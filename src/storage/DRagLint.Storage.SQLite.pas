@@ -53,6 +53,7 @@ type
     function FindSymbolsByQualifiedName(const AQName: string): TArray<TSymbol>;
     function FindReferencesTo(ASymbolId: Int64): TArray<TReference>;
     function FindCallersByName(const ACalleeName: string): TArray<TReference>;
+    function FindSymbolsFuzzy(const APattern: string; ATopK: Integer = 10): TArray<TSymbol>;
     function GetFilePath(AFileId: Int64): string;
     function CountSymbols: Int64;
     function CountReferences: Int64;
@@ -62,7 +63,9 @@ type
 implementation
 
 uses
-  DRagLint.Storage.Schema;
+  System.Generics.Defaults,
+  DRagLint.Storage.Schema,
+  DRagLint.Query.Fuzzy;
 
 { TSQLiteSymbolStore }
 
@@ -363,6 +366,48 @@ begin
   finally
     Q.Free;
     List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindSymbolsFuzzy(const APattern: string;
+  ATopK: Integer): TArray<TSymbol>;
+var
+  Q: TFDQuery;
+  Scored: TList<TPair<Integer, TSymbol>>;
+  Sym: TSymbol;
+  D, MaxD: Integer;
+  i: Integer;
+begin
+  Scored := TList<TPair<Integer, TSymbol>>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text := 'SELECT * FROM symbols';
+    Q.Open;
+    MaxD := DRagLint.Query.Fuzzy.FuzzyMaxDistanceFor(APattern);
+    while not Q.Eof do
+    begin
+      Sym := ReadSymbolFromQuery(Q);
+      D := DRagLint.Query.Fuzzy.LevenshteinDistance(APattern, Sym.Name);
+      if D <= MaxD then
+        Scored.Add(TPair<Integer, TSymbol>.Create(D, Sym));
+      Q.Next;
+    end;
+    Scored.Sort(TComparer<TPair<Integer, TSymbol>>.Construct(
+      function(const L, R: TPair<Integer, TSymbol>): Integer
+      begin
+        Result := L.Key - R.Key;
+        if Result = 0 then
+          Result := CompareText(L.Value.QualifiedName, R.Value.QualifiedName);
+      end));
+    if Scored.Count > ATopK then
+      Scored.Count := ATopK;
+    SetLength(Result, Scored.Count);
+    for i := 0 to Scored.Count - 1 do
+      Result[i] := Scored[i].Value;
+  finally
+    Q.Free;
+    Scored.Free;
   end;
 end;
 

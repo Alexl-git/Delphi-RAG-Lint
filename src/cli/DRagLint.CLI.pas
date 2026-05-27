@@ -282,6 +282,19 @@ begin
     Writeln('ERROR: query requires --name or --qname');
     Exit(2);
   end;
+  if (Length(Symbols) = 0) and (AArgs.Name <> '') then
+  begin
+    // Fuzzy fallback for misremembered names.
+    Symbols := Store.FindSymbolsFuzzy(AArgs.Name, 10);
+    if Length(Symbols) > 0 then
+    begin
+      if not AArgs.AsJson then
+        Writeln(Format('(no exact match for "%s" — closest matches:)',
+          [AArgs.Name]));
+      PrintSymbols(Symbols, AArgs.AsJson);
+      Exit(0);
+    end;
+  end;
   PrintSymbols(Symbols, AArgs.AsJson);
   if Length(Symbols) = 0 then
     Result := 1

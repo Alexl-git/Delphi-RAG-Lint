@@ -24,6 +24,7 @@ type
     function FindSymbolsByQualifiedName(const AQName: string): TArray<TSymbol>;
     function FindReferencesTo(ASymbolId: Int64): TArray<TReference>;
     function FindCallersByName(const ACalleeName: string): TArray<TReference>;
+    function FindSymbolsFuzzy(const APattern: string; ATopK: Integer = 10): TArray<TSymbol>;
     function GetFilePath(AFileId: Int64): string;
     function CountSymbols: Int64;
     function CountReferences: Int64;

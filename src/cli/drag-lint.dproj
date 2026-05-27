@@ -163,6 +163,7 @@
         <DCCReference Include="..\storage\DRagLint.Storage.Schema.pas"/>
         <DCCReference Include="..\storage\DRagLint.Storage.SQLite.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.Delphi13.pas"/>
+        <DCCReference Include="..\query\DRagLint.Query.Fuzzy.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
