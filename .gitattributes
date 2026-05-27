@@ -1,0 +1,30 @@
+# Delphi source files MUST be ANSI / CRLF — per CLAUDE.md project rule.
+*.pas    text eol=crlf
+*.dpr    text eol=crlf
+*.dpk    text eol=crlf
+*.dfm    text eol=crlf
+*.inc    text eol=crlf
+
+# Build scripts on Windows
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+
+# Generic text files — normalize on commit, native checkout
+*.md     text
+*.txt    text
+*.sql    text
+*.json   text
+
+# Binaries — never touch
+*.dll    binary
+*.exe    binary
+*.lib    binary
+*.exp    binary
+*.obj    binary
+*.dcu    binary
+*.bpl    binary
+*.res    binary
+*.tds    binary
+*.rsm    binary
+*.pdb    binary
+*.sqlite binary
