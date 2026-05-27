@@ -32,6 +32,35 @@ RAG and structural lint in one binary. Existing tools:
 | Peganza Pascal Analyzer | — | Yes | Commercial |
 | DelphiAST | Parser only | No | MIT |
 
+## Status
+
+- **Phase 0** (toolchain validation) — **done.** Grammar DLLs built; modersohn
+  bindings load them; AST parse confirmed on a `.pas` fixture.
+- **Phase 1** (indexer + SQLite store + CLI) — **done.** `drag-lint index`
+  walks a folder, parses each Delphi source with tree-sitter, extracts
+  unit/class/method symbols, writes them to SQLite. `drag-lint query --name`
+  / `--qname` returns deterministic results with file:line ranges, JSON
+  output supported.
+- **Phase 2a** (references + fuzzy match) — next.
+
+## Quickstart
+
+```cmd
+:: Build the grammar DLLs (one-time)
+build\_buildgrammar.bat C:\Projects\tree-sitter-delphi13 third_party\dll\tree-sitter-delphi13.dll
+build\_builddfm.bat
+build\_buildruntime.bat
+
+:: Build the CLI
+build\build_draglint.bat
+
+:: Index something
+third_party\dll\drag-lint.exe index path\to\source --db myproject.sqlite
+
+:: Query
+third_party\dll\drag-lint.exe query --name TFormShow --db myproject.sqlite --json
+```
+
 ## License
 
 MIT. Portions of the tree-sitter binding layer derive from
