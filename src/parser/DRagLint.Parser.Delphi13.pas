@@ -178,12 +178,33 @@ begin
     Walk(ANode.NamedChild(i), AState, UnitIdx, UnitName);
 end;
 
-function TryWalkClass(const ADeclTypeNode: TTSNode; const AState: TWalkState;
-  AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
+// Determines whether a declClass node is actually a record (first token is
+// kRecord) versus a regular class (kClass). The grammar reuses declClass for
+// both shapes; the kind is carried by the leading token child.
+function ClassNodeIsRecord(const AClassNode: TTSNode): Boolean;
+var
+  i: Integer;
+  C: TTSNode;
+  T: string;
+begin
+  Result := False;
+  for i := 0 to AClassNode.ChildCount - 1 do
+  begin
+    C := AClassNode.Child(i);
+    T := C.NodeType;
+    if T = 'kClass' then Exit(False);
+    if T = 'kRecord' then Exit(True);
+  end;
+end;
+
+function TryWalkClassOrRecord(const ADeclTypeNode: TTSNode;
+  const AState: TWalkState; AParentSymbolIdx: Integer;
+  const AParentQualifiedName: string): Boolean;
 var
   TypeWrapNode, ClassNode, NameNode: TTSNode;
-  ClassName, QName: string;
-  ClassIdx, i: Integer;
+  TypeName, QName: string;
+  TypeIdx, i: Integer;
+  Kind: TSymbolKind;
 begin
   Result := False;
   TypeWrapNode := ADeclTypeNode.ChildByField('type');
@@ -195,16 +216,94 @@ begin
   NameNode := ADeclTypeNode.ChildByField('name');
   if NameNode.IsNull then
     Exit;
-  ClassName := NodeText(NameNode, AState.Source);
-  if ClassName = '' then
+  TypeName := NodeText(NameNode, AState.Source);
+  if TypeName = '' then
     Exit;
   if AParentQualifiedName <> '' then
-    QName := AParentQualifiedName + '.' + ClassName
+    QName := AParentQualifiedName + '.' + TypeName
   else
-    QName := ClassName;
-  ClassIdx := AState.Emit(skClass, ClassName, QName, AParentSymbolIdx, ADeclTypeNode);
+    QName := TypeName;
+  if ClassNodeIsRecord(ClassNode) then
+    Kind := skRecord
+  else
+    Kind := skClass;
+  TypeIdx := AState.Emit(Kind, TypeName, QName, AParentSymbolIdx, ADeclTypeNode);
   for i := 0 to ClassNode.NamedChildCount - 1 do
-    Walk(ClassNode.NamedChild(i), AState, ClassIdx, QName);
+    Walk(ClassNode.NamedChild(i), AState, TypeIdx, QName);
+  Result := True;
+end;
+
+function TryWalkInterface(const ADeclTypeNode: TTSNode;
+  const AState: TWalkState; AParentSymbolIdx: Integer;
+  const AParentQualifiedName: string): Boolean;
+var
+  TypeNode, NameNode: TTSNode;
+  TypeName, QName: string;
+  Idx, i: Integer;
+begin
+  Result := False;
+  TypeNode := ADeclTypeNode.ChildByField('type');
+  // declIntf is the `type:` child directly — not wrapped in (type).
+  if TypeNode.IsNull or (TypeNode.NodeType <> 'declIntf') then
+    Exit;
+  NameNode := ADeclTypeNode.ChildByField('name');
+  if NameNode.IsNull then
+    Exit;
+  TypeName := NodeText(NameNode, AState.Source);
+  if TypeName = '' then
+    Exit;
+  if AParentQualifiedName <> '' then
+    QName := AParentQualifiedName + '.' + TypeName
+  else
+    QName := TypeName;
+  Idx := AState.Emit(skInterface, TypeName, QName, AParentSymbolIdx,
+    ADeclTypeNode);
+  for i := 0 to TypeNode.NamedChildCount - 1 do
+    Walk(TypeNode.NamedChild(i), AState, Idx, QName);
+  Result := True;
+end;
+
+function TryWalkEnum(const ADeclTypeNode: TTSNode; const AState: TWalkState;
+  AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
+var
+  TypeWrapNode, EnumNode, NameNode, ValNode, ValNameNode: TTSNode;
+  TypeName, QName, ValName: string;
+  EnumIdx, i: Integer;
+begin
+  Result := False;
+  TypeWrapNode := ADeclTypeNode.ChildByField('type');
+  if TypeWrapNode.IsNull then
+    Exit;
+  EnumNode := FindNamedChildOfType(TypeWrapNode, 'declEnum');
+  if EnumNode.IsNull then
+    Exit;
+  NameNode := ADeclTypeNode.ChildByField('name');
+  if NameNode.IsNull then
+    Exit;
+  TypeName := NodeText(NameNode, AState.Source);
+  if TypeName = '' then
+    Exit;
+  if AParentQualifiedName <> '' then
+    QName := AParentQualifiedName + '.' + TypeName
+  else
+    QName := TypeName;
+  EnumIdx := AState.Emit(skEnum, TypeName, QName, AParentSymbolIdx, ADeclTypeNode);
+  // Emit each enum value as a child symbol
+  for i := 0 to EnumNode.NamedChildCount - 1 do
+  begin
+    ValNode := EnumNode.NamedChild(i);
+    if ValNode.NodeType = 'declEnumValue' then
+    begin
+      ValNameNode := ValNode.ChildByField('name');
+      if not ValNameNode.IsNull then
+      begin
+        ValName := NodeText(ValNameNode, AState.Source);
+        if ValName <> '' then
+          AState.Emit(skEnumValue, ValName, QName + '.' + ValName, EnumIdx,
+            ValNode);
+      end;
+    end;
+  end;
   Result := True;
 end;
 
@@ -268,21 +367,68 @@ begin
     Exit;
   end;
 
-  // declType wrapping a class declaration
+  // declType wrapping a class/record/interface/enum declaration. Try each
+  // shape in order; the first matching handler returns true and we're done.
   if NodeType = 'declType' then
   begin
-    if TryWalkClass(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then
+    if TryWalkInterface(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then
       Exit;
-    // not a class — fall through and walk normally (could be record/enum/alias)
+    if TryWalkClassOrRecord(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then
+      Exit;
+    if TryWalkEnum(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then
+      Exit;
+    // Unknown shape (type alias, set, etc.) — fall through to default recurse.
   end;
 
-  // declProc: emit a method or free proc/func
+  // declProc: emit a method (when inside class/record/interface) or a free
+  // proc/func otherwise.
   if NodeType = 'declProc' then
   begin
     IsInClass := (AParentSymbolIdx >= 0) and
       (AParentSymbolIdx < AState.Symbols.Count) and
-      (AState.Symbols[AParentSymbolIdx].Kind = skClass);
+      (AState.Symbols[AParentSymbolIdx].Kind in
+       [skClass, skRecord, skInterface]);
     WalkDeclProc(ANode, AState, AParentSymbolIdx, AParentQualifiedName, IsInClass);
+    Exit;
+  end;
+
+  // declField: emit a field symbol (always inside a class/record/interface).
+  if NodeType = 'declField' then
+  begin
+    var FNameNode := ANode.ChildByField('name');
+    if not FNameNode.IsNull then
+    begin
+      var FName := NodeText(FNameNode, AState.Source);
+      if FName <> '' then
+      begin
+        var FQName: string;
+        if AParentQualifiedName <> '' then
+          FQName := AParentQualifiedName + '.' + FName
+        else
+          FQName := FName;
+        AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode);
+      end;
+    end;
+    Exit;
+  end;
+
+  // declProp: emit a property symbol.
+  if NodeType = 'declProp' then
+  begin
+    var PNameNode := ANode.ChildByField('name');
+    if not PNameNode.IsNull then
+    begin
+      var PName := NodeText(PNameNode, AState.Source);
+      if PName <> '' then
+      begin
+        var PQName: string;
+        if AParentQualifiedName <> '' then
+          PQName := AParentQualifiedName + '.' + PName
+        else
+          PQName := PName;
+        AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode);
+      end;
+    end;
     Exit;
   end;
 

@@ -5,7 +5,7 @@ interface
 type
   TSymbolKind = (
     skUnit, skProgram, skPackage,
-    skClass, skInterface, skRecord, skEnum,
+    skClass, skInterface, skRecord, skEnum, skEnumValue,
     skProcedure, skFunction, skMethod, skConstructor, skDestructor,
     skProperty, skField, skVarDecl, skConstDecl, skTypeAlias
   );
@@ -78,7 +78,7 @@ uses
 const
   KindText: array[TSymbolKind] of string = (
     'unit', 'program', 'package',
-    'class', 'interface', 'record', 'enum',
+    'class', 'interface', 'record', 'enum', 'enum_value',
     'procedure', 'function', 'method', 'constructor', 'destructor',
     'property', 'field', 'var', 'const', 'type'
   );
