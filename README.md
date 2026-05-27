@@ -11,6 +11,12 @@ records, enums, properties, fields), external lint rule plugins (S-expression
 query files), and project-aware scan (`--project <file.dproj>` resolves
 dependencies + Library/Browsing paths from the registry automatically).**
 
+| Corpus | Files | Symbols | Refs | Index time |
+|---|---:|---:|---:|---:|
+| Micronite ORM3 (full) | 795 | 44,169 | 42,341 | 8 s |
+| **DevExpress VCL (entire install)** | **4,460** | **473,756** | **387,668** | **179 s (~3 min)** |
+| Delphi RTL + VCL + FMX + Data | 1,295 | 212,083 | 250,663 | 60 s |
+
 ---
 
 ## Why
