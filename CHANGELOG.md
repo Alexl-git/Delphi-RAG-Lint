@@ -3,6 +3,35 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha — expect
 breaking changes** until v1.0.
 
+## v0.10.0-alpha — 2026-05-27
+
+### Added
+- **`drag-lint graph`** — emit a unit-level dependency graph from the
+  index. One node per indexed source file, one edge per (file A
+  references symbol defined in file B) pair, edge weight = count of
+  references. Two output formats:
+  - `--format dot` — Graphviz, renders via `dot -Tsvg drag-graph.dot -o
+    drag-graph.svg` (or pasted into any online Graphviz viewer)
+  - `--format mermaid` — Mermaid syntax, renders inline in
+    GitHub/Obsidian/most Markdown viewers without external tools
+- `--name <substr>` filter restricts the graph to edges whose source OR
+  target path contains the substring. Useful for "show me everything
+  depending on or used by the parser layer" → `--name Parser`.
+- `--output <file>` writes the graph to a file instead of stdout.
+
+### Notes
+- Edge resolution is name-only: refs are joined to symbols by
+  `LOWER(name)` because the indexer leaves `refs.symbol_id` NULL today.
+  That means a ref to a generic name like `Create` will fan out to every
+  unit defining a `Create`. Still useful as a structural snapshot — the
+  real architectural arrows dominate the small noise. A future iteration
+  will resolve `symbol_id` at index time.
+- Self-test on drag-lint corpus: `CLI -> Storage.SQLite (48), CLI ->
+  Core.Indexer (46), CLI -> Lint.Linter (44), ...` — matches the real
+  hierarchy.
+
+---
+
 ## v0.9.0-alpha — 2026-05-27
 
 ### Added — two project-shaped lint rules
