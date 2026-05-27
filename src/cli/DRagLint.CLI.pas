@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.10.0-alpha';
+  VERSION = '0.11.0-alpha';
 
 function Run: Integer;
 
@@ -55,6 +55,8 @@ type
     ScanLibraries: Boolean;
     AsJson: Boolean;
     DryRun: Boolean;
+    Watch: Boolean;
+    Interval: Integer;
     ShowHelp: Boolean;
     ShowVersion: Boolean;
   end;
@@ -65,8 +67,8 @@ begin
     ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
   Writeln('Usage:');
-  Writeln('  drag-lint index <path>                              [--db <file.sqlite>]');
-  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--dry-run]');
+  Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]]');
+  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--dry-run] [--watch [--interval N]]');
   Writeln('  drag-lint index --scan-libraries                    [--db <file.sqlite>] [--dry-run]');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
@@ -161,6 +163,13 @@ begin
       Result.DryRun := True
     else if A = '--scan-libraries' then
       Result.ScanLibraries := True
+    else if A = '--watch' then
+      Result.Watch := True
+    else if (A = '--interval') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Interval := StrToIntDef(ParamStr(i), 5);
+    end
     else if (A = '--format') and (i < ParamCount) then
     begin
       Inc(i);
@@ -273,13 +282,14 @@ begin
 
   Writeln('Database: ', AArgs.DbPath);
 
-  StartTime := Now;
   Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
-
   Parser := TDelphi13Parser.Create;
   Indexer := TIndexer.Create(Store, [Parser, TDFMParser.Create]);
 
+  // Resolve target folders once (--scan-libraries / --project) or fall back
+  // to the explicit path. The watch loop re-walks these on every tick;
+  // unchanged files are skipped via mtime+sha256.
   if AArgs.ScanLibraries then
   begin
     Writeln('Scope: Delphi Library + Browsing paths (registry, Win32+Win64)');
@@ -293,15 +303,6 @@ begin
       [Length(Folders)]));
     for F in Folders do
       Writeln('  ', F);
-    if AArgs.DryRun then
-    begin
-      Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.');
-      Result := 0;
-      Exit;
-    end;
-    Writeln('Indexing...');
-    for F in Folders do
-      Indexer.IndexFolder(F, True);
   end
   else if AArgs.ProjectPath <> '' then
   begin
@@ -315,33 +316,50 @@ begin
     Writeln(Format('Resolved %d unique scan folders:', [Length(Folders)]));
     for F in Folders do
       Writeln('  ', F);
-    if AArgs.DryRun then
-    begin
-      Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.');
-      Result := 0;
-      Exit;
-    end;
-    Writeln('Indexing...');
-    for F in Folders do
-      Indexer.IndexFolder(F, True);
   end
   else
+    Folders := [AArgs.Path];
+
+  if AArgs.DryRun then
   begin
-    Writeln('Indexing: ', AArgs.Path);
-    if TFile.Exists(AArgs.Path) then
-      Indexer.IndexFile(AArgs.Path)
-    else
-      Indexer.IndexFolder(AArgs.Path, True);
+    Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.');
+    Result := 0;
+    Exit;
   end;
 
-  Elapsed := (Now - StartTime) * 86400;
-  if Indexer.SkippedUpToDate > 0 then
-    Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs',
-      [Store.CountFiles, Store.CountSymbols, Store.CountReferences,
-       Indexer.SkippedUpToDate, Elapsed]))
-  else
-    Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs',
-      [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Elapsed]));
+  var Interval := AArgs.Interval;
+  if AArgs.Watch and (Interval <= 0) then
+    Interval := 5;
+
+  while True do
+  begin
+    StartTime := Now;
+    if AArgs.Watch then
+      Writeln(Format('[%s] Indexing tick (interval=%ds)...',
+        [FormatDateTime('hh:nn:ss', Now), Interval]))
+    else
+      Writeln('Indexing...');
+    for F in Folders do
+    begin
+      if TFile.Exists(F) then
+        Indexer.IndexFile(F)
+      else
+        Indexer.IndexFolder(F, True);
+    end;
+    Elapsed := (Now - StartTime) * 86400;
+    if Indexer.SkippedUpToDate > 0 then
+      Writeln(Format(
+        'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs',
+        [Store.CountFiles, Store.CountSymbols, Store.CountReferences,
+         Indexer.SkippedUpToDate, Elapsed]))
+    else
+      Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs',
+        [Store.CountFiles, Store.CountSymbols, Store.CountReferences,
+         Elapsed]));
+    if not AArgs.Watch then Break;
+    Sleep(Interval * 1000);
+  end;
+
   Result := 0;
 end;
 

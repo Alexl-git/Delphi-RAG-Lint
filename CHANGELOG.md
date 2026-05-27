@@ -3,6 +3,26 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha — expect
 breaking changes** until v1.0.
 
+## v0.11.0-alpha — 2026-05-27
+
+### Added
+- **`drag-lint index --watch [--interval N]`** — keep the index hot by
+  polling the target folder(s) every `N` seconds (default 5). Each tick
+  re-walks every resolved file; the existing mtime+sha256 incremental
+  skip means unchanged files cost roughly nothing. Self-test on the
+  drag-lint corpus: first tick = 0.14s for 16 files / 315 symbols,
+  subsequent ticks = 0.02s (all skipped). Combine with `--project` to
+  watch every folder pulled in by a .dproj's DCC paths.
+
+### Notes
+- Polling, not OS-level filesystem events. Trade-off: simpler, portable,
+  no signal-handling subtleties; latency capped at `--interval` seconds.
+  A v0.12 candidate is `ReadDirectoryChangesW`-backed watcher for
+  sub-second response.
+- No schema bump.
+
+---
+
 ## v0.10.0-alpha — 2026-05-27
 
 ### Added

@@ -6,11 +6,14 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.10-alpha. Early work in progress — expect breaking changes.** Adds
-`drag-lint graph` — unit-level dependency graph in Graphviz DOT or
-Mermaid format from the index. Built on v0.9 project-shaped lint rules,
-v0.8 type-use refs + compiler-log ingest, v0.7 LSP position resolution,
-v0.4 MCP server, and the export/top/fuzzy stack.
+**v0.11-alpha. Early work in progress — expect breaking changes.** Adds
+`drag-lint index --watch [--interval N]` — polling watcher that keeps
+the index hot. Each tick re-walks the target folder; unchanged files
+are skipped via the existing mtime+sha256 incremental check (a 16-file
+drag-lint self-corpus reindexes in 0.02s when nothing changed). Builds
+on v0.10 graph export, v0.9 project-shaped lint rules, v0.8 type-use
+refs + compiler-log ingest, v0.7 LSP position resolution, v0.4 MCP
+server, and the export/top/fuzzy stack.
 
 Builds on v0.2 (DFM forms, full symbol coverage, external `.scm` lint
 plugins, `--project <dproj>` mode).
