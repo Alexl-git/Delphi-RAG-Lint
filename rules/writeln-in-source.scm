@@ -1,5 +1,5 @@
-; Sample external lint rule loaded from rules/*.scm at startup.
-; Matches every bare procedure call whose callee identifier is named "WriteLn".
-; Pair this file with writeln-in-source.json for severity / message metadata.
+; v0.3: predicates now work. The (#eq?) clause filters down to ONLY calls
+; whose callee identifier equals "WriteLn" (case-sensitive).
 ((exprCall
-  entity: (identifier) @callee) @warn)
+  entity: (identifier) @callee) @warn
+  (#eq? @callee "WriteLn"))

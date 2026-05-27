@@ -8,6 +8,7 @@ uses
   System.IOUtils,
   System.JSON,
   System.Generics.Collections,
+  System.RegularExpressions,
   TreeSitter,
   TreeSitterLib,
   TreeSitter.Query,
@@ -114,6 +115,155 @@ begin
   inherited;
 end;
 
+// Resolve a predicate step group to a list of args. The first arg is the
+// operator (e.g. "eq?"); subsequent args are either captured node text or
+// literal strings.
+type
+  TPredicateArg = record
+    IsCapture: Boolean;
+    CaptureIndex: UInt32;
+    StringValue: string;
+  end;
+
+function ResolveCaptureText(const AMatch: TTSQueryMatch;
+  ACaptureIndex: UInt32; const ASource: TBytes): string;
+var
+  Caps: TTSQueryCaptureArray;
+  i: Integer;
+begin
+  Result := '';
+  Caps := AMatch.CapturesArray;
+  for i := 0 to Length(Caps) - 1 do
+    if Caps[i].index = ACaptureIndex then
+      Exit(NodeText(Caps[i].node, ASource));
+end;
+
+// Evaluate one predicate. Returns True if it passes.
+function EvalPredicate(const AQuery: TTSQuery; const AMatch: TTSQueryMatch;
+  const ASource: TBytes; const AArgs: TArray<TPredicateArg>): Boolean;
+var
+  i: Integer;
+  Op, FirstText, Other, Pattern: string;
+begin
+  if Length(AArgs) < 1 then
+    Exit(True);
+  if not AArgs[0].IsCapture then
+    Op := AArgs[0].StringValue
+  else
+    Op := '';
+
+  if (Op = 'eq?') or (Op = 'not-eq?') then
+  begin
+    // (#eq? @cap "literal")  or  (#eq? @cap1 @cap2)
+    // Resolve each subsequent arg to a string and compare all-equal.
+    if Length(AArgs) < 3 then Exit(True);
+    if AArgs[1].IsCapture then
+      FirstText := ResolveCaptureText(AMatch, AArgs[1].CaptureIndex, ASource)
+    else
+      FirstText := AArgs[1].StringValue;
+    Result := True;
+    for i := 2 to Length(AArgs) - 1 do
+    begin
+      if AArgs[i].IsCapture then
+        Other := ResolveCaptureText(AMatch, AArgs[i].CaptureIndex, ASource)
+      else
+        Other := AArgs[i].StringValue;
+      if FirstText <> Other then
+      begin
+        Result := False;
+        Break;
+      end;
+    end;
+    if Op = 'not-eq?' then
+      Result := not Result;
+    Exit;
+  end;
+
+  if (Op = 'match?') or (Op = 'not-match?') then
+  begin
+    if Length(AArgs) <> 3 then Exit(True);
+    if not AArgs[1].IsCapture then Exit(True);
+    if AArgs[2].IsCapture then Exit(True);
+    FirstText := ResolveCaptureText(AMatch, AArgs[1].CaptureIndex, ASource);
+    Pattern := AArgs[2].StringValue;
+    try
+      Result := TRegEx.IsMatch(FirstText, Pattern);
+    except
+      Result := False;
+    end;
+    if Op = 'not-match?' then
+      Result := not Result;
+    Exit;
+  end;
+
+  if (Op = 'any-of?') or (Op = 'not-any-of?') then
+  begin
+    if Length(AArgs) < 3 then Exit(True);
+    if not AArgs[1].IsCapture then Exit(True);
+    FirstText := ResolveCaptureText(AMatch, AArgs[1].CaptureIndex, ASource);
+    Result := False;
+    for i := 2 to Length(AArgs) - 1 do
+      if (not AArgs[i].IsCapture) and (AArgs[i].StringValue = FirstText) then
+      begin
+        Result := True;
+        Break;
+      end;
+    if Op = 'not-any-of?' then
+      Result := not Result;
+    Exit;
+  end;
+
+  // Unknown predicate — treat as pass (don't suppress matches just because
+  // we don't recognise a directive).
+  Result := True;
+end;
+
+function AllPredicatesPass(const AQuery: TTSQuery; const AMatch: TTSQueryMatch;
+  const ASource: TBytes): Boolean;
+var
+  Steps: TTSQueryPredicateStepArray;
+  Current: TList<TPredicateArg>;
+  Arg: TPredicateArg;
+  i: Integer;
+begin
+  Steps := AQuery.PredicatesForPattern(AMatch.pattern_index);
+  if Length(Steps) = 0 then
+    Exit(True);
+  Current := TList<TPredicateArg>.Create;
+  try
+    for i := 0 to Length(Steps) - 1 do
+    begin
+      case Steps[i].&type of
+        TSQueryPredicateStepTypeCapture:
+          begin
+            Arg.IsCapture := True;
+            Arg.CaptureIndex := Steps[i].value_id;
+            Arg.StringValue := '';
+            Current.Add(Arg);
+          end;
+        TSQueryPredicateStepTypeString:
+          begin
+            Arg.IsCapture := False;
+            Arg.CaptureIndex := 0;
+            Arg.StringValue := AQuery.StringValueForID(Steps[i].value_id);
+            Current.Add(Arg);
+          end;
+        TSQueryPredicateStepTypeDone:
+          begin
+            // End of one predicate. Evaluate; if false, the whole match
+            // fails. Then reset Current for the next predicate (if any).
+            if not EvalPredicate(AQuery, AMatch, ASource, Current.ToArray) then
+              Exit(False);
+            Current.Clear;
+          end;
+      end;
+    end;
+    Result := True;
+  finally
+    Current.Free;
+  end;
+end;
+
 function TQueryRule.Run(const ARootNode: TTSNode; const ASource: TBytes;
   const AFilePath: string): TArray<TLintFinding>;
 var
@@ -135,6 +285,10 @@ begin
     Cursor.Execute(FQuery, ARootNode);
     while Cursor.NextMatch(Match) do
     begin
+      // v0.3: evaluate predicates before emitting a finding.
+      if not AllPredicatesPass(FQuery, Match, ASource) then
+        Continue;
+
       Captures := Match.CapturesArray;
       // Prefer the capture named @<FWarnCapture>; otherwise pin to the
       // first capture.
