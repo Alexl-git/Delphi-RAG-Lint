@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.11.0-alpha';
+  VERSION = '0.12.0-alpha';
 
 function Run: Integer;
 
@@ -81,6 +81,7 @@ begin
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
   Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]');
+  Writeln('  drag-lint todos              [<path>]                (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])');
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
   Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
   Writeln('  drag-lint --version');
@@ -1458,6 +1459,139 @@ begin
   Result := 0;
 end;
 
+// --- todos ------------------------------------------------------------------
+
+// v0.12: scan .pas/.dpr/.dpk files for TODO/FIXME/HACK/XXX/REVIEW/NOTE
+// comments and report them with file:line:col + optional author tag.
+// Standalone — no index needed. Intended workflow: run before commits,
+// or pipe into `--json` for CI dashboards.
+function DoTodos(const AArgs: TArgs): Integer;
+type
+  TTodo = record
+    FilePath: string;
+    LineNo, ColNo: Integer;
+    Keyword: string;
+    Author: string;
+    Body: string;
+  end;
+var
+  Path: string;
+  Files: TArray<string>;
+  Patterns: TArray<string>;
+  Pattern, FileName: string;
+  Lines: TArray<string>;
+  Line, Tail: string;
+  RE: TRegEx;
+  M: TMatch;
+  Todos: TList<TTodo>;
+  T: TTodo;
+  I: Integer;
+  JArr: TJSONArray;
+  JObj: TJSONObject;
+begin
+  if AArgs.Path = '' then
+    Path := GetCurrentDir
+  else
+    Path := AArgs.Path;
+  if not (TDirectory.Exists(Path) or TFile.Exists(Path)) then
+  begin
+    Writeln('ERROR: path does not exist: ', Path);
+    Exit(2);
+  end;
+  // Keyword set is intentionally narrow and word-boundaried so noise like
+  // "fixmessage" doesn't false-trip. Author tag accepts @alex or "Alex:"
+  // forms, matching common Delphi codebase conventions.
+  // Author tag accepts @alex or "Alex:" forms (starts with a letter, to
+  // avoid swallowing Delphi's built-in priority digits like `TODO 1`).
+  RE := TRegEx.Create(
+    '//\s*(TODO|FIXME|HACK|XXX|REVIEW|NOTE)\b' +
+    '(?:[@\s]([A-Za-z]\w*))?[\s:]*(.*)$',
+    [roIgnoreCase]);
+
+  Todos := TList<TTodo>.Create;
+  try
+    if TFile.Exists(Path) then
+      Files := [Path]
+    else
+    begin
+      Patterns := ['*.pas', '*.dpr', '*.dpk', '*.inc'];
+      Files := nil;
+      for Pattern in Patterns do
+        Files := Files + TDirectory.GetFiles(Path, Pattern,
+          TSearchOption.soAllDirectories);
+    end;
+    for FileName in Files do
+    begin
+      try
+        Lines := TFile.ReadAllLines(FileName);
+      except
+        Continue;
+      end;
+      for I := 0 to High(Lines) do
+      begin
+        Line := Lines[I];
+        M := RE.Match(Line);
+        if not M.Success then Continue;
+        // Skip when `//` lives inside a quoted string by checking the
+        // count of `'` chars before the `//` position — odd count means
+        // we're inside a string literal.
+        Tail := Copy(Line, 1, M.Index - 1);
+        if (Length(Tail) - Length(StringReplace(
+              Tail, '''', '', [rfReplaceAll]))) mod 2 = 1 then
+          Continue;
+        T := Default(TTodo);
+        T.FilePath := FileName;
+        T.LineNo := I + 1;
+        T.ColNo := M.Index;
+        T.Keyword := UpperCase(M.Groups[1].Value);
+        if M.Groups[2].Success then
+          T.Author := M.Groups[2].Value
+        else
+          T.Author := '';
+        T.Body := Trim(M.Groups[3].Value);
+        Todos.Add(T);
+      end;
+    end;
+
+    if AArgs.AsJson then
+    begin
+      JArr := TJSONArray.Create;
+      try
+        for T in Todos do
+        begin
+          JObj := TJSONObject.Create;
+          JObj.AddPair('file_path', T.FilePath);
+          JObj.AddPair('line', TJSONNumber.Create(T.LineNo));
+          JObj.AddPair('col', TJSONNumber.Create(T.ColNo));
+          JObj.AddPair('keyword', T.Keyword);
+          JObj.AddPair('author', T.Author);
+          JObj.AddPair('body', T.Body);
+          JArr.AddElement(JObj);
+        end;
+        Writeln(JArr.Format(2));
+      finally
+        JArr.Free;
+      end;
+    end
+    else
+    begin
+      for T in Todos do
+      begin
+        if T.Author <> '' then
+          Writeln(Format('%s:%d:%d  [%s @%s] %s',
+            [T.FilePath, T.LineNo, T.ColNo, T.Keyword, T.Author, T.Body]))
+        else
+          Writeln(Format('%s:%d:%d  [%s] %s',
+            [T.FilePath, T.LineNo, T.ColNo, T.Keyword, T.Body]));
+      end;
+      Writeln(Format('%d todo(s)', [Todos.Count]));
+    end;
+  finally
+    Todos.Free;
+  end;
+  Result := 0;
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter: DRagLint.Lint.Linter.TLinter;
@@ -1574,6 +1708,8 @@ begin
       Result := DoImportLog(Args)
     else if Args.Command = 'graph' then
       Result := DoGraph(Args)
+    else if Args.Command = 'todos' then
+      Result := DoTodos(Args)
     else if Args.Command = 'lsp' then
     begin
       var LspDb := '';

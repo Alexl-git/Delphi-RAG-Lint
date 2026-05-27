@@ -3,6 +3,30 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha — expect
 breaking changes** until v1.0.
 
+## v0.12.0-alpha — 2026-05-27
+
+### Added
+- **`drag-lint todos [<path>]`** — scan `.pas`/`.dpr`/`.dpk`/`.inc` for
+  `// TODO`, `// FIXME`, `// HACK`, `// XXX`, `// REVIEW`, `// NOTE`
+  comments. Word-boundaried so noise like "fixmessage" doesn't false-
+  trip. Skips `//` inside string literals (odd-quote check on the line
+  prefix). Optional author tag captured from `// TODO @alex ...` or
+  `// TODO Alex: ...` forms — must start with a letter, so Delphi's
+  built-in `// TODO 1 -oAuthor -cCategory : ...` priority digits don't
+  consume the slot. `--json` for tool integration.
+
+### Examples
+
+```
+drag-lint todos C:\path\to\src
+drag-lint todos C:\path\to\src --json | jq '[.[] | select(.keyword=="FIXME")]'
+```
+
+Real-world: 68 todos found in the Micronite COMMON folder; 1 in the
+drag-lint self-corpus.
+
+---
+
 ## v0.11.0-alpha — 2026-05-27
 
 ### Added
