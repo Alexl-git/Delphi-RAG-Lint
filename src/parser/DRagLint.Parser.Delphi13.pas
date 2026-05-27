@@ -48,13 +48,16 @@ var
   i: Integer;
   Child: TTSNode;
 begin
+  // Default(TTSNode) is the null sentinel — ts_node_is_null() returns true
+  // for a zero-filled record. Avoid AParent.Child(-1) which casts -1 to
+  // UInt32 and trips ERangeError under {$R+}.
+  Result := Default(TTSNode);
   for i := 0 to AParent.NamedChildCount - 1 do
   begin
     Child := AParent.NamedChild(i);
     if Child.NodeType = AType then
       Exit(Child);
   end;
-  Result := AParent.Child(-1);
 end;
 
 type

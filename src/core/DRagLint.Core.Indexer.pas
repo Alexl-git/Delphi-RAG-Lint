@@ -150,7 +150,15 @@ begin
     begin
       Files := TDirectory.GetFiles(APath, Pattern, Mode);
       for F in Files do
-        IndexFile(F);
+      begin
+        try
+          IndexFile(F);
+        except
+          on E: Exception do
+            Writeln(Format('  SKIP %s: %s: %s',
+              [F, E.ClassName, E.Message]));
+        end;
+      end;
     end;
   finally
     Patterns.Free;
