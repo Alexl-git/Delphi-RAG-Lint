@@ -6,10 +6,14 @@ Built on `tree-sitter-delphi13` (grammar) and
 (runtime bindings, MIT). **Pure Delphi at runtime — no Python, Node, or Rust
 deps.**
 
-**v0.2-alpha. Adds DFM form indexing, full symbol coverage (interfaces,
-records, enums, properties, fields), external lint rule plugins (S-expression
-query files), and project-aware scan (`--project <file.dproj>` resolves
-dependencies + Library/Browsing paths from the registry automatically).**
+**v0.3-alpha. Early work in progress — expect breaking changes.** Adds
+persistent trigram index for sub-second fuzzy queries on 100k+-symbol
+corpora, `--scan-libraries` (index Delphi RTL/VCL/etc. with no .dproj),
+multi-database queries (`--db a --db b`), and tree-sitter query predicates
+(`#eq?`, `#match?`, `#any-of?`) so external lint rules can be precise.
+
+Builds on v0.2 (DFM forms, full symbol coverage, external `.scm` lint
+plugins, `--project <dproj>` mode).
 
 | Corpus | Files | Symbols | Refs | Index time |
 |---|---:|---:|---:|---:|
@@ -78,8 +82,19 @@ third_party\dll\drag-lint.exe index C:\path\to\my\project --db myproj.sqlite
 :: expands $(BDS) macros.
 third_party\dll\drag-lint.exe index --project C:\path\to\MyProject.dproj --db myproj.sqlite
 
+:: Index just the Delphi Library + Browsing paths (no .dproj needed).
+:: Useful as a one-time "library knowledge base" your AI can query.
+third_party\dll\drag-lint.exe index --scan-libraries --db delphi-libs.sqlite
+
+:: Preview which folders --project / --scan-libraries would index, without
+:: actually indexing.
+third_party\dll\drag-lint.exe index --project MyApp.dproj --dry-run
+
 :: Find a symbol by exact name (fuzzy fallback if no exact match)
 third_party\dll\drag-lint.exe query --name TBaseForm --db myproj.sqlite
+
+:: Query across multiple indexes at once
+third_party\dll\drag-lint.exe query --name TcxGrid --db myproj.sqlite --db delphi-libs.sqlite
 
 :: Find a symbol by qualified name
 third_party\dll\drag-lint.exe query --qname uBaseForm.TBaseForm.AfterShow --db myproj.sqlite
@@ -141,9 +156,10 @@ Indexes a small fixture, runs the standard queries, prints expected output.
 
 ## Roadmap
 
-- v0.3: tree-sitter query predicates (`#eq?`/`#match?`/`#not-eq?`); MCP
-  server (`drag-lint serve`); BM25 over AST-chunked text for semantic
-  retrieval; project-aware mode caching to avoid re-walking the registry
+- v0.4: MCP server (`drag-lint serve`) so Claude Code / other AI tools
+  auto-discover the queries as native tools; project-aware mode caching to
+  avoid re-walking the registry on every run; BM25 over AST-chunked text
+  for semantic retrieval
 - v0.5: more lint rules, IDE inspector demo, multi-platform binaries
 - v1.0: BPL packaging for in-IDE use, additional `ISymbolStore` impls
   (Firebird Embedded), per-project `.drag-lint.json` config

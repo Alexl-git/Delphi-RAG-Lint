@@ -38,14 +38,19 @@ Standard tree-sitter S-expression query syntax. Captures use `@name`.
   entity: (identifier) @callee) @warn)
 ```
 
-### Known limitation (v0.2)
+### Supported predicates (v0.3)
 
-The runner **does not evaluate predicates yet** (`#eq?`, `#match?`, `#not-eq?`,
-etc.). Predicates compile fine but are ignored — your rule must be
-structurally specific enough to avoid false positives, or filter
-findings downstream. Predicate evaluation is on the v0.3 backlog. Until then,
-treat `*.scm` rules as "AST shape detectors" and the JSON metadata as the
-human label.
+The runner evaluates these standard tree-sitter predicates:
+
+| Predicate | Meaning |
+|---|---|
+| `#eq? @cap "lit"` / `#not-eq?` | Capture text equals the literal |
+| `#eq? @c1 @c2` / `#not-eq?` | Two captures have identical text |
+| `#match? @cap "re"` / `#not-match?` | Capture text matches the regex (TRegEx) |
+| `#any-of? @cap "a" "b" ...` / `#not-any-of?` | Capture text equals any of the listed |
+
+Unknown predicates pass through (don't suppress) so future tree-sitter
+extensions don't silently filter matches.
 
 ### Tip
 
