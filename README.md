@@ -37,7 +37,7 @@ dependencies + Library/Browsing paths from the registry automatically).**
 | Tool | RAG | Lint | License | Native Delphi |
 |---|---|---|---|---|
 | **Delphi-RAG-Lint** | Symbol + fuzzy + (BM25 planned) | Yes | MIT | Yes |
-| theMIMER | Text RAG + LLM | No | Commercial | Yes |
+| Commercial Delphi-native RAG/LLM tools | Text RAG + LLM | No | Commercial | Yes |
 | FixInsight | — | Yes | Commercial | Yes |
 | Peganza Pascal Analyzer | — | Yes | Commercial | Yes |
 | DelphiAST | Parser lib only | No | MIT | Yes |
