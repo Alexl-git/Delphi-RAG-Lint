@@ -1,0 +1,37 @@
+# Delphi
+*.dcu
+*.local
+*.identcache
+*.tvsconfig
+*.stat
+*.dsk
+__history/
+__recovery/
+*.~*
+
+# Build outputs
+Win32/
+Win64/
+Debug/
+Release/
+*.exe
+*.dll
+!third_party/**/*.dll
+
+# IDE
+.vs/
+*.pdb
+
+# Indexer artifacts
+*.kbvs
+*.bm25
+*.sqlite
+*.db-journal
+indexed/
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
