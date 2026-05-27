@@ -23,6 +23,7 @@ uses
 type
   TArgs = record
     Command: string;
+    SubCommand: string;
     Path: string;
     DbPath: string;
     Name: string;
@@ -38,9 +39,10 @@ begin
     ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
   Writeln('Usage:');
-  Writeln('  drag-lint index <path> [--db <file.sqlite>]');
-  Writeln('  drag-lint query --name <symbol-name>  [--db <file.sqlite>] [--json]');
-  Writeln('  drag-lint query --qname <qualified>   [--db <file.sqlite>] [--json]');
+  Writeln('  drag-lint index <path>                              [--db <file.sqlite>]');
+  Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
+  Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
+  Writeln('  drag-lint query find-callers --name  <callee-name>  [--db ...] [--json]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -72,7 +74,18 @@ begin
     Exit;
   end;
 
+  // Optional subcommand: ParamStr(2) if it doesn't start with '--'.
   i := 2;
+  if (Result.Command = 'query') and (ParamCount >= 2) then
+  begin
+    A := ParamStr(2);
+    if (A <> '') and (not A.StartsWith('--')) then
+    begin
+      Result.SubCommand := A;
+      i := 3;
+    end;
+  end;
+
   while i <= ParamCount do
   begin
     A := ParamStr(i);
@@ -98,6 +111,48 @@ begin
     else
       raise Exception.CreateFmt('Unknown argument: %s', [A]);
     Inc(i);
+  end;
+end;
+
+procedure PrintReferences(const AStore: ISymbolStore;
+  const ARefs: TArray<TReference>; AsJson: Boolean);
+var
+  JArr: TJSONArray;
+  JObj: TJSONObject;
+  R: TReference;
+  Path: string;
+begin
+  if AsJson then
+  begin
+    JArr := TJSONArray.Create;
+    try
+      for R in ARefs do
+      begin
+        Path := AStore.GetFilePath(R.FileId);
+        JObj := TJSONObject.Create;
+        JObj.AddPair('id', TJSONNumber.Create(R.Id));
+        JObj.AddPair('kind', R.Kind);
+        JObj.AddPair('name_text', R.NameText);
+        JObj.AddPair('file_path', Path);
+        JObj.AddPair('start_line', TJSONNumber.Create(R.StartLine));
+        JObj.AddPair('start_col', TJSONNumber.Create(R.StartCol));
+        JObj.AddPair('end_line', TJSONNumber.Create(R.EndLine));
+        JObj.AddPair('end_col', TJSONNumber.Create(R.EndCol));
+        JArr.AddElement(JObj);
+      end;
+      Writeln(JArr.Format(2));
+    finally
+      JArr.Free;
+    end;
+  end
+  else
+  begin
+    for R in ARefs do
+    begin
+      Path := AStore.GetFilePath(R.FileId);
+      Writeln(Format('%s:%d:%d  %s', [Path, R.StartLine, R.StartCol, R.NameText]));
+    end;
+    Writeln(Format('%d caller(s)', [Length(ARefs)]));
   end;
 end;
 
@@ -136,8 +191,8 @@ begin
     Indexer.IndexFolder(AArgs.Path, True);
 
   Elapsed := (Now - StartTime) * 86400;
-  Writeln(Format('Done. Files: %d, Symbols: %d, %.2fs',
-    [Store.CountFiles, Store.CountSymbols, Elapsed]));
+  Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs',
+    [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Elapsed]));
   Result := 0;
 end;
 
@@ -185,6 +240,7 @@ function DoQuery(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore;
   Symbols: TArray<TSymbol>;
+  Refs: TArray<TReference>;
 begin
   if not TFile.Exists(AArgs.DbPath) then
   begin
@@ -194,6 +250,29 @@ begin
   end;
   Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
+
+  if AArgs.SubCommand = 'find-callers' then
+  begin
+    if AArgs.Name = '' then
+    begin
+      Writeln('ERROR: find-callers requires --name <callee>');
+      Exit(2);
+    end;
+    Refs := Store.FindCallersByName(AArgs.Name);
+    PrintReferences(Store, Refs, AArgs.AsJson);
+    if Length(Refs) = 0 then
+      Result := 1
+    else
+      Result := 0;
+    Exit;
+  end;
+
+  if AArgs.SubCommand <> '' then
+  begin
+    Writeln('ERROR: unknown query subcommand: ', AArgs.SubCommand);
+    Exit(2);
+  end;
+
   if AArgs.QName <> '' then
     Symbols := Store.FindSymbolsByQualifiedName(AArgs.QName)
   else if AArgs.Name <> '' then

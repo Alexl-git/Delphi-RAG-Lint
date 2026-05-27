@@ -52,7 +52,10 @@ type
     function FindSymbolsByExactName(const AName: string): TArray<TSymbol>;
     function FindSymbolsByQualifiedName(const AQName: string): TArray<TSymbol>;
     function FindReferencesTo(ASymbolId: Int64): TArray<TReference>;
+    function FindCallersByName(const ACalleeName: string): TArray<TReference>;
+    function GetFilePath(AFileId: Int64): string;
     function CountSymbols: Int64;
+    function CountReferences: Int64;
     function CountFiles: Int64;
   end;
 
@@ -363,6 +366,66 @@ begin
   end;
 end;
 
+function TSQLiteSymbolStore.FindCallersByName(
+  const ACalleeName: string): TArray<TReference>;
+var
+  Q: TFDQuery;
+  List: TList<TReference>;
+  R: TReference;
+begin
+  List := TList<TReference>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text :=
+      'SELECT * FROM refs WHERE kind = ''call'' AND name_text = :name ' +
+      'ORDER BY file_id, start_line';
+    Q.ParamByName('name').AsString := ACalleeName;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R := Default(TReference);
+      R.Id := Q.FieldByName('id').AsLargeInt;
+      if Q.FieldByName('symbol_id').IsNull then
+        R.SymbolId := 0
+      else
+        R.SymbolId := Q.FieldByName('symbol_id').AsLargeInt;
+      R.FileId := Q.FieldByName('file_id').AsLargeInt;
+      R.Kind := Q.FieldByName('kind').AsString;
+      R.NameText := Q.FieldByName('name_text').AsString;
+      R.StartLine := Q.FieldByName('start_line').AsInteger;
+      R.StartCol := Q.FieldByName('start_col').AsInteger;
+      R.EndLine := Q.FieldByName('end_line').AsInteger;
+      R.EndCol := Q.FieldByName('end_col').AsInteger;
+      List.Add(R);
+      Q.Next;
+    end;
+    Result := List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetFilePath(AFileId: Int64): string;
+var
+  Q: TFDQuery;
+begin
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text := 'SELECT path FROM files WHERE id = :id';
+    Q.ParamByName('id').AsLargeInt := AFileId;
+    Q.Open;
+    if Q.IsEmpty then
+      Result := ''
+    else
+      Result := Q.FieldByName('path').AsString;
+  finally
+    Q.Free;
+  end;
+end;
+
 function TSQLiteSymbolStore.CountSymbols: Int64;
 begin
   if FQCountSymbols.Active then
@@ -370,6 +433,21 @@ begin
   FQCountSymbols.Open;
   Result := FQCountSymbols.FieldByName('n').AsLargeInt;
   FQCountSymbols.Close;
+end;
+
+function TSQLiteSymbolStore.CountReferences: Int64;
+var
+  Q: TFDQuery;
+begin
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text := 'SELECT COUNT(*) AS n FROM refs';
+    Q.Open;
+    Result := Q.FieldByName('n').AsLargeInt;
+  finally
+    Q.Free;
+  end;
 end;
 
 function TSQLiteSymbolStore.CountFiles: Int64;

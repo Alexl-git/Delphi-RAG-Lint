@@ -18,7 +18,7 @@ type
     FStore: ISymbolStore;
     FParsers: TList<IParser>;
     function ParserFor(const AExtension: string): IParser;
-    procedure ReportProgress(const APath: string; ASymbols, AErrors: Integer);
+    procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
   public
     constructor Create(const AStore: ISymbolStore;
       const AParsers: TArray<IParser>);
@@ -64,9 +64,10 @@ begin
 end;
 
 procedure TIndexer.ReportProgress(const APath: string;
-  ASymbols, AErrors: Integer);
+  ASymbols, ARefs, AErrors: Integer);
 begin
-  Writeln(Format('  %s -> %d symbols, %d errors', [APath, ASymbols, AErrors]));
+  Writeln(Format('  %s -> %d symbols, %d refs, %d errors',
+    [APath, ASymbols, ARefs, AErrors]));
 end;
 
 procedure TIndexer.IndexFile(const AFilePath: string);
@@ -106,8 +107,11 @@ begin
         NewSymId := FStore.UpsertSymbol(Token, Sym);
         IdxToId.Add(i, NewSymId);
       end;
+      for i := 0 to High(ParseRes.References) do
+        FStore.UpsertReference(Token, ParseRes.References[i]);
       FStore.CommitFileTx(Token);
       ReportProgress(AFilePath, Length(ParseRes.Symbols),
+        Length(ParseRes.References),
         Length(ParseRes.Diagnostics));
     except
       on E: Exception do

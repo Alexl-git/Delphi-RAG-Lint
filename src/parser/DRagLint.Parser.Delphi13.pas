@@ -61,11 +61,13 @@ type
   TWalkState = class
     Source: TBytes;
     Symbols: TList<TSymbol>;
+    References: TList<TReference>;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     function Emit(AKind: TSymbolKind; const AName, AQualifiedName: string;
       AParentSymbolIdx: Integer; const ARangeNode: TTSNode;
       const ASignature: string = ''; const AModifiers: string = ''): Integer;
+    procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
   end;
 
 constructor TWalkState.Create(const ASource: TBytes);
@@ -73,12 +75,32 @@ begin
   inherited Create;
   Source := ASource;
   Symbols := TList<TSymbol>.Create;
+  References := TList<TReference>.Create;
 end;
 
 destructor TWalkState.Destroy;
 begin
   Symbols.Free;
+  References.Free;
   inherited;
+end;
+
+procedure TWalkState.EmitRef(const AKind, ANameText: string;
+  const ARangeNode: TTSNode);
+var
+  Ref: TReference;
+begin
+  if ARangeNode.IsNull or (ANameText = '') then
+    Exit;
+  Ref := Default(TReference);
+  Ref.Kind := AKind;
+  Ref.NameText := ANameText;
+  Ref.SymbolId := 0;  // unresolved at parse time
+  Ref.StartLine := Integer(ARangeNode.StartPoint.row) + 1;
+  Ref.StartCol := Integer(ARangeNode.StartPoint.column) + 1;
+  Ref.EndLine := Integer(ARangeNode.EndPoint.row) + 1;
+  Ref.EndCol := Integer(ARangeNode.EndPoint.column) + 1;
+  References.Add(Ref);
 end;
 
 function TWalkState.Emit(AKind: TSymbolKind; const AName, AQualifiedName: string;
@@ -110,6 +132,30 @@ end;
 
 procedure Walk(const ANode: TTSNode; const AState: TWalkState;
   AParentSymbolIdx: Integer; const AParentQualifiedName: string); forward;
+
+procedure EmitCallReference(const ANode: TTSNode; const AState: TWalkState);
+var
+  EntityNode, NameNode: TTSNode;
+  CalleeName: string;
+begin
+  EntityNode := ANode.ChildByField('entity');
+  if EntityNode.IsNull then
+    Exit;
+  if EntityNode.NodeType = 'identifier' then
+    NameNode := EntityNode
+  else if EntityNode.NodeType = 'exprDot' then
+  begin
+    NameNode := EntityNode.ChildByField('rhs');
+    if NameNode.IsNull then
+      Exit;
+  end
+  else
+    Exit;
+  CalleeName := NodeText(NameNode, AState.Source);
+  if CalleeName = '' then
+    Exit;
+  AState.EmitRef('call', CalleeName, NameNode);
+end;
 
 procedure WalkUnit(const ANode: TTSNode; const AState: TWalkState);
 var
@@ -237,10 +283,26 @@ begin
     Exit;
   end;
 
-  // Skip implementation method definitions — their declarations were already
-  // emitted from the interface section. Phase 1 keeps things minimal.
+  // Implementation bodies: don't emit a duplicate symbol from the `header:`
+  // declProc (the interface decl is the source of truth). Walk only the
+  // `body:` so call expressions inside produce TReference records.
   if NodeType = 'defProc' then
+  begin
+    var BodyNode := ANode.ChildByField('body');
+    if not BodyNode.IsNull then
+      Walk(BodyNode, AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
+  end;
+
+  // Call expression: emit a reference for the callee name. Walk into args for
+  // nested calls.
+  if NodeType = 'exprCall' then
+  begin
+    EmitCallReference(ANode, AState);
+    for i := 0 to ANode.NamedChildCount - 1 do
+      Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+    Exit;
+  end;
 
   // Default: recurse into named children
   for i := 0 to ANode.NamedChildCount - 1 do
@@ -313,6 +375,7 @@ begin
       Result.Diagnostics := ['parse contains syntax errors (Tree.RootNode.HasError = true)'];
     Walk(Root, State, -1, '');
     Result.Symbols := State.Symbols.ToArray;
+    Result.References := State.References.ToArray;
   finally
     State.Free;
     Tree.Free;
