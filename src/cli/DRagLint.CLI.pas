@@ -14,6 +14,7 @@ uses
   System.Classes,
   System.IOUtils,
   System.JSON,
+  System.Generics.Collections,
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces,
   DRagLint.Core.Indexer,
@@ -29,6 +30,7 @@ type
     SubCommand: string;
     Path: string;
     DbPath: string;
+    DbPaths: TArray<string>;
     Name: string;
     QName: string;
     Rule: string;
@@ -103,6 +105,8 @@ begin
     begin
       Inc(i);
       Result.DbPath := ParamStr(i);
+      SetLength(Result.DbPaths, Length(Result.DbPaths) + 1);
+      Result.DbPaths[High(Result.DbPaths)] := ParamStr(i);
     end
     else if (A = '--name') and (i < ParamCount) then
     begin
@@ -326,19 +330,39 @@ end;
 
 function DoQuery(const AArgs: TArgs): Integer;
 var
+  Symbols, AllSymbols: TArray<TSymbol>;
+  Refs, AllRefs: TArray<TReference>;
+  DbPath: string;
+  DbPaths: TArray<string>;
   Store: ISymbolStore;
-  Symbols: TArray<TSymbol>;
-  Refs: TArray<TReference>;
+  StoresByDb: TDictionary<Int64, ISymbolStore>;
+  PathsToScan: TArray<string>;
+  S: TSymbol;
+  R: TReference;
+  LastStore: ISymbolStore;
 begin
-  if not TFile.Exists(AArgs.DbPath) then
+  PathsToScan := AArgs.DbPaths;
+  if Length(PathsToScan) = 0 then
+    PathsToScan := [AArgs.DbPath];
+  for DbPath in PathsToScan do
   begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Writeln('Run "drag-lint index <path>" first.');
-    Exit(2);
+    if not TFile.Exists(DbPath) then
+    begin
+      Writeln('ERROR: database not found: ', DbPath);
+      Writeln('Run "drag-lint index <path>" first.');
+      Exit(2);
+    end;
   end;
-  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
 
+  SetLength(AllSymbols, 0);
+  SetLength(AllRefs, 0);
+  LastStore := nil;
+
+  // For find-callers we need to render with the store that owns each ref
+  // (for GetFilePath). Easiest: iterate DBs, accumulate, render once we know
+  // the dominant store. Or render per-db. For v0.3 minimum, just print
+  // header once and concat. PrintReferences walks per-row; we pass the
+  // store that owns the rows in that batch.
   if AArgs.SubCommand = 'find-callers' then
   begin
     if AArgs.Name = '' then
@@ -346,9 +370,21 @@ begin
       Writeln('ERROR: find-callers requires --name <callee>');
       Exit(2);
     end;
-    Refs := Store.FindCallersByName(AArgs.Name);
-    PrintReferences(Store, Refs, AArgs.AsJson);
-    if Length(Refs) = 0 then
+    var TotalRefs := 0;
+    for DbPath in PathsToScan do
+    begin
+      Store := TSQLiteSymbolStore.Create(DbPath);
+      Store.Migrate;
+      Refs := Store.FindCallersByName(AArgs.Name);
+      if Length(Refs) > 0 then
+      begin
+        PrintReferences(Store, Refs, AArgs.AsJson);
+        Inc(TotalRefs, Length(Refs));
+      end;
+    end;
+    if (TotalRefs = 0) and (not AArgs.AsJson) then
+      Writeln('0 caller(s)');
+    if TotalRefs = 0 then
       Result := 1
     else
       Result := 0;
@@ -361,30 +397,53 @@ begin
     Exit(2);
   end;
 
-  if AArgs.QName <> '' then
-    Symbols := Store.FindSymbolsByQualifiedName(AArgs.QName)
-  else if AArgs.Name <> '' then
-    Symbols := Store.FindSymbolsByExactName(AArgs.Name)
-  else
+  if (AArgs.QName = '') and (AArgs.Name = '') then
   begin
     Writeln('ERROR: query requires --name or --qname');
     Exit(2);
   end;
-  if (Length(Symbols) = 0) and (AArgs.Name <> '') then
+
+  for DbPath in PathsToScan do
   begin
-    // Fuzzy fallback for misremembered names.
-    Symbols := Store.FindSymbolsFuzzy(AArgs.Name, 10);
-    if Length(Symbols) > 0 then
+    Store := TSQLiteSymbolStore.Create(DbPath);
+    Store.Migrate;
+    if AArgs.QName <> '' then
+      Symbols := Store.FindSymbolsByQualifiedName(AArgs.QName)
+    else
+      Symbols := Store.FindSymbolsByExactName(AArgs.Name);
+    for S in Symbols do
+    begin
+      SetLength(AllSymbols, Length(AllSymbols) + 1);
+      AllSymbols[High(AllSymbols)] := S;
+    end;
+    LastStore := Store;
+  end;
+
+  if (Length(AllSymbols) = 0) and (AArgs.Name <> '') then
+  begin
+    // Fuzzy fallback: hit each DB, accumulate, top-K overall.
+    for DbPath in PathsToScan do
+    begin
+      Store := TSQLiteSymbolStore.Create(DbPath);
+      Store.Migrate;
+      Symbols := Store.FindSymbolsFuzzy(AArgs.Name, 10);
+      for S in Symbols do
+      begin
+        SetLength(AllSymbols, Length(AllSymbols) + 1);
+        AllSymbols[High(AllSymbols)] := S;
+      end;
+    end;
+    if Length(AllSymbols) > 0 then
     begin
       if not AArgs.AsJson then
         Writeln(Format('(no exact match for "%s" — closest matches:)',
           [AArgs.Name]));
-      PrintSymbols(Symbols, AArgs.AsJson);
+      PrintSymbols(AllSymbols, AArgs.AsJson);
       Exit(0);
     end;
   end;
-  PrintSymbols(Symbols, AArgs.AsJson);
-  if Length(Symbols) = 0 then
+  PrintSymbols(AllSymbols, AArgs.AsJson);
+  if Length(AllSymbols) = 0 then
     Result := 1
   else
     Result := 0;
