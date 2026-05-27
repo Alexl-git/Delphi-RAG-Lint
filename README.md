@@ -6,13 +6,13 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.12-alpha. Early work in progress — expect breaking changes.** Adds
-`drag-lint todos` — scan `.pas/.dpr/.dpk/.inc` for `// TODO`, `// FIXME`,
-`// HACK`, `// XXX`, `// REVIEW`, `// NOTE` comments with optional
-author capture, JSON output, and Delphi-priority-digit awareness.
-Builds on v0.11 watch mode, v0.10 graph export, v0.9 project-shaped
-lint rules, v0.8 type-use refs + compiler-log ingest, v0.7 LSP position
-resolution, v0.4 MCP server, and the export/top/fuzzy stack.
+**v0.13-alpha. Early work in progress — expect breaking changes.** Adds
+`drag-lint diff --db <old> --db <new>` — compare two indexes by
+qualified name and report API-impact (added / removed / changed
+symbols). Built on v0.12 TODO scanner, v0.11 watch mode, v0.10 graph
+export, v0.9 project-shaped lint rules, v0.8 type-use refs + compiler-
+log ingest, v0.7 LSP position resolution, v0.4 MCP server, and the
+export/top/fuzzy stack.
 
 Builds on v0.2 (DFM forms, full symbol coverage, external `.scm` lint
 plugins, `--project <dproj>` mode).

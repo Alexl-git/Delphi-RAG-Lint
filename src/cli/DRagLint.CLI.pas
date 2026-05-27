@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.12.0-alpha';
+  VERSION = '0.13.0-alpha';
 
 function Run: Integer;
 
@@ -82,6 +82,7 @@ begin
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
   Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]');
   Writeln('  drag-lint todos              [<path>]                (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])');
+  Writeln('  drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]');
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
   Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
   Writeln('  drag-lint --version');
@@ -1459,6 +1460,165 @@ begin
   Result := 0;
 end;
 
+// --- diff -------------------------------------------------------------------
+
+// v0.13: diff two indexes by qualified_name. Pass two --db args:
+//   drag-lint diff --db old.sqlite --db new.sqlite
+// Reports added, removed, and signature-changed symbols. Useful for
+// reviewing the API impact of a refactor commit.
+function DoDiff(const AArgs: TArgs): Integer;
+var
+  DbA, DbB: string;
+  ConnA, ConnB: TFDConnection;
+  QA, QB: TFDQuery;
+  SetA: TDictionary<string, string>; // qname -> "kind|signature"
+  SetB: TDictionary<string, string>;
+  Pair: TPair<string, string>;
+  Added, Removed, Changed: Integer;
+  JArr: TJSONArray;
+  JObj: TJSONObject;
+  Tag: string;
+begin
+  if Length(AArgs.DbPaths) < 2 then
+  begin
+    Writeln('ERROR: diff requires two --db arguments ' +
+      '(--db <old.sqlite> --db <new.sqlite>)');
+    Exit(2);
+  end;
+  DbA := AArgs.DbPaths[0];
+  DbB := AArgs.DbPaths[1];
+  if not TFile.Exists(DbA) then
+  begin
+    Writeln('ERROR: --db ', DbA, ' not found');
+    Exit(2);
+  end;
+  if not TFile.Exists(DbB) then
+  begin
+    Writeln('ERROR: --db ', DbB, ' not found');
+    Exit(2);
+  end;
+
+  ConnA := TFDConnection.Create(nil);
+  ConnB := TFDConnection.Create(nil);
+  QA := TFDQuery.Create(nil);
+  QB := TFDQuery.Create(nil);
+  SetA := TDictionary<string, string>.Create;
+  SetB := TDictionary<string, string>.Create;
+  try
+    ConnA.DriverName := 'SQLite';
+    ConnA.Params.Values['Database'] := DbA;
+    ConnA.LoginPrompt := False;
+    ConnA.Connected := True;
+    ConnB.DriverName := 'SQLite';
+    ConnB.Params.Values['Database'] := DbB;
+    ConnB.LoginPrompt := False;
+    ConnB.Connected := True;
+    QA.Connection := ConnA;
+    QB.Connection := ConnB;
+    QA.SQL.Text :=
+      'SELECT qualified_name, kind, COALESCE(signature, '''') AS sig ' +
+      'FROM symbols WHERE qualified_name <> '''' ';
+    QB.SQL.Text := QA.SQL.Text;
+    QA.Open;
+    while not QA.Eof do
+    begin
+      SetA.AddOrSetValue(
+        QA.FieldByName('qualified_name').AsString,
+        QA.FieldByName('kind').AsString + '|' +
+        QA.FieldByName('sig').AsString);
+      QA.Next;
+    end;
+    QB.Open;
+    while not QB.Eof do
+    begin
+      SetB.AddOrSetValue(
+        QB.FieldByName('qualified_name').AsString,
+        QB.FieldByName('kind').AsString + '|' +
+        QB.FieldByName('sig').AsString);
+      QB.Next;
+    end;
+
+    Added := 0;
+    Removed := 0;
+    Changed := 0;
+
+    if AArgs.AsJson then
+    begin
+      JArr := TJSONArray.Create;
+      try
+        for Pair in SetB do
+          if not SetA.ContainsKey(Pair.Key) then
+          begin
+            JObj := TJSONObject.Create;
+            JObj.AddPair('change', 'added');
+            JObj.AddPair('qualified_name', Pair.Key);
+            JObj.AddPair('kind', Pair.Value.Split(['|'])[0]);
+            JArr.AddElement(JObj);
+            Inc(Added);
+          end
+          else if SetA[Pair.Key] <> Pair.Value then
+          begin
+            JObj := TJSONObject.Create;
+            JObj.AddPair('change', 'changed');
+            JObj.AddPair('qualified_name', Pair.Key);
+            JObj.AddPair('from', SetA[Pair.Key]);
+            JObj.AddPair('to', Pair.Value);
+            JArr.AddElement(JObj);
+            Inc(Changed);
+          end;
+        for Pair in SetA do
+          if not SetB.ContainsKey(Pair.Key) then
+          begin
+            JObj := TJSONObject.Create;
+            JObj.AddPair('change', 'removed');
+            JObj.AddPair('qualified_name', Pair.Key);
+            JObj.AddPair('kind', Pair.Value.Split(['|'])[0]);
+            JArr.AddElement(JObj);
+            Inc(Removed);
+          end;
+        Writeln(JArr.Format(2));
+      finally
+        JArr.Free;
+      end;
+    end
+    else
+    begin
+      for Pair in SetB do
+        if not SetA.ContainsKey(Pair.Key) then
+        begin
+          Tag := Pair.Value.Split(['|'])[0];
+          Writeln('+ ', Pair.Key, '  [', Tag, ']');
+          Inc(Added);
+        end
+        else if SetA[Pair.Key] <> Pair.Value then
+        begin
+          Writeln('~ ', Pair.Key);
+          Writeln('    from: ', SetA[Pair.Key]);
+          Writeln('    to:   ', Pair.Value);
+          Inc(Changed);
+        end;
+      for Pair in SetA do
+        if not SetB.ContainsKey(Pair.Key) then
+        begin
+          Tag := Pair.Value.Split(['|'])[0];
+          Writeln('- ', Pair.Key, '  [', Tag, ']');
+          Inc(Removed);
+        end;
+      Writeln(Format('Summary: %d added, %d removed, %d changed',
+        [Added, Removed, Changed]));
+    end;
+
+    Result := 0;
+  finally
+    SetA.Free;
+    SetB.Free;
+    QA.Free;
+    QB.Free;
+    ConnA.Free;
+    ConnB.Free;
+  end;
+end;
+
 // --- todos ------------------------------------------------------------------
 
 // v0.12: scan .pas/.dpr/.dpk files for TODO/FIXME/HACK/XXX/REVIEW/NOTE
@@ -1710,6 +1870,8 @@ begin
       Result := DoGraph(Args)
     else if Args.Command = 'todos' then
       Result := DoTodos(Args)
+    else if Args.Command = 'diff' then
+      Result := DoDiff(Args)
     else if Args.Command = 'lsp' then
     begin
       var LspDb := '';

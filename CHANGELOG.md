@@ -3,6 +3,28 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha — expect
 breaking changes** until v1.0.
 
+## v0.13.0-alpha — 2026-05-27
+
+### Added
+- **`drag-lint diff --db <old.sqlite> --db <new.sqlite>`** — compare two
+  indexes by `qualified_name`. Reports added, removed, and signature-
+  changed symbols. Use case: "what did this PR change in the public
+  API?" Build an index before the change, build one after, run diff.
+  `--json` for tool integration.
+
+### Example output
+```
++ DRagLint.Lint.ProjectChecks.TProjectChecks  [class]
++ DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr  [method]
++ DRagLint.CLI.TArgs.Watch  [field]
++ DRagLint.CLI.TArgs.Interval  [field]
++ DRagLint.Lint.ProjectChecks  [unit]
+Summary: 5 added, 0 removed, 0 changed
+```
+That diff was the captured drag-lint API delta from v0.7 to v0.13.
+
+---
+
 ## v0.12.0-alpha — 2026-05-27
 
 ### Added
