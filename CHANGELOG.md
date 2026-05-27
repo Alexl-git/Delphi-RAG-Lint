@@ -3,6 +3,35 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha — expect
 breaking changes** until v1.0.
 
+## v0.14.0-alpha — 2026-05-27
+
+### Added
+- **`.drag-lint.json`** — per-project config. Located in cwd or any
+  ancestor directory. Loaded before CLI flags; CLI overrides config.
+  Recognised keys:
+  ```json
+  {
+    "db": "drag-lint.sqlite",
+    "project": "MyApp.dproj",
+    "path": "C:/src",
+    "rule": "field-by-name-in-loop",
+    "watch": { "interval": 5 }
+  }
+  ```
+- Save typing on repeat invocations:
+  ```
+  cd C:\proj                       # has .drag-lint.json
+  drag-lint index                  # uses configured --db and --path
+  drag-lint query --name TFoo      # uses configured --db
+  ```
+
+### Notes
+- Missing or invalid `.drag-lint.json` is silently ignored.
+- A small status line "(loaded defaults from <path>)" prints when the
+  file was honoured, so you know it took effect.
+
+---
+
 ## v0.13.0-alpha — 2026-05-27
 
 ### Added

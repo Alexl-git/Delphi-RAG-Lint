@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.13.0-alpha';
+  VERSION = '0.14.0-alpha';
 
 function Run: Integer;
 
@@ -92,6 +92,66 @@ begin
   Writeln('  --db = .\drag-lint.sqlite next to the cwd');
 end;
 
+// v0.14: load defaults from `.drag-lint.json` in cwd (or any parent),
+// before CLI flags. Recognized keys:
+//   { "db": "...", "project": "...", "path": "...", "rule": "...",
+//     "watch": { "interval": N } }
+// CLI flags override config values. Missing file is silently ignored.
+procedure LoadConfigDefaults(var AArgs: TArgs);
+var
+  Dir, Candidate: string;
+  Content: string;
+  J, JWatch: TJSONObject;
+  V: TJSONValue;
+  N: TJSONNumber;
+begin
+  Dir := GetCurrentDir;
+  Candidate := '';
+  while Dir <> '' do
+  begin
+    if TFile.Exists(TPath.Combine(Dir, '.drag-lint.json')) then
+    begin
+      Candidate := TPath.Combine(Dir, '.drag-lint.json');
+      Break;
+    end;
+    if Dir = ExtractFilePath(Dir.TrimRight(['\','/'])) then Break;
+    Dir := ExtractFilePath(Dir.TrimRight(['\','/']));
+  end;
+  if Candidate = '' then Exit;
+  try
+    Content := TFile.ReadAllText(Candidate);
+    J := TJSONObject.ParseJSONValue(Content) as TJSONObject;
+  except
+    Exit;
+  end;
+  if J = nil then Exit;
+  try
+    V := J.GetValue('db');
+    if (V <> nil) and (V.Value <> '') then
+      AArgs.DbPath := V.Value;
+    V := J.GetValue('project');
+    if (V <> nil) and (V.Value <> '') then
+      AArgs.ProjectPath := V.Value;
+    V := J.GetValue('path');
+    if (V <> nil) and (V.Value <> '') then
+      AArgs.Path := V.Value;
+    V := J.GetValue('rule');
+    if (V <> nil) and (V.Value <> '') then
+      AArgs.Rule := V.Value;
+    V := J.GetValue('watch');
+    if V is TJSONObject then
+    begin
+      JWatch := TJSONObject(V);
+      AArgs.Watch := True;
+      N := JWatch.GetValue('interval') as TJSONNumber;
+      if N <> nil then AArgs.Interval := N.AsInt;
+    end;
+  finally
+    J.Free;
+  end;
+  Writeln('(loaded defaults from ', Candidate, ')');
+end;
+
 function ParseArgs: TArgs;
 var
   i: Integer;
@@ -99,6 +159,7 @@ var
 begin
   Result := Default(TArgs);
   Result.DbPath := TPath.Combine(GetCurrentDir, 'drag-lint.sqlite');
+  LoadConfigDefaults(Result);
   if ParamCount = 0 then
   begin
     Result.ShowHelp := True;
