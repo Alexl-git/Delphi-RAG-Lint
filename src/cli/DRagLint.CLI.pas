@@ -20,7 +20,8 @@ uses
   DRagLint.Storage.SQLite,
   DRagLint.Parser.Delphi13,
   DRagLint.Parser.DFM,
-  DRagLint.Lint.Linter;
+  DRagLint.Lint.Linter,
+  DRagLint.Project.Resolver;
 
 type
   TArgs = record
@@ -31,7 +32,9 @@ type
     Name: string;
     QName: string;
     Rule: string;
+    ProjectPath: string;
     AsJson: Boolean;
+    DryRun: Boolean;
     ShowHelp: Boolean;
     ShowVersion: Boolean;
   end;
@@ -43,6 +46,7 @@ begin
   Writeln('');
   Writeln('Usage:');
   Writeln('  drag-lint index <path>                              [--db <file.sqlite>]');
+  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--dry-run]');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--db ...] [--json]');
@@ -113,8 +117,15 @@ begin
       Inc(i);
       Result.Rule := ParamStr(i);
     end
+    else if (A = '--project') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.ProjectPath := ParamStr(i);
+    end
     else if A = '--json' then
       Result.AsJson := True
+    else if A = '--dry-run' then
+      Result.DryRun := True
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
     else
@@ -172,19 +183,32 @@ var
   Parser: IParser;
   StartTime: TDateTime;
   Elapsed: Double;
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  Folders: TArray<string>;
+  F: string;
 begin
-  if AArgs.Path = '' then
+  if (AArgs.Path = '') and (AArgs.ProjectPath = '') then
   begin
-    Writeln('ERROR: index requires a <path>');
+    Writeln('ERROR: index requires a <path> or --project <file.dproj>');
     Exit(2);
   end;
-  if not (TDirectory.Exists(AArgs.Path) or TFile.Exists(AArgs.Path)) then
+  if AArgs.Path <> '' then
   begin
-    Writeln('ERROR: path does not exist: ', AArgs.Path);
-    Exit(2);
+    if not (TDirectory.Exists(AArgs.Path) or TFile.Exists(AArgs.Path)) then
+    begin
+      Writeln('ERROR: path does not exist: ', AArgs.Path);
+      Exit(2);
+    end;
+  end;
+  if AArgs.ProjectPath <> '' then
+  begin
+    if not TFile.Exists(AArgs.ProjectPath) then
+    begin
+      Writeln('ERROR: .dproj not found: ', AArgs.ProjectPath);
+      Exit(2);
+    end;
   end;
 
-  Writeln('Indexing: ', AArgs.Path);
   Writeln('Database: ', AArgs.DbPath);
 
   StartTime := Now;
@@ -194,10 +218,36 @@ begin
   Parser := TDelphi13Parser.Create;
   Indexer := TIndexer.Create(Store, [Parser, TDFMParser.Create]);
 
-  if TFile.Exists(AArgs.Path) then
-    Indexer.IndexFile(AArgs.Path)
+  if AArgs.ProjectPath <> '' then
+  begin
+    Writeln('Project: ', AArgs.ProjectPath);
+    Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      Folders := Resolver.Resolve(AArgs.ProjectPath);
+    finally
+      Resolver.Free;
+    end;
+    Writeln(Format('Resolved %d unique scan folders:', [Length(Folders)]));
+    for F in Folders do
+      Writeln('  ', F);
+    if AArgs.DryRun then
+    begin
+      Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.');
+      Result := 0;
+      Exit;
+    end;
+    Writeln('Indexing...');
+    for F in Folders do
+      Indexer.IndexFolder(F, True);
+  end
   else
-    Indexer.IndexFolder(AArgs.Path, True);
+  begin
+    Writeln('Indexing: ', AArgs.Path);
+    if TFile.Exists(AArgs.Path) then
+      Indexer.IndexFile(AArgs.Path)
+    else
+      Indexer.IndexFolder(AArgs.Path, True);
+  end;
 
   Elapsed := (Now - StartTime) * 86400;
   Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs',

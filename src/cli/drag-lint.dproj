@@ -168,6 +168,7 @@
         <DCCReference Include="..\query\DRagLint.Query.Fuzzy.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.QueryRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Linter.pas"/>
+        <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

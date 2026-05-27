@@ -17,6 +17,7 @@ uses
   DRagLint.Query.Fuzzy in '..\query\DRagLint.Query.Fuzzy.pas',
   DRagLint.Lint.QueryRules in '..\lint\DRagLint.Lint.QueryRules.pas',
   DRagLint.Lint.Linter in '..\lint\DRagLint.Lint.Linter.pas',
+  DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

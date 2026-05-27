@@ -6,9 +6,10 @@ Built on `tree-sitter-delphi13` (grammar) and
 (runtime bindings, MIT). **Pure Delphi at runtime — no Python, Node, or Rust
 deps.**
 
-**v0.1-alpha. Indexer + symbol query + fuzzy fallback + find-callers + one
-lint rule, all working end-to-end on a real codebase (Micronite ORM3 COMMON,
-310 .pas files, ~12k symbols, ~6k references, indexed in ~1.7 seconds).**
+**v0.2-alpha. Adds DFM form indexing, full symbol coverage (interfaces,
+records, enums, properties, fields), external lint rule plugins (S-expression
+query files), and project-aware scan (`--project <file.dproj>` resolves
+dependencies + Library/Browsing paths from the registry automatically).**
 
 ---
 
@@ -63,8 +64,13 @@ three DLLs so it can find them at load time.
 ### Use it
 
 ```cmd
-:: Index a Delphi project (writes to .\drag-lint.sqlite by default)
+:: Index a folder of Delphi sources (writes to .\drag-lint.sqlite by default)
 third_party\dll\drag-lint.exe index C:\path\to\my\project --db myproj.sqlite
+
+:: Index a .dproj — pulls in dependencies, Library, and Browsing paths
+:: from the registry (HKCU and HKLM, both 32-bit and 64-bit views) and
+:: expands $(BDS) macros.
+third_party\dll\drag-lint.exe index --project C:\path\to\MyProject.dproj --db myproj.sqlite
 
 :: Find a symbol by exact name (fuzzy fallback if no exact match)
 third_party\dll\drag-lint.exe query --name TBaseForm --db myproj.sqlite
@@ -72,10 +78,11 @@ third_party\dll\drag-lint.exe query --name TBaseForm --db myproj.sqlite
 :: Find a symbol by qualified name
 third_party\dll\drag-lint.exe query --qname uBaseForm.TBaseForm.AfterShow --db myproj.sqlite
 
-:: Find every caller of a method
+:: Find every caller / reference of a method or event handler
 third_party\dll\drag-lint.exe query find-callers --name AfterShow --db myproj.sqlite
 
-:: Lint a folder for FieldByName-in-loop anti-pattern
+:: Lint a folder. Loads built-in rules + any *.scm rule files from
+:: <exedir>\rules\ (see rules/README.md).
 third_party\dll\drag-lint.exe lint C:\path\to\my\project
 
 :: JSON output (for tooling integration)
@@ -100,26 +107,38 @@ Indexes a small fixture, runs the standard queries, prints expected output.
 | 2 | usage error (bad args, missing path/db) |
 | 3 | fatal exception |
 
-## What works in v0.1
+## What works in v0.2
 
-- Indexer for `.pas` / `.dpr` / `.dpk` (`.dfm` deferred to v0.2)
-- Symbol kinds emitted: `unit`, `class`, `method`, `procedure`, `function`,
-  `constructor`, `destructor`. (`interface`-as-type, `record`, `enum`,
-  `property`, `field` are next.)
-- Per-file SQLite transactions with full re-emit semantics on re-index
-- Symbol-exact query by name or qualified name
+- **Indexer** for `.pas` / `.dpr` / `.dpk` / `.dfm`
+- **Symbol kinds emitted:** `unit`, `class`, `interface`, `record`, `enum`,
+  `enum_value`, `procedure`, `function`, `method`, `constructor`,
+  `destructor`, `property`, `field`, `form`, `component`
+- **DFM**: every `object Name: TClass` emits a `form` (top-level) or
+  `component` (nested); event-handler bindings (`OnClick = btnOKClick`)
+  emit references that show up in `find-callers`
+- **Project-aware scan**: `drag-lint index --project <file.dproj>` parses
+  the .dproj's `DCC_UnitSearchPath`, walks the `.dpr`'s `uses X in 'path'`
+  clauses, reads HKCU + HKLM Library and Browsing paths for Win32 + Win64,
+  expands `$(BDS)` macros, deduplicates the resulting folder set, indexes
+  the union
+- **Per-file SQLite transactions** with full re-emit semantics on re-index
+- **Symbol-exact query** by name or qualified name
 - **Fuzzy fallback** (Levenshtein, adaptive threshold by pattern length)
-- `find-callers` — every call site whose callee text matches a name
-  (`bare()` or `Foo.bare()` both detected)
-- One lint rule: `field-by-name-in-loop`
-- Sub-second query latency on ~12k-symbol indexes
+- `find-callers` — every site referencing a name (call site, event-handler
+  binding, etc.)
+- **Built-in lint rule**: `field-by-name-in-loop` (AST-precise; no false
+  positives in comments/strings)
+- **External lint rules**: drop `*.scm` query files into `rules/`; sister
+  `*.json` provides metadata. See `rules/README.md`. Predicate evaluation
+  (`#eq?`, `#match?`) is v0.3 — for now rules must be structurally
+  specific.
 
 ## Roadmap
 
-- v0.2: `.dfm` form indexing, `declInterface` support, more lint rules,
-  README screenshots
-- v0.5: BM25 over AST-chunked text (full-text retrieval), MCP server
-  (`drag-lint serve`), VCL inspector demo
+- v0.3: tree-sitter query predicates (`#eq?`/`#match?`/`#not-eq?`); MCP
+  server (`drag-lint serve`); BM25 over AST-chunked text for semantic
+  retrieval; project-aware mode caching to avoid re-walking the registry
+- v0.5: more lint rules, IDE inspector demo, multi-platform binaries
 - v1.0: BPL packaging for in-IDE use, additional `ISymbolStore` impls
   (Firebird Embedded), per-project `.drag-lint.json` config
 
