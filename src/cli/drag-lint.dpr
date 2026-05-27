@@ -18,6 +18,7 @@ uses
   DRagLint.Lint.QueryRules in '..\lint\DRagLint.Lint.QueryRules.pas',
   DRagLint.Lint.Linter in '..\lint\DRagLint.Lint.Linter.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
+  DRagLint.MCP.Server in '..\mcp\DRagLint.MCP.Server.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

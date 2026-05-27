@@ -22,7 +22,8 @@ uses
   DRagLint.Parser.Delphi13,
   DRagLint.Parser.DFM,
   DRagLint.Lint.Linter,
-  DRagLint.Project.Resolver;
+  DRagLint.Project.Resolver,
+  DRagLint.MCP.Server;
 
 type
   TArgs = record
@@ -55,6 +56,7 @@ begin
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--db ...] [--json]');
   Writeln('  drag-lint lint  <path>       [--rule field-by-name-in-loop] [--json]');
+  Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -545,6 +547,23 @@ begin
       Result := DoQuery(Args)
     else if Args.Command = 'lint' then
       Result := DoLint(Args)
+    else if Args.Command = 'serve' then
+    begin
+      // Start MCP server. Reads JSON-RPC 2.0 over stdin, writes responses
+      // to stdout. Holds the --db open for the lifetime of the session.
+      var DbList: TArray<string>;
+      if Length(Args.DbPaths) > 0 then
+        DbList := Args.DbPaths
+      else if Args.DbPath <> '' then
+        DbList := [Args.DbPath];
+      var Server := DRagLint.MCP.Server.TMCPServer.Create(DbList);
+      try
+        Server.Run;
+        Result := 0;
+      finally
+        Server.Free;
+      end;
+    end
     else
     begin
       Writeln('ERROR: unknown command: ', Args.Command);
