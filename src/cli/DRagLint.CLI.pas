@@ -33,6 +33,7 @@ type
     QName: string;
     Rule: string;
     ProjectPath: string;
+    ScanLibraries: Boolean;
     AsJson: Boolean;
     DryRun: Boolean;
     ShowHelp: Boolean;
@@ -47,6 +48,7 @@ begin
   Writeln('Usage:');
   Writeln('  drag-lint index <path>                              [--db <file.sqlite>]');
   Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--dry-run]');
+  Writeln('  drag-lint index --scan-libraries                    [--db <file.sqlite>] [--dry-run]');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--db ...] [--json]');
@@ -126,6 +128,8 @@ begin
       Result.AsJson := True
     else if A = '--dry-run' then
       Result.DryRun := True
+    else if A = '--scan-libraries' then
+      Result.ScanLibraries := True
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
     else
@@ -187,9 +191,11 @@ var
   Folders: TArray<string>;
   F: string;
 begin
-  if (AArgs.Path = '') and (AArgs.ProjectPath = '') then
+  if (AArgs.Path = '') and (AArgs.ProjectPath = '') and
+     (not AArgs.ScanLibraries) then
   begin
-    Writeln('ERROR: index requires a <path> or --project <file.dproj>');
+    Writeln('ERROR: index requires a <path>, --project <file.dproj>, ' +
+      'or --scan-libraries');
     Exit(2);
   end;
   if AArgs.Path <> '' then
@@ -218,7 +224,30 @@ begin
   Parser := TDelphi13Parser.Create;
   Indexer := TIndexer.Create(Store, [Parser, TDFMParser.Create]);
 
-  if AArgs.ProjectPath <> '' then
+  if AArgs.ScanLibraries then
+  begin
+    Writeln('Scope: Delphi Library + Browsing paths (registry, Win32+Win64)');
+    Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      Folders := Resolver.ResolveLibraryPaths;
+    finally
+      Resolver.Free;
+    end;
+    Writeln(Format('Resolved %d unique library/browsing folders:',
+      [Length(Folders)]));
+    for F in Folders do
+      Writeln('  ', F);
+    if AArgs.DryRun then
+    begin
+      Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.');
+      Result := 0;
+      Exit;
+    end;
+    Writeln('Indexing...');
+    for F in Folders do
+      Indexer.IndexFolder(F, True);
+  end
+  else if AArgs.ProjectPath <> '' then
   begin
     Writeln('Project: ', AArgs.ProjectPath);
     Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;

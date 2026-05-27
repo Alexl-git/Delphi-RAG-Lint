@@ -34,6 +34,9 @@ type
   public
     constructor Create;
     function Resolve(const ADprojPath: string): TArray<string>;
+    // Library/Browsing paths from registry only — no .dproj required.
+    // Useful for "index everything Delphi knows about" without a project.
+    function ResolveLibraryPaths: TArray<string>;
   end;
 
 implementation
@@ -213,6 +216,19 @@ begin
     FolderOf := TPath.GetDirectoryName(Resolved);
     AddFolderIfReal(AList, FolderOf);
     P := EndQ + 1;
+  end;
+end;
+
+function TProjectResolver.ResolveLibraryPaths: TArray<string>;
+var
+  List: TList<string>;
+begin
+  List := TList<string>.Create;
+  try
+    ReadLibraryPaths(List);
+    Result := List.ToArray;
+  finally
+    List.Free;
   end;
 end;
 

@@ -3,11 +3,11 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 1;
+  SCHEMA_VERSION = 2;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
-  SCHEMA_DDL: array[0..7] of string = (
+  SCHEMA_DDL: array[0..9] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' +
     '  key   TEXT PRIMARY KEY,' +
     '  value TEXT NOT NULL' +
@@ -52,7 +52,19 @@ const
     '  start_col   INTEGER NOT NULL,' +
     '  end_line    INTEGER NOT NULL,' +
     '  end_col     INTEGER NOT NULL' +
-    ')'
+    ')',
+
+    // v2: trigram inverted index for fast fuzzy lookup. Populated lazily on
+    // first fuzzy query for any DB that's missing it (so v1 .sqlite files
+    // upgrade transparently).
+    'CREATE TABLE IF NOT EXISTS symbol_trigrams (' +
+    '  trigram     TEXT NOT NULL,' +
+    '  symbol_id   INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+    '  PRIMARY KEY (trigram, symbol_id)' +
+    ') WITHOUT ROWID',
+
+    'CREATE INDEX IF NOT EXISTS idx_symbol_trigrams_trigram ' +
+    '  ON symbol_trigrams(trigram)'
   );
 
 implementation

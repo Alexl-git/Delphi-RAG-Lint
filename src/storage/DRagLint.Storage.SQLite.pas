@@ -24,6 +24,7 @@ type
     FQInsertFile: TFDQuery;
     FQUpsertFile: TFDQuery;
     FQInsertSymbol: TFDQuery;
+    FQInsertTrigram: TFDQuery;
     FQInsertRef: TFDQuery;
     FQDeleteFileSymbols: TFDQuery;
     FQDeleteFileRefs: TFDQuery;
@@ -33,6 +34,7 @@ type
     FQCountFiles: TFDQuery;
     procedure Connect(const ADbPath: string);
     procedure PrepareStatements;
+    procedure EnsureTrigramTablePopulated;
   public
     constructor Create(const ADbPath: string);
     destructor Destroy; override;
@@ -80,6 +82,7 @@ begin
   FQInsertFile.Free;
   FQUpsertFile.Free;
   FQInsertSymbol.Free;
+  FQInsertTrigram.Free;
   FQInsertRef.Free;
   FQDeleteFileSymbols.Free;
   FQDeleteFileRefs.Free;
@@ -94,6 +97,67 @@ begin
     FConn.Free;
   end;
   inherited;
+end;
+
+procedure TSQLiteSymbolStore.EnsureTrigramTablePopulated;
+var
+  CheckQ, NameQ, InsertQ: TFDQuery;
+  Grams: TArray<string>;
+  G: string;
+  SymId: Int64;
+  SymName: string;
+begin
+  // Check whether symbol_trigrams already has rows. If yes, we're good — the
+  // table is kept in sync by triggers (next iteration); for now we just
+  // populate-on-demand here. If empty, populate from symbols.
+  CheckQ := TFDQuery.Create(nil);
+  try
+    CheckQ.Connection := FConn;
+    CheckQ.SQL.Text := 'SELECT 1 FROM symbol_trigrams LIMIT 1';
+    CheckQ.Open;
+    if not CheckQ.IsEmpty then
+      Exit;
+  finally
+    CheckQ.Free;
+  end;
+
+  // Empty — build it. Per-batch transaction for speed.
+  NameQ := TFDQuery.Create(nil);
+  InsertQ := TFDQuery.Create(nil);
+  try
+    NameQ.Connection := FConn;
+    NameQ.SQL.Text := 'SELECT id, name FROM symbols';
+    NameQ.Open;
+    InsertQ.Connection := FConn;
+    InsertQ.SQL.Text :=
+      'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' +
+      'VALUES (:tg, :sid)';
+    InsertQ.Params.ParamByName('tg').DataType := ftString;
+    InsertQ.Params.ParamByName('sid').DataType := ftLargeint;
+    FConn.StartTransaction;
+    try
+      while not NameQ.Eof do
+      begin
+        SymId := NameQ.FieldByName('id').AsLargeInt;
+        SymName := NameQ.FieldByName('name').AsString;
+        Grams := DRagLint.Query.Fuzzy.Trigrams(SymName);
+        for G in Grams do
+        begin
+          InsertQ.ParamByName('tg').AsString := G;
+          InsertQ.ParamByName('sid').AsLargeInt := SymId;
+          InsertQ.ExecSQL;
+        end;
+        NameQ.Next;
+      end;
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
+    end;
+  finally
+    NameQ.Free;
+    InsertQ.Free;
+  end;
 end;
 
 procedure TSQLiteSymbolStore.Connect(const ADbPath: string);
@@ -154,6 +218,9 @@ begin
     '  signature, modifiers, start_line, start_col, end_line, end_col) ' +
     'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, ' +
     '  :sl, :sc, :el, :ec)');
+  FQInsertTrigram := NewQuery(
+    'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' +
+    'VALUES (:tg, :sid)');
   FQInsertRef := NewQuery(
     'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' +
     '  start_line, start_col, end_line, end_col) ' +
@@ -230,6 +297,16 @@ begin
   FQInsertSymbol.ParamByName('ec').AsInteger := ASymbol.EndCol;
   FQInsertSymbol.ExecSQL;
   Result := FConn.GetLastAutoGenValue('');
+  // Populate trigram index alongside each symbol insert so fuzzy queries
+  // are sub-second from the first call without any lazy build cost.
+  var Grams := DRagLint.Query.Fuzzy.Trigrams(ASymbol.Name);
+  var G: string;
+  for G in Grams do
+  begin
+    FQInsertTrigram.ParamByName('tg').AsString := G;
+    FQInsertTrigram.ParamByName('sid').AsLargeInt := Result;
+    FQInsertTrigram.ExecSQL;
+  end;
 end;
 
 procedure TSQLiteSymbolStore.UpsertReference(const AToken: TFileTxToken;
@@ -374,17 +451,46 @@ function TSQLiteSymbolStore.FindSymbolsFuzzy(const APattern: string;
 var
   Q: TFDQuery;
   Scored: TList<TPair<Integer, TSymbol>>;
-  Sym: TSymbol;
   D, MaxD: Integer;
+  Grams: TArray<string>;
+  PlaceholderList: string;
   i: Integer;
+  Sym: TSymbol;
 begin
+  SetLength(Result, 0);
+  EnsureTrigramTablePopulated;
+  MaxD := DRagLint.Query.Fuzzy.FuzzyMaxDistanceFor(APattern);
+  Grams := DRagLint.Query.Fuzzy.Trigrams(APattern);
+
   Scored := TList<TPair<Integer, TSymbol>>.Create;
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := FConn;
-    Q.SQL.Text := 'SELECT * FROM symbols';
+    if Length(Grams) = 0 then
+    begin
+      // Pattern too short for trigrams — full scan (still fast for short pattern).
+      Q.SQL.Text := 'SELECT * FROM symbols';
+    end
+    else
+    begin
+      // Build placeholder list for IN clause: ?, ?, ?, …
+      PlaceholderList := '';
+      for i := 0 to High(Grams) do
+      begin
+        if i > 0 then
+          PlaceholderList := PlaceholderList + ', ';
+        PlaceholderList := PlaceholderList + ':g' + IntToStr(i);
+      end;
+      Q.SQL.Text :=
+        'SELECT s.* FROM symbols s ' +
+        'WHERE s.id IN (' +
+        '  SELECT DISTINCT symbol_id FROM symbol_trigrams ' +
+        '  WHERE trigram IN (' + PlaceholderList + ')' +
+        ')';
+      for i := 0 to High(Grams) do
+        Q.ParamByName('g' + IntToStr(i)).AsString := Grams[i];
+    end;
     Q.Open;
-    MaxD := DRagLint.Query.Fuzzy.FuzzyMaxDistanceFor(APattern);
     while not Q.Eof do
     begin
       Sym := ReadSymbolFromQuery(Q);
@@ -393,6 +499,7 @@ begin
         Scored.Add(TPair<Integer, TSymbol>.Create(D, Sym));
       Q.Next;
     end;
+
     Scored.Sort(TComparer<TPair<Integer, TSymbol>>.Construct(
       function(const L, R: TPair<Integer, TSymbol>): Integer
       begin
