@@ -136,6 +136,39 @@ end;
 procedure Walk(const ANode: TTSNode; const AState: TWalkState;
   AParentSymbolIdx: Integer; const AParentQualifiedName: string); forward;
 
+// v0.8: every `typeref` node that appears in a parameter type, field type,
+// inheritance clause, etc. emits a kind='type_use' reference. This lets
+// `find-callers` / LSP references answer "where is type X used?" not just
+// "where is method X called?".
+procedure EmitTypeUseReference(const ANode: TTSNode; const AState: TWalkState);
+var
+  Child: TTSNode;
+  RefName: string;
+begin
+  // A typeref is (typeref (identifier "TFoo")) or sometimes
+  // (typeref (genericDot lhs: id operator: kDot rhs: id)) for qualified types
+  // and (typeref (identifier) (declTypeArgs ...)) for generics. Take the
+  // first named-child identifier-shaped thing.
+  if ANode.NamedChildCount = 0 then Exit;
+  Child := ANode.NamedChild(0);
+  if Child.NodeType = 'identifier' then
+    RefName := NodeText(Child, AState.Source)
+  else if Child.NodeType = 'genericDot' then
+  begin
+    // qualified: take rhs
+    var Rhs := Child.ChildByField('rhs');
+    if not Rhs.IsNull then
+      RefName := NodeText(Rhs, AState.Source)
+    else
+      Exit;
+    Child := Rhs;
+  end
+  else
+    Exit;
+  if RefName = '' then Exit;
+  AState.EmitRef('type_use', RefName, Child);
+end;
+
 procedure EmitCallReference(const ANode: TTSNode; const AState: TWalkState);
 var
   EntityNode, NameNode: TTSNode;
@@ -383,7 +416,8 @@ begin
   end;
 
   // declProc: emit a method (when inside class/record/interface) or a free
-  // proc/func otherwise.
+  // proc/func otherwise. Then walk children so typerefs in args + return
+  // type emit type_use refs.
   if NodeType = 'declProc' then
   begin
     IsInClass := (AParentSymbolIdx >= 0) and
@@ -391,6 +425,8 @@ begin
       (AState.Symbols[AParentSymbolIdx].Kind in
        [skClass, skRecord, skInterface]);
     WalkDeclProc(ANode, AState, AParentSymbolIdx, AParentQualifiedName, IsInClass);
+    for i := 0 to ANode.NamedChildCount - 1 do
+      Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
   end;
 
@@ -411,6 +447,9 @@ begin
         AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode);
       end;
     end;
+    // Walk children so the field's type is visited and emits a type_use ref.
+    for i := 0 to ANode.NamedChildCount - 1 do
+      Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
   end;
 
@@ -431,6 +470,9 @@ begin
         AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode);
       end;
     end;
+    // Walk children so the property's type emits a type_use ref.
+    for i := 0 to ANode.NamedChildCount - 1 do
+      Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
   end;
 
@@ -450,6 +492,16 @@ begin
   if NodeType = 'exprCall' then
   begin
     EmitCallReference(ANode, AState);
+    for i := 0 to ANode.NamedChildCount - 1 do
+      Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+    Exit;
+  end;
+
+  // Type reference: emits a kind='type_use' reference and keeps walking
+  // (typerefs can be nested in generic args).
+  if NodeType = 'typeref' then
+  begin
+    EmitTypeUseReference(ANode, AState);
     for i := 0 to ANode.NamedChildCount - 1 do
       Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;

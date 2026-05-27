@@ -3,11 +3,11 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 2;
+  SCHEMA_VERSION = 3;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
-  SCHEMA_DDL: array[0..9] of string = (
+  SCHEMA_DDL: array[0..11] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' +
     '  key   TEXT PRIMARY KEY,' +
     '  value TEXT NOT NULL' +
@@ -64,7 +64,26 @@ const
     ') WITHOUT ROWID',
 
     'CREATE INDEX IF NOT EXISTS idx_symbol_trigrams_trigram ' +
-    '  ON symbol_trigrams(trigram)'
+    '  ON symbol_trigrams(trigram)',
+
+    // v3: compiler-log ingest. One row per finding extracted from a
+    // dcc32/dcc64/msbuild log; cross-referenced to the files table when
+    // the path matches an indexed file (otherwise file_id is NULL and the
+    // raw path is preserved in raw_path).
+    'CREATE TABLE IF NOT EXISTS compiler_findings (' +
+    '  id          INTEGER PRIMARY KEY,' +
+    '  file_id     INTEGER REFERENCES files(id) ON DELETE SET NULL,' +
+    '  raw_path    TEXT NOT NULL,' +
+    '  code        TEXT NOT NULL,' +
+    '  severity    TEXT NOT NULL,' +
+    '  line_no     INTEGER,' +
+    '  col_no      INTEGER,' +
+    '  message     TEXT NOT NULL,' +
+    '  imported_at INTEGER NOT NULL' +
+    ')',
+
+    'CREATE INDEX IF NOT EXISTS idx_compiler_findings_code ' +
+    '  ON compiler_findings(code)'
   );
 
 implementation

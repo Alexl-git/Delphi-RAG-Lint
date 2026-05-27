@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.1.0-alpha';
+  VERSION = '0.8.0-alpha';
 
 function Run: Integer;
 
@@ -15,6 +15,8 @@ uses
   System.IOUtils,
   System.JSON,
   System.StrUtils,
+  System.DateUtils,
+  System.RegularExpressions,
   System.Generics.Collections,
   Data.DB,
   FireDAC.Comp.Client,
@@ -74,6 +76,8 @@ begin
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
+  Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
+  Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -378,6 +382,8 @@ begin
   end;
 end;
 
+function DoQueryHints(const AArgs: TArgs): Integer; forward;
+
 function DoQuery(const AArgs: TArgs): Integer;
 var
   Symbols, AllSymbols: TArray<TSymbol>;
@@ -438,6 +444,12 @@ begin
       Result := 1
     else
       Result := 0;
+    Exit;
+  end;
+
+  if AArgs.SubCommand = 'hints' then
+  begin
+    Result := DoQueryHints(AArgs);
     Exit;
   end;
 
@@ -1059,6 +1071,211 @@ begin
   Result := 0;
 end;
 
+// --- import-log -------------------------------------------------------------
+
+function DoImportLog(const AArgs: TArgs): Integer;
+var
+  Conn: TFDConnection;
+  Q, FileQ: TFDQuery;
+  LogPath: string;
+  Lines: TArray<string>;
+  Line: string;
+  PatternMsb: TRegEx;
+  M: TMatch;
+  Severity, Code, Msg, RawPath: string;
+  LineNo, ColNo: Integer;
+  FileId: Int64;
+  ImportedAt: Int64;
+  Count, MatchedFile: Integer;
+  FirstChar: Char;
+begin
+  if AArgs.Path = '' then
+  begin
+    Writeln('ERROR: import-log requires a <logfile> argument');
+    Exit(2);
+  end;
+  if AArgs.DbPath = '' then
+  begin
+    Writeln('ERROR: import-log requires --db');
+    Exit(2);
+  end;
+  LogPath := AArgs.Path;
+  if not TFile.Exists(LogPath) then
+  begin
+    Writeln('ERROR: log file not found: ', LogPath);
+    Exit(2);
+  end;
+
+  // Three common formats (we strip severity tokens and derive from code prefix):
+  //   1. msbuild/dcc errors:   "Foo.pas(45,10): Error E2010: Incompatible types..."
+  //   2. msbuild/dcc hints:    "Foo.pas(45): Hint warning H2077: Value assigned ..."
+  //   3. BDS bracketed format: "[dcc64 Error] Foo.pas(45,10): E2010 ..."
+  // Trailing "[...dproj]" tag from msbuild is stripped from the message.
+  PatternMsb := TRegEx.Create(
+    '^(?:\[[^\]]*\]\s*)?(.+?\.[a-zA-Z]+)\((\d+)(?:,(\d+))?\)\s*:?\s*' +
+    '(?:(?:Fatal|Error|Warning|Hint)\s+)*' +
+    '([EFWH]\d{4})\s*:?\s*' +
+    '(.*?)(?:\s*\[[^\]]+\])?$', [roIgnoreCase]);
+
+  Conn := TFDConnection.Create(nil);
+  Q := TFDQuery.Create(nil);
+  FileQ := TFDQuery.Create(nil);
+  try
+    Conn.DriverName := 'SQLite';
+    Conn.Params.Values['Database'] := AArgs.DbPath;
+    Conn.LoginPrompt := False;
+    Conn.Connected := True;
+    Q.Connection := Conn;
+    Q.SQL.Text :=
+      'INSERT INTO compiler_findings(file_id, raw_path, code, severity, ' +
+      '  line_no, col_no, message, imported_at) ' +
+      'VALUES (:fid, :rp, :code, :sev, :ln, :cn, :msg, :t)';
+    Q.Params.ParamByName('fid').DataType := ftLargeint;
+    Q.Params.ParamByName('rp').DataType := ftString;
+    Q.Params.ParamByName('code').DataType := ftString;
+    Q.Params.ParamByName('sev').DataType := ftString;
+    Q.Params.ParamByName('ln').DataType := ftInteger;
+    Q.Params.ParamByName('cn').DataType := ftInteger;
+    Q.Params.ParamByName('msg').DataType := ftString;
+    Q.Params.ParamByName('t').DataType := ftLargeint;
+    FileQ.Connection := Conn;
+    FileQ.SQL.Text :=
+      'SELECT id FROM files WHERE path = :p OR ' +
+      '  path LIKE :p2 LIMIT 1';
+    FileQ.Params.ParamByName('p').DataType := ftString;
+    FileQ.Params.ParamByName('p2').DataType := ftString;
+
+    ImportedAt := DateTimeToUnix(Now, False);
+    Lines := TFile.ReadAllLines(LogPath);
+    Count := 0;
+    MatchedFile := 0;
+    Conn.StartTransaction;
+    try
+      for Line in Lines do
+      begin
+        M := PatternMsb.Match(Line);
+        if not M.Success then Continue;
+        RawPath := Trim(M.Groups[1].Value);
+        LineNo := StrToIntDef(M.Groups[2].Value, 0);
+        if M.Groups[3].Success then
+          ColNo := StrToIntDef(M.Groups[3].Value, 0)
+        else
+          ColNo := 0;
+        Code := M.Groups[4].Value;
+        // Derive severity from code prefix (F/E/W/H).
+        if Code <> '' then
+          FirstChar := UpCase(Code[1])
+        else
+          FirstChar := '?';
+        if FirstChar = 'F' then Severity := 'Fatal'
+        else if FirstChar = 'E' then Severity := 'Error'
+        else if FirstChar = 'W' then Severity := 'Warning'
+        else if FirstChar = 'H' then Severity := 'Hint'
+        else Severity := 'Info';
+        Msg := Trim(M.Groups[5].Value);
+
+        FileId := 0;
+        FileQ.Close;
+        FileQ.ParamByName('p').AsString := RawPath;
+        FileQ.ParamByName('p2').AsString := '%' + ExtractFileName(RawPath);
+        FileQ.Open;
+        if not FileQ.IsEmpty then
+        begin
+          FileId := FileQ.FieldByName('id').AsLargeInt;
+          Inc(MatchedFile);
+        end;
+        FileQ.Close;
+
+        if FileId > 0 then
+          Q.ParamByName('fid').AsLargeInt := FileId
+        else
+          Q.ParamByName('fid').Clear;
+        Q.ParamByName('rp').AsString := RawPath;
+        Q.ParamByName('code').AsString := Code.ToUpper;
+        Q.ParamByName('sev').AsString := Severity;
+        Q.ParamByName('ln').AsInteger := LineNo;
+        Q.ParamByName('cn').AsInteger := ColNo;
+        Q.ParamByName('msg').AsString := Msg;
+        Q.ParamByName('t').AsLargeInt := ImportedAt;
+        Q.ExecSQL;
+        Inc(Count);
+      end;
+      Conn.Commit;
+    except
+      Conn.Rollback;
+      raise;
+    end;
+    Writeln(Format('Imported %d compiler findings (%d cross-referenced ' +
+      'with indexed files)', [Count, MatchedFile]));
+  finally
+    FileQ.Free;
+    Q.Free;
+    Conn.Free;
+  end;
+  Result := 0;
+end;
+
+// --- query hints ------------------------------------------------------------
+
+function DoQueryHints(const AArgs: TArgs): Integer;
+var
+  Conn: TFDConnection;
+  Q: TFDQuery;
+  Where, Sql: string;
+  Rows: Integer;
+begin
+  if AArgs.DbPath = '' then
+  begin
+    Writeln('ERROR: query hints requires --db');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
+  Conn := TFDConnection.Create(nil);
+  Q := TFDQuery.Create(nil);
+  try
+    Conn.DriverName := 'SQLite';
+    Conn.Params.Values['Database'] := AArgs.DbPath;
+    Conn.LoginPrompt := False;
+    Conn.Connected := True;
+    Where := '';
+    if AArgs.Name <> '' then
+      Where := 'WHERE UPPER(code) = ''' + UpperCase(AArgs.Name) + '''';
+    if AArgs.Rule <> '' then  // reuse --rule arg as --severity filter
+    begin
+      if Where = '' then Where := 'WHERE ' else Where := Where + ' AND ';
+      Where := Where + 'LOWER(severity) = ''' + LowerCase(AArgs.Rule) + '''';
+    end;
+    Sql := 'SELECT code, severity, raw_path, line_no, col_no, message ' +
+      'FROM compiler_findings ' + Where +
+      ' ORDER BY raw_path, line_no LIMIT 500';
+    Q.Connection := Conn;
+    Q.SQL.Text := Sql;
+    Q.Open;
+    Rows := 0;
+    while not Q.Eof do
+    begin
+      Writeln(Format('%s:%d:%d  [%s %s] %s',
+        [Q.FieldByName('raw_path').AsString,
+         Q.FieldByName('line_no').AsInteger,
+         Q.FieldByName('col_no').AsInteger,
+         Q.FieldByName('severity').AsString,
+         Q.FieldByName('code').AsString,
+         Q.FieldByName('message').AsString]));
+      Inc(Rows);
+      Q.Next;
+    end;
+    Writeln(Format('%d finding(s)', [Rows]));
+  finally
+    Q.Free;
+    Conn.Free;
+  end;
+  Result := 0;
+end;
+
 function DoExport(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand = 'enums' then
@@ -1168,6 +1385,8 @@ begin
       Result := DoExport(Args)
     else if Args.Command = 'top' then
       Result := DoTop(Args)
+    else if Args.Command = 'import-log' then
+      Result := DoImportLog(Args)
     else if Args.Command = 'lsp' then
     begin
       var LspDb := '';

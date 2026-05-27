@@ -3,6 +3,37 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha — expect
 breaking changes** until v1.0.
 
+## v0.8.0-alpha — 2026-05-27
+
+### Added
+- **Type-use references.** The indexer now emits `kind='type_use'` references
+  for every `typeref` AST node — field types, parameter types, function
+  return types, class/interface inheritance lists, generic type arguments,
+  and qualified type names (`Unit.TFoo`). `find-callers --name ISymbolStore`
+  on the drag-lint self-corpus now returns 5 sites (was 1): the interface
+  decl, the field decl in the Indexer, the ctor parameter, the LSP field,
+  and the concrete `TSQLiteSymbolStore` inheritance line. Total refs across
+  the same corpus went 1251 → 1528 (+277).
+- **`drag-lint import-log <logfile>`** — parse a msbuild/dcc compiler log
+  and store findings in a new `compiler_findings` table (schema v3). Cross-
+  references each finding to the indexed `files` row when the path matches,
+  preserves the raw path otherwise. Accepts three formats:
+  - `Foo.pas(45,10): Error E2010: ...`
+  - `Foo.pas(45): Hint warning H2077: Value assigned to 'X' never used`
+  - `[dcc64 Error] Foo.pas(45,10): E2010 ...`
+- **`drag-lint query hints --name <code>`** — query the compiler-finding
+  store. `--name H2077` returns every dead-write the compiler flagged across
+  the project, with file/line. `--rule <severity>` filters by severity
+  (Fatal/Error/Warning/Hint). Useful answer to "where's the dead code?" —
+  the Delphi compiler already knows; this just stores its answer for
+  cross-session querying.
+
+### Notes
+- Schema bumped to v3 (`compiler_findings` table + index). v2 indexes are
+  upgraded transparently — existing fuzzy/symbol tables are untouched.
+
+---
+
 ## v0.7.0-alpha — 2026-05-27
 
 ### Added

@@ -6,10 +6,12 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.7-alpha. Early work in progress — expect breaking changes.** Adds
-position-to-token resolution to the LSP server — `textDocument/definition`,
-`textDocument/references`, and `textDocument/hover` now work on real
-cursor positions. Builds on v0.6 LSP scaffold, v0.4 MCP server, and the
+**v0.8-alpha. Early work in progress — expect breaking changes.** Adds
+type-use references (`find-callers --name ISymbolStore` now finds every
+field/parameter/inheritance use, not just method calls) and compiler-log
+ingest (`drag-lint import-log build.log` + `query hints --name H2077`
+turns msbuild output into a queryable dead-code / warnings store).
+Builds on v0.7 LSP position resolution, v0.4 MCP server, and the
 export/top/fuzzy stack.
 
 Builds on v0.2 (DFM forms, full symbol coverage, external `.scm` lint
@@ -109,6 +111,12 @@ third_party\dll\drag-lint.exe lint C:\path\to\my\project
 :: / Zed can discover and call find_symbol / find_callers / lint as
 :: typed tools. See "MCP integration" below for the config block.
 third_party\dll\drag-lint.exe serve --db myproj.sqlite
+
+:: v0.8: feed your msbuild/dcc log into the index, then query it
+::       (great for finding dead code H2077s across a 500k-symbol corpus)
+msbuild /p:Config=Debug /p:Platform=Win64 MyApp.dproj /v:minimal > build.log
+third_party\dll\drag-lint.exe import-log build.log --db myproj.sqlite
+third_party\dll\drag-lint.exe query hints --name H2077 --db myproj.sqlite
 
 :: Re-running index is incremental — files whose mtime+sha256 are
 :: unchanged are skipped automatically. Reformat your project, then
