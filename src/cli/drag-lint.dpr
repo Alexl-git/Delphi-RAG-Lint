@@ -6,6 +6,7 @@ uses
   System.SysUtils,
   TreeSitter in '..\..\third_party\delphi-tree-sitter\TreeSitter.pas',
   TreeSitterLib in '..\..\third_party\delphi-tree-sitter\TreeSitterLib.pas',
+  TreeSitter.Query in '..\..\third_party\delphi-tree-sitter\TreeSitter.Query.pas',
   DRagLint.Core.Model in '..\core\DRagLint.Core.Model.pas',
   DRagLint.Core.Interfaces in '..\core\DRagLint.Core.Interfaces.pas',
   DRagLint.Core.Indexer in '..\core\DRagLint.Core.Indexer.pas',
@@ -14,6 +15,7 @@ uses
   DRagLint.Parser.Delphi13 in '..\parser\DRagLint.Parser.Delphi13.pas',
   DRagLint.Parser.DFM in '..\parser\DRagLint.Parser.DFM.pas',
   DRagLint.Query.Fuzzy in '..\query\DRagLint.Query.Fuzzy.pas',
+  DRagLint.Lint.QueryRules in '..\lint\DRagLint.Lint.QueryRules.pas',
   DRagLint.Lint.Linter in '..\lint\DRagLint.Lint.Linter.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 

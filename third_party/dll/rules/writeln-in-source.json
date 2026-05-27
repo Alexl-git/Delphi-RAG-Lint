@@ -1,0 +1,6 @@
+{
+  "id": "writeln-in-source",
+  "severity": "info",
+  "message": "Direct WriteLn call — consider a logger instead.",
+  "warn_capture": "warn"
+}

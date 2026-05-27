@@ -157,6 +157,7 @@
         </DelphiCompile>
         <DCCReference Include="..\..\third_party\delphi-tree-sitter\TreeSitter.pas"/>
         <DCCReference Include="..\..\third_party\delphi-tree-sitter\TreeSitterLib.pas"/>
+        <DCCReference Include="..\..\third_party\delphi-tree-sitter\TreeSitter.Query.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.Model.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.Interfaces.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.Indexer.pas"/>
@@ -165,6 +166,7 @@
         <DCCReference Include="..\parser\DRagLint.Parser.Delphi13.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.DFM.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Fuzzy.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.QueryRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Linter.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">

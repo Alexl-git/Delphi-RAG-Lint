@@ -1,0 +1,6 @@
+{
+  "id": "any-bare-call-demo",
+  "severity": "info",
+  "message": "Bare procedure call (no qualifier). Demo rule — query has no #eq? predicate, so this fires on ANY exprCall with an identifier entity, not just WriteLn. Predicate support is a v0.3 backlog item; track it in docs/design.",
+  "warn_capture": "warn"
+}

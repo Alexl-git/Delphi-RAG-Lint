@@ -10,18 +10,22 @@ uses
   TreeSitter,
   TreeSitterLib,
   DRagLint.Core.Model,
-  DRagLint.Parser.Delphi13;
+  DRagLint.Parser.Delphi13,
+  DRagLint.Lint.QueryRules;
 
 type
   TLinter = class
   strict private
     FLanguage: PTSLanguage;
+    FQueryRules: TArray<TQueryRule>;
     function CheckFileImpl(const AFilePath: string): TArray<TLintFinding>;
   public
-    constructor Create;
+    constructor Create(const ARulesDir: string = '');
+    destructor Destroy; override;
     function LintFile(const AFilePath: string): TArray<TLintFinding>;
     function LintFolder(const APath: string;
       ARecursive: Boolean = True): TArray<TLintFinding>;
+    function ExternalRuleCount: Integer;
   end;
 
 implementation
@@ -93,10 +97,32 @@ end;
 
 { TLinter }
 
-constructor TLinter.Create;
+constructor TLinter.Create(const ARulesDir: string);
+var
+  ResolvedDir: string;
 begin
   inherited Create;
   FLanguage := tree_sitter_delphi13;
+  if ARulesDir = '' then
+    ResolvedDir := TPath.Combine(
+      TPath.GetDirectoryName(ParamStr(0)), 'rules')
+  else
+    ResolvedDir := ARulesDir;
+  FQueryRules := TQueryRuleLoader.LoadAll(FLanguage, ResolvedDir);
+end;
+
+destructor TLinter.Destroy;
+var
+  R: TQueryRule;
+begin
+  for R in FQueryRules do
+    R.Free;
+  inherited;
+end;
+
+function TLinter.ExternalRuleCount: Integer;
+begin
+  Result := Length(FQueryRules);
 end;
 
 function TLinter.CheckFileImpl(
@@ -133,6 +159,15 @@ begin
       end,
       TTSInputEncoding.TSInputEncodingUTF8);
     WalkForFieldByNameInLoop(Tree.RootNode, Source, AFilePath, 0, Findings);
+    // External *.scm rules
+    var R: TQueryRule;
+    for R in FQueryRules do
+    begin
+      var QFindings := R.Run(Tree.RootNode, Source, AFilePath);
+      var F: TLintFinding;
+      for F in QFindings do
+        Findings.Add(F);
+    end;
     Result := Findings.ToArray;
   finally
     Tree.Free;
