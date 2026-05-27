@@ -6,11 +6,11 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.3-alpha. Early work in progress — expect breaking changes.** Adds
-persistent trigram index for sub-second fuzzy queries on 100k+-symbol
-corpora, `--scan-libraries` (index Delphi RTL/VCL/etc. with no .dproj),
-multi-database queries (`--db a --db b`), and tree-sitter query predicates
-(`#eq?`, `#match?`, `#any-of?`) so external lint rules can be precise.
+**v0.4-alpha. Early work in progress — expect breaking changes.** Adds
+incremental reindex (skip files whose mtime+sha256 are unchanged), an MCP
+stdio server (`drag-lint serve`) for native integration with Claude Code /
+Cursor / Zed, on top of v0.3's trigram fuzzy, `--scan-libraries`, multi-db
+queries, and tree-sitter query predicates.
 
 Builds on v0.2 (DFM forms, full symbol coverage, external `.scm` lint
 plugins, `--project <dproj>` mode).
@@ -105,6 +105,15 @@ third_party\dll\drag-lint.exe query find-callers --name AfterShow --db myproj.sq
 :: <exedir>\rules\ (see rules/README.md).
 third_party\dll\drag-lint.exe lint C:\path\to\my\project
 
+:: Run as an MCP server (JSON-RPC 2.0 over stdio) so Claude Code / Cursor
+:: / Zed can discover and call find_symbol / find_callers / lint as
+:: typed tools. See "MCP integration" below for the config block.
+third_party\dll\drag-lint.exe serve --db myproj.sqlite
+
+:: Re-running index is incremental — files whose mtime+sha256 are
+:: unchanged are skipped automatically. Reformat your project, then
+:: re-run; only the changed files re-parse.
+
 :: JSON output (for tooling integration)
 third_party\dll\drag-lint.exe query --name TForm --db myproj.sqlite --json
 third_party\dll\drag-lint.exe lint C:\path --json
@@ -117,6 +126,35 @@ tests\run_phase1_e2e.bat
 ```
 
 Indexes a small fixture, runs the standard queries, prints expected output.
+
+## MCP integration
+
+`drag-lint serve --db <file.sqlite>` starts an MCP stdio server speaking
+protocol version `2024-11-05`. AI editors that natively support MCP
+(Claude Code, Cursor, Zed, Codeium, …) call `find_symbol`, `find_callers`,
+and `lint` as typed tools — no shell parsing on their side.
+
+### Claude Code config (`~/.claude.json` or per-project `.mcp.json`)
+
+```json
+{
+  "mcpServers": {
+    "drag-lint": {
+      "command": "C:/Projects/Delphi-RAG-lint/third_party/dll/drag-lint.exe",
+      "args": ["serve", "--db", "C:/Projects/myproject/drag-lint.sqlite"]
+    }
+  }
+}
+```
+
+After the index exists (run `drag-lint index --project MyApp.dproj --db
+.../drag-lint.sqlite` once), point your editor at the MCP block above and
+the AI can ask drag-lint for symbols, callers, and lint findings as part
+of its normal tool-use.
+
+Prefer not to keep the server always-on? Skip the MCP config and just
+call the CLI directly — `drag-lint query find-callers --name X --json`
+returns the same data and only consumes tokens when actually invoked.
 
 ## Exit codes
 
@@ -155,13 +193,13 @@ Indexes a small fixture, runs the standard queries, prints expected output.
 
 ## Roadmap
 
-- v0.4: MCP server (`drag-lint serve`) so Claude Code / other AI tools
-  auto-discover the queries as native tools; project-aware mode caching to
-  avoid re-walking the registry on every run; BM25 over AST-chunked text
-  for semantic retrieval
-- v0.5: more lint rules, IDE inspector demo, multi-platform binaries
-- v1.0: BPL packaging for in-IDE use, additional `ISymbolStore` impls
-  (Firebird Embedded), per-project `.drag-lint.json` config
+- v0.5: BM25 over AST-chunked text for semantic retrieval; daemon mode
+  watching the filesystem for changes; ATTACH-based cross-DB query joins;
+  3+ new lint rules; project-aware mode caching
+- v0.6: LSP server (for editors that speak LSP but not MCP), per-project
+  `.drag-lint.json` config, optional embedding hookup for semantic search
+- v1.0: BPL packaging for in-IDE use, additional `ISymbolStore` impls,
+  stable CLI surface, multi-platform binaries
 
 ## Project layout
 

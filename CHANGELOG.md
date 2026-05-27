@@ -3,6 +3,29 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha — expect
 breaking changes** until v1.0.
 
+## v0.4.0-alpha — 2026-05-27
+
+### Added
+- **MCP stdio server** — `drag-lint serve --db <file>` speaks JSON-RPC 2.0
+  / MCP `2024-11-05` and exposes `find_symbol`, `find_callers`, and `lint`
+  as typed tools. Claude Code / Cursor / Zed can wire it via the standard
+  `mcpServers` config block. The CLI is still available for token-tight
+  use; same engine underneath.
+- **Incremental reindex** — `IndexFile` skips files whose `mtime_unix` AND
+  `sha256` are already in the `files` table. Reformatting an entire
+  project (e.g. with YADF) and re-running `index` only re-parses the
+  files that actually changed. The CLI summary line reports the skip
+  count when nonzero.
+
+### Notes
+- Documentation external-vendor scrub: README, CHANGELOG, design doc,
+  and `rules/README.md` no longer name specific commercial vendors or
+  upstream open-source library authors except Delphi/Embarcadero
+  themselves. Required attribution (MIT) is preserved in
+  `third_party/<repo>/LICENSE`.
+
+---
+
 ## v0.3.0-alpha — 2026-05-27
 
 ### Added
