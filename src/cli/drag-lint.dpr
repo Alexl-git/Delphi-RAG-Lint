@@ -13,6 +13,7 @@ uses
   DRagLint.Storage.SQLite in '..\storage\DRagLint.Storage.SQLite.pas',
   DRagLint.Parser.Delphi13 in '..\parser\DRagLint.Parser.Delphi13.pas',
   DRagLint.Query.Fuzzy in '..\query\DRagLint.Query.Fuzzy.pas',
+  DRagLint.Lint.Linter in '..\lint\DRagLint.Lint.Linter.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

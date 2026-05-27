@@ -18,7 +18,8 @@ uses
   DRagLint.Core.Interfaces,
   DRagLint.Core.Indexer,
   DRagLint.Storage.SQLite,
-  DRagLint.Parser.Delphi13;
+  DRagLint.Parser.Delphi13,
+  DRagLint.Lint.Linter;
 
 type
   TArgs = record
@@ -28,6 +29,7 @@ type
     DbPath: string;
     Name: string;
     QName: string;
+    Rule: string;
     AsJson: Boolean;
     ShowHelp: Boolean;
     ShowVersion: Boolean;
@@ -43,6 +45,7 @@ begin
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--db ...] [--json]');
+  Writeln('  drag-lint lint  <path>       [--rule field-by-name-in-loop] [--json]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -103,6 +106,11 @@ begin
     begin
       Inc(i);
       Result.QName := ParamStr(i);
+    end
+    else if (A = '--rule') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Rule := ParamStr(i);
     end
     else if A = '--json' then
       Result.AsJson := True
@@ -302,6 +310,75 @@ begin
     Result := 0;
 end;
 
+function DoLint(const AArgs: TArgs): Integer;
+var
+  Linter: DRagLint.Lint.Linter.TLinter;
+  Findings: TArray<TLintFinding>;
+  F: TLintFinding;
+  JArr: TJSONArray;
+  JObj: TJSONObject;
+begin
+  if AArgs.Path = '' then
+  begin
+    Writeln('ERROR: lint requires a <path>');
+    Exit(2);
+  end;
+  if (AArgs.Rule <> '') and (AArgs.Rule <> 'field-by-name-in-loop') then
+  begin
+    Writeln(Format('ERROR: unknown rule "%s" (only "field-by-name-in-loop" ' +
+      'is implemented in v0.1)', [AArgs.Rule]));
+    Exit(2);
+  end;
+  Linter := DRagLint.Lint.Linter.TLinter.Create;
+  try
+    if TFile.Exists(AArgs.Path) then
+      Findings := Linter.LintFile(AArgs.Path)
+    else if TDirectory.Exists(AArgs.Path) then
+      Findings := Linter.LintFolder(AArgs.Path, True)
+    else
+    begin
+      Writeln('ERROR: path does not exist: ', AArgs.Path);
+      Exit(2);
+    end;
+  finally
+    Linter.Free;
+  end;
+  if AArgs.AsJson then
+  begin
+    JArr := TJSONArray.Create;
+    try
+      for F in Findings do
+      begin
+        JObj := TJSONObject.Create;
+        JObj.AddPair('rule', F.RuleId);
+        JObj.AddPair('severity', F.Severity);
+        JObj.AddPair('file_path', F.FilePath);
+        JObj.AddPair('start_line', TJSONNumber.Create(F.StartLine));
+        JObj.AddPair('start_col', TJSONNumber.Create(F.StartCol));
+        JObj.AddPair('end_line', TJSONNumber.Create(F.EndLine));
+        JObj.AddPair('end_col', TJSONNumber.Create(F.EndCol));
+        JObj.AddPair('message', F.Message);
+        JArr.AddElement(JObj);
+      end;
+      Writeln(JArr.Format(2));
+    finally
+      JArr.Free;
+    end;
+  end
+  else
+  begin
+    for F in Findings do
+      Writeln(Format('%s:%d:%d  [%s] %s: %s',
+        [F.FilePath, F.StartLine, F.StartCol, F.Severity, F.RuleId,
+         F.Message]));
+    Writeln(Format('%d finding(s)', [Length(Findings)]));
+  end;
+  if Length(Findings) > 0 then
+    Result := 1
+  else
+    Result := 0;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -322,6 +399,8 @@ begin
       Result := DoIndex(Args)
     else if Args.Command = 'query' then
       Result := DoQuery(Args)
+    else if Args.Command = 'lint' then
+      Result := DoLint(Args)
     else
     begin
       Writeln('ERROR: unknown command: ', Args.Command);
