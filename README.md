@@ -1,8 +1,8 @@
 # Delphi-RAG-Lint
 
 A Delphi-native, MIT-licensed RAG + linter for Delphi/Pascal source code.
-Built on [tree-sitter-delphi13](https://github.com/anaximandrov/tree-sitter-delphi13)
-(grammar) and [modersohn/delphi-tree-sitter](https://github.com/modersohn/delphi-tree-sitter)
+Built on `tree-sitter-delphi13` (grammar, sibling project)
+and [modersohn/delphi-tree-sitter](https://github.com/modersohn/delphi-tree-sitter)
 (runtime bindings).
 
 **Status:** v1 in development. See [docs/design/2026-05-27-v1-design.md](docs/design/2026-05-27-v1-design.md).
