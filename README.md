@@ -1,10 +1,10 @@
 # Delphi-RAG-Lint
 
 A Delphi-native, MIT-licensed RAG + linter for Delphi/Pascal source code.
-Built on `tree-sitter-delphi13` (grammar) and
-[modersohn/delphi-tree-sitter](https://github.com/modersohn/delphi-tree-sitter)
-(runtime bindings, MIT). **Pure Delphi at runtime — no Python, Node, or Rust
-deps.**
+Built on `tree-sitter-delphi13` (grammar, sibling project) and a vendored
+MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
+Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
+preserved in `third_party/<repo>/LICENSE` files.
 
 **v0.3-alpha. Early work in progress — expect breaking changes.** Adds
 persistent trigram index for sub-second fuzzy queries on 100k+-symbol
@@ -18,7 +18,7 @@ plugins, `--project <dproj>` mode).
 | Corpus | Files | Symbols | Refs | Index time |
 |---|---:|---:|---:|---:|
 | Micronite ORM3 (full) | 795 | 44,169 | 42,341 | 8 s |
-| **DevExpress VCL (entire install)** | **4,460** | **473,756** | **387,668** | **179 s (~3 min)** |
+| **Large 3rd-party VCL component suite (full install)** | **4,460** | **473,756** | **387,668** | **179 s (~3 min)** |
 | Delphi RTL + VCL + FMX + Data | 1,295 | 212,083 | 250,663 | 60 s |
 
 ---
@@ -41,10 +41,9 @@ plugins, `--project <dproj>` mode).
 | Tool | RAG | Lint | License | Native Delphi |
 |---|---|---|---|---|
 | **Delphi-RAG-Lint** | Symbol + fuzzy + (BM25 planned) | Yes | MIT | Yes |
-| Commercial Delphi-native RAG/LLM tools | Text RAG + LLM | No | Commercial | Yes |
-| FixInsight | — | Yes | Commercial | Yes |
-| Peganza Pascal Analyzer | — | Yes | Commercial | Yes |
-| DelphiAST | Parser lib only | No | MIT | Yes |
+| 3rd-party RAG tools for Delphi | Text RAG + LLM | No | Commercial | Yes |
+| 3rd-party Delphi lint tools | — | Yes | Commercial | Yes |
+| 3rd-party Pascal AST library | Parser lib only | No | MIT | Yes |
 
 ## Quickstart (Windows)
 
@@ -174,14 +173,14 @@ src/query/     — fuzzy matcher (Levenshtein)
 src/lint/      — linter
 src/cli/       — argparse + dispatch + drag-lint.dpr/.dproj
 build/         — *.bat compile scripts
-third_party/   — vendored modersohn bindings + compiled DLLs
+third_party/   — vendored MIT-licensed Pascal bindings + compiled DLLs
 tests/         — fixtures + e2e smoke test
 docs/          — v1 design doc
 ```
 
 ## License
 
-MIT. Portions of the binding layer derive from
-[modersohn/delphi-tree-sitter](https://github.com/modersohn/delphi-tree-sitter)
-(MIT). The grammar derives from
-[tree-sitter-pascal](https://github.com/Isopod/tree-sitter-pascal) (MIT).
+MIT. Portions of the binding layer derive from an upstream MIT-licensed
+Pascal binding for libtree-sitter; the grammar derives from an upstream
+MIT-licensed Pascal/Delphi tree-sitter grammar. Full attributions are in
+the LICENSE files under `third_party/`.

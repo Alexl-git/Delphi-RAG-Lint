@@ -28,9 +28,9 @@ breaking changes** until v1.0.
 ### Known limitations
 - Fuzzy lookup latency target was <500 ms — we hit ~520 ms on 473k symbols.
   Further wins likely need a daemon (MCP server in v0.4).
-- `--scan-libraries` pulls in a wide path set — DevExpress alone can take
-  3 minutes to index. Use `--dry-run` first to inspect what will be
-  scanned.
+- `--scan-libraries` pulls in a wide path set — a large 3rd-party VCL
+  component library alone can take 3 minutes to index. Use `--dry-run`
+  first to inspect what will be scanned.
 
 ---
 
@@ -74,5 +74,5 @@ Scaled tested on:
   symbols, 42 341 references, 8 s
 - Delphi RTL+VCL+FMX+Data (1295 files) → 212 083 symbols, 250 663 references,
   60 s
-- DevExpress VCL full install (4460 files) → 473 756 symbols, 387 668
-  references, 179 s
+- Large 3rd-party VCL component library full install (4460 files) →
+  473 756 symbols, 387 668 references, 179 s
