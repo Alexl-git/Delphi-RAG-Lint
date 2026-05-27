@@ -170,6 +170,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.Linter.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
         <DCCReference Include="..\mcp\DRagLint.MCP.Server.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Server.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

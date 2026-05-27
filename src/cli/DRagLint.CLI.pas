@@ -30,7 +30,8 @@ uses
   DRagLint.Parser.DFM,
   DRagLint.Lint.Linter,
   DRagLint.Project.Resolver,
-  DRagLint.MCP.Server;
+  DRagLint.MCP.Server,
+  DRagLint.LSP.Server;
 
 type
   TArgs = record
@@ -69,6 +70,7 @@ begin
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--db ...] [--json]');
   Writeln('  drag-lint lint  <path>       [--rule field-by-name-in-loop] [--json]');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
+  Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
@@ -1166,6 +1168,21 @@ begin
       Result := DoExport(Args)
     else if Args.Command = 'top' then
       Result := DoTop(Args)
+    else if Args.Command = 'lsp' then
+    begin
+      var LspDb := '';
+      if Length(Args.DbPaths) > 0 then
+        LspDb := Args.DbPaths[0]
+      else
+        LspDb := Args.DbPath;
+      var Lsp := DRagLint.LSP.Server.TLSPServer.Create(LspDb);
+      try
+        Lsp.Run;
+        Result := 0;
+      finally
+        Lsp.Free;
+      end;
+    end
     else if Args.Command = 'serve' then
     begin
       // Start MCP server. Reads JSON-RPC 2.0 over stdin, writes responses

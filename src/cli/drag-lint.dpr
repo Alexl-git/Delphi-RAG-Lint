@@ -19,6 +19,7 @@ uses
   DRagLint.Lint.Linter in '..\lint\DRagLint.Lint.Linter.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   DRagLint.MCP.Server in '..\mcp\DRagLint.MCP.Server.pas',
+  DRagLint.LSP.Server in '..\lsp\DRagLint.LSP.Server.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

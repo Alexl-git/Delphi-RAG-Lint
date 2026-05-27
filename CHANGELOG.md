@@ -3,6 +3,36 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha — expect
 breaking changes** until v1.0.
 
+## v0.6.0-alpha — 2026-05-27
+
+### Added
+- **`drag-lint lsp`** — Language Server Protocol stdio server, framed with
+  Content-Length headers per spec. `initialize`, `shutdown`, `exit`, and
+  `workspace/symbol` work today. `textDocument/definition` and
+  `textDocument/references` return empty arrays (placeholders) — they
+  need position-to-token resolution which is a v0.7 item (tree-sitter
+  reparse on cursor position).
+- **`drag-lint top --by fanin`** — ranks names by reference count across
+  the index. Aggregates refs by name first (fast path), then attaches a
+  sample symbol for context. 1.5 s on 473 k-symbol corpora.
+- **`drag-lint export enums`** — emit every `(enum, value)` pair from the
+  index. Four formats: `firebird-sql` (CREATE TABLE + INSERTs), `csv`,
+  `json` (nested-values), `delphi-const` (paste-ready arrays).
+- **`drag-lint export obsidian`** — write one `.md` per unit with YAML
+  frontmatter, full symbol list, and a "Referenced by" section using
+  `[[wikilinks]]` so Obsidian's graph view becomes a navigable
+  cross-reference map of the codebase.
+
+### Fixed
+- **Parser**: multi-segment unit names like `DRagLint.Core.Interfaces`
+  were getting truncated to just the first identifier (`DRagLint`).
+  `WalkUnit` now takes the full text of the `moduleName` node so the
+  qualified path is preserved. **Indexes built before this commit need a
+  full re-index** (delete the .sqlite and re-run `drag-lint index`) to
+  pick up the correct unit names.
+
+---
+
 ## v0.4.0-alpha — 2026-05-27
 
 ### Added
