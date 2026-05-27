@@ -16,11 +16,19 @@ Debug/
 Release/
 *.exe
 *.dll
+*.exp
+*.lib
+*.obj
+*.pdb
+*.dcu
+*.drc
+*.map
+*.tds
+*.rsm
 !third_party/**/*.dll
 
 # IDE
 .vs/
-*.pdb
 
 # Indexer artifacts
 *.kbvs
