@@ -17,6 +17,7 @@ type
   strict private
     FStore: ISymbolStore;
     FParsers: TList<IParser>;
+    FSkippedUpToDate: Integer;
     function ParserFor(const AExtension: string): IParser;
     procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
   public
@@ -26,6 +27,7 @@ type
     procedure IndexFolder(const APath: string;
       ARecursive: Boolean = True);
     procedure IndexFile(const AFilePath: string);
+    function SkippedUpToDate: Integer;
   end;
 
 implementation
@@ -47,6 +49,11 @@ begin
   FParsers.Free;
   FStore := nil;
   inherited;
+end;
+
+function TIndexer.SkippedUpToDate: Integer;
+begin
+  Result := FSkippedUpToDate;
 end;
 
 function TIndexer.ParserFor(const AExtension: string): IParser;
@@ -90,6 +97,14 @@ begin
   Source := TFile.ReadAllBytes(AFilePath);
   Sha := THashSHA2.GetHashString(TEncoding.ANSI.GetString(Source));
   Mtime := DateTimeToUnix(TFile.GetLastWriteTime(AFilePath), False);
+  // v0.4: incremental skip. If the file's already in the DB with the same
+  // mtime and sha256, nothing to do — the parser would emit the same
+  // symbols. Saves a parse + the per-file transaction.
+  if FStore.FileIsUpToDate(AFilePath, Mtime, Sha) then
+  begin
+    Inc(FSkippedUpToDate);
+    Exit;
+  end;
   ParseRes := Parser.Parse(Source, AFilePath);
   Token := FStore.OpenFileTx(AFilePath, Mtime, Sha, Parser.LanguageName);
   IdxToId := TDictionary<Integer, Int64>.Create;

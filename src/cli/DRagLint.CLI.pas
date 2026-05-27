@@ -283,8 +283,13 @@ begin
   end;
 
   Elapsed := (Now - StartTime) * 86400;
-  Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs',
-    [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Elapsed]));
+  if Indexer.SkippedUpToDate > 0 then
+    Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs',
+      [Store.CountFiles, Store.CountSymbols, Store.CountReferences,
+       Indexer.SkippedUpToDate, Elapsed]))
+  else
+    Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs',
+      [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Elapsed]));
   Result := 0;
 end;
 

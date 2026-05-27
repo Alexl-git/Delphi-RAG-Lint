@@ -41,6 +41,8 @@ type
 
     procedure Migrate;
 
+    function FileIsUpToDate(const APath: string; AMtimeUnix: Int64;
+      const ASha: string): Boolean;
     function OpenFileTx(const APath: string; AMtimeUnix: Int64;
       const ASha: string; const ALanguage: string): TFileTxToken;
     function UpsertSymbol(const AToken: TFileTxToken;
@@ -233,6 +235,27 @@ begin
     'SELECT * FROM symbols WHERE qualified_name = :qname');
   FQCountSymbols := NewQuery('SELECT COUNT(*) AS n FROM symbols');
   FQCountFiles := NewQuery('SELECT COUNT(*) AS n FROM files');
+end;
+
+function TSQLiteSymbolStore.FileIsUpToDate(const APath: string;
+  AMtimeUnix: Int64; const ASha: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text :=
+      'SELECT 1 FROM files WHERE path = :p AND mtime_unix = :m ' +
+      'AND sha256 = :s';
+    Q.ParamByName('p').AsString := APath;
+    Q.ParamByName('m').AsLargeInt := AMtimeUnix;
+    Q.ParamByName('s').AsString := ASha;
+    Q.Open;
+    Result := not Q.IsEmpty;
+  finally
+    Q.Free;
+  end;
 end;
 
 function TSQLiteSymbolStore.OpenFileTx(const APath: string;

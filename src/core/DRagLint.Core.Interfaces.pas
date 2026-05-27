@@ -10,6 +10,10 @@ type
   ISymbolStore = interface
     ['{6B9F8AC4-3F19-4E1A-9D38-1A2C3B7EF501}']
     procedure Migrate;
+    // v0.4: returns True if this file is already indexed at exactly this
+    // mtime AND sha256 — so the indexer can skip re-parsing it.
+    function FileIsUpToDate(const APath: string; AMtimeUnix: Int64;
+      const ASha: string): Boolean;
     function OpenFileTx(const APath: string; AMtimeUnix: Int64;
       const ASha: string; const ALanguage: string): TFileTxToken;
     function UpsertSymbol(const AToken: TFileTxToken;
@@ -50,6 +54,7 @@ type
     procedure IndexFolder(const APath: string;
       ARecursive: Boolean = True);
     procedure IndexFile(const AFilePath: string);
+    function SkippedUpToDate: Integer;
   end;
 
   ILinter = interface
