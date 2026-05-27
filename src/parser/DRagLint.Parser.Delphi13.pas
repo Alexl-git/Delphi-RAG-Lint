@@ -162,17 +162,19 @@ end;
 
 procedure WalkUnit(const ANode: TTSNode; const AState: TWalkState);
 var
-  ModNode, IdNode: TTSNode;
+  ModNode: TTSNode;
   UnitName: string;
   UnitIdx, i: Integer;
 begin
   ModNode := FindNamedChildOfType(ANode, 'moduleName');
   if ModNode.IsNull then
     Exit;
-  IdNode := FindNamedChildOfType(ModNode, 'identifier');
-  if IdNode.IsNull then
+  // Take the full text of moduleName so multi-segment unit names like
+  // DRagLint.Core.Interfaces are preserved verbatim. Earlier impl grabbed
+  // only the first identifier and lost everything after the dot.
+  UnitName := Trim(NodeText(ModNode, AState.Source));
+  if UnitName = '' then
     Exit;
-  UnitName := NodeText(IdNode, AState.Source);
   UnitIdx := AState.Emit(skUnit, UnitName, UnitName, -1, ANode);
   for i := 0 to ANode.NamedChildCount - 1 do
     Walk(ANode.NamedChild(i), AState, UnitIdx, UnitName);

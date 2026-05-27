@@ -45,6 +45,9 @@ type
     ProjectPath: string;
     Format: string;
     Output: string;
+    OutputDir: string;
+    Limit: Integer;
+    SortBy: string;
     ScanLibraries: Boolean;
     AsJson: Boolean;
     DryRun: Boolean;
@@ -67,6 +70,8 @@ begin
   Writeln('  drag-lint lint  <path>       [--rule field-by-name-in-loop] [--json]');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
+  Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>');
+  Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -156,6 +161,21 @@ begin
     begin
       Inc(i);
       Result.Output := ParamStr(i);
+    end
+    else if (A = '--output-dir') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.OutputDir := ParamStr(i);
+    end
+    else if (A = '--limit') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Limit := StrToIntDef(ParamStr(i), 50);
+    end
+    else if (A = '--by') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.SortBy := ParamStr(i);
     end
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
@@ -719,14 +739,334 @@ begin
   Result := 0;
 end;
 
+// --- export obsidian --------------------------------------------------------
+
+function ObsidianSanitizeFilename(const S: string): string;
+const
+  Bad: array[0..6] of Char = ('\', '/', ':', '*', '?', '"', '|');
+var
+  C: Char;
+begin
+  Result := S;
+  for C in Bad do
+    Result := StringReplace(Result, C, '_', [rfReplaceAll]);
+end;
+
+function DoExportObsidian(const AArgs: TArgs): Integer;
+var
+  Conn: TFDConnection;
+  Q, QSyms, QRefs: TFDQuery;
+  UnitId: Int64;
+  UnitName, UnitPath, OutPath, SanName: string;
+  Sb: TStringBuilder;
+  ParentMap: TDictionary<Int64, Int64>;
+  KindCount: Integer;
+  Sym: record
+    Id: Int64;
+    Kind, Name, QName: string;
+    ParentId: Int64;
+    StartLine: Integer;
+  end;
+  WriteOut: TStreamWriter;
+  Buf: TStringStream;
+  UnitsByName: TDictionary<string, string>;
+  CallerLine: string;
+  Visited: TDictionary<string, Boolean>;
+  WrittenCount: Integer;
+begin
+  if AArgs.DbPath = '' then
+  begin
+    Writeln('ERROR: export obsidian requires --db');
+    Exit(2);
+  end;
+  if AArgs.OutputDir = '' then
+  begin
+    Writeln('ERROR: export obsidian requires --output-dir <dir>');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
+  if not TDirectory.Exists(AArgs.OutputDir) then
+    TDirectory.CreateDirectory(AArgs.OutputDir);
+
+  Conn := TFDConnection.Create(nil);
+  Conn.DriverName := 'SQLite';
+  Conn.Params.Values['Database'] := AArgs.DbPath;
+  Conn.LoginPrompt := False;
+  Conn.Connected := True;
+  WrittenCount := 0;
+  try
+    // First pass: build a name → md-filename map so cross-links resolve.
+    UnitsByName := TDictionary<string, string>.Create;
+    try
+      Q := TFDQuery.Create(nil);
+      try
+        Q.Connection := Conn;
+        Q.SQL.Text :=
+          'SELECT u.name AS unit_name FROM symbols u WHERE u.kind = ''unit''';
+        Q.Open;
+        while not Q.Eof do
+        begin
+          UnitName := Q.FieldByName('unit_name').AsString;
+          UnitsByName.AddOrSetValue(UnitName,
+            ObsidianSanitizeFilename(UnitName));
+          Q.Next;
+        end;
+      finally
+        Q.Free;
+      end;
+
+      // Second pass: per unit, write one markdown file.
+      Q := TFDQuery.Create(nil);
+      QSyms := TFDQuery.Create(nil);
+      QRefs := TFDQuery.Create(nil);
+      try
+        Q.Connection := Conn;
+        Q.SQL.Text :=
+          'SELECT u.id AS unit_id, u.name AS unit_name, f.path AS file_path ' +
+          'FROM symbols u JOIN files f ON f.id = u.file_id ' +
+          'WHERE u.kind = ''unit'' ORDER BY u.name';
+        Q.Open;
+        QSyms.Connection := Conn;
+        QSyms.SQL.Text :=
+          'SELECT s.id, s.kind, s.name, s.qualified_name, s.parent_id, ' +
+          '       s.start_line ' +
+          'FROM symbols s WHERE s.file_id = :fid AND s.kind <> ''unit'' ' +
+          'ORDER BY s.start_line';
+        QRefs.Connection := Conn;
+        QRefs.SQL.Text :=
+          'SELECT DISTINCT u2.name AS by_unit, COUNT(*) AS hits ' +
+          'FROM refs r ' +
+          'JOIN files f2 ON f2.id = r.file_id ' +
+          'JOIN symbols u2 ON u2.kind = ''unit'' AND u2.file_id = f2.id ' +
+          'JOIN symbols s ON s.name = r.name_text ' +
+          'WHERE s.file_id = (SELECT u.file_id FROM symbols u ' +
+          '                    WHERE u.kind = ''unit'' AND u.name = :u LIMIT 1) ' +
+          '  AND u2.name <> :u ' +
+          'GROUP BY u2.name ORDER BY hits DESC LIMIT 20';
+
+        while not Q.Eof do
+        begin
+          UnitId := Q.FieldByName('unit_id').AsLargeInt;
+          UnitName := Q.FieldByName('unit_name').AsString;
+          UnitPath := Q.FieldByName('file_path').AsString;
+          SanName := ObsidianSanitizeFilename(UnitName);
+          OutPath := TPath.Combine(AArgs.OutputDir, SanName + '.md');
+
+          Sb := TStringBuilder.Create;
+          try
+            Sb.AppendLine(Format('---'#10'unit: %s'#10'source: %s'#10'---',
+              [UnitName, UnitPath]));
+            Sb.AppendLine('');
+            Sb.AppendLine(Format('# %s', [UnitName]));
+            Sb.AppendLine('');
+            Sb.AppendLine('Source: `' + UnitPath + '`');
+            Sb.AppendLine('');
+
+            // Symbols grouped by kind.
+            QSyms.Close;
+            QSyms.ParamByName('fid').AsLargeInt :=
+              0;  // resolve via SQL — actually we need file_id, not unit_id
+            // Easier: fetch file_id of the unit symbol first.
+            var FileIdQ := TFDQuery.Create(nil);
+            try
+              FileIdQ.Connection := Conn;
+              FileIdQ.SQL.Text :=
+                'SELECT file_id FROM symbols WHERE id = :id';
+              FileIdQ.ParamByName('id').AsLargeInt := UnitId;
+              FileIdQ.Open;
+              if FileIdQ.IsEmpty then Continue;
+              QSyms.ParamByName('fid').AsLargeInt :=
+                FileIdQ.FieldByName('file_id').AsLargeInt;
+            finally
+              FileIdQ.Free;
+            end;
+            QSyms.Open;
+            Sb.AppendLine('## Symbols');
+            Sb.AppendLine('');
+            KindCount := 0;
+            while not QSyms.Eof do
+            begin
+              Sym.Kind := QSyms.FieldByName('kind').AsString;
+              Sym.Name := QSyms.FieldByName('name').AsString;
+              Sym.QName := QSyms.FieldByName('qualified_name').AsString;
+              Sym.StartLine := QSyms.FieldByName('start_line').AsInteger;
+              Sb.AppendLine(Format('- **%s** `%s` — line %d',
+                [Sym.Kind, Sym.QName, Sym.StartLine]));
+              Inc(KindCount);
+              QSyms.Next;
+            end;
+            QSyms.Close;
+            Sb.AppendLine('');
+            Sb.AppendLine(Format('_%d symbols_', [KindCount]));
+            Sb.AppendLine('');
+
+            // Referenced by other units.
+            QRefs.Close;
+            QRefs.ParamByName('u').AsString := UnitName;
+            QRefs.Open;
+            if not QRefs.IsEmpty then
+            begin
+              Sb.AppendLine('## Referenced by');
+              Sb.AppendLine('');
+              Visited := TDictionary<string, Boolean>.Create;
+              try
+                while not QRefs.Eof do
+                begin
+                  CallerLine := QRefs.FieldByName('by_unit').AsString;
+                  if not Visited.ContainsKey(CallerLine) then
+                  begin
+                    Visited.Add(CallerLine, True);
+                    if UnitsByName.ContainsKey(CallerLine) then
+                      Sb.AppendLine(Format('- [[%s]] — %d hit(s)',
+                        [CallerLine, QRefs.FieldByName('hits').AsInteger]))
+                    else
+                      Sb.AppendLine(Format('- %s — %d hit(s)',
+                        [CallerLine, QRefs.FieldByName('hits').AsInteger]));
+                  end;
+                  QRefs.Next;
+                end;
+              finally
+                Visited.Free;
+              end;
+              Sb.AppendLine('');
+            end;
+
+            TFile.WriteAllText(OutPath, Sb.ToString, TEncoding.UTF8);
+            Inc(WrittenCount);
+          finally
+            Sb.Free;
+          end;
+          Q.Next;
+        end;
+      finally
+        QRefs.Free;
+        QSyms.Free;
+        Q.Free;
+      end;
+    finally
+      UnitsByName.Free;
+    end;
+  finally
+    Conn.Free;
+  end;
+  Writeln(Format('Wrote %d unit notes to %s', [WrittenCount, AArgs.OutputDir]));
+  Result := 0;
+end;
+
+// --- top --------------------------------------------------------------------
+
+function DoTop(const AArgs: TArgs): Integer;
+var
+  Conn: TFDConnection;
+  Q: TFDQuery;
+  Limit: Integer;
+  JArr: TJSONArray;
+  JObj: TJSONObject;
+  Rows: Integer;
+begin
+  if AArgs.DbPath = '' then
+  begin
+    Writeln('ERROR: top requires --db');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
+  if AArgs.Limit > 0 then Limit := AArgs.Limit else Limit := 50;
+
+  Conn := TFDConnection.Create(nil);
+  Q := TFDQuery.Create(nil);
+  try
+    Conn.DriverName := 'SQLite';
+    Conn.Params.Values['Database'] := AArgs.DbPath;
+    Conn.LoginPrompt := False;
+    Conn.Connected := True;
+    Q.Connection := Conn;
+    // Default sort: fan-in count (refs whose name_text matches the symbol).
+    // Limits to the symbol kinds that callers typically reach for.
+    // Strategy: aggregate refs by name first (fast — there's an index on
+    // refs.name_text), then pick one sample symbol per name for context.
+    // This collapses "every method named Add" into a single Add row, which
+    // is what users actually want from a "what's referenced most" question.
+    // Until v0.6 lands index-time symbol resolution (refs.symbol_id), this
+    // is the most honest aggregation.
+    Q.SQL.Text :=
+      'WITH ref_counts AS (' +
+      '  SELECT name_text, COUNT(*) AS fanin FROM refs ' +
+      '  GROUP BY name_text ORDER BY fanin DESC LIMIT :lim' +
+      ') ' +
+      'SELECT rc.name_text AS name, rc.fanin, ' +
+      '       (SELECT kind FROM symbols WHERE name = rc.name_text LIMIT 1) ' +
+      '         AS kind, ' +
+      '       (SELECT qualified_name FROM symbols WHERE name = rc.name_text ' +
+      '        ORDER BY id LIMIT 1) AS sample_qname ' +
+      'FROM ref_counts rc ORDER BY rc.fanin DESC';
+    Q.ParamByName('lim').AsInteger := Limit;
+    Q.Open;
+    Rows := 0;
+    if AArgs.AsJson then
+    begin
+      JArr := TJSONArray.Create;
+      try
+        while not Q.Eof do
+        begin
+          JObj := TJSONObject.Create;
+          JObj.AddPair('name', Q.FieldByName('name').AsString);
+          JObj.AddPair('fanin', TJSONNumber.Create(
+            Q.FieldByName('fanin').AsInteger));
+          JObj.AddPair('sample_kind', Q.FieldByName('kind').AsString);
+          JObj.AddPair('sample_qualified_name',
+            Q.FieldByName('sample_qname').AsString);
+          JArr.AddElement(JObj);
+          Inc(Rows);
+          Q.Next;
+        end;
+        Writeln(JArr.Format(2));
+      finally
+        JArr.Free;
+      end;
+    end
+    else
+    begin
+      Writeln(Format('%6s  %-22s  %-10s  %s',
+        ['fan-in', 'name', 'kind', 'sample qualified name']));
+      Writeln(StringOfChar('-', 90));
+      while not Q.Eof do
+      begin
+        Writeln(Format('%6d  %-22s  %-10s  %s',
+          [Q.FieldByName('fanin').AsInteger,
+           Q.FieldByName('name').AsString,
+           Q.FieldByName('kind').AsString,
+           Q.FieldByName('sample_qname').AsString]));
+        Inc(Rows);
+        Q.Next;
+      end;
+      Writeln(Format('%d row(s) (fan-in = how many references in the index ' +
+        'use this name; ambiguous if multiple symbols share it)', [Rows]));
+    end;
+  finally
+    Q.Free;
+    Conn.Free;
+  end;
+  Result := 0;
+end;
+
 function DoExport(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand = 'enums' then
     Result := DoExportEnums(AArgs)
+  else if AArgs.SubCommand = 'obsidian' then
+    Result := DoExportObsidian(AArgs)
   else
   begin
     Writeln('ERROR: unknown export subcommand: ', AArgs.SubCommand);
-    Writeln('Available: enums');
+    Writeln('Available: enums, obsidian');
     Result := 2;
   end;
 end;
@@ -824,6 +1164,8 @@ begin
       Result := DoLint(Args)
     else if Args.Command = 'export' then
       Result := DoExport(Args)
+    else if Args.Command = 'top' then
+      Result := DoTop(Args)
     else if Args.Command = 'serve' then
     begin
       // Start MCP server. Reads JSON-RPC 2.0 over stdin, writes responses
