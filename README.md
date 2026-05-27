@@ -6,12 +6,11 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.6-alpha. Early work in progress — expect breaking changes.** Adds
-LSP stdio server (workspace/symbol works; definition + references stubbed
-pending v0.7 position resolution), `drag-lint top --by fanin`,
-`drag-lint export enums` (firebird-sql / csv / json / delphi-const),
-`drag-lint export obsidian` (one .md per unit with [[wikilinks]]), on top
-of v0.4's MCP server and incremental reindex.
+**v0.7-alpha. Early work in progress — expect breaking changes.** Adds
+position-to-token resolution to the LSP server — `textDocument/definition`,
+`textDocument/references`, and `textDocument/hover` now work on real
+cursor positions. Builds on v0.6 LSP scaffold, v0.4 MCP server, and the
+export/top/fuzzy stack.
 
 Builds on v0.2 (DFM forms, full symbol coverage, external `.scm` lint
 plugins, `--project <dproj>` mode).

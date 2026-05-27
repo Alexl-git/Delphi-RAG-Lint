@@ -9,9 +9,12 @@ uses
   System.JSON,
   System.NetEncoding,
   Winapi.Windows,
+  TreeSitter,
+  TreeSitterLib,
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces,
-  DRagLint.Storage.SQLite;
+  DRagLint.Storage.SQLite,
+  DRagLint.Parser.Delphi13;
 
 type
   // Language Server Protocol over stdio with Content-Length framing.
@@ -44,8 +47,15 @@ type
       const AParams: TJSONObject);
     procedure HandleReferences(const AId: TJSONValue;
       const AParams: TJSONObject);
+    procedure HandleHover(const AId: TJSONValue;
+      const AParams: TJSONObject);
     function LocationFromSymbol(const ASym: TSymbol): TJSONObject;
     function LocationFromRef(const ARef: TReference): TJSONObject;
+    // v0.7: reparse the file at APath and find the identifier text under
+    // (ALine, ACol) — both 0-based (LSP convention). Returns empty string
+    // if the file doesn't exist or the cursor isn't on an identifier.
+    function IdentifierAtPosition(const APath: string;
+      ALine, ACol: Integer): string;
   public
     constructor Create(const ADbPath: string);
     destructor Destroy; override;
@@ -200,10 +210,15 @@ end;
 
 function TLSPServer.FileToUri(const APath: string): string;
 var
-  Normalised: string;
+  Normalised, Encoded: string;
 begin
   Normalised := StringReplace(APath, '\', '/', [rfReplaceAll]);
-  Result := 'file:///' + TNetEncoding.URL.EncodePath(Normalised);
+  Encoded := TNetEncoding.URL.EncodePath(Normalised);
+  // EncodePath preserves the leading slash if it exists, so we'd end up
+  // with file://// for absolute Windows paths. Strip it before prepending.
+  if Encoded.StartsWith('/') then
+    Encoded := Copy(Encoded, 2, MaxInt);
+  Result := 'file:///' + Encoded;
 end;
 
 function TLSPServer.LocationFromSymbol(const ASym: TSymbol): TJSONObject;
@@ -262,16 +277,150 @@ begin
     Caps.AddPair('definitionProvider', TJSONBool.Create(True));
     Caps.AddPair('referencesProvider', TJSONBool.Create(True));
     Caps.AddPair('workspaceSymbolProvider', TJSONBool.Create(True));
+    Caps.AddPair('hoverProvider', TJSONBool.Create(True));
     Result.AddPair('capabilities', Caps);
     Info := TJSONObject.Create;
     Info.AddPair('name', 'drag-lint LSP');
-    Info.AddPair('version', '0.6.0-alpha');
+    Info.AddPair('version', '0.7.0-alpha');
     Result.AddPair('serverInfo', Info);
     Reply.AddPair('result', Result);
     SendMessage(Reply);
     FInitialized := True;
   finally
     Reply.Free;
+  end;
+end;
+
+function ContainsPosition(const ANode: TTSNode; ALine, ACol: Integer): Boolean;
+var
+  Sp, Ep: TTSPoint;
+begin
+  Sp := ANode.StartPoint;
+  Ep := ANode.EndPoint;
+  // Tree-sitter rows/cols are 0-based, matching LSP.
+  if (ALine < Integer(Sp.row)) or (ALine > Integer(Ep.row)) then
+    Exit(False);
+  if (ALine = Integer(Sp.row)) and (ACol < Integer(Sp.column)) then
+    Exit(False);
+  // EndPoint is exclusive — cursor right at the end is past the token.
+  if (ALine = Integer(Ep.row)) and (ACol >= Integer(Ep.column)) then
+    Exit(False);
+  Result := True;
+end;
+
+function FindSmallestNamedAt(const ANode: TTSNode; ALine, ACol: Integer): TTSNode;
+var
+  i: Integer;
+  Child, Hit: TTSNode;
+begin
+  Result := Default(TTSNode);
+  if ANode.IsNull then Exit;
+  if not ContainsPosition(ANode, ALine, ACol) then Exit;
+  for i := 0 to ANode.NamedChildCount - 1 do
+  begin
+    Child := ANode.NamedChild(i);
+    if ContainsPosition(Child, ALine, ACol) then
+    begin
+      Hit := FindSmallestNamedAt(Child, ALine, ACol);
+      if not Hit.IsNull then
+        Exit(Hit);
+    end;
+  end;
+  Result := ANode;
+end;
+
+function NodeTextLocal(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  StartIdx, EndIdx, Len: Integer;
+begin
+  Result := '';
+  if ANode.IsNull then Exit;
+  StartIdx := Integer(ANode.StartByte);
+  EndIdx := Integer(ANode.EndByte);
+  Len := EndIdx - StartIdx;
+  if (Len <= 0) or (StartIdx < 0) or (EndIdx > Length(ASource)) then
+    Exit;
+  Result := TEncoding.UTF8.GetString(ASource, StartIdx, Len);
+end;
+
+function TLSPServer.IdentifierAtPosition(const APath: string;
+  ALine, ACol: Integer): string;
+var
+  Parser: TTSParser;
+  Tree: TTSTree;
+  Source: TBytes;
+  Node: TTSNode;
+begin
+  Result := '';
+  if not TFile.Exists(APath) then Exit;
+  Source := TFile.ReadAllBytes(APath);
+  Parser := nil;
+  Tree := nil;
+  try
+    Parser := TTSParser.Create;
+    Parser.Language := tree_sitter_delphi13;
+    Tree := Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint;
+        var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining := Length(Source) - Integer(AByteIndex);
+        if Remaining <= 0 then
+        begin
+          ABytesRead := 0;
+          SetLength(Result, 0);
+          Exit;
+        end;
+        SetLength(Result, Remaining);
+        Move(Source[AByteIndex], Result[0], Remaining);
+        ABytesRead := Remaining;
+      end,
+      TTSInputEncoding.TSInputEncodingUTF8);
+
+    Node := FindSmallestNamedAt(Tree.RootNode, ALine, ACol);
+    if Node.IsNull then Exit;
+    // Prefer an identifier-shaped node. If the smallest enclosing is e.g.
+    // a `genericDot` (qualified name like Foo.Bar), drill into its rhs.
+    if Node.NodeType = 'genericDot' then
+    begin
+      var Rhs := Node.ChildByField('rhs');
+      if (not Rhs.IsNull) and ContainsPosition(Rhs, ALine, ACol) then
+        Node := Rhs;
+    end
+    else if Node.NodeType = 'exprDot' then
+    begin
+      var Rhs := Node.ChildByField('rhs');
+      if (not Rhs.IsNull) and ContainsPosition(Rhs, ALine, ACol) then
+        Node := Rhs;
+    end;
+    if (Node.NodeType <> 'identifier') and
+       (Node.NodeType <> 'moduleName') then
+    begin
+      // Try to find an identifier descendant covering the cursor.
+      var ChildIt := Node;
+      while (ChildIt.NamedChildCount > 0) and
+            (ChildIt.NodeType <> 'identifier') do
+      begin
+        var Found := False;
+        for var i := 0 to ChildIt.NamedChildCount - 1 do
+        begin
+          var C := ChildIt.NamedChild(i);
+          if ContainsPosition(C, ALine, ACol) then
+          begin
+            ChildIt := C;
+            Found := True;
+            Break;
+          end;
+        end;
+        if not Found then Break;
+      end;
+      Node := ChildIt;
+    end;
+    Result := Trim(NodeTextLocal(Node, Source));
+  finally
+    Tree.Free;
+    Parser.Free;
   end;
 end;
 
@@ -369,7 +518,7 @@ var
   Reply: TJSONObject;
   Arr: TJSONArray;
   TextDoc, Position: TJSONObject;
-  Uri, Path: string;
+  Uri, Path, Ident: string;
   Line, Col: Integer;
   Symbols: TArray<TSymbol>;
   Sym: TSymbol;
@@ -396,18 +545,16 @@ begin
     end;
     Uri := TextDoc.GetValue('uri').Value;
     Path := FileFromUri(Uri);
-    Line := StrToIntDef(Position.GetValue('line').Value, 0) + 1;
-    Col := StrToIntDef(Position.GetValue('character').Value, 0) + 1;
+    Line := StrToIntDef(Position.GetValue('line').Value, 0);
+    Col := StrToIntDef(Position.GetValue('character').Value, 0);
 
-    // v0.6 strategy: look up symbols matching by name at the cursor.
-    // We don't know the identifier under the cursor without the file text,
-    // so for v0.6 we fall back to: find the enclosing symbol AT that
-    // position (if any) and return ITS declaration. Editors can also call
-    // workspace/symbol with a name selected by the user — that's a better
-    // path for v0.6. Position-based exact-token resolution is a v0.7 item
-    // (needs incremental tree-sitter parse + position→node walk).
-    Symbols := FStore.FindSymbolsByExactName('');  // placeholder
-    SetLength(Symbols, 0);  // empty — caller should use workspace/symbol
+    Ident := IdentifierAtPosition(Path, Line, Col);
+    if Ident <> '' then
+    begin
+      Symbols := FStore.FindSymbolsByExactName(Ident);
+      for Sym in Symbols do
+        Arr.AddElement(LocationFromSymbol(Sym));
+    end;
     Reply.AddPair('result', Arr);
     SendMessage(Reply);
   finally
@@ -420,6 +567,14 @@ procedure TLSPServer.HandleReferences(const AId: TJSONValue;
 var
   Reply: TJSONObject;
   Arr: TJSONArray;
+  TextDoc, Position, Context: TJSONObject;
+  Uri, Path, Ident: string;
+  Line, Col: Integer;
+  Refs: TArray<TReference>;
+  Symbols: TArray<TSymbol>;
+  IncludeDecl: Boolean;
+  R: TReference;
+  Sym: TSymbol;
 begin
   Reply := TJSONObject.Create;
   Arr := TJSONArray.Create;
@@ -427,11 +582,123 @@ begin
     Reply.AddPair('jsonrpc', '2.0');
     if AId <> nil then
       Reply.AddPair('id', AId.Clone as TJSONValue);
-    // Same v0.6 limitation as HandleDefinition — without incremental
-    // tree-sitter parse we can't resolve the cursor token. Return empty
-    // and tell the client to use workspace/symbol + find-callers via MCP
-    // / CLI for now.
+    if (FStore = nil) or (AParams = nil) then
+    begin
+      Reply.AddPair('result', Arr);
+      SendMessage(Reply);
+      Exit;
+    end;
+    TextDoc := AParams.GetValue('textDocument') as TJSONObject;
+    Position := AParams.GetValue('position') as TJSONObject;
+    if (TextDoc = nil) or (Position = nil) then
+    begin
+      Reply.AddPair('result', Arr);
+      SendMessage(Reply);
+      Exit;
+    end;
+    Uri := TextDoc.GetValue('uri').Value;
+    Path := FileFromUri(Uri);
+    Line := StrToIntDef(Position.GetValue('line').Value, 0);
+    Col := StrToIntDef(Position.GetValue('character').Value, 0);
+
+    IncludeDecl := True;
+    Context := AParams.GetValue('context') as TJSONObject;
+    if Context <> nil then
+    begin
+      var IncDeclVal := Context.GetValue('includeDeclaration');
+      if IncDeclVal is TJSONBool then
+        IncludeDecl := TJSONBool(IncDeclVal).AsBoolean;
+    end;
+
+    Ident := IdentifierAtPosition(Path, Line, Col);
+    if Ident <> '' then
+    begin
+      Refs := FStore.FindCallersByName(Ident);
+      for R in Refs do
+        Arr.AddElement(LocationFromRef(R));
+      if IncludeDecl then
+      begin
+        Symbols := FStore.FindSymbolsByExactName(Ident);
+        for Sym in Symbols do
+          Arr.AddElement(LocationFromSymbol(Sym));
+      end;
+    end;
     Reply.AddPair('result', Arr);
+    SendMessage(Reply);
+  finally
+    Reply.Free;
+  end;
+end;
+
+procedure TLSPServer.HandleHover(const AId: TJSONValue;
+  const AParams: TJSONObject);
+var
+  Reply, HoverObj, Contents: TJSONObject;
+  TextDoc, Position: TJSONObject;
+  Uri, Path, Ident, MdValue: string;
+  Line, Col: Integer;
+  Symbols: TArray<TSymbol>;
+  Sym: TSymbol;
+  Sb: TStringBuilder;
+begin
+  Reply := TJSONObject.Create;
+  try
+    Reply.AddPair('jsonrpc', '2.0');
+    if AId <> nil then
+      Reply.AddPair('id', AId.Clone as TJSONValue);
+    if (FStore = nil) or (AParams = nil) then
+    begin
+      Reply.AddPair('result', TJSONNull.Create);
+      SendMessage(Reply);
+      Exit;
+    end;
+    TextDoc := AParams.GetValue('textDocument') as TJSONObject;
+    Position := AParams.GetValue('position') as TJSONObject;
+    if (TextDoc = nil) or (Position = nil) then
+    begin
+      Reply.AddPair('result', TJSONNull.Create);
+      SendMessage(Reply);
+      Exit;
+    end;
+    Uri := TextDoc.GetValue('uri').Value;
+    Path := FileFromUri(Uri);
+    Line := StrToIntDef(Position.GetValue('line').Value, 0);
+    Col := StrToIntDef(Position.GetValue('character').Value, 0);
+    Ident := IdentifierAtPosition(Path, Line, Col);
+    if Ident = '' then
+    begin
+      Reply.AddPair('result', TJSONNull.Create);
+      SendMessage(Reply);
+      Exit;
+    end;
+    Symbols := FStore.FindSymbolsByExactName(Ident);
+    if Length(Symbols) = 0 then
+    begin
+      Reply.AddPair('result', TJSONNull.Create);
+      SendMessage(Reply);
+      Exit;
+    end;
+    Sb := TStringBuilder.Create;
+    try
+      Sb.AppendLine(Format('**%s** `%s`', [Ident, Symbols[0].Kind.ToText]));
+      Sb.AppendLine('');
+      for Sym in Symbols do
+      begin
+        Sb.AppendLine(Format('- `%s` — line %d', [Sym.QualifiedName,
+          Sym.StartLine]));
+        if Sym.Signature <> '' then
+          Sb.AppendLine('    ' + Sym.Signature);
+      end;
+      MdValue := Sb.ToString;
+    finally
+      Sb.Free;
+    end;
+    HoverObj := TJSONObject.Create;
+    Contents := TJSONObject.Create;
+    Contents.AddPair('kind', 'markdown');
+    Contents.AddPair('value', MdValue);
+    HoverObj.AddPair('contents', Contents);
+    Reply.AddPair('result', HoverObj);
     SendMessage(Reply);
   finally
     Reply.Free;
@@ -475,6 +742,8 @@ begin
         HandleDefinition(Id, Params)
       else if Method = 'textDocument/references' then
         HandleReferences(Id, Params)
+      else if Method = 'textDocument/hover' then
+        HandleHover(Id, Params)
       else if (Id <> nil) and (Method <> '') then
         SendError(Id, -32601, 'method not found: ' + Method);
     finally

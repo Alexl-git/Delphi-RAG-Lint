@@ -3,6 +3,47 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha — expect
 breaking changes** until v1.0.
 
+## v0.7.0-alpha — 2026-05-27
+
+### Added
+- **LSP position resolution.** `textDocument/definition`,
+  `textDocument/references`, and (new) `textDocument/hover` now work on
+  the cursor position. Implementation reparses the file under the URI
+  with tree-sitter, walks to the smallest named node containing the
+  cursor, drills into `genericDot`/`exprDot` to pick the rhs identifier
+  if the cursor is on a qualified name, then queries the symbol table by
+  that identifier text.
+- **Hover** returns a Markdown block with the symbol kind + every
+  qualified name matching that bare name + first declaration line.
+
+### Fixed
+- `file:///` URI encoding emitted an extra leading slash for absolute
+  Windows paths (`file:////C:/...`). Strip the leading slash from the
+  encoded path before prepending.
+
+### Verified
+- Cursor on `FStore.UpsertSymbol` in `DRagLint.Core.Indexer.pas`:
+  - definition → 2 results: `ISymbolStore.UpsertSymbol` (interface) and
+    `TSQLiteSymbolStore.UpsertSymbol` (concrete impl), each with proper
+    file URI + range
+  - references → 3 results: the call site + both declarations
+- Cursor on `ISymbolStore` in the interface declaration: definition
+  returns the interface decl range; references currently returns just
+  the declaration because v0.7 refs are call-site-only (not type-use).
+  Type-use refs are a v0.8 enhancement.
+
+### Known limitations to flag publicly
+- LSP `textDocument/references` only finds call sites today. Type uses
+  (`X: ISymbolStore`, class inheritance, parameter types) are NOT
+  emitted as refs by the indexer — they'd need a parser-side
+  enhancement. Tracked as v0.8.
+- No incremental parse on `textDocument/didChange`. The LSP server uses
+  the on-disk index + reparses the cursor's file on each request.
+  Re-running `drag-lint index` is sub-second per file thanks to v0.4
+  incremental, so editor save + index-on-save covers most cases.
+
+---
+
 ## v0.6.0-alpha — 2026-05-27
 
 ### Added
