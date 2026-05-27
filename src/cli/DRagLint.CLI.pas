@@ -19,6 +19,7 @@ uses
   DRagLint.Core.Indexer,
   DRagLint.Storage.SQLite,
   DRagLint.Parser.Delphi13,
+  DRagLint.Parser.DFM,
   DRagLint.Lint.Linter;
 
 type
@@ -191,7 +192,7 @@ begin
   Store.Migrate;
 
   Parser := TDelphi13Parser.Create;
-  Indexer := TIndexer.Create(Store, [Parser]);
+  Indexer := TIndexer.Create(Store, [Parser, TDFMParser.Create]);
 
   if TFile.Exists(AArgs.Path) then
     Indexer.IndexFile(AArgs.Path)

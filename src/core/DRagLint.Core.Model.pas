@@ -7,7 +7,8 @@ type
     skUnit, skProgram, skPackage,
     skClass, skInterface, skRecord, skEnum, skEnumValue,
     skProcedure, skFunction, skMethod, skConstructor, skDestructor,
-    skProperty, skField, skVarDecl, skConstDecl, skTypeAlias
+    skProperty, skField, skVarDecl, skConstDecl, skTypeAlias,
+    skForm, skComponent
   );
 
   TSymbolKindHelper = record helper for TSymbolKind
@@ -80,7 +81,8 @@ const
     'unit', 'program', 'package',
     'class', 'interface', 'record', 'enum', 'enum_value',
     'procedure', 'function', 'method', 'constructor', 'destructor',
-    'property', 'field', 'var', 'const', 'type'
+    'property', 'field', 'var', 'const', 'type',
+    'form', 'component'
   );
 
 function TSymbolKindHelper.ToText: string;

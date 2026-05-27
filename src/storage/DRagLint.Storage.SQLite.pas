@@ -422,8 +422,11 @@ begin
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := FConn;
+    // Match any reference kind (call, event-binding, type_use, ...). "callers"
+    // is a slight misnomer — the semantic is "every site that references
+    // this name" — but it's what users mean when they say find-callers.
     Q.SQL.Text :=
-      'SELECT * FROM refs WHERE kind = ''call'' AND name_text = :name ' +
+      'SELECT * FROM refs WHERE name_text = :name ' +
       'ORDER BY file_id, start_line';
     Q.ParamByName('name').AsString := ACalleeName;
     Q.Open;
