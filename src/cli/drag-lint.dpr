@@ -17,6 +17,7 @@ uses
   DRagLint.Query.Fuzzy in '..\query\DRagLint.Query.Fuzzy.pas',
   DRagLint.Lint.QueryRules in '..\lint\DRagLint.Lint.QueryRules.pas',
   DRagLint.Lint.Linter in '..\lint\DRagLint.Lint.Linter.pas',
+  DRagLint.Lint.ProjectChecks in '..\lint\DRagLint.Lint.ProjectChecks.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   DRagLint.MCP.Server in '..\mcp\DRagLint.MCP.Server.pas',
   DRagLint.LSP.Server in '..\lsp\DRagLint.LSP.Server.pas',

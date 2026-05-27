@@ -3,6 +3,39 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha — expect
 breaking changes** until v1.0.
 
+## v0.9.0-alpha — 2026-05-27
+
+### Added — two project-shaped lint rules
+
+- **`unit-not-in-dpr`** (project-level). Cross-checks the .dproj's
+  `<DCCReference Include="..."/>` list against the matching .dpr/.dpk's
+  `uses` clause. Emits a warning for every unit listed in the .dproj but
+  missing from the program/package source (the dangerous case — drops out
+  of the build on next IDE re-open), and an info-level finding for the
+  reverse (compiles via search path today, but IDE doesn't track it).
+  Invoked via `drag-lint lint --project <file.dproj>`. Self-test on
+  drag-lint itself: 0 findings (clean). Real-world test on a 700-file
+  Micronite client: 22 mismatches caught, every one a real "I forgot to
+  add this to the dpr" bug.
+
+- **`inline-comment-in-multiline-args`** (file-level, layout heuristic).
+  Detects trailing `// ...` comments placed inside multi-line argument
+  lists, array/set literals, and record initialisers — the exact pattern
+  that YADF and other Pascal reformatters reflow incorrectly, silently
+  destroying the next array element. Tracks paren/bracket depth,
+  `{...}` and `(* ... *)` block comments, and `'string'` literals so URL
+  fragments inside license headers don't false-trip. Skips closing-paren
+  lines (no reflow target). Real-world test on Micronite client: 70 hits
+  across array-of-record initialisers in `Blueprint4.ViewModel.pas`.
+
+### Notes
+- Project-level lint introduces `--project <file.dproj>` to the lint
+  subcommand. File/folder lint and project lint are independent and can
+  be combined in one invocation (run together, findings merge).
+- No schema bump in v0.9.
+
+---
+
 ## v0.8.0-alpha — 2026-05-27
 
 ### Added

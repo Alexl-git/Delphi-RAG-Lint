@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.8.0-alpha';
+  VERSION = '0.9.0-alpha';
 
 function Run: Integer;
 
@@ -31,6 +31,7 @@ uses
   DRagLint.Parser.Delphi13,
   DRagLint.Parser.DFM,
   DRagLint.Lint.Linter,
+  DRagLint.Lint.ProjectChecks,
   DRagLint.Project.Resolver,
   DRagLint.MCP.Server,
   DRagLint.LSP.Server;
@@ -71,6 +72,7 @@ begin
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--db ...] [--json]');
   Writeln('  drag-lint lint  <path>       [--rule field-by-name-in-loop] [--json]');
+  Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
@@ -1293,35 +1295,52 @@ end;
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter: DRagLint.Lint.Linter.TLinter;
-  Findings: TArray<TLintFinding>;
+  Findings, ProjFindings: TArray<TLintFinding>;
   F: TLintFinding;
   JArr: TJSONArray;
   JObj: TJSONObject;
 begin
-  if AArgs.Path = '' then
+  if (AArgs.Path = '') and (AArgs.ProjectPath = '') then
   begin
-    Writeln('ERROR: lint requires a <path>');
+    Writeln('ERROR: lint requires a <path> or --project <file.dproj>');
     Exit(2);
   end;
-  if (AArgs.Rule <> '') and (AArgs.Rule <> 'field-by-name-in-loop') then
+  if (AArgs.Rule <> '') and
+     (AArgs.Rule <> 'field-by-name-in-loop') and
+     (AArgs.Rule <> 'unit-not-in-dpr') and
+     (AArgs.Rule <> 'inline-comment-in-multiline-args') then
   begin
-    Writeln(Format('ERROR: unknown rule "%s" (only "field-by-name-in-loop" ' +
-      'is implemented in v0.1)', [AArgs.Rule]));
+    Writeln(Format('ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' +
+      'unit-not-in-dpr, inline-comment-in-multiline-args)', [AArgs.Rule]));
     Exit(2);
   end;
-  Linter := DRagLint.Lint.Linter.TLinter.Create;
-  try
-    if TFile.Exists(AArgs.Path) then
-      Findings := Linter.LintFile(AArgs.Path)
-    else if TDirectory.Exists(AArgs.Path) then
-      Findings := Linter.LintFolder(AArgs.Path, True)
-    else
+  Findings := nil;
+  // Project-level lint: --project triggers DCC/DPR membership check.
+  if AArgs.ProjectPath <> '' then
+  begin
+    if (AArgs.Rule = '') or (AArgs.Rule = 'unit-not-in-dpr') then
     begin
-      Writeln('ERROR: path does not exist: ', AArgs.Path);
-      Exit(2);
+      ProjFindings := DRagLint.Lint.ProjectChecks.TProjectChecks
+        .CheckUnitsInDpr(AArgs.ProjectPath);
+      Findings := Findings + ProjFindings;
     end;
-  finally
-    Linter.Free;
+  end;
+  if AArgs.Path <> '' then
+  begin
+    Linter := DRagLint.Lint.Linter.TLinter.Create;
+    try
+      if TFile.Exists(AArgs.Path) then
+        Findings := Findings + Linter.LintFile(AArgs.Path)
+      else if TDirectory.Exists(AArgs.Path) then
+        Findings := Findings + Linter.LintFolder(AArgs.Path, True)
+      else
+      begin
+        Writeln('ERROR: path does not exist: ', AArgs.Path);
+        Exit(2);
+      end;
+    finally
+      Linter.Free;
+    end;
   end;
   if AArgs.AsJson then
   begin

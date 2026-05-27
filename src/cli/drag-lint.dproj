@@ -168,6 +168,7 @@
         <DCCReference Include="..\query\DRagLint.Query.Fuzzy.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.QueryRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Linter.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
         <DCCReference Include="..\mcp\DRagLint.MCP.Server.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Server.pas"/>
