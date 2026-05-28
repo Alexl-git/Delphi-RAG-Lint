@@ -703,9 +703,9 @@ tests\fixtures\T3_regions.exe
 ```
 Expected output:
 ```
-tripleSlash=2 doubleSlashOne=1 tripleSlashOne=1 pasDocCurly=1 pasDocParen=1 looseLine=1 looseBlock=0
+tripleSlash=3 doubleSlashOne=1 tripleSlashOne=1 pasDocCurly=1 pasDocParen=1 looseLine=1 looseBlock=0
 ```
-(`tripleSlash=2` because XMLDoc on TDocDemo and on GetBaz each merge into one region; `looseLine=1` for the trailing `// user name`.)
+(`tripleSlash=3` = three non-adjacent `///` regions: TDocDemo block (lines 6-7 merged), GetBaz block (lines 10-13 merged), and the standalone `/// Plain one-liner` on line 31. `looseLine=1` for the trailing `// user name`.)
 
 - [ ] **Step 5: Commit**
 
