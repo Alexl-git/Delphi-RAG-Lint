@@ -36,6 +36,11 @@ type
     function FormatSymbols(const ASymbols: TArray<TSymbol>): string;
     function FormatReferences(const ARefs: TArray<TReference>): string;
     function FormatFindings(const AFindings: TArray<TLintFinding>): string;
+    function FormatDocAsJson(const AQName: string;
+      const ADoc: TParsedDoc): string;
+    function FormatSymbolsAsJsonArray(const ASymbols: TArray<TSymbol>;
+      AStore: ISymbolStore): string;
+    function ResolveStore(const AArgs: TJSONObject): ISymbolStore;
   public
     constructor Create(const ADbPaths: TArray<string>);
     destructor Destroy; override;
@@ -186,6 +191,36 @@ begin
     '"path":{"type":"string","description":"File or folder to lint"}' +
     '},"required":["path"],"additionalProperties":false}'));
 
+  Tools.AddElement(ToolDescriptor(
+    'get_symbol_doc',
+    'Return the structured doc comment for a Delphi symbol by its qualified ' +
+    'name. Returns format, summary, params, returns, exceptions, since, ' +
+    'deprecated flag, and raw_block.',
+    '{"type":"object","properties":{' +
+    '"qname":{"type":"string","description":"Qualified symbol name (e.g. Unit.TClass.Method)"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional if --db passed at startup)"}' +
+    '},"required":["qname"]}'));
+
+  Tools.AddElement(ToolDescriptor(
+    'find_by_doc_tag',
+    'Find symbols whose doc comment has a given tag. Supported tags: ' +
+    '"deprecated" (symbols marked deprecated) and "since" (symbols with ' +
+    'a @since / <since> annotation).',
+    '{"type":"object","properties":{' +
+    '"tag":{"type":"string","description":"Tag to search: deprecated | since"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
+    '},"required":["tag"]}'));
+
+  Tools.AddElement(ToolDescriptor(
+    'find_undocumented',
+    'Find symbols that have no doc comment. Optionally filter by symbol kind ' +
+    '(method, function, procedure, class, ...) and restrict to public symbols.',
+    '{"type":"object","properties":{' +
+    '"kind":{"type":"string","description":"Symbol kind filter (optional)"},' +
+    '"public_only":{"type":"boolean","description":"Only include public symbols (optional)"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
+    '}}'));
+
   Res.AddPair('tools', Tools);
   SendResult(AId, Res);
 end;
@@ -265,6 +300,76 @@ begin
   finally
     Sb.Free;
   end;
+end;
+
+function TMCPServer.ResolveStore(const AArgs: TJSONObject): ISymbolStore;
+var
+  DbVal: TJSONValue;
+  DbPath: string;
+begin
+  // If the caller supplies a "db" argument, open a per-call store.
+  // Otherwise fall back to the session-level FStore.
+  if AArgs <> nil then
+    DbVal := AArgs.GetValue('db')
+  else
+    DbVal := nil;
+  if DbVal <> nil then
+  begin
+    DbPath := DbVal.Value;
+    Result := TSQLiteSymbolStore.Create(DbPath);
+    Result.Migrate;
+  end
+  else
+    Result := FStore;
+end;
+
+function TMCPServer.FormatDocAsJson(const AQName: string;
+  const ADoc: TParsedDoc): string;
+var
+  DepStr: string;
+begin
+  if ADoc.Deprecated then DepStr := 'true' else DepStr := 'false';
+  Result :=
+    '{"qname":"' + JsonEscape(AQName) + '"' +
+    ',"format":"' + JsonEscape(DocFormatToStr(ADoc.Format)) + '"' +
+    ',"summary":"' + JsonEscape(ADoc.Summary) + '"' +
+    ',"returns":"' + JsonEscape(ADoc.ReturnsText) + '"' +
+    ',"since":"' + JsonEscape(ADoc.SinceText) + '"' +
+    ',"deprecated":' + DepStr +
+    ',"params_json":"' + JsonEscape(ADoc.ParamsJsonRaw) + '"' +
+    ',"exceptions_json":"' + JsonEscape(ADoc.ExceptionsJsonRaw) + '"' +
+    ',"seealso_json":"' + JsonEscape(ADoc.SeeAlsoJsonRaw) + '"' +
+    ',"raw_block":"' + JsonEscape(ADoc.RawBlock) + '"' +
+    '}';
+end;
+
+function TMCPServer.FormatSymbolsAsJsonArray(const ASymbols: TArray<TSymbol>;
+  AStore: ISymbolStore): string;
+var
+  Parts: TArray<string>;
+  I: Integer;
+  FilePath: string;
+begin
+  if Length(ASymbols) = 0 then
+  begin
+    Result := '[]';
+    Exit;
+  end;
+  SetLength(Parts, Length(ASymbols));
+  for I := 0 to High(ASymbols) do
+  begin
+    if AStore <> nil then
+      FilePath := AStore.GetFilePath(ASymbols[I].FileId)
+    else
+      FilePath := '';
+    Parts[I] :=
+      '{"qname":"' + JsonEscape(ASymbols[I].QualifiedName) + '"' +
+      ',"kind":"' + JsonEscape(ASymbols[I].Kind.ToText) + '"' +
+      ',"file":"' + JsonEscape(FilePath) + '"' +
+      ',"line":' + IntToStr(ASymbols[I].StartLine) +
+      '}';
+  end;
+  Result := '[' + string.Join(',', Parts) + ']';
 end;
 
 procedure TMCPServer.HandleToolsCall(const AId: TJSONValue;
@@ -354,6 +459,72 @@ begin
         Exit;
       end;
       ResultText := FormatFindings(Findings);
+    end
+    else if ToolName = 'get_symbol_doc' then
+    begin
+      var CallStore := ResolveStore(Args);
+      if CallStore = nil then
+      begin
+        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        Exit;
+      end;
+      var QNameVal := '';
+      if Args.GetValue('qname') <> nil then
+        QNameVal := Args.GetValue('qname').Value;
+      if QNameVal = '' then
+      begin
+        SendError(AId, -32602, 'get_symbol_doc requires qname');
+        Exit;
+      end;
+      var SymsForDoc := CallStore.FindSymbolsByQualifiedName(QNameVal);
+      if Length(SymsForDoc) = 0 then
+        ResultText := '{"error":"symbol not found","qname":"' +
+          JsonEscape(QNameVal) + '"}'
+      else
+      begin
+        var DocResult := CallStore.GetSymbolDoc(SymsForDoc[0].Id);
+        if not DocResult.HasContent then
+          ResultText := '{"error":"no doc comment","qname":"' +
+            JsonEscape(QNameVal) + '"}'
+        else
+          ResultText := FormatDocAsJson(SymsForDoc[0].QualifiedName, DocResult);
+      end;
+    end
+    else if ToolName = 'find_by_doc_tag' then
+    begin
+      var CallStore2 := ResolveStore(Args);
+      if CallStore2 = nil then
+      begin
+        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        Exit;
+      end;
+      var TagVal := '';
+      if Args.GetValue('tag') <> nil then
+        TagVal := Args.GetValue('tag').Value;
+      if TagVal = '' then
+      begin
+        SendError(AId, -32602, 'find_by_doc_tag requires tag');
+        Exit;
+      end;
+      var TagSyms := CallStore2.FindByDocTag(TagVal);
+      ResultText := FormatSymbolsAsJsonArray(TagSyms, CallStore2);
+    end
+    else if ToolName = 'find_undocumented' then
+    begin
+      var CallStore3 := ResolveStore(Args);
+      if CallStore3 = nil then
+      begin
+        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        Exit;
+      end;
+      var KindVal := '';
+      var PubOnly := False;
+      if Args.GetValue('kind') <> nil then
+        KindVal := Args.GetValue('kind').Value;
+      if Args.GetValue('public_only') <> nil then
+        PubOnly := Args.GetValue('public_only').Value = 'true';
+      var UndocSyms := CallStore3.FindUndocumented(KindVal, PubOnly);
+      ResultText := FormatSymbolsAsJsonArray(UndocSyms, CallStore3);
     end
     else
     begin
