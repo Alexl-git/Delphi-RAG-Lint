@@ -3,6 +3,11 @@ setlocal
 set HERE=%~dp0
 set FAILED=0
 
+REM Pin cwd to repo root for the entire suite so relative paths inside
+REM fixtures (e.g. T3 reads tests\fixtures\Docs.pas; T7 writes tests\t7.sqlite)
+REM resolve consistently regardless of where the stitcher is invoked.
+pushd "%HERE%.."
+
 echo === T1: schema v4 ===
 call "%HERE%fixtures\T1_schema.bat" || set FAILED=1
 
@@ -34,25 +39,21 @@ echo === T10: CLI find ===
 call "%HERE%fixtures\T10_find.bat" || set FAILED=1
 
 echo === T11: MCP tools ===
-pushd "%HERE%.."
-call "%HERE%fixtures\T11_mcp.bat"
-if errorlevel 1 set FAILED=1
-popd
+call "%HERE%fixtures\T11_mcp.bat" || set FAILED=1
 
 echo === T12: LSP hover ===
 call "%HERE%fixtures\T12_lsp.bat" || set FAILED=1
 
 echo === T13: docs config ===
-pushd "%HERE%.."
-call "%HERE%fixtures\T13_config.bat"
-if errorlevel 1 set FAILED=1
-popd
+call "%HERE%fixtures\T13_config.bat" || set FAILED=1
 
 echo.
 echo === Stop criteria: self-corpus doc coverage ===
 del /q "%HERE%draglint_self.sqlite" 2>NUL
 "%HERE%..\third_party\dll\drag-lint.exe" index "%HERE%..\src" --db "%HERE%draglint_self.sqlite" >NUL
 python -c "import sqlite3,sys; print('symbol_docs with summary:', sqlite3.connect(sys.argv[1]).execute('SELECT COUNT(*) FROM symbol_docs WHERE summary IS NOT NULL').fetchone()[0])" "%HERE%draglint_self.sqlite"
+
+popd
 
 if %FAILED%==1 (
   echo.
