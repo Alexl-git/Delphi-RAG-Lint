@@ -23,12 +23,14 @@ type
 
     class function StripXmlDocPrefix(const ALine: string): string; static;
     class function CollapseWhitespace(const S: string): string; static;
+
+    class function Dispatch(const ARegion: TDocCommentRegion): TParsedDoc; static;
   end;
 
 implementation
 
 uses
-  System.RegularExpressions;
+  System.RegularExpressions, System.StrUtils;
 
 type
   TScanState = (ssCode, ssInString, ssInLineComment, ssInBraceComment, ssInParenComment);
@@ -495,17 +497,101 @@ end;
 
 class function TDocCommentParser.ParseOneline(const ARaw: string;
   AKind: TDocCommentKind): TParsedDoc;
+var
+  Lines: TArray<string>;
+  Acc: TStringBuilder;
+  I: Integer;
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Format := dfOneline;
   Result.RawBlock := ARaw;
+  Lines := ARaw.Split([sLineBreak, #10, #13]);
+  Acc := TStringBuilder.Create;
+  try
+    for I := 0 to High(Lines) do
+    begin
+      if Acc.Length > 0 then Acc.Append(' ');
+      Acc.Append(StripXmlDocPrefix(Lines[I]));
+    end;
+    Result.Summary := CollapseWhitespace(Acc.ToString);
+  finally
+    Acc.Free;
+  end;
+  Result.HasContent := Result.Summary <> '';
 end;
 
 class function TDocCommentParser.ParseLoose(const ARaw: string): TParsedDoc;
+const
+  NOISE_PREFIXES: array[0..9] of string = (
+    'TODO', 'FIXME', 'HACK', 'XXX', 'REVIEW',
+    '=====', '-----', '#####', 'Copyright', '(c)'
+  );
+var
+  Lines: TArray<string>;
+  I, NoiseCount, TotalCount: Integer;
+  Stripped: string;
+  Noise: string;
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Format := dfLoose;
   Result.RawBlock := ARaw;
+
+  Lines := ARaw.Split([sLineBreak, #10, #13]);
+  NoiseCount := 0;
+  TotalCount := 0;
+  for I := 0 to High(Lines) do
+  begin
+    Stripped := TrimLeft(StripXmlDocPrefix(Lines[I]));
+    if Stripped = '' then Continue;
+    Inc(TotalCount);
+    for Noise in NOISE_PREFIXES do
+      if StartsText(Noise, Stripped) then
+      begin
+        Inc(NoiseCount);
+        Break;
+      end;
+  end;
+
+  if (TotalCount > 0) and (NoiseCount * 2 > TotalCount) then
+  begin
+    Result.HasContent := False;
+    Exit;
+  end;
+
+  // Treat like oneline
+  Result := ParseOneline(ARaw, dckLooseLine);
+  Result.Format := dfLoose;
+end;
+
+class function TDocCommentParser.Dispatch(const ARegion: TDocCommentRegion): TParsedDoc;
+var
+  HasXmlTags: Boolean;
+begin
+  case ARegion.Kind of
+    dckTripleSlash:
+      begin
+        HasXmlTags := (Pos('<summary>', ARegion.RawText) > 0) or
+                      (Pos('<param', ARegion.RawText) > 0) or
+                      (Pos('<returns>', ARegion.RawText) > 0) or
+                      (Pos('<remarks>', ARegion.RawText) > 0) or
+                      (Pos('<exception', ARegion.RawText) > 0) or
+                      (Pos('<example>', ARegion.RawText) > 0);
+        if HasXmlTags then
+          Result := ParseXmlDoc(ARegion.RawText)
+        else
+          Result := ParseOneline(ARegion.RawText, ARegion.Kind);
+      end;
+    dckDoubleSlashOne, dckTripleSlashOne:
+      Result := ParseOneline(ARegion.RawText, ARegion.Kind);
+    dckPasDocCurly, dckPasDocParen:
+      Result := ParsePasDoc(ARegion.RawText);
+    dckLooseLine, dckLooseBlock:
+      Result := ParseLoose(ARegion.RawText);
+  else
+    FillChar(Result, SizeOf(Result), 0);
+  end;
+  Result.StartLine := ARegion.StartLine;
+  Result.EndLine := ARegion.EndLine;
 end;
 
 end.
