@@ -149,48 +149,51 @@ begin
   // so we can associate them with symbols by line proximity below.
   SourceText := TEncoding.ANSI.GetString(Source);
   DocRegions := TDocCommentScanner.Scan(SourceText);
-  Token := FStore.OpenFileTx(AFilePath, Mtime, Sha, Parser.LanguageName);
-  // v0.16: clear stale doc rows for this file before emitting fresh ones
-  // (OpenFileTx already cleared symbols and refs).
-  FStore.DeleteFileDocs(Token.FileId);
-  IdxToId := TDictionary<Integer, Int64>.Create;
   try
+    Token := FStore.OpenFileTx(AFilePath, Mtime, Sha, Parser.LanguageName);
+    // v0.16: clear stale doc rows for this file before emitting fresh ones
+    // (OpenFileTx already cleared symbols and refs).
+    FStore.DeleteFileDocs(Token.FileId);
+    IdxToId := TDictionary<Integer, Int64>.Create;
     try
-      for i := 0 to High(ParseRes.Symbols) do
-      begin
-        Sym := ParseRes.Symbols[i];
-        // Translate in-array parent index to actual DB id
-        if (Sym.ParentId >= 0) and IdxToId.TryGetValue(Integer(Sym.ParentId),
-          ResolvedParent) then
-          Sym.ParentId := ResolvedParent
-        else
-          Sym.ParentId := -1;
-        NewSymId := FStore.UpsertSymbol(Token, Sym);
-        IdxToId.Add(i, NewSymId);
-        // v0.16: associate doc comment region to this symbol
-        DocRegion := FindDocRegionAbove(DocRegions, Sym.StartLine);
-        if DocRegion.Kind <> TDocCommentKind(-1) then
+      try
+        for i := 0 to High(ParseRes.Symbols) do
         begin
-          ParsedDoc := TDocCommentParser.Dispatch(DocRegion);
-          if ParsedDoc.HasContent then
-            FStore.UpsertSymbolDoc(Token, NewSymId, ParsedDoc);
+          Sym := ParseRes.Symbols[i];
+          // Translate in-array parent index to actual DB id
+          if (Sym.ParentId >= 0) and IdxToId.TryGetValue(Integer(Sym.ParentId),
+            ResolvedParent) then
+            Sym.ParentId := ResolvedParent
+          else
+            Sym.ParentId := -1;
+          NewSymId := FStore.UpsertSymbol(Token, Sym);
+          IdxToId.Add(i, NewSymId);
+          // v0.16: associate doc comment region to this symbol
+          DocRegion := FindDocRegionAbove(DocRegions, Sym.StartLine);
+          if DocRegion.Kind <> TDocCommentKind(-1) then
+          begin
+            ParsedDoc := TDocCommentParser.Dispatch(DocRegion);
+            if ParsedDoc.HasContent then
+              FStore.UpsertSymbolDoc(Token, NewSymId, ParsedDoc);
+          end;
+        end;
+        for i := 0 to High(ParseRes.References) do
+          FStore.UpsertReference(Token, ParseRes.References[i]);
+        FStore.CommitFileTx(Token);
+        ReportProgress(AFilePath, Length(ParseRes.Symbols),
+          Length(ParseRes.References),
+          Length(ParseRes.Diagnostics));
+      except
+        on E: Exception do
+        begin
+          FStore.RollbackFileTx(Token);
+          Writeln(Format('  ERROR indexing %s: %s', [AFilePath, E.Message]));
         end;
       end;
-      for i := 0 to High(ParseRes.References) do
-        FStore.UpsertReference(Token, ParseRes.References[i]);
-      FStore.CommitFileTx(Token);
-      ReportProgress(AFilePath, Length(ParseRes.Symbols),
-        Length(ParseRes.References),
-        Length(ParseRes.Diagnostics));
-    except
-      on E: Exception do
-      begin
-        FStore.RollbackFileTx(Token);
-        Writeln(Format('  ERROR indexing %s: %s', [AFilePath, E.Message]));
-      end;
+    finally
+      IdxToId.Free;
     end;
   finally
-    IdxToId.Free;
     DocRegions.Free;
   end;
 end;
