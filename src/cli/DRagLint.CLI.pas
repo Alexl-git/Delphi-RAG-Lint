@@ -62,6 +62,12 @@ type
     Open: Boolean;
     ShowHelp: Boolean;
     ShowVersion: Boolean;
+    // v0.16: query find flags
+    DocTag: string;
+    DocContains: string;
+    NoDocs: Boolean;
+    Kind: string;
+    PublicOnly: Boolean;
   end;
 
 procedure PrintHelp;
@@ -76,6 +82,7 @@ begin
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--db ...] [--json]');
+  Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
   Writeln('  drag-lint lint  <path>       [--rule field-by-name-in-loop] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
@@ -264,6 +271,25 @@ begin
       Inc(i);
       Result.SortBy := ParamStr(i);
     end
+    else if (A = '--doc-tag') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.DocTag := ParamStr(i);
+    end
+    else if (A = '--doc-contains') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.DocContains := ParamStr(i);
+    end
+    else if (A = '--no-docs') then
+      Result.NoDocs := True
+    else if (A = '--kind') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Kind := ParamStr(i);
+    end
+    else if (A = '--public') then
+      Result.PublicOnly := True
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
     else
@@ -474,6 +500,52 @@ end;
 
 function DoQueryHints(const AArgs: TArgs): Integer; forward;
 
+// v0.16: query find --doc-tag X | --doc-contains Y | --no-docs [--kind K] [--public]
+// Output per result: "<qualified_name>  [<kind>]  <file_path>:<start_line>"
+// Exit 0 if any results, 1 if none.
+function DoQueryFind(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Syms: TArray<TSymbol>;
+  S: TSymbol;
+  FilePath: string;
+begin
+  if (AArgs.DocTag = '') and (AArgs.DocContains = '') and (not AArgs.NoDocs) then
+  begin
+    Writeln('Usage: drag-lint query find [--doc-tag X | --doc-contains Y | --no-docs] ' +
+      '[--kind K] [--public] [--db <file.sqlite>]');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first.');
+    Exit(2);
+  end;
+
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  if AArgs.NoDocs then
+    Syms := Store.FindUndocumented(AArgs.Kind, AArgs.PublicOnly)
+  else if AArgs.DocTag <> '' then
+    Syms := Store.FindByDocTag(AArgs.DocTag)
+  else
+    Syms := Store.FindByDocContains(AArgs.DocContains);
+
+  for S in Syms do
+  begin
+    FilePath := Store.GetFilePath(S.FileId);
+    Writeln(System.SysUtils.Format('%s  [%s]  %s:%d',
+      [S.QualifiedName, S.Kind.ToText, FilePath, S.StartLine]));
+  end;
+
+  if Length(Syms) = 0 then
+    Result := 1
+  else
+    Result := 0;
+end;
+
 function DoQuery(const AArgs: TArgs): Integer;
 var
   Symbols, AllSymbols: TArray<TSymbol>;
@@ -540,6 +612,12 @@ begin
   if AArgs.SubCommand = 'hints' then
   begin
     Result := DoQueryHints(AArgs);
+    Exit;
+  end;
+
+  if AArgs.SubCommand = 'find' then
+  begin
+    Result := DoQueryFind(AArgs);
     Exit;
   end;
 
