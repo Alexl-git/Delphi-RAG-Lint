@@ -34,7 +34,7 @@ type
   public
     constructor Create;
     function Resolve(const ADprojPath: string): TArray<string>;
-    // Library/Browsing paths from registry only — no .dproj required.
+    // Library/Browsing paths from registry only - no .dproj required.
     // Useful for "index everything Delphi knows about" without a project.
     function ResolveLibraryPaths: TArray<string>;
   end;
@@ -175,7 +175,7 @@ begin
   AddFolderIfReal(AList, BaseDir);
 
   // Skip XML DOM (MSXML COM init is not present in many Delphi installs).
-  // We only need a few specific tags — plain regex over the file text.
+  // We only need a few specific tags - plain regex over the file text.
   Content := TFile.ReadAllText(ADprojPath, TEncoding.UTF8);
   for Tag in PATH_TAGS do
   begin

@@ -209,7 +209,7 @@ begin
   Sb := TStringBuilder.Create;
   try
     for S in ASymbols do
-      Sb.AppendLine(Format('%s %s (%s) — line %d:%d',
+      Sb.AppendLine(Format('%s %s (%s) - line %d:%d',
         [S.Kind.ToText, S.QualifiedName, S.Name, S.StartLine, S.StartCol]));
     if Length(ASymbols) = 0 then
       Sb.AppendLine('No matches.')

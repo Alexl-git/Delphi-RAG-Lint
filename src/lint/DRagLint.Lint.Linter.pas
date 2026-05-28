@@ -174,7 +174,7 @@ begin
       // (post-value) ones are. Require non-whitespace BEFORE `//`.
       if Trim(Copy(Infos[I].Text, 1, Infos[I].SlashSlashCol - 1)) = '' then
         Continue;
-      // Also skip lines that close out of the multi-line construct —
+      // Also skip lines that close out of the multi-line construct -
       // YADF can't reflow into a comment that has no following sibling.
       if Infos[I].DepthExit = 0 then
         Continue;
@@ -193,7 +193,7 @@ begin
       Finding.RuleId := 'inline-comment-in-multiline-args';
       Finding.Severity := 'warning';
       Finding.Message :=
-        '// comment inside multi-line argument/array list — reformatters ' +
+        '// comment inside multi-line argument/array list - reformatters ' +
         '(YADF, etc.) may reflow the next element into this comment. ' +
         'Move the comment above the line or to its own line.';
       Finding.FilePath := AFilePath;
@@ -238,7 +238,7 @@ begin
           Finding.RuleId := 'field-by-name-in-loop';
           Finding.Severity := 'warning';
           Finding.Message :=
-            'FieldByName() inside a loop body — cache the TField reference ' +
+            'FieldByName() inside a loop body - cache the TField reference ' +
             'in a local variable before the loop and reuse it';
           Finding.FilePath := AFilePath;
           Finding.StartLine := Integer(Rhs.StartPoint.row) + 1;

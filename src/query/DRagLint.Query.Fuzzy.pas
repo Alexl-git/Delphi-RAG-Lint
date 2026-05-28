@@ -7,7 +7,7 @@ uses
   System.Generics.Collections;
 
 // Classic O(|a|*|b|) Levenshtein distance with two rolling rows.
-// Case-insensitive (lowercases both inputs first) — Pascal identifiers are
+// Case-insensitive (lowercases both inputs first) - Pascal identifiers are
 // case-insensitive at the language level.
 function LevenshteinDistance(const A, B: string): Integer;
 

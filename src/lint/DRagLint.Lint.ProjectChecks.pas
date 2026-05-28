@@ -4,7 +4,7 @@ unit DRagLint.Lint.ProjectChecks;
 // not on per-file ASTs. The first rule (`unit-not-in-dpr`) is from a known
 // real-world hazard: Delphi compiles a unit if either the .dproj DCCReference
 // list OR the search path resolves it, so a unit can be "in the build" without
-// being listed in both places — and that silently breaks future re-IDE-opens.
+// being listed in both places - and that silently breaks future re-IDE-opens.
 
 interface
 
@@ -180,7 +180,7 @@ begin
     for Name in ProgramUses do
       UsesSet.AddOrSetValue(LowerCase(Name), Name);
 
-    // In .dproj but not in .dpr/.dpk uses → most dangerous case.
+    // In .dproj but not in .dpr/.dpk uses -> most dangerous case.
     for Pair in DCCSet do
     begin
       if not UsesSet.ContainsKey(Pair.Key) then
@@ -199,13 +199,13 @@ begin
       end;
     end;
 
-    // In .dpr/.dpk uses but not in .dproj DCCReference → typically compiles
+    // In .dpr/.dpk uses but not in .dproj DCCReference -> typically compiles
     // via search path, but IDE-managed dependency tracking misses it.
     for Pair in UsesSet do
     begin
       if not DCCSet.ContainsKey(Pair.Key) then
       begin
-        // Skip RTL/VCL/FMX/standard-library names — they live in BDS Lib paths
+        // Skip RTL/VCL/FMX/standard-library names - they live in BDS Lib paths
         // and are never expected in DCCReference.
         if StartsText('System.', Pair.Value) or
            StartsText('Vcl.', Pair.Value) or

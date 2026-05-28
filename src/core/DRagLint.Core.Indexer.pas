@@ -98,7 +98,7 @@ begin
   Sha := THashSHA2.GetHashString(TEncoding.ANSI.GetString(Source));
   Mtime := DateTimeToUnix(TFile.GetLastWriteTime(AFilePath), False);
   // v0.4: incremental skip. If the file's already in the DB with the same
-  // mtime and sha256, nothing to do — the parser would emit the same
+  // mtime and sha256, nothing to do - the parser would emit the same
   // symbols. Saves a parse + the per-file transaction.
   if FStore.FileIsUpToDate(AFilePath, Mtime, Sha) then
   begin

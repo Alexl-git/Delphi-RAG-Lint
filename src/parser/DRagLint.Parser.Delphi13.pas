@@ -48,7 +48,7 @@ var
   i: Integer;
   Child: TTSNode;
 begin
-  // Default(TTSNode) is the null sentinel — ts_node_is_null() returns true
+  // Default(TTSNode) is the null sentinel - ts_node_is_null() returns true
   // for a zero-filled record. Avoid AParent.Child(-1) which casts -1 to
   // UInt32 and trips ERangeError under {$R+}.
   Result := Default(TTSNode);
@@ -278,7 +278,7 @@ var
 begin
   Result := False;
   TypeNode := ADeclTypeNode.ChildByField('type');
-  // declIntf is the `type:` child directly — not wrapped in (type).
+  // declIntf is the `type:` child directly - not wrapped in (type).
   if TypeNode.IsNull or (TypeNode.NodeType <> 'declIntf') then
     Exit;
   NameNode := ADeclTypeNode.ChildByField('name');
@@ -356,7 +356,7 @@ begin
   MethName := NodeText(NameNode, AState.Source);
   if MethName = '' then
     Exit;
-  // Strip qualified prefix if present (e.g. 'TFoo.DoBar' -> 'DoBar') — happens in
+  // Strip qualified prefix if present (e.g. 'TFoo.DoBar' -> 'DoBar') - happens in
   // free implementations. For interface/class declarations the name is bare.
   if Pos('.', MethName) > 0 then
     MethName := Copy(MethName, LastDelimiter('.', MethName) + 1, MaxInt);
@@ -412,7 +412,7 @@ begin
       Exit;
     if TryWalkEnum(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then
       Exit;
-    // Unknown shape (type alias, set, etc.) — fall through to default recurse.
+    // Unknown shape (type alias, set, etc.) - fall through to default recurse.
   end;
 
   // declProc: emit a method (when inside class/record/interface) or a free

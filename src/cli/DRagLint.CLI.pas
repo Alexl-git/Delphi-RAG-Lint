@@ -3,13 +3,15 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.14.0-alpha';
+  VERSION = '0.15.0-alpha';
 
 function Run: Integer;
 
 implementation
 
 uses
+  Winapi.Windows,
+  Winapi.ShellAPI,
   System.SysUtils,
   System.Classes,
   System.IOUtils,
@@ -57,6 +59,7 @@ type
     DryRun: Boolean;
     Watch: Boolean;
     Interval: Integer;
+    Open: Boolean;
     ShowHelp: Boolean;
     ShowVersion: Boolean;
   end;
@@ -78,7 +81,7 @@ begin
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
-  Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>');
+  Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
   Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]');
   Writeln('  drag-lint todos              [<path>]                (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])');
@@ -228,6 +231,8 @@ begin
       Result.ScanLibraries := True
     else if A = '--watch' then
       Result.Watch := True
+    else if A = '--open' then
+      Result.Open := True
     else if (A = '--interval') and (i < ParamCount) then
     begin
       Inc(i);
@@ -582,7 +587,7 @@ begin
     if Length(AllSymbols) > 0 then
     begin
       if not AArgs.AsJson then
-        Writeln(Format('(no exact match for "%s" — closest matches:)',
+        Writeln(Format('(no exact match for "%s" - closest matches:)',
           [AArgs.Name]));
       PrintSymbols(AllSymbols, AArgs.AsJson);
       Exit(0);
@@ -850,6 +855,125 @@ begin
     Result := StringReplace(Result, C, '_', [rfReplaceAll]);
 end;
 
+// Generate a 16-char lowercase hex ID for the Obsidian vault registry.
+// Obsidian uses 16-hex vault IDs in obsidian.json; we just need something
+// unique-enough that doesn't collide with existing entries.
+function NewVaultId: string;
+var
+  G: TGUID;
+begin
+  CreateGUID(G);
+  Result := LowerCase(StringReplace(StringReplace(G.ToString,
+    '{', '', []), '}', '', []));
+  Result := StringReplace(Result, '-', '', [rfReplaceAll]);
+  Result := Copy(Result, 1, 16);
+end;
+
+// v0.15: register the freshly-exported folder as an Obsidian vault and
+// open it. Three steps: create .obsidian/, add the path to
+// %APPDATA%\obsidian\obsidian.json (idempotent -- skip if already
+// registered), launch obsidian://open?vault=<basename>. Failures are
+// non-fatal (Obsidian not installed, registry malformed, etc.); we
+// print a hint and continue.
+procedure OpenInObsidian(const AVaultPath: string);
+var
+  AbsPath, BaseName, ObsCfg, ObsDir, Existing, Body, Uri: string;
+  Cfg: TJSONObject;
+  Vaults: TJSONObject;
+  NewEntry: TJSONObject;
+  V: TJSONValue;
+  PathV: TJSONValue;
+  AlreadyRegistered: Boolean;
+  I: Integer;
+  Stream: TStringStream;
+begin
+  AbsPath := TPath.GetFullPath(AVaultPath);
+  BaseName := ExtractFileName(ExcludeTrailingPathDelimiter(AbsPath));
+
+  // (1) Mark the folder as an Obsidian vault by creating an empty
+  //     .obsidian subdirectory if Obsidian hasn't done so yet.
+  ObsDir := TPath.Combine(AbsPath, '.obsidian');
+  if not DirectoryExists(ObsDir) then
+    ForceDirectories(ObsDir);
+
+  // (2) Add to Obsidian's vault registry.
+  ObsCfg := TPath.Combine(
+    GetEnvironmentVariable('APPDATA'), 'obsidian\obsidian.json');
+  if not TFile.Exists(ObsCfg) then
+  begin
+    Writeln('  (Obsidian config not found at ', ObsCfg,
+      ' - is Obsidian installed?)');
+    Exit;
+  end;
+  Cfg := nil;
+  try
+    try
+      Body := TFile.ReadAllText(ObsCfg, TEncoding.UTF8);
+      Cfg := TJSONObject.ParseJSONValue(Body) as TJSONObject;
+    except
+      Cfg := nil;
+    end;
+    if Cfg = nil then
+    begin
+      Writeln('  (could not parse ', ObsCfg, ')');
+      Exit;
+    end;
+
+    Vaults := Cfg.GetValue('vaults') as TJSONObject;
+    if Vaults = nil then
+    begin
+      Vaults := TJSONObject.Create;
+      Cfg.AddPair('vaults', Vaults);
+    end;
+
+    AlreadyRegistered := False;
+    for I := 0 to Vaults.Count - 1 do
+    begin
+      V := Vaults.Pairs[I].JsonValue;
+      if V is TJSONObject then
+      begin
+        PathV := TJSONObject(V).GetValue('path');
+        if PathV <> nil then
+        begin
+          Existing := PathV.Value;
+          if SameText(Existing, AbsPath) then
+          begin
+            AlreadyRegistered := True;
+            Break;
+          end;
+        end;
+      end;
+    end;
+
+    if not AlreadyRegistered then
+    begin
+      NewEntry := TJSONObject.Create;
+      NewEntry.AddPair('path', AbsPath);
+      NewEntry.AddPair('ts', TJSONNumber.Create(
+        DateTimeToUnix(Now, False) * Int64(1000)));
+      Vaults.AddPair(NewVaultId, NewEntry);
+      Stream := TStringStream.Create(Cfg.ToJSON, TEncoding.UTF8);
+      try
+        Stream.SaveToFile(ObsCfg);
+      finally
+        Stream.Free;
+      end;
+      Writeln('  Registered as Obsidian vault.');
+    end
+    else
+      Writeln('  Vault already registered with Obsidian.');
+  finally
+    Cfg.Free;
+  end;
+
+  // (3) Launch. obsidian:// URI is handled by Obsidian's registered
+  //     protocol handler. ShellExecute with the URI returns whatever
+  //     handler is registered for it.
+  Uri := 'obsidian://open?vault=' + BaseName;
+  ShellExecute(0, 'open', PChar(Uri), nil, nil, SW_SHOWNORMAL);
+  Writeln('  Launched Obsidian. Vault path: ', AbsPath);
+end;
+
 function DoExportObsidian(const AArgs: TArgs): Integer;
 var
   Conn: TFDConnection;
@@ -897,7 +1021,7 @@ begin
   Conn.Connected := True;
   WrittenCount := 0;
   try
-    // First pass: build a name → md-filename map so cross-links resolve.
+    // First pass: build a name -> md-filename map so cross-links resolve.
     UnitsByName := TDictionary<string, string>.Create;
     try
       Q := TFDQuery.Create(nil);
@@ -967,7 +1091,7 @@ begin
             // Symbols grouped by kind.
             QSyms.Close;
             QSyms.ParamByName('fid').AsLargeInt :=
-              0;  // resolve via SQL — actually we need file_id, not unit_id
+              0;  // resolve via SQL - actually we need file_id, not unit_id
             // Easier: fetch file_id of the unit symbol first.
             var FileIdQ := TFDQuery.Create(nil);
             try
@@ -992,7 +1116,7 @@ begin
               Sym.Name := QSyms.FieldByName('name').AsString;
               Sym.QName := QSyms.FieldByName('qualified_name').AsString;
               Sym.StartLine := QSyms.FieldByName('start_line').AsInteger;
-              Sb.AppendLine(Format('- **%s** `%s` — line %d',
+              Sb.AppendLine(Format('- **%s** `%s` - line %d',
                 [Sym.Kind, Sym.QName, Sym.StartLine]));
               Inc(KindCount);
               QSyms.Next;
@@ -1019,10 +1143,10 @@ begin
                   begin
                     Visited.Add(CallerLine, True);
                     if UnitsByName.ContainsKey(CallerLine) then
-                      Sb.AppendLine(Format('- [[%s]] — %d hit(s)',
+                      Sb.AppendLine(Format('- [[%s]] - %d hit(s)',
                         [CallerLine, QRefs.FieldByName('hits').AsInteger]))
                     else
-                      Sb.AppendLine(Format('- %s — %d hit(s)',
+                      Sb.AppendLine(Format('- %s - %d hit(s)',
                         [CallerLine, QRefs.FieldByName('hits').AsInteger]));
                   end;
                   QRefs.Next;
@@ -1052,6 +1176,15 @@ begin
     Conn.Free;
   end;
   Writeln(Format('Wrote %d unit notes to %s', [WrittenCount, AArgs.OutputDir]));
+
+  // v0.15: --open ships the user straight into Obsidian. Steps:
+  //   (1) Create .obsidian/ inside the vault so Obsidian recognises it.
+  //   (2) Register the vault in %APPDATA%\obsidian\obsidian.json
+  //       (so the obsidian:// URI scheme can find it by basename).
+  //   (3) Launch obsidian://open?vault=<basename>.
+  if AArgs.Open then
+    OpenInObsidian(AArgs.OutputDir);
+
   Result := 0;
 end;
 
@@ -1088,7 +1221,7 @@ begin
     Q.Connection := Conn;
     // Default sort: fan-in count (refs whose name_text matches the symbol).
     // Limits to the symbol kinds that callers typically reach for.
-    // Strategy: aggregate refs by name first (fast — there's an index on
+    // Strategy: aggregate refs by name first (fast - there's an index on
     // refs.name_text), then pick one sample symbol per name for context.
     // This collapses "every method named Add" into a single Add row, which
     // is what users actually want from a "what's referenced most" question.
@@ -1684,7 +1817,7 @@ end;
 
 // v0.12: scan .pas/.dpr/.dpk files for TODO/FIXME/HACK/XXX/REVIEW/NOTE
 // comments and report them with file:line:col + optional author tag.
-// Standalone — no index needed. Intended workflow: run before commits,
+// Standalone - no index needed. Intended workflow: run before commits,
 // or pipe into `--json` for CI dashboards.
 function DoTodos(const AArgs: TArgs): Integer;
 type
@@ -1754,7 +1887,7 @@ begin
         M := RE.Match(Line);
         if not M.Success then Continue;
         // Skip when `//` lives inside a quoted string by checking the
-        // count of `'` chars before the `//` position — odd count means
+        // count of `'` chars before the `//` position - odd count means
         // we're inside a string literal.
         Tail := Copy(Line, 1, M.Index - 1);
         if (Length(Tail) - Length(StringReplace(

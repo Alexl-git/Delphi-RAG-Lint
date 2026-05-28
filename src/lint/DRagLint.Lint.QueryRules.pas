@@ -213,7 +213,7 @@ begin
     Exit;
   end;
 
-  // Unknown predicate — treat as pass (don't suppress matches just because
+  // Unknown predicate - treat as pass (don't suppress matches just because
   // we don't recognise a directive).
   Result := True;
 end;

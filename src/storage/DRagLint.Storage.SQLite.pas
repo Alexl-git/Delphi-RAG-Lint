@@ -109,7 +109,7 @@ var
   SymId: Int64;
   SymName: string;
 begin
-  // Check whether symbol_trigrams already has rows. If yes, we're good — the
+  // Check whether symbol_trigrams already has rows. If yes, we're good - the
   // table is kept in sync by triggers (next iteration); for now we just
   // populate-on-demand here. If empty, populate from symbols.
   CheckQ := TFDQuery.Create(nil);
@@ -123,7 +123,7 @@ begin
     CheckQ.Free;
   end;
 
-  // Empty — build it. Per-batch transaction for speed.
+  // Empty - build it. Per-batch transaction for speed.
   NameQ := TFDQuery.Create(nil);
   InsertQ := TFDQuery.Create(nil);
   try
@@ -491,12 +491,12 @@ begin
     Q.Connection := FConn;
     if Length(Grams) = 0 then
     begin
-      // Pattern too short for trigrams — full scan (still fast for short pattern).
+      // Pattern too short for trigrams - full scan (still fast for short pattern).
       Q.SQL.Text := 'SELECT * FROM symbols';
     end
     else
     begin
-      // Build placeholder list for IN clause: ?, ?, ?, …
+      // Build placeholder list for IN clause: ?, ?, ?, ...
       PlaceholderList := '';
       for i := 0 to High(Grams) do
       begin
@@ -553,8 +553,8 @@ begin
   try
     Q.Connection := FConn;
     // Match any reference kind (call, event-binding, type_use, ...). "callers"
-    // is a slight misnomer — the semantic is "every site that references
-    // this name" — but it's what users mean when they say find-callers.
+    // is a slight misnomer - the semantic is "every site that references
+    // this name" - but it's what users mean when they say find-callers.
     Q.SQL.Text :=
       'SELECT * FROM refs WHERE name_text = :name ' +
       'ORDER BY file_id, start_line';

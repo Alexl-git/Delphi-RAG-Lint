@@ -22,7 +22,7 @@ type
   // symbol index: initialize, shutdown, workspace/symbol,
   // textDocument/definition, textDocument/references.
   //
-  // v0.6 deliberately does NOT implement textDocument/didChange — files are
+  // v0.6 deliberately does NOT implement textDocument/didChange - files are
   // indexed via `drag-lint index` ahead of time. Editing a file in-place
   // and getting fresh results requires a re-run of `index` (which is
   // sub-second per file thanks to v0.4 incremental).
@@ -52,7 +52,7 @@ type
     function LocationFromSymbol(const ASym: TSymbol): TJSONObject;
     function LocationFromRef(const ARef: TReference): TJSONObject;
     // v0.7: reparse the file at APath and find the identifier text under
-    // (ALine, ACol) — both 0-based (LSP convention). Returns empty string
+    // (ALine, ACol) - both 0-based (LSP convention). Returns empty string
     // if the file doesn't exist or the cursor isn't on an identifier.
     function IdentifierAtPosition(const APath: string;
       ALine, ACol: Integer): string;
@@ -102,13 +102,13 @@ begin
     while True do
     begin
       if FStdIn.Read(Ch, 1) <> 1 then Exit;
-      if Ch = 13 then  // CR — expect LF next
+      if Ch = 13 then  // CR - expect LF next
       begin
         if FStdIn.Read(Ch, 1) <> 1 then Exit;
         if Ch = 10 then
         begin
           if Line.Length = 0 then
-            Break;  // empty line — end of headers
+            Break;  // empty line - end of headers
           Headers.Add(Line.ToString);
           Line.Clear;
         end;
@@ -302,7 +302,7 @@ begin
     Exit(False);
   if (ALine = Integer(Sp.row)) and (ACol < Integer(Sp.column)) then
     Exit(False);
-  // EndPoint is exclusive — cursor right at the end is past the token.
+  // EndPoint is exclusive - cursor right at the end is past the token.
   if (ALine = Integer(Ep.row)) and (ACol >= Integer(Ep.column)) then
     Exit(False);
   Result := True;
@@ -684,7 +684,7 @@ begin
       Sb.AppendLine('');
       for Sym in Symbols do
       begin
-        Sb.AppendLine(Format('- `%s` — line %d', [Sym.QualifiedName,
+        Sb.AppendLine(Format('- `%s` - line %d', [Sym.QualifiedName,
           Sym.StartLine]));
         if Sym.Signature <> '' then
           Sb.AppendLine('    ' + Sym.Signature);

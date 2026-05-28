@@ -3,7 +3,27 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha — expect
 breaking changes** until v1.0.
 
-## v0.14.0-alpha — 2026-05-27
+## v0.15.0-alpha -- 2026-05-27
+
+### Added
+- **`drag-lint export obsidian --open`** -- after writing the notes,
+  creates `.obsidian/` in the output dir, registers the folder in
+  `%APPDATA%\obsidian\obsidian.json`, and launches
+  `obsidian://open?vault=<basename>`. Turns the previous three-step
+  flow (export -> drag folder onto Obsidian -> trust vault) into a
+  single CLI invocation.
+
+### Fixed
+- **Mojibake in Obsidian-export notes.** Source files contained
+  literal Unicode em-dashes (`U+2014`), pipe arrows (`U+2192`), and
+  ellipses (`U+2026`) interpreted by Delphi 13 as Windows-1252 bytes,
+  producing `â€"` etc. when written out as UTF-8. All non-ASCII
+  characters scrubbed from `.pas` sources per the project's strict-
+  ASCII rule. Re-export to refresh existing vaults.
+
+---
+
+## v0.14.0-alpha -- 2026-05-27
 
 ### Added
 - **`.drag-lint.json`** — per-project config. Located in cwd or any
