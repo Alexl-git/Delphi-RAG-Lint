@@ -3,11 +3,11 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 3;
+  SCHEMA_VERSION = 4;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
-  SCHEMA_DDL: array[0..11] of string = (
+  SCHEMA_DDL: array[0..14] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' +
     '  key   TEXT PRIMARY KEY,' +
     '  value TEXT NOT NULL' +
@@ -83,7 +83,32 @@ const
     ')',
 
     'CREATE INDEX IF NOT EXISTS idx_compiler_findings_code ' +
-    '  ON compiler_findings(code)'
+    '  ON compiler_findings(code)',
+
+    // v4: symbol-level documentation comments (XMLDoc, PasDoc, oneline).
+    // One row per documented symbol. Format-tagged so future passes can
+    // target a style. raw_block preserves the original text for fallback.
+    'CREATE TABLE IF NOT EXISTS symbol_docs (' +
+    '  symbol_id        INTEGER PRIMARY KEY REFERENCES symbols(id) ON DELETE CASCADE,' +
+    '  format           TEXT NOT NULL,' +
+    '  raw_block        TEXT NOT NULL,' +
+    '  summary          TEXT,' +
+    '  remarks          TEXT,' +
+    '  returns_text     TEXT,' +
+    '  params_json      TEXT,' +
+    '  exceptions_json  TEXT,' +
+    '  example_text     TEXT,' +
+    '  seealso_json     TEXT,' +
+    '  since_text       TEXT,' +
+    '  deprecated       INTEGER NOT NULL DEFAULT 0,' +
+    '  start_line       INTEGER,' +
+    '  end_line         INTEGER' +
+    ')',
+
+    'CREATE INDEX IF NOT EXISTS idx_symbol_docs_format ON symbol_docs(format)',
+
+    'CREATE INDEX IF NOT EXISTS idx_symbol_docs_deprecated ' +
+    '  ON symbol_docs(deprecated) WHERE deprecated = 1'
   );
 
 implementation
