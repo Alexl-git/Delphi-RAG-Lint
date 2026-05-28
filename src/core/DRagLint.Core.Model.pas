@@ -71,6 +71,58 @@ type
     Message: string;
   end;
 
+  TDocCommentKind = (
+    dckTripleSlash,
+    dckDoubleSlashOne,
+    dckTripleSlashOne,
+    dckPasDocCurly,
+    dckPasDocParen,
+    dckLooseLine,
+    dckLooseBlock
+  );
+
+  TDocFormat = (dfXmlDoc, dfPasDoc, dfOneline, dfLoose);
+
+  TDocCommentRegion = record
+    StartLine: Integer;
+    EndLine:   Integer;
+    StartCol:  Integer;
+    Kind:      TDocCommentKind;
+    RawText:   string;
+  end;
+
+  TDocParam = record
+    Name: string;
+    Desc: string;
+  end;
+
+  TDocException = record
+    TypeName: string;
+    Desc:     string;
+  end;
+
+  TParsedDoc = record
+    Format:      TDocFormat;
+    RawBlock:    string;
+    Summary:     string;
+    Remarks:     string;
+    ReturnsText: string;
+    Params:      TArray<TDocParam>;
+    Exceptions:  TArray<TDocException>;
+    ExampleText: string;
+    SeeAlso:     TArray<string>;
+    SinceText:   string;
+    Deprecated:  Boolean;
+    StartLine:   Integer;
+    EndLine:     Integer;
+    HasContent:  Boolean;
+  end;
+
+function DocFormatToStr(AFormat: TDocFormat): string;
+function ParamsToJson(const AParams: TArray<TDocParam>): string;
+function ExceptionsToJson(const AExceptions: TArray<TDocException>): string;
+function SeeAlsoToJson(const ASeeAlso: TArray<string>): string;
+
 implementation
 
 uses
@@ -98,6 +150,84 @@ begin
     if SameText(KindText[K], AText) then
       Exit(K);
   raise Exception.CreateFmt('Unknown symbol kind: "%s"', [AText]);
+end;
+
+function DocFormatToStr(AFormat: TDocFormat): string;
+begin
+  case AFormat of
+    dfXmlDoc:  Result := 'xmldoc';
+    dfPasDoc:  Result := 'pasdoc';
+    dfOneline: Result := 'oneline';
+    dfLoose:   Result := 'loose';
+  else
+    Result := 'unknown';
+  end;
+end;
+
+function JsonEscape(const S: string): string;
+var
+  I: Integer;
+  C: Char;
+begin
+  Result := '';
+  for I := 1 to Length(S) do
+  begin
+    C := S[I];
+    case C of
+      '"': Result := Result + '\"';
+      '\': Result := Result + '\\';
+      #8:  Result := Result + '\b';
+      #9:  Result := Result + '\t';
+      #10: Result := Result + '\n';
+      #13: Result := Result + '\r';
+    else
+      if C < #32 then
+        Result := Result + Format('\u%.4x', [Ord(C)])
+      else
+        Result := Result + C;
+    end;
+  end;
+end;
+
+function ParamsToJson(const AParams: TArray<TDocParam>): string;
+var
+  Parts: TArray<string>;
+  I: Integer;
+begin
+  if Length(AParams) = 0 then
+    Exit('');
+  SetLength(Parts, Length(AParams));
+  for I := 0 to High(AParams) do
+    Parts[I] := Format('{"name":"%s","desc":"%s"}',
+      [JsonEscape(AParams[I].Name), JsonEscape(AParams[I].Desc)]);
+  Result := '[' + string.Join(',', Parts) + ']';
+end;
+
+function ExceptionsToJson(const AExceptions: TArray<TDocException>): string;
+var
+  Parts: TArray<string>;
+  I: Integer;
+begin
+  if Length(AExceptions) = 0 then
+    Exit('');
+  SetLength(Parts, Length(AExceptions));
+  for I := 0 to High(AExceptions) do
+    Parts[I] := Format('{"type":"%s","desc":"%s"}',
+      [JsonEscape(AExceptions[I].TypeName), JsonEscape(AExceptions[I].Desc)]);
+  Result := '[' + string.Join(',', Parts) + ']';
+end;
+
+function SeeAlsoToJson(const ASeeAlso: TArray<string>): string;
+var
+  Parts: TArray<string>;
+  I: Integer;
+begin
+  if Length(ASeeAlso) = 0 then
+    Exit('');
+  SetLength(Parts, Length(ASeeAlso));
+  for I := 0 to High(ASeeAlso) do
+    Parts[I] := Format('"%s"', [JsonEscape(ASeeAlso[I])]);
+  Result := '[' + string.Join(',', Parts) + ']';
 end;
 
 end.

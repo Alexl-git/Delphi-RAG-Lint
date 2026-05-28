@@ -33,6 +33,15 @@ type
     function CountSymbols: Int64;
     function CountReferences: Int64;
     function CountFiles: Int64;
+
+    procedure UpsertSymbolDoc(const AToken: TFileTxToken;
+      ASymbolId: Int64; const ADoc: TParsedDoc);
+    function GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
+    function FindByDocTag(const ATag: string): TArray<TSymbol>;
+    function FindUndocumented(const AKind: string;
+      APublicOnly: Boolean): TArray<TSymbol>;
+    function FindByDocContains(const ASubstring: string): TArray<TSymbol>;
+    procedure DeleteFileDocs(AFileId: Int64);
   end;
 
   TParseResult = record

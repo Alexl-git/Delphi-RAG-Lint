@@ -62,6 +62,15 @@ type
     function CountSymbols: Int64;
     function CountReferences: Int64;
     function CountFiles: Int64;
+
+    procedure UpsertSymbolDoc(const AToken: TFileTxToken;
+      ASymbolId: Int64; const ADoc: TParsedDoc);
+    function GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
+    function FindByDocTag(const ATag: string): TArray<TSymbol>;
+    function FindUndocumented(const AKind: string;
+      APublicOnly: Boolean): TArray<TSymbol>;
+    function FindByDocContains(const ASubstring: string): TArray<TSymbol>;
+    procedure DeleteFileDocs(AFileId: Int64);
   end;
 
 implementation
@@ -635,6 +644,39 @@ begin
   FQCountFiles.Open;
   Result := FQCountFiles.FieldByName('n').AsLargeInt;
   FQCountFiles.Close;
+end;
+
+procedure TSQLiteSymbolStore.UpsertSymbolDoc(const AToken: TFileTxToken;
+  ASymbolId: Int64; const ADoc: TParsedDoc);
+begin
+  raise ENotImplemented.Create('UpsertSymbolDoc: pending Task 7');
+end;
+
+function TSQLiteSymbolStore.GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
+begin
+  raise ENotImplemented.Create('GetSymbolDoc: pending Task 7');
+end;
+
+function TSQLiteSymbolStore.FindByDocTag(const ATag: string): TArray<TSymbol>;
+begin
+  raise ENotImplemented.Create('FindByDocTag: pending Task 7');
+end;
+
+function TSQLiteSymbolStore.FindUndocumented(const AKind: string;
+  APublicOnly: Boolean): TArray<TSymbol>;
+begin
+  raise ENotImplemented.Create('FindUndocumented: pending Task 7');
+end;
+
+function TSQLiteSymbolStore.FindByDocContains(
+  const ASubstring: string): TArray<TSymbol>;
+begin
+  raise ENotImplemented.Create('FindByDocContains: pending Task 7');
+end;
+
+procedure TSQLiteSymbolStore.DeleteFileDocs(AFileId: Int64);
+begin
+  raise ENotImplemented.Create('DeleteFileDocs: pending Task 8');
 end;
 
 end.
