@@ -6,14 +6,14 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.14-alpha. Early work in progress — expect breaking changes.** Adds
-`.drag-lint.json` per-project config — drop one in your project dir
-and `drag-lint` picks up `db`, `project`, `path`, `rule`, and `watch`
-defaults without typing them on every call. Built on v0.13 `diff`,
-v0.12 TODO scanner, v0.11 watch mode, v0.10 graph export, v0.9
-project-shaped lint rules, v0.8 type-use refs + compiler-log ingest,
-v0.7 LSP position resolution, v0.4 MCP server, and the export/top/fuzzy
-stack.
+**v0.16-alpha. Early work in progress -- expect breaking changes.** Adds
+structured doc-comment extraction (XMLDoc / PasDoc / oneline) wired into
+the indexer, CLI hover, query find, MCP tools, and LSP hover. Schema v3
+databases auto-migrate to v4. Built on v0.15 Obsidian `--open`, v0.14
+`.drag-lint.json` per-project config, v0.13 `diff`, v0.12 TODO scanner,
+v0.11 watch mode, v0.10 graph export, v0.9 project-shaped lint rules,
+v0.8 type-use refs + compiler-log ingest, v0.7 LSP position resolution,
+v0.4 MCP server, and the export/top/fuzzy stack.
 
 Builds on v0.2 (DFM forms, full symbol coverage, external `.scm` lint
 plugins, `--project <dproj>` mode).
@@ -164,6 +164,54 @@ of its normal tool-use.
 Prefer not to keep the server always-on? Skip the MCP config and just
 call the CLI directly — `drag-lint query find-callers --name X --json`
 returns the same data and only consumes tokens when actually invoked.
+
+## Doc-comment extraction (v0.16)
+
+`drag-lint` extracts structured documentation from Delphi doc comments at
+index time and stores them in the `symbol_docs` table (schema v4). Three
+comment formats are supported: XMLDoc (`/// <summary>...</summary>`), PasDoc
+(`{** @param ... }`), and oneline (`/// one-liner above the declaration`).
+Loose `{ ... }` block comments can be enabled per-project via `.drag-lint.json`.
+
+Full design: [`docs/superpowers/specs/2026-05-28-v016-doc-extraction-design.md`](docs/superpowers/specs/2026-05-28-v016-doc-extraction-design.md)
+
+### CLI usage
+
+```cmd
+:: Show the doc for a symbol (plain text, Markdown, or JSON)
+drag-lint hover --qname Docs.TDocDemo.GetBaz --db myproj.sqlite
+drag-lint hover --qname Docs.TDocDemo.GetBaz --db myproj.sqlite --format md
+drag-lint hover --qname Docs.TDocDemo.GetBaz --db myproj.sqlite --format json
+
+:: Find all deprecated symbols
+drag-lint query find --doc-tag deprecated --db myproj.sqlite
+
+:: Find all symbols with "baz" anywhere in their doc
+drag-lint query find --doc-contains baz --db myproj.sqlite
+
+:: Find undocumented public methods
+drag-lint query find --no-docs --kind method --public --db myproj.sqlite
+```
+
+### MCP tools added in v0.16
+
+| Tool | Description |
+|---|---|
+| `get_symbol_doc` | Full structured doc row for a qualified name |
+| `find_by_doc_tag` | All symbols bearing `deprecated` or `since` tag |
+| `find_undocumented` | Symbols with no doc comment (optional kind / public filter) |
+
+### .drag-lint.json docs section
+
+```json
+{
+  "docs": {
+    "captureLooseComments": false,
+    "allowBlankLineGap": 0,
+    "implPrecedence": false
+  }
+}
+```
 
 ## Exit codes
 
