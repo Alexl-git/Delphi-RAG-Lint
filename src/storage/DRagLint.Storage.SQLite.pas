@@ -265,6 +265,24 @@ begin
     ' deprecated, start_line, end_line) ' +
     'VALUES (:sid, :fmt, :raw, :sum, :rem, :ret, :pj, :ej, :ex, :sj, :since, ' +
     ' :dep, :sl, :el)');
+  // Pre-declare all param types before the first Prepare/Execute so FireDAC
+  // does not re-infer types from run-time values. Without this, a param that
+  // is NULL on one call and non-NULL on another raises [SQLite]-338.
+  FQUpsertSymbolDoc.Params.ParamByName('sid').DataType := ftLargeint;
+  FQUpsertSymbolDoc.Params.ParamByName('fmt').DataType := ftString;
+  FQUpsertSymbolDoc.Params.ParamByName('raw').DataType := ftString;
+  FQUpsertSymbolDoc.Params.ParamByName('sum').DataType := ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('rem').DataType := ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('ret').DataType := ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('pj').DataType := ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('ej').DataType := ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('ex').DataType := ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('sj').DataType := ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('since').DataType := ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('dep').DataType := ftInteger;
+  FQUpsertSymbolDoc.Params.ParamByName('sl').DataType := ftInteger;
+  FQUpsertSymbolDoc.Params.ParamByName('el').DataType := ftInteger;
+  FQUpsertSymbolDoc.Prepare;
 
   FQDeleteFileDocs := NewQuery(
     'DELETE FROM symbol_docs WHERE symbol_id IN ' +
@@ -697,37 +715,40 @@ end;
 
 procedure TSQLiteSymbolStore.UpsertSymbolDoc(const AToken: TFileTxToken;
   ASymbolId: Int64; const ADoc: TParsedDoc);
+// Helper: assign a nullable text param without changing its pre-declared
+// DataType. Using AsString would silently flip DataType to ftString and break
+// the next call with [SQLite]-338 "Param type changed".
+  procedure SetNullableText(const AParamName: string; const AValue: string);
+  begin
+    with FQUpsertSymbolDoc.ParamByName(AParamName) do
+      if AValue = '' then Clear else Value := AValue;
+  end;
 begin
   if not ADoc.HasContent then Exit;
   FQUpsertSymbolDoc.ParamByName('sid').AsLargeInt := ASymbolId;
   FQUpsertSymbolDoc.ParamByName('fmt').AsString := DocFormatToStr(ADoc.Format);
   FQUpsertSymbolDoc.ParamByName('raw').AsString := ADoc.RawBlock;
 
-  // Nullable text params: set DataType BEFORE Clear (FireDAC gotcha —
-  // parameter type inference fails on the first execution if DataType is
-  // ftUnknown and the value is NULL, raising [SQLite]-335).
-  with FQUpsertSymbolDoc.ParamByName('sum') do
-  begin DataType := ftWideMemo; if ADoc.Summary = '' then Clear else AsString := ADoc.Summary; end;
-  with FQUpsertSymbolDoc.ParamByName('rem') do
-  begin DataType := ftWideMemo; if ADoc.Remarks = '' then Clear else AsString := ADoc.Remarks; end;
-  with FQUpsertSymbolDoc.ParamByName('ret') do
-  begin DataType := ftWideMemo; if ADoc.ReturnsText = '' then Clear else AsString := ADoc.ReturnsText; end;
-  with FQUpsertSymbolDoc.ParamByName('pj') do
-  begin DataType := ftWideMemo;
-    if Length(ADoc.Params) = 0 then Clear else AsString := ParamsToJson(ADoc.Params);
-  end;
-  with FQUpsertSymbolDoc.ParamByName('ej') do
-  begin DataType := ftWideMemo;
-    if Length(ADoc.Exceptions) = 0 then Clear else AsString := ExceptionsToJson(ADoc.Exceptions);
-  end;
-  with FQUpsertSymbolDoc.ParamByName('ex') do
-  begin DataType := ftWideMemo; if ADoc.ExampleText = '' then Clear else AsString := ADoc.ExampleText; end;
-  with FQUpsertSymbolDoc.ParamByName('sj') do
-  begin DataType := ftWideMemo;
-    if Length(ADoc.SeeAlso) = 0 then Clear else AsString := SeeAlsoToJson(ADoc.SeeAlso);
-  end;
-  with FQUpsertSymbolDoc.ParamByName('since') do
-  begin DataType := ftWideMemo; if ADoc.SinceText = '' then Clear else AsString := ADoc.SinceText; end;
+  // Use Value := (not AsString :=) so DataType stays as pre-declared ftWideMemo.
+  // AsString := implicitly changes DataType to ftString, which raises
+  // [SQLite]-338 on subsequent calls once the query is Prepared.
+  SetNullableText('sum', ADoc.Summary);
+  SetNullableText('rem', ADoc.Remarks);
+  SetNullableText('ret', ADoc.ReturnsText);
+  if Length(ADoc.Params) = 0 then
+    FQUpsertSymbolDoc.ParamByName('pj').Clear
+  else
+    FQUpsertSymbolDoc.ParamByName('pj').Value := ParamsToJson(ADoc.Params);
+  if Length(ADoc.Exceptions) = 0 then
+    FQUpsertSymbolDoc.ParamByName('ej').Clear
+  else
+    FQUpsertSymbolDoc.ParamByName('ej').Value := ExceptionsToJson(ADoc.Exceptions);
+  SetNullableText('ex', ADoc.ExampleText);
+  if Length(ADoc.SeeAlso) = 0 then
+    FQUpsertSymbolDoc.ParamByName('sj').Clear
+  else
+    FQUpsertSymbolDoc.ParamByName('sj').Value := SeeAlsoToJson(ADoc.SeeAlso);
+  SetNullableText('since', ADoc.SinceText);
 
   FQUpsertSymbolDoc.ParamByName('dep').AsInteger := Ord(ADoc.Deprecated);
   FQUpsertSymbolDoc.ParamByName('sl').AsInteger := ADoc.StartLine;
