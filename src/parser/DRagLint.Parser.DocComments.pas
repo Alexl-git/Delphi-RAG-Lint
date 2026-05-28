@@ -348,10 +348,149 @@ begin
 end;
 
 class function TDocCommentParser.ParsePasDoc(const ARaw: string): TParsedDoc;
+var
+  Cleaned, Body, SummaryPart: string;
+  Lines, BodyLines: TArray<string>;
+  I, BlankIdx: Integer;
+  Params: TList<TDocParam>;
+  Excs: TList<TDocException>;
+  SeeList: TList<string>;
+  RxTag: TRegEx;
+  Match: TMatch;
+  AccTag, AccVal: string;
+
+  procedure FlushTag;
+  var
+    P2: TDocParam;
+    E2: TDocException;
+    Tag, Arg, ValRest: string;
+    SpaceIdx: Integer;
+    Val: string;
+  begin
+    if AccTag = '' then Exit;
+    Val := Trim(AccVal);
+    Tag := LowerCase(AccTag);
+    if (Tag = 'param') then
+    begin
+      SpaceIdx := Pos(' ', Val);
+      if SpaceIdx > 0 then
+      begin
+        P2.Name := Copy(Val, 1, SpaceIdx - 1);
+        P2.Desc := Trim(Copy(Val, SpaceIdx + 1, MaxInt));
+      end
+      else
+      begin
+        P2.Name := Val;
+        P2.Desc := '';
+      end;
+      Params.Add(P2);
+    end
+    else if (Tag = 'returns') or (Tag = 'return') then
+      Result.ReturnsText := Val
+    else if (Tag = 'throws') or (Tag = 'raises') then
+    begin
+      SpaceIdx := Pos(' ', Val);
+      if SpaceIdx > 0 then
+      begin
+        E2.TypeName := Copy(Val, 1, SpaceIdx - 1);
+        E2.Desc := Trim(Copy(Val, SpaceIdx + 1, MaxInt));
+      end
+      else
+      begin
+        E2.TypeName := Val;
+        E2.Desc := '';
+      end;
+      Excs.Add(E2);
+    end
+    else if Tag = 'remarks' then Result.Remarks := Val
+    else if Tag = 'example' then Result.ExampleText := Val
+    else if Tag = 'see' then
+    begin
+      for ValRest in Val.Split([',']) do
+      begin
+        Arg := Trim(ValRest);
+        if Arg <> '' then SeeList.Add(Arg);
+      end;
+    end
+    else if Tag = 'since' then Result.SinceText := Val
+    else if Tag = 'deprecated' then Result.Deprecated := True
+    else if (Tag = 'author') or (Tag = 'version') then
+    begin
+      if Result.Remarks <> '' then Result.Remarks := Result.Remarks + #10;
+      Result.Remarks := Result.Remarks + AccTag + ': ' + Val;
+    end;
+    AccTag := '';
+    AccVal := '';
+  end;
+
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Format := dfPasDoc;
   Result.RawBlock := ARaw;
+  Params := TList<TDocParam>.Create;
+  Excs := TList<TDocException>.Create;
+  SeeList := TList<string>.Create;
+  try
+    // Strip leading `*` or `* ` from each line (common in PasDoc blocks)
+    Lines := ARaw.Split([sLineBreak, #10, #13]);
+    Cleaned := '';
+    for I := 0 to High(Lines) do
+    begin
+      Body := TrimLeft(Lines[I]);
+      if Body.StartsWith('* ') then Body := Copy(Body, 3, MaxInt)
+      else if Body.StartsWith('*') then Body := Copy(Body, 2, MaxInt);
+      if I > 0 then Cleaned := Cleaned + #10;
+      Cleaned := Cleaned + Body;
+    end;
+    Cleaned := Trim(Cleaned);
+
+    // Summary = text before first @tag (or before first blank line, whichever earlier)
+    RxTag := TRegEx.Create('(?m)^\s*@(\w+)\b\s*(.*)$');
+    Match := RxTag.Match(Cleaned);
+    if Match.Success then
+      SummaryPart := Trim(Copy(Cleaned, 1, Match.Index - 1))
+    else
+      SummaryPart := Cleaned;
+
+    // Trim summary at first blank line
+    BlankIdx := Pos(#10#10, SummaryPart);
+    if BlankIdx > 0 then SummaryPart := Trim(Copy(SummaryPart, 1, BlankIdx - 1));
+    Result.Summary := CollapseWhitespace(SummaryPart);
+
+    // Walk @tag blocks
+    BodyLines := Cleaned.Split([#10]);
+    AccTag := '';
+    AccVal := '';
+    for I := 0 to High(BodyLines) do
+    begin
+      Match := RxTag.Match(BodyLines[I]);
+      if Match.Success then
+      begin
+        FlushTag;
+        AccTag := Match.Groups[1].Value;
+        AccVal := Match.Groups[2].Value;
+      end
+      else if AccTag <> '' then
+      begin
+        if Trim(BodyLines[I]) = '' then FlushTag
+        else
+          AccVal := AccVal + ' ' + Trim(BodyLines[I]);
+      end;
+    end;
+    FlushTag;
+
+    Result.Params := Params.ToArray;
+    Result.Exceptions := Excs.ToArray;
+    Result.SeeAlso := SeeList.ToArray;
+
+    Result.HasContent :=
+      (Result.Summary <> '') or (Length(Result.Params) > 0) or
+      (Result.ReturnsText <> '') or Result.Deprecated;
+  finally
+    Params.Free;
+    Excs.Free;
+    SeeList.Free;
+  end;
 end;
 
 class function TDocCommentParser.ParseOneline(const ARaw: string;
