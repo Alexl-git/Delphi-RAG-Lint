@@ -781,8 +781,10 @@ begin
     Result.Deprecated  := FQGetSymbolDoc.FieldByName('deprecated').AsInteger = 1;
     Result.StartLine   := FQGetSymbolDoc.FieldByName('start_line').AsInteger;
     Result.EndLine     := FQGetSymbolDoc.FieldByName('end_line').AsInteger;
-    // Params/Exceptions/SeeAlso parsing from JSON deferred (v0.17).
-    // Consumers either use RawBlock or read params_json string directly.
+    // Raw JSON strings — v0.16 renderers read these directly; v0.17 may parse.
+    Result.ParamsJsonRaw     := FQGetSymbolDoc.FieldByName('params_json').AsString;
+    Result.ExceptionsJsonRaw := FQGetSymbolDoc.FieldByName('exceptions_json').AsString;
+    Result.SeeAlsoJsonRaw    := FQGetSymbolDoc.FieldByName('seealso_json').AsString;
     Result.HasContent  := True;
   finally
     FQGetSymbolDoc.Close;

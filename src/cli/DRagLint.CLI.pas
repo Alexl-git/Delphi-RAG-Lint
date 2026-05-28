@@ -88,6 +88,7 @@ begin
   Writeln('  drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]');
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
   Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
+  Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -1946,6 +1947,144 @@ begin
   Result := 0;
 end;
 
+// --- hover ------------------------------------------------------------------
+
+// v0.16: drag-lint hover --qname <Foo.Bar> [--db <path>] [--format md|plain|json]
+// Looks up the first symbol matching the qualified name, retrieves its doc
+// comment from symbol_docs, and renders it in the requested format.
+
+function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
+var
+  SB: TStringBuilder;
+  Re: TRegEx;
+  M: TMatch;
+begin
+  SB := TStringBuilder.Create;
+  try
+    SB.AppendLine(ASym.QualifiedName);
+    if ADoc.Deprecated then SB.AppendLine('[DEPRECATED]');
+    if ADoc.SinceText <> '' then SB.AppendLine('Since: ' + ADoc.SinceText);
+    if ADoc.Summary <> '' then
+      SB.AppendLine('Summary: ' + ADoc.Summary);
+    // Params: emit one line per param extracted from the stored JSON array.
+    if ADoc.ParamsJsonRaw <> '' then
+    begin
+      Re := TRegEx.Create('"name":"([^"]+)","desc":"([^"]*)"');
+      for M in Re.Matches(ADoc.ParamsJsonRaw) do
+        SB.AppendLine('  ' + M.Groups[1].Value + ' -- ' + M.Groups[2].Value);
+    end;
+    if ADoc.ReturnsText <> '' then SB.AppendLine('Returns: ' + ADoc.ReturnsText);
+    if ADoc.Remarks <> '' then SB.AppendLine('Remarks: ' + ADoc.Remarks);
+    if ADoc.ExampleText <> '' then
+    begin
+      SB.AppendLine('Example:');
+      SB.AppendLine(ADoc.ExampleText);
+    end;
+    Result := SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc): string;
+var
+  SB: TStringBuilder;
+begin
+  SB := TStringBuilder.Create;
+  try
+    SB.AppendLine('# ' + ASym.QualifiedName);
+    if ADoc.Deprecated then SB.AppendLine('> **DEPRECATED**');
+    if ADoc.SinceText <> '' then SB.AppendLine('> _Since: ' + ADoc.SinceText + '_');
+    if ADoc.Summary <> '' then
+    begin
+      SB.AppendLine('');
+      SB.AppendLine(ADoc.Summary);
+    end;
+    if ADoc.ReturnsText <> '' then
+    begin
+      SB.AppendLine('');
+      SB.AppendLine('**Returns:** ' + ADoc.ReturnsText);
+    end;
+    if ADoc.Remarks <> '' then
+    begin
+      SB.AppendLine('');
+      SB.AppendLine('## Remarks');
+      SB.AppendLine(ADoc.Remarks);
+    end;
+    if ADoc.ExampleText <> '' then
+    begin
+      SB.AppendLine('');
+      SB.AppendLine('## Example');
+      SB.AppendLine('```pascal');
+      SB.AppendLine(ADoc.ExampleText);
+      SB.AppendLine('```');
+    end;
+    Result := SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string;
+begin
+  Result := System.SysUtils.Format(
+    '{"qname":"%s","format":"%s","summary":"%s","returns":"%s",' +
+    '"since":"%s","deprecated":%s}',
+    [JsonEscape(ASym.QualifiedName), DocFormatToStr(ADoc.Format),
+     JsonEscape(ADoc.Summary), JsonEscape(ADoc.ReturnsText),
+     JsonEscape(ADoc.SinceText),
+     IfThen(ADoc.Deprecated, 'true', 'false')]);
+end;
+
+function DoHover(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Syms: TArray<TSymbol>;
+  Doc: TParsedDoc;
+  Fmt: string;
+begin
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint hover --qname <Foo.Bar> [--db <path>] ' +
+      '[--format md|plain|json]');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first.');
+    Exit(2);
+  end;
+
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  Syms := Store.FindSymbolsByQualifiedName(AArgs.QName);
+  if Length(Syms) = 0 then
+  begin
+    Writeln(System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName]));
+    Exit(1);
+  end;
+
+  Doc := Store.GetSymbolDoc(Syms[0].Id);
+  if not Doc.HasContent then
+  begin
+    Writeln(System.SysUtils.Format('Symbol %s found but has no doc comment.',
+      [Syms[0].QualifiedName]));
+    Exit(1);
+  end;
+
+  Fmt := LowerCase(AArgs.Format);
+  if Fmt = '' then Fmt := 'plain';
+
+  if Fmt = 'json' then
+    Write(RenderHoverJson(Syms[0], Doc))
+  else if Fmt = 'md' then
+    Write(RenderHoverMarkdown(Syms[0], Doc))
+  else
+    Write(RenderHoverPlain(Syms[0], Doc));
+  Result := 0;
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter: DRagLint.Lint.Linter.TLinter;
@@ -2064,6 +2203,8 @@ begin
       Result := DoGraph(Args)
     else if Args.Command = 'todos' then
       Result := DoTodos(Args)
+    else if Args.Command = 'hover' then
+      Result := DoHover(Args)
     else if Args.Command = 'diff' then
       Result := DoDiff(Args)
     else if Args.Command = 'lsp' then

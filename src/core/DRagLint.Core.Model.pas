@@ -116,9 +116,15 @@ type
     StartLine:   Integer;
     EndLine:     Integer;
     HasContent:  Boolean;
+    // Raw JSON strings from storage (populated by GetSymbolDoc for renderers).
+    // FillChar zeroes these; empty means not stored or not retrieved.
+    ParamsJsonRaw:     string;
+    ExceptionsJsonRaw: string;
+    SeeAlsoJsonRaw:    string;
   end;
 
 function DocFormatToStr(AFormat: TDocFormat): string;
+function JsonEscape(const S: string): string;
 function ParamsToJson(const AParams: TArray<TDocParam>): string;
 function ExceptionsToJson(const AExceptions: TArray<TDocException>): string;
 function SeeAlsoToJson(const ASeeAlso: TArray<string>): string;
