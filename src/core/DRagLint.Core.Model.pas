@@ -123,11 +123,26 @@ type
     SeeAlsoJsonRaw:    string;
   end;
 
+  // v0.16 Task 13: .drag-lint.json "docs" section config.
+  // CaptureLooseComments: when False (default), loose // and {..} regions
+  //   preceding a symbol are ignored by FindDocRegionAbove.
+  // ImplPrecedence: reserved for future use; 'interface' is the only
+  //   behavior in v0.16.
+  // AllowBlankLineGap: number of blank lines permitted between a doc region
+  //   and the following symbol declaration. Default 1.
+  TDocConfig = record
+    CaptureLooseComments: Boolean;
+    ImplPrecedence:       string;
+    AllowBlankLineGap:    Integer;
+  end;
+
 function DocFormatToStr(AFormat: TDocFormat): string;
 function JsonEscape(const S: string): string;
 function ParamsToJson(const AParams: TArray<TDocParam>): string;
 function ExceptionsToJson(const AExceptions: TArray<TDocException>): string;
 function SeeAlsoToJson(const ASeeAlso: TArray<string>): string;
+
+function DefaultDocConfig: TDocConfig;
 
 implementation
 
@@ -234,6 +249,13 @@ begin
   for I := 0 to High(ASeeAlso) do
     Parts[I] := Format('"%s"', [JsonEscape(ASeeAlso[I])]);
   Result := '[' + string.Join(',', Parts) + ']';
+end;
+
+function DefaultDocConfig: TDocConfig;
+begin
+  Result.CaptureLooseComments := False;
+  Result.ImplPrecedence := 'interface';
+  Result.AllowBlankLineGap := 1;
 end;
 
 end.

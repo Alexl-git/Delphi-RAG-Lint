@@ -19,11 +19,15 @@ type
     FStore: ISymbolStore;
     FParsers: TList<IParser>;
     FSkippedUpToDate: Integer;
+    FDocConfig: TDocConfig;
     function ParserFor(const AExtension: string): IParser;
     procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
   public
     constructor Create(const AStore: ISymbolStore;
-      const AParsers: TArray<IParser>);
+      const AParsers: TArray<IParser>;
+      const ADocConfig: TDocConfig); overload;
+    constructor Create(const AStore: ISymbolStore;
+      const AParsers: TArray<IParser>); overload;
     destructor Destroy; override;
     procedure IndexFolder(const APath: string;
       ARecursive: Boolean = True);
@@ -34,15 +38,23 @@ type
 implementation
 
 constructor TIndexer.Create(const AStore: ISymbolStore;
-  const AParsers: TArray<IParser>);
+  const AParsers: TArray<IParser>;
+  const ADocConfig: TDocConfig);
 var
   P: IParser;
 begin
   inherited Create;
   FStore := AStore;
+  FDocConfig := ADocConfig;
   FParsers := TList<IParser>.Create;
   for P in AParsers do
     FParsers.Add(P);
+end;
+
+constructor TIndexer.Create(const AStore: ISymbolStore;
+  const AParsers: TArray<IParser>);
+begin
+  Create(AStore, AParsers, DefaultDocConfig);
 end;
 
 destructor TIndexer.Destroy;
@@ -79,22 +91,27 @@ begin
 end;
 
 // Returns the TDocCommentRegion immediately preceding ASymStartLine
-// (EndLine in [SymStartLine - 1 - ALLOW_GAP, SymStartLine - 1]).
+// (EndLine in [SymStartLine - 1 - AllowGap, SymStartLine - 1]).
+// When ACaptureLoose is False, regions with Kind in [dckLooseLine, dckLooseBlock]
+// are skipped entirely.
 // Sentinel: Result.Kind = TDocCommentKind(-1) means no region found.
 function FindDocRegionAbove(ADocRegions: TList<TDocCommentRegion>;
-  ASymStartLine: Integer): TDocCommentRegion;
+  ASymStartLine: Integer; AAllowGap: Integer;
+  ACaptureLoose: Boolean): TDocCommentRegion;
 var
   I: Integer;
   Best: TDocCommentRegion;
   HasBest: Boolean;
-const
-  ALLOW_GAP = 1;  // TODO Task 13: read from .drag-lint.json
 begin
   HasBest := False;
   // ADocRegions is sorted by StartLine ascending.
   for I := 0 to ADocRegions.Count - 1 do
   begin
-    if (ADocRegions[I].EndLine >= ASymStartLine - 1 - ALLOW_GAP) and
+    // Skip loose regions when captureLooseComments is disabled.
+    if (not ACaptureLoose) and
+       (ADocRegions[I].Kind in [dckLooseLine, dckLooseBlock]) then
+      Continue;
+    if (ADocRegions[I].EndLine >= ASymStartLine - 1 - AAllowGap) and
        (ADocRegions[I].EndLine <= ASymStartLine - 1) then
     begin
       Best := ADocRegions[I];
@@ -168,8 +185,11 @@ begin
             Sym.ParentId := -1;
           NewSymId := FStore.UpsertSymbol(Token, Sym);
           IdxToId.Add(i, NewSymId);
-          // v0.16: associate doc comment region to this symbol
-          DocRegion := FindDocRegionAbove(DocRegions, Sym.StartLine);
+          // v0.16: associate doc comment region to this symbol.
+          // Task 13: AllowBlankLineGap and CaptureLooseComments come from
+          // .drag-lint.json "docs" section via FDocConfig.
+          DocRegion := FindDocRegionAbove(DocRegions, Sym.StartLine,
+            FDocConfig.AllowBlankLineGap, FDocConfig.CaptureLooseComments);
           if DocRegion.Kind <> TDocCommentKind(-1) then
           begin
             ParsedDoc := TDocCommentParser.Dispatch(DocRegion);

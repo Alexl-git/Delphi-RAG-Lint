@@ -69,6 +69,8 @@ type
     NoDocs: Boolean;
     Kind: string;
     PublicOnly: Boolean;
+    // v0.16 Task 13: .drag-lint.json "docs" section
+    Docs: TDocConfig;
   end;
 
 procedure PrintHelp;
@@ -107,15 +109,18 @@ end;
 // v0.14: load defaults from `.drag-lint.json` in cwd (or any parent),
 // before CLI flags. Recognized keys:
 //   { "db": "...", "project": "...", "path": "...", "rule": "...",
-//     "watch": { "interval": N } }
+//     "watch": { "interval": N },
+//     "docs": { "captureLooseComments": bool, "allowBlankLineGap": N,
+//               "implPrecedence": "interface" } }
 // CLI flags override config values. Missing file is silently ignored.
 procedure LoadConfigDefaults(var AArgs: TArgs);
 var
   Dir, Candidate: string;
   Content: string;
-  J, JWatch: TJSONObject;
+  J, JWatch, JDocs: TJSONObject;
   V: TJSONValue;
   N: TJSONNumber;
+  B: TJSONBool;
 begin
   Dir := GetCurrentDir;
   Candidate := '';
@@ -158,6 +163,19 @@ begin
       N := JWatch.GetValue('interval') as TJSONNumber;
       if N <> nil then AArgs.Interval := N.AsInt;
     end;
+    // v0.16 Task 13: "docs" section
+    V := J.GetValue('docs');
+    if V is TJSONObject then
+    begin
+      JDocs := TJSONObject(V);
+      B := JDocs.GetValue('captureLooseComments') as TJSONBool;
+      if B <> nil then AArgs.Docs.CaptureLooseComments := B.AsBoolean;
+      N := JDocs.GetValue('allowBlankLineGap') as TJSONNumber;
+      if N <> nil then AArgs.Docs.AllowBlankLineGap := N.AsInt;
+      V := JDocs.GetValue('implPrecedence');
+      if (V <> nil) and (V.Value <> '') then
+        AArgs.Docs.ImplPrecedence := V.Value;
+    end;
   finally
     J.Free;
   end;
@@ -171,6 +189,7 @@ var
 begin
   Result := Default(TArgs);
   Result.DbPath := TPath.Combine(GetCurrentDir, 'drag-lint.sqlite');
+  Result.Docs := DefaultDocConfig;
   LoadConfigDefaults(Result);
   if ParamCount = 0 then
   begin
@@ -381,7 +400,10 @@ begin
   Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
   Parser := TDelphi13Parser.Create;
-  Indexer := TIndexer.Create(Store, [Parser, TDFMParser.Create]);
+  // v0.16 Task 13: pass docs config from .drag-lint.json so the indexer
+  // applies AllowBlankLineGap and CaptureLooseComments when associating
+  // doc regions to symbols.
+  Indexer := TIndexer.Create(Store, [Parser, TDFMParser.Create], AArgs.Docs);
 
   // Resolve target folders once (--scan-libraries / --project) or fall back
   // to the explicit path. The watch loop re-walks these on every tick;
