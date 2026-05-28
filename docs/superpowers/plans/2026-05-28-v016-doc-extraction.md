@@ -8,6 +8,14 @@
 
 **Tech Stack:** Delphi 13 (RAD Studio 37.0), FireDAC SQLite, tree-sitter-delphi13, modersohn delphi-tree-sitter bindings, regex via `System.RegularExpressions`, MSBuild build pipeline.
 
+**Environment note (amended 2026-05-28):** This system does not have `sqlite3.exe` on PATH (RAD Studio ships `sqlite3.dll` only, no CLI). Python 3.14 with built-in `sqlite3` module is available at `C:\Python314\python.exe`. **All test .bat files use Python one-liners** for SQLite verification instead of the `sqlite3` CLI. Pattern:
+
+```bat
+python -c "import sqlite3,sys; r=sqlite3.connect(sys.argv[1]).execute(sys.argv[2]).fetchone(); sys.exit(0 if r else 1)" "%DB%" "SELECT 1 FROM sqlite_master WHERE type='table' AND name='symbol_docs'" && echo PASS || (echo FAIL: ... && exit /b 1)
+```
+
+This is a one-line spec deviation from the design doc — same intent, different verifier. No helper .py files; the Python invocation stays inline in each .bat.
+
 **Spec:** [docs/superpowers/specs/2026-05-28-v016-doc-extraction-design.md](../specs/2026-05-28-v016-doc-extraction-design.md)
 
 ---
@@ -51,8 +59,7 @@ set EXE=%~dp0..\..\third_party\dll\drag-lint.exe
 set DB=%~dp0..\t1.sqlite
 del /q "%DB%" 2>NUL
 "%EXE%" index "%~dp0Smoke.pas" --db "%DB%"
-sqlite3 "%DB%" "SELECT name FROM sqlite_master WHERE type='table' AND name='symbol_docs';" > "%~dp0t1_actual.txt"
-findstr /c:"symbol_docs" "%~dp0t1_actual.txt" >NUL || (echo FAIL: symbol_docs table missing && exit /b 1)
+python -c "import sqlite3,sys; r=sqlite3.connect(sys.argv[1]).execute(\"SELECT 1 FROM sqlite_master WHERE type='table' AND name='symbol_docs'\").fetchone(); sys.exit(0 if r else 1)" "%DB%" || (echo FAIL: symbol_docs table missing && exit /b 1)
 echo PASS
 ```
 
@@ -1687,7 +1694,7 @@ set EXE=%ROOT%\third_party\dll\drag-lint.exe
 set DB=%HERE%t8.sqlite
 del /q "%DB%" 2>NUL
 "%EXE%" index "%HERE%Docs.pas" --db "%DB%"
-sqlite3 "%DB%" "SELECT s.qualified_name || '|' || d.format || '|' || COALESCE(d.summary,'<null>') FROM symbols s JOIN symbol_docs d ON d.symbol_id = s.id ORDER BY s.qualified_name;" > "%HERE%t8_out.txt"
+python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); [print('|'.join([str(x) if x is not None else '<null>' for x in row])) for row in c.execute(\"SELECT s.qualified_name, d.format, COALESCE(d.summary,'<null>') FROM symbols s JOIN symbol_docs d ON d.symbol_id = s.id ORDER BY s.qualified_name\")]" "%DB%" > "%HERE%t8_out.txt"
 type "%HERE%t8_out.txt"
 findstr /c:"Docs.TDocDemo.GetBaz|xmldoc|Computes the baz" "%HERE%t8_out.txt" >NUL || (echo FAIL: GetBaz doc not stored && exit /b 1)
 findstr /c:"Docs.TDocDemo.Add|pasdoc|Adds two numbers." "%HERE%t8_out.txt" >NUL || (echo FAIL: Add PasDoc not stored && exit /b 1)
@@ -2294,7 +2301,7 @@ set DB=%HERE%t13.sqlite
 del /q "%DB%" 2>NUL
 cd /d "%HERE%T13_config"
 "%EXE%" index "sample.pas" --db "%DB%"
-sqlite3 "%DB%" "SELECT s.name, d.format, d.summary FROM symbols s LEFT JOIN symbol_docs d ON d.symbol_id = s.id WHERE s.name IN ('A','B') ORDER BY s.name;" > "%HERE%t13_out.txt"
+python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); [print('|'.join([str(x) if x is not None else '' for x in row])) for row in c.execute(\"SELECT s.name, d.format, d.summary FROM symbols s LEFT JOIN symbol_docs d ON d.symbol_id = s.id WHERE s.name IN ('A','B') ORDER BY s.name\")]" "%DB%" > "%HERE%t13_out.txt"
 type "%HERE%t13_out.txt"
 findstr /c:"A|loose|loose preceding doc" "%HERE%t13_out.txt" >NUL || (echo FAIL: A loose not captured && exit /b 1)
 findstr /r /c:"B|" "%HERE%t13_out.txt" | findstr /v "loose" >NUL && (echo FAIL: B should have no doc with gap=0 && exit /b 1)
@@ -2380,7 +2387,7 @@ echo.
 echo === Stop criteria check ===
 echo (1) Self-corpus doc coverage:
 "%HERE%..\third_party\dll\drag-lint.exe" index "%HERE%..\src" --db "%HERE%draglint_self.sqlite"
-sqlite3 "%HERE%draglint_self.sqlite" "SELECT COUNT(*) FROM symbol_docs WHERE summary IS NOT NULL;"
+python -c "import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute('SELECT COUNT(*) FROM symbol_docs WHERE summary IS NOT NULL').fetchone()[0])" "%HERE%draglint_self.sqlite"
 echo (6) Micronite COMMON undocumented public methods (first 20):
 "%HERE%..\third_party\dll\drag-lint.exe" index "C:\Projects\DB\ORM3\COMMON" --db "%HERE%micronite_common.sqlite" >NUL
 "%HERE%..\third_party\dll\drag-lint.exe" query find --no-docs --kind method --public --db "%HERE%micronite_common.sqlite" | head -20
