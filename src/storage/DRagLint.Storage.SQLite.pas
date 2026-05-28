@@ -32,6 +32,12 @@ type
     FQFindByQName: TFDQuery;
     FQCountSymbols: TFDQuery;
     FQCountFiles: TFDQuery;
+    FQUpsertSymbolDoc: TFDQuery;
+    FQDeleteFileDocs: TFDQuery;
+    FQGetSymbolDoc: TFDQuery;
+    FQFindByDocTag: TFDQuery;
+    FQFindUndocumented: TFDQuery;
+    FQFindByDocContains: TFDQuery;
     procedure Connect(const ADbPath: string);
     procedure PrepareStatements;
     procedure EnsureTrigramTablePopulated;
@@ -77,6 +83,7 @@ implementation
 
 uses
   System.Generics.Defaults,
+  System.StrUtils,
   DRagLint.Storage.Schema,
   DRagLint.Query.Fuzzy;
 
@@ -101,6 +108,12 @@ begin
   FQFindByQName.Free;
   FQCountSymbols.Free;
   FQCountFiles.Free;
+  FQUpsertSymbolDoc.Free;
+  FQDeleteFileDocs.Free;
+  FQGetSymbolDoc.Free;
+  FQFindByDocTag.Free;
+  FQFindUndocumented.Free;
+  FQFindByDocContains.Free;
   if Assigned(FConn) then
   begin
     if FConn.Connected then
@@ -244,6 +257,42 @@ begin
     'SELECT * FROM symbols WHERE qualified_name = :qname');
   FQCountSymbols := NewQuery('SELECT COUNT(*) AS n FROM symbols');
   FQCountFiles := NewQuery('SELECT COUNT(*) AS n FROM files');
+
+  FQUpsertSymbolDoc := NewQuery(
+    'INSERT OR REPLACE INTO symbol_docs ' +
+    '(symbol_id, format, raw_block, summary, remarks, returns_text, ' +
+    ' params_json, exceptions_json, example_text, seealso_json, since_text, ' +
+    ' deprecated, start_line, end_line) ' +
+    'VALUES (:sid, :fmt, :raw, :sum, :rem, :ret, :pj, :ej, :ex, :sj, :since, ' +
+    ' :dep, :sl, :el)');
+
+  FQDeleteFileDocs := NewQuery(
+    'DELETE FROM symbol_docs WHERE symbol_id IN ' +
+    '(SELECT id FROM symbols WHERE file_id = :fid)');
+
+  FQGetSymbolDoc := NewQuery(
+    'SELECT format, raw_block, summary, remarks, returns_text, ' +
+    ' params_json, exceptions_json, example_text, seealso_json, since_text, ' +
+    ' deprecated, start_line, end_line ' +
+    'FROM symbol_docs WHERE symbol_id = :sid');
+
+  FQFindByDocTag := NewQuery(
+    'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' +
+    'WHERE (:tag = ''deprecated'' AND d.deprecated = 1) ' +
+    '   OR (:tag = ''since'' AND d.since_text IS NOT NULL)');
+
+  FQFindUndocumented := NewQuery(
+    'SELECT s.* FROM symbols s ' +
+    'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' +
+    'WHERE d.symbol_id IS NULL ' +
+    '  AND (:kind = '''' OR s.kind = :kind) ' +
+    '  AND (:publicOnly = 0 OR (s.modifiers IS NULL ' +
+    '       OR (s.modifiers NOT LIKE ''%private%'' AND ' +
+    '           s.modifiers NOT LIKE ''%protected%'')))');
+
+  FQFindByDocContains := NewQuery(
+    'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' +
+    'WHERE d.summary LIKE :pat OR d.remarks LIKE :pat OR d.example_text LIKE :pat');
 end;
 
 function TSQLiteSymbolStore.FileIsUpToDate(const APath: string;
@@ -649,34 +698,158 @@ end;
 procedure TSQLiteSymbolStore.UpsertSymbolDoc(const AToken: TFileTxToken;
   ASymbolId: Int64; const ADoc: TParsedDoc);
 begin
-  raise ENotImplemented.Create('UpsertSymbolDoc: pending Task 7');
+  if not ADoc.HasContent then Exit;
+  FQUpsertSymbolDoc.ParamByName('sid').AsLargeInt := ASymbolId;
+  FQUpsertSymbolDoc.ParamByName('fmt').AsString := DocFormatToStr(ADoc.Format);
+  FQUpsertSymbolDoc.ParamByName('raw').AsString := ADoc.RawBlock;
+
+  // Nullable text params: set DataType BEFORE Clear (FireDAC gotcha —
+  // parameter type inference fails on the first execution if DataType is
+  // ftUnknown and the value is NULL, raising [SQLite]-335).
+  with FQUpsertSymbolDoc.ParamByName('sum') do
+  begin DataType := ftWideMemo; if ADoc.Summary = '' then Clear else AsString := ADoc.Summary; end;
+  with FQUpsertSymbolDoc.ParamByName('rem') do
+  begin DataType := ftWideMemo; if ADoc.Remarks = '' then Clear else AsString := ADoc.Remarks; end;
+  with FQUpsertSymbolDoc.ParamByName('ret') do
+  begin DataType := ftWideMemo; if ADoc.ReturnsText = '' then Clear else AsString := ADoc.ReturnsText; end;
+  with FQUpsertSymbolDoc.ParamByName('pj') do
+  begin DataType := ftWideMemo;
+    if Length(ADoc.Params) = 0 then Clear else AsString := ParamsToJson(ADoc.Params);
+  end;
+  with FQUpsertSymbolDoc.ParamByName('ej') do
+  begin DataType := ftWideMemo;
+    if Length(ADoc.Exceptions) = 0 then Clear else AsString := ExceptionsToJson(ADoc.Exceptions);
+  end;
+  with FQUpsertSymbolDoc.ParamByName('ex') do
+  begin DataType := ftWideMemo; if ADoc.ExampleText = '' then Clear else AsString := ADoc.ExampleText; end;
+  with FQUpsertSymbolDoc.ParamByName('sj') do
+  begin DataType := ftWideMemo;
+    if Length(ADoc.SeeAlso) = 0 then Clear else AsString := SeeAlsoToJson(ADoc.SeeAlso);
+  end;
+  with FQUpsertSymbolDoc.ParamByName('since') do
+  begin DataType := ftWideMemo; if ADoc.SinceText = '' then Clear else AsString := ADoc.SinceText; end;
+
+  FQUpsertSymbolDoc.ParamByName('dep').AsInteger := Ord(ADoc.Deprecated);
+  FQUpsertSymbolDoc.ParamByName('sl').AsInteger := ADoc.StartLine;
+  FQUpsertSymbolDoc.ParamByName('el').AsInteger := ADoc.EndLine;
+  FQUpsertSymbolDoc.ExecSQL;
 end;
 
 function TSQLiteSymbolStore.GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
 begin
-  raise ENotImplemented.Create('GetSymbolDoc: pending Task 7');
+  FillChar(Result, SizeOf(Result), 0);
+  if FQGetSymbolDoc.Active then
+    FQGetSymbolDoc.Close;
+  FQGetSymbolDoc.ParamByName('sid').AsLargeInt := ASymbolId;
+  FQGetSymbolDoc.Open;
+  try
+    if FQGetSymbolDoc.IsEmpty then Exit;
+    case IndexStr(FQGetSymbolDoc.FieldByName('format').AsString,
+                  ['xmldoc', 'pasdoc', 'oneline', 'loose']) of
+      0: Result.Format := dfXmlDoc;
+      1: Result.Format := dfPasDoc;
+      2: Result.Format := dfOneline;
+      3: Result.Format := dfLoose;
+    end;
+    Result.RawBlock    := FQGetSymbolDoc.FieldByName('raw_block').AsString;
+    Result.Summary     := FQGetSymbolDoc.FieldByName('summary').AsString;
+    Result.Remarks     := FQGetSymbolDoc.FieldByName('remarks').AsString;
+    Result.ReturnsText := FQGetSymbolDoc.FieldByName('returns_text').AsString;
+    Result.ExampleText := FQGetSymbolDoc.FieldByName('example_text').AsString;
+    Result.SinceText   := FQGetSymbolDoc.FieldByName('since_text').AsString;
+    Result.Deprecated  := FQGetSymbolDoc.FieldByName('deprecated').AsInteger = 1;
+    Result.StartLine   := FQGetSymbolDoc.FieldByName('start_line').AsInteger;
+    Result.EndLine     := FQGetSymbolDoc.FieldByName('end_line').AsInteger;
+    // Params/Exceptions/SeeAlso parsing from JSON deferred (v0.17).
+    // Consumers either use RawBlock or read params_json string directly.
+    Result.HasContent  := True;
+  finally
+    FQGetSymbolDoc.Close;
+  end;
 end;
 
 function TSQLiteSymbolStore.FindByDocTag(const ATag: string): TArray<TSymbol>;
+var
+  Acc: TList<TSymbol>;
 begin
-  raise ENotImplemented.Create('FindByDocTag: pending Task 7');
+  Acc := TList<TSymbol>.Create;
+  try
+    if FQFindByDocTag.Active then
+      FQFindByDocTag.Close;
+    FQFindByDocTag.ParamByName('tag').AsString := LowerCase(ATag);
+    FQFindByDocTag.Open;
+    try
+      while not FQFindByDocTag.Eof do
+      begin
+        Acc.Add(ReadSymbolFromQuery(FQFindByDocTag));
+        FQFindByDocTag.Next;
+      end;
+    finally
+      FQFindByDocTag.Close;
+    end;
+    Result := Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
 end;
 
 function TSQLiteSymbolStore.FindUndocumented(const AKind: string;
   APublicOnly: Boolean): TArray<TSymbol>;
+var
+  Acc: TList<TSymbol>;
 begin
-  raise ENotImplemented.Create('FindUndocumented: pending Task 7');
+  Acc := TList<TSymbol>.Create;
+  try
+    if FQFindUndocumented.Active then
+      FQFindUndocumented.Close;
+    FQFindUndocumented.ParamByName('kind').AsString := AKind;
+    FQFindUndocumented.ParamByName('publicOnly').AsInteger := Ord(APublicOnly);
+    FQFindUndocumented.Open;
+    try
+      while not FQFindUndocumented.Eof do
+      begin
+        Acc.Add(ReadSymbolFromQuery(FQFindUndocumented));
+        FQFindUndocumented.Next;
+      end;
+    finally
+      FQFindUndocumented.Close;
+    end;
+    Result := Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
 end;
 
 function TSQLiteSymbolStore.FindByDocContains(
   const ASubstring: string): TArray<TSymbol>;
+var
+  Acc: TList<TSymbol>;
 begin
-  raise ENotImplemented.Create('FindByDocContains: pending Task 7');
+  Acc := TList<TSymbol>.Create;
+  try
+    if FQFindByDocContains.Active then
+      FQFindByDocContains.Close;
+    FQFindByDocContains.ParamByName('pat').AsString := '%' + ASubstring + '%';
+    FQFindByDocContains.Open;
+    try
+      while not FQFindByDocContains.Eof do
+      begin
+        Acc.Add(ReadSymbolFromQuery(FQFindByDocContains));
+        FQFindByDocContains.Next;
+      end;
+    finally
+      FQFindByDocContains.Close;
+    end;
+    Result := Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
 end;
 
 procedure TSQLiteSymbolStore.DeleteFileDocs(AFileId: Int64);
 begin
-  raise ENotImplemented.Create('DeleteFileDocs: pending Task 8');
+  FQDeleteFileDocs.ParamByName('fid').AsLargeInt := AFileId;
+  FQDeleteFileDocs.ExecSQL;
 end;
 
 end.
