@@ -9,7 +9,8 @@ breaking changes** until v1.0.
 
 - **`symbol_docs` table (schema v4).** One row per documented symbol:
   `format`, `raw_block`, `summary`, `remarks`, `returns_text`, `params_json`,
-  `exceptions_json`, `example_text`, `see_json`, `since_text`, `deprecated_text`.
+  `exceptions_json`, `example_text`, `seealso_json`, `since_text`, `deprecated`
+  (INTEGER flag), plus `start_line` / `end_line` for the source range.
   v3 databases are migrated transparently on first open -- no manual steps.
 
 - **`DRagLint.Parser.DocComments` module.** A single-pass comment-region
@@ -61,15 +62,16 @@ breaking changes** until v1.0.
   {
     "docs": {
       "captureLooseComments": false,
-      "allowBlankLineGap": 0,
-      "implPrecedence": false
+      "allowBlankLineGap": 1,
+      "implPrecedence": "interface"
     }
   }
   ```
   `captureLooseComments` enables the loose-comment path. `allowBlankLineGap`
-  (default 0) permits N blank lines between a comment block and its symbol.
-  `implPrecedence` (default false): when both interface and implementation
-  declarations have doc comments, prefer the implementation-side comment.
+  (default 1) permits up to N blank lines between a comment block and its
+  symbol. `implPrecedence` (default `"interface"`, reserved for future use):
+  when both interface and implementation declarations have doc comments,
+  selects which side wins. v0.16 always uses interface; set up for v0.17+.
 
 ### Notes
 
