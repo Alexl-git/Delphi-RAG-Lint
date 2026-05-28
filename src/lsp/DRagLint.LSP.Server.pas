@@ -14,7 +14,8 @@ uses
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces,
   DRagLint.Storage.SQLite,
-  DRagLint.Parser.Delphi13;
+  DRagLint.Parser.Delphi13,
+  DRagLint.Hover.Renderer;
 
 type
   // Language Server Protocol over stdio with Content-Length framing.
@@ -639,6 +640,7 @@ var
   Line, Col: Integer;
   Symbols: TArray<TSymbol>;
   Sym: TSymbol;
+  Doc: TParsedDoc;
   Sb: TStringBuilder;
 begin
   Reply := TJSONObject.Create;
@@ -678,20 +680,29 @@ begin
       SendMessage(Reply);
       Exit;
     end;
-    Sb := TStringBuilder.Create;
-    try
-      Sb.AppendLine(Format('**%s** `%s`', [Ident, Symbols[0].Kind.ToText]));
-      Sb.AppendLine('');
-      for Sym in Symbols do
-      begin
-        Sb.AppendLine(Format('- `%s` - line %d', [Sym.QualifiedName,
-          Sym.StartLine]));
-        if Sym.Signature <> '' then
-          Sb.AppendLine('    ' + Sym.Signature);
+    // v0.16: try to enrich the hover with doc-comment content.
+    // GetSymbolDoc returns a zeroed TParsedDoc with HasContent=False when
+    // no row exists; in that case fall back to the legacy signature listing.
+    Doc := FStore.GetSymbolDoc(Symbols[0].Id);
+    if Doc.HasContent then
+      MdValue := DRagLint.Hover.Renderer.RenderHoverMarkdown(Symbols[0], Doc)
+    else
+    begin
+      Sb := TStringBuilder.Create;
+      try
+        Sb.AppendLine(Format('**%s** `%s`', [Ident, Symbols[0].Kind.ToText]));
+        Sb.AppendLine('');
+        for Sym in Symbols do
+        begin
+          Sb.AppendLine(Format('- `%s` - line %d', [Sym.QualifiedName,
+            Sym.StartLine]));
+          if Sym.Signature <> '' then
+            Sb.AppendLine('    ' + Sym.Signature);
+        end;
+        MdValue := Sb.ToString;
+      finally
+        Sb.Free;
       end;
-      MdValue := Sb.ToString;
-    finally
-      Sb.Free;
     end;
     HoverObj := TJSONObject.Create;
     Contents := TJSONObject.Create;

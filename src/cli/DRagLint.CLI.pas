@@ -36,7 +36,8 @@ uses
   DRagLint.Lint.ProjectChecks,
   DRagLint.Project.Resolver,
   DRagLint.MCP.Server,
-  DRagLint.LSP.Server;
+  DRagLint.LSP.Server,
+  DRagLint.Hover.Renderer;
 
 type
   TArgs = record
@@ -2031,87 +2032,26 @@ end;
 // Looks up the first symbol matching the qualified name, retrieves its doc
 // comment from symbol_docs, and renders it in the requested format.
 
-function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
-var
-  SB: TStringBuilder;
-  Re: TRegEx;
-  M: TMatch;
+// RenderHover* functions are now in DRagLint.Hover.Renderer (shared with LSP).
+// These local wrappers forward to the shared unit so existing callers
+// (DoHover below) continue to compile without change.
+
+function RenderHoverPlain(const ASym: TSymbol;
+  const ADoc: TParsedDoc): string;
 begin
-  SB := TStringBuilder.Create;
-  try
-    SB.AppendLine(ASym.QualifiedName);
-    if ADoc.Deprecated then SB.AppendLine('[DEPRECATED]');
-    if ADoc.SinceText <> '' then SB.AppendLine('Since: ' + ADoc.SinceText);
-    if ADoc.Summary <> '' then
-      SB.AppendLine('Summary: ' + ADoc.Summary);
-    // Params: emit one line per param extracted from the stored JSON array.
-    if ADoc.ParamsJsonRaw <> '' then
-    begin
-      Re := TRegEx.Create('"name":"([^"]+)","desc":"([^"]*)"');
-      for M in Re.Matches(ADoc.ParamsJsonRaw) do
-        SB.AppendLine('  ' + M.Groups[1].Value + ' -- ' + M.Groups[2].Value);
-    end;
-    if ADoc.ReturnsText <> '' then SB.AppendLine('Returns: ' + ADoc.ReturnsText);
-    if ADoc.Remarks <> '' then SB.AppendLine('Remarks: ' + ADoc.Remarks);
-    if ADoc.ExampleText <> '' then
-    begin
-      SB.AppendLine('Example:');
-      SB.AppendLine(ADoc.ExampleText);
-    end;
-    Result := SB.ToString;
-  finally
-    SB.Free;
-  end;
+  Result := DRagLint.Hover.Renderer.RenderHoverPlain(ASym, ADoc);
 end;
 
-function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc): string;
-var
-  SB: TStringBuilder;
+function RenderHoverMarkdown(const ASym: TSymbol;
+  const ADoc: TParsedDoc): string;
 begin
-  SB := TStringBuilder.Create;
-  try
-    SB.AppendLine('# ' + ASym.QualifiedName);
-    if ADoc.Deprecated then SB.AppendLine('> **DEPRECATED**');
-    if ADoc.SinceText <> '' then SB.AppendLine('> _Since: ' + ADoc.SinceText + '_');
-    if ADoc.Summary <> '' then
-    begin
-      SB.AppendLine('');
-      SB.AppendLine(ADoc.Summary);
-    end;
-    if ADoc.ReturnsText <> '' then
-    begin
-      SB.AppendLine('');
-      SB.AppendLine('**Returns:** ' + ADoc.ReturnsText);
-    end;
-    if ADoc.Remarks <> '' then
-    begin
-      SB.AppendLine('');
-      SB.AppendLine('## Remarks');
-      SB.AppendLine(ADoc.Remarks);
-    end;
-    if ADoc.ExampleText <> '' then
-    begin
-      SB.AppendLine('');
-      SB.AppendLine('## Example');
-      SB.AppendLine('```pascal');
-      SB.AppendLine(ADoc.ExampleText);
-      SB.AppendLine('```');
-    end;
-    Result := SB.ToString;
-  finally
-    SB.Free;
-  end;
+  Result := DRagLint.Hover.Renderer.RenderHoverMarkdown(ASym, ADoc);
 end;
 
-function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string;
+function RenderHoverJson(const ASym: TSymbol;
+  const ADoc: TParsedDoc): string;
 begin
-  Result := System.SysUtils.Format(
-    '{"qname":"%s","format":"%s","summary":"%s","returns":"%s",' +
-    '"since":"%s","deprecated":%s}',
-    [JsonEscape(ASym.QualifiedName), DocFormatToStr(ADoc.Format),
-     JsonEscape(ADoc.Summary), JsonEscape(ADoc.ReturnsText),
-     JsonEscape(ADoc.SinceText),
-     IfThen(ADoc.Deprecated, 'true', 'false')]);
+  Result := DRagLint.Hover.Renderer.RenderHoverJson(ASym, ADoc);
 end;
 
 function DoHover(const AArgs: TArgs): Integer;
