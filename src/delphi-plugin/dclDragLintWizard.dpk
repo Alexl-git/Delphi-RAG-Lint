@@ -48,6 +48,10 @@ contains
   DragLint.Plugin.RefactorForm in 'DragLint.Plugin.RefactorForm.pas',
   DragLint.Plugin.RegistryColors in 'DragLint.Plugin.RegistryColors.pas',
   DragLint.Plugin.DiagnosticCache in 'DragLint.Plugin.DiagnosticCache.pas',
-  DragLint.Plugin.EditViewNotifier in 'DragLint.Plugin.EditViewNotifier.pas';
+  DragLint.Plugin.EditViewNotifier in 'DragLint.Plugin.EditViewNotifier.pas',
+  DragLint.Plugin.StructureCache in 'DragLint.Plugin.StructureCache.pas',
+  DragLint.Plugin.StructureForm in 'DragLint.Plugin.StructureForm.pas',
+  DragLint.Plugin.OptionsFrame in 'DragLint.Plugin.OptionsFrame.pas',
+  DragLint.Plugin.Options in 'DragLint.Plugin.Options.pas';
 
 end.

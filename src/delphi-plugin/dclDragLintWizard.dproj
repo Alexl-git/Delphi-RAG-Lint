@@ -87,6 +87,10 @@
         <DCCReference Include="DragLint.Plugin.RegistryColors.pas"/>
         <DCCReference Include="DragLint.Plugin.DiagnosticCache.pas"/>
         <DCCReference Include="DragLint.Plugin.EditViewNotifier.pas"/>
+        <DCCReference Include="DragLint.Plugin.StructureCache.pas"/>
+        <DCCReference Include="DragLint.Plugin.StructureForm.pas"/>
+        <DCCReference Include="DragLint.Plugin.OptionsFrame.pas"/>
+        <DCCReference Include="DragLint.Plugin.Options.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
