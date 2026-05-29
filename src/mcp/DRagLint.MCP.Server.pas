@@ -13,7 +13,8 @@ uses
   DRagLint.Storage.SQLite,
   DRagLint.Lint.Linter,
   DRagLint.Context.Bundler,
-  DRagLint.Resolver.TypeAt;
+  DRagLint.Resolver.TypeAt,
+  DRagLint.Refactor.Rename;
 
 type
   // Newline-delimited JSON-RPC 2.0 server speaking MCP-2024-11-05 over stdio.
@@ -49,6 +50,7 @@ type
       const ALines: TArray<TSurfaceLine>): string;
     function FormatSliceAsJson(const AQName: string;
       const AChunks: TArray<TSliceChunk>): string;
+    function FormatRenameEditsAsJson(const AEdits: TArray<TRenameEdit>): string;
     function ResolveStore(const AArgs: TJSONObject): ISymbolStore;
   public
     constructor Create(const ADbPaths: TArray<string>);
@@ -291,6 +293,18 @@ begin
     '"col":{"type":"integer","description":"1-based column number"},' +
     '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
     '},"required":["file","line","col"]}'));
+
+  Tools.AddElement(ToolDescriptor(
+    'rename_symbol',
+    'Rename every occurrence of a Delphi symbol (declaration + all references) ' +
+    'by its qualified name. In dry_run mode returns the edit list without ' +
+    'modifying files; otherwise applies edits in place and writes .bak backups.',
+    '{"type":"object","properties":{' +
+    '"qname":{"type":"string","description":"Qualified name of the symbol to rename (e.g. Unit.TClass.Method)"},' +
+    '"to":{"type":"string","description":"New short name for the symbol"},' +
+    '"dry_run":{"type":"boolean","description":"If true, return edits without applying them (optional, default false)"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional if --db passed at startup)"}' +
+    '},"required":["qname","to"]}'));
 
   Res.AddPair('tools', Tools);
   SendResult(AId, Res);
@@ -558,6 +572,31 @@ begin
   Result :=
     '{"qname":"' + JsonEscape(AQName) + '"' +
     ',"chunks":[' + string.Join(',', Parts) + ']}';
+end;
+
+function TMCPServer.FormatRenameEditsAsJson(
+  const AEdits: TArray<TRenameEdit>): string;
+// Returns a JSON array of edit objects:
+// [{"file":"...","line":N,"col":N,"old":"OldName","new":"NewName"}, ...]
+var
+  Parts: TArray<string>;
+  I: Integer;
+begin
+  if Length(AEdits) = 0 then
+  begin
+    Result := '[]';
+    Exit;
+  end;
+  SetLength(Parts, Length(AEdits));
+  for I := 0 to High(AEdits) do
+    Parts[I] :=
+      '{"file":"' + JsonEscape(AEdits[I].FilePath) + '"' +
+      ',"line":' + IntToStr(AEdits[I].Line) +
+      ',"col":' + IntToStr(AEdits[I].Col) +
+      ',"old":"' + JsonEscape(AEdits[I].OldName) + '"' +
+      ',"new":"' + JsonEscape(AEdits[I].NewName) + '"' +
+      '}';
+  Result := '[' + string.Join(',', Parts) + ']';
 end;
 
 procedure TMCPServer.HandleToolsCall(const AId: TJSONValue;
@@ -878,6 +917,74 @@ begin
       var TAPosResult := TTypeAtResolver.Resolve(
         TAPosStore, TAPosFile, TAPosLine, TAPosCol);
       ResultText := TTypeAtResolver.RenderJson(TAPosResult);
+    end
+    else if ToolName = 'rename_symbol' then
+    begin
+      var RenStore := ResolveStore(Args);
+      if RenStore = nil then
+      begin
+        SendError(AId, -32000,
+          'no database loaded; pass --db on serve or in arguments');
+        Exit;
+      end;
+      var RenQName := '';
+      var RenTo := '';
+      var RenDryRun := False;
+      if Args.GetValue('qname') <> nil then
+        RenQName := Args.GetValue('qname').Value;
+      if Args.GetValue('to') <> nil then
+        RenTo := Args.GetValue('to').Value;
+      if Args.GetValue('dry_run') <> nil then
+        RenDryRun := Args.GetValue('dry_run').Value = 'true';
+      if RenQName = '' then
+      begin
+        SendError(AId, -32602, 'rename_symbol requires qname');
+        Exit;
+      end;
+      if RenTo = '' then
+      begin
+        SendError(AId, -32602, 'rename_symbol requires to');
+        Exit;
+      end;
+      var RenEdits := TRenameRefactoring.Build(RenStore, RenQName, RenTo);
+      if Length(RenEdits) = 0 then
+      begin
+        ResultText :=
+          '{"edits":[],"files_touched":0,"applied":false,' +
+          '"error":"symbol not found: ' + JsonEscape(RenQName) + '"}';
+      end
+      else
+      begin
+        var RenEditsJson := FormatRenameEditsAsJson(RenEdits);
+        var RenFilesTouched: Integer;
+        var RenApplied: Boolean;
+        if RenDryRun then
+        begin
+          // Count distinct files from the edits array
+          var RenFileSet := TDictionary<string, Boolean>.Create;
+          try
+            var RenEd: TRenameEdit;
+            for RenEd in RenEdits do
+              RenFileSet.AddOrSetValue(RenEd.FilePath, True);
+            RenFilesTouched := RenFileSet.Count;
+          finally
+            RenFileSet.Free;
+          end;
+          RenApplied := False;
+        end
+        else
+        begin
+          RenFilesTouched := TRenameRefactoring.Apply(RenEdits, True);
+          RenApplied := True;
+        end;
+        var RenAppliedStr: string;
+        if RenApplied then RenAppliedStr := 'true' else RenAppliedStr := 'false';
+        ResultText :=
+          '{"edits":' + RenEditsJson +
+          ',"files_touched":' + IntToStr(RenFilesTouched) +
+          ',"applied":' + RenAppliedStr +
+          '}';
+      end;
     end
     else
     begin

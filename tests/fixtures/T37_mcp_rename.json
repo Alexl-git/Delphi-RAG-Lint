@@ -1,0 +1,2 @@
+{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"rename_symbol","arguments":{"qname":"Calls.TWidget.Compute","to":"Calc","dry_run":true,"db":"tests/fixtures/t14.sqlite"}}}
