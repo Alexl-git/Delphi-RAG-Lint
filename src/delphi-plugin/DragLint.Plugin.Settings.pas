@@ -12,6 +12,11 @@ type
     EnableCompletion:     Boolean;
     EnableSignature:      Boolean;
     EnableDiagnostics:    Boolean;
+    EnableInlineMarkers:  Boolean;
+    ShowErrorsInline:     Boolean;
+    ShowWarningsInline:   Boolean;
+    ShowHintsInline:      Boolean;
+    ShowInfoInline:       Boolean;
   end;
 
 function LoadSettings: TDragLintSettings;
@@ -37,6 +42,11 @@ begin
   Result.EnableCompletion  := True;
   Result.EnableSignature   := True;
   Result.EnableDiagnostics := True;
+  Result.EnableInlineMarkers  := True;
+  Result.ShowErrorsInline     := True;
+  Result.ShowWarningsInline   := True;
+  Result.ShowHintsInline      := True;
+  Result.ShowInfoInline       := False;
 end;
 
 function LoadSettings: TDragLintSettings;
@@ -57,6 +67,16 @@ begin
       if Reg.ValueExists('EnableCompletion')  then Result.EnableCompletion  := Reg.ReadInteger('EnableCompletion') <> 0;
       if Reg.ValueExists('EnableSignature')   then Result.EnableSignature   := Reg.ReadInteger('EnableSignature') <> 0;
       if Reg.ValueExists('EnableDiagnostics') then Result.EnableDiagnostics := Reg.ReadInteger('EnableDiagnostics') <> 0;
+      if Reg.ValueExists('EnableInlineMarkers') then
+        Result.EnableInlineMarkers := Reg.ReadInteger('EnableInlineMarkers') <> 0;
+      if Reg.ValueExists('ShowErrorsInline') then
+        Result.ShowErrorsInline    := Reg.ReadInteger('ShowErrorsInline') <> 0;
+      if Reg.ValueExists('ShowWarningsInline') then
+        Result.ShowWarningsInline  := Reg.ReadInteger('ShowWarningsInline') <> 0;
+      if Reg.ValueExists('ShowHintsInline') then
+        Result.ShowHintsInline     := Reg.ReadInteger('ShowHintsInline') <> 0;
+      if Reg.ValueExists('ShowInfoInline') then
+        Result.ShowInfoInline      := Reg.ReadInteger('ShowInfoInline') <> 0;
     finally
       Reg.CloseKey;
     end;
@@ -82,6 +102,11 @@ begin
       Reg.WriteInteger('EnableCompletion',  Ord(ASettings.EnableCompletion));
       Reg.WriteInteger('EnableSignature',   Ord(ASettings.EnableSignature));
       Reg.WriteInteger('EnableDiagnostics', Ord(ASettings.EnableDiagnostics));
+      Reg.WriteInteger('EnableInlineMarkers', Ord(ASettings.EnableInlineMarkers));
+      Reg.WriteInteger('ShowErrorsInline',    Ord(ASettings.ShowErrorsInline));
+      Reg.WriteInteger('ShowWarningsInline',  Ord(ASettings.ShowWarningsInline));
+      Reg.WriteInteger('ShowHintsInline',     Ord(ASettings.ShowHintsInline));
+      Reg.WriteInteger('ShowInfoInline',      Ord(ASettings.ShowInfoInline));
     finally
       Reg.CloseKey;
     end;
