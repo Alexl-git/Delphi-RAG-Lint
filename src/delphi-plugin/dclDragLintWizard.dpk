@@ -44,6 +44,7 @@ contains
   DragLint.Plugin.HoverForm in 'DragLint.Plugin.HoverForm.pas',
   DragLint.Plugin.CompletionForm in 'DragLint.Plugin.CompletionForm.pas',
   DragLint.Plugin.SignatureForm in 'DragLint.Plugin.SignatureForm.pas',
-  DragLint.Plugin.SaveNotifier in 'DragLint.Plugin.SaveNotifier.pas';
+  DragLint.Plugin.SaveNotifier in 'DragLint.Plugin.SaveNotifier.pas',
+  DragLint.Plugin.RefactorForm in 'DragLint.Plugin.RefactorForm.pas';
 
 end.

@@ -8,10 +8,12 @@ uses
   ToolsAPI,
   DragLint.Plugin.LspClient,
   DragLint.Plugin.ProjectNotifier,
+  DragLint.Plugin.Settings,
   DragLint.Plugin.SettingsForm,
   DragLint.Plugin.HoverForm,
   DragLint.Plugin.CompletionForm,
-  DragLint.Plugin.SignatureForm;
+  DragLint.Plugin.SignatureForm,
+  DragLint.Plugin.RefactorForm;
 
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
@@ -25,6 +27,8 @@ procedure InvokeRename(Sender: TObject);
 { v0.26: compiler diagnostics }
 procedure InvokeCompileDiagnose(Sender: TObject);
 procedure InvokeImportLog(Sender: TObject);
+{ v0.27: YADF format integration }
+procedure InvokeFormatYadf(Sender: TObject);
 
 implementation
 
@@ -493,45 +497,6 @@ begin
     'Results will appear in the Messages pane.');
 end;
 
-procedure InvokeRename(Sender: TObject);
-var
-  Uri:     string;
-  Line, Col: Integer;
-  QName, NewName: string;
-  ExePath, CmdLine: string;
-begin
-  if not GetActiveEditorInfo(Uri, Line, Col) then
-  begin
-    ShowMessage('drag-lint: no active editor view');
-    Exit;
-  end;
-
-  QName := InputBox('drag-lint Rename', 'Qualified name to rename:', '');
-  if QName = '' then Exit;
-
-  NewName := InputBox('drag-lint Rename', 'New name:', '');
-  if NewName = '' then Exit;
-
-  { Resolve drag-lint.exe: next to BPL first, then PATH }
-  ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then
-    ExePath := 'drag-lint.exe';
-
-  { Build the CLI command the user can run for apply mode }
-  CmdLine := Format('"%s" rename --qname %s --to %s --dry-run',
-    [ExePath, QName, NewName]);
-
-  ShowMessage(
-    Format('drag-lint Rename:'#13#10 +
-           '  Symbol : %s'#13#10 +
-           '  New name: %s'#13#10 +
-           #13#10 +
-           'v0.24 plugin shows the command only.'#13#10 +
-           'Run from CLI to apply:'#13#10 +
-           '  %s',
-    [QName, NewName, CmdLine]));
-end;
-
 { ---- v0.26: synchronous process helper ---- }
 
 // Spawns ACmdLine via CreateProcessW with merged stdout+stderr capture.
@@ -635,6 +600,86 @@ begin
     Result := ''
   else
     Result := ChangeFileExt(ProjFile, '.sqlite');
+end;
+
+procedure InvokeRename(Sender: TObject);
+var
+  Uri:             string;
+  Line, Col:       Integer;
+  ProjDb, ExePath: string;
+begin
+  if not GetActiveEditorInfo(Uri, Line, Col) then
+  begin
+    ShowMessage('drag-lint: no active editor view');
+    Exit;
+  end;
+
+  { Resolve project DB and exe path }
+  ProjDb  := GetActiveProjectDb;
+  ExePath := LoadSettings.ExePath;
+  if (ExePath = '') or not FileExists(ExePath) then
+    ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then
+    ExePath := 'drag-lint.exe';
+
+  { Open the refactor preview form.
+    For v0.27 simplicity the qname field starts empty; the user fills it in.
+    Future v0.28+ can extract the identifier at cursor via TTypeAtResolver. }
+  ShowRefactorDialog('', ProjDb, ExePath);
+end;
+
+procedure InvokeFormatYadf(Sender: TObject);
+var
+  ESS:      IOTAEditorServices;
+  EditView: IOTAEditView;
+  FilePath: string;
+  ExePath:  string;
+  CmdLine:  string;
+  Output:   string;
+  ExitCode: Integer;
+begin
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
+  begin
+    ShowMessage('drag-lint: no editor services available');
+    Exit;
+  end;
+  EditView := ESS.TopView;
+  if EditView = nil then
+  begin
+    ShowMessage('drag-lint: no active editor view');
+    Exit;
+  end;
+  FilePath := EditView.Buffer.FileName;
+  if FilePath = '' then
+  begin
+    ShowMessage('drag-lint: active buffer has no file name');
+    Exit;
+  end;
+
+  { Resolve drag-lint.exe }
+  ExePath := LoadSettings.ExePath;
+  if (ExePath = '') or not FileExists(ExePath) then
+    ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then
+    ExePath := 'drag-lint.exe';
+
+  { For v0.27: do not auto-save; spawn YADF against the current on-disk file.
+    The user should save the file before invoking this command. }
+  CmdLine  := Format('"%s" format "%s"', [ExePath, FilePath]);
+  ExitCode := RunAndCaptureStdout(CmdLine, Output, 60000);
+
+  if ExitCode = 2 then
+  begin
+    ShowMessage(
+      'drag-lint: failed to spawn format command.'#13#10 +
+      'Ensure drag-lint.exe is on PATH or next to the BPL.');
+    Exit;
+  end;
+
+  { The IDE will auto-detect the file change on next focus switch. }
+  ShowMessage(
+    Format('drag-lint Format with YADF:'#13#10 + '%s',
+      [Trim(Output)]));
 end;
 
 // Broadcasts textDocument/didSave for every .pas file mentioned in AOutput
@@ -874,6 +919,8 @@ begin
   // v0.26: compiler diagnostics entries
   AddWrappedItem(RootMenu, 'Compile && Diagnose',        InvokeCompileDiagnose);
   AddWrappedItem(RootMenu, 'Import Build Log...',        InvokeImportLog);
+  // v0.27: YADF format integration
+  AddWrappedItem(RootMenu, 'Format with YADF',           InvokeFormatYadf);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
 
   RegisterProjectNotifier;
