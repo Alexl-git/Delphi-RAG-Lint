@@ -21,6 +21,7 @@ procedure InvokeHover(Sender: TObject);
 procedure InvokeCompletion(Sender: TObject);
 procedure InvokeSignatureHelp(Sender: TObject);
 procedure InvokeDiagnostics(Sender: TObject);
+procedure InvokeRename(Sender: TObject);
 
 implementation
 
@@ -489,6 +490,45 @@ begin
     'Results will appear in the Messages pane.');
 end;
 
+procedure InvokeRename(Sender: TObject);
+var
+  Uri:     string;
+  Line, Col: Integer;
+  QName, NewName: string;
+  ExePath, CmdLine: string;
+begin
+  if not GetActiveEditorInfo(Uri, Line, Col) then
+  begin
+    ShowMessage('drag-lint: no active editor view');
+    Exit;
+  end;
+
+  QName := InputBox('drag-lint Rename', 'Qualified name to rename:', '');
+  if QName = '' then Exit;
+
+  NewName := InputBox('drag-lint Rename', 'New name:', '');
+  if NewName = '' then Exit;
+
+  { Resolve drag-lint.exe: next to BPL first, then PATH }
+  ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then
+    ExePath := 'drag-lint.exe';
+
+  { Build the CLI command the user can run for apply mode }
+  CmdLine := Format('"%s" rename --qname %s --to %s --dry-run',
+    [ExePath, QName, NewName]);
+
+  ShowMessage(
+    Format('drag-lint Rename:'#13#10 +
+           '  Symbol : %s'#13#10 +
+           '  New name: %s'#13#10 +
+           #13#10 +
+           'v0.24 plugin shows the command only.'#13#10 +
+           'Run from CLI to apply:'#13#10 +
+           '  %s',
+    [QName, NewName, CmdLine]));
+end;
+
 procedure InvokeSettings(Sender: TObject);
 begin
   ShowSettingsDialog;
@@ -528,6 +568,7 @@ begin
   AddWrappedItem(RootMenu, 'Show Completion',            InvokeCompletion);
   AddWrappedItem(RootMenu, 'Show Signature Help',        InvokeSignatureHelp);
   AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)',  InvokeDiagnostics);
+  AddWrappedItem(RootMenu, 'Rename Symbol...',           InvokeRename);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
 
   RegisterProjectNotifier;

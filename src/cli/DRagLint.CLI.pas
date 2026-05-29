@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.22.0-alpha';
+  VERSION = '0.24.0-alpha';
 
 function Run: Integer;
 
@@ -39,7 +39,8 @@ uses
   DRagLint.LSP.Server,
   DRagLint.Hover.Renderer,
   DRagLint.Context.Bundler,
-  DRagLint.Resolver.TypeAt;
+  DRagLint.Resolver.TypeAt,
+  DRagLint.Refactor.Rename;
 
 type
   TArgs = record
@@ -87,6 +88,9 @@ type
     BenchN:             Integer; // --n N for bench-context (default 20)
     // v0.19: typeat
     Position:           string;  // raw <file>:<line>:<col>
+    // v0.24: rename
+    RenameTo:           string;  // --to <NewName>
+    NoBackup:           Boolean; // --no-backup
   end;
 
 procedure PrintHelp;
@@ -122,6 +126,7 @@ begin
   Writeln('                               [--max-callers N] [--context N] [--no-docs]');
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
+  Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -391,6 +396,13 @@ begin
       Inc(i);
       Result.BenchN := StrToIntDef(ParamStr(i), 20);
     end
+    else if (A = '--to') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RenameTo := ParamStr(i);
+    end
+    else if A = '--no-backup' then
+      Result.NoBackup := True
     else if (Result.Command = 'typeat') and (Result.Position = '') and
             (not A.StartsWith('--')) then
       Result.Position := A
@@ -2428,10 +2440,10 @@ end;
 
 // v0.17: drag-lint slice --qname <Foo.TBar> [--db <path>] [--format text|json]
 // Returns symbol-relevant chunks of the unit:
-//   1. unit-header  — lines 1 through the "interface" keyword line
-//   2. class-decl   — class symbol's start_line..end_line
-//   3. impl-method  — implementation body for each method child
-//   4. unit-trailer — the "end." line
+//   1. unit-header  � lines 1 through the "interface" keyword line
+//   2. class-decl   � class symbol's start_line..end_line
+//   3. impl-method  � implementation body for each method child
+//   4. unit-trailer � the "end." line
 // Text format: chunks separated by "--- <kind> ---" headers.
 // JSON format: {"qname":..., "chunks":[{"kind":..., "start_line":...,
 //               "end_line":..., "text":...}]}
@@ -2799,6 +2811,68 @@ begin
     Result := 1;
 end;
 
+// v0.24: count distinct file paths across edit set.
+function CountDistinctFiles(const AEdits: TArray<TRenameEdit>): Integer;
+var
+  Seen: TDictionary<string, Boolean>;
+  E: TRenameEdit;
+begin
+  Seen := TDictionary<string, Boolean>.Create;
+  try
+    for E in AEdits do
+      Seen.AddOrSetValue(E.FilePath, True);
+    Result := Seen.Count;
+  finally
+    Seen.Free;
+  end;
+end;
+
+// v0.24: drag-lint rename --qname Foo.TBar.Baz --to NewName
+//   [--db PATH] [--dry-run] [--no-backup]
+// Resolves the symbol, finds all caller refs, builds an edit set, then
+// either dry-runs (prints plan) or applies edits in-place with .bak backup.
+function DoRename(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Edits: TArray<TRenameEdit>;
+  FilesTouched: Integer;
+begin
+  if (AArgs.QName = '') or (AArgs.RenameTo = '') then
+  begin
+    Writeln('Usage: drag-lint rename --qname Foo.TBar.Baz --to NewName ' +
+      '[--db PATH] [--dry-run] [--no-backup]');
+    Exit(2);
+  end;
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(1);
+  end;
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  Edits := TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo);
+  if Length(Edits) = 0 then
+  begin
+    Writeln(Format('No edits computed for %s (symbol may not exist)',
+      [AArgs.QName]));
+    Exit(1);
+  end;
+
+  if AArgs.DryRun then
+  begin
+    Writeln(TRenameRefactoring.RenderDryRun(Edits));
+    Writeln(Format('Dry run: %d edits across %d files',
+      [Length(Edits), CountDistinctFiles(Edits)]));
+    Exit(0);
+  end;
+
+  FilesTouched := TRenameRefactoring.Apply(Edits, not AArgs.NoBackup);
+  Writeln(Format('Renamed: %d edits, %d files touched. ' +
+    'Re-run `drag-lint index` to refresh.',
+    [Length(Edits), FilesTouched]));
+  Result := 0;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -2845,6 +2919,8 @@ begin
       Result := DoBenchContext(Args)
     else if Args.Command = 'typeat' then
       Result := DoTypeAt(Args)
+    else if Args.Command = 'rename' then
+      Result := DoRename(Args)
     else if Args.Command = 'diff' then
       Result := DoDiff(Args)
     else if Args.Command = 'lsp' then

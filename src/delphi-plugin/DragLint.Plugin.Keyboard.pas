@@ -51,6 +51,8 @@ type
       var BindingResult: TKeyBindingResult);
     procedure DiagnosticsKey(const Context: IOTAKeyContext; KeyCode: TShortCut;
       var BindingResult: TKeyBindingResult);
+    procedure RenameKey(const Context: IOTAKeyContext; KeyCode: TShortCut;
+      var BindingResult: TKeyBindingResult);
   end;
 
 { IOTANotifier stubs }
@@ -84,6 +86,8 @@ begin
     [ShortCut(Ord('S'), [ssCtrl, ssAlt])], SignatureKey,   nil);
   BindingServices.AddKeyBinding(
     [ShortCut(Ord('D'), [ssCtrl, ssAlt])], DiagnosticsKey, nil);
+  BindingServices.AddKeyBinding(
+    [ShortCut(Ord('R'), [ssCtrl, ssAlt])], RenameKey,      nil);
 end;
 
 function TDragLintKeyboardBinding.GetBindingType: TBindingType;
@@ -132,6 +136,13 @@ procedure TDragLintKeyboardBinding.DiagnosticsKey(const Context: IOTAKeyContext;
 begin
   if not LoadSettings.EnableDiagnostics then Exit;
   InvokeDiagnostics(nil);
+  BindingResult := krHandled;
+end;
+
+procedure TDragLintKeyboardBinding.RenameKey(const Context: IOTAKeyContext;
+  KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
+begin
+  InvokeRename(nil);
   BindingResult := krHandled;
 end;
 
