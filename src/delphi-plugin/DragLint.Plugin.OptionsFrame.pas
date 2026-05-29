@@ -42,6 +42,9 @@ type
     { -- Code Lens group -- }
     FGrpCodeLens:    TGroupBox;
     FCbCodeLens:     TCheckBox;
+    { -- Workspace group -- }
+    FGrpWorkspace:   TGroupBox;
+    FCbWorkspace:    TCheckBox;
     { Browse dialog }
     FOpenDlg:        TOpenDialog;
     procedure BtnBrowseClick(Sender: TObject);
@@ -131,7 +134,7 @@ var
   GW: Integer;  { group box interior width }
 begin
   Width  := 460;
-  Height := 568;
+  Height := 616;
   Y := GM;
 
   { --- Paths --- }
@@ -195,6 +198,12 @@ begin
   GY := GH - 4;
   FCbCodeLens := NewCheck(FGrpCodeLens, LM, GY,
     'Enable inline code lens ([N callers] next to method declarations)', False);
+
+  { --- Workspace --- }
+  FGrpWorkspace := NewGroup('Workspace (v0.34)', GH + CH + 4);
+  GY := GH - 4;
+  FCbWorkspace := NewCheck(FGrpWorkspace, LM, GY,
+    'Enable workspace mode (auto-detect .drag-lint-workspace.json)', False);
 end;
 
 { ---- Load: read registry into controls ---- }
@@ -219,6 +228,7 @@ begin
   FCbHintInline.Checked := S.ShowHintsInline;
   FCbInfoInline.Checked := S.ShowInfoInline;
   FCbCodeLens.Checked   := S.EnableCodeLens;
+  FCbWorkspace.Checked  := S.EnableWorkspaceMode;
 end;
 
 { ---- Save: write controls back to registry ---- }
@@ -242,6 +252,7 @@ begin
   S.ShowHintsInline      := FCbHintInline.Checked;
   S.ShowInfoInline       := FCbInfoInline.Checked;
   S.EnableCodeLens       := FCbCodeLens.Checked;
+  S.EnableWorkspaceMode  := FCbWorkspace.Checked;
   SaveSettings(S);
 end;
 

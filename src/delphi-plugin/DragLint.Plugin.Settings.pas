@@ -19,6 +19,7 @@ type
     ShowInfoInline:       Boolean;
     ScanLibraries:        Boolean;
     EnableCodeLens:       Boolean;
+    EnableWorkspaceMode:  Boolean;
   end;
 
 function LoadSettings: TDragLintSettings;
@@ -51,6 +52,7 @@ begin
   Result.ShowInfoInline       := False;
   Result.ScanLibraries        := False;
   Result.EnableCodeLens       := True;
+  Result.EnableWorkspaceMode  := True;
 end;
 
 function LoadSettings: TDragLintSettings;
@@ -85,6 +87,8 @@ begin
         Result.ScanLibraries       := Reg.ReadInteger('ScanLibraries') <> 0;
       if Reg.ValueExists('EnableCodeLens') then
         Result.EnableCodeLens      := Reg.ReadInteger('EnableCodeLens') <> 0;
+      if Reg.ValueExists('EnableWorkspaceMode') then
+        Result.EnableWorkspaceMode := Reg.ReadInteger('EnableWorkspaceMode') <> 0;
     finally
       Reg.CloseKey;
     end;
@@ -117,6 +121,7 @@ begin
       Reg.WriteInteger('ShowInfoInline',      Ord(ASettings.ShowInfoInline));
       Reg.WriteInteger('ScanLibraries',       Ord(ASettings.ScanLibraries));
       Reg.WriteInteger('EnableCodeLens',      Ord(ASettings.EnableCodeLens));
+      Reg.WriteInteger('EnableWorkspaceMode', Ord(ASettings.EnableWorkspaceMode));
     finally
       Reg.CloseKey;
     end;

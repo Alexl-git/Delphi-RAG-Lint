@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.33.0-alpha';
+  VERSION = '0.34.0-alpha';
 
 function Run: Integer;
 
@@ -46,7 +46,8 @@ uses
   DRagLint.Refactor.TestStub,
   DRagLint.Format.Yadf,
   DRagLint.Diagnostics.CompileCheck,
-  DRagLint.Diagnostics.AstChecks;
+  DRagLint.Diagnostics.AstChecks,
+  DRagLint.Workspace.Config;
 
 type
   TArgs = record
@@ -105,6 +106,8 @@ type
     // v0.27: generate-test + format
     TestFramework:      string;  // --framework dunitx|dunit (default 'dunitx')
     YadfPath:           string;  // --yadf-path <YADF.exe>
+    // v0.34: workspace
+    WorkspaceConfig:    string;  // --config <path>
   end;
 
 procedure PrintHelp;
@@ -147,6 +150,9 @@ begin
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH]');
   Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
+  Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
+  Writeln('  drag-lint workspace status [--config <.drag-lint-workspace.json>]');
+  Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -263,7 +269,8 @@ begin
 
   // Optional subcommand: ParamStr(2) if it doesn't start with '--'.
   i := 2;
-  if ((Result.Command = 'query') or (Result.Command = 'export')) and
+  if ((Result.Command = 'query') or (Result.Command = 'export') or
+      (Result.Command = 'workspace')) and
      (ParamCount >= 2) then
   begin
     A := ParamStr(2);
@@ -440,6 +447,11 @@ begin
       Inc(i);
       Result.YadfPath := ParamStr(i);
     end
+    else if (A = '--config') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.WorkspaceConfig := ParamStr(i);
+    end
     else if (Result.Command = 'typeat') and (Result.Position = '') and
             (not A.StartsWith('--')) then
       Result.Position := A
@@ -451,6 +463,9 @@ begin
       Result.Target := A
     else if (Result.Command = 'format') and (Result.Target = '') and
             (not A.StartsWith('--')) then
+      Result.Target := A
+    else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and
+            (Result.Target = '') and (not A.StartsWith('--')) then
       Result.Target := A
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
@@ -3198,6 +3213,241 @@ begin
   Result := 0;
 end;
 
+// v0.34: drag-lint workspace index|status|add [--config PATH]
+// index: loads workspace config, indexes each project into the shared DB.
+// status: lists projects and file counts in the shared DB.
+// add <projfile>: appends a project entry and saves.
+function DoWorkspace(const AArgs: TArgs): Integer;
+var
+  CfgPath: string;
+  Cfg: TWorkspaceConfig;
+  SharedDbPath: string;
+  P: TWorkspaceProject;
+  CmdLine: string;
+  CmdLineBuf: array[0..2047] of WideChar;
+  SA: TSecurityAttributes;
+  SD: TSecurityDescriptor;
+  ReadPipe, WritePipe: THandle;
+  SI: TStartupInfoW;
+  PI: TProcessInformation;
+  Buffer: array[0..4095] of AnsiChar;
+  BytesRead: DWORD;
+  NewProj: TWorkspaceProject;
+
+  function SpawnSync(const ACmd: string): Integer;
+  begin
+    FillChar(SI, SizeOf(SI), 0);
+    SI.cb := SizeOf(SI);
+    SI.dwFlags := STARTF_USESTDHANDLES;
+    SI.hStdOutput := WritePipe;
+    SI.hStdError  := WritePipe;
+    SI.hStdInput  := INVALID_HANDLE_VALUE;
+    FillChar(PI, SizeOf(PI), 0);
+    StrPCopy(CmdLineBuf, ACmd);
+    if not CreateProcessW(nil, CmdLineBuf, nil, nil, True,
+      CREATE_NO_WINDOW, nil, nil, SI, PI) then
+    begin
+      Writeln('ERROR: failed to spawn: ', ACmd);
+      Result := -1;
+      Exit;
+    end;
+    // Drain stdout/stderr while child runs
+    CloseHandle(WritePipe);
+    WritePipe := INVALID_HANDLE_VALUE;
+    repeat
+      if ReadFile(ReadPipe, Buffer, SizeOf(Buffer) - 1, BytesRead, nil) then
+      begin
+        Buffer[BytesRead] := #0;
+        Write(AnsiString(Buffer));
+      end
+      else
+        Break;
+    until BytesRead = 0;
+    WaitForSingleObject(PI.hProcess, INFINITE);
+    var ExitCodeVal: DWORD := 0;
+    GetExitCodeProcess(PI.hProcess, ExitCodeVal);
+    Result := Integer(ExitCodeVal);
+    CloseHandle(PI.hProcess);
+    CloseHandle(PI.hThread);
+  end;
+
+  // Re-create pipes for each project spawn
+  procedure CreatePipes;
+  begin
+    FillChar(SA, SizeOf(SA), 0);
+    SA.nLength := SizeOf(SA);
+    SA.bInheritHandle := True;
+    InitializeSecurityDescriptor(@SD, SECURITY_DESCRIPTOR_REVISION);
+    SetSecurityDescriptorDacl(@SD, True, nil, False);
+    SA.lpSecurityDescriptor := @SD;
+    CreatePipe(ReadPipe, WritePipe, @SA, 0);
+    SetHandleInformation(ReadPipe, HANDLE_FLAG_INHERIT, 0);
+  end;
+
+var
+  ExeName: string;
+  AbsProjPath: string;
+  ProjectCount, SuccessCount: Integer;
+  Conn: TFDConnection;
+  Q: TFDQuery;
+  FileCount: Integer;
+  PathPrefix: string;
+begin
+  // --- Locate workspace config ---
+  CfgPath := AArgs.WorkspaceConfig;
+  if CfgPath = '' then
+  begin
+    // Try current dir and parents
+    CfgPath := TWorkspaceConfigIO.FindWorkspaceRoot(GetCurrentDir);
+    if CfgPath <> '' then
+      CfgPath := TPath.Combine(CfgPath, WORKSPACE_FILENAME)
+    else
+    begin
+      Writeln('ERROR: .drag-lint-workspace.json not found. ' +
+        'Use --config <path> or run from a workspace root.');
+      Exit(2);
+    end;
+  end;
+  if not TFile.Exists(CfgPath) then
+  begin
+    Writeln('ERROR: workspace config not found: ', CfgPath);
+    Exit(2);
+  end;
+
+  // --- workspace add ---
+  if AArgs.SubCommand = 'add' then
+  begin
+    if AArgs.Target = '' then
+    begin
+      Writeln('Usage: drag-lint workspace add <projfile> [--config PATH]');
+      Exit(2);
+    end;
+    Cfg := TWorkspaceConfigIO.LoadFromFile(CfgPath);
+    NewProj := Default(TWorkspaceProject);
+    NewProj.Path := AArgs.Target;
+    NewProj.ScanDir := TDirectory.Exists(
+      TPath.Combine(Cfg.RootDir, AArgs.Target));
+    SetLength(Cfg.Projects, Length(Cfg.Projects) + 1);
+    Cfg.Projects[High(Cfg.Projects)] := NewProj;
+    TWorkspaceConfigIO.SaveToFile(Cfg, CfgPath);
+    Writeln(Format('Added project "%s" to workspace config: %s',
+      [AArgs.Target, CfgPath]));
+    Exit(0);
+  end;
+
+  // --- workspace status ---
+  if AArgs.SubCommand = 'status' then
+  begin
+    Cfg := TWorkspaceConfigIO.LoadFromFile(CfgPath);
+    SharedDbPath := TPath.Combine(Cfg.RootDir, Cfg.SharedDb);
+    Writeln(Format('Workspace: %s', [Cfg.Name]));
+    Writeln(Format('Config:    %s', [CfgPath]));
+    Writeln(Format('SharedDB:  %s', [SharedDbPath]));
+    Writeln(Format('Projects:  %d', [Length(Cfg.Projects)]));
+    Writeln('');
+    if not TFile.Exists(SharedDbPath) then
+    begin
+      Writeln('(shared DB not yet created -- run "workspace index" first)');
+      for P in Cfg.Projects do
+        Writeln(Format('  %s  [scan_dir=%s]',
+          [P.Path, BoolToStr(P.ScanDir, True)]));
+      Exit(0);
+    end;
+    Conn := TFDConnection.Create(nil);
+    Q    := TFDQuery.Create(nil);
+    try
+      Conn.DriverName := 'SQLite';
+      Conn.Params.Values['Database'] := SharedDbPath;
+      Conn.LoginPrompt := False;
+      Conn.Connected := True;
+      Q.Connection := Conn;
+      for P in Cfg.Projects do
+      begin
+        AbsProjPath := TPath.GetFullPath(
+          TPath.Combine(Cfg.RootDir, P.Path));
+        PathPrefix := IncludeTrailingPathDelimiter(AbsProjPath);
+        Q.Close;
+        Q.SQL.Text :=
+          'SELECT COUNT(*) AS cnt FROM files WHERE path LIKE :prefix';
+        Q.ParamByName('prefix').AsString := PathPrefix + '%';
+        Q.Open;
+        FileCount := 0;
+        if not Q.IsEmpty then
+          FileCount := Q.FieldByName('cnt').AsInteger;
+        Writeln(Format('  %-50s  %d file(s)',
+          [P.Path, FileCount]));
+      end;
+    finally
+      Q.Free;
+      Conn.Free;
+    end;
+    Exit(0);
+  end;
+
+  // --- workspace index ---
+  if (AArgs.SubCommand <> 'index') and (AArgs.SubCommand <> '') then
+  begin
+    Writeln('ERROR: unknown workspace subcommand: ', AArgs.SubCommand);
+    Writeln('Available: index, status, add');
+    Exit(2);
+  end;
+
+  Cfg := TWorkspaceConfigIO.LoadFromFile(CfgPath);
+  SharedDbPath := TPath.Combine(Cfg.RootDir, Cfg.SharedDb);
+
+  ExeName := ParamStr(0);  // path to this executable
+
+  Writeln(Format('Workspace: %s', [Cfg.Name]));
+  Writeln(Format('SharedDB:  %s', [SharedDbPath]));
+  Writeln(Format('Projects:  %d', [Length(Cfg.Projects)]));
+
+  ProjectCount := Length(Cfg.Projects);
+  SuccessCount := 0;
+  ReadPipe  := INVALID_HANDLE_VALUE;
+  WritePipe := INVALID_HANDLE_VALUE;
+
+  for P in Cfg.Projects do
+  begin
+    AbsProjPath := TPath.GetFullPath(TPath.Combine(Cfg.RootDir, P.Path));
+    Writeln('');
+    Writeln(Format('[%s]', [P.Path]));
+
+    if P.ScanDir then
+      CmdLine := Format('"%s" index "%s" --db "%s"',
+        [ExeName, AbsProjPath, SharedDbPath])
+    else
+      CmdLine := Format('"%s" index --project "%s" --db "%s"',
+        [ExeName, AbsProjPath, SharedDbPath]);
+
+    Writeln(CmdLine);
+    CreatePipes;
+    var EC := SpawnSync(CmdLine);
+    if ReadPipe <> INVALID_HANDLE_VALUE then
+    begin
+      CloseHandle(ReadPipe);
+      ReadPipe := INVALID_HANDLE_VALUE;
+    end;
+    if WritePipe <> INVALID_HANDLE_VALUE then
+    begin
+      CloseHandle(WritePipe);
+      WritePipe := INVALID_HANDLE_VALUE;
+    end;
+    if EC = 0 then
+      Inc(SuccessCount)
+    else
+      Writeln(Format('WARNING: index returned exit code %d for: %s', [EC, P.Path]));
+  end;
+
+  Writeln('');
+  Writeln(Format('Done: %d/%d projects indexed into %s',
+    [SuccessCount, ProjectCount, SharedDbPath]));
+
+  if SuccessCount = ProjectCount then
+    Result := 0
+  else
+    Result := 1;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -3260,6 +3510,8 @@ begin
       Result := DoCheckAst(Args)
     else if Args.Command = 'diff' then
       Result := DoDiff(Args)
+    else if Args.Command = 'workspace' then
+      Result := DoWorkspace(Args)
     else if Args.Command = 'lsp' then
     begin
       var LspDb := '';

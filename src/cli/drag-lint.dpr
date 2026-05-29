@@ -33,6 +33,7 @@ uses
   DRagLint.Format.Yadf in '..\refactor\DRagLint.Format.Yadf.pas',
   DRagLint.Diagnostics.CompileCheck in '..\diagnostics\DRagLint.Diagnostics.CompileCheck.pas',
   DRagLint.Diagnostics.AstChecks in '..\diagnostics\DRagLint.Diagnostics.AstChecks.pas',
+  DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

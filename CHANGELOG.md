@@ -3,6 +3,42 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.34.0-alpha -- 2026-05-29
+
+### Added
+
+- **Workspace mode** (`drag-lint workspace index|status|add`): a
+  `.drag-lint-workspace.json` file at a repo root lists multiple projects
+  (`path` + optional `scan_dir: true`) and a `shared_db` path. All projects
+  index into one shared SQLite, so symbols from PACKAGE, SERVER, CLIENT, and
+  COMMON are all queryable together.
+
+  - `workspace index [--config PATH]` -- indexes every listed project into
+    the shared DB. Discovers config by walking up from the current directory.
+  - `workspace status [--config PATH]` -- lists projects with per-project
+    file counts from the shared DB.
+  - `workspace add <projfile> [--config PATH]` -- appends a new project entry
+    and saves.
+
+- **Plugin workspace detection**: `TDragLintProjectNotifier.SpawnIndexer`
+  now walks up from the active `.dproj` directory looking for
+  `.drag-lint-workspace.json`. When found and `EnableWorkspaceMode` is True
+  (default), it spawns `workspace index --config` instead of a single-project
+  index, and uses the shared DB path for the session.
+
+- **New setting `EnableWorkspaceMode`** (default True): available in both
+  Tools > drag-lint > Settings and Tools > Options > drag-lint.
+
+- **New module** `DRagLint.Workspace.Config` (`src/workspace/`):
+  `TWorkspaceConfig` record, `TWorkspaceConfigIO.LoadFromFile`,
+  `SaveToFile`, `FindWorkspaceRoot`.
+
+- **T59** -- workspace config load/save round-trip.
+- **T60** -- `drag-lint workspace index` on a 1-project fixture creates
+  the shared DB.
+
+---
+
 ## v0.33.0-alpha -- 2026-05-29
 
 ### Added

@@ -6,7 +6,14 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.33-alpha. Early work in progress -- expect breaking changes.**
+**v0.34-alpha. Early work in progress -- expect breaking changes.**
+v0.34 adds **workspace mode**: a `.drag-lint-workspace.json` at the repo root
+lists multiple projects (PACKAGE / SERVER / CLIENT / COMMON) that all index
+into a single shared SQLite. CLI: `drag-lint workspace index|status|add`. The
+Delphi plugin auto-detects the workspace config by walking up from the active
+`.dproj` and switches to workspace indexing automatically (`EnableWorkspaceMode`
+setting, default True).
+
 v0.33 adds two navigation forms: **Find Usages** (`Ctrl+Alt+F`) prompts for
 a symbol name, shells `drag-lint query find-callers`, and shows callers
 grouped by file in a stay-on-top TTreeView; double-click jumps the editor.

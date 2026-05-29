@@ -55,6 +55,7 @@ contains
   DragLint.Plugin.OptionsFrame in 'DragLint.Plugin.OptionsFrame.pas',
   DragLint.Plugin.Options in 'DragLint.Plugin.Options.pas',
   DragLint.Plugin.UsagesForm in 'DragLint.Plugin.UsagesForm.pas',
-  DragLint.Plugin.SymbolSearchForm in 'DragLint.Plugin.SymbolSearchForm.pas';
+  DragLint.Plugin.SymbolSearchForm in 'DragLint.Plugin.SymbolSearchForm.pas',
+  DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas';
 
 end.

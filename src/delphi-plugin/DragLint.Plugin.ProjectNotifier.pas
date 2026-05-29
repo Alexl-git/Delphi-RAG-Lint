@@ -3,9 +3,10 @@ unit DragLint.Plugin.ProjectNotifier;
 interface
 
 uses
-  System.SysUtils, System.Classes,
+  System.SysUtils, System.Classes, System.IOUtils,
   ToolsAPI,
-  DragLint.Plugin.Settings;
+  DragLint.Plugin.Settings,
+  DRagLint.Workspace.Config;
 
 type
   TDragLintProjectNotifier = class(TInterfacedObject, IOTAIDENotifier)
@@ -75,11 +76,45 @@ var
   PI: TProcessInformation;
   CmdLineBuf: array[0..2047] of WideChar;
   Cfg: TDragLintSettings;
+  WsRoot: string;
+  WsCfgPath: string;
+  WsCfg: TWorkspaceConfig;
+  WsDbPath: string;
 begin
   FillChar(SI, SizeOf(SI), 0);
   SI.cb := SizeOf(SI);
   FillChar(PI, SizeOf(PI), 0);
   Cfg := LoadSettings;
+
+  // v0.34: workspace mode -- if workspace config found walking up from
+  // the project dir, use "workspace index --config" instead.
+  if Cfg.EnableWorkspaceMode then
+  begin
+    WsRoot := TWorkspaceConfigIO.FindWorkspaceRoot(AProjDir);
+    if WsRoot <> '' then
+    begin
+      WsCfgPath := TPath.Combine(WsRoot, WORKSPACE_FILENAME);
+      try
+        WsCfg := TWorkspaceConfigIO.LoadFromFile(WsCfgPath);
+        WsDbPath := TPath.Combine(WsRoot, WsCfg.SharedDb);
+        CmdLine := Format('"%s" workspace index --config "%s"',
+          [AExePath, WsCfgPath]);
+        // Also update the session DB reference for save-notifier
+        GLastProjectDb := WsDbPath;
+        StrPCopy(CmdLineBuf, CmdLine);
+        if CreateProcessW(nil, CmdLineBuf, nil, nil, False,
+          CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
+        begin
+          CloseHandle(PI.hProcess);
+          CloseHandle(PI.hThread);
+        end;
+        Exit;
+      except
+        // Malformed workspace config: fall through to per-project index
+      end;
+    end;
+  end;
+
   if Cfg.ScanLibraries then
     CmdLine := Format('"%s" index "%s" --scan-libraries --db "%s"',
       [AExePath, AProjDir, ADbPath])

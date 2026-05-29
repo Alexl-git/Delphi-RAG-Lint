@@ -1,0 +1,6 @@
+{
+  "id": "parser-error",
+  "severity": "error",
+  "message": "Syntax error: parser failed to recognize this construct",
+  "warn_capture": "warn"
+}
