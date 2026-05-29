@@ -1,0 +1,6 @@
+{
+  "id": "goto-statement",
+  "severity": "warning",
+  "message": "goto statement is generally considered harmful",
+  "warn_capture": "warn"
+}

@@ -1,0 +1,6 @@
+{
+  "id": "string-equality-comparison",
+  "severity": "info",
+  "message": "'=' compares strings case-sensitively. Use SameText for case-insensitive comparison.",
+  "warn_capture": "warn"
+}
