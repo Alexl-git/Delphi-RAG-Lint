@@ -25,7 +25,8 @@ uses
   Vcl.Menus,
   ToolsAPI,
   DragLint.Plugin.Settings,
-  DragLint.Plugin.Editor;
+  DragLint.Plugin.Editor,
+  DragLint.Plugin.EditViewNotifier;
 
 { ---- IOTAKeyboardBinding implementation ---- }
 
@@ -52,6 +53,8 @@ type
     procedure DiagnosticsKey(const Context: IOTAKeyContext; KeyCode: TShortCut;
       var BindingResult: TKeyBindingResult);
     procedure RenameKey(const Context: IOTAKeyContext; KeyCode: TShortCut;
+      var BindingResult: TKeyBindingResult);
+    procedure InlineInfoKey(const Context: IOTAKeyContext; KeyCode: TShortCut;
       var BindingResult: TKeyBindingResult);
   end;
 
@@ -88,6 +91,8 @@ begin
     [ShortCut(Ord('D'), [ssCtrl, ssAlt])], DiagnosticsKey, nil);
   BindingServices.AddKeyBinding(
     [ShortCut(Ord('R'), [ssCtrl, ssAlt])], RenameKey,      nil);
+  BindingServices.AddKeyBinding(
+    [ShortCut(Ord('I'), [ssCtrl, ssAlt])], InlineInfoKey, nil);
 end;
 
 function TDragLintKeyboardBinding.GetBindingType: TBindingType;
@@ -143,6 +148,14 @@ procedure TDragLintKeyboardBinding.RenameKey(const Context: IOTAKeyContext;
   KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
 begin
   InvokeRename(nil);
+  BindingResult := krHandled;
+end;
+
+procedure TDragLintKeyboardBinding.InlineInfoKey(const Context: IOTAKeyContext;
+  KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
+begin
+  if not LoadSettings.EnableInlineMarkers then Exit;
+  InvokeInlineInfo;
   BindingResult := krHandled;
 end;
 
