@@ -368,7 +368,47 @@ Or via a launch config that connects to the LSP server:
   only on `didSave` (matching the indexer's file-based model). v0.21 (with
   OTAPI incremental updates) will enable fine-grained incremental diagnostics.
 - Completion uses prefix-LIKE matching (no fuzzy yet; defer to v0.21+).
-- v0.21 will add OTAPI integration for in-IDE plugin support.
+- v0.21 (below) will add OTAPI integration for in-IDE plugin support.
+
+## Delphi IDE plugin (v0.21)
+
+v0.21 brings a design-time OTAPI package for RAD Studio 13 Florence that surfaces
+drag-lint LSP capabilities directly in the IDE. The plugin registers a Tools menu
+with four entries: Hover at Cursor, Show Completion, Show Signature Help, Run Diagnostics.
+Invocations are synchronous (modal dialogs) in v0.21; custom popups and keystroke
+bindings move to v0.22 after OTAPI event wiring is finalized.
+
+### Build & Install
+
+See [`src/delphi-plugin/README.md`](src/delphi-plugin/README.md) for full instructions.
+
+Quick summary:
+```bash
+cd src/delphi-plugin
+cmd.exe /c "call ""C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"" && msbuild dclDragLintWizard.dproj /p:Platform=Win64 /p:Config=Debug /v:minimal"
+# Output: build/v021/dclDragLintWizard.bpl
+```
+
+1. Ensure `drag-lint.exe` is on your PATH.
+2. In RAD Studio 13: **Component → Install Packages... → Add** → browse to the .bpl.
+3. Restart the IDE.
+4. Tools menu now shows **drag-lint** with four entries.
+
+### Architecture
+
+- **LSP client (`TDragLintLspClient`)** — spawns `drag-lint.exe lsp` as a persistent
+  subprocess and round-trips JSON-RPC 2.0 requests over anonymous pipes.
+- **OTAPI integration** — `IOTAWizard` registration hooks into IDE startup;
+  menu items route through `IOTAActionServices` and message dialogs.
+- **Diagnostics routing** — `publishDiagnostics` notifications post to the
+  Messages pane via `IOTAMessageServices.AddToolMessage` (thread-safe).
+
+### Limitations (deferred to v0.22)
+
+- No custom popup forms — results appear in ShowMessage dialogs.
+- No keystroke bindings — invocation is Tools menu only.
+- No index auto-build — assumes you've run `drag-lint index` already.
+- No incremental updates — diagnostics run on menu-click, not on every keystroke.
 
 ## Exit codes
 
