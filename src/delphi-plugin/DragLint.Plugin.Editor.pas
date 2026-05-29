@@ -13,12 +13,19 @@ uses
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
 
+{ Invoke* procedures are also called by the keyboard binding unit }
+procedure InvokeHover(Sender: TObject);
+procedure InvokeCompletion(Sender: TObject);
+procedure InvokeSignatureHelp(Sender: TObject);
+procedure InvokeDiagnostics(Sender: TObject);
+
 implementation
 
 uses
   System.Generics.Collections,
   Vcl.Forms,
-  Winapi.Windows;
+  Winapi.Windows,
+  DragLint.Plugin.Keyboard;
 
 { ---- TMenuActionWrapper ---- }
 { OnClick is TNotifyEvent (method pointer); plain procedures cannot be
@@ -413,10 +420,12 @@ begin
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
 
   RegisterProjectNotifier;
+  RegisterDragLintKeystrokes;
 end;
 
 procedure UnregisterDragLintMenu;
 begin
+  UnregisterDragLintKeystrokes;
   UnregisterProjectNotifier;
 
   { Stop LSP client first }
