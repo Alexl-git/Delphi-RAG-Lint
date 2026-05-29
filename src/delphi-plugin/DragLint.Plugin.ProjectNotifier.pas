@@ -12,6 +12,7 @@ type
   private
     class procedure SpawnIndexer(const AExePath, AProjDir,
       ADbPath: string); static;
+    class function ResolveExePath(const ACfgExePath: string): string; static;
   public
     { IOTANotifier }
     procedure AfterSave;
@@ -32,7 +33,8 @@ procedure UnregisterProjectNotifier;
 implementation
 
 uses
-  Winapi.Windows;
+  Winapi.Windows,
+  DragLint.Plugin.SaveNotifier;
 
 { ---- IOTANotifier stubs ---- }
 
@@ -87,19 +89,64 @@ begin
   end;
 end;
 
+class function TDragLintProjectNotifier.ResolveExePath(
+  const ACfgExePath: string): string;
+begin
+  Result := ACfgExePath;
+  if (Result = '') or (Result = 'drag-lint.exe') then
+  begin
+    Result := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+    if not FileExists(Result) then
+      Result := 'drag-lint.exe';
+  end;
+end;
+
 { ---- FileNotification ---- }
+
+const
+  REINDEX_EXTS: array[0..4] of string = (
+    '.pas', '.dpr', '.dpk', '.inc', '.dfm');
+
+function IsDelphiSourceExt(const AExt: string): Boolean;
+var
+  I:        Integer;
+  LowerExt: string;
+begin
+  LowerExt := LowerCase(AExt);
+  Result   := False;
+  for I := Low(REINDEX_EXTS) to High(REINDEX_EXTS) do
+    if REINDEX_EXTS[I] = LowerExt then
+    begin
+      Result := True;
+      Break;
+    end;
+end;
 
 procedure TDragLintProjectNotifier.FileNotification(
   NotifyCode: TOTAFileNotification;
   const FileName: string; var Cancel: Boolean);
 var
-  ProjDir: string;
-  DbPath: string;
-  ExePath: string;
+  ProjDir:  string;
+  DbPath:   string;
+  ExePath:  string;
   ProjName: string;
-  Cfg: TDragLintSettings;
+  Cfg:      TDragLintSettings;
+  Module:   IOTAModule;
+  ModSvcs:  IOTAModuleServices;
 begin
   if NotifyCode <> ofnFileOpened then Exit;
+
+  { --- Register a save-notifier on every Delphi source file that opens --- }
+  if IsDelphiSourceExt(ExtractFileExt(FileName)) then
+  begin
+    if Supports(BorlandIDEServices, IOTAModuleServices, ModSvcs) then
+    begin
+      Module := ModSvcs.FindModule(FileName);
+      RegisterSaveNotifierForModule(Module);
+    end;
+  end;
+
+  { --- Only auto-index when a .dproj is opened --- }
   if LowerCase(ExtractFileExt(FileName)) <> '.dproj' then Exit;
 
   Cfg := LoadSettings;
@@ -110,17 +157,11 @@ begin
   ProjDir  := ExtractFilePath(FileName);
   ProjName := ChangeFileExt(ExtractFileName(FileName), '');
 
-  { Resolve DB path from template }
+  { Resolve DB path from template and cache it for later save events }
   DbPath := ResolveDbPath(Cfg.DbPathTemplate, ProjDir);
+  GLastProjectDb := DbPath;
 
-  { Resolve drag-lint.exe: use configured path, then next to BPL, then PATH }
-  ExePath := Cfg.ExePath;
-  if (ExePath = '') or (ExePath = 'drag-lint.exe') then
-  begin
-    ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-    if not FileExists(ExePath) then
-      ExePath := 'drag-lint.exe';
-  end;
+  ExePath := ResolveExePath(Cfg.ExePath);
 
   { Post "indexing..." message to IDE Messages pane from main thread }
   TThread.Queue(nil,
@@ -140,7 +181,7 @@ end;
 
 var
   GNotifierIndex: Integer = -1;
-  GNotifier: TDragLintProjectNotifier = nil;
+  GNotifier:      TDragLintProjectNotifier = nil;
 
 procedure RegisterProjectNotifier;
 var

@@ -51,7 +51,7 @@ var
   Form: TForm;
   Settings: TDragLintSettings;
   edExe, edDb: TEdit;
-  cbAutoIndex, cbHover, cbCompletion, cbSignature, cbDiag: TCheckBox;
+  cbAutoIndex, cbAutoReindex, cbHover, cbCompletion, cbSignature, cbDiag: TCheckBox;
   btnOK, btnCancel, btnBrowse: TButton;
   OpenDlg: TOpenDialog;
   BrowseHandler: TBrowseHandler;
@@ -99,7 +99,7 @@ begin
     Form.BorderStyle := bsDialog;
     Form.Position := poScreenCenter;
     Form.ClientWidth := 480;
-    Form.ClientHeight := 360;
+    Form.ClientHeight := 384;
 
     Y := 16;
     AddLabel('drag-lint.exe path:', Y); Inc(Y, 20);
@@ -126,9 +126,11 @@ begin
     Inc(Y, 32);
 
     Inc(Y, 8);
-    cbAutoIndex  := AddCheck(Y, 'Auto-index project when .dproj opens',
+    cbAutoIndex   := AddCheck(Y, 'Auto-index project when .dproj opens',
       Settings.AutoIndex);  Inc(Y, 24);
-    cbHover      := AddCheck(Y, 'Enable Hover at Cursor',
+    cbAutoReindex := AddCheck(Y, 'Auto-reindex on file save (.pas, .dpr, .dfm)',
+      Settings.AutoReindexOnSave);  Inc(Y, 24);
+    cbHover       := AddCheck(Y, 'Enable Hover at Cursor',
       Settings.EnableHover);  Inc(Y, 24);
     cbCompletion := AddCheck(Y, 'Enable Show Completion',
       Settings.EnableCompletion);  Inc(Y, 24);
@@ -159,8 +161,9 @@ begin
     begin
       Settings.ExePath          := edExe.Text;
       Settings.DbPathTemplate   := edDb.Text;
-      Settings.AutoIndex        := cbAutoIndex.Checked;
-      Settings.EnableHover      := cbHover.Checked;
+      Settings.AutoIndex           := cbAutoIndex.Checked;
+      Settings.AutoReindexOnSave   := cbAutoReindex.Checked;
+      Settings.EnableHover         := cbHover.Checked;
       Settings.EnableCompletion := cbCompletion.Checked;
       Settings.EnableSignature  := cbSignature.Checked;
       Settings.EnableDiagnostics := cbDiag.Checked;
