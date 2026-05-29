@@ -6,17 +6,27 @@ uses
   System.SysUtils, System.Classes, System.JSON,
   Vcl.Menus, Vcl.Dialogs,
   ToolsAPI,
-  DragLint.Plugin.LspClient;
+  DragLint.Plugin.LspClient,
+  DragLint.Plugin.ProjectNotifier,
+  DragLint.Plugin.SettingsForm,
+  DragLint.Plugin.HoverForm;
 
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
+
+{ Invoke* procedures are also called by the keyboard binding unit }
+procedure InvokeHover(Sender: TObject);
+procedure InvokeCompletion(Sender: TObject);
+procedure InvokeSignatureHelp(Sender: TObject);
+procedure InvokeDiagnostics(Sender: TObject);
 
 implementation
 
 uses
   System.Generics.Collections,
   Vcl.Forms,
-  Winapi.Windows;
+  Winapi.Windows,
+  DragLint.Plugin.Keyboard;
 
 { ---- TMenuActionWrapper ---- }
 { OnClick is TNotifyEvent (method pointer); plain procedures cannot be
@@ -234,11 +244,14 @@ end;
 
 procedure InvokeHover(Sender: TObject);
 var
-  Client: TDragLintLspClient;
-  Uri: string;
-  Line, Col: Integer;
-  Params: TJSONObject;
-  Resp: TJSONValue;
+  Client:      TDragLintLspClient;
+  Uri:         string;
+  Line, Col:   Integer;
+  Params:      TJSONObject;
+  Resp:        TJSONValue;
+  HoverText:   string;
+  ContentsVal: TJSONValue;
+  P:           TPoint;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
@@ -260,8 +273,28 @@ begin
     ShowMessage('drag-lint hover: request timed out or no result.');
     Exit;
   end;
+
   try
-    ShowMessage('drag-lint hover:'#13#10 + Resp.Format(2));
+    // Extract text from LSP hover response.
+    // Supported shapes:
+    //   contents: object with "value" field (MarkupContent)
+    //   contents: plain string
+    // Falls back to formatted JSON if extraction fails.
+    HoverText := '';
+    if (Resp is TJSONObject) and
+       (Resp as TJSONObject).TryGetValue<TJSONValue>('contents', ContentsVal) then
+    begin
+      if ContentsVal is TJSONObject then
+        (ContentsVal as TJSONObject).TryGetValue<string>('value', HoverText)
+      else if ContentsVal is TJSONString then
+        HoverText := (ContentsVal as TJSONString).Value;
+    end;
+
+    if HoverText = '' then
+      HoverText := Resp.Format(2);
+
+    GetCursorPos(P);
+    ShowDragLintHover(HoverText, P.X, P.Y + 20);
   finally
     Resp.Free;
   end;
@@ -369,6 +402,11 @@ begin
     'Results will appear in the Messages pane.');
 end;
 
+procedure InvokeSettings(Sender: TObject);
+begin
+  ShowSettingsDialog;
+end;
+
 { ---- menu registration ---- }
 
 function AddWrappedItem(AParent: TMenuItem; const ACaption: string;
@@ -399,14 +437,21 @@ begin
   Services.AddActionMenu('ToolsMenu', nil, RootMenu, True, True);
   GMenuItems.Add(RootMenu);
 
-  AddWrappedItem(RootMenu, 'Hover at Cursor',      InvokeHover);
-  AddWrappedItem(RootMenu, 'Show Completion',       InvokeCompletion);
-  AddWrappedItem(RootMenu, 'Show Signature Help',   InvokeSignatureHelp);
-  AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)', InvokeDiagnostics);
+  AddWrappedItem(RootMenu, 'Hover at Cursor',           InvokeHover);
+  AddWrappedItem(RootMenu, 'Show Completion',            InvokeCompletion);
+  AddWrappedItem(RootMenu, 'Show Signature Help',        InvokeSignatureHelp);
+  AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)',  InvokeDiagnostics);
+  AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
+
+  RegisterProjectNotifier;
+  RegisterDragLintKeystrokes;
 end;
 
 procedure UnregisterDragLintMenu;
 begin
+  UnregisterDragLintKeystrokes;
+  UnregisterProjectNotifier;
+
   { Stop LSP client first }
   if GLspClient <> nil then
   begin

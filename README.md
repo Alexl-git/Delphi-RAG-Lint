@@ -410,6 +410,28 @@ cmd.exe /c "call ""C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat
 - No index auto-build — assumes you've run `drag-lint index` already.
 - No incremental updates — diagnostics run on menu-click, not on every keystroke.
 
+## IDE Polish (v0.22)
+
+v0.22 builds on v0.21's IDE integration with four polish features moving the
+plugin from demo-quality to daily-driver:
+
+- **Auto-index on project open** — when a `.dproj` opens in the IDE, the
+  plugin asynchronously spawns `drag-lint.exe index` to refresh the symbol
+  database. Togglable via **Tools > drag-lint > Settings...**.
+- **Settings UI** — registry-backed configuration dialog (no .dfm required)
+  with seven fields: ExePath, DbPathTemplate (use `<projdir>` placeholder),
+  and five feature toggles (AutoIndex, EnableHover, EnableCompletion,
+  EnableSignature, EnableDiagnostics).
+- **Keystroke bindings** — `Ctrl+Alt+H` (Hover), `Ctrl+Alt+C` (Completion),
+  `Ctrl+Alt+S` (Signature), `Ctrl+Alt+D` (Diagnostics) via
+  `IOTAKeyboardServices.AddKeyboardBinding`. Each respects its Enable* setting.
+- **Custom hover popup** — borderless `fsStayOnTop` form with TMemo content
+  (Consolas 9pt), auto-sized up to 600×400, positioned below the cursor,
+  auto-closes on ESC / click-outside / 30s timeout.
+
+Completion and signature help custom popups, plus incremental `didChange`
+editor updates, move to v0.23. Full spec: [2026-05-29 IDE polish design](docs/superpowers/specs/2026-05-29-v022-ide-polish-design.md).
+
 ## Exit codes
 
 | Code | Meaning |

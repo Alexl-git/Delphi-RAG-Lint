@@ -75,6 +75,11 @@
         <DCCReference Include="DragLint.Plugin.Wizard.pas"/>
         <DCCReference Include="DragLint.Plugin.LspClient.pas"/>
         <DCCReference Include="DragLint.Plugin.Editor.pas"/>
+        <DCCReference Include="DragLint.Plugin.ProjectNotifier.pas"/>
+        <DCCReference Include="DragLint.Plugin.Settings.pas"/>
+        <DCCReference Include="DragLint.Plugin.SettingsForm.pas"/>
+        <DCCReference Include="DragLint.Plugin.Keyboard.pas"/>
+        <DCCReference Include="DragLint.Plugin.HoverForm.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
