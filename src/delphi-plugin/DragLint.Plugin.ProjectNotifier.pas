@@ -4,7 +4,8 @@ interface
 
 uses
   System.SysUtils, System.Classes,
-  ToolsAPI;
+  ToolsAPI,
+  DragLint.Plugin.Settings;
 
 type
   TDragLintProjectNotifier = class(TInterfacedObject, IOTAIDENotifier)
@@ -96,18 +97,30 @@ var
   DbPath: string;
   ExePath: string;
   ProjName: string;
+  Cfg: TDragLintSettings;
 begin
   if NotifyCode <> ofnFileOpened then Exit;
   if LowerCase(ExtractFileExt(FileName)) <> '.dproj' then Exit;
 
+  Cfg := LoadSettings;
+
+  { Honor AutoIndex setting — skip spawning when disabled }
+  if not Cfg.AutoIndex then Exit;
+
   ProjDir  := ExtractFilePath(FileName);
-  DbPath   := ProjDir + '.drag-lint.sqlite';
   ProjName := ChangeFileExt(ExtractFileName(FileName), '');
 
-  { Resolve drag-lint.exe: next to BPL, else rely on PATH }
-  ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then
-    ExePath := 'drag-lint.exe';
+  { Resolve DB path from template }
+  DbPath := ResolveDbPath(Cfg.DbPathTemplate, ProjDir);
+
+  { Resolve drag-lint.exe: use configured path, then next to BPL, then PATH }
+  ExePath := Cfg.ExePath;
+  if (ExePath = '') or (ExePath = 'drag-lint.exe') then
+  begin
+    ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+    if not FileExists(ExePath) then
+      ExePath := 'drag-lint.exe';
+  end;
 
   { Post "indexing..." message to IDE Messages pane from main thread }
   TThread.Queue(nil,

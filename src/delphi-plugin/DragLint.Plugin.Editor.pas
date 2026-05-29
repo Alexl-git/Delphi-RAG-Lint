@@ -7,7 +7,8 @@ uses
   Vcl.Menus, Vcl.Dialogs,
   ToolsAPI,
   DragLint.Plugin.LspClient,
-  DragLint.Plugin.ProjectNotifier;
+  DragLint.Plugin.ProjectNotifier,
+  DragLint.Plugin.SettingsForm;
 
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
@@ -370,6 +371,11 @@ begin
     'Results will appear in the Messages pane.');
 end;
 
+procedure InvokeSettings(Sender: TObject);
+begin
+  ShowSettingsDialog;
+end;
+
 { ---- menu registration ---- }
 
 function AddWrappedItem(AParent: TMenuItem; const ACaption: string;
@@ -400,10 +406,11 @@ begin
   Services.AddActionMenu('ToolsMenu', nil, RootMenu, True, True);
   GMenuItems.Add(RootMenu);
 
-  AddWrappedItem(RootMenu, 'Hover at Cursor',      InvokeHover);
-  AddWrappedItem(RootMenu, 'Show Completion',       InvokeCompletion);
-  AddWrappedItem(RootMenu, 'Show Signature Help',   InvokeSignatureHelp);
-  AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)', InvokeDiagnostics);
+  AddWrappedItem(RootMenu, 'Hover at Cursor',           InvokeHover);
+  AddWrappedItem(RootMenu, 'Show Completion',            InvokeCompletion);
+  AddWrappedItem(RootMenu, 'Show Signature Help',        InvokeSignatureHelp);
+  AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)',  InvokeDiagnostics);
+  AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
 
   RegisterProjectNotifier;
 end;

@@ -37,6 +37,8 @@ contains
   DragLint.Plugin.Wizard in 'DragLint.Plugin.Wizard.pas',
   DragLint.Plugin.LspClient in 'DragLint.Plugin.LspClient.pas',
   DragLint.Plugin.Editor in 'DragLint.Plugin.Editor.pas',
-  DragLint.Plugin.ProjectNotifier in 'DragLint.Plugin.ProjectNotifier.pas';
+  DragLint.Plugin.ProjectNotifier in 'DragLint.Plugin.ProjectNotifier.pas',
+  DragLint.Plugin.Settings in 'DragLint.Plugin.Settings.pas',
+  DragLint.Plugin.SettingsForm in 'DragLint.Plugin.SettingsForm.pas';
 
 end.
