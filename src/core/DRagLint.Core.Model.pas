@@ -167,6 +167,17 @@ type
     ContextText: string;
   end;
 
+  // v0.26: compiler diagnostic finding (from dcc64 or msbuild output).
+  TCompilerFinding = record
+    FileId:   Int64;
+    RawPath:  string;
+    Code:     string;    // e.g. 'W1002'
+    Severity: string;    // 'Error' | 'Warning' | 'Hint' | 'Information'
+    LineNo:   Integer;
+    ColNo:    Integer;
+    Message:  string;
+  end;
+
   // v0.18: context bundle — minimum AI-ready slice for a symbol.
   TContextBundle = record
     Task:          string;

@@ -45,6 +45,8 @@ type
     FQFindByPrefix: TFDQuery;
     FQFindAllChildren: TFDQuery;
     FQFindNoCallers: TFDQuery;
+    FQFindCompilerFindings: TFDQuery;
+    FQInsertCompilerFinding: TFDQuery;
     procedure Connect(const ADbPath: string);
     procedure PrepareStatements;
     procedure EnsureTrigramTablePopulated;
@@ -103,6 +105,11 @@ type
     // v0.25: dead-code finder
     function FindSymbolsWithNoCallers(const AKind: string;
       AIncludePrivate: Boolean): TArray<TSymbol>;
+
+    // v0.26: compiler diagnostics
+    function FindCompilerFindingsForFile(AFileId: Int64): TArray<TCompilerFinding>;
+    procedure ClearCompilerFindings;
+    procedure InsertCompilerFinding(const AFinding: TCompilerFinding);
 
     // v0.17: blast-radius pack
     function FindTransitiveCallers(const ASymbolName: string;
@@ -175,6 +182,8 @@ begin
   FQFindByPrefix.Free;
   FQFindAllChildren.Free;
   FQFindNoCallers.Free;
+  FQFindCompilerFindings.Free;
+  FQInsertCompilerFinding.Free;
   if Assigned(FConn) then
   begin
     if FConn.Connected then
@@ -410,6 +419,26 @@ begin
     '  AND s.kind NOT IN (''constructor'', ''destructor'') ' +
     '  AND (:includePrivate = 1 OR (s.modifiers IS NULL ' +
     '       OR s.modifiers NOT LIKE ''%private%''))');
+
+  // v0.26: compiler findings helpers
+  FQFindCompilerFindings := NewQuery(
+    'SELECT file_id, raw_path, code, severity, line_no, col_no, message ' +
+    'FROM compiler_findings ' +
+    'WHERE file_id = :fid ORDER BY line_no, col_no');
+
+  FQInsertCompilerFinding := NewQuery(
+    'INSERT INTO compiler_findings ' +
+    '(file_id, raw_path, code, severity, line_no, col_no, message, imported_at) ' +
+    'VALUES (:fid, :rp, :code, :sev, :lno, :cno, :msg, :iat)');
+  FQInsertCompilerFinding.Params.ParamByName('fid').DataType := ftLargeint;
+  FQInsertCompilerFinding.Params.ParamByName('rp').DataType := ftString;
+  FQInsertCompilerFinding.Params.ParamByName('code').DataType := ftString;
+  FQInsertCompilerFinding.Params.ParamByName('sev').DataType := ftString;
+  FQInsertCompilerFinding.Params.ParamByName('lno').DataType := ftInteger;
+  FQInsertCompilerFinding.Params.ParamByName('cno').DataType := ftInteger;
+  FQInsertCompilerFinding.Params.ParamByName('msg').DataType := ftString;
+  FQInsertCompilerFinding.Params.ParamByName('iat').DataType := ftLargeint;
+  FQInsertCompilerFinding.Prepare;
 end;
 
 function TSQLiteSymbolStore.FileIsUpToDate(const APath: string;
@@ -1171,6 +1200,69 @@ begin
   finally
     List.Free;
   end;
+end;
+
+// v0.26: compiler diagnostics
+
+function TSQLiteSymbolStore.FindCompilerFindingsForFile(
+  AFileId: Int64): TArray<TCompilerFinding>;
+var
+  List: TList<TCompilerFinding>;
+  F: TCompilerFinding;
+begin
+  List := TList<TCompilerFinding>.Create;
+  try
+    if FQFindCompilerFindings.Active then
+      FQFindCompilerFindings.Close;
+    FQFindCompilerFindings.ParamByName('fid').AsLargeInt := AFileId;
+    FQFindCompilerFindings.Open;
+    try
+      while not FQFindCompilerFindings.Eof do
+      begin
+        F := Default(TCompilerFinding);
+        if FQFindCompilerFindings.FieldByName('file_id').IsNull then
+          F.FileId := -1
+        else
+          F.FileId := FQFindCompilerFindings.FieldByName('file_id').AsLargeInt;
+        F.RawPath  := FQFindCompilerFindings.FieldByName('raw_path').AsString;
+        F.Code     := FQFindCompilerFindings.FieldByName('code').AsString;
+        F.Severity := FQFindCompilerFindings.FieldByName('severity').AsString;
+        F.LineNo   := FQFindCompilerFindings.FieldByName('line_no').AsInteger;
+        F.ColNo    := FQFindCompilerFindings.FieldByName('col_no').AsInteger;
+        F.Message  := FQFindCompilerFindings.FieldByName('message').AsString;
+        List.Add(F);
+        FQFindCompilerFindings.Next;
+      end;
+    finally
+      FQFindCompilerFindings.Close;
+    end;
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+procedure TSQLiteSymbolStore.ClearCompilerFindings;
+begin
+  FConn.ExecSQL('DELETE FROM compiler_findings');
+end;
+
+procedure TSQLiteSymbolStore.InsertCompilerFinding(
+  const AFinding: TCompilerFinding);
+begin
+  if AFinding.FileId > 0 then
+    FQInsertCompilerFinding.ParamByName('fid').AsLargeInt := AFinding.FileId
+  else
+    FQInsertCompilerFinding.ParamByName('fid').Clear;
+  FQInsertCompilerFinding.ParamByName('rp').AsString  := AFinding.RawPath;
+  FQInsertCompilerFinding.ParamByName('code').AsString := AFinding.Code;
+  FQInsertCompilerFinding.ParamByName('sev').AsString  := AFinding.Severity;
+  FQInsertCompilerFinding.ParamByName('lno').AsInteger := AFinding.LineNo;
+  FQInsertCompilerFinding.ParamByName('cno').AsInteger := AFinding.ColNo;
+  FQInsertCompilerFinding.ParamByName('msg').AsString  := AFinding.Message;
+  FQInsertCompilerFinding.ParamByName('iat').AsLargeInt :=
+    System.DateUtils.DateTimeToUnix(Now, False);
+  FQInsertCompilerFinding.ExecSQL;
 end;
 
 // v0.17: blast-radius pack

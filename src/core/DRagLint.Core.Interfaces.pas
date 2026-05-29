@@ -70,6 +70,11 @@ type
     // v0.25: dead-code finder
     function FindSymbolsWithNoCallers(const AKind: string;
       AIncludePrivate: Boolean): TArray<TSymbol>;
+
+    // v0.26: compiler diagnostics
+    function FindCompilerFindingsForFile(AFileId: Int64): TArray<TCompilerFinding>;
+    procedure ClearCompilerFindings;
+    procedure InsertCompilerFinding(const AFinding: TCompilerFinding);
   end;
 
   TParseResult = record
