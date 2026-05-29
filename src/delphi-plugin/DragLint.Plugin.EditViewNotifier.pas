@@ -4,7 +4,8 @@ interface
 
 uses
   System.SysUtils, System.Classes,
-  Vcl.Graphics, Vcl.Forms,
+  Vcl.Graphics, Vcl.Forms, Vcl.Controls,
+  DockForm,
   ToolsAPI;
 
 procedure RegisterDragLintEditViewNotifier;
@@ -193,7 +194,7 @@ type
       const EditView: IOTAEditView);
     procedure EditorViewModified(const EditWindow: INTAEditWindow;
       const EditView: IOTAEditView);
-    procedure DockFormVisibilityChanged(const EditWindow: INTAEditWindow;
+    procedure DockFormVisibleChanged(const EditWindow: INTAEditWindow;
       DockForm: TDockableForm);
     procedure DockFormUpdated(const EditWindow: INTAEditWindow;
       DockForm: TDockableForm);
@@ -215,7 +216,7 @@ procedure TDragLintEditServicesNotifier.WindowCommand(const EditWindow: INTAEdit
   Command, Param: Integer; var Handled: Boolean); begin end;
 procedure TDragLintEditServicesNotifier.EditorViewModified(
   const EditWindow: INTAEditWindow; const EditView: IOTAEditView); begin end;
-procedure TDragLintEditServicesNotifier.DockFormVisibilityChanged(
+procedure TDragLintEditServicesNotifier.DockFormVisibleChanged(
   const EditWindow: INTAEditWindow; DockForm: TDockableForm); begin end;
 procedure TDragLintEditServicesNotifier.DockFormUpdated(
   const EditWindow: INTAEditWindow; DockForm: TDockableForm); begin end;
