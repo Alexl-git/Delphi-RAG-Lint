@@ -1,0 +1,7 @@
+Content-Length: 75
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}Content-Length: 193
+
+{"jsonrpc":"2.0","id":2,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///C:/Projects/Delphi-RAG-lint/tests/fixtures/Docs.pas"},"position":{"line":13,"character":15}}}Content-Length: 56
+
+{"jsonrpc":"2.0","id":3,"method":"shutdown","params":{}}

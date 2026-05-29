@@ -29,6 +29,7 @@ uses
   DRagLint.Refactor.Rename in '..\refactor\DRagLint.Refactor.Rename.pas',
   DRagLint.Refactor.DocStub in '..\refactor\DRagLint.Refactor.DocStub.pas',
   DRagLint.Refactor.DeadCode in '..\refactor\DRagLint.Refactor.DeadCode.pas',
+  DRagLint.Diagnostics.CompileCheck in '..\diagnostics\DRagLint.Diagnostics.CompileCheck.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

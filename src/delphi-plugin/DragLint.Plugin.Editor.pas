@@ -22,6 +22,9 @@ procedure InvokeCompletion(Sender: TObject);
 procedure InvokeSignatureHelp(Sender: TObject);
 procedure InvokeDiagnostics(Sender: TObject);
 procedure InvokeRename(Sender: TObject);
+{ v0.26: compiler diagnostics }
+procedure InvokeCompileDiagnose(Sender: TObject);
+procedure InvokeImportLog(Sender: TObject);
 
 implementation
 
@@ -529,6 +532,305 @@ begin
     [QName, NewName, CmdLine]));
 end;
 
+{ ---- v0.26: synchronous process helper ---- }
+
+// Spawns ACmdLine via CreateProcessW with merged stdout+stderr capture.
+// Returns the process exit code (-1 on spawn failure).
+// AOutput receives the full text output. ATimeoutMs = 0 means INFINITE.
+function RunAndCaptureStdout(const ACmdLine: string;
+  out AOutput: string; ATimeoutMs: Integer = 60000): Integer;
+var
+  SA: TSecurityAttributes;
+  ReadPipe, WritePipe: THandle;
+  SI: TStartupInfoW;
+  PI: TProcessInformation;
+  Buf: array[0..4095] of AnsiChar;
+  BytesRead: DWORD;
+  ExitCode: DWORD;
+  WideCmd: string;
+  SB: TStringBuilder;
+  TimeoutValue: DWORD;
+begin
+  Result := -1;
+  AOutput := '';
+  SA.nLength := SizeOf(SA);
+  SA.bInheritHandle := True;
+  SA.lpSecurityDescriptor := nil;
+  if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then
+    Exit;
+  try
+    SetHandleInformation(ReadPipe, HANDLE_FLAG_INHERIT, 0);
+    FillChar(SI, SizeOf(SI), 0);
+    SI.cb        := SizeOf(SI);
+    SI.dwFlags   := STARTF_USESTDHANDLES;
+    SI.hStdOutput := WritePipe;
+    SI.hStdError  := WritePipe;
+    SI.hStdInput  := GetStdHandle(STD_INPUT_HANDLE);
+    FillChar(PI, SizeOf(PI), 0);
+    WideCmd := ACmdLine;
+    UniqueString(WideCmd);
+    if not CreateProcessW(nil, PWideChar(WideCmd),
+       nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
+    begin
+      CloseHandle(WritePipe);
+      Exit;
+    end;
+    CloseHandle(WritePipe);
+    SB := TStringBuilder.Create;
+    try
+      repeat
+        BytesRead := 0;
+        if not ReadFile(ReadPipe, Buf[0], SizeOf(Buf) - 1, BytesRead, nil) then
+          Break;
+        if BytesRead = 0 then
+          Break;
+        Buf[BytesRead] := #0;
+        SB.Append(string(AnsiString(Buf)));
+      until False;
+      AOutput := SB.ToString;
+    finally
+      SB.Free;
+    end;
+    if ATimeoutMs <= 0 then
+      TimeoutValue := INFINITE
+    else
+      TimeoutValue := DWORD(ATimeoutMs);
+    WaitForSingleObject(PI.hProcess, TimeoutValue);
+    GetExitCodeProcess(PI.hProcess, ExitCode);
+    Result := Integer(ExitCode);
+    CloseHandle(PI.hProcess);
+    CloseHandle(PI.hThread);
+  finally
+    CloseHandle(ReadPipe);
+  end;
+end;
+
+{ ---- helpers to resolve project db path and active project file ---- }
+
+// Returns the active project file path (.dproj), or '' if not available.
+function GetActiveProjectFile: string;
+var
+  MS: IOTAModuleServices;
+  ProjGroup: IOTAProjectGroup;
+  ActiveProj: IOTAProject;
+begin
+  Result := '';
+  if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
+  if MS = nil then Exit;
+  ProjGroup := MS.MainProjectGroup;
+  if ProjGroup = nil then Exit;
+  ActiveProj := ProjGroup.ActiveProject;
+  if ActiveProj = nil then Exit;
+  Result := ActiveProj.FileName;
+end;
+
+// Returns the database path for the active project: same dir as .dproj with
+// name <ProjectName>.sqlite.  Falls back to '' when no project is open.
+function GetActiveProjectDb: string;
+var
+  ProjFile: string;
+begin
+  ProjFile := GetActiveProjectFile;
+  if ProjFile = '' then
+    Result := ''
+  else
+    Result := ChangeFileExt(ProjFile, '.sqlite');
+end;
+
+// Broadcasts textDocument/didSave for every .pas file mentioned in AOutput
+// (lines of the form  "path.pas(N,...)" — same format as dcc64/msbuild output).
+// This makes the LSP server re-publish diagnostics for the affected files.
+procedure BroadcastDidSaveForAffectedFiles(const AOutput: string);
+var
+  Client: TDragLintLspClient;
+  Lines: TStringList;
+  Line, FilePath, Uri: string;
+  P: Integer;
+  Params, TextDoc: TJSONObject;
+begin
+  Client := EnsureLspClient;
+  if Client = nil then Exit;
+
+  Lines := TStringList.Create;
+  try
+    Lines.Text := AOutput;
+    for Line in Lines do
+    begin
+      // Lines look like:  C:\path\File.pas(N) Warning: ...
+      P := Pos('.pas(', LowerCase(Line));
+      if P <= 0 then
+        P := Pos('.dpr(', LowerCase(Line));
+      if P <= 0 then Continue;
+      FilePath := Copy(Line, 1, P + 3); // up to and including '.pas' or '.dpr'
+      if not FileExists(FilePath) then Continue;
+      Uri := 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
+      Params  := TJSONObject.Create;
+      TextDoc := TJSONObject.Create;
+      TextDoc.AddPair('uri', Uri);
+      Params.AddPair('textDocument', TextDoc);
+      try
+        Client.Notify('textDocument/didSave', Params);
+      finally
+        Params.Free;
+      end;
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
+
+{ ---- v0.26 menu actions ---- }
+
+procedure InvokeCompileDiagnose(Sender: TObject);
+var
+  ProjFile, DbPath, ExePath: string;
+  CmdLine, Output: string;
+  ExitCode: Integer;
+  ErrCount, WarnCount, HintCount: Integer;
+  Lines: TStringList;
+  Line: string;
+  LLine: string;
+begin
+  ProjFile := GetActiveProjectFile;
+  if ProjFile = '' then
+  begin
+    ShowMessage('drag-lint Compile & Diagnose: no active project found.');
+    Exit;
+  end;
+
+  DbPath := GetActiveProjectDb;
+
+  ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then
+    ExePath := 'drag-lint.exe';
+
+  // Build the CLI command line.
+  if DbPath <> '' then
+    CmdLine := Format('"%s" compile-check "%s" --db "%s" --format text',
+      [ExePath, ProjFile, DbPath])
+  else
+    CmdLine := Format('"%s" compile-check "%s" --format text',
+      [ExePath, ProjFile]);
+
+  // Run synchronously (msbuild can take up to several minutes; use 10 min).
+  ExitCode := RunAndCaptureStdout(CmdLine, Output, 600000);
+
+  if ExitCode = 2 then
+  begin
+    ShowMessage('drag-lint: failed to spawn compile-check.'#13#10 +
+      'Ensure drag-lint.exe is on PATH or next to the BPL.');
+    Exit;
+  end;
+
+  // Count by severity from the CLI text output lines.
+  ErrCount  := 0;
+  WarnCount := 0;
+  HintCount := 0;
+  Lines := TStringList.Create;
+  try
+    Lines.Text := Output;
+    for Line in Lines do
+    begin
+      LLine := LowerCase(Line);
+      if (Pos(') error:', LLine) > 0) or (Pos(') fatal:', LLine) > 0) then
+        Inc(ErrCount)
+      else if Pos(') warning:', LLine) > 0 then
+        Inc(WarnCount)
+      else if (Pos(') hint:', LLine) > 0) or
+              (Pos(') information:', LLine) > 0) then
+        Inc(HintCount);
+    end;
+  finally
+    Lines.Free;
+  end;
+
+  // If findings were stored in the DB, trigger LSP publishDiagnostics.
+  if DbPath <> '' then
+    BroadcastDidSaveForAffectedFiles(Output);
+
+  ShowMessage(Format(
+    'drag-lint Compile & Diagnose complete.'#13#10 +
+    '%d error(s), %d warning(s), %d hint(s) found.'#13#10 +
+    'Check the Messages pane for details.',
+    [ErrCount, WarnCount, HintCount]));
+end;
+
+procedure InvokeImportLog(Sender: TObject);
+var
+  Dlg: TOpenDialog;
+  LogFile, DbPath, ExePath: string;
+  CmdLine, Output: string;
+  ExitCode: Integer;
+  ErrCount, WarnCount, HintCount: Integer;
+  Lines: TStringList;
+  Line, LLine: string;
+begin
+  DbPath := GetActiveProjectDb;
+
+  Dlg := TOpenDialog.Create(nil);
+  try
+    Dlg.Title  := 'drag-lint: Import Build Log';
+    Dlg.Filter := 'Log files (*.log;*.txt)|*.log;*.txt|All files (*.*)|*.*';
+    Dlg.Options := [ofFileMustExist, ofPathMustExist];
+    if not Dlg.Execute then Exit;
+    LogFile := Dlg.FileName;
+  finally
+    Dlg.Free;
+  end;
+
+  ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then
+    ExePath := 'drag-lint.exe';
+
+  if DbPath <> '' then
+    CmdLine := Format('"%s" import-log "%s" --db "%s"',
+      [ExePath, LogFile, DbPath])
+  else
+    CmdLine := Format('"%s" import-log "%s"',
+      [ExePath, LogFile]);
+
+  ExitCode := RunAndCaptureStdout(CmdLine, Output, 60000);
+
+  if ExitCode = 2 then
+  begin
+    ShowMessage('drag-lint: failed to spawn import-log.'#13#10 +
+      'Ensure drag-lint.exe is on PATH or next to the BPL.');
+    Exit;
+  end;
+
+  // Count imported findings from output.
+  ErrCount  := 0;
+  WarnCount := 0;
+  HintCount := 0;
+  Lines := TStringList.Create;
+  try
+    Lines.Text := Output;
+    for Line in Lines do
+    begin
+      LLine := LowerCase(Line);
+      if (Pos(') error:', LLine) > 0) or (Pos(') fatal:', LLine) > 0) then
+        Inc(ErrCount)
+      else if Pos(') warning:', LLine) > 0 then
+        Inc(WarnCount)
+      else if (Pos(') hint:', LLine) > 0) or
+              (Pos(') information:', LLine) > 0) then
+        Inc(HintCount);
+    end;
+  finally
+    Lines.Free;
+  end;
+
+  // Trigger LSP refresh for affected files.
+  if DbPath <> '' then
+    BroadcastDidSaveForAffectedFiles(Output);
+
+  ShowMessage(Format(
+    'drag-lint Import Build Log complete.'#13#10 +
+    'Imported: %d error(s), %d warning(s), %d hint(s).'#13#10 +
+    'Check the Messages pane for details.',
+    [ErrCount, WarnCount, HintCount]));
+end;
+
 procedure InvokeSettings(Sender: TObject);
 begin
   ShowSettingsDialog;
@@ -569,6 +871,9 @@ begin
   AddWrappedItem(RootMenu, 'Show Signature Help',        InvokeSignatureHelp);
   AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)',  InvokeDiagnostics);
   AddWrappedItem(RootMenu, 'Rename Symbol...',           InvokeRename);
+  // v0.26: compiler diagnostics entries
+  AddWrappedItem(RootMenu, 'Compile && Diagnose',        InvokeCompileDiagnose);
+  AddWrappedItem(RootMenu, 'Import Build Log...',        InvokeImportLog);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
 
   RegisterProjectNotifier;

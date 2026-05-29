@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.25.0-alpha';
+  VERSION = '0.26.0-alpha';
 
 function Run: Integer;
 
@@ -42,7 +42,8 @@ uses
   DRagLint.Resolver.TypeAt,
   DRagLint.Refactor.Rename,
   DRagLint.Refactor.DocStub,
-  DRagLint.Refactor.DeadCode;
+  DRagLint.Refactor.DeadCode,
+  DRagLint.Diagnostics.CompileCheck;
 
 type
   TArgs = record
@@ -96,6 +97,8 @@ type
     // v0.25: doc-stub generator + dead-code finder
     DocStubFormat:      string;  // --format xmldoc|pasdoc (default 'xmldoc')
     IncludePrivate:     Boolean; // --include-private
+    // v0.26: compile-check
+    Target:             string;  // --target <file.dproj|.pas>
   end;
 
 procedure PrintHelp;
@@ -134,6 +137,7 @@ begin
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
+  Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -412,9 +416,17 @@ begin
       Result.NoBackup := True
     else if A = '--include-private' then
       Result.IncludePrivate := True
+    else if (A = '--target') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Target := ParamStr(i);
+    end
     else if (Result.Command = 'typeat') and (Result.Position = '') and
             (not A.StartsWith('--')) then
       Result.Position := A
+    else if (Result.Command = 'compile-check') and (Result.Target = '') and
+            (not A.StartsWith('--')) then
+      Result.Target := A
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
     else
@@ -2942,6 +2954,90 @@ begin
   Result := 0;
 end;
 
+// v0.26: drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]
+// Runs a compiler build, parses findings, stores them in the DB (if --db
+// points to an existing database), and reports results to stdout.
+// Exit 0 = no errors; 1 = errors found; 2 = usage error.
+function DoCompileCheck(const AArgs: TArgs): Integer;
+var
+  Target: string;
+  Store: ISymbolStore;
+  Res: TCompileCheckResult;
+  ErrCount, WarnCount, HintCount: Integer;
+  F: TCompilerFinding;
+  Fmt: string;
+  SB: TStringBuilder;
+  FilePath: string;
+begin
+  Target := AArgs.Target;
+  if Target = '' then
+    Target := AArgs.QName; // fallback: --qname used as target
+  if Target = '' then
+  begin
+    Writeln('Usage: drag-lint compile-check <target.dproj or target.pas> ' +
+      '[--db PATH] [--format json|text]');
+    Exit(2);
+  end;
+
+  Writeln('Compiling: ', Target);
+  Res := TCompileChecker.Run(Target);
+
+  ErrCount := 0; WarnCount := 0; HintCount := 0;
+  for F in Res.Findings do
+  begin
+    if SameText(F.Severity, 'Error') then Inc(ErrCount)
+    else if SameText(F.Severity, 'Warning') then Inc(WarnCount)
+    else if SameText(F.Severity, 'Hint') then Inc(HintCount);
+  end;
+
+  if TFile.Exists(AArgs.DbPath) then
+  begin
+    Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+    Store.Migrate;
+    TCompileChecker.InsertFindings(Store, Res.Findings);
+  end;
+
+  Fmt := LowerCase(AArgs.Format);
+
+  if Fmt = 'json' then
+  begin
+    SB := TStringBuilder.Create;
+    try
+      SB.Append('[');
+      var First := True;
+      for F in Res.Findings do
+      begin
+        if not First then SB.Append(',');
+        First := False;
+        FilePath := F.RawPath;
+        SB.Append(Format(
+          '{"file":"%s","line":%d,"col":%d,' +
+          '"severity":"%s","code":"%s","message":"%s"}',
+          [JsonEscape(FilePath), F.LineNo, F.ColNo,
+           JsonEscape(F.Severity), JsonEscape(F.Code),
+           JsonEscape(F.Message)]));
+      end;
+      SB.Append(']');
+      Writeln(SB.ToString);
+    finally
+      SB.Free;
+    end;
+  end
+  else
+  begin
+    for F in Res.Findings do
+      Writeln(Format('%s(%d,%d): %s %s: %s',
+        [F.RawPath, F.LineNo, F.ColNo, F.Severity, F.Code, F.Message]));
+    Writeln(Format('Findings: %d errors, %d warnings, %d hints',
+      [ErrCount, WarnCount, HintCount]));
+  end;
+
+  if ErrCount > 0 then
+    Result := 1
+  else
+    Result := 0;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -2994,6 +3090,8 @@ begin
       Result := DoGenerateDocs(Args)
     else if Args.Command = 'find-deadcode' then
       Result := DoFindDeadCode(Args)
+    else if Args.Command = 'compile-check' then
+      Result := DoCompileCheck(Args)
     else if Args.Command = 'diff' then
       Result := DoDiff(Args)
     else if Args.Command = 'lsp' then

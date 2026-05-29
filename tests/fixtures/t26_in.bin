@@ -1,0 +1,7 @@
+Content-Length: 75
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}Content-Length: 192
+
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///C:/Projects/Delphi-RAG-lint/tests/fixtures/LoopFBN.pas","languageId":"pascal","version":1,"text":""}}}Content-Length: 56
+
+{"jsonrpc":"2.0","id":2,"method":"shutdown","params":{}}

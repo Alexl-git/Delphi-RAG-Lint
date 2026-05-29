@@ -14,7 +14,8 @@ uses
   DRagLint.Lint.Linter,
   DRagLint.Context.Bundler,
   DRagLint.Resolver.TypeAt,
-  DRagLint.Refactor.Rename;
+  DRagLint.Refactor.Rename,
+  DRagLint.Diagnostics.CompileCheck;
 
 type
   // Newline-delimited JSON-RPC 2.0 server speaking MCP-2024-11-05 over stdio.
@@ -305,6 +306,19 @@ begin
     '"dry_run":{"type":"boolean","description":"If true, return edits without applying them (optional, default false)"},' +
     '"db":{"type":"string","description":"Path to .sqlite database (optional if --db passed at startup)"}' +
     '},"required":["qname","to"]}'));
+
+  // v0.26: run dcc64/msbuild and return compiler findings as JSON.
+  Tools.AddElement(ToolDescriptor(
+    'run_compile_check',
+    'Spawn dcc64 or msbuild against a .pas or .dproj file, parse the output ' +
+    'for H/W/E/F diagnostic lines, and return the findings as JSON. ' +
+    'When db is supplied the findings are also stored in compiler_findings ' +
+    'for later LSP publishDiagnostics merging.',
+    '{"type":"object","properties":{' +
+    '"target":{"type":"string","description":"Absolute path to a .pas file or .dproj project"},' +
+    '"msbuild_path":{"type":"string","description":"Absolute path to msbuild.exe (optional)"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional — stores findings)"}' +
+    '},"required":["target"],"additionalProperties":false}'));
 
   Res.AddPair('tools', Tools);
   SendResult(AId, Res);
@@ -985,6 +999,70 @@ begin
           ',"applied":' + RenAppliedStr +
           '}';
       end;
+    end
+    else if ToolName = 'run_compile_check' then
+    begin
+      var CCTarget := '';
+      var CCMsbuild := '';
+      if Args.GetValue('target') <> nil then
+        CCTarget := Args.GetValue('target').Value;
+      if CCTarget = '' then
+      begin
+        SendError(AId, -32602, 'run_compile_check requires target');
+        Exit;
+      end;
+      if Args.GetValue('msbuild_path') <> nil then
+        CCMsbuild := Args.GetValue('msbuild_path').Value;
+
+      // Run the compiler / msbuild.
+      var CCResult := TCompileChecker.Run(CCTarget, CCMsbuild);
+
+      // If a db was specified, also persist the findings.
+      var CCStore := ResolveStore(Args);
+      if CCStore <> nil then
+        TCompileChecker.InsertFindings(CCStore, CCResult.Findings);
+
+      // Count by severity.
+      var CCErrors := 0;
+      var CCWarnings := 0;
+      var CCHints := 0;
+      var CF: TCompilerFinding;
+      for CF in CCResult.Findings do
+      begin
+        if SameText(CF.Severity, 'Error') then
+          Inc(CCErrors)
+        else if SameText(CF.Severity, 'Warning') then
+          Inc(CCWarnings)
+        else
+          Inc(CCHints);
+      end;
+
+      // Build findings JSON array.
+      var CCParts: TArray<string>;
+      SetLength(CCParts, Length(CCResult.Findings));
+      var CCIdx: Integer;
+      for CCIdx := 0 to High(CCResult.Findings) do
+      begin
+        CF := CCResult.Findings[CCIdx];
+        CCParts[CCIdx] :=
+          '{"file":"'     + JsonEscape(CF.RawPath)  + '"' +
+          ',"line":'      + IntToStr(CF.LineNo)      +
+          ',"col":'       + IntToStr(CF.ColNo)       +
+          ',"severity":"' + JsonEscape(CF.Severity)  + '"' +
+          ',"code":"'     + JsonEscape(CF.Code)      + '"' +
+          ',"message":"'  + JsonEscape(CF.Message)   + '"' +
+          '}';
+      end;
+
+      ResultText :=
+        '{"findings":[' + string.Join(',', CCParts) + ']' +
+        ',"by_severity":{' +
+          '"errors":'   + IntToStr(CCErrors)   +
+          ',"warnings":' + IntToStr(CCWarnings) +
+          ',"hints":'    + IntToStr(CCHints)    +
+        '}' +
+        ',"exit_code":' + IntToStr(CCResult.ExitCode) +
+        '}';
     end
     else
     begin

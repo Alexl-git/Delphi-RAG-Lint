@@ -6,15 +6,17 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.25-alpha. Early work in progress -- expect breaking changes.** Adds
-doc-comment stub generator (`drag-lint generate-docs --qname X [--format
-xmldoc|pasdoc]`) and dead-code finder (`drag-lint find-deadcode [--kind K]`).
-Built on v0.24 symbol rename (CLI + MCP + plugin menu), v0.23 editor
-reactivity (completion/signature popups + save-driven reindex), v0.22 IDE
-polish (auto-index on project open, settings dialog, keystroke bindings, hover
-popup), v0.16 structured doc-comment extraction (XMLDoc / PasDoc / oneline),
-v0.15 Obsidian `--open`, v0.14 `.drag-lint.json` per-project config, and the
-v0.4 MCP server stack.
+**v0.26-alpha. Early work in progress -- expect breaking changes.** Adds
+compiler diagnostic integration: `drag-lint compile-check <target>` runs msbuild
+or dcc64, parses H/W/E/F output, stores in `compiler_findings` table. LSP
+`publishDiagnostics` now merges compiler findings with lint findings. Plugin
+Tools menu: `Compile & Diagnose` + `Import Build Log...`. Built on v0.25
+doc-comment generator + dead-code finder, v0.24 symbol rename (CLI + MCP +
+plugin menu), v0.23 editor reactivity (completion/signature popups +
+save-driven reindex), v0.22 IDE polish (auto-index on project open, settings
+dialog, keystroke bindings, hover popup), v0.16 structured doc-comment
+extraction (XMLDoc / PasDoc / oneline), v0.15 Obsidian `--open`, v0.14
+`.drag-lint.json` per-project config, and the v0.4 MCP server stack.
 
 Builds on v0.2 (DFM forms, full symbol coverage, external `.scm` lint
 plugins, `--project <dproj>` mode).
