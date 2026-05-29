@@ -44,6 +44,7 @@ type
     FQFindChildByName: TFDQuery;
     FQFindByPrefix: TFDQuery;
     FQFindAllChildren: TFDQuery;
+    FQFindNoCallers: TFDQuery;
     procedure Connect(const ADbPath: string);
     procedure PrepareStatements;
     procedure EnsureTrigramTablePopulated;
@@ -98,6 +99,10 @@ type
     function FindSymbolsByPrefix(const APrefix: string;
       ALimit: Integer): TArray<TSymbol>;
     function FindAllChildSymbols(AParentId: Int64): TArray<TSymbol>;
+
+    // v0.25: dead-code finder
+    function FindSymbolsWithNoCallers(const AKind: string;
+      AIncludePrivate: Boolean): TArray<TSymbol>;
 
     // v0.17: blast-radius pack
     function FindTransitiveCallers(const ASymbolName: string;
@@ -169,6 +174,7 @@ begin
   FQFindChildByName.Free;
   FQFindByPrefix.Free;
   FQFindAllChildren.Free;
+  FQFindNoCallers.Free;
   if Assigned(FConn) then
   begin
     if FConn.Connected then
@@ -393,6 +399,17 @@ begin
 
   FQFindAllChildren := NewQuery(
     'SELECT * FROM symbols WHERE parent_id = :pid ORDER BY start_line');
+
+  // v0.25: dead-code finder - symbols with no entry in refs.name_text
+  FQFindNoCallers := NewQuery(
+    'SELECT s.* FROM symbols s ' +
+    'LEFT JOIN refs r ON r.name_text = s.name ' +
+    'WHERE r.id IS NULL ' +
+    '  AND (:kind = '''' OR s.kind = :kind) ' +
+    '  AND s.name NOT IN (''Main'', ''Register'', ''initialization'', ''finalization'') ' +
+    '  AND s.kind NOT IN (''constructor'', ''destructor'') ' +
+    '  AND (:includePrivate = 1 OR (s.modifiers IS NULL ' +
+    '       OR s.modifiers NOT LIKE ''%private%''))');
 end;
 
 function TSQLiteSymbolStore.FileIsUpToDate(const APath: string;
@@ -1119,6 +1136,36 @@ begin
       end;
     finally
       FQFindAllChildren.Close;
+    end;
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+// v0.25: dead-code finder
+
+function TSQLiteSymbolStore.FindSymbolsWithNoCallers(const AKind: string;
+  AIncludePrivate: Boolean): TArray<TSymbol>;
+var
+  List: TList<TSymbol>;
+begin
+  List := TList<TSymbol>.Create;
+  try
+    if FQFindNoCallers.Active then
+      FQFindNoCallers.Close;
+    FQFindNoCallers.ParamByName('kind').AsString := AKind;
+    FQFindNoCallers.ParamByName('includePrivate').AsInteger :=
+      Ord(AIncludePrivate);
+    FQFindNoCallers.Open;
+    try
+      while not FQFindNoCallers.Eof do
+      begin
+        List.Add(ReadSymbolFromQuery(FQFindNoCallers));
+        FQFindNoCallers.Next;
+      end;
+    finally
+      FQFindNoCallers.Close;
     end;
     Result := List.ToArray;
   finally
