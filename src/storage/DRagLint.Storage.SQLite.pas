@@ -42,6 +42,8 @@ type
     FQFindContaining: TFDQuery;
     FQFindFileId: TFDQuery;
     FQFindChildByName: TFDQuery;
+    FQFindByPrefix: TFDQuery;
+    FQFindAllChildren: TFDQuery;
     procedure Connect(const ADbPath: string);
     procedure PrepareStatements;
     procedure EnsureTrigramTablePopulated;
@@ -91,6 +93,11 @@ type
     function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
     function FindChildSymbolByName(AParentId: Int64;
       const AName: string): TSymbol;
+
+    // v0.20: completion helpers
+    function FindSymbolsByPrefix(const APrefix: string;
+      ALimit: Integer): TArray<TSymbol>;
+    function FindAllChildSymbols(AParentId: Int64): TArray<TSymbol>;
 
     // v0.17: blast-radius pack
     function FindTransitiveCallers(const ASymbolName: string;
@@ -160,6 +167,8 @@ begin
   FQFindContaining.Free;
   FQFindFileId.Free;
   FQFindChildByName.Free;
+  FQFindByPrefix.Free;
+  FQFindAllChildren.Free;
   if Assigned(FConn) then
   begin
     if FConn.Connected then
@@ -375,6 +384,15 @@ begin
 
   FQFindChildByName := NewQuery(
     'SELECT * FROM symbols WHERE parent_id = :pid AND name = :name LIMIT 1');
+
+  // v0.20: completion helpers
+  // LIKE pattern: escape _ and % in user input, then append %.
+  // SQLite LIKE is case-insensitive for ASCII by default.
+  FQFindByPrefix := NewQuery(
+    'SELECT * FROM symbols WHERE name LIKE :prefixLike ORDER BY name LIMIT :lim');
+
+  FQFindAllChildren := NewQuery(
+    'SELECT * FROM symbols WHERE parent_id = :pid ORDER BY start_line');
 end;
 
 function TSQLiteSymbolStore.FileIsUpToDate(const APath: string;
@@ -1044,6 +1062,67 @@ begin
       Result := ReadSymbolFromQuery(FQFindChildByName);
   finally
     FQFindChildByName.Close;
+  end;
+end;
+
+// v0.20: completion helpers
+
+function TSQLiteSymbolStore.FindSymbolsByPrefix(const APrefix: string;
+  ALimit: Integer): TArray<TSymbol>;
+var
+  List: TList<TSymbol>;
+  EscapedPrefix: string;
+begin
+  List := TList<TSymbol>.Create;
+  try
+    // Escape LIKE meta-characters in the user-supplied prefix.
+    EscapedPrefix := StringReplace(APrefix, '\', '\\', [rfReplaceAll]);
+    EscapedPrefix := StringReplace(EscapedPrefix, '%', '\%', [rfReplaceAll]);
+    EscapedPrefix := StringReplace(EscapedPrefix, '_', '\_', [rfReplaceAll]);
+    EscapedPrefix := EscapedPrefix + '%';
+    if FQFindByPrefix.Active then
+      FQFindByPrefix.Close;
+    FQFindByPrefix.ParamByName('prefixLike').AsString := EscapedPrefix;
+    FQFindByPrefix.ParamByName('lim').AsInteger := ALimit;
+    FQFindByPrefix.Open;
+    try
+      while not FQFindByPrefix.Eof do
+      begin
+        List.Add(ReadSymbolFromQuery(FQFindByPrefix));
+        FQFindByPrefix.Next;
+      end;
+    finally
+      FQFindByPrefix.Close;
+    end;
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindAllChildSymbols(
+  AParentId: Int64): TArray<TSymbol>;
+var
+  List: TList<TSymbol>;
+begin
+  List := TList<TSymbol>.Create;
+  try
+    if FQFindAllChildren.Active then
+      FQFindAllChildren.Close;
+    FQFindAllChildren.ParamByName('pid').AsLargeInt := AParentId;
+    FQFindAllChildren.Open;
+    try
+      while not FQFindAllChildren.Eof do
+      begin
+        List.Add(ReadSymbolFromQuery(FQFindAllChildren));
+        FQFindAllChildren.Next;
+      end;
+    finally
+      FQFindAllChildren.Close;
+    end;
+    Result := List.ToArray;
+  finally
+    List.Free;
   end;
 end;
 

@@ -173,6 +173,7 @@
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
         <DCCReference Include="..\mcp\DRagLint.MCP.Server.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Server.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Completion.pas"/>
         <DCCReference Include="DRagLint.Hover.Renderer.pas"/>
         <DCCReference Include="..\context\DRagLint.Context.Bundler.pas"/>
         <DCCReference Include="..\resolver\DRagLint.Resolver.TypeAt.pas"/>

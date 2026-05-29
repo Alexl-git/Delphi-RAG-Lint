@@ -61,6 +61,11 @@ type
     function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
     function FindChildSymbolByName(AParentId: Int64;
       const AName: string): TSymbol;
+
+    // v0.20: completion helpers
+    function FindSymbolsByPrefix(const APrefix: string;
+      ALimit: Integer): TArray<TSymbol>;
+    function FindAllChildSymbols(AParentId: Int64): TArray<TSymbol>;
   end;
 
   TParseResult = record

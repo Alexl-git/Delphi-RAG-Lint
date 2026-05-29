@@ -22,6 +22,7 @@ uses
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   DRagLint.MCP.Server in '..\mcp\DRagLint.MCP.Server.pas',
   DRagLint.LSP.Server in '..\lsp\DRagLint.LSP.Server.pas',
+  DRagLint.LSP.Completion in '..\lsp\DRagLint.LSP.Completion.pas',
   DRagLint.Hover.Renderer in 'DRagLint.Hover.Renderer.pas',
   DRagLint.Context.Bundler in '..\context\DRagLint.Context.Bundler.pas',
   DRagLint.Resolver.TypeAt in '..\resolver\DRagLint.Resolver.TypeAt.pas',

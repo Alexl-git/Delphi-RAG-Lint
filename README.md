@@ -321,6 +321,55 @@ reference: in addition to declaration hover data, the response now includes
 resolved symbol details (via type-at-position lookup) so clients can display
 the inferred type and documentation inline.
 
+## IDE-grade LSP (v0.20)
+
+v0.20 adds LSP `textDocument/completion`, `textDocument/signatureHelp`, and
+`textDocument/publishDiagnostics` (triggered on file save), bringing full
+IDE autocomplete, signature hints, and inline diagnostics to any editor with
+LSP support.
+
+### Features
+
+- **Completion (`textDocument/completion`)**: member completion after `.` and
+  identifier completion via prefix matching. Trigger characters: `.`, `(`, `,`.
+- **Signature Help (`textDocument/signatureHelp`)**: function/procedure
+  signature with active parameter highlighting. Trigger characters: `(`, `,`.
+- **Diagnostics (`textDocument/publishDiagnostics`)**: lint findings pushed to
+  the editor on file save, with severity levels (Error/Warning/Information/Hint),
+  source attribution (`drag-lint`), and rule codes for filtering.
+
+### Configuration (VS Code example)
+
+In `.vscode/settings.json`:
+
+```json
+{
+  "[delphi]": {
+    "editor.defaultFormatter": "delphi.delphi-for-vscode"
+  }
+}
+```
+
+Or via a launch config that connects to the LSP server:
+
+```json
+{
+  "name": "Delphi LSP (drag-lint)",
+  "server": {
+    "command": "C:\\path\\to\\drag-lint.exe",
+    "args": ["lsp", "--db", "C:\\path\\to\\myproj.sqlite"]
+  }
+}
+```
+
+### Notes
+
+- `textDocument/didChange` is deliberately not wired — the server re-runs lint
+  only on `didSave` (matching the indexer's file-based model). v0.21 (with
+  OTAPI incremental updates) will enable fine-grained incremental diagnostics.
+- Completion uses prefix-LIKE matching (no fuzzy yet; defer to v0.21+).
+- v0.21 will add OTAPI integration for in-IDE plugin support.
+
 ## Exit codes
 
 | Code | Meaning |

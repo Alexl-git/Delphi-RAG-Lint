@@ -16,7 +16,9 @@ uses
   DRagLint.Storage.SQLite,
   DRagLint.Parser.Delphi13,
   DRagLint.Hover.Renderer,
-  DRagLint.Resolver.TypeAt;
+  DRagLint.Resolver.TypeAt,
+  DRagLint.Lint.Linter,
+  DRagLint.LSP.Completion;
 
 type
   // Language Server Protocol over stdio with Content-Length framing.
@@ -32,10 +34,12 @@ type
   strict private
     FStore: ISymbolStore;
     FStdIn: THandleStream;
+    FLinter: TLinter;
     FInitialized: Boolean;
     FShuttingDown: Boolean;
     function ReadMessage: TJSONObject;
     procedure SendMessage(const AObj: TJSONObject);
+    procedure SendRawNotification(const AObj: TJSONObject);
     procedure SendError(const AId: TJSONValue; ACode: Integer;
       const AMessage: string);
     function FileFromUri(const AUri: string): string;
@@ -51,6 +55,11 @@ type
       const AParams: TJSONObject);
     procedure HandleHover(const AId: TJSONValue;
       const AParams: TJSONObject);
+    procedure HandleCompletion(const AId: TJSONValue;
+      const AParams: TJSONObject);
+    procedure HandleSignatureHelp(const AId: TJSONValue;
+      const AParams: TJSONObject);
+    procedure HandleDidOpenOrSave(const AParams: TJSONObject);
     function LocationFromSymbol(const ASym: TSymbol): TJSONObject;
     function LocationFromRef(const ARef: TReference): TJSONObject;
     // v0.7: reparse the file at APath and find the identifier text under
@@ -58,6 +67,7 @@ type
     // if the file doesn't exist or the cursor isn't on an identifier.
     function IdentifierAtPosition(const APath: string;
       ALine, ACol: Integer): string;
+    function EnsureLinter: TLinter;
   public
     constructor Create(const ADbPath: string);
     destructor Destroy; override;
@@ -70,6 +80,7 @@ constructor TLSPServer.Create(const ADbPath: string);
 begin
   inherited Create;
   FStdIn := THandleStream.Create(GetStdHandle(STD_INPUT_HANDLE));
+  FLinter := nil;
   if ADbPath <> '' then
   begin
     FStore := TSQLiteSymbolStore.Create(ADbPath);
@@ -79,9 +90,17 @@ end;
 
 destructor TLSPServer.Destroy;
 begin
+  FLinter.Free;
   FStdIn.Free;
   FStore := nil;
   inherited;
+end;
+
+function TLSPServer.EnsureLinter: TLinter;
+begin
+  if FLinter = nil then
+    FLinter := TLinter.Create('');
+  Result := FLinter;
 end;
 
 function TLSPServer.ReadMessage: TJSONObject;
@@ -177,6 +196,14 @@ begin
     WriteFile(StdOutHandle, BodyBytes[0], Length(BodyBytes), Written, nil);
 end;
 
+// SendRawNotification sends a notification (no id) with Content-Length framing.
+// Identical to SendMessage but semantically distinct — used for server-pushed
+// notifications such as textDocument/publishDiagnostics.
+procedure TLSPServer.SendRawNotification(const AObj: TJSONObject);
+begin
+  SendMessage(AObj);
+end;
+
 procedure TLSPServer.SendError(const AId: TJSONValue; ACode: Integer;
   const AMessage: string);
 var
@@ -267,25 +294,43 @@ end;
 procedure TLSPServer.HandleInitialize(const AId: TJSONValue;
   const AParams: TJSONObject);
 var
-  Reply, Result, Caps, Info: TJSONObject;
+  Reply, ResObj, Caps, Info: TJSONObject;
+  CompProvider, SigProvider: TJSONObject;
+  TriggerCharsCompletion, TriggerCharsSig: TJSONArray;
 begin
   Reply := TJSONObject.Create;
   try
     Reply.AddPair('jsonrpc', '2.0');
     if AId <> nil then
       Reply.AddPair('id', AId.Clone as TJSONValue);
-    Result := TJSONObject.Create;
+    ResObj := TJSONObject.Create;
     Caps := TJSONObject.Create;
     Caps.AddPair('definitionProvider', TJSONBool.Create(True));
     Caps.AddPair('referencesProvider', TJSONBool.Create(True));
     Caps.AddPair('workspaceSymbolProvider', TJSONBool.Create(True));
     Caps.AddPair('hoverProvider', TJSONBool.Create(True));
-    Result.AddPair('capabilities', Caps);
+    // v0.20: completion provider
+    CompProvider := TJSONObject.Create;
+    TriggerCharsCompletion := TJSONArray.Create;
+    TriggerCharsCompletion.AddElement(TJSONString.Create('.'));
+    TriggerCharsCompletion.AddElement(TJSONString.Create('('));
+    TriggerCharsCompletion.AddElement(TJSONString.Create(','));
+    CompProvider.AddPair('triggerCharacters', TriggerCharsCompletion);
+    CompProvider.AddPair('resolveProvider', TJSONBool.Create(False));
+    Caps.AddPair('completionProvider', CompProvider);
+    // v0.20: signatureHelp provider
+    SigProvider := TJSONObject.Create;
+    TriggerCharsSig := TJSONArray.Create;
+    TriggerCharsSig.AddElement(TJSONString.Create('('));
+    TriggerCharsSig.AddElement(TJSONString.Create(','));
+    SigProvider.AddPair('triggerCharacters', TriggerCharsSig);
+    Caps.AddPair('signatureHelpProvider', SigProvider);
+    ResObj.AddPair('capabilities', Caps);
     Info := TJSONObject.Create;
     Info.AddPair('name', 'drag-lint LSP');
-    Info.AddPair('version', '0.7.0-alpha');
-    Result.AddPair('serverInfo', Info);
-    Reply.AddPair('result', Result);
+    Info.AddPair('version', '0.20.0-alpha');
+    ResObj.AddPair('serverInfo', Info);
+    Reply.AddPair('result', ResObj);
     SendMessage(Reply);
     FInitialized := True;
   finally
@@ -734,6 +779,127 @@ begin
   end;
 end;
 
+procedure TLSPServer.HandleCompletion(const AId: TJSONValue;
+  const AParams: TJSONObject);
+var
+  Reply, WrapObj: TJSONObject;
+  TextDoc, Position: TJSONObject;
+  Uri, Path: string;
+  Line, Col: Integer;
+  Items: TJSONArray;
+begin
+  Reply := TJSONObject.Create;
+  try
+    Reply.AddPair('jsonrpc', '2.0');
+    if AId <> nil then
+      Reply.AddPair('id', AId.Clone as TJSONValue);
+    if (FStore = nil) or (AParams = nil) then
+    begin
+      WrapObj := TJSONObject.Create;
+      WrapObj.AddPair('isIncomplete', TJSONBool.Create(False));
+      WrapObj.AddPair('items', TJSONArray.Create);
+      Reply.AddPair('result', WrapObj);
+      SendMessage(Reply);
+      Exit;
+    end;
+    TextDoc := AParams.GetValue('textDocument') as TJSONObject;
+    Position := AParams.GetValue('position') as TJSONObject;
+    if (TextDoc = nil) or (Position = nil) then
+    begin
+      WrapObj := TJSONObject.Create;
+      WrapObj.AddPair('isIncomplete', TJSONBool.Create(False));
+      WrapObj.AddPair('items', TJSONArray.Create);
+      Reply.AddPair('result', WrapObj);
+      SendMessage(Reply);
+      Exit;
+    end;
+    Uri := TextDoc.GetValue('uri').Value;
+    Path := FileFromUri(Uri);
+    // LSP positions are 0-based; completion builder uses 1-based.
+    Line := StrToIntDef(Position.GetValue('line').Value, 0) + 1;
+    Col  := StrToIntDef(Position.GetValue('character').Value, 0) + 1;
+    Items := TLspCompletion.BuildCompletionItems(FStore, Path, Line, Col);
+    WrapObj := TJSONObject.Create;
+    WrapObj.AddPair('isIncomplete', TJSONBool.Create(False));
+    WrapObj.AddPair('items', Items);
+    Reply.AddPair('result', WrapObj);
+    SendMessage(Reply);
+  finally
+    Reply.Free;
+  end;
+end;
+
+procedure TLSPServer.HandleSignatureHelp(const AId: TJSONValue;
+  const AParams: TJSONObject);
+var
+  Reply: TJSONObject;
+  TextDoc, Position: TJSONObject;
+  Uri, Path: string;
+  Line, Col: Integer;
+  SigHelp: TJSONObject;
+begin
+  Reply := TJSONObject.Create;
+  try
+    Reply.AddPair('jsonrpc', '2.0');
+    if AId <> nil then
+      Reply.AddPair('id', AId.Clone as TJSONValue);
+    if (FStore = nil) or (AParams = nil) then
+    begin
+      Reply.AddPair('result', TJSONNull.Create);
+      SendMessage(Reply);
+      Exit;
+    end;
+    TextDoc := AParams.GetValue('textDocument') as TJSONObject;
+    Position := AParams.GetValue('position') as TJSONObject;
+    if (TextDoc = nil) or (Position = nil) then
+    begin
+      Reply.AddPair('result', TJSONNull.Create);
+      SendMessage(Reply);
+      Exit;
+    end;
+    Uri := TextDoc.GetValue('uri').Value;
+    Path := FileFromUri(Uri);
+    // LSP positions are 0-based; signatureHelp builder uses 1-based.
+    Line := StrToIntDef(Position.GetValue('line').Value, 0) + 1;
+    Col  := StrToIntDef(Position.GetValue('character').Value, 0) + 1;
+    SigHelp := TLspCompletion.BuildSignatureHelp(FStore, Path, Line, Col);
+    if SigHelp <> nil then
+      Reply.AddPair('result', SigHelp)
+    else
+      Reply.AddPair('result', TJSONNull.Create);
+    SendMessage(Reply);
+  finally
+    Reply.Free;
+  end;
+end;
+
+procedure TLSPServer.HandleDidOpenOrSave(const AParams: TJSONObject);
+var
+  TextDoc: TJSONObject;
+  Uri, Path: string;
+  Diags: TJSONArray;
+  Notif, ParamsObj: TJSONObject;
+begin
+  if AParams = nil then Exit;
+  TextDoc := AParams.GetValue('textDocument') as TJSONObject;
+  if TextDoc = nil then Exit;
+  Uri := TextDoc.GetValue('uri').Value;
+  Path := FileFromUri(Uri);
+  Diags := TLspCompletion.BuildDiagnostics(EnsureLinter, Path);
+  Notif := TJSONObject.Create;
+  try
+    Notif.AddPair('jsonrpc', '2.0');
+    Notif.AddPair('method', 'textDocument/publishDiagnostics');
+    ParamsObj := TJSONObject.Create;
+    ParamsObj.AddPair('uri', Uri);
+    ParamsObj.AddPair('diagnostics', Diags);
+    Notif.AddPair('params', ParamsObj);
+    SendRawNotification(Notif);
+  finally
+    Notif.Free;
+  end;
+end;
+
 procedure TLSPServer.Run;
 var
   Msg: TJSONObject;
@@ -773,6 +939,14 @@ begin
         HandleReferences(Id, Params)
       else if Method = 'textDocument/hover' then
         HandleHover(Id, Params)
+      else if Method = 'textDocument/completion' then
+        HandleCompletion(Id, Params)
+      else if Method = 'textDocument/signatureHelp' then
+        HandleSignatureHelp(Id, Params)
+      else if Method = 'textDocument/didOpen' then
+        HandleDidOpenOrSave(Params)
+      else if Method = 'textDocument/didSave' then
+        HandleDidOpenOrSave(Params)
       else if (Id <> nil) and (Method <> '') then
         SendError(Id, -32601, 'method not found: ' + Method);
     finally
