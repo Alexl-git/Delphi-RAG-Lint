@@ -6,11 +6,11 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.27-alpha. Early work in progress -- expect breaking changes.** Quality-of-life
-release: `drag-lint generate-test --qname X` emits DUnitX test scaffolds;
-`drag-lint format <file>` shells YADF for in-place formatting; plugin refactor
-dialog replaces two InputBox prompts with a proper VCL form (preview + apply).
-Built on v0.26 compiler diagnostic integration (`compile-check`, LSP
+**v0.28-alpha. Early work in progress -- expect breaking changes.** Lint rule
+pack: 5 new built-in tree-sitter-query rules (`goto-statement`, `with-statement`,
+`empty-procedure-body`, `large-magic-number`, `string-equality-comparison`).
+Built on v0.27 QoL release (test-stub generator, YADF format command, refactor
+preview dialog), v0.26 compiler diagnostic integration (`compile-check`, LSP
 `publishDiagnostics` merging), v0.25 doc-comment generator + dead-code finder,
 v0.24 symbol rename (CLI + MCP + plugin menu), v0.23 editor reactivity
 (completion/signature popups + save-driven reindex), v0.22 IDE polish (auto-index

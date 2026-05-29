@@ -3,6 +3,39 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.28.0-alpha -- 2026-05-28
+
+### Added
+
+- **5 new built-in tree-sitter-query lint rules** under `rules/`. Each rule is
+  a `.scm` tree-sitter query + `.json` metadata pair. Loaded automatically at
+  startup from `<exedir>/rules/` by the existing v0.3 `TQueryRules` engine.
+
+  | Rule id | Severity | Description |
+  |---------|----------|-------------|
+  | `goto-statement` | warning | `goto` is a Delphi anti-pattern |
+  | `with-statement` | info | `with` makes symbol scope ambiguous |
+  | `empty-procedure-body` | info | `begin end` body with no statements |
+  | `large-magic-number` | info | Numeric literal not in the common-constants allow-list |
+  | `string-equality-comparison` | info | `=` binary expression (fires on all `=`, not just strings -- type-aware precision deferred to v0.19+) |
+
+- **`tests/fixtures/T44_lint_pack.bat`** -- regression test that runs
+  `drag-lint lint RuleTest.pas` and asserts all 5 new rules fire.
+
+### Notes
+
+- Rules use predicates shipped in v0.3 (`#eq?`, `#not-eq?`, `#match?`,
+  `#not-match?`). The `empty-procedure-body` rule uses `#match?` on the body
+  text -- it does not fire when `begin` and `end` are separated by comments.
+- The `string-equality-comparison` rule is intentionally over-eager: it fires
+  on every `=` binary expression regardless of type. Precise string-only
+  detection waits on v0.19+ type-resolution data being plumbed into the lint
+  engine.
+- The original `writeln-in-source` rule remains as the reference example for
+  the `.scm` + `.json` authoring pattern.
+
+---
+
 ## v0.27.0-alpha -- 2026-05-29
 
 ### Added

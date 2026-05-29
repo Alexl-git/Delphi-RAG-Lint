@@ -52,6 +52,17 @@ The runner evaluates these standard tree-sitter predicates:
 Unknown predicates pass through (don't suppress) so future tree-sitter
 extensions don't silently filter matches.
 
+## Shipped rules (v0.28)
+
+| Rule id | Severity | Description |
+|---------|----------|-------------|
+| `writeln-in-source` | info | Direct `WriteLn` call — use a logger |
+| `goto-statement` | warning | `goto` statement is generally considered harmful |
+| `with-statement` | info | `with` statement makes symbol scope ambiguous |
+| `empty-procedure-body` | info | Empty `procedure`/`function` body (begin..end with no statements) |
+| `large-magic-number` | info | Numeric literal not in the common-constants allow-list |
+| `string-equality-comparison` | info | `=` comparison on expressions — fires on all `=` binary expressions until type-resolution is plumbed in (v0.19+) |
+
 ### Tip
 
 If you want to discover what AST nodes look like for a fragment of Delphi
