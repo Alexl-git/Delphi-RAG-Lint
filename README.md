@@ -6,18 +6,16 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.28-alpha. Early work in progress -- expect breaking changes.** Lint rule
-pack: 5 new built-in tree-sitter-query rules (`goto-statement`, `with-statement`,
-`empty-procedure-body`, `large-magic-number`, `string-equality-comparison`).
-Built on v0.27 QoL release (test-stub generator, YADF format command, refactor
-preview dialog), v0.26 compiler diagnostic integration (`compile-check`, LSP
-`publishDiagnostics` merging), v0.25 doc-comment generator + dead-code finder,
-v0.24 symbol rename (CLI + MCP + plugin menu), v0.23 editor reactivity
-(completion/signature popups + save-driven reindex), v0.22 IDE polish (auto-index
-on project open, settings dialog, keystroke bindings, hover popup), v0.16
-structured doc-comment extraction (XMLDoc / PasDoc / oneline), v0.15 Obsidian
-`--open`, v0.14 `.drag-lint.json` per-project config, and the v0.4 MCP server
-stack.
+**v0.30-alpha. Early work in progress -- expect breaking changes.**
+IDE integration: custom Structure form (`Tools > drag-lint > Show Structure`)
+with Diagnostics + Code Elements trees; native Tools > Options page via
+`INTAAddInOptions` TFrame. Built on v0.29 in-editor visual diagnostics (gutter
+dots + wavy underlines + Ctrl+Alt+I hint popup), v0.28 lint rule pack
+(5 built-in tree-sitter-query rules), v0.27 QoL release, v0.26 compiler
+diagnostic integration, v0.25 doc-comment generator + dead-code finder,
+v0.24 symbol rename, v0.23 editor reactivity, v0.22 IDE polish, v0.16
+structured doc-comment extraction, v0.15 Obsidian `--open`, v0.14
+`.drag-lint.json` per-project config, and the v0.4 MCP server stack.
 
 Builds on v0.2 (DFM forms, full symbol coverage, external `.scm` lint
 plugins, `--project <dproj>` mode).
