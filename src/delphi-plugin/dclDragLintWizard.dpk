@@ -41,6 +41,9 @@ contains
   DragLint.Plugin.Settings in 'DragLint.Plugin.Settings.pas',
   DragLint.Plugin.SettingsForm in 'DragLint.Plugin.SettingsForm.pas',
   DragLint.Plugin.Keyboard in 'DragLint.Plugin.Keyboard.pas',
-  DragLint.Plugin.HoverForm in 'DragLint.Plugin.HoverForm.pas';
+  DragLint.Plugin.HoverForm in 'DragLint.Plugin.HoverForm.pas',
+  DragLint.Plugin.CompletionForm in 'DragLint.Plugin.CompletionForm.pas',
+  DragLint.Plugin.SignatureForm in 'DragLint.Plugin.SignatureForm.pas',
+  DragLint.Plugin.SaveNotifier in 'DragLint.Plugin.SaveNotifier.pas';
 
 end.

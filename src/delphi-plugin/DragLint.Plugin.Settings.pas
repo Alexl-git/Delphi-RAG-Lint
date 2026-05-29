@@ -4,13 +4,14 @@ interface
 
 type
   TDragLintSettings = record
-    ExePath:           string;
-    DbPathTemplate:    string;
-    AutoIndex:         Boolean;
-    EnableHover:       Boolean;
-    EnableCompletion:  Boolean;
-    EnableSignature:   Boolean;
-    EnableDiagnostics: Boolean;
+    ExePath:              string;
+    DbPathTemplate:       string;
+    AutoIndex:            Boolean;
+    AutoReindexOnSave:    Boolean;
+    EnableHover:          Boolean;
+    EnableCompletion:     Boolean;
+    EnableSignature:      Boolean;
+    EnableDiagnostics:    Boolean;
   end;
 
 function LoadSettings: TDragLintSettings;
@@ -30,8 +31,9 @@ function DefaultSettings: TDragLintSettings;
 begin
   Result.ExePath        := 'drag-lint.exe';
   Result.DbPathTemplate := '<projdir>\.drag-lint.sqlite';
-  Result.AutoIndex         := True;
-  Result.EnableHover       := True;
+  Result.AutoIndex            := True;
+  Result.AutoReindexOnSave    := True;
+  Result.EnableHover          := True;
   Result.EnableCompletion  := True;
   Result.EnableSignature   := True;
   Result.EnableDiagnostics := True;
@@ -49,7 +51,8 @@ begin
     try
       if Reg.ValueExists('ExePath')        then Result.ExePath        := Reg.ReadString('ExePath');
       if Reg.ValueExists('DbPathTemplate') then Result.DbPathTemplate := Reg.ReadString('DbPathTemplate');
-      if Reg.ValueExists('AutoIndex')      then Result.AutoIndex      := Reg.ReadInteger('AutoIndex') <> 0;
+      if Reg.ValueExists('AutoIndex')         then Result.AutoIndex         := Reg.ReadInteger('AutoIndex') <> 0;
+      if Reg.ValueExists('AutoReindexOnSave') then Result.AutoReindexOnSave := Reg.ReadInteger('AutoReindexOnSave') <> 0;
       if Reg.ValueExists('EnableHover')       then Result.EnableHover       := Reg.ReadInteger('EnableHover') <> 0;
       if Reg.ValueExists('EnableCompletion')  then Result.EnableCompletion  := Reg.ReadInteger('EnableCompletion') <> 0;
       if Reg.ValueExists('EnableSignature')   then Result.EnableSignature   := Reg.ReadInteger('EnableSignature') <> 0;
@@ -73,7 +76,8 @@ begin
     try
       Reg.WriteString('ExePath',        ASettings.ExePath);
       Reg.WriteString('DbPathTemplate', ASettings.DbPathTemplate);
-      Reg.WriteInteger('AutoIndex',      Ord(ASettings.AutoIndex));
+      Reg.WriteInteger('AutoIndex',         Ord(ASettings.AutoIndex));
+      Reg.WriteInteger('AutoReindexOnSave', Ord(ASettings.AutoReindexOnSave));
       Reg.WriteInteger('EnableHover',       Ord(ASettings.EnableHover));
       Reg.WriteInteger('EnableCompletion',  Ord(ASettings.EnableCompletion));
       Reg.WriteInteger('EnableSignature',   Ord(ASettings.EnableSignature));
