@@ -13,7 +13,8 @@ uses
   DragLint.Plugin.HoverForm,
   DragLint.Plugin.CompletionForm,
   DragLint.Plugin.SignatureForm,
-  DragLint.Plugin.RefactorForm;
+  DragLint.Plugin.RefactorForm,
+  DragLint.Plugin.StructureForm;
 
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
@@ -29,6 +30,8 @@ procedure InvokeCompileDiagnose(Sender: TObject);
 procedure InvokeImportLog(Sender: TObject);
 { v0.27: YADF format integration }
 procedure InvokeFormatYadf(Sender: TObject);
+{ v0.30: structure form }
+procedure InvokeShowStructure(Sender: TObject);
 
 implementation
 
@@ -887,6 +890,12 @@ begin
   ShowSettingsDialog;
 end;
 
+{ v0.30: show structure form }
+procedure InvokeShowStructure(Sender: TObject);
+begin
+  ShowDragLintStructure;
+end;
+
 { ---- menu registration ---- }
 
 function AddWrappedItem(AParent: TMenuItem; const ACaption: string;
@@ -927,6 +936,8 @@ begin
   AddWrappedItem(RootMenu, 'Import Build Log...',        InvokeImportLog);
   // v0.27: YADF format integration
   AddWrappedItem(RootMenu, 'Format with YADF',           InvokeFormatYadf);
+  // v0.30: structure form + settings
+  AddWrappedItem(RootMenu, 'Show Structure',             InvokeShowStructure);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
 
   RegisterProjectNotifier;
@@ -939,6 +950,9 @@ begin
   UnregisterDragLintEditViewNotifier;
   UnregisterDragLintKeystrokes;
   UnregisterProjectNotifier;
+
+  { Close the structure form if still open }
+  HideDragLintStructure;
 
   { Stop LSP client first }
   if GLspClient <> nil then

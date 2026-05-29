@@ -26,7 +26,8 @@ implementation
 
 uses
   Vcl.Dialogs,
-  DragLint.Plugin.Editor;
+  DragLint.Plugin.Editor,
+  DragLint.Plugin.Options;
 
 procedure TDragLintWizard.AfterSave;
 begin
@@ -69,6 +70,7 @@ procedure Register;
 begin
   RegisterPackageWizard(TDragLintWizard.Create);
   RegisterDragLintMenu;
+  RegisterDragLintOptions;
 end;
 
 end.
