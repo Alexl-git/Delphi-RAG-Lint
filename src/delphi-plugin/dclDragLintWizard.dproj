@@ -84,6 +84,9 @@
         <DCCReference Include="DragLint.Plugin.SignatureForm.pas"/>
         <DCCReference Include="DragLint.Plugin.SaveNotifier.pas"/>
         <DCCReference Include="DragLint.Plugin.RefactorForm.pas"/>
+        <DCCReference Include="DragLint.Plugin.RegistryColors.pas"/>
+        <DCCReference Include="DragLint.Plugin.DiagnosticCache.pas"/>
+        <DCCReference Include="DragLint.Plugin.EditViewNotifier.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

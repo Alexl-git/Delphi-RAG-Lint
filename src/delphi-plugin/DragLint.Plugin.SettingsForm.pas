@@ -52,6 +52,7 @@ var
   Settings: TDragLintSettings;
   edExe, edDb: TEdit;
   cbAutoIndex, cbAutoReindex, cbHover, cbCompletion, cbSignature, cbDiag: TCheckBox;
+  cbInlineMarkers, cbErrInline, cbWarnInline, cbHintInline, cbInfoInline: TCheckBox;
   btnOK, btnCancel, btnBrowse: TButton;
   OpenDlg: TOpenDialog;
   BrowseHandler: TBrowseHandler;
@@ -99,7 +100,7 @@ begin
     Form.BorderStyle := bsDialog;
     Form.Position := poScreenCenter;
     Form.ClientWidth := 480;
-    Form.ClientHeight := 384;
+    Form.ClientHeight := 512;
 
     Y := 16;
     AddLabel('drag-lint.exe path:', Y); Inc(Y, 20);
@@ -137,7 +138,19 @@ begin
     cbSignature  := AddCheck(Y, 'Enable Show Signature Help',
       Settings.EnableSignature);  Inc(Y, 24);
     cbDiag       := AddCheck(Y, 'Enable Run Diagnostics',
-      Settings.EnableDiagnostics);
+      Settings.EnableDiagnostics);  Inc(Y, 24);
+
+    Inc(Y, 8);
+    cbInlineMarkers := AddCheck(Y, 'Enable inline markers (gutter + underline)',
+      Settings.EnableInlineMarkers);  Inc(Y, 24);
+    cbErrInline  := AddCheck(Y, '  Show errors inline',
+      Settings.ShowErrorsInline);   Inc(Y, 24);
+    cbWarnInline := AddCheck(Y, '  Show warnings inline',
+      Settings.ShowWarningsInline); Inc(Y, 24);
+    cbHintInline := AddCheck(Y, '  Show hints inline',
+      Settings.ShowHintsInline);    Inc(Y, 24);
+    cbInfoInline := AddCheck(Y, '  Show info inline',
+      Settings.ShowInfoInline);
 
     btnOK := TButton.Create(Form);
     btnOK.Parent      := Form;
@@ -167,6 +180,11 @@ begin
       Settings.EnableCompletion := cbCompletion.Checked;
       Settings.EnableSignature  := cbSignature.Checked;
       Settings.EnableDiagnostics := cbDiag.Checked;
+      Settings.EnableInlineMarkers := cbInlineMarkers.Checked;
+      Settings.ShowErrorsInline    := cbErrInline.Checked;
+      Settings.ShowWarningsInline  := cbWarnInline.Checked;
+      Settings.ShowHintsInline     := cbHintInline.Checked;
+      Settings.ShowInfoInline      := cbInfoInline.Checked;
       SaveSettings(Settings);
       Result := True;
     end;

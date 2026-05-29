@@ -36,7 +36,9 @@ uses
   System.Generics.Collections,
   Vcl.Forms,
   Winapi.Windows,
-  DragLint.Plugin.Keyboard;
+  DragLint.Plugin.Keyboard,
+  DragLint.Plugin.DiagnosticCache,
+  DragLint.Plugin.EditViewNotifier;
 
 { ---- TMenuActionWrapper ---- }
 { OnClick is TNotifyEvent (method pointer); plain procedures cannot be
@@ -99,6 +101,10 @@ begin
      (LowerCase(Copy(FileName, 1, 8)) = 'file:///') then
     FileName := StringReplace(Copy(FileName, 9, MaxInt), '/', '\',
       [rfReplaceAll]);
+
+  { v0.29: update the visual diagnostic cache (runs on the LSP reader thread;
+    Cache.Update is thread-safe). }
+  Cache.Update(FileName, AParams);
 
   { Collect diagnostic entries before queuing (Diags is owned by AMsg which
     will be freed after this call returns) }
@@ -925,10 +931,12 @@ begin
 
   RegisterProjectNotifier;
   RegisterDragLintKeystrokes;
+  RegisterDragLintEditViewNotifier;
 end;
 
 procedure UnregisterDragLintMenu;
 begin
+  UnregisterDragLintEditViewNotifier;
   UnregisterDragLintKeystrokes;
   UnregisterProjectNotifier;
 

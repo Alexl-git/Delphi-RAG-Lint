@@ -45,6 +45,9 @@ contains
   DragLint.Plugin.CompletionForm in 'DragLint.Plugin.CompletionForm.pas',
   DragLint.Plugin.SignatureForm in 'DragLint.Plugin.SignatureForm.pas',
   DragLint.Plugin.SaveNotifier in 'DragLint.Plugin.SaveNotifier.pas',
-  DragLint.Plugin.RefactorForm in 'DragLint.Plugin.RefactorForm.pas';
+  DragLint.Plugin.RefactorForm in 'DragLint.Plugin.RefactorForm.pas',
+  DragLint.Plugin.RegistryColors in 'DragLint.Plugin.RegistryColors.pas',
+  DragLint.Plugin.DiagnosticCache in 'DragLint.Plugin.DiagnosticCache.pas',
+  DragLint.Plugin.EditViewNotifier in 'DragLint.Plugin.EditViewNotifier.pas';
 
 end.
