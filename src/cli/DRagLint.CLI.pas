@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.26.0-alpha';
+  VERSION = '0.27.0-alpha';
 
 function Run: Integer;
 
@@ -43,6 +43,8 @@ uses
   DRagLint.Refactor.Rename,
   DRagLint.Refactor.DocStub,
   DRagLint.Refactor.DeadCode,
+  DRagLint.Refactor.TestStub,
+  DRagLint.Format.Yadf,
   DRagLint.Diagnostics.CompileCheck;
 
 type
@@ -99,6 +101,9 @@ type
     IncludePrivate:     Boolean; // --include-private
     // v0.26: compile-check
     Target:             string;  // --target <file.dproj|.pas>
+    // v0.27: generate-test + format
+    TestFramework:      string;  // --framework dunitx|dunit (default 'dunitx')
+    YadfPath:           string;  // --yadf-path <YADF.exe>
   end;
 
 procedure PrintHelp;
@@ -138,6 +143,8 @@ begin
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
+  Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
+  Writeln('  drag-lint format <file> [--yadf-path PATH]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -421,10 +428,23 @@ begin
       Inc(i);
       Result.Target := ParamStr(i);
     end
+    else if (A = '--framework') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.TestFramework := ParamStr(i);
+    end
+    else if (A = '--yadf-path') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.YadfPath := ParamStr(i);
+    end
     else if (Result.Command = 'typeat') and (Result.Position = '') and
             (not A.StartsWith('--')) then
       Result.Position := A
     else if (Result.Command = 'compile-check') and (Result.Target = '') and
+            (not A.StartsWith('--')) then
+      Result.Target := A
+    else if (Result.Command = 'format') and (Result.Target = '') and
             (not A.StartsWith('--')) then
       Result.Target := A
     else if (Result.Path = '') and (not A.StartsWith('--')) then
@@ -3038,6 +3058,73 @@ begin
     Result := 0;
 end;
 
+// v0.27: drag-lint generate-test --qname X [--framework dunitx|dunit] [--db PATH]
+// Generates a DUnitX (default) or DUnit test scaffold for the given symbol.
+// Exit 2 on usage error, 1 if no stub generated, 0 on success.
+function DoGenerateTest(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Framework: TTestFramework;
+  Stub: string;
+begin
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint generate-test --qname X [--framework dunitx|dunit] [--db PATH]');
+    Exit(2);
+  end;
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(2);
+  end;
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  if SameText(AArgs.TestFramework, 'dunit') then
+    Framework := tfDUnit
+  else
+    Framework := tfDUnitX;
+  Stub := TTestStubGenerator.Generate(Store, AArgs.QName, Framework);
+  if Stub = '' then
+  begin
+    Writeln(Format('No stub generated for %s', [AArgs.QName]));
+    Exit(1);
+  end;
+  Writeln(Stub);
+  Result := 0;
+end;
+
+// v0.27: drag-lint format <file> [--yadf-path PATH]
+// Runs YADF formatter on the given file (YADF rewrites in place).
+// Exit 2 on usage error, 1 on formatter failure, 0 on success.
+function DoFormat(const AArgs: TArgs): Integer;
+var
+  Res: TFormatResult;
+  Target: string;
+begin
+  Target := AArgs.Target;
+  if Target = '' then
+    Target := AArgs.QName; // fallback: reuse qname slot
+  if Target = '' then
+  begin
+    Writeln('Usage: drag-lint format <file> [--yadf-path PATH]');
+    Exit(2);
+  end;
+  if not FileExists(Target) then
+  begin
+    Writeln(Format('File not found: %s', [Target]));
+    Exit(2);
+  end;
+  Res := TYadfFormatter.Format(Target, AArgs.YadfPath);
+  if not Res.Success then
+  begin
+    Writeln(Format('YADF format failed (exit %d):'#13#10'%s',
+      [Res.ExitCode, Res.StdoutText]));
+    Exit(1);
+  end;
+  Writeln(Format('Formatted: %s', [Target]));
+  Result := 0;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -3092,6 +3179,10 @@ begin
       Result := DoFindDeadCode(Args)
     else if Args.Command = 'compile-check' then
       Result := DoCompileCheck(Args)
+    else if Args.Command = 'generate-test' then
+      Result := DoGenerateTest(Args)
+    else if Args.Command = 'format' then
+      Result := DoFormat(Args)
     else if Args.Command = 'diff' then
       Result := DoDiff(Args)
     else if Args.Command = 'lsp' then
