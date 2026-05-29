@@ -78,6 +78,14 @@ extensions don't silently filter matches.
 | `assert-call` | info | `Assert()` call — ensure the second argument provides a descriptive message |
 | `case-magic-numbers` | info | `case` label is an integer literal — consider naming the constant |
 
+## Shipped rules (v0.35)
+
+| Rule id | Severity | Description |
+|---------|----------|-------------|
+| `boolean-comparison-true` | info | `X = True` or `X = False` -- redundant boolean comparison |
+| `redundant-as-tobject` | info | `(X as TObject)` -- every Delphi object is already a TObject |
+| `inherited-bare` | info | Bare `inherited;` call -- verify it invokes the intended ancestor method |
+
 ### Tip
 
 If you want to discover what AST nodes look like for a fragment of Delphi

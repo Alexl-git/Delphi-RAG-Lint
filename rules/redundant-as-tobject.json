@@ -1,0 +1,6 @@
+{
+  "id": "redundant-as-tobject",
+  "severity": "info",
+  "message": "Redundant 'as TObject' cast - every Delphi object is already a TObject",
+  "warn_capture": "warn"
+}

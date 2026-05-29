@@ -1,0 +1,6 @@
+{
+  "id": "inherited-bare",
+  "severity": "info",
+  "message": "Bare 'inherited' call - verify it invokes the intended ancestor method",
+  "warn_capture": "warn"
+}

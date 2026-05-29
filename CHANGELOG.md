@@ -3,6 +3,52 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.35.0-alpha -- 2026-05-29
+
+Final polish version closing the v0.16-v0.35 marathon (20 versions total).
+
+### Added
+
+- **Hover tooltip** (`DragLint.Plugin.HoverTracker`): a `TTimer` polls every
+  200ms; when the mouse cursor is stable for >= 600ms, the caret row of the
+  active editor view is looked up in the diagnostic cache. If a diagnostic is
+  found, `Application.HintWindow.ActivateHint` shows the message near the
+  cursor. Caret-based (not pixel-precise); limitation documented.
+
+- **New setting `EnableHoverTooltip`** (default True): persisted in the
+  registry; exposed in both Tools > drag-lint > Settings and
+  Tools > Options > drag-lint (Hover Tooltip group).
+
+- **3 new lint rules** (total built-in count now 13+):
+  - `boolean-comparison-true` (info) -- `X = True` or `X = False`: redundant
+    boolean comparison; use the expression directly.
+  - `redundant-as-tobject` (info) -- `(X as TObject)`: every Delphi object is
+    already a TObject; cast is a no-op.
+  - `inherited-bare` (info) -- bare `inherited;` call: verify it invokes the
+    intended ancestor method.
+  Rules in both `rules/` and `third_party/dll/rules/`.
+
+- **README rewritten** as a comprehensive getting-started guide covering CLI,
+  LSP server (Zed / VS Code), MCP server (Claude / Cursor), and RAD Studio
+  plugin install paths; full command/tool/rule reference.
+
+- **T61** -- HoverTracker compile smoke (`dcc64 -B T61_hovertracker.dpr`).
+- **T62** -- Verify 3 new lint rules fire on `RuleTest.pas` (extended with
+  boolean compare, `as TObject`, and bare `inherited` examples).
+
+### Changed
+
+- VERSION bumped to `0.35.0-alpha` in `DRagLint.CLI` and `DRagLint.LSP.Server`.
+
+### Notes
+
+Skipped rules that require data-flow analysis (single-line-if-then,
+string-concat-loop, pos-with-substring, freeandnil-missing,
+repeat-without-until): tree-sitter query syntax alone is insufficient for
+these; deferred to a future session with a flow analysis pass.
+
+---
+
 ## v0.34.0-alpha -- 2026-05-29
 
 ### Added

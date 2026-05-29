@@ -1,0 +1,6 @@
+{
+  "id": "boolean-comparison-true",
+  "severity": "info",
+  "message": "Redundant comparison with boolean literal (use the expression directly)",
+  "warn_capture": "warn"
+}

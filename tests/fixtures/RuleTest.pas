@@ -65,4 +65,40 @@ begin
   L2.Free;
 end;
 
+{ v0.35: boolean-comparison-true }
+procedure BoolCompareExample;
+var B: Boolean;
+begin
+  B := True;
+  if B = True then WriteLn('yes');
+  if B = False then WriteLn('no');
+end;
+
+{ v0.35: redundant-as-tobject }
+procedure AsObjectExample;
+var Obj: TObject;
+begin
+  Obj := TStringList.Create as TObject;
+  Obj.Free;
+end;
+
+{ v0.35: inherited-bare }
+type
+  TBaseClass = class
+    procedure DoSomething; virtual;
+  end;
+
+  TDerivedClass = class(TBaseClass)
+    procedure DoSomething; override;
+  end;
+
+procedure TBaseClass.DoSomething;
+begin
+end;
+
+procedure TDerivedClass.DoSomething;
+begin
+  inherited;
+end;
+
 end.

@@ -45,6 +45,9 @@ type
     { -- Workspace group -- }
     FGrpWorkspace:   TGroupBox;
     FCbWorkspace:    TCheckBox;
+    { -- Hover Tooltip group -- }
+    FGrpHoverTip:    TGroupBox;
+    FCbHoverTooltip: TCheckBox;
     { Browse dialog }
     FOpenDlg:        TOpenDialog;
     procedure BtnBrowseClick(Sender: TObject);
@@ -134,7 +137,7 @@ var
   GW: Integer;  { group box interior width }
 begin
   Width  := 460;
-  Height := 616;
+  Height := 660;
   Y := GM;
 
   { --- Paths --- }
@@ -204,6 +207,12 @@ begin
   GY := GH - 4;
   FCbWorkspace := NewCheck(FGrpWorkspace, LM, GY,
     'Enable workspace mode (auto-detect .drag-lint-workspace.json)', False);
+
+  { --- Hover Tooltip --- }
+  FGrpHoverTip := NewGroup('Hover Tooltip (v0.35)', GH + CH + 4);
+  GY := GH - 4;
+  FCbHoverTooltip := NewCheck(FGrpHoverTip, LM, GY,
+    'Enable hover tooltip (caret-based, 600ms dwell)', False);
 end;
 
 { ---- Load: read registry into controls ---- }
@@ -227,8 +236,9 @@ begin
   FCbWarnInline.Checked := S.ShowWarningsInline;
   FCbHintInline.Checked := S.ShowHintsInline;
   FCbInfoInline.Checked := S.ShowInfoInline;
-  FCbCodeLens.Checked   := S.EnableCodeLens;
-  FCbWorkspace.Checked  := S.EnableWorkspaceMode;
+  FCbCodeLens.Checked     := S.EnableCodeLens;
+  FCbWorkspace.Checked    := S.EnableWorkspaceMode;
+  FCbHoverTooltip.Checked := S.EnableHoverTooltip;
 end;
 
 { ---- Save: write controls back to registry ---- }
@@ -253,6 +263,7 @@ begin
   S.ShowInfoInline       := FCbInfoInline.Checked;
   S.EnableCodeLens       := FCbCodeLens.Checked;
   S.EnableWorkspaceMode  := FCbWorkspace.Checked;
+  S.EnableHoverTooltip   := FCbHoverTooltip.Checked;
   SaveSettings(S);
 end;
 

@@ -20,6 +20,7 @@ type
     ScanLibraries:        Boolean;
     EnableCodeLens:       Boolean;
     EnableWorkspaceMode:  Boolean;
+    EnableHoverTooltip:   Boolean;
   end;
 
 function LoadSettings: TDragLintSettings;
@@ -53,6 +54,7 @@ begin
   Result.ScanLibraries        := False;
   Result.EnableCodeLens       := True;
   Result.EnableWorkspaceMode  := True;
+  Result.EnableHoverTooltip   := True;
 end;
 
 function LoadSettings: TDragLintSettings;
@@ -89,6 +91,8 @@ begin
         Result.EnableCodeLens      := Reg.ReadInteger('EnableCodeLens') <> 0;
       if Reg.ValueExists('EnableWorkspaceMode') then
         Result.EnableWorkspaceMode := Reg.ReadInteger('EnableWorkspaceMode') <> 0;
+      if Reg.ValueExists('EnableHoverTooltip') then
+        Result.EnableHoverTooltip  := Reg.ReadInteger('EnableHoverTooltip') <> 0;
     finally
       Reg.CloseKey;
     end;
@@ -122,6 +126,7 @@ begin
       Reg.WriteInteger('ScanLibraries',       Ord(ASettings.ScanLibraries));
       Reg.WriteInteger('EnableCodeLens',      Ord(ASettings.EnableCodeLens));
       Reg.WriteInteger('EnableWorkspaceMode', Ord(ASettings.EnableWorkspaceMode));
+      Reg.WriteInteger('EnableHoverTooltip',  Ord(ASettings.EnableHoverTooltip));
     finally
       Reg.CloseKey;
     end;

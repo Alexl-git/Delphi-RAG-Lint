@@ -56,6 +56,7 @@ var
   cbInlineMarkers, cbErrInline, cbWarnInline, cbHintInline, cbInfoInline: TCheckBox;
   cbCodeLens: TCheckBox;
   cbWorkspace: TCheckBox;
+  cbHoverTooltip: TCheckBox;
   btnOK, btnCancel, btnBrowse: TButton;
   OpenDlg: TOpenDialog;
   BrowseHandler: TBrowseHandler;
@@ -103,7 +104,7 @@ begin
     Form.BorderStyle := bsDialog;
     Form.Position := poScreenCenter;
     Form.ClientWidth := 480;
-    Form.ClientHeight := 632;
+    Form.ClientHeight := 660;
 
     Y := 16;
     AddLabel('drag-lint.exe path:', Y); Inc(Y, 20);
@@ -166,6 +167,10 @@ begin
     cbWorkspace := AddCheck(Y, 'Enable workspace mode (auto-detect .drag-lint-workspace.json)',
       Settings.EnableWorkspaceMode);  Inc(Y, 24);
 
+    cbHoverTooltip := AddCheck(Y,
+      'Enable hover tooltip (caret-based, 600ms dwell)',
+      Settings.EnableHoverTooltip);  Inc(Y, 24);
+
     btnOK := TButton.Create(Form);
     btnOK.Parent      := Form;
     btnOK.Left        := 296;
@@ -202,6 +207,7 @@ begin
       Settings.ShowInfoInline      := cbInfoInline.Checked;
       Settings.EnableCodeLens      := cbCodeLens.Checked;
       Settings.EnableWorkspaceMode := cbWorkspace.Checked;
+      Settings.EnableHoverTooltip  := cbHoverTooltip.Checked;
       SaveSettings(Settings);
       Result := True;
     end;

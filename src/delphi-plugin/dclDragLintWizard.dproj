@@ -95,6 +95,7 @@
         <DCCReference Include="DragLint.Plugin.UsagesForm.pas"/>
         <DCCReference Include="DragLint.Plugin.SymbolSearchForm.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
+        <DCCReference Include="DragLint.Plugin.HoverTracker.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

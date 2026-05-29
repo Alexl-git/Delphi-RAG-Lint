@@ -48,7 +48,8 @@ uses
   Winapi.Windows,
   DragLint.Plugin.Keyboard,
   DragLint.Plugin.DiagnosticCache,
-  DragLint.Plugin.EditViewNotifier;
+  DragLint.Plugin.EditViewNotifier,
+  DragLint.Plugin.HoverTracker;
 
 { ---- TMenuActionWrapper ---- }
 { OnClick is TNotifyEvent (method pointer); plain procedures cannot be
@@ -1112,10 +1113,12 @@ begin
   RegisterProjectNotifier;
   RegisterDragLintKeystrokes;
   RegisterDragLintEditViewNotifier;
+  StartHoverTracker;
 end;
 
 procedure UnregisterDragLintMenu;
 begin
+  StopHoverTracker;
   UnregisterDragLintEditViewNotifier;
   UnregisterDragLintKeystrokes;
   UnregisterProjectNotifier;
