@@ -328,7 +328,7 @@ begin
     ResObj.AddPair('capabilities', Caps);
     Info := TJSONObject.Create;
     Info.AddPair('name', 'drag-lint LSP');
-    Info.AddPair('version', '0.31.0-alpha');
+    Info.AddPair('version', '0.32.0-alpha');
     ResObj.AddPair('serverInfo', Info);
     Reply.AddPair('result', ResObj);
     SendMessage(Reply);

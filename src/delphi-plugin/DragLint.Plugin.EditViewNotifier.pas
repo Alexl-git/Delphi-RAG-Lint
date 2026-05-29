@@ -16,7 +16,9 @@ implementation
 
 uses
   Winapi.Windows,
+  System.IOUtils,
   DragLint.Plugin.DiagnosticCache,
+  DragLint.Plugin.CodeLensCache,
   DragLint.Plugin.RegistryColors,
   DragLint.Plugin.Settings;
 
@@ -82,6 +84,9 @@ var
   SavedWidth: Integer;
   SavedBrush: TColor;
   SavedBrushStyle: TBrushStyle;
+  CodeLensText: string;
+  SavedFontColor: TColor;
+  SavedFontStyle: TFontStyles;
 
   function SevEnabled(S: TDragLintSeverity): Boolean;
   begin
@@ -169,6 +174,29 @@ begin
     Canvas.Brush.Color := SavedBrush;
     Canvas.Brush.Style := SavedBrushStyle;
   end;
+
+  { ---- Code lens overlay ---- }
+  if Settings.EnableCodeLens then
+  begin
+    CodeLensText := CodeLensCache.GetForLine(FilePath, LineNumber - 1);
+    if CodeLensText <> '' then
+    begin
+      SavedFontColor := Canvas.Font.Color;
+      SavedFontStyle := Canvas.Font.Style;
+      try
+        Canvas.Font.Color := $00808080;  { dim grey }
+        Canvas.Font.Style := [fsItalic];
+        Canvas.Brush.Style := bsClear;
+        Canvas.TextOut(
+          TextRect.Left + TextWidth * CellSize.cx + 8,
+          TextRect.Top,
+          CodeLensText);
+      finally
+        Canvas.Font.Color := SavedFontColor;
+        Canvas.Font.Style := SavedFontStyle;
+      end;
+    end;
+  end;
 end;
 
 { ---- TDragLintEditServicesNotifier ---------------------------------------- }
@@ -225,9 +253,22 @@ procedure TDragLintEditServicesNotifier.DockFormRefresh(
 
 procedure TDragLintEditServicesNotifier.EditorViewActivated(
   const EditWindow: INTAEditWindow; const EditView: IOTAEditView);
+var
+  S:        TDragLintSettings;
+  FilePath: string;
+  DbPath:   string;
 begin
-  if EditView <> nil then
-    EditView.AddNotifier(TDragLintEditViewNotifier.Create);
+  if EditView = nil then Exit;
+  EditView.AddNotifier(TDragLintEditViewNotifier.Create);
+  { Populate code lens cache for this file (synchronous; fast for small files) }
+  if EditView.Buffer = nil then Exit;
+  FilePath := EditView.Buffer.FileName;
+  if FilePath = '' then Exit;
+  S      := LoadSettings;
+  if not S.EnableCodeLens then Exit;
+  DbPath := ResolveDbPath(S.DbPathTemplate,
+              TPath.GetDirectoryName(FilePath));
+  CodeLensCache.PopulateOnce(FilePath, S.ExePath, DbPath);
 end;
 
 { ---- Register / Unregister ------------------------------------------------ }

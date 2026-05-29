@@ -43,4 +43,26 @@ procedure EmptyBody;
 begin
 end;
 
+// TODO: fix this later
+// FIXME: broken
+procedure AssertExample;
+var X: Integer;
+begin
+  X := 0;
+  Assert(X > 0);
+  Assert(X > 0, 'X must be positive');
+end;
+
+procedure NestedWithExample;
+var L1, L2: TStringList;
+begin
+  L1 := TStringList.Create;
+  L2 := TStringList.Create;
+  with L1 do
+    with L2 do
+      Add('nested');
+  L1.Free;
+  L2.Free;
+end;
+
 end.

@@ -63,6 +63,21 @@ extensions don't silently filter matches.
 | `large-magic-number` | info | Numeric literal not in the common-constants allow-list |
 | `string-equality-comparison` | info | `=` comparison on expressions — fires on all `=` binary expressions until type-resolution is plumbed in (v0.19+) |
 
+## Shipped rules (v0.31)
+
+| Rule id | Severity | Description |
+|---------|----------|-------------|
+| `parser-error` | error | Tree-sitter `ERROR` node — malformed syntax that the parser could not recover |
+
+## Shipped rules (v0.32)
+
+| Rule id | Severity | Description |
+|---------|----------|-------------|
+| `compiler-magic-comments` | info | Comment contains TODO/FIXME/HACK/XXX — track in issue tracker |
+| `nested-with` | warning | Nested `with` statement — scope becomes highly ambiguous |
+| `assert-call` | info | `Assert()` call — ensure the second argument provides a descriptive message |
+| `case-magic-numbers` | info | `case` label is an integer literal — consider naming the constant |
+
 ### Tip
 
 If you want to discover what AST nodes look like for a fragment of Delphi

@@ -18,6 +18,7 @@ type
     ShowHintsInline:      Boolean;
     ShowInfoInline:       Boolean;
     ScanLibraries:        Boolean;
+    EnableCodeLens:       Boolean;
   end;
 
 function LoadSettings: TDragLintSettings;
@@ -49,6 +50,7 @@ begin
   Result.ShowHintsInline      := True;
   Result.ShowInfoInline       := False;
   Result.ScanLibraries        := False;
+  Result.EnableCodeLens       := True;
 end;
 
 function LoadSettings: TDragLintSettings;
@@ -81,6 +83,8 @@ begin
         Result.ShowInfoInline      := Reg.ReadInteger('ShowInfoInline') <> 0;
       if Reg.ValueExists('ScanLibraries') then
         Result.ScanLibraries       := Reg.ReadInteger('ScanLibraries') <> 0;
+      if Reg.ValueExists('EnableCodeLens') then
+        Result.EnableCodeLens      := Reg.ReadInteger('EnableCodeLens') <> 0;
     finally
       Reg.CloseKey;
     end;
@@ -112,6 +116,7 @@ begin
       Reg.WriteInteger('ShowHintsInline',     Ord(ASettings.ShowHintsInline));
       Reg.WriteInteger('ShowInfoInline',      Ord(ASettings.ShowInfoInline));
       Reg.WriteInteger('ScanLibraries',       Ord(ASettings.ScanLibraries));
+      Reg.WriteInteger('EnableCodeLens',      Ord(ASettings.EnableCodeLens));
     finally
       Reg.CloseKey;
     end;

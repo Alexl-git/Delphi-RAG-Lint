@@ -39,6 +39,9 @@ type
     FCbWarnInline:   TCheckBox;
     FCbHintInline:   TCheckBox;
     FCbInfoInline:   TCheckBox;
+    { -- Code Lens group -- }
+    FGrpCodeLens:    TGroupBox;
+    FCbCodeLens:     TCheckBox;
     { Browse dialog }
     FOpenDlg:        TOpenDialog;
     procedure BtnBrowseClick(Sender: TObject);
@@ -128,7 +131,7 @@ var
   GW: Integer;  { group box interior width }
 begin
   Width  := 460;
-  Height := 520;
+  Height := 568;
   Y := GM;
 
   { --- Paths --- }
@@ -186,6 +189,12 @@ begin
   FCbWarnInline:= NewCheck(FGrpMarkers, LM + 16, GY, 'Show warnings inline', False); Inc(GY, CH);
   FCbHintInline:= NewCheck(FGrpMarkers, LM + 16, GY, 'Show hints inline',    False); Inc(GY, CH);
   FCbInfoInline:= NewCheck(FGrpMarkers, LM + 16, GY, 'Show info inline',     False);
+
+  { --- Code Lens --- }
+  FGrpCodeLens := NewGroup('Code Lens', GH + CH + 4);
+  GY := GH - 4;
+  FCbCodeLens := NewCheck(FGrpCodeLens, LM, GY,
+    'Enable inline code lens ([N callers] next to method declarations)', False);
 end;
 
 { ---- Load: read registry into controls ---- }
@@ -209,6 +218,7 @@ begin
   FCbWarnInline.Checked := S.ShowWarningsInline;
   FCbHintInline.Checked := S.ShowHintsInline;
   FCbInfoInline.Checked := S.ShowInfoInline;
+  FCbCodeLens.Checked   := S.EnableCodeLens;
 end;
 
 { ---- Save: write controls back to registry ---- }
@@ -231,6 +241,7 @@ begin
   S.ShowWarningsInline   := FCbWarnInline.Checked;
   S.ShowHintsInline      := FCbHintInline.Checked;
   S.ShowInfoInline       := FCbInfoInline.Checked;
+  S.EnableCodeLens       := FCbCodeLens.Checked;
   SaveSettings(S);
 end;
 

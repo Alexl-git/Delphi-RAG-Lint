@@ -1,0 +1,6 @@
+{
+  "id": "nested-with",
+  "severity": "warning",
+  "message": "Nested with statement (scope highly ambiguous)",
+  "warn_capture": "outer"
+}

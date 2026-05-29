@@ -54,6 +54,7 @@ var
   cbAutoIndex, cbAutoReindex, cbScanLibraries: TCheckBox;
   cbHover, cbCompletion, cbSignature, cbDiag: TCheckBox;
   cbInlineMarkers, cbErrInline, cbWarnInline, cbHintInline, cbInfoInline: TCheckBox;
+  cbCodeLens: TCheckBox;
   btnOK, btnCancel, btnBrowse: TButton;
   OpenDlg: TOpenDialog;
   BrowseHandler: TBrowseHandler;
@@ -101,7 +102,7 @@ begin
     Form.BorderStyle := bsDialog;
     Form.Position := poScreenCenter;
     Form.ClientWidth := 480;
-    Form.ClientHeight := 536;
+    Form.ClientHeight := 584;
 
     Y := 16;
     AddLabel('drag-lint.exe path:', Y); Inc(Y, 20);
@@ -154,7 +155,11 @@ begin
     cbHintInline := AddCheck(Y, '  Show hints inline',
       Settings.ShowHintsInline);    Inc(Y, 24);
     cbInfoInline := AddCheck(Y, '  Show info inline',
-      Settings.ShowInfoInline);
+      Settings.ShowInfoInline);  Inc(Y, 24);
+
+    Inc(Y, 8);
+    cbCodeLens := AddCheck(Y, 'Enable inline code lens ([N callers])',
+      Settings.EnableCodeLens);
 
     btnOK := TButton.Create(Form);
     btnOK.Parent      := Form;
@@ -190,6 +195,7 @@ begin
       Settings.ShowWarningsInline  := cbWarnInline.Checked;
       Settings.ShowHintsInline     := cbHintInline.Checked;
       Settings.ShowInfoInline      := cbInfoInline.Checked;
+      Settings.EnableCodeLens      := cbCodeLens.Checked;
       SaveSettings(Settings);
       Result := True;
     end;

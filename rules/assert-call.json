@@ -1,0 +1,6 @@
+{
+  "id": "assert-call",
+  "severity": "info",
+  "message": "Assert call -- ensure 2nd arg has a message",
+  "warn_capture": "warn"
+}

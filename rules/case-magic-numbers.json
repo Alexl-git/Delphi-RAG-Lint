@@ -1,0 +1,6 @@
+{
+  "id": "case-magic-numbers",
+  "severity": "info",
+  "message": "Case label is a literal -- consider naming the constant",
+  "warn_capture": "lit"
+}

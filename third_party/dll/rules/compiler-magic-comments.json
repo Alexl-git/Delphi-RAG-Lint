@@ -1,0 +1,6 @@
+{
+  "id": "compiler-magic-comments",
+  "severity": "info",
+  "message": "TODO/FIXME/HACK comment -- track in issue tracker",
+  "warn_capture": "warn"
+}
