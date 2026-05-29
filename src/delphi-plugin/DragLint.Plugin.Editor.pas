@@ -32,6 +32,8 @@ procedure InvokeImportLog(Sender: TObject);
 procedure InvokeFormatYadf(Sender: TObject);
 { v0.30: structure form }
 procedure InvokeShowStructure(Sender: TObject);
+{ v0.31: AST checks }
+procedure InvokeRunAstChecks(Sender: TObject);
 
 implementation
 
@@ -896,6 +898,78 @@ begin
   ShowDragLintStructure;
 end;
 
+{ v0.31: Run AST Checks on the active file (no compiler required) }
+procedure InvokeRunAstChecks(Sender: TObject);
+var
+  ESS:     IOTAEditorServices;
+  EditView: IOTAEditView;
+  FilePath: string;
+  ExePath, DbPath: string;
+  CmdLine, Output: string;
+  ExitCode: Integer;
+  Client: TDragLintLspClient;
+  Params, TextDoc: TJSONObject;
+  Uri: string;
+begin
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
+  begin
+    ShowMessage('drag-lint: no editor services available');
+    Exit;
+  end;
+  EditView := ESS.TopView;
+  if EditView = nil then
+  begin
+    ShowMessage('drag-lint: no active editor view');
+    Exit;
+  end;
+  FilePath := EditView.Buffer.FileName;
+  if FilePath = '' then
+  begin
+    ShowMessage('drag-lint: active buffer has no file name');
+    Exit;
+  end;
+
+  ExePath := LoadSettings.ExePath;
+  if (ExePath = '') or not FileExists(ExePath) then
+    ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then
+    ExePath := 'drag-lint.exe';
+
+  DbPath := GetActiveProjectDb;
+
+  if DbPath <> '' then
+    CmdLine := Format('"%s" check-ast "%s" --db "%s"',
+      [ExePath, FilePath, DbPath])
+  else
+    CmdLine := Format('"%s" check-ast "%s"', [ExePath, FilePath]);
+
+  ExitCode := RunAndCaptureStdout(CmdLine, Output, 30000);
+
+  if ExitCode = 2 then
+  begin
+    ShowMessage('drag-lint: failed to spawn check-ast.'#13#10 +
+      'Ensure drag-lint.exe is on PATH or next to the BPL.');
+    Exit;
+  end;
+
+  Uri := 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
+  Client := EnsureLspClient;
+  if Client <> nil then
+  begin
+    Params  := TJSONObject.Create;
+    TextDoc := TJSONObject.Create;
+    TextDoc.AddPair('uri', Uri);
+    Params.AddPair('textDocument', TextDoc);
+    try
+      Client.Notify('textDocument/didSave', Params);
+    finally
+      Params.Free;
+    end;
+  end;
+
+  ShowMessage(Format('drag-lint AST Checks:'#13#10'%s', [Trim(Output)]));
+end;
+
 { ---- menu registration ---- }
 
 function AddWrappedItem(AParent: TMenuItem; const ACaption: string;
@@ -938,6 +1012,8 @@ begin
   AddWrappedItem(RootMenu, 'Format with YADF',           InvokeFormatYadf);
   // v0.30: structure form + settings
   AddWrappedItem(RootMenu, 'Show Structure',             InvokeShowStructure);
+  // v0.31: AST diagnostics (no compiler required)
+  AddWrappedItem(RootMenu, 'Run AST Checks',             InvokeRunAstChecks);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
 
   RegisterProjectNotifier;

@@ -183,6 +183,7 @@
         <DCCReference Include="..\refactor\DRagLint.Refactor.TestStub.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Format.Yadf.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.CompileCheck.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.AstChecks.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

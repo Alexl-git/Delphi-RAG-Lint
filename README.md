@@ -6,16 +6,20 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.30-alpha. Early work in progress -- expect breaking changes.**
-IDE integration: custom Structure form (`Tools > drag-lint > Show Structure`)
-with Diagnostics + Code Elements trees; native Tools > Options page via
-`INTAAddInOptions` TFrame. Built on v0.29 in-editor visual diagnostics (gutter
-dots + wavy underlines + Ctrl+Alt+I hint popup), v0.28 lint rule pack
-(5 built-in tree-sitter-query rules), v0.27 QoL release, v0.26 compiler
-diagnostic integration, v0.25 doc-comment generator + dead-code finder,
-v0.24 symbol rename, v0.23 editor reactivity, v0.22 IDE polish, v0.16
-structured doc-comment extraction, v0.15 Obsidian `--open`, v0.14
-`.drag-lint.json` per-project config, and the v0.4 MCP server stack.
+**v0.31-alpha. Early work in progress -- expect breaking changes.**
+v0.31 adds compiler-less AST diagnostics: `drag-lint check-ast <file>` runs
+unbalanced-begin/end and undeclared-identifier checks without `dcc.exe`,
+making the LSP useful in Zed / VS Code. New `parser-error` tree-sitter rule
+catches ERROR nodes. Settings `ScanLibraries` toggle controls whether
+auto-index pulls in RTL + DevExpress + Spring4D libraries. MCP
+`run_ast_checks` tool (14th). Built on v0.30 (custom Structure form +
+native Tools > Options page via `INTAAddInOptions` TFrame), v0.29 in-editor
+visual diagnostics (gutter dots + wavy underlines + Ctrl+Alt+I hint popup),
+v0.28 lint rule pack (5 built-in tree-sitter-query rules), v0.27 QoL
+release, v0.26 compiler diagnostic integration, v0.25 doc-comment generator
++ dead-code finder, v0.24 symbol rename, v0.23 editor reactivity, v0.22 IDE
+polish, v0.16 structured doc-comment extraction, v0.15 Obsidian `--open`,
+v0.14 `.drag-lint.json` per-project config, and the v0.4 MCP server stack.
 
 Builds on v0.2 (DFM forms, full symbol coverage, external `.scm` lint
 plugins, `--project <dproj>` mode).

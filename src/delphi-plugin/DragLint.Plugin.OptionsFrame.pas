@@ -25,6 +25,7 @@ type
     FGrpAutoIndex:   TGroupBox;
     FCbAutoIndex:    TCheckBox;
     FCbAutoReindex:  TCheckBox;
+    FCbScanLibraries: TCheckBox;
     { -- Features group -- }
     FGrpFeatures:    TGroupBox;
     FCbHover:        TCheckBox;
@@ -158,13 +159,16 @@ begin
   FOpenDlg.Filter := 'drag-lint.exe|drag-lint.exe|All files|*.*';
 
   { --- Auto-index --- }
-  FGrpAutoIndex := NewGroup('Auto-index', GH + CH * 2 + 4);
+  FGrpAutoIndex := NewGroup('Auto-index', GH + CH * 3 + 4);
   GY := GH - 4;
   FCbAutoIndex  := NewCheck(FGrpAutoIndex,  LM, GY,
     'Auto-index project when .dproj opens', False);
   Inc(GY, CH);
   FCbAutoReindex := NewCheck(FGrpAutoIndex, LM, GY,
     'Auto-reindex on file save (.pas, .dpr, .dfm)', False);
+  Inc(GY, CH);
+  FCbScanLibraries := NewCheck(FGrpAutoIndex, LM, GY,
+    'Scan libraries (RTL + DevExpress + browsing paths) on index', False);
 
   { --- Feature Toggles --- }
   FGrpFeatures := NewGroup('Feature Toggles', GH + CH * 4 + 4);
@@ -193,8 +197,9 @@ begin
   S := LoadSettings;
   FEdExe.Text          := S.ExePath;
   FEdDb.Text           := S.DbPathTemplate;
-  FCbAutoIndex.Checked  := S.AutoIndex;
-  FCbAutoReindex.Checked:= S.AutoReindexOnSave;
+  FCbAutoIndex.Checked     := S.AutoIndex;
+  FCbAutoReindex.Checked   := S.AutoReindexOnSave;
+  FCbScanLibraries.Checked := S.ScanLibraries;
   FCbHover.Checked      := S.EnableHover;
   FCbCompletion.Checked := S.EnableCompletion;
   FCbSignature.Checked  := S.EnableSignature;
@@ -216,6 +221,7 @@ begin
   S.DbPathTemplate    := FEdDb.Text;
   S.AutoIndex            := FCbAutoIndex.Checked;
   S.AutoReindexOnSave    := FCbAutoReindex.Checked;
+  S.ScanLibraries        := FCbScanLibraries.Checked;
   S.EnableHover          := FCbHover.Checked;
   S.EnableCompletion     := FCbCompletion.Checked;
   S.EnableSignature      := FCbSignature.Checked;

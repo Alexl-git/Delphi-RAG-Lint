@@ -32,6 +32,7 @@ uses
   DRagLint.Refactor.TestStub in '..\refactor\DRagLint.Refactor.TestStub.pas',
   DRagLint.Format.Yadf in '..\refactor\DRagLint.Format.Yadf.pas',
   DRagLint.Diagnostics.CompileCheck in '..\diagnostics\DRagLint.Diagnostics.CompileCheck.pas',
+  DRagLint.Diagnostics.AstChecks in '..\diagnostics\DRagLint.Diagnostics.AstChecks.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

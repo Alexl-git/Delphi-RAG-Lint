@@ -51,7 +51,8 @@ var
   Form: TForm;
   Settings: TDragLintSettings;
   edExe, edDb: TEdit;
-  cbAutoIndex, cbAutoReindex, cbHover, cbCompletion, cbSignature, cbDiag: TCheckBox;
+  cbAutoIndex, cbAutoReindex, cbScanLibraries: TCheckBox;
+  cbHover, cbCompletion, cbSignature, cbDiag: TCheckBox;
   cbInlineMarkers, cbErrInline, cbWarnInline, cbHintInline, cbInfoInline: TCheckBox;
   btnOK, btnCancel, btnBrowse: TButton;
   OpenDlg: TOpenDialog;
@@ -100,7 +101,7 @@ begin
     Form.BorderStyle := bsDialog;
     Form.Position := poScreenCenter;
     Form.ClientWidth := 480;
-    Form.ClientHeight := 512;
+    Form.ClientHeight := 536;
 
     Y := 16;
     AddLabel('drag-lint.exe path:', Y); Inc(Y, 20);
@@ -131,6 +132,9 @@ begin
       Settings.AutoIndex);  Inc(Y, 24);
     cbAutoReindex := AddCheck(Y, 'Auto-reindex on file save (.pas, .dpr, .dfm)',
       Settings.AutoReindexOnSave);  Inc(Y, 24);
+    cbScanLibraries := AddCheck(Y,
+      'Scan libraries (RTL + DevExpress + browsing paths)',
+      Settings.ScanLibraries);  Inc(Y, 24);
     cbHover       := AddCheck(Y, 'Enable Hover at Cursor',
       Settings.EnableHover);  Inc(Y, 24);
     cbCompletion := AddCheck(Y, 'Enable Show Completion',
@@ -176,6 +180,7 @@ begin
       Settings.DbPathTemplate   := edDb.Text;
       Settings.AutoIndex           := cbAutoIndex.Checked;
       Settings.AutoReindexOnSave   := cbAutoReindex.Checked;
+      Settings.ScanLibraries       := cbScanLibraries.Checked;
       Settings.EnableHover         := cbHover.Checked;
       Settings.EnableCompletion := cbCompletion.Checked;
       Settings.EnableSignature  := cbSignature.Checked;

@@ -17,6 +17,7 @@ type
     ShowWarningsInline:   Boolean;
     ShowHintsInline:      Boolean;
     ShowInfoInline:       Boolean;
+    ScanLibraries:        Boolean;
   end;
 
 function LoadSettings: TDragLintSettings;
@@ -47,6 +48,7 @@ begin
   Result.ShowWarningsInline   := True;
   Result.ShowHintsInline      := True;
   Result.ShowInfoInline       := False;
+  Result.ScanLibraries        := False;
 end;
 
 function LoadSettings: TDragLintSettings;
@@ -77,6 +79,8 @@ begin
         Result.ShowHintsInline     := Reg.ReadInteger('ShowHintsInline') <> 0;
       if Reg.ValueExists('ShowInfoInline') then
         Result.ShowInfoInline      := Reg.ReadInteger('ShowInfoInline') <> 0;
+      if Reg.ValueExists('ScanLibraries') then
+        Result.ScanLibraries       := Reg.ReadInteger('ScanLibraries') <> 0;
     finally
       Reg.CloseKey;
     end;
@@ -107,6 +111,7 @@ begin
       Reg.WriteInteger('ShowWarningsInline',  Ord(ASettings.ShowWarningsInline));
       Reg.WriteInteger('ShowHintsInline',     Ord(ASettings.ShowHintsInline));
       Reg.WriteInteger('ShowInfoInline',      Ord(ASettings.ShowInfoInline));
+      Reg.WriteInteger('ScanLibraries',       Ord(ASettings.ScanLibraries));
     finally
       Reg.CloseKey;
     end;

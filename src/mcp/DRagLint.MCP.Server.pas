@@ -15,7 +15,8 @@ uses
   DRagLint.Context.Bundler,
   DRagLint.Resolver.TypeAt,
   DRagLint.Refactor.Rename,
-  DRagLint.Diagnostics.CompileCheck;
+  DRagLint.Diagnostics.CompileCheck,
+  DRagLint.Diagnostics.AstChecks;
 
 type
   // Newline-delimited JSON-RPC 2.0 server speaking MCP-2024-11-05 over stdio.
@@ -148,7 +149,7 @@ begin
   Res.AddPair('capabilities', Caps);
   Info := TJSONObject.Create;
   Info.AddPair('name', 'drag-lint');
-  Info.AddPair('version', '0.4.0-alpha');
+  Info.AddPair('version', '0.31.0-alpha');
   Res.AddPair('serverInfo', Info);
   SendResult(AId, Res);
 end;
@@ -306,6 +307,17 @@ begin
     '"dry_run":{"type":"boolean","description":"If true, return edits without applying them (optional, default false)"},' +
     '"db":{"type":"string","description":"Path to .sqlite database (optional if --db passed at startup)"}' +
     '},"required":["qname","to"]}'));
+
+  // v0.31: run AST-based diagnostics (no compiler required).
+  Tools.AddElement(ToolDescriptor(
+    'run_ast_checks',
+    'Run compiler-less AST diagnostics on a Delphi source file. ' +
+    'Checks: unbalanced begin/end, undeclared identifiers (vs symbol index). ' +
+    'Works in Zed / VS Code / any editor without dcc.exe installed.',
+    '{"type":"object","properties":{' +
+    '"target":{"type":"string","description":"Absolute path to a .pas file"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional — enables undeclared-identifier check)"}' +
+    '},"required":["target"],"additionalProperties":false}'));
 
   // v0.26: run dcc64/msbuild and return compiler findings as JSON.
   Tools.AddElement(ToolDescriptor(
@@ -999,6 +1011,38 @@ begin
           ',"applied":' + RenAppliedStr +
           '}';
       end;
+    end
+    else if ToolName = 'run_ast_checks' then
+    begin
+      var AstTarget := '';
+      if Args.GetValue('target') <> nil then
+        AstTarget := Args.GetValue('target').Value;
+      if AstTarget = '' then
+      begin
+        SendError(AId, -32602, 'run_ast_checks requires target');
+        Exit;
+      end;
+      var AstStore := ResolveStore(Args);
+      var AstFindings := TAstChecker.Check(AstStore, AstTarget);
+      var AstParts: TArray<string>;
+      SetLength(AstParts, Length(AstFindings));
+      var AstIdx: Integer;
+      for AstIdx := 0 to High(AstFindings) do
+      begin
+        var AF := AstFindings[AstIdx];
+        AstParts[AstIdx] :=
+          '{"file":"'      + JsonEscape(AF.FilePath)  + '"' +
+          ',"line":'       + IntToStr(AF.StartLine)   +
+          ',"col":'        + IntToStr(AF.StartCol)    +
+          ',"severity":"'  + JsonEscape(AF.Severity)  + '"' +
+          ',"rule":"'      + JsonEscape(AF.RuleId)    + '"' +
+          ',"message":"'   + JsonEscape(AF.Message)   + '"' +
+          '}';
+      end;
+      ResultText :=
+        '{"findings":[' + string.Join(',', AstParts) + ']' +
+        ',"count":' + IntToStr(Length(AstFindings)) +
+        '}';
     end
     else if ToolName = 'run_compile_check' then
     begin

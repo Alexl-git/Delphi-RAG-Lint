@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.30.0-alpha';
+  VERSION = '0.31.0-alpha';
 
 function Run: Integer;
 
@@ -45,7 +45,8 @@ uses
   DRagLint.Refactor.DeadCode,
   DRagLint.Refactor.TestStub,
   DRagLint.Format.Yadf,
-  DRagLint.Diagnostics.CompileCheck;
+  DRagLint.Diagnostics.CompileCheck,
+  DRagLint.Diagnostics.AstChecks;
 
 type
   TArgs = record
@@ -145,6 +146,7 @@ begin
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH]');
+  Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -442,6 +444,9 @@ begin
             (not A.StartsWith('--')) then
       Result.Position := A
     else if (Result.Command = 'compile-check') and (Result.Target = '') and
+            (not A.StartsWith('--')) then
+      Result.Target := A
+    else if (Result.Command = 'check-ast') and (Result.Target = '') and
             (not A.StartsWith('--')) then
       Result.Target := A
     else if (Result.Command = 'format') and (Result.Target = '') and
@@ -3093,6 +3098,74 @@ begin
   Result := 0;
 end;
 
+// v0.31: drag-lint check-ast <file> [--db PATH] [--format text|json]
+// Runs AST-based diagnostics without requiring dcc.exe.
+// Checks: unbalanced begin/end, undeclared identifiers (vs index).
+// Exit 0 if no findings, 1 if findings present, 2 on usage error.
+function DoCheckAst(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Findings: TArray<TLintFinding>;
+  F: TLintFinding;
+  JArr: TJSONArray;
+  JObj: TJSONObject;
+begin
+  if AArgs.Target = '' then
+  begin
+    Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--format text|json]');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.Target) then
+  begin
+    Writeln('ERROR: file not found: ', AArgs.Target);
+    Exit(2);
+  end;
+  if TFile.Exists(AArgs.DbPath) then
+  begin
+    Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+    Store.Migrate;
+  end
+  else
+    Store := nil;
+  Findings := TAstChecker.Check(Store, AArgs.Target);
+
+  if SameText(AArgs.Format, 'json') then
+  begin
+    JArr := TJSONArray.Create;
+    try
+      for F in Findings do
+      begin
+        JObj := TJSONObject.Create;
+        JObj.AddPair('rule', F.RuleId);
+        JObj.AddPair('severity', F.Severity);
+        JObj.AddPair('file_path', F.FilePath);
+        JObj.AddPair('start_line', TJSONNumber.Create(F.StartLine));
+        JObj.AddPair('start_col', TJSONNumber.Create(F.StartCol));
+        JObj.AddPair('end_line', TJSONNumber.Create(F.EndLine));
+        JObj.AddPair('end_col', TJSONNumber.Create(F.EndCol));
+        JObj.AddPair('message', F.Message);
+        JArr.AddElement(JObj);
+      end;
+      Writeln(JArr.Format(2));
+    finally
+      JArr.Free;
+    end;
+  end
+  else
+  begin
+    for F in Findings do
+      Writeln(Format('%s(%d,%d): %s %s: %s',
+        [AArgs.Target, F.StartLine, F.StartCol,
+         F.Severity, F.RuleId, F.Message]));
+    Writeln(Format('AST findings: %d', [Length(Findings)]));
+  end;
+
+  if Length(Findings) > 0 then
+    Result := 1
+  else
+    Result := 0;
+end;
+
 // v0.27: drag-lint format <file> [--yadf-path PATH]
 // Runs YADF formatter on the given file (YADF rewrites in place).
 // Exit 2 on usage error, 1 on formatter failure, 0 on success.
@@ -3183,6 +3256,8 @@ begin
       Result := DoGenerateTest(Args)
     else if Args.Command = 'format' then
       Result := DoFormat(Args)
+    else if Args.Command = 'check-ast' then
+      Result := DoCheckAst(Args)
     else if Args.Command = 'diff' then
       Result := DoDiff(Args)
     else if Args.Command = 'lsp' then

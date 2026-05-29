@@ -73,13 +73,19 @@ var
   CmdLine: string;
   SI: TStartupInfoW;
   PI: TProcessInformation;
-  CmdLineBuf: array[0..1023] of WideChar;
+  CmdLineBuf: array[0..2047] of WideChar;
+  Cfg: TDragLintSettings;
 begin
   FillChar(SI, SizeOf(SI), 0);
   SI.cb := SizeOf(SI);
   FillChar(PI, SizeOf(PI), 0);
-  CmdLine := Format('"%s" index "%s" --db "%s"',
-    [AExePath, AProjDir, ADbPath]);
+  Cfg := LoadSettings;
+  if Cfg.ScanLibraries then
+    CmdLine := Format('"%s" index "%s" --scan-libraries --db "%s"',
+      [AExePath, AProjDir, ADbPath])
+  else
+    CmdLine := Format('"%s" index "%s" --db "%s"',
+      [AExePath, AProjDir, ADbPath]);
   StrPCopy(CmdLineBuf, CmdLine);
   if CreateProcessW(nil, CmdLineBuf, nil, nil, False,
     CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then

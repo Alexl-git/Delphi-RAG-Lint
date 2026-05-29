@@ -3,6 +3,44 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.31.0-alpha -- 2026-05-29
+
+### Added
+
+- **Compiler-less AST diagnostics** -- `drag-lint check-ast <file>`
+  runs without `dcc.exe`. Two programmatic checks via new
+  `DRagLint.Diagnostics.AstChecks.TAstChecker`:
+  - `unbalanced-begin-end` -- depth-aware lexer counting begin/end
+    keywords outside strings/comments; flags mismatches at file end.
+  - `undeclared-identifier` -- regex-extracts identifiers (uppercase
+    first letter, length > 2) and queries the symbol index; identifiers
+    not found AND not in the built-in allowlist are flagged.
+    Requires `--db` to be useful. Allowlist shipped in
+    `rules/builtin-symbols.txt`.
+  Findings flow through the same `publishDiagnostics` path; compatible
+  with Zed, VS Code, or any LSP client.
+
+- **`parser-error` rule** (`rules/parser-error.scm` +
+  `rules/parser-error.json`) -- catches `ERROR` nodes emitted by the
+  tree-sitter grammar for malformed syntax. Works via the existing
+  `.scm` rule loader (`TLinter`).
+
+- **MCP `run_ast_checks` tool** (14th in catalog) -- mirrors
+  `run_compile_check` shape: `{"target":"path.pas","db":"..."}`.
+
+- **Settings: `ScanLibraries` toggle** -- new checkbox in
+  Tools > Options > drag-lint and Tools > drag-lint > Settings.
+  When True, the plugin auto-index appends `--scan-libraries` to
+  the spawned `drag-lint index` command, pulling in RTL + DevExpress
+  + Spring4D + browsing-path libraries. Off by default (heavy;
+  ~480k symbols on a typical install).
+
+- **Tools > drag-lint > Run AST Checks** menu entry -- spawns
+  `drag-lint check-ast <active-file>` and broadcasts `textDocument/
+  didSave` for LSP refresh. Produces findings without a compiler.
+
+---
+
 ## v0.30.0-alpha -- 2026-05-29
 
 ### Added (IDE integration)
