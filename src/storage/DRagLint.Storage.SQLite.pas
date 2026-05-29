@@ -39,6 +39,9 @@ type
     FQFindUndocumented: TFDQuery;
     FQFindByDocContains: TFDQuery;
     FQListDocumentedSymbols: TFDQuery;
+    FQFindContaining: TFDQuery;
+    FQFindFileId: TFDQuery;
+    FQFindChildByName: TFDQuery;
     procedure Connect(const ADbPath: string);
     procedure PrepareStatements;
     procedure EnsureTrigramTablePopulated;
@@ -81,6 +84,13 @@ type
 
     // v0.18: bench-context
     function ListDocumentedSymbols(ALimit: Integer): TArray<TSymbol>;
+
+    // v0.19: type-at-position helpers
+    function FindContainingSymbol(AFileId: Int64; ALine: Integer): TSymbol;
+    function FindFileIdByPath(const APath: string): Int64;
+    function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
+    function FindChildSymbolByName(AParentId: Int64;
+      const AName: string): TSymbol;
 
     // v0.17: blast-radius pack
     function FindTransitiveCallers(const ASymbolName: string;
@@ -147,6 +157,9 @@ begin
   FQFindUndocumented.Free;
   FQFindByDocContains.Free;
   FQListDocumentedSymbols.Free;
+  FQFindContaining.Free;
+  FQFindFileId.Free;
+  FQFindChildByName.Free;
   if Assigned(FConn) then
   begin
     if FConn.Connected then
@@ -350,6 +363,18 @@ begin
     'INNER JOIN symbol_docs d ON d.symbol_id = s.id ' +
     'WHERE d.summary IS NOT NULL ' +
     'LIMIT :lim');
+
+  FQFindContaining := NewQuery(
+    'SELECT * FROM symbols ' +
+    'WHERE file_id = :fid AND start_line <= :line AND end_line >= :line ' +
+    'ORDER BY start_line DESC LIMIT 1');
+
+  FQFindFileId := NewQuery(
+    'SELECT id FROM files ' +
+    'WHERE path = :p OR LOWER(path) = LOWER(:p) LIMIT 1');
+
+  FQFindChildByName := NewQuery(
+    'SELECT * FROM symbols WHERE parent_id = :pid AND name = :name LIMIT 1');
 end;
 
 function TSQLiteSymbolStore.FileIsUpToDate(const APath: string;
@@ -939,6 +964,86 @@ begin
     Result := Acc.ToArray;
   finally
     Acc.Free;
+  end;
+end;
+
+// v0.19: type-at-position helpers
+
+function TSQLiteSymbolStore.FindContainingSymbol(AFileId: Int64;
+  ALine: Integer): TSymbol;
+begin
+  Result := Default(TSymbol);
+  if FQFindContaining.Active then
+    FQFindContaining.Close;
+  FQFindContaining.ParamByName('fid').AsLargeInt := AFileId;
+  FQFindContaining.ParamByName('line').AsInteger := ALine;
+  FQFindContaining.Open;
+  try
+    if not FQFindContaining.IsEmpty then
+      Result := ReadSymbolFromQuery(FQFindContaining);
+  finally
+    FQFindContaining.Close;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindFileIdByPath(const APath: string): Int64;
+var
+  NormPath: string;
+begin
+  Result := -1;
+  NormPath := StringReplace(APath, '/', '\', [rfReplaceAll]);
+  if FQFindFileId.Active then
+    FQFindFileId.Close;
+  FQFindFileId.ParamByName('p').AsString := NormPath;
+  FQFindFileId.Open;
+  try
+    if not FQFindFileId.IsEmpty then
+      Result := FQFindFileId.Fields[0].AsLargeInt;
+  finally
+    FQFindFileId.Close;
+  end;
+  if Result = -1 then
+  begin
+    // Try forward-slash normalised version
+    NormPath := StringReplace(APath, '\', '/', [rfReplaceAll]);
+    if FQFindFileId.Active then
+      FQFindFileId.Close;
+    FQFindFileId.ParamByName('p').AsString := NormPath;
+    FQFindFileId.Open;
+    try
+      if not FQFindFileId.IsEmpty then
+        Result := FQFindFileId.Fields[0].AsLargeInt;
+    finally
+      FQFindFileId.Close;
+    end;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindSymbolByExactNameAnywhere(
+  const AName: string): TSymbol;
+var
+  Arr: TArray<TSymbol>;
+begin
+  Result := Default(TSymbol);
+  Arr := FindSymbolsByExactName(AName);
+  if Length(Arr) > 0 then
+    Result := Arr[0];
+end;
+
+function TSQLiteSymbolStore.FindChildSymbolByName(AParentId: Int64;
+  const AName: string): TSymbol;
+begin
+  Result := Default(TSymbol);
+  if FQFindChildByName.Active then
+    FQFindChildByName.Close;
+  FQFindChildByName.ParamByName('pid').AsLargeInt := AParentId;
+  FQFindChildByName.ParamByName('name').AsString := AName;
+  FQFindChildByName.Open;
+  try
+    if not FQFindChildByName.IsEmpty then
+      Result := ReadSymbolFromQuery(FQFindChildByName);
+  finally
+    FQFindChildByName.Close;
   end;
 end;
 

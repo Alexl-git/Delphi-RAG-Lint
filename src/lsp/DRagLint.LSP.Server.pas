@@ -15,7 +15,8 @@ uses
   DRagLint.Core.Interfaces,
   DRagLint.Storage.SQLite,
   DRagLint.Parser.Delphi13,
-  DRagLint.Hover.Renderer;
+  DRagLint.Hover.Renderer,
+  DRagLint.Resolver.TypeAt;
 
 type
   // Language Server Protocol over stdio with Content-Length framing.
@@ -698,6 +699,23 @@ begin
             Sym.StartLine]));
           if Sym.Signature <> '' then
             Sb.AppendLine('    ' + Sym.Signature);
+        end;
+        // v0.19: enrich with type-at-position resolution when the identifier
+        // is a reference (no doc comment found on the declaration).
+        // LSP uses 0-based line/col; TTypeAtResolver uses 1-based.
+        var TAResult := TTypeAtResolver.Resolve(
+          FStore, Path, Line + 1, Col + 1);
+        if TAResult.HasResolved and
+           (TAResult.Resolved.QualifiedName <> Symbols[0].QualifiedName) then
+        begin
+          Sb.AppendLine('');
+          Sb.AppendLine('## Type');
+          Sb.AppendLine('');
+          Sb.AppendLine(Format('Resolved: `%s`',
+            [TAResult.Resolved.QualifiedName]));
+          if TAResult.Resolved.Signature <> '' then
+            Sb.AppendLine(Format('Signature: `%s`',
+              [TAResult.Resolved.Signature]));
         end;
         MdValue := Sb.ToString;
       finally

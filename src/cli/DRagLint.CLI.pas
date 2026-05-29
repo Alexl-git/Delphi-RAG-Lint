@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.18.0-alpha';
+  VERSION = '0.19.0-alpha';
 
 function Run: Integer;
 
@@ -38,7 +38,8 @@ uses
   DRagLint.MCP.Server,
   DRagLint.LSP.Server,
   DRagLint.Hover.Renderer,
-  DRagLint.Context.Bundler;
+  DRagLint.Context.Bundler,
+  DRagLint.Resolver.TypeAt;
 
 type
   TArgs = record
@@ -84,6 +85,8 @@ type
     MaxCallers:         Integer; // --max-callers N (default 5)
     IncludeClassSurface: Boolean; // default true
     BenchN:             Integer; // --n N for bench-context (default 20)
+    // v0.19: typeat
+    Position:           string;  // raw <file>:<line>:<col>
   end;
 
 procedure PrintHelp;
@@ -118,6 +121,7 @@ begin
   Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw]');
   Writeln('                               [--max-callers N] [--context N] [--no-docs]');
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
+  Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -387,6 +391,9 @@ begin
       Inc(i);
       Result.BenchN := StrToIntDef(ParamStr(i), 20);
     end
+    else if (Result.Command = 'typeat') and (Result.Position = '') and
+            (not A.StartsWith('--')) then
+      Result.Position := A
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
     else
@@ -2725,6 +2732,73 @@ begin
   Result := 0;
 end;
 
+// v0.19: drag-lint typeat <file>:<line>:<col> [--db <path>] [--format text|json]
+// Resolves the identifier at the given position to a symbol in the index.
+// The position argument has the form: C:\path\to\File.pas:17:8
+// (Windows paths may contain a drive letter colon, so we parse the LAST
+// two colon-delimited segments as line and column.)
+function DoTypeAt(const AArgs: TArgs): Integer;
+var
+  Pos, FilePart: string;
+  Parts: TArray<string>;
+  Line, Col: Integer;
+  Store: ISymbolStore;
+  TAResult: TTypeAtResult;
+  Fmt: string;
+begin
+  Pos := AArgs.Position;
+  if Pos = '' then
+  begin
+    Writeln('Usage: drag-lint typeat <file>:<line>:<col> [--db <path>] ' +
+      '[--format text|json]');
+    Exit(2);
+  end;
+
+  // Parse last two colon segments as line:col.
+  // e.g. "C:\foo\bar.pas:17:8" -> Parts=[..,"17","8"]
+  Parts := Pos.Split([':']);
+  if Length(Parts) < 3 then
+  begin
+    Writeln('ERROR: position must be <file>:<line>:<col>, got: ', Pos);
+    Exit(2);
+  end;
+  Col  := StrToIntDef(Parts[High(Parts)], 0);
+  Line := StrToIntDef(Parts[High(Parts) - 1], 0);
+  // Everything before the last two segments is the file path.
+  // Re-join first (n-2) parts with ':' to handle drive letters.
+  var PartCount := Length(Parts) - 2;
+  FilePart := string.Join(':', System.Copy(Parts, 0, PartCount));
+
+  if (Line <= 0) or (Col <= 0) then
+  begin
+    Writeln('ERROR: line and col must be positive integers');
+    Exit(2);
+  end;
+
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first.');
+    Exit(2);
+  end;
+
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  TAResult := TTypeAtResolver.Resolve(Store, FilePart, Line, Col);
+
+  Fmt := LowerCase(AArgs.Format);
+  if Fmt = 'json' then
+    Write(TTypeAtResolver.RenderJson(TAResult))
+  else
+    Write(TTypeAtResolver.RenderText(TAResult));
+
+  if TAResult.HasResolved then
+    Result := 0
+  else
+    Result := 1;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -2769,6 +2843,8 @@ begin
       Result := DoContext(Args)
     else if Args.Command = 'bench-context' then
       Result := DoBenchContext(Args)
+    else if Args.Command = 'typeat' then
+      Result := DoTypeAt(Args)
     else if Args.Command = 'diff' then
       Result := DoDiff(Args)
     else if Args.Command = 'lsp' then

@@ -175,6 +175,7 @@
         <DCCReference Include="..\lsp\DRagLint.LSP.Server.pas"/>
         <DCCReference Include="DRagLint.Hover.Renderer.pas"/>
         <DCCReference Include="..\context\DRagLint.Context.Bundler.pas"/>
+        <DCCReference Include="..\resolver\DRagLint.Resolver.TypeAt.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

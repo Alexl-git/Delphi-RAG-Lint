@@ -1,0 +1,2 @@
+{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_type_at_position","arguments":{"file":"tests/fixtures/Calls.pas","line":17,"col":8,"db":"tests/fixtures/t14.sqlite"}}}

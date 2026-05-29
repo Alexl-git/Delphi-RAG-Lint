@@ -54,6 +54,13 @@ type
 
     // v0.18: bench-context — symbols that have at least one non-null summary
     function ListDocumentedSymbols(ALimit: Integer): TArray<TSymbol>;
+
+    // v0.19: type-at-position helpers
+    function FindContainingSymbol(AFileId: Int64; ALine: Integer): TSymbol;
+    function FindFileIdByPath(const APath: string): Int64;
+    function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
+    function FindChildSymbolByName(AParentId: Int64;
+      const AName: string): TSymbol;
   end;
 
   TParseResult = record

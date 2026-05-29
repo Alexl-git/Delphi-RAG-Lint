@@ -24,6 +24,7 @@ uses
   DRagLint.LSP.Server in '..\lsp\DRagLint.LSP.Server.pas',
   DRagLint.Hover.Renderer in 'DRagLint.Hover.Renderer.pas',
   DRagLint.Context.Bundler in '..\context\DRagLint.Context.Bundler.pas',
+  DRagLint.Resolver.TypeAt in '..\resolver\DRagLint.Resolver.TypeAt.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

@@ -12,7 +12,8 @@ uses
   DRagLint.Core.Interfaces,
   DRagLint.Storage.SQLite,
   DRagLint.Lint.Linter,
-  DRagLint.Context.Bundler;
+  DRagLint.Context.Bundler,
+  DRagLint.Resolver.TypeAt;
 
 type
   // Newline-delimited JSON-RPC 2.0 server speaking MCP-2024-11-05 over stdio.
@@ -278,6 +279,18 @@ begin
     '"max_callers":{"type":"integer","description":"Maximum number of callers to include (optional, default 5)"},' +
     '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
     '},"required":["qname"]}'));
+
+  Tools.AddElement(ToolDescriptor(
+    'get_type_at_position',
+    'Resolve the identifier at a given file/line/col position to a symbol in ' +
+    'the index. Returns token, containing symbol, resolved symbol, signature, ' +
+    'and a note when the position is unresolvable (e.g. local variable).',
+    '{"type":"object","properties":{' +
+    '"file":{"type":"string","description":"Absolute or relative path to the source file"},' +
+    '"line":{"type":"integer","description":"1-based line number"},' +
+    '"col":{"type":"integer","description":"1-based column number"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
+    '},"required":["file","line","col"]}'));
 
   Res.AddPair('tools', Tools);
   SendResult(AId, Res);
@@ -832,6 +845,39 @@ begin
 
       // Render as JSON
       ResultText := TContextBundler.RenderJson(Bundle);
+    end
+    else if ToolName = 'get_type_at_position' then
+    begin
+      var TAPosStore := ResolveStore(Args);
+      if TAPosStore = nil then
+      begin
+        SendError(AId, -32000,
+          'no database loaded; pass --db on serve or in arguments');
+        Exit;
+      end;
+      var TAPosFile := '';
+      var TAPosLine := 0;
+      var TAPosCol := 0;
+      if Args.GetValue('file') <> nil then
+        TAPosFile := Args.GetValue('file').Value;
+      if Args.GetValue('line') <> nil then
+        TAPosLine := StrToIntDef(Args.GetValue('line').Value, 0);
+      if Args.GetValue('col') <> nil then
+        TAPosCol := StrToIntDef(Args.GetValue('col').Value, 0);
+      if TAPosFile = '' then
+      begin
+        SendError(AId, -32602, 'get_type_at_position requires file');
+        Exit;
+      end;
+      if (TAPosLine <= 0) or (TAPosCol <= 0) then
+      begin
+        SendError(AId, -32602,
+          'get_type_at_position: line and col must be positive integers');
+        Exit;
+      end;
+      var TAPosResult := TTypeAtResolver.Resolve(
+        TAPosStore, TAPosFile, TAPosLine, TAPosCol);
+      ResultText := TTypeAtResolver.RenderJson(TAPosResult);
     end
     else
     begin

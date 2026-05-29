@@ -284,6 +284,43 @@ drag-lint bench-context --n 10 --md --db myproj.sqlite
 
 Full design: [`docs/superpowers/specs/2026-05-28-v018-context-bundles-design.md`](docs/superpowers/specs/2026-05-28-v018-context-bundles-design.md)
 
+## Type-at-position (v0.19)
+
+`drag-lint typeat` resolves the identifier at a specific source file position
+(line and column) and returns the containing symbol, the resolved symbol's
+qualified name, signature, and documentation. Useful for IDE hovering,
+AI-assisted navigation, and type inference in editor extensions.
+
+Pragmatic scope: top-level symbols + dotted access (`Foo.Bar`) against
+class / record / interface parents. Local variable inference, generic
+substitution, and `with`-statement scope are deferred to v0.21.
+
+### CLI usage
+
+```cmd
+:: Resolve identifier at source position (line:col are 1-based)
+drag-lint typeat Docs.pas:42:15 --db myproj.sqlite
+
+:: Output as JSON
+drag-lint typeat Docs.pas:42:15 --db myproj.sqlite --json
+
+:: Verbose output (containing symbol + full resolution chain)
+drag-lint typeat Docs.pas:42:15 --db myproj.sqlite --verbose
+```
+
+### MCP tools added in v0.19
+
+| Tool | Arguments | Description |
+|---|---|---|
+| `get_type_at_position` | `file`, `line`, `col`, `db` (optional) | Resolve identifier at position; return qualified name + signature + doc |
+
+### LSP enhancement
+
+Hover (textDocument/hover) is enriched when the cursor is on an identifier
+reference: in addition to declaration hover data, the response now includes
+resolved symbol details (via type-at-position lookup) so clients can display
+the inferred type and documentation inline.
+
 ## Exit codes
 
 | Code | Meaning |
