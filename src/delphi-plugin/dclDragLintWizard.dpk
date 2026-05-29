@@ -36,6 +36,7 @@ requires
 contains
   DragLint.Plugin.Wizard in 'DragLint.Plugin.Wizard.pas',
   DragLint.Plugin.LspClient in 'DragLint.Plugin.LspClient.pas',
-  DragLint.Plugin.Editor in 'DragLint.Plugin.Editor.pas';
+  DragLint.Plugin.Editor in 'DragLint.Plugin.Editor.pas',
+  DragLint.Plugin.ProjectNotifier in 'DragLint.Plugin.ProjectNotifier.pas';
 
 end.

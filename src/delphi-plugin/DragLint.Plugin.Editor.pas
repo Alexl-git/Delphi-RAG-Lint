@@ -6,7 +6,8 @@ uses
   System.SysUtils, System.Classes, System.JSON,
   Vcl.Menus, Vcl.Dialogs,
   ToolsAPI,
-  DragLint.Plugin.LspClient;
+  DragLint.Plugin.LspClient,
+  DragLint.Plugin.ProjectNotifier;
 
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
@@ -403,10 +404,14 @@ begin
   AddWrappedItem(RootMenu, 'Show Completion',       InvokeCompletion);
   AddWrappedItem(RootMenu, 'Show Signature Help',   InvokeSignatureHelp);
   AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)', InvokeDiagnostics);
+
+  RegisterProjectNotifier;
 end;
 
 procedure UnregisterDragLintMenu;
 begin
+  UnregisterProjectNotifier;
+
   { Stop LSP client first }
   if GLspClient <> nil then
   begin

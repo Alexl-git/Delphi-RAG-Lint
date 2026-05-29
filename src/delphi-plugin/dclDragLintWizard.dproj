@@ -75,6 +75,7 @@
         <DCCReference Include="DragLint.Plugin.Wizard.pas"/>
         <DCCReference Include="DragLint.Plugin.LspClient.pas"/>
         <DCCReference Include="DragLint.Plugin.Editor.pas"/>
+        <DCCReference Include="DragLint.Plugin.ProjectNotifier.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
