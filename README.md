@@ -6,13 +6,14 @@ MIT-licensed third-party Pascal binding layer for libtree-sitter. **Pure
 Delphi at runtime — no Python, Node, or Rust deps.** Upstream attribution
 preserved in `third_party/<repo>/LICENSE` files.
 
-**v0.32-alpha. Early work in progress -- expect breaking changes.**
-v0.32 adds inline code lens (`[N callers]` dim-grey annotations next to
-method declarations, settable via `EnableCodeLens`) and 4 new lint rules:
-`compiler-magic-comments`, `nested-with`, `assert-call`,
-`case-magic-numbers`. Total: 10 built-in lint rules + 3 programmatic AST
-checks. Built on v0.31 (compiler-less `check-ast`, `parser-error` rule,
-`ScanLibraries` toggle), v0.30 (Structure form + native Options page),
+**v0.33-alpha. Early work in progress -- expect breaking changes.**
+v0.33 adds two navigation forms: **Find Usages** (`Ctrl+Alt+F`) prompts for
+a symbol name, shells `drag-lint query find-callers`, and shows callers
+grouped by file in a stay-on-top TTreeView; double-click jumps the editor.
+**Symbol Search** (`Ctrl+Alt+T`) is a modal debounced-search dialog over the
+indexed symbol table. Built on v0.32 (inline code lens + 4 new lint rules,
+total 10 built-in rules + 3 AST checks), v0.31 (compiler-less `check-ast`,
+`parser-error` rule, `ScanLibraries` toggle), v0.30 (Structure form + native Options page),
 v0.29 in-editor visual diagnostics (gutter dots + wavy underlines +
 Ctrl+Alt+I hint popup), v0.28 lint rule pack (5 built-in
 tree-sitter-query rules), v0.27 QoL release, v0.26 compiler diagnostic

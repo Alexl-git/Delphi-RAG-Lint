@@ -53,6 +53,8 @@ contains
   DragLint.Plugin.StructureCache in 'DragLint.Plugin.StructureCache.pas',
   DragLint.Plugin.StructureForm in 'DragLint.Plugin.StructureForm.pas',
   DragLint.Plugin.OptionsFrame in 'DragLint.Plugin.OptionsFrame.pas',
-  DragLint.Plugin.Options in 'DragLint.Plugin.Options.pas';
+  DragLint.Plugin.Options in 'DragLint.Plugin.Options.pas',
+  DragLint.Plugin.UsagesForm in 'DragLint.Plugin.UsagesForm.pas',
+  DragLint.Plugin.SymbolSearchForm in 'DragLint.Plugin.SymbolSearchForm.pas';
 
 end.

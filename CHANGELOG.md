@@ -3,6 +3,29 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.33.0-alpha -- 2026-05-29
+
+### Added
+
+- **Find Usages form** (`Ctrl+Alt+F` or `Tools > drag-lint > Find Usages...`):
+  InputBox prompts for a symbol name; shells `drag-lint query find-callers
+  --name <name> --context 3 --db <db> --format json`; results are grouped by
+  file in a `fsStayOnTop` TTreeView form. Double-click on a caller node opens
+  the file and navigates the IDE editor to that line.
+  New unit: `DragLint.Plugin.UsagesForm`.
+
+- **Symbol Search form** (`Ctrl+Alt+T` or `Tools > drag-lint > Symbol Search...`):
+  Modal TForm with a debounced TEdit (300ms); calls `drag-lint query --name
+  <text>` as the user types; top-30 results shown in a TListView (qualified
+  name | kind | location). Enter on the selected row or double-click navigates
+  the IDE editor to that location. ESC closes with no action.
+  New unit: `DragLint.Plugin.SymbolSearchForm`.
+
+- **T57** -- UsagesForm compile + public-API smoke test.
+- **T58** -- SymbolSearchForm compile + public-API smoke test.
+
+---
+
 ## v0.32.0-alpha -- 2026-05-29
 
 ### Added

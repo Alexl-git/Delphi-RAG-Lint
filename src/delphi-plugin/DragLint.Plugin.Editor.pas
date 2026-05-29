@@ -14,7 +14,9 @@ uses
   DragLint.Plugin.CompletionForm,
   DragLint.Plugin.SignatureForm,
   DragLint.Plugin.RefactorForm,
-  DragLint.Plugin.StructureForm;
+  DragLint.Plugin.StructureForm,
+  DragLint.Plugin.UsagesForm,
+  DragLint.Plugin.SymbolSearchForm;
 
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
@@ -34,6 +36,9 @@ procedure InvokeFormatYadf(Sender: TObject);
 procedure InvokeShowStructure(Sender: TObject);
 { v0.31: AST checks }
 procedure InvokeRunAstChecks(Sender: TObject);
+{ v0.33: find usages + symbol search }
+procedure InvokeFindUsages(Sender: TObject);
+procedure InvokeSymbolSearch(Sender: TObject);
 
 implementation
 
@@ -970,6 +975,91 @@ begin
   ShowMessage(Format('drag-lint AST Checks:'#13#10'%s', [Trim(Output)]));
 end;
 
+{ v0.33: Find Usages }
+procedure InvokeFindUsages(Sender: TObject);
+var
+  ExePath, ProjDb: string;
+  SymName: string;
+begin
+  ExePath := LoadSettings.ExePath;
+  if (ExePath = '') or not FileExists(ExePath) then
+    ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then
+    ExePath := 'drag-lint.exe';
+
+  ProjDb := GetActiveProjectDb;
+
+  SymName := InputBox('drag-lint Find Usages', 'Symbol name:', '');
+  if Trim(SymName) = '' then Exit;
+
+  ShowFindUsages(SymName, ExePath, ProjDb);
+end;
+
+{ v0.33: Symbol Search }
+procedure InvokeSymbolSearch(Sender: TObject);
+var
+  ExePath, ProjDb: string;
+  Selected:        string;
+  ColonPos:        Integer;
+  FilePath:        string;
+  LineNum:         Integer;
+  ESS:             IOTAEditorServices;
+  AS_:             IOTAActionServices;
+  EV:              IOTAEditView;
+  Pos:             IOTAEditPosition;
+begin
+  ExePath := LoadSettings.ExePath;
+  if (ExePath = '') or not FileExists(ExePath) then
+    ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then
+    ExePath := 'drag-lint.exe';
+
+  ProjDb   := GetActiveProjectDb;
+  Selected := ShowSymbolSearch(ExePath, ProjDb);
+  if Selected = '' then Exit;
+
+  { Parse "file:line" from the returned location }
+  ColonPos := 0;
+  var k: Integer;
+  for k := Length(Selected) downto 1 do
+    if Selected[k] = ':' then
+    begin
+      ColonPos := k;
+      Break;
+    end;
+
+  if ColonPos > 0 then
+  begin
+    FilePath := Copy(Selected, 1, ColonPos - 1);
+    LineNum  := StrToIntDef(Copy(Selected, ColonPos + 1, MaxInt), 0);
+  end
+  else
+  begin
+    FilePath := Selected;
+    LineNum  := 0;
+  end;
+
+  if FilePath = '' then Exit;
+
+  if Supports(BorlandIDEServices, IOTAActionServices, AS_) then
+    AS_.OpenFile(FilePath);
+
+  if (LineNum > 0) and
+     Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
+  begin
+    EV := ESS.TopView;
+    if EV <> nil then
+    begin
+      Pos := EV.Position;
+      if Pos <> nil then
+      begin
+        Pos.GotoLine(LineNum);
+        EV.Paint;
+      end;
+    end;
+  end;
+end;
+
 { ---- menu registration ---- }
 
 function AddWrappedItem(AParent: TMenuItem; const ACaption: string;
@@ -1014,6 +1104,9 @@ begin
   AddWrappedItem(RootMenu, 'Show Structure',             InvokeShowStructure);
   // v0.31: AST diagnostics (no compiler required)
   AddWrappedItem(RootMenu, 'Run AST Checks',             InvokeRunAstChecks);
+  // v0.33: find usages + symbol search
+  AddWrappedItem(RootMenu, 'Find Usages...',             InvokeFindUsages);
+  AddWrappedItem(RootMenu, 'Symbol Search...',           InvokeSymbolSearch);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
 
   RegisterProjectNotifier;
@@ -1027,8 +1120,9 @@ begin
   UnregisterDragLintKeystrokes;
   UnregisterProjectNotifier;
 
-  { Close the structure form if still open }
+  { Close the structure form and usages form if still open }
   HideDragLintStructure;
+  HideFindUsages;
 
   { Stop LSP client first }
   if GLspClient <> nil then

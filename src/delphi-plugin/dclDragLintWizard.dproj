@@ -92,6 +92,8 @@
         <DCCReference Include="DragLint.Plugin.StructureForm.pas"/>
         <DCCReference Include="DragLint.Plugin.OptionsFrame.pas"/>
         <DCCReference Include="DragLint.Plugin.Options.pas"/>
+        <DCCReference Include="DragLint.Plugin.UsagesForm.pas"/>
+        <DCCReference Include="DragLint.Plugin.SymbolSearchForm.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

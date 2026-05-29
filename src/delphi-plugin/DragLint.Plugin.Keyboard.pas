@@ -56,6 +56,10 @@ type
       var BindingResult: TKeyBindingResult);
     procedure InlineInfoKey(const Context: IOTAKeyContext; KeyCode: TShortCut;
       var BindingResult: TKeyBindingResult);
+    procedure FindUsagesKey(const Context: IOTAKeyContext; KeyCode: TShortCut;
+      var BindingResult: TKeyBindingResult);
+    procedure SymbolSearchKey(const Context: IOTAKeyContext; KeyCode: TShortCut;
+      var BindingResult: TKeyBindingResult);
   end;
 
 { IOTANotifier stubs }
@@ -92,7 +96,11 @@ begin
   BindingServices.AddKeyBinding(
     [ShortCut(Ord('R'), [ssCtrl, ssAlt])], RenameKey,      nil);
   BindingServices.AddKeyBinding(
-    [ShortCut(Ord('I'), [ssCtrl, ssAlt])], InlineInfoKey, nil);
+    [ShortCut(Ord('I'), [ssCtrl, ssAlt])], InlineInfoKey,   nil);
+  BindingServices.AddKeyBinding(
+    [ShortCut(Ord('F'), [ssCtrl, ssAlt])], FindUsagesKey,   nil);
+  BindingServices.AddKeyBinding(
+    [ShortCut(Ord('T'), [ssCtrl, ssAlt])], SymbolSearchKey, nil);
 end;
 
 function TDragLintKeyboardBinding.GetBindingType: TBindingType;
@@ -156,6 +164,20 @@ procedure TDragLintKeyboardBinding.InlineInfoKey(const Context: IOTAKeyContext;
 begin
   if not LoadSettings.EnableInlineMarkers then Exit;
   InvokeInlineInfo;
+  BindingResult := krHandled;
+end;
+
+procedure TDragLintKeyboardBinding.FindUsagesKey(const Context: IOTAKeyContext;
+  KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
+begin
+  InvokeFindUsages(nil);
+  BindingResult := krHandled;
+end;
+
+procedure TDragLintKeyboardBinding.SymbolSearchKey(const Context: IOTAKeyContext;
+  KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
+begin
+  InvokeSymbolSearch(nil);
   BindingResult := krHandled;
 end;
 
