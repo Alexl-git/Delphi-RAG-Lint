@@ -191,29 +191,46 @@ var
 function EnsureLspClient: TDragLintLspClient;
 var
   ExePath: string;
+  BplDir: string;
+  LogPath: string;
 begin
   if GLspClient = nil then
   begin
     GLspClient := TDragLintLspClient.Create;
     GLspClient.OnNotification := HandleNotification;
 
+    BplDir := ExtractFilePath(GetModuleName(HInstance));
+    DebugLog('EnsureLspClient: BPL dir = ' + BplDir);
+    DebugLog('EnsureLspClient: BPL fullpath = ' + GetModuleName(HInstance));
+
     { Look for drag-lint.exe next to the BPL first, then fall back to PATH }
-    ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+    ExePath := BplDir + 'drag-lint.exe';
+    DebugLog('EnsureLspClient: candidate = ' + ExePath +
+      ' (exists=' + BoolToStr(FileExists(ExePath), True) + ')');
     if not FileExists(ExePath) then
+    begin
       ExePath := 'drag-lint.exe';
+      DebugLog('EnsureLspClient: falling back to PATH lookup of drag-lint.exe');
+    end;
+
+    LogPath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP'))
+      + 'drag-lint-plugin.log';
 
     if not GLspClient.Start(ExePath) then
     begin
       ShowMessage(
         'drag-lint: LSP server failed to start.'#13#10 +
-        'Ensure drag-lint.exe is on PATH or next to the BPL.');
+        'Ensure drag-lint.exe is on PATH or next to the BPL.'#13#10#13#10 +
+        'Debug log: ' + LogPath);
       FreeAndNil(GLspClient);
       Exit(nil);
     end;
 
     if not GLspClient.Initialize then
     begin
-      ShowMessage('drag-lint: LSP initialize handshake failed.');
+      ShowMessage(
+        'drag-lint: LSP initialize handshake failed.'#13#10#13#10 +
+        'Debug log: ' + LogPath);
       GLspClient.Stop;
       FreeAndNil(GLspClient);
       Exit(nil);

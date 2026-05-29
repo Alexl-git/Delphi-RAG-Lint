@@ -3,9 +3,11 @@ unit DragLint.Plugin.LspClient;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.JSON,
+  System.SysUtils, System.Classes, System.JSON, System.IOUtils,
   System.Generics.Collections, System.SyncObjs,
   Winapi.Windows;
+
+procedure DebugLog(const AMsg: string);  // appends to %TEMP%\drag-lint-plugin.log
 
 type
   TLspNotificationHandler = reference to procedure(const AMethod: string;
@@ -41,6 +43,42 @@ type
   end;
 
 implementation
+
+{ ---- Debug log ---- }
+
+var
+  GLogLock: TCriticalSection = nil;
+
+procedure DebugLog(const AMsg: string);
+var
+  LogPath: string;
+  Stream: TFileStream;
+  Line: AnsiString;
+begin
+  if GLogLock = nil then GLogLock := TCriticalSection.Create;
+  GLogLock.Enter;
+  try
+    try
+      LogPath := TPath.Combine(TPath.GetTempPath, 'drag-lint-plugin.log');
+      Line := AnsiString(Format('[%s] %s'#13#10,
+        [FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now), AMsg]));
+      if FileExists(LogPath) then
+        Stream := TFileStream.Create(LogPath, fmOpenWrite or fmShareDenyNone)
+      else
+        Stream := TFileStream.Create(LogPath, fmCreate or fmShareDenyNone);
+      try
+        Stream.Seek(0, soEnd);
+        Stream.WriteBuffer(Line[1], Length(Line));
+      finally
+        Stream.Free;
+      end;
+    except
+      // swallow log errors silently
+    end;
+  finally
+    GLogLock.Leave;
+  end;
+end;
 
 { Reader thread }
 
@@ -96,6 +134,7 @@ var
   Pos: Integer;
   S: string;
 begin
+  DebugLog('ReaderThread: started');
   while not Terminated do
   begin
     { Read header byte-by-byte until CRLFCRLF }
@@ -104,7 +143,11 @@ begin
     repeat
       Ok := ReadFile(FHandle, Ch, 1, Read, nil);
       if (not Ok) or (Read = 0) then
+      begin
+        DebugLog(Format('ReaderThread: ReadFile failed/EOF, Ok=%s Read=%d GetLastError=%d',
+          [BoolToStr(Ok, True), Read, GetLastError]));
         Exit;
+      end;
       HeaderBuf := HeaderBuf + AnsiChar(Ch);
       { track the CRLFCRLF sequence }
       case Seq of
@@ -142,10 +185,15 @@ begin
 
     { Decode and parse }
     JsonStr := TEncoding.UTF8.GetString(BodyBuf);
+    DebugLog(Format('ReaderThread: rx %d bytes: %s',
+      [ContentLength, Copy(JsonStr, 1, 200)]));
     JsonVal := TJSONObject.ParseJSONValue(JsonStr);
     if JsonVal <> nil then
-      FOwner.DispatchMessage(JsonVal);
+      FOwner.DispatchMessage(JsonVal)
+    else
+      DebugLog('ReaderThread: JSON parse failed');
   end;
+  DebugLog('ReaderThread: terminated normally');
 end;
 
 { TDragLintLspClient }
@@ -181,8 +229,11 @@ var
   PI: TProcessInformation;
   CmdLine: string;
   CmdLineW: array of WideChar;
+  LastErr: DWORD;
 begin
   Result := False;
+  DebugLog('Start: ExePath=' + AExePath);
+  DebugLog('Start: AExePath FileExists=' + BoolToStr(FileExists(AExePath), True));
 
   SA.nLength := SizeOf(SA);
   SA.bInheritHandle := True;
@@ -190,7 +241,10 @@ begin
 
   { stdin pipe: child reads from hReadIn, parent writes to hWriteIn }
   if not CreatePipe(hReadIn, hWriteIn, @SA, 0) then
+  begin
+    DebugLog('Start: CreatePipe(stdin) FAILED, GetLastError=' + IntToStr(GetLastError));
     Exit;
+  end;
   { don't let child inherit the write end }
   SetHandleInformation(hWriteIn, HANDLE_FLAG_INHERIT, 0);
 
@@ -213,19 +267,24 @@ begin
 
   ZeroMemory(@PI, SizeOf(PI));
 
-  CmdLine := AExePath + ' lsp';
+  { Quote the exe path to handle paths with spaces (e.g. Program Files). }
+  CmdLine := '"' + AExePath + '" lsp';
+  DebugLog('Start: CmdLine=' + CmdLine);
   SetLength(CmdLineW, Length(CmdLine) + 1);
   Move(PChar(CmdLine)^, CmdLineW[0], (Length(CmdLine) + 1) * SizeOf(WideChar));
 
   if not CreateProcessW(nil, @CmdLineW[0], nil, nil, True,
-    0, nil, nil, SI, PI) then
+    CREATE_NO_WINDOW, nil, nil, SI, PI) then
   begin
+    LastErr := GetLastError;
+    DebugLog('Start: CreateProcessW FAILED, GetLastError=' + IntToStr(LastErr));
     CloseHandle(hReadIn);
     CloseHandle(hWriteIn);
     CloseHandle(hReadOut);
     CloseHandle(hWriteOut);
     Exit;
   end;
+  DebugLog('Start: CreateProcessW OK, ProcessId=' + IntToStr(PI.dwProcessId));
 
   { Close child-side handles in the parent }
   CloseHandle(hReadIn);
@@ -239,6 +298,7 @@ begin
 
   FReaderThread := TLspReaderThread.Create(Self, FStdOutRead);
   Result := True;
+  DebugLog('Start: success, reader thread launched');
 end;
 
 procedure TDragLintLspClient.Stop;
@@ -280,13 +340,20 @@ var
   Params: TJSONObject;
   Resp: TJSONValue;
 begin
+  DebugLog('Initialize: sending initialize request');
   Params := TJSONObject.Create;
   Params.AddPair('processId', TJSONNumber.Create(GetCurrentProcessId));
   Params.AddPair('capabilities', TJSONObject.Create);
   try
-    Resp := Request('initialize', Params, 5000);
+    Resp := Request('initialize', Params, 10000);  // bumped from 5000
     Result := Resp <> nil;
-    if Result then Resp.Free;
+    if Result then
+    begin
+      DebugLog('Initialize: response received OK');
+      Resp.Free;
+    end
+    else
+      DebugLog('Initialize: TIMEOUT or no response within 10s');
   finally
     Params.Free;
   end;
@@ -374,14 +441,29 @@ var
   Bytes: TBytes;
   Header: AnsiString;
   Written: DWORD;
+  HdrW, BodyW: BOOL;
+  LastErr: DWORD;
 begin
   Bytes := TEncoding.UTF8.GetBytes(AJson);
   Header := AnsiString(Format('Content-Length: %d'#13#10#13#10, [Length(Bytes)]));
+  DebugLog(Format('Tx: %d bytes: %s', [Length(Bytes), Copy(AJson, 1, 200)]));
   FLock.Enter;
   try
-    WriteFile(FStdInWrite, Header[1], Length(Header), Written, nil);
+    HdrW := WriteFile(FStdInWrite, Header[1], Length(Header), Written, nil);
+    if not HdrW then
+    begin
+      LastErr := GetLastError;
+      DebugLog(Format('WriteFile(header) FAILED, GetLastError=%d', [LastErr]));
+    end;
     if Length(Bytes) > 0 then
-      WriteFile(FStdInWrite, Bytes[0], Length(Bytes), Written, nil);
+    begin
+      BodyW := WriteFile(FStdInWrite, Bytes[0], Length(Bytes), Written, nil);
+      if not BodyW then
+      begin
+        LastErr := GetLastError;
+        DebugLog(Format('WriteFile(body) FAILED, GetLastError=%d', [LastErr]));
+      end;
+    end;
   finally
     FLock.Leave;
   end;
@@ -433,5 +515,14 @@ begin
     handler is synchronous and done by the time we return. }
   AMsg.Free;
 end;
+
+initialization
+
+finalization
+  if GLogLock <> nil then
+  begin
+    GLogLock.Free;
+    GLogLock := nil;
+  end;
 
 end.

@@ -3,6 +3,47 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.38.0-alpha -- 2026-05-29
+
+### Added (diagnostics)
+
+- **`%TEMP%\drag-lint-plugin.log`** — the IDE plugin's LSP client now
+  writes a detailed timestamped log of every subprocess event, send,
+  receive, and error to a file in the user's temp dir. Created
+  automatically on first plugin invocation; appended thereafter.
+
+  When the plugin shows "LSP server failed to start" or "LSP initialize
+  handshake failed", the dialog now includes the log file path.
+
+### Fixed
+
+- **`CreateProcessW` cmd-line did not quote the exe path** — if the BPL
+  was installed at a path containing spaces (e.g.
+  `C:\Program Files\drag-lint\dclDragLintWizard.bpl`), the cmd line
+  `<unquoted exe> lsp` was tokenized by Windows and the process spawn
+  succeeded but the args got mangled. Now quotes the exe path
+  explicitly.
+
+- **`CREATE_NO_WINDOW` flag added** to `CreateProcessW` so the
+  spawned drag-lint subprocess does not pop a console window.
+
+- **`Initialize` request timeout bumped from 5s to 10s** — the 5s
+  timeout was occasionally too short on slow disks / first-run cold
+  starts.
+
+### Notes
+
+- The BPL is loaded into RAD Studio's process at IDE startup. To pick
+  up the v0.38 BPL changes you must either:
+  1. Close RAD Studio entirely, replace
+     `dclDragLintWizard.bpl`, and restart, OR
+  2. Component → Install Packages → uncheck drag-lint → OK,
+     replace the BPL file, then re-check it.
+- The `drag-lint.exe` standalone is unchanged behavior from v0.37 —
+  only the BPL plugin gained logging.
+
+---
+
 ## v0.37.0-alpha -- 2026-05-29
 
 ### Fixed (critical)
