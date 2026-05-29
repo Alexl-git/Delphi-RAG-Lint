@@ -3,6 +3,57 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.36.0-alpha -- 2026-05-29
+
+### Fixed (critical)
+
+- **Binary architecture mismatch.** Releases through v0.35 shipped
+  `drag-lint.exe` (Win32) bundled with `tree-sitter*.dll` (Win64). The
+  exe would silently fail to load the DLLs with
+  `STATUS_INVALID_IMAGE_FORMAT` (0xC000007B). Any prior install was
+  non-functional regardless of CLI vs IDE-plugin use.
+
+### Added (distribution)
+
+- **Dual-architecture release artifacts.** Every binary now ships in
+  two matched variants:
+  - `drag-lint-v0.36.0-alpha-win32.zip` — `drag-lint.exe` + 3 DLLs as
+    PE32 (Intel i386). **Required for the IDE plugin** since RAD Studio
+    13 itself is a 32-bit process; the `dclDragLintWizard.bpl` is also
+    Win32 and goes in this bundle.
+  - `drag-lint-v0.36.0-alpha-win64.zip` — same contents as PE32+
+    (x86-64). For standalone CLI / LSP / MCP usage where the process
+    runs outside any IDE.
+
+- **New build scripts** at `build/`:
+  - `build_draglint_win32.bat` / `build_draglint_win64.bat` —
+    msbuild-driven Delphi 13 builds for either platform; output staged
+    to `third_party/dll-win32/` or `dll-win64/`.
+  - `_buildruntime32.bat` / `_buildruntime64.bat` — `cl.exe` build of
+    `tree-sitter.dll` runtime library with explicit `/MACHINE:X86` or
+    `/MACHINE:X64`.
+  - `_buildgrammar32_manual.bat` / `_buildgrammar64_manual.bat` —
+    direct `cl.exe` build of `tree-sitter-delphi13.dll` from
+    `parser.c + scanner.c`. Replaces the `tree-sitter build` invocation
+    because the bundled tree-sitter CLI defaults to x64 and ignores
+    `vcvars32.bat` for cross-arch.
+  - `_builddfm32_manual.bat` / `_builddfm64_manual.bat` — same for
+    `tree-sitter-dfm.dll`.
+
+### Notes
+
+- The IDE plugin BPL was already Win32 (correct for the IDE). The bug
+  was only on the matching tree-sitter DLLs.
+- Standalone CLI users who put the Win64 DLLs on PATH and ran the
+  Win64 `drag-lint.exe` directly from `src/cli/Win64/Debug/` would
+  have a working install; only the `third_party/dll/` bundled folder
+  was broken.
+- For the IDE plugin, copy the Win32 bundle next to the BPL or onto
+  PATH. The Win64 bundle is irrelevant in that context — the IDE is
+  Win32.
+
+---
+
 ## v0.35.0-alpha -- 2026-05-29
 
 Final polish version closing the v0.16-v0.35 marathon (20 versions total).
