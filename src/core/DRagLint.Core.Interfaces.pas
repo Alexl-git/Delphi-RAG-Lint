@@ -66,6 +66,10 @@ type
     function FindSymbolsByPrefix(const APrefix: string;
       ALimit: Integer): TArray<TSymbol>;
     function FindAllChildSymbols(AParentId: Int64): TArray<TSymbol>;
+
+    // v0.25: dead-code finder
+    function FindSymbolsWithNoCallers(const AKind: string;
+      AIncludePrivate: Boolean): TArray<TSymbol>;
   end;
 
   TParseResult = record

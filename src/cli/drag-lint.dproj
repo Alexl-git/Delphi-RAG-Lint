@@ -178,6 +178,8 @@
         <DCCReference Include="..\context\DRagLint.Context.Bundler.pas"/>
         <DCCReference Include="..\resolver\DRagLint.Resolver.TypeAt.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.Rename.pas"/>
+        <DCCReference Include="..\refactor\DRagLint.Refactor.DocStub.pas"/>
+        <DCCReference Include="..\refactor\DRagLint.Refactor.DeadCode.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

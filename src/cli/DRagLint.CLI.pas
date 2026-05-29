@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.24.0-alpha';
+  VERSION = '0.25.0-alpha';
 
 function Run: Integer;
 
@@ -40,7 +40,9 @@ uses
   DRagLint.Hover.Renderer,
   DRagLint.Context.Bundler,
   DRagLint.Resolver.TypeAt,
-  DRagLint.Refactor.Rename;
+  DRagLint.Refactor.Rename,
+  DRagLint.Refactor.DocStub,
+  DRagLint.Refactor.DeadCode;
 
 type
   TArgs = record
@@ -91,6 +93,9 @@ type
     // v0.24: rename
     RenameTo:           string;  // --to <NewName>
     NoBackup:           Boolean; // --no-backup
+    // v0.25: doc-stub generator + dead-code finder
+    DocStubFormat:      string;  // --format xmldoc|pasdoc (default 'xmldoc')
+    IncludePrivate:     Boolean; // --include-private
   end;
 
 procedure PrintHelp;
@@ -127,6 +132,8 @@ begin
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
+  Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
+  Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -403,6 +410,8 @@ begin
     end
     else if A = '--no-backup' then
       Result.NoBackup := True
+    else if A = '--include-private' then
+      Result.IncludePrivate := True
     else if (Result.Command = 'typeat') and (Result.Position = '') and
             (not A.StartsWith('--')) then
       Result.Position := A
@@ -2811,6 +2820,66 @@ begin
     Result := 1;
 end;
 
+// v0.25: drag-lint generate-docs --qname X [--format xmldoc|pasdoc] [--db PATH]
+// Generates a doc stub (XMLDoc or PasDoc format) for the given symbol and
+// prints it to stdout. Exit 2 on usage error, 1 if symbol not found, 0 on success.
+function DoGenerateDocs(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Fmt: TDocStubFormat;
+  Stub: string;
+begin
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint generate-docs --qname X [--format xmldoc|pasdoc] [--db PATH]');
+    Exit(2);
+  end;
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(2);
+  end;
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  if SameText(AArgs.Format, 'pasdoc') then
+    Fmt := dsfPasDoc
+  else
+    Fmt := dsfXmlDoc;
+  Stub := TDocStubGenerator.Generate(Store, AArgs.QName, Fmt);
+  if Stub = '' then
+  begin
+    Writeln(Format('No stub generated for %s (symbol not found)', [AArgs.QName]));
+    Exit(1);
+  end;
+  Writeln(Stub);
+  Result := 0;
+end;
+
+// v0.25: drag-lint find-deadcode [--kind K] [--include-private] [--db PATH]
+// Lists symbols with no callers in the index. Exit 0 if any found, 1 if none,
+// 2 on usage error.
+function DoFindDeadCode(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Symbols: TArray<TSymbol>;
+begin
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(2);
+  end;
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  Symbols := TDeadCodeFinder.Find(Store, AArgs.Kind, AArgs.IncludePrivate);
+  if Length(Symbols) > 0 then
+    Writeln(TDeadCodeFinder.RenderText(Symbols, Store));
+  Writeln(Format('Found %d dead-code candidate(s)', [Length(Symbols)]));
+  if Length(Symbols) > 0 then
+    Result := 0
+  else
+    Result := 1;
+end;
+
 // v0.24: count distinct file paths across edit set.
 function CountDistinctFiles(const AEdits: TArray<TRenameEdit>): Integer;
 var
@@ -2921,6 +2990,10 @@ begin
       Result := DoTypeAt(Args)
     else if Args.Command = 'rename' then
       Result := DoRename(Args)
+    else if Args.Command = 'generate-docs' then
+      Result := DoGenerateDocs(Args)
+    else if Args.Command = 'find-deadcode' then
+      Result := DoFindDeadCode(Args)
     else if Args.Command = 'diff' then
       Result := DoDiff(Args)
     else if Args.Command = 'lsp' then
