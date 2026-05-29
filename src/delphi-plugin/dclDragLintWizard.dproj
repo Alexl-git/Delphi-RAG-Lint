@@ -80,6 +80,8 @@
         <DCCReference Include="DragLint.Plugin.SettingsForm.pas"/>
         <DCCReference Include="DragLint.Plugin.Keyboard.pas"/>
         <DCCReference Include="DragLint.Plugin.HoverForm.pas"/>
+        <DCCReference Include="DragLint.Plugin.CompletionForm.pas"/>
+        <DCCReference Include="DragLint.Plugin.SignatureForm.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

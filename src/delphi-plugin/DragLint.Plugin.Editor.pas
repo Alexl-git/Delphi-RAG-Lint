@@ -9,7 +9,9 @@ uses
   DragLint.Plugin.LspClient,
   DragLint.Plugin.ProjectNotifier,
   DragLint.Plugin.SettingsForm,
-  DragLint.Plugin.HoverForm;
+  DragLint.Plugin.HoverForm,
+  DragLint.Plugin.CompletionForm,
+  DragLint.Plugin.SignatureForm;
 
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
@@ -302,11 +304,15 @@ end;
 
 procedure InvokeCompletion(Sender: TObject);
 var
-  Client: TDragLintLspClient;
-  Uri: string;
+  Client:   TDragLintLspClient;
+  Uri:      string;
   Line, Col: Integer;
-  Params: TJSONObject;
-  Resp: TJSONValue;
+  Params:   TJSONObject;
+  Resp:     TJSONValue;
+  RespObj:  TJSONObject;
+  Items:    TJSONArray;
+  ResultV:  TJSONValue;
+  P:        TPoint;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
@@ -329,7 +335,49 @@ begin
     Exit;
   end;
   try
-    ShowMessage('drag-lint completion:'#13#10 + Resp.Format(2));
+    Items := nil;
+
+    // Shape 1: top-level array
+    // Shape 2: { items:[...] } or { result:{ items:[...] } }
+    if Resp is TJSONArray then
+      Items := Resp as TJSONArray
+    else if Resp is TJSONObject then
+    begin
+      RespObj := Resp as TJSONObject;
+      if not RespObj.TryGetValue<TJSONArray>('items', Items) then
+      begin
+        if RespObj.TryGetValue<TJSONValue>('result', ResultV) then
+        begin
+          if ResultV is TJSONArray then
+            Items := ResultV as TJSONArray
+          else if ResultV is TJSONObject then
+            (ResultV as TJSONObject).TryGetValue<TJSONArray>('items', Items);
+        end;
+      end;
+    end;
+
+    if Items = nil then
+    begin
+      ShowMessage('drag-lint completion:'#13#10 + Resp.Format(2));
+      Exit;
+    end;
+
+    GetCursorPos(P);
+    ShowDragLintCompletion(
+      Items,
+      P.X, P.Y + 20,
+      procedure(const ATxt: string)
+      var
+        ESS: IOTAEditorServices;
+        EV:  IOTAEditView;
+        EW:  IOTAEditWriter;
+      begin
+        if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+        EV := ESS.TopView;
+        if EV = nil then Exit;
+        EW := EV.Buffer.CreateUndoableWriter;
+        EW.Insert(PAnsiChar(AnsiString(ATxt)));
+      end);
   finally
     Resp.Free;
   end;
@@ -337,11 +385,18 @@ end;
 
 procedure InvokeSignatureHelp(Sender: TObject);
 var
-  Client: TDragLintLspClient;
-  Uri: string;
-  Line, Col: Integer;
-  Params: TJSONObject;
-  Resp: TJSONValue;
+  Client:      TDragLintLspClient;
+  Uri:         string;
+  Line, Col:   Integer;
+  Params:      TJSONObject;
+  Resp:        TJSONValue;
+  RespObj:     TJSONObject;
+  SigsArr:     TJSONArray;
+  ActiveSig:   Integer;
+  ActiveParam: Integer;
+  SigObj:      TJSONObject;
+  SigLabel:    string;
+  P:           TPoint;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
@@ -364,7 +419,39 @@ begin
     Exit;
   end;
   try
-    ShowMessage('drag-lint signatureHelp:'#13#10 + Resp.Format(2));
+    SigLabel    := '';
+    ActiveParam := 0;
+
+    if Resp is TJSONObject then
+    begin
+      RespObj    := Resp as TJSONObject;
+      ActiveSig  := 0;
+      RespObj.TryGetValue<Integer>('activeSignature', ActiveSig);
+      RespObj.TryGetValue<Integer>('activeParameter',  ActiveParam);
+
+      if RespObj.TryGetValue<TJSONArray>('signatures', SigsArr) and
+         (SigsArr.Count > 0) then
+      begin
+        if ActiveSig >= SigsArr.Count then
+          ActiveSig := 0;
+        if SigsArr.Items[ActiveSig] is TJSONObject then
+        begin
+          SigObj := SigsArr.Items[ActiveSig] as TJSONObject;
+          SigObj.TryGetValue<string>('label', SigLabel);
+          { Per-signature activeParameter overrides the top-level one }
+          SigObj.TryGetValue<Integer>('activeParameter', ActiveParam);
+        end;
+      end;
+    end;
+
+    if SigLabel = '' then
+    begin
+      ShowMessage('drag-lint signatureHelp:'#13#10 + Resp.Format(2));
+      Exit;
+    end;
+
+    GetCursorPos(P);
+    ShowDragLintSignature(SigLabel, ActiveParam, P.X, P.Y + 20);
   finally
     Resp.Free;
   end;
