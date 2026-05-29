@@ -40,6 +40,7 @@ contains
   DragLint.Plugin.ProjectNotifier in 'DragLint.Plugin.ProjectNotifier.pas',
   DragLint.Plugin.Settings in 'DragLint.Plugin.Settings.pas',
   DragLint.Plugin.SettingsForm in 'DragLint.Plugin.SettingsForm.pas',
-  DragLint.Plugin.Keyboard in 'DragLint.Plugin.Keyboard.pas';
+  DragLint.Plugin.Keyboard in 'DragLint.Plugin.Keyboard.pas',
+  DragLint.Plugin.HoverForm in 'DragLint.Plugin.HoverForm.pas';
 
 end.

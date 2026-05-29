@@ -8,7 +8,8 @@ uses
   ToolsAPI,
   DragLint.Plugin.LspClient,
   DragLint.Plugin.ProjectNotifier,
-  DragLint.Plugin.SettingsForm;
+  DragLint.Plugin.SettingsForm,
+  DragLint.Plugin.HoverForm;
 
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
@@ -243,11 +244,14 @@ end;
 
 procedure InvokeHover(Sender: TObject);
 var
-  Client: TDragLintLspClient;
-  Uri: string;
-  Line, Col: Integer;
-  Params: TJSONObject;
-  Resp: TJSONValue;
+  Client:      TDragLintLspClient;
+  Uri:         string;
+  Line, Col:   Integer;
+  Params:      TJSONObject;
+  Resp:        TJSONValue;
+  HoverText:   string;
+  ContentsVal: TJSONValue;
+  P:           TPoint;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
@@ -269,8 +273,28 @@ begin
     ShowMessage('drag-lint hover: request timed out or no result.');
     Exit;
   end;
+
   try
-    ShowMessage('drag-lint hover:'#13#10 + Resp.Format(2));
+    // Extract text from LSP hover response.
+    // Supported shapes:
+    //   contents: object with "value" field (MarkupContent)
+    //   contents: plain string
+    // Falls back to formatted JSON if extraction fails.
+    HoverText := '';
+    if (Resp is TJSONObject) and
+       (Resp as TJSONObject).TryGetValue<TJSONValue>('contents', ContentsVal) then
+    begin
+      if ContentsVal is TJSONObject then
+        (ContentsVal as TJSONObject).TryGetValue<string>('value', HoverText)
+      else if ContentsVal is TJSONString then
+        HoverText := (ContentsVal as TJSONString).Value;
+    end;
+
+    if HoverText = '' then
+      HoverText := Resp.Format(2);
+
+    GetCursorPos(P);
+    ShowDragLintHover(HoverText, P.X, P.Y + 20);
   finally
     Resp.Free;
   end;
