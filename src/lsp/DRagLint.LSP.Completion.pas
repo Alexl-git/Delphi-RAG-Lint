@@ -17,12 +17,19 @@ type
     // ASevText is the string severity stored in TLintFinding.Severity
     // ('error', 'warning', 'info', 'hint').
     class function MapLintSeverityToLspSeverity(const ASevText: string): Integer;
+    // v0.26: map compiler finding severity ('Error'|'Warning'|'Hint'|
+    // 'Information') to LSP DiagnosticSeverity (1=Error, 2=Warning,
+    // 3=Information, 4=Hint).
+    class function MapCompilerSeverityToLspSeverity(const ASev: string): Integer;
     class function BuildCompletionItems(const AStore: ISymbolStore;
       const AFile: string; ALine, ACol: Integer): TJSONArray;
     class function BuildSignatureHelp(const AStore: ISymbolStore;
       const AFile: string; ALine, ACol: Integer): TJSONObject;
+    // v0.26: AStore is optional; when supplied, compiler_findings for this file
+    // are merged into the result alongside lint findings.
     class function BuildDiagnostics(const ALinter: TLinter;
-      const AFile: string): TJSONArray;
+      const AFile: string;
+      const AStore: ISymbolStore = nil): TJSONArray;
   private
     class function MakeCompletionItem(const ASym: TSymbol;
       const AStore: ISymbolStore): TJSONObject;
@@ -96,6 +103,23 @@ begin
     Result := 4
   else
     Result := 3; // Information as default
+end;
+
+// v0.26: compiler finding severity uses title-case strings from
+// TCompileChecker.NormalizeSeverity: 'Error', 'Warning', 'Hint', 'Information'.
+class function TLspCompletion.MapCompilerSeverityToLspSeverity(
+  const ASev: string): Integer;
+begin
+  if SameText(ASev, 'Error') then
+    Result := 1
+  else if SameText(ASev, 'Warning') then
+    Result := 2
+  else if SameText(ASev, 'Information') then
+    Result := 3
+  else if SameText(ASev, 'Hint') then
+    Result := 4
+  else
+    Result := 3; // default Information
 end;
 
 class function TLspCompletion.MakeCompletionItem(const ASym: TSymbol;
@@ -423,7 +447,8 @@ begin
 end;
 
 class function TLspCompletion.BuildDiagnostics(const ALinter: TLinter;
-  const AFile: string): TJSONArray;
+  const AFile: string;
+  const AStore: ISymbolStore = nil): TJSONArray;
 var
   Findings: TArray<TLintFinding>;
   F: TLintFinding;
@@ -431,37 +456,86 @@ var
   RangeObj: TJSONObject;
   StartObj: TJSONObject;
   EndObj: TJSONObject;
+  // v0.26 compiler findings
+  FileId: Int64;
+  CFindings: TArray<TCompilerFinding>;
+  CF: TCompilerFinding;
+  CStart, CEnd, CRange: TJSONObject;
 begin
   Result := TJSONArray.Create;
-  if not Assigned(ALinter) then
-    Exit;
   if not TFile.Exists(AFile) then
     Exit;
-  Findings := ALinter.LintFile(AFile);
-  for F in Findings do
+
+  // --- Lint findings ---
+  if Assigned(ALinter) then
   begin
-    DiagObj := TJSONObject.Create;
+    Findings := ALinter.LintFile(AFile);
+    for F in Findings do
+    begin
+      DiagObj := TJSONObject.Create;
 
-    StartObj := TJSONObject.Create;
-    StartObj.AddPair('line', TJSONNumber.Create(F.StartLine - 1));
-    StartObj.AddPair('character', TJSONNumber.Create(F.StartCol - 1));
+      StartObj := TJSONObject.Create;
+      StartObj.AddPair('line', TJSONNumber.Create(F.StartLine - 1));
+      StartObj.AddPair('character', TJSONNumber.Create(F.StartCol - 1));
 
-    EndObj := TJSONObject.Create;
-    EndObj.AddPair('line', TJSONNumber.Create(F.EndLine - 1));
-    EndObj.AddPair('character', TJSONNumber.Create(F.EndCol - 1));
+      EndObj := TJSONObject.Create;
+      EndObj.AddPair('line', TJSONNumber.Create(F.EndLine - 1));
+      EndObj.AddPair('character', TJSONNumber.Create(F.EndCol - 1));
 
-    RangeObj := TJSONObject.Create;
-    RangeObj.AddPair('start', StartObj);
-    RangeObj.AddPair('end', EndObj);
+      RangeObj := TJSONObject.Create;
+      RangeObj.AddPair('start', StartObj);
+      RangeObj.AddPair('end', EndObj);
 
-    DiagObj.AddPair('range', RangeObj);
-    DiagObj.AddPair('severity',
-      TJSONNumber.Create(MapLintSeverityToLspSeverity(F.Severity)));
-    DiagObj.AddPair('source', 'drag-lint');
-    DiagObj.AddPair('code', F.RuleId);
-    DiagObj.AddPair('message', F.Message);
+      DiagObj.AddPair('range', RangeObj);
+      DiagObj.AddPair('severity',
+        TJSONNumber.Create(MapLintSeverityToLspSeverity(F.Severity)));
+      DiagObj.AddPair('source', 'drag-lint');
+      DiagObj.AddPair('code', F.RuleId);
+      DiagObj.AddPair('message', F.Message);
 
-    Result.AddElement(DiagObj);
+      Result.AddElement(DiagObj);
+    end;
+  end;
+
+  // --- v0.26: Compiler findings from the DB ---
+  if Assigned(AStore) then
+  begin
+    FileId := AStore.FindFileIdByPath(AFile);
+    if FileId > 0 then
+    begin
+      CFindings := AStore.FindCompilerFindingsForFile(FileId);
+      for CF in CFindings do
+      begin
+        DiagObj := TJSONObject.Create;
+
+        // LineNo/ColNo are 1-based; LSP range is 0-based.
+        CStart := TJSONObject.Create;
+        CStart.AddPair('line',
+          TJSONNumber.Create(CF.LineNo - 1));
+        CStart.AddPair('character',
+          TJSONNumber.Create(CF.ColNo - 1));
+
+        CEnd := TJSONObject.Create;
+        CEnd.AddPair('line',
+          TJSONNumber.Create(CF.LineNo - 1));
+        CEnd.AddPair('character',
+          TJSONNumber.Create(CF.ColNo));
+
+        CRange := TJSONObject.Create;
+        CRange.AddPair('start', CStart);
+        CRange.AddPair('end', CEnd);
+
+        DiagObj.AddPair('range', CRange);
+        DiagObj.AddPair('severity',
+          TJSONNumber.Create(
+            MapCompilerSeverityToLspSeverity(CF.Severity)));
+        DiagObj.AddPair('source', 'dcc');
+        DiagObj.AddPair('code', CF.Code);
+        DiagObj.AddPair('message', CF.Message);
+
+        Result.AddElement(DiagObj);
+      end;
+    end;
   end;
 end;
 

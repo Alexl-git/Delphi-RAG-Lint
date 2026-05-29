@@ -885,7 +885,8 @@ begin
   if TextDoc = nil then Exit;
   Uri := TextDoc.GetValue('uri').Value;
   Path := FileFromUri(Uri);
-  Diags := TLspCompletion.BuildDiagnostics(EnsureLinter, Path);
+  // v0.26: pass FStore so compiler_findings are merged into publishDiagnostics.
+  Diags := TLspCompletion.BuildDiagnostics(EnsureLinter, Path, FStore);
   Notif := TJSONObject.Create;
   try
     Notif.AddPair('jsonrpc', '2.0');

@@ -9,4 +9,5 @@ type "%HERE%t11_out.txt"
 findstr /c:"get_symbol_doc" "%HERE%t11_out.txt" >NUL || (echo FAIL: tool not advertised && exit /b 1)
 findstr /c:"Computes the baz" "%HERE%t11_out.txt" >NUL || (echo FAIL: doc not returned && exit /b 1)
 findstr /c:"OldProc" "%HERE%t11_out.txt" >NUL || (echo FAIL: deprecated not returned && exit /b 1)
+findstr /c:"run_compile_check" "%HERE%t11_out.txt" >NUL || (echo FAIL: run_compile_check tool not advertised && exit /b 1)
 echo PASS
