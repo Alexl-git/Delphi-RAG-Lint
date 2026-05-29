@@ -46,6 +46,7 @@ type
     StartCol: Integer;
     EndLine: Integer;
     EndCol: Integer;
+    ContextText: string;  // v0.17: surrounding source lines (find-callers --context N)
   end;
 
   TChunk = record
@@ -134,6 +135,27 @@ type
     CaptureLooseComments: Boolean;
     ImplPrecedence:       string;
     AllowBlankLineGap:    Integer;
+  end;
+
+  TImpactLevel = record
+    Depth:        Integer;
+    CallerCount:  Integer;
+    UnitCount:    Integer;
+    Categories:   TArray<string>;
+  end;
+
+  TSurfaceLine = record
+    Kind:       string;
+    Text:       string;
+    StartLine:  Integer;
+    EndLine:    Integer;
+  end;
+
+  TSliceChunk = record
+    Kind:       string;
+    Text:       string;
+    StartLine:  Integer;
+    EndLine:    Integer;
   end;
 
 function DocFormatToStr(AFormat: TDocFormat): string;

@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.16.0-alpha';
+  VERSION = '0.17.0-alpha';
 
 function Run: Integer;
 
@@ -71,6 +71,11 @@ type
     PublicOnly: Boolean;
     // v0.16 Task 13: .drag-lint.json "docs" section
     Docs: TDocConfig;
+    // v0.17: blast-radius pack
+    Depth: Integer;
+    IncludeImpl: Boolean;
+    AllVisibility: Boolean;
+    ContextLines: Integer;  // v0.17: find-callers --context N
   end;
 
 procedure PrintHelp;
@@ -84,7 +89,7 @@ begin
   Writeln('  drag-lint index --scan-libraries                    [--db <file.sqlite>] [--dry-run]');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
-  Writeln('  drag-lint query find-callers --name  <callee-name>  [--db ...] [--json]');
+  Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--db ...] [--json]');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
   Writeln('  drag-lint lint  <path>       [--rule field-by-name-in-loop] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
@@ -99,6 +104,9 @@ begin
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
   Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
   Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
+  Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
+  Writeln('  drag-lint surface            --qname <Foo.TBar>   [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]');
+  Writeln('  drag-lint slice              --qname <Foo.TBar>   [--db <file.sqlite>] [--format text|json]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -190,6 +198,7 @@ begin
   Result := Default(TArgs);
   Result.DbPath := TPath.Combine(GetCurrentDir, 'drag-lint.sqlite');
   Result.Docs := DefaultDocConfig;
+  Result.Depth := 3;
   LoadConfigDefaults(Result);
   if ParamCount = 0 then
   begin
@@ -310,6 +319,20 @@ begin
     end
     else if (A = '--public') then
       Result.PublicOnly := True
+    else if (A = '--depth') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Depth := StrToIntDef(ParamStr(i), 3);
+    end
+    else if A = '--include-impl' then
+      Result.IncludeImpl := True
+    else if A = '--all-visibility' then
+      Result.AllVisibility := True
+    else if (A = '--context') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.ContextLines := StrToIntDef(ParamStr(i), 0);
+    end
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
     else
@@ -355,6 +378,55 @@ begin
     begin
       Path := AStore.GetFilePath(R.FileId);
       Writeln(Format('%s:%d:%d  %s', [Path, R.StartLine, R.StartCol, R.NameText]));
+    end;
+    Writeln(Format('%d caller(s)', [Length(ARefs)]));
+  end;
+end;
+
+// v0.17: Print references with optional context lines
+procedure PrintReferencesWithContext(const AStore: ISymbolStore;
+  const ARefs: TArray<TReference>; AContextLines: Integer; AsJson: Boolean);
+var
+  JArr: TJSONArray;
+  JObj: TJSONObject;
+  R: TReference;
+  Path: string;
+begin
+  if AsJson then
+  begin
+    JArr := TJSONArray.Create;
+    try
+      for R in ARefs do
+      begin
+        Path := AStore.GetFilePath(R.FileId);
+        JObj := TJSONObject.Create;
+        JObj.AddPair('id', TJSONNumber.Create(R.Id));
+        JObj.AddPair('kind', R.Kind);
+        JObj.AddPair('name_text', R.NameText);
+        JObj.AddPair('file_path', Path);
+        JObj.AddPair('start_line', TJSONNumber.Create(R.StartLine));
+        JObj.AddPair('start_col', TJSONNumber.Create(R.StartCol));
+        JObj.AddPair('end_line', TJSONNumber.Create(R.EndLine));
+        JObj.AddPair('end_col', TJSONNumber.Create(R.EndCol));
+        if R.ContextText <> '' then
+          JObj.AddPair('context', R.ContextText);
+        JArr.AddElement(JObj);
+      end;
+      Writeln(JArr.Format(2));
+    finally
+      JArr.Free;
+    end;
+  end
+  else
+  begin
+    for R in ARefs do
+    begin
+      Path := AStore.GetFilePath(R.FileId);
+      Writeln(Format('%s:%d:%d  %s', [Path, R.StartLine, R.StartCol, R.NameText]));
+      if R.ContextText <> '' then
+      begin
+        Writeln('  ' + StringReplace(R.ContextText, sLineBreak, sLineBreak + '  ', [rfReplaceAll]));
+      end;
     end;
     Writeln(Format('%d caller(s)', [Length(ARefs)]));
   end;
@@ -616,10 +688,17 @@ begin
     begin
       Store := TSQLiteSymbolStore.Create(DbPath);
       Store.Migrate;
-      Refs := Store.FindCallersByName(AArgs.Name);
+      // v0.17: use context variant if --context N is provided
+      if AArgs.ContextLines > 0 then
+        Refs := Store.FindCallersByNameWithContext(AArgs.Name, AArgs.ContextLines)
+      else
+        Refs := Store.FindCallersByName(AArgs.Name);
       if Length(Refs) > 0 then
       begin
-        PrintReferences(Store, Refs, AArgs.AsJson);
+        if AArgs.ContextLines > 0 then
+          PrintReferencesWithContext(Store, Refs, AArgs.ContextLines, AArgs.AsJson)
+        else
+          PrintReferences(Store, Refs, AArgs.AsJson);
         Inc(TotalRefs, Length(Refs));
       end;
     end;
@@ -2125,6 +2204,242 @@ begin
   Result := 0;
 end;
 
+// v0.17: drag-lint impact --qname <X> [--depth N] [--db <path>] [--format text|json]
+// Walks transitive callers of the last segment of <X> up to depth N.
+// Exit 0 if callers found, 1 if none.
+function DoImpact(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Levels: TArray<TImpactLevel>;
+  L: TImpactLevel;
+  Prev, Depth: Integer;
+  TargetName: string;
+  JRoot, JLevel: TJSONObject;
+  JArr: TJSONArray;
+begin
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint impact --qname <Qualified.Name> ' +
+      '[--depth N] [--db <path>] [--format text|json]');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first.');
+    Exit(2);
+  end;
+  Depth := AArgs.Depth;
+  if Depth <= 0 then
+  begin
+    Writeln(AArgs.QName);
+    Writeln('  (depth 0 returns nothing)');
+    Exit(1);
+  end;
+  // Use the bare name (last segment) as the target for the CTE ref lookup,
+  // since refs store the bare identifier name, not the qualified name.
+  TargetName := LastSegment(AArgs.QName, '.');
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  Levels := Store.FindTransitiveCallers(TargetName, Depth);
+  if LowerCase(AArgs.Format) = 'json' then
+  begin
+    JRoot := TJSONObject.Create;
+    JArr := TJSONArray.Create;
+    try
+      JRoot.AddPair('qname', AArgs.QName);
+      for L in Levels do
+      begin
+        JLevel := TJSONObject.Create;
+        JLevel.AddPair('depth', TJSONNumber.Create(L.Depth));
+        JLevel.AddPair('callers', TJSONNumber.Create(L.CallerCount));
+        JLevel.AddPair('units', TJSONNumber.Create(L.UnitCount));
+        JArr.AddElement(JLevel);
+      end;
+      JRoot.AddPair('levels', JArr);
+      Writeln(JRoot.Format(2));
+    finally
+      JRoot.Free;
+    end;
+  end
+  else
+  begin
+    Writeln(AArgs.QName);
+    Prev := 0;
+    for L in Levels do
+    begin
+      if Prev > 0 then
+        Writeln(Format('  Depth %d: %3d callers in %d units (+%d)',
+          [L.Depth, L.CallerCount, L.UnitCount, L.CallerCount - Prev]))
+      else
+        Writeln(Format('  Depth %d: %3d callers in %d units',
+          [L.Depth, L.CallerCount, L.UnitCount]));
+      Prev := L.CallerCount;
+    end;
+    if Length(Levels) = 0 then
+    begin
+      Writeln('  (no callers)');
+      Exit(1);
+    end;
+  end;
+  Result := 0;
+end;
+
+// v0.17: drag-lint surface --qname <Foo.TBar> [--db <path>]
+//   [--include-impl] [--all-visibility] [--format text|json]
+// Reads start_line..end_line of the class symbol from the source file and
+// prints each line. For a well-formed Delphi unit the class symbol spans only
+// the interface-section declaration, so no implementation bodies leak through.
+// Exit 2 on usage error, 1 if symbol not found or wrong kind, 0 on success.
+function DoSurface(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Lines: TArray<TSurfaceLine>;
+  L: TSurfaceLine;
+  Syms: TArray<TSymbol>;
+  JArr: TJSONArray;
+  JObj: TJSONObject;
+begin
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint surface --qname <Foo.TBar> ' +
+      '[--db <path>] [--include-impl] [--all-visibility] ' +
+      '[--format text|json]');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first.');
+    Exit(2);
+  end;
+
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  // Validate that the symbol exists and is a class/record/interface.
+  Syms := Store.FindSymbolsByQualifiedName(AArgs.QName);
+  if Length(Syms) = 0 then
+  begin
+    Writeln(System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName]));
+    Exit(1);
+  end;
+  if not (Syms[0].Kind in [skClass, skRecord, skInterface]) then
+  begin
+    Writeln(System.SysUtils.Format(
+      'Symbol %s has kind "%s"; surface requires a class, record, or interface.',
+      [Syms[0].QualifiedName, Syms[0].Kind.ToText]));
+    Exit(2);
+  end;
+
+  Lines := Store.GetClassSurface(AArgs.QName, AArgs.IncludeImpl,
+    AArgs.AllVisibility);
+  if Length(Lines) = 0 then
+  begin
+    Writeln('(no surface lines returned)');
+    Exit(1);
+  end;
+
+  if LowerCase(AArgs.Format) = 'json' then
+  begin
+    JArr := TJSONArray.Create;
+    try
+      for L in Lines do
+      begin
+        JObj := TJSONObject.Create;
+        JObj.AddPair('kind', L.Kind);
+        JObj.AddPair('text', L.Text);
+        JObj.AddPair('line', TJSONNumber.Create(L.StartLine));
+        JArr.AddElement(JObj);
+      end;
+      Writeln(JArr.Format(2));
+    finally
+      JArr.Free;
+    end;
+  end
+  else
+  begin
+    for L in Lines do
+      Writeln(L.Text);
+  end;
+  Result := 0;
+end;
+
+// v0.17: drag-lint slice --qname <Foo.TBar> [--db <path>] [--format text|json]
+// Returns symbol-relevant chunks of the unit:
+//   1. unit-header  — lines 1 through the "interface" keyword line
+//   2. class-decl   — class symbol's start_line..end_line
+//   3. impl-method  — implementation body for each method child
+//   4. unit-trailer — the "end." line
+// Text format: chunks separated by "--- <kind> ---" headers.
+// JSON format: {"qname":..., "chunks":[{"kind":..., "start_line":...,
+//               "end_line":..., "text":...}]}
+// Exit 2 on usage error, 1 if symbol not found, 0 on success.
+function DoSlice(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Slice: TArray<TSliceChunk>;
+  C: TSliceChunk;
+  JRoot: TJSONObject;
+  JArr: TJSONArray;
+  JObj: TJSONObject;
+begin
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint slice --qname <Foo.TBar> ' +
+      '[--db <path>] [--format text|json]');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first.');
+    Exit(2);
+  end;
+
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  Slice := Store.GetSymbolSlice(AArgs.QName);
+
+  if Length(Slice) = 0 then
+  begin
+    Writeln(System.SysUtils.Format(
+      'No slice returned for qname: %s', [AArgs.QName]));
+    Exit(1);
+  end;
+
+  if LowerCase(AArgs.Format) = 'json' then
+  begin
+    JRoot := TJSONObject.Create;
+    JArr := TJSONArray.Create;
+    try
+      JRoot.AddPair('qname', AArgs.QName);
+      for C in Slice do
+      begin
+        JObj := TJSONObject.Create;
+        JObj.AddPair('kind', C.Kind);
+        JObj.AddPair('start_line', TJSONNumber.Create(C.StartLine));
+        JObj.AddPair('end_line', TJSONNumber.Create(C.EndLine));
+        JObj.AddPair('text', C.Text);
+        JArr.AddElement(JObj);
+      end;
+      JRoot.AddPair('chunks', JArr);
+      Writeln(JRoot.Format(2));
+    finally
+      JRoot.Free;
+    end;
+  end
+  else
+  begin
+    for C in Slice do
+    begin
+      Writeln('--- ', C.Kind, ' ---');
+      Writeln(C.Text);
+    end;
+  end;
+  Result := 0;
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter: DRagLint.Lint.Linter.TLinter;
@@ -2245,6 +2560,12 @@ begin
       Result := DoTodos(Args)
     else if Args.Command = 'hover' then
       Result := DoHover(Args)
+    else if Args.Command = 'impact' then
+      Result := DoImpact(Args)
+    else if Args.Command = 'surface' then
+      Result := DoSurface(Args)
+    else if Args.Command = 'slice' then
+      Result := DoSlice(Args)
     else if Args.Command = 'diff' then
       Result := DoDiff(Args)
     else if Args.Command = 'lsp' then

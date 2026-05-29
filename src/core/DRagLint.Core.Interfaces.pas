@@ -34,6 +34,15 @@ type
     function CountReferences: Int64;
     function CountFiles: Int64;
 
+    // v0.17: blast-radius pack
+    function FindTransitiveCallers(const ASymbolName: string;
+      ADepth: Integer): TArray<TImpactLevel>;
+    function GetClassSurface(const AQName: string;
+      AIncludeImpl, AAllVisibility: Boolean): TArray<TSurfaceLine>;
+    function GetSymbolSlice(const AQName: string): TArray<TSliceChunk>;
+    function FindCallersByNameWithContext(const ACalleeName: string;
+      AContextLines: Integer): TArray<TReference>;
+
     procedure UpsertSymbolDoc(const AToken: TFileTxToken;
       ASymbolId: Int64; const ADoc: TParsedDoc);
     function GetSymbolDoc(ASymbolId: Int64): TParsedDoc;

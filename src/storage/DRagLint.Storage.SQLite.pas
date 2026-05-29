@@ -77,6 +77,32 @@ type
       APublicOnly: Boolean): TArray<TSymbol>;
     function FindByDocContains(const ASubstring: string): TArray<TSymbol>;
     procedure DeleteFileDocs(AFileId: Int64);
+
+    // v0.17: blast-radius pack
+    function FindTransitiveCallers(const ASymbolName: string;
+      ADepth: Integer): TArray<TImpactLevel>;
+    function GetClassSurface(const AQName: string;
+      AIncludeImpl, AAllVisibility: Boolean): TArray<TSurfaceLine>;
+    function GetSymbolSlice(const AQName: string): TArray<TSliceChunk>;
+    function FindCallersByNameWithContext(const ACalleeName: string;
+      AContextLines: Integer): TArray<TReference>;
+  private
+    // v0.17 slice helpers
+    function FindChildSymbols(AParentId: Int64): TArray<TSymbol>;
+    // FindImplLine: searches ALines (0-based) for a line matching
+    // "procedure|function|constructor|destructor ClassName.MethodName"
+    // case-insensitively. Returns 0-based index, or -1 if not found.
+    // NOTE: heuristic for v0.17 - may miss unusual formatting.
+    class function FindImplLine(const ALines: TArray<string>;
+      const APattern: string): Integer; static;
+    // FindImplEnd: from AStartLine (0-based), scans forward to find the last
+    // line of the implementation body. Stops at the next top-level
+    // procedure/function/constructor/destructor/class procedure/class function
+    // at column 0, or at a line ending 'end.' (unit footer). Returns 0-based
+    // index of the last line included in the body.
+    // NOTE: handles single-line "begin ... end;" bodies correctly.
+    class function FindImplEnd(const ALines: TArray<string>;
+      AStartLine: Integer): Integer; static;
   end;
 
 implementation
@@ -84,6 +110,8 @@ implementation
 uses
   System.Generics.Defaults,
   System.StrUtils,
+  System.IOUtils,
+  System.Math,
   DRagLint.Storage.Schema,
   DRagLint.Query.Fuzzy;
 
@@ -651,6 +679,7 @@ begin
       R.StartCol := Q.FieldByName('start_col').AsInteger;
       R.EndLine := Q.FieldByName('end_line').AsInteger;
       R.EndCol := Q.FieldByName('end_col').AsInteger;
+      R.ContextText := '';  // v0.17: initialize context (unless set by FindCallersByNameWithContext)
       List.Add(R);
       Q.Next;
     end;
@@ -873,6 +902,460 @@ procedure TSQLiteSymbolStore.DeleteFileDocs(AFileId: Int64);
 begin
   FQDeleteFileDocs.ParamByName('fid').AsLargeInt := AFileId;
   FQDeleteFileDocs.ExecSQL;
+end;
+
+// v0.17: blast-radius pack
+
+function TSQLiteSymbolStore.FindTransitiveCallers(const ASymbolName: string;
+  ADepth: Integer): TArray<TImpactLevel>;
+const
+  CTE_SQL =
+    'WITH RECURSIVE caller_walk(level, caller_id, caller_name, file_id) AS (' +
+    '  SELECT 1, s2.id, s2.name, s2.file_id ' +
+    '    FROM refs r INNER JOIN symbols s2 ON s2.file_id = r.file_id ' +
+    '      AND r.start_line BETWEEN s2.start_line AND s2.end_line ' +
+    '    WHERE r.name_text = :targetName ' +
+    '  UNION ' +
+    '  SELECT cw.level + 1, s3.id, s3.name, s3.file_id ' +
+    '    FROM caller_walk cw ' +
+    '    INNER JOIN refs r2 ON r2.name_text = cw.caller_name ' +
+    '    INNER JOIN symbols s3 ON s3.file_id = r2.file_id ' +
+    '      AND r2.start_line BETWEEN s3.start_line AND s3.end_line ' +
+    '    WHERE cw.level < :maxDepth' +
+    ') ' +
+    'SELECT level, COUNT(DISTINCT caller_id) AS callers, ' +
+    '       COUNT(DISTINCT file_id) AS units ' +
+    '  FROM caller_walk GROUP BY level ORDER BY level';
+var
+  Q: TFDQuery;
+  Levels: TList<TImpactLevel>;
+  Lvl: TImpactLevel;
+begin
+  Q := TFDQuery.Create(nil);
+  Levels := TList<TImpactLevel>.Create;
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text := CTE_SQL;
+    Q.ParamByName('targetName').AsString := ASymbolName;
+    Q.ParamByName('maxDepth').AsInteger := ADepth;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Lvl := Default(TImpactLevel);
+      Lvl.Depth := Q.Fields[0].AsInteger;
+      Lvl.CallerCount := Q.Fields[1].AsInteger;
+      Lvl.UnitCount := Q.Fields[2].AsInteger;
+      Levels.Add(Lvl);
+      Q.Next;
+    end;
+    Result := Levels.ToArray;
+  finally
+    Q.Free;
+    Levels.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetClassSurface(const AQName: string;
+  AIncludeImpl, AAllVisibility: Boolean): TArray<TSurfaceLine>;
+// Returns the interface-section lines for the class declaration (start_line..
+// end_line from the symbol record). This is the class body as declared in the
+// interface section of a well-formed Delphi unit; implementation bodies are in
+// a separate symbol block and are NOT included unless AIncludeImpl is set.
+//
+// Visibility filtering (AAllVisibility = False): skips lines whose trimmed
+// text is exactly "private" or "strict private". This is a naive line-grep
+// heuristic -- a proper implementation would walk child symbols and filter by
+// their modifiers field. For v0.17 the simple approach is acceptable.
+var
+  Syms: TArray<TSymbol>;
+  Sym: TSymbol;
+  AllLines: TArray<string>;
+  I: Integer;
+  SurfLine: TSurfaceLine;
+  Acc: TList<TSurfaceLine>;
+  FilePath: string;
+  TrimmedText: string;
+  InPrivate: Boolean;
+begin
+  Result := nil;
+  Syms := FindSymbolsByQualifiedName(AQName);
+  if Length(Syms) = 0 then
+    Exit;
+  Sym := Syms[0];
+  if not (Sym.Kind in [skClass, skRecord, skInterface]) then
+    Exit;
+  FilePath := GetFilePath(Sym.FileId);
+  if not TFile.Exists(FilePath) then
+    Exit;
+
+  // Source files are ANSI-encoded (strict project convention).
+  AllLines := TFile.ReadAllLines(FilePath, TEncoding.ANSI);
+  Acc := TList<TSurfaceLine>.Create;
+  try
+    InPrivate := False;
+    for I := Sym.StartLine to Sym.EndLine do
+    begin
+      if (I < 1) or (I > Length(AllLines)) then
+        Continue;
+      TrimmedText := Trim(AllLines[I - 1]);
+      // Track whether we are inside a private/strict private section so that
+      // the entire section body can be suppressed when AAllVisibility is False.
+      if SameText(TrimmedText, 'private') or
+         SameText(TrimmedText, 'strict private') then
+      begin
+        InPrivate := True;
+        if not AAllVisibility then
+          Continue;
+      end
+      else if SameText(TrimmedText, 'public') or
+              SameText(TrimmedText, 'strict public') or
+              SameText(TrimmedText, 'protected') or
+              SameText(TrimmedText, 'strict protected') or
+              SameText(TrimmedText, 'published') then
+        InPrivate := False;
+
+      if InPrivate and (not AAllVisibility) then
+        Continue;
+
+      SurfLine := Default(TSurfaceLine);
+      SurfLine.Kind := 'source';
+      SurfLine.Text := AllLines[I - 1];
+      SurfLine.StartLine := I;
+      SurfLine.EndLine := I;
+      Acc.Add(SurfLine);
+    end;
+    Result := Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindChildSymbols(
+  AParentId: Int64): TArray<TSymbol>;
+var
+  Q: TFDQuery;
+  List: TList<TSymbol>;
+begin
+  List := TList<TSymbol>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text :=
+      'SELECT * FROM symbols WHERE parent_id = :pid ORDER BY start_line';
+    Q.ParamByName('pid').AsLargeInt := AParentId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      List.Add(ReadSymbolFromQuery(Q));
+      Q.Next;
+    end;
+    Result := List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
+
+class function TSQLiteSymbolStore.FindImplLine(const ALines: TArray<string>;
+  const APattern: string): Integer;
+// Searches for lines matching "procedure|function|constructor|destructor
+// ClassName.MethodName" (case-insensitive). APattern should be "ClassName.MethodName".
+// Returns the 0-based line index, or -1 if not found.
+var
+  I: Integer;
+  LTrimmed, LUpper, LPatUpper: string;
+  Prefixes: array[0..5] of string;
+  J: Integer;
+  PrefixedPat: string;
+begin
+  LPatUpper := UpperCase(APattern);
+  Prefixes[0] := 'PROCEDURE ';
+  Prefixes[1] := 'FUNCTION ';
+  Prefixes[2] := 'CONSTRUCTOR ';
+  Prefixes[3] := 'DESTRUCTOR ';
+  Prefixes[4] := 'CLASS PROCEDURE ';
+  Prefixes[5] := 'CLASS FUNCTION ';
+  for I := 0 to High(ALines) do
+  begin
+    LTrimmed := Trim(ALines[I]);
+    if LTrimmed = '' then Continue;
+    LUpper := UpperCase(LTrimmed);
+    for J := 0 to High(Prefixes) do
+    begin
+      PrefixedPat := Prefixes[J] + LPatUpper;
+      // Match at start of trimmed line; allow "function TFoo.Bar(" or
+      // "function TFoo.Bar;" - so just check that LUpper starts with
+      // the prefixed pattern (which includes ClassName.MethodName).
+      if Copy(LUpper, 1, Length(PrefixedPat)) = PrefixedPat then
+        Exit(I);
+    end;
+  end;
+  Result := -1;
+end;
+
+class function TSQLiteSymbolStore.FindImplEnd(const ALines: TArray<string>;
+  AStartLine: Integer): Integer;
+// From AStartLine (0-based), scans forward to find the last line of the
+// implementation body. The body ends just before the next top-level
+// procedure/function/constructor/destructor/class procedure/class function
+// declaration at column 0, or at/before the final "end." line.
+//
+// Special case: if the very start line itself contains "end;" or "end" at
+// the end (single-line body like "begin Result := X; end;"), we return
+// AStartLine immediately after scanning until the begin..end is closed.
+//
+// v0.17 limitation: the heuristic may include or exclude lines if the
+// source uses unusual indentation or multiple begin..end blocks per line.
+var
+  I: Integer;
+  LTrimmed, LUpper: string;
+  TopLevelPrefixes: array[0..5] of string;
+  J: Integer;
+  IsTopLevel: Boolean;
+begin
+  TopLevelPrefixes[0] := 'PROCEDURE ';
+  TopLevelPrefixes[1] := 'FUNCTION ';
+  TopLevelPrefixes[2] := 'CONSTRUCTOR ';
+  TopLevelPrefixes[3] := 'DESTRUCTOR ';
+  TopLevelPrefixes[4] := 'CLASS PROCEDURE ';
+  TopLevelPrefixes[5] := 'CLASS FUNCTION ';
+
+  // Scan from the line AFTER the header line (AStartLine itself is the decl).
+  // Walk until we hit a top-level decl, "end.", or EOF.
+  for I := AStartLine + 1 to High(ALines) do
+  begin
+    LTrimmed := Trim(ALines[I]);
+    LUpper := UpperCase(LTrimmed);
+
+    // Check for unit footer "end."
+    if LUpper = 'END.' then
+      Exit(I - 1);
+
+    // Check for next top-level declaration (starts at column 0, i.e. the
+    // raw line has no leading whitespace before the keyword).
+    if (Length(ALines[I]) > 0) and not CharInSet(ALines[I][1], [' ', #9]) then
+    begin
+      IsTopLevel := False;
+      for J := 0 to High(TopLevelPrefixes) do
+      begin
+        if Copy(LUpper, 1, Length(TopLevelPrefixes[J])) =
+           TopLevelPrefixes[J] then
+        begin
+          IsTopLevel := True;
+          Break;
+        end;
+      end;
+      if IsTopLevel then
+        Exit(I - 1);
+    end;
+  end;
+  // Reached end of file
+  if High(ALines) >= AStartLine then
+    Result := High(ALines)
+  else
+    Result := AStartLine;
+end;
+
+function TSQLiteSymbolStore.GetSymbolSlice(const AQName: string): TArray<TSliceChunk>;
+// Returns symbol-relevant chunks of the source unit:
+//   1. unit-header: lines 1..interface-line
+//   2. class-decl: class symbol's start_line..end_line
+//   3. impl-method: implementation body for each method child of the class
+//   4. unit-trailer: the "end." line
+//
+// Limitation: FindImplEnd uses a heuristic that may over- or under-include
+// lines if source formatting is unusual. Acceptable for v0.17 on standard
+// Delphi fixtures. Children with no matching impl (e.g. abstract methods)
+// are silently skipped. Empty children list is handled gracefully.
+var
+  Syms: TArray<TSymbol>;
+  ClassSym: TSymbol;
+  AllLines: TArray<string>;
+  FilePath: string;
+  Chunks: TList<TSliceChunk>;
+  Chunk: TSliceChunk;
+  I, InterfaceLine: Integer;
+  Children: TArray<TSymbol>;
+  Child: TSymbol;
+  ImplPattern: string;
+  ImplLine, ImplEndLine: Integer;
+  TrailerLine: Integer;
+  LineCount: Integer;
+
+  function JoinLines(AFrom, ATo: Integer): string;
+  var
+    Parts: TStringList;
+    K: Integer;
+  begin
+    Parts := TStringList.Create;
+    try
+      for K := AFrom to ATo do
+        if (K >= 0) and (K <= High(AllLines)) then
+          Parts.Add(AllLines[K]);
+      Result := Parts.Text;
+      // TStringList.Text always appends a trailing CRLF; trim it.
+      Result := Result.TrimRight([#13, #10]);
+    finally
+      Parts.Free;
+    end;
+  end;
+
+begin
+  Result := nil;
+  Syms := FindSymbolsByQualifiedName(AQName);
+  if Length(Syms) = 0 then
+    Exit;
+  ClassSym := Syms[0];
+  FilePath := GetFilePath(ClassSym.FileId);
+  if not TFile.Exists(FilePath) then
+    Exit;
+
+  AllLines := TFile.ReadAllLines(FilePath, TEncoding.ANSI);
+  LineCount := Length(AllLines);
+  if LineCount = 0 then
+    Exit;
+
+  Chunks := TList<TSliceChunk>.Create;
+  try
+    // 1. Unit header: lines 0..(InterfaceLine) in 0-based; 1..(InterfaceLine+1) 1-based.
+    //    Find the line that is exactly "interface" (trimmed, case-insensitive).
+    InterfaceLine := 0;
+    for I := 0 to High(AllLines) do
+      if SameText(Trim(AllLines[I]), 'interface') then
+      begin
+        InterfaceLine := I;
+        Break;
+      end;
+    Chunk := Default(TSliceChunk);
+    Chunk.Kind := 'unit-header';
+    Chunk.StartLine := 1;
+    Chunk.EndLine := InterfaceLine + 1;
+    Chunk.Text := JoinLines(0, InterfaceLine);
+    Chunks.Add(Chunk);
+
+    // 2. Class declaration: ClassSym.StartLine..EndLine (1-based in DB).
+    Chunk := Default(TSliceChunk);
+    Chunk.Kind := 'class-decl';
+    Chunk.StartLine := ClassSym.StartLine;
+    Chunk.EndLine := ClassSym.EndLine;
+    Chunk.Text := JoinLines(ClassSym.StartLine - 1, ClassSym.EndLine - 1);
+    Chunks.Add(Chunk);
+
+    // 3. Implementation bodies for each method child of the class.
+    Children := FindChildSymbols(ClassSym.Id);
+    for Child in Children do
+    begin
+      if not (Child.Kind in [skMethod, skProcedure, skFunction,
+        skConstructor, skDestructor]) then
+        Continue;
+      // Build pattern "ClassName.MethodName" for the impl finder.
+      ImplPattern := ClassSym.Name + '.' + Child.Name;
+      ImplLine := FindImplLine(AllLines, ImplPattern);
+      if ImplLine < 0 then
+        Continue;
+      ImplEndLine := FindImplEnd(AllLines, ImplLine);
+      // Clamp to valid range
+      if ImplEndLine < ImplLine then
+        ImplEndLine := ImplLine;
+      if ImplEndLine >= LineCount then
+        ImplEndLine := LineCount - 1;
+      Chunk := Default(TSliceChunk);
+      Chunk.Kind := 'impl-method';
+      Chunk.StartLine := ImplLine + 1;
+      Chunk.EndLine := ImplEndLine + 1;
+      Chunk.Text := JoinLines(ImplLine, ImplEndLine);
+      Chunks.Add(Chunk);
+    end;
+
+    // 4. Unit trailer: find the "end." line (0-based search from the end).
+    TrailerLine := LineCount - 1;
+    for I := High(AllLines) downto 0 do
+      if SameText(Trim(AllLines[I]), 'end.') then
+      begin
+        TrailerLine := I;
+        Break;
+      end;
+    Chunk := Default(TSliceChunk);
+    Chunk.Kind := 'unit-trailer';
+    Chunk.StartLine := TrailerLine + 1;
+    Chunk.EndLine := TrailerLine + 1;
+    Chunk.Text := Trim(AllLines[TrailerLine]);
+    Chunks.Add(Chunk);
+
+    Result := Chunks.ToArray;
+  finally
+    Chunks.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindCallersByNameWithContext(const ACalleeName: string;
+  AContextLines: Integer): TArray<TReference>;
+var
+  Refs: TArray<TReference>;
+  I, J: Integer;
+  FilePath: string;
+  StartIdx, EndIdx: Integer;
+  CachedPath: string;
+  CachedLines: TArray<string>;
+  CtxBuilder: TStringBuilder;
+begin
+  // Get all callers first
+  Refs := FindCallersByName(ACalleeName);
+
+  // If no context requested or no callers, return as-is
+  if (AContextLines <= 0) or (Length(Refs) = 0) then
+  begin
+    Result := Refs;
+    Exit;
+  end;
+
+  // For each reference, read surrounding context lines
+  CachedPath := '';
+  SetLength(CachedLines, 0);
+  CtxBuilder := TStringBuilder.Create;
+  try
+    for I := Low(Refs) to High(Refs) do
+    begin
+      FilePath := GetFilePath(Refs[I].FileId);
+
+      // Cache: if we're reading a different file, re-read it
+      if FilePath <> CachedPath then
+      begin
+        CachedPath := FilePath;
+        if TFile.Exists(FilePath) then
+          CachedLines := TFile.ReadAllLines(FilePath, TEncoding.ANSI)
+        else
+          SetLength(CachedLines, 0);
+      end;
+
+      // Extract context: (line - N) to (line + N), 1-indexed
+      // Refs[I].StartLine is 1-indexed, array access is 0-indexed
+      StartIdx := Max(0, Refs[I].StartLine - AContextLines - 1);
+      EndIdx := Min(High(CachedLines), Refs[I].StartLine + AContextLines - 1);
+
+      // Build context text with line numbers
+      CtxBuilder.Clear;
+      if (Length(CachedLines) > 0) and (StartIdx <= EndIdx) and (StartIdx <= High(CachedLines)) then
+      begin
+        for J := StartIdx to EndIdx do
+        begin
+          if (J >= 0) and (J <= High(CachedLines)) then
+          begin
+            if CtxBuilder.Length > 0 then
+              CtxBuilder.AppendLine;
+            CtxBuilder.Append(Format('%5d: %s', [J + 1, CachedLines[J]]));
+          end;
+        end;
+      end;
+
+      // Store context in the reference
+      Refs[I].ContextText := CtxBuilder.ToString;
+    end;
+  finally
+    CtxBuilder.Free;
+  end;
+
+  Result := Refs;
 end;
 
 end.

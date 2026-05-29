@@ -40,6 +40,13 @@ type
       const ADoc: TParsedDoc): string;
     function FormatSymbolsAsJsonArray(const ASymbols: TArray<TSymbol>;
       AStore: ISymbolStore): string;
+    function FormatReferencesWithContext(const ARefs: TArray<TReference>): string;
+    function FormatImpactAsJson(const AQName: string;
+      const ALevels: TArray<TImpactLevel>): string;
+    function FormatSurfaceAsJson(const AQName: string;
+      const ALines: TArray<TSurfaceLine>): string;
+    function FormatSliceAsJson(const AQName: string;
+      const AChunks: TArray<TSliceChunk>): string;
     function ResolveStore(const AArgs: TJSONObject): ISymbolStore;
   public
     constructor Create(const ADbPaths: TArray<string>);
@@ -177,9 +184,11 @@ begin
     'find_callers',
     'Find every reference site to a method/event-handler by name. Returns ' +
     'file:line:col rows. Includes DFM event-handler bindings when the .dfm ' +
-    'files are indexed.',
+    'files are indexed. When context > 0 each result includes surrounding ' +
+    'source lines.',
     '{"type":"object","properties":{' +
-    '"name":{"type":"string","description":"Callee/handler name"}' +
+    '"name":{"type":"string","description":"Callee/handler name"},' +
+    '"context":{"type":"integer","description":"Number of surrounding source lines to include (optional, default 0)"}' +
     '},"required":["name"],"additionalProperties":false}'));
 
   Tools.AddElement(ToolDescriptor(
@@ -220,6 +229,40 @@ begin
     '"public_only":{"type":"boolean","description":"Only include public symbols (optional)"},' +
     '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
     '}}'));
+
+  Tools.AddElement(ToolDescriptor(
+    'get_impact',
+    'Return the transitive blast-radius of a symbol: how many callers and ' +
+    'units are impacted at each depth level. Uses a recursive CTE over the ' +
+    'refs table. Input: qualified name (last segment used for lookup) and ' +
+    'optional depth (default 3).',
+    '{"type":"object","properties":{' +
+    '"qname":{"type":"string","description":"Qualified symbol name (e.g. Unit.TClass.Method)"},' +
+    '"depth":{"type":"integer","description":"Maximum recursion depth (optional, default 3)"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
+    '},"required":["qname"]}'));
+
+  Tools.AddElement(ToolDescriptor(
+    'get_surface',
+    'Return the public interface of a class or record: the lines of its ' +
+    'declaration in the interface section. By default private/strict-private ' +
+    'sections are excluded. Use all_visibility to include them.',
+    '{"type":"object","properties":{' +
+    '"qname":{"type":"string","description":"Qualified class/record name (e.g. Unit.TClass)"},' +
+    '"include_impl":{"type":"boolean","description":"Include implementation bodies (optional, default false)"},' +
+    '"all_visibility":{"type":"boolean","description":"Include private sections (optional, default false)"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
+    '},"required":["qname"]}'));
+
+  Tools.AddElement(ToolDescriptor(
+    'get_slice',
+    'Return a minimal, self-contained slice of the source unit for a given ' +
+    'class: unit header, class declaration, and implementation bodies for ' +
+    'each method. Useful for LLM context with only the relevant code.',
+    '{"type":"object","properties":{' +
+    '"qname":{"type":"string","description":"Qualified class name (e.g. Unit.TClass)"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
+    '},"required":["qname"]}'));
 
   Res.AddPair('tools', Tools);
   SendResult(AId, Res);
@@ -372,6 +415,123 @@ begin
   Result := '[' + string.Join(',', Parts) + ']';
 end;
 
+function TMCPServer.FormatReferencesWithContext(
+  const ARefs: TArray<TReference>): string;
+// Formats callers as a JSON array; each element includes a "context" field
+// when ContextText is non-empty (populated by FindCallersByNameWithContext).
+var
+  Parts: TArray<string>;
+  I: Integer;
+  FilePath: string;
+  Store: ISymbolStore;
+begin
+  Store := FStore;
+  if Length(ARefs) = 0 then
+  begin
+    Result := '{"callers":[]}';
+    Exit;
+  end;
+  SetLength(Parts, Length(ARefs));
+  for I := 0 to High(ARefs) do
+  begin
+    if Store <> nil then
+      FilePath := Store.GetFilePath(ARefs[I].FileId)
+    else
+      FilePath := '';
+    Parts[I] :=
+      '{"file":"' + JsonEscape(FilePath) + '"' +
+      ',"line":' + IntToStr(ARefs[I].StartLine) +
+      ',"col":' + IntToStr(ARefs[I].StartCol) +
+      ',"context":"' + JsonEscape(ARefs[I].ContextText) + '"' +
+      '}';
+  end;
+  Result := '{"callers":[' + string.Join(',', Parts) + ']}';
+end;
+
+function TMCPServer.FormatImpactAsJson(const AQName: string;
+  const ALevels: TArray<TImpactLevel>): string;
+// Returns: {"qname":"X","levels":[{"depth":1,"callers":12,"units":5,"delta":0},...]}
+var
+  Parts: TArray<string>;
+  I: Integer;
+  PrevCount, Delta: Integer;
+begin
+  if Length(ALevels) = 0 then
+  begin
+    Result :=
+      '{"qname":"' + JsonEscape(AQName) + '","levels":[]}';
+    Exit;
+  end;
+  SetLength(Parts, Length(ALevels));
+  PrevCount := 0;
+  for I := 0 to High(ALevels) do
+  begin
+    Delta := ALevels[I].CallerCount - PrevCount;
+    Parts[I] :=
+      '{"depth":' + IntToStr(ALevels[I].Depth) +
+      ',"callers":' + IntToStr(ALevels[I].CallerCount) +
+      ',"units":' + IntToStr(ALevels[I].UnitCount) +
+      ',"delta":' + IntToStr(Delta) +
+      '}';
+    PrevCount := ALevels[I].CallerCount;
+  end;
+  Result :=
+    '{"qname":"' + JsonEscape(AQName) + '"' +
+    ',"levels":[' + string.Join(',', Parts) + ']}';
+end;
+
+function TMCPServer.FormatSurfaceAsJson(const AQName: string;
+  const ALines: TArray<TSurfaceLine>): string;
+// Returns: {"qname":"X","lines":[{"kind":"source","text":"...","start_line":10,"end_line":10},...]}
+var
+  Parts: TArray<string>;
+  I: Integer;
+begin
+  if Length(ALines) = 0 then
+  begin
+    Result :=
+      '{"qname":"' + JsonEscape(AQName) + '","lines":[]}';
+    Exit;
+  end;
+  SetLength(Parts, Length(ALines));
+  for I := 0 to High(ALines) do
+    Parts[I] :=
+      '{"kind":"' + JsonEscape(ALines[I].Kind) + '"' +
+      ',"text":"' + JsonEscape(ALines[I].Text) + '"' +
+      ',"start_line":' + IntToStr(ALines[I].StartLine) +
+      ',"end_line":' + IntToStr(ALines[I].EndLine) +
+      '}';
+  Result :=
+    '{"qname":"' + JsonEscape(AQName) + '"' +
+    ',"lines":[' + string.Join(',', Parts) + ']}';
+end;
+
+function TMCPServer.FormatSliceAsJson(const AQName: string;
+  const AChunks: TArray<TSliceChunk>): string;
+// Returns: {"qname":"X","chunks":[{"kind":"unit-header","text":"...","start_line":1,"end_line":3},...]}
+var
+  Parts: TArray<string>;
+  I: Integer;
+begin
+  if Length(AChunks) = 0 then
+  begin
+    Result :=
+      '{"qname":"' + JsonEscape(AQName) + '","chunks":[]}';
+    Exit;
+  end;
+  SetLength(Parts, Length(AChunks));
+  for I := 0 to High(AChunks) do
+    Parts[I] :=
+      '{"kind":"' + JsonEscape(AChunks[I].Kind) + '"' +
+      ',"text":"' + JsonEscape(AChunks[I].Text) + '"' +
+      ',"start_line":' + IntToStr(AChunks[I].StartLine) +
+      ',"end_line":' + IntToStr(AChunks[I].EndLine) +
+      '}';
+  Result :=
+    '{"qname":"' + JsonEscape(AQName) + '"' +
+    ',"chunks":[' + string.Join(',', Parts) + ']}';
+end;
+
 procedure TMCPServer.HandleToolsCall(const AId: TJSONValue;
   const AParams: TJSONObject);
 var
@@ -438,8 +598,19 @@ begin
         Exit;
       end;
       Name := Args.GetValue('name').Value;
-      Refs := FStore.FindCallersByName(Name);
-      ResultText := FormatReferences(Refs);
+      var CtxLines := 0;
+      if Args.GetValue('context') <> nil then
+        CtxLines := StrToIntDef(Args.GetValue('context').Value, 0);
+      if CtxLines > 0 then
+      begin
+        Refs := FStore.FindCallersByNameWithContext(Name, CtxLines);
+        ResultText := FormatReferencesWithContext(Refs);
+      end
+      else
+      begin
+        Refs := FStore.FindCallersByName(Name);
+        ResultText := FormatReferences(Refs);
+      end;
     end
     else if ToolName = 'lint' then
     begin
@@ -525,6 +696,75 @@ begin
         PubOnly := Args.GetValue('public_only').Value = 'true';
       var UndocSyms := CallStore3.FindUndocumented(KindVal, PubOnly);
       ResultText := FormatSymbolsAsJsonArray(UndocSyms, CallStore3);
+    end
+    else if ToolName = 'get_impact' then
+    begin
+      var ImpStore := ResolveStore(Args);
+      if ImpStore = nil then
+      begin
+        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        Exit;
+      end;
+      var ImpQName := '';
+      if Args.GetValue('qname') <> nil then
+        ImpQName := Args.GetValue('qname').Value;
+      if ImpQName = '' then
+      begin
+        SendError(AId, -32602, 'get_impact requires qname');
+        Exit;
+      end;
+      var ImpDepth := 3;
+      if Args.GetValue('depth') <> nil then
+        ImpDepth := StrToIntDef(Args.GetValue('depth').Value, 3);
+      // Use last segment of qname for the symbol name lookup
+      var ImpSegments := ImpQName.Split(['.']);
+      var ImpName := ImpSegments[High(ImpSegments)];
+      var ImpLevels := ImpStore.FindTransitiveCallers(ImpName, ImpDepth);
+      ResultText := FormatImpactAsJson(ImpQName, ImpLevels);
+    end
+    else if ToolName = 'get_surface' then
+    begin
+      var SurfStore := ResolveStore(Args);
+      if SurfStore = nil then
+      begin
+        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        Exit;
+      end;
+      var SurfQName := '';
+      if Args.GetValue('qname') <> nil then
+        SurfQName := Args.GetValue('qname').Value;
+      if SurfQName = '' then
+      begin
+        SendError(AId, -32602, 'get_surface requires qname');
+        Exit;
+      end;
+      var SurfIncImpl := False;
+      var SurfAllVis := False;
+      if Args.GetValue('include_impl') <> nil then
+        SurfIncImpl := Args.GetValue('include_impl').Value = 'true';
+      if Args.GetValue('all_visibility') <> nil then
+        SurfAllVis := Args.GetValue('all_visibility').Value = 'true';
+      var SurfLines := SurfStore.GetClassSurface(SurfQName, SurfIncImpl, SurfAllVis);
+      ResultText := FormatSurfaceAsJson(SurfQName, SurfLines);
+    end
+    else if ToolName = 'get_slice' then
+    begin
+      var SliceStore := ResolveStore(Args);
+      if SliceStore = nil then
+      begin
+        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        Exit;
+      end;
+      var SliceQName := '';
+      if Args.GetValue('qname') <> nil then
+        SliceQName := Args.GetValue('qname').Value;
+      if SliceQName = '' then
+      begin
+        SendError(AId, -32602, 'get_slice requires qname');
+        Exit;
+      end;
+      var SliceChunks := SliceStore.GetSymbolSlice(SliceQName);
+      ResultText := FormatSliceAsJson(SliceQName, SliceChunks);
     end
     else
     begin

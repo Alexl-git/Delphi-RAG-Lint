@@ -213,6 +213,41 @@ drag-lint query find --no-docs --kind method --public --db myproj.sqlite
 }
 ```
 
+## Blast-radius queries (v0.17)
+
+For impact analysis, refactoring preview, and AI context optimization,
+v0.17 adds `impact`, `surface`, and `slice` commands that traverse the
+call graph and extract minimal source slices.
+
+Full design: [`docs/superpowers/specs/2026-05-28-v017-blast-radius-design.md`](docs/superpowers/specs/2026-05-28-v017-blast-radius-design.md)
+
+### CLI usage
+
+```cmd
+:: Transitive callers to depth N — how many units impact a change to X?
+drag-lint impact --qname Foo.TBar.DoSomething --depth 2 --db myproj.sqlite
+
+:: Class interface block (no impl bodies) — understand the contract
+drag-lint surface --qname Foo.TBar --db myproj.sqlite
+drag-lint surface --qname Foo.TBar --all-visibility --db myproj.sqlite
+
+:: Minimal symbol slice for AI context — unit header + class decl + methods only
+drag-lint slice --qname Foo.TBar --db myproj.sqlite
+
+:: Find callers with surrounding source context (N lines before + after)
+drag-lint query find-callers --name DoSomething --context 3 --db myproj.sqlite
+drag-lint query find-callers --name DoSomething --context 3 --db myproj.sqlite --json
+```
+
+### MCP tools added in v0.17
+
+| Tool | Arguments | Description |
+|---|---|---|
+| `get_impact` | `qname`, `depth` (optional, default 3) | Transitive callers by depth |
+| `get_surface` | `qname`, `include_impl` (optional), `all_visibility` (optional) | Class interface slice |
+| `get_slice` | `qname` | Unit header + class decl + method impls |
+| `find_callers` | existing + `context` (optional, default 0) | Find-callers with surrounding source lines |
+
 ## Exit codes
 
 | Code | Meaning |
