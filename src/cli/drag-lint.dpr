@@ -23,6 +23,7 @@ uses
   DRagLint.MCP.Server in '..\mcp\DRagLint.MCP.Server.pas',
   DRagLint.LSP.Server in '..\lsp\DRagLint.LSP.Server.pas',
   DRagLint.Hover.Renderer in 'DRagLint.Hover.Renderer.pas',
+  DRagLint.Context.Bundler in '..\context\DRagLint.Context.Bundler.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

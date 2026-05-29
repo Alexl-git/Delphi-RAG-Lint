@@ -51,6 +51,9 @@ type
       APublicOnly: Boolean): TArray<TSymbol>;
     function FindByDocContains(const ASubstring: string): TArray<TSymbol>;
     procedure DeleteFileDocs(AFileId: Int64);
+
+    // v0.18: bench-context — symbols that have at least one non-null summary
+    function ListDocumentedSymbols(ALimit: Integer): TArray<TSymbol>;
   end;
 
   TParseResult = record

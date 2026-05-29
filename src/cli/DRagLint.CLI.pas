@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.17.0-alpha';
+  VERSION = '0.18.0-alpha';
 
 function Run: Integer;
 
@@ -37,7 +37,8 @@ uses
   DRagLint.Project.Resolver,
   DRagLint.MCP.Server,
   DRagLint.LSP.Server,
-  DRagLint.Hover.Renderer;
+  DRagLint.Hover.Renderer,
+  DRagLint.Context.Bundler;
 
 type
   TArgs = record
@@ -76,6 +77,13 @@ type
     IncludeImpl: Boolean;
     AllVisibility: Boolean;
     ContextLines: Integer;  // v0.17: find-callers --context N
+    // v0.18: context bundle
+    Task:               string;  // raw --task value
+    Verb:               string;  // parsed verb (modify/inspect/refactor/delete/extend)
+    BundleQName:        string;  // parsed qname from --task
+    MaxCallers:         Integer; // --max-callers N (default 5)
+    IncludeClassSurface: Boolean; // default true
+    BenchN:             Integer; // --n N for bench-context (default 20)
   end;
 
 procedure PrintHelp;
@@ -107,6 +115,9 @@ begin
   Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
   Writeln('  drag-lint surface            --qname <Foo.TBar>   [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]');
   Writeln('  drag-lint slice              --qname <Foo.TBar>   [--db <file.sqlite>] [--format text|json]');
+  Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw]');
+  Writeln('                               [--max-callers N] [--context N] [--no-docs]');
+  Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -199,6 +210,10 @@ begin
   Result.DbPath := TPath.Combine(GetCurrentDir, 'drag-lint.sqlite');
   Result.Docs := DefaultDocConfig;
   Result.Depth := 3;
+  Result.MaxCallers := 5;
+  Result.IncludeClassSurface := True;
+  Result.ContextLines := 3;
+  Result.BenchN := 20;
   LoadConfigDefaults(Result);
   if ParamCount = 0 then
   begin
@@ -332,6 +347,45 @@ begin
     begin
       Inc(i);
       Result.ContextLines := StrToIntDef(ParamStr(i), 0);
+    end
+    else if (A = '--task') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Task := ParamStr(i);
+      // Parse "verb qname" or just "qname".
+      // Recognized verbs: modify, inspect, refactor, delete, extend.
+      var SpPos := Pos(' ', Result.Task);
+      if SpPos > 0 then
+      begin
+        var FirstToken := LowerCase(Copy(Result.Task, 1, SpPos - 1));
+        if (FirstToken = 'modify') or (FirstToken = 'inspect') or
+           (FirstToken = 'refactor') or (FirstToken = 'delete') or
+           (FirstToken = 'extend') then
+        begin
+          Result.Verb := FirstToken;
+          Result.BundleQName := Trim(Copy(Result.Task, SpPos + 1, MaxInt));
+        end
+        else
+        begin
+          Result.Verb := 'modify';
+          Result.BundleQName := Result.Task;
+        end;
+      end
+      else
+      begin
+        Result.Verb := 'modify';
+        Result.BundleQName := Result.Task;
+      end;
+    end
+    else if (A = '--max-callers') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.MaxCallers := StrToIntDef(ParamStr(i), 5);
+    end
+    else if (A = '--n') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.BenchN := StrToIntDef(ParamStr(i), 20);
     end
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
@@ -2526,6 +2580,151 @@ begin
     Result := 0;
 end;
 
+// v0.18: drag-lint context --task "verb qname" [--db <path>]
+//   [--format md|json|raw] [--max-callers N] [--context N] [--no-docs]
+// Builds a TContextBundle and renders it in the requested format.
+// Exit 2 on usage error, 1 if symbol not found, 0 on success.
+function DoContext(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Bundle: TContextBundle;
+  IncDocs, IncSurface, IncImpl: Boolean;
+begin
+  if AArgs.Task = '' then
+  begin
+    Writeln('Usage: drag-lint context --task "verb qname" [--db PATH] ' +
+      '[--format md|json|raw]');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(2);
+  end;
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  IncDocs    := not AArgs.NoDocs;
+  IncSurface := AArgs.IncludeClassSurface;
+  IncImpl    := SameText(AArgs.Verb, 'modify') or
+                SameText(AArgs.Verb, 'refactor') or
+                SameText(AArgs.Verb, 'extend');
+  Bundle := TContextBundler.Build(Store, AArgs.Verb, AArgs.BundleQName,
+    AArgs.ContextLines, AArgs.MaxCallers,
+    IncDocs, IncSurface, IncImpl);
+  if Bundle.QName = '' then
+  begin
+    Writeln(Format('No symbol matched: %s', [AArgs.BundleQName]));
+    Exit(1);
+  end;
+  if SameText(AArgs.Format, 'json') then
+    Writeln(TContextBundler.RenderJson(Bundle))
+  else if SameText(AArgs.Format, 'raw') then
+    Writeln(TContextBundler.RenderRaw(Bundle))
+  else
+    Writeln(TContextBundler.RenderMarkdown(Bundle));
+  Result := 0;
+end;
+
+// v0.18: drag-lint bench-context [--db PATH] [--n N]
+// Lists up to N documented symbols, builds a context bundle for each (verb
+// 'modify'), computes bundle token estimate vs source-file baseline
+// (chars / 3.7), and prints average reduction ratio.
+function DoBenchContext(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Syms: TArray<TSymbol>;
+  Sym: TSymbol;
+  N, I: Integer;
+  Bundle: TContextBundle;
+  FilePath: string;
+  FileCache: TDictionary<string, string>;
+  FileSource: string;
+  BaselineTokens: Double;
+  BundleTokens: Double;
+  TotalBundle, TotalBaseline: Double;
+  Count: Integer;
+begin
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(2);
+  end;
+
+  N := AArgs.BenchN;
+  if N <= 0 then N := 20;
+
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  // Fetch documented symbols (clamped to N).
+  Syms := Store.ListDocumentedSymbols(N);
+  if Length(Syms) = 0 then
+  begin
+    Writeln('No documented symbols found in: ', AArgs.DbPath);
+    Exit(1);
+  end;
+
+  FileCache := TDictionary<string, string>.Create;
+  TotalBundle  := 0;
+  TotalBaseline := 0;
+  Count := 0;
+  try
+    for I := 0 to High(Syms) do
+    begin
+      Sym := Syms[I];
+      FilePath := Store.GetFilePath(Sym.FileId);
+      if (FilePath = '') or (not TFile.Exists(FilePath)) then
+        Continue;
+
+      // Build context bundle for this symbol.
+      Bundle := TContextBundler.Build(
+        Store, 'modify', Sym.QualifiedName,
+        3, 5, True, True, True);
+
+      // Baseline: entire source file chars / 3.7.
+      if not FileCache.TryGetValue(FilePath, FileSource) then
+      begin
+        try
+          FileSource := TFile.ReadAllText(FilePath, TEncoding.ANSI);
+        except
+          FileSource := '';
+        end;
+        FileCache.AddOrSetValue(FilePath, FileSource);
+      end;
+
+      BundleTokens  := Bundle.TokenEstimate;
+      BaselineTokens := Length(FileSource) / 3.7;
+
+      TotalBundle   := TotalBundle  + BundleTokens;
+      TotalBaseline := TotalBaseline + BaselineTokens;
+      Inc(Count);
+    end;
+  finally
+    FileCache.Free;
+  end;
+
+  if Count = 0 then
+  begin
+    Writeln('No valid symbols with accessible source files.');
+    Exit(1);
+  end;
+
+  var AvgBundle   := TotalBundle   / Count;
+  var AvgBaseline := TotalBaseline / Count;
+  var Reduction: Double;
+  if AvgBundle > 0 then
+    Reduction := AvgBaseline / AvgBundle
+  else
+    Reduction := 0;
+
+  Writeln(Format('Bench: %s (N=%d)', [AArgs.DbPath, Count]));
+  Writeln(Format('  Average bundle tokens:    %d', [Round(AvgBundle)]));
+  Writeln(Format('  Average baseline tokens:  %d', [Round(AvgBaseline)]));
+  Writeln(Format('  Reduction:                %.1fx', [Reduction]));
+
+  Result := 0;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -2566,6 +2765,10 @@ begin
       Result := DoSurface(Args)
     else if Args.Command = 'slice' then
       Result := DoSlice(Args)
+    else if Args.Command = 'context' then
+      Result := DoContext(Args)
+    else if Args.Command = 'bench-context' then
+      Result := DoBenchContext(Args)
     else if Args.Command = 'diff' then
       Result := DoDiff(Args)
     else if Args.Command = 'lsp' then

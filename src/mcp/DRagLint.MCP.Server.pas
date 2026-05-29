@@ -11,7 +11,8 @@ uses
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces,
   DRagLint.Storage.SQLite,
-  DRagLint.Lint.Linter;
+  DRagLint.Lint.Linter,
+  DRagLint.Context.Bundler;
 
 type
   // Newline-delimited JSON-RPC 2.0 server speaking MCP-2024-11-05 over stdio.
@@ -261,6 +262,20 @@ begin
     'each method. Useful for LLM context with only the relevant code.',
     '{"type":"object","properties":{' +
     '"qname":{"type":"string","description":"Qualified class name (e.g. Unit.TClass)"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
+    '},"required":["qname"]}'));
+
+  Tools.AddElement(ToolDescriptor(
+    'get_context_bundle',
+    'Return a curated context bundle for a symbol: doc, class surface, impl slice, ' +
+    'callers, and token estimate. Useful for preparing minimal AI-ready context for ' +
+    'refactoring, inspection, or deletion tasks.',
+    '{"type":"object","properties":{' +
+    '"task":{"type":"string","description":"Task description (verb qname, e.g. \"modify Foo.Bar\")"},' +
+    '"qname":{"type":"string","description":"Qualified symbol name (e.g. Unit.TClass.Method)"},' +
+    '"verb":{"type":"string","description":"Action verb: modify|inspect|refactor|delete|extend (default modify)"},' +
+    '"caller_context":{"type":"integer","description":"Number of surrounding source lines for each caller (optional, default 3)"},' +
+    '"max_callers":{"type":"integer","description":"Maximum number of callers to include (optional, default 5)"},' +
     '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
     '},"required":["qname"]}'));
 
@@ -765,6 +780,58 @@ begin
       end;
       var SliceChunks := SliceStore.GetSymbolSlice(SliceQName);
       ResultText := FormatSliceAsJson(SliceQName, SliceChunks);
+    end
+    else if ToolName = 'get_context_bundle' then
+    begin
+      var BundleStore := ResolveStore(Args);
+      if BundleStore = nil then
+      begin
+        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        Exit;
+      end;
+
+      // Parse qname (required)
+      var BundleQName := '';
+      if Args.GetValue('qname') <> nil then
+        BundleQName := Args.GetValue('qname').Value;
+      if BundleQName = '' then
+      begin
+        SendError(AId, -32602, 'get_context_bundle requires qname');
+        Exit;
+      end;
+
+      // Parse verb and task
+      var BundleVerb := 'modify';
+      var BundleTask := '';
+      if Args.GetValue('task') <> nil then
+      begin
+        BundleTask := Args.GetValue('task').Value;
+        // Parse "verb qname" or just "qname"
+        var Parts := BundleTask.Split([' ']);
+        if Length(Parts) >= 2 then
+        begin
+          BundleVerb := Parts[0];
+          // qname is already from Args, or take from parts[1] if different
+        end;
+      end;
+      if Args.GetValue('verb') <> nil then
+        BundleVerb := Args.GetValue('verb').Value;
+
+      // Parse optional args
+      var BundleCallerContext := 3;
+      if Args.GetValue('caller_context') <> nil then
+        BundleCallerContext := StrToIntDef(Args.GetValue('caller_context').Value, 3);
+
+      var BundleMaxCallers := 5;
+      if Args.GetValue('max_callers') <> nil then
+        BundleMaxCallers := StrToIntDef(Args.GetValue('max_callers').Value, 5);
+
+      // Build the bundle
+      var Bundle := TContextBundler.Build(BundleStore, BundleVerb, BundleQName,
+        BundleCallerContext, BundleMaxCallers, True, True, True);
+
+      // Render as JSON
+      ResultText := TContextBundler.RenderJson(Bundle);
     end
     else
     begin

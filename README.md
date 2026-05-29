@@ -248,6 +248,42 @@ drag-lint query find-callers --name DoSomething --context 3 --db myproj.sqlite -
 | `get_slice` | `qname` | Unit header + class decl + method impls |
 | `find_callers` | existing + `context` (optional, default 0) | Find-callers with surrounding source lines |
 
+## Token reduction (v0.18)
+
+`drag-lint` cuts AI assistant per-task token usage on Delphi codebases by an
+order of magnitude, with zero data leaving the machine.
+
+v0.18 adds `context` and `bench-context` commands that compose v0.16 docs +
+v0.17 surface/slice/callers/impact into one minimal AI-ready payload
+(Markdown, JSON, or raw source). The bundler estimates token count using a
+simple chars / 3.7 heuristic and reports reduction ratio vs the naive baseline
+(indexing the entire source file).
+
+### CLI usage
+
+```cmd
+:: Compose one AI-ready bundle for a symbol (docs + interface + impl + callers)
+drag-lint context --task "modify Foo.TBar.Baz" --db myproj.sqlite
+
+:: Compose for refactor — includes impact summary and transitive callers
+drag-lint context --task "refactor Foo.TBar.Baz" --caller-context 3 --db myproj.sqlite
+
+:: Output as JSON instead of Markdown
+drag-lint context --task "inspect Foo.TBar" --format json --db myproj.sqlite
+
+:: Benchmark token reduction over N random documented symbols
+drag-lint bench-context --n 10 --db myproj.sqlite
+drag-lint bench-context --n 10 --md --db myproj.sqlite
+```
+
+### MCP tools added in v0.18
+
+| Tool | Arguments | Description |
+|---|---|---|
+| `get_context_bundle` | `task`, `db` (optional), `caller_context` (optional), `max_callers` (optional), `format` (optional) | Compose docs + surface + slice + callers into one payload |
+
+Full design: [`docs/superpowers/specs/2026-05-28-v018-context-bundles-design.md`](docs/superpowers/specs/2026-05-28-v018-context-bundles-design.md)
+
 ## Exit codes
 
 | Code | Meaning |

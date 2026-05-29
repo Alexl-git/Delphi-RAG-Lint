@@ -158,6 +158,30 @@ type
     EndLine:    Integer;
   end;
 
+  // v0.18: resolved caller entry for a context bundle (FilePath pre-resolved
+  // from FileId so renderers don't need a store callback).
+  TBundleCaller = record
+    FilePath:    string;
+    Line:        Integer;
+    Col:         Integer;
+    ContextText: string;
+  end;
+
+  // v0.18: context bundle — minimum AI-ready slice for a symbol.
+  TContextBundle = record
+    Task:          string;
+    Verb:          string;
+    QName:         string;
+    GeneratedAt:   TDateTime;
+    TokenEstimate: Integer;
+    Doc:           TParsedDoc;
+    HasDoc:        Boolean;
+    ClassSurface:  TArray<TSurfaceLine>;
+    ImplSlice:     TArray<TSliceChunk>;
+    Callers:       TArray<TBundleCaller>;
+    ImpactSummary: TArray<TImpactLevel>;
+  end;
+
 function DocFormatToStr(AFormat: TDocFormat): string;
 function JsonEscape(const S: string): string;
 function ParamsToJson(const AParams: TArray<TDocParam>): string;

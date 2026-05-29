@@ -38,6 +38,7 @@ type
     FQFindByDocTag: TFDQuery;
     FQFindUndocumented: TFDQuery;
     FQFindByDocContains: TFDQuery;
+    FQListDocumentedSymbols: TFDQuery;
     procedure Connect(const ADbPath: string);
     procedure PrepareStatements;
     procedure EnsureTrigramTablePopulated;
@@ -77,6 +78,9 @@ type
       APublicOnly: Boolean): TArray<TSymbol>;
     function FindByDocContains(const ASubstring: string): TArray<TSymbol>;
     procedure DeleteFileDocs(AFileId: Int64);
+
+    // v0.18: bench-context
+    function ListDocumentedSymbols(ALimit: Integer): TArray<TSymbol>;
 
     // v0.17: blast-radius pack
     function FindTransitiveCallers(const ASymbolName: string;
@@ -142,6 +146,7 @@ begin
   FQFindByDocTag.Free;
   FQFindUndocumented.Free;
   FQFindByDocContains.Free;
+  FQListDocumentedSymbols.Free;
   if Assigned(FConn) then
   begin
     if FConn.Connected then
@@ -339,6 +344,12 @@ begin
   FQFindByDocContains := NewQuery(
     'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' +
     'WHERE d.summary LIKE :pat OR d.remarks LIKE :pat OR d.example_text LIKE :pat');
+
+  FQListDocumentedSymbols := NewQuery(
+    'SELECT s.* FROM symbols s ' +
+    'INNER JOIN symbol_docs d ON d.symbol_id = s.id ' +
+    'WHERE d.summary IS NOT NULL ' +
+    'LIMIT :lim');
 end;
 
 function TSQLiteSymbolStore.FileIsUpToDate(const APath: string;
@@ -902,6 +913,33 @@ procedure TSQLiteSymbolStore.DeleteFileDocs(AFileId: Int64);
 begin
   FQDeleteFileDocs.ParamByName('fid').AsLargeInt := AFileId;
   FQDeleteFileDocs.ExecSQL;
+end;
+
+// v0.18: bench-context
+
+function TSQLiteSymbolStore.ListDocumentedSymbols(ALimit: Integer): TArray<TSymbol>;
+var
+  Acc: TList<TSymbol>;
+begin
+  Acc := TList<TSymbol>.Create;
+  try
+    if FQListDocumentedSymbols.Active then
+      FQListDocumentedSymbols.Close;
+    FQListDocumentedSymbols.ParamByName('lim').AsInteger := ALimit;
+    FQListDocumentedSymbols.Open;
+    try
+      while not FQListDocumentedSymbols.Eof do
+      begin
+        Acc.Add(ReadSymbolFromQuery(FQListDocumentedSymbols));
+        FQListDocumentedSymbols.Next;
+      end;
+    finally
+      FQListDocumentedSymbols.Close;
+    end;
+    Result := Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
 end;
 
 // v0.17: blast-radius pack
