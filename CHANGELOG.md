@@ -3,6 +3,19 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.37.0-alpha -- 2026-05-29
+
+### Fixed (critical)
+
+- **`drag-lint index` failing on Win32** with `[FireDAC][Phys][SQLite] ERROR: near "ON": syntax error`. The `FQUpsertFile` prepared query used SQLite's UPSERT syntax (`INSERT ... ON CONFLICT(path) DO UPDATE SET ...`) which requires SQLite 3.24+. RAD Studio 13's bundled Win32 FireDAC SQLite library is older than that and rejects the keyword. Win64 was unaffected. Rewrote the query to use `INSERT OR REPLACE INTO files(...)` which is supported in every SQLite version. Behavior unchanged for the indexer (files.id may differ on re-index, but symbols/refs cascade and incremental skip path was already bypassing this query for already-indexed files).
+
+### Notes
+
+- v0.36's dual-arch fix made the Win32 IDE plugin path actually usable; this v0.37 fix makes auto-indexing work in that path. Both fixes are required for a functioning IDE plugin install.
+- Win64 standalone CLI users were unaffected by this bug (the Win64 FireDAC SQLite is current enough).
+
+---
+
 ## v0.36.0-alpha -- 2026-05-29
 
 ### Fixed (critical)

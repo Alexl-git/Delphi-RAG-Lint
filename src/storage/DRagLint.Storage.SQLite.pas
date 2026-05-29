@@ -299,14 +299,17 @@ begin
   FQInsertFile := NewQuery(
     'INSERT INTO files(path, mtime_unix, sha256, parsed_at, language) ' +
     'VALUES (:path, :mtime, :sha, :parsed, :lang)');
+  // v0.37: ON CONFLICT DO UPDATE requires SQLite 3.24+; Win32 FireDAC ships
+  // an older bundled sqlite that rejects this syntax. INSERT OR REPLACE is
+  // supported in every SQLite version. (Behavior difference: REPLACE deletes
+  // the existing row and inserts a new one, which changes files.id and would
+  // break FK references. Mitigation: the files table is only inserted into,
+  // never updated — the v0.4 incremental-skip path uses FileIsUpToDate to
+  // bypass before reaching this query, and the indexer's cascade deletes
+  // happen on the symbols/refs side, not files. New id on re-index is fine.)
   FQUpsertFile := NewQuery(
-    'INSERT INTO files(path, mtime_unix, sha256, parsed_at, language) ' +
-    'VALUES (:path, :mtime, :sha, :parsed, :lang) ' +
-    'ON CONFLICT(path) DO UPDATE SET ' +
-    '  mtime_unix=excluded.mtime_unix, ' +
-    '  sha256=excluded.sha256, ' +
-    '  parsed_at=excluded.parsed_at, ' +
-    '  language=excluded.language');
+    'INSERT OR REPLACE INTO files(path, mtime_unix, sha256, parsed_at, language) ' +
+    'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol := NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' +
     '  signature, modifiers, start_line, start_col, end_line, end_col) ' +
