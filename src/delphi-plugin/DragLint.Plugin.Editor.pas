@@ -39,6 +39,9 @@ procedure InvokeRunAstChecks(Sender: TObject);
 { v0.33: find usages + symbol search }
 procedure InvokeFindUsages(Sender: TObject);
 procedure InvokeSymbolSearch(Sender: TObject);
+{ v0.39: diagnostic menu — shows path resolution, subprocess spawn, LSP handshake details }
+procedure InvokeTestConnection(Sender: TObject);
+procedure InvokeOpenLog(Sender: TObject);
 
 implementation
 
@@ -46,6 +49,7 @@ uses
   System.Generics.Collections,
   Vcl.Forms,
   Winapi.Windows,
+  Winapi.ShellAPI,
   DragLint.Plugin.Keyboard,
   DragLint.Plugin.DiagnosticCache,
   DragLint.Plugin.EditViewNotifier,
@@ -1093,6 +1097,88 @@ begin
   AParent.Add(Result);
 end;
 
+{ ---- v0.39 diagnostic helpers ---- }
+
+procedure InvokeTestConnection(Sender: TObject);
+var
+  BplPath, BplDir: string;
+  ExePathBpl, ExePath: string;
+  HasNextToBpl: Boolean;
+  Client: TDragLintLspClient;
+  Started, InitOk: Boolean;
+  Report: TStringBuilder;
+  LogPath: string;
+begin
+  Report := TStringBuilder.Create;
+  try
+    Report.AppendLine('=== drag-lint plugin self-test ===');
+    BplPath := GetModuleName(HInstance);
+    BplDir := ExtractFilePath(BplPath);
+    Report.AppendLine('BPL path: ' + BplPath);
+    Report.AppendLine('BPL dir:  ' + BplDir);
+
+    ExePathBpl := BplDir + 'drag-lint.exe';
+    HasNextToBpl := FileExists(ExePathBpl);
+    Report.AppendLine(Format('drag-lint.exe next to BPL: %s  (exists=%s)',
+      [ExePathBpl, BoolToStr(HasNextToBpl, True)]));
+
+    if HasNextToBpl then
+      ExePath := ExePathBpl
+    else
+    begin
+      ExePath := 'drag-lint.exe';
+      Report.AppendLine('Will fall back to PATH lookup of "drag-lint.exe"');
+    end;
+
+    Report.AppendLine('');
+    Report.AppendLine('Spawning drag-lint.exe lsp ...');
+    Client := TDragLintLspClient.Create;
+    try
+      Started := Client.Start(ExePath);
+      Report.AppendLine(Format('Start result: %s', [BoolToStr(Started, True)]));
+      if Started then
+      begin
+        Report.AppendLine('Sending initialize request ...');
+        InitOk := Client.Initialize;
+        Report.AppendLine(Format('Initialize result: %s', [BoolToStr(InitOk, True)]));
+        if InitOk then
+          Report.AppendLine('SUCCESS: subprocess + handshake working')
+        else
+          Report.AppendLine('FAILED: initialize did not return within timeout');
+        Client.Stop;
+      end
+      else
+        Report.AppendLine('FAILED: CreateProcessW failed (see log)');
+    finally
+      Client.Free;
+    end;
+
+    LogPath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP'))
+      + 'drag-lint-plugin.log';
+    Report.AppendLine('');
+    Report.AppendLine('Detailed log: ' + LogPath);
+    ShowMessage(Report.ToString);
+  finally
+    Report.Free;
+  end;
+end;
+
+procedure InvokeOpenLog(Sender: TObject);
+var
+  LogPath: string;
+begin
+  LogPath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP'))
+    + 'drag-lint-plugin.log';
+  if not FileExists(LogPath) then
+  begin
+    ShowMessage('No log yet at:'#13#10 + LogPath +
+      #13#10#13#10 +
+      'The log is created on first plugin LSP invocation.');
+    Exit;
+  end;
+  ShellExecute(0, 'open', PChar(LogPath), nil, nil, SW_SHOWNORMAL);
+end;
+
 procedure RegisterDragLintMenu;
 var
   Services: INTAServices;
@@ -1126,6 +1212,9 @@ begin
   AddWrappedItem(RootMenu, 'Find Usages...',             InvokeFindUsages);
   AddWrappedItem(RootMenu, 'Symbol Search...',           InvokeSymbolSearch);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
+  // v0.39: diagnostic submenu
+  AddWrappedItem(RootMenu, 'Test Connection...',         InvokeTestConnection);
+  AddWrappedItem(RootMenu, 'Open Plugin Log',            InvokeOpenLog);
 
   RegisterProjectNotifier;
   RegisterDragLintKeystrokes;

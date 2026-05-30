@@ -3,6 +3,36 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.39.0-alpha -- 2026-05-29
+
+### Added (plugin diagnostics)
+
+- **`Tools > drag-lint > Test Connection...`** — runs through the exact
+  LSP startup sequence the plugin uses internally and shows a
+  human-readable report:
+  - BPL path + directory
+  - Resolved `drag-lint.exe` candidate (next-to-BPL or PATH fallback)
+  - `Start` result (subprocess spawn)
+  - `Initialize` result (handshake)
+  - Path to the detailed log file
+  All without the user having to install/uninstall the package or
+  trigger a real hover.
+
+- **`Tools > drag-lint > Open Plugin Log`** — opens
+  `%TEMP%\drag-lint-plugin.log` in the user's default text editor.
+  When the log doesn't exist yet (first run before any plugin LSP
+  invocation), shows an informational dialog.
+
+### Notes
+
+- The Test Connection report is the fastest path to diagnose the
+  "LSP initialize handshake failed" error from v0.21-v0.37. Run it,
+  share the report.
+- The plugin log is timestamped; previous runs append, so check
+  the tail of the file for the most recent attempt.
+
+---
+
 ## v0.38.0-alpha -- 2026-05-29
 
 ### Added (diagnostics)
