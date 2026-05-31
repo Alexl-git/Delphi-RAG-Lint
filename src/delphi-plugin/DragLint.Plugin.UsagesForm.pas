@@ -23,7 +23,9 @@ uses
   Vcl.Forms, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.ToolWin,
   Vcl.ExtCtrls,
   Winapi.Windows,
-  ToolsAPI;
+  ToolsAPI,
+  DragLint.Plugin.DbResolver,  { v0.40.5: ResolverDiagnostic for debug node }
+  DragLint.Plugin.Settings;
 
 { v0.40.5: local copy of the BPL build-stamp helper to avoid circular use
   with DragLint.Plugin.Editor (which already imports this unit). Same
@@ -473,6 +475,41 @@ begin
 
     if FTree.Items.Count = 0 then
     begin
+      { v0.40.5: dump the raw command line + first 400 chars of stdout +
+        every --db argument the resolver passed, so we can see what the
+        plugin actually ran when 0 callers comes back. Top-level node
+        for each. }
+      var DbgRoot := AddNodeData(nil, '== DEBUG (v0.40.5): command + output ==', '', 0);
+      AddNodeData(DbgRoot, 'Exit code: ' + IntToStr(ExitCode), '', 0);
+      AddNodeData(DbgRoot, 'CmdLine: ' + CmdLine, '', 0);
+      AddNodeData(DbgRoot, 'Output length: ' + IntToStr(Length(Output)), '', 0);
+      var DbgOut := Copy(Output, 1, 400);
+      AddNodeData(DbgRoot, 'Output[0..400]: ' + DbgOut, '', 0);
+      if Length(FDbPaths) > 0 then
+      begin
+        AddNodeData(DbgRoot, 'FDbPaths count: ' + IntToStr(Length(FDbPaths)), '', 0);
+        for var P2 in FDbPaths do
+          AddNodeData(DbgRoot, '  - ' + P2 + ' (exists=' +
+            BoolToStr(FileExists(P2), True) + ')', '', 0);
+      end
+      else
+        AddNodeData(DbgRoot, 'FDbPaths is empty; FDbPath="' + FDbPath + '"', '', 0);
+
+      { v0.40.5: full resolver diagnostic so we can see WHY the project DB
+        was or wasn't selected. }
+      var DiagRoot := AddNodeData(nil, '== DEBUG: resolver state ==', '', 0);
+      var Diag := ResolverDiagnostic(LoadSettings);
+      var DiagLines := TStringList.Create;
+      try
+        DiagLines.Text := Diag;
+        for var DL in DiagLines do
+          AddNodeData(DiagRoot, DL, '', 0);
+      finally
+        DiagLines.Free;
+      end;
+      DiagRoot.Expand(False);
+      DbgRoot.Expand(False);
+
       { v0.40.3: be honest about scope. drag-lint's indexer captures
         top-level declarations (types, methods, fields, properties,
         constants, units) but NOT procedure parameters or local

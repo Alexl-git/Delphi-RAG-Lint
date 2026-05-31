@@ -49,6 +49,10 @@ function PrimaryDbForProject(const AProjPath: string;
   non-existent files are filtered. Duplicates removed. }
 function ResolveActiveIndexDbs(const ASettings: TDragLintSettings): TArray<string>;
 
+{ v0.40.5: exposed for the Find Usages debug panel. Returns a multi-line
+  diagnostic string showing exactly what the resolver saw and decided. }
+function ResolverDiagnostic(const ASettings: TDragLintSettings): string;
+
 implementation
 
 function GetActiveEditorFilePath: string;
@@ -64,6 +68,30 @@ begin
     if EV = nil then Exit;
     if EV.Buffer = nil then Exit;
     Result := EV.Buffer.FileName;
+  except
+    Result := '';
+  end;
+end;
+
+function GetActiveProjectFilePath: string;
+{ v0.40.5 fallback when the editor view path is empty -- happens when the
+  Find Usages menu is invoked from a non-editor focus (Project Manager,
+  Object Inspector, etc.). Pulls the currently-active .dproj from
+  IOTAProjectGroup, which is stable across focus changes. }
+var
+  MS:         IOTAModuleServices;
+  ProjGroup:  IOTAProjectGroup;
+  ActiveProj: IOTAProject;
+begin
+  Result := '';
+  try
+    if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
+    if MS = nil then Exit;
+    ProjGroup := MS.MainProjectGroup;
+    if ProjGroup = nil then Exit;
+    ActiveProj := ProjGroup.ActiveProject;
+    if ActiveProj = nil then Exit;
+    Result := ActiveProj.FileName;
   except
     Result := '';
   end;
@@ -180,6 +208,40 @@ begin
   end;
 end;
 
+function ResolverDiagnostic(const ASettings: TDragLintSettings): string;
+var
+  EditorPath, ProjPath, FallbackProj, PrimaryDb, AncestorDb: string;
+  SB: TStringBuilder;
+begin
+  SB := TStringBuilder.Create;
+  try
+    EditorPath := GetActiveEditorFilePath;
+    SB.AppendLine('EditorPath: "' + EditorPath + '"');
+    ProjPath := FindOwningProject(EditorPath);
+    SB.AppendLine('FindOwningProject(editor): "' + ProjPath + '"');
+    if ProjPath = '' then
+    begin
+      FallbackProj := GetActiveProjectFilePath;
+      SB.AppendLine('GetActiveProjectFilePath fallback: "' + FallbackProj + '"');
+      ProjPath := FallbackProj;
+    end;
+    PrimaryDb := PrimaryDbForProject(ProjPath, ASettings);
+    SB.AppendLine('PrimaryDb: "' + PrimaryDb + '" (exists=' +
+      BoolToStr(TFile.Exists(PrimaryDb), True) + ')');
+    if (not TFile.Exists(PrimaryDb)) and (ProjPath <> '') then
+    begin
+      AncestorDb := FindAncestorDb(ExtractFilePath(ProjPath), ASettings);
+      SB.AppendLine('FindAncestorDb walking up: "' + AncestorDb + '"');
+    end;
+    SB.AppendLine('DbPathTemplate: ' + ASettings.DbPathTemplate);
+    SB.AppendLine('IncludeLibraryDb: ' + BoolToStr(ASettings.IncludeLibraryDb, True));
+    SB.AppendLine('AutoDiscoverDbs: ' + BoolToStr(ASettings.AutoDiscoverDbs, True));
+    Result := SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
 function ResolveActiveIndexDbs(const ASettings: TDragLintSettings): TArray<string>;
 var
   EditorPath: string;
@@ -192,8 +254,13 @@ var
 begin
   SetLength(Result, 0);
 
+  { Try editor view first; if no active editor (Find Usages invoked from
+    Project Manager focus, etc.), fall back to the active project group's
+    project file. Then walk up from THAT to find a .dproj. }
   EditorPath := GetActiveEditorFilePath;
   ProjPath := FindOwningProject(EditorPath);
+  if ProjPath = '' then
+    ProjPath := GetActiveProjectFilePath;
 
   { Try the template-resolved primary DB next to the .dproj first. }
   PrimaryDb := PrimaryDbForProject(ProjPath, ASettings);
