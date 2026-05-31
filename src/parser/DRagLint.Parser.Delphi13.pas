@@ -616,6 +616,33 @@ begin
     Exit;
   end;
 
+  // v0.40.5: bare statement-level procedure call (no parens). Pascal accepts
+  //   foo;
+  //   self.foo;
+  //   obj.method;
+  // The grammar parses these as `statement -> identifier|exprDot`. Without
+  // emitting a ref here, find-callers misses every paren-less call -- the
+  // common idiom for stateful procedures (RepointJobHeaderToFolder; etc).
+  if NodeType = 'statement' then
+  begin
+    if ANode.NamedChildCount >= 1 then
+    begin
+      var ExprChild := ANode.NamedChild(0);
+      var ChildKind := ExprChild.NodeType;
+      if ChildKind = 'identifier' then
+        AState.EmitRef('call', NodeText(ExprChild, AState.Source), ExprChild)
+      else if ChildKind = 'exprDot' then
+      begin
+        var RhsNode := ExprChild.ChildByField('rhs');
+        if not RhsNode.IsNull then
+          AState.EmitRef('call', NodeText(RhsNode, AState.Source), RhsNode);
+      end;
+    end;
+    for i := 0 to ANode.NamedChildCount - 1 do
+      Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+    Exit;
+  end;
+
   // Type reference: emits a kind='type_use' reference and keeps walking
   // (typerefs can be nested in generic args).
   if NodeType = 'typeref' then
