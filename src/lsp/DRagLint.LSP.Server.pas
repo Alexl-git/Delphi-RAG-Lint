@@ -32,8 +32,9 @@ type
   // sub-second per file thanks to v0.4 incremental).
   TLSPServer = class
   strict private
-    FStore: ISymbolStore;
-    FStdIn: THandleStream;
+    FStore:  ISymbolStore;             { v0.40.3: FStores[0]; kept for legacy single-store callers }
+    FStores: TArray<ISymbolStore>;     { v0.40.3: every --db opened, queried + merged across all }
+    FStdIn:  THandleStream;
     FLinter: TLinter;
     FInitialized: Boolean;
     FShuttingDown: Boolean;
@@ -60,8 +61,14 @@ type
     procedure HandleSignatureHelp(const AId: TJSONValue;
       const AParams: TJSONObject);
     procedure HandleDidOpenOrSave(const AParams: TJSONObject);
-    function LocationFromSymbol(const ASym: TSymbol): TJSONObject;
-    function LocationFromRef(const ARef: TReference): TJSONObject;
+    function LocationFromSymbol(const ASym: TSymbol): TJSONObject; overload;
+    function LocationFromRef(const ARef: TReference): TJSONObject; overload;
+    { v0.40.3: explicit-store overloads — preferred for multi-DB queries
+      so each Location URI resolves against the store that owns the row. }
+    function LocationFromSymbol(const ASym: TSymbol;
+      const AStore: ISymbolStore): TJSONObject; overload;
+    function LocationFromRef(const ARef: TReference;
+      const AStore: ISymbolStore): TJSONObject; overload;
     // v0.7: reparse the file at APath and find the identifier text under
     // (ALine, ACol) - both 0-based (LSP convention). Returns empty string
     // if the file doesn't exist or the cursor isn't on an identifier.
@@ -69,7 +76,11 @@ type
       ALine, ACol: Integer): string;
     function EnsureLinter: TLinter;
   public
-    constructor Create(const ADbPath: string);
+    constructor Create(const ADbPath: string); overload;
+    { v0.40.3: multi-DB constructor. Opens every path; missing paths are
+      logged via stderr (LSP doesn't see them) and skipped. The first
+      surviving store becomes FStore for legacy code paths. }
+    constructor Create(const ADbPaths: TArray<string>); overload;
     destructor Destroy; override;
     procedure Run;
   end;
@@ -78,14 +89,42 @@ implementation
 
 constructor TLSPServer.Create(const ADbPath: string);
 begin
+  Create(TArray<string>.Create(ADbPath));
+end;
+
+constructor TLSPServer.Create(const ADbPaths: TArray<string>);
+var
+  I: Integer;
+  Path: string;
+  S: ISymbolStore;
+begin
   inherited Create;
   FStdIn := THandleStream.Create(GetStdHandle(STD_INPUT_HANDLE));
   FLinter := nil;
-  if ADbPath <> '' then
+  SetLength(FStores, 0);
+  for I := 0 to High(ADbPaths) do
   begin
-    FStore := TSQLiteSymbolStore.Create(ADbPath);
-    FStore.Migrate;
+    Path := ADbPaths[I];
+    if Path = '' then Continue;
+    if not TFile.Exists(Path) then
+    begin
+      { Server protocol doesn't have a startup-message channel; write to
+        stderr so the spawning plugin / shell can surface it. The plugin's
+        DebugLog will capture this if redirected. }
+      Writeln(ErrOutput, 'drag-lint LSP: db not found, skipping: ', Path);
+      Continue;
+    end;
+    try
+      S := TSQLiteSymbolStore.Create(Path);
+      S.Migrate;
+      SetLength(FStores, Length(FStores) + 1);
+      FStores[High(FStores)] := S;
+    except
+      on E: Exception do
+        Writeln(ErrOutput, 'drag-lint LSP: could not open ', Path, ': ', E.Message);
+    end;
   end;
+  if Length(FStores) > 0 then FStore := FStores[0];
 end;
 
 destructor TLSPServer.Destroy;
@@ -251,12 +290,29 @@ begin
 end;
 
 function TLSPServer.LocationFromSymbol(const ASym: TSymbol): TJSONObject;
+begin
+  { Legacy single-store path: defer to the explicit-store overload using
+    FStore (= FStores[0]). New multi-DB code paths should pass the
+    originating store explicitly. }
+  Result := LocationFromSymbol(ASym, FStore);
+end;
+
+function TLSPServer.LocationFromRef(const ARef: TReference): TJSONObject;
+begin
+  Result := LocationFromRef(ARef, FStore);
+end;
+
+function TLSPServer.LocationFromSymbol(const ASym: TSymbol;
+  const AStore: ISymbolStore): TJSONObject;
 var
   Range, Start, EndPos: TJSONObject;
   Path: string;
 begin
   Result := TJSONObject.Create;
-  Path := FStore.GetFilePath(ASym.FileId);
+  if AStore <> nil then
+    Path := AStore.GetFilePath(ASym.FileId)
+  else
+    Path := '';
   Result.AddPair('uri', FileToUri(Path));
   Range := TJSONObject.Create;
   Start := TJSONObject.Create;
@@ -271,13 +327,17 @@ begin
   Result.AddPair('range', Range);
 end;
 
-function TLSPServer.LocationFromRef(const ARef: TReference): TJSONObject;
+function TLSPServer.LocationFromRef(const ARef: TReference;
+  const AStore: ISymbolStore): TJSONObject;
 var
   Range, Start, EndPos: TJSONObject;
   Path: string;
 begin
   Result := TJSONObject.Create;
-  Path := FStore.GetFilePath(ARef.FileId);
+  if AStore <> nil then
+    Path := AStore.GetFilePath(ARef.FileId)
+  else
+    Path := '';
   Result.AddPair('uri', FileToUri(Path));
   Range := TJSONObject.Create;
   Start := TJSONObject.Create;
@@ -328,7 +388,7 @@ begin
     ResObj.AddPair('capabilities', Caps);
     Info := TJSONObject.Create;
     Info.AddPair('name', 'drag-lint LSP');
-    Info.AddPair('version', '0.40.2-alpha');
+    Info.AddPair('version', '0.40.3-alpha');
     ResObj.AddPair('serverInfo', Info);
     Reply.AddPair('result', ResObj);
     SendMessage(Reply);
@@ -497,6 +557,8 @@ var
   Symbols: TArray<TSymbol>;
   Sym: TSymbol;
   SymObj, Loc: TJSONObject;
+  StIdx: Integer;
+  StCur: ISymbolStore;
 begin
   Reply := TJSONObject.Create;
   Arr := TJSONArray.Create;
@@ -504,7 +566,7 @@ begin
     Reply.AddPair('jsonrpc', '2.0');
     if AId <> nil then
       Reply.AddPair('id', AId.Clone as TJSONValue);
-    if FStore = nil then
+    if Length(FStores) = 0 then
     begin
       Reply.AddPair('result', Arr);
       SendMessage(Reply);
@@ -519,38 +581,45 @@ begin
       SendMessage(Reply);
       Exit;
     end;
-    Symbols := FStore.FindSymbolsByExactName(QueryStr);
-    if Length(Symbols) = 0 then
-      Symbols := FStore.FindSymbolsFuzzy(QueryStr, 50);
-    for Sym in Symbols do
+
+    { v0.40.3: iterate every store, merge results. For each store, prefer
+      exact-name matches; fall back to fuzzy when exact returns nothing.
+      Per-store fallback is intentional — if project DB has an exact hit
+      we don't want library DB's fuzzy noise diluting the result. }
+    for StIdx := 0 to High(FStores) do
     begin
-      SymObj := TJSONObject.Create;
-      SymObj.AddPair('name', Sym.Name);
-      // LSP SymbolKind enum: 5=Class, 11=Interface, 23=Struct, 10=Enum,
-      // 6=Method, 12=Function, 7=Property, 8=Field, ...
-      var Kind: Integer;
-      case Sym.Kind of
-        skClass: Kind := 5;
-        skInterface: Kind := 11;
-        skRecord: Kind := 23;
-        skEnum: Kind := 10;
-        skEnumValue: Kind := 22;
-        skMethod, skConstructor, skDestructor: Kind := 6;
-        skProcedure, skFunction: Kind := 12;
-        skProperty: Kind := 7;
-        skField: Kind := 8;
-        skVarDecl: Kind := 13;
-        skConstDecl: Kind := 14;
-        skUnit, skPackage, skProgram: Kind := 2;
-        skForm: Kind := 5;
-        skComponent: Kind := 8;
-      else Kind := 1;
+      StCur := FStores[StIdx];
+      Symbols := StCur.FindSymbolsByExactName(QueryStr);
+      if Length(Symbols) = 0 then
+        Symbols := StCur.FindSymbolsFuzzy(QueryStr, 50);
+      for Sym in Symbols do
+      begin
+        SymObj := TJSONObject.Create;
+        SymObj.AddPair('name', Sym.Name);
+        var Kind: Integer;
+        case Sym.Kind of
+          skClass: Kind := 5;
+          skInterface: Kind := 11;
+          skRecord: Kind := 23;
+          skEnum: Kind := 10;
+          skEnumValue: Kind := 22;
+          skMethod, skConstructor, skDestructor: Kind := 6;
+          skProcedure, skFunction: Kind := 12;
+          skProperty: Kind := 7;
+          skField: Kind := 8;
+          skVarDecl: Kind := 13;
+          skConstDecl: Kind := 14;
+          skUnit, skPackage, skProgram: Kind := 2;
+          skForm: Kind := 5;
+          skComponent: Kind := 8;
+        else Kind := 1;
+        end;
+        SymObj.AddPair('kind', TJSONNumber.Create(Kind));
+        SymObj.AddPair('containerName', Sym.QualifiedName);
+        Loc := LocationFromSymbol(Sym, StCur);
+        SymObj.AddPair('location', Loc);
+        Arr.AddElement(SymObj);
       end;
-      SymObj.AddPair('kind', TJSONNumber.Create(Kind));
-      SymObj.AddPair('containerName', Sym.QualifiedName);
-      Loc := LocationFromSymbol(Sym);
-      SymObj.AddPair('location', Loc);
-      Arr.AddElement(SymObj);
     end;
     Reply.AddPair('result', Arr);
     SendMessage(Reply);
@@ -576,7 +645,7 @@ begin
     Reply.AddPair('jsonrpc', '2.0');
     if AId <> nil then
       Reply.AddPair('id', AId.Clone as TJSONValue);
-    if (FStore = nil) or (AParams = nil) then
+    if (Length(FStores) = 0) or (AParams = nil) then
     begin
       Reply.AddPair('result', Arr);
       SendMessage(Reply);
@@ -598,9 +667,13 @@ begin
     Ident := IdentifierAtPosition(Path, Line, Col);
     if Ident <> '' then
     begin
-      Symbols := FStore.FindSymbolsByExactName(Ident);
-      for Sym in Symbols do
-        Arr.AddElement(LocationFromSymbol(Sym));
+      { v0.40.3: iterate every store, accumulate definitions. }
+      for var StIdx := 0 to High(FStores) do
+      begin
+        Symbols := FStores[StIdx].FindSymbolsByExactName(Ident);
+        for Sym in Symbols do
+          Arr.AddElement(LocationFromSymbol(Sym, FStores[StIdx]));
+      end;
     end;
     Reply.AddPair('result', Arr);
     SendMessage(Reply);
@@ -629,7 +702,7 @@ begin
     Reply.AddPair('jsonrpc', '2.0');
     if AId <> nil then
       Reply.AddPair('id', AId.Clone as TJSONValue);
-    if (FStore = nil) or (AParams = nil) then
+    if (Length(FStores) = 0) or (AParams = nil) then
     begin
       Reply.AddPair('result', Arr);
       SendMessage(Reply);
@@ -660,14 +733,18 @@ begin
     Ident := IdentifierAtPosition(Path, Line, Col);
     if Ident <> '' then
     begin
-      Refs := FStore.FindCallersByName(Ident);
-      for R in Refs do
-        Arr.AddElement(LocationFromRef(R));
-      if IncludeDecl then
+      { v0.40.3: iterate every store for both callers and declarations. }
+      for var StIdx := 0 to High(FStores) do
       begin
-        Symbols := FStore.FindSymbolsByExactName(Ident);
-        for Sym in Symbols do
-          Arr.AddElement(LocationFromSymbol(Sym));
+        Refs := FStores[StIdx].FindCallersByName(Ident);
+        for R in Refs do
+          Arr.AddElement(LocationFromRef(R, FStores[StIdx]));
+        if IncludeDecl then
+        begin
+          Symbols := FStores[StIdx].FindSymbolsByExactName(Ident);
+          for Sym in Symbols do
+            Arr.AddElement(LocationFromSymbol(Sym, FStores[StIdx]));
+        end;
       end;
     end;
     Reply.AddPair('result', Arr);
@@ -694,7 +771,7 @@ begin
     Reply.AddPair('jsonrpc', '2.0');
     if AId <> nil then
       Reply.AddPair('id', AId.Clone as TJSONValue);
-    if (FStore = nil) or (AParams = nil) then
+    if (Length(FStores) = 0) or (AParams = nil) then
     begin
       Reply.AddPair('result', TJSONNull.Create);
       SendMessage(Reply);
@@ -719,8 +796,21 @@ begin
       SendMessage(Reply);
       Exit;
     end;
-    Symbols := FStore.FindSymbolsByExactName(Ident);
-    if Length(Symbols) = 0 then
+    { v0.40.3: hover returns the FIRST hit across stores in declared order
+      (project DB before library DB, per CLI arg ordering). For multi-hit
+      cases the user can use Find Usages to see all stores' results. }
+    Symbols := nil;
+    var HitStore: ISymbolStore := nil;
+    for var StIdx := 0 to High(FStores) do
+    begin
+      Symbols := FStores[StIdx].FindSymbolsByExactName(Ident);
+      if Length(Symbols) > 0 then
+      begin
+        HitStore := FStores[StIdx];
+        Break;
+      end;
+    end;
+    if (Length(Symbols) = 0) or (HitStore = nil) then
     begin
       Reply.AddPair('result', TJSONNull.Create);
       SendMessage(Reply);
@@ -729,7 +819,7 @@ begin
     // v0.16: try to enrich the hover with doc-comment content.
     // GetSymbolDoc returns a zeroed TParsedDoc with HasContent=False when
     // no row exists; in that case fall back to the legacy signature listing.
-    Doc := FStore.GetSymbolDoc(Symbols[0].Id);
+    Doc := HitStore.GetSymbolDoc(Symbols[0].Id);
     if Doc.HasContent then
       MdValue := DRagLint.Hover.Renderer.RenderHoverMarkdown(Symbols[0], Doc)
     else
@@ -749,7 +839,7 @@ begin
         // is a reference (no doc comment found on the declaration).
         // LSP uses 0-based line/col; TTypeAtResolver uses 1-based.
         var TAResult := TTypeAtResolver.Resolve(
-          FStore, Path, Line + 1, Col + 1);
+          HitStore, Path, Line + 1, Col + 1);
         if TAResult.HasResolved and
            (TAResult.Resolved.QualifiedName <> Symbols[0].QualifiedName) then
         begin

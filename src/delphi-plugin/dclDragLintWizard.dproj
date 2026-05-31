@@ -92,6 +92,7 @@
         <DCCReference Include="DragLint.Plugin.SymbolSearchForm.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
         <DCCReference Include="DragLint.Plugin.HoverTracker.pas"/>
+        <DCCReference Include="DragLint.Plugin.DbResolver.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

@@ -57,6 +57,7 @@ contains
   DragLint.Plugin.UsagesForm in 'DragLint.Plugin.UsagesForm.pas',
   DragLint.Plugin.SymbolSearchForm in 'DragLint.Plugin.SymbolSearchForm.pas',
   DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas',
-  DragLint.Plugin.HoverTracker in 'DragLint.Plugin.HoverTracker.pas';
+  DragLint.Plugin.HoverTracker in 'DragLint.Plugin.HoverTracker.pas',
+  DragLint.Plugin.DbResolver in 'DragLint.Plugin.DbResolver.pas';
 
 end.

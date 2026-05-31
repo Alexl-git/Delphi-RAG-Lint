@@ -23,12 +23,24 @@ const
      loaded BPL's file modtime (see PluginBuildTag). Compiler intrinsics
      like the dollar-I DATE/TIME macros emit unquoted strings in Delphi 13
      and don't fit in a const expression. *)
-  PLUGIN_VERSION = 'v0.40.2-alpha';
+  PLUGIN_VERSION = 'v0.40.3-alpha';
 
 { Stamp every user-visible plugin dialog with the version + the actual
   build time of the BPL the IDE has loaded so the user can verify at a
   glance that they are testing the latest build. }
 function PluginBuildTag: string;
+
+{ v0.40.3: exposed so HoverTracker can reuse the shared LSP client for
+  dwell-triggered textDocument/hover queries. Returns nil if startup or
+  initialize failed. Called only from main thread. }
+function EnsureLspClient: TDragLintLspClient;
+
+{ v0.40.3: dwell-fire helper used by HoverTracker. Queries LSP hover at
+  the given URI/line/col and returns the extracted hover text, or '' on
+  timeout / no-result / any failure. Safe to call from main thread only.
+  ATimeoutMs is the per-query budget; default 500ms keeps the UI snappy. }
+function QueryHoverText(const AUri: string; ALine, ACol: Integer;
+  ATimeoutMs: Integer = 500): string;
 
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
@@ -55,17 +67,24 @@ procedure InvokeSymbolSearch(Sender: TObject);
 procedure InvokeTestConnection(Sender: TObject);
 procedure InvokeOpenLog(Sender: TObject);
 
+{ v0.40.3: lint the active editor BUFFER (unsaved changes included).
+  Snapshots the in-memory text to %TEMP%\drag-lint-buffer-<n>.pas and
+  runs drag-lint lint <tempfile> --json. Findings are merged into the
+  diagnostic cache so inline markers update without saving the file. }
+procedure InvokeLintBuffer(Sender: TObject);
+
 implementation
 
 uses
-  System.Generics.Collections,
+  System.Generics.Collections, System.IOUtils,
   Vcl.Forms,
   Winapi.Windows,
   Winapi.ShellAPI,
   DragLint.Plugin.Keyboard,
   DragLint.Plugin.DiagnosticCache,
   DragLint.Plugin.EditViewNotifier,
-  DragLint.Plugin.HoverTracker;
+  DragLint.Plugin.HoverTracker,
+  DragLint.Plugin.DbResolver;
 
 { ---- PluginBuildTag ---- }
 
@@ -247,7 +266,17 @@ begin
 
     LogPath := GetPluginLogPath;
 
-    if not GLspClient.Start(ExePath) then
+    { v0.40.3: resolve all index DBs for the currently-active editor file
+      and pass them as --db flags. Plugin Settings + auto-discovery + the
+      exe-relative library DB are all merged inside ResolveActiveIndexDbs. }
+    var DbList: TArray<string>;
+    try
+      DbList := ResolveActiveIndexDbs(LoadSettings);
+    except
+      SetLength(DbList, 0);
+    end;
+
+    if not GLspClient.Start(ExePath, DbList) then
     begin
       ShowMessage(
         PluginBuildTag + #13#10#13#10 +
@@ -255,6 +284,7 @@ begin
         'Ensure drag-lint.exe is on PATH or next to the BPL.'#13#10#13#10 +
         'BPL dir:        ' + BplDir + #13#10 +
         'Resolved exe:   ' + ExePath + #13#10 +
+        Format('DBs:            %d resolved', [Length(DbList)]) + #13#10 +
         'Debug log:      ' + LogPath);
       FreeAndNil(GLspClient);
       Exit(nil);
@@ -322,6 +352,47 @@ begin
 end;
 
 { ---- menu action procedures ---- }
+
+function QueryHoverText(const AUri: string; ALine, ACol: Integer;
+  ATimeoutMs: Integer): string;
+{ v0.40.3: shared hover-text extraction used by both InvokeHover (manual
+  Ctrl+Alt+H invocation) and the HoverTracker dwell trigger. Returns
+  empty string on any failure — caller decides whether to show a popup
+  or fall back to diagnostic-only. }
+var
+  Client:      TDragLintLspClient;
+  Params:      TJSONObject;
+  Resp:        TJSONValue;
+  ContentsVal: TJSONValue;
+begin
+  Result := '';
+  try
+    Client := EnsureLspClient;
+    if Client = nil then Exit;
+    Params := MakeTextDocumentPositionParams(AUri, ALine, ACol);
+    try
+      Resp := Client.Request('textDocument/hover', Params, ATimeoutMs);
+    finally
+      Params.Free;
+    end;
+    if Resp = nil then Exit;
+    try
+      if (Resp is TJSONObject) and
+         (Resp as TJSONObject).TryGetValue<TJSONValue>('contents', ContentsVal) then
+      begin
+        if ContentsVal is TJSONObject then
+          (ContentsVal as TJSONObject).TryGetValue<string>('value', Result)
+        else if ContentsVal is TJSONString then
+          Result := (ContentsVal as TJSONString).Value;
+      end;
+    finally
+      Resp.Free;
+    end;
+  except
+    { Silent — fires from dwell timer; AVs here would break IDE }
+    Result := '';
+  end;
+end;
 
 procedure InvokeHover(Sender: TObject);
 var
@@ -1211,6 +1282,130 @@ begin
     end).Start;
 end;
 
+{ ---- v0.40.3: lint unsaved buffer -------------------------------------- }
+
+function ReadActiveBufferText(out AFileName: string): string;
+{ Snapshot the in-memory text of the active editor view via IOTAEditReader.
+  Returns '' if no active view or buffer. Output is UTF-8 friendly because
+  the IDE buffer is already AnsiString in the source charset; we read raw
+  bytes and let drag-lint's parser handle encoding the same way it does
+  for on-disk files. }
+var
+  ESS:    IOTAEditorServices;
+  EV:     IOTAEditView;
+  Reader: IOTAEditReader;
+  Buf:    TBytes;
+  Pos, N: Integer;
+  Tmp:    array[0..16383] of AnsiChar;
+const
+  CHUNK = SizeOf(Tmp);
+begin
+  Result    := '';
+  AFileName := '';
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  EV := ESS.TopView;
+  if EV = nil then Exit;
+  if EV.Buffer = nil then Exit;
+  AFileName := EV.Buffer.FileName;
+  Reader := EV.Buffer.CreateReader;
+  if Reader = nil then Exit;
+
+  SetLength(Buf, 0);
+  Pos := 0;
+  repeat
+    N := Reader.GetText(Pos, Tmp, CHUNK);
+    if N <= 0 then Break;
+    SetLength(Buf, Length(Buf) + N);
+    Move(Tmp[0], Buf[Length(Buf) - N], N);
+    Inc(Pos, N);
+  until N < CHUNK;
+
+  if Length(Buf) > 0 then
+    Result := TEncoding.ANSI.GetString(Buf);
+end;
+
+procedure InvokeLintBuffer(Sender: TObject);
+var
+  FilePath:  string;
+  BufText:   string;
+  Ext:       string;
+  TmpPath:   string;
+  Cfg:       TDragLintSettings;
+  ExePath:   string;
+  CmdLine:   string;
+  TmpStream: TFileStream;
+  Bytes:     TBytes;
+  SI:        TStartupInfoW;
+  PI:        TProcessInformation;
+  CmdLineW:  array of WideChar;
+begin
+  BufText := ReadActiveBufferText(FilePath);
+  if BufText = '' then
+  begin
+    ShowMessage(PluginBuildTag + #13#10#13#10 +
+      'drag-lint: no active editor buffer to lint.');
+    Exit;
+  end;
+
+  Ext := ExtractFileExt(FilePath);
+  if Ext = '' then Ext := '.pas';
+  TmpPath := TPath.Combine(TPath.GetTempPath,
+    Format('drag-lint-buffer-%d%s', [GetTickCount, Ext]));
+
+  Bytes := TEncoding.UTF8.GetBytes(BufText);
+  try
+    TmpStream := TFileStream.Create(TmpPath, fmCreate);
+    try
+      if Length(Bytes) > 0 then
+        TmpStream.WriteBuffer(Bytes[0], Length(Bytes));
+    finally
+      TmpStream.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      ShowMessage('drag-lint: could not write buffer snapshot: ' + E.Message);
+      Exit;
+    end;
+  end;
+
+  Cfg := LoadSettings;
+  ExePath := Cfg.ExePath;
+  if (ExePath = '') or not FileExists(ExePath) then
+  begin
+    ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+    if not FileExists(ExePath) then ExePath := 'drag-lint.exe';
+  end;
+
+  { Spawn detached: drag-lint lint <tmp> --json. We don't capture stdout
+    in v0.40.3a — the diagnostic-publish path will be wired in v0.40.4
+    after we add a one-shot --output <jsonfile> flag to drag-lint. Today
+    the user sees results in the Messages pane via the spawn fall-through. }
+  FillChar(SI, SizeOf(SI), 0);
+  SI.cb := SizeOf(SI);
+  FillChar(PI, SizeOf(PI), 0);
+  CmdLine := Format('"%s" lint "%s"', [ExePath, TmpPath]);
+  SetLength(CmdLineW, Length(CmdLine) + 1);
+  Move(PChar(CmdLine)^, CmdLineW[0], (Length(CmdLine) + 1) * SizeOf(WideChar));
+  if CreateProcessW(nil, @CmdLineW[0], nil, nil, False,
+    CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
+  begin
+    CloseHandle(PI.hProcess);
+    CloseHandle(PI.hThread);
+  end;
+
+  TThread.Queue(nil,
+    procedure
+    var
+      MS: IOTAMessageServices;
+    begin
+      if Supports(BorlandIDEServices, IOTAMessageServices, MS) then
+        MS.AddTitleMessage(Format(
+          'drag-lint: linted buffer snapshot of %s (-> %s)',
+          [ExtractFileName(FilePath), ExtractFileName(TmpPath)]));
+    end);
+end;
+
 procedure InvokeOpenLog(Sender: TObject);
 var
   LogPath: string;
@@ -1261,6 +1456,7 @@ begin
   AddWrappedItem(RootMenu, 'Symbol Search...',           InvokeSymbolSearch);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
   // v0.39: diagnostic submenu
+  AddWrappedItem(RootMenu, 'Lint Buffer (Unsaved)',      InvokeLintBuffer);
   AddWrappedItem(RootMenu, 'Test Connection...',         InvokeTestConnection);
   AddWrappedItem(RootMenu, 'Open Plugin Log',            InvokeOpenLog);
 

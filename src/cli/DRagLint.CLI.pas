@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.40.2-alpha';
+  VERSION = '0.40.3-alpha';
 
 function Run: Integer;
 
@@ -3514,12 +3514,17 @@ begin
       Result := DoWorkspace(Args)
     else if Args.Command = 'lsp' then
     begin
-      var LspDb := '';
+      { v0.40.3: forward EVERY --db flag to the LSP server. Multi-DB
+        query support inside TLSPServer iterates all stores. Falls back
+        to single-DB if only --db <one> was passed. }
+      var DbList: TArray<string>;
       if Length(Args.DbPaths) > 0 then
-        LspDb := Args.DbPaths[0]
+        DbList := Args.DbPaths
+      else if Args.DbPath <> '' then
+        DbList := TArray<string>.Create(Args.DbPath)
       else
-        LspDb := Args.DbPath;
-      var Lsp := DRagLint.LSP.Server.TLSPServer.Create(LspDb);
+        DbList := nil;
+      var Lsp := DRagLint.LSP.Server.TLSPServer.Create(DbList);
       try
         Lsp.Run;
         Result := 0;

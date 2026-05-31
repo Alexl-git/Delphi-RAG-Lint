@@ -21,6 +21,13 @@ type
     EnableCodeLens:       Boolean;
     EnableWorkspaceMode:  Boolean;
     EnableHoverTooltip:   Boolean;
+    { v0.40.3: explicit list of additional DB paths to include in every
+      LSP/query invocation (in addition to project + auto-discovered DBs).
+      Stored as '|'-delimited string in the registry; presented as a
+      one-path-per-line edit in the Settings dialog. }
+    IndexDbs:             TArray<string>;
+    AutoDiscoverDbs:      Boolean;  { default True - find sibling .sqlite by walking project root }
+    IncludeLibraryDb:     Boolean;  { default True - merge exe-relative drag-lint-library.sqlite }
   end;
 
 function LoadSettings: TDragLintSettings;
@@ -39,7 +46,7 @@ const
 function DefaultSettings: TDragLintSettings;
 begin
   Result.ExePath        := 'drag-lint.exe';
-  Result.DbPathTemplate := '<projdir>\.drag-lint.sqlite';
+  Result.DbPathTemplate := '<projdir>\drag-lint.sqlite';
   Result.AutoIndex            := True;
   Result.AutoReindexOnSave    := True;
   Result.EnableHover          := True;
@@ -55,6 +62,9 @@ begin
   Result.EnableCodeLens       := True;
   Result.EnableWorkspaceMode  := True;
   Result.EnableHoverTooltip   := True;
+  SetLength(Result.IndexDbs, 0);
+  Result.AutoDiscoverDbs      := True;
+  Result.IncludeLibraryDb     := True;
 end;
 
 function LoadSettings: TDragLintSettings;
@@ -93,6 +103,22 @@ begin
         Result.EnableWorkspaceMode := Reg.ReadInteger('EnableWorkspaceMode') <> 0;
       if Reg.ValueExists('EnableHoverTooltip') then
         Result.EnableHoverTooltip  := Reg.ReadInteger('EnableHoverTooltip') <> 0;
+      { v0.40.3: explicit DB list + auto-discovery flags. }
+      if Reg.ValueExists('IndexDbs') then
+      begin
+        var Joined := Reg.ReadString('IndexDbs');
+        if Joined <> '' then
+        begin
+          var Parts := Joined.Split(['|'], TStringSplitOptions.ExcludeEmpty);
+          SetLength(Result.IndexDbs, Length(Parts));
+          for var I := 0 to High(Parts) do
+            Result.IndexDbs[I] := Parts[I];
+        end;
+      end;
+      if Reg.ValueExists('AutoDiscoverDbs') then
+        Result.AutoDiscoverDbs  := Reg.ReadInteger('AutoDiscoverDbs') <> 0;
+      if Reg.ValueExists('IncludeLibraryDb') then
+        Result.IncludeLibraryDb := Reg.ReadInteger('IncludeLibraryDb') <> 0;
     finally
       Reg.CloseKey;
     end;
@@ -127,6 +153,16 @@ begin
       Reg.WriteInteger('EnableCodeLens',      Ord(ASettings.EnableCodeLens));
       Reg.WriteInteger('EnableWorkspaceMode', Ord(ASettings.EnableWorkspaceMode));
       Reg.WriteInteger('EnableHoverTooltip',  Ord(ASettings.EnableHoverTooltip));
+      { v0.40.3: persist explicit DB list and auto-discovery flags. }
+      var Joined := '';
+      for var I := 0 to High(ASettings.IndexDbs) do
+      begin
+        if I > 0 then Joined := Joined + '|';
+        Joined := Joined + ASettings.IndexDbs[I];
+      end;
+      Reg.WriteString('IndexDbs', Joined);
+      Reg.WriteInteger('AutoDiscoverDbs',  Ord(ASettings.AutoDiscoverDbs));
+      Reg.WriteInteger('IncludeLibraryDb', Ord(ASettings.IncludeLibraryDb));
     finally
       Reg.CloseKey;
     end;

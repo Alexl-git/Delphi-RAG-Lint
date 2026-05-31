@@ -33,7 +33,11 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    function Start(const AExePath: string): Boolean;
+    function Start(const AExePath: string): Boolean; overload;
+    { v0.40.3: spawn with explicit --db paths. Each path becomes a
+      separate "--db <quoted>" cmd-line flag the LSP server iterates. }
+    function Start(const AExePath: string;
+      const ADbPaths: TArray<string>): Boolean; overload;
     procedure Stop;
     function Initialize: Boolean;
     function Request(const AMethod: string; AParams: TJSONValue;
@@ -248,6 +252,12 @@ begin
 end;
 
 function TDragLintLspClient.Start(const AExePath: string): Boolean;
+begin
+  Result := Start(AExePath, nil);
+end;
+
+function TDragLintLspClient.Start(const AExePath: string;
+  const ADbPaths: TArray<string>): Boolean;
 var
   SA: TSecurityAttributes;
   hReadIn, hWriteIn: THandle;
@@ -296,6 +306,11 @@ begin
 
   { Quote the exe path to handle paths with spaces (e.g. Program Files). }
   CmdLine := '"' + AExePath + '" lsp';
+  { v0.40.3: append every --db path the caller specified. Empty paths are
+    skipped; paths get quoted so spaces survive. }
+  for var DbI := 0 to High(ADbPaths) do
+    if ADbPaths[DbI] <> '' then
+      CmdLine := CmdLine + Format(' --db "%s"', [ADbPaths[DbI]]);
   DebugLog('Start: CmdLine=' + CmdLine);
   SetLength(CmdLineW, Length(CmdLine) + 1);
   Move(PChar(CmdLine)^, CmdLineW[0], (Length(CmdLine) + 1) * SizeOf(WideChar));
