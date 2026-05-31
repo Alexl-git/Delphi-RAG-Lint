@@ -78,7 +78,17 @@ begin
     if Reg.OpenKeyReadOnly(REG_KEY) then
     try
       if Reg.ValueExists('ExePath')        then Result.ExePath        := Reg.ReadString('ExePath');
-      if Reg.ValueExists('DbPathTemplate') then Result.DbPathTemplate := Reg.ReadString('DbPathTemplate');
+      if Reg.ValueExists('DbPathTemplate') then
+      begin
+        Result.DbPathTemplate := Reg.ReadString('DbPathTemplate');
+        { v0.40.5: migrate the obsolete dot-prefixed default to the new one.
+          Previous default '<projdir>\.drag-lint.sqlite' assumed a hidden-file
+          convention that turned out to be inconvenient on Windows + never
+          actually shipped that way in any user's environment. The new
+          default has no dot. Existing registry values get silently rewritten. }
+        if SameText(Result.DbPathTemplate, '<projdir>\.drag-lint.sqlite') then
+          Result.DbPathTemplate := '<projdir>\drag-lint.sqlite';
+      end;
       if Reg.ValueExists('AutoIndex')         then Result.AutoIndex         := Reg.ReadInteger('AutoIndex') <> 0;
       if Reg.ValueExists('AutoReindexOnSave') then Result.AutoReindexOnSave := Reg.ReadInteger('AutoReindexOnSave') <> 0;
       if Reg.ValueExists('EnableHover')       then Result.EnableHover       := Reg.ReadInteger('EnableHover') <> 0;

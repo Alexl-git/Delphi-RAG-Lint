@@ -192,16 +192,37 @@ function FindAncestorDb(const AStartDir: string;
   the workspace contains multiple sub-projects (CLIENT, SERVER, COMMON,
   PACKAGE) that all index into the same DB. When the primary template-
   resolved DB doesn't exist next to the .dproj, walk up the directory
-  tree looking for a drag-lint.sqlite. Stops at the drive root. }
+  tree looking for a drag-lint.sqlite. Stops at the drive root.
+
+  At each level we try BOTH the configured template AND the canonical
+  unprefixed default. Catches the case where a user's old registry
+  template still points at the legacy '.drag-lint.sqlite' (dot-prefixed)
+  pattern but their actual DB lives at 'drag-lint.sqlite'. }
+const
+  CANONICAL_TEMPLATE = '<projdir>\drag-lint.sqlite';
 var
-  Dir, Parent, Candidate: string;
+  Dir, Parent: string;
+  Candidates: TArray<string>;
+  C: string;
 begin
   Result := '';
   Dir := ExcludeTrailingPathDelimiter(AStartDir);
   while (Dir <> '') and TDirectory.Exists(Dir) do
   begin
-    Candidate := ResolveDbPath(ASettings.DbPathTemplate, Dir);
-    if TFile.Exists(Candidate) then Exit(Candidate);
+    SetLength(Candidates, 0);
+    if ASettings.DbPathTemplate <> '' then
+    begin
+      SetLength(Candidates, 1);
+      Candidates[0] := ResolveDbPath(ASettings.DbPathTemplate, Dir);
+    end;
+    { Always also try the canonical default (in case the user's template
+      is misconfigured or legacy). }
+    SetLength(Candidates, Length(Candidates) + 1);
+    Candidates[High(Candidates)] := ResolveDbPath(CANONICAL_TEMPLATE, Dir);
+
+    for C in Candidates do
+      if (C <> '') and TFile.Exists(C) then Exit(C);
+
     Parent := ExtractFileDir(Dir);
     if (Parent = '') or SameText(Parent, Dir) then Break;
     Dir := Parent;
@@ -262,19 +283,24 @@ begin
   if ProjPath = '' then
     ProjPath := GetActiveProjectFilePath;
 
-  { Try the template-resolved primary DB next to the .dproj first. }
-  PrimaryDb := PrimaryDbForProject(ProjPath, ASettings);
-  if TFile.Exists(PrimaryDb) then
-    AddUnique(Result, PrimaryDb)
-  else if ProjPath <> '' then
+  { Try the template-resolved primary DB next to the .dproj first.
+    v0.40.5: if the configured template doesn't yield an existing file,
+    walk up the directory tree from the .dproj's folder. FindAncestorDb
+    tries both the configured template AND the canonical default at
+    each level, so legacy '.drag-lint.sqlite' configs still find the
+    user's actual 'drag-lint.sqlite' wherever it lives. }
+  if ProjPath <> '' then
   begin
-    { v0.40.5: walk up from .dproj looking for a parent-level shared DB.
-      Catches Micronite's pattern where the DB lives at the workspace
-      root and many sub-project .dprojs share it. }
-    ProjDir := ExtractFilePath(ProjPath);
-    AncestorDb := FindAncestorDb(ProjDir, ASettings);
-    if AncestorDb <> '' then
-      AddUnique(Result, AncestorDb);
+    PrimaryDb := PrimaryDbForProject(ProjPath, ASettings);
+    if TFile.Exists(PrimaryDb) then
+      AddUnique(Result, PrimaryDb)
+    else
+    begin
+      ProjDir := ExtractFilePath(ProjPath);
+      AncestorDb := FindAncestorDb(ProjDir, ASettings);
+      if AncestorDb <> '' then
+        AddUnique(Result, AncestorDb);
+    end;
   end;
 
   DiscoverSiblings(Result, ProjPath, ASettings);
