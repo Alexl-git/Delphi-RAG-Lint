@@ -31,8 +31,8 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base)'!=''">
         <DCC_DcuOutput>.\$(Platform)\$(Config)</DCC_DcuOutput>
-        <DCC_BplOutput>..\..\build\v021</DCC_BplOutput>
-        <DCC_DcpOutput>..\..\build\v021</DCC_DcpOutput>
+        <DCC_BplOutput>..\..\third_party\dll-win32</DCC_BplOutput>
+        <DCC_DcpOutput>..\..\third_party\dll-win32</DCC_DcpOutput>
         <DCC_E>false</DCC_E>
         <DCC_N>false</DCC_N>
         <DCC_S>false</DCC_S>

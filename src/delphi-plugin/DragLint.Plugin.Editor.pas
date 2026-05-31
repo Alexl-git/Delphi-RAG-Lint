@@ -18,6 +18,18 @@ uses
   DragLint.Plugin.UsagesForm,
   DragLint.Plugin.SymbolSearchForm;
 
+const
+  (* v0.40.1: hardcoded version; build stamp resolved at runtime from the
+     loaded BPL's file modtime (see PluginBuildTag). Compiler intrinsics
+     like the dollar-I DATE/TIME macros emit unquoted strings in Delphi 13
+     and don't fit in a const expression. *)
+  PLUGIN_VERSION = 'v0.40.1-alpha';
+
+{ Stamp every user-visible plugin dialog with the version + the actual
+  build time of the BPL the IDE has loaded so the user can verify at a
+  glance that they are testing the latest build. }
+function PluginBuildTag: string;
+
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
 
@@ -54,6 +66,22 @@ uses
   DragLint.Plugin.DiagnosticCache,
   DragLint.Plugin.EditViewNotifier,
   DragLint.Plugin.HoverTracker;
+
+{ ---- PluginBuildTag ---- }
+
+function PluginBuildTag: string;
+var
+  ModName: string;
+  Age: TDateTime;
+begin
+  ModName := GetModuleName(HInstance);
+  if (ModName <> '') and FileAge(ModName, Age) then
+    Result := 'drag-lint plugin ' + PLUGIN_VERSION +
+              ' (BPL built ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
+  else
+    Result := 'drag-lint plugin ' + PLUGIN_VERSION +
+              ' (BPL build time unknown)';
+end;
 
 { ---- TMenuActionWrapper ---- }
 { OnClick is TNotifyEvent (method pointer); plain procedures cannot be
@@ -217,15 +245,17 @@ begin
       DebugLog('EnsureLspClient: falling back to PATH lookup of drag-lint.exe');
     end;
 
-    LogPath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP'))
-      + 'drag-lint-plugin.log';
+    LogPath := GetPluginLogPath;
 
     if not GLspClient.Start(ExePath) then
     begin
       ShowMessage(
+        PluginBuildTag + #13#10#13#10 +
         'drag-lint: LSP server failed to start.'#13#10 +
         'Ensure drag-lint.exe is on PATH or next to the BPL.'#13#10#13#10 +
-        'Debug log: ' + LogPath);
+        'BPL dir:        ' + BplDir + #13#10 +
+        'Resolved exe:   ' + ExePath + #13#10 +
+        'Debug log:      ' + LogPath);
       FreeAndNil(GLspClient);
       Exit(nil);
     end;
@@ -233,8 +263,11 @@ begin
     if not GLspClient.Initialize then
     begin
       ShowMessage(
+        PluginBuildTag + #13#10#13#10 +
         'drag-lint: LSP initialize handshake failed.'#13#10#13#10 +
-        'Debug log: ' + LogPath);
+        'BPL dir:        ' + BplDir + #13#10 +
+        'Resolved exe:   ' + ExePath + #13#10 +
+        'Debug log:      ' + LogPath);
       GLspClient.Stop;
       FreeAndNil(GLspClient);
       Exit(nil);
@@ -1112,6 +1145,8 @@ begin
   Report := TStringBuilder.Create;
   try
     Report.AppendLine('=== drag-lint plugin self-test ===');
+    Report.AppendLine(PluginBuildTag);
+    Report.AppendLine('');
     BplPath := GetModuleName(HInstance);
     BplDir := ExtractFilePath(BplPath);
     Report.AppendLine('BPL path: ' + BplPath);
@@ -1153,8 +1188,7 @@ begin
       Client.Free;
     end;
 
-    LogPath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP'))
-      + 'drag-lint-plugin.log';
+    LogPath := GetPluginLogPath;
     Report.AppendLine('');
     Report.AppendLine('Detailed log: ' + LogPath);
     ShowMessage(Report.ToString);
@@ -1167,11 +1201,11 @@ procedure InvokeOpenLog(Sender: TObject);
 var
   LogPath: string;
 begin
-  LogPath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP'))
-    + 'drag-lint-plugin.log';
+  LogPath := GetPluginLogPath;
   if not FileExists(LogPath) then
   begin
-    ShowMessage('No log yet at:'#13#10 + LogPath +
+    ShowMessage(PluginBuildTag + #13#10#13#10 +
+      'No log yet at:'#13#10 + LogPath +
       #13#10#13#10 +
       'The log is created on first plugin LSP invocation.');
     Exit;

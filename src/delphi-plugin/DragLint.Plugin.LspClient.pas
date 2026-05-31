@@ -7,7 +7,8 @@ uses
   System.Generics.Collections, System.SyncObjs,
   Winapi.Windows;
 
-procedure DebugLog(const AMsg: string);  // appends to %TEMP%\drag-lint-plugin.log
+procedure DebugLog(const AMsg: string);  // appends to GetPluginLogPath
+function  GetPluginLogPath: string;      // single source of truth (v0.40.1)
 
 type
   TLspNotificationHandler = reference to procedure(const AMethod: string;
@@ -49,6 +50,32 @@ implementation
 var
   GLogLock: TCriticalSection = nil;
 
+function GetPluginLogPath: string;
+{ v0.40.1: resolve the same path DebugLog actually writes to. Previously
+  EnsureLspClient / InvokeTestConnection printed GetEnvironmentVariable('TEMP')
+  while DebugLog wrote to TPath.GetTempPath — the two can disagree under
+  Windows TMP/TEMP precedence, so users hunted for a log at the displayed
+  path and couldn't find it. }
+var
+  Candidate: string;
+begin
+  Candidate := TPath.Combine(TPath.GetTempPath, 'drag-lint-plugin.log');
+  Result := Candidate;
+  { Best-effort: if we can't write to TEMP, fall back to alongside the BPL. }
+  try
+    with TFileStream.Create(Candidate, fmOpenReadWrite or fmShareDenyNone) do
+      Free;
+  except
+    try
+      with TFileStream.Create(Candidate, fmCreate or fmShareDenyNone) do
+        Free;
+    except
+      Result := ExtractFilePath(GetModuleName(HInstance)) +
+                'drag-lint-plugin.log';
+    end;
+  end;
+end;
+
 procedure DebugLog(const AMsg: string);
 var
   LogPath: string;
@@ -59,7 +86,7 @@ begin
   GLogLock.Enter;
   try
     try
-      LogPath := TPath.Combine(TPath.GetTempPath, 'drag-lint-plugin.log');
+      LogPath := GetPluginLogPath;
       Line := AnsiString(Format('[%s] %s'#13#10,
         [FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now), AMsg]));
       if FileExists(LogPath) then

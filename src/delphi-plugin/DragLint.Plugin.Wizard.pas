@@ -76,8 +76,8 @@ end;
 
 procedure TDragLintWizard.Execute;
 begin
-  ShowMessage('drag-lint v0.21.0-alpha'#13#10 +
-    'Tools > drag-lint menu: Hover / Completion / Signature Help / Diagnostics');
+  ShowMessage(PluginBuildTag + #13#10#13#10 +
+    'Tools > drag-lint menu: Hover / Completion / Signature Help / Diagnostics / Test Connection / Open Plugin Log');
 end;
 
 procedure Register;
