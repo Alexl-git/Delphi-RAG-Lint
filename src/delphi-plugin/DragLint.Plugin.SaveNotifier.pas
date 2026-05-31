@@ -127,41 +127,55 @@ var
   Cfg:       TDragLintSettings;
   SavedFile: string;
 begin
-  if FModule = nil then Exit;
+  { v0.40.3+: belt-and-suspenders try/except. The IDE's save flow (File >
+    Save All) runs notifiers as part of a deep VCLFormDesigner / DocModul
+    callchain. ANY exception propagating out of this method has been known
+    to surface as a VCLFormDesigner AV at form-save time, even though the
+    fault is actually here. Swallow everything; reindex is best-effort. }
+  try
+    if FModule = nil then Exit;
 
-  Cfg := LoadSettings;
-  if not Cfg.AutoReindexOnSave then Exit;
+    Cfg := LoadSettings;
+    if not Cfg.AutoReindexOnSave then Exit;
 
-  FileName := FModule.FileName;
-  FileExt  := ExtractFileExt(FileName);
-  if not IsDelphiSourceExt(FileExt) then Exit;
+    FileName := FModule.FileName;
+    FileExt  := ExtractFileExt(FileName);
+    if not IsDelphiSourceExt(FileExt) then Exit;
 
-  DbPath := GLastProjectDb;
-  if DbPath = '' then Exit;
+    DbPath := GLastProjectDb;
+    if DbPath = '' then Exit;
 
-  { Resolve drag-lint.exe: configured path, then next to BPL, then PATH }
-  ExePath := Cfg.ExePath;
-  if (ExePath = '') or (ExePath = 'drag-lint.exe') then
-  begin
-    ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-    if not FileExists(ExePath) then
-      ExePath := 'drag-lint.exe';
-  end;
-
-  SavedFile := FileName;
-
-  { Post status message to IDE Messages pane from main thread }
-  TThread.Queue(nil,
-    procedure
-    var
-      Svc: IOTAMessageServices;
+    { Resolve drag-lint.exe: configured path, then next to BPL, then PATH }
+    ExePath := Cfg.ExePath;
+    if (ExePath = '') or (ExePath = 'drag-lint.exe') then
     begin
-      if Supports(BorlandIDEServices, IOTAMessageServices, Svc) then
-        Svc.AddTitleMessage(
-          Format('drag-lint: reindexing %s...', [ExtractFileName(SavedFile)]));
-    end);
+      ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+      if not FileExists(ExePath) then
+        ExePath := 'drag-lint.exe';
+    end;
 
-  SpawnIndexerFile(ExePath, SavedFile, DbPath);
+    SavedFile := FileName;
+
+    { Post status message to IDE Messages pane from main thread }
+    TThread.Queue(nil,
+      procedure
+      var
+        Svc: IOTAMessageServices;
+      begin
+        try
+          if Supports(BorlandIDEServices, IOTAMessageServices, Svc) then
+            Svc.AddTitleMessage(
+              Format('drag-lint: reindexing %s...',
+                [ExtractFileName(SavedFile)]));
+        except
+          { swallow }
+        end;
+      end);
+
+    SpawnIndexerFile(ExePath, SavedFile, DbPath);
+  except
+    { Silent — never propagate into the IDE save path. }
+  end;
 end;
 
 procedure TDragLintSaveNotifier.BeforeSave;
