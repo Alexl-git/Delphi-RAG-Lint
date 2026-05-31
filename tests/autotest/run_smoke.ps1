@@ -31,7 +31,7 @@
 [CmdletBinding()]
 param(
     [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win32\drag-lint.exe",
-    [string] $ExpectedVersion = '0.40.2-alpha',
+    [string] $ExpectedVersion = '0.40.5-alpha',
     [string] $FixtureDir = "$PSScriptRoot\fixtures",
     [string] $WorkDir = "$env:TEMP\drag-lint-autotest",
     [int]    $InitTimeoutMs = 3000,
@@ -126,6 +126,26 @@ Run-Stage 'CLI smoke' {
     $mdbOut = & $Exe query --name KnownMethod --db $db --db $db2 2>&1
     $t5.Stop()
     Write-Check 'multi-DB query returns merged results' (($mdbOut | Select-String 'KnownMethod').Count -ge 2) "($(($mdbOut | Select-String 'KnownMethod').Count) KnownMethod lines)" $t5.Elapsed.TotalMilliseconds
+
+    # v0.40.5 Tier 1: SQL DDL parser. fixture has CREATE TABLE / GENERATOR /
+    # TRIGGER / DOMAIN / INDEX / EXCEPTION / PROCEDURE -- check each kind
+    # produces at least one symbol row.
+    $sqlDb = "$WorkDir\sql.sqlite"
+    $t6 = [Diagnostics.Stopwatch]::StartNew()
+    & $Exe index "$FixtureDir\sample_schema.sql" --db $sqlDb 2>&1 | Out-Null
+    $t6.Stop()
+    $tCount = (& $Exe query --name SAMPLE --db $sqlDb 2>&1 | Select-String 'sql_table').Count
+    Write-Check 'SQL parser: sql_table SAMPLE indexed' ($tCount -ge 1) "" $t6.Elapsed.TotalMilliseconds
+    $genCount = (& $Exe query --name GEN_SAMPLE_ID --db $sqlDb 2>&1 | Select-String 'sql_generator').Count
+    Write-Check 'SQL parser: sql_generator indexed' ($genCount -ge 1) ""
+
+    # v0.40.5 Tier 3: link-orm. Re-index the Pascal fixture so its TKnownClass
+    # might match a SQL table KNOWNCLASS -- not expected here (no matching
+    # table), but the command should exit 0 with the report intact.
+    $t7 = [Diagnostics.Stopwatch]::StartNew()
+    & $Exe link-orm --db $db --db $sqlDb 2>&1 | Out-Null
+    $t7.Stop()
+    Write-Check 'link-orm command exits 0' ($LASTEXITCODE -eq 0) "" $t7.Elapsed.TotalMilliseconds
 }
 
 # --------------------------------------------------------------------------
