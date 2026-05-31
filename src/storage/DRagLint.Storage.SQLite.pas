@@ -96,6 +96,12 @@ type
     function  FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
     procedure ResolveUnitUseTargets;
 
+    { v0.40.4: leaf accessor for utilities that need raw SQL access
+      (uses-report walks the whole files + unit_uses tables). Not part
+      of ISymbolStore — caller must know it's calling into the SQLite
+      implementation. }
+    function GetConnection: TFDConnection;
+
     function FindByDocTag(const ATag: string): TArray<TSymbol>;
     function FindUndocumented(const AKind: string;
       APublicOnly: Boolean): TArray<TSymbol>;
@@ -1797,6 +1803,11 @@ begin
   end;
 
   Result := Refs;
+end;
+
+function TSQLiteSymbolStore.GetConnection: TFDConnection;
+begin
+  Result := FConn;
 end;
 
 { ---- v0.40.4: unit_uses ---------------------------------------------------- }

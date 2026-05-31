@@ -79,6 +79,9 @@ type
     NoDocs: Boolean;
     Kind: string;
     PublicOnly: Boolean;
+    // v0.40.4: uses-report flags
+    IncludeExternal: Boolean;  // --include-external
+    AllSources:      Boolean;  // --all-sources (default: only first DB's files)
     // v0.16 Task 13: .drag-lint.json "docs" section
     Docs: TDocConfig;
     // v0.17: blast-radius pack
@@ -143,6 +146,7 @@ begin
   Writeln('                               [--max-callers N] [--context N] [--no-docs]');
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
+  Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
@@ -341,6 +345,8 @@ begin
       Inc(i);
       Result.OutputDir := ParamStr(i);
     end
+    else if A = '--include-external' then Result.IncludeExternal := True
+    else if A = '--all-sources'      then Result.AllSources      := True
     else if (A = '--limit') and (i < ParamCount) then
     begin
       Inc(i);
@@ -2809,6 +2815,393 @@ begin
   Result := 0;
 end;
 
+// v0.40.4: drag-lint uses-report --output <out.csv> [--db ...] [...]
+//
+// Emits a CSV row per (source_unit, transitively_used_unit) for every unit
+// in the project (or, with --all-sources, every unit across every --db).
+// BFS with a per-source visited set so each downstream unit appears at most
+// once per source. Cycles are broken automatically by the visited set;
+// unresolved (external) units terminate the walk at depth 1 unless
+// --include-external is passed (in which case they appear in the output
+// but still terminate as leaves since we don't have their uses indexed).
+//
+// CSV columns:
+//   source_unit       — basename stem (no ext, no dir) of the source file
+//   used_unit         — verbatim unit_name as written in the uses clause
+//   depth             — 1 = direct use, 2 = via one hop, ...
+//   first_section     — section the edge was first reached through
+//   via_chain         — '>' separated unit chain from source -> used (excl. self)
+//   external          — 1 when target_file_id couldn't be resolved, else 0
+function DoUsesReport(const AArgs: TArgs): Integer;
+type
+  TUsesEdge = record
+    UnitName:     string;      { verbatim }
+    UnitNameNorm: string;      { lowercase trailing segment }
+    TargetFileId: Int64;       { -1 = external/unresolved }
+    Section:      string;      { 'interface'|'implementation'|'program'|'package' }
+  end;
+
+  TFileMeta = record
+    Path:        string;
+    Stem:        string;       { lowercase basename without extension }
+    StoreIndex:  Integer;      { which --db this file came from }
+    FileId:      Int64;        { id INSIDE that store; needed for joins }
+  end;
+
+  TBfsQueueItem = record
+    FileId:       Int64;
+    Depth:        Integer;
+    UsedUnit:     string;
+    UnitNameNorm: string;
+    Section:      string;
+    Via:          string;      { chain so far, '>' separated, excludes self }
+    External:     Boolean;
+  end;
+var
+  Stores:        TArray<ISymbolStore>;
+  AllFiles:      TList<TFileMeta>;
+  StemToGlobal:  TDictionary<string, Integer>;  { stem -> index into AllFiles }
+  Edges:         TDictionary<Integer, TArray<TUsesEdge>>;  { source = global file index }
+  CsvOut:        TStreamWriter;
+  MaxDepth:      Integer;
+  RootPattern:   string;
+
+  procedure OpenStores;
+  var
+    DbList: TArray<string>;
+    I:      Integer;
+    Path:   string;
+  begin
+    if Length(AArgs.DbPaths) > 0 then
+      DbList := AArgs.DbPaths
+    else if AArgs.DbPath <> '' then
+      DbList := TArray<string>.Create(AArgs.DbPath)
+    else
+    begin
+      Writeln(ErrOutput, 'uses-report: need at least one --db');
+      Result := 2;
+      Exit;
+    end;
+    SetLength(Stores, 0);
+    for I := 0 to High(DbList) do
+    begin
+      Path := DbList[I];
+      if not TFile.Exists(Path) then
+      begin
+        Writeln(ErrOutput, 'uses-report: db not found, skipping: ', Path);
+        Continue;
+      end;
+      SetLength(Stores, Length(Stores) + 1);
+      Stores[High(Stores)] := TSQLiteSymbolStore.Create(Path);
+      Stores[High(Stores)].Migrate;
+    end;
+  end;
+
+  function ComputeStem(const APath: string): string;
+  var
+    Base: string;
+    Dot:  Integer;
+  begin
+    Base := APath;
+    while Length(Base) > 0 do
+    begin
+      if CharInSet(Base[Length(Base)], ['\','/']) then
+      begin
+        Delete(Base, Length(Base), 1);
+        Break;
+      end;
+      Break;
+    end;
+    Result := LowerCase(ExtractFileName(Base));
+    Dot := LastDelimiter('.', Result);
+    if Dot > 0 then Result := Copy(Result, 1, Dot - 1);
+  end;
+
+  procedure LoadFilesAndEdges;
+  var
+    StoreIdx: Integer;
+    QFiles, QUses: TFDQuery;
+    SQLiteStore:   TSQLiteSymbolStore;
+    Meta:          TFileMeta;
+    PathStr:       string;
+    LocalFileId:   Int64;
+    GlobalIdx:     Integer;
+    FileIdToGlobal: TDictionary<Int64, Integer>;
+    LocalUses:     TList<TUsesEdge>;
+    PerStore:      TDictionary<Integer, TList<TUsesEdge>>;
+    TargetFid:     Int64;
+    TargetPath:    string;
+    TargetGlobal:  Integer;
+    Edge:          TUsesEdge;
+    Kv:            TPair<Integer, TList<TUsesEdge>>;
+    AssistQ:       TFDQuery;
+  begin
+    AllFiles      := TList<TFileMeta>.Create;
+    StemToGlobal  := TDictionary<string, Integer>.Create;
+    Edges         := TDictionary<Integer, TArray<TUsesEdge>>.Create;
+    PerStore      := TDictionary<Integer, TList<TUsesEdge>>.Create;
+
+    { Step 1: gather every file across every store, build stem -> global index. }
+    for StoreIdx := 0 to High(Stores) do
+    begin
+      SQLiteStore := TSQLiteSymbolStore(Stores[StoreIdx]);
+      QFiles := TFDQuery.Create(nil);
+      try
+        QFiles.Connection := SQLiteStore.GetConnection;
+        { Filter out DFM rows — uses clauses only exist in pascal sources.
+          Language tag is 'delphi13' for .pas/.dpr/.dpk in v0.40.x indexes. }
+        QFiles.SQL.Text :=
+          'SELECT id, path FROM files ' +
+          'WHERE language NOT IN (''dfm'', ''json'', ''text'')';
+        QFiles.Open;
+        while not QFiles.Eof do
+        begin
+          PathStr      := QFiles.FieldByName('path').AsString;
+          Meta.Path        := PathStr;
+          Meta.Stem        := ComputeStem(PathStr);
+          Meta.StoreIndex  := StoreIdx;
+          Meta.FileId      := QFiles.FieldByName('id').AsLargeInt;
+          AllFiles.Add(Meta);
+          { First-write-wins: project DB (first --db) takes priority. }
+          if not StemToGlobal.ContainsKey(Meta.Stem) then
+            StemToGlobal.Add(Meta.Stem, AllFiles.Count - 1);
+          QFiles.Next;
+        end;
+      finally
+        QFiles.Free;
+      end;
+    end;
+
+    { Step 2: gather every unit_uses edge, group by global source file index. }
+    FileIdToGlobal := TDictionary<Int64, Integer>.Create;
+    try
+      for GlobalIdx := 0 to AllFiles.Count - 1 do
+        FileIdToGlobal.AddOrSetValue(
+          (Int64(AllFiles[GlobalIdx].StoreIndex) shl 40) or
+          Int64(AllFiles[GlobalIdx].FileId), GlobalIdx);
+
+      for StoreIdx := 0 to High(Stores) do
+      begin
+        SQLiteStore := TSQLiteSymbolStore(Stores[StoreIdx]);
+        QUses := TFDQuery.Create(nil);
+        try
+          QUses.Connection := SQLiteStore.GetConnection;
+          QUses.SQL.Text :=
+            'SELECT file_id, unit_name, unit_name_norm, section, target_file_id ' +
+            'FROM unit_uses';
+          QUses.Open;
+          while not QUses.Eof do
+          begin
+            LocalFileId := QUses.FieldByName('file_id').AsLargeInt;
+            if not FileIdToGlobal.TryGetValue(
+              (Int64(StoreIdx) shl 40) or LocalFileId, GlobalIdx) then
+            begin
+              QUses.Next;
+              Continue;
+            end;
+
+            Edge.UnitName     := QUses.FieldByName('unit_name').AsString;
+            Edge.UnitNameNorm := QUses.FieldByName('unit_name_norm').AsString;
+            Edge.Section      := QUses.FieldByName('section').AsString;
+            { Resolve target: prefer the in-DB target_file_id; fall back to
+              cross-DB lookup by stem. }
+            Edge.TargetFileId := -1;
+            if not QUses.FieldByName('target_file_id').IsNull then
+            begin
+              TargetFid := QUses.FieldByName('target_file_id').AsLargeInt;
+              if FileIdToGlobal.TryGetValue(
+                (Int64(StoreIdx) shl 40) or TargetFid, TargetGlobal) then
+                Edge.TargetFileId := TargetGlobal;
+            end;
+            if Edge.TargetFileId = -1 then
+              if StemToGlobal.TryGetValue(Edge.UnitNameNorm, TargetGlobal) then
+                Edge.TargetFileId := TargetGlobal;
+
+            if not PerStore.ContainsKey(GlobalIdx) then
+              PerStore.Add(GlobalIdx, TList<TUsesEdge>.Create);
+            PerStore[GlobalIdx].Add(Edge);
+
+            QUses.Next;
+          end;
+        finally
+          QUses.Free;
+        end;
+      end;
+    finally
+      FileIdToGlobal.Free;
+    end;
+
+    for Kv in PerStore do
+      Edges.AddOrSetValue(Kv.Key, Kv.Value.ToArray);
+    for Kv in PerStore do
+      Kv.Value.Free;
+    PerStore.Free;
+  end;
+
+  procedure EmitCsvHeader;
+  begin
+    CsvOut.WriteLine('source_unit,used_unit,depth,first_section,via_chain,external');
+  end;
+
+  function CsvEscape(const S: string): string;
+  begin
+    if (Pos(',', S) > 0) or (Pos('"', S) > 0) or (Pos(#10, S) > 0) then
+      Result := '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
+    else
+      Result := S;
+  end;
+
+  procedure EmitCsvRow(const ASource, AUsed: string; ADepth: Integer;
+    const ASection, AVia: string; AExternal: Boolean);
+  begin
+    CsvOut.WriteLine(
+      CsvEscape(ASource) + ',' +
+      CsvEscape(AUsed)   + ',' +
+      IntToStr(ADepth)   + ',' +
+      CsvEscape(ASection) + ',' +
+      CsvEscape(AVia) + ',' +
+      IfThen(AExternal, '1', '0'));
+  end;
+
+  procedure WalkBfs(ASourceIdx: Integer; var ARowCount: Integer);
+  var
+    Queue:    System.Generics.Collections.TQueue<TBfsQueueItem>;
+    Visited:  TDictionary<string, Boolean>;
+    Item, Nx: TBfsQueueItem;
+    Edge:     TUsesEdge;
+    EdgeList: TArray<TUsesEdge>;
+    SourceMeta: TFileMeta;
+    NextVia:  string;
+  begin
+    Queue   := System.Generics.Collections.TQueue<TBfsQueueItem>.Create;
+    Visited := TDictionary<string, Boolean>.Create;
+    try
+      SourceMeta := AllFiles[ASourceIdx];
+
+      { Seed: direct uses from the source file. }
+      if Edges.TryGetValue(ASourceIdx, EdgeList) then
+        for Edge in EdgeList do
+        begin
+          if Visited.ContainsKey(Edge.UnitNameNorm) then Continue;
+          Item.FileId       := Edge.TargetFileId;
+          Item.Depth        := 1;
+          Item.UsedUnit     := Edge.UnitName;
+          Item.UnitNameNorm := Edge.UnitNameNorm;
+          Item.Section      := Edge.Section;
+          Item.Via          := '';
+          Item.External     := (Edge.TargetFileId < 0);
+          Queue.Enqueue(Item);
+        end;
+
+      while Queue.Count > 0 do
+      begin
+        Item := Queue.Dequeue;
+        if Visited.ContainsKey(Item.UnitNameNorm) then Continue;
+        Visited.Add(Item.UnitNameNorm, True);
+
+        if Item.External and (not AArgs.IncludeExternal) then
+        begin
+          { Skip external rows when not requested, but DO still mark visited
+            so we don't repeat them later via a different chain. }
+        end
+        else
+        begin
+          EmitCsvRow(SourceMeta.Stem, Item.UsedUnit, Item.Depth,
+            Item.Section, Item.Via, Item.External);
+          Inc(ARowCount);
+        end;
+
+        if Item.External then Continue;
+        if Item.Depth >= MaxDepth then Continue;
+        if not Edges.TryGetValue(Integer(Item.FileId), EdgeList) then Continue;
+
+        if Item.Via = '' then
+          NextVia := Item.UsedUnit
+        else
+          NextVia := Item.Via + '>' + Item.UsedUnit;
+
+        for Edge in EdgeList do
+        begin
+          if Visited.ContainsKey(Edge.UnitNameNorm) then Continue;
+          Nx.FileId       := Edge.TargetFileId;
+          Nx.Depth        := Item.Depth + 1;
+          Nx.UsedUnit     := Edge.UnitName;
+          Nx.UnitNameNorm := Edge.UnitNameNorm;
+          Nx.Section      := Edge.Section;
+          Nx.Via          := NextVia;
+          Nx.External     := (Edge.TargetFileId < 0);
+          Queue.Enqueue(Nx);
+        end;
+      end;
+    finally
+      Visited.Free;
+      Queue.Free;
+    end;
+  end;
+
+var
+  GlobalIdx: Integer;
+  SourceMeta: TFileMeta;
+  RowCount:  Integer;
+  SourceCount: Integer;
+  RootPatLower: string;
+begin
+  Result := 0;
+
+  if AArgs.Output = '' then
+  begin
+    Writeln(ErrOutput, 'uses-report: --output <path.csv> is required');
+    Exit(2);
+  end;
+
+  MaxDepth := AArgs.Depth;
+  if MaxDepth <= 0 then MaxDepth := 50;
+  RootPattern := LowerCase(AArgs.Name);
+
+  AllFiles     := nil;
+  StemToGlobal := nil;
+  Edges        := nil;
+  CsvOut       := nil;
+  try
+    OpenStores;
+    if Result <> 0 then Exit;
+    if Length(Stores) = 0 then
+    begin
+      Writeln(ErrOutput, 'uses-report: no usable DB');
+      Exit(2);
+    end;
+
+    LoadFilesAndEdges;
+
+    CsvOut := TStreamWriter.Create(AArgs.Output, False, TEncoding.UTF8);
+    EmitCsvHeader;
+
+    RowCount    := 0;
+    SourceCount := 0;
+    RootPatLower := RootPattern;
+    for GlobalIdx := 0 to AllFiles.Count - 1 do
+    begin
+      SourceMeta := AllFiles[GlobalIdx];
+      { Default: emit only files from the first DB (the "project"). With
+        --all-sources, include all. }
+      if (not AArgs.AllSources) and (SourceMeta.StoreIndex <> 0) then Continue;
+      if (RootPatLower <> '') and (Pos(RootPatLower, SourceMeta.Stem) = 0) then
+        Continue;
+      WalkBfs(GlobalIdx, RowCount);
+      Inc(SourceCount);
+    end;
+    CsvOut.Flush;
+
+    Writeln(Format('uses-report: %d source units, %d rows written to %s',
+      [SourceCount, RowCount, AArgs.Output]));
+  finally
+    if CsvOut       <> nil then CsvOut.Free;
+    if Edges        <> nil then Edges.Free;
+    if StemToGlobal <> nil then StemToGlobal.Free;
+    if AllFiles     <> nil then AllFiles.Free;
+  end;
+end;
+
 // v0.19: drag-lint typeat <file>:<line>:<col> [--db <path>] [--format text|json]
 // Resolves the identifier at the given position to a symbol in the index.
 // The position argument has the form: C:\path\to\File.pas:17:8
@@ -3498,6 +3891,8 @@ begin
       Result := DoBenchContext(Args)
     else if Args.Command = 'typeat' then
       Result := DoTypeAt(Args)
+    else if Args.Command = 'uses-report' then
+      Result := DoUsesReport(Args)
     else if Args.Command = 'rename' then
       Result := DoRename(Args)
     else if Args.Command = 'generate-docs' then
