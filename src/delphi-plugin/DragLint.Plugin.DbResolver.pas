@@ -157,11 +157,36 @@ begin
             'drag-lint-library.sqlite';
 end;
 
+function FindAncestorDb(const AStartDir: string;
+  const ASettings: TDragLintSettings): string;
+{ v0.40.5: many real-world projects (Micronite is the canonical case)
+  store one shared drag-lint.sqlite ABOVE the .dproj directory because
+  the workspace contains multiple sub-projects (CLIENT, SERVER, COMMON,
+  PACKAGE) that all index into the same DB. When the primary template-
+  resolved DB doesn't exist next to the .dproj, walk up the directory
+  tree looking for a drag-lint.sqlite. Stops at the drive root. }
+var
+  Dir, Parent, Candidate: string;
+begin
+  Result := '';
+  Dir := ExcludeTrailingPathDelimiter(AStartDir);
+  while (Dir <> '') and TDirectory.Exists(Dir) do
+  begin
+    Candidate := ResolveDbPath(ASettings.DbPathTemplate, Dir);
+    if TFile.Exists(Candidate) then Exit(Candidate);
+    Parent := ExtractFileDir(Dir);
+    if (Parent = '') or SameText(Parent, Dir) then Break;
+    Dir := Parent;
+  end;
+end;
+
 function ResolveActiveIndexDbs(const ASettings: TDragLintSettings): TArray<string>;
 var
   EditorPath: string;
   ProjPath:   string;
+  ProjDir:    string;
   PrimaryDb:  string;
+  AncestorDb: string;
   P:          string;
   LibPath:    string;
 begin
@@ -169,9 +194,21 @@ begin
 
   EditorPath := GetActiveEditorFilePath;
   ProjPath := FindOwningProject(EditorPath);
+
+  { Try the template-resolved primary DB next to the .dproj first. }
   PrimaryDb := PrimaryDbForProject(ProjPath, ASettings);
   if TFile.Exists(PrimaryDb) then
-    AddUnique(Result, PrimaryDb);
+    AddUnique(Result, PrimaryDb)
+  else if ProjPath <> '' then
+  begin
+    { v0.40.5: walk up from .dproj looking for a parent-level shared DB.
+      Catches Micronite's pattern where the DB lives at the workspace
+      root and many sub-project .dprojs share it. }
+    ProjDir := ExtractFilePath(ProjPath);
+    AncestorDb := FindAncestorDb(ProjDir, ASettings);
+    if AncestorDb <> '' then
+      AddUnique(Result, AncestorDb);
+  end;
 
   DiscoverSiblings(Result, ProjPath, ASettings);
 

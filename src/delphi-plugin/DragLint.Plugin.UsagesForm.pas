@@ -25,6 +25,22 @@ uses
   Winapi.Windows,
   ToolsAPI;
 
+{ v0.40.5: local copy of the BPL build-stamp helper to avoid circular use
+  with DragLint.Plugin.Editor (which already imports this unit). Same
+  semantics as Editor.PluginBuildTag — reads the loaded BPL's file modtime. }
+function LocalBuildTag: string;
+var
+  ModName: string;
+  Age: TDateTime;
+begin
+  ModName := GetModuleName(HInstance);
+  if (ModName <> '') and FileAge(ModName, Age) then
+    Result := 'v0.40.5-alpha (BPL built ' +
+              FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
+  else
+    Result := 'v0.40.5-alpha';
+end;
+
 { ---- TUsageNodeData: stores file + line in tree node.Data ---- }
 
 type
@@ -143,7 +159,10 @@ var
   Panel: TPanel;
 begin
   inherited CreateNew(AOwner);
-  Caption      := 'drag-lint Find Usages';
+  { v0.40.5: stamp the form caption with the loaded BPL's modtime so a
+    glance at the title bar tells the user which build is live. Mirrors
+    the Test Connection dialog's PluginBuildTag pattern. }
+  Caption      := 'drag-lint Find Usages  -  ' + LocalBuildTag;
   Width        := 520;
   Height       := 420;
   Position     := poDefaultPosOnly;
