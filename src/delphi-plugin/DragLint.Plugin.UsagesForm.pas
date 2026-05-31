@@ -9,7 +9,11 @@ unit DragLint.Plugin.UsagesForm;
 
 interface
 
-procedure ShowFindUsages(const ASymbolName, AExePath, ADbPath: string);
+procedure ShowFindUsages(const ASymbolName, AExePath, ADbPath: string); overload;
+{ v0.40.3: pass every --db path the resolver picked so callers from
+  SERVER + COMMON + library DBs show up alongside the active project's. }
+procedure ShowFindUsages(const ASymbolName, AExePath: string;
+  const ADbPaths: TArray<string>); overload;
 procedure HideFindUsages;
 
 implementation
@@ -41,7 +45,8 @@ type
     FTree:       TTreeView;
     FSymbolName: string;
     FExePath:    string;
-    FDbPath:     string;
+    FDbPath:     string;            { kept for legacy single-DB callers }
+    FDbPaths:    TArray<string>;    { v0.40.3: multi-DB list }
     FLastCallerNode: TTreeNode;
     procedure BtnRefreshClick(Sender: TObject);
     procedure BtnCloseClick(Sender: TObject);
@@ -57,7 +62,9 @@ type
                 ALine: Integer): TTreeNode;
   public
     constructor Create(AOwner: TComponent); override;
-    procedure LoadUsages(const ASymbolName, AExePath, ADbPath: string);
+    procedure LoadUsages(const ASymbolName, AExePath, ADbPath: string); overload;
+    procedure LoadUsages(const ASymbolName, AExePath: string;
+      const ADbPaths: TArray<string>); overload;
   end;
 
 var
@@ -403,7 +410,15 @@ begin
 
     CmdLine := Format('"%s" query find-callers --name "%s" --context 3',
       [FExePath, FSymbolName]);
-    if FDbPath <> '' then
+    { v0.40.3: emit one --db per resolved path. Falls back to legacy
+      single-DB if FDbPaths is empty but FDbPath is set. }
+    if Length(FDbPaths) > 0 then
+    begin
+      for var P in FDbPaths do
+        if P <> '' then
+          CmdLine := CmdLine + Format(' --db "%s"', [P]);
+    end
+    else if FDbPath <> '' then
       CmdLine := CmdLine + Format(' --db "%s"', [FDbPath]);
     CmdLine := CmdLine + ' --format json';
 
@@ -427,7 +442,36 @@ begin
       ParseTextOutput(Output);
 
     if FTree.Items.Count = 0 then
-      AddNodeData(nil, '(no callers found)', '', 0);
+    begin
+      { v0.40.3: be honest about scope. drag-lint's indexer captures
+        top-level declarations (types, methods, fields, properties,
+        constants, units) but NOT procedure parameters or local
+        variables. If the user asked about a local they're never
+        going to get a hit, so surface a useful hint instead of just
+        "(no callers found)". The lowercase-A leading prefix
+        (AItemLink, AButton, AParam, ASender...) is the Delphi
+        convention for parameters and a strong scope signal. }
+      var Hint: string;
+      Hint := '(no callers found)';
+      if (Length(FSymbolName) > 1) and (FSymbolName[1] in ['A', 'a']) and
+         (FSymbolName[2] in ['A'..'Z']) then
+        Hint := Hint +
+          '  -  "' + FSymbolName + '" looks like a parameter (A-prefix).' +
+          '  drag-lint indexes types, methods, fields, and constants -' +
+          ' not procedure parameters or local variables.'
+      else if (Length(FSymbolName) > 1) and (FSymbolName[1] in ['F', 'f']) and
+              (FSymbolName[2] in ['A'..'Z']) then
+        Hint := Hint +
+          '  -  "' + FSymbolName + '" looks like a private field (F-prefix).' +
+          '  If this is on a class declared in the project,' +
+          ' make sure the project DB is current (Tools > drag-lint > Lint Buffer).'
+      else
+        Hint := Hint +
+          '  -  if "' + FSymbolName + '" is a procedure parameter or' +
+          ' local variable, that is expected -' +
+          ' drag-lint does not index local scopes.';
+      AddNodeData(nil, Hint, '', 0);
+    end;
 
     for i := 0 to FTree.Items.Count - 1 do
       if FTree.Items[i].Level = 0 then
@@ -489,6 +533,18 @@ begin
   FSymbolName := ASymbolName;
   FExePath    := AExePath;
   FDbPath     := ADbPath;
+  SetLength(FDbPaths, 0);
+  FLblTitle.Caption := 'Find usages of: ' + ASymbolName;
+  RunQuery;
+end;
+
+procedure TDragLintUsagesForm.LoadUsages(const ASymbolName, AExePath: string;
+  const ADbPaths: TArray<string>);
+begin
+  FSymbolName := ASymbolName;
+  FExePath    := AExePath;
+  FDbPath     := '';
+  FDbPaths    := ADbPaths;
   FLblTitle.Caption := 'Find usages of: ' + ASymbolName;
   RunQuery;
 end;
@@ -501,6 +557,19 @@ begin
     GUsagesForm := TDragLintUsagesForm.Create(nil);
 
   GUsagesForm.LoadUsages(ASymbolName, AExePath, ADbPath);
+
+  if not GUsagesForm.Visible then
+    GUsagesForm.Show;
+  GUsagesForm.BringToFront;
+end;
+
+procedure ShowFindUsages(const ASymbolName, AExePath: string;
+  const ADbPaths: TArray<string>);
+begin
+  if GUsagesForm = nil then
+    GUsagesForm := TDragLintUsagesForm.Create(nil);
+
+  GUsagesForm.LoadUsages(ASymbolName, AExePath, ADbPaths);
 
   if not GUsagesForm.Visible then
     GUsagesForm.Show;

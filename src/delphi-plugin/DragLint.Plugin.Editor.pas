@@ -1102,23 +1102,131 @@ begin
 end;
 
 { v0.33: Find Usages }
+function IdentifierAtCursor: string;
+{ v0.40.3: read the active editor's caret line and return the identifier
+  spanning the cursor column. Identifier = run of [A-Za-z0-9_] containing
+  the cursor position. Empty string if no identifier under cursor. }
+var
+  ESS:  IOTAEditorServices;
+  EV:   IOTAEditView;
+  Reader: IOTAEditReader;
+  CaretRow, CaretCol: Integer;
+  LineStartPos: Integer;
+  Buf:  array[0..1023] of AnsiChar;
+  Read: Integer;
+  LineText: string;
+  Lo, Hi:   Integer;
+
+  function IsIdentChar(C: Char): Boolean;
+  begin
+    Result := CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']);
+  end;
+
+begin
+  Result := '';
+  try
+    if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+    EV := ESS.TopView;
+    if (EV = nil) or (EV.Buffer = nil) then Exit;
+    Reader := EV.Buffer.CreateReader;
+    if Reader = nil then Exit;
+    CaretRow := EV.Position.Row;
+    CaretCol := EV.Position.Column;
+    if (CaretRow <= 0) or (CaretCol <= 0) then Exit;
+
+    { Buffer is character-addressed; we don't have a direct line offset,
+      so walk the file scanning for newlines until we hit (CaretRow - 1).
+      Lines are typically <1KB so this is cheap even for long files. }
+    LineStartPos := 0;
+    var CurRow := 1;
+    var Pos := 0;
+    while CurRow < CaretRow do
+    begin
+      Read := Reader.GetText(Pos, Buf, SizeOf(Buf));
+      if Read <= 0 then Exit;
+      for var I := 0 to Read - 1 do
+      begin
+        if Buf[I] = #10 then
+        begin
+          Inc(CurRow);
+          if CurRow = CaretRow then
+          begin
+            LineStartPos := Pos + I + 1;
+            Break;
+          end;
+        end;
+      end;
+      if CurRow >= CaretRow then Break;
+      Inc(Pos, Read);
+    end;
+
+    Read := Reader.GetText(LineStartPos, Buf, SizeOf(Buf));
+    if Read <= 0 then Exit;
+    var EolIdx := 0;
+    while (EolIdx < Read) and not (Buf[EolIdx] in [#10, #13]) do Inc(EolIdx);
+    SetString(LineText, PAnsiChar(@Buf[0]), EolIdx);
+
+    if CaretCol > Length(LineText) then Exit;
+    if (CaretCol > 0) and (CaretCol <= Length(LineText)) and
+       not IsIdentChar(LineText[CaretCol]) then
+    begin
+      { Try one column to the left — caret can sit just past an identifier. }
+      if (CaretCol > 1) and IsIdentChar(LineText[CaretCol - 1]) then
+        Dec(CaretCol)
+      else
+        Exit;
+    end;
+    if (CaretCol < 1) or (CaretCol > Length(LineText)) then Exit;
+    if not IsIdentChar(LineText[CaretCol]) then Exit;
+
+    Lo := CaretCol;
+    while (Lo > 1) and IsIdentChar(LineText[Lo - 1]) do Dec(Lo);
+    Hi := CaretCol;
+    while (Hi < Length(LineText)) and IsIdentChar(LineText[Hi + 1]) do Inc(Hi);
+    Result := Copy(LineText, Lo, Hi - Lo + 1);
+  except
+    Result := '';
+  end;
+end;
+
 procedure InvokeFindUsages(Sender: TObject);
 var
-  ExePath, ProjDb: string;
+  ExePath: string;
+  DbList:  TArray<string>;
   SymName: string;
+  Settings: TDragLintSettings;
 begin
-  ExePath := LoadSettings.ExePath;
+  Settings := LoadSettings;
+  ExePath := Settings.ExePath;
   if (ExePath = '') or not FileExists(ExePath) then
     ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
   if not FileExists(ExePath) then
     ExePath := 'drag-lint.exe';
 
-  ProjDb := GetActiveProjectDb;
+  { v0.40.3: resolve every relevant DB (project + sibling subprojects +
+    explicit list + library) instead of the broken single-project lookup. }
+  try
+    DbList := ResolveActiveIndexDbs(Settings);
+  except
+    SetLength(DbList, 0);
+  end;
 
-  SymName := InputBox('drag-lint Find Usages', 'Symbol name:', '');
+  { v0.40.3: pre-fill the prompt with the identifier under the cursor.
+    User can still edit it (so they aren't blocked when cursor isn't on
+    an identifier, or they want to search for something different). }
+  SymName := IdentifierAtCursor;
+  SymName := InputBox(
+    'drag-lint Find Usages',
+    'Symbol name (cursor identifier pre-filled, edit to search something else):',
+    SymName);
   if Trim(SymName) = '' then Exit;
 
-  ShowFindUsages(SymName, ExePath, ProjDb);
+  if Length(DbList) > 0 then
+    ShowFindUsages(SymName, ExePath, DbList)
+  else
+    { No DBs resolved — fall back to legacy single-arg path so the form
+      still surfaces a meaningful error. }
+    ShowFindUsages(SymName, ExePath, '');
 end;
 
 { v0.33: Symbol Search }
