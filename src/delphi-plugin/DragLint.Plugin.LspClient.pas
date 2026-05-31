@@ -329,34 +329,76 @@ begin
 end;
 
 procedure TDragLintLspClient.Stop;
+{ v0.40.2: previous order was: Terminate -> CloseHandle(FStdOutRead) ->
+  WaitFor. On Windows, CloseHandle of a pipe read end does NOT reliably
+  unblock another thread's ReadFile when the child still holds the write
+  end open — the reader thread blocks indefinitely in ReadFile and
+  WaitFor hangs forever, freezing the IDE. (Confirmed root cause of the
+  IDE freeze user reported after Test Connection in v0.40.1.)
+
+  Correct sequence is to kill the child FIRST so its write end of stdout
+  closes, which unblocks our ReadFile with ERROR_BROKEN_PIPE, then
+  WaitFor returns immediately. Final WaitFor still gets a 2s upper bound
+  so even a pathological reader thread can't lock the UI. }
+const
+  WAITFOR_MS = 2000;
 var
-  WaitResult: DWORD;
+  ReaderHandle: THandle;
+  WaitResult:   DWORD;
 begin
-  if FReaderThread <> nil then
+  { Step 1: kill the child unconditionally first. Forces the write end
+    of stdout closed, which makes the reader thread's ReadFile return. }
+  if FProcessHandle <> 0 then
   begin
-    FReaderThread.Terminate;
-    { Close the read handle so the reader thread unblocks from ReadFile }
-    if FStdOutRead <> INVALID_HANDLE_VALUE then
-    begin
-      CloseHandle(FStdOutRead);
-      FStdOutRead := INVALID_HANDLE_VALUE;
-    end;
-    FReaderThread.WaitFor;
-    FReaderThread.Free;
-    FReaderThread := nil;
+    TerminateProcess(FProcessHandle, 0);
+    { Don't WaitForSingleObject yet — let the reader thread observe the
+      pipe close first so it can exit cleanly. }
   end;
 
+  { Step 2: close stdin and stdout handles. By now ReadFile in the
+    reader will have unblocked (or is about to). }
   if FStdInWrite <> INVALID_HANDLE_VALUE then
   begin
     CloseHandle(FStdInWrite);
     FStdInWrite := INVALID_HANDLE_VALUE;
   end;
+  if FStdOutRead <> INVALID_HANDLE_VALUE then
+  begin
+    CloseHandle(FStdOutRead);
+    FStdOutRead := INVALID_HANDLE_VALUE;
+  end;
 
+  { Step 3: terminate and join the reader thread. Use Windows
+    WaitForSingleObject directly with a hard timeout — TThread.WaitFor
+    has no timeout overload and pumping message would re-enter the IDE. }
+  if FReaderThread <> nil then
+  begin
+    FReaderThread.Terminate;
+    ReaderHandle := FReaderThread.Handle;
+    if ReaderHandle <> 0 then
+    begin
+      WaitResult := WaitForSingleObject(ReaderHandle, WAITFOR_MS);
+      if WaitResult <> WAIT_OBJECT_0 then
+        DebugLog('Stop: reader thread did not exit within ' +
+                 IntToStr(WAITFOR_MS) + 'ms — leaking it to avoid IDE freeze');
+    end;
+    if WaitForSingleObject(ReaderHandle, 0) = WAIT_OBJECT_0 then
+    begin
+      FReaderThread.Free;
+      FReaderThread := nil;
+    end
+    else
+    begin
+      { Don't Free — Destructor calls WaitFor which would block again.
+        Leak the TThread instance; OS will reclaim when child fully exits. }
+      FReaderThread := nil;
+    end;
+  end;
+
+  { Step 4: reap the child and close its handle. }
   if FProcessHandle <> 0 then
   begin
-    WaitResult := WaitForSingleObject(FProcessHandle, 2000);
-    if WaitResult <> WAIT_OBJECT_0 then
-      TerminateProcess(FProcessHandle, 0);
+    WaitForSingleObject(FProcessHandle, 200);
     CloseHandle(FProcessHandle);
     FProcessHandle := 0;
   end;

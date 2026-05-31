@@ -23,7 +23,7 @@ const
      loaded BPL's file modtime (see PluginBuildTag). Compiler intrinsics
      like the dollar-I DATE/TIME macros emit unquoted strings in Delphi 13
      and don't fit in a const expression. *)
-  PLUGIN_VERSION = 'v0.40.1-alpha';
+  PLUGIN_VERSION = 'v0.40.2-alpha';
 
 { Stamp every user-visible plugin dialog with the version + the actual
   build time of the BPL the IDE has loaded so the user can verify at a
@@ -1133,68 +1133,82 @@ end;
 { ---- v0.39 diagnostic helpers ---- }
 
 procedure InvokeTestConnection(Sender: TObject);
+{ v0.40.2: previously ran Start + Initialize + Stop on the UI thread.
+  Initialize blocks up to 10s; Stop could hang forever on a sticky
+  WaitFor; either freezes the IDE. Now we capture the up-front
+  resolution synchronously, then spin a background TThread for the
+  subprocess work and post the final ShowMessage back via TThread.Queue
+  so the UI remains responsive. }
 var
   BplPath, BplDir: string;
   ExePathBpl, ExePath: string;
-  HasNextToBpl: Boolean;
-  Client: TDragLintLspClient;
-  Started, InitOk: Boolean;
-  Report: TStringBuilder;
-  LogPath: string;
+  HasNextToBpl:       Boolean;
+  Header:             string;
 begin
-  Report := TStringBuilder.Create;
-  try
-    Report.AppendLine('=== drag-lint plugin self-test ===');
-    Report.AppendLine(PluginBuildTag);
-    Report.AppendLine('');
-    BplPath := GetModuleName(HInstance);
-    BplDir := ExtractFilePath(BplPath);
-    Report.AppendLine('BPL path: ' + BplPath);
-    Report.AppendLine('BPL dir:  ' + BplDir);
+  BplPath := GetModuleName(HInstance);
+  BplDir  := ExtractFilePath(BplPath);
+  ExePathBpl   := BplDir + 'drag-lint.exe';
+  HasNextToBpl := FileExists(ExePathBpl);
+  if HasNextToBpl then
+    ExePath := ExePathBpl
+  else
+    ExePath := 'drag-lint.exe';
 
-    ExePathBpl := BplDir + 'drag-lint.exe';
-    HasNextToBpl := FileExists(ExePathBpl);
-    Report.AppendLine(Format('drag-lint.exe next to BPL: %s  (exists=%s)',
-      [ExePathBpl, BoolToStr(HasNextToBpl, True)]));
+  Header :=
+    '=== drag-lint plugin self-test ===' + sLineBreak +
+    PluginBuildTag + sLineBreak + sLineBreak +
+    'BPL path: ' + BplPath + sLineBreak +
+    'BPL dir:  ' + BplDir + sLineBreak +
+    Format('drag-lint.exe next to BPL: %s  (exists=%s)',
+      [ExePathBpl, BoolToStr(HasNextToBpl, True)]) + sLineBreak;
+  if not HasNextToBpl then
+    Header := Header + 'Will fall back to PATH lookup of "drag-lint.exe"' +
+              sLineBreak;
+  Header := Header + sLineBreak + 'Spawning drag-lint.exe lsp ...' + sLineBreak;
 
-    if HasNextToBpl then
-      ExePath := ExePathBpl
-    else
+  { Show "running" immediately so the user knows the click registered.
+    The background thread then assembles and posts the full report. }
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      Client:          TDragLintLspClient;
+      Started, InitOk: Boolean;
+      Body:            string;
+      FinalText:       string;
     begin
-      ExePath := 'drag-lint.exe';
-      Report.AppendLine('Will fall back to PATH lookup of "drag-lint.exe"');
-    end;
-
-    Report.AppendLine('');
-    Report.AppendLine('Spawning drag-lint.exe lsp ...');
-    Client := TDragLintLspClient.Create;
-    try
-      Started := Client.Start(ExePath);
-      Report.AppendLine(Format('Start result: %s', [BoolToStr(Started, True)]));
-      if Started then
-      begin
-        Report.AppendLine('Sending initialize request ...');
-        InitOk := Client.Initialize;
-        Report.AppendLine(Format('Initialize result: %s', [BoolToStr(InitOk, True)]));
-        if InitOk then
-          Report.AppendLine('SUCCESS: subprocess + handshake working')
+      Client := TDragLintLspClient.Create;
+      try
+        Started := Client.Start(ExePath);
+        Body := Format('Start result: %s', [BoolToStr(Started, True)]) +
+                sLineBreak;
+        if Started then
+        begin
+          Body := Body + 'Sending initialize request ...' + sLineBreak;
+          InitOk := Client.Initialize;
+          Body := Body + Format('Initialize result: %s',
+            [BoolToStr(InitOk, True)]) + sLineBreak;
+          if InitOk then
+            Body := Body + 'SUCCESS: subprocess + handshake working' +
+                    sLineBreak
+          else
+            Body := Body + 'FAILED: initialize did not return within timeout' +
+                    sLineBreak;
+          Client.Stop;
+        end
         else
-          Report.AppendLine('FAILED: initialize did not return within timeout');
-        Client.Stop;
-      end
-      else
-        Report.AppendLine('FAILED: CreateProcessW failed (see log)');
-    finally
-      Client.Free;
-    end;
+          Body := Body + 'FAILED: CreateProcessW failed (see log)' + sLineBreak;
+      finally
+        Client.Free;
+      end;
 
-    LogPath := GetPluginLogPath;
-    Report.AppendLine('');
-    Report.AppendLine('Detailed log: ' + LogPath);
-    ShowMessage(Report.ToString);
-  finally
-    Report.Free;
-  end;
+      FinalText := Header + Body + sLineBreak +
+                   'Detailed log: ' + GetPluginLogPath;
+      TThread.Queue(nil,
+        procedure
+        begin
+          ShowMessage(FinalText);
+        end);
+    end).Start;
 end;
 
 procedure InvokeOpenLog(Sender: TObject);
