@@ -296,6 +296,16 @@ begin
 end;
 
 procedure TDragLintUsagesForm.ParseTextOutput(const AOutput: string);
+{ v0.40.5: the CLI's `query find-callers` text output format is:
+    <file>:<line>:<col>  <symbol_name>
+       <ctx_line>: <code>
+       <ctx_line>: <code>
+    <file>:<line>:<col>  <symbol_name>
+       ...
+    N caller(s)
+  No '->' anywhere. Earlier parser looked for ' -> ' and so dropped
+  every match. Fix: recognise the header by trailing :LINE:COL pattern
+  at the position before the symbol name (two spaces separator). }
 var
   Lines:    TStringList;
   i:        Integer;
@@ -303,13 +313,14 @@ var
   Location: string;
   CFile:    string;
   CLine:    Integer;
-  ArrowPos: Integer;
+  HdrSep:   Integer;
   p1, p2:  Integer;
   k:        Integer;
   LastFile: string;
   FileNode: TTreeNode;
   CallerNode: TTreeNode;
   ND:       TUsageNodeData;
+  SymName:  string;
 begin
   Lines     := TStringList.Create;
   LastFile  := '';
@@ -337,53 +348,53 @@ begin
         Continue;
       end;
 
-      { Caller line: <file>:<line>:<col> -> <callee> }
-      ArrowPos := Pos(' -> ', Line);
-      if ArrowPos > 0 then
-      begin
-        Location := Copy(Line, 1, ArrowPos - 1);
-        p1 := 0;
-        p2 := 0;
-        for k := Length(Location) downto 1 do
-          if Location[k] = ':' then
+      { Skip the trailing "N caller(s)" summary line. }
+      if Pos(' caller(s)', Line) > 0 then Continue;
+      if Pos(' callers found', Line) > 0 then Continue;
+
+      { Caller header line: <file>:<line>:<col>  <symbol_name>
+        Two-space separator between location and name. }
+      HdrSep := Pos('  ', Line);
+      if HdrSep <= 0 then Continue;
+      Location := Copy(Line, 1, HdrSep - 1);
+      SymName  := Trim(Copy(Line, HdrSep, MaxInt));
+      { Skip if SymName contains spaces (not a caller header). }
+      if Pos(' ', SymName) > 0 then Continue;
+
+      p1 := 0;
+      p2 := 0;
+      for k := Length(Location) downto 1 do
+        if Location[k] = ':' then
+        begin
+          if p2 = 0 then p2 := k
+          else if p1 = 0 then
           begin
-            if p2 = 0 then p2 := k
-            else if p1 = 0 then
-            begin
-              p1 := k;
-              Break;
-            end;
+            p1 := k;
+            Break;
           end;
-        if (p1 > 0) and (p2 > p1) then
-        begin
-          CFile := Copy(Location, 1, p1 - 1);
-          CLine := StrToIntDef(Copy(Location, p1 + 1, p2 - p1 - 1), 0);
-        end
-        else
-        begin
-          CFile := Location;
-          CLine := 0;
         end;
-
-        if not SameText(CFile, LastFile) then
-        begin
-          LastFile := CFile;
-          FileNode := AddNodeData(nil,
-            ExtractFileName(CFile) + '  [' + CFile + ']', CFile, 0);
-        end;
-
-        CallerNode := AddNodeData(FileNode,
-          Format('Line %d  %s',
-            [CLine, Trim(Copy(Line, ArrowPos + 4, MaxInt))]),
-          CFile, CLine);
-        FLastCallerNode := CallerNode;
+      if (p1 > 0) and (p2 > p1) then
+      begin
+        CFile := Copy(Location, 1, p1 - 1);
+        CLine := StrToIntDef(Copy(Location, p1 + 1, p2 - p1 - 1), 0);
       end
       else
       begin
-        { Unrecognised line -- top-level info }
-        FileNode := AddNodeData(nil, Line, '', 0);
-        CallerNode := nil;
+        CFile := Location;
+        CLine := 0;
       end;
+
+      if not SameText(CFile, LastFile) then
+      begin
+        LastFile := CFile;
+        FileNode := AddNodeData(nil,
+          ExtractFileName(CFile) + '  [' + CFile + ']', CFile, 0);
+      end;
+
+      CallerNode := AddNodeData(FileNode,
+        Format('Line %d  %s', [CLine, SymName]),
+        CFile, CLine);
+      FLastCallerNode := CallerNode;
     end;
   finally
     Lines.Free;
