@@ -65,12 +65,15 @@ type
     Source: TBytes;
     Symbols: TList<TSymbol>;
     References: TList<TReference>;
+    UsesEntries: TList<TUnitUse>;  { v0.40.4 }
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     function Emit(AKind: TSymbolKind; const AName, AQualifiedName: string;
       AParentSymbolIdx: Integer; const ARangeNode: TTSNode;
       const ASignature: string = ''; const AModifiers: string = ''): Integer;
     procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
+    procedure EmitUnitUse(const AUnitName, AInPath: string;
+      ASection: TUnitUseSection; const ARangeNode: TTSNode);
   end;
 
 constructor TWalkState.Create(const ASource: TBytes);
@@ -79,13 +82,38 @@ begin
   Source := ASource;
   Symbols := TList<TSymbol>.Create;
   References := TList<TReference>.Create;
+  UsesEntries := TList<TUnitUse>.Create;
 end;
 
 destructor TWalkState.Destroy;
 begin
   Symbols.Free;
   References.Free;
+  UsesEntries.Free;
   inherited;
+end;
+
+procedure TWalkState.EmitUnitUse(const AUnitName, AInPath: string;
+  ASection: TUnitUseSection; const ARangeNode: TTSNode);
+var
+  U: TUnitUse;
+  Stem: string;
+  DotPos: Integer;
+begin
+  if AUnitName = '' then Exit;
+  U.FileId    := -1;  { indexer will fill in from files table }
+  U.UnitName  := AUnitName;
+  U.Section   := ASection;
+  U.InPath    := AInPath;
+  U.StartLine := Integer(ARangeNode.StartPoint.row) + 1;
+  U.StartCol  := Integer(ARangeNode.StartPoint.column) + 1;
+  U.EndLine   := Integer(ARangeNode.EndPoint.row) + 1;
+  U.EndCol    := Integer(ARangeNode.EndPoint.column) + 1;
+  UsesEntries.Add(U);
+  { Suppress hint: Stem reserved for a future normalize-here path. }
+  Stem := AUnitName;
+  DotPos := LastDelimiter('.', Stem);
+  if DotPos > 0 then Stem := Copy(Stem, DotPos + 1, MaxInt);
 end;
 
 procedure TWalkState.EmitRef(const AKind, ANameText: string;
@@ -193,11 +221,70 @@ begin
   AState.EmitRef('call', CalleeName, NameNode);
 end;
 
+// v0.40.4: extract the literal string body from a `kIn literalString` pair
+// inside a declUsesUnit. Strips the surrounding single quotes.
+function ExtractInPath(const ALitNode: TTSNode; const ASource: TBytes): string;
+begin
+  Result := NodeText(ALitNode, ASource);
+  if (Length(Result) >= 2) and (Result[1] = '''') and
+     (Result[Length(Result)] = '''') then
+    Result := Copy(Result, 2, Length(Result) - 2);
+end;
+
+// v0.40.4: walk a declUses node, emitting one TUnitUse per declUsesUnit child.
+procedure WalkUsesClause(const ANode: TTSNode; const AState: TWalkState;
+  ASection: TUnitUseSection);
+var
+  I, J:        Integer;
+  Child, Sub:  TTSNode;
+  ModNode:     TTSNode;
+  LitNode:     TTSNode;
+  UnitName:    string;
+  InPath:      string;
+begin
+  for I := 0 to ANode.NamedChildCount - 1 do
+  begin
+    Child := ANode.NamedChild(I);
+    if Child.NodeType <> 'declUsesUnit' then Continue;
+    ModNode := Default(TTSNode);
+    LitNode := Default(TTSNode);
+    for J := 0 to Child.NamedChildCount - 1 do
+    begin
+      Sub := Child.NamedChild(J);
+      if      Sub.NodeType = 'moduleName'    then ModNode := Sub
+      else if Sub.NodeType = 'literalString' then LitNode := Sub;
+    end;
+    if ModNode.IsNull then Continue;
+    UnitName := Trim(NodeText(ModNode, AState.Source));
+    if UnitName = '' then Continue;
+    InPath := '';
+    if not LitNode.IsNull then InPath := ExtractInPath(LitNode, AState.Source);
+    AState.EmitUnitUse(UnitName, InPath, ASection, Child);
+  end;
+end;
+
+// v0.40.4: walk a unit's interface or implementation section, looking for a
+// declUses child and emitting its entries under the appropriate section.
+procedure WalkSection(const ASectionNode: TTSNode; const AState: TWalkState;
+  ASection: TUnitUseSection);
+var
+  I:     Integer;
+  Child: TTSNode;
+begin
+  for I := 0 to ASectionNode.NamedChildCount - 1 do
+  begin
+    Child := ASectionNode.NamedChild(I);
+    if Child.NodeType = 'declUses' then
+      WalkUsesClause(Child, AState, ASection);
+  end;
+end;
+
 procedure WalkUnit(const ANode: TTSNode; const AState: TWalkState);
 var
   ModNode: TTSNode;
   UnitName: string;
   UnitIdx, i: Integer;
+  Child: TTSNode;
 begin
   ModNode := FindNamedChildOfType(ANode, 'moduleName');
   if ModNode.IsNull then
@@ -209,6 +296,16 @@ begin
   if UnitName = '' then
     Exit;
   UnitIdx := AState.Emit(skUnit, UnitName, UnitName, -1, ANode);
+
+  // v0.40.4: explicitly walk interface/implementation children to extract
+  // their `declUses` entries under the correct section.
+  for i := 0 to ANode.NamedChildCount - 1 do
+  begin
+    Child := ANode.NamedChild(i);
+    if      Child.NodeType = 'interface'      then WalkSection(Child, AState, uusInterface)
+    else if Child.NodeType = 'implementation' then WalkSection(Child, AState, uusImplementation);
+  end;
+
   for i := 0 to ANode.NamedChildCount - 1 do
     Walk(ANode.NamedChild(i), AState, UnitIdx, UnitName);
 end;
@@ -402,6 +499,28 @@ begin
     Exit;
   end;
 
+  // v0.40.4: .dpr and .dpk roots also carry a top-level declUses.
+  // Section is uusProgram or uusPackage respectively. We don't emit a
+  // unit symbol here (no moduleName at the .dpr/.dpk top level in our model);
+  // just harvest the uses entries.
+  if (NodeType = 'program') or (NodeType = 'package') then
+  begin
+    for i := 0 to ANode.NamedChildCount - 1 do
+    begin
+      var SectChild := ANode.NamedChild(i);
+      if SectChild.NodeType = 'declUses' then
+      begin
+        if NodeType = 'program' then
+          WalkUsesClause(SectChild, AState, uusProgram)
+        else
+          WalkUsesClause(SectChild, AState, uusPackage);
+      end;
+    end;
+    for i := 0 to ANode.NamedChildCount - 1 do
+      Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+    Exit;
+  end;
+
   // declType wrapping a class/record/interface/enum declaration. Try each
   // shape in order; the first matching handler returns true and we're done.
   if NodeType = 'declType' then
@@ -579,6 +698,7 @@ begin
     Walk(Root, State, -1, '');
     Result.Symbols := State.Symbols.ToArray;
     Result.References := State.References.ToArray;
+    Result.UsesEntries := State.UsesEntries.ToArray;
   finally
     State.Free;
     Tree.Free;

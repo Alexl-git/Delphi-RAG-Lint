@@ -3,11 +3,11 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 4;
+  SCHEMA_VERSION = 5;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
-  SCHEMA_DDL: array[0..14] of string = (
+  SCHEMA_DDL: array[0..19] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' +
     '  key   TEXT PRIMARY KEY,' +
     '  value TEXT NOT NULL' +
@@ -108,7 +108,37 @@ const
     'CREATE INDEX IF NOT EXISTS idx_symbol_docs_format ON symbol_docs(format)',
 
     'CREATE INDEX IF NOT EXISTS idx_symbol_docs_deprecated ' +
-    '  ON symbol_docs(deprecated) WHERE deprecated = 1'
+    '  ON symbol_docs(deprecated) WHERE deprecated = 1',
+
+    // v0.40.4: unit_uses captures every entry in every uses clause across the
+    // codebase. One row per (file, section, unit_name). Powers circular-
+    // dependency detection, interface->implementation move-down suggestions,
+    // and unused-unit elimination utilities in graphing + lint tools.
+    'CREATE TABLE IF NOT EXISTS unit_uses (' +
+    '  id              INTEGER PRIMARY KEY,' +
+    '  file_id         INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+    '  unit_name       TEXT NOT NULL,' +
+    // Lowercased trailing segment for join-friendly lookups against files.
+    // For "System.SysUtils" this is "sysutils" so we can match
+    // files.path -> basename -> stem -> lowercase.
+    '  unit_name_norm  TEXT NOT NULL,' +
+    '  section         TEXT NOT NULL,' +     // interface|implementation|program|package
+    '  in_path         TEXT,' +               // text from `in ''...''`; NULL if absent
+    '  target_file_id  INTEGER REFERENCES files(id) ON DELETE SET NULL,' +
+    '  start_line      INTEGER NOT NULL,' +
+    '  start_col       INTEGER NOT NULL,' +
+    '  end_line        INTEGER,' +
+    '  end_col         INTEGER' +
+    ')',
+
+    'CREATE INDEX IF NOT EXISTS idx_unit_uses_file '       +
+    '  ON unit_uses(file_id)',
+    'CREATE INDEX IF NOT EXISTS idx_unit_uses_unit_norm '  +
+    '  ON unit_uses(unit_name_norm)',
+    'CREATE INDEX IF NOT EXISTS idx_unit_uses_section '    +
+    '  ON unit_uses(section)',
+    'CREATE INDEX IF NOT EXISTS idx_unit_uses_target '     +
+    '  ON unit_uses(target_file_id) WHERE target_file_id IS NOT NULL'
   );
 
 implementation

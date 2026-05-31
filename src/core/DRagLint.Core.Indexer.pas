@@ -199,6 +199,12 @@ begin
         end;
         for i := 0 to High(ParseRes.References) do
           FStore.UpsertReference(Token, ParseRes.References[i]);
+        { v0.40.4: wipe-and-rewrite uses for this file so we never carry
+          stale rows. DeleteUnitUsesForFile must run inside the open
+          transaction to ensure consistency on rollback. }
+        FStore.DeleteUnitUsesForFile(Token.FileId);
+        for i := 0 to High(ParseRes.UsesEntries) do
+          FStore.UpsertUnitUse(Token, ParseRes.UsesEntries[i]);
         FStore.CommitFileTx(Token);
         ReportProgress(AFilePath, Length(ParseRes.Symbols),
           Length(ParseRes.References),

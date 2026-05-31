@@ -102,6 +102,27 @@ type
     Desc:     string;
   end;
 
+  // v0.40.4: captured from `uses` clauses to support circular-dep detection,
+  // move-down (interface->implementation) suggestions, and unused-unit
+  // analysis in graphing + lint utilities.
+  TUnitUseSection = (
+    uusInterface,        // `interface uses ...`
+    uusImplementation,   // `implementation uses ...`
+    uusProgram,          // top-level uses in a .dpr
+    uusPackage           // top-level uses in a .dpk
+  );
+
+  TUnitUse = record
+    FileId:    Int64;          // owning file (set by indexer post-parse; -1 in parser output)
+    UnitName:  string;         // verbatim, with dots: 'System.SysUtils'
+    Section:   TUnitUseSection;
+    InPath:    string;         // text inside `in '<path>'`; empty when absent
+    StartLine: Integer;        // 1-based
+    StartCol:  Integer;
+    EndLine:   Integer;
+    EndCol:    Integer;
+  end;
+
   TParsedDoc = record
     Format:      TDocFormat;
     RawBlock:    string;
@@ -194,6 +215,8 @@ type
   end;
 
 function DocFormatToStr(AFormat: TDocFormat): string;
+function UnitUseSectionToStr(ASection: TUnitUseSection): string;
+function StrToUnitUseSection(const AStr: string): TUnitUseSection;
 function JsonEscape(const S: string): string;
 function ParamsToJson(const AParams: TArray<TDocParam>): string;
 function ExceptionsToJson(const AExceptions: TArray<TDocException>): string;
@@ -228,6 +251,27 @@ begin
     if SameText(KindText[K], AText) then
       Exit(K);
   raise Exception.CreateFmt('Unknown symbol kind: "%s"', [AText]);
+end;
+
+function UnitUseSectionToStr(ASection: TUnitUseSection): string;
+begin
+  case ASection of
+    uusInterface:      Result := 'interface';
+    uusImplementation: Result := 'implementation';
+    uusProgram:        Result := 'program';
+    uusPackage:        Result := 'package';
+  else
+    Result := 'unknown';
+  end;
+end;
+
+function StrToUnitUseSection(const AStr: string): TUnitUseSection;
+begin
+  if      SameText(AStr, 'interface')      then Result := uusInterface
+  else if SameText(AStr, 'implementation') then Result := uusImplementation
+  else if SameText(AStr, 'program')        then Result := uusProgram
+  else if SameText(AStr, 'package')        then Result := uusPackage
+  else                                          Result := uusImplementation;
 end;
 
 function DocFormatToStr(AFormat: TDocFormat): string;

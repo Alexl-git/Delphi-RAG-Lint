@@ -670,6 +670,10 @@ begin
       else
         Indexer.IndexFolder(F, True);
     end;
+    { v0.40.4: post-pass resolves target_file_id for every unit_uses row.
+      Done here (not inside the per-file transaction) because resolution
+      needs to see every file the indexer has just written. }
+    Store.ResolveUnitUseTargets;
     Elapsed := (Now - StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then
       Writeln(Format(

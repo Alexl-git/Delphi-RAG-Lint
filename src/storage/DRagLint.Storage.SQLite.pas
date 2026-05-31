@@ -47,6 +47,12 @@ type
     FQFindNoCallers: TFDQuery;
     FQFindCompilerFindings: TFDQuery;
     FQInsertCompilerFinding: TFDQuery;
+    // v0.40.4: uses-clause persistence
+    FQInsertUnitUse: TFDQuery;
+    FQDeleteFileUnitUses: TFDQuery;
+    FQGetFileUnitUses: TFDQuery;
+    FQFindUsersOfUnit: TFDQuery;
+    FQResolveUnitUseTargets: TFDQuery;
     procedure Connect(const ADbPath: string);
     procedure PrepareStatements;
     procedure EnsureTrigramTablePopulated;
@@ -81,6 +87,15 @@ type
     procedure UpsertSymbolDoc(const AToken: TFileTxToken;
       ASymbolId: Int64; const ADoc: TParsedDoc);
     function GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
+
+    // v0.40.4: uses-clause persistence + queries
+    procedure UpsertUnitUse(const AToken: TFileTxToken;
+      const AUse: TUnitUse);
+    procedure DeleteUnitUsesForFile(AFileId: Int64);
+    function  GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>;
+    function  FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
+    procedure ResolveUnitUseTargets;
+
     function FindByDocTag(const ATag: string): TArray<TSymbol>;
     function FindUndocumented(const AKind: string;
       APublicOnly: Boolean): TArray<TSymbol>;
@@ -184,6 +199,11 @@ begin
   FQFindNoCallers.Free;
   FQFindCompilerFindings.Free;
   FQInsertCompilerFinding.Free;
+  FQInsertUnitUse.Free;
+  FQDeleteFileUnitUses.Free;
+  FQGetFileUnitUses.Free;
+  FQFindUsersOfUnit.Free;
+  FQResolveUnitUseTargets.Free;
   if Assigned(FConn) then
   begin
     if FConn.Connected then
@@ -442,6 +462,63 @@ begin
   FQInsertCompilerFinding.Params.ParamByName('msg').DataType := ftString;
   FQInsertCompilerFinding.Params.ParamByName('iat').DataType := ftLargeint;
   FQInsertCompilerFinding.Prepare;
+
+  // v0.40.4: uses-clause queries
+  FQInsertUnitUse := NewQuery(
+    'INSERT INTO unit_uses ' +
+    '(file_id, unit_name, unit_name_norm, section, in_path, ' +
+    ' target_file_id, start_line, start_col, end_line, end_col) ' +
+    'VALUES (:fid, :un, :unn, :sec, :inp, NULL, :sl, :sc, :el, :ec)');
+  FQInsertUnitUse.Params.ParamByName('fid').DataType := ftLargeint;
+  FQInsertUnitUse.Params.ParamByName('un').DataType  := ftString;
+  FQInsertUnitUse.Params.ParamByName('unn').DataType := ftString;
+  FQInsertUnitUse.Params.ParamByName('sec').DataType := ftString;
+  FQInsertUnitUse.Params.ParamByName('inp').DataType := ftString;
+  FQInsertUnitUse.Params.ParamByName('sl').DataType  := ftInteger;
+  FQInsertUnitUse.Params.ParamByName('sc').DataType  := ftInteger;
+  FQInsertUnitUse.Params.ParamByName('el').DataType  := ftInteger;
+  FQInsertUnitUse.Params.ParamByName('ec').DataType  := ftInteger;
+  FQInsertUnitUse.Prepare;
+
+  FQDeleteFileUnitUses := NewQuery(
+    'DELETE FROM unit_uses WHERE file_id = :fid');
+  FQDeleteFileUnitUses.Params.ParamByName('fid').DataType := ftLargeint;
+  FQDeleteFileUnitUses.Prepare;
+
+  FQGetFileUnitUses := NewQuery(
+    'SELECT unit_name, unit_name_norm, section, in_path, ' +
+    '       target_file_id, start_line, start_col, end_line, end_col ' +
+    'FROM unit_uses WHERE file_id = :fid ' +
+    'ORDER BY section, start_line, start_col');
+  FQGetFileUnitUses.Params.ParamByName('fid').DataType := ftLargeint;
+  FQGetFileUnitUses.Prepare;
+
+  FQFindUsersOfUnit := NewQuery(
+    'SELECT file_id, unit_name, unit_name_norm, section, in_path, ' +
+    '       target_file_id, start_line, start_col, end_line, end_col ' +
+    'FROM unit_uses WHERE unit_name_norm = :un');
+  FQFindUsersOfUnit.Params.ParamByName('un').DataType := ftString;
+  FQFindUsersOfUnit.Prepare;
+
+  // Resolves target_file_id for every unit_uses row whose unit_name_norm
+  // matches the lower-cased basename (stem) of some files.path entry.
+  // Run once after a full index pass; safe to re-run (UPDATE is idempotent).
+  // Uses LOWER + substr math because sqlite's basename trick (replace ext)
+  // would over-match. Path separators normalised to '/'.
+  FQResolveUnitUseTargets := NewQuery(
+    'UPDATE unit_uses SET target_file_id = ('                                 +
+    '  SELECT f.id FROM files f '                                             +
+    '  WHERE LOWER('                                                          +
+    '    REPLACE('                                                            +
+    '      SUBSTR('                                                           +
+    '        SUBSTR(f.path, 1 + LENGTH(f.path) - INSTR('                      +
+    '          REPLACE(REPLACE(f.path, ''\'', ''/''), ''/'', '''') || ''/'','+
+    '          ''/'')), 1)'                                                   +
+    '      , ''.pas'', '''')'                                                 +
+    '  ) = unit_uses.unit_name_norm '                                         +
+    '  LIMIT 1) '                                                             +
+    'WHERE target_file_id IS NULL');
+  FQResolveUnitUseTargets.Prepare;
 end;
 
 function TSQLiteSymbolStore.FileIsUpToDate(const APath: string;
@@ -1720,6 +1797,166 @@ begin
   end;
 
   Result := Refs;
+end;
+
+{ ---- v0.40.4: unit_uses ---------------------------------------------------- }
+
+function UnitNameNorm(const AUnitName: string): string;
+{ Returns the lowercased trailing dotted segment of a unit name. For
+  'System.SysUtils' returns 'sysutils'. Used as the join key against the
+  basename-stem of files.path so target resolution stays simple. }
+var
+  Dot: Integer;
+begin
+  Result := AUnitName;
+  Dot := LastDelimiter('.', Result);
+  if Dot > 0 then Result := Copy(Result, Dot + 1, MaxInt);
+  Result := LowerCase(Result);
+end;
+
+procedure TSQLiteSymbolStore.UpsertUnitUse(const AToken: TFileTxToken;
+  const AUse: TUnitUse);
+begin
+  FQInsertUnitUse.ParamByName('fid').AsLargeInt := AToken.FileId;
+  FQInsertUnitUse.ParamByName('un').AsString    := AUse.UnitName;
+  FQInsertUnitUse.ParamByName('unn').AsString   := UnitNameNorm(AUse.UnitName);
+  FQInsertUnitUse.ParamByName('sec').AsString   := UnitUseSectionToStr(AUse.Section);
+  if AUse.InPath = '' then
+    FQInsertUnitUse.ParamByName('inp').Clear
+  else
+    FQInsertUnitUse.ParamByName('inp').AsString := AUse.InPath;
+  FQInsertUnitUse.ParamByName('sl').AsInteger := AUse.StartLine;
+  FQInsertUnitUse.ParamByName('sc').AsInteger := AUse.StartCol;
+  FQInsertUnitUse.ParamByName('el').AsInteger := AUse.EndLine;
+  FQInsertUnitUse.ParamByName('ec').AsInteger := AUse.EndCol;
+  FQInsertUnitUse.ExecSQL;
+end;
+
+procedure TSQLiteSymbolStore.DeleteUnitUsesForFile(AFileId: Int64);
+begin
+  FQDeleteFileUnitUses.ParamByName('fid').AsLargeInt := AFileId;
+  FQDeleteFileUnitUses.ExecSQL;
+end;
+
+function TSQLiteSymbolStore.GetUnitUsesForFile(
+  AFileId: Int64): TArray<TUnitUse>;
+var
+  List: TList<TUnitUse>;
+  U:    TUnitUse;
+begin
+  List := TList<TUnitUse>.Create;
+  try
+    FQGetFileUnitUses.ParamByName('fid').AsLargeInt := AFileId;
+    FQGetFileUnitUses.Open;
+    try
+      while not FQGetFileUnitUses.Eof do
+      begin
+        U.FileId    := AFileId;
+        U.UnitName  := FQGetFileUnitUses.FieldByName('unit_name').AsString;
+        U.Section   := StrToUnitUseSection(
+                         FQGetFileUnitUses.FieldByName('section').AsString);
+        U.InPath    := FQGetFileUnitUses.FieldByName('in_path').AsString;
+        U.StartLine := FQGetFileUnitUses.FieldByName('start_line').AsInteger;
+        U.StartCol  := FQGetFileUnitUses.FieldByName('start_col').AsInteger;
+        U.EndLine   := FQGetFileUnitUses.FieldByName('end_line').AsInteger;
+        U.EndCol    := FQGetFileUnitUses.FieldByName('end_col').AsInteger;
+        List.Add(U);
+        FQGetFileUnitUses.Next;
+      end;
+    finally
+      FQGetFileUnitUses.Close;
+    end;
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindUsersOfUnit(
+  const AUnitNameNorm: string): TArray<TUnitUse>;
+var
+  List: TList<TUnitUse>;
+  U:    TUnitUse;
+begin
+  List := TList<TUnitUse>.Create;
+  try
+    FQFindUsersOfUnit.ParamByName('un').AsString := LowerCase(AUnitNameNorm);
+    FQFindUsersOfUnit.Open;
+    try
+      while not FQFindUsersOfUnit.Eof do
+      begin
+        U.FileId    := FQFindUsersOfUnit.FieldByName('file_id').AsLargeInt;
+        U.UnitName  := FQFindUsersOfUnit.FieldByName('unit_name').AsString;
+        U.Section   := StrToUnitUseSection(
+                         FQFindUsersOfUnit.FieldByName('section').AsString);
+        U.InPath    := FQFindUsersOfUnit.FieldByName('in_path').AsString;
+        U.StartLine := FQFindUsersOfUnit.FieldByName('start_line').AsInteger;
+        U.StartCol  := FQFindUsersOfUnit.FieldByName('start_col').AsInteger;
+        U.EndLine   := FQFindUsersOfUnit.FieldByName('end_line').AsInteger;
+        U.EndCol    := FQFindUsersOfUnit.FieldByName('end_col').AsInteger;
+        List.Add(U);
+        FQFindUsersOfUnit.Next;
+      end;
+    finally
+      FQFindUsersOfUnit.Close;
+    end;
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
+{ Drives target_file_id resolution in Pascal rather than SQL because the
+  basename-extract is fiddly across sqlite dialects (Win32 FireDAC's
+  bundled sqlite lacks some 3.24+ functions). We pull every (file_id, path),
+  compute the lowercase stem, build a dictionary, then UPDATE per group. }
+var
+  QFiles, QUpdate: TFDQuery;
+  StemToFileId:    TDictionary<string, Int64>;
+  Path, Stem:      string;
+  Slash:           Integer;
+begin
+  StemToFileId := TDictionary<string, Int64>.Create;
+  QFiles  := TFDQuery.Create(nil);
+  QUpdate := TFDQuery.Create(nil);
+  try
+    QFiles.Connection := FConn;
+    QFiles.SQL.Text := 'SELECT id, path FROM files';
+    QFiles.Open;
+    while not QFiles.Eof do
+    begin
+      Path := QFiles.FieldByName('path').AsString;
+      Slash := Path.LastDelimiter('\/');
+      if Slash >= 0 then
+        Stem := Copy(Path, Slash + 2, MaxInt)
+      else
+        Stem := Path;
+      Stem := LowerCase(ChangeFileExt(Stem, ''));
+      if Stem <> '' then
+        StemToFileId.AddOrSetValue(Stem, QFiles.FieldByName('id').AsLargeInt);
+      QFiles.Next;
+    end;
+    QFiles.Close;
+
+    QUpdate.Connection := FConn;
+    QUpdate.SQL.Text :=
+      'UPDATE unit_uses SET target_file_id = :tid ' +
+      'WHERE unit_name_norm = :un AND target_file_id IS NULL';
+    QUpdate.Params.ParamByName('tid').DataType := ftLargeint;
+    QUpdate.Params.ParamByName('un').DataType  := ftString;
+    QUpdate.Prepare;
+    for var Kvp in StemToFileId do
+    begin
+      QUpdate.ParamByName('tid').AsLargeInt := Kvp.Value;
+      QUpdate.ParamByName('un').AsString    := Kvp.Key;
+      QUpdate.ExecSQL;
+    end;
+  finally
+    QUpdate.Free;
+    QFiles.Free;
+    StemToFileId.Free;
+  end;
 end;
 
 end.

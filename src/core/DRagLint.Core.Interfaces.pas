@@ -46,6 +46,14 @@ type
     procedure UpsertSymbolDoc(const AToken: TFileTxToken;
       ASymbolId: Int64; const ADoc: TParsedDoc);
     function GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
+
+    // v0.40.4: uses-clause persistence + queries.
+    procedure UpsertUnitUse(const AToken: TFileTxToken;
+      const AUse: TUnitUse);
+    procedure DeleteUnitUsesForFile(AFileId: Int64);
+    function  GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>;
+    function  FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
+    procedure ResolveUnitUseTargets;
     function FindByDocTag(const ATag: string): TArray<TSymbol>;
     function FindUndocumented(const AKind: string;
       APublicOnly: Boolean): TArray<TSymbol>;
@@ -82,6 +90,10 @@ type
     References: TArray<TReference>;
     Chunks: TArray<TChunk>;
     Diagnostics: TArray<string>;
+    // v0.40.4: uses-clause entries captured per file. Section disambiguates
+    // interface vs implementation vs program/package; FileId is filled by
+    // the indexer post-parse from the files table.
+    UsesEntries: TArray<TUnitUse>;
   end;
 
   IParser = interface
