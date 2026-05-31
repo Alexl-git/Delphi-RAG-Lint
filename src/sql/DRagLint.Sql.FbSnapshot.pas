@@ -38,6 +38,8 @@ uses
   FireDAC.Stan.Async,
   FireDAC.Phys.IB,
   FireDAC.Phys.IBDef,
+  FireDAC.Phys.FB,
+  FireDAC.Phys.FBDef,
   DRagLint.Core.Interfaces,
   DRagLint.Storage.SQLite;
 
@@ -202,7 +204,7 @@ begin
         QIns.Params.ParamByName('n').DataType  := ftString;
         QIns.Params.ParamByName('o').DataType  := ftString;
         QIns.Params.ParamByName('sf').DataType := ftInteger;
-        QIns.Params.ParamByName('d').DataType  := ftWideMemo;
+        QIns.Params.ParamByName('d').DataType  := ftString;
         QIns.Params.ParamByName('sa').DataType := ftLargeint;
         QIns.Prepare;
 
@@ -262,8 +264,8 @@ begin
         QIns.Params.ParamByName('fsc').DataType := ftInteger;
         QIns.Params.ParamByName('fpr').DataType := ftInteger;
         QIns.Params.ParamByName('nul').DataType := ftInteger;
-        QIns.Params.ParamByName('def').DataType := ftWideMemo;
-        QIns.Params.ParamByName('d').DataType   := ftWideMemo;
+        QIns.Params.ParamByName('def').DataType := ftString;
+        QIns.Params.ParamByName('d').DataType   := ftString;
         QIns.Params.ParamByName('sa').DataType  := ftLargeint;
         QIns.Prepare;
 
@@ -295,25 +297,41 @@ begin
         QSrc.Free; QIns.Free;
       end;
 
-      { ---- FIB$FIELDS_INFO -> fb_field_info (optional) ---- }
+      { ---- FIB$FIELDS_INFO -> fb_field_info (optional) ----
+        Best-effort: skip on permission denied, schema mismatch, etc. so a
+        partial snapshot still commits. }
       if TableExists(FbConn, 'FIB$FIELDS_INFO') then
-      begin
+      try
         QSrc := TFDQuery.Create(nil); QIns := TFDQuery.Create(nil);
         try
           QSrc.Connection := FbConn;
+          { Project-specific schema — the actual FIB$FIELDS_INFO in Micronite
+            v6 doesn't carry READ_ONLY. Stick to fields confirmed present in
+            the MS*.SQL DDL. Other variants of FIB$* across projects will
+            have their own columns; if needed, extend this list later. }
           QSrc.SQL.Text :=
             'SELECT TRIM(FIELD_NAME) AS FN, TRIM(TABLE_NAME) AS TN, ' +
             '       DISPLAY_LABEL, DISPLAY_FORMAT, EDIT_FORMAT, ' +
-            '       VISIBLE, READ_ONLY, TRIGGERED, DISPLAY_WIDTH, ' +
+            '       VISIBLE, TRIGGERED, DISPLAY_WIDTH, ' +
             '       FIB$VERSION ' +
             'FROM FIB$FIELDS_INFO';
           QSrc.Open;
           QIns.Connection := Sqlite;
           QIns.SQL.Text :=
             'INSERT INTO fb_field_info(field_name, table_name, display_label, ' +
-            '  display_format, edit_format, visible, read_only, triggered, ' +
+            '  display_format, edit_format, visible, triggered, ' +
             '  display_width, fib_version, snapshot_at) VALUES ' +
-            '(:fn, :tn, :dl, :df, :ef, :v, :ro, :tr, :w, :ver, :sa)';
+            '(:fn, :tn, :dl, :df, :ef, :v, :tr, :w, :ver, :sa)';
+          QIns.Params.ParamByName('fn').DataType  := ftString;
+          QIns.Params.ParamByName('tn').DataType  := ftString;
+          QIns.Params.ParamByName('dl').DataType  := ftString;
+          QIns.Params.ParamByName('df').DataType  := ftString;
+          QIns.Params.ParamByName('ef').DataType  := ftString;
+          QIns.Params.ParamByName('v').DataType   := ftInteger;
+          QIns.Params.ParamByName('tr').DataType  := ftInteger;
+          QIns.Params.ParamByName('w').DataType   := ftInteger;
+          QIns.Params.ParamByName('ver').DataType := ftInteger;
+          QIns.Params.ParamByName('sa').DataType  := ftLargeint;
           QIns.Prepare;
           while not QSrc.Eof do
           begin
@@ -322,9 +340,11 @@ begin
             QIns.ParamByName('dl').AsString    := QSrc.FieldByName('DISPLAY_LABEL').AsString;
             QIns.ParamByName('df').AsString    := QSrc.FieldByName('DISPLAY_FORMAT').AsString;
             QIns.ParamByName('ef').AsString    := QSrc.FieldByName('EDIT_FORMAT').AsString;
-            QIns.ParamByName('v').AsInteger    := QSrc.FieldByName('VISIBLE').AsInteger;
-            QIns.ParamByName('ro').AsInteger   := QSrc.FieldByName('READ_ONLY').AsInteger;
-            QIns.ParamByName('tr').AsInteger   := QSrc.FieldByName('TRIGGERED').AsInteger;
+            { D_BOOLEAN is CHAR(1) 'T'/'F' in Micronite v6; map to 0/1. }
+            QIns.ParamByName('v').AsInteger    :=
+              Ord(UpCase(string(QSrc.FieldByName('VISIBLE').AsString + ' ')[1]) = 'T');
+            QIns.ParamByName('tr').AsInteger   :=
+              Ord(UpCase(string(QSrc.FieldByName('TRIGGERED').AsString + ' ')[1]) = 'T');
             QIns.ParamByName('w').AsInteger    := QSrc.FieldByName('DISPLAY_WIDTH').AsInteger;
             QIns.ParamByName('ver').AsInteger  := QSrc.FieldByName('FIB$VERSION').AsInteger;
             QIns.ParamByName('sa').AsLargeInt  := SnapshotAt;
@@ -335,11 +355,14 @@ begin
         finally
           QSrc.Free; QIns.Free;
         end;
+      except
+        on E: Exception do
+          Writeln(ErrOutput, 'fb-snapshot: FIB$FIELDS_INFO skipped: ', E.Message);
       end;
 
       { ---- FIB$DATASETS_INFO -> fb_datasets (optional) ---- }
       if TableExists(FbConn, 'FIB$DATASETS_INFO') then
-      begin
+      try
         QSrc := TFDQuery.Create(nil); QIns := TFDQuery.Create(nil);
         try
           QSrc.Connection := FbConn;
@@ -358,6 +381,20 @@ begin
             '  update_only_modified_fields, conditions, fib_version, ' +
             '  snapshot_at) VALUES (:dsid, :desc, :ss, :us, :is_, :ds, :rs, ' +
             '  :ng, :kf, :utn, :uomf, :c, :ver, :sa)';
+          QIns.Params.ParamByName('dsid').DataType := ftInteger;
+          QIns.Params.ParamByName('desc').DataType := ftString;
+          QIns.Params.ParamByName('ss').DataType   := ftString;
+          QIns.Params.ParamByName('us').DataType   := ftString;
+          QIns.Params.ParamByName('is_').DataType  := ftString;
+          QIns.Params.ParamByName('ds').DataType   := ftString;
+          QIns.Params.ParamByName('rs').DataType   := ftString;
+          QIns.Params.ParamByName('ng').DataType   := ftString;
+          QIns.Params.ParamByName('kf').DataType   := ftString;
+          QIns.Params.ParamByName('utn').DataType  := ftString;
+          QIns.Params.ParamByName('uomf').DataType := ftInteger;
+          QIns.Params.ParamByName('c').DataType    := ftString;
+          QIns.Params.ParamByName('ver').DataType  := ftInteger;
+          QIns.Params.ParamByName('sa').DataType   := ftLargeint;
           QIns.Prepare;
           while not QSrc.Eof do
           begin
@@ -371,7 +408,8 @@ begin
             QIns.ParamByName('ng').AsString     := QSrc.FieldByName('NAME_GENERATOR').AsString;
             QIns.ParamByName('kf').AsString     := QSrc.FieldByName('KEY_FIELD').AsString;
             QIns.ParamByName('utn').AsString    := QSrc.FieldByName('UPDATE_TABLE_NAME').AsString;
-            QIns.ParamByName('uomf').AsInteger  := QSrc.FieldByName('UPDATE_ONLY_MODIFIED_FIELDS').AsInteger;
+            QIns.ParamByName('uomf').AsInteger  :=
+              Ord(UpCase(string(QSrc.FieldByName('UPDATE_ONLY_MODIFIED_FIELDS').AsString + ' ')[1]) = 'T');
             QIns.ParamByName('c').AsString      := QSrc.FieldByName('CONDITIONS').AsString;
             QIns.ParamByName('ver').AsInteger   := QSrc.FieldByName('FIB$VERSION').AsInteger;
             QIns.ParamByName('sa').AsLargeInt   := SnapshotAt;
@@ -382,33 +420,43 @@ begin
         finally
           QSrc.Free; QIns.Free;
         end;
+      except
+        on E: Exception do
+          Writeln(ErrOutput, 'fb-snapshot: FIB$DATASETS_INFO skipped: ', E.Message);
       end;
 
-      { ---- FIB$ENUMVALUES -> fb_enum_values (optional) ---- }
+      { ---- FIB$ENUMVALUES -> fb_enum_values (optional) ----
+        Micronite v6 schema:
+          ENUMTYPE   - enum logical name
+          EORDER     - display order
+          NAME       - short value identifier
+          ESTRING    - display label
+          DOCUMENTATION - optional notes
+          EVALUE     - the actual code/value
+        We map: enum_name <- ENUMTYPE, value_code <- EVALUE, value_label <- ESTRING. }
       if TableExists(FbConn, 'FIB$ENUMVALUES') then
-      begin
+      try
         QSrc := TFDQuery.Create(nil); QIns := TFDQuery.Create(nil);
         try
           QSrc.Connection := FbConn;
           QSrc.SQL.Text :=
-            'SELECT * FROM FIB$ENUMVALUES';
+            'SELECT ENUMTYPE, EVALUE, ESTRING FROM FIB$ENUMVALUES';
           QSrc.Open;
           QIns.Connection := Sqlite;
           QIns.SQL.Text :=
             'INSERT INTO fb_enum_values(enum_name, value_code, value_label, ' +
-            '  fib_version, snapshot_at) VALUES (:en, :vc, :vl, :ver, :sa)';
+            '  snapshot_at) VALUES (:en, :vc, :vl, :sa)';
+          QIns.Params.ParamByName('en').DataType := ftString;
+          QIns.Params.ParamByName('vc').DataType := ftString;
+          QIns.Params.ParamByName('vl').DataType := ftString;
+          QIns.Params.ParamByName('sa').DataType := ftLargeint;
           QIns.Prepare;
           while not QSrc.Eof do
           begin
-            { Be liberal with field names — schema varies between projects. }
-            QIns.ParamByName('en').AsString    := QSrc.Fields[0].AsString;
-            if QSrc.FieldCount >= 2 then
-              QIns.ParamByName('vc').AsString  := QSrc.Fields[1].AsString;
-            if QSrc.FieldCount >= 3 then
-              QIns.ParamByName('vl').AsString  := QSrc.Fields[2].AsString;
-            if QSrc.FindField('FIB$VERSION') <> nil then
-              QIns.ParamByName('ver').AsInteger := QSrc.FieldByName('FIB$VERSION').AsInteger;
-            QIns.ParamByName('sa').AsLargeInt  := SnapshotAt;
+            QIns.ParamByName('en').AsString   := QSrc.FieldByName('ENUMTYPE').AsString;
+            QIns.ParamByName('vc').AsString   := QSrc.FieldByName('EVALUE').AsString;
+            QIns.ParamByName('vl').AsString   := QSrc.FieldByName('ESTRING').AsString;
+            QIns.ParamByName('sa').AsLargeInt := SnapshotAt;
             QIns.ExecSQL;
             Inc(Result.EnumValues);
             QSrc.Next;
@@ -416,6 +464,9 @@ begin
         finally
           QSrc.Free; QIns.Free;
         end;
+      except
+        on E: Exception do
+          Writeln(ErrOutput, 'fb-snapshot: FIB$ENUMVALUES skipped: ', E.Message);
       end;
 
       ResolveSqlSymbolLinks(Sqlite);
