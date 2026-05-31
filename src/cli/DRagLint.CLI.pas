@@ -32,6 +32,7 @@ uses
   DRagLint.Storage.SQLite,
   DRagLint.Parser.Delphi13,
   DRagLint.Parser.DFM,
+  DRagLint.Parser.Sql,
   DRagLint.Lint.Linter,
   DRagLint.Lint.ProjectChecks,
   DRagLint.Project.Resolver,
@@ -615,7 +616,9 @@ begin
   // v0.16 Task 13: pass docs config from .drag-lint.json so the indexer
   // applies AllowBlankLineGap and CaptureLooseComments when associating
   // doc regions to symbols.
-  Indexer := TIndexer.Create(Store, [Parser, TDFMParser.Create], AArgs.Docs);
+  { v0.40.5 Tier 1: register the Firebird SQL parser alongside Delphi/DFM. }
+  Indexer := TIndexer.Create(Store,
+    [Parser, TDFMParser.Create, TFirebirdSqlParser.Create], AArgs.Docs);
 
   // Resolve target folders once (--scan-libraries / --project) or fall back
   // to the explicit path. The watch loop re-walks these on every tick;

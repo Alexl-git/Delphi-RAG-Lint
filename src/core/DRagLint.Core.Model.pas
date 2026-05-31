@@ -8,7 +8,14 @@ type
     skClass, skInterface, skRecord, skEnum, skEnumValue,
     skProcedure, skFunction, skMethod, skConstructor, skDestructor,
     skProperty, skField, skVarDecl, skConstDecl, skTypeAlias,
-    skForm, skComponent
+    skForm, skComponent,
+    // v0.40.5 Tier 1: SQL DDL symbols extracted from MS*.SQL files.
+    // Stored in the same symbols table so the existing query/hover/refs
+    // infrastructure carries them transparently; the kind text
+    // ('sql_table', 'sql_column', ...) is the disambiguator.
+    skSqlTable, skSqlColumn, skSqlIndex, skSqlTrigger,
+    skSqlGenerator, skSqlProcedure, skSqlView, skSqlException,
+    skSqlDomain, skSqlConstraint
   );
 
   TSymbolKindHelper = record helper for TSymbolKind
@@ -235,7 +242,10 @@ const
     'class', 'interface', 'record', 'enum', 'enum_value',
     'procedure', 'function', 'method', 'constructor', 'destructor',
     'property', 'field', 'var', 'const', 'type',
-    'form', 'component'
+    'form', 'component',
+    'sql_table', 'sql_column', 'sql_index', 'sql_trigger',
+    'sql_generator', 'sql_procedure', 'sql_view', 'sql_exception',
+    'sql_domain', 'sql_constraint'
   );
 
 function TSymbolKindHelper.ToText: string;

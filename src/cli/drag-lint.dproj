@@ -104,6 +104,7 @@
         <DCCReference Include="..\storage\DRagLint.Storage.SQLite.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.Delphi13.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.DFM.pas"/>
+        <DCCReference Include="..\parser\DRagLint.Parser.Sql.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.DocComments.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Fuzzy.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.QueryRules.pas"/>
