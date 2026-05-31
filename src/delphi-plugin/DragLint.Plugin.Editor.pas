@@ -77,7 +77,7 @@ implementation
 
 uses
   System.Generics.Collections, System.IOUtils,
-  Vcl.Forms,
+  Vcl.Forms, Vcl.Clipbrd,
   Winapi.Windows,
   Winapi.ShellAPI,
   DragLint.Plugin.Keyboard,
@@ -454,6 +454,23 @@ begin
 
     if HoverText = '' then
       HoverText := '(no hover info: ' + Resp.Format(2) + ')';
+
+    { v0.40.5: dump every hover invocation to the debug log + copy the
+      rendered text to the clipboard so users can paste it back when the
+      popup is too transient to screenshot. Logging happens BEFORE the
+      popup shows; clipboard is set unconditionally so even a Hover that
+      immediately closes leaves the text behind. }
+    DebugLog('InvokeHover: raw response (' + IntToStr(Length(Resp.ToString)) +
+      ' chars): ' + Resp.ToString);
+    DebugLog('InvokeHover: extracted HoverText (' +
+      IntToStr(Length(HoverText)) + ' chars):' + sLineBreak + HoverText);
+    try
+      Vcl.Clipbrd.Clipboard.AsText := HoverText;
+      DebugLog('InvokeHover: clipboard updated');
+    except
+      on E: Exception do
+        DebugLog('InvokeHover: clipboard FAILED: ' + E.Message);
+    end;
 
     GetCursorPos(P);
     ShowDragLintHover(HoverText, P.X, P.Y + 20);
