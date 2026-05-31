@@ -33,6 +33,8 @@ uses
   DRagLint.Parser.Delphi13,
   DRagLint.Parser.DFM,
   DRagLint.Parser.Sql,
+  DRagLint.Sql.FbSnapshot,
+  DRagLint.Sql.OrmLinker,
   DRagLint.Lint.Linter,
   DRagLint.Lint.ProjectChecks,
   DRagLint.Project.Resolver,
@@ -83,6 +85,9 @@ type
     // v0.40.4: uses-report flags
     IncludeExternal: Boolean;  // --include-external
     AllSources:      Boolean;  // --all-sources (default: only first DB's files)
+    // v0.40.5 Tier 2/3: Firebird snapshot + ORM linker
+    FbConnection:    string;   // --connection "Database=...;User=...;Password=...;DriverID=FB"
+    OrmTtl:          Integer;  // unused for now; reserved for cache-invalidation control
     // v0.16 Task 13: .drag-lint.json "docs" section
     Docs: TDocConfig;
     // v0.17: blast-radius pack
@@ -148,6 +153,8 @@ begin
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
   Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]');
+  Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
+  Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
@@ -348,6 +355,11 @@ begin
     end
     else if A = '--include-external' then Result.IncludeExternal := True
     else if A = '--all-sources'      then Result.AllSources      := True
+    else if (A = '--connection') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.FbConnection := ParamStr(i);
+    end
     else if (A = '--limit') and (i < ParamCount) then
     begin
       Inc(i);
@@ -2818,6 +2830,72 @@ begin
   Result := 0;
 end;
 
+// v0.40.5 Tier 2: drag-lint fb-snapshot --connection "..." --db sql.sqlite
+function DoFbSnapshot(const AArgs: TArgs): Integer;
+var
+  Store: TSQLiteSymbolStore;
+  Stats: TFbSnapshotStats;
+  DbPath: string;
+begin
+  if AArgs.FbConnection = '' then
+  begin
+    Writeln(ErrOutput,
+      'fb-snapshot: --connection "Database=...;User=...;Password=...;DriverID=FB" required');
+    Exit(2);
+  end;
+  if Length(AArgs.DbPaths) > 0 then DbPath := AArgs.DbPaths[0]
+  else                              DbPath := AArgs.DbPath;
+  if DbPath = '' then
+  begin
+    Writeln(ErrOutput, 'fb-snapshot: --db <sql.sqlite> required');
+    Exit(2);
+  end;
+  Store := TSQLiteSymbolStore.Create(DbPath);
+  try
+    Store.Migrate;
+    try
+      Stats := TFbSnapshot.Run(AArgs.FbConnection, Store);
+      Writeln(Format(
+        'fb-snapshot: %d relations, %d columns, %d field_info, %d datasets, %d enums (snapshot_at=%d)',
+        [Stats.Relations, Stats.Columns, Stats.FieldInfos, Stats.Datasets,
+         Stats.EnumValues, Stats.SnapshotAt]));
+      Result := 0;
+    except
+      on E: Exception do
+      begin
+        Writeln(ErrOutput, 'fb-snapshot FAILED: ', E.ClassName, ': ', E.Message);
+        Result := 3;
+      end;
+    end;
+  finally
+    Store.Free;
+  end;
+end;
+
+// v0.40.5 Tier 3: drag-lint link-orm --db proj.sqlite --db sql.sqlite
+function DoLinkOrm(const AArgs: TArgs): Integer;
+var
+  Stats: TOrmLinkerStats;
+begin
+  if Length(AArgs.DbPaths) < 1 then
+  begin
+    Writeln(ErrOutput, 'link-orm: pass each project + sql DB as --db <path>');
+    Exit(2);
+  end;
+  try
+    Stats := TOrmLinker.Run(AArgs.DbPaths);
+    Writeln(Format('link-orm: %d class_to_table, %d iface_to_table, %d field_to_column (across %d DBs)',
+      [Stats.ClassLinks, Stats.IfaceLinks, Stats.FieldLinks, Length(AArgs.DbPaths)]));
+    Result := 0;
+  except
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, 'link-orm FAILED: ', E.ClassName, ': ', E.Message);
+      Result := 3;
+    end;
+  end;
+end;
+
 // v0.40.4: drag-lint uses-report --output <out.csv> [--db ...] [...]
 //
 // Emits a CSV row per (source_unit, transitively_used_unit) for every unit
@@ -3896,6 +3974,10 @@ begin
       Result := DoTypeAt(Args)
     else if Args.Command = 'uses-report' then
       Result := DoUsesReport(Args)
+    else if Args.Command = 'fb-snapshot' then
+      Result := DoFbSnapshot(Args)
+    else if Args.Command = 'link-orm' then
+      Result := DoLinkOrm(Args)
     else if Args.Command = 'rename' then
       Result := DoRename(Args)
     else if Args.Command = 'generate-docs' then

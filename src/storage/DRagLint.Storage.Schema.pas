@@ -3,11 +3,11 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 5;
+  SCHEMA_VERSION = 6;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
-  SCHEMA_DDL: array[0..19] of string = (
+  SCHEMA_DDL: array[0..36] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' +
     '  key   TEXT PRIMARY KEY,' +
     '  value TEXT NOT NULL' +
@@ -138,7 +138,106 @@ const
     'CREATE INDEX IF NOT EXISTS idx_unit_uses_section '    +
     '  ON unit_uses(section)',
     'CREATE INDEX IF NOT EXISTS idx_unit_uses_target '     +
-    '  ON unit_uses(target_file_id) WHERE target_file_id IS NOT NULL'
+    '  ON unit_uses(target_file_id) WHERE target_file_id IS NOT NULL',
+
+    // v0.40.5 Tier 2: live Firebird snapshot tables.
+    // Each snapshot stamps `snapshot_at` so multiple snapshots can coexist
+    // for drift detection (compare runs across days/weeks).
+    'CREATE TABLE IF NOT EXISTS fb_relations (' +
+    '  id                   INTEGER PRIMARY KEY,' +
+    '  name                 TEXT NOT NULL,' +
+    '  sql_table_symbol_id  INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+    '  owner                TEXT,' +
+    '  system_flag          INTEGER NOT NULL DEFAULT 0,' +
+    '  description          TEXT,' +
+    '  snapshot_at          INTEGER NOT NULL' +
+    ')',
+    'CREATE INDEX IF NOT EXISTS idx_fb_relations_name ON fb_relations(name)',
+
+    'CREATE TABLE IF NOT EXISTS fb_columns (' +
+    '  id                   INTEGER PRIMARY KEY,' +
+    '  relation_id          INTEGER NOT NULL REFERENCES fb_relations(id) ON DELETE CASCADE,' +
+    '  name                 TEXT NOT NULL,' +
+    '  position             INTEGER NOT NULL,' +
+    '  field_source         TEXT,' +
+    '  field_type           INTEGER,' +
+    '  field_length         INTEGER,' +
+    '  field_scale          INTEGER,' +
+    '  field_precision      INTEGER,' +
+    '  nullable             INTEGER NOT NULL DEFAULT 1,' +
+    '  default_value        TEXT,' +
+    '  sql_column_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+    '  description          TEXT,' +
+    '  snapshot_at          INTEGER NOT NULL' +
+    ')',
+    'CREATE INDEX IF NOT EXISTS idx_fb_columns_relation ON fb_columns(relation_id)',
+    'CREATE INDEX IF NOT EXISTS idx_fb_columns_name ON fb_columns(name)',
+
+    'CREATE TABLE IF NOT EXISTS fb_field_info (' +
+    '  id              INTEGER PRIMARY KEY,' +
+    '  field_name      TEXT NOT NULL,' +
+    '  table_name      TEXT,' +
+    '  display_label   TEXT,' +
+    '  display_format  TEXT,' +
+    '  edit_format     TEXT,' +
+    '  visible         INTEGER,' +
+    '  read_only       INTEGER,' +
+    '  triggered       INTEGER,' +
+    '  display_width   INTEGER,' +
+    '  fib_version     INTEGER,' +
+    '  snapshot_at     INTEGER NOT NULL' +
+    ')',
+    'CREATE INDEX IF NOT EXISTS idx_fb_field_info_field ON fb_field_info(field_name)',
+    'CREATE INDEX IF NOT EXISTS idx_fb_field_info_table ON fb_field_info(table_name)',
+
+    'CREATE TABLE IF NOT EXISTS fb_datasets (' +
+    '  id                          INTEGER PRIMARY KEY,' +
+    '  ds_id                       INTEGER,' +
+    '  description                 TEXT,' +
+    '  select_sql                  TEXT,' +
+    '  update_sql                  TEXT,' +
+    '  insert_sql                  TEXT,' +
+    '  delete_sql                  TEXT,' +
+    '  refresh_sql                 TEXT,' +
+    '  name_generator              TEXT,' +
+    '  key_field                   TEXT,' +
+    '  update_table_name           TEXT,' +
+    '  update_only_modified_fields INTEGER,' +
+    '  conditions                  TEXT,' +
+    '  fib_version                 INTEGER,' +
+    '  snapshot_at                 INTEGER NOT NULL' +
+    ')',
+    'CREATE INDEX IF NOT EXISTS idx_fb_datasets_ds_id ON fb_datasets(ds_id)',
+    'CREATE INDEX IF NOT EXISTS idx_fb_datasets_table ON fb_datasets(update_table_name)',
+
+    'CREATE TABLE IF NOT EXISTS fb_enum_values (' +
+    '  id           INTEGER PRIMARY KEY,' +
+    '  enum_name    TEXT NOT NULL,' +
+    '  value_code   TEXT NOT NULL,' +
+    '  value_label  TEXT,' +
+    '  fib_version  INTEGER,' +
+    '  snapshot_at  INTEGER NOT NULL' +
+    ')',
+    'CREATE INDEX IF NOT EXISTS idx_fb_enum_name ON fb_enum_values(enum_name)',
+
+    // v0.40.5 Tier 3: Delphi <-> SQL ORM bindings.
+    // Cross-DB: delphi_db_index / sql_db_index track which --db each end
+    // came from (matches the LSP store ordering). delphi_symbol_id and
+    // sql_symbol_id are LOCAL to their respective DBs.
+    'CREATE TABLE IF NOT EXISTS orm_links (' +
+    '  id                INTEGER PRIMARY KEY,' +
+    '  delphi_symbol_id  INTEGER NOT NULL,' +
+    '  delphi_db_index   INTEGER NOT NULL DEFAULT 0,' +
+    '  sql_symbol_id     INTEGER NOT NULL,' +
+    '  sql_db_index      INTEGER NOT NULL DEFAULT 0,' +
+    '  confidence        REAL NOT NULL DEFAULT 1.0,' +
+    '  link_kind         TEXT NOT NULL,' +     // class_to_table | iface_to_table | field_to_column
+    '  evidence          TEXT,' +
+    '  computed_at       INTEGER NOT NULL' +
+    ')',
+    'CREATE INDEX IF NOT EXISTS idx_orm_links_delphi ON orm_links(delphi_symbol_id, delphi_db_index)',
+    'CREATE INDEX IF NOT EXISTS idx_orm_links_sql    ON orm_links(sql_symbol_id, sql_db_index)',
+    'CREATE INDEX IF NOT EXISTS idx_orm_links_kind   ON orm_links(link_kind)'
   );
 
 implementation

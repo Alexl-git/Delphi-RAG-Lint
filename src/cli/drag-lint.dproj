@@ -105,6 +105,8 @@
         <DCCReference Include="..\parser\DRagLint.Parser.Delphi13.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.DFM.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.Sql.pas"/>
+        <DCCReference Include="..\sql\DRagLint.Sql.FbSnapshot.pas"/>
+        <DCCReference Include="..\sql\DRagLint.Sql.OrmLinker.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.DocComments.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Fuzzy.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.QueryRules.pas"/>
