@@ -3,6 +3,84 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.40.5-alpha -- 2026-05-31
+
+### Added (major)
+
+**SQL-aware drag-lint.** Three new capabilities indexed alongside Delphi
+and DFM:
+
+- **Tier 1: Firebird DDL extractor** (`src/parser/DRagLint.Parser.Sql.pas`).
+  New `IParser` implementation; the indexer dispatches `.sql` extensions
+  to it automatically. New `TSymbolKind` values: `skSqlTable`,
+  `skSqlColumn`, `skSqlIndex`, `skSqlTrigger`, `skSqlGenerator`,
+  `skSqlProcedure`, `skSqlView`, `skSqlException`, `skSqlDomain`,
+  `skSqlConstraint`. SQL columns are stored as children of their table
+  (same shape as Delphi fields-of-class). Trigger references emit
+  `sql_table_ref` rows. Real-world numbers from Micronite
+  `C:\Projects\DB\SQL\` (39 files, 14s):
+
+  ```
+  489 sql_table   8012 sql_column   619 sql_trigger
+  282 sql_generator   193 sql_domain    90 sql_index
+    4 sql_view       395 sql_procedure   8 sql_exception
+  ```
+
+- **Tier 2: live Firebird snapshot** (`drag-lint fb-snapshot
+  --connection "..." --db <sql.sqlite>`). Connects via FireDAC
+  `DriverID=FB`, pulls `RDB$RELATIONS`, `RDB$RELATION_FIELDS`,
+  `FIB$FIELDS_INFO`, `FIB$DATASETS_INFO`, `FIB$ENUMVALUES` into
+  `fb_relations` / `fb_columns` / `fb_field_info` / `fb_datasets` /
+  `fb_enum_values`. Each row stamps `snapshot_at` for drift detection.
+  Post-pass cross-links `fb_relations.sql_table_symbol_id` and
+  `fb_columns.sql_column_symbol_id` to the Tier 1 DDL symbols by name.
+  Each `FIB$*` block is wrapped in try/except, so a permission denial
+  or schema mismatch on one optional table doesn't abort the snapshot.
+  Verified against `MICRONITEV6A.FDB`: 134 relations / 2273 columns /
+  2049 field_info / 129 datasets in 0.5s, 99% cross-link rate for
+  relations and 93% for columns.
+
+  Required runtime DLLs (Win32, beside `drag-lint.exe`): `fbclient.dll`
+  + `icudt63.dll` + `icuin63.dll` + `icuuc63.dll` + `msvcp140.dll` +
+  `vcruntime140.dll` + `zlib1.dll`. Source: `%FIREBIRD%\WOW64\`.
+
+- **Tier 3: Delphi ↔ SQL ORM linker** (`drag-lint link-orm --db
+  <proj.sqlite> --db <sql.sqlite>`). Cross-references Delphi
+  classes/interfaces/fields against SQL tables/columns by Delphi/Micronite
+  naming convention (T/I/F-prefix strip). New `orm_links` table records
+  `(delphi_symbol_id + delphi_db_index, sql_symbol_id + sql_db_index,
+  confidence, link_kind, evidence)`. Cross-DB indices track origin DBs.
+  Verified against MICRONITE_V4DataModel.Classes.pas + MS*.SQL:
+  158 `class_to_table` + 1367 `field_to_column` bindings at
+  confidence 1.0.
+
+### Added (storage)
+
+Schema bumped **v5 → v6** (additive; existing DBs migrate cleanly):
+
+- `fb_relations`, `fb_columns`, `fb_field_info`, `fb_datasets`,
+  `fb_enum_values` — Tier 2 snapshot tables
+- `orm_links` — Tier 3 cross-DB bindings
+
+`TSQLiteSymbolStore.GetConnection: TFDConnection` exposed as a leaf
+accessor for utilities (uses-report, fb-snapshot, link-orm) that need
+raw table scans. Intentionally **not** on `ISymbolStore` — calling
+code knows it's reaching into the SQLite impl.
+
+### Added (autotest)
+
+Three new SQL-aware checks: `sql_table SAMPLE indexed`,
+`sql_generator indexed`, `link-orm command exits 0`. Fixture:
+`tests/autotest/fixtures/sample_schema.sql` exercises every Tier 1
+DDL kind. Total now **17 PASS** in ~1.5s.
+
+### Notes for the graphing tool
+
+- **Cross-DB symbols**: see `Delphi-RAG-Lint-Graph/docs/cross-db-symbols.md`.
+- **SQL symbol contract**: see `Delphi-RAG-Lint-Graph/docs/sql-symbols.md`.
+
+---
+
 ## v0.40.2-alpha -- 2026-05-31
 
 ### Fixed (critical — IDE freeze)
