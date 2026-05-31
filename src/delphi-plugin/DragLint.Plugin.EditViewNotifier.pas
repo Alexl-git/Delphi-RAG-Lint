@@ -3,8 +3,8 @@ unit DragLint.Plugin.EditViewNotifier;
 interface
 
 uses
-  System.SysUtils, System.Classes,
-  Vcl.Graphics, Vcl.Forms, Vcl.Controls,
+  System.SysUtils, System.Classes, System.Generics.Collections,
+  Vcl.Graphics, Vcl.Forms, Vcl.Controls, Vcl.ExtCtrls,
   DockForm,
   ToolsAPI;
 
@@ -26,7 +26,11 @@ uses
 
 type
   TDragLintEditViewNotifier = class(TInterfacedObject, INTAEditViewNotifier)
+  private
+    FView:  IOTAEditView;
+    FIndex: Integer;
   public
+    constructor Create(const AView: IOTAEditView);
     { IOTANotifier }
     procedure AfterSave;
     procedure BeforeSave;
@@ -42,9 +46,100 @@ type
       const TextRect: TRect; const LineRect: TRect; const CellSize: TSize);
   end;
 
+{ v0.40: track every (view, index) we register so package unload can
+  RemoveNotifier each one before the BPL's code segment is dropped. }
+type
+  TViewRegistration = record
+    View:  IOTAEditView;
+    Index: Integer;
+  end;
+
+var
+  GViewRegistrations: TList<TViewRegistration> = nil;
+  GViewRegLock:       TObject = nil;
+
+procedure UnregisterAllViewNotifiers;
+var
+  I:   Integer;
+  Reg: TViewRegistration;
+begin
+  if (GViewRegistrations = nil) or (GViewRegLock = nil) then Exit;
+  System.TMonitor.Enter(GViewRegLock);
+  try
+    for I := GViewRegistrations.Count - 1 downto 0 do
+    begin
+      Reg := GViewRegistrations[I];
+      try
+        if Reg.View <> nil then
+          Reg.View.RemoveNotifier(Reg.Index);
+      except
+        { Swallow — view may already be partially destroyed }
+      end;
+    end;
+    GViewRegistrations.Clear;
+  finally
+    System.TMonitor.Exit(GViewRegLock);
+  end;
+end;
+
+function ViewAlreadyHasNotifier(const AView: IOTAEditView): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  if (GViewRegistrations = nil) or (GViewRegLock = nil) then Exit;
+  System.TMonitor.Enter(GViewRegLock);
+  try
+    for I := 0 to GViewRegistrations.Count - 1 do
+      if GViewRegistrations[I].View = AView then
+        Exit(True);
+  finally
+    System.TMonitor.Exit(GViewRegLock);
+  end;
+end;
+
+constructor TDragLintEditViewNotifier.Create(const AView: IOTAEditView);
+var
+  Reg: TViewRegistration;
+begin
+  inherited Create;
+  FView  := AView;
+  FIndex := AView.AddNotifier(Self);
+  if GViewRegistrations = nil then
+    GViewRegistrations := TList<TViewRegistration>.Create;
+  Reg.View  := AView;
+  Reg.Index := FIndex;
+  System.TMonitor.Enter(GViewRegLock);
+  try
+    GViewRegistrations.Add(Reg);
+  finally
+    System.TMonitor.Exit(GViewRegLock);
+  end;
+end;
+
 procedure TDragLintEditViewNotifier.AfterSave; begin end;
 procedure TDragLintEditViewNotifier.BeforeSave; begin end;
-procedure TDragLintEditViewNotifier.Destroyed; begin end;
+procedure TDragLintEditViewNotifier.Destroyed;
+var
+  I: Integer;
+begin
+  if (GViewRegistrations <> nil) and (GViewRegLock <> nil) then
+  begin
+    System.TMonitor.Enter(GViewRegLock);
+    try
+      for I := GViewRegistrations.Count - 1 downto 0 do
+        if GViewRegistrations[I].View = FView then
+        begin
+          GViewRegistrations.Delete(I);
+          Break;
+        end;
+    finally
+      System.TMonitor.Exit(GViewRegLock);
+    end;
+  end;
+  FView  := nil;
+  FIndex := -1;
+end;
 procedure TDragLintEditViewNotifier.Modified; begin end;
 procedure TDragLintEditViewNotifier.EditorIdle(const View: IOTAEditView); begin end;
 procedure TDragLintEditViewNotifier.BeginPaint(const View: IOTAEditView;
@@ -259,7 +354,11 @@ var
   DbPath:   string;
 begin
   if EditView = nil then Exit;
-  EditView.AddNotifier(TDragLintEditViewNotifier.Create);
+  { v0.40: constructor now does AddNotifier + dedups via GViewRegistrations.
+    The IDE fires EditorViewActivated every focus change; without dedup we
+    accumulate notifiers per view and BeginPaint AVs once any one is freed. }
+  if not ViewAlreadyHasNotifier(EditView) then
+    TDragLintEditViewNotifier.Create(EditView);
   { Populate code lens cache for this file (synchronous; fast for small files) }
   if EditView.Buffer = nil then Exit;
   FilePath := EditView.Buffer.FileName;
@@ -290,6 +389,10 @@ procedure UnregisterDragLintEditViewNotifier;
 var
   ESS: IOTAEditorServices80;
 begin
+  { v0.40: remove every per-view notifier first; otherwise the IDE keeps
+    holding interface pointers into our soon-to-be-unloaded BPL and AVs
+    on next paint / shutdown. }
+  UnregisterAllViewNotifiers;
   if GESNotifierIdx < 0 then Exit;
   if Supports(BorlandIDEServices, IOTAEditorServices80, ESS) then
     ESS.RemoveNotifier(GESNotifierIdx);
@@ -297,6 +400,26 @@ begin
 end;
 
 { ---- InvokeInlineInfo (Ctrl+Alt+I) ---------------------------------------- }
+{ v0.40: previously used Sleep(4000) inside the active call, which froze the
+  UI thread for 4 seconds. Now we keep a singleton hint window + TTimer; the
+  timer fires once, closes the hint, and disables itself. Re-invoking before
+  the timer fires simply restarts it (and reuses the window). }
+
+var
+  GHintWindow: THintWindow = nil;
+  GHintTimer:  TTimer      = nil;
+
+type
+  TInlineHintHelper = class
+  public
+    class procedure OnHintTimer(Sender: TObject);
+  end;
+
+class procedure TInlineHintHelper.OnHintTimer(Sender: TObject);
+begin
+  if GHintTimer <> nil then GHintTimer.Enabled := False;
+  if GHintWindow <> nil then FreeAndNil(GHintWindow);
+end;
 
 procedure InvokeInlineInfo;
 var
@@ -308,7 +431,6 @@ var
   D:        TDragLintDiagnostic;
   Msg:      string;
   SB:       TStringBuilder;
-  HW:       THintWindow;
   P:        TPoint;
   R:        TRect;
 begin
@@ -356,16 +478,39 @@ begin
   end;
 
   GetCursorPos(P);
-  HW := THintWindow.Create(nil);
-  try
-    R := HW.CalcHintRect(400, Msg, nil);
-    OffsetRect(R, P.X + 16, P.Y + 16);
-    HW.ActivateHint(R, Msg);
-    { Show for 4 seconds then free }
-    Sleep(4000);
-  finally
-    HW.Free;
+
+  { Tear down a previous hint if it's still up }
+  if GHintWindow <> nil then FreeAndNil(GHintWindow);
+
+  if GHintTimer = nil then
+  begin
+    GHintTimer          := TTimer.Create(nil);
+    GHintTimer.Interval := 4000;
+    GHintTimer.OnTimer  := TInlineHintHelper.OnHintTimer;
+    GHintTimer.Enabled  := False;
   end;
+
+  GHintWindow := THintWindow.Create(nil);
+  R := GHintWindow.CalcHintRect(400, Msg, nil);
+  OffsetRect(R, P.X + 16, P.Y + 16);
+  GHintWindow.ActivateHint(R, Msg);
+
+  { (Re)start the auto-close timer without blocking the IDE thread }
+  GHintTimer.Enabled := False;
+  GHintTimer.Enabled := True;
 end;
+
+initialization
+  GViewRegLock := TObject.Create;
+
+finalization
+  { v0.40: drop our hint window + timer first so the IDE doesn't try to
+    paint into objects we've freed }
+  if GHintTimer  <> nil then FreeAndNil(GHintTimer);
+  if GHintWindow <> nil then FreeAndNil(GHintWindow);
+  { Then remove every per-view notifier (the BPL is about to be unloaded) }
+  UnregisterAllViewNotifiers;
+  if GViewRegistrations <> nil then FreeAndNil(GViewRegistrations);
+  if GViewRegLock       <> nil then FreeAndNil(GViewRegLock);
 
 end.

@@ -175,6 +175,24 @@ var
   Module:   IOTAModule;
   ModSvcs:  IOTAModuleServices;
 begin
+  { v0.40: When the IDE closes a module (including during IDE Exit, before
+    BPL unload), drop our save-notifier from that module's notifier list.
+    Otherwise the next AllowSave / @IntfCopy walks a dangling pointer
+    once the BPL code segment is unloaded. }
+  if NotifyCode = ofnFileClosing then
+  begin
+    if IsDelphiSourceExt(ExtractFileExt(FileName)) then
+    begin
+      if Supports(BorlandIDEServices, IOTAModuleServices, ModSvcs) then
+      begin
+        Module := ModSvcs.FindModule(FileName);
+        if Module <> nil then
+          UnregisterSaveNotifierForModule(Module);
+      end;
+    end;
+    Exit;
+  end;
+
   if NotifyCode <> ofnFileOpened then Exit;
 
   { --- Register a save-notifier on every Delphi source file that opens --- }
