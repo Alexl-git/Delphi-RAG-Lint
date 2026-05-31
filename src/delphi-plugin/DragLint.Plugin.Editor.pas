@@ -1211,14 +1211,22 @@ begin
     SetLength(DbList, 0);
   end;
 
-  { v0.40.3: pre-fill the prompt with the identifier under the cursor.
-    User can still edit it (so they aren't blocked when cursor isn't on
-    an identifier, or they want to search for something different). }
+  { v0.40.5: if the cursor is on an identifier, use it directly with no
+    prompt -- one keystroke / one menu pick to run the query. Only fall
+    back to the InputBox when there is nothing under the cursor (e.g. the
+    menu was invoked from the Project Manager or some other non-editor
+    focus where IdentifierAtCursor returns ''). The Shift modifier on
+    the menu pick still forces the InputBox so users can override the
+    auto-pick when they want to search for something else. }
   SymName := IdentifierAtCursor;
-  SymName := InputBox(
-    'drag-lint Find Usages',
-    'Symbol name (cursor identifier pre-filled, edit to search something else):',
-    SymName);
+  if (SymName = '') or
+     ((GetKeyState(VK_SHIFT) and $8000) <> 0) then
+  begin
+    SymName := InputBox(
+      'drag-lint Find Usages',
+      'Symbol name (Shift+menu forces this prompt; otherwise auto-picked from cursor):',
+      SymName);
+  end;
   if Trim(SymName) = '' then Exit;
 
   if Length(DbList) > 0 then
