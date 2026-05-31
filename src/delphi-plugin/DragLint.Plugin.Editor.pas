@@ -355,14 +355,20 @@ end;
 
 function QueryHoverText(const AUri: string; ALine, ACol: Integer;
   ATimeoutMs: Integer): string;
-{ v0.40.3: shared hover-text extraction used by both InvokeHover (manual
-  Ctrl+Alt+H invocation) and the HoverTracker dwell trigger. Returns
-  empty string on any failure — caller decides whether to show a popup
-  or fall back to diagnostic-only. }
+(* v0.40.3: shared hover-text extraction used by both InvokeHover (manual
+   Ctrl+Alt+H invocation) and the HoverTracker dwell trigger. Returns
+   empty string on any failure — caller decides whether to show a popup
+   or fall back to diagnostic-only.
+
+   v0.40.5: TDragLintLspClient.Request returns the FULL JSON-RPC envelope
+   (jsonrpc, id, result, error), not just the inner result. Earlier
+   versions of this function looked for 'contents' at the top level and
+   always missed -- the markdown body was inside .result.contents.value. *)
 var
   Client:      TDragLintLspClient;
   Params:      TJSONObject;
   Resp:        TJSONValue;
+  ResultVal:   TJSONValue;
   ContentsVal: TJSONValue;
 begin
   Result := '';
@@ -377,14 +383,15 @@ begin
     end;
     if Resp = nil then Exit;
     try
-      if (Resp is TJSONObject) and
-         (Resp as TJSONObject).TryGetValue<TJSONValue>('contents', ContentsVal) then
-      begin
-        if ContentsVal is TJSONObject then
-          (ContentsVal as TJSONObject).TryGetValue<string>('value', Result)
-        else if ContentsVal is TJSONString then
-          Result := (ContentsVal as TJSONString).Value;
-      end;
+      if not (Resp is TJSONObject) then Exit;
+      if not (Resp as TJSONObject).TryGetValue<TJSONValue>('result', ResultVal) then Exit;
+      if ResultVal is TJSONNull then Exit;
+      if not (ResultVal is TJSONObject) then Exit;
+      if not (ResultVal as TJSONObject).TryGetValue<TJSONValue>('contents', ContentsVal) then Exit;
+      if ContentsVal is TJSONObject then
+        (ContentsVal as TJSONObject).TryGetValue<string>('value', Result)
+      else if ContentsVal is TJSONString then
+        Result := (ContentsVal as TJSONString).Value;
     finally
       Resp.Free;
     end;
@@ -427,14 +434,17 @@ begin
   end;
 
   try
-    // Extract text from LSP hover response.
-    // Supported shapes:
-    //   contents: object with "value" field (MarkupContent)
-    //   contents: plain string
-    // Falls back to formatted JSON if extraction fails.
+    { v0.40.5: walk the FULL JSON-RPC envelope: .result.contents.value
+      Earlier code stopped at .contents and always missed, so the
+      Resp.Format(2) raw-JSON fallback was always what users saw.
+      Now: extract markdown body or string; only fall back when extraction
+      genuinely fails (server returned an error, etc.). }
     HoverText := '';
+    var ResultVal: TJSONValue;
     if (Resp is TJSONObject) and
-       (Resp as TJSONObject).TryGetValue<TJSONValue>('contents', ContentsVal) then
+       (Resp as TJSONObject).TryGetValue<TJSONValue>('result', ResultVal) and
+       (ResultVal is TJSONObject) and
+       (ResultVal as TJSONObject).TryGetValue<TJSONValue>('contents', ContentsVal) then
     begin
       if ContentsVal is TJSONObject then
         (ContentsVal as TJSONObject).TryGetValue<string>('value', HoverText)
@@ -443,7 +453,7 @@ begin
     end;
 
     if HoverText = '' then
-      HoverText := Resp.Format(2);
+      HoverText := '(no hover info: ' + Resp.Format(2) + ')';
 
     GetCursorPos(P);
     ShowDragLintHover(HoverText, P.X, P.Y + 20);
