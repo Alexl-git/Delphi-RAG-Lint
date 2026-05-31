@@ -27,7 +27,10 @@ implementation
 uses
   Vcl.Dialogs,
   DragLint.Plugin.Editor,
-  DragLint.Plugin.Options;
+  DragLint.Plugin.Options,
+  DragLint.Plugin.EditViewNotifier,
+  DragLint.Plugin.ProjectNotifier,
+  DragLint.Plugin.SaveNotifier;
 
 procedure TDragLintWizard.AfterSave;
 begin
@@ -39,6 +42,17 @@ end;
 
 procedure TDragLintWizard.Destroyed;
 begin
+  { v0.40: wizard.Destroyed fires during IDE shutdown / package unload,
+    BEFORE the BPL code segment is dropped. Strip every notifier we ever
+    handed to the IDE so no module / view / IDE list keeps a dangling
+    interface pointer into our soon-to-vanish vtable. Without this:
+      - File > Exit AVs in TCodeIDocModule.AllowSave -> @IntfCopy
+      - Editor paints AV in TOTAEditView.BeginPaint -> GetInterface
+    All four are idempotent; safe to call here in addition to the unit
+    finalizations (which run later in the same shutdown). }
+  try UnregisterAllSaveNotifiers;     except end;
+  try UnregisterDragLintEditViewNotifier; except end;
+  try UnregisterProjectNotifier;      except end;
 end;
 
 procedure TDragLintWizard.Modified;
