@@ -595,6 +595,32 @@ begin
     Exit;
   end;
 
+  // declConst: emit a constant symbol.  Covers unit-level const sections,
+  // class consts, and resourcestrings (all are `declConst` items under a
+  // `declConsts` section).  Without this, "where is this const defined?" could
+  // never be answered from the index (resolve-uses).
+  if NodeType = 'declConst' then
+  begin
+    var KNameNode := ANode.ChildByField('name');
+    if not KNameNode.IsNull then
+    begin
+      var KName := NodeText(KNameNode, AState.Source);
+      if KName <> '' then
+      begin
+        var KQName: string;
+        if AParentQualifiedName <> '' then
+          KQName := AParentQualifiedName + '.' + KName
+        else
+          KQName := KName;
+        AState.Emit(skConstDecl, KName, KQName, AParentSymbolIdx, ANode);
+      end;
+    end;
+    // Walk children so a typed const's type emits a type_use ref.
+    for i := 0 to ANode.NamedChildCount - 1 do
+      Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+    Exit;
+  end;
+
   // Implementation bodies: don't emit a duplicate symbol from the `header:`
   // declProc (the interface decl is the source of truth). Walk only the
   // `body:` so call expressions inside produce TReference records.

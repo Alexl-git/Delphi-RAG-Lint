@@ -61,6 +61,7 @@ type
     DbPaths: TArray<string>;
     Name: string;
     QName: string;
+    InFile: string;        // --in <file.pas> (resolve-uses scope context)
     Rule: string;
     ProjectPath: string;
     Format: string;
@@ -307,6 +308,11 @@ begin
     begin
       Inc(i);
       Result.Name := ParamStr(i);
+    end
+    else if (A = '--in') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.InFile := ParamStr(i);
     end
     else if (A = '--qname') and (i < ParamCount) then
     begin
@@ -798,6 +804,205 @@ begin
     Result := 1
   else
     Result := 0;
+end;
+
+{ resolve-uses: "which unit defines this symbol, and which should I add to my
+  uses clause?"  Finds every indexed symbol named <name>, groups by defining
+  unit (first segment of the qualified name), and ranks:
+    1. units NOT already in the caller's uses (--in) -- the actionable add
+    2. project units before library/RTL units (path heuristic)
+    3. units defining the requested --kind
+    4. more definitions of the name, then alphabetical
+  Value-type affinity is intentionally out of scope (the index stores a const's
+  location, not its resolved value type) -- this is a ranked suggestion, not a
+  compiler. }
+function DoResolveUses(const AArgs: TArgs): Integer;
+type
+  TUnitHit = record
+    UnitName:    string;
+    BestKind:    string;
+    Kinds:       string;
+    SampleFile:  string;
+    SampleLine:  Integer;
+    Count:       Integer;
+    AlreadyUsed: Boolean;
+    IsLibrary:   Boolean;
+    Score:       Integer;
+  end;
+
+  function IsLibraryPath(const P: string): Boolean;
+  var
+    L: string;
+  begin
+    L := LowerCase(P);
+    Result := (Pos('\embarcadero\', L) > 0) or
+              (Pos('\program files', L) > 0) or
+              (Pos('\dcc\', L) > 0);
+  end;
+
+var
+  Store:     ISymbolStore;
+  Syms:      TArray<TSymbol>;
+  S:         TSymbol;
+  Map:       TDictionary<string, Integer>;
+  UsedUnits: TDictionary<string, Boolean>;
+  Hits:      TArray<TUnitHit>;
+  H:         TUnitHit;
+  UnitName:  string;
+  DotPos:    Integer;
+  InFileId:  Int64;
+  UU:        TArray<TUnitUse>;
+  U:         TUnitUse;
+  FilePath:  string;
+  I, J, Idx: Integer;
+  JArr:      TJSONArray;
+  JO:        TJSONObject;
+begin
+  if AArgs.Name = '' then
+  begin
+    Writeln('Usage: drag-lint resolve-uses --name <Symbol> [--in <file.pas>] ' +
+      '[--kind K] [--json] [--db <file.sqlite>]');
+    Writeln('  Finds which unit(s) define <Symbol> and ranks which to add to ' +
+      'your uses clause.');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first.');
+    Exit(2);
+  end;
+
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  Syms := Store.FindSymbolsByExactName(AArgs.Name);
+
+  UsedUnits := TDictionary<string, Boolean>.Create;
+  Map        := TDictionary<string, Integer>.Create;
+  try
+    { units already imported by the caller (from the index, not re-parsed) }
+    if AArgs.InFile <> '' then
+    begin
+      InFileId := Store.FindFileIdByPath(TPath.GetFullPath(AArgs.InFile));
+      if InFileId <= 0 then
+        InFileId := Store.FindFileIdByPath(AArgs.InFile);
+      if InFileId > 0 then
+      begin
+        UU := Store.GetUnitUsesForFile(InFileId);
+        for U in UU do
+          UsedUnits.AddOrSetValue(LowerCase(U.UnitName), True);
+      end;
+    end;
+
+    SetLength(Hits, 0);
+    for S in Syms do
+    begin
+      if (AArgs.Kind <> '') and not SameText(S.Kind.ToText, AArgs.Kind) then
+        Continue;
+      { Unit name = the .pas file's basename stem.  Delphi requires the unit
+        name to equal the file name, and this is correct for DOTTED unit names
+        (Blueprint4.Interfaces.pas -> "Blueprint4.Interfaces"), unlike taking
+        the first segment of the qualified name. }
+      FilePath := Store.GetFilePath(S.FileId);
+      UnitName := ChangeFileExt(ExtractFileName(FilePath), '');
+      if UnitName = '' then
+      begin
+        DotPos := Pos('.', S.QualifiedName);
+        if DotPos > 0 then
+          UnitName := Copy(S.QualifiedName, 1, DotPos - 1)
+        else
+          UnitName := S.QualifiedName;
+      end;
+      if UnitName = '' then Continue;
+
+      if Map.TryGetValue(LowerCase(UnitName), Idx) then
+      begin
+        Inc(Hits[Idx].Count);
+        if Pos(S.Kind.ToText, Hits[Idx].Kinds) = 0 then
+          Hits[Idx].Kinds := Hits[Idx].Kinds + ',' + S.Kind.ToText;
+      end
+      else
+      begin
+        H := Default(TUnitHit);
+        H.UnitName    := UnitName;
+        H.BestKind    := S.Kind.ToText;
+        H.Kinds       := S.Kind.ToText;
+        H.SampleFile  := FilePath;
+        H.SampleLine  := S.StartLine;
+        H.Count       := 1;
+        H.AlreadyUsed := UsedUnits.ContainsKey(LowerCase(UnitName));
+        H.IsLibrary   := IsLibraryPath(FilePath);
+        SetLength(Hits, Length(Hits) + 1);
+        Hits[High(Hits)] := H;
+        Map.AddOrSetValue(LowerCase(UnitName), High(Hits));
+      end;
+    end;
+
+    { score }
+    for I := 0 to High(Hits) do
+    begin
+      Hits[I].Score := 0;
+      if not Hits[I].AlreadyUsed then Inc(Hits[I].Score, 1000);
+      if not Hits[I].IsLibrary  then Inc(Hits[I].Score, 100);
+      if (AArgs.Kind <> '') and SameText(Hits[I].BestKind, AArgs.Kind) then
+        Inc(Hits[I].Score, 10);
+      Inc(Hits[I].Score, Hits[I].Count);
+    end;
+
+    { sort: score desc, then unit name asc (bubble -- result sets are tiny) }
+    for I := 0 to High(Hits) - 1 do
+      for J := 0 to High(Hits) - 2 - I do
+        if (Hits[J].Score < Hits[J + 1].Score) or
+           ((Hits[J].Score = Hits[J + 1].Score) and
+            (CompareText(Hits[J].UnitName, Hits[J + 1].UnitName) > 0)) then
+        begin
+          H := Hits[J]; Hits[J] := Hits[J + 1]; Hits[J + 1] := H;
+        end;
+
+    if AArgs.AsJson then
+    begin
+      JArr := TJSONArray.Create;
+      try
+        for I := 0 to High(Hits) do
+        begin
+          JO := TJSONObject.Create;
+          JO.AddPair('unit', Hits[I].UnitName);
+          JO.AddPair('kinds', Hits[I].Kinds);
+          JO.AddPair('file', Hits[I].SampleFile);
+          JO.AddPair('line', TJSONNumber.Create(Hits[I].SampleLine));
+          JO.AddPair('count', TJSONNumber.Create(Hits[I].Count));
+          JO.AddPair('already_in_uses', TJSONBool.Create(Hits[I].AlreadyUsed));
+          JO.AddPair('library', TJSONBool.Create(Hits[I].IsLibrary));
+          JArr.AddElement(JO);
+        end;
+        Writeln(JArr.ToJSON);
+      finally
+        JArr.Free;
+      end;
+    end
+    else if Length(Hits) = 0 then
+      Writeln(Format('No unit in the index defines "%s".', [AArgs.Name]))
+    else
+    begin
+      Writeln(Format('"%s" is defined in %d unit(s):',
+        [AArgs.Name, Length(Hits)]));
+      for I := 0 to High(Hits) do
+        Writeln(Format('  %-28s [%s]%s%s  (%s:%d)',
+          [Hits[I].UnitName, Hits[I].Kinds,
+           IfThen(Hits[I].AlreadyUsed, '  <already in uses>', ''),
+           IfThen(Hits[I].IsLibrary, '  <library>', ''),
+           Hits[I].SampleFile, Hits[I].SampleLine]));
+      if not Hits[0].AlreadyUsed then
+        Writeln(Format('Suggestion: add "%s" to your uses clause.',
+          [Hits[0].UnitName]));
+    end;
+
+    if Length(Hits) = 0 then Result := 1 else Result := 0;
+  finally
+    Map.Free;
+    UsedUnits.Free;
+  end;
 end;
 
 function DoQuery(const AArgs: TArgs): Integer;
@@ -3974,6 +4179,8 @@ begin
       Result := DoTypeAt(Args)
     else if Args.Command = 'uses-report' then
       Result := DoUsesReport(Args)
+    else if Args.Command = 'resolve-uses' then
+      Result := DoResolveUses(Args)
     else if Args.Command = 'fb-snapshot' then
       Result := DoFbSnapshot(Args)
     else if Args.Command = 'link-orm' then
