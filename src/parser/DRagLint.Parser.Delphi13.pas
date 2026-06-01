@@ -66,6 +66,11 @@ type
     Symbols: TList<TSymbol>;
     References: TList<TReference>;
     UsesEntries: TList<TUnitUse>;  { v0.40.4 }
+    { Current member visibility while walking a class/record body -- set by the
+      declSection handler ('public'/'private'/'protected'/'published', with a
+      'strict ' prefix when applicable) and stamped into each member's
+      Modifiers.  Drives the UML visibility glyphs (+/-/#/~) in the graph. }
+    CurrentVisibility: string;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     function Emit(AKind: TSymbolKind; const AName, AQualifiedName: string;
@@ -329,12 +334,41 @@ begin
   end;
 end;
 
+// Read the visibility of a declSection node ('private'/'protected'/'public'/
+// 'published', prefixed 'strict ' when applicable).  Defaults to 'public'.
+function VisibilityOfSection(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  i: Integer;
+  C: TTSNode;
+  NT, Vis: string;
+  IsStrict: Boolean;
+begin
+  IsStrict := False;
+  Vis := '';
+  for i := 0 to ANode.NamedChildCount - 1 do
+  begin
+    C := ANode.NamedChild(i);
+    NT := C.NodeType;
+    if NT = 'kStrict' then IsStrict := True
+    else if NT = 'kPrivate' then Vis := 'private'
+    else if NT = 'kProtected' then Vis := 'protected'
+    else if NT = 'kPublic' then Vis := 'public'
+    else if NT = 'kPublished' then Vis := 'published'
+    else if Vis <> '' then Break;  // past the keyword(s), into members
+  end;
+  if Vis = '' then Vis := 'public';
+  if IsStrict and ((Vis = 'private') or (Vis = 'protected')) then
+    Result := 'strict ' + Vis
+  else
+    Result := Vis;
+end;
+
 function TryWalkClassOrRecord(const ADeclTypeNode: TTSNode;
   const AState: TWalkState; AParentSymbolIdx: Integer;
   const AParentQualifiedName: string): Boolean;
 var
   TypeWrapNode, ClassNode, NameNode: TTSNode;
-  TypeName, QName: string;
+  TypeName, QName, OldVis: string;
   TypeIdx, i: Integer;
   Kind: TSymbolKind;
 begin
@@ -360,8 +394,14 @@ begin
   else
     Kind := skClass;
   TypeIdx := AState.Emit(Kind, TypeName, QName, AParentSymbolIdx, ADeclTypeNode);
+  { Members before any visibility keyword default to 'public'; declSection
+    handlers update it as they are walked.  Save/restore so a nested type does
+    not leak its sections to the enclosing one. }
+  OldVis := AState.CurrentVisibility;
+  AState.CurrentVisibility := 'public';
   for i := 0 to ClassNode.NamedChildCount - 1 do
     Walk(ClassNode.NamedChild(i), AState, TypeIdx, QName);
+  AState.CurrentVisibility := OldVis;
   Result := True;
 end;
 
@@ -370,7 +410,7 @@ function TryWalkInterface(const ADeclTypeNode: TTSNode;
   const AParentQualifiedName: string): Boolean;
 var
   TypeNode, NameNode: TTSNode;
-  TypeName, QName: string;
+  TypeName, QName, OldVis: string;
   Idx, i: Integer;
 begin
   Result := False;
@@ -390,8 +430,12 @@ begin
     QName := TypeName;
   Idx := AState.Emit(skInterface, TypeName, QName, AParentSymbolIdx,
     ADeclTypeNode);
+  { All interface members are public. }
+  OldVis := AState.CurrentVisibility;
+  AState.CurrentVisibility := 'public';
   for i := 0 to TypeNode.NamedChildCount - 1 do
     Walk(TypeNode.NamedChild(i), AState, Idx, QName);
+  AState.CurrentVisibility := OldVis;
   Result := True;
 end;
 
@@ -478,7 +522,11 @@ begin
     QName := AParentQualifiedName + '.' + MethName
   else
     QName := MethName;
-  Modifiers := '';
+  { Methods carry their class visibility (UML glyphs); free procs do not. }
+  if AAsMethod then
+    Modifiers := AState.CurrentVisibility
+  else
+    Modifiers := '';
   AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, '', Modifiers);
 end;
 
@@ -563,7 +611,8 @@ begin
           FQName := AParentQualifiedName + '.' + FName
         else
           FQName := FName;
-        AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode);
+        AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode, '',
+          AState.CurrentVisibility);
       end;
     end;
     // Walk children so the field's type is visited and emits a type_use ref.
@@ -586,10 +635,22 @@ begin
           PQName := AParentQualifiedName + '.' + PName
         else
           PQName := PName;
-        AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode);
+        AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode, '',
+          AState.CurrentVisibility);
       end;
     end;
     // Walk children so the property's type emits a type_use ref.
+    for i := 0 to ANode.NamedChildCount - 1 do
+      Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+    Exit;
+  end;
+
+  // declSection: a visibility section inside a class/record/interface body.
+  // Record the visibility so the members it contains carry it (UML glyphs),
+  // then recurse into those members.
+  if NodeType = 'declSection' then
+  begin
+    AState.CurrentVisibility := VisibilityOfSection(ANode, AState.Source);
     for i := 0 to ANode.NamedChildCount - 1 do
       Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
