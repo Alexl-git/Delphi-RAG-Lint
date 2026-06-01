@@ -31,7 +31,8 @@ uses
   DragLint.Plugin.EditViewNotifier,
   DragLint.Plugin.ProjectNotifier,
   DragLint.Plugin.SaveNotifier,
-  DragLint.Plugin.OpenSourceServer;
+  DragLint.Plugin.OpenSourceServer,
+  DragLint.Plugin.DockForm;
 
 procedure TDragLintWizard.AfterSave;
 begin
@@ -55,6 +56,7 @@ begin
   try UnregisterDragLintEditViewNotifier; except end;
   try UnregisterProjectNotifier;      except end;
   try StopOpenSourceServer;           except end;
+  try UnregisterDragLintDock;         except end;
 end;
 
 procedure TDragLintWizard.Modified;

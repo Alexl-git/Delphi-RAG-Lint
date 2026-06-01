@@ -94,6 +94,7 @@
         <DCCReference Include="DragLint.Plugin.HoverTracker.pas"/>
         <DCCReference Include="DragLint.Plugin.DbResolver.pas"/>
         <DCCReference Include="DragLint.Plugin.OpenSourceServer.pas"/>
+        <DCCReference Include="DragLint.Plugin.DockForm.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

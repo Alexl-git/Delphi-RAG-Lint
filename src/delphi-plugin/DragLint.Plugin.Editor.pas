@@ -89,6 +89,7 @@ uses
   DragLint.Plugin.DiagnosticCache,
   DragLint.Plugin.EditViewNotifier,
   DragLint.Plugin.HoverTracker,
+  DragLint.Plugin.DockForm,
   DragLint.Plugin.DbResolver;
 
 { ---- PluginBuildTag ---- }
@@ -1860,6 +1861,11 @@ begin
   end;
 end;
 
+procedure InvokeDockPanel(Sender: TObject);
+begin
+  ShowDragLintDock;
+end;
+
 procedure RegisterDragLintMenu;
 var
   Services: INTAServices;
@@ -1894,6 +1900,7 @@ begin
   // v0.33: find usages + symbol search
   AddWrappedItem(RootMenu, 'Find Usages...',             InvokeFindUsages);
   AddWrappedItem(RootMenu, 'Symbol Search...',           InvokeSymbolSearch);
+  AddWrappedItem(RootMenu, 'Dockable Panel (test)',      InvokeDockPanel);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
   // v0.39: diagnostic submenu
   AddWrappedItem(RootMenu, 'Lint Buffer (Unsaved)',      InvokeLintBuffer);
