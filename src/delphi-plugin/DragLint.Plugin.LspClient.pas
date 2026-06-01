@@ -410,10 +410,16 @@ begin
     end;
   end;
 
-  { Step 4: reap the child and close its handle. }
+  { Step 4: reap the child and close its handle.
+    v0.40.8h: bumped wait from 200 ms to 2000 ms. The EXE file handle is
+    only released by the kernel after the process fully exits; on a busy
+    machine 200 ms can race the BPL reinstall's AutoPullStagedExe and
+    leave the staged drag-lint.exe still locked. 2 s is more than enough
+    after TerminateProcess; we still have the WAITFOR_MS hard cap above
+    so the IDE can't freeze. }
   if FProcessHandle <> 0 then
   begin
-    WaitForSingleObject(FProcessHandle, 200);
+    WaitForSingleObject(FProcessHandle, 2000);
     CloseHandle(FProcessHandle);
     FProcessHandle := 0;
   end;

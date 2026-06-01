@@ -42,6 +42,11 @@ function EnsureLspClient: TDragLintLspClient;
 function QueryHoverText(const AUri: string; ALine, ACol: Integer;
   ATimeoutMs: Integer = 500): string;
 
+{ v0.40.8c: exposed for the dwell tracker so it can produce the same
+  "kind   name   --   unit.pas (line)" header that menu InvokeHover does. }
+function ExtractHoverHeader(const AMarkdown: string): string;
+function StripFirstHeaderLine(const AMarkdown: string): string;
+
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
 
@@ -63,7 +68,7 @@ procedure InvokeRunAstChecks(Sender: TObject);
 { v0.33: find usages + symbol search }
 procedure InvokeFindUsages(Sender: TObject);
 procedure InvokeSymbolSearch(Sender: TObject);
-{ v0.39: diagnostic menu — shows path resolution, subprocess spawn, LSP handshake details }
+{ v0.39: diagnostic menu -- shows path resolution, subprocess spawn, LSP handshake details }
 procedure InvokeTestConnection(Sender: TObject);
 procedure InvokeOpenLog(Sender: TObject);
 
@@ -357,7 +362,7 @@ function QueryHoverText(const AUri: string; ALine, ACol: Integer;
   ATimeoutMs: Integer): string;
 (* v0.40.3: shared hover-text extraction used by both InvokeHover (manual
    Ctrl+Alt+H invocation) and the HoverTracker dwell trigger. Returns
-   empty string on any failure — caller decides whether to show a popup
+   empty string on any failure -- caller decides whether to show a popup
    or fall back to diagnostic-only.
 
    v0.40.5: TDragLintLspClient.Request returns the FULL JSON-RPC envelope
@@ -396,8 +401,231 @@ begin
       Resp.Free;
     end;
   except
-    { Silent — fires from dwell timer; AVs here would break IDE }
+    { Silent -- fires from dwell timer; AVs here would break IDE }
     Result := '';
+  end;
+end;
+
+{ v0.40.7: forward decls so FetchHoverCallers / InvokeHover compose can call
+  helpers defined later in this unit. }
+function RunAndCaptureStdout(const ACmdLine: string;
+  out AOutput: string; ATimeoutMs: Integer = 60000): Integer; forward;
+function IdentifierAtCursor: string; forward;
+
+function FetchHoverCallers(const AExe, ASymName: string;
+  const ADbList: TArray<string>): TArray<TDragLintCallerInfo>;
+var
+  CmdLine, Output, DbArgs: string;
+  ExitCode, I: Integer;
+  JV: TJSONValue;
+  JArr: TJSONArray;
+  JItem: TJSONObject;
+  Info: TDragLintCallerInfo;
+  Ctx: string;
+  CtxLines: TArray<string>;
+  L, LineNumStr, Trimmed: string;
+  CapAt: Integer;
+begin
+  SetLength(Result, 0);
+  if (AExe = '') or not FileExists(AExe) then Exit;
+  if Trim(ASymName) = '' then Exit;
+
+  DbArgs := '';
+  for I := 0 to High(ADbList) do
+    DbArgs := DbArgs + Format(' --db "%s"', [ADbList[I]]);
+
+  CmdLine := Format('"%s" query find-callers --name "%s"%s --json --context 1',
+    [AExe, ASymName, DbArgs]);
+
+  ExitCode := RunAndCaptureStdout(CmdLine, Output, 5000);
+  if (ExitCode <> 0) or (Trim(Output) = '') or (Output[1] <> '[') then Exit;
+
+  JV := nil;
+  try
+    JV := TJSONObject.ParseJSONValue(Output);
+  except
+    JV := nil;
+  end;
+  if (JV = nil) or not (JV is TJSONArray) then
+  begin
+    if JV <> nil then JV.Free;
+    Exit;
+  end;
+
+  try
+    JArr := JV as TJSONArray;
+    { Cap to 200 rows so the popup can never explode on hot symbols. }
+    CapAt := JArr.Count;
+    if CapAt > 200 then CapAt := 200;
+    SetLength(Result, CapAt);
+    for I := 0 to CapAt - 1 do
+    begin
+      if not (JArr.Items[I] is TJSONObject) then Continue;
+      JItem := JArr.Items[I] as TJSONObject;
+      Info.FilePath := JItem.GetValue<string>('file_path', '');
+      Info.Line     := JItem.GetValue<Integer>('start_line', 0);
+      Ctx           := JItem.GetValue<string>('context', '');
+      Info.CodeText := '';
+      LineNumStr    := IntToStr(Info.Line) + ':';
+      CtxLines      := Ctx.Split([#10]);
+      for L in CtxLines do
+      begin
+        Trimmed := Trim(L);
+        if Pos(LineNumStr, Trimmed) = 1 then
+        begin
+          Info.CodeText := Trim(Copy(Trimmed, Length(LineNumStr) + 1, MaxInt));
+          Break;
+        end;
+      end;
+      Result[I] := Info;
+    end;
+  finally
+    JV.Free;
+  end;
+end;
+
+function ExtractHoverHeader(const AMarkdown: string): string;
+{ Extract a single-line summary mirroring Delphi's own Code Insight popup:
+    "<kind>   <name>   -   <unit>.pas (<line>)"
+  Source: LSP hover markdown's first line "**name** `kind`" gives kind+name;
+  the first subsequent "`<qname>` - line N" gives the unit and line. The
+  unit is everything in the qname except the last 1-2 dotted segments
+  (member, optionally class/record). Pas extension is appended. }
+var
+  Lines: TArray<string>;
+  L, FirstLine: string;
+  Name, Kind, Qname, LineStr, UnitName: string;
+  P1, P2, P3, DashAt: Integer;
+  I:  Integer;
+  DotCount: Integer;
+begin
+  Result := '';
+  if Trim(AMarkdown) = '' then Exit;
+  Lines := AMarkdown.Split([#13, #10], TStringSplitOptions.ExcludeEmpty);
+  if Length(Lines) = 0 then Exit;
+
+  { Parse "**name** `kind`" header line. }
+  FirstLine := Trim(Lines[0]);
+  if (Length(FirstLine) >= 4) and (Copy(FirstLine, 1, 2) = '**') then
+  begin
+    P1 := Pos('**', Copy(FirstLine, 3, MaxInt));
+    if P1 > 0 then
+    begin
+      Name := Copy(FirstLine, 3, P1 - 1);
+      L := Trim(Copy(FirstLine, P1 + 4, MaxInt));
+      if (L <> '') and (L[1] = '`') then
+      begin
+        P2 := Pos('`', Copy(L, 2, MaxInt));
+        if P2 > 0 then
+          Kind := Copy(L, 2, P2 - 1);
+      end;
+    end;
+  end
+  else
+  begin
+    Result := FirstLine;
+    Exit;
+  end;
+
+  { Walk subsequent lines for first "`qname` - line N" entry. }
+  Qname := '';
+  LineStr := '';
+  for I := 1 to High(Lines) do
+  begin
+    L := Trim(Lines[I]);
+    { Optional bullet "- " prefix. }
+    if (Length(L) >= 2) and (Copy(L, 1, 2) = '- ') then
+      L := Trim(Copy(L, 3, MaxInt));
+    if (L = '') or (L[1] <> '`') then Continue;
+    P1 := Pos('`', Copy(L, 2, MaxInt));
+    if P1 <= 0 then Continue;
+    Qname := Copy(L, 2, P1 - 1);
+    L := Trim(Copy(L, P1 + 2, MaxInt));
+    DashAt := Pos('line ', L);
+    if DashAt > 0 then
+      LineStr := Trim(Copy(L, DashAt + 5, MaxInt));
+    Break;
+  end;
+
+  { Derive unit name from qname: drop the last 1-2 dotted segments. If the
+    last-but-one starts with T/I/E and has another segment after it, that's
+    a class/interface so drop two. Otherwise drop one. }
+  UnitName := '';
+  if Qname <> '' then
+  begin
+    DotCount := 0;
+    for I := 1 to Length(Qname) do
+      if Qname[I] = '.' then Inc(DotCount);
+    UnitName := Qname;
+    if DotCount >= 2 then
+    begin
+      P2 := 0;
+      for I := Length(UnitName) downto 1 do
+        if UnitName[I] = '.' then
+        begin
+          P2 := I;
+          Break;
+        end;
+      { Check the segment immediately before P2 starts with T/I/E (class kind). }
+      P3 := 0;
+      for I := P2 - 1 downto 1 do
+        if UnitName[I] = '.' then
+        begin
+          P3 := I;
+          Break;
+        end;
+      if (P3 > 0) and (P3 + 1 <= Length(UnitName)) and
+         (CharInSet(UnitName[P3 + 1], ['T','I','E'])) then
+        UnitName := Copy(UnitName, 1, P3 - 1)
+      else
+        UnitName := Copy(UnitName, 1, P2 - 1);
+    end
+    else if DotCount = 1 then
+    begin
+      P2 := Pos('.', UnitName);
+      UnitName := Copy(UnitName, 1, P2 - 1);
+    end;
+  end;
+
+  { Compose the header. }
+  Result := '';
+  if Kind <> '' then Result := Kind + '   ';
+  Result := Result + Name;
+  if UnitName <> '' then
+  begin
+    Result := Result + '   --   ' + UnitName + '.pas';
+    if LineStr <> '' then
+      Result := Result + ' (' + LineStr + ')';
+  end;
+end;
+
+function StripFirstHeaderLine(const AMarkdown: string): string;
+{ Drop the first "**name** `kind`" line so the body memo doesn't duplicate
+  what's already on the header label. Keep the blank separator line so
+  the definitions list reads naturally. }
+var
+  Lines: TArray<string>;
+  SB:    TStringBuilder;
+  StartIdx, I: Integer;
+begin
+  Result := AMarkdown;
+  if Trim(AMarkdown) = '' then Exit;
+  Lines := AMarkdown.Split([#10]);
+  if (Length(Lines) = 0) then Exit;
+  if Trim(Lines[0]).StartsWith('**') then
+    StartIdx := 1
+  else
+    Exit;
+  SB := TStringBuilder.Create;
+  try
+    for I := StartIdx to High(Lines) do
+    begin
+      SB.Append(Lines[I]);
+      if I < High(Lines) then SB.Append(#10);
+    end;
+    Result := SB.ToString;
+  finally
+    SB.Free;
   end;
 end;
 
@@ -411,6 +639,12 @@ var
   HoverText:   string;
   ContentsVal: TJSONValue;
   P:           TPoint;
+  SymName:     string;
+  Header:      string;
+  Callers:     TArray<TDragLintCallerInfo>;
+  Settings:    TDragLintSettings;
+  ExePath:     string;
+  DbList:      TArray<string>;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
@@ -472,8 +706,28 @@ begin
         DebugLog('InvokeHover: clipboard FAILED: ' + E.Message);
     end;
 
+    { v0.40.7: compose the three-section popup.
+      v0.40.8c: header includes unit.pas (line); body drops the dup'd first line. }
+    Header := ExtractHoverHeader(HoverText);
+    HoverText := StripFirstHeaderLine(HoverText);
+    SymName := IdentifierAtCursor;
+    Settings := LoadSettings;
+    ExePath := Settings.ExePath;
+    if (ExePath = '') or not FileExists(ExePath) then
+      ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+    if not FileExists(ExePath) then ExePath := 'drag-lint.exe';
+    try
+      DbList := ResolveActiveIndexDbs(Settings);
+    except
+      SetLength(DbList, 0);
+    end;
+    Callers := FetchHoverCallers(ExePath, SymName, DbList);
+    DebugLog(Format('InvokeHover: callers fetched: %d', [Length(Callers)]));
+
+    { v0.40.6: menu invocation is explicit -- replace any current popup. }
+    CloseDragLintHover;
     GetCursorPos(P);
-    ShowDragLintHover(HoverText, P.X, P.Y + 20);
+    ShowDragLintHover(Header, HoverText, Callers, P.X, P.Y + 20);
   finally
     Resp.Free;
   end;
@@ -852,7 +1106,7 @@ begin
 end;
 
 // Broadcasts textDocument/didSave for every .pas file mentioned in AOutput
-// (lines of the form  "path.pas(N,...)" — same format as dcc64/msbuild output).
+// (lines of the form  "path.pas(N,...)" -- same format as dcc64/msbuild output).
 // This makes the LSP server re-publish diagnostics for the affected files.
 procedure BroadcastDidSaveForAffectedFiles(const AOutput: string);
 var
@@ -1197,7 +1451,7 @@ begin
     if (CaretCol > 0) and (CaretCol <= Length(LineText)) and
        not IsIdentChar(LineText[CaretCol]) then
     begin
-      { Try one column to the left — caret can sit just past an identifier. }
+      { Try one column to the left -- caret can sit just past an identifier. }
       if (CaretCol > 1) and IsIdentChar(LineText[CaretCol - 1]) then
         Dec(CaretCol)
       else
@@ -1259,7 +1513,7 @@ begin
   if Length(DbList) > 0 then
     ShowFindUsages(SymName, ExePath, DbList)
   else
-    { No DBs resolved — fall back to legacy single-arg path so the form
+    { No DBs resolved -- fall back to legacy single-arg path so the form
       still surfaces a meaningful error. }
     ShowFindUsages(SymName, ExePath, '');
 end;
@@ -1521,7 +1775,7 @@ begin
   end;
 
   { Spawn detached: drag-lint lint <tmp> --json. We don't capture stdout
-    in v0.40.3a — the diagnostic-publish path will be wired in v0.40.4
+    in v0.40.3a -- the diagnostic-publish path will be wired in v0.40.4
     after we add a one-shot --output <jsonfile> flag to drag-lint. Today
     the user sees results in the Messages pane via the spawn fall-through. }
   FillChar(SI, SizeOf(SI), 0);
@@ -1565,12 +1819,55 @@ begin
   ShellExecute(0, 'open', PChar(LogPath), nil, nil, SW_SHOWNORMAL);
 end;
 
+procedure AutoPullStagedExe;
+{ v0.40.8h: when the user reinstalls the BPL via Component -> Install Packages,
+  pull a newer drag-lint.exe from C:\TEMP1\bpl_staging\ into the BPL's
+  deployment directory. The previous BPL's UnregisterDragLintMenu killed
+  the LSP child process (LspClient.Stop -> TerminateProcess), so the EXE
+  file handle is free at this point. No-op if the staged file is missing
+  or not newer than the deployed one. Errors are silent: we never want
+  package init to fail just because a copy failed. }
+const
+  STAGING_PATH = 'C:\TEMP1\bpl_staging\drag-lint.exe';
+var
+  DeployDir, DeployedExe: string;
+  StagedTime, DeployedTime: TDateTime;
+begin
+  try
+    if not FileExists(STAGING_PATH) then Exit;
+    DeployDir := ExtractFilePath(GetModuleName(HInstance));
+    DeployedExe := DeployDir + 'drag-lint.exe';
+    StagedTime := 0;
+    if FileAge(STAGING_PATH, StagedTime) then
+    begin
+      if FileExists(DeployedExe) and FileAge(DeployedExe, DeployedTime) then
+      begin
+        if StagedTime <= DeployedTime then Exit;
+      end;
+      { Copy staged -> deployed. Give the kernel a beat in case Stop's
+        TerminateProcess hasn't fully released the file yet. }
+      Sleep(500);
+      if Winapi.Windows.CopyFile(PChar(STAGING_PATH), PChar(DeployedExe), False) then
+        DebugLog(Format('AutoPullStagedExe: copied %s -> %s',
+          [STAGING_PATH, DeployedExe]))
+      else
+        DebugLog(Format('AutoPullStagedExe: CopyFile FAILED (Win32 err %d) for %s',
+          [GetLastError, DeployedExe]));
+    end;
+  except
+    on E: Exception do
+      DebugLog('AutoPullStagedExe: ' + E.ClassName + ': ' + E.Message);
+  end;
+end;
+
 procedure RegisterDragLintMenu;
 var
   Services: INTAServices;
   RootMenu: TMenuItem;
 begin
   if not Supports(BorlandIDEServices, INTAServices, Services) then Exit;
+
+  AutoPullStagedExe;
 
   GMenuItems := TObjectList<TMenuItem>.Create(True);
   GWrappers  := TObjectList<TMenuActionWrapper>.Create(True);
@@ -1606,11 +1903,19 @@ begin
   RegisterProjectNotifier;
   RegisterDragLintKeystrokes;
   RegisterDragLintEditViewNotifier;
+  { v0.40.7: dwell tracker re-enabled with the 1600 ms threshold (was 600 ms)
+    and the singleton guard, so it fires only on deliberate dwells and never
+    competes with an already-visible popup. Menu InvokeHover does the richer
+    three-section show with callers; dwell does the short LSP-only summary. }
   StartHoverTracker;
 end;
 
 procedure UnregisterDragLintMenu;
 begin
+  { v0.40.8d: close hover popup before tearing down notifiers, otherwise
+    its 150 ms watch timer can fire after the BPL's HoverForm DCU has
+    been unloaded -- observed as an IDE crash on Uninstall. }
+  try CloseDragLintHover; except end;
   StopHoverTracker;
   UnregisterDragLintEditViewNotifier;
   UnregisterDragLintKeystrokes;

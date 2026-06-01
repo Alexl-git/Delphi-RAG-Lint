@@ -1,0 +1,80 @@
+[
+  {
+    "Name": "--version exits 0",
+    "Ok": true,
+    "Detail": "drag-lint 0.40.2-alpha",
+    "Ms": 1133.8693
+  },
+  {
+    "Name": "--version matches expected",
+    "Ok": true,
+    "Detail": "drag-lint 0.40.2-alpha",
+    "Ms": 0.0
+  },
+  {
+    "Name": "index fixture exits 0",
+    "Ok": true,
+    "Detail": "Done. Files: 1, Symbols: 13, Refs: 11, 0.01s",
+    "Ms": 99.4157
+  },
+  {
+    "Name": "index reports >= 1 symbol",
+    "Ok": true,
+    "Detail": "Done. Files: 1, Symbols: 13, Refs: 11, 0.01s",
+    "Ms": 0.0
+  },
+  {
+    "Name": "query KnownMethod returns 1+ match",
+    "Ok": true,
+    "Detail": "(4 lines)",
+    "Ms": 75.758
+  },
+  {
+    "Name": "find-callers KnownMethod returns 1+ ref",
+    "Ok": true,
+    "Detail": "(17 lines)",
+    "Ms": 72.1216
+  },
+  {
+    "Name": "hover KnownMethod returns text",
+    "Ok": true,
+    "Detail": "(71 chars)",
+    "Ms": 60.5648
+  },
+  {
+    "Name": "LSP server spawns",
+    "Ok": true,
+    "Detail": "",
+    "Ms": 11.0
+  },
+  {
+    "Name": "LSP initialize replies within timeout",
+    "Ok": true,
+    "Detail": "result=OK",
+    "Ms": 56.0
+  },
+  {
+    "Name": "LSP initialize response is JSON-RPC",
+    "Ok": true,
+    "Detail": "",
+    "Ms": 0.0
+  },
+  {
+    "Name": "LSP capabilities object present",
+    "Ok": true,
+    "Detail": "",
+    "Ms": 0.0
+  },
+  {
+    "Name": "LSP hover round-trip",
+    "Ok": true,
+    "Detail": "",
+    "Ms": 0.0
+  },
+  {
+    "Name": "LSP shutdown within timeout (no freeze regression)",
+    "Ok": true,
+    "Detail": "result=OK",
+    "Ms": 21.0
+  }
+]

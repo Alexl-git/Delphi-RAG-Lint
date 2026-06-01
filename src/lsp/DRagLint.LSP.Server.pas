@@ -826,32 +826,67 @@ begin
     begin
       Sb := TStringBuilder.Create;
       try
-        Sb.AppendLine(Format('**%s** `%s`', [Ident, Symbols[0].Kind.ToText]));
+        { v0.40.8f: try to resolve the actual type at cursor first. If we
+          can, narrow the candidate list to symbols on THAT type (else a
+          common member like DataBinding lists every class that has one). }
+        var TAResult := TTypeAtResolver.Resolve(
+          HitStore, Path, Line + 1, Col + 1);
+
+        var Filtered: TArray<TSymbol>;
+        SetLength(Filtered, 0);
+        var ResolvedQName: string := '';
+        if TAResult.HasResolved then
+          ResolvedQName := TAResult.Resolved.QualifiedName;
+
+        if ResolvedQName <> '' then
+        begin
+          { Keep only candidates whose QualifiedName matches the resolved
+            symbol exactly, or whose QualifiedName begins with the resolved
+            qname plus '.' (member access on a record/interface). }
+          for Sym in Symbols do
+          begin
+            if (Sym.QualifiedName = ResolvedQName) or
+               (Pos(ResolvedQName + '.', Sym.QualifiedName) = 1) then
+            begin
+              SetLength(Filtered, Length(Filtered) + 1);
+              Filtered[High(Filtered)] := Sym;
+            end;
+          end;
+        end;
+
+        { Fallback: if filtering yielded nothing (no LHS info, or qname
+          mismatch across stores), keep the original list capped at 50 so
+          mega-common members like DataBinding don't blow up the popup. }
+        if Length(Filtered) = 0 then
+        begin
+          if Length(Symbols) <= 50 then
+            Filtered := Symbols
+          else
+          begin
+            SetLength(Filtered, 50);
+            for var I := 0 to 49 do
+              Filtered[I] := Symbols[I];
+          end;
+        end;
+
+        Sb.AppendLine(Format('**%s** `%s`', [Ident, Filtered[0].Kind.ToText]));
         Sb.AppendLine('');
-        for Sym in Symbols do
+        if ResolvedQName <> '' then
+        begin
+          Sb.AppendLine(Format('_Resolved type: `%s`_', [ResolvedQName]));
+          Sb.AppendLine('');
+        end;
+        for Sym in Filtered do
         begin
           Sb.AppendLine(Format('- `%s` - line %d', [Sym.QualifiedName,
             Sym.StartLine]));
           if Sym.Signature <> '' then
             Sb.AppendLine('    ' + Sym.Signature);
         end;
-        // v0.19: enrich with type-at-position resolution when the identifier
-        // is a reference (no doc comment found on the declaration).
-        // LSP uses 0-based line/col; TTypeAtResolver uses 1-based.
-        var TAResult := TTypeAtResolver.Resolve(
-          HitStore, Path, Line + 1, Col + 1);
-        if TAResult.HasResolved and
-           (TAResult.Resolved.QualifiedName <> Symbols[0].QualifiedName) then
-        begin
-          Sb.AppendLine('');
-          Sb.AppendLine('## Type');
-          Sb.AppendLine('');
-          Sb.AppendLine(Format('Resolved: `%s`',
-            [TAResult.Resolved.QualifiedName]));
-          if TAResult.Resolved.Signature <> '' then
-            Sb.AppendLine(Format('Signature: `%s`',
-              [TAResult.Resolved.Signature]));
-        end;
+        if (Length(Filtered) < Length(Symbols)) and (ResolvedQName = '') then
+          Sb.AppendLine(Format(#10'_(showing %d of %d -- use Find Usages for full list)_',
+            [Length(Filtered), Length(Symbols)]));
+
         MdValue := Sb.ToString;
       finally
         Sb.Free;

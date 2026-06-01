@@ -30,7 +30,8 @@ uses
   DragLint.Plugin.Options,
   DragLint.Plugin.EditViewNotifier,
   DragLint.Plugin.ProjectNotifier,
-  DragLint.Plugin.SaveNotifier;
+  DragLint.Plugin.SaveNotifier,
+  DragLint.Plugin.OpenSourceServer;
 
 procedure TDragLintWizard.AfterSave;
 begin
@@ -53,6 +54,7 @@ begin
   try UnregisterAllSaveNotifiers;     except end;
   try UnregisterDragLintEditViewNotifier; except end;
   try UnregisterProjectNotifier;      except end;
+  try StopOpenSourceServer;           except end;
 end;
 
 procedure TDragLintWizard.Modified;
@@ -85,6 +87,7 @@ begin
   RegisterPackageWizard(TDragLintWizard.Create);
   RegisterDragLintMenu;
   RegisterDragLintOptions;
+  StartOpenSourceServer;
 end;
 
 end.
