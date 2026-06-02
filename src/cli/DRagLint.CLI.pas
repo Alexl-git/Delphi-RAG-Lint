@@ -735,6 +735,7 @@ begin
         JObj.AddPair('kind', Sym.Kind.ToText);
         JObj.AddPair('name', Sym.Name);
         JObj.AddPair('qualified_name', Sym.QualifiedName);
+        JObj.AddPair('signature', Sym.Signature);
         JObj.AddPair('modifiers', Sym.Modifiers);
         JObj.AddPair('file_id', TJSONNumber.Create(Sym.FileId));
         JObj.AddPair('start_line', TJSONNumber.Create(Sym.StartLine));

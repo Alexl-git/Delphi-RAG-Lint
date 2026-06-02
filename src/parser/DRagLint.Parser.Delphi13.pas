@@ -483,6 +483,39 @@ begin
   Result := True;
 end;
 
+// Text of a node's `type:` field (field/property/const type, or a proc's
+// return type), whitespace-collapsed. Empty when there is no type child.
+function TypeTextOf(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  T: TTSNode;
+  i: Integer;
+  Raw: string;
+  C: Char;
+  PrevSpace: Boolean;
+begin
+  Result := '';
+  T := ANode.ChildByField('type');
+  if T.IsNull then Exit;
+  Raw := NodeText(T, ASource);
+  { collapse runs of whitespace to single spaces so multi-line types read well }
+  PrevSpace := False;
+  for i := 1 to Length(Raw) do
+  begin
+    C := Raw[i];
+    if (C = #9) or (C = #10) or (C = #13) or (C = ' ') then
+    begin
+      if not PrevSpace then Result := Result + ' ';
+      PrevSpace := True;
+    end
+    else
+    begin
+      Result := Result + C;
+      PrevSpace := False;
+    end;
+  end;
+  Result := Trim(Result);
+end;
+
 procedure WalkDeclProc(const ANode: TTSNode; const AState: TWalkState;
   AParentSymbolIdx: Integer; const AParentQualifiedName: string;
   AAsMethod: Boolean);
@@ -527,7 +560,9 @@ begin
     Modifiers := AState.CurrentVisibility
   else
     Modifiers := '';
-  AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, '', Modifiers);
+  { Signature = the return type (functions); blank for procedures. }
+  AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode,
+    TypeTextOf(ANode, AState.Source), Modifiers);
 end;
 
 procedure Walk(const ANode: TTSNode; const AState: TWalkState;
@@ -611,8 +646,8 @@ begin
           FQName := AParentQualifiedName + '.' + FName
         else
           FQName := FName;
-        AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode, '',
-          AState.CurrentVisibility);
+        AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode,
+          TypeTextOf(ANode, AState.Source), AState.CurrentVisibility);
       end;
     end;
     // Walk children so the field's type is visited and emits a type_use ref.
@@ -635,8 +670,8 @@ begin
           PQName := AParentQualifiedName + '.' + PName
         else
           PQName := PName;
-        AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode, '',
-          AState.CurrentVisibility);
+        AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode,
+          TypeTextOf(ANode, AState.Source), AState.CurrentVisibility);
       end;
     end;
     // Walk children so the property's type emits a type_use ref.
