@@ -93,7 +93,10 @@ Write-Host $report
 
 # ---- 5. optional email (Gmail SMTP app password) ------------------------
 if ($EmailTo -and $env:GMAIL_APP_PASSWORD) {
-    $sec  = ConvertTo-SecureString $env:GMAIL_APP_PASSWORD -AsPlainText -Force
+    # Gmail shows app passwords as "abcd efgh ijkl mnop"; SMTP needs them
+    # space-free, so strip whitespace regardless of how it was stored.
+    $pw   = $env:GMAIL_APP_PASSWORD -replace '\s',''
+    $sec  = ConvertTo-SecureString $pw -AsPlainText -Force
     $cred = New-Object System.Management.Automation.PSCredential($EmailFrom, $sec)
     Send-MailMessage -To $EmailTo -From $EmailFrom -Subject "Daily repo report $Today" `
         -Body $report -SmtpServer smtp.gmail.com -Port 587 -UseSsl -Credential $cred
