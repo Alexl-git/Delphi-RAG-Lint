@@ -3,7 +3,7 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 6;
+  SCHEMA_VERSION = 7;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
@@ -31,6 +31,7 @@ const
     '  qualified_name  TEXT NOT NULL,' +
     '  signature       TEXT,' +
     '  modifiers       TEXT,' +
+    '  section         TEXT,' +   // interface | implementation (usability)
     '  start_line      INTEGER NOT NULL,' +
     '  start_col       INTEGER NOT NULL,' +
     '  end_line        INTEGER NOT NULL,' +

@@ -338,8 +338,8 @@ begin
     'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol := NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' +
-    '  signature, modifiers, start_line, start_col, end_line, end_col) ' +
-    'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, ' +
+    '  signature, modifiers, section, start_line, start_col, end_line, end_col) ' +
+    'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, ' +
     '  :sl, :sc, :el, :ec)');
   FQInsertTrigram := NewQuery(
     'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' +
@@ -604,6 +604,7 @@ begin
   FQInsertSymbol.ParamByName('qname').AsString := ASymbol.QualifiedName;
   FQInsertSymbol.ParamByName('sig').AsString := ASymbol.Signature;
   FQInsertSymbol.ParamByName('mods').AsString := ASymbol.Modifiers;
+  FQInsertSymbol.ParamByName('sec').AsString := ASymbol.Section;
   FQInsertSymbol.ParamByName('sl').AsInteger := ASymbol.StartLine;
   FQInsertSymbol.ParamByName('sc').AsInteger := ASymbol.StartCol;
   FQInsertSymbol.ParamByName('el').AsInteger := ASymbol.EndLine;
@@ -670,6 +671,8 @@ begin
   Result.QualifiedName := AQ.FieldByName('qualified_name').AsString;
   Result.Signature := AQ.FieldByName('signature').AsString;
   Result.Modifiers := AQ.FieldByName('modifiers').AsString;
+  if AQ.FindField('section') <> nil then    { tolerate pre-v7 databases }
+    Result.Section := AQ.FieldByName('section').AsString;
   Result.StartLine := AQ.FieldByName('start_line').AsInteger;
   Result.StartCol := AQ.FieldByName('start_col').AsInteger;
   Result.EndLine := AQ.FieldByName('end_line').AsInteger;

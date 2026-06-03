@@ -723,6 +723,7 @@ var
   JArr: TJSONArray;
   JObj: TJSONObject;
   Sym: TSymbol;
+  Line: string;
 begin
   if AsJson then
   begin
@@ -737,6 +738,11 @@ begin
         JObj.AddPair('qualified_name', Sym.QualifiedName);
         JObj.AddPair('signature', Sym.Signature);
         JObj.AddPair('modifiers', Sym.Modifiers);
+        JObj.AddPair('section', Sym.Section);
+        { interface-section symbols (and members of interface-section types) are
+          callable from another unit; implementation-only ones are not. }
+        JObj.AddPair('usable_from_other_units',
+          TJSONBool.Create(Sym.Section <> 'implementation'));
         JObj.AddPair('file_id', TJSONNumber.Create(Sym.FileId));
         JObj.AddPair('start_line', TJSONNumber.Create(Sym.StartLine));
         JObj.AddPair('start_col', TJSONNumber.Create(Sym.StartCol));
@@ -754,8 +760,15 @@ begin
     Writeln(Format('%-12s %-30s %s', ['kind', 'name', 'qualified_name']));
     Writeln(StringOfChar('-', 75));
     for Sym in ASymbols do
-      Writeln(Format('%-12s %-30s %s', [Sym.Kind.ToText, Sym.Name,
-        Sym.QualifiedName]));
+    begin
+      Line := Format('%-12s %-30s %s', [Sym.Kind.ToText, Sym.Name,
+        Sym.QualifiedName]);
+      if Sym.Signature <> '' then          { gap #1/#2: show sig, distinguish overloads }
+        Line := Line + ' : ' + Sym.Signature;
+      if Sym.Section = 'implementation' then  { gap #3: not usable from other units }
+        Line := Line + '  [impl-only]';
+      Writeln(Line);
+    end;
     Writeln(Format('%d match(es)', [Length(ASymbols)]));
   end;
 end;

@@ -37,6 +37,7 @@ type
     QualifiedName: string;
     Signature: string;
     Modifiers: string;
+    Section: string;     // 'interface' | 'implementation' | '' (usable-from-other-units)
     StartLine: Integer;
     StartCol: Integer;
     EndLine: Integer;

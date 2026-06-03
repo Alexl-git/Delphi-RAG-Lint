@@ -71,6 +71,10 @@ type
       'strict ' prefix when applicable) and stamped into each member's
       Modifiers.  Drives the UML visibility glyphs (+/-/#/~) in the graph. }
     CurrentVisibility: string;
+    { 'interface' | 'implementation' | '' -- which unit section the current
+      symbol lives in; stamped into TSymbol.Section by Emit (agent gap #3:
+      tells whether a symbol is usable from another unit). }
+    CurrentSection: string;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     function Emit(AKind: TSymbolKind; const AName, AQualifiedName: string;
@@ -151,6 +155,7 @@ begin
   Sym.QualifiedName := AQualifiedName;
   Sym.Signature := ASignature;
   Sym.Modifiers := AModifiers;
+  Sym.Section := CurrentSection;
   if AParentSymbolIdx >= 0 then
     Sym.ParentId := AParentSymbolIdx
   else
@@ -300,6 +305,7 @@ begin
   UnitName := Trim(NodeText(ModNode, AState.Source));
   if UnitName = '' then
     Exit;
+  AState.CurrentSection := '';        { the unit symbol itself is section-less }
   UnitIdx := AState.Emit(skUnit, UnitName, UnitName, -1, ANode);
 
   // v0.40.4: explicitly walk interface/implementation children to extract
@@ -311,8 +317,16 @@ begin
     else if Child.NodeType = 'implementation' then WalkSection(Child, AState, uusImplementation);
   end;
 
+  { Stamp each symbol with the unit section it is declared in (gap #3): set
+    CurrentSection as we descend into the interface vs implementation child. }
   for i := 0 to ANode.NamedChildCount - 1 do
-    Walk(ANode.NamedChild(i), AState, UnitIdx, UnitName);
+  begin
+    Child := ANode.NamedChild(i);
+    if      Child.NodeType = 'interface'      then AState.CurrentSection := 'interface'
+    else if Child.NodeType = 'implementation' then AState.CurrentSection := 'implementation';
+    Walk(Child, AState, UnitIdx, UnitName);
+  end;
+  AState.CurrentSection := '';
 end;
 
 // Determines whether a declClass node is actually a record (first token is
