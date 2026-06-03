@@ -6,6 +6,7 @@ uses
   System.SysUtils, System.Classes, System.IOUtils,
   System.Generics.Collections,
   System.RegularExpressions,
+  TreeSitter, TreeSitterLib,
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces;
 
@@ -21,9 +22,15 @@ type
       const AFile: string): TArray<TLintFinding>;
     class function CheckUnbalancedBeginEnd(
       const AFile: string): TArray<TLintFinding>;
+    { Tree-sitter ERROR / MISSING nodes -> located 'syntax-error' findings.
+      Live syntax diagnostics (Error-Insight-style) without a compiler. }
+    class function CheckSyntaxErrors(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
+
+function tree_sitter_delphi13: PTSLanguage; cdecl;
+  external 'tree-sitter-delphi13';
 
 var
   GKeywordSet: TDictionary<string, Boolean> = nil;
@@ -352,6 +359,82 @@ begin
   end;
 end;
 
+class function TAstChecker.CheckSyntaxErrors(
+  const AFile: string): TArray<TLintFinding>;
+var
+  Src: TBytes;
+  Parser: TTSParser;
+  Tree: TTSTree;
+  Findings: TList<TLintFinding>;
+
+  procedure Visit(const N: TTSNode);
+  var
+    i: Integer;
+    F: TLintFinding;
+    P: TTSPoint;
+  begin
+    if N.IsNull or (Findings.Count >= 100) then Exit;
+    if N.IsError or N.IsMissing then
+    begin
+      P := N.StartPoint;
+      F := Default(TLintFinding);
+      F.RuleId   := 'syntax-error';
+      F.Severity := 'error';
+      if N.IsMissing then
+        F.Message := 'Syntax error: missing token'
+      else
+        F.Message := 'Syntax error near here';
+      F.FilePath  := AFile;
+      F.StartLine := Integer(P.Row) + 1;
+      F.StartCol  := Integer(P.Column) + 1;
+      F.EndLine   := F.StartLine;
+      F.EndCol    := F.StartCol + 1;
+      Findings.Add(F);
+      Exit;                 { do not descend into an error node }
+    end;
+    if not N.HasError then Exit;   { clean subtree -> skip }
+    for i := 0 to N.ChildCount - 1 do
+      Visit(N.Child(i));
+  end;
+
+begin
+  Result := nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src := TFile.ReadAllBytes(AFile);
+  Findings := TList<TLintFinding>.Create;
+  Parser := nil;
+  Tree := nil;
+  try
+    Parser := TTSParser.Create;
+    Parser.Language := tree_sitter_delphi13;
+    Tree := Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint;
+        var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining := Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then
+        begin
+          ABytesRead := 0;
+          SetLength(Result, 0);
+          Exit;
+        end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead := Remaining;
+      end,
+      TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then
+      Visit(Tree.RootNode);
+    Result := Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end;
+
 class function TAstChecker.Check(const AStore: ISymbolStore;
   const AFile: string): TArray<TLintFinding>;
 var
@@ -361,6 +444,9 @@ var
 begin
   All := TList<TLintFinding>.Create;
   try
+    Part := CheckSyntaxErrors(AFile);
+    for F in Part do All.Add(F);
+
     Part := CheckUnbalancedBeginEnd(AFile);
     for F in Part do All.Add(F);
 
