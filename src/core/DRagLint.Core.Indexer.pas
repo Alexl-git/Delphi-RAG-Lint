@@ -224,6 +224,20 @@ begin
   end;
 end;
 
+function IsExcludedScanPath(const APath: string): Boolean;
+const
+  SEGS: array[0..6] of string = (
+    '\__history\', '\__recovery\', '\.git\', '\.svn\', '\.hg\',
+    '\node_modules\', '\__recovery_');
+var
+  L, S: string;
+begin
+  Result := False;
+  L := LowerCase(APath);
+  for S in SEGS do
+    if Pos(S, L) > 0 then Exit(True);
+end;
+
 procedure TIndexer.IndexFolder(const APath: string; ARecursive: Boolean);
 var
   Mode: TSearchOption;
@@ -250,6 +264,7 @@ begin
       Files := TDirectory.GetFiles(APath, Pattern, Mode);
       for F in Files do
       begin
+        if IsExcludedScanPath(F) then Continue;   { skip __history/.git backups etc. }
         try
           IndexFile(F);
         except
