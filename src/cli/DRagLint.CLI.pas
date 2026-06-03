@@ -842,6 +842,7 @@ type
     Count:       Integer;
     AlreadyUsed: Boolean;
     IsLibrary:   Boolean;
+    HasUsable:   Boolean;   { symbol declared in this unit's interface section }
     Score:       Integer;
   end;
 
@@ -936,6 +937,7 @@ begin
         Inc(Hits[Idx].Count);
         if Pos(S.Kind.ToText, Hits[Idx].Kinds) = 0 then
           Hits[Idx].Kinds := Hits[Idx].Kinds + ',' + S.Kind.ToText;
+        if S.Section <> 'implementation' then Hits[Idx].HasUsable := True;
       end
       else
       begin
@@ -948,6 +950,7 @@ begin
         H.Count       := 1;
         H.AlreadyUsed := UsedUnits.ContainsKey(LowerCase(UnitName));
         H.IsLibrary   := IsLibraryPath(FilePath);
+        H.HasUsable   := S.Section <> 'implementation';
         SetLength(Hits, Length(Hits) + 1);
         Hits[High(Hits)] := H;
         Map.AddOrSetValue(LowerCase(UnitName), High(Hits));
@@ -958,6 +961,9 @@ begin
     for I := 0 to High(Hits) do
     begin
       Hits[I].Score := 0;
+      { a unit where the symbol is only in the implementation section can't be
+        satisfied by a `uses` -- push it well below usable units. }
+      if Hits[I].HasUsable then Inc(Hits[I].Score, 10000);
       if not Hits[I].AlreadyUsed then Inc(Hits[I].Score, 1000);
       if not Hits[I].IsLibrary  then Inc(Hits[I].Score, 100);
       if (AArgs.Kind <> '') and SameText(Hits[I].BestKind, AArgs.Kind) then
@@ -1003,12 +1009,14 @@ begin
       Writeln(Format('"%s" is defined in %d unit(s):',
         [AArgs.Name, Length(Hits)]));
       for I := 0 to High(Hits) do
-        Writeln(Format('  %-28s [%s]%s%s  (%s:%d)',
+        Writeln(Format('  %-28s [%s]%s%s%s  (%s:%d)',
           [Hits[I].UnitName, Hits[I].Kinds,
            IfThen(Hits[I].AlreadyUsed, '  <already in uses>', ''),
            IfThen(Hits[I].IsLibrary, '  <library>', ''),
+           IfThen(not Hits[I].HasUsable, '  <impl-only: NOT usable via uses>', ''),
            Hits[I].SampleFile, Hits[I].SampleLine]));
-      if not Hits[0].AlreadyUsed then
+      { suggest the top unit only if it is actually usable + not already used }
+      if Hits[0].HasUsable and (not Hits[0].AlreadyUsed) then
         Writeln(Format('Suggestion: add "%s" to your uses clause.',
           [Hits[0].UnitName]));
     end;
