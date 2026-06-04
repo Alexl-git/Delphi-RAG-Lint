@@ -60,11 +60,17 @@ var
   ESS: IOTAEditorServices;
   EV:  IOTAEditView;
   Pos: IOTAEditPosition;
+  OpenOk: Boolean;
 begin
   if (AFile = '') or not FileExists(AFile) then Exit;
 
-  if Supports(BorlandIDEServices, IOTAActionServices, AS_) then
-    AS_.OpenFile(AFile);
+  { Guard on OpenFile's result.  If it failed (or the service is absent) we must
+    NOT fall through and GotoLine -- that would scroll whatever file was already
+    focused to ALine, which looks like "the IDE got the command but did the
+    wrong thing." }
+  OpenOk := Supports(BorlandIDEServices, IOTAActionServices, AS_) and
+            AS_.OpenFile(AFile);
+  if not OpenOk then Exit;
 
   if (ALine > 0) and Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
   begin
