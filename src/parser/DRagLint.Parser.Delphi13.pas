@@ -326,6 +326,21 @@ begin
     else if Child.NodeType = 'implementation' then AState.CurrentSection := 'implementation';
     Walk(Child, AState, UnitIdx, UnitName);
   end;
+
+  { v0.41: emit initialization / finalization sections as named unit-child
+    markers (they carry no identifier of their own).  Placed in the
+    implementation section conceptually -- they run after it. }
+  AState.CurrentSection := 'implementation';
+  for i := 0 to ANode.NamedChildCount - 1 do
+  begin
+    Child := ANode.NamedChild(i);
+    if Child.NodeType = 'initialization' then
+      AState.Emit(skInitialization, 'initialization',
+        UnitName + '.initialization', UnitIdx, Child)
+    else if Child.NodeType = 'finalization' then
+      AState.Emit(skFinalization, 'finalization',
+        UnitName + '.finalization', UnitIdx, Child);
+  end;
   AState.CurrentSection := '';
 end;
 

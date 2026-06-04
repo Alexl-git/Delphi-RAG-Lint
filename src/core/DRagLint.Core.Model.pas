@@ -15,7 +15,11 @@ type
     // ('sql_table', 'sql_column', ...) is the disambiguator.
     skSqlTable, skSqlColumn, skSqlIndex, skSqlTrigger,
     skSqlGenerator, skSqlProcedure, skSqlView, skSqlException,
-    skSqlDomain, skSqlConstraint
+    skSqlDomain, skSqlConstraint,
+    // v0.41: unit initialization / finalization sections (no name; one each
+    // per unit at most).  Emitted as unit-child markers so the structure view
+    // can list them.
+    skInitialization, skFinalization
   );
 
   TSymbolKindHelper = record helper for TSymbolKind
@@ -246,7 +250,8 @@ const
     'form', 'component',
     'sql_table', 'sql_column', 'sql_index', 'sql_trigger',
     'sql_generator', 'sql_procedure', 'sql_view', 'sql_exception',
-    'sql_domain', 'sql_constraint'
+    'sql_domain', 'sql_constraint',
+    'initialization', 'finalization'
   );
 
 function TSymbolKindHelper.ToText: string;
