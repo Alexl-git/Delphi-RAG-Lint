@@ -3,6 +3,31 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.41.0-alpha -- 2026-06-05
+
+### Added
+- **AI-usage guide** (`docs/AI-USAGE.md`): copy-paste instructions so an AI
+  agent drives drag-lint over CLI or MCP, with the token-saving context-bundle
+  workflow.
+- **Unit initialization/finalization** are now indexed (kinds `initialization`/
+  `finalization`), so structure/section views can show them.
+- **Symbol `section`** (interface vs implementation) + member **types**
+  captured into signatures; `query` shows `section` + `usable_from_other_units`;
+  `resolve-uses` is section-aware (won't suggest implementation-only symbols).
+
+### Changed (token economy)
+- **Lean context bundle:** `drag-lint context` now slices only the target
+  symbol's body (not the whole parent class). `bench-context` on a real project:
+  **~556 vs ~33,762 tokens (~60x)**.
+- **`--full-surface` switch** (CLI) / `full_surface` (MCP `get_context_bundle`):
+  by default the auto-generated published DFM component fields are stripped from
+  a form's class surface; pass the switch to keep them when working on the form.
+
+### Fixed
+- Plugin open-in-IDE: only `GotoLine` after `OpenFile` succeeds (was scrolling
+  the wrong file).
+- Indexer skips `__history` / `.git` / backup dirs in folder scans.
+
 ## v0.40.5-alpha -- 2026-05-31
 
 ### Added (major)

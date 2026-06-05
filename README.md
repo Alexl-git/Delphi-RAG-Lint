@@ -15,6 +15,8 @@ Pure Object Pascal at runtime -- no Python, Node, or Rust. No cloud AI.
 
 **Use it as:** CLI tool &middot; LSP server (Zed / VS Code) &middot; MCP server (Claude / Cursor) &middot; RAD Studio 13 plugin.
 
+**→ Driving it from an AI agent? See [docs/AI-USAGE.md](docs/AI-USAGE.md)** — copy-paste instructions so your AI uses drag-lint over CLI or MCP (and reads ~10-60x fewer tokens than opening whole units).
+
 Built on [`tree-sitter-delphi13`](https://github.com/Alexl-git/tree-sitter-delphi13)
 (sibling project) and a vendored Pascal binding for libtree-sitter.
 
