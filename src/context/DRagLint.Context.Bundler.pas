@@ -8,6 +8,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.DateUtils, System.StrUtils,
+  System.Generics.Collections,
   DRagLint.Core.Model, DRagLint.Core.Interfaces;
 
 type
@@ -16,7 +17,8 @@ type
     class function Build(const AStore: ISymbolStore;
       const AVerb, AQName: string;
       ACallerContext, AMaxCallers: Integer;
-      AIncludeDocs, AIncludeSurface, AIncludeImpl: Boolean): TContextBundle;
+      AIncludeDocs, AIncludeSurface, AIncludeImpl: Boolean;
+      AExcludeDfmFields: Boolean = True): TContextBundle;
     class function EstimateTokens(const AText: string): Integer;
     class function RenderMarkdown(const ABundle: TContextBundle): string;
     class function RenderJson(const ABundle: TContextBundle): string;
@@ -30,10 +32,75 @@ begin
   Result := Round(Length(AText) / 3.7);
 end;
 
+// True when a trimmed class-body line is a simple field declaration of the form
+//   Ident : TSomeType;       (a published component field -- DFM-streamed noise)
+// i.e. has a colon, ends with ';', no '(' (so not a method/event), and the
+// leading token is a plain identifier (not a keyword). Used to strip the
+// hundreds of auto-generated component fields a form class carries.
+function IsComponentFieldLine(const ATrim: string): Boolean;
+var
+  ColonPos, I: Integer;
+  Head, Low: string;
+begin
+  Result := False;
+  if ATrim = '' then Exit;
+  if ATrim[Length(ATrim)] <> ';' then Exit;
+  ColonPos := Pos(':', ATrim);
+  if ColonPos < 2 then Exit;
+  if Pos('(', ATrim) > 0 then Exit;            // method / event handler
+  Head := Trim(Copy(ATrim, 1, ColonPos - 1));
+  if Head = '' then Exit;
+  // leading token must be a plain identifier (a field name), not a keyword
+  for I := 1 to Length(Head) do
+    if not (CharInSet(Head[I], ['A'..'Z', 'a'..'z', '0'..'9', '_'])) then Exit;
+  Low := LowerCase(Head);
+  if (Low = 'procedure') or (Low = 'function') or (Low = 'property') or
+     (Low = 'constructor') or (Low = 'destructor') or (Low = 'class') or
+     (Low = 'type') or (Low = 'const') or (Low = 'var') or (Low = 'case') then
+    Exit;
+  Result := True;
+end;
+
+// Drops published component-field declarations from a class surface. The class
+// body's default (pre-specifier) and explicit `published` sections are where
+// the IDE streams DFM component fields; private/protected/public members and
+// all methods/properties/events are kept.
+function StripDfmFields(
+  const ASurface: TArray<TSurfaceLine>): TArray<TSurfaceLine>;
+var
+  Acc: TList<TSurfaceLine>;
+  L:   TSurfaceLine;
+  T, Low: string;
+  InPublished: Boolean;
+begin
+  Acc := TList<TSurfaceLine>.Create;
+  try
+    InPublished := True;   // form classes are $M+: top section is published
+    for L in ASurface do
+    begin
+      T   := Trim(L.Text);
+      Low := LowerCase(T);
+      if (Low = 'private') or (Low = 'strict private') or
+         (Low = 'protected') or (Low = 'strict protected') or
+         (Low = 'public') or (Low = 'strict public') then
+        InPublished := False
+      else if Low = 'published' then
+        InPublished := True
+      else if InPublished and IsComponentFieldLine(T) then
+        Continue;          // drop the DFM component field
+      Acc.Add(L);
+    end;
+    Result := Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
 class function TContextBundler.Build(const AStore: ISymbolStore;
   const AVerb, AQName: string;
   ACallerContext, AMaxCallers: Integer;
-  AIncludeDocs, AIncludeSurface, AIncludeImpl: Boolean): TContextBundle;
+  AIncludeDocs, AIncludeSurface, AIncludeImpl: Boolean;
+  AExcludeDfmFields: Boolean = True): TContextBundle;
 var
   Syms:        TArray<TSymbol>;
   Sym:         TSymbol;
@@ -71,7 +138,13 @@ begin
     if LastDelimiter('.', ParentQName) > 0 then
       ParentQName := Copy(ParentQName, 1, LastDelimiter('.', ParentQName) - 1);
     if ParentQName <> AQName then
+    begin
       Result.ClassSurface := AStore.GetClassSurface(ParentQName, False, False);
+      // Strip the auto-generated DFM component fields unless the caller asked
+      // for the full surface (e.g. when working on the form's components/DFM).
+      if AExcludeDfmFields then
+        Result.ClassSurface := StripDfmFields(Result.ClassSurface);
+    end;
   end;
 
   // Impl slice -- ONLY the target symbol's own body, never the whole parent

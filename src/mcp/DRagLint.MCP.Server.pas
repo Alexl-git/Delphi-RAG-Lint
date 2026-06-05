@@ -281,6 +281,7 @@ begin
     '"verb":{"type":"string","description":"Action verb: modify|inspect|refactor|delete|extend (default modify)"},' +
     '"caller_context":{"type":"integer","description":"Number of surrounding source lines for each caller (optional, default 3)"},' +
     '"max_callers":{"type":"integer","description":"Maximum number of callers to include (optional, default 5)"},' +
+    '"full_surface":{"type":"boolean","description":"Keep the auto-generated DFM component fields in the class surface (optional, default false = lean; set true only when working on the form components/DFM)"},' +
     '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
     '},"required":["qname"]}'));
 
@@ -904,9 +905,16 @@ begin
       if Args.GetValue('max_callers') <> nil then
         BundleMaxCallers := StrToIntDef(Args.GetValue('max_callers').Value, 5);
 
+      // Lean by default: strip auto-generated DFM component fields from the
+      // class surface unless full_surface=true.
+      var BundleFullSurface := False;
+      if Args.GetValue('full_surface') <> nil then
+        BundleFullSurface := SameText(Args.GetValue('full_surface').Value, 'true');
+
       // Build the bundle
       var Bundle := TContextBundler.Build(BundleStore, BundleVerb, BundleQName,
-        BundleCallerContext, BundleMaxCallers, True, True, True);
+        BundleCallerContext, BundleMaxCallers, True, True, True,
+        {AExcludeDfmFields=} not BundleFullSurface);
 
       // Render as JSON
       ResultText := TContextBundler.RenderJson(Bundle);

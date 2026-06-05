@@ -102,6 +102,7 @@ type
     BundleQName:        string;  // parsed qname from --task
     MaxCallers:         Integer; // --max-callers N (default 5)
     IncludeClassSurface: Boolean; // default true
+    FullSurface:        Boolean; // --full-surface: keep DFM component fields (default lean)
     BenchN:             Integer; // --n N for bench-context (default 20)
     // v0.19: typeat
     Position:           string;  // raw <file>:<line>:<col>
@@ -402,6 +403,8 @@ begin
     end
     else if A = '--include-impl' then
       Result.IncludeImpl := True
+    else if A = '--full-surface' then
+      Result.FullSurface := True
     else if A = '--all-visibility' then
       Result.AllVisibility := True
     else if (A = '--context') and (i < ParamCount) then
@@ -2943,7 +2946,7 @@ begin
                 SameText(AArgs.Verb, 'extend');
   Bundle := TContextBundler.Build(Store, AArgs.Verb, AArgs.BundleQName,
     AArgs.ContextLines, AArgs.MaxCallers,
-    IncDocs, IncSurface, IncImpl);
+    IncDocs, IncSurface, IncImpl, {AExcludeDfmFields=} not AArgs.FullSurface);
   if Bundle.QName = '' then
   begin
     Writeln(Format('No symbol matched: %s', [AArgs.BundleQName]));
