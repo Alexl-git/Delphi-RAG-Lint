@@ -20,6 +20,10 @@ Pure Object Pascal at runtime -- no Python, Node, or Rust. No cloud AI.
 Built on [`tree-sitter-delphi13`](https://github.com/Alexl-git/tree-sitter-delphi13)
 (sibling project) and a vendored Pascal binding for libtree-sitter.
 
+**Companion:** [`Delphi-RAG-Lint-Graph`](https://github.com/Alexl-git/Delphi-RAG-Lint-Graph)
+— an experimental standalone VCL viewer that turns this index into an interactive
+symbol graph + structure panel, with click-to-jump into RAD Studio.
+
 ---
 
 ## Quick start

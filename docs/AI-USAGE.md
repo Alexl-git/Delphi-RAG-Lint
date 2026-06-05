@@ -137,9 +137,9 @@ hundred tokens versus tens of thousands to read the relevant 2,000-line units.
 
 ## 6. Bonus: the graph viewer (optional, experimental)
 
-There is a companion **standalone VCL graph viewer** over the same index: an
-interactive symbol graph with drill-in, a left **Structure panel** (units ->
+There is a companion **standalone VCL graph viewer** over the same index:
+**[Delphi-RAG-Lint-Graph](https://github.com/Alexl-git/Delphi-RAG-Lint-Graph)**.
+An interactive symbol graph with drill-in, a left **Structure panel** (units ->
 interface/implementation -> types/consts/routines, initialization/finalization,
 uses / used-by), symbol search, and click-to-jump into a running RAD Studio (via
-a named pipe). It is a separate, even-more-experimental tool — ask if you'd like
-it published.
+a named pipe). Separate and even-more-experimental — feedback welcome there too.
