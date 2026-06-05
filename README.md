@@ -3,6 +3,13 @@
 [![Release](https://img.shields.io/github/v/release/Alexl-git/Delphi-RAG-Lint?include_prereleases)](https://github.com/Alexl-git/Delphi-RAG-Lint/releases)
 [![License](https://img.shields.io/github/license/Alexl-git/Delphi-RAG-Lint)](LICENSE)
 
+> **⚠️ Alpha / work in progress.** This is an early alpha under active, daily
+> development — expect rough edges, unfinished corners, and breaking changes
+> between versions. It is shared early so the Delphi community can try it and
+> shape it. **Feedback and suggestions are very welcome** — please open an
+> [Issue](https://github.com/Alexl-git/Delphi-RAG-Lint/issues) with ideas, bugs,
+> or "I wish it could…". Not yet recommended for unattended/production use.
+
 A symbol-aware retrieval + lint + refactoring + IDE-integration tool for Delphi.
 Pure Object Pascal at runtime -- no Python, Node, or Rust. No cloud AI.
 
