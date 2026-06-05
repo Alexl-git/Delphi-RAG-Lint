@@ -74,14 +74,13 @@ begin
       Result.ClassSurface := AStore.GetClassSurface(ParentQName, False, False);
   end;
 
-  // Impl slice -- for methods use parent class qname; for top-level use AQName
+  // Impl slice -- ONLY the target symbol's own body, never the whole parent
+  // class.  Pulling the parent's slice dragged in every sibling method body, so
+  // the bundle was ~the whole source file (bench-context ~1x, no savings).  The
+  // class SURFACE (signatures, cheap) already supplies the surrounding shape;
+  // the body the caller actually needs is the target's own.  (v0.41)
   if AIncludeImpl then
-  begin
-    if (ParentQName <> '') and (ParentQName <> AQName) then
-      Result.ImplSlice := AStore.GetSymbolSlice(ParentQName)
-    else
-      Result.ImplSlice := AStore.GetSymbolSlice(AQName);
-  end;
+    Result.ImplSlice := AStore.GetSymbolSlice(AQName);
 
   // Callers (truncated to AMaxCallers; resolve FilePath from store)
   CallerName := AQName;
