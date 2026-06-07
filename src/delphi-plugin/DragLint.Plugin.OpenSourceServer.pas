@@ -216,23 +216,45 @@ end;
 procedure StopOpenSourceServer;
 var
   H: THandle;
+  I: Integer;
 begin
   if GServer = nil then Exit;
 
   GServer.Terminate;
 
-  { Release the thread's blocking ConnectNamedPipe by connecting a throwaway
-    client.  WaitNamedPipe + CreateFile; we write nothing, just close. }
-  if WaitNamedPipe(OPEN_SOURCE_PIPE_NAME, 200) then
+  { Wake the listener out of its blocking ConnectNamedPipe by connecting a
+    throwaway client, then close it.
+
+    BUG FIX (IDE freeze on uninstall): the pipe is PIPE_ACCESS_INBOUND, so the
+    client MUST open it for WRITE.  The old code opened GENERIC_READ, which a
+    inbound pipe denies (ERROR_ACCESS_DENIED) -- the wake-up never connected, the
+    listener stayed blocked in ConnectNamedPipe, and the unbounded WaitFor below
+    hung the IDE thread forever.  Open GENERIC_WRITE, and retry a few times to
+    cover the race where the listener is between pipe instances. }
+  for I := 1 to 10 do
   begin
-    H := CreateFile(OPEN_SOURCE_PIPE_NAME, GENERIC_READ, 0, nil,
-      OPEN_EXISTING, 0, 0);
-    if H <> INVALID_HANDLE_VALUE then
-      CloseHandle(H);
+    if WaitForSingleObject(GServer.Handle, 0) = WAIT_OBJECT_0 then Break;
+    if WaitNamedPipe(OPEN_SOURCE_PIPE_NAME, 100) then
+    begin
+      H := CreateFile(OPEN_SOURCE_PIPE_NAME, GENERIC_WRITE, 0, nil,
+        OPEN_EXISTING, 0, 0);
+      if H <> INVALID_HANDLE_VALUE then
+        CloseHandle(H);
+    end;
+    if WaitForSingleObject(GServer.Handle, 150) = WAIT_OBJECT_0 then Break;
   end;
 
-  GServer.WaitFor;
-  FreeAndNil(GServer);
+  { Bounded final wait so a stuck listener can NEVER freeze the IDE (the old
+    unbounded TThread.WaitFor was the freeze).  If it really did not stop, detach
+    and let it self-free on terminate rather than free a live thread (which would
+    AV) -- a one-thread leak at unload beats a hung IDE. }
+  if WaitForSingleObject(GServer.Handle, 2000) = WAIT_OBJECT_0 then
+    FreeAndNil(GServer)
+  else
+  begin
+    GServer.FreeOnTerminate := True;
+    GServer := nil;
+  end;
 end;
 
 initialization
