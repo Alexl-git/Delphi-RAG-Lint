@@ -50,3 +50,7 @@ tests/fixtures/t*.json
 # OS
 Thumbs.db
 .DS_Store
+
+*.sqlite-shm
+*.sqlite-wal
+build/release-artifacts-0.41/
