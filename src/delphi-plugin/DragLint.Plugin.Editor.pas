@@ -1880,7 +1880,16 @@ begin
 
   RootMenu := TMenuItem.Create(nil);
   RootMenu.Caption := 'drag-lint';
-  Services.AddActionMenu('ToolsMenu', nil, RootMenu, True, True);
+  { Top-level IDE menu (like TableTools): insert directly into the main menu bar
+    instead of nesting under Tools.  RootMenu has NO component owner (Create(nil))
+    and is added only as a menu CHILD here; GMenuItems is its sole owner and frees
+    it on unload, at which point TMenuItem.Destroy removes it from the menu bar --
+    so teardown stays single-owner (no double-free).  Falls back to the Tools
+    submenu if the IDE main menu is unavailable. }
+  if Services.MainMenu <> nil then
+    Services.MainMenu.Items.Add(RootMenu)
+  else
+    Services.AddActionMenu('ToolsMenu', nil, RootMenu, True, True);
   GMenuItems.Add(RootMenu);
 
   AddWrappedItem(RootMenu, 'Hover at Cursor',           InvokeHover);
