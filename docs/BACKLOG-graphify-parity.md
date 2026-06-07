@@ -46,6 +46,29 @@ All of these are pure graph/aggregation over data we already index — **no AI**
       code by name — the non-AI slice of their "multi-artifact" ingestion. PDFs
       / images are the AI parts; skip those.
 
+## Open question: universal "UNI-RAG" vs Delphi-RAG?
+
+**Does Graphify already do UNI-RAG?** Largely yes, at a shallow level: its code
+stage is tree-sitter over **40+ languages**, and its semantic layer is
+language-agnostic. So "turn any folder into a graph" is already multi-language.
+But its per-language depth is generic (ASTs/call-graphs/docstrings); it leans on
+an **LLM** for the "why"/semantic layer.
+
+**Could drag-lint go universal?** Architecturally **yes** — our stack
+(tree-sitter + SQLite symbol index + CLI/MCP) is language-agnostic. The
+Delphi-specific part is the **symbol extractor** (`DRagLint.Parser.Delphi13`
+maps Delphi AST nodes -> our symbol model). To add a language you add a
+`Parser.<Lang>` that maps that grammar's nodes -> symbols/refs/uses, and load its
+grammar. Everything downstream (storage, query, context bundles, MCP, viewer)
+is already language-neutral.
+
+**Recommendation (strategic):** stay **Delphi-deep** — that's the moat. The
+Delphi ecosystem has no modern AST-exact code-intelligence tool; generic tools
+(Sourcegraph, Graphify, ast-grep) serve it poorly. A universal UNI-RAG competes
+head-on with well-funded incumbents and dilutes the one thing we do better than
+anyone. Keep the architecture extensible (a 2nd language as a proof-of-concept
+is cheap), but lead with Delphi depth + AST-exactness, not breadth.
+
 ## Where we already match or beat them
 - Incremental cache / only-reprocess-changed: we have `--watch` + up-to-date
   skipping already.
