@@ -9,6 +9,10 @@ Tools->Options page, and the graph viewer's IDE handoff. Each step has an
 Detailed per-item menu behaviour lives in `TEST-PLAN-IDE-TOOLS-MENU.md`; this
 doc is the wider sweep and references it for section A.
 
+> **Targets v0.41.0-alpha.** This is the IDE/plugin + graph-viewer pass. For
+> driving drag-lint from an **AI agent over CLI or MCP** (no IDE), test against
+> [`docs/AI-USAGE.md`](AI-USAGE.md) instead — that path has its own instructions.
+
 ---
 
 ## 0. Setup (do once)
@@ -16,10 +20,12 @@ doc is the wider sweep and references it for section A.
 - [ ] **0.1 Indexes current.** All four scan DBs are freshly built (with
       initialization/finalization): ORM3, SQL, all-projects, library. See
       `SCAN-DATABASES.md` for paths.
-- [ ] **0.2 Rebuild + install the plugin BPL** to pick up the latest fixes
-      (open-source GotoLine guard, v0.41 scanner): Component -> Install Packages
-      -> uncheck `dclDragLintWizard` -> rebuild `dclDragLintWizard.dproj` ->
-      re-add it. IDE confirms `drag-lint` loaded.
+- [ ] **0.2 Install the latest plugin BPL** (it carries the open-source
+      GotoLine guard + v0.41 scanner). Either: rebuild from source (Component ->
+      Install Packages -> uncheck `dclDragLintWizard` -> rebuild
+      `dclDragLintWizard.dproj` -> re-add), **or** use the `dclDragLintWizard.bpl`
+      from the **v0.41.0-alpha** release (`...-win32.zip`). IDE confirms
+      `drag-lint` loaded.
 - [ ] **0.3 drag-lint.exe reachable** (PATH, beside the BPL, or set in
       Tools -> drag-lint -> Settings).
 - [ ] **0.4** Open an ORM3 unit with real code and a project that compiles.
@@ -107,7 +113,11 @@ Search, Dockable Panel, Settings, Lint Buffer, Test Connection, Open Plugin Log)
 
 ## G. Graph viewer <-> IDE
 
-Launch the viewer (its own process) against the refreshed indexes:
+The viewer is now its own published tool:
+[Delphi-RAG-Lint-Graph](https://github.com/Alexl-git/Delphi-RAG-Lint-Graph) -
+download the **v0.1.0-alpha** release (win32 **or** win64; each bundles its
+`sqlite3.dll`) or build it. Launch it (its own process) against the refreshed
+indexes:
 
     drag_lint_graph.exe --db C:\Projects\DB\ORM3\drag-lint.sqlite ^
                         --db C:\Projects\Delphi-RAG-lint\third_party\dll-win32\drag-lint-library.sqlite
