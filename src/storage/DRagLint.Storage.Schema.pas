@@ -7,7 +7,7 @@ const
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
-  SCHEMA_DDL: array[0..36] of string = (
+  SCHEMA_DDL: array[0..39] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' +
     '  key   TEXT PRIMARY KEY,' +
     '  value TEXT NOT NULL' +
@@ -55,6 +55,14 @@ const
     '  end_col     INTEGER NOT NULL' +
     ')',
 
+    // v0.42 perf: per-file re-index does DELETE FROM refs WHERE file_id, and
+    // deleting a symbol fires the FK refs.symbol_id ON DELETE SET NULL. Without
+    // these two indexes both operations scan the whole refs table, so per-file
+    // indexing cost grew with the DB (0.04 -> 0.55 s/file fresh; ~3.2 s/file
+    // re-index on a 1.2 GB DB). With them it's an index seek.
+    'CREATE INDEX IF NOT EXISTS idx_refs_file ON refs(file_id)',
+    'CREATE INDEX IF NOT EXISTS idx_refs_symbol ON refs(symbol_id)',
+
     // v2: trigram inverted index for fast fuzzy lookup. Populated lazily on
     // first fuzzy query for any DB that's missing it (so v1 .sqlite files
     // upgrade transparently).
@@ -66,6 +74,13 @@ const
 
     'CREATE INDEX IF NOT EXISTS idx_symbol_trigrams_trigram ' +
     '  ON symbol_trigrams(trigram)',
+
+    // v0.42 perf: the PK (trigram, symbol_id) can't serve symbol_id-only
+    // lookups, so the FK symbol_trigrams.symbol_id ON DELETE CASCADE scanned
+    // the entire (multi-million row) trigram table for every symbol deleted
+    // during a per-file re-index. Index symbol_id so the cascade is a seek.
+    'CREATE INDEX IF NOT EXISTS idx_symbol_trigrams_symbol ' +
+    '  ON symbol_trigrams(symbol_id)',
 
     // v3: compiler-log ingest. One row per finding extracted from a
     // dcc32/dcc64/msbuild log; cross-referenced to the files table when

@@ -294,6 +294,16 @@ begin
   FConn.LoginPrompt := False;
   FConn.Connected := True;
   FConn.ExecSQL('PRAGMA foreign_keys = ON');
+  { v0.42 perf: per-file insert throughput collapses as the DB grows past ~1 GB
+    (full C:\Projects scan ran at 0.55 s/file vs ~0.04 s/file historically). The
+    cause is index B-tree maintenance (symbol_trigrams especially) thrashing
+    against the default ~2 MB page cache. Give SQLite a large page cache + a
+    big read mmap so the hot index pages stay resident instead of being
+    re-read from disk on every insert; keep temp tables in memory. These are
+    pure performance hints -- WAL + synchronous=Normal already guard durability. }
+  FConn.ExecSQL('PRAGMA cache_size = -262144');   { 256 MB page cache }
+  FConn.ExecSQL('PRAGMA mmap_size = 1073741824');  { 1 GB read mmap }
+  FConn.ExecSQL('PRAGMA temp_store = MEMORY');
 end;
 
 procedure TSQLiteSymbolStore.Migrate;
