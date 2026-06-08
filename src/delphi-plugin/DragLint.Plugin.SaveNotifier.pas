@@ -72,6 +72,35 @@ uses
 
 { ---- helpers ---- }
 
+{ v0.42: per-file debounce. AfterSave can fire more than once for the same
+  file in quick succession (Save All, designer + source both saving, IDE
+  reentrancy). Reindexing the same file twice within a short window is wasted
+  work, so we record the last reindex tick per file and skip a re-fire inside
+  the window. Different files in a Save All each still reindex once -- they
+  genuinely changed -- so the index stays fresh without a process storm. }
+const
+  REINDEX_DEBOUNCE_MS = 2000;
+
+var
+  GLastReindexTick: TDictionary<string, Cardinal> = nil;
+
+function ShouldDebounceReindex(const AFile: string): Boolean;
+var
+  Key:  string;
+  Last: Cardinal;
+  Now:  Cardinal;
+begin
+  Result := False;
+  if GLastReindexTick = nil then
+    GLastReindexTick := TDictionary<string, Cardinal>.Create;
+  Key := LowerCase(AFile);
+  Now := GetTickCount;
+  if GLastReindexTick.TryGetValue(Key, Last) and
+     (Now - Last < REINDEX_DEBOUNCE_MS) then
+    Exit(True);
+  GLastReindexTick.AddOrSetValue(Key, Now);
+end;
+
 const
   REINDEX_EXTS: array[0..4] of string = (
     '.pas', '.dpr', '.dpk', '.inc', '.dfm');
@@ -144,6 +173,9 @@ begin
 
     DbPath := GLastProjectDb;
     if DbPath = '' then Exit;
+
+    { v0.42: coalesce rapid re-fires for the same file. }
+    if ShouldDebounceReindex(FileName) then Exit;
 
     { Resolve drag-lint.exe: configured path, then next to BPL, then PATH }
     ExePath := Cfg.ExePath;
@@ -341,5 +373,7 @@ finalization
     FreeAndNil(GRegistrations);
   if GRegLock <> nil then
     FreeAndNil(GRegLock);
+  if GLastReindexTick <> nil then
+    FreeAndNil(GLastReindexTick);
 
 end.
