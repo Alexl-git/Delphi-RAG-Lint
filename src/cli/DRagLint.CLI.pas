@@ -736,6 +736,204 @@ begin
   Result := 0;
 end;
 
+// v0.42: build ONE dictionary database in-process from a set of folders/files,
+// honouring the scan-hygiene filters (.scanignore, *BACKUP*, MS*.SQL) plus any
+// caller-supplied exclude roots (cross-dictionary dedup).
+function IndexDictionary(const ADbPath: string;
+  const AFolders, AExcludeRoots: TArray<string>;
+  const ADocs: TDocConfig; out AElapsedSec: Double): Boolean;
+var
+  Store:   ISymbolStore;
+  Indexer: IIndexer;
+  F, Ex:   string;
+  T0:      TDateTime;
+begin
+  Writeln('');
+  Writeln('=== Dictionary: ', ADbPath, ' ===');
+  T0 := Now;
+  Store := TSQLiteSymbolStore.Create(ADbPath);
+  Store.Migrate;
+  { Each library/project ROOT is walked RECURSIVELY (soAllDirectories), so a
+    unit whose .pas lives in a subfolder that is NOT itself on the Library/
+    Browsing path -- only its DCU's folder is -- still gets indexed as long as
+    it sits anywhere beneath a listed root. }
+  Indexer := TIndexer.Create(Store,
+    [TDelphi13Parser.Create, TDFMParser.Create, TFirebirdSqlParser.Create],
+    ADocs);
+  for Ex in AExcludeRoots do
+    Indexer.AddExcludeRoot(Ex);
+  for F in AFolders do
+  begin
+    if TDirectory.Exists(F) then
+    begin
+      Writeln('  + ', F, '  (recursive, incl. subfolders)');
+      Indexer.IndexFolder(F, True);
+    end
+    else if TFile.Exists(F) then
+      Indexer.IndexFile(F)
+    else
+      Writeln('  (skip, not found) ', F);
+  end;
+  Store.ResolveUnitUseTargets;
+  AElapsedSec := (Now - T0) * 86400;
+  Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]',
+    [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
+  Result := True;
+end;
+
+// v0.42: locate the nearest .drag-lint.json (cwd or any parent) and return its
+// "scan" object, or nil. Caller frees the returned ROOT via the out param.
+function FindScanConfig(out ARoot: TJSONObject): TJSONObject;
+var
+  Dir, Candidate, Content: string;
+begin
+  Result := nil;
+  ARoot  := nil;
+  Dir := GetCurrentDir;
+  Candidate := '';
+  while Dir <> '' do
+  begin
+    if TFile.Exists(TPath.Combine(Dir, '.drag-lint.json')) then
+    begin
+      Candidate := TPath.Combine(Dir, '.drag-lint.json');
+      Break;
+    end;
+    if Dir = ExtractFilePath(Dir.TrimRight(['\','/'])) then Break;
+    Dir := ExtractFilePath(Dir.TrimRight(['\','/']));
+  end;
+  if Candidate = '' then Exit;
+  try
+    Content := TFile.ReadAllText(Candidate);
+    ARoot := TJSONObject.ParseJSONValue(Content) as TJSONObject;
+  except
+    ARoot := nil;
+  end;
+  if ARoot = nil then Exit;
+  Writeln('(scan config: ', Candidate, ')');
+  Result := ARoot.GetValue('scan') as TJSONObject;
+end;
+
+// v0.42: drag-lint scan-all [--dry-run]
+// Builds the user's THREE dictionaries with automatic cross-dedup, driven by
+// the "scan" section of .drag-lint.json:
+//   "scan": {
+//     "outDir": "C:\\Projects\\.drag-lint",
+//     "library": true,
+//     "projects": ["C:\\Projects\\DB\\ORM3", ...],
+//     "projectsRoot": "C:\\Projects"
+//   }
+// 1. library.sqlite        = Delphi Library + Browsing paths (registry).
+// 2. active-projects.sqlite = every "projects" folder, frequently reindexed.
+// 3. projects.sqlite       = projectsRoot, EXCLUDING every library root and
+//                            every active-project root (so nothing is scanned
+//                            into more than one dictionary).
+function DoScanAll(const AArgs: TArgs): Integer;
+var
+  Root, Scan: TJSONObject;
+  JProjects:  TJSONArray;
+  Projects:   TArray<string>;
+  OutDir, ProjectsRoot: string;
+  DoLibrary:  Boolean;
+  LibRoots, ExcludeForRoot: TArray<string>;
+  Resolver:   DRagLint.Project.Resolver.TProjectResolver;
+  V:          TJSONValue;
+  i:          Integer;
+  ElLib, ElProj, ElRoot, ElTotal: Double;
+begin
+  ElLib  := 0; ElProj := 0; ElRoot := 0;
+  Scan := FindScanConfig(Root);
+  try
+    if Scan = nil then
+    begin
+      Writeln('No "scan" section found in .drag-lint.json.');
+      Writeln('Create one, e.g.:');
+      Writeln('  { "scan": { "outDir": "C:\\Projects\\.drag-lint",');
+      Writeln('              "library": true,');
+      Writeln('              "projects": ["C:\\Projects\\DB\\ORM3"],');
+      Writeln('              "projectsRoot": "C:\\Projects" } }');
+      Exit(2);
+    end;
+
+    OutDir := '';
+    V := Scan.GetValue('outDir');
+    if (V <> nil) and (V.Value <> '') then OutDir := V.Value;
+    if OutDir = '' then OutDir := TPath.Combine(GetCurrentDir, '.drag-lint');
+    TDirectory.CreateDirectory(OutDir);
+
+    DoLibrary := True;
+    V := Scan.GetValue('library');
+    if V is TJSONBool then DoLibrary := TJSONBool(V).AsBoolean;
+
+    ProjectsRoot := '';
+    V := Scan.GetValue('projectsRoot');
+    if (V <> nil) and (V.Value <> '') then ProjectsRoot := V.Value;
+
+    SetLength(Projects, 0);
+    if Scan.TryGetValue<TJSONArray>('projects', JProjects) then
+      for i := 0 to JProjects.Count - 1 do
+      begin
+        SetLength(Projects, Length(Projects) + 1);
+        Projects[High(Projects)] := JProjects.Items[i].Value;
+      end;
+
+    if AArgs.DryRun then
+    begin
+      Writeln('--dry-run: would build dictionaries under ', OutDir);
+      Writeln('  library    = ', BoolToStr(DoLibrary, True));
+      Writeln(Format('  projects   = %d folders', [Length(Projects)]));
+      Writeln('  projectsRoot = ', ProjectsRoot);
+      Exit(0);
+    end;
+
+    { 1. Library dictionary (also gives us the roots to exclude later). }
+    SetLength(LibRoots, 0);
+    if DoLibrary then
+    begin
+      Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+      try
+        LibRoots := Resolver.ResolveLibraryPaths;
+      finally
+        Resolver.Free;
+      end;
+      IndexDictionary(TPath.Combine(OutDir, 'library.sqlite'),
+        LibRoots, [], AArgs.Docs, ElLib);
+    end;
+
+    { 2. Active-projects dictionary -- all configured project folders into one. }
+    if Length(Projects) > 0 then
+      IndexDictionary(TPath.Combine(OutDir, 'active-projects.sqlite'),
+        Projects, [], AArgs.Docs, ElProj);
+
+    { 3. Projects-root dictionary -- everything else under projectsRoot, with
+         the library roots AND the active-project roots excluded so no folder
+         is scanned into more than one dictionary. }
+    if ProjectsRoot <> '' then
+    begin
+      ExcludeForRoot := Concat(LibRoots, Projects);
+      IndexDictionary(TPath.Combine(OutDir, 'projects.sqlite'),
+        [ProjectsRoot], ExcludeForRoot, AArgs.Docs, ElRoot);
+    end;
+
+    ElTotal := ElLib + ElProj + ElRoot;
+    Writeln('');
+    Writeln('--- scan-all timing ---');
+    Writeln(Format('  library          : %7.1fs', [ElLib]));
+    Writeln(Format('  active-projects  : %7.1fs', [ElProj]));
+    Writeln(Format('  projects-root    : %7.1fs', [ElRoot]));
+    Writeln(Format('  TOTAL            : %7.1fs  (%.1f min)',
+      [ElTotal, ElTotal / 60]));
+    Writeln('');
+    Writeln('scan-all complete. Query all three with repeated --db:');
+    Writeln(Format('  --db "%s" --db "%s" --db "%s"',
+      [TPath.Combine(OutDir, 'active-projects.sqlite'),
+       TPath.Combine(OutDir, 'projects.sqlite'),
+       TPath.Combine(OutDir, 'library.sqlite')]));
+    Result := 0;
+  finally
+    Root.Free;
+  end;
+end;
+
 procedure PrintSymbols(const ASymbols: TArray<TSymbol>; AsJson: Boolean);
 var
   JArr: TJSONArray;
@@ -4280,6 +4478,8 @@ begin
       Result := DoSurface(Args)
     else if Args.Command = 'outline' then
       Result := DoOutline(Args)
+    else if Args.Command = 'scan-all' then
+      Result := DoScanAll(Args)
     else if Args.Command = 'slice' then
       Result := DoSlice(Args)
     else if Args.Command = 'context' then
