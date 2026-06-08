@@ -1599,6 +1599,24 @@ begin
   AParent.Add(Result);
 end;
 
+{ v0.42: menu separator line. }
+function AddSeparator(AParent: TMenuItem): TMenuItem;
+begin
+  Result := TMenuItem.Create(AParent);
+  Result.Caption := '-';
+  AParent.Add(Result);
+end;
+
+{ v0.42: a non-clickable section header (disabled caption) used to label the
+  diagnostics/test block at the bottom of the menu. }
+function AddSectionHeader(AParent: TMenuItem; const ACaption: string): TMenuItem;
+begin
+  Result := TMenuItem.Create(AParent);
+  Result.Caption := ACaption;
+  Result.Enabled := False;
+  AParent.Add(Result);
+end;
+
 { ---- v0.39 diagnostic helpers ---- }
 
 procedure InvokeTestConnection(Sender: TObject);
@@ -1892,27 +1910,27 @@ begin
     Services.AddActionMenu('ToolsMenu', nil, RootMenu, True, True);
   GMenuItems.Add(RootMenu);
 
+  { v0.42: daily-use actions on top; diagnostics & test harness bunched below
+    a separator so the everyday items aren't lost among them. }
   AddWrappedItem(RootMenu, 'Hover at Cursor',           InvokeHover);
   AddWrappedItem(RootMenu, 'Show Completion',            InvokeCompletion);
   AddWrappedItem(RootMenu, 'Show Signature Help',        InvokeSignatureHelp);
-  AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)',  InvokeDiagnostics);
-  AddWrappedItem(RootMenu, 'Rename Symbol...',           InvokeRename);
-  // v0.26: compiler diagnostics entries
-  AddWrappedItem(RootMenu, 'Compile && Diagnose',        InvokeCompileDiagnose);
-  AddWrappedItem(RootMenu, 'Import Build Log...',        InvokeImportLog);
-  // v0.27: YADF format integration
-  AddWrappedItem(RootMenu, 'Format with YADF',           InvokeFormatYadf);
-  // v0.30: structure form + settings
-  AddWrappedItem(RootMenu, 'Show Structure',             InvokeShowStructure);
-  // v0.31: AST diagnostics (no compiler required)
-  AddWrappedItem(RootMenu, 'Run AST Checks',             InvokeRunAstChecks);
-  // v0.33: find usages + symbol search
   AddWrappedItem(RootMenu, 'Find Usages...',             InvokeFindUsages);
   AddWrappedItem(RootMenu, 'Symbol Search...',           InvokeSymbolSearch);
-  AddWrappedItem(RootMenu, 'Dockable Panel (test)',      InvokeDockPanel);
+  AddWrappedItem(RootMenu, 'Show Structure',             InvokeShowStructure);
+  AddWrappedItem(RootMenu, 'Rename Symbol...',           InvokeRename);
+  AddWrappedItem(RootMenu, 'Format with YADF',           InvokeFormatYadf);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
-  // v0.39: diagnostic submenu
+
+  { ---- Diagnostics & Tests (alpha) ---- }
+  AddSeparator(RootMenu);
+  AddSectionHeader(RootMenu, 'Diagnostics && Tests');
+  AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)',  InvokeDiagnostics);
+  AddWrappedItem(RootMenu, 'Run AST Checks',             InvokeRunAstChecks);
   AddWrappedItem(RootMenu, 'Lint Buffer (Unsaved)',      InvokeLintBuffer);
+  AddWrappedItem(RootMenu, 'Compile && Diagnose',        InvokeCompileDiagnose);
+  AddWrappedItem(RootMenu, 'Import Build Log...',        InvokeImportLog);
+  AddWrappedItem(RootMenu, 'Dockable Panel (test)',      InvokeDockPanel);
   AddWrappedItem(RootMenu, 'Test Connection...',         InvokeTestConnection);
   AddWrappedItem(RootMenu, 'Open Plugin Log',            InvokeOpenLog);
 

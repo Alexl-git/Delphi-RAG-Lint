@@ -754,6 +754,52 @@ begin
   end;
 end;
 
+// v0.42: render a symbol as a Code-Insight-style declaration line, e.g.
+//   function TShape.Area: Double          (proc-likes: sig has params+return)
+//   constructor Create(const AName: string)
+//   property Name: string                 (prop/field/const/var: sig is type)
+//   class TShape                          (containers: no signature)
+// Signature already carries the leading '(' or ': ' for proc-likes, so we
+// concatenate directly; for type-valued kinds we insert ': ' before the type.
+function DeclLineFor(const ASym: TSymbol): string;
+var
+  Keyword, Sig: string;
+begin
+  Sig := ASym.Signature;
+  case ASym.Kind of
+    skFunction:    Keyword := 'function';
+    skProcedure:   Keyword := 'procedure';
+    skConstructor: Keyword := 'constructor';
+    skDestructor:  Keyword := 'destructor';
+    skMethod:
+      { class/interface methods: tell function from procedure by whether the
+        signature carries a return type. }
+      if (Sig <> '') and ((Sig[1] = ':') or (Pos('): ', Sig) > 0)) then
+        Keyword := 'function'
+      else
+        Keyword := 'procedure';
+    skProperty:    Keyword := 'property';
+    skField:       Keyword := 'var';
+    skVarDecl:     Keyword := 'var';
+    skConstDecl:   Keyword := 'const';
+  else
+    Keyword := ASym.Kind.ToText;
+  end;
+
+  case ASym.Kind of
+    skFunction, skProcedure, skConstructor, skDestructor, skMethod:
+      // Sig is '(args): Ret' or ': Ret' or '(args)' or '' -- concat directly.
+      Result := Format('%s %s%s', [Keyword, ASym.Name, Sig]);
+    skProperty, skField, skVarDecl, skConstDecl:
+      if Sig <> '' then
+        Result := Format('%s %s: %s', [Keyword, ASym.Name, Sig])
+      else
+        Result := Format('%s %s', [Keyword, ASym.Name]);
+  else
+    Result := Format('%s %s', [Keyword, ASym.Name]);
+  end;
+end;
+
 procedure TLSPServer.HandleHover(const AId: TJSONValue;
   const AParams: TJSONObject);
 var
@@ -876,12 +922,21 @@ begin
           Sb.AppendLine(Format('_Resolved type: `%s`_', [ResolvedQName]));
           Sb.AppendLine('');
         end;
+        { v0.42: render each candidate (every overload) as a Code-Insight-style
+          declaration. Signature now carries the full param list + return type,
+          e.g. '(const A: Integer): Boolean'. The "- `qname` - line N" shape is
+          preserved exactly so the popup's single-click navigation still parses
+          the qname + line; the declaration line is shown indented underneath. }
+        if Length(Filtered) > 1 then
+        begin
+          Sb.AppendLine(Format('_%d overloads:_', [Length(Filtered)]));
+          Sb.AppendLine('');
+        end;
         for Sym in Filtered do
         begin
           Sb.AppendLine(Format('- `%s` - line %d', [Sym.QualifiedName,
             Sym.StartLine]));
-          if Sym.Signature <> '' then
-            Sb.AppendLine('    ' + Sym.Signature);
+          Sb.AppendLine('    ' + DeclLineFor(Sym));
         end;
         if (Length(Filtered) < Length(Symbols)) and (ResolvedQName = '') then
           Sb.AppendLine(Format(#10'_(showing %d of %d -- use Find Usages for full list)_',

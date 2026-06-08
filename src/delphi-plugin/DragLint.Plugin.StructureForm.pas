@@ -24,6 +24,7 @@ uses
   ToolsAPI,
   DragLint.Plugin.DiagnosticCache,
   DragLint.Plugin.StructureCache,
+  DragLint.Plugin.DbResolver,
   DragLint.Plugin.Settings;
 
 { ---- TStructureNodeData: stores line info in tree node.Data ---- }
@@ -73,17 +74,22 @@ end;
 function KindPrefix(AKind: TSymbolKind): string;
 begin
   case AKind of
-    skUnit:      Result := '[unit] ';
-    skClass:     Result := '[cls]  ';
-    skInterface: Result := '[intf] ';
-    skRecord:    Result := '[rec]  ';
-    skProcedure: Result := '[proc] ';
-    skFunction:  Result := '[func] ';
-    skProperty:  Result := '[prop] ';
-    skField:     Result := '[fld]  ';
-    skConstant:  Result := '[const]';
-    skType:      Result := '[type] ';
-    skVariable:  Result := '[var]  ';
+    skUnit:        Result := '[unit] ';
+    skClass:       Result := '[cls]  ';
+    skInterface:   Result := '[intf] ';
+    skRecord:      Result := '[rec]  ';
+    skEnum:        Result := '[enum] ';
+    skEnumValue:   Result := '[val]  ';
+    skProcedure:   Result := '[proc] ';
+    skFunction:    Result := '[func] ';
+    skMethod:      Result := '[meth] ';
+    skConstructor: Result := '[ctor] ';
+    skDestructor:  Result := '[dtor] ';
+    skProperty:    Result := '[prop] ';
+    skField:       Result := '[fld]  ';
+    skConstant:    Result := '[const]';
+    skType:        Result := '[type] ';
+    skVariable:    Result := '[var]  ';
   else
     Result := '[?]    ';
   end;
@@ -96,6 +102,23 @@ begin
     Result := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
   if not FileExists(Result) then
     Result := 'drag-lint.exe';
+end;
+
+function ResolveDbForFile: string;
+{ v0.42: the Structure outline must query the SAME database the rest of the
+  plugin uses for the active file. Reuse the shared DbResolver and take the
+  primary (first, highest-priority) DB. Empty => let the exe self-resolve. }
+var
+  Dbs: TArray<string>;
+begin
+  Result := '';
+  try
+    Dbs := ResolveActiveIndexDbs(LoadSettings);
+    if Length(Dbs) > 0 then
+      Result := Dbs[0];
+  except
+    Result := '';
+  end;
 end;
 
 { ---- TDragLintStructureForm ---- }
@@ -193,6 +216,7 @@ var
   D:        TDragLintDiagnostic;
   S:        TSymbolInfo;
   ExePath:  string;
+  DbPath:   string;
   i:        Integer;
 begin
   FTree.Items.BeginUpdate;
@@ -231,7 +255,8 @@ begin
 
     { --- Code Elements root --- }
     ExePath := ResolveExePath;
-    Syms    := StructureCache.GetSymbolsForFile(AFilePath, ExePath);
+    DbPath  := ResolveDbForFile;
+    Syms    := StructureCache.GetSymbolsForFile(AFilePath, ExePath, DbPath);
 
     RootSym := FTree.Items.Add(nil,
       Format('Code Elements (%d)', [Length(Syms)]));
@@ -242,8 +267,17 @@ begin
       S  := Syms[i];
       ND := TStructureNodeData.Create;
       ND.Line := S.Line;
-      Node := FTree.Items.AddChild(RootSym,
-        KindPrefix(S.Kind) + S.Name);
+      { v0.42: show the signature inline for proc-likes (it already begins
+        with '(' or ': '); for type-valued members append ': <type>'. }
+      var Caption: string := KindPrefix(S.Kind) + S.Name;
+      if S.Signature <> '' then
+      begin
+        if (S.Signature[1] = '(') or (S.Signature[1] = ':') then
+          Caption := Caption + S.Signature
+        else
+          Caption := Caption + ': ' + S.Signature;
+      end;
+      Node := FTree.Items.AddChild(RootSym, Caption);
       Node.Data := ND;
     end;
 

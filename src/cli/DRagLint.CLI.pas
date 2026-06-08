@@ -310,7 +310,7 @@ begin
       Inc(i);
       Result.Name := ParamStr(i);
     end
-    else if (A = '--in') and (i < ParamCount) then
+    else if ((A = '--in') or (A = '--file')) and (i < ParamCount) then
     begin
       Inc(i);
       Result.InFile := ParamStr(i);
@@ -767,7 +767,15 @@ begin
       Line := Format('%-12s %-30s %s', [Sym.Kind.ToText, Sym.Name,
         Sym.QualifiedName]);
       if Sym.Signature <> '' then          { gap #1/#2: show sig, distinguish overloads }
-        Line := Line + ' : ' + Sym.Signature;
+      begin
+        { v0.42: Signature now carries the full param list (+ return type).
+          A function's sig already begins with ': ' (e.g. ': Boolean'), so
+          only inject the separator when it doesn't start with '(' or ':'. }
+        if (Sym.Signature[1] = '(') or (Sym.Signature[1] = ':') then
+          Line := Line + ' ' + Sym.Signature
+        else
+          Line := Line + ' : ' + Sym.Signature;
+      end;
       if Sym.Section = 'implementation' then  { gap #3: not usable from other units }
         Line := Line + '  [impl-only]';
       Writeln(Line);
@@ -2755,6 +2763,66 @@ begin
   Result := 0;
 end;
 
+// v0.42: drag-lint outline --file <path.pas> [--db <path>] [--format text|json]
+// Lists every symbol declared in one file, ordered by position. Backs the
+// IDE Structure form (which previously mis-used the class-scoped 'surface').
+// JSON shape: [{"kind","name","qname","line","signature","modifiers"}, ...]
+// Exit 2 on usage error / db missing, 0 otherwise (empty list is not an error
+// -- a file with no indexed symbols legitimately returns []).
+function DoOutline(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Syms: TArray<TSymbol>;
+  S: TSymbol;
+  JArr: TJSONArray;
+  JObj: TJSONObject;
+begin
+  if AArgs.InFile = '' then
+  begin
+    Writeln('Usage: drag-lint outline --file <path.pas> ' +
+      '[--db <path>] [--format text|json]');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first.');
+    Exit(2);
+  end;
+
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  Syms := Store.FindSymbolsByFile(AArgs.InFile);
+
+  if LowerCase(AArgs.Format) = 'json' then
+  begin
+    JArr := TJSONArray.Create;
+    try
+      for S in Syms do
+      begin
+        JObj := TJSONObject.Create;
+        JObj.AddPair('kind', S.Kind.ToText);
+        JObj.AddPair('name', S.Name);
+        JObj.AddPair('qname', S.QualifiedName);
+        JObj.AddPair('line', TJSONNumber.Create(S.StartLine));
+        JObj.AddPair('signature', S.Signature);
+        JObj.AddPair('modifiers', S.Modifiers);
+        JArr.AddElement(JObj);
+      end;
+      Writeln(JArr.Format(2));
+    finally
+      JArr.Free;
+    end;
+  end
+  else
+  begin
+    for S in Syms do
+      Writeln(System.SysUtils.Format('%-10s %-40s %d',
+        [S.Kind.ToText, S.QualifiedName, S.StartLine]));
+  end;
+  Result := 0;
+end;
+
 // v0.17: drag-lint slice --qname <Foo.TBar> [--db <path>] [--format text|json]
 // Returns symbol-relevant chunks of the unit:
 //   1. unit-header  � lines 1 through the "interface" keyword line
@@ -4195,6 +4263,8 @@ begin
       Result := DoImpact(Args)
     else if Args.Command = 'surface' then
       Result := DoSurface(Args)
+    else if Args.Command = 'outline' then
+      Result := DoOutline(Args)
     else if Args.Command = 'slice' then
       Result := DoSlice(Args)
     else if Args.Command = 'context' then

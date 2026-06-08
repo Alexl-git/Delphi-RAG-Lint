@@ -545,6 +545,59 @@ begin
   Result := Trim(Result);
 end;
 
+// v0.42: whitespace-collapse any node text to a single readable line.
+function CollapseWs(const ARaw: string): string;
+var
+  i: Integer;
+  C: Char;
+  PrevSpace: Boolean;
+begin
+  Result := '';
+  PrevSpace := False;
+  for i := 1 to Length(ARaw) do
+  begin
+    C := ARaw[i];
+    if (C = #9) or (C = #10) or (C = #13) or (C = ' ') then
+    begin
+      if not PrevSpace then Result := Result + ' ';
+      PrevSpace := True;
+    end
+    else
+    begin
+      Result := Result + C;
+      PrevSpace := False;
+    end;
+  end;
+  Result := Trim(Result);
+end;
+
+// v0.42: full Pascal signature for a declProc node = the parameter list
+// (declArgs, including its parentheses) plus the return type, so hover and
+// completion can show "(const A: Integer; B: string): Boolean" rather than
+// just the return type. Paramless procedures yield ''; paramless functions
+// yield ': <ReturnType>'. Whitespace is collapsed so multi-line param lists
+// read on one line.
+function ProcSignatureOf(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  ArgsNode: TTSNode;
+  ArgsText, RetType: string;
+begin
+  ArgsText := '';
+  ArgsNode := ANode.ChildByField('args');
+  if not ArgsNode.IsNull then
+    ArgsText := CollapseWs(NodeText(ArgsNode, ASource));
+  RetType := TypeTextOf(ANode, ASource);
+  if RetType <> '' then
+  begin
+    if ArgsText <> '' then
+      Result := ArgsText + ': ' + RetType
+    else
+      Result := ': ' + RetType;
+  end
+  else
+    Result := ArgsText;
+end;
+
 procedure WalkDeclProc(const ANode: TTSNode; const AState: TWalkState;
   AParentSymbolIdx: Integer; const AParentQualifiedName: string;
   AAsMethod: Boolean);
@@ -589,9 +642,10 @@ begin
     Modifiers := AState.CurrentVisibility
   else
     Modifiers := '';
-  { Signature = the return type (functions); blank for procedures. }
+  { v0.42: Signature = full parameter list + return type (Code-Insight style),
+    e.g. '(const A: Integer): Boolean'. Was return-type-only before. }
   AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode,
-    TypeTextOf(ANode, AState.Source), Modifiers);
+    ProcSignatureOf(ANode, AState.Source), Modifiers);
 end;
 
 procedure Walk(const ANode: TTSNode; const AState: TWalkState;

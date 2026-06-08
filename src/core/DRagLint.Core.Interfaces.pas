@@ -26,6 +26,9 @@ type
 
     function FindSymbolsByExactName(const AName: string): TArray<TSymbol>;
     function FindSymbolsByQualifiedName(const AQName: string): TArray<TSymbol>;
+    // v0.42: file outline - every symbol declared in one file, ordered by
+    // position. Backs the Structure form (was mis-using class-scoped surface).
+    function FindSymbolsByFile(const APath: string): TArray<TSymbol>;
     function FindReferencesTo(ASymbolId: Int64): TArray<TReference>;
     function FindCallersByName(const ACalleeName: string): TArray<TReference>;
     function FindSymbolsFuzzy(const APattern: string; ATopK: Integer = 10): TArray<TSymbol>;

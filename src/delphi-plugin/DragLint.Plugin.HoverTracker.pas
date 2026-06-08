@@ -269,7 +269,11 @@ begin
     DebugLog(Format('HoverTracker: spawning popup at (%d,%d), %d chars, header="%s"',
       [Pos.X, Pos.Y + 20, Length(Combined), DwellHeader]));
     CloseDragLintHover;
-    ShowDragLintHover(DwellHeader, Combined, DwellCallers, Pos.X, Pos.Y + 20);
+    { v0.42: dwell popups dismiss against the original mouse point (Pos), not
+      the wide popup rect -- so a small drift, or leaving the editor, clears
+      them. The popup is still drawn at Pos.Y+20 (below the cursor). }
+    ShowDragLintHover(DwellHeader, Combined, DwellCallers, Pos.X, Pos.Y + 20,
+      True, Pos.X, Pos.Y);
   except
     { Swallow all exceptions: this fires in a VCL timer inside the IDE.
       Any unhandled exception here would surface as an IDE crash or modal

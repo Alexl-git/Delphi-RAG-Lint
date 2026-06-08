@@ -76,6 +76,7 @@ type
 
     function FindSymbolsByExactName(const AName: string): TArray<TSymbol>;
     function FindSymbolsByQualifiedName(const AQName: string): TArray<TSymbol>;
+    function FindSymbolsByFile(const APath: string): TArray<TSymbol>;
     function FindReferencesTo(ASymbolId: Int64): TArray<TReference>;
     function FindCallersByName(const ACalleeName: string): TArray<TReference>;
     function FindSymbolsFuzzy(const APattern: string; ATopK: Integer = 10): TArray<TSymbol>;
@@ -141,6 +142,8 @@ type
     function FindCallersByNameWithContext(const ACalleeName: string;
       AContextLines: Integer): TArray<TReference>;
   private
+    // v0.42: path-tolerant file-id resolution for FindSymbolsByFile (outline)
+    function ResolveFileIdTolerant(const APath: string): Int64;
     // v0.17 slice helpers
     function FindChildSymbols(AParentId: Int64): TArray<TSymbol>;
     // FindImplLine: searches ALines (0-based) for a line matching
@@ -721,6 +724,109 @@ begin
     FQFindByQName.Close;
     Result := List.ToArray;
   finally
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.ResolveFileIdTolerant(const APath: string): Int64;
+{ Path matching is fragile: the indexer can bake un-normalized segments into
+  files.path (e.g. "C:\repo\tests\..\src\Foo.pas") depending on how it was
+  invoked, while the IDE hands us the fully-expanded path. Resolve in three
+  escalating steps:
+    1. exact (slash-tolerant) - the common case for clean indexes
+    2. exact on the expanded caller path
+    3. basename match: pull every file with the same leaf name, expand each
+       stored path with TPath.GetFullPath, and accept the one whose canonical
+       form equals the caller's. If exactly one candidate exists, accept it
+       outright (a single open buffer almost never collides on basename). }
+var
+  Q: TFDQuery;
+  WantFull, Leaf, CandFull: string;
+  OnlyId, MatchId: Int64;
+  CandCount: Integer;
+begin
+  Result := FindFileIdByPath(APath);
+  if Result >= 0 then Exit;
+
+  WantFull := '';
+  try WantFull := TPath.GetFullPath(APath); except WantFull := APath; end;
+  if not SameText(WantFull, APath) then
+  begin
+    Result := FindFileIdByPath(WantFull);
+    if Result >= 0 then Exit;
+  end;
+
+  Leaf := TPath.GetFileName(APath);
+  if Leaf = '' then Exit(-1);
+
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text := 'SELECT id, path FROM files WHERE path LIKE :leaf';
+    Q.ParamByName('leaf').AsString := '%' + Leaf;
+    Q.Open;
+    CandCount := 0;
+    OnlyId    := -1;
+    MatchId   := -1;
+    while not Q.Eof do
+    begin
+      { Endswith guard: LIKE '%Leaf' also matches "XYZFoo.pas" for "Foo.pas",
+        so require a real path-separator boundary before the leaf. }
+      var StoredPath: string := Q.FieldByName('path').AsString;
+      if SameText(TPath.GetFileName(StoredPath), Leaf) then
+      begin
+        Inc(CandCount);
+        OnlyId := Q.FieldByName('id').AsLargeInt;
+        CandFull := '';
+        try CandFull := TPath.GetFullPath(StoredPath); except CandFull := StoredPath; end;
+        if (MatchId < 0) and SameText(CandFull, WantFull) then
+          MatchId := OnlyId;
+      end;
+      Q.Next;
+    end;
+    Q.Close;
+    if MatchId >= 0 then
+      Result := MatchId
+    else if CandCount = 1 then
+      Result := OnlyId
+    else
+      Result := -1;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindSymbolsByFile(
+  const APath: string): TArray<TSymbol>;
+var
+  Q: TFDQuery;
+  List: TList<TSymbol>;
+  FileId: Int64;
+begin
+  List := TList<TSymbol>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    { Resolve the file id tolerantly (handles un-normalized stored paths),
+      then pull every symbol on that file ordered by position. }
+    FileId := ResolveFileIdTolerant(APath);
+    if FileId >= 0 then
+    begin
+      Q.Connection := FConn;
+      Q.SQL.Text :=
+        'SELECT * FROM symbols WHERE file_id = :fid ' +
+        'ORDER BY start_line, start_col';
+      Q.ParamByName('fid').AsLargeInt := FileId;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        List.Add(ReadSymbolFromQuery(Q));
+        Q.Next;
+      end;
+      Q.Close;
+    end;
+    Result := List.ToArray;
+  finally
+    Q.Free;
     List.Free;
   end;
 end;

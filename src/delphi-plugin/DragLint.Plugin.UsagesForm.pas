@@ -19,9 +19,9 @@ procedure HideFindUsages;
 implementation
 
 uses
-  System.SysUtils, System.Classes, System.JSON,
+  System.SysUtils, System.Classes, System.JSON, System.StrUtils,
   Vcl.Forms, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.ToolWin,
-  Vcl.ExtCtrls,
+  Vcl.ExtCtrls, Vcl.Graphics,
   Winapi.Windows,
   ToolsAPI,
   DragLint.Plugin.DbResolver,  { v0.40.5: ResolverDiagnostic for debug node }
@@ -69,6 +69,9 @@ type
     procedure BtnRefreshClick(Sender: TObject);
     procedure BtnCloseClick(Sender: TObject);
     procedure TreeDblClick(Sender: TObject);
+    procedure TreeAdvancedCustomDrawItem(Sender: TCustomTreeView;
+      Node: TTreeNode; State: TCustomDrawState; Stage: TCustomDrawStage;
+      var PaintImages, DefaultDraw: Boolean);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure FormDestroy(Sender: TObject);
     procedure ClearNodeData;
@@ -210,6 +213,9 @@ begin
   FTree.ShowLines     := True;
   FTree.HideSelection := False;
   FTree.OnDblClick    := TreeDblClick;
+  { v0.42: custom-draw caller rows so the searched identifier is highlighted
+    (bold + amber) inside the code snippet. }
+  FTree.OnAdvancedCustomDrawItem := TreeAdvancedCustomDrawItem;
 
   FLastCallerNode := nil;
 end;
@@ -261,6 +267,109 @@ begin
   else
     Result := FTree.Items.AddChild(AParent, AText);
   Result.Data := ND;
+end;
+
+function IsIdentBoundary(const AText: string; AIndex: Integer): Boolean;
+{ True when position AIndex (1-based; may be 0 or > length for the edges) is
+  NOT part of a Pascal identifier -- used to keep highlighting to whole-word
+  matches of the symbol, so "Foo" doesn't light up inside "FooBar". }
+var
+  C: Char;
+begin
+  if (AIndex < 1) or (AIndex > Length(AText)) then Exit(True);
+  C := AText[AIndex];
+  Result := not (CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']));
+end;
+
+procedure TDragLintUsagesForm.TreeAdvancedCustomDrawItem(
+  Sender: TCustomTreeView; Node: TTreeNode; State: TCustomDrawState;
+  Stage: TCustomDrawStage; var PaintImages, DefaultDraw: Boolean);
+{ v0.42: full self-draw of caller rows so we can render the matched identifier
+  in bold amber while leaving the rest of the snippet plain. Self-drawing (vs
+  overlaying) guarantees exact alignment because every segment's X is computed
+  from one origin. Only caller rows (Data with a real Line) are custom-drawn;
+  file headers / debug nodes fall through to the default renderer. }
+var
+  ND:        TUsageNodeData;
+  Txt, Term: string;
+  R:         TRect;
+  Cv:        TCanvas;
+  Selected:  Boolean;
+  X, P, StartAt: Integer;
+  Seg:       string;
+begin
+  DefaultDraw := True;
+  if Stage <> cdPrePaint then Exit;
+  if FSymbolName = '' then Exit;
+  if not (TObject(Node.Data) is TUsageNodeData) then Exit;
+  ND := TUsageNodeData(Node.Data);
+  if ND.Line <= 0 then Exit;       { only real caller rows }
+
+  Txt  := Node.Text;
+  Term := FSymbolName;
+  if Pos(LowerCase(Term), LowerCase(Txt)) = 0 then Exit;  { nothing to mark }
+
+  Cv := Sender.Canvas;
+  R  := Node.DisplayRect(True);
+  Selected := (cdsSelected in State) or (cdsMarked in State);
+
+  Cv.Font.Assign(FTree.Font);
+  if Selected then
+  begin
+    Cv.Brush.Color := clHighlight;
+    Cv.Font.Color  := clHighlightText;
+  end
+  else
+  begin
+    Cv.Brush.Color := clWindow;
+    Cv.Font.Color  := clWindowText;
+  end;
+  Cv.FillRect(R);
+  Cv.Brush.Style := bsClear;
+
+  X := R.Left + 2;
+  StartAt := 1;
+  repeat
+    { next whole-word, case-insensitive occurrence at/after StartAt }
+    P := PosEx(LowerCase(Term), LowerCase(Txt), StartAt);
+    while (P > 0) and
+          not (IsIdentBoundary(Txt, P - 1) and
+               IsIdentBoundary(Txt, P + Length(Term))) do
+      P := PosEx(LowerCase(Term), LowerCase(Txt), P + 1);
+
+    if P = 0 then
+    begin
+      Seg := Copy(Txt, StartAt, MaxInt);
+      if Seg <> '' then
+      begin
+        Cv.Font.Style := [];
+        if not Selected then Cv.Font.Color := clWindowText;
+        Cv.TextOut(X, R.Top, Seg);
+      end;
+      Break;
+    end;
+
+    { plain text before the match }
+    if P > StartAt then
+    begin
+      Seg := Copy(Txt, StartAt, P - StartAt);
+      Cv.Font.Style := [];
+      if not Selected then Cv.Font.Color := clWindowText;
+      Cv.TextOut(X, R.Top, Seg);
+      Inc(X, Cv.TextWidth(Seg));
+    end;
+
+    { the matched identifier: bold + amber (plain bold when selected) }
+    Seg := Copy(Txt, P, Length(Term));
+    Cv.Font.Style := [fsBold];
+    if not Selected then Cv.Font.Color := TColor($004080FF) { amber/orange BGR };
+    Cv.TextOut(X, R.Top, Seg);
+    Inc(X, Cv.TextWidth(Seg));
+
+    StartAt := P + Length(Term);
+  until False;
+
+  DefaultDraw := False;
 end;
 
 procedure TDragLintUsagesForm.ParseJsonOutput(const AOutput: string;

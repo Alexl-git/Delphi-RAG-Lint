@@ -1,8 +1,15 @@
 unit DragLint.Plugin.StructureCache;
 
 { Singleton cache for per-file symbol/code-element data.
-  Shells out to "drag-lint surface --qname <UnitName>" once per file,
-  caches the result keyed by lower-case file path.
+
+  v0.42: shells out to "drag-lint outline --file <path> --format json --db <db>"
+  once per file -- the FILE-scoped outline, ordered by position. Replaces the
+  old "surface --qname <UnitName>" call, which required a CLASS qname and emitted
+  signature lines, so for a normal unit it returned "No symbol matched" and the
+  tree showed a single "[?] Symbol". Now every symbol in the file is listed with
+  its correct kind, name, line, and signature.
+
+  Caches the result keyed by lower-case file path.
   Thread-safe: Update/Invalidate may be called from a background thread. }
 
 interface
@@ -12,15 +19,17 @@ uses
 
 type
   TSymbolKind = (skUnknown, skUnit, skClass, skInterface, skRecord,
-                 skProcedure, skFunction, skProperty, skField,
-                 skConstant, skType, skVariable);
+                 skEnum, skEnumValue,
+                 skProcedure, skFunction, skMethod, skConstructor, skDestructor,
+                 skProperty, skField, skConstant, skType, skVariable);
 
   TSymbolInfo = record
-    Name:     string;
-    Kind:     TSymbolKind;
-    Line:     Integer;      { 1-based, 0 = unknown }
-    QName:    string;       { fully-qualified name from surface output }
-    KindStr:  string;       { raw kind string from CLI }
+    Name:      string;
+    Kind:      TSymbolKind;
+    Line:      Integer;      { 1-based, 0 = unknown }
+    QName:     string;       { fully-qualified name from outline output }
+    KindStr:   string;       { raw kind string from CLI }
+    Signature: string;       { param list + return type / member type }
   end;
 
   TDragLintStructureCache = class
@@ -32,8 +41,9 @@ type
     destructor Destroy; override;
 
     { Returns cached symbols for AFilePath, shelling out if not cached.
-      AExePath is the path to drag-lint.exe. }
-    function GetSymbolsForFile(const AFilePath, AExePath: string):
+      AExePath is the path to drag-lint.exe; ADbPath is the resolved project
+      database to query (empty = let the exe use its default resolution). }
+    function GetSymbolsForFile(const AFilePath, AExePath, ADbPath: string):
       TArray<TSymbolInfo>;
 
     { Drop the cached entry for AFilePath so the next call re-shells. }
@@ -49,6 +59,7 @@ implementation
 uses
   Winapi.Windows,
   System.Classes,
+  System.JSON,
   System.IOUtils;
 
 { ---- module-level singleton ---- }
@@ -75,53 +86,22 @@ var
 begin
   S := LowerCase(KindStr);
   if S = 'unit'       then Result := skUnit
-  else if S = 'class'     then Result := skClass
-  else if S = 'interface' then Result := skInterface
-  else if S = 'record'    then Result := skRecord
+  else if S = 'class'       then Result := skClass
+  else if S = 'interface'   then Result := skInterface
+  else if S = 'record'      then Result := skRecord
+  else if S = 'enum'        then Result := skEnum
+  else if S = 'enum_value'  then Result := skEnumValue
   else if (S = 'procedure') or (S = 'proc') then Result := skProcedure
   else if (S = 'function')  or (S = 'func') then Result := skFunction
-  else if S = 'property'  then Result := skProperty
-  else if S = 'field'     then Result := skField
-  else if S = 'const'     then Result := skConstant
-  else if S = 'type'      then Result := skType
-  else if S = 'var'       then Result := skVariable
-  else                         Result := skUnknown;
-end;
-
-function ParseSurfaceLine(const ALine: string): TSymbolInfo;
-var
-  Parts: TArray<string>;
-  LocPart: string;
-  ColonPos: Integer;
-begin
-  Result.KindStr := '';
-  Result.Kind    := skUnknown;
-  Result.QName   := '';
-  Result.Name    := '';
-  Result.Line    := 0;
-
-  Parts := ALine.Split([' ', #9], TStringSplitOptions.ExcludeEmpty);
-  if Length(Parts) < 2 then Exit;
-
-  Result.KindStr := Parts[0];
-  Result.Kind    := ParseKind(Parts[0]);
-  Result.QName   := Parts[1];
-
-  { Extract leaf name: part after last '.' }
-  ColonPos := LastDelimiter('.', Result.QName);
-  if ColonPos > 0 then
-    Result.Name := Copy(Result.QName, ColonPos + 1, MaxInt)
-  else
-    Result.Name := Result.QName;
-
-  { Optional third token: file:line }
-  if Length(Parts) >= 3 then
-  begin
-    LocPart := Parts[2];
-    ColonPos := LastDelimiter(':', LocPart);
-    if ColonPos > 1 then
-      Result.Line := StrToIntDef(Copy(LocPart, ColonPos + 1, MaxInt), 0);
-  end;
+  else if S = 'method'      then Result := skMethod
+  else if S = 'constructor' then Result := skConstructor
+  else if S = 'destructor'  then Result := skDestructor
+  else if S = 'property'    then Result := skProperty
+  else if S = 'field'       then Result := skField
+  else if S = 'const'       then Result := skConstant
+  else if S = 'type'        then Result := skType
+  else if S = 'var'         then Result := skVariable
+  else                           Result := skUnknown;
 end;
 
 { ---- RunAndCaptureSurface: shell out to drag-lint surface ---- }
@@ -189,33 +169,50 @@ begin
   end;
 end;
 
-{ ---- parse full surface output into TArray<TSymbolInfo> ---- }
+{ ---- parse "outline --format json" output into TArray<TSymbolInfo> ---- }
+{ JSON is an array of objects with keys: kind, name, qname, line, signature,
+  modifiers. }
 
-function ParseSurfaceOutput(const AOutput: string): TArray<TSymbolInfo>;
+function ParseOutlineJson(const AOutput: string): TArray<TSymbolInfo>;
 var
-  Lines: TStringList;
+  Root:  TJSONValue;
+  Arr:   TJSONArray;
+  Obj:   TJSONObject;
   S:     TSymbolInfo;
   List:  TList<TSymbolInfo>;
   i:     Integer;
-  L:     string;
 begin
   List := TList<TSymbolInfo>.Create;
   try
-    Lines := TStringList.Create;
+    Root := nil;
     try
-      Lines.Text := AOutput;
-      for i := 0 to Lines.Count - 1 do
+      Root := TJSONObject.ParseJSONValue(AOutput);
+    except
+      Root := nil;
+    end;
+    try
+      if Root is TJSONArray then
       begin
-        L := Trim(Lines[i]);
-        if L = '' then Continue;
-        { Skip header/error lines that don't start with a letter token }
-        if (L[1] = '-') or (L[1] = '[') then Continue;
-        S := ParseSurfaceLine(L);
-        if S.QName <> '' then
-          List.Add(S);
+        Arr := TJSONArray(Root);
+        for i := 0 to Arr.Count - 1 do
+        begin
+          if not (Arr.Items[i] is TJSONObject) then Continue;
+          Obj := TJSONObject(Arr.Items[i]);
+          S := Default(TSymbolInfo);
+          S.KindStr   := Obj.GetValue<string>('kind', '');
+          S.Kind      := ParseKind(S.KindStr);
+          S.Name      := Obj.GetValue<string>('name', '');
+          S.QName     := Obj.GetValue<string>('qname', '');
+          S.Line      := Obj.GetValue<Integer>('line', 0);
+          S.Signature := Obj.GetValue<string>('signature', '');
+          if S.Name = '' then
+            S.Name := S.QName;
+          if S.QName <> '' then
+            List.Add(S);
+        end;
       end;
     finally
-      Lines.Free;
+      Root.Free;
     end;
     Result := List.ToArray;
   finally
@@ -240,12 +237,11 @@ begin
 end;
 
 function TDragLintStructureCache.GetSymbolsForFile(
-  const AFilePath, AExePath: string): TArray<TSymbolInfo>;
+  const AFilePath, AExePath, ADbPath: string): TArray<TSymbolInfo>;
 var
   Key:      string;
   Cached:   TArray<TSymbolInfo>;
   HaveIt:   Boolean;
-  UnitName: string;
   CmdLine:  string;
   Output:   string;
   Symbols:  TArray<TSymbolInfo>;
@@ -265,13 +261,17 @@ begin
     Exit;
   end;
 
-  { Derive unit name: file stem without extension }
-  UnitName := TPath.GetFileNameWithoutExtension(AFilePath);
-
-  { Shell out }
-  CmdLine := Format('"%s" surface --qname "%s"', [AExePath, UnitName]);
+  { v0.42: file-scoped outline as JSON. Pass --db when we have a resolved
+    project database; without it the exe falls back to its own default
+    resolution (.drag-lint.json / drag-lint.sqlite in cwd). }
+  if ADbPath <> '' then
+    CmdLine := Format('"%s" outline --file "%s" --format json --db "%s"',
+      [AExePath, AFilePath, ADbPath])
+  else
+    CmdLine := Format('"%s" outline --file "%s" --format json',
+      [AExePath, AFilePath]);
   RunAndCaptureSurface(CmdLine, Output);
-  Symbols := ParseSurfaceOutput(Output);
+  Symbols := ParseOutlineJson(Output);
 
   { Cache even an empty result so we don't re-shell on every refresh }
   FLock.Enter;

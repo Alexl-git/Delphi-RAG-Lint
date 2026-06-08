@@ -42,6 +42,14 @@ type
     FWatchTimer:  TTimer;
     FAnchor:      TPoint;
     FShowTickMs:  Cardinal;
+    { v0.42: dwell popups dismiss tightly -- the moment the cursor leaves a
+      small box around the ORIGINAL dwell point (where the user was pointing),
+      not the whole 900 px popup rect. This stops the popup lingering over the
+      Projects/Messages pane and also clears it when the mouse leaves the
+      editor (that motion necessarily exits the anchor box). Menu-invoked
+      popups keep the generous popup-rect dismissal so they stay interactive. }
+    FAnchorDismiss: Boolean;
+    FDwellAnchor:   TPoint;
     procedure HandleKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
     procedure HandleDeactivate(Sender: TObject);
@@ -56,12 +64,15 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     procedure ShowAt(X, Y: Integer; const AHeader, ASummary: string;
-      const ACallers: TArray<TDragLintCallerInfo>);
+      const ACallers: TArray<TDragLintCallerInfo>;
+      AAnchorDismiss: Boolean; AAnchorX, AAnchorY: Integer);
   end;
 
 procedure ShowDragLintHover(const AHeader, ASummary: string;
   const ACallers: TArray<TDragLintCallerInfo>;
-  AScreenX, AScreenY: Integer); overload;
+  AScreenX, AScreenY: Integer;
+  AAnchorDismiss: Boolean = False;
+  AAnchorX: Integer = -1; AAnchorY: Integer = -1); overload;
 procedure ShowDragLintHover(const AContent: string;
   AScreenX, AScreenY: Integer); overload;
 procedure CloseDragLintHover;
@@ -184,17 +195,37 @@ procedure TDragLintHoverForm.HandleWatchTick(Sender: TObject);
 const
   MARGIN  = 20;
   GRACE_MS = 1500;
+  { v0.42: anchor-box half-extents ~ "1 line up/down, 3-4 chars left/right". }
+  ANCHOR_HALF_W = 28;
+  ANCHOR_HALF_H = 13;
+  ANCHOR_GRACE_MS = 300;
 var
   Pt:      TPoint;
   ExtRect: TRect;
+  AncRect: TRect;
 begin
-  { v0.40.8: single dismissal rule -- mouse outside (popup + 20 px margin)
-    closes the popup. ESC also closes via HandleKeyDown. Title-bar close
-    button is provided by bsSizeToolWin. That's it.
+  if not GetCursorPos(Pt) then Exit;
+
+  if FAnchorDismiss then
+  begin
+    { v0.42 dwell popup: close the instant the cursor leaves a tight box around
+      the ORIGINAL dwell point. Short grace so a sub-pixel jitter at spawn
+      doesn't self-close. Leaving the editor moves well outside this box, so
+      this also satisfies "clear hover when the mouse leaves the edit page". }
+    if GetTickCount - FShowTickMs < ANCHOR_GRACE_MS then Exit;
+    AncRect := Rect(FDwellAnchor.X - ANCHOR_HALF_W, FDwellAnchor.Y - ANCHOR_HALF_H,
+                    FDwellAnchor.X + ANCHOR_HALF_W, FDwellAnchor.Y + ANCHOR_HALF_H);
+    if not PtInRect(AncRect, Pt) then
+      Close;
+    Exit;
+  end;
+
+  { v0.40.8 menu popup: stays interactive -- mouse outside (popup + 20 px
+    margin) closes it. ESC also closes via HandleKeyDown. Title-bar close
+    button is provided by bsSizeToolWin.
     v0.40.8b: first 1.5 seconds after Show are a grace period -- the popup
     spawns at cursor+20, so the cursor is 20 px above the popup top; any
     1-px upward drift would otherwise close it immediately. }
-  if not GetCursorPos(Pt) then Exit;
   if GetTickCount - FShowTickMs < GRACE_MS then Exit;
   ExtRect := BoundsRect;
   InflateRect(ExtRect, MARGIN, MARGIN);
@@ -325,7 +356,8 @@ begin
 end;
 
 procedure TDragLintHoverForm.ShowAt(X, Y: Integer; const AHeader, ASummary: string;
-  const ACallers: TArray<TDragLintCallerInfo>);
+  const ACallers: TArray<TDragLintCallerInfo>;
+  AAnchorDismiss: Boolean; AAnchorX, AAnchorY: Integer);
 const
   MAX_W = 900;
   MAX_H = 700;
@@ -339,7 +371,15 @@ var
   HeaderH:    Integer;
   SummaryH:   Integer;
   ShortName:  string;
+  Ln:         string;
+  MaxLen:     Integer;
 begin
+  FAnchorDismiss := AAnchorDismiss;
+  if AAnchorX >= 0 then
+    FDwellAnchor := Point(AAnchorX, AAnchorY)
+  else
+    FDwellAnchor := Point(X, Y);
+
   FMemo.Text := ASummary;
   { v0.40.8g: title bar carries only "drag-lint -- kind name" (no file/line),
     because the body lists every definition with file:line already and the
@@ -393,7 +433,21 @@ begin
     FCallers.Height := CallersH;
   end;
 
-  W := MAX_W;
+  { v0.42: dwell popups size to their content width (the summary is short --
+    a couple of declaration lines) instead of the fixed 900 px, so they don't
+    blanket the panes behind the editor. Consolas 9 pt ~ 7 px/char. Menu
+    popups keep the full width because they carry the callers grid. }
+  if AAnchorDismiss then
+  begin
+    MaxLen := Length(AHeader);
+    for Ln in ASummary.Split([#10]) do
+      if Length(Ln.TrimRight) > MaxLen then MaxLen := Length(Ln.TrimRight);
+    W := 40 + MaxLen * 7;
+    if W < 200   then W := 200;
+    if W > MAX_W then W := MAX_W;
+  end
+  else
+    W := MAX_W;
   H := HeaderH + SummaryH + CallersH + PAD * 2;
   if H > MAX_H then H := MAX_H;
   if H < 120   then H := 120;
@@ -422,14 +476,17 @@ end;
 
 procedure ShowDragLintHover(const AHeader, ASummary: string;
   const ACallers: TArray<TDragLintCallerInfo>;
-  AScreenX, AScreenY: Integer);
+  AScreenX, AScreenY: Integer;
+  AAnchorDismiss: Boolean = False;
+  AAnchorX: Integer = -1; AAnchorY: Integer = -1);
 var
   Form: TDragLintHoverForm;
 begin
   if (GCurrentHover <> nil) and GCurrentHover.Visible then Exit;
   Form := TDragLintHoverForm.Create(Application);
   GCurrentHover := Form;
-  Form.ShowAt(AScreenX, AScreenY, AHeader, ASummary, ACallers);
+  Form.ShowAt(AScreenX, AScreenY, AHeader, ASummary, ACallers,
+    AAnchorDismiss, AAnchorX, AAnchorY);
 end;
 
 procedure ShowDragLintHover(const AContent: string;
