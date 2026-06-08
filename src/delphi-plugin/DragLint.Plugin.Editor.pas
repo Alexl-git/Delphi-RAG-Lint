@@ -1617,6 +1617,43 @@ begin
   AParent.Add(Result);
 end;
 
+{ v0.42: find a direct child menu item by its (ampersand-stripped) caption. }
+function FindMenuChildByCaption(AParent: TMenuItem;
+  const ACaption: string): TMenuItem;
+var
+  I: Integer;
+  C: string;
+begin
+  Result := nil;
+  if AParent = nil then Exit;
+  for I := 0 to AParent.Count - 1 do
+  begin
+    C := StringReplace(AParent.Items[I].Caption, '&', '', [rfReplaceAll]);
+    if SameText(Trim(C), ACaption) then
+      Exit(AParent.Items[I]);
+  end;
+end;
+
+{ v0.42: locate the IDE's "View > Tool Windows" submenu so we can register the
+  dock panel there, alongside Structure / Project Manager / Messages -- the
+  conventional home for dockable tool windows. Falls back to the View menu
+  itself, then nil (caller keeps the top-level drag-lint entry). }
+function FindViewToolWindowsMenu(Services: INTAServices): TMenuItem;
+var
+  MainMenu: TMainMenu;
+  ViewItem: TMenuItem;
+begin
+  Result := nil;
+  if Services = nil then Exit;
+  MainMenu := Services.MainMenu;
+  if MainMenu = nil then Exit;
+  ViewItem := FindMenuChildByCaption(MainMenu.Items, 'View');
+  if ViewItem = nil then Exit;
+  Result := FindMenuChildByCaption(ViewItem, 'Tool Windows');
+  if Result = nil then
+    Result := ViewItem;   { fall back to View itself }
+end;
+
 { ---- v0.39 diagnostic helpers ---- }
 
 procedure InvokeTestConnection(Sender: TObject);
@@ -1934,6 +1971,14 @@ begin
   AddWrappedItem(RootMenu, 'Import Build Log...',        InvokeImportLog);
   AddWrappedItem(RootMenu, 'Test Connection...',         InvokeTestConnection);
   AddWrappedItem(RootMenu, 'Open Plugin Log',            InvokeOpenLog);
+
+  { v0.42: also surface the dockable panel under View > Tool Windows -- the
+    standard place to show/hide dockable windows. The item is owned by
+    GMenuItems (via AddWrappedItem), so teardown removes it from the IDE menu
+    just like the top-level entries. }
+  var ToolWin: TMenuItem := FindViewToolWindowsMenu(Services);
+  if ToolWin <> nil then
+    AddWrappedItem(ToolWin, 'drag-lint', InvokeDockPanel);
 
   RegisterProjectNotifier;
   RegisterDragLintKeystrokes;
