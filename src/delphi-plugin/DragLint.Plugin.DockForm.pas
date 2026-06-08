@@ -26,10 +26,22 @@ uses
   Vcl.Controls, Vcl.Forms, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.ActnList,
   Vcl.ImgList, Vcl.Menus,
   DesignIntf,   { TEditState / TEditAction }
-  ToolsAPI;
+  ToolsAPI,
+  DragLint.Plugin.StructureForm;
 
 type
+  { v0.42: the dock panel hosts a tabbed view of the drag-lint tools, matching
+    the delphi-terminal sample's single-window-with-tabs layout. Structure is
+    live (embedded form); Find Usages / Symbol Search / Graph are placeholder
+    tabs filled in follow-up slices. }
   TDragLintDockFrame = class(TCustomFrame)
+  private
+    FPages:      TPageControl;
+    FStructure:  TForm;          { embedded TDragLintStructureForm }
+    FTabStruct:  TTabSheet;
+    procedure HandlePageChange(Sender: TObject);
+    function  AddTab(const ACaption: string): TTabSheet;
+    procedure AddPlaceholder(ATab: TTabSheet; const AText: string);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -72,30 +84,66 @@ var
 
 { ---- frame (placeholder content) ---------------------------------------- }
 
-constructor TDragLintDockFrame.Create(AOwner: TComponent);
+function TDragLintDockFrame.AddTab(const ACaption: string): TTabSheet;
+begin
+  Result := TTabSheet.Create(FPages);
+  Result.PageControl := FPages;
+  Result.Caption := ACaption;
+end;
+
+procedure TDragLintDockFrame.AddPlaceholder(ATab: TTabSheet; const AText: string);
 var
   L: TLabel;
-  M: TMemo;
+begin
+  L := TLabel.Create(ATab);
+  L.Parent    := ATab;
+  L.Align     := alClient;
+  L.Alignment := taCenter;
+  L.Layout    := tlCenter;
+  L.WordWrap  := True;
+  L.Caption   := AText;
+end;
+
+constructor TDragLintDockFrame.Create(AOwner: TComponent);
+var
+  Tab: TTabSheet;
 begin
   inherited;
-  L := TLabel.Create(Self);
-  L.Parent  := Self;
-  L.Align   := alTop;
-  L.Layout  := tlCenter;
-  L.Height  := 22;
-  L.Caption := '  drag-lint dockable panel -- docking works. Park me at the '
-    + 'bottom like Grep.';
 
-  M := TMemo.Create(Self);
-  M.Parent     := Self;
-  M.Align      := alClient;
-  M.ReadOnly   := True;
-  M.ScrollBars := ssBoth;
-  M.WordWrap   := False;
-  M.Lines.Add('Prototype panel hosted via INTACustomDockableForm.');
-  M.Lines.Add('');
-  M.Lines.Add('Next: Phase 3 scoped symbol search (project / current form /');
-  M.Lines.Add('everywhere) renders results here; Phase 4 hosts the graph.');
+  FPages := TPageControl.Create(Self);
+  FPages.Parent   := Self;
+  FPages.Align    := alClient;
+  FPages.OnChange := HandlePageChange;
+
+  { Tab 1: Structure -- live, embedded structure form. }
+  FTabStruct := AddTab('Structure');
+  try
+    FStructure := CreateEmbeddedStructure(Self, FTabStruct);
+  except
+    FStructure := nil;
+    AddPlaceholder(FTabStruct, 'Structure failed to load.');
+  end;
+
+  { Tabs 2-4: placeholders wired in follow-up slices. }
+  Tab := AddTab('Find Usages');
+  AddPlaceholder(Tab, 'Find Usages moves here next.' + sLineBreak +
+    'For now use drag-lint > Find Usages at the cursor.');
+
+  Tab := AddTab('Symbol Search');
+  AddPlaceholder(Tab, 'Symbol Search moves here next.' + sLineBreak +
+    'For now use drag-lint > Symbol Search.');
+
+  Tab := AddTab('Graph');
+  AddPlaceholder(Tab, 'Graph viewer (separate BPL) docks here next.');
+
+  FPages.ActivePage := FTabStruct;
+end;
+
+procedure TDragLintDockFrame.HandlePageChange(Sender: TObject);
+begin
+  { Re-read the active editor file whenever the Structure tab comes forward. }
+  if (FPages.ActivePage = FTabStruct) and (FStructure <> nil) then
+    RefreshEmbeddedStructure(FStructure);
 end;
 
 { ---- free watcher -------------------------------------------------------- }

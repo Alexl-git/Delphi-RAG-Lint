@@ -1912,6 +1912,8 @@ begin
 
   { v0.42: daily-use actions on top; diagnostics & test harness bunched below
     a separator so the everyday items aren't lost among them. }
+  AddWrappedItem(RootMenu, 'drag-lint Panel (dockable)', InvokeDockPanel);
+  AddSeparator(RootMenu);
   AddWrappedItem(RootMenu, 'Hover at Cursor',           InvokeHover);
   AddWrappedItem(RootMenu, 'Show Completion',            InvokeCompletion);
   AddWrappedItem(RootMenu, 'Show Signature Help',        InvokeSignatureHelp);
@@ -1930,7 +1932,6 @@ begin
   AddWrappedItem(RootMenu, 'Lint Buffer (Unsaved)',      InvokeLintBuffer);
   AddWrappedItem(RootMenu, 'Compile && Diagnose',        InvokeCompileDiagnose);
   AddWrappedItem(RootMenu, 'Import Build Log...',        InvokeImportLog);
-  AddWrappedItem(RootMenu, 'Dockable Panel (test)',      InvokeDockPanel);
   AddWrappedItem(RootMenu, 'Test Connection...',         InvokeTestConnection);
   AddWrappedItem(RootMenu, 'Open Plugin Log',            InvokeOpenLog);
 

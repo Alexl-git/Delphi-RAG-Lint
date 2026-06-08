@@ -12,14 +12,24 @@ unit DragLint.Plugin.StructureForm;
 
 interface
 
+uses
+  System.Classes, Vcl.Controls, Vcl.Forms;
+
 procedure ShowDragLintStructure;
 procedure HideDragLintStructure;
+
+{ v0.42: build the Structure UI embedded inside a host container (a tab of the
+  drag-lint dock panel) rather than as a standalone stay-on-top window. The
+  returned form is owned by AOwner; call RefreshEmbeddedStructure when its tab
+  is activated to re-read the active editor file. }
+function CreateEmbeddedStructure(AOwner: TComponent; AParent: TWinControl): TForm;
+procedure RefreshEmbeddedStructure(AForm: TForm);
 
 implementation
 
 uses
-  System.SysUtils, System.Classes,
-  Vcl.Forms, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.ExtCtrls,
+  System.SysUtils,
+  Vcl.ComCtrls, Vcl.StdCtrls, Vcl.ExtCtrls,
   Winapi.Windows,
   ToolsAPI,
   DragLint.Plugin.DiagnosticCache,
@@ -52,6 +62,7 @@ type
     function  GetActiveFilePath: string;
   public
     constructor Create(AOwner: TComponent); override;
+    procedure RefreshActive;   { v0.42: re-read the active editor file }
   end;
 
 var
@@ -327,6 +338,35 @@ begin
 end;
 
 { ---- public factory ---- }
+
+procedure TDragLintStructureForm.RefreshActive;
+begin
+  RefreshForFile(GetActiveFilePath);
+end;
+
+{ v0.42: embedded-in-a-tab factory. The form is created child-style (no border,
+  fsNormal) and parented into AParent (a dock-panel TTabSheet), so the same
+  tree + refresh logic serves both the standalone window and the dock tab. }
+function CreateEmbeddedStructure(AOwner: TComponent;
+  AParent: TWinControl): TForm;
+var
+  F: TDragLintStructureForm;
+begin
+  F := TDragLintStructureForm.Create(AOwner);
+  F.BorderStyle := bsNone;
+  F.FormStyle   := fsNormal;
+  F.Align       := alClient;
+  F.Parent      := AParent;
+  F.Visible     := True;
+  F.RefreshActive;
+  Result := F;
+end;
+
+procedure RefreshEmbeddedStructure(AForm: TForm);
+begin
+  if AForm is TDragLintStructureForm then
+    TDragLintStructureForm(AForm).RefreshActive;
+end;
 
 procedure ShowDragLintStructure;
 begin
