@@ -59,6 +59,7 @@ type
     Path: string;
     DbPath: string;
     DbPaths: TArray<string>;
+    ExcludeUnder: TArray<string>;   // v0.42: --exclude-under <dir> (repeatable)
     Name: string;
     QName: string;
     InFile: string;        // --in <file.pas> (resolve-uses scope context)
@@ -324,6 +325,12 @@ begin
     begin
       Inc(i);
       Result.Rule := ParamStr(i);
+    end
+    else if (A = '--exclude-under') and (i < ParamCount) then
+    begin
+      Inc(i);
+      SetLength(Result.ExcludeUnder, Length(Result.ExcludeUnder) + 1);
+      Result.ExcludeUnder[High(Result.ExcludeUnder)] := ParamStr(i);
     end
     else if (A = '--project') and (i < ParamCount) then
     begin
@@ -640,6 +647,14 @@ begin
   { v0.40.5 Tier 1: register the Firebird SQL parser alongside Delphi/DFM. }
   Indexer := TIndexer.Create(Store,
     [Parser, TDFMParser.Create, TFirebirdSqlParser.Create], AArgs.Docs);
+
+  { v0.42: cross-dictionary dedup -- exclude any subtree the caller says is
+    already covered by another index (library / active-project DB). }
+  for var ExDir in AArgs.ExcludeUnder do
+  begin
+    Indexer.AddExcludeRoot(ExDir);
+    Writeln('Excluding subtree: ', ExDir);
+  end;
 
   // Resolve target folders once (--scan-libraries / --project) or fall back
   // to the explicit path. The watch loop re-walks these on every tick;

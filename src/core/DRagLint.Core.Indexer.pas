@@ -5,6 +5,7 @@ interface
 uses
   System.SysUtils,
   System.Classes,
+  System.StrUtils,
   System.IOUtils,
   System.Hash,
   System.DateUtils,
@@ -20,8 +21,11 @@ type
     FParsers: TList<IParser>;
     FSkippedUpToDate: Integer;
     FDocConfig: TDocConfig;
+    FExcludeRoots: TList<string>;   { v0.42: normalized lowercase, trailing-sep }
     function ParserFor(const AExtension: string): IParser;
     procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
+    function IsUnderExcludeRoot(const APath: string): Boolean;
+    procedure CollectScanIgnoreRoots(const APath: string; ARecursive: Boolean);
   public
     constructor Create(const AStore: ISymbolStore;
       const AParsers: TArray<IParser>;
@@ -33,6 +37,7 @@ type
       ARecursive: Boolean = True);
     procedure IndexFile(const AFilePath: string);
     function SkippedUpToDate: Integer;
+    procedure AddExcludeRoot(const APath: string);
   end;
 
 implementation
@@ -47,6 +52,7 @@ begin
   FStore := AStore;
   FDocConfig := ADocConfig;
   FParsers := TList<IParser>.Create;
+  FExcludeRoots := TList<string>.Create;
   for P in AParsers do
     FParsers.Add(P);
 end;
@@ -60,6 +66,7 @@ end;
 destructor TIndexer.Destroy;
 begin
   FParsers.Free;
+  FExcludeRoots.Free;
   FStore := nil;
   inherited;
 end;
@@ -67,6 +74,28 @@ end;
 function TIndexer.SkippedUpToDate: Integer;
 begin
   Result := FSkippedUpToDate;
+end;
+
+procedure TIndexer.AddExcludeRoot(const APath: string);
+var
+  Norm: string;
+begin
+  if APath = '' then Exit;
+  Norm := LowerCase(IncludeTrailingPathDelimiter(
+    ExcludeTrailingPathDelimiter(APath)));
+  if not FExcludeRoots.Contains(Norm) then
+    FExcludeRoots.Add(Norm);
+end;
+
+function TIndexer.IsUnderExcludeRoot(const APath: string): Boolean;
+var
+  L, Root: string;
+begin
+  Result := False;
+  if FExcludeRoots.Count = 0 then Exit;
+  L := LowerCase(APath);
+  for Root in FExcludeRoots do
+    if StartsStr(Root, L) then Exit(True);
 end;
 
 function TIndexer.ParserFor(const AExtension: string): IParser;
@@ -238,6 +267,57 @@ begin
     if Pos(S, L) > 0 then Exit(True);
 end;
 
+// v0.42: any DIRECTORY segment whose name contains "backup" (any case, any
+// position -- "Backup", "OLD_BACKUP", "backup2024") prunes the file. The
+// filename itself is not tested, so a unit literally called Backup.pas still
+// indexes; only folders named *backup* are skipped.
+function PathHasBackupDir(const APath: string): Boolean;
+var
+  Dir, Seg: string;
+begin
+  Result := False;
+  Dir := LowerCase(ExtractFilePath(APath));       { drops the filename }
+  for Seg in Dir.Split(['\', '/']) do
+    if (Seg <> '') and (Pos('backup', Seg) > 0) then
+      Exit(True);
+end;
+
+// v0.42: SQL files are scanned only when they match the MS*.SQL convention
+// (the Micronite Firebird DDL scripts) -- per user, those are the only SQL
+// files worth indexing. Every other .sql is skipped so the index isn't
+// polluted by ad-hoc query scripts. Non-.sql files always pass this gate.
+function SqlFileAllowed(const APath: string): Boolean;
+var
+  Name: string;
+begin
+  if not SameText(ExtractFileExt(APath), '.sql') then Exit(True);
+  Name := ExtractFileName(APath);
+  Result := StartsText('MS', Name);
+end;
+
+procedure TIndexer.CollectScanIgnoreRoots(const APath: string;
+  ARecursive: Boolean);
+{ v0.42: every directory containing a ".scanignore" marker file becomes an
+  exclude root, so that directory AND its whole subtree are skipped. The
+  marker's contents are irrelevant -- presence alone prunes. }
+var
+  Mode: TSearchOption;
+  Markers: TArray<string>;
+  M: string;
+begin
+  if ARecursive then
+    Mode := TSearchOption.soAllDirectories
+  else
+    Mode := TSearchOption.soTopDirectoryOnly;
+  try
+    Markers := TDirectory.GetFiles(APath, '.scanignore', Mode);
+  except
+    SetLength(Markers, 0);
+  end;
+  for M in Markers do
+    AddExcludeRoot(ExtractFilePath(M));
+end;
+
 procedure TIndexer.IndexFolder(const APath: string; ARecursive: Boolean);
 var
   Mode: TSearchOption;
@@ -253,6 +333,9 @@ begin
   else
     Mode := TSearchOption.soTopDirectoryOnly;
 
+  { v0.42: discover .scanignore markers first so their subtrees are pruned. }
+  CollectScanIgnoreRoots(APath, ARecursive);
+
   Patterns := TList<string>.Create;
   try
     for P in FParsers do
@@ -264,7 +347,10 @@ begin
       Files := TDirectory.GetFiles(APath, Pattern, Mode);
       for F in Files do
       begin
-        if IsExcludedScanPath(F) then Continue;   { skip __history/.git backups etc. }
+        if IsExcludedScanPath(F) then Continue;   { __history/.git/etc. }
+        if PathHasBackupDir(F)    then Continue;   { *BACKUP* folders }
+        if IsUnderExcludeRoot(F)  then Continue;   { .scanignore + --exclude-under }
+        if not SqlFileAllowed(F)  then Continue;   { only MS*.SQL among .sql }
         try
           IndexFile(F);
         except

@@ -112,6 +112,10 @@ type
       ARecursive: Boolean = True);
     procedure IndexFile(const AFilePath: string);
     function SkippedUpToDate: Integer;
+    // v0.42: register a directory whose subtree must NOT be scanned (used for
+    // cross-dictionary dedup -- e.g. exclude folders already covered by the
+    // library or active-project indexes). Repeatable.
+    procedure AddExcludeRoot(const APath: string);
   end;
 
   ILinter = interface
