@@ -25,7 +25,8 @@ type
     function ParserFor(const AExtension: string): IParser;
     procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
     function IsUnderExcludeRoot(const APath: string): Boolean;
-    procedure CollectScanIgnoreRoots(const APath: string; ARecursive: Boolean);
+    function ShouldPruneDir(const ADir: string): Boolean;
+    procedure WalkAndIndex(const ADir: string; ARecursive: Boolean);
   public
     constructor Create(const AStore: ISymbolStore;
       const AParsers: TArray<IParser>;
@@ -253,35 +254,6 @@ begin
   end;
 end;
 
-function IsExcludedScanPath(const APath: string): Boolean;
-const
-  SEGS: array[0..6] of string = (
-    '\__history\', '\__recovery\', '\.git\', '\.svn\', '\.hg\',
-    '\node_modules\', '\__recovery_');
-var
-  L, S: string;
-begin
-  Result := False;
-  L := LowerCase(APath);
-  for S in SEGS do
-    if Pos(S, L) > 0 then Exit(True);
-end;
-
-// v0.42: any DIRECTORY segment whose name contains "backup" (any case, any
-// position -- "Backup", "OLD_BACKUP", "backup2024") prunes the file. The
-// filename itself is not tested, so a unit literally called Backup.pas still
-// indexes; only folders named *backup* are skipped.
-function PathHasBackupDir(const APath: string): Boolean;
-var
-  Dir, Seg: string;
-begin
-  Result := False;
-  Dir := LowerCase(ExtractFilePath(APath));       { drops the filename }
-  for Seg in Dir.Split(['\', '/']) do
-    if (Seg <> '') and (Pos('backup', Seg) > 0) then
-      Exit(True);
-end;
-
 // v0.42: SQL files are scanned only when they match the MS*.SQL convention
 // (the Micronite Firebird DDL scripts) -- per user, those are the only SQL
 // files worth indexing. Every other .sql is skipped so the index isn't
@@ -295,74 +267,67 @@ begin
   Result := StartsText('MS', Name);
 end;
 
-procedure TIndexer.CollectScanIgnoreRoots(const APath: string;
-  ARecursive: Boolean);
-{ v0.42: every directory containing a ".scanignore" marker file becomes an
-  exclude root, so that directory AND its whole subtree are skipped. The
-  marker's contents are irrelevant -- presence alone prunes. }
+function TIndexer.ShouldPruneDir(const ADir: string): Boolean;
+{ v0.42: directory-level pruning -- decided BEFORE we descend, so an excluded
+  subtree is never enumerated. This is what makes a full C:\Projects scan
+  practical: __history / BACKUP_ALL / .git / node_modules / .scanignore'd and
+  already-indexed (--exclude-under) trees are skipped wholesale rather than
+  walked and then filtered file-by-file (which took ~8.7h over C:\Projects). }
+const
+  PRUNE_NAMES: array[0..5] of string = (
+    '__history', '__recovery', '.git', '.svn', '.hg', 'node_modules');
 var
-  Mode: TSearchOption;
-  Markers: TArray<string>;
-  M: string;
+  Name, PN: string;
 begin
-  if ARecursive then
-    Mode := TSearchOption.soAllDirectories
-  else
-    Mode := TSearchOption.soTopDirectoryOnly;
+  Result := True;
+  Name := LowerCase(ExtractFileName(ExcludeTrailingPathDelimiter(ADir)));
+  for PN in PRUNE_NAMES do
+    if Name = PN then Exit;
+  if Pos('backup', Name) > 0 then Exit;                    { *BACKUP* folders }
+  if IsUnderExcludeRoot(IncludeTrailingPathDelimiter(ADir)) then Exit;
+  if TFile.Exists(TPath.Combine(ADir, '.scanignore')) then Exit;  { marker file }
+  Result := False;
+end;
+
+procedure TIndexer.WalkAndIndex(const ADir: string; ARecursive: Boolean);
+var
+  Files, SubDirs: TArray<string>;
+  F, D: string;
+begin
+  if ShouldPruneDir(ADir) then Exit;
+
+  { Files directly in this directory whose extension a parser handles. }
   try
-    Markers := TDirectory.GetFiles(APath, '.scanignore', Mode);
+    Files := TDirectory.GetFiles(ADir, '*', TSearchOption.soTopDirectoryOnly);
   except
-    SetLength(Markers, 0);
+    SetLength(Files, 0);
   end;
-  for M in Markers do
-    AddExcludeRoot(ExtractFilePath(M));
+  for F in Files do
+  begin
+    if ParserFor(ExtractFileExt(F)) = nil then Continue;
+    if not SqlFileAllowed(F) then Continue;          { only MS*.SQL among .sql }
+    try
+      IndexFile(F);
+    except
+      on E: Exception do
+        Writeln(Format('  SKIP %s: %s: %s', [F, E.ClassName, E.Message]));
+    end;
+  end;
+
+  if not ARecursive then Exit;
+
+  try
+    SubDirs := TDirectory.GetDirectories(ADir, '*', TSearchOption.soTopDirectoryOnly);
+  except
+    SetLength(SubDirs, 0);
+  end;
+  for D in SubDirs do
+    WalkAndIndex(D, True);          { ShouldPruneDir gate is applied per subdir }
 end;
 
 procedure TIndexer.IndexFolder(const APath: string; ARecursive: Boolean);
-var
-  Mode: TSearchOption;
-  Files: TArray<string>;
-  F: string;
-  P: IParser;
-  Ext: string;
-  Patterns: TList<string>;
-  Pattern: string;
 begin
-  if ARecursive then
-    Mode := TSearchOption.soAllDirectories
-  else
-    Mode := TSearchOption.soTopDirectoryOnly;
-
-  { v0.42: discover .scanignore markers first so their subtrees are pruned. }
-  CollectScanIgnoreRoots(APath, ARecursive);
-
-  Patterns := TList<string>.Create;
-  try
-    for P in FParsers do
-      for Ext in P.FileExtensions do
-        Patterns.Add('*' + Ext);
-
-    for Pattern in Patterns do
-    begin
-      Files := TDirectory.GetFiles(APath, Pattern, Mode);
-      for F in Files do
-      begin
-        if IsExcludedScanPath(F) then Continue;   { __history/.git/etc. }
-        if PathHasBackupDir(F)    then Continue;   { *BACKUP* folders }
-        if IsUnderExcludeRoot(F)  then Continue;   { .scanignore + --exclude-under }
-        if not SqlFileAllowed(F)  then Continue;   { only MS*.SQL among .sql }
-        try
-          IndexFile(F);
-        except
-          on E: Exception do
-            Writeln(Format('  SKIP %s: %s: %s',
-              [F, E.ClassName, E.Message]));
-        end;
-      end;
-    end;
-  finally
-    Patterns.Free;
-  end;
+  WalkAndIndex(APath, ARecursive);
 end;
 
 end.
