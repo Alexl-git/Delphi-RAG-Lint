@@ -178,9 +178,11 @@ begin
       what the user is pointing at. }
     if not IsMouseOverEditorView(Pos) then
     begin
-      { v0.42: mouse left the editor view -> clear any visible dwell popup so it
-        never lingers over the Project Manager / Messages / other panes. }
-      if IsDragLintHoverVisible then
+      { v0.42: mouse left the editor view -> clear the popup so it never lingers
+        over the Project Manager / Messages / other panes. Keep it alive only
+        while the cursor is actually over the popup (so the interactive menu
+        popup the user is reaching for isn't yanked away). }
+      if IsDragLintHoverVisible and not IsMouseOverDragLintHover then
         CloseDragLintHover;
       ResetState;
       Exit;

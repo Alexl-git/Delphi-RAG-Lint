@@ -77,6 +77,7 @@ procedure ShowDragLintHover(const AContent: string;
   AScreenX, AScreenY: Integer); overload;
 procedure CloseDragLintHover;
 function  IsDragLintHoverVisible: Boolean;
+function  IsMouseOverDragLintHover: Boolean;
 procedure OpenSourceAt(const AFile: string; ALine: Integer);
 
 implementation
@@ -507,6 +508,22 @@ end;
 function IsDragLintHoverVisible: Boolean;
 begin
   Result := (GCurrentHover <> nil) and GCurrentHover.Visible;
+end;
+
+function IsMouseOverDragLintHover: Boolean;
+{ v0.42: True when the cursor is within the visible hover popup (+ a small
+  margin). Lets the dwell tracker close the popup when the mouse leaves the
+  editor WITHOUT killing the interactive menu popup the user is reaching for. }
+var
+  Pt: TPoint;
+  R:  TRect;
+begin
+  Result := False;
+  if (GCurrentHover = nil) or not GCurrentHover.Visible then Exit;
+  if not GetCursorPos(Pt) then Exit;
+  R := GCurrentHover.BoundsRect;
+  InflateRect(R, 12, 12);
+  Result := PtInRect(R, Pt);
 end;
 
 initialization
