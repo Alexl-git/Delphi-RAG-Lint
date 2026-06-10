@@ -23,30 +23,45 @@ implementation
 
 uses
   System.SysUtils, System.Classes, System.IniFiles, System.Actions,
+  Winapi.Windows, Winapi.ShellAPI,
   Vcl.Controls, Vcl.Forms, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.ActnList,
   Vcl.ImgList, Vcl.Menus,
   Vcl.ExtCtrls,
   DesignIntf,   { TEditState / TEditAction }
   ToolsAPI,
-  DragLint.Plugin.StructureForm;
+  DragLint.Plugin.StructureForm,
+  DragLint.Plugin.UsagesForm,
+  DragLint.Plugin.SymbolSearchForm,
+  DragLint.Plugin.DbResolver,
+  DragLint.Plugin.Settings;
 
 {$R *.dfm}
 
 type
   { v0.42: the dock panel hosts a tabbed view of the drag-lint tools, matching
-    the delphi-terminal sample's single-window-with-tabs layout. Structure is
-    live (embedded form); Find Usages / Symbol Search / Graph are placeholder
-    tabs filled in follow-up slices. }
+    the delphi-terminal sample's single-window-with-tabs layout: Structure,
+    Find Usages, Symbol Search (all live) + a Graph launcher. The form-reparent
+    embeds (Structure, Find Usages) are built in HandleInitTimer, one message
+    turn after construction, because reparenting a TForm while the IDE is still
+    constructing the dock host AV'd. }
   TDragLintDockFrame = class(TCustomFrame)
   private
     FPages:      TPageControl;
     FStructure:  TForm;          { embedded TDragLintStructureForm }
     FTabStruct:  TTabSheet;
+    FTabUsages:  TTabSheet;
+    FTabSearch:  TTabSheet;
+    FTabGraph:   TTabSheet;
+    FInited:     Boolean;
     FInitTimer:  TTimer;         { v0.42: defers the embed off the ctor }
     procedure HandlePageChange(Sender: TObject);
     procedure HandleInitTimer(Sender: TObject);
+    procedure HandleOpenGraph(Sender: TObject);
     function  AddTab(const ACaption: string): TTabSheet;
     procedure AddPlaceholder(ATab: TTabSheet; const AText: string);
+    function  ResolveExe: string;
+    function  ResolveDbArgs: string;
+    procedure BuildGraphTab(ATab: TTabSheet);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -109,9 +124,71 @@ begin
   L.Caption   := AText;
 end;
 
-constructor TDragLintDockFrame.Create(AOwner: TComponent);
+function TDragLintDockFrame.ResolveExe: string;
+begin
+  Result := LoadSettings.ExePath;
+  if (Result = '') or not FileExists(Result) then
+    Result := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(Result) then
+    Result := 'drag-lint.exe';
+end;
+
+function TDragLintDockFrame.ResolveDbArgs: string;
 var
-  Tab: TTabSheet;
+  Dbs: TArray<string>;
+  P:   string;
+begin
+  Result := '';
+  try
+    Dbs := ResolveActiveIndexDbs(LoadSettings);
+  except
+    SetLength(Dbs, 0);
+  end;
+  for P in Dbs do
+    if P <> '' then
+      Result := Result + Format(' --db "%s"', [P]);
+end;
+
+procedure TDragLintDockFrame.HandleOpenGraph(Sender: TObject);
+var
+  Exe: string;
+begin
+  { Launch the standalone graph viewer if present next to the BPL / exe. True
+    in-dock embedding is a separate cross-BPL effort. }
+  Exe := ExtractFilePath(GetModuleName(HInstance)) + 'DragLintGraphViewer.exe';
+  if not FileExists(Exe) then
+    Exe := ExtractFilePath(ResolveExe) + 'DragLintGraphViewer.exe';
+  if FileExists(Exe) then
+    ShellExecute(0, 'open', PChar(Exe), nil, PChar(ExtractFilePath(Exe)), SW_SHOWNORMAL)
+  else
+    MessageBox(0,
+      'Graph viewer (DragLintGraphViewer.exe) was not found next to the plugin.'#13#10 +
+      'Build/copy it there, or open it from its own project for now.',
+      'drag-lint', MB_OK or MB_ICONINFORMATION);
+end;
+
+procedure TDragLintDockFrame.BuildGraphTab(ATab: TTabSheet);
+var
+  Btn: TButton;
+  L:   TLabel;
+begin
+  L := TLabel.Create(ATab);
+  L.Parent    := ATab;
+  L.Align     := alTop;
+  L.WordWrap  := True;
+  L.Caption   := ' The graph viewer is a separate window. In-dock embedding is '
+    + 'planned; for now launch it here:';
+  L.Height    := 40;
+
+  Btn := TButton.Create(ATab);
+  Btn.Parent  := ATab;
+  Btn.Align   := alTop;
+  Btn.Height  := 30;
+  Btn.Caption := 'Open Graph Viewer';
+  Btn.OnClick := HandleOpenGraph;
+end;
+
+constructor TDragLintDockFrame.Create(AOwner: TComponent);
 begin
   inherited;
 
@@ -120,27 +197,19 @@ begin
   FPages.Align    := alClient;
   FPages.OnChange := HandlePageChange;
 
-  { Tab 1: Structure -- the embedded form is created LATER (HandleInitTimer),
-    not here: building/reparenting a TForm while the IDE is still mid-construct
-    of the dockable host (TOTADockForm.EmbedFrame) AV'd. The tab starts empty. }
+  { Tabs are created here (empty); the form-reparent embeds (Structure, Find
+    Usages) are filled in HandleInitTimer, one message turn later, because
+    reparenting a TForm during the IDE's dock construction AV'd. Symbol Search
+    (native controls) + Graph (a button) are safe to build immediately. }
   FTabStruct := AddTab('Structure');
+  FTabUsages := AddTab('Find Usages');
+  FTabSearch := AddTab('Symbol Search');
+  FTabGraph  := AddTab('Graph');
 
-  { Tabs 2-4: placeholders wired in follow-up slices. }
-  Tab := AddTab('Find Usages');
-  AddPlaceholder(Tab, 'Find Usages moves here next.' + sLineBreak +
-    'For now use drag-lint > Find Usages at the cursor.');
-
-  Tab := AddTab('Symbol Search');
-  AddPlaceholder(Tab, 'Symbol Search moves here next.' + sLineBreak +
-    'For now use drag-lint > Symbol Search.');
-
-  Tab := AddTab('Graph');
-  AddPlaceholder(Tab, 'Graph viewer (separate BPL) docks here next.');
+  BuildGraphTab(FTabGraph);
 
   FPages.ActivePage := FTabStruct;
 
-  { Defer the Structure embed one message-loop turn so the dock host is fully
-    constructed and our frame is properly parented before we add a child form. }
   FInitTimer := TTimer.Create(Self);
   FInitTimer.Interval := 50;
   FInitTimer.OnTimer  := HandleInitTimer;
@@ -150,7 +219,9 @@ end;
 procedure TDragLintDockFrame.HandleInitTimer(Sender: TObject);
 begin
   FInitTimer.Enabled := False;
-  if FStructure <> nil then Exit;
+  if FInited then Exit;
+  FInited := True;
+
   try
     FStructure := CreateEmbeddedStructure(Self, FTabStruct);
   except
@@ -159,6 +230,20 @@ begin
       FStructure := nil;
       AddPlaceholder(FTabStruct, 'Structure failed to load: ' + E.Message);
     end;
+  end;
+
+  try
+    CreateEmbeddedUsages(Self, FTabUsages);
+  except
+    on E: Exception do
+      AddPlaceholder(FTabUsages, 'Find Usages failed to load: ' + E.Message);
+  end;
+
+  try
+    CreateEmbeddedSymbolSearch(Self, FTabSearch, ResolveExe, ResolveDbArgs);
+  except
+    on E: Exception do
+      AddPlaceholder(FTabSearch, 'Symbol Search failed to load: ' + E.Message);
   end;
 end;
 

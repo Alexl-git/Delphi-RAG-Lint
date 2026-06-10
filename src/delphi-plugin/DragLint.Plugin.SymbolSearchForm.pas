@@ -9,15 +9,25 @@ unit DragLint.Plugin.SymbolSearchForm;
 
 interface
 
+uses
+  System.Classes, Vcl.Controls;
+
 function ShowSymbolSearch(const AExePath, ADbPath: string): string;
+
+{ v0.42: build the symbol-search UI embedded in a dock-panel tab (non-modal).
+  Double-click / Enter opens the symbol's source instead of returning a result.
+  ADbArgs is a pre-built ' --db "x" --db "y"' string (multi-DB). }
+procedure CreateEmbeddedSymbolSearch(AOwner: TComponent; AParent: TWinControl;
+  const AExePath, ADbArgs: string);
 
 implementation
 
 uses
-  System.SysUtils, System.Classes,
-  Vcl.Forms, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.ExtCtrls,
+  System.SysUtils,
+  Vcl.Forms, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.ExtCtrls,
   Winapi.Windows,
-  ToolsAPI;
+  ToolsAPI,
+  DragLint.Plugin.HoverForm;   { OpenSourceAt }
 
 { ---- TSymbolSearchForm ---- }
 
@@ -38,6 +48,8 @@ type
     FTimer:     TTimer;
     FExePath:   string;
     FDbPath:    string;
+    FDbArgs:    string;        { v0.42: full ' --db "..." --db "..."' (multi-DB) }
+    FEmbedded:  Boolean;       { v0.42: tab mode -> open source instead of modal }
     FResult:    string;
     FItems:     array of TSymbolItem;
     procedure TimerFired(Sender: TObject);
@@ -132,6 +144,11 @@ begin
   FLblStatus  := ALblStatus;
   FExePath    := AExePath;
   FDbPath     := ADbPath;
+  if ADbPath <> '' then
+    FDbArgs := Format(' --db "%s"', [ADbPath])
+  else
+    FDbArgs := '';
+  FEmbedded   := False;
   FResult     := '';
 
   FTimer := TTimer.Create(Self);
@@ -141,7 +158,8 @@ begin
 
   FEdit.OnChange      := EditChange;
   FList.OnDblClick    := ListDblClick;
-  FForm.OnKeyDown     := FormKeyDown;
+  if FForm <> nil then
+    FForm.OnKeyDown   := FormKeyDown;
 end;
 
 function TSymbolSearchHandler.GetResult: string;
@@ -184,9 +202,7 @@ begin
   FLblStatus.Caption := 'Searching...';
   FForm.Update;
 
-  CmdLine := Format('"%s" query --name "%s"', [FExePath, Trim(AText)]);
-  if FDbPath <> '' then
-    CmdLine := CmdLine + Format(' --db "%s"', [FDbPath]);
+  CmdLine := Format('"%s" query --name "%s"', [FExePath, Trim(AText)]) + FDbArgs;
 
   ExitCode := RunCapture(CmdLine, Output, 15000);
 
@@ -265,9 +281,17 @@ begin
   if FList.Selected = nil then Exit;
   Idx := FList.Selected.Index;
   if (Idx < 0) or (Idx >= Length(FItems)) then Exit;
+  if FEmbedded then
+  begin
+    { tab mode: jump the editor straight to the symbol's definition }
+    if FItems[Idx].FilePath <> '' then
+      OpenSourceAt(FItems[Idx].FilePath, FItems[Idx].Line);
+    Exit;
+  end;
   FResult := Format('%s:%d',
     [FItems[Idx].FilePath, FItems[Idx].Line]);
-  FForm.ModalResult := mrOk;
+  if FForm <> nil then
+    FForm.ModalResult := mrOk;
 end;
 
 procedure TSymbolSearchHandler.ListDblClick(Sender: TObject);
@@ -369,6 +393,50 @@ begin
   finally
     Form.Free;
   end;
+end;
+
+{ ---- CreateEmbeddedSymbolSearch (dock tab) ---- }
+
+procedure CreateEmbeddedSymbolSearch(AOwner: TComponent; AParent: TWinControl;
+  const AExePath, ADbArgs: string);
+var
+  Edit:      TEdit;
+  List:      TListView;
+  LblStatus: TLabel;
+  Handler:   TSymbolSearchHandler;
+  Col:       TListColumn;
+begin
+  Edit := TEdit.Create(AOwner);
+  Edit.Parent   := AParent;
+  Edit.Align    := alTop;
+  Edit.TextHint := 'Type symbol name...';
+
+  LblStatus := TLabel.Create(AOwner);
+  LblStatus.Parent   := AParent;
+  LblStatus.Align    := alBottom;
+  LblStatus.Layout   := tlCenter;
+  LblStatus.Caption  := 'Type to search...';
+  LblStatus.AutoSize := False;
+  LblStatus.Height   := 18;
+
+  List := TListView.Create(AOwner);
+  List.Parent      := AParent;
+  List.Align       := alClient;
+  List.ViewStyle   := vsReport;
+  List.ReadOnly    := True;
+  List.HideSelection := False;
+  List.RowSelect   := True;
+
+  Col := List.Columns.Add; Col.Caption := 'Qualified Name'; Col.Width := 240;
+  Col := List.Columns.Add; Col.Caption := 'Kind';           Col.Width := 80;
+  Col := List.Columns.Add; Col.Caption := 'Location';       Col.Width := 260;
+
+  { Owner = AOwner so the handler lives as long as the dock frame. FForm = nil
+    (no modal host); double-click opens the source via OpenSourceAt. }
+  Handler := TSymbolSearchHandler.Create(AOwner, nil, Edit, List, LblStatus,
+    AExePath, '');
+  Handler.FDbArgs  := ADbArgs;
+  Handler.FEmbedded := True;
 end;
 
 end.

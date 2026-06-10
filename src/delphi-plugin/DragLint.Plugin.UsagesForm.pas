@@ -9,6 +9,9 @@ unit DragLint.Plugin.UsagesForm;
 
 interface
 
+uses
+  System.Classes, Vcl.Controls;
+
 procedure ShowFindUsages(const ASymbolName, AExePath, ADbPath: string); overload;
 { v0.40.3: pass every --db path the resolver picked so callers from
   SERVER + COMMON + library DBs show up alongside the active project's. }
@@ -16,11 +19,16 @@ procedure ShowFindUsages(const ASymbolName, AExePath: string;
   const ADbPaths: TArray<string>); overload;
 procedure HideFindUsages;
 
+{ v0.42: build the Find-Usages UI in a dock-panel tab: a symbol search box on
+  top of the (reparented, non-modal) usages tree. Enter runs find-callers for
+  the typed symbol against the resolved project DBs. }
+procedure CreateEmbeddedUsages(AOwner: TComponent; AParent: TWinControl);
+
 implementation
 
 uses
-  System.SysUtils, System.Classes, System.JSON, System.StrUtils,
-  Vcl.Forms, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.ToolWin,
+  System.SysUtils, System.JSON, System.StrUtils,
+  Vcl.Forms, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.ToolWin,
   Vcl.ExtCtrls, Vcl.Graphics,
   Winapi.Windows,
   ToolsAPI,
@@ -723,6 +731,76 @@ begin
   FDbPaths    := ADbPaths;
   FLblTitle.Caption := 'Find usages of: ' + ASymbolName;
   RunQuery;
+end;
+
+{ ---- embedded (dock tab) ---- }
+
+type
+  { Holds the search edit + reparented usages form for a dock tab, and runs the
+    query on Enter. Owned by the dock frame (AOwner) so it lives/dies with it. }
+  TUsagesEmbedCtl = class(TComponent)
+  public
+    FUsages: TDragLintUsagesForm;
+    FEdit:   TEdit;
+    procedure EditKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+  end;
+
+procedure TUsagesEmbedCtl.EditKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+var
+  Sym, Exe: string;
+  Dbs: TArray<string>;
+begin
+  if Key <> VK_RETURN then Exit;
+  Key := 0;
+  Sym := Trim(FEdit.Text);
+  if (Sym = '') or (FUsages = nil) then Exit;
+  Exe := LoadSettings.ExePath;
+  if (Exe = '') or not FileExists(Exe) then
+    Exe := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(Exe) then Exe := 'drag-lint.exe';
+  Dbs := ResolveActiveIndexDbs(LoadSettings);
+  FUsages.LoadUsages(Sym, Exe, Dbs);
+end;
+
+procedure CreateEmbeddedUsages(AOwner: TComponent; AParent: TWinControl);
+var
+  Pnl:  TPanel;
+  Lbl:  TLabel;
+  Edit: TEdit;
+  Frm:  TDragLintUsagesForm;
+  Ctl:  TUsagesEmbedCtl;
+begin
+  { search row on top }
+  Pnl := TPanel.Create(AOwner);
+  Pnl.Parent     := AParent;
+  Pnl.Align      := alTop;
+  Pnl.Height     := 28;
+  Pnl.BevelOuter := bvNone;
+
+  Lbl := TLabel.Create(AOwner);
+  Lbl.Parent  := Pnl;
+  Lbl.Align   := alLeft;
+  Lbl.Layout  := tlCenter;
+  Lbl.Caption := ' Usages of: ';
+
+  Edit := TEdit.Create(AOwner);
+  Edit.Parent   := Pnl;
+  Edit.Align    := alClient;
+  Edit.TextHint := 'symbol name, then Enter';
+
+  { reparented usages tree fills the rest }
+  Frm := TDragLintUsagesForm.Create(AOwner);
+  Frm.BorderStyle := bsNone;
+  Frm.FormStyle   := fsNormal;
+  Frm.Align       := alClient;
+  Frm.Parent      := AParent;
+  Frm.Visible     := True;
+
+  Ctl := TUsagesEmbedCtl.Create(AOwner);
+  Ctl.FUsages := Frm;
+  Ctl.FEdit   := Edit;
+  Edit.OnKeyDown := Ctl.EditKeyDown;
 end;
 
 { ---- public API ---- }

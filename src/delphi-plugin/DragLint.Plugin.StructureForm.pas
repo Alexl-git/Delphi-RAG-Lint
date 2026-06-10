@@ -28,7 +28,7 @@ procedure RefreshEmbeddedStructure(AForm: TForm);
 implementation
 
 uses
-  System.SysUtils,
+  System.SysUtils, System.StrUtils, System.RegularExpressions,
   Vcl.ComCtrls, Vcl.StdCtrls, Vcl.ExtCtrls,
   Winapi.Windows,
   ToolsAPI,
@@ -52,13 +52,20 @@ type
     FTree:       TTreeView;
     FBtnRefresh: TButton;
     FLblFile:    TLabel;
+    FSearch:     TEdit;          { v0.42: on-the-fly filter }
+    FRegex:      TCheckBox;      { v0.42: treat filter as regex }
     FCurrentFile: string;
+    FSyms:       TArray<TSymbolInfo>;           { cached so filtering doesn't re-shell }
+    FDiags:      TArray<TDragLintDiagnostic>;
     procedure BtnRefreshClick(Sender: TObject);
     procedure FormActivate(Sender: TObject);
     procedure TreeDblClick(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure SearchChanged(Sender: TObject);
     procedure ClearNodeData;
     procedure RefreshForFile(const AFilePath: string);
+    procedure BuildTree(const AFilter: string);
+    function  SymMatches(const ASym: TSymbolInfo; const AFilter: string): Boolean;
     function  GetActiveFilePath: string;
   public
     constructor Create(AOwner: TComponent); override;
@@ -136,7 +143,8 @@ end;
 
 constructor TDragLintStructureForm.Create(AOwner: TComponent);
 var
-  Panel: TPanel;
+  PanelFile, PanelSearch: TPanel;
+  LblFilter: TLabel;
 begin
   inherited CreateNew(AOwner);
   Caption       := 'drag-lint Structure';
@@ -148,26 +156,53 @@ begin
   OnActivate    := FormActivate;
   OnDestroy     := FormDestroy;
 
-  { top panel: label + refresh button }
-  Panel := TPanel.Create(Self);
-  Panel.Parent      := Self;
-  Panel.Align       := alTop;
-  Panel.Height      := 32;
-  Panel.BevelOuter  := bvNone;
+  { Row 1: file label + refresh button. Created first so it docks topmost. }
+  PanelFile := TPanel.Create(Self);
+  PanelFile.Parent      := Self;
+  PanelFile.Align       := alTop;
+  PanelFile.Height      := 30;
+  PanelFile.BevelOuter  := bvNone;
 
-  FBtnRefresh := TButton.Create(Panel);
-  FBtnRefresh.Parent  := Panel;
+  FBtnRefresh := TButton.Create(PanelFile);
+  FBtnRefresh.Parent  := PanelFile;
   FBtnRefresh.Caption := 'Refresh';
   FBtnRefresh.Align   := alRight;
   FBtnRefresh.Width   := 72;
   FBtnRefresh.OnClick := BtnRefreshClick;
 
-  FLblFile := TLabel.Create(Panel);
-  FLblFile.Parent     := Panel;
+  FLblFile := TLabel.Create(PanelFile);
+  FLblFile.Parent     := PanelFile;
   FLblFile.Align      := alClient;
   FLblFile.Caption    := '(no file)';
   FLblFile.Layout     := tlCenter;
   FLblFile.EllipsisPosition := epPathEllipsis;
+
+  { Row 2: filter edit + regex checkbox. Created after Row 1 so it docks below. }
+  PanelSearch := TPanel.Create(Self);
+  PanelSearch.Parent      := Self;
+  PanelSearch.Align       := alTop;
+  PanelSearch.Top         := PanelFile.Height;  { ensure it sits below Row 1 }
+  PanelSearch.Height      := 28;
+  PanelSearch.BevelOuter  := bvNone;
+
+  FRegex := TCheckBox.Create(PanelSearch);
+  FRegex.Parent   := PanelSearch;
+  FRegex.Align    := alRight;
+  FRegex.Width    := 64;
+  FRegex.Caption  := 'regex';
+  FRegex.OnClick  := SearchChanged;
+
+  LblFilter := TLabel.Create(PanelSearch);
+  LblFilter.Parent  := PanelSearch;
+  LblFilter.Align   := alLeft;
+  LblFilter.Layout  := tlCenter;
+  LblFilter.Caption := ' Filter: ';
+
+  FSearch := TEdit.Create(PanelSearch);
+  FSearch.Parent      := PanelSearch;
+  FSearch.Align       := alClient;
+  FSearch.TextHint    := 'type to filter (substring, or regex)';
+  FSearch.OnChange    := SearchChanged;
 
   { tree view }
   FTree := TTreeView.Create(Self);
@@ -219,68 +254,89 @@ end;
 
 procedure TDragLintStructureForm.RefreshForFile(const AFilePath: string);
 var
-  Diags:    TArray<TDragLintDiagnostic>;
-  Syms:     TArray<TSymbolInfo>;
-  RootDiag, RootSym: TTreeNode;
-  Node:     TTreeNode;
-  ND:       TStructureNodeData;
-  D:        TDragLintDiagnostic;
-  S:        TSymbolInfo;
-  ExePath:  string;
-  DbPath:   string;
-  i:        Integer;
+  ExePath, DbPath: string;
+begin
+  FCurrentFile := AFilePath;
+  if AFilePath = '' then
+  begin
+    FLblFile.Caption := '(no active editor)';
+    SetLength(FDiags, 0);
+    SetLength(FSyms, 0);
+    BuildTree(FSearch.Text);
+    Exit;
+  end;
+  FLblFile.Caption := ExtractFileName(AFilePath);
+
+  { Re-shell once; cache the results so the filter re-renders without re-running
+    drag-lint on every keystroke. }
+  StructureCache.InvalidateForFile(AFilePath);
+  FDiags := Cache.GetForFile(AFilePath);
+  ExePath := ResolveExePath;
+  DbPath  := ResolveDbForFile;
+  FSyms   := StructureCache.GetSymbolsForFile(AFilePath, ExePath, DbPath);
+
+  BuildTree(FSearch.Text);
+end;
+
+function TDragLintStructureForm.SymMatches(const ASym: TSymbolInfo;
+  const AFilter: string): Boolean;
+begin
+  if AFilter = '' then Exit(True);
+  if FRegex.Checked then
+  begin
+    try
+      Result := TRegEx.IsMatch(ASym.Name, AFilter, [roIgnoreCase]) or
+                TRegEx.IsMatch(ASym.QName, AFilter, [roIgnoreCase]);
+    except
+      Result := False;   { incomplete/invalid regex while typing -> match none }
+    end;
+  end
+  else
+    Result := ContainsText(ASym.Name, AFilter) or
+              ContainsText(ASym.QName, AFilter);
+end;
+
+procedure TDragLintStructureForm.BuildTree(const AFilter: string);
+var
+  RootDiag, RootSym, Node: TTreeNode;
+  ND: TStructureNodeData;
+  D:  TDragLintDiagnostic;
+  S:  TSymbolInfo;
+  i, Shown: Integer;
+  Caption: string;
 begin
   FTree.Items.BeginUpdate;
   try
     ClearNodeData;
     FTree.Items.Clear;
-    FCurrentFile := AFilePath;
 
-    if AFilePath = '' then
-    begin
-      FLblFile.Caption := '(no active editor)';
-      Exit;
-    end;
-    FLblFile.Caption := ExtractFileName(AFilePath);
-
-    { Invalidate structure cache so a Refresh always re-shells }
-    StructureCache.InvalidateForFile(AFilePath);
-
-    { --- Diagnostics root --- }
-    Diags := Cache.GetForFile(AFilePath);
+    { --- Diagnostics root (not filtered: diagnostics are about lines/messages,
+          not symbol names) --- }
     RootDiag := FTree.Items.Add(nil,
-      Format('Diagnostics (%d)', [Length(Diags)]));
+      Format('Diagnostics (%d)', [Length(FDiags)]));
     RootDiag.Data := nil;
-
-    for i := 0 to High(Diags) do
+    for i := 0 to High(FDiags) do
     begin
-      D := Diags[i];
+      D := FDiags[i];
       ND := TStructureNodeData.Create;
-      ND.Line := D.Line + 1;  { cache stores 0-based }
+      ND.Line := D.Line + 1;
       Node := FTree.Items.AddChild(RootDiag,
-        SeverityPrefix(D.Severity) +
-        Format('(%d) ', [D.Line + 1]) +
-        D.Message);
+        SeverityPrefix(D.Severity) + Format('(%d) ', [D.Line + 1]) + D.Message);
       Node.Data := ND;
     end;
 
-    { --- Code Elements root --- }
-    ExePath := ResolveExePath;
-    DbPath  := ResolveDbForFile;
-    Syms    := StructureCache.GetSymbolsForFile(AFilePath, ExePath, DbPath);
-
-    RootSym := FTree.Items.Add(nil,
-      Format('Code Elements (%d)', [Length(Syms)]));
+    { --- Code Elements root (filtered by AFilter) --- }
+    Shown := 0;
+    RootSym := FTree.Items.Add(nil, '');  { caption set after we count }
     RootSym.Data := nil;
-
-    for i := 0 to High(Syms) do
+    for i := 0 to High(FSyms) do
     begin
-      S  := Syms[i];
+      S := FSyms[i];
+      if not SymMatches(S, AFilter) then Continue;
+      Inc(Shown);
       ND := TStructureNodeData.Create;
       ND.Line := S.Line;
-      { v0.42: show the signature inline for proc-likes (it already begins
-        with '(' or ': '); for type-valued members append ': <type>'. }
-      var Caption: string := KindPrefix(S.Kind) + S.Name;
+      Caption := KindPrefix(S.Kind) + S.Name;
       if S.Signature <> '' then
       begin
         if (S.Signature[1] = '(') or (S.Signature[1] = ':') then
@@ -292,11 +348,22 @@ begin
       Node.Data := ND;
     end;
 
+    if AFilter = '' then
+      RootSym.Text := Format('Code Elements (%d)', [Shown])
+    else
+      RootSym.Text := Format('Code Elements (%d of %d)', [Shown, Length(FSyms)]);
+
     RootDiag.Expand(False);
     RootSym.Expand(False);
   finally
     FTree.Items.EndUpdate;
   end;
+end;
+
+procedure TDragLintStructureForm.SearchChanged(Sender: TObject);
+begin
+  { Re-filter the already-loaded symbols on every keystroke (no re-shell). }
+  BuildTree(FSearch.Text);
 end;
 
 procedure TDragLintStructureForm.BtnRefreshClick(Sender: TObject);
