@@ -94,6 +94,7 @@ type
     FHintShown:   Boolean;
     FLastLspKey:  string;   { v0.40.3: dedupes textDocument/hover firings per stable caret }
     FLastLspText: string;   { v0.40.3: cached symbol info for the last stable caret }
+    FLastShownKey: string;  { v0.42: caret key we already popped; don't re-show it }
     FLastForegroundFail: Boolean; { v0.40.8b: log the bail-out only once per transition }
     procedure OnTick(Sender: TObject);
     procedure ResetState;
@@ -177,6 +178,10 @@ begin
       what the user is pointing at. }
     if not IsMouseOverEditorView(Pos) then
     begin
+      { v0.42: mouse left the editor view -> clear any visible dwell popup so it
+        never lingers over the Project Manager / Messages / other panes. }
+      if IsDragLintHoverVisible then
+        CloseDragLintHover;
       ResetState;
       Exit;
     end;
@@ -230,6 +235,17 @@ begin
       the same position. Cache the result so repeated dwell on the same
       caret reuses it. }
     LspKey := Format('%s|%d|%d', [FilePath, CaretRow, CaretCol]);
+
+    { v0.42: the dwell uses the CARET position for content but the MOUSE for
+      placement, so wandering the mouse over a docked pane (still inside the
+      editor form rect) for the same caret kept re-popping the same hover.
+      Show a given caret's popup once; only a caret change re-arms it. }
+    if LspKey = FLastShownKey then
+    begin
+      FHintShown := True;
+      Exit;
+    end;
+
     if LspKey <> FLastLspKey then
     begin
       Uri := 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
@@ -274,6 +290,7 @@ begin
       them. The popup is still drawn at Pos.Y+20 (below the cursor). }
     ShowDragLintHover(DwellHeader, Combined, DwellCallers, Pos.X, Pos.Y + 20,
       True, Pos.X, Pos.Y);
+    FLastShownKey := LspKey;   { v0.42: don't re-pop this same caret }
   except
     { Swallow all exceptions: this fires in a VCL timer inside the IDE.
       Any unhandled exception here would surface as an IDE crash or modal

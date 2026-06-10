@@ -25,9 +25,12 @@ uses
   System.SysUtils, System.Classes, System.IniFiles, System.Actions,
   Vcl.Controls, Vcl.Forms, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.ActnList,
   Vcl.ImgList, Vcl.Menus,
+  Vcl.ExtCtrls,
   DesignIntf,   { TEditState / TEditAction }
   ToolsAPI,
   DragLint.Plugin.StructureForm;
+
+{$R *.dfm}
 
 type
   { v0.42: the dock panel hosts a tabbed view of the drag-lint tools, matching
@@ -39,7 +42,9 @@ type
     FPages:      TPageControl;
     FStructure:  TForm;          { embedded TDragLintStructureForm }
     FTabStruct:  TTabSheet;
+    FInitTimer:  TTimer;         { v0.42: defers the embed off the ctor }
     procedure HandlePageChange(Sender: TObject);
+    procedure HandleInitTimer(Sender: TObject);
     function  AddTab(const ACaption: string): TTabSheet;
     procedure AddPlaceholder(ATab: TTabSheet; const AText: string);
   public
@@ -115,14 +120,10 @@ begin
   FPages.Align    := alClient;
   FPages.OnChange := HandlePageChange;
 
-  { Tab 1: Structure -- live, embedded structure form. }
+  { Tab 1: Structure -- the embedded form is created LATER (HandleInitTimer),
+    not here: building/reparenting a TForm while the IDE is still mid-construct
+    of the dockable host (TOTADockForm.EmbedFrame) AV'd. The tab starts empty. }
   FTabStruct := AddTab('Structure');
-  try
-    FStructure := CreateEmbeddedStructure(Self, FTabStruct);
-  except
-    FStructure := nil;
-    AddPlaceholder(FTabStruct, 'Structure failed to load.');
-  end;
 
   { Tabs 2-4: placeholders wired in follow-up slices. }
   Tab := AddTab('Find Usages');
@@ -137,6 +138,28 @@ begin
   AddPlaceholder(Tab, 'Graph viewer (separate BPL) docks here next.');
 
   FPages.ActivePage := FTabStruct;
+
+  { Defer the Structure embed one message-loop turn so the dock host is fully
+    constructed and our frame is properly parented before we add a child form. }
+  FInitTimer := TTimer.Create(Self);
+  FInitTimer.Interval := 50;
+  FInitTimer.OnTimer  := HandleInitTimer;
+  FInitTimer.Enabled  := True;
+end;
+
+procedure TDragLintDockFrame.HandleInitTimer(Sender: TObject);
+begin
+  FInitTimer.Enabled := False;
+  if FStructure <> nil then Exit;
+  try
+    FStructure := CreateEmbeddedStructure(Self, FTabStruct);
+  except
+    on E: Exception do
+    begin
+      FStructure := nil;
+      AddPlaceholder(FTabStruct, 'Structure failed to load: ' + E.Message);
+    end;
+  end;
 end;
 
 procedure TDragLintDockFrame.HandlePageChange(Sender: TObject);
