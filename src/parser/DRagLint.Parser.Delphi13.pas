@@ -884,7 +884,13 @@ end;
 
 function TDelphi13Parser.FileExtensions: TArray<string>;
 begin
-  Result := ['.pas', '.dpr', '.dpk'];
+  // v0.42: .inc include files are parsed too. They are fragments (no unit
+  // header), so symbols defined in them -- e.g. csmRed in CodeSiteMsgTypes.inc,
+  // and many RTL/VCL platform consts -- would otherwise be invisible, because
+  // tree-sitter does not expand the $INCLUDE directive into the including
+  // unit. Walk() recurses into a fragment root and still fires the decl
+  // handlers.
+  Result := ['.pas', '.dpr', '.dpk', '.inc'];
 end;
 
 function TDelphi13Parser.Parse(const ASource: TBytes;
