@@ -244,6 +244,10 @@ var
   GLspClient:   TDragLintLspClient = nil;
   GMenuItems:   TObjectList<TMenuItem> = nil;
   GWrappers:    TObjectList<TMenuActionWrapper> = nil;
+  { v0.42: the View > Tool Windows entry lives under the IDE's menu (its Owner
+    is the IDE's Tool Windows item, not our GMenuItems), so our normal teardown
+    can't free it. Track it explicitly and free it in UnregisterDragLintMenu. }
+  GDockToolWinItem: TMenuItem = nil;
 
 function EnsureLspClient: TDragLintLspClient;
 var
@@ -1635,6 +1639,24 @@ begin
   end;
 end;
 
+{ v0.42: free every direct child of AParent whose (ampersand-stripped) caption
+  equals ACaption. Used to purge any stale 'drag-lint' dock entries left under
+  View > Tool Windows by a prior install that didn't (or couldn't) clean up,
+  regardless of whether they had a Name set. }
+procedure RemoveChildrenByCaption(AParent: TMenuItem; const ACaption: string);
+var
+  I: Integer;
+  C: string;
+begin
+  if AParent = nil then Exit;
+  for I := AParent.Count - 1 downto 0 do
+  begin
+    C := StringReplace(AParent.Items[I].Caption, '&', '', [rfReplaceAll]);
+    if SameText(Trim(C), ACaption) then
+      AParent.Items[I].Free;
+  end;
+end;
+
 { v0.42: find a direct child menu item by its (ampersand-stripped) caption. }
 function FindMenuChildByCaption(AParent: TMenuItem;
   const ACaption: string): TMenuItem;
@@ -1990,20 +2012,23 @@ begin
   AddWrappedItem(RootMenu, 'Test Connection...',         InvokeTestConnection);
   AddWrappedItem(RootMenu, 'Open Plugin Log',            InvokeOpenLog);
 
-  { v0.42: also surface the dockable panel under View > Tool Windows -- the
-    standard place to show/hide dockable windows. The item is owned by
-    GMenuItems (via AddWrappedItem), so teardown removes it. We give it a stable
-    Name and remove any pre-existing item with that Name first, so a reinstall
-    that didn't fully unload the old package can't leave a duplicate. }
+  { v0.42: also surface the dockable panel under View > Tool Windows. This item
+    can NOT go through AddWrappedItem/GMenuItems: its Owner ends up being the
+    IDE's Tool Windows menu item, so our GMenuItems teardown never frees it and
+    it lingers after uninstall (-> duplicate + a stale entry that calls into the
+    unloaded BPL). Instead: purge ANY pre-existing 'drag-lint' child first
+    (catches stale entries from earlier installs, named or not), create one
+    tracked item in GDockToolWinItem, and free it explicitly on teardown. }
   var ToolWin: TMenuItem := FindViewToolWindowsMenu(Services);
-  if (ToolWin <> nil) and (Services.MainMenu <> nil) then
+  if ToolWin <> nil then
   begin
-    var Stale: TMenuItem :=
-      FindMenuItemByName(Services.MainMenu.Items, 'DragLintDockToolWinItem');
-    if Stale <> nil then
-      Stale.Free;
-    var DockItem: TMenuItem := AddWrappedItem(ToolWin, 'drag-lint', InvokeDockPanel);
-    DockItem.Name := 'DragLintDockToolWinItem';
+    RemoveChildrenByCaption(ToolWin, 'drag-lint');
+    GDockToolWinItem := TMenuItem.Create(ToolWin);
+    GDockToolWinItem.Caption := 'drag-lint';
+    var DockWrap: TMenuActionWrapper := TMenuActionWrapper.Create(InvokeDockPanel);
+    GWrappers.Add(DockWrap);
+    GDockToolWinItem.OnClick := DockWrap.HandleClick;
+    ToolWin.Add(GDockToolWinItem);
   end;
 
   RegisterProjectNotifier;
@@ -2037,6 +2062,11 @@ begin
     GLspClient.Stop;
     FreeAndNil(GLspClient);
   end;
+  { v0.42: free the View > Tool Windows entry explicitly (its Owner is the IDE
+    menu, so GMenuItems won't reach it). Freeing removes it from the IDE menu --
+    this is what stops a duplicate/stale entry surviving an uninstall. Do it
+    before GWrappers so its OnClick wrapper isn't dangling. }
+  FreeAndNil(GDockToolWinItem);
   { Wrappers hold the OnClick method pointers; free them before the menu items }
   FreeAndNil(GWrappers);
   FreeAndNil(GMenuItems);
