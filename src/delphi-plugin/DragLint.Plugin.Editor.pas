@@ -1617,6 +1617,24 @@ begin
   AParent.Add(Result);
 end;
 
+{ v0.42: recursively find a menu item by Name anywhere under AParent. Used to
+  remove a stale dock entry left by a prior install/reinstall before we add a
+  fresh one, so View > Tool Windows never accumulates duplicates. }
+function FindMenuItemByName(AParent: TMenuItem; const AName: string): TMenuItem;
+var
+  I: Integer;
+begin
+  Result := nil;
+  if AParent = nil then Exit;
+  for I := 0 to AParent.Count - 1 do
+  begin
+    if SameText(AParent.Items[I].Name, AName) then
+      Exit(AParent.Items[I]);
+    Result := FindMenuItemByName(AParent.Items[I], AName);
+    if Result <> nil then Exit;
+  end;
+end;
+
 { v0.42: find a direct child menu item by its (ampersand-stripped) caption. }
 function FindMenuChildByCaption(AParent: TMenuItem;
   const ACaption: string): TMenuItem;
@@ -1974,11 +1992,19 @@ begin
 
   { v0.42: also surface the dockable panel under View > Tool Windows -- the
     standard place to show/hide dockable windows. The item is owned by
-    GMenuItems (via AddWrappedItem), so teardown removes it from the IDE menu
-    just like the top-level entries. }
+    GMenuItems (via AddWrappedItem), so teardown removes it. We give it a stable
+    Name and remove any pre-existing item with that Name first, so a reinstall
+    that didn't fully unload the old package can't leave a duplicate. }
   var ToolWin: TMenuItem := FindViewToolWindowsMenu(Services);
-  if ToolWin <> nil then
-    AddWrappedItem(ToolWin, 'drag-lint', InvokeDockPanel);
+  if (ToolWin <> nil) and (Services.MainMenu <> nil) then
+  begin
+    var Stale: TMenuItem :=
+      FindMenuItemByName(Services.MainMenu.Items, 'DragLintDockToolWinItem');
+    if Stale <> nil then
+      Stale.Free;
+    var DockItem: TMenuItem := AddWrappedItem(ToolWin, 'drag-lint', InvokeDockPanel);
+    DockItem.Name := 'DragLintDockToolWinItem';
+  end;
 
   RegisterProjectNotifier;
   RegisterDragLintKeystrokes;

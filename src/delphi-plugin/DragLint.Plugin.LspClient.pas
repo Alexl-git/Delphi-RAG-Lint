@@ -435,7 +435,12 @@ begin
   Params.AddPair('processId', TJSONNumber.Create(GetCurrentProcessId));
   Params.AddPair('capabilities', TJSONObject.Create);
   try
-    Resp := Request('initialize', Params, 10000);  // bumped from 5000
+    { v0.42: bumped 10s -> 45s. The server opens + migrates every resolved DB
+      during initialize; a large DB (1.3 GB library) that predates the v0.42
+      index additions builds them on first open. That one-time cost (plus
+      several project DBs) can exceed 10s and fail the handshake. 45s covers it;
+      subsequent opens are instant (CREATE INDEX IF NOT EXISTS no-ops). }
+    Resp := Request('initialize', Params, 45000);
     Result := Resp <> nil;
     if Result then
     begin
@@ -443,7 +448,7 @@ begin
       Resp.Free;
     end
     else
-      DebugLog('Initialize: TIMEOUT or no response within 10s');
+      DebugLog('Initialize: TIMEOUT or no response within 45s');
   finally
     Params.Free;
   end;
