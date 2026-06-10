@@ -149,21 +149,35 @@ begin
       Result := Result + Format(' --db "%s"', [P]);
 end;
 
+function FindGraphViewerExe(const ABplDir, AExeDir: string): string;
+{ The standalone viewer is Delphi-RAG-Lint-Graph's app project: drag_lint_graph.exe.
+  Look next to the BPL and next to drag-lint.exe (older name kept as fallback). }
+const
+  NAMES: array[0..1] of string = ('drag_lint_graph.exe', 'DragLintGraphViewer.exe');
+var
+  Dir, N: string;
+begin
+  Result := '';
+  for Dir in [ABplDir, AExeDir] do
+    for N in NAMES do
+      if FileExists(Dir + N) then
+        Exit(Dir + N);
+end;
+
 procedure TDragLintDockFrame.HandleOpenGraph(Sender: TObject);
 var
   Exe: string;
 begin
-  { Launch the standalone graph viewer if present next to the BPL / exe. True
-    in-dock embedding is a separate cross-BPL effort. }
-  Exe := ExtractFilePath(GetModuleName(HInstance)) + 'DragLintGraphViewer.exe';
-  if not FileExists(Exe) then
-    Exe := ExtractFilePath(ResolveExe) + 'DragLintGraphViewer.exe';
-  if FileExists(Exe) then
+  { Launch the standalone graph viewer if present. True in-dock embedding is a
+    separate cross-BPL effort. }
+  Exe := FindGraphViewerExe(ExtractFilePath(GetModuleName(HInstance)),
+                            ExtractFilePath(ResolveExe));
+  if Exe <> '' then
     ShellExecute(0, 'open', PChar(Exe), nil, PChar(ExtractFilePath(Exe)), SW_SHOWNORMAL)
   else
     MessageBox(0,
-      'Graph viewer (DragLintGraphViewer.exe) was not found next to the plugin.'#13#10 +
-      'Build/copy it there, or open it from its own project for now.',
+      'Graph viewer (drag_lint_graph.exe) was not found next to the plugin.'#13#10 +
+      'It is the app project Delphi-RAG-Lint-Graph\src\viewer\drag_lint_graph.dproj.',
       'drag-lint', MB_OK or MB_ICONINFORMATION);
 end;
 
