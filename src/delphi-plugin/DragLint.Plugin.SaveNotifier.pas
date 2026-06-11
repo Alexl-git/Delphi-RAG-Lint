@@ -140,7 +140,10 @@ begin
   FillChar(SI, SizeOf(SI), 0);
   SI.cb := SizeOf(SI);
   FillChar(PI, SizeOf(PI), 0);
-  CmdLine := Format('"%s" index "%s" --db "%s"',
+  { v0.42: --deep so a saved file keeps its identifier usage refs (Find-Usages).
+    Without it, the per-save reindex would re-emit the file shallow and drop the
+    read/write refs the project DB was built deep with. }
+  CmdLine := Format('"%s" index "%s" --db "%s" --deep',
     [AExePath, AFilePath, ADbPath]);
   StrPCopy(CmdLineBuf, CmdLine);
   if CreateProcessW(nil, CmdLineBuf, nil, nil, False,

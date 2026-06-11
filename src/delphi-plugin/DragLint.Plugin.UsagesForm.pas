@@ -73,6 +73,7 @@ type
     FExePath:    string;
     FDbPath:     string;            { kept for legacy single-DB callers }
     FDbPaths:    TArray<string>;    { v0.40.3: multi-DB list }
+    FWidth:      string;            { v0.42: narrow|wide|very-wide }
     FLastCallerNode: TTreeNode;
     procedure BtnRefreshClick(Sender: TObject);
     procedure BtnCloseClick(Sender: TObject);
@@ -84,6 +85,7 @@ type
     procedure FormDestroy(Sender: TObject);
     procedure ClearNodeData;
     procedure RunQuery;
+    procedure ParseUsagesGrouped(const AOutput: string; out AParsed: Boolean);
     procedure NavigateToNode(ANode: TTreeNode);
     procedure ParseJsonOutput(const AOutput: string; out AParsed: Boolean);
     procedure ParseTextOutput(const AOutput: string);
@@ -91,6 +93,7 @@ type
                 ALine: Integer): TTreeNode;
   public
     constructor Create(AOwner: TComponent); override;
+    procedure SetWidth(const AWidth: string);   { v0.42: narrow|wide|very-wide }
     procedure LoadUsages(const ASymbolName, AExePath, ADbPath: string); overload;
     procedure LoadUsages(const ASymbolName, AExePath: string;
       const ADbPaths: TArray<string>); overload;
@@ -226,6 +229,7 @@ begin
   FTree.OnAdvancedCustomDrawItem := TreeAdvancedCustomDrawItem;
 
   FLastCallerNode := nil;
+  FWidth := 'narrow';
 end;
 
 procedure TDragLintUsagesForm.FormClose(Sender: TObject;
@@ -378,6 +382,123 @@ begin
   until False;
 
   DefaultDraw := False;
+end;
+
+procedure TDragLintUsagesForm.SetWidth(const AWidth: string);
+begin
+  FWidth := AWidth;
+  if FSymbolName <> '' then
+    RunQuery;   { re-run at the new width (cheap; query-time over the index) }
+end;
+
+procedure TDragLintUsagesForm.ParseUsagesGrouped(const AOutput: string;
+  out AParsed: Boolean);
+{ v0.42: render the grouped JSON from `drag-lint usages`. Top-level keys:
+  declarations (kind/qname/file/line), reads/writes/calls/types/attributes/
+  events (each file/line/col), and impact (depth/callers/units). Each category
+  becomes a root tree node with navigable child rows. }
+var
+  Root: TJSONValue;
+  Obj:  TJSONObject;
+
+  procedure AddRefGroup(const AKey, ACaption: string);
+  var
+    Arr: TJSONArray;
+    i, Ln, Cl: Integer;
+    O: TJSONObject;
+    F: string;
+    GroupNode: TTreeNode;
+  begin
+    if not Obj.TryGetValue<TJSONArray>(AKey, Arr) then Exit;
+    if Arr.Count = 0 then Exit;
+    GroupNode := AddNodeData(nil, Format('%s (%d)', [ACaption, Arr.Count]), '', 0);
+    for i := 0 to Arr.Count - 1 do
+    begin
+      if not (Arr.Items[i] is TJSONObject) then Continue;
+      O := TJSONObject(Arr.Items[i]);
+      F := ''; Ln := 0; Cl := 0;
+      O.TryGetValue<string>('file', F);
+      O.TryGetValue<Integer>('line', Ln);
+      O.TryGetValue<Integer>('col', Cl);
+      AddNodeData(GroupNode,
+        Format('%s:%d', [ExtractFileName(F), Ln]), F, Ln);
+    end;
+    GroupNode.Expand(False);
+  end;
+
+  procedure AddDeclGroup;
+  var
+    Arr: TJSONArray;
+    i, Ln: Integer;
+    O: TJSONObject;
+    F, QN, Kd: string;
+    GroupNode: TTreeNode;
+  begin
+    if not Obj.TryGetValue<TJSONArray>('declarations', Arr) then Exit;
+    if Arr.Count = 0 then Exit;
+    GroupNode := AddNodeData(nil, Format('Declaration (%d)', [Arr.Count]), '', 0);
+    for i := 0 to Arr.Count - 1 do
+    begin
+      if not (Arr.Items[i] is TJSONObject) then Continue;
+      O := TJSONObject(Arr.Items[i]);
+      F := ''; QN := ''; Kd := ''; Ln := 0;
+      O.TryGetValue<string>('kind', Kd);
+      O.TryGetValue<string>('qname', QN);
+      O.TryGetValue<string>('file', F);
+      O.TryGetValue<Integer>('line', Ln);
+      AddNodeData(GroupNode,
+        Format('%s  %s  (%s:%d)', [Kd, QN, ExtractFileName(F), Ln]), F, Ln);
+    end;
+    GroupNode.Expand(False);
+  end;
+
+  procedure AddImpactGroup;
+  var
+    Arr: TJSONArray;
+    i, Dp, Ca, Un: Integer;
+    O: TJSONObject;
+    GroupNode: TTreeNode;
+  begin
+    if not Obj.TryGetValue<TJSONArray>('impact', Arr) then Exit;
+    if Arr.Count = 0 then Exit;
+    GroupNode := AddNodeData(nil, 'Impact (transitive callers)', '', 0);
+    for i := 0 to Arr.Count - 1 do
+    begin
+      if not (Arr.Items[i] is TJSONObject) then Continue;
+      O := TJSONObject(Arr.Items[i]);
+      Dp := 0; Ca := 0; Un := 0;
+      O.TryGetValue<Integer>('depth', Dp);
+      O.TryGetValue<Integer>('callers', Ca);
+      O.TryGetValue<Integer>('units', Un);
+      AddNodeData(GroupNode,
+        Format('depth %d: %d callers across %d units', [Dp, Ca, Un]), '', 0);
+    end;
+    GroupNode.Expand(False);
+  end;
+
+begin
+  AParsed := False;
+  Root := TJSONObject.ParseJSONValue(AOutput);
+  if not (Root is TJSONObject) then
+  begin
+    if Root <> nil then Root.Free;
+    Exit;
+  end;
+  try
+    Obj := TJSONObject(Root);
+    if Obj.GetValue('reads') = nil then Exit;  { not the usages shape }
+    AParsed := True;
+    AddDeclGroup;
+    AddRefGroup('reads',      'Reads');
+    AddRefGroup('writes',     'Writes');
+    AddRefGroup('calls',      'Calls');
+    AddRefGroup('types',      'Type uses');
+    AddRefGroup('attributes', 'Attributes');
+    AddRefGroup('events',     'Event handlers');
+    AddImpactGroup;
+  finally
+    Root.Free;
+  end;
 end;
 
 procedure TDragLintUsagesForm.ParseJsonOutput(const AOutput: string;
@@ -557,8 +678,11 @@ begin
       Exit;
     end;
 
-    CmdLine := Format('"%s" query find-callers --name "%s" --context 3',
-      [FExePath, FSymbolName]);
+    { v0.42: the new 'usages' command finds reads/writes/etc. (not just calls)
+      and supports the width selector. }
+    if FWidth = '' then FWidth := 'narrow';
+    CmdLine := Format('"%s" usages --name "%s" --width %s',
+      [FExePath, FSymbolName, FWidth]);
     { v0.40.3: emit one --db per resolved path. Falls back to legacy
       single-DB if FDbPaths is empty but FDbPath is set. }
     if Length(FDbPaths) > 0 then
@@ -583,7 +707,7 @@ begin
 
     if (Length(Output) > 0) and (Output[1] = '{') then
     begin
-      ParseJsonOutput(Output, Parsed);
+      ParseUsagesGrouped(Output, Parsed);   { v0.42 grouped usages JSON }
       if not Parsed then
         ParseTextOutput(Output);
     end
@@ -742,36 +866,62 @@ type
   public
     FUsages: TDragLintUsagesForm;
     FEdit:   TEdit;
+    FCombo:  TComboBox;
+    function  CurrentWidth: string;
+    procedure RunFor(const ASym: string);
     procedure EditKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure ComboChange(Sender: TObject);
   end;
 
-procedure TUsagesEmbedCtl.EditKeyDown(Sender: TObject; var Key: Word;
-  Shift: TShiftState);
+function TUsagesEmbedCtl.CurrentWidth: string;
+begin
+  if FCombo = nil then Exit('narrow');
+  case FCombo.ItemIndex of
+    1: Result := 'wide';
+    2: Result := 'very-wide';
+  else Result := 'narrow';
+  end;
+end;
+
+procedure TUsagesEmbedCtl.RunFor(const ASym: string);
 var
-  Sym, Exe: string;
+  Exe: string;
   Dbs: TArray<string>;
 begin
-  if Key <> VK_RETURN then Exit;
-  Key := 0;
-  Sym := Trim(FEdit.Text);
-  if (Sym = '') or (FUsages = nil) then Exit;
+  if (ASym = '') or (FUsages = nil) then Exit;
   Exe := LoadSettings.ExePath;
   if (Exe = '') or not FileExists(Exe) then
     Exe := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
   if not FileExists(Exe) then Exe := 'drag-lint.exe';
   Dbs := ResolveActiveIndexDbs(LoadSettings);
-  FUsages.LoadUsages(Sym, Exe, Dbs);
+  FUsages.SetWidth(CurrentWidth);   { set width before the query }
+  FUsages.LoadUsages(ASym, Exe, Dbs);
+end;
+
+procedure TUsagesEmbedCtl.EditKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  if Key <> VK_RETURN then Exit;
+  Key := 0;
+  RunFor(Trim(FEdit.Text));
+end;
+
+procedure TUsagesEmbedCtl.ComboChange(Sender: TObject);
+begin
+  { re-run at the new width if a symbol is already loaded }
+  RunFor(Trim(FEdit.Text));
 end;
 
 procedure CreateEmbeddedUsages(AOwner: TComponent; AParent: TWinControl);
 var
-  Pnl:  TPanel;
-  Lbl:  TLabel;
-  Edit: TEdit;
-  Frm:  TDragLintUsagesForm;
-  Ctl:  TUsagesEmbedCtl;
+  Pnl:   TPanel;
+  Lbl:   TLabel;
+  Edit:  TEdit;
+  Combo: TComboBox;
+  Frm:   TDragLintUsagesForm;
+  Ctl:   TUsagesEmbedCtl;
 begin
-  { search row on top }
+  { search row on top: label + edit + width selector }
   Pnl := TPanel.Create(AOwner);
   Pnl.Parent     := AParent;
   Pnl.Align      := alTop;
@@ -783,6 +933,16 @@ begin
   Lbl.Align   := alLeft;
   Lbl.Layout  := tlCenter;
   Lbl.Caption := ' Usages of: ';
+
+  Combo := TComboBox.Create(AOwner);
+  Combo.Parent := Pnl;
+  Combo.Align  := alRight;
+  Combo.Width  := 110;
+  Combo.Style  := csDropDownList;
+  Combo.Items.Add('Narrow');
+  Combo.Items.Add('Wide');
+  Combo.Items.Add('Very wide');
+  Combo.ItemIndex := 0;
 
   Edit := TEdit.Create(AOwner);
   Edit.Parent   := Pnl;
@@ -800,7 +960,9 @@ begin
   Ctl := TUsagesEmbedCtl.Create(AOwner);
   Ctl.FUsages := Frm;
   Ctl.FEdit   := Edit;
+  Ctl.FCombo  := Combo;
   Edit.OnKeyDown := Ctl.EditKeyDown;
+  Combo.OnChange := Ctl.ComboChange;
 end;
 
 { ---- public API ---- }
