@@ -20,6 +20,7 @@ uses
   DragLint.Plugin.DiagnosticCache,
   DragLint.Plugin.CodeLensCache,
   DragLint.Plugin.RegistryColors,
+  DragLint.Plugin.LiveDiagnostics,
   DragLint.Plugin.Settings;
 
 { ---- TDragLintEditViewNotifier -------------------------------------------- }
@@ -140,7 +141,12 @@ begin
   FView  := nil;
   FIndex := -1;
 end;
-procedure TDragLintEditViewNotifier.Modified; begin end;
+procedure TDragLintEditViewNotifier.Modified;
+begin
+  { v0.42: an edit happened -> mark the live-diagnostics runner dirty (debounced).
+    Guarded; never let a diagnostics path disturb the editor. }
+  try NotifyEditDirty; except end;
+end;
 procedure TDragLintEditViewNotifier.EditorIdle(const View: IOTAEditView); begin end;
 procedure TDragLintEditViewNotifier.BeginPaint(const View: IOTAEditView;
   var FullRepaint: Boolean); begin end;

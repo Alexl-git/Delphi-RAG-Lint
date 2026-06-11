@@ -91,6 +91,7 @@ uses
   DragLint.Plugin.HoverTracker,
   DragLint.Plugin.DockForm,
   DragLint.Plugin.SaveNotifier,
+  DragLint.Plugin.LiveDiagnostics,
   DragLint.Plugin.DbResolver;
 
 { ---- PluginBuildTag ---- }
@@ -2068,6 +2069,10 @@ begin
   { v0.42: auto-publish diagnostics on save (syntax errors + lint -> markers +
     the Structure 'Diagnostics' node). The hook is no-op until the LSP is up. }
   DragLint.Plugin.SaveNotifier.GAfterSaveDiagHook := TriggerDiagnosticsOnSave;
+
+  { v0.42: live edit-time diagnostics (debounced buffer lint via the provider
+    registry). }
+  StartLiveDiagnostics;
 end;
 
 procedure UnregisterDragLintMenu;
@@ -2076,6 +2081,7 @@ begin
     its 150 ms watch timer can fire after the BPL's HoverForm DCU has
     been unloaded -- observed as an IDE crash on Uninstall. }
   try CloseDragLintHover; except end;
+  try StopLiveDiagnostics; except end;
   StopHoverTracker;
   UnregisterDragLintEditViewNotifier;
   UnregisterDragLintKeystrokes;
