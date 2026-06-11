@@ -883,7 +883,7 @@ function TSQLiteSymbolStore.FindSymbolsFuzzy(const APattern: string;
 var
   Q: TFDQuery;
   Scored: TList<TPair<Integer, TSymbol>>;
-  D, MaxD: Integer;
+  D, MaxD, MinShared, PatLen: Integer;
   Grams: TArray<string>;
   PlaceholderList: string;
   i: Integer;
@@ -893,6 +893,7 @@ begin
   EnsureTrigramTablePopulated;
   MaxD := DRagLint.Query.Fuzzy.FuzzyMaxDistanceFor(APattern);
   Grams := DRagLint.Query.Fuzzy.Trigrams(APattern);
+  PatLen := Length(APattern);
 
   Scored := TList<TPair<Integer, TSymbol>>.Create;
   Q := TFDQuery.Create(nil);
@@ -913,11 +914,20 @@ begin
           PlaceholderList := PlaceholderList + ', ';
         PlaceholderList := PlaceholderList + ':g' + IntToStr(i);
       end;
+      // v0.42 perf: require a candidate to share at least HALF the pattern's
+      // trigrams, not just one. The old ">=1 shared trigram" matched anything
+      // containing a common gram (e.g. 'red'/'set'), so Levenshtein ran over a
+      // huge set (~3.2 s on 1.5M symbols). HAVING COUNT >= minShared (served by
+      // idx_symbol_trigrams_symbol) plus the length pre-filter below cut it to
+      // the genuinely-similar candidates.
+      MinShared := (Length(Grams) + 1) div 2;
+      if MinShared < 1 then MinShared := 1;
       Q.SQL.Text :=
         'SELECT s.* FROM symbols s ' +
         'WHERE s.id IN (' +
-        '  SELECT DISTINCT symbol_id FROM symbol_trigrams ' +
+        '  SELECT symbol_id FROM symbol_trigrams ' +
         '  WHERE trigram IN (' + PlaceholderList + ')' +
+        '  GROUP BY symbol_id HAVING COUNT(*) >= ' + IntToStr(MinShared) +
         ')';
       for i := 0 to High(Grams) do
         Q.ParamByName('g' + IntToStr(i)).AsString := Grams[i];
@@ -926,6 +936,13 @@ begin
     while not Q.Eof do
     begin
       Sym := ReadSymbolFromQuery(Q);
+      // Length pre-filter: Levenshtein(A,B) >= ||A|-|B||, so anything whose
+      // name length differs from the pattern by more than MaxD can't qualify.
+      if Abs(Length(Sym.Name) - PatLen) > MaxD then
+      begin
+        Q.Next;
+        Continue;
+      end;
       D := DRagLint.Query.Fuzzy.LevenshteinDistance(APattern, Sym.Name);
       if D <= MaxD then
         Scored.Add(TPair<Integer, TSymbol>.Create(D, Sym));
