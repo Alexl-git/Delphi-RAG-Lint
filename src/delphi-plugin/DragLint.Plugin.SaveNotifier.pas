@@ -65,6 +65,13 @@ procedure UnregisterSaveNotifierForModule(const AModule: IOTAModule);
 var
   GLastProjectDb: string;
 
+{ v0.42: set by Editor.RegisterDragLintMenu to Editor.TriggerDiagnosticsOnSave.
+  Called from AfterSave (when AutoDiagnosticsOnSave is on) so saving a file
+  republishes its syntax/lint diagnostics. A hook avoids a SaveNotifier->Editor
+  unit dependency (Editor already depends on SaveNotifier). }
+var
+  GAfterSaveDiagHook: procedure(const AFile: string) = nil;
+
 implementation
 
 uses
@@ -205,6 +212,13 @@ begin
       end);
 
     SpawnIndexerFile(ExePath, SavedFile, DbPath);
+
+    { v0.42: republish diagnostics for the saved file (syntax errors + lint).
+      The hook sends textDocument/didSave to the running LSP, which replies with
+      publishDiagnostics -> markers. No-op if the LSP isn't running yet (the
+      hook guards), so we never force a slow LSP init from the save path. }
+    if Cfg.AutoDiagnosticsOnSave and Assigned(GAfterSaveDiagHook) then
+      try GAfterSaveDiagHook(SavedFile); except end;
   except
     { Silent — never propagate into the IDE save path. }
   end;

@@ -497,6 +497,13 @@ begin
     end;
   end;
 
+  // NOTE (v0.42): tree-sitter AST "syntax errors" are deliberately NOT auto-
+  // published here. tree-sitter-delphi13 still false-positives on valid code
+  // (e.g. `X in [#10,#13]` set membership -> bogus "missing token"), so live
+  // squiggles from it would land on good code. Real syntax errors come from
+  // the compiler (IDE-native + on-demand Compile && Diagnose). Lint findings
+  // above + compiler findings below are the reliable auto-published set.
+
   // --- v0.26: Compiler findings from the DB ---
   if Assigned(AStore) then
   begin

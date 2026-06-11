@@ -90,6 +90,7 @@ uses
   DragLint.Plugin.EditViewNotifier,
   DragLint.Plugin.HoverTracker,
   DragLint.Plugin.DockForm,
+  DragLint.Plugin.SaveNotifier,
   DragLint.Plugin.DbResolver;
 
 { ---- PluginBuildTag ---- }
@@ -923,6 +924,30 @@ begin
   ShowMessage(
     'drag-lint: diagnostics requested for'#13#10 + Uri + #13#10 +
     'Results will appear in the Messages pane.');
+end;
+
+procedure TriggerDiagnosticsOnSave(const AFile: string);
+{ v0.42: hook installed into SaveNotifier.GAfterSaveDiagHook. Republishes
+  diagnostics for a just-saved .pas by sending textDocument/didSave to the
+  RUNNING LSP (the server replies with publishDiagnostics -> HandleNotification
+  -> cache -> markers). We never force-start the LSP here -- if it isn't up yet
+  we silently skip, so the save path is never blocked by a slow LSP init. }
+var
+  Params, TextDoc: TJSONObject;
+  Uri: string;
+begin
+  if GLspClient = nil then Exit;
+  if (AFile = '') or not SameText(ExtractFileExt(AFile), '.pas') then Exit;
+  Uri := 'file:///' + StringReplace(AFile, '\', '/', [rfReplaceAll]);
+  Params  := TJSONObject.Create;
+  TextDoc := TJSONObject.Create;
+  TextDoc.AddPair('uri', Uri);
+  Params.AddPair('textDocument', TextDoc);
+  try
+    GLspClient.Notify('textDocument/didSave', Params);
+  finally
+    Params.Free;
+  end;
 end;
 
 { ---- v0.26: synchronous process helper ---- }
@@ -2039,6 +2064,10 @@ begin
     competes with an already-visible popup. Menu InvokeHover does the richer
     three-section show with callers; dwell does the short LSP-only summary. }
   StartHoverTracker;
+
+  { v0.42: auto-publish diagnostics on save (syntax errors + lint -> markers +
+    the Structure 'Diagnostics' node). The hook is no-op until the LSP is up. }
+  DragLint.Plugin.SaveNotifier.GAfterSaveDiagHook := TriggerDiagnosticsOnSave;
 end;
 
 procedure UnregisterDragLintMenu;
