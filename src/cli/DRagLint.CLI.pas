@@ -60,6 +60,9 @@ type
     DbPath: string;
     DbPaths: TArray<string>;
     ExcludeUnder: TArray<string>;   // v0.42: --exclude-under <dir> (repeatable)
+    Deep: Boolean;                  // v0.42: emit identifier usage refs
+    DeepExplicit: Boolean;          // --deep/--shallow was given on the cmd line
+    Width: string;                  // v0.42: usages width narrow|wide|very-wide
     Name: string;
     QName: string;
     InFile: string;        // --in <file.pas> (resolve-uses scope context)
@@ -331,6 +334,19 @@ begin
       Inc(i);
       SetLength(Result.ExcludeUnder, Length(Result.ExcludeUnder) + 1);
       Result.ExcludeUnder[High(Result.ExcludeUnder)] := ParamStr(i);
+    end
+    else if A = '--deep' then
+    begin
+      Result.Deep := True;  Result.DeepExplicit := True;
+    end
+    else if A = '--shallow' then
+    begin
+      Result.Deep := False; Result.DeepExplicit := True;
+    end
+    else if (A = '--width') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Width := ParamStr(i);
     end
     else if (A = '--project') and (i < ParamCount) then
     begin
@@ -640,7 +656,17 @@ begin
 
   Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
-  Parser := TDelphi13Parser.Create;
+  { v0.42: deep scan emits identifier usage refs. Default deep, except a
+    --scan-libraries scan defaults shallow (libraries are queried by call/type,
+    and usage-refs would ~double the 1.3 GB library DB). --deep/--shallow wins.
+    Set on the concrete parser before it's held as IParser. }
+  var DP: TDelphi13Parser := TDelphi13Parser.Create;
+  if AArgs.DeepExplicit then
+    DP.EmitUsageRefs := AArgs.Deep
+  else
+    DP.EmitUsageRefs := not AArgs.ScanLibraries;
+  Writeln('Usage refs (deep): ', BoolToStr(DP.EmitUsageRefs, True));
+  Parser := DP;
   // v0.16 Task 13: pass docs config from .drag-lint.json so the indexer
   // applies AllowBlankLineGap and CaptureLooseComments when associating
   // doc regions to symbols.
@@ -741,15 +767,16 @@ end;
 // caller-supplied exclude roots (cross-dictionary dedup).
 function IndexDictionary(const ADbPath: string;
   const AFolders, AExcludeRoots: TArray<string>;
-  const ADocs: TDocConfig; out AElapsedSec: Double): Boolean;
+  const ADocs: TDocConfig; ADeep: Boolean; out AElapsedSec: Double): Boolean;
 var
   Store:   ISymbolStore;
   Indexer: IIndexer;
+  DParser: TDelphi13Parser;
   F, Ex:   string;
   T0:      TDateTime;
 begin
   Writeln('');
-  Writeln('=== Dictionary: ', ADbPath, ' ===');
+  Writeln('=== Dictionary: ', ADbPath, '  (deep=', BoolToStr(ADeep, True), ') ===');
   T0 := Now;
   Store := TSQLiteSymbolStore.Create(ADbPath);
   Store.Migrate;
@@ -757,8 +784,10 @@ begin
     unit whose .pas lives in a subfolder that is NOT itself on the Library/
     Browsing path -- only its DCU's folder is -- still gets indexed as long as
     it sits anywhere beneath a listed root. }
+  DParser := TDelphi13Parser.Create;
+  DParser.EmitUsageRefs := ADeep;   { v0.42: deep dictionaries get usage refs }
   Indexer := TIndexer.Create(Store,
-    [TDelphi13Parser.Create, TDFMParser.Create, TFirebirdSqlParser.Create],
+    [DParser, TDFMParser.Create, TFirebirdSqlParser.Create],
     ADocs);
   for Ex in AExcludeRoots do
     Indexer.AddExcludeRoot(Ex);
@@ -895,14 +924,17 @@ begin
       finally
         Resolver.Free;
       end;
+      { Library: shallow (call/type only) -- usage refs would ~double its size
+        and you query the library by definition/call, not usage. }
       IndexDictionary(TPath.Combine(OutDir, 'library.sqlite'),
-        LibRoots, [], AArgs.Docs, ElLib);
+        LibRoots, [], AArgs.Docs, False, ElLib);
     end;
 
-    { 2. Active-projects dictionary -- all configured project folders into one. }
+    { 2. Active-projects dictionary -- all configured project folders into one.
+         Deep: your code, where Find-Usages of variables/components matters. }
     if Length(Projects) > 0 then
       IndexDictionary(TPath.Combine(OutDir, 'active-projects.sqlite'),
-        Projects, [], AArgs.Docs, ElProj);
+        Projects, [], AArgs.Docs, True, ElProj);
 
     { 3. Projects-root dictionary -- everything else under projectsRoot, with
          the library roots AND the active-project roots excluded so no folder
@@ -911,7 +943,7 @@ begin
     begin
       ExcludeForRoot := Concat(LibRoots, Projects);
       IndexDictionary(TPath.Combine(OutDir, 'projects.sqlite'),
-        [ProjectsRoot], ExcludeForRoot, AArgs.Docs, ElRoot);
+        [ProjectsRoot], ExcludeForRoot, AArgs.Docs, True, ElRoot);
     end;
 
     ElTotal := ElLib + ElProj + ElRoot;
@@ -3036,6 +3068,141 @@ begin
   Result := 0;
 end;
 
+// v0.42: drag-lint usages --name <X> [--width narrow|wide|very-wide]
+//        [--db ...] [--depth N] [--format text|json]
+// Find every place a symbol is used -- not just calls. After a DEEP index,
+// 'refs' includes read/write/attribute usages, so this finds variable and
+// component usages (e.g. dxDBGrid1.DataSource := X). Width:
+//   narrow    - the declaration(s) + every reference to exactly <X>.
+//   wide      - narrow + transitive callers to depth 2 (blast radius).
+//   very-wide - narrow + transitive callers to --depth (default 4).
+// Output is grouped by category. Multi-DB via repeated --db.
+function DoUsages(const AArgs: TArgs): Integer;
+var
+  PathsToScan: TArray<string>;
+  DbPath, Width: string;
+  Store: ISymbolStore;
+  Depth: Integer;
+  JRoot: TJSONObject;
+  JDecls, JReads, JWrites, JCalls, JTypes, JAttrs, JEvents, JImpact: TJSONArray;
+
+  procedure AddRefRow(AArr: TJSONArray; const AFile: string;
+    ALine, ACol: Integer);
+  var O: TJSONObject;
+  begin
+    O := TJSONObject.Create;
+    O.AddPair('file', AFile);
+    O.AddPair('line', TJSONNumber.Create(ALine));
+    O.AddPair('col', TJSONNumber.Create(ACol));
+    AArr.AddElement(O);
+  end;
+
+  function GroupFor(const AKind: string): TJSONArray;
+  begin
+    if AKind = 'read' then Result := JReads
+    else if AKind = 'write' then Result := JWrites
+    else if AKind = 'type_use' then Result := JTypes
+    else if AKind = 'attribute' then Result := JAttrs
+    else if AKind = 'event-binding' then Result := JEvents
+    else Result := JCalls;   { call + anything else }
+  end;
+
+var
+  S: TSymbol;
+  R: TReference;
+  L: TImpactLevel;
+  DeclO: TJSONObject;
+begin
+  if AArgs.Name = '' then
+  begin
+    Writeln('Usage: drag-lint usages --name <X> ' +
+      '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json]');
+    Exit(2);
+  end;
+  Width := LowerCase(AArgs.Width);
+  if Width = '' then Width := 'narrow';
+
+  if Width = 'very-wide' then
+    Depth := AArgs.Depth
+  else
+    Depth := 2;
+  if Depth <= 0 then Depth := 4;
+
+  PathsToScan := AArgs.DbPaths;
+  if Length(PathsToScan) = 0 then
+    PathsToScan := [AArgs.DbPath];
+
+  JRoot   := TJSONObject.Create;
+  JDecls  := TJSONArray.Create;  JReads  := TJSONArray.Create;
+  JWrites := TJSONArray.Create;  JCalls  := TJSONArray.Create;
+  JTypes  := TJSONArray.Create;  JAttrs  := TJSONArray.Create;
+  JEvents := TJSONArray.Create;  JImpact := TJSONArray.Create;
+  try
+    for DbPath in PathsToScan do
+    begin
+      if not TFile.Exists(DbPath) then Continue;
+      Store := TSQLiteSymbolStore.Create(DbPath);
+      Store.Migrate;
+
+      for S in Store.FindSymbolsByExactName(AArgs.Name) do
+      begin
+        DeclO := TJSONObject.Create;
+        DeclO.AddPair('kind', S.Kind.ToText);
+        DeclO.AddPair('qname', S.QualifiedName);
+        DeclO.AddPair('file', Store.GetFilePath(S.FileId));
+        DeclO.AddPair('line', TJSONNumber.Create(S.StartLine));
+        DeclO.AddPair('signature', S.Signature);
+        JDecls.AddElement(DeclO);
+      end;
+
+      for R in Store.FindCallersByName(AArgs.Name) do
+        AddRefRow(GroupFor(R.Kind), Store.GetFilePath(R.FileId),
+          R.StartLine, R.StartCol);
+
+      if (Width = 'wide') or (Width = 'very-wide') then
+        for L in Store.FindTransitiveCallers(AArgs.Name, Depth) do
+        begin
+          { TImpactLevel is an aggregate per transitive depth: how many distinct
+            callers / units reference the symbol at that level. }
+          var IO: TJSONObject := TJSONObject.Create;
+          IO.AddPair('depth', TJSONNumber.Create(L.Depth));
+          IO.AddPair('callers', TJSONNumber.Create(L.CallerCount));
+          IO.AddPair('units', TJSONNumber.Create(L.UnitCount));
+          JImpact.AddElement(IO);
+        end;
+
+      Store := nil;
+    end;
+
+    JRoot.AddPair('name', AArgs.Name);
+    JRoot.AddPair('width', Width);
+    JRoot.AddPair('declarations', JDecls);
+    JRoot.AddPair('reads', JReads);
+    JRoot.AddPair('writes', JWrites);
+    JRoot.AddPair('calls', JCalls);
+    JRoot.AddPair('types', JTypes);
+    JRoot.AddPair('attributes', JAttrs);
+    JRoot.AddPair('events', JEvents);
+    JRoot.AddPair('impact', JImpact);
+
+    if LowerCase(AArgs.Format) = 'json' then
+      Writeln(JRoot.Format(2))
+    else
+    begin
+      Writeln(Format('usages of "%s" (width=%s)', [AArgs.Name, Width]));
+      Writeln(Format('  declarations: %d', [JDecls.Count]));
+      Writeln(Format('  reads: %d  writes: %d  calls: %d  types: %d  attributes: %d  events: %d',
+        [JReads.Count, JWrites.Count, JCalls.Count, JTypes.Count,
+         JAttrs.Count, JEvents.Count]));
+      if JImpact.Count > 0 then
+        Writeln(Format('  impact (transitive): %d', [JImpact.Count]));
+    end;
+    Result := 0;
+  finally
+    JRoot.Free;   { owns the arrays once AddPair'd; arrays added are freed with root }
+  end;
+end;
+
 // v0.17: drag-lint slice --qname <Foo.TBar> [--db <path>] [--format text|json]
 // Returns symbol-relevant chunks of the unit:
 //   1. unit-header  � lines 1 through the "interface" keyword line
@@ -4478,6 +4645,8 @@ begin
       Result := DoSurface(Args)
     else if Args.Command = 'outline' then
       Result := DoOutline(Args)
+    else if Args.Command = 'usages' then
+      Result := DoUsages(Args)
     else if Args.Command = 'scan-all' then
       Result := DoScanAll(Args)
     else if Args.Command = 'slice' then

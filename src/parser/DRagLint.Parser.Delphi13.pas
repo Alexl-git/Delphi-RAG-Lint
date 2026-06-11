@@ -16,6 +16,9 @@ type
   strict private
     FLanguage: PTSLanguage;
   public
+    { v0.42: deep scan -> emit identifier usage refs (read/write/attribute).
+      Set by the indexer from the --deep/--shallow flag before parsing. }
+    EmitUsageRefs: Boolean;
     constructor Create;
     function LanguageName: string;
     function FileExtensions: TArray<string>;
@@ -75,6 +78,11 @@ type
       symbol lives in; stamped into TSymbol.Section by Emit (agent gap #3:
       tells whether a symbol is usable from another unit). }
     CurrentSection: string;
+    { v0.42: when True (deep scan), emit read/write/attribute usage references
+      for identifiers in expression position, so Find-Usages works for
+      variables/components/properties -- not just calls. Off = today's
+      call/type_use-only behaviour (shallow scan, e.g. libraries). }
+    EmitUsageRefs: Boolean;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     function Emit(AKind: TSymbolKind; const AName, AQualifiedName: string;
@@ -858,6 +866,61 @@ begin
     Exit;
   end;
 
+  // v0.42: identifier usage references (deep scan only). Captures variable /
+  // component / property usages so Find-Usages works beyond calls. Each handler
+  // still recurses, so nested expressions are fully covered.
+  if AState.EmitUsageRefs then
+  begin
+    // Member access `obj.Member` -> the BASE identifier is a usage of `obj`
+    // (the dxDBGrid1 case). The member itself is captured as call/type_use
+    // elsewhere; we don't re-emit it here.
+    if NodeType = 'exprDot' then
+    begin
+      var L := ANode.ChildByField('lhs');
+      if (not L.IsNull) and (L.NodeType = 'identifier') then
+        AState.EmitRef('read', NodeText(L, AState.Source), L);
+      for i := 0 to ANode.NamedChildCount - 1 do
+        Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+      Exit;
+    end;
+
+    // Assignment `X := ...` -> X is written; the RHS recurses as reads.
+    if NodeType = 'assignment' then
+    begin
+      var Lhs := ANode.ChildByField('lhs');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then
+        AState.EmitRef('write', NodeText(Lhs, AState.Source), Lhs);
+      for i := 0 to ANode.NamedChildCount - 1 do
+        Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+      Exit;
+    end;
+
+    // A bare identifier passed as a call argument is a usage (`Foo(dxDBGrid1)`).
+    if NodeType = 'exprArgs' then
+    begin
+      for i := 0 to ANode.NamedChildCount - 1 do
+      begin
+        var Arg := ANode.NamedChild(i);
+        if Arg.NodeType = 'identifier' then
+          AState.EmitRef('read', NodeText(Arg, AState.Source), Arg);
+      end;
+      for i := 0 to ANode.NamedChildCount - 1 do
+        Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+      Exit;
+    end;
+
+    // Custom attribute `[Foo]` usage.
+    if NodeType = 'attribute' then
+    begin
+      var Aid := FindNamedChildOfType(ANode, 'identifier');
+      if not Aid.IsNull then
+        AState.EmitRef('attribute', NodeText(Aid, AState.Source), Aid);
+      for i := 0 to ANode.NamedChildCount - 1 do
+        Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+      Exit;
+    end;
+  end;
+
   // Default: recurse into named children
   for i := 0 to ANode.NamedChildCount - 1 do
     Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
@@ -930,6 +993,7 @@ begin
       TTSInputEncoding.TSInputEncodingUTF8);
 
     State := TWalkState.Create(Source);
+    State.EmitUsageRefs := EmitUsageRefs;   { v0.42: deep scan }
     Root := Tree.RootNode;
     if Root.HasError then
       Result.Diagnostics := ['parse contains syntax errors (Tree.RootNode.HasError = true)'];
