@@ -24,11 +24,13 @@ type
   TProjectResolver = class
   strict private
     FBDS: string;
+    FCurrentPlatform: string;   // what $(Platform) expands to right now
     function ExpandMacros(const APath: string): string;
     procedure AddFolderIfReal(AList: TList<string>; const APath: string);
     procedure AddSemicolonList(AList: TList<string>; const ASemicolonList: string;
       const ABaseDir: string);
-    procedure ReadLibraryPaths(AList: TList<string>);
+    function EnumLibraryPlatforms: TArray<string>;
+    procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>);
     procedure ReadDProj(const ADprojPath: string; AList: TList<string>);
     procedure ReadDprUsesPaths(const ADprPath: string; AList: TList<string>);
   public
@@ -36,7 +38,11 @@ type
     function Resolve(const ADprojPath: string): TArray<string>;
     // Library/Browsing paths from registry only - no .dproj required.
     // Useful for "index everything Delphi knows about" without a project.
-    function ResolveLibraryPaths: TArray<string>;
+    //   AAllPlatforms = False -> Win32 + Win64 only (the IDE's native targets).
+    //   AAllPlatforms = True  -> every platform subkey under ...\BDS\37.0\Library
+    //     (Android*, iOS*, Linux64, OSX*, Win64x, ...), which additionally pulls
+    //     in the Posix / Androidapi / iOSapi / Macapi platform source trees.
+    function ResolveLibraryPaths(AAllPlatforms: Boolean = False): TArray<string>;
   end;
 
 implementation
@@ -51,6 +57,7 @@ begin
   FBDS := GetEnvironmentVariable('BDS');
   if FBDS = '' then
     FBDS := 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
+  FCurrentPlatform := 'Win64';
 end;
 
 function TProjectResolver.ExpandMacros(const APath: string): string;
@@ -59,7 +66,7 @@ begin
   Result := StringReplace(Result, '$(BDS)', FBDS, [rfReplaceAll, rfIgnoreCase]);
   Result := StringReplace(Result, '$(BDSCOMMONDIR)',
     TPath.Combine(FBDS, '..\Studio\Public\Documents'), [rfReplaceAll, rfIgnoreCase]);
-  Result := StringReplace(Result, '$(Platform)', 'Win64',
+  Result := StringReplace(Result, '$(Platform)', FCurrentPlatform,
     [rfReplaceAll, rfIgnoreCase]);
   Result := StringReplace(Result, '$(Config)', 'Debug',
     [rfReplaceAll, rfIgnoreCase]);
@@ -130,9 +137,61 @@ begin
   end;
 end;
 
-procedure TProjectResolver.ReadLibraryPaths(AList: TList<string>);
+// Enumerates every platform subkey under ...\BDS\37.0\Library across both
+// hives and registry views, deduplicated case-insensitively. These are the
+// names Delphi itself registers (Win32, Win64, Android64, iOSDevice64, ...).
+function TProjectResolver.EnumLibraryPlatforms: TArray<string>;
+var
+  List: TList<string>;
+  Names: TStringList;
+  Reg: TRegistry;
+  HiveRoot: HKEY;
+  Sam: Cardinal;
+  Name: string;
+
+  procedure AddUnique(const AName: string);
+  begin
+    if AName.Trim = '' then
+      Exit;
+    for var Existing in List do
+      if SameText(Existing, AName) then
+        Exit;
+    List.Add(AName);
+  end;
+
+begin
+  List := TList<string>.Create;
+  Names := TStringList.Create;
+  try
+    for HiveRoot in [HKEY(HKEY_CURRENT_USER), HKEY(HKEY_LOCAL_MACHINE)] do
+      for Sam in [KEY_WOW64_32KEY, KEY_WOW64_64KEY] do
+      begin
+        Reg := TRegistry.Create(KEY_READ or Sam);
+        try
+          Reg.RootKey := HiveRoot;
+          if Reg.OpenKeyReadOnly(BDS_REG_PATH + '\Library') then
+            try
+              Names.Clear;
+              Reg.GetKeyNames(Names);
+              for Name in Names do
+                AddUnique(Name);
+            finally
+              Reg.CloseKey;
+            end;
+        finally
+          Reg.Free;
+        end;
+      end;
+    Result := List.ToArray;
+  finally
+    Names.Free;
+    List.Free;
+  end;
+end;
+
+procedure TProjectResolver.ReadLibraryPaths(AList: TList<string>;
+  const APlatforms: TArray<string>);
 const
-  PLATFORMS: array[0..1] of string = ('Win32', 'Win64');
   VALUE_NAMES: array[0..1] of string = ('Search Path', 'Browsing Path');
 var
   Plat, Val: string;
@@ -141,7 +200,9 @@ var
   RegBase: string;
 begin
   // Probe HKCU + HKLM, both 32-bit + 64-bit registry views.
-  for Plat in PLATFORMS do
+  for Plat in APlatforms do
+  begin
+    FCurrentPlatform := Plat;   // so $(Platform) expands to this target
     for Val in VALUE_NAMES do
     begin
       RegBase := BDS_REG_PATH + '\Library\' + Plat;
@@ -153,6 +214,8 @@ begin
               AddSemicolonList(AList, S, '');
             end);
     end;
+  end;
+  FCurrentPlatform := 'Win64';   // back to default for any later expansion
 end;
 
 procedure TProjectResolver.ReadDProj(const ADprojPath: string;
@@ -219,13 +282,23 @@ begin
   end;
 end;
 
-function TProjectResolver.ResolveLibraryPaths: TArray<string>;
+function TProjectResolver.ResolveLibraryPaths(AAllPlatforms: Boolean): TArray<string>;
 var
   List: TList<string>;
+  Platforms: TArray<string>;
 begin
+  if AAllPlatforms then
+  begin
+    Platforms := EnumLibraryPlatforms;
+    if Length(Platforms) = 0 then
+      Platforms := ['Win32', 'Win64'];   // fallback if enumeration found nothing
+  end
+  else
+    Platforms := ['Win32', 'Win64'];
+
   List := TList<string>.Create;
   try
-    ReadLibraryPaths(List);
+    ReadLibraryPaths(List, Platforms);
     Result := List.ToArray;
   finally
     List.Free;
@@ -260,7 +333,7 @@ begin
     if DprPath <> '' then
       ReadDprUsesPaths(DprPath, List);
 
-    ReadLibraryPaths(List);
+    ReadLibraryPaths(List, ['Win32', 'Win64']);
     Result := List.ToArray;
   finally
     List.Free;

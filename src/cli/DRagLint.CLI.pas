@@ -75,6 +75,7 @@ type
     Limit: Integer;
     SortBy: string;
     ScanLibraries: Boolean;
+    ScanLibrariesAll: Boolean;   // --scan-libraries-all: every platform subkey
     AsJson: Boolean;
     DryRun: Boolean;
     Watch: Boolean;
@@ -134,7 +135,8 @@ begin
   Writeln('Usage:');
   Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]]');
   Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--dry-run] [--watch [--interval N]]');
-  Writeln('  drag-lint index --scan-libraries                    [--db <file.sqlite>] [--dry-run]');
+  Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
+  Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--db ...] [--json]');
@@ -358,8 +360,13 @@ begin
       Result.AsJson := True
     else if A = '--dry-run' then
       Result.DryRun := True
-    else if A = '--scan-libraries' then
-      Result.ScanLibraries := True
+    else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then
+      Result.ScanLibraries := True   // Win32 + Win64 (--scan-libraries is the back-compat alias)
+    else if A = '--scan-libraries-all' then
+    begin
+      Result.ScanLibraries    := True;
+      Result.ScanLibrariesAll := True;   // every registered platform
+    end
     else if A = '--watch' then
       Result.Watch := True
     else if A = '--open' then
@@ -688,10 +695,13 @@ begin
   // unchanged files are skipped via mtime+sha256.
   if AArgs.ScanLibraries then
   begin
-    Writeln('Scope: Delphi Library + Browsing paths (registry, Win32+Win64)');
+    if AArgs.ScanLibrariesAll then
+      Writeln('Scope: Delphi Library + Browsing paths (registry, ALL platforms)')
+    else
+      Writeln('Scope: Delphi Library + Browsing paths (registry, Win32+Win64)');
     Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
     try
-      Folders := Resolver.ResolveLibraryPaths;
+      Folders := Resolver.ResolveLibraryPaths(AArgs.ScanLibrariesAll);
     finally
       Resolver.Free;
     end;

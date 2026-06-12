@@ -44,6 +44,32 @@ symbol graph + structure panel, with click-to-jump into RAD Studio.
    drag-lint impact --qname Unit.TFoo.DoBar --db myapp.sqlite
    ```
 
+### Indexing the Delphi RTL/VCL libraries
+
+To build one index over everything Delphi itself knows about - the IDE's
+**Library** and **Browsing** search paths, read straight from the registry,
+deduplicated, with `$(BDS)` / `$(Platform)` macros expanded - use the
+`--scan-libraries-*` flags (no project or path needed):
+
+```
+drag-lint index --scan-libraries-win --db Library.sqlite   # Win32 + Win64 (default)
+drag-lint index --scan-libraries-all --db Library.sqlite   # every registered platform
+```
+
+- **`--scan-libraries-win`** covers the IDE's native targets (Win32 + Win64).
+  Because the RTL / VCL / FMX `.pas` source is shared across platforms, this
+  already captures essentially all library source. (`--scan-libraries` is kept
+  as a back-compat alias for this.)
+- **`--scan-libraries-all`** enumerates **every** platform subkey under
+  `...\BDS\37.0\Library` (Android*, iOS*, Linux64, OSX*, Win64x, ...). On top of
+  the Win set it pulls in the platform-specific source trees - `source\rtl\posix`,
+  `source\rtl\ios`, `posix\osx` - so symbols like `Posix.*`, `iOSapi.*`,
+  `Macapi.*` and `Androidapi.*` resolve too.
+
+Both probe HKCU + HKLM in both the 32- and 64-bit registry views and fold the
+results into a single deduplicated folder set. Add `--dry-run` to print the
+resolved folder list without indexing.
+
 ### LSP server (Zed / VS Code)
 
 Point your editor's LSP config at `drag-lint.exe lsp --db <path>.sqlite`.
@@ -89,6 +115,8 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | Command | Description |
 |---------|-------------|
 | `index <path>` | Parse and index a Delphi project into SQLite |
+| `index --scan-libraries-win` | Index the IDE's Win32+Win64 Library + Browsing paths (from the registry) |
+| `index --scan-libraries-all` | Same, but every registered platform (adds Posix/iOS/Android/OSX source) |
 | `query --name <name>` | Find symbols by name (fuzzy) |
 | `surface --qname <qname>` | Show the full source surface of a symbol |
 | `slice --qname <qname>` | Extract the call-slice reachable from a symbol |

@@ -3,6 +3,24 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.42.0-alpha -- 2026-06-12
+
+### Added
+- **`index --scan-libraries-win`** and **`index --scan-libraries-all`**: build a
+  single library index from the IDE's registry Library + Browsing paths.
+  `-win` covers Win32 + Win64 (the IDE's native targets, and what `--scan-libraries`
+  still aliases to); `-all` enumerates **every** platform subkey under
+  `...\BDS\37.0\Library` (Android/iOS/Linux64/OSX/Win64x/...), adding the
+  platform-specific `source\rtl\posix`, `source\rtl\ios` and `posix\osx` trees so
+  `Posix.*` / `iOSapi.*` / `Macapi.*` / `Androidapi.*` symbols resolve. Both
+  deduplicate across HKCU+HKLM and 32/64-bit registry views; `$(Platform)` now
+  expands per-platform instead of a hardcoded `Win64`.
+
+### Fixed (compiler hygiene)
+- Cleared inline-expansion hints (H2443) by adding `FireDAC.Stan.Param` and
+  `System.Generics.Collections` to the units that needed them; removed dead
+  locals and the superseded `ParseJsonOutput` method (H2164/H2219/W1050).
+
 ## v0.41.0-alpha -- 2026-06-05
 
 ### Added
