@@ -123,6 +123,7 @@ type
     // v0.43: check-unit (in-memory semantic check) + uses-audit
     Shadow:             string;  // --shadow <dir> (unsaved-buffer overlay)
     ResolveUsesFlag:    Boolean; // --resolve-uses (enrich undeclared errors)
+    CheckPlatform:      string;  // --platform win32|win64 (matches project config)
     // v0.27: generate-test + format
     TestFramework:      string;  // --framework dunitx|dunit (default 'dunitx')
     YadfPath:           string;  // --yadf-path <YADF.exe>
@@ -171,7 +172,7 @@ begin
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
-  Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
+  Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
   Writeln('  drag-lint cycles             --db <file.sqlite>    [--format json|text]   (circular unit deps)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH]');
@@ -508,6 +509,11 @@ begin
     end
     else if A = '--resolve-uses' then
       Result.ResolveUsesFlag := True
+    else if (A = '--platform') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.CheckPlatform := ParamStr(i);
+    end
     else if (A = '--framework') and (i < ParamCount) then
     begin
       Inc(i);
@@ -4403,23 +4409,31 @@ begin
   else
     CompileTarget := AArgs.Target;
 
-  { 3. unit search path. We compile for Win64 (dcc64) to match the ORM3 client
-       and server, so the path must NOT contain Win32 DCU/lib/dcp dirs -- a
-       Win32 System.dcu first on the path triggers F2048 (bad unit format) and
-       aborts the compile. Drop any '\win32\' folder and prepend the Win64 RTL
-       lib so the right System.dcu is found first. Shadow is first of all so the
-       unsaved overlay wins. }
+  { 3. platform. The compiler + DCUs MUST match the project's active platform:
+       a Win32 System.dcu first on the path for a dcc64 compile triggers F2048
+       (bad unit format). So we pick dcc32/dcc64 to match, prepend that
+       platform's RTL lib, and drop the OTHER platform's DCU/lib/dcp dirs. The
+       plugin passes --platform from the project's active config; default win64
+       (ORM3 client + server). }
+  var Plat: string := LowerCase(AArgs.CheckPlatform);
+  if (Plat <> 'win32') and (Plat <> 'win64') then Plat := 'win64';
+
+  var DccExe:   string := IfThen(Plat = 'win32', 'dcc32', 'dcc64');
+  var PlatDir:  string := IfThen(Plat = 'win32', 'Win32', 'Win64');
+  var WrongDir: string := IfThen(Plat = 'win32', '\win64\', '\win32\');
+
   var BdsDir: string := GetEnvironmentVariable('BDS');
   if BdsDir = '' then
     BdsDir := 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
-  var LibRelease: string := TPath.Combine(BdsDir, 'lib\Win64\release');
+  var LibRelease: string := TPath.Combine(BdsDir, 'lib\' + PlatDir + '\release');
 
+  { unit search path -- shadow first so the unsaved overlay wins }
   UPath := '';
   if AArgs.Shadow <> '' then UPath := AArgs.Shadow;
   if TDirectory.Exists(LibRelease) then
     if UPath = '' then UPath := LibRelease else UPath := UPath + ';' + LibRelease;
   for P in Folders do
-    if (P <> '') and (Pos('\win32\', LowerCase(P)) = 0) then   { Win64 compile }
+    if (P <> '') and (Pos(WrongDir, LowerCase(P)) = 0) then
       if UPath = '' then UPath := P else UPath := UPath + ';' + P;
 
   Namespaces := ReadDccNamespaces(AArgs.ProjectPath);
@@ -4431,15 +4445,25 @@ begin
   DcuDir  := TPath.Combine(TmpRoot, 'dcu');
   TDirectory.CreateDirectory(CfgDir);
   TDirectory.CreateDirectory(DcuDir);
-  TFile.WriteAllText(TPath.Combine(CfgDir, 'dcc64.cfg'),
+  { dcc reads <compiler>.cfg from its working dir, so name the cfg to match }
+  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'),
     Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10,
       [UPath, Namespaces, DcuDir]));
 
   RsVars := 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat';
-  Cmd := Format('cmd.exe /c "call "%s" && cd /d "%s" && dcc64 "%s" 2>&1"',
-    [RsVars, CfgDir, CompileTarget]);
+  Cmd := Format('cmd.exe /c "call "%s" && cd /d "%s" && %s "%s" 2>&1"',
+    [RsVars, CfgDir, DccExe, CompileTarget]);
 
   Res := TCompileChecker.RunCommand(Cmd);
+
+  if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
+  begin
+    Writeln(ErrOutput, '[check-unit] CMD: ' + Cmd);
+    Writeln(ErrOutput, '[check-unit] EXIT: ' + IntToStr(Res.ExitCode));
+    Writeln(ErrOutput, '[check-unit] RAW OUTPUT >>>');
+    Writeln(ErrOutput, Res.StdoutText);
+    Writeln(ErrOutput, '[check-unit] <<< END, findings=' + IntToStr(Length(Res.Findings)));
+  end;
 
   { open the index only if --resolve-uses asked AND the db exists }
   HasStore := AArgs.ResolveUsesFlag and TFile.Exists(AArgs.DbPath);
