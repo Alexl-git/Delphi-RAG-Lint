@@ -62,6 +62,7 @@ contains
   DragLint.Plugin.OpenSourceServer in 'DragLint.Plugin.OpenSourceServer.pas',
   DragLint.Plugin.DockForm in 'DragLint.Plugin.DockForm.pas' {DragLintDockFrame: TFrame},
   DragLint.Plugin.Providers in 'DragLint.Plugin.Providers.pas',
-  DragLint.Plugin.LiveDiagnostics in 'DragLint.Plugin.LiveDiagnostics.pas';
+  DragLint.Plugin.LiveDiagnostics in 'DragLint.Plugin.LiveDiagnostics.pas',
+  DragLint.Plugin.GraphWindow in 'DragLint.Plugin.GraphWindow.pas';
 
 end.

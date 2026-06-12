@@ -6,6 +6,14 @@ breaking changes** until v1.0.
 ## v0.43.0-alpha -- 2026-06-12
 
 ### Added
+- **Dedicated dockable Graph window.** The graph is now its own
+  `INTACustomDockableForm` ("drag-lint Graph", under View > Tool Windows) rather
+  than a tab -- so it can sit open beside the Structure window, both visible at
+  once. It hosts the standalone viewer **in-place**: the plugin launches
+  `drag_lint_graph.exe --parent-hwnd <thisWindow>`, the viewer renders as a
+  child filling the window, and the plugin terminates it on close. Jump-to-source
+  still flows through the named-pipe contract. (Viewer side: new `--parent-hwnd`
+  embed mode.)
 - **Hover: IDE-style Parameters block.** Proc-like hovers now break the
   signature into a `**Parameters:**` list (one `name : type` per line, with
   `const`/`var`/`out` preserved) plus a `**Returns:**` line -- mirroring the

@@ -32,6 +32,7 @@ uses
   DragLint.Plugin.StructureForm,
   DragLint.Plugin.UsagesForm,
   DragLint.Plugin.SymbolSearchForm,
+  DragLint.Plugin.GraphWindow,
   DragLint.Plugin.DbResolver,
   DragLint.Plugin.Settings;
 
@@ -149,36 +150,11 @@ begin
       Result := Result + Format(' --db "%s"', [P]);
 end;
 
-function FindGraphViewerExe(const ABplDir, AExeDir: string): string;
-{ The standalone viewer is Delphi-RAG-Lint-Graph's app project: drag_lint_graph.exe.
-  Look next to the BPL and next to drag-lint.exe (older name kept as fallback). }
-const
-  NAMES: array[0..1] of string = ('drag_lint_graph.exe', 'DragLintGraphViewer.exe');
-var
-  Dir, N: string;
-begin
-  Result := '';
-  for Dir in [ABplDir, AExeDir] do
-    for N in NAMES do
-      if FileExists(Dir + N) then
-        Exit(Dir + N);
-end;
-
 procedure TDragLintDockFrame.HandleOpenGraph(Sender: TObject);
-var
-  Exe: string;
 begin
-  { Launch the standalone graph viewer if present. True in-dock embedding is a
-    separate cross-BPL effort. }
-  Exe := FindGraphViewerExe(ExtractFilePath(GetModuleName(HInstance)),
-                            ExtractFilePath(ResolveExe));
-  if Exe <> '' then
-    ShellExecute(0, 'open', PChar(Exe), nil, PChar(ExtractFilePath(Exe)), SW_SHOWNORMAL)
-  else
-    MessageBox(0,
-      'Graph viewer (drag_lint_graph.exe) was not found next to the plugin.'#13#10 +
-      'It is the app project Delphi-RAG-Lint-Graph\src\viewer\drag_lint_graph.dproj.',
-      'drag-lint', MB_OK or MB_ICONINFORMATION);
+  { v0.43: the graph now lives in its own dockable tool window so it can sit
+    open beside Structure. Open that instead of launching a floating exe. }
+  ShowDragLintGraph;
 end;
 
 procedure TDragLintDockFrame.BuildGraphTab(ATab: TTabSheet);
@@ -190,15 +166,15 @@ begin
   L.Parent    := ATab;
   L.Align     := alTop;
   L.WordWrap  := True;
-  L.Caption   := ' The graph viewer is a separate window. In-dock embedding is '
-    + 'planned; for now launch it here:';
-  L.Height    := 40;
+  L.Caption   := ' The graph is a dedicated, dockable tool window (View > Tool '
+    + 'Windows > drag-lint Graph) so it can sit open beside Structure. Open it:';
+  L.Height    := 48;
 
   Btn := TButton.Create(ATab);
   Btn.Parent  := ATab;
   Btn.Align   := alTop;
   Btn.Height  := 30;
-  Btn.Caption := 'Open Graph Viewer';
+  Btn.Caption := 'Open Graph Window';
   Btn.OnClick := HandleOpenGraph;
 end;
 

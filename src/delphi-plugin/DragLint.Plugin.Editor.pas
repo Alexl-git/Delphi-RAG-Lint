@@ -90,6 +90,7 @@ uses
   DragLint.Plugin.EditViewNotifier,
   DragLint.Plugin.HoverTracker,
   DragLint.Plugin.DockForm,
+  DragLint.Plugin.GraphWindow,
   DragLint.Plugin.SaveNotifier,
   DragLint.Plugin.LiveDiagnostics,
   DragLint.Plugin.DbResolver;
@@ -250,6 +251,9 @@ var
     is the IDE's Tool Windows item, not our GMenuItems), so our normal teardown
     can't free it. Track it explicitly and free it in UnregisterDragLintMenu. }
   GDockToolWinItem: TMenuItem = nil;
+  { v0.43: the dedicated Graph dockable window's View > Tool Windows entry --
+    same IDE-owned-menu caveat, tracked + freed the same way. }
+  GGraphToolWinItem: TMenuItem = nil;
 
 function EnsureLspClient: TDragLintLspClient;
 var
@@ -1987,6 +1991,11 @@ begin
   ShowDragLintDock;
 end;
 
+procedure InvokeGraphWindow(Sender: TObject);
+begin
+  ShowDragLintGraph;
+end;
+
 procedure RegisterDragLintMenu;
 var
   Services: INTAServices;
@@ -2016,6 +2025,7 @@ begin
   { v0.42: daily-use actions on top; diagnostics & test harness bunched below
     a separator so the everyday items aren't lost among them. }
   AddWrappedItem(RootMenu, 'drag-lint Panel (dockable)', InvokeDockPanel);
+  AddWrappedItem(RootMenu, 'drag-lint Graph (dockable)', InvokeGraphWindow);
   AddSeparator(RootMenu);
   AddWrappedItem(RootMenu, 'Hover at Cursor',           InvokeHover);
   AddWrappedItem(RootMenu, 'Show Completion',            InvokeCompletion);
@@ -2049,12 +2059,21 @@ begin
   if ToolWin <> nil then
   begin
     RemoveChildrenByCaption(ToolWin, 'drag-lint');
+    RemoveChildrenByCaption(ToolWin, 'drag-lint Graph');
     GDockToolWinItem := TMenuItem.Create(ToolWin);
     GDockToolWinItem.Caption := 'drag-lint';
     var DockWrap: TMenuActionWrapper := TMenuActionWrapper.Create(InvokeDockPanel);
     GWrappers.Add(DockWrap);
     GDockToolWinItem.OnClick := DockWrap.HandleClick;
     ToolWin.Add(GDockToolWinItem);
+
+    { v0.43: second entry for the dedicated Graph window. }
+    GGraphToolWinItem := TMenuItem.Create(ToolWin);
+    GGraphToolWinItem.Caption := 'drag-lint Graph';
+    var GraphWrap: TMenuActionWrapper := TMenuActionWrapper.Create(InvokeGraphWindow);
+    GWrappers.Add(GraphWrap);
+    GGraphToolWinItem.OnClick := GraphWrap.HandleClick;
+    ToolWin.Add(GGraphToolWinItem);
   end;
 
   RegisterProjectNotifier;
@@ -2082,6 +2101,9 @@ begin
     been unloaded -- observed as an IDE crash on Uninstall. }
   try CloseDragLintHover; except end;
   try StopLiveDiagnostics; except end;
+  { v0.43: tear down the dedicated Graph window first so its frame dtor
+    terminates the embedded drag_lint_graph.exe before the BPL unloads. }
+  try UnregisterDragLintGraph; except end;
   StopHoverTracker;
   UnregisterDragLintEditViewNotifier;
   UnregisterDragLintKeystrokes;
@@ -2102,6 +2124,7 @@ begin
     this is what stops a duplicate/stale entry surviving an uninstall. Do it
     before GWrappers so its OnClick wrapper isn't dangling. }
   FreeAndNil(GDockToolWinItem);
+  FreeAndNil(GGraphToolWinItem);
   { Wrappers hold the OnClick method pointers; free them before the menu items }
   FreeAndNil(GWrappers);
   FreeAndNil(GMenuItems);

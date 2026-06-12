@@ -101,6 +101,7 @@
         </DCCReference>
         <DCCReference Include="DragLint.Plugin.Providers.pas"/>
         <DCCReference Include="DragLint.Plugin.LiveDiagnostics.pas"/>
+        <DCCReference Include="DragLint.Plugin.GraphWindow.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
