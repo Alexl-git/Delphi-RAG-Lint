@@ -125,6 +125,8 @@ type
     ResolveUsesFlag:    Boolean; // --resolve-uses (enrich undeclared errors)
     CheckPlatform:      string;  // --platform win32|win64 (matches project config)
     Edges:              Boolean; // --edges (cycles: show the actual uses edges)
+    Apply:              Boolean; // --apply (uses-fix: write changes, not dry-run)
+    RemoveUnused:       Boolean; // --remove-unused (uses-fix: also comment unused)
     // v0.27: generate-test + format
     TestFramework:      string;  // --framework dunitx|dunit (default 'dunitx')
     YadfPath:           string;  // --yadf-path <YADF.exe>
@@ -176,6 +178,7 @@ begin
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
   Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--format json|text]   (circular unit deps)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
+  Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused]   (compiler-verified uses cleanup)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH]');
   Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
@@ -513,6 +516,10 @@ begin
       Result.ResolveUsesFlag := True
     else if A = '--edges' then
       Result.Edges := True
+    else if A = '--apply' then
+      Result.Apply := True
+    else if A = '--remove-unused' then
+      Result.RemoveUnused := True
     else if (A = '--platform') and (i < ParamCount) then
     begin
       Inc(i);
@@ -539,7 +546,8 @@ begin
     else if (Result.Command = 'compile-check') and (Result.Target = '') and
             (not A.StartsWith('--')) then
       Result.Target := A
-    else if ((Result.Command = 'check-unit') or (Result.Command = 'uses-audit')) and
+    else if ((Result.Command = 'check-unit') or (Result.Command = 'uses-audit') or
+             (Result.Command = 'uses-fix')) and
             (Result.Target = '') and (not A.StartsWith('--')) then
       Result.Target := A
     else if (Result.Command = 'check-ast') and (Result.Target = '') and
@@ -4963,6 +4971,490 @@ begin
   end;
 end;
 
+// v0.43: compile ONE unit in full project context (the engine behind
+// check-unit, factored so uses-fix can reuse it). AShadow, if set, is put first
+// on the unit search path so a modified copy of the unit there is compiled
+// instead of the on-disk file. Picks dcc32/dcc64 + that platform's lib to match
+// the project (avoids F2048). Returns parsed compiler findings.
+function CompileUnitInContext(const AUnitPath, AProject, APlatform,
+  AShadow: string): TCompileCheckResult;
+var
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  Folders: TArray<string>;
+  P, UPath, Namespaces, CompileTarget, TargetBase: string;
+  RsVars, Cmd, BdsDir, LibRelease: string;
+  Plat, DccExe, PlatDir, WrongDir, CfgDir, DcuDir, TmpRoot: string;
+begin
+  TargetBase := ExtractFileName(AUnitPath);
+  Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    if AProject <> '' then
+      Folders := Resolver.Resolve(AProject)
+    else
+      Folders := Resolver.ResolveLibraryPaths;
+  finally
+    Resolver.Free;
+  end;
+
+  if AShadow <> '' then
+    CompileTarget := TPath.Combine(AShadow, TargetBase)
+  else
+    CompileTarget := AUnitPath;
+
+  Plat := LowerCase(APlatform);
+  if (Plat <> 'win32') and (Plat <> 'win64') then Plat := 'win64';
+  DccExe   := IfThen(Plat = 'win32', 'dcc32', 'dcc64');
+  PlatDir  := IfThen(Plat = 'win32', 'Win32', 'Win64');
+  WrongDir := IfThen(Plat = 'win32', '\win64\', '\win32\');
+
+  BdsDir := GetEnvironmentVariable('BDS');
+  if BdsDir = '' then
+    BdsDir := 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
+  LibRelease := TPath.Combine(BdsDir, 'lib\' + PlatDir + '\release');
+
+  UPath := '';
+  if AShadow <> '' then UPath := AShadow;
+  if TDirectory.Exists(LibRelease) then
+    if UPath = '' then UPath := LibRelease else UPath := UPath + ';' + LibRelease;
+  for P in Folders do
+    if (P <> '') and (Pos(WrongDir, LowerCase(P)) = 0) then
+      if UPath = '' then UPath := P else UPath := UPath + ';' + P;
+
+  Namespaces := ReadDccNamespaces(AProject);
+
+  TmpRoot := TPath.Combine(TPath.GetTempPath, 'draglint_checkunit');
+  CfgDir  := TPath.Combine(TmpRoot, 'cfg');
+  DcuDir  := TPath.Combine(TmpRoot, 'dcu');
+  TDirectory.CreateDirectory(CfgDir);
+  TDirectory.CreateDirectory(DcuDir);
+  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'),
+    Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10,
+      [UPath, Namespaces, DcuDir]));
+
+  RsVars := 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat';
+  Cmd := Format('cmd.exe /c "call "%s" && cd /d "%s" && %s "%s" 2>&1"',
+    [RsVars, CfgDir, DccExe, CompileTarget]);
+  Result := TCompileChecker.RunCommand(Cmd);
+end;
+
+// set of error+fatal signatures (code|line|message) from a compile -- used to
+// tell whether an edit INTRODUCED a new error vs the baseline (so we can verify
+// edits even on projects that are already red).
+function ErrorSignatures(const ARes: TCompileCheckResult): TArray<string>;
+var
+  F: TCompilerFinding;
+  L: TList<string>;
+  Sig: string;
+begin
+  L := TList<string>.Create;
+  try
+    for F in ARes.Findings do
+      if SameText(F.Severity, 'Error') or SameText(F.Severity, 'Fatal') then
+      begin
+        Sig := Format('%s|%d|%s', [F.Code, F.LineNo, F.Message]);
+        if not L.Contains(Sig) then L.Add(Sig);
+      end;
+    Result := L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+// v0.43: drag-lint uses-fix <unit.pas> --project <dproj> --db <sqlite>
+//        [--platform win32|win64] [--apply] [--remove-unused]
+// Compiler-VERIFIED uses-clause cleanup for one unit:
+//   * move: an interface-uses unit only referenced from the implementation is
+//           moved down to the implementation uses (breaks interface cycles).
+//   * remove (only with --remove-unused): a never-referenced unit is commented
+//           out -- but ONLY if it has no initialization/finalization section
+//           (those are side-effect/registration units; removing them compiles
+//           clean but breaks runtime, which the compiler cannot see).
+// Every edit is applied to a shadow + compiled; it is kept ONLY if it adds no
+// new compiler error vs the baseline. Default is dry-run (prints a diff);
+// --apply writes the file after a .bak backup.
+function DoUsesFix(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  FileId: Int64;
+  ThisStem, SrcPath, Plat, Proj: string;
+  Orig, Work: TStringList;
+  UU: TArray<TUnitUse>;
+  Refs: TArray<TReference>;
+  RefIntf, RefImpl: TDictionary<string, Boolean>;
+  IndexedUnits: TDictionary<string, Int64>;
+  NameCache: TDictionary<string, TArray<string>>;
+  ImplLine, i: Integer;
+  Baseline: TArray<string>;
+  nMove, nRemove, nSkip, nApplied: Integer;
+
+  function UnitStemOf(const APath: string): string;
+  begin
+    Result := LowerCase(ChangeFileExt(ExtractFileName(
+      StringReplace(APath, '/', '\', [rfReplaceAll])), ''));
+  end;
+
+  function UnitsDefining(const AName: string): TArray<string>;
+  var Sm: TSymbol; Us: TList<string>; St: string;
+  begin
+    if NameCache.TryGetValue(AName, Result) then Exit;
+    Us := TList<string>.Create;
+    try
+      for Sm in Store.FindSymbolsByExactName(AName) do
+      begin
+        St := UnitStemOf(Store.GetFilePath(Sm.FileId));
+        if (St <> '') and not Us.Contains(St) then Us.Add(St);
+      end;
+      Result := Us.ToArray;
+    finally Us.Free; end;
+    NameCache.AddOrSetValue(AName, Result);
+  end;
+
+  { does unit U (by stem) have an initialization/finalization section? if we
+    cannot tell, assume YES (never auto-remove a possible side-effect unit). }
+  function HasInitSection(const AStem: string): Boolean;
+  var Fid: Int64; Sym: TSymbol; Syms: TArray<TSymbol>;
+  begin
+    Result := True;
+    if not IndexedUnits.TryGetValue(AStem, Fid) then Exit;
+    Syms := Store.FindSymbolsByFile(Store.GetFilePath(Fid));
+    if Length(Syms) = 0 then Exit;   { unknown -> be safe }
+    Result := False;
+    for Sym in Syms do
+      if SameText(Sym.Kind.ToText, 'initialization') or
+         SameText(Sym.Kind.ToText, 'finalization') then
+        Exit(True);
+  end;
+
+  { comment out the unit on AEntryLine and repair a dangling comma so the list
+    stays valid. Returns False if the line isn't a clean single-unit entry. }
+  function CommentEntry(AEntryLine: Integer; const AUnitName: string): Boolean;
+  var
+    raw, body: string;
+    p: Integer;
+  begin
+    Result := False;
+    if (AEntryLine < 0) or (AEntryLine >= Work.Count) then Exit;
+    raw := Work[AEntryLine];
+    body := Trim(raw);
+    { strip a leading/trailing comma to test that the line holds ONLY this unit }
+    var core := body;
+    if core.StartsWith(',') then core := Trim(core.Substring(1));
+    if core.EndsWith(',') then core := Trim(core.Substring(0, core.Length - 1));
+    if not SameText(core, AUnitName) then Exit;   { not a clean one-per-line entry }
+
+    var hadTrailingComma := body.EndsWith(',');
+    var hadLeadingComma  := body.StartsWith(',');
+
+    { comment the line, preserving indentation }
+    p := 1;
+    while (p <= Length(raw)) and (raw[p] = ' ') do Inc(p);
+    Work[AEntryLine] := Copy(raw, 1, p - 1) + '// ' + Copy(raw, p, MaxInt) +
+      '   { drag-lint: moved/removed }';
+
+    { repair commas: if this entry had NO trailing comma (it was the last), the
+      previous real entry's trailing comma now dangles before ';' -> strip it.
+      If it had NO leading comma (it was the first) in a leading-comma list, the
+      next entry's leading comma now dangles after 'uses' -> strip it. }
+    if not hadTrailingComma then
+    begin
+      var j := AEntryLine - 1;
+      while (j >= 0) and (Trim(Work[j]) = '') do Dec(j);
+      if (j >= 0) then
+      begin
+        var sj := Work[j];
+        if Trim(sj).EndsWith(',') then
+        begin
+          var q := Length(sj);
+          while (q > 0) and (sj[q] <> ',') do Dec(q);
+          if q > 0 then begin Delete(sj, q, 1); Work[j] := sj; end;
+        end;
+      end;
+    end;
+    if not hadLeadingComma then
+    begin
+      var j := AEntryLine + 1;
+      while (j < Work.Count) and (Trim(Work[j]) = '') do Inc(j);
+      if (j < Work.Count) then
+      begin
+        var sj := Work[j];
+        if Trim(sj).StartsWith(',') then
+        begin
+          var q := Pos(',', sj);
+          if q > 0 then begin Delete(sj, q, 1); Work[j] := sj; end;
+        end;
+      end;
+    end;
+    Result := True;
+  end;
+
+  { add AUnitName to the implementation uses as the FIRST entry. Inserting at
+    the front with a trailing comma is valid for BOTH leading-comma and
+    trailing-comma list styles (the original first entry never has a leading
+    comma). Creates the block right after `implementation` if none exists. }
+  procedure AddToImplUses(const AUnitName: string);
+  var
+    k, usesLine, p: Integer;
+    t: string;
+  begin
+    usesLine := -1;
+    for k := ImplLine - 1 to Work.Count - 1 do
+    begin
+      t := LowerCase(Trim(Work[k]));
+      if (t = 'uses') or t.StartsWith('uses ') then begin usesLine := k; Break; end;
+    end;
+
+    if usesLine < 0 then
+    begin
+      for k := 0 to Work.Count - 1 do
+        if SameText(Trim(Work[k]), 'implementation') then
+        begin
+          Work.Insert(k + 1, 'uses');
+          Work.Insert(k + 2, '  ' + AUnitName + ';   { drag-lint: moved here }');
+          Break;
+        end;
+      Exit;
+    end;
+
+    if SameText(Trim(Work[usesLine]), 'uses') then
+      { 'uses' on its own line -> new entry on the next line }
+      Work.Insert(usesLine + 1, '  ' + AUnitName + ',   { drag-lint: moved here }')
+    else
+    begin
+      { 'uses Foo, Bar;' inline -> inject right after the keyword }
+      var s := Work[usesLine];
+      p := Pos('uses', LowerCase(s));
+      System.Insert(' ' + AUnitName + ',', s, p + 4);
+      Work[usesLine] := s;
+    end;
+  end;
+
+  { try one edit on a fresh copy, compile it, accept into Work only if it adds
+    no new error vs the baseline. AKind: 'move' | 'remove'. }
+  function TryEdit(const AUnitName: string; AEntryLine: Integer;
+    const AKind: string): Boolean;
+  var
+    Trial: TStringList;
+    ShadowDir: string;
+    Res: TCompileCheckResult;
+    AfterSig: TArray<string>;
+    sg: string;
+    NewErr: Boolean;
+  begin
+    Result := False;
+    Trial := TStringList.Create;
+    try
+      Trial.Assign(Work);
+      { editing helpers operate on Work, so swap temporarily }
+      var Saved := Work;
+      Work := Trial;
+      try
+        if not CommentEntry(AEntryLine, AUnitName) then Exit;
+        if AKind = 'move' then AddToImplUses(AUnitName);
+      finally
+        Work := Saved;
+      end;
+
+      ShadowDir := TPath.Combine(TPath.GetTempPath, 'draglint_usesfix');
+      TDirectory.CreateDirectory(ShadowDir);
+      Trial.SaveToFile(TPath.Combine(ShadowDir, ExtractFileName(SrcPath)));
+
+      Res := CompileUnitInContext(SrcPath, Proj, Plat, ShadowDir);
+      AfterSig := ErrorSignatures(Res);
+
+      NewErr := False;
+      for sg in AfterSig do
+      begin
+        var found := False;
+        var b: string;
+        for b in Baseline do if b = sg then begin found := True; Break; end;
+        if not found then begin NewErr := True; Break; end;
+      end;
+
+      if not NewErr then
+      begin
+        Work.Assign(Trial);   { accept }
+        Result := True;
+      end;
+    finally
+      Trial.Free;
+    end;
+  end;
+
+  procedure PrintDiff;
+  var k: Integer;
+  begin
+    { show only the lines we touched (they carry a drag-lint marker) + 1 line of
+      context, so an inserted line doesn't make every following line look changed }
+    Writeln('--- ', SrcPath, ' (proposed uses-clause changes) ---');
+    for k := 0 to Work.Count - 1 do
+      if Pos('{ drag-lint:', Work[k]) > 0 then
+      begin
+        if (k > 0) and (Pos('{ drag-lint:', Work[k - 1]) = 0) then
+          Writeln(Format('  %4d: %s', [k, Work[k - 1]]));
+        Writeln(Format('  %4d: %s', [k + 1, Work[k]]));
+      end;
+  end;
+
+var
+  Uo: TUnitUse;
+  uStem: string;
+  R: TReference;
+  UnitsForName: TArray<string>;
+  u: string;
+  Lines2: TStringList;
+begin
+  if (AArgs.Target = '') or (AArgs.ProjectPath = '') then
+  begin
+    Writeln('Usage: drag-lint uses-fix <unit.pas> --project <dproj> --db <sqlite> ' +
+      '[--platform win32|win64] [--apply] [--remove-unused]');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
+  Proj := AArgs.ProjectPath;
+  Plat := AArgs.CheckPlatform;
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  RefIntf := TDictionary<string, Boolean>.Create;
+  RefImpl := TDictionary<string, Boolean>.Create;
+  IndexedUnits := TDictionary<string, Int64>.Create;
+  NameCache := TDictionary<string, TArray<string>>.Create;
+  Orig := TStringList.Create;
+  Work := TStringList.Create;
+  try
+    for var Fid2 in Store.GetAllFileIds do
+    begin
+      u := UnitStemOf(Store.GetFilePath(Fid2));
+      if u <> '' then IndexedUnits.AddOrSetValue(u, Fid2);
+    end;
+    ThisStem := UnitStemOf(AArgs.Target);
+    if not IndexedUnits.TryGetValue(ThisStem, FileId) then
+    begin
+      Writeln('Not indexed (re-run "drag-lint index"): ', AArgs.Target);
+      Exit(2);
+    end;
+    { normalise separators: stored paths can be mixed ('C:/x\y.pas'), which
+      breaks ExtractFileName -> wrong shadow filename -> the verify would compile
+      the REAL file instead of the edit (a false pass). }
+    SrcPath := StringReplace(Store.GetFilePath(FileId), '/', '\', [rfReplaceAll]);
+    if not TFile.Exists(SrcPath) then SrcPath := AArgs.Target;
+    if not TFile.Exists(SrcPath) then
+    begin
+      Writeln('Source file not found on disk: ', SrcPath);
+      Exit(2);
+    end;
+    Orig.LoadFromFile(SrcPath);
+    Work.Assign(Orig);
+
+    { implementation line + outgoing-ref sections (uses-audit logic) }
+    ImplLine := MaxInt;
+    for i := 0 to Orig.Count - 1 do
+      if SameText(Trim(Orig[i]), 'implementation') then begin ImplLine := i + 1; Break; end;
+
+    Refs := Store.GetReferencesFromFile(FileId);
+    for R in Refs do
+    begin
+      UnitsForName := UnitsDefining(R.NameText);
+      for u in UnitsForName do
+      begin
+        if SameText(u, ThisStem) then Continue;
+        if R.StartLine < ImplLine then RefIntf.AddOrSetValue(u, True)
+        else RefImpl.AddOrSetValue(u, True);
+      end;
+    end;
+
+    { baseline compile (so we only reject edits that add NEW errors) }
+    Baseline := ErrorSignatures(CompileUnitInContext(SrcPath, Proj, Plat, ''));
+
+    nMove := 0; nRemove := 0; nSkip := 0;
+    UU := Store.GetUnitUsesForFile(FileId);
+    for Uo in UU do
+    begin
+      uStem := LowerCase(Uo.UnitName);
+      if not IndexedUnits.ContainsKey(uStem) then Continue;
+      if SameText(uStem, ThisStem) then Continue;
+
+      { MOVE: interface entry, not referenced from the interface section }
+      if (Uo.Section = uusInterface) and (not RefIntf.ContainsKey(uStem)) and
+         (RefImpl.ContainsKey(uStem)) then
+      begin
+        if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'move') then
+        begin
+          Inc(nMove);
+          Writeln(Format('  MOVED  %s  interface -> implementation (line %d)',
+            [Uo.UnitName, Uo.StartLine]));
+        end
+        else
+        begin
+          Inc(nSkip);
+          Writeln(Format('  skip   %s  (move did not verify / not a clean entry)',
+            [Uo.UnitName]));
+        end;
+      end
+      { REMOVE: never referenced, only with --remove-unused, and only if it has
+        no init/final section (side-effect units stay) }
+      else if AArgs.RemoveUnused and (not RefIntf.ContainsKey(uStem)) and
+              (not RefImpl.ContainsKey(uStem)) then
+      begin
+        if HasInitSection(uStem) then
+        begin
+          Inc(nSkip);
+          Writeln(Format('  skip   %s  (unreferenced but has init/final -- ' +
+            'possible side-effect unit, NOT removed)', [Uo.UnitName]));
+        end
+        else if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'remove') then
+        begin
+          Inc(nRemove);
+          Writeln(Format('  REMOVE %s  commented out (line %d)',
+            [Uo.UnitName, Uo.StartLine]));
+        end
+        else
+        begin
+          Inc(nSkip);
+          Writeln(Format('  skip   %s  (remove did not verify / not a clean entry)',
+            [Uo.UnitName]));
+        end;
+      end;
+    end;
+
+    if (nMove + nRemove) = 0 then
+    begin
+      Writeln('  Nothing to change.');
+      Exit(0);
+    end;
+
+    if AArgs.Apply then
+    begin
+      TFile.Copy(SrcPath, SrcPath + '.bak', True);
+      { preserve CRLF + ANSI }
+      Lines2 := TStringList.Create;
+      try
+        Lines2.Assign(Work);
+        Lines2.WriteBOM := False;
+        Lines2.SaveToFile(SrcPath, TEncoding.ANSI);
+      finally
+        Lines2.Free;
+      end;
+      Writeln(Format('-- APPLIED %d move(s), %d remove(s) to %s (backup: %s.bak)',
+        [nMove, nRemove, ExtractFileName(SrcPath), ExtractFileName(SrcPath)]));
+    end
+    else
+    begin
+      PrintDiff;
+      Writeln(Format('-- DRY-RUN: %d move(s), %d remove(s) verified. ' +
+        'Re-run with --apply to write (creates .bak).', [nMove, nRemove]));
+    end;
+    Result := 0;
+  finally
+    RefIntf.Free; RefImpl.Free; IndexedUnits.Free; NameCache.Free;
+    Orig.Free; Work.Free;
+  end;
+end;
+
 // v0.27: drag-lint generate-test --qname X [--framework dunitx|dunit] [--db PATH]
 // Generates a DUnitX (default) or DUnit test scaffold for the given symbol.
 // Exit 2 on usage error, 1 if no stub generated, 0 on success.
@@ -5407,6 +5899,8 @@ begin
       Result := DoCycles(Args)
     else if Args.Command = 'uses-audit' then
       Result := DoUsesAudit(Args)
+    else if Args.Command = 'uses-fix' then
+      Result := DoUsesFix(Args)
     else if Args.Command = 'generate-test' then
       Result := DoGenerateTest(Args)
     else if Args.Command = 'format' then
