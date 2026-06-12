@@ -576,7 +576,8 @@ begin
     Q.SQL.Text :=
       'SELECT 1 FROM files WHERE path = :p AND mtime_unix = :m ' +
       'AND sha256 = :s';
-    Q.ParamByName('p').AsString := APath;
+    { match the canonical stored form (see NormalizeStoredPath) }
+    Q.ParamByName('p').AsString := StringReplace(APath, '/', '\', [rfReplaceAll]);
     Q.ParamByName('m').AsLargeInt := AMtimeUnix;
     Q.ParamByName('s').AsString := ASha;
     Q.Open;
@@ -586,15 +587,27 @@ begin
   end;
 end;
 
+// v0.43: canonical stored-path form. The walker can produce mixed separators
+// ('C:/root\sub\file.pas') when the index root is given with '/', which made
+// re-indexing INSERT a duplicate files row (path is UNIQUE, so the differently-
+// spelled path didn't REPLACE) and left stale unit_uses/refs behind. Collapse
+// every spelling to one canonical all-backslash path at the store boundary.
+function NormalizeStoredPath(const APath: string): string;
+begin
+  Result := StringReplace(APath, '/', '\', [rfReplaceAll]);
+end;
+
 function TSQLiteSymbolStore.OpenFileTx(const APath: string;
   AMtimeUnix: Int64; const ASha: string;
   const ALanguage: string): TFileTxToken;
 var
   Q: TFDQuery;
+  NP: string;
 begin
+  NP := NormalizeStoredPath(APath);
   FConn.StartTransaction;
   try
-    FQUpsertFile.ParamByName('path').AsString := APath;
+    FQUpsertFile.ParamByName('path').AsString := NP;
     FQUpsertFile.ParamByName('mtime').AsLargeInt := AMtimeUnix;
     FQUpsertFile.ParamByName('sha').AsString := ASha;
     FQUpsertFile.ParamByName('parsed').AsLargeInt :=
@@ -606,12 +619,12 @@ begin
     try
       Q.Connection := FConn;
       Q.SQL.Text := 'SELECT id FROM files WHERE path = :path';
-      Q.ParamByName('path').AsString := APath;
+      Q.ParamByName('path').AsString := NP;
       Q.Open;
       if Q.IsEmpty then
-        raise Exception.CreateFmt('File row not found after upsert: %s', [APath]);
+        raise Exception.CreateFmt('File row not found after upsert: %s', [NP]);
       Result.FileId := Q.Fields[0].AsLargeInt;
-      Result.Path := APath;
+      Result.Path := NP;
     finally
       Q.Free;
     end;
