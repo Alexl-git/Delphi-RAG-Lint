@@ -237,11 +237,9 @@ procedure ParseColumnList(const AText: string; ATableIdx: Integer;
   nested parens used in NUMERIC(10,2) etc.) and emits a sql_column per item.
   ATableIdx is the table's symbol index for parent linkage. }
 var
-  Body: string;
   Depth, I, Start: Integer;
-  Token, Name, TypeText: string;
-  TokI, NameEnd: Integer;
-  AbsStart, AbsEnd: Integer;
+  Name, TypeText: string;
+  AbsStart: Integer;
   ColLine, ColCol: Integer;
 
   procedure FlushItem(AItemStart, AItemEnd: Integer);

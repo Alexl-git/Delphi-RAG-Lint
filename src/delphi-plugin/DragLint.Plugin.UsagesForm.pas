@@ -87,7 +87,6 @@ type
     procedure RunQuery;
     procedure ParseUsagesGrouped(const AOutput: string; out AParsed: Boolean);
     procedure NavigateToNode(ANode: TTreeNode);
-    procedure ParseJsonOutput(const AOutput: string; out AParsed: Boolean);
     procedure ParseTextOutput(const AOutput: string);
     function  AddNodeData(AParent: TTreeNode; const AText, AFile: string;
                 ALine: Integer): TTreeNode;
@@ -501,59 +500,6 @@ begin
   end;
 end;
 
-procedure TDragLintUsagesForm.ParseJsonOutput(const AOutput: string;
-  out AParsed: Boolean);
-var
-  JRoot:    TJSONValue;
-  JObj:     TJSONObject;
-  JCallers: TJSONArray;
-  JCaller:  TJSONObject;
-  i:        Integer;
-  CFile:    string;
-  CLine:    Integer;
-  CCtx:     string;
-  LastFile: string;
-  FileNode: TTreeNode;
-  CNode:    TTreeNode;
-begin
-  AParsed  := False;
-  JRoot := TJSONObject.ParseJSONValue(AOutput);
-  if JRoot = nil then Exit;
-  try
-    if not (JRoot is TJSONObject) then Exit;
-    JObj := JRoot as TJSONObject;
-    if not JObj.TryGetValue<TJSONArray>('callers', JCallers) then Exit;
-
-    AParsed  := True;
-    LastFile := '';
-    FileNode := nil;
-    for i := 0 to JCallers.Count - 1 do
-    begin
-      if not (JCallers.Items[i] is TJSONObject) then Continue;
-      JCaller := JCallers.Items[i] as TJSONObject;
-      CFile   := '';
-      CLine   := 0;
-      CCtx    := '';
-      JCaller.TryGetValue<string>('file',    CFile);
-      JCaller.TryGetValue<Integer>('line',   CLine);
-      JCaller.TryGetValue<string>('context', CCtx);
-
-      if not SameText(CFile, LastFile) then
-      begin
-        LastFile := CFile;
-        FileNode := AddNodeData(nil,
-          ExtractFileName(CFile) + '  [' + CFile + ']', CFile, 0);
-      end;
-
-      CNode := AddNodeData(FileNode,
-        Format('Line %d  %s', [CLine, Trim(CCtx)]), CFile, CLine);
-      FLastCallerNode := CNode;
-    end;
-  finally
-    JRoot.Free;
-  end;
-end;
-
 procedure TDragLintUsagesForm.ParseTextOutput(const AOutput: string);
 { v0.40.5: the CLI's `query find-callers` text output format is:
     <file>:<line>:<col>  <symbol_name>
@@ -761,14 +707,14 @@ begin
         convention for parameters and a strong scope signal. }
       var Hint: string;
       Hint := '(no callers found)';
-      if (Length(FSymbolName) > 1) and (FSymbolName[1] in ['A', 'a']) and
-         (FSymbolName[2] in ['A'..'Z']) then
+      if (Length(FSymbolName) > 1) and CharInSet(FSymbolName[1], ['A', 'a']) and
+         CharInSet(FSymbolName[2], ['A'..'Z']) then
         Hint := Hint +
           '  -  "' + FSymbolName + '" looks like a parameter (A-prefix).' +
           '  drag-lint indexes types, methods, fields, and constants -' +
           ' not procedure parameters or local variables.'
-      else if (Length(FSymbolName) > 1) and (FSymbolName[1] in ['F', 'f']) and
-              (FSymbolName[2] in ['A'..'Z']) then
+      else if (Length(FSymbolName) > 1) and CharInSet(FSymbolName[1], ['F', 'f']) and
+              CharInSet(FSymbolName[2], ['A'..'Z']) then
         Hint := Hint +
           '  -  "' + FSymbolName + '" looks like a private field (F-prefix).' +
           '  If this is on a class declared in the project,' +

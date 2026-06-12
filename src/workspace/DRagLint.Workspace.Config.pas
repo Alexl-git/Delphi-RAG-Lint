@@ -3,7 +3,8 @@ unit DRagLint.Workspace.Config;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.JSON;
+  System.SysUtils, System.Classes, System.IOUtils, System.JSON,
+  System.Generics.Collections;   { v0.42: lets TJSONArray.GetValue inline (was H2443) }
 
 type
   TWorkspaceProject = record

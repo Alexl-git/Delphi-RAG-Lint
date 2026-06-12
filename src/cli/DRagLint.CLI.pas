@@ -25,6 +25,7 @@ uses
   FireDAC.Phys.SQLite,
   FireDAC.Stan.Async,
   FireDAC.Stan.Def,
+  FireDAC.Stan.Param,   { v0.42: lets TFDParam.SetAsX inline (was H2443) }
   FireDAC.DApt,
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces,
@@ -1527,7 +1528,7 @@ end;
 
 procedure EmitEnumsJson(const ARows: TArray<TEnumRow>; AOut: TTextWriter);
 var
-  Doc, ValuesArr: TJSONArray;
+  Doc: TJSONArray;
   Cur: TJSONObject;
   Vals: TJSONArray;
   V: TJSONObject;
@@ -1805,7 +1806,6 @@ var
   UnitId: Int64;
   UnitName, UnitPath, OutPath, SanName: string;
   Sb: TStringBuilder;
-  ParentMap: TDictionary<Int64, Int64>;
   KindCount: Integer;
   Sym: record
     Id: Int64;
@@ -1813,8 +1813,6 @@ var
     ParentId: Int64;
     StartLine: Integer;
   end;
-  WriteOut: TStreamWriter;
-  Buf: TStringStream;
   UnitsByName: TDictionary<string, string>;
   CallerLine: string;
   Visited: TDictionary<string, Boolean>;
