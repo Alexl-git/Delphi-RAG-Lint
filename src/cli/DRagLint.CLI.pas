@@ -124,6 +124,7 @@ type
     Shadow:             string;  // --shadow <dir> (unsaved-buffer overlay)
     ResolveUsesFlag:    Boolean; // --resolve-uses (enrich undeclared errors)
     CheckPlatform:      string;  // --platform win32|win64 (matches project config)
+    Edges:              Boolean; // --edges (cycles: show the actual uses edges)
     // v0.27: generate-test + format
     TestFramework:      string;  // --framework dunitx|dunit (default 'dunitx')
     YadfPath:           string;  // --yadf-path <YADF.exe>
@@ -173,7 +174,8 @@ begin
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
-  Writeln('  drag-lint cycles             --db <file.sqlite>    [--format json|text]   (circular unit deps)');
+  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--format json|text]   (circular unit deps)');
+  Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH]');
   Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
@@ -509,6 +511,8 @@ begin
     end
     else if A = '--resolve-uses' then
       Result.ResolveUsesFlag := True
+    else if A = '--edges' then
+      Result.Edges := True
     else if (A = '--platform') and (i < ParamCount) then
     begin
       Inc(i);
@@ -4533,10 +4537,13 @@ begin
   if ErrCount > 0 then Result := 1 else Result := 0;
 end;
 
-// v0.43: drag-lint cycles --db <sqlite> [--format json|text]
+// v0.43: drag-lint cycles --db <sqlite> [--edges] [--format json|text]
 // Reports circular unit dependencies (strongly-connected components of the
-// unit-uses graph). Interface-section cycles are illegal in Delphi and the
-// worst for compile/LSP time; we report all cycles and flag interface ones.
+// unit-uses graph). These all compile (a pure interface cycle is illegal F2047,
+// broken here by an implementation back-edge); we flag cycles that carry
+// interface coupling (widest recompile blast radius) and, with --edges, list
+// the actual uses edges + move-to-implementation candidates + layering
+// inversions (e.g. COMMON -> CLIENT) so you can see exactly which line to cut.
 function DoCycles(const AArgs: TArgs): Integer;
 type
   TEdgeSet = TDictionary<string, Boolean>;
@@ -4545,6 +4552,7 @@ var
   FilePath: string;
   Adj:        TDictionary<string, TList<string>>;   { unit -> used units (lower) }
   IntfEdges:  TEdgeSet;                              { "a->b" if a uses b in intf }
+  UnitFile:   TDictionary<string, string>;          { unit stem -> source path }
   // Tarjan state
   Index:   TDictionary<string, Integer>;
   Lowlink: TDictionary<string, Integer>;
@@ -4562,6 +4570,17 @@ var
     { indexed paths may use '/' -- normalise so ExtractFileName strips the dir }
     S := StringReplace(APath, '/', '\', [rfReplaceAll]);
     Result := LowerCase(ChangeFileExt(ExtractFileName(S), ''));
+  end;
+
+  { coarse layer from the path so we can flag inverted dependencies }
+  function LayerOf(const APath: string): string;
+  var L: string;
+  begin
+    L := LowerCase(APath);
+    if Pos('\common\', L) > 0 then Result := 'COMMON'
+    else if Pos('\client\', L) > 0 then Result := 'CLIENT'
+    else if Pos('\server\', L) > 0 then Result := 'SERVER'
+    else Result := '';
   end;
 
   procedure StrongConnect(const AV: string);
@@ -4626,6 +4645,7 @@ begin
 
   Adj       := TDictionary<string, TList<string>>.Create;
   IntfEdges := TEdgeSet.Create;
+  UnitFile  := TDictionary<string, string>.Create;
   Index     := TDictionary<string, Integer>.Create;
   Lowlink   := TDictionary<string, Integer>.Create;
   OnStack   := TDictionary<string, Boolean>.Create;
@@ -4639,6 +4659,7 @@ begin
       if not SameText(ExtractFileExt(FilePath), '.pas') then Continue;
       UFrom := UnitNameOfFile(FilePath);
       if UFrom = '' then Continue;
+      UnitFile.AddOrSetValue(UFrom, FilePath);
       UU := Store.GetUnitUsesForFile(FId);
       if not Adj.TryGetValue(UFrom, L) then
       begin
@@ -4702,16 +4723,243 @@ begin
               if (A <> B) and IntfEdges.ContainsKey(A + '->' + B) then
                 HasIntf := True;
           Write(Format('  [%d units] %s', [Length(Comp), string.Join(' <-> ', Comp)]));
-          if HasIntf then Writeln('   (INTERFACE cycle -- worst for compile/LSP time)')
-          else Writeln('   (implementation-only)');
+          if HasIntf then
+            Writeln('   (has interface coupling -- widest recompile blast radius)')
+          else
+            Writeln('   (implementation-only -- legal, lower impact)');
+
+          { --edges: list the actual uses edges inside the cycle, with section
+            and layering, so you see exactly which line to move/cut. }
+          if AArgs.Edges then
+          begin
+            for var A in Comp do
+            begin
+              var NeighborsL: TList<string>;
+              if not Adj.TryGetValue(A, NeighborsL) then Continue;
+              for var B in NeighborsL do
+              begin
+                { only edges that stay inside this cycle }
+                var InComp := False;
+                for var C in Comp do if C = B then InComp := True;
+                if not InComp then Continue;
+
+                var Sect: string;
+                if IntfEdges.ContainsKey(A + '->' + B) then
+                  Sect := 'interface  <-- move-to-implementation candidate'
+                else
+                  Sect := 'implementation';
+
+                var PathA, PathB, Lay: string;
+                UnitFile.TryGetValue(A, PathA);
+                UnitFile.TryGetValue(B, PathB);
+                Lay := '';
+                if (LayerOf(PathA) = 'COMMON') and
+                   ((LayerOf(PathB) = 'CLIENT') or (LayerOf(PathB) = 'SERVER')) then
+                  Lay := Format('   [LAYERING: %s -> %s, inverted]',
+                    [LayerOf(PathA), LayerOf(PathB)]);
+
+                Writeln(Format('      %s uses %s  [%s]%s', [A, B, Sect, Lay]));
+              end;
+            end;
+          end;
         end;
+        if not AArgs.Edges then
+          Writeln('  (add --edges to see which uses lines form each cycle)');
       end;
     end;
     Result := 0;
   finally
     for L in Adj.Values do L.Free;
-    Adj.Free; IntfEdges.Free; Index.Free; Lowlink.Free; OnStack.Free;
-    Stack.Free; Sccs.Free;
+    Adj.Free; IntfEdges.Free; UnitFile.Free; Index.Free; Lowlink.Free;
+    OnStack.Free; Stack.Free; Sccs.Free;
+  end;
+end;
+
+// v0.43: drag-lint uses-audit <unit.pas> --db <sqlite> [--format json|text]
+// Index-based PROPOSAL of uses-clause cleanups for one unit:
+//   - units in the INTERFACE uses that are only referenced from the
+//     implementation section -> "move to implementation"
+//   - units that are not referenced at all -> "appears unused"
+// Only audits project units that are in the index (never RTL/library uses).
+// These are CANDIDATES: the rewriter (uses-fix) compiler-verifies each before
+// applying, because the tree-sitter index can miss some references.
+function DoUsesAudit(const AArgs: TArgs): Integer;
+var
+  Store:    ISymbolStore;
+  FileId:   Int64;
+  ThisStem: string;
+  UU:       TArray<TUnitUse>;
+  Uo:       TUnitUse;
+  Refs:     TArray<TReference>;
+  R:        TReference;
+  Lines:    TStringList;
+  ImplLine, i: Integer;
+  RefIntf, RefImpl: TDictionary<string, Boolean>;
+  IndexedUnits:     TDictionary<string, Int64>;   { stem -> file_id }
+  NameCache:        TDictionary<string, TArray<string>>;
+  Syms:    TArray<TSymbol>;
+  S:       TSymbol;
+  UnitsForName: TArray<string>;
+  u, uStem: string;
+  JArr: TJSONArray;
+  nMove, nUnused: Integer;
+
+  function UnitStemOf(const APath: string): string;
+  begin
+    Result := LowerCase(ChangeFileExt(ExtractFileName(
+      StringReplace(APath, '/', '\', [rfReplaceAll])), ''));
+  end;
+
+  { distinct indexed-unit stems that define a symbol named AName (cached) }
+  function UnitsDefining(const AName: string): TArray<string>;
+  var
+    Sm: TSymbol;
+    Us: TList<string>;
+    St: string;
+  begin
+    if NameCache.TryGetValue(AName, Result) then Exit;
+    Us := TList<string>.Create;
+    try
+      for Sm in Store.FindSymbolsByExactName(AName) do
+      begin
+        St := UnitStemOf(Store.GetFilePath(Sm.FileId));
+        if (St <> '') and not Us.Contains(St) then Us.Add(St);
+      end;
+      Result := Us.ToArray;
+    finally
+      Us.Free;
+    end;
+    NameCache.AddOrSetValue(AName, Result);
+  end;
+
+begin
+  if AArgs.Target = '' then
+  begin
+    Writeln('Usage: drag-lint uses-audit <unit.pas> --db <sqlite> [--format json|text]');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  RefIntf      := TDictionary<string, Boolean>.Create;
+  RefImpl      := TDictionary<string, Boolean>.Create;
+  IndexedUnits := TDictionary<string, Int64>.Create;
+  NameCache    := TDictionary<string, TArray<string>>.Create;
+  try
+    { stem -> file_id for every indexed unit. Also lets us resolve the target by
+      unit name, tolerant of the stored-path separator quirks that defeat a
+      direct path lookup. }
+    for var Fid2 in Store.GetAllFileIds do
+    begin
+      u := UnitStemOf(Store.GetFilePath(Fid2));
+      if u <> '' then IndexedUnits.AddOrSetValue(u, Fid2);
+    end;
+
+    ThisStem := UnitStemOf(AArgs.Target);
+    if not IndexedUnits.TryGetValue(ThisStem, FileId) then
+    begin
+      Writeln('Not indexed (re-run "drag-lint index"): ', AArgs.Target);
+      Exit(2);
+    end;
+
+    { which section references each indexed unit }
+    ImplLine := MaxInt;
+    var SrcPath: string := Store.GetFilePath(FileId);
+    if not TFile.Exists(SrcPath) then SrcPath := AArgs.Target;
+    if TFile.Exists(SrcPath) then
+    begin
+      Lines := TStringList.Create;
+      try
+        Lines.LoadFromFile(SrcPath);
+        for i := 0 to Lines.Count - 1 do
+          if SameText(Trim(Lines[i]), 'implementation') then
+          begin
+            ImplLine := i + 1;
+            Break;
+          end;
+      finally
+        Lines.Free;
+      end;
+    end;
+
+    Refs := Store.GetReferencesFromFile(FileId);
+    for R in Refs do
+    begin
+      UnitsForName := UnitsDefining(R.NameText);
+      for u in UnitsForName do
+      begin
+        if SameText(u, ThisStem) then Continue;
+        if R.StartLine < ImplLine then RefIntf.AddOrSetValue(u, True)
+        else RefImpl.AddOrSetValue(u, True);
+      end;
+    end;
+
+    UU := Store.GetUnitUsesForFile(FileId);
+    JArr := TJSONArray.Create;
+    nMove := 0; nUnused := 0;
+    try
+      for Uo in UU do
+      begin
+        uStem := LowerCase(Uo.UnitName);
+        { audit only project units we can actually see in the index }
+        if not IndexedUnits.ContainsKey(uStem) then Continue;
+        if SameText(uStem, ThisStem) then Continue;
+
+        var Verdict: string := '';
+        if (not RefIntf.ContainsKey(uStem)) and (not RefImpl.ContainsKey(uStem)) then
+        begin
+          Verdict := 'unused';
+          Inc(nUnused);
+        end
+        else if (Uo.Section = uusInterface) and (not RefIntf.ContainsKey(uStem)) then
+        begin
+          Verdict := 'move-to-implementation';
+          Inc(nMove);
+        end;
+        if Verdict = '' then Continue;
+
+        if SameText(AArgs.Format, 'json') then
+        begin
+          var JO := TJSONObject.Create;
+          JO.AddPair('unit', Uo.UnitName);
+          JO.AddPair('verdict', Verdict);
+          JO.AddPair('section', IfThen(Uo.Section = uusInterface, 'interface', 'implementation'));
+          JO.AddPair('line', TJSONNumber.Create(Uo.StartLine));
+          JArr.AddElement(JO);
+        end
+        else
+        begin
+          if Verdict = 'unused' then
+            Writeln(Format('  line %d: %s  -- appears UNUSED (comment out?)',
+              [Uo.StartLine, Uo.UnitName]))
+          else
+            Writeln(Format('  line %d: %s  -- in interface uses, only used by ' +
+              'implementation -> MOVE down', [Uo.StartLine, Uo.UnitName]));
+        end;
+      end;
+
+      if SameText(AArgs.Format, 'json') then
+        Writeln(JArr.ToJSON)
+      else
+      begin
+        if nMove + nUnused = 0 then
+          Writeln('  No interface->implementation moves or unused units found.')
+        else
+          Writeln(Format('-- %d move candidate(s), %d unused candidate(s). ' +
+            'Candidates only -- verify by compiling before applying.',
+            [nMove, nUnused]));
+      end;
+    finally
+      JArr.Free;
+    end;
+    Result := 0;
+  finally
+    RefIntf.Free; RefImpl.Free; IndexedUnits.Free; NameCache.Free;
   end;
 end;
 
@@ -5157,6 +5405,8 @@ begin
       Result := DoCheckUnit(Args)
     else if Args.Command = 'cycles' then
       Result := DoCycles(Args)
+    else if Args.Command = 'uses-audit' then
+      Result := DoUsesAudit(Args)
     else if Args.Command = 'generate-test' then
       Result := DoGenerateTest(Args)
     else if Args.Command = 'format' then

@@ -82,6 +82,7 @@ type
     function FindSymbolsFuzzy(const APattern: string; ATopK: Integer = 10): TArray<TSymbol>;
     function GetFilePath(AFileId: Int64): string;
     function GetAllFileIds: TArray<Int64>;
+    function GetReferencesFromFile(AFileId: Int64): TArray<TReference>;
     function CountSymbols: Int64;
     function CountReferences: Int64;
     function CountFiles: Int64;
@@ -857,6 +858,42 @@ begin
         Q.Next;
       end;
       Q.Close;
+    end;
+    Result := List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetReferencesFromFile(
+  AFileId: Int64): TArray<TReference>;
+var
+  Q: TFDQuery;
+  List: TList<TReference>;
+  R: TReference;
+begin
+  List := TList<TReference>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text :=
+      'SELECT * FROM refs WHERE file_id = :fid ORDER BY start_line, start_col';
+    Q.ParamByName('fid').AsLargeInt := AFileId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R := Default(TReference);
+      R.Id := Q.FieldByName('id').AsLargeInt;
+      if not Q.FieldByName('symbol_id').IsNull then
+        R.SymbolId := Q.FieldByName('symbol_id').AsLargeInt;
+      R.FileId := AFileId;
+      R.Kind := Q.FieldByName('kind').AsString;
+      R.NameText := Q.FieldByName('name_text').AsString;
+      R.StartLine := Q.FieldByName('start_line').AsInteger;
+      R.StartCol := Q.FieldByName('start_col').AsInteger;
+      List.Add(R);
+      Q.Next;
     end;
     Result := List.ToArray;
   finally
