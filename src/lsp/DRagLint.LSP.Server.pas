@@ -937,6 +937,20 @@ begin
           Sb.AppendLine(Format('- `%s` - line %d', [Sym.QualifiedName,
             Sym.StartLine]));
           Sb.AppendLine('    ' + DeclLineFor(Sym));
+          { v0.43: break the signature into an IDE-style Parameters block
+            (name + type per line, + Returns). Only for a focused candidate
+            set so a 50-hit common member doesn't explode the popup. }
+          if Length(Filtered) <= 5 then
+          begin
+            var ParamBlock: string :=
+              DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown(Sym.Signature);
+            if ParamBlock <> '' then
+            begin
+              Sb.AppendLine('');
+              Sb.Append(ParamBlock);
+              Sb.AppendLine('');
+            end;
+          end;
         end;
         if (Length(Filtered) < Length(Symbols)) and (ResolvedQName = '') then
           Sb.AppendLine(Format(#10'_(showing %d of %d -- use Find Usages for full list)_',

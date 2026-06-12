@@ -2836,12 +2836,9 @@ begin
   end;
 
   Doc := Store.GetSymbolDoc(Syms[0].Id);
-  if not Doc.HasContent then
-  begin
-    Writeln(System.SysUtils.Format('Symbol %s found but has no doc comment.',
-      [Syms[0].QualifiedName]));
-    Exit(1);
-  end;
+  { v0.43: no doc comment is no longer fatal -- the renderer still shows the
+    qualified name + an IDE-style Parameters block parsed from the signature,
+    which is exactly what the LSP hover does. }
 
   Fmt := LowerCase(AArgs.Format);
   if Fmt = '' then Fmt := 'plain';

@@ -29,11 +29,13 @@ implementation
 
 uses
   System.SysUtils, System.StrUtils, System.RegularExpressions,
-  Vcl.ComCtrls, Vcl.StdCtrls, Vcl.ExtCtrls,
+  System.IOUtils,
+  Vcl.ComCtrls, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.Menus,
   Winapi.Windows,
   ToolsAPI,
   DragLint.Plugin.DiagnosticCache,
   DragLint.Plugin.StructureCache,
+  DragLint.Plugin.UsagesForm,
   DragLint.Plugin.DbResolver,
   DragLint.Plugin.Settings;
 
@@ -41,7 +43,10 @@ uses
 
 type
   TStructureNodeData = class
-    Line: Integer;   { 1-based; 0 = no navigation }
+    Line:  Integer;       { 1-based declaration line; 0 = no navigation }
+    Name:  string;        { symbol name -- for Find Usages }
+    QName: string;        { qualified name -- for Go to Implementation }
+    Kind:  TSymbolKind;   { so we only offer impl/usages on proc-likes }
   end;
 
 { ---- TDragLintStructureForm ---- }
@@ -57,9 +62,12 @@ type
     FCurrentFile: string;
     FSyms:       TArray<TSymbolInfo>;           { cached so filtering doesn't re-shell }
     FDiags:      TArray<TDragLintDiagnostic>;
+    FPopup:      TPopupMenu;                    { v0.43: right-click nav menu }
     procedure BtnRefreshClick(Sender: TObject);
     procedure FormActivate(Sender: TObject);
     procedure TreeDblClick(Sender: TObject);
+    procedure TreeMouseDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
     procedure FormDestroy(Sender: TObject);
     procedure SearchChanged(Sender: TObject);
     procedure ClearNodeData;
@@ -67,6 +75,11 @@ type
     procedure BuildTree(const AFilter: string);
     function  SymMatches(const ASym: TSymbolInfo; const AFilter: string): Boolean;
     function  GetActiveFilePath: string;
+    function  SelectedNodeData: TStructureNodeData;
+    procedure NavigateToLine(ALine: Integer);
+    procedure GoToDeclarationClick(Sender: TObject);
+    procedure GoToImplementationClick(Sender: TObject);
+    procedure FindUsagesClick(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
     procedure RefreshActive;   { v0.42: re-read the active editor file }
@@ -120,6 +133,48 @@ begin
     Result := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
   if not FileExists(Result) then
     Result := 'drag-lint.exe';
+end;
+
+procedure AddPopupItem(AMenu: TPopupMenu; const ACaption: string;
+  AHandler: TNotifyEvent);
+var
+  Item: TMenuItem;
+begin
+  Item := TMenuItem.Create(AMenu);
+  Item.Caption := ACaption;
+  Item.OnClick := AHandler;
+  AMenu.Items.Add(Item);
+end;
+
+{ v0.43: scan a .pas on disk for the implementation-section body of
+  <AClass>.<AMethod> (or a standalone proc when AClass is empty). Returns the
+  1-based line, or 0 if not found. We read the file rather than the live buffer;
+  the Structure already navigates by indexed line numbers, so this stays
+  consistent and self-contained. }
+function FindImplementationLine(const AFilePath, AClass, AMethod: string): Integer;
+var
+  Lines: TStringList;
+  Re:    TRegEx;
+  Pat:   string;
+  i:     Integer;
+begin
+  Result := 0;
+  if (AMethod = '') or not TFile.Exists(AFilePath) then Exit;
+  if AClass <> '' then
+    Pat := '^\s*(class\s+)?(procedure|function|constructor|destructor|operator)\s+' +
+           TRegEx.Escape(AClass) + '\.' + TRegEx.Escape(AMethod) + '\b'
+  else
+    Pat := '^\s*(procedure|function)\s+' + TRegEx.Escape(AMethod) + '\b';
+  Re := TRegEx.Create(Pat, [roIgnoreCase]);
+  Lines := TStringList.Create;
+  try
+    Lines.LoadFromFile(AFilePath);
+    for i := 0 to Lines.Count - 1 do
+      if Re.IsMatch(Lines[i]) then
+        Exit(i + 1);
+  finally
+    Lines.Free;
+  end;
 end;
 
 function ResolveDbForFile: string;
@@ -212,6 +267,15 @@ begin
   FTree.ShowLines  := True;
   FTree.HideSelection := False;
   FTree.OnDblClick := TreeDblClick;
+  FTree.OnMouseDown := TreeMouseDown;
+
+  { v0.43: right-click navigation menu. Single/double-click stays as the
+    primary "go to declaration"; the secondary actions live here. }
+  FPopup := TPopupMenu.Create(Self);
+  AddPopupItem(FPopup, 'Go to &Declaration', GoToDeclarationClick);
+  AddPopupItem(FPopup, 'Go to &Implementation (body)', GoToImplementationClick);
+  AddPopupItem(FPopup, 'Find &Usages', FindUsagesClick);
+  FTree.PopupMenu := FPopup;
 end;
 
 procedure TDragLintStructureForm.FormDestroy(Sender: TObject);
@@ -335,7 +399,10 @@ begin
       if not SymMatches(S, AFilter) then Continue;
       Inc(Shown);
       ND := TStructureNodeData.Create;
-      ND.Line := S.Line;
+      ND.Line  := S.Line;
+      ND.Name  := S.Name;
+      ND.QName := S.QName;
+      ND.Kind  := S.Kind;
       Caption := KindPrefix(S.Kind) + S.Name;
       if S.Signature <> '' then
       begin
@@ -381,27 +448,112 @@ begin
     RefreshForFile(FilePath);
 end;
 
-procedure TDragLintStructureForm.TreeDblClick(Sender: TObject);
+function TDragLintStructureForm.SelectedNodeData: TStructureNodeData;
 var
   Node: TTreeNode;
-  ND:   TStructureNodeData;
+begin
+  Result := nil;
+  Node := FTree.Selected;
+  if (Node <> nil) and (Node.Data <> nil) then
+    Result := TStructureNodeData(Node.Data);
+end;
+
+procedure TDragLintStructureForm.NavigateToLine(ALine: Integer);
+var
   ESS:  IOTAEditorServices;
   EV:   IOTAEditView;
   Pos:  IOTAEditPosition;
 begin
-  Node := FTree.Selected;
-  if Node = nil then Exit;
-  if Node.Data = nil then Exit;
-  ND := TStructureNodeData(Node.Data);
-  if ND.Line <= 0 then Exit;
-
+  if ALine <= 0 then Exit;
   if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
   EV := ESS.TopView;
   if EV = nil then Exit;
   Pos := EV.Position;
   if Pos = nil then Exit;
-  Pos.GotoLine(ND.Line);
+  Pos.GotoLine(ALine);
   EV.Paint;
+end;
+
+procedure TDragLintStructureForm.TreeDblClick(Sender: TObject);
+var
+  ND: TStructureNodeData;
+begin
+  ND := SelectedNodeData;
+  if ND <> nil then
+    NavigateToLine(ND.Line);
+end;
+
+procedure TDragLintStructureForm.TreeMouseDown(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  N: TTreeNode;
+begin
+  { Right-click should target the node under the cursor (TTreeView doesn't
+    select on right-click by itself), so the popup acts on what was clicked. }
+  if Button = mbRight then
+  begin
+    N := FTree.GetNodeAt(X, Y);
+    if N <> nil then
+      FTree.Selected := N;
+  end;
+end;
+
+procedure TDragLintStructureForm.GoToDeclarationClick(Sender: TObject);
+var
+  ND: TStructureNodeData;
+begin
+  ND := SelectedNodeData;
+  if ND <> nil then
+    NavigateToLine(ND.Line);
+end;
+
+procedure TDragLintStructureForm.GoToImplementationClick(Sender: TObject);
+var
+  ND:    TStructureNodeData;
+  Parts: TArray<string>;
+  Cls, Mth: string;
+  Ln:    Integer;
+begin
+  ND := SelectedNodeData;
+  if (ND = nil) or (ND.Name = '') then Exit;
+
+  { derive class + method from the qualified name (Unit.TClass.Method or
+    Unit.Proc). }
+  Cls := '';
+  Mth := ND.Name;
+  if ND.QName <> '' then
+  begin
+    Parts := ND.QName.Split(['.']);
+    if Length(Parts) >= 3 then
+    begin
+      Cls := Parts[High(Parts) - 1];
+      Mth := Parts[High(Parts)];
+    end
+    else if Length(Parts) = 2 then
+      Mth := Parts[High(Parts)];
+  end;
+
+  Ln := FindImplementationLine(FCurrentFile, Cls, Mth);
+  if Ln > 0 then
+    NavigateToLine(Ln)
+  else
+    { no separate body found (e.g. abstract, interface method, or inline) --
+      fall back to the declaration so the click is never a no-op. }
+    NavigateToLine(ND.Line);
+end;
+
+procedure TDragLintStructureForm.FindUsagesClick(Sender: TObject);
+var
+  ND: TStructureNodeData;
+  Db: string;
+begin
+  ND := SelectedNodeData;
+  if (ND = nil) or (ND.Name = '') then Exit;
+  Db := ResolveDbForFile;
+  if Db <> '' then
+    ShowFindUsages(ND.Name, ResolveExePath, [Db])
+  else
+    ShowFindUsages(ND.Name, ResolveExePath, TArray<string>.Create());
 end;
 
 { ---- public factory ---- }

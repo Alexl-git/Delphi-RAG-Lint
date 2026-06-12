@@ -3,6 +3,21 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.43.0-alpha -- 2026-06-12
+
+### Added
+- **Hover: IDE-style Parameters block.** Proc-like hovers now break the
+  signature into a `**Parameters:**` list (one `name : type` per line, with
+  `const`/`var`/`out` preserved) plus a `**Returns:**` line -- mirroring the
+  IDE's parameter insight -- even when the symbol has no doc-comment. Works in
+  the LSP popup and `drag-lint hover` (which no longer errors on no-doc
+  symbols). Generic types stay intact (top-level split respects `<> () []`).
+- **Structure window: right-click navigation menu.** Single/double-click still
+  goes to the declaration; the new context menu adds **Go to Implementation
+  (body)** -- scans the file for the `TClass.Method` body line -- and **Find
+  Usages** (opens the usages view for the symbol). Right-click selects the node
+  under the cursor first.
+
 ## v0.42.0-alpha -- 2026-06-12
 
 ### Added
