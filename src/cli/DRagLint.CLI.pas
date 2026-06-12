@@ -120,6 +120,9 @@ type
     IncludePrivate:     Boolean; // --include-private
     // v0.26: compile-check
     Target:             string;  // --target <file.dproj|.pas>
+    // v0.43: check-unit (in-memory semantic check) + uses-audit
+    Shadow:             string;  // --shadow <dir> (unsaved-buffer overlay)
+    ResolveUsesFlag:    Boolean; // --resolve-uses (enrich undeclared errors)
     // v0.27: generate-test + format
     TestFramework:      string;  // --framework dunitx|dunit (default 'dunitx')
     YadfPath:           string;  // --yadf-path <YADF.exe>
@@ -168,6 +171,8 @@ begin
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
+  Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
+  Writeln('  drag-lint cycles             --db <file.sqlite>    [--format json|text]   (circular unit deps)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH]');
   Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
@@ -496,6 +501,13 @@ begin
       Inc(i);
       Result.Target := ParamStr(i);
     end
+    else if (A = '--shadow') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Shadow := ParamStr(i);
+    end
+    else if A = '--resolve-uses' then
+      Result.ResolveUsesFlag := True
     else if (A = '--framework') and (i < ParamCount) then
     begin
       Inc(i);
@@ -516,6 +528,9 @@ begin
       Result.Position := A
     else if (Result.Command = 'compile-check') and (Result.Target = '') and
             (not A.StartsWith('--')) then
+      Result.Target := A
+    else if ((Result.Command = 'check-unit') or (Result.Command = 'uses-audit')) and
+            (Result.Target = '') and (not A.StartsWith('--')) then
       Result.Target := A
     else if (Result.Command = 'check-ast') and (Result.Target = '') and
             (not A.StartsWith('--')) then
@@ -4240,6 +4255,442 @@ begin
     Result := 0;
 end;
 
+{ ====================================================================== }
+{ v0.43: check-unit -- in-memory semantic check of one unit               }
+{ ====================================================================== }
+
+type
+  TUsesSuggestion = record
+    Found:    Boolean;
+    UnitName: string;
+    Usable:   Boolean;   { symbol is in the unit's interface -> addable via uses }
+  end;
+
+// Given an undeclared identifier, find the best unit to add to the uses clause
+// (interface-visible, not already imported, project before library). Reuses the
+// same ranking idea as resolve-uses, distilled to the single best hit.
+function SuggestUnitForSymbol(const AStore: ISymbolStore;
+  const AName, AInFile: string): TUsesSuggestion;
+var
+  Syms: TArray<TSymbol>;
+  S: TSymbol;
+  UsedUnits: TDictionary<string, Boolean>;
+  InFileId: Int64;
+  U: TUnitUse;
+  FilePath, UnitName, LP: string;
+  Usable, AlreadyUsed, IsLib: Boolean;
+  Score, BestScore: Integer;
+begin
+  Result := Default(TUsesSuggestion);
+  Syms := AStore.FindSymbolsByExactName(AName);
+  if Length(Syms) = 0 then Exit;
+
+  UsedUnits := TDictionary<string, Boolean>.Create;
+  try
+    if AInFile <> '' then
+    begin
+      InFileId := AStore.FindFileIdByPath(TPath.GetFullPath(AInFile));
+      if InFileId <= 0 then InFileId := AStore.FindFileIdByPath(AInFile);
+      if InFileId > 0 then
+        for U in AStore.GetUnitUsesForFile(InFileId) do
+          UsedUnits.AddOrSetValue(LowerCase(U.UnitName), True);
+    end;
+
+    BestScore := -1;
+    for S in Syms do
+    begin
+      FilePath := AStore.GetFilePath(S.FileId);
+      UnitName := ChangeFileExt(ExtractFileName(FilePath), '');
+      if UnitName = '' then Continue;
+      Usable      := S.Section <> 'implementation';
+      AlreadyUsed := UsedUnits.ContainsKey(LowerCase(UnitName));
+      LP          := LowerCase(FilePath);
+      IsLib       := (Pos('\embarcadero\', LP) > 0) or (Pos('\program files', LP) > 0);
+
+      Score := 0;
+      if Usable then Inc(Score, 10000);
+      if not AlreadyUsed then Inc(Score, 1000);
+      if not IsLib then Inc(Score, 100);
+      if Score > BestScore then
+      begin
+        BestScore := Score;
+        Result.Found    := True;
+        Result.UnitName := UnitName;
+        Result.Usable   := Usable;
+      end;
+    end;
+  finally
+    UsedUnits.Free;
+  end;
+end;
+
+// Read DCC_Namespace from a .dproj (so dotted-down 'uses Forms' etc. resolve),
+// falling back to a broad default covering the common RTL/VCL roots.
+function ReadDccNamespaces(const ADprojPath: string): string;
+const
+  DEFAULT_NS = 'System;Xml;Data;Datasnap;Web;Soap;Winapi;System.Win;Vcl;' +
+    'Vcl.Imaging;Vcl.Touch;Vcl.Samples;Vcl.Shell;Data.Win;Bde;FireDAC';
+var
+  Content: string;
+  M: TMatch;
+begin
+  Result := DEFAULT_NS;
+  if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
+  try
+    Content := TFile.ReadAllText(ADprojPath);
+  except
+    Exit;
+  end;
+  M := TRegEx.Match(Content, '<DCC_Namespace>(.*?)</DCC_Namespace>',
+    [roIgnoreCase, roSingleLine]);
+  if M.Success then
+  begin
+    var NS: string := M.Groups[1].Value;
+    NS := StringReplace(NS, '$(DCC_Namespace)', DEFAULT_NS, [rfReplaceAll, rfIgnoreCase]);
+    NS := Trim(NS);
+    if NS <> '' then Result := NS;
+  end;
+end;
+
+// v0.43: drag-lint check-unit <unit.pas> [--project <dproj>] [--shadow <dir>]
+//        [--resolve-uses] [--db <sqlite>] [--format json|text]
+// Compiles ONE unit in full project context (single-unit dcc, deps from DCUs)
+// and reports findings FOR THAT UNIT. With --shadow, the unit is read from the
+// shadow dir (an overlay of the unsaved editor buffer) so errors reflect edits
+// that are not yet saved -- without touching the real file. With --resolve-uses,
+// each "Undeclared identifier" error is annotated with the unit to add.
+function DoCheckUnit(const AArgs: TArgs): Integer;
+var
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  Folders: TArray<string>;
+  P, UPath, Namespaces, CompileTarget, TargetBase, TmpRoot, CfgDir, DcuDir: string;
+  RsVars, Cmd, Disp, Ident, Note: string;
+  Res: TCompileCheckResult;
+  Store: ISymbolStore;
+  HasStore: Boolean;
+  SB: TStringBuilder;
+  First: Boolean;
+  F: TCompilerFinding;
+  ErrCount, WarnCount: Integer;
+  Sug: TUsesSuggestion;
+  MID: TMatch;
+  Keep: Boolean;
+begin
+  if AArgs.Target = '' then
+  begin
+    Writeln('Usage: drag-lint check-unit <unit.pas> [--project <dproj>] ' +
+      '[--shadow <dir>] [--resolve-uses] [--db <sqlite>] [--format json|text]');
+    Exit(2);
+  end;
+
+  TargetBase := ExtractFileName(AArgs.Target);
+
+  { 1. search path: the project's folders (incl. library + DCU output) or, with
+       no project, just the IDE library paths. }
+  Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    if AArgs.ProjectPath <> '' then
+      Folders := Resolver.Resolve(AArgs.ProjectPath)
+    else
+      Folders := Resolver.ResolveLibraryPaths;
+  finally
+    Resolver.Free;
+  end;
+
+  { 2. which file to compile: the shadow (unsaved) copy if given, else the real }
+  if AArgs.Shadow <> '' then
+    CompileTarget := TPath.Combine(AArgs.Shadow, TargetBase)
+  else
+    CompileTarget := AArgs.Target;
+
+  { 3. unit search path. We compile for Win64 (dcc64) to match the ORM3 client
+       and server, so the path must NOT contain Win32 DCU/lib/dcp dirs -- a
+       Win32 System.dcu first on the path triggers F2048 (bad unit format) and
+       aborts the compile. Drop any '\win32\' folder and prepend the Win64 RTL
+       lib so the right System.dcu is found first. Shadow is first of all so the
+       unsaved overlay wins. }
+  var BdsDir: string := GetEnvironmentVariable('BDS');
+  if BdsDir = '' then
+    BdsDir := 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
+  var LibRelease: string := TPath.Combine(BdsDir, 'lib\Win64\release');
+
+  UPath := '';
+  if AArgs.Shadow <> '' then UPath := AArgs.Shadow;
+  if TDirectory.Exists(LibRelease) then
+    if UPath = '' then UPath := LibRelease else UPath := UPath + ';' + LibRelease;
+  for P in Folders do
+    if (P <> '') and (Pos('\win32\', LowerCase(P)) = 0) then   { Win64 compile }
+      if UPath = '' then UPath := P else UPath := UPath + ';' + P;
+
+  Namespaces := ReadDccNamespaces(AArgs.ProjectPath);
+
+  { 4. write a dcc64.cfg (avoids the ~8 KB command-line limit on the path list)
+       in a temp dir, and run dcc64 there so it auto-reads the cfg. }
+  TmpRoot := TPath.Combine(TPath.GetTempPath, 'draglint_checkunit');
+  CfgDir  := TPath.Combine(TmpRoot, 'cfg');
+  DcuDir  := TPath.Combine(TmpRoot, 'dcu');
+  TDirectory.CreateDirectory(CfgDir);
+  TDirectory.CreateDirectory(DcuDir);
+  TFile.WriteAllText(TPath.Combine(CfgDir, 'dcc64.cfg'),
+    Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10,
+      [UPath, Namespaces, DcuDir]));
+
+  RsVars := 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat';
+  Cmd := Format('cmd.exe /c "call "%s" && cd /d "%s" && dcc64 "%s" 2>&1"',
+    [RsVars, CfgDir, CompileTarget]);
+
+  Res := TCompileChecker.RunCommand(Cmd);
+
+  { open the index only if --resolve-uses asked AND the db exists }
+  HasStore := AArgs.ResolveUsesFlag and TFile.Exists(AArgs.DbPath);
+  if HasStore then
+  begin
+    Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+    Store.Migrate;
+  end;
+
+  ErrCount := 0; WarnCount := 0;
+  SB := TStringBuilder.Create;
+  try
+    SB.Append('[');
+    First := True;
+    for F in Res.Findings do
+    begin
+      { keep only findings for the target unit (deps compile silently from DCUs,
+        but be defensive about path/basename). }
+      Keep := SameText(ExtractFileName(F.RawPath), TargetBase);
+      if not Keep then Continue;
+
+      if SameText(F.Severity, 'Error') then Inc(ErrCount)
+      else if SameText(F.Severity, 'Warning') then Inc(WarnCount);
+
+      { map the shadow path back to the real unit for display }
+      Disp := AArgs.Target;
+
+      { missing-unit annotation for undeclared identifiers }
+      Note := '';
+      if HasStore and SameText(F.Code, 'E2003') then
+      begin
+        MID := TRegEx.Match(F.Message, '''([A-Za-z_][A-Za-z0-9_]*)''');
+        if MID.Success then
+        begin
+          Ident := MID.Groups[1].Value;
+          Sug := SuggestUnitForSymbol(Store, Ident, AArgs.Target);
+          if Sug.Found and Sug.Usable then
+            Note := Format(' -- add unit %s to the uses clause', [Sug.UnitName]);
+        end;
+      end;
+
+      if not First then SB.Append(',');
+      First := False;
+      SB.Append(Format(
+        '{"file":"%s","line":%d,"col":%d,"severity":"%s","code":"%s",' +
+        '"message":"%s","fix":"%s"}',
+        [JsonEscape(Disp), F.LineNo, F.ColNo, JsonEscape(F.Severity),
+         JsonEscape(F.Code), JsonEscape(F.Message + Note), JsonEscape(Note)]));
+    end;
+    SB.Append(']');
+
+    if SameText(AArgs.Format, 'json') then
+      Writeln(SB.ToString)
+    else
+    begin
+      for F in Res.Findings do
+        if SameText(ExtractFileName(F.RawPath), TargetBase) then
+          Writeln(Format('%s(%d): %s %s: %s',
+            [AArgs.Target, F.LineNo, F.Severity, F.Code, F.Message]));
+      Writeln(Format('-- %d error(s), %d warning(s) in %s',
+        [ErrCount, WarnCount, TargetBase]));
+    end;
+  finally
+    SB.Free;
+  end;
+
+  if ErrCount > 0 then Result := 1 else Result := 0;
+end;
+
+// v0.43: drag-lint cycles --db <sqlite> [--format json|text]
+// Reports circular unit dependencies (strongly-connected components of the
+// unit-uses graph). Interface-section cycles are illegal in Delphi and the
+// worst for compile/LSP time; we report all cycles and flag interface ones.
+function DoCycles(const AArgs: TArgs): Integer;
+type
+  TEdgeSet = TDictionary<string, Boolean>;
+var
+  Store: ISymbolStore;
+  FilePath: string;
+  Adj:        TDictionary<string, TList<string>>;   { unit -> used units (lower) }
+  IntfEdges:  TEdgeSet;                              { "a->b" if a uses b in intf }
+  // Tarjan state
+  Index:   TDictionary<string, Integer>;
+  Lowlink: TDictionary<string, Integer>;
+  OnStack: TDictionary<string, Boolean>;
+  Stack:   TList<string>;
+  Counter: Integer;
+  Sccs:    TList<TArray<string>>;
+  JArr:    TJSONArray;
+  I:       Integer;
+
+  function UnitNameOfFile(const APath: string): string;
+  var
+    S: string;
+  begin
+    { indexed paths may use '/' -- normalise so ExtractFileName strips the dir }
+    S := StringReplace(APath, '/', '\', [rfReplaceAll]);
+    Result := LowerCase(ChangeFileExt(ExtractFileName(S), ''));
+  end;
+
+  procedure StrongConnect(const AV: string);
+  var
+    W: string;
+    Comp: TList<string>;
+    Top: string;
+    Neighbors: TList<string>;
+  begin
+    Index.AddOrSetValue(AV, Counter);
+    Lowlink.AddOrSetValue(AV, Counter);
+    Inc(Counter);
+    Stack.Add(AV);
+    OnStack.AddOrSetValue(AV, True);
+
+    if Adj.TryGetValue(AV, Neighbors) then
+      for W in Neighbors do
+      begin
+        if not Index.ContainsKey(W) then
+        begin
+          if Adj.ContainsKey(W) then StrongConnect(W)
+          else
+          begin
+            { external/library unit -- a leaf, cannot be part of a cycle }
+            Continue;
+          end;
+          if Lowlink[W] < Lowlink[AV] then Lowlink[AV] := Lowlink[W];
+        end
+        else if OnStack.ContainsKey(W) and OnStack[W] then
+          if Index[W] < Lowlink[AV] then Lowlink[AV] := Index[W];
+      end;
+
+    if Lowlink[AV] = Index[AV] then
+    begin
+      Comp := TList<string>.Create;
+      repeat
+        Top := Stack[Stack.Count - 1];
+        Stack.Delete(Stack.Count - 1);
+        OnStack.AddOrSetValue(Top, False);
+        Comp.Add(Top);
+      until Top = AV;
+      if Comp.Count > 1 then
+        Sccs.Add(Comp.ToArray);
+      Comp.Free;
+    end;
+  end;
+
+var
+  UU: TArray<TUnitUse>;
+  Uo: TUnitUse;
+  FId: Int64;
+  UFrom, UTo, Key, K: string;
+  L: TList<string>;
+begin
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  Adj       := TDictionary<string, TList<string>>.Create;
+  IntfEdges := TEdgeSet.Create;
+  Index     := TDictionary<string, Integer>.Create;
+  Lowlink   := TDictionary<string, Integer>.Create;
+  OnStack   := TDictionary<string, Boolean>.Create;
+  Stack     := TList<string>.Create;
+  Sccs      := TList<TArray<string>>.Create;
+  try
+    { build the adjacency from every indexed file's uses clauses }
+    for FId in Store.GetAllFileIds do
+    begin
+      FilePath := Store.GetFilePath(FId);
+      if not SameText(ExtractFileExt(FilePath), '.pas') then Continue;
+      UFrom := UnitNameOfFile(FilePath);
+      if UFrom = '' then Continue;
+      UU := Store.GetUnitUsesForFile(FId);
+      if not Adj.TryGetValue(UFrom, L) then
+      begin
+        L := TList<string>.Create;
+        Adj.AddOrSetValue(UFrom, L);
+      end;
+      for Uo in UU do
+      begin
+        UTo := LowerCase(Uo.UnitName);
+        if UTo = '' then Continue;
+        if not L.Contains(UTo) then L.Add(UTo);
+        if Uo.Section = uusInterface then
+          IntfEdges.AddOrSetValue(UFrom + '->' + UTo, True);
+      end;
+    end;
+
+    { Tarjan SCC over the in-project units }
+    Counter := 0;
+    for K in Adj.Keys do
+      if not Index.ContainsKey(K) then
+        StrongConnect(K);
+
+    if SameText(AArgs.Format, 'json') then
+    begin
+      JArr := TJSONArray.Create;
+      try
+        for I := 0 to Sccs.Count - 1 do
+        begin
+          var Comp := Sccs[I];
+          var JO := TJSONObject.Create;
+          var JMembers := TJSONArray.Create;
+          var HasIntf := False;
+          for var A in Comp do
+            for var B in Comp do
+              if (A <> B) and IntfEdges.ContainsKey(A + '->' + B) then
+                HasIntf := True;
+          for var A in Comp do JMembers.Add(A);
+          JO.AddPair('units', JMembers);
+          JO.AddPair('size', TJSONNumber.Create(Length(Comp)));
+          JO.AddPair('interface_cycle', TJSONBool.Create(HasIntf));
+          JArr.AddElement(JO);
+        end;
+        Writeln(JArr.ToJSON);
+      finally
+        JArr.Free;
+      end;
+    end
+    else
+    begin
+      if Sccs.Count = 0 then
+        Writeln('No circular unit dependencies found.')
+      else
+      begin
+        Writeln(Format('%d circular unit group(s) found:', [Sccs.Count]));
+        for I := 0 to Sccs.Count - 1 do
+        begin
+          var Comp := Sccs[I];
+          var HasIntf := False;
+          for var A in Comp do
+            for var B in Comp do
+              if (A <> B) and IntfEdges.ContainsKey(A + '->' + B) then
+                HasIntf := True;
+          Write(Format('  [%d units] %s', [Length(Comp), string.Join(' <-> ', Comp)]));
+          if HasIntf then Writeln('   (INTERFACE cycle -- worst for compile/LSP time)')
+          else Writeln('   (implementation-only)');
+        end;
+      end;
+    end;
+    Result := 0;
+  finally
+    for L in Adj.Values do L.Free;
+    Adj.Free; IntfEdges.Free; Index.Free; Lowlink.Free; OnStack.Free;
+    Stack.Free; Sccs.Free;
+  end;
+end;
+
 // v0.27: drag-lint generate-test --qname X [--framework dunitx|dunit] [--db PATH]
 // Generates a DUnitX (default) or DUnit test scaffold for the given symbol.
 // Exit 2 on usage error, 1 if no stub generated, 0 on success.
@@ -4678,6 +5129,10 @@ begin
       Result := DoFindDeadCode(Args)
     else if Args.Command = 'compile-check' then
       Result := DoCompileCheck(Args)
+    else if Args.Command = 'check-unit' then
+      Result := DoCheckUnit(Args)
+    else if Args.Command = 'cycles' then
+      Result := DoCycles(Args)
     else if Args.Command = 'generate-test' then
       Result := DoGenerateTest(Args)
     else if Args.Command = 'format' then

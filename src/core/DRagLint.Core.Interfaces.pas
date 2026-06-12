@@ -33,6 +33,7 @@ type
     function FindCallersByName(const ACalleeName: string): TArray<TReference>;
     function FindSymbolsFuzzy(const APattern: string; ATopK: Integer = 10): TArray<TSymbol>;
     function GetFilePath(AFileId: Int64): string;
+    function GetAllFileIds: TArray<Int64>;   { v0.43: for cycles / cross-file scans }
     function CountSymbols: Int64;
     function CountReferences: Int64;
     function CountFiles: Int64;

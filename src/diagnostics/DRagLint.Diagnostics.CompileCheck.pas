@@ -24,6 +24,10 @@ type
   public
     class function Run(const ATarget: string; const AMsbuildPath: string = '';
       const ARsvarsPath: string = ''): TCompileCheckResult;
+    { v0.43: run an arbitrary compiler command line (already wrapped in
+      cmd.exe /c "call rsvars && dcc... 2>&1") and parse its findings. Used by
+      check-unit for the single-unit shadow-overlay compile. }
+    class function RunCommand(const ACmd: string): TCompileCheckResult;
     class function ParseLine(const ALine: string;
       out AFinding: TCompilerFinding): Boolean;
     class procedure InsertFindings(const AStore: ISymbolStore;
@@ -205,6 +209,31 @@ begin
   end;
 
   Result.ExitCode := SpawnAndCapture(Cmd, RawOutput);
+  Result.StdoutText := RawOutput;
+
+  Lines := TStringList.Create;
+  Findings := TList<TCompilerFinding>.Create;
+  try
+    Lines.Text := RawOutput;
+    for Line in Lines do
+      if ParseLine(Line, F) then
+        Findings.Add(F);
+    Result.Findings := Findings.ToArray;
+  finally
+    Lines.Free;
+    Findings.Free;
+  end;
+end;
+
+class function TCompileChecker.RunCommand(const ACmd: string): TCompileCheckResult;
+var
+  RawOutput, Line: string;
+  Lines: TStringList;
+  F: TCompilerFinding;
+  Findings: TList<TCompilerFinding>;
+begin
+  Result := Default(TCompileCheckResult);
+  Result.ExitCode := SpawnAndCapture(ACmd, RawOutput);
   Result.StdoutText := RawOutput;
 
   Lines := TStringList.Create;

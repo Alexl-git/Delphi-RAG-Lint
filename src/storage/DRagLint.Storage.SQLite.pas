@@ -81,6 +81,7 @@ type
     function FindCallersByName(const ACalleeName: string): TArray<TReference>;
     function FindSymbolsFuzzy(const APattern: string; ATopK: Integer = 10): TArray<TSymbol>;
     function GetFilePath(AFileId: Int64): string;
+    function GetAllFileIds: TArray<Int64>;
     function CountSymbols: Int64;
     function CountReferences: Int64;
     function CountFiles: Int64;
@@ -538,6 +539,29 @@ begin
     '  LIMIT 1) '                                                             +
     'WHERE target_file_id IS NULL');
   FQResolveUnitUseTargets.Prepare;
+end;
+
+function TSQLiteSymbolStore.GetAllFileIds: TArray<Int64>;
+var
+  Q: TFDQuery;
+  L: TList<Int64>;
+begin
+  L := TList<Int64>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text := 'SELECT id FROM files ORDER BY id';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      L.Add(Q.FieldByName('id').AsLargeInt);
+      Q.Next;
+    end;
+    Result := L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
 end;
 
 function TSQLiteSymbolStore.FileIsUpToDate(const APath: string;
