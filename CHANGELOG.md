@@ -5,6 +5,34 @@ breaking changes** until v1.0.
 
 ## v0.43.0-alpha -- 2026-06-12
 
+### Added (semantic diagnostics + uses cleanup)
+- **`check-unit <unit.pas> [--project <dproj>] [--platform win32|win64]
+  [--shadow <dir>] [--resolve-uses]`** -- compile ONE unit in full project
+  context (deps from DCUs) for real semantic errors (`E2003` etc.) without a
+  full build. `--shadow` overlays an unsaved-buffer copy so errors reflect edits
+  before save, never touching the file. `--platform` matches the project's
+  active config (picks dcc32/dcc64 + that platform's RTL lib; avoids `F2048`).
+  `--resolve-uses` annotates undeclared identifiers with the unit to add.
+- **`cycles --db <sqlite> [--edges]`** -- circular unit dependencies (Tarjan
+  SCC over the unit-uses graph). `--edges` lists each cycle's actual
+  `A uses B [section]` edges, flags interface edges as move-to-implementation
+  candidates and layering inversions (COMMON -> CLIENT/SERVER).
+- **`uses-audit <unit.pas>`** -- index proposal of interface->implementation
+  moves + unused units (conservative; project units only).
+- **`uses-fix <unit.pas> --project <dproj> [--apply] [--remove-unused]`** --
+  compiler-VERIFIED uses-clause cleanup: move interface-only imports down,
+  optionally comment out unused units (skips those with init/final sections).
+  Each edit is shadow-compiled and kept only if it adds no new error vs the
+  baseline; dry-run by default, `--apply` writes after a `.bak`. With no
+  `<unit>` target it runs a project-wide dry-run sweep report.
+
+### Fixed
+- **Duplicate file rows on re-index.** Mixed-separator stored paths
+  (`C:/root\sub\file.pas`) defeated the `files.path` UNIQUE upsert, so each
+  re-index inserted a duplicate row and left stale `unit_uses`/refs. Paths are
+  now canonicalised at the store boundary; an incremental re-index is a true
+  no-op (`skipped N up-to-date`).
+
 ### Added
 - **Dedicated dockable Graph window.** The graph is now its own
   `INTACustomDockableForm` ("drag-lint Graph", under View > Tool Windows) rather

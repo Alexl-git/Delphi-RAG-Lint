@@ -13,6 +13,9 @@ A single dockable window (park it at the bottom like Grep Results) with tabs:
   Plain text = substring (`grid` matches `dxDBGrid1`); tick **regex** for a
   regular expression. Filters over symbol name + qualified name; header shows
   `Code Elements (N of M)`. Double-click a row to jump to it.
+- **Right-click a row** for: **Go to Declaration**, **Go to Implementation
+  (body)** (jumps to the `TClass.Method` body, not just the interface line), and
+  **Find Usages**.
 
 ### Find Usages
 - Type a symbol, press **Enter**. Finds **all** references — including variable
@@ -30,9 +33,12 @@ A single dockable window (park it at the bottom like Grep Results) with tabs:
 - Type to search across the resolved DBs (debounced). Double-click / Enter opens
   the symbol's source.
 
-### Graph
-- **Open Graph Viewer** launches the standalone `drag_lint_graph.exe` against
-  your resolved DBs (a separate window you can keep open alongside Structure).
+### Graph — its own dockable window
+- **View → Tool Windows → drag-lint Graph** (or the *drag-lint Graph (dockable)*
+  menu item) opens a dedicated dockable window with the **live graph embedded
+  in-place** — so you can dock it beside the Structure window and keep both
+  visible. (It hosts `drag_lint_graph.exe` as a child; single-click a node to
+  jump to its source in the IDE.)
 
 ## Editor features (drag-lint menu)
 
@@ -71,6 +77,10 @@ Log, Test Connection, Open Plugin Log.
 | `slice --qname <X>` / `context --task "modify <X>"` | Symbol-relevant source chunks / context bundle. |
 | `impact --qname <X> [--depth N]` | Transitive-caller blast radius. |
 | `graph --format dot\|mermaid` | Unit dependency graph. |
+| `cycles [--edges]` | Circular unit deps; `--edges` shows the exact `uses` lines + move/layering candidates. |
+| `uses-audit <unit.pas>` | Propose interface→implementation moves + unused units. |
+| `uses-fix <unit.pas> --project <dproj> [--apply] [--remove-unused]` | Compiler-verified uses cleanup (dry-run default; `.bak` on apply). No `<unit>` = project sweep report. |
+| `check-unit <unit.pas> --project <dproj> [--shadow <dir>] [--resolve-uses]` | Real semantic errors for one unit (incl. unsaved buffer via `--shadow`). |
 | `todos <path>` / `diff <dbA> <dbB>` | TODO scan / API-impact diff between two indexes. |
 | `lint <path>` / `check-ast <path>` | Lint rules / tree-sitter syntax check. |
 

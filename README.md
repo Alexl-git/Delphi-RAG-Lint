@@ -70,6 +70,44 @@ Both probe HKCU + HKLM in both the 32- and 64-bit registry views and fold the
 results into a single deduplicated folder set. Add `--dry-run` to print the
 resolved folder list without indexing.
 
+### Untangling unit dependencies (cycles + uses cleanup)
+
+Find circular unit dependencies and the exact `uses` lines that form them:
+
+```
+drag-lint cycles --db myapp.sqlite --edges
+```
+
+Each cycle lists its `A uses B [interface|implementation]` edges, marks the
+**interface** edges as move-to-implementation candidates, and flags layering
+inversions (e.g. a COMMON unit reaching into CLIENT). Then propose and apply the
+cleanup, **verified by the compiler** so it never breaks the build:
+
+```
+drag-lint uses-audit MyUnit.pas --db myapp.sqlite                       # propose
+drag-lint uses-fix --project MyApp.dproj --db myapp.sqlite              # dry-run sweep report
+drag-lint uses-fix MyUnit.pas --project MyApp.dproj --db myapp.sqlite --apply   # apply (.bak backup)
+```
+
+`uses-fix` shadow-compiles every edit and keeps it only if it adds no new error.
+Moves (interface→implementation) are behaviour-preserving; unused-removal is
+opt-in (`--remove-unused`) and skips units with an `initialization`/
+`finalization` section (possible side-effect units).
+
+### Semantic errors without a full build
+
+`check-unit` compiles a single unit in its project's context, so you get real
+compiler errors (e.g. `E2003 Undeclared identifier`) fast -- and on the
+**unsaved** buffer via a shadow overlay:
+
+```
+drag-lint check-unit MyUnit.pas --project MyApp.dproj --platform win64 \
+          --db myapp.sqlite --resolve-uses
+```
+
+`--resolve-uses` turns an undeclared identifier into a fix: *"add unit X to the
+uses clause."*
+
 ### LSP server (Zed / VS Code)
 
 Point your editor's LSP config at `drag-lint.exe lsp --db <path>.sqlite`.
@@ -127,6 +165,11 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `generate-test --qname <q>` | Generate a test-method stub |
 | `find-deadcode` | List symbols with no callers outside their own unit |
 | `compile-check <dproj>` | Run msbuild and store diagnostics in the DB |
+| `check-unit <unit.pas>` | Compile one unit in project context (semantic errors; `--shadow` for unsaved buffers, `--resolve-uses` to suggest the missing unit) |
+| `cycles` | Circular unit dependencies (`--edges` shows edges + move/layering candidates) |
+| `uses-audit <unit.pas>` | Propose interface→implementation moves + unused units |
+| `uses-fix <unit.pas> --project <dproj>` | Compiler-verified uses cleanup (move/remove; dry-run by default, `--apply`) |
+| `resolve-uses --name <X>` | Which unit defines `X` and should be added to `uses` |
 | `import-log <log>` | Import a saved msbuild log into the DB |
 | `format <file>` | Format a .pas file with the YADF formatter |
 | `check-ast <file>` | Run tree-sitter lint rules without compiling |

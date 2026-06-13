@@ -71,12 +71,24 @@ Search, Dockable Panel, Settings, Lint Buffer, Test Connection, Open Plugin Log)
 - [ ] **C1 Show Structure** (Tools -> drag-lint -> Show Structure) opens the
       drag-lint Structure dockable for the active unit; **Refresh** updates it;
       selecting an element moves the editor caret.
+- [ ] **C1b Structure right-click nav (v0.43).** Right-click a method row ->
+      **Go to Declaration** lands on the interface line; **Go to Implementation
+      (body)** lands on the `TClass.Method` body; **Find Usages** opens the
+      usages view for that symbol.
 - [ ] **C2 Find Usages.** Caret on a symbol -> Find Usages... -> a list of every
       reference; double-click jumps to the site.
 - [ ] **C3 Symbol Search.** Symbol Search... -> type a partial name -> results
       filter live (debounced); choosing one opens it at the definition.
-- [ ] **C4 Dockable Panel.** "Dockable Panel (test)" opens a panel you can dock
-      at the bottom/side like GExperts (docking plumbing check).
+- [ ] **C4 Dockable Panel.** "drag-lint Panel (dockable)" opens a tabbed panel
+      (Structure / Find Usages / Symbol Search / Graph) you can dock like
+      GExperts.
+- [ ] **C5 Graph window (v0.43).** View -> Tool Windows -> **drag-lint Graph**
+      opens a dedicated dockable window with the graph **embedded in-place**;
+      dock it beside Structure (both visible). Single-click a leaf node ->
+      jumps to its source in the IDE. Closing the window terminates the viewer.
+- [ ] **C6 Hover Parameters (v0.43).** Hover a proc/method -> the popup shows a
+      **Parameters** block (one `name : type` per line, `const`/`var`/`out`
+      preserved) + **Returns**, even with no doc-comment.
 
 ---
 
@@ -164,6 +176,36 @@ indexes:
       IDE does NOT crash; the `drag-lint` submenu, markers, and dockables go away
       cleanly.
 - [ ] **I2 Reinstall.** Re-add the package -> submenu + features return and work.
+
+---
+
+## J. Semantic + uses cleanup (CLI, v0.43)
+
+Run from a prompt (PowerShell, **not** Git-Bash — it mangles `C:\` paths).
+DB = `C:\Projects\DB\ORM3\drag-lint.sqlite`.
+
+- [ ] **J1 check-unit (saved).** `drag-lint check-unit <unit.pas> --project
+      <dproj> --platform win64 --db <DB> --format text` -> compiles the unit;
+      a clean unit reports `0 error(s)`.
+- [ ] **J2 check-unit (unsaved / shadow).** Copy the unit to a temp dir, delete
+      a needed entry from its `uses`, and run with `--shadow <tempdir>
+      --resolve-uses` -> reports `E2003 Undeclared identifier ... -- add unit X
+      to the uses clause`, without touching the real file.
+- [ ] **J3 cycles --edges.** `drag-lint cycles --db <DB> --edges` -> lists
+      circular groups with `A uses B [section]` edges, move-to-implementation
+      candidates, and any `[LAYERING: COMMON -> CLIENT]` flags.
+- [ ] **J4 uses-audit.** `drag-lint uses-audit <unit.pas> --db <DB>` -> proposes
+      interface→implementation moves + unused candidates (or "nothing").
+- [ ] **J5 uses-fix dry-run.** `drag-lint uses-fix <unit.pas> --project <dproj>
+      --db <DB>` -> shows the proposed uses-clause diff; writes nothing.
+- [ ] **J6 uses-fix apply.** Add `--apply` -> the move is applied, a `.bak` is
+      created, and an independent `check-unit` of the modified file still reports
+      `0 error(s)`.
+- [ ] **J7 sweep report.** `drag-lint uses-fix --project <dproj> --db <DB>`
+      (no `<unit>`) -> a project-wide report of proposed moves/unused with totals.
+- [ ] **J8 re-index is a no-op.** Re-run `drag-lint index C:\Projects\DB\ORM3
+      --db <DB>` twice -> the second run reports `skipped N up-to-date` (no
+      duplicate rows; the v0.43 canonical-path fix).
 
 ---
 
