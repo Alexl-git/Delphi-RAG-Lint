@@ -5060,6 +5060,157 @@ begin
   end;
 end;
 
+// v0.43: drag-lint uses-fix --project <dproj> --db <sqlite> [--remove-unused]
+// PROJECT SWEEP (no <unit> target): a fast, index-only DRY-RUN report of every
+// proposed uses-clause change across all indexed units -- move interface->impl
+// and (with --remove-unused) unused units that have no init/final section. No
+// compiling here: this is the report you review before applying per-unit (where
+// each edit IS compiler-verified). Filtered to a directory with --in <dir>.
+function DoUsesFixSweep(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  IndexedUnits: TDictionary<string, Int64>;
+  NameCache: TDictionary<string, TArray<string>>;
+  RefIntf, RefImpl: TDictionary<string, Boolean>;
+  TotalMove, TotalUnused, UnitsWithChanges: Integer;
+  RootFilter: string;
+
+  function UnitStemOf(const APath: string): string;
+  begin
+    Result := LowerCase(ChangeFileExt(ExtractFileName(
+      StringReplace(APath, '/', '\', [rfReplaceAll])), ''));
+  end;
+
+  function UnitsDefining(const AName: string): TArray<string>;
+  var Sm: TSymbol; Us: TList<string>; St: string;
+  begin
+    if NameCache.TryGetValue(AName, Result) then Exit;
+    Us := TList<string>.Create;
+    try
+      for Sm in Store.FindSymbolsByExactName(AName) do
+      begin
+        St := UnitStemOf(Store.GetFilePath(Sm.FileId));
+        if (St <> '') and not Us.Contains(St) then Us.Add(St);
+      end;
+      Result := Us.ToArray;
+    finally Us.Free; end;
+    NameCache.AddOrSetValue(AName, Result);
+  end;
+
+  function HasInitSection(const AStem: string): Boolean;
+  var Fid: Int64; Sym: TSymbol; Syms: TArray<TSymbol>;
+  begin
+    Result := True;
+    if not IndexedUnits.TryGetValue(AStem, Fid) then Exit;
+    Syms := Store.FindSymbolsByFile(Store.GetFilePath(Fid));
+    if Length(Syms) = 0 then Exit;
+    Result := False;
+    for Sym in Syms do
+      if SameText(Sym.Kind.ToText, 'initialization') or
+         SameText(Sym.Kind.ToText, 'finalization') then Exit(True);
+  end;
+
+var
+  Fid: Int64;
+  Path, ThisStem, SrcPath, uStem, u: string;
+  Lines: TStringList;
+  ImplLine, i: Integer;
+  Refs: TArray<TReference>;
+  R: TReference;
+  UU: TArray<TUnitUse>;
+  Uo: TUnitUse;
+  HeaderShown: Boolean;
+begin
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
+  RootFilter := LowerCase(StringReplace(AArgs.InFile, '/', '\', [rfReplaceAll]));
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  IndexedUnits := TDictionary<string, Int64>.Create;
+  NameCache    := TDictionary<string, TArray<string>>.Create;
+  RefIntf      := TDictionary<string, Boolean>.Create;
+  RefImpl      := TDictionary<string, Boolean>.Create;
+  Lines        := TStringList.Create;
+  try
+    for Fid in Store.GetAllFileIds do
+    begin
+      u := UnitStemOf(Store.GetFilePath(Fid));
+      if u <> '' then IndexedUnits.AddOrSetValue(u, Fid);
+    end;
+
+    TotalMove := 0; TotalUnused := 0; UnitsWithChanges := 0;
+    Writeln('Project uses sweep (DRY-RUN, index proposal -- apply per-unit to verify):');
+    Writeln('');
+
+    for Fid in Store.GetAllFileIds do
+    begin
+      Path := StringReplace(Store.GetFilePath(Fid), '/', '\', [rfReplaceAll]);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      if (RootFilter <> '') and (Pos(RootFilter, LowerCase(Path)) = 0) then Continue;
+      ThisStem := UnitStemOf(Path);
+
+      ImplLine := MaxInt;
+      if TFile.Exists(Path) then
+      begin
+        try Lines.LoadFromFile(Path); except Continue; end;
+        for i := 0 to Lines.Count - 1 do
+          if SameText(Trim(Lines[i]), 'implementation') then begin ImplLine := i + 1; Break; end;
+      end;
+
+      RefIntf.Clear; RefImpl.Clear;
+      Refs := Store.GetReferencesFromFile(Fid);
+      for R in Refs do
+        for u in UnitsDefining(R.NameText) do
+        begin
+          if SameText(u, ThisStem) then Continue;
+          if R.StartLine < ImplLine then RefIntf.AddOrSetValue(u, True)
+          else RefImpl.AddOrSetValue(u, True);
+        end;
+
+      HeaderShown := False;
+      UU := Store.GetUnitUsesForFile(Fid);
+      for Uo in UU do
+      begin
+        uStem := LowerCase(Uo.UnitName);
+        if not IndexedUnits.ContainsKey(uStem) then Continue;
+        if SameText(uStem, ThisStem) then Continue;
+
+        var Verdict: string := '';
+        if (Uo.Section = uusInterface) and (not RefIntf.ContainsKey(uStem)) and
+           (RefImpl.ContainsKey(uStem)) then
+        begin Verdict := 'MOVE   ' + Uo.UnitName + ' -> implementation'; Inc(TotalMove); end
+        else if AArgs.RemoveUnused and (not RefIntf.ContainsKey(uStem)) and
+                (not RefImpl.ContainsKey(uStem)) then
+        begin
+          if HasInitSection(uStem) then Continue;   { side-effect unit, leave it }
+          Verdict := 'UNUSED ' + Uo.UnitName + ' (comment out)'; Inc(TotalUnused);
+        end;
+        if Verdict = '' then Continue;
+
+        if not HeaderShown then
+        begin
+          Writeln(Format('%s  (%s)', [ExtractFileName(Path), Path]));
+          HeaderShown := True;
+          Inc(UnitsWithChanges);
+        end;
+        Writeln(Format('    line %4d: %s', [Uo.StartLine, Verdict]));
+      end;
+    end;
+
+    Writeln('');
+    Writeln(Format('== %d unit(s) with proposals: %d move(s), %d unused candidate(s). ==',
+      [UnitsWithChanges, TotalMove, TotalUnused]));
+    Writeln('Apply per unit (verified): drag-lint uses-fix <unit.pas> --project <dproj> --apply [--remove-unused]');
+    Result := 0;
+  finally
+    IndexedUnits.Free; NameCache.Free; RefIntf.Free; RefImpl.Free; Lines.Free;
+  end;
+end;
+
 // v0.43: drag-lint uses-fix <unit.pas> --project <dproj> --db <sqlite>
 //        [--platform win32|win64] [--apply] [--remove-unused]
 // Compiler-VERIFIED uses-clause cleanup for one unit:
@@ -5303,10 +5454,15 @@ var
   u: string;
   Lines2: TStringList;
 begin
-  if (AArgs.Target = '') or (AArgs.ProjectPath = '') then
+  { no <unit> target -> project-wide dry-run report (fast, index-only) }
+  if AArgs.Target = '' then
+    Exit(DoUsesFixSweep(AArgs));
+
+  if AArgs.ProjectPath = '' then
   begin
     Writeln('Usage: drag-lint uses-fix <unit.pas> --project <dproj> --db <sqlite> ' +
       '[--platform win32|win64] [--apply] [--remove-unused]');
+    Writeln('   or: drag-lint uses-fix --project <dproj> --db <sqlite> [--in <dir>] [--remove-unused]   (sweep report)');
     Exit(2);
   end;
   if not TFile.Exists(AArgs.DbPath) then
