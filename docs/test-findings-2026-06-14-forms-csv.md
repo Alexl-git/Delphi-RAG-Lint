@@ -111,6 +111,49 @@ are fresh.
 
 ---
 
+## VALIDATED: fresh-index re-run (staleness confirmed, engine correct)
+
+The staleness theory was confirmed and the engine proven on real data. The ORM3
+`CLIENT` tree was re-indexed into a temp db (`drag-lint index C:\Projects\DB\ORM3\CLIENT
+--db <temp>`, 307 files / 102,362 refs / 17.8s) and `forms-csv --project
+Micronite2027.dproj --db <temp>` was re-run. The user's working index was left
+untouched.
+
+Confirmation of staleness: the old index records `TfrmBlueprint4` refs at
+`uJobList.pas:1771` and `:1789`, but that file is only 1682 lines -- past EOF, so
+`IsLaunchLine` correctly read nothing and built no edge.
+
+| Metric                      | Stale index | Fresh index |
+|-----------------------------|-------------|-------------|
+| Form rows (excl header)     | 46          | 46          |
+| `(no path from MAIN)` rows  | 46          | 16          |
+| Forms with a real captioned path | 0      | 29          |
+| Root                        | frmMAIN     | frmMAIN     |
+
+Real navigation chains now resolve exactly as designed, e.g.:
+
+```
+frmBlueprint4 (MDI)   frmMAIN -> 'Job List' -> 'Open Folder'
+frmConfirmorCancel    frmMAIN -> 'Job List' -> 'Open Folder' -> 'Delete Operation'
+frmControlPlanningPresets  frmMAIN -> 'Default Settings ...' -> 'Control Planning Presets'
+dlgOperatorList       frmMAIN -> 'Personnel List'
+```
+
+Called From is populated too (e.g. frmBlueprint4 <- `frmCPSched (Exit to Blueprint4);
+frmJobList (Open Folder)`). A small number of hops render `(via Routine)` where the
+launching routine has no captioned binder (keep-the-gap, by design).
+
+The remaining 16 `(no path from MAIN)` are forms opened through generic ViewModel /
+factory indirection (no form-class token at the call site) -- the documented limitation.
+These are candidates for the optional auto-derivation follow-up or manual Notes entry.
+
+**Net:** the feature works on the real project. The only operational requirement is that
+the project index be current (re-index if forms-csv shows mostly `(no path)`). NOTE: the
+user's daily index `C:\Projects\DB\ORM3\drag-lint.sqlite` is stale and would benefit from
+a re-index (this affects all drag-lint features, not just forms-csv) -- left to the user.
+
+---
+
 ## Fixture smoke (all 23 checks pass)
 
 ```
