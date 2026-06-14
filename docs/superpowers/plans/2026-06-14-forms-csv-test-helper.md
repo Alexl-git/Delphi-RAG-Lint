@@ -1254,22 +1254,39 @@ In `uDemoMain.pas` add a form `frmReports` launch in `actReportsExecute`, declar
 method, add `uDemoReports` to uses. Create `uDemoReports.pas`/`.dfm` (a bare form like
 `uDemoEdit`), add to `.dpr`/`.dproj`.
 
-(c) Keep-the-gap: create `uDemoOrphanLaunch.pas` where a form `frmGap` is opened from a
-non-form context (a free-standing procedure, not a form method) so no captioned control
-exists. Create its `.pas`/`.dfm`, add to `.dpr`/`.dproj`.
+(c) Keep-the-gap: create `uDemoGap.pas`/`.dfm` (a bare form `frmGap`, class `TfrmGap`,
+like `uDemoEdit`). The uncaptioned launch must live in a METHOD OF A REACHABLE FORM (so
+an edge is actually produced) that has NO captioned binding. In `uDemoMain.pas`, add a
+public method `OpenGap` whose body is `TfrmGap.Create(Self).ShowModal;`, declare it in
+the `TfrmMain` class, add `uDemoGap` to uses -- but do NOT bind `OpenGap` to any control
+(no `OnClick`) and do NOT call it from any other method. Add `uDemoGap` to `.dpr`/`.dproj`.
+
+Why a form method, not a free procedure: `FindEnclosingImpl` only resolves a launch
+site whose enclosing routine is a qualified `TClass.Method` belonging to a known form
+node. A launch in a free-standing procedure yields NO edge (so the target would be
+`(no path from MAIN)`, not `(via ...)`). Putting it in `TfrmMain.OpenGap` makes
+`frmMain --(via OpenGap)--> frmGap` an edge: `CaptionForHandler(frmMain,'OpenGap')`
+finds no event-binding, no Action, and no in-form caller, so it returns '' and the edge
+caption becomes `(via OpenGap)` -- exactly the keep-the-gap behaviour.
 
 - [ ] **Step 2: Add assertions (failing first)**
 
 ```powershell
 Check 'action-bound caption (Reports)' ($csv -match "uDemoReports,frmReports,\d+,frmMain -> 'Reports',")
-Check 'keep-the-gap via routine'        ($csv -match "uDemoGap,frmGap,\d+,.*\(via ")
+Check 'keep-the-gap via routine'        ($csv -match "uDemoGap,frmGap,\d+,frmMain -> \(via ")
 ```
 
-- [ ] **Step 3: Run smoke to confirm RED for the new cases**
+- [ ] **Step 3: Run smoke to confirm RED for the new case**
 
 Run: `pwsh -File tests/autotest/run_formsmap.ps1`
-Expected: `(Reports)` FAILS (Action not resolved), `frmList nav via Lists` may now FAIL
-(indirect handler), keep-the-gap PASSES already.
+Expected: the existing `frmList nav via Lists` check now FAILS, because making
+`btnListsClick` call `OpenLists` (which does the launch) means the launch's enclosing
+routine is `OpenLists`, which has no captioned binding -- so without within-form caller
+recursion the path renders `frmMain -> (via OpenLists)` instead of `frmMain -> 'Lists'`.
+This is the RED that drives the recursion implementation. The `(Reports)` and
+`keep-the-gap` checks may already pass (an action's `OnExecute` is itself an
+event-binding whose owning `TAction` carries the caption; the gap edge already renders
+`(via OpenGap)`), but keep them -- they guard those paths against regressions.
 
 - [ ] **Step 4: Implement within-form recursion + Action resolution**
 
