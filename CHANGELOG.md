@@ -13,10 +13,13 @@ breaking changes** until v1.0.
   before save, never touching the file. `--platform` matches the project's
   active config (picks dcc32/dcc64 + that platform's RTL lib; avoids `F2048`).
   `--resolve-uses` annotates undeclared identifiers with the unit to add.
-- **`cycles --db <sqlite> [--edges]`** -- circular unit dependencies (Tarjan
-  SCC over the unit-uses graph). `--edges` lists each cycle's actual
+- **`cycles --db <sqlite> [--edges] [--causes]`** -- circular unit dependencies
+  (Tarjan SCC over the unit-uses graph). `--edges` lists each cycle's actual
   `A uses B [section]` edges, flags interface edges as move-to-implementation
-  candidates and layering inversions (COMMON -> CLIENT/SERVER).
+  candidates and layering inversions (COMMON -> CLIENT/SERVER). `--causes`
+  pinpoints the specific symbols in A's interface that reference B (the
+  types/vars/methods to move/extract), with line numbers and an honest note
+  where the index couldn't resolve a ref.
 - **`uses-audit <unit.pas>`** -- index proposal of interface->implementation
   moves + unused units (conservative; project units only).
 - **`uses-fix <unit.pas> --project <dproj> [--apply] [--remove-unused]`** --

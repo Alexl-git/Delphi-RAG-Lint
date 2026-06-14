@@ -80,7 +80,10 @@ drag-lint cycles --db myapp.sqlite --edges
 
 Each cycle lists its `A uses B [interface|implementation]` edges, marks the
 **interface** edges as move-to-implementation candidates, and flags layering
-inversions (e.g. a COMMON unit reaching into CLIENT). Then propose and apply the
+inversions (e.g. a COMMON unit reaching into CLIENT). Add **`--causes`** to
+pinpoint the *specific symbols* in `A`'s interface that force the dependency on
+`B` (the types/vars/methods to move or extract) — with the line numbers, and an
+honest note where the index couldn't resolve a reference. Then propose and apply the
 cleanup, **verified by the compiler** so it never breaks the build:
 
 ```

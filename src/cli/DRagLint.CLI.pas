@@ -125,6 +125,7 @@ type
     ResolveUsesFlag:    Boolean; // --resolve-uses (enrich undeclared errors)
     CheckPlatform:      string;  // --platform win32|win64 (matches project config)
     Edges:              Boolean; // --edges (cycles: show the actual uses edges)
+    Causes:             Boolean; // --causes (cycles: pinpoint the symbols forcing each interface edge)
     Apply:              Boolean; // --apply (uses-fix: write changes, not dry-run)
     RemoveUnused:       Boolean; // --remove-unused (uses-fix: also comment unused)
     // v0.27: generate-test + format
@@ -176,7 +177,7 @@ begin
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
-  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--format json|text]   (circular unit deps)');
+  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--format json|text]   (circular unit deps; --causes pinpoints symbols to refactor)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused]   (compiler-verified uses cleanup)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
@@ -516,6 +517,8 @@ begin
       Result.ResolveUsesFlag := True
     else if A = '--edges' then
       Result.Edges := True
+    else if A = '--causes' then
+      Result.Causes := True
     else if A = '--apply' then
       Result.Apply := True
     else if A = '--remove-unused' then
@@ -4561,6 +4564,7 @@ var
   Adj:        TDictionary<string, TList<string>>;   { unit -> used units (lower) }
   IntfEdges:  TEdgeSet;                              { "a->b" if a uses b in intf }
   UnitFile:   TDictionary<string, string>;          { unit stem -> source path }
+  UnitFid:    TDictionary<string, Int64>;           { unit stem -> file_id (--causes) }
   // Tarjan state
   Index:   TDictionary<string, Integer>;
   Lowlink: TDictionary<string, Integer>;
@@ -4654,6 +4658,7 @@ begin
   Adj       := TDictionary<string, TList<string>>.Create;
   IntfEdges := TEdgeSet.Create;
   UnitFile  := TDictionary<string, string>.Create;
+  UnitFid   := TDictionary<string, Int64>.Create;
   Index     := TDictionary<string, Integer>.Create;
   Lowlink   := TDictionary<string, Integer>.Create;
   OnStack   := TDictionary<string, Boolean>.Create;
@@ -4668,6 +4673,7 @@ begin
       UFrom := UnitNameOfFile(FilePath);
       if UFrom = '' then Continue;
       UnitFile.AddOrSetValue(UFrom, FilePath);
+      UnitFid.AddOrSetValue(UFrom, FId);
       UU := Store.GetUnitUsesForFile(FId);
       if not Adj.TryGetValue(UFrom, L) then
       begin
@@ -4770,15 +4776,71 @@ begin
               end;
             end;
           end;
+
+          { --causes: for each INTERFACE edge A->B, pinpoint the exact symbols in
+            A's interface that reference B -- the things to move/extract to break
+            the dependency. (Best-effort: the index can miss refs like set types,
+            so treat as a starting point, not exhaustive.) }
+          if AArgs.Causes then
+          begin
+            for var A in Comp do
+              for var B in Comp do
+              begin
+                if (A = B) or not IntfEdges.ContainsKey(A + '->' + B) then Continue;
+                var Afid: Int64;
+                if not UnitFid.TryGetValue(A, Afid) then Continue;
+                var Apath: string := '';
+                UnitFile.TryGetValue(A, Apath);
+
+                var ImplL: Integer := MaxInt;
+                if TFile.Exists(Apath) then
+                begin
+                  var Ls := TStringList.Create;
+                  try
+                    Ls.LoadFromFile(Apath);
+                    for var kk := 0 to Ls.Count - 1 do
+                      if SameText(Trim(Ls[kk]), 'implementation') then
+                      begin ImplL := kk + 1; Break; end;
+                  finally Ls.Free; end;
+                end;
+
+                var Seen := TDictionary<string, Boolean>.Create;
+                var HdrShown := False;
+                try
+                  for var R in Store.GetReferencesFromFile(Afid) do
+                  begin
+                    if R.StartLine >= ImplL then Continue;   { interface only }
+                    if Seen.ContainsKey(LowerCase(R.NameText)) then Continue;
+                    for var Sym in Store.FindSymbolsByExactName(R.NameText) do
+                      if SameText(UnitNameOfFile(Store.GetFilePath(Sym.FileId)), B) then
+                      begin
+                        if not HdrShown then
+                        begin
+                          Writeln(Format('      * %s''s INTERFACE needs %s via:', [A, B]));
+                          HdrShown := True;
+                        end;
+                        Writeln(Format('          line %d: %s  [%s]  -> move/extract this',
+                          [R.StartLine, R.NameText, Sym.Kind.ToText]));
+                        Seen.AddOrSetValue(LowerCase(R.NameText), True);
+                        Break;
+                      end;
+                  end;
+                  if not HdrShown then
+                    Writeln(Format('      * %s -> %s interface dep: no specific symbol ' +
+                      'resolved (index gap -- inspect %s''s interface uses of %s by hand)',
+                      [A, B, A, B]));
+                finally Seen.Free; end;
+              end;
+          end;
         end;
-        if not AArgs.Edges then
-          Writeln('  (add --edges to see which uses lines form each cycle)');
+        if not (AArgs.Edges or AArgs.Causes) then
+          Writeln('  (add --edges for the uses lines, --causes for the symbols to refactor)');
       end;
     end;
     Result := 0;
   finally
     for L in Adj.Values do L.Free;
-    Adj.Free; IntfEdges.Free; UnitFile.Free; Index.Free; Lowlink.Free;
+    Adj.Free; IntfEdges.Free; UnitFile.Free; UnitFid.Free; Index.Free; Lowlink.Free;
     OnStack.Free; Stack.Free; Sccs.Free;
   end;
 end;
