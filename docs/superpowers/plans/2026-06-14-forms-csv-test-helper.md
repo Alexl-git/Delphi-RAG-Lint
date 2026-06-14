@@ -1597,6 +1597,93 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ---
 
+## Task 7b: Real-data fixes (root detection + project-unit filter)
+
+The Task 7 ORM3 run surfaced two real bugs:
+
+1. **Wrong root.** `DetectRoot` picked the FIRST `Application.CreateForm(Tform)` in the
+   `.dpr`, but Micronite's `.dpr` has `Application.CreateForm(TdlgOperatorList, ...)`
+   inside a non-main bootstrap PROCEDURE (`RunAdminBootstrap`) that textually precedes
+   the real main path `... CreateForm(TdmStyles); CreateForm(TfrmMAIN); Application.Run;`.
+   Result: `dlgOperatorList` became the root and almost every form was
+   `(no path from MAIN)`.
+2. **Backup-file noise.** The index contains `*- Copy.pas/.dfm` and other backups, so the
+   inventory had duplicate rows (`Blueprint4 - Copy`, `uSetupDefaultsFrm - Copy`, ...).
+   Inventory must be restricted to real project units.
+
+**Files:** Modify `src/forms/DRagLint.FormsMap.pas`; extend fixtures + `run_formsmap.ps1`.
+
+- [ ] **Step 1: Root detection - pick the main form near `Application.Run`**
+
+Rework `DetectRoot` so that, when `--root` is not given, it parses the sibling `.dpr`
+and returns the **last** `Application.CreateForm(Tclass)` whose `Tclass` is a form node
+that appears **at or before the first `Application.Run`** (scan in file order; remember
+the last form-node CreateForm seen; stop at the line containing `Application.Run`). This
+ignores CreateForm calls inside helper procedures that run after `Application.Run` and,
+for one-line `... CreateForm(TdmStyles); CreateForm(TfrmMAIN); Application.Run; ...`,
+yields `TfrmMAIN`. If no `Application.Run` or no form-node CreateForm precedes it, fall
+back to the form node with the highest out-degree in the edge graph (the navigation hub).
+Change `DetectRoot`'s signature to also accept `AEdges: TList<TFormEdge>` for the
+fallback, and pass `Edges` at the call site in `GenerateFormsCsv`.
+
+- [ ] **Step 2: Project-unit filter + backup exclusion in inventory**
+
+Add a helper `LoadProjectUnits(const AProjectFile: string): TArray<string>` that reads
+the sibling `.dpr` and returns the lowercased basenames of every unit in its `uses`
+clause (extract each ``'<name>.pas'`` occurrence -> `<name>`). Then:
+- `GenerateFormsCsv` computes the project-unit set once (when `AProjectFile <> ''`) and
+  passes it to `LoadInventory`.
+- `LoadInventory(AStore; const AProjectUnits: TArray<string>)` skips a form when EITHER
+  (a) its `.dfm`/`.pas` path matches a backup pattern - case-insensitive contains
+  `' - copy'` or `'-copy'`, or ends with `.bak` / `.bck` / `.old` / `.orig` (also skip if
+  the UnitName contains `' - copy'`), OR (b) `AProjectUnits` is non-empty and the form's
+  `UnitName` (lowercased) is not in it. When `AProjectUnits` is empty (no `--project`),
+  only the backup-pattern exclusion applies.
+
+- [ ] **Step 3: Fixtures + assertions (TDD red first)**
+
+Root regression: edit `tests/fixtures/formsmap/Demo.dpr` to add, BEFORE the main
+`begin ... Application.CreateForm(TfrmMain, frmMain); Application.Run; end` path, a
+bootstrap-style procedure that does `Application.CreateForm(TfrmEdit, frmEdit)` (mimics
+`RunAdminBootstrap`). The new `DetectRoot` must still choose `TfrmMain`. Assertion:
+`frmMain` nav blank AND `frmEdit` nav is `frmMain -> 'Lists' -> 'Edit Item'` (NOT blank).
+
+Backup exclusion: add `tests/fixtures/formsmap/uDemoEdit - Copy.pas` and
+`uDemoEdit - Copy.dfm` (a copy of the frmEdit form/unit; do NOT add it to `Demo.dpr`).
+Assertions:
+```powershell
+Check 'backup copy excluded'  (-not ($csv -match '- Copy'))
+Check 'no duplicate frmEdit'  ((($csv -split "`r`n") | Select-String ',frmEdit,').Count -eq 1)
+```
+Run smoke first to confirm the new checks FAIL (and that the root-regression assertion
+fails before the DetectRoot fix).
+
+- [ ] **Step 4: Implement, rebuild, smoke green**
+
+Build the Win32 Debug exe; run `pwsh -File tests/autotest/run_formsmap.ps1`. All checks
+(prior + new) PASS.
+
+- [ ] **Step 5: Re-run ORM3 and refresh the findings doc**
+
+Re-run the Task 7 command. Confirm `frmMAIN` is now the root (blank nav), `- Copy`
+duplicates are gone, and the `(no path from MAIN)` share drops substantially. Capture
+the before/after counts and any residual `(no path)` / `(via ...)` hotspots in
+`docs/test-findings-2026-06-14-forms-csv.md`. Note: caption resolution depends on the
+index containing `event-binding` refs + `component` symbols for the DFMs; if ORM3
+captions are mostly `(via ...)`, recommend re-indexing the project with current
+drag-lint, and record that.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/forms/DRagLint.FormsMap.pas tests/fixtures/formsmap tests/autotest/run_formsmap.ps1 docs/test-findings-2026-06-14-forms-csv.md
+git commit -m "fix(forms-csv): main-form root detection + project-unit/backup filter
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
 ## Task 8: IDE menu item
 
 Goal: add **drag-lint -> Generate Test Helper CSV...** that saves all, runs the exe on
