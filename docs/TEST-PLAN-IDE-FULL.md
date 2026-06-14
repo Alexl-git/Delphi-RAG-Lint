@@ -159,6 +159,96 @@ indexes:
 
 ---
 
+## G-Flow. Code Flow View (NEW)
+
+A new **Flow mode** in the graph viewer: from a chosen symbol it builds a
+**static call tree** (what that routine calls, transitively, in source order)
+and draws it as a **vertical flowchart** of boxes annotated from DocInsight
+doc-comments. Undocumented symbols still show name + parameters. The pure
+engine/DB/view-model layers are covered by **58 headless tests**; the items
+below are the **GUI surface those tests can't exercise**.
+
+> **Build note:** Flow mode lives on branch **`feat/graph-viewer-real`** and is
+> NOT in the v0.1.0-alpha release. Build the viewer from that branch
+> (`build\build_viewer.bat`) and launch as in section G, OR test it embedded in
+> the IDE graph window (C5) after installing a plugin BPL built from the same
+> branch. Run against ORM3 **+** library DBs so cross-store callees resolve.
+
+**Entry points (three ways in):**
+
+- [ ] **GF1 Tree -> Trace flow.** Right-click a method/proc/function in the
+      left **structure tree** -> **Trace flow from here** -> the right pane swaps
+      from the graph to a flowchart: the chosen symbol is the top box, its
+      callees are boxes below it joined by connector lines. A **Back to Graph**
+      and a **Brief/Expanded** button appear; the **Flow** toolbar button hides.
+- [ ] **GF2 Graph node -> Trace flow.** Right-click a **graph node** -> **Trace
+      flow from here** -> same flowchart, rooted at that node.
+- [ ] **GF3 Toolbar Flow button.** Select a graph node, then click the **Flow**
+      toolbar button -> enters flow from the selected node. With **nothing**
+      selected, clicking Flow shows the status hint
+      `Select a graph node first, then click Flow.` (no crash, no blank pane).
+- [ ] **GF4 Back to Graph.** Click **Back to Graph** -> the graph returns
+      exactly as it was; the Flow/Brief buttons toggle back. Round-trip a few
+      times -> only one of graph/flow is ever visible (no overlap, no flicker).
+
+**Rendering & graceful degradation:**
+
+- [ ] **GF5 Documented box.** Trace from a method that HAS a doc-comment -> its
+      box shows the **summary** line under the signature.
+- [ ] **GF6 Undocumented still useful.** A callee with NO doc-comment still shows
+      its **name + parameters** (from the signature) plus a `[no doc]` marker --
+      a box is **never blank**. (This is the core promise: useful even on
+      undocumented code.)
+- [ ] **GF7 Brief vs Expanded.** Click the detail toggle: **Brief** = signature
+      + one-line summary on every box; **Expanded** = adds **parameter
+      descriptions, Returns, Raises, Remarks, See-also** on documented boxes.
+      The button caption reflects the mode (`Brief` / `Expanded`).
+- [ ] **GF8 Per-box override.** In Brief mode, click a single box's **`+`** ->
+      just that box expands (others stay brief). In Expanded mode, **`-`**
+      collapses one box. The override survives a Brief<->Expanded toggle of the
+      others.
+- [ ] **GF9 Source order.** Sibling callees appear **in the order they are
+      called** in the parent's body (top-to-bottom = first-to-last call site),
+      not alphabetical. A method called several times in one body appears
+      **once** (at its first call site).
+
+**Bounds & exploration:**
+
+- [ ] **GF10 Recursion.** Trace a recursive routine (calls itself directly or
+      via a cycle) -> the repeat shows a **`(recursion)`** marker and does NOT
+      expand forever.
+- [ ] **GF11 External/unresolved leaf.** A call to an RTL/library/3rd-party
+      symbol not in the loaded DB (or an unresolved call) shows as a terminal
+      **`[external]`** box with no children (not expandable).
+- [ ] **GF12 Truncation + expand.** Trace something wide/deep -> a node with
+      many or deep callees shows a **`... N more`** line. **Click `... N more`**
+      -> that node expands in place to reveal the omitted callees (count drops /
+      children appear). Confirm it works on the **root** box too.
+- [ ] **GF13 No outgoing calls.** Trace a leaf routine that calls nothing -> the
+      root box shows **`(no outgoing calls)`**.
+- [ ] **GF14 Scrolling.** A tall flow scrolls **vertically**; a deeply nested
+      flow (indent ~6 levels) scrolls **horizontally** with the rightmost boxes
+      fully reachable (not clipped).
+
+**Cross-cutting:**
+
+- [ ] **GF15 Flow -> tree sync.** Click a flow box -> the matching row
+      **highlights in the structure tree** (so you can cross-reference / then
+      Back-to-Graph with context).
+- [ ] **GF16 Completeness vs display cap.** Trace a symbol in a **huge** store
+      (e.g. the 1.57M-symbol library) -> the flow still shows its real callees
+      even though the graph itself is node-capped at 20k (Flow queries the index
+      directly, so it is not limited by the visible graph slice).
+- [ ] **GF17 Cross-DB callee.** Trace a symbol whose callee lives in another
+      store (ORM3 routine calling a **library** symbol, both DBs loaded) -> the
+      callee box resolves and is labelled, not dropped.
+- [ ] **GF18 Teardown safety.** **Close the viewer while in Flow mode** (don't
+      Back-to-Graph first) -> it closes cleanly, no AV / no FastMM "freed block"
+      dialog. Repeat embedded in the IDE (close the dockable Graph window while
+      a flow is showing).
+
+---
+
 ## H. Cross-DB resolution (refreshed library)
 
 - [ ] **H1** In the viewer (with both ORM3 + library DBs), click a node that

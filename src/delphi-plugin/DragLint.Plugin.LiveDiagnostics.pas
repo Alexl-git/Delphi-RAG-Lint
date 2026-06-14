@@ -40,7 +40,11 @@ uses
   DragLint.Plugin.Settings;
 
 const
-  DEBOUNCE_MS = 700;   { idle time after the last keystroke before we analyze }
+  DEBOUNCE_MS = 700;           { keystroke->lint (instant feedback) }
+  SEMANTIC_DEBOUNCE_MS = 5000;  { keystroke->semantic check (compiler; slower) }
+
+var
+  GLastSemanticCheck: Cardinal = 0;  { v0.43: throttle semantic to 5s apart }
 
 { ---------- small process-capture helper ---------- }
 
@@ -101,6 +105,18 @@ end;
 
 type
   TLintDiagnosticProvider = class(TInterfacedObject, IDragLintDiagnosticProvider)
+  public
+    function Name: string;
+    function GetDiagnostics(const ACtx: TDragLintDiagContext): TDragLintDiagItems;
+  end;
+
+{ ---------- the semantic diagnostic provider (compiler-based) ---------- }
+{ Runs `drag-lint check-unit <file.pas> --shadow <tempdir> --resolve-uses --db <lib>`
+  to report real compiler errors (E2003 Undeclared, F2048, etc.) with suggested units.
+  Parsed from JSON output. }
+
+type
+  TSemanticDiagnosticProvider = class(TInterfacedObject, IDragLintDiagnosticProvider)
   public
     function Name: string;
     function GetDiagnostics(const ACtx: TDragLintDiagContext): TDragLintDiagItems;
@@ -187,6 +203,99 @@ begin
   end;
 end;
 
+{ Semantic diagnostic provider: runs compiler, parses JSON, merges undeclared-id
+  suggestions. Uses `check-unit` with shadow + resolve-uses. }
+function TSemanticDiagnosticProvider.Name: string;
+begin
+  Result := 'semantic';
+end;
+
+function TSemanticDiagnosticProvider.GetDiagnostics(
+  const ACtx: TDragLintDiagContext): TDragLintDiagItems;
+var
+  Cmd, Output, ShadowDir, DcuDir, Json: string;
+  JArr: TJSONArray;
+  JObj, DObj: TJSONValue;
+  D: TDragLintDiagItem;
+  Acc: TList<TDragLintDiagItem>;
+  i: Integer;
+begin
+  SetLength(Result, 0);
+  if (ACtx.BufferPath = '') or (ACtx.ExePath = '') then Exit;
+
+  { v0.43: shadow-overlay semantic check on unsaved buffer (throttled to 5s+).
+    Creates a shadow dir with just that one unit, runs check-unit with shadow,
+    and parses the JSON result to merge into the diagnostics.
+    Requires --db (a project or library db to resolve undeclared symbols).
+    Throttled so we don't compile on every keystroke. }
+
+  { skip if less than 5 seconds since last semantic check }
+  if (GetTickCount - GLastSemanticCheck < SEMANTIC_DEBOUNCE_MS) then
+    Exit;
+  GLastSemanticCheck := GetTickCount;
+
+  { v0.43: use library DB for resolving undeclared identifiers in semantic checks.
+    The project DB is heavier (includes full source) and best left for manual
+    queries. The library DB (1.5M symbols, RTL/VCL/Spring4D/DevExpress) gives us
+    everything we need for "add unit X to uses" suggestions. }
+  Json := TPath.Combine(ExtractFilePath(ACtx.ExePath), 'drag-lint-library.sqlite');
+  if not FileExists(Json) then
+    Exit;   { no semantic checks without the library db }
+
+  try
+    { Create shadow dir with the unsaved file }
+    ShadowDir := TPath.Combine(TPath.GetTempPath,
+      Format('draglint_semantic_%d', [GetTickCount]));
+    DcuDir := TPath.Combine(ShadowDir, 'dcu');
+    try
+      TDirectory.CreateDirectory(DcuDir);
+      TFile.Copy(ACtx.BufferPath, TPath.Combine(ShadowDir, ExtractFileName(ACtx.BufferPath)), True);
+
+      { run check-unit with shadow + resolve-uses + json output }
+      Cmd := Format('"%s" check-unit "%s" --shadow "%s" --resolve-uses ' +
+        '--db "%s" --format json', [ACtx.ExePath, ACtx.FilePath, ShadowDir, Json]);
+      if not RunCapture(Cmd, Output, 12000) then
+        Exit;
+
+      { parse JSON findings array }
+      try
+        JArr := TJSONObject.ParseJSONValue(Output) as TJSONArray;
+        if JArr = nil then Exit;
+        Acc := TList<TDragLintDiagItem>.Create;
+        try
+          for i := 0 to JArr.Count - 1 do
+          begin
+            JObj := JArr.Items[i];
+            if not (JObj is TJSONObject) then Continue;
+            DObj := TJSONObject(JObj);
+
+            D := Default(TDragLintDiagItem);
+            D.FilePath := ACtx.FilePath;  { map shadow back to real path }
+            D.Line     := StrToIntDef(DObj.GetValue<string>('line'), 1);
+            D.Col      := StrToIntDef(DObj.GetValue<string>('col'), 1);
+            D.EndLine  := D.Line;
+            D.EndCol   := D.Col + 1;
+            D.Message  := DObj.GetValue<string>('message');
+            D.Rule     := DObj.GetValue<string>('code');
+            D.Severity := 1;  { all compiler findings are treated as errors }
+            D.Source   := 'semantic';
+            Acc.Add(D);
+          end;
+          Result := Acc.ToArray;
+        finally
+          Acc.Free;
+        end;
+      except
+        { json parse failed or malformed -- just skip semantic tier for this run }
+      end;
+    finally
+      try TDirectory.Delete(ShadowDir, True); except end;
+    end;
+  except
+    { never block the editor on a semantic check failure }
+  end;
+end;
+
 { ---------- the runner ---------- }
 
 type
@@ -203,8 +312,9 @@ type
   end;
 
 var
-  GRunner:   TLiveRunner = nil;
-  GProvider: IDragLintDiagnosticProvider = nil;
+  GRunner:             TLiveRunner = nil;
+  GLintProvider:       IDragLintDiagnosticProvider = nil;
+  GSemanticProvider:   IDragLintDiagnosticProvider = nil;
 
 function ActiveBufferText(out AFilePath: string): string;
 var
@@ -360,15 +470,16 @@ begin
 
         TThread.Queue(nil,
           procedure
-          var nErr, nWarn, i: Integer;
+          var
+            nErr, nWarn, j: Integer;
           begin
             try
               PublishToCache(FilePath, Diags);
               RepaintEditViews;
               nErr := 0; nWarn := 0;
-              for i := 0 to High(Diags) do
-                if Diags[i].Severity = 1 then Inc(nErr)
-                else if Diags[i].Severity = 2 then Inc(nWarn);
+              for j := 0 to High(Diags) do
+                if Diags[j].Severity = 1 then Inc(nErr)
+                else if Diags[j].Severity = 2 then Inc(nWarn);
               GLiveStatus := Format('%d error(s), %d warning(s)', [nErr, nWarn]);
             except
             end;
@@ -392,21 +503,34 @@ end;
 
 procedure StartLiveDiagnostics;
 begin
-  if GProvider = nil then
+  { Register lint provider (syntax/style rules) }
+  if GLintProvider = nil then
   begin
-    GProvider := TLintDiagnosticProvider.Create;
-    RegisterDiagnosticProvider(GProvider);
+    GLintProvider := TLintDiagnosticProvider.Create;
+    RegisterDiagnosticProvider(GLintProvider);
   end;
+  { Register semantic provider (real compiler errors on unsaved buffer) }
+  if GSemanticProvider = nil then
+  begin
+    GSemanticProvider := TSemanticDiagnosticProvider.Create;
+    RegisterDiagnosticProvider(GSemanticProvider);
+  end;
+  { Start the live runner (timer debounce loop) }
   if GRunner = nil then
     GRunner := TLiveRunner.Create;
 end;
 
 procedure StopLiveDiagnostics;
 begin
-  if GProvider <> nil then
+  if GLintProvider <> nil then
   begin
-    UnregisterDiagnosticProvider(GProvider);
-    GProvider := nil;
+    UnregisterDiagnosticProvider(GLintProvider);
+    GLintProvider := nil;
+  end;
+  if GSemanticProvider <> nil then
+  begin
+    UnregisterDiagnosticProvider(GSemanticProvider);
+    GSemanticProvider := nil;
   end;
   FreeAndNil(GRunner);
 end;
