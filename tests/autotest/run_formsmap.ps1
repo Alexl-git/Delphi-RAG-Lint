@@ -44,5 +44,11 @@ Check 'keep-the-gap via routine'       ($csv -match "uDemoGap,frmGap,\d+,frmMain
 Check 'unreachable form'               ($csv -match 'uDemoUnreached,frmLonely,\d+,\(no path from MAIN\),')
 Check 'called-from for frmEdit'        ($csv -match "uDemoEdit,frmEdit,\d+,[^,]*,frmList")
 Check 'no hang (script completed)'     ($true)
+# Task 7b: root regression (bootstrap procedure must not steal root)
+Check 'root regression: frmMain root (blank nav)' ($csv -match "uDemoMain,frmMain,\d+,,")
+Check 'root regression: frmEdit still reachable'  ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> 'Edit Item',")
+# Task 7b: backup copy exclusion
+Check 'backup copy excluded'  (-not ($csv -match '- Copy'))
+Check 'no duplicate frmEdit'  ((($csv -split "`r`n") | Select-String ',frmEdit,').Count -eq 1)
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

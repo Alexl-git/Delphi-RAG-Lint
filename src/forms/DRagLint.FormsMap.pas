@@ -12,6 +12,7 @@ interface
 uses
   System.SysUtils,
   System.Classes,
+  System.StrUtils,
   System.Generics.Collections,
   System.Generics.Defaults,
   System.IOUtils,
@@ -137,12 +138,83 @@ begin
   Result := True;
 end;
 
+/// <summary>Returns True if the path matches a known backup-file pattern:
+/// case-insensitive contains ' - copy' or '-copy', or ends with .bak/.bck/.old/.orig.</summary>
+function IsBackupPath(const APath: string): Boolean;
+var
+  Lc: string;
+begin
+  Lc := LowerCase(APath);
+  Result :=
+    (Pos(' - copy', Lc) > 0) or
+    (Pos('-copy', Lc) > 0) or
+    (Copy(Lc, Length(Lc) - 3, 4) = '.bak') or
+    (Copy(Lc, Length(Lc) - 3, 4) = '.bck') or
+    (Copy(Lc, Length(Lc) - 3, 4) = '.old') or
+    (Copy(Lc, Length(Lc) - 4, 5) = '.orig');
+end;
+
+/// <summary>Reads lowercased unit basenames from the uses clause of the sibling
+/// .dpr file. Returns an empty array if AProjectFile is '' or the .dpr is absent.
+/// Used to restrict inventory to real project units (skips backup/generated
+/// files that happen to be in the indexed directory).</summary>
+/// <param name="AProjectFile">Path to the .dproj; the .dpr is derived by
+/// changing the extension.</param>
+/// <returns>Lowercased basenames without extension, e.g. 'udemomain'.</returns>
+function LoadProjectUnits(const AProjectFile: string): TArray<string>;
+var
+  DprPath: string;
+  Content: string;
+  P, Q: Integer;
+  Name: string;
+  List: TStringList;
+begin
+  Result := [];
+  if AProjectFile = '' then Exit;
+  DprPath := TPath.ChangeExtension(AProjectFile, '.dpr');
+  if not TFile.Exists(DprPath) then Exit;
+  Content := TFile.ReadAllText(DprPath, TEncoding.ANSI);
+  List := TStringList.Create;
+  try
+    P := 1;
+    while P <= Length(Content) do
+    begin
+      Q := PosEx('''', Content, P);
+      if Q = 0 then Break;
+      // Find the closing quote
+      var R := PosEx('''', Content, Q + 1);
+      if R = 0 then Break;
+      // Extract the text between single quotes
+      var Token := Copy(Content, Q + 1, R - Q - 1);
+      // We want entries like 'uDemoMain.pas' - ends with .pas
+      if LowerCase(Copy(Token, Length(Token) - 3, 4)) = '.pas' then
+      begin
+        Name := LowerCase(TPath.GetFileNameWithoutExtension(Token));
+        if Name <> '' then
+          List.Add(Name);
+      end;
+      P := R + 1;
+    end;
+    Result := List.ToStringArray;
+  finally
+    List.Free;
+  end;
+end;
+
 /// <summary>Loads every navigable form from the index (kind='form'), pairing the
-/// .dfm with its same-basename .pas and counting the .pas lines.</summary>
-function LoadInventory(AStore: TSQLiteSymbolStore): TList<TFormNode>;
+/// .dfm with its same-basename .pas and counting the .pas lines. Skips backup
+/// files and, when AProjectUnits is non-empty, units not listed in the project.</summary>
+/// <param name="AStore">The SQLite symbol store.</param>
+/// <param name="AProjectUnits">Lowercased unit basenames from LoadProjectUnits;
+/// empty array means no project filter (only backup exclusion applies).</param>
+function LoadInventory(AStore: TSQLiteSymbolStore;
+  const AProjectUnits: TArray<string>): TList<TFormNode>;
 var
   Q: TFDQuery;
   Node: TFormNode;
+  UnitLc: string;
+  InProject: Boolean;
+  I: Integer;
 begin
   Result := TList<TFormNode>.Create;
   Q := TFDQuery.Create(nil);
@@ -162,13 +234,31 @@ begin
       Node.DfmPath   := Q.FieldByName('p').AsString;
       Node.PasPath   := TPath.ChangeExtension(Node.DfmPath, '.pas');
       Node.UnitName  := TPath.GetFileNameWithoutExtension(Node.PasPath);
+      Q.Next;  // advance before any Continue so we do not loop forever
+      // (a) backup filter: skip paths / unit names matching backup patterns
+      if IsBackupPath(Node.DfmPath) or IsBackupPath(Node.PasPath) or
+         IsBackupPath(Node.UnitName) then
+        Continue;
+      // (b) project-unit filter: when a project list is available, skip forms
+      // whose unit is not in it
+      if Length(AProjectUnits) > 0 then
+      begin
+        UnitLc := LowerCase(Node.UnitName);
+        InProject := False;
+        for I := 0 to Length(AProjectUnits) - 1 do
+          if AProjectUnits[I] = UnitLc then
+          begin
+            InProject := True;
+            Break;
+          end;
+        if not InProject then Continue;
+      end;
       if TFile.Exists(Node.PasPath) then
         Node.PasLineCount := Length(TFile.ReadAllLines(Node.PasPath, TEncoding.ANSI))
       else
         Node.PasLineCount := 0;
       if IsNavigableForm(AStore, Node.FormClass) then
         Result.Add(Node);
-      Q.Next;
     end;
   finally
     Q.Free;
@@ -531,17 +621,32 @@ begin
   end;
 end;
 
-/// <summary>Determines the root form class: ARootForm if given, else the first
-/// Application.CreateForm(T..., ...) in the sibling .dpr whose class is a form
-/// node.</summary>
+/// <summary>Determines the root form class from the sibling .dpr: scans lines
+/// in order, remembers the last Application.CreateForm(Tclass) whose class is a
+/// form node, and stops at the first line containing Application.Run. Returns
+/// the last remembered form-node class, which for a typical .dpr like
+/// "CreateForm(TdmStyles,...); CreateForm(TfrmMAIN,...); Application.Run;"
+/// yields TfrmMAIN and ignores bootstrap procedures that precede the main block.
+/// Fallback when no match: the form node with the highest out-degree in AEdges
+/// (the navigation hub).</summary>
+/// <param name="AProjectFile">Path to the .dproj; .dpr is derived from it.</param>
+/// <param name="ARootForm">Explicit override; returned unchanged if non-empty.</param>
+/// <param name="AClassToNode">Form-class to node lookup for membership test.</param>
+/// <param name="AEdges">All launch edges; used for the out-degree fallback.</param>
+/// <returns>The detected root class name, or '' if none can be resolved.</returns>
 function DetectRoot(const AProjectFile, ARootForm: string;
-  AClassToNode: TDictionary<string, TFormNode>): string;
+  AClassToNode: TDictionary<string, TFormNode>;
+  AEdges: TList<TFormEdge>): string;
 var
   DprPath: string;
   Lines: TArray<string>;
   L, Frag: string;
-  P, Q: Integer;
-  Cls: string;
+  StartPos, FragEnd: Integer;
+  Cls, Best: string;
+  OutDeg: TDictionary<string, Integer>;
+  E: TFormEdge;
+  MaxDeg, Deg: Integer;
+  Pair: TPair<string, Integer>;
 begin
   if ARootForm <> '' then Exit(ARootForm);
   Result := '';
@@ -549,18 +654,75 @@ begin
   DprPath := TPath.ChangeExtension(AProjectFile, '.dpr');
   if not TFile.Exists(DprPath) then Exit;
   Lines := TFile.ReadAllLines(DprPath, TEncoding.ANSI);
+  Best := '';
   for L in Lines do
   begin
-    P := Pos('Application.CreateForm(', L);
-    if P = 0 then Continue;
-    Frag := Copy(L, P + Length('Application.CreateForm('), MaxInt);
-    Q := 1;
-    while (Q <= Length(Frag)) and CharInSet(Frag[Q], [' ', #9]) do Inc(Q);
-    P := Q;
-    while (P <= Length(Frag)) and
-          CharInSet(Frag[P], ['A'..'Z','a'..'z','0'..'9','_']) do Inc(P);
-    Cls := Copy(Frag, Q, P - Q);
-    if AClassToNode.ContainsKey(Cls) then Exit(Cls);
+    // Determine scan limit: if this line also contains Application.Run, only
+    // consider CreateForm calls that appear BEFORE the Application.Run position.
+    var RunPos := Pos('Application.Run', L);
+    var ScanLimit := Length(L);
+    var IsRunLine := RunPos > 0;
+    if IsRunLine then
+      ScanLimit := RunPos - 1;
+    // Scan all Application.CreateForm( occurrences on this line up to ScanLimit.
+    StartPos := 1;
+    while True do
+    begin
+      StartPos := PosEx('Application.CreateForm(', L, StartPos);
+      if (StartPos = 0) or (StartPos > ScanLimit) then Break;
+      // Advance StartPos past the matched keyword so the next iteration
+      // continues after this occurrence.
+      StartPos := StartPos + Length('Application.CreateForm(');
+      // Extract the class name token immediately after the opening paren.
+      Frag := Copy(L, StartPos, MaxInt);
+      FragEnd := 1;
+      while (FragEnd <= Length(Frag)) and
+            CharInSet(Frag[FragEnd], [' ', #9]) do Inc(FragEnd);
+      var TokenEnd := FragEnd;
+      while (TokenEnd <= Length(Frag)) and
+            CharInSet(Frag[TokenEnd], ['A'..'Z','a'..'z','0'..'9','_']) do Inc(TokenEnd);
+      Cls := Copy(Frag, FragEnd, TokenEnd - FragEnd);
+      if AClassToNode.ContainsKey(Cls) then
+        Best := Cls;  // remember last form-node CreateForm before Run
+    end;
+    // After scanning CreateForms on this line: if it contains Application.Run, stop.
+    if IsRunLine then
+    begin
+      Result := Best;
+      Exit;
+    end;
+  end;
+  // Application.Run line not found: return whatever we collected.
+  if Best <> '' then
+  begin
+    Result := Best;
+    Exit;
+  end;
+  // Out-degree fallback: pick the form node that launches the most other forms.
+  OutDeg := TDictionary<string, Integer>.Create;
+  try
+    for E in AEdges do
+      if AClassToNode.ContainsKey(E.FromClass) then
+      begin
+        if OutDeg.ContainsKey(E.FromClass) then
+          OutDeg[E.FromClass] := OutDeg[E.FromClass] + 1
+        else
+          OutDeg.Add(E.FromClass, 1);
+      end;
+    MaxDeg := -1;
+    Best := '';
+    for Pair in OutDeg do
+    begin
+      Deg := Pair.Value;
+      if Deg > MaxDeg then
+      begin
+        MaxDeg := Deg;
+        Best := Pair.Key;
+      end;
+    end;
+    Result := Best;
+  finally
+    OutDeg.Free;
   end;
 end;
 
@@ -609,12 +771,14 @@ var
   Edges: TList<TFormEdge>;
   RootClass: string;
   Nav: string;
+  ProjUnits: TArray<string>;
 begin
   Store := TSQLiteSymbolStore.Create(ADbPath);
   Sb := TStringBuilder.Create;
   try
     Store.Migrate;
-    Nodes := LoadInventory(Store);
+    ProjUnits := LoadProjectUnits(AProjectFile);
+    Nodes := LoadInventory(Store, ProjUnits);
     try
       Nodes.Sort(TComparer<TFormNode>.Construct(
         function(const L, R: TFormNode): Integer
@@ -625,7 +789,7 @@ begin
       for N in Nodes do ClassToNode.AddOrSetValue(N.FormClass, N);
       Edges := BuildEdges(Store, Nodes, ClassToNode);
       try
-        RootClass := DetectRoot(AProjectFile, ARootForm, ClassToNode);
+        RootClass := DetectRoot(AProjectFile, ARootForm, ClassToNode, Edges);
         Sb.Append('#,Unit,FormName,PAS lines,Navigation,Called From,Notes').Append(#13#10);
         Idx := 0;
         for N in Nodes do
