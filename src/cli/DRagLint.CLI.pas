@@ -5410,6 +5410,17 @@ var
       Trial.SaveToFile(TPath.Combine(ShadowDir, ExtractFileName(SrcPath)));
 
       Res := CompileUnitInContext(SrcPath, Proj, Plat, ShadowDir);
+
+      { SAFETY GUARD: a Fatal (F-code) means the compile ABORTED -- usually on a
+        dependency it couldn't resolve in this single-unit context -- BEFORE it
+        ever validated the target unit's interface. Such a compile validated
+        NOTHING, so the edit must never be accepted on its basis (this is the
+        false-pass that let a bad move through: the same fatal appeared in both
+        baseline and after, so the diff saw "no new error"). Reject = inconclusive. }
+      for var Ft in Res.Findings do
+        if SameText(Ft.Severity, 'Fatal') then
+          Exit;   { Result stays False -> skipped }
+
       AfterSig := ErrorSignatures(Res);
 
       NewErr := False;
@@ -5597,12 +5608,16 @@ begin
       end;
       Writeln(Format('-- APPLIED %d move(s), %d remove(s) to %s (backup: %s.bak)',
         [nMove, nRemove, ExtractFileName(SrcPath), ExtractFileName(SrcPath)]));
+      Writeln('** WARNING: the per-unit verify is BEST-EFFORT, not a faithful');
+      Writeln('   full-build check (dcc can reuse a stale .dcu or abort on an RTL');
+      Writeln('   dependency, masking a real error). You MUST do a full project');
+      Writeln('   build to confirm; revert from .bak if it fails.');
     end
     else
     begin
       PrintDiff;
-      Writeln(Format('-- DRY-RUN: %d move(s), %d remove(s) verified. ' +
-        'Re-run with --apply to write (creates .bak).', [nMove, nRemove]));
+      Writeln(Format('-- DRY-RUN: %d move(s), %d remove(s) (best-effort verify -- ' +
+        'a full project build is required to confirm).', [nMove, nRemove]));
     end;
     Result := 0;
   finally

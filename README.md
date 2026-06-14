@@ -89,10 +89,13 @@ drag-lint uses-fix --project MyApp.dproj --db myapp.sqlite              # dry-ru
 drag-lint uses-fix MyUnit.pas --project MyApp.dproj --db myapp.sqlite --apply   # apply (.bak backup)
 ```
 
-`uses-fix` shadow-compiles every edit and keeps it only if it adds no new error.
-Moves (interface→implementation) are behaviour-preserving; unused-removal is
-opt-in (`--remove-unused`) and skips units with an `initialization`/
-`finalization` section (possible side-effect units).
+> **Caveat (important):** `uses-fix`'s per-unit verify is **best-effort, not a
+> faithful full-build check** — a single-unit `dcc` compile can reuse a stale
+> `.dcu` (masking a real error) or abort on an RTL dependency. Treat
+> `cycles`/`uses-audit` as **advisory** (they pinpoint candidates, and the index
+> can miss refs like `set` types), and **always do a full project build** after
+> `--apply` (revert from `.bak` if it fails). Reliable bulk cleanup needs
+> full-project-build verification, not per-unit compiles.
 
 ### Semantic errors without a full build
 

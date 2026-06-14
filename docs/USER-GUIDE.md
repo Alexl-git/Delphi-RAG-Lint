@@ -79,7 +79,7 @@ Log, Test Connection, Open Plugin Log.
 | `graph --format dot\|mermaid` | Unit dependency graph. |
 | `cycles [--edges]` | Circular unit deps; `--edges` shows the exact `uses` lines + move/layering candidates. |
 | `uses-audit <unit.pas>` | Propose interface→implementation moves + unused units. |
-| `uses-fix <unit.pas> --project <dproj> [--apply] [--remove-unused]` | Compiler-verified uses cleanup (dry-run default; `.bak` on apply). No `<unit>` = project sweep report. |
+| `uses-fix <unit.pas> --project <dproj> [--apply] [--remove-unused]` | Uses cleanup (dry-run default; `.bak` on apply). No `<unit>` = sweep report. **Verify is best-effort — do a full build after `--apply`.** |
 | `check-unit <unit.pas> --project <dproj> [--shadow <dir>] [--resolve-uses]` | Real semantic errors for one unit (incl. unsaved buffer via `--shadow`). |
 | `todos <path>` / `diff <dbA> <dbB>` | TODO scan / API-impact diff between two indexes. |
 | `lint <path>` / `check-ast <path>` | Lint rules / tree-sitter syntax check. |

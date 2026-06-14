@@ -26,6 +26,15 @@ breaking changes** until v1.0.
   baseline; dry-run by default, `--apply` writes after a `.bak`. With no
   `<unit>` target it runs a project-wide dry-run sweep report.
 
+### Known limitation (uses-fix)
+- `uses-fix`'s per-unit verify is **best-effort, not a faithful full-build
+  check**: a single-unit `dcc` compile can reuse a stale `.dcu` (masking a real
+  error) or abort on an RTL dependency (`F1026`), so a move that breaks the full
+  build can pass per-unit. A safety guard now rejects edits whose verify compile
+  *fatally aborted*, but the `.dcu`-reuse case can still false-pass. **Always do
+  a full project build after `--apply`**; treat `cycles`/`uses-audit` as
+  advisory. Reliable bulk cleanup needs full-project-build verification.
+
 ### Fixed
 - **Duplicate file rows on re-index.** Mixed-separator stored paths
   (`C:/root\sub\file.pas`) defeated the `files.path` UNIQUE upsert, so each
