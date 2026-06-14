@@ -39,6 +39,7 @@ uses
   DRagLint.Lint.Linter,
   DRagLint.Lint.ProjectChecks,
   DRagLint.Project.Resolver,
+  DRagLint.FormsMap,
   DRagLint.MCP.Server,
   DRagLint.LSP.Server,
   DRagLint.Hover.Renderer,
@@ -134,6 +135,8 @@ type
     YadfPath:           string;  // --yadf-path <YADF.exe>
     // v0.34: workspace
     WorkspaceConfig:    string;  // --config <path>
+    // forms-csv
+    RootForm:           string;  // forms-csv: --root <TfrmMAIN> (auto-detect if '')
   end;
 
 procedure PrintHelp;
@@ -187,6 +190,7 @@ begin
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace status [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
+  Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--out <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -394,7 +398,7 @@ begin
       Inc(i);
       Result.Format := ParamStr(i);
     end
-    else if (A = '--output') and (i < ParamCount) then
+    else if ((A = '--output') or (A = '--out')) and (i < ParamCount) then
     begin
       Inc(i);
       Result.Output := ParamStr(i);
@@ -545,6 +549,11 @@ begin
     begin
       Inc(i);
       Result.WorkspaceConfig := ParamStr(i);
+    end
+    else if (A = '--root') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RootForm := ParamStr(i);
     end
     else if (Result.Command = 'typeat') and (Result.Position = '') and
             (not A.StartsWith('--')) then
@@ -6202,6 +6211,45 @@ begin
     Result := 1;
 end;
 
+/// <summary>Implements the forms-csv CLI command: generates a navigation-map CSV
+/// for a project index and writes it to --out or stdout.</summary>
+function DoFormsCsv(const AArgs: TArgs): Integer;
+var
+  DbPath, Csv: string;
+begin
+  if Length(AArgs.DbPaths) > 0 then
+    DbPath := AArgs.DbPaths[0]
+  else
+    DbPath := AArgs.DbPath;
+  if DbPath = '' then
+  begin
+    Writeln(ErrOutput, 'forms-csv: need --db <index.sqlite>');
+    Exit(2);
+  end;
+  if not TFile.Exists(DbPath) then
+  begin
+    Writeln(ErrOutput, 'forms-csv: db not found: ', DbPath);
+    Exit(2);
+  end;
+  try
+    Csv := DRagLint.FormsMap.GenerateFormsCsv(DbPath, AArgs.ProjectPath, AArgs.RootForm);
+  except
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, 'forms-csv: ', E.Message);
+      Exit(1);
+    end;
+  end;
+  if AArgs.Output <> '' then
+  begin
+    TFile.WriteAllText(AArgs.Output, Csv, TEncoding.ANSI);
+    Writeln('forms-csv: wrote ', AArgs.Output);
+  end
+  else
+    Write(Csv);
+  Result := 0;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -6278,6 +6326,8 @@ begin
       Result := DoUsesAudit(Args)
     else if Args.Command = 'uses-fix' then
       Result := DoUsesFix(Args)
+    else if Args.Command = 'forms-csv' then
+      Result := DoFormsCsv(Args)
     else if Args.Command = 'generate-test' then
       Result := DoGenerateTest(Args)
     else if Args.Command = 'format' then
