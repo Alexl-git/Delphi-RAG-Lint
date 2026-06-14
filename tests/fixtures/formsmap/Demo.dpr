@@ -4,6 +4,7 @@ uses
   uDemoMain in 'uDemoMain.pas' {frmMain},
   uDemoList in 'uDemoList.pas' {frmList},
   uDemoEdit in 'uDemoEdit.pas' {frmEdit},
+  uDemoChild in 'uDemoChild.pas' {frmChild},
   uDemoData in 'uDemoData.pas' {dmDemo: TDataModule};
 begin
   Application.Initialize;

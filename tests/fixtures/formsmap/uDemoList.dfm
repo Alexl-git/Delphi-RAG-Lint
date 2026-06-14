@@ -12,4 +12,12 @@ object frmList: TfrmList
     Caption = 'Edit Item'
     OnClick = btnEditClick
   end
+  object btnOpen: TButton
+    Left = 8
+    Top = 40
+    Width = 75
+    Height = 25
+    Caption = 'Open Child'
+    OnClick = btnOpenClick
+  end
 end
