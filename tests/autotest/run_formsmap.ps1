@@ -28,5 +28,12 @@ Check 'forms-csv exits 0' ($LASTEXITCODE -eq 0)
 Check 'csv exists' (Test-Path $out)
 $csv = Get-Content $out -Raw
 Check 'header present' ($csv -match '#,Unit,FormName,PAS lines,Navigation,Called From,Notes')
+$rows = ($csv -split "`r`n") | Where-Object { $_ -ne '' }
+Check 'frmMain row present'  ($csv -match 'uDemoMain,frmMain,')
+Check 'frmList row present'  ($csv -match 'uDemoList,frmList,')
+Check 'frmEdit row present'  ($csv -match 'uDemoEdit,frmEdit,')
+Check 'data module excluded' (-not ($csv -match 'dmDemo'))
+Check 'pas line count for frmEdit' ($csv -match 'uDemoEdit,frmEdit,9,')
+Check 'row count is 3 forms + header' ($rows.Count -eq 4)
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
