@@ -217,37 +217,6 @@ begin
   end;
 end;
 
-/// <summary>Finds the control caption bound to event handler ARoutine in form
-/// ANode; returns '' if no captioned control directly binds it (Task 5 adds
-/// within-form recursion and Action indirection).</summary>
-function CaptionForHandler(AStore: TSQLiteSymbolStore; const ANode: TFormNode;
-  const ARoutine: string): string;
-var
-  Q: TFDQuery;
-  Line: Integer;
-  Sym: TSymbol;
-begin
-  Result := '';
-  Q := TFDQuery.Create(nil);
-  try
-    Q.Connection := AStore.GetConnection;
-    Q.SQL.Text :=
-      'SELECT start_line FROM refs ' +
-      'WHERE kind = ''event-binding'' AND name_text = :h AND file_id = :fid ' +
-      'ORDER BY start_line LIMIT 1';
-    Q.ParamByName('h').AsString := ARoutine;
-    Q.ParamByName('fid').AsLargeInt := ANode.DfmFileId;
-    Q.Open;
-    if Q.IsEmpty then Exit;
-    Line := Q.FieldByName('start_line').AsInteger;
-  finally
-    Q.Free;
-  end;
-  Sym := AStore.FindContainingSymbol(ANode.DfmFileId, Line);
-  if Sym.Name = '' then Exit;
-  Result := ReadCaption(ANode.DfmPath, Sym.StartLine, Sym.EndLine);
-end;
-
 /// <summary>Scans backward from ALaunchLine (1-based) in ALines to find the
 /// nearest "procedure/function/constructor ClassName.MethodName" heading and
 /// returns ClassName and MethodName. Returns False if not found within 50 lines.
@@ -289,6 +258,140 @@ begin
     ARoutine := Copy(Rest, P, Q - P);
     if (AOwnerClass <> '') and (ARoutine <> '') then
       Exit(True);
+  end;
+end;
+
+/// <summary>Reads "Action = X" within a control's .dfm line range; '' if none.</summary>
+function ReadActionRef(const ADfmPath: string; AStartLine, AEndLine: Integer): string;
+var
+  Lines: TArray<string>;
+  I, P: Integer;
+  T: string;
+begin
+  Result := '';
+  if not TFile.Exists(ADfmPath) then Exit;
+  Lines := TFile.ReadAllLines(ADfmPath, TEncoding.ANSI);
+  for I := AStartLine to AEndLine - 1 do
+  begin
+    if (I < 0) or (I >= Length(Lines)) then Continue;
+    T := Trim(Lines[I]);
+    if LowerCase(Copy(T, 1, 7)) = 'object ' then Exit;
+    if LowerCase(Copy(T, 1, 8)) = 'action =' then
+    begin
+      P := Pos('=', T);
+      Result := Trim(Copy(T, P + 1, MaxInt));
+      Exit;
+    end;
+  end;
+end;
+
+/// <summary>Finds a component symbol by name within a .dfm file.</summary>
+function FindComponent(AStore: TSQLiteSymbolStore; ADfmFileId: Int64;
+  const AName: string): TSymbol;
+var
+  Q: TFDQuery;
+begin
+  Result := Default(TSymbol);
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := AStore.GetConnection;
+    Q.SQL.Text :=
+      'SELECT * FROM symbols WHERE kind = ''component'' AND name = :n ' +
+      'AND file_id = :fid LIMIT 1';
+    Q.ParamByName('n').AsString := AName;
+    Q.ParamByName('fid').AsLargeInt := ADfmFileId;
+    Q.Open;
+    if not Q.IsEmpty then
+      Result := AStore.GetSymbolById(Q.FieldByName('id').AsLargeInt);
+  finally
+    Q.Free;
+  end;
+end;
+
+/// <summary>Resolves the caption a tester presses in form ANode to invoke the
+/// launching routine ARoutine: direct event-binding, Action-linked caption, or by
+/// walking callers of ARoutine within the same form. '' if none found.</summary>
+function CaptionForHandler(AStore: TSQLiteSymbolStore; const ANode: TFormNode;
+  const ARoutine: string; AVisited: TDictionary<string, Boolean>): string;
+var
+  Q: TFDQuery;
+  Line: Integer;
+  Ctrl, ActSym: TSymbol;
+  ActName, Cap: string;
+  Lines: TArray<string>;
+  LineIdx: Integer;
+  OwnerClass: string;
+  CallerRoutine: string;
+begin
+  Result := '';
+  if AVisited.ContainsKey(ARoutine) then Exit;
+  AVisited.Add(ARoutine, True);
+
+  // (1) direct event-binding in this form's dfm
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := AStore.GetConnection;
+    Q.SQL.Text :=
+      'SELECT start_line FROM refs ' +
+      'WHERE kind = ''event-binding'' AND name_text = :h AND file_id = :fid ' +
+      'ORDER BY start_line LIMIT 1';
+    Q.ParamByName('h').AsString := ARoutine;
+    Q.ParamByName('fid').AsLargeInt := ANode.DfmFileId;
+    Q.Open;
+    if not Q.IsEmpty then
+    begin
+      Line := Q.FieldByName('start_line').AsInteger;
+      Ctrl := AStore.FindContainingSymbol(ANode.DfmFileId, Line);
+      if Ctrl.Name <> '' then
+      begin
+        Cap := ReadCaption(ANode.DfmPath, Ctrl.StartLine, Ctrl.EndLine);
+        if Cap <> '' then
+        begin
+          Q.Free;
+          Q := nil;
+          Exit(Cap);
+        end;
+        // (2) control bound via Action: read "Action = X", resolve X's caption.
+        ActName := ReadActionRef(ANode.DfmPath, Ctrl.StartLine, Ctrl.EndLine);
+        if ActName <> '' then
+        begin
+          ActSym := FindComponent(AStore, ANode.DfmFileId, ActName);
+          if ActSym.Name <> '' then
+          begin
+            Cap := ReadCaption(ANode.DfmPath, ActSym.StartLine, ActSym.EndLine);
+            if Cap <> '' then
+            begin
+              Q.Free;
+              Q := nil;
+              Exit(Cap);
+            end;
+          end;
+        end;
+      end;
+    end;
+  finally
+    Q.Free;
+  end;
+
+  // (3) walk callers of ARoutine WITHIN this form's own .pas.
+  // Implementation method bodies are NOT indexed as symbols (method symbols are
+  // single-line at their declaration). Reuse FindEnclosingImpl text-scan over
+  // the form's own .pas lines to find callers.
+  Lines := [];
+  if TFile.Exists(ANode.PasPath) then
+    Lines := TFile.ReadAllLines(ANode.PasPath, TEncoding.ANSI);
+  for LineIdx := 0 to Length(Lines) - 1 do
+  begin
+    if Pos(ARoutine, Lines[LineIdx]) = 0 then Continue;
+    OwnerClass := '';
+    CallerRoutine := '';
+    if FindEnclosingImpl(Lines, LineIdx + 1, OwnerClass, CallerRoutine) and
+       SameText(OwnerClass, ANode.FormClass) and
+       not SameText(CallerRoutine, ARoutine) then
+    begin
+      Cap := CaptionForHandler(AStore, ANode, CallerRoutine, AVisited);
+      if Cap <> '' then Exit(Cap);
+    end;
   end;
 end;
 
@@ -351,7 +454,12 @@ begin
             Edge := Default(TFormEdge);
             Edge.FromClass := OwnerClass;
             Edge.ToClass   := Y.FormClass;
-            Edge.Caption   := CaptionForHandler(AStore, XNode, Routine);
+            var Vis := TDictionary<string, Boolean>.Create;
+            try
+              Edge.Caption := CaptionForHandler(AStore, XNode, Routine, Vis);
+            finally
+              Vis.Free;
+            end;
             if Edge.Caption = '' then
               Edge.Caption := '(via ' + Routine + ')';
             Result.Add(Edge);

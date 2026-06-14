@@ -34,10 +34,12 @@ Check 'frmList row present'  ($csv -match 'uDemoList,frmList,')
 Check 'frmEdit row present'  ($csv -match 'uDemoEdit,frmEdit,')
 Check 'data module excluded' (-not ($csv -match 'dmDemo'))
 Check 'pas line count for frmEdit' ($csv -match 'uDemoEdit,frmEdit,9,')
-Check 'row count is 4 forms + header' ($rows.Count -eq 5)
+Check 'row count is 6 forms + header' ($rows.Count -eq 7)
 Check 'frmMain is root (blank nav)'   ($csv -match "uDemoMain,frmMain,\d+,,")
 Check 'frmList nav via Lists'         ($csv -match "uDemoList,frmList,\d+,frmMain -> 'Lists',")
 Check 'frmEdit nav via Lists>Edit'    ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> 'Edit Item',")
 Check 'frmChild nav via named ctor'   ($csv -match "uDemoChild,frmChild,\d+,frmMain -> 'Lists' -> 'Open Child',")
+Check 'action-bound caption (Reports)' ($csv -match "uDemoReports,frmReports,\d+,frmMain -> 'Reports',")
+Check 'keep-the-gap via routine'        ($csv -match "uDemoGap,frmGap,\d+,frmMain -> \(via ")
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

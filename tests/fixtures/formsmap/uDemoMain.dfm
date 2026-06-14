@@ -12,4 +12,17 @@ object frmMain: TfrmMain
     Caption = 'Lists'
     OnClick = btnListsClick
   end
+  object ActionList1: TActionList
+    object actReports: TAction
+      Caption = 'Reports'
+      OnExecute = actReportsExecute
+    end
+  end
+  object btnReports: TButton
+    Left = 90
+    Top = 8
+    Width = 75
+    Height = 25
+    Action = actReports
+  end
 end
