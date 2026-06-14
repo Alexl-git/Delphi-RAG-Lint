@@ -1288,8 +1288,6 @@ var
   Line: Integer;
   Ctrl, ActSym: TSymbol;
   ActName, Cap: string;
-  CallerRoutine, CallerClass: string;
-  RSym, ClsSym: TSymbol;
 begin
   Result := '';
   if AVisited.ContainsKey(ARoutine) then Exit;
@@ -1335,37 +1333,40 @@ begin
   // own handler but bound directly). Find event-binding to ARoutine already covers
   // OnExecute (it is an On* property), so (1) handles it.
 
-  // (3) walk callers of ARoutine within the same form class.
-  Q := TFDQuery.Create(nil);
-  try
-    Q.Connection := AStore.GetConnection;
-    Q.SQL.Text :=
-      'SELECT r.file_id AS fid, r.start_line AS sl FROM refs r ' +
-      'WHERE r.name_text = :rt';
-    Q.ParamByName('rt').AsString := ARoutine;
-    Q.Open;
-    while not Q.Eof do
+  // (3) walk callers of ARoutine WITHIN this form's own .pas.
+  // IMPORTANT (verified in Task 3): implementation method BODIES are NOT indexed
+  // as symbols (only their interface declaration line is, with start_line ==
+  // end_line). So FindContainingSymbol over a .pas body line does NOT resolve the
+  // enclosing routine. Reuse the FindEnclosingImpl text-scan helper (added to this
+  // unit in Task 3) instead. A caller of ARoutine within the same form lives in the
+  // form's own unit, so scan ANode.PasPath directly: for each line that mentions
+  // ARoutine, resolve its enclosing routine; if it belongs to this form class,
+  // recurse on that caller.
+  var Lines: TArray<string> := [];
+  if TFile.Exists(ANode.PasPath) then
+    Lines := TFile.ReadAllLines(ANode.PasPath, TEncoding.ANSI);
+  for var LineIdx := 0 to Length(Lines) - 1 do
+  begin
+    if Pos(ARoutine, Lines[LineIdx]) = 0 then Continue;
+    var OwnerClass: string := '';
+    var CallerRoutine: string := '';
+    if FindEnclosingImpl(Lines, LineIdx + 1, OwnerClass, CallerRoutine) and
+       SameText(OwnerClass, ANode.FormClass) and
+       not SameText(CallerRoutine, ARoutine) then
     begin
-      RSym := AStore.FindContainingSymbol(
-        Q.FieldByName('fid').AsLargeInt, Q.FieldByName('sl').AsInteger);
-      if (RSym.Name <> '') and (RSym.ParentId > 0) and
-         not SameText(RSym.Name, ARoutine) then
-      begin
-        ClsSym := AStore.GetSymbolById(RSym.ParentId);
-        if SameText(ClsSym.Name, ANode.FormClass) then
-        begin
-          CallerRoutine := RSym.Name;
-          Cap := CaptionForHandler(AStore, ANode, CallerRoutine, AVisited);
-          if Cap <> '' then Exit(Cap);
-        end;
-      end;
-      Q.Next;
+      Cap := CaptionForHandler(AStore, ANode, CallerRoutine, AVisited);
+      if Cap <> '' then Exit(Cap);
     end;
-  finally
-    Q.Free;
   end;
 end;
 ```
+
+Note: `FindEnclosingImpl` has signature
+`function FindEnclosingImpl(const ALines: TArray<string>; ALaunchLine: Integer; out AOwnerClass, ARoutine: string): Boolean;`
+(added in Task 3). It is in the same unit's implementation section, so it is callable
+directly here. The `(2)` Action-indirection path is unchanged because DFM component
+bodies ARE indexed with full ranges (so `FindContainingSymbol`/`FindComponent` over the
+`.dfm` are correct); only the `.pas` body case needed the text-scan adaptation.
 
 Add the two helpers:
 
