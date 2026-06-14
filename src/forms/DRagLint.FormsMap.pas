@@ -174,6 +174,278 @@ begin
     Result := S;
 end;
 
+/// <summary>True if the source line constructs the given form class:
+/// "FormClass.Create" (also matches named ctors like .CreateForFolder) or
+/// "CreateForm(FormClass".</summary>
+function IsLaunchLine(const ALine, AFormClass: string): Boolean;
+begin
+  Result :=
+    (Pos(AFormClass + '.Create', ALine) > 0) or
+    (Pos('CreateForm(' + AFormClass, StringReplace(ALine, ' ', '', [rfReplaceAll])) > 0);
+end;
+
+/// <summary>Reads the Caption literal of a control from its .dfm line range
+/// (the first "Caption = '...'" before any nested object). Strips '&amp;'
+/// accelerators and joins simple multi-line string continuations.</summary>
+function ReadCaption(const ADfmPath: string; AStartLine, AEndLine: Integer): string;
+var
+  Lines: TArray<string>;
+  I, P, Q: Integer;
+  T: string;
+begin
+  Result := '';
+  if not TFile.Exists(ADfmPath) then Exit;
+  Lines := TFile.ReadAllLines(ADfmPath, TEncoding.ANSI);
+  for I := AStartLine to AEndLine - 1 do  // skip the object header line itself
+  begin
+    if (I < 0) or (I >= Length(Lines)) then Continue;
+    T := Trim(Lines[I]);
+    if (LowerCase(Copy(T, 1, 7)) = 'object ') or
+       (LowerCase(Copy(T, 1, 5)) = 'item') then Exit;
+    if LowerCase(Copy(T, 1, 9)) = 'caption =' then
+    begin
+      P := Pos('''', T);
+      Q := LastDelimiter('''', T);
+      if (P > 0) and (Q > P) then
+      begin
+        Result := Copy(T, P + 1, Q - P - 1);
+        Result := StringReplace(Result, '''''', '''', [rfReplaceAll]);
+        Result := StringReplace(Result, '&', '', [rfReplaceAll]);
+      end;
+      Exit;
+    end;
+  end;
+end;
+
+/// <summary>Finds the control caption bound to event handler ARoutine in form
+/// ANode; returns '' if no captioned control directly binds it (Task 5 adds
+/// within-form recursion and Action indirection).</summary>
+function CaptionForHandler(AStore: TSQLiteSymbolStore; const ANode: TFormNode;
+  const ARoutine: string): string;
+var
+  Q: TFDQuery;
+  Line: Integer;
+  Sym: TSymbol;
+begin
+  Result := '';
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := AStore.GetConnection;
+    Q.SQL.Text :=
+      'SELECT start_line FROM refs ' +
+      'WHERE kind = ''event-binding'' AND name_text = :h AND file_id = :fid ' +
+      'ORDER BY start_line LIMIT 1';
+    Q.ParamByName('h').AsString := ARoutine;
+    Q.ParamByName('fid').AsLargeInt := ANode.DfmFileId;
+    Q.Open;
+    if Q.IsEmpty then Exit;
+    Line := Q.FieldByName('start_line').AsInteger;
+  finally
+    Q.Free;
+  end;
+  Sym := AStore.FindContainingSymbol(ANode.DfmFileId, Line);
+  if Sym.Name = '' then Exit;
+  Result := ReadCaption(ANode.DfmPath, Sym.StartLine, Sym.EndLine);
+end;
+
+/// <summary>Scans backward from ALaunchLine (1-based) in ALines to find the
+/// nearest "procedure/function/constructor ClassName.MethodName" heading and
+/// returns ClassName and MethodName. Returns False if not found within 50 lines.
+/// Used because implementation method bodies are not separately indexed.</summary>
+function FindEnclosingImpl(const ALines: TArray<string>; ALaunchLine: Integer;
+  out AOwnerClass, ARoutine: string): Boolean;
+var
+  I: Integer;
+  T, Lc, Rest: string;
+  P, Q: Integer;
+  Kw: string;
+begin
+  Result := False;
+  AOwnerClass := '';
+  ARoutine := '';
+  for I := ALaunchLine - 1 downto 0 do
+  begin
+    if (ALaunchLine - 1 - I) > 50 then Break;
+    T := Trim(ALines[I]);
+    Lc := LowerCase(T);
+    Kw := '';
+    if Copy(Lc, 1, 10) = 'procedure ' then Kw := 'procedure'
+    else if Copy(Lc, 1, 9) = 'function ' then Kw := 'function'
+    else if Copy(Lc, 1, 12) = 'constructor ' then Kw := 'constructor'
+    else if Copy(Lc, 1, 11) = 'destructor ' then Kw := 'destructor';
+    if Kw = '' then Continue;
+    Rest := Copy(T, Length(Kw) + 2, MaxInt);  // skip keyword + space
+    // Rest now: "ClassName.MethodName(..." or "MethodName(..." (standalone)
+    P := Pos('.', Rest);
+    if P = 0 then Continue;  // no dot -> not a qualified class method
+    // Extract class name (chars before the dot)
+    Q := 1;
+    while (Q < P) and CharInSet(Rest[Q], ['A'..'Z','a'..'z','0'..'9','_']) do Inc(Q);
+    AOwnerClass := Copy(Rest, 1, Q - 1);
+    // Extract method name (chars after the dot, up to first non-ident char)
+    P := P + 1;
+    Q := P;
+    while (Q <= Length(Rest)) and CharInSet(Rest[Q], ['A'..'Z','a'..'z','0'..'9','_']) do Inc(Q);
+    ARoutine := Copy(Rest, P, Q - P);
+    if (AOwnerClass <> '') and (ARoutine <> '') then
+      Exit(True);
+  end;
+end;
+
+/// <summary>Builds launch edges X -> Y across all forms. For each target form Y,
+/// finds construction sites in any .pas, resolves the enclosing routine and its
+/// owning form X, and resolves the caption of the control that triggers it.</summary>
+function BuildEdges(AStore: TSQLiteSymbolStore; ANodes: TList<TFormNode>;
+  AClassToNode: TDictionary<string, TFormNode>): TList<TFormEdge>;
+var
+  Y: TFormNode;
+  Q: TFDQuery;
+  PasFileId: Int64;
+  LaunchLine: Integer;
+  LineText: string;
+  Routine, OwnerClass: string;
+  XNode: TFormNode;
+  Edge: TFormEdge;
+  PasLines: TDictionary<Int64, TArray<string>>;
+  function FileLines(AFileId: Int64; const APath: string): TArray<string>;
+  begin
+    if not PasLines.TryGetValue(AFileId, Result) then
+    begin
+      if TFile.Exists(APath) then
+        Result := TFile.ReadAllLines(APath, TEncoding.ANSI)
+      else
+        Result := [];
+      PasLines.Add(AFileId, Result);
+    end;
+  end;
+begin
+  Result := TList<TFormEdge>.Create;
+  PasLines := TDictionary<Int64, TArray<string>>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := AStore.GetConnection;
+    for Y in ANodes do
+    begin
+      Q.Close;
+      Q.SQL.Text :=
+        'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
+        'FROM refs r JOIN files f ON f.id = r.file_id ' +
+        'WHERE r.name_text = :cls AND f.language LIKE ''delphi%''';
+      Q.ParamByName('cls').AsString := Y.FormClass;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        PasFileId  := Q.FieldByName('fid').AsLargeInt;
+        LaunchLine := Q.FieldByName('sl').AsInteger;
+        var Arr := FileLines(PasFileId, Q.FieldByName('p').AsString);
+        if (LaunchLine >= 1) and (LaunchLine <= Length(Arr)) then
+          LineText := Arr[LaunchLine - 1]
+        else
+          LineText := '';
+        if IsLaunchLine(LineText, Y.FormClass) then
+        begin
+          if FindEnclosingImpl(Arr, LaunchLine, OwnerClass, Routine) and
+             AClassToNode.TryGetValue(OwnerClass, XNode) and
+             (OwnerClass <> Y.FormClass) then
+          begin
+            Edge := Default(TFormEdge);
+            Edge.FromClass := OwnerClass;
+            Edge.ToClass   := Y.FormClass;
+            Edge.Caption   := CaptionForHandler(AStore, XNode, Routine);
+            if Edge.Caption = '' then
+              Edge.Caption := '(via ' + Routine + ')';
+            Result.Add(Edge);
+          end;
+        end;
+        Q.Next;
+      end;
+    end;
+  finally
+    Q.Free;
+    PasLines.Free;
+  end;
+end;
+
+/// <summary>BFS shortest navigation path from the root form to AToClass.
+/// Returns "RootName -> 'Cap1' -> 'Cap2'" or '' if unreachable.</summary>
+function NavPath(AEdges: TList<TFormEdge>; AClassToNode: TDictionary<string, TFormNode>;
+  const ARootClass, AToClass: string): string;
+type
+  TStep = record Cls: string; Path: string; end;
+var
+  Queue: TQueue<TStep>;
+  Visited: TDictionary<string, Boolean>;
+  Cur, Nxt: TStep;
+  E: TFormEdge;
+  RootNode: TFormNode;
+begin
+  Result := '';
+  if SameText(ARootClass, AToClass) then Exit;
+  Queue := TQueue<TStep>.Create;
+  Visited := TDictionary<string, Boolean>.Create;
+  try
+    if AClassToNode.TryGetValue(ARootClass, RootNode) then
+      Cur.Path := RootNode.FormName
+    else
+      Cur.Path := ARootClass;
+    Cur.Cls := ARootClass;
+    Queue.Enqueue(Cur);
+    Visited.Add(ARootClass, True);
+    while Queue.Count > 0 do
+    begin
+      Cur := Queue.Dequeue;
+      for E in AEdges do
+        if SameText(E.FromClass, Cur.Cls) and not Visited.ContainsKey(E.ToClass) then
+        begin
+          Nxt.Cls := E.ToClass;
+          if Copy(E.Caption, 1, 1) = '(' then
+            Nxt.Path := Cur.Path + ' -> ' + E.Caption
+          else
+            Nxt.Path := Cur.Path + ' -> ''' + E.Caption + '''';
+          if SameText(E.ToClass, AToClass) then Exit(Nxt.Path);
+          Visited.Add(E.ToClass, True);
+          Queue.Enqueue(Nxt);
+        end;
+    end;
+  finally
+    Queue.Free;
+    Visited.Free;
+  end;
+end;
+
+/// <summary>Determines the root form class: ARootForm if given, else the first
+/// Application.CreateForm(T..., ...) in the sibling .dpr whose class is a form
+/// node.</summary>
+function DetectRoot(const AProjectFile, ARootForm: string;
+  AClassToNode: TDictionary<string, TFormNode>): string;
+var
+  DprPath: string;
+  Lines: TArray<string>;
+  L, Frag: string;
+  P, Q: Integer;
+  Cls: string;
+begin
+  if ARootForm <> '' then Exit(ARootForm);
+  Result := '';
+  if AProjectFile = '' then Exit;
+  DprPath := TPath.ChangeExtension(AProjectFile, '.dpr');
+  if not TFile.Exists(DprPath) then Exit;
+  Lines := TFile.ReadAllLines(DprPath, TEncoding.ANSI);
+  for L in Lines do
+  begin
+    P := Pos('Application.CreateForm(', L);
+    if P = 0 then Continue;
+    Frag := Copy(L, P + Length('Application.CreateForm('), MaxInt);
+    Q := 1;
+    while (Q <= Length(Frag)) and CharInSet(Frag[Q], [' ', #9]) do Inc(Q);
+    P := Q;
+    while (P <= Length(Frag)) and
+          CharInSet(Frag[P], ['A'..'Z','a'..'z','0'..'9','_']) do Inc(P);
+    Cls := Copy(Frag, Q, P - Q);
+    if AClassToNode.ContainsKey(Cls) then Exit(Cls);
+  end;
+end;
+
 function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): string;
 var
   Store: TSQLiteSymbolStore;
@@ -181,6 +453,10 @@ var
   Sb: TStringBuilder;
   N: TFormNode;
   Idx: Integer;
+  ClassToNode: TDictionary<string, TFormNode>;
+  Edges: TList<TFormEdge>;
+  RootClass: string;
+  Nav: string;
 begin
   Store := TSQLiteSymbolStore.Create(ADbPath);
   Sb := TStringBuilder.Create;
@@ -193,21 +469,37 @@ begin
         begin
           Result := CompareText(L.FormName, R.FormName);
         end));
-      Sb.Append('#,Unit,FormName,PAS lines,Navigation,Called From,Notes').Append(#13#10);
-      Idx := 0;
-      for N in Nodes do
-      begin
-        Inc(Idx);
-        Sb.Append(Idx).Append(',')
-          .Append(CsvField(N.UnitName)).Append(',')
-          .Append(CsvField(N.FormName)).Append(',')
-          .Append(N.PasLineCount).Append(',')
-          .Append(',')
-          .Append(',')
-          .Append('')
-          .Append(#13#10);
+      ClassToNode := TDictionary<string, TFormNode>.Create;
+      for N in Nodes do ClassToNode.AddOrSetValue(N.FormClass, N);
+      Edges := BuildEdges(Store, Nodes, ClassToNode);
+      try
+        RootClass := DetectRoot(AProjectFile, ARootForm, ClassToNode);
+        Sb.Append('#,Unit,FormName,PAS lines,Navigation,Called From,Notes').Append(#13#10);
+        Idx := 0;
+        for N in Nodes do
+        begin
+          Inc(Idx);
+          Nav := '';
+          if RootClass <> '' then
+          begin
+            Nav := NavPath(Edges, ClassToNode, RootClass, N.FormClass);
+            if (Nav = '') and not SameText(N.FormClass, RootClass) then
+              Nav := '(no path from MAIN)';
+          end;
+          Sb.Append(Idx).Append(',')
+            .Append(CsvField(N.UnitName)).Append(',')
+            .Append(CsvField(N.FormName)).Append(',')
+            .Append(N.PasLineCount).Append(',')
+            .Append(CsvField(Nav)).Append(',')
+            .Append(',')   // Called From (Task 6)
+            .Append('')    // Notes
+            .Append(#13#10);
+        end;
+        Result := Sb.ToString;
+      finally
+        Edges.Free;
+        ClassToNode.Free;
       end;
-      Result := Sb.ToString;
     finally
       Nodes.Free;
     end;

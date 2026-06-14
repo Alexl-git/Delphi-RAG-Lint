@@ -70,6 +70,7 @@ type
 
     // v0.19: type-at-position helpers
     function FindContainingSymbol(AFileId: Int64; ALine: Integer): TSymbol;
+    function GetSymbolById(AId: Int64): TSymbol;
     function FindFileIdByPath(const APath: string): Int64;
     function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
     function FindChildSymbolByName(AParentId: Int64;

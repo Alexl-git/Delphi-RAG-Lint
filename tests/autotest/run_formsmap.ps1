@@ -35,5 +35,8 @@ Check 'frmEdit row present'  ($csv -match 'uDemoEdit,frmEdit,')
 Check 'data module excluded' (-not ($csv -match 'dmDemo'))
 Check 'pas line count for frmEdit' ($csv -match 'uDemoEdit,frmEdit,9,')
 Check 'row count is 3 forms + header' ($rows.Count -eq 4)
+Check 'frmMain is root (blank nav)'   ($csv -match "uDemoMain,frmMain,\d+,,")
+Check 'frmList nav via Lists'         ($csv -match "uDemoList,frmList,\d+,frmMain -> 'Lists',")
+Check 'frmEdit nav via Lists>Edit'    ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> 'Edit Item',")
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

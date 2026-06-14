@@ -116,6 +116,7 @@ type
 
     // v0.19: type-at-position helpers
     function FindContainingSymbol(AFileId: Int64; ALine: Integer): TSymbol;
+    function GetSymbolById(AId: Int64): TSymbol;
     function FindFileIdByPath(const APath: string): Int64;
     function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
     function FindChildSymbolByName(AParentId: Int64;
@@ -1343,6 +1344,24 @@ begin
       Result := ReadSymbolFromQuery(FQFindContaining);
   finally
     FQFindContaining.Close;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetSymbolById(AId: Int64): TSymbol;
+var
+  Q: TFDQuery;
+begin
+  Result := Default(TSymbol);
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text := 'SELECT * FROM symbols WHERE id = :id LIMIT 1';
+    Q.ParamByName('id').AsLargeInt := AId;
+    Q.Open;
+    if not Q.IsEmpty then
+      Result := ReadSymbolFromQuery(Q);
+  finally
+    Q.Free;
   end;
 end;
 
