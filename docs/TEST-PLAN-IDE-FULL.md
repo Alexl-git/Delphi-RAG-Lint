@@ -194,6 +194,11 @@ DB = `C:\Projects\DB\ORM3\drag-lint.sqlite`.
 - [ ] **J3 cycles --edges.** `drag-lint cycles --db <DB> --edges` -> lists
       circular groups with `A uses B [section]` edges, move-to-implementation
       candidates, and any `[LAYERING: COMMON -> CLIENT]` flags.
+- [ ] **J3b cycles --causes / --plan.** `--causes` pinpoints the symbols in each
+      interface edge (with use + declaration line). `--plan` emits a markdown
+      refactoring playbook (extract-contract vs invert-dependency, numbered
+      steps, verify command) -- readable + followable; flags index-gap edges
+      honestly.
 - [ ] **J4 uses-audit.** `drag-lint uses-audit <unit.pas> --db <DB>` -> proposes
       interface→implementation moves + unused candidates (or "nothing").
 - [ ] **J5 uses-fix dry-run.** `drag-lint uses-fix <unit.pas> --project <dproj>

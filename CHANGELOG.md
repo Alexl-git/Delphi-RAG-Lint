@@ -19,7 +19,10 @@ breaking changes** until v1.0.
   candidates and layering inversions (COMMON -> CLIENT/SERVER). `--causes`
   pinpoints the specific symbols in A's interface that reference B (the
   types/vars/methods to move/extract), with line numbers and an honest note
-  where the index couldn't resolve a ref.
+  where the index couldn't resolve a ref. `--plan` emits a followable markdown
+  refactoring playbook per cycle (files, symbols with use + declaration line,
+  an auto-classified fix -- extract-contract or invert-dependency -- numbered
+  steps, and a verify command) that a junior dev or small model can execute.
 - **`uses-audit <unit.pas>`** -- index proposal of interface->implementation
   moves + unused units (conservative; project units only).
 - **`uses-fix <unit.pas> --project <dproj> [--apply] [--remove-unused]`** --

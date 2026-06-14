@@ -83,7 +83,19 @@ Each cycle lists its `A uses B [interface|implementation]` edges, marks the
 inversions (e.g. a COMMON unit reaching into CLIENT). Add **`--causes`** to
 pinpoint the *specific symbols* in `A`'s interface that force the dependency on
 `B` (the types/vars/methods to move or extract) — with the line numbers, and an
-honest note where the index couldn't resolve a reference. Then propose and apply the
+honest note where the index couldn't resolve a reference.
+
+Or generate a full **followable refactoring playbook** that a junior dev (or a
+small model) can execute:
+
+```
+drag-lint cycles --db myapp.sqlite --plan > cycle-plan.md
+```
+
+Per cycle it gives the files, the load-bearing symbols (use site **and**
+declaration site, with line numbers), an auto-classified fix (*extract the shared
+contract*, or *invert the dependency* for layering inversions), numbered steps,
+and a verify command. Build after each cycle and re-run `cycles` to confirm. Then propose and apply the
 cleanup, **verified by the compiler** so it never breaks the build:
 
 ```
