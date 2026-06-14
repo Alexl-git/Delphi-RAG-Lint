@@ -3,6 +3,31 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.44.0-alpha -- 2026-06-14
+
+### Added (forms-csv test-helper navigation map)
+- **`forms-csv --project <dproj> --db <sqlite> [--out <f.csv>] [--root <TfrmMAIN>]`**
+  -- emits a tester-oriented CSV, one row per navigable form (forms/dialogs only;
+  data modules and frames excluded via class-ancestry). Columns: `#`, `Unit`,
+  `FormName`, `PAS lines`, `Navigation`, `Called From`, `Notes`.
+  - **Navigation**: the button/menu captions a tester clicks from the application's
+    main form to reach each form, e.g. `frmMAIN -> 'Job List' -> 'Open Folder'`.
+    Built by resolving form-construction sites (`TfrmX.Create` incl. named ctors,
+    `Application.CreateForm`) to their enclosing routine, mapping that to the owning
+    form, and reading the bound control's caption from the `.dfm`. Resolves direct
+    handlers, handlers reached indirectly within a form, and `TAction` captions;
+    falls back to `(via Routine)` when no captioned control binds the launch
+    (keep-the-gap), and `(no path from MAIN)` when unreachable. BFS = shortest path;
+    cycle-safe.
+  - **Called From**: the distinct forms that directly open this one (with captions).
+  - Root form auto-detected from the `.dpr` (last `Application.CreateForm` of a form
+    at/before `Application.Run`); override with `--root`. Inventory is restricted to
+    the project's own units (skips `*- Copy`/`.bak` backups).
+  - Requires a **current** index -- re-index the project if rows show mostly
+    `(no path from MAIN)` (stale construction-site line numbers break edge detection).
+- **IDE plugin: "Generate Test Helper CSV..."** Tools-menu item -- saves all, runs
+  `forms-csv` on the active project, opens the CSV.
+
 ## v0.43.0-alpha -- 2026-06-12
 
 ### Added (semantic diagnostics + uses cleanup)

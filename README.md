@@ -198,6 +198,7 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `workspace add <dproj>` | Add a project to the workspace config |
 | `context --qname <q>` | Emit a compact context bundle for AI prompts |
 | `bench-context <dir>` | Benchmark context bundle throughput |
+| `forms-csv --project <dproj> --db <db>` | Test-helper CSV: one row per form with the button/menu path from the main form (`Navigation`), the forms that open it (`Called From`), unit + line count (`--out <f.csv>`, `--root <TfrmMAIN>`) |
 | `lsp [--db <db>]` | Start the LSP server (stdio) |
 | `serve [--db <db>]` | Start the MCP server (stdio) |
 | `--version` | Print version |
@@ -246,10 +247,11 @@ Drop custom `.scm` + `.json` pairs in the `rules/` directory; see
 
 ### RAD Studio plugin
 
-**Tools menu** (12 entries): Hover at Cursor, Show Completion, Show Signature
+**Tools menu**: Hover at Cursor, Show Completion, Show Signature
 Help, Run Diagnostics, Rename Symbol, Compile & Diagnose, Import Build Log,
 Format with YADF, Show Structure, Run AST Checks, Find Usages, Symbol Search,
-Settings.
+Generate Test Helper CSV..., Settings. ("Generate Test Helper CSV..." saves all,
+runs `forms-csv` on the active project, and opens the resulting navigation CSV.)
 
 **Keystroke bindings** (registered via `IOTAKeyBindingServices`):
 
@@ -350,6 +352,12 @@ tests\fixtures\T61_hovertracker.bat
 tests\fixtures\T62_lint_rules_v035.bat
 tests\fixtures\T56_lint_rules_v032.bat
 :: ... etc.
+```
+
+PowerShell smoke scripts in `tests/autotest/` exercise the built exe end to end:
+```
+pwsh -File tests/autotest/run_smoke.ps1       # CLI + LSP server smoke
+pwsh -File tests/autotest/run_formsmap.ps1    # forms-csv navigation-map smoke (fixture project)
 ```
 
 ---
