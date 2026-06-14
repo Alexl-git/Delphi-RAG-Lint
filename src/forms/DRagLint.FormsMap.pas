@@ -42,6 +42,16 @@ type
     Caption:   string;
   end;
 
+  /// <summary>Lists distinct parent forms that directly launch AToClass, each as its
+  /// form Name with the resolved caption in parentheses; ';'-separated. Caption is
+  /// omitted when the edge caption is a '(via ...)' gap marker.</summary>
+  /// <param name="AEdges">All launch edges built by BuildEdges.</param>
+  /// <param name="AClassToNode">Class-name to TFormNode lookup.</param>
+  /// <param name="AToClass">The form class whose callers we want.</param>
+  /// <returns>Semicolon-separated list, e.g. "frmList (Edit Item)" or "".</returns>
+  function CalledFrom(AEdges: TList<TFormEdge>;
+    AClassToNode: TDictionary<string, TFormNode>; const AToClass: string): string;
+
   /// <summary>Generates the navigation-map CSV text.</summary>
   /// <param name="ADbPath">Path to the project's drag-lint index (sqlite).</param>
   /// <param name="AProjectFile">Path to the .dproj (used to find the .dpr for root
@@ -554,6 +564,40 @@ begin
   end;
 end;
 
+function CalledFrom(AEdges: TList<TFormEdge>;
+  AClassToNode: TDictionary<string, TFormNode>; const AToClass: string): string;
+var
+  E: TFormEdge;
+  Seen: TStringList;
+  ParentNode: TFormNode;
+  Item: string;
+begin
+  Result := '';
+  Seen := TStringList.Create;
+  try
+    Seen.Sorted := True;
+    Seen.Duplicates := dupIgnore;
+    for E in AEdges do
+      if SameText(E.ToClass, AToClass) then
+      begin
+        if AClassToNode.TryGetValue(E.FromClass, ParentNode) then
+          Item := ParentNode.FormName
+        else
+          Item := E.FromClass;
+        if Copy(E.Caption, 1, 1) <> '(' then
+          Item := Item + ' (' + E.Caption + ')';
+        if Seen.IndexOf(Item) < 0 then
+        begin
+          Seen.Add(Item);
+          if Result <> '' then Result := Result + '; ';
+          Result := Result + Item;
+        end;
+      end;
+  finally
+    Seen.Free;
+  end;
+end;
+
 function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): string;
 var
   Store: TSQLiteSymbolStore;
@@ -594,12 +638,13 @@ begin
             if (Nav = '') and not SameText(N.FormClass, RootClass) then
               Nav := '(no path from MAIN)';
           end;
+          var CF := CalledFrom(Edges, ClassToNode, N.FormClass);
           Sb.Append(Idx).Append(',')
             .Append(CsvField(N.UnitName)).Append(',')
             .Append(CsvField(N.FormName)).Append(',')
             .Append(N.PasLineCount).Append(',')
             .Append(CsvField(Nav)).Append(',')
-            .Append(',')   // Called From (Task 6)
+            .Append(CsvField(CF)).Append(',')
             .Append('')    // Notes
             .Append(#13#10);
         end;

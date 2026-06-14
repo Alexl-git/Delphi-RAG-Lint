@@ -9,6 +9,7 @@
     <DCCReference Include="uDemoChild.pas"><Form>frmChild</Form><FormType>dfm</FormType></DCCReference>
     <DCCReference Include="uDemoReports.pas"><Form>frmReports</Form><FormType>dfm</FormType></DCCReference>
     <DCCReference Include="uDemoGap.pas"><Form>frmGap</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uDemoUnreached.pas"><Form>frmLonely</Form><FormType>dfm</FormType></DCCReference>
     <DCCReference Include="uDemoData.pas"><Form>dmDemo</Form><FormType>dfm</FormType></DCCReference>
   </ItemGroup>
 </Project>

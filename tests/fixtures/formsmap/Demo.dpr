@@ -7,6 +7,7 @@ uses
   uDemoChild in 'uDemoChild.pas' {frmChild},
   uDemoReports in 'uDemoReports.pas' {frmReports},
   uDemoGap in 'uDemoGap.pas' {frmGap},
+  uDemoUnreached in 'uDemoUnreached.pas' {frmLonely},
   uDemoData in 'uDemoData.pas' {dmDemo: TDataModule};
 begin
   Application.Initialize;
