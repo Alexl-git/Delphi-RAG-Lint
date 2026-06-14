@@ -78,6 +78,11 @@ procedure InvokeOpenLog(Sender: TObject);
   diagnostic cache so inline markers update without saving the file. }
 procedure InvokeLintBuffer(Sender: TObject);
 
+/// <summary>Saves all modified modules then shells out to drag-lint
+/// forms-csv for the active project and opens the resulting CSV in the
+/// IDE editor. Prompts the user for the output path via a save dialog.</summary>
+procedure InvokeGenerateFormsCsv(Sender: TObject);
+
 implementation
 
 uses
@@ -1618,6 +1623,68 @@ begin
   end;
 end;
 
+{ ---- forms-csv IDE menu action ---- }
+
+procedure InvokeGenerateFormsCsv(Sender: TObject);
+{ Saves all modified modules, resolves the active project .dproj + drag-lint
+  index, prompts for a CSV output path, runs forms-csv, then opens the
+  resulting file in the IDE editor. }
+var
+  ProjFile, ProjDb, ExePath: string;
+  OutPath, CmdLine, Output:  string;
+  ExitCode:                  Integer;
+  Dlg:                       TSaveDialog;
+  MS:                        IOTAModuleServices;
+  AS_:                       IOTAActionServices;
+begin
+  { Save all so on-disk DFMs match the editor; the engine reads saved files. }
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then
+    MS.SaveAll;
+
+  ProjFile := GetActiveProjectFile;
+  ProjDb   := GetActiveProjectDb;
+  if (ProjFile = '') or (ProjDb = '') then
+  begin
+    ShowMessage('drag-lint: no active project or index found.');
+    Exit;
+  end;
+
+  { Resolve drag-lint.exe the same way the other handlers do. }
+  ExePath := LoadSettings.ExePath;
+  if (ExePath = '') or not FileExists(ExePath) then
+    ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then
+    ExePath := 'drag-lint.exe';
+
+  { Prompt for the output CSV path. }
+  Dlg := TSaveDialog.Create(nil);
+  try
+    Dlg.Filter     := 'CSV files (*.csv)|*.csv';
+    Dlg.DefaultExt := 'csv';
+    Dlg.FileName   := ChangeFileExt(ExtractFileName(ProjFile), '') + '-forms.csv';
+    Dlg.InitialDir := ExtractFilePath(ProjFile);
+    if not Dlg.Execute then
+      Exit;
+    OutPath := Dlg.FileName;
+  finally
+    Dlg.Free;
+  end;
+
+  CmdLine  := Format('"%s" forms-csv --project "%s" --db "%s" --out "%s"',
+                [ExePath, ProjFile, ProjDb, OutPath]);
+  ExitCode := RunAndCaptureStdout(CmdLine, Output, 120000);
+
+  if ExitCode <> 0 then
+  begin
+    ShowMessage('drag-lint: forms-csv failed. See plugin log.');
+    Exit;
+  end;
+
+  { Open the generated CSV in the IDE editor. }
+  if Supports(BorlandIDEServices, IOTAActionServices, AS_) then
+    AS_.OpenFile(OutPath);
+end;
+
 { ---- menu registration ---- }
 
 function AddWrappedItem(AParent: TMenuItem; const ACaption: string;
@@ -2035,6 +2102,7 @@ begin
   AddWrappedItem(RootMenu, 'Show Structure',             InvokeShowStructure);
   AddWrappedItem(RootMenu, 'Rename Symbol...',           InvokeRename);
   AddWrappedItem(RootMenu, 'Format with YADF',           InvokeFormatYadf);
+  AddWrappedItem(RootMenu, 'Generate Test Helper CSV...', InvokeGenerateFormsCsv);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
 
   { ---- Diagnostics & Tests (alpha) ---- }
