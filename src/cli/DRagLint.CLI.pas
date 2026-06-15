@@ -7378,9 +7378,12 @@ begin
   end;
 end;
 
-// reconcile-project <App.dpr|.dproj> [--apply] [--config <path>]
+// reconcile-project <App.dpr|.dproj> [--apply] [--json] [--config <path>]
 // Dry-run (default): print MISSING/EXTRA/STALE report, exit 0, write nothing.
 // --apply: back up .dpr/.dproj and insert Missing units (Task 2).
+// --json: emit a JSON object {missing,extra,stale} to stdout instead of text.
+//         When --apply is also given, apply still runs; apply messages go to
+//         ErrOutput so stdout remains valid JSON.
 function DoReconcileProject(const AArgs: TArgs): Integer;
 var
   ProjectFile, EngineDir: string;
@@ -7391,6 +7394,8 @@ var
   ProjResolver: DRagLint.Project.Resolver.TProjectResolver;
   RR: TReconcileResult;
   Item: TReconcileItem;
+  JRoot, JObj: TJSONObject;
+  JMissing, JExtra, JStale: TJSONArray;
 begin
   // Accept either positional arg (AArgs.Path) or explicit --project.
   ProjectFile := AArgs.Path;
@@ -7443,41 +7448,98 @@ begin
   try
     RR := Reconciler.Analyze(ProjectFile);
 
-    // Print the report (always, whether dry-run or --apply).
-    Writeln(Format('MISSING (%d) - used but not listed (will be added with --apply):',
-      [Length(RR.Missing)]));
-    for Item in RR.Missing do
+    if AArgs.AsJson then
     begin
-      if Item.UsedBy <> '' then
-        Writeln(Format('  %s -> %s   (used by %s)',
-          [Item.UnitName, Item.RelPath, Item.UsedBy]))
-      else
+      // JSON output: { "missing": [...], "extra": [...], "stale": [...] }
+      // stdout stays valid JSON; --apply messages go to ErrOutput.
+      JRoot := TJSONObject.Create;
+      try
+        JMissing := TJSONArray.Create;
+        for Item in RR.Missing do
+        begin
+          JObj := TJSONObject.Create;
+          JObj.AddPair('unit', Item.UnitName);
+          JObj.AddPair('file', Item.FilePath);
+          JObj.AddPair('relPath', Item.RelPath);
+          JObj.AddPair('usedBy', Item.UsedBy);
+          JMissing.AddElement(JObj);
+        end;
+        JRoot.AddPair('missing', JMissing);
+
+        JExtra := TJSONArray.Create;
+        for Item in RR.Extra do
+        begin
+          JObj := TJSONObject.Create;
+          JObj.AddPair('unit', Item.UnitName);
+          JObj.AddPair('file', Item.FilePath);
+          JObj.AddPair('relPath', Item.RelPath);
+          JObj.AddPair('usedBy', Item.UsedBy);
+          JExtra.AddElement(JObj);
+        end;
+        JRoot.AddPair('extra', JExtra);
+
+        JStale := TJSONArray.Create;
+        for Item in RR.Stale do
+        begin
+          JObj := TJSONObject.Create;
+          JObj.AddPair('unit', Item.UnitName);
+          JObj.AddPair('file', Item.FilePath);
+          JObj.AddPair('relPath', Item.RelPath);
+          JObj.AddPair('usedBy', Item.UsedBy);
+          JStale.AddElement(JObj);
+        end;
+        JRoot.AddPair('stale', JStale);
+
+        Writeln(JRoot.Format(2));
+      finally
+        JRoot.Free;
+      end;
+
+      // --apply still runs; write messages to stderr so stdout stays clean.
+      if AArgs.Apply then
+      begin
+        Reconciler.Apply(ProjectFile, RR);
+        Writeln(ErrOutput, 'Applied: Missing units added to .dpr and .dproj (.bak backups written).');
+      end;
+    end
+    else
+    begin
+      // Text report.
+      Writeln(Format('MISSING (%d) - used but not listed (will be added with --apply):',
+        [Length(RR.Missing)]));
+      for Item in RR.Missing do
+      begin
+        if Item.UsedBy <> '' then
+          Writeln(Format('  %s -> %s   (used by %s)',
+            [Item.UnitName, Item.RelPath, Item.UsedBy]))
+        else
+          Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
+      end;
+
+      Writeln(Format('EXTRA (%d) - listed but never reached via uses (review):',
+        [Length(RR.Extra)]));
+      for Item in RR.Extra do
         Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
-    end;
 
-    Writeln(Format('EXTRA (%d) - listed but never reached via uses (review):',
-      [Length(RR.Extra)]));
-    for Item in RR.Extra do
-      Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
+      Writeln(Format('STALE (%d) - used but looks stale (investigate):',
+        [Length(RR.Stale)]));
+      for Item in RR.Stale do
+      begin
+        if Item.UsedBy <> '' then
+          Writeln(Format('  %s -> %s   (used by %s)',
+            [Item.UnitName, Item.RelPath, Item.UsedBy]))
+        else
+          Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
+      end;
 
-    Writeln(Format('STALE (%d) - used but looks stale (investigate):',
-      [Length(RR.Stale)]));
-    for Item in RR.Stale do
-    begin
-      if Item.UsedBy <> '' then
-        Writeln(Format('  %s -> %s   (used by %s)',
-          [Item.UnitName, Item.RelPath, Item.UsedBy]))
-      else
-        Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
-    end;
+      Writeln('Run a full project build to verify after --apply.');
 
-    Writeln('Run a full project build to verify after --apply.');
-
-    // --apply: write changes to .dpr/.dproj (with .bak backups).
-    if AArgs.Apply then
-    begin
-      Reconciler.Apply(ProjectFile, RR);
-      Writeln('Applied: Missing units added to .dpr and .dproj (.bak backups written).');
+      // --apply: write changes to .dpr/.dproj (with .bak backups).
+      if AArgs.Apply then
+      begin
+        Reconciler.Apply(ProjectFile, RR);
+        Writeln('Applied: Missing units added to .dpr and .dproj (.bak backups written).');
+      end;
     end;
   finally
     Reconciler.Free;

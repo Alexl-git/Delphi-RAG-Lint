@@ -26,5 +26,13 @@ $rep2 = & $Exe reconcile-project "$work\App.dpr" 2>&1 | Out-String
 Check 'reapply 0 missing'     ($rep2 -match 'MISSING \(0\)')
 Check 'uOrphan untouched'     ($rep2 -match 'EXTRA[\s\S]*uOrphan')
 
+# Task 3: --json assertions (use the read-only fixture, not the temp copy)
+$j = & $Exe reconcile-project "$fx\App.dpr" --json 2>&1 | Out-String
+Check 'json has missing array' ($j -match '"missing"\s*:\s*\[')
+Check 'json has stale array'   ($j -match '"stale"\s*:\s*\[')
+# Extract the JSON object from combined stdout+stderr (stderr may have advisory lines)
+$jClean = [regex]::Match($j, '(?s)\{.*\}').Value
+Check 'json parses'            ([bool]($jClean | ConvertFrom-Json))
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
