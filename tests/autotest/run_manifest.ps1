@@ -6,5 +6,7 @@ Check 'plan is json'    ($plan.TrimStart().StartsWith('{') -or $plan.TrimStart()
 Check 'section Proj'     ($plan -match '"name"\s*:\s*"Proj"')
 Check 'section SQL'      ($plan -match '"name"\s*:\s*"SQL"')
 Check 'settings parsed'  ($plan -match '"currentProjectsIndexing"\s*:\s*"perProject"')
+$m = & $Exe selftest manifest-merge 2>&1 | Out-String
+Check 'manifest-merge keeps global currentProjectsIndexing' ($m -match 'MERGE-OK')
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

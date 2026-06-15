@@ -311,7 +311,7 @@ begin
   // Optional subcommand: ParamStr(2) if it doesn't start with '--'.
   i := 2;
   if ((Result.Command = 'query') or (Result.Command = 'export') or
-      (Result.Command = 'workspace')) and
+      (Result.Command = 'workspace') or (Result.Command = 'selftest')) and
      (ParamCount >= 2) then
   begin
     A := ParamStr(2);
@@ -677,93 +677,18 @@ begin
   end;
 end;
 
-// v0.45: serialise a TIndexManifest to a TJSONObject (caller owns + frees).
+// v0.45: serialise a TIndexManifest to a TJSONObject for the dry-run JSON view.
+// Delegates to TManifestIO.ToJson for the canonical manifest structure, then
+// adds the extra 'indexes.rootDir' field (richer than the saved file). Caller owns + frees.
 function ManifestToJson(const AManifest: TIndexManifest): TJSONObject;
 var
-  JSettings, JIndexes: TJSONObject;
-  JSections, JExclude, JInclude, JSecExclude, JIncOnly, JPlats, JDedup: TJSONArray;
-  Sec: TIndexSection;
-  S: string;
+  JIndexes: TJSONObject;
 begin
-  Result := TJSONObject.Create;
-
-  JSettings := TJSONObject.Create;
-  Result.AddPair('settings', JSettings);
-  case AManifest.Settings.CurrentProjectsIndexing of
-    piPerGroup: JSettings.AddPair('currentProjectsIndexing', 'perGroup');
-    piSingle:   JSettings.AddPair('currentProjectsIndexing', 'single');
-  else
-    JSettings.AddPair('currentProjectsIndexing', 'perProject');
-  end;
-  JSettings.AddPair('defaultPlatform', AManifest.Settings.DefaultPlatform);
-  JSettings.AddPair('sizeGuardMB', TJSONNumber.Create(AManifest.Settings.SizeGuardMB));
-  JSettings.AddPair('enginePath', AManifest.Settings.EnginePath);
-  JSettings.AddPair('maxJobs', TJSONNumber.Create(AManifest.Settings.MaxJobs));
-
-  JIndexes := TJSONObject.Create;
-  Result.AddPair('indexes', JIndexes);
-  JIndexes.AddPair('outDir', AManifest.OutDir);
-  JIndexes.AddPair('rootDir', AManifest.RootDir);
-
-  JExclude := TJSONArray.Create;
-  JIndexes.AddPair('exclude', JExclude);
-  for S in AManifest.GlobalExclude do
-    JExclude.AddElement(TJSONString.Create(S));
-
-  JSections := TJSONArray.Create;
-  JIndexes.AddPair('sections', JSections);
-  for Sec in AManifest.Sections do
-  begin
-    var JSecObj := TJSONObject.Create;
-    JSections.AddElement(JSecObj);
-    JSecObj.AddPair('name', Sec.Name);
-    if Sec.Db <> '' then JSecObj.AddPair('db', Sec.Db);
-    if Sec.Source <> '' then JSecObj.AddPair('source', Sec.Source);
-
-    if Length(Sec.Platforms) > 0 then
-    begin
-      JPlats := TJSONArray.Create;
-      JSecObj.AddPair('platforms', JPlats);
-      for S in Sec.Platforms do
-        JPlats.AddElement(TJSONString.Create(S));
-    end;
-
-    if Length(Sec.Include) > 0 then
-    begin
-      JInclude := TJSONArray.Create;
-      JSecObj.AddPair('include', JInclude);
-      for S in Sec.Include do
-        JInclude.AddElement(TJSONString.Create(S));
-    end;
-
-    if Length(Sec.Exclude) > 0 then
-    begin
-      JSecExclude := TJSONArray.Create;
-      JSecObj.AddPair('exclude', JSecExclude);
-      for S in Sec.Exclude do
-        JSecExclude.AddElement(TJSONString.Create(S));
-    end;
-
-    if Length(Sec.IncludeOnly) > 0 then
-    begin
-      JIncOnly := TJSONArray.Create;
-      JSecObj.AddPair('includeOnly', JIncOnly);
-      for S in Sec.IncludeOnly do
-        JIncOnly.AddElement(TJSONString.Create(S));
-    end;
-
-    JSecObj.AddPair('useIgnoreFiles', TJSONBool.Create(Sec.UseIgnoreFiles));
-
-    if Length(Sec.DedupAgainst) > 0 then
-    begin
-      JDedup := TJSONArray.Create;
-      JSecObj.AddPair('dedupAgainst', JDedup);
-      for S in Sec.DedupAgainst do
-        JDedup.AddElement(TJSONString.Create(S));
-    end;
-
-    JSecObj.AddPair('sqlOnlyMS', TJSONBool.Create(Sec.SqlOnlyMS));
-  end;
+  Result := TManifestIO.ToJson(AManifest);
+  // Inject rootDir into indexes (dry-run view is intentionally richer than the saved file)
+  JIndexes := Result.GetValue('indexes') as TJSONObject;
+  if JIndexes <> nil then
+    JIndexes.AddPair('rootDir', AManifest.RootDir);
 end;
 
 // v0.45: index --all [--config <path>] [--dry-run] [--json]
@@ -827,6 +752,7 @@ begin
     end;
   end;
 
+  // TODO(Task 7): honour AArgs.OnlySections (--only) filter
   // Full build not yet implemented (Task 7)
   Writeln('ERROR: index --all without --dry-run is not yet implemented (Task 7).');
   Exit(2);
@@ -6409,6 +6335,73 @@ begin
   Result := 0;
 end;
 
+// selftest manifest-merge: builds a global manifest with currentProjectsIndexing=piPerGroup,
+// merges a local manifest parsed from JSON with NO settings block, and asserts the
+// merged value is still piPerGroup. Prints MERGE-OK on success or MERGE-FAIL: <detail>.
+function DoSelfTestManifestMerge: Integer;
+const
+  GlobalJson =
+    '{"settings":{"currentProjectsIndexing":"perGroup","defaultPlatform":"Win32",' +
+    '"sizeGuardMB":1500,"enginePath":"auto","maxJobs":0},' +
+    '"indexes":{"outDir":"OUT","exclude":[],"sections":[' +
+    '{"name":"Proj","include":["proj"]}]}}';
+  LocalJson =
+    '{"indexes":{"outDir":"LOCAL","sections":[{"name":"Extra","include":["extra"]}]}}';
+var
+  Global, Local, Merged: TIndexManifest;
+  LocalKeys: TSettingsKeySet;
+  OldLen: Integer;
+  K: Integer;
+begin
+  Global := TManifestIO.ParseText(GlobalJson, 'C:\global');
+  Local  := TManifestIO.ParseTextEx(LocalJson, 'C:\local', LocalKeys);
+
+  { Replicate the merge logic from TManifestIO.Load }
+  Merged := Global;
+  if Local.OutDir <> '' then Merged.OutDir := Local.OutDir;
+  if Length(Local.GlobalExclude) > 0 then
+  begin
+    OldLen := Length(Merged.GlobalExclude);
+    SetLength(Merged.GlobalExclude, OldLen + Length(Local.GlobalExclude));
+    for K := 0 to High(Local.GlobalExclude) do
+      Merged.GlobalExclude[OldLen + K] := Local.GlobalExclude[K];
+  end;
+  if skDefaultPlatform in LocalKeys then
+    Merged.Settings.DefaultPlatform := Local.Settings.DefaultPlatform;
+  if skEnginePath in LocalKeys then
+    Merged.Settings.EnginePath := Local.Settings.EnginePath;
+  if skSizeGuardMB in LocalKeys then
+    Merged.Settings.SizeGuardMB := Local.Settings.SizeGuardMB;
+  if skMaxJobs in LocalKeys then
+    Merged.Settings.MaxJobs := Local.Settings.MaxJobs;
+  if skCurrentProjectsIndexing in LocalKeys then
+    Merged.Settings.CurrentProjectsIndexing := Local.Settings.CurrentProjectsIndexing;
+
+  if Merged.Settings.CurrentProjectsIndexing = piPerGroup then
+  begin
+    Writeln('MERGE-OK');
+    Result := 0;
+  end
+  else
+  begin
+    Writeln('MERGE-FAIL: expected piPerGroup but got ',
+      Ord(Merged.Settings.CurrentProjectsIndexing));
+    Result := 1;
+  end;
+end;
+
+function DoSelfTest(const AArgs: TArgs): Integer;
+begin
+  if AArgs.SubCommand = 'manifest-merge' then
+    Result := DoSelfTestManifestMerge
+  else
+  begin
+    Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
+    Writeln('Available: manifest-merge');
+    Result := 2;
+  end;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -6502,6 +6495,8 @@ begin
       Result := DoDiff(Args)
     else if Args.Command = 'workspace' then
       Result := DoWorkspace(Args)
+    else if Args.Command = 'selftest' then
+      Result := DoSelfTest(Args)
     else if Args.Command = 'lsp' then
     begin
       { v0.40.3: forward EVERY --db flag to the LSP server. Multi-DB

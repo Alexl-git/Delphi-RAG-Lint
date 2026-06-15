@@ -6,8 +6,10 @@ unit DRagLint.Index.Manifest;
 /// Config discovery:
 ///   1. Global config: &lt;EngineDir&gt;\drag-lint.json (beside the EXE).
 ///   2. Local override: .drag-lint.json found by walking AStartDir up to the root.
-/// Merge rules: local scalars override global; a local section with the same Name
-/// replaces the matching global section; new local sections are appended.
+/// Merge rules: local scalars override global ONLY when they are present in the
+/// local file; local GlobalExclude is APPENDED to (not replacing) the global list;
+/// a local section with the same Name replaces the matching global section; new
+/// local sections are appended.
 /// All .pas source: strict 7-bit ASCII, CRLF line endings, no BOM.
 /// </remarks>
 
@@ -40,6 +42,16 @@ type
     class function Defaults: TIndexSettings; static;
   end;
 
+  /// <summary>Which top-level settings keys were explicitly present in a parsed JSON block.
+  /// Used by the merge logic to distinguish "absent" (keep global) from "present but default".</summary>
+  TSettingsKeySet = set of (
+    skCurrentProjectsIndexing,
+    skDefaultPlatform,
+    skSizeGuardMB,
+    skEnginePath,
+    skMaxJobs
+  );
+
   /// <summary>Describes one named index section within the manifest.</summary>
   TIndexSection = record
     /// <summary>Unique human-readable name used to identify and reference this section.</summary>
@@ -63,6 +75,7 @@ type
     /// already-indexed and excluded from this section's walk (deduplication).</summary>
     DedupAgainst: TArray<string>;
     /// <summary>When True and Source='', only MS*.SQL files pass the SQL file gate.</summary>
+    /// <remarks>Applies to folder-tree (non-library) sections only; ignored when Source='registry-libraries'.</remarks>
     SqlOnlyMS: Boolean;
   end;
 
@@ -72,7 +85,8 @@ type
     RootDir: string;
     /// <summary>Directory where output SQLite DBs are written. Relative to RootDir.</summary>
     OutDir: string;
-    /// <summary>Glob patterns applied to every section's walk before section-level excludes.</summary>
+    /// <summary>Glob patterns applied to every section's walk before section-level excludes.
+    /// During merge, local global-excludes are ADDITIVE to global ones (appended after).</summary>
     GlobalExclude: TArray<string>;
     /// <summary>Settings block parsed from the 'settings' key.</summary>
     Settings: TIndexSettings;
@@ -90,7 +104,8 @@ type
   public
     /// <summary>Load and merge: reads the global config beside AEngineDir, then
     /// walks AStartDir up to the root looking for .drag-lint.json and merges it
-    /// (local scalars override global; same-name sections replace; new sections append).</summary>
+    /// (local scalars override global when present; local GlobalExclude appends to global;
+    /// same-name sections replace; new sections append).</summary>
     /// <param name="AEngineDir">Directory containing the drag-lint EXE (global config source).</param>
     /// <param name="AStartDir">Directory to begin the upward local-config search.</param>
     /// <returns>Merged TIndexManifest. RootDir is set to the local config dir if found,
@@ -102,6 +117,22 @@ type
     /// <param name="ARootDir">Absolute directory associated with this JSON (used for relative paths).</param>
     /// <returns>Populated TIndexManifest.</returns>
     class function ParseText(const AJson, ARootDir: string): TIndexManifest; static;
+
+    /// <summary>Parse a manifest from JSON text, also returning which top-level settings
+    /// keys were explicitly present in the JSON. Used by the merge logic.</summary>
+    /// <param name="AJson">Raw JSON string (UTF-8 or ASCII).</param>
+    /// <param name="ARootDir">Absolute directory associated with this JSON (used for relative paths).</param>
+    /// <param name="ASettingsKeys">Receives the set of settings keys that were present.</param>
+    /// <returns>Populated TIndexManifest.</returns>
+    class function ParseTextEx(const AJson, ARootDir: string;
+      out ASettingsKeys: TSettingsKeySet): TIndexManifest; static;
+
+    /// <summary>Serialise AManifest to a JSON object. Caller owns the returned object and
+    /// must free it. Platforms ['*'] is emitted as the bare string "all";
+    /// DedupAgainst ['*'] is emitted as the bare string "*".</summary>
+    /// <param name="AManifest">Manifest to serialise.</param>
+    /// <returns>New TJSONObject; caller must free.</returns>
+    class function ToJson(const AManifest: TIndexManifest): TJSONObject; static;
 
     /// <summary>Serialise AManifest to a .drag-lint.json file at APath.</summary>
     /// <param name="AManifest">Manifest to write.</param>
@@ -207,8 +238,9 @@ begin
 
   { useIgnoreFiles: accept also legacy 'useGitignore' key (back-compat) }
   B := AObj.GetValue('useIgnoreFiles') as TJSONBool;
-  if B <> nil then Result.UseIgnoreFiles := B.AsBoolean;
-  if B = nil then
+  if B <> nil then
+    Result.UseIgnoreFiles := B.AsBoolean
+  else
   begin
     B := AObj.GetValue('useGitignore') as TJSONBool;
     if B <> nil then Result.UseIgnoreFiles := B.AsBoolean;
@@ -255,10 +287,11 @@ begin
 end;
 
 { ---------------------------------------------------------------------- }
-{  TManifestIO.ParseText                                                   }
+{  TManifestIO.ParseTextEx                                                 }
 { ---------------------------------------------------------------------- }
 
-class function TManifestIO.ParseText(const AJson, ARootDir: string): TIndexManifest;
+class function TManifestIO.ParseTextEx(const AJson, ARootDir: string;
+  out ASettingsKeys: TSettingsKeySet): TIndexManifest;
 var
   Root, JSettings, JIndexes: TJSONObject;
   JSections: TJSONArray;
@@ -269,6 +302,7 @@ begin
   Result         := Default(TIndexManifest);
   Result.RootDir := ARootDir;
   Result.Settings := TIndexSettings.Defaults;
+  ASettingsKeys  := [];
 
   Root := TJSONObject.ParseJSONValue(AJson) as TJSONObject;
   if Root = nil then Exit;
@@ -279,21 +313,38 @@ begin
     begin
       V := JSettings.GetValue('currentProjectsIndexing');
       if (V <> nil) and (V.Value <> '') then
+      begin
         Result.Settings.CurrentProjectsIndexing := ParseProjectsIndexing(V.Value);
+        Include(ASettingsKeys, skCurrentProjectsIndexing);
+      end;
 
       V := JSettings.GetValue('defaultPlatform');
       if (V <> nil) and (V.Value <> '') then
+      begin
         Result.Settings.DefaultPlatform := V.Value;
+        Include(ASettingsKeys, skDefaultPlatform);
+      end;
 
       N := JSettings.GetValue('sizeGuardMB') as TJSONNumber;
-      if N <> nil then Result.Settings.SizeGuardMB := N.AsInt;
+      if N <> nil then
+      begin
+        Result.Settings.SizeGuardMB := N.AsInt;
+        Include(ASettingsKeys, skSizeGuardMB);
+      end;
 
       V := JSettings.GetValue('enginePath');
       if (V <> nil) and (V.Value <> '') then
+      begin
         Result.Settings.EnginePath := V.Value;
+        Include(ASettingsKeys, skEnginePath);
+      end;
 
       N := JSettings.GetValue('maxJobs') as TJSONNumber;
-      if N <> nil then Result.Settings.MaxJobs := N.AsInt;
+      if N <> nil then
+      begin
+        Result.Settings.MaxJobs := N.AsInt;
+        Include(ASettingsKeys, skMaxJobs);
+      end;
     end;
 
     { -- indexes block -- }
@@ -323,6 +374,17 @@ begin
 end;
 
 { ---------------------------------------------------------------------- }
+{  TManifestIO.ParseText                                                   }
+{ ---------------------------------------------------------------------- }
+
+class function TManifestIO.ParseText(const AJson, ARootDir: string): TIndexManifest;
+var
+  Keys: TSettingsKeySet;
+begin
+  Result := ParseTextEx(AJson, ARootDir, Keys);
+end;
+
+{ ---------------------------------------------------------------------- }
 {  TManifestIO.Load                                                        }
 { ---------------------------------------------------------------------- }
 
@@ -330,6 +392,7 @@ class function TManifestIO.Load(const AEngineDir, AStartDir: string): TIndexMani
 var
   GlobalPath, LocalPath: string;
   GlobalManifest, LocalManifest: TIndexManifest;
+  LocalKeys: TSettingsKeySet;
   Content: string;
   HaveGlobal, HaveLocal: Boolean;
   Dir, Parent: string;
@@ -362,6 +425,7 @@ begin
   Result   := Default(TIndexManifest);
   HaveGlobal := False;
   HaveLocal  := False;
+  LocalKeys  := [];
 
   { Try global: <AEngineDir>\drag-lint.json (no leading dot -- the EXE-side config) }
   GlobalPath := TPath.Combine(AEngineDir, 'drag-lint.json');
@@ -372,7 +436,8 @@ begin
       GlobalManifest := ParseText(Content, AEngineDir);
       HaveGlobal := True;
     except
-      { Swallow parse errors on the global config; continue with defaults }
+      on E: Exception do
+        Writeln(ErrOutput, 'WARNING: could not parse config at ', GlobalPath, ': ', E.Message);
     end;
   end;
 
@@ -396,30 +461,41 @@ begin
   begin
     try
       Content := TFile.ReadAllText(LocalPath);
-      LocalManifest := ParseText(Content, TPath.GetDirectoryName(LocalPath));
+      LocalManifest := ParseTextEx(Content, TPath.GetDirectoryName(LocalPath), LocalKeys);
       HaveLocal := True;
     except
-      { Swallow; continue with global only }
+      on E: Exception do
+        Writeln(ErrOutput, 'WARNING: could not parse config at ', LocalPath, ': ', E.Message);
     end;
   end;
 
   if HaveGlobal and HaveLocal then
   begin
-    { Merge: start from global, override with local scalars, then sections }
+    { Merge: start from global, override with local scalars only when present,
+      append local GlobalExclude (additive), then sections }
     Result := GlobalManifest;
     if LocalManifest.OutDir <> '' then Result.OutDir := LocalManifest.OutDir;
+    { GlobalExclude: APPEND local to global (additive -- local excludes do not
+      replace global ones; both apply after merge) }
     if Length(LocalManifest.GlobalExclude) > 0 then
-      Result.GlobalExclude := LocalManifest.GlobalExclude;
-    { Settings: local scalars override }
-    if LocalManifest.Settings.DefaultPlatform <> '' then
+    begin
+      var OldLen := Length(Result.GlobalExclude);
+      SetLength(Result.GlobalExclude, OldLen + Length(LocalManifest.GlobalExclude));
+      for var K := 0 to High(LocalManifest.GlobalExclude) do
+        Result.GlobalExclude[OldLen + K] := LocalManifest.GlobalExclude[K];
+    end;
+    { Settings: local scalars override ONLY when the key was present in the local file }
+    if skDefaultPlatform in LocalKeys then
       Result.Settings.DefaultPlatform := LocalManifest.Settings.DefaultPlatform;
-    if LocalManifest.Settings.EnginePath <> '' then
+    if skEnginePath in LocalKeys then
       Result.Settings.EnginePath := LocalManifest.Settings.EnginePath;
-    if LocalManifest.Settings.SizeGuardMB <> 0 then
+    if skSizeGuardMB in LocalKeys then
       Result.Settings.SizeGuardMB := LocalManifest.Settings.SizeGuardMB;
-    if LocalManifest.Settings.MaxJobs <> 0 then
+    if skMaxJobs in LocalKeys then
       Result.Settings.MaxJobs := LocalManifest.Settings.MaxJobs;
-    Result.Settings.CurrentProjectsIndexing := LocalManifest.Settings.CurrentProjectsIndexing;
+    if skCurrentProjectsIndexing in LocalKeys then
+      Result.Settings.CurrentProjectsIndexing :=
+        LocalManifest.Settings.CurrentProjectsIndexing;
     Result.RootDir := LocalManifest.RootDir;
     MergeSections(Result, LocalManifest);
   end
@@ -501,104 +577,115 @@ begin
 end;
 
 { ---------------------------------------------------------------------- }
+{  TManifestIO.ToJson                                                      }
+{ ---------------------------------------------------------------------- }
+
+class function TManifestIO.ToJson(const AManifest: TIndexManifest): TJSONObject;
+var
+  JSettings, JIndexes: TJSONObject;
+  JSections, JExclude, JInclude, JSecExclude, JIncOnly, JPlats, JDedup: TJSONArray;
+  Sec: TIndexSection;
+  S: string;
+begin
+  Result := TJSONObject.Create;
+
+  { settings }
+  JSettings := TJSONObject.Create;
+  Result.AddPair('settings', JSettings);
+  JSettings.AddPair('currentProjectsIndexing',
+    ProjectsIndexingToStr(AManifest.Settings.CurrentProjectsIndexing));
+  JSettings.AddPair('defaultPlatform', AManifest.Settings.DefaultPlatform);
+  JSettings.AddPair('sizeGuardMB', TJSONNumber.Create(AManifest.Settings.SizeGuardMB));
+  JSettings.AddPair('enginePath', AManifest.Settings.EnginePath);
+  JSettings.AddPair('maxJobs', TJSONNumber.Create(AManifest.Settings.MaxJobs));
+
+  { indexes }
+  JIndexes := TJSONObject.Create;
+  Result.AddPair('indexes', JIndexes);
+  JIndexes.AddPair('outDir', AManifest.OutDir);
+
+  JExclude := TJSONArray.Create;
+  JIndexes.AddPair('exclude', JExclude);
+  for S in AManifest.GlobalExclude do
+    JExclude.AddElement(TJSONString.Create(S));
+
+  JSections := TJSONArray.Create;
+  JIndexes.AddPair('sections', JSections);
+  for Sec in AManifest.Sections do
+  begin
+    var JSecObj := TJSONObject.Create;
+    JSections.AddElement(JSecObj);
+    JSecObj.AddPair('name', Sec.Name);
+    if Sec.Db <> '' then JSecObj.AddPair('db', Sec.Db);
+    if Sec.Source <> '' then JSecObj.AddPair('source', Sec.Source);
+
+    if Length(Sec.Platforms) > 0 then
+    begin
+      if (Length(Sec.Platforms) = 1) and (Sec.Platforms[0] = '*') then
+        JSecObj.AddPair('platforms', 'all')
+      else
+      begin
+        JPlats := TJSONArray.Create;
+        JSecObj.AddPair('platforms', JPlats);
+        for S in Sec.Platforms do
+          JPlats.AddElement(TJSONString.Create(S));
+      end;
+    end;
+
+    if Length(Sec.Include) > 0 then
+    begin
+      JInclude := TJSONArray.Create;
+      JSecObj.AddPair('include', JInclude);
+      for S in Sec.Include do
+        JInclude.AddElement(TJSONString.Create(S));
+    end;
+
+    if Length(Sec.Exclude) > 0 then
+    begin
+      JSecExclude := TJSONArray.Create;
+      JSecObj.AddPair('exclude', JSecExclude);
+      for S in Sec.Exclude do
+        JSecExclude.AddElement(TJSONString.Create(S));
+    end;
+
+    if Length(Sec.IncludeOnly) > 0 then
+    begin
+      JIncOnly := TJSONArray.Create;
+      JSecObj.AddPair('includeOnly', JIncOnly);
+      for S in Sec.IncludeOnly do
+        JIncOnly.AddElement(TJSONString.Create(S));
+    end;
+
+    JSecObj.AddPair('useIgnoreFiles', TJSONBool.Create(Sec.UseIgnoreFiles));
+
+    if Length(Sec.DedupAgainst) > 0 then
+    begin
+      if (Length(Sec.DedupAgainst) = 1) and (Sec.DedupAgainst[0] = '*') then
+        JSecObj.AddPair('dedupAgainst', '*')
+      else
+      begin
+        JDedup := TJSONArray.Create;
+        JSecObj.AddPair('dedupAgainst', JDedup);
+        for S in Sec.DedupAgainst do
+          JDedup.AddElement(TJSONString.Create(S));
+      end;
+    end;
+
+    JSecObj.AddPair('sqlOnlyMS', TJSONBool.Create(Sec.SqlOnlyMS));
+  end;
+end;
+
+{ ---------------------------------------------------------------------- }
 {  TManifestIO.Save                                                        }
 { ---------------------------------------------------------------------- }
 
 class procedure TManifestIO.Save(const AManifest: TIndexManifest; const APath: string);
 var
-  Root, JSettings, JIndexes: TJSONObject;
-  JSections, JExclude, JInclude, JSecExclude, JIncOnly, JPlats, JDedup: TJSONArray;
-  Sec: TIndexSection;
-  S: string;
+  Root: TJSONObject;
   JsonText: string;
 begin
-  Root := TJSONObject.Create;
+  Root := ToJson(AManifest);
   try
-    { settings }
-    JSettings := TJSONObject.Create;
-    Root.AddPair('settings', JSettings);
-    JSettings.AddPair('currentProjectsIndexing',
-      ProjectsIndexingToStr(AManifest.Settings.CurrentProjectsIndexing));
-    JSettings.AddPair('defaultPlatform', AManifest.Settings.DefaultPlatform);
-    JSettings.AddPair('sizeGuardMB', TJSONNumber.Create(AManifest.Settings.SizeGuardMB));
-    JSettings.AddPair('enginePath', AManifest.Settings.EnginePath);
-    JSettings.AddPair('maxJobs', TJSONNumber.Create(AManifest.Settings.MaxJobs));
-
-    { indexes }
-    JIndexes := TJSONObject.Create;
-    Root.AddPair('indexes', JIndexes);
-    JIndexes.AddPair('outDir', AManifest.OutDir);
-
-    JExclude := TJSONArray.Create;
-    JIndexes.AddPair('exclude', JExclude);
-    for S in AManifest.GlobalExclude do
-      JExclude.AddElement(TJSONString.Create(S));
-
-    JSections := TJSONArray.Create;
-    JIndexes.AddPair('sections', JSections);
-    for Sec in AManifest.Sections do
-    begin
-      var JSecObj := TJSONObject.Create;
-      JSections.AddElement(JSecObj);
-      JSecObj.AddPair('name', Sec.Name);
-      if Sec.Db <> '' then JSecObj.AddPair('db', Sec.Db);
-      if Sec.Source <> '' then JSecObj.AddPair('source', Sec.Source);
-
-      if Length(Sec.Platforms) > 0 then
-      begin
-        if (Length(Sec.Platforms) = 1) and (Sec.Platforms[0] = '*') then
-          JSecObj.AddPair('platforms', 'all')
-        else
-        begin
-          JPlats := TJSONArray.Create;
-          JSecObj.AddPair('platforms', JPlats);
-          for S in Sec.Platforms do
-            JPlats.AddElement(TJSONString.Create(S));
-        end;
-      end;
-
-      if Length(Sec.Include) > 0 then
-      begin
-        JInclude := TJSONArray.Create;
-        JSecObj.AddPair('include', JInclude);
-        for S in Sec.Include do
-          JInclude.AddElement(TJSONString.Create(S));
-      end;
-
-      if Length(Sec.Exclude) > 0 then
-      begin
-        JSecExclude := TJSONArray.Create;
-        JSecObj.AddPair('exclude', JSecExclude);
-        for S in Sec.Exclude do
-          JSecExclude.AddElement(TJSONString.Create(S));
-      end;
-
-      if Length(Sec.IncludeOnly) > 0 then
-      begin
-        JIncOnly := TJSONArray.Create;
-        JSecObj.AddPair('includeOnly', JIncOnly);
-        for S in Sec.IncludeOnly do
-          JIncOnly.AddElement(TJSONString.Create(S));
-      end;
-
-      JSecObj.AddPair('useIgnoreFiles', TJSONBool.Create(Sec.UseIgnoreFiles));
-
-      if Length(Sec.DedupAgainst) > 0 then
-      begin
-        if (Length(Sec.DedupAgainst) = 1) and (Sec.DedupAgainst[0] = '*') then
-          JSecObj.AddPair('dedupAgainst', '*')
-        else
-        begin
-          JDedup := TJSONArray.Create;
-          JSecObj.AddPair('dedupAgainst', JDedup);
-          for S in Sec.DedupAgainst do
-            JDedup.AddElement(TJSONString.Create(S));
-        end;
-      end;
-
-      JSecObj.AddPair('sqlOnlyMS', TJSONBool.Create(Sec.SqlOnlyMS));
-    end;
-
     JsonText := Root.Format(2);
   finally
     Root.Free;
