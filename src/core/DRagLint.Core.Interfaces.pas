@@ -10,8 +10,10 @@ type
   /// <summary>Walk-filter settings passed to IIndexer.SetWalkFilter.
   /// Controls which files and directories are included or excluded during
   /// a folder-tree index walk.</summary>
-  /// <remarks>Default-initialised record preserves prior behaviour:
-  /// SqlOnlyMS=True, all other fields empty/False.</remarks>
+  /// <remarks>Use TWalkFilter.Create to obtain the safe default (SqlOnlyMS=True,
+  /// all other fields empty/False). A bare Default(TWalkFilter) zero-inits the
+  /// record and leaves SqlOnlyMS=False, which indexes every .sql file --
+  /// callers must not rely on Default(TWalkFilter) for the safe default.</remarks>
   TWalkFilter = record
     /// <summary>Glob patterns applied to both file names and directory names.
     /// Any file or dir whose name matches is skipped globally.</summary>
@@ -26,10 +28,14 @@ type
     /// <summary>When True, .gitignore and .hgignore files found while
     /// descending the tree are loaded and honoured.</summary>
     UseIgnoreFiles: Boolean;
-    /// <summary>When True (the default), .sql files must match the MS*.SQL
-    /// naming convention to be indexed. Set to False to index all SQL
+    /// <summary>When True (the default via Create), .sql files must match the
+    /// MS*.SQL naming convention to be indexed. Set to False to index all SQL
     /// files regardless of name.</summary>
     SqlOnlyMS:      Boolean;
+    /// <summary>Returns a TWalkFilter with the safe defaults: SqlOnlyMS=True,
+    /// all other fields empty/False. Prefer this over Default(TWalkFilter),
+    /// which leaves SqlOnlyMS=False.</summary>
+    class function Create: TWalkFilter; static;
   end;
 
   ISymbolStore = interface
@@ -166,5 +172,11 @@ type
   end;
 
 implementation
+
+class function TWalkFilter.Create: TWalkFilter;
+begin
+  Result := Default(TWalkFilter);
+  Result.SqlOnlyMS := True;
+end;
 
 end.

@@ -62,8 +62,7 @@ begin
   FExcludeRoots := TList<string>.Create;
   FIgnoreStack := nil;
   { v0.45: default filter preserves prior behaviour -- only MS*.SQL indexed. }
-  FWalkFilter := Default(TWalkFilter);
-  FWalkFilter.SqlOnlyMS := True;
+  FWalkFilter := TWalkFilter.Create;
   for P in AParsers do
     FParsers.Add(P);
 end;
@@ -310,10 +309,10 @@ begin
   if Pos('backup', Name) > 0 then Exit;                    { *BACKUP* folders }
   if IsUnderExcludeRoot(IncludeTrailingPathDelimiter(ADir)) then Exit;
   if TFile.Exists(TPath.Combine(ADir, '.scanignore')) then Exit;  { marker file }
-  { v0.45: glob-based directory exclusion (uses base name only, case-insensitive). }
-  var BaseName := ExtractFileName(ExcludeTrailingPathDelimiter(ADir));
-  if TGlob.MatchesAny(BaseName, FWalkFilter.GlobalExclude) then Exit;
-  if TGlob.MatchesAny(BaseName, FWalkFilter.SectionExclude) then Exit;
+  { v0.45: glob-based directory exclusion (uses base name only, case-insensitive).
+    Re-use Name (already lower-cased above); TGlob.MatchesAny is case-insensitive. }
+  if TGlob.MatchesAny(Name, FWalkFilter.GlobalExclude) then Exit;
+  if TGlob.MatchesAny(Name, FWalkFilter.SectionExclude) then Exit;
   Result := False;
 end;
 

@@ -849,12 +849,14 @@ begin
     Writeln('Excluding subtree: ', ExDir);
   end;
 
-  { v0.45: apply walk filter when any filter flag is present. }
+  { v0.45: apply walk filter when any filter flag is present. Start from
+    TWalkFilter.Create (SqlOnlyMS=True by default) so the safe default is
+    preserved; --no-sql-ms explicitly clears it. }
   if (Length(AArgs.ExcludeGlobs) > 0) or
      (Length(AArgs.IncludeOnlyGlobs) > 0) or
      AArgs.UseIgnore or AArgs.NoSqlMS then
   begin
-    var WF: TWalkFilter := Default(TWalkFilter);
+    var WF: TWalkFilter := TWalkFilter.Create;
     WF.SectionExclude := AArgs.ExcludeGlobs;
     WF.IncludeOnly    := AArgs.IncludeOnlyGlobs;
     WF.UseIgnoreFiles := AArgs.UseIgnore;
@@ -6529,7 +6531,6 @@ begin
     Exit(2);
   end;
   Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
   FileIds := Store.GetAllFileIds;
   for Id in FileIds do
   begin
