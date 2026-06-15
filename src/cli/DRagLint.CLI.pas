@@ -59,7 +59,8 @@ uses
   DRagLint.Index.Closure,
   DRagLint.Index.Reconcile,
   DRagLint.Index.Plan,
-  DRagLint.Index.DbSelect;
+  DRagLint.Index.DbSelect,
+  DRagLint.Index.Drift;
 
 type
   TArgs = record
@@ -144,6 +145,8 @@ type
     WorkspaceConfig:    string;  // --config <path>
     // forms-csv
     RootForm:           string;  // forms-csv: --root <TfrmMAIN> (auto-detect if '')
+    // library-drift / selftest drift
+    Roots:              TArray<string>; // --root <dir> repeatable (drift check)
     // v0.45: index manifest (Task 1)
     IndexAll:           Boolean;         // --all  (index all sections from manifest)
     // v0.45: index walk filter (Task 4)
@@ -219,6 +222,7 @@ begin
   Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--out <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
   Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--json] [--config <path>]  - sync project member list; flag stale used units');
+  Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry roots missing from library index (exit 2 if drift)');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -636,7 +640,13 @@ begin
     else if (A = '--root') and (i < ParamCount) then
     begin
       Inc(i);
-      Result.RootForm := ParamStr(i);
+      if (Result.Command = 'selftest') or (Result.Command = 'library-drift') then
+      begin
+        SetLength(Result.Roots, Length(Result.Roots) + 1);
+        Result.Roots[High(Result.Roots)] := ParamStr(i);
+      end
+      else
+        Result.RootForm := ParamStr(i);
     end
     else if (Result.Command = 'typeat') and (Result.Position = '') and
             (not A.StartsWith('--')) then
@@ -7356,6 +7366,29 @@ begin
   Result := 0;
 end;
 
+// selftest drift: call AnalyzeLibraryDrift with roots from --root flags.
+// Prints MISSING <root> for each missing root, then DRIFT-OK or DRIFT-MISSING N.
+// Exits 0 in all cases (test assertions are done by the caller script).
+function DoSelfTestDrift(const AArgs: TArgs): Integer;
+var
+  Missing: TArray<string>;
+  M:       string;
+begin
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
+  Missing := AnalyzeLibraryDrift(AArgs.DbPath, AArgs.Roots);
+  for M in Missing do
+    Writeln('MISSING ', M);
+  if Length(Missing) = 0 then
+    Writeln('DRIFT-OK')
+  else
+    Writeln('DRIFT-MISSING ', Length(Missing));
+  Result := 0;
+end;
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand = 'manifest-merge' then
@@ -7370,10 +7403,12 @@ begin
     Result := DoSelfTestClosure(AArgs)
   else if AArgs.SubCommand = 'dbselect' then
     Result := DoSelfTestDbSelect(AArgs)
+  else if AArgs.SubCommand = 'drift' then
+    Result := DoSelfTestDrift(AArgs)
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift');
     Result := 2;
   end;
 end;
@@ -7548,6 +7583,116 @@ begin
   Result := 0;
 end;
 
+// library-drift [--platform <p>] [--config <path>] [--json]
+// Resolves the manifest, enumerates library plan items (smLibrary),
+// and for each platform whose DB exists reports registry roots that
+// have no indexed files in that DB. Exit 2 if any drift, else 0.
+function DoLibraryDrift(const AArgs: TArgs): Integer;
+var
+  EngineDir, ConfigPath: string;
+  Manifest:  TIndexManifest;
+  Plan:      TIndexPlan;
+  Resolver:  DRagLint.Project.Resolver.TProjectResolver;
+  Item:      TPlanSection;
+  PFilter:   TArray<string>;
+  Roots:     TArray<string>;
+  Missing:   TArray<string>;
+  TotalMiss: Integer;
+  PlatCnt:   Integer;
+  R:         string;
+  JRoot:     TJSONObject;
+  JPlatArr:  TJSONArray;
+  JPlatObj:  TJSONObject;
+  JMissArr:  TJSONArray;
+begin
+  EngineDir  := ExtractFilePath(ParamStr(0));
+  ConfigPath := AArgs.WorkspaceConfig;
+
+  if ConfigPath <> '' then
+  begin
+    if not TFile.Exists(ConfigPath) then
+    begin
+      Writeln(ErrOutput, 'library-drift: config not found: ', ConfigPath);
+      Exit(2);
+    end;
+    var Content := TFile.ReadAllText(ConfigPath);
+    var RootDir := ExtractFilePath(TPath.GetFullPath(ConfigPath));
+    Manifest := TManifestIO.ParseText(Content, RootDir);
+  end
+  else
+    Manifest := TManifestIO.Load(EngineDir, GetCurrentDir);
+
+  // Build platform filter from --platform arg.
+  if AArgs.CheckPlatform <> '' then
+  begin
+    SetLength(PFilter, 1);
+    PFilter[0] := AArgs.CheckPlatform;
+  end
+  else
+    PFilter := nil;
+
+  Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    Plan := ResolvePlan(Manifest, PFilter, Resolver);
+
+    TotalMiss := 0;
+    PlatCnt   := 0;
+
+    if AArgs.AsJson then
+    begin
+      JRoot    := TJSONObject.Create;
+      JPlatArr := TJSONArray.Create;
+      try
+        for Item in Plan.Items do
+        begin
+          if Item.Mode <> smLibrary then Continue;
+          if not TFile.Exists(Item.DbPath) then Continue;
+          Inc(PlatCnt);
+          Roots   := Resolver.ReadPlatformLibraryPaths(Item.Platform);
+          Missing := AnalyzeLibraryDrift(Item.DbPath, Roots);
+          Inc(TotalMiss, Length(Missing));
+          JPlatObj := TJSONObject.Create;
+          JPlatObj.AddPair('platform', Item.Platform);
+          JPlatObj.AddPair('db', Item.DbPath);
+          JMissArr := TJSONArray.Create;
+          for R in Missing do
+            JMissArr.Add(R);
+          JPlatObj.AddPair('missingRoots', JMissArr);
+          JPlatArr.AddElement(JPlatObj);
+        end;
+        JRoot.AddPair('platforms', JPlatArr);
+        Writeln(JRoot.Format(2));
+      finally
+        JRoot.Free;
+      end;
+    end
+    else
+    begin
+      for Item in Plan.Items do
+      begin
+        if Item.Mode <> smLibrary then Continue;
+        if not TFile.Exists(Item.DbPath) then Continue;
+        Inc(PlatCnt);
+        Roots   := Resolver.ReadPlatformLibraryPaths(Item.Platform);
+        Missing := AnalyzeLibraryDrift(Item.DbPath, Roots);
+        Inc(TotalMiss, Length(Missing));
+        Writeln('platform: ', Item.Platform, ', db: ', Item.DbPath);
+        for R in Missing do
+          Writeln('  MISSING: ', R);
+        if Length(Missing) = 0 then
+          Writeln('  (clean)');
+      end;
+      Writeln('library-drift: ', PlatCnt, ' platforms checked, ',
+        TotalMiss, ' roots missing from index');
+    end;
+  finally
+    Resolver.Free;
+  end;
+
+  if TotalMiss > 0 then Result := 2
+  else Result := 0;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -7645,6 +7790,8 @@ begin
       Result := DoSelfTest(Args)
     else if Args.Command = 'reconcile-project' then
       Result := DoReconcileProject(Args)
+    else if Args.Command = 'library-drift' then
+      Result := DoLibraryDrift(Args)
     else if Args.Command = 'resolve-dbs' then
       // v0.45 Task 10: print the consumer DB list (same as query/lsp/serve use).
       Result := DoResolveDbsList(Args)
