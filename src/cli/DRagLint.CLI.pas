@@ -54,7 +54,8 @@ uses
   DRagLint.Diagnostics.AstChecks,
   DRagLint.Workspace.Config,
   DRagLint.Index.Manifest,
-  DRagLint.Index.Glob;
+  DRagLint.Index.Glob,
+  DRagLint.Index.IgnoreFiles;
 
 type
   TArgs = record
@@ -579,6 +580,11 @@ begin
     else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and
             (Result.Target = '') and (not A.StartsWith('--')) then
       Result.Target := A
+    else if (A = '--dir') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Path := ParamStr(i);
+    end
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
     else
@@ -6422,16 +6428,71 @@ begin
   Result := 0;
 end;
 
+// selftest ignore: exercises TIgnoreStack against the fixture tree at
+// tests/fixtures/manifest/proj/ (pass --dir <path> to override).
+// Prints IGNORE-FAIL: <desc> and exits 1 on first failure; IGNORE-OK on success.
+function DoSelfTestIgnoreFiles(const AArgs: TArgs): Integer;
+var
+  ProjDir: string;
+  SubDir:  string;
+  Stack:   TIgnoreStack;
+
+  procedure Assert(const ADesc: string; AActual, AExpected: Boolean);
+  begin
+    if AActual <> AExpected then
+    begin
+      Writeln('IGNORE-FAIL: ', ADesc,
+        ' (expected=', BoolToStr(AExpected, True),
+        ' got=', BoolToStr(AActual, True), ')');
+      Halt(1);
+    end;
+  end;
+
+begin
+  ProjDir := AArgs.Path;
+  if ProjDir = '' then
+  begin
+    Writeln('IGNORE-FAIL: --dir <proj> required');
+    Halt(1);
+  end;
+  SubDir := TPath.Combine(ProjDir, 'sub');
+
+  Stack := TIgnoreStack.Create;
+  try
+    // --- Layer 1: proj/.hgignore (*.log, build/) ---
+    Stack.PushDir(ProjDir);
+    Assert('drop.log ignored',  Stack.IsIgnored('drop.log', False), True);
+    Assert('keep.pas not ignored', Stack.IsIgnored('keep.pas', False), False);
+    Assert('build dir ignored', Stack.IsIgnored('build', True),   True);
+
+    // --- Layer 2: proj/sub/.gitignore (*.tmp, !keep.tmp) ---
+    Stack.PushDir(SubDir);
+    Assert('a.tmp ignored',     Stack.IsIgnored('a.tmp',    False), True);
+    Assert('keep.tmp included', Stack.IsIgnored('keep.tmp', False), False);
+    Assert('b.pas not ignored', Stack.IsIgnored('b.pas',    False), False);
+
+    Stack.PopDir;
+    Stack.PopDir;
+  finally
+    Stack.Free;
+  end;
+
+  Writeln('IGNORE-OK');
+  Result := 0;
+end;
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand = 'manifest-merge' then
     Result := DoSelfTestManifestMerge
   else if AArgs.SubCommand = 'glob' then
     Result := DoSelfTestGlob
+  else if AArgs.SubCommand = 'ignore' then
+    Result := DoSelfTestIgnoreFiles(AArgs)
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob');
+    Writeln('Available: manifest-merge, glob, ignore');
     Result := 2;
   end;
 end;

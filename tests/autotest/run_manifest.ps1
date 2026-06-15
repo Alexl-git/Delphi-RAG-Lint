@@ -11,4 +11,7 @@ Check 'manifest-merge keeps global currentProjectsIndexing' ($m -match 'MERGE-OK
 Write-Host ''
 $g = & $Exe selftest glob 2>&1 | Out-String
 Check 'glob selftest' ($g -match 'GLOB-OK')
+Write-Host ''
+$ig = & $Exe selftest ignore --dir "$fx\proj" 2>&1 | Out-String
+Check 'ignore-files selftest' ($ig -match 'IGNORE-OK')
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
