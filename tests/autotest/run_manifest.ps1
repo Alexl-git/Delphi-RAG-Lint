@@ -62,4 +62,15 @@ Write-Host ''
 Write-Host 'Task 7: --only Proj (single-section filter)...'
 & $Exe index --all --only Proj --config "$fx\global.drag-lint.json" 2>&1 | Out-Null
 Check 'index --only Proj exits 0'  ($LASTEXITCODE -eq 0)
+# Task 8: parallel --jobs (Proj + SQL + All built in parallel, never Library).
+Write-Host ''
+Write-Host 'Task 8: parallel --jobs 3 (--only Proj,SQL,All)...'
+Remove-Item "$fx\OUT\*.sqlite" -Force -ErrorAction SilentlyContinue
+& $Exe index --all --jobs 3 --only Proj,SQL,All --config "$fx\global.drag-lint.json" 2>&1 | Out-Null
+Check 'parallel build exits 0' ($LASTEXITCODE -eq 0)
+Check 'parallel built Proj' (Test-Path "$fx\OUT\Proj.sqlite")
+Check 'parallel built SQL'  (Test-Path "$fx\OUT\SQL.sqlite")
+Check 'parallel built All'  (Test-Path "$fx\OUT\All.sqlite")
+$ppf = & $Exe selftest files --db "$fx\OUT\Proj.sqlite" 2>&1 | Out-String
+Check 'parallel Proj has keep.pas' ($ppf -match 'keep\.pas')
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

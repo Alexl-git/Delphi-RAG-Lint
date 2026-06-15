@@ -151,6 +151,8 @@ type
     NoSqlMS:            Boolean;         // --no-sql-ms
     // v0.45: index manifest (Task 7)
     OnlySections:       TArray<string>; // --only <Sec1,Sec2,...>  restrict sections to build
+    // v0.45: index manifest (Task 8)
+    Jobs:               Integer;        // --jobs <n>  parallel worker processes (0 = manifest/auto)
   end;
 
 procedure PrintHelp;
@@ -455,6 +457,11 @@ begin
     end
     else if A = '--use-ignore' then Result.UseIgnore := True
     else if A = '--no-sql-ms'  then Result.NoSqlMS  := True
+    else if (A = '--jobs') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Jobs := StrToIntDef(ParamStr(i), 0);
+    end
     else if (A = '--connection') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1044,18 +1051,184 @@ begin
     end;
   end;
 
-  // Build each section sequentially.
-  AnyFailed := False;
-  for I := 0 to High(Plan.Items) do
+  // Build each section: sequential or parallel based on --jobs / manifest.maxJobs.
+  // Compute effective job count.
+  // Priority: --jobs CLI > manifest.settings.maxJobs > auto (min(CpuCount, sections)).
+  var EffJobs: Integer;
+  var NSections: Integer;
+  var SysInfo2: TSystemInfo;
+  var CpuCount: Integer;
+  NSections := Length(Plan.Items);
+  if AArgs.Jobs > 0 then
+    EffJobs := AArgs.Jobs
+  else if Manifest.Settings.MaxJobs > 0 then
+    EffJobs := Manifest.Settings.MaxJobs
+  else
   begin
-    if not BuildPlanItem(Plan.Items[I], AArgs.Docs) then
-      AnyFailed := True;
+    // Auto: use Windows GetSystemInfo; avoids pulling in System.Threading.
+    GetSystemInfo(SysInfo2);
+    CpuCount := Integer(SysInfo2.dwNumberOfProcessors);
+    if CpuCount < 1 then CpuCount := 1;
+    EffJobs := CpuCount;
+    if NSections < EffJobs then EffJobs := NSections;
+  end;
+  if EffJobs < 1 then EffJobs := 1;
+
+  // Sequential path (jobs <= 1): existing in-process build.
+  if EffJobs <= 1 then
+  begin
+    AnyFailed := False;
+    for I := 0 to High(Plan.Items) do
+    begin
+      if not BuildPlanItem(Plan.Items[I], AArgs.Docs) then
+        AnyFailed := True;
+    end;
+    if AnyFailed then Result := 1 else Result := 0;
+    Exit;
   end;
 
-  if AnyFailed then
-    Result := 1
-  else
-    Result := 0;
+  // Parallel path: --jobs N > 1.
+  // Requires --config so the child gets a deterministic config path.
+  // If no --config was given (discovered mode), warn and fall back to sequential.
+  if AArgs.WorkspaceConfig = '' then
+  begin
+    Writeln(ErrOutput,
+      'NOTE: --jobs >1 requires --config <path>; running sequentially.');
+    AnyFailed := False;
+    for I := 0 to High(Plan.Items) do
+    begin
+      if not BuildPlanItem(Plan.Items[I], AArgs.Docs) then
+        AnyFailed := True;
+    end;
+    if AnyFailed then Result := 1 else Result := 0;
+    Exit;
+  end;
+
+  // Spawn one child process per plan item, throttled to EffJobs concurrent.
+  // Each child runs: "<self>" index --all --only "<Name>" [--platform "<P>"]
+  //                             --config "<cfg>" --jobs 1
+  var SelfExe: string;
+  var TotalSections: Integer;
+  var FailedCount: Integer;
+  var ProcHandles: array of THandle;
+  var ProcItemIdx: array of Integer;
+  var PoolCount: Integer;
+  var WaitResult: DWORD;
+  var SlotDW: DWORD;
+  var ExitCode: DWORD;
+  var SpawnSI: TStartupInfoW;
+  var SpawnPI: TProcessInformation;
+  var ChildCmdLine: string;
+  var ChildCmdBuf: array of WideChar;
+  var OkCount: Integer;
+  SelfExe := ParamStr(0);
+  TotalSections := NSections;
+  FailedCount := 0;
+  SetLength(ProcHandles, TotalSections);
+  SetLength(ProcItemIdx, TotalSections);
+  PoolCount := 0;
+
+  // Inner helpers inline because Delphi nested procs cannot follow inline var decls.
+  // Use local labels and gotos instead -- actually just inline all pool operations below.
+
+  try
+    for I := 0 to TotalSections - 1 do
+    begin
+      // Drain one slot from pool if it is full.
+      while PoolCount >= EffJobs do
+      begin
+        WaitResult := WaitForMultipleObjects(PoolCount, @ProcHandles[0],
+          False { bWaitAll }, INFINITE);
+        if (WaitResult >= WAIT_OBJECT_0) and
+           (WaitResult < WAIT_OBJECT_0 + DWORD(PoolCount)) then
+          SlotDW := WaitResult - WAIT_OBJECT_0
+        else
+          SlotDW := 0;
+        ExitCode := 0;
+        GetExitCodeProcess(ProcHandles[SlotDW], ExitCode);
+        CloseHandle(ProcHandles[SlotDW]);
+        if ExitCode <> 0 then
+          Inc(FailedCount);
+        // Compact pool: swap finished slot with last entry.
+        if SlotDW < DWORD(PoolCount) - 1 then
+        begin
+          ProcHandles[SlotDW] := ProcHandles[PoolCount - 1];
+          ProcItemIdx[SlotDW] := ProcItemIdx[PoolCount - 1];
+        end;
+        Dec(PoolCount);
+      end;
+
+      // Build child command line.
+      ChildCmdLine := '"' + SelfExe + '" index --all --only "' +
+        Plan.Items[I].Name + '"';
+      if Plan.Items[I].Platform <> '' then
+        ChildCmdLine := ChildCmdLine +
+          ' --platform "' + Plan.Items[I].Platform + '"';
+      ChildCmdLine := ChildCmdLine +
+        ' --config "' + AArgs.WorkspaceConfig + '"' +
+        ' --jobs 1';
+
+      SetLength(ChildCmdBuf, Length(ChildCmdLine) + 1);
+      Move(PChar(ChildCmdLine)^, ChildCmdBuf[0],
+        (Length(ChildCmdLine) + 1) * SizeOf(WideChar));
+
+      ZeroMemory(@SpawnSI, SizeOf(SpawnSI));
+      SpawnSI.cb := SizeOf(SpawnSI);
+      ZeroMemory(@SpawnPI, SizeOf(SpawnPI));
+
+      // Inherit console handles so child output interleaves on same stdout/stderr.
+      if not CreateProcessW(nil, @ChildCmdBuf[0], nil, nil,
+        True { bInheritHandles }, 0 { dwCreationFlags },
+        nil, nil, SpawnSI, SpawnPI) then
+      begin
+        Writeln(ErrOutput, 'ERROR: failed to spawn child for section "',
+          Plan.Items[I].Name, '": GetLastError=', GetLastError);
+        Inc(FailedCount);
+        Continue;
+      end;
+
+      // Close thread handle; keep only the process handle.
+      CloseHandle(SpawnPI.hThread);
+      ProcHandles[PoolCount] := SpawnPI.hProcess;
+      ProcItemIdx[PoolCount] := I;
+      Inc(PoolCount);
+    end;
+
+    // Drain remaining pool.
+    while PoolCount > 0 do
+    begin
+      WaitResult := WaitForMultipleObjects(PoolCount, @ProcHandles[0],
+        False { bWaitAll }, INFINITE);
+      if (WaitResult >= WAIT_OBJECT_0) and
+         (WaitResult < WAIT_OBJECT_0 + DWORD(PoolCount)) then
+        SlotDW := WaitResult - WAIT_OBJECT_0
+      else
+        SlotDW := 0;
+      ExitCode := 0;
+      GetExitCodeProcess(ProcHandles[SlotDW], ExitCode);
+      CloseHandle(ProcHandles[SlotDW]);
+      if ExitCode <> 0 then
+        Inc(FailedCount);
+      if SlotDW < DWORD(PoolCount) - 1 then
+      begin
+        ProcHandles[SlotDW] := ProcHandles[PoolCount - 1];
+        ProcItemIdx[SlotDW] := ProcItemIdx[PoolCount - 1];
+      end;
+      Dec(PoolCount);
+    end;
+
+  finally
+    // Safety net: close any handles still open after an exception.
+    for I := 0 to PoolCount - 1 do
+      CloseHandle(ProcHandles[I]);
+    PoolCount := 0;
+  end;
+
+  OkCount := TotalSections - FailedCount;
+  Writeln(Format('parallel build: %d/%d sections OK (jobs=%d)',
+    [OkCount, TotalSections, EffJobs]));
+
+  if FailedCount > 0 then Result := 1 else Result := 0;
 end;
 
 function DoIndex(const AArgs: TArgs): Integer;
