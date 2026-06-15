@@ -84,4 +84,11 @@ Check 'dbselect excludes library-Win32' (-not ($sel -match 'library-Win32\.sqlit
 # against a DB that was built earlier in this test run (Proj.sqlite).
 $g = & $Exe query --name X --db "$fx\OUT\Proj.sqlite" --force32 --size-guard-mb 0 2>&1 | Out-String
 Check 'size guard warns' ($g -match 'WARNING.*Win64|size guard|may run out of memory')
+# Task 10: resolve-dbs command.
+Write-Host ''
+Write-Host 'Task 10: resolve-dbs command...'
+$rd = & $Exe resolve-dbs --platform Win64 --config "$fx\global.drag-lint.json" 2>&1 | Out-String
+Check 'resolve-dbs lists Proj' ($rd -match 'Proj\.sqlite')
+$rdj = & $Exe resolve-dbs --platform Win64 --config "$fx\global.drag-lint.json" --json 2>&1 | Out-String
+Check 'resolve-dbs --json is array' ($rdj.TrimStart().StartsWith('['))
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

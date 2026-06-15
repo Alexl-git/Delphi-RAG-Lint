@@ -213,6 +213,7 @@ begin
   Writeln('  drag-lint workspace status [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--out <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
+  Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -6951,6 +6952,96 @@ begin
   end;
 end;
 
+// v0.45 Task 10: resolve-dbs command.
+// Prints the consumer DB list that query/lsp/serve would use when invoked with
+// the same --platform / --config flags and no explicit --db.
+// Output: one absolute path per line, or a JSON array with --json.
+// Platform defaults to manifest defaultPlatform when --platform is omitted.
+// Exit 0 always (an empty list prints nothing and still exits 0).
+// When --config is given, the manifest is loaded directly from that file
+// (matching the behaviour of index --all); otherwise TManifestIO.Load
+// performs the standard engine-dir/cwd discovery (matching ResolveConsumerDbs).
+/// <summary>Implements the resolve-dbs command: prints the ordered consumer
+/// DB list a tool (query/lsp/serve) would open when invoked with no
+/// explicit --db flags.  Useful for scripting and diagnostics.</summary>
+/// <param name="AArgs">Parsed CLI arguments; uses CheckPlatform, WorkspaceConfig,
+///   AsJson.  When DbPaths is non-empty (explicit --db flags) those paths are
+///   printed as-is (matching ResolveConsumerDbs behaviour).</param>
+/// <returns>0 always.</returns>
+/// <remarks>Not thread-safe; call from the main thread only.</remarks>
+function DoResolveDbsList(const AArgs: TArgs): Integer;
+var
+  Manifest:    TIndexManifest;
+  Resolver:    DRagLint.Project.Resolver.TProjectResolver;
+  EngineDir, ConfigPath, Platform: string;
+  Paths:       TArray<string>;
+  P:           string;
+  J:           TJSONArray;
+begin
+  // --- Resolve the DB list -------------------------------------------------
+  if Length(AArgs.DbPaths) > 0 then
+  begin
+    // Explicit --db flags: honour without modification (same as ResolveConsumerDbs).
+    Paths := AArgs.DbPaths;
+  end
+  else
+  begin
+    EngineDir  := ExtractFilePath(ParamStr(0));
+    ConfigPath := AArgs.WorkspaceConfig;  // --config <path>
+
+    try
+      if ConfigPath <> '' then
+      begin
+        var Content := TFile.ReadAllText(ConfigPath);
+        var RootDir := ExtractFilePath(TPath.GetFullPath(ConfigPath));
+        Manifest := TManifestIO.ParseText(Content, RootDir);
+      end
+      else
+        Manifest := TManifestIO.Load(EngineDir, GetCurrentDir);
+
+      // Pick platform: CLI --platform > manifest defaultPlatform.
+      if AArgs.CheckPlatform <> '' then
+        Platform := AArgs.CheckPlatform
+      else
+        Platform := Manifest.Settings.DefaultPlatform;
+
+      Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+      try
+        Paths := TDbSelect.Resolve(Manifest, Platform, Resolver, True);
+      finally
+        Resolver.Free;
+      end;
+    except
+      // Any manifest parse / IO error: empty list (do not crash).
+      Paths := nil;
+    end;
+
+    // Fallback: preserve pre-Task-9 default when no manifest is found.
+    if Length(Paths) = 0 then
+      Paths := [AArgs.DbPath];
+  end;
+
+  // --- Emit output ---------------------------------------------------------
+  if AArgs.AsJson then
+  begin
+    J := TJSONArray.Create;
+    try
+      for P in Paths do
+        J.Add(P);
+      Writeln(J.ToString);
+    finally
+      J.Free;
+    end;
+  end
+  else
+  begin
+    for P in Paths do
+      Writeln(P);
+  end;
+
+  Result := 0;
+end;
+
 // selftest dbselect: load the manifest from --config, resolve DB list via
 // TDbSelect.Resolve (ARequireExists=False so library paths can be asserted
 // without building the library index), and print each resolved DB path on its
@@ -7316,6 +7407,9 @@ begin
       Result := DoWorkspace(Args)
     else if Args.Command = 'selftest' then
       Result := DoSelfTest(Args)
+    else if Args.Command = 'resolve-dbs' then
+      // v0.45 Task 10: print the consumer DB list (same as query/lsp/serve use).
+      Result := DoResolveDbsList(Args)
     else if Args.Command = 'lsp' then
     begin
       { v0.40.3: forward EVERY --db flag to the LSP server. Multi-DB
