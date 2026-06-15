@@ -304,6 +304,55 @@ DB = `C:\Projects\DB\ORM3\drag-lint.sqlite`.
 
 ---
 
+## K. Index Manifest + Settings + Platform (v0.45)
+
+Config used: `third_party\dll-win64\drag-lint.json` (beside the Win64 engine).
+Run CLI steps from a PowerShell prompt at `C:\Projects\Delphi-RAG-lint`.
+
+- [ ] **K1 Edit config.** Open `third_party\dll-win64\drag-lint.json`; change
+      `maxJobs` to `4` and save. Confirm the file is valid JSON (no parse error
+      on next step).
+- [ ] **K2 Dry-run plan.** `drag-lint index --all --dry-run --config
+      third_party\dll-win64\drag-lint.json` -> prints a resolved plan with all
+      nine sections; Library expands to one entry per registered platform
+      (at minimum `library-Win32.sqlite` and `library-Win64.sqlite`); AllProjects
+      shows a non-empty `dedupExcludeRoots`; exits 0.
+- [ ] **K3 Dry-run JSON.** Add `--json` to the above -> output is valid JSON
+      with a top-level `"sections"` array; section names match the config.
+- [ ] **K4 Loader closure.** In the dry-run JSON, the Loader section has
+      `"mode": "closure"` (resolved from the `.dproj` path, not `folderTree`).
+- [ ] **K5 resolve-dbs Win32.** `drag-lint resolve-dbs --platform Win32 --config
+      third_party\dll-win64\drag-lint.json` -> lists ORM3 + SQL + Loader +
+      working-set DBs + `library-Win32.sqlite`; does NOT list `library-Win64.sqlite`.
+- [ ] **K6 resolve-dbs Win64.** Same with `--platform Win64` -> lists
+      `library-Win64.sqlite` instead; does NOT list `library-Win32.sqlite`.
+- [ ] **K7 resolve-dbs --json.** `--json` variant -> output starts with `[`;
+      each entry is a plain DB path string.
+- [ ] **K8 Full index (non-dry, long).** `drag-lint index --all --jobs 0
+      --config third_party\dll-win64\drag-lint.json` builds every section DB
+      (WARNING: Library and AllProjects are long-running; skip if time-constrained;
+      use `--only ORM3,SQL` for a quick build-path smoke).
+- [ ] **K9 Win32 BPL in 32-bit IDE.** Component -> Install Packages -> install
+      `third_party\dll-win32\dclDragLintWizard.bpl` (the v0.45 Debug build).
+      IDE confirms `drag-lint` loaded. Tools -> drag-lint submenu appears.
+- [ ] **K10 Manifest-driven hover (no --db).** Open an ORM3 unit. Tools ->
+      drag-lint -> Hover -> result shown (no "no DB" error). The plugin found
+      the manifest and selected the ORM3 DB automatically.
+- [ ] **K11 Manifest-driven Find Usages (no --db).** Caret on a symbol -> Find
+      Usages -> usages list populated; no "specify --db" error.
+- [ ] **K12 Platform swap library DB.** Switch the active project's target
+      platform Win32 -> Win64 (Project Manager toolbar). Run Hover again ->
+      confirm the library DB used switches from `library-Win32.sqlite` to
+      `library-Win64.sqlite` (check plugin log for DB-selection trace).
+      (This may require a later plugin task if the notifier is not wired yet --
+      note the actual behaviour.)
+- [ ] **K13 Graph viewer with manifest.** Launch `drag_lint_graph.exe` with no
+      `--db` flag (or from the IDE dockable window, section C5) -> it shells
+      out to `drag-lint resolve-dbs` and loads the manifest DB set; graph
+      populates without a "no database" error.
+
+---
+
 ## How to report back
 Per failing step: the number, what you saw, the unit/symbol involved, and any
 text from **Open Plugin Log** or the Messages pane. That pins each issue fast.

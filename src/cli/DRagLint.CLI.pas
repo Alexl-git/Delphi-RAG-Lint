@@ -1093,6 +1093,7 @@ begin
     if NSections < EffJobs then EffJobs := NSections;
   end;
   if EffJobs < 1 then EffJobs := 1;
+  if EffJobs > 63 then EffJobs := 63; // WaitForMultipleObjects caps at 64 handles
 
   // Sequential path (jobs <= 1): existing in-process build.
   if EffJobs <= 1 then
