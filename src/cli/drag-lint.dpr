@@ -42,6 +42,7 @@ uses
   DRagLint.Index.Glob in '..\index\DRagLint.Index.Glob.pas',
   DRagLint.Index.IgnoreFiles in '..\index\DRagLint.Index.IgnoreFiles.pas',
   DRagLint.Index.Closure in '..\index\DRagLint.Index.Closure.pas',
+  DRagLint.Index.Plan in '..\index\DRagLint.Index.Plan.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

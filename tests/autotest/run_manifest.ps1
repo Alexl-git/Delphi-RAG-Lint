@@ -40,4 +40,9 @@ Check 'closure has inc'                ($cl -match 'uAlpha\.inc')
 Check 'closure has uStale (referenced)' ($cl -match 'uStale\.pas')
 Check 'orphan excluded'                (-not ($cl -match 'uOrphan\.pas'))
 Check 'stale match warned'             ($cl -match 'WARN.*uStale\.pas')
+$plan2 = & $Exe index --all --dry-run --json --config "$fx\global.drag-lint.json" 2>&1 | Out-String
+Check 'plan lib expands Win32'     ($plan2 -match 'library-Win32\.sqlite')
+Check 'plan lib expands Win64'     ($plan2 -match 'library-Win64\.sqlite')
+Check 'plan Proj mode folderTree'  ($plan2 -match '"name"\s*:\s*"Proj"[\s\S]*?"mode"\s*:\s*"folderTree"')
+Check 'plan All dedups proj root'  ($plan2 -match '"name"\s*:\s*"All"[\s\S]*?"dedupExcludeRoots"[\s\S]*?proj')
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

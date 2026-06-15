@@ -43,6 +43,17 @@ type
     //     (Android*, iOS*, Linux64, OSX*, Win64x, ...), which additionally pulls
     //     in the Posix / Androidapi / iOSapi / Macapi platform source trees.
     function ResolveLibraryPaths(AAllPlatforms: Boolean = False): TArray<string>;
+    /// <summary>Returns every platform name registered under BDS\37.0\Library,
+    /// deduplicated case-insensitively. Wraps the private EnumLibraryPlatforms.
+    /// Returns at least ['Win32','Win64'] as a fallback when the registry is empty.</summary>
+    /// <returns>Array of platform names (e.g. Win32, Win64, Android64).</returns>
+    function EnumRegistryPlatforms: TArray<string>;
+    /// <summary>Returns the resolved Library + Browsing search paths for one
+    /// specific platform, as absolute folder paths. Probes HKCU + HKLM,
+    /// both 32-bit and 64-bit registry views.</summary>
+    /// <param name="APlatform">Platform subkey name, e.g. 'Win32', 'Win64'.</param>
+    /// <returns>Deduplicated array of existing absolute folder paths.</returns>
+    function ReadPlatformLibraryPaths(const APlatform: string): TArray<string>;
   end;
 
 implementation
@@ -299,6 +310,26 @@ begin
   List := TList<string>.Create;
   try
     ReadLibraryPaths(List, Platforms);
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+function TProjectResolver.EnumRegistryPlatforms: TArray<string>;
+begin
+  Result := EnumLibraryPlatforms;
+  if Length(Result) = 0 then
+    Result := ['Win32', 'Win64'];
+end;
+
+function TProjectResolver.ReadPlatformLibraryPaths(const APlatform: string): TArray<string>;
+var
+  List: TList<string>;
+begin
+  List := TList<string>.Create;
+  try
+    ReadLibraryPaths(List, [APlatform]);
     Result := List.ToArray;
   finally
     List.Free;

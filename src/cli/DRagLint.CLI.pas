@@ -56,7 +56,8 @@ uses
   DRagLint.Index.Manifest,
   DRagLint.Index.Glob,
   DRagLint.Index.IgnoreFiles,
-  DRagLint.Index.Closure;
+  DRagLint.Index.Closure,
+  DRagLint.Index.Plan;
 
 type
   TArgs = record
@@ -718,9 +719,91 @@ begin
     JIndexes.AddPair('rootDir', AManifest.RootDir);
 end;
 
+// v0.45 Task 6: serialise a TIndexPlan to a TJSONObject alongside the settings
+// echo from the manifest. Shape:
+//   { "settings": { "currentProjectsIndexing": "...", ... },
+//     "sections": [ { "name": ..., "mode": ..., "db": ...,
+//                     "platform": ..., "roots"|"rootsCount": ...,
+//                     "dedupExcludeRoots": [...] }, ... ] }
+// Library sections emit rootsCount (integer) instead of the full roots array
+// to keep output sane (libraries have hundreds of folders).
+// Caller owns + must free the returned object.
+function PlanToJson(const AManifest: TIndexManifest;
+  const APlan: TIndexPlan): TJSONObject;
+var
+  JSettings, JSecObj: TJSONObject;
+  JSections, JRoots, JDedup: TJSONArray;
+  PS: TPlanSection;
+  S: string;
+
+  function ModeStr(M: TPlanSectionMode): string;
+  begin
+    case M of
+      smFolderTree: Result := 'folderTree';
+      smClosure:    Result := 'closure';
+      smLibrary:    Result := 'library';
+    else
+      Result := 'folderTree';
+    end;
+  end;
+
+begin
+  Result := TJSONObject.Create;
+
+  // Settings echo (preserves "currentProjectsIndexing":"perProject" assertion)
+  JSettings := TJSONObject.Create;
+  Result.AddPair('settings', JSettings);
+  JSettings.AddPair('currentProjectsIndexing',
+    (function: string
+     begin
+       case AManifest.Settings.CurrentProjectsIndexing of
+         piPerGroup: Result := 'perGroup';
+         piSingle:   Result := 'single';
+       else
+         Result := 'perProject';
+       end;
+     end)());
+  JSettings.AddPair('defaultPlatform', AManifest.Settings.DefaultPlatform);
+  JSettings.AddPair('sizeGuardMB',
+    TJSONNumber.Create(AManifest.Settings.SizeGuardMB));
+  JSettings.AddPair('enginePath', AManifest.Settings.EnginePath);
+  JSettings.AddPair('maxJobs',
+    TJSONNumber.Create(AManifest.Settings.MaxJobs));
+
+  // Plan sections
+  JSections := TJSONArray.Create;
+  Result.AddPair('sections', JSections);
+  for PS in APlan.Items do
+  begin
+    JSecObj := TJSONObject.Create;
+    JSections.AddElement(JSecObj);
+    JSecObj.AddPair('name',     PS.Name);
+    JSecObj.AddPair('mode',     ModeStr(PS.Mode));
+    JSecObj.AddPair('db',       PS.DbPath);
+    JSecObj.AddPair('platform', PS.Platform);
+
+    if PS.Mode = smLibrary then
+      // Library sections: emit count only (hundreds of folders)
+      JSecObj.AddPair('rootsCount', TJSONNumber.Create(Length(PS.Roots)))
+    else
+    begin
+      JRoots := TJSONArray.Create;
+      JSecObj.AddPair('roots', JRoots);
+      for S in PS.Roots do
+        JRoots.AddElement(TJSONString.Create(S));
+    end;
+
+    JDedup := TJSONArray.Create;
+    JSecObj.AddPair('dedupExcludeRoots', JDedup);
+    for S in PS.DedupExcludeRoots do
+      JDedup.AddElement(TJSONString.Create(S));
+  end;
+end;
+
 // v0.45: index --all [--config <path>] [--dry-run] [--json]
 // Loads the manifest (from --config if given, else TManifestIO.Load(enginedir, cwd)),
-// validates it, and for --dry-run prints the parsed manifest as JSON to stdout.
+// validates it, and for --dry-run --json prints the resolved build plan as JSON.
+// For --dry-run without --json prints a human-readable summary.
 // Full build logic (Task 7) is not yet implemented.
 function DoIndexAll(const AArgs: TArgs): Integer;
 var
@@ -728,6 +811,8 @@ var
   EngineDir, ConfigPath: string;
   ErrMsg: string;
   JRoot: TJSONObject;
+  Plan: TIndexPlan;
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
 begin
   EngineDir  := ExtractFilePath(ParamStr(0));
   ConfigPath := AArgs.WorkspaceConfig;  // --config <path>
@@ -757,7 +842,14 @@ begin
   begin
     if AArgs.AsJson then
     begin
-      JRoot := ManifestToJson(Manifest);
+      // Resolve the manifest into a concrete build plan, then emit plan JSON.
+      Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+      try
+        Plan := ResolvePlan(Manifest, nil, Resolver);
+      finally
+        Resolver.Free;
+      end;
+      JRoot := PlanToJson(Manifest, Plan);
       try
         Writeln(JRoot.Format(2));
       finally
