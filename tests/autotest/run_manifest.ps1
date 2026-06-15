@@ -73,4 +73,15 @@ Check 'parallel built SQL'  (Test-Path "$fx\OUT\SQL.sqlite")
 Check 'parallel built All'  (Test-Path "$fx\OUT\All.sqlite")
 $ppf = & $Exe selftest files --db "$fx\OUT\Proj.sqlite" 2>&1 | Out-String
 Check 'parallel Proj has keep.pas' ($ppf -match 'keep\.pas')
+# Task 9: manifest-driven DB selection + 32-bit size guard.
+Write-Host ''
+Write-Host 'Task 9: dbselect + size guard...'
+$sel = & $Exe selftest dbselect --platform Win64 --config "$fx\global.drag-lint.json" 2>&1 | Out-String
+Check 'dbselect includes Proj'          ($sel -match 'Proj\.sqlite')
+Check 'dbselect includes library-Win64' ($sel -match 'library-Win64\.sqlite')
+Check 'dbselect excludes library-Win32' (-not ($sel -match 'library-Win32\.sqlite'))
+# size guard: force 32-bit branch + threshold 0 (warn for any non-empty file)
+# against a DB that was built earlier in this test run (Proj.sqlite).
+$g = & $Exe query --name X --db "$fx\OUT\Proj.sqlite" --force32 --size-guard-mb 0 2>&1 | Out-String
+Check 'size guard warns' ($g -match 'WARNING.*Win64|size guard|may run out of memory')
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

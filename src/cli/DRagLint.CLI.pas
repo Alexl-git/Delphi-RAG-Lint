@@ -57,7 +57,8 @@ uses
   DRagLint.Index.Glob,
   DRagLint.Index.IgnoreFiles,
   DRagLint.Index.Closure,
-  DRagLint.Index.Plan;
+  DRagLint.Index.Plan,
+  DRagLint.Index.DbSelect;
 
 type
   TArgs = record
@@ -153,6 +154,10 @@ type
     OnlySections:       TArray<string>; // --only <Sec1,Sec2,...>  restrict sections to build
     // v0.45: index manifest (Task 8)
     Jobs:               Integer;        // --jobs <n>  parallel worker processes (0 = manifest/auto)
+    // v0.45: index manifest (Task 9) -- DB selection + size guard
+    Force32:            Boolean;        // --force32  treat this run as 32-bit for size-guard testing
+    SizeGuardMB:        Integer;        // --size-guard-mb <n>  override manifest sizeGuardMB (0=warn always)
+    SizeGuardMBSet:     Boolean;        // True when --size-guard-mb was explicitly given
   end;
 
 procedure PrintHelp;
@@ -214,6 +219,12 @@ begin
   Writeln('Defaults:');
   Writeln('  --db = .\drag-lint.sqlite next to the cwd');
 end;
+
+// v0.45 Task 9: forward declarations so DoQuery (declared early) can call
+// these helpers that are defined later in the file.
+procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer;
+  AForce32: Boolean); forward;
+function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
 
 // v0.14: load defaults from `.drag-lint.json` in cwd (or any parent),
 // before CLI flags. Recognized keys:
@@ -461,6 +472,14 @@ begin
     begin
       Inc(i);
       Result.Jobs := StrToIntDef(ParamStr(i), 0);
+    end
+    else if A = '--force32' then
+      Result.Force32 := True
+    else if (A = '--size-guard-mb') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.SizeGuardMB    := StrToIntDef(ParamStr(i), 0);
+      Result.SizeGuardMBSet := True;
     end
     else if (A = '--connection') and (i < ParamCount) then
     begin
@@ -1933,10 +1952,10 @@ var
   S: TSymbol;
   R: TReference;
   LastStore: ISymbolStore;
+  EffSizeGuardMB: Integer;
 begin
-  PathsToScan := AArgs.DbPaths;
-  if Length(PathsToScan) = 0 then
-    PathsToScan := [AArgs.DbPath];
+  // v0.45 Task 9: resolve DB list (explicit --db or manifest-driven).
+  PathsToScan := ResolveConsumerDbs(AArgs);
   for DbPath in PathsToScan do
   begin
     if not TFile.Exists(DbPath) then
@@ -1946,6 +1965,22 @@ begin
       Exit(2);
     end;
   end;
+  // Size guard: determine effective threshold then check each DB.
+  if AArgs.SizeGuardMBSet then
+    EffSizeGuardMB := AArgs.SizeGuardMB
+  else
+  begin
+    // Load manifest for sizeGuardMB setting (best-effort; ignore errors).
+    EffSizeGuardMB := 1500;  // default
+    try
+      var SgManifest := TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+      EffSizeGuardMB := SgManifest.Settings.SizeGuardMB;
+    except
+      // ignore
+    end;
+  end;
+  for DbPath in PathsToScan do
+    SizeGuardCheck(DbPath, EffSizeGuardMB, AArgs.Force32);
 
   SetLength(AllSymbols, 0);
   SetLength(AllRefs, 0);
@@ -6828,6 +6863,142 @@ begin
   Result := 0;
 end;
 
+// v0.45 Task 9: 32-bit size guard.
+// Emits a WARNING to ErrOutput when the process is 32-bit (or AForce32=True for
+// testing) and the DB file exceeds ASizeGuardMB.
+// Semantics for ASizeGuardMB:
+//   0  -> warn for ANY non-empty file (deterministic threshold for tests)
+//   >0 -> warn when file size in MB > ASizeGuardMB
+// Does NOT abort; advisory only.
+procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer;
+  AForce32: Boolean);
+var
+  Is32Bit: Boolean;
+  FileSizeMB: Int64;
+  FileSize64: Int64;
+begin
+{$IFNDEF WIN64}
+  Is32Bit := True;
+{$ELSE}
+  Is32Bit := AForce32;
+{$ENDIF}
+  if not Is32Bit then Exit;
+  if not TFile.Exists(ADbPath) then Exit;
+  try
+    FileSize64 := TFile.GetSize(ADbPath);
+  except
+    Exit;
+  end;
+  FileSizeMB := FileSize64 div (1024 * 1024);
+  // ASizeGuardMB=0 -> warn for any non-empty file; else warn when size > threshold.
+  if (ASizeGuardMB = 0) or (FileSizeMB > ASizeGuardMB) then
+    Writeln(ErrOutput, Format(
+      'WARNING: %s is %d MB; a 32-bit process may run out of memory. ' +
+      'Use the Win64 drag-lint.exe (third_party\dll-win64).',
+      [ADbPath, FileSizeMB]));
+end;
+
+// v0.45 Task 9: resolve the DB list for consumer commands (query/lsp/serve)
+// when the user supplied no --db flags.
+// Steps:
+//   1. If the user gave --db flags, return those unchanged.
+//   2. Otherwise load the manifest, pick platform, call TDbSelect.Resolve,
+//      use that list.
+//   3. If no manifest is found or the resolved list is empty, fall back to the
+//      default .\drag-lint.sqlite so existing behaviour is preserved.
+function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>;
+var
+  Manifest: TIndexManifest;
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  EngineDir, Platform: string;
+  Resolved: TArray<string>;
+begin
+  // User supplied explicit --db: honour without modification.
+  if Length(AArgs.DbPaths) > 0 then
+  begin
+    Result := AArgs.DbPaths;
+    Exit;
+  end;
+
+  // Try manifest-driven selection.
+  try
+    EngineDir := ExtractFilePath(ParamStr(0));
+    Manifest  := TManifestIO.Load(EngineDir, GetCurrentDir);
+
+    // Pick platform: CLI --platform > manifest defaultPlatform.
+    if AArgs.CheckPlatform <> '' then
+      Platform := AArgs.CheckPlatform
+    else
+      Platform := Manifest.Settings.DefaultPlatform;
+
+    Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      Resolved := TDbSelect.Resolve(Manifest, Platform, Resolver, True);
+    finally
+      Resolver.Free;
+    end;
+  except
+    // Any manifest parse / IO error: fall through to default.
+    Resolved := nil;
+  end;
+
+  if Length(Resolved) > 0 then
+    Result := Resolved
+  else
+  begin
+    // Fallback: single default DB (preserves pre-Task-9 behaviour).
+    Result := [AArgs.DbPath];
+  end;
+end;
+
+// selftest dbselect: load the manifest from --config, resolve DB list via
+// TDbSelect.Resolve (ARequireExists=False so library paths can be asserted
+// without building the library index), and print each resolved DB path on its
+// own line.  Platform is taken from --platform (required).
+function DoSelfTestDbSelect(const AArgs: TArgs): Integer;
+var
+  Manifest: TIndexManifest;
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  ConfigPath, Platform: string;
+  Paths: TArray<string>;
+  P: string;
+begin
+  ConfigPath := AArgs.WorkspaceConfig;
+  if ConfigPath = '' then
+  begin
+    Writeln(ErrOutput, 'selftest dbselect requires --config <path>');
+    Exit(2);
+  end;
+  if not TFile.Exists(ConfigPath) then
+  begin
+    Writeln(ErrOutput, 'selftest dbselect: config not found: ', ConfigPath);
+    Exit(2);
+  end;
+
+  Platform := AArgs.CheckPlatform;
+  if Platform = '' then
+  begin
+    Writeln(ErrOutput, 'selftest dbselect requires --platform <p>');
+    Exit(2);
+  end;
+
+  var Content := TFile.ReadAllText(ConfigPath);
+  var RootDir := ExtractFilePath(TPath.GetFullPath(ConfigPath));
+  Manifest := TManifestIO.ParseText(Content, RootDir);
+
+  Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    // ARequireExists=False: assert paths even when library DB is not built.
+    Paths := TDbSelect.Resolve(Manifest, Platform, Resolver, False);
+  finally
+    Resolver.Free;
+  end;
+
+  for P in Paths do
+    Writeln(P);
+  Result := 0;
+end;
+
 // selftest manifest-merge: builds a global manifest with currentProjectsIndexing=piPerGroup,
 // merges a local manifest parsed from JSON with NO settings block, and asserts the
 // merged value is still piPerGroup. Prints MERGE-OK on success or MERGE-FAIL: <detail>.
@@ -7040,10 +7211,12 @@ begin
     Result := DoSelfTestFiles(AArgs)
   else if AArgs.SubCommand = 'closure' then
     Result := DoSelfTestClosure(AArgs)
+  else if AArgs.SubCommand = 'dbselect' then
+    Result := DoSelfTestDbSelect(AArgs)
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect');
     Result := 2;
   end;
 end;
@@ -7146,15 +7319,10 @@ begin
     else if Args.Command = 'lsp' then
     begin
       { v0.40.3: forward EVERY --db flag to the LSP server. Multi-DB
-        query support inside TLSPServer iterates all stores. Falls back
-        to single-DB if only --db <one> was passed. }
+        query support inside TLSPServer iterates all stores.
+        v0.45 Task 9: when no --db given, resolve from manifest. }
       var DbList: TArray<string>;
-      if Length(Args.DbPaths) > 0 then
-        DbList := Args.DbPaths
-      else if Args.DbPath <> '' then
-        DbList := TArray<string>.Create(Args.DbPath)
-      else
-        DbList := nil;
+      DbList := ResolveConsumerDbs(Args);
       var Lsp := DRagLint.LSP.Server.TLSPServer.Create(DbList);
       try
         Lsp.Run;
@@ -7167,11 +7335,9 @@ begin
     begin
       // Start MCP server. Reads JSON-RPC 2.0 over stdin, writes responses
       // to stdout. Holds the --db open for the lifetime of the session.
+      // v0.45 Task 9: when no --db given, resolve from manifest.
       var DbList: TArray<string>;
-      if Length(Args.DbPaths) > 0 then
-        DbList := Args.DbPaths
-      else if Args.DbPath <> '' then
-        DbList := [Args.DbPath];
+      DbList := ResolveConsumerDbs(Args);
       var Server := DRagLint.MCP.Server.TMCPServer.Create(DbList);
       try
         Server.Run;
