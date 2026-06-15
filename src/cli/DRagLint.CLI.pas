@@ -7380,7 +7380,7 @@ end;
 
 // reconcile-project <App.dpr|.dproj> [--apply] [--config <path>]
 // Dry-run (default): print MISSING/EXTRA/STALE report, exit 0, write nothing.
-// --apply is accepted but deferred to Task 2 (raises an error when used).
+// --apply: back up .dpr/.dproj and insert Missing units (Task 2).
 function DoReconcileProject(const AArgs: TArgs): Integer;
 var
   ProjectFile, EngineDir: string;
@@ -7404,12 +7404,6 @@ begin
   if not TFile.Exists(ProjectFile) then
   begin
     Writeln('ERROR: project file not found: ', ProjectFile);
-    Exit(2);
-  end;
-
-  if AArgs.Apply then
-  begin
-    Writeln('ERROR: --apply is not yet implemented (Task 2)');
     Exit(2);
   end;
 
@@ -7448,39 +7442,47 @@ begin
   Reconciler := TProjectReconciler.Create(LibRoots, StaleGlobs);
   try
     RR := Reconciler.Analyze(ProjectFile);
+
+    // Print the report (always, whether dry-run or --apply).
+    Writeln(Format('MISSING (%d) - used but not listed (will be added with --apply):',
+      [Length(RR.Missing)]));
+    for Item in RR.Missing do
+    begin
+      if Item.UsedBy <> '' then
+        Writeln(Format('  %s -> %s   (used by %s)',
+          [Item.UnitName, Item.RelPath, Item.UsedBy]))
+      else
+        Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
+    end;
+
+    Writeln(Format('EXTRA (%d) - listed but never reached via uses (review):',
+      [Length(RR.Extra)]));
+    for Item in RR.Extra do
+      Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
+
+    Writeln(Format('STALE (%d) - used but looks stale (investigate):',
+      [Length(RR.Stale)]));
+    for Item in RR.Stale do
+    begin
+      if Item.UsedBy <> '' then
+        Writeln(Format('  %s -> %s   (used by %s)',
+          [Item.UnitName, Item.RelPath, Item.UsedBy]))
+      else
+        Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
+    end;
+
+    Writeln('Run a full project build to verify after --apply.');
+
+    // --apply: write changes to .dpr/.dproj (with .bak backups).
+    if AArgs.Apply then
+    begin
+      Reconciler.Apply(ProjectFile, RR);
+      Writeln('Applied: Missing units added to .dpr and .dproj (.bak backups written).');
+    end;
   finally
     Reconciler.Free;
   end;
 
-  // Print the dry-run report.
-  Writeln(Format('MISSING (%d) - used but not listed (will be added with --apply):',
-    [Length(RR.Missing)]));
-  for Item in RR.Missing do
-  begin
-    if Item.UsedBy <> '' then
-      Writeln(Format('  %s -> %s   (used by %s)',
-        [Item.UnitName, Item.RelPath, Item.UsedBy]))
-    else
-      Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
-  end;
-
-  Writeln(Format('EXTRA (%d) - listed but never reached via uses (review):',
-    [Length(RR.Extra)]));
-  for Item in RR.Extra do
-    Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
-
-  Writeln(Format('STALE (%d) - used but looks stale (investigate):',
-    [Length(RR.Stale)]));
-  for Item in RR.Stale do
-  begin
-    if Item.UsedBy <> '' then
-      Writeln(Format('  %s -> %s   (used by %s)',
-        [Item.UnitName, Item.RelPath, Item.UsedBy]))
-    else
-      Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
-  end;
-
-  Writeln('Run a full project build to verify after --apply.');
   Result := 0;
 end;
 

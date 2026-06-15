@@ -424,11 +424,211 @@ begin
   end;
 end;
 
+// --------------------------------------------------------------------------
+// Apply helpers -- .dpr uses-clause edit
+// --------------------------------------------------------------------------
+
+// Return the lowercase unit name of a missing item: used to detect duplicates.
+// Walk through existing text to see if a unit already appears in the clause.
+function UnitAlreadyInClause(const AClause, AUnitName: string): Boolean;
+var
+  Re: TRegEx;
+begin
+  // Match the unit name as a word boundary followed optionally by `in '...'`.
+  Re := TRegEx.Create(
+    '\b' + TRegEx.Escape(AUnitName) + '\b',
+    [roIgnoreCase]);
+  Result := Re.IsMatch(AClause);
+end;
+
+// Build the insertion snippet: ,<CRLF>  <UnitName> in '<RelPath>'
+function MakeUseEntry(const AUnitName, ARelPath: string): string;
+begin
+  Result := ',' + #13#10 + '  ' + AUnitName + ' in ''' + ARelPath + '''';
+end;
+
+// Edit the .dpr: locate the first uses clause and append missing entries
+// before the closing ';'.
+procedure EditDpr(const ADprPath: string; const AMissing: TArray<TReconcileItem>);
+var
+  Content, UsesBlock, Before, After: string;
+  Re: TRegEx;
+  UsesMatch: TMatch;
+  UsesPos, SemiPos: Integer;
+  Item: TReconcileItem;
+  Additions: string;
+begin
+  if Length(AMissing) = 0 then Exit;
+  Content := TFile.ReadAllText(ADprPath);
+
+  // Find the first 'uses' keyword.
+  Re := TRegEx.Create('\buses\b', [roIgnoreCase]);
+  UsesMatch := Re.Match(Content);
+  if not UsesMatch.Success then Exit;
+
+  // The character index (1-based) just after the 'uses' keyword.
+  UsesPos := UsesMatch.Index + UsesMatch.Length - 1;  // 1-based end of 'uses'
+
+  // Find the terminating ';' of the uses clause.
+  SemiPos := Pos(';', Content, UsesPos + 1);
+  if SemiPos = 0 then Exit;
+
+  // Extract just the clause body (between 'uses' and ';') to check for
+  // existing entries (idempotency guard).
+  UsesBlock := Copy(Content, UsesPos + 1, SemiPos - UsesPos - 1);
+
+  // Build additions string.
+  Additions := '';
+  for Item in AMissing do
+    if not UnitAlreadyInClause(UsesBlock, Item.UnitName) then
+      Additions := Additions + MakeUseEntry(Item.UnitName, Item.RelPath);
+
+  if Additions = '' then Exit;
+
+  // Splice: everything before the ';' + additions + ';' + everything after.
+  Before := Copy(Content, 1, SemiPos - 1);
+  After  := Copy(Content, SemiPos, MaxInt);   // includes the ';' itself
+  Content := Before + Additions + After;
+
+  TFile.WriteAllText(ADprPath, Content);
+end;
+
+// --------------------------------------------------------------------------
+// Apply helpers -- .dproj DCCReference ItemGroup edit
+// --------------------------------------------------------------------------
+
+// Return True if the .dproj already contains a DCCReference for this RelPath
+// (case-insensitive file name comparison).
+function RefAlreadyInDproj(const AContent, ARelPath: string): Boolean;
+var
+  Re: TRegEx;
+begin
+  Re := TRegEx.Create(
+    'DCCReference\s+Include="' + TRegEx.Escape(ARelPath) + '"',
+    [roIgnoreCase]);
+  Result := Re.IsMatch(AContent);
+end;
+
+// Edit the .dproj: insert DCCReference entries into the existing ItemGroup
+// (the one already containing <DCCReference>), or create a new ItemGroup
+// before </Project>.
+procedure EditDproj(const ADprojPath: string;
+  const AMissing: TArray<TReconcileItem>);
+var
+  Content, Snippet, GroupClose, ProjClose: string;
+  InsertPos: Integer;
+  Re: TRegEx;
+  M: TMatch;
+  Item: TReconcileItem;
+begin
+  if Length(AMissing) = 0 then Exit;
+  Content := TFile.ReadAllText(ADprojPath);
+
+  // Build the snippet of new <DCCReference> lines (one per missing item,
+  // only those not already present).
+  Snippet := '';
+  for Item in AMissing do
+    if not RefAlreadyInDproj(Content, Item.RelPath) then
+      Snippet := Snippet + #13#10 + '    <DCCReference Include="' +
+        Item.RelPath + '"/>';
+
+  if Snippet = '' then Exit;
+
+  // Case 1: an existing DCCReference ItemGroup exists.
+  // Find </ItemGroup> that closes the group containing <DCCReference.
+  Re := TRegEx.Create(
+    '<DCCReference[\s\S]*?</ItemGroup>',
+    [roIgnoreCase, roMultiLine, roSingleLine]);
+  M := Re.Match(Content);
+  if M.Success then
+  begin
+    // Insert just before the closing </ItemGroup> of that match.
+    // M.Index + M.Length - 1 points at the last char of </ItemGroup>.
+    // Find the position of </ItemGroup> within the match.
+    GroupClose := '</ItemGroup>';
+    InsertPos := M.Index + M.Length - Length(GroupClose);
+    // Validate: the text at InsertPos should be the closing tag.
+    if SameText(Copy(Content, InsertPos, Length(GroupClose)), GroupClose) then
+    begin
+      Content := Copy(Content, 1, InsertPos - 1) +
+                 Snippet + #13#10 + '  ' +
+                 Copy(Content, InsertPos, MaxInt);
+      TFile.WriteAllText(ADprojPath, Content);
+      Exit;
+    end;
+  end;
+
+  // Case 2: no existing DCCReference ItemGroup -- insert before </Project>.
+  ProjClose := '</Project>';
+  InsertPos := Pos(ProjClose, Content);
+  if InsertPos > 0 then
+  begin
+    Content := Copy(Content, 1, InsertPos - 1) +
+               '  <ItemGroup>' +
+               Snippet + #13#10 + '  </ItemGroup>' + #13#10 +
+               Copy(Content, InsertPos, MaxInt);
+    TFile.WriteAllText(ADprojPath, Content);
+  end;
+end;
+
+// --------------------------------------------------------------------------
+
+/// <summary>Apply: add Missing units to .dpr uses clause and .dproj
+/// DCCReference ItemGroup after writing .bak backups.
+/// Backs up .dpr->.dpr.bak and .dproj->.dproj.bak (overwrite).
+/// Inserts only items that are Missing and not already present (idempotent).
+/// Extra/Stale entries are never removed.</summary>
+/// <param name="AProjectFile">Path to .dpr or .dproj.</param>
+/// <param name="AResult">Result from a prior Analyze call.</param>
 procedure TProjectReconciler.Apply(const AProjectFile: string;
   const AResult: TReconcileResult);
+var
+  ProjectAbs, Ext, DprPath, DprojPath: string;
+  ProjectDir: string;
+  Item: TReconcileItem;
+  ProjectRelMissing: TArray<TReconcileItem>;
+  I: Integer;
 begin
-  raise Exception.Create(
-    'TProjectReconciler.Apply not yet implemented (Task 2)');
+  if Length(AResult.Missing) = 0 then Exit;
+
+  ProjectAbs := TPath.GetFullPath(AProjectFile);
+  Ext        := LowerCase(TPath.GetExtension(ProjectAbs));
+  ProjectDir := TPath.GetDirectoryName(ProjectAbs);
+
+  if Ext = '.dpr' then
+  begin
+    DprPath   := ProjectAbs;
+    DprojPath := TPath.ChangeExtension(ProjectAbs, '.dproj');
+  end
+  else
+  begin
+    DprojPath := ProjectAbs;
+    DprPath   := TPath.ChangeExtension(ProjectAbs, '.dpr');
+  end;
+
+  // -- Backups (overwrite any existing .bak) ---------------------------------
+  if TFile.Exists(DprPath) then
+    TFile.Copy(DprPath, DprPath + '.bak', True);
+  if TFile.Exists(DprojPath) then
+    TFile.Copy(DprojPath, DprojPath + '.bak', True);
+
+  // -- Rebuild Missing list with RelPath relative to project dir (backslash) -
+  SetLength(ProjectRelMissing, Length(AResult.Missing));
+  for I := 0 to High(AResult.Missing) do
+  begin
+    Item := AResult.Missing[I];
+    // MakeRelPath already produces backslash-relative from project dir.
+    Item.RelPath := MakeRelPath(Item.FilePath, ProjectDir);
+    ProjectRelMissing[I] := Item;
+  end;
+
+  // -- Edit .dpr uses clause -------------------------------------------------
+  if TFile.Exists(DprPath) then
+    EditDpr(DprPath, ProjectRelMissing);
+
+  // -- Edit .dproj DCCReference ItemGroup ------------------------------------
+  if TFile.Exists(DprojPath) then
+    EditDproj(DprojPath, ProjectRelMissing);
 end;
 
 end.
