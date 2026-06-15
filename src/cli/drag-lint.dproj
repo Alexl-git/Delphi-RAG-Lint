@@ -132,6 +132,7 @@
         <DCCReference Include="..\index\DRagLint.Index.Glob.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.IgnoreFiles.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Closure.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.Reconcile.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Plan.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.DbSelect.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>

@@ -35,6 +35,11 @@ type
     Files: TArray<string>;
     /// <summary>Human-readable warnings, e.g. excluded-but-in-closure messages.</summary>
     Warnings: TArray<string>;
+    /// <summary>The unit name that pulled each Files[i] into the closure.
+    /// Parallel to Files: UsedBy[i] is the using-unit for Files[i].
+    /// '&lt;project&gt;' for entries seeded directly from the .dpr/.dproj member list.
+    /// Existing callers need not change -- they simply ignore this field.</summary>
+    UsedBy: TArray<string>;
   end;
 
   /// <summary>Resolves the compile closure of a Delphi .dpr or .dproj project.</summary>
@@ -526,6 +531,7 @@ var
   Visited: TDictionary<string, Boolean>;  // lowercase abs-path -> True
   Files: TList<string>;
   Warnings: TList<string>;
+  UsedByList: TList<string>;    // parallel to Files; using-unit per entry
   Queue: TQueue<TWorkItem>;
 
   UnitNames, UnitFilePaths: TStringList;
@@ -549,6 +555,7 @@ var
     if Visited.ContainsKey(LKey) then Exit;
     Visited.Add(LKey, True);
     Files.Add(AAbsPath);
+    UsedByList.Add(AUsingUnit);
     W2.UnitName  := '';
     W2.FilePath  := AAbsPath;
     W2.UsingUnit := AUsingUnit;
@@ -568,10 +575,11 @@ begin
   BaseDir := TPath.GetDirectoryName(ProjectAbs);
   Ext     := LowerCase(TPath.GetExtension(ProjectAbs));
 
-  Files    := TList<string>.Create;
-  Warnings := TList<string>.Create;
-  Visited  := TDictionary<string, Boolean>.Create;
-  Queue    := TQueue<TWorkItem>.Create;
+  Files      := TList<string>.Create;
+  Warnings   := TList<string>.Create;
+  UsedByList := TList<string>.Create;
+  Visited    := TDictionary<string, Boolean>.Create;
+  Queue      := TQueue<TWorkItem>.Create;
   SearchPaths := TStringList.Create;
   SearchPaths.CaseSensitive := False;
 
@@ -695,6 +703,7 @@ begin
 
     Result.Files    := Files.ToArray;
     Result.Warnings := Warnings.ToArray;
+    Result.UsedBy   := UsedByList.ToArray;
   finally
     DprojRefFiles.Free;
     UnitFilePaths.Free;
@@ -703,6 +712,7 @@ begin
     Queue.Free;
     Visited.Free;
     Warnings.Free;
+    UsedByList.Free;
     Files.Free;
   end;
 end;

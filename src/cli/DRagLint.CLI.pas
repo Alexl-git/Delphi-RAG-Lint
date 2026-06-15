@@ -57,6 +57,7 @@ uses
   DRagLint.Index.Glob,
   DRagLint.Index.IgnoreFiles,
   DRagLint.Index.Closure,
+  DRagLint.Index.Reconcile,
   DRagLint.Index.Plan,
   DRagLint.Index.DbSelect;
 
@@ -217,6 +218,7 @@ begin
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--out <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
+  Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--json] [--config <path>]  - sync project member list; flag stale used units');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -7376,6 +7378,112 @@ begin
   end;
 end;
 
+// reconcile-project <App.dpr|.dproj> [--apply] [--config <path>]
+// Dry-run (default): print MISSING/EXTRA/STALE report, exit 0, write nothing.
+// --apply is accepted but deferred to Task 2 (raises an error when used).
+function DoReconcileProject(const AArgs: TArgs): Integer;
+var
+  ProjectFile, EngineDir: string;
+  Reconciler: TProjectReconciler;
+  LibRoots: TArray<string>;
+  StaleGlobs: TArray<string>;
+  Manifest: TIndexManifest;
+  ProjResolver: DRagLint.Project.Resolver.TProjectResolver;
+  RR: TReconcileResult;
+  Item: TReconcileItem;
+begin
+  // Accept either positional arg (AArgs.Path) or explicit --project.
+  ProjectFile := AArgs.Path;
+  if (ProjectFile = '') and (AArgs.ProjectPath <> '') then
+    ProjectFile := AArgs.ProjectPath;
+  if ProjectFile = '' then
+  begin
+    Writeln('ERROR: reconcile-project requires a .dpr or .dproj file path');
+    Exit(2);
+  end;
+  if not TFile.Exists(ProjectFile) then
+  begin
+    Writeln('ERROR: project file not found: ', ProjectFile);
+    Exit(2);
+  end;
+
+  if AArgs.Apply then
+  begin
+    Writeln('ERROR: --apply is not yet implemented (Task 2)');
+    Exit(2);
+  end;
+
+  // Resolve library roots (used to exclude library files from the closure).
+  ProjResolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    LibRoots := ProjResolver.ResolveLibraryPaths;
+  finally
+    ProjResolver.Free;
+  end;
+
+  // Load manifest stale globs from indexes.exclude.
+  // Use --config if given; else auto-discover (engine dir + cwd walk).
+  StaleGlobs := nil;
+  try
+    EngineDir := ExtractFilePath(ParamStr(0));
+    if AArgs.WorkspaceConfig <> '' then
+    begin
+      if TFile.Exists(AArgs.WorkspaceConfig) then
+      begin
+        var Content := TFile.ReadAllText(AArgs.WorkspaceConfig);
+        var RootDir := ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig));
+        Manifest := TManifestIO.ParseText(Content, RootDir);
+      end
+      else
+        Manifest := Default(TIndexManifest);
+    end
+    else
+      Manifest := TManifestIO.Load(EngineDir, GetCurrentDir);
+    StaleGlobs := Manifest.GlobalExclude;
+  except
+    // Advisory: if manifest load fails, proceed with built-in globs only.
+    StaleGlobs := nil;
+  end;
+
+  Reconciler := TProjectReconciler.Create(LibRoots, StaleGlobs);
+  try
+    RR := Reconciler.Analyze(ProjectFile);
+  finally
+    Reconciler.Free;
+  end;
+
+  // Print the dry-run report.
+  Writeln(Format('MISSING (%d) - used but not listed (will be added with --apply):',
+    [Length(RR.Missing)]));
+  for Item in RR.Missing do
+  begin
+    if Item.UsedBy <> '' then
+      Writeln(Format('  %s -> %s   (used by %s)',
+        [Item.UnitName, Item.RelPath, Item.UsedBy]))
+    else
+      Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
+  end;
+
+  Writeln(Format('EXTRA (%d) - listed but never reached via uses (review):',
+    [Length(RR.Extra)]));
+  for Item in RR.Extra do
+    Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
+
+  Writeln(Format('STALE (%d) - used but looks stale (investigate):',
+    [Length(RR.Stale)]));
+  for Item in RR.Stale do
+  begin
+    if Item.UsedBy <> '' then
+      Writeln(Format('  %s -> %s   (used by %s)',
+        [Item.UnitName, Item.RelPath, Item.UsedBy]))
+    else
+      Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
+  end;
+
+  Writeln('Run a full project build to verify after --apply.');
+  Result := 0;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -7471,6 +7579,8 @@ begin
       Result := DoWorkspace(Args)
     else if Args.Command = 'selftest' then
       Result := DoSelfTest(Args)
+    else if Args.Command = 'reconcile-project' then
+      Result := DoReconcileProject(Args)
     else if Args.Command = 'resolve-dbs' then
       // v0.45 Task 10: print the consumer DB list (same as query/lsp/serve use).
       Result := DoResolveDbsList(Args)
