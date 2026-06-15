@@ -272,6 +272,65 @@ object IndexesFrame: TIndexesFrame
     OnChange = pcBottomChange
     object tsCoverage: TTabSheet
       Caption = 'Coverage'
+      object pnlCovTop: TPanel
+        Left = 0
+        Top = 0
+        Width = 872
+        Height = 30
+        Align = alTop
+        BevelOuter = bvNone
+        TabOrder = 0
+        object lblCovRoot: TLabel
+          Left = 4
+          Top = 8
+          Width = 26
+          Height = 13
+          Caption = 'Root:'
+        end
+        object edCovRoot: TEdit
+          Left = 36
+          Top = 4
+          Width = 640
+          Height = 22
+          TabOrder = 0
+        end
+        object btnCovBrowse: TButton
+          Left = 682
+          Top = 4
+          Width = 80
+          Height = 22
+          Caption = 'Browse...'
+          TabOrder = 1
+          OnClick = btnCovBrowseClick
+        end
+        object btnCovRefresh: TButton
+          Left = 768
+          Top = 4
+          Width = 80
+          Height = 22
+          Caption = 'Refresh'
+          TabOrder = 2
+          OnClick = btnCovRefreshClick
+        end
+      end
+      object tvCoverage: TTreeView
+        Left = 0
+        Top = 30
+        Width = 872
+        Height = 114
+        Align = alClient
+        HideSelection = False
+        PopupMenu = pmCoverage
+        ReadOnly = True
+        TabOrder = 1
+        OnCustomDrawItem = tvCoverageCustomDrawItem
+        OnExpanding = tvCoverageExpanding
+      end
+      object pmCoverage: TPopupMenu
+        OnPopup = pmCoveragePopup
+        Left = 16
+        Top = 46
+      end
     end
     object tsPlanPreview: TTabSheet
       Caption = 'Plan preview'

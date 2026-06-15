@@ -14,6 +14,7 @@ uses
   System.SysUtils,
   System.Classes,
   System.IOUtils,
+  System.Generics.Collections,
   Winapi.Windows,
   Winapi.Messages,
   Vcl.Controls,
@@ -23,8 +24,11 @@ uses
   Vcl.ComCtrls,
   Vcl.Dialogs,
   Vcl.FileCtrl,
+  Vcl.Menus,
+  Vcl.Graphics,
   DRagLint.Index.Manifest,
   DRagLint.Index.Plan,
+  DRagLint.Index.Coverage,
   DRagLint.Project.Resolver,
   Config.EngineRunner;
 
@@ -69,6 +73,13 @@ type
     splBottom: TSplitter;
     pcBottom: TPageControl;
     tsCoverage: TTabSheet;
+    pnlCovTop: TPanel;
+    lblCovRoot: TLabel;
+    edCovRoot: TEdit;
+    btnCovBrowse: TButton;
+    btnCovRefresh: TButton;
+    tvCoverage: TTreeView;
+    pmCoverage: TPopupMenu;
     tsPlanPreview: TTabSheet;
     lvPlan: TListView;
     btnRefreshPlan: TButton;
@@ -99,6 +110,13 @@ type
     procedure btnBuildAllClick(Sender: TObject);
     procedure btnBuildSelectedClick(Sender: TObject);
     procedure btnDriftClick(Sender: TObject);
+    procedure btnCovBrowseClick(Sender: TObject);
+    procedure btnCovRefreshClick(Sender: TObject);
+    procedure tvCoverageCustomDrawItem(Sender: TCustomTreeView;
+      Node: TTreeNode; State: TCustomDrawState; var DefaultDraw: Boolean);
+    procedure tvCoverageExpanding(Sender: TObject; Node: TTreeNode;
+      var AllowExpansion: Boolean);
+    procedure pmCoveragePopup(Sender: TObject);
   private
     FManifest:      PIndexManifest;
     FLoading:       Boolean;
@@ -106,6 +124,10 @@ type
     FRunning:       Boolean;
     FConfigPath:    string;
     FOnSaveNeeded:  TProc;
+    { Coverage tab: parallel list of TCoverageItem for each leaf node.
+      Index stored in Node.Data as Pointer(idx+1); 0 = dummy child sentinel.
+      Freed in the destructor. }
+    FCoverageItems: TList<TCoverageItem>;
     /// <summary>Split a semicolon-joined string into a TArray of strings,
     /// trimming each element and ignoring empty entries.</summary>
     /// <param name="S">Semicolon-joined input string.</param>
@@ -115,6 +137,40 @@ type
     /// <param name="A">Array of strings to join.</param>
     /// <returns>Joined string.</returns>
     function JoinSemicolon(const A: TArray<string>): string;
+    /// <summary>Return the coverage item index stored in a tree node, or -1
+    /// if the node is a root or dummy child sentinel.</summary>
+    /// <param name="ANode">The tree node to query.</param>
+    /// <returns>Zero-based index into FCoverageItems, or -1.</returns>
+    function NodeCovIdx(ANode: TTreeNode): Integer;
+    /// <summary>Populate child nodes of AParent from ComputeCoverage for
+    /// AFolderPath. Each child gets a dummy grandchild so it shows [+].
+    /// Appends new TCoverageItem entries to FCoverageItems; stores
+    /// Pointer(idx+1) in Node.Data. A resolver is created then freed by
+    /// this method.</summary>
+    /// <param name="AParent">Tree node to add children to.</param>
+    /// <param name="AFolderPath">Absolute folder to classify children of.</param>
+    procedure PopulateCoverageChildren(AParent: TTreeNode;
+      const AFolderPath: string);
+    /// <summary>Rebuild the tvCoverage tree for edCovRoot.Text.
+    /// Clears FCoverageItems; calls ComputeCoverage for the root; each
+    /// child folder gets a single dummy grandchild so [+] is shown.
+    /// No-op when edCovRoot.Text is empty or FManifest is nil.</summary>
+    procedure RefreshCoverage;
+    /// <summary>Return the font colour for a given coverage kind.</summary>
+    /// <param name="AKind">Coverage classification of the folder.</param>
+    /// <returns>TColor constant matching the kind.</returns>
+    function CovKindColor(AKind: TCoverageKind): TColor;
+    /// <summary>Popup menu handler: assign the selected coverage node's folder
+    /// to the section whose index is stored in Sender.Tag. Appends to Include
+    /// (duplicate-guarded), refreshes the section list and coverage tree.</summary>
+    /// <param name="Sender">TMenuItem whose Tag is the section index.</param>
+    procedure CovAssignToSectionClick(Sender: TObject);
+    /// <summary>Popup menu handler: create a new TIndexSection whose Include
+    /// contains the selected coverage node's folder. Prompts for the section
+    /// name (default = sanitized leaf), appends to FManifest^.Sections, and
+    /// refreshes the section list and coverage tree.</summary>
+    /// <param name="Sender">TMenuItem (unused beyond dispatch).</param>
+    procedure CovNewDbFromFolderClick(Sender: TObject);
     /// <summary>Return the index of the currently selected section, or -1 if
     /// nothing is selected or FManifest is nil.</summary>
     /// <returns>Zero-based section index, or -1.</returns>
@@ -156,6 +212,8 @@ type
     /// <param name="AArgs">Argument string for drag-lint.exe.</param>
     procedure RunEngine(const AArgs: string);
   public
+    /// <summary>Free the coverage item list and all owned objects.</summary>
+    destructor Destroy; override;
     /// <summary>Bind the frame to a manifest pointer. The pointer must remain
     /// valid for the lifetime of the frame (owned by TMainForm). Rebuilds the
     /// section list and clears the editor.</summary>
@@ -346,9 +404,33 @@ end;
 { public }
 
 procedure TIndexesFrame.BindManifest(AManifest: PIndexManifest);
+var
+  DefaultRoot: string;
 begin
   FManifest := AManifest;
   RefreshSectionList;
+
+  { Set coverage root default: parent of OutDir if set, else C:\Projects }
+  DefaultRoot := 'C:\Projects';
+  if (AManifest <> nil) and (AManifest^.OutDir <> '') then
+  begin
+    var AbsOut: string;
+    if TPath.IsPathRooted(AManifest^.OutDir) then
+      AbsOut := AManifest^.OutDir
+    else if AManifest^.RootDir <> '' then
+      AbsOut := TPath.Combine(AManifest^.RootDir, AManifest^.OutDir)
+    else
+      AbsOut := '';
+    if AbsOut <> '' then
+    begin
+      var Parent: string;
+      Parent := TPath.GetDirectoryName(ExcludeTrailingPathDelimiter(AbsOut));
+      if (Parent <> '') and TDirectory.Exists(Parent) then
+        DefaultRoot := Parent;
+    end;
+  end;
+  if edCovRoot.Text = '' then
+    edCovRoot.Text := DefaultRoot;
 end;
 
 procedure TIndexesFrame.FlushToManifest;
@@ -556,7 +638,12 @@ end;
 procedure TIndexesFrame.pcBottomChange(Sender: TObject);
 begin
   if pcBottom.ActivePage = tsPlanPreview then
-    RefreshPlanPreview;
+    RefreshPlanPreview
+  else if pcBottom.ActivePage = tsCoverage then
+  begin
+    if edCovRoot.Text <> '' then
+      RefreshCoverage;
+  end;
 end;
 
 procedure TIndexesFrame.btnRefreshPlanClick(Sender: TObject);
@@ -679,6 +766,288 @@ begin
   if FConfigPath <> '' then
     Args := Args + ' --config "' + FConfigPath + '"';
   RunEngine(Args);
+end;
+
+{ Coverage tab helpers }
+
+destructor TIndexesFrame.Destroy;
+begin
+  FCoverageItems.Free;
+  inherited;
+end;
+
+function TIndexesFrame.CovKindColor(AKind: TCoverageKind): TColor;
+begin
+  case AKind of
+    ckIndexed:    Result := clGreen;
+    ckOverlap:    Result := clOlive;
+    ckExcluded:   Result := clGray;
+    ckLibrary:    Result := clNavy;
+  else
+    Result := clRed;
+  end;
+end;
+
+function TIndexesFrame.NodeCovIdx(ANode: TTreeNode): Integer;
+begin
+  if ANode = nil then
+    Result := -1
+  else
+    Result := Integer(ANode.Data) - 1;
+end;
+
+procedure TIndexesFrame.PopulateCoverageChildren(AParent: TTreeNode;
+  const AFolderPath: string);
+var
+  Resolver: TProjectResolver;
+  Items:    TArray<TCoverageItem>;
+  Item:     TCoverageItem;
+  Leaf:     string;
+  Caption:  string;
+  Child:    TTreeNode;
+  Idx:      Integer;
+begin
+  if FManifest = nil then Exit;
+
+  Resolver := TProjectResolver.Create;
+  try
+    Items := ComputeCoverage(FManifest^, AFolderPath, Resolver);
+  finally
+    Resolver.Free;
+  end;
+
+  tvCoverage.Items.BeginUpdate;
+  try
+    for Item in Items do
+    begin
+      Leaf := TPath.GetFileName(Item.Folder);
+      if Item.Detail <> '' then
+        Caption := Leaf + '  [' + CoverageKindStr(Item.Kind) + ']  ' + Item.Detail
+      else
+        Caption := Leaf + '  [' + CoverageKindStr(Item.Kind) + ']';
+
+      { Append item to FCoverageItems; store 1-based index in Node.Data }
+      Idx := FCoverageItems.Add(Item);
+      Child := tvCoverage.Items.AddChild(AParent, Caption);
+      Child.Data := Pointer(Idx + 1);
+
+      { Add a dummy grandchild so the node shows a [+] expander.
+        Dummy sentinel is marked with Data=nil (index 0 means "real item 0",
+        so we can't use 0; use nil for the dummy). }
+      tvCoverage.Items.AddChild(Child, '').Data := nil;
+    end;
+  finally
+    tvCoverage.Items.EndUpdate;
+  end;
+end;
+
+procedure TIndexesFrame.RefreshCoverage;
+var
+  Root:     TTreeNode;
+  RootPath: string;
+begin
+  if FManifest = nil then Exit;
+  RootPath := Trim(edCovRoot.Text);
+  if RootPath = '' then Exit;
+
+  tvCoverage.Items.BeginUpdate;
+  try
+    tvCoverage.Items.Clear;
+    { Re-create the items list on every full refresh }
+    if FCoverageItems = nil then
+      FCoverageItems := TList<TCoverageItem>.Create
+    else
+      FCoverageItems.Clear;
+
+    Root := tvCoverage.Items.Add(nil, RootPath);
+    Root.Data := nil;
+
+    PopulateCoverageChildren(Root, RootPath);
+    Root.Expand(False);
+  finally
+    tvCoverage.Items.EndUpdate;
+  end;
+end;
+
+{ Coverage event handlers }
+
+procedure TIndexesFrame.btnCovBrowseClick(Sender: TObject);
+var
+  Dir: string;
+begin
+  Dir := edCovRoot.Text;
+  if SelectDirectory('Select coverage root', '', Dir) then
+    edCovRoot.Text := Dir;
+end;
+
+procedure TIndexesFrame.btnCovRefreshClick(Sender: TObject);
+begin
+  RefreshCoverage;
+end;
+
+procedure TIndexesFrame.tvCoverageCustomDrawItem(Sender: TCustomTreeView;
+  Node: TTreeNode; State: TCustomDrawState; var DefaultDraw: Boolean);
+var
+  Idx: Integer;
+begin
+  DefaultDraw := True;
+  Idx := NodeCovIdx(Node);
+  if (Idx >= 0) and (FCoverageItems <> nil) and (Idx < FCoverageItems.Count) then
+    Sender.Canvas.Font.Color := CovKindColor(FCoverageItems[Idx].Kind)
+  else
+    Sender.Canvas.Font.Color := clWindowText;
+end;
+
+procedure TIndexesFrame.tvCoverageExpanding(Sender: TObject; Node: TTreeNode;
+  var AllowExpansion: Boolean);
+var
+  Idx:     Integer;
+  Folder:  string;
+  First:   TTreeNode;
+begin
+  AllowExpansion := True;
+
+  { Root node: no coverage data, children were already populated at refresh }
+  if NodeCovIdx(Node) < 0 then Exit;
+  if (FCoverageItems = nil) then Exit;
+
+  Idx := NodeCovIdx(Node);
+  if (Idx < 0) or (Idx >= FCoverageItems.Count) then Exit;
+
+  { Check whether this node still holds only the dummy sentinel }
+  First := Node.GetFirstChild;
+  if (First = nil) or (First.Text <> '') then
+    Exit; { already populated or no children }
+
+  { Delete the dummy sentinel and populate real children }
+  Folder := FCoverageItems[Idx].Folder;
+  tvCoverage.Items.Delete(First);
+  PopulateCoverageChildren(Node, Folder);
+end;
+
+{ Coverage popup menu action handlers }
+
+procedure TIndexesFrame.CovAssignToSectionClick(Sender: TObject);
+var
+  Node:    TTreeNode;
+  MIdx:    Integer;
+  SecIdx:  Integer;
+  F:       string;
+  J:       Integer;
+  Already: Boolean;
+  OldLen:  Integer;
+begin
+  Node := tvCoverage.Selected;
+  if Node = nil then Exit;
+  MIdx := NodeCovIdx(Node);
+  if (FManifest = nil) or (MIdx < 0) or
+     (FCoverageItems = nil) or (MIdx >= FCoverageItems.Count) then
+    Exit;
+  F := FCoverageItems[MIdx].Folder;
+  SecIdx := TMenuItem(Sender).Tag;
+  if (SecIdx < 0) or (SecIdx > High(FManifest^.Sections)) then Exit;
+
+  { Avoid duplicate includes }
+  Already := False;
+  for J := 0 to High(FManifest^.Sections[SecIdx].Include) do
+  begin
+    if SameText(FManifest^.Sections[SecIdx].Include[J], F) then
+    begin
+      Already := True;
+      Break;
+    end;
+  end;
+  if not Already then
+  begin
+    OldLen := Length(FManifest^.Sections[SecIdx].Include);
+    SetLength(FManifest^.Sections[SecIdx].Include, OldLen + 1);
+    FManifest^.Sections[SecIdx].Include[OldLen] := F;
+  end;
+
+  RefreshSectionList;
+  RefreshCoverage;
+end;
+
+procedure TIndexesFrame.CovNewDbFromFolderClick(Sender: TObject);
+var
+  SelNode:  TTreeNode;
+  SIdx:     Integer;
+  Leaf:     string;
+  NewName:  string;
+  NewSec:   TIndexSection;
+  N:        Integer;
+begin
+  SelNode := tvCoverage.Selected;
+  if SelNode = nil then Exit;
+  SIdx := NodeCovIdx(SelNode);
+  if (FManifest = nil) or (SIdx < 0) or
+     (FCoverageItems = nil) or (SIdx >= FCoverageItems.Count) then
+    Exit;
+  Leaf := TPath.GetFileName(FCoverageItems[SIdx].Folder);
+  { Sanitize: replace spaces with underscores }
+  NewName := StringReplace(Leaf, ' ', '_', [rfReplaceAll]);
+  if not InputQuery('New DB from folder', 'Section name:', NewName) then
+    Exit;
+  if Trim(NewName) = '' then Exit;
+
+  NewSec               := Default(TIndexSection);
+  NewSec.Name          := Trim(NewName);
+  NewSec.UseIgnoreFiles := True;
+  NewSec.SqlOnlyMS     := True;
+  SetLength(NewSec.Include, 1);
+  NewSec.Include[0]    := FCoverageItems[SIdx].Folder;
+
+  N := Length(FManifest^.Sections);
+  SetLength(FManifest^.Sections, N + 1);
+  FManifest^.Sections[N] := NewSec;
+
+  RefreshSectionList;
+  RefreshCoverage;
+end;
+
+procedure TIndexesFrame.pmCoveragePopup(Sender: TObject);
+var
+  Node:       TTreeNode;
+  Idx:        Integer;
+  I:          Integer;
+  AssignItem: TMenuItem;
+  SubItem:    TMenuItem;
+  NewItem:    TMenuItem;
+  SecName:    string;
+begin
+  { Clear dynamic items from a previous popup }
+  pmCoverage.Items.Clear;
+
+  Node := tvCoverage.Selected;
+  if Node = nil then Exit;
+  Idx := NodeCovIdx(Node);
+  if (FManifest = nil) or (Idx < 0) or
+     (FCoverageItems = nil) or (Idx >= FCoverageItems.Count) then
+    Exit;
+
+  { "Assign to ->" submenu }
+  AssignItem := TMenuItem.Create(pmCoverage);
+  AssignItem.Caption := 'Assign to...';
+  pmCoverage.Items.Add(AssignItem);
+
+  for I := 0 to High(FManifest^.Sections) do
+  begin
+    SecName := FManifest^.Sections[I].Name;
+    SubItem := TMenuItem.Create(AssignItem);
+    SubItem.Caption := SecName;
+    SubItem.Tag := I;
+    SubItem.OnClick := CovAssignToSectionClick;
+    AssignItem.Add(SubItem);
+  end;
+
+  if AssignItem.Count = 0 then
+    AssignItem.Enabled := False;
+
+  { "New DB from folder..." item }
+  NewItem := TMenuItem.Create(pmCoverage);
+  NewItem.Caption := 'New DB from folder...';
+  NewItem.OnClick := CovNewDbFromFolderClick;
+  pmCoverage.Items.Add(NewItem);
 end;
 
 end.

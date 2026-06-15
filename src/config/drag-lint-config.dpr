@@ -9,6 +9,7 @@ uses
   System.Classes,
   DRagLint.Index.Manifest in '..\index\DRagLint.Index.Manifest.pas',
   DRagLint.Index.Plan in '..\index\DRagLint.Index.Plan.pas',
+  DRagLint.Index.Coverage in '..\index\DRagLint.Index.Coverage.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   Config.MainForm in 'Config.MainForm.pas' {MainForm},
   Config.IndexesFrame in 'Config.IndexesFrame.pas' {IndexesFrame: TFrame},
