@@ -184,6 +184,8 @@ end;
 // Build the TWalkFilter for a section, applying global + section settings.
 function BuildFilter(const AManifest: TIndexManifest;
   const ASection: TIndexSection): TWalkFilter;
+var
+  KB: Integer;
 begin
   Result := TWalkFilter.Create;
   Result.GlobalExclude  := AManifest.GlobalExclude;
@@ -191,6 +193,16 @@ begin
   Result.IncludeOnly    := ASection.IncludeOnly;
   Result.UseIgnoreFiles := ASection.UseIgnoreFiles;
   Result.SqlOnlyMS      := ASection.SqlOnlyMS;
+  { Propagate the file-size guard from manifest settings.
+    0 in settings means "not set" -> fall back to the TWalkFilter.Create
+    default of 2048. A negative value is treated as unlimited (0 in the
+    filter). }
+  KB := AManifest.Settings.MaxParseFileKB;
+  if KB = 0 then
+    KB := 2048;  // default when manifest omits the key
+  if KB < 0 then
+    KB := 0;     // negative = unlimited
+  Result.MaxFileKB := KB;
 end;
 
 // Append unique strings from ASrc into ADest (case-insensitive dedup).

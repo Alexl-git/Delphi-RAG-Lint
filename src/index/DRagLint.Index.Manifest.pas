@@ -38,6 +38,11 @@ type
     EnginePath: string;
     /// <summary>Maximum parallel index jobs. 0 = auto (min(CpuCount, sectionCount)).</summary>
     MaxJobs: Integer;
+    /// <summary>Maximum file size in KB that the indexer will hand to the
+    /// tree-sitter parser. Files exceeding this threshold are skipped with a
+    /// SKIP warning. 0 is normalised to 2048 (the safe default).
+    /// Override via CLI: --max-file-kb N (0 = unlimited).</summary>
+    MaxParseFileKB: Integer;
     /// <summary>Returns a record with all fields set to their documented defaults.</summary>
     class function Defaults: TIndexSettings; static;
   end;
@@ -49,7 +54,8 @@ type
     skDefaultPlatform,
     skSizeGuardMB,
     skEnginePath,
-    skMaxJobs
+    skMaxJobs,
+    skMaxParseFileKB
   );
 
   /// <summary>Describes one named index section within the manifest.</summary>
@@ -265,6 +271,7 @@ begin
   Result.SizeGuardMB             := 1500;
   Result.EnginePath              := 'auto';
   Result.MaxJobs                 := 0;
+  Result.MaxParseFileKB          := 2048;
 end;
 
 { ---------------------------------------------------------------------- }
@@ -344,6 +351,18 @@ begin
       begin
         Result.Settings.MaxJobs := N.AsInt;
         Include(ASettingsKeys, skMaxJobs);
+      end;
+
+      N := JSettings.GetValue('maxParseFileKB') as TJSONNumber;
+      if N <> nil then
+      begin
+        { 0 in JSON means "use default 2048"; a negative value disables the
+          guard (unlimited). CLI --max-file-kb 0 overrides to unlimited after
+          this is applied. }
+        var KB := N.AsInt;
+        if KB = 0 then KB := 2048;
+        Result.Settings.MaxParseFileKB := KB;
+        Include(ASettingsKeys, skMaxParseFileKB);
       end;
     end;
 
@@ -496,6 +515,8 @@ begin
     if skCurrentProjectsIndexing in LocalKeys then
       Result.Settings.CurrentProjectsIndexing :=
         LocalManifest.Settings.CurrentProjectsIndexing;
+    if skMaxParseFileKB in LocalKeys then
+      Result.Settings.MaxParseFileKB := LocalManifest.Settings.MaxParseFileKB;
     Result.RootDir := LocalManifest.RootDir;
     MergeSections(Result, LocalManifest);
   end
@@ -598,6 +619,8 @@ begin
   JSettings.AddPair('sizeGuardMB', TJSONNumber.Create(AManifest.Settings.SizeGuardMB));
   JSettings.AddPair('enginePath', AManifest.Settings.EnginePath);
   JSettings.AddPair('maxJobs', TJSONNumber.Create(AManifest.Settings.MaxJobs));
+  JSettings.AddPair('maxParseFileKB',
+    TJSONNumber.Create(AManifest.Settings.MaxParseFileKB));
 
   { indexes }
   JIndexes := TJSONObject.Create;

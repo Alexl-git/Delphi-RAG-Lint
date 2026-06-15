@@ -158,6 +158,9 @@ type
     Force32:            Boolean;        // --force32  treat this run as 32-bit for size-guard testing
     SizeGuardMB:        Integer;        // --size-guard-mb <n>  override manifest sizeGuardMB (0=warn always)
     SizeGuardMBSet:     Boolean;        // True when --size-guard-mb was explicitly given
+    // v0.46: file-size guard (tree-sitter native stack overflow prevention)
+    MaxFileKB:          Integer;        // --max-file-kb <n>  override default 2048; 0=unlimited; -1=not set
+    MaxFileKBSet:       Boolean;        // True when --max-file-kb was explicitly given
   end;
 
 procedure PrintHelp;
@@ -481,6 +484,12 @@ begin
       Inc(i);
       Result.SizeGuardMB    := StrToIntDef(ParamStr(i), 0);
       Result.SizeGuardMBSet := True;
+    end
+    else if (A = '--max-file-kb') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.MaxFileKB    := StrToIntDef(ParamStr(i), 2048);
+      Result.MaxFileKBSet := True;
     end
     else if (A = '--connection') and (i < ParamCount) then
     begin
@@ -1011,6 +1020,18 @@ begin
     Resolver.Free;
   end;
 
+  // v0.46: CLI --max-file-kb overrides the filter on every plan item.
+  // 0 = unlimited (explicit opt-out); positive = new limit.
+  if AArgs.MaxFileKBSet then
+  begin
+    for I := 0 to High(Plan.Items) do
+    begin
+      var PS2 := Plan.Items[I];
+      PS2.Filter.MaxFileKB := AArgs.MaxFileKB;
+      Plan.Items[I] := PS2;
+    end;
+  end;
+
   // Apply --only filter: keep only items whose Name is in OnlySections.
   if Length(AArgs.OnlySections) > 0 then
   begin
@@ -1317,18 +1338,21 @@ begin
     Writeln('Excluding subtree: ', ExDir);
   end;
 
-  { v0.45: apply walk filter when any filter flag is present. Start from
-    TWalkFilter.Create (SqlOnlyMS=True by default) so the safe default is
-    preserved; --no-sql-ms explicitly clears it. }
+  { v0.45/v0.46: apply walk filter when any filter flag is present. Start from
+    TWalkFilter.Create (SqlOnlyMS=True, MaxFileKB=2048 by default) so the
+    safe defaults are preserved; --no-sql-ms clears SqlOnlyMS;
+    --max-file-kb N overrides MaxFileKB (0 = unlimited). }
   if (Length(AArgs.ExcludeGlobs) > 0) or
      (Length(AArgs.IncludeOnlyGlobs) > 0) or
-     AArgs.UseIgnore or AArgs.NoSqlMS then
+     AArgs.UseIgnore or AArgs.NoSqlMS or AArgs.MaxFileKBSet then
   begin
     var WF: TWalkFilter := TWalkFilter.Create;
     WF.SectionExclude := AArgs.ExcludeGlobs;
     WF.IncludeOnly    := AArgs.IncludeOnlyGlobs;
     WF.UseIgnoreFiles := AArgs.UseIgnore;
     WF.SqlOnlyMS      := not AArgs.NoSqlMS;
+    if AArgs.MaxFileKBSet then
+      WF.MaxFileKB := AArgs.MaxFileKB;  // 0 = unlimited (caller opted out)
     Indexer.SetWalkFilter(WF);
   end;
 

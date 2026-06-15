@@ -116,4 +116,17 @@ $rd = & $Exe resolve-dbs --platform Win64 --config "$fx\global.drag-lint.json" 2
 Check 'resolve-dbs lists Proj' ($rd -match 'Proj\.sqlite')
 $rdj = & $Exe resolve-dbs --platform Win64 --config "$fx\global.drag-lint.json" --json 2>&1 | Out-String
 Check 'resolve-dbs --json is array' ($rdj.TrimStart().StartsWith('['))
+# v0.46: file-size guard regression.
+# Huge.inc is ~8 KB; --max-file-kb 1 sets the limit to 1 KB so the guard
+# fires. After indexing, selftest files must NOT list Huge.inc (it was skipped).
+Write-Host ''
+Write-Host 'v0.46: file-size guard (--max-file-kb 1 skips Huge.inc)...'
+$bigDir = "$PSScriptRoot\..\fixtures\manifest\big"
+$bigDb  = Join-Path $env:TEMP 'draglint_sizetest.sqlite'
+if (Test-Path $bigDb) { Remove-Item -Force $bigDb }
+$bigOut = & $Exe index $bigDir --db $bigDb --max-file-kb 1 2>&1 | Out-String
+Check 'size-guard index exits 0'          ($LASTEXITCODE -eq 0)
+Check 'size-guard prints SKIP for Huge.inc' ($bigOut -match 'SKIP.*Huge\.inc')
+$bgf = & $Exe selftest files --db $bigDb 2>&1 | Out-String
+Check 'size-guard: Huge.inc NOT in index' (-not ($bgf -match 'Huge\.inc'))
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

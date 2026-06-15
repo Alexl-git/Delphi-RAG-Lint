@@ -199,6 +199,25 @@ begin
   Parser := ParserFor(ExtractFileExt(AFilePath));
   if Parser = nil then
     Exit;
+  { v0.46: file-size guard -- skip files that would overflow the tree-sitter
+    native stack. The segfault is not catchable by Delphi (it is a native
+    stack overflow, not an OS exception the RTL wraps). Default: 2048 KB.
+    0 = unlimited (caller explicitly opted out). }
+  if FWalkFilter.MaxFileKB > 0 then
+  begin
+    var FileSize: Int64;
+    try
+      FileSize := TFile.GetSize(AFilePath);
+    except
+      FileSize := 0;
+    end;
+    if FileSize > Int64(FWalkFilter.MaxFileKB) * 1024 then
+    begin
+      Writeln(Format('  SKIP %s: %d KB exceeds parse limit (%d KB)',
+        [AFilePath, FileSize div 1024, FWalkFilter.MaxFileKB]));
+      Exit;
+    end;
+  end;
   Source := TFile.ReadAllBytes(AFilePath);
   Sha := THashSHA2.GetHashString(TEncoding.ANSI.GetString(Source));
   Mtime := DateTimeToUnix(TFile.GetLastWriteTime(AFilePath), False);

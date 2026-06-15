@@ -32,9 +32,19 @@ type
     /// MS*.SQL naming convention to be indexed. Set to False to index all SQL
     /// files regardless of name.</summary>
     SqlOnlyMS:      Boolean;
+    /// <summary>Maximum file size in KB that the indexer will hand to the
+    /// tree-sitter parser. Files exceeding this threshold are silently skipped
+    /// with a SKIP warning to stdout. 0 = no limit (unlimited).
+    /// Default via Create: 2048 (2 MB). Applies to all parsed extensions
+    /// (.pas, .inc, .dfm, .sql).</summary>
+    /// <remarks>The guard exists because tree-sitter recurses on large flat
+    /// literals and can overflow the native stack (segfault, not catchable by
+    /// Delphi's EExternal handler). 2 MB is well above any hand-written
+    /// source file and safely below the files that trigger the crash.</remarks>
+    MaxFileKB:      Integer;
     /// <summary>Returns a TWalkFilter with the safe defaults: SqlOnlyMS=True,
-    /// all other fields empty/False. Prefer this over Default(TWalkFilter),
-    /// which leaves SqlOnlyMS=False.</summary>
+    /// MaxFileKB=2048, all other fields empty/False. Prefer this over
+    /// Default(TWalkFilter), which leaves SqlOnlyMS=False and MaxFileKB=0.</summary>
     class function Create: TWalkFilter; static;
   end;
 
@@ -176,7 +186,8 @@ implementation
 class function TWalkFilter.Create: TWalkFilter;
 begin
   Result := Default(TWalkFilter);
-  Result.SqlOnlyMS := True;
+  Result.SqlOnlyMS  := True;
+  Result.MaxFileKB  := 2048;
 end;
 
 end.
