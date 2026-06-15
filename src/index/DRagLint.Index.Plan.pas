@@ -142,13 +142,13 @@ begin
 end;
 
 // Resolve include entries to absolute paths against ARootDir.
-// For smClosure: returns .dpr/.dproj absolute paths.
-// For smFolderTree: returns existing folder paths.
+// All entries are returned regardless of mode; the caller (BuildPlanItem)
+// decides how to consume them (closure walk vs folder walk).
 function ResolveRoots(const ASection: TIndexSection; const ARootDir: string;
   AMode: TPlanSectionMode): TArray<string>;
 var
   List: TList<string>;
-  Inc, Abs, Ext: string;
+  Inc, Abs: string;
 begin
   List := TList<string>.Create;
   try
@@ -163,17 +163,9 @@ begin
       except
         // keep as-is
       end;
-      Ext := LowerCase(TPath.GetExtension(Abs));
-      if AMode = smClosure then
-      begin
-        // Only collect .dpr/.dproj entries; skip pure folders
-        if (Ext = '.dpr') or (Ext = '.dproj') then
-          List.Add(Abs)
-        else
-          List.Add(Abs);   // also keep folder roots as additional roots
-      end
-      else
-        List.Add(Abs);
+      // All include entries are added regardless of mode; smClosure vs smFolderTree
+      // distinction is handled in BuildPlanItem (closure walk vs folder walk).
+      List.Add(Abs);
     end;
     Result := List.ToArray;
   finally

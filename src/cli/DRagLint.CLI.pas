@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.41.0-alpha';
+  VERSION = '0.45.0-alpha';
 
 function Run: Integer;
 
@@ -1535,23 +1535,34 @@ end;
 // 3. projects.sqlite       = projectsRoot, EXCLUDING every library root and
 //                            every active-project root (so nothing is scanned
 //                            into more than one dictionary).
+// v0.45 Cleanup 1: translate the legacy "scan" block from .drag-lint.json into a
+// TIndexManifest and delegate to the same ResolvePlan + BuildPlanItem core that
+// `index --all` uses, so there is one build path. Mapping:
+//   scan.library:true       -> section {name:"Library", source:"registry-libraries",
+//                              platforms:["*"], db:"library-{platform}.sqlite"}
+//   scan.projects[]:folder  -> folderTree section per folder (name = leaf name)
+//   scan.projectsRoot:dir   -> section {name:"AllProjects", include:[dir],
+//                              dedupAgainst:["*"]}
+//   scan.outDir             -> manifest OutDir
+// If no "scan" block is found, emits creation guidance and exits 2 (unchanged).
 function DoScanAll(const AArgs: TArgs): Integer;
 var
   Root, Scan: TJSONObject;
   JProjects:  TJSONArray;
-  Projects:   TArray<string>;
-  OutDir, ProjectsRoot: string;
-  DoLibrary:  Boolean;
-  LibRoots, ExcludeForRoot: TArray<string>;
-  Resolver:   DRagLint.Project.Resolver.TProjectResolver;
   V:          TJSONValue;
   i:          Integer;
-  ElLib, ElProj, ElRoot, ElTotal: Double;
+  OutDir, ProjectsRoot: string;
+  DoLibrary:  Boolean;
+  Manifest:   TIndexManifest;
+  Sec:        TIndexSection;
+  Plan:       TIndexPlan;
+  Resolver:   DRagLint.Project.Resolver.TProjectResolver;
+  AnyFailed:  Boolean;
+  JRoot:      TJSONObject;
 begin
   Writeln(ErrOutput,
     'DEPRECATED: scan-all is superseded by `index --all`. ' +
     'See global.drag-lint.json for the manifest format.');
-  ElLib  := 0; ElProj := 0; ElRoot := 0;
   Scan := FindScanConfig(Root);
   try
     if Scan = nil then
@@ -1565,11 +1576,11 @@ begin
       Exit(2);
     end;
 
+    // --- Parse "scan" block fields ---
     OutDir := '';
     V := Scan.GetValue('outDir');
     if (V <> nil) and (V.Value <> '') then OutDir := V.Value;
     if OutDir = '' then OutDir := TPath.Combine(GetCurrentDir, '.drag-lint');
-    TDirectory.CreateDirectory(OutDir);
 
     DoLibrary := True;
     V := Scan.GetValue('library');
@@ -1579,70 +1590,98 @@ begin
     V := Scan.GetValue('projectsRoot');
     if (V <> nil) and (V.Value <> '') then ProjectsRoot := V.Value;
 
-    SetLength(Projects, 0);
+    // --- Build TIndexManifest from the parsed scan block ---
+    Manifest := Default(TIndexManifest);
+    Manifest.RootDir := GetCurrentDir;
+    Manifest.OutDir  := OutDir;
+    Manifest.Sections := nil;
+
+    // Library section: one per registered platform, shallow (no usage refs).
+    if DoLibrary then
+    begin
+      Sec := Default(TIndexSection);
+      Sec.Name      := 'Library';
+      Sec.Source    := 'registry-libraries';
+      Sec.Platforms := ['*'];       // expand to all registered platforms
+      Sec.Db        := 'library-{platform}.sqlite';
+      SetLength(Manifest.Sections, Length(Manifest.Sections) + 1);
+      Manifest.Sections[High(Manifest.Sections)] := Sec;
+    end;
+
+    // One folderTree section per "projects" entry (name = folder leaf).
     if Scan.TryGetValue<TJSONArray>('projects', JProjects) then
       for i := 0 to JProjects.Count - 1 do
       begin
-        SetLength(Projects, Length(Projects) + 1);
-        Projects[High(Projects)] := JProjects.Items[i].Value;
+        var ProjFolder := JProjects.Items[i].Value;
+        Sec := Default(TIndexSection);
+        Sec.Name    := ExtractFileName(
+          ExcludeTrailingPathDelimiter(TPath.GetFullPath(ProjFolder)));
+        if Sec.Name = '' then Sec.Name := 'Project' + IntToStr(i + 1);
+        Sec.Include := [ProjFolder];
+        SetLength(Manifest.Sections, Length(Manifest.Sections) + 1);
+        Manifest.Sections[High(Manifest.Sections)] := Sec;
       end;
+
+    // AllProjects section: everything under projectsRoot, deduped against all others.
+    if ProjectsRoot <> '' then
+    begin
+      Sec := Default(TIndexSection);
+      Sec.Name         := 'AllProjects';
+      Sec.Include      := [ProjectsRoot];
+      Sec.DedupAgainst := ['*'];
+      SetLength(Manifest.Sections, Length(Manifest.Sections) + 1);
+      Manifest.Sections[High(Manifest.Sections)] := Sec;
+    end;
+
+    // --- Resolve plan and dispatch ---
+    Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      Plan := ResolvePlan(Manifest, nil, Resolver);
+    finally
+      Resolver.Free;
+    end;
 
     if AArgs.DryRun then
     begin
-      Writeln('--dry-run: would build dictionaries under ', OutDir);
-      Writeln('  library    = ', BoolToStr(DoLibrary, True));
-      Writeln(Format('  projects   = %d folders', [Length(Projects)]));
-      Writeln('  projectsRoot = ', ProjectsRoot);
+      if AArgs.AsJson then
+      begin
+        JRoot := PlanToJson(Manifest, Plan);
+        try
+          Writeln(JRoot.Format(2));
+        finally
+          JRoot.Free;
+        end;
+      end
+      else
+      begin
+        Writeln('scan-all --dry-run: plan derived from "scan" block:');
+        Writeln('  OutDir:  ', OutDir);
+        Writeln(Format('  Sections: %d', [Length(Plan.Items)]));
+        for var PS in Plan.Items do
+          Writeln(Format('    [%s] mode=%s db=%s',
+            [PS.Name + (if PS.Platform <> '' then '['+PS.Platform+']' else ''),
+             (function: string
+              begin
+                case PS.Mode of
+                  smFolderTree: Result := 'folderTree';
+                  smClosure:    Result := 'closure';
+                  smLibrary:    Result := 'library';
+                else
+                  Result := '?';
+                end;
+              end)(),
+             PS.DbPath]));
+      end;
       Exit(0);
     end;
 
-    { 1. Library dictionary (also gives us the roots to exclude later). }
-    SetLength(LibRoots, 0);
-    if DoLibrary then
-    begin
-      Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
-      try
-        LibRoots := Resolver.ResolveLibraryPaths;
-      finally
-        Resolver.Free;
-      end;
-      { Library: shallow (call/type only) -- usage refs would ~double its size
-        and you query the library by definition/call, not usage. }
-      IndexDictionary(TPath.Combine(OutDir, 'library.sqlite'),
-        LibRoots, [], AArgs.Docs, False, ElLib);
-    end;
+    TDirectory.CreateDirectory(OutDir);
+    AnyFailed := False;
+    for var PS in Plan.Items do
+      if not BuildPlanItem(PS, AArgs.Docs) then
+        AnyFailed := True;
 
-    { 2. Active-projects dictionary -- all configured project folders into one.
-         Deep: your code, where Find-Usages of variables/components matters. }
-    if Length(Projects) > 0 then
-      IndexDictionary(TPath.Combine(OutDir, 'active-projects.sqlite'),
-        Projects, [], AArgs.Docs, True, ElProj);
-
-    { 3. Projects-root dictionary -- everything else under projectsRoot, with
-         the library roots AND the active-project roots excluded so no folder
-         is scanned into more than one dictionary. }
-    if ProjectsRoot <> '' then
-    begin
-      ExcludeForRoot := Concat(LibRoots, Projects);
-      IndexDictionary(TPath.Combine(OutDir, 'projects.sqlite'),
-        [ProjectsRoot], ExcludeForRoot, AArgs.Docs, True, ElRoot);
-    end;
-
-    ElTotal := ElLib + ElProj + ElRoot;
-    Writeln('');
-    Writeln('--- scan-all timing ---');
-    Writeln(Format('  library          : %7.1fs', [ElLib]));
-    Writeln(Format('  active-projects  : %7.1fs', [ElProj]));
-    Writeln(Format('  projects-root    : %7.1fs', [ElRoot]));
-    Writeln(Format('  TOTAL            : %7.1fs  (%.1f min)',
-      [ElTotal, ElTotal / 60]));
-    Writeln('');
-    Writeln('scan-all complete. Query all three with repeated --db:');
-    Writeln(Format('  --db "%s" --db "%s" --db "%s"',
-      [TPath.Combine(OutDir, 'active-projects.sqlite'),
-       TPath.Combine(OutDir, 'projects.sqlite'),
-       TPath.Combine(OutDir, 'library.sqlite')]));
-    Result := 0;
+    if AnyFailed then Result := 1 else Result := 0;
   finally
     Root.Free;
   end;
@@ -7439,9 +7478,26 @@ begin
     begin
       { v0.40.3: forward EVERY --db flag to the LSP server. Multi-DB
         query support inside TLSPServer iterates all stores.
-        v0.45 Task 9: when no --db given, resolve from manifest. }
+        v0.45 Task 9: when no --db given, resolve from manifest.
+        Cleanup 2: run size guard for each resolved DB at startup.
+        Writes to ErrOutput only -- must NOT pollute the JSON-RPC stdout stream. }
       var DbList: TArray<string>;
       DbList := ResolveConsumerDbs(Args);
+      var LspSGMB: Integer;
+      if Args.SizeGuardMBSet then
+        LspSGMB := Args.SizeGuardMB
+      else
+      begin
+        LspSGMB := 1500;
+        try
+          var LspM := TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+          LspSGMB := LspM.Settings.SizeGuardMB;
+        except
+          // ignore -- advisory only
+        end;
+      end;
+      for var LspDb in DbList do
+        SizeGuardCheck(LspDb, LspSGMB, Args.Force32);
       var Lsp := DRagLint.LSP.Server.TLSPServer.Create(DbList);
       try
         Lsp.Run;
@@ -7455,8 +7511,25 @@ begin
       // Start MCP server. Reads JSON-RPC 2.0 over stdin, writes responses
       // to stdout. Holds the --db open for the lifetime of the session.
       // v0.45 Task 9: when no --db given, resolve from manifest.
+      // Cleanup 2: run size guard for each resolved DB at startup.
+      // Writes to ErrOutput only -- must NOT pollute the JSON-RPC stdout stream.
       var DbList: TArray<string>;
       DbList := ResolveConsumerDbs(Args);
+      var ServeSGMB: Integer;
+      if Args.SizeGuardMBSet then
+        ServeSGMB := Args.SizeGuardMB
+      else
+      begin
+        ServeSGMB := 1500;
+        try
+          var ServeM := TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+          ServeSGMB := ServeM.Settings.SizeGuardMB;
+        except
+          // ignore -- advisory only
+        end;
+      end;
+      for var ServeDb in DbList do
+        SizeGuardCheck(ServeDb, ServeSGMB, Args.Force32);
       var Server := DRagLint.MCP.Server.TMCPServer.Create(DbList);
       try
         Server.Run;
