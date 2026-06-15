@@ -55,7 +55,8 @@ uses
   DRagLint.Workspace.Config,
   DRagLint.Index.Manifest,
   DRagLint.Index.Glob,
-  DRagLint.Index.IgnoreFiles;
+  DRagLint.Index.IgnoreFiles,
+  DRagLint.Index.Closure;
 
 type
   TArgs = record
@@ -6515,6 +6516,41 @@ begin
   Result := 0;
 end;
 
+// selftest closure: resolves the compile closure of --project <dpr/.dproj>,
+// applying any --exclude <glob> patterns, and prints one file per line then
+// WARN lines. Used by tests to assert the closure file set.
+function DoSelfTestClosure(const AArgs: TArgs): Integer;
+var
+  Resolver: TClosureResolver;
+  LibRoots: TArray<string>;
+  ProjResolver: DRagLint.Project.Resolver.TProjectResolver;
+  CR: TClosureResult;
+  F, W: string;
+begin
+  if AArgs.ProjectPath = '' then
+  begin
+    Writeln('ERROR: selftest closure requires --project <dpr/.dproj>');
+    Exit(2);
+  end;
+  ProjResolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    LibRoots := ProjResolver.ResolveLibraryPaths;
+  finally
+    ProjResolver.Free;
+  end;
+  Resolver := TClosureResolver.Create(LibRoots);
+  try
+    CR := Resolver.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+  finally
+    Resolver.Free;
+  end;
+  for F in CR.Files do
+    Writeln(F);
+  for W in CR.Warnings do
+    Writeln(W);
+  Result := 0;
+end;
+
 // selftest files: open the DB at --db read-only and print every distinct path
 // from the files table, one per line. Used by tests to assert the indexed
 // file set after a filtered index run.
@@ -6551,10 +6587,12 @@ begin
     Result := DoSelfTestIgnoreFiles(AArgs)
   else if AArgs.SubCommand = 'files' then
     Result := DoSelfTestFiles(AArgs)
+  else if AArgs.SubCommand = 'closure' then
+    Result := DoSelfTestClosure(AArgs)
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure');
     Result := 2;
   end;
 end;

@@ -41,6 +41,7 @@ uses
   DRagLint.Index.Manifest in '..\index\DRagLint.Index.Manifest.pas',
   DRagLint.Index.Glob in '..\index\DRagLint.Index.Glob.pas',
   DRagLint.Index.IgnoreFiles in '..\index\DRagLint.Index.IgnoreFiles.pas',
+  DRagLint.Index.Closure in '..\index\DRagLint.Index.Closure.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

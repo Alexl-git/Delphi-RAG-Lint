@@ -31,4 +31,13 @@ $sf = & $Exe selftest files --db "$out\SQL.sqlite" 2>&1 | Out-String
 Check 'sql keeps MS*.SQL'          ($sf -match 'MSData\.SQL')
 Check 'sql drops .pas'             (-not ($sf -match 'scratch\.pas'))
 Check 'sql drops non-MS .SQL'      (-not ($sf -match 'notes\.SQL'))
+$ap = "$fx\app"
+$cl = & $Exe selftest closure --project "$ap\App.dpr" --exclude "uStale*.pas" 2>&1 | Out-String
+Check 'closure has uAlpha'              ($cl -match 'uAlpha\.pas')
+Check 'closure has uBeta'              ($cl -match 'uBeta\.pas')
+Check 'closure has uGamma (transitive)' ($cl -match 'uGamma\.pas')
+Check 'closure has inc'                ($cl -match 'uAlpha\.inc')
+Check 'closure has uStale (referenced)' ($cl -match 'uStale\.pas')
+Check 'orphan excluded'                (-not ($cl -match 'uOrphan\.pas'))
+Check 'stale match warned'             ($cl -match 'WARN.*uStale\.pas')
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
