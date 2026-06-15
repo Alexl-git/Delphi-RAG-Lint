@@ -37,12 +37,29 @@ Exit code 2 if any drift is found, 0 if clean (CI-friendly).
 3. For each (platform, dbPath) where the DB exists:
    - `CurrentRoots := TProjectResolver.ReadPlatformLibraryPaths(platform)`.
    - `IndexedPaths` := all file paths in the DB (`TSQLiteSymbolStore` enumerate).
-   - For each `root` in `CurrentRoots`: it is **MISSING** if no indexed path is
-     under it (case-insensitive prefix, normalized separators + trailing sep).
+   - For each `root` in `CurrentRoots`: it is **MISSING** (true drift) if BOTH:
+     a. No indexed path is under it (case-insensitive prefix, normalized
+        separators + trailing sep), AND
+     b. The root directory contains at least one indexable source file on disk
+        (`.pas`, `.inc`, or `.dfm`), searched recursively with early exit on the
+        first hit (`DirHasSource` helper).
+   - Roots that have NO source on disk (DCU/DCP/BPL output folders, Imports
+     dirs, empty dirs) are NOT drift -- they have nothing to index. Exclude them
+     silently.
 4. Report per platform: the MISSING roots. Summary line:
    `library-drift: <P> platforms checked, <M> roots missing from index`.
    Exit 2 if M > 0, else 0. `--json`:
    `{ "platforms": [ { "platform": "...", "db": "...", "missingRoots": [ ... ] } ] }`.
+
+## DirHasSource -- disk scan helper
+`function DirHasSource(const ADir: string): Boolean` in `DRagLint.Index.Drift.pas`:
+- Walks `ADir` recursively level-by-level using `TDirectory.GetFiles` (top-only
+  per level) + `TDirectory.GetDirectories` (top-only per level, then recurse).
+- Returns `True` on the FIRST `.pas`, `.inc`, or `.dfm` found -- does not
+  enumerate the full tree (early exit matters for large SDK/output roots).
+- Skips subdirectories named `__history`, `.git`, `.hg`, `win32`, `win64`
+  (common Delphi VCS/output dirs with no source).
+- Returns `False` if the directory does not exist.
 
 ## Components
 - New unit `src/index/DRagLint.Index.Drift.pas`:
@@ -70,15 +87,21 @@ Exit code 2 if any drift is found, 0 if clean (CI-friendly).
 - Register the new unit in BOTH `src/cli/drag-lint.dpr` and `drag-lint.dproj`.
 
 ## Testing
-`tests/autotest/run_drift.ps1` (or extend `run_manifest.ps1`):
+`tests/autotest/run_drift.ps1`:
 - Build a tiny library-like DB: `index <fixtureRootA> --db drift.sqlite` where
   `fixtureRootA` has one `.pas`. (Reuse an existing small fixture folder.)
 - `selftest drift --db drift.sqlite --root <fixtureRootA> --root <fixtureRootB>`
-  where `fixtureRootB` is a different folder NOT indexed -> output lists
-  `MISSING <fixtureRootB>` and NOT `<fixtureRootA>`; prints `DRIFT-MISSING 1`.
+  where `fixtureRootB` is a different folder NOT indexed but HAS `.pas` files ->
+  output lists `MISSING <fixtureRootB>` and NOT `<fixtureRootA>`; prints
+  `DRIFT-MISSING 1`.
 - `selftest drift --db drift.sqlite --root <fixtureRootA>` -> `DRIFT-OK` (no missing).
+- `selftest drift --db drift.sqlite --root <fixtureRootB> --root <fixtureRootC>`
+  where `fixtureRootC` = `tests/fixtures/drift-nosrc` (directory exists, contains
+  only a `.txt` file, no `.pas/.inc/.dfm`) -> `fixtureRootB` still flagged MISSING,
+  `fixtureRootC` NOT flagged (no source on disk = not drift).
 - Real smoke (manual, not asserted): `library-drift --platform Win32` against the
-  built `library-Win32.sqlite` -> 0 missing (just reindexed), exit 0.
+  built `library-Win32.sqlite` -> far fewer or zero roots flagged after fix; only
+  genuine source folders missing from the index appear.
 
 ## Future
 Add a `scan_meta(key,value)` table written at index time (resolved roots +
