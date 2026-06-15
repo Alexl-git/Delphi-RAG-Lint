@@ -53,7 +53,8 @@ uses
   DRagLint.Diagnostics.CompileCheck,
   DRagLint.Diagnostics.AstChecks,
   DRagLint.Workspace.Config,
-  DRagLint.Index.Manifest;
+  DRagLint.Index.Manifest,
+  DRagLint.Index.Glob;
 
 type
   TArgs = record
@@ -6390,14 +6391,47 @@ begin
   end;
 end;
 
+// selftest glob: runs all TGlob.Matches / MatchesAny cases.
+// Prints GLOB-FAIL: <desc> and exits 1 on first failure; GLOB-OK and 0 on success.
+function DoSelfTestGlob: Integer;
+
+  procedure Expect(const ADesc: string; AActual, AExpected: Boolean);
+  begin
+    if AActual <> AExpected then
+    begin
+      Writeln('GLOB-FAIL: ', ADesc);
+      Halt(1);
+    end;
+  end;
+
+begin
+  // Single wildcard cases
+  Expect('* - Copy.pas',     TGlob.Matches('Foo - Copy.pas', '* - Copy.pas'),    True);
+  Expect('*_OLD*.pas true',  TGlob.Matches('Unit_OLD.pas',   '*_OLD*.pas'),       True);
+  Expect('*BACKUP* true',    TGlob.Matches('BACKUP_ALL',     '*BACKUP*'),         True);
+  Expect('*_OLD*.pas false', TGlob.Matches('Unit.pas',       '*_OLD*.pas'),       False);
+  // Double-star cross-directory
+  Expect('**/c.pas',         TGlob.Matches('a/b/c.pas',      '**/c.pas'),         True);
+  // SQL extensions
+  Expect('MS*.SQL true',     TGlob.Matches('MSData.SQL',     'MS*.SQL'),          True);
+  Expect('MS*.SQL false',    TGlob.Matches('Other.SQL',      'MS*.SQL'),          False);
+  // MatchesAny
+  Expect('MatchesAny hit',   TGlob.MatchesAny('x.tmp', ['*.bak', '*.tmp']),      True);
+  Expect('MatchesAny miss',  TGlob.MatchesAny('x.pas', ['*.bak', '*.tmp']),      False);
+  Writeln('GLOB-OK');
+  Result := 0;
+end;
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand = 'manifest-merge' then
     Result := DoSelfTestManifestMerge
+  else if AArgs.SubCommand = 'glob' then
+    Result := DoSelfTestGlob
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge');
+    Writeln('Available: manifest-merge, glob');
     Result := 2;
   end;
 end;

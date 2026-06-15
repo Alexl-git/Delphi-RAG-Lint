@@ -39,6 +39,7 @@ uses
   DRagLint.Diagnostics.AstChecks in '..\diagnostics\DRagLint.Diagnostics.AstChecks.pas',
   DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas',
   DRagLint.Index.Manifest in '..\index\DRagLint.Index.Manifest.pas',
+  DRagLint.Index.Glob in '..\index\DRagLint.Index.Glob.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

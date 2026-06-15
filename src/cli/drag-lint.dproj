@@ -129,6 +129,7 @@
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.AstChecks.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Manifest.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.Glob.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
