@@ -328,10 +328,12 @@ Run CLI steps from a PowerShell prompt at `C:\Projects\Delphi-RAG-lint`.
       `library-Win64.sqlite` instead; does NOT list `library-Win32.sqlite`.
 - [ ] **K7 resolve-dbs --json.** `--json` variant -> output starts with `[`;
       each entry is a plain DB path string.
-- [ ] **K8 Full index (non-dry, long).** `drag-lint index --all --jobs 0
-      --config third_party\dll-win64\drag-lint.json` builds every section DB
-      (WARNING: Library and AllProjects are long-running; skip if time-constrained;
-      use `--only ORM3,SQL` for a quick build-path smoke).
+- [ ] **K8 Full index (non-dry, long).** `drag-lint index --all --jobs 4
+      --config third_party\dll-win64\drag-lint.json` builds every section DB and
+      ends with `parallel build: N/N sections OK` (verified 21/21). Library +
+      AllProjects are long-running but DO complete; expect a handful of
+      `SKIP ... exceeds parse limit` lines for multi-MB generated files. Use
+      `--only ORM3,SQL` for a quick build-path smoke if time-constrained.
 - [ ] **K9 Win32 BPL in 32-bit IDE.** Component -> Install Packages -> install
       `third_party\dll-win32\dclDragLintWizard.bpl` (the v0.45 Debug build).
       IDE confirms `drag-lint` loaded. Tools -> drag-lint submenu appears.
@@ -350,6 +352,16 @@ Run CLI steps from a PowerShell prompt at `C:\Projects\Delphi-RAG-lint`.
       `--db` flag (or from the IDE dockable window, section C5) -> it shells
       out to `drag-lint resolve-dbs` and loads the manifest DB set; graph
       populates without a "no database" error.
+- [ ] **K14 File-size guard.** `drag-lint index C:\Projects\DelphiBigNumbers\Tests\BigIntegers
+      --db %TEMP%\bn.sqlite` -> exits 0 and prints `SKIP ... exceeds parse limit`
+      for the multi-MB `*.inc` data files (default 2048 KB). Override with
+      `--max-file-kb 5000` (indexes them; slower) or `--max-file-kb 0` (no limit;
+      may crash on pathological generated files). Setting key: `maxParseFileKB`.
+- [ ] **K15 Ignore files (.gitignore/.hgignore).** Index a tree that has a
+      `.hgignore`/`.gitignore` with `--use-ignore` (ORM3 has an `.hgignore`) ->
+      completes promptly (no hang), and ignored paths (e.g. `*BACKUP*`, `- Copy`,
+      `OLD/`) are absent from the DB. Mercurial `.hgignore` regexp-default lines
+      (before a `syntax: glob` line) are skipped; glob lines apply.
 
 ---
 
