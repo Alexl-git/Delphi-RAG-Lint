@@ -163,6 +163,7 @@ begin
   Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--dry-run] [--watch [--interval N]]');
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
+  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--dry-run [--json]] [--jobs <n>]');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--db ...] [--json]');
@@ -836,15 +837,14 @@ var
   ProjectFile: string;
   ExcludePatterns: TArray<string>;
 begin
-  Result := False;
   // Ensure output directory exists before creating the SQLite file.
   var DbDir := ExtractFilePath(AItem.DbPath);
   if (DbDir <> '') and (not TDirectory.Exists(DbDir)) then
     TDirectory.CreateDirectory(DbDir);
 
   T0 := Now;
-  Store := TSQLiteSymbolStore.Create(AItem.DbPath);
   try
+    Store := TSQLiteSymbolStore.Create(AItem.DbPath);
     Store.Migrate;
 
     DParser := TDelphi13Parser.Create;
