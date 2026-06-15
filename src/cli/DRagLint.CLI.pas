@@ -143,12 +143,14 @@ type
     // forms-csv
     RootForm:           string;  // forms-csv: --root <TfrmMAIN> (auto-detect if '')
     // v0.45: index manifest (Task 1)
-    IndexAll:           Boolean; // --all  (index all sections from manifest)
+    IndexAll:           Boolean;         // --all  (index all sections from manifest)
     // v0.45: index walk filter (Task 4)
     ExcludeGlobs:       TArray<string>; // --exclude <glob> (repeatable)
     IncludeOnlyGlobs:   TArray<string>; // --include-only <glob> (repeatable)
     UseIgnore:          Boolean;         // --use-ignore
     NoSqlMS:            Boolean;         // --no-sql-ms
+    // v0.45: index manifest (Task 7)
+    OnlySections:       TArray<string>; // --only <Sec1,Sec2,...>  restrict sections to build
   end;
 
 procedure PrintHelp;
@@ -423,6 +425,21 @@ begin
     else if A = '--include-external' then Result.IncludeExternal := True
     else if A = '--all-sources'      then Result.AllSources      := True
     else if A = '--all'              then Result.IndexAll         := True
+    else if (A = '--only') and (i < ParamCount) then
+    begin
+      Inc(i);
+      // Split comma-separated section names, trim each, skip empties.
+      var Parts := ParamStr(i).Split([',']);
+      for var P in Parts do
+      begin
+        var T := Trim(P);
+        if T <> '' then
+        begin
+          SetLength(Result.OnlySections, Length(Result.OnlySections) + 1);
+          Result.OnlySections[High(Result.OnlySections)] := T;
+        end;
+      end;
+    end
     else if (A = '--exclude') and (i < ParamCount) then
     begin
       Inc(i);
@@ -800,11 +817,123 @@ begin
   end;
 end;
 
-// v0.45: index --all [--config <path>] [--dry-run] [--json]
+// v0.45 Task 7: build one plan item into its SQLite database.
+// Creates the Store + Indexer, applies filter + dedup roots, walks per mode,
+// then calls ResolveUnitUseTargets. Writes a one-line summary to stdout.
+// Returns True on success, False (and prints the error) on failure.
+function BuildPlanItem(const AItem: TPlanSection;
+  const ADocs: TDocConfig): Boolean;
+var
+  Store:   ISymbolStore;
+  Indexer: IIndexer;
+  DParser: TDelphi13Parser;
+  Cl:      TClosureResolver;
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  CR:      TClosureResult;
+  F, W, ExDir: string;
+  T0:      TDateTime;
+  Elapsed: Double;
+  ProjectFile: string;
+  ExcludePatterns: TArray<string>;
+begin
+  Result := False;
+  // Ensure output directory exists before creating the SQLite file.
+  var DbDir := ExtractFilePath(AItem.DbPath);
+  if (DbDir <> '') and (not TDirectory.Exists(DbDir)) then
+    TDirectory.CreateDirectory(DbDir);
+
+  T0 := Now;
+  Store := TSQLiteSymbolStore.Create(AItem.DbPath);
+  try
+    Store.Migrate;
+
+    DParser := TDelphi13Parser.Create;
+    // Library sections: shallow (no usage refs -- would ~double the DB size).
+    DParser.EmitUsageRefs := (AItem.Mode <> smLibrary);
+    Indexer := TIndexer.Create(Store,
+      [DParser, TDFMParser.Create, TFirebirdSqlParser.Create], ADocs);
+
+    // Apply walk filter from the resolved plan item.
+    Indexer.SetWalkFilter(AItem.Filter);
+
+    // Cross-index dedup: exclude roots already covered by other sections.
+    for ExDir in AItem.DedupExcludeRoots do
+      Indexer.AddExcludeRoot(ExDir);
+
+    case AItem.Mode of
+      smFolderTree, smLibrary:
+        begin
+          for F in AItem.Roots do
+          begin
+            if TDirectory.Exists(F) then
+              Indexer.IndexFolder(F, True)
+            else if TFile.Exists(F) then
+              Indexer.IndexFile(F)
+            else
+              Writeln(Format('  (skip, not found) %s', [F]));
+          end;
+        end;
+
+      smClosure:
+        begin
+          // AItem.Roots for closure = the .dpr/.dproj paths.
+          // Build library roots for exclusion from the closure walk.
+          Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+          try
+            Cl := TClosureResolver.Create(Resolver.ResolveLibraryPaths);
+            try
+              for F in AItem.Roots do
+              begin
+                if not TFile.Exists(F) then
+                begin
+                  Writeln(Format('  (skip, project file not found) %s', [F]));
+                  Continue;
+                end;
+                // Combine global + section exclude patterns for the closure.
+                ExcludePatterns := Concat(
+                  AItem.Filter.GlobalExclude,
+                  AItem.Filter.SectionExclude);
+                CR := Cl.Resolve(F, ExcludePatterns);
+                for W in CR.Warnings do
+                  Writeln('  ', W);
+                for ProjectFile in CR.Files do
+                  Indexer.IndexFile(ProjectFile);
+              end;
+            finally
+              Cl.Free;
+            end;
+          finally
+            Resolver.Free;
+          end;
+        end;
+    end;
+
+    Store.ResolveUnitUseTargets;
+    Elapsed := (Now - T0) * 86400;
+
+    var PlatSuffix := '';
+    if AItem.Platform <> '' then PlatSuffix := ' [' + AItem.Platform + ']';
+    Writeln(Format('=== %s%s -> %s : files=%d symbols=%d [%.1fs] ===',
+      [AItem.Name, PlatSuffix, AItem.DbPath,
+       Store.CountFiles, Store.CountSymbols, Elapsed]));
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      var PlatSuffix := '';
+      if AItem.Platform <> '' then PlatSuffix := ' [' + AItem.Platform + ']';
+      Writeln(ErrOutput, Format(
+        'ERROR building section %s%s: %s: %s',
+        [AItem.Name, PlatSuffix, E.ClassName, E.Message]));
+      Result := False;
+    end;
+  end;
+end;
+
+// v0.45: index --all [--config <path>] [--dry-run [--json]] [--only <Secs>] [--platform <P>]
 // Loads the manifest (from --config if given, else TManifestIO.Load(enginedir, cwd)),
-// validates it, and for --dry-run --json prints the resolved build plan as JSON.
-// For --dry-run without --json prints a human-readable summary.
-// Full build logic (Task 7) is not yet implemented.
+// validates it, resolves the build plan, optionally filters by --only / --platform,
+// then builds each section sequentially. Returns 0 if all sections succeeded.
 function DoIndexAll(const AArgs: TArgs): Integer;
 var
   Manifest: TIndexManifest;
@@ -813,6 +942,9 @@ var
   JRoot: TJSONObject;
   Plan: TIndexPlan;
   Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  PlatFilter: TArray<string>;
+  AnyFailed: Boolean;
+  I: Integer;
 begin
   EngineDir  := ExtractFilePath(ParamStr(0));
   ConfigPath := AArgs.WorkspaceConfig;  // --config <path>
@@ -834,21 +966,51 @@ begin
   ErrMsg := TManifestIO.Validate(Manifest);
   if ErrMsg <> '' then
   begin
-    Writeln('ERROR: manifest invalid: ', ErrMsg);
+    Writeln(ErrOutput, 'ERROR: manifest invalid: ', ErrMsg);
     Exit(2);
+  end;
+
+  // Build platform filter from --platform (reuses CheckPlatform field).
+  if AArgs.CheckPlatform <> '' then
+    PlatFilter := [AArgs.CheckPlatform]
+  else
+    PlatFilter := nil;
+
+  // Resolve the full build plan.
+  Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    Plan := ResolvePlan(Manifest, PlatFilter, Resolver);
+  finally
+    Resolver.Free;
+  end;
+
+  // Apply --only filter: keep only items whose Name is in OnlySections.
+  if Length(AArgs.OnlySections) > 0 then
+  begin
+    var Filtered: TArray<TPlanSection>;
+    for I := 0 to High(Plan.Items) do
+    begin
+      var PS := Plan.Items[I];
+      var Keep := False;
+      for var OnlyName in AArgs.OnlySections do
+        if SameText(PS.Name, OnlyName) then
+        begin
+          Keep := True;
+          Break;
+        end;
+      if Keep then
+      begin
+        SetLength(Filtered, Length(Filtered) + 1);
+        Filtered[High(Filtered)] := PS;
+      end;
+    end;
+    Plan.Items := Filtered;
   end;
 
   if AArgs.DryRun then
   begin
     if AArgs.AsJson then
     begin
-      // Resolve the manifest into a concrete build plan, then emit plan JSON.
-      Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
-      try
-        Plan := ResolvePlan(Manifest, nil, Resolver);
-      finally
-        Resolver.Free;
-      end;
       JRoot := PlanToJson(Manifest, Plan);
       try
         Writeln(JRoot.Format(2));
@@ -863,18 +1025,37 @@ begin
       Writeln('Index manifest (dry-run):');
       Writeln('  RootDir: ', Manifest.RootDir);
       Writeln('  OutDir:  ', Manifest.OutDir);
-      Writeln(Format('  Sections: %d', [Length(Manifest.Sections)]));
-      for var Sec in Manifest.Sections do
-        Writeln(Format('    [%s] source=%s include=%d',
-          [Sec.Name, Sec.Source, Length(Sec.Include)]));
+      Writeln(Format('  Sections to build: %d', [Length(Plan.Items)]));
+      for var PS in Plan.Items do
+        Writeln(Format('    [%s] mode=%s db=%s',
+          [PS.Name + (if PS.Platform <> '' then '['+PS.Platform+']' else ''),
+           (function: string
+            begin
+              case PS.Mode of
+                smFolderTree: Result := 'folderTree';
+                smClosure:    Result := 'closure';
+                smLibrary:    Result := 'library';
+              else
+                Result := '?';
+              end;
+            end)(),
+           PS.DbPath]));
       Exit(0);
     end;
   end;
 
-  // TODO(Task 7): honour AArgs.OnlySections (--only) filter
-  // Full build not yet implemented (Task 7)
-  Writeln('ERROR: index --all without --dry-run is not yet implemented (Task 7).');
-  Exit(2);
+  // Build each section sequentially.
+  AnyFailed := False;
+  for I := 0 to High(Plan.Items) do
+  begin
+    if not BuildPlanItem(Plan.Items[I], AArgs.Docs) then
+      AnyFailed := True;
+  end;
+
+  if AnyFailed then
+    Result := 1
+  else
+    Result := 0;
 end;
 
 function DoIndex(const AArgs: TArgs): Integer;
@@ -1121,6 +1302,8 @@ begin
 end;
 
 // v0.42: drag-lint scan-all [--dry-run]
+// DEPRECATED (v0.45): the manifest-driven `index --all` command supersedes
+// scan-all. scan-all continues to work but emits a deprecation notice.
 // Builds the user's THREE dictionaries with automatic cross-dedup, driven by
 // the "scan" section of .drag-lint.json:
 //   "scan": {
@@ -1147,6 +1330,9 @@ var
   i:          Integer;
   ElLib, ElProj, ElRoot, ElTotal: Double;
 begin
+  Writeln(ErrOutput,
+    'DEPRECATED: scan-all is superseded by `index --all`. ' +
+    'See global.drag-lint.json for the manifest format.');
   ElLib  := 0; ElProj := 0; ElRoot := 0;
   Scan := FindScanConfig(Root);
   try

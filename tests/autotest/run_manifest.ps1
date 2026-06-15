@@ -45,4 +45,21 @@ Check 'plan lib expands Win32'     ($plan2 -match 'library-Win32\.sqlite')
 Check 'plan lib expands Win64'     ($plan2 -match 'library-Win64\.sqlite')
 Check 'plan Proj mode folderTree'  ($plan2 -match '"name"\s*:\s*"Proj"[\s\S]*?"mode"\s*:\s*"folderTree"')
 Check 'plan All dedups proj root'  ($plan2 -match '"name"\s*:\s*"All"[\s\S]*?"dedupExcludeRoots"[\s\S]*?proj')
+# Task 7: Build via the manifest (folder-tree + dedup), NEVER the Library section.
+Write-Host ''
+Write-Host 'Task 7: manifest build (--only Proj,SQL,All)...'
+& $Exe index --all --only Proj,SQL,All --config "$fx\global.drag-lint.json" 2>&1 | Out-Null
+Check 'index --only exits 0' ($LASTEXITCODE -eq 0)
+Check 'manifest built Proj.sqlite' (Test-Path "$fx\OUT\Proj.sqlite")
+Check 'manifest built SQL.sqlite'  (Test-Path "$fx\OUT\SQL.sqlite")
+Check 'manifest built All.sqlite'  (Test-Path "$fx\OUT\All.sqlite")
+$pf2 = & $Exe selftest files --db "$fx\OUT\Proj.sqlite" 2>&1 | Out-String
+Check 'manifest Proj keep.pas'     ($pf2 -match 'keep\.pas')
+$sf2 = & $Exe selftest files --db "$fx\OUT\SQL.sqlite" 2>&1 | Out-String
+Check 'manifest SQL MS only'       ($sf2 -match 'MSData\.SQL')
+# Confirm --only filters correctly when only one section given.
+Write-Host ''
+Write-Host 'Task 7: --only Proj (single-section filter)...'
+& $Exe index --all --only Proj --config "$fx\global.drag-lint.json" 2>&1 | Out-Null
+Check 'index --only Proj exits 0'  ($LASTEXITCODE -eq 0)
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
