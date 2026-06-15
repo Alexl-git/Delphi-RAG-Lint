@@ -63,10 +63,13 @@ drag-lint reconcile-project <App.dpr|App.dproj> [--apply] [--json] [--config <pa
      entry includes the using-unit. A Stale unit that is also Missing is still
      added (it is compiled) but flagged for investigation.
 
-### Stale heuristics (built-in), matched on the file's base name via `TGlob`:
-`*_OLD*`, `* - Copy*`, `*-Copy*`, `*BACKUP*`, `*-bad*`, and a date-stamp pattern
-`*_20######*` (e.g. `_20230828`). PLUS the nearby manifest's `indexes.exclude`
-globs when a config is found.
+### Stale heuristics (built-in), matched on the file's base name:
+`*_OLD*`, `* - Copy*`, `*-Copy*`, `*BACKUP*`, `*-bad*` via `TGlob.Matches`, plus
+a date-stamp suffix `_` + 8 digits (e.g. `_20230828`) detected via
+`TRegEx.IsMatch(BaseName, '_\d{8}')` (replaces the old non-functional
+`*_20######*` glob -- `TGlob` treats `#` as a literal character, not a digit
+wildcard). PLUS the nearby manifest's `indexes.exclude` globs when a config is
+found.
 
 ### Report (dry-run and the summary of `--apply`)
 - `MISSING (N) - used but not listed (will be added):` unit -> relative file.

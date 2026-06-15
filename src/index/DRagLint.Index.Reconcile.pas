@@ -93,18 +93,22 @@ type
 
     /// <summary>Apply: add Missing units to .dpr uses clause and .dproj
     /// DCCReference ItemGroup after writing .bak backups.
-    /// NOT implemented in Task 1 -- raises an exception.</summary>
+    /// Backs up .dpr -> .dpr.bak and .dproj -> .dproj.bak before writing.
+    /// Inserts only items that are Missing and not already present (idempotent).
+    /// Extra and Stale entries are never removed.
+    /// Re-running after Apply reports 0 Missing.</summary>
     /// <param name="AProjectFile">Path to .dpr or .dproj.</param>
     /// <param name="AResult">Result from a prior Analyze call.</param>
-    /// <exception cref="Exception">Always raised: not yet implemented (Task 2).</exception>
     procedure Apply(const AProjectFile: string; const AResult: TReconcileResult);
   end;
 
 /// <summary>True when the file's base name (including extension) matches a
 /// built-in stale heuristic or any pattern in AExtraGlobs.
-/// Built-in patterns (case-insensitive): *_OLD*, * - Copy*, *-Copy*,
-/// *BACKUP*, *-bad*, *_20######* (exactly six digits after _20).
-/// Matching uses TGlob.Matches on the base name only.</summary>
+/// Built-in glob patterns (case-insensitive): *_OLD*, * - Copy*, *-Copy*,
+/// *BACKUP*, *-bad*. Additionally detects a date-stamp suffix: underscore
+/// followed by 8 digits (e.g. _20230828) via TRegEx (replaces the old
+/// non-functional *_20######* glob -- TGlob treats # as a literal).
+/// Matching uses TGlob.Matches + TRegEx on the base name only.</summary>
 /// <param name="AFileName">Base file name (e.g. 'uFoo_OLD_20230828.pas').</param>
 /// <param name="AExtraGlobs">Additional glob patterns (e.g. manifest excludes).</param>
 /// <returns>True if the name looks stale.</returns>
@@ -115,13 +119,14 @@ implementation
 
 const
   // Built-in stale base-name glob patterns (case-insensitive via TGlob.Matches).
-  STALE_GLOBS: array[0..5] of string = (
+  // Note: date-stamp detection (_YYYYMMDD) is handled separately by TRegEx
+  // in IsStaleName; the dead *_20######* glob has been removed.
+  STALE_GLOBS: array[0..4] of string = (
     '*_OLD*',
     '* - Copy*',
     '*-Copy*',
     '*BACKUP*',
-    '*-bad*',
-    '*_20######*'
+    '*-bad*'
   );
 
 // --------------------------------------------------------------------------
@@ -136,6 +141,11 @@ begin
   for P in STALE_GLOBS do
     if TGlob.Matches(BaseName, P) then
       Exit(True);
+  // Date-stamp heuristic: base name contains _ followed by 8 digits
+  // (e.g. uData_20240101.pas).  TGlob does not support # as digit-class
+  // so we use a regex here instead of the dead *_20######* glob.
+  if TRegEx.IsMatch(BaseName, '_\d{8}', [roIgnoreCase]) then
+    Exit(True);
   for P in AExtraGlobs do
     if TGlob.Matches(BaseName, P) then
       Exit(True);
@@ -447,11 +457,123 @@ begin
   Result := ',' + #13#10 + '  ' + AUnitName + ' in ''' + ARelPath + '''';
 end;
 
+// BlankCommentsAndStrings: return a length-preserving copy of AText where
+// all comment and string-literal content is replaced by spaces.  Handles
+// {..} brace comments, (*...*) paren-star comments, // line comments, and
+// single-quoted string literals ('' escape handled).  Uses the same algorithm
+// as TClosureResolver.StripCommentsAndStrings; extracted here so EditDpr can
+// locate positions in the blanked copy and apply them to the original text
+// without any position shift (blank = same length as original).
+function BlankCommentsAndStrings(const AText: string): string;
+var
+  I, Len: Integer;
+  C: Char;
+  InBrace, InParen, InString: Boolean;
+  SB: TStringBuilder;
+begin
+  SB := TStringBuilder.Create(Length(AText));
+  try
+    I := 1;
+    Len := Length(AText);
+    InBrace  := False;
+    InParen  := False;
+    InString := False;
+    while I <= Len do
+    begin
+      C := AText[I];
+      if InString then
+      begin
+        if C = '''' then
+        begin
+          if (I < Len) and (AText[I + 1] = '''') then
+          begin
+            SB.Append('  ');
+            Inc(I, 2);
+            Continue;
+          end;
+          InString := False;
+          SB.Append(' ');
+        end
+        else
+          SB.Append(' ');
+        Inc(I);
+        Continue;
+      end;
+      if InBrace then
+      begin
+        if C = '}' then
+        begin
+          InBrace := False;
+          SB.Append(' ');
+        end
+        else
+          SB.Append(' ');
+        Inc(I);
+        Continue;
+      end;
+      if InParen then
+      begin
+        if (C = '*') and (I < Len) and (AText[I + 1] = ')') then
+        begin
+          InParen := False;
+          SB.Append('  ');
+          Inc(I, 2);
+          Continue;
+        end
+        else
+          SB.Append(' ');
+        Inc(I);
+        Continue;
+      end;
+      // Not inside any comment or string.
+      if C = '''' then
+      begin
+        InString := True;
+        SB.Append(' ');
+        Inc(I);
+        Continue;
+      end;
+      if C = '{' then
+      begin
+        InBrace := True;
+        SB.Append(' ');
+        Inc(I);
+        Continue;
+      end;
+      if (C = '(') and (I < Len) and (AText[I + 1] = '*') then
+      begin
+        InParen := True;
+        SB.Append('  ');
+        Inc(I, 2);
+        Continue;
+      end;
+      if (C = '/') and (I < Len) and (AText[I + 1] = '/') then
+      begin
+        while (I <= Len) and (AText[I] <> #10) do
+        begin
+          SB.Append(' ');
+          Inc(I);
+        end;
+        Continue;
+      end;
+      SB.Append(C);
+      Inc(I);
+    end;
+    Result := SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
 // Edit the .dpr: locate the first uses clause and append missing entries
 // before the closing ';'.
+// Uses a length-preserving blanked copy to find positions so that brace
+// comments containing ';' (e.g. uMain in 'uMain.pas' {Form: TFoo; aux})
+// do not fool the semicolon search.  Positions from the blanked copy are
+// applied directly to the original content (same length -> same indexes).
 procedure EditDpr(const ADprPath: string; const AMissing: TArray<TReconcileItem>);
 var
-  Content, UsesBlock, Before, After: string;
+  Content, Blanked, UsesBlock, Before, After: string;
   Re: TRegEx;
   UsesMatch: TMatch;
   UsesPos, SemiPos: Integer;
@@ -461,20 +583,25 @@ begin
   if Length(AMissing) = 0 then Exit;
   Content := TFile.ReadAllText(ADprPath);
 
-  // Find the first 'uses' keyword.
+  // Blank comments/strings first; all position searches work on the blanked
+  // copy, then applied to the original (identical byte-length).
+  Blanked := BlankCommentsAndStrings(Content);
+
+  // Find the first 'uses' keyword in the blanked copy.
   Re := TRegEx.Create('\buses\b', [roIgnoreCase]);
-  UsesMatch := Re.Match(Content);
+  UsesMatch := Re.Match(Blanked);
   if not UsesMatch.Success then Exit;
 
   // The character index (1-based) just after the 'uses' keyword.
   UsesPos := UsesMatch.Index + UsesMatch.Length - 1;  // 1-based end of 'uses'
 
-  // Find the terminating ';' of the uses clause.
-  SemiPos := Pos(';', Content, UsesPos + 1);
+  // Find the terminating ';' of the uses clause in the BLANKED copy.
+  // This skips any semicolon that appears inside a brace comment or string.
+  SemiPos := Pos(';', Blanked, UsesPos + 1);
   if SemiPos = 0 then Exit;
 
-  // Extract just the clause body (between 'uses' and ';') to check for
-  // existing entries (idempotency guard).
+  // Extract clause body from the ORIGINAL text for the idempotency guard
+  // (positions are the same because blanking is length-preserving).
   UsesBlock := Copy(Content, UsesPos + 1, SemiPos - UsesPos - 1);
 
   // Build additions string.
@@ -485,7 +612,7 @@ begin
 
   if Additions = '' then Exit;
 
-  // Splice: everything before the ';' + additions + ';' + everything after.
+  // Splice into the ORIGINAL content at the positions found in the blanked copy.
   Before := Copy(Content, 1, SemiPos - 1);
   After  := Copy(Content, SemiPos, MaxInt);   // includes the ';' itself
   Content := Before + Additions + After;
