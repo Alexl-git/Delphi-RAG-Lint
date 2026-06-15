@@ -31,13 +31,14 @@ $rep2 = & $Exe reconcile-project "$work\App.dpr" 2>&1 | Out-String
 Check 'reapply 0 missing'     ($rep2 -match 'MISSING \(0\)')
 Check 'uOrphan untouched'     ($rep2 -match 'EXTRA[\s\S]*uOrphan')
 
-# Task 3: --json assertions (use the read-only fixture, not the temp copy)
-$j = & $Exe reconcile-project "$fx\App.dpr" --json 2>&1 | Out-String
+# Task 3: --json assertions (use the read-only fixture, not the temp copy).
+# Capture STDOUT ONLY (2>$null): the engine emits a "(loaded defaults ...)"
+# advisory to stderr that can interleave mid-JSON under 2>&1 and break parsing.
+# Real consumers read stdout, which is clean JSON.
+$j = & $Exe reconcile-project "$fx\App.dpr" --json 2>$null | Out-String
 Check 'json has missing array' ($j -match '"missing"\s*:\s*\[')
 Check 'json has stale array'   ($j -match '"stale"\s*:\s*\[')
-# Extract the JSON object from combined stdout+stderr (stderr may have advisory lines)
-$jClean = [regex]::Match($j, '(?s)\{.*\}').Value
-Check 'json parses'            ([bool]($jClean | ConvertFrom-Json))
+Check 'json parses'            ([bool]($j | ConvertFrom-Json))
 
 # FIX 1 regression: EditDpr must not corrupt .dpr when a uses entry carries a
 # brace comment containing ';' (e.g. uMain in 'uMain.pas' {Form: TBar; note}).
