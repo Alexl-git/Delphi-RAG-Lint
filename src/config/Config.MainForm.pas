@@ -18,7 +18,8 @@ uses
   Vcl.StdCtrls,
   Vcl.Dialogs,
   DRagLint.Index.Manifest,
-  Config.IndexesFrame;
+  Config.IndexesFrame,
+  Config.SettingsFrame;
 
 type
   /// <summary>Top-level form: tabbed shell over the index section editor and
@@ -28,7 +29,6 @@ type
     pcMain: TPageControl;
     tsIndexes: TTabSheet;
     tsSettings: TTabSheet;
-    lblSettingsPlaceholder: TLabel;
     pnlBottom: TPanel;
     btnSave: TButton;
     btnReload: TButton;
@@ -39,10 +39,11 @@ type
     procedure btnReloadClick(Sender: TObject);
     procedure btnOpenClick(Sender: TObject);
   private
-    FManifest:    TIndexManifest;
-    FConfigPath:  string;
-    FIndexFrame:  TIndexesFrame;
-    FOpenDialog:  TOpenDialog;
+    FManifest:       TIndexManifest;
+    FConfigPath:     string;
+    FIndexFrame:     TIndexesFrame;
+    FSettingsFrame:  TSettingsFrame;
+    FOpenDialog:     TOpenDialog;
     /// <summary>Resolve the config path: --config arg, then &lt;ExeDir&gt;\drag-lint.json,
     /// else empty (load via TManifestIO discovery).</summary>
     /// <returns>Resolved absolute path, or empty string if not found by arg/default.</returns>
@@ -137,6 +138,8 @@ procedure TMainForm.PopulateFrame;
 begin
   if FIndexFrame <> nil then
     FIndexFrame.BindManifest(PIndexManifest(@FManifest));
+  if FSettingsFrame <> nil then
+    FSettingsFrame.BindManifest(PIndexManifest(@FManifest));
   if FConfigPath <> '' then
     lblConfigPath.Caption := FConfigPath
   else
@@ -153,6 +156,14 @@ begin
     FIndexFrame.Align  := alClient;
   end;
 
+  { Create the settings frame on first show }
+  if FSettingsFrame = nil then
+  begin
+    FSettingsFrame := TSettingsFrame.Create(Self);
+    FSettingsFrame.Parent := tsSettings;
+    FSettingsFrame.Align  := alClient;
+  end;
+
   FConfigPath := ResolveConfigPath;
   LoadManifest;
 end;
@@ -161,9 +172,11 @@ procedure TMainForm.btnSaveClick(Sender: TObject);
 var
   ErrMsg: string;
 begin
-  { Pull edits back from frame into FManifest }
+  { Pull edits back from frames into FManifest }
   if FIndexFrame <> nil then
     FIndexFrame.FlushToManifest;
+  if FSettingsFrame <> nil then
+    FSettingsFrame.FlushToManifest;
 
   ErrMsg := TManifestIO.Validate(FManifest);
   if ErrMsg <> '' then

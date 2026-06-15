@@ -55,7 +55,7 @@
     <PropertyGroup Condition="'$(Base)'!=''">
         <DCC_DcuOutput>.\$(Platform)\$(Config)</DCC_DcuOutput>
         <DCC_ExeOutput>.\$(Platform)\$(Config)</DCC_ExeOutput>
-        <DCC_UnitSearchPath>..\index;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>..\index;..\project;..\core;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <DCC_E>false</DCC_E>
         <DCC_N>false</DCC_N>
         <DCC_S>false</DCC_S>
@@ -84,11 +84,16 @@
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
         <DCCReference Include="..\index\DRagLint.Index.Manifest.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.Plan.pas"/>
+        <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
         <DCCReference Include="Config.MainForm.pas">
             <Form>MainForm</Form>
         </DCCReference>
         <DCCReference Include="Config.IndexesFrame.pas">
             <Form>IndexesFrame</Form>
+        </DCCReference>
+        <DCCReference Include="Config.SettingsFrame.pas">
+            <Form>SettingsFrame</Form>
         </DCCReference>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

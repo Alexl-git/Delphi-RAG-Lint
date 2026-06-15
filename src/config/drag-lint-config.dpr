@@ -8,8 +8,11 @@ uses
   System.SysUtils,
   System.Classes,
   DRagLint.Index.Manifest in '..\index\DRagLint.Index.Manifest.pas',
+  DRagLint.Index.Plan in '..\index\DRagLint.Index.Plan.pas',
+  DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   Config.MainForm in 'Config.MainForm.pas' {MainForm},
-  Config.IndexesFrame in 'Config.IndexesFrame.pas' {IndexesFrame: TFrame};
+  Config.IndexesFrame in 'Config.IndexesFrame.pas' {IndexesFrame: TFrame},
+  Config.SettingsFrame in 'Config.SettingsFrame.pas' {SettingsFrame: TFrame};
 
 const
   VERSION = '0.45.0-alpha';

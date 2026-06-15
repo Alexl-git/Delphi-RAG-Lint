@@ -2,8 +2,9 @@ unit Config.IndexesFrame;
 
 /// <summary>Frame hosting the section list editor for drag-lint index manifests.
 /// Left panel: list of section names with Add/Delete. Right panel: editor for
-/// the selected TIndexSection fields. Bottom: placeholder TPageControl with
-/// Coverage / Plan preview / Build log tabs (content added in later tasks).</summary>
+/// the selected TIndexSection fields. Bottom: TPageControl with
+/// Coverage / Plan preview / Build log tabs. Plan preview tab contains a
+/// read-only TListView (lvPlan) populated by ResolvePlan.</summary>
 
 interface
 
@@ -19,7 +20,9 @@ uses
   Vcl.ComCtrls,
   Vcl.Dialogs,
   Vcl.FileCtrl,
-  DRagLint.Index.Manifest;
+  DRagLint.Index.Manifest,
+  DRagLint.Index.Plan,
+  DRagLint.Project.Resolver;
 
 type
   /// <summary>Typed pointer to TIndexManifest, used by BindManifest so the frame
@@ -63,8 +66,12 @@ type
     pcBottom: TPageControl;
     tsCoverage: TTabSheet;
     tsPlanPreview: TTabSheet;
+    lvPlan: TListView;
+    btnRefreshPlan: TButton;
     tsBuildLog: TTabSheet;
     procedure lbSectionsClick(Sender: TObject);
+    procedure pcBottomChange(Sender: TObject);
+    procedure btnRefreshPlanClick(Sender: TObject);
     procedure btnAddSectionClick(Sender: TObject);
     procedure btnDelSectionClick(Sender: TObject);
     procedure edNameChange(Sender: TObject);
@@ -112,6 +119,15 @@ type
     /// whether a section is currently selected.</summary>
     /// <param name="AEnabled">True to enable; False to disable.</param>
     procedure SetEditorEnabled(AEnabled: Boolean);
+    /// <summary>Populate lvPlan from the current FManifest by calling ResolvePlan.
+    /// One row per TPlanSection: Name, Mode, DbPath, Platform, Roots count,
+    /// DedupExcludeRoots count. Silently clears lvPlan on error.</summary>
+    /// <remarks>Not thread-safe; call from the main (UI) thread only.</remarks>
+    procedure RefreshPlanPreview;
+    /// <summary>Convert a TPlanSectionMode to a short display string.</summary>
+    /// <param name="AMode">The mode to convert.</param>
+    /// <returns>'folderTree', 'closure', or 'library'.</returns>
+    function PlanModeDisplayStr(const AMode: TPlanSectionMode): string;
   public
     /// <summary>Bind the frame to a manifest pointer. The pointer must remain
     /// valid for the lifetime of the frame (owned by TMainForm). Rebuilds the
@@ -305,6 +321,57 @@ begin
   SaveControlsToSection(SelectedSectionIndex);
 end;
 
+function TIndexesFrame.PlanModeDisplayStr(const AMode: TPlanSectionMode): string;
+begin
+  case AMode of
+    smFolderTree: Result := 'folderTree';
+    smClosure:    Result := 'closure';
+    smLibrary:    Result := 'library';
+  else
+    Result := 'folderTree';
+  end;
+end;
+
+procedure TIndexesFrame.RefreshPlanPreview;
+var
+  Resolver: TProjectResolver;
+  Plan:     TIndexPlan;
+  Sec:      TPlanSection;
+  Item:     TListItem;
+  I:        Integer;
+begin
+  lvPlan.Items.BeginUpdate;
+  try
+    lvPlan.Items.Clear;
+    if FManifest = nil then Exit;
+
+    { Flush pending edits so the plan reflects the current UI state }
+    SaveControlsToSection(SelectedSectionIndex);
+
+    Resolver := TProjectResolver.Create;
+    try
+      Plan := ResolvePlan(FManifest^, nil, Resolver);
+    finally
+      Resolver.Free;
+    end;
+
+    for I := 0 to High(Plan.Items) do
+    begin
+      Sec  := Plan.Items[I];
+      Item := lvPlan.Items.Add;
+      Item.Caption    := Sec.Name;
+      Item.SubItems.Add(PlanModeDisplayStr(Sec.Mode));
+      Item.SubItems.Add(Sec.DbPath);
+      Item.SubItems.Add(Sec.Platform);
+      Item.SubItems.Add(IntToStr(Length(Sec.Roots)));
+      Item.SubItems.Add(IntToStr(Length(Sec.DedupExcludeRoots)));
+    end;
+  except
+    { swallow so preview never crashes the app; list stays cleared }
+  end;
+  lvPlan.Items.EndUpdate;
+end;
+
 { event handlers }
 
 procedure TIndexesFrame.lbSectionsClick(Sender: TObject);
@@ -449,6 +516,17 @@ end;
 procedure TIndexesFrame.cbSqlOnlyMSClick(Sender: TObject);
 begin
   SaveControlsToSection(SelectedSectionIndex);
+end;
+
+procedure TIndexesFrame.pcBottomChange(Sender: TObject);
+begin
+  if pcBottom.ActivePage = tsPlanPreview then
+    RefreshPlanPreview;
+end;
+
+procedure TIndexesFrame.btnRefreshPlanClick(Sender: TObject);
+begin
+  RefreshPlanPreview;
 end;
 
 end.

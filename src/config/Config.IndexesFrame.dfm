@@ -269,11 +269,57 @@ object IndexesFrame: TIndexesFrame
     ActivePage = tsCoverage
     Align = alBottom
     TabOrder = 2
+    OnChange = pcBottomChange
     object tsCoverage: TTabSheet
       Caption = 'Coverage'
     end
     object tsPlanPreview: TTabSheet
       Caption = 'Plan preview'
+      object btnRefreshPlan: TButton
+        Left = 4
+        Top = 4
+        Width = 90
+        Height = 23
+        Caption = 'Refresh'
+        TabOrder = 0
+        OnClick = btnRefreshPlanClick
+      end
+      object lvPlan: TListView
+        Left = 0
+        Top = 31
+        Width = 872
+        Height = 113
+        Align = alBottom
+        Columns = <
+          item
+            Caption = 'Section'
+            Width = 140
+          end
+          item
+            Caption = 'Mode'
+            Width = 80
+          end
+          item
+            Caption = 'Db'
+            Width = 240
+          end
+          item
+            Caption = 'Platform'
+            Width = 70
+          end
+          item
+            Caption = 'Roots'
+            Width = 50
+          end
+          item
+            Caption = 'Dedup'
+            Width = 50
+          end>
+        ReadOnly = True
+        RowSelect = True
+        TabOrder = 1
+        ViewStyle = vsReport
+      end
     end
     object tsBuildLog: TTabSheet
       Caption = 'Build log'

@@ -26,13 +26,6 @@ object MainForm: TMainForm
     end
     object tsSettings: TTabSheet
       Caption = 'Settings'
-      object lblSettingsPlaceholder: TLabel
-        Left = 16
-        Top = 16
-        Width = 220
-        Height = 13
-        Caption = 'Settings editor will appear here (Task 3).'
-      end
     end
   end
   object pnlBottom: TPanel
