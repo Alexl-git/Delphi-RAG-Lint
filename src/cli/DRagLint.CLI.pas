@@ -52,7 +52,8 @@ uses
   DRagLint.Format.Yadf,
   DRagLint.Diagnostics.CompileCheck,
   DRagLint.Diagnostics.AstChecks,
-  DRagLint.Workspace.Config;
+  DRagLint.Workspace.Config,
+  DRagLint.Index.Manifest;
 
 type
   TArgs = record
@@ -137,6 +138,8 @@ type
     WorkspaceConfig:    string;  // --config <path>
     // forms-csv
     RootForm:           string;  // forms-csv: --root <TfrmMAIN> (auto-detect if '')
+    // v0.45: index manifest (Task 1)
+    IndexAll:           Boolean; // --all  (index all sections from manifest)
   end;
 
 procedure PrintHelp;
@@ -271,7 +274,7 @@ begin
   finally
     J.Free;
   end;
-  Writeln('(loaded defaults from ', Candidate, ')');
+  Writeln(ErrOutput, '(loaded defaults from ', Candidate, ')');
 end;
 
 function ParseArgs: TArgs;
@@ -410,6 +413,7 @@ begin
     end
     else if A = '--include-external' then Result.IncludeExternal := True
     else if A = '--all-sources'      then Result.AllSources      := True
+    else if A = '--all'              then Result.IndexAll         := True
     else if (A = '--connection') and (i < ParamCount) then
     begin
       Inc(i);
@@ -671,6 +675,161 @@ begin
     end;
     Writeln(Format('%d caller(s)', [Length(ARefs)]));
   end;
+end;
+
+// v0.45: serialise a TIndexManifest to a TJSONObject (caller owns + frees).
+function ManifestToJson(const AManifest: TIndexManifest): TJSONObject;
+var
+  JSettings, JIndexes: TJSONObject;
+  JSections, JExclude, JInclude, JSecExclude, JIncOnly, JPlats, JDedup: TJSONArray;
+  Sec: TIndexSection;
+  S: string;
+begin
+  Result := TJSONObject.Create;
+
+  JSettings := TJSONObject.Create;
+  Result.AddPair('settings', JSettings);
+  case AManifest.Settings.CurrentProjectsIndexing of
+    piPerGroup: JSettings.AddPair('currentProjectsIndexing', 'perGroup');
+    piSingle:   JSettings.AddPair('currentProjectsIndexing', 'single');
+  else
+    JSettings.AddPair('currentProjectsIndexing', 'perProject');
+  end;
+  JSettings.AddPair('defaultPlatform', AManifest.Settings.DefaultPlatform);
+  JSettings.AddPair('sizeGuardMB', TJSONNumber.Create(AManifest.Settings.SizeGuardMB));
+  JSettings.AddPair('enginePath', AManifest.Settings.EnginePath);
+  JSettings.AddPair('maxJobs', TJSONNumber.Create(AManifest.Settings.MaxJobs));
+
+  JIndexes := TJSONObject.Create;
+  Result.AddPair('indexes', JIndexes);
+  JIndexes.AddPair('outDir', AManifest.OutDir);
+  JIndexes.AddPair('rootDir', AManifest.RootDir);
+
+  JExclude := TJSONArray.Create;
+  JIndexes.AddPair('exclude', JExclude);
+  for S in AManifest.GlobalExclude do
+    JExclude.AddElement(TJSONString.Create(S));
+
+  JSections := TJSONArray.Create;
+  JIndexes.AddPair('sections', JSections);
+  for Sec in AManifest.Sections do
+  begin
+    var JSecObj := TJSONObject.Create;
+    JSections.AddElement(JSecObj);
+    JSecObj.AddPair('name', Sec.Name);
+    if Sec.Db <> '' then JSecObj.AddPair('db', Sec.Db);
+    if Sec.Source <> '' then JSecObj.AddPair('source', Sec.Source);
+
+    if Length(Sec.Platforms) > 0 then
+    begin
+      JPlats := TJSONArray.Create;
+      JSecObj.AddPair('platforms', JPlats);
+      for S in Sec.Platforms do
+        JPlats.AddElement(TJSONString.Create(S));
+    end;
+
+    if Length(Sec.Include) > 0 then
+    begin
+      JInclude := TJSONArray.Create;
+      JSecObj.AddPair('include', JInclude);
+      for S in Sec.Include do
+        JInclude.AddElement(TJSONString.Create(S));
+    end;
+
+    if Length(Sec.Exclude) > 0 then
+    begin
+      JSecExclude := TJSONArray.Create;
+      JSecObj.AddPair('exclude', JSecExclude);
+      for S in Sec.Exclude do
+        JSecExclude.AddElement(TJSONString.Create(S));
+    end;
+
+    if Length(Sec.IncludeOnly) > 0 then
+    begin
+      JIncOnly := TJSONArray.Create;
+      JSecObj.AddPair('includeOnly', JIncOnly);
+      for S in Sec.IncludeOnly do
+        JIncOnly.AddElement(TJSONString.Create(S));
+    end;
+
+    JSecObj.AddPair('useIgnoreFiles', TJSONBool.Create(Sec.UseIgnoreFiles));
+
+    if Length(Sec.DedupAgainst) > 0 then
+    begin
+      JDedup := TJSONArray.Create;
+      JSecObj.AddPair('dedupAgainst', JDedup);
+      for S in Sec.DedupAgainst do
+        JDedup.AddElement(TJSONString.Create(S));
+    end;
+
+    JSecObj.AddPair('sqlOnlyMS', TJSONBool.Create(Sec.SqlOnlyMS));
+  end;
+end;
+
+// v0.45: index --all [--config <path>] [--dry-run] [--json]
+// Loads the manifest (from --config if given, else TManifestIO.Load(enginedir, cwd)),
+// validates it, and for --dry-run prints the parsed manifest as JSON to stdout.
+// Full build logic (Task 7) is not yet implemented.
+function DoIndexAll(const AArgs: TArgs): Integer;
+var
+  Manifest: TIndexManifest;
+  EngineDir, ConfigPath: string;
+  ErrMsg: string;
+  JRoot: TJSONObject;
+begin
+  EngineDir  := ExtractFilePath(ParamStr(0));
+  ConfigPath := AArgs.WorkspaceConfig;  // --config <path>
+
+  if ConfigPath <> '' then
+  begin
+    if not TFile.Exists(ConfigPath) then
+    begin
+      Writeln('ERROR: config file not found: ', ConfigPath);
+      Exit(2);
+    end;
+    var Content := TFile.ReadAllText(ConfigPath);
+    var RootDir := ExtractFilePath(TPath.GetFullPath(ConfigPath));
+    Manifest := TManifestIO.ParseText(Content, RootDir);
+  end
+  else
+    Manifest := TManifestIO.Load(EngineDir, GetCurrentDir);
+
+  ErrMsg := TManifestIO.Validate(Manifest);
+  if ErrMsg <> '' then
+  begin
+    Writeln('ERROR: manifest invalid: ', ErrMsg);
+    Exit(2);
+  end;
+
+  if AArgs.DryRun then
+  begin
+    if AArgs.AsJson then
+    begin
+      JRoot := ManifestToJson(Manifest);
+      try
+        Writeln(JRoot.Format(2));
+      finally
+        JRoot.Free;
+      end;
+      Exit(0);
+    end
+    else
+    begin
+      // Text dry-run: print a human-readable summary
+      Writeln('Index manifest (dry-run):');
+      Writeln('  RootDir: ', Manifest.RootDir);
+      Writeln('  OutDir:  ', Manifest.OutDir);
+      Writeln(Format('  Sections: %d', [Length(Manifest.Sections)]));
+      for var Sec in Manifest.Sections do
+        Writeln(Format('    [%s] source=%s include=%d',
+          [Sec.Name, Sec.Source, Length(Sec.Include)]));
+      Exit(0);
+    end;
+  end;
+
+  // Full build not yet implemented (Task 7)
+  Writeln('ERROR: index --all without --dry-run is not yet implemented (Task 7).');
+  Exit(2);
 end;
 
 function DoIndex(const AArgs: TArgs): Integer;
@@ -6267,7 +6426,12 @@ begin
       Exit(0);
     end;
     if Args.Command = 'index' then
-      Result := DoIndex(Args)
+    begin
+      if Args.IndexAll then
+        Result := DoIndexAll(Args)
+      else
+        Result := DoIndex(Args)
+    end
     else if Args.Command = 'query' then
       Result := DoQuery(Args)
     else if Args.Command = 'lint' then
