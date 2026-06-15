@@ -142,6 +142,11 @@ type
     RootForm:           string;  // forms-csv: --root <TfrmMAIN> (auto-detect if '')
     // v0.45: index manifest (Task 1)
     IndexAll:           Boolean; // --all  (index all sections from manifest)
+    // v0.45: index walk filter (Task 4)
+    ExcludeGlobs:       TArray<string>; // --exclude <glob> (repeatable)
+    IncludeOnlyGlobs:   TArray<string>; // --include-only <glob> (repeatable)
+    UseIgnore:          Boolean;         // --use-ignore
+    NoSqlMS:            Boolean;         // --no-sql-ms
   end;
 
 procedure PrintHelp;
@@ -416,6 +421,20 @@ begin
     else if A = '--include-external' then Result.IncludeExternal := True
     else if A = '--all-sources'      then Result.AllSources      := True
     else if A = '--all'              then Result.IndexAll         := True
+    else if (A = '--exclude') and (i < ParamCount) then
+    begin
+      Inc(i);
+      SetLength(Result.ExcludeGlobs, Length(Result.ExcludeGlobs) + 1);
+      Result.ExcludeGlobs[High(Result.ExcludeGlobs)] := ParamStr(i);
+    end
+    else if (A = '--include-only') and (i < ParamCount) then
+    begin
+      Inc(i);
+      SetLength(Result.IncludeOnlyGlobs, Length(Result.IncludeOnlyGlobs) + 1);
+      Result.IncludeOnlyGlobs[High(Result.IncludeOnlyGlobs)] := ParamStr(i);
+    end
+    else if A = '--use-ignore' then Result.UseIgnore := True
+    else if A = '--no-sql-ms'  then Result.NoSqlMS  := True
     else if (A = '--connection') and (i < ParamCount) then
     begin
       Inc(i);
@@ -828,6 +847,19 @@ begin
   begin
     Indexer.AddExcludeRoot(ExDir);
     Writeln('Excluding subtree: ', ExDir);
+  end;
+
+  { v0.45: apply walk filter when any filter flag is present. }
+  if (Length(AArgs.ExcludeGlobs) > 0) or
+     (Length(AArgs.IncludeOnlyGlobs) > 0) or
+     AArgs.UseIgnore or AArgs.NoSqlMS then
+  begin
+    var WF: TWalkFilter := Default(TWalkFilter);
+    WF.SectionExclude := AArgs.ExcludeGlobs;
+    WF.IncludeOnly    := AArgs.IncludeOnlyGlobs;
+    WF.UseIgnoreFiles := AArgs.UseIgnore;
+    WF.SqlOnlyMS      := not AArgs.NoSqlMS;
+    Indexer.SetWalkFilter(WF);
   end;
 
   // Resolve target folders once (--scan-libraries / --project) or fall back
@@ -6481,6 +6513,33 @@ begin
   Result := 0;
 end;
 
+// selftest files: open the DB at --db read-only and print every distinct path
+// from the files table, one per line. Used by tests to assert the indexed
+// file set after a filtered index run.
+function DoSelfTestFiles(const AArgs: TArgs): Integer;
+var
+  Store:   ISymbolStore;
+  FileIds: TArray<Int64>;
+  Id:      Int64;
+  Path:    string;
+begin
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  FileIds := Store.GetAllFileIds;
+  for Id in FileIds do
+  begin
+    Path := Store.GetFilePath(Id);
+    if Path <> '' then
+      Writeln(Path);
+  end;
+  Result := 0;
+end;
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand = 'manifest-merge' then
@@ -6489,10 +6548,12 @@ begin
     Result := DoSelfTestGlob
   else if AArgs.SubCommand = 'ignore' then
     Result := DoSelfTestIgnoreFiles(AArgs)
+  else if AArgs.SubCommand = 'files' then
+    Result := DoSelfTestFiles(AArgs)
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore');
+    Writeln('Available: manifest-merge, glob, ignore, files');
     Result := 2;
   end;
 end;

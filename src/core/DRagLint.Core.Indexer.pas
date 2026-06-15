@@ -12,6 +12,8 @@ uses
   System.Generics.Collections,
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces,
+  DRagLint.Index.Glob,
+  DRagLint.Index.IgnoreFiles,
   DRagLint.Parser.DocComments;
 
 type
@@ -22,10 +24,13 @@ type
     FSkippedUpToDate: Integer;
     FDocConfig: TDocConfig;
     FExcludeRoots: TList<string>;   { v0.42: normalized lowercase, trailing-sep }
+    FWalkFilter: TWalkFilter;       { v0.45: glob/ignore filtering }
+    FIgnoreStack: TIgnoreStack;     { v0.45: .gitignore/.hgignore stack; nil when not UseIgnoreFiles }
     function ParserFor(const AExtension: string): IParser;
     procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
     function IsUnderExcludeRoot(const APath: string): Boolean;
     function ShouldPruneDir(const ADir: string): Boolean;
+    function SqlFileAllowedFilter(const APath: string): Boolean;
     procedure WalkAndIndex(const ADir: string; ARecursive: Boolean);
   public
     constructor Create(const AStore: ISymbolStore;
@@ -39,6 +44,7 @@ type
     procedure IndexFile(const AFilePath: string);
     function SkippedUpToDate: Integer;
     procedure AddExcludeRoot(const APath: string);
+    procedure SetWalkFilter(const AFilter: TWalkFilter);
   end;
 
 implementation
@@ -54,6 +60,10 @@ begin
   FDocConfig := ADocConfig;
   FParsers := TList<IParser>.Create;
   FExcludeRoots := TList<string>.Create;
+  FIgnoreStack := nil;
+  { v0.45: default filter preserves prior behaviour -- only MS*.SQL indexed. }
+  FWalkFilter := Default(TWalkFilter);
+  FWalkFilter.SqlOnlyMS := True;
   for P in AParsers do
     FParsers.Add(P);
 end;
@@ -68,6 +78,7 @@ destructor TIndexer.Destroy;
 begin
   FParsers.Free;
   FExcludeRoots.Free;
+  FIgnoreStack.Free;
   FStore := nil;
   inherited;
 end;
@@ -97,6 +108,15 @@ begin
   L := LowerCase(APath);
   for Root in FExcludeRoots do
     if StartsStr(Root, L) then Exit(True);
+end;
+
+procedure TIndexer.SetWalkFilter(const AFilter: TWalkFilter);
+begin
+  FWalkFilter := AFilter;
+  { (Re)create the ignore stack when UseIgnoreFiles is toggled. }
+  FreeAndNil(FIgnoreStack);
+  if FWalkFilter.UseIgnoreFiles then
+    FIgnoreStack := TIgnoreStack.Create;
 end;
 
 function TIndexer.ParserFor(const AExtension: string): IParser;
@@ -258,11 +278,13 @@ end;
 // (the Micronite Firebird DDL scripts) -- per user, those are the only SQL
 // files worth indexing. Every other .sql is skipped so the index isn't
 // polluted by ad-hoc query scripts. Non-.sql files always pass this gate.
-function SqlFileAllowed(const APath: string): Boolean;
+// v0.45: gate is conditional on FWalkFilter.SqlOnlyMS; when False all SQL pass.
+function TIndexer.SqlFileAllowedFilter(const APath: string): Boolean;
 var
   Name: string;
 begin
   if not SameText(ExtractFileExt(APath), '.sql') then Exit(True);
+  if not FWalkFilter.SqlOnlyMS then Exit(True);
   Name := ExtractFileName(APath);
   Result := StartsText('MS', Name);
 end;
@@ -272,7 +294,9 @@ function TIndexer.ShouldPruneDir(const ADir: string): Boolean;
   subtree is never enumerated. This is what makes a full C:\Projects scan
   practical: __history / BACKUP_ALL / .git / node_modules / .scanignore'd and
   already-indexed (--exclude-under) trees are skipped wholesale rather than
-  walked and then filtered file-by-file (which took ~8.7h over C:\Projects). }
+  walked and then filtered file-by-file (which took ~8.7h over C:\Projects).
+  v0.45: after built-in checks, also prune dirs whose base name matches any
+  GlobalExclude or SectionExclude glob from the walk filter. }
 const
   PRUNE_NAMES: array[0..5] of string = (
     '__history', '__recovery', '.git', '.svn', '.hg', 'node_modules');
@@ -286,43 +310,79 @@ begin
   if Pos('backup', Name) > 0 then Exit;                    { *BACKUP* folders }
   if IsUnderExcludeRoot(IncludeTrailingPathDelimiter(ADir)) then Exit;
   if TFile.Exists(TPath.Combine(ADir, '.scanignore')) then Exit;  { marker file }
+  { v0.45: glob-based directory exclusion (uses base name only, case-insensitive). }
+  var BaseName := ExtractFileName(ExcludeTrailingPathDelimiter(ADir));
+  if TGlob.MatchesAny(BaseName, FWalkFilter.GlobalExclude) then Exit;
+  if TGlob.MatchesAny(BaseName, FWalkFilter.SectionExclude) then Exit;
   Result := False;
 end;
 
 procedure TIndexer.WalkAndIndex(const ADir: string; ARecursive: Boolean);
+{ v0.45: precedence order for filtering:
+    1. Built-in dir prunes (ShouldPruneDir -- __history, .git, backup, etc.)
+    2. GlobalExclude / SectionExclude globs on dir names (inside ShouldPruneDir)
+    3. File-level glob excludes (GlobalExclude + SectionExclude on file base name)
+    4. IncludeOnly allow-list on file base name
+    5. .gitignore/.hgignore rules via FIgnoreStack (highest precedence)
+  PushDir/PopDir symmetry: we ONLY push when we are about to descend
+  (i.e. ShouldPruneDir returned False). Pruned dirs are never pushed. }
 var
   Files, SubDirs: TArray<string>;
-  F, D: string;
+  F, D:      string;
+  FBaseName: string;
+  DBaseName: string;
 begin
   if ShouldPruneDir(ADir) then Exit;
 
-  { Files directly in this directory whose extension a parser handles. }
+  { v0.45: load ignore files for this directory before listing its contents. }
+  if FIgnoreStack <> nil then
+    FIgnoreStack.PushDir(ADir);
   try
-    Files := TDirectory.GetFiles(ADir, '*', TSearchOption.soTopDirectoryOnly);
-  except
-    SetLength(Files, 0);
-  end;
-  for F in Files do
-  begin
-    if ParserFor(ExtractFileExt(F)) = nil then Continue;
-    if not SqlFileAllowed(F) then Continue;          { only MS*.SQL among .sql }
+    { Files directly in this directory whose extension a parser handles. }
     try
-      IndexFile(F);
+      Files := TDirectory.GetFiles(ADir, '*', TSearchOption.soTopDirectoryOnly);
     except
-      on E: Exception do
-        Writeln(Format('  SKIP %s: %s: %s', [F, E.ClassName, E.Message]));
+      SetLength(Files, 0);
     end;
-  end;
+    for F in Files do
+    begin
+      if ParserFor(ExtractFileExt(F)) = nil then Continue;
+      if not SqlFileAllowedFilter(F) then Continue;
+      FBaseName := ExtractFileName(F);
+      { v0.45: GlobalExclude + SectionExclude on file base name. }
+      if TGlob.MatchesAny(FBaseName, FWalkFilter.GlobalExclude) then Continue;
+      if TGlob.MatchesAny(FBaseName, FWalkFilter.SectionExclude) then Continue;
+      { v0.45: IncludeOnly allow-list -- skip if non-empty and no match. }
+      if (Length(FWalkFilter.IncludeOnly) > 0) and
+         (not TGlob.MatchesAny(FBaseName, FWalkFilter.IncludeOnly)) then Continue;
+      { v0.45: ignore-file gate (highest precedence). }
+      if (FIgnoreStack <> nil) and FIgnoreStack.IsIgnored(F, False) then Continue;
+      try
+        IndexFile(F);
+      except
+        on E: Exception do
+          Writeln(Format('  SKIP %s: %s: %s', [F, E.ClassName, E.Message]));
+      end;
+    end;
 
-  if not ARecursive then Exit;
+    if not ARecursive then Exit;
 
-  try
-    SubDirs := TDirectory.GetDirectories(ADir, '*', TSearchOption.soTopDirectoryOnly);
-  except
-    SetLength(SubDirs, 0);
+    try
+      SubDirs := TDirectory.GetDirectories(ADir, '*', TSearchOption.soTopDirectoryOnly);
+    except
+      SetLength(SubDirs, 0);
+    end;
+    for D in SubDirs do
+    begin
+      { v0.45: ignore-file gate for dirs (before descending). }
+      DBaseName := ExtractFileName(ExcludeTrailingPathDelimiter(D));
+      if (FIgnoreStack <> nil) and FIgnoreStack.IsIgnored(DBaseName, True) then Continue;
+      WalkAndIndex(D, True);      { ShouldPruneDir gate is applied per subdir }
+    end;
+  finally
+    if FIgnoreStack <> nil then
+      FIgnoreStack.PopDir;
   end;
-  for D in SubDirs do
-    WalkAndIndex(D, True);          { ShouldPruneDir gate is applied per subdir }
 end;
 
 procedure TIndexer.IndexFolder(const APath: string; ARecursive: Boolean);

@@ -7,6 +7,31 @@ uses
   DRagLint.Core.Model;
 
 type
+  /// <summary>Walk-filter settings passed to IIndexer.SetWalkFilter.
+  /// Controls which files and directories are included or excluded during
+  /// a folder-tree index walk.</summary>
+  /// <remarks>Default-initialised record preserves prior behaviour:
+  /// SqlOnlyMS=True, all other fields empty/False.</remarks>
+  TWalkFilter = record
+    /// <summary>Glob patterns applied to both file names and directory names.
+    /// Any file or dir whose name matches is skipped globally.</summary>
+    GlobalExclude:  TArray<string>;
+    /// <summary>Additional glob patterns for files and dirs to skip in this
+    /// particular index section (union with GlobalExclude).</summary>
+    SectionExclude: TArray<string>;
+    /// <summary>Allow-list of glob patterns. When non-empty, only files whose
+    /// name matches at least one pattern are indexed; non-matching files are
+    /// skipped. Directories are not affected by this filter.</summary>
+    IncludeOnly:    TArray<string>;
+    /// <summary>When True, .gitignore and .hgignore files found while
+    /// descending the tree are loaded and honoured.</summary>
+    UseIgnoreFiles: Boolean;
+    /// <summary>When True (the default), .sql files must match the MS*.SQL
+    /// naming convention to be indexed. Set to False to index all SQL
+    /// files regardless of name.</summary>
+    SqlOnlyMS:      Boolean;
+  end;
+
   ISymbolStore = interface
     ['{6B9F8AC4-3F19-4E1A-9D38-1A2C3B7EF501}']
     procedure Migrate;
@@ -119,6 +144,12 @@ type
     // cross-dictionary dedup -- e.g. exclude folders already covered by the
     // library or active-project indexes). Repeatable.
     procedure AddExcludeRoot(const APath: string);
+    /// <summary>Apply glob-based file/dir filtering to subsequent IndexFolder
+    /// calls. Must be called before the first IndexFolder; has no effect on
+    /// IndexFile. SqlOnlyMS defaults to True if never called.</summary>
+    /// <param name="AFilter">Filter settings; caller may leave unused fields
+    /// at their zero-value defaults.</param>
+    procedure SetWalkFilter(const AFilter: TWalkFilter);
   end;
 
   ILinter = interface

@@ -14,4 +14,18 @@ Check 'glob selftest' ($g -match 'GLOB-OK')
 Write-Host ''
 $ig = & $Exe selftest ignore --dir "$fx\proj" 2>&1 | Out-String
 Check 'ignore-files selftest' ($ig -match 'IGNORE-OK')
+$proj = "$fx\proj"; $out = "$fx\OUT"; New-Item -ItemType Directory -Force $out | Out-Null
+& $Exe index $proj --db "$out\Proj.sqlite" --use-ignore --exclude "*_OLD*.pas" 2>&1 | Out-Null
+$pf = & $Exe selftest files --db "$out\Proj.sqlite" 2>&1 | Out-String
+Check 'proj keep.pas indexed'      ($pf -match 'keep\.pas')
+Check 'proj drop.log NOT indexed'  (-not ($pf -match 'drop\.log'))
+Check 'proj build/ pruned'         (-not ($pf -match '[\\/]build[\\/]'))
+Check 'proj sub/a.tmp ignored'     (-not ($pf -match 'a\.tmp'))
+Check 'proj sub/keep.tmp kept'     ($pf -match 'keep\.tmp')
+Check 'proj Unit_OLD excluded'     (-not ($pf -match '_OLD'))
+& $Exe index "$fx\sql" --db "$out\SQL.sqlite" --include-only "MS*.SQL" 2>&1 | Out-Null
+$sf = & $Exe selftest files --db "$out\SQL.sqlite" 2>&1 | Out-String
+Check 'sql keeps MS*.SQL'          ($sf -match 'MSData\.SQL')
+Check 'sql drops .pas'             (-not ($sf -match 'scratch\.pas'))
+Check 'sql drops non-MS .SQL'      (-not ($sf -match 'notes\.SQL'))
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
