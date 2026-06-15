@@ -9,7 +9,8 @@ Tools->Options page, and the graph viewer's IDE handoff. Each step has an
 Detailed per-item menu behaviour lives in `TEST-PLAN-IDE-TOOLS-MENU.md`; this
 doc is the wider sweep and references it for section A.
 
-> **Targets v0.41.0-alpha.** This is the IDE/plugin + graph-viewer pass. For
+> **Targets v0.45.0-alpha** (index-manifest era; engine is **Win64**, the 32-bit
+> IDE drives it out-of-process). This is the IDE/plugin + graph-viewer pass. For
 > driving drag-lint from an **AI agent over CLI or MCP** (no IDE), test against
 > [`docs/AI-USAGE.md`](AI-USAGE.md) instead — that path has its own instructions.
 
@@ -17,17 +18,23 @@ doc is the wider sweep and references it for section A.
 
 ## 0. Setup (do once)
 
-- [ ] **0.1 Indexes current.** All four scan DBs are freshly built (with
-      initialization/finalization): ORM3, SQL, all-projects, library. See
-      `SCAN-DATABASES.md` for paths.
-- [ ] **0.2 Install the latest plugin BPL** (it carries the open-source
-      GotoLine guard + v0.41 scanner). Either: rebuild from source (Component ->
-      Install Packages -> uncheck `dclDragLintWizard` -> rebuild
-      `dclDragLintWizard.dproj` -> re-add), **or** use the `dclDragLintWizard.bpl`
-      from the **v0.41.0-alpha** release (`...-win32.zip`). IDE confirms
-      `drag-lint` loaded.
-- [ ] **0.3 drag-lint.exe reachable** (PATH, beside the BPL, or set in
-      Tools -> drag-lint -> Settings).
+- [ ] **0.1 Indexes current (DONE).** All indexes were freshly rebuilt by the
+      v0.45 engine: ORM3 (`C:\Projects\DB\ORM3\drag-lint.sqlite`), SQL,
+      per-platform libraries (`C:\Projects\.drag-lint\library-Win32.sqlite` /
+      `library-Win64.sqlite` / ...), all-projects (`C:\Projects\drag-lint-all.sqlite`),
+      and the working-set DBs in `C:\Projects\.drag-lint\`. Nothing to rebuild.
+- [ ] **0.2 Install the 32-bit BPL.** Component -> Install Packages -> Add ->
+      browse to
+      **`C:\Projects\Delphi-RAG-lint\third_party\dll-win32\dclDragLintWizard.bpl`**
+      (its build location). IDE confirms `drag-lint` loaded. The engine is now
+      **Win64-only**; the current Win64 `drag-lint.exe` + `drag-lint.json`
+      (manifest) + `drag_lint_graph.exe` are placed in BOTH `dll-win32` and
+      `dll-win64`, so the BPL spawns the right engine from beside itself either
+      way. (The 32-bit IDE drives the Win64 engine out-of-process -- no shim.)
+- [ ] **0.3 Engine + manifest beside the BPL (auto).** The plugin finds
+      `drag-lint.exe` (Win64, v0.45) and `drag-lint.json` next to the installed
+      BPL automatically -- no PATH/Settings needed. The Graph window launches
+      `drag_lint_graph.exe` from the same folder.
 - [ ] **0.4** Open an ORM3 unit with real code and a project that compiles.
 - [ ] **0.5 Test Connection** (Tools -> drag-lint -> Test Connection...) reports
       drag-lint reachable + a version. Do this first; if it fails, fix before
