@@ -7,9 +7,10 @@ object IndexesFrame: TIndexesFrame
   object splMain: TSplitter
     Left = 180
     Top = 0
-    Width = 6
+    Width = 8
     Height = 340
     Cursor = crHSplit
+    Beveled = True
   end
   object pnlLeft: TPanel
     Left = 0
@@ -257,9 +258,11 @@ object IndexesFrame: TIndexesFrame
     Left = 0
     Top = 340
     Width = 880
-    Height = 6
+    Height = 8
     Cursor = crVSplit
     Align = alBottom
+    Beveled = True
+    MinSize = 60
   end
   object pcBottom: TPageControl
     Left = 0
@@ -334,21 +337,30 @@ object IndexesFrame: TIndexesFrame
     end
     object tsPlanPreview: TTabSheet
       Caption = 'Plan preview'
-      object btnRefreshPlan: TButton
-        Left = 4
-        Top = 4
-        Width = 90
-        Height = 23
-        Caption = 'Refresh'
+      object pnlPlanTop: TPanel
+        Left = 0
+        Top = 0
+        Width = 872
+        Height = 31
+        Align = alTop
+        BevelOuter = bvNone
         TabOrder = 0
-        OnClick = btnRefreshPlanClick
+        object btnRefreshPlan: TButton
+          Left = 4
+          Top = 4
+          Width = 90
+          Height = 23
+          Caption = 'Refresh'
+          TabOrder = 0
+          OnClick = btnRefreshPlanClick
+        end
       end
       object lvPlan: TListView
         Left = 0
         Top = 31
         Width = 872
         Height = 113
-        Align = alBottom
+        Align = alClient
         Columns = <
           item
             Caption = 'Section'

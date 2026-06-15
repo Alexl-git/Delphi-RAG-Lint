@@ -83,6 +83,7 @@ type
     tsPlanPreview: TTabSheet;
     lvPlan: TListView;
     btnRefreshPlan: TButton;
+    pnlPlanTop: TPanel;
     tsBuildLog: TTabSheet;
     pnlBuildBtns: TPanel;
     btnBuildAll: TButton;
