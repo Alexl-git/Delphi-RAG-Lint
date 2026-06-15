@@ -60,7 +60,8 @@ uses
   DRagLint.Index.Reconcile,
   DRagLint.Index.Plan,
   DRagLint.Index.DbSelect,
-  DRagLint.Index.Drift;
+  DRagLint.Index.Drift,
+  DRagLint.Index.Coverage;
 
 type
   TArgs = record
@@ -7389,6 +7390,60 @@ begin
   Result := 0;
 end;
 
+// selftest coverage --config <path> --root <dir>
+// Load the manifest from --config (WorkspaceConfig), build a TProjectResolver,
+// call ComputeCoverage for the directory given by --root (Roots[0]), and print
+// one line per item: "<leaf> <kind> <detail>". Exits 0 on success.
+function DoSelfTestCoverage(const AArgs: TArgs): Integer;
+var
+  ConfigPath, RootDir, Content: string;
+  Manifest: TIndexManifest;
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  Items: TArray<TCoverageItem>;
+  Item: TCoverageItem;
+  Leaf, Line: string;
+begin
+  ConfigPath := AArgs.WorkspaceConfig;
+  if ConfigPath = '' then
+  begin
+    Writeln(ErrOutput, 'selftest coverage requires --config <path>');
+    Exit(2);
+  end;
+  if not TFile.Exists(ConfigPath) then
+  begin
+    Writeln(ErrOutput, 'selftest coverage: config not found: ', ConfigPath);
+    Exit(2);
+  end;
+
+  if Length(AArgs.Roots) = 0 then
+  begin
+    Writeln(ErrOutput, 'selftest coverage requires --root <dir>');
+    Exit(2);
+  end;
+  RootDir := AArgs.Roots[0];
+
+  Content  := TFile.ReadAllText(ConfigPath);
+  Manifest := TManifestIO.ParseText(Content,
+    TPath.GetDirectoryName(TPath.GetFullPath(ConfigPath)));
+
+  Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    Items := ComputeCoverage(Manifest, RootDir, Resolver);
+  finally
+    Resolver.Free;
+  end;
+
+  for Item in Items do
+  begin
+    Leaf := TPath.GetFileName(Item.Folder);
+    Line := Leaf + ' ' + CoverageKindStr(Item.Kind);
+    if Item.Detail <> '' then
+      Line := Line + ' ' + Item.Detail;
+    Writeln(Line);
+  end;
+  Result := 0;
+end;
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand = 'manifest-merge' then
@@ -7405,10 +7460,12 @@ begin
     Result := DoSelfTestDbSelect(AArgs)
   else if AArgs.SubCommand = 'drift' then
     Result := DoSelfTestDrift(AArgs)
+  else if AArgs.SubCommand = 'coverage' then
+    Result := DoSelfTestCoverage(AArgs)
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage');
     Result := 2;
   end;
 end;
