@@ -14,6 +14,31 @@ Check 'glob selftest' ($g -match 'GLOB-OK')
 Write-Host ''
 $ig = & $Exe selftest ignore --dir "$fx\proj" 2>&1 | Out-String
 Check 'ignore-files selftest' ($ig -match 'IGNORE-OK')
+# Regression (v0.46): ignore-walk must COMPLETE quickly on real-world ignore
+# content -- a .hgignore mirroring Loader2019 (regexp-default lines, '/'-bearing
+# patterns, late 'syntax: glob', '- Copy', '~', 'OLD/') plus a .gitignore with
+# the flutter/fluentui catastrophic-shape globs ('**/ios/**/*.mode1v3', etc.).
+# Before the linear matcher this hung (exit 124) or crashed (139). Guard with a
+# hard wall-clock timeout so a regression fails the suite instead of hanging it.
+Write-Host ''
+$stress = "$PSScriptRoot\..\fixtures\ignore-stress"
+$sdb    = Join-Path $env:TEMP 'draglint_ignore_stress.sqlite'
+if (Test-Path $sdb) { Remove-Item -Force $sdb }
+$proc = Start-Process -FilePath $Exe `
+    -ArgumentList @('index', $stress, '--db', $sdb, '--use-ignore') `
+    -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\draglint_stress.out" `
+    -RedirectStandardError "$env:TEMP\draglint_stress.err"
+$done = $proc.WaitForExit(30000)   # 30s hard cap; pathological behaviour would blow this
+if (-not $done) {
+    try { $proc.Kill() } catch {}
+    Check 'ignore-stress completes (no hang/segfault)' $false 'TIMED OUT (>30s)'
+} else {
+    Check 'ignore-stress completes (no hang/segfault)' ($proc.ExitCode -eq 0) "exit=$($proc.ExitCode)"
+    $sf3 = & $Exe selftest files --db $sdb 2>&1 | Out-String
+    Check 'ignore-stress indexed deep ios/sub file' ($sf3 -match 'uDeep\.pas')
+    Check 'ignore-stress dropped "* - Copy*" file'   (-not ($sf3 -match 'Foo - Copy'))
+    Check 'ignore-stress kept hg-regexp-line file'   ($sf3 -match 'uMSCLIST_OLD')
+}
 $proj = "$fx\proj"; $out = "$fx\OUT"
 if (Test-Path $out) { Remove-Item -Recurse -Force $out }
 New-Item -ItemType Directory $out | Out-Null

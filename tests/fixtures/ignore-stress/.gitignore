@@ -1,0 +1,18 @@
+# Catastrophic-shape glob patterns harvested from real flutter / fluentui
+# .gitignore files. Before v0.46 these were translated to PCRE and the regex was
+# recompiled on every TGlob.Matches call, making the tree walk degrade to a
+# multi-minute hang (and crash the process on a large/deep tree). With the
+# direct linear matcher they are O(n*m) and allocation-free.
+node_modules
+dist/
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/.tags*
+**/ios/**/*sync/
+**/ios/**/DerivedData/
+**/AddTests/**
+**.dcu
+* - Copy*
+packages/react-icons/src/icons
+packages/react-icons/intermediate
+**/*.Server/GeneratedArtifacts

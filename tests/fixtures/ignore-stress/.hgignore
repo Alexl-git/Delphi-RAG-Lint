@@ -1,0 +1,27 @@
+dcu
+~
+_history
+_recovery
+Doc
+TESTS
+Sentinel
+Examples
+doc
+Backups
+SVG/ALEX
+SVG/dx
+SVG/Skins
+ControlPlan2.ViewModel.dfm
+INSPFLDR-2022-12-29-bad.dfm
+InspFldrThreads-2023-04-24.pas
+uInterfaces_OLD_20230828.pas
+uMSCLIST_OLD_20230828.pas
+Win32/Debug
+- Copy
+SVG/AATEST
+SVG/iTrack
+SVG/ipTrack
+OLD/
+syntax: glob
+*.bak
+*.bak

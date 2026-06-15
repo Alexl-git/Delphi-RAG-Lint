@@ -17,7 +17,15 @@ type
   /// tree. Deeper (later-pushed) directories' rules take precedence; a leading
   /// '!' re-includes. Honors .gitignore AND .hgignore (practical subset:
   /// per-line glob, '#' comments, trailing '/' = dir-only, leading '!' =
-  /// negation; .hgignore 'syntax:' lines are skipped).</summary>
+  /// negation).</summary>
+  /// <remarks>v0.46: .hgignore syntax handling. Mercurial's DEFAULT syntax is
+  /// 'regexp', switched to glob by a 'syntax: glob' line. Lines that are in
+  /// effect under regexp syntax (i.e. before any 'syntax: glob' switch, or
+  /// after a 'syntax: regexp' switch) are NOT valid globs and are SKIPPED --
+  /// feeding them to the glob matcher would mis-interpret '/'-, '~'- and
+  /// '- '-bearing regexps as globs. Only glob-syntax lines become rules.
+  /// .gitignore is always glob. Matching uses TGlob's direct linear matcher,
+  /// so no pattern can cause pathological CPU/stack behavior on the walk.</remarks>
   TIgnoreStack = class
   private
     type
@@ -25,6 +33,7 @@ type
         Pattern: string;  // glob pattern (stripped of leading '!')
         DirOnly: Boolean; // rule applies to directories only (trailing '/')
         Negated: Boolean; // leading '!' -> re-include if matched
+        HasSep:  Boolean; // pattern contains a path separator (precomputed)
       end;
       TLayer = TList<TRule>;
 
@@ -108,10 +117,14 @@ var
   Lines: TStringList;
   Line:  string;
   Rule:  TRule;
+  GlobSyntax: Boolean; // hg: current line syntax (False=regexp default, True=glob)
 begin
   Result := TLayer.Create;
   if not TFile.Exists(APath) then
     Exit;
+  // .gitignore is always glob. .hgignore defaults to 'regexp' until a
+  // 'syntax: glob' directive switches it; regexp-syntax lines are skipped.
+  GlobSyntax := not AIsHg;
   Lines := TStringList.Create;
   try
     Lines.LoadFromFile(APath);
@@ -122,8 +135,17 @@ begin
       // Skip blank lines and comments.
       if (Trimmed = '') or (Trimmed[1] = '#') then
         Continue;
-      // Skip .hgignore 'syntax:' directive lines.
+      // Handle .hgignore 'syntax:' directive: switch mode, then skip the line.
       if AIsHg and Trimmed.StartsWith('syntax:', True) then
+      begin
+        var Mode := Trim(Copy(Trimmed, Length('syntax:') + 1, MaxInt)).ToLower;
+        GlobSyntax := (Mode = 'glob');
+        Continue;
+      end;
+      // Skip lines that are not glob syntax (hg regexp-mode lines): treating a
+      // regexp as a glob would feed '/'-, '~'- and '- '-bearing patterns to the
+      // matcher with the wrong meaning. Safe, documented choice.
+      if not GlobSyntax then
         Continue;
       Rule := Default(TRule);
       // Leading '!' = negation.
@@ -141,6 +163,8 @@ begin
         if Trimmed = '' then Continue;
       end;
       Rule.Pattern := Trimmed;
+      // Precompute separator presence so IsIgnored need not re-scan per call.
+      Rule.HasSep := (Pos('/', Trimmed) > 0) or (Pos('\', Trimmed) > 0);
       Result.Add(Rule);
     end;
   finally
@@ -203,11 +227,10 @@ begin
       // Dir-only rules do not apply to plain files.
       if Rule.DirOnly and not AIsDir then
         Continue;
-      // Match: try base name first; if pattern contains '/' also try path tail.
+      // Match: try base name first; if pattern contains a separator also try
+      // the full path tail (HasSep precomputed at parse time).
       Matched := TGlob.Matches(Base, Rule.Pattern);
-      if (not Matched) and
-         ((Pos('/', NormPath(Rule.Pattern)) > 0) or
-          (Pos('\', Rule.Pattern) > 0)) then
+      if (not Matched) and Rule.HasSep then
         Matched := TGlob.Matches(Norm, Rule.Pattern);
       if Matched then
         Result := not Rule.Negated; // '!' flips the decision
