@@ -4,7 +4,9 @@ unit Config.IndexesFrame;
 /// Left panel: list of section names with Add/Delete. Right panel: editor for
 /// the selected TIndexSection fields. Bottom: TPageControl with
 /// Coverage / Plan preview / Build log tabs. Plan preview tab contains a
-/// read-only TListView (lvPlan) populated by ResolvePlan.</summary>
+/// read-only TListView (lvPlan) populated by ResolvePlan. Build log tab has
+/// a TMemo for streamed engine output and buttons for Build All, Build
+/// Selected, and Library Drift.</summary>
 
 interface
 
@@ -13,6 +15,7 @@ uses
   System.Classes,
   System.IOUtils,
   Winapi.Windows,
+  Winapi.Messages,
   Vcl.Controls,
   Vcl.Forms,
   Vcl.StdCtrls,
@@ -22,7 +25,8 @@ uses
   Vcl.FileCtrl,
   DRagLint.Index.Manifest,
   DRagLint.Index.Plan,
-  DRagLint.Project.Resolver;
+  DRagLint.Project.Resolver,
+  Config.EngineRunner;
 
 type
   /// <summary>Typed pointer to TIndexManifest, used by BindManifest so the frame
@@ -69,6 +73,11 @@ type
     lvPlan: TListView;
     btnRefreshPlan: TButton;
     tsBuildLog: TTabSheet;
+    pnlBuildBtns: TPanel;
+    btnBuildAll: TButton;
+    btnBuildSelected: TButton;
+    btnDrift: TButton;
+    mLog: TMemo;
     procedure lbSectionsClick(Sender: TObject);
     procedure pcBottomChange(Sender: TObject);
     procedure btnRefreshPlanClick(Sender: TObject);
@@ -87,10 +96,16 @@ type
     procedure edDedupChange(Sender: TObject);
     procedure cbUseIgnoreClick(Sender: TObject);
     procedure cbSqlOnlyMSClick(Sender: TObject);
+    procedure btnBuildAllClick(Sender: TObject);
+    procedure btnBuildSelectedClick(Sender: TObject);
+    procedure btnDriftClick(Sender: TObject);
   private
-    FManifest:   PIndexManifest;
-    FLoading:    Boolean;
-    FOpenDialog: TOpenDialog;
+    FManifest:      PIndexManifest;
+    FLoading:       Boolean;
+    FOpenDialog:    TOpenDialog;
+    FRunning:       Boolean;
+    FConfigPath:    string;
+    FOnSaveNeeded:  TProc;
     /// <summary>Split a semicolon-joined string into a TArray of strings,
     /// trimming each element and ignoring empty entries.</summary>
     /// <param name="S">Semicolon-joined input string.</param>
@@ -128,6 +143,18 @@ type
     /// <param name="AMode">The mode to convert.</param>
     /// <returns>'folderTree', 'closure', or 'library'.</returns>
     function PlanModeDisplayStr(const AMode: TPlanSectionMode): string;
+    /// <summary>Enable or disable the three build/drift buttons together.</summary>
+    /// <param name="AEnabled">True to enable; False to disable.</param>
+    procedure SetBuildButtonsEnabled(AEnabled: Boolean);
+    /// <summary>Append ALine to mLog (scrolls to end). Called on the main thread
+    /// by TEngineRunner.TRunnerThread via TThread.Queue.</summary>
+    /// <param name="ALine">Line of output from the engine process.</param>
+    procedure AppendLogLine(const ALine: string);
+    /// <summary>Launch the engine with AArgs. Saves first via FOnSaveNeeded;
+    /// if the engine path cannot be resolved, logs an error. Disables build
+    /// buttons while running; re-enables + logs exit code when done.</summary>
+    /// <param name="AArgs">Argument string for drag-lint.exe.</param>
+    procedure RunEngine(const AArgs: string);
   public
     /// <summary>Bind the frame to a manifest pointer. The pointer must remain
     /// valid for the lifetime of the frame (owned by TMainForm). Rebuilds the
@@ -139,6 +166,14 @@ type
     /// controls back into FManifest^. Called by TMainForm before Save.</summary>
     /// <remarks>Not thread-safe; call from the main (UI) thread only.</remarks>
     procedure FlushToManifest;
+    /// <summary>Absolute path of the config file currently open in the main form.
+    /// Set by TMainForm after load/save. Used by build/drift button handlers
+    /// to pass --config to the engine.</summary>
+    property ConfigPath: string read FConfigPath write FConfigPath;
+    /// <summary>Callback invoked by RunEngine before spawning the process so the
+    /// main form can flush edits and write the config file to disk. Assign
+    /// TMainForm's save routine here. Optional: if nil, no save is performed.</summary>
+    property OnSaveNeeded: TProc read FOnSaveNeeded write FOnSaveNeeded;
   end;
 
 implementation
@@ -527,6 +562,123 @@ end;
 procedure TIndexesFrame.btnRefreshPlanClick(Sender: TObject);
 begin
   RefreshPlanPreview;
+end;
+
+{ Build log helpers }
+
+procedure TIndexesFrame.SetBuildButtonsEnabled(AEnabled: Boolean);
+begin
+  btnBuildAll.Enabled      := AEnabled;
+  btnBuildSelected.Enabled := AEnabled;
+  btnDrift.Enabled         := AEnabled;
+end;
+
+procedure TIndexesFrame.AppendLogLine(const ALine: string);
+begin
+  mLog.Lines.Add(ALine);
+  { Scroll to the last line }
+  SendMessage(mLog.Handle, WM_VSCROLL, SB_BOTTOM, 0);
+end;
+
+procedure TIndexesFrame.RunEngine(const AArgs: string);
+var
+  ExePath: string;
+  EngPath: string;
+begin
+  if FRunning then
+  begin
+    AppendLogLine('[already running -- wait for the current run to finish]');
+    Exit;
+  end;
+
+  { Save the manifest to disk so the engine reads current state }
+  if Assigned(FOnSaveNeeded) then
+    FOnSaveNeeded();
+
+  { Resolve engine path from settings }
+  EngPath := '';
+  if FManifest <> nil then
+    EngPath := FManifest^.Settings.EnginePath;
+  ExePath := TEngineRunner.ResolveEngineExe(EngPath);
+
+  if ExePath = '' then
+  begin
+    mLog.Lines.Add('[ERROR] drag-lint.exe not found. Set the engine path in Settings.');
+    Exit;
+  end;
+
+  mLog.Clear;
+  mLog.Lines.Add('> ' + ExePath + ' ' + AArgs);
+  mLog.Lines.Add('');
+  SetBuildButtonsEnabled(False);
+  FRunning := True;
+
+  TEngineRunner.Run(ExePath, AArgs,
+    procedure(ALine: string)
+    begin
+      AppendLogLine(ALine);
+    end,
+    procedure(ACode: Integer)
+    begin
+      FRunning := False;
+      AppendLogLine('');
+      AppendLogLine('=== exit ' + IntToStr(ACode) + ' ===');
+      SetBuildButtonsEnabled(True);
+    end);
+end;
+
+{ Build log button handlers }
+
+procedure TIndexesFrame.btnBuildAllClick(Sender: TObject);
+var
+  Args: string;
+begin
+  pcBottom.ActivePage := tsBuildLog;
+  Args := 'index --all --jobs 0';
+  if FConfigPath <> '' then
+    Args := Args + ' --config "' + FConfigPath + '"';
+  RunEngine(Args);
+end;
+
+procedure TIndexesFrame.btnBuildSelectedClick(Sender: TObject);
+var
+  Args, Names: string;
+  I: Integer;
+begin
+  pcBottom.ActivePage := tsBuildLog;
+  Names := '';
+  for I := 0 to lbSections.Count - 1 do
+    if lbSections.Selected[I] then
+    begin
+      if Names <> '' then Names := Names + ',';
+      Names := Names + lbSections.Items[I];
+    end;
+  { Fall back to the single-selected item if multi-select not active }
+  if (Names = '') and (lbSections.ItemIndex >= 0) then
+    Names := lbSections.Items[lbSections.ItemIndex];
+
+  if Names = '' then
+  begin
+    mLog.Clear;
+    mLog.Lines.Add('[No section selected -- select one in the list first]');
+    Exit;
+  end;
+
+  Args := 'index --all --only ' + Names;
+  if FConfigPath <> '' then
+    Args := Args + ' --config "' + FConfigPath + '"';
+  RunEngine(Args);
+end;
+
+procedure TIndexesFrame.btnDriftClick(Sender: TObject);
+var
+  Args: string;
+begin
+  pcBottom.ActivePage := tsBuildLog;
+  Args := 'library-drift';
+  if FConfigPath <> '' then
+    Args := Args + ' --config "' + FConfigPath + '"';
+  RunEngine(Args);
 end;
 
 end.

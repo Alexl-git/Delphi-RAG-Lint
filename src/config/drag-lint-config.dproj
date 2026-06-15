@@ -95,6 +95,7 @@
         <DCCReference Include="Config.SettingsFrame.pas">
             <Form>SettingsFrame</Form>
         </DCCReference>
+        <DCCReference Include="Config.EngineRunner.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

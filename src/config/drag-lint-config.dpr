@@ -12,7 +12,8 @@ uses
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   Config.MainForm in 'Config.MainForm.pas' {MainForm},
   Config.IndexesFrame in 'Config.IndexesFrame.pas' {IndexesFrame: TFrame},
-  Config.SettingsFrame in 'Config.SettingsFrame.pas' {SettingsFrame: TFrame};
+  Config.SettingsFrame in 'Config.SettingsFrame.pas' {SettingsFrame: TFrame},
+  Config.EngineRunner in 'Config.EngineRunner.pas';
 
 const
   VERSION = '0.45.0-alpha';

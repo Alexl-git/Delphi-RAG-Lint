@@ -323,6 +323,53 @@ object IndexesFrame: TIndexesFrame
     end
     object tsBuildLog: TTabSheet
       Caption = 'Build log'
+      object pnlBuildBtns: TPanel
+        Left = 0
+        Top = 0
+        Width = 872
+        Height = 30
+        Align = alTop
+        BevelOuter = bvNone
+        TabOrder = 0
+        object btnBuildAll: TButton
+          Left = 4
+          Top = 4
+          Width = 90
+          Height = 22
+          Caption = 'Build All'
+          TabOrder = 0
+          OnClick = btnBuildAllClick
+        end
+        object btnBuildSelected: TButton
+          Left = 100
+          Top = 4
+          Width = 110
+          Height = 22
+          Caption = 'Build Selected'
+          TabOrder = 1
+          OnClick = btnBuildSelectedClick
+        end
+        object btnDrift: TButton
+          Left = 216
+          Top = 4
+          Width = 100
+          Height = 22
+          Caption = 'Library Drift'
+          TabOrder = 2
+          OnClick = btnDriftClick
+        end
+      end
+      object mLog: TMemo
+        Left = 0
+        Top = 30
+        Width = 872
+        Height = 114
+        Align = alClient
+        ReadOnly = True
+        ScrollBars = ssBoth
+        TabOrder = 1
+        WordWrap = False
+      end
     end
   end
 end

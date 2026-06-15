@@ -137,7 +137,10 @@ end;
 procedure TMainForm.PopulateFrame;
 begin
   if FIndexFrame <> nil then
+  begin
     FIndexFrame.BindManifest(PIndexManifest(@FManifest));
+    FIndexFrame.ConfigPath := FConfigPath;
+  end;
   if FSettingsFrame <> nil then
     FSettingsFrame.BindManifest(PIndexManifest(@FManifest));
   if FConfigPath <> '' then
@@ -154,6 +157,21 @@ begin
     FIndexFrame := TIndexesFrame.Create(Self);
     FIndexFrame.Parent := tsIndexes;
     FIndexFrame.Align  := alClient;
+    FIndexFrame.OnSaveNeeded :=
+      procedure
+      var
+        ErrMsg: string;
+      begin
+        if FIndexFrame <> nil then FIndexFrame.FlushToManifest;
+        if FSettingsFrame <> nil then FSettingsFrame.FlushToManifest;
+        ErrMsg := TManifestIO.Validate(FManifest);
+        if (ErrMsg = '') and (FConfigPath <> '') then
+        try
+          TManifestIO.Save(FManifest, FConfigPath);
+        except
+          { swallow; build will use whatever is on disk }
+        end;
+      end;
   end;
 
   { Create the settings frame on first show }
