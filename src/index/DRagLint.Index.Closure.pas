@@ -189,10 +189,13 @@ const
   PAT_ITEM = '([A-Za-z_][A-Za-z0-9_.]*)\s*(?:in\s*''([^'']*)''\s*)?';
 var
   UsesPos, SemiPos: Integer;
-  UsesBlock, ItemPat: string;
+  UsesBlock, Stripped, ItemPat: string;
   Matches: TMatchCollection;
   M: TMatch;
   UName, UFile: string;
+  I, Len: Integer;
+  InBrace: Boolean;
+  SB: TStringBuilder;
 begin
   // Find `uses` keyword (word-boundary, case-insensitive)
   var Re := TRegEx.Create('\buses\b', [roIgnoreCase]);
@@ -207,8 +210,46 @@ begin
 
   UsesBlock := Copy(AContent, UsesPos + 1, SemiPos - UsesPos - 1);
 
+  // Strip {$IFDEF}/{$ENDIF}/{form-comment} braces so PAT_ITEM only sees real
+  // unit names.  Real .dpr uses blocks can contain:
+  //   {$IFDEF EurekaLog}  ... {$ENDIF EurekaLog}
+  //   UnitName in 'file.pas' {FormName: TFormClass}
+  // Without stripping, PAT_ITEM would match identifiers inside the braces
+  // (IFDEF, EurekaLog, FormName, etc.) as spurious unit names, and on some
+  // inputs the Delphi regex engine raises ERegularExpressionError when
+  // accessing optional group 2 for those spurious matches.
+  SB := TStringBuilder.Create(Length(UsesBlock));
+  try
+    I := 1;
+    Len := Length(UsesBlock);
+    InBrace := False;
+    while I <= Len do
+    begin
+      if InBrace then
+      begin
+        if UsesBlock[I] = '}' then
+          InBrace := False;
+        SB.Append(' ');
+      end
+      else
+      begin
+        if UsesBlock[I] = '{' then
+        begin
+          InBrace := True;
+          SB.Append(' ');
+        end
+        else
+          SB.Append(UsesBlock[I]);
+      end;
+      Inc(I);
+    end;
+    Stripped := SB.ToString;
+  finally
+    SB.Free;
+  end;
+
   ItemPat := PAT_ITEM;
-  Matches := TRegEx.Matches(UsesBlock, ItemPat, [roIgnoreCase]);
+  Matches := TRegEx.Matches(Stripped, ItemPat, [roIgnoreCase]);
   for M in Matches do
   begin
     UName := M.Groups[1].Value.Trim;
@@ -217,7 +258,8 @@ begin
     if SameText(UName, 'in') then Continue;
 
     UFile := '';
-    if M.Groups[2].Success then
+    // Guard: PAT_ITEM has 2 capture groups; access group 2 only when present.
+    if (M.Groups.Count > 2) and M.Groups[2].Success then
     begin
       UFile := M.Groups[2].Value.Trim;
       if (UFile <> '') and (not TPath.IsPathRooted(UFile)) then

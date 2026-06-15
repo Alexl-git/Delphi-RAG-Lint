@@ -1,4 +1,9 @@
 program App;
-uses uAlpha in 'uAlpha.pas', uBeta in 'uBeta.pas';
+uses
+  {$IFDEF MYFLAG}
+  uConditional,
+  {$ENDIF MYFLAG}
+  uAlpha in 'uAlpha.pas' {AlphaForm: TForm},
+  uBeta in 'uBeta.pas';
 begin
 end.
