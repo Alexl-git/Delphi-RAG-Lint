@@ -1014,6 +1014,26 @@ begin
           end;
         end;
 
+        { v0.46: owner-type / unit fallback. When the exact-type filter found
+          nothing because the member is INHERITED (resolved to the owner type,
+          not the member itself), narrow by the resolved type's UNIT prefix.
+          Turns ~50 same-named properties across unrelated types into the few
+          in the right library unit (e.g. AButton: TdxBarButton -> only dxBar). }
+        if (Length(Filtered) = 0) and (ResolvedQName <> '') then
+        begin
+          var DotP: Integer := Pos('.', ResolvedQName);
+          if DotP > 1 then
+          begin
+            var UnitPfx: string := Copy(ResolvedQName, 1, DotP);  { incl. '.' }
+            for Sym in Symbols do
+              if Pos(UnitPfx, Sym.QualifiedName) = 1 then
+              begin
+                SetLength(Filtered, Length(Filtered) + 1);
+                Filtered[High(Filtered)] := Sym;
+              end;
+          end;
+        end;
+
         { Fallback: if filtering yielded nothing (no LHS info, or qname
           mismatch across stores), keep the original list capped at 50 so
           mega-common members like DataBinding don't blow up the popup. }
