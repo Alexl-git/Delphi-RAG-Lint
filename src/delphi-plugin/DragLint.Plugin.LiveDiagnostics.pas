@@ -433,10 +433,14 @@ begin
       Exit;
     end;
 
-    Exe := Settings.ExePath;
-    if (Exe = '') or not FileExists(Exe) then
-      Exe := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-    if not FileExists(Exe) then Exe := 'drag-lint.exe';
+    { v0.46: PREFER the engine bundled beside the BPL (kept current with the
+      plugin), like the LSP client does -- otherwise a stale Settings.ExePath
+      runs an OLD engine for lint while hover uses the new one, so new rules
+      (e.g. unused-local/H2164) silently never appear. Fall back to the
+      configured ExePath, then PATH. }
+    Exe := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+    if not FileExists(Exe) then Exe := Settings.ExePath;
+    if (Exe = '') or not FileExists(Exe) then Exe := 'drag-lint.exe';
 
     Tmp := TPath.Combine(TPath.GetTempPath,
       Format('drag-lint-live-%d.pas', [GetTickCount]));

@@ -1996,6 +1996,63 @@ begin
     end);
 end;
 
+procedure InvokeCopyDiagnostics(Sender: TObject);
+{ v0.46: copy every cached diagnostic for the active file to the clipboard as
+  plain text (file(line,col): sev code: message), so the user can paste the
+  list (e.g. to an AI). Reads DiagnosticCache, which the live runner populates. }
+var
+  ES: IOTAEditorServices;
+  EV: IOTAEditView;
+  FilePath, SevStr: string;
+  Diags: TArray<TDragLintDiagnostic>;
+  D: TDragLintDiagnostic;
+  SB: TStringBuilder;
+begin
+  FilePath := '';
+  if Supports(BorlandIDEServices, IOTAEditorServices, ES) and (ES <> nil) then
+  begin
+    EV := ES.TopView;
+    if (EV <> nil) and (EV.Buffer <> nil) then
+      FilePath := EV.Buffer.FileName;
+  end;
+  if FilePath = '' then
+  begin
+    ShowMessage('drag-lint: no active editor file.');
+    Exit;
+  end;
+  Diags := Cache.GetForFile(FilePath);
+  if Length(Diags) = 0 then
+  begin
+    ShowMessage(Format('drag-lint: no diagnostics cached for %s yet.'#13#10 +
+      'Open or edit the file so diagnostics run, then copy again.',
+      [ExtractFileName(FilePath)]));
+    Exit;
+  end;
+  SB := TStringBuilder.Create;
+  try
+    SB.AppendLine(Format('drag-lint diagnostics for %s (%d):',
+      [ExtractFileName(FilePath), Length(Diags)]));
+    for D in Diags do
+    begin
+      case D.Severity of
+        dlsError:   SevStr := 'error';
+        dlsWarning: SevStr := 'warning';
+        dlsHint:    SevStr := 'hint';
+      else
+        SevStr := 'info';
+      end;
+      { cache stores 0-based line/col }
+      SB.AppendLine(Format('%s(%d,%d): %s %s: %s',
+        [FilePath, D.Line + 1, D.StartCol + 1, SevStr, D.Code, D.Message]));
+    end;
+    Vcl.Clipbrd.Clipboard.AsText := SB.ToString;
+    ShowMessage(Format('drag-lint: copied %d diagnostic(s) to the clipboard.',
+      [Length(Diags)]));
+  finally
+    SB.Free;
+  end;
+end;
+
 procedure InvokeOpenLog(Sender: TObject);
 var
   LogPath: string;
@@ -2111,6 +2168,7 @@ begin
   AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)',  InvokeDiagnostics);
   AddWrappedItem(RootMenu, 'Run AST Checks',             InvokeRunAstChecks);
   AddWrappedItem(RootMenu, 'Lint Buffer (Unsaved)',      InvokeLintBuffer);
+  AddWrappedItem(RootMenu, 'Copy Diagnostics (Current File)', InvokeCopyDiagnostics);
   AddWrappedItem(RootMenu, 'Compile && Diagnose',        InvokeCompileDiagnose);
   AddWrappedItem(RootMenu, 'Import Build Log...',        InvokeImportLog);
   AddWrappedItem(RootMenu, 'Test Connection...',         InvokeTestConnection);
