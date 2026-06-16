@@ -43,6 +43,19 @@ const
   DEBOUNCE_MS = 700;           { keystroke->lint (instant feedback) }
   SEMANTIC_DEBOUNCE_MS = 5000;  { keystroke->semantic check (compiler; slower) }
 
+{ v0.46: append-only diagnostic trace so a "nothing shows" report is conclusive.
+  Open via drag-lint > Open Plugin Log is the editor log; THIS file is dedicated
+  to the live-diagnostics path: %TEMP%\drag-lint-livediag.log. }
+procedure LiveLog(const AMsg: string);
+begin
+  try
+    TFile.AppendAllText(
+      TPath.Combine(TPath.GetTempPath, 'drag-lint-livediag.log'),
+      FormatDateTime('hh:nn:ss', Now) + '  ' + AMsg + sLineBreak);
+  except
+  end;
+end;
+
 var
   GLastSemanticCheck: Cardinal = 0;  { v0.43: throttle semantic to 5s apart }
 
@@ -148,9 +161,21 @@ var
   i, p, lb, rb, c1, c2: Integer;
 begin
   SetLength(Result, 0);
-  if (ACtx.BufferPath = '') or (ACtx.ExePath = '') then Exit;
-  Cmd := Format('"%s" lint "%s"', [ACtx.ExePath, ACtx.BufferPath]);
-  if not RunCapture(Cmd, Output, 8000) then Exit;
+  if ACtx.ExePath = '' then Exit;
+  { v0.46: lint the SAVED file on disk when it exists -- reliable, and the engine
+    reports every finding there (the buffer-snapshot path was masking findings
+    past a GetText short-read). Fall back to the unsaved buffer snapshot. }
+  var LintTarget: string := ACtx.FilePath;
+  if (LintTarget = '') or not FileExists(LintTarget) then LintTarget := ACtx.BufferPath;
+  if LintTarget = '' then Exit;
+  Cmd := Format('"%s" lint "%s"', [ACtx.ExePath, LintTarget]);
+  LiveLog(Format('lint: exe=%s target=%s', [ACtx.ExePath, LintTarget]));
+  if not RunCapture(Cmd, Output, 8000) then
+  begin
+    LiveLog('lint: RunCapture FAILED (engine not found / timeout?)');
+    Exit;
+  end;
+  LiveLog(Format('lint: output=%d bytes', [Length(Output)]));
 
   Acc := TList<TDragLintDiagItem>.Create;
   Lines := TStringList.Create;
@@ -196,6 +221,7 @@ begin
       D.Source   := 'lint';
       Acc.Add(D);
     end;
+    LiveLog(Format('lint: parsed %d finding(s)', [Acc.Count]));
     Result := Acc.ToArray;
   finally
     Lines.Free;
@@ -426,7 +452,12 @@ begin
     if GetTickCount - FLastEdit < DEBOUNCE_MS then Exit;
 
     Settings := LoadSettings;
-    if not Settings.AutoDiagnosticsOnSave then begin FDirty := False; Exit; end;
+    if not Settings.AutoDiagnosticsOnSave then
+    begin
+      LiveLog('runner: SKIP -- AutoDiagnosticsOnSave is OFF in Settings');
+      FDirty := False;
+      Exit;
+    end;
 
     { Snapshot the buffer on the MAIN thread (OTAPI access), then hand the
       analysis to a BACKGROUND thread so a slow lint can never block the editor.
@@ -459,6 +490,8 @@ begin
     FBusy := True;
     FDirty := False;
     GLiveStatus := 'Analyzing ' + ExtractFileName(FilePath) + '...';
+    LiveLog(Format('runner: FIRE file=%s exe=%s bufLen=%d',
+      [FilePath, Exe, Length(BufText)]));
 
     TThread.CreateAnonymousThread(
       procedure
@@ -472,8 +505,13 @@ begin
           Ctx.BufferPath := Tmp;
           Ctx.ExePath    := Exe;
           Diags := AggregateDiagnostics(Ctx);   { runs the lint -- background }
+          LiveLog(Format('runner: aggregated %d diag(s)', [Length(Diags)]));
         except
-          SetLength(Diags, 0);
+          on E: Exception do
+          begin
+            LiveLog('runner: AggregateDiagnostics EXC: ' + E.Message);
+            SetLength(Diags, 0);
+          end;
         end;
         try TFile.Delete(Tmp); except end;
 
