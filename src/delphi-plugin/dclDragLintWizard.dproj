@@ -45,6 +45,13 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
         <DCC_UsePackage>rtl;vcl;designide;$(DCC_UsePackage)</DCC_UsePackage>
+        <!-- The Base group sends the BPL/DCP to dll-win32; for a Win64 build that
+             would clobber the 32-bit IDE's package with a 64-bit binary ("not a
+             valid Win32 application"). Redirect Win64 output to dll-win64 so each
+             directory holds the matching bitness. (Base_Win64 is evaluated after
+             Base, so this override wins for Win64 only.) -->
+        <DCC_BplOutput>..\..\third_party\dll-win64</DCC_BplOutput>
+        <DCC_DcpOutput>..\..\third_party\dll-win64</DCC_DcpOutput>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
         <DCC_Define>DESIGNONLY;DEBUG;$(DCC_Define)</DCC_Define>
