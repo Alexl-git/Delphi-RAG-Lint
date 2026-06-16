@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.45.0-alpha';
+  VERSION = '0.46.0-alpha';
 
 function Run: Integer;
 
@@ -867,6 +867,27 @@ begin
   end;
 end;
 
+// v0.46: a full `index --all` / `--only` is a CLEAN rebuild of each section's
+// DB. Re-running a build into an existing DB doubled symbols: a scoped reindex
+// during development and a separate full reindex both wrote into the same file,
+// and the incremental FileIsUpToDate skip did not catch every file (path-spelling
+// / sha drift between two engine builds), so rows accumulated. Deleting the
+// section DB plus its WAL/SHM/journal sidecars before (re)creating the store
+// guarantees one clean copy. The incremental per-file reindex path (LSP save)
+// still uses FileIsUpToDate against an existing DB and does NOT come through here.
+procedure RecreateSectionDb(const ADbPath: string);
+const
+  Sidecars: array[0..2] of string = ('-wal', '-shm', '-journal');
+var
+  Suffix: string;
+begin
+  if TFile.Exists(ADbPath) then
+    TFile.Delete(ADbPath);
+  for Suffix in Sidecars do
+    if TFile.Exists(ADbPath + Suffix) then
+      TFile.Delete(ADbPath + Suffix);
+end;
+
 // v0.45 Task 7: build one plan item into its SQLite database.
 // Creates the Store + Indexer, applies filter + dedup roots, walks per mode,
 // then calls ResolveUnitUseTargets. Writes a one-line summary to stdout.
@@ -890,6 +911,10 @@ begin
   var DbDir := ExtractFilePath(AItem.DbPath);
   if (DbDir <> '') and (not TDirectory.Exists(DbDir)) then
     TDirectory.CreateDirectory(DbDir);
+
+  // v0.46: clean rebuild -- drop any prior DB so symbols never accumulate
+  // across runs (see RecreateSectionDb).
+  RecreateSectionDb(AItem.DbPath);
 
   T0 := Now;
   try
@@ -7444,6 +7469,93 @@ begin
   Result := 0;
 end;
 
+// selftest recreate: build a one-file folder-tree section into a temp DB TWICE
+// via BuildPlanItem and assert the symbol count is identical (not doubled).
+// Regression for the duplicate-symbol bug where re-running index --all into an
+// existing DB accumulated rows. PASS requires Count1 = Count2 > 0.
+function DoSelfTestRecreate: Integer;
+var
+  TmpRoot, SrcDir, DbPath, PasFile: string;
+  Item: TPlanSection;
+  Docs: TDocConfig;
+  Store: ISymbolStore;
+  Count1, Count2: Int64;
+begin
+  Result := 0;
+  TmpRoot := TPath.Combine(TPath.GetTempPath,
+    'draglint_selftest_recreate_' + IntToStr(Int64(GetTickCount)));
+  SrcDir := TPath.Combine(TmpRoot, 'src');
+  TDirectory.CreateDirectory(SrcDir);
+  PasFile := TPath.Combine(SrcDir, 'UFoo.pas');
+  TFile.WriteAllText(PasFile,
+    'unit UFoo;'#13#10 +
+    'interface'#13#10 +
+    'type'#13#10 +
+    '  TFoo = class'#13#10 +
+    '  public'#13#10 +
+    '    procedure Bar;'#13#10 +
+    '    function Baz: Integer;'#13#10 +
+    '  end;'#13#10 +
+    'implementation'#13#10 +
+    'procedure TFoo.Bar; begin end;'#13#10 +
+    'function TFoo.Baz: Integer; begin Result := 0; end;'#13#10 +
+    'end.'#13#10);
+  DbPath := TPath.Combine(TmpRoot, 'sec.sqlite');
+
+  // Minimal folder-tree section with the standard safe filter defaults.
+  Item := Default(TPlanSection);
+  Item.Name     := 'selftest';
+  Item.Mode     := smFolderTree;
+  Item.DbPath   := DbPath;
+  Item.Roots    := [SrcDir];
+  Item.Platform := '';
+  Item.Filter   := TWalkFilter.Create;
+
+  Docs := Default(TDocConfig);
+
+  try
+    if not BuildPlanItem(Item, Docs) then
+    begin
+      Writeln('FAIL recreate: first build failed');
+      Exit(1);
+    end;
+    // Create() only connects; Migrate() prepares the count statements (and is
+    // idempotent against the already-built schema).
+    Store := TSQLiteSymbolStore.Create(DbPath);
+    Store.Migrate;
+    Count1 := Store.CountSymbols;
+    Store := nil; // close before second build deletes the file
+
+    if not BuildPlanItem(Item, Docs) then
+    begin
+      Writeln('FAIL recreate: second build failed');
+      Exit(1);
+    end;
+    Store := TSQLiteSymbolStore.Create(DbPath);
+    Store.Migrate;
+    Count2 := Store.CountSymbols;
+    Store := nil;
+
+    Writeln(Format('recreate: build1=%d build2=%d symbols', [Count1, Count2]));
+    if Count1 = 0 then
+    begin
+      Writeln('FAIL recreate: no symbols indexed (parser/setup issue)');
+      Result := 1;
+    end
+    else if Count1 <> Count2 then
+    begin
+      Writeln(Format('FAIL recreate: symbol count changed on rebuild (%d -> %d)',
+        [Count1, Count2]));
+      Result := 1;
+    end
+    else
+      Writeln('PASS recreate: stable symbol count across rebuilds');
+  finally
+    Store := nil;
+    try TDirectory.Delete(TmpRoot, True); except end;
+  end;
+end;
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand = 'manifest-merge' then
@@ -7462,10 +7574,12 @@ begin
     Result := DoSelfTestDrift(AArgs)
   else if AArgs.SubCommand = 'coverage' then
     Result := DoSelfTestCoverage(AArgs)
+  else if AArgs.SubCommand = 'recreate' then
+    Result := DoSelfTestRecreate
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate');
     Result := 2;
   end;
 end;

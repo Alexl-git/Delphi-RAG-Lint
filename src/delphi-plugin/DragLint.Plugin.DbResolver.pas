@@ -180,9 +180,22 @@ begin
 end;
 
 function GetLibraryDbPath: string;
+{ v0.46: the v0.45 manifest renamed library DBs to library-<platform>.sqlite.
+  Prefer a fresh per-platform DB deployed beside the BPL (Win32 is the manifest
+  default platform, then Win64), but fall back to the legacy merged
+  drag-lint-library.sqlite -- still a complete all-platform symbol set for
+  "which unit declares X" -- so existing installs keep working. }
+var
+  Dir, C: string;
+  Candidates: array[0..2] of string;
 begin
-  Result := ExtractFilePath(GetModuleName(HInstance)) +
-            'drag-lint-library.sqlite';
+  Dir := ExtractFilePath(GetModuleName(HInstance));
+  Candidates[0] := Dir + 'library-Win32.sqlite';
+  Candidates[1] := Dir + 'library-Win64.sqlite';
+  Candidates[2] := Dir + 'drag-lint-library.sqlite';
+  for C in Candidates do
+    if TFile.Exists(C) then Exit(C);
+  Result := Dir + 'drag-lint-library.sqlite';  { legacy default even if absent }
 end;
 
 function FindAncestorDb(const AStartDir: string;

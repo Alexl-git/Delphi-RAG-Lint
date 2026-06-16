@@ -800,6 +800,57 @@ begin
   end;
 end;
 
+// v0.46 hover polish. Two passes over the candidate symbols:
+//   1. De-duplicate by (QualifiedName, FileId, StartLine). A doubled index (the
+//      pre-0.46 accumulate bug) otherwise renders a phantom "N overloads".
+//   2. If any source declaration (not skForm/skComponent) is present, drop the
+//      DFM component/form entries: a published field in the .pas and its
+//      generated DFM object describe the same thing, and the source declaration
+//      carries the real declared type (what the IDE shows on hover).
+// The candidate list is small (capped at 50 upstream), so a linear dedup is fine.
+function DedupAndPreferSource(const ASyms: TArray<TSymbol>): TArray<TSymbol>;
+  function IsSourceKind(AKind: TSymbolKind): Boolean;
+  begin
+    Result := not (AKind in [skForm, skComponent]);
+  end;
+var
+  I, J: Integer;
+  Dup, HasSource: Boolean;
+  Deduped: TArray<TSymbol>;
+begin
+  SetLength(Deduped, 0);
+  HasSource := False;
+  for I := 0 to High(ASyms) do
+  begin
+    Dup := False;
+    for J := 0 to High(Deduped) do
+      if (Deduped[J].QualifiedName = ASyms[I].QualifiedName) and
+         (Deduped[J].FileId = ASyms[I].FileId) and
+         (Deduped[J].StartLine = ASyms[I].StartLine) then
+      begin
+        Dup := True;
+        Break;
+      end;
+    if Dup then Continue;
+    SetLength(Deduped, Length(Deduped) + 1);
+    Deduped[High(Deduped)] := ASyms[I];
+    if IsSourceKind(ASyms[I].Kind) then
+      HasSource := True;
+  end;
+
+  if not HasSource then
+    Exit(Deduped);
+
+  // A source declaration is present -> drop the generated DFM components.
+  SetLength(Result, 0);
+  for I := 0 to High(Deduped) do
+    if IsSourceKind(Deduped[I].Kind) then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := Deduped[I];
+    end;
+end;
+
 procedure TLSPServer.HandleHover(const AId: TJSONValue;
   const AParams: TJSONObject);
 var
@@ -915,23 +966,24 @@ begin
           end;
         end;
 
+        { v0.46 hover polish: de-duplicate candidates and prefer the source
+          declaration over a generated DFM component (see DedupAndPreferSource),
+          so a published field shows once with its real declared type instead of
+          a phantom "2 overloads" (field + DFM object, possibly doubled by a
+          stale index). The mislabeled "_Resolved type: <qname>_" line is gone --
+          the indented declaration line below already shows "name: Type" exactly
+          as the IDE does. }
+        Filtered := DedupAndPreferSource(Filtered);
+
         Sb.AppendLine(Format('**%s** `%s`', [Ident, Filtered[0].Kind.ToText]));
         Sb.AppendLine('');
-        if ResolvedQName <> '' then
-        begin
-          Sb.AppendLine(Format('_Resolved type: `%s`_', [ResolvedQName]));
-          Sb.AppendLine('');
-        end;
         { v0.42: render each candidate (every overload) as a Code-Insight-style
           declaration. Signature now carries the full param list + return type,
           e.g. '(const A: Integer): Boolean'. The "- `qname` - line N" shape is
           preserved exactly so the popup's single-click navigation still parses
           the qname + line; the declaration line is shown indented underneath. }
         if Length(Filtered) > 1 then
-        begin
           Sb.AppendLine(Format('_%d overloads:_', [Length(Filtered)]));
-          Sb.AppendLine('');
-        end;
         for Sym in Filtered do
         begin
           Sb.AppendLine(Format('- `%s` - line %d', [Sym.QualifiedName,
@@ -948,11 +1000,13 @@ begin
             begin
               Sb.AppendLine('');
               Sb.Append(ParamBlock);
-              Sb.AppendLine('');
             end;
           end;
         end;
-        if (Length(Filtered) < Length(Symbols)) and (ResolvedQName = '') then
+        { Partial-list note: only when the original hit set actually exceeded the
+          50-candidate cap (the DataBinding case), NOT when dedup/prefer-source
+          shrank the list -- otherwise a field+DFM pair would read "showing 1 of 2". }
+        if (Length(Symbols) > 50) and (ResolvedQName = '') then
           Sb.AppendLine(Format(#10'_(showing %d of %d -- use Find Usages for full list)_',
             [Length(Filtered), Length(Symbols)]));
 

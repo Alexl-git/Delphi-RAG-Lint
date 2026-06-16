@@ -104,6 +104,34 @@ begin
   end;
 end;
 
+{ ---- IDE theme follow (v0.46) ---- }
+
+var
+  GHoverThemeRegistered: Boolean = False;
+
+procedure ApplyIdeTheme(AForm: TCustomForm);
+{ v0.46: make the popup follow the IDE's light/dark theme. ApplyTheme recolors
+  the form + its child controls to the active VCL style. Guarded end-to-end so a
+  missing service or an older IDE never breaks the popup -- it just stays on the
+  default light colours. RegisterFormClass (once) lets the theme engine recognise
+  our form class. }
+var
+  Theming: IOTAIDEThemingServices;
+begin
+  try
+    if not Supports(BorlandIDEServices, IOTAIDEThemingServices, Theming) then Exit;
+    if not Theming.IDEThemingEnabled then Exit;
+    if not GHoverThemeRegistered then
+    begin
+      Theming.RegisterFormClass(TDragLintHoverForm);
+      GHoverThemeRegistered := True;
+    end;
+    Theming.ApplyTheme(AForm);
+  except
+    { theming is best-effort -- never let it break the hover }
+  end;
+end;
+
 { ---- TDragLintHoverForm ---- }
 
 constructor TDragLintHoverForm.Create(AOwner: TComponent);
@@ -170,6 +198,9 @@ begin
   FWatchTimer.Enabled  := False;
   FWatchTimer.Interval := 150;
   FWatchTimer.OnTimer  := HandleWatchTick;
+
+  { v0.46: follow the IDE light/dark theme (guarded; no-op on older IDEs). }
+  ApplyIdeTheme(Self);
 end;
 
 procedure TDragLintHoverForm.DoClose(var Action: TCloseAction);
@@ -284,6 +315,53 @@ begin
   end;
 end;
 
+function CleanHoverMarkdown(const AMarkdown: string): string;
+{ v0.46: the popup body is a plain TMemo with no markdown engine, so the LSP
+  hover markdown was showing literal '**', '`' and '_..._' noise plus a blank
+  line after almost every element. Render it as clean monospaced text:
+    * drop code-span backticks and bold '**' (safe -- identifiers contain
+      neither);
+    * unwrap a line that is wholly italic '_..._' (e.g. "_2 overloads:_") WITHOUT
+      touching underscores inside identifiers (MS_FOLDER stays intact);
+    * collapse runs of blank lines to a single blank.
+  The definition rows keep their "<qname> - line N" text so HandleMemoClick can
+  still parse them for single-click navigation. }
+var
+  Lines: TArray<string>;
+  SB: TStringBuilder;
+  L, T: string;
+  BlankRun: Boolean;
+  I: Integer;
+begin
+  if Trim(AMarkdown) = '' then Exit('');
+  Lines := AMarkdown.Split([#10]);
+  SB := TStringBuilder.Create;
+  try
+    BlankRun := False;
+    for I := 0 to High(Lines) do
+    begin
+      L := StringReplace(Lines[I], #13, '', [rfReplaceAll]);
+      L := StringReplace(L, '`', '', [rfReplaceAll]);
+      L := StringReplace(L, '**', '', [rfReplaceAll]);
+      { unwrap whole-line italics only (don't disturb in-identifier underscores) }
+      T := Trim(L);
+      if (Length(T) >= 2) and (T[1] = '_') and (T[Length(T)] = '_') then
+        L := Copy(T, 2, Length(T) - 2);
+      if Trim(L) = '' then
+      begin
+        if BlankRun then Continue;   { collapse consecutive blanks }
+        BlankRun := True;
+      end
+      else
+        BlankRun := False;
+      SB.AppendLine(L.TrimRight);
+    end;
+    Result := SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
 function UnitNameFromQname(const AQname: string): string;
 { Mirror of Editor.ExtractHoverHeader's heuristic: drop the last 1 or 2
   segments of a dotted qname to get the unit. If the next-to-last segment
@@ -316,39 +394,34 @@ begin
 end;
 
 procedure TDragLintHoverForm.HandleMemoClick(Sender: TObject);
-{ v0.40.8g: single-click navigation. We don't navigate on every click in
-  the memo (user has to be able to scroll / position caret to read) -- we
-  only navigate when the line under the caret matches the definition
-  shape "- `qname` - line N". Other lines pass through to normal memo
-  click handling (caret repositioned, no navigation). }
+{ v0.40.8g: single-click navigation. We don't navigate on every click in the
+  memo (the user has to be able to scroll / position the caret to read) -- we
+  only navigate when the line under the caret matches the definition shape
+  "<qname> - line N". Other lines pass through to normal memo click handling.
+  v0.46: the body is now cleaned of markdown (CleanHoverMarkdown), so the rows
+  read "- <qname> - line N" WITHOUT backticks; parse that shape. }
 var
   LineIdx:  Integer;
-  LineText, Inner, Qname, LineStr, UnitName: string;
-  P1, P2, DashAt, LineN: Integer;
+  LineText, Body, Qname, LineStr, UnitName: string;
+  DashAt, LineN: Integer;
 begin
   LineIdx := FMemo.CaretPos.Y;
   if (LineIdx < 0) or (LineIdx >= FMemo.Lines.Count) then Exit;
   LineText := FMemo.Lines[LineIdx];
 
-  { Gate: only navigate when the line starts with the bullet "- `" --
-    matches the LSP server's definition rows exactly. Other lines
-    (resolved-type note, blank separators, doc text) are left alone. }
-  if not LineText.TrimLeft.StartsWith('- `') then Exit;
+  { Gate: a definition row is "- <qname> - line N". Require the bullet, the
+    " - line " separator, and a positive trailing integer so doc/blank lines
+    (and ordinary "- bullet" prose) are left alone. }
+  Body := LineText.TrimLeft;
+  if not Body.StartsWith('- ') then Exit;
+  Body := Copy(Body, 3, MaxInt);                 { drop the "- " bullet }
 
-  { Extract first backtick-wrapped qname. }
-  P1 := Pos('`', LineText);
-  if P1 = 0 then Exit;
-  Inner := Copy(LineText, P1 + 1, MaxInt);
-  P2 := Pos('`', Inner);
-  if P2 <= 0 then Exit;
-  Qname := Copy(Inner, 1, P2 - 1);
-
-  { Extract trailing "line N". }
-  DashAt := Pos('line ', LineText);
-  if DashAt = 0 then Exit;
-  LineStr := Trim(Copy(LineText, DashAt + 5, MaxInt));
-  LineN := StrToIntDef(LineStr, 0);
-  if LineN <= 0 then Exit;
+  DashAt := Pos(' - line ', Body);
+  if DashAt <= 0 then Exit;
+  Qname   := Trim(Copy(Body, 1, DashAt - 1));
+  LineStr := Trim(Copy(Body, DashAt + Length(' - line '), MaxInt));
+  LineN   := StrToIntDef(LineStr, 0);
+  if (Qname = '') or (LineN <= 0) then Exit;
 
   UnitName := UnitNameFromQname(Qname);
   if UnitName = '' then Exit;
@@ -374,6 +447,7 @@ var
   ShortName:  string;
   Ln:         string;
   MaxLen:     Integer;
+  CleanSummary: string;
 begin
   FAnchorDismiss := AAnchorDismiss;
   if AAnchorX >= 0 then
@@ -381,7 +455,9 @@ begin
   else
     FDwellAnchor := Point(X, Y);
 
-  FMemo.Text := ASummary;
+  { v0.46: render markdown as clean memo text (the TMemo has no markdown engine). }
+  CleanSummary := CleanHoverMarkdown(ASummary);
+  FMemo.Text := CleanSummary;
   { v0.40.8g: title bar carries only "drag-lint -- kind name" (no file/line),
     because the body lists every definition with file:line already and the
     user reported the duplication as noise. ExtractHoverHeader still returns
@@ -415,9 +491,10 @@ begin
     FCallers.Items.EndUpdate;
   end;
 
-  { Sizing: header 22 + summary lines * 16 + callers (header + rows * 18). }
+  { Sizing: header 22 + summary lines * 16 + callers (header + rows * 18).
+    v0.46: size to the CLEANED text (fewer blank lines after the trim). }
   HeaderH := 22;
-  SummaryH := 16 * (1 + Length(ASummary.Split([#10]))); { rough }
+  SummaryH := 16 * (1 + Length(CleanSummary.Split([#10]))); { rough }
   if SummaryH < 60 then SummaryH := 60;
   if SummaryH > 200 then SummaryH := 200;
   if Length(ACallers) = 0 then
@@ -441,7 +518,7 @@ begin
   if AAnchorDismiss then
   begin
     MaxLen := Length(AHeader);
-    for Ln in ASummary.Split([#10]) do
+    for Ln in CleanSummary.Split([#10]) do
       if Length(Ln.TrimRight) > MaxLen then MaxLen := Length(Ln.TrimRight);
     W := 40 + MaxLen * 7;
     if W < 200   then W := 200;
