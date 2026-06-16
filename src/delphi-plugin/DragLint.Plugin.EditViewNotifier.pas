@@ -4,6 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.Generics.Collections,
+  Winapi.Windows,
   Vcl.Graphics, Vcl.Forms, Vcl.Controls, Vcl.ExtCtrls,
   DockForm,
   ToolsAPI;
@@ -12,10 +13,21 @@ procedure RegisterDragLintEditViewNotifier;
 procedure UnregisterDragLintEditViewNotifier;
 procedure InvokeInlineInfo;
 
+var
+  { v0.46: published by PaintLine so the hover tracker can map a screen point to
+    an editor row for gutter-glyph hover. The buffer row (1-based) at client-Y y
+    is  GGutterAnchorLine + floor((y - GGutterAnchorTopY) / GGutterLineHeight).
+    GGutterAnchorHwnd is the edit-surface window (for ScreenToClient); a mouse X
+    less than GGutterTextLeft is over the gutter, not the text. }
+  GGutterAnchorHwnd: HWND = 0;
+  GGutterLineHeight: Integer = 0;
+  GGutterAnchorLine: Integer = 0;
+  GGutterAnchorTopY: Integer = 0;
+  GGutterTextLeft:   Integer = 0;
+
 implementation
 
 uses
-  Winapi.Windows,
   System.IOUtils,
   DragLint.Plugin.DiagnosticCache,
   DragLint.Plugin.CodeLensCache,
@@ -209,6 +221,17 @@ begin
   FilePath := View.Buffer.FileName;
   if FilePath = '' then Exit;
 
+  { v0.46: publish the row<->client-Y anchor for the hover tracker (gutter hover).
+    Recorded for EVERY painted line so it stays fresh as the view scrolls. }
+  if CellSize.cy > 0 then
+  begin
+    GGutterAnchorHwnd := WindowFromDC(Canvas.Handle);
+    GGutterLineHeight := CellSize.cy;
+    GGutterAnchorLine := LineNumber;       { 1-based buffer row }
+    GGutterAnchorTopY := LineRect.Top;     { client Y of its top }
+    GGutterTextLeft   := TextRect.Left;    { client X where text begins }
+  end;
+
   { PaintLine LineNumber is 1-based; cache stores 0-based. }
   Diags := Cache.GetForLine(FilePath, LineNumber - 1);
   if Length(Diags) = 0 then Exit;
@@ -232,12 +255,23 @@ begin
   SavedBrush      := Canvas.Brush.Color;
   SavedBrushStyle := Canvas.Brush.Style;
   try
-    { ---- Gutter dot ---- }
-    CY := LineRect.Top + (LineRect.Bottom - LineRect.Top) div 2;
-    Canvas.Pen.Color   := SeverityColor(MaxSev, Colors);
+    { ---- Gutter glyph (v0.46: large + outlined, IDE-sized) ----
+      A row-height filled circle with a dark outline -- far more visible than the
+      old 6 px dot. Diameter = row height, capped by the gutter width and 16 px. }
+    var RowH: Integer := LineRect.Bottom - LineRect.Top;
+    var GutterW: Integer := TextRect.Left - LineRect.Left;
+    var GlyphD: Integer := RowH - 2;
+    if (GutterW > 4) and (GlyphD > GutterW - 2) then GlyphD := GutterW - 2;
+    if GlyphD > 16 then GlyphD := 16;
+    if GlyphD < 9  then GlyphD := 9;
+    var GX: Integer := LineRect.Left + 1;
+    var GY: Integer := LineRect.Top + (RowH - GlyphD) div 2;
     Canvas.Brush.Color := SeverityColor(MaxSev, Colors);
     Canvas.Brush.Style := bsSolid;
-    Canvas.Ellipse(LineRect.Left + 2, CY - 3, LineRect.Left + 8, CY + 3);
+    Canvas.Pen.Color   := clBlack;   { outline for contrast on any gutter colour }
+    Canvas.Pen.Style   := psSolid;
+    Canvas.Pen.Width   := 1;
+    Canvas.Ellipse(GX, GY, GX + GlyphD + 1, GY + GlyphD + 1);
 
     { ---- Wavy underline per diagnostic ---- }
     for i := 0 to High(Diags) do

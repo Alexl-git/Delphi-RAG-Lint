@@ -40,6 +40,7 @@ uses
   DragLint.Plugin.HoverForm,
   DragLint.Plugin.Settings,
   DragLint.Plugin.LspClient,
+  DragLint.Plugin.EditViewNotifier,
   DragLint.Plugin.Editor;
 
 function IdeIsForeground: Boolean;
@@ -219,6 +220,48 @@ begin
 
     FilePath := EditView.Buffer.FileName;
     if FilePath = '' then Exit;
+
+    { v0.46: GUTTER-glyph hover. Map the MOUSE screen point to an editor row via
+      the anchor the painter publishes, and if the cursor is over the gutter
+      (x < text start) on a line that has diagnostics, show that line's
+      message(s). This is independent of the caret -- it's true mouse hover. }
+    if (GGutterAnchorHwnd <> 0) and (GGutterLineHeight > 0) then
+    begin
+      var CliPt: TPoint := Pos;
+      if ScreenToClient(GGutterAnchorHwnd, CliPt) then
+      begin
+        var DeltaY: Integer := CliPt.Y - GGutterAnchorTopY;
+        var RowOff: Integer;
+        if DeltaY >= 0 then
+          RowOff := DeltaY div GGutterLineHeight
+        else
+          RowOff := -((-DeltaY + GGutterLineHeight - 1) div GGutterLineHeight);
+        var MouseRow1: Integer := GGutterAnchorLine + RowOff;   { 1-based }
+        if (CliPt.X >= 0) and (CliPt.X < GGutterTextLeft) and (MouseRow1 >= 1) then
+        begin
+          var GDiags := Cache.GetForLine(FilePath, MouseRow1 - 1);
+          if Length(GDiags) > 0 then
+          begin
+            var GMsg: string := '';
+            for var GI := 0 to High(GDiags) do
+            begin
+              if GMsg <> '' then GMsg := GMsg + #13#10;
+              if GDiags[GI].Code <> '' then
+                GMsg := GMsg + '[' + GDiags[GI].Code + '] ';
+              GMsg := GMsg + GDiags[GI].Message;
+            end;
+            FHintShown := True;
+            var GEmpty: TArray<TDragLintCallerInfo>;
+            SetLength(GEmpty, 0);
+            CloseDragLintHover;
+            ShowDragLintHover('Diagnostics', GMsg, GEmpty,
+              Pos.X + 18, Pos.Y + 8, True, Pos.X, Pos.Y);
+            FLastShownKey := Format('gutter|%s|%d', [FilePath, MouseRow1]);
+            Exit;
+          end;
+        end;
+      end;
+    end;
 
     { IOTAEditView.Position is 1-based; LSP / diagnostic cache is 0-based }
     CaretRow := EditView.Position.Row - 1;
