@@ -1999,16 +1999,20 @@ begin
 end;
 
 procedure InvokeCopyDiagnostics(Sender: TObject);
-{ v0.46: copy every cached diagnostic for the active file to the clipboard as
-  plain text (file(line,col): sev code: message), so the user can paste the
-  list (e.g. to an AI). Reads DiagnosticCache, which the live runner populates. }
+{ v0.46: lint the active SAVED file ON DEMAND (synchronous), copy the findings to
+  the clipboard (for pasting to an AI) AND publish them to the cache + repaint so
+  the gutter/inline markers light up. This is independent of the background
+  live-diagnostics runner -- it always reflects the file on disk right now. }
 var
   ES: IOTAEditorServices;
   EV: IOTAEditView;
-  FilePath, SevStr: string;
-  Diags: TArray<TDragLintDiagnostic>;
-  D: TDragLintDiagnostic;
+  FilePath, Exe, CmdLine, Output, Line, Loc, Loc2, ColStr, LineStr: string;
+  Tag, Rest, Rule, Msg, ClipText: string;
+  Lines: TStringList;
   SB: TStringBuilder;
+  I, lb, rb, c1, c2, p, LineNo, ColNo, Count, SevInt: Integer;
+  Params, DObj, RangeObj, StartObj, EndObj: TJSONObject;
+  Arr: TJSONArray;
 begin
   FilePath := '';
   if Supports(BorlandIDEServices, IOTAEditorServices, ES) and (ES <> nil) then
@@ -2017,41 +2021,100 @@ begin
     if (EV <> nil) and (EV.Buffer <> nil) then
       FilePath := EV.Buffer.FileName;
   end;
-  if FilePath = '' then
+  if (FilePath = '') or not FileExists(FilePath) then
   begin
-    ShowMessage('drag-lint: no active editor file.');
+    ShowMessage('drag-lint: no active SAVED file to lint. Save the file (Ctrl+S) first.');
     Exit;
   end;
-  Diags := Cache.GetForFile(FilePath);
-  if Length(Diags) = 0 then
+
+  { Prefer the engine bundled beside the BPL (current), like the LSP. }
+  Exe := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(Exe) then
   begin
-    ShowMessage(Format('drag-lint: no diagnostics cached for %s yet.'#13#10 +
-      'Open or edit the file so diagnostics run, then copy again.',
-      [ExtractFileName(FilePath)]));
-    Exit;
+    Exe := LoadSettings.ExePath;
+    if (Exe = '') or not FileExists(Exe) then Exe := 'drag-lint.exe';
   end;
-  SB := TStringBuilder.Create;
+
+  CmdLine := Format('"%s" lint "%s"', [Exe, FilePath]);
+  Output := '';
+  RunAndCaptureStdout(CmdLine, Output, 20000);
+
+  Lines  := TStringList.Create;
+  SB     := TStringBuilder.Create;
+  Params := TJSONObject.Create;
+  Arr    := TJSONArray.Create;
   try
-    SB.AppendLine(Format('drag-lint diagnostics for %s (%d):',
-      [ExtractFileName(FilePath), Length(Diags)]));
-    for D in Diags do
+    Lines.Text := Output;
+    Count := 0;
+    for I := 0 to Lines.Count - 1 do
     begin
-      case D.Severity of
-        dlsError:   SevStr := 'error';
-        dlsWarning: SevStr := 'warning';
-        dlsHint:    SevStr := 'hint';
+      Line := Lines[I];
+      lb := Pos('[', Line); rb := Pos(']', Line);
+      if (lb = 0) or (rb = 0) or (rb < lb) then Continue;   { not a finding line }
+      Loc := Trim(Copy(Line, 1, lb - 1));
+      c2 := LastDelimiter(':', Loc); if c2 <= 1 then Continue;
+      ColStr := Copy(Loc, c2 + 1, MaxInt);
+      Loc2 := Copy(Loc, 1, c2 - 1);
+      c1 := LastDelimiter(':', Loc2); if c1 <= 1 then Continue;
+      LineStr := Copy(Loc2, c1 + 1, MaxInt);
+      Tag := LowerCase(Copy(Line, lb + 1, rb - lb - 1));
+      Rest := Trim(Copy(Line, rb + 1, MaxInt));
+      p := Pos(':', Rest);
+      if p > 0 then
+      begin Rule := Trim(Copy(Rest, 1, p - 1)); Msg := Trim(Copy(Rest, p + 1, MaxInt)); end
       else
-        SevStr := 'info';
-      end;
-      { cache stores 0-based line/col }
+      begin Rule := ''; Msg := Rest; end;
+      LineNo := StrToIntDef(Trim(LineStr), 1);
+      ColNo  := StrToIntDef(Trim(ColStr), 1);
+
       SB.AppendLine(Format('%s(%d,%d): %s %s: %s',
-        [FilePath, D.Line + 1, D.StartCol + 1, SevStr, D.Code, D.Message]));
+        [FilePath, LineNo, ColNo, Tag, Rule, Msg]));
+      Inc(Count);
+
+      { cache entry (LSP-style, 0-based) so EditViewNotifier paints it }
+      if Pos('error', Tag) > 0 then SevInt := 1
+      else if Pos('warn', Tag) > 0 then SevInt := 2
+      else if Pos('hint', Tag) > 0 then SevInt := 4
+      else SevInt := 3;
+      StartObj := TJSONObject.Create;
+      StartObj.AddPair('line', TJSONNumber.Create(LineNo - 1));
+      StartObj.AddPair('character', TJSONNumber.Create(ColNo - 1));
+      EndObj := TJSONObject.Create;
+      EndObj.AddPair('line', TJSONNumber.Create(LineNo - 1));
+      EndObj.AddPair('character', TJSONNumber.Create(ColNo + 1));
+      RangeObj := TJSONObject.Create;
+      RangeObj.AddPair('start', StartObj);
+      RangeObj.AddPair('end', EndObj);
+      DObj := TJSONObject.Create;
+      DObj.AddPair('range', RangeObj);
+      DObj.AddPair('severity', TJSONNumber.Create(SevInt));
+      DObj.AddPair('source', 'lint');
+      DObj.AddPair('code', Rule);
+      DObj.AddPair('message', Msg);
+      Arr.AddElement(DObj);
     end;
-    Vcl.Clipbrd.Clipboard.AsText := SB.ToString;
-    ShowMessage(Format('drag-lint: copied %d diagnostic(s) to the clipboard.',
-      [Length(Diags)]));
+
+    Params.AddPair('diagnostics', Arr);   { Arr ownership -> Params }
+    Cache.Update(FilePath, Params);
+    if (ES <> nil) and (ES.TopView <> nil) then
+      try ES.TopView.Paint; except end;
+
+    if Count = 0 then
+      ShowMessage(Format('drag-lint: no diagnostics for %s.',
+        [ExtractFileName(FilePath)]))
+    else
+    begin
+      ClipText := Format('drag-lint diagnostics for %s (%d):'#13#10'%s',
+        [ExtractFileName(FilePath), Count, SB.ToString]);
+      Vcl.Clipbrd.Clipboard.AsText := ClipText;
+      ShowMessage(Format(
+        'drag-lint: %d diagnostic(s) copied to the clipboard and shown in the gutter.',
+        [Count]));
+    end;
   finally
     SB.Free;
+    Lines.Free;
+    Params.Free;   { frees Arr + child objects }
   end;
 end;
 
