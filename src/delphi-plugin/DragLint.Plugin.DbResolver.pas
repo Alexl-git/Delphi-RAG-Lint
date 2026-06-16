@@ -25,9 +25,17 @@ unit DragLint.Plugin.DbResolver;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils,
+  System.SysUtils, System.Classes, System.IOUtils, System.JSON,
   ToolsAPI,
   DragLint.Plugin.Settings;
+
+{ v0.46: returns the manifest section DB whose include folder is an ancestor of
+  AFilePath (longest/most-specific match wins), or '' when there is no manifest
+  beside the engine or no covering section. This is the SAME clean DB the
+  manifest builds (e.g. ...\ORM3\drag-lint.sqlite for any ORM3 file), so the
+  plugin stops reading stale per-.dproj DBs. Used by both the read side
+  (ResolveActiveIndexDbs) and the write side (ProjectNotifier auto-index). }
+function ManifestDbForFile(const AFilePath: string): string;
 
 { Returns the absolute path to the .dproj that owns the file currently
   active in the editor. Walks up the directory tree from the file's
@@ -54,6 +62,87 @@ function ResolveActiveIndexDbs(const ASettings: TDragLintSettings): TArray<strin
 function ResolverDiagnostic(const ASettings: TDragLintSettings): string;
 
 implementation
+
+function ManifestPathBesideEngine: string;
+begin
+  Result := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.json';
+end;
+
+function ManifestDbForFile(const AFilePath: string): string;
+var
+  MPath, Content, OutDir, FileNorm, Db, IncRaw, IncNorm, BestDb: string;
+  RootVal, V, IdxVal, SecsVal, IncVal: TJSONValue;
+  Indexes, Sec: TJSONObject;
+  Sections, Includes: TJSONArray;
+  I, J, BestLen: Integer;
+begin
+  Result := '';
+  if AFilePath = '' then Exit;
+  MPath := ManifestPathBesideEngine;
+  if not TFile.Exists(MPath) then Exit;
+  FileNorm := LowerCase(IncludeTrailingPathDelimiter(ExtractFilePath(AFilePath)));
+  try
+    Content := TFile.ReadAllText(MPath);
+    RootVal := TJSONObject.ParseJSONValue(Content);
+    if not (RootVal is TJSONObject) then Exit;
+    try
+      IdxVal := TJSONObject(RootVal).GetValue('indexes');
+      if not (IdxVal is TJSONObject) then Exit;
+      Indexes := TJSONObject(IdxVal);
+
+      OutDir := '';
+      V := Indexes.GetValue('outDir');
+      if V is TJSONString then OutDir := TJSONString(V).Value;
+
+      SecsVal := Indexes.GetValue('sections');
+      if not (SecsVal is TJSONArray) then Exit;
+      Sections := TJSONArray(SecsVal);
+
+      BestDb := '';
+      BestLen := -1;
+      for I := 0 to Sections.Count - 1 do
+      begin
+        if not (Sections.Items[I] is TJSONObject) then Continue;
+        Sec := TJSONObject(Sections.Items[I]);
+
+        IncVal := Sec.GetValue('include');
+        if not (IncVal is TJSONArray) then Continue;   { skip library sections }
+        Includes := TJSONArray(IncVal);
+
+        Db := '';
+        V := Sec.GetValue('db');
+        if V is TJSONString then Db := TJSONString(V).Value;
+        if Db = '' then Continue;
+
+        for J := 0 to Includes.Count - 1 do
+        begin
+          if not (Includes.Items[J] is TJSONString) then Continue;
+          IncRaw := TJSONString(Includes.Items[J]).Value;
+          { an include may be a folder OR a .dproj/.dpr -- use its folder }
+          if SameText(ExtractFileExt(IncRaw), '.dproj') or
+             SameText(ExtractFileExt(IncRaw), '.dpr') then
+            IncRaw := ExtractFilePath(IncRaw);
+          IncNorm := LowerCase(IncludeTrailingPathDelimiter(IncRaw));
+          { file under this include folder? longest match = most specific }
+          if (Length(IncNorm) > 1) and (Pos(IncNorm, FileNorm) = 1) and
+             (Length(IncNorm) > BestLen) then
+          begin
+            if TPath.IsRelativePath(Db) and (OutDir <> '') then
+              BestDb := TPath.Combine(OutDir, Db)
+            else
+              BestDb := Db;
+            BestLen := Length(IncNorm);
+          end;
+        end;
+      end;
+      Result := BestDb;
+    finally
+      RootVal.Free;
+    end;
+  except
+    Result := '';
+  end;
+end;
 
 function GetActiveEditorFilePath: string;
 var
@@ -285,6 +374,7 @@ var
   AncestorDb: string;
   P:          string;
   LibPath:    string;
+  ManifestDb: string;
 begin
   SetLength(Result, 0);
 
@@ -295,6 +385,30 @@ begin
   ProjPath := FindOwningProject(EditorPath);
   if ProjPath = '' then
     ProjPath := GetActiveProjectFilePath;
+
+  { v0.46: the manifest is the source of truth. If a manifest section's include
+    folder covers the active file, use THAT clean DB and skip the per-.dproj
+    template/ancestor/sibling walk -- otherwise a stale per-project DB sitting
+    next to a sub-project .dproj (e.g. CLIENT\drag-lint.sqlite) shadows the
+    manifest's ORM3-root DB and shows phantom/duplicated symbols. The library DB
+    is still appended below. }
+  ManifestDb := ManifestDbForFile(EditorPath);
+  if ManifestDb = '' then
+    ManifestDb := ManifestDbForFile(ProjPath);
+  if (ManifestDb <> '') and TFile.Exists(ManifestDb) then
+  begin
+    AddUnique(Result, ManifestDb);
+    for P in ASettings.IndexDbs do
+      if TFile.Exists(P) then
+        AddUnique(Result, P);
+    if ASettings.IncludeLibraryDb then
+    begin
+      LibPath := GetLibraryDbPath;
+      if TFile.Exists(LibPath) then
+        AddUnique(Result, LibPath);
+    end;
+    Exit;
+  end;
 
   { Try the template-resolved primary DB next to the .dproj first.
     v0.40.5: if the configured template doesn't yield an existing file,

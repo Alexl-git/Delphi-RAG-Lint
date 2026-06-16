@@ -6,6 +6,7 @@ uses
   System.SysUtils, System.Classes, System.IOUtils,
   ToolsAPI,
   DragLint.Plugin.Settings,
+  DragLint.Plugin.DbResolver,
   DRagLint.Workspace.Config;
 
 type
@@ -216,8 +217,13 @@ begin
   ProjDir  := ExtractFilePath(FileName);
   ProjName := ChangeFileExt(ExtractFileName(FileName), '');
 
-  { Resolve DB path from template and cache it for later save events }
-  DbPath := ResolveDbPath(Cfg.DbPathTemplate, ProjDir);
+  { v0.46: prefer the manifest section DB that covers this project, so auto-index
+    + save-reindex write into the SAME clean DB the manifest builds (and the
+    resolver reads) -- not a stale per-.dproj sibling DB. Fall back to the
+    template only when no manifest section covers it. }
+  DbPath := ManifestDbForFile(FileName);
+  if DbPath = '' then
+    DbPath := ResolveDbPath(Cfg.DbPathTemplate, ProjDir);
   GLastProjectDb := DbPath;
 
   ExePath := ResolveExePath(Cfg.ExePath);
