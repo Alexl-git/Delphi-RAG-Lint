@@ -4,7 +4,8 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.JSON,
-  System.Generics.Collections, System.SyncObjs;
+  System.Generics.Collections, System.SyncObjs,
+  DragLint.Plugin.Telemetry;   { TEMP debug telemetry }
 
 type
   TDragLintSeverity = (dlsError, dlsWarning, dlsHint, dlsInfo);
@@ -130,6 +131,8 @@ begin
   finally
     FLock.Leave;
   end;
+  DLT('cache', Format('Update %s -> %d diag(s) [key=%s]',
+    [ExtractFileName(AFilePath), Length(Arr), LowerCase(AFilePath)]));
 end;
 
 function TDragLintDiagnosticCache.GetForFile(

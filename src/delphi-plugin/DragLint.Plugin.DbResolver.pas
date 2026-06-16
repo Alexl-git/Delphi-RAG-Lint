@@ -27,6 +27,7 @@ interface
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.JSON,
   ToolsAPI,
+  DragLint.Plugin.Telemetry,   { TEMP debug telemetry }
   DragLint.Plugin.Settings;
 
 { v0.46: returns the manifest section DB whose include folder is an ancestor of
@@ -407,6 +408,8 @@ begin
       if TFile.Exists(LibPath) then
         AddUnique(Result, LibPath);
     end;
+    DLT('dbresolve', Format('editor=%s -> MANIFEST db=%s (+%d total)',
+      [ExtractFileName(EditorPath), ManifestDb, Length(Result)]));
     Exit;
   end;
 
@@ -442,6 +445,8 @@ begin
     if TFile.Exists(LibPath) then
       AddUnique(Result, LibPath);
   end;
+  DLT('dbresolve', Format('editor=%s proj=%s -> %d db(s) (no manifest match)',
+    [ExtractFileName(EditorPath), ExtractFileName(ProjPath), Length(Result)]));
 end;
 
 end.

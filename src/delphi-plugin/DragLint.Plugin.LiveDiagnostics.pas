@@ -37,6 +37,7 @@ uses
   DragLint.Plugin.Providers,
   DragLint.Plugin.DiagnosticCache,
   DragLint.Plugin.DbResolver,
+  DragLint.Plugin.Telemetry,   { TEMP debug telemetry }
   DragLint.Plugin.Settings;
 
 const
@@ -48,12 +49,7 @@ const
   to the live-diagnostics path: %TEMP%\drag-lint-livediag.log. }
 procedure LiveLog(const AMsg: string);
 begin
-  try
-    TFile.AppendAllText(
-      TPath.Combine(TPath.GetTempPath, 'drag-lint-livediag.log'),
-      FormatDateTime('hh:nn:ss', Now) + '  ' + AMsg + sLineBreak);
-  except
-  end;
+  DLT('livediag', AMsg);   { TEMP: route to the shared telemetry log }
 end;
 
 { v0.46: cheap active-editor file name (no buffer read) -- used to auto-lint on

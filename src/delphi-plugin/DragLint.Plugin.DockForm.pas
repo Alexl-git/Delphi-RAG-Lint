@@ -31,6 +31,8 @@ uses
   DesignIntf,   { TEditState / TEditAction }
   ToolsAPI,
   DragLint.Plugin.StructureForm,
+  DragLint.Plugin.DiagnosticCache,
+  DragLint.Plugin.Telemetry,   { TEMP debug telemetry }
   DragLint.Plugin.UsagesForm,
   DragLint.Plugin.SymbolSearchForm,
   DragLint.Plugin.GraphWindow,
@@ -58,6 +60,7 @@ type
     FInitTimer:  TTimer;         { v0.42: defers the embed off the ctor }
     FWatchTimer: TTimer;         { v0.46: auto-refresh Structure on code-tab switch }
     FLastStructFile: string;
+    FLastDiagCount:  Integer;    { v0.46: refresh Diagnostics node when cache changes }
     procedure HandlePageChange(Sender: TObject);
     procedure HandleInitTimer(Sender: TObject);
     procedure HandleWatchTimer(Sender: TObject);
@@ -238,7 +241,26 @@ begin
   if (CurFile <> '') and not SameText(CurFile, FLastStructFile) then
   begin
     FLastStructFile := CurFile;
+    FLastDiagCount  := Length(Cache.GetForFile(CurFile));
+    DLT('dock', Format('watch: file change -> %s (full structure refresh)',
+      [ExtractFileName(CurFile)]));
     try RefreshEmbeddedStructure(FStructure); except end;
+    Exit;
+  end;
+
+  { v0.46: same file, but the lint may have populated the cache AFTER the last
+    full refresh -> update just the Diagnostics node when the count changes.
+    Fixes "Diagnostics (0)" while the gutter already shows the markers. }
+  if CurFile <> '' then
+  begin
+    var DiagN: Integer := Length(Cache.GetForFile(CurFile));
+    if DiagN <> FLastDiagCount then
+    begin
+      DLT('dock', Format('watch: diag count %d -> %d for %s (diag-only refresh)',
+        [FLastDiagCount, DiagN, ExtractFileName(CurFile)]));
+      FLastDiagCount := DiagN;
+      try RefreshEmbeddedStructureDiagnostics(FStructure); except end;
+    end;
   end;
 end;
 

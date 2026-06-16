@@ -59,6 +59,7 @@ contains
   DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas',
   DragLint.Plugin.HoverTracker in 'DragLint.Plugin.HoverTracker.pas',
   DragLint.Plugin.AutoComplete in 'DragLint.Plugin.AutoComplete.pas',
+  DragLint.Plugin.Telemetry in 'DragLint.Plugin.Telemetry.pas',
   DragLint.Plugin.DbResolver in 'DragLint.Plugin.DbResolver.pas',
   DragLint.Plugin.OpenSourceServer in 'DragLint.Plugin.OpenSourceServer.pas',
   DragLint.Plugin.DockForm in 'DragLint.Plugin.DockForm.pas' {DragLintDockFrame: TFrame},

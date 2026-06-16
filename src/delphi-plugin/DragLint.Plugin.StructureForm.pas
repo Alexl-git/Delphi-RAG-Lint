@@ -24,6 +24,8 @@ procedure HideDragLintStructure;
   is activated to re-read the active editor file. }
 function CreateEmbeddedStructure(AOwner: TComponent; AParent: TWinControl): TForm;
 procedure RefreshEmbeddedStructure(AForm: TForm);
+{ v0.46: cheap diagnostics-only refresh (no symbol re-shell). }
+procedure RefreshEmbeddedStructureDiagnostics(AForm: TForm);
 
 implementation
 
@@ -34,6 +36,7 @@ uses
   Winapi.Windows,
   ToolsAPI,
   DragLint.Plugin.DiagnosticCache,
+  DragLint.Plugin.Telemetry,   { TEMP debug telemetry }
   DragLint.Plugin.StructureCache,
   DragLint.Plugin.UsagesForm,
   DragLint.Plugin.DbResolver,
@@ -83,6 +86,10 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     procedure RefreshActive;   { v0.42: re-read the active editor file }
+    { v0.46: cheap re-read of just the diagnostics from the cache for the
+      already-loaded file (no symbol re-shell) -- fixes "Diagnostics (0)" when
+      the lint populates the cache AFTER the structure was last refreshed. }
+    procedure RefreshDiagnosticsOnly;
   end;
 
 var
@@ -339,6 +346,9 @@ begin
   DbPath  := ResolveDbForFile;
   FSyms   := StructureCache.GetSymbolsForFile(AFilePath, ExePath, DbPath);
 
+  DLT('structure', Format('RefreshForFile %s -> %d diag(s), %d sym(s) [exe=%s db=%s]',
+    [ExtractFileName(AFilePath), Length(FDiags), Length(FSyms),
+     ExtractFileName(ExePath), ExtractFileName(DbPath)]));
   BuildTree(FSearch.Text);
 end;
 
@@ -563,6 +573,21 @@ begin
   RefreshForFile(GetActiveFilePath);
 end;
 
+procedure TDragLintStructureForm.RefreshDiagnosticsOnly;
+begin
+  if FCurrentFile = '' then
+  begin
+    FCurrentFile := GetActiveFilePath;
+    if FCurrentFile = '' then Exit;
+  end;
+  { re-read just the diagnostics (cheap) and rebuild the tree using the already
+    cached symbols (BuildTree reads FSyms; no engine shell-out here). }
+  FDiags := Cache.GetForFile(FCurrentFile);
+  DLT('structure', Format('RefreshDiagnosticsOnly %s -> %d diag(s)',
+    [ExtractFileName(FCurrentFile), Length(FDiags)]));
+  BuildTree(FSearch.Text);
+end;
+
 { v0.42: embedded-in-a-tab factory. The form is created child-style (no border,
   fsNormal) and parented into AParent (a dock-panel TTabSheet), so the same
   tree + refresh logic serves both the standalone window and the dock tab. }
@@ -585,6 +610,12 @@ procedure RefreshEmbeddedStructure(AForm: TForm);
 begin
   if AForm is TDragLintStructureForm then
     TDragLintStructureForm(AForm).RefreshActive;
+end;
+
+procedure RefreshEmbeddedStructureDiagnostics(AForm: TForm);
+begin
+  if AForm is TDragLintStructureForm then
+    TDragLintStructureForm(AForm).RefreshDiagnosticsOnly;
 end;
 
 procedure ShowDragLintStructure;

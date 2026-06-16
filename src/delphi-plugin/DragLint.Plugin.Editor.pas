@@ -101,6 +101,7 @@ uses
   DragLint.Plugin.SaveNotifier,
   DragLint.Plugin.LiveDiagnostics,
   DragLint.Plugin.AutoComplete,
+  DragLint.Plugin.Telemetry,   { TEMP debug telemetry }
   DragLint.Plugin.DbResolver;
 
 { ---- PluginBuildTag ---- }
@@ -742,6 +743,8 @@ begin
     end;
     Callers := FetchHoverCallers(ExePath, SymName, DbList);
     DebugLog(Format('InvokeHover: callers fetched: %d', [Length(Callers)]));
+    DLT('hover', Format('sym="%s" dbs=%d callers=%d hdr="%s" bodyLen=%d',
+      [SymName, Length(DbList), Length(Callers), Header, Length(HoverText)]));
 
     { v0.40.6: menu invocation is explicit -- replace any current popup. }
     CloseDragLintHover;
@@ -814,10 +817,12 @@ begin
 
     if Items = nil then
     begin
+      DLT('completion', Format('silent=%s -> NO items array', [BoolToStr(ASilent, True)]));
       if not ASilent then
         ShowMessage('drag-lint completion:'#13#10 + Resp.Format(2));
       Exit;
     end;
+    DLT('completion', Format('silent=%s -> %d item(s)', [BoolToStr(ASilent, True), Items.Count]));
     { auto-trigger: never pop an empty list. }
     if ASilent and (Items.Count = 0) then Exit;
 
@@ -2308,6 +2313,14 @@ begin
 
   { v0.46: automatic completion trigger (pops on a typed '.'; debounced). }
   StartAutoComplete;
+
+  { TEMP debug telemetry: fresh log per session + record the resolved engine. }
+  DLTReset;
+  DLT('startup', 'plugin registered; BPL=' + GetModuleName(HInstance));
+  DLT('startup', 'engine beside BPL=' +
+    ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe' +
+    ' (exists=' + BoolToStr(FileExists(ExtractFilePath(GetModuleName(HInstance)) +
+    'drag-lint.exe'), True) + ')');
 end;
 
 procedure UnregisterDragLintMenu;

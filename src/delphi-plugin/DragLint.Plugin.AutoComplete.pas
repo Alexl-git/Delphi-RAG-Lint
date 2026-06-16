@@ -26,6 +26,7 @@ uses
   Vcl.ExtCtrls,
   ToolsAPI,
   DragLint.Plugin.Settings,
+  DragLint.Plugin.Telemetry,   { TEMP debug telemetry }
   DragLint.Plugin.Editor;
 
 type
@@ -138,10 +139,17 @@ begin
     if not FDirty then Exit;
     if GetTickCount - FTick < 220 then Exit;   { debounce: fire after a pause }
     FDirty := False;
-    if not LoadSettings.EnableCompletion then Exit;
+    if not LoadSettings.EnableCompletion then
+    begin
+      DLT('autocomplete', 'skip: EnableCompletion=off');
+      Exit;
+    end;
     if not IdeIsForeground then Exit;
     if CaretPrecededByDot then
+    begin
+      DLT('autocomplete', 'trigger: char-before-caret = "." -> InvokeCompletionAuto');
       try InvokeCompletionAuto; except end;
+    end;
   except
     { never let a timer exception surface inside the IDE }
   end;
