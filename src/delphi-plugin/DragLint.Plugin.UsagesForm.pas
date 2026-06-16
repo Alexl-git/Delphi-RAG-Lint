@@ -745,6 +745,34 @@ begin
   Close;
 end;
 
+function ShowSourceEditorFor(const AFile: string): Boolean;
+{ v0.46: open and bring forward the CODE view of a unit. For a FORM unit,
+  IOTAActionServices.OpenFile (and re-opening an already-open module) can
+  surface the form designer / DFM view instead of the .pas source, so
+  Find-Usages navigation landed in the DFM. Showing the IOTASourceEditor
+  explicitly forces the code editor. }
+var
+  MS:     IOTAModuleServices;
+  Module: IOTAModule;
+  Editor: IOTAEditor;
+  Src:    IOTASourceEditor;
+  I:      Integer;
+begin
+  Result := False;
+  if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
+  Module := MS.OpenModule(AFile);
+  if Module = nil then Exit;
+  for I := 0 to Module.GetModuleFileCount - 1 do
+  begin
+    Editor := Module.GetModuleFileEditor(I);
+    if Supports(Editor, IOTASourceEditor, Src) then
+    begin
+      Src.Show;   { brings the .pas code view forward, not the form designer }
+      Exit(True);
+    end;
+  end;
+end;
+
 procedure TDragLintUsagesForm.NavigateToNode(ANode: TTreeNode);
 var
   ND:  TUsageNodeData;
@@ -758,8 +786,10 @@ begin
   ND := TUsageNodeData(ANode.Data);
   if (ND.FilePath = '') or (ND.Line <= 0) then Exit;
 
-  if Supports(BorlandIDEServices, IOTAActionServices, AS_) then
-    AS_.OpenFile(ND.FilePath);
+  { v0.46: force the source (code) view; fall back to OpenFile if that fails. }
+  if not ShowSourceEditorFor(ND.FilePath) then
+    if Supports(BorlandIDEServices, IOTAActionServices, AS_) then
+      AS_.OpenFile(ND.FilePath);
 
   if Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
   begin

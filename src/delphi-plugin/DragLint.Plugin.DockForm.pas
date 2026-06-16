@@ -56,8 +56,11 @@ type
     FTabGraph:   TTabSheet;
     FInited:     Boolean;
     FInitTimer:  TTimer;         { v0.42: defers the embed off the ctor }
+    FWatchTimer: TTimer;         { v0.46: auto-refresh Structure on code-tab switch }
+    FLastStructFile: string;
     procedure HandlePageChange(Sender: TObject);
     procedure HandleInitTimer(Sender: TObject);
+    procedure HandleWatchTimer(Sender: TObject);
     procedure HandleOpenGraph(Sender: TObject);
     function  AddTab(const ACaption: string): TTabSheet;
     procedure AddPlaceholder(ATab: TTabSheet; const AText: string);
@@ -195,9 +198,9 @@ begin
   FTabStruct := AddTab('Structure');
   FTabUsages := AddTab('Find Usages');
   FTabSearch := AddTab('Symbol Search');
-  FTabGraph  := AddTab('Graph');
-
-  BuildGraphTab(FTabGraph);
+  { v0.46: the Graph tab was removed -- the graph is now its own dockable tool
+    window (View > Tool Windows > drag-lint Graph), so the in-dock launcher tab
+    was just stale clutter. }
 
   FPages.ActivePage := FTabStruct;
 
@@ -205,6 +208,38 @@ begin
   FInitTimer.Interval := 50;
   FInitTimer.OnTimer  := HandleInitTimer;
   FInitTimer.Enabled  := True;
+
+  { v0.46: auto-refresh the Structure tab when the active code unit changes
+    (switching editor tabs), not only when the Structure tab is re-selected. }
+  FWatchTimer := TTimer.Create(Self);
+  FWatchTimer.Interval := 400;
+  FWatchTimer.OnTimer  := HandleWatchTimer;
+  FWatchTimer.Enabled  := True;
+end;
+
+procedure TDragLintDockFrame.HandleWatchTimer(Sender: TObject);
+var
+  ES:   IOTAEditorServices;
+  Buf:  IOTAEditBuffer;
+  CurFile: string;
+begin
+  if (FStructure = nil) or (FPages = nil) then Exit;
+  if FPages.ActivePage <> FTabStruct then Exit;   { only when Structure is shown }
+  CurFile := '';
+  try
+    if Supports(BorlandIDEServices, IOTAEditorServices, ES) and (ES <> nil) then
+    begin
+      Buf := ES.TopBuffer;
+      if Buf <> nil then CurFile := Buf.FileName;
+    end;
+  except
+    Exit;
+  end;
+  if (CurFile <> '') and not SameText(CurFile, FLastStructFile) then
+  begin
+    FLastStructFile := CurFile;
+    try RefreshEmbeddedStructure(FStructure); except end;
+  end;
 end;
 
 procedure TDragLintDockFrame.HandleInitTimer(Sender: TObject);
