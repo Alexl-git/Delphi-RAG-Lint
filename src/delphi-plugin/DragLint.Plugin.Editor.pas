@@ -1902,13 +1902,15 @@ begin
 
   SetLength(Buf, 0);
   Pos := 0;
+  { v0.46: read to true EOF -- GetText can short-read mid-buffer, so the old
+    `until N < CHUNK` truncated the snapshot (see LiveDiagnostics.ActiveBufferText). }
   repeat
     N := Reader.GetText(Pos, Tmp, CHUNK);
     if N <= 0 then Break;
     SetLength(Buf, Length(Buf) + N);
     Move(Tmp[0], Buf[Length(Buf) - N], N);
     Inc(Pos, N);
-  until N < CHUNK;
+  until False;
 
   if Length(Buf) > 0 then
     Result := TEncoding.ANSI.GetString(Buf);

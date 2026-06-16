@@ -334,6 +334,11 @@ begin
   if Reader = nil then Exit;
   SB := TStringBuilder.Create;
   try
+    { v0.46 BUG FIX: read to true EOF (GetText returns 0), NOT until the first
+      short read. IOTAEditReader.GetText may return fewer bytes than requested
+      mid-buffer (block boundaries), so the old `until Read < Chunk-1` truncated
+      the snapshot -- diagnostics past the cut (e.g. unused locals at line 1331)
+      silently vanished while earlier ones (line 979) showed. }
     Pos := 0;
     repeat
       Read := Reader.GetText(Pos, @Chunk[0], SizeOf(Chunk) - 1);
@@ -341,7 +346,7 @@ begin
       Chunk[Read] := #0;
       SB.Append(string(AnsiString(Chunk)));
       Inc(Pos, Read);
-    until Read < SizeOf(Chunk) - 1;
+    until False;
     Result := SB.ToString;
   finally
     SB.Free;
