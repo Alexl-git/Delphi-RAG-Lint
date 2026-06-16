@@ -30,6 +30,12 @@ uses
   DragLint.Plugin.DbResolver,
   DragLint.Plugin.Settings;
 
+{ A minimal .dfm resource is REQUIRED: TCustomFrame.Create (invoked by the IDE's
+  OTADockableForm.EmbedFrame) calls InitInheritedComponent, which raises
+  "Resource TDragLintGraphFrame not found" without it. The frame builds its own
+  controls in the constructor; the .dfm is an empty shell (mirrors DockForm). }
+{$R *.dfm}
+
 type
   TDragLintGraphFrame = class(TCustomFrame)
   private
