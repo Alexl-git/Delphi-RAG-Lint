@@ -189,17 +189,21 @@ begin
       Exit;
     end;
 
-    if (Pos.X = FLastPos.X) and (Pos.Y = FLastPos.Y) then
+    { v0.46: tolerate small mouse jitter. Exact-pixel equality almost never held
+      for a full dwell (a real hand wobbles 1-2 px), so the popup rarely fired.
+      Treat motion within 4 px of the anchor as "stable"; only a real move
+      re-anchors + resets. }
+    if (Abs(Pos.X - FLastPos.X) <= 4) and (Abs(Pos.Y - FLastPos.Y) <= 4) then
       Inc(FStableCount)
     else
     begin
       ResetState;
+      FLastPos := Pos;   { re-anchor only when the cursor really moved }
     end;
-    FLastPos := Pos;
 
-    { v0.40.7: bumped from 3 (600ms) to 8 (1600ms) so casual cursor drift
-      doesn't fire the popup. }
-    if FStableCount < 8 then Exit;
+    { v0.46: 5 ticks * 200 ms = 1.0 s dwell (was 1.6 s) -- snappier, and the
+      jitter tolerance above keeps it from firing on casual drift. }
+    if FStableCount < 5 then Exit;
 
     { Already showed for this stable position }
     if FHintShown then Exit;

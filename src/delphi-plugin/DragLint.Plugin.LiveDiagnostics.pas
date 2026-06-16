@@ -56,6 +56,24 @@ begin
   end;
 end;
 
+{ v0.46: cheap active-editor file name (no buffer read) -- used to auto-lint on
+  tab/view switch. }
+function ActiveEditorFileName: string;
+var
+  ES: IOTAEditorServices;
+  Buf: IOTAEditBuffer;
+begin
+  Result := '';
+  try
+    if not Supports(BorlandIDEServices, IOTAEditorServices, ES) then Exit;
+    if ES = nil then Exit;
+    Buf := ES.TopBuffer;
+    if Buf <> nil then Result := Buf.FileName;
+  except
+    Result := '';
+  end;
+end;
+
 var
   GLastSemanticCheck: Cardinal = 0;  { v0.43: throttle semantic to 5s apart }
 
@@ -331,6 +349,7 @@ type
     FDirty:     Boolean;
     FLastEdit:  Cardinal;
     FBusy:      Boolean;
+    FLastActiveFile: string;   { v0.46: auto-lint on tab/view switch }
     procedure OnTick(Sender: TObject);
   public
     constructor Create;
@@ -448,16 +467,28 @@ var
   Bytes: TBytes;
 begin
   try
-    if FBusy or not FDirty then Exit;
-    if GetTickCount - FLastEdit < DEBOUNCE_MS then Exit;
-
     Settings := LoadSettings;
     if not Settings.AutoDiagnosticsOnSave then
     begin
-      LiveLog('runner: SKIP -- AutoDiagnosticsOnSave is OFF in Settings');
       FDirty := False;
       Exit;
     end;
+
+    { v0.46: AUTO-lint on tab/view switch. Detect an active-file change cheaply
+      (no buffer read) and arm a lint -- so diagnostics appear automatically when
+      you switch code tabs, without depending on open/edit events. }
+    var ActiveFile: string := ActiveEditorFileName;
+    if (ActiveFile <> '') and SameText(ExtractFileExt(ActiveFile), '.pas') and
+       not SameText(ActiveFile, FLastActiveFile) then
+    begin
+      FLastActiveFile := ActiveFile;
+      FDirty    := True;
+      FLastEdit := GetTickCount - DEBOUNCE_MS;   { lint on the next tick }
+      LiveLog('runner: tab/view switch -> ' + ExtractFileName(ActiveFile));
+    end;
+
+    if FBusy or not FDirty then Exit;
+    if GetTickCount - FLastEdit < DEBOUNCE_MS then Exit;
 
     { Snapshot the buffer on the MAIN thread (OTAPI access), then hand the
       analysis to a BACKGROUND thread so a slow lint can never block the editor.

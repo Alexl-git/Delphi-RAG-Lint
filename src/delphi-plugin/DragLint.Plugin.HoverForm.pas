@@ -245,6 +245,16 @@ begin
       doesn't self-close. Leaving the editor moves well outside this box, so
       this also satisfies "clear hover when the mouse leaves the edit page". }
     if GetTickCount - FShowTickMs < ANCHOR_GRACE_MS then Exit;
+    { v0.46: once the cursor reaches the popup, make it STICKY (switch to the
+      generous popup-rect dismissal) so the user can move in and scroll a long
+      list -- previously any move off the tiny anchor box closed it instantly. }
+    ExtRect := BoundsRect;
+    InflateRect(ExtRect, 24, 24);
+    if PtInRect(ExtRect, Pt) then
+    begin
+      FAnchorDismiss := False;
+      Exit;
+    end;
     AncRect := Rect(FDwellAnchor.X - ANCHOR_HALF_W, FDwellAnchor.Y - ANCHOR_HALF_H,
                     FDwellAnchor.X + ANCHOR_HALF_W, FDwellAnchor.Y + ANCHOR_HALF_H);
     if not PtInRect(AncRect, Pt) then
@@ -330,7 +340,7 @@ var
   Lines: TArray<string>;
   SB: TStringBuilder;
   L, T: string;
-  BlankRun: Boolean;
+  BlankRun, SeenContent: Boolean;
   I: Integer;
 begin
   if Trim(AMarkdown) = '' then Exit('');
@@ -338,6 +348,7 @@ begin
   SB := TStringBuilder.Create;
   try
     BlankRun := False;
+    SeenContent := False;
     for I := 0 to High(Lines) do
     begin
       L := StringReplace(Lines[I], #13, '', [rfReplaceAll]);
@@ -349,11 +360,16 @@ begin
         L := Copy(T, 2, Length(T) - 2);
       if Trim(L) = '' then
       begin
-        if BlankRun then Continue;   { collapse consecutive blanks }
+        { v0.46: drop LEADING blank lines (the empty first row the user saw) and
+          collapse runs of blanks. }
+        if (not SeenContent) or BlankRun then Continue;
         BlankRun := True;
       end
       else
+      begin
         BlankRun := False;
+        SeenContent := True;
+      end;
       SB.AppendLine(L.TrimRight);
     end;
     Result := SB.ToString;
