@@ -33,6 +33,7 @@ uses
   DragLint.Plugin.CodeLensCache,
   DragLint.Plugin.RegistryColors,
   DragLint.Plugin.LiveDiagnostics,
+  DragLint.Plugin.AutoComplete,
   DragLint.Plugin.Settings;
 
 { ---- TDragLintEditViewNotifier -------------------------------------------- }
@@ -158,6 +159,9 @@ begin
   { v0.42: an edit happened -> mark the live-diagnostics runner dirty (debounced).
     Guarded; never let a diagnostics path disturb the editor. }
   try NotifyEditDirty; except end;
+  { v0.46: also nudge the auto-completion trigger (it debounces + only fires
+    after a typed '.'). }
+  try NotifyEditForAutoComplete; except end;
 end;
 procedure TDragLintEditViewNotifier.EditorIdle(const View: IOTAEditView); begin end;
 procedure TDragLintEditViewNotifier.BeginPaint(const View: IOTAEditView;

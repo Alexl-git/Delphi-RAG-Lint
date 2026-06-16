@@ -99,6 +99,7 @@
         <DCCReference Include="DragLint.Plugin.SymbolSearchForm.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
         <DCCReference Include="DragLint.Plugin.HoverTracker.pas"/>
+        <DCCReference Include="DragLint.Plugin.AutoComplete.pas"/>
         <DCCReference Include="DragLint.Plugin.DbResolver.pas"/>
         <DCCReference Include="DragLint.Plugin.OpenSourceServer.pas"/>
         <DCCReference Include="DragLint.Plugin.DockForm.pas">

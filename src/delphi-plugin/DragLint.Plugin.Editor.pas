@@ -53,6 +53,8 @@ procedure UnregisterDragLintMenu;
 { Invoke* procedures are also called by the keyboard binding unit }
 procedure InvokeHover(Sender: TObject);
 procedure InvokeCompletion(Sender: TObject);
+{ v0.46: silent auto-trigger (typed '.') -- no dialogs, only pops if items. }
+procedure InvokeCompletionAuto;
 procedure InvokeSignatureHelp(Sender: TObject);
 procedure InvokeDiagnostics(Sender: TObject);
 procedure InvokeRename(Sender: TObject);
@@ -98,6 +100,7 @@ uses
   DragLint.Plugin.GraphWindow,
   DragLint.Plugin.SaveNotifier,
   DragLint.Plugin.LiveDiagnostics,
+  DragLint.Plugin.AutoComplete,
   DragLint.Plugin.DbResolver;
 
 { ---- PluginBuildTag ---- }
@@ -749,7 +752,11 @@ begin
   end;
 end;
 
-procedure InvokeCompletion(Sender: TObject);
+{ v0.46: ASilent = auto-trigger (typed '.') -- suppress every dialog and only
+  pop the list when there are items, with a short timeout so a slow/stuck engine
+  never blocks typing. ASilent = False = manual invoke (menu/shortcut), keeps the
+  informative dialogs. }
+procedure DoCompletion(ASilent: Boolean);
 var
   Client:   TDragLintLspClient;
   Uri:      string;
@@ -763,7 +770,7 @@ var
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
-    ShowMessage('drag-lint: No active editor view.');
+    if not ASilent then ShowMessage('drag-lint: No active editor view.');
     Exit;
   end;
   Client := EnsureLspClient;
@@ -771,14 +778,16 @@ begin
 
   Params := MakeTextDocumentPositionParams(Uri, Line, Col);
   try
-    Resp := Client.Request('textDocument/completion', Params, 5000);
+    Resp := Client.Request('textDocument/completion', Params,
+      (if ASilent then 1200 else 5000));
   finally
     Params.Free;
   end;
 
   if Resp = nil then
   begin
-    ShowMessage('drag-lint completion: request timed out or no result.');
+    if not ASilent then
+      ShowMessage('drag-lint completion: request timed out or no result.');
     Exit;
   end;
   try
@@ -805,9 +814,12 @@ begin
 
     if Items = nil then
     begin
-      ShowMessage('drag-lint completion:'#13#10 + Resp.Format(2));
+      if not ASilent then
+        ShowMessage('drag-lint completion:'#13#10 + Resp.Format(2));
       Exit;
     end;
+    { auto-trigger: never pop an empty list. }
+    if ASilent and (Items.Count = 0) then Exit;
 
     GetCursorPos(P);
     ShowDragLintCompletion(
@@ -828,6 +840,16 @@ begin
   finally
     Resp.Free;
   end;
+end;
+
+procedure InvokeCompletion(Sender: TObject);
+begin
+  DoCompletion(False);
+end;
+
+procedure InvokeCompletionAuto;
+begin
+  DoCompletion(True);
 end;
 
 procedure InvokeSignatureHelp(Sender: TObject);
@@ -2283,6 +2305,9 @@ begin
   { v0.42: live edit-time diagnostics (debounced buffer lint via the provider
     registry). }
   StartLiveDiagnostics;
+
+  { v0.46: automatic completion trigger (pops on a typed '.'; debounced). }
+  StartAutoComplete;
 end;
 
 procedure UnregisterDragLintMenu;
@@ -2291,6 +2316,7 @@ begin
     its 150 ms watch timer can fire after the BPL's HoverForm DCU has
     been unloaded -- observed as an IDE crash on Uninstall. }
   try CloseDragLintHover; except end;
+  try StopAutoComplete; except end;
   try StopLiveDiagnostics; except end;
   { v0.43: tear down the dedicated Graph window first so its frame dtor
     terminates the embedded drag_lint_graph.exe before the BPL unloads. }
