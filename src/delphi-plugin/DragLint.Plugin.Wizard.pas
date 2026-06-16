@@ -32,7 +32,8 @@ uses
   DragLint.Plugin.ProjectNotifier,
   DragLint.Plugin.SaveNotifier,
   DragLint.Plugin.OpenSourceServer,
-  DragLint.Plugin.DockForm;
+  DragLint.Plugin.DockForm,
+  DragLint.Plugin.GraphWindow;
 
 procedure TDragLintWizard.AfterSave;
 begin
@@ -90,6 +91,11 @@ begin
   RegisterDragLintMenu;
   RegisterDragLintOptions;
   StartOpenSourceServer;
+  { Register the dockable forms at STARTUP so the IDE can restore them when it
+    reloads a saved desktop that had them docked. Registering only on menu click
+    (inside ShowDragLintDock/ShowDragLintGraph) is too late for desktop restore. }
+  try RegisterDragLintDockable;      except end;
+  try RegisterDragLintGraphDockable; except end;
 end;
 
 end.

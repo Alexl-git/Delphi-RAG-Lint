@@ -16,6 +16,7 @@ unit DragLint.Plugin.GraphWindow;
 interface
 
 procedure ShowDragLintGraph;        { open / focus the dockable graph window }
+procedure RegisterDragLintGraphDockable;  { register at startup so the IDE restores a saved docked instance }
 procedure UnregisterDragLintGraph;  { idempotent teardown }
 
 implementation
@@ -330,22 +331,31 @@ end;
 
 { ---- show / teardown ---------------------------------------------------- }
 
+procedure RegisterDragLintGraphDockable;
+{ Registering the dockable form at plugin startup (from the wizard's Register)
+  is what lets the IDE recreate a saved/docked instance when it restores the
+  desktop. Registering only inside ShowDragLintGraph (on menu click) is too late
+  for desktop restore. Idempotent. }
+var
+  NTA: INTAServices;
+begin
+  if GGraphRegistered then Exit;
+  if not Supports(BorlandIDEServices, INTAServices, NTA) then Exit;
+  if GGraphWatch = nil then
+    GGraphWatch := TGraphFormWatch.Create(nil);
+  if GGraphDockable = nil then
+    GGraphDockable := TDragLintGraphDockable.Create;
+  NTA.RegisterDockableForm(GGraphDockable);
+  GGraphRegistered := True;
+end;
+
 procedure ShowDragLintGraph;
 var
   NTA: INTAServices;
 begin
   if not Supports(BorlandIDEServices, INTAServices, NTA) then Exit;
 
-  if GGraphWatch = nil then
-    GGraphWatch := TGraphFormWatch.Create(nil);
-
-  if GGraphDockable = nil then
-    GGraphDockable := TDragLintGraphDockable.Create;
-  if not GGraphRegistered then
-  begin
-    NTA.RegisterDockableForm(GGraphDockable);
-    GGraphRegistered := True;
-  end;
+  RegisterDragLintGraphDockable;
 
   if GGraphForm = nil then
   begin

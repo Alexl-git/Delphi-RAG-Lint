@@ -17,6 +17,7 @@ unit DragLint.Plugin.DockForm;
 interface
 
 procedure ShowDragLintDock;        { open / focus the dockable panel }
+procedure RegisterDragLintDockable;  { register at startup so the IDE restores a saved docked instance }
 procedure UnregisterDragLintDock;  { idempotent teardown }
 
 implementation
@@ -325,22 +326,30 @@ end;
 
 { ---- show / teardown ----------------------------------------------------- }
 
+procedure RegisterDragLintDockable;
+{ Register at plugin startup (from the wizard's Register) so the IDE can restore
+  a saved docked instance when it reloads the desktop. Registering only inside
+  ShowDragLintDock (on menu click) is too late for desktop restore. Idempotent. }
+var
+  NTA: INTAServices;
+begin
+  if GRegistered then Exit;
+  if not Supports(BorlandIDEServices, INTAServices, NTA) then Exit;
+  if GWatch = nil then
+    GWatch := TFormWatch.Create(nil);
+  if GDockable = nil then
+    GDockable := TDragLintDockable.Create;
+  NTA.RegisterDockableForm(GDockable);
+  GRegistered := True;
+end;
+
 procedure ShowDragLintDock;
 var
   NTA: INTAServices;
 begin
   if not Supports(BorlandIDEServices, INTAServices, NTA) then Exit;
 
-  if GWatch = nil then
-    GWatch := TFormWatch.Create(nil);
-
-  if GDockable = nil then
-    GDockable := TDragLintDockable.Create;
-  if not GRegistered then
-  begin
-    NTA.RegisterDockableForm(GDockable);
-    GRegistered := True;
-  end;
+  RegisterDragLintDockable;
 
   if GForm = nil then
   begin
