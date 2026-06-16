@@ -36,7 +36,8 @@ implementation
 
 uses
   Winapi.Windows,
-  DragLint.Plugin.SaveNotifier;
+  DragLint.Plugin.SaveNotifier,
+  DragLint.Plugin.LiveDiagnostics;
 
 { ---- IOTANotifier stubs ---- }
 
@@ -204,6 +205,11 @@ begin
       Module := ModSvcs.FindModule(FileName);
       RegisterSaveNotifierForModule(Module);
     end;
+    { v0.46: kick the live-diagnostics runner when a .pas opens so findings
+      (unused locals/H2164, syntax, lint) appear on VIEW -- not only after the
+      first edit/save. The runner debounces + lints the active buffer. }
+    if SameText(ExtractFileExt(FileName), '.pas') then
+      try NotifyEditDirty; except end;
   end;
 
   { --- Only auto-index when a .dproj is opened --- }

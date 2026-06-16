@@ -4063,10 +4063,12 @@ begin
   if (AArgs.Rule <> '') and
      (AArgs.Rule <> 'field-by-name-in-loop') and
      (AArgs.Rule <> 'unit-not-in-dpr') and
-     (AArgs.Rule <> 'inline-comment-in-multiline-args') then
+     (AArgs.Rule <> 'inline-comment-in-multiline-args') and
+     (AArgs.Rule <> 'unused-local') then
   begin
     Writeln(Format('ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' +
-      'unit-not-in-dpr, inline-comment-in-multiline-args)', [AArgs.Rule]));
+      'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local)',
+      [AArgs.Rule]));
     Exit(2);
   end;
   Findings := nil;
@@ -4096,6 +4098,14 @@ begin
     finally
       Linter.Free;
     end;
+    { v0.46: unused local variables (H2164) -- AST rule, single-file only.
+      Runs when no --rule filter or --rule unused-local. This is the live
+      diagnostic the plugin's lint provider surfaces as edit-time hints. }
+    if ((AArgs.Rule = '') or (AArgs.Rule = 'unused-local')) and
+       TFile.Exists(AArgs.Path) and
+       SameText(ExtractFileExt(AArgs.Path), '.pas') then
+      Findings := Findings +
+        DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(AArgs.Path);
   end;
   if AArgs.AsJson then
   begin
@@ -7556,6 +7566,60 @@ begin
   end;
 end;
 
+// selftest unused-locals: CheckUnusedLocals must flag UnusedX + UnusedZ (each
+// occurs only at its declaration) and spare UsedY + AlsoUsed (referenced in the
+// body) + the parameter. Regression for the H2164 unused-local-var rule.
+function DoSelfTestUnusedLocals: Integer;
+var
+  TmpDir, PasFile: string;
+  Findings: TArray<TLintFinding>;
+  F: TLintFinding;
+  GotX, GotZ, FalsePos: Boolean;
+begin
+  Result := 0;
+  TmpDir := TPath.Combine(TPath.GetTempPath,
+    'draglint_unusedlocals_' + IntToStr(Int64(GetTickCount)));
+  TDirectory.CreateDirectory(TmpDir);
+  PasFile := TPath.Combine(TmpDir, 'UTest.pas');
+  TFile.WriteAllText(PasFile,
+    'unit UTest;'#13#10 +
+    'interface'#13#10 +
+    'implementation'#13#10 +
+    'procedure Foo(AParam: Integer);'#13#10 +
+    'var'#13#10 +
+    '  UnusedX: Integer;'#13#10 +              // unused -> flag
+    '  UsedY: Integer;'#13#10 +                // used -> spare
+    '  UnusedZ, AlsoUsed: Integer;'#13#10 +    // UnusedZ flag, AlsoUsed spare
+    'begin'#13#10 +
+    '  UsedY := AParam;'#13#10 +
+    '  AlsoUsed := UsedY + 2;'#13#10 +
+    '  if AlsoUsed > 0 then ;'#13#10 +
+    'end;'#13#10 +
+    'end.'#13#10);
+  try
+    Findings := DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(PasFile);
+    GotX := False; GotZ := False; FalsePos := False;
+    for F in Findings do
+    begin
+      if Pos('UnusedX', F.Message) > 0 then GotX := True
+      else if Pos('UnusedZ', F.Message) > 0 then GotZ := True
+      else FalsePos := True;   // any OTHER var flagged = false positive
+    end;
+    Writeln(Format('unused-locals: findings=%d (want UnusedX + UnusedZ only)',
+      [Length(Findings)]));
+    if GotX and GotZ and not FalsePos then
+      Writeln('PASS unused-locals')
+    else
+    begin
+      Writeln(Format('FAIL unused-locals: UnusedX=%s UnusedZ=%s falsePositive=%s',
+        [BoolToStr(GotX, True), BoolToStr(GotZ, True), BoolToStr(FalsePos, True)]));
+      Result := 1;
+    end;
+  finally
+    try TDirectory.Delete(TmpDir, True); except end;
+  end;
+end;
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand = 'manifest-merge' then
@@ -7576,10 +7640,12 @@ begin
     Result := DoSelfTestCoverage(AArgs)
   else if AArgs.SubCommand = 'recreate' then
     Result := DoSelfTestRecreate
+  else if AArgs.SubCommand = 'unused-locals' then
+    Result := DoSelfTestUnusedLocals
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals');
     Result := 2;
   end;
 end;

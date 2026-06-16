@@ -25,6 +25,13 @@ type
     { Tree-sitter ERROR / MISSING nodes -> located 'syntax-error' findings.
       Live syntax diagnostics (Error-Insight-style) without a compiler. }
     class function CheckSyntaxErrors(const AFile: string): TArray<TLintFinding>;
+    { v0.46: unused local variables (the compiler's H2164). For each defProc,
+      a local declared in its var section that occurs exactly once in the whole
+      routine subtree (i.e. only its declaration) is flagged. Counting over the
+      subtree is intentionally false-positive-SAFE: a name used anywhere (incl.
+      a nested routine = closure, or via with/property) raises the count and
+      suppresses the finding. No compiler / no DB needed. }
+    class function CheckUnusedLocals(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -427,6 +434,169 @@ begin
       TTSInputEncoding.TSInputEncodingUTF8);
     if Tree <> nil then
       Visit(Tree.RootNode);
+    Result := Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end;
+
+class function TAstChecker.CheckUnusedLocals(
+  const AFile: string): TArray<TLintFinding>;
+var
+  Src: TBytes;
+  Parser: TTSParser;
+  Tree: TTSTree;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var S, E, L: Integer;
+  begin
+    Result := '';
+    if N.IsNull then Exit;
+    S := Integer(N.StartByte); E := Integer(N.EndByte); L := E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result := TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { Count every identifier occurrence (lowercased) in the subtree. A declared
+    local's own declaration counts as one; any use raises it above one. }
+  procedure CountIdents(const N: TTSNode; AMap: TDictionary<string, Integer>);
+  var
+    I, C: Integer;
+    T: string;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'identifier' then
+    begin
+      T := LowerCase(NodeStr(N));
+      if T <> '' then
+        if AMap.TryGetValue(T, C) then AMap[T] := C + 1 else AMap.Add(T, 1);
+    end;
+    for I := 0 to N.NamedChildCount - 1 do
+      CountIdents(N.NamedChild(I), AMap);
+  end;
+
+  procedure CheckProc(const ADefProc: TTSNode);
+  var
+    Counts: TDictionary<string, Integer>;
+    I, J, K, Cnt, TypeStart: Integer;
+    Child, DV, TypeNode, NameId, Hdr, Nm, Body: TTSNode;
+    RoutineName, DisplayName, LowerName: string;
+    P: TTSPoint;
+    F: TLintFinding;
+  begin
+    { skip asm routines -- identifiers in an asm block are not 'identifier'
+      nodes, so a local used only in asm would be a false positive. }
+    Body := ADefProc.ChildByField('body');
+    if (not Body.IsNull) and (Body.NodeType = 'asm') then Exit;
+
+    Counts := TDictionary<string, Integer>.Create;
+    try
+      CountIdents(ADefProc, Counts);
+
+      RoutineName := '';
+      Hdr := ADefProc.ChildByField('header');
+      if not Hdr.IsNull then
+      begin
+        Nm := Hdr.ChildByField('name');
+        if not Nm.IsNull then RoutineName := NodeStr(Nm);
+      end;
+
+      { direct declVars children = THIS routine's local var sections (a nested
+        routine's declVars are grandchildren, handled when we recurse to it). }
+      for I := 0 to ADefProc.NamedChildCount - 1 do
+      begin
+        Child := ADefProc.NamedChild(I);
+        if Child.NodeType <> 'declVars' then Continue;
+        for J := 0 to Child.NamedChildCount - 1 do
+        begin
+          DV := Child.NamedChild(J);
+          if DV.NodeType <> 'declVar' then Continue;
+          TypeNode := DV.ChildByField('type');
+          if TypeNode.IsNull then TypeStart := MaxInt
+          else TypeStart := Integer(TypeNode.StartByte);
+          { name identifiers come before the type field (A, B: T) }
+          for K := 0 to DV.NamedChildCount - 1 do
+          begin
+            NameId := DV.NamedChild(K);
+            if NameId.NodeType <> 'identifier' then Continue;
+            if Integer(NameId.StartByte) >= TypeStart then Continue;
+            DisplayName := NodeStr(NameId);
+            LowerName := LowerCase(DisplayName);
+            if LowerName = '' then Continue;
+            Cnt := 0;
+            Counts.TryGetValue(LowerName, Cnt);
+            if Cnt <= 1 then   { only the declaration occurrence -> unused }
+            begin
+              P := NameId.StartPoint;
+              F := Default(TLintFinding);
+              F.RuleId   := 'unused-local';
+              F.Severity := 'hint';
+              if RoutineName <> '' then
+                F.Message := Format(
+                  'H2164 Variable ''%s'' is declared but never used in ''%s''',
+                  [DisplayName, RoutineName])
+              else
+                F.Message := Format(
+                  'H2164 Variable ''%s'' is declared but never used',
+                  [DisplayName]);
+              F.FilePath  := AFile;
+              F.StartLine := Integer(P.Row) + 1;
+              F.StartCol  := Integer(P.Column) + 1;
+              F.EndLine   := F.StartLine;
+              F.EndCol    := F.StartCol + Length(DisplayName);
+              Findings.Add(F);
+            end;
+          end;
+        end;
+      end;
+    finally
+      Counts.Free;
+    end;
+  end;
+
+  procedure VisitProcs(const N: TTSNode);
+  var I: Integer;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then
+      CheckProc(N);
+    for I := 0 to N.NamedChildCount - 1 do
+      VisitProcs(N.NamedChild(I));
+  end;
+
+begin
+  Result := nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src := TFile.ReadAllBytes(AFile);
+  Findings := TList<TLintFinding>.Create;
+  Parser := nil;
+  Tree := nil;
+  try
+    Parser := TTSParser.Create;
+    Parser.Language := tree_sitter_delphi13;
+    Tree := Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint;
+        var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining := Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then
+        begin
+          ABytesRead := 0;
+          SetLength(Result, 0);
+          Exit;
+        end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead := Remaining;
+      end,
+      TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then
+      VisitProcs(Tree.RootNode);
     Result := Findings.ToArray;
   finally
     Tree.Free;

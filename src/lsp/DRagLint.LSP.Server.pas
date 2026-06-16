@@ -851,6 +851,27 @@ begin
     end;
 end;
 
+// v0.46: compiler intrinsics that are NOT real indexed symbols. Hovering one
+// (e.g. `Assigned(X)`) otherwise matched a random library symbol of the same
+// name (FMX.Graphics.TCanvasSaveState.Assigned, a property) because the project
+// DB has no such symbol and the search fell through to the library DB. This set
+// is deliberately RESTRICTED to names that are virtually never user-defined
+// (so we don't mis-label a real method called Copy/Insert/Delete/etc.).
+function IsBuiltinIntrinsic(const AName: string): Boolean;
+const
+  INTRINSICS: array[0..23] of string = (
+    'Assigned', 'Length', 'SetLength', 'Inc', 'Dec', 'Ord', 'Chr',
+    'High', 'Low', 'SizeOf', 'TypeInfo', 'Succ', 'Pred', 'Trunc',
+    'Round', 'Frac', 'Abs', 'Sqr', 'Sqrt', 'Exit', 'Break', 'Continue',
+    'Halt', 'Assert');
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := Low(INTRINSICS) to High(INTRINSICS) do
+    if SameText(AName, INTRINSICS[I]) then Exit(True);
+end;
+
 procedure TLSPServer.HandleHover(const AId: TJSONValue;
   const AParams: TJSONObject);
 var
@@ -890,6 +911,21 @@ begin
     if Ident = '' then
     begin
       Reply.AddPair('result', TJSONNull.Create);
+      SendMessage(Reply);
+      Exit;
+    end;
+    { v0.46: a compiler intrinsic has no real indexed symbol -- show it as a
+      built-in instead of falling through to a wrong library match. }
+    if IsBuiltinIntrinsic(Ident) then
+    begin
+      MdValue := Format('**%s** `intrinsic`'#10#10 +
+        '_Delphi compiler built-in routine._', [Ident]);
+      HoverObj := TJSONObject.Create;
+      Contents := TJSONObject.Create;
+      Contents.AddPair('kind', 'markdown');
+      Contents.AddPair('value', MdValue);
+      HoverObj.AddPair('contents', Contents);
+      Reply.AddPair('result', HoverObj);
       SendMessage(Reply);
       Exit;
     end;
