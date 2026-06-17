@@ -3,11 +3,11 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 7;
+  SCHEMA_VERSION = 8;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
-  SCHEMA_DDL: array[0..39] of string = (
+  SCHEMA_DDL: array[0..42] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' +
     '  key   TEXT PRIMARY KEY,' +
     '  value TEXT NOT NULL' +
@@ -253,7 +253,25 @@ const
     ')',
     'CREATE INDEX IF NOT EXISTS idx_orm_links_delphi ON orm_links(delphi_symbol_id, delphi_db_index)',
     'CREATE INDEX IF NOT EXISTS idx_orm_links_sql    ON orm_links(sql_symbol_id, sql_db_index)',
-    'CREATE INDEX IF NOT EXISTS idx_orm_links_kind   ON orm_links(link_kind)'
+    'CREATE INDEX IF NOT EXISTS idx_orm_links_kind   ON orm_links(link_kind)',
+
+    // v8 (2026-06-17): Spring4D DI bindings. One row per resolved
+    // RegisterType<TImpl>.Implements<IIntf> registration. interface_name and
+    // impl_name are stored verbatim, including nested generics. Per-file cascade
+    // matches the symbols/refs reindex path.
+    'CREATE TABLE IF NOT EXISTS di_bindings (' +
+    '  id             INTEGER PRIMARY KEY,' +
+    '  file_id        INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+    '  interface_name TEXT NOT NULL,' +
+    '  impl_name      TEXT NOT NULL,' +
+    '  lifetime       TEXT NOT NULL,' +
+    '  start_line     INTEGER NOT NULL,' +
+    '  start_col      INTEGER NOT NULL,' +
+    '  end_line       INTEGER NOT NULL,' +
+    '  end_col        INTEGER NOT NULL' +
+    ')',
+    'CREATE INDEX IF NOT EXISTS idx_di_interface ON di_bindings(interface_name)',
+    'CREATE INDEX IF NOT EXISTS idx_di_impl      ON di_bindings(impl_name)'
   );
 
 implementation
