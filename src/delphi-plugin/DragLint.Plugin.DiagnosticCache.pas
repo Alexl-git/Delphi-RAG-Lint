@@ -22,12 +22,28 @@ type
 
   TDragLintDiagnosticCache = class
   strict private
-    FByFile: TDictionary<string, TArray<TDragLintDiagnostic>>;
+    FByFile:         TDictionary<string, TArray<TDragLintDiagnostic>>;
+    { v0.47: compiler findings from "Compile && Diagnose" live in a SEPARATE
+      overlay so the per-keystroke live runner (which overwrites FByFile every
+      tick) cannot clobber them. GetForFile returns the union of both. }
+    FCompilerByFile: TDictionary<string, TArray<TDragLintDiagnostic>>;
     FLock:   TCriticalSection;
   public
     constructor Create;
     destructor Destroy; override;
+    /// <summary>Replaces the live-lint diagnostics for AFilePath from an LSP
+    /// publishDiagnostics params object. Thread-safe.</summary>
     procedure Update(const AFilePath: string; AParams: TJSONValue);
+    /// <summary>Replaces the compiler-findings overlay for AFilePath (from
+    /// "Compile && Diagnose"). These persist across live-lint ticks until the
+    /// next compile. Thread-safe.</summary>
+    procedure SetCompilerFindings(const AFilePath: string;
+      const ADiags: TArray<TDragLintDiagnostic>);
+    /// <summary>Clears the entire compiler-findings overlay (every file). Call
+    /// before pushing a fresh compile so resolved errors disappear. Thread-safe.</summary>
+    procedure ClearAllCompilerFindings;
+    /// <summary>All diagnostics for AFilePath: live-lint findings UNION the
+    /// compiler-findings overlay. Thread-safe.</summary>
     function GetForFile(const AFilePath: string): TArray<TDragLintDiagnostic>;
     function GetForLine(const AFilePath: string;
       ALine: Integer): TArray<TDragLintDiagnostic>;
@@ -52,12 +68,14 @@ constructor TDragLintDiagnosticCache.Create;
 begin
   inherited Create;
   FByFile := TDictionary<string, TArray<TDragLintDiagnostic>>.Create;
+  FCompilerByFile := TDictionary<string, TArray<TDragLintDiagnostic>>.Create;
   FLock := TCriticalSection.Create;
 end;
 
 destructor TDragLintDiagnosticCache.Destroy;
 begin
   FLock.Free;
+  FCompilerByFile.Free;
   FByFile.Free;
   inherited;
 end;
@@ -135,13 +153,49 @@ begin
     [ExtractFileName(AFilePath), Length(Arr), LowerCase(AFilePath)]));
 end;
 
-function TDragLintDiagnosticCache.GetForFile(
-  const AFilePath: string): TArray<TDragLintDiagnostic>;
+procedure TDragLintDiagnosticCache.SetCompilerFindings(const AFilePath: string;
+  const ADiags: TArray<TDragLintDiagnostic>);
 begin
   FLock.Enter;
   try
-    if not FByFile.TryGetValue(LowerCase(AFilePath), Result) then
-      Result := nil;
+    if Length(ADiags) = 0 then
+      FCompilerByFile.Remove(LowerCase(AFilePath))
+    else
+      FCompilerByFile.AddOrSetValue(LowerCase(AFilePath), ADiags);
+  finally
+    FLock.Leave;
+  end;
+  DLT('cache', Format('SetCompilerFindings %s -> %d',
+    [ExtractFileName(AFilePath), Length(ADiags)]));
+end;
+
+procedure TDragLintDiagnosticCache.ClearAllCompilerFindings;
+begin
+  FLock.Enter;
+  try
+    FCompilerByFile.Clear;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+function TDragLintDiagnosticCache.GetForFile(
+  const AFilePath: string): TArray<TDragLintDiagnostic>;
+var
+  Key: string;
+  LintArr, CompArr: TArray<TDragLintDiagnostic>;
+begin
+  FLock.Enter;
+  try
+    Key := LowerCase(AFilePath);
+    if not FByFile.TryGetValue(Key, LintArr) then LintArr := nil;
+    if not FCompilerByFile.TryGetValue(Key, CompArr) then CompArr := nil;
+    if Length(CompArr) = 0 then
+      Result := LintArr
+    else if Length(LintArr) = 0 then
+      Result := CompArr
+    else
+      Result := LintArr + CompArr;   { union: live-lint + compiler overlay }
   finally
     FLock.Leave;
   end;
@@ -170,6 +224,7 @@ begin
   FLock.Enter;
   try
     FByFile.Clear;
+    FCompilerByFile.Clear;
   finally
     FLock.Leave;
   end;

@@ -22,6 +22,13 @@ type
 
   TCompileChecker = class
   public
+    /// <summary>Compiles ATarget and returns the parsed compiler findings.</summary>
+    /// <param name="ATarget">A .dproj (compiled via msbuild) or a .pas/.dpr/.dpk (via dcc64).</param>
+    /// <returns>Findings, raw stdout, and the compiler exit code.</returns>
+    /// <remarks>Runs an INCREMENTAL compile (msbuild /t:Make; dcc64 without -B):
+    /// only changed units and their dependents are recompiled, so it is fast on
+    /// large projects. Units that fail to compile lack a valid DCU and are always
+    /// re-checked, so current errors are never skipped. Not thread-safe.</remarks>
     class function Run(const ATarget: string; const AMsbuildPath: string = '';
       const ARsvarsPath: string = ''): TCompileCheckResult;
     { v0.43: run an arbitrary compiler command line (already wrapped in
@@ -195,16 +202,21 @@ begin
   Ext := LowerCase(ExtractFileExt(ATarget));
   if Ext = '.dproj' then
   begin
+    { Incremental Compile (/t:Make), NOT a full Build (/t:Build): Make only
+      recompiles changed units + their dependents, reusing existing DCUs --
+      seconds vs minutes on a large project. A unit that fails to compile has no
+      valid DCU, so Make always re-checks it; current errors are never missed. }
     if AMsbuildPath <> '' then
-      Cmd := Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /nologo"',
+      Cmd := Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /nologo"',
         [RsVars, AMsbuildPath, ATarget])
     else
-      Cmd := Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Build /nologo"',
+      Cmd := Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Make /nologo"',
         [RsVars, ATarget]);
   end
   else
   begin
-    Cmd := Format('cmd.exe /c "call "%s" && dcc64 -Q -B "%s" 2>&1"',
+    { -Q quiet, no -B: incremental compile (reuse DCUs), not build-all-units. }
+    Cmd := Format('cmd.exe /c "call "%s" && dcc64 -Q "%s" 2>&1"',
       [RsVars, ATarget]);
   end;
 

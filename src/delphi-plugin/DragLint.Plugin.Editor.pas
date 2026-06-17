@@ -1219,15 +1219,39 @@ end;
 
 { ---- v0.26 menu actions ---- }
 
+{ Read an int field that may arrive as a JSON number or a quoted string. }
+function JsonIntField(AObj: TJSONObject; const AName: string): Integer;
+var
+  S: string;
+begin
+  if AObj.TryGetValue<Integer>(AName, Result) then Exit;
+  if AObj.TryGetValue<string>(AName, S) then Exit(StrToIntDef(S, 0));
+  Result := 0;
+end;
+
+{ Force the active edit view to repaint so gutter diagnostic marks appear now;
+  the dock's Diagnostics tab auto-refreshes on its own watch timer. }
+procedure RepaintActiveView;
+var
+  ESS: IOTAEditorServices;
+begin
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  if ESS.TopView <> nil then
+    try ESS.TopView.Paint; except end;
+end;
+
 procedure InvokeCompileDiagnose(Sender: TObject);
 var
-  ProjFile, DbPath, ExePath: string;
-  CmdLine, Output: string;
-  ExitCode: Integer;
+  ProjFile, ExePath, CmdLine, Output, Json, FilePath, Sev: string;
+  ExitCode, P1, P2, K, LineNo, ColNo: Integer;
   ErrCount, WarnCount, HintCount: Integer;
-  Lines: TStringList;
-  Line: string;
-  LLine: string;
+  JV: TJSONValue;
+  JArr: TJSONArray;
+  JItem: TJSONObject;
+  ByFile: TDictionary<string, TList<TDragLintDiagnostic>>;
+  Pair: TPair<string, TList<TDragLintDiagnostic>>;
+  L: TList<TDragLintDiagnostic>;
+  D: TDragLintDiagnostic;
 begin
   ProjFile := GetActiveProjectFile;
   if ProjFile = '' then
@@ -1236,23 +1260,19 @@ begin
     Exit;
   end;
 
-  DbPath := GetActiveProjectDb;
-
   ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
   if not FileExists(ExePath) then
     ExePath := 'drag-lint.exe';
 
-  // Build the CLI command line.
-  if DbPath <> '' then
-    CmdLine := Format('"%s" compile-check "%s" --db "%s" --format text',
-      [ExePath, ProjFile, DbPath])
-  else
-    CmdLine := Format('"%s" compile-check "%s" --format text',
-      [ExePath, ProjFile]);
+  { Incremental compile of the active project (engine uses /t:Make), JSON output
+    so every finding -- including semantic errors like E2003 that the live
+    tree-sitter lint cannot see -- is pushed straight into the Diagnostics pane's
+    compiler overlay. No --db / LSP round-trip and no fragile single-unit shadow
+    compile. }
+  CmdLine := Format('"%s" compile-check "%s" --format json', [ExePath, ProjFile]);
 
-  // Run synchronously (msbuild can take up to several minutes; use 10 min).
+  { Synchronous; an incremental compile is usually seconds, but allow 10 min. }
   ExitCode := RunAndCaptureStdout(CmdLine, Output, 600000);
-
   if ExitCode = 2 then
   begin
     ShowMessage('drag-lint: failed to spawn compile-check.'#13#10 +
@@ -1260,36 +1280,88 @@ begin
     Exit;
   end;
 
-  // Count by severity from the CLI text output lines.
-  ErrCount  := 0;
-  WarnCount := 0;
-  HintCount := 0;
-  Lines := TStringList.Create;
+  { Extract the JSON array from stdout (a "Compiling: ..." line and a possible
+    defaults banner precede it). Finding objects have no nested [] so the array
+    runs from the first '[' to the last ']'. }
+  P1 := Pos('[', Output);
+  P2 := 0;
+  for K := Length(Output) downto 1 do
+    if Output[K] = ']' then begin P2 := K; Break; end;
+  if (P1 = 0) or (P2 < P1) then
+  begin
+    ShowMessage('drag-lint Compile & Diagnose: no parseable compiler output '
+      + '(build-configuration or msbuild error).');
+    Exit;
+  end;
+  Json := Copy(Output, P1, P2 - P1 + 1);
+
+  ErrCount := 0; WarnCount := 0; HintCount := 0;
+  ByFile := TDictionary<string, TList<TDragLintDiagnostic>>.Create;
   try
-    Lines.Text := Output;
-    for Line in Lines do
-    begin
-      LLine := LowerCase(Line);
-      if (Pos(') error:', LLine) > 0) or (Pos(') fatal:', LLine) > 0) then
-        Inc(ErrCount)
-      else if Pos(') warning:', LLine) > 0 then
-        Inc(WarnCount)
-      else if (Pos(') hint:', LLine) > 0) or
-              (Pos(') information:', LLine) > 0) then
-        Inc(HintCount);
+    JV := TJSONObject.ParseJSONValue(Json);
+    try
+      if JV is TJSONArray then
+      begin
+        JArr := JV as TJSONArray;
+        for K := 0 to JArr.Count - 1 do
+        begin
+          if not (JArr.Items[K] is TJSONObject) then Continue;
+          JItem := JArr.Items[K] as TJSONObject;
+
+          FilePath := '';
+          JItem.TryGetValue<string>('file', FilePath);
+          if FilePath = '' then Continue;
+
+          LineNo := JsonIntField(JItem, 'line');
+          ColNo  := JsonIntField(JItem, 'col');
+          Sev    := '';
+          JItem.TryGetValue<string>('severity', Sev);
+
+          D := Default(TDragLintDiagnostic);
+          D.Line     := LineNo - 1; if D.Line < 0 then D.Line := 0;
+          D.StartCol := ColNo - 1;  if D.StartCol < 0 then D.StartCol := 0;
+          D.EndCol   := D.StartCol + 1;
+          D.Source   := 'compiler';
+          JItem.TryGetValue<string>('code',    D.Code);
+          JItem.TryGetValue<string>('message', D.Message);
+
+          if SameText(Sev, 'Error') or SameText(Sev, 'Fatal') then
+          begin D.Severity := dlsError;   Inc(ErrCount);  end
+          else if SameText(Sev, 'Warning') then
+          begin D.Severity := dlsWarning; Inc(WarnCount); end
+          else if SameText(Sev, 'Hint') then
+          begin D.Severity := dlsHint;    Inc(HintCount); end
+          else
+            D.Severity := dlsInfo;
+
+          if not ByFile.TryGetValue(FilePath, L) then
+          begin
+            L := TList<TDragLintDiagnostic>.Create;
+            ByFile.Add(FilePath, L);
+          end;
+          L.Add(D);
+        end;
+      end;
+    finally
+      JV.Free;
     end;
+
+    { Replace the whole compiler overlay (so fixed errors vanish), then push this
+      compile's findings per file. ToArray copies, so the lists are freed below. }
+    Cache.ClearAllCompilerFindings;
+    for Pair in ByFile do
+      Cache.SetCompilerFindings(Pair.Key, Pair.Value.ToArray);
   finally
-    Lines.Free;
+    for L in ByFile.Values do L.Free;
+    ByFile.Free;
   end;
 
-  // If findings were stored in the DB, trigger LSP publishDiagnostics.
-  if DbPath <> '' then
-    BroadcastDidSaveForAffectedFiles(Output);
+  RepaintActiveView;
 
   ShowMessage(Format(
     'drag-lint Compile & Diagnose complete.'#13#10 +
-    '%d error(s), %d warning(s), %d hint(s) found.'#13#10 +
-    'Check the Messages pane for details.',
+    '%d error(s), %d warning(s), %d hint(s).'#13#10 +
+    'See the drag-lint Diagnostics pane.',
     [ErrCount, WarnCount, HintCount]));
 end;
 
