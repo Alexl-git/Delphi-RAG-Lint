@@ -2675,6 +2675,61 @@ begin
   DLRunReport(Format('top --db "%s" --by fanin --limit 50', [Db]), 'drag-lint-top.txt');
 end;
 
+procedure InvokeFindUndocumented(Sender: TObject);
+var Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  DLRunReport(Format('query find --no-docs --public --db "%s"', [Db]),
+    'drag-lint-undocumented.txt');
+end;
+
+procedure InvokeExportGraphDot(Sender: TObject);
+var Db, Outp: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  Outp := TPath.Combine(TPath.GetTempPath, 'drag-lint-graph.dot');
+  DLRunReport(Format('graph --db "%s" --format dot --output "%s"', [Db, Outp]),
+    'drag-lint-graph-log.txt');
+  DLOpenInEditor(Outp);
+end;
+
+procedure InvokeExportObsidian(Sender: TObject);
+var Db, Dir, Cmd, Output: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  Dir := TPath.Combine(TPath.GetTempPath, 'drag-lint-obsidian');
+  try TDirectory.CreateDirectory(Dir); except end;
+  Cmd := Format('"%s" export obsidian --db "%s" --output-dir "%s"', [DLExe, Db, Dir]);
+  DLT('menu', 'run: ' + Cmd);
+  Output := '';
+  RunAndCaptureStdout(Cmd, Output, 180000);
+  ShellExecute(0, 'open', PChar(Dir), nil, nil, SW_SHOWNORMAL);
+  ShowMessage('drag-lint: exported Obsidian notes to'#13#10 + Dir);
+end;
+
+procedure InvokeReindexProject(Sender: TObject);
+var Db, Proj, ProjDir: string; MS: IOTAModuleServices;
+begin
+  Proj := GetActiveProjectFile; Db := GetActiveProjectDb;
+  if (Proj = '') or (Db = '') then begin ShowMessage('drag-lint: no project/index found.'); Exit; end;
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+  ProjDir := ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
+  DLRunReport(Format('index "%s" --db "%s"', [ProjDir, Db]), 'drag-lint-reindex.txt');
+end;
+
+procedure InvokeResolveDbs(Sender: TObject);
+begin
+  DLRunReport('resolve-dbs --platform win64', 'drag-lint-resolve-dbs.txt');
+end;
+
+procedure InvokeLibraryDrift(Sender: TObject);
+begin
+  DLRunReport('library-drift', 'drag-lint-library-drift.txt');
+end;
+
 procedure RegisterDragLintMenu;
 var
   Services: INTAServices;
@@ -2744,17 +2799,28 @@ begin
   SubQuality.Caption := 'Code Quality';
   RootMenu.Add(SubQuality);
   AddWrappedItem(SubQuality, 'Find Dead Code...',         InvokeFindDeadCode);
+  AddWrappedItem(SubQuality, 'Find Undocumented (public)...', InvokeFindUndocumented);
   AddWrappedItem(SubQuality, 'Scan TODOs / FIXMEs...',    InvokeScanTodos);
   AddWrappedItem(SubQuality, 'Compiler Hints...',         InvokeCompilerHints);
   AddWrappedItem(SubQuality, 'Top Symbols (fan-in)...',   InvokeTopSymbols);
 
-  { v0.46: Generate submenu }
+  { v0.46: Generate / Export submenu }
   var SubGen: TMenuItem := TMenuItem.Create(RootMenu);
-  SubGen.Caption := 'Generate';
+  SubGen.Caption := 'Generate && Export';
   RootMenu.Add(SubGen);
   AddWrappedItem(SubGen, 'Doc Comment Stub (symbol)...',  InvokeGenerateDocs);
   AddWrappedItem(SubGen, 'Unit Test Stub (symbol)...',    InvokeGenerateTest);
   AddWrappedItem(SubGen, 'Export Enums (Delphi const)...', InvokeExportEnums);
+  AddWrappedItem(SubGen, 'Export Graph (DOT)...',         InvokeExportGraphDot);
+  AddWrappedItem(SubGen, 'Export to Obsidian...',         InvokeExportObsidian);
+
+  { v0.46: Index && Maintenance submenu }
+  var SubMaint: TMenuItem := TMenuItem.Create(RootMenu);
+  SubMaint.Caption := 'Index && Maintenance';
+  RootMenu.Add(SubMaint);
+  AddWrappedItem(SubMaint, 'Reindex This Project',        InvokeReindexProject);
+  AddWrappedItem(SubMaint, 'Show Resolved DBs (debug)...', InvokeResolveDbs);
+  AddWrappedItem(SubMaint, 'Library Drift Check...',      InvokeLibraryDrift);
 
   { ---- Diagnostics & Tests (alpha) ---- }
   AddSeparator(RootMenu);
