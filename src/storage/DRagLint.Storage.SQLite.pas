@@ -28,6 +28,8 @@ type
     FQInsertRef: TFDQuery;
     FQDeleteFileSymbols: TFDQuery;
     FQDeleteFileRefs: TFDQuery;
+    FQUpsertDiBinding: TFDQuery;
+    FQDeleteFileDiBindings: TFDQuery;
     FQFindByName: TFDQuery;
     FQFindByQName: TFDQuery;
     FQCountSymbols: TFDQuery;
@@ -70,6 +72,14 @@ type
       const ASymbol: TSymbol): Int64;
     procedure UpsertReference(const AToken: TFileTxToken;
       const ARef: TReference);
+    procedure UpsertDiBinding(const AToken: TFileTxToken;
+      const ABinding: TDiBindingRow);
+    procedure DeleteDiBindingsForFile(AFileId: Int64);
+    function FindImplementationsOf(
+      const AInterfaceName: string): TArray<TDiBindingRow>;
+    function FindDiResolveSites(
+      const AInterfaceName: string): TArray<TReference>;
+    function FindDiUnresolved: TArray<TReference>;
     procedure UpsertChunk(const AToken: TFileTxToken; const AChunk: TChunk);
     procedure CommitFileTx(const AToken: TFileTxToken);
     procedure RollbackFileTx(const AToken: TFileTxToken);
@@ -192,6 +202,8 @@ begin
   FQInsertRef.Free;
   FQDeleteFileSymbols.Free;
   FQDeleteFileRefs.Free;
+  FQUpsertDiBinding.Free;
+  FQDeleteFileDiBindings.Free;
   FQFindByName.Free;
   FQFindByQName.Free;
   FQCountSymbols.Free;
@@ -366,6 +378,12 @@ begin
     'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec)');
   FQDeleteFileSymbols := NewQuery('DELETE FROM symbols WHERE file_id = :fid');
   FQDeleteFileRefs := NewQuery('DELETE FROM refs WHERE file_id = :fid');
+  FQUpsertDiBinding := NewQuery(
+    'INSERT INTO di_bindings(file_id, interface_name, impl_name, lifetime, ' +
+    '  start_line, start_col, end_line, end_col) ' +
+    'VALUES (:fid, :intf, :impl, :life, :sl, :sc, :el, :ec)');
+  FQDeleteFileDiBindings := NewQuery(
+    'DELETE FROM di_bindings WHERE file_id = :fid');
   FQFindByName := NewQuery(
     'SELECT * FROM symbols WHERE name = :name ORDER BY qualified_name');
   FQFindByQName := NewQuery(
@@ -634,6 +652,8 @@ begin
     // before the caller starts emitting fresh records.
     FQDeleteFileRefs.ParamByName('fid').AsLargeInt := Result.FileId;
     FQDeleteFileRefs.ExecSQL;
+    FQDeleteFileDiBindings.ParamByName('fid').AsLargeInt := Result.FileId;
+    FQDeleteFileDiBindings.ExecSQL;
     FQDeleteFileSymbols.ParamByName('fid').AsLargeInt := Result.FileId;
     FQDeleteFileSymbols.ExecSQL;
   except
@@ -691,6 +711,144 @@ begin
   FQInsertRef.ParamByName('el').AsInteger := ARef.EndLine;
   FQInsertRef.ParamByName('ec').AsInteger := ARef.EndCol;
   FQInsertRef.ExecSQL;
+end;
+
+procedure TSQLiteSymbolStore.UpsertDiBinding(const AToken: TFileTxToken;
+  const ABinding: TDiBindingRow);
+begin
+  FQUpsertDiBinding.ParamByName('fid').AsLargeInt := AToken.FileId;
+  FQUpsertDiBinding.ParamByName('intf').AsString := ABinding.InterfaceName;
+  FQUpsertDiBinding.ParamByName('impl').AsString := ABinding.ImplName;
+  FQUpsertDiBinding.ParamByName('life').AsString := ABinding.Lifetime;
+  FQUpsertDiBinding.ParamByName('sl').AsInteger := ABinding.StartLine;
+  FQUpsertDiBinding.ParamByName('sc').AsInteger := ABinding.StartCol;
+  FQUpsertDiBinding.ParamByName('el').AsInteger := ABinding.EndLine;
+  FQUpsertDiBinding.ParamByName('ec').AsInteger := ABinding.EndCol;
+  FQUpsertDiBinding.ExecSQL;
+end;
+
+procedure TSQLiteSymbolStore.DeleteDiBindingsForFile(AFileId: Int64);
+begin
+  FQDeleteFileDiBindings.ParamByName('fid').AsLargeInt := AFileId;
+  FQDeleteFileDiBindings.ExecSQL;
+end;
+
+function TSQLiteSymbolStore.FindImplementationsOf(
+  const AInterfaceName: string): TArray<TDiBindingRow>;
+var
+  Q: TFDQuery;
+  List: TList<TDiBindingRow>;
+  B: TDiBindingRow;
+begin
+  List := TList<TDiBindingRow>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text :=
+      'SELECT * FROM di_bindings WHERE interface_name = :intf ' +
+      'ORDER BY file_id, start_line';
+    Q.ParamByName('intf').AsString := AInterfaceName;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      B := Default(TDiBindingRow);
+      B.Id := Q.FieldByName('id').AsLargeInt;
+      B.FileId := Q.FieldByName('file_id').AsLargeInt;
+      B.InterfaceName := Q.FieldByName('interface_name').AsString;
+      B.ImplName := Q.FieldByName('impl_name').AsString;
+      B.Lifetime := Q.FieldByName('lifetime').AsString;
+      B.StartLine := Q.FieldByName('start_line').AsInteger;
+      B.StartCol := Q.FieldByName('start_col').AsInteger;
+      B.EndLine := Q.FieldByName('end_line').AsInteger;
+      B.EndCol := Q.FieldByName('end_col').AsInteger;
+      List.Add(B);
+      Q.Next;
+    end;
+    Result := List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindDiResolveSites(
+  const AInterfaceName: string): TArray<TReference>;
+var
+  Q: TFDQuery;
+  List: TList<TReference>;
+  R: TReference;
+begin
+  List := TList<TReference>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text :=
+      'SELECT * FROM refs WHERE kind = ''di-resolve'' AND name_text = :intf ' +
+      'ORDER BY file_id, start_line';
+    Q.ParamByName('intf').AsString := AInterfaceName;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R := Default(TReference);
+      R.Id := Q.FieldByName('id').AsLargeInt;
+      if Q.FieldByName('symbol_id').IsNull then
+        R.SymbolId := 0
+      else
+        R.SymbolId := Q.FieldByName('symbol_id').AsLargeInt;
+      R.FileId := Q.FieldByName('file_id').AsLargeInt;
+      R.Kind := Q.FieldByName('kind').AsString;
+      R.NameText := Q.FieldByName('name_text').AsString;
+      R.StartLine := Q.FieldByName('start_line').AsInteger;
+      R.StartCol := Q.FieldByName('start_col').AsInteger;
+      R.EndLine := Q.FieldByName('end_line').AsInteger;
+      R.EndCol := Q.FieldByName('end_col').AsInteger;
+      List.Add(R);
+      Q.Next;
+    end;
+    Result := List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindDiUnresolved: TArray<TReference>;
+var
+  Q: TFDQuery;
+  List: TList<TReference>;
+  R: TReference;
+begin
+  List := TList<TReference>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text :=
+      'SELECT * FROM refs WHERE kind = ''di-unresolved'' ' +
+      'ORDER BY name_text, file_id, start_line';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R := Default(TReference);
+      R.Id := Q.FieldByName('id').AsLargeInt;
+      if Q.FieldByName('symbol_id').IsNull then
+        R.SymbolId := 0
+      else
+        R.SymbolId := Q.FieldByName('symbol_id').AsLargeInt;
+      R.FileId := Q.FieldByName('file_id').AsLargeInt;
+      R.Kind := Q.FieldByName('kind').AsString;
+      R.NameText := Q.FieldByName('name_text').AsString;
+      R.StartLine := Q.FieldByName('start_line').AsInteger;
+      R.StartCol := Q.FieldByName('start_col').AsInteger;
+      R.EndLine := Q.FieldByName('end_line').AsInteger;
+      R.EndCol := Q.FieldByName('end_col').AsInteger;
+      List.Add(R);
+      Q.Next;
+    end;
+    Result := List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
 end;
 
 procedure TSQLiteSymbolStore.UpsertChunk(const AToken: TFileTxToken;

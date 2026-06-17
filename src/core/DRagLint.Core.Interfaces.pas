@@ -130,6 +130,16 @@ type
     function FindCompilerFindingsForFile(AFileId: Int64): TArray<TCompilerFinding>;
     procedure ClearCompilerFindings;
     procedure InsertCompilerFinding(const AFinding: TCompilerFinding);
+
+    // v8: Spring4D DI edges.
+    procedure UpsertDiBinding(const AToken: TFileTxToken;
+      const ABinding: TDiBindingRow);
+    procedure DeleteDiBindingsForFile(AFileId: Int64);
+    function FindImplementationsOf(
+      const AInterfaceName: string): TArray<TDiBindingRow>;
+    function FindDiResolveSites(
+      const AInterfaceName: string): TArray<TReference>;
+    function FindDiUnresolved: TArray<TReference>;
   end;
 
   TParseResult = record
@@ -141,6 +151,7 @@ type
     // interface vs implementation vs program/package; FileId is filled by
     // the indexer post-parse from the files table.
     UsesEntries: TArray<TUnitUse>;
+    DiBindings: TArray<TDiBindingRow>;  // v8: Spring4D DI registrations
   end;
 
   IParser = interface

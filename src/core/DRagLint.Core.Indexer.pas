@@ -267,6 +267,8 @@ begin
         end;
         for i := 0 to High(ParseRes.References) do
           FStore.UpsertReference(Token, ParseRes.References[i]);
+        for i := 0 to High(ParseRes.DiBindings) do
+          FStore.UpsertDiBinding(Token, ParseRes.DiBindings[i]);
         { v0.40.4: wipe-and-rewrite uses for this file so we never carry
           stale rows. DeleteUnitUsesForFile must run inside the open
           transaction to ensure consistency on rollback. }

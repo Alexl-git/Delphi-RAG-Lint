@@ -111,6 +111,7 @@ type
     Depth: Integer;
     IncludeImpl: Boolean;
     AllVisibility: Boolean;
+    WiringCoverage: Boolean;  // v8: --coverage for the wiring command
     ContextLines: Integer;  // v0.17: find-callers --context N
     // v0.18: context bundle
     Task:               string;  // raw --task value
@@ -543,6 +544,8 @@ begin
       Result.FullSurface := True
     else if A = '--all-visibility' then
       Result.AllVisibility := True
+    else if A = '--coverage' then
+      Result.WiringCoverage := True
     else if (A = '--context') and (i < ParamCount) then
     begin
       Inc(i);
@@ -3619,6 +3622,121 @@ end;
 // v0.17: drag-lint impact --qname <X> [--depth N] [--db <path>] [--format text|json]
 // Walks transitive callers of the last segment of <X> up to depth N.
 // Exit 0 if callers found, 1 if none.
+// v8: drag-lint wiring --qname <Interface> [--db <path>] [--format text|json]
+//     drag-lint wiring --coverage      [--db <path>] [--format text|json]
+// Spring4D DI wiring edges: implementations (+lifetime) and resolve-sites of an
+// interface; --coverage lists DI registrations not resolved into I->T edges.
+function DoWiring(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Impls: TArray<TDiBindingRow>;
+  Sites, Unres: TArray<TReference>;
+  B: TDiBindingRow;
+  R: TReference;
+  JRoot, JO: TJSONObject;
+  JImpls, JSites: TJSONArray;
+begin
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first.');
+    Exit(2);
+  end;
+  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  if AArgs.WiringCoverage then
+  begin
+    Unres := Store.FindDiUnresolved;
+    if LowerCase(AArgs.Format) = 'json' then
+    begin
+      JRoot := TJSONObject.Create;
+      JSites := TJSONArray.Create;
+      try
+        for R in Unres do
+        begin
+          JO := TJSONObject.Create;
+          JO.AddPair('method', R.NameText);
+          JO.AddPair('file', Store.GetFilePath(R.FileId));
+          JO.AddPair('line', TJSONNumber.Create(R.StartLine));
+          JSites.AddElement(JO);
+        end;
+        JRoot.AddPair('unresolved', JSites);
+        Writeln(JRoot.Format(2));
+      finally
+        JRoot.Free;
+      end;
+    end
+    else
+    begin
+      Writeln(Format('DI registrations not resolved into I->T edges (%d):',
+        [Length(Unres)]));
+      for R in Unres do
+        Writeln(Format('  %s  %s:%d',
+          [R.NameText, Store.GetFilePath(R.FileId), R.StartLine]));
+      if Length(Unres) = 0 then
+        Writeln('  (none)');
+    end;
+    Exit(0);
+  end;
+
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint wiring --qname <Interface> [--db <path>] ' +
+      '[--format text|json]');
+    Writeln('       drag-lint wiring --coverage [--db <path>] [--format text|json]');
+    Exit(2);
+  end;
+
+  Impls := Store.FindImplementationsOf(AArgs.QName);
+  Sites := Store.FindDiResolveSites(AArgs.QName);
+
+  if LowerCase(AArgs.Format) = 'json' then
+  begin
+    JRoot := TJSONObject.Create;
+    JImpls := TJSONArray.Create;
+    JSites := TJSONArray.Create;
+    try
+      JRoot.AddPair('interface', AArgs.QName);
+      for B in Impls do
+      begin
+        JO := TJSONObject.Create;
+        JO.AddPair('impl', B.ImplName);
+        JO.AddPair('lifetime', B.Lifetime);
+        JO.AddPair('file', Store.GetFilePath(B.FileId));
+        JO.AddPair('line', TJSONNumber.Create(B.StartLine));
+        JImpls.AddElement(JO);
+      end;
+      for R in Sites do
+      begin
+        JO := TJSONObject.Create;
+        JO.AddPair('file', Store.GetFilePath(R.FileId));
+        JO.AddPair('line', TJSONNumber.Create(R.StartLine));
+        JSites.AddElement(JO);
+      end;
+      JRoot.AddPair('implementations', JImpls);
+      JRoot.AddPair('resolved_at', JSites);
+      Writeln(JRoot.Format(2));
+    finally
+      JRoot.Free;
+    end;
+  end
+  else
+  begin
+    Writeln(AArgs.QName);
+    if Length(Impls) = 0 then
+      Writeln('  (no DI implementations registered)')
+    else
+      for B in Impls do
+        Writeln(Format('  impl: %s [%s]  %s:%d',
+          [B.ImplName, B.Lifetime, Store.GetFilePath(B.FileId), B.StartLine]));
+    Writeln(Format('  resolved at %d site(s):', [Length(Sites)]));
+    for R in Sites do
+      Writeln(Format('    %s:%d', [Store.GetFilePath(R.FileId), R.StartLine]));
+  end;
+  Result := 0;
+end;
+
 function DoImpact(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore;
@@ -7991,6 +8109,8 @@ begin
       Result := DoHover(Args)
     else if Args.Command = 'impact' then
       Result := DoImpact(Args)
+    else if Args.Command = 'wiring' then
+      Result := DoWiring(Args)
     else if Args.Command = 'surface' then
       Result := DoSurface(Args)
     else if Args.Command = 'outline' then

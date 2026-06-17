@@ -61,6 +61,21 @@ type
     ContextText: string;  // v0.17: surrounding source lines (find-callers --context N)
   end;
 
+  /// <summary>v8: one Spring4D DI registration (interface implemented by impl,
+  /// with lifetime). Endpoint names are verbatim, including nested generics.
+  /// FileId is filled by the store from the file transaction token.</summary>
+  TDiBindingRow = record
+    Id: Int64;
+    FileId: Int64;
+    InterfaceName: string;
+    ImplName: string;
+    Lifetime: string;
+    StartLine: Integer;
+    StartCol: Integer;
+    EndLine: Integer;
+    EndCol: Integer;
+  end;
+
   TChunk = record
     Id: Int64;
     FileId: Int64;

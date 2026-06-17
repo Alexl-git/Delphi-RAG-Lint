@@ -9,7 +9,8 @@ uses
   TreeSitter,
   TreeSitterLib,
   DRagLint.Core.Model,
-  DRagLint.Core.Interfaces;
+  DRagLint.Core.Interfaces,
+  DRagLint.Parser.SpringDI;
 
 type
   TDelphi13Parser = class(TInterfacedObject, IParser)
@@ -69,6 +70,7 @@ type
     Symbols: TList<TSymbol>;
     References: TList<TReference>;
     UsesEntries: TList<TUnitUse>;  { v0.40.4 }
+    DiBindings: TList<TDiBindingRow>;  { v8: Spring4D DI registrations }
     { Current member visibility while walking a class/record body -- set by the
       declSection handler ('public'/'private'/'protected'/'published', with a
       'strict ' prefix when applicable) and stamped into each member's
@@ -100,6 +102,7 @@ begin
   Symbols := TList<TSymbol>.Create;
   References := TList<TReference>.Create;
   UsesEntries := TList<TUnitUse>.Create;
+  DiBindings := TList<TDiBindingRow>.Create;
 end;
 
 destructor TWalkState.Destroy;
@@ -107,6 +110,7 @@ begin
   Symbols.Free;
   References.Free;
   UsesEntries.Free;
+  DiBindings.Free;
   inherited;
 end;
 
@@ -656,6 +660,93 @@ begin
     ProcSignatureOf(ANode, AState.Source), Modifiers);
 end;
 
+// v8: walk a Spring4D fluent method-access chain (descend the lhs/entity spine of
+// exprDot / exprTpl / exprCall nodes), collect (method, type-arg) links, classify
+// via SpringDI, and emit DI facts. Type-arg text is the verbatim typeref source,
+// so nested generics ('IDataService<ImcCAUSFAIL>') are preserved. Link order does
+// not matter to ClassifyDiChain. Registrations are added to AState.DiBindings
+// (persisted to di_bindings); resolutions/unresolved emit di-resolve/di-unresolved
+// refs.
+procedure TryEmitSpringDI(const AExpr: TTSNode; const AState: TWalkState);
+var
+  Links: TArray<TDiChainLink>;
+
+  procedure AddLink(const AMethod, ATypeArg: string);
+  var
+    Lnk: TDiChainLink;
+  begin
+    Lnk.MethodName := AMethod;
+    Lnk.TypeArg := Trim(ATypeArg);
+    Links := Links + [Lnk];
+  end;
+
+var
+  Cur, Entity, ArgsNode, RhsNode: TTSNode;
+  Outcome: TDiOutcome;
+  Binding: TDiBinding;
+  Row: TDiBindingRow;
+  ResIntf, UnresMethod: string;
+  Guard: Integer;
+begin
+  Links := nil;
+  Cur := AExpr;
+  Guard := 0;
+  while (not Cur.IsNull) and (Guard < 64) do
+  begin
+    Inc(Guard);
+    if Cur.NodeType = 'exprCall' then
+      Cur := Cur.ChildByField('entity')
+    else if Cur.NodeType = 'exprTpl' then
+    begin
+      Entity := Cur.ChildByField('entity');
+      ArgsNode := Cur.ChildByField('args');
+      if (not Entity.IsNull) and (Entity.NodeType = 'exprDot') then
+      begin
+        RhsNode := Entity.ChildByField('rhs');
+        AddLink(NodeText(RhsNode, AState.Source), NodeText(ArgsNode, AState.Source));
+        Cur := Entity.ChildByField('lhs');
+      end
+      else if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
+      begin
+        AddLink(NodeText(Entity, AState.Source), NodeText(ArgsNode, AState.Source));
+        Break;
+      end
+      else
+        Cur := Entity;
+    end
+    else if Cur.NodeType = 'exprDot' then
+    begin
+      RhsNode := Cur.ChildByField('rhs');
+      AddLink(NodeText(RhsNode, AState.Source), '');
+      Cur := Cur.ChildByField('lhs');
+    end
+    else
+      Break;
+  end;
+
+  if Length(Links) = 0 then
+    Exit;
+  Outcome := ClassifyDiChain(Links, Binding, ResIntf, UnresMethod);
+  case Outcome of
+    dioRegister:
+      begin
+        Row := Default(TDiBindingRow);
+        Row.InterfaceName := Binding.InterfaceName;
+        Row.ImplName := Binding.ImplName;
+        Row.Lifetime := Binding.Lifetime;
+        Row.StartLine := Integer(AExpr.StartPoint.row) + 1;
+        Row.StartCol := Integer(AExpr.StartPoint.column) + 1;
+        Row.EndLine := Integer(AExpr.EndPoint.row) + 1;
+        Row.EndCol := Integer(AExpr.EndPoint.column) + 1;
+        AState.DiBindings.Add(Row);
+      end;
+    dioResolve:
+      AState.EmitRef('di-resolve', ResIntf, AExpr);
+    dioUnresolved:
+      AState.EmitRef('di-unresolved', UnresMethod, AExpr);
+  end;
+end;
+
 procedure Walk(const ANode: TTSNode; const AState: TWalkState;
   AParentSymbolIdx: Integer; const AParentQualifiedName: string);
 var
@@ -666,6 +757,15 @@ begin
   if ANode.IsNull then
     Exit;
   NodeType := ANode.NodeType;
+
+  // v8: Spring4D DI edges. Registrations appear as a `statement` (no-paren fluent
+  // chain) or `exprCall` (RegisterInstance<T>(...)); resolutions appear as the rhs
+  // of an `assignment` or as a `statement`. Extract+classify the chain here;
+  // normal recursion below still emits type_use refs for the type arguments.
+  if (NodeType = 'statement') and (ANode.NamedChildCount >= 1) then
+    TryEmitSpringDI(ANode.NamedChild(0), AState)
+  else if NodeType = 'assignment' then
+    TryEmitSpringDI(ANode.ChildByField('rhs'), AState);
 
   if NodeType = 'unit' then
   begin
@@ -1001,6 +1101,7 @@ begin
     Result.Symbols := State.Symbols.ToArray;
     Result.References := State.References.ToArray;
     Result.UsesEntries := State.UsesEntries.ToArray;
+    Result.DiBindings := State.DiBindings.ToArray;
   finally
     State.Free;
     Tree.Free;

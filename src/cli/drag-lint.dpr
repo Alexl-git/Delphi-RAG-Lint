@@ -13,6 +13,7 @@ uses
   DRagLint.Storage.Schema in '..\storage\DRagLint.Storage.Schema.pas',
   DRagLint.Storage.SQLite in '..\storage\DRagLint.Storage.SQLite.pas',
   DRagLint.Parser.Delphi13 in '..\parser\DRagLint.Parser.Delphi13.pas',
+  DRagLint.Parser.SpringDI in '..\parser\DRagLint.Parser.SpringDI.pas',
   DRagLint.Parser.DFM in '..\parser\DRagLint.Parser.DFM.pas',
   DRagLint.Parser.Sql in '..\parser\DRagLint.Parser.Sql.pas',
   DRagLint.Sql.FbSnapshot in '..\sql\DRagLint.Sql.FbSnapshot.pas',
