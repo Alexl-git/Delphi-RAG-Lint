@@ -7,7 +7,8 @@ uses
   System.Generics.Collections, System.StrUtils, System.Types,
   DRagLint.Core.Model, DRagLint.Core.Interfaces,
   DRagLint.Lint.Linter,
-  DRagLint.Resolver.TypeAt;
+  DRagLint.Resolver.TypeAt,
+  DRagLint.Diagnostics.AstChecks;
 
 type
   // v0.20: LSP response builders for completion, signatureHelp, diagnostics.
@@ -497,12 +498,37 @@ begin
     end;
   end;
 
-  // NOTE (v0.42): tree-sitter AST "syntax errors" are deliberately NOT auto-
-  // published here. tree-sitter-delphi13 still false-positives on valid code
-  // (e.g. `X in [#10,#13]` set membership -> bogus "missing token"), so live
-  // squiggles from it would land on good code. Real syntax errors come from
-  // the compiler (IDE-native + on-demand Compile && Diagnose). Lint findings
-  // above + compiler findings below are the reliable auto-published set.
+  // --- v8: AST syntax errors, for PARITY with the CLI `lint` / live-runner path
+  //     (added in dadf9b9). The LSP publishDiagnostics that runs on didOpen/
+  //     didSave used to omit these, so it carried the lint warnings above but
+  //     NEVER the typed syntax error -- and that save-time publish overwrites the
+  //     live runner's richer set, leaving the diagnostics pane showing
+  //     "warnings only". (Supersedes the v0.42 suppression note: the CLI path
+  //     already ships these and the report is a MISSING error, not false ones; if
+  //     a grammar false-positive recurs, fix tree-sitter-delphi13 rather than
+  //     hide real errors.) Gated to source files. ---
+  if SameText(ExtractFileExt(AFile), '.pas') or
+     SameText(ExtractFileExt(AFile), '.inc') then
+    for F in TAstChecker.CheckSyntaxErrors(AFile) do
+    begin
+      DiagObj := TJSONObject.Create;
+      StartObj := TJSONObject.Create;
+      StartObj.AddPair('line', TJSONNumber.Create(F.StartLine - 1));
+      StartObj.AddPair('character', TJSONNumber.Create(F.StartCol - 1));
+      EndObj := TJSONObject.Create;
+      EndObj.AddPair('line', TJSONNumber.Create(F.EndLine - 1));
+      EndObj.AddPair('character', TJSONNumber.Create(F.EndCol - 1));
+      RangeObj := TJSONObject.Create;
+      RangeObj.AddPair('start', StartObj);
+      RangeObj.AddPair('end', EndObj);
+      DiagObj.AddPair('range', RangeObj);
+      DiagObj.AddPair('severity',
+        TJSONNumber.Create(MapLintSeverityToLspSeverity(F.Severity)));
+      DiagObj.AddPair('source', 'drag-lint');
+      DiagObj.AddPair('code', F.RuleId);
+      DiagObj.AddPair('message', F.Message);
+      Result.AddElement(DiagObj);
+    end;
 
   // --- v0.26: Compiler findings from the DB ---
   if Assigned(AStore) then

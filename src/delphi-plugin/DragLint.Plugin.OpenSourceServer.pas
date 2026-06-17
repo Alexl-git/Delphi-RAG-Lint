@@ -57,19 +57,48 @@ var
 procedure DoOpenInIDE(const AFile: string; ALine, ACol: Integer);
 var
   AS_: IOTAActionServices;
+  MS_: IOTAModuleServices;
+  Mod_: IOTAModule;
+  SrcEd: IOTASourceEditor;
   ESS: IOTAEditorServices;
   EV:  IOTAEditView;
   Pos: IOTAEditPosition;
   OpenOk: Boolean;
+  I: Integer;
 begin
   if (AFile = '') or not FileExists(AFile) then Exit;
 
-  { Guard on OpenFile's result.  If it failed (or the service is absent) we must
-    NOT fall through and GotoLine -- that would scroll whatever file was already
-    focused to ALine, which looks like "the IDE got the command but did the
-    wrong thing." }
-  OpenOk := Supports(BorlandIDEServices, IOTAActionServices, AS_) and
-            AS_.OpenFile(AFile);
+  { Open the target. For a CODE file force the SOURCE editor to the front via
+    OpenModule + IOTASourceEditor.Show, so a form unit's .pas lands on the CODE
+    view -- not the form designer (mirrors DLNavigateToSource). Only an explicit
+    .dfm target opens the designer (a genuine component-node click). Falls back to
+    OpenFile if module services are unavailable. Guard the result: if the open
+    failed we must NOT fall through to GotoLine (that would scroll whatever file
+    was already focused, looking like "the IDE did the wrong thing"). }
+  OpenOk := False;
+  if SameText(ExtractFileExt(AFile), '.dfm') then
+    OpenOk := Supports(BorlandIDEServices, IOTAActionServices, AS_) and
+              AS_.OpenFile(AFile)
+  else
+  begin
+    if Supports(BorlandIDEServices, IOTAModuleServices, MS_) then
+    begin
+      Mod_ := MS_.OpenModule(AFile);
+      if Mod_ <> nil then
+      begin
+        for I := 0 to Mod_.GetModuleFileCount - 1 do
+          if Supports(Mod_.GetModuleFileEditor(I), IOTASourceEditor, SrcEd) then
+          begin
+            SrcEd.Show;   { selects the code tab, not the designer }
+            Break;
+          end;
+        OpenOk := True;
+      end;
+    end;
+    if not OpenOk then
+      OpenOk := Supports(BorlandIDEServices, IOTAActionServices, AS_) and
+                AS_.OpenFile(AFile);
+  end;
   if not OpenOk then Exit;
 
   if (ALine > 0) and Supports(BorlandIDEServices, IOTAEditorServices, ESS) then

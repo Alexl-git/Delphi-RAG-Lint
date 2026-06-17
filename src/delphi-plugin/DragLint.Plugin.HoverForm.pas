@@ -59,6 +59,9 @@ type
     procedure HandleCallerKey(Sender: TObject; var Key: Word;
       Shift: TShiftState);
     procedure HandleMemoClick(Sender: TObject);
+    procedure HandleMemoMouseMove(Sender: TObject; Shift: TShiftState;
+      X, Y: Integer);
+    function LineIsClickable(const ALineText: string): Boolean;
   protected
     procedure DoClose(var Action: TCloseAction); override;
   public
@@ -85,6 +88,12 @@ var
     reads "... add unit X to the uses clause", the hover calls this with X to
     insert the unit (the lightbulb quick-fix from the diagnostic popup). }
   GOnAddUnit: TProc<string> = nil;
+  { v0.46.x: set by the Editor. When the user clicks a definition row, the hover
+    calls this with the def's UNIT NAME + line; the Editor resolves the unit to
+    its ABSOLUTE source path via the open project and opens the .pas there. The
+    popup itself only has qname+line (never an absolute path), so it cannot open
+    the file directly without resolving it against the IDE bin dir. }
+  GOnNavigateToUnit: TProc<string, Integer> = nil;
 
 implementation
 
@@ -97,6 +106,10 @@ var
   EdSvc:  IOTAEditorServices;
   View:   IOTAEditView;
 begin
+  { v0.46.x: never feed OpenFile a non-absolute path -- a bare unit filename
+    ("Foo.pas") resolves against the IDE working dir (...\bin) and raises
+    "Cannot create file". Require a rooted path. }
+  if (AFile = '') or (ExtractFileDrive(AFile) = '') then Exit;
   if not Supports(BorlandIDEServices, IOTAActionServices, ActSvc) then Exit;
   ActSvc.OpenFile(AFile);
   if Supports(BorlandIDEServices, IOTAEditorServices, EdSvc) then
@@ -183,6 +196,7 @@ begin
   with FCallers.Columns.Add do begin Caption := 'Code'; Width := 420; end;
   FCallers.OnDblClick  := HandleCallerDblClick;
   FCallers.OnKeyDown   := HandleCallerKey;
+  FCallers.Cursor      := crHandPoint;   { every row navigates -> hand cursor }
 
   { Middle: memo for docs / params / LSP markdown.
     v0.40.8e: double-clicking a "`qname` - line N" row attempts to navigate. }
@@ -197,6 +211,7 @@ begin
   FMemo.Font.Size   := 9;
   FMemo.TabStop     := False;
   FMemo.OnClick     := HandleMemoClick;
+  FMemo.OnMouseMove := HandleMemoMouseMove;   { hand cursor over clickable lines }
 
   FCallerPaths := TStringList.Create;
 
@@ -472,8 +487,49 @@ begin
 
   UnitName := UnitNameFromQname(Qname);
   if UnitName = '' then Exit;
-  OpenSourceAt(UnitName + '.pas', LineN);
   Close;
+  { Prefer the Editor hook: it resolves the unit to its ABSOLUTE source path via
+    the open project and forces the code view. The fallback OpenSourceAt is now
+    guarded against the bare path (it no-ops rather than erroring). }
+  if Assigned(GOnNavigateToUnit) then
+    GOnNavigateToUnit(UnitName, LineN)
+  else
+    OpenSourceAt(UnitName + '.pas', LineN);
+end;
+
+{ Is a memo line clickable? -- an "add unit X" lightbulb line, or a definition
+  row "- <qname> - line N". Used to show the hand cursor over it. }
+function TDragLintHoverForm.LineIsClickable(const ALineText: string): Boolean;
+var
+  Body: string;
+  DashAt: Integer;
+begin
+  Result := False;
+  if Pos('add unit ', LowerCase(ALineText)) > 0 then Exit(True);
+  Body := ALineText.TrimLeft;
+  if not Body.StartsWith('- ') then Exit;
+  Body := Copy(Body, 3, MaxInt);
+  DashAt := Pos(' - line ', Body);
+  if DashAt <= 0 then Exit;
+  Result := StrToIntDef(Trim(Copy(Body, DashAt + Length(' - line '), MaxInt)), 0) > 0;
+end;
+
+{ v0.46.x: show a hand cursor over clickable lines so users see they are links.
+  EM_CHARFROMPOS maps the mouse point to a memo char index; on a multiline edit
+  its HIWORD is the line index. }
+procedure TDragLintHoverForm.HandleMemoMouseMove(Sender: TObject;
+  Shift: TShiftState; X, Y: Integer);
+var
+  Res: Integer;
+  LineIdx: Integer;
+begin
+  Res := FMemo.Perform(EM_CHARFROMPOS, 0, MakeLParam(X, Y));
+  LineIdx := HiWord(Cardinal(Res));
+  if (LineIdx >= 0) and (LineIdx < FMemo.Lines.Count) and
+     LineIsClickable(FMemo.Lines[LineIdx]) then
+    FMemo.Cursor := crHandPoint
+  else
+    FMemo.Cursor := crDefault;
 end;
 
 procedure TDragLintHoverForm.ShowAt(X, Y: Integer; const AHeader, ASummary: string;

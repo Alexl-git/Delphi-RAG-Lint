@@ -2346,6 +2346,35 @@ begin
   end;
 end;
 
+{ v0.46.x: resolve a unit NAME to its absolute .pas via the active project's
+  module list, so a hover def-row click opens the real file (not a bare name the
+  IDE resolves against its bin dir). Returns '' if it is not a project unit. }
+function DLProjectUnitPath(const AUnitName: string): string;
+var
+  MS: IOTAModuleServices;
+  ProjGroup: IOTAProjectGroup;
+  Proj: IOTAProject;
+  I: Integer;
+  MI: IOTAModuleInfo;
+  Base: string;
+begin
+  Result := '';
+  if AUnitName = '' then Exit;
+  if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
+  ProjGroup := MS.MainProjectGroup;
+  if ProjGroup = nil then Exit;
+  Proj := ProjGroup.ActiveProject;
+  if Proj = nil then Exit;
+  for I := 0 to Proj.GetModuleCount - 1 do
+  begin
+    MI := Proj.GetModule(I);
+    if MI = nil then Continue;
+    Base := ChangeFileExt(ExtractFileName(MI.FileName), '');
+    if SameText(Base, AUnitName) or SameText(MI.Name, AUnitName) then
+      Exit(MI.FileName);
+  end;
+end;
+
 { ---- Uses & Dependencies ---- }
 
 procedure InvokeCircularUses(Sender: TObject);
@@ -3095,6 +3124,21 @@ begin
       else
         ShowMessage('drag-lint: could not add ' + U +
           '. Open the .pas and place the caret in it, then retry.');
+    end;
+
+  { v0.46.x: clicking a definition row in the hover popup navigates to the def's
+    .pas. The popup knows only the unit name + line; resolve the unit to its
+    absolute path via the open project, then open the SOURCE (code) view. }
+  DragLint.Plugin.HoverForm.GOnNavigateToUnit :=
+    procedure(AUnit: string; ALine: Integer)
+    var P: string;
+    begin
+      P := DLProjectUnitPath(AUnit);
+      if P <> '' then
+        DLNavigateToSource(P, ALine)
+      else
+        ShowMessage('drag-lint: could not locate unit ' + AUnit +
+          ' in the active project; open it manually.');
     end;
 
   { TEMP debug telemetry: fresh log per session + record the resolved engine. }
