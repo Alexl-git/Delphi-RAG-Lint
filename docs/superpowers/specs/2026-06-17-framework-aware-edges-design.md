@@ -108,8 +108,11 @@ CREATE INDEX IF NOT EXISTS idx_di_impl      ON di_bindings(impl_name);
 Per-file cascade-delete matches the existing per-file reindex path (consistent
 with `symbols`/`refs`).
 
-New `refs.kind` value (no schema change - column is free-form):
+New `refs.kind` values (no schema change - column is free-form):
 - `di-resolve` - `symbol_id` = enclosing routine; `name_text` = interface resolved.
+- `di-unresolved` - a DI registration call detected but NOT resolved into an I->T
+  binding (named/instance/delegate/bare-Register); `name_text` = method name.
+  Captures coverage gaps so deferred-form usage is measurable, not silently lost.
 
 DFM `event-binding` refs (existing): `symbol_id` = component symbol,
 `name_text` = handler method name. Reused as-is.
@@ -135,10 +138,15 @@ Receiver-agnostic so `GlobalContainer`, a local `TContainer`, and
   (enclosing routine, IIntf).
 - Nested generic type-args preserved verbatim.
 
-**Deferred (documented; fall through with no edge emitted):** `.Named('x')`,
-`RegisterInstance`, delegate/factory (`DelegateTo`), bare `Register<T>` without
-`.Implements`. ORM3's dominant idiom is `RegisterType.Implements[.AsSingleton]`,
-so v1 covers the real ~95%.
+**Deferred resolution, but DETECTED and FLAGGED (not silently dropped):**
+`.Named('x')`, `RegisterInstance`, delegate/factory (`DelegateTo`), bare
+`Register<T>` without `.Implements`. v1 does not resolve these into I->T bindings,
+but emits a `di-unresolved` ref (method name + location) for each, so a coverage
+query reveals whether/where these forms are actually used across the indexed apps.
+ORM3's dominant idiom is `RegisterType.Implements[.AsSingleton]`; usage of the
+deferred forms is currently UNCERTAIN, so v1 measures it rather than guessing. If
+the flag shows a deferred form is common in another app, v2 resolution is a small
+follow-up keyed on the same SpringDI recognizer.
 
 ## 8. DFM wiring (surface existing data)
 
@@ -155,6 +163,8 @@ drag-lint wiring --qname <IIntf|TImpl|TForm[.Method]> [--db ...] [--format text|
 - interface -> implementations (+lifetime) + resolve-sites.
 - class -> DI interfaces it implements + resolve-sites of those.
 - form/method -> event bindings into/out of it.
+- `--coverage` (no qname) -> summary of `di-unresolved` registrations grouped by
+  method + unit, so deferred-form usage is visible at a glance.
 Output mirrors `impact` text/json conventions.
 
 MCP: `get_wiring` tool { qname, [kind], [format] } alongside `get_impact`.
