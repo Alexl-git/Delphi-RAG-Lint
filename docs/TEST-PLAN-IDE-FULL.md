@@ -343,6 +343,35 @@ on `feat/framework-aware-edges`.
 
 ---
 
+## T. Test-Feedback Fixes (NEW - this round)
+
+From live-testing feedback on Blueprint4.pas + the graph/hover. **Install the
+rebuilt BPL** (`third_party\dll-win32\dclDragLintWizard.bpl`) for T2-T4; T1 is
+engine-side, so also ensure the **freshly-staged Win64 engine** is in place
+(`build\build_draglint_win64.bat` stages it to `dll-win64`; it is mirrored to
+`dll-win32`).
+
+- [ ] **T1 Diagnostics shows the ERROR, not just warnings.** Open a unit that has
+      a real syntax error plus warnings (e.g. `Blueprint4.pas`). The drag-lint
+      diagnostics pane / markers now show the **error** (severity 1), not only the
+      warnings. (Fix: the LSP `publishDiagnostics` path now runs `CheckSyntaxErrors`
+      like the CLI `lint`, so the save-time publish no longer drops the error.)
+- [ ] **T2 Graph click opens CODE, not the designer.** In the graph window, click
+      a node for a **form unit's** method/field -> the IDE opens the **.pas at the
+      line** (code editor), NOT the form designer. (Only a genuine `.dfm`
+      component node opens the designer.)
+- [ ] **T3 Hover def-row click navigates (no error).** Hover an identifier ->
+      in the popup, click a definition row ("- <qname> - line N"). It opens the
+      def's **.pas at the line** with no `Cannot create file ...\bin\X.pas` error.
+      (For a unit not in the active project it shows a "locate manually" message
+      instead of erroring.)
+- [ ] **T4 Hover links look clickable.** Move the mouse over a clickable hover
+      line (a definition row, or an "... add unit X" lightbulb line) -> the cursor
+      becomes a **hand**. The callers grid rows also show a hand cursor.
+      (Link COLOR is a follow-up: it needs the popup memo swapped to a TRichEdit.)
+
+---
+
 ## I. Lifecycle (do last)
 
 - [ ] **I1 Uninstall.** Install Packages -> uncheck `dclDragLintWizard` -> the
