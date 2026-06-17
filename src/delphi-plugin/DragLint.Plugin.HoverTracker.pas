@@ -253,6 +253,9 @@ begin
               if GDiags[GI].Code <> '' then
                 GMsg := GMsg + '[' + GDiags[GI].Code + '] ';
               GMsg := GMsg + GDiags[GI].Message;
+              { v0.46 lightbulb hint }
+              if System.Pos('add unit ', LowerCase(GDiags[GI].Message)) > 0 then
+                GMsg := GMsg + '   <-- click to add';
             end;
             FHintShown := True;
             var GEmpty: TArray<TDragLintCallerInfo>;
@@ -277,7 +280,12 @@ begin
     DiagText := '';
     Diags := Cache.GetForLine(FilePath, CaretRow);
     if Length(Diags) > 0 then
+    begin
       DiagText := Diags[0].Message;
+      { v0.46 lightbulb hint -- the line is clickable to apply the fix. }
+      if System.Pos('add unit ', LowerCase(DiagText)) > 0 then
+        DiagText := DiagText + '   <-- click to add';
+    end;
 
     { v0.40.3: ALSO query LSP hover at (file, row, col) for symbol info.
       Dedupe via FLastLspKey so we don't fire on every dwell cycle for

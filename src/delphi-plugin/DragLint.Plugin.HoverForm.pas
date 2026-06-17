@@ -80,6 +80,12 @@ function  IsDragLintHoverVisible: Boolean;
 function  IsMouseOverDragLintHover: Boolean;
 procedure OpenSourceAt(const AFile: string; ALine: Integer);
 
+var
+  { v0.46: set by the Editor at startup. When the user clicks a popup line that
+    reads "... add unit X to the uses clause", the hover calls this with X to
+    insert the unit (the lightbulb quick-fix from the diagnostic popup). }
+  GOnAddUnit: TProc<string> = nil;
+
 implementation
 
 var
@@ -419,11 +425,36 @@ procedure TDragLintHoverForm.HandleMemoClick(Sender: TObject);
 var
   LineIdx:  Integer;
   LineText, Body, Qname, LineStr, UnitName: string;
-  DashAt, LineN: Integer;
+  DashAt, LineN, P, Q: Integer;
+  AddUnit, Tail: string;
+const
+  MARK = 'add unit ';
 begin
   LineIdx := FMemo.CaretPos.Y;
   if (LineIdx < 0) or (LineIdx >= FMemo.Lines.Count) then Exit;
   LineText := FMemo.Lines[LineIdx];
+
+  { v0.46 lightbulb: a diagnostic line reading "... add unit X to the uses
+    clause" is clickable -- clicking it inserts X via the Editor-supplied hook. }
+  if Assigned(GOnAddUnit) then
+  begin
+    P := Pos(MARK, LowerCase(LineText));
+    if P > 0 then
+    begin
+      Tail := Copy(LineText, P + Length(MARK), MaxInt);
+      Q := 1;
+      while (Q <= Length(Tail)) and
+            CharInSet(Tail[Q], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) do
+        Inc(Q);
+      AddUnit := Copy(Tail, 1, Q - 1);
+      if AddUnit <> '' then
+      begin
+        Close;
+        GOnAddUnit(AddUnit);
+        Exit;
+      end;
+    end;
+  end;
 
   { Gate: a definition row is "- <qname> - line N". Require the bullet, the
     " - line " separator, and a positive trailing integer so doc/blank lines

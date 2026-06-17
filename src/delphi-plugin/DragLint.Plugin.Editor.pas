@@ -3005,6 +3005,19 @@ begin
   { v0.46: automatic completion trigger (pops on a typed '.'; debounced). }
   StartAutoComplete;
 
+  { v0.46 lightbulb: clicking "... add unit X to the uses clause" in a diagnostic
+    hover popup inserts the unit. }
+  DragLint.Plugin.HoverForm.GOnAddUnit :=
+    procedure(U: string)
+    var Ins: string;
+    begin
+      if DLAddUnitsToImplUses([U], Ins) then
+        ShowMessage('drag-lint: added unit to the implementation uses clause: ' + Ins)
+      else
+        ShowMessage('drag-lint: could not add ' + U +
+          '. Open the .pas and place the caret in it, then retry.');
+    end;
+
   { TEMP debug telemetry: fresh log per session + record the resolved engine. }
   DLTReset;
   DLT('startup', 'plugin registered; BPL=' + GetModuleName(HInstance));
