@@ -29,6 +29,7 @@ uses
   DesignIntf,   { TEditState / TEditAction }
   ToolsAPI,
   DragLint.Plugin.DbResolver,
+  DragLint.Plugin.JobObject,
   DragLint.Plugin.Settings;
 
 { A minimal .dfm resource is REQUIRED: TCustomFrame.Create (invoked by the IDE's
@@ -177,8 +178,10 @@ begin
     Exit;
   end;
 
-  CmdLine := Format('"%s" --parent-hwnd %d%s',
-    [Exe, Self.Handle, ResolveDbArgs]);
+  { v0.47: --parent-pid lets the viewer self-exit if the IDE dies (belt-and-
+    suspenders to the kill-on-close job object the child is assigned to below). }
+  CmdLine := Format('"%s" --parent-hwnd %d --parent-pid %d%s',
+    [Exe, Self.Handle, GetCurrentProcessId, ResolveDbArgs]);
   UniqueString(CmdLine);   { CreateProcessW may write into the buffer }
 
   FillChar(StartInfo, SizeOf(StartInfo), 0);
@@ -188,6 +191,8 @@ begin
                    0, nil, PChar(ExtractFilePath(Exe)), StartInfo, FProcInfo) then
   begin
     FHasProc := True;
+    { v0.47: OS force-kills the viewer when the IDE process dies (crash/kill too). }
+    AssignToDragLintJob(FProcInfo.hProcess);
     FPollCount := 0;
     FPollTimer := TTimer.Create(Self);
     FPollTimer.Interval := 150;

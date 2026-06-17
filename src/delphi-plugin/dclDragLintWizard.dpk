@@ -65,6 +65,7 @@ contains
   DragLint.Plugin.DockForm in 'DragLint.Plugin.DockForm.pas' {DragLintDockFrame: TFrame},
   DragLint.Plugin.Providers in 'DragLint.Plugin.Providers.pas',
   DragLint.Plugin.LiveDiagnostics in 'DragLint.Plugin.LiveDiagnostics.pas',
+  DragLint.Plugin.JobObject in 'DragLint.Plugin.JobObject.pas',
   DragLint.Plugin.GraphWindow in 'DragLint.Plugin.GraphWindow.pas';
 
 end.

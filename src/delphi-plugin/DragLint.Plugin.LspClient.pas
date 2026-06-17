@@ -5,7 +5,8 @@ interface
 uses
   System.SysUtils, System.Classes, System.JSON, System.IOUtils,
   System.Generics.Collections, System.SyncObjs,
-  Winapi.Windows;
+  Winapi.Windows,
+  DragLint.Plugin.JobObject;
 
 procedure DebugLog(const AMsg: string);  // appends to GetPluginLogPath
 function  GetPluginLogPath: string;      // single source of truth (v0.40.1)
@@ -311,6 +312,9 @@ begin
   for var DbI := 0 to High(ADbPaths) do
     if ADbPaths[DbI] <> '' then
       CmdLine := CmdLine + Format(' --db "%s"', [ADbPaths[DbI]]);
+  { v0.47: tell the engine to self-exit if THIS process (the IDE) dies --
+    belt-and-suspenders to the kill-on-close job object below. }
+  CmdLine := CmdLine + Format(' --parent-pid %d', [GetCurrentProcessId]);
   DebugLog('Start: CmdLine=' + CmdLine);
   SetLength(CmdLineW, Length(CmdLine) + 1);
   Move(PChar(CmdLine)^, CmdLineW[0], (Length(CmdLine) + 1) * SizeOf(WideChar));
@@ -335,6 +339,8 @@ begin
 
   FProcessHandle := PI.hProcess;
   FProcessId := PI.dwProcessId;
+  { v0.47: OS force-kills the engine when the IDE process dies (crash/kill too). }
+  AssignToDragLintJob(FProcessHandle);
   FStdInWrite := hWriteIn;
   FStdOutRead := hReadOut;
 

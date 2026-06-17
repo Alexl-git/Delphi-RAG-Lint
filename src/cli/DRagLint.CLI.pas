@@ -168,6 +168,10 @@ type
     // v0.46: file-size guard (tree-sitter native stack overflow prevention)
     MaxFileKB:          Integer;        // --max-file-kb <n>  override default 2048; 0=unlimited; -1=not set
     MaxFileKBSet:       Boolean;        // True when --max-file-kb was explicitly given
+    // v0.47: lifecycle -- when the IDE plugin spawns a long-running server
+    // (lsp), it passes --parent-pid <IDE pid> so we self-exit if the IDE dies
+    // (belt-and-suspenders alongside the BPL's kill-on-close job object).
+    ParentPid:          Cardinal;       // --parent-pid <n>  (0 = not set)
   end;
 
 procedure PrintHelp;
@@ -679,12 +683,48 @@ begin
       Inc(i);
       Result.Path := ParamStr(i);
     end
+    else if (A = '--parent-pid') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.ParentPid := Cardinal(StrToInt64Def(ParamStr(i), 0));
+    end
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
     else
       raise Exception.CreateFmt('Unknown argument: %s', [A]);
     Inc(i);
   end;
+end;
+
+{ v0.47: parent-process exit watcher. When --parent-pid is passed (by the IDE
+  plugin for the long-running lsp server), a thread blocks on the parent process
+  handle and force-exits THIS process when the parent dies -- so a crashed or
+  Task-Manager-killed IDE never leaves an orphaned engine. Raw CreateThread (no
+  RTL TThread) keeps it dependency-free and immune to a hung main thread;
+  TerminateProcess(self) guarantees teardown. Complements the BPL job object. }
+function ParentWatchProc(P: Pointer): DWORD; stdcall;
+var
+  H: THandle;
+begin
+  Result := 0;
+  H := OpenProcess(SYNCHRONIZE, False, DWORD(NativeUInt(P)));
+  if H = 0 then Exit;
+  try
+    if WaitForSingleObject(H, INFINITE) = WAIT_OBJECT_0 then
+      TerminateProcess(GetCurrentProcess, 0);
+  finally
+    CloseHandle(H);
+  end;
+end;
+
+procedure StartParentExitWatch(APid: Cardinal);
+var
+  Tid: DWORD;
+  H: THandle;
+begin
+  if APid = 0 then Exit;
+  H := CreateThread(nil, 0, @ParentWatchProc, Pointer(NativeUInt(APid)), 0, Tid);
+  if H <> 0 then CloseHandle(H);
 end;
 
 procedure PrintReferences(const AStore: ISymbolStore;
@@ -8198,6 +8238,8 @@ begin
         v0.45 Task 9: when no --db given, resolve from manifest.
         Cleanup 2: run size guard for each resolved DB at startup.
         Writes to ErrOutput only -- must NOT pollute the JSON-RPC stdout stream. }
+      { Self-exit if the spawning IDE dies (no-op when --parent-pid absent). }
+      StartParentExitWatch(Args.ParentPid);
       var DbList: TArray<string>;
       DbList := ResolveConsumerDbs(Args);
       var LspSGMB: Integer;
