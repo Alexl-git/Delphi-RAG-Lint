@@ -61,7 +61,8 @@ uses
   DRagLint.Index.Plan,
   DRagLint.Index.DbSelect,
   DRagLint.Index.Drift,
-  DRagLint.Index.Coverage;
+  DRagLint.Index.Coverage,
+  DRagLint.Wiring;
 
 type
   TArgs = record
@@ -3632,11 +3633,9 @@ var
   Impls: TArray<TDiBindingRow>;
   Sites, Unres, Handlers: TArray<TReference>;
   B: TDiBindingRow;
-  R, HRef: TReference;
-  FormSym, Child: TSymbol;
-  Children: TArray<TSymbol>;
+  R: TReference;
   JRoot, JO: TJSONObject;
-  JImpls, JSites, JHandlers: TJSONArray;
+  JSites: TJSONArray;
 begin
   if not TFile.Exists(AArgs.DbPath) then
   begin
@@ -3690,62 +3689,11 @@ begin
     Exit(2);
   end;
 
-  Impls := Store.FindImplementationsOf(AArgs.QName);
-  Sites := Store.FindDiResolveSites(AArgs.QName);
-
-  // DFM event wiring: a child method of the named form/class that is bound to a
-  // component event in the .dfm (kind='event-binding'). NameText is set to the
-  // handler method name; FileId/StartLine point at the .dfm OnXxx line.
-  Handlers := nil;
-  FormSym := Store.FindSymbolByExactNameAnywhere(AArgs.QName);
-  if FormSym.Id > 0 then
-  begin
-    Children := Store.FindAllChildSymbols(FormSym.Id);
-    for Child in Children do
-      for R in Store.FindCallersByName(Child.Name) do
-        if R.Kind = 'event-binding' then
-        begin
-          HRef := R;
-          HRef.NameText := Child.Name;
-          Handlers := Handlers + [HRef];
-        end;
-  end;
-
   if LowerCase(AArgs.Format) = 'json' then
   begin
-    JRoot := TJSONObject.Create;
-    JImpls := TJSONArray.Create;
-    JSites := TJSONArray.Create;
-    JHandlers := TJSONArray.Create;
+    // Shared builder so CLI json and MCP get_wiring return identical data.
+    JRoot := BuildWiringJson(AArgs.QName, Store);
     try
-      JRoot.AddPair('qname', AArgs.QName);
-      for B in Impls do
-      begin
-        JO := TJSONObject.Create;
-        JO.AddPair('impl', B.ImplName);
-        JO.AddPair('lifetime', B.Lifetime);
-        JO.AddPair('file', Store.GetFilePath(B.FileId));
-        JO.AddPair('line', TJSONNumber.Create(B.StartLine));
-        JImpls.AddElement(JO);
-      end;
-      for R in Sites do
-      begin
-        JO := TJSONObject.Create;
-        JO.AddPair('file', Store.GetFilePath(R.FileId));
-        JO.AddPair('line', TJSONNumber.Create(R.StartLine));
-        JSites.AddElement(JO);
-      end;
-      for R in Handlers do
-      begin
-        JO := TJSONObject.Create;
-        JO.AddPair('handler', R.NameText);
-        JO.AddPair('file', Store.GetFilePath(R.FileId));
-        JO.AddPair('line', TJSONNumber.Create(R.StartLine));
-        JHandlers.AddElement(JO);
-      end;
-      JRoot.AddPair('implementations', JImpls);
-      JRoot.AddPair('resolved_at', JSites);
-      JRoot.AddPair('event_handlers', JHandlers);
       Writeln(JRoot.Format(2));
     finally
       JRoot.Free;
@@ -3753,6 +3701,9 @@ begin
   end
   else
   begin
+    Impls := Store.FindImplementationsOf(AArgs.QName);
+    Sites := Store.FindDiResolveSites(AArgs.QName);
+    Handlers := Store.FindEventHandlersForForm(AArgs.QName);
     Writeln(AArgs.QName);
     if Length(Impls) > 0 then
       for B in Impls do

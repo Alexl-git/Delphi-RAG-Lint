@@ -61,6 +61,12 @@ Check 'DI: unresolved RegisterInstance flagged'    ($o -match '"method"\s*:\s*"R
 $o = Run @('wiring','--qname','TfrmWire','--db',$db,'--format','json')
 Check 'DFM: TfrmWire.Button1Click event handler'   ($o -match '"handler"\s*:\s*"Button1Click"')
 
+# --- MCP get_wiring (stdio JSON-RPC round-trip; same builder as the CLI) ---
+$init = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+$call = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_wiring","arguments":{"qname":"ImcSTATIONS"}}}'
+$mcp  = "$init`n$call" | & $Exe serve --db $db 2>$null | Out-String
+Check 'MCP: get_wiring returns TmcSTATIONS'         ($mcp -match 'TmcSTATIONS')
+
 Write-Host ""
 if ($script:Failed) { Write-Host "WIRING SMOKE: FAIL" -ForegroundColor Red; exit 1 }
 Write-Host "WIRING SMOKE: PASS" -ForegroundColor Green

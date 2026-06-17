@@ -80,6 +80,8 @@ type
     function FindDiResolveSites(
       const AInterfaceName: string): TArray<TReference>;
     function FindDiUnresolved: TArray<TReference>;
+    function FindEventHandlersForForm(
+      const AFormName: string): TArray<TReference>;
     procedure UpsertChunk(const AToken: TFileTxToken; const AChunk: TChunk);
     procedure CommitFileTx(const AToken: TFileTxToken);
     procedure RollbackFileTx(const AToken: TFileTxToken);
@@ -847,6 +849,35 @@ begin
     Result := List.ToArray;
   finally
     Q.Free;
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindEventHandlersForForm(
+  const AFormName: string): TArray<TReference>;
+var
+  FormSym, Child: TSymbol;
+  Children: TArray<TSymbol>;
+  R, H: TReference;
+  List: TList<TReference>;
+begin
+  List := TList<TReference>.Create;
+  try
+    FormSym := FindSymbolByExactNameAnywhere(AFormName);
+    if FormSym.Id > 0 then
+    begin
+      Children := FindAllChildSymbols(FormSym.Id);
+      for Child in Children do
+        for R in FindCallersByName(Child.Name) do
+          if R.Kind = 'event-binding' then
+          begin
+            H := R;
+            H.NameText := Child.Name;  // the handler method name
+            List.Add(H);
+          end;
+    end;
+    Result := List.ToArray;
+  finally
     List.Free;
   end;
 end;

@@ -140,6 +140,11 @@ type
     function FindDiResolveSites(
       const AInterfaceName: string): TArray<TReference>;
     function FindDiUnresolved: TArray<TReference>;
+    /// <summary>DFM event handlers of a form/class: its child methods bound to a
+    /// component event (kind='event-binding'). NameText is the handler method;
+    /// FileId/StartLine point at the .dfm OnXxx line.</summary>
+    function FindEventHandlersForForm(
+      const AFormName: string): TArray<TReference>;
   end;
 
   TParseResult = record

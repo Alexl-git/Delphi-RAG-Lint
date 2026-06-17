@@ -16,7 +16,8 @@ uses
   DRagLint.Resolver.TypeAt,
   DRagLint.Refactor.Rename,
   DRagLint.Diagnostics.CompileCheck,
-  DRagLint.Diagnostics.AstChecks;
+  DRagLint.Diagnostics.AstChecks,
+  DRagLint.Wiring;
 
 type
   // Newline-delimited JSON-RPC 2.0 server speaking MCP-2024-11-05 over stdio.
@@ -245,6 +246,19 @@ begin
     '{"type":"object","properties":{' +
     '"qname":{"type":"string","description":"Qualified symbol name (e.g. Unit.TClass.Method)"},' +
     '"depth":{"type":"integer","description":"Maximum recursion depth (optional, default 3)"},' +
+    '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
+    '},"required":["qname"]}'));
+
+  Tools.AddElement(ToolDescriptor(
+    'get_wiring',
+    'Return framework-aware wiring edges for a name: Spring4D DI ' +
+    'implementations (interface -> impl class + lifetime) and resolve-sites, ' +
+    'plus DFM event handlers (a form''s methods bound to component events). ' +
+    'Pass an interface name for DI, or a form/class name for event handlers. ' +
+    'Answers "who implements IFoo / where is it resolved / what handles this ' +
+    'form''s events" in one call.',
+    '{"type":"object","properties":{' +
+    '"qname":{"type":"string","description":"Interface name (DI) or form/class name (DFM handlers)"},' +
     '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' +
     '},"required":["qname"]}'));
 
@@ -815,6 +829,29 @@ begin
       var ImpName := ImpSegments[High(ImpSegments)];
       var ImpLevels := ImpStore.FindTransitiveCallers(ImpName, ImpDepth);
       ResultText := FormatImpactAsJson(ImpQName, ImpLevels);
+    end
+    else if ToolName = 'get_wiring' then
+    begin
+      var WStore := ResolveStore(Args);
+      if WStore = nil then
+      begin
+        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        Exit;
+      end;
+      var WQName := '';
+      if Args.GetValue('qname') <> nil then
+        WQName := Args.GetValue('qname').Value;
+      if WQName = '' then
+      begin
+        SendError(AId, -32602, 'get_wiring requires qname');
+        Exit;
+      end;
+      var WJson := BuildWiringJson(WQName, WStore);
+      try
+        ResultText := WJson.Format(2);
+      finally
+        WJson.Free;
+      end;
     end
     else if ToolName = 'get_surface' then
     begin
