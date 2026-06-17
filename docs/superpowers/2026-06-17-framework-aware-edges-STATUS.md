@@ -4,6 +4,47 @@ Branch: `feat/framework-aware-edges` (off `feat/index-manifest`). All work below
 committed and VERIFIED; the branch is in a clean, non-broken state. Remaining tasks
 are well-specified with exact anchors so resuming is mechanical.
 
+---
+
+## UPDATE - session 2: DI + DFM edges COMPLETE end-to-end
+
+Both halves of idea #1 now work end-to-end through the `wiring` CLI command,
+verified by a 7/7 smoke test. New commits:
+
+| Commit  | What | Verified |
+|---------|------|----------|
+| f5387f5 | Spring4D DI edges: parser chain-walker -> di_bindings + di-resolve/di-unresolved refs -> `wiring` CLI | `wiring --qname ImcSTATIONS` => TmcSTATIONS [singleton] + resolve-site; nested generic `IDataService<ImcCAUSFAIL>` [singleton-per-thread]; `--coverage` => RegisterInstance |
+| b145ac3 | DFM event-wiring in `wiring` + `run_wiring.ps1` smoke (7/7) | `wiring --qname TfrmWire` => Button1Click <- dfm:5 |
+
+**AST ground truth (resolved the last unknown):** a generic call `X.M<T>` is
+`exprTpl(entity: exprDot(lhs:X, rhs:M), args: typeref(T))`; the fluent chain is
+left-nested via `exprDot.lhs` / `exprTpl.entity`; bare links (`.AsSingleton`) are
+`exprDot`; paren calls (`RegisterInstance<T>(...)`) wrap in `exprCall(entity:...)`.
+`NodeText(args)` yields nested generics verbatim. Walker: `TryEmitSpringDI` in
+`DRagLint.Parser.Delphi13.pas`.
+
+**What shipped:** schema v8 `di_bindings`; `TDiBindingRow` (Core.Model);
+`TParseResult.DiBindings`; `ISymbolStore.UpsertDiBinding/DeleteDiBindingsForFile/
+FindImplementationsOf/FindDiResolveSites/FindDiUnresolved` (+ SQLite impls + reindex
+cascade); indexer flush; `DRagLint.Parser.SpringDI` recognizer; `wiring` command
+(`--qname`, `--coverage`, text/json); `tests/fixtures/{di_edges.pas,dfm_wiring.*}`;
+`tests/autotest/run_wiring.ps1`.
+
+**Remaining follow-ups (optional enhancements, not blocking; anchors):**
+- MCP `get_wiring` tool: descriptor near `DRagLint.MCP.Server.pas:249` (mirror
+  `get_impact`), handler near `:818`; build JSON from `FindImplementationsOf` +
+  `FindDiResolveSites` + the form-handler logic. Consider extracting a store method
+  `FindEventHandlersForForm(formName)` so CLI `DoWiring` and the MCP handler share it
+  (removes the small form-handler duplication currently in `DoWiring`).
+- Context-bundle enrichment: add a "Wiring" section to `get_context_bundle` /
+  `DoContext` for interface/class/form targets.
+- `bench-wiring`: agent-task gate, model on `DoBenchContext` (`DRagLint.CLI.pas:4206`).
+- ROADMAP/CHANGELOG note for `wiring` + schema v8.
+
+The rest of this document is the original session-1 plan (still accurate).
+
+---
+
 ## Delivered + verified this session
 
 | Commit  | What | Verification |
