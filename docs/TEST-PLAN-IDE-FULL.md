@@ -281,9 +281,10 @@ three surfaces -- IDE menu, CLI, and MCP.
 > `tests/fixtures/dfm_wiring.{pas,dfm}`.
 
 - [ ] **HW1 Menu: Wiring (interface).** Caret on a Spring4D interface name (e.g.
-      `ImcSTATIONS`) -> **Tools -> drag-lint -> Inspect Symbol -> "Wiring: DI + DFM
-      events (symbol)..."** -> a report listing implementations (with lifetime:
-      `singleton` / `singleton-per-thread` / `transient`) + DI resolve-sites.
+      `ImcSTATIONS`) -> **Tools -> drag-lint -> Uses && Dependencies -> "Show
+      Wiring (Spring4D DI + DFM events)..."** -> a report listing implementations
+      (with lifetime: `singleton` / `singleton-per-thread` / `transient`) + DI
+      resolve-sites.
 - [ ] **HW2 Menu: Wiring (form).** Caret on a form/frame class name (e.g.
       `TfrmWire`) -> same menu item -> a report of event handlers bound to
       component events (e.g. `Button1Click <- ...dfm:5`).
