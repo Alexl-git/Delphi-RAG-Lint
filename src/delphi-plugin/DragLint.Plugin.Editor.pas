@@ -2241,16 +2241,38 @@ end;
 { Run "exe <tail>", capture stdout, write to %TEMP%\<base>, open it in the IDE. }
 procedure DLRunReport(const ACmdTail, ABaseName: string);
 var
-  Cmd, Output, OutPath: string;
+  Cmd, OutPath: string;
 begin
+  { v0.46 review (M): run the engine OFF the main thread so a slow/hung command
+    (cap 180s) does not freeze the IDE. The worker only runs the subprocess +
+    writes a temp file (both thread-safe, no OTAPI); the editor open (OTAPI) is
+    marshalled back to the main thread via TThread.Queue -- same pattern as
+    LiveDiagnostics.TLiveRunner. Cmd/OutPath are locals captured (heap-promoted)
+    by the closure, so they outlive this procedure's return. }
   Cmd := Format('"%s" %s', [DLExe, ACmdTail]);
-  DLT('menu', 'run: ' + Cmd);
-  Output := '';
-  RunAndCaptureStdout(Cmd, Output, 180000);
-  if Trim(Output) = '' then Output := '(no output -- the command produced nothing)';
   OutPath := TPath.Combine(TPath.GetTempPath, ABaseName);
-  try TFile.WriteAllText(OutPath, Output); except end;
-  DLOpenInEditor(OutPath);
+  DLT('menu', 'run(async): ' + Cmd);
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      Output: string;
+    begin
+      Output := '';
+      try
+        RunAndCaptureStdout(Cmd, Output, 180000);
+      except
+        on E: Exception do
+          Output := 'drag-lint: command failed: ' + E.ClassName + ': ' + E.Message;
+      end;
+      if Trim(Output) = '' then
+        Output := '(no output -- the command produced nothing)';
+      try TFile.WriteAllText(OutPath, Output); except end;
+      TThread.Queue(nil,
+        procedure
+        begin
+          DLOpenInEditor(OutPath);
+        end);
+    end).Start;
 end;
 
 function DLActivePas(out APath: string): Boolean;
@@ -2272,6 +2294,13 @@ begin
   AQ := IdentifierAtCursor;
   Result := InputQuery('drag-lint',
     'Qualified name (Unit.Type.Member):', AQ) and (Trim(AQ) <> '');
+  { v0.46 review (security/robustness): a double-quote would break the
+    "%s"-quoted engine argument. Reject it rather than mis-parse the command. }
+  if Result and (Pos('"', AQ) > 0) then
+  begin
+    ShowMessage('drag-lint: the name must not contain a double-quote (").');
+    Result := False;
+  end;
 end;
 
 function DLUriToPath(const AUri: string): string;
@@ -2444,6 +2473,43 @@ var
     Result := StringReplace(ALn, #13, '', [rfReplaceAll]);
   end;
 
+  { v0.46 review (L): replace the content of line comments, brace comments, and
+    paren-star comments with spaces (same length, so column positions are
+    preserved), so a semicolon inside a comment is not mistaken for the
+    uses-clause terminator. Single-line scope, which covers the realistic cases. }
+  function BlankComments(const ALn: string): string;
+  var
+    K, N: Integer;
+  begin
+    Result := ALn;
+    N := Length(Result);
+    K := 1;
+    while K <= N do
+    begin
+      if (K < N) and (Result[K] = '/') and (Result[K + 1] = '/') then
+      begin
+        while K <= N do begin Result[K] := ' '; Inc(K); end;
+      end
+      else if Result[K] = '{' then
+      begin
+        while (K <= N) and (Result[K] <> '}') do begin Result[K] := ' '; Inc(K); end;
+        if K <= N then begin Result[K] := ' '; Inc(K); end;
+      end
+      else if (K < N) and (Result[K] = '(') and (Result[K + 1] = '*') then
+      begin
+        Result[K] := ' '; Result[K + 1] := ' '; Inc(K, 2);
+        while K <= N do
+        begin
+          if (K < N) and (Result[K] = '*') and (Result[K + 1] = ')') then
+          begin Result[K] := ' '; Result[K + 1] := ' '; Inc(K, 2); Break; end;
+          Result[K] := ' '; Inc(K);
+        end;
+      end
+      else
+        Inc(K);
+    end;
+  end;
+
 begin
   Result := False; AInserted := '';
   Combined := '';
@@ -2482,9 +2548,9 @@ begin
   begin
     SemiIdx := -1;
     for I := UsesIdx to High(Lines) do
-      if System.Pos(';', CleanLine(Lines[I])) > 0 then begin SemiIdx := I; Break; end;
+      if System.Pos(';', BlankComments(CleanLine(Lines[I]))) > 0 then begin SemiIdx := I; Break; end;
     if SemiIdx < 0 then Exit;
-    ColN := System.Pos(';', CleanLine(Lines[SemiIdx]));
+    ColN := System.Pos(';', BlankComments(CleanLine(Lines[SemiIdx])));
     EPos.Move(SemiIdx + 1, ColN);
     EPos.InsertText(', ' + Combined);
   end
@@ -2642,14 +2708,12 @@ begin
           if (Trim(U) <> '') and (FLine = CaretRow0 + 1) then
           begin AUnit := Trim(U); DLT('uses', 'quickfix: engine(line) -> ' + AUnit); Exit(True); end;
         end;
-      { else the first resolvable one in the unit }
-      for I := 0 to Arr.Count - 1 do
-        if Arr.Items[I] is TJSONObject then
-        begin
-          Obj := Arr.Items[I] as TJSONObject; U := '';
-          if Obj.TryGetValue<string>('addUnit', U) and (Trim(U) <> '') then
-          begin AUnit := Trim(U); DLT('uses', 'quickfix: engine(first) -> ' + AUnit); Exit(True); end;
-        end;
+      { v0.46 review (M): NO "first resolvable in the unit" fallback for the
+        CURSOR quick-fix -- it could insert a unit unrelated to the symbol under
+        the caret (especially when an uncompiled project yields many spurious
+        undeclared ids). If nothing matches the caret line, return False and let
+        InvokeQuickFixUses tell the user to put the caret on the offending line.
+        The whole-unit InvokeSuggestUses keeps its own broader behaviour. }
     end;
   finally
     V.Free;
