@@ -3630,11 +3630,13 @@ function DoWiring(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore;
   Impls: TArray<TDiBindingRow>;
-  Sites, Unres: TArray<TReference>;
+  Sites, Unres, Handlers: TArray<TReference>;
   B: TDiBindingRow;
-  R: TReference;
+  R, HRef: TReference;
+  FormSym, Child: TSymbol;
+  Children: TArray<TSymbol>;
   JRoot, JO: TJSONObject;
-  JImpls, JSites: TJSONArray;
+  JImpls, JSites, JHandlers: TJSONArray;
 begin
   if not TFile.Exists(AArgs.DbPath) then
   begin
@@ -3691,13 +3693,32 @@ begin
   Impls := Store.FindImplementationsOf(AArgs.QName);
   Sites := Store.FindDiResolveSites(AArgs.QName);
 
+  // DFM event wiring: a child method of the named form/class that is bound to a
+  // component event in the .dfm (kind='event-binding'). NameText is set to the
+  // handler method name; FileId/StartLine point at the .dfm OnXxx line.
+  Handlers := nil;
+  FormSym := Store.FindSymbolByExactNameAnywhere(AArgs.QName);
+  if FormSym.Id > 0 then
+  begin
+    Children := Store.FindAllChildSymbols(FormSym.Id);
+    for Child in Children do
+      for R in Store.FindCallersByName(Child.Name) do
+        if R.Kind = 'event-binding' then
+        begin
+          HRef := R;
+          HRef.NameText := Child.Name;
+          Handlers := Handlers + [HRef];
+        end;
+  end;
+
   if LowerCase(AArgs.Format) = 'json' then
   begin
     JRoot := TJSONObject.Create;
     JImpls := TJSONArray.Create;
     JSites := TJSONArray.Create;
+    JHandlers := TJSONArray.Create;
     try
-      JRoot.AddPair('interface', AArgs.QName);
+      JRoot.AddPair('qname', AArgs.QName);
       for B in Impls do
       begin
         JO := TJSONObject.Create;
@@ -3714,8 +3735,17 @@ begin
         JO.AddPair('line', TJSONNumber.Create(R.StartLine));
         JSites.AddElement(JO);
       end;
+      for R in Handlers do
+      begin
+        JO := TJSONObject.Create;
+        JO.AddPair('handler', R.NameText);
+        JO.AddPair('file', Store.GetFilePath(R.FileId));
+        JO.AddPair('line', TJSONNumber.Create(R.StartLine));
+        JHandlers.AddElement(JO);
+      end;
       JRoot.AddPair('implementations', JImpls);
       JRoot.AddPair('resolved_at', JSites);
+      JRoot.AddPair('event_handlers', JHandlers);
       Writeln(JRoot.Format(2));
     finally
       JRoot.Free;
@@ -3724,15 +3754,25 @@ begin
   else
   begin
     Writeln(AArgs.QName);
-    if Length(Impls) = 0 then
-      Writeln('  (no DI implementations registered)')
-    else
+    if Length(Impls) > 0 then
       for B in Impls do
         Writeln(Format('  impl: %s [%s]  %s:%d',
           [B.ImplName, B.Lifetime, Store.GetFilePath(B.FileId), B.StartLine]));
-    Writeln(Format('  resolved at %d site(s):', [Length(Sites)]));
-    for R in Sites do
-      Writeln(Format('    %s:%d', [Store.GetFilePath(R.FileId), R.StartLine]));
+    if Length(Sites) > 0 then
+    begin
+      Writeln(Format('  resolved at %d site(s):', [Length(Sites)]));
+      for R in Sites do
+        Writeln(Format('    %s:%d', [Store.GetFilePath(R.FileId), R.StartLine]));
+    end;
+    if Length(Handlers) > 0 then
+    begin
+      Writeln('  event handlers:');
+      for R in Handlers do
+        Writeln(Format('    %s <- %s:%d',
+          [R.NameText, Store.GetFilePath(R.FileId), R.StartLine]));
+    end;
+    if (Length(Impls) = 0) and (Length(Sites) = 0) and (Length(Handlers) = 0) then
+      Writeln('  (no DI or DFM wiring found)');
   end;
   Result := 0;
 end;
