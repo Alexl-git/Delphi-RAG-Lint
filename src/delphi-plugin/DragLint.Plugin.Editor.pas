@@ -55,6 +55,9 @@ procedure InvokeHover(Sender: TObject);
 procedure InvokeCompletion(Sender: TObject);
 { v0.46: silent auto-trigger (typed '.') -- no dialogs, only pops if items. }
 procedure InvokeCompletionAuto;
+{ v0.46: quick-fix -- add the unit for the undeclared identifier at the cursor
+  (bound to Ctrl+Alt+U). }
+procedure InvokeQuickFixUses(Sender: TObject);
 procedure InvokeSignatureHelp(Sender: TObject);
 procedure InvokeDiagnostics(Sender: TObject);
 procedure InvokeRename(Sender: TObject);
@@ -2389,6 +2392,97 @@ begin
   if not FileExists(Result) then Result := Dir + 'drag-lint-library.sqlite';
 end;
 
+{ Pull the unit name out of a diagnostic message like
+  "...Undeclared identifier 'Foo' -- add unit Bar to the uses clause". }
+function DLExtractAddUnit(const AMsg: string): string;
+var
+  P, Q: Integer;
+  Tail: string;
+const
+  MARK = 'add unit ';
+begin
+  Result := '';
+  P := Pos(MARK, LowerCase(AMsg));
+  if P = 0 then Exit;
+  Tail := Copy(AMsg, P + Length(MARK), MaxInt);
+  Q := 1;
+  while (Q <= Length(Tail)) and
+        CharInSet(Tail[Q], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) do
+    Inc(Q);
+  Result := Copy(Tail, 1, Q - 1);
+end;
+
+{ Shared: insert AUnits into the IMPLEMENTATION uses clause (append to an
+  existing one before its ';', else create "uses ...;" after 'implementation').
+  Returns the inserted, comma-joined list in AInserted. Undoable. }
+function DLAddUnitsToImplUses(const AUnits: array of string;
+  out AInserted: string): Boolean;
+var
+  Src, FileName, T, Combined: string;
+  Lines: TArray<string>;
+  ImplIdx, UsesIdx, SemiIdx, ColN, I: Integer;
+  ESS: IOTAEditorServices;
+  EV:  IOTAEditView;
+  EPos: IOTAEditPosition;
+
+  function CleanLine(const ALn: string): string;
+  begin
+    Result := StringReplace(ALn, #13, '', [rfReplaceAll]);
+  end;
+
+begin
+  Result := False; AInserted := '';
+  Combined := '';
+  for I := 0 to High(AUnits) do
+    if Trim(AUnits[I]) <> '' then
+    begin
+      if Combined <> '' then Combined := Combined + ', ';
+      Combined := Combined + Trim(AUnits[I]);
+    end;
+  if Combined = '' then Exit;
+
+  Src := ReadActiveBufferText(FileName);
+  Lines := Src.Split([#10]);
+  ImplIdx := -1;
+  for I := 0 to High(Lines) do
+    if SameText(Trim(CleanLine(Lines[I])), 'implementation') then
+    begin ImplIdx := I; Break; end;
+  if ImplIdx < 0 then Exit;
+
+  UsesIdx := -1;
+  for I := ImplIdx + 1 to High(Lines) do
+  begin
+    T := LowerCase(Trim(CleanLine(Lines[I])));
+    if T = '' then Continue;
+    if (T = 'uses') or (Copy(T, 1, 5) = 'uses ') or (Copy(T, 1, 5) = 'uses,') then
+      UsesIdx := I;
+    Break;
+  end;
+
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  EV := ESS.TopView;
+  if EV = nil then Exit;
+  EPos := EV.Position;
+
+  if UsesIdx >= 0 then
+  begin
+    SemiIdx := -1;
+    for I := UsesIdx to High(Lines) do
+      if System.Pos(';', CleanLine(Lines[I])) > 0 then begin SemiIdx := I; Break; end;
+    if SemiIdx < 0 then Exit;
+    ColN := System.Pos(';', CleanLine(Lines[SemiIdx]));
+    EPos.Move(SemiIdx + 1, ColN);
+    EPos.InsertText(', ' + Combined);
+  end
+  else
+  begin
+    EPos.Move(ImplIdx + 2, 1);
+    EPos.InsertText('uses ' + Combined + ';' + sLineBreak);
+  end;
+  AInserted := Combined;
+  Result := True;
+end;
+
 { v0.46: resolve & (optionally) insert the units that fix undeclared-identifier
   errors. Runs check-unit --resolve-uses against the LIBRARY index, collects the
   suggested units, and on confirmation inserts them into the implementation uses
@@ -2400,21 +2494,9 @@ var
   V:    TJSONValue;
   Arr:  TJSONArray;
   Obj:  TJSONObject;
-  I, J: Integer;
+  I: Integer;
   U, Combined, MsgList: string;
   Units: TStringList;
-  Src, FileName, T: string;
-  Lines: TArray<string>;
-  ImplIdx, UsesIdx, SemiIdx, ColN: Integer;
-  ESS:  IOTAEditorServices;
-  EV:   IOTAEditView;
-  EPos: IOTAEditPosition;
-
-  function CleanLine(const ALn: string): string;
-  begin
-    Result := StringReplace(ALn, #13, '', [rfReplaceAll]);
-  end;
-
 begin
   if not DLActivePas(Pas) then begin ShowMessage('drag-lint: open a .pas unit first.'); Exit; end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
@@ -2474,66 +2556,106 @@ begin
                 [Units.Count, MsgList]),
          mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
 
-    Combined := '';
-    for J := 0 to Units.Count - 1 do
+    if DLAddUnitsToImplUses(Units.ToStringArray, Combined) then
     begin
-      if Combined <> '' then Combined := Combined + ', ';
-      Combined := Combined + Units[J];
-    end;
-
-    { locate the implementation section + its uses clause }
-    Src := ReadActiveBufferText(FileName);
-    Lines := Src.Split([#10]);
-    ImplIdx := -1;
-    for I := 0 to High(Lines) do
-      if SameText(Trim(CleanLine(Lines[I])), 'implementation') then
-      begin ImplIdx := I; Break; end;
-    if ImplIdx < 0 then
-    begin
-      ShowMessage('drag-lint: could not locate the implementation section. ' +
-        'Add manually: ' + Combined);
-      Exit;
-    end;
-
-    UsesIdx := -1;
-    for I := ImplIdx + 1 to High(Lines) do
-    begin
-      T := LowerCase(Trim(CleanLine(Lines[I])));
-      if T = '' then Continue;
-      if (T = 'uses') or (Copy(T, 1, 5) = 'uses ') or (Copy(T, 1, 5) = 'uses,') then
-        UsesIdx := I;
-      Break;   { first non-blank line after implementation decides it }
-    end;
-
-    if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
-    EV := ESS.TopView;
-    if EV = nil then Exit;
-    EPos := EV.Position;
-
-    if UsesIdx >= 0 then
-    begin
-      SemiIdx := -1;
-      for I := UsesIdx to High(Lines) do
-        if System.Pos(';', CleanLine(Lines[I])) > 0 then begin SemiIdx := I; Break; end;
-      if SemiIdx < 0 then
-      begin
-        ShowMessage('drag-lint: malformed uses clause. Add manually: ' + Combined);
-        Exit;
-      end;
-      ColN := System.Pos(';', CleanLine(Lines[SemiIdx]));
-      EPos.Move(SemiIdx + 1, ColN);          { row 1-based; col at the ';' }
-      EPos.InsertText(', ' + Combined);      { -> "uses ...A, NewUnits;" }
+      DLT('uses', 'inserted: ' + Combined);
+      ShowMessage('drag-lint: added to the implementation uses clause:'#13#10 + Combined);
     end
     else
-    begin
-      EPos.Move(ImplIdx + 2, 1);             { start of the line after 'implementation' }
-      EPos.InsertText('uses ' + Combined + ';' + sLineBreak);
-    end;
-    DLT('uses', 'inserted: ' + Combined);
-    ShowMessage('drag-lint: added to the implementation uses clause:'#13#10 + Combined);
+      ShowMessage('drag-lint: could not locate the implementation uses clause.'#13#10 +
+        'Add manually: ' + MsgList);
   finally
     Units.Free;
   end;
+end;
+
+{ Find the unit that fixes the undeclared identifier on the caret line: first
+  from a cached diagnostic message ("add unit X"), else by running check-unit
+  --resolve-uses now and matching the caret line. }
+function DLCursorUndeclaredUnit(out AUnit: string): Boolean;
+var
+  ESS: IOTAEditorServices;
+  EV:  IOTAEditView;
+  FileName, Pas, Proj, LibDb, Cmd, Output, U: string;
+  CaretRow0, I, FLine: Integer;
+  Diags: TArray<TDragLintDiagnostic>;
+  D: TDragLintDiagnostic;
+  MS: IOTAModuleServices;
+  V: TJSONValue;
+  Arr: TJSONArray;
+  Obj: TJSONObject;
+begin
+  Result := False; AUnit := '';
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  EV := ESS.TopView;
+  if (EV = nil) or (EV.Buffer = nil) then Exit;
+  FileName := EV.Buffer.FileName;
+  CaretRow0 := EV.Position.Row - 1;   { cache is 0-based }
+  if CaretRow0 < 0 then CaretRow0 := 0;
+
+  { 1) fast path: a cached diagnostic on the caret line already carries the
+       "add unit X" suggestion (the live semantic check produced it). }
+  Diags := Cache.GetForLine(FileName, CaretRow0);
+  for D in Diags do
+  begin
+    U := DLExtractAddUnit(D.Message);
+    if U <> '' then begin AUnit := U; DLT('uses', 'quickfix: cache -> ' + U); Exit(True); end;
+  end;
+
+  { 2) fallback: run check-unit --resolve-uses now and match the caret line. }
+  if not SameText(ExtractFileExt(FileName), '.pas') then Exit;
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+  Pas := FileName; Proj := GetActiveProjectFile; LibDb := DLLibraryDb;
+  if not FileExists(LibDb) then Exit;
+  Cmd := Format('"%s" check-unit "%s" --resolve-uses --db "%s" --format json',
+    [DLExe, Pas, LibDb]);
+  if Proj <> '' then Cmd := Cmd + Format(' --project "%s"', [Proj]);
+  Output := '';
+  RunAndCaptureStdout(Cmd, Output, 90000);
+  V := nil;
+  try V := TJSONObject.ParseJSONValue(Output); except V := nil; end;
+  try
+    if V is TJSONArray then
+    begin
+      Arr := V as TJSONArray;
+      { prefer the finding on the caret line }
+      for I := 0 to Arr.Count - 1 do
+        if Arr.Items[I] is TJSONObject then
+        begin
+          Obj := Arr.Items[I] as TJSONObject; U := ''; FLine := -1;
+          Obj.TryGetValue<string>('addUnit', U);
+          Obj.TryGetValue<Integer>('line', FLine);
+          if (Trim(U) <> '') and (FLine = CaretRow0 + 1) then
+          begin AUnit := Trim(U); DLT('uses', 'quickfix: engine(line) -> ' + AUnit); Exit(True); end;
+        end;
+      { else the first resolvable one in the unit }
+      for I := 0 to Arr.Count - 1 do
+        if Arr.Items[I] is TJSONObject then
+        begin
+          Obj := Arr.Items[I] as TJSONObject; U := '';
+          if Obj.TryGetValue<string>('addUnit', U) and (Trim(U) <> '') then
+          begin AUnit := Trim(U); DLT('uses', 'quickfix: engine(first) -> ' + AUnit); Exit(True); end;
+        end;
+    end;
+  finally
+    V.Free;
+  end;
+end;
+
+{ Quick-fix: add the unit for the undeclared identifier on the caret line. }
+procedure InvokeQuickFixUses(Sender: TObject);
+var U, Ins: string;
+begin
+  if not DLCursorUndeclaredUnit(U) then
+  begin
+    ShowMessage('drag-lint: no missing-unit suggestion for the line at the cursor.'#13#10 +
+      '(Put the caret on the line with the undeclared identifier; build the project first so deps resolve.)');
+    Exit;
+  end;
+  if DLAddUnitsToImplUses([U], Ins) then
+    ShowMessage('drag-lint: added unit to the implementation uses clause: ' + Ins)
+  else
+    ShowMessage('drag-lint: could not locate the implementation uses clause. Add manually: ' + U);
 end;
 
 procedure InvokeGoToDefinition(Sender: TObject);
@@ -2783,7 +2905,8 @@ begin
   AddWrappedItem(SubUses, 'Uses Cleanup Preview (compiler-verified, this unit)...', InvokeUsesFix);
   AddWrappedItem(SubUses, 'Reconcile Project Members (.dpr/.dproj)...', InvokeReconcileProject);
   AddWrappedItem(SubUses, 'Uses Report (CSV)...',          InvokeUsesReportCsv);
-  AddWrappedItem(SubUses, 'Add Missing Units to uses (resolve undeclared)...', InvokeSuggestUses);
+  AddWrappedItem(SubUses, 'Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)', InvokeQuickFixUses);
+  AddWrappedItem(SubUses, 'Add Missing Units to uses (whole unit)...', InvokeSuggestUses);
   AddWrappedItem(SubUses, 'Impact / Blast Radius (symbol)...', InvokeImpact);
 
   { v0.46: Inspect Symbol submenu }

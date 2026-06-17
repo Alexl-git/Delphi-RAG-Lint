@@ -60,6 +60,8 @@ type
       var BindingResult: TKeyBindingResult);
     procedure SymbolSearchKey(const Context: IOTAKeyContext; KeyCode: TShortCut;
       var BindingResult: TKeyBindingResult);
+    procedure QuickFixUsesKey(const Context: IOTAKeyContext; KeyCode: TShortCut;
+      var BindingResult: TKeyBindingResult);
   end;
 
 { IOTANotifier stubs }
@@ -101,6 +103,8 @@ begin
     [ShortCut(Ord('F'), [ssCtrl, ssAlt])], FindUsagesKey,   nil);
   BindingServices.AddKeyBinding(
     [ShortCut(Ord('T'), [ssCtrl, ssAlt])], SymbolSearchKey, nil);
+  BindingServices.AddKeyBinding(
+    [ShortCut(Ord('U'), [ssCtrl, ssAlt])], QuickFixUsesKey, nil);
 end;
 
 function TDragLintKeyboardBinding.GetBindingType: TBindingType;
@@ -178,6 +182,13 @@ procedure TDragLintKeyboardBinding.SymbolSearchKey(const Context: IOTAKeyContext
   KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
 begin
   InvokeSymbolSearch(nil);
+  BindingResult := krHandled;
+end;
+
+procedure TDragLintKeyboardBinding.QuickFixUsesKey(const Context: IOTAKeyContext;
+  KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
+begin
+  InvokeQuickFixUses(nil);
   BindingResult := krHandled;
 end;
 
