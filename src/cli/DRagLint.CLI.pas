@@ -5261,6 +5261,7 @@ begin
 
       { missing-unit annotation for undeclared identifiers }
       Note := '';
+      var AddUnit: string := '';   { v0.46: dedicated field for the IDE quick-fix }
       if HasStore and SameText(F.Code, 'E2003') then
       begin
         MID := TRegEx.Match(F.Message, '''([A-Za-z_][A-Za-z0-9_]*)''');
@@ -5269,7 +5270,10 @@ begin
           Ident := MID.Groups[1].Value;
           Sug := SuggestUnitForSymbol(Store, Ident, AArgs.Target);
           if Sug.Found and Sug.Usable then
+          begin
+            AddUnit := Sug.UnitName;
             Note := Format(' -- add unit %s to the uses clause', [Sug.UnitName]);
+          end;
         end;
       end;
 
@@ -5277,9 +5281,10 @@ begin
       First := False;
       SB.Append(Format(
         '{"file":"%s","line":%d,"col":%d,"severity":"%s","code":"%s",' +
-        '"message":"%s","fix":"%s"}',
+        '"message":"%s","fix":"%s","addUnit":"%s"}',
         [JsonEscape(Disp), F.LineNo, F.ColNo, JsonEscape(F.Severity),
-         JsonEscape(F.Code), JsonEscape(F.Message + Note), JsonEscape(Note)]));
+         JsonEscape(F.Code), JsonEscape(F.Message + Note), JsonEscape(Note),
+         JsonEscape(AddUnit)]));
     end;
     SB.Append(']');
 

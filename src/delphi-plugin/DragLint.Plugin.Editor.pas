@@ -88,7 +88,7 @@ procedure InvokeGenerateFormsCsv(Sender: TObject);
 implementation
 
 uses
-  System.Generics.Collections, System.IOUtils,
+  System.Generics.Collections, System.IOUtils, System.UITypes,
   Vcl.Forms, Vcl.Clipbrd,
   Winapi.Windows,
   Winapi.ShellAPI,
@@ -2378,6 +2378,164 @@ begin
     'drag-lint-impact.txt');
 end;
 
+{ Resolve the library index beside the plugin (where RTL/VCL/DevExpress units are
+  indexed) -- needed to map an undeclared identifier to the unit that defines it. }
+function DLLibraryDb: string;
+var Dir: string;
+begin
+  Dir := ExtractFilePath(GetModuleName(HInstance));
+  Result := Dir + 'library-Win32.sqlite';
+  if not FileExists(Result) then Result := Dir + 'library-Win64.sqlite';
+  if not FileExists(Result) then Result := Dir + 'drag-lint-library.sqlite';
+end;
+
+{ v0.46: resolve & (optionally) insert the units that fix undeclared-identifier
+  errors. Runs check-unit --resolve-uses against the LIBRARY index, collects the
+  suggested units, and on confirmation inserts them into the implementation uses
+  clause via an undoable editor write. }
+procedure InvokeSuggestUses(Sender: TObject);
+var
+  Pas, Proj, LibDb, Cmd, Output: string;
+  MS:   IOTAModuleServices;
+  V:    TJSONValue;
+  Arr:  TJSONArray;
+  Obj:  TJSONObject;
+  I, J: Integer;
+  U, Combined, MsgList: string;
+  Units: TStringList;
+  Src, FileName, T: string;
+  Lines: TArray<string>;
+  ImplIdx, UsesIdx, SemiIdx, ColN: Integer;
+  ESS:  IOTAEditorServices;
+  EV:   IOTAEditView;
+  EPos: IOTAEditPosition;
+
+  function CleanLine(const ALn: string): string;
+  begin
+    Result := StringReplace(ALn, #13, '', [rfReplaceAll]);
+  end;
+
+begin
+  if not DLActivePas(Pas) then begin ShowMessage('drag-lint: open a .pas unit first.'); Exit; end;
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+  Proj  := GetActiveProjectFile;
+  LibDb := DLLibraryDb;
+  if not FileExists(LibDb) then
+  begin
+    ShowMessage('drag-lint: library index not found beside the plugin '#13#10 +
+      '(needed to resolve which unit defines a symbol).');
+    Exit;
+  end;
+
+  Cmd := Format('"%s" check-unit "%s" --resolve-uses --db "%s" --format json',
+    [DLExe, Pas, LibDb]);
+  if Proj <> '' then Cmd := Cmd + Format(' --project "%s"', [Proj]);
+  DLT('uses', 'suggest-missing: ' + Cmd);
+  Output := '';
+  RunAndCaptureStdout(Cmd, Output, 90000);
+
+  Units := TStringList.Create;
+  try
+    Units.Sorted := True;
+    Units.Duplicates := dupIgnore;
+    V := nil;
+    try V := TJSONObject.ParseJSONValue(Output); except V := nil; end;
+    try
+      if V is TJSONArray then
+      begin
+        Arr := V as TJSONArray;
+        for I := 0 to Arr.Count - 1 do
+          if Arr.Items[I] is TJSONObject then
+          begin
+            Obj := Arr.Items[I] as TJSONObject;
+            U := '';
+            if Obj.TryGetValue<string>('addUnit', U) and (Trim(U) <> '') then
+              Units.Add(Trim(U));
+          end;
+      end;
+    finally
+      V.Free;
+    end;
+
+    DLT('uses', Format('suggest-missing: %d unit(s) [%s]', [Units.Count, Units.CommaText]));
+    if Units.Count = 0 then
+    begin
+      ShowMessage('drag-lint: no missing units to add.'#13#10 +
+        '(No undeclared-identifier errors, or the symbols could not be resolved '#13#10 +
+        'from the library index. Tip: build the project first so dependencies '#13#10 +
+        'resolve from DCUs.)');
+      Exit;
+    end;
+
+    MsgList := Units.CommaText;
+    if MessageDlg(
+         Format('drag-lint resolved %d missing unit(s):'#13#10#13#10'%s'#13#10#13#10 +
+                'Add them to the IMPLEMENTATION uses clause?',
+                [Units.Count, MsgList]),
+         mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+    Combined := '';
+    for J := 0 to Units.Count - 1 do
+    begin
+      if Combined <> '' then Combined := Combined + ', ';
+      Combined := Combined + Units[J];
+    end;
+
+    { locate the implementation section + its uses clause }
+    Src := ReadActiveBufferText(FileName);
+    Lines := Src.Split([#10]);
+    ImplIdx := -1;
+    for I := 0 to High(Lines) do
+      if SameText(Trim(CleanLine(Lines[I])), 'implementation') then
+      begin ImplIdx := I; Break; end;
+    if ImplIdx < 0 then
+    begin
+      ShowMessage('drag-lint: could not locate the implementation section. ' +
+        'Add manually: ' + Combined);
+      Exit;
+    end;
+
+    UsesIdx := -1;
+    for I := ImplIdx + 1 to High(Lines) do
+    begin
+      T := LowerCase(Trim(CleanLine(Lines[I])));
+      if T = '' then Continue;
+      if (T = 'uses') or (Copy(T, 1, 5) = 'uses ') or (Copy(T, 1, 5) = 'uses,') then
+        UsesIdx := I;
+      Break;   { first non-blank line after implementation decides it }
+    end;
+
+    if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+    EV := ESS.TopView;
+    if EV = nil then Exit;
+    EPos := EV.Position;
+
+    if UsesIdx >= 0 then
+    begin
+      SemiIdx := -1;
+      for I := UsesIdx to High(Lines) do
+        if System.Pos(';', CleanLine(Lines[I])) > 0 then begin SemiIdx := I; Break; end;
+      if SemiIdx < 0 then
+      begin
+        ShowMessage('drag-lint: malformed uses clause. Add manually: ' + Combined);
+        Exit;
+      end;
+      ColN := System.Pos(';', CleanLine(Lines[SemiIdx]));
+      EPos.Move(SemiIdx + 1, ColN);          { row 1-based; col at the ';' }
+      EPos.InsertText(', ' + Combined);      { -> "uses ...A, NewUnits;" }
+    end
+    else
+    begin
+      EPos.Move(ImplIdx + 2, 1);             { start of the line after 'implementation' }
+      EPos.InsertText('uses ' + Combined + ';' + sLineBreak);
+    end;
+    DLT('uses', 'inserted: ' + Combined);
+    ShowMessage('drag-lint: added to the implementation uses clause:'#13#10 + Combined);
+  finally
+    Units.Free;
+  end;
+end;
+
 procedure InvokeGoToDefinition(Sender: TObject);
 var
   Uri: string; Line, Col: Integer;
@@ -2570,6 +2728,7 @@ begin
   AddWrappedItem(SubUses, 'Uses Cleanup Preview (compiler-verified, this unit)...', InvokeUsesFix);
   AddWrappedItem(SubUses, 'Reconcile Project Members (.dpr/.dproj)...', InvokeReconcileProject);
   AddWrappedItem(SubUses, 'Uses Report (CSV)...',          InvokeUsesReportCsv);
+  AddWrappedItem(SubUses, 'Add Missing Units to uses (resolve undeclared)...', InvokeSuggestUses);
   AddWrappedItem(SubUses, 'Impact / Blast Radius (symbol)...', InvokeImpact);
 
   { v0.46: Inspect Symbol submenu }
