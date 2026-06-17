@@ -267,6 +267,25 @@ below are the **GUI surface those tests can't exercise**.
 
 ---
 
+## H. Spring4D DI + DFM Wiring (NEW in v8)
+
+Understanding symbol dependencies and architecture: Spring4D DI edges (interface
+→ implementation + lifetime), DI resolution sites, and DFM event-handler bindings.
+
+- [ ] **H1 Show Wiring (interface).** Caret on a Spring4D interface name (e.g.
+      `ImcSTATIONS`, `IDataService<T>`) -> Tools -> drag-lint -> Uses && 
+      Dependencies -> Show Wiring... -> list of implementations (with lifetime:
+      singleton / per-thread / transient) + DI resolve-sites.
+- [ ] **H2 Show Wiring (form).** Caret on a form/frame class name (e.g. 
+      `TfrmWire`, `TfrmBlueprint4`) -> Show Wiring... -> list of event handlers
+      bound to component events (e.g. `Button1Click <- dfm:5`).
+- [ ] **H3 Nested generics.** Wiring shows generic types verbatim (e.g.
+      `IDataService<ImcCAUSFAIL>` impl is `TDataService_CAUSFAIL_SERVER`).
+- [ ] **H4 DI + DFM mixed.** A class that is BOTH a DI interface impl AND a form
+      shows both implementations and event handlers in one view.
+
+---
+
 ## I. Lifecycle (do last)
 
 - [ ] **I1 Uninstall.** Install Packages -> uncheck `dclDragLintWizard` -> the

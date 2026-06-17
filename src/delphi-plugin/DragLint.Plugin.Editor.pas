@@ -2931,7 +2931,6 @@ begin
   AddWrappedItem(SubInspect, 'Class Surface...',          InvokeClassSurface);
   AddWrappedItem(SubInspect, 'Symbol Slice...',           InvokeSymbolSlice);
   AddWrappedItem(SubInspect, 'Type at Cursor',            InvokeTypeAtCursor);
-  AddWrappedItem(SubInspect, 'Wiring: DI + DFM events (symbol)...', InvokeWiring);
 
   { v0.46: Code Quality submenu }
   var SubQuality: TMenuItem := TMenuItem.Create(RootMenu);

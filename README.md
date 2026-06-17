@@ -177,6 +177,7 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `surface --qname <qname>` | Show the full source surface of a symbol |
 | `slice --qname <qname>` | Extract the call-slice reachable from a symbol |
 | `impact --qname <qname>` | Show everything that would be affected by changing a symbol |
+| `wiring --qname <IIntf\|TForm>` | Spring4D DI wiring edges (impl class + lifetime + resolve-sites) and DFM event handlers (`--coverage` lists unresolved DI registrations) |
 | `hover --file <f> --line <n> --col <c>` | Hover info at a source position |
 | `rename --qname <q> --new-name <n>` | Preview or apply a symbol rename |
 | `generate-docs --qname <q>` | Generate an XML doc-comment stub |
@@ -219,6 +220,7 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `format_file` | Format a source file with YADF |
 | `get_surface` | Full source surface of a symbol |
 | `get_impact` | Call-impact set for a symbol |
+| `get_wiring` | Spring4D DI edges + DFM event handlers for an interface or form |
 | `get_slice` | Reachable call-slice |
 | `workspace_status` | Workspace project/file summary |
 | `workspace_index` | Re-index all workspace projects |
@@ -247,11 +249,15 @@ Drop custom `.scm` + `.json` pairs in the `rules/` directory; see
 
 ### RAD Studio plugin
 
-**Tools menu**: Hover at Cursor, Show Completion, Show Signature
-Help, Run Diagnostics, Rename Symbol, Compile & Diagnose, Import Build Log,
-Format with YADF, Show Structure, Run AST Checks, Find Usages, Symbol Search,
-Generate Test Helper CSV..., Settings. ("Generate Test Helper CSV..." saves all,
-runs `forms-csv` on the active project, and opens the resulting navigation CSV.)
+**Tools menu** (20+ items, organized into submenus): Hover at Cursor, Show Completion, 
+Show Signature Help, Run Diagnostics, Rename Symbol, Compile & Diagnose, Import Build Log,
+Format with YADF, Show Structure, Run AST Checks, Find Usages, Symbol Search, dockable 
+panels (Structure / Usages / Symbol Search / Graph), Generate Test Helper CSV..., 
+**Uses & Dependencies** submenu (cycles, uses-audit, uses-fix, reconcile, wiring, impact), 
+**Inspect Symbol** submenu (surface, slice, type-at-cursor), 
+**Code Quality** submenu (dead code, undocumented, TODOs, compiler hints, top symbols),
+**Generate & Export** submenu (docs, tests, enums, graph, Obsidian),
+**Index & Maintenance** submenu, plus diagnostics & test tools. Settings.
 
 **Keystroke bindings** (registered via `IOTAKeyBindingServices`):
 

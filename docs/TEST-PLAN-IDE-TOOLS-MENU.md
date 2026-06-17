@@ -23,8 +23,8 @@ IDE surfaces (Options page, dwell hover, graph open-source). Each step has an
       hover/usages/search).
 - [ ] **0.4** Open a real unit with code (e.g. an ORM3 unit) and a project that
       builds, so the compiler-based items have something to chew on.
-- [ ] **0.5** **Tools -> drag-lint** submenu is present and lists the 17 entries
-      below in order.
+- [ ] **0.5** **Tools -> drag-lint** submenu is present and lists the 18+ entries
+      below in order (menu is organized into submenus; see section structure).
 
 ---
 
@@ -115,6 +115,31 @@ IDE surfaces (Options page, dwell hover, graph open-source). Each step has an
 - [ ] Menu item.
 - [ ] **Expected:** the plugin's log file opens (in the editor or default
       viewer) - useful when diagnosing any of the above.
+
+---
+
+## 17b. Uses && Dependencies submenu (v0.46+)
+
+These items live under Tools -> drag-lint -> Uses && Dependencies:
+
+- [ ] **17b-1 Circular Uses Report...** Shows circular unit dependencies with a
+      refactoring playbook (`--plan` mode).
+- [ ] **17b-2 Uses Audit...** Proposes interface -> implementation moves + unused
+      units for the active unit.
+- [ ] **17b-3 Uses Cleanup Preview...** Dry-run of compiler-verified uses fixes.
+- [ ] **17b-4 Reconcile Project Members...** Syncs .dpr/.dproj unit lists.
+- [ ] **17b-5 Uses Report (CSV)...** Exports a navigation report of all units and
+      their uses.
+- [ ] **17b-6 Quick-Fix: Add Unit for Undeclared...** Keyboard: Ctrl+Alt+U on an
+      undeclared identifier -> inserts the resolving unit.
+- [ ] **17b-7 Add Missing Units...** Scans a unit for undeclared identifiers and
+      adds the required uses entries.
+- [ ] **17b-8 Impact / Blast Radius...** Shows transitive callers of a symbol up
+      to depth N.
+- [ ] **17b-9 Show Wiring (Spring4D DI + DFM events)...** (NEW in v8) Shows DI
+      implementations + resolve-sites for an interface, or event handlers for a
+      form. Caret on an interface or form name -> Menu item -> list of bindings
+      (DI lifetime, handler method -> dfm line).
 
 ---
 

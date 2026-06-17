@@ -1,0 +1,33 @@
+{
+  "settings": {
+    "currentProjectsIndexing": "perProject",
+    "defaultPlatform": "Win32",
+    "sizeGuardMB": 1500,
+    "enginePath": "auto",
+    "maxJobs": 0
+  },
+  "indexes": {
+    "outDir": "C:\\Projects\\.drag-lint",
+    "exclude": ["*BACKUP*", "*_OLD*.pas", "* - Copy.pas", "*- Copy.PAS", "*-Copy.PAS"],
+    "sections": [
+      { "name": "ORM3", "db": "C:\\Projects\\DB\\ORM3\\drag-lint.sqlite",
+        "include": ["C:\\Projects\\DB\\ORM3"], "useIgnoreFiles": true },
+      { "name": "SQL", "db": "C:\\Projects\\DB\\SQL\\drag-lint-sql.sqlite",
+        "include": ["C:\\Projects\\DB\\SQL"], "includeOnly": ["MS*.SQL"] },
+      { "name": "Loader", "db": "Loader.sqlite",
+        "include": ["C:\\Projects\\Loader2019\\Loader2025.dproj"] },
+      { "name": "TableTools", "db": "TableTools.sqlite",
+        "include": ["C:\\Projects\\TableTools"] },
+      { "name": "DragLint", "db": "Delphi-RAG-lint.sqlite",
+        "include": ["C:\\Projects\\Delphi-RAG-lint"] },
+      { "name": "DragLintGraph", "db": "Delphi-RAG-Lint-Graph.sqlite",
+        "include": ["C:\\Projects\\Delphi-RAG-Lint-Graph"] },
+      { "name": "OCRPDF", "db": "OCRPDF.sqlite",
+        "include": ["C:\\Projects\\OCRPDF"] },
+      { "name": "Library", "source": "registry-libraries", "platforms": "all",
+        "db": "library-{platform}.sqlite" },
+      { "name": "AllProjects", "db": "C:\\Projects\\drag-lint-all.sqlite",
+        "include": ["C:\\Projects"], "dedupAgainst": "*" }
+    ]
+  }
+}
