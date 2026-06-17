@@ -2381,6 +2381,20 @@ begin
     'drag-lint-impact.txt');
 end;
 
+{ v8: Spring4D DI + DFM event wiring for the symbol under the cursor. For an
+  interface name: implementations (+lifetime) + resolve-sites. For a form/class:
+  its methods bound to component events. Put the caret on the interface or form
+  name before invoking. }
+procedure InvokeWiring(Sender: TObject);
+var Q, Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  if not DLAskQName(Q) then Exit;
+  DLRunReport(Format('wiring --qname "%s" --db "%s" --format text', [Q, Db]),
+    'drag-lint-wiring.txt');
+end;
+
 { Resolve the library index beside the plugin (where RTL/VCL/DevExpress units are
   indexed) -- needed to map an undeclared identifier to the unit that defines it. }
 function DLLibraryDb: string;
@@ -2908,6 +2922,7 @@ begin
   AddWrappedItem(SubUses, 'Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)', InvokeQuickFixUses);
   AddWrappedItem(SubUses, 'Add Missing Units to uses (whole unit)...', InvokeSuggestUses);
   AddWrappedItem(SubUses, 'Impact / Blast Radius (symbol)...', InvokeImpact);
+  AddWrappedItem(SubUses, 'Show Wiring (Spring4D DI + DFM events)...', InvokeWiring);
 
   { v0.46: Inspect Symbol submenu }
   var SubInspect: TMenuItem := TMenuItem.Create(RootMenu);
@@ -2916,6 +2931,7 @@ begin
   AddWrappedItem(SubInspect, 'Class Surface...',          InvokeClassSurface);
   AddWrappedItem(SubInspect, 'Symbol Slice...',           InvokeSymbolSlice);
   AddWrappedItem(SubInspect, 'Type at Cursor',            InvokeTypeAtCursor);
+  AddWrappedItem(SubInspect, 'Wiring: DI + DFM events (symbol)...', InvokeWiring);
 
   { v0.46: Code Quality submenu }
   var SubQuality: TMenuItem := TMenuItem.Create(RootMenu);
