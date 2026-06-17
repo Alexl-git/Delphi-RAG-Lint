@@ -2272,6 +2272,13 @@ begin
   AQ := IdentifierAtCursor;
   Result := InputQuery('drag-lint',
     'Qualified name (Unit.Type.Member):', AQ) and (Trim(AQ) <> '');
+  { v0.46 review (security/robustness): a double-quote would break the
+    "%s"-quoted engine argument. Reject it rather than mis-parse the command. }
+  if Result and (Pos('"', AQ) > 0) then
+  begin
+    ShowMessage('drag-lint: the name must not contain a double-quote (").');
+    Result := False;
+  end;
 end;
 
 function DLUriToPath(const AUri: string): string;
@@ -2628,14 +2635,12 @@ begin
           if (Trim(U) <> '') and (FLine = CaretRow0 + 1) then
           begin AUnit := Trim(U); DLT('uses', 'quickfix: engine(line) -> ' + AUnit); Exit(True); end;
         end;
-      { else the first resolvable one in the unit }
-      for I := 0 to Arr.Count - 1 do
-        if Arr.Items[I] is TJSONObject then
-        begin
-          Obj := Arr.Items[I] as TJSONObject; U := '';
-          if Obj.TryGetValue<string>('addUnit', U) and (Trim(U) <> '') then
-          begin AUnit := Trim(U); DLT('uses', 'quickfix: engine(first) -> ' + AUnit); Exit(True); end;
-        end;
+      { v0.46 review (M): NO "first resolvable in the unit" fallback for the
+        CURSOR quick-fix -- it could insert a unit unrelated to the symbol under
+        the caret (especially when an uncompiled project yields many spurious
+        undeclared ids). If nothing matches the caret line, return False and let
+        InvokeQuickFixUses tell the user to put the caret on the offending line.
+        The whole-unit InvokeSuggestUses keeps its own broader behaviour. }
     end;
   finally
     V.Free;
