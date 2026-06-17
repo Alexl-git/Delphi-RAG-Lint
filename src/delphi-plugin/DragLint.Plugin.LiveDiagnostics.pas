@@ -176,11 +176,13 @@ var
 begin
   SetLength(Result, 0);
   if ACtx.ExePath = '' then Exit;
-  { v0.46: lint the SAVED file on disk when it exists -- reliable, and the engine
-    reports every finding there (the buffer-snapshot path was masking findings
-    past a GetText short-read). Fall back to the unsaved buffer snapshot. }
-  var LintTarget: string := ACtx.FilePath;
-  if (LintTarget = '') or not FileExists(LintTarget) then LintTarget := ACtx.BufferPath;
+  { v0.46: lint the UNSAVED buffer snapshot when available, so live diagnostics
+    (incl. syntax errors typed but not yet saved) match the IDE's Error Insight.
+    The earlier GetText short-read that truncated the snapshot is fixed
+    (ActiveBufferText reads to EOF), so the buffer is now reliable. Fall back to
+    the saved file on disk. }
+  var LintTarget: string := ACtx.BufferPath;
+  if (LintTarget = '') or not FileExists(LintTarget) then LintTarget := ACtx.FilePath;
   if LintTarget = '' then Exit;
   Cmd := Format('"%s" lint "%s"', [ACtx.ExePath, LintTarget]);
   LiveLog(Format('lint: exe=%s target=%s', [ACtx.ExePath, LintTarget]));

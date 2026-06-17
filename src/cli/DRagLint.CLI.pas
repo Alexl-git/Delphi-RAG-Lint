@@ -4064,11 +4064,13 @@ begin
      (AArgs.Rule <> 'field-by-name-in-loop') and
      (AArgs.Rule <> 'unit-not-in-dpr') and
      (AArgs.Rule <> 'inline-comment-in-multiline-args') and
-     (AArgs.Rule <> 'unused-local') then
+     (AArgs.Rule <> 'unused-local') and
+     (AArgs.Rule <> 'syntax-error') and
+     (AArgs.Rule <> 'unbalanced-begin-end') then
   begin
     Writeln(Format('ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' +
-      'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local)',
-      [AArgs.Rule]));
+      'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' +
+      'syntax-error, unbalanced-begin-end)', [AArgs.Rule]));
     Exit(2);
   end;
   Findings := nil;
@@ -4098,14 +4100,27 @@ begin
     finally
       Linter.Free;
     end;
-    { v0.46: unused local variables (H2164) -- AST rule, single-file only.
-      Runs when no --rule filter or --rule unused-local. This is the live
-      diagnostic the plugin's lint provider surfaces as edit-time hints. }
-    if ((AArgs.Rule = '') or (AArgs.Rule = 'unused-local')) and
-       TFile.Exists(AArgs.Path) and
-       SameText(ExtractFileExt(AArgs.Path), '.pas') then
-      Findings := Findings +
-        DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(AArgs.Path);
+    { v0.46: AST checks that need no DB -- single .pas file only. The plugin's
+      lint provider runs `lint <buffer>` with no --rule, so all of these surface
+      as live edit-time diagnostics. }
+    if TFile.Exists(AArgs.Path) and
+       (SameText(ExtractFileExt(AArgs.Path), '.pas') or
+        SameText(ExtractFileExt(AArgs.Path), '.inc')) then
+    begin
+      { unused local variables (H2164) }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'unused-local') then
+        Findings := Findings +
+          DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(AArgs.Path);
+      { syntax errors (tree-sitter ERROR/MISSING) -- this is what makes a typed
+        syntax error show up in the editor like the IDE's Error Insight. }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'syntax-error') then
+        Findings := Findings +
+          DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors(AArgs.Path);
+      { unbalanced begin/end (a common edit-time mistake) }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'unbalanced-begin-end') then
+        Findings := Findings +
+          DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd(AArgs.Path);
+    end;
   end;
   if AArgs.AsJson then
   begin
