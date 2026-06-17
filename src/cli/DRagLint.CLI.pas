@@ -3651,14 +3651,24 @@ var
   R: TReference;
   JRoot, JO: TJSONObject;
   JSites: TJSONArray;
+  Dbs: TArray<string>;
+  DbToUse, D: string;
 begin
-  if not TFile.Exists(AArgs.DbPath) then
+  { v8: resolve the DB like query/hover -- explicit --db if given, else
+    manifest-driven. Fixes projects whose index is NOT named <Project>.sqlite
+    beside the .dproj (e.g. ORM3 -> C:\Projects\DB\ORM3\drag-lint.sqlite). Use the
+    first existing resolved DB (the project/primary index). }
+  Dbs := ResolveConsumerDbs(AArgs);
+  DbToUse := '';
+  for D in Dbs do
+    if TFile.Exists(D) then begin DbToUse := D; Break; end;
+  if DbToUse = '' then
   begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Writeln('Run "drag-lint index <path>" first.');
+    Writeln('ERROR: no drag-lint index found (tried ', Length(Dbs),
+      ' resolved path(s)). Pass --db <file.sqlite> or build the index first.');
     Exit(2);
   end;
-  Store := TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store := TSQLiteSymbolStore.Create(DbToUse);
   Store.Migrate;
 
   if AArgs.WiringCoverage then

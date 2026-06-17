@@ -2452,12 +2452,19 @@ end;
   its methods bound to component events. Put the caret on the interface or form
   name before invoking. }
 procedure InvokeWiring(Sender: TObject);
-var Q, Db: string;
+var Q, Db, DbArg: string;
 begin
-  Db := GetActiveProjectDb;
-  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   if not DLAskQName(Q) then Exit;
-  DLRunReport(Format('wiring --qname "%s" --db "%s" --format text', [Q, Db]),
+  { Pass --db only when the conventional <Project>.sqlite exists; otherwise omit
+    it and let the engine resolve the index from the manifest (like hover/find-
+    usages), which handles projects whose index lives elsewhere (e.g. ORM3 ->
+    ...\ORM3\drag-lint.sqlite, not ...\CLIENT\Micronite2027.sqlite). }
+  Db := GetActiveProjectDb;
+  if (Db <> '') and FileExists(Db) then
+    DbArg := Format(' --db "%s"', [Db])
+  else
+    DbArg := '';
+  DLRunReport(Format('wiring --qname "%s"%s --format text', [Q, DbArg]),
     'drag-lint-wiring.txt');
 end;
 
