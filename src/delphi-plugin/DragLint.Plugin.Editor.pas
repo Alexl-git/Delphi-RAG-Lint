@@ -2212,6 +2212,311 @@ begin
   ShowDragLintGraph;
 end;
 
+{ ============================================================================
+  v0.46: surface the analysis/refactor/export CLI commands on the menu.
+  Shared helpers keep each handler tiny: resolve the engine, run a command,
+  open its text/CSV output in the IDE editor.
+  ============================================================================ }
+
+function DLExe: string;
+begin
+  Result := LoadSettings.ExePath;
+  if (Result = '') or not FileExists(Result) then
+    Result := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(Result) then Result := 'drag-lint.exe';
+end;
+
+procedure DLOpenInEditor(const AFilePath: string);
+var
+  AS_: IOTAActionServices;
+begin
+  if (AFilePath <> '') and FileExists(AFilePath) and
+     Supports(BorlandIDEServices, IOTAActionServices, AS_) then
+    AS_.OpenFile(AFilePath);
+end;
+
+{ Run "exe <tail>", capture stdout, write to %TEMP%\<base>, open it in the IDE. }
+procedure DLRunReport(const ACmdTail, ABaseName: string);
+var
+  Cmd, Output, OutPath: string;
+begin
+  Cmd := Format('"%s" %s', [DLExe, ACmdTail]);
+  DLT('menu', 'run: ' + Cmd);
+  Output := '';
+  RunAndCaptureStdout(Cmd, Output, 180000);
+  if Trim(Output) = '' then Output := '(no output -- the command produced nothing)';
+  OutPath := TPath.Combine(TPath.GetTempPath, ABaseName);
+  try TFile.WriteAllText(OutPath, Output); except end;
+  DLOpenInEditor(OutPath);
+end;
+
+function DLActivePas(out APath: string): Boolean;
+var
+  ESS: IOTAEditorServices;
+  EV:  IOTAEditView;
+begin
+  Result := False; APath := '';
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  EV := ESS.TopView;
+  if (EV = nil) or (EV.Buffer = nil) then Exit;
+  APath := EV.Buffer.FileName;
+  Result := (APath <> '') and SameText(ExtractFileExt(APath), '.pas');
+end;
+
+{ Prompt for a qualified name, pre-filled with the identifier at the cursor. }
+function DLAskQName(out AQ: string): Boolean;
+begin
+  AQ := IdentifierAtCursor;
+  Result := InputQuery('drag-lint',
+    'Qualified name (Unit.Type.Member):', AQ) and (Trim(AQ) <> '');
+end;
+
+function DLUriToPath(const AUri: string): string;
+begin
+  Result := AUri;
+  if Result.StartsWith('file:///') then Result := Copy(Result, 9, MaxInt)
+  else if Result.StartsWith('file://') then Result := Copy(Result, 8, MaxInt);
+  Result := StringReplace(Result, '/', '\', [rfReplaceAll]);
+  Result := StringReplace(Result, '%20', ' ', [rfReplaceAll]);
+end;
+
+{ Open the SOURCE (code) view of AFile and jump to ALine (mirrors the
+  Find-Usages nav fix so a form unit lands on the .pas, not the designer). }
+procedure DLNavigateToSource(const AFile: string; ALine: Integer);
+var
+  MS:  IOTAModuleServices;
+  Mod_: IOTAModule;
+  Ed:  IOTAEditor;
+  Src: IOTASourceEditor;
+  ESS: IOTAEditorServices;
+  EV:  IOTAEditView;
+  I:   Integer;
+begin
+  if (AFile = '') or not FileExists(AFile) then Exit;
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then
+  begin
+    Mod_ := MS.OpenModule(AFile);
+    if Mod_ <> nil then
+      for I := 0 to Mod_.GetModuleFileCount - 1 do
+      begin
+        Ed := Mod_.GetModuleFileEditor(I);
+        if Supports(Ed, IOTASourceEditor, Src) then begin Src.Show; Break; end;
+      end;
+  end;
+  if Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
+  begin
+    EV := ESS.TopView;
+    if (EV <> nil) and (ALine > 0) then
+    begin
+      EV.Position.GotoLine(ALine);
+      EV.Paint;
+    end;
+  end;
+end;
+
+{ ---- Uses & Dependencies ---- }
+
+procedure InvokeCircularUses(Sender: TObject);
+var Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no active project index (DB) found.'); Exit; end;
+  DLRunReport(Format('cycles --db "%s" --plan --edges --causes --format text', [Db]),
+    'drag-lint-circular-uses.txt');
+end;
+
+procedure InvokeUsesAudit(Sender: TObject);
+var Pas, Db: string; MS: IOTAModuleServices;
+begin
+  if not DLActivePas(Pas) then begin ShowMessage('drag-lint: open a .pas unit first.'); Exit; end;
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index (DB).'); Exit; end;
+  DLRunReport(Format('uses-audit "%s" --db "%s" --format text', [Pas, Db]),
+    'drag-lint-uses-audit.txt');
+end;
+
+procedure InvokeUsesFix(Sender: TObject);
+var Pas, Db, Proj: string; MS: IOTAModuleServices;
+begin
+  if not DLActivePas(Pas) then begin ShowMessage('drag-lint: open a .pas unit first.'); Exit; end;
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+  Db := GetActiveProjectDb; Proj := GetActiveProjectFile;
+  if (Db = '') or (Proj = '') then begin ShowMessage('drag-lint: no project/index found.'); Exit; end;
+  { report-only preview (no --apply): compiler-verified moves + removals. }
+  DLRunReport(Format('uses-fix "%s" --project "%s" --db "%s"', [Pas, Proj, Db]),
+    'drag-lint-uses-fix-preview.txt');
+end;
+
+procedure InvokeReconcileProject(Sender: TObject);
+var Proj: string; MS: IOTAModuleServices;
+begin
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+  Proj := GetActiveProjectFile;
+  if Proj = '' then begin ShowMessage('drag-lint: no active project.'); Exit; end;
+  DLRunReport(Format('reconcile-project "%s"', [Proj]), 'drag-lint-reconcile.txt');
+end;
+
+procedure InvokeUsesReportCsv(Sender: TObject);
+var Db, OutCsv: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  OutCsv := TPath.Combine(TPath.GetTempPath, 'drag-lint-uses-report.csv');
+  DLRunReport(Format('uses-report --output "%s" --db "%s"', [OutCsv, Db]),
+    'drag-lint-uses-report-log.txt');
+  DLOpenInEditor(OutCsv);
+end;
+
+procedure InvokeImpact(Sender: TObject);
+var Q, Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  if not DLAskQName(Q) then Exit;
+  DLRunReport(Format('impact --qname "%s" --db "%s" --depth 3 --format text', [Q, Db]),
+    'drag-lint-impact.txt');
+end;
+
+procedure InvokeGoToDefinition(Sender: TObject);
+var
+  Uri: string; Line, Col: Integer;
+  Client: TDragLintLspClient;
+  Params: TJSONObject;
+  Resp, ResVal: TJSONValue;
+  Arr: TJSONArray;
+  Loc, Rng, St: TJSONObject;
+  DefPath: string; DefLine: Integer;
+begin
+  if not GetActiveEditorInfo(Uri, Line, Col) then begin ShowMessage('drag-lint: no active editor view.'); Exit; end;
+  Client := EnsureLspClient;
+  if Client = nil then Exit;
+  Params := MakeTextDocumentPositionParams(Uri, Line, Col);
+  try
+    Resp := Client.Request('textDocument/definition', Params, 5000);
+  finally
+    Params.Free;
+  end;
+  if Resp = nil then begin ShowMessage('drag-lint: definition lookup timed out.'); Exit; end;
+  try
+    Arr := nil;
+    if Resp is TJSONArray then Arr := Resp as TJSONArray
+    else if (Resp is TJSONObject) and
+            (Resp as TJSONObject).TryGetValue<TJSONValue>('result', ResVal) and
+            (ResVal is TJSONArray) then
+      Arr := ResVal as TJSONArray;
+    if (Arr = nil) or (Arr.Count = 0) then begin ShowMessage('drag-lint: definition not found.'); Exit; end;
+    Loc := Arr.Items[0] as TJSONObject;
+    DefPath := ''; DefLine := 1;
+    Loc.TryGetValue<string>('uri', DefPath);
+    DefPath := DLUriToPath(DefPath);
+    if Loc.TryGetValue<TJSONObject>('range', Rng) and
+       Rng.TryGetValue<TJSONObject>('start', St) then
+      DefLine := St.GetValue<Integer>('line') + 1;
+    DLNavigateToSource(DefPath, DefLine);
+  finally
+    Resp.Free;
+  end;
+end;
+
+{ ---- Inspect / Quality / Generate / Export ---- }
+
+procedure InvokeClassSurface(Sender: TObject);
+var Q, Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  if not DLAskQName(Q) then Exit;
+  DLRunReport(Format('surface --qname "%s" --db "%s" --format text', [Q, Db]),
+    'drag-lint-surface.txt');
+end;
+
+procedure InvokeSymbolSlice(Sender: TObject);
+var Q, Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  if not DLAskQName(Q) then Exit;
+  DLRunReport(Format('slice --qname "%s" --db "%s" --format text', [Q, Db]),
+    'drag-lint-slice.txt');
+end;
+
+procedure InvokeTypeAtCursor(Sender: TObject);
+var ESS: IOTAEditorServices; EV: IOTAEditView; Db, Pas: string; Row, ColN: Integer;
+begin
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  EV := ESS.TopView;
+  if (EV = nil) or (EV.Buffer = nil) then begin ShowMessage('drag-lint: no active editor.'); Exit; end;
+  Pas := EV.Buffer.FileName;
+  Row := EV.Position.Row; ColN := EV.Position.Column;
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  DLRunReport(Format('typeat "%s:%d:%d" --db "%s" --format text', [Pas, Row, ColN, Db]),
+    'drag-lint-typeat.txt');
+end;
+
+procedure InvokeFindDeadCode(Sender: TObject);
+var Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  DLRunReport(Format('find-deadcode --db "%s"', [Db]), 'drag-lint-deadcode.txt');
+end;
+
+procedure InvokeScanTodos(Sender: TObject);
+var Proj, Dir: string;
+begin
+  Proj := GetActiveProjectFile;
+  if Proj <> '' then Dir := ExtractFilePath(Proj) else Dir := '';
+  if Dir = '' then begin ShowMessage('drag-lint: no active project.'); Exit; end;
+  DLRunReport(Format('todos "%s"', [ExcludeTrailingPathDelimiter(Dir)]), 'drag-lint-todos.txt');
+end;
+
+procedure InvokeCompilerHints(Sender: TObject);
+var Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  DLRunReport(Format('query hints --db "%s"', [Db]), 'drag-lint-hints.txt');
+end;
+
+procedure InvokeGenerateDocs(Sender: TObject);
+var Q, Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  if not DLAskQName(Q) then Exit;
+  DLRunReport(Format('generate-docs --qname "%s" --format xmldoc --db "%s"', [Q, Db]),
+    'drag-lint-docstub.txt');
+end;
+
+procedure InvokeGenerateTest(Sender: TObject);
+var Q, Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  if not DLAskQName(Q) then Exit;
+  DLRunReport(Format('generate-test --qname "%s" --framework dunitx --db "%s"', [Q, Db]),
+    'drag-lint-teststub.txt');
+end;
+
+procedure InvokeExportEnums(Sender: TObject);
+var Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  DLRunReport(Format('export enums --db "%s" --format delphi-const', [Db]),
+    'drag-lint-enums.txt');
+end;
+
+procedure InvokeTopSymbols(Sender: TObject);
+var Db: string;
+begin
+  Db := GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  DLRunReport(Format('top --db "%s" --by fanin --limit 50', [Db]), 'drag-lint-top.txt');
+end;
+
 procedure RegisterDragLintMenu;
 var
   Services: INTAServices;
@@ -2244,6 +2549,7 @@ begin
   AddWrappedItem(RootMenu, 'drag-lint Graph (dockable)', InvokeGraphWindow);
   AddSeparator(RootMenu);
   AddWrappedItem(RootMenu, 'Hover at Cursor',           InvokeHover);
+  AddWrappedItem(RootMenu, 'Go to Definition',          InvokeGoToDefinition);
   AddWrappedItem(RootMenu, 'Show Completion',            InvokeCompletion);
   AddWrappedItem(RootMenu, 'Show Signature Help',        InvokeSignatureHelp);
   AddWrappedItem(RootMenu, 'Find Usages...',             InvokeFindUsages);
@@ -2253,6 +2559,43 @@ begin
   AddWrappedItem(RootMenu, 'Format with YADF',           InvokeFormatYadf);
   AddWrappedItem(RootMenu, 'Generate Test Helper CSV...', InvokeGenerateFormsCsv);
   AddWrappedItem(RootMenu, 'Settings...',                InvokeSettings);
+
+  { v0.46: Uses & Dependencies submenu }
+  AddSeparator(RootMenu);
+  var SubUses: TMenuItem := TMenuItem.Create(RootMenu);
+  SubUses.Caption := 'Uses && Dependencies';
+  RootMenu.Add(SubUses);
+  AddWrappedItem(SubUses, 'Circular Uses Report (cycles + fix plan)...', InvokeCircularUses);
+  AddWrappedItem(SubUses, 'Uses Audit -- interface->impl moves + unused (this unit)...', InvokeUsesAudit);
+  AddWrappedItem(SubUses, 'Uses Cleanup Preview (compiler-verified, this unit)...', InvokeUsesFix);
+  AddWrappedItem(SubUses, 'Reconcile Project Members (.dpr/.dproj)...', InvokeReconcileProject);
+  AddWrappedItem(SubUses, 'Uses Report (CSV)...',          InvokeUsesReportCsv);
+  AddWrappedItem(SubUses, 'Impact / Blast Radius (symbol)...', InvokeImpact);
+
+  { v0.46: Inspect Symbol submenu }
+  var SubInspect: TMenuItem := TMenuItem.Create(RootMenu);
+  SubInspect.Caption := 'Inspect Symbol';
+  RootMenu.Add(SubInspect);
+  AddWrappedItem(SubInspect, 'Class Surface...',          InvokeClassSurface);
+  AddWrappedItem(SubInspect, 'Symbol Slice...',           InvokeSymbolSlice);
+  AddWrappedItem(SubInspect, 'Type at Cursor',            InvokeTypeAtCursor);
+
+  { v0.46: Code Quality submenu }
+  var SubQuality: TMenuItem := TMenuItem.Create(RootMenu);
+  SubQuality.Caption := 'Code Quality';
+  RootMenu.Add(SubQuality);
+  AddWrappedItem(SubQuality, 'Find Dead Code...',         InvokeFindDeadCode);
+  AddWrappedItem(SubQuality, 'Scan TODOs / FIXMEs...',    InvokeScanTodos);
+  AddWrappedItem(SubQuality, 'Compiler Hints...',         InvokeCompilerHints);
+  AddWrappedItem(SubQuality, 'Top Symbols (fan-in)...',   InvokeTopSymbols);
+
+  { v0.46: Generate submenu }
+  var SubGen: TMenuItem := TMenuItem.Create(RootMenu);
+  SubGen.Caption := 'Generate';
+  RootMenu.Add(SubGen);
+  AddWrappedItem(SubGen, 'Doc Comment Stub (symbol)...',  InvokeGenerateDocs);
+  AddWrappedItem(SubGen, 'Unit Test Stub (symbol)...',    InvokeGenerateTest);
+  AddWrappedItem(SubGen, 'Export Enums (Delphi const)...', InvokeExportEnums);
 
   { ---- Diagnostics & Tests (alpha) ---- }
   AddSeparator(RootMenu);
