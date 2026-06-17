@@ -267,22 +267,39 @@ below are the **GUI surface those tests can't exercise**.
 
 ---
 
-## H. Spring4D DI + DFM Wiring (NEW in v8)
+## H-Wiring. Spring4D DI + DFM Wiring (NEW in v8)
 
-Understanding symbol dependencies and architecture: Spring4D DI edges (interface
-→ implementation + lifetime), DI resolution sites, and DFM event-handler bindings.
+Framework-aware edges over the index: Spring4D DI (interface -> implementation +
+lifetime), DI resolution sites, and DFM event-handler bindings. Same data via
+three surfaces -- IDE menu, CLI, and MCP.
 
-- [ ] **H1 Show Wiring (interface).** Caret on a Spring4D interface name (e.g.
-      `ImcSTATIONS`, `IDataService<T>`) -> Tools -> drag-lint -> Uses && 
-      Dependencies -> Show Wiring... -> list of implementations (with lifetime:
-      singleton / per-thread / transient) + DI resolve-sites.
-- [ ] **H2 Show Wiring (form).** Caret on a form/frame class name (e.g. 
-      `TfrmWire`, `TfrmBlueprint4`) -> Show Wiring... -> list of event handlers
-      bound to component events (e.g. `Button1Click <- dfm:5`).
-- [ ] **H3 Nested generics.** Wiring shows generic types verbatim (e.g.
-      `IDataService<ImcCAUSFAIL>` impl is `TDataService_CAUSFAIL_SERVER`).
-- [ ] **H4 DI + DFM mixed.** A class that is BOTH a DI interface impl AND a form
-      shows both implementations and event handlers in one view.
+> **Build note:** the `wiring` engine command AND the IDE menu item live on branch
+> **`feat/framework-aware-edges`**. Build `drag-lint.exe` and the plugin BPL from
+> that branch (or merge it) first -- a v0.45/v0.46 engine has no `wiring` command.
+> Index a project that uses Spring4D `GlobalContainer.RegisterType<>` + forms with
+> event handlers, or the bundled fixtures `tests/fixtures/di_edges.pas` and
+> `tests/fixtures/dfm_wiring.{pas,dfm}`.
+
+- [ ] **HW1 Menu: Wiring (interface).** Caret on a Spring4D interface name (e.g.
+      `ImcSTATIONS`) -> **Tools -> drag-lint -> Inspect Symbol -> "Wiring: DI + DFM
+      events (symbol)..."** -> a report listing implementations (with lifetime:
+      `singleton` / `singleton-per-thread` / `transient`) + DI resolve-sites.
+- [ ] **HW2 Menu: Wiring (form).** Caret on a form/frame class name (e.g.
+      `TfrmWire`) -> same menu item -> a report of event handlers bound to
+      component events (e.g. `Button1Click <- ...dfm:5`).
+- [ ] **HW3 Nested generics.** For `IDataService<ImcCAUSFAIL>` the report shows
+      impl `TDataService_CAUSFAIL_SERVER`, generic preserved verbatim.
+- [ ] **HW4 Coverage (CLI).** `drag-lint wiring --coverage --db <DB>` lists DI
+      registrations NOT resolved into an interface->impl edge (named / instance /
+      delegate / factory) -- so unsupported-form usage is visible, not silent.
+- [ ] **HW5 CLI parity.** `drag-lint wiring --qname ImcSTATIONS --db <DB> --format
+      json` returns `{implementations:[{impl,lifetime,file,line}], resolved_at:[],
+      event_handlers:[]}`. The bundled smoke `tests/autotest/run_wiring.ps1`
+      asserts all of the above (8/8, including the MCP round-trip) -- run it for a
+      one-shot check.
+- [ ] **HW6 MCP parity.** With `drag-lint serve --db <DB>`, `tools/list` includes
+      `get_wiring`, and a `tools/call get_wiring {"qname":"ImcSTATIONS"}` returns
+      the SAME JSON as the CLI (both use the shared `BuildWiringJson`).
 
 ---
 
