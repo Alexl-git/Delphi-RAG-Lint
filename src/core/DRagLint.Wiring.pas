@@ -38,38 +38,47 @@ begin
   Handlers := AStore.FindEventHandlersForForm(AQName);
 
   Result := TJSONObject.Create;
-  JImpls := TJSONArray.Create;
-  JSites := TJSONArray.Create;
-  JHandlers := TJSONArray.Create;
+  try
+    // Adopt the arrays into Result up front, and each JO into its array BEFORE
+    // calling GetFilePath (a live DB query that can raise). That way any
+    // mid-build exception leaves the whole tree owned by Result, which the
+    // except clause frees -- no orphaned arrays/objects (review fix).
+    JImpls := TJSONArray.Create;
+    JSites := TJSONArray.Create;
+    JHandlers := TJSONArray.Create;
+    Result.AddPair('qname', AQName);
+    Result.AddPair('implementations', JImpls);
+    Result.AddPair('resolved_at', JSites);
+    Result.AddPair('event_handlers', JHandlers);
 
-  Result.AddPair('qname', AQName);
-  for B in Impls do
-  begin
-    JO := TJSONObject.Create;
-    JO.AddPair('impl', B.ImplName);
-    JO.AddPair('lifetime', B.Lifetime);
-    JO.AddPair('file', AStore.GetFilePath(B.FileId));
-    JO.AddPair('line', TJSONNumber.Create(B.StartLine));
-    JImpls.AddElement(JO);
+    for B in Impls do
+    begin
+      JO := TJSONObject.Create;
+      JImpls.AddElement(JO);
+      JO.AddPair('impl', B.ImplName);
+      JO.AddPair('lifetime', B.Lifetime);
+      JO.AddPair('file', AStore.GetFilePath(B.FileId));
+      JO.AddPair('line', TJSONNumber.Create(B.StartLine));
+    end;
+    for R in Sites do
+    begin
+      JO := TJSONObject.Create;
+      JSites.AddElement(JO);
+      JO.AddPair('file', AStore.GetFilePath(R.FileId));
+      JO.AddPair('line', TJSONNumber.Create(R.StartLine));
+    end;
+    for R in Handlers do
+    begin
+      JO := TJSONObject.Create;
+      JHandlers.AddElement(JO);
+      JO.AddPair('handler', R.NameText);
+      JO.AddPair('file', AStore.GetFilePath(R.FileId));
+      JO.AddPair('line', TJSONNumber.Create(R.StartLine));
+    end;
+  except
+    Result.Free;
+    raise;
   end;
-  for R in Sites do
-  begin
-    JO := TJSONObject.Create;
-    JO.AddPair('file', AStore.GetFilePath(R.FileId));
-    JO.AddPair('line', TJSONNumber.Create(R.StartLine));
-    JSites.AddElement(JO);
-  end;
-  for R in Handlers do
-  begin
-    JO := TJSONObject.Create;
-    JO.AddPair('handler', R.NameText);
-    JO.AddPair('file', AStore.GetFilePath(R.FileId));
-    JO.AddPair('line', TJSONNumber.Create(R.StartLine));
-    JHandlers.AddElement(JO);
-  end;
-  Result.AddPair('implementations', JImpls);
-  Result.AddPair('resolved_at', JSites);
-  Result.AddPair('event_handlers', JHandlers);
 end;
 
 end.

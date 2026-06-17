@@ -3654,17 +3654,20 @@ begin
     if LowerCase(AArgs.Format) = 'json' then
     begin
       JRoot := TJSONObject.Create;
-      JSites := TJSONArray.Create;
       try
+        // Adopt JSites into JRoot, and each JO into JSites, before GetFilePath
+        // (a DB query that can raise) so a mid-loop exception frees the whole
+        // tree via JRoot (review fix).
+        JSites := TJSONArray.Create;
+        JRoot.AddPair('unresolved', JSites);
         for R in Unres do
         begin
           JO := TJSONObject.Create;
+          JSites.AddElement(JO);
           JO.AddPair('method', R.NameText);
           JO.AddPair('file', Store.GetFilePath(R.FileId));
           JO.AddPair('line', TJSONNumber.Create(R.StartLine));
-          JSites.AddElement(JO);
         end;
-        JRoot.AddPair('unresolved', JSites);
         Writeln(JRoot.Format(2));
       finally
         JRoot.Free;
