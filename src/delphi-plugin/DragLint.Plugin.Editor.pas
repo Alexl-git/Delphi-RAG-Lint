@@ -188,6 +188,8 @@ begin
   { v0.29: update the visual diagnostic cache (runs on the LSP reader thread;
     Cache.Update is thread-safe). }
   Cache.Update(FileName, AParams);
+  DebugLog(Format('LSP publishDiagnostics: %s -> %d diag(s) (overwrites live cache)',
+    [ExtractFileName(FileName), Diags.Count]));
 
   { Collect diagnostic entries before queuing (Diags is owned by AMsg which
     will be freed after this call returns) }
@@ -1270,11 +1272,15 @@ begin
     compiler overlay. No --db / LSP round-trip and no fragile single-unit shadow
     compile. }
   CmdLine := Format('"%s" compile-check "%s" --format json', [ExePath, ProjFile]);
+  DebugLog('CompileDiagnose: START cmd=' + CmdLine);
 
   { Synchronous; an incremental compile is usually seconds, but allow 10 min. }
   ExitCode := RunAndCaptureStdout(CmdLine, Output, 600000);
+  DebugLog(Format('CompileDiagnose: compile-check returned exit=%d outLen=%d',
+    [ExitCode, Length(Output)]));
   if ExitCode = 2 then
   begin
+    DebugLog('CompileDiagnose: ABORT -- failed to spawn compile-check');
     ShowMessage('drag-lint: failed to spawn compile-check.'#13#10 +
       'Ensure drag-lint.exe is on PATH or next to the BPL.');
     Exit;
@@ -1289,11 +1295,15 @@ begin
     if Output[K] = ']' then begin P2 := K; Break; end;
   if (P1 = 0) or (P2 < P1) then
   begin
+    DebugLog('CompileDiagnose: NO parseable JSON array in output. First 400 chars: '
+      + Copy(Output, 1, 400));
     ShowMessage('drag-lint Compile & Diagnose: no parseable compiler output '
       + '(build-configuration or msbuild error).');
     Exit;
   end;
   Json := Copy(Output, P1, P2 - P1 + 1);
+  DebugLog(Format('CompileDiagnose: JSON array extracted (P1=%d P2=%d len=%d)',
+    [P1, P2, Length(Json)]));
 
   ErrCount := 0; WarnCount := 0; HintCount := 0;
   ByFile := TDictionary<string, TList<TDragLintDiagnostic>>.Create;
@@ -1350,7 +1360,13 @@ begin
       compile's findings per file. ToArray copies, so the lists are freed below. }
     Cache.ClearAllCompilerFindings;
     for Pair in ByFile do
+    begin
       Cache.SetCompilerFindings(Pair.Key, Pair.Value.ToArray);
+      DebugLog(Format('CompileDiagnose: overlay %s <- %d finding(s)',
+        [ExtractFileName(Pair.Key), Pair.Value.Count]));
+    end;
+    DebugLog(Format('CompileDiagnose: DONE E=%d W=%d H=%d across %d file(s)',
+      [ErrCount, WarnCount, HintCount, ByFile.Count]));
   finally
     for L in ByFile.Values do L.Free;
     ByFile.Free;

@@ -358,6 +358,7 @@ var
   GRunner:             TLiveRunner = nil;
   GLintProvider:       IDragLintDiagnosticProvider = nil;
   GSemanticProvider:   IDragLintDiagnosticProvider = nil;
+  GHeartbeat:          Cardinal = 0;   { v0.47: OnTick heartbeat (diagnosis) }
 
 function ActiveBufferText(out AFilePath: string): string;
 var
@@ -438,6 +439,8 @@ begin
     end;
     Params.AddPair('diagnostics', Arr);
     Cache.Update(AFile, Params);
+    LiveLog(Format('PublishToCache: %s -> %d diag(s)',
+      [ExtractFileName(AFile), Length(ADiags)]));
   finally
     Params.Free;
   end;
@@ -450,6 +453,7 @@ begin
   FTimer.Interval := 250;
   FTimer.OnTimer := OnTick;
   FTimer.Enabled := True;
+  LiveLog('TLiveRunner.Create: timer enabled (250ms) -- runner is live');
 end;
 
 destructor TLiveRunner.Destroy;
@@ -465,9 +469,19 @@ var
   Bytes: TBytes;
 begin
   try
+    { v0.47 diagnosis: prove the timer fires. Log the first 3 ticks, then every
+      ~5s, with the gating state -- so a silent runner is visible in the log. }
+    Inc(GHeartbeat);
+    if (GHeartbeat <= 3) or (GHeartbeat mod 20 = 0) then
+      LiveLog(Format('runner: tick #%d busy=%s dirty=%s active=%s',
+        [GHeartbeat, BoolToStr(FBusy, True), BoolToStr(FDirty, True),
+         ExtractFileName(FLastActiveFile)]));
+
     Settings := LoadSettings;
     if not Settings.AutoDiagnosticsOnSave then
     begin
+      if (GHeartbeat <= 3) or (GHeartbeat mod 20 = 0) then
+        LiveLog('runner: SKIP -- AutoDiagnosticsOnSave is OFF');
       FDirty := False;
       Exit;
     end;
@@ -572,13 +586,20 @@ procedure NotifyEditDirty;
 begin
   if GRunner <> nil then
   begin
+    { v0.47 diagnosis: log only the not-dirty -> dirty transition (one line per
+      edit burst, not per keystroke) so we can see edits reaching the runner. }
+    if not GRunner.FDirty then
+      LiveLog('NotifyEditDirty: edit detected -> FDirty set');
     GRunner.FDirty := True;
     GRunner.FLastEdit := GetTickCount;
-  end;
+  end
+  else
+    LiveLog('NotifyEditDirty: GRunner=nil -- live runner NOT started!');
 end;
 
 procedure StartLiveDiagnostics;
 begin
+  LiveLog('StartLiveDiagnostics: ENTER');
   { Register lint provider (syntax/style rules) }
   if GLintProvider = nil then
   begin
@@ -593,7 +614,9 @@ begin
   end;
   { Start the live runner (timer debounce loop) }
   if GRunner = nil then
-    GRunner := TLiveRunner.Create;
+    GRunner := TLiveRunner.Create
+  else
+    LiveLog('StartLiveDiagnostics: GRunner already exists');
 end;
 
 procedure StopLiveDiagnostics;
