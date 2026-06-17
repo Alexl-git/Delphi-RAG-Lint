@@ -2346,32 +2346,40 @@ begin
   end;
 end;
 
-{ v0.46.x: resolve a unit NAME to its absolute .pas via the active project's
-  module list, so a hover def-row click opens the real file (not a bare name the
-  IDE resolves against its bin dir). Returns '' if it is not a project unit. }
-function DLProjectUnitPath(const AUnitName: string): string;
+{ v8: resolve a qualified name to its absolute source path via the index -- the
+  query JSON now carries "file". '' if not found in ADb. Used by the hover
+  def-row click so it navigates for project AND library defs while the popup
+  display stays clean (the path is resolved on click, never shown). }
+function DLResolveQnameFile(const AQName, ADb: string): string;
 var
-  MS: IOTAModuleServices;
-  ProjGroup: IOTAProjectGroup;
-  Proj: IOTAProject;
-  I: Integer;
-  MI: IOTAModuleInfo;
-  Base: string;
+  Cmd, Output: string;
+  V: TJSONValue;
+  Arr: TJSONArray;
+  Obj: TJSONObject;
+  P: Integer;
 begin
   Result := '';
-  if AUnitName = '' then Exit;
-  if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
-  ProjGroup := MS.MainProjectGroup;
-  if ProjGroup = nil then Exit;
-  Proj := ProjGroup.ActiveProject;
-  if Proj = nil then Exit;
-  for I := 0 to Proj.GetModuleCount - 1 do
-  begin
-    MI := Proj.GetModule(I);
-    if MI = nil then Continue;
-    Base := ChangeFileExt(ExtractFileName(MI.FileName), '');
-    if SameText(Base, AUnitName) or SameText(MI.Name, AUnitName) then
-      Exit(MI.FileName);
+  if (AQName = '') or (ADb = '') or not FileExists(ADb) then Exit;
+  Cmd := Format('"%s" query --qname "%s" --db "%s" --json', [DLExe, AQName, ADb]);
+  Output := '';
+  RunAndCaptureStdout(Cmd, Output, 15000);
+  P := Pos('[', Output);          { skip any "(loaded defaults...)" banner prefix }
+  if P <= 0 then Exit;
+  Output := Copy(Output, P, MaxInt);
+  V := nil;
+  try V := TJSONObject.ParseJSONValue(Output); except V := nil; end;
+  try
+    if (V is TJSONArray) then
+    begin
+      Arr := V as TJSONArray;
+      if Arr.Count > 0 then
+      begin
+        Obj := Arr.Items[0] as TJSONObject;
+        Obj.TryGetValue<string>('file', Result);
+      end;
+    end;
+  finally
+    V.Free;
   end;
 end;
 
@@ -3126,19 +3134,23 @@ begin
           '. Open the .pas and place the caret in it, then retry.');
     end;
 
-  { v0.46.x: clicking a definition row in the hover popup navigates to the def's
-    .pas. The popup knows only the unit name + line; resolve the unit to its
-    absolute path via the open project, then open the SOURCE (code) view. }
-  DragLint.Plugin.HoverForm.GOnNavigateToUnit :=
-    procedure(AUnit: string; ALine: Integer)
-    var P: string;
+  { v8: clicking a definition row in the hover popup navigates to the def's .pas.
+    The popup knows only the qname + line; resolve it to an absolute path via the
+    index ("file" in query JSON) -- project DB first, then the library DB so
+    RTL/VCL/DevExpress defs resolve too -- then open the SOURCE (code) view. The
+    popup display stays clean; the path is resolved here, on click. }
+  DragLint.Plugin.HoverForm.GOnNavigateToQname :=
+    procedure(AQName: string; ALine: Integer)
+    var F: string;
     begin
-      P := DLProjectUnitPath(AUnit);
-      if P <> '' then
-        DLNavigateToSource(P, ALine)
+      F := DLResolveQnameFile(AQName, GetActiveProjectDb);
+      if F = '' then
+        F := DLResolveQnameFile(AQName, DLLibraryDb);
+      if (F <> '') and FileExists(F) then
+        DLNavigateToSource(F, ALine)
       else
-        ShowMessage('drag-lint: could not locate unit ' + AUnit +
-          ' in the active project; open it manually.');
+        ShowMessage('drag-lint: could not locate ' + AQName +
+          ' in the project or library index; open it manually.');
     end;
 
   { TEMP debug telemetry: fresh log per session + record the resolved engine. }

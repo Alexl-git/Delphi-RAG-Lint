@@ -363,8 +363,10 @@ engine-side, so also ensure the **freshly-staged Win64 engine** is in place
 - [ ] **T3 Hover def-row click navigates (no error).** Hover an identifier ->
       in the popup, click a definition row ("- <qname> - line N"). It opens the
       def's **.pas at the line** with no `Cannot create file ...\bin\X.pas` error.
-      (For a unit not in the active project it shows a "locate manually" message
-      instead of erroring.)
+      The path is resolved on click via the index (`query --json` now carries
+      `"file"`), against the **project DB then the library DB**, so library/RTL
+      defs resolve too. The hover display stays unchanged (the path is not shown).
+      Only a def in **neither** index shows a "locate manually" message.
 - [ ] **T4 Hover links look clickable.** Move the mouse over a clickable hover
       line (a definition row, or an "... add unit X" lightbulb line) -> the cursor
       becomes a **hand**. The callers grid rows also show a hand cursor.

@@ -89,11 +89,11 @@ var
     insert the unit (the lightbulb quick-fix from the diagnostic popup). }
   GOnAddUnit: TProc<string> = nil;
   { v0.46.x: set by the Editor. When the user clicks a definition row, the hover
-    calls this with the def's UNIT NAME + line; the Editor resolves the unit to
-    its ABSOLUTE source path via the open project and opens the .pas there. The
-    popup itself only has qname+line (never an absolute path), so it cannot open
-    the file directly without resolving it against the IDE bin dir. }
-  GOnNavigateToUnit: TProc<string, Integer> = nil;
+    calls this with the def's QUALIFIED NAME + line; the Editor resolves it to an
+    ABSOLUTE source path via the index (the query JSON now carries "file") and
+    opens the .pas there. The popup keeps its display clean -- the path is
+    resolved on click, never shown. }
+  GOnNavigateToQname: TProc<string, Integer> = nil;
 
 implementation
 
@@ -491,8 +491,8 @@ begin
   { Prefer the Editor hook: it resolves the unit to its ABSOLUTE source path via
     the open project and forces the code view. The fallback OpenSourceAt is now
     guarded against the bare path (it no-ops rather than erroring). }
-  if Assigned(GOnNavigateToUnit) then
-    GOnNavigateToUnit(UnitName, LineN)
+  if Assigned(GOnNavigateToQname) then
+    GOnNavigateToQname(Qname, LineN)
   else
     OpenSourceAt(UnitName + '.pas', LineN);
 end;

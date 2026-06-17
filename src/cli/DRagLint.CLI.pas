@@ -1731,19 +1731,22 @@ begin
   end;
 end;
 
-procedure PrintSymbols(const ASymbols: TArray<TSymbol>; AsJson: Boolean);
+procedure PrintSymbols(const ASymbols: TArray<TSymbol>; AsJson: Boolean;
+  const AFilePaths: TArray<string> = nil);
 var
   JArr: TJSONArray;
   JObj: TJSONObject;
   Sym: TSymbol;
   Line: string;
+  I: Integer;
 begin
   if AsJson then
   begin
     JArr := TJSONArray.Create;
     try
-      for Sym in ASymbols do
+      for I := 0 to High(ASymbols) do
       begin
+        Sym := ASymbols[I];
         JObj := TJSONObject.Create;
         JObj.AddPair('id', TJSONNumber.Create(Sym.Id));
         JObj.AddPair('kind', Sym.Kind.ToText);
@@ -1757,6 +1760,11 @@ begin
         JObj.AddPair('usable_from_other_units',
           TJSONBool.Create(Sym.Section <> 'implementation'));
         JObj.AddPair('file_id', TJSONNumber.Create(Sym.FileId));
+        { v8: resolved absolute path (the index has it in files.path; the JSON
+          used to drop it, leaving only the internal file_id). Per-symbol so a
+          multi-db query reports each symbol's own store path. }
+        if (I <= High(AFilePaths)) and (AFilePaths[I] <> '') then
+          JObj.AddPair('file', AFilePaths[I]);
         JObj.AddPair('start_line', TJSONNumber.Create(Sym.StartLine));
         JObj.AddPair('start_col', TJSONNumber.Create(Sym.StartCol));
         JObj.AddPair('end_line', TJSONNumber.Create(Sym.EndLine));
@@ -2052,6 +2060,7 @@ end;
 function DoQuery(const AArgs: TArgs): Integer;
 var
   Symbols, AllSymbols: TArray<TSymbol>;
+  AllPaths: TArray<string>;  { v8: abs path per AllSymbols entry (own store) }
   Refs, AllRefs: TArray<TReference>;
   DbPath: string;
   DbPaths: TArray<string>;
@@ -2171,6 +2180,8 @@ begin
     begin
       SetLength(AllSymbols, Length(AllSymbols) + 1);
       AllSymbols[High(AllSymbols)] := S;
+      SetLength(AllPaths, Length(AllPaths) + 1);
+      AllPaths[High(AllPaths)] := Store.GetFilePath(S.FileId);
     end;
     LastStore := Store;
   end;
@@ -2187,6 +2198,8 @@ begin
       begin
         SetLength(AllSymbols, Length(AllSymbols) + 1);
         AllSymbols[High(AllSymbols)] := S;
+        SetLength(AllPaths, Length(AllPaths) + 1);
+        AllPaths[High(AllPaths)] := Store.GetFilePath(S.FileId);
       end;
     end;
     if Length(AllSymbols) > 0 then
@@ -2194,11 +2207,11 @@ begin
       if not AArgs.AsJson then
         Writeln(Format('(no exact match for "%s" - closest matches:)',
           [AArgs.Name]));
-      PrintSymbols(AllSymbols, AArgs.AsJson);
+      PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths);
       Exit(0);
     end;
   end;
-  PrintSymbols(AllSymbols, AArgs.AsJson);
+  PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths);
   if Length(AllSymbols) = 0 then
     Result := 1
   else
