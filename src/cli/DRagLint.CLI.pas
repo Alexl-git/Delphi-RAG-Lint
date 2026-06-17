@@ -199,6 +199,8 @@ begin
   Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
   Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
   Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
+  Writeln('  drag-lint wiring             --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]   (Spring4D DI + DFM event edges)');
+  Writeln('  drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)');
   Writeln('  drag-lint surface            --qname <Foo.TBar>   [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]');
   Writeln('  drag-lint slice              --qname <Foo.TBar>   [--db <file.sqlite>] [--format text|json]');
   Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw]');
