@@ -304,6 +304,45 @@ three surfaces -- IDE menu, CLI, and MCP.
 
 ---
 
+## R. v0.46 Review-Fix Verification (NEW)
+
+Confirm the post-v0.46 code-review fixes. These live on branch
+**`feat/index-manifest`** (the IDE-plugin fixes) -- build + install that BPL (or a
+build that merges it) to exercise R1-R4. R5 (wiring JSON robustness) is engine-side
+on `feat/framework-aware-edges`.
+
+- [ ] **R1 Quick-fix never inserts the wrong unit.** Open a unit with an
+      undeclared identifier on the caret line AND at least one OTHER undeclared id
+      elsewhere (e.g. don't build the project so several ids are unresolved). Put
+      the caret on a line whose identifier has **no** resolvable unit ->
+      **Ctrl+Alt+U** (Quick-Fix: Add Unit...). **Expected:** "no missing-unit
+      suggestion for the line at the cursor" -- it does NOT silently add some
+      unrelated unit from elsewhere in the file (the dropped "first resolvable"
+      fallback). With the caret on a line whose id DOES resolve, it adds the right
+      unit.
+- [ ] **R2 IDE stays responsive during a slow report.** Run a heavy report item
+      (Tools -> drag-lint -> e.g. **Impact / Blast Radius...** or **Show Wiring...**
+      on a big symbol/DB). **Expected:** the IDE does **not** freeze while the
+      engine runs -- you can move the caret / scroll; the report window opens when
+      the engine finishes (DLRunReport now runs async, marshalling the editor-open
+      back to the main thread). A hung engine no longer locks the IDE for 180s.
+- [ ] **R3 Comment-safe uses insert.** In a unit whose implementation uses clause
+      has a comment containing a semicolon -- e.g. `uses A {note; here}, B;` or
+      `uses A; // old: B` -- trigger an add (Quick-Fix or Add Missing Units).
+      **Expected:** the new unit is spliced before the REAL terminating `;`
+      (after `B`), not at the `;` inside the comment.
+- [ ] **R4 Quote rejected in qname prompt.** On any qname-prompt action (Impact /
+      Class Surface / Symbol Slice / Show Wiring / Generate...), type a name
+      containing a `"` and confirm. **Expected:** a "must not contain a
+      double-quote" message; the command is not run with a broken argument.
+- [ ] **R5 Wiring query survives a busy DB (engine).** Not IDE-visible: the
+      `wiring`/`get_wiring` JSON builder now adopts its arrays/objects before any
+      DB call and frees the root on exception, so a query that hits a locked/busy
+      `.sqlite` mid-build does not leak (matters for long-lived `serve`). Covered
+      by code review; no manual step.
+
+---
+
 ## I. Lifecycle (do last)
 
 - [ ] **I1 Uninstall.** Install Packages -> uncheck `dclDragLintWizard` -> the
