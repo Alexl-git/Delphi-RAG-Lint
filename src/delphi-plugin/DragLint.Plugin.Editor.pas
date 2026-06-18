@@ -1484,40 +1484,135 @@ begin
   end;
 end;
 
-/// <summary>Compiles the active unit's UNSAVED buffer in the context of the real
-/// project (engine 'ghost-check': overlay buffer on a throwaway copy of the file
-/// with a guaranteed restore) and pushes the compiler errors into the Diagnostics
-/// overlay -- errors in unsaved code appear without saving. Out-of-process, async,
-/// single-flight; the file is never permanently changed.</summary>
-/// <returns>True if a compile actually started (or there was nothing to compile);
+{ v0.48: read one source editor's full in-memory buffer via its reader (to EOF). }
+function ReadSourceEditorText(const ASrc: IOTASourceEditor): string;
+var
+  Reader: IOTAEditReader;
+  Pos, Got: Integer;
+  Chunk: array[0..8191] of AnsiChar;
+  SB: TStringBuilder;
+begin
+  Result := '';
+  if ASrc = nil then Exit;
+  Reader := ASrc.CreateReader;
+  if Reader = nil then Exit;
+  SB := TStringBuilder.Create;
+  try
+    Pos := 0;
+    repeat
+      Got := Reader.GetText(Pos, @Chunk[0], SizeOf(Chunk) - 1);
+      if Got <= 0 then Break;
+      Chunk[Got] := #0;
+      SB.Append(string(AnsiString(Chunk)));
+      Inc(Pos, Got);
+    until False;
+    Result := SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+{ v0.48: enumerate EVERY open, MODIFIED module's .pas whose in-memory buffer
+  actually differs from disk, stage each to a temp .pas (strict ANSI), and build a
+  ghost-check overlay manifest ('realpath'<TAB>'temppath' per line). So when you
+  edit several units and switch between them, the compile sees ALL the unsaved
+  content at once -- not just the active tab. Returns the overlay count;
+  AManifestPath = '' when none. ATempFiles lists every temp (incl. the manifest)
+  to delete afterwards. MUST be called on the main thread (OTAPI access). }
+function CollectUnsavedOverlays(out AManifestPath: string;
+  out ATempFiles: TArray<string>): Integer;
+var
+  MS: IOTAModuleServices;
+  M, FE: Integer;
+  Modu: IOTAModule;
+  Src: IOTASourceEditor;
+  Path, BufText, Tmp, ManifestText: string;
+  BufBytes, DiskBytes: TBytes;
+  Temps: TList<string>;
+begin
+  Result := 0; AManifestPath := ''; SetLength(ATempFiles, 0);
+  if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
+  ManifestText := '';
+  Temps := TList<string>.Create;
+  try
+    for M := 0 to MS.ModuleCount - 1 do
+    begin
+      Modu := MS.Modules[M];
+      if Modu = nil then Continue;
+      { the byte-diff below is the real 'is this unsaved?' test -- no IOTAModule
+        Modified flag needed (and it isn't exposed on this interface version). }
+      for FE := 0 to Modu.GetModuleFileCount - 1 do
+      begin
+        if not Supports(Modu.GetModuleFileEditor(FE), IOTASourceEditor, Src) then Continue;
+        Path := Src.FileName;
+        if (not SameText(ExtractFileExt(Path), '.pas')) or (not FileExists(Path)) then Continue;
+        BufText := ReadSourceEditorText(Src);
+        if BufText = '' then Continue;
+        BufBytes := TEncoding.ANSI.GetBytes(BufText);
+        { skip if this .pas buffer equals disk (e.g. only the form/.dfm changed) }
+        try DiskBytes := TFile.ReadAllBytes(Path); except SetLength(DiskBytes, 0); end;
+        if (Length(BufBytes) = Length(DiskBytes)) and
+           ((Length(BufBytes) = 0) or CompareMem(@BufBytes[0], @DiskBytes[0], Length(BufBytes))) then
+          Continue;
+        Tmp := TPath.Combine(TPath.GetTempPath,
+          Format('draglint-ov-%d-%d.pas', [GetTickCount, Temps.Count]));
+        try TFile.WriteAllBytes(Tmp, BufBytes); except Continue; end;
+        Temps.Add(Tmp);
+        ManifestText := ManifestText + Path + #9 + Tmp + sLineBreak;
+        Inc(Result);
+      end;
+    end;
+    if Result > 0 then
+    begin
+      AManifestPath := TPath.Combine(TPath.GetTempPath,
+        Format('draglint-ov-manifest-%d.txt', [GetTickCount]));
+      try TFile.WriteAllText(AManifestPath, ManifestText, TEncoding.ASCII);
+      except AManifestPath := ''; end;
+      if AManifestPath <> '' then Temps.Add(AManifestPath);
+    end;
+    ATempFiles := Temps.ToArray;
+  finally
+    Temps.Free;
+  end;
+end;
+
+/// <summary>Compiles ALL unsaved units' buffers in the context of the real project
+/// (engine 'ghost-check': overlay each modified module's buffer on its real file
+/// with a guaranteed per-file restore) and pushes the compiler errors into the
+/// Diagnostics overlay -- errors in unsaved code, across every edited unit, appear
+/// without saving. Out-of-process, async, single-flight; no file is permanently
+/// changed.</summary>
+/// <returns>True if a compile started (or there was nothing unsaved to compile);
 /// False only if one was already running -- so the idle auto-trigger can retry.</returns>
 function RunGhostCheckAsync(AInteractive: Boolean): Boolean;
 var
-  ProjFile, UnitPath, BufText, ExePath, Plat, TmpBuf: string;
+  ProjFile, ExePath, Plat, Manifest: string;
+  Temps: TArray<string>;
+  nOverlays: Integer;
 begin
   Result := True;   { permanent no-ops below are 'consumed'; only 'busy' retries }
   ProjFile := GetActiveProjectFile;
   if ProjFile = '' then
   begin if AInteractive then ShowMessage('drag-lint: no active project.'); Exit; end;
-  if not GetActiveBuffer(UnitPath, BufText) then
-  begin if AInteractive then ShowMessage('drag-lint: no active editor buffer.'); Exit; end;
-  if not SameText(ExtractFileExt(UnitPath), '.pas') then
-  begin if AInteractive then ShowMessage('drag-lint: the active file is not a .pas unit.'); Exit; end;
+
+  { snapshot every unsaved unit (main thread, OTAPI) BEFORE taking the guard }
+  nOverlays := CollectUnsavedOverlays(Manifest, Temps);
+  if nOverlays = 0 then
+  begin
+    if AInteractive then ShowMessage('drag-lint: nothing unsaved to compile.');
+    Exit;   { consumed -- nothing to do }
+  end;
+
   if AtomicCmpExchange(GProjectBuildBusy, 1, 0) <> 0 then
-  begin if AInteractive then ShowMessage('drag-lint: a compile is already running -- please wait.'); Exit(False); end;
+  begin
+    for var T in Temps do try TFile.Delete(T); except end;   { drop staged temps }
+    if AInteractive then ShowMessage('drag-lint: a compile is already running -- please wait.');
+    Exit(False);   { retry later }
+  end;
 
   ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
   if not FileExists(ExePath) then ExePath := 'drag-lint.exe';
   Plat := GetActiveProjectPlatform;
-  TmpBuf := TPath.Combine(TPath.GetTempPath,
-    Format('draglint-ghostbuf-%d.pas', [GetTickCount]));
-  try
-    TFile.WriteAllText(TmpBuf, BufText, TEncoding.ANSI);  { strict-ANSI .pas }
-  except
-    AtomicExchange(GProjectBuildBusy, 0);
-    if AInteractive then ShowMessage('drag-lint: could not stage the buffer.');
-    Exit;
-  end;
 
   TThread.CreateAnonymousThread(
     procedure
@@ -1528,18 +1623,18 @@ begin
     begin
       nErr := 0; nWarn := 0; nHint := 0; Parsed := False;
       try
-        CmdLine := Format('"%s" ghost-check "%s" --unit "%s" --buffer "%s" ' +
-          '--platform %s --format json',
-          [ExePath, ProjFile, UnitPath, TmpBuf, Plat]);
-        DebugLog('GhostCheck: START ' + CmdLine);
+        CmdLine := Format('"%s" ghost-check "%s" --overlays "%s" --platform %s --format json',
+          [ExePath, ProjFile, Manifest, Plat]);
+        DebugLog('GhostCheck(multi): START ' + CmdLine);
         ExitCode := RunAndCaptureStdout(CmdLine, Output, 600000);
-        DebugLog(Format('GhostCheck: exit=%d outLen=%d', [ExitCode, Length(Output)]));
+        DebugLog(Format('GhostCheck(multi): %d overlay(s) exit=%d outLen=%d',
+          [nOverlays, ExitCode, Length(Output)]));
         if ExitCode <> 2 then
           Parsed := ParseAndPushCompileOutput(Output, nErr, nWarn, nHint);
       except
-        on E: Exception do DebugLog('GhostCheck: EXC ' + E.Message);
+        on E: Exception do DebugLog('GhostCheck(multi): EXC ' + E.Message);
       end;
-      try TFile.Delete(TmpBuf); except end;
+      for var T in Temps do try TFile.Delete(T); except end;
       TThread.Queue(nil,
         procedure
         begin
@@ -1547,9 +1642,9 @@ begin
           if AInteractive then
           begin
             if Parsed then
-              ShowMessage(Format('drag-lint Compile Buffer (unsaved):'#13#10 +
+              ShowMessage(Format('drag-lint Compile Buffer (%d unsaved unit(s)):'#13#10 +
                 '%d error(s), %d warning(s), %d hint(s).'#13#10 +
-                'Your file on disk was not changed.', [nErr, nWarn, nHint]))
+                'Your files on disk were not changed.', [nOverlays, nErr, nWarn, nHint]))
             else
               ShowMessage('drag-lint Compile Buffer: no parseable compiler output.');
           end;

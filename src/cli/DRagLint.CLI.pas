@@ -176,6 +176,9 @@ type
     // by an unsaved buffer, with a guaranteed restore.
     GhostUnit:          string;         // --unit <real .pas to overlay>
     GhostBuffer:        string;         // --buffer <temp file holding the buffer>
+    // v0.48: multi-overlay -- a manifest with one 'realpath<TAB>bufferpath' per
+    // line, so ALL unsaved units are overlaid for a single compile.
+    GhostOverlays:      string;         // --overlays <manifest>
   end;
 
 procedure PrintHelp;
@@ -702,6 +705,11 @@ begin
     begin
       Inc(i);
       Result.GhostBuffer := ParamStr(i);
+    end
+    else if (A = '--overlays') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.GhostOverlays := ParamStr(i);
     end
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
@@ -5356,167 +5364,228 @@ begin
   try Result := SetFileTime(H, nil, nil, @AFT); finally CloseHandle(H); end;
 end;
 
-{ v0.47: ghost-check -- compile the project with ONE unit's content replaced by
-  an unsaved buffer, WITHOUT a lasting change to the file. Overlays the buffer on
-  the real .pas and stamps a CURRENT mtime so the incremental compiler always
-  rebuilds the unit (robust regardless of where the .dcu lives -- platform/config),
-  runs the real incremental compile, then in a finally ALWAYS restores the original
-  content + the EXACT original timestamp (raw FILETIME, so the IDE sees no "changed
-  on disk" change). Restore is verified and never clobbers a concurrent external
-  save; the crash-recovery journal in _D-RAG is kept if the restore cannot be
-  proven, so ghost-recover can finish on next startup. A crash leaves the buffer
-  (the user's current work) + nothing else damaged. }
-function DoGhostCheck(const AArgs: TArgs): Integer;
-var
-  Dproj, UnitPath, BufPath, DcuPath, Fmt, FilePath: string;
-  DragDir, OrigBak, Journal: string;
-  OrigBytes, BufBytes, CurBytes: TBytes;
-  OrigMtime: TDateTime;
-  OrigFT: TFileTime;
-  HaveFT, RestoreDone: Boolean;
-  JournalText: string;
-  Res: TCompileCheckResult;
-  ErrCount, WarnCount, HintCount: Integer;
-  F: TCompilerFinding;
-  SB: TStringBuilder;
-begin
-  Dproj    := AArgs.Target;
-  UnitPath := AArgs.GhostUnit;
-  BufPath  := AArgs.GhostBuffer;
-  if (Dproj = '') or (UnitPath = '') or (BufPath = '') then
-  begin
-    Writeln('Usage: drag-lint ghost-check <dproj> --unit <real.pas> ' +
-      '--buffer <bufferfile> [--platform win32|win64] [--format json|text]');
-    Exit(2);
+type
+  { v0.48: one unsaved file to overlay during a ghost-check (a .pas now; a .dfm in
+    a later phase). Carries everything needed to restore it EXACTLY afterwards. }
+  TGhostOverlay = record
+    RealPath:  string;     { the real file we briefly overwrite }
+    BufPath:   string;     { temp file holding the unsaved buffer }
+    DcuPath:   string;     { stale .dcu to drop (forces recompile); '' if none }
+    OrigBak:   string;     { _D-RAG\<name>.ghost-orig (crash backup) }
+    Journal:   string;     { _D-RAG\<name>.ghost-journal }
+    OrigBytes: TBytes;
+    BufBytes:  TBytes;
+    OrigMtime: TDateTime;
+    OrigFT:    TFileTime;
+    HaveFT:    Boolean;
   end;
-  if not TFile.Exists(UnitPath) then
-  begin Writeln('ERROR: unit not found: ', UnitPath); Exit(2); end;
-  if not TFile.Exists(BufPath) then
-  begin Writeln('ERROR: buffer not found: ', BufPath); Exit(2); end;
 
-  OrigBytes := TFile.ReadAllBytes(UnitPath);
-  OrigMtime := TFile.GetLastWriteTime(UnitPath);          { fallback }
-  HaveFT    := ReadFileWriteTime(UnitPath, OrigFT);        { preferred: tick-exact }
-  BufBytes  := TFile.ReadAllBytes(BufPath);
-  DcuPath   := ResolveGhostDcu(Dproj, UnitPath, AArgs.CheckPlatform);
-  DragDir   := GhostDir(Dproj);
-  OrigBak   := TPath.Combine(DragDir, ExtractFileName(UnitPath) + '.ghost-orig');
-  Journal   := TPath.Combine(DragDir, ExtractFileName(UnitPath) + '.ghost-journal');
-
-  Res := Default(TCompileCheckResult);
+{ Apply one overlay: write the crash-recovery journal, overlay the buffer, stamp a
+  CURRENT mtime so the incremental compiler rebuilds the unit, and drop the stale
+  .dcu. Best-effort; GhostRestoreOverlay is the guarantee. }
+procedure GhostApplyOverlay(const E: TGhostOverlay);
+var
+  JournalText: string;
+begin
   try
-    { v0.47 crash-recovery journal: stash the ORIGINAL + a marker in _D-RAG BEFORE
-      we overlay, so a hard kill mid-compile is auto-restorable on next startup
-      (ghost-recover). Best-effort. }
-    try
-      TFile.WriteAllBytes(OrigBak, OrigBytes);
-      JournalText :=
-        'unit=' + UnitPath + sLineBreak +
-        'orig=' + OrigBak + sLineBreak +
-        'mtime=' + FloatToStrF(Double(OrigMtime), ffGeneral, 17, 0,
-                               TFormatSettings.Invariant) + sLineBreak;
-      if HaveFT then
-        JournalText := JournalText + 'ft=' + IntToStr(FileTimeToI64(OrigFT)) + sLineBreak;
-      TFile.WriteAllText(Journal, JournalText);
-    except end;
-    { Overlay the buffer and stamp a CURRENT mtime so the incremental compiler
-      always rebuilds this unit (its source is now newer than any .dcu) -- robust
-      regardless of where the .dcu lives (platform/config). The DCU delete below
-      is best-effort belt-and-suspenders. The ORIGINAL mtime is put back in the
-      finally, so the IDE still sees no lasting change on disk. }
-    TFile.WriteAllBytes(UnitPath, BufBytes);
-    try TFile.SetLastWriteTime(UnitPath, Now); except end;
-    if (DcuPath <> '') and TFile.Exists(DcuPath) then
-      try TFile.Delete(DcuPath); except end;
-    Res := TCompileChecker.Run(Dproj);
-    Res.Findings := NormalizeFindings(Res.Findings, ExtractFilePath(Dproj));
-  finally
-    { Restore -- but (a) never clobber a concurrent external save made during the
-      compile window, and (b) never drop the crash-recovery journal unless the
-      file is provably back to the saved original (so ghost-recover can finish the
-      job on next startup if the restore write itself fails). }
-    RestoreDone := False;
-    try
-      CurBytes := TFile.ReadAllBytes(UnitPath);
-      if BytesSame(CurBytes, OrigBytes) or BytesSame(CurBytes, BufBytes) then
-      begin
-        { disk holds our overlay (or already-original content) -> normalize back to
-          the saved original: rewrite content only if needed, but ALWAYS restore the
-          ORIGINAL timestamp (the overlay stamped 'Now' to force the rebuild, so even
-          when content already matches the mtime must be put back), then VERIFY. }
-        if not BytesSame(CurBytes, OrigBytes) then
-          TFile.WriteAllBytes(UnitPath, OrigBytes);
-        if not (HaveFT and SetFileWriteTime(UnitPath, OrigFT)) then
-          try TFile.SetLastWriteTime(UnitPath, OrigMtime); except end;
-        try RestoreDone := BytesSame(TFile.ReadAllBytes(UnitPath), OrigBytes);
-        except RestoreDone := False; end;
-      end
-      else
-      begin
-        { the file was changed by something else (e.g. an IDE save) during the
-          window -- that is the user's content, not our overlay. Leave it. }
-        RestoreDone := True;
-        Writeln('ghost-check: NOTE -- ', UnitPath,
-                ' changed externally during the check; left as-is.');
-      end;
-    except
-      RestoreDone := False;
-    end;
-    { drop the buffer-based DCU so the next real build recompiles from source }
-    if (DcuPath <> '') and TFile.Exists(DcuPath) then
-      try TFile.Delete(DcuPath); except end;
-    if RestoreDone then
+    TFile.WriteAllBytes(E.OrigBak, E.OrigBytes);
+    JournalText :=
+      'unit=' + E.RealPath + sLineBreak +
+      'orig=' + E.OrigBak + sLineBreak +
+      'mtime=' + FloatToStrF(Double(E.OrigMtime), ffGeneral, 17, 0,
+                             TFormatSettings.Invariant) + sLineBreak;
+    if E.HaveFT then
+      JournalText := JournalText + 'ft=' + IntToStr(FileTimeToI64(E.OrigFT)) + sLineBreak;
+    TFile.WriteAllText(E.Journal, JournalText);
+  except end;
+  TFile.WriteAllBytes(E.RealPath, E.BufBytes);
+  try TFile.SetLastWriteTime(E.RealPath, Now); except end;
+  if (E.DcuPath <> '') and TFile.Exists(E.DcuPath) then
+    try TFile.Delete(E.DcuPath); except end;
+end;
+
+{ Restore one overlay: put the original content + EXACT timestamp back (verified),
+  never clobbering a concurrent external save; drop the buffer-built .dcu; clear
+  the journal ONLY if the restore is provable (else keep it so ghost-recover can
+  finish on next startup). }
+procedure GhostRestoreOverlay(const E: TGhostOverlay);
+var
+  CurBytes: TBytes;
+  RestoreDone: Boolean;
+begin
+  RestoreDone := False;
+  try
+    CurBytes := TFile.ReadAllBytes(E.RealPath);
+    if BytesSame(CurBytes, E.OrigBytes) or BytesSame(CurBytes, E.BufBytes) then
     begin
-      { file is safe -> clear the recovery journal }
-      try if TFile.Exists(Journal) then TFile.Delete(Journal); except end;
-      try if TFile.Exists(OrigBak) then TFile.Delete(OrigBak); except end;
+      { disk holds our overlay (or already-original content) -> normalize back to
+        the saved original: rewrite content only if needed, but ALWAYS restore the
+        ORIGINAL timestamp (the overlay stamped 'Now' to force the rebuild), VERIFY. }
+      if not BytesSame(CurBytes, E.OrigBytes) then
+        TFile.WriteAllBytes(E.RealPath, E.OrigBytes);
+      if not (E.HaveFT and SetFileWriteTime(E.RealPath, E.OrigFT)) then
+        try TFile.SetLastWriteTime(E.RealPath, E.OrigMtime); except end;
+      try RestoreDone := BytesSame(TFile.ReadAllBytes(E.RealPath), E.OrigBytes);
+      except RestoreDone := False; end;
     end
     else
-      Writeln('ghost-check: WARNING -- could not safely restore ', UnitPath,
-              '; recovery journal kept (run ghost-recover or restart the IDE).');
-  end;
-
-  ErrCount := 0; WarnCount := 0; HintCount := 0;
-  for F in Res.Findings do
-    if SameText(F.Severity, 'Error') then Inc(ErrCount)
-    else if SameText(F.Severity, 'Warning') then Inc(WarnCount)
-    else if SameText(F.Severity, 'Hint') then Inc(HintCount);
-
-  Fmt := LowerCase(AArgs.Format);
-  if Fmt = 'json' then
-  begin
-    SB := TStringBuilder.Create;
-    try
-      SB.Append('[');
-      var First := True;
-      for F in Res.Findings do
-      begin
-        if not First then SB.Append(',');
-        First := False;
-        FilePath := F.RawPath;
-        SB.Append(Format(
-          '{"file":"%s","line":%d,"col":%d,' +
-          '"severity":"%s","code":"%s","message":"%s"}',
-          [JsonEscape(FilePath), F.LineNo, F.ColNo,
-           JsonEscape(F.Severity), JsonEscape(F.Code),
-           JsonEscape(F.Message)]));
-      end;
-      SB.Append(']');
-      Writeln(SB.ToString);
-    finally
-      SB.Free;
+    begin
+      { changed by something else (e.g. an IDE save) during the window -- that is
+        the user's content, not our overlay. Leave it. }
+      RestoreDone := True;
+      Writeln('ghost-check: NOTE -- ', E.RealPath,
+              ' changed externally during the check; left as-is.');
     end;
+  except
+    RestoreDone := False;
+  end;
+  if (E.DcuPath <> '') and TFile.Exists(E.DcuPath) then
+    try TFile.Delete(E.DcuPath); except end;
+  if RestoreDone then
+  begin
+    try if TFile.Exists(E.Journal) then TFile.Delete(E.Journal); except end;
+    try if TFile.Exists(E.OrigBak) then TFile.Delete(E.OrigBak); except end;
   end
   else
-  begin
-    for F in Res.Findings do
-      Writeln(Format('%s(%d,%d): %s %s: %s',
-        [F.RawPath, F.LineNo, F.ColNo, F.Severity, F.Code, F.Message]));
-    Writeln(Format('Findings: %d errors, %d warnings, %d hints',
-      [ErrCount, WarnCount, HintCount]));
-  end;
+    Writeln('ghost-check: WARNING -- could not safely restore ', E.RealPath,
+            '; recovery journal kept (run ghost-recover or restart the IDE).');
+end;
 
-  if ErrCount > 0 then Result := 1 else Result := 0;
+{ v0.48: ghost-check -- compile the project with one or more units' content
+  replaced by their UNSAVED buffers, WITHOUT a lasting change to any file. Each
+  overlay is stamped with a current mtime to force its recompile, the project is
+  compiled ONCE, then EVERY file is restored to its original content + EXACT
+  timestamp (verified, crash-journaled in _D-RAG). Overlays come from --overlays
+  <manifest> ('realpath'<TAB>'bufferpath' per line) or a single --unit/--buffer. }
+function DoGhostCheck(const AArgs: TArgs): Integer;
+var
+  Dproj, Fmt, FilePath, DragDir, Ln: string;
+  Entries: TList<TGhostOverlay>;
+  E: TGhostOverlay;
+  ManifestLines, Parts: TArray<string>;
+  Res: TCompileCheckResult;
+  ErrCount, WarnCount, HintCount, I: Integer;
+  F: TCompilerFinding;
+  SB: TStringBuilder;
+const
+  USAGE = 'Usage: drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf>'
+        + ' | --overlays <manifest> ) [--platform win32|win64] [--format json|text]';
+begin
+  Dproj := AArgs.Target;
+  if Dproj = '' then begin Writeln(USAGE); Exit(2); end;
+
+  Entries := TList<TGhostOverlay>.Create;
+  try
+    DragDir := GhostDir(Dproj);
+
+    { Build the overlay list from a manifest, or a single --unit/--buffer pair. }
+    if AArgs.GhostOverlays <> '' then
+    begin
+      if not TFile.Exists(AArgs.GhostOverlays) then
+      begin Writeln('ERROR: overlays manifest not found: ', AArgs.GhostOverlays); Exit(2); end;
+      try ManifestLines := TFile.ReadAllLines(AArgs.GhostOverlays);
+      except SetLength(ManifestLines, 0); end;
+      for Ln in ManifestLines do
+      begin
+        if Trim(Ln) = '' then Continue;
+        Parts := Ln.Split([#9]);
+        if Length(Parts) < 2 then Continue;
+        E := Default(TGhostOverlay);
+        E.RealPath := Parts[0];
+        E.BufPath  := Parts[1];
+        Entries.Add(E);
+      end;
+    end
+    else if (AArgs.GhostUnit <> '') and (AArgs.GhostBuffer <> '') then
+    begin
+      E := Default(TGhostOverlay);
+      E.RealPath := AArgs.GhostUnit;
+      E.BufPath  := AArgs.GhostBuffer;
+      Entries.Add(E);
+    end
+    else
+    begin Writeln(USAGE); Exit(2); end;
+
+    { Load + validate each entry (drop any whose files are missing). }
+    for I := Entries.Count - 1 downto 0 do
+    begin
+      E := Entries[I];
+      if (not TFile.Exists(E.RealPath)) or (not TFile.Exists(E.BufPath)) then
+      begin
+        Writeln('ghost-check: skip (missing): ', E.RealPath);
+        Entries.Delete(I);
+        Continue;
+      end;
+      E.OrigBytes := TFile.ReadAllBytes(E.RealPath);
+      E.OrigMtime := TFile.GetLastWriteTime(E.RealPath);
+      E.HaveFT    := ReadFileWriteTime(E.RealPath, E.OrigFT);
+      E.BufBytes  := TFile.ReadAllBytes(E.BufPath);
+      E.OrigBak   := TPath.Combine(DragDir, ExtractFileName(E.RealPath) + '.ghost-orig');
+      E.Journal   := TPath.Combine(DragDir, ExtractFileName(E.RealPath) + '.ghost-journal');
+      if SameText(ExtractFileExt(E.RealPath), '.pas') then
+        E.DcuPath := ResolveGhostDcu(Dproj, E.RealPath, AArgs.CheckPlatform)
+      else
+        E.DcuPath := '';
+      Entries[I] := E;
+    end;
+
+    if Entries.Count = 0 then
+    begin Writeln('ghost-check: nothing to overlay.'); Exit(2); end;
+
+    Res := Default(TCompileCheckResult);
+    try
+      for E in Entries do GhostApplyOverlay(E);
+      Res := TCompileChecker.Run(Dproj);
+      Res.Findings := NormalizeFindings(Res.Findings, ExtractFilePath(Dproj));
+    finally
+      { ALWAYS restore EVERY overlaid file (each independently hardened). }
+      for E in Entries do GhostRestoreOverlay(E);
+    end;
+
+    ErrCount := 0; WarnCount := 0; HintCount := 0;
+    for F in Res.Findings do
+      if SameText(F.Severity, 'Error') then Inc(ErrCount)
+      else if SameText(F.Severity, 'Warning') then Inc(WarnCount)
+      else if SameText(F.Severity, 'Hint') then Inc(HintCount);
+
+    Fmt := LowerCase(AArgs.Format);
+    if Fmt = 'json' then
+    begin
+      SB := TStringBuilder.Create;
+      try
+        SB.Append('[');
+        var First := True;
+        for F in Res.Findings do
+        begin
+          if not First then SB.Append(',');
+          First := False;
+          FilePath := F.RawPath;
+          SB.Append(Format(
+            '{"file":"%s","line":%d,"col":%d,' +
+            '"severity":"%s","code":"%s","message":"%s"}',
+            [JsonEscape(FilePath), F.LineNo, F.ColNo,
+             JsonEscape(F.Severity), JsonEscape(F.Code),
+             JsonEscape(F.Message)]));
+        end;
+        SB.Append(']');
+        Writeln(SB.ToString);
+      finally
+        SB.Free;
+      end;
+    end
+    else
+    begin
+      for F in Res.Findings do
+        Writeln(Format('%s(%d,%d): %s %s: %s',
+          [F.RawPath, F.LineNo, F.ColNo, F.Severity, F.Code, F.Message]));
+      Writeln(Format('Findings: %d errors, %d warnings, %d hints',
+        [ErrCount, WarnCount, HintCount]));
+    end;
+
+    if ErrCount > 0 then Result := 1 else Result := 0;
+  finally
+    Entries.Free;
+  end;
 end;
 
 { v0.47: ghost-recover -- on IDE startup, scan a project's hidden _D-RAG folder
