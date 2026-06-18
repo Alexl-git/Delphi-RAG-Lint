@@ -85,6 +85,10 @@ type
       variables/components/properties -- not just calls. Off = today's
       call/type_use-only behaviour (shallow scan, e.g. libraries). }
     EmitUsageRefs: Boolean;
+    { v0.48: nesting depth while walking routine bodies. 0 = top-level (unit /
+      implementation section). Lets us emit a symbol only for TOP-LEVEL
+      implementation-only free routines, never for nested local procedures. }
+    RoutineDepth: Integer;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     function Emit(AKind: TSymbolKind; const AName, AQualifiedName: string;
@@ -660,6 +664,20 @@ begin
     ProcSignatureOf(ANode, AState.Source), Modifiers);
 end;
 
+{ v0.48: does the in-memory symbol list already hold a free routine (proc/func) by
+  this name? Used to dedup an implementation-only free routine against a prior
+  interface or forward declaration so we never emit a duplicate symbol. }
+function FreeRoutineSymbolExists(const AState: TWalkState; const AName: string): Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  for i := 0 to AState.Symbols.Count - 1 do
+    if (AState.Symbols[i].Kind in [skProcedure, skFunction]) and
+       SameText(AState.Symbols[i].Name, AName) then
+      Exit(True);
+end;
+
 // v8: walk a Spring4D fluent method-access chain (descend the lhs/entity spine of
 // exprDot / exprTpl / exprCall nodes), collect (method, type-arg) links, classify
 // via SpringDI, and emit DI facts. Type-arg text is the verbatim typeref source,
@@ -908,14 +926,40 @@ begin
     Exit;
   end;
 
-  // Implementation bodies: don't emit a duplicate symbol from the `header:`
-  // declProc (the interface decl is the source of truth). Walk only the
-  // `body:` so call expressions inside produce TReference records.
+  // Implementation bodies. A routine declared in the interface (or class) is the
+  // source of truth -- its `header:` defProc must NOT emit a duplicate. BUT a
+  // TOP-LEVEL free routine defined ONLY in the implementation section has no such
+  // declaration, so without this it would never be a symbol at all (query /
+  // find-callers returned nothing). v0.48: emit those implementation-only free
+  // routines. Nested locals (RoutineDepth > 0) and method bodies (qualified
+  // 'TClass.Method' name) are still skipped -- their decl is the source.
   if NodeType = 'defProc' then
   begin
+    if AState.RoutineDepth = 0 then
+    begin
+      var HdrNode := ANode.ChildByField('header');
+      if not HdrNode.IsNull then
+      begin
+        var HdrNameNode := HdrNode.ChildByField('name');
+        if not HdrNameNode.IsNull then
+        begin
+          var HdrName := NodeText(HdrNameNode, AState.Source);
+          if (HdrName <> '') and (Pos('.', HdrName) = 0)
+             and not FreeRoutineSymbolExists(AState, HdrName) then
+            WalkDeclProc(HdrNode, AState, AParentSymbolIdx, AParentQualifiedName, False);
+        end;
+      end;
+    end;
     var BodyNode := ANode.ChildByField('body');
     if not BodyNode.IsNull then
-      Walk(BodyNode, AState, AParentSymbolIdx, AParentQualifiedName);
+    begin
+      Inc(AState.RoutineDepth);
+      try
+        Walk(BodyNode, AState, AParentSymbolIdx, AParentQualifiedName);
+      finally
+        Dec(AState.RoutineDepth);
+      end;
+    end;
     Exit;
   end;
 
