@@ -65,6 +65,10 @@ procedure InvokeRename(Sender: TObject);
 procedure InvokeCompileDiagnose(Sender: TObject);
 procedure InvokeGhostCheck(Sender: TObject);
 procedure InvokeGhostRecover(Sender: TObject);
+{ v0.47: non-interactive recovery for a SPECIFIC project; the project-open
+  notifier calls this once a .dproj is actually loaded (the BPL-load startup
+  pass runs before any project exists and would otherwise miss the crash). }
+procedure RunGhostRecoverForProject(const AProjFile: string);
 procedure InvokeImportLog(Sender: TObject);
 { v0.27: YADF format integration }
 procedure InvokeFormatYadf(Sender: TObject);
@@ -1355,7 +1359,11 @@ begin
 end;
 
 var
-  GCompileBusy: Integer = 0;   { single-flight guard for the async compiler }
+  { v0.47: ONE guard shared by Compile&Diagnose, compile-on-save AND ghost-check.
+    They all run msbuild on the SAME project; ghost-check additionally overlays
+    the unsaved buffer on the real .pas, so a concurrent compile would build that
+    overlay and mis-attribute its findings to the saved file. Mutually exclusive. }
+  GProjectBuildBusy: Integer = 0;
 
 /// <summary>Compiles AProjFile OUT-OF-PROCESS on a background thread (the real
 /// msbuild incremental compile) and pushes compiler findings -- including
@@ -1374,7 +1382,7 @@ begin
       ShowMessage('drag-lint Compile & Diagnose: no active project found.');
     Exit;
   end;
-  if AtomicCmpExchange(GCompileBusy, 1, 0) <> 0 then
+  if AtomicCmpExchange(GProjectBuildBusy, 1, 0) <> 0 then
   begin
     if AInteractive then
       ShowMessage('drag-lint: a compile is already running -- please wait.');
@@ -1422,7 +1430,7 @@ begin
                 + 'output (build-configuration or msbuild error).');
           end;
         end);
-      AtomicExchange(GCompileBusy, 0);
+      AtomicExchange(GProjectBuildBusy, 0);
     end).Start;
 end;
 
@@ -1476,9 +1484,6 @@ begin
   end;
 end;
 
-var
-  GGhostBusy: Integer = 0;   { single-flight guard for ghost-check }
-
 /// <summary>Compiles the active unit's UNSAVED buffer in the context of the real
 /// project (engine 'ghost-check': overlay buffer on a throwaway copy of the file
 /// with a guaranteed restore) and pushes the compiler errors into the Diagnostics
@@ -1495,8 +1500,8 @@ begin
   begin if AInteractive then ShowMessage('drag-lint: no active editor buffer.'); Exit; end;
   if not SameText(ExtractFileExt(UnitPath), '.pas') then
   begin if AInteractive then ShowMessage('drag-lint: the active file is not a .pas unit.'); Exit; end;
-  if AtomicCmpExchange(GGhostBusy, 1, 0) <> 0 then
-  begin if AInteractive then ShowMessage('drag-lint: a buffer compile is already running.'); Exit; end;
+  if AtomicCmpExchange(GProjectBuildBusy, 1, 0) <> 0 then
+  begin if AInteractive then ShowMessage('drag-lint: a compile is already running -- please wait.'); Exit; end;
 
   ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
   if not FileExists(ExePath) then ExePath := 'drag-lint.exe';
@@ -1506,7 +1511,7 @@ begin
   try
     TFile.WriteAllText(TmpBuf, BufText, TEncoding.ANSI);  { strict-ANSI .pas }
   except
-    AtomicExchange(GGhostBusy, 0);
+    AtomicExchange(GProjectBuildBusy, 0);
     if AInteractive then ShowMessage('drag-lint: could not stage the buffer.');
     Exit;
   end;
@@ -1546,7 +1551,7 @@ begin
               ShowMessage('drag-lint Compile Buffer: no parseable compiler output.');
           end;
         end);
-      AtomicExchange(GGhostBusy, 0);
+      AtomicExchange(GProjectBuildBusy, 0);
     end).Start;
 end;
 
@@ -1561,11 +1566,11 @@ end;
   posts to the IDE Messages pane IF something was recovered -- no prompt. The
   engine restores the saved original and keeps the crash-time content in
   _D-RAG\<unit>.crash-buffer, so nothing is ever lost. }
-procedure RunGhostRecover(AInteractive: Boolean);
+procedure RunGhostRecoverFor(const AProjFile: string; AInteractive: Boolean);
 var
   ProjFile, ExePath: string;
 begin
-  ProjFile := GetActiveProjectFile;
+  ProjFile := AProjFile;
   if ProjFile = '' then
   begin if AInteractive then ShowMessage('drag-lint: no active project.'); Exit; end;
   ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
@@ -1608,6 +1613,20 @@ begin
             end;
           end);
     end).Start;
+end;
+
+{ menu/interactive path: recover the currently-active project }
+procedure RunGhostRecover(AInteractive: Boolean);
+begin
+  RunGhostRecoverFor(GetActiveProjectFile, AInteractive);
+end;
+
+{ v0.47: recover a SPECIFIC project (called from the project-open notifier, which
+  fires AFTER the project is loaded -- the BPL-load startup pass runs too early,
+  before any project exists, so on its own it would miss the just-crashed one). }
+procedure RunGhostRecoverForProject(const AProjFile: string);
+begin
+  RunGhostRecoverFor(AProjFile, False);
 end;
 
 procedure InvokeGhostRecover(Sender: TObject);

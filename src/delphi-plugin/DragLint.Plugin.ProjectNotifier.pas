@@ -37,7 +37,8 @@ implementation
 uses
   Winapi.Windows,
   DragLint.Plugin.SaveNotifier,
-  DragLint.Plugin.LiveDiagnostics;
+  DragLint.Plugin.LiveDiagnostics,
+  DragLint.Plugin.Editor;
 
 { ---- IOTANotifier stubs ---- }
 
@@ -214,6 +215,11 @@ begin
 
   { --- Only auto-index when a .dproj is opened --- }
   if LowerCase(ExtractFileExt(FileName)) <> '.dproj' then Exit;
+
+  { v0.47: now that a project is actually loaded, recover any file left overlaid
+    on disk by a ghost-check that was interrupted (IDE crash) in a PRIOR session.
+    Runs independently of AutoIndex; no-ops cheaply when nothing is pending. }
+  try RunGhostRecoverForProject(FileName); except end;
 
   Cfg := LoadSettings;
 

@@ -5162,8 +5162,11 @@ begin
       if (P <> '') and (ABaseDir <> '') and (not TPath.IsPathRooted(P)) then
         try P := TPath.GetFullPath(TPath.Combine(ABaseDir, P)); except end;
       Rec.RawPath := P;
-      { msbuild appends " [<project>.dproj]" to every message -- strip it. }
-      Rec.Message := TRegEx.Replace(Rec.Message, '\s*\[[^\]]*\]\s*$', '');
+      { msbuild appends " [<full>\<project>.dproj]" to every message -- strip ONLY
+        that trailing project-file reference, not a legitimate bracketed tail such
+        as "[WEAKPACKAGEUNIT]" (over-stripping would also corrupt the dedup key). }
+      Rec.Message := TRegEx.Replace(Rec.Message,
+        '\s*\[[^\]]*\.(?:dproj|dpk|dpr|proj)\]\s*$', '', [roIgnoreCase]);
       Key := LowerCase(P) + '|' + IntToStr(Rec.LineNo) + '|' + Rec.Code + '|' + Rec.Message;
       if not Seen.ContainsKey(Key) then
       begin
@@ -5303,20 +5306,75 @@ begin
   end;
 end;
 
+{ Byte-exact buffer compare (dependency-free; files here are small). Used by
+  ghost-check to decide whether its overlay is still on disk before restoring. }
+function BytesSame(const A, B: TBytes): Boolean;
+var
+  I: Integer;
+begin
+  if Length(A) <> Length(B) then Exit(False);
+  for I := 0 to High(A) do
+    if A[I] <> B[I] then Exit(False);
+  Result := True;
+end;
+
+{ Raw last-write FILETIME read/write (100ns ticks). ghost-check restores the
+  EXACT original timestamp this way -- a TDateTime round-trip would lose
+  sub-second precision and the IDE's "changed on disk" check could then fire. }
+function FileTimeToI64(const AFT: TFileTime): Int64;
+begin
+  Result := (Int64(AFT.dwHighDateTime) shl 32) or Int64(Cardinal(AFT.dwLowDateTime));
+end;
+
+function I64ToFileTime(const AValue: Int64): TFileTime;
+begin
+  Result.dwLowDateTime  := Cardinal(AValue and $FFFFFFFF);
+  Result.dwHighDateTime := Cardinal((AValue shr 32) and $FFFFFFFF);
+end;
+
+function ReadFileWriteTime(const APath: string; out AFT: TFileTime): Boolean;
+var
+  H: THandle;
+begin
+  Result := False;
+  H := CreateFile(PChar(APath), GENERIC_READ,
+    FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE, nil,
+    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  if H = INVALID_HANDLE_VALUE then Exit;
+  try Result := GetFileTime(H, nil, nil, @AFT); finally CloseHandle(H); end;
+end;
+
+function SetFileWriteTime(const APath: string; const AFT: TFileTime): Boolean;
+var
+  H: THandle;
+begin
+  Result := False;
+  H := CreateFile(PChar(APath), FILE_WRITE_ATTRIBUTES,
+    FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE, nil,
+    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  if H = INVALID_HANDLE_VALUE then Exit;
+  try Result := SetFileTime(H, nil, nil, @AFT); finally CloseHandle(H); end;
+end;
+
 { v0.47: ghost-check -- compile the project with ONE unit's content replaced by
   an unsaved buffer, WITHOUT a lasting change to the file. Overlays the buffer on
-  the real .pas (preserving its mtime so the IDE shows no "changed on disk"
-  prompt), deletes the unit's .dcu to force a recompile despite the unchanged
-  mtime, runs the real incremental compile, then ALWAYS restores the original
-  content + mtime in a finally (and drops the buffer-based .dcu so the next real
-  build recompiles from the saved source). A crash leaves the buffer (the user's
-  current work) + nothing else damaged. }
+  the real .pas and stamps a CURRENT mtime so the incremental compiler always
+  rebuilds the unit (robust regardless of where the .dcu lives -- platform/config),
+  runs the real incremental compile, then in a finally ALWAYS restores the original
+  content + the EXACT original timestamp (raw FILETIME, so the IDE sees no "changed
+  on disk" change). Restore is verified and never clobbers a concurrent external
+  save; the crash-recovery journal in _D-RAG is kept if the restore cannot be
+  proven, so ghost-recover can finish on next startup. A crash leaves the buffer
+  (the user's current work) + nothing else damaged. }
 function DoGhostCheck(const AArgs: TArgs): Integer;
 var
   Dproj, UnitPath, BufPath, DcuPath, Fmt, FilePath: string;
   DragDir, OrigBak, Journal: string;
-  OrigBytes, BufBytes: TBytes;
+  OrigBytes, BufBytes, CurBytes: TBytes;
   OrigMtime: TDateTime;
+  OrigFT: TFileTime;
+  HaveFT, RestoreDone: Boolean;
+  JournalText: string;
   Res: TCompileCheckResult;
   ErrCount, WarnCount, HintCount: Integer;
   F: TCompilerFinding;
@@ -5337,7 +5395,8 @@ begin
   begin Writeln('ERROR: buffer not found: ', BufPath); Exit(2); end;
 
   OrigBytes := TFile.ReadAllBytes(UnitPath);
-  OrigMtime := TFile.GetLastWriteTime(UnitPath);
+  OrigMtime := TFile.GetLastWriteTime(UnitPath);          { fallback }
+  HaveFT    := ReadFileWriteTime(UnitPath, OrigFT);        { preferred: tick-exact }
   BufBytes  := TFile.ReadAllBytes(BufPath);
   DcuPath   := ResolveGhostDcu(Dproj, UnitPath, AArgs.CheckPlatform);
   DragDir   := GhostDir(Dproj);
@@ -5351,29 +5410,70 @@ begin
       (ghost-recover). Best-effort. }
     try
       TFile.WriteAllBytes(OrigBak, OrigBytes);
-      TFile.WriteAllText(Journal,
+      JournalText :=
         'unit=' + UnitPath + sLineBreak +
         'orig=' + OrigBak + sLineBreak +
-        'mtime=' + FloatToStr(Double(OrigMtime), TFormatSettings.Invariant) + sLineBreak);
+        'mtime=' + FloatToStrF(Double(OrigMtime), ffGeneral, 17, 0,
+                               TFormatSettings.Invariant) + sLineBreak;
+      if HaveFT then
+        JournalText := JournalText + 'ft=' + IntToStr(FileTimeToI64(OrigFT)) + sLineBreak;
+      TFile.WriteAllText(Journal, JournalText);
     except end;
-    { overlay the buffer; keep the original mtime so the IDE sees no change }
+    { Overlay the buffer and stamp a CURRENT mtime so the incremental compiler
+      always rebuilds this unit (its source is now newer than any .dcu) -- robust
+      regardless of where the .dcu lives (platform/config). The DCU delete below
+      is best-effort belt-and-suspenders. The ORIGINAL mtime is put back in the
+      finally, so the IDE still sees no lasting change on disk. }
     TFile.WriteAllBytes(UnitPath, BufBytes);
-    try TFile.SetLastWriteTime(UnitPath, OrigMtime); except end;
-    { force a recompile of this unit despite the preserved mtime }
+    try TFile.SetLastWriteTime(UnitPath, Now); except end;
     if (DcuPath <> '') and TFile.Exists(DcuPath) then
       try TFile.Delete(DcuPath); except end;
     Res := TCompileChecker.Run(Dproj);
     Res.Findings := NormalizeFindings(Res.Findings, ExtractFilePath(Dproj));
   finally
-    { ALWAYS restore the original content + mtime }
-    try TFile.WriteAllBytes(UnitPath, OrigBytes); except end;
-    try TFile.SetLastWriteTime(UnitPath, OrigMtime); except end;
+    { Restore -- but (a) never clobber a concurrent external save made during the
+      compile window, and (b) never drop the crash-recovery journal unless the
+      file is provably back to the saved original (so ghost-recover can finish the
+      job on next startup if the restore write itself fails). }
+    RestoreDone := False;
+    try
+      CurBytes := TFile.ReadAllBytes(UnitPath);
+      if BytesSame(CurBytes, OrigBytes) or BytesSame(CurBytes, BufBytes) then
+      begin
+        { disk holds our overlay (or already-original content) -> normalize back to
+          the saved original: rewrite content only if needed, but ALWAYS restore the
+          ORIGINAL timestamp (the overlay stamped 'Now' to force the rebuild, so even
+          when content already matches the mtime must be put back), then VERIFY. }
+        if not BytesSame(CurBytes, OrigBytes) then
+          TFile.WriteAllBytes(UnitPath, OrigBytes);
+        if not (HaveFT and SetFileWriteTime(UnitPath, OrigFT)) then
+          try TFile.SetLastWriteTime(UnitPath, OrigMtime); except end;
+        try RestoreDone := BytesSame(TFile.ReadAllBytes(UnitPath), OrigBytes);
+        except RestoreDone := False; end;
+      end
+      else
+      begin
+        { the file was changed by something else (e.g. an IDE save) during the
+          window -- that is the user's content, not our overlay. Leave it. }
+        RestoreDone := True;
+        Writeln('ghost-check: NOTE -- ', UnitPath,
+                ' changed externally during the check; left as-is.');
+      end;
+    except
+      RestoreDone := False;
+    end;
     { drop the buffer-based DCU so the next real build recompiles from source }
     if (DcuPath <> '') and TFile.Exists(DcuPath) then
       try TFile.Delete(DcuPath); except end;
-    { restore succeeded -> clear the recovery journal }
-    try if TFile.Exists(Journal) then TFile.Delete(Journal); except end;
-    try if TFile.Exists(OrigBak) then TFile.Delete(OrigBak); except end;
+    if RestoreDone then
+    begin
+      { file is safe -> clear the recovery journal }
+      try if TFile.Exists(Journal) then TFile.Delete(Journal); except end;
+      try if TFile.Exists(OrigBak) then TFile.Delete(OrigBak); except end;
+    end
+    else
+      Writeln('ghost-check: WARNING -- could not safely restore ', UnitPath,
+              '; recovery journal kept (run ghost-recover or restart the IDE).');
   end;
 
   ErrCount := 0; WarnCount := 0; HintCount := 0;
@@ -5425,9 +5525,10 @@ end;
   copied to _D-RAG\<unit>.crash-buffer, THEN the saved original is restored. }
 function DoGhostRecover(const AArgs: TArgs): Integer;
 var
-  Root, DragDir, J, UnitPath, OrigBak, MtimeStr, CrashBuf, Ln: string;
+  Root, DragDir, J, UnitPath, OrigBak, MtimeStr, FtStr, CrashBuf, Ln: string;
   Journals, Lines: TArray<string>;
   Recovered: Integer;
+  FtVal: Int64;
 begin
   Root := AArgs.Target;
   if Root = '' then Root := AArgs.Path;
@@ -5447,13 +5548,14 @@ begin
   end;
   for J in Journals do
   begin
-    UnitPath := ''; OrigBak := ''; MtimeStr := '';
+    UnitPath := ''; OrigBak := ''; MtimeStr := ''; FtStr := '';
     try
       Lines := TFile.ReadAllLines(J);
       for Ln in Lines do
         if Ln.StartsWith('unit=') then UnitPath := Copy(Ln, 6, MaxInt)
         else if Ln.StartsWith('orig=') then OrigBak := Copy(Ln, 6, MaxInt)
-        else if Ln.StartsWith('mtime=') then MtimeStr := Copy(Ln, 7, MaxInt);
+        else if Ln.StartsWith('mtime=') then MtimeStr := Copy(Ln, 7, MaxInt)
+        else if Ln.StartsWith('ft=') then FtStr := Copy(Ln, 4, MaxInt);
     except end;
     if (UnitPath <> '') and (OrigBak <> '') and TFile.Exists(OrigBak)
        and TFile.Exists(UnitPath) then
@@ -5462,9 +5564,16 @@ begin
         { keep the crash-time content so nothing is ever lost }
         CrashBuf := TPath.Combine(DragDir, ExtractFileName(UnitPath) + '.crash-buffer');
         try TFile.Copy(UnitPath, CrashBuf, True); except end;
-        { restore the saved original + mtime }
+        { restore the saved original + mtime (prefer the exact FILETIME) }
         TFile.Copy(OrigBak, UnitPath, True);
-        if MtimeStr <> '' then
+        if (FtStr <> '') and TryStrToInt64(FtStr, FtVal) then
+        begin
+          if not SetFileWriteTime(UnitPath, I64ToFileTime(FtVal)) then
+            if MtimeStr <> '' then
+              try TFile.SetLastWriteTime(UnitPath,
+                TDateTime(StrToFloat(MtimeStr, TFormatSettings.Invariant))); except end;
+        end
+        else if MtimeStr <> '' then
           try TFile.SetLastWriteTime(UnitPath,
             TDateTime(StrToFloat(MtimeStr, TFormatSettings.Invariant))); except end;
         try TFile.Delete(OrigBak); except end;
