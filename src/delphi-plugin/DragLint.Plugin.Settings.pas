@@ -9,6 +9,7 @@ type
     AutoIndex:            Boolean;
     AutoReindexOnSave:    Boolean;
     AutoDiagnosticsOnSave: Boolean;  { v0.42: run syntax/lint diagnostics on save }
+    AutoCompileOnSave:    Boolean;   { v0.47: out-of-process compile-check on save (surfaces E2003 etc.) }
     EnableHover:          Boolean;
     EnableCompletion:     Boolean;
     EnableSignature:      Boolean;
@@ -51,6 +52,7 @@ begin
   Result.AutoIndex            := True;
   Result.AutoReindexOnSave    := True;
   Result.AutoDiagnosticsOnSave := True;
+  Result.AutoCompileOnSave    := True;
   Result.EnableHover          := True;
   Result.EnableCompletion  := True;
   Result.EnableSignature   := True;
@@ -94,6 +96,7 @@ begin
       if Reg.ValueExists('AutoIndex')         then Result.AutoIndex         := Reg.ReadInteger('AutoIndex') <> 0;
       if Reg.ValueExists('AutoReindexOnSave') then Result.AutoReindexOnSave := Reg.ReadInteger('AutoReindexOnSave') <> 0;
       if Reg.ValueExists('AutoDiagnosticsOnSave') then Result.AutoDiagnosticsOnSave := Reg.ReadInteger('AutoDiagnosticsOnSave') <> 0;
+      if Reg.ValueExists('AutoCompileOnSave') then Result.AutoCompileOnSave := Reg.ReadInteger('AutoCompileOnSave') <> 0;
       if Reg.ValueExists('EnableHover')       then Result.EnableHover       := Reg.ReadInteger('EnableHover') <> 0;
       if Reg.ValueExists('EnableCompletion')  then Result.EnableCompletion  := Reg.ReadInteger('EnableCompletion') <> 0;
       if Reg.ValueExists('EnableSignature')   then Result.EnableSignature   := Reg.ReadInteger('EnableSignature') <> 0;
@@ -154,6 +157,7 @@ begin
       Reg.WriteInteger('AutoIndex',         Ord(ASettings.AutoIndex));
       Reg.WriteInteger('AutoReindexOnSave', Ord(ASettings.AutoReindexOnSave));
       Reg.WriteInteger('AutoDiagnosticsOnSave', Ord(ASettings.AutoDiagnosticsOnSave));
+      Reg.WriteInteger('AutoCompileOnSave', Ord(ASettings.AutoCompileOnSave));
       Reg.WriteInteger('EnableHover',       Ord(ASettings.EnableHover));
       Reg.WriteInteger('EnableCompletion',  Ord(ASettings.EnableCompletion));
       Reg.WriteInteger('EnableSignature',   Ord(ASettings.EnableSignature));

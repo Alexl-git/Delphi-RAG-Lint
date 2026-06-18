@@ -1242,11 +1242,14 @@ begin
     try ESS.TopView.Paint; except end;
 end;
 
-procedure InvokeCompileDiagnose(Sender: TObject);
+{ Parse compile-check --format json output and REPLACE the compiler overlay.
+  Thread-safe (the DiagnosticCache has its own lock) -- safe to call from a
+  background thread. Returns False if the output held no parseable JSON array. }
+function ParseAndPushCompileOutput(const AOutput: string;
+  out nErr, nWarn, nHint: Integer): Boolean;
 var
-  ProjFile, ExePath, CmdLine, Output, Json, FilePath, Sev: string;
-  ExitCode, P1, P2, K, LineNo, ColNo: Integer;
-  ErrCount, WarnCount, HintCount: Integer;
+  Json, FilePath, Sev: string;
+  P1, P2, K, LineNo, ColNo: Integer;
   JV: TJSONValue;
   JArr: TJSONArray;
   JItem: TJSONObject;
@@ -1255,57 +1258,15 @@ var
   L: TList<TDragLintDiagnostic>;
   D: TDragLintDiagnostic;
 begin
-  ProjFile := GetActiveProjectFile;
-  if ProjFile = '' then
-  begin
-    ShowMessage('drag-lint Compile & Diagnose: no active project found.');
-    Exit;
-  end;
-
-  ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then
-    ExePath := 'drag-lint.exe';
-
-  { Incremental compile of the active project (engine uses /t:Make), JSON output
-    so every finding -- including semantic errors like E2003 that the live
-    tree-sitter lint cannot see -- is pushed straight into the Diagnostics pane's
-    compiler overlay. No --db / LSP round-trip and no fragile single-unit shadow
-    compile. }
-  CmdLine := Format('"%s" compile-check "%s" --format json', [ExePath, ProjFile]);
-  DebugLog('CompileDiagnose: START cmd=' + CmdLine);
-
-  { Synchronous; an incremental compile is usually seconds, but allow 10 min. }
-  ExitCode := RunAndCaptureStdout(CmdLine, Output, 600000);
-  DebugLog(Format('CompileDiagnose: compile-check returned exit=%d outLen=%d',
-    [ExitCode, Length(Output)]));
-  if ExitCode = 2 then
-  begin
-    DebugLog('CompileDiagnose: ABORT -- failed to spawn compile-check');
-    ShowMessage('drag-lint: failed to spawn compile-check.'#13#10 +
-      'Ensure drag-lint.exe is on PATH or next to the BPL.');
-    Exit;
-  end;
-
-  { Extract the JSON array from stdout (a "Compiling: ..." line and a possible
-    defaults banner precede it). Finding objects have no nested [] so the array
-    runs from the first '[' to the last ']'. }
-  P1 := Pos('[', Output);
+  nErr := 0; nWarn := 0; nHint := 0;
+  Result := False;
+  P1 := Pos('[', AOutput);
   P2 := 0;
-  for K := Length(Output) downto 1 do
-    if Output[K] = ']' then begin P2 := K; Break; end;
-  if (P1 = 0) or (P2 < P1) then
-  begin
-    DebugLog('CompileDiagnose: NO parseable JSON array in output. First 400 chars: '
-      + Copy(Output, 1, 400));
-    ShowMessage('drag-lint Compile & Diagnose: no parseable compiler output '
-      + '(build-configuration or msbuild error).');
-    Exit;
-  end;
-  Json := Copy(Output, P1, P2 - P1 + 1);
-  DebugLog(Format('CompileDiagnose: JSON array extracted (P1=%d P2=%d len=%d)',
-    [P1, P2, Length(Json)]));
+  for K := Length(AOutput) downto 1 do
+    if AOutput[K] = ']' then begin P2 := K; Break; end;
+  if (P1 = 0) or (P2 < P1) then Exit;
+  Json := Copy(AOutput, P1, P2 - P1 + 1);
 
-  ErrCount := 0; WarnCount := 0; HintCount := 0;
   ByFile := TDictionary<string, TList<TDragLintDiagnostic>>.Create;
   try
     JV := TJSONObject.ParseJSONValue(Json);
@@ -1336,11 +1297,11 @@ begin
           JItem.TryGetValue<string>('message', D.Message);
 
           if SameText(Sev, 'Error') or SameText(Sev, 'Fatal') then
-          begin D.Severity := dlsError;   Inc(ErrCount);  end
+          begin D.Severity := dlsError;   Inc(nErr);  end
           else if SameText(Sev, 'Warning') then
-          begin D.Severity := dlsWarning; Inc(WarnCount); end
+          begin D.Severity := dlsWarning; Inc(nWarn); end
           else if SameText(Sev, 'Hint') then
-          begin D.Severity := dlsHint;    Inc(HintCount); end
+          begin D.Severity := dlsHint;    Inc(nHint); end
           else
             D.Severity := dlsInfo;
 
@@ -1356,29 +1317,102 @@ begin
       JV.Free;
     end;
 
-    { Replace the whole compiler overlay (so fixed errors vanish), then push this
-      compile's findings per file. ToArray copies, so the lists are freed below. }
+    { Replace the whole compiler overlay (so fixed errors vanish), then push. }
     Cache.ClearAllCompilerFindings;
     for Pair in ByFile do
-    begin
       Cache.SetCompilerFindings(Pair.Key, Pair.Value.ToArray);
-      DebugLog(Format('CompileDiagnose: overlay %s <- %d finding(s)',
-        [ExtractFileName(Pair.Key), Pair.Value.Count]));
-    end;
-    DebugLog(Format('CompileDiagnose: DONE E=%d W=%d H=%d across %d file(s)',
-      [ErrCount, WarnCount, HintCount, ByFile.Count]));
+    Result := True;
   finally
     for L in ByFile.Values do L.Free;
     ByFile.Free;
   end;
+end;
 
-  RepaintActiveView;
+var
+  GCompileBusy: Integer = 0;   { single-flight guard for the async compiler }
 
-  ShowMessage(Format(
-    'drag-lint Compile & Diagnose complete.'#13#10 +
-    '%d error(s), %d warning(s), %d hint(s).'#13#10 +
-    'See the drag-lint Diagnostics pane.',
-    [ErrCount, WarnCount, HintCount]));
+/// <summary>Compiles AProjFile OUT-OF-PROCESS on a background thread (the real
+/// msbuild incremental compile) and pushes compiler findings -- including
+/// semantic errors like E2003 that the tree-sitter lint cannot see -- into the
+/// Diagnostics pane's compiler overlay. Never blocks the IDE (cannot freeze it
+/// like in-process Error Insight). When AInteractive, shows a completion dialog;
+/// the on-save trigger runs silently. Single-flight: a second call while one is
+/// running is ignored.</summary>
+procedure RunCompileDiagnoseAsync(const AProjFile: string; AInteractive: Boolean);
+var
+  ExePath: string;
+begin
+  if AProjFile = '' then
+  begin
+    if AInteractive then
+      ShowMessage('drag-lint Compile & Diagnose: no active project found.');
+    Exit;
+  end;
+  if AtomicCmpExchange(GCompileBusy, 1, 0) <> 0 then
+  begin
+    if AInteractive then
+      ShowMessage('drag-lint: a compile is already running -- please wait.');
+    Exit;
+  end;
+  ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then ExePath := 'drag-lint.exe';
+
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      CmdLine, Output: string;
+      ExitCode, nErr, nWarn, nHint: Integer;
+      Parsed: Boolean;
+    begin
+      nErr := 0; nWarn := 0; nHint := 0; Parsed := False;
+      try
+        CmdLine := Format('"%s" compile-check "%s" --format json',
+          [ExePath, AProjFile]);
+        DebugLog('CompileDiagnose(async): START ' + CmdLine);
+        ExitCode := RunAndCaptureStdout(CmdLine, Output, 600000);
+        DebugLog(Format('CompileDiagnose(async): exit=%d outLen=%d',
+          [ExitCode, Length(Output)]));
+        if ExitCode <> 2 then
+          Parsed := ParseAndPushCompileOutput(Output, nErr, nWarn, nHint);
+        DebugLog(Format('CompileDiagnose(async): parsed=%s E=%d W=%d H=%d',
+          [BoolToStr(Parsed, True), nErr, nWarn, nHint]));
+      except
+        on E: Exception do
+          DebugLog('CompileDiagnose(async): EXC ' + E.Message);
+      end;
+      TThread.Queue(nil,
+        procedure
+        begin
+          try RepaintActiveView; except end;
+          if AInteractive then
+          begin
+            if Parsed then
+              ShowMessage(Format(
+                'drag-lint Compile & Diagnose complete.'#13#10 +
+                '%d error(s), %d warning(s), %d hint(s).'#13#10 +
+                'See the drag-lint Diagnostics pane.', [nErr, nWarn, nHint]))
+            else
+              ShowMessage('drag-lint Compile & Diagnose: no parseable compiler '
+                + 'output (build-configuration or msbuild error).');
+          end;
+        end);
+      AtomicExchange(GCompileBusy, 0);
+    end).Start;
+end;
+
+procedure InvokeCompileDiagnose(Sender: TObject);
+begin
+  RunCompileDiagnoseAsync(GetActiveProjectFile, True);
+end;
+
+{ v0.47: assigned to the SaveNotifier's compile hook. After a .pas is saved and
+  AutoCompileOnSave is on, run a SILENT async compile of the active project so
+  compiler errors (E2003 etc.) appear in the pane a few seconds later -- without
+  blocking the IDE and without the user running the menu by hand. }
+procedure TriggerCompileOnSave(const AFile: string);
+begin
+  if not SameText(ExtractFileExt(AFile), '.pas') then Exit;
+  RunCompileDiagnoseAsync(GetActiveProjectFile, False);
 end;
 
 procedure InvokeImportLog(Sender: TObject);
@@ -3208,6 +3242,8 @@ begin
   { v0.42: auto-publish diagnostics on save (syntax errors + lint -> markers +
     the Structure 'Diagnostics' node). The hook is no-op until the LSP is up. }
   DragLint.Plugin.SaveNotifier.GAfterSaveDiagHook := TriggerDiagnosticsOnSave;
+  { v0.47: out-of-process compile-on-save -> surfaces compiler errors in the pane. }
+  DragLint.Plugin.SaveNotifier.GAfterSaveCompileHook := TriggerCompileOnSave;
 
   { v0.42: live edit-time diagnostics (debounced buffer lint via the provider
     registry). }

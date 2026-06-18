@@ -72,6 +72,12 @@ var
 var
   GAfterSaveDiagHook: procedure(const AFile: string) = nil;
 
+{ v0.47: set by Editor.RegisterDragLintMenu to Editor.TriggerCompileOnSave.
+  Called from AfterSave (when AutoCompileOnSave is on) to kick off an
+  out-of-process compile of the active project. }
+var
+  GAfterSaveCompileHook: procedure(const AFile: string) = nil;
+
 implementation
 
 uses
@@ -222,6 +228,13 @@ begin
       hook guards), so we never force a slow LSP init from the save path. }
     if Cfg.AutoDiagnosticsOnSave and Assigned(GAfterSaveDiagHook) then
       try GAfterSaveDiagHook(SavedFile); except end;
+
+    { v0.47: out-of-process incremental compile of the active project -> surfaces
+      real compiler errors (E2003 etc., which the tree-sitter lint cannot see)
+      in the Diagnostics pane. Async; never blocks the save and cannot freeze
+      the IDE the way in-process Error Insight can. }
+    if Cfg.AutoCompileOnSave and Assigned(GAfterSaveCompileHook) then
+      try GAfterSaveCompileHook(SavedFile); except end;
   except
     { Silent — never propagate into the IDE save path. }
   end;
