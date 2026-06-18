@@ -666,7 +666,8 @@ begin
     else if (Result.Command = 'typeat') and (Result.Position = '') and
             (not A.StartsWith('--')) then
       Result.Position := A
-    else if ((Result.Command = 'compile-check') or (Result.Command = 'ghost-check'))
+    else if ((Result.Command = 'compile-check') or (Result.Command = 'ghost-check')
+            or (Result.Command = 'ghost-recover'))
             and (Result.Target = '') and (not A.StartsWith('--')) then
       Result.Target := A
     else if ((Result.Command = 'check-unit') or (Result.Command = 'uses-audit') or
@@ -5286,6 +5287,22 @@ begin
   Result := TPath.Combine(DcuOut, ChangeFileExt(ExtractFileName(AUnit), '.dcu'));
 end;
 
+{ v0.47: ensure a hidden "_D-RAG" working folder exists (like the IDE's _history
+  / _recovery). Holds ghost-check crash-recovery journals. }
+function GhostDir(const ADproj: string): string;
+var
+  Attrs: Cardinal;
+begin
+  Result := TPath.Combine(ExtractFilePath(ADproj), '_D-RAG');
+  try
+    if not TDirectory.Exists(Result) then TDirectory.CreateDirectory(Result);
+    Attrs := GetFileAttributes(PChar(Result));
+    if Attrs <> INVALID_FILE_ATTRIBUTES then
+      SetFileAttributes(PChar(Result), Attrs or FILE_ATTRIBUTE_HIDDEN);
+  except
+  end;
+end;
+
 { v0.47: ghost-check -- compile the project with ONE unit's content replaced by
   an unsaved buffer, WITHOUT a lasting change to the file. Overlays the buffer on
   the real .pas (preserving its mtime so the IDE shows no "changed on disk"
@@ -5297,6 +5314,7 @@ end;
 function DoGhostCheck(const AArgs: TArgs): Integer;
 var
   Dproj, UnitPath, BufPath, DcuPath, Fmt, FilePath: string;
+  DragDir, OrigBak, Journal: string;
   OrigBytes, BufBytes: TBytes;
   OrigMtime: TDateTime;
   Res: TCompileCheckResult;
@@ -5322,9 +5340,22 @@ begin
   OrigMtime := TFile.GetLastWriteTime(UnitPath);
   BufBytes  := TFile.ReadAllBytes(BufPath);
   DcuPath   := ResolveGhostDcu(Dproj, UnitPath, AArgs.CheckPlatform);
+  DragDir   := GhostDir(Dproj);
+  OrigBak   := TPath.Combine(DragDir, ExtractFileName(UnitPath) + '.ghost-orig');
+  Journal   := TPath.Combine(DragDir, ExtractFileName(UnitPath) + '.ghost-journal');
 
   Res := Default(TCompileCheckResult);
   try
+    { v0.47 crash-recovery journal: stash the ORIGINAL + a marker in _D-RAG BEFORE
+      we overlay, so a hard kill mid-compile is auto-restorable on next startup
+      (ghost-recover). Best-effort. }
+    try
+      TFile.WriteAllBytes(OrigBak, OrigBytes);
+      TFile.WriteAllText(Journal,
+        'unit=' + UnitPath + sLineBreak +
+        'orig=' + OrigBak + sLineBreak +
+        'mtime=' + FloatToStr(Double(OrigMtime), TFormatSettings.Invariant) + sLineBreak);
+    except end;
     { overlay the buffer; keep the original mtime so the IDE sees no change }
     TFile.WriteAllBytes(UnitPath, BufBytes);
     try TFile.SetLastWriteTime(UnitPath, OrigMtime); except end;
@@ -5340,6 +5371,9 @@ begin
     { drop the buffer-based DCU so the next real build recompiles from source }
     if (DcuPath <> '') and TFile.Exists(DcuPath) then
       try TFile.Delete(DcuPath); except end;
+    { restore succeeded -> clear the recovery journal }
+    try if TFile.Exists(Journal) then TFile.Delete(Journal); except end;
+    try if TFile.Exists(OrigBak) then TFile.Delete(OrigBak); except end;
   end;
 
   ErrCount := 0; WarnCount := 0; HintCount := 0;
@@ -5383,6 +5417,73 @@ begin
   end;
 
   if ErrCount > 0 then Result := 1 else Result := 0;
+end;
+
+{ v0.47: ghost-recover -- on IDE startup, scan a project's hidden _D-RAG folder
+  for ghost-check journals left by a crash mid-overlay and put the file back. To
+  lose NOTHING without a prompt, the crash-time content (current on disk) is first
+  copied to _D-RAG\<unit>.crash-buffer, THEN the saved original is restored. }
+function DoGhostRecover(const AArgs: TArgs): Integer;
+var
+  Root, DragDir, J, UnitPath, OrigBak, MtimeStr, CrashBuf, Ln: string;
+  Journals, Lines: TArray<string>;
+  Recovered: Integer;
+begin
+  Root := AArgs.Target;
+  if Root = '' then Root := AArgs.Path;
+  if Root = '' then Root := GetCurrentDir;
+  if SameText(ExtractFileExt(Root), '.dproj') then Root := ExtractFilePath(Root);
+  DragDir := TPath.Combine(Root, '_D-RAG');
+  Recovered := 0;
+  if not TDirectory.Exists(DragDir) then
+  begin
+    Writeln('ghost-recover: nothing pending.');
+    Exit(0);
+  end;
+  try
+    Journals := TDirectory.GetFiles(DragDir, '*.ghost-journal');
+  except
+    SetLength(Journals, 0);
+  end;
+  for J in Journals do
+  begin
+    UnitPath := ''; OrigBak := ''; MtimeStr := '';
+    try
+      Lines := TFile.ReadAllLines(J);
+      for Ln in Lines do
+        if Ln.StartsWith('unit=') then UnitPath := Copy(Ln, 6, MaxInt)
+        else if Ln.StartsWith('orig=') then OrigBak := Copy(Ln, 6, MaxInt)
+        else if Ln.StartsWith('mtime=') then MtimeStr := Copy(Ln, 7, MaxInt);
+    except end;
+    if (UnitPath <> '') and (OrigBak <> '') and TFile.Exists(OrigBak)
+       and TFile.Exists(UnitPath) then
+    begin
+      try
+        { keep the crash-time content so nothing is ever lost }
+        CrashBuf := TPath.Combine(DragDir, ExtractFileName(UnitPath) + '.crash-buffer');
+        try TFile.Copy(UnitPath, CrashBuf, True); except end;
+        { restore the saved original + mtime }
+        TFile.Copy(OrigBak, UnitPath, True);
+        if MtimeStr <> '' then
+          try TFile.SetLastWriteTime(UnitPath,
+            TDateTime(StrToFloat(MtimeStr, TFormatSettings.Invariant))); except end;
+        try TFile.Delete(OrigBak); except end;
+        try TFile.Delete(J); except end;
+        Inc(Recovered);
+        Writeln('Recovered ', UnitPath, ' (crash content kept at ', CrashBuf, ')');
+      except
+        Writeln('FAILED to recover ', UnitPath);
+      end;
+    end
+    else
+    begin
+      { stale/incomplete journal -> drop it }
+      try TFile.Delete(J); except end;
+      try if (OrigBak <> '') and TFile.Exists(OrigBak) then TFile.Delete(OrigBak); except end;
+    end;
+  end;
+  Writeln(Format('ghost-recover: %d file(s) restored.', [Recovered]));
+  Result := 0;
 end;
 
 { ====================================================================== }
@@ -8383,6 +8484,8 @@ begin
       Result := DoCompileCheck(Args)
     else if Args.Command = 'ghost-check' then
       Result := DoGhostCheck(Args)
+    else if Args.Command = 'ghost-recover' then
+      Result := DoGhostRecover(Args)
     else if Args.Command = 'check-unit' then
       Result := DoCheckUnit(Args)
     else if Args.Command = 'cycles' then

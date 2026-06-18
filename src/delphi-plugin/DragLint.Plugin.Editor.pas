@@ -64,6 +64,7 @@ procedure InvokeRename(Sender: TObject);
 { v0.26: compiler diagnostics }
 procedure InvokeCompileDiagnose(Sender: TObject);
 procedure InvokeGhostCheck(Sender: TObject);
+procedure InvokeGhostRecover(Sender: TObject);
 procedure InvokeImportLog(Sender: TObject);
 { v0.27: YADF format integration }
 procedure InvokeFormatYadf(Sender: TObject);
@@ -1552,6 +1553,66 @@ end;
 procedure InvokeGhostCheck(Sender: TObject);
 begin
   RunGhostCheckAsync(True);
+end;
+
+{ v0.47: restore any file left overlaid by a CRASHED ghost-check (engine writes a
+  journal to the project's hidden _D-RAG before overlaying; a hard kill leaves it).
+  Async; when AInteractive shows a dialog, otherwise (startup auto-run) it only
+  posts to the IDE Messages pane IF something was recovered -- no prompt. The
+  engine restores the saved original and keeps the crash-time content in
+  _D-RAG\<unit>.crash-buffer, so nothing is ever lost. }
+procedure RunGhostRecover(AInteractive: Boolean);
+var
+  ProjFile, ExePath: string;
+begin
+  ProjFile := GetActiveProjectFile;
+  if ProjFile = '' then
+  begin if AInteractive then ShowMessage('drag-lint: no active project.'); Exit; end;
+  ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then ExePath := 'drag-lint.exe';
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      CmdLine, Output: string;
+      ExitCode: Integer;
+      DidRecover: Boolean;
+    begin
+      DidRecover := False;
+      try
+        CmdLine := Format('"%s" ghost-recover "%s"', [ExePath, ProjFile]);
+        ExitCode := RunAndCaptureStdout(CmdLine, Output, 60000);
+        DidRecover := Pos('Recovered ', Output) > 0;
+        DebugLog(Format('GhostRecover: exit=%d recovered=%s',
+          [ExitCode, BoolToStr(DidRecover, True)]));
+      except
+        on E: Exception do DebugLog('GhostRecover: EXC ' + E.Message);
+      end;
+      if DidRecover or AInteractive then
+        TThread.Queue(nil,
+          procedure
+          var MS: IOTAMessageServices;
+          begin
+            if DidRecover and
+               Supports(BorlandIDEServices, IOTAMessageServices, MS) then
+              MS.AddTitleMessage('drag-lint: recovered file(s) left by an ' +
+                'interrupted buffer-compile -- originals restored; crash-time ' +
+                'content kept in the project _D-RAG folder.');
+            if AInteractive then
+            begin
+              if DidRecover then
+                ShowMessage('drag-lint: recovered file(s) from an interrupted ' +
+                  'buffer-compile.'#13#10 +
+                  '(Originals restored; crash-time content saved in _D-RAG.)')
+              else
+                ShowMessage('drag-lint: nothing to recover.');
+            end;
+          end);
+    end).Start;
+end;
+
+procedure InvokeGhostRecover(Sender: TObject);
+begin
+  RunGhostRecover(True);
 end;
 
 procedure InvokeImportLog(Sender: TObject);
@@ -3338,6 +3399,7 @@ begin
   AddWrappedItem(RootMenu, 'Copy Diagnostics (Current File)', InvokeCopyDiagnostics);
   AddWrappedItem(RootMenu, 'Compile && Diagnose',        InvokeCompileDiagnose);
   AddWrappedItem(RootMenu, 'Compile Buffer (unsaved)',   InvokeGhostCheck);
+  AddWrappedItem(RootMenu, 'Recover Buffer-Compile Files', InvokeGhostRecover);
   AddWrappedItem(RootMenu, 'Import Build Log...',        InvokeImportLog);
   AddWrappedItem(RootMenu, 'Test Connection...',         InvokeTestConnection);
   AddWrappedItem(RootMenu, 'Open Plugin Log',            InvokeOpenLog);
@@ -3384,6 +3446,11 @@ begin
   DragLint.Plugin.SaveNotifier.GAfterSaveDiagHook := TriggerDiagnosticsOnSave;
   { v0.47: out-of-process compile-on-save -> surfaces compiler errors in the pane. }
   DragLint.Plugin.SaveNotifier.GAfterSaveCompileHook := TriggerCompileOnSave;
+  { v0.47: best-effort crash recovery on startup -- if a project is already open,
+    restore any file left overlaid by a crashed ghost-check (no prompt; only posts
+    to the Messages pane if it actually recovered something). The "Recover
+    Buffer-Compile Files" menu is the reliable manual fallback. }
+  try RunGhostRecover(False); except end;
 
   { v0.42: live edit-time diagnostics (debounced buffer lint via the provider
     registry). }
