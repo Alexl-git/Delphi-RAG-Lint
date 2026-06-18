@@ -223,6 +223,11 @@ begin
 
   Cfg := LoadSettings;
 
+  { v0.48: startup compile -- surface compiler errors right when the project opens,
+    even if nothing is modified yet. Independent of AutoIndex. }
+  if Cfg.AutoCompileOnStartup then
+    try TriggerProjectCompile(FileName); except end;
+
   { Honor AutoIndex setting — skip spawning when disabled }
   if not Cfg.AutoIndex then Exit;
 

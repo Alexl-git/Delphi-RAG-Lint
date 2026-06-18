@@ -69,6 +69,9 @@ procedure InvokeGhostRecover(Sender: TObject);
   notifier calls this once a .dproj is actually loaded (the BPL-load startup
   pass runs before any project exists and would otherwise miss the crash). }
 procedure RunGhostRecoverForProject(const AProjFile: string);
+{ v0.48: silent plain compile of a SPECIFIC project, for the project-open
+  notifier's startup compile (AutoCompileOnStartup). }
+procedure TriggerProjectCompile(const AProjFile: string);
 procedure InvokeImportLog(Sender: TObject);
 { v0.27: YADF format integration }
 procedure InvokeFormatYadf(Sender: TObject);
@@ -1439,6 +1442,14 @@ begin
   RunCompileDiagnoseAsync(GetActiveProjectFile, True);
 end;
 
+{ v0.48: silent plain compile of a SPECIFIC project (used by the project-open
+  notifier for the startup compile -- at startup nothing is unsaved, so a plain
+  compile of the saved project surfaces the initial compiler errors). }
+procedure TriggerProjectCompile(const AProjFile: string);
+begin
+  RunCompileDiagnoseAsync(AProjFile, False);
+end;
+
 { v0.47: assigned to the SaveNotifier's compile hook. After a .pas is saved and
   AutoCompileOnSave is on, run a SILENT async compile of the active project so
   compiler errors (E2003 etc.) appear in the pane a few seconds later -- without
@@ -1576,32 +1587,29 @@ begin
   end;
 end;
 
-/// <summary>Compiles ALL unsaved units' buffers in the context of the real project
-/// (engine 'ghost-check': overlay each modified module's buffer on its real file
-/// with a guaranteed per-file restore) and pushes the compiler errors into the
-/// Diagnostics overlay -- errors in unsaved code, across every edited unit, appear
-/// without saving. Out-of-process, async, single-flight; no file is permanently
-/// changed.</summary>
-/// <returns>True if a compile started (or there was nothing unsaved to compile);
-/// False only if one was already running -- so the idle auto-trigger can retry.</returns>
+/// <summary>Compiles the project in its CURRENT state and pushes compiler errors
+/// into the Diagnostics overlay: if any units are unsaved it overlays ALL of their
+/// buffers (engine 'ghost-check', guaranteed per-file restore) so errors in unsaved
+/// code across every edited unit appear without saving; if nothing is unsaved it
+/// runs a plain compile of the saved project (so the startup / tab-switch triggers
+/// still surface errors). Out-of-process, async, single-flight; no file is
+/// permanently changed.</summary>
+/// <returns>True if a compile started; False only if one was already running -- so
+/// the idle / switch auto-triggers can retry.</returns>
 function RunGhostCheckAsync(AInteractive: Boolean): Boolean;
 var
   ProjFile, ExePath, Plat, Manifest: string;
   Temps: TArray<string>;
   nOverlays: Integer;
 begin
-  Result := True;   { permanent no-ops below are 'consumed'; only 'busy' retries }
+  Result := True;   { 'consumed' on no-op; only 'busy' returns False to retry }
   ProjFile := GetActiveProjectFile;
   if ProjFile = '' then
   begin if AInteractive then ShowMessage('drag-lint: no active project.'); Exit; end;
 
-  { snapshot every unsaved unit (main thread, OTAPI) BEFORE taking the guard }
+  { snapshot every unsaved unit (main thread, OTAPI) BEFORE taking the guard;
+    0 overlays -> a plain compile of the saved project below. }
   nOverlays := CollectUnsavedOverlays(Manifest, Temps);
-  if nOverlays = 0 then
-  begin
-    if AInteractive then ShowMessage('drag-lint: nothing unsaved to compile.');
-    Exit;   { consumed -- nothing to do }
-  end;
 
   if AtomicCmpExchange(GProjectBuildBusy, 1, 0) <> 0 then
   begin
@@ -1623,16 +1631,20 @@ begin
     begin
       nErr := 0; nWarn := 0; nHint := 0; Parsed := False;
       try
-        CmdLine := Format('"%s" ghost-check "%s" --overlays "%s" --platform %s --format json',
-          [ExePath, ProjFile, Manifest, Plat]);
-        DebugLog('GhostCheck(multi): START ' + CmdLine);
+        if nOverlays > 0 then
+          CmdLine := Format('"%s" ghost-check "%s" --overlays "%s" --platform %s --format json',
+            [ExePath, ProjFile, Manifest, Plat])
+        else
+          { nothing unsaved -> a plain compile of the saved project (same errors,
+            no overlay) so startup / tab-switch triggers still show diagnostics. }
+          CmdLine := Format('"%s" compile-check "%s" --format json', [ExePath, ProjFile]);
+        DebugLog(Format('Compile(state): %d overlay(s) START %s', [nOverlays, CmdLine]));
         ExitCode := RunAndCaptureStdout(CmdLine, Output, 600000);
-        DebugLog(Format('GhostCheck(multi): %d overlay(s) exit=%d outLen=%d',
-          [nOverlays, ExitCode, Length(Output)]));
+        DebugLog(Format('Compile(state): exit=%d outLen=%d', [ExitCode, Length(Output)]));
         if ExitCode <> 2 then
           Parsed := ParseAndPushCompileOutput(Output, nErr, nWarn, nHint);
       except
-        on E: Exception do DebugLog('GhostCheck(multi): EXC ' + E.Message);
+        on E: Exception do DebugLog('Compile(state): EXC ' + E.Message);
       end;
       for var T in Temps do try TFile.Delete(T); except end;
       TThread.Queue(nil,
@@ -1642,11 +1654,17 @@ begin
           if AInteractive then
           begin
             if Parsed then
-              ShowMessage(Format('drag-lint Compile Buffer (%d unsaved unit(s)):'#13#10 +
-                '%d error(s), %d warning(s), %d hint(s).'#13#10 +
-                'Your files on disk were not changed.', [nOverlays, nErr, nWarn, nHint]))
+            begin
+              if nOverlays > 0 then
+                ShowMessage(Format('drag-lint compile (%d unsaved unit(s)):'#13#10 +
+                  '%d error(s), %d warning(s), %d hint(s).'#13#10 +
+                  'Your files on disk were not changed.', [nOverlays, nErr, nWarn, nHint]))
+              else
+                ShowMessage(Format('drag-lint compile (saved project):'#13#10 +
+                  '%d error(s), %d warning(s), %d hint(s).', [nErr, nWarn, nHint]));
+            end
             else
-              ShowMessage('drag-lint Compile Buffer: no parseable compiler output.');
+              ShowMessage('drag-lint compile: no parseable compiler output.');
           end;
         end);
       AtomicExchange(GProjectBuildBusy, 0);

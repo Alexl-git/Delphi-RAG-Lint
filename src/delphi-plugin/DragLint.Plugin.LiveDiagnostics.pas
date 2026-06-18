@@ -55,6 +55,7 @@ const
   DEBOUNCE_MS = 700;           { keystroke->lint (instant feedback) }
   SEMANTIC_DEBOUNCE_MS = 5000;  { keystroke->semantic check (compiler; slower) }
   GHOST_IDLE_MS = 3500;        { keystroke->auto ghost-check (full-project compile of the unsaved buffer; heavy, so a longer pause) }
+  SWITCH_COMPILE_MS = 1200;    { tab-switch->compile-current-state (debounce so flipping through tabs doesn't spam) }
 
 { v0.46: append-only diagnostic trace so a "nothing shows" report is conclusive.
   Open via drag-lint > Open Plugin Log is the editor log; THIS file is dedicated
@@ -370,6 +371,13 @@ type
       compiled, so we never re-compile identical text. }
     FGhostPending:    Boolean;
     FGhostLastHash:   Cardinal;
+    { v0.48: compile-on-switch -- when you move to a different .pas, compile the
+      current state once (even if unchanged) so its compiler errors show. Armed on
+      a file change (baseline-only on the first file seen, since the project-open
+      startup compile covers that one). }
+    FSwitchPending:   Boolean;
+    FSwitchFile:      string;
+    FSwitchArm:       Cardinal;
     procedure OnTick(Sender: TObject);
   public
     constructor Create;
@@ -531,6 +539,25 @@ begin
       LiveLog('runner: tab/view switch -> ' + ExtractFileName(ActiveFile));
     end;
 
+    { v0.48: compile-on-switch -- compile the current state when you move to a
+      DIFFERENT .pas (even if unchanged). Baseline-only on the first file seen (the
+      project-open startup compile covers that one); arm a compile on later changes. }
+    if (ActiveFile <> '') and SameText(ExtractFileExt(ActiveFile), '.pas') and
+       not SameText(ActiveFile, FSwitchFile) then
+    begin
+      if FSwitchFile = '' then
+        FSwitchFile := ActiveFile                  { baseline only -- no compile }
+      else if Settings.AutoCompileOnSwitch then
+      begin
+        FSwitchFile    := ActiveFile;
+        FSwitchPending := True;
+        FSwitchArm     := GetTickCount;
+        LiveLog('runner: tab switch -> arm compile ' + ExtractFileName(ActiveFile));
+      end
+      else
+        FSwitchFile := ActiveFile;
+    end;
+
     { v0.47: content-change poll (~1.5s). The per-view Modified notifier only
       fires on the clean->dirty transition (once per save-cycle), so CONTINUED
       editing never re-armed the runner. This reads the active .pas buffer and
@@ -584,6 +611,18 @@ begin
         end;
         { else a compile is already running -> keep pending, retry next tick }
       end;
+    end;
+
+    { v0.48: fire the compile-on-switch once the switch has settled. Same single-
+      flight compile hook (compiles current state: ghost if unsaved, else plain);
+      if a compile is already running, keep pending and retry next tick. }
+    if FSwitchPending and Settings.AutoCompileOnSwitch and Assigned(GIdleGhostCheckHook)
+       and (GetTickCount - FSwitchArm >= SWITCH_COMPILE_MS) then
+    begin
+      LiveLog('runner: switch settled -> compile current state');
+      if GIdleGhostCheckHook() then
+        FSwitchPending := False;
+      { else busy -> keep pending, retry next tick }
     end;
 
     if FBusy or not FDirty then Exit;
