@@ -37,6 +37,7 @@ uses
   DragLint.Plugin.SymbolSearchForm,
   DragLint.Plugin.GraphWindow,
   DragLint.Plugin.DbResolver,
+  DragLint.Plugin.EditViewNotifier,   { v0.47: ForceGutterRepaint }
   DragLint.Plugin.Settings;
 
 {$R *.dfm}
@@ -260,6 +261,10 @@ begin
         [FLastDiagCount, DiagN, ExtractFileName(CurFile)]));
       FLastDiagCount := DiagN;
       try RefreshEmbeddedStructureDiagnostics(FStructure); except end;
+      { v0.47: the diagnostic cache changed -> also force the editor gutter to
+        redraw from this reliable 400ms timer context, as a fallback in case a
+        path's immediate ForceGutterRepaint was missed. }
+      try ForceGutterRepaint; except end;
     end;
   end;
 end;

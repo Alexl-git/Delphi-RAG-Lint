@@ -12,6 +12,10 @@ uses
 procedure RegisterDragLintEditViewNotifier;
 procedure UnregisterDragLintEditViewNotifier;
 procedure InvokeInlineInfo;
+{ v0.47: force the editor gutter (our PaintLine glyphs) to redraw NOW, even while
+  the user is idle. Robust against double-buffered paints (where the per-paint DC
+  has no window): repaints via the edit window's FORM handle + RDW_ALLCHILDREN. }
+procedure ForceGutterRepaint;
 
 var
   { v0.46: published by PaintLine so the hover tracker can map a screen point to
@@ -35,6 +39,7 @@ uses
   DragLint.Plugin.LiveDiagnostics,
   DragLint.Plugin.AutoComplete,
   DragLint.Plugin.HoverForm,   { v0.47: dismiss the hover popup when the user types }
+  DragLint.Plugin.Telemetry,   { v0.47: log the gutter repaint handle }
   DragLint.Plugin.Settings;
 
 { ---- TDragLintEditViewNotifier -------------------------------------------- }
@@ -427,6 +432,39 @@ begin
   DbPath := ResolveDbPath(S.DbPathTemplate,
               TPath.GetDirectoryName(FilePath));
   CodeLensCache.PopulateOnce(FilePath, S.ExePath, DbPath);
+end;
+
+procedure ForceGutterRepaint;
+var
+  ESS: IOTAEditorServices;
+  View: IOTAEditView;
+  Win: INTAEditWindow;
+  H: HWND;
+begin
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  View := ESS.TopView;
+  if View = nil then Exit;
+  { re-run our PaintLine via the IDE's own repaint (draws into its buffer) }
+  try View.Paint; except end;
+  { then force the edit window + ALL children (text + gutter) to repaint NOW.
+    Use the edit window FORM handle -- always valid. GGutterAnchorHwnd (from
+    WindowFromDC during paint) can be 0 when the IDE double-buffers, which is
+    why the earlier InvalidateRect approach silently did nothing. }
+  H := 0;
+  try
+    Win := View.GetEditWindow;
+    if (Win <> nil) and (Win.Form <> nil) then H := Win.Form.Handle;
+  except
+  end;
+  if (H = 0) and (GGutterAnchorHwnd <> 0) then H := GGutterAnchorHwnd;
+  DLT('gutter', Format('ForceGutterRepaint: editFormHwnd=%d gutterAnchor=%d',
+    [H, GGutterAnchorHwnd]));
+  if (H <> 0) and IsWindow(H) then
+    try
+      RedrawWindow(H, nil, 0,
+        RDW_INVALIDATE or RDW_UPDATENOW or RDW_ALLCHILDREN or RDW_ERASE);
+    except
+    end;
 end;
 
 { ---- Register / Unregister ------------------------------------------------ }

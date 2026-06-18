@@ -235,10 +235,8 @@ begin
     begin
       { v0.47: force the gutter to repaint so its glyphs match the cache we just
         updated (an LSP publish that clears/changes findings must not leave stale
-        dots behind). GGutterAnchorHwnd is the editor surface from PaintLine. }
-      if (GGutterAnchorHwnd <> 0) and IsWindow(GGutterAnchorHwnd) then
-        try InvalidateRect(GGutterAnchorHwnd, nil, False);
-            UpdateWindow(GGutterAnchorHwnd); except end;
+        dots behind). }
+      ForceGutterRepaint;
       if not Supports(BorlandIDEServices, IOTAMessageServices, MS) then Exit;
 
       if Length(Entries) = 0 then
@@ -1263,21 +1261,10 @@ end;
 { Force the active edit view to repaint so gutter diagnostic marks appear now;
   the dock's Diagnostics tab auto-refreshes on its own watch timer. }
 procedure RepaintActiveView;
-var
-  ESS: IOTAEditorServices;
 begin
-  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
-  if ESS.TopView <> nil then
-    try ESS.TopView.Paint; except end;
-  { v0.47: also invalidate the edit-surface window so the gutter glyphs (drawn in
-    our PaintLine) redraw IMMEDIATELY. When the user is idle, TopView.Paint alone
-    can leave the gutter dot lagging behind the Diagnostics list (which refreshes
-    on its own timer) until the next natural paint -- forcing a WM_PAINT makes
-    them appear together. GGutterAnchorHwnd is the editor surface published by
-    EditViewNotifier.PaintLine. }
-  if (GGutterAnchorHwnd <> 0) and IsWindow(GGutterAnchorHwnd) then
-    try InvalidateRect(GGutterAnchorHwnd, nil, False);
-        UpdateWindow(GGutterAnchorHwnd); except end;
+  { v0.47: robust gutter repaint (via the edit-window form handle + RDW_ALLCHILDREN)
+    lives in EditViewNotifier.ForceGutterRepaint. }
+  ForceGutterRepaint;
 end;
 
 { Parse compile-check --format json output and REPLACE the compiler overlay.
