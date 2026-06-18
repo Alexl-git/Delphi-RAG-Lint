@@ -124,6 +124,11 @@ Run-Stage 'CLI smoke' {
     $iofcOut = & $Exe query find-callers --name ImplOnlyHelper --db $db 2>&1
     Write-Check 'find-callers ImplOnlyHelper returns a ref' (($iofcOut | Select-String 'ImplOnlyHelper|SampleUnit' -Quiet) -eq $true) "($($iofcOut.Count) lines)"
 
+    # v0.48 / schema v9: the routine's body line-range is stored (impl_start_line > 0).
+    $ioJson = (& $Exe query --name ImplOnlyHelper --db $db --json 2>&1) | Out-String
+    $implOk = [bool]($ioJson -match '"impl_start_line":\s*([1-9]\d*)')
+    Write-Check 'ImplOnlyHelper has a body range (impl_start_line > 0)' $implOk "impl_start_line=$($Matches[1])"
+
     $t4 = [Diagnostics.Stopwatch]::StartNew()
     $hovOut = & $Exe hover --qname SampleUnit.TKnownClass.KnownMethod --db $db 2>&1
     $t4.Stop()

@@ -3,7 +3,7 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 8;
+  SCHEMA_VERSION = 9;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
@@ -35,7 +35,12 @@ const
     '  start_line      INTEGER NOT NULL,' +
     '  start_col       INTEGER NOT NULL,' +
     '  end_line        INTEGER NOT NULL,' +
-    '  end_col         INTEGER NOT NULL' +
+    '  end_col         INTEGER NOT NULL,' +
+    // v9: implementation body span (header..final 'end'); 0 when no body.
+    // Migrate() ALTERs these onto pre-v9 tables (CREATE TABLE IF NOT EXISTS
+    // does not add columns to an existing table).
+    '  impl_start_line INTEGER,' +
+    '  impl_end_line   INTEGER' +
     ')',
 
     'CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)',

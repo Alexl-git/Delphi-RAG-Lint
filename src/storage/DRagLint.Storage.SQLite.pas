@@ -326,6 +326,14 @@ end;
 procedure TSQLiteSymbolStore.Migrate;
 var
   Stmt: string;
+
+  procedure TryExec(const ASql: string);
+  begin
+    { Idempotent ALTER: swallow the only expected failure ('duplicate column'
+      on a fresh DB whose CREATE TABLE already added the column). }
+    try FConn.ExecSQL(ASql); except end;
+  end;
+
 begin
   FConn.StartTransaction;
   try
@@ -339,6 +347,12 @@ begin
     FConn.Rollback;
     raise;
   end;
+  { v9: additive body-span columns for pre-v9 symbols tables. CREATE TABLE IF
+    NOT EXISTS never adds columns to an existing table, so ALTER explicitly
+    (after the commit so a swallowed duplicate-column error can't disturb the
+    main schema transaction). }
+  TryExec('ALTER TABLE symbols ADD COLUMN impl_start_line INTEGER');
+  TryExec('ALTER TABLE symbols ADD COLUMN impl_end_line INTEGER');
   PrepareStatements;
 end;
 
@@ -368,9 +382,10 @@ begin
     'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol := NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' +
-    '  signature, modifiers, section, start_line, start_col, end_line, end_col) ' +
+    '  signature, modifiers, section, start_line, start_col, end_line, end_col, ' +
+    '  impl_start_line, impl_end_line) ' +
     'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, ' +
-    '  :sl, :sc, :el, :ec)');
+    '  :sl, :sc, :el, :ec, :isl, :iel)');
   FQInsertTrigram := NewQuery(
     'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' +
     'VALUES (:tg, :sid)');
@@ -683,6 +698,8 @@ begin
   FQInsertSymbol.ParamByName('sc').AsInteger := ASymbol.StartCol;
   FQInsertSymbol.ParamByName('el').AsInteger := ASymbol.EndLine;
   FQInsertSymbol.ParamByName('ec').AsInteger := ASymbol.EndCol;
+  FQInsertSymbol.ParamByName('isl').AsInteger := ASymbol.ImplStartLine;  { v9 }
+  FQInsertSymbol.ParamByName('iel').AsInteger := ASymbol.ImplEndLine;    { v9 }
   FQInsertSymbol.ExecSQL;
   Result := FConn.GetLastAutoGenValue('');
   // Populate trigram index alongside each symbol insert so fuzzy queries
@@ -918,6 +935,11 @@ begin
   Result.StartCol := AQ.FieldByName('start_col').AsInteger;
   Result.EndLine := AQ.FieldByName('end_line').AsInteger;
   Result.EndCol := AQ.FieldByName('end_col').AsInteger;
+  if AQ.FindField('impl_start_line') <> nil then   { tolerate pre-v9 databases }
+  begin
+    Result.ImplStartLine := AQ.FieldByName('impl_start_line').AsInteger;
+    Result.ImplEndLine := AQ.FieldByName('impl_end_line').AsInteger;
+  end;
 end;
 
 function TSQLiteSymbolStore.FindSymbolsByExactName(

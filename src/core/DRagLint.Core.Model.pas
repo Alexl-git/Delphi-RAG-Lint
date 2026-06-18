@@ -46,6 +46,12 @@ type
     StartCol: Integer;
     EndLine: Integer;
     EndCol: Integer;
+    // v9: the routine's implementation BODY span (header..final 'end'), so
+    // "which routine contains line N" / context bundles don't need a text-scan.
+    // 0 when the symbol has no body (types, fields, consts, abstract/interface
+    // methods). StartLine/EndLine stay the DECLARATION range.
+    ImplStartLine: Integer;
+    ImplEndLine: Integer;
   end;
 
   TReference = record

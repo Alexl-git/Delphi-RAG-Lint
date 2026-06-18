@@ -1832,6 +1832,10 @@ begin
         JObj.AddPair('start_col', TJSONNumber.Create(Sym.StartCol));
         JObj.AddPair('end_line', TJSONNumber.Create(Sym.EndLine));
         JObj.AddPair('end_col', TJSONNumber.Create(Sym.EndCol));
+        { v9: the routine's implementation BODY span (header..final 'end');
+          0 when the symbol has no body. start_line/end_line stay the decl. }
+        JObj.AddPair('impl_start_line', TJSONNumber.Create(Sym.ImplStartLine));
+        JObj.AddPair('impl_end_line', TJSONNumber.Create(Sym.ImplEndLine));
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));

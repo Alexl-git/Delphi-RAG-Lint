@@ -678,6 +678,39 @@ begin
       Exit(True);
 end;
 
+{ v9: stamp a routine's implementation body span onto its symbol so "which routine
+  contains line N" / context bundles don't need a text-scan. The defProc name is
+  'TClass.Method' or 'Foo'; the decl symbol is unit-qualified ('Unit.TClass.Method'),
+  so match on the leaf name + a qualified-name suffix. Sets the first not-yet-
+  stamped match (overloads in source order). }
+procedure SetRoutineImplRange(const AState: TWalkState; const AName: string;
+  AStartLine, AEndLine: Integer);
+var
+  i: Integer;
+  Sym: TSymbol;
+  LastSeg: string;
+begin
+  if AName = '' then Exit;
+  LastSeg := AName;
+  if Pos('.', LastSeg) > 0 then
+    LastSeg := Copy(LastSeg, LastDelimiter('.', LastSeg) + 1, MaxInt);
+  for i := AState.Symbols.Count - 1 downto 0 do
+  begin
+    Sym := AState.Symbols[i];
+    if (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor])
+       and (Sym.ImplStartLine = 0)
+       and SameText(Sym.Name, LastSeg)
+       and (SameText(Sym.QualifiedName, AName)
+            or Sym.QualifiedName.EndsWith('.' + AName, True)) then
+    begin
+      Sym.ImplStartLine := AStartLine;
+      Sym.ImplEndLine := AEndLine;
+      AState.Symbols[i] := Sym;
+      Exit;
+    end;
+  end;
+end;
+
 // v8: walk a Spring4D fluent method-access chain (descend the lhs/entity spine of
 // exprDot / exprTpl / exprCall nodes), collect (method, type-arg) links, classify
 // via SpringDI, and emit DI facts. Type-arg text is the verbatim typeref source,
@@ -947,6 +980,11 @@ begin
           if (HdrName <> '') and (Pos('.', HdrName) = 0)
              and not FreeRoutineSymbolExists(AState, HdrName) then
             WalkDeclProc(HdrNode, AState, AParentSymbolIdx, AParentQualifiedName, False);
+          { v9: record this routine's body span on its symbol (decl or the
+            impl-only one just emitted above). }
+          if HdrName <> '' then
+            SetRoutineImplRange(AState, HdrName,
+              Integer(ANode.StartPoint.row) + 1, Integer(ANode.EndPoint.row) + 1);
         end;
       end;
     end;
