@@ -348,6 +348,11 @@ type
     FLastEdit:  Cardinal;
     FBusy:      Boolean;
     FLastActiveFile: string;   { v0.46: auto-lint on tab/view switch }
+    { v0.47: content-change poll -- catches edits the per-view Modified notifier
+      misses (it only fires on the clean->dirty transition). }
+    FLastHashCheck:   Cardinal;
+    FLastContentHash: Cardinal;
+    FLastHashFile:    string;
     procedure OnTick(Sender: TObject);
   public
     constructor Create;
@@ -446,6 +451,17 @@ begin
   end;
 end;
 
+{ v0.47: cheap rolling hash of the buffer for the runner's change-detection
+  poll -- avoids re-linting when nothing actually changed. }
+function CheapHash(const S: string): Cardinal;
+var
+  I: Integer;
+begin
+  Result := Cardinal(Length(S));
+  for I := 1 to Length(S) do
+    Result := (Result * 31) + Cardinal(Ord(S[I]));
+end;
+
 constructor TLiveRunner.Create;
 begin
   inherited Create;
@@ -497,6 +513,36 @@ begin
       FDirty    := True;
       FLastEdit := GetTickCount - DEBOUNCE_MS;   { lint on the next tick }
       LiveLog('runner: tab/view switch -> ' + ExtractFileName(ActiveFile));
+    end;
+
+    { v0.47: content-change poll (~1.5s). The per-view Modified notifier only
+      fires on the clean->dirty transition (once per save-cycle), so CONTINUED
+      editing never re-armed the runner. This reads the active .pas buffer and
+      compares a cheap hash -- catching every edit regardless of notifier flakiness
+      (EditorViewModified covers the snappy case; this is the guarantee). }
+    if GetTickCount - FLastHashCheck >= 1500 then
+    begin
+      FLastHashCheck := GetTickCount;
+      var PollFile: string;
+      var Snap: string := ActiveBufferText(PollFile);
+      if (PollFile <> '') and SameText(ExtractFileExt(PollFile), '.pas') then
+      begin
+        var HashNow: Cardinal := CheapHash(Snap);
+        if not SameText(PollFile, FLastHashFile) then
+        begin
+          { new file: set the baseline only -- the tab/view switch above already
+            armed a lint for it. }
+          FLastHashFile    := PollFile;
+          FLastContentHash := HashNow;
+        end
+        else if HashNow <> FLastContentHash then
+        begin
+          FLastContentHash := HashNow;
+          FDirty    := True;
+          FLastEdit := GetTickCount;   { debounce 700ms after the detected change }
+          LiveLog('runner: content changed (poll) -> dirty');
+        end;
+      end;
     end;
 
     if FBusy or not FDirty then Exit;

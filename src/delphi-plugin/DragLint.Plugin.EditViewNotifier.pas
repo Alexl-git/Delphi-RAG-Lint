@@ -382,7 +382,16 @@ procedure TDragLintEditServicesNotifier.WindowActivated(
 procedure TDragLintEditServicesNotifier.WindowCommand(const EditWindow: INTAEditWindow;
   Command, Param: Integer; var Handled: Boolean); begin end;
 procedure TDragLintEditServicesNotifier.EditorViewModified(
-  const EditWindow: INTAEditWindow; const EditView: IOTAEditView); begin end;
+  const EditWindow: INTAEditWindow; const EditView: IOTAEditView);
+begin
+  { v0.47: per-edit modify notification. The per-VIEW IOTANotifier.Modified only
+    fires on the clean->dirty TRANSITION (once per save-cycle), so continued
+    editing never re-triggered the live runner and diagnostics went stale after
+    the first keystroke. This services-level callback fires on each modification.
+    Guarded; a diagnostics path must never disturb the editor. }
+  try NotifyEditDirty; except end;
+  try NotifyEditForAutoComplete; except end;
+end;
 procedure TDragLintEditServicesNotifier.DockFormVisibleChanged(
   const EditWindow: INTAEditWindow; DockForm: TDockableForm); begin end;
 procedure TDragLintEditServicesNotifier.DockFormUpdated(
