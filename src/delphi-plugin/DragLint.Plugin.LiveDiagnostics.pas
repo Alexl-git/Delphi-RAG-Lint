@@ -416,7 +416,8 @@ begin
     can be minutes when the user is idle. GGutterAnchorHwnd is published by
     PaintLine (the editor surface window). }
   if (GGutterAnchorHwnd <> 0) and IsWindow(GGutterAnchorHwnd) then
-    try InvalidateRect(GGutterAnchorHwnd, nil, False); except end;
+    try InvalidateRect(GGutterAnchorHwnd, nil, False);
+        UpdateWindow(GGutterAnchorHwnd); except end;
 end;
 
 procedure PublishToCache(const AFile: string; const ADiags: TDragLintDiagItems);

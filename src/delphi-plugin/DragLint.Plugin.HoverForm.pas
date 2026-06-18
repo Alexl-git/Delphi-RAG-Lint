@@ -661,13 +661,20 @@ begin
 
   FShowTickMs := GetTickCount;
   FWatchTimer.Enabled := True;
-  { v0.47: show WITHOUT stealing keyboard focus -- the editor keeps focus so the
-    user can keep typing. WS_EX_NOACTIVATE (CreateParams) stops Visible:=True from
-    foregrounding us; pin topmost without activating. (Not Show -- its BringToFront
-    can activate.) }
+  { v0.47: show WITHOUT stealing keyboard focus so the user can keep typing.
+    WS_EX_NOACTIVATE (CreateParams) is not enough on its own: Visible:=True uses
+    SW_SHOWNORMAL which still activates us. So we capture whoever had focus (the
+    editor), show topmost+no-activate, then HAND FOCUS BACK. The popup stays
+    visible (topmost) but unfocused; the editor keeps the caret + keystrokes. }
+  var PrevForeground: HWND := GetForegroundWindow;
+  var PrevFocus: HWND := GetFocus;
   Visible := True;
   SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0,
     SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+  if (PrevForeground <> 0) and (PrevForeground <> Handle) then
+    try SetForegroundWindow(PrevForeground); except end;
+  if (PrevFocus <> 0) and (PrevFocus <> Handle) then
+    try Winapi.Windows.SetFocus(PrevFocus); except end;
 end;
 
 { ---- public factory ---- }

@@ -236,7 +236,8 @@ begin
         updated (an LSP publish that clears/changes findings must not leave stale
         dots behind). GGutterAnchorHwnd is the editor surface from PaintLine. }
       if (GGutterAnchorHwnd <> 0) and IsWindow(GGutterAnchorHwnd) then
-        try InvalidateRect(GGutterAnchorHwnd, nil, False); except end;
+        try InvalidateRect(GGutterAnchorHwnd, nil, False);
+            UpdateWindow(GGutterAnchorHwnd); except end;
       if not Supports(BorlandIDEServices, IOTAMessageServices, MS) then Exit;
 
       if Length(Entries) = 0 then
@@ -1252,7 +1253,8 @@ begin
     them appear together. GGutterAnchorHwnd is the editor surface published by
     EditViewNotifier.PaintLine. }
   if (GGutterAnchorHwnd <> 0) and IsWindow(GGutterAnchorHwnd) then
-    try InvalidateRect(GGutterAnchorHwnd, nil, False); except end;
+    try InvalidateRect(GGutterAnchorHwnd, nil, False);
+        UpdateWindow(GGutterAnchorHwnd); except end;
 end;
 
 { Parse compile-check --format json output and REPLACE the compiler overlay.
