@@ -64,6 +64,10 @@ type
     function LineIsClickable(const ALineText: string): Boolean;
   protected
     procedure DoClose(var Action: TCloseAction); override;
+    { v0.47: WS_EX_NOACTIVATE -- show as an info popup that NEVER steals keyboard
+      focus, so the user can keep typing in the editor. Mouse clicks on the
+      clickable rows still work (mouse activation is independent). }
+    procedure CreateParams(var Params: TCreateParams); override;
   public
     constructor Create(AOwner: TComponent); override;
     procedure ShowAt(X, Y: Integer; const AHeader, ASummary: string;
@@ -532,6 +536,13 @@ begin
     FMemo.Cursor := crDefault;
 end;
 
+procedure TDragLintHoverForm.CreateParams(var Params: TCreateParams);
+begin
+  inherited CreateParams(Params);
+  { Info popup: never take keyboard focus; keep off the taskbar/alt-tab. }
+  Params.ExStyle := Params.ExStyle or WS_EX_NOACTIVATE or WS_EX_TOOLWINDOW;
+end;
+
 procedure TDragLintHoverForm.ShowAt(X, Y: Integer; const AHeader, ASummary: string;
   const ACallers: TArray<TDragLintCallerInfo>;
   AAnchorDismiss: Boolean; AAnchorX, AAnchorY: Integer);
@@ -650,7 +661,13 @@ begin
 
   FShowTickMs := GetTickCount;
   FWatchTimer.Enabled := True;
-  Show;
+  { v0.47: show WITHOUT stealing keyboard focus -- the editor keeps focus so the
+    user can keep typing. WS_EX_NOACTIVATE (CreateParams) stops Visible:=True from
+    foregrounding us; pin topmost without activating. (Not Show -- its BringToFront
+    can activate.) }
+  Visible := True;
+  SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0,
+    SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
 end;
 
 { ---- public factory ---- }

@@ -34,6 +34,7 @@ uses
   DragLint.Plugin.RegistryColors,
   DragLint.Plugin.LiveDiagnostics,
   DragLint.Plugin.AutoComplete,
+  DragLint.Plugin.HoverForm,   { v0.47: dismiss the hover popup when the user types }
   DragLint.Plugin.Settings;
 
 { ---- TDragLintEditViewNotifier -------------------------------------------- }
@@ -393,6 +394,9 @@ begin
     Guarded; a diagnostics path must never disturb the editor. }
   try NotifyEditDirty; except end;
   try NotifyEditForAutoComplete; except end;
+  { v0.47: the user resumed typing -> they are not reading the hover popup, so
+    dismiss it immediately (it never held focus, so it cannot eat the keystroke). }
+  try CloseDragLintHover; except end;
 end;
 procedure TDragLintEditServicesNotifier.DockFormVisibleChanged(
   const EditWindow: INTAEditWindow; DockForm: TDockableForm); begin end;
