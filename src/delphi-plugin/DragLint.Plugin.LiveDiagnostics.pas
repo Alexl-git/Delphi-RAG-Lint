@@ -18,6 +18,9 @@ unit DragLint.Plugin.LiveDiagnostics;
 
 interface
 
+uses
+  System.SysUtils;
+
 procedure StartLiveDiagnostics;
 procedure StopLiveDiagnostics;
 { Called from the edit-view notifier's Modified hook. }
@@ -25,11 +28,18 @@ procedure NotifyEditDirty;
 
 var
   GLiveStatus: string = '';   { shown in the dock Diagnostics status line }
+  { v0.47: assigned by the Editor unit to RunGhostCheckAsync(False). The runner
+    calls it after the buffer has been idle a few seconds (auto-compile the
+    UNSAVED buffer so compiler errors like E2003 appear without saving). Returns
+    True if the compile actually STARTED, False if one was already running (so the
+    runner can retry). nil-safe; kept here (not in Editor) to avoid a uses cycle.
+    Called on the MAIN thread. }
+  GIdleGhostCheckHook: TFunc<Boolean> = nil;
 
 implementation
 
 uses
-  System.SysUtils, System.Classes, System.JSON, System.IOUtils,
+  System.Classes, System.JSON, System.IOUtils,
   System.StrUtils, System.Generics.Collections,
   Vcl.ExtCtrls,
   Winapi.Windows,
@@ -44,6 +54,7 @@ uses
 const
   DEBOUNCE_MS = 700;           { keystroke->lint (instant feedback) }
   SEMANTIC_DEBOUNCE_MS = 5000;  { keystroke->semantic check (compiler; slower) }
+  GHOST_IDLE_MS = 3500;        { keystroke->auto ghost-check (full-project compile of the unsaved buffer; heavy, so a longer pause) }
 
 { v0.46: append-only diagnostic trace so a "nothing shows" report is conclusive.
   Open via drag-lint > Open Plugin Log is the editor log; THIS file is dedicated
@@ -354,6 +365,11 @@ type
     FLastHashCheck:   Cardinal;
     FLastContentHash: Cardinal;
     FLastHashFile:    string;
+    { v0.47: auto ghost-check (compile the unsaved buffer on idle). FGhostPending
+      is armed on every real content change; FGhostLastHash is the content we last
+      compiled, so we never re-compile identical text. }
+    FGhostPending:    Boolean;
+    FGhostLastHash:   Cardinal;
     procedure OnTick(Sender: TObject);
   public
     constructor Create;
@@ -539,9 +555,34 @@ begin
         begin
           FLastContentHash := HashNow;
           FDirty    := True;
+          FGhostPending := True;       { arm the auto ghost-check too }
           FLastEdit := GetTickCount;   { debounce 700ms after the detected change }
           LiveLog('runner: content changed (poll) -> dirty');
         end;
+      end;
+    end;
+
+    { v0.47: auto-compile the UNSAVED buffer once it has been idle a few seconds,
+      so real compiler errors (E2003 etc.) on code you have not saved appear
+      without the manual menu or a save. RunGhostCheckAsync is single-flight and
+      restores the file; we also gate on the content hash so identical text is
+      never recompiled. Independent of the lint tier below. }
+    if FGhostPending and Settings.AutoCompileBuffer and Assigned(GIdleGhostCheckHook)
+       and (GetTickCount - FLastEdit >= GHOST_IDLE_MS) then
+    begin
+      if FLastContentHash = FGhostLastHash then
+        FGhostPending := False   { this exact text was already compiled }
+      else
+      begin
+        LiveLog('runner: idle -> auto ghost-check (compile unsaved buffer)');
+        var Started: Boolean := False;
+        try Started := GIdleGhostCheckHook(); except end;
+        if Started then
+        begin
+          FGhostPending  := False;
+          FGhostLastHash := FLastContentHash;   { mark this text compiled }
+        end;
+        { else a compile is already running -> keep pending, retry next tick }
       end;
     end;
 
@@ -637,6 +678,7 @@ begin
     if not GRunner.FDirty then
       LiveLog('NotifyEditDirty: edit detected -> FDirty set');
     GRunner.FDirty := True;
+    GRunner.FGhostPending := True;   { arm the auto ghost-check }
     GRunner.FLastEdit := GetTickCount;
   end
   else

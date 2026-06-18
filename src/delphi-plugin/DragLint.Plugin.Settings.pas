@@ -10,6 +10,7 @@ type
     AutoReindexOnSave:    Boolean;
     AutoDiagnosticsOnSave: Boolean;  { v0.42: run syntax/lint diagnostics on save }
     AutoCompileOnSave:    Boolean;   { v0.47: out-of-process compile-check on save (surfaces E2003 etc.) }
+    AutoCompileBuffer:    Boolean;   { v0.47: auto-compile the UNSAVED buffer on idle (ghost-check) -- compiler errors without saving }
     EnableHover:          Boolean;
     EnableCompletion:     Boolean;
     EnableSignature:      Boolean;
@@ -53,6 +54,7 @@ begin
   Result.AutoReindexOnSave    := True;
   Result.AutoDiagnosticsOnSave := True;
   Result.AutoCompileOnSave    := True;
+  Result.AutoCompileBuffer    := True;
   Result.EnableHover          := True;
   Result.EnableCompletion  := True;
   Result.EnableSignature   := True;
@@ -97,6 +99,7 @@ begin
       if Reg.ValueExists('AutoReindexOnSave') then Result.AutoReindexOnSave := Reg.ReadInteger('AutoReindexOnSave') <> 0;
       if Reg.ValueExists('AutoDiagnosticsOnSave') then Result.AutoDiagnosticsOnSave := Reg.ReadInteger('AutoDiagnosticsOnSave') <> 0;
       if Reg.ValueExists('AutoCompileOnSave') then Result.AutoCompileOnSave := Reg.ReadInteger('AutoCompileOnSave') <> 0;
+      if Reg.ValueExists('AutoCompileBuffer') then Result.AutoCompileBuffer := Reg.ReadInteger('AutoCompileBuffer') <> 0;
       if Reg.ValueExists('EnableHover')       then Result.EnableHover       := Reg.ReadInteger('EnableHover') <> 0;
       if Reg.ValueExists('EnableCompletion')  then Result.EnableCompletion  := Reg.ReadInteger('EnableCompletion') <> 0;
       if Reg.ValueExists('EnableSignature')   then Result.EnableSignature   := Reg.ReadInteger('EnableSignature') <> 0;
@@ -158,6 +161,7 @@ begin
       Reg.WriteInteger('AutoReindexOnSave', Ord(ASettings.AutoReindexOnSave));
       Reg.WriteInteger('AutoDiagnosticsOnSave', Ord(ASettings.AutoDiagnosticsOnSave));
       Reg.WriteInteger('AutoCompileOnSave', Ord(ASettings.AutoCompileOnSave));
+      Reg.WriteInteger('AutoCompileBuffer', Ord(ASettings.AutoCompileBuffer));
       Reg.WriteInteger('EnableHover',       Ord(ASettings.EnableHover));
       Reg.WriteInteger('EnableCompletion',  Ord(ASettings.EnableCompletion));
       Reg.WriteInteger('EnableSignature',   Ord(ASettings.EnableSignature));

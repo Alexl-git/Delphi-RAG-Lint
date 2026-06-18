@@ -1489,10 +1489,13 @@ end;
 /// with a guaranteed restore) and pushes the compiler errors into the Diagnostics
 /// overlay -- errors in unsaved code appear without saving. Out-of-process, async,
 /// single-flight; the file is never permanently changed.</summary>
-procedure RunGhostCheckAsync(AInteractive: Boolean);
+/// <returns>True if a compile actually started (or there was nothing to compile);
+/// False only if one was already running -- so the idle auto-trigger can retry.</returns>
+function RunGhostCheckAsync(AInteractive: Boolean): Boolean;
 var
   ProjFile, UnitPath, BufText, ExePath, Plat, TmpBuf: string;
 begin
+  Result := True;   { permanent no-ops below are 'consumed'; only 'busy' retries }
   ProjFile := GetActiveProjectFile;
   if ProjFile = '' then
   begin if AInteractive then ShowMessage('drag-lint: no active project.'); Exit; end;
@@ -1501,7 +1504,7 @@ begin
   if not SameText(ExtractFileExt(UnitPath), '.pas') then
   begin if AInteractive then ShowMessage('drag-lint: the active file is not a .pas unit.'); Exit; end;
   if AtomicCmpExchange(GProjectBuildBusy, 1, 0) <> 0 then
-  begin if AInteractive then ShowMessage('drag-lint: a compile is already running -- please wait.'); Exit; end;
+  begin if AInteractive then ShowMessage('drag-lint: a compile is already running -- please wait.'); Exit(False); end;
 
   ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
   if not FileExists(ExePath) then ExePath := 'drag-lint.exe';
@@ -3465,6 +3468,15 @@ begin
   DragLint.Plugin.SaveNotifier.GAfterSaveDiagHook := TriggerDiagnosticsOnSave;
   { v0.47: out-of-process compile-on-save -> surfaces compiler errors in the pane. }
   DragLint.Plugin.SaveNotifier.GAfterSaveCompileHook := TriggerCompileOnSave;
+  { v0.47: auto-compile the UNSAVED buffer when editing goes idle (AutoCompileBuffer),
+    so compiler errors on unsaved code appear without saving or the menu. The runner
+    calls this on the main thread; RunGhostCheckAsync is single-flight + restores. }
+  DragLint.Plugin.LiveDiagnostics.GIdleGhostCheckHook :=
+    function: Boolean
+    begin
+      Result := False;
+      try Result := RunGhostCheckAsync(False); except end;
+    end;
   { v0.47: best-effort crash recovery on startup -- if a project is already open,
     restore any file left overlaid by a crashed ghost-check (no prompt; only posts
     to the Messages pane if it actually recovered something). The "Recover
