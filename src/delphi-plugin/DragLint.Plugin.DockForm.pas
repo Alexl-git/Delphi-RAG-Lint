@@ -267,6 +267,20 @@ begin
       try ForceGutterRepaint; except end;
     end;
   end;
+
+  { v0.48: a compile just pushed findings -> auto-scroll the embedded Structure to
+    the Diagnostics section (if it has any), once. The flag is set by the compile
+    and consumed here regardless of whether the diag count changed, so even a
+    same-count refresh still jumps. Honors AutoJumpToDiagnostics. }
+  if GScrollStructureToDiagPending then
+  begin
+    GScrollStructureToDiagPending := False;
+    if LoadSettings.AutoJumpToDiagnostics then
+    begin
+      try RefreshEmbeddedStructureDiagnostics(FStructure); except end;
+      try ScrollEmbeddedStructureToDiagnostics(FStructure); except end;
+    end;
+  end;
 end;
 
 procedure TDragLintDockFrame.HandleInitTimer(Sender: TObject);

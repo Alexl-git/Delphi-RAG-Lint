@@ -26,6 +26,13 @@ function CreateEmbeddedStructure(AOwner: TComponent; AParent: TWinControl): TFor
 procedure RefreshEmbeddedStructure(AForm: TForm);
 { v0.46: cheap diagnostics-only refresh (no symbol re-shell). }
 procedure RefreshEmbeddedStructureDiagnostics(AForm: TForm);
+{ v0.48: scroll an embedded Structure form to its Diagnostics section if it has any. }
+procedure ScrollEmbeddedStructureToDiagnostics(AForm: TForm);
+
+var
+  { v0.48: set True by a compile that just pushed findings; the dock watch timer
+    consumes it to auto-scroll the Structure to the Diagnostics section (if any). }
+  GScrollStructureToDiagPending: Boolean = False;
 
 implementation
 
@@ -92,6 +99,10 @@ type
       already-loaded file (no symbol re-shell) -- fixes "Diagnostics (0)" when
       the lint populates the cache AFTER the structure was last refreshed. }
     procedure RefreshDiagnosticsOnly;
+    { v0.48: scroll the tree so the Diagnostics section is pinned to the top and
+      the first message selected (shared by the 'Diag' button + the auto-jump). }
+    procedure ScrollToDiagnostics;
+    function  HasDiagnostics: Boolean;
   end;
 
 var
@@ -466,7 +477,12 @@ end;
   and select its first message. After a refresh the tree is scrolled to Code
   Elements, leaving Diagnostics above the visible area. Diagnostics is always the
   first root node (added first in BuildTree). }
-procedure TDragLintStructureForm.BtnDiagClick(Sender: TObject);
+function TDragLintStructureForm.HasDiagnostics: Boolean;
+begin
+  Result := Length(FDiags) > 0;
+end;
+
+procedure TDragLintStructureForm.ScrollToDiagnostics;
 var
   Root: TTreeNode;
 begin
@@ -484,6 +500,11 @@ begin
   finally
     FTree.Items.EndUpdate;
   end;
+end;
+
+procedure TDragLintStructureForm.BtnDiagClick(Sender: TObject);
+begin
+  ScrollToDiagnostics;
 end;
 
 procedure TDragLintStructureForm.FormActivate(Sender: TObject);
@@ -654,6 +675,13 @@ procedure RefreshEmbeddedStructureDiagnostics(AForm: TForm);
 begin
   if AForm is TDragLintStructureForm then
     TDragLintStructureForm(AForm).RefreshDiagnosticsOnly;
+end;
+
+procedure ScrollEmbeddedStructureToDiagnostics(AForm: TForm);
+begin
+  if (AForm is TDragLintStructureForm)
+     and TDragLintStructureForm(AForm).HasDiagnostics then
+    TDragLintStructureForm(AForm).ScrollToDiagnostics;
 end;
 
 procedure ShowDragLintStructure;

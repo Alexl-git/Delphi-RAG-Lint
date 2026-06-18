@@ -13,6 +13,7 @@ type
     AutoCompileBuffer:    Boolean;   { v0.47: auto-compile the UNSAVED buffer on idle (ghost-check) -- compiler errors without saving }
     AutoCompileOnStartup: Boolean;   { v0.48: compile the project once when it opens, so compiler errors show immediately }
     AutoCompileOnSwitch:  Boolean;   { v0.48: compile the current state when you switch to a .pas, even if unchanged }
+    AutoJumpToDiagnostics: Boolean;  { v0.48: after a compile updates the gutter, scroll the Structure tree to the Diagnostics section if it has any }
     EnableHover:          Boolean;
     EnableCompletion:     Boolean;
     EnableSignature:      Boolean;
@@ -59,6 +60,7 @@ begin
   Result.AutoCompileBuffer    := True;
   Result.AutoCompileOnStartup := True;
   Result.AutoCompileOnSwitch  := True;
+  Result.AutoJumpToDiagnostics := True;
   Result.EnableHover          := True;
   Result.EnableCompletion  := True;
   Result.EnableSignature   := True;
@@ -106,6 +108,7 @@ begin
       if Reg.ValueExists('AutoCompileBuffer') then Result.AutoCompileBuffer := Reg.ReadInteger('AutoCompileBuffer') <> 0;
       if Reg.ValueExists('AutoCompileOnStartup') then Result.AutoCompileOnStartup := Reg.ReadInteger('AutoCompileOnStartup') <> 0;
       if Reg.ValueExists('AutoCompileOnSwitch') then Result.AutoCompileOnSwitch := Reg.ReadInteger('AutoCompileOnSwitch') <> 0;
+      if Reg.ValueExists('AutoJumpToDiagnostics') then Result.AutoJumpToDiagnostics := Reg.ReadInteger('AutoJumpToDiagnostics') <> 0;
       if Reg.ValueExists('EnableHover')       then Result.EnableHover       := Reg.ReadInteger('EnableHover') <> 0;
       if Reg.ValueExists('EnableCompletion')  then Result.EnableCompletion  := Reg.ReadInteger('EnableCompletion') <> 0;
       if Reg.ValueExists('EnableSignature')   then Result.EnableSignature   := Reg.ReadInteger('EnableSignature') <> 0;
@@ -170,6 +173,7 @@ begin
       Reg.WriteInteger('AutoCompileBuffer', Ord(ASettings.AutoCompileBuffer));
       Reg.WriteInteger('AutoCompileOnStartup', Ord(ASettings.AutoCompileOnStartup));
       Reg.WriteInteger('AutoCompileOnSwitch', Ord(ASettings.AutoCompileOnSwitch));
+      Reg.WriteInteger('AutoJumpToDiagnostics', Ord(ASettings.AutoJumpToDiagnostics));
       Reg.WriteInteger('EnableHover',       Ord(ASettings.EnableHover));
       Reg.WriteInteger('EnableCompletion',  Ord(ASettings.EnableCompletion));
       Reg.WriteInteger('EnableSignature',   Ord(ASettings.EnableSignature));

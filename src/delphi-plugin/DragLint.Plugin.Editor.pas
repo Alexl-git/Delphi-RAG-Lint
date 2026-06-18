@@ -1421,6 +1421,9 @@ begin
         procedure
         begin
           try RepaintActiveView; except end;
+          { v0.48: tell the dock watch timer to jump to the Diagnostics section. }
+          if Parsed then
+            DragLint.Plugin.StructureForm.GScrollStructureToDiagPending := True;
           if AInteractive then
           begin
             if Parsed then
@@ -1651,6 +1654,9 @@ begin
         procedure
         begin
           try RepaintActiveView; except end;
+          { v0.48: tell the dock watch timer to jump to the Diagnostics section. }
+          if Parsed then
+            DragLint.Plugin.StructureForm.GScrollStructureToDiagPending := True;
           if AInteractive then
           begin
             if Parsed then
