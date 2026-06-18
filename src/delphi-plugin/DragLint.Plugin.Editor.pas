@@ -1240,6 +1240,14 @@ begin
   if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
   if ESS.TopView <> nil then
     try ESS.TopView.Paint; except end;
+  { v0.47: also invalidate the edit-surface window so the gutter glyphs (drawn in
+    our PaintLine) redraw IMMEDIATELY. When the user is idle, TopView.Paint alone
+    can leave the gutter dot lagging behind the Diagnostics list (which refreshes
+    on its own timer) until the next natural paint -- forcing a WM_PAINT makes
+    them appear together. GGutterAnchorHwnd is the editor surface published by
+    EditViewNotifier.PaintLine. }
+  if (GGutterAnchorHwnd <> 0) and IsWindow(GGutterAnchorHwnd) then
+    try InvalidateRect(GGutterAnchorHwnd, nil, False); except end;
 end;
 
 { Parse compile-check --format json output and REPLACE the compiler overlay.
