@@ -367,10 +367,9 @@ type
     FLastContentHash: Cardinal;
     FLastHashFile:    string;
     { v0.47: auto ghost-check (compile the unsaved buffer on idle). FGhostPending
-      is armed on every real content change; FGhostLastHash is the content we last
-      compiled, so we never re-compile identical text. }
+      is armed on every edit (NotifyEditDirty / the content poll) and cleared when
+      the compile starts -- so it fires once per edit-burst. }
     FGhostPending:    Boolean;
-    FGhostLastHash:   Cardinal;
     { v0.48: compile-on-switch -- when you move to a different .pas, compile the
       current state once (even if unchanged) so its compiler errors show. Armed on
       a file change (baseline-only on the first file seen, since the project-open
@@ -589,26 +588,32 @@ begin
       end;
     end;
 
-    { v0.47: auto-compile the UNSAVED buffer once it has been idle a few seconds,
+    { v0.48: auto-compile the UNSAVED buffer once it has been idle a few seconds,
       so real compiler errors (E2003 etc.) on code you have not saved appear
-      without the manual menu or a save. RunGhostCheckAsync is single-flight and
-      restores the file; we also gate on the content hash so identical text is
-      never recompiled. Independent of the lint tier below. }
-    if FGhostPending and Settings.AutoCompileBuffer and Assigned(GIdleGhostCheckHook)
-       and (GetTickCount - FLastEdit >= GHOST_IDLE_MS) then
+      without the manual menu or a save. Fires ONCE per edit-burst (FGhostPending
+      is set on every edit by NotifyEditDirty/the poll, and cleared here on a
+      successful start). NO content-hash gate -- the old gate could wedge the
+      trigger permanently OFF when a transient empty buffer-read left
+      FLastContentHash = FGhostLastHash = 0. Logs WHY it skips, so a 'no compile'
+      report is conclusive. Independent of the lint tier below. }
+    if FGhostPending and (GetTickCount - FLastEdit >= GHOST_IDLE_MS) then
     begin
-      if FLastContentHash = FGhostLastHash then
-        FGhostPending := False   { this exact text was already compiled }
+      if not Settings.AutoCompileBuffer then
+      begin
+        FGhostPending := False;
+        LiveLog('runner: auto-ghost SKIP -- AutoCompileBuffer is OFF');
+      end
+      else if not Assigned(GIdleGhostCheckHook) then
+        LiveLog('runner: auto-ghost SKIP -- compile hook not assigned (retry)')
       else
       begin
         LiveLog('runner: idle -> auto ghost-check (compile unsaved buffer)');
         var Started: Boolean := False;
         try Started := GIdleGhostCheckHook(); except end;
         if Started then
-        begin
-          FGhostPending  := False;
-          FGhostLastHash := FLastContentHash;   { mark this text compiled }
-        end;
+          FGhostPending := False   { started; re-armed on the next edit }
+        else
+          LiveLog('runner: auto-ghost busy -- will retry next tick');
         { else a compile is already running -> keep pending, retry next tick }
       end;
     end;
