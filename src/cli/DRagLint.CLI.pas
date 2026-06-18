@@ -172,6 +172,10 @@ type
     // (lsp), it passes --parent-pid <IDE pid> so we self-exit if the IDE dies
     // (belt-and-suspenders alongside the BPL's kill-on-close job object).
     ParentPid:          Cardinal;       // --parent-pid <n>  (0 = not set)
+    // v0.47: ghost-check -- compile the project with one unit's content replaced
+    // by an unsaved buffer, with a guaranteed restore.
+    GhostUnit:          string;         // --unit <real .pas to overlay>
+    GhostBuffer:        string;         // --buffer <temp file holding the buffer>
   end;
 
 procedure PrintHelp;
@@ -662,8 +666,8 @@ begin
     else if (Result.Command = 'typeat') and (Result.Position = '') and
             (not A.StartsWith('--')) then
       Result.Position := A
-    else if (Result.Command = 'compile-check') and (Result.Target = '') and
-            (not A.StartsWith('--')) then
+    else if ((Result.Command = 'compile-check') or (Result.Command = 'ghost-check'))
+            and (Result.Target = '') and (not A.StartsWith('--')) then
       Result.Target := A
     else if ((Result.Command = 'check-unit') or (Result.Command = 'uses-audit') or
              (Result.Command = 'uses-fix')) and
@@ -687,6 +691,16 @@ begin
     begin
       Inc(i);
       Result.ParentPid := Cardinal(StrToInt64Def(ParamStr(i), 0));
+    end
+    else if (A = '--unit') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.GhostUnit := ParamStr(i);
+    end
+    else if (A = '--buffer') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.GhostBuffer := ParamStr(i);
     end
     else if (Result.Path = '') and (not A.StartsWith('--')) then
       Result.Path := A
@@ -5245,6 +5259,132 @@ begin
     Result := 0;
 end;
 
+{ Resolve <unit>.dcu inside the project's DCU output dir (DCC_DcuOutput in the
+  .dproj, with $(Platform)/$(Config) expanded) so ghost-check can delete it and
+  force a recompile. Best-effort; '' if it cannot be determined. }
+function ResolveGhostDcu(const ADproj, AUnit, APlatform: string): string;
+var
+  Content, DcuOut, Plat: string;
+  M: TMatch;
+begin
+  Result := '';
+  Plat := APlatform;
+  if Plat = '' then Plat := 'Win64';
+  DcuOut := '.\' + Plat + '\Debug\DCU';
+  try
+    Content := TFile.ReadAllText(ADproj);
+    M := TRegEx.Match(Content, '<DCC_DcuOutput>(.*?)</DCC_DcuOutput>',
+      [roIgnoreCase, roSingleLine]);
+    if M.Success and (Trim(M.Groups[1].Value) <> '') then
+      DcuOut := Trim(M.Groups[1].Value);
+  except
+  end;
+  DcuOut := StringReplace(DcuOut, '$(Platform)', Plat, [rfReplaceAll, rfIgnoreCase]);
+  DcuOut := StringReplace(DcuOut, '$(Config)', 'Debug', [rfReplaceAll, rfIgnoreCase]);
+  if not TPath.IsPathRooted(DcuOut) then
+    try DcuOut := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ADproj), DcuOut)); except end;
+  Result := TPath.Combine(DcuOut, ChangeFileExt(ExtractFileName(AUnit), '.dcu'));
+end;
+
+{ v0.47: ghost-check -- compile the project with ONE unit's content replaced by
+  an unsaved buffer, WITHOUT a lasting change to the file. Overlays the buffer on
+  the real .pas (preserving its mtime so the IDE shows no "changed on disk"
+  prompt), deletes the unit's .dcu to force a recompile despite the unchanged
+  mtime, runs the real incremental compile, then ALWAYS restores the original
+  content + mtime in a finally (and drops the buffer-based .dcu so the next real
+  build recompiles from the saved source). A crash leaves the buffer (the user's
+  current work) + nothing else damaged. }
+function DoGhostCheck(const AArgs: TArgs): Integer;
+var
+  Dproj, UnitPath, BufPath, DcuPath, Fmt, FilePath: string;
+  OrigBytes, BufBytes: TBytes;
+  OrigMtime: TDateTime;
+  Res: TCompileCheckResult;
+  ErrCount, WarnCount, HintCount: Integer;
+  F: TCompilerFinding;
+  SB: TStringBuilder;
+begin
+  Dproj    := AArgs.Target;
+  UnitPath := AArgs.GhostUnit;
+  BufPath  := AArgs.GhostBuffer;
+  if (Dproj = '') or (UnitPath = '') or (BufPath = '') then
+  begin
+    Writeln('Usage: drag-lint ghost-check <dproj> --unit <real.pas> ' +
+      '--buffer <bufferfile> [--platform win32|win64] [--format json|text]');
+    Exit(2);
+  end;
+  if not TFile.Exists(UnitPath) then
+  begin Writeln('ERROR: unit not found: ', UnitPath); Exit(2); end;
+  if not TFile.Exists(BufPath) then
+  begin Writeln('ERROR: buffer not found: ', BufPath); Exit(2); end;
+
+  OrigBytes := TFile.ReadAllBytes(UnitPath);
+  OrigMtime := TFile.GetLastWriteTime(UnitPath);
+  BufBytes  := TFile.ReadAllBytes(BufPath);
+  DcuPath   := ResolveGhostDcu(Dproj, UnitPath, AArgs.CheckPlatform);
+
+  Res := Default(TCompileCheckResult);
+  try
+    { overlay the buffer; keep the original mtime so the IDE sees no change }
+    TFile.WriteAllBytes(UnitPath, BufBytes);
+    try TFile.SetLastWriteTime(UnitPath, OrigMtime); except end;
+    { force a recompile of this unit despite the preserved mtime }
+    if (DcuPath <> '') and TFile.Exists(DcuPath) then
+      try TFile.Delete(DcuPath); except end;
+    Res := TCompileChecker.Run(Dproj);
+    Res.Findings := NormalizeFindings(Res.Findings, ExtractFilePath(Dproj));
+  finally
+    { ALWAYS restore the original content + mtime }
+    try TFile.WriteAllBytes(UnitPath, OrigBytes); except end;
+    try TFile.SetLastWriteTime(UnitPath, OrigMtime); except end;
+    { drop the buffer-based DCU so the next real build recompiles from source }
+    if (DcuPath <> '') and TFile.Exists(DcuPath) then
+      try TFile.Delete(DcuPath); except end;
+  end;
+
+  ErrCount := 0; WarnCount := 0; HintCount := 0;
+  for F in Res.Findings do
+    if SameText(F.Severity, 'Error') then Inc(ErrCount)
+    else if SameText(F.Severity, 'Warning') then Inc(WarnCount)
+    else if SameText(F.Severity, 'Hint') then Inc(HintCount);
+
+  Fmt := LowerCase(AArgs.Format);
+  if Fmt = 'json' then
+  begin
+    SB := TStringBuilder.Create;
+    try
+      SB.Append('[');
+      var First := True;
+      for F in Res.Findings do
+      begin
+        if not First then SB.Append(',');
+        First := False;
+        FilePath := F.RawPath;
+        SB.Append(Format(
+          '{"file":"%s","line":%d,"col":%d,' +
+          '"severity":"%s","code":"%s","message":"%s"}',
+          [JsonEscape(FilePath), F.LineNo, F.ColNo,
+           JsonEscape(F.Severity), JsonEscape(F.Code),
+           JsonEscape(F.Message)]));
+      end;
+      SB.Append(']');
+      Writeln(SB.ToString);
+    finally
+      SB.Free;
+    end;
+  end
+  else
+  begin
+    for F in Res.Findings do
+      Writeln(Format('%s(%d,%d): %s %s: %s',
+        [F.RawPath, F.LineNo, F.ColNo, F.Severity, F.Code, F.Message]));
+    Writeln(Format('Findings: %d errors, %d warnings, %d hints',
+      [ErrCount, WarnCount, HintCount]));
+  end;
+
+  if ErrCount > 0 then Result := 1 else Result := 0;
+end;
+
 { ====================================================================== }
 { v0.43: check-unit -- in-memory semantic check of one unit               }
 { ====================================================================== }
@@ -8241,6 +8381,8 @@ begin
       Result := DoFindDeadCode(Args)
     else if Args.Command = 'compile-check' then
       Result := DoCompileCheck(Args)
+    else if Args.Command = 'ghost-check' then
+      Result := DoGhostCheck(Args)
     else if Args.Command = 'check-unit' then
       Result := DoCheckUnit(Args)
     else if Args.Command = 'cycles' then
