@@ -5126,6 +5126,43 @@ end;
 // Runs a compiler build, parses findings, stores them in the DB (if --db
 // points to an existing database), and reports results to stdout.
 // Exit 0 = no errors; 1 = errors found; 2 = usage error.
+{ v0.47: the RAD Studio msbuild dcc wrapper prints findings RELATIVE to the
+  project directory and emits each one TWICE (inline + the summary block). Make
+  paths absolute (so the IDE can match an open buffer) and de-duplicate. }
+function NormalizeFindings(const AFindings: TArray<TCompilerFinding>;
+  const ABaseDir: string): TArray<TCompilerFinding>;
+var
+  Seen: TDictionary<string, Boolean>;
+  Acc:  TList<TCompilerFinding>;
+  F, Rec: TCompilerFinding;
+  Key, P: string;
+begin
+  Seen := TDictionary<string, Boolean>.Create;
+  Acc  := TList<TCompilerFinding>.Create;
+  try
+    for F in AFindings do
+    begin
+      Rec := F;   { F is the for-in loop var (read-only) -- mutate a copy }
+      P := Rec.RawPath;
+      if (P <> '') and (ABaseDir <> '') and (not TPath.IsPathRooted(P)) then
+        try P := TPath.GetFullPath(TPath.Combine(ABaseDir, P)); except end;
+      Rec.RawPath := P;
+      { msbuild appends " [<project>.dproj]" to every message -- strip it. }
+      Rec.Message := TRegEx.Replace(Rec.Message, '\s*\[[^\]]*\]\s*$', '');
+      Key := LowerCase(P) + '|' + IntToStr(Rec.LineNo) + '|' + Rec.Code + '|' + Rec.Message;
+      if not Seen.ContainsKey(Key) then
+      begin
+        Seen.Add(Key, True);
+        Acc.Add(Rec);
+      end;
+    end;
+    Result := Acc.ToArray;
+  finally
+    Acc.Free;
+    Seen.Free;
+  end;
+end;
+
 function DoCompileCheck(const AArgs: TArgs): Integer;
 var
   Target: string;
@@ -5149,6 +5186,8 @@ begin
 
   Writeln('Compiling: ', Target);
   Res := TCompileChecker.Run(Target);
+  { v0.47: absolutize relative paths + drop msbuild's duplicate lines. }
+  Res.Findings := NormalizeFindings(Res.Findings, ExtractFilePath(Target));
 
   ErrCount := 0; WarnCount := 0; HintCount := 0;
   for F in Res.Findings do

@@ -144,11 +144,16 @@ const
     '^(.+?\.(?:pas|dpr|dpk))\((\d+)\)\s+(Hint|Warning|Error|Fatal|Information):' +
     '\s*([HWEF]\d+)?\s*(.*)$';
 
-  // msbuild: path(line,col): severity code: message
-  // Example: C:\foo\Bar.pas(99,5): error E2003: Undeclared identifier: "Foo"
+  // msbuild: [indent]path(line[,col]): severity code: message
+  // The RAD Studio msbuild dcc wrapper omits the column for most findings and
+  // indents the summary copy, e.g.:
+  //   Blueprint4.pas(1348): error E2003: Undeclared identifier: 'FOperNames'
+  //     Blueprint4.pas(1348): error E2003: ...        (indented duplicate)
+  //   C:\foo\Bar.pas(99,5): error E2003: ...          (column sometimes present)
+  // So: tolerate leading whitespace, make the column optional, lowercase severity.
   MSB_PATTERN =
-    '^(.+?\.(?:pas|dpr|dpk))\((\d+),(\d+)\):\s+(error|warning|hint|fatal|information)' +
-    '\s+([HWEF]\d+):\s+(.*)$';
+    '^\s*(.+?\.(?:pas|dpr|dpk))\((\d+)(?:,(\d+))?\):\s+' +
+    '(error|warning|hint|fatal|information)\s+([HWEF]\d+):\s+(.*)$';
 var
   M: TMatch;
 begin
