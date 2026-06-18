@@ -259,9 +259,11 @@ begin
   SavedBrush      := Canvas.Brush.Color;
   SavedBrushStyle := Canvas.Brush.Style;
   try
-    { ---- Gutter glyph (v0.46: large + outlined, IDE-sized) ----
-      A row-height filled circle with a dark outline -- far more visible than the
-      old 6 px dot. Diameter = row height, capped by the gutter width and 16 px. }
+    { ---- Gutter glyph (v0.47: filled SQUARE + outline) ----
+      Deliberately square, not round: the IDE's own breakpoint glyph is a round
+      red dot, so a round error glyph is easy to confuse with a breakpoint. A
+      square clearly reads as "drag-lint diagnostic". Side = row height, capped
+      by the gutter width and 16 px. }
     var RowH: Integer := LineRect.Bottom - LineRect.Top;
     var GutterW: Integer := TextRect.Left - LineRect.Left;
     var GlyphD: Integer := RowH - 2;
@@ -275,7 +277,7 @@ begin
     Canvas.Pen.Color   := clBlack;   { outline for contrast on any gutter colour }
     Canvas.Pen.Style   := psSolid;
     Canvas.Pen.Width   := 1;
-    Canvas.Ellipse(GX, GY, GX + GlyphD + 1, GY + GlyphD + 1);
+    Canvas.Rectangle(GX, GY, GX + GlyphD + 1, GY + GlyphD + 1);
 
     { ---- Wavy underline per diagnostic ---- }
     for i := 0 to High(Diags) do

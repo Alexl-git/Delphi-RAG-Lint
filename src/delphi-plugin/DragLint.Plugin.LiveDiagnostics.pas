@@ -38,6 +38,7 @@ uses
   DragLint.Plugin.DiagnosticCache,
   DragLint.Plugin.DbResolver,
   DragLint.Plugin.Telemetry,   { TEMP debug telemetry }
+  DragLint.Plugin.EditViewNotifier,   { v0.47: GGutterAnchorHwnd for forced repaint }
   DragLint.Plugin.Settings;
 
 const
@@ -409,6 +410,13 @@ begin
   if not Supports(BorlandIDEServices, IOTAEditorServices, ES) then Exit;
   if ES.TopView <> nil then
     try ES.TopView.Paint; except end;
+  { v0.47: force a real WM_PAINT of the edit surface so the gutter glyphs redraw
+    NOW -- TopView.Paint alone can leave STALE glyphs (e.g. the unused-var hint
+    dots after a syntax error clears them) until the next natural paint, which
+    can be minutes when the user is idle. GGutterAnchorHwnd is published by
+    PaintLine (the editor surface window). }
+  if (GGutterAnchorHwnd <> 0) and IsWindow(GGutterAnchorHwnd) then
+    try InvalidateRect(GGutterAnchorHwnd, nil, False); except end;
 end;
 
 procedure PublishToCache(const AFile: string; const ADiags: TDragLintDiagItems);

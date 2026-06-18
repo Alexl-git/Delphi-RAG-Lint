@@ -232,6 +232,11 @@ begin
       MS: IOTAMessageServices;
       j: Integer;
     begin
+      { v0.47: force the gutter to repaint so its glyphs match the cache we just
+        updated (an LSP publish that clears/changes findings must not leave stale
+        dots behind). GGutterAnchorHwnd is the editor surface from PaintLine. }
+      if (GGutterAnchorHwnd <> 0) and IsWindow(GGutterAnchorHwnd) then
+        try InvalidateRect(GGutterAnchorHwnd, nil, False); except end;
       if not Supports(BorlandIDEServices, IOTAMessageServices, MS) then Exit;
 
       if Length(Entries) = 0 then

@@ -59,6 +59,7 @@ type
   private
     FTree:       TTreeView;
     FBtnRefresh: TButton;
+    FBtnDiag:    TButton;        { v0.47: scroll to the top Diagnostics message }
     FLblFile:    TLabel;
     FSearch:     TEdit;          { v0.42: on-the-fly filter }
     FRegex:      TCheckBox;      { v0.42: treat filter as regex }
@@ -67,6 +68,7 @@ type
     FDiags:      TArray<TDragLintDiagnostic>;
     FPopup:      TPopupMenu;                    { v0.43: right-click nav menu }
     procedure BtnRefreshClick(Sender: TObject);
+    procedure BtnDiagClick(Sender: TObject);
     procedure FormActivate(Sender: TObject);
     procedure TreeDblClick(Sender: TObject);
     procedure TreeMouseDown(Sender: TObject; Button: TMouseButton;
@@ -231,6 +233,18 @@ begin
   FBtnRefresh.Align   := alRight;
   FBtnRefresh.Width   := 72;
   FBtnRefresh.OnClick := BtnRefreshClick;
+
+  { v0.47: jump to Diagnostics. A refresh leaves the tree scrolled to Code
+    Elements, hiding the Diagnostics section above the visible area; this scrolls
+    it back so the top message is visible + selected. Docks left of Refresh. }
+  FBtnDiag := TButton.Create(PanelFile);
+  FBtnDiag.Parent   := PanelFile;
+  FBtnDiag.Caption  := 'Diag';
+  FBtnDiag.Hint     := 'Scroll to the top Diagnostics message';
+  FBtnDiag.ShowHint := True;
+  FBtnDiag.Align    := alRight;
+  FBtnDiag.Width    := 44;
+  FBtnDiag.OnClick  := BtnDiagClick;
 
   FLblFile := TLabel.Create(PanelFile);
   FLblFile.Parent     := PanelFile;
@@ -446,6 +460,30 @@ end;
 procedure TDragLintStructureForm.BtnRefreshClick(Sender: TObject);
 begin
   RefreshForFile(GetActiveFilePath);
+end;
+
+{ v0.47: scroll the tree so the Diagnostics section is at the top of the view
+  and select its first message. After a refresh the tree is scrolled to Code
+  Elements, leaving Diagnostics above the visible area. Diagnostics is always the
+  first root node (added first in BuildTree). }
+procedure TDragLintStructureForm.BtnDiagClick(Sender: TObject);
+var
+  Root: TTreeNode;
+begin
+  if (FTree = nil) or (FTree.Items.Count = 0) then Exit;
+  Root := FTree.Items.GetFirstNode;   { Diagnostics root }
+  if Root = nil then Exit;
+  FTree.Items.BeginUpdate;
+  try
+    Root.Expand(False);
+    if Root.getFirstChild <> nil then
+      FTree.Selected := Root.getFirstChild   { focus the top message line }
+    else
+      FTree.Selected := Root;                { no messages -> just the header }
+    FTree.TopItem := Root;   { pin the Diagnostics header to the top of the view }
+  finally
+    FTree.Items.EndUpdate;
+  end;
 end;
 
 procedure TDragLintStructureForm.FormActivate(Sender: TObject);
