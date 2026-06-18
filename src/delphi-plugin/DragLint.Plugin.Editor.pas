@@ -63,6 +63,7 @@ procedure InvokeDiagnostics(Sender: TObject);
 procedure InvokeRename(Sender: TObject);
 { v0.26: compiler diagnostics }
 procedure InvokeCompileDiagnose(Sender: TObject);
+procedure InvokeGhostCheck(Sender: TObject);
 procedure InvokeImportLog(Sender: TObject);
 { v0.27: YADF format integration }
 procedure InvokeFormatYadf(Sender: TObject);
@@ -1103,6 +1104,28 @@ begin
     Result := ChangeFileExt(ProjFile, '.sqlite');
 end;
 
+{ v0.47: the active project's platform (Win32/Win64). ghost-check needs it to
+  locate the unit's .dcu to delete (to force a recompile). Defaults to Win64. }
+function GetActiveProjectPlatform: string;
+var
+  MS: IOTAModuleServices;
+  ProjGroup: IOTAProjectGroup;
+  ActiveProj: IOTAProject;
+begin
+  Result := 'Win64';
+  try
+    if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
+    if MS = nil then Exit;
+    ProjGroup := MS.MainProjectGroup;
+    if ProjGroup = nil then Exit;
+    ActiveProj := ProjGroup.ActiveProject;
+    if ActiveProj = nil then Exit;
+    var P: string := ActiveProj.CurrentPlatform;
+    if P <> '' then Result := P;
+  except
+  end;
+end;
+
 procedure InvokeRename(Sender: TObject);
 var
   Uri:             string;
@@ -1428,6 +1451,120 @@ procedure TriggerCompileOnSave(const AFile: string);
 begin
   if not SameText(ExtractFileExt(AFile), '.pas') then Exit;
   RunCompileDiagnoseAsync(GetActiveProjectFile, False);
+end;
+
+{ v0.47: read the active editor's UNSAVED buffer (in-memory text) + its file path
+  so ghost-check can compile exactly what the user is typing. }
+function GetActiveBuffer(out APath, AText: string): Boolean;
+var
+  ES: IOTAEditorServices;
+  Buf: IOTAEditBuffer;
+  Reader: IOTAEditReader;
+  Pos, Got: Integer;
+  Chunk: array[0..8191] of AnsiChar;
+  SB: TStringBuilder;
+begin
+  Result := False; APath := ''; AText := '';
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ES) then Exit;
+  Buf := ES.TopBuffer;
+  if Buf = nil then Exit;
+  APath := Buf.FileName;
+  Reader := Buf.CreateReader;
+  if Reader = nil then Exit;
+  SB := TStringBuilder.Create;
+  try
+    Pos := 0;
+    repeat
+      Got := Reader.GetText(Pos, @Chunk[0], SizeOf(Chunk) - 1);
+      if Got <= 0 then Break;
+      Chunk[Got] := #0;
+      SB.Append(string(AnsiString(Chunk)));
+      Inc(Pos, Got);
+    until False;
+    AText := SB.ToString;
+    Result := APath <> '';
+  finally
+    SB.Free;
+  end;
+end;
+
+var
+  GGhostBusy: Integer = 0;   { single-flight guard for ghost-check }
+
+/// <summary>Compiles the active unit's UNSAVED buffer in the context of the real
+/// project (engine 'ghost-check': overlay buffer on a throwaway copy of the file
+/// with a guaranteed restore) and pushes the compiler errors into the Diagnostics
+/// overlay -- errors in unsaved code appear without saving. Out-of-process, async,
+/// single-flight; the file is never permanently changed.</summary>
+procedure RunGhostCheckAsync(AInteractive: Boolean);
+var
+  ProjFile, UnitPath, BufText, ExePath, Plat, TmpBuf: string;
+begin
+  ProjFile := GetActiveProjectFile;
+  if ProjFile = '' then
+  begin if AInteractive then ShowMessage('drag-lint: no active project.'); Exit; end;
+  if not GetActiveBuffer(UnitPath, BufText) then
+  begin if AInteractive then ShowMessage('drag-lint: no active editor buffer.'); Exit; end;
+  if not SameText(ExtractFileExt(UnitPath), '.pas') then
+  begin if AInteractive then ShowMessage('drag-lint: the active file is not a .pas unit.'); Exit; end;
+  if AtomicCmpExchange(GGhostBusy, 1, 0) <> 0 then
+  begin if AInteractive then ShowMessage('drag-lint: a buffer compile is already running.'); Exit; end;
+
+  ExePath := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+  if not FileExists(ExePath) then ExePath := 'drag-lint.exe';
+  Plat := GetActiveProjectPlatform;
+  TmpBuf := TPath.Combine(TPath.GetTempPath,
+    Format('draglint-ghostbuf-%d.pas', [GetTickCount]));
+  try
+    TFile.WriteAllText(TmpBuf, BufText, TEncoding.ANSI);  { strict-ANSI .pas }
+  except
+    AtomicExchange(GGhostBusy, 0);
+    if AInteractive then ShowMessage('drag-lint: could not stage the buffer.');
+    Exit;
+  end;
+
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      CmdLine, Output: string;
+      ExitCode, nErr, nWarn, nHint: Integer;
+      Parsed: Boolean;
+    begin
+      nErr := 0; nWarn := 0; nHint := 0; Parsed := False;
+      try
+        CmdLine := Format('"%s" ghost-check "%s" --unit "%s" --buffer "%s" ' +
+          '--platform %s --format json',
+          [ExePath, ProjFile, UnitPath, TmpBuf, Plat]);
+        DebugLog('GhostCheck: START ' + CmdLine);
+        ExitCode := RunAndCaptureStdout(CmdLine, Output, 600000);
+        DebugLog(Format('GhostCheck: exit=%d outLen=%d', [ExitCode, Length(Output)]));
+        if ExitCode <> 2 then
+          Parsed := ParseAndPushCompileOutput(Output, nErr, nWarn, nHint);
+      except
+        on E: Exception do DebugLog('GhostCheck: EXC ' + E.Message);
+      end;
+      try TFile.Delete(TmpBuf); except end;
+      TThread.Queue(nil,
+        procedure
+        begin
+          try RepaintActiveView; except end;
+          if AInteractive then
+          begin
+            if Parsed then
+              ShowMessage(Format('drag-lint Compile Buffer (unsaved):'#13#10 +
+                '%d error(s), %d warning(s), %d hint(s).'#13#10 +
+                'Your file on disk was not changed.', [nErr, nWarn, nHint]))
+            else
+              ShowMessage('drag-lint Compile Buffer: no parseable compiler output.');
+          end;
+        end);
+      AtomicExchange(GGhostBusy, 0);
+    end).Start;
+end;
+
+procedure InvokeGhostCheck(Sender: TObject);
+begin
+  RunGhostCheckAsync(True);
 end;
 
 procedure InvokeImportLog(Sender: TObject);
@@ -3213,6 +3350,7 @@ begin
   AddWrappedItem(RootMenu, 'Lint Buffer (Unsaved)',      InvokeLintBuffer);
   AddWrappedItem(RootMenu, 'Copy Diagnostics (Current File)', InvokeCopyDiagnostics);
   AddWrappedItem(RootMenu, 'Compile && Diagnose',        InvokeCompileDiagnose);
+  AddWrappedItem(RootMenu, 'Compile Buffer (unsaved)',   InvokeGhostCheck);
   AddWrappedItem(RootMenu, 'Import Build Log...',        InvokeImportLog);
   AddWrappedItem(RootMenu, 'Test Connection...',         InvokeTestConnection);
   AddWrappedItem(RootMenu, 'Open Plugin Log',            InvokeOpenLog);
