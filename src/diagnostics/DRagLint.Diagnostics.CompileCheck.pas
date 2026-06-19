@@ -14,16 +14,27 @@ uses
   DRagLint.Core.Interfaces;
 
 type
+  /// <summary>Outcome of one compile run: the parsed findings, the compiler
+  /// process exit code (0 = clean), and the raw merged stdout/stderr text (kept
+  /// for diagnostics and fallback parsing).</summary>
   TCompileCheckResult = record
     Findings:   TArray<TCompilerFinding>;
     ExitCode:   Integer;
     StdoutText: string;
   end;
 
+  /// <summary>Compiles a Delphi target out-of-process and turns the compiler's
+  /// textual output into structured findings.</summary>
+  /// <remarks>Stateless and thin (class methods only): spawn -> capture -> parse.
+  /// Used by the CLI compile-check / check-unit / ghost-check commands and the
+  /// IDE plugin's live + ghost compile. Not thread-safe (shares no instance
+  /// state, but each call spawns a process and reads its pipe synchronously).</remarks>
   TCompileChecker = class
   public
     /// <summary>Compiles ATarget and returns the parsed compiler findings.</summary>
     /// <param name="ATarget">A .dproj (compiled via msbuild) or a .pas/.dpr/.dpk (via dcc64).</param>
+    /// <param name="AMsbuildPath">Optional explicit msbuild path; '' uses PATH.</param>
+    /// <param name="ARsvarsPath">Optional explicit rsvars.bat; '' uses the default.</param>
     /// <returns>Findings, raw stdout, and the compiler exit code.</returns>
     /// <remarks>Runs an INCREMENTAL compile (msbuild /t:Make; dcc64 without -B):
     /// only changed units and their dependents are recompiled, so it is fast on
@@ -31,17 +42,35 @@ type
     /// re-checked, so current errors are never skipped. Not thread-safe.</remarks>
     class function Run(const ATarget: string; const AMsbuildPath: string = '';
       const ARsvarsPath: string = ''): TCompileCheckResult;
-    { v0.43: run an arbitrary compiler command line (already wrapped in
-      cmd.exe /c "call rsvars && dcc... 2>&1") and parse its findings. Used by
-      check-unit for the single-unit shadow-overlay compile. }
+    /// <summary>Runs an arbitrary, already-shell-wrapped compiler command line
+    /// (a cmd.exe invocation that calls rsvars then dcc and merges stderr) and
+    /// parses its findings.</summary>
+    /// <param name="ACmd">The full command line to execute.</param>
+    /// <returns>Parsed findings, raw output, and the exit code.</returns>
+    /// <remarks>Used by check-unit for the single-unit shadow-overlay compile.</remarks>
     class function RunCommand(const ACmd: string): TCompileCheckResult;
+    /// <summary>Parses one line of compiler output into a finding.</summary>
+    /// <param name="ALine">A single output line.</param>
+    /// <param name="AFinding">Receives the parsed finding when the line matches.</param>
+    /// <returns>True if the line was a recognized finding.</returns>
+    /// <remarks>Recognizes the RAD Studio msbuild dcc wrapper format
+    /// (path(line[,col]): severity code: message) and the native dcc64 format
+    /// (path(line) Severity: code message).</remarks>
     class function ParseLine(const ALine: string;
       out AFinding: TCompilerFinding): Boolean;
+    /// <summary>Persists findings into the symbol DB, resolving each finding's
+    /// path to a files.id where it is indexed (NULL file_id otherwise).</summary>
+    /// <param name="AStore">Open symbol store to insert into.</param>
+    /// <param name="AFindings">Findings to persist.</param>
     class procedure InsertFindings(const AStore: ISymbolStore;
       const AFindings: TArray<TCompilerFinding>);
   private
+    /// <summary>Spawns ACmd via CreateProcessW with stdout+stderr redirected;
+    /// returns the process exit code and the merged output in AOutput.</summary>
     class function SpawnAndCapture(const ACmd: string;
       out AOutput: string): Integer;
+    /// <summary>Canonicalizes a raw severity word (error/fatal/warning/hint/
+    /// information) to 'Error'/'Warning'/'Hint'/'Information'.</summary>
     class function NormalizeSeverity(const ARaw: string): string;
   end;
 
