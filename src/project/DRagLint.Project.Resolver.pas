@@ -3,14 +3,15 @@ unit DRagLint.Project.Resolver;
 interface
 
 uses
-  System.SysUtils,
-  System.StrUtils,
-  System.RegularExpressions,
-  System.Classes,
-  System.IOUtils,
-  System.Generics.Collections,
-  System.Win.Registry,
-  Winapi.Windows;
+  System.SysUtils
+  , System.StrUtils
+  , System.RegularExpressions
+  , System.Classes
+  , System.IOUtils
+  , System.Generics.Collections
+  , System.Win     .Registry
+  , Winapi.Windows
+  ;
 
 type
   // Resolves the set of folders that should be scanned for a Delphi project.
@@ -22,38 +23,37 @@ type
   //     clauses (one level deep)
   // All $(BDS) and similar macros are expanded.
   TProjectResolver = class
-  strict private
-    FBDS: string;
-    FCurrentPlatform: string;   // what $(Platform) expands to right now
-    function ExpandMacros(const APath: string): string;
-    procedure AddFolderIfReal(AList: TList<string>; const APath: string);
-    procedure AddSemicolonList(AList: TList<string>; const ASemicolonList: string;
-      const ABaseDir: string);
-    function EnumLibraryPlatforms: TArray<string>;
-    procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>);
-    procedure ReadDProj(const ADprojPath: string; AList: TList<string>);
-    procedure ReadDprUsesPaths(const ADprPath: string; AList: TList<string>);
-  public
-    constructor Create;
-    function Resolve(const ADprojPath: string): TArray<string>;
-    // Library/Browsing paths from registry only - no .dproj required.
-    // Useful for "index everything Delphi knows about" without a project.
-    //   AAllPlatforms = False -> Win32 + Win64 only (the IDE's native targets).
-    //   AAllPlatforms = True  -> every platform subkey under ...\BDS\37.0\Library
-    //     (Android*, iOS*, Linux64, OSX*, Win64x, ...), which additionally pulls
-    //     in the Posix / Androidapi / iOSapi / Macapi platform source trees.
-    function ResolveLibraryPaths(AAllPlatforms: Boolean = False): TArray<string>;
-    /// <summary>Returns every platform name registered under BDS\37.0\Library,
-    /// deduplicated case-insensitively. Wraps the private EnumLibraryPlatforms.
-    /// Returns at least ['Win32','Win64'] as a fallback when the registry is empty.</summary>
-    /// <returns>Array of platform names (e.g. Win32, Win64, Android64).</returns>
-    function EnumRegistryPlatforms: TArray<string>;
-    /// <summary>Returns the resolved Library + Browsing search paths for one
-    /// specific platform, as absolute folder paths. Probes HKCU + HKLM,
-    /// both 32-bit and 64-bit registry views.</summary>
-    /// <param name="APlatform">Platform subkey name, e.g. 'Win32', 'Win64'.</param>
-    /// <returns>Deduplicated array of existing absolute folder paths.</returns>
-    function ReadPlatformLibraryPaths(const APlatform: string): TArray<string>;
+    strict private
+      FBDS            : string                          ;
+      FCurrentPlatform: string                          ; // what $(Platform) expands to right now
+      function ExpandMacros(const APath: string): string;
+      procedure AddFolderIfReal(AList: TList<string>; const APath: string);
+      procedure AddSemicolonList(AList: TList<string>; const ASemicolonList: string; const ABaseDir: string);
+      function EnumLibraryPlatforms: TArray<string>;
+      procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>);
+      procedure ReadDProj       (const ADprojPath: string; AList: TList<string>);
+      procedure ReadDprUsesPaths(const ADprPath  : string; AList: TList<string>);
+    public
+      constructor Create;
+      function Resolve(const ADprojPath: string): TArray<string>;
+      // Library/Browsing paths from registry only - no .dproj required.
+      // Useful for "index everything Delphi knows about" without a project.
+      //   AAllPlatforms = False -> Win32 + Win64 only (the IDE's native targets).
+      //   AAllPlatforms = True  -> every platform subkey under ...\BDS\37.0\Library
+      //     (Android*, iOS*, Linux64, OSX*, Win64x, ...), which additionally pulls
+      //     in the Posix / Androidapi / iOSapi / Macapi platform source trees.
+      function ResolveLibraryPaths(AAllPlatforms: Boolean = False): TArray<string>;
+      /// <summary>Returns every platform name registered under BDS\37.0\Library,
+      /// deduplicated case-insensitively. Wraps the private EnumLibraryPlatforms.
+      /// Returns at least ['Win32','Win64'] as a fallback when the registry is empty.</summary>
+      /// <returns>Array of platform names (e.g. Win32, Win64, Android64).</returns>
+      function EnumRegistryPlatforms: TArray<string>;
+      /// <summary>Returns the resolved Library + Browsing search paths for one
+      /// specific platform, as absolute folder paths. Probes HKCU + HKLM,
+      /// both 32-bit and 64-bit registry views.</summary>
+      /// <param name="APlatform">Platform subkey name, e.g. 'Win32', 'Win64'.</param>
+      /// <returns>Deduplicated array of existing absolute folder paths.</returns>
+      function ReadPlatformLibraryPaths(const APlatform: string): TArray<string>;
   end;
 
 implementation
@@ -65,272 +65,249 @@ constructor TProjectResolver.Create;
 begin
   inherited Create;
   // Default BDS install. Could be overridden by env var.
-  FBDS := GetEnvironmentVariable('BDS');
-  if FBDS = '' then
-    FBDS := 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
-  FCurrentPlatform := 'Win64';
+  FBDS:= GetEnvironmentVariable('BDS');
+  if FBDS = '' then FBDS:= 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
+  FCurrentPlatform:= 'Win64';
 end;
 
 function TProjectResolver.ExpandMacros(const APath: string): string;
 begin
-  Result := APath;
-  Result := StringReplace(Result, '$(BDS)', FBDS, [rfReplaceAll, rfIgnoreCase]);
-  Result := StringReplace(Result, '$(BDSCOMMONDIR)',
-    TPath.Combine(FBDS, '..\Studio\Public\Documents'), [rfReplaceAll, rfIgnoreCase]);
-  Result := StringReplace(Result, '$(Platform)', FCurrentPlatform,
-    [rfReplaceAll, rfIgnoreCase]);
-  Result := StringReplace(Result, '$(Config)', 'Debug',
-    [rfReplaceAll, rfIgnoreCase]);
+  Result:= APath;
+  Result:= StringReplace(Result, '$(BDS)', FBDS, [rfReplaceAll, rfIgnoreCase]);
+  Result:= StringReplace(Result, '$(BDSCOMMONDIR)', TPath.Combine(FBDS, '..\Studio\Public\Documents'), [rfReplaceAll, rfIgnoreCase]);
+  Result:= StringReplace(Result, '$(Platform)', FCurrentPlatform, [rfReplaceAll, rfIgnoreCase]);
+  Result:= StringReplace(Result, '$(Config)'  , 'Debug'         , [rfReplaceAll, rfIgnoreCase]);
 end;
 
-procedure TProjectResolver.AddFolderIfReal(AList: TList<string>;
-  const APath: string);
+procedure TProjectResolver.AddFolderIfReal(AList: TList<string>; const APath: string);
 var
   Normalized: string;
 begin
-  if APath.Trim = '' then
-    Exit;
-  Normalized := ExpandMacros(APath.Trim);
+  if APath.Trim = '' then Exit;
+  Normalized:= ExpandMacros(APath.Trim);
   try
-    Normalized := TPath.GetFullPath(Normalized);
+    Normalized:= TPath.GetFullPath(Normalized);
   except
     Exit;
   end;
-  if not TDirectory.Exists(Normalized) then
-    Exit;
+  if not TDirectory.Exists(Normalized) then Exit;
   // Case-insensitive dedup.
   for var Existing in AList do
-    if SameText(Existing, Normalized) then
-      Exit;
+    if SameText(Existing, Normalized) then Exit;
   AList.Add(Normalized);
-end;
+end; // procedure
 
-procedure TProjectResolver.AddSemicolonList(AList: TList<string>;
-  const ASemicolonList, ABaseDir: string);
+procedure TProjectResolver.AddSemicolonList(AList: TList<string>; const ASemicolonList, ABaseDir: string);
 var
-  Parts: TArray<string>;
-  P, Resolved: string;
+  Parts   : TArray<string>;
+  P       : string        ;
+  Resolved: string        ;
 begin
-  if ASemicolonList.Trim = '' then
-    Exit;
-  Parts := ASemicolonList.Split([';']);
+  if ASemicolonList.Trim = '' then Exit;
+  Parts:= ASemicolonList.Split([';']);
   for P in Parts do
   begin
     if P.Trim = '' then Continue;
-    Resolved := ExpandMacros(P.Trim);
-    if not TPath.IsPathRooted(Resolved) then
-      Resolved := TPath.Combine(ABaseDir, Resolved);
+    Resolved:= ExpandMacros(P.Trim);
+    if not TPath.IsPathRooted(Resolved) then Resolved:= TPath.Combine(ABaseDir, Resolved);
     AddFolderIfReal(AList, Resolved);
   end;
 end;
 
-procedure ReadRegPathInto(const ARoot: HKEY; const AKey, AValue: string;
-  ASamDesired: Cardinal; const AAdd: TProc<string>);
+procedure ReadRegPathInto(const ARoot: HKEY; const AKey, AValue: string; ASamDesired: Cardinal; const AAdd: TProc<string>);
 var
-  Reg: TRegistry;
-  RegValue: string;
+  Reg     : TRegistry;
+  RegValue: string   ;
 begin
-  Reg := TRegistry.Create(KEY_READ or ASamDesired);
+  Reg:= TRegistry.Create(KEY_READ or ASamDesired);
   try
-    Reg.RootKey := ARoot;
+    Reg.RootKey:= ARoot;
     if Reg.OpenKeyReadOnly(AKey) then
-      try
-        if Reg.ValueExists(AValue) then
-        begin
-          RegValue := Reg.ReadString(AValue);
-          AAdd(RegValue);
-        end;
-      finally
-        Reg.CloseKey;
+    try
+      if Reg.ValueExists(AValue) then
+      begin
+        RegValue:= Reg.ReadString(AValue);
+        AAdd(RegValue);
       end;
+    finally
+      Reg.CloseKey;
+    end;
   finally
     Reg.Free;
   end;
-end;
+end; // procedure
 
 // Enumerates every platform subkey under ...\BDS\37.0\Library across both
 // hives and registry views, deduplicated case-insensitively. These are the
 // names Delphi itself registers (Win32, Win64, Android64, iOSDevice64, ...).
 function TProjectResolver.EnumLibraryPlatforms: TArray<string>;
 var
-  List: TList<string>;
-  Names: TStringList;
-  Reg: TRegistry;
-  HiveRoot: HKEY;
-  Sam: Cardinal;
-  Name: string;
+  List    : TList<string>;
+  Names   : TStringList  ;
+  Reg     : TRegistry    ;
+  HiveRoot: HKEY         ;
+  Sam     : Cardinal     ;
+  Name    : string       ;
 
   procedure AddUnique(const AName: string);
   begin
-    if AName.Trim = '' then
-      Exit;
+    if AName.Trim = '' then Exit;
     for var Existing in List do
-      if SameText(Existing, AName) then
-        Exit;
+      if SameText(Existing, AName) then Exit;
     List.Add(AName);
   end;
 
 begin
-  List := TList<string>.Create;
-  Names := TStringList.Create;
+  List:= TList<string>.Create;
+  Names:= TStringList.Create;
   try
     for HiveRoot in [HKEY(HKEY_CURRENT_USER), HKEY(HKEY_LOCAL_MACHINE)] do
       for Sam in [KEY_WOW64_32KEY, KEY_WOW64_64KEY] do
       begin
-        Reg := TRegistry.Create(KEY_READ or Sam);
+        Reg:= TRegistry.Create(KEY_READ or Sam);
         try
-          Reg.RootKey := HiveRoot;
+          Reg.RootKey:= HiveRoot;
           if Reg.OpenKeyReadOnly(BDS_REG_PATH + '\Library') then
-            try
-              Names.Clear;
-              Reg.GetKeyNames(Names);
-              for Name in Names do
-                AddUnique(Name);
-            finally
-              Reg.CloseKey;
-            end;
+          try
+            Names.Clear;
+            Reg.GetKeyNames(Names);
+            for Name in Names do AddUnique(Name);
+          finally
+            Reg.CloseKey;
+          end;
         finally
           Reg.Free;
         end;
-      end;
-    Result := List.ToArray;
+      end; // for
+    Result:= List.ToArray;
   finally
     Names.Free;
     List.Free;
-  end;
-end;
+  end; // try
+end; // begin
 
-procedure TProjectResolver.ReadLibraryPaths(AList: TList<string>;
-  const APlatforms: TArray<string>);
+procedure TProjectResolver.ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>);
 const
   VALUE_NAMES: array[0..1] of string = ('Search Path', 'Browsing Path');
 var
-  Plat, Val: string;
-  HiveRoot: HKEY;
-  Sam: Cardinal;
-  RegBase: string;
+  Plat    : string  ;
+  Val     : string  ;
+  HiveRoot: HKEY    ;
+  Sam     : Cardinal;
+  RegBase : string  ;
 begin
   // Probe HKCU + HKLM, both 32-bit + 64-bit registry views.
   for Plat in APlatforms do
   begin
-    FCurrentPlatform := Plat;   // so $(Platform) expands to this target
+    FCurrentPlatform:= Plat; // so $(Platform) expands to this target
     for Val in VALUE_NAMES do
     begin
-      RegBase := BDS_REG_PATH + '\Library\' + Plat;
+      RegBase:= BDS_REG_PATH + '\Library\' + Plat;
       for HiveRoot in [HKEY(HKEY_CURRENT_USER), HKEY(HKEY_LOCAL_MACHINE)] do
-        for Sam in [KEY_WOW64_32KEY, KEY_WOW64_64KEY] do
-          ReadRegPathInto(HiveRoot, RegBase, Val, Sam,
-            procedure (S: string)
-            begin
-              AddSemicolonList(AList, S, '');
-            end);
+        for Sam in [KEY_WOW64_32KEY, KEY_WOW64_64KEY] do ReadRegPathInto(HiveRoot, RegBase, Val, Sam, procedure (S: string) begin AddSemicolonList(AList, S, ''); end);
     end;
   end;
-  FCurrentPlatform := 'Win64';   // back to default for any later expansion
+  FCurrentPlatform:= 'Win64'; // back to default for any later expansion
 end;
 
-procedure TProjectResolver.ReadDProj(const ADprojPath: string;
-  AList: TList<string>);
+procedure TProjectResolver.ReadDProj(const ADprojPath: string; AList: TList<string>);
 const
   // Tag names whose text content is a semicolon-separated path list.
-  PATH_TAGS: array[0..3] of string = (
-    'DCC_UnitSearchPath',
-    'DCC_UnitAliases',
-    'DCC_ObjPath',
-    'DCC_DcuOutput'
-  );
+  PATH_TAGS: array[0..3] of string = ( 'DCC_UnitSearchPath', 'DCC_UnitAliases', 'DCC_ObjPath', 'DCC_DcuOutput' );
 var
-  Content, Tag, Pattern, Text: string;
-  BaseDir: string;
+  Content: string          ;
+  Tag    : string          ;
+  Pattern: string          ;
+  Text   : string          ;
+  BaseDir: string          ;
   Matches: TMatchCollection;
-  M: TMatch;
+  M      : TMatch          ;
 begin
-  BaseDir := TPath.GetDirectoryName(ADprojPath);
+  BaseDir:= TPath.GetDirectoryName(ADprojPath);
   AddFolderIfReal(AList, BaseDir);
 
   // Skip XML DOM (MSXML COM init is not present in many Delphi installs).
   // We only need a few specific tags - plain regex over the file text.
-  Content := TFile.ReadAllText(ADprojPath, TEncoding.UTF8);
+  Content:= TFile.ReadAllText(ADprojPath, TEncoding.UTF8);
   for Tag in PATH_TAGS do
   begin
-    Pattern := Format('<%s>(.*?)</%s>', [Tag, Tag]);
-    Matches := TRegEx.Matches(Content, Pattern, [roIgnoreCase, roSingleLine]);
+    Pattern:= Format('<%s>(.*?)</%s>', [Tag, Tag]);
+    Matches:= TRegEx.Matches(Content, Pattern, [roIgnoreCase, roSingleLine]);
     for M in Matches do
     begin
-      Text := M.Groups[1].Value;
+      Text:= M.Groups[1].Value;
       AddSemicolonList(AList, Text, BaseDir);
     end;
   end;
-end;
+end; // procedure
 
-procedure TProjectResolver.ReadDprUsesPaths(const ADprPath: string;
-  AList: TList<string>);
+procedure TProjectResolver.ReadDprUsesPaths(const ADprPath: string; AList: TList<string>);
 var
   Content: string;
   BaseDir: string;
   // Quick-and-dirty: find every `in '...'` literal, strip quotes, resolve.
-  P, EndQ, StartQ: Integer;
-  Quoted, Resolved, FolderOf: string;
+  P       : Integer;
+  EndQ    : Integer;
+  StartQ  : Integer;
+  Quoted  : string ;
+  Resolved: string ;
+  FolderOf: string ;
 begin
   if not TFile.Exists(ADprPath) then Exit;
-  BaseDir := TPath.GetDirectoryName(ADprPath);
-  Content := TFile.ReadAllText(ADprPath);
-  P := 1;
+  BaseDir:= TPath.GetDirectoryName(ADprPath);
+  Content:= TFile.ReadAllText     (ADprPath);
+  P:= 1;
   while True do
   begin
-    P := Pos(' in ''', Content, P);
+    P:= Pos(' in ''', Content, P);
     if P = 0 then Break;
-    StartQ := P + 4;  // points to opening quote
-    EndQ := PosEx('''', Content, StartQ + 1);
+    StartQ:= P + 4; // points to opening quote
+    EndQ:= PosEx('''', Content, StartQ + 1);
     if EndQ = 0 then Break;
-    Quoted := Copy(Content, StartQ + 1, EndQ - StartQ - 1);
-    Resolved := Quoted;
-    if not TPath.IsPathRooted(Resolved) then
-      Resolved := TPath.Combine(BaseDir, Resolved);
-    FolderOf := TPath.GetDirectoryName(Resolved);
+    Quoted:= Copy(Content, StartQ + 1, EndQ - StartQ - 1);
+    Resolved:= Quoted;
+    if not TPath.IsPathRooted(Resolved) then Resolved:= TPath.Combine(BaseDir, Resolved);
+    FolderOf:= TPath.GetDirectoryName(Resolved);
     AddFolderIfReal(AList, FolderOf);
-    P := EndQ + 1;
+    P:= EndQ + 1;
   end;
-end;
+end; // procedure
 
 function TProjectResolver.ResolveLibraryPaths(AAllPlatforms: Boolean): TArray<string>;
 var
-  List: TList<string>;
+  List     : TList<string> ;
   Platforms: TArray<string>;
 begin
   if AAllPlatforms then
   begin
-    Platforms := EnumLibraryPlatforms;
-    if Length(Platforms) = 0 then
-      Platforms := ['Win32', 'Win64'];   // fallback if enumeration found nothing
+    Platforms:= EnumLibraryPlatforms;
+    if Length(Platforms) = 0 then Platforms:= ['Win32', 'Win64']; // fallback if enumeration found nothing
   end
-  else
-    Platforms := ['Win32', 'Win64'];
+  else Platforms:= ['Win32', 'Win64'];
 
-  List := TList<string>.Create;
+  List:= TList<string>.Create;
   try
     ReadLibraryPaths(List, Platforms);
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
   end;
-end;
+end; // function
 
 function TProjectResolver.EnumRegistryPlatforms: TArray<string>;
 begin
-  Result := EnumLibraryPlatforms;
-  if Length(Result) = 0 then
-    Result := ['Win32', 'Win64'];
+  Result:= EnumLibraryPlatforms;
+  if Length(Result) = 0 then Result:= ['Win32', 'Win64'];
 end;
 
 function TProjectResolver.ReadPlatformLibraryPaths(const APlatform: string): TArray<string>;
 var
   List: TList<string>;
 begin
-  List := TList<string>.Create;
+  List:= TList<string>.Create;
   try
     ReadLibraryPaths(List, [APlatform]);
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
   end;
@@ -338,37 +315,34 @@ end;
 
 function TProjectResolver.Resolve(const ADprojPath: string): TArray<string>;
 var
-  List: TList<string>;
-  DprPath, BaseDir, MainSource: string;
+  List      : TList<string>;
+  DprPath   : string       ;
+  BaseDir   : string       ;
+  MainSource: string       ;
 begin
-  if not TFile.Exists(ADprojPath) then
-    raise Exception.CreateFmt('.dproj not found: %s', [ADprojPath]);
-  List := TList<string>.Create;
+  if not TFile.Exists(ADprojPath) then raise Exception.CreateFmt('.dproj not found: %s', [ADprojPath]);
+  List:= TList<string>.Create;
   try
     ReadDProj(ADprojPath, List);
 
     // Try to find the matching .dpr (same basename) next to the .dproj
-    BaseDir := TPath.GetDirectoryName(ADprojPath);
-    MainSource := TPath.ChangeExtension(ADprojPath, '.dpr');
-    if TFile.Exists(MainSource) then
-      DprPath := MainSource
+    BaseDir:= TPath.GetDirectoryName(ADprojPath);
+    MainSource:= TPath.ChangeExtension(ADprojPath, '.dpr');
+    if TFile.Exists(MainSource) then DprPath:= MainSource
     else
     begin
       // Sometimes the .dpk has the uses list (packages)
-      MainSource := TPath.ChangeExtension(ADprojPath, '.dpk');
-      if TFile.Exists(MainSource) then
-        DprPath := MainSource
-      else
-        DprPath := '';
+      MainSource:= TPath.ChangeExtension(ADprojPath, '.dpk');
+      if TFile.Exists(MainSource) then DprPath:= MainSource
+      else DprPath:= '';
     end;
-    if DprPath <> '' then
-      ReadDprUsesPaths(DprPath, List);
+    if DprPath <> '' then ReadDprUsesPaths(DprPath, List);
 
     ReadLibraryPaths(List, ['Win32', 'Win64']);
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 end.

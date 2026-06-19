@@ -8,13 +8,14 @@ unit DRagLint.Index.Plan;
 interface
 
 uses
-  System.SysUtils,
-  System.IOUtils,
-  System.Classes,
-  System.Generics.Collections,
-  DRagLint.Core.Interfaces,
-  DRagLint.Index.Manifest,
-  DRagLint.Project.Resolver;
+  System.SysUtils
+  , System.IOUtils
+  , System.Classes
+  , System  .Generics.Collections
+  , DRagLint.Core    .Interfaces
+  , DRagLint.Index   .Manifest
+  , DRagLint.Project .Resolver
+  ;
 
 type
   /// <summary>How a manifest section's file set is gathered.</summary>
@@ -24,8 +25,7 @@ type
     /// <summary>Closure of a .dpr / .dproj file (transitively used units).</summary>
     smClosure,
     /// <summary>Delphi registry Library + Browsing paths for one platform.</summary>
-    smLibrary
-  );
+    smLibrary);
 
   /// <summary>Concrete resolved build plan for one index section (or one platform
   /// expansion of a library section).</summary>
@@ -46,7 +46,7 @@ type
     DedupExcludeRoots: TArray<string>;
     /// <summary>Walk filter derived from global + per-section settings.</summary>
     Filter: TWalkFilter;
-  end;
+  end; // record
 
   /// <summary>Complete concrete build plan resolved from a TIndexManifest.</summary>
   TIndexPlan = record
@@ -55,27 +55,25 @@ type
     Items: TArray<TPlanSection>;
   end;
 
-/// <summary>Resolve a manifest into a concrete build plan. APlatformsFilter nil
-/// = all platforms a library section requests; non-nil restricts library
-/// expansion to the intersection with APlatformsFilter. AResolver supplies
-/// registry platform enumeration and per-platform library path reads.</summary>
-/// <param name="AManifest">Parsed, validated manifest. Must have RootDir set.</param>
-/// <param name="APlatformsFilter">Optional whitelist of platform names. Pass nil
-/// to accept all platforms the section declares. Caller owns the array lifetime.</param>
-/// <param name="AResolver">Resolver instance; caller owns + must not free until
-/// after this function returns. Must not be nil.</param>
-/// <returns>Fully populated TIndexPlan.</returns>
-/// <remarks>
-/// Mode classification:
-///   Source='registry-libraries' -> smLibrary (one TPlanSection per platform).
-///   Any Include entry ending with .dpr/.dproj (case-insensitive) -> smClosure.
-///   Otherwise -> smFolderTree.
-/// DedupAgainst='*' -> union of ALL other sections' roots.
-/// Not thread-safe; call from a single thread.
-/// </remarks>
-function ResolvePlan(const AManifest: TIndexManifest;
-  const APlatformsFilter: TArray<string>;
-  AResolver: TProjectResolver): TIndexPlan;
+  /// <summary>Resolve a manifest into a concrete build plan. APlatformsFilter nil
+  /// = all platforms a library section requests; non-nil restricts library
+  /// expansion to the intersection with APlatformsFilter. AResolver supplies
+  /// registry platform enumeration and per-platform library path reads.</summary>
+  /// <param name="AManifest">Parsed, validated manifest. Must have RootDir set.</param>
+  /// <param name="APlatformsFilter">Optional whitelist of platform names. Pass nil
+  /// to accept all platforms the section declares. Caller owns the array lifetime.</param>
+  /// <param name="AResolver">Resolver instance; caller owns + must not free until
+  /// after this function returns. Must not be nil.</param>
+  /// <returns>Fully populated TIndexPlan.</returns>
+  /// <remarks>
+  /// Mode classification:
+  ///   Source='registry-libraries' -> smLibrary (one TPlanSection per platform).
+  ///   Any Include entry ending with .dpr/.dproj (case-insensitive) -> smClosure.
+  ///   Otherwise -> smFolderTree.
+  /// DedupAgainst='*' -> union of ALL other sections' roots.
+  /// Not thread-safe; call from a single thread.
+  /// </remarks>
+function ResolvePlan(const AManifest: TIndexManifest; const APlatformsFilter: TArray<string>; AResolver: TProjectResolver): TIndexPlan;
 
 implementation
 
@@ -86,11 +84,10 @@ implementation
 function PlanModeStr(const AMode: TPlanSectionMode): string;
 begin
   case AMode of
-    smFolderTree: Result := 'folderTree';
-    smClosure:    Result := 'closure';
-    smLibrary:    Result := 'library';
-  else
-    Result := 'folderTree';
+    smFolderTree: Result:= 'folderTree';
+    smClosure   : Result:= 'closure';
+    smLibrary   : Result:= 'library';
+    else Result:= 'folderTree';
   end;
 end;
 
@@ -99,29 +96,26 @@ function ExpandDbPath(const ATemplate, APlatform, ABase, AOutDir: string): strin
 var
   S: string;
 begin
-  S := ATemplate;
-  S := StringReplace(S, '{platform}', APlatform, [rfReplaceAll, rfIgnoreCase]);
+  S:= ATemplate;
+  S:= StringReplace(S, '{platform}', APlatform, [rfReplaceAll, rfIgnoreCase]);
   // Bare filename -> place under OutDir (which is itself relative to ABase)
   if not TPath.IsPathRooted(S) then
   begin
     // If AOutDir is non-empty, combine with it; else directly with ABase
     if AOutDir <> '' then
     begin
-      if TPath.IsPathRooted(AOutDir) then
-        S := TPath.Combine(AOutDir, S)
-      else
-        S := TPath.Combine(TPath.Combine(ABase, AOutDir), S);
+      if TPath.IsPathRooted(AOutDir) then S:= TPath.Combine(AOutDir, S)
+      else S:= TPath.Combine(TPath.Combine(ABase, AOutDir), S);
     end
-    else
-      S := TPath.Combine(ABase, S);
+    else S:= TPath.Combine(ABase, S);
   end;
   try
-    S := TPath.GetFullPath(S);
+    S:= TPath.GetFullPath(S);
   except
     // leave as-is if GetFullPath fails (bad path chars)
   end;
-  Result := S;
-end;
+  Result:= S;
+end; // function
 
 // Determine mode by scanning Include list for .dpr/.dproj entries.
 // If any entry ends with .dpr or .dproj -> smClosure; else smFolderTree.
@@ -130,36 +124,32 @@ var
   Inc: string;
   Ext: string;
 begin
-  if SameText(ASection.Source, 'registry-libraries') then
-    Exit(smLibrary);
+  if SameText(ASection.Source, 'registry-libraries') then Exit(smLibrary);
   for Inc in ASection.Include do
   begin
-    Ext := LowerCase(TPath.GetExtension(Inc));
-    if (Ext = '.dpr') or (Ext = '.dproj') then
-      Exit(smClosure);
+    Ext:= LowerCase(TPath.GetExtension(Inc));
+    if (Ext = '.dpr') or (Ext = '.dproj') then Exit(smClosure);
   end;
-  Result := smFolderTree;
+  Result:= smFolderTree;
 end;
 
 // Resolve include entries to absolute paths against ARootDir.
 // All entries are returned regardless of mode; the caller (BuildPlanItem)
 // decides how to consume them (closure walk vs folder walk).
-function ResolveRoots(const ASection: TIndexSection; const ARootDir: string;
-  AMode: TPlanSectionMode): TArray<string>;
+function ResolveRoots(const ASection: TIndexSection; const ARootDir: string; AMode: TPlanSectionMode): TArray<string>;
 var
   List: TList<string>;
-  Inc, Abs: string;
+  Inc : string       ;
+  Abs : string       ;
 begin
-  List := TList<string>.Create;
+  List:= TList<string>.Create;
   try
     for Inc in ASection.Include do
     begin
-      if TPath.IsPathRooted(Inc) then
-        Abs := Inc
-      else
-        Abs := TPath.Combine(ARootDir, Inc);
+      if TPath.IsPathRooted(Inc) then Abs:= Inc
+      else Abs:= TPath.Combine(ARootDir, Inc);
       try
-        Abs := TPath.GetFullPath(Abs);
+        Abs:= TPath.GetFullPath(Abs);
       except
         // keep as-is
       end;
@@ -167,125 +157,116 @@ begin
       // distinction is handled in BuildPlanItem (closure walk vs folder walk).
       List.Add(Abs);
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 // Build the TWalkFilter for a section, applying global + section settings.
-function BuildFilter(const AManifest: TIndexManifest;
-  const ASection: TIndexSection): TWalkFilter;
+function BuildFilter(const AManifest: TIndexManifest; const ASection: TIndexSection): TWalkFilter;
 var
   KB: Integer;
 begin
-  Result := TWalkFilter.Create;
-  Result.GlobalExclude  := AManifest.GlobalExclude;
-  Result.SectionExclude := ASection.Exclude;
-  Result.IncludeOnly    := ASection.IncludeOnly;
-  Result.UseIgnoreFiles := ASection.UseIgnoreFiles;
-  Result.SqlOnlyMS      := ASection.SqlOnlyMS;
+  Result:= TWalkFilter.Create;
+  Result.GlobalExclude := AManifest.GlobalExclude;
+  Result.SectionExclude:= ASection .Exclude;
+  Result.IncludeOnly   := ASection .IncludeOnly;
+  Result.UseIgnoreFiles:= ASection .UseIgnoreFiles;
+  Result.SqlOnlyMS     := ASection .SqlOnlyMS;
   { Propagate the file-size guard from manifest settings.
     0 in settings means "not set" -> fall back to the TWalkFilter.Create
     default of 2048. A negative value is treated as unlimited (0 in the
     filter). }
-  KB := AManifest.Settings.MaxParseFileKB;
-  if KB = 0 then
-    KB := 2048;  // default when manifest omits the key
-  if KB < 0 then
-    KB := 0;     // negative = unlimited
-  Result.MaxFileKB := KB;
+  KB:= AManifest.Settings.MaxParseFileKB;
+  if KB = 0 then KB:= 2048; // default when manifest omits the key
+  if KB < 0 then KB:= 0; // negative = unlimited
+  Result.MaxFileKB:= KB;
 end;
 
 // Append unique strings from ASrc into ADest (case-insensitive dedup).
 procedure AppendUnique(var ADest: TArray<string>; const ASrc: TArray<string>);
 var
-  S, E: string;
+  S    : string ;
+  E    : string ;
   Found: Boolean;
 begin
   for S in ASrc do
   begin
-    Found := False;
+    Found:= False;
     for E in ADest do
       if SameText(E, S) then
       begin
-        Found := True;
+        Found:= True;
         Break;
       end;
     if not Found then
     begin
       SetLength(ADest, Length(ADest) + 1);
-      ADest[High(ADest)] := S;
+      ADest[High(ADest)]:= S;
     end;
   end;
-end;
+end; // procedure
 
 // Union of all Roots from all plan items whose Name matches AName (case-insens).
-procedure CollectRootsByName(const AItems: TArray<TPlanSection>;
-  const AName: string; var ADest: TArray<string>);
+procedure CollectRootsByName(const AItems: TArray<TPlanSection>; const AName: string; var ADest: TArray<string>);
 var
   Item: TPlanSection;
 begin
   for Item in AItems do
-    if SameText(Item.Name, AName) then
-      AppendUnique(ADest, Item.Roots);
+    if SameText(Item.Name, AName) then AppendUnique(ADest, Item.Roots);
 end;
 
 // Union of all Roots from every plan item EXCEPT those named AExcludeName.
-procedure CollectRootsExcept(const AItems: TArray<TPlanSection>;
-  const AExcludeName: string; var ADest: TArray<string>);
+procedure CollectRootsExcept(const AItems: TArray<TPlanSection>; const AExcludeName: string; var ADest: TArray<string>);
 var
   Item: TPlanSection;
 begin
   for Item in AItems do
-    if not SameText(Item.Name, AExcludeName) then
-      AppendUnique(ADest, Item.Roots);
+    if not SameText(Item.Name, AExcludeName) then AppendUnique(ADest, Item.Roots);
 end;
 
 // Check if APlatform is in AFilter (case-insensitive). Empty filter = all pass.
-function PlatformAllowed(const APlatform: string;
-  const AFilter: TArray<string>): Boolean;
+function PlatformAllowed(const APlatform: string; const AFilter: TArray<string>): Boolean;
 var
   F: string;
 begin
-  if Length(AFilter) = 0 then
-    Exit(True);
+  if Length(AFilter) = 0 then Exit(True);
   for F in AFilter do
-    if SameText(F, APlatform) then
-      Exit(True);
-  Result := False;
+    if SameText(F, APlatform) then Exit(True);
+  Result:= False;
 end;
 
 { ---------------------------------------------------------------------- }
 {  ResolvePlan                                                             }
 { ---------------------------------------------------------------------- }
 
-function ResolvePlan(const AManifest: TIndexManifest;
-  const APlatformsFilter: TArray<string>;
-  AResolver: TProjectResolver): TIndexPlan;
+function ResolvePlan(const AManifest: TIndexManifest; const APlatformsFilter: TArray<string>; AResolver: TProjectResolver): TIndexPlan;
 var
-  Sec: TIndexSection;
-  Mode: TPlanSectionMode;
-  Items: TList<TPlanSection>;
-  PS: TPlanSection;
-  OutDir, DbTemplate, DbPath: string;
-  RegPlatforms, SecPlatforms, LibRoots: TArray<string>;
-  Plat: string;
-  I: Integer;
-  DA: string;
-  DedupRoots: TArray<string>;
+  Sec         : TIndexSection      ;
+  Mode        : TPlanSectionMode   ;
+  Items       : TList<TPlanSection>;
+  PS          : TPlanSection       ;
+  OutDir      : string             ;
+  DbTemplate  : string             ;
+  DbPath      : string             ;
+  RegPlatforms: TArray<string>     ;
+  SecPlatforms: TArray<string>     ;
+  LibRoots    : TArray<string>     ;
+  Plat        : string             ;
+  I           : Integer            ;
+  DA          : string             ;
+  DedupRoots  : TArray<string>     ;
 begin
-  Result := Default(TIndexPlan);
-  Items := TList<TPlanSection>.Create;
+  Result:= Default(TIndexPlan);
+  Items:= TList<TPlanSection>.Create;
   try
     // Resolve OutDir against RootDir
-    OutDir := AManifest.OutDir;
-    if (OutDir <> '') and (not TPath.IsPathRooted(OutDir)) then
-      OutDir := TPath.Combine(AManifest.RootDir, OutDir);
-    if OutDir = '' then
-      OutDir := AManifest.RootDir;
+    OutDir:= AManifest.OutDir;
+    if (OutDir <> '') and (not TPath.IsPathRooted(OutDir)) then OutDir:= TPath.Combine(AManifest.RootDir, OutDir);
+    if OutDir = '' then OutDir:= AManifest.RootDir;
     try
-      OutDir := TPath.GetFullPath(OutDir);
+      OutDir:= TPath.GetFullPath(OutDir);
     except
       // keep as-is
     end;
@@ -293,80 +274,75 @@ begin
     // --- Pass 1: resolve each section into plan item(s) (no dedup yet) ---
     for Sec in AManifest.Sections do
     begin
-      Mode := ClassifyMode(Sec);
+      Mode:= ClassifyMode(Sec);
 
       if Mode = smLibrary then
       begin
         // Platform expansion: determine which platforms to emit
-        if (Length(Sec.Platforms) = 1) and (Sec.Platforms[0] = '*') then
-          RegPlatforms := AResolver.EnumRegistryPlatforms
-        else
-          RegPlatforms := Sec.Platforms;
+        if (Length(Sec.Platforms) = 1) and (Sec.Platforms[0] = '*') then RegPlatforms:= AResolver.EnumRegistryPlatforms
+        else RegPlatforms:= Sec.Platforms;
 
         // Apply filter if provided
         if Length(APlatformsFilter) > 0 then
         begin
-          SecPlatforms := nil;
+          SecPlatforms:= nil;
           for Plat in RegPlatforms do
             if PlatformAllowed(Plat, APlatformsFilter) then
             begin
               SetLength(SecPlatforms, Length(SecPlatforms) + 1);
-              SecPlatforms[High(SecPlatforms)] := Plat;
+              SecPlatforms[High(SecPlatforms)]:= Plat;
             end;
         end
-        else
-          SecPlatforms := RegPlatforms;
+        else SecPlatforms:= RegPlatforms;
 
         // Determine DB template: default to '<Name>-{platform}.sqlite'
-        DbTemplate := Sec.Db;
-        if DbTemplate = '' then
-          DbTemplate := Sec.Name + '-{platform}.sqlite';
+        DbTemplate:= Sec.Db;
+        if DbTemplate = '' then DbTemplate:= Sec.Name + '-{platform}.sqlite';
 
         // Emit one plan section per platform
         for Plat in SecPlatforms do
         begin
-          PS := Default(TPlanSection);
-          PS.Name     := Sec.Name;
-          PS.Mode     := smLibrary;
-          PS.Platform := Plat;
-          PS.DbPath   := ExpandDbPath(DbTemplate, Plat, AManifest.RootDir, AManifest.OutDir);
-          LibRoots    := AResolver.ReadPlatformLibraryPaths(Plat);
-          PS.Roots    := LibRoots;
-          PS.Filter   := BuildFilter(AManifest, Sec);
+          PS:= Default(TPlanSection);
+          PS.Name:= Sec.Name;
+          PS.Mode    := smLibrary;
+          PS.Platform:= Plat;
+          PS.DbPath:= ExpandDbPath(DbTemplate, Plat, AManifest.RootDir, AManifest.OutDir);
+          LibRoots:= AResolver.ReadPlatformLibraryPaths(Plat);
+          PS.Roots:= LibRoots;
+          PS.Filter:= BuildFilter(AManifest, Sec);
           // DedupExcludeRoots: computed in pass 2
           Items.Add(PS);
         end;
-      end
+      end // if
       else
       begin
         // smFolderTree or smClosure
-        PS := Default(TPlanSection);
-        PS.Name     := Sec.Name;
-        PS.Mode     := Mode;
-        PS.Platform := '';
+        PS:= Default(TPlanSection);
+        PS.Name:= Sec.Name;
+        PS.Mode    := Mode;
+        PS.Platform:= '';
 
-        DbTemplate := Sec.Db;
-        if DbTemplate = '' then
-          DbTemplate := Sec.Name + '.sqlite';
-        PS.DbPath := ExpandDbPath(DbTemplate, '', AManifest.RootDir, AManifest.OutDir);
-        PS.Roots  := ResolveRoots(Sec, AManifest.RootDir, Mode);
-        PS.Filter := BuildFilter(AManifest, Sec);
+        DbTemplate:= Sec.Db;
+        if DbTemplate = '' then DbTemplate:= Sec.Name + '.sqlite';
+        PS.DbPath:= ExpandDbPath(DbTemplate, '', AManifest.RootDir, AManifest.OutDir);
+        PS.Roots:= ResolveRoots(Sec, AManifest.RootDir, Mode);
+        PS.Filter:= BuildFilter(AManifest, Sec);
         Items.Add(PS);
       end;
-    end;
+    end; // for
 
     // --- Pass 2: compute DedupExcludeRoots for each item ---
     // We need a snapshot of all roots per name at this point.
-    for I := 0 to Items.Count - 1 do
+    for I:= 0 to Items.Count - 1 do
     begin
-      PS := Items[I];
-      DedupRoots := nil;
+      PS:= Items[I];
+      DedupRoots:= nil;
 
       // Find the matching manifest section's DedupAgainst list
       var MatchSec: TIndexSection;
       if not AManifest.FindSection(PS.Name, MatchSec) then
       begin
-        Items[I] := PS;
+        Items[I]:= PS;
         Continue;
       end;
 
@@ -375,18 +351,17 @@ begin
         if DA = '*' then
           // All sections except this one
           CollectRootsExcept(Items.ToArray, PS.Name, DedupRoots)
-        else
-          CollectRootsByName(Items.ToArray, DA, DedupRoots);
+        else CollectRootsByName(Items.ToArray, DA, DedupRoots);
       end;
 
-      PS.DedupExcludeRoots := DedupRoots;
-      Items[I] := PS;
-    end;
+      PS.DedupExcludeRoots:= DedupRoots;
+      Items[I]:= PS;
+    end; // for
 
-    Result.Items := Items.ToArray;
+    Result.Items:= Items.ToArray;
   finally
     Items.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 end.

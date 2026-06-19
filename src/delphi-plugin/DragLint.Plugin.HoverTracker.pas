@@ -32,16 +32,20 @@ procedure StopHoverTracker;
 implementation
 
 uses
-  System.SysUtils, System.Classes,
-  Vcl.Forms, Vcl.Controls, Vcl.ExtCtrls,
-  Winapi.Windows,
-  ToolsAPI,
-  DragLint.Plugin.DiagnosticCache,
-  DragLint.Plugin.HoverForm,
-  DragLint.Plugin.Settings,
-  DragLint.Plugin.LspClient,
-  DragLint.Plugin.EditViewNotifier,
-  DragLint.Plugin.Editor;
+  System.SysUtils
+  , System.Classes
+  , Vcl.Forms
+  , Vcl.Controls
+  , Vcl.ExtCtrls
+  , Winapi.Windows
+  , ToolsAPI
+  , DragLint.Plugin.DiagnosticCache
+  , DragLint.Plugin.HoverForm
+  , DragLint.Plugin.Settings
+  , DragLint.Plugin.LspClient
+  , DragLint.Plugin.EditViewNotifier
+  , DragLint.Plugin.Editor
+  ;
 
 function IdeIsForeground: Boolean;
 { v0.40.8b: process-ID comparison is the only check that works across
@@ -51,15 +55,15 @@ function IdeIsForeground: Boolean;
   IsChild + GetAncestor failed for floating editor tabs (their root is
   the float container, not the AppBuilder main form). }
 var
-  Fg: HWND;
+  Fg : HWND ;
   Pid: DWORD;
 begin
-  Result := False;
-  Fg := GetForegroundWindow;
+  Result:= False;
+  Fg    := GetForegroundWindow;
   if Fg = 0 then Exit;
-  Pid := 0;
+  Pid:= 0;
   GetWindowThreadProcessId(Fg, Pid);
-  Result := (Pid <> 0) and (Pid = GetCurrentProcessId);
+  Result:= (Pid <> 0) and (Pid = GetCurrentProcessId);
 end;
 
 function IsMouseOverEditorView(const APt: TPoint): Boolean;
@@ -71,37 +75,37 @@ function IsMouseOverEditorView(const APt: TPoint): Boolean;
   pointing. Uses IOTAEditView.GetEditWindow.Form.BoundsRect (the whole
   editor dock pane, including its tabs/scrollbars -- fine for this check). }
 var
-  ESS: IOTAEditorServices;
-  EditView: IOTAEditView;
-  F: TCustomForm;
-  R: TRect;
+  ESS     : IOTAEditorServices;
+  EditView: IOTAEditView      ;
+  F       : TCustomForm       ;
+  R       : TRect             ;
 begin
-  Result := False;
+  Result:= False;
   if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
-  EditView := ESS.TopView;
+  EditView:= ESS.TopView;
   if EditView = nil then Exit;
-  F := EditView.GetEditWindow.Form;
+  F:= EditView.GetEditWindow.Form;
   if F = nil then Exit;
   if not GetWindowRect(F.Handle, R) then Exit;
-  Result := PtInRect(R, APt);
+  Result:= PtInRect(R, APt);
 end;
 
 type
   TDragLintHoverHelper = class
-  private
-    FTimer:       TTimer;
-    FLastPos:     TPoint;
-    FStableCount: Integer;
-    FHintShown:   Boolean;
-    FLastLspKey:  string;   { v0.40.3: dedupes textDocument/hover firings per stable caret }
-    FLastLspText: string;   { v0.40.3: cached symbol info for the last stable caret }
-    FLastShownKey: string;  { v0.42: caret key we already popped; don't re-show it }
-    FLastForegroundFail: Boolean; { v0.40.8b: log the bail-out only once per transition }
-    procedure OnTick(Sender: TObject);
-    procedure ResetState;
-  public
-    constructor Create;
-    destructor Destroy; override;
+    private
+      FTimer             : TTimer ;
+      FLastPos           : TPoint ;
+      FStableCount       : Integer;
+      FHintShown         : Boolean;
+      FLastLspKey        : string ; { v0.40.3: dedupes textDocument/hover firings per stable caret }
+      FLastLspText       : string ; { v0.40.3: cached symbol info for the last stable caret }
+      FLastShownKey      : string ; { v0.42: caret key we already popped; don't re-show it }
+      FLastForegroundFail: Boolean; { v0.40.8b: log the bail-out only once per transition }
+      procedure OnTick(Sender: TObject);
+      procedure ResetState;
+    public
+      constructor Create;
+      destructor Destroy; override;
   end;
 
 var
@@ -110,13 +114,13 @@ var
 constructor TDragLintHoverHelper.Create;
 begin
   inherited;
-  FTimer := TTimer.Create(nil);
-  FTimer.Interval := 200;
-  FTimer.OnTimer  := OnTick;
-  FTimer.Enabled  := True;
-  FLastPos        := Point(-1, -1);
-  FStableCount    := 0;
-  FHintShown      := False;
+  FTimer:= TTimer.Create(nil);
+  FTimer.Interval:= 200;
+  FTimer.OnTimer := OnTick;
+  FTimer.Enabled := True;
+  FLastPos:= Point(-1, -1);
+  FStableCount:= 0;
+  FHintShown  := False;
 end;
 
 destructor TDragLintHoverHelper.Destroy;
@@ -127,28 +131,28 @@ end;
 
 procedure TDragLintHoverHelper.ResetState;
 begin
-  FStableCount := 0;
-  FHintShown   := False;
+  FStableCount:= 0;
+  FHintShown  := False;
 end;
 
 procedure TDragLintHoverHelper.OnTick(Sender: TObject);
 var
-  Settings:  TDragLintSettings;
-  Pos:       TPoint;
-  ESS:       IOTAEditorServices;
-  EditView:  IOTAEditView;
-  FilePath:  string;
-  CaretRow:  Integer;
-  CaretCol:  Integer;
-  Diags:     TArray<TDragLintDiagnostic>;
-  LspKey:    string;
-  LspText:   string;
-  DiagText:  string;
-  Combined:  string;
-  Uri:       string;
+  Settings: TDragLintSettings          ;
+  Pos     : TPoint                     ;
+  ESS     : IOTAEditorServices         ;
+  EditView: IOTAEditView               ;
+  FilePath: string                     ;
+  CaretRow: Integer                    ;
+  CaretCol: Integer                    ;
+  Diags   : TArray<TDragLintDiagnostic>;
+  LspKey  : string                     ;
+  LspText : string                     ;
+  DiagText: string                     ;
+  Combined: string                     ;
+  Uri     : string                     ;
 begin
   try
-    Settings := LoadSettings;
+    Settings:= LoadSettings;
     if not Settings.EnableHoverTooltip then
     begin
       ResetState;
@@ -163,12 +167,12 @@ begin
       if not FLastForegroundFail then
       begin
         DebugLog('HoverTracker: bail -- IDE not foreground');
-        FLastForegroundFail := True;
+        FLastForegroundFail:= True;
       end;
       ResetState;
       Exit;
     end;
-    FLastForegroundFail := False;
+    FLastForegroundFail:= False;
 
     GetCursorPos(Pos);
 
@@ -183,8 +187,7 @@ begin
         over the Project Manager / Messages / other panes. Keep it alive only
         while the cursor is actually over the popup (so the interactive menu
         popup the user is reaching for isn't yanked away). }
-      if IsDragLintHoverVisible and not IsMouseOverDragLintHover then
-        CloseDragLintHover;
+      if IsDragLintHoverVisible and not IsMouseOverDragLintHover then CloseDragLintHover;
       ResetState;
       Exit;
     end;
@@ -193,12 +196,11 @@ begin
       for a full dwell (a real hand wobbles 1-2 px), so the popup rarely fired.
       Treat motion within 4 px of the anchor as "stable"; only a real move
       re-anchors + resets. }
-    if (Abs(Pos.X - FLastPos.X) <= 4) and (Abs(Pos.Y - FLastPos.Y) <= 4) then
-      Inc(FStableCount)
+    if (Abs(Pos.X - FLastPos.X) <= 4) and (Abs(Pos.Y - FLastPos.Y) <= 4) then Inc(FStableCount)
     else
     begin
       ResetState;
-      FLastPos := Pos;   { re-anchor only when the cursor really moved }
+      FLastPos:= Pos; { re-anchor only when the cursor really moved }
     end;
 
     { v0.46: 5 ticks * 200 ms = 1.0 s dwell (was 1.6 s) -- snappier, and the
@@ -213,16 +215,16 @@ begin
       the popup would re-anchor at every mouse stop ("jumping around"). }
     if IsDragLintHoverVisible then
     begin
-      FHintShown := True;
+      FHintShown:= True;
       Exit;
     end;
 
     { Query the active editor's caret row + column }
     if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
-    EditView := ESS.TopView;
+    EditView:= ESS.TopView;
     if EditView = nil then Exit;
 
-    FilePath := EditView.Buffer.FileName;
+    FilePath:= EditView.Buffer.FileName;
     if FilePath = '' then Exit;
 
     { v0.46: GUTTER-glyph hover. Map the MOUSE screen point to an editor row via
@@ -231,67 +233,61 @@ begin
       message(s). This is independent of the caret -- it's true mouse hover. }
     if (GGutterAnchorHwnd <> 0) and (GGutterLineHeight > 0) then
     begin
-      var CliPt: TPoint := Pos;
+      var CliPt: TPoint:= Pos;
       if ScreenToClient(GGutterAnchorHwnd, CliPt) then
       begin
-        var DeltaY: Integer := CliPt.Y - GGutterAnchorTopY;
-        var RowOff: Integer;
-        if DeltaY >= 0 then
-          RowOff := DeltaY div GGutterLineHeight
-        else
-          RowOff := -((-DeltaY + GGutterLineHeight - 1) div GGutterLineHeight);
-        var MouseRow1: Integer := GGutterAnchorLine + RowOff;   { 1-based }
+        var DeltaY: Integer:= CliPt.Y - GGutterAnchorTopY;
+        var RowOff: Integer                              ;
+        if DeltaY >= 0 then RowOff:= DeltaY div GGutterLineHeight
+        else RowOff:= -((-DeltaY + GGutterLineHeight - 1) div GGutterLineHeight);
+        var MouseRow1: Integer:= GGutterAnchorLine + RowOff; { 1-based }
         if (CliPt.X >= 0) and (CliPt.X < GGutterTextLeft) and (MouseRow1 >= 1) then
         begin
-          var GDiags := Cache.GetForLine(FilePath, MouseRow1 - 1);
+          var GDiags:= Cache.GetForLine(FilePath, MouseRow1 - 1);
           if Length(GDiags) > 0 then
           begin
-            var GMsg: string := '';
-            for var GI := 0 to High(GDiags) do
+            var GMsg: string:= '';
+            for var GI:= 0 to High(GDiags) do
             begin
-              if GMsg <> '' then GMsg := GMsg + #13#10;
-              if GDiags[GI].Code <> '' then
-                GMsg := GMsg + '[' + GDiags[GI].Code + '] ';
-              GMsg := GMsg + GDiags[GI].Message;
+              if GMsg <> '' then GMsg:= GMsg + #13#10;
+              if GDiags[GI].Code <> '' then GMsg:= GMsg + '[' + GDiags[GI].Code + '] ';
+              GMsg:= GMsg + GDiags[GI].Message;
               { v0.46 lightbulb hint }
-              if System.Pos('add unit ', LowerCase(GDiags[GI].Message)) > 0 then
-                GMsg := GMsg + '   <-- click to add';
+              if System.Pos('add unit ', LowerCase(GDiags[GI].Message)) > 0 then GMsg:= GMsg + '   <-- click to add';
             end;
-            FHintShown := True;
+            FHintShown:= True;
             var GEmpty: TArray<TDragLintCallerInfo>;
             SetLength(GEmpty, 0);
             CloseDragLintHover;
-            ShowDragLintHover('Diagnostics', GMsg, GEmpty,
-              Pos.X + 18, Pos.Y + 8, True, Pos.X, Pos.Y);
-            FLastShownKey := Format('gutter|%s|%d', [FilePath, MouseRow1]);
+            ShowDragLintHover('Diagnostics', GMsg, GEmpty, Pos.X + 18, Pos.Y + 8, True, Pos.X, Pos.Y);
+            FLastShownKey:= Format('gutter|%s|%d', [FilePath, MouseRow1]);
             Exit;
-          end;
-        end;
-      end;
-    end;
+          end; // if
+        end; // if
+      end; // if
+    end; // if
 
     { IOTAEditView.Position is 1-based; LSP / diagnostic cache is 0-based }
-    CaretRow := EditView.Position.Row - 1;
-    CaretCol := EditView.Position.Column - 1;
-    if CaretRow < 0 then CaretRow := 0;
-    if CaretCol < 0 then CaretCol := 0;
+    CaretRow:= EditView.Position.Row    - 1;
+    CaretCol:= EditView.Position.Column - 1;
+    if CaretRow < 0 then CaretRow:= 0;
+    if CaretCol < 0 then CaretCol:= 0;
 
     { Pull cached diagnostic for this row, if any. }
-    DiagText := '';
-    Diags := Cache.GetForLine(FilePath, CaretRow);
+    DiagText:= '';
+    Diags:= Cache.GetForLine(FilePath, CaretRow);
     if Length(Diags) > 0 then
     begin
-      DiagText := Diags[0].Message;
+      DiagText:= Diags[0].Message;
       { v0.46 lightbulb hint -- the line is clickable to apply the fix. }
-      if System.Pos('add unit ', LowerCase(DiagText)) > 0 then
-        DiagText := DiagText + '   <-- click to add';
+      if System.Pos('add unit ', LowerCase(DiagText)) > 0 then DiagText:= DiagText + '   <-- click to add';
     end;
 
     { v0.40.3: ALSO query LSP hover at (file, row, col) for symbol info.
       Dedupe via FLastLspKey so we don't fire on every dwell cycle for
       the same position. Cache the result so repeated dwell on the same
       caret reuses it. }
-    LspKey := Format('%s|%d|%d', [FilePath, CaretRow, CaretCol]);
+    LspKey:= Format('%s|%d|%d', [FilePath, CaretRow, CaretCol]);
 
     { v0.42: the dwell uses the CARET position for content but the MOUSE for
       placement, so wandering the mouse over a docked pane (still inside the
@@ -299,32 +295,30 @@ begin
       Show a given caret's popup once; only a caret change re-arms it. }
     if LspKey = FLastShownKey then
     begin
-      FHintShown := True;
+      FHintShown:= True;
       Exit;
     end;
 
     if LspKey <> FLastLspKey then
     begin
-      Uri := 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
-      FLastLspText := QueryHoverText(Uri, CaretRow, CaretCol, 500);
-      FLastLspKey  := LspKey;
+      Uri:= 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
+      FLastLspText:= QueryHoverText(Uri, CaretRow, CaretCol, 500);
+      FLastLspKey:= LspKey;
     end;
-    LspText := FLastLspText;
+    LspText:= FLastLspText;
 
     { Combine the two -- symbol info first, diagnostic underneath. }
-    Combined := '';
-    if LspText <> '' then
-      Combined := LspText;
+    Combined:= '';
+    if LspText <> '' then Combined:= LspText;
     if DiagText <> '' then
     begin
-      if Combined <> '' then
-        Combined := Combined + #13#10 + '---' + #13#10;
-      Combined := Combined + DiagText;
+      if Combined <> '' then Combined:= Combined + #13#10 + '---' + #13#10;
+      Combined:= Combined + DiagText;
     end;
 
     if Combined = '' then Exit;
 
-    FHintShown := True;
+    FHintShown:= True;
     { v0.40.7: dwell tracker uses the simple 1-arg overload (no callers /
       no header) because the find-callers shell-out from a 200 ms timer would
       compound latency. Menu InvokeHover does the full three-section show.
@@ -335,30 +329,27 @@ begin
       new one. Without this the singleton in HoverForm refuses to show
       because the previous popup is still on screen, leaving the user
       reading stale data while pointing at a new identifier. }
-    var DwellHeader: string := ExtractHoverHeader(Combined);
-    Combined := StripFirstHeaderLine(Combined);
+    var DwellHeader: string:= ExtractHoverHeader(Combined);
+    Combined:= StripFirstHeaderLine(Combined);
     var DwellCallers: TArray<TDragLintCallerInfo>;
     SetLength(DwellCallers, 0);
-    DebugLog(Format('HoverTracker: spawning popup at (%d,%d), %d chars, header="%s"',
-      [Pos.X, Pos.Y + 20, Length(Combined), DwellHeader]));
+    DebugLog(Format('HoverTracker: spawning popup at (%d,%d), %d chars, header="%s"', [Pos.X, Pos.Y + 20, Length(Combined), DwellHeader]));
     CloseDragLintHover;
     { v0.42: dwell popups dismiss against the original mouse point (Pos), not
       the wide popup rect -- so a small drift, or leaving the editor, clears
       them. The popup is still drawn at Pos.Y+20 (below the cursor). }
-    ShowDragLintHover(DwellHeader, Combined, DwellCallers, Pos.X, Pos.Y + 20,
-      True, Pos.X, Pos.Y);
-    FLastShownKey := LspKey;   { v0.42: don't re-pop this same caret }
+    ShowDragLintHover(DwellHeader, Combined, DwellCallers, Pos.X, Pos.Y + 20, True, Pos.X, Pos.Y);
+    FLastShownKey:= LspKey; { v0.42: don't re-pop this same caret }
   except
     { Swallow all exceptions: this fires in a VCL timer inside the IDE.
       Any unhandled exception here would surface as an IDE crash or modal
       dialog. Silent failure is strongly preferred. }
-  end;
-end;
+  end; // try
+end; // procedure
 
 procedure StartHoverTracker;
 begin
-  if GHelper = nil then
-    GHelper := TDragLintHoverHelper.Create;
+  if GHelper = nil then GHelper:= TDragLintHoverHelper.Create;
 end;
 
 procedure StopHoverTracker;
@@ -369,6 +360,6 @@ end;
 initialization
 
 finalization
-  StopHoverTracker;
+StopHoverTracker;
 
 end.

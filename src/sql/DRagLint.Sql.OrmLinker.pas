@@ -26,176 +26,164 @@ unit DRagLint.Sql.OrmLinker;
 interface
 
 uses
-  System.SysUtils,
-  System.Classes,
-  System.DateUtils,
-  System.Generics.Collections,
-  FireDAC.Comp.Client,
-  DRagLint.Storage.SQLite;
+  System.SysUtils
+  , System.Classes
+  , System.DateUtils
+  , System  .Generics.Collections
+  , FireDAC .Comp    .Client
+  , DRagLint.Storage .SQLite
+  ;
 
 type
   TOrmLinkerStats = record
-    ClassLinks:  Integer;
-    IfaceLinks:  Integer;
-    FieldLinks:  Integer;
-    ComputedAt:  Int64;
+    ClassLinks: Integer;
+    IfaceLinks: Integer;
+    FieldLinks: Integer;
+    ComputedAt: Int64  ;
   end;
 
   TOrmLinker = class
-  public
-    class function Run(const ADbPaths: TArray<string>): TOrmLinkerStats; static;
+    public
+      class function Run(const ADbPaths: TArray<string>): TOrmLinkerStats; static;
   end;
 
 implementation
 
 uses
-  Data.DB,
-  FireDAC.Stan.Intf,
-  FireDAC.Stan.Param;
+  Data.DB
+  , FireDAC.Stan.Intf
+  , FireDAC.Stan.Param
+  ;
 
 type
   TSqlSym = record
-    Id:       Int64;
-    DbIndex:  Integer;
-    Name:     string;       // uppercased canonical
-    ParentId: Int64;
+    Id      : Int64  ;
+    DbIndex : Integer;
+    Name    : string ; // uppercased canonical
+    ParentId: Int64  ;
   end;
 
   TDelphiSym = record
-    Id:       Int64;
-    DbIndex:  Integer;
-    Name:     string;       // raw
-    Stripped: string;       // T/I/F-stripped, uppercase
-    ParentId: Int64;
+    Id      : Int64  ;
+    DbIndex : Integer;
+    Name    : string ; // raw
+    Stripped: string ; // T/I/F-stripped, uppercase
+    ParentId: Int64  ;
   end;
 
 function StripPrefix(const AName: string; APrefix: Char): string;
 begin
-  if (Length(AName) >= 2) and (UpCase(AName[1]) = APrefix) and
-     CharInSet(AName[2], ['A'..'Z']) then
-    Result := Copy(AName, 2, MaxInt)
-  else
-    Result := AName;
+  if (Length(AName) >= 2) and (UpCase(AName[1]) = APrefix) and CharInSet(AName[2], ['A'..'Z']) then Result:= Copy(AName, 2, MaxInt)
+  else Result:= AName;
 end;
 
 class function TOrmLinker.Run(const ADbPaths: TArray<string>): TOrmLinkerStats;
 var
-  Stores:      TArray<TSQLiteSymbolStore>;
-  ComputedAt:  Int64;
-  SqlTables:   TList<TSqlSym>;     { dest = upper(stripped) -> list }
-  SqlColumns:  TDictionary<string, TList<TSqlSym>>;  { key = upper(table)+'.'+upper(col) }
-  DelphiClasses: TList<TDelphiSym>;
-  DelphiIfaces:  TList<TDelphiSym>;
-  DelphiFields:  TDictionary<Int64, TList<TDelphiSym>>;  { class symbol id -> fields }
-  ParentLookup:  TDictionary<Int64, string>;             { Delphi parent class id -> upper(stripped) }
-  SqlTablesByName: TDictionary<string, TSqlSym>;          { upper(table) -> sym (first wins) }
-  OutStore:    TSQLiteSymbolStore;
-  QIns:        TFDQuery;
-  StoreIdx:    Integer;
-  I:           Integer;
+  Stores         : TArray<TSQLiteSymbolStore>           ;
+  ComputedAt     : Int64                                ;
+  SqlTables      : TList<TSqlSym>                       ; { dest = upper(stripped) -> list }
+  SqlColumns     : TDictionary<string, TList<TSqlSym>>  ; { key = upper(table)+'.'+upper(col) }
+  DelphiClasses  : TList<TDelphiSym>                    ;
+  DelphiIfaces   : TList<TDelphiSym>                    ;
+  DelphiFields   : TDictionary<Int64, TList<TDelphiSym>>; { class symbol id -> fields }
+  ParentLookup   : TDictionary<Int64, string>           ; { Delphi parent class id -> upper(stripped) }
+  SqlTablesByName: TDictionary<string, TSqlSym>         ; { upper(table) -> sym (first wins) }
+  OutStore       : TSQLiteSymbolStore                   ;
+  QIns           : TFDQuery                             ;
+  StoreIdx       : Integer                              ;
+  I              : Integer                              ;
 
   procedure LoadFromStore(AStore: TSQLiteSymbolStore; ADbIdx: Integer);
   var
-    Q: TFDQuery;
-    Sql: TSqlSym;
-    Del: TDelphiSym;
-    ParentId: Int64;
-    Key: string;
-    Up: string;
+    Q       : TFDQuery  ;
+    Sql     : TSqlSym   ;
+    Del     : TDelphiSym;
+    ParentId: Int64     ;
+    Key     : string    ;
+    Up      : string    ;
   begin
-    Q := TFDQuery.Create(nil);
+    Q:= TFDQuery.Create(nil);
     try
-      Q.Connection := AStore.GetConnection;
+      Q.Connection:= AStore.GetConnection;
 
       { ---- SQL tables ---- }
-      Q.SQL.Text :=
-        'SELECT id, name FROM symbols WHERE kind = ''sql_table''';
+      Q.Sql.Text:= 'SELECT id, name FROM symbols WHERE kind = ''sql_table''';
       Q.Open;
       while not Q.Eof do
       begin
-        Sql.Id       := Q.FieldByName('id').AsLargeInt;
-        Sql.DbIndex  := ADbIdx;
-        Sql.Name     := UpperCase(Q.FieldByName('name').AsString);
-        Sql.ParentId := 0;
+        Sql.Id:= Q.FieldByName('id').AsLargeInt;
+        Sql.DbIndex:= ADbIdx;
+        Sql.Name:= UpperCase(Q.FieldByName('name').AsString);
+        Sql.ParentId:= 0;
         SqlTables.Add(Sql);
-        if not SqlTablesByName.ContainsKey(Sql.Name) then
-          SqlTablesByName.Add(Sql.Name, Sql);
+        if not SqlTablesByName.ContainsKey(Sql.Name) then SqlTablesByName.Add(Sql.Name, Sql);
         Q.Next;
       end;
       Q.Close;
 
       { ---- SQL columns ---- }
-      Q.SQL.Text :=
-        'SELECT c.id, c.name, t.name AS tname ' +
-        'FROM symbols c JOIN symbols t ON t.id = c.parent_id ' +
-        'WHERE c.kind = ''sql_column'' AND t.kind = ''sql_table''';
+      Q.Sql.Text:= 'SELECT c.id, c.name, t.name AS tname ' + 'FROM symbols c JOIN symbols t ON t.id = c.parent_id ' + 'WHERE c.kind = ''sql_column'' AND t.kind = ''sql_table''';
       Q.Open;
       while not Q.Eof do
       begin
-        Sql.Id       := Q.FieldByName('id').AsLargeInt;
-        Sql.DbIndex  := ADbIdx;
-        Sql.Name     := UpperCase(Q.FieldByName('name').AsString);
-        Sql.ParentId := 0;
-        Key := UpperCase(Q.FieldByName('tname').AsString) + '.' + Sql.Name;
-        if not SqlColumns.ContainsKey(Key) then
-          SqlColumns.Add(Key, TList<TSqlSym>.Create);
+        Sql.Id:= Q.FieldByName('id').AsLargeInt;
+        Sql.DbIndex:= ADbIdx;
+        Sql.Name:= UpperCase(Q.FieldByName('name').AsString);
+        Sql.ParentId:= 0;
+        Key:= UpperCase(Q.FieldByName('tname').AsString) + '.' + Sql.Name;
+        if not SqlColumns.ContainsKey(Key) then SqlColumns.Add(Key, TList<TSqlSym>.Create);
         SqlColumns[Key].Add(Sql);
         Q.Next;
       end;
       Q.Close;
 
       { ---- Delphi classes ---- }
-      Q.SQL.Text :=
-        'SELECT id, name FROM symbols WHERE kind = ''class''';
+      Q.Sql.Text:= 'SELECT id, name FROM symbols WHERE kind = ''class''';
       Q.Open;
       while not Q.Eof do
       begin
-        Del.Id       := Q.FieldByName('id').AsLargeInt;
-        Del.DbIndex  := ADbIdx;
-        Del.Name     := Q.FieldByName('name').AsString;
-        Del.Stripped := UpperCase(StripPrefix(Del.Name, 'T'));
-        Del.ParentId := 0;
+        Del.Id:= Q.FieldByName('id').AsLargeInt;
+        Del.DbIndex:= ADbIdx;
+        Del.Name:= Q.FieldByName('name').AsString;
+        Del.Stripped:= UpperCase(StripPrefix(Del.Name, 'T'));
+        Del.ParentId:= 0;
         DelphiClasses.Add(Del);
         { Track parent->stripped for field lookup later. }
-        Up := UpperCase(StripPrefix(Del.Name, 'T'));
-        if not ParentLookup.ContainsKey(Del.Id) then
-          ParentLookup.Add(Del.Id, Up);
+        Up:= UpperCase(StripPrefix(Del.Name, 'T'));
+        if not ParentLookup.ContainsKey(Del.Id) then ParentLookup.Add(Del.Id, Up);
         Q.Next;
       end;
       Q.Close;
 
       { ---- Delphi interfaces ---- }
-      Q.SQL.Text :=
-        'SELECT id, name FROM symbols WHERE kind = ''interface''';
+      Q.Sql.Text:= 'SELECT id, name FROM symbols WHERE kind = ''interface''';
       Q.Open;
       while not Q.Eof do
       begin
-        Del.Id       := Q.FieldByName('id').AsLargeInt;
-        Del.DbIndex  := ADbIdx;
-        Del.Name     := Q.FieldByName('name').AsString;
-        Del.Stripped := UpperCase(StripPrefix(Del.Name, 'I'));
-        Del.ParentId := 0;
+        Del.Id:= Q.FieldByName('id').AsLargeInt;
+        Del.DbIndex:= ADbIdx;
+        Del.Name:= Q.FieldByName('name').AsString;
+        Del.Stripped:= UpperCase(StripPrefix(Del.Name, 'I'));
+        Del.ParentId:= 0;
         DelphiIfaces.Add(Del);
         Q.Next;
       end;
       Q.Close;
 
       { ---- Delphi fields (per class) ---- }
-      Q.SQL.Text :=
-        'SELECT id, name, parent_id FROM symbols WHERE kind = ''field''';
+      Q.Sql.Text:= 'SELECT id, name, parent_id FROM symbols WHERE kind = ''field''';
       Q.Open;
       while not Q.Eof do
       begin
-        Del.Id       := Q.FieldByName('id').AsLargeInt;
-        Del.DbIndex  := ADbIdx;
-        Del.Name     := Q.FieldByName('name').AsString;
-        Del.Stripped := UpperCase(StripPrefix(Del.Name, 'F'));
-        ParentId     := Q.FieldByName('parent_id').AsLargeInt;
-        Del.ParentId := ParentId;
+        Del.Id:= Q.FieldByName('id').AsLargeInt;
+        Del.DbIndex:= ADbIdx;
+        Del.Name:= Q.FieldByName('name').AsString;
+        Del.Stripped:= UpperCase(StripPrefix(Del.Name, 'F'));
+        ParentId:= Q.FieldByName('parent_id').AsLargeInt;
+        Del.ParentId:= ParentId;
         if ParentId > 0 then
         begin
-          if not DelphiFields.ContainsKey(ParentId) then
-            DelphiFields.Add(ParentId, TList<TDelphiSym>.Create);
+          if not DelphiFields.ContainsKey(ParentId) then DelphiFields.Add(ParentId, TList<TDelphiSym>.Create);
           DelphiFields[ParentId].Add(Del);
         end;
         Q.Next;
@@ -203,79 +191,74 @@ var
       Q.Close;
     finally
       Q.Free;
-    end;
-  end;
+    end; // try
+  end; // procedure
 
-  procedure EmitLink(ADelphi: TDelphiSym; ASql: TSqlSym;
-    const ALinkKind, AEvidence: string; AConfidence: Double);
+  procedure EmitLink(ADelphi: TDelphiSym; ASql: TSqlSym; const ALinkKind, AEvidence: string; AConfidence: Double);
   begin
-    QIns.ParamByName('did').AsLargeInt := ADelphi.Id;
-    QIns.ParamByName('ddx').AsInteger  := ADelphi.DbIndex;
-    QIns.ParamByName('sid').AsLargeInt := ASql.Id;
-    QIns.ParamByName('sdx').AsInteger  := ASql.DbIndex;
+    QIns.ParamByName('did').AsLargeInt:= ADelphi.Id;
+    QIns.ParamByName('ddx').AsInteger := ADelphi.DbIndex;
+    QIns.ParamByName('sid').AsLargeInt:= ASql   .Id;
+    QIns.ParamByName('sdx').AsInteger := ASql   .DbIndex;
     QIns.ParamByName('conf').AsFloat   := AConfidence;
-    QIns.ParamByName('lk').AsString    := ALinkKind;
-    QIns.ParamByName('ev').AsString    := AEvidence;
-    QIns.ParamByName('ca').AsLargeInt  := ComputedAt;
+    QIns.ParamByName('lk'  ).AsString  := ALinkKind;
+    QIns.ParamByName('ev'  ).AsString  := AEvidence;
+    QIns.ParamByName('ca'  ).AsLargeInt:= ComputedAt;
     QIns.ExecSQL;
   end;
 
 var
-  Cls: TDelphiSym;
-  Iface: TDelphiSym;
-  Fld: TDelphiSym;
-  Tbl: TSqlSym;
-  ColsList: TList<TSqlSym>;
-  ParentStripped: string;
-  Key: string;
-  FldList: TList<TDelphiSym>;
-  ColKv: TPair<string, TList<TSqlSym>>;
+  Cls           : TDelphiSym                   ;
+  Iface         : TDelphiSym                   ;
+  Fld           : TDelphiSym                   ;
+  Tbl           : TSqlSym                      ;
+  ColsList      : TList<TSqlSym>               ;
+  ParentStripped: string                       ;
+  Key           : string                       ;
+  FldList       : TList<TDelphiSym>            ;
+  ColKv         : TPair<string, TList<TSqlSym>>;
 begin
-  Result := Default(TOrmLinkerStats);
-  ComputedAt := DateTimeToUnix(Now);
-  Result.ComputedAt := ComputedAt;
+  Result    := Default       (TOrmLinkerStats);
+  ComputedAt:= DateTimeToUnix(Now            );
+  Result.ComputedAt:= ComputedAt;
 
   SetLength(Stores, Length(ADbPaths));
-  for I := 0 to High(ADbPaths) do
+  for I:= 0 to High(ADbPaths) do
   begin
-    Stores[I] := TSQLiteSymbolStore.Create(ADbPaths[I]);
+    Stores[I]:= TSQLiteSymbolStore.Create(ADbPaths[I]);
     Stores[I].Migrate;
   end;
-  OutStore := Stores[High(Stores)];  { last DB receives orm_links rows }
+  OutStore:= Stores[High(Stores)]; { last DB receives orm_links rows }
 
-  SqlTables       := TList<TSqlSym>.Create;
-  SqlColumns      := TDictionary<string, TList<TSqlSym>>.Create;
-  SqlTablesByName := TDictionary<string, TSqlSym>.Create;
-  DelphiClasses   := TList<TDelphiSym>.Create;
-  DelphiIfaces    := TList<TDelphiSym>.Create;
-  DelphiFields    := TDictionary<Int64, TList<TDelphiSym>>.Create;
-  ParentLookup    := TDictionary<Int64, string>.Create;
+  SqlTables:= TList<TSqlSym>.Create;
+  SqlColumns:= TDictionary<string, TList<TSqlSym>>.Create;
+  SqlTablesByName:= TDictionary<string, TSqlSym>.Create;
+  DelphiClasses:= TList<TDelphiSym>.Create;
+  DelphiIfaces := TList<TDelphiSym>.Create;
+  DelphiFields:= TDictionary<Int64, TList<TDelphiSym>>.Create;
+  ParentLookup:= TDictionary<Int64, string>.Create;
 
   try
-    for StoreIdx := 0 to High(Stores) do
-      LoadFromStore(Stores[StoreIdx], StoreIdx);
+    for StoreIdx:= 0 to High(Stores) do LoadFromStore(Stores[StoreIdx], StoreIdx);
 
     OutStore.GetConnection.StartTransaction;
     try
       { Clear prior orm_links so we don't accumulate stale rows. }
       OutStore.GetConnection.ExecSQL('DELETE FROM orm_links');
 
-      QIns := TFDQuery.Create(nil);
+      QIns:= TFDQuery.Create(nil);
       try
-        QIns.Connection := OutStore.GetConnection;
-        QIns.SQL.Text :=
-          'INSERT INTO orm_links(delphi_symbol_id, delphi_db_index, ' +
-          '  sql_symbol_id, sql_db_index, confidence, link_kind, ' +
-          '  evidence, computed_at) ' +
-          'VALUES (:did, :ddx, :sid, :sdx, :conf, :lk, :ev, :ca)';
-        QIns.Params.ParamByName('did').DataType  := ftLargeint;
-        QIns.Params.ParamByName('ddx').DataType  := ftInteger;
-        QIns.Params.ParamByName('sid').DataType  := ftLargeint;
-        QIns.Params.ParamByName('sdx').DataType  := ftInteger;
-        QIns.Params.ParamByName('conf').DataType := ftFloat;
-        QIns.Params.ParamByName('lk').DataType   := ftString;
-        QIns.Params.ParamByName('ev').DataType   := ftString;
-        QIns.Params.ParamByName('ca').DataType   := ftLargeint;
+        QIns.Connection:= OutStore.GetConnection;
+        QIns.Sql.Text:= 'INSERT INTO orm_links(delphi_symbol_id, delphi_db_index, ' + '  sql_symbol_id, sql_db_index, confidence, link_kind, ' + '  evidence, computed_at) ' +
+        'VALUES (:did, :ddx, :sid, :sdx, :conf, :lk, :ev, :ca)';
+        QIns.Params.ParamByName('did' ).DataType:= ftLargeint;
+        QIns.Params.ParamByName('ddx' ).DataType:= ftInteger;
+        QIns.Params.ParamByName('sid' ).DataType:= ftLargeint;
+        QIns.Params.ParamByName('sdx' ).DataType:= ftInteger;
+        QIns.Params.ParamByName('conf').DataType:= ftFloat;
+        QIns.Params.ParamByName('lk'  ).DataType:= ftString;
+        QIns.Params.ParamByName('ev'  ).DataType:= ftString;
+        QIns.Params.ParamByName('ca'  ).DataType:= ftLargeint;
         QIns.Prepare;
 
         { ---- class_to_table: TXXX -> XXX ---- }
@@ -284,8 +267,7 @@ begin
           if Cls.Stripped = '' then Continue;
           if SqlTablesByName.TryGetValue(Cls.Stripped, Tbl) then
           begin
-            EmitLink(Cls, Tbl, 'class_to_table',
-              'T-strip + exact', 1.0);
+            EmitLink(Cls, Tbl, 'class_to_table', 'T-strip + exact', 1.0);
             Inc(Result.ClassLinks);
           end;
         end;
@@ -296,8 +278,7 @@ begin
           if Iface.Stripped = '' then Continue;
           if SqlTablesByName.TryGetValue(Iface.Stripped, Tbl) then
           begin
-            EmitLink(Iface, Tbl, 'iface_to_table',
-              'I-strip + exact', 1.0);
+            EmitLink(Iface, Tbl, 'iface_to_table', 'I-strip + exact', 1.0);
             Inc(Result.IfaceLinks);
           end;
         end;
@@ -307,33 +288,30 @@ begin
         begin
           if Cls.Stripped = '' then Continue;
           if not DelphiFields.TryGetValue(Cls.Id, FldList) then Continue;
-          ParentStripped := Cls.Stripped;
+          ParentStripped:= Cls.Stripped;
           for Fld in FldList do
           begin
             if Fld.Stripped = '' then Continue;
-            Key := ParentStripped + '.' + Fld.Stripped;
+            Key:= ParentStripped + '.' + Fld.Stripped;
             if SqlColumns.TryGetValue(Key, ColsList) and (ColsList.Count > 0) then
             begin
-              EmitLink(Fld, ColsList[0], 'field_to_column',
-                'T+F-strip + exact', 1.0);
+              EmitLink(Fld, ColsList[0], 'field_to_column', 'T+F-strip + exact', 1.0);
               Inc(Result.FieldLinks);
             end;
           end;
         end;
       finally
         QIns.Free;
-      end;
+      end; // try
 
       OutStore.GetConnection.Commit;
     except
       OutStore.GetConnection.Rollback;
       raise;
-    end;
+    end; // try
   finally
-    for ColKv in SqlColumns do
-      ColKv.Value.Free;
-    for var Kv2 in DelphiFields do
-      Kv2.Value.Free;
+    for ColKv in SqlColumns do ColKv.Value.Free;
+    for var Kv2 in DelphiFields do Kv2.Value.Free;
     ParentLookup.Free;
     DelphiFields.Free;
     DelphiIfaces.Free;
@@ -341,8 +319,8 @@ begin
     SqlTablesByName.Free;
     SqlColumns.Free;
     SqlTables.Free;
-    for I := 0 to High(Stores) do Stores[I].Free;
-  end;
-end;
+    for I:= 0 to High(Stores) do Stores[I].Free;
+  end; // try
+end; // begin
 
 end.

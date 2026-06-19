@@ -3,30 +3,30 @@ unit DragLint.Plugin.ProjectNotifier;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils,
-  ToolsAPI,
-  DragLint.Plugin.Settings,
-  DragLint.Plugin.DbResolver,
-  DRagLint.Workspace.Config;
+  System.SysUtils
+  , System.Classes
+  , System.IOUtils
+  , ToolsAPI
+  , DragLint.Plugin   .Settings
+  , DragLint.Plugin   .DbResolver
+  , DragLint.Workspace.Config
+  ;
 
 type
   TDragLintProjectNotifier = class(TInterfacedObject, IOTAIDENotifier)
-  private
-    class procedure SpawnIndexer(const AExePath, AProjDir,
-      ADbPath: string); static;
-    class function ResolveExePath(const ACfgExePath: string): string; static;
-  public
-    { IOTANotifier }
-    procedure AfterSave;
-    procedure BeforeSave;
-    procedure Destroyed;
-    procedure Modified;
-    { IOTAIDENotifier }
-    procedure FileNotification(NotifyCode: TOTAFileNotification;
-      const FileName: string; var Cancel: Boolean);
-    procedure BeforeCompile(const Project: IOTAProject;
-      var Cancel: Boolean);
-    procedure AfterCompile(Succeeded: Boolean);
+    private
+      class procedure SpawnIndexer(const AExePath, AProjDir, ADbPath: string); static;
+      class function ResolveExePath(const ACfgExePath: string): string; static;
+    public
+      { IOTANotifier }
+      procedure AfterSave;
+      procedure BeforeSave;
+      procedure Destroyed;
+      procedure Modified;
+      { IOTAIDENotifier }
+      procedure FileNotification(NotifyCode: TOTAFileNotification; const FileName: string; var Cancel: Boolean);
+      procedure BeforeCompile(const Project: IOTAProject; var Cancel: Boolean);
+      procedure AfterCompile(Succeeded: Boolean);
   end;
 
 procedure RegisterProjectNotifier;
@@ -35,10 +35,11 @@ procedure UnregisterProjectNotifier;
 implementation
 
 uses
-  Winapi.Windows,
-  DragLint.Plugin.SaveNotifier,
-  DragLint.Plugin.LiveDiagnostics,
-  DragLint.Plugin.Editor;
+  Winapi.Windows
+  , DragLint.Plugin.SaveNotifier
+  , DragLint.Plugin.LiveDiagnostics
+  , DragLint.Plugin.Editor
+  ;
 
 { ---- IOTANotifier stubs ---- }
 
@@ -60,8 +61,7 @@ end;
 
 { ---- IOTAIDENotifier stubs ---- }
 
-procedure TDragLintProjectNotifier.BeforeCompile(const Project: IOTAProject;
-  var Cancel: Boolean);
+procedure TDragLintProjectNotifier.BeforeCompile(const Project: IOTAProject; var Cancel: Boolean);
 begin
 end;
 
@@ -71,112 +71,99 @@ end;
 
 { ---- async indexer spawn ---- }
 
-class procedure TDragLintProjectNotifier.SpawnIndexer(
-  const AExePath, AProjDir, ADbPath: string);
+class procedure TDragLintProjectNotifier.SpawnIndexer( const AExePath, AProjDir, ADbPath: string);
 var
-  CmdLine: string;
-  SI: TStartupInfoW;
-  PI: TProcessInformation;
+  CmdLine   : string                    ;
+  SI        : TStartupInfoW             ;
+  PI        : TProcessInformation       ;
   CmdLineBuf: array[0..2047] of WideChar;
-  Cfg: TDragLintSettings;
-  WsRoot: string;
-  WsCfgPath: string;
-  WsCfg: TWorkspaceConfig;
-  WsDbPath: string;
+  Cfg       : TDragLintSettings         ;
+  WsRoot    : string                    ;
+  WsCfgPath : string                    ;
+  WsCfg     : TWorkspaceConfig          ;
+  WsDbPath  : string                    ;
 begin
   FillChar(SI, SizeOf(SI), 0);
-  SI.cb := SizeOf(SI);
+  SI.cb:= SizeOf(SI);
   FillChar(PI, SizeOf(PI), 0);
-  Cfg := LoadSettings;
+  Cfg:= LoadSettings;
 
   // v0.34: workspace mode -- if workspace config found walking up from
   // the project dir, use "workspace index --config" instead.
   if Cfg.EnableWorkspaceMode then
   begin
-    WsRoot := TWorkspaceConfigIO.FindWorkspaceRoot(AProjDir);
+    WsRoot:= TWorkspaceConfigIO.FindWorkspaceRoot(AProjDir);
     if WsRoot <> '' then
     begin
-      WsCfgPath := TPath.Combine(WsRoot, WORKSPACE_FILENAME);
+      WsCfgPath:= TPath.Combine(WsRoot, WORKSPACE_FILENAME);
       try
-        WsCfg := TWorkspaceConfigIO.LoadFromFile(WsCfgPath);
-        WsDbPath := TPath.Combine(WsRoot, WsCfg.SharedDb);
-        CmdLine := Format('"%s" workspace index --config "%s"',
-          [AExePath, WsCfgPath]);
+        WsCfg:= TWorkspaceConfigIO.LoadFromFile(WsCfgPath);
+        WsDbPath:= TPath.Combine(WsRoot, WsCfg.SharedDb);
+        CmdLine:= Format('"%s" workspace index --config "%s"', [AExePath, WsCfgPath]);
         // Also update the session DB reference for save-notifier
-        GLastProjectDb := WsDbPath;
+        GLastProjectDb:= WsDbPath;
         StrPCopy(CmdLineBuf, CmdLine);
-        if CreateProcessW(nil, CmdLineBuf, nil, nil, False,
-          CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
+        if CreateProcessW(nil, CmdLineBuf, nil, nil, False, CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
         begin
           CloseHandle(PI.hProcess);
-          CloseHandle(PI.hThread);
+          CloseHandle(PI.hThread );
         end;
         Exit;
       except
         // Malformed workspace config: fall through to per-project index
-      end;
-    end;
-  end;
+      end; // try
+    end; // if
+  end; // if
 
-  if Cfg.ScanLibraries then
-    CmdLine := Format('"%s" index "%s" --scan-libraries --db "%s"',
-      [AExePath, AProjDir, ADbPath])
-  else
-    CmdLine := Format('"%s" index "%s" --db "%s"',
-      [AExePath, AProjDir, ADbPath]);
+  if Cfg.ScanLibraries then CmdLine:= Format('"%s" index "%s" --scan-libraries --db "%s"', [AExePath, AProjDir, ADbPath])
+  else CmdLine:= Format('"%s" index "%s" --db "%s"', [AExePath, AProjDir, ADbPath]);
   StrPCopy(CmdLineBuf, CmdLine);
-  if CreateProcessW(nil, CmdLineBuf, nil, nil, False,
-    CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
+  if CreateProcessW(nil, CmdLineBuf, nil, nil, False, CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
   begin
     CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread);
+    CloseHandle(PI.hThread );
   end;
-end;
+end; // procedure
 
-class function TDragLintProjectNotifier.ResolveExePath(
-  const ACfgExePath: string): string;
+class function TDragLintProjectNotifier.ResolveExePath( const ACfgExePath: string): string;
 begin
-  Result := ACfgExePath;
+  Result:= ACfgExePath;
   if (Result = '') or (Result = 'drag-lint.exe') then
   begin
-    Result := ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-    if not FileExists(Result) then
-      Result := 'drag-lint.exe';
+    Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
+    if not FileExists(Result) then Result:= 'drag-lint.exe';
   end;
 end;
 
 { ---- FileNotification ---- }
 
 const
-  REINDEX_EXTS: array[0..4] of string = (
-    '.pas', '.dpr', '.dpk', '.inc', '.dfm');
+  REINDEX_EXTS: array[0..4] of string = ( '.pas', '.dpr', '.dpk', '.inc', '.dfm');
 
 function IsDelphiSourceExt(const AExt: string): Boolean;
 var
-  I:        Integer;
-  LowerExt: string;
+  I       : Integer;
+  LowerExt: string ;
 begin
-  LowerExt := LowerCase(AExt);
-  Result   := False;
-  for I := Low(REINDEX_EXTS) to High(REINDEX_EXTS) do
+  LowerExt:= LowerCase(AExt);
+  Result:= False;
+  for I:= Low(REINDEX_EXTS) to High(REINDEX_EXTS) do
     if REINDEX_EXTS[I] = LowerExt then
     begin
-      Result := True;
+      Result:= True;
       Break;
     end;
 end;
 
-procedure TDragLintProjectNotifier.FileNotification(
-  NotifyCode: TOTAFileNotification;
-  const FileName: string; var Cancel: Boolean);
+procedure TDragLintProjectNotifier.FileNotification( NotifyCode: TOTAFileNotification; const FileName: string; var Cancel: Boolean);
 var
-  ProjDir:  string;
-  DbPath:   string;
-  ExePath:  string;
-  ProjName: string;
-  Cfg:      TDragLintSettings;
-  Module:   IOTAModule;
-  ModSvcs:  IOTAModuleServices;
+  ProjDir : string            ;
+  DbPath  : string            ;
+  ExePath : string            ;
+  ProjName: string            ;
+  Cfg     : TDragLintSettings ;
+  Module  : IOTAModule        ;
+  ModSvcs : IOTAModuleServices;
 begin
   { v0.40: When the IDE closes a module (including during IDE Exit, before
     BPL unload), drop our save-notifier from that module's notifier list.
@@ -188,9 +175,8 @@ begin
     begin
       if Supports(BorlandIDEServices, IOTAModuleServices, ModSvcs) then
       begin
-        Module := ModSvcs.FindModule(FileName);
-        if Module <> nil then
-          UnregisterSaveNotifierForModule(Module);
+        Module:= ModSvcs.FindModule(FileName);
+        if Module <> nil then UnregisterSaveNotifierForModule(Module);
       end;
     end;
     Exit;
@@ -203,14 +189,14 @@ begin
   begin
     if Supports(BorlandIDEServices, IOTAModuleServices, ModSvcs) then
     begin
-      Module := ModSvcs.FindModule(FileName);
+      Module:= ModSvcs.FindModule(FileName);
       RegisterSaveNotifierForModule(Module);
     end;
     { v0.46: kick the live-diagnostics runner when a .pas opens so findings
       (unused locals/H2164, syntax, lint) appear on VIEW -- not only after the
       first edit/save. The runner debounces + lints the active buffer. }
     if SameText(ExtractFileExt(FileName), '.pas') then
-      try NotifyEditDirty; except end;
+    try NotifyEditDirty; except end;
   end;
 
   { --- Only auto-index when a .dproj is opened --- }
@@ -221,57 +207,52 @@ begin
     Runs independently of AutoIndex; no-ops cheaply when nothing is pending. }
   try RunGhostRecoverForProject(FileName); except end;
 
-  Cfg := LoadSettings;
+  Cfg:= LoadSettings;
 
   { v0.48: startup compile -- surface compiler errors right when the project opens,
     even if nothing is modified yet. Independent of AutoIndex. }
   if Cfg.AutoCompileOnStartup then
-    try TriggerProjectCompile(FileName); except end;
+  try TriggerProjectCompile(FileName); except end;
 
   { Honor AutoIndex setting — skip spawning when disabled }
   if not Cfg.AutoIndex then Exit;
 
-  ProjDir  := ExtractFilePath(FileName);
-  ProjName := ChangeFileExt(ExtractFileName(FileName), '');
+  ProjDir:= ExtractFilePath(FileName);
+  ProjName:= ChangeFileExt(ExtractFileName(FileName), '');
 
   { v0.46: prefer the manifest section DB that covers this project, so auto-index
     + save-reindex write into the SAME clean DB the manifest builds (and the
     resolver reads) -- not a stale per-.dproj sibling DB. Fall back to the
     template only when no manifest section covers it. }
-  DbPath := ManifestDbForFile(FileName);
-  if DbPath = '' then
-    DbPath := ResolveDbPath(Cfg.DbPathTemplate, ProjDir);
-  GLastProjectDb := DbPath;
+  DbPath:= ManifestDbForFile(FileName);
+  if DbPath = '' then DbPath:= ResolveDbPath(Cfg.DbPathTemplate, ProjDir);
+  GLastProjectDb:= DbPath;
 
-  ExePath := ResolveExePath(Cfg.ExePath);
+  ExePath:= ResolveExePath(Cfg.ExePath);
 
   { Post "indexing..." message to IDE Messages pane from main thread }
-  TThread.Queue(nil,
-    procedure
-    var
-      Svc: IOTAMessageServices;
-    begin
-      if Supports(BorlandIDEServices, IOTAMessageServices, Svc) then
-        Svc.AddTitleMessage(
-          Format('drag-lint: indexing project %s...', [ProjName]));
-    end);
+  TThread.Queue(
+    nil,
+    procedure var Svc: IOTAMessageServices; begin if Supports(BorlandIDEServices, IOTAMessageServices, Svc) then Svc.AddTitleMessage( Format('drag-lint: indexing project %s...',
+          [ProjName])); end
+  );
 
   SpawnIndexer(ExePath, ProjDir, DbPath);
-end;
+end; // procedure
 
 { ---- registration ---- }
 
 var
-  GNotifierIndex: Integer = -1;
-  GNotifier:      TDragLintProjectNotifier = nil;
+  GNotifierIndex: Integer                  = -1                  ;
+  GNotifier     : TDragLintProjectNotifier = nil;
 
 procedure RegisterProjectNotifier;
 var
   Svcs: IOTAServices;
 begin
   if not Supports(BorlandIDEServices, IOTAServices, Svcs) then Exit;
-  GNotifier      := TDragLintProjectNotifier.Create;
-  GNotifierIndex := Svcs.AddNotifier(GNotifier);
+  GNotifier:= TDragLintProjectNotifier.Create;
+  GNotifierIndex:= Svcs.AddNotifier(GNotifier);
 end;
 
 procedure UnregisterProjectNotifier;
@@ -279,10 +260,9 @@ var
   Svcs: IOTAServices;
 begin
   if GNotifierIndex < 0 then Exit;
-  if Supports(BorlandIDEServices, IOTAServices, Svcs) then
-    Svcs.RemoveNotifier(GNotifierIndex);
-  GNotifierIndex := -1;
-  GNotifier      := nil;  { interface ref auto-freed }
+  if Supports(BorlandIDEServices, IOTAServices, Svcs) then Svcs.RemoveNotifier(GNotifierIndex);
+  GNotifierIndex:= -1;
+  GNotifier:= nil; { interface ref auto-freed }
 end;
 
 end.

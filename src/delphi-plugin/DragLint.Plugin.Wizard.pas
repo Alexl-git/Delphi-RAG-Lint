@@ -3,21 +3,24 @@ unit DragLint.Plugin.Wizard;
 interface
 
 uses
-  System.SysUtils, System.Classes, ToolsAPI;
+  System.SysUtils
+  , System.Classes
+  , ToolsAPI
+  ;
 
 type
   TDragLintWizard = class(TInterfacedObject, IOTAWizard)
-  public
-    { IOTANotifier }
-    procedure AfterSave;
-    procedure BeforeSave;
-    procedure Destroyed;
-    procedure Modified;
-    { IOTAWizard }
-    function GetIDString: string;
-    function GetName: string;
-    function GetState: TWizardState;
-    procedure Execute;
+    public
+      { IOTANotifier }
+      procedure AfterSave;
+      procedure BeforeSave;
+      procedure Destroyed;
+      procedure Modified;
+      { IOTAWizard }
+      function GetIDString: string;
+      function GetName    : string;
+      function GetState: TWizardState;
+      procedure Execute;
   end;
 
 procedure Register;
@@ -25,15 +28,16 @@ procedure Register;
 implementation
 
 uses
-  Vcl.Dialogs,
-  DragLint.Plugin.Editor,
-  DragLint.Plugin.Options,
-  DragLint.Plugin.EditViewNotifier,
-  DragLint.Plugin.ProjectNotifier,
-  DragLint.Plugin.SaveNotifier,
-  DragLint.Plugin.OpenSourceServer,
-  DragLint.Plugin.DockForm,
-  DragLint.Plugin.GraphWindow;
+  Vcl.Dialogs
+  , DragLint.Plugin.Editor
+  , DragLint.Plugin.Options
+  , DragLint.Plugin.EditViewNotifier
+  , DragLint.Plugin.ProjectNotifier
+  , DragLint.Plugin.SaveNotifier
+  , DragLint.Plugin.OpenSourceServer
+  , DragLint.Plugin.DockForm
+  , DragLint.Plugin.GraphWindow
+  ;
 
 procedure TDragLintWizard.AfterSave;
 begin
@@ -53,11 +57,11 @@ begin
       - Editor paints AV in TOTAEditView.BeginPaint -> GetInterface
     All four are idempotent; safe to call here in addition to the unit
     finalizations (which run later in the same shutdown). }
-  try UnregisterAllSaveNotifiers;     except end;
+  try UnregisterAllSaveNotifiers; except end;
   try UnregisterDragLintEditViewNotifier; except end;
-  try UnregisterProjectNotifier;      except end;
-  try StopOpenSourceServer;           except end;
-  try UnregisterDragLintDock;         except end;
+  try UnregisterProjectNotifier; except end;
+  try StopOpenSourceServer; except end;
+  try UnregisterDragLintDock; except end;
 end;
 
 procedure TDragLintWizard.Modified;
@@ -66,23 +70,22 @@ end;
 
 function TDragLintWizard.GetIDString: string;
 begin
-  Result := 'drag-lint.wizard.v021';
+  Result:= 'drag-lint.wizard.v021';
 end;
 
 function TDragLintWizard.GetName: string;
 begin
-  Result := 'drag-lint';
+  Result:= 'drag-lint';
 end;
 
 function TDragLintWizard.GetState: TWizardState;
 begin
-  Result := [wsEnabled];
+  Result:= [wsEnabled];
 end;
 
 procedure TDragLintWizard.Execute;
 begin
-  ShowMessage(PluginBuildTag + #13#10#13#10 +
-    'Tools > drag-lint menu: Hover / Completion / Signature Help / Diagnostics / Test Connection / Open Plugin Log');
+  ShowMessage(PluginBuildTag + #13#10#13#10 + 'Tools > drag-lint menu: Hover / Completion / Signature Help / Diagnostics / Test Connection / Open Plugin Log');
 end;
 
 procedure Register;
@@ -94,7 +97,7 @@ begin
   { Register the dockable forms at STARTUP so the IDE can restore them when it
     reloads a saved desktop that had them docked. Registering only on menu click
     (inside ShowDragLintDock/ShowDragLintGraph) is too late for desktop restore. }
-  try RegisterDragLintDockable;      except end;
+  try RegisterDragLintDockable; except end;
   try RegisterDragLintGraphDockable; except end;
 end;
 

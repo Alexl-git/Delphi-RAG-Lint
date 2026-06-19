@@ -21,25 +21,28 @@ procedure NotifyEditForAutoComplete;
 implementation
 
 uses
-  System.SysUtils, System.Classes,
-  Winapi.Windows,
-  Vcl.ExtCtrls,
-  ToolsAPI,
-  DragLint.Plugin.Settings,
-  DragLint.Plugin.Telemetry,   { TEMP debug telemetry }
-  DragLint.Plugin.Editor;
+  System.SysUtils
+  , System.Classes
+  , Winapi.Windows
+  , Vcl.ExtCtrls
+  , ToolsAPI
+  , DragLint.Plugin.Settings
+  , DragLint.Plugin.Telemetry
+  , { TEMP debug telemetry }
+    DragLint.Plugin.Editor
+  ;
 
 type
   TAutoCompleter = class
-  private
-    FTimer: TTimer;
-    FDirty: Boolean;
-    FTick:  Cardinal;
-    procedure OnTick(Sender: TObject);
-  public
-    constructor Create;
-    destructor Destroy; override;
-    procedure Notify;
+    private
+      FTimer: TTimer  ;
+      FDirty: Boolean ;
+      FTick : Cardinal;
+      procedure OnTick(Sender: TObject);
+    public
+      constructor Create;
+      destructor Destroy; override;
+      procedure Notify;
   end;
 
 var
@@ -47,78 +50,84 @@ var
 
 function IdeIsForeground: Boolean;
 var
-  Fg:  HWND;
+  Fg : HWND ;
   Pid: DWORD;
 begin
-  Result := False;
-  Fg := GetForegroundWindow;
+  Result:= False;
+  Fg    := GetForegroundWindow;
   if Fg = 0 then Exit;
-  Pid := 0;
+  Pid:= 0;
   GetWindowThreadProcessId(Fg, Pid);
-  Result := (Pid <> 0) and (Pid = GetCurrentProcessId);
+  Result:= (Pid <> 0) and (Pid = GetCurrentProcessId);
 end;
 
 function CaretPrecededByDot: Boolean;
 var
-  ESS:    IOTAEditorServices;
-  EV:     IOTAEditView;
-  Reader: IOTAEditReader;
-  Buf:    array[0..2047] of AnsiChar;
-  CaretRow, CaretCol, Read, LineStartPos, Pos, CurRow, I, EolIdx: Integer;
-  LineText: string;
+  ESS         : IOTAEditorServices        ;
+  EV          : IOTAEditView              ;
+  Reader      : IOTAEditReader            ;
+  Buf         : array[0..2047] of AnsiChar;
+  CaretRow    : Integer                   ;
+  CaretCol    : Integer                   ;
+  Read        : Integer                   ;
+  LineStartPos: Integer                   ;
+  Pos         : Integer                   ;
+  CurRow      : Integer                   ;
+  I           : Integer                   ;
+  EolIdx      : Integer                   ;
+  LineText    : string                    ;
 begin
-  Result := False;
+  Result:= False;
   try
     if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
-    EV := ESS.TopView;
+    EV:= ESS.TopView;
     if (EV = nil) or (EV.Buffer = nil) then Exit;
-    CaretRow := EV.Position.Row;
-    CaretCol := EV.Position.Column;
+    CaretRow:= EV.Position.Row;
+    CaretCol:= EV.Position.Column;
     if (CaretRow <= 0) or (CaretCol <= 1) then Exit;
-    Reader := EV.Buffer.CreateReader;
+    Reader:= EV.Buffer.CreateReader;
     if Reader = nil then Exit;
 
     { Walk to the caret line's start (buffer is character-addressed). }
-    LineStartPos := 0; CurRow := 1; Pos := 0;
+    LineStartPos:= 0; CurRow:= 1; Pos:= 0;
     while CurRow < CaretRow do
     begin
-      Read := Reader.GetText(Pos, Buf, SizeOf(Buf));
+      Read:= Reader.GetText(Pos, Buf, SizeOf(Buf));
       if Read <= 0 then Exit;
-      for I := 0 to Read - 1 do
+      for I:= 0 to Read - 1 do
         if Buf[I] = #10 then
         begin
           Inc(CurRow);
           if CurRow = CaretRow then
           begin
-            LineStartPos := Pos + I + 1;
+            LineStartPos:= Pos + I + 1;
             Break;
           end;
         end;
       if CurRow >= CaretRow then Break;
       Inc(Pos, Read);
-    end;
+    end; // while
 
-    Read := Reader.GetText(LineStartPos, Buf, SizeOf(Buf));
+    Read:= Reader.GetText(LineStartPos, Buf, SizeOf(Buf));
     if Read <= 0 then Exit;
-    EolIdx := 0;
+    EolIdx:= 0;
     while (EolIdx < Read) and not (Buf[EolIdx] in [#10, #13]) do Inc(EolIdx);
     SetString(LineText, PAnsiChar(@Buf[0]), EolIdx);
 
     { char immediately before the caret = LineText[CaretCol - 1] (1-based) }
-    if (CaretCol - 1 >= 1) and (CaretCol - 1 <= Length(LineText)) then
-      Result := LineText[CaretCol - 1] = '.';
+    if (CaretCol - 1 >= 1) and (CaretCol - 1 <= Length(LineText)) then Result:= LineText[CaretCol - 1] = '.';
   except
-    Result := False;
-  end;
-end;
+    Result:= False;
+  end; // try
+end; // function
 
 constructor TAutoCompleter.Create;
 begin
   inherited;
-  FTimer := TTimer.Create(nil);
-  FTimer.Interval := 100;
-  FTimer.OnTimer  := OnTick;
-  FTimer.Enabled  := True;
+  FTimer:= TTimer.Create(nil);
+  FTimer.Interval:= 100;
+  FTimer.OnTimer := OnTick;
+  FTimer.Enabled := True;
 end;
 
 destructor TAutoCompleter.Destroy;
@@ -129,16 +138,16 @@ end;
 
 procedure TAutoCompleter.Notify;
 begin
-  FDirty := True;
-  FTick  := GetTickCount;
+  FDirty:= True;
+  FTick := GetTickCount;
 end;
 
 procedure TAutoCompleter.OnTick(Sender: TObject);
 begin
   try
     if not FDirty then Exit;
-    if GetTickCount - FTick < 220 then Exit;   { debounce: fire after a pause }
-    FDirty := False;
+    if GetTickCount - FTick < 220 then Exit; { debounce: fire after a pause }
+    FDirty:= False;
     if not LoadSettings.EnableCompletion then
     begin
       DLT('autocomplete', 'skip: EnableCompletion=off');
@@ -152,13 +161,12 @@ begin
     end;
   except
     { never let a timer exception surface inside the IDE }
-  end;
-end;
+  end; // try
+end; // procedure
 
 procedure StartAutoComplete;
 begin
-  if GAuto = nil then
-    GAuto := TAutoCompleter.Create;
+  if GAuto = nil then GAuto:= TAutoCompleter.Create;
 end;
 
 procedure StopAutoComplete;
@@ -168,13 +176,12 @@ end;
 
 procedure NotifyEditForAutoComplete;
 begin
-  if GAuto <> nil then
-    GAuto.Notify;
+  if GAuto <> nil then GAuto.Notify;
 end;
 
 initialization
 
 finalization
-  StopAutoComplete;
+StopAutoComplete;
 
 end.

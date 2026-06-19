@@ -3,189 +3,172 @@ unit DRagLint.Storage.SQLite;
 interface
 
 uses
-  System.SysUtils,
-  System.Classes,
-  System.DateUtils,
-  System.Generics.Collections,
-  Data.DB,
-  FireDAC.Comp.Client,
-  FireDAC.Stan.Def,
-  FireDAC.Stan.Async,
-  FireDAC.Phys.SQLite,
-  FireDAC.Stan.Param,
-  FireDAC.DApt,
-  DRagLint.Core.Model,
-  DRagLint.Core.Interfaces;
+  System.SysUtils
+  , System.Classes
+  , System.DateUtils
+  , System.Generics.Collections
+  , Data.DB
+  , FireDAC.Comp.Client
+  , FireDAC.Stan.Def
+  , FireDAC.Stan.Async
+  , FireDAC.Phys.SQLite
+  , FireDAC.Stan.Param
+  , FireDAC.DApt
+  , DRagLint.Core.Model
+  , DRagLint.Core.Interfaces
+  ;
 
 type
   TSQLiteSymbolStore = class(TInterfacedObject, ISymbolStore)
-  strict private
-    FConn: TFDConnection;
-    FQInsertFile: TFDQuery;
-    FQUpsertFile: TFDQuery;
-    FQInsertSymbol: TFDQuery;
-    FQInsertTrigram: TFDQuery;
-    FQInsertRef: TFDQuery;
-    FQDeleteFileSymbols: TFDQuery;
-    FQDeleteFileRefs: TFDQuery;
-    FQUpsertDiBinding: TFDQuery;
-    FQDeleteFileDiBindings: TFDQuery;
-    FQFindByName: TFDQuery;
-    FQFindByQName: TFDQuery;
-    FQCountSymbols: TFDQuery;
-    FQCountFiles: TFDQuery;
-    FQUpsertSymbolDoc: TFDQuery;
-    FQDeleteFileDocs: TFDQuery;
-    FQGetSymbolDoc: TFDQuery;
-    FQFindByDocTag: TFDQuery;
-    FQFindUndocumented: TFDQuery;
-    FQFindByDocContains: TFDQuery;
-    FQListDocumentedSymbols: TFDQuery;
-    FQFindContaining: TFDQuery;
-    FQFindFileId: TFDQuery;
-    FQFindChildByName: TFDQuery;
-    FQFindByPrefix: TFDQuery;
-    FQFindAllChildren: TFDQuery;
-    FQFindNoCallers: TFDQuery;
-    FQFindCompilerFindings: TFDQuery;
-    FQInsertCompilerFinding: TFDQuery;
-    // v0.40.4: uses-clause persistence
-    FQInsertUnitUse: TFDQuery;
-    FQDeleteFileUnitUses: TFDQuery;
-    FQGetFileUnitUses: TFDQuery;
-    FQFindUsersOfUnit: TFDQuery;
-    FQResolveUnitUseTargets: TFDQuery;
-    procedure Connect(const ADbPath: string);
-    procedure PrepareStatements;
-    procedure EnsureTrigramTablePopulated;
-  public
-    constructor Create(const ADbPath: string);
-    destructor Destroy; override;
+    strict private
+      FConn                  : TFDConnection;
+      FQInsertFile           : TFDQuery     ;
+      FQUpsertFile           : TFDQuery     ;
+      FQInsertSymbol         : TFDQuery     ;
+      FQInsertTrigram        : TFDQuery     ;
+      FQInsertRef            : TFDQuery     ;
+      FQDeleteFileSymbols    : TFDQuery     ;
+      FQDeleteFileRefs       : TFDQuery     ;
+      FQUpsertDiBinding      : TFDQuery     ;
+      FQDeleteFileDiBindings : TFDQuery     ;
+      FQFindByName           : TFDQuery     ;
+      FQFindByQName          : TFDQuery     ;
+      FQCountSymbols         : TFDQuery     ;
+      FQCountFiles           : TFDQuery     ;
+      FQUpsertSymbolDoc      : TFDQuery     ;
+      FQDeleteFileDocs       : TFDQuery     ;
+      FQGetSymbolDoc         : TFDQuery     ;
+      FQFindByDocTag         : TFDQuery     ;
+      FQFindUndocumented     : TFDQuery     ;
+      FQFindByDocContains    : TFDQuery     ;
+      FQListDocumentedSymbols: TFDQuery     ;
+      FQFindContaining       : TFDQuery     ;
+      FQFindFileId           : TFDQuery     ;
+      FQFindChildByName      : TFDQuery     ;
+      FQFindByPrefix         : TFDQuery     ;
+      FQFindAllChildren      : TFDQuery     ;
+      FQFindNoCallers        : TFDQuery     ;
+      FQFindCompilerFindings : TFDQuery     ;
+      FQInsertCompilerFinding: TFDQuery     ;
+      // v0.40.4: uses-clause persistence
+      FQInsertUnitUse        : TFDQuery;
+      FQDeleteFileUnitUses   : TFDQuery;
+      FQGetFileUnitUses      : TFDQuery;
+      FQFindUsersOfUnit      : TFDQuery;
+      FQResolveUnitUseTargets: TFDQuery;
+      procedure Connect(const ADbPath: string);
+      procedure PrepareStatements;
+      procedure EnsureTrigramTablePopulated;
+    public
+      constructor Create(const ADbPath: string);
+      destructor Destroy; override;
 
-    procedure Migrate;
+      procedure Migrate;
 
-    function FileIsUpToDate(const APath: string; AMtimeUnix: Int64;
-      const ASha: string): Boolean;
-    function OpenFileTx(const APath: string; AMtimeUnix: Int64;
-      const ASha: string; const ALanguage: string): TFileTxToken;
-    function UpsertSymbol(const AToken: TFileTxToken;
-      const ASymbol: TSymbol): Int64;
-    procedure UpsertReference(const AToken: TFileTxToken;
-      const ARef: TReference);
-    procedure UpsertDiBinding(const AToken: TFileTxToken;
-      const ABinding: TDiBindingRow);
-    procedure DeleteDiBindingsForFile(AFileId: Int64);
-    function FindImplementationsOf(
-      const AInterfaceName: string): TArray<TDiBindingRow>;
-    function FindDiResolveSites(
-      const AInterfaceName: string): TArray<TReference>;
-    function FindDiUnresolved: TArray<TReference>;
-    function FindEventHandlersForForm(
-      const AFormName: string): TArray<TReference>;
-    procedure UpsertChunk(const AToken: TFileTxToken; const AChunk: TChunk);
-    procedure CommitFileTx(const AToken: TFileTxToken);
-    procedure RollbackFileTx(const AToken: TFileTxToken);
+      function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+      function OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
+      function UpsertSymbol(const AToken: TFileTxToken; const ASymbol: TSymbol): Int64                                      ;
+      procedure UpsertReference(const AToken: TFileTxToken; const ARef    : TReference   );
+      procedure UpsertDiBinding(const AToken: TFileTxToken; const ABinding: TDiBindingRow);
+      procedure DeleteDiBindingsForFile(AFileId: Int64);
+      function FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
+      function FindDiResolveSites   ( const AInterfaceName: string): TArray<TReference   >;
+      function FindDiUnresolved: TArray<TReference>                                       ;
+      function FindEventHandlersForForm( const AFormName: string): TArray<TReference>     ;
+      procedure UpsertChunk(const AToken: TFileTxToken; const AChunk: TChunk);
+      procedure CommitFileTx  (const AToken: TFileTxToken);
+      procedure RollbackFileTx(const AToken: TFileTxToken);
 
-    function FindSymbolsByExactName(const AName: string): TArray<TSymbol>;
-    function FindSymbolsByQualifiedName(const AQName: string): TArray<TSymbol>;
-    function FindSymbolsByFile(const APath: string): TArray<TSymbol>;
-    function FindReferencesTo(ASymbolId: Int64): TArray<TReference>;
-    function FindCallersByName(const ACalleeName: string): TArray<TReference>;
-    function FindSymbolsFuzzy(const APattern: string; ATopK: Integer = 10): TArray<TSymbol>;
-    function GetFilePath(AFileId: Int64): string;
-    function GetAllFileIds: TArray<Int64>;
-    function GetReferencesFromFile(AFileId: Int64): TArray<TReference>;
-    function CountSymbols: Int64;
-    function CountReferences: Int64;
-    function CountFiles: Int64;
+      function FindSymbolsByExactName    (const AName : string): TArray<TSymbol>;
+      function FindSymbolsByQualifiedName(const AQName: string): TArray<TSymbol>;
+      function FindSymbolsByFile         (const APath : string): TArray<TSymbol>;
+      function FindReferencesTo(ASymbolId: Int64): TArray<TReference>                        ;
+      function FindCallersByName(const ACalleeName: string): TArray<TReference>              ;
+      function FindSymbolsFuzzy(const APattern: string; ATopK: Integer = 10): TArray<TSymbol>;
+      function GetFilePath(AFileId: Int64): string                                           ;
+      function GetAllFileIds: TArray<Int64>                                                  ;
+      function GetReferencesFromFile(AFileId: Int64): TArray<TReference>                     ;
+      function CountSymbols   : Int64;
+      function CountReferences: Int64;
+      function CountFiles     : Int64;
 
-    procedure UpsertSymbolDoc(const AToken: TFileTxToken;
-      ASymbolId: Int64; const ADoc: TParsedDoc);
-    function GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
+      procedure UpsertSymbolDoc(const AToken: TFileTxToken; ASymbolId: Int64; const ADoc: TParsedDoc);
+      function GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
 
-    // v0.40.4: uses-clause persistence + queries
-    procedure UpsertUnitUse(const AToken: TFileTxToken;
-      const AUse: TUnitUse);
-    procedure DeleteUnitUsesForFile(AFileId: Int64);
-    function  GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>;
-    function  FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
-    procedure ResolveUnitUseTargets;
+      // v0.40.4: uses-clause persistence + queries
+      procedure UpsertUnitUse(const AToken: TFileTxToken; const AUse: TUnitUse);
+      procedure DeleteUnitUsesForFile(AFileId: Int64);
+      function GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>          ;
+      function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
+      procedure ResolveUnitUseTargets;
 
-    { v0.40.4: leaf accessor for utilities that need raw SQL access
+      { v0.40.4: leaf accessor for utilities that need raw SQL access
       (uses-report walks the whole files + unit_uses tables). Not part
       of ISymbolStore — caller must know it's calling into the SQLite
       implementation. }
-    function GetConnection: TFDConnection;
+      function GetConnection: TFDConnection;
 
-    function FindByDocTag(const ATag: string): TArray<TSymbol>;
-    function FindUndocumented(const AKind: string;
-      APublicOnly: Boolean): TArray<TSymbol>;
-    function FindByDocContains(const ASubstring: string): TArray<TSymbol>;
-    procedure DeleteFileDocs(AFileId: Int64);
+      function FindByDocTag(const ATag: string): TArray<TSymbol>                           ;
+      function FindUndocumented(const AKind: string; APublicOnly: Boolean): TArray<TSymbol>;
+      function FindByDocContains(const ASubstring: string): TArray<TSymbol>                ;
+      procedure DeleteFileDocs(AFileId: Int64);
 
-    // v0.18: bench-context
-    function ListDocumentedSymbols(ALimit: Integer): TArray<TSymbol>;
+      // v0.18: bench-context
+      function ListDocumentedSymbols(ALimit: Integer): TArray<TSymbol>;
 
-    // v0.19: type-at-position helpers
-    function FindContainingSymbol(AFileId: Int64; ALine: Integer): TSymbol;
-    function GetSymbolById(AId: Int64): TSymbol;
-    function FindFileIdByPath(const APath: string): Int64;
-    function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
-    function FindChildSymbolByName(AParentId: Int64;
-      const AName: string): TSymbol;
+      // v0.19: type-at-position helpers
+      function FindContainingSymbol(AFileId: Int64; ALine: Integer): TSymbol        ;
+      function GetSymbolById(AId: Int64): TSymbol                                   ;
+      function FindFileIdByPath             (const APath: string): Int64;
+      function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
+      function FindChildSymbolByName(AParentId: Int64; const AName: string): TSymbol;
 
-    // v0.20: completion helpers
-    function FindSymbolsByPrefix(const APrefix: string;
-      ALimit: Integer): TArray<TSymbol>;
-    function FindAllChildSymbols(AParentId: Int64): TArray<TSymbol>;
+      // v0.20: completion helpers
+      function FindSymbolsByPrefix(const APrefix: string; ALimit: Integer): TArray<TSymbol>;
+      function FindAllChildSymbols(AParentId: Int64): TArray<TSymbol>                      ;
 
-    // v0.25: dead-code finder
-    function FindSymbolsWithNoCallers(const AKind: string;
-      AIncludePrivate: Boolean): TArray<TSymbol>;
+      // v0.25: dead-code finder
+      function FindSymbolsWithNoCallers(const AKind: string; AIncludePrivate: Boolean): TArray<TSymbol>;
 
-    // v0.26: compiler diagnostics
-    function FindCompilerFindingsForFile(AFileId: Int64): TArray<TCompilerFinding>;
-    procedure ClearCompilerFindings;
-    procedure InsertCompilerFinding(const AFinding: TCompilerFinding);
+      // v0.26: compiler diagnostics
+      function FindCompilerFindingsForFile(AFileId: Int64): TArray<TCompilerFinding>;
+      procedure ClearCompilerFindings;
+      procedure InsertCompilerFinding(const AFinding: TCompilerFinding);
 
-    // v0.17: blast-radius pack
-    function FindTransitiveCallers(const ASymbolName: string;
-      ADepth: Integer): TArray<TImpactLevel>;
-    function GetClassSurface(const AQName: string;
-      AIncludeImpl, AAllVisibility: Boolean): TArray<TSurfaceLine>;
-    function GetSymbolSlice(const AQName: string): TArray<TSliceChunk>;
-    function FindCallersByNameWithContext(const ACalleeName: string;
-      AContextLines: Integer): TArray<TReference>;
-  private
-    // v0.42: path-tolerant file-id resolution for FindSymbolsByFile (outline)
-    function ResolveFileIdTolerant(const APath: string): Int64;
-    // v0.17 slice helpers
-    function FindChildSymbols(AParentId: Int64): TArray<TSymbol>;
-    // FindImplLine: searches ALines (0-based) for a line matching
-    // "procedure|function|constructor|destructor ClassName.MethodName"
-    // case-insensitively. Returns 0-based index, or -1 if not found.
-    // NOTE: heuristic for v0.17 - may miss unusual formatting.
-    class function FindImplLine(const ALines: TArray<string>;
-      const APattern: string): Integer; static;
-    // FindImplEnd: from AStartLine (0-based), scans forward to find the last
-    // line of the implementation body. Stops at the next top-level
-    // procedure/function/constructor/destructor/class procedure/class function
-    // at column 0, or at a line ending 'end.' (unit footer). Returns 0-based
-    // index of the last line included in the body.
-    // NOTE: handles single-line "begin ... end;" bodies correctly.
-    class function FindImplEnd(const ALines: TArray<string>;
-      AStartLine: Integer): Integer; static;
+      // v0.17: blast-radius pack
+      function FindTransitiveCallers(const ASymbolName: string; ADepth: Integer): TArray<TImpactLevel>            ;
+      function GetClassSurface(const AQName: string; AIncludeImpl, AAllVisibility: Boolean): TArray<TSurfaceLine> ;
+      function GetSymbolSlice(const AQName: string): TArray<TSliceChunk>                                          ;
+      function FindCallersByNameWithContext(const ACalleeName: string; AContextLines: Integer): TArray<TReference>;
+    private
+      // v0.42: path-tolerant file-id resolution for FindSymbolsByFile (outline)
+      function ResolveFileIdTolerant(const APath: string): Int64;
+      // v0.17 slice helpers
+      function FindChildSymbols(AParentId: Int64): TArray<TSymbol>;
+      // FindImplLine: searches ALines (0-based) for a line matching
+      // "procedure|function|constructor|destructor ClassName.MethodName"
+      // case-insensitively. Returns 0-based index, or -1 if not found.
+      // NOTE: heuristic for v0.17 - may miss unusual formatting.
+      class function FindImplLine(const ALines: TArray<string>; const APattern: string): Integer; static;
+      // FindImplEnd: from AStartLine (0-based), scans forward to find the last
+      // line of the implementation body. Stops at the next top-level
+      // procedure/function/constructor/destructor/class procedure/class function
+      // at column 0, or at a line ending 'end.' (unit footer). Returns 0-based
+      // index of the last line included in the body.
+      // NOTE: handles single-line "begin ... end;" bodies correctly.
+      class function FindImplEnd(const ALines: TArray<string>; AStartLine: Integer): Integer; static;
   end;
 
 implementation
 
 uses
-  System.Generics.Defaults,
-  System.StrUtils,
-  System.IOUtils,
-  System.Math,
-  DRagLint.Storage.Schema,
-  DRagLint.Query.Fuzzy;
+  System.Generics.Defaults
+  , System.StrUtils
+  , System.IOUtils
+  , System.Math
+  , DRagLint.Storage.Schema
+  , DRagLint.Query  .Fuzzy
+  ;
 
 { TSQLiteSymbolStore }
 
@@ -232,59 +215,57 @@ begin
   FQResolveUnitUseTargets.Free;
   if Assigned(FConn) then
   begin
-    if FConn.Connected then
-      FConn.Close;
+    if FConn.Connected then FConn.Close;
     FConn.Free;
   end;
   inherited;
-end;
+end; // destructor
 
 procedure TSQLiteSymbolStore.EnsureTrigramTablePopulated;
 var
-  CheckQ, NameQ, InsertQ: TFDQuery;
-  Grams: TArray<string>;
-  G: string;
-  SymId: Int64;
-  SymName: string;
+  CheckQ : TFDQuery      ;
+  NameQ  : TFDQuery      ;
+  InsertQ: TFDQuery      ;
+  Grams  : TArray<string>;
+  G      : string        ;
+  SymId  : Int64         ;
+  SymName: string        ;
 begin
   // Check whether symbol_trigrams already has rows. If yes, we're good - the
   // table is kept in sync by triggers (next iteration); for now we just
   // populate-on-demand here. If empty, populate from symbols.
-  CheckQ := TFDQuery.Create(nil);
+  CheckQ:= TFDQuery.Create(nil);
   try
-    CheckQ.Connection := FConn;
-    CheckQ.SQL.Text := 'SELECT 1 FROM symbol_trigrams LIMIT 1';
+    CheckQ.Connection:= FConn;
+    CheckQ.SQL.Text:= 'SELECT 1 FROM symbol_trigrams LIMIT 1';
     CheckQ.Open;
-    if not CheckQ.IsEmpty then
-      Exit;
+    if not CheckQ.IsEmpty then Exit;
   finally
     CheckQ.Free;
   end;
 
   // Empty - build it. Per-batch transaction for speed.
-  NameQ := TFDQuery.Create(nil);
-  InsertQ := TFDQuery.Create(nil);
+  NameQ  := TFDQuery.Create(nil);
+  InsertQ:= TFDQuery.Create(nil);
   try
-    NameQ.Connection := FConn;
-    NameQ.SQL.Text := 'SELECT id, name FROM symbols';
+    NameQ.Connection:= FConn;
+    NameQ.SQL.Text:= 'SELECT id, name FROM symbols';
     NameQ.Open;
-    InsertQ.Connection := FConn;
-    InsertQ.SQL.Text :=
-      'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' +
-      'VALUES (:tg, :sid)';
-    InsertQ.Params.ParamByName('tg').DataType := ftString;
-    InsertQ.Params.ParamByName('sid').DataType := ftLargeint;
+    InsertQ.Connection:= FConn;
+    InsertQ.SQL.Text:= 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)';
+    InsertQ.Params.ParamByName('tg' ).DataType:= ftString;
+    InsertQ.Params.ParamByName('sid').DataType:= ftLargeint;
     FConn.StartTransaction;
     try
       while not NameQ.Eof do
       begin
-        SymId := NameQ.FieldByName('id').AsLargeInt;
-        SymName := NameQ.FieldByName('name').AsString;
-        Grams := DRagLint.Query.Fuzzy.Trigrams(SymName);
+        SymId  := NameQ.FieldByName('id'  ).AsLargeInt;
+        SymName:= NameQ.FieldByName('name').AsString;
+        Grams:= DRagLint.Query.Fuzzy.Trigrams(SymName);
         for G in Grams do
         begin
-          InsertQ.ParamByName('tg').AsString := G;
-          InsertQ.ParamByName('sid').AsLargeInt := SymId;
+          InsertQ.ParamByName('tg' ).AsString  := G;
+          InsertQ.ParamByName('sid').AsLargeInt:= SymId;
           InsertQ.ExecSQL;
         end;
         NameQ.Next;
@@ -293,23 +274,23 @@ begin
     except
       FConn.Rollback;
       raise;
-    end;
+    end; // try
   finally
     NameQ.Free;
     InsertQ.Free;
-  end;
-end;
+  end; // try
+end; // procedure
 
 procedure TSQLiteSymbolStore.Connect(const ADbPath: string);
 begin
-  FConn := TFDConnection.Create(nil);
-  FConn.DriverName := 'SQLite';
-  FConn.Params.Values['Database'] := ADbPath;
-  FConn.Params.Values['LockingMode'] := 'Normal';
-  FConn.Params.Values['JournalMode'] := 'WAL';
-  FConn.Params.Values['Synchronous'] := 'Normal';
-  FConn.LoginPrompt := False;
-  FConn.Connected := True;
+  FConn:= TFDConnection.Create(nil);
+  FConn.DriverName:= 'SQLite';
+  FConn.Params.Values['Database'   ]:= ADbPath;
+  FConn.Params.Values['LockingMode']:= 'Normal';
+  FConn.Params.Values['JournalMode']:= 'WAL';
+  FConn.Params.Values['Synchronous']:= 'Normal';
+  FConn.LoginPrompt:= False;
+  FConn.Connected  := True;
   FConn.ExecSQL('PRAGMA foreign_keys = ON');
   { v0.42 perf: per-file insert throughput collapses as the DB grows past ~1 GB
     (full C:\Projects scan ran at 0.55 s/file vs ~0.04 s/file historically). The
@@ -318,9 +299,9 @@ begin
     big read mmap so the hot index pages stay resident instead of being
     re-read from disk on every insert; keep temp tables in memory. These are
     pure performance hints -- WAL + synchronous=Normal already guard durability. }
-  FConn.ExecSQL('PRAGMA cache_size = -262144');   { 256 MB page cache }
-  FConn.ExecSQL('PRAGMA mmap_size = 1073741824');  { 1 GB read mmap }
-  FConn.ExecSQL('PRAGMA temp_store = MEMORY');
+  FConn.ExecSQL('PRAGMA cache_size = -262144'  ); { 256 MB page cache }
+  FConn.ExecSQL('PRAGMA mmap_size = 1073741824'); { 1 GB read mmap }
+  FConn.ExecSQL('PRAGMA temp_store = MEMORY'   );
 end;
 
 procedure TSQLiteSymbolStore.Migrate;
@@ -337,11 +318,8 @@ var
 begin
   FConn.StartTransaction;
   try
-    for Stmt in SCHEMA_DDL do
-      FConn.ExecSQL(Stmt);
-    FConn.ExecSQL(
-      'INSERT OR REPLACE INTO schema_meta(key, value) VALUES (''schema_version'', ?)',
-      [IntToStr(SCHEMA_VERSION)]);
+    for Stmt in SCHEMA_DDL do FConn.ExecSQL(Stmt);
+    FConn.ExecSQL( 'INSERT OR REPLACE INTO schema_meta(key, value) VALUES (''schema_version'', ?)', [IntToStr(SCHEMA_VERSION)]);
     FConn.Commit;
   except
     FConn.Rollback;
@@ -352,23 +330,21 @@ begin
     (after the commit so a swallowed duplicate-column error can't disturb the
     main schema transaction). }
   TryExec('ALTER TABLE symbols ADD COLUMN impl_start_line INTEGER');
-  TryExec('ALTER TABLE symbols ADD COLUMN impl_end_line INTEGER');
+  TryExec('ALTER TABLE symbols ADD COLUMN impl_end_line INTEGER'  );
   PrepareStatements;
-end;
+end; // begin
 
 procedure TSQLiteSymbolStore.PrepareStatements;
-  function NewQuery(const ASQL: string): TFDQuery;
+  function NewQuery(const ASql: string): TFDQuery;
   begin
-    Result := TFDQuery.Create(nil);
-    Result.Connection := FConn;
-    Result.SQL.Text := ASQL;
+    Result:= TFDQuery.Create(nil);
+    Result.Connection:= FConn;
+    Result.SQL.Text:= ASql;
     // FireDAC auto-prepares on first execution; param types are inferred from
     // the first set of param values, so do NOT call Prepare here.
   end;
 begin
-  FQInsertFile := NewQuery(
-    'INSERT INTO files(path, mtime_unix, sha256, parsed_at, language) ' +
-    'VALUES (:path, :mtime, :sha, :parsed, :lang)');
+  FQInsertFile:= NewQuery( 'INSERT INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   // v0.37: ON CONFLICT DO UPDATE requires SQLite 3.24+; Win32 FireDAC ships
   // an older bundled sqlite that rejects this syntax. INSERT OR REPLACE is
   // supported in every SQLite version. (Behavior difference: REPLACE deletes
@@ -377,184 +353,130 @@ begin
   // never updated — the v0.4 incremental-skip path uses FileIsUpToDate to
   // bypass before reaching this query, and the indexer's cascade deletes
   // happen on the symbols/refs side, not files. New id on re-index is fine.)
-  FQUpsertFile := NewQuery(
-    'INSERT OR REPLACE INTO files(path, mtime_unix, sha256, parsed_at, language) ' +
-    'VALUES (:path, :mtime, :sha, :parsed, :lang)');
-  FQInsertSymbol := NewQuery(
-    'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' +
-    '  signature, modifiers, section, start_line, start_col, end_line, end_col, ' +
-    '  impl_start_line, impl_end_line) ' +
-    'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, ' +
-    '  :sl, :sc, :el, :ec, :isl, :iel)');
-  FQInsertTrigram := NewQuery(
-    'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' +
-    'VALUES (:tg, :sid)');
-  FQInsertRef := NewQuery(
-    'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' +
-    '  start_line, start_col, end_line, end_col) ' +
-    'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec)');
-  FQDeleteFileSymbols := NewQuery('DELETE FROM symbols WHERE file_id = :fid');
-  FQDeleteFileRefs := NewQuery('DELETE FROM refs WHERE file_id = :fid');
-  FQUpsertDiBinding := NewQuery(
-    'INSERT INTO di_bindings(file_id, interface_name, impl_name, lifetime, ' +
-    '  start_line, start_col, end_line, end_col) ' +
+  FQUpsertFile:= NewQuery( 'INSERT OR REPLACE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
+  FQInsertSymbol:= NewQuery(
+    'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, start_line, start_col, end_line, end_col, ' +
+    '  impl_start_line, impl_end_line) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, ' + '  :sl, :sc, :el, :ec, :isl, :iel)');
+  FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
+  FQInsertRef:= NewQuery(
+    'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col) ' + 'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec)');
+  FQDeleteFileSymbols:= NewQuery('DELETE FROM symbols WHERE file_id = :fid');
+  FQDeleteFileRefs   := NewQuery('DELETE FROM refs WHERE file_id = :fid'   );
+  FQUpsertDiBinding:= NewQuery(
+    'INSERT INTO di_bindings(file_id, interface_name, impl_name, lifetime, ' + '  start_line, start_col, end_line, end_col) ' +
     'VALUES (:fid, :intf, :impl, :life, :sl, :sc, :el, :ec)');
-  FQDeleteFileDiBindings := NewQuery(
-    'DELETE FROM di_bindings WHERE file_id = :fid');
-  FQFindByName := NewQuery(
-    'SELECT * FROM symbols WHERE name = :name ORDER BY qualified_name');
-  FQFindByQName := NewQuery(
-    'SELECT * FROM symbols WHERE qualified_name = :qname');
-  FQCountSymbols := NewQuery('SELECT COUNT(*) AS n FROM symbols');
-  FQCountFiles := NewQuery('SELECT COUNT(*) AS n FROM files');
+  FQDeleteFileDiBindings:= NewQuery( 'DELETE FROM di_bindings WHERE file_id = :fid'                    );
+  FQFindByName          := NewQuery( 'SELECT * FROM symbols WHERE name = :name ORDER BY qualified_name');
+  FQFindByQName         := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname'             );
+  FQCountSymbols        := NewQuery('SELECT COUNT(*) AS n FROM symbols'                                );
+  FQCountFiles          := NewQuery('SELECT COUNT(*) AS n FROM files'                                  );
 
-  FQUpsertSymbolDoc := NewQuery(
-    'INSERT OR REPLACE INTO symbol_docs ' +
-    '(symbol_id, format, raw_block, summary, remarks, returns_text, ' +
-    ' params_json, exceptions_json, example_text, seealso_json, since_text, ' +
-    ' deprecated, start_line, end_line) ' +
-    'VALUES (:sid, :fmt, :raw, :sum, :rem, :ret, :pj, :ej, :ex, :sj, :since, ' +
-    ' :dep, :sl, :el)');
+  FQUpsertSymbolDoc:= NewQuery(
+    'INSERT OR REPLACE INTO symbol_docs ' + '(symbol_id, format, raw_block, summary, remarks, returns_text, ' +
+    ' params_json, exceptions_json, example_text, seealso_json, since_text, ' + ' deprecated, start_line, end_line) ' +
+    'VALUES (:sid, :fmt, :raw, :sum, :rem, :ret, :pj, :ej, :ex, :sj, :since, ' + ' :dep, :sl, :el)');
   // Pre-declare all param types before the first Prepare/Execute so FireDAC
   // does not re-infer types from run-time values. Without this, a param that
   // is NULL on one call and non-NULL on another raises [SQLite]-338.
-  FQUpsertSymbolDoc.Params.ParamByName('sid').DataType := ftLargeint;
-  FQUpsertSymbolDoc.Params.ParamByName('fmt').DataType := ftString;
-  FQUpsertSymbolDoc.Params.ParamByName('raw').DataType := ftString;
-  FQUpsertSymbolDoc.Params.ParamByName('sum').DataType := ftWideMemo;
-  FQUpsertSymbolDoc.Params.ParamByName('rem').DataType := ftWideMemo;
-  FQUpsertSymbolDoc.Params.ParamByName('ret').DataType := ftWideMemo;
-  FQUpsertSymbolDoc.Params.ParamByName('pj').DataType := ftWideMemo;
-  FQUpsertSymbolDoc.Params.ParamByName('ej').DataType := ftWideMemo;
-  FQUpsertSymbolDoc.Params.ParamByName('ex').DataType := ftWideMemo;
-  FQUpsertSymbolDoc.Params.ParamByName('sj').DataType := ftWideMemo;
-  FQUpsertSymbolDoc.Params.ParamByName('since').DataType := ftWideMemo;
-  FQUpsertSymbolDoc.Params.ParamByName('dep').DataType := ftInteger;
-  FQUpsertSymbolDoc.Params.ParamByName('sl').DataType := ftInteger;
-  FQUpsertSymbolDoc.Params.ParamByName('el').DataType := ftInteger;
+  FQUpsertSymbolDoc.Params.ParamByName('sid'  ).DataType:= ftLargeint;
+  FQUpsertSymbolDoc.Params.ParamByName('fmt'  ).DataType:= ftString;
+  FQUpsertSymbolDoc.Params.ParamByName('raw'  ).DataType:= ftString;
+  FQUpsertSymbolDoc.Params.ParamByName('sum'  ).DataType:= ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('rem'  ).DataType:= ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('ret'  ).DataType:= ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('pj'   ).DataType:= ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('ej'   ).DataType:= ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('ex'   ).DataType:= ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('sj'   ).DataType:= ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('since').DataType:= ftWideMemo;
+  FQUpsertSymbolDoc.Params.ParamByName('dep'  ).DataType:= ftInteger;
+  FQUpsertSymbolDoc.Params.ParamByName('sl'   ).DataType:= ftInteger;
+  FQUpsertSymbolDoc.Params.ParamByName('el'   ).DataType:= ftInteger;
   FQUpsertSymbolDoc.Prepare;
 
-  FQDeleteFileDocs := NewQuery(
-    'DELETE FROM symbol_docs WHERE symbol_id IN ' +
-    '(SELECT id FROM symbols WHERE file_id = :fid)');
+  FQDeleteFileDocs:= NewQuery( 'DELETE FROM symbol_docs WHERE symbol_id IN ' + '(SELECT id FROM symbols WHERE file_id = :fid)');
 
-  FQGetSymbolDoc := NewQuery(
-    'SELECT format, raw_block, summary, remarks, returns_text, ' +
-    ' params_json, exceptions_json, example_text, seealso_json, since_text, ' +
-    ' deprecated, start_line, end_line ' +
-    'FROM symbol_docs WHERE symbol_id = :sid');
+  FQGetSymbolDoc:= NewQuery(
+    'SELECT format, raw_block, summary, remarks, returns_text, ' + ' params_json, exceptions_json, example_text, seealso_json, since_text, ' +
+    ' deprecated, start_line, end_line ' + 'FROM symbol_docs WHERE symbol_id = :sid');
 
-  FQFindByDocTag := NewQuery(
-    'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' +
-    'WHERE (:tag = ''deprecated'' AND d.deprecated = 1) ' +
+  FQFindByDocTag:= NewQuery(
+    'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE (:tag = ''deprecated'' AND d.deprecated = 1) ' +
     '   OR (:tag = ''since'' AND d.since_text IS NOT NULL)');
 
-  FQFindUndocumented := NewQuery(
-    'SELECT s.* FROM symbols s ' +
-    'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' +
-    'WHERE d.symbol_id IS NULL ' +
-    '  AND (:kind = '''' OR s.kind = :kind) ' +
-    '  AND (:publicOnly = 0 OR (s.modifiers IS NULL ' +
-    '       OR (s.modifiers NOT LIKE ''%private%'' AND ' +
-    '           s.modifiers NOT LIKE ''%protected%'')))');
+  FQFindUndocumented:= NewQuery(
+    'SELECT s.* FROM symbols s ' + 'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE d.symbol_id IS NULL ' + '  AND (:kind = '''' OR s.kind = :kind) ' +
+    '  AND (:publicOnly = 0 OR (s.modifiers IS NULL ' + '       OR (s.modifiers NOT LIKE ''%private%'' AND ' + '           s.modifiers NOT LIKE ''%protected%'')))');
 
-  FQFindByDocContains := NewQuery(
-    'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' +
-    'WHERE d.summary LIKE :pat OR d.remarks LIKE :pat OR d.example_text LIKE :pat');
+  FQFindByDocContains:= NewQuery(
+    'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE d.summary LIKE :pat OR d.remarks LIKE :pat OR d.example_text LIKE :pat');
 
-  FQListDocumentedSymbols := NewQuery(
-    'SELECT s.* FROM symbols s ' +
-    'INNER JOIN symbol_docs d ON d.symbol_id = s.id ' +
-    'WHERE d.summary IS NOT NULL ' +
-    'LIMIT :lim');
+  FQListDocumentedSymbols:= NewQuery( 'SELECT s.* FROM symbols s ' + 'INNER JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE d.summary IS NOT NULL ' + 'LIMIT :lim');
 
-  FQFindContaining := NewQuery(
-    'SELECT * FROM symbols ' +
-    'WHERE file_id = :fid AND start_line <= :line AND end_line >= :line ' +
-    'ORDER BY start_line DESC LIMIT 1');
+  FQFindContaining:= NewQuery( 'SELECT * FROM symbols ' + 'WHERE file_id = :fid AND start_line <= :line AND end_line >= :line ' + 'ORDER BY start_line DESC LIMIT 1');
 
-  FQFindFileId := NewQuery(
-    'SELECT id FROM files ' +
-    'WHERE path = :p OR LOWER(path) = LOWER(:p) LIMIT 1');
+  FQFindFileId:= NewQuery( 'SELECT id FROM files ' + 'WHERE path = :p OR LOWER(path) = LOWER(:p) LIMIT 1');
 
-  FQFindChildByName := NewQuery(
-    'SELECT * FROM symbols WHERE parent_id = :pid AND name = :name LIMIT 1');
+  FQFindChildByName:= NewQuery( 'SELECT * FROM symbols WHERE parent_id = :pid AND name = :name LIMIT 1');
 
   // v0.20: completion helpers
   // LIKE pattern: escape _ and % in user input, then append %.
   // SQLite LIKE is case-insensitive for ASCII by default.
-  FQFindByPrefix := NewQuery(
-    'SELECT * FROM symbols WHERE name LIKE :prefixLike ORDER BY name LIMIT :lim');
+  FQFindByPrefix:= NewQuery( 'SELECT * FROM symbols WHERE name LIKE :prefixLike ORDER BY name LIMIT :lim');
 
-  FQFindAllChildren := NewQuery(
-    'SELECT * FROM symbols WHERE parent_id = :pid ORDER BY start_line');
+  FQFindAllChildren:= NewQuery( 'SELECT * FROM symbols WHERE parent_id = :pid ORDER BY start_line');
 
   // v0.25: dead-code finder - symbols with no entry in refs.name_text
-  FQFindNoCallers := NewQuery(
-    'SELECT s.* FROM symbols s ' +
-    'LEFT JOIN refs r ON r.name_text = s.name ' +
-    'WHERE r.id IS NULL ' +
-    '  AND (:kind = '''' OR s.kind = :kind) ' +
-    '  AND s.name NOT IN (''Main'', ''Register'', ''initialization'', ''finalization'') ' +
-    '  AND s.kind NOT IN (''constructor'', ''destructor'') ' +
-    '  AND (:includePrivate = 1 OR (s.modifiers IS NULL ' +
-    '       OR s.modifiers NOT LIKE ''%private%''))');
+  FQFindNoCallers:= NewQuery(
+    'SELECT s.* FROM symbols s ' + 'LEFT JOIN refs r ON r.name_text = s.name ' + 'WHERE r.id IS NULL ' + '  AND (:kind = '''' OR s.kind = :kind) ' +
+    '  AND s.name NOT IN (''Main'', ''Register'', ''initialization'', ''finalization'') ' + '  AND s.kind NOT IN (''constructor'', ''destructor'') ' +
+    '  AND (:includePrivate = 1 OR (s.modifiers IS NULL ' + '       OR s.modifiers NOT LIKE ''%private%''))');
 
   // v0.26: compiler findings helpers
-  FQFindCompilerFindings := NewQuery(
-    'SELECT file_id, raw_path, code, severity, line_no, col_no, message ' +
-    'FROM compiler_findings ' +
-    'WHERE file_id = :fid ORDER BY line_no, col_no');
+  FQFindCompilerFindings:= NewQuery(
+    'SELECT file_id, raw_path, code, severity, line_no, col_no, message ' + 'FROM compiler_findings ' + 'WHERE file_id = :fid ORDER BY line_no, col_no');
 
-  FQInsertCompilerFinding := NewQuery(
-    'INSERT INTO compiler_findings ' +
-    '(file_id, raw_path, code, severity, line_no, col_no, message, imported_at) ' +
-    'VALUES (:fid, :rp, :code, :sev, :lno, :cno, :msg, :iat)');
-  FQInsertCompilerFinding.Params.ParamByName('fid').DataType := ftLargeint;
-  FQInsertCompilerFinding.Params.ParamByName('rp').DataType := ftString;
-  FQInsertCompilerFinding.Params.ParamByName('code').DataType := ftString;
-  FQInsertCompilerFinding.Params.ParamByName('sev').DataType := ftString;
-  FQInsertCompilerFinding.Params.ParamByName('lno').DataType := ftInteger;
-  FQInsertCompilerFinding.Params.ParamByName('cno').DataType := ftInteger;
-  FQInsertCompilerFinding.Params.ParamByName('msg').DataType := ftString;
-  FQInsertCompilerFinding.Params.ParamByName('iat').DataType := ftLargeint;
+  FQInsertCompilerFinding:= NewQuery(
+    'INSERT INTO compiler_findings ' + '(file_id, raw_path, code, severity, line_no, col_no, message, imported_at) ' + 'VALUES (:fid, :rp, :code, :sev, :lno, :cno, :msg, :iat)');
+  FQInsertCompilerFinding.Params.ParamByName('fid' ).DataType:= ftLargeint;
+  FQInsertCompilerFinding.Params.ParamByName('rp'  ).DataType:= ftString;
+  FQInsertCompilerFinding.Params.ParamByName('code').DataType:= ftString;
+  FQInsertCompilerFinding.Params.ParamByName('sev' ).DataType:= ftString;
+  FQInsertCompilerFinding.Params.ParamByName('lno' ).DataType:= ftInteger;
+  FQInsertCompilerFinding.Params.ParamByName('cno' ).DataType:= ftInteger;
+  FQInsertCompilerFinding.Params.ParamByName('msg' ).DataType:= ftString;
+  FQInsertCompilerFinding.Params.ParamByName('iat' ).DataType:= ftLargeint;
   FQInsertCompilerFinding.Prepare;
 
   // v0.40.4: uses-clause queries
-  FQInsertUnitUse := NewQuery(
-    'INSERT INTO unit_uses ' +
-    '(file_id, unit_name, unit_name_norm, section, in_path, ' +
-    ' target_file_id, start_line, start_col, end_line, end_col) ' +
+  FQInsertUnitUse:= NewQuery(
+    'INSERT INTO unit_uses ' + '(file_id, unit_name, unit_name_norm, section, in_path, ' + ' target_file_id, start_line, start_col, end_line, end_col) ' +
     'VALUES (:fid, :un, :unn, :sec, :inp, NULL, :sl, :sc, :el, :ec)');
-  FQInsertUnitUse.Params.ParamByName('fid').DataType := ftLargeint;
-  FQInsertUnitUse.Params.ParamByName('un').DataType  := ftString;
-  FQInsertUnitUse.Params.ParamByName('unn').DataType := ftString;
-  FQInsertUnitUse.Params.ParamByName('sec').DataType := ftString;
-  FQInsertUnitUse.Params.ParamByName('inp').DataType := ftString;
-  FQInsertUnitUse.Params.ParamByName('sl').DataType  := ftInteger;
-  FQInsertUnitUse.Params.ParamByName('sc').DataType  := ftInteger;
-  FQInsertUnitUse.Params.ParamByName('el').DataType  := ftInteger;
-  FQInsertUnitUse.Params.ParamByName('ec').DataType  := ftInteger;
+  FQInsertUnitUse.Params.ParamByName('fid').DataType:= ftLargeint;
+  FQInsertUnitUse.Params.ParamByName('un' ).DataType:= ftString;
+  FQInsertUnitUse.Params.ParamByName('unn').DataType:= ftString;
+  FQInsertUnitUse.Params.ParamByName('sec').DataType:= ftString;
+  FQInsertUnitUse.Params.ParamByName('inp').DataType:= ftString;
+  FQInsertUnitUse.Params.ParamByName('sl' ).DataType:= ftInteger;
+  FQInsertUnitUse.Params.ParamByName('sc' ).DataType:= ftInteger;
+  FQInsertUnitUse.Params.ParamByName('el' ).DataType:= ftInteger;
+  FQInsertUnitUse.Params.ParamByName('ec' ).DataType:= ftInteger;
   FQInsertUnitUse.Prepare;
 
-  FQDeleteFileUnitUses := NewQuery(
-    'DELETE FROM unit_uses WHERE file_id = :fid');
-  FQDeleteFileUnitUses.Params.ParamByName('fid').DataType := ftLargeint;
+  FQDeleteFileUnitUses:= NewQuery( 'DELETE FROM unit_uses WHERE file_id = :fid');
+  FQDeleteFileUnitUses.Params.ParamByName('fid').DataType:= ftLargeint;
   FQDeleteFileUnitUses.Prepare;
 
-  FQGetFileUnitUses := NewQuery(
-    'SELECT unit_name, unit_name_norm, section, in_path, ' +
-    '       target_file_id, start_line, start_col, end_line, end_col ' +
-    'FROM unit_uses WHERE file_id = :fid ' +
+  FQGetFileUnitUses:= NewQuery(
+    'SELECT unit_name, unit_name_norm, section, in_path, ' + '       target_file_id, start_line, start_col, end_line, end_col ' + 'FROM unit_uses WHERE file_id = :fid ' +
     'ORDER BY section, start_line, start_col');
-  FQGetFileUnitUses.Params.ParamByName('fid').DataType := ftLargeint;
+  FQGetFileUnitUses.Params.ParamByName('fid').DataType:= ftLargeint;
   FQGetFileUnitUses.Prepare;
 
-  FQFindUsersOfUnit := NewQuery(
-    'SELECT file_id, unit_name, unit_name_norm, section, in_path, ' +
-    '       target_file_id, start_line, start_col, end_line, end_col ' +
+  FQFindUsersOfUnit:= NewQuery(
+    'SELECT file_id, unit_name, unit_name_norm, section, in_path, ' + '       target_file_id, start_line, start_col, end_line, end_col ' +
     'FROM unit_uses WHERE unit_name_norm = :un');
-  FQFindUsersOfUnit.Params.ParamByName('un').DataType := ftString;
+  FQFindUsersOfUnit.Params.ParamByName('un').DataType:= ftString;
   FQFindUsersOfUnit.Prepare;
 
   // Resolves target_file_id for every unit_uses row whose unit_name_norm
@@ -562,66 +484,54 @@ begin
   // Run once after a full index pass; safe to re-run (UPDATE is idempotent).
   // Uses LOWER + substr math because sqlite's basename trick (replace ext)
   // would over-match. Path separators normalised to '/'.
-  FQResolveUnitUseTargets := NewQuery(
-    'UPDATE unit_uses SET target_file_id = ('                                 +
-    '  SELECT f.id FROM files f '                                             +
-    '  WHERE LOWER('                                                          +
-    '    REPLACE('                                                            +
-    '      SUBSTR('                                                           +
-    '        SUBSTR(f.path, 1 + LENGTH(f.path) - INSTR('                      +
-    '          REPLACE(REPLACE(f.path, ''\'', ''/''), ''/'', '''') || ''/'','+
-    '          ''/'')), 1)'                                                   +
-    '      , ''.pas'', '''')'                                                 +
-    '  ) = unit_uses.unit_name_norm '                                         +
-    '  LIMIT 1) '                                                             +
-    'WHERE target_file_id IS NULL');
+  FQResolveUnitUseTargets:= NewQuery(
+    'UPDATE unit_uses SET target_file_id = (' + '  SELECT f.id FROM files f ' + '  WHERE LOWER(' + '    REPLACE(' + '      SUBSTR(' +
+    '        SUBSTR(f.path, 1 + LENGTH(f.path) - INSTR(' + '          REPLACE(REPLACE(f.path, ''\'', ''/''), ''/'', '''') || ''/'',' + '          ''/'')), 1)' +
+    '      , ''.pas'', '''')' + '  ) = unit_uses.unit_name_norm ' + '  LIMIT 1) ' + 'WHERE target_file_id IS NULL');
   FQResolveUnitUseTargets.Prepare;
-end;
+end; // begin
 
 function TSQLiteSymbolStore.GetAllFileIds: TArray<Int64>;
 var
-  Q: TFDQuery;
+  Q: TFDQuery    ;
   L: TList<Int64>;
 begin
-  L := TList<Int64>.Create;
-  Q := TFDQuery.Create(nil);
+  L:= TList<Int64>.Create;
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text := 'SELECT id FROM files ORDER BY id';
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT id FROM files ORDER BY id';
     Q.Open;
     while not Q.Eof do
     begin
       L.Add(Q.FieldByName('id').AsLargeInt);
       Q.Next;
     end;
-    Result := L.ToArray;
+    Result:= L.ToArray;
   finally
     Q.Free;
     L.Free;
   end;
-end;
+end; // function
 
-function TSQLiteSymbolStore.FileIsUpToDate(const APath: string;
-  AMtimeUnix: Int64; const ASha: string): Boolean;
+function TSQLiteSymbolStore.FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean;
 var
   Q: TFDQuery;
 begin
-  Q := TFDQuery.Create(nil);
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text :=
-      'SELECT 1 FROM files WHERE path = :p AND mtime_unix = :m ' +
-      'AND sha256 = :s';
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT 1 FROM files WHERE path = :p AND mtime_unix = :m ' + 'AND sha256 = :s';
     { match the canonical stored form (see NormalizeStoredPath) }
-    Q.ParamByName('p').AsString := StringReplace(APath, '/', '\', [rfReplaceAll]);
-    Q.ParamByName('m').AsLargeInt := AMtimeUnix;
-    Q.ParamByName('s').AsString := ASha;
+    Q.ParamByName('p').AsString:= StringReplace(APath, '/', '\', [rfReplaceAll]);
+    Q.ParamByName('m').AsLargeInt:= AMtimeUnix;
+    Q.ParamByName('s').AsString  := ASha;
     Q.Open;
-    Result := not Q.IsEmpty;
+    Result:= not Q.IsEmpty;
   finally
     Q.Free;
   end;
-end;
+end; // function
 
 // v0.43: canonical stored-path form. The walker can produce mixed separators
 // ('C:/root\sub\file.pas') when the index root is given with '/', which made
@@ -630,277 +540,254 @@ end;
 // every spelling to one canonical all-backslash path at the store boundary.
 function NormalizeStoredPath(const APath: string): string;
 begin
-  Result := StringReplace(APath, '/', '\', [rfReplaceAll]);
+  Result:= StringReplace(APath, '/', '\', [rfReplaceAll]);
 end;
 
-function TSQLiteSymbolStore.OpenFileTx(const APath: string;
-  AMtimeUnix: Int64; const ASha: string;
-  const ALanguage: string): TFileTxToken;
+function TSQLiteSymbolStore.OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
 var
-  Q: TFDQuery;
-  NP: string;
+  Q : TFDQuery;
+  NP: string  ;
 begin
-  NP := NormalizeStoredPath(APath);
+  NP:= NormalizeStoredPath(APath);
   FConn.StartTransaction;
   try
-    FQUpsertFile.ParamByName('path').AsString := NP;
-    FQUpsertFile.ParamByName('mtime').AsLargeInt := AMtimeUnix;
-    FQUpsertFile.ParamByName('sha').AsString := ASha;
-    FQUpsertFile.ParamByName('parsed').AsLargeInt :=
-      DateTimeToUnix(Now, False);
-    FQUpsertFile.ParamByName('lang').AsString := ALanguage;
+    FQUpsertFile.ParamByName('path' ).AsString  := NP;
+    FQUpsertFile.ParamByName('mtime').AsLargeInt:= AMtimeUnix;
+    FQUpsertFile.ParamByName('sha'  ).AsString  := ASha;
+    FQUpsertFile.ParamByName('parsed').AsLargeInt:= DateTimeToUnix(Now, False);
+    FQUpsertFile.ParamByName('lang').AsString:= ALanguage;
     FQUpsertFile.ExecSQL;
 
-    Q := TFDQuery.Create(nil);
+    Q:= TFDQuery.Create(nil);
     try
-      Q.Connection := FConn;
-      Q.SQL.Text := 'SELECT id FROM files WHERE path = :path';
-      Q.ParamByName('path').AsString := NP;
+      Q.Connection:= FConn;
+      Q.SQL.Text:= 'SELECT id FROM files WHERE path = :path';
+      Q.ParamByName('path').AsString:= NP;
       Q.Open;
-      if Q.IsEmpty then
-        raise Exception.CreateFmt('File row not found after upsert: %s', [NP]);
-      Result.FileId := Q.Fields[0].AsLargeInt;
-      Result.Path := NP;
+      if Q.IsEmpty then raise Exception.CreateFmt('File row not found after upsert: %s', [NP]);
+      Result.FileId:= Q.Fields[0].AsLargeInt;
+      Result.Path:= NP;
     finally
       Q.Free;
     end;
 
     // Phase 1: full re-emit semantics. Clear old symbols/refs for this file
     // before the caller starts emitting fresh records.
-    FQDeleteFileRefs.ParamByName('fid').AsLargeInt := Result.FileId;
+    FQDeleteFileRefs.ParamByName('fid').AsLargeInt:= Result.FileId;
     FQDeleteFileRefs.ExecSQL;
-    FQDeleteFileDiBindings.ParamByName('fid').AsLargeInt := Result.FileId;
+    FQDeleteFileDiBindings.ParamByName('fid').AsLargeInt:= Result.FileId;
     FQDeleteFileDiBindings.ExecSQL;
-    FQDeleteFileSymbols.ParamByName('fid').AsLargeInt := Result.FileId;
+    FQDeleteFileSymbols.ParamByName('fid').AsLargeInt:= Result.FileId;
     FQDeleteFileSymbols.ExecSQL;
   except
     FConn.Rollback;
     raise;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.UpsertSymbol(const AToken: TFileTxToken;
-  const ASymbol: TSymbol): Int64;
+function TSQLiteSymbolStore.UpsertSymbol(const AToken: TFileTxToken; const ASymbol: TSymbol): Int64;
 begin
-  FQInsertSymbol.ParamByName('fid').AsLargeInt := AToken.FileId;
-  FQInsertSymbol.ParamByName('pid').DataType := ftLargeint;
-  if ASymbol.ParentId >= 0 then
-    FQInsertSymbol.ParamByName('pid').AsLargeInt := ASymbol.ParentId
-  else
-    FQInsertSymbol.ParamByName('pid').Clear;
-  FQInsertSymbol.ParamByName('kind').AsString := ASymbol.Kind.ToText;
-  FQInsertSymbol.ParamByName('name').AsString := ASymbol.Name;
+  FQInsertSymbol.ParamByName('fid').AsLargeInt:= AToken.FileId;
+  FQInsertSymbol.ParamByName('pid').DataType:= ftLargeint;
+  if ASymbol.ParentId >= 0 then FQInsertSymbol.ParamByName('pid').AsLargeInt:= ASymbol.ParentId
+  else FQInsertSymbol.ParamByName('pid').Clear;
+  FQInsertSymbol.ParamByName('kind').AsString:= ASymbol.Kind.ToText;
+  FQInsertSymbol.ParamByName('name' ).AsString := ASymbol.Name;
   FQInsertSymbol.ParamByName('qname').AsString := ASymbol.QualifiedName;
-  FQInsertSymbol.ParamByName('sig').AsString := ASymbol.Signature;
-  FQInsertSymbol.ParamByName('mods').AsString := ASymbol.Modifiers;
-  FQInsertSymbol.ParamByName('sec').AsString := ASymbol.Section;
-  FQInsertSymbol.ParamByName('sl').AsInteger := ASymbol.StartLine;
-  FQInsertSymbol.ParamByName('sc').AsInteger := ASymbol.StartCol;
-  FQInsertSymbol.ParamByName('el').AsInteger := ASymbol.EndLine;
-  FQInsertSymbol.ParamByName('ec').AsInteger := ASymbol.EndCol;
-  FQInsertSymbol.ParamByName('isl').AsInteger := ASymbol.ImplStartLine;  { v9 }
-  FQInsertSymbol.ParamByName('iel').AsInteger := ASymbol.ImplEndLine;    { v9 }
+  FQInsertSymbol.ParamByName('sig'  ).AsString := ASymbol.Signature;
+  FQInsertSymbol.ParamByName('mods' ).AsString := ASymbol.Modifiers;
+  FQInsertSymbol.ParamByName('sec'  ).AsString := ASymbol.Section;
+  FQInsertSymbol.ParamByName('sl'   ).AsInteger:= ASymbol.StartLine;
+  FQInsertSymbol.ParamByName('sc'   ).AsInteger:= ASymbol.StartCol;
+  FQInsertSymbol.ParamByName('el'   ).AsInteger:= ASymbol.EndLine;
+  FQInsertSymbol.ParamByName('ec'   ).AsInteger:= ASymbol.EndCol;
+  FQInsertSymbol.ParamByName('isl'  ).AsInteger:= ASymbol.ImplStartLine; { v9 }
+  FQInsertSymbol.ParamByName('iel'  ).AsInteger:= ASymbol.ImplEndLine; { v9 }
   FQInsertSymbol.ExecSQL;
-  Result := FConn.GetLastAutoGenValue('');
+  Result:= FConn.GetLastAutoGenValue('');
   // Populate trigram index alongside each symbol insert so fuzzy queries
   // are sub-second from the first call without any lazy build cost.
-  var Grams := DRagLint.Query.Fuzzy.Trigrams(ASymbol.Name);
+  var Grams:= DRagLint.Query.Fuzzy.Trigrams(ASymbol.Name);
   var G: string;
   for G in Grams do
   begin
-    FQInsertTrigram.ParamByName('tg').AsString := G;
-    FQInsertTrigram.ParamByName('sid').AsLargeInt := Result;
+    FQInsertTrigram.ParamByName('tg' ).AsString  := G;
+    FQInsertTrigram.ParamByName('sid').AsLargeInt:= Result;
     FQInsertTrigram.ExecSQL;
   end;
-end;
+end; // function
 
-procedure TSQLiteSymbolStore.UpsertReference(const AToken: TFileTxToken;
-  const ARef: TReference);
+procedure TSQLiteSymbolStore.UpsertReference(const AToken: TFileTxToken; const ARef: TReference);
 begin
-  FQInsertRef.ParamByName('sid').DataType := ftLargeint;
-  if ARef.SymbolId > 0 then
-    FQInsertRef.ParamByName('sid').AsLargeInt := ARef.SymbolId
-  else
-    FQInsertRef.ParamByName('sid').Clear;
-  FQInsertRef.ParamByName('fid').AsLargeInt := AToken.FileId;
-  FQInsertRef.ParamByName('kind').AsString := ARef.Kind;
-  FQInsertRef.ParamByName('name').AsString := ARef.NameText;
-  FQInsertRef.ParamByName('sl').AsInteger := ARef.StartLine;
-  FQInsertRef.ParamByName('sc').AsInteger := ARef.StartCol;
-  FQInsertRef.ParamByName('el').AsInteger := ARef.EndLine;
-  FQInsertRef.ParamByName('ec').AsInteger := ARef.EndCol;
+  FQInsertRef.ParamByName('sid').DataType:= ftLargeint;
+  if ARef.SymbolId > 0 then FQInsertRef.ParamByName('sid').AsLargeInt:= ARef.SymbolId
+  else FQInsertRef.ParamByName('sid').Clear;
+  FQInsertRef.ParamByName('fid' ).AsLargeInt:= AToken.FileId;
+  FQInsertRef.ParamByName('kind').AsString  := ARef  .Kind;
+  FQInsertRef.ParamByName('name').AsString  := ARef  .NameText;
+  FQInsertRef.ParamByName('sl'  ).AsInteger := ARef  .StartLine;
+  FQInsertRef.ParamByName('sc'  ).AsInteger := ARef  .StartCol;
+  FQInsertRef.ParamByName('el'  ).AsInteger := ARef  .EndLine;
+  FQInsertRef.ParamByName('ec'  ).AsInteger := ARef  .EndCol;
   FQInsertRef.ExecSQL;
 end;
 
-procedure TSQLiteSymbolStore.UpsertDiBinding(const AToken: TFileTxToken;
-  const ABinding: TDiBindingRow);
+procedure TSQLiteSymbolStore.UpsertDiBinding(const AToken: TFileTxToken; const ABinding: TDiBindingRow);
 begin
-  FQUpsertDiBinding.ParamByName('fid').AsLargeInt := AToken.FileId;
-  FQUpsertDiBinding.ParamByName('intf').AsString := ABinding.InterfaceName;
-  FQUpsertDiBinding.ParamByName('impl').AsString := ABinding.ImplName;
-  FQUpsertDiBinding.ParamByName('life').AsString := ABinding.Lifetime;
-  FQUpsertDiBinding.ParamByName('sl').AsInteger := ABinding.StartLine;
-  FQUpsertDiBinding.ParamByName('sc').AsInteger := ABinding.StartCol;
-  FQUpsertDiBinding.ParamByName('el').AsInteger := ABinding.EndLine;
-  FQUpsertDiBinding.ParamByName('ec').AsInteger := ABinding.EndCol;
+  FQUpsertDiBinding.ParamByName('fid' ).AsLargeInt:= AToken  .FileId;
+  FQUpsertDiBinding.ParamByName('intf').AsString  := ABinding.InterfaceName;
+  FQUpsertDiBinding.ParamByName('impl').AsString  := ABinding.ImplName;
+  FQUpsertDiBinding.ParamByName('life').AsString  := ABinding.Lifetime;
+  FQUpsertDiBinding.ParamByName('sl'  ).AsInteger := ABinding.StartLine;
+  FQUpsertDiBinding.ParamByName('sc'  ).AsInteger := ABinding.StartCol;
+  FQUpsertDiBinding.ParamByName('el'  ).AsInteger := ABinding.EndLine;
+  FQUpsertDiBinding.ParamByName('ec'  ).AsInteger := ABinding.EndCol;
   FQUpsertDiBinding.ExecSQL;
 end;
 
 procedure TSQLiteSymbolStore.DeleteDiBindingsForFile(AFileId: Int64);
 begin
-  FQDeleteFileDiBindings.ParamByName('fid').AsLargeInt := AFileId;
+  FQDeleteFileDiBindings.ParamByName('fid').AsLargeInt:= AFileId;
   FQDeleteFileDiBindings.ExecSQL;
 end;
 
-function TSQLiteSymbolStore.FindImplementationsOf(
-  const AInterfaceName: string): TArray<TDiBindingRow>;
+function TSQLiteSymbolStore.FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
 var
-  Q: TFDQuery;
+  Q   : TFDQuery            ;
   List: TList<TDiBindingRow>;
-  B: TDiBindingRow;
+  B   : TDiBindingRow       ;
 begin
-  List := TList<TDiBindingRow>.Create;
-  Q := TFDQuery.Create(nil);
+  List:= TList<TDiBindingRow>.Create;
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text :=
-      'SELECT * FROM di_bindings WHERE interface_name = :intf ' +
-      'ORDER BY file_id, start_line';
-    Q.ParamByName('intf').AsString := AInterfaceName;
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT * FROM di_bindings WHERE interface_name = :intf ' + 'ORDER BY file_id, start_line';
+    Q.ParamByName('intf').AsString:= AInterfaceName;
     Q.Open;
     while not Q.Eof do
     begin
-      B := Default(TDiBindingRow);
-      B.Id := Q.FieldByName('id').AsLargeInt;
-      B.FileId := Q.FieldByName('file_id').AsLargeInt;
-      B.InterfaceName := Q.FieldByName('interface_name').AsString;
-      B.ImplName := Q.FieldByName('impl_name').AsString;
-      B.Lifetime := Q.FieldByName('lifetime').AsString;
-      B.StartLine := Q.FieldByName('start_line').AsInteger;
-      B.StartCol := Q.FieldByName('start_col').AsInteger;
-      B.EndLine := Q.FieldByName('end_line').AsInteger;
-      B.EndCol := Q.FieldByName('end_col').AsInteger;
+      B:= Default(TDiBindingRow);
+      B.Id           := Q.FieldByName('id'            ).AsLargeInt;
+      B.FileId       := Q.FieldByName('file_id'       ).AsLargeInt;
+      B.InterfaceName:= Q.FieldByName('interface_name').AsString;
+      B.ImplName     := Q.FieldByName('impl_name'     ).AsString;
+      B.Lifetime     := Q.FieldByName('lifetime'      ).AsString;
+      B.StartLine    := Q.FieldByName('start_line'    ).AsInteger;
+      B.StartCol     := Q.FieldByName('start_col'     ).AsInteger;
+      B.EndLine      := Q.FieldByName('end_line'      ).AsInteger;
+      B.EndCol       := Q.FieldByName('end_col'       ).AsInteger;
       List.Add(B);
       Q.Next;
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     Q.Free;
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.FindDiResolveSites(
-  const AInterfaceName: string): TArray<TReference>;
+function TSQLiteSymbolStore.FindDiResolveSites( const AInterfaceName: string): TArray<TReference>;
 var
-  Q: TFDQuery;
+  Q   : TFDQuery         ;
   List: TList<TReference>;
-  R: TReference;
+  R   : TReference       ;
 begin
-  List := TList<TReference>.Create;
-  Q := TFDQuery.Create(nil);
+  List:= TList<TReference>.Create;
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text :=
-      'SELECT * FROM refs WHERE kind = ''di-resolve'' AND name_text = :intf ' +
-      'ORDER BY file_id, start_line';
-    Q.ParamByName('intf').AsString := AInterfaceName;
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT * FROM refs WHERE kind = ''di-resolve'' AND name_text = :intf ' + 'ORDER BY file_id, start_line';
+    Q.ParamByName('intf').AsString:= AInterfaceName;
     Q.Open;
     while not Q.Eof do
     begin
-      R := Default(TReference);
-      R.Id := Q.FieldByName('id').AsLargeInt;
-      if Q.FieldByName('symbol_id').IsNull then
-        R.SymbolId := 0
-      else
-        R.SymbolId := Q.FieldByName('symbol_id').AsLargeInt;
-      R.FileId := Q.FieldByName('file_id').AsLargeInt;
-      R.Kind := Q.FieldByName('kind').AsString;
-      R.NameText := Q.FieldByName('name_text').AsString;
-      R.StartLine := Q.FieldByName('start_line').AsInteger;
-      R.StartCol := Q.FieldByName('start_col').AsInteger;
-      R.EndLine := Q.FieldByName('end_line').AsInteger;
-      R.EndCol := Q.FieldByName('end_col').AsInteger;
+      R:= Default(TReference);
+      R.Id:= Q.FieldByName('id').AsLargeInt;
+      if Q.FieldByName('symbol_id').IsNull then R.SymbolId:= 0
+      else R.SymbolId:= Q.FieldByName('symbol_id').AsLargeInt;
+      R.FileId   := Q.FieldByName('file_id'   ).AsLargeInt;
+      R.Kind     := Q.FieldByName('kind'      ).AsString;
+      R.NameText := Q.FieldByName('name_text' ).AsString;
+      R.StartLine:= Q.FieldByName('start_line').AsInteger;
+      R.StartCol := Q.FieldByName('start_col' ).AsInteger;
+      R.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
+      R.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
       List.Add(R);
       Q.Next;
-    end;
-    Result := List.ToArray;
+    end; // while
+    Result:= List.ToArray;
   finally
     Q.Free;
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 function TSQLiteSymbolStore.FindDiUnresolved: TArray<TReference>;
 var
-  Q: TFDQuery;
+  Q   : TFDQuery         ;
   List: TList<TReference>;
-  R: TReference;
+  R   : TReference       ;
 begin
-  List := TList<TReference>.Create;
-  Q := TFDQuery.Create(nil);
+  List:= TList<TReference>.Create;
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text :=
-      'SELECT * FROM refs WHERE kind = ''di-unresolved'' ' +
-      'ORDER BY name_text, file_id, start_line';
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT * FROM refs WHERE kind = ''di-unresolved'' ' + 'ORDER BY name_text, file_id, start_line';
     Q.Open;
     while not Q.Eof do
     begin
-      R := Default(TReference);
-      R.Id := Q.FieldByName('id').AsLargeInt;
-      if Q.FieldByName('symbol_id').IsNull then
-        R.SymbolId := 0
-      else
-        R.SymbolId := Q.FieldByName('symbol_id').AsLargeInt;
-      R.FileId := Q.FieldByName('file_id').AsLargeInt;
-      R.Kind := Q.FieldByName('kind').AsString;
-      R.NameText := Q.FieldByName('name_text').AsString;
-      R.StartLine := Q.FieldByName('start_line').AsInteger;
-      R.StartCol := Q.FieldByName('start_col').AsInteger;
-      R.EndLine := Q.FieldByName('end_line').AsInteger;
-      R.EndCol := Q.FieldByName('end_col').AsInteger;
+      R:= Default(TReference);
+      R.Id:= Q.FieldByName('id').AsLargeInt;
+      if Q.FieldByName('symbol_id').IsNull then R.SymbolId:= 0
+      else R.SymbolId:= Q.FieldByName('symbol_id').AsLargeInt;
+      R.FileId   := Q.FieldByName('file_id'   ).AsLargeInt;
+      R.Kind     := Q.FieldByName('kind'      ).AsString;
+      R.NameText := Q.FieldByName('name_text' ).AsString;
+      R.StartLine:= Q.FieldByName('start_line').AsInteger;
+      R.StartCol := Q.FieldByName('start_col' ).AsInteger;
+      R.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
+      R.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
       List.Add(R);
       Q.Next;
-    end;
-    Result := List.ToArray;
+    end; // while
+    Result:= List.ToArray;
   finally
     Q.Free;
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.FindEventHandlersForForm(
-  const AFormName: string): TArray<TReference>;
+function TSQLiteSymbolStore.FindEventHandlersForForm( const AFormName: string): TArray<TReference>;
 var
-  FormSym, Child: TSymbol;
-  Children: TArray<TSymbol>;
-  R, H: TReference;
-  List: TList<TReference>;
+  FormSym : TSymbol          ;
+  Child   : TSymbol          ;
+  Children: TArray<TSymbol>  ;
+  R       : TReference       ;
+  H       : TReference       ;
+  List    : TList<TReference>;
 begin
-  List := TList<TReference>.Create;
+  List:= TList<TReference>.Create;
   try
-    FormSym := FindSymbolByExactNameAnywhere(AFormName);
+    FormSym:= FindSymbolByExactNameAnywhere(AFormName);
     if FormSym.Id > 0 then
     begin
-      Children := FindAllChildSymbols(FormSym.Id);
+      Children:= FindAllChildSymbols(FormSym.Id);
       for Child in Children do
         for R in FindCallersByName(Child.Name) do
           if R.Kind = 'event-binding' then
           begin
-            H := R;
-            H.NameText := Child.Name;  // the handler method name
+            H:= R;
+            H.NameText:= Child.Name; // the handler method name
             List.Add(H);
           end;
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-procedure TSQLiteSymbolStore.UpsertChunk(const AToken: TFileTxToken;
-  const AChunk: TChunk);
+procedure TSQLiteSymbolStore.UpsertChunk(const AToken: TFileTxToken; const AChunk: TChunk);
 begin
   // Phase 1 omits chunk storage.
 end;
@@ -917,41 +804,37 @@ end;
 
 function ReadSymbolFromQuery(AQ: TFDQuery): TSymbol;
 begin
-  Result := Default(TSymbol);
-  Result.Id := AQ.FieldByName('id').AsLargeInt;
-  Result.FileId := AQ.FieldByName('file_id').AsLargeInt;
-  if AQ.FieldByName('parent_id').IsNull then
-    Result.ParentId := -1
-  else
-    Result.ParentId := AQ.FieldByName('parent_id').AsLargeInt;
-  Result.Kind := TSymbolKind.FromText(AQ.FieldByName('kind').AsString);
-  Result.Name := AQ.FieldByName('name').AsString;
-  Result.QualifiedName := AQ.FieldByName('qualified_name').AsString;
-  Result.Signature := AQ.FieldByName('signature').AsString;
-  Result.Modifiers := AQ.FieldByName('modifiers').AsString;
-  if AQ.FindField('section') <> nil then    { tolerate pre-v7 databases }
-    Result.Section := AQ.FieldByName('section').AsString;
-  Result.StartLine := AQ.FieldByName('start_line').AsInteger;
-  Result.StartCol := AQ.FieldByName('start_col').AsInteger;
-  Result.EndLine := AQ.FieldByName('end_line').AsInteger;
-  Result.EndCol := AQ.FieldByName('end_col').AsInteger;
-  if AQ.FindField('impl_start_line') <> nil then   { tolerate pre-v9 databases }
+  Result:= Default(TSymbol);
+  Result.Id    := AQ.FieldByName('id'     ).AsLargeInt;
+  Result.FileId:= AQ.FieldByName('file_id').AsLargeInt;
+  if AQ.FieldByName('parent_id').IsNull then Result.ParentId:= -1
+  else Result.ParentId:= AQ.FieldByName('parent_id').AsLargeInt;
+  Result.Kind:= TSymbolKind.FromText(AQ.FieldByName('kind').AsString);
+  Result.Name         := AQ.FieldByName('name'          ).AsString;
+  Result.QualifiedName:= AQ.FieldByName('qualified_name').AsString;
+  Result.Signature    := AQ.FieldByName('signature'     ).AsString;
+  Result.Modifiers    := AQ.FieldByName('modifiers'     ).AsString;
+  if AQ.FindField('section') <> nil then { tolerate pre-v7 databases }
+    Result.Section  := AQ.FieldByName('section'   ).AsString;
+  Result  .StartLine:= AQ.FieldByName('start_line').AsInteger;
+  Result  .StartCol := AQ.FieldByName('start_col' ).AsInteger;
+  Result  .EndLine  := AQ.FieldByName('end_line'  ).AsInteger;
+  Result  .EndCol   := AQ.FieldByName('end_col'   ).AsInteger;
+  if AQ.FindField('impl_start_line') <> nil then { tolerate pre-v9 databases }
   begin
-    Result.ImplStartLine := AQ.FieldByName('impl_start_line').AsInteger;
-    Result.ImplEndLine := AQ.FieldByName('impl_end_line').AsInteger;
+    Result.ImplStartLine:= AQ.FieldByName('impl_start_line').AsInteger;
+    Result.ImplEndLine  := AQ.FieldByName('impl_end_line'  ).AsInteger;
   end;
-end;
+end; // function
 
-function TSQLiteSymbolStore.FindSymbolsByExactName(
-  const AName: string): TArray<TSymbol>;
+function TSQLiteSymbolStore.FindSymbolsByExactName( const AName: string): TArray<TSymbol>;
 var
   List: TList<TSymbol>;
 begin
-  List := TList<TSymbol>.Create;
+  List:= TList<TSymbol>.Create;
   try
-    if FQFindByName.Active then
-      FQFindByName.Close;
-    FQFindByName.ParamByName('name').AsString := AName;
+    if FQFindByName.Active then FQFindByName.Close;
+    FQFindByName.ParamByName('name').AsString:= AName;
     FQFindByName.Open;
     while not FQFindByName.Eof do
     begin
@@ -959,22 +842,20 @@ begin
       FQFindByName.Next;
     end;
     FQFindByName.Close;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
   end;
-end;
+end; // function
 
-function TSQLiteSymbolStore.FindSymbolsByQualifiedName(
-  const AQName: string): TArray<TSymbol>;
+function TSQLiteSymbolStore.FindSymbolsByQualifiedName( const AQName: string): TArray<TSymbol>;
 var
   List: TList<TSymbol>;
 begin
-  List := TList<TSymbol>.Create;
+  List:= TList<TSymbol>.Create;
   try
-    if FQFindByQName.Active then
-      FQFindByQName.Close;
-    FQFindByQName.ParamByName('qname').AsString := AQName;
+    if FQFindByQName.Active then FQFindByQName.Close;
+    FQFindByQName.ParamByName('qname').AsString:= AQName;
     FQFindByQName.Open;
     while not FQFindByQName.Eof do
     begin
@@ -982,11 +863,11 @@ begin
       FQFindByQName.Next;
     end;
     FQFindByQName.Close;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
   end;
-end;
+end; // function
 
 function TSQLiteSymbolStore.ResolveFileIdTolerant(const APath: string): Int64;
 { Path matching is fragile: the indexer can bake un-normalized segments into
@@ -1000,82 +881,78 @@ function TSQLiteSymbolStore.ResolveFileIdTolerant(const APath: string): Int64;
        form equals the caller's. If exactly one candidate exists, accept it
        outright (a single open buffer almost never collides on basename). }
 var
-  Q: TFDQuery;
-  WantFull, Leaf, CandFull: string;
-  OnlyId, MatchId: Int64;
-  CandCount: Integer;
+  Q        : TFDQuery;
+  WantFull : string  ;
+  Leaf     : string  ;
+  CandFull : string  ;
+  OnlyId   : Int64   ;
+  MatchId  : Int64   ;
+  CandCount: Integer ;
 begin
-  Result := FindFileIdByPath(APath);
+  Result:= FindFileIdByPath(APath);
   if Result >= 0 then Exit;
 
-  WantFull := '';
-  try WantFull := TPath.GetFullPath(APath); except WantFull := APath; end;
+  WantFull:= '';
+  try WantFull:= TPath.GetFullPath(APath); except WantFull:= APath; end;
   if not SameText(WantFull, APath) then
   begin
-    Result := FindFileIdByPath(WantFull);
+    Result:= FindFileIdByPath(WantFull);
     if Result >= 0 then Exit;
   end;
 
-  Leaf := TPath.GetFileName(APath);
+  Leaf:= TPath.GetFileName(APath);
   if Leaf = '' then Exit(-1);
 
-  Q := TFDQuery.Create(nil);
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text := 'SELECT id, path FROM files WHERE path LIKE :leaf';
-    Q.ParamByName('leaf').AsString := '%' + Leaf;
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT id, path FROM files WHERE path LIKE :leaf';
+    Q.ParamByName('leaf').AsString:= '%' + Leaf;
     Q.Open;
-    CandCount := 0;
-    OnlyId    := -1;
-    MatchId   := -1;
+    CandCount:= 0;
+    OnlyId := -1;
+    MatchId:= -1;
     while not Q.Eof do
     begin
       { Endswith guard: LIKE '%Leaf' also matches "XYZFoo.pas" for "Foo.pas",
         so require a real path-separator boundary before the leaf. }
-      var StoredPath: string := Q.FieldByName('path').AsString;
+      var StoredPath: string:= Q.FieldByName('path').AsString;
       if SameText(TPath.GetFileName(StoredPath), Leaf) then
       begin
         Inc(CandCount);
-        OnlyId := Q.FieldByName('id').AsLargeInt;
-        CandFull := '';
-        try CandFull := TPath.GetFullPath(StoredPath); except CandFull := StoredPath; end;
-        if (MatchId < 0) and SameText(CandFull, WantFull) then
-          MatchId := OnlyId;
+        OnlyId:= Q.FieldByName('id').AsLargeInt;
+        CandFull:= '';
+        try CandFull:= TPath.GetFullPath(StoredPath); except CandFull:= StoredPath; end;
+        if (MatchId < 0) and SameText(CandFull, WantFull) then MatchId:= OnlyId;
       end;
       Q.Next;
     end;
     Q.Close;
-    if MatchId >= 0 then
-      Result := MatchId
-    else if CandCount = 1 then
-      Result := OnlyId
-    else
-      Result := -1;
+    if MatchId >= 0 then Result:= MatchId
+    else if CandCount = 1 then Result:= OnlyId
+    else Result:= -1;
   finally
     Q.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.FindSymbolsByFile(
-  const APath: string): TArray<TSymbol>;
+function TSQLiteSymbolStore.FindSymbolsByFile( const APath: string): TArray<TSymbol>;
 var
-  Q: TFDQuery;
-  List: TList<TSymbol>;
-  FileId: Int64;
+  Q     : TFDQuery      ;
+  List  : TList<TSymbol>;
+  FileId: Int64         ;
 begin
-  List := TList<TSymbol>.Create;
-  Q := TFDQuery.Create(nil);
+  List:= TList<TSymbol>.Create;
+  Q:= TFDQuery.Create(nil);
   try
     { Resolve the file id tolerantly (handles un-normalized stored paths),
       then pull every symbol on that file ordered by position. }
-    FileId := ResolveFileIdTolerant(APath);
+    FileId:= ResolveFileIdTolerant(APath);
     if FileId >= 0 then
     begin
-      Q.Connection := FConn;
-      Q.SQL.Text :=
-        'SELECT * FROM symbols WHERE file_id = :fid ' +
-        'ORDER BY start_line, start_col';
-      Q.ParamByName('fid').AsLargeInt := FileId;
+      Q.Connection:= FConn;
+      Q.SQL.Text:= 'SELECT * FROM symbols WHERE file_id = :fid ' + 'ORDER BY start_line, start_col';
+      Q.ParamByName('fid').AsLargeInt:= FileId;
       Q.Open;
       while not Q.Eof do
       begin
@@ -1084,121 +961,117 @@ begin
       end;
       Q.Close;
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     Q.Free;
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.GetReferencesFromFile(
-  AFileId: Int64): TArray<TReference>;
+function TSQLiteSymbolStore.GetReferencesFromFile( AFileId: Int64): TArray<TReference>;
 var
-  Q: TFDQuery;
+  Q   : TFDQuery         ;
   List: TList<TReference>;
-  R: TReference;
+  R   : TReference       ;
 begin
-  List := TList<TReference>.Create;
-  Q := TFDQuery.Create(nil);
+  List:= TList<TReference>.Create;
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text :=
-      'SELECT * FROM refs WHERE file_id = :fid ORDER BY start_line, start_col';
-    Q.ParamByName('fid').AsLargeInt := AFileId;
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT * FROM refs WHERE file_id = :fid ORDER BY start_line, start_col';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
     Q.Open;
     while not Q.Eof do
     begin
-      R := Default(TReference);
-      R.Id := Q.FieldByName('id').AsLargeInt;
-      if not Q.FieldByName('symbol_id').IsNull then
-        R.SymbolId := Q.FieldByName('symbol_id').AsLargeInt;
-      R.FileId := AFileId;
-      R.Kind := Q.FieldByName('kind').AsString;
-      R.NameText := Q.FieldByName('name_text').AsString;
-      R.StartLine := Q.FieldByName('start_line').AsInteger;
-      R.StartCol := Q.FieldByName('start_col').AsInteger;
+      R:= Default(TReference);
+      R.Id:= Q.FieldByName('id').AsLargeInt;
+      if not Q.FieldByName('symbol_id').IsNull then R.SymbolId:= Q.FieldByName('symbol_id').AsLargeInt;
+      R.FileId:= AFileId;
+      R.Kind     := Q.FieldByName('kind'      ).AsString;
+      R.NameText := Q.FieldByName('name_text' ).AsString;
+      R.StartLine:= Q.FieldByName('start_line').AsInteger;
+      R.StartCol := Q.FieldByName('start_col' ).AsInteger;
       List.Add(R);
       Q.Next;
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     Q.Free;
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.FindReferencesTo(
-  ASymbolId: Int64): TArray<TReference>;
+function TSQLiteSymbolStore.FindReferencesTo( ASymbolId: Int64): TArray<TReference>;
 var
-  Q: TFDQuery;
+  Q   : TFDQuery         ;
   List: TList<TReference>;
-  R: TReference;
+  R   : TReference       ;
 begin
-  List := TList<TReference>.Create;
-  Q := TFDQuery.Create(nil);
+  List:= TList<TReference>.Create;
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text :=
-      'SELECT * FROM refs WHERE symbol_id = :sid ORDER BY file_id, start_line';
-    Q.ParamByName('sid').AsLargeInt := ASymbolId;
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT * FROM refs WHERE symbol_id = :sid ORDER BY file_id, start_line';
+    Q.ParamByName('sid').AsLargeInt:= ASymbolId;
     Q.Open;
     while not Q.Eof do
     begin
-      R := Default(TReference);
-      R.Id := Q.FieldByName('id').AsLargeInt;
-      R.SymbolId := ASymbolId;
-      R.FileId := Q.FieldByName('file_id').AsLargeInt;
-      R.Kind := Q.FieldByName('kind').AsString;
-      R.NameText := Q.FieldByName('name_text').AsString;
-      R.StartLine := Q.FieldByName('start_line').AsInteger;
-      R.StartCol := Q.FieldByName('start_col').AsInteger;
-      R.EndLine := Q.FieldByName('end_line').AsInteger;
-      R.EndCol := Q.FieldByName('end_col').AsInteger;
+      R:= Default(TReference);
+      R.Id:= Q.FieldByName('id').AsLargeInt;
+      R.SymbolId:= ASymbolId;
+      R.FileId   := Q.FieldByName('file_id'   ).AsLargeInt;
+      R.Kind     := Q.FieldByName('kind'      ).AsString;
+      R.NameText := Q.FieldByName('name_text' ).AsString;
+      R.StartLine:= Q.FieldByName('start_line').AsInteger;
+      R.StartCol := Q.FieldByName('start_col' ).AsInteger;
+      R.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
+      R.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
       List.Add(R);
       Q.Next;
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     Q.Free;
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.FindSymbolsFuzzy(const APattern: string;
-  ATopK: Integer): TArray<TSymbol>;
+function TSQLiteSymbolStore.FindSymbolsFuzzy(const APattern: string; ATopK: Integer): TArray<TSymbol>;
 var
-  Q: TFDQuery;
-  Scored: TList<TPair<Integer, TSymbol>>;
-  D, MaxD, MinShared, PatLen: Integer;
-  Grams: TArray<string>;
-  PlaceholderList: string;
-  i: Integer;
-  Sym: TSymbol;
+  Q              : TFDQuery                      ;
+  Scored         : TList<TPair<Integer, TSymbol>>;
+  D              : Integer                       ;
+  MaxD           : Integer                       ;
+  MinShared      : Integer                       ;
+  PatLen         : Integer                       ;
+  Grams          : TArray<string>                ;
+  PlaceholderList: string                        ;
+  i              : Integer                       ;
+  Sym            : TSymbol                       ;
 begin
   SetLength(Result, 0);
   EnsureTrigramTablePopulated;
   MaxD := DRagLint.Query.Fuzzy.FuzzyMaxDistanceFor(APattern);
-  Grams := DRagLint.Query.Fuzzy.Trigrams(APattern);
-  PatLen := Length(APattern);
+  Grams:= DRagLint.Query.Fuzzy.Trigrams           (APattern);
+  PatLen:= Length(APattern);
 
-  Scored := TList<TPair<Integer, TSymbol>>.Create;
-  Q := TFDQuery.Create(nil);
+  Scored:= TList<TPair<Integer, TSymbol>>.Create;
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
+    Q.Connection:= FConn;
     if Length(Grams) = 0 then
     begin
       // Pattern too short for trigrams - full scan (still fast for short pattern).
-      Q.SQL.Text := 'SELECT * FROM symbols';
+      Q.SQL.Text:= 'SELECT * FROM symbols';
     end
     else
     begin
       // Build placeholder list for IN clause: ?, ?, ?, ...
-      PlaceholderList := '';
-      for i := 0 to High(Grams) do
+      PlaceholderList:= '';
+      for i:= 0 to High(Grams) do
       begin
-        if i > 0 then
-          PlaceholderList := PlaceholderList + ', ';
-        PlaceholderList := PlaceholderList + ':g' + IntToStr(i);
+        if i > 0 then PlaceholderList:= PlaceholderList + ', ';
+        PlaceholderList:= PlaceholderList + ':g' + IntToStr(i);
       end;
       // v0.42 perf: require a candidate to share at least HALF the pattern's
       // trigrams, not just one. The old ">=1 shared trigram" matched anything
@@ -1206,22 +1079,16 @@ begin
       // huge set (~3.2 s on 1.5M symbols). HAVING COUNT >= minShared (served by
       // idx_symbol_trigrams_symbol) plus the length pre-filter below cut it to
       // the genuinely-similar candidates.
-      MinShared := (Length(Grams) + 1) div 2;
-      if MinShared < 1 then MinShared := 1;
-      Q.SQL.Text :=
-        'SELECT s.* FROM symbols s ' +
-        'WHERE s.id IN (' +
-        '  SELECT symbol_id FROM symbol_trigrams ' +
-        '  WHERE trigram IN (' + PlaceholderList + ')' +
-        '  GROUP BY symbol_id HAVING COUNT(*) >= ' + IntToStr(MinShared) +
-        ')';
-      for i := 0 to High(Grams) do
-        Q.ParamByName('g' + IntToStr(i)).AsString := Grams[i];
-    end;
+      MinShared:= (Length(Grams) + 1) div 2;
+      if MinShared < 1 then MinShared:= 1;
+      Q.SQL.Text:= 'SELECT s.* FROM symbols s ' + 'WHERE s.id IN (' + '  SELECT symbol_id FROM symbol_trigrams ' + '  WHERE trigram IN (' + PlaceholderList + ')' +
+      '  GROUP BY symbol_id HAVING COUNT(*) >= ' + IntToStr(MinShared) + ')';
+      for i:= 0 to High(Grams) do Q.ParamByName('g' + IntToStr(i)).AsString:= Grams[i];
+    end; // else
     Q.Open;
     while not Q.Eof do
     begin
-      Sym := ReadSymbolFromQuery(Q);
+      Sym:= ReadSymbolFromQuery(Q);
       // Length pre-filter: Levenshtein(A,B) >= ||A|-|B||, so anything whose
       // name length differs from the pattern by more than MaxD can't qualify.
       if Abs(Length(Sym.Name) - PatLen) > MaxD then
@@ -1229,89 +1096,76 @@ begin
         Q.Next;
         Continue;
       end;
-      D := DRagLint.Query.Fuzzy.LevenshteinDistance(APattern, Sym.Name);
-      if D <= MaxD then
-        Scored.Add(TPair<Integer, TSymbol>.Create(D, Sym));
+      D:= DRagLint.Query.Fuzzy.LevenshteinDistance(APattern, Sym.Name);
+      if D <= MaxD then Scored.Add(TPair<Integer, TSymbol>.Create(D, Sym));
       Q.Next;
     end;
 
-    Scored.Sort(TComparer<TPair<Integer, TSymbol>>.Construct(
-      function(const L, R: TPair<Integer, TSymbol>): Integer
-      begin
-        Result := L.Key - R.Key;
-        if Result = 0 then
-          Result := CompareText(L.Value.QualifiedName, R.Value.QualifiedName);
-      end));
-    if Scored.Count > ATopK then
-      Scored.Count := ATopK;
+    Scored.Sort(
+      TComparer<TPair<Integer,
+      TSymbol>>.Construct( function(const L, R: TPair<Integer, TSymbol>): Integer begin Result:= L.Key - R.Key; if Result = 0 then Result:= CompareText(L.Value.QualifiedName,
+            R.Value.QualifiedName); end));
+    if Scored.Count > ATopK then Scored.Count:= ATopK;
     SetLength(Result, Scored.Count);
-    for i := 0 to Scored.Count - 1 do
-      Result[i] := Scored[i].Value;
+    for i:= 0 to Scored.Count - 1 do Result[i]:= Scored[i].Value;
   finally
     Q.Free;
     Scored.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.FindCallersByName(
-  const ACalleeName: string): TArray<TReference>;
+function TSQLiteSymbolStore.FindCallersByName( const ACalleeName: string): TArray<TReference>;
 var
-  Q: TFDQuery;
+  Q   : TFDQuery         ;
   List: TList<TReference>;
-  R: TReference;
+  R   : TReference       ;
 begin
-  List := TList<TReference>.Create;
-  Q := TFDQuery.Create(nil);
+  List:= TList<TReference>.Create;
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
+    Q.Connection:= FConn;
     // Match any reference kind (call, event-binding, type_use, ...). "callers"
     // is a slight misnomer - the semantic is "every site that references
     // this name" - but it's what users mean when they say find-callers.
-    Q.SQL.Text :=
-      'SELECT * FROM refs WHERE name_text = :name ' +
-      'ORDER BY file_id, start_line';
-    Q.ParamByName('name').AsString := ACalleeName;
+    Q.SQL.Text:= 'SELECT * FROM refs WHERE name_text = :name ' + 'ORDER BY file_id, start_line';
+    Q.ParamByName('name').AsString:= ACalleeName;
     Q.Open;
     while not Q.Eof do
     begin
-      R := Default(TReference);
-      R.Id := Q.FieldByName('id').AsLargeInt;
-      if Q.FieldByName('symbol_id').IsNull then
-        R.SymbolId := 0
-      else
-        R.SymbolId := Q.FieldByName('symbol_id').AsLargeInt;
-      R.FileId := Q.FieldByName('file_id').AsLargeInt;
-      R.Kind := Q.FieldByName('kind').AsString;
-      R.NameText := Q.FieldByName('name_text').AsString;
-      R.StartLine := Q.FieldByName('start_line').AsInteger;
-      R.StartCol := Q.FieldByName('start_col').AsInteger;
-      R.EndLine := Q.FieldByName('end_line').AsInteger;
-      R.EndCol := Q.FieldByName('end_col').AsInteger;
-      R.ContextText := '';  // v0.17: initialize context (unless set by FindCallersByNameWithContext)
+      R:= Default(TReference);
+      R.Id:= Q.FieldByName('id').AsLargeInt;
+      if Q.FieldByName('symbol_id').IsNull then R.SymbolId:= 0
+      else R.SymbolId:= Q.FieldByName('symbol_id').AsLargeInt;
+      R.FileId   := Q.FieldByName('file_id'   ).AsLargeInt;
+      R.Kind     := Q.FieldByName('kind'      ).AsString;
+      R.NameText := Q.FieldByName('name_text' ).AsString;
+      R.StartLine:= Q.FieldByName('start_line').AsInteger;
+      R.StartCol := Q.FieldByName('start_col' ).AsInteger;
+      R.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
+      R.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
+      R.ContextText:= ''; // v0.17: initialize context (unless set by FindCallersByNameWithContext)
       List.Add(R);
       Q.Next;
-    end;
-    Result := List.ToArray;
+    end; // while
+    Result:= List.ToArray;
   finally
     Q.Free;
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 function TSQLiteSymbolStore.GetFilePath(AFileId: Int64): string;
 var
   Q: TFDQuery;
 begin
-  Q := TFDQuery.Create(nil);
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text := 'SELECT path FROM files WHERE id = :id';
-    Q.ParamByName('id').AsLargeInt := AFileId;
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT path FROM files WHERE id = :id';
+    Q.ParamByName('id').AsLargeInt:= AFileId;
     Q.Open;
-    if Q.IsEmpty then
-      Result := ''
-    else
-      Result := Q.FieldByName('path').AsString;
+    if Q.IsEmpty then Result:= ''
+    else Result:= Q.FieldByName('path').AsString;
   finally
     Q.Free;
   end;
@@ -1319,10 +1173,9 @@ end;
 
 function TSQLiteSymbolStore.CountSymbols: Int64;
 begin
-  if FQCountSymbols.Active then
-    FQCountSymbols.Close;
+  if FQCountSymbols.Active then FQCountSymbols.Close;
   FQCountSymbols.Open;
-  Result := FQCountSymbols.FieldByName('n').AsLargeInt;
+  Result:= FQCountSymbols.FieldByName('n').AsLargeInt;
   FQCountSymbols.Close;
 end;
 
@@ -1330,12 +1183,12 @@ function TSQLiteSymbolStore.CountReferences: Int64;
 var
   Q: TFDQuery;
 begin
-  Q := TFDQuery.Create(nil);
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text := 'SELECT COUNT(*) AS n FROM refs';
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT COUNT(*) AS n FROM refs';
     Q.Open;
-    Result := Q.FieldByName('n').AsLargeInt;
+    Result:= Q.FieldByName('n').AsLargeInt;
   finally
     Q.Free;
   end;
@@ -1343,100 +1196,89 @@ end;
 
 function TSQLiteSymbolStore.CountFiles: Int64;
 begin
-  if FQCountFiles.Active then
-    FQCountFiles.Close;
+  if FQCountFiles.Active then FQCountFiles.Close;
   FQCountFiles.Open;
-  Result := FQCountFiles.FieldByName('n').AsLargeInt;
+  Result:= FQCountFiles.FieldByName('n').AsLargeInt;
   FQCountFiles.Close;
 end;
 
-procedure TSQLiteSymbolStore.UpsertSymbolDoc(const AToken: TFileTxToken;
-  ASymbolId: Int64; const ADoc: TParsedDoc);
+procedure TSQLiteSymbolStore.UpsertSymbolDoc(const AToken: TFileTxToken; ASymbolId: Int64; const ADoc: TParsedDoc);
 // Helper: assign a nullable text param without changing its pre-declared
 // DataType. Using AsString would silently flip DataType to ftString and break
 // the next call with [SQLite]-338 "Param type changed".
   procedure SetNullableText(const AParamName: string; const AValue: string);
   begin
     with FQUpsertSymbolDoc.ParamByName(AParamName) do
-      if AValue = '' then Clear else Value := AValue;
+      if AValue = '' then Clear else Value:= AValue;
   end;
 begin
   if not ADoc.HasContent then Exit;
-  FQUpsertSymbolDoc.ParamByName('sid').AsLargeInt := ASymbolId;
-  FQUpsertSymbolDoc.ParamByName('fmt').AsString := DocFormatToStr(ADoc.Format);
-  FQUpsertSymbolDoc.ParamByName('raw').AsString := ADoc.RawBlock;
+  FQUpsertSymbolDoc.ParamByName('sid').AsLargeInt:= ASymbolId;
+  FQUpsertSymbolDoc.ParamByName('fmt').AsString:= DocFormatToStr(ADoc.Format);
+  FQUpsertSymbolDoc.ParamByName('raw').AsString:= ADoc.RawBlock;
 
   // Use Value := (not AsString :=) so DataType stays as pre-declared ftWideMemo.
   // AsString := implicitly changes DataType to ftString, which raises
   // [SQLite]-338 on subsequent calls once the query is Prepared.
-  SetNullableText('sum', ADoc.Summary);
-  SetNullableText('rem', ADoc.Remarks);
+  SetNullableText('sum', ADoc.Summary    );
+  SetNullableText('rem', ADoc.Remarks    );
   SetNullableText('ret', ADoc.ReturnsText);
-  if Length(ADoc.Params) = 0 then
-    FQUpsertSymbolDoc.ParamByName('pj').Clear
-  else
-    FQUpsertSymbolDoc.ParamByName('pj').Value := ParamsToJson(ADoc.Params);
-  if Length(ADoc.Exceptions) = 0 then
-    FQUpsertSymbolDoc.ParamByName('ej').Clear
-  else
-    FQUpsertSymbolDoc.ParamByName('ej').Value := ExceptionsToJson(ADoc.Exceptions);
+  if Length(ADoc.Params) = 0 then FQUpsertSymbolDoc.ParamByName('pj').Clear
+  else FQUpsertSymbolDoc.ParamByName('pj').Value:= ParamsToJson(ADoc.Params);
+  if Length(ADoc.Exceptions) = 0 then FQUpsertSymbolDoc.ParamByName('ej').Clear
+  else FQUpsertSymbolDoc.ParamByName('ej').Value:= ExceptionsToJson(ADoc.Exceptions);
   SetNullableText('ex', ADoc.ExampleText);
-  if Length(ADoc.SeeAlso) = 0 then
-    FQUpsertSymbolDoc.ParamByName('sj').Clear
-  else
-    FQUpsertSymbolDoc.ParamByName('sj').Value := SeeAlsoToJson(ADoc.SeeAlso);
+  if Length(ADoc.SeeAlso) = 0 then FQUpsertSymbolDoc.ParamByName('sj').Clear
+  else FQUpsertSymbolDoc.ParamByName('sj').Value:= SeeAlsoToJson(ADoc.SeeAlso);
   SetNullableText('since', ADoc.SinceText);
 
-  FQUpsertSymbolDoc.ParamByName('dep').AsInteger := Ord(ADoc.Deprecated);
-  FQUpsertSymbolDoc.ParamByName('sl').AsInteger := ADoc.StartLine;
-  FQUpsertSymbolDoc.ParamByName('el').AsInteger := ADoc.EndLine;
+  FQUpsertSymbolDoc.ParamByName('dep').AsInteger:= Ord(ADoc.Deprecated);
+  FQUpsertSymbolDoc.ParamByName('sl').AsInteger:= ADoc.StartLine;
+  FQUpsertSymbolDoc.ParamByName('el').AsInteger:= ADoc.EndLine;
   FQUpsertSymbolDoc.ExecSQL;
-end;
+end; // begin
 
 function TSQLiteSymbolStore.GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
 begin
   FillChar(Result, SizeOf(Result), 0);
-  if FQGetSymbolDoc.Active then
-    FQGetSymbolDoc.Close;
-  FQGetSymbolDoc.ParamByName('sid').AsLargeInt := ASymbolId;
+  if FQGetSymbolDoc.Active then FQGetSymbolDoc.Close;
+  FQGetSymbolDoc.ParamByName('sid').AsLargeInt:= ASymbolId;
   FQGetSymbolDoc.Open;
   try
     if FQGetSymbolDoc.IsEmpty then Exit;
-    case IndexStr(FQGetSymbolDoc.FieldByName('format').AsString,
-                  ['xmldoc', 'pasdoc', 'oneline', 'loose']) of
-      0: Result.Format := dfXmlDoc;
-      1: Result.Format := dfPasDoc;
-      2: Result.Format := dfOneline;
-      3: Result.Format := dfLoose;
+    case IndexStr(FQGetSymbolDoc.FieldByName('format').AsString, ['xmldoc', 'pasdoc', 'oneline', 'loose']) of
+      0: Result.Format:= dfXmlDoc;
+      1: Result.Format:= dfPasDoc;
+      2: Result.Format:= dfOneline;
+      3: Result.Format:= dfLoose;
     end;
-    Result.RawBlock    := FQGetSymbolDoc.FieldByName('raw_block').AsString;
-    Result.Summary     := FQGetSymbolDoc.FieldByName('summary').AsString;
-    Result.Remarks     := FQGetSymbolDoc.FieldByName('remarks').AsString;
-    Result.ReturnsText := FQGetSymbolDoc.FieldByName('returns_text').AsString;
-    Result.ExampleText := FQGetSymbolDoc.FieldByName('example_text').AsString;
-    Result.SinceText   := FQGetSymbolDoc.FieldByName('since_text').AsString;
-    Result.Deprecated  := FQGetSymbolDoc.FieldByName('deprecated').AsInteger = 1;
-    Result.StartLine   := FQGetSymbolDoc.FieldByName('start_line').AsInteger;
-    Result.EndLine     := FQGetSymbolDoc.FieldByName('end_line').AsInteger;
+    Result.RawBlock   := FQGetSymbolDoc.FieldByName('raw_block'   ).AsString;
+    Result.Summary    := FQGetSymbolDoc.FieldByName('summary'     ).AsString;
+    Result.Remarks    := FQGetSymbolDoc.FieldByName('remarks'     ).AsString;
+    Result.ReturnsText:= FQGetSymbolDoc.FieldByName('returns_text').AsString;
+    Result.ExampleText:= FQGetSymbolDoc.FieldByName('example_text').AsString;
+    Result.SinceText  := FQGetSymbolDoc.FieldByName('since_text'  ).AsString;
+    Result.Deprecated:= FQGetSymbolDoc.FieldByName('deprecated').AsInteger = 1;
+    Result.StartLine:= FQGetSymbolDoc.FieldByName('start_line').AsInteger;
+    Result.EndLine  := FQGetSymbolDoc.FieldByName('end_line'  ).AsInteger;
     // Raw JSON strings — v0.16 renderers read these directly; v0.17 may parse.
-    Result.ParamsJsonRaw     := FQGetSymbolDoc.FieldByName('params_json').AsString;
-    Result.ExceptionsJsonRaw := FQGetSymbolDoc.FieldByName('exceptions_json').AsString;
-    Result.SeeAlsoJsonRaw    := FQGetSymbolDoc.FieldByName('seealso_json').AsString;
-    Result.HasContent  := True;
+    Result.ParamsJsonRaw    := FQGetSymbolDoc.FieldByName('params_json'    ).AsString;
+    Result.ExceptionsJsonRaw:= FQGetSymbolDoc.FieldByName('exceptions_json').AsString;
+    Result.SeeAlsoJsonRaw   := FQGetSymbolDoc.FieldByName('seealso_json'   ).AsString;
+    Result.HasContent:= True;
   finally
     FQGetSymbolDoc.Close;
-  end;
-end;
+  end; // try
+end; // function
 
 function TSQLiteSymbolStore.FindByDocTag(const ATag: string): TArray<TSymbol>;
 var
   Acc: TList<TSymbol>;
 begin
-  Acc := TList<TSymbol>.Create;
+  Acc:= TList<TSymbol>.Create;
   try
-    if FQFindByDocTag.Active then
-      FQFindByDocTag.Close;
-    FQFindByDocTag.ParamByName('tag').AsString := LowerCase(ATag);
+    if FQFindByDocTag.Active then FQFindByDocTag.Close;
+    FQFindByDocTag.ParamByName('tag').AsString:= LowerCase(ATag);
     FQFindByDocTag.Open;
     try
       while not FQFindByDocTag.Eof do
@@ -1447,23 +1289,21 @@ begin
     finally
       FQFindByDocTag.Close;
     end;
-    Result := Acc.ToArray;
+    Result:= Acc.ToArray;
   finally
     Acc.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.FindUndocumented(const AKind: string;
-  APublicOnly: Boolean): TArray<TSymbol>;
+function TSQLiteSymbolStore.FindUndocumented(const AKind: string; APublicOnly: Boolean): TArray<TSymbol>;
 var
   Acc: TList<TSymbol>;
 begin
-  Acc := TList<TSymbol>.Create;
+  Acc:= TList<TSymbol>.Create;
   try
-    if FQFindUndocumented.Active then
-      FQFindUndocumented.Close;
-    FQFindUndocumented.ParamByName('kind').AsString := AKind;
-    FQFindUndocumented.ParamByName('publicOnly').AsInteger := Ord(APublicOnly);
+    if FQFindUndocumented.Active then FQFindUndocumented.Close;
+    FQFindUndocumented.ParamByName('kind').AsString:= AKind;
+    FQFindUndocumented.ParamByName('publicOnly').AsInteger:= Ord(APublicOnly);
     FQFindUndocumented.Open;
     try
       while not FQFindUndocumented.Eof do
@@ -1474,22 +1314,20 @@ begin
     finally
       FQFindUndocumented.Close;
     end;
-    Result := Acc.ToArray;
+    Result:= Acc.ToArray;
   finally
     Acc.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.FindByDocContains(
-  const ASubstring: string): TArray<TSymbol>;
+function TSQLiteSymbolStore.FindByDocContains( const ASubstring: string): TArray<TSymbol>;
 var
   Acc: TList<TSymbol>;
 begin
-  Acc := TList<TSymbol>.Create;
+  Acc:= TList<TSymbol>.Create;
   try
-    if FQFindByDocContains.Active then
-      FQFindByDocContains.Close;
-    FQFindByDocContains.ParamByName('pat').AsString := '%' + ASubstring + '%';
+    if FQFindByDocContains.Active then FQFindByDocContains.Close;
+    FQFindByDocContains.ParamByName('pat').AsString:= '%' + ASubstring + '%';
     FQFindByDocContains.Open;
     try
       while not FQFindByDocContains.Eof do
@@ -1500,15 +1338,15 @@ begin
     finally
       FQFindByDocContains.Close;
     end;
-    Result := Acc.ToArray;
+    Result:= Acc.ToArray;
   finally
     Acc.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 procedure TSQLiteSymbolStore.DeleteFileDocs(AFileId: Int64);
 begin
-  FQDeleteFileDocs.ParamByName('fid').AsLargeInt := AFileId;
+  FQDeleteFileDocs.ParamByName('fid').AsLargeInt:= AFileId;
   FQDeleteFileDocs.ExecSQL;
 end;
 
@@ -1518,11 +1356,10 @@ function TSQLiteSymbolStore.ListDocumentedSymbols(ALimit: Integer): TArray<TSymb
 var
   Acc: TList<TSymbol>;
 begin
-  Acc := TList<TSymbol>.Create;
+  Acc:= TList<TSymbol>.Create;
   try
-    if FQListDocumentedSymbols.Active then
-      FQListDocumentedSymbols.Close;
-    FQListDocumentedSymbols.ParamByName('lim').AsInteger := ALimit;
+    if FQListDocumentedSymbols.Active then FQListDocumentedSymbols.Close;
+    FQListDocumentedSymbols.ParamByName('lim').AsInteger:= ALimit;
     FQListDocumentedSymbols.Open;
     try
       while not FQListDocumentedSymbols.Eof do
@@ -1533,26 +1370,23 @@ begin
     finally
       FQListDocumentedSymbols.Close;
     end;
-    Result := Acc.ToArray;
+    Result:= Acc.ToArray;
   finally
     Acc.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 // v0.19: type-at-position helpers
 
-function TSQLiteSymbolStore.FindContainingSymbol(AFileId: Int64;
-  ALine: Integer): TSymbol;
+function TSQLiteSymbolStore.FindContainingSymbol(AFileId: Int64; ALine: Integer): TSymbol;
 begin
-  Result := Default(TSymbol);
-  if FQFindContaining.Active then
-    FQFindContaining.Close;
-  FQFindContaining.ParamByName('fid').AsLargeInt := AFileId;
+  Result:= Default(TSymbol);
+  if FQFindContaining.Active then FQFindContaining.Close;
+  FQFindContaining.ParamByName('fid' ).AsLargeInt:= AFileId;
   FQFindContaining.ParamByName('line').AsInteger := ALine;
   FQFindContaining.Open;
   try
-    if not FQFindContaining.IsEmpty then
-      Result := ReadSymbolFromQuery(FQFindContaining);
+    if not FQFindContaining.IsEmpty then Result:= ReadSymbolFromQuery(FQFindContaining);
   finally
     FQFindContaining.Close;
   end;
@@ -1562,15 +1396,14 @@ function TSQLiteSymbolStore.GetSymbolById(AId: Int64): TSymbol;
 var
   Q: TFDQuery;
 begin
-  Result := Default(TSymbol);
-  Q := TFDQuery.Create(nil);
+  Result:= Default(TSymbol);
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text := 'SELECT * FROM symbols WHERE id = :id LIMIT 1';
-    Q.ParamByName('id').AsLargeInt := AId;
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT * FROM symbols WHERE id = :id LIMIT 1';
+    Q.ParamByName('id').AsLargeInt:= AId;
     Q.Open;
-    if not Q.IsEmpty then
-      Result := ReadSymbolFromQuery(Q);
+    if not Q.IsEmpty then Result:= ReadSymbolFromQuery(Q);
   finally
     Q.Free;
   end;
@@ -1580,58 +1413,49 @@ function TSQLiteSymbolStore.FindFileIdByPath(const APath: string): Int64;
 var
   NormPath: string;
 begin
-  Result := -1;
-  NormPath := StringReplace(APath, '/', '\', [rfReplaceAll]);
-  if FQFindFileId.Active then
-    FQFindFileId.Close;
-  FQFindFileId.ParamByName('p').AsString := NormPath;
+  Result:= -1;
+  NormPath:= StringReplace(APath, '/', '\', [rfReplaceAll]);
+  if FQFindFileId.Active then FQFindFileId.Close;
+  FQFindFileId.ParamByName('p').AsString:= NormPath;
   FQFindFileId.Open;
   try
-    if not FQFindFileId.IsEmpty then
-      Result := FQFindFileId.Fields[0].AsLargeInt;
+    if not FQFindFileId.IsEmpty then Result:= FQFindFileId.Fields[0].AsLargeInt;
   finally
     FQFindFileId.Close;
   end;
   if Result = -1 then
   begin
     // Try forward-slash normalised version
-    NormPath := StringReplace(APath, '\', '/', [rfReplaceAll]);
-    if FQFindFileId.Active then
-      FQFindFileId.Close;
-    FQFindFileId.ParamByName('p').AsString := NormPath;
+    NormPath:= StringReplace(APath, '\', '/', [rfReplaceAll]);
+    if FQFindFileId.Active then FQFindFileId.Close;
+    FQFindFileId.ParamByName('p').AsString:= NormPath;
     FQFindFileId.Open;
     try
-      if not FQFindFileId.IsEmpty then
-        Result := FQFindFileId.Fields[0].AsLargeInt;
+      if not FQFindFileId.IsEmpty then Result:= FQFindFileId.Fields[0].AsLargeInt;
     finally
       FQFindFileId.Close;
     end;
   end;
-end;
+end; // function
 
-function TSQLiteSymbolStore.FindSymbolByExactNameAnywhere(
-  const AName: string): TSymbol;
+function TSQLiteSymbolStore.FindSymbolByExactNameAnywhere( const AName: string): TSymbol;
 var
   Arr: TArray<TSymbol>;
 begin
-  Result := Default(TSymbol);
-  Arr := FindSymbolsByExactName(AName);
-  if Length(Arr) > 0 then
-    Result := Arr[0];
+  Result:= Default               (TSymbol);
+  Arr   := FindSymbolsByExactName(AName  );
+  if Length(Arr) > 0 then Result:= Arr[0];
 end;
 
-function TSQLiteSymbolStore.FindChildSymbolByName(AParentId: Int64;
-  const AName: string): TSymbol;
+function TSQLiteSymbolStore.FindChildSymbolByName(AParentId: Int64; const AName: string): TSymbol;
 begin
-  Result := Default(TSymbol);
-  if FQFindChildByName.Active then
-    FQFindChildByName.Close;
-  FQFindChildByName.ParamByName('pid').AsLargeInt := AParentId;
-  FQFindChildByName.ParamByName('name').AsString := AName;
+  Result:= Default(TSymbol);
+  if FQFindChildByName.Active then FQFindChildByName.Close;
+  FQFindChildByName.ParamByName('pid' ).AsLargeInt:= AParentId;
+  FQFindChildByName.ParamByName('name').AsString  := AName;
   FQFindChildByName.Open;
   try
-    if not FQFindChildByName.IsEmpty then
-      Result := ReadSymbolFromQuery(FQFindChildByName);
+    if not FQFindChildByName.IsEmpty then Result:= ReadSymbolFromQuery(FQFindChildByName);
   finally
     FQFindChildByName.Close;
   end;
@@ -1639,23 +1463,21 @@ end;
 
 // v0.20: completion helpers
 
-function TSQLiteSymbolStore.FindSymbolsByPrefix(const APrefix: string;
-  ALimit: Integer): TArray<TSymbol>;
+function TSQLiteSymbolStore.FindSymbolsByPrefix(const APrefix: string; ALimit: Integer): TArray<TSymbol>;
 var
-  List: TList<TSymbol>;
-  EscapedPrefix: string;
+  List         : TList<TSymbol>;
+  EscapedPrefix: string        ;
 begin
-  List := TList<TSymbol>.Create;
+  List:= TList<TSymbol>.Create;
   try
     // Escape LIKE meta-characters in the user-supplied prefix.
-    EscapedPrefix := StringReplace(APrefix, '\', '\\', [rfReplaceAll]);
-    EscapedPrefix := StringReplace(EscapedPrefix, '%', '\%', [rfReplaceAll]);
-    EscapedPrefix := StringReplace(EscapedPrefix, '_', '\_', [rfReplaceAll]);
-    EscapedPrefix := EscapedPrefix + '%';
-    if FQFindByPrefix.Active then
-      FQFindByPrefix.Close;
+    EscapedPrefix:= StringReplace(APrefix      , '\', '\\', [rfReplaceAll]);
+    EscapedPrefix:= StringReplace(EscapedPrefix, '%', '\%', [rfReplaceAll]);
+    EscapedPrefix:= StringReplace(EscapedPrefix, '_', '\_', [rfReplaceAll]);
+    EscapedPrefix:= EscapedPrefix + '%';
+    if FQFindByPrefix.Active then FQFindByPrefix.Close;
     FQFindByPrefix.ParamByName('prefixLike').AsString := EscapedPrefix;
-    FQFindByPrefix.ParamByName('lim').AsInteger := ALimit;
+    FQFindByPrefix.ParamByName('lim'       ).AsInteger:= ALimit;
     FQFindByPrefix.Open;
     try
       while not FQFindByPrefix.Eof do
@@ -1666,22 +1488,20 @@ begin
     finally
       FQFindByPrefix.Close;
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.FindAllChildSymbols(
-  AParentId: Int64): TArray<TSymbol>;
+function TSQLiteSymbolStore.FindAllChildSymbols( AParentId: Int64): TArray<TSymbol>;
 var
   List: TList<TSymbol>;
 begin
-  List := TList<TSymbol>.Create;
+  List:= TList<TSymbol>.Create;
   try
-    if FQFindAllChildren.Active then
-      FQFindAllChildren.Close;
-    FQFindAllChildren.ParamByName('pid').AsLargeInt := AParentId;
+    if FQFindAllChildren.Active then FQFindAllChildren.Close;
+    FQFindAllChildren.ParamByName('pid').AsLargeInt:= AParentId;
     FQFindAllChildren.Open;
     try
       while not FQFindAllChildren.Eof do
@@ -1692,26 +1512,23 @@ begin
     finally
       FQFindAllChildren.Close;
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 // v0.25: dead-code finder
 
-function TSQLiteSymbolStore.FindSymbolsWithNoCallers(const AKind: string;
-  AIncludePrivate: Boolean): TArray<TSymbol>;
+function TSQLiteSymbolStore.FindSymbolsWithNoCallers(const AKind: string; AIncludePrivate: Boolean): TArray<TSymbol>;
 var
   List: TList<TSymbol>;
 begin
-  List := TList<TSymbol>.Create;
+  List:= TList<TSymbol>.Create;
   try
-    if FQFindNoCallers.Active then
-      FQFindNoCallers.Close;
-    FQFindNoCallers.ParamByName('kind').AsString := AKind;
-    FQFindNoCallers.ParamByName('includePrivate').AsInteger :=
-      Ord(AIncludePrivate);
+    if FQFindNoCallers.Active then FQFindNoCallers.Close;
+    FQFindNoCallers.ParamByName('kind').AsString:= AKind;
+    FQFindNoCallers.ParamByName('includePrivate').AsInteger:= Ord(AIncludePrivate);
     FQFindNoCallers.Open;
     try
       while not FQFindNoCallers.Eof do
@@ -1722,128 +1539,106 @@ begin
     finally
       FQFindNoCallers.Close;
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 // v0.26: compiler diagnostics
 
-function TSQLiteSymbolStore.FindCompilerFindingsForFile(
-  AFileId: Int64): TArray<TCompilerFinding>;
+function TSQLiteSymbolStore.FindCompilerFindingsForFile( AFileId: Int64): TArray<TCompilerFinding>;
 var
   List: TList<TCompilerFinding>;
-  F: TCompilerFinding;
+  F   : TCompilerFinding       ;
 begin
-  List := TList<TCompilerFinding>.Create;
+  List:= TList<TCompilerFinding>.Create;
   try
-    if FQFindCompilerFindings.Active then
-      FQFindCompilerFindings.Close;
-    FQFindCompilerFindings.ParamByName('fid').AsLargeInt := AFileId;
+    if FQFindCompilerFindings.Active then FQFindCompilerFindings.Close;
+    FQFindCompilerFindings.ParamByName('fid').AsLargeInt:= AFileId;
     FQFindCompilerFindings.Open;
     try
       while not FQFindCompilerFindings.Eof do
       begin
-        F := Default(TCompilerFinding);
-        if FQFindCompilerFindings.FieldByName('file_id').IsNull then
-          F.FileId := -1
-        else
-          F.FileId := FQFindCompilerFindings.FieldByName('file_id').AsLargeInt;
-        F.RawPath  := FQFindCompilerFindings.FieldByName('raw_path').AsString;
-        F.Code     := FQFindCompilerFindings.FieldByName('code').AsString;
-        F.Severity := FQFindCompilerFindings.FieldByName('severity').AsString;
-        F.LineNo   := FQFindCompilerFindings.FieldByName('line_no').AsInteger;
-        F.ColNo    := FQFindCompilerFindings.FieldByName('col_no').AsInteger;
-        F.Message  := FQFindCompilerFindings.FieldByName('message').AsString;
+        F:= Default(TCompilerFinding);
+        if FQFindCompilerFindings.FieldByName('file_id').IsNull then F.FileId:= -1
+        else F.FileId:= FQFindCompilerFindings.FieldByName('file_id').AsLargeInt;
+        F.RawPath := FQFindCompilerFindings.FieldByName('raw_path').AsString;
+        F.Code    := FQFindCompilerFindings.FieldByName('code'    ).AsString;
+        F.Severity:= FQFindCompilerFindings.FieldByName('severity').AsString;
+        F.LineNo  := FQFindCompilerFindings.FieldByName('line_no' ).AsInteger;
+        F.ColNo   := FQFindCompilerFindings.FieldByName('col_no'  ).AsInteger;
+        F.Message := FQFindCompilerFindings.FieldByName('message' ).AsString;
         List.Add(F);
         FQFindCompilerFindings.Next;
       end;
     finally
       FQFindCompilerFindings.Close;
-    end;
-    Result := List.ToArray;
+    end; // try
+    Result:= List.ToArray;
   finally
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 procedure TSQLiteSymbolStore.ClearCompilerFindings;
 begin
   FConn.ExecSQL('DELETE FROM compiler_findings');
 end;
 
-procedure TSQLiteSymbolStore.InsertCompilerFinding(
-  const AFinding: TCompilerFinding);
+procedure TSQLiteSymbolStore.InsertCompilerFinding( const AFinding: TCompilerFinding);
 begin
-  if AFinding.FileId > 0 then
-    FQInsertCompilerFinding.ParamByName('fid').AsLargeInt := AFinding.FileId
-  else
-    FQInsertCompilerFinding.ParamByName('fid').Clear;
-  FQInsertCompilerFinding.ParamByName('rp').AsString  := AFinding.RawPath;
+  if AFinding.FileId > 0 then FQInsertCompilerFinding.ParamByName('fid').AsLargeInt:= AFinding.FileId
+  else FQInsertCompilerFinding.ParamByName('fid').Clear;
+  FQInsertCompilerFinding.ParamByName('rp'  ).AsString := AFinding.RawPath;
   FQInsertCompilerFinding.ParamByName('code').AsString := AFinding.Code;
-  FQInsertCompilerFinding.ParamByName('sev').AsString  := AFinding.Severity;
-  FQInsertCompilerFinding.ParamByName('lno').AsInteger := AFinding.LineNo;
-  FQInsertCompilerFinding.ParamByName('cno').AsInteger := AFinding.ColNo;
-  FQInsertCompilerFinding.ParamByName('msg').AsString  := AFinding.Message;
-  FQInsertCompilerFinding.ParamByName('iat').AsLargeInt :=
-    System.DateUtils.DateTimeToUnix(Now, False);
+  FQInsertCompilerFinding.ParamByName('sev' ).AsString := AFinding.Severity;
+  FQInsertCompilerFinding.ParamByName('lno' ).AsInteger:= AFinding.LineNo;
+  FQInsertCompilerFinding.ParamByName('cno' ).AsInteger:= AFinding.ColNo;
+  FQInsertCompilerFinding.ParamByName('msg' ).AsString := AFinding.Message;
+  FQInsertCompilerFinding.ParamByName('iat').AsLargeInt:= System.DateUtils.DateTimeToUnix(Now, False);
   FQInsertCompilerFinding.ExecSQL;
 end;
 
 // v0.17: blast-radius pack
 
-function TSQLiteSymbolStore.FindTransitiveCallers(const ASymbolName: string;
-  ADepth: Integer): TArray<TImpactLevel>;
+function TSQLiteSymbolStore.FindTransitiveCallers(const ASymbolName: string; ADepth: Integer): TArray<TImpactLevel>;
 const
-  CTE_SQL =
-    'WITH RECURSIVE caller_walk(level, caller_id, caller_name, file_id) AS (' +
-    '  SELECT 1, s2.id, s2.name, s2.file_id ' +
-    '    FROM refs r INNER JOIN symbols s2 ON s2.file_id = r.file_id ' +
-    '      AND r.start_line BETWEEN s2.start_line AND s2.end_line ' +
-    '    WHERE r.name_text = :targetName ' +
-    '  UNION ' +
-    '  SELECT cw.level + 1, s3.id, s3.name, s3.file_id ' +
-    '    FROM caller_walk cw ' +
-    '    INNER JOIN refs r2 ON r2.name_text = cw.caller_name ' +
-    '    INNER JOIN symbols s3 ON s3.file_id = r2.file_id ' +
-    '      AND r2.start_line BETWEEN s3.start_line AND s3.end_line ' +
-    '    WHERE cw.level < :maxDepth' +
-    ') ' +
-    'SELECT level, COUNT(DISTINCT caller_id) AS callers, ' +
-    '       COUNT(DISTINCT file_id) AS units ' +
-    '  FROM caller_walk GROUP BY level ORDER BY level';
+  CTE_SQL = 'WITH RECURSIVE caller_walk(level, caller_id, caller_name, file_id) AS (' + '  SELECT 1, s2.id, s2.name, s2.file_id ' +
+  '    FROM refs r INNER JOIN symbols s2 ON s2.file_id = r.file_id ' + '      AND r.start_line BETWEEN s2.start_line AND s2.end_line ' + '    WHERE r.name_text = :targetName ' +
+  '  UNION ' + '  SELECT cw.level + 1, s3.id, s3.name, s3.file_id ' + '    FROM caller_walk cw ' + '    INNER JOIN refs r2 ON r2.name_text = cw.caller_name ' +
+  '    INNER JOIN symbols s3 ON s3.file_id = r2.file_id ' + '      AND r2.start_line BETWEEN s3.start_line AND s3.end_line ' + '    WHERE cw.level < :maxDepth' + ') ' +
+  'SELECT level, COUNT(DISTINCT caller_id) AS callers, ' + '       COUNT(DISTINCT file_id) AS units ' + '  FROM caller_walk GROUP BY level ORDER BY level';
 var
-  Q: TFDQuery;
+  Q     : TFDQuery           ;
   Levels: TList<TImpactLevel>;
-  Lvl: TImpactLevel;
+  Lvl   : TImpactLevel       ;
 begin
-  Q := TFDQuery.Create(nil);
-  Levels := TList<TImpactLevel>.Create;
+  Q:= TFDQuery.Create(nil);
+  Levels:= TList<TImpactLevel>.Create;
   try
-    Q.Connection := FConn;
-    Q.SQL.Text := CTE_SQL;
+    Q.Connection:= FConn;
+    Q.SQL.Text:= CTE_SQL;
     Q.ParamByName('targetName').AsString := ASymbolName;
-    Q.ParamByName('maxDepth').AsInteger := ADepth;
+    Q.ParamByName('maxDepth'  ).AsInteger:= ADepth;
     Q.Open;
     while not Q.Eof do
     begin
-      Lvl := Default(TImpactLevel);
-      Lvl.Depth := Q.Fields[0].AsInteger;
-      Lvl.CallerCount := Q.Fields[1].AsInteger;
-      Lvl.UnitCount := Q.Fields[2].AsInteger;
+      Lvl:= Default(TImpactLevel);
+      Lvl.Depth      := Q.Fields[0].AsInteger;
+      Lvl.CallerCount:= Q.Fields[1].AsInteger;
+      Lvl.UnitCount  := Q.Fields[2].AsInteger;
       Levels.Add(Lvl);
       Q.Next;
     end;
-    Result := Levels.ToArray;
+    Result:= Levels.ToArray;
   finally
     Q.Free;
     Levels.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.GetClassSurface(const AQName: string;
-  AIncludeImpl, AAllVisibility: Boolean): TArray<TSurfaceLine>;
+function TSQLiteSymbolStore.GetClassSurface(const AQName: string; AIncludeImpl, AAllVisibility: Boolean): TArray<TSurfaceLine>;
 // Returns the interface-section lines for the class declaration (start_line..
 // end_line from the symbol record). This is the class body as declared in the
 // interface section of a well-formed Delphi unit; implementation bodies are in
@@ -1854,134 +1649,120 @@ function TSQLiteSymbolStore.GetClassSurface(const AQName: string;
 // heuristic -- a proper implementation would walk child symbols and filter by
 // their modifiers field. For v0.17 the simple approach is acceptable.
 var
-  Syms: TArray<TSymbol>;
-  Sym: TSymbol;
-  AllLines: TArray<string>;
-  I: Integer;
-  SurfLine: TSurfaceLine;
-  Acc: TList<TSurfaceLine>;
-  FilePath: string;
-  TrimmedText: string;
-  InPrivate: Boolean;
+  Syms       : TArray<TSymbol>    ;
+  Sym        : TSymbol            ;
+  AllLines   : TArray<string>     ;
+  i          : Integer            ;
+  SurfLine   : TSurfaceLine       ;
+  Acc        : TList<TSurfaceLine>;
+  FilePath   : string             ;
+  TrimmedText: string             ;
+  InPrivate  : Boolean            ;
 begin
-  Result := nil;
-  Syms := FindSymbolsByQualifiedName(AQName);
-  if Length(Syms) = 0 then
-    Exit;
-  Sym := Syms[0];
-  if not (Sym.Kind in [skClass, skRecord, skInterface]) then
-    Exit;
-  FilePath := GetFilePath(Sym.FileId);
-  if not TFile.Exists(FilePath) then
-    Exit;
+  Result:= nil;
+  Syms:= FindSymbolsByQualifiedName(AQName);
+  if Length(Syms) = 0 then Exit;
+  Sym:= Syms[0];
+  if not (Sym.Kind in [skClass, skRecord, skInterface]) then Exit;
+  FilePath:= GetFilePath(Sym.FileId);
+  if not TFile.Exists(FilePath) then Exit;
 
   // Source files are ANSI-encoded (strict project convention).
-  AllLines := TFile.ReadAllLines(FilePath, TEncoding.ANSI);
-  Acc := TList<TSurfaceLine>.Create;
+  AllLines:= TFile.ReadAllLines(FilePath, TEncoding.ANSI);
+  Acc:= TList<TSurfaceLine>.Create;
   try
-    InPrivate := False;
-    for I := Sym.StartLine to Sym.EndLine do
+    InPrivate:= False;
+    for i:= Sym.StartLine to Sym.EndLine do
     begin
-      if (I < 1) or (I > Length(AllLines)) then
-        Continue;
-      TrimmedText := Trim(AllLines[I - 1]);
+      if (i < 1) or (i > Length(AllLines)) then Continue;
+      TrimmedText:= Trim(AllLines[i - 1]);
       // Track whether we are inside a private/strict private section so that
       // the entire section body can be suppressed when AAllVisibility is False.
-      if SameText(TrimmedText, 'private') or
-         SameText(TrimmedText, 'strict private') then
+      if SameText(TrimmedText, 'private') or SameText(TrimmedText, 'strict private') then
       begin
-        InPrivate := True;
-        if not AAllVisibility then
-          Continue;
+        InPrivate:= True;
+        if not AAllVisibility then Continue;
       end
-      else if SameText(TrimmedText, 'public') or
-              SameText(TrimmedText, 'strict public') or
-              SameText(TrimmedText, 'protected') or
-              SameText(TrimmedText, 'strict protected') or
-              SameText(TrimmedText, 'published') then
-        InPrivate := False;
+      else if SameText(TrimmedText, 'public') or SameText(TrimmedText, 'strict public') or SameText(TrimmedText, 'protected') or SameText(TrimmedText, 'strict protected') or
+      SameText(TrimmedText, 'published') then InPrivate:= False;
 
-      if InPrivate and (not AAllVisibility) then
-        Continue;
+      if InPrivate and (not AAllVisibility) then Continue;
 
-      SurfLine := Default(TSurfaceLine);
-      SurfLine.Kind := 'source';
-      SurfLine.Text := AllLines[I - 1];
-      SurfLine.StartLine := I;
-      SurfLine.EndLine := I;
+      SurfLine:= Default(TSurfaceLine);
+      SurfLine.Kind:= 'source';
+      SurfLine.Text:= AllLines[i - 1];
+      SurfLine.StartLine:= i;
+      SurfLine.EndLine  := i;
       Acc.Add(SurfLine);
-    end;
-    Result := Acc.ToArray;
+    end; // for
+    Result:= Acc.ToArray;
   finally
     Acc.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.FindChildSymbols(
-  AParentId: Int64): TArray<TSymbol>;
+function TSQLiteSymbolStore.FindChildSymbols( AParentId: Int64): TArray<TSymbol>;
 var
-  Q: TFDQuery;
+  Q   : TFDQuery      ;
   List: TList<TSymbol>;
 begin
-  List := TList<TSymbol>.Create;
-  Q := TFDQuery.Create(nil);
+  List:= TList<TSymbol>.Create;
+  Q:= TFDQuery.Create(nil);
   try
-    Q.Connection := FConn;
-    Q.SQL.Text :=
-      'SELECT * FROM symbols WHERE parent_id = :pid ORDER BY start_line';
-    Q.ParamByName('pid').AsLargeInt := AParentId;
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT * FROM symbols WHERE parent_id = :pid ORDER BY start_line';
+    Q.ParamByName('pid').AsLargeInt:= AParentId;
     Q.Open;
     while not Q.Eof do
     begin
       List.Add(ReadSymbolFromQuery(Q));
       Q.Next;
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     Q.Free;
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-class function TSQLiteSymbolStore.FindImplLine(const ALines: TArray<string>;
-  const APattern: string): Integer;
+class function TSQLiteSymbolStore.FindImplLine(const ALines: TArray<string>; const APattern: string): Integer;
 // Searches for lines matching "procedure|function|constructor|destructor
 // ClassName.MethodName" (case-insensitive). APattern should be "ClassName.MethodName".
 // Returns the 0-based line index, or -1 if not found.
 var
-  I: Integer;
-  LTrimmed, LUpper, LPatUpper: string;
-  Prefixes: array[0..5] of string;
-  J: Integer;
-  PrefixedPat: string;
+  i          : Integer              ;
+  LTrimmed   : string               ;
+  LUpper     : string               ;
+  LPatUpper  : string               ;
+  Prefixes   : array[0..5] of string;
+  J          : Integer              ;
+  PrefixedPat: string               ;
 begin
-  LPatUpper := UpperCase(APattern);
-  Prefixes[0] := 'PROCEDURE ';
-  Prefixes[1] := 'FUNCTION ';
-  Prefixes[2] := 'CONSTRUCTOR ';
-  Prefixes[3] := 'DESTRUCTOR ';
-  Prefixes[4] := 'CLASS PROCEDURE ';
-  Prefixes[5] := 'CLASS FUNCTION ';
-  for I := 0 to High(ALines) do
+  LPatUpper:= UpperCase(APattern);
+  Prefixes[0]:= 'PROCEDURE ';
+  Prefixes[1]:= 'FUNCTION ';
+  Prefixes[2]:= 'CONSTRUCTOR ';
+  Prefixes[3]:= 'DESTRUCTOR ';
+  Prefixes[4]:= 'CLASS PROCEDURE ';
+  Prefixes[5]:= 'CLASS FUNCTION ';
+  for i:= 0 to High(ALines) do
   begin
-    LTrimmed := Trim(ALines[I]);
+    LTrimmed:= Trim(ALines[i]);
     if LTrimmed = '' then Continue;
-    LUpper := UpperCase(LTrimmed);
-    for J := 0 to High(Prefixes) do
+    LUpper:= UpperCase(LTrimmed);
+    for J:= 0 to High(Prefixes) do
     begin
-      PrefixedPat := Prefixes[J] + LPatUpper;
+      PrefixedPat:= Prefixes[J] + LPatUpper;
       // Match at start of trimmed line; allow "function TFoo.Bar(" or
       // "function TFoo.Bar;" - so just check that LUpper starts with
       // the prefixed pattern (which includes ClassName.MethodName).
-      if Copy(LUpper, 1, Length(PrefixedPat)) = PrefixedPat then
-        Exit(I);
+      if Copy(LUpper, 1, Length(PrefixedPat)) = PrefixedPat then Exit(i);
     end;
   end;
-  Result := -1;
-end;
+  Result:= -1;
+end; // function
 
-class function TSQLiteSymbolStore.FindImplEnd(const ALines: TArray<string>;
-  AStartLine: Integer): Integer;
+class function TSQLiteSymbolStore.FindImplEnd(const ALines: TArray<string>; AStartLine: Integer): Integer;
 // From AStartLine (0-based), scans forward to find the last line of the
 // implementation body. The body ends just before the next top-level
 // procedure/function/constructor/destructor/class procedure/class function
@@ -1994,54 +1775,50 @@ class function TSQLiteSymbolStore.FindImplEnd(const ALines: TArray<string>;
 // v0.17 limitation: the heuristic may include or exclude lines if the
 // source uses unusual indentation or multiple begin..end blocks per line.
 var
-  I: Integer;
-  LTrimmed, LUpper: string;
+  i               : Integer              ;
+  LTrimmed        : string               ;
+  LUpper          : string               ;
   TopLevelPrefixes: array[0..5] of string;
-  J: Integer;
-  IsTopLevel: Boolean;
+  J               : Integer              ;
+  IsTopLevel      : Boolean              ;
 begin
-  TopLevelPrefixes[0] := 'PROCEDURE ';
-  TopLevelPrefixes[1] := 'FUNCTION ';
-  TopLevelPrefixes[2] := 'CONSTRUCTOR ';
-  TopLevelPrefixes[3] := 'DESTRUCTOR ';
-  TopLevelPrefixes[4] := 'CLASS PROCEDURE ';
-  TopLevelPrefixes[5] := 'CLASS FUNCTION ';
+  TopLevelPrefixes[0]:= 'PROCEDURE ';
+  TopLevelPrefixes[1]:= 'FUNCTION ';
+  TopLevelPrefixes[2]:= 'CONSTRUCTOR ';
+  TopLevelPrefixes[3]:= 'DESTRUCTOR ';
+  TopLevelPrefixes[4]:= 'CLASS PROCEDURE ';
+  TopLevelPrefixes[5]:= 'CLASS FUNCTION ';
 
   // Scan from the line AFTER the header line (AStartLine itself is the decl).
   // Walk until we hit a top-level decl, "end.", or EOF.
-  for I := AStartLine + 1 to High(ALines) do
+  for i:= AStartLine + 1 to High(ALines) do
   begin
-    LTrimmed := Trim(ALines[I]);
-    LUpper := UpperCase(LTrimmed);
+    LTrimmed:= Trim(ALines[i]);
+    LUpper:= UpperCase(LTrimmed);
 
     // Check for unit footer "end."
-    if LUpper = 'END.' then
-      Exit(I - 1);
+    if LUpper = 'END.' then Exit(i - 1);
 
     // Check for next top-level declaration (starts at column 0, i.e. the
     // raw line has no leading whitespace before the keyword).
-    if (Length(ALines[I]) > 0) and not CharInSet(ALines[I][1], [' ', #9]) then
+    if (Length(ALines[i]) > 0) and not CharInSet(ALines[i][1], [' ', #9]) then
     begin
-      IsTopLevel := False;
-      for J := 0 to High(TopLevelPrefixes) do
+      IsTopLevel:= False;
+      for J:= 0 to High(TopLevelPrefixes) do
       begin
-        if Copy(LUpper, 1, Length(TopLevelPrefixes[J])) =
-           TopLevelPrefixes[J] then
+        if Copy(LUpper, 1, Length(TopLevelPrefixes[J])) = TopLevelPrefixes[J] then
         begin
-          IsTopLevel := True;
+          IsTopLevel:= True;
           Break;
         end;
       end;
-      if IsTopLevel then
-        Exit(I - 1);
+      if IsTopLevel then Exit(i - 1);
     end;
-  end;
+  end; // for
   // Reached end of file
-  if High(ALines) >= AStartLine then
-    Result := High(ALines)
-  else
-    Result := AStartLine;
-end;
+  if High(ALines) >= AStartLine then Result:= High(ALines)
+  else Result:= AStartLine;
+end; // function
 
 function TSQLiteSymbolStore.GetSymbolSlice(const AQName: string): TArray<TSliceChunk>;
 // Returns symbol-relevant chunks of the source unit:
@@ -2055,199 +1832,190 @@ function TSQLiteSymbolStore.GetSymbolSlice(const AQName: string): TArray<TSliceC
 // Delphi fixtures. Children with no matching impl (e.g. abstract methods)
 // are silently skipped. Empty children list is handled gracefully.
 var
-  Syms: TArray<TSymbol>;
-  ClassSym: TSymbol;
-  AllLines: TArray<string>;
-  FilePath: string;
-  Chunks: TList<TSliceChunk>;
-  Chunk: TSliceChunk;
-  I, InterfaceLine: Integer;
-  Children: TArray<TSymbol>;
-  Child: TSymbol;
-  ImplPattern: string;
-  ImplLine, ImplEndLine: Integer;
-  TrailerLine: Integer;
-  LineCount: Integer;
+  Syms         : TArray<TSymbol>   ;
+  ClassSym     : TSymbol           ;
+  AllLines     : TArray<string>    ;
+  FilePath     : string            ;
+  Chunks       : TList<TSliceChunk>;
+  Chunk        : TSliceChunk       ;
+  i            : Integer           ;
+  InterfaceLine: Integer           ;
+  Children     : TArray<TSymbol>   ;
+  Child        : TSymbol           ;
+  ImplPattern  : string            ;
+  ImplLine     : Integer           ;
+  ImplEndLine  : Integer           ;
+  TrailerLine  : Integer           ;
+  LineCount    : Integer           ;
 
   function JoinLines(AFrom, ATo: Integer): string;
   var
     Parts: TStringList;
-    K: Integer;
+    K    : Integer    ;
   begin
-    Parts := TStringList.Create;
+    Parts:= TStringList.Create;
     try
-      for K := AFrom to ATo do
-        if (K >= 0) and (K <= High(AllLines)) then
-          Parts.Add(AllLines[K]);
-      Result := Parts.Text;
+      for K:= AFrom to ATo do
+        if (K >= 0) and (K <= High(AllLines)) then Parts.Add(AllLines[K]);
+      Result:= Parts.Text;
       // TStringList.Text always appends a trailing CRLF; trim it.
-      Result := Result.TrimRight([#13, #10]);
+      Result:= Result.TrimRight([#13, #10]);
     finally
       Parts.Free;
     end;
   end;
 
 begin
-  Result := nil;
-  Syms := FindSymbolsByQualifiedName(AQName);
-  if Length(Syms) = 0 then
-    Exit;
-  ClassSym := Syms[0];
-  FilePath := GetFilePath(ClassSym.FileId);
-  if not TFile.Exists(FilePath) then
-    Exit;
+  Result:= nil;
+  Syms:= FindSymbolsByQualifiedName(AQName);
+  if Length(Syms) = 0 then Exit;
+  ClassSym:= Syms[0];
+  FilePath:= GetFilePath(ClassSym.FileId);
+  if not TFile.Exists(FilePath) then Exit;
 
-  AllLines := TFile.ReadAllLines(FilePath, TEncoding.ANSI);
-  LineCount := Length(AllLines);
-  if LineCount = 0 then
-    Exit;
+  AllLines:= TFile.ReadAllLines(FilePath, TEncoding.ANSI);
+  LineCount:= Length(AllLines);
+  if LineCount = 0 then Exit;
 
-  Chunks := TList<TSliceChunk>.Create;
+  Chunks:= TList<TSliceChunk>.Create;
   try
     // 1. Unit header: lines 0..(InterfaceLine) in 0-based; 1..(InterfaceLine+1) 1-based.
     //    Find the line that is exactly "interface" (trimmed, case-insensitive).
-    InterfaceLine := 0;
-    for I := 0 to High(AllLines) do
-      if SameText(Trim(AllLines[I]), 'interface') then
+    InterfaceLine:= 0;
+    for i:= 0 to High(AllLines) do
+      if SameText(Trim(AllLines[i]), 'interface') then
       begin
-        InterfaceLine := I;
+        InterfaceLine:= i;
         Break;
       end;
-    Chunk := Default(TSliceChunk);
-    Chunk.Kind := 'unit-header';
-    Chunk.StartLine := 1;
-    Chunk.EndLine := InterfaceLine + 1;
-    Chunk.Text := JoinLines(0, InterfaceLine);
+    Chunk:= Default(TSliceChunk);
+    Chunk.Kind     := 'unit-header';
+    Chunk.StartLine:= 1;
+    Chunk.EndLine:= InterfaceLine + 1;
+    Chunk.Text:= JoinLines(0, InterfaceLine);
     Chunks.Add(Chunk);
 
     // 2. Class declaration: ClassSym.StartLine..EndLine (1-based in DB).
-    Chunk := Default(TSliceChunk);
-    Chunk.Kind := 'class-decl';
-    Chunk.StartLine := ClassSym.StartLine;
-    Chunk.EndLine := ClassSym.EndLine;
-    Chunk.Text := JoinLines(ClassSym.StartLine - 1, ClassSym.EndLine - 1);
+    Chunk:= Default(TSliceChunk);
+    Chunk.Kind:= 'class-decl';
+    Chunk.StartLine:= ClassSym.StartLine;
+    Chunk.EndLine  := ClassSym.EndLine;
+    Chunk.Text:= JoinLines(ClassSym.StartLine - 1, ClassSym.EndLine - 1);
     Chunks.Add(Chunk);
 
     // 3. Implementation bodies for each method child of the class.
-    Children := FindChildSymbols(ClassSym.Id);
+    Children:= FindChildSymbols(ClassSym.Id);
     for Child in Children do
     begin
-      if not (Child.Kind in [skMethod, skProcedure, skFunction,
-        skConstructor, skDestructor]) then
-        Continue;
+      if not (Child.Kind in [skMethod, skProcedure, skFunction, skConstructor, skDestructor]) then Continue;
       // Build pattern "ClassName.MethodName" for the impl finder.
-      ImplPattern := ClassSym.Name + '.' + Child.Name;
-      ImplLine := FindImplLine(AllLines, ImplPattern);
-      if ImplLine < 0 then
-        Continue;
-      ImplEndLine := FindImplEnd(AllLines, ImplLine);
+      ImplPattern:= ClassSym.Name + '.' + Child.Name;
+      ImplLine:= FindImplLine(AllLines, ImplPattern);
+      if ImplLine < 0 then Continue;
+      ImplEndLine:= FindImplEnd(AllLines, ImplLine);
       // Clamp to valid range
-      if ImplEndLine < ImplLine then
-        ImplEndLine := ImplLine;
-      if ImplEndLine >= LineCount then
-        ImplEndLine := LineCount - 1;
-      Chunk := Default(TSliceChunk);
-      Chunk.Kind := 'impl-method';
-      Chunk.StartLine := ImplLine + 1;
-      Chunk.EndLine := ImplEndLine + 1;
-      Chunk.Text := JoinLines(ImplLine, ImplEndLine);
+      if ImplEndLine < ImplLine then ImplEndLine:= ImplLine;
+      if ImplEndLine >= LineCount then ImplEndLine:= LineCount - 1;
+      Chunk:= Default(TSliceChunk);
+      Chunk.Kind:= 'impl-method';
+      Chunk.StartLine:= ImplLine    + 1;
+      Chunk.EndLine  := ImplEndLine + 1;
+      Chunk.Text:= JoinLines(ImplLine, ImplEndLine);
       Chunks.Add(Chunk);
-    end;
+    end; // for
 
     // 4. Unit trailer: find the "end." line (0-based search from the end).
-    TrailerLine := LineCount - 1;
-    for I := High(AllLines) downto 0 do
-      if SameText(Trim(AllLines[I]), 'end.') then
+    TrailerLine:= LineCount - 1;
+    for i:= High(AllLines) downto 0 do
+      if SameText(Trim(AllLines[i]), 'end.') then
       begin
-        TrailerLine := I;
+        TrailerLine:= i;
         Break;
       end;
-    Chunk := Default(TSliceChunk);
-    Chunk.Kind := 'unit-trailer';
-    Chunk.StartLine := TrailerLine + 1;
-    Chunk.EndLine := TrailerLine + 1;
-    Chunk.Text := Trim(AllLines[TrailerLine]);
+    Chunk:= Default(TSliceChunk);
+    Chunk.Kind:= 'unit-trailer';
+    Chunk.StartLine:= TrailerLine + 1;
+    Chunk.EndLine  := TrailerLine + 1;
+    Chunk.Text:= Trim(AllLines[TrailerLine]);
     Chunks.Add(Chunk);
 
-    Result := Chunks.ToArray;
+    Result:= Chunks.ToArray;
   finally
     Chunks.Free;
-  end;
-end;
+  end; // try
+end; // begin
 
-function TSQLiteSymbolStore.FindCallersByNameWithContext(const ACalleeName: string;
-  AContextLines: Integer): TArray<TReference>;
+function TSQLiteSymbolStore.FindCallersByNameWithContext(const ACalleeName: string; AContextLines: Integer): TArray<TReference>;
 var
-  Refs: TArray<TReference>;
-  I, J: Integer;
-  FilePath: string;
-  StartIdx, EndIdx: Integer;
-  CachedPath: string;
-  CachedLines: TArray<string>;
-  CtxBuilder: TStringBuilder;
+  Refs       : TArray<TReference>;
+  i          : Integer           ;
+  J          : Integer           ;
+  FilePath   : string            ;
+  StartIdx   : Integer           ;
+  EndIdx     : Integer           ;
+  CachedPath : string            ;
+  CachedLines: TArray<string>    ;
+  CtxBuilder : TStringBuilder    ;
 begin
   // Get all callers first
-  Refs := FindCallersByName(ACalleeName);
+  Refs:= FindCallersByName(ACalleeName);
 
   // If no context requested or no callers, return as-is
   if (AContextLines <= 0) or (Length(Refs) = 0) then
   begin
-    Result := Refs;
+    Result:= Refs;
     Exit;
   end;
 
   // For each reference, read surrounding context lines
-  CachedPath := '';
+  CachedPath:= '';
   SetLength(CachedLines, 0);
-  CtxBuilder := TStringBuilder.Create;
+  CtxBuilder:= TStringBuilder.Create;
   try
-    for I := Low(Refs) to High(Refs) do
+    for i:= Low(Refs) to High(Refs) do
     begin
-      FilePath := GetFilePath(Refs[I].FileId);
+      FilePath:= GetFilePath(Refs[i].FileId);
 
       // Cache: if we're reading a different file, re-read it
       if FilePath <> CachedPath then
       begin
-        CachedPath := FilePath;
-        if TFile.Exists(FilePath) then
-          CachedLines := TFile.ReadAllLines(FilePath, TEncoding.ANSI)
-        else
-          SetLength(CachedLines, 0);
+        CachedPath:= FilePath;
+        if TFile.Exists(FilePath) then CachedLines:= TFile.ReadAllLines(FilePath, TEncoding.ANSI)
+        else SetLength(CachedLines, 0);
       end;
 
       // Extract context: (line - N) to (line + N), 1-indexed
       // Refs[I].StartLine is 1-indexed, array access is 0-indexed
-      StartIdx := Max(0, Refs[I].StartLine - AContextLines - 1);
-      EndIdx := Min(High(CachedLines), Refs[I].StartLine + AContextLines - 1);
+      StartIdx:= Max(0, Refs[i].StartLine - AContextLines - 1);
+      EndIdx:= Min(High(CachedLines), Refs[i].StartLine + AContextLines - 1);
 
       // Build context text with line numbers
       CtxBuilder.Clear;
       if (Length(CachedLines) > 0) and (StartIdx <= EndIdx) and (StartIdx <= High(CachedLines)) then
       begin
-        for J := StartIdx to EndIdx do
+        for J:= StartIdx to EndIdx do
         begin
           if (J >= 0) and (J <= High(CachedLines)) then
           begin
-            if CtxBuilder.Length > 0 then
-              CtxBuilder.AppendLine;
+            if CtxBuilder.Length > 0 then CtxBuilder.AppendLine;
             CtxBuilder.Append(Format('%5d: %s', [J + 1, CachedLines[J]]));
           end;
         end;
       end;
 
       // Store context in the reference
-      Refs[I].ContextText := CtxBuilder.ToString;
-    end;
+      Refs[i].ContextText:= CtxBuilder.ToString;
+    end; // for
   finally
     CtxBuilder.Free;
-  end;
+  end; // try
 
-  Result := Refs;
-end;
+  Result:= Refs;
+end; // function
 
 function TSQLiteSymbolStore.GetConnection: TFDConnection;
 begin
-  Result := FConn;
+  Result:= FConn;
 end;
 
 { ---- v0.40.4: unit_uses ---------------------------------------------------- }
@@ -2259,103 +2027,96 @@ function UnitNameNorm(const AUnitName: string): string;
 var
   Dot: Integer;
 begin
-  Result := AUnitName;
-  Dot := LastDelimiter('.', Result);
-  if Dot > 0 then Result := Copy(Result, Dot + 1, MaxInt);
-  Result := LowerCase(Result);
+  Result:= AUnitName;
+  Dot:= LastDelimiter('.', Result);
+  if Dot > 0 then Result:= Copy(Result, Dot + 1, MaxInt);
+  Result:= LowerCase(Result);
 end;
 
-procedure TSQLiteSymbolStore.UpsertUnitUse(const AToken: TFileTxToken;
-  const AUse: TUnitUse);
+procedure TSQLiteSymbolStore.UpsertUnitUse(const AToken: TFileTxToken; const AUse: TUnitUse);
 begin
-  FQInsertUnitUse.ParamByName('fid').AsLargeInt := AToken.FileId;
-  FQInsertUnitUse.ParamByName('un').AsString    := AUse.UnitName;
-  FQInsertUnitUse.ParamByName('unn').AsString   := UnitNameNorm(AUse.UnitName);
-  FQInsertUnitUse.ParamByName('sec').AsString   := UnitUseSectionToStr(AUse.Section);
-  if AUse.InPath = '' then
-    FQInsertUnitUse.ParamByName('inp').Clear
-  else
-    FQInsertUnitUse.ParamByName('inp').AsString := AUse.InPath;
-  FQInsertUnitUse.ParamByName('sl').AsInteger := AUse.StartLine;
-  FQInsertUnitUse.ParamByName('sc').AsInteger := AUse.StartCol;
-  FQInsertUnitUse.ParamByName('el').AsInteger := AUse.EndLine;
-  FQInsertUnitUse.ParamByName('ec').AsInteger := AUse.EndCol;
+  FQInsertUnitUse.ParamByName('fid').AsLargeInt:= AToken.FileId;
+  FQInsertUnitUse.ParamByName('un' ).AsString  := AUse  .UnitName;
+  FQInsertUnitUse.ParamByName('unn').AsString:= UnitNameNorm       (AUse.UnitName);
+  FQInsertUnitUse.ParamByName('sec').AsString:= UnitUseSectionToStr(AUse.Section );
+  if AUse.InPath = '' then FQInsertUnitUse.ParamByName('inp').Clear
+  else FQInsertUnitUse.ParamByName('inp').AsString:= AUse.InPath;
+  FQInsertUnitUse.ParamByName('sl').AsInteger:= AUse.StartLine;
+  FQInsertUnitUse.ParamByName('sc').AsInteger:= AUse.StartCol;
+  FQInsertUnitUse.ParamByName('el').AsInteger:= AUse.EndLine;
+  FQInsertUnitUse.ParamByName('ec').AsInteger:= AUse.EndCol;
   FQInsertUnitUse.ExecSQL;
 end;
 
 procedure TSQLiteSymbolStore.DeleteUnitUsesForFile(AFileId: Int64);
 begin
-  FQDeleteFileUnitUses.ParamByName('fid').AsLargeInt := AFileId;
+  FQDeleteFileUnitUses.ParamByName('fid').AsLargeInt:= AFileId;
   FQDeleteFileUnitUses.ExecSQL;
 end;
 
-function TSQLiteSymbolStore.GetUnitUsesForFile(
-  AFileId: Int64): TArray<TUnitUse>;
+function TSQLiteSymbolStore.GetUnitUsesForFile( AFileId: Int64): TArray<TUnitUse>;
 var
   List: TList<TUnitUse>;
-  U:    TUnitUse;
+  U   : TUnitUse       ;
 begin
-  List := TList<TUnitUse>.Create;
+  List:= TList<TUnitUse>.Create;
   try
-    FQGetFileUnitUses.ParamByName('fid').AsLargeInt := AFileId;
+    FQGetFileUnitUses.ParamByName('fid').AsLargeInt:= AFileId;
     FQGetFileUnitUses.Open;
     try
       while not FQGetFileUnitUses.Eof do
       begin
-        U.FileId    := AFileId;
-        U.UnitName  := FQGetFileUnitUses.FieldByName('unit_name').AsString;
-        U.Section   := StrToUnitUseSection(
-                         FQGetFileUnitUses.FieldByName('section').AsString);
-        U.InPath    := FQGetFileUnitUses.FieldByName('in_path').AsString;
-        U.StartLine := FQGetFileUnitUses.FieldByName('start_line').AsInteger;
-        U.StartCol  := FQGetFileUnitUses.FieldByName('start_col').AsInteger;
-        U.EndLine   := FQGetFileUnitUses.FieldByName('end_line').AsInteger;
-        U.EndCol    := FQGetFileUnitUses.FieldByName('end_col').AsInteger;
+        U.FileId:= AFileId;
+        U.UnitName:= FQGetFileUnitUses.FieldByName('unit_name').AsString;
+        U.Section:= StrToUnitUseSection( FQGetFileUnitUses.FieldByName('section').AsString);
+        U.InPath   := FQGetFileUnitUses.FieldByName('in_path'   ).AsString;
+        U.StartLine:= FQGetFileUnitUses.FieldByName('start_line').AsInteger;
+        U.StartCol := FQGetFileUnitUses.FieldByName('start_col' ).AsInteger;
+        U.EndLine  := FQGetFileUnitUses.FieldByName('end_line'  ).AsInteger;
+        U.EndCol   := FQGetFileUnitUses.FieldByName('end_col'   ).AsInteger;
         List.Add(U);
         FQGetFileUnitUses.Next;
       end;
     finally
       FQGetFileUnitUses.Close;
-    end;
-    Result := List.ToArray;
+    end; // try
+    Result:= List.ToArray;
   finally
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function TSQLiteSymbolStore.FindUsersOfUnit(
-  const AUnitNameNorm: string): TArray<TUnitUse>;
+function TSQLiteSymbolStore.FindUsersOfUnit( const AUnitNameNorm: string): TArray<TUnitUse>;
 var
   List: TList<TUnitUse>;
-  U:    TUnitUse;
+  U   : TUnitUse       ;
 begin
-  List := TList<TUnitUse>.Create;
+  List:= TList<TUnitUse>.Create;
   try
-    FQFindUsersOfUnit.ParamByName('un').AsString := LowerCase(AUnitNameNorm);
+    FQFindUsersOfUnit.ParamByName('un').AsString:= LowerCase(AUnitNameNorm);
     FQFindUsersOfUnit.Open;
     try
       while not FQFindUsersOfUnit.Eof do
       begin
-        U.FileId    := FQFindUsersOfUnit.FieldByName('file_id').AsLargeInt;
-        U.UnitName  := FQFindUsersOfUnit.FieldByName('unit_name').AsString;
-        U.Section   := StrToUnitUseSection(
-                         FQFindUsersOfUnit.FieldByName('section').AsString);
-        U.InPath    := FQFindUsersOfUnit.FieldByName('in_path').AsString;
-        U.StartLine := FQFindUsersOfUnit.FieldByName('start_line').AsInteger;
-        U.StartCol  := FQFindUsersOfUnit.FieldByName('start_col').AsInteger;
-        U.EndLine   := FQFindUsersOfUnit.FieldByName('end_line').AsInteger;
-        U.EndCol    := FQFindUsersOfUnit.FieldByName('end_col').AsInteger;
+        U.FileId  := FQFindUsersOfUnit.FieldByName('file_id'  ).AsLargeInt;
+        U.UnitName:= FQFindUsersOfUnit.FieldByName('unit_name').AsString;
+        U.Section:= StrToUnitUseSection( FQFindUsersOfUnit.FieldByName('section').AsString);
+        U.InPath   := FQFindUsersOfUnit.FieldByName('in_path'   ).AsString;
+        U.StartLine:= FQFindUsersOfUnit.FieldByName('start_line').AsInteger;
+        U.StartCol := FQFindUsersOfUnit.FieldByName('start_col' ).AsInteger;
+        U.EndLine  := FQFindUsersOfUnit.FieldByName('end_line'  ).AsInteger;
+        U.EndCol   := FQFindUsersOfUnit.FieldByName('end_col'   ).AsInteger;
         List.Add(U);
         FQFindUsersOfUnit.Next;
       end;
     finally
       FQFindUsersOfUnit.Close;
-    end;
-    Result := List.ToArray;
+    end; // try
+    Result:= List.ToArray;
   finally
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
 { Drives target_file_id resolution in Pascal rather than SQL because the
@@ -2363,51 +2124,48 @@ procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
   bundled sqlite lacks some 3.24+ functions). We pull every (file_id, path),
   compute the lowercase stem, build a dictionary, then UPDATE per group. }
 var
-  QFiles, QUpdate: TFDQuery;
-  StemToFileId:    TDictionary<string, Int64>;
-  Path, Stem:      string;
-  Slash:           Integer;
+  QFiles      : TFDQuery                  ;
+  QUpdate     : TFDQuery                  ;
+  StemToFileId: TDictionary<string, Int64>;
+  Path        : string                    ;
+  Stem        : string                    ;
+  Slash       : Integer                   ;
 begin
-  StemToFileId := TDictionary<string, Int64>.Create;
-  QFiles  := TFDQuery.Create(nil);
-  QUpdate := TFDQuery.Create(nil);
+  StemToFileId:= TDictionary<string, Int64>.Create;
+  QFiles := TFDQuery.Create(nil);
+  QUpdate:= TFDQuery.Create(nil);
   try
-    QFiles.Connection := FConn;
-    QFiles.SQL.Text := 'SELECT id, path FROM files';
+    QFiles.Connection:= FConn;
+    QFiles.SQL.Text:= 'SELECT id, path FROM files';
     QFiles.Open;
     while not QFiles.Eof do
     begin
-      Path := QFiles.FieldByName('path').AsString;
-      Slash := Path.LastDelimiter('\/');
-      if Slash >= 0 then
-        Stem := Copy(Path, Slash + 2, MaxInt)
-      else
-        Stem := Path;
-      Stem := LowerCase(ChangeFileExt(Stem, ''));
-      if Stem <> '' then
-        StemToFileId.AddOrSetValue(Stem, QFiles.FieldByName('id').AsLargeInt);
+      Path:= QFiles.FieldByName('path').AsString;
+      Slash:= Path.LastDelimiter('\/');
+      if Slash >= 0 then Stem:= Copy(Path, Slash + 2, MaxInt)
+      else Stem:= Path;
+      Stem:= LowerCase(ChangeFileExt(Stem, ''));
+      if Stem <> '' then StemToFileId.AddOrSetValue(Stem, QFiles.FieldByName('id').AsLargeInt);
       QFiles.Next;
     end;
     QFiles.Close;
 
-    QUpdate.Connection := FConn;
-    QUpdate.SQL.Text :=
-      'UPDATE unit_uses SET target_file_id = :tid ' +
-      'WHERE unit_name_norm = :un AND target_file_id IS NULL';
-    QUpdate.Params.ParamByName('tid').DataType := ftLargeint;
-    QUpdate.Params.ParamByName('un').DataType  := ftString;
+    QUpdate.Connection:= FConn;
+    QUpdate.SQL.Text:= 'UPDATE unit_uses SET target_file_id = :tid ' + 'WHERE unit_name_norm = :un AND target_file_id IS NULL';
+    QUpdate.Params.ParamByName('tid').DataType:= ftLargeint;
+    QUpdate.Params.ParamByName('un' ).DataType:= ftString;
     QUpdate.Prepare;
     for var Kvp in StemToFileId do
     begin
-      QUpdate.ParamByName('tid').AsLargeInt := Kvp.Value;
-      QUpdate.ParamByName('un').AsString    := Kvp.Key;
+      QUpdate.ParamByName('tid').AsLargeInt:= Kvp.Value;
+      QUpdate.ParamByName('un' ).AsString  := Kvp.Key;
       QUpdate.ExecSQL;
     end;
   finally
     QUpdate.Free;
     QFiles.Free;
     StemToFileId.Free;
-  end;
-end;
+  end; // try
+end; // procedure
 
 end.

@@ -1,42 +1,43 @@
-﻿unit TreeSitter.Query;
+unit TreeSitter.Query;
 
 interface
 
 uses
-  TreeSitterLib, TreeSitter;
+  TreeSitterLib
+  , TreeSitter
+  ;
 
 type
-  TTSQueryError = TreeSitterLib.TSQueryError;
-  TTSQueryPredicateStep = TreeSitterLib.TSQueryPredicateStep;
+  TTSQueryError             = TreeSitterLib.TSQueryError;
+  TTSQueryPredicateStep     = TreeSitterLib.TSQueryPredicateStep;
   TTSQueryPredicateStepType = TreeSitterLib.TSQueryPredicateStepType;
 
   TTSQueryPredicateStepArray = array of TTSQueryPredicateStep;
-  TTSQuantifier = TreeSitterLib.TSQuantifier;
+  TTSQuantifier              = TreeSitterLib.TSQuantifier;
 
   TTSQuery = class
-  strict private
-    FQuery: PTSQuery;
-  public
-    constructor Create(ALanguage: PTSLanguage; const ASource: string;
-      var AErrorOffset: UInt32; var AErrorType: TTSQueryError); virtual;
-    destructor Destroy; override;
+    strict private
+      FQuery: PTSQuery;
+    public
+      constructor Create(ALanguage: PTSLanguage; const ASource: string; var AErrorOffset: UInt32; var AErrorType: TTSQueryError); virtual;
+      destructor Destroy; override;
 
-    function PatternCount: UInt32;
-    function CaptureCount: UInt32;
-    function StringCount: UInt32;
+      function PatternCount: UInt32;
+      function CaptureCount: UInt32;
+      function StringCount : UInt32;
 
-    function StartByteForPattern(APatternIndex: UInt32): UInt32;
-    function PredicatesForPattern(APatternIndex: UInt32): TTSQueryPredicateStepArray;
+      function StartByteForPattern (APatternIndex: UInt32): UInt32;
+      function PredicatesForPattern(APatternIndex: UInt32): TTSQueryPredicateStepArray;
 
-    function CaptureNameForID(ACaptureIndex: UInt32): string;
-    function StringValueForID(AStringIndex: UInt32): string;
+      function CaptureNameForID(ACaptureIndex: UInt32): string;
+      function StringValueForID(AStringIndex : UInt32): string;
 
-    function QuantifierForCapture(APatternIndex, ACaptureIndex: UInt32): TTSQuantifier;
+      function QuantifierForCapture(APatternIndex, ACaptureIndex: UInt32): TTSQuantifier;
 
-    property Query: PTSQuery read FQuery;
+      property Query: PTSQuery read FQuery;
   end;
 
-  TTSQueryCapture = TreeSitterLib.TSQueryCapture;
+  TTSQueryCapture      = TreeSitterLib.TSQueryCapture;
   TTSQueryCaptureArray = array of TTSQueryCapture;
 
   TTSQueryMatch = TreeSitterLib.TSQueryMatch;
@@ -46,26 +47,25 @@ type
   end;
 
   TTSQueryCursor = class
-  strict private
-    FQueryCursor: PTSQueryCursor;
+    strict private
+      FQueryCursor: PTSQueryCursor;
 
-    function GetMatchLimit: UInt32;
-    procedure SetMatchLimit(const Value: UInt32);
-  public
-    constructor Create; virtual;
-    destructor Destroy; override;
+      function GetMatchLimit: UInt32;
+      procedure SetMatchLimit(const Value: UInt32);
+    public
+      constructor Create; virtual;
+      destructor Destroy; override;
 
-    procedure Execute(AQuery: TTSQuery; ANode: TTSNode);
-    function DidExceedMatchLimit: Boolean;
-    procedure SetMaxStartDepth(AMaxStartDepth: UInt32);
+      procedure Execute(AQuery: TTSQuery; ANode: TTSNode);
+      function DidExceedMatchLimit: Boolean;
+      procedure SetMaxStartDepth(AMaxStartDepth: UInt32);
 
-    function NextMatch(var AMatch: TTSQueryMatch): Boolean;
-    function NextCapture(var AMatch: TTSQueryMatch; var ACaptureIndex: UInt32): Boolean;
+      function NextMatch(var AMatch: TTSQueryMatch): Boolean                             ;
+      function NextCapture(var AMatch: TTSQueryMatch; var ACaptureIndex: UInt32): Boolean;
 
-    property QueryCursor: PTSQueryCursor read FQueryCursor;
-    property MatchLimit: UInt32 read GetMatchLimit write SetMatchLimit;
+      property QueryCursor: PTSQueryCursor read FQueryCursor;
+      property MatchLimit : UInt32 read GetMatchLimit write SetMatchLimit;
   end;
-
 
 implementation
 
@@ -78,25 +78,22 @@ end;
 
 function TTSQuery.CaptureNameForID(ACaptureIndex: UInt32): string;
 var
-  pac: PAnsiChar;
-  len: UInt32;
+  pac: PAnsiChar ;
+  len: UInt32    ;
   res: AnsiString;
 begin
   pac:= ts_query_capture_name_for_id(FQuery, ACaptureIndex, len);
   SetLength(res, len);
-  if len > 0 then
-    Move(pac[0], res[1], len * SizeOf(pac[0]));
+  if len > 0 then Move(pac[0], res[1], len * SizeOf(pac[0]));
   Result:= string(res);
 end;
 
-constructor TTSQuery.Create(ALanguage: PTSLanguage; const ASource: string;
-  var AErrorOffset: UInt32; var AErrorType: TTSQueryError);
+constructor TTSQuery.Create(ALanguage: PTSLanguage; const ASource: string; var AErrorOffset: UInt32; var AErrorType: TTSQueryError);
 var
   ansiSource: AnsiString;
 begin
   ansiSource:= AnsiString(ASource);
-  FQuery:= ts_query_new(ALanguage, PAnsiChar(ansiSource), Length(ansiSource),
-    AErrorOffset, AErrorType);
+  FQuery:= ts_query_new(ALanguage, PAnsiChar(ansiSource), Length(ansiSource), AErrorOffset, AErrorType);
 end;
 
 destructor TTSQuery.Destroy;
@@ -110,11 +107,10 @@ begin
   Result:= ts_query_pattern_count(FQuery);
 end;
 
-function TTSQuery.PredicatesForPattern(
-  APatternIndex: UInt32): TTSQueryPredicateStepArray;
+function TTSQuery.PredicatesForPattern( APatternIndex: UInt32): TTSQueryPredicateStepArray;
 var
-  count: UInt32;
-  parr: PTSQueryPredicateStepArray;
+  count: UInt32                    ;
+  parr : PTSQueryPredicateStepArray;
 begin
   count:= 0;
   parr:= ts_query_predicates_for_pattern(FQuery, APatternIndex, count);
@@ -125,8 +121,7 @@ begin
   end;
 end;
 
-function TTSQuery.QuantifierForCapture(APatternIndex,
-  ACaptureIndex: UInt32): TTSQuantifier;
+function TTSQuery.QuantifierForCapture(APatternIndex, ACaptureIndex: UInt32): TTSQuantifier;
 begin
   Result:= ts_query_capture_quantifier_for_id(FQuery, APatternIndex, ACaptureIndex);
 end;
@@ -143,14 +138,13 @@ end;
 
 function TTSQuery.StringValueForID(AStringIndex: UInt32): string;
 var
-  pac: PAnsiChar;
-  len: UInt32;
+  pac: PAnsiChar ;
+  len: UInt32    ;
   res: AnsiString;
 begin
   pac:= ts_query_string_value_for_id(FQuery, AStringIndex, len);
   SetLength(res, len);
-  if len > 0 then
-    Move(pac[0], res[1], len * SizeOf(pac[0]));
+  if len > 0 then Move(pac[0], res[1], len * SizeOf(pac[0]));
   Result:= string(res);
 end;
 
@@ -182,8 +176,7 @@ begin
   Result:= ts_query_cursor_match_limit(FQueryCursor);
 end;
 
-function TTSQueryCursor.NextCapture(var AMatch: TTSQueryMatch;
-  var ACaptureIndex: UInt32): Boolean;
+function TTSQueryCursor.NextCapture(var AMatch: TTSQueryMatch; var ACaptureIndex: UInt32): Boolean;
 begin
   Result:= ts_query_cursor_next_capture(FQueryCursor, AMatch, ACaptureIndex);
 end;
@@ -208,8 +201,7 @@ end;
 function TTSQueryMatchHelper.CapturesArray: TTSQueryCaptureArray;
 begin
   SetLength(Result, capture_count);
-  if capture_count > 0 then
-    Move(captures[0], Result[0], capture_count * SizeOf(captures[0]));
+  if capture_count > 0 then Move(captures[0], Result[0], capture_count * SizeOf(captures[0]));
 end;
 
 end.

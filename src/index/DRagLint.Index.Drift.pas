@@ -9,7 +9,8 @@ unit DRagLint.Index.Drift;
 interface
 
 uses
-  System.SysUtils;
+  System.SysUtils
+  ;
 
 /// <summary>Read-only: returns the subset of ACurrentRoots that BOTH have no
 /// indexed file under them in the DB at ADbPath AND contain at least one
@@ -23,15 +24,15 @@ uses
 /// files under them (true drift = forgotten/added source folder).</returns>
 /// <remarks>Not thread-safe; call from a single thread. Disk scan uses early
 /// exit on first source file found -- no full enumeration of large roots.</remarks>
-function AnalyzeLibraryDrift(const ADbPath: string;
-  const ACurrentRoots: TArray<string>): TArray<string>;
+function AnalyzeLibraryDrift(const ADbPath: string; const ACurrentRoots: TArray<string>): TArray<string>;
 
 implementation
 
 uses
-  System.IOUtils,
-  DRagLint.Core.Interfaces,
-  DRagLint.Storage.SQLite;
+  System.IOUtils
+  , DRagLint.Core   .Interfaces
+  , DRagLint.Storage.SQLite
+  ;
 
 { ---------------------------------------------------------------------------
   Path normalisation helpers
@@ -39,14 +40,13 @@ uses
 
 function NormPath(const APath: string): string;
 begin
-  Result := LowerCase(StringReplace(APath, '/', '\', [rfReplaceAll]));
+  Result:= LowerCase(StringReplace(APath, '/', '\', [rfReplaceAll]));
 end;
 
 function NormRoot(const APath: string): string;
 begin
-  Result := NormPath(APath);
-  if (Result <> '') and (Result[Length(Result)] <> '\') then
-    Result := Result + '\';
+  Result:= NormPath(APath);
+  if (Result <> '') and (Result[Length(Result)] <> '\') then Result:= Result + '\';
 end;
 
 { ---------------------------------------------------------------------------
@@ -66,119 +66,110 @@ function ShouldSkipDir(const ADirName: string): Boolean;
 var
   LN: string;
 begin
-  LN := LowerCase(ADirName);
-  Result := (LN = '__history')
-         or (LN = '.git')
-         or (LN = '.hg')
-         or (LN = 'win32')
-         or (LN = 'win64');
+  LN:= LowerCase(ADirName);
+  Result:= (LN = '__history') or (LN = '.git') or (LN = '.hg') or (LN = 'win32') or (LN = 'win64');
 end;
 
 function DirHasSource(const ADir: string): Boolean;
 const
   SrcExts: array[0..2] of string = ('.pas', '.inc', '.dfm');
 var
-  Files:   TArray<string>;
+  Files  : TArray<string>;
   SubDirs: TArray<string>;
-  F:       string;
-  D:       string;
-  Ext:     string;
-  I:       Integer;
-  DName:   string;
+  F      : string        ;
+  D      : string        ;
+  Ext    : string        ;
+  I      : Integer       ;
+  DName  : string        ;
 begin
-  Result := False;
-  if not TDirectory.Exists(ADir) then
-    Exit;
+  Result:= False;
+  if not TDirectory.Exists(ADir) then Exit;
 
   { Check files in this directory. }
   try
-    Files := TDirectory.GetFiles(ADir, '*', TSearchOption.soTopDirectoryOnly);
+    Files:= TDirectory.GetFiles(ADir, '*', TSearchOption.soTopDirectoryOnly);
   except
     SetLength(Files, 0);
   end;
   for F in Files do
   begin
-    Ext := LowerCase(ExtractFileExt(F));
-    for I := 0 to High(SrcExts) do
+    Ext:= LowerCase(ExtractFileExt(F));
+    for I:= 0 to High(SrcExts) do
       if Ext = SrcExts[I] then
       begin
-        Result := True;
-        Exit;  { Early exit on first hit }
+        Result:= True;
+        Exit; { Early exit on first hit }
       end;
   end;
 
   { Recurse into subdirectories. }
   try
-    SubDirs := TDirectory.GetDirectories(ADir, '*', TSearchOption.soTopDirectoryOnly);
+    SubDirs:= TDirectory.GetDirectories(ADir, '*', TSearchOption.soTopDirectoryOnly);
   except
     SetLength(SubDirs, 0);
   end;
   for D in SubDirs do
   begin
-    DName := ExtractFileName(ExcludeTrailingPathDelimiter(D));
+    DName:= ExtractFileName(ExcludeTrailingPathDelimiter(D));
     if ShouldSkipDir(DName) then Continue;
     if DirHasSource(D) then
     begin
-      Result := True;
-      Exit;  { Early exit on first hit in subtree }
+      Result:= True;
+      Exit; { Early exit on first hit in subtree }
     end;
   end;
-end;
+end; // function
 
 { ---------------------------------------------------------------------------
   AnalyzeLibraryDrift
   --------------------------------------------------------------------------- }
 
-function AnalyzeLibraryDrift(const ADbPath: string;
-  const ACurrentRoots: TArray<string>): TArray<string>;
+function AnalyzeLibraryDrift(const ADbPath: string; const ACurrentRoots: TArray<string>): TArray<string>;
 var
-  Store:       ISymbolStore;
-  FileIds:     TArray<Int64>;
-  FilePath:    string;
-  AllPaths:    TArray<string>;
-  PathCount:   Integer;
-  NormRoots:   TArray<string>;
-  Covered:     TArray<Boolean>;
-  R, P:        Integer;
-  Missing:     TArray<string>;
-  MissCnt:     Integer;
+  Store    : ISymbolStore   ;
+  FileIds  : TArray<Int64>  ;
+  FilePath : string         ;
+  AllPaths : TArray<string> ;
+  PathCount: Integer        ;
+  NormRoots: TArray<string> ;
+  Covered  : TArray<Boolean>;
+  R        : Integer        ;
+  P        : Integer        ;
+  Missing  : TArray<string> ;
+  MissCnt  : Integer        ;
 begin
-  Result := nil;
-  if Length(ACurrentRoots) = 0 then
-    Exit;
+  Result:= nil;
+  if Length(ACurrentRoots) = 0 then Exit;
 
   { Normalise all roots once. }
   SetLength(NormRoots, Length(ACurrentRoots));
-  for R := 0 to High(ACurrentRoots) do
-    NormRoots[R] := NormRoot(ACurrentRoots[R]);
+  for R:= 0 to High(ACurrentRoots) do NormRoots[R]:= NormRoot(ACurrentRoots[R]);
 
   { Open the store and enumerate all indexed file paths. }
-  Store := TSQLiteSymbolStore.Create(ADbPath);
+  Store:= TSQLiteSymbolStore.Create(ADbPath);
   try
-    FileIds   := Store.GetAllFileIds;
-    PathCount := Length(FileIds);
+    FileIds:= Store.GetAllFileIds;
+    PathCount:= Length(FileIds);
     SetLength(AllPaths, PathCount);
-    for P := 0 to PathCount - 1 do
+    for P:= 0 to PathCount - 1 do
     begin
-      FilePath    := Store.GetFilePath(FileIds[P]);
-      AllPaths[P] := NormPath(FilePath);
+      FilePath:= Store.GetFilePath(FileIds[P]);
+      AllPaths[P]:= NormPath(FilePath);
     end;
   finally
-    Store := nil;   { release interface -> free the store }
+    Store:= nil; { release interface -> free the store }
   end;
 
   { For each root, check whether at least one indexed path starts with it. }
   SetLength(Covered, Length(ACurrentRoots));
-  for R := 0 to High(ACurrentRoots) do
-    Covered[R] := False;
+  for R:= 0 to High(ACurrentRoots) do Covered[R]:= False;
 
-  for P := 0 to PathCount - 1 do
+  for P:= 0 to PathCount - 1 do
   begin
-    for R := 0 to High(NormRoots) do
+    for R:= 0 to High(NormRoots) do
     begin
       if not Covered[R] then
-        if AllPaths[P].StartsWith(NormRoots[R]) then
-          Covered[R] := True;
+        if AllPaths[P].StartsWith(NormRoots[R]) then Covered[R]:= True;
     end;
   end;
 
@@ -186,19 +177,19 @@ begin
     actually contains indexable source on disk. Roots with no source
     (DCU/DCP/BPL output folders, empty dirs) are silently excluded:
     they have nothing to index and are not genuine drift. }
-  MissCnt := 0;
+  MissCnt:= 0;
   SetLength(Missing, Length(ACurrentRoots));
-  for R := 0 to High(ACurrentRoots) do
+  for R:= 0 to High(ACurrentRoots) do
     if not Covered[R] then
     begin
       if DirHasSource(ACurrentRoots[R]) then
       begin
-        Missing[MissCnt] := ACurrentRoots[R];
+        Missing[MissCnt]:= ACurrentRoots[R];
         Inc(MissCnt);
       end;
     end;
   SetLength(Missing, MissCnt);
-  Result := Missing;
-end;
+  Result:= Missing;
+end; // function
 
 end.

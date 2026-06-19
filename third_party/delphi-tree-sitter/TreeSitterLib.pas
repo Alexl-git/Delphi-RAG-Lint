@@ -1,4 +1,4 @@
-﻿unit TreeSitterLib;
+unit TreeSitterLib;
 
 (*
 
@@ -17,7 +17,7 @@ interface
 const
   ModuleName = 'tree-sitter';
 
-(*
+  (*
 /****************************/
 /* Section - ABI Versioning */
 /****************************/
@@ -29,46 +29,47 @@ const
  * generated using older CLI versions, but is not forwards-compatible.
  */
 *)
-const TREE_SITTER_LANGUAGE_VERSION = 14;
-(*
+const
+  TREE_SITTER_LANGUAGE_VERSION = 14;
+  (*
 /**
  * The earliest ABI version that is supported by the current version of the
  * library.
  */
 *)
-const TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION = 13;
-(*
+const
+  TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION = 13;
+  (*
 /*******************/
 /* Section - Types */
 /*******************/
 *)
 type
-  TSStateId = UInt16;
-  TSSymbol = UInt16;
-  TSFieldId = UInt16;
-  PTSLanguage = ^TSLanguage;
-  TSLanguage = record end;
-  PTSParser = ^TSParser;
-  TSParser = record end;
-  PTSTree = ^TSTree;
-  TSTree = record end;
-  PTSQuery = ^TSQuery;
-  TSQuery = record end;
-  PTSQueryCursor = ^TSQueryCursor;
-  TSQueryCursor = record end;
+  TSStateId           = UInt16;
+  TSSymbol            = UInt16;
+  TSFieldId           = UInt16;
+  PTSLanguage         = ^TSLanguage;
+  TSLanguage          = record end;
+  PTSParser           = ^TSParser;
+  TSParser            = record end;
+  PTSTree             = ^TSTree;
+  TSTree              = record end;
+  PTSQuery            = ^TSQuery;
+  TSQuery             = record end;
+  PTSQueryCursor      = ^TSQueryCursor;
+  TSQueryCursor       = record end;
   TSLookaheadIterator = record end;
 
   {$MINENUMSIZE 4}
   TSInputEncoding = (TSInputEncodingUTF8, TSInputEncodingUTF16);
 
-  TSSymbolType = (TSSymbolTypeRegular, TSSymbolTypeAnonymous,
-    TSSymbolTypeAuxiliary);
+  TSSymbolType = (TSSymbolTypeRegular, TSSymbolTypeAnonymous, TSSymbolTypeAuxiliary);
 
   TSPoint = record
-    row: UInt32;
+    row   : UInt32;
     column: UInt32;
   end;
-(*
+  (*
 typedef struct TSRange {
   TSPoint start_point;
   TSPoint end_point;
@@ -77,11 +78,11 @@ typedef struct TSRange {
 } TSRange;
 *)
   TSInput = record
-    payload: Pointer;
-    read: function (payload: Pointer; byte_index: UInt32; position: TSPoint; var bytes_read: UInt32): PAnsiChar; cdecl;
-    encoding: TSInputEncoding;
+    payload : Pointer                                                                                                     ;
+    read    : function (payload: Pointer; byte_index: UInt32; position: TSPoint; var bytes_read: UInt32): PAnsiChar; cdecl;
+    encoding: TSInputEncoding                                                                                             ;
   end;
-(*
+  (*
 typedef enum TSLogType {
   TSLogTypeParse,
   TSLogTypeLex,
@@ -101,19 +102,19 @@ typedef struct TSInputEdit {
 *)
   TSNode = record
     context: array[1..4] of UInt32;
-    id: Pointer;
-    tree: PTSTree;
+    id     : Pointer              ;
+    tree   : PTSTree              ;
   end;
 
   PTSTreeCursor = ^TSTreeCursor;
-  TSTreeCursor = record
-    tree: PTSTree;
-    id: Pointer;
+  TSTreeCursor  = record
+    tree   : PTSTree              ;
+    id     : Pointer              ;
     context: array[1..3] of UInt32;
   end;
 
   TSQueryCapture = record
-    node: TSNode;
+    node : TSNode;
     index: UInt32;
   end;
 
@@ -122,44 +123,33 @@ typedef struct TSInputEdit {
 
   TSQuantifier = (
     TSQuantifierZero,// = 0, // must match the array initialization value
-    TSQuantifierZeroOrOne,
-    TSQuantifierZeroOrMore,
-    TSQuantifierOne,
-    TSQuantifierOneOrMore);
+    TSQuantifierZeroOrOne, TSQuantifierZeroOrMore, TSQuantifierOne, TSQuantifierOneOrMore);
 
   TSQueryMatch = record
-    id: UInt32;
-    pattern_index: UInt16;
-    capture_count: UInt16;
-    captures: PSQueryCaptureArray;
+    id           : UInt32             ;
+    pattern_index: UInt16             ;
+    capture_count: UInt16             ;
+    captures     : PSQueryCaptureArray;
   end;
 
   PTSQueryMatchArray = ^TSQueryMatchArray;
-  TSQueryMatchArray = array[0..0] of TSQueryMatch;
+  TSQueryMatchArray  = array[0..0] of TSQueryMatch;
 
-  TSQueryPredicateStepType = (
-    TSQueryPredicateStepTypeDone,
-    TSQueryPredicateStepTypeCapture,
-    TSQueryPredicateStepTypeString);
+  TSQueryPredicateStepType = ( TSQueryPredicateStepTypeDone, TSQueryPredicateStepTypeCapture, TSQueryPredicateStepTypeString);
 
   TSQueryPredicateStep = record
-    &type: TSQueryPredicateStepType;
-    value_id: UInt32;
+    &type   : TSQueryPredicateStepType;
+    value_id: UInt32                  ;
   end;
 
   PTSQueryPredicateStepArray = ^TSQueryPredicateStepArray;
-  TSQueryPredicateStepArray = array[0..0] of TSQueryPredicateStep;
+  TSQueryPredicateStepArray  = array[0..0] of TSQueryPredicateStep;
 
   TSQueryError = (
     TSQueryErrorNone,// = 0,
-    TSQueryErrorSyntax,
-    TSQueryErrorNodeType,
-    TSQueryErrorField,
-    TSQueryErrorCapture,
-    TSQueryErrorStructure,
-    TSQueryErrorLanguage);
+    TSQueryErrorSyntax, TSQueryErrorNodeType, TSQueryErrorField, TSQueryErrorCapture, TSQueryErrorStructure, TSQueryErrorLanguage);
 
-(*
+  (*
 /********************/
 /* Section - Parser */
 /********************/
@@ -278,11 +268,7 @@ const TSRange *ts_parser_included_ranges(
  * [`bytes_read`]: TSInput::read
  */
 *)
-function ts_parser_parse(
-  self: PTSParser;
-  const old_tree: PTSTree;
-  input: TSInput
-): PTSTree; cdecl; external ModuleName;
+function ts_parser_parse( self: PTSParser; const old_tree: PTSTree; input: TSInput ): PTSTree; cdecl; external ModuleName;
 (*
 /**
  * Use the parser to parse some source code stored in one contiguous buffer.
@@ -291,12 +277,7 @@ function ts_parser_parse(
  * length in bytes.
  */
 *)
-function ts_parser_parse_string(
-  self: PTSParser;
-  old_tree: PTSTree;
-   _string: PAnsiChar;
-  length: UInt32
-): PTSTree; cdecl; external ModuleName;
+function ts_parser_parse_string( self: PTSParser; old_tree: PTSTree; _string: PAnsiChar; length: UInt32 ): PTSTree; cdecl; external ModuleName;
 (*
 /**
  * Use the parser to parse some source code stored in one contiguous buffer with
@@ -305,13 +286,7 @@ function ts_parser_parse_string(
  * the text is encoded as UTF8 or UTF16.
  */
 *)
-function ts_parser_parse_string_encoding(
-  self: PTSParser;
-  old_tree: PTSTree;
-  _string: PByte;
-  length: UInt32;
-  encoding: TSInputEncoding
-): PTSTree; cdecl; external ModuleName;
+function ts_parser_parse_string_encoding( self: PTSParser; old_tree: PTSTree; _string: PByte; length: UInt32; encoding: TSInputEncoding ): PTSTree; cdecl; external ModuleName;
 (*
 /**
  * Instruct the parser to start the next parse from the beginning.
@@ -637,11 +612,7 @@ function ts_node_named_child_count(self: TSNode): UInt32; cdecl; external Module
  * Get the node's child with the given field name.
  */
 *)
-function ts_node_child_by_field_name(
-  self: TSNode;
-  const name: PAnsiChar;
-  name_length: UInt32
-): TSNode; cdecl; external ModuleName;
+function ts_node_child_by_field_name( self: TSNode; const name: PAnsiChar; name_length: UInt32 ): TSNode; cdecl; external ModuleName;
 (*
 /**
  * Get the node's child with the given numerical field id.
@@ -735,7 +706,7 @@ procedure ts_tree_cursor_delete(self: PTSTreeCursor); cdecl; external ModuleName
  * Re-initialize a tree cursor to start at a different node.
  */
 *)
-procedure ts_tree_cursor_reset(Self: PTSTreeCursor; node: TSNode); cdecl; external ModuleName;
+procedure ts_tree_cursor_reset(self: PTSTreeCursor; node: TSNode); cdecl; external ModuleName;
 (*
 /**
  * Re-initialize a tree cursor to the same position as another cursor.
@@ -854,7 +825,7 @@ function ts_tree_cursor_current_depth(const self: PTSTreeCursor): UInt32; cdecl;
  * if no such child was found.
  */
 *)
-function ts_tree_cursor_goto_first_child_for_byte(self: PTSTreeCursor; goal_byte: UInt32): Int64; cdecl; external ModuleName;
+function ts_tree_cursor_goto_first_child_for_byte (self: PTSTreeCursor; goal_byte : UInt32 ): Int64; cdecl; external ModuleName;
 function ts_tree_cursor_goto_first_child_for_point(self: PTSTreeCursor; goal_point: TSPoint): Int64; cdecl; external ModuleName;
 
 function ts_tree_cursor_copy(const cursor: PTSTreeCursor): TSTreeCursor; cdecl; external ModuleName;
@@ -874,12 +845,7 @@ function ts_tree_cursor_copy(const cursor: PTSTreeCursor): TSTreeCursor; cdecl; 
  * 2. The type of error is written to the `error_type` parameter.
  */
 *)
-function ts_query_new(
-  const language: PTSLanguage;
-  const source: PAnsiChar;
-  source_len: UInt32;
-  var error_offset: UInt32;
-  var error_type: TSQueryError): PTSQuery; cdecl; external ModuleName;
+function ts_query_new( const language: PTSLanguage; const source: PAnsiChar; source_len: UInt32; var error_offset: UInt32; var error_type: TSQueryError): PTSQuery; cdecl; external ModuleName;
 (*
 /**
  * Delete a query, freeing all of the memory that it used.
@@ -893,7 +859,7 @@ procedure ts_query_delete(self: PTSQuery); cdecl; external ModuleName;
 *)
 function ts_query_pattern_count(const self: PTSQuery): UInt32; cdecl; external ModuleName;
 function ts_query_capture_count(const self: PTSQuery): UInt32; cdecl; external ModuleName;
-function ts_query_string_count(const self: PTSQuery): UInt32; cdecl; external ModuleName;
+function ts_query_string_count (const self: PTSQuery): UInt32; cdecl; external ModuleName;
 (*
 /**
  * Get the byte offset where the given pattern starts in the query's source.
@@ -921,11 +887,7 @@ function ts_query_start_byte_for_pattern(const self: PTSQuery; pattern_index: UI
  *    predicates, then there will be two steps with this `type` in the array.
  */
 *)
-function ts_query_predicates_for_pattern(
-  const self: PTSQuery;
-  pattern_index: UInt32;
-  var step_count: UInt32
-): PTSQueryPredicateStepArray; cdecl; external ModuleName;
+function ts_query_predicates_for_pattern( const self: PTSQuery; pattern_index: UInt32; var step_count: UInt32 ): PTSQueryPredicateStepArray; cdecl; external ModuleName;
 (*
 /*
  * Check if the given pattern in the query has a single root node.
@@ -953,28 +915,16 @@ bool ts_query_is_pattern_guaranteed_at_step(const TSQuery *self, uint32_t byte_o
  * numeric id based on the order that it appeared in the query's source.
  */
 *)
-function ts_query_capture_name_for_id(
-  const self: PTSQuery;
-  index: UInt32;
-  var length: UInt32
-): PAnsiChar; cdecl; external ModuleName;
+function ts_query_capture_name_for_id( const self: PTSQuery; index: UInt32; var length: UInt32 ): PAnsiChar; cdecl; external ModuleName;
 (*
 /**
  * Get the quantifier of the query's captures. Each capture is * associated
  * with a numeric id based on the order that it appeared in the query's source.
  */
 *)
-function ts_query_capture_quantifier_for_id(
-  const self: PTSQuery;
-  pattern_index: UInt32;
-  capture_index: UInt32
-): TSQuantifier; cdecl; external ModuleName;
+function ts_query_capture_quantifier_for_id( const self: PTSQuery; pattern_index: UInt32; capture_index: UInt32 ): TSQuantifier; cdecl; external ModuleName;
 
-function ts_query_string_value_for_id(
-  const self: PTSQuery;
-  index: UInt32;
-  var length: UInt32
-): PAnsiChar; cdecl; external ModuleName;
+function ts_query_string_value_for_id( const self: PTSQuery; index: UInt32; var length: UInt32 ): PAnsiChar; cdecl; external ModuleName;
 (*
 /**
  * Disable a certain capture within a query.
@@ -1037,13 +987,13 @@ procedure ts_query_cursor_exec(self: PTSQueryCursor; const query: PTSQuery; node
  * Query cursors have an optional maximum capacity for storing lists of
  * in-progress captures. If this capacity is exceeded, then the
  * earliest-starting match will silently be dropped to make room for further
- * matches. This maximum capacity is optional — by default, query cursors allow
+ * matches. This maximum capacity is optional � by default, query cursors allow
  * any number of pending matches, dynamically allocating new space for them as
  * needed as the query is executed.
  */
 *)
 function ts_query_cursor_did_exceed_match_limit(const self: PTSQueryCursor): Boolean; cdecl; external ModuleName;
-function ts_query_cursor_match_limit(const self: PTSQueryCursor): UInt32; cdecl; external ModuleName;
+function ts_query_cursor_match_limit           (const self: PTSQueryCursor): UInt32 ; cdecl; external ModuleName;
 procedure ts_query_cursor_set_match_limit(self: PTSQueryCursor; limit: UInt32); cdecl; external ModuleName;
 (*
 /**
@@ -1071,11 +1021,7 @@ procedure ts_query_cursor_remove_match(self: PTSQueryCursor; match_id: UInt32); 
  * the matche's capture list to `*capture_index`. Otherwise, return `false`.
  */
 *)
-function ts_query_cursor_next_capture(
-  self: PTSQueryCursor;
-  var match: TSQueryMatch;
-  var capture_index: UInt32
-): Boolean; cdecl; external ModuleName;
+function ts_query_cursor_next_capture( self: PTSQueryCursor; var match: TSQueryMatch; var capture_index: UInt32 ): Boolean; cdecl; external ModuleName;
 (*
 /**
  * Set the maximum start depth for a query cursor.
@@ -1130,30 +1076,25 @@ function ts_language_symbol_name(const self: PTSLanguage; symbol: TSSymbol): PAn
  * Get the numerical id for the given node type string.
  */
 *)
-function ts_language_symbol_for_name(
-  const self: PTSLanguage;
-  AString: PAnsiChar;
-  length: UInt32;
-  is_named: Boolean
-): TSSymbol; cdecl; external ModuleName;
+function ts_language_symbol_for_name( const self: PTSLanguage; AString: PAnsiChar; length: UInt32; is_named: Boolean ): TSSymbol; cdecl; external ModuleName;
 (*
 /**
  * Get the number of distinct field names in the language.
  */
 *)
-function ts_language_field_count(const Self: PTSLanguage): UInt32; cdecl; external ModuleName;
+function ts_language_field_count(const self: PTSLanguage): UInt32; cdecl; external ModuleName;
 (*
 /**
  * Get the field name string for the given numerical id.
  */
 *)
-function ts_language_field_name_for_id(const Self: PTSLanguage; id: TSFieldId): PAnsiChar; cdecl; external ModuleName;
+function ts_language_field_name_for_id(const self: PTSLanguage; id: TSFieldId): PAnsiChar; cdecl; external ModuleName;
 (*
 /**
  * Get the numerical id for the given field name string.
  */
 *)
-function ts_language_field_id_for_name(const Self: PTSLanguage; const name: PAnsiChar; name_length: UInt32): TSFieldId; cdecl; external ModuleName;
+function ts_language_field_id_for_name(const self: PTSLanguage; const name: PAnsiChar; name_length: UInt32): TSFieldId; cdecl; external ModuleName;
 (*
 /**
  * Check whether the given node type id belongs to named nodes, anonymous nodes,
@@ -1323,20 +1264,16 @@ TSWasmStore *ts_parser_take_wasm_store(TSParser * );
  */
 }
 type
-  Pts_malloc_func = ^Tts_malloc_func;
-  Tts_malloc_func = function(sizeOf: NativeUInt): Pointer; cdecl;
-  Pts_calloc_func = ^Tts_calloc_func;
-  Tts_calloc_func = function(nitems: NativeUInt; size: NativeUInt): Pointer; cdecl;
-  Pts_free_func = ^Tts_free_func;
-  Tts_free_func = procedure(ptr: Pointer); cdecl;
+  Pts_malloc_func  = ^Tts_malloc_func;
+  Tts_malloc_func  = function(sizeOf: NativeUInt): Pointer; cdecl;
+  Pts_calloc_func  = ^Tts_calloc_func;
+  Tts_calloc_func  = function(nitems: NativeUInt; size: NativeUInt): Pointer; cdecl;
+  Pts_free_func    = ^Tts_free_func;
+  Tts_free_func    = procedure(ptr: Pointer); cdecl;
   Pts_realloc_func = ^Tts_realloc_func;
   Tts_realloc_func = function(ptr: Pointer; sizeOf: NativeUInt): Pointer; cdecl;
 
-procedure ts_set_allocator(
-  new_malloc: Pts_malloc_func;
-  new_calloc: Pts_calloc_func;
-  new_realloc: Pts_realloc_func;
-  new_free: Pts_free_func); cdecl; external ModuleName;
+procedure ts_set_allocator( new_malloc: Pts_malloc_func; new_calloc: Pts_calloc_func; new_realloc: Pts_realloc_func; new_free: Pts_free_func); cdecl; external ModuleName;
 
 implementation
 

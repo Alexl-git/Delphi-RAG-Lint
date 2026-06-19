@@ -3,7 +3,8 @@ unit DRagLint.Index.Glob;
 interface
 
 uses
-  System.SysUtils;
+  System.SysUtils
+  ;
 
 type
   /// <summary>Glob-pattern matcher for file names and paths.
@@ -18,27 +19,27 @@ type
   /// process) on large trees where Matches is invoked tens of millions of
   /// times. Not thread-safe state is involved: Matches is a pure function.</remarks>
   TGlob = class
-  public
-    /// <summary>Match AName against APattern. '*' = any run of non-separator
-    /// chars, '?' = one char, '**' = any run incl. path separators.
-    /// Case-insensitive (Windows). Anchored (whole-string match).</summary>
-    /// <param name="AName">The file name or path to test.</param>
-    /// <param name="APattern">The glob pattern (may contain *, ?, **).</param>
-    /// <returns>True if AName matches APattern.</returns>
-    class function Matches(const AName, APattern: string): Boolean; static;
+    public
+      /// <summary>Match AName against APattern. '*' = any run of non-separator
+      /// chars, '?' = one char, '**' = any run incl. path separators.
+      /// Case-insensitive (Windows). Anchored (whole-string match).</summary>
+      /// <param name="AName">The file name or path to test.</param>
+      /// <param name="APattern">The glob pattern (may contain *, ?, **).</param>
+      /// <returns>True if AName matches APattern.</returns>
+      class function Matches(const AName, APattern: string): Boolean; static;
 
-    /// <summary>Return True if AName matches any pattern in APatterns.</summary>
-    /// <param name="AName">The file name or path to test.</param>
-    /// <param name="APatterns">Array of glob patterns.</param>
-    /// <returns>True if AName matches at least one pattern.</returns>
-    class function MatchesAny(const AName: string;
-      const APatterns: TArray<string>): Boolean; static;
+      /// <summary>Return True if AName matches any pattern in APatterns.</summary>
+      /// <param name="AName">The file name or path to test.</param>
+      /// <param name="APatterns">Array of glob patterns.</param>
+      /// <returns>True if AName matches at least one pattern.</returns>
+      class function MatchesAny(const AName: string; const APatterns: TArray<string>): Boolean; static;
   end;
 
 implementation
 
 uses
-  System.Character;
+  System.Character
+  ;
 
 { ---- internal helpers ---------------------------------------------------- }
 
@@ -47,17 +48,15 @@ uses
 function Normalize(const S: string): string;
 var
   I: Integer;
-  C: Char;
+  C: Char   ;
 begin
   SetLength(Result, Length(S));
-  for I := 1 to Length(S) do
+  for I:= 1 to Length(S) do
   begin
-    C := S[I];
-    if C = '\' then
-      C := '/'
-    else
-      C := C.ToLower;
-    Result[I] := C;
+    C:= S[I];
+    if C = '\' then C:= '/'
+    else C:= C.ToLower;
+    Result[I]:= C;
   end;
 end;
 
@@ -78,29 +77,33 @@ end;
 // the native stack or spin pathologically the way nested regex quantifiers can.
 function GlobMatch(const AName, APattern: string): Boolean;
 var
-  N, P: Integer;            // 1-based cursors into AName / APattern
-  NLen, PLen: Integer;
+  N   : Integer; // 1-based cursors into AName / APattern
+  P   : Integer;
+  NLen: Integer;
+  PLen: Integer;
   // Backtrack anchors for a single '*':
-  StarP, StarN: Integer;    // pattern pos just AFTER the '*', and name pos to resume
+  StarP   : Integer; // pattern pos just AFTER the '*', and name pos to resume
+  StarN   : Integer;
   HaveStar: Boolean;
   // Backtrack anchors for a '**':
-  DStarP, DStarN: Integer;
+  DStarP   : Integer;
+  DStarN   : Integer;
   HaveDStar: Boolean;
-  PC: Char;
+  PC       : Char   ;
 begin
-  NLen := Length(AName);
-  PLen := Length(APattern);
+  NLen:= Length(AName   );
+  PLen:= Length(APattern);
 
-  N := 1;
-  P := 1;
-  HaveStar  := False;  StarP  := 0;  StarN  := 0;
-  HaveDStar := False;  DStarP := 0;  DStarN := 0;
+  N:= 1;
+  P:= 1;
+  HaveStar := False; StarP := 0; StarN := 0;
+  HaveDStar:= False; DStarP:= 0; DStarN:= 0;
 
   while N <= NLen do
   begin
     if P <= PLen then
     begin
-      PC := APattern[P];
+      PC:= APattern[P];
 
       if PC = '*' then
       begin
@@ -110,14 +113,13 @@ begin
           // '**' : consume both stars; collapse a following '/' so that
           // '**/x' also matches 'x' at the root (mirrors the old '[/\\]?').
           Inc(P, 2);
-          if (P <= PLen) and (APattern[P] = '/') then
-            Inc(P);
+          if (P <= PLen) and (APattern[P] = '/') then Inc(P);
           // Remember this '**' so we can extend its match (across '/') on
           // a later mismatch. Clear any pending single-star anchor: '**' is
           // the more permissive backtrack point from here on.
-          HaveDStar := True;
-          DStarP := P;
-          DStarN := N;
+          HaveDStar:= True;
+          DStarP   := P;
+          DStarN   := N;
           HaveStar := False;
           Continue;
         end
@@ -125,12 +127,12 @@ begin
         begin
           // single '*' : remember resume point; match zero chars for now.
           Inc(P);
-          HaveStar := True;
-          StarP := P;
-          StarN := N;
+          HaveStar:= True;
+          StarP   := P;
+          StarN   := N;
           Continue;
         end;
-      end;
+      end; // if
 
       if (PC = '?') then
       begin
@@ -147,7 +149,7 @@ begin
         Inc(N);
         Continue;
       end;
-    end;
+    end; // if
 
     // Mismatch (or pattern exhausted while name remains). Try to extend the
     // most recent active wildcard.
@@ -159,8 +161,8 @@ begin
     begin
       // Extend the single '*' by one char and retry from just after it.
       Inc(StarN);
-      N := StarN;
-      P := StarP;
+      N:= StarN;
+      P:= StarP;
       Continue;
     end;
 
@@ -168,23 +170,22 @@ begin
     begin
       // Extend the '**' by one char (may include '/') and retry.
       Inc(DStarN);
-      N := DStarN;
-      P := DStarP;
+      N:= DStarN;
+      P:= DStarP;
       // A '**' supersedes any stale single-star anchor that could not advance.
-      HaveStar := False;
+      HaveStar:= False;
       Continue;
     end;
 
     // No wildcard available to absorb the mismatch.
     Exit(False);
-  end;
+  end; // while
 
   // Name fully consumed; skip any trailing wildcards that can match empty.
-  while (P <= PLen) and (APattern[P] = '*') do
-    Inc(P);
+  while (P <= PLen) and (APattern[P] = '*') do Inc(P);
 
-  Result := (P > PLen);
-end;
+  Result:= (P > PLen);
+end; // function
 
 { TGlob }
 
@@ -192,21 +193,19 @@ class function TGlob.Matches(const AName, APattern: string): Boolean;
 begin
   // Normalize both operands once (lower-case + '/' separators), then run the
   // allocation-free linear matcher.
-  Result := GlobMatch(Normalize(AName), Normalize(APattern));
+  Result:= GlobMatch(Normalize(AName), Normalize(APattern));
 end;
 
-class function TGlob.MatchesAny(const AName: string;
-  const APatterns: TArray<string>): Boolean;
+class function TGlob.MatchesAny(const AName: string; const APatterns: TArray<string>): Boolean;
 var
   NormName: string;
-  P: string;
+  P       : string;
 begin
   // Normalize the name once and reuse it across every pattern.
-  NormName := Normalize(AName);
+  NormName:= Normalize(AName);
   for P in APatterns do
-    if GlobMatch(NormName, Normalize(P)) then
-      Exit(True);
-  Result := False;
+    if GlobMatch(NormName, Normalize(P)) then Exit(True);
+  Result:= False;
 end;
 
 end.

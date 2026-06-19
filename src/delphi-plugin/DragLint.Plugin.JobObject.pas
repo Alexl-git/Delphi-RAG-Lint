@@ -20,7 +20,8 @@ unit DragLint.Plugin.JobObject;
 interface
 
 uses
-  Winapi.Windows;
+  Winapi.Windows
+  ;
 
 /// <summary>Assigns AProcess to the drag-lint kill-on-close job object so the
 /// OS force-terminates it when the IDE process exits, crashes, or is killed.
@@ -41,16 +42,15 @@ var
 begin
   if GJob = 0 then
   begin
-    GJob := CreateJobObject(nil, nil);
+    GJob:= CreateJobObject(nil, nil);
     if GJob <> 0 then
     begin
       FillChar(Info, SizeOf(Info), 0);
-      Info.BasicLimitInformation.LimitFlags := JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-      SetInformationJobObject(GJob, JobObjectExtendedLimitInformation,
-        @Info, SizeOf(Info));
+      Info.BasicLimitInformation.LimitFlags:= JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+      SetInformationJobObject(GJob, JobObjectExtendedLimitInformation, @Info, SizeOf(Info));
     end;
   end;
-  Result := GJob;
+  Result:= GJob;
 end;
 
 procedure AssignToDragLintJob(AProcess: THandle);
@@ -58,9 +58,9 @@ var
   Job: THandle;
 begin
   if (AProcess = 0) or (AProcess = INVALID_HANDLE_VALUE) then Exit;
-  Job := EnsureJob;
+  Job:= EnsureJob;
   if Job = 0 then Exit;
-  AssignProcessToJobObject(Job, AProcess);   { best-effort }
+  AssignProcessToJobObject(Job, AProcess); { best-effort }
 end;
 
 { Intentionally NO finalization that closes GJob: closing it would kill the
