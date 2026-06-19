@@ -26,6 +26,59 @@ symbol graph + structure panel, with click-to-jump into RAD Studio.
 
 ---
 
+## Screenshots
+
+### Out-of-process compiler intelligence, inside the IDE
+Live diagnostics come from compiling your buffer in a **spawned** process — even
+unsaved code — so the IDE never freezes. The Structure panel and a dockable code
+graph sit beside the editor.
+
+![drag-lint live diagnostics in RAD Studio with a docked code graph](docs/Images/IDE_Out_of_process_compilation.png)
+
+### Your DocInsight `///` comments, in Help Insight
+`<summary>` and `<remarks>` render natively in the IDE's Help Insight tooltip.
+
+![A DocInsight doc-comment shown in the IDE Help Insight tooltip](docs/Images/IDE_DOCInsight.png)
+
+### Code Flow View
+Trace a routine's calls as a flowchart — each box carries its DocInsight summary.
+Here `TCompileChecker.Run`, with its signature, params, returns and remarks.
+
+![Code Flow View of TCompileChecker.Run with DocInsight summaries on each box](docs/Images/Graph_Calls_out.png)
+
+### UML class view, with doc on hover
+Search a type to see its members (visibility glyphs + full signatures); hover a
+member for its DocInsight doc.
+
+![UML class box for TCompileChecker with a member doc tooltip](docs/Images/Graph_Find.png)
+
+### Where Used
+A precise, clickable list of a symbol's callers — 7 callers of
+`ResolveActiveIndexDbs` — beside its unit's call graph.
+
+![Where-Used caller list for ResolveActiveIndexDbs in the graph viewer](docs/Images/Graph_Who_uses.png)
+
+### AST-exact symbol query (CLI)
+`drag-lint query --name TCompileChecker --json` returns every match with kind,
+qualified name, section, file and precise line/impl ranges — no comment or
+string-literal noise.
+
+![drag-lint query --json output for TCompileChecker](docs/Images/DRAG-Lint.exe_query_example1.png)
+
+### Find callers, with source context (CLI)
+`drag-lint query find-callers` lists every caller (7 here) with the surrounding
+source lines.
+
+![drag-lint find-callers output with code context](docs/Images/DRAG-Lint.exe_query_example2_Find_Callers.png)
+
+### Semantic compile-check from the CLI
+`drag-lint check-unit` compiles a unit in its project's context and reports
+findings (here: clean).
+
+![drag-lint check-unit clean result](docs/Images/DRAG-Lint.exe_query_example2.png)
+
+---
+
 ## Quick start
 
 ### Standalone CLI
