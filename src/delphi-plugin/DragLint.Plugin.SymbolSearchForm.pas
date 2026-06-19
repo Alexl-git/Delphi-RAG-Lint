@@ -156,6 +156,17 @@ begin
   FEdit.OnChange  := EditChange;
   FList.OnDblClick:= ListDblClick;
   if FForm <> nil then FForm.OnKeyDown:= FormKeyDown;
+
+  { v0.49: opt these controls out of VCL Styles so their WndProc/paint never calls
+    TStyleManager.GetStyle -- that AV'd inside the IDE's theme engine during the
+    search timer's repaint (under some IDE themes / RDP). Best-effort + guarded. }
+  try
+    if FForm      <> nil then FForm.StyleElements      := [];
+    if FEdit      <> nil then FEdit.StyleElements      := [];
+    if FList      <> nil then FList.StyleElements      := [];
+    if FLblStatus <> nil then FLblStatus.StyleElements := [];
+  except
+  end;
 end; // constructor
 
 function TSymbolSearchHandler.GetResult: string;
@@ -190,16 +201,21 @@ var
   ColonPos: Integer       ;
   Item    : TListItem     ;
 begin
+  { v0.49: defensive -- the timer can fire after the form/controls are gone, and
+    the IDE's VCL Styles (TStyleManager.GetStyle) can AV during a styled repaint
+    of these controls under some themes / RDP. Guard nils and NEVER force a
+    synchronous repaint here (FForm.Update was the AV trigger), and wrap every
+    caption set so a theming fault can't crash the IDE. }
+  if (FList = nil) or (FLblStatus = nil) then Exit;
   if (FExePath = '') or (Trim(AText) = '') then
   begin
     FList.Items.Clear;
     SetLength(FItems, 0);
-    FLblStatus.Caption:= 'Type to search...';
+    try FLblStatus.Caption:= 'Type to search...'; except end;
     Exit;
   end;
 
-  FLblStatus.Caption:= 'Searching...';
-  FForm.Update;
+  try FLblStatus.Caption:= 'Searching...'; except end;
 
   CmdLine:= Format('"%s" query --name "%s"', [FExePath, Trim(AText)]) + FDbArgs;
 
@@ -212,7 +228,7 @@ begin
 
     if ExitCode < 0 then
     begin
-      FLblStatus.Caption:= 'Failed to spawn drag-lint.exe';
+      try FLblStatus.Caption:= 'Failed to spawn drag-lint.exe'; except end;
       Exit;
     end;
 
@@ -262,7 +278,7 @@ begin
         Inc(Count);
       end; // for
 
-      FLblStatus.Caption:= Format('%d result(s)', [Count]);
+      try FLblStatus.Caption:= Format('%d result(s)', [Count]); except end;
     finally
       Lines.Free;
     end; // try
