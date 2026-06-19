@@ -33,6 +33,7 @@ uses
   , System.Classes
   , System.IniFiles
   , System.Actions
+  , System.Win.Registry
   , Winapi.Windows
   , Winapi.Messages
   , Vcl.Controls
@@ -409,16 +410,46 @@ end;
 
 { ---- editor-sync (IDE -> viewer) --------------------------------------- }
 
+function ResolveViewerHwnd: HWND;
+{ The viewer to sync, or 0 when none is running (-> editor-sync idles). Prefers a
+  registry-published viewer (covers a STANDALONE viewer the plugin did not spawn),
+  then the embedded dock's viewer child. Every handle is IsWindow-validated so a
+  stale registry entry is ignored. }
+var
+  Reg: TRegistry;
+  H  : HWND      ;
+begin
+  Result:= 0;
+  try
+    Reg:= TRegistry.Create(KEY_READ);
+    try
+      Reg.RootKey:= HKEY_CURRENT_USER;
+      if Reg.OpenKeyReadOnly('Software\DragLint') and Reg.ValueExists('GraphViewerHwnd') then
+      begin
+        H:= HWND(Reg.ReadInteger('GraphViewerHwnd'));
+        if (H <> 0) and IsWindow(H) then Result:= H;
+      end;
+    finally
+      Reg.Free;
+    end;
+  except
+  end;
+  if (Result = 0) and (GGraphFrame <> nil) and (GGraphFrame.FViewerHwnd <> 0)
+     and IsWindow(GGraphFrame.FViewerHwnd) then
+    Result:= GGraphFrame.FViewerHwnd;
+end;
+
 procedure DragLintGraphNotifyActiveUnit(const AUnitName: string);
 var
-  CDS: TCopyDataStruct;
-  A  : AnsiString     ;
-  Res: NativeInt      ;
+  CDS  : TCopyDataStruct;
+  A    : AnsiString     ;
+  Res  : NativeInt      ;
+  Wnd  : HWND           ;
 begin
-  if (GGraphFrame = nil) or (AUnitName = '') then Exit;
-  if GGraphFrame.FViewerHwnd = 0 then Exit; { viewer not embedded yet }
-  if SameText(AUnitName, GLastSyncedUnit) then Exit; { same tab refocused -> skip }
-  if not IsWindow(GGraphFrame.FViewerHwnd) then Exit;
+  if AUnitName = '' then Exit;
+  if SameText(AUnitName, GLastSyncedUnit) then Exit;   { same tab refocused -> skip }
+  Wnd:= ResolveViewerHwnd;
+  if Wnd = 0 then Exit;   { no viewer running (standalone or embedded) -> idle }
 
   A:= AnsiString(AUnitName); { viewer expects 7-bit ANSI }
   CDS.dwData:= CD_CENTER_SYMBOL;
@@ -428,8 +459,9 @@ begin
 
   { SendMessageTimeout (not Post): WM_COPYDATA must be synchronous so the buffer
     stays valid while the viewer copies it. The timeout + ABORTIFHUNG keeps the
-    IDE thread from stalling if the viewer is busy. }
-  if SendMessageTimeout(GGraphFrame.FViewerHwnd, WM_COPYDATA, 0, LPARAM(@CDS), SMTO_ABORTIFHUNG or SMTO_NORMAL, 1000, @Res) <> 0 then GLastSyncedUnit:= AUnitName;
+    IDE thread from stalling if the viewer is busy. Cross-bitness (Win32 plugin ->
+    Win64 viewer) is marshaled by the OS. }
+  if SendMessageTimeout(Wnd, WM_COPYDATA, 0, LPARAM(@CDS), SMTO_ABORTIFHUNG or SMTO_NORMAL, 1000, @Res) <> 0 then GLastSyncedUnit:= AUnitName;
 end; // procedure
 
 initialization
