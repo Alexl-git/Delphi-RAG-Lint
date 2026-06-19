@@ -27,7 +27,13 @@ if (Test-Path $LogFile) {
     foreach ($line in Get-Content $LogFile) {
         if ($line.StartsWith('#') -or -not $line.Trim()) { continue }
         $f = $line -split "`t"; if ($f.Count -lt 4) { continue }
-        $ln=[int]$f[2]; $tk=[int]$f[3]; $totLines+=$ln; $totTokens+=$tk
+        # Robust parse: tolerate malformed entries (e.g. '~120', stray quotes) by
+        # keeping only digits. A bad line must NEVER abort the report (it did,
+        # silently, 2026-06-15..17). Non-numeric -> 0, never throws.
+        $ln=0; $tk=0
+        [void][int]::TryParse((([string]$f[2]) -replace '\D',''), [ref]$ln)
+        [void][int]::TryParse((([string]$f[3]) -replace '\D',''), [ref]$tk)
+        $totLines+=$ln; $totTokens+=$tk
         if ($f[0].StartsWith($Today)) { $todayRows++; $todayLines+=$ln; $todayTokens+=$tk }
     }
 }

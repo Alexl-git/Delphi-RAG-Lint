@@ -25,204 +25,219 @@ unit DragLint.Plugin.OpenSourceServer;
 interface
 
 procedure StartOpenSourceServer;
-procedure StopOpenSourceServer;   { idempotent }
+procedure StopOpenSourceServer; { idempotent }
 
 implementation
 
 uses
-  Winapi.Windows,
-  System.SysUtils,
-  System.Classes,
-  ToolsAPI;
+  Winapi.Windows
+  , System.SysUtils
+  , System.Classes
+  , ToolsAPI
+  ;
 
 const
   OPEN_SOURCE_PIPE_NAME = '\\.\pipe\drag-lint-open-source';
-  SEP  = #9;
-  TERM = #10;
-  MAX_MSG = 8 * 1024;   { a path + 2 ints; anything larger is bogus }
+  SEP                   = #9;
+  TERM                  = #10;
+  MAX_MSG               = 8 * 1024; { a path + 2 ints; anything larger is bogus }
 
 type
   TOpenSourceListener = class(TThread)
-  protected
-    procedure Execute; override;
-  public
-    constructor Create;
+    protected
+      procedure Execute; override;
+    public
+      constructor Create;
   end;
 
 var
   GServer: TOpenSourceListener = nil;
 
-{ ---- main-thread open (OTAPI) ------------------------------------------- }
+  { ---- main-thread open (OTAPI) ------------------------------------------- }
 
 procedure DoOpenInIDE(const AFile: string; ALine, ACol: Integer);
 var
-  AS_: IOTAActionServices;
-  ESS: IOTAEditorServices;
-  EV:  IOTAEditView;
-  Pos: IOTAEditPosition;
-  OpenOk: Boolean;
+  AS_   : IOTAActionServices;
+  MS_   : IOTAModuleServices;
+  Mod_  : IOTAModule        ;
+  SrcEd : IOTASourceEditor  ;
+  ESS   : IOTAEditorServices;
+  EV    : IOTAEditView      ;
+  Pos   : IOTAEditPosition  ;
+  OpenOk: Boolean           ;
+  I     : Integer           ;
 begin
   if (AFile = '') or not FileExists(AFile) then Exit;
 
-  { Guard on OpenFile's result.  If it failed (or the service is absent) we must
-    NOT fall through and GotoLine -- that would scroll whatever file was already
-    focused to ALine, which looks like "the IDE got the command but did the
-    wrong thing." }
-  OpenOk := Supports(BorlandIDEServices, IOTAActionServices, AS_) and
-            AS_.OpenFile(AFile);
+  { Open the target. For a CODE file force the SOURCE editor to the front via
+    OpenModule + IOTASourceEditor.Show, so a form unit's .pas lands on the CODE
+    view -- not the form designer (mirrors DLNavigateToSource). Only an explicit
+    .dfm target opens the designer (a genuine component-node click). Falls back to
+    OpenFile if module services are unavailable. Guard the result: if the open
+    failed we must NOT fall through to GotoLine (that would scroll whatever file
+    was already focused, looking like "the IDE did the wrong thing"). }
+  OpenOk:= False;
+  if SameText(ExtractFileExt(AFile), '.dfm') then OpenOk:= Supports(BorlandIDEServices, IOTAActionServices, AS_) and AS_.OpenFile(AFile)
+  else
+  begin
+    if Supports(BorlandIDEServices, IOTAModuleServices, MS_) then
+    begin
+      Mod_:= MS_.OpenModule(AFile);
+      if Mod_ <> nil then
+      begin
+        for I:= 0 to Mod_.GetModuleFileCount - 1 do
+          if Supports(Mod_.GetModuleFileEditor(I), IOTASourceEditor, SrcEd) then
+          begin
+            SrcEd.Show; { selects the code tab, not the designer }
+            Break;
+          end;
+        OpenOk:= True;
+      end;
+    end;
+    if not OpenOk then OpenOk:= Supports(BorlandIDEServices, IOTAActionServices, AS_) and AS_.OpenFile(AFile);
+  end; // else
   if not OpenOk then Exit;
 
   if (ALine > 0) and Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
   begin
-    EV := ESS.TopView;
+    EV:= ESS.TopView;
     if EV <> nil then
     begin
-      Pos := EV.Position;
+      Pos:= EV.Position;
       if Pos <> nil then
       begin
-        if ACol > 1 then
-          Pos.Move(ALine, ACol)
-        else
-          Pos.GotoLine(ALine);
+        if ACol > 1 then Pos.Move(ALine, ACol)
+        else Pos.GotoLine(ALine);
         EV.MoveViewToCursor;
         EV.Paint;
       end;
     end;
-  end;
-end;
+  end; // if
+end; // procedure
 
 { Build a fresh closure per call so each queued open captures its OWN copies of
   the arguments (anonymous methods capture variables by reference, so we must
   not let the listener loop reuse the same locals underneath a pending queue). }
-function MakeOpenProc(const AFile: string; ALine, ACol: Integer):
-  TThreadProcedure;
+function MakeOpenProc(const AFile: string; ALine, ACol: Integer): TThreadProcedure;
 begin
-  Result :=
-    procedure
+  Result:=
+  procedure
     begin
       DoOpenInIDE(AFile, ALine, ACol);
     end;
-end;
+  end;
 
 { Parse "<file>[TAB<line>[TAB<col>]]" -- positional, extra fields ignored, a
   missing/garbled number defaults to safe values (line 0 = file only). }
-procedure DispatchMessage(const ARaw: string);
-var
-  S:       string;
-  Parts:   TArray<string>;
-  AFile:   string;
-  ALine:   Integer;
-  ACol:    Integer;
-begin
-  S := ARaw;
-  { strip a trailing CR if a client ever sends CRLF, and the LF terminator }
-  while (S <> '') and ((S[Length(S)] = #10) or (S[Length(S)] = #13)) do
-    SetLength(S, Length(S) - 1);
-  if S = '' then Exit;
+  procedure DispatchMessage(const ARaw: string);
+  var
+    S    : string        ;
+    Parts: TArray<string>;
+    AFile: string        ;
+    ALine: Integer       ;
+    ACol : Integer       ;
+  begin
+    S:= ARaw;
+    { strip a trailing CR if a client ever sends CRLF, and the LF terminator }
+    while (S <> '') and ((S[Length(S)] = #10) or (S[Length(S)] = #13)) do SetLength(S, Length(S) - 1);
+    if S = '' then Exit;
 
-  Parts := S.Split([SEP]);
-  if Length(Parts) = 0 then Exit;
-  AFile := Parts[0];
-  ALine := 0;
-  ACol  := 0;
-  if Length(Parts) >= 2 then ALine := StrToIntDef(Parts[1], 0);
-  if Length(Parts) >= 3 then ACol  := StrToIntDef(Parts[2], 0);
-  if AFile = '' then Exit;
+    Parts:= S.Split([SEP]);
+    if Length(Parts) = 0 then Exit;
+    AFile:= Parts[0];
+    ALine:= 0;
+    ACol := 0;
+    if Length(Parts) >= 2 then ALine:= StrToIntDef(Parts[1], 0);
+    if Length(Parts) >= 3 then ACol := StrToIntDef(Parts[2], 0);
+    if AFile = '' then Exit;
 
-  { OTAPI must run on the IDE main thread. }
-  TThread.Queue(nil, MakeOpenProc(AFile, ALine, ACol));
-end;
+    { OTAPI must run on the IDE main thread. }
+    TThread.Queue(nil, MakeOpenProc(AFile, ALine, ACol));
+  end; // procedure
 
 { ---- listener thread ----------------------------------------------------- }
 
-constructor TOpenSourceListener.Create;
-begin
-  inherited Create(False);   { start immediately }
-  FreeOnTerminate := False;  { owner frees us after WaitFor }
-end;
-
-procedure TOpenSourceListener.Execute;
-var
-  Pipe:     THandle;
-  Connected: Boolean;
-  Buf:      array[0..511] of AnsiChar;
-  Read:     DWORD;
-  Acc:      TBytes;
-  I:        Integer;
-  GotTerm:  Boolean;
-  Raw:      string;
-begin
-  NameThreadForDebugging('drag-lint open-source pipe');
-  while not Terminated do
+  constructor TOpenSourceListener.Create;
   begin
-    Pipe := CreateNamedPipe(
-      OPEN_SOURCE_PIPE_NAME,
-      PIPE_ACCESS_INBOUND,
-      PIPE_TYPE_BYTE or PIPE_READMODE_BYTE or PIPE_WAIT,
-      PIPE_UNLIMITED_INSTANCES,
-      0, MAX_MSG, 0, nil);
-    if Pipe = INVALID_HANDLE_VALUE then
-    begin
-      { transient failure -- back off briefly, re-check Terminated }
-      Sleep(200);
-      Continue;
-    end;
-
-    try
-      { Blocks until a client connects (the viewer, or the throwaway client
-        that StopOpenSourceServer uses to release us). }
-      Connected := ConnectNamedPipe(Pipe, nil) or
-                   (GetLastError = ERROR_PIPE_CONNECTED);
-      if Terminated then Break;
-      if not Connected then Continue;
-
-      { Read the single framed message (until LF, EOF, or the size cap). }
-      SetLength(Acc, 0);
-      GotTerm := False;
-      while (not GotTerm) and (Length(Acc) < MAX_MSG) do
-      begin
-        Read := 0;
-        if not ReadFile(Pipe, Buf[0], Length(Buf), Read, nil) then Break;
-        if Read = 0 then Break;
-        I := Length(Acc);
-        SetLength(Acc, I + Integer(Read));
-        Move(Buf[0], Acc[I], Read);
-        { stop as soon as we have the LF terminator }
-        for I := 0 to Integer(Read) - 1 do
-          if Buf[I] = TERM then begin GotTerm := True; Break; end;
-      end;
-
-      if Length(Acc) > 0 then
-      begin
-        Raw := TEncoding.UTF8.GetString(Acc);
-        if not Terminated then
-          DispatchMessage(Raw);
-      end;
-    finally
-      DisconnectNamedPipe(Pipe);
-      CloseHandle(Pipe);
-    end;
+    inherited Create(False); { start immediately }
+    FreeOnTerminate:= False; { owner frees us after WaitFor }
   end;
-end;
+
+  procedure TOpenSourceListener.Execute;
+  var
+    Pipe     : THandle                  ;
+    Connected: Boolean                  ;
+    Buf      : array[0..511] of AnsiChar;
+    Read     : DWORD                    ;
+    Acc      : TBytes                   ;
+    I        : Integer                  ;
+    GotTerm  : Boolean                  ;
+    Raw      : string                   ;
+  begin
+    NameThreadForDebugging('drag-lint open-source pipe');
+    while not Terminated do
+    begin
+      Pipe:= CreateNamedPipe( OPEN_SOURCE_PIPE_NAME, PIPE_ACCESS_INBOUND, PIPE_TYPE_BYTE or PIPE_READMODE_BYTE or PIPE_WAIT, PIPE_UNLIMITED_INSTANCES, 0, MAX_MSG, 0, nil);
+      if Pipe = INVALID_HANDLE_VALUE then
+      begin
+        { transient failure -- back off briefly, re-check Terminated }
+        Sleep(200);
+        Continue;
+      end;
+
+      try
+        { Blocks until a client connects (the viewer, or the throwaway client
+        that StopOpenSourceServer uses to release us). }
+        Connected:= ConnectNamedPipe(Pipe, nil) or (GetLastError = ERROR_PIPE_CONNECTED);
+        if Terminated then Break;
+        if not Connected then Continue;
+
+        { Read the single framed message (until LF, EOF, or the size cap). }
+        SetLength(Acc, 0);
+        GotTerm:= False;
+        while (not GotTerm) and (Length(Acc) < MAX_MSG) do
+        begin
+          Read:= 0;
+          if not ReadFile(Pipe, Buf[0], Length(Buf), Read, nil) then Break;
+          if Read = 0 then Break;
+          I:= Length(Acc);
+          SetLength(Acc, I + Integer(Read));
+          Move(Buf[0], Acc[I], Read);
+          { stop as soon as we have the LF terminator }
+          for I:= 0 to Integer(Read) - 1 do
+            if Buf[I] = TERM then begin GotTerm:= True; Break; end;
+        end;
+
+        if Length(Acc) > 0 then
+        begin
+          Raw:= TEncoding.UTF8.GetString(Acc);
+          if not Terminated then DispatchMessage(Raw);
+        end;
+      finally
+        DisconnectNamedPipe(Pipe);
+        CloseHandle        (Pipe);
+      end; // try
+    end; // while
+  end; // procedure
 
 { ---- public start/stop --------------------------------------------------- }
 
-procedure StartOpenSourceServer;
-begin
-  if GServer <> nil then Exit;
-  GServer := TOpenSourceListener.Create;
-end;
+  procedure StartOpenSourceServer;
+  begin
+    if GServer <> nil then Exit;
+    GServer:= TOpenSourceListener.Create;
+  end;
 
-procedure StopOpenSourceServer;
-var
-  H: THandle;
-  I: Integer;
-begin
-  if GServer = nil then Exit;
+  procedure StopOpenSourceServer;
+  var
+    H: THandle;
+    I: Integer;
+  begin
+    if GServer = nil then Exit;
 
-  GServer.Terminate;
+    GServer.Terminate;
 
-  { Wake the listener out of its blocking ConnectNamedPipe by connecting a
+    { Wake the listener out of its blocking ConnectNamedPipe by connecting a
     throwaway client, then close it.
 
     BUG FIX (IDE freeze on uninstall): the pipe is PIPE_ACCESS_INBOUND, so the
@@ -231,35 +246,32 @@ begin
     listener stayed blocked in ConnectNamedPipe, and the unbounded WaitFor below
     hung the IDE thread forever.  Open GENERIC_WRITE, and retry a few times to
     cover the race where the listener is between pipe instances. }
-  for I := 1 to 10 do
-  begin
-    if WaitForSingleObject(GServer.Handle, 0) = WAIT_OBJECT_0 then Break;
-    if WaitNamedPipe(OPEN_SOURCE_PIPE_NAME, 100) then
+    for I:= 1 to 10 do
     begin
-      H := CreateFile(OPEN_SOURCE_PIPE_NAME, GENERIC_WRITE, 0, nil,
-        OPEN_EXISTING, 0, 0);
-      if H <> INVALID_HANDLE_VALUE then
-        CloseHandle(H);
+      if WaitForSingleObject(GServer.Handle, 0) = WAIT_OBJECT_0 then Break;
+      if WaitNamedPipe(OPEN_SOURCE_PIPE_NAME, 100) then
+      begin
+        H:= CreateFile(OPEN_SOURCE_PIPE_NAME, GENERIC_WRITE, 0, nil, OPEN_EXISTING, 0, 0);
+        if H <> INVALID_HANDLE_VALUE then CloseHandle(H);
+      end;
+      if WaitForSingleObject(GServer.Handle, 150) = WAIT_OBJECT_0 then Break;
     end;
-    if WaitForSingleObject(GServer.Handle, 150) = WAIT_OBJECT_0 then Break;
-  end;
 
-  { Bounded final wait so a stuck listener can NEVER freeze the IDE (the old
+    { Bounded final wait so a stuck listener can NEVER freeze the IDE (the old
     unbounded TThread.WaitFor was the freeze).  If it really did not stop, detach
     and let it self-free on terminate rather than free a live thread (which would
     AV) -- a one-thread leak at unload beats a hung IDE. }
-  if WaitForSingleObject(GServer.Handle, 2000) = WAIT_OBJECT_0 then
-    FreeAndNil(GServer)
-  else
-  begin
-    GServer.FreeOnTerminate := True;
-    GServer := nil;
-  end;
-end;
+    if WaitForSingleObject(GServer.Handle, 2000) = WAIT_OBJECT_0 then FreeAndNil(GServer)
+    else
+    begin
+      GServer.FreeOnTerminate:= True;
+      GServer:= nil;
+    end;
+  end; // procedure
 
 initialization
 
 finalization
-  try StopOpenSourceServer; except end;
+try StopOpenSourceServer; except end;
 
 end.

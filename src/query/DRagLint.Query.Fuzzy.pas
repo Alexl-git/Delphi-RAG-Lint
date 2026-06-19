@@ -3,8 +3,9 @@ unit DRagLint.Query.Fuzzy;
 interface
 
 uses
-  System.SysUtils,
-  System.Generics.Collections;
+  System.SysUtils
+  , System.Generics.Collections
+  ;
 
 // Classic O(|a|*|b|) Levenshtein distance with two rolling rows.
 // Case-insensitive (lowercases both inputs first) - Pascal identifiers are
@@ -23,86 +24,89 @@ implementation
 
 function LevenshteinDistance(const A, B: string): Integer;
 var
-  La, Lb, i, j, Cost, Above, Left, Diag, Tmp: Integer;
+  La              : Integer         ;
+  Lb              : Integer         ;
+  i               : Integer         ;
+  j               : Integer         ;
+  Cost            : Integer         ;
+  Above           : Integer         ;
+  Left            : Integer         ;
+  Diag            : Integer         ;
+  Tmp             : Integer         ;
   RowPrev, RowCurr: array of Integer;
-  LowA, LowB: string;
+  LowA            : string          ;
+  LowB            : string          ;
 begin
-  LowA := LowerCase(A);
-  LowB := LowerCase(B);
-  La := Length(LowA);
-  Lb := Length(LowB);
+  LowA:= LowerCase(A   );
+  LowB:= LowerCase(B   );
+  La  := Length   (LowA);
+  Lb  := Length   (LowB);
   if La = 0 then Exit(Lb);
   if Lb = 0 then Exit(La);
 
   SetLength(RowPrev, Lb + 1);
   SetLength(RowCurr, Lb + 1);
-  for j := 0 to Lb do
-    RowPrev[j] := j;
+  for j:= 0 to Lb do RowPrev[j]:= j;
 
-  for i := 1 to La do
+  for i:= 1 to La do
   begin
-    RowCurr[0] := i;
-    for j := 1 to Lb do
+    RowCurr[0]:= i;
+    for j:= 1 to Lb do
     begin
-      if LowA[i] = LowB[j] then
-        Cost := 0
-      else
-        Cost := 1;
-      Above := RowPrev[j] + 1;
-      Left := RowCurr[j - 1] + 1;
-      Diag := RowPrev[j - 1] + Cost;
-      Tmp := Above;
-      if Left < Tmp then Tmp := Left;
-      if Diag < Tmp then Tmp := Diag;
-      RowCurr[j] := Tmp;
+      if LowA[i] = LowB[j] then Cost:= 0
+      else Cost:= 1;
+      Above:= RowPrev[j] + 1;
+      Left:= RowCurr[j - 1] + 1;
+      Diag:= RowPrev[j - 1] + Cost;
+      Tmp:= Above;
+      if Left < Tmp then Tmp:= Left;
+      if Diag < Tmp then Tmp:= Diag;
+      RowCurr[j]:= Tmp;
     end;
-    RowPrev := Copy(RowCurr);
-  end;
-  Result := RowPrev[Lb];
-end;
+    RowPrev:= Copy(RowCurr);
+  end; // for
+  Result:= RowPrev[Lb];
+end; // function
 
 function FuzzyMaxDistanceFor(const APattern: string): Integer;
 var
   L: Integer;
 begin
-  L := Length(APattern);
-  if L <= 4 then
-    Result := 1
-  else if L <= 8 then
-    Result := 2
-  else
-    Result := 3;
+  L:= Length(APattern);
+  if L <= 4 then Result:= 1
+  else if L <= 8 then Result:= 2
+  else Result:= 3;
 end;
 
 function Trigrams(const S: string): TArray<string>;
 var
-  Low: string;
-  i, N: Integer;
+  Low : string                      ;
+  i   : Integer                     ;
+  N   : Integer                     ;
   Seen: TDictionary<string, Boolean>;
-  G: string;
-  List: TList<string>;
+  G   : string                      ;
+  List: TList<string>               ;
 begin
-  Low := LowerCase(S);
-  N := Length(Low);
-  if N < 3 then
-    Exit(nil);
-  Seen := TDictionary<string, Boolean>.Create;
-  List := TList<string>.Create;
+  Low:= LowerCase(S  );
+  N  := Length   (Low);
+  if N < 3 then Exit(nil);
+  Seen:= TDictionary<string, Boolean>.Create;
+  List:= TList<string>.Create;
   try
-    for i := 1 to N - 2 do
+    for i:= 1 to N - 2 do
     begin
-      G := Copy(Low, i, 3);
+      G:= Copy(Low, i, 3);
       if not Seen.ContainsKey(G) then
       begin
         Seen.Add(G, True);
         List.Add(G);
       end;
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
     Seen.Free;
   end;
-end;
+end; // function
 
 end.

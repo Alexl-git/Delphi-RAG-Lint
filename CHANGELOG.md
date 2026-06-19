@@ -3,6 +3,115 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.44.0-alpha -- 2026-06-14
+
+### Added (forms-csv test-helper navigation map)
+- **`forms-csv --project <dproj> --db <sqlite> [--out <f.csv>] [--root <TfrmMAIN>]`**
+  -- emits a tester-oriented CSV, one row per navigable form (forms/dialogs only;
+  data modules and frames excluded via class-ancestry). Columns: `#`, `Unit`,
+  `FormName`, `PAS lines`, `Navigation`, `Called From`, `Notes`.
+  - **Navigation**: the button/menu captions a tester clicks from the application's
+    main form to reach each form, e.g. `frmMAIN -> 'Job List' -> 'Open Folder'`.
+    Built by resolving form-construction sites (`TfrmX.Create` incl. named ctors,
+    `Application.CreateForm`) to their enclosing routine, mapping that to the owning
+    form, and reading the bound control's caption from the `.dfm`. Resolves direct
+    handlers, handlers reached indirectly within a form, and `TAction` captions;
+    falls back to `(via Routine)` when no captioned control binds the launch
+    (keep-the-gap), and `(no path from MAIN)` when unreachable. BFS = shortest path;
+    cycle-safe.
+  - **Called From**: the distinct forms that directly open this one (with captions).
+  - Root form auto-detected from the `.dpr` (last `Application.CreateForm` of a form
+    at/before `Application.Run`); override with `--root`. Inventory is restricted to
+    the project's own units (skips `*- Copy`/`.bak` backups).
+  - Requires a **current** index -- re-index the project if rows show mostly
+    `(no path from MAIN)` (stale construction-site line numbers break edge detection).
+- **IDE plugin: "Generate Test Helper CSV..."** Tools-menu item -- saves all, runs
+  `forms-csv` on the active project, opens the CSV.
+
+## v0.43.0-alpha -- 2026-06-12
+
+### Added (semantic diagnostics + uses cleanup)
+- **`check-unit <unit.pas> [--project <dproj>] [--platform win32|win64]
+  [--shadow <dir>] [--resolve-uses]`** -- compile ONE unit in full project
+  context (deps from DCUs) for real semantic errors (`E2003` etc.) without a
+  full build. `--shadow` overlays an unsaved-buffer copy so errors reflect edits
+  before save, never touching the file. `--platform` matches the project's
+  active config (picks dcc32/dcc64 + that platform's RTL lib; avoids `F2048`).
+  `--resolve-uses` annotates undeclared identifiers with the unit to add.
+- **`cycles --db <sqlite> [--edges] [--causes]`** -- circular unit dependencies
+  (Tarjan SCC over the unit-uses graph). `--edges` lists each cycle's actual
+  `A uses B [section]` edges, flags interface edges as move-to-implementation
+  candidates and layering inversions (COMMON -> CLIENT/SERVER). `--causes`
+  pinpoints the specific symbols in A's interface that reference B (the
+  types/vars/methods to move/extract), with line numbers and an honest note
+  where the index couldn't resolve a ref. `--plan` emits a followable markdown
+  refactoring playbook per cycle (files, symbols with use + declaration line,
+  an auto-classified fix -- extract-contract or invert-dependency -- numbered
+  steps, and a verify command) that a junior dev or small model can execute.
+- **`uses-audit <unit.pas>`** -- index proposal of interface->implementation
+  moves + unused units (conservative; project units only).
+- **`uses-fix <unit.pas> --project <dproj> [--apply] [--remove-unused]`** --
+  compiler-VERIFIED uses-clause cleanup: move interface-only imports down,
+  optionally comment out unused units (skips those with init/final sections).
+  Each edit is shadow-compiled and kept only if it adds no new error vs the
+  baseline; dry-run by default, `--apply` writes after a `.bak`. With no
+  `<unit>` target it runs a project-wide dry-run sweep report.
+
+### Known limitation (uses-fix)
+- `uses-fix`'s per-unit verify is **best-effort, not a faithful full-build
+  check**: a single-unit `dcc` compile can reuse a stale `.dcu` (masking a real
+  error) or abort on an RTL dependency (`F1026`), so a move that breaks the full
+  build can pass per-unit. A safety guard now rejects edits whose verify compile
+  *fatally aborted*, but the `.dcu`-reuse case can still false-pass. **Always do
+  a full project build after `--apply`**; treat `cycles`/`uses-audit` as
+  advisory. Reliable bulk cleanup needs full-project-build verification.
+
+### Fixed
+- **Duplicate file rows on re-index.** Mixed-separator stored paths
+  (`C:/root\sub\file.pas`) defeated the `files.path` UNIQUE upsert, so each
+  re-index inserted a duplicate row and left stale `unit_uses`/refs. Paths are
+  now canonicalised at the store boundary; an incremental re-index is a true
+  no-op (`skipped N up-to-date`).
+
+### Added
+- **Dedicated dockable Graph window.** The graph is now its own
+  `INTACustomDockableForm` ("drag-lint Graph", under View > Tool Windows) rather
+  than a tab -- so it can sit open beside the Structure window, both visible at
+  once. It hosts the standalone viewer **in-place**: the plugin launches
+  `drag_lint_graph.exe --parent-hwnd <thisWindow>`, the viewer renders as a
+  child filling the window, and the plugin terminates it on close. Jump-to-source
+  still flows through the named-pipe contract. (Viewer side: new `--parent-hwnd`
+  embed mode.)
+- **Hover: IDE-style Parameters block.** Proc-like hovers now break the
+  signature into a `**Parameters:**` list (one `name : type` per line, with
+  `const`/`var`/`out` preserved) plus a `**Returns:**` line -- mirroring the
+  IDE's parameter insight -- even when the symbol has no doc-comment. Works in
+  the LSP popup and `drag-lint hover` (which no longer errors on no-doc
+  symbols). Generic types stay intact (top-level split respects `<> () []`).
+- **Structure window: right-click navigation menu.** Single/double-click still
+  goes to the declaration; the new context menu adds **Go to Implementation
+  (body)** -- scans the file for the `TClass.Method` body line -- and **Find
+  Usages** (opens the usages view for the symbol). Right-click selects the node
+  under the cursor first.
+
+## v0.42.0-alpha -- 2026-06-12
+
+### Added
+- **`index --scan-libraries-win`** and **`index --scan-libraries-all`**: build a
+  single library index from the IDE's registry Library + Browsing paths.
+  `-win` covers Win32 + Win64 (the IDE's native targets, and what `--scan-libraries`
+  still aliases to); `-all` enumerates **every** platform subkey under
+  `...\BDS\37.0\Library` (Android/iOS/Linux64/OSX/Win64x/...), adding the
+  platform-specific `source\rtl\posix`, `source\rtl\ios` and `posix\osx` trees so
+  `Posix.*` / `iOSapi.*` / `Macapi.*` / `Androidapi.*` symbols resolve. Both
+  deduplicate across HKCU+HKLM and 32/64-bit registry views; `$(Platform)` now
+  expands per-platform instead of a hardcoded `Win64`.
+
+### Fixed (compiler hygiene)
+- Cleared inline-expansion hints (H2443) by adding `FireDAC.Stan.Param` and
+  `System.Generics.Collections` to the units that needed them; removed dead
+  locals and the superseded `ParseJsonOutput` method (H2164/H2219/W1050).
+
 ## v0.41.0-alpha -- 2026-06-05
 
 ### Added

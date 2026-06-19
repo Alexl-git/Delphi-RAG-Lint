@@ -31,7 +31,7 @@
 [CmdletBinding()]
 param(
     [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win32\drag-lint.exe",
-    [string] $ExpectedVersion = '0.40.5-alpha',
+    [string] $ExpectedVersion = '0.46.0-alpha',
     [string] $FixtureDir = "$PSScriptRoot\fixtures",
     [string] $WorkDir = "$env:TEMP\drag-lint-autotest",
     [int]    $InitTimeoutMs = 3000,
@@ -93,8 +93,12 @@ Run-Stage 'CLI smoke' {
     $t0 = [Diagnostics.Stopwatch]::StartNew()
     $verOut = & $Exe --version 2>&1
     $t0.Stop()
-    Write-Check '--version exits 0'        ($LASTEXITCODE -eq 0) $verOut $t0.Elapsed.TotalMilliseconds
-    Write-Check '--version matches expected' ($verOut -match [Regex]::Escape($ExpectedVersion)) $verOut
+    # v0.48: join to a scalar -- the engine prints a 2nd '(loaded defaults ...)'
+    # line, and `$array -match` returns the matching ELEMENTS (an array), which
+    # broke the [bool] $Ok param. Join first so -match yields a scalar bool.
+    $verStr = ($verOut | Out-String)
+    Write-Check '--version exits 0'        ($LASTEXITCODE -eq 0) $verStr $t0.Elapsed.TotalMilliseconds
+    Write-Check '--version matches expected' ([bool]($verStr -match [Regex]::Escape($ExpectedVersion))) $verStr
 
     $t1 = [Diagnostics.Stopwatch]::StartNew()
     $indexOut = & $Exe index $FixtureDir --db $db 2>&1 | Select-Object -Last 1
@@ -111,6 +115,19 @@ Run-Stage 'CLI smoke' {
     $fcOut = & $Exe query find-callers --name KnownMethod --db $db 2>&1
     $t3.Stop()
     Write-Check 'find-callers KnownMethod returns 1+ ref' (($fcOut | Select-String 'KnownMethod|SampleUnit' -Quiet) -eq $true) "($($fcOut.Count) lines)" $t3.Elapsed.TotalMilliseconds
+
+    # v0.48: implementation-only free routine (ImplOnlyHelper) is now indexed.
+    # Before v0.48 these returned 0 matches (interface-decl-is-source dedup
+    # skipped routines defined only in the implementation section).
+    $ioOut = & $Exe query --name ImplOnlyHelper --db $db 2>&1
+    Write-Check 'query ImplOnlyHelper (impl-only routine) returns a match' (($ioOut | Select-String 'ImplOnlyHelper' -Quiet) -eq $true) "($($ioOut.Count) lines)"
+    $iofcOut = & $Exe query find-callers --name ImplOnlyHelper --db $db 2>&1
+    Write-Check 'find-callers ImplOnlyHelper returns a ref' (($iofcOut | Select-String 'ImplOnlyHelper|SampleUnit' -Quiet) -eq $true) "($($iofcOut.Count) lines)"
+
+    # v0.48 / schema v9: the routine's body line-range is stored (impl_start_line > 0).
+    $ioJson = (& $Exe query --name ImplOnlyHelper --db $db --json 2>&1) | Out-String
+    $implOk = [bool]($ioJson -match '"impl_start_line":\s*([1-9]\d*)')
+    Write-Check 'ImplOnlyHelper has a body range (impl_start_line > 0)' $implOk "impl_start_line=$($Matches[1])"
 
     $t4 = [Diagnostics.Stopwatch]::StartNew()
     $hovOut = & $Exe hover --qname SampleUnit.TKnownClass.KnownMethod --db $db 2>&1

@@ -36,7 +36,8 @@ One scope per command:
 ```
 drag-lint index C:\Projects\DB\ORM3 --db C:\Projects\DB\ORM3\drag-lint.sqlite
 drag-lint index C:\Projects\DB\SQL  --db C:\Projects\DB\SQL\drag-lint-sql.sqlite
-drag-lint index --scan-libraries    --db C:\Projects\Delphi-RAG-lint\third_party\dll-win32\drag-lint-library.sqlite
+drag-lint index --scan-libraries-win --db C:\Projects\Delphi-RAG-lint\third_party\dll-win32\drag-lint-library.sqlite
+REM  ...use --scan-libraries-all instead to also pull in Posix/iOS/Android/OSX source trees.
 drag-lint index C:\Projects         --db C:\Projects\drag-lint-all.sqlite
 ```
 

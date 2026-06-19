@@ -56,6 +56,12 @@ You can drive it two ways, both backed by the same engine:
 > - **Class shape / member signatures:** `drag-lint surface --qname <Unit.TClass> --db <DB>`
 > - **One symbol's source body:** `drag-lint slice --qname <Unit.TClass.Method> --db <DB>`
 > - **Blast radius before a refactor:** `drag-lint impact --qname <...> --db <DB>`
+> - **Framework wiring (Spring4D DI + DFM events):** `drag-lint wiring --qname <IIntf|TForm> --db <DB> [--format json]`
+>   Answers "who implements `IFoo` and where is it resolved" (DI: impl class +
+>   lifetime + resolve-sites) and "what handles this form's events" (DFM
+>   component event -> handler method) in one call. `--coverage` lists DI
+>   registrations not resolved into an interface->impl edge (named / instance /
+>   delegate / factory).
 > - **Syntax check without the compiler:** `drag-lint check-ast <file.pas>`
 >   (reports `(line,col): error syntax-error`).
 > - **Type at a cursor position:** `drag-lint typeat <file>:<line>:<col> --db <DB>`
@@ -85,6 +91,7 @@ It speaks **JSON-RPC 2.0 over stdio**. Tools exposed:
 | `get_surface` | class surface (signatures) |
 | `get_slice` | a symbol's source body |
 | `get_impact` | transitive caller impact |
+| `get_wiring` | Spring4D DI edges (impl class + lifetime + resolve-sites) and DFM event handlers, by interface or form name |
 | `get_symbol_doc` | doc comment for a symbol |
 | `get_type_at_position` | resolve identifier at file:line:col |
 | `find_by_doc_tag` / `find_undocumented` | doc-driven queries |

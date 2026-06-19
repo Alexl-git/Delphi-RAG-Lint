@@ -1,0 +1,2 @@
+{ "indexes": { "exclude": ["* - Copy"],
+  "sections": [ { "name": "A", "include": ["tree/inA"] }, { "name": "B", "include": ["tree/inB"] } ] } }

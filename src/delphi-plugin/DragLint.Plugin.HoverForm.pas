@@ -22,51 +22,81 @@ unit DragLint.Plugin.HoverForm;
 interface
 
 uses
-  System.SysUtils, System.Classes,
-  Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.Graphics, Vcl.ComCtrls,
-  Winapi.Windows, Winapi.Messages,
-  ToolsAPI;
+  System.SysUtils
+  , System.Classes
+  , Vcl.Forms
+  , Vcl.Controls
+  , Vcl.StdCtrls
+  , Vcl.ExtCtrls
+  , Vcl.Graphics
+  , Vcl.ComCtrls
+  , Winapi.Windows
+  , Winapi.Messages
+  , ToolsAPI
+  ;
 
 type
   TDragLintCallerInfo = record
-    FilePath: string;
-    Line:     Integer;
-    CodeText: string;
+    FilePath: string ;
+    Line    : Integer;
+    CodeText: string ;
   end;
 
   TDragLintHoverForm = class(TForm)
-  private
-    FMemo:        TMemo;
-    FCallers:     TListView;
-    FCallerPaths: TStringList;
-    FWatchTimer:  TTimer;
-    FAnchor:      TPoint;
-    FShowTickMs:  Cardinal;
-    procedure HandleKeyDown(Sender: TObject; var Key: Word;
-      Shift: TShiftState);
-    procedure HandleDeactivate(Sender: TObject);
-    procedure HandleTimerTick(Sender: TObject);
-    procedure HandleWatchTick(Sender: TObject);
-    procedure HandleCallerDblClick(Sender: TObject);
-    procedure HandleCallerKey(Sender: TObject; var Key: Word;
-      Shift: TShiftState);
-    procedure HandleMemoClick(Sender: TObject);
-  protected
-    procedure DoClose(var Action: TCloseAction); override;
-  public
-    constructor Create(AOwner: TComponent); override;
-    procedure ShowAt(X, Y: Integer; const AHeader, ASummary: string;
-      const ACallers: TArray<TDragLintCallerInfo>);
+    private
+      FMemo       : TMemo      ;
+      FCallers    : TListView  ;
+      FCallerPaths: TStringList;
+      FWatchTimer : TTimer     ;
+      FAnchor     : TPoint     ;
+      FShowTickMs : Cardinal   ;
+      { v0.42: dwell popups dismiss tightly -- the moment the cursor leaves a
+      small box around the ORIGINAL dwell point (where the user was pointing),
+      not the whole 900 px popup rect. This stops the popup lingering over the
+      Projects/Messages pane and also clears it when the mouse leaves the
+      editor (that motion necessarily exits the anchor box). Menu-invoked
+      popups keep the generous popup-rect dismissal so they stay interactive. }
+      FAnchorDismiss: Boolean;
+      FDwellAnchor  : TPoint ;
+      procedure HandleKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+      procedure HandleDeactivate    (Sender: TObject);
+      procedure HandleTimerTick     (Sender: TObject);
+      procedure HandleWatchTick     (Sender: TObject);
+      procedure HandleCallerDblClick(Sender: TObject);
+      procedure HandleCallerKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+      procedure HandleMemoClick(Sender: TObject);
+      procedure HandleMemoMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+      function LineIsClickable(const ALineText: string): Boolean;
+    protected
+      procedure DoClose(var Action: TCloseAction); override;
+      { v0.47: WS_EX_NOACTIVATE -- show as an info popup that NEVER steals keyboard
+      focus, so the user can keep typing in the editor. Mouse clicks on the
+      clickable rows still work (mouse activation is independent). }
+      procedure CreateParams(var Params: TCreateParams); override;
+    public
+      constructor Create(AOwner: TComponent); override;
+      procedure ShowAt(X, Y: Integer; const AHeader, ASummary: string; const ACallers: TArray<TDragLintCallerInfo>; AAnchorDismiss: Boolean; AAnchorX, AAnchorY: Integer);
   end;
 
-procedure ShowDragLintHover(const AHeader, ASummary: string;
-  const ACallers: TArray<TDragLintCallerInfo>;
-  AScreenX, AScreenY: Integer); overload;
-procedure ShowDragLintHover(const AContent: string;
-  AScreenX, AScreenY: Integer); overload;
+procedure ShowDragLintHover(
+  const AHeader, ASummary: string; const ACallers: TArray<TDragLintCallerInfo>; AScreenX,
+  AScreenY: Integer; AAnchorDismiss: Boolean = False; AAnchorX: Integer = -1; AAnchorY: Integer = -1); overload;
+procedure ShowDragLintHover(const AContent: string; AScreenX, AScreenY: Integer); overload;
 procedure CloseDragLintHover;
-function  IsDragLintHoverVisible: Boolean;
+function IsDragLintHoverVisible  : Boolean;
+function IsMouseOverDragLintHover: Boolean;
 procedure OpenSourceAt(const AFile: string; ALine: Integer);
+
+var { v0.46: set by the Editor at startup. When the user clicks a popup line that
+    reads "... add unit X to the uses clause", the hover calls this with X to
+    insert the unit (the lightbulb quick-fix from the diagnostic popup). }
+  GOnAddUnit: TProc<string> = nil;
+  { v0.46.x: set by the Editor. When the user clicks a definition row, the hover
+    calls this with the def's QUALIFIED NAME + line; the Editor resolves it to an
+    ABSOLUTE source path via the index (the query JSON now carries "file") and
+    opens the .pas there. The popup keeps its display clean -- the path is
+    resolved on click, never shown. }
+  GOnNavigateToQname: TProc<string, Integer> = nil;
 
 implementation
 
@@ -76,19 +106,51 @@ var
 procedure OpenSourceAt(const AFile: string; ALine: Integer);
 var
   ActSvc: IOTAActionServices;
-  EdSvc:  IOTAEditorServices;
-  View:   IOTAEditView;
+  EdSvc : IOTAEditorServices;
+  View  : IOTAEditView      ;
 begin
+  { v0.46.x: never feed OpenFile a non-absolute path -- a bare unit filename
+    ("Foo.pas") resolves against the IDE working dir (...\bin) and raises
+    "Cannot create file". Require a rooted path. }
+  if (AFile = '') or (ExtractFileDrive(AFile) = '') then Exit;
   if not Supports(BorlandIDEServices, IOTAActionServices, ActSvc) then Exit;
   ActSvc.OpenFile(AFile);
   if Supports(BorlandIDEServices, IOTAEditorServices, EdSvc) then
   begin
-    View := EdSvc.TopView;
+    View:= EdSvc.TopView;
     if (View <> nil) and (ALine > 0) then
     begin
       View.Position.GotoLine(ALine);
       View.Paint;
     end;
+  end;
+end;
+
+{ ---- IDE theme follow (v0.46) ---- }
+
+var
+  GHoverThemeRegistered: Boolean = False;
+
+procedure ApplyIdeTheme(AForm: TCustomForm);
+{ v0.46: make the popup follow the IDE's light/dark theme. ApplyTheme recolors
+  the form + its child controls to the active VCL style. Guarded end-to-end so a
+  missing service or an older IDE never breaks the popup -- it just stays on the
+  default light colours. RegisterFormClass (once) lets the theme engine recognise
+  our form class. }
+var
+  Theming: IOTAIDEThemingServices;
+begin
+  try
+    if not Supports(BorlandIDEServices, IOTAIDEThemingServices, Theming) then Exit;
+    if not Theming.IDEThemingEnabled then Exit;
+    if not GHoverThemeRegistered then
+    begin
+      Theming.RegisterFormClass(TDragLintHoverForm);
+      GHoverThemeRegistered:= True;
+    end;
+    Theming.ApplyTheme(AForm);
+  except
+    { theming is best-effort -- never let it break the hover }
   end;
 end;
 
@@ -106,108 +168,137 @@ begin
         (a) mouse moves > 20 px off the popup
         (b) ESC pressed
         (c) Close button in the toolwindow title bar }
-  Caption     := 'drag-lint hover';
-  BorderStyle := bsSizeToolWin;
-  FormStyle   := fsStayOnTop;
-  Color       := clWindow;
-  KeyPreview  := True;
-  Position    := poDesigned;
+  Caption    := 'drag-lint hover';
+  BorderStyle:= bsSizeToolWin;
+  FormStyle  := fsStayOnTop;
+  Color      := clWindow;
+  KeyPreview := True;
+  Position   := poDesigned;
 
-  OnKeyDown   := HandleKeyDown;
+  OnKeyDown:= HandleKeyDown;
 
   { v0.40.8e: top header label removed -- the title bar shows the same
     "drag-lint -- kind name -- unit.pas (line)" string and a duplicate
     inside the body is just visual noise. }
 
   { Bottom: callers ListView. Created BEFORE memo so alClient memo fills middle. }
-  FCallers := TListView.Create(Self);
-  FCallers.Parent      := Self;
-  FCallers.Align       := alBottom;
-  FCallers.Height      := 130;
-  FCallers.ViewStyle   := vsReport;
-  FCallers.RowSelect   := True;
-  FCallers.ReadOnly    := True;
-  FCallers.GridLines   := False;
-  FCallers.ShowColumnHeaders := True;
-  FCallers.HideSelection     := False;
-  FCallers.Font.Name   := 'Consolas';
-  FCallers.Font.Size   := 9;
-  with FCallers.Columns.Add do begin Caption := 'Unit'; Width := 180; end;
-  with FCallers.Columns.Add do begin Caption := 'Line'; Width := 50;  end;
-  with FCallers.Columns.Add do begin Caption := 'Code'; Width := 420; end;
-  FCallers.OnDblClick  := HandleCallerDblClick;
-  FCallers.OnKeyDown   := HandleCallerKey;
+  FCallers:= TListView.Create(Self);
+  FCallers.Parent           := Self;
+  FCallers.Align            := alBottom;
+  FCallers.Height           := 130;
+  FCallers.ViewStyle        := vsReport;
+  FCallers.RowSelect        := True;
+  FCallers.ReadOnly         := True;
+  FCallers.GridLines        := False;
+  FCallers.ShowColumnHeaders:= True;
+  FCallers.HideSelection    := False;
+  FCallers.Font.Name:= 'Consolas';
+  FCallers.Font.Size:= 9;
+  with FCallers.Columns.Add do begin Caption:= 'Unit'; Width:= 180; end;
+  with FCallers.Columns.Add do begin Caption:= 'Line'; Width:= 50 ; end;
+  with FCallers.Columns.Add do begin Caption:= 'Code'; Width:= 420; end;
+  FCallers.OnDblClick:= HandleCallerDblClick;
+  FCallers.OnKeyDown := HandleCallerKey;
+  FCallers.Cursor    := crHandPoint; { every row navigates -> hand cursor }
 
   { Middle: memo for docs / params / LSP markdown.
     v0.40.8e: double-clicking a "`qname` - line N" row attempts to navigate. }
-  FMemo := TMemo.Create(Self);
-  FMemo.Parent      := Self;
-  FMemo.Align       := alClient;
-  FMemo.BorderStyle := bsNone;
-  FMemo.ReadOnly    := True;
-  FMemo.ScrollBars  := ssVertical;
-  FMemo.Color       := clWindow;
-  FMemo.Font.Name   := 'Consolas';
-  FMemo.Font.Size   := 9;
-  FMemo.TabStop     := False;
-  FMemo.OnClick     := HandleMemoClick;
+  FMemo:= TMemo.Create(Self);
+  FMemo.Parent     := Self;
+  FMemo.Align      := alClient;
+  FMemo.BorderStyle:= bsNone;
+  FMemo.ReadOnly   := True;
+  FMemo.ScrollBars := ssVertical;
+  FMemo.Color      := clWindow;
+  FMemo.Font.Name:= 'Consolas';
+  FMemo.Font.Size:= 9;
+  FMemo.TabStop    := False;
+  FMemo.OnClick    := HandleMemoClick;
+  FMemo.OnMouseMove:= HandleMemoMouseMove; { hand cursor over clickable lines }
 
-  FCallerPaths := TStringList.Create;
+  FCallerPaths:= TStringList.Create;
 
-  FWatchTimer          := TTimer.Create(Self);
-  FWatchTimer.Enabled  := False;
-  FWatchTimer.Interval := 150;
-  FWatchTimer.OnTimer  := HandleWatchTick;
-end;
+  FWatchTimer:= TTimer.Create(Self);
+  FWatchTimer.Enabled := False;
+  FWatchTimer.Interval:= 150;
+  FWatchTimer.OnTimer := HandleWatchTick;
+
+  { v0.46: follow the IDE light/dark theme (guarded; no-op on older IDEs). }
+  ApplyIdeTheme(Self);
+end; // constructor
 
 procedure TDragLintHoverForm.DoClose(var Action: TCloseAction);
 begin
-  if FWatchTimer <> nil then FWatchTimer.Enabled := False;
-  if GCurrentHover = Self then GCurrentHover := nil;
+  if FWatchTimer <> nil then FWatchTimer.Enabled:= False;
+  if GCurrentHover = Self then GCurrentHover:= nil;
   FreeAndNil(FCallerPaths);
   inherited;
-  Action := caFree;
+  Action:= caFree;
 end;
 
 function GetIdeMainHwnd: HWND;
 var
   Svcs: IOTAServices;
 begin
-  Result := 0;
-  if Supports(BorlandIDEServices, IOTAServices, Svcs) then
-    Result := Svcs.GetParentHandle;
-  if (Result = 0) and (Application <> nil) and (Application.MainForm <> nil) then
-    Result := Application.MainForm.Handle;
+  Result:= 0;
+  if Supports(BorlandIDEServices, IOTAServices, Svcs) then Result:= Svcs.GetParentHandle;
+  if (Result = 0) and (Application <> nil) and (Application.MainForm <> nil) then Result:= Application.MainForm.Handle;
 end;
 
 procedure TDragLintHoverForm.HandleWatchTick(Sender: TObject);
 const
-  MARGIN  = 20;
+  MARGIN   = 20;
   GRACE_MS = 1500;
+  { v0.42: anchor-box half-extents ~ "1 line up/down, 3-4 chars left/right". }
+  ANCHOR_HALF_W   = 28;
+  ANCHOR_HALF_H   = 13;
+  ANCHOR_GRACE_MS = 300;
 var
-  Pt:      TPoint;
-  ExtRect: TRect;
+  Pt     : TPoint;
+  ExtRect: TRect ;
+  AncRect: TRect ;
 begin
-  { v0.40.8: single dismissal rule -- mouse outside (popup + 20 px margin)
-    closes the popup. ESC also closes via HandleKeyDown. Title-bar close
-    button is provided by bsSizeToolWin. That's it.
+  if not GetCursorPos(Pt) then Exit;
+
+  if FAnchorDismiss then
+  begin
+    { v0.42 dwell popup: close the instant the cursor leaves a tight box around
+      the ORIGINAL dwell point. Short grace so a sub-pixel jitter at spawn
+      doesn't self-close. Leaving the editor moves well outside this box, so
+      this also satisfies "clear hover when the mouse leaves the edit page". }
+    if GetTickCount - FShowTickMs < ANCHOR_GRACE_MS then Exit;
+    { v0.46: once the cursor reaches the popup, make it STICKY (switch to the
+      generous popup-rect dismissal) so the user can move in and scroll a long
+      list -- previously any move off the tiny anchor box closed it instantly. }
+    ExtRect:= BoundsRect;
+    InflateRect(ExtRect, 24, 24);
+    if PtInRect(ExtRect, Pt) then
+    begin
+      FAnchorDismiss:= False;
+      Exit;
+    end;
+    AncRect:= Rect(FDwellAnchor.X - ANCHOR_HALF_W, FDwellAnchor.Y - ANCHOR_HALF_H, FDwellAnchor.X + ANCHOR_HALF_W, FDwellAnchor.Y + ANCHOR_HALF_H);
+    if not PtInRect(AncRect, Pt) then Close;
+    Exit;
+  end; // if
+
+  { v0.40.8 menu popup: stays interactive -- mouse outside (popup + 20 px
+    margin) closes it. ESC also closes via HandleKeyDown. Title-bar close
+    button is provided by bsSizeToolWin.
     v0.40.8b: first 1.5 seconds after Show are a grace period -- the popup
     spawns at cursor+20, so the cursor is 20 px above the popup top; any
     1-px upward drift would otherwise close it immediately. }
-  if not GetCursorPos(Pt) then Exit;
   if GetTickCount - FShowTickMs < GRACE_MS then Exit;
-  ExtRect := BoundsRect;
+  ExtRect:= BoundsRect;
   InflateRect(ExtRect, MARGIN, MARGIN);
-  if not PtInRect(ExtRect, Pt) then
-    Close;
-end;
+  if not PtInRect(ExtRect, Pt) then Close;
+end; // procedure
 
-procedure TDragLintHoverForm.HandleKeyDown(Sender: TObject; var Key: Word;
-  Shift: TShiftState);
+procedure TDragLintHoverForm.HandleKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   if Key = VK_ESCAPE then
   begin
-    Key := 0;
+    Key:= 0;
     Close;
   end;
 end;
@@ -229,118 +320,248 @@ end;
 procedure TDragLintHoverForm.HandleCallerDblClick(Sender: TObject);
 var
   Sel: TListItem;
-  Ln:  Integer;
-  Idx: Integer;
+  Ln : Integer  ;
+  Idx: Integer  ;
 begin
-  Sel := FCallers.Selected;
+  Sel:= FCallers.Selected;
   if (Sel = nil) or (FCallerPaths = nil) then Exit;
   if Sel.SubItems.Count = 0 then Exit;
-  Idx := Sel.Index;
+  Idx:= Sel.Index;
   if (Idx < 0) or (Idx >= FCallerPaths.Count) then Exit;
-  Ln := StrToIntDef(Sel.SubItems[0], 0);
+  Ln:= StrToIntDef(Sel.SubItems[0], 0);
   OpenSourceAt(FCallerPaths[Idx], Ln);
   Close;
 end;
 
-procedure TDragLintHoverForm.HandleCallerKey(Sender: TObject; var Key: Word;
-  Shift: TShiftState);
+procedure TDragLintHoverForm.HandleCallerKey(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   if Key = VK_RETURN then
   begin
-    Key := 0;
+    Key:= 0;
     HandleCallerDblClick(Sender);
   end;
 end;
+
+function CleanHoverMarkdown(const AMarkdown: string): string;
+{ v0.46: the popup body is a plain TMemo with no markdown engine, so the LSP
+  hover markdown was showing literal '**', '`' and '_..._' noise plus a blank
+  line after almost every element. Render it as clean monospaced text:
+    * drop code-span backticks and bold '**' (safe -- identifiers contain
+      neither);
+    * unwrap a line that is wholly italic '_..._' (e.g. "_2 overloads:_") WITHOUT
+      touching underscores inside identifiers (MS_FOLDER stays intact);
+    * collapse runs of blank lines to a single blank.
+  The definition rows keep their "<qname> - line N" text so HandleMemoClick can
+  still parse them for single-click navigation. }
+var
+  Lines      : TArray<string>;
+  SB         : TStringBuilder;
+  L          : string        ;
+  T          : string        ;
+  BlankRun   : Boolean       ;
+  SeenContent: Boolean       ;
+  I          : Integer       ;
+begin
+  if Trim(AMarkdown) = '' then Exit('');
+  Lines:= AMarkdown.Split([#10]);
+  SB:= TStringBuilder.Create;
+  try
+    BlankRun   := False;
+    SeenContent:= False;
+    for I:= 0 to High(Lines) do
+    begin
+      L:= StringReplace(Lines[I], #13, '', [rfReplaceAll]);
+      L:= StringReplace(L, '`' , '', [rfReplaceAll]);
+      L:= StringReplace(L, '**', '', [rfReplaceAll]);
+      { unwrap whole-line italics only (don't disturb in-identifier underscores) }
+      T:= Trim(L);
+      if (Length(T) >= 2) and (T[1] = '_') and (T[Length(T)] = '_') then L:= Copy(T, 2, Length(T) - 2);
+      if Trim(L) = '' then
+      begin
+        { v0.46: drop LEADING blank lines (the empty first row the user saw) and
+          collapse runs of blanks. }
+        if (not SeenContent) or BlankRun then Continue;
+        BlankRun:= True;
+      end
+      else
+      begin
+        BlankRun   := False;
+        SeenContent:= True;
+      end;
+      SB.AppendLine(L.TrimRight);
+    end; // for
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end; // try
+end; // function
 
 function UnitNameFromQname(const AQname: string): string;
 { Mirror of Editor.ExtractHoverHeader's heuristic: drop the last 1 or 2
   segments of a dotted qname to get the unit. If the next-to-last segment
   starts with T/I/E it's a class/interface/exception, drop two; else drop one. }
 var
-  P, P2, I, DotCount: Integer;
+  P       : Integer;
+  P2      : Integer;
+  I       : Integer;
+  DotCount: Integer;
 begin
-  Result := '';
-  DotCount := 0;
-  for I := 1 to Length(AQname) do
+  Result  := '';
+  DotCount:= 0;
+  for I:= 1 to Length(AQname) do
     if AQname[I] = '.' then Inc(DotCount);
-  if DotCount = 0 then Exit;
-  Result := AQname;
+  if DotCount    = 0 then Exit;
+  Result:= AQname;
   if DotCount >= 2 then
   begin
-    P := 0;
-    for I := Length(Result) downto 1 do
-      if Result[I] = '.' then begin P := I; Break; end;
-    P2 := 0;
-    for I := P - 1 downto 1 do
-      if Result[I] = '.' then begin P2 := I; Break; end;
-    if (P2 > 0) and (P2 + 1 <= Length(Result)) and
-       CharInSet(Result[P2 + 1], ['T','I','E']) then
-      Result := Copy(Result, 1, P2 - 1)
-    else
-      Result := Copy(Result, 1, P - 1);
+    P:= 0;
+    for I:= Length(Result) downto 1 do
+      if Result[I] = '.' then begin P:= I; Break; end;
+    P2:= 0;
+    for I:= P - 1 downto 1 do
+      if Result[I] = '.' then begin P2:= I; Break; end;
+    if (P2 > 0) and (P2 + 1 <= Length(Result)) and CharInSet(Result[P2 + 1], ['T','I','E']) then Result:= Copy(Result, 1, P2 - 1)
+    else Result:= Copy(Result, 1, P - 1);
   end
-  else
-    Result := Copy(Result, 1, Pos('.', Result) - 1);
-end;
+  else Result:= Copy(Result, 1, Pos('.', Result) - 1);
+end; // function
 
 procedure TDragLintHoverForm.HandleMemoClick(Sender: TObject);
-{ v0.40.8g: single-click navigation. We don't navigate on every click in
-  the memo (user has to be able to scroll / position caret to read) -- we
-  only navigate when the line under the caret matches the definition
-  shape "- `qname` - line N". Other lines pass through to normal memo
-  click handling (caret repositioned, no navigation). }
+{ v0.40.8g: single-click navigation. We don't navigate on every click in the
+  memo (the user has to be able to scroll / position the caret to read) -- we
+  only navigate when the line under the caret matches the definition shape
+  "<qname> - line N". Other lines pass through to normal memo click handling.
+  v0.46: the body is now cleaned of markdown (CleanHoverMarkdown), so the rows
+  read "- <qname> - line N" WITHOUT backticks; parse that shape. }
 var
-  LineIdx:  Integer;
-  LineText, Inner, Qname, LineStr, UnitName: string;
-  P1, P2, DashAt, LineN: Integer;
+  LineIdx : Integer;
+  LineText: string ;
+  Body    : string ;
+  Qname   : string ;
+  LineStr : string ;
+  UnitName: string ;
+  DashAt  : Integer;
+  LineN   : Integer;
+  P       : Integer;
+  Q       : Integer;
+  AddUnit : string ;
+  Tail    : string ;
+const
+  MARK = 'add unit ';
 begin
-  LineIdx := FMemo.CaretPos.Y;
+  LineIdx:= FMemo.CaretPos.Y;
   if (LineIdx < 0) or (LineIdx >= FMemo.Lines.Count) then Exit;
-  LineText := FMemo.Lines[LineIdx];
+  LineText:= FMemo.Lines[LineIdx];
 
-  { Gate: only navigate when the line starts with the bullet "- `" --
-    matches the LSP server's definition rows exactly. Other lines
-    (resolved-type note, blank separators, doc text) are left alone. }
-  if not LineText.TrimLeft.StartsWith('- `') then Exit;
+  { v0.46 lightbulb: a diagnostic line reading "... add unit X to the uses
+    clause" is clickable -- clicking it inserts X via the Editor-supplied hook. }
+  if Assigned(GOnAddUnit) then
+  begin
+    P:= Pos(MARK, LowerCase(LineText));
+    if P > 0 then
+    begin
+      Tail:= Copy(LineText, P + Length(MARK), MaxInt);
+      Q:= 1;
+      while (Q <= Length(Tail)) and CharInSet(Tail[Q], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) do Inc(Q);
+      AddUnit:= Copy(Tail, 1, Q - 1);
+      if AddUnit <> '' then
+      begin
+        Close;
+        GOnAddUnit(AddUnit);
+        Exit;
+      end;
+    end;
+  end; // if
 
-  { Extract first backtick-wrapped qname. }
-  P1 := Pos('`', LineText);
-  if P1 = 0 then Exit;
-  Inner := Copy(LineText, P1 + 1, MaxInt);
-  P2 := Pos('`', Inner);
-  if P2 <= 0 then Exit;
-  Qname := Copy(Inner, 1, P2 - 1);
+  { Gate: a definition row is "- <qname> - line N". Require the bullet, the
+    " - line " separator, and a positive trailing integer so doc/blank lines
+    (and ordinary "- bullet" prose) are left alone. }
+  Body:= LineText.TrimLeft;
+  if not Body.StartsWith('- ') then Exit;
+  Body:= Copy(Body, 3, MaxInt); { drop the "- " bullet }
 
-  { Extract trailing "line N". }
-  DashAt := Pos('line ', LineText);
-  if DashAt = 0 then Exit;
-  LineStr := Trim(Copy(LineText, DashAt + 5, MaxInt));
-  LineN := StrToIntDef(LineStr, 0);
-  if LineN <= 0 then Exit;
+  DashAt:= Pos(' - line ', Body);
+  if DashAt <= 0 then Exit;
+  Qname:= Trim(Copy(Body, 1, DashAt - 1));
+  LineStr:= Trim(Copy(Body, DashAt + Length(' - line '), MaxInt));
+  LineN:= StrToIntDef(LineStr, 0);
+  if (Qname = '') or (LineN <= 0) then Exit;
 
-  UnitName := UnitNameFromQname(Qname);
+  UnitName:= UnitNameFromQname(Qname);
   if UnitName = '' then Exit;
-  OpenSourceAt(UnitName + '.pas', LineN);
   Close;
+  { Prefer the Editor hook: it resolves the unit to its ABSOLUTE source path via
+    the open project and forces the code view. The fallback OpenSourceAt is now
+    guarded against the bare path (it no-ops rather than erroring). }
+  if Assigned(GOnNavigateToQname) then GOnNavigateToQname(Qname, LineN)
+  else OpenSourceAt(UnitName + '.pas', LineN);
+end; // procedure
+
+{ Is a memo line clickable? -- an "add unit X" lightbulb line, or a definition
+  row "- <qname> - line N". Used to show the hand cursor over it. }
+function TDragLintHoverForm.LineIsClickable(const ALineText: string): Boolean;
+var
+  Body  : string ;
+  DashAt: Integer;
+begin
+  Result:= False;
+  if Pos('add unit ', LowerCase(ALineText)) > 0 then Exit(True);
+  Body:= ALineText.TrimLeft;
+  if not Body.StartsWith('- ') then Exit;
+  Body:= Copy(Body, 3, MaxInt);
+  DashAt:= Pos(' - line ', Body);
+  if DashAt <= 0 then Exit;
+  Result:= StrToIntDef(Trim(Copy(Body, DashAt + Length(' - line '), MaxInt)), 0) > 0;
 end;
 
-procedure TDragLintHoverForm.ShowAt(X, Y: Integer; const AHeader, ASummary: string;
-  const ACallers: TArray<TDragLintCallerInfo>);
+{ v0.46.x: show a hand cursor over clickable lines so users see they are links.
+  EM_CHARFROMPOS maps the mouse point to a memo char index; on a multiline edit
+  its HIWORD is the line index. }
+procedure TDragLintHoverForm.HandleMemoMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+var
+  Res    : Integer;
+  LineIdx: Integer;
+begin
+  Res:= FMemo.Perform(EM_CHARFROMPOS, 0, MakeLParam(X, Y));
+  LineIdx:= HiWord(Cardinal(Res));
+  if (LineIdx >= 0) and (LineIdx < FMemo.Lines.Count) and LineIsClickable(FMemo.Lines[LineIdx]) then FMemo.Cursor:= crHandPoint
+  else FMemo.Cursor:= crDefault;
+end;
+
+procedure TDragLintHoverForm.CreateParams(var Params: TCreateParams);
+begin
+  inherited CreateParams(Params);
+  { Info popup: never take keyboard focus; keep off the taskbar/alt-tab. }
+  Params.ExStyle:= Params.ExStyle or WS_EX_NOACTIVATE or WS_EX_TOOLWINDOW;
+end;
+
+procedure TDragLintHoverForm.ShowAt(
+  X, Y: Integer; const AHeader, ASummary: string; const ACallers: TArray<TDragLintCallerInfo>; AAnchorDismiss: Boolean; AAnchorX, AAnchorY: Integer);
 const
   MAX_W = 900;
   MAX_H = 700;
   PAD   = 8;
 var
-  I:          Integer;
-  LI:         TListItem;
-  W, H:       Integer;
-  MonR:       TRect;
-  CallersH:   Integer;
-  HeaderH:    Integer;
-  SummaryH:   Integer;
-  ShortName:  string;
+  I           : Integer  ;
+  LI          : TListItem;
+  W           : Integer  ;
+  H           : Integer  ;
+  MonR        : TRect    ;
+  CallersH    : Integer  ;
+  HeaderH     : Integer  ;
+  SummaryH    : Integer  ;
+  ShortName   : string   ;
+  Ln          : string   ;
+  MaxLen      : Integer  ;
+  CleanSummary: string   ;
 begin
-  FMemo.Text := ASummary;
+  FAnchorDismiss:= AAnchorDismiss;
+  if AAnchorX >= 0 then FDwellAnchor:= Point(AAnchorX, AAnchorY)
+  else FDwellAnchor:= Point(X, Y);
+
+  { v0.46: render markdown as clean memo text (the TMemo has no markdown engine). }
+  CleanSummary:= CleanHoverMarkdown(ASummary);
+  FMemo.Text:= CleanSummary;
   { v0.40.8g: title bar carries only "drag-lint -- kind name" (no file/line),
     because the body lists every definition with file:line already and the
     user reported the duplication as noise. ExtractHoverHeader still returns
@@ -348,24 +569,22 @@ begin
     "   --   " separator onward for the title. }
   if AHeader <> '' then
   begin
-    var ShortHeader: string := AHeader;
-    var DashPos: Integer := Pos('   --   ', ShortHeader);
-    if DashPos > 0 then
-      ShortHeader := Trim(Copy(ShortHeader, 1, DashPos - 1));
-    Caption := 'drag-lint -- ' + ShortHeader;
+    var ShortHeader: string:= AHeader                  ;
+    var DashPos: Integer:= Pos('   --   ', ShortHeader);
+    if DashPos > 0 then ShortHeader:= Trim(Copy(ShortHeader, 1, DashPos - 1));
+    Caption:= 'drag-lint -- ' + ShortHeader;
   end
-  else
-    Caption := 'drag-lint hover';
+  else Caption:= 'drag-lint hover';
 
   FCallerPaths.Clear;
   FCallers.Items.BeginUpdate;
   try
     FCallers.Items.Clear;
-    for I := 0 to High(ACallers) do
+    for I:= 0 to High(ACallers) do
     begin
-      LI := FCallers.Items.Add;
-      ShortName := ExtractFileName(ACallers[I].FilePath);
-      LI.Caption := ShortName;
+      LI:= FCallers.Items.Add;
+      ShortName:= ExtractFileName(ACallers[I].FilePath);
+      LI.Caption:= ShortName;
       LI.SubItems.Add(IntToStr(ACallers[I].Line));
       LI.SubItems.Add(ACallers[I].CodeText);
       FCallerPaths.Add(ACallers[I].FilePath);
@@ -374,66 +593,91 @@ begin
     FCallers.Items.EndUpdate;
   end;
 
-  { Sizing: header 22 + summary lines * 16 + callers (header + rows * 18). }
-  HeaderH := 22;
-  SummaryH := 16 * (1 + Length(ASummary.Split([#10]))); { rough }
-  if SummaryH < 60 then SummaryH := 60;
-  if SummaryH > 200 then SummaryH := 200;
+  { Sizing: header 22 + summary lines * 16 + callers (header + rows * 18).
+    v0.46: size to the CLEANED text (fewer blank lines after the trim). }
+  HeaderH:= 22;
+  SummaryH:= 16 * (1 + Length(CleanSummary.Split([#10]))); { rough }
+  if SummaryH < 60 then SummaryH:= 60;
+  if SummaryH > 200 then SummaryH:= 200;
   if Length(ACallers) = 0 then
   begin
-    FCallers.Visible := False;
-    CallersH := 0;
+    FCallers.Visible:= False;
+    CallersH:= 0;
   end
   else
   begin
-    FCallers.Visible := True;
-    CallersH := 28 + Length(ACallers) * 18;
-    if CallersH < 60 then CallersH := 60;
-    if CallersH > 200 then CallersH := 200;
-    FCallers.Height := CallersH;
+    FCallers.Visible:= True;
+    CallersH:= 28 + Length(ACallers) * 18;
+    if CallersH < 60 then CallersH:= 60;
+    if CallersH > 200 then CallersH:= 200;
+    FCallers.Height:= CallersH;
   end;
 
-  W := MAX_W;
-  H := HeaderH + SummaryH + CallersH + PAD * 2;
-  if H > MAX_H then H := MAX_H;
-  if H < 120   then H := 120;
+  { v0.42: dwell popups size to their content width (the summary is short --
+    a couple of declaration lines) instead of the fixed 900 px, so they don't
+    blanket the panes behind the editor. Consolas 9 pt ~ 7 px/char. Menu
+    popups keep the full width because they carry the callers grid. }
+  if AAnchorDismiss then
+  begin
+    MaxLen:= Length(AHeader);
+    for Ln in CleanSummary.Split([#10]) do
+      if Length(Ln.TrimRight) > MaxLen then MaxLen:= Length(Ln.TrimRight);
+    W:= 40 + MaxLen * 7;
+    if W < 200 then W:= 200;
+    if W > MAX_W then W:= MAX_W;
+  end
+  else W:= MAX_W;
+  H:= HeaderH + SummaryH + CallersH + PAD * 2;
+  if H > MAX_H then H:= MAX_H;
+  if H < 120 then H:= 120;
 
-  Width  := W;
-  Height := H;
+  Width := W;
+  Height:= H;
 
   if SystemParametersInfo(SPI_GETWORKAREA, 0, @MonR, 0) then
   begin
-    if X + W > MonR.Right  then X := MonR.Right  - W;
-    if Y + H > MonR.Bottom then Y := MonR.Bottom - H;
-    if X < MonR.Left then X := MonR.Left;
-    if Y < MonR.Top  then Y := MonR.Top;
+    if X + W > MonR.Right  then X:= MonR.Right  - W;
+    if Y + H > MonR.Bottom then Y:= MonR.Bottom - H;
+    if X < MonR.Left then X:= MonR.Left;
+    if Y < MonR.Top  then Y:= MonR.Top;
   end;
-  Left := X;
-  Top  := Y;
-  FAnchor.X := X;
-  FAnchor.Y := Y;
+  Left:= X;
+  Top := Y;
+  FAnchor.X:= X;
+  FAnchor.Y:= Y;
 
-  FShowTickMs := GetTickCount;
-  FWatchTimer.Enabled := True;
-  Show;
-end;
+  FShowTickMs:= GetTickCount;
+  FWatchTimer.Enabled:= True;
+  { v0.47: show WITHOUT stealing keyboard focus so the user can keep typing.
+    WS_EX_NOACTIVATE (CreateParams) is not enough on its own: Visible:=True uses
+    SW_SHOWNORMAL which still activates us. So we capture whoever had focus (the
+    editor), show topmost+no-activate, then HAND FOCUS BACK. The popup stays
+    visible (topmost) but unfocused; the editor keeps the caret + keystrokes. }
+  var PrevForeground: HWND:= GetForegroundWindow;
+  var PrevFocus     : HWND:= GetFocus;
+  Visible:= True;
+  SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+  if (PrevForeground <> 0) and (PrevForeground <> Handle) then
+  try SetForegroundWindow(PrevForeground); except end;
+  if (PrevFocus <> 0) and (PrevFocus <> Handle) then
+  try Winapi.Windows.SetFocus(PrevFocus); except end;
+end; // procedure
 
 { ---- public factory ---- }
 
-procedure ShowDragLintHover(const AHeader, ASummary: string;
-  const ACallers: TArray<TDragLintCallerInfo>;
-  AScreenX, AScreenY: Integer);
+procedure ShowDragLintHover(
+  const AHeader, ASummary: string; const ACallers: TArray<TDragLintCallerInfo>; AScreenX,
+  AScreenY: Integer; AAnchorDismiss: Boolean = False; AAnchorX: Integer = -1; AAnchorY: Integer = -1);
 var
   Form: TDragLintHoverForm;
 begin
   if (GCurrentHover <> nil) and GCurrentHover.Visible then Exit;
-  Form := TDragLintHoverForm.Create(Application);
-  GCurrentHover := Form;
-  Form.ShowAt(AScreenX, AScreenY, AHeader, ASummary, ACallers);
+  Form:= TDragLintHoverForm.Create(Application);
+  GCurrentHover:= Form;
+  Form.ShowAt(AScreenX, AScreenY, AHeader, ASummary, ACallers, AAnchorDismiss, AAnchorX, AAnchorY);
 end;
 
-procedure ShowDragLintHover(const AContent: string;
-  AScreenX, AScreenY: Integer);
+procedure ShowDragLintHover(const AContent: string; AScreenX, AScreenY: Integer);
 var
   Empty: TArray<TDragLintCallerInfo>;
 begin
@@ -443,29 +687,44 @@ end;
 
 procedure CloseDragLintHover;
 begin
-  if (GCurrentHover <> nil) and GCurrentHover.Visible then
-    GCurrentHover.Close;
+  if (GCurrentHover <> nil) and GCurrentHover.Visible then GCurrentHover.Close;
 end;
 
 function IsDragLintHoverVisible: Boolean;
 begin
-  Result := (GCurrentHover <> nil) and GCurrentHover.Visible;
+  Result:= (GCurrentHover <> nil) and GCurrentHover.Visible;
+end;
+
+function IsMouseOverDragLintHover: Boolean;
+{ v0.42: True when the cursor is within the visible hover popup (+ a small
+  margin). Lets the dwell tracker close the popup when the mouse leaves the
+  editor WITHOUT killing the interactive menu popup the user is reaching for. }
+var
+  Pt: TPoint;
+  R : TRect ;
+begin
+  Result:= False;
+  if (GCurrentHover = nil) or not GCurrentHover.Visible then Exit;
+  if not GetCursorPos(Pt) then Exit;
+  R:= GCurrentHover.BoundsRect;
+  InflateRect(R, 12, 12);
+  Result:= PtInRect(R, Pt);
 end;
 
 initialization
 
 finalization
-  { v0.40.8d: belt and braces -- if Editor.UnregisterDragLintMenu didn't get
+{ v0.40.8d: belt and braces -- if Editor.UnregisterDragLintMenu didn't get
     to call CloseDragLintHover (e.g. an exception broke the teardown chain),
     yank the popup here before the BPL DCU unloads. Touching a half-freed
     form from the watch timer otherwise crashes the IDE. }
-  try
-    if GCurrentHover <> nil then
-    begin
-      GCurrentHover.Close;
-      GCurrentHover := nil;
-    end;
-  except
+try
+  if GCurrentHover <> nil then
+  begin
+    GCurrentHover.Close;
+    GCurrentHover:= nil;
   end;
+except
+end;
 
 end.

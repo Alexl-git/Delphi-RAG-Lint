@@ -25,9 +25,23 @@ unit DragLint.Plugin.DbResolver;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils,
-  ToolsAPI,
-  DragLint.Plugin.Settings;
+  System.SysUtils
+  , System.Classes
+  , System.IOUtils
+  , System.JSON
+  , ToolsAPI
+  , DragLint.Plugin.Telemetry
+  , { TEMP debug telemetry }
+    DragLint.Plugin.Settings
+  ;
+
+{ v0.46: returns the manifest section DB whose include folder is an ancestor of
+  AFilePath (longest/most-specific match wins), or '' when there is no manifest
+  beside the engine or no covering section. This is the SAME clean DB the
+  manifest builds (e.g. ...\ORM3\drag-lint.sqlite for any ORM3 file), so the
+  plugin stops reading stale per-.dproj DBs. Used by both the read side
+  (ResolveActiveIndexDbs) and the write side (ProjectNotifier auto-index). }
+function ManifestDbForFile(const AFilePath: string): string;
 
 { Returns the absolute path to the .dproj that owns the file currently
   active in the editor. Walks up the directory tree from the file's
@@ -41,8 +55,7 @@ function GetActiveEditorFilePath: string;
 { Returns the primary DB path for an arbitrary .dproj (or '' for none).
   Uses the template from Settings. Result may point at a file that does
   not yet exist. }
-function PrimaryDbForProject(const AProjPath: string;
-  const ASettings: TDragLintSettings): string;
+function PrimaryDbForProject(const AProjPath: string; const ASettings: TDragLintSettings): string;
 
 { The headline function: returns ALL DBs the plugin should query for the
   currently-active editor file, in priority order. Empty paths and
@@ -55,21 +68,112 @@ function ResolverDiagnostic(const ASettings: TDragLintSettings): string;
 
 implementation
 
+function ManifestPathBesideEngine: string;
+begin
+  Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.json';
+end;
+
+function ManifestDbForFile(const AFilePath: string): string;
+var
+  MPath   : string     ;
+  Content : string     ;
+  OutDir  : string     ;
+  FileNorm: string     ;
+  Db      : string     ;
+  IncRaw  : string     ;
+  IncNorm : string     ;
+  BestDb  : string     ;
+  RootVal : TJSONValue ;
+  V       : TJSONValue ;
+  IdxVal  : TJSONValue ;
+  SecsVal : TJSONValue ;
+  IncVal  : TJSONValue ;
+  Indexes : TJSONObject;
+  Sec     : TJSONObject;
+  Sections: TJSONArray ;
+  Includes: TJSONArray ;
+  I       : Integer    ;
+  J       : Integer    ;
+  BestLen : Integer    ;
+begin
+  Result:= '';
+  if AFilePath = '' then Exit;
+  MPath:= ManifestPathBesideEngine;
+  if not TFile.Exists(MPath) then Exit;
+  FileNorm:= LowerCase(IncludeTrailingPathDelimiter(ExtractFilePath(AFilePath)));
+  try
+    Content:= TFile      .ReadAllText   (MPath  );
+    RootVal:= TJSONObject.ParseJSONValue(Content);
+    if not (RootVal is TJSONObject) then Exit;
+    try
+      IdxVal:= TJSONObject(RootVal).GetValue('indexes');
+      if not (IdxVal is TJSONObject) then Exit;
+      Indexes:= TJSONObject(IdxVal);
+
+      OutDir:= '';
+      V:= Indexes.GetValue('outDir');
+      if V is TJSONString then OutDir:= TJSONString(V).Value;
+
+      SecsVal:= Indexes.GetValue('sections');
+      if not (SecsVal is TJSONArray) then Exit;
+      Sections:= TJSONArray(SecsVal);
+
+      BestDb:= '';
+      BestLen:= -1;
+      for I:= 0 to Sections.Count - 1 do
+      begin
+        if not (Sections.Items[I] is TJSONObject) then Continue;
+        Sec:= TJSONObject(Sections.Items[I]);
+
+        IncVal:= Sec.GetValue('include');
+        if not (IncVal is TJSONArray) then Continue; { skip library sections }
+        Includes:= TJSONArray(IncVal);
+
+        Db:= '';
+        V:= Sec.GetValue('db');
+        if V is TJSONString then Db:= TJSONString(V).Value;
+        if Db = '' then Continue;
+
+        for J:= 0 to Includes.Count - 1 do
+        begin
+          if not (Includes.Items[J] is TJSONString) then Continue;
+          IncRaw:= TJSONString(Includes.Items[J]).Value;
+          { an include may be a folder OR a .dproj/.dpr -- use its folder }
+          if SameText(ExtractFileExt(IncRaw), '.dproj') or SameText(ExtractFileExt(IncRaw), '.dpr') then IncRaw:= ExtractFilePath(IncRaw);
+          IncNorm:= LowerCase(IncludeTrailingPathDelimiter(IncRaw));
+          { file under this include folder? longest match = most specific }
+          if (Length(IncNorm) > 1) and (Pos(IncNorm, FileNorm) = 1) and (Length(IncNorm) > BestLen) then
+          begin
+            if TPath.IsRelativePath(Db) and (OutDir <> '') then BestDb:= TPath.Combine(OutDir, Db)
+            else BestDb:= Db;
+            BestLen:= Length(IncNorm);
+          end;
+        end; // for
+      end; // for
+      Result:= BestDb;
+    finally
+      RootVal.Free;
+    end; // try
+  except
+    Result:= '';
+  end; // try
+end; // function
+
 function GetActiveEditorFilePath: string;
 var
   ESS: IOTAEditorServices;
-  EV:  IOTAEditView;
+  EV : IOTAEditView      ;
 begin
-  Result := '';
+  Result:= '';
   try
     if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
     if ESS = nil then Exit;
-    EV := ESS.TopView;
-    if EV = nil then Exit;
+    EV:= ESS.TopView;
+    if EV        = nil then Exit;
     if EV.Buffer = nil then Exit;
-    Result := EV.Buffer.FileName;
+    Result:= EV.Buffer.FileName;
   except
-    Result := '';
+    Result:= '';
   end;
 end;
 
@@ -79,114 +183,121 @@ function GetActiveProjectFilePath: string;
   Object Inspector, etc.). Pulls the currently-active .dproj from
   IOTAProjectGroup, which is stable across focus changes. }
 var
-  MS:         IOTAModuleServices;
-  ProjGroup:  IOTAProjectGroup;
-  ActiveProj: IOTAProject;
+  MS        : IOTAModuleServices;
+  ProjGroup : IOTAProjectGroup  ;
+  ActiveProj: IOTAProject       ;
 begin
-  Result := '';
+  Result:= '';
   try
     if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
     if MS = nil then Exit;
-    ProjGroup := MS.MainProjectGroup;
+    ProjGroup:= MS.MainProjectGroup;
     if ProjGroup = nil then Exit;
-    ActiveProj := ProjGroup.ActiveProject;
+    ActiveProj:= ProjGroup.ActiveProject;
     if ActiveProj = nil then Exit;
-    Result := ActiveProj.FileName;
+    Result:= ActiveProj.FileName;
   except
-    Result := '';
+    Result:= '';
   end;
 end;
 
 function FindOwningProject(const AFilePath: string): string;
 var
-  Dir:    string;
-  Files:  TArray<string>;
-  Parent: string;
+  Dir   : string        ;
+  Files : TArray<string>;
+  Parent: string        ;
 begin
-  Result := '';
+  Result:= '';
   if AFilePath = '' then Exit;
-  Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(AFilePath));
+  Dir:= ExtractFilePath(ExcludeTrailingPathDelimiter(AFilePath));
   while (Dir <> '') and TDirectory.Exists(Dir) do
   begin
-    Files := TDirectory.GetFiles(Dir, '*.dproj');
+    Files:= TDirectory.GetFiles(Dir, '*.dproj');
     if Length(Files) > 0 then
     begin
-      Result := Files[0];
+      Result:= Files[0];
       Exit;
     end;
-    Parent := ExtractFileDir(ExcludeTrailingPathDelimiter(Dir));
+    Parent:= ExtractFileDir(ExcludeTrailingPathDelimiter(Dir));
     if (Parent = '') or SameText(Parent, Dir) then Break;
-    Dir := Parent;
+    Dir:= Parent;
   end;
-end;
+end; // function
 
-function PrimaryDbForProject(const AProjPath: string;
-  const ASettings: TDragLintSettings): string;
+function PrimaryDbForProject(const AProjPath: string; const ASettings: TDragLintSettings): string;
 var
   ProjDir: string;
 begin
-  Result := '';
+  Result:= '';
   if AProjPath = '' then Exit;
-  ProjDir := ExtractFilePath(AProjPath);
-  Result := ResolveDbPath(ASettings.DbPathTemplate, ProjDir);
+  ProjDir:= ExtractFilePath(AProjPath);
+  Result:= ResolveDbPath(ASettings.DbPathTemplate, ProjDir);
 end;
 
 function NormalizePath(const APath: string): string;
 begin
-  if APath = '' then Result := '' else Result := LowerCase(ExpandFileName(APath));
+  if APath = '' then Result:= '' else Result:= LowerCase(ExpandFileName(APath));
 end;
 
 procedure AddUnique(var ADbs: TArray<string>; const APath: string);
 var
-  Norm: string;
-  I:    Integer;
+  Norm: string ;
+  I   : Integer;
 begin
   if APath = '' then Exit;
-  Norm := NormalizePath(APath);
-  for I := 0 to High(ADbs) do
+  Norm:= NormalizePath(APath);
+  for I:= 0 to High(ADbs) do
     if NormalizePath(ADbs[I]) = Norm then Exit;
   SetLength(ADbs, Length(ADbs) + 1);
-  ADbs[High(ADbs)] := APath;
+  ADbs[High(ADbs)]:= APath;
 end;
 
-procedure DiscoverSiblings(var ADbs: TArray<string>;
-  const APrimaryProjPath: string;
-  const ASettings: TDragLintSettings);
+procedure DiscoverSiblings(var ADbs: TArray<string>; const APrimaryProjPath: string; const ASettings: TDragLintSettings);
 var
-  ProjDir:    string;
-  ParentDir:  string;
-  SubDirs:    TArray<string>;
-  Sub:        string;
-  ProjFiles:  TArray<string>;
-  SiblingDb:  string;
+  ProjDir  : string        ;
+  ParentDir: string        ;
+  SubDirs  : TArray<string>;
+  Sub      : string        ;
+  ProjFiles: TArray<string>;
+  SiblingDb: string        ;
 begin
   if (APrimaryProjPath = '') or (not ASettings.AutoDiscoverDbs) then Exit;
-  ProjDir := ExtractFilePath(APrimaryProjPath);
-  ParentDir := ExtractFileDir(ExcludeTrailingPathDelimiter(ProjDir));
+  ProjDir:= ExtractFilePath(APrimaryProjPath);
+  ParentDir:= ExtractFileDir(ExcludeTrailingPathDelimiter(ProjDir));
   if (ParentDir = '') or not TDirectory.Exists(ParentDir) then Exit;
 
-  SubDirs := TDirectory.GetDirectories(ParentDir);
+  SubDirs:= TDirectory.GetDirectories(ParentDir);
   for Sub in SubDirs do
   begin
-    if SameText(IncludeTrailingPathDelimiter(Sub),
-                IncludeTrailingPathDelimiter(ProjDir)) then
-      Continue;
-    ProjFiles := TDirectory.GetFiles(Sub, '*.dproj');
+    if SameText(IncludeTrailingPathDelimiter(Sub), IncludeTrailingPathDelimiter(ProjDir)) then Continue;
+    ProjFiles:= TDirectory.GetFiles(Sub, '*.dproj');
     if Length(ProjFiles) = 0 then Continue;
-    SiblingDb := ResolveDbPath(ASettings.DbPathTemplate, Sub);
-    if TFile.Exists(SiblingDb) then
-      AddUnique(ADbs, SiblingDb);
+    SiblingDb:= ResolveDbPath(ASettings.DbPathTemplate, Sub);
+    if TFile.Exists(SiblingDb) then AddUnique(ADbs, SiblingDb);
   end;
-end;
+end; // procedure
 
 function GetLibraryDbPath: string;
+{ v0.46: the v0.45 manifest renamed library DBs to library-<platform>.sqlite.
+  Prefer a fresh per-platform DB deployed beside the BPL (Win32 is the manifest
+  default platform, then Win64), but fall back to the legacy merged
+  drag-lint-library.sqlite -- still a complete all-platform symbol set for
+  "which unit declares X" -- so existing installs keep working. }
+var
+  Dir       : string               ;
+  C         : string               ;
+  Candidates: array[0..2] of string;
 begin
-  Result := ExtractFilePath(GetModuleName(HInstance)) +
-            'drag-lint-library.sqlite';
+  Dir:= ExtractFilePath(GetModuleName(HInstance));
+  Candidates[0]:= Dir + 'library-Win32.sqlite';
+  Candidates[1]:= Dir + 'library-Win64.sqlite';
+  Candidates[2]:= Dir + 'drag-lint-library.sqlite';
+  for C in Candidates do
+    if TFile.Exists(C) then Exit(C);
+  Result:= Dir + 'drag-lint-library.sqlite'; { legacy default even if absent }
 end;
 
-function FindAncestorDb(const AStartDir: string;
-  const ASettings: TDragLintSettings): string;
+function FindAncestorDb(const AStartDir: string; const ASettings: TDragLintSettings): string;
 { v0.40.5: many real-world projects (Micronite is the canonical case)
   store one shared drag-lint.sqlite ABOVE the .dproj directory because
   the workspace contains multiple sub-projects (CLIENT, SERVER, COMMON,
@@ -201,87 +312,113 @@ function FindAncestorDb(const AStartDir: string;
 const
   CANONICAL_TEMPLATE = '<projdir>\drag-lint.sqlite';
 var
-  Dir, Parent: string;
+  Dir       : string        ;
+  Parent    : string        ;
   Candidates: TArray<string>;
-  C: string;
+  C         : string        ;
 begin
-  Result := '';
-  Dir := ExcludeTrailingPathDelimiter(AStartDir);
+  Result:= '';
+  Dir:= ExcludeTrailingPathDelimiter(AStartDir);
   while (Dir <> '') and TDirectory.Exists(Dir) do
   begin
     SetLength(Candidates, 0);
     if ASettings.DbPathTemplate <> '' then
     begin
       SetLength(Candidates, 1);
-      Candidates[0] := ResolveDbPath(ASettings.DbPathTemplate, Dir);
+      Candidates[0]:= ResolveDbPath(ASettings.DbPathTemplate, Dir);
     end;
     { Always also try the canonical default (in case the user's template
       is misconfigured or legacy). }
     SetLength(Candidates, Length(Candidates) + 1);
-    Candidates[High(Candidates)] := ResolveDbPath(CANONICAL_TEMPLATE, Dir);
+    Candidates[High(Candidates)]:= ResolveDbPath(CANONICAL_TEMPLATE, Dir);
 
     for C in Candidates do
       if (C <> '') and TFile.Exists(C) then Exit(C);
 
-    Parent := ExtractFileDir(Dir);
+    Parent:= ExtractFileDir(Dir);
     if (Parent = '') or SameText(Parent, Dir) then Break;
-    Dir := Parent;
-  end;
-end;
+    Dir:= Parent;
+  end; // while
+end; // function
 
 function ResolverDiagnostic(const ASettings: TDragLintSettings): string;
 var
-  EditorPath, ProjPath, FallbackProj, PrimaryDb, AncestorDb: string;
-  SB: TStringBuilder;
+  EditorPath  : string        ;
+  ProjPath    : string        ;
+  FallbackProj: string        ;
+  PrimaryDb   : string        ;
+  AncestorDb  : string        ;
+  SB          : TStringBuilder;
 begin
-  SB := TStringBuilder.Create;
+  SB:= TStringBuilder.Create;
   try
-    EditorPath := GetActiveEditorFilePath;
+    EditorPath:= GetActiveEditorFilePath;
     SB.AppendLine('EditorPath: "' + EditorPath + '"');
-    ProjPath := FindOwningProject(EditorPath);
+    ProjPath:= FindOwningProject(EditorPath);
     SB.AppendLine('FindOwningProject(editor): "' + ProjPath + '"');
     if ProjPath = '' then
     begin
-      FallbackProj := GetActiveProjectFilePath;
+      FallbackProj:= GetActiveProjectFilePath;
       SB.AppendLine('GetActiveProjectFilePath fallback: "' + FallbackProj + '"');
-      ProjPath := FallbackProj;
+      ProjPath:= FallbackProj;
     end;
-    PrimaryDb := PrimaryDbForProject(ProjPath, ASettings);
-    SB.AppendLine('PrimaryDb: "' + PrimaryDb + '" (exists=' +
-      BoolToStr(TFile.Exists(PrimaryDb), True) + ')');
+    PrimaryDb:= PrimaryDbForProject(ProjPath, ASettings);
+    SB.AppendLine('PrimaryDb: "' + PrimaryDb + '" (exists=' + BoolToStr(TFile.Exists(PrimaryDb), True) + ')');
     if (not TFile.Exists(PrimaryDb)) and (ProjPath <> '') then
     begin
-      AncestorDb := FindAncestorDb(ExtractFilePath(ProjPath), ASettings);
+      AncestorDb:= FindAncestorDb(ExtractFilePath(ProjPath), ASettings);
       SB.AppendLine('FindAncestorDb walking up: "' + AncestorDb + '"');
     end;
     SB.AppendLine('DbPathTemplate: ' + ASettings.DbPathTemplate);
     SB.AppendLine('IncludeLibraryDb: ' + BoolToStr(ASettings.IncludeLibraryDb, True));
-    SB.AppendLine('AutoDiscoverDbs: ' + BoolToStr(ASettings.AutoDiscoverDbs, True));
-    Result := SB.ToString;
+    SB.AppendLine('AutoDiscoverDbs: '  + BoolToStr(ASettings.AutoDiscoverDbs , True));
+    Result:= SB.ToString;
   finally
     SB.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 function ResolveActiveIndexDbs(const ASettings: TDragLintSettings): TArray<string>;
 var
   EditorPath: string;
-  ProjPath:   string;
-  ProjDir:    string;
-  PrimaryDb:  string;
+  ProjPath  : string;
+  ProjDir   : string;
+  PrimaryDb : string;
   AncestorDb: string;
-  P:          string;
-  LibPath:    string;
+  P         : string;
+  LibPath   : string;
+  ManifestDb: string;
 begin
   SetLength(Result, 0);
 
   { Try editor view first; if no active editor (Find Usages invoked from
     Project Manager focus, etc.), fall back to the active project group's
     project file. Then walk up from THAT to find a .dproj. }
-  EditorPath := GetActiveEditorFilePath;
-  ProjPath := FindOwningProject(EditorPath);
-  if ProjPath = '' then
-    ProjPath := GetActiveProjectFilePath;
+  EditorPath:= GetActiveEditorFilePath;
+  ProjPath:= FindOwningProject(EditorPath);
+  if ProjPath = '' then ProjPath:= GetActiveProjectFilePath;
+
+  { v0.46: the manifest is the source of truth. If a manifest section's include
+    folder covers the active file, use THAT clean DB and skip the per-.dproj
+    template/ancestor/sibling walk -- otherwise a stale per-project DB sitting
+    next to a sub-project .dproj (e.g. CLIENT\drag-lint.sqlite) shadows the
+    manifest's ORM3-root DB and shows phantom/duplicated symbols. The library DB
+    is still appended below. }
+  ManifestDb:= ManifestDbForFile(EditorPath);
+  if ManifestDb = '' then ManifestDb:= ManifestDbForFile(ProjPath);
+  if (ManifestDb <> '') and TFile.Exists(ManifestDb) then
+  begin
+    AddUnique(Result, ManifestDb);
+    for P in ASettings.IndexDbs do
+      if TFile.Exists(P) then AddUnique(Result, P);
+    if ASettings.IncludeLibraryDb then
+    begin
+      LibPath:= GetLibraryDbPath;
+      if TFile.Exists(LibPath) then AddUnique(Result, LibPath);
+    end;
+    DLT('dbresolve', Format('editor=%s -> MANIFEST db=%s (+%d total)', [ExtractFileName(EditorPath), ManifestDb, Length(Result)]));
+    Exit;
+  end;
 
   { Try the template-resolved primary DB next to the .dproj first.
     v0.40.5: if the configured template doesn't yield an existing file,
@@ -291,30 +428,27 @@ begin
     user's actual 'drag-lint.sqlite' wherever it lives. }
   if ProjPath <> '' then
   begin
-    PrimaryDb := PrimaryDbForProject(ProjPath, ASettings);
-    if TFile.Exists(PrimaryDb) then
-      AddUnique(Result, PrimaryDb)
+    PrimaryDb:= PrimaryDbForProject(ProjPath, ASettings);
+    if TFile.Exists(PrimaryDb) then AddUnique(Result, PrimaryDb)
     else
     begin
-      ProjDir := ExtractFilePath(ProjPath);
-      AncestorDb := FindAncestorDb(ProjDir, ASettings);
-      if AncestorDb <> '' then
-        AddUnique(Result, AncestorDb);
+      ProjDir:= ExtractFilePath(ProjPath);
+      AncestorDb:= FindAncestorDb(ProjDir, ASettings);
+      if AncestorDb <> '' then AddUnique(Result, AncestorDb);
     end;
   end;
 
   DiscoverSiblings(Result, ProjPath, ASettings);
 
   for P in ASettings.IndexDbs do
-    if TFile.Exists(P) then
-      AddUnique(Result, P);
+    if TFile.Exists(P) then AddUnique(Result, P);
 
   if ASettings.IncludeLibraryDb then
   begin
-    LibPath := GetLibraryDbPath;
-    if TFile.Exists(LibPath) then
-      AddUnique(Result, LibPath);
+    LibPath:= GetLibraryDbPath;
+    if TFile.Exists(LibPath) then AddUnique(Result, LibPath);
   end;
-end;
+  DLT('dbresolve', Format('editor=%s proj=%s -> %d db(s) (no manifest match)', [ExtractFileName(EditorPath), ExtractFileName(ProjPath), Length(Result)]));
+end; // function
 
 end.

@@ -1,4 +1,4 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</ProjectGuid>
         <ProjectVersion>20.4</ProjectVersion>
@@ -45,6 +45,13 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
         <DCC_UsePackage>rtl;vcl;designide;$(DCC_UsePackage)</DCC_UsePackage>
+        <!-- The Base group sends the BPL/DCP to dll-win32; for a Win64 build that
+             would clobber the 32-bit IDE's package with a 64-bit binary ("not a
+             valid Win32 application"). Redirect Win64 output to dll-win64 so each
+             directory holds the matching bitness. (Base_Win64 is evaluated after
+             Base, so this override wins for Win64 only.) -->
+        <DCC_BplOutput>..\..\third_party\dll-win64</DCC_BplOutput>
+        <DCC_DcpOutput>..\..\third_party\dll-win64</DCC_DcpOutput>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
         <DCC_Define>DESIGNONLY;DEBUG;$(DCC_Define)</DCC_Define>
@@ -92,9 +99,19 @@
         <DCCReference Include="DragLint.Plugin.SymbolSearchForm.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
         <DCCReference Include="DragLint.Plugin.HoverTracker.pas"/>
+        <DCCReference Include="DragLint.Plugin.AutoComplete.pas"/>
+        <DCCReference Include="DragLint.Plugin.Telemetry.pas"/>
         <DCCReference Include="DragLint.Plugin.DbResolver.pas"/>
         <DCCReference Include="DragLint.Plugin.OpenSourceServer.pas"/>
-        <DCCReference Include="DragLint.Plugin.DockForm.pas"/>
+        <DCCReference Include="DragLint.Plugin.DockForm.pas">
+            <Form>DragLintDockFrame</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="DragLint.Plugin.Providers.pas"/>
+        <DCCReference Include="DragLint.Plugin.LiveDiagnostics.pas"/>
+        <DCCReference Include="DragLint.Plugin.JobObject.pas"/>
+        <DCCReference Include="DragLint.Plugin.GraphWindow.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

@@ -1,0 +1,15 @@
+{
+  "settings": { "currentProjectsIndexing": "perProject", "defaultPlatform": "Win32",
+                "sizeGuardMB": 1500, "enginePath": "auto", "maxJobs": 0 },
+  "indexes": {
+    "outDir": "OUT",
+    "exclude": ["*BACKUP*", "*_OLD*.pas", "* - Copy.pas"],
+    "sections": [
+      { "name": "Proj", "include": ["proj"], "useIgnoreFiles": true },
+      { "name": "SQL",  "include": ["sql"], "includeOnly": ["MS*.SQL"] },
+      { "name": "Library", "source": "registry-libraries", "platforms": "all",
+        "db": "library-{platform}.sqlite" },
+      { "name": "All", "include": ["."], "dedupAgainst": "*" }
+    ]
+  }
+}

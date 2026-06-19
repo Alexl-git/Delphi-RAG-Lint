@@ -113,6 +113,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.Linter.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
+        <DCCReference Include="..\forms\DRagLint.FormsMap.pas"/>
         <DCCReference Include="..\mcp\DRagLint.MCP.Server.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Server.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Completion.pas"/>
@@ -127,6 +128,15 @@
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.CompileCheck.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.AstChecks.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.Manifest.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.Glob.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.IgnoreFiles.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.Closure.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.Reconcile.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.Plan.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.DbSelect.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.Drift.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.Coverage.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

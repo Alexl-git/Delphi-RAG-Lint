@@ -7,28 +7,34 @@ unit DragLint.Plugin.SignatureForm;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.JSON,
-  Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.Graphics,
-  Winapi.Windows, Winapi.Messages;
+  System.SysUtils
+  , System.Classes
+  , System.JSON
+  , Vcl.Forms
+  , Vcl.Controls
+  , Vcl.StdCtrls
+  , Vcl.ExtCtrls
+  , Vcl.Graphics
+  , Winapi.Windows
+  , Winapi.Messages
+  ;
 
 type
   TDragLintSignatureForm = class(TForm)
-  private
-    FLabel:      TLabel;
-    FCloseTimer: TTimer;
-    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
-    procedure HandleTimerTick(Sender: TObject);
-  protected
-    procedure DoClose(var Action: TCloseAction); override;
-    procedure Deactivate; override;
-  public
-    constructor Create(AOwner: TComponent); override;
-    procedure ShowSignature(X, Y: Integer; const ASigLabel: string;
-      AActiveParam: Integer);
+    private
+      FLabel     : TLabel;
+      FCloseTimer: TTimer;
+      procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+      procedure HandleTimerTick(Sender: TObject);
+    protected
+      procedure DoClose(var Action: TCloseAction); override;
+      procedure Deactivate; override;
+    public
+      constructor Create(AOwner: TComponent); override;
+      procedure ShowSignature(X, Y: Integer; const ASigLabel: string; AActiveParam: Integer);
   end;
 
-procedure ShowDragLintSignature(const ASigLabel: string;
-  AActiveParam: Integer; AScreenX, AScreenY: Integer);
+procedure ShowDragLintSignature(const ASigLabel: string; AActiveParam: Integer; AScreenX, AScreenY: Integer);
 
 implementation
 
@@ -38,34 +44,34 @@ constructor TDragLintSignatureForm.Create(AOwner: TComponent);
 begin
   inherited CreateNew(AOwner);
 
-  Caption     := '';
-  BorderStyle := bsNone;
-  FormStyle   := fsStayOnTop;
-  Color       := clInfoBk;
-  KeyPreview  := True;
-  Position    := poDesigned;
+  Caption    := '';
+  BorderStyle:= bsNone;
+  FormStyle  := fsStayOnTop;
+  Color      := clInfoBk;
+  KeyPreview := True;
+  Position   := poDesigned;
 
-  OnKeyDown   := FormKeyDown;
+  OnKeyDown:= FormKeyDown;
 
-  FLabel := TLabel.Create(Self);
-  FLabel.Parent    := Self;
-  FLabel.Align     := alClient;
-  FLabel.Layout    := tlCenter;
-  FLabel.Font.Name := 'Consolas';
-  FLabel.Font.Size := 9;
-  FLabel.Color     := clInfoBk;
-  FLabel.AutoSize  := False;
+  FLabel:= TLabel.Create(Self);
+  FLabel.Parent:= Self;
+  FLabel.Align := alClient;
+  FLabel.Layout:= tlCenter;
+  FLabel.Font.Name:= 'Consolas';
+  FLabel.Font.Size:= 9;
+  FLabel.Color   := clInfoBk;
+  FLabel.AutoSize:= False;
 
-  FCloseTimer          := TTimer.Create(Self);
-  FCloseTimer.Enabled  := False;
-  FCloseTimer.Interval := 30000;
-  FCloseTimer.OnTimer  := HandleTimerTick;
-end;
+  FCloseTimer:= TTimer.Create(Self);
+  FCloseTimer.Enabled := False;
+  FCloseTimer.Interval:= 30000;
+  FCloseTimer.OnTimer := HandleTimerTick;
+end; // constructor
 
 procedure TDragLintSignatureForm.DoClose(var Action: TCloseAction);
 begin
   inherited;
-  Action := caFree;
+  Action:= caFree;
 end;
 
 procedure TDragLintSignatureForm.Deactivate;
@@ -74,74 +80,69 @@ begin
   Close;
 end;
 
-procedure TDragLintSignatureForm.FormKeyDown(Sender: TObject;
-  var Key: Word; Shift: TShiftState);
+procedure TDragLintSignatureForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   if Key = VK_ESCAPE then
   begin
-    Key := 0;
+    Key:= 0;
     Close;
   end;
 end;
 
 procedure TDragLintSignatureForm.HandleTimerTick(Sender: TObject);
 begin
-  FCloseTimer.Enabled := False;
+  FCloseTimer.Enabled:= False;
   Close;
 end;
 
-procedure TDragLintSignatureForm.ShowSignature(X, Y: Integer;
-  const ASigLabel: string; AActiveParam: Integer);
+procedure TDragLintSignatureForm.ShowSignature(X, Y: Integer; const ASigLabel: string; AActiveParam: Integer);
 const
   MIN_W = 300;
   H     = 32;
   PAD_H = 16;
   PAD_V = 4;
 var
-  DisplayText: string;
-  W:           Integer;
-  MonR:        TRect;
+  DisplayText: string ;
+  W          : Integer;
+  MonR       : TRect  ;
 begin
   { Show full signature; append active-parameter indicator in caption }
-  DisplayText := '  ' + ASigLabel + '  ';
-  if AActiveParam >= 0 then
-    Caption := 'arg ' + IntToStr(AActiveParam + 1)
-  else
-    Caption := '';
+  DisplayText:= '  ' + ASigLabel + '  ';
+  if AActiveParam >= 0 then Caption:= 'arg ' + IntToStr(AActiveParam + 1)
+  else Caption:= '';
 
-  FLabel.Caption := DisplayText;
+  FLabel.Caption:= DisplayText;
 
   { Heuristic width: ~7px/char (Consolas 9pt) }
-  W := Length(DisplayText) * 7 + PAD_H;
-  if W < MIN_W then W := MIN_W;
+  W:= Length(DisplayText) * 7 + PAD_H;
+  if W < MIN_W then W:= MIN_W;
 
-  Width  := W;
-  Height := H;
+  Width := W;
+  Height:= H;
 
   { Clamp to work area }
   if SystemParametersInfo(SPI_GETWORKAREA, 0, @MonR, 0) then
   begin
-    if X + W > MonR.Right  then X := MonR.Right  - W;
-    if Y + H > MonR.Bottom then Y := MonR.Bottom - H;
-    if X < MonR.Left then X := MonR.Left;
-    if Y < MonR.Top  then Y := MonR.Top;
+    if X + W > MonR.Right  then X:= MonR.Right  - W;
+    if Y + H > MonR.Bottom then Y:= MonR.Bottom - H;
+    if X < MonR.Left then X:= MonR.Left;
+    if Y < MonR.Top  then Y:= MonR.Top;
   end;
 
-  Left := X;
-  Top  := Y;
+  Left:= X;
+  Top := Y;
 
-  FCloseTimer.Enabled := True;
+  FCloseTimer.Enabled:= True;
   Show;
-end;
+end; // procedure
 
 { ---- public factory ---- }
 
-procedure ShowDragLintSignature(const ASigLabel: string;
-  AActiveParam: Integer; AScreenX, AScreenY: Integer);
+procedure ShowDragLintSignature(const ASigLabel: string; AActiveParam: Integer; AScreenX, AScreenY: Integer);
 var
   Form: TDragLintSignatureForm;
 begin
-  Form := TDragLintSignatureForm.Create(Application);
+  Form:= TDragLintSignatureForm.Create(Application);
   Form.ShowSignature(AScreenX, AScreenY, ASigLabel, AActiveParam);
 end;
 
