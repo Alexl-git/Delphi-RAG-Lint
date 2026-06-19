@@ -39,6 +39,7 @@ uses
   DragLint.Plugin.LiveDiagnostics,
   DragLint.Plugin.AutoComplete,
   DragLint.Plugin.HoverForm,   { v0.47: dismiss the hover popup when the user types }
+  DragLint.Plugin.GraphWindow, { v0.48: editor-sync -- graph follows the active unit }
   DragLint.Plugin.Telemetry,   { v0.47: log the gutter repaint handle }
   DragLint.Plugin.Settings;
 
@@ -427,6 +428,16 @@ begin
   if EditView.Buffer = nil then Exit;
   FilePath := EditView.Buffer.FileName;
   if FilePath = '' then Exit;
+
+  { v0.48: editor-sync -- let the graph viewer follow the active unit. Guarded;
+    no-op unless the graph window is open + embedded. Pascal source units only. }
+  try
+    var Ext: string := LowerCase(ExtractFileExt(FilePath));
+    if (Ext = '.pas') or (Ext = '.dpr') or (Ext = '.dpk') then
+      DragLintGraphNotifyActiveUnit(ChangeFileExt(ExtractFileName(FilePath), ''));
+  except
+  end;
+
   S      := LoadSettings;
   if not S.EnableCodeLens then Exit;
   DbPath := ResolveDbPath(S.DbPathTemplate,

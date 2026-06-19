@@ -19,6 +19,13 @@ procedure ShowDragLintGraph;        { open / focus the dockable graph window }
 procedure RegisterDragLintGraphDockable;  { register at startup so the IDE restores a saved docked instance }
 procedure UnregisterDragLintGraph;  { idempotent teardown }
 
+{ v0.48 editor-sync: when the active editor unit changes, the edit-view notifier
+  calls this so the embedded graph viewer follows the editor. No-op unless the
+  graph window is open AND its viewer child has embedded; safe to call always.
+  AUnitName is the bare unit name (file name without extension), which the viewer
+  resolves to a graph node and centers (recording nav history). }
+procedure DragLintGraphNotifyActiveUnit(const AUnitName: string);
+
 implementation
 
 uses
@@ -90,11 +97,17 @@ type
 const
   GRAPH_IDENTIFIER = 'DragLintGraphDockable';
 
+  { v0.48 editor-sync: WM_COPYDATA magic the viewer expects in
+    COPYDATASTRUCT.dwData (must match MainForm.CD_CENTER_SYMBOL in the viewer). }
+  CD_CENTER_SYMBOL = $DA61C000;
+
 var
   GGraphDockable:   INTACustomDockableForm = nil;
   GGraphForm:       TCustomForm = nil;
   GGraphRegistered: Boolean = False;
   GGraphWatch:      TGraphFormWatch = nil;
+  GGraphFrame:      TDragLintGraphFrame = nil;  { live frame (holds viewer hwnd) }
+  GLastSyncedUnit:  string = '';                { de-dup repeated tab activations }
 
 { ---- frame -------------------------------------------------------------- }
 
@@ -120,10 +133,18 @@ begin
   FInitTimer.Interval := 50;
   FInitTimer.OnTimer  := HandleInitTimer;
   FInitTimer.Enabled  := True;
+
+  GGraphFrame := Self;        { v0.48: expose to the editor-sync notifier }
+  GLastSyncedUnit := '';
 end;
 
 destructor TDragLintGraphFrame.Destroy;
 begin
+  if GGraphFrame = Self then  { v0.48: stop editor-sync from targeting a dead frame }
+  begin
+    GGraphFrame := nil;
+    GLastSyncedUnit := '';
+  end;
   KillViewer;
   inherited;
 end;
@@ -392,6 +413,33 @@ begin
   GGraphForm := nil;        { owned/freed by the IDE (frame dtor kills viewer) }
   GGraphDockable := nil;
   FreeAndNil(GGraphWatch);
+end;
+
+{ ---- editor-sync (IDE -> viewer) --------------------------------------- }
+
+procedure DragLintGraphNotifyActiveUnit(const AUnitName: string);
+var
+  CDS: TCopyDataStruct;
+  A:   AnsiString;
+  Res: NativeInt;
+begin
+  if (GGraphFrame = nil) or (AUnitName = '') then Exit;
+  if GGraphFrame.FViewerHwnd = 0 then Exit;          { viewer not embedded yet }
+  if SameText(AUnitName, GLastSyncedUnit) then Exit;  { same tab refocused -> skip }
+  if not IsWindow(GGraphFrame.FViewerHwnd) then Exit;
+
+  A := AnsiString(AUnitName);                          { viewer expects 7-bit ANSI }
+  CDS.dwData := CD_CENTER_SYMBOL;
+  CDS.cbData := Length(A);                             { bytes, no trailing NUL }
+  if CDS.cbData = 0 then Exit;
+  CDS.lpData := PAnsiChar(A);
+
+  { SendMessageTimeout (not Post): WM_COPYDATA must be synchronous so the buffer
+    stays valid while the viewer copies it. The timeout + ABORTIFHUNG keeps the
+    IDE thread from stalling if the viewer is busy. }
+  if SendMessageTimeout(GGraphFrame.FViewerHwnd, WM_COPYDATA, 0,
+       LPARAM(@CDS), SMTO_ABORTIFHUNG or SMTO_NORMAL, 1000, @Res) <> 0 then
+    GLastSyncedUnit := AUnitName;
 end;
 
 initialization
