@@ -21,8 +21,63 @@ Built on [`tree-sitter-delphi13`](https://github.com/Alexl-git/tree-sitter-delph
 (sibling project) and a vendored Pascal binding for libtree-sitter.
 
 **Companion:** [`Delphi-RAG-Lint-Graph`](https://github.com/Alexl-git/Delphi-RAG-Lint-Graph)
-— an experimental standalone VCL viewer that turns this index into an interactive
-symbol graph + structure panel, with click-to-jump into RAD Studio.
+— a standalone VCL viewer (Win64) that turns this index into an interactive symbol
+graph: UML class boxes, a **Code Flow View** that renders your DocInsight comments,
+a **Where-Used** caller list, search with Back/Forward history, and **editor-sync**
+(the graph follows the active unit in RAD Studio). Click-to-jump back into the IDE.
+
+---
+
+## Screenshots
+
+### Out-of-process compiler intelligence, inside the IDE
+Live diagnostics come from compiling your buffer in a **spawned** process — even
+unsaved code — so the IDE never freezes. The Structure panel and a dockable code
+graph sit beside the editor.
+
+![drag-lint live diagnostics in RAD Studio with a docked code graph](docs/Images/IDE_Out_of_process_compilation.png)
+
+### Your DocInsight `///` comments, in Help Insight
+`<summary>` and `<remarks>` render natively in the IDE's Help Insight tooltip.
+
+![A DocInsight doc-comment shown in the IDE Help Insight tooltip](docs/Images/IDE_DOCInsight.png)
+
+### Code Flow View
+Trace a routine's calls as a flowchart — each box carries its DocInsight summary
+(here `TCompileChecker.Run`).
+
+![Code Flow View of TCompileChecker.Run with DocInsight summaries on each box](docs/Images/Graph_Calls_out.png)
+
+### UML class view, with doc on hover
+Search a type to see its members (visibility glyphs + full signatures); hover a
+member for its DocInsight doc.
+
+![UML class box for TCompileChecker with a member doc tooltip](docs/Images/Graph_Find.png)
+
+### Where Used
+A precise, clickable list of a symbol's callers — 7 callers of
+`ResolveActiveIndexDbs` — beside its unit's call graph.
+
+![Where-Used caller list for ResolveActiveIndexDbs in the graph viewer](docs/Images/Graph_Who_uses.png)
+
+### AST-exact symbol query (CLI)
+`drag-lint query --name TCompileChecker --json` returns every match with kind,
+qualified name, section, file and precise line/impl ranges — no comment or
+string-literal noise.
+
+![drag-lint query --json output for TCompileChecker](docs/Images/DRAG-Lint.exe_query_example1.png)
+
+### Find callers, with source context (CLI)
+`drag-lint query find-callers` lists every caller (7 here) with the surrounding
+source lines.
+
+![drag-lint find-callers output with code context](docs/Images/DRAG-Lint.exe_query_example2_Find_Callers.png)
+
+### Semantic compile-check from the CLI
+`drag-lint check-unit` compiles a unit in its project's context and reports
+findings (here: clean).
+
+![drag-lint check-unit clean result](docs/Images/DRAG-Lint.exe_query_example2.png)
 
 ---
 
@@ -193,11 +248,14 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `format <file>` | Format a .pas file with the YADF formatter |
 | `check-ast <file>` | Run tree-sitter lint rules without compiling |
 | `lint <file>` | Run all built-in + external .scm rules |
-| `find-callers --name <n>` | List every call-site for a symbol |
+| `query find-callers --name <n>` | List every call-site for a symbol (with source context) |
 | `workspace index` | Index all projects in a workspace config |
 | `workspace status` | Show per-project file counts |
 | `workspace add <dproj>` | Add a project to the workspace config |
-| `context --qname <q>` | Emit a compact context bundle for AI prompts |
+| `context --task "verb qname"` | Emit a compact context bundle for AI prompts (e.g. `--task "modify Unit.TFoo.Bar"`) -- doc + surface + the target's body, ~10-60x leaner than the source |
+| `check-unit ... --shadow` | Compile an **unsaved** buffer (overlay) and report errors -- the CLI side of the IDE's ghost-compile |
+| `ghost-check <dproj> --overlays <manifest>` | Compile a project with one or more units' unsaved content overlaid (multi-unit), restoring every file byte-for-byte; powers the IDE's live ghost-compile |
+| `ghost-recover` | Restore any files left overlaid by a crash mid-ghost-check (`_D-RAG` journal) |
 | `bench-context <dir>` | Benchmark context bundle throughput |
 | `forms-csv --project <dproj> --db <db>` | Test-helper CSV: one row per form with the button/menu path from the main form (`Navigation`), the forms that open it (`Called From`), unit + line count (`--out <f.csv>`, `--root <TfrmMAIN>`) |
 | `lsp [--db <db>]` | Start the LSP server (stdio) |
@@ -275,6 +333,13 @@ panels (Structure / Usages / Symbol Search / Graph), Generate Test Helper CSV...
 **In-editor diagnostics**: gutter dot markers + wavy underlines via
 `IOTAEditViewNotifier.BeforeDrawLine`. Severity colours from the IDE colour
 scheme registry.
+
+**Ghost-compile (live, out-of-process)**: as you type, drag-lint compiles your
+**unsaved** buffer(s) in a *spawned* process and surfaces real compiler errors
+(e.g. `E2003 Undeclared identifier`) in the gutter -- without saving, and without
+ever freezing the IDE. Fires automatically on idle and on tab-switch, with
+multi-unit overlays so edits across several open units are all seen. Files are
+restored byte-for-byte (crash-safe via a recovery journal).
 
 **Hover tooltip** (v0.35): a 200ms timer shows `Application.HintWindow` with
 the diagnostic message when the cursor is stable for 600ms over a row that has
@@ -370,8 +435,11 @@ pwsh -File tests/autotest/run_formsmap.ps1    # forms-csv navigation-map smoke (
 
 ## Version history
 
-See [CHANGELOG.md](CHANGELOG.md) for the full v0.16 to v0.35 history
-(20 versions, released 2026-05-28 through 2026-05-29).
+See [CHANGELOG.md](CHANGELOG.md) for the detailed history (v0.16 through
+v0.44-alpha, 2026-05-28 → 2026-06-14). Development continues daily (currently
+**v0.46-alpha** on the `feat/*` branches): graph viewer on Win64 (UML / Code Flow
+/ Where-Used / editor-sync), out-of-process ghost-compile, and manifest-driven
+multi-DB resolution.
 
 ---
 
