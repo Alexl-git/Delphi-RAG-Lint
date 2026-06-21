@@ -201,3 +201,34 @@ _(updated as rules land)_
   (`selftest unused-locals` PASS). The canonical exe is gitignored (ships via the release zip, not
   git), so only source is committed; a release rebuild will carry the rule to users.
   **Session total: 13 new rules (12 `.scm` + 1 built-in).**
+- 2026-06-21 — **Expansion to a delivery-ready set (user: "add as many rules as we can").**
+  Batches 3-6 added 13 more rules; total this effort = **25 distinct new rule ids + 3 refinements**,
+  TDD harness **28/28**, 8 commits on `feat/lint-rules-expansion`, every Release rebuild clean,
+  `selftest unused-locals` still PASS.
+  - `.scm` (20 ids): empty-except, empty-finally, bare-except, empty-conditional, raise-bare-exception,
+    reraise-loses-stack, off-by-one-count, nil-comparison, not-in-precedence, classname-string-compare,
+    inline-assembly, self-assignment, with-multiple-items, empty-loop-body, redundant-assigned-free,
+    sql-injection-concat (CWE-89), hardcoded-credential (CWE-798; assignment + const), comparison-same-operands,
+    division-by-zero-literal, empty-case-branch.
+  - built-ins (5): raise-in-finally, control-flow-in-finally, code-after-exit, missing-inherited-ctor,
+    missing-inherited-dtor.
+  - refined: boolean-comparison-true (+`<>`), assert-call (single-arg), compiler-magic-comments (+BUG).
+  - infra: **`--rules-dir <path>`** flag + a stderr note when 0 external rules load (kills the silent
+    deploy gap).
+
+---
+
+## 8. Stage-1 delivery checklist (the `.scm` linter)
+
+To deliver the first-stage linter so the rules actually fire for users:
+
+1. **Ship `rules/` next to the binary.** The exe loads `<exe-dir>\rules` (or `--rules-dir`). The
+   release zip and the IDE-plugin deployment must include `rules\*.scm` + `*.json` + `builtin-symbols.txt`.
+   (Repo `rules/` is the source of truth; `tests/lint/run_lint_tests.ps1` shows the copy step.)
+2. **Rebuild + publish the Win64 (and Win32) exe** carrying the 5 new built-ins (the canonical exe is
+   gitignored, so it only updates via a release build).
+3. **IDE plugin:** confirm it deploys `rules/` beside the spawned exe or passes `--rules-dir`.
+4. **Smoke:** `drag-lint lint <unit>.pas --json` -- confirm no "0 external rules" note and that
+   `.scm` + built-in findings appear.
+5. (Recommended for adoption) FP policy: per-`.scm` enable/disable + `// drag-lint:ignore` suppression
+   + SARIF output -- queued in §3, touches the CLI surface.
