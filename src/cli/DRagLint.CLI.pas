@@ -39,6 +39,7 @@ uses
   , DRagLint.Sql    .OrmLinker
   , DRagLint.Lint   .Linter
   , DRagLint.Lint   .ProjectChecks
+  , DRagLint.Lint   .ProjectRules
   , DRagLint.Project.Resolver
   , DRagLint.FormsMap
   , DRagLint.MCP        .Server
@@ -200,6 +201,7 @@ begin
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
+  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol] [--json]');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
@@ -4780,6 +4782,56 @@ begin
   else Result:= 1;
 end; // function
 
+// v0.48: drag-lint lint-project --db <index.sqlite> [--rule <id>] [--json]
+// Index-wide ("project") lint rules (god-class, unused-public-symbol) that need
+// the whole symbol/refs graph. Exit 1 if any findings, 0 if none, 2 on usage error.
+function DoLintProject(const AArgs: TArgs): Integer;
+var
+  Store   : ISymbolStore        ;
+  Findings: TArray<TLintFinding> ;
+  F       : TLintFinding         ;
+  JArr    : TJSONArray           ;
+  JObj    : TJSONObject          ;
+begin
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s (pass --db <index.sqlite>)', [AArgs.DbPath]));
+    Exit(2);
+  end;
+  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, AArgs.Rule);
+  if AArgs.AsJson then
+  begin
+    JArr:= TJSONArray.Create;
+    try
+      for F in Findings do
+      begin
+        JObj:= TJSONObject.Create;
+        JObj.AddPair('rule'      , F.RuleId  );
+        JObj.AddPair('severity'  , F.Severity);
+        JObj.AddPair('file_path' , F.FilePath);
+        JObj.AddPair('start_line', TJSONNumber.Create(F.StartLine));
+        JObj.AddPair('start_col' , TJSONNumber.Create(F.StartCol ));
+        JObj.AddPair('end_line'  , TJSONNumber.Create(F.EndLine  ));
+        JObj.AddPair('end_col'   , TJSONNumber.Create(F.EndCol   ));
+        JObj.AddPair('message'   , F.Message );
+        JArr.AddElement(JObj);
+      end;
+      Writeln(JArr.ToJSON);
+    finally
+      JArr.Free;
+    end;
+  end
+  else
+  begin
+    for F in Findings do
+      Writeln(Format('%s:%d:%d  [%s] %s: %s', [F.FilePath, F.StartLine, F.StartCol, F.Severity, F.RuleId, F.Message]));
+    Writeln(Format('%d finding(s)', [Length(Findings)]));
+  end;
+  if Length(Findings) > 0 then Result:= 1 else Result:= 0;
+end; // function
+
 // v0.24: count distinct file paths across edit set.
 function CountDistinctFiles(const AEdits: TArray<TRenameEdit>): Integer;
 var
@@ -8185,6 +8237,7 @@ begin
     else if Args.Command = 'ghost-check'       then Result:= DoGhostCheck      (Args)
     else if Args.Command = 'ghost-recover'     then Result:= DoGhostRecover    (Args)
     else if Args.Command = 'check-unit'        then Result:= DoCheckUnit       (Args)
+    else if Args.Command = 'lint-project'      then Result:= DoLintProject     (Args)
     else if Args.Command = 'cycles'            then Result:= DoCycles          (Args)
     else if Args.Command = 'uses-audit'        then Result:= DoUsesAudit       (Args)
     else if Args.Command = 'uses-fix'          then Result:= DoUsesFix         (Args)

@@ -17,6 +17,12 @@ breaking changes** until v1.0.
 - **Per-line suppression** -- `// drag-lint:ignore` (silence all rules on that
   line) or `// drag-lint:ignore <rule-id> [<rule-id> ...]` (silence specific
   rules). Applies to both `.scm` and built-in rules.
+- **`drag-lint lint-project --db <index.sqlite> [--rule <id>] [--json]`** --
+  index-wide ("project") lint rules that need the whole symbol/refs graph:
+  - `god-class` (info): a class with many methods *and* many fields.
+  - `unused-public-symbol` (info): an exported (interface-section) free routine
+    with no references/callers anywhere in the index -- possible dead public API.
+    (Best for applications; libraries expose API for external callers.)
 
 ## v0.47.0-alpha -- 2026-06-21
 
