@@ -3,6 +3,16 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.51.0-alpha -- 2026-06-21
+
+### Added (project-wide)
+
+- `interface-reference-cycle` (warning, `lint-project --db`): class A holds an
+  interface implemented by class B, and B holds an interface implemented by A --
+  a mutual strong interface reference that leaks under ARC. Parses every indexed
+  source file, maps interface implementors and interface-typed fields, and reports
+  each mutual pair. Fix by marking one side's field `[weak]` or `[unsafe]`.
+
 ## v0.50.0-alpha -- 2026-06-21
 
 ### Added (resource lifetime)

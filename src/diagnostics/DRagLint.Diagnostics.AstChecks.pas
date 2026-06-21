@@ -95,6 +95,14 @@ type
       /// later 'X.Free' / 'FreeAndNil(X)' on the same variable that is NOT lexically inside a finally
       /// block. Requiring same-routine construction filters destructor field-frees. Pure AST; no DB. Never raises.</remarks>
       class function CheckUnprotectedFree(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Detects interface reference cycles across the given files: class A holds an
+      /// interface implemented by class B, and B holds an interface implemented by A (mutual).</summary>
+      /// <param name="AFiles">Source files to parse (project-wide); typically the indexed file set.</param>
+      /// <returns>'interface-reference-cycle' findings (one per mutual pair); empty if none.</returns>
+      /// <remarks>Under ARC these mutual strong interface references leak; fix by marking one side
+      /// [weak] or [unsafe]. Interface detection uses the I-prefix convention; only mutual (2-cycle)
+      /// pairs are reported. Pure AST across all files; no DB. Never raises.</remarks>
+      class function CheckInterfaceCycles(const AFiles: TArray<string>): TArray<TLintFinding>;
   end;
 
 implementation
@@ -1724,6 +1732,246 @@ begin
   finally
     Tree.Free;
     Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+type
+  TCycNode = record
+    Disp : string         ; { display class name }
+    Path : string         ;
+    Line : Integer        ;
+    Col  : Integer        ;
+    Holds: TArray<string> ; { lowercased interface names held via fields }
+  end;
+
+class function TAstChecker.CheckInterfaceCycles(const AFiles: TArray<string>): TArray<TLintFinding>;
+var
+  Findings: TList<TLintFinding>             ;
+  Nodes   : TDictionary<string, TCycNode>  ; { classLower -> node }
+  ImplBy  : TDictionary<string, TStringList>; { intfLower -> classLowers implementing it }
+  Seen    : TDictionary<string, Boolean>   ; { reported "a|b" pairs }
+  Path    : string                         ;
+  Key     : string                         ;
+  Node    : TCycNode                        ;
+  Ix      : string                         ;
+  L       : TStringList                     ;
+  K       : Integer                        ;
+  BLow    : string                         ;
+  F       : TLintFinding                    ;
+
+  function IsIntfName(const S: string): Boolean;
+  begin
+    Result:= (Length(S) >= 2) and (S[1] = 'I') and CharInSet(S[2], ['A'..'Z']);
+  end;
+
+  function LeadIdent(const S: string): string;
+  var
+    T: string ;
+    I: Integer;
+  begin
+    T:= Trim(S);
+    I:= 1;
+    while (I <= Length(T)) and CharInSet(T[I], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(I);
+    Result:= Copy(T, 1, I - 1);
+  end;
+
+  procedure AddImpl(const AIntf, AClass: string);
+  var
+    Lst: TStringList;
+  begin
+    if not ImplBy.TryGetValue(AIntf, Lst) then
+    begin
+      Lst:= TStringList.Create;
+      ImplBy.Add(AIntf, Lst);
+    end;
+    if Lst.IndexOf(AClass) < 0 then Lst.Add(AClass);
+  end;
+
+  procedure ExtractFile(const APath: string);
+  var
+    Src   : TBytes   ;
+    Parser: TTSParser;
+    Tree  : TTSTree  ;
+
+    function NodeStr(const N: TTSNode): string;
+    var
+      S, E, Ln: Integer;
+    begin
+      Result:= '';
+      if N.IsNull then Exit;
+      S:= Integer(N.StartByte); E:= Integer(N.EndByte); Ln:= E - S;
+      if (Ln <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+      Result:= TEncoding.UTF8.GetString(Src, S, Ln);
+    end;
+
+    procedure CollectFields(const N: TTSNode; AHolds: TList<string>);
+    var
+      I  : Integer;
+      Tn : TTSNode;
+      Nm : string ;
+    begin
+      if N.IsNull then Exit;
+      if N.NodeType = 'declField' then
+      begin
+        Tn:= N.ChildByField('type');
+        if not Tn.IsNull then
+        begin
+          Nm:= LeadIdent(NodeStr(Tn));
+          if IsIntfName(Nm) then AHolds.Add(LowerCase(Nm));
+        end;
+      end;
+      for I:= 0 to N.NamedChildCount - 1 do CollectFields(N.NamedChild(I), AHolds);
+    end;
+
+    procedure HandleClass(const ADeclType: TTSNode);
+    var
+      NameN, TypeN, Cls, Ch: TTSNode      ;
+      I                    : Integer      ;
+      FoundCls             : Boolean      ;
+      Disp, Low, P         : string       ;
+      Holds                : TList<string>;
+      N2                   : TCycNode      ;
+      Pt                   : TTSPoint     ;
+    begin
+      NameN:= ADeclType.ChildByField('name');
+      TypeN:= ADeclType.ChildByField('type');
+      if NameN.IsNull or TypeN.IsNull then Exit;
+      FoundCls:= False;
+      if TypeN.NodeType = 'declClass' then begin Cls:= TypeN; FoundCls:= True; end
+      else
+        for I:= 0 to TypeN.ChildCount - 1 do
+          if TypeN.Child(I).NodeType = 'declClass' then begin Cls:= TypeN.Child(I); FoundCls:= True; Break; end;
+      if not FoundCls then Exit;
+      Disp:= NodeStr(NameN);
+      Low := LowerCase(Disp);
+      if Low = '' then Exit;
+      { implemented interfaces = direct typeref children with an I-prefix name }
+      for I:= 0 to Cls.ChildCount - 1 do
+      begin
+        Ch:= Cls.Child(I);
+        if Ch.NodeType = 'typeref' then
+        begin
+          P:= LeadIdent(NodeStr(Ch));
+          if IsIntfName(P) then AddImpl(LowerCase(P), Low);
+        end;
+      end;
+      Holds:= TList<string>.Create;
+      try
+        CollectFields(Cls, Holds);
+        N2.Disp := Disp;
+        N2.Path := APath;
+        Pt:= NameN.StartPoint;
+        N2.Line := Integer(Pt.Row) + 1;
+        N2.Col  := Integer(Pt.Column) + 1;
+        N2.Holds:= Holds.ToArray;
+      finally
+        Holds.Free;
+      end;
+      Nodes.AddOrSetValue(Low, N2);
+    end;
+
+    procedure Walk(const N: TTSNode);
+    var
+      I: Integer;
+    begin
+      if N.IsNull then Exit;
+      if N.NodeType = 'declType' then HandleClass(N);
+      for I:= 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+    end;
+
+  begin
+    if not TFile.Exists(APath) then Exit;
+    Src:= TFile.ReadAllBytes(APath);
+    Parser:= nil;
+    Tree  := nil;
+    try
+      Parser:= TTSParser.Create;
+      Parser.Language:= tree_sitter_delphi13;
+      Tree:= Parser.Parse(
+        function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+        var
+          Remaining: Integer;
+        begin
+          Remaining:= Length(Src) - Integer(AByteIndex);
+          if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+          SetLength(Result, Remaining);
+          Move(Src[AByteIndex], Result[0], Remaining);
+          ABytesRead:= Remaining;
+        end, TTSInputEncoding.TSInputEncodingUTF8);
+      if Tree <> nil then Walk(Tree.RootNode);
+    finally
+      Tree.Free;
+      Parser.Free;
+    end;
+  end; // ExtractFile
+
+  { does class AFrom hold an interface implemented by class ATo? }
+  function HoldsImplementedBy(const AFrom, ATo: string): Boolean;
+  var
+    Nd : TCycNode  ;
+    H  : string    ;
+    Lst: TStringList;
+  begin
+    Result:= False;
+    if not Nodes.TryGetValue(AFrom, Nd) then Exit;
+    for H in Nd.Holds do
+      if ImplBy.TryGetValue(H, Lst) and (Lst.IndexOf(ATo) >= 0) then Exit(True);
+  end;
+
+begin
+  Result:= nil;
+  Findings:= TList<TLintFinding>.Create;
+  Nodes   := TDictionary<string, TCycNode>.Create;
+  ImplBy  := TDictionary<string, TStringList>.Create;
+  Seen    := TDictionary<string, Boolean>.Create;
+  try
+    for Path in AFiles do
+      if (LowerCase(ExtractFileExt(Path)) = '.pas') or (LowerCase(ExtractFileExt(Path)) = '.inc') then ExtractFile(Path);
+
+    for Key in Nodes.Keys do
+    begin
+      Node:= Nodes[Key];
+      for Ix in Node.Holds do
+      begin
+        if not ImplBy.TryGetValue(Ix, L) then Continue;
+        for K:= 0 to L.Count - 1 do
+        begin
+          BLow:= L[K];
+          if BLow = Key then Continue;                 { self-reference, not a cycle }
+          if not Nodes.ContainsKey(BLow) then Continue;
+          if not HoldsImplementedBy(BLow, Key) then Continue; { B must also hold an interface A implements }
+          { dedup the unordered pair }
+          if Key < BLow then
+          begin
+            if Seen.ContainsKey(Key + '|' + BLow) then Continue;
+            Seen.Add(Key + '|' + BLow, True);
+          end
+          else
+          begin
+            if Seen.ContainsKey(BLow + '|' + Key) then Continue;
+            Seen.Add(BLow + '|' + Key, True);
+          end;
+          F:= Default(TLintFinding);
+          F.RuleId  := 'interface-reference-cycle';
+          F.Severity:= 'warning';
+          F.Message := Format('Interface reference cycle: %s and %s each hold an interface the other implements -- under ARC this leaks; mark one side''s field [weak] or [unsafe]', [Node.Disp, Nodes[BLow].Disp]);
+          F.FilePath:= Node.Path;
+          F.StartLine:= Node.Line;
+          F.StartCol := Node.Col;
+          F.EndLine:= Node.Line;
+          F.EndCol := Node.Col + Length(Node.Disp);
+          Findings.Add(F);
+          if Findings.Count >= 200 then Break;
+        end;
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    for L in ImplBy.Values do L.Free;
+    Seen.Free;
+    ImplBy.Free;
+    Nodes.Free;
     Findings.Free;
   end;
 end; // function

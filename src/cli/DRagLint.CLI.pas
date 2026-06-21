@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.50.0-alpha';
+  VERSION = '0.51.0-alpha';
 
 function Run: Integer;
 
@@ -202,7 +202,7 @@ begin
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
-  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol] [--json]');
+  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle] [--json]');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
@@ -4837,6 +4837,14 @@ begin
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
   Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, AArgs.Rule);
+  { v0.51: interface reference cycles -- needs the AST of all project files (parsed here) }
+  if (AArgs.Rule = '') or (AArgs.Rule = 'interface-reference-cycle') then
+  begin
+    var Paths: TArray<string>:= nil;
+    var Fid2 : Int64;
+    for Fid2 in Store.GetAllFileIds do Paths:= Paths + [Store.GetFilePath(Fid2)];
+    Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(Paths);
+  end;
   if AArgs.AsJson then
   begin
     JArr:= TJSONArray.Create;

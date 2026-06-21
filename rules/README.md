@@ -159,7 +159,9 @@ Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag
 - **`unprotected-object-free`** (warning): a locally-created object freed without `try-finally`
   (leaks if code between creation and `Free`/`FreeAndNil` raises).
 
-Index-wide rules (need `--db`, run via `drag-lint lint-project`): **`god-class`**, **`unused-public-symbol`**.
+Index-wide rules (need `--db`, run via `drag-lint lint-project`): **`god-class`**, **`unused-public-symbol`**,
+**`interface-reference-cycle`** (class A holds an interface implemented by B and vice-versa -- ARC leak;
+mark one side `[weak]`/`[unsafe]`).
 
 Plus `field-by-name-in-loop` and `inline-comment-in-multiline-args` from the linter core, and
 `unit-not-in-dpr` (project check).
