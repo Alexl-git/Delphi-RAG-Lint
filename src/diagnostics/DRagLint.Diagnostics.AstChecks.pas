@@ -71,6 +71,14 @@ type
       /// <returns>Findings tagged with the four metric rule ids; empty if all within limits.</returns>
       /// <remarks>One AST walk per routine. Pure AST; no DB. Never raises.</remarks>
       class function CheckRoutineMetrics(const AFile: string; AMaxParams, AMaxLocals, AMaxLines, AMaxNesting: Integer): TArray<TLintFinding>;
+      /// <summary>Type-aware checks using a lightweight per-file name-to-type map:
+      /// floating-point equality comparison, and FreeAndNil on an interface-typed variable.</summary>
+      /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
+      /// <returns>Findings 'float-equality-comparison' / 'freeandnil-on-interface'; empty if none.</returns>
+      /// <remarks>The type map is flat (declared types of vars/params/fields, no scope resolution),
+      /// so rare same-name shadowing may mis-type; the rules are heuristic. Interface detection uses the
+      /// Delphi I-prefix convention. Pure AST; no DB. Never raises.</remarks>
+      class function CheckTypeAware(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -1186,6 +1194,189 @@ begin
   finally
     Tree.Free;
     Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckTypeAware(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes                    ;
+  Parser  : TTSParser                 ;
+  Tree    : TTSTree                   ;
+  Findings: TList<TLintFinding>       ;
+  TypeMap : TDictionary<string,string>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  function IsFloatType(const T: string): Boolean;
+  var
+    L: string;
+  begin
+    L:= LowerCase(Trim(T));
+    Result:= (L = 'single') or (L = 'double') or (L = 'extended') or (L = 'real') or (L = 'real48');
+  end;
+
+  function IsInterfaceType(const T: string): Boolean;
+  var
+    S: string;
+  begin
+    S:= Trim(T);
+    Result:= (Length(S) >= 2) and (S[1] = 'I') and CharInSet(S[2], ['A'..'Z']);
+  end;
+
+  { Collect declared name -> type text for vars, params and fields (flat map). }
+  procedure CollectDecls(const N: TTSNode);
+  var
+    I, J     : Integer;
+    TypeNode : TTSNode;
+    NameId   : TTSNode;
+    TypeStart: Integer;
+    TTxt     : string ;
+  begin
+    if N.IsNull then Exit;
+    if (N.NodeType = 'declVar') or (N.NodeType = 'declArg') or (N.NodeType = 'declField') then
+    begin
+      TypeNode:= N.ChildByField('type');
+      if not TypeNode.IsNull then
+      begin
+        TTxt:= Trim(NodeStr(TypeNode));
+        TypeStart:= Integer(TypeNode.StartByte);
+        for J:= 0 to N.NamedChildCount - 1 do
+        begin
+          NameId:= N.NamedChild(J);
+          if (NameId.NodeType = 'identifier') and (Integer(NameId.StartByte) < TypeStart) then
+            TypeMap.AddOrSetValue(LowerCase(NodeStr(NameId)), TTxt);
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectDecls(N.NamedChild(I));
+  end;
+
+  function OperandIsFloat(const N: TTSNode): Boolean;
+  var
+    T  : string;
+    Txt: string;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'identifier' then
+    begin
+      if TypeMap.TryGetValue(LowerCase(NodeStr(N)), T) then Result:= IsFloatType(T);
+    end
+    else if N.NodeType = 'literalNumber' then
+    begin
+      Txt:= NodeStr(N);
+      Result:= (Pos('.', Txt) > 0) and (Pos('$', Txt) = 0);
+    end;
+  end;
+
+  procedure CheckExpr(const N: TTSNode);
+  var
+    I     : Integer    ;
+    Op    : TTSNode    ;
+    L      : TTSNode    ;
+    R      : TTSNode    ;
+    Entity: TTSNode    ;
+    Args  : TTSNode    ;
+    A0    : TTSNode    ;
+    T     : string     ;
+    P     : TTSPoint   ;
+    F     : TLintFinding;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.NodeType = 'exprBinary' then
+    begin
+      Op:= N.ChildByField('operator');
+      if (not Op.IsNull) and ((Op.NodeType = 'kEq') or (Op.NodeType = 'kNeq')) then
+      begin
+        L:= N.ChildByField('lhs');
+        R:= N.ChildByField('rhs');
+        if OperandIsFloat(L) or OperandIsFloat(R) then
+        begin
+          P:= N.StartPoint;
+          F:= Default(TLintFinding);
+          F.RuleId  := 'float-equality-comparison';
+          F.Severity:= 'warning';
+          F.Message := 'Floating-point values compared with = / <> -- rounding makes exact equality unreliable; use SameValue or an epsilon';
+          F.FilePath:= AFile;
+          F.StartLine:= Integer(P.Row   ) + 1;
+          F.StartCol := Integer(P.Column) + 1;
+          F.EndLine:= F.StartLine;
+          F.EndCol := F.StartCol + 1;
+          Findings.Add(F);
+        end;
+      end;
+    end;
+    if N.NodeType = 'exprCall' then
+    begin
+      Entity:= N.ChildByField('entity');
+      if (not Entity.IsNull) and (Entity.NodeType = 'identifier') and SameText(NodeStr(Entity), 'FreeAndNil') then
+      begin
+        Args:= N.ChildByField('args');
+        if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
+        begin
+          A0:= Args.NamedChild(0);
+          if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) and IsInterfaceType(T) then
+          begin
+            P:= Entity.StartPoint;
+            F:= Default(TLintFinding);
+            F.RuleId  := 'freeandnil-on-interface';
+            F.Severity:= 'warning';
+            F.Message := Format('FreeAndNil on interface-typed %s -- interfaces are reference-counted; assign nil instead of freeing', [NodeStr(A0)]);
+            F.FilePath:= AFile;
+            F.StartLine:= Integer(P.Row   ) + 1;
+            F.StartCol := Integer(P.Column) + 1;
+            F.EndLine:= F.StartLine;
+            F.EndCol := F.StartCol + 1;
+            Findings.Add(F);
+          end;
+        end;
+      end;
+    end;
+    for I:= 0 to N.ChildCount - 1 do CheckExpr(N.Child(I));
+  end;
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  TypeMap := TDictionary<string,string>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then
+    begin
+      CollectDecls(Tree.RootNode);
+      CheckExpr(Tree.RootNode);
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    TypeMap.Free;
     Findings.Free;
   end;
 end; // function

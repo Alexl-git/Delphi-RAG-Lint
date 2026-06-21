@@ -1,0 +1,3 @@
+# StrToFloat(S) without settings (11) fires; StrToFloat(S, FS) (12) must not
+locale-sensitive-conversion 11
+!locale-sensitive-conversion 12

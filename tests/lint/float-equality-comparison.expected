@@ -1,0 +1,3 @@
+# 'D = 1.5' (Double, 9) fires; 'I = 0' (Integer, 11) must not
+float-equality-comparison 9
+!float-equality-comparison 11

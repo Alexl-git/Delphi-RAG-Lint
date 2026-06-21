@@ -1,0 +1,3 @@
+# FreeAndNil on interface-typed Intf (11) fires; on TObject Obj (12) must not
+freeandnil-on-interface 11
+!freeandnil-on-interface 12

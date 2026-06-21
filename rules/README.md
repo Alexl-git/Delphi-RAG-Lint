@@ -126,6 +126,7 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `not-comparison-precedence` | warning | `not A = B` parses as `(not A) = B` -- write `not (A = B)` |
 | `redundant-not-not` | info | `not not X` -- redundant double negation, simplify to `X` |
 | `public-field` | info | public data field on a class -- breaks encapsulation; use a property |
+| `locale-sensitive-conversion` | warning | `StrToFloat`/`FloatToStr`/`StrToDate`/... without a `TFormatSettings` |
 
 Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<> False`;
 `assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`
@@ -149,6 +150,10 @@ Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag
 - **`too-many-parameters`** / **`too-many-locals`** / **`method-too-long`** / **`deep-nesting`** (info):
   routine size/complexity metrics with conservative defaults (params > 7, locals > 25, body > 120
   lines, nesting > 5). Use `--disable <id>` to turn any off.
+
+- **`float-equality-comparison`** (warning) / **`freeandnil-on-interface`** (warning): type-aware
+  checks using a lightweight per-file name-to-type map (`=`/`<>` on float operands; `FreeAndNil`
+  on an interface-typed variable).
 
 Index-wide rules (need `--db`, run via `drag-lint lint-project`): **`god-class`**, **`unused-public-symbol`**.
 

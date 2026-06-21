@@ -1,0 +1,6 @@
+{
+  "id": "locale-sensitive-conversion",
+  "severity": "warning",
+  "message": "Locale-sensitive conversion without a TFormatSettings -- behaves differently per regional settings; pass an explicit TFormatSettings.",
+  "warn_capture": "warn"
+}

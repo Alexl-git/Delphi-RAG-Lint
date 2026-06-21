@@ -13,6 +13,11 @@ breaking changes** until v1.0.
 - `empty-on-handler` (warning): `on E: ... do ;` empty handler swallows the exception.
 - Routine metrics (info, built-in, conservative defaults): `too-many-parameters` (>7),
   `too-many-locals` (>25), `method-too-long` (>120 lines), `deep-nesting` (>5).
+- Type-aware (lightweight per-file type map): `float-equality-comparison` (warning):
+  `=` / `<>` on `Single`/`Double`/`Extended`/`Real` operands; `freeandnil-on-interface`
+  (warning): `FreeAndNil` on an interface-typed variable.
+- `locale-sensitive-conversion` (warning): `StrToFloat`/`FloatToStr`/`StrToDate`/... without
+  an explicit `TFormatSettings` (locale-dependent cross-machine bug).
 
 ### Added (CLI)
 
