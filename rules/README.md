@@ -104,6 +104,7 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `not-in-precedence` | warning | `not X in S` parses as `(not X) in S` -- write `not (X in S)` |
 | `classname-string-compare` | warning | `X.ClassName = 'TFoo'` is fragile -- use `is` / `InheritsFrom` |
 | `inline-assembly` | info | `asm ... end` block -- not portable across platforms |
+| `self-assignment` | warning | `X := X` is a no-op self-assignment -- likely a copy-paste error |
 
 Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<> False`;
 `assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`

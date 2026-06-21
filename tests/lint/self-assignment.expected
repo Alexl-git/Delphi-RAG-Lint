@@ -1,0 +1,3 @@
+# 'X := X' self-assign at line 11; 'Y := X' at line 12 must not fire
+self-assignment 11
+!self-assignment 12
