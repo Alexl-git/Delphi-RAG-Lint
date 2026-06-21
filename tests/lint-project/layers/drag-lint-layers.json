@@ -1,0 +1,11 @@
+{
+  "layers": [
+    { "name": "UI",       "match": ["*.UI.*"] },
+    { "name": "Business", "match": ["*.Business.*"] },
+    { "name": "Data",     "match": ["*.Data.*"] }
+  ],
+  "allow": [
+    { "from": "UI",       "to": ["Business"] },
+    { "from": "Business", "to": ["Data"] }
+  ]
+}

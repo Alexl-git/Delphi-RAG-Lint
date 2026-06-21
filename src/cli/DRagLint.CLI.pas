@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.53.0-alpha';
+  VERSION = '0.54.0-alpha';
 
 function Run: Integer;
 
@@ -85,6 +85,7 @@ type
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     Disable         : string        ; // --disable id1,id2,...: rule ids to drop from lint output
+    LayersPath      : string        ; // --layers <file.json>: architecture-layer config for lint-project
     Format          : string        ;
     Output          : string        ;
     OutputDir       : string        ;
@@ -202,7 +203,7 @@ begin
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
-  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle] [--json]');
+  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation] [--layers <f.json>] [--json]');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
@@ -436,6 +437,11 @@ begin
     begin
       Inc(i);
       Result.Disable:= ParamStr(i);
+    end
+    else if (A = '--layers') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.LayersPath:= ParamStr(i);
     end
     else if A = '--json'    then Result.AsJson:= True
     else if A = '--dry-run' then Result.DryRun:= True
@@ -4847,6 +4853,13 @@ begin
     var Fid2 : Int64;
     for Fid2 in Store.GetAllFileIds do Paths:= Paths + [Store.GetFilePath(Fid2)];
     Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(Paths);
+  end;
+  { v0.54: architecture layering -- needs a layer config (--layers, or drag-lint-layers.json in CWD) }
+  if (AArgs.Rule = '') or (AArgs.Rule = 'layering-violation') then
+  begin
+    var Cfg: string:= AArgs.LayersPath;
+    if (Cfg = '') and FileExists('drag-lint-layers.json') then Cfg:= 'drag-lint-layers.json';
+    if Cfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, Cfg);
   end;
   if AArgs.AsJson then
   begin

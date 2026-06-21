@@ -3,6 +3,17 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.54.0-alpha -- 2026-06-21
+
+### Added (architecture)
+
+- `layering-violation` (warning, `lint-project --db --layers <file.json>`):
+  config-driven architecture enforcement. Assign units to layers by name globs,
+  declare allowed dependencies, and flag forbidden cross-layer `uses` edges.
+  Config: `{ "layers":[{"name":"UI","match":["*.UI.*"]},...], "allow":[{"from":"UI","to":["Business"]},...] }`.
+  Default-deny among defined layers; units matching no layer are ignored (RTL/3rd-party).
+  Pass the config with `--layers`, or place `drag-lint-layers.json` in the working dir.
+
 ## v0.53.0-alpha -- 2026-06-21
 
 ### Added (batch)
