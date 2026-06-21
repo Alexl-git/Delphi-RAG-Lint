@@ -3940,10 +3940,11 @@ begin
   end;
   if (AArgs.Rule <> '') and (AArgs.Rule <> 'field-by-name-in-loop') and (AArgs.Rule <> 'unit-not-in-dpr') and (AArgs.Rule <> 'inline-comment-in-multiline-args') and
   (AArgs.Rule <> 'unused-local') and (AArgs.Rule <> 'syntax-error') and (AArgs.Rule <> 'unbalanced-begin-end') and (AArgs.Rule <> 'raise-in-finally') and
-  (AArgs.Rule <> 'code-after-exit') and (AArgs.Rule <> 'missing-inherited-ctor') and (AArgs.Rule <> 'missing-inherited-dtor') then
+  (AArgs.Rule <> 'code-after-exit') and (AArgs.Rule <> 'missing-inherited-ctor') and (AArgs.Rule <> 'missing-inherited-dtor') and
+  (AArgs.Rule <> 'control-flow-in-finally') then
   begin
     Writeln(Format(
-        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor)',
+        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -3987,6 +3988,8 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'raise-in-finally') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally(AArgs.Path);
       { v0.47: unreachable code after Exit/raise/Break/Continue/Halt }
       if (AArgs.Rule = '') or (AArgs.Rule = 'code-after-exit') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit(AArgs.Path);
+      { v0.47: Exit/Break/Continue/Halt inside a finally block }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'control-flow-in-finally') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally(AArgs.Path);
       { v0.47: constructor/destructor without an inherited call (one walk emits both ids) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'missing-inherited-ctor') or (AArgs.Rule = 'missing-inherited-dtor') then
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(AArgs.Path) do

@@ -109,7 +109,7 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `empty-loop-body` | warning | `while/for ... do ;` or `repeat until` with no body -- stray `;` or busy-wait |
 | `redundant-assigned-free` | info | `if Assigned(X) then X.Free` -- guard redundant (Free/FreeAndNil handle nil) |
 | `sql-injection-concat` | warning | SQL string literal concatenated with a variable -- injection risk (CWE-89) |
-| `hardcoded-credential` | warning | secret-named variable assigned a string literal -- hardcoded credential (CWE-798) |
+| `hardcoded-credential` | warning | secret-named variable OR const set to a string literal -- hardcoded credential (CWE-798) |
 | `comparison-same-operands` | warning | `X = X` / `X < X` -- both operands identical, result is constant (likely a typo) |
 | `division-by-zero-literal` | warning | `X div 0` / `X / 0` / `X mod 0` -- always raises a runtime division error |
 | `empty-case-branch` | info | `1: ;` -- case branch with a label but no statement |
@@ -131,6 +131,8 @@ Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag
   does not flag code after the if/case).
 - **`missing-inherited-ctor`** / **`missing-inherited-dtor`** (warning): a constructor/destructor whose
   body never calls `inherited` (skips ancestor init/cleanup). Class ctors/dtors and asm bodies skipped.
+- **`control-flow-in-finally`** (warning): `Exit`/`Break`/`Continue`/`Halt` inside a `finally` block
+  silently discards the in-flight exception (companion to `raise-in-finally`).
 
 Plus `field-by-name-in-loop` and `inline-comment-in-multiline-args` from the linter core, and
 `unit-not-in-dpr` (project check).
