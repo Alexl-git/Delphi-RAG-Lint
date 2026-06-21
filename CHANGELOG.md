@@ -3,6 +3,21 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.53.0-alpha -- 2026-06-21
+
+### Added (batch)
+
+- `uppercase-compare` (warning): `UpperCase(X)`/`LowerCase(X)` compared to a string
+  literal -- fragile (silently always-false if the literal's case differs) and slow;
+  use `SameText`.
+- `outputdebugstring` (info): `OutputDebugString` debug tracing left in code.
+- `length-zero-compare` (info): `Length(X) = 0` / `> 0` -- for strings prefer `X = ''`.
+
+### Changed
+
+- `float-equality-comparison` now also flags `TDateTime` / `TDate` / `TTime` operands
+  (they are `Double`-backed, so `=` / `<>` is unreliable).
+
 ## v0.52.0-alpha -- 2026-06-21
 
 ### Added (batch)

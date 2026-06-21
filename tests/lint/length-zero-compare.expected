@@ -1,0 +1,3 @@
+# Length(S) = 0 (9) fires; I = 0 (11) must not
+length-zero-compare 9
+!length-zero-compare 11

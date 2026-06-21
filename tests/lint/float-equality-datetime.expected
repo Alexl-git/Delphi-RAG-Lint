@@ -1,0 +1,2 @@
+# TDateTime compared with '=' (9) -- now covered by float-equality-comparison
+float-equality-comparison 9

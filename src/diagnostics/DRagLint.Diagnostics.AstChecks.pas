@@ -1253,7 +1253,7 @@ var
     L: string;
   begin
     L:= LowerCase(Trim(T));
-    Result:= (L = 'single') or (L = 'double') or (L = 'extended') or (L = 'real') or (L = 'real48');
+    Result:= (L = 'single') or (L = 'double') or (L = 'extended') or (L = 'real') or (L = 'real48') or (L = 'tdatetime') or (L = 'tdate') or (L = 'ttime');
   end;
 
   function IsInterfaceType(const T: string): Boolean;

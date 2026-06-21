@@ -1,0 +1,3 @@
+# UpperCase(S) = 'ABC' (9) fires; plain S = 'ABC' (11) must not
+uppercase-compare 9
+!uppercase-compare 11

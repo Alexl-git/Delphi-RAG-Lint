@@ -1,0 +1,6 @@
+{
+  "id": "uppercase-compare",
+  "severity": "warning",
+  "message": "Comparing UpperCase/LowerCase(...) to a string literal -- fragile (always-false if the literal's case differs) and slow; use SameText.",
+  "warn_capture": "warn"
+}
