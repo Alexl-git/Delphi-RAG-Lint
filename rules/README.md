@@ -52,6 +52,15 @@ The runner evaluates these standard tree-sitter predicates:
 Unknown predicates pass through (don't suppress) so future tree-sitter
 extensions don't silently filter matches.
 
+## Suppressing a finding
+
+Put a line comment on the offending source line:
+
+- `// drag-lint:ignore` -- silence **all** rules on that line.
+- `// drag-lint:ignore <rule-id> [<rule-id> ...]` -- silence only those rule ids.
+
+Works for both external `.scm` rules and the built-in checks.
+
 ## Shipped rules (v0.28)
 
 | Rule id | Severity | Description |

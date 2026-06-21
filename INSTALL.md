@@ -61,6 +61,18 @@ Useful options:
 
 Exit code is `1` when any findings are reported, `0` when clean.
 
+### Suppressing a finding
+
+Add a line comment on the offending source line:
+
+```pascal
+SomeQuery.SQL.Text := 'SELECT * FROM t WHERE id=' + Id;  // drag-lint:ignore sql-injection-concat
+X := X;  // drag-lint:ignore           <-- suppress ALL rules on this line
+```
+
+`// drag-lint:ignore` (alone) silences every rule on that line; followed by one
+or more rule ids it silences only those. Applies to both `.scm` and built-in rules.
+
 ## 4. What it checks
 
 This release ships **25 rules across exceptions, control-flow / dead code,

@@ -3,6 +3,21 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Added (more lint rules)
+
+- `not-comparison-precedence` (warning): `not A = B` parses as `(not A) = B`.
+- `redundant-not-not` (info): `not not X` double negation.
+- `public-field` (info): public data field on a class breaks encapsulation.
+- `empty-on-handler` (warning): `on E: ... do ;` empty handler swallows the exception.
+
+### Added (CLI)
+
+- **Per-line suppression** -- `// drag-lint:ignore` (silence all rules on that
+  line) or `// drag-lint:ignore <rule-id> [<rule-id> ...]` (silence specific
+  rules). Applies to both `.scm` and built-in rules.
+
 ## v0.47.0-alpha -- 2026-06-21
 
 ### Added (lint rule expansion -- 25 new rules)

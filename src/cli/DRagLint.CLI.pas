@@ -3930,6 +3930,68 @@ begin
   Result:= 0;
 end; // function
 
+{ Drops findings whose source line carries a '// drag-lint:ignore' directive.
+  Forms: '// drag-lint:ignore' (suppress every rule on that line) or
+  '// drag-lint:ignore <rule-id> [<rule-id> ...]' (suppress only those rule ids).
+  The marker must be inside a // line comment. File lines are cached per path. }
+function ApplyLineSuppressions(const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
+const
+  MARK = 'drag-lint:ignore';
+var
+  LineCache : TDictionary<string, TArray<string>>;
+  Lines     : TArray<string>     ;
+  Kept      : TList<TLintFinding>;
+  F         : TLintFinding       ;
+  LineTxt   : string             ;
+  Rest      : string             ;
+  Tok       : string             ;
+  Toks      : TArray<string>     ;
+  CPos      : Integer            ;
+  MPos      : Integer            ;
+  Suppressed: Boolean            ;
+begin
+  if Length(AFindings) = 0 then Exit(AFindings);
+  LineCache:= TDictionary<string, TArray<string>>.Create;
+  Kept     := TList<TLintFinding>.Create;
+  try
+    for F in AFindings do
+    begin
+      if not LineCache.TryGetValue(F.FilePath, Lines) then
+      begin
+        if TFile.Exists(F.FilePath) then Lines:= TFile.ReadAllLines(F.FilePath) else SetLength(Lines, 0);
+        LineCache.Add(F.FilePath, Lines);
+      end;
+      Suppressed:= False;
+      if (F.StartLine >= 1) and (F.StartLine <= Length(Lines)) then
+      begin
+        LineTxt:= Lines[F.StartLine - 1];
+        CPos:= Pos('//', LineTxt);
+        MPos:= Pos(MARK, LowerCase(LineTxt));
+        if (CPos > 0) and (MPos > CPos) then
+        begin
+          Rest:= Trim(Copy(LineTxt, MPos + Length(MARK), MaxInt));
+          if Rest = '' then Suppressed:= True
+          else
+          begin
+            Toks:= Rest.Split([' ', ',', #9]);
+            for Tok in Toks do
+              if SameText(Trim(Tok), F.RuleId) then
+              begin
+                Suppressed:= True;
+                Break;
+              end;
+          end;
+        end;
+      end;
+      if not Suppressed then Kept.Add(F);
+    end;
+    Result:= Kept.ToArray;
+  finally
+    Kept.Free;
+    LineCache.Free;
+  end;
+end; // function
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
@@ -4006,6 +4068,8 @@ begin
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
     end;
   end; // if
+  { v0.47: honor '// drag-lint:ignore [rule ...]' line suppressions across all findings }
+  Findings:= ApplyLineSuppressions(Findings);
   if AArgs.AsJson then
   begin
     JArr:= TJSONArray.Create;

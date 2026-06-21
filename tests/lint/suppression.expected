@@ -1,0 +1,6 @@
+# line 11: ignore <rule> -> suppressed; line 12: ignore (all) -> suppressed
+# line 13: no directive -> fires; line 14: ignore of a different rule -> still fires
+!division-by-zero-literal 11
+!division-by-zero-literal 12
+division-by-zero-literal 13
+division-by-zero-literal 14
