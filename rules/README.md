@@ -154,6 +154,8 @@ Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag
 - **`float-equality-comparison`** (warning) / **`freeandnil-on-interface`** (warning): type-aware
   checks using a lightweight per-file name-to-type map (`=`/`<>` on float operands; `FreeAndNil`
   on an interface-typed variable).
+- **`firedac-open-execsql-mismatch`** (warning): `Open` on a DML statement or `ExecSQL` on a SELECT
+  (correlates a literal `X.SQL.Text := '...'` with a later `X.Open`/`X.ExecSQL` on the same variable).
 
 Index-wide rules (need `--db`, run via `drag-lint lint-project`): **`god-class`**, **`unused-public-symbol`**.
 

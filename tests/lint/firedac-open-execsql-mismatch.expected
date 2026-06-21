@@ -1,0 +1,4 @@
+# Open after UPDATE (10) + ExecSQL after SELECT (12) fire; Open after SELECT (14) must not
+firedac-open-execsql-mismatch 10
+firedac-open-execsql-mismatch 12
+!firedac-open-execsql-mismatch 14

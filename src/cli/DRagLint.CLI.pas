@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.48.0-alpha';
+  VERSION = '0.49.0-alpha';
 
 function Run: Integer;
 
@@ -4019,10 +4019,10 @@ begin
   (AArgs.Rule <> 'code-after-exit') and (AArgs.Rule <> 'missing-inherited-ctor') and (AArgs.Rule <> 'missing-inherited-dtor') and
   (AArgs.Rule <> 'control-flow-in-finally') and (AArgs.Rule <> 'too-many-parameters') and (AArgs.Rule <> 'too-many-locals') and
   (AArgs.Rule <> 'method-too-long') and (AArgs.Rule <> 'deep-nesting') and (AArgs.Rule <> 'float-equality-comparison') and
-  (AArgs.Rule <> 'freeandnil-on-interface') then
+  (AArgs.Rule <> 'freeandnil-on-interface') and (AArgs.Rule <> 'firedac-open-execsql-mismatch') then
   begin
     Writeln(Format(
-        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface)',
+        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4084,6 +4084,8 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'float-equality-comparison') or (AArgs.Rule = 'freeandnil-on-interface') then
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(AArgs.Path) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      { v0.49: FireDAC Open/ExecSQL vs SQL-kind mismatch }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'firedac-open-execsql-mismatch') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch(AArgs.Path);
     end;
   end; // if
   { v0.47: honor '// drag-lint:ignore [rule ...]' line suppressions across all findings }

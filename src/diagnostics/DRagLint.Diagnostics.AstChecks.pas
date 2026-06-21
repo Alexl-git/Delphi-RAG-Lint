@@ -79,6 +79,14 @@ type
       /// so rare same-name shadowing may mis-type; the rules are heuristic. Interface detection uses the
       /// Delphi I-prefix convention. Pure AST; no DB. Never raises.</remarks>
       class function CheckTypeAware(const AFile: string): TArray<TLintFinding>;
+      /// <summary>FireDAC misuse: 'Open' on a data-modifying statement, or 'ExecSQL' on a SELECT.</summary>
+      /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
+      /// <returns>'firedac-open-execsql-mismatch' findings; empty if none.</returns>
+      /// <remarks>Per routine, correlates a literal 'X.SQL.Text := ''...''' (classified SELECT vs
+      /// INSERT/UPDATE/DELETE/MERGE) with a later 'X.Open' / 'X.ExecSQL' on the same variable, in
+      /// program order. Only fires when the SQL is a recognizable literal, so false positives are rare.
+      /// Pure AST; no DB. Never raises.</remarks>
+      class function CheckFireDacSqlMismatch(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -1377,6 +1385,158 @@ begin
     Tree.Free;
     Parser.Free;
     TypeMap.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckFireDacSqlMismatch(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { Recognize 'X.SQL.Text := ''<sql>''' and return X (lowercased) + 'select'/'dml'. }
+  function MatchSqlTextAssign(const ANode: TTSNode; out AVar, AKind: string): Boolean;
+  var
+    Lhs, Inner, V, Rhs: TTSNode;
+    Lit, Up           : string ;
+  begin
+    Result:= False;
+    if ANode.NodeType <> 'assignment' then Exit;
+    Lhs:= ANode.ChildByField('lhs');
+    if Lhs.IsNull or (Lhs.NodeType <> 'exprDot') then Exit;
+    if not SameText(NodeStr(Lhs.ChildByField('rhs')), 'Text') then Exit;
+    Inner:= Lhs.ChildByField('lhs');
+    if Inner.IsNull or (Inner.NodeType <> 'exprDot') then Exit;
+    if not SameText(NodeStr(Inner.ChildByField('rhs')), 'SQL') then Exit;
+    V:= Inner.ChildByField('lhs');
+    if V.IsNull or (V.NodeType <> 'identifier') then Exit;
+    Rhs:= ANode.ChildByField('rhs');
+    if Rhs.IsNull or (Rhs.NodeType <> 'literalString') then Exit;
+    Lit:= NodeStr(Rhs);
+    if (Length(Lit) >= 2) and (Lit[1] = '''') and (Lit[Length(Lit)] = '''') then Lit:= Copy(Lit, 2, Length(Lit) - 2);
+    Up:= UpperCase(TrimLeft(Lit));
+    if Up.StartsWith('SELECT') or Up.StartsWith('WITH ') then AKind:= 'select'
+    else if Up.StartsWith('INSERT') or Up.StartsWith('UPDATE') or Up.StartsWith('DELETE') or Up.StartsWith('MERGE') then AKind:= 'dml'
+    else Exit;
+    AVar:= LowerCase(NodeStr(V));
+    Result:= True;
+  end;
+
+  { Recognize 'X.Open' / 'X.ExecSQL' (the exprDot form). }
+  function MatchCall(const ANode: TTSNode; out AVar, AMethod: string): Boolean;
+  var
+    V, M: TTSNode;
+    Mn  : string ;
+  begin
+    Result:= False;
+    if ANode.NodeType <> 'exprDot' then Exit;
+    V:= ANode.ChildByField('lhs');
+    M:= ANode.ChildByField('rhs');
+    if V.IsNull or M.IsNull or (V.NodeType <> 'identifier') or (M.NodeType <> 'identifier') then Exit;
+    Mn:= NodeStr(M);
+    if SameText(Mn, 'Open') or SameText(Mn, 'ExecSQL') then
+    begin
+      AVar   := LowerCase(NodeStr(V));
+      AMethod:= LowerCase(Mn);
+      Result := True;
+    end;
+  end;
+
+  procedure WalkBody(const N: TTSNode; AMap: TDictionary<string, string>);
+  var
+    I        : Integer    ;
+    V, K, M  : string     ;
+    Kind     : string     ;
+    P        : TTSPoint   ;
+    F        : TLintFinding;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.NodeType = 'defProc' then Exit; { nested routine handled separately }
+    if (N.NodeType = 'assignment') and MatchSqlTextAssign(N, V, K) then AMap.AddOrSetValue(V, K)
+    else if (N.NodeType = 'exprDot') and MatchCall(N, V, M) then
+    begin
+      if AMap.TryGetValue(V, Kind) then
+        if ((M = 'open') and (Kind = 'dml')) or ((M = 'execsql') and (Kind = 'select')) then
+        begin
+          P:= N.StartPoint;
+          F:= Default(TLintFinding);
+          F.RuleId  := 'firedac-open-execsql-mismatch';
+          F.Severity:= 'warning';
+          if M = 'open' then F.Message:= 'Open on a data-modifying statement (INSERT/UPDATE/DELETE) -- use ExecSQL; Open expects a result set'
+          else F.Message:= 'ExecSQL on a SELECT -- use Open to fetch the result set; ExecSQL discards it';
+          F.FilePath:= AFile;
+          F.StartLine:= Integer(P.Row   ) + 1;
+          F.StartCol := Integer(P.Column) + 1;
+          F.EndLine:= F.StartLine;
+          F.EndCol := F.StartCol + 1;
+          Findings.Add(F);
+        end;
+    end;
+    for I:= 0 to N.ChildCount - 1 do WalkBody(N.Child(I), AMap);
+  end; // procedure
+
+  procedure VisitProcs(const N: TTSNode);
+  var
+    I   : Integer                     ;
+    Body: TTSNode                     ;
+    Map : TDictionary<string, string> ;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then
+    begin
+      Body:= N.ChildByField('body');
+      if not Body.IsNull then
+      begin
+        Map:= TDictionary<string, string>.Create;
+        try
+          WalkBody(Body, Map);
+        finally
+          Map.Free;
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do VisitProcs(N.NamedChild(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then VisitProcs(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
     Findings.Free;
   end;
 end; // function

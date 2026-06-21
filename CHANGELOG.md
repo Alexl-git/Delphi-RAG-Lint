@@ -3,6 +3,15 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.49.0-alpha -- 2026-06-21
+
+### Added (FireDAC)
+
+- `firedac-open-execsql-mismatch` (warning): `Open` on a data-modifying statement
+  (INSERT/UPDATE/DELETE) or `ExecSQL` on a SELECT. Correlates a literal
+  `X.SQL.Text := '...'` with a later `X.Open` / `X.ExecSQL` on the same variable,
+  in program order -- only fires when the SQL is a recognizable literal.
+
 ## v0.48.0-alpha -- 2026-06-21
 
 ### Added (more lint rules)
