@@ -101,6 +101,9 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `reraise-loses-stack` | warning | `raise E;` resets the stack trace -- use a bare `raise;` |
 | `off-by-one-count` | warning | `for I := 0 to X.Count/Length(X)` runs one past the end |
 | `nil-comparison` | info | Prefer `Assigned(X)` over `X = nil` / `X <> nil` |
+| `not-in-precedence` | warning | `not X in S` parses as `(not X) in S` -- write `not (X in S)` |
+| `classname-string-compare` | warning | `X.ClassName = 'TFoo'` is fragile -- use `is` / `InheritsFrom` |
+| `inline-assembly` | info | `asm ... end` block -- not portable across platforms |
 
 Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<> False`;
 `assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`

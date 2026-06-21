@@ -188,3 +188,8 @@ _(updated as rules land)_
   `#not-match? @args ","` text heuristic. Deploy: harness syncs `rules/` -> `<exe-dir>/rules`
   (gitignored); permanent in-exe deploy + `--rules-dir` flag + per-`.scm` selectability deferred to
   the Wave 2 CLI rebuild.
+- 2026-06-21 — Wave 1 (cont.): 3 more near-zero-FP `.scm` rules (14/14 harness green):
+  `not-in-precedence` (`not X in S` precedence bug -- real defect), `classname-string-compare`
+  (W538: `X.ClassName = 'literal'`), `inline-assembly` (`asm` block, portability). **Total: 11 new
+  rules this session.** Next: Wave 2 Pascal built-ins (need a Win64 rebuild + self-tests) and the
+  rules-dir deploy/`--rules-dir`/selectability infra (same rebuild).

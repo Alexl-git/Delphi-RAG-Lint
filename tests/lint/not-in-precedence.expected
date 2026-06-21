@@ -1,0 +1,3 @@
+# 'not X in [..]' bug at line 9; correctly parenthesized 'not (X in [..])' at line 15 must not fire
+not-in-precedence 9
+!not-in-precedence 15
