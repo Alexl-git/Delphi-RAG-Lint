@@ -1,0 +1,3 @@
+# single-arg Assert (line 11) fires; two-arg Assert with a message (line 12) must not
+assert-call 11
+!assert-call 12

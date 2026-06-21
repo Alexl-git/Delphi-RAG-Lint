@@ -86,6 +86,26 @@ extensions don't silently filter matches.
 | `redundant-as-tobject` | info | `(X as TObject)` -- every Delphi object is already a TObject |
 | `inherited-bare` | info | Bare `inherited;` call -- verify it invokes the intended ancestor method |
 
+## Shipped rules (v0.47 -- lint expansion, Wave 1)
+
+New high-signal, low-false-positive rules (see `docs/lint/REPORT-2-draglint-implementation-plan.md`).
+Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_tests.ps1`.
+
+| Rule id | Severity | Description |
+|---------|----------|-------------|
+| `empty-except` | warning | Empty `except` block silently swallows every exception |
+| `empty-finally` | warning | Empty `finally` block does nothing |
+| `bare-except` | info | `except` with no `on E: ... do` clause catches everything (incl. EOutOfMemory) |
+| `empty-conditional` | warning | Empty `then`/`else` branch -- stray `;` after `then`/`else` |
+| `raise-bare-exception` | warning | `raise Exception.Create(...)` raises the root class -- use a subclass |
+| `reraise-loses-stack` | warning | `raise E;` resets the stack trace -- use a bare `raise;` |
+| `off-by-one-count` | warning | `for I := 0 to X.Count/Length(X)` runs one past the end |
+| `nil-comparison` | info | Prefer `Assigned(X)` over `X = nil` / `X <> nil` |
+
+Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<> False`;
+`assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`
+also matches `BUG`.
+
 ### Tip
 
 If you want to discover what AST nodes look like for a fragment of Delphi

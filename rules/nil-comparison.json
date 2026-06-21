@@ -1,0 +1,6 @@
+{
+  "id": "nil-comparison",
+  "severity": "info",
+  "message": "Prefer Assigned(X) over 'X = nil' / 'X <> nil' -- clearer, and correct for method-pointer references.",
+  "warn_capture": "warn"
+}

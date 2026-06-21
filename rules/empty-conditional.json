@@ -1,0 +1,6 @@
+{
+  "id": "empty-conditional",
+  "severity": "warning",
+  "message": "Empty then/else branch is a no-op -- likely a stray ';' after 'then'/'else'.",
+  "warn_capture": "warn"
+}

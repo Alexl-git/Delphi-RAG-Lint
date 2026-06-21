@@ -54,3 +54,6 @@ Thumbs.db
 *.sqlite-shm
 *.sqlite-wal
 build/release-artifacts-0.41/
+
+# Lint rules deployed next to the binary by the test harness (source of truth is rules/)
+third_party/*/rules/

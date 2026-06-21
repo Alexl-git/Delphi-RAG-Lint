@@ -1,0 +1,6 @@
+{
+  "id": "empty-except",
+  "severity": "warning",
+  "message": "Empty except block silently swallows every exception -- log it or re-raise.",
+  "warn_capture": "warn"
+}

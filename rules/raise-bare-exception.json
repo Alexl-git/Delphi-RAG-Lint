@@ -1,0 +1,6 @@
+{
+  "id": "raise-bare-exception",
+  "severity": "warning",
+  "message": "Raising the root Exception class -- raise a specific subclass so callers can handle it selectively.",
+  "warn_capture": "warn"
+}

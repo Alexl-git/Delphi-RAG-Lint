@@ -1,0 +1,4 @@
+# 'to L.Count' (line 12) and 'to Length(L)' (line 14) fire; 'to L.Count - 1' (line 16) must not
+off-by-one-count 12
+off-by-one-count 14
+!off-by-one-count 16

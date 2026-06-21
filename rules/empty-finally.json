@@ -1,0 +1,6 @@
+{
+  "id": "empty-finally",
+  "severity": "warning",
+  "message": "Empty finally block does nothing -- remove it, or release the resource it was meant to free.",
+  "warn_capture": "warn"
+}
