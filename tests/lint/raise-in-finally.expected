@@ -1,0 +1,3 @@
+# raise inside finally at line 14 fires; raise in the try body (line 20) must not
+raise-in-finally 14
+!raise-in-finally 20

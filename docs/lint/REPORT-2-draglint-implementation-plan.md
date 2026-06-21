@@ -193,3 +193,11 @@ _(updated as rules land)_
   (W538: `X.ClassName = 'literal'`), `inline-assembly` (`asm` block, portability). **Total: 11 new
   rules this session.** Next: Wave 2 Pascal built-ins (need a Win64 rebuild + self-tests) and the
   rules-dir deploy/`--rules-dir`/selectability infra (same rebuild).
+- 2026-06-21 — **Wave 2 started: first Pascal built-in `raise-in-finally`** (#17) -- a real bug the
+  `.scm` engine can't express (needs a finally-subtree walk that stops at nested `try`). Added
+  `TAstChecker.CheckRaiseInFinally` (DocInsight-documented), wired into `DoLint` and the `--rule`
+  allow-list; Win64 Release rebuilt (clean) + redeployed to `third_party/dll-win64/`. Harness 16/16
+  (fixture asserts fire-in-finally + no-fire-in-try-body). Confirmed no regression
+  (`selftest unused-locals` PASS). The canonical exe is gitignored (ships via the release zip, not
+  git), so only source is committed; a release rebuild will carry the rule to users.
+  **Session total: 13 new rules (12 `.scm` + 1 built-in).**

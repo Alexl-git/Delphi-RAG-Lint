@@ -110,6 +110,16 @@ Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<>
 `assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`
 also matches `BUG`.
 
+### Built-in rules (compiled into the exe, not `.scm`)
+
+Some rules need scope/flow analysis a single tree-sitter query can't express, so they live in
+Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag-lint lint <file>`
+(single `.pas`/`.inc`): `unused-local` (H2164), `syntax-error`, `unbalanced-begin-end`,
+`undeclared-identifier` (needs `--db`), and -- new in v0.47 -- **`raise-in-finally`** (warning: a
+`raise` inside a `finally` block masks the in-flight exception; walks the finally subtree, not
+descending into nested `try`). Plus `field-by-name-in-loop` and `inline-comment-in-multiline-args`
+from the linter core, and `unit-not-in-dpr` (project check).
+
 ### Tip
 
 If you want to discover what AST nodes look like for a fragment of Delphi

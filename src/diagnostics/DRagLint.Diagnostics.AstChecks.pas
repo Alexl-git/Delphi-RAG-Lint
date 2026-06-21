@@ -33,6 +33,13 @@ type
       a nested routine = closure, or via with/property) raises the count and
       suppresses the finding. No compiler / no DB needed. }
       class function CheckUnusedLocals(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags a 'raise' statement located inside a 'finally' block.</summary>
+      /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
+      /// <returns>One finding per raise found within a finally body (capped at 100); nil/empty if none.</returns>
+      /// <remarks>A raise in a finally masks the exception currently propagating out of the protected
+      /// section. The walk does not descend into nested try blocks, so each try's finally is attributed
+      /// to that try. Pure tree-sitter AST; no DB or compiler required. Never raises.</remarks>
+      class function CheckRaiseInFinally(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -547,6 +554,94 @@ begin
     Findings.Free;
   end;
 end; // begin
+
+class function TAstChecker.CheckRaiseInFinally(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  { Search a finally body subtree for raise statements. Does NOT descend into a
+    nested 'try' -- a raise inside an inner try is attributed to that try when
+    the main walk reaches it. }
+  procedure SearchForRaise(const N: TTSNode);
+  var
+    I: Integer     ;
+    P: TTSPoint    ;
+    F: TLintFinding;
+  begin
+    if N.IsNull or (Findings.Count >= 100) then Exit;
+    if N.NodeType = 'try' then Exit;
+    if N.NodeType = 'raise' then
+    begin
+      P:= N.StartPoint;
+      F:= Default(TLintFinding);
+      F.RuleId  := 'raise-in-finally';
+      F.Severity:= 'warning';
+      F.Message := 'raise inside a finally block masks the exception currently propagating -- move it out of the finally';
+      F.FilePath:= AFile;
+      F.StartLine:= Integer(P.Row   ) + 1;
+      F.StartCol := Integer(P.Column) + 1;
+      F.EndLine:= F.StartLine;
+      F.EndCol := F.StartCol + 5;
+      Findings.Add(F);
+      Exit; { do not descend into the raise expression }
+    end;
+    for I:= 0 to N.ChildCount - 1 do SearchForRaise(N.Child(I));
+  end; // procedure
+
+  { Walk the whole tree; for each 'try', scan its finally body (the 'statements'
+    child that follows the kFinally keyword). }
+  procedure Visit(const N: TTSNode);
+  var
+    I        : Integer;
+    InFinally: Boolean;
+    C        : TTSNode;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'try' then
+    begin
+      InFinally:= False;
+      for I:= 0 to N.ChildCount - 1 do
+      begin
+        C:= N.Child(I);
+        if C.NodeType = 'kFinally' then InFinally:= True
+        else if InFinally and (C.NodeType = 'statements') then SearchForRaise(C);
+      end;
+    end;
+    for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then Visit(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end; // function
 
 class function TAstChecker.Check(const AStore: ISymbolStore; const AFile: string): TArray<TLintFinding>;
 var
