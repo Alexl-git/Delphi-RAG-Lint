@@ -1,0 +1,6 @@
+{
+  "id": "public-field",
+  "severity": "info",
+  "message": "Public field on a class breaks encapsulation -- expose it via a property.",
+  "warn_capture": "warn"
+}

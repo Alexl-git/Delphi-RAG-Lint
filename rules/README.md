@@ -113,6 +113,9 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `comparison-same-operands` | warning | `X = X` / `X < X` -- both operands identical, result is constant (likely a typo) |
 | `division-by-zero-literal` | warning | `X div 0` / `X / 0` / `X mod 0` -- always raises a runtime division error |
 | `empty-case-branch` | info | `1: ;` -- case branch with a label but no statement |
+| `not-comparison-precedence` | warning | `not A = B` parses as `(not A) = B` -- write `not (A = B)` |
+| `redundant-not-not` | info | `not not X` -- redundant double negation, simplify to `X` |
+| `public-field` | info | public data field on a class -- breaks encapsulation; use a property |
 
 Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<> False`;
 `assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`

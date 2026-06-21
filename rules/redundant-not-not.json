@@ -1,0 +1,6 @@
+{
+  "id": "redundant-not-not",
+  "severity": "info",
+  "message": "Double negation 'not not X' -- simplify to X.",
+  "warn_capture": "warn"
+}

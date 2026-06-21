@@ -1,0 +1,3 @@
+# public field Count (10) fires; private FName (8) must not
+public-field 10
+!public-field 8

@@ -1,0 +1,3 @@
+# 'not not X' (9) fires; single 'not X' (11) must not
+redundant-not-not 9
+!redundant-not-not 11

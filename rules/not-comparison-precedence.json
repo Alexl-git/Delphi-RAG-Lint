@@ -1,0 +1,6 @@
+{
+  "id": "not-comparison-precedence",
+  "severity": "warning",
+  "message": "'not A = B' parses as '(not A) = B' -- likely a bug; write 'not (A = B)'.",
+  "warn_capture": "warn"
+}
