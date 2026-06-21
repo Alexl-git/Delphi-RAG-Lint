@@ -1,0 +1,6 @@
+{
+  "id": "with-multiple-items",
+  "severity": "warning",
+  "message": "'with A, B do' lists multiple objects -- name resolution is highly ambiguous; use explicit qualified access.",
+  "warn_capture": "warn"
+}

@@ -105,6 +105,11 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `classname-string-compare` | warning | `X.ClassName = 'TFoo'` is fragile -- use `is` / `InheritsFrom` |
 | `inline-assembly` | info | `asm ... end` block -- not portable across platforms |
 | `self-assignment` | warning | `X := X` is a no-op self-assignment -- likely a copy-paste error |
+| `with-multiple-items` | warning | `with A, B do` -- multiple objects make name resolution highly ambiguous |
+| `empty-loop-body` | warning | `while/for ... do ;` or `repeat until` with no body -- stray `;` or busy-wait |
+| `redundant-assigned-free` | info | `if Assigned(X) then X.Free` -- guard redundant (Free/FreeAndNil handle nil) |
+| `sql-injection-concat` | warning | SQL string literal concatenated with a variable -- injection risk (CWE-89) |
+| `hardcoded-credential` | warning | secret-named variable assigned a string literal -- hardcoded credential (CWE-798) |
 
 Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<> False`;
 `assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`

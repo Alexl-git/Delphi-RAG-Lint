@@ -1,0 +1,4 @@
+# Assigned-then-Free (11) and Assigned-then-FreeAndNil (16) fire; different vars (21) must not
+redundant-assigned-free 11
+redundant-assigned-free 16
+!redundant-assigned-free 21
