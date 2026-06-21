@@ -94,6 +94,7 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | Rule id | Severity | Description |
 |---------|----------|-------------|
 | `empty-except` | warning | Empty `except` block silently swallows every exception |
+| `empty-on-handler` | warning | `on E: ... do ;` -- empty exception handler swallows that exception |
 | `empty-finally` | warning | Empty `finally` block does nothing |
 | `bare-except` | info | `except` with no `on E: ... do` clause catches everything (incl. EOutOfMemory) |
 | `empty-conditional` | warning | Empty `then`/`else` branch -- stray `;` after `then`/`else` |

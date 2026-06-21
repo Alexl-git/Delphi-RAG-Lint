@@ -1,0 +1,6 @@
+{
+  "id": "empty-on-handler",
+  "severity": "warning",
+  "message": "Empty exception handler ('on ... do ;') silently swallows the exception -- log it or re-raise.",
+  "warn_capture": "warn"
+}

@@ -1,0 +1,4 @@
+# empty 'on E: ... do ;' (14) fires; handler with a body (23/24) must not
+empty-on-handler 14
+!empty-on-handler 23
+!empty-on-handler 24
