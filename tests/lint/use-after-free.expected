@@ -1,0 +1,3 @@
+# X.ToString after X.Free (15) fires; Y.ToString before FreeAndNil (23) must not
+use-after-free 15
+!use-after-free 23

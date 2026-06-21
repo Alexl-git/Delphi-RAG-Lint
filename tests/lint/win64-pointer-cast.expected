@@ -1,0 +1,3 @@
+# Integer(Ptr) where Ptr: Pointer (11) fires; Integer(I) where I: Integer (12) must not
+win64-pointer-cast 11
+!win64-pointer-cast 12

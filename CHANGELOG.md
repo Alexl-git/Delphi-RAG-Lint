@@ -3,6 +3,19 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.52.0-alpha -- 2026-06-21
+
+### Added (batch)
+
+- `use-after-free` (warning): use of an object after a raw `X.Free` (dangling
+  reference) within the same block, until `X` is reassigned. `FreeAndNil(X)` clears
+  tracking. Catches the classic `X.Free; ...; X.Something` crash.
+- `win64-pointer-cast` (warning): a 32-bit cast (`Integer`/`Cardinal`/`LongInt`/
+  `LongWord`) of a pointer-typed value (`Pointer` / `P...`) -- truncates on Win64;
+  use `NativeInt`/`NativeUInt`.
+- `hardcoded-absolute-path` (info): a string literal that is an absolute drive path
+  (`'C:\...'`) -- breaks on other machines; read from config or compute at runtime.
+
 ## v0.51.0-alpha -- 2026-06-21
 
 ### Added (project-wide)

@@ -127,6 +127,7 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `redundant-not-not` | info | `not not X` -- redundant double negation, simplify to `X` |
 | `public-field` | info | public data field on a class -- breaks encapsulation; use a property |
 | `locale-sensitive-conversion` | warning | `StrToFloat`/`FloatToStr`/`StrToDate`/... without a `TFormatSettings` |
+| `hardcoded-absolute-path` | info | string literal that is an absolute drive path (`'C:\...'`) |
 
 Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<> False`;
 `assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`
@@ -158,6 +159,10 @@ Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag
   (correlates a literal `X.SQL.Text := '...'` with a later `X.Open`/`X.ExecSQL` on the same variable).
 - **`unprotected-object-free`** (warning): a locally-created object freed without `try-finally`
   (leaks if code between creation and `Free`/`FreeAndNil` raises).
+- **`use-after-free`** (warning): use of an object after a raw `X.Free` (dangling reference) before
+  `X` is reassigned (block-scoped; `FreeAndNil` clears tracking).
+- **`win64-pointer-cast`** (warning): a 32-bit cast (`Integer`/`Cardinal`/...) of a pointer-typed
+  value -- truncates on Win64; use `NativeInt`/`NativeUInt`.
 
 Index-wide rules (need `--db`, run via `drag-lint lint-project`): **`god-class`**, **`unused-public-symbol`**,
 **`interface-reference-cycle`** (class A holds an interface implemented by B and vice-versa -- ARC leak;

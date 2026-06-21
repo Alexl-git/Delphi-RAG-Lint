@@ -1,0 +1,6 @@
+{
+  "id": "hardcoded-absolute-path",
+  "severity": "info",
+  "message": "Hardcoded absolute path -- breaks on other machines; read it from config or compute it at runtime.",
+  "warn_capture": "warn"
+}

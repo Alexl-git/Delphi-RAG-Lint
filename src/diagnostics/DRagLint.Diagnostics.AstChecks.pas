@@ -103,6 +103,13 @@ type
       /// [weak] or [unsafe]. Interface detection uses the I-prefix convention; only mutual (2-cycle)
       /// pairs are reported. Pure AST across all files; no DB. Never raises.</remarks>
       class function CheckInterfaceCycles(const AFiles: TArray<string>): TArray<TLintFinding>;
+      /// <summary>Use of an object after 'X.Free' (dangling reference) within the same block.</summary>
+      /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
+      /// <returns>'use-after-free' findings; empty if none.</returns>
+      /// <remarks>Block-scoped (siblings only, to keep false positives low): after a raw 'X.Free' it
+      /// flags a later 'X.&lt;member&gt;' access (incl. a second X.Free) until X is reassigned. FreeAndNil(X)
+      /// clears tracking (it nils X). Pure AST; no DB. Never raises.</remarks>
+      class function CheckUseAfterFree(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -1257,6 +1264,17 @@ var
     Result:= (Length(S) >= 2) and (S[1] = 'I') and CharInSet(S[2], ['A'..'Z']);
   end;
 
+  { Pointer-sized types whose value is truncated by a 32-bit cast on Win64.
+    Conservative: 'Pointer' and P-prefix pointer types only (T-prefix is ambiguous --
+    could be an int-sized enum/record -- so it is excluded to keep false positives low). }
+  function IsPointerType(const T: string): Boolean;
+  var
+    S: string;
+  begin
+    S:= Trim(T);
+    Result:= SameText(S, 'Pointer') or ((Length(S) >= 2) and (S[1] = 'P') and CharInSet(S[2], ['A'..'Z']));
+  end;
+
   { Collect declared name -> type text for vars, params and fields (flat map). }
   procedure CollectDecls(const N: TTSNode);
   var
@@ -1362,6 +1380,34 @@ var
             F.EndLine:= F.StartLine;
             F.EndCol := F.StartCol + 1;
             Findings.Add(F);
+          end;
+        end;
+      end;
+      { v0.52: a 32-bit cast (Integer/Cardinal/LongInt/LongWord) of a pointer-typed
+        value truncates on Win64 -- use NativeInt/NativeUInt. }
+      if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
+      begin
+        var Cn: string:= LowerCase(NodeStr(Entity));
+        if (Cn = 'integer') or (Cn = 'cardinal') or (Cn = 'longint') or (Cn = 'longword') then
+        begin
+          Args:= N.ChildByField('args');
+          if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
+          begin
+            A0:= Args.NamedChild(0);
+            if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) and IsPointerType(T) then
+            begin
+              P:= Entity.StartPoint;
+              F:= Default(TLintFinding);
+              F.RuleId  := 'win64-pointer-cast';
+              F.Severity:= 'warning';
+              F.Message := Format('32-bit cast (%s) of pointer-typed %s -- truncates on Win64; use NativeInt/NativeUInt', [NodeStr(Entity), NodeStr(A0)]);
+              F.FilePath:= AFile;
+              F.StartLine:= Integer(P.Row   ) + 1;
+              F.StartCol := Integer(P.Column) + 1;
+              F.EndLine:= F.StartLine;
+              F.EndCol := F.StartCol + 1;
+              Findings.Add(F);
+            end;
           end;
         end;
       end;
@@ -1972,6 +2018,168 @@ begin
     Seen.Free;
     ImplBy.Free;
     Nodes.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckUseAfterFree(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { Unwrap a 'statement' wrapper to its primary expression. }
+  function Primary(const N: TTSNode): TTSNode;
+  begin
+    if (N.NodeType = 'statement') and (N.NamedChildCount > 0) then Result:= N.NamedChild(0) else Result:= N;
+  end;
+
+  { 'X.Free' -> X. }
+  function IsRawFree(const N: TTSNode; out AVar: string): Boolean;
+  var
+    L, R: TTSNode;
+  begin
+    Result:= False;
+    if N.NodeType <> 'exprDot' then Exit;
+    L:= N.ChildByField('lhs'); R:= N.ChildByField('rhs');
+    if (not L.IsNull) and (not R.IsNull) and (L.NodeType = 'identifier') and (R.NodeType = 'identifier') and SameText(NodeStr(R), 'Free') then
+    begin
+      AVar:= LowerCase(NodeStr(L));
+      Result:= True;
+    end;
+  end;
+
+  { 'FreeAndNil(X)' -> X. }
+  function IsFreeAndNil(const N: TTSNode; out AVar: string): Boolean;
+  var
+    Ent, Args, A0: TTSNode;
+  begin
+    Result:= False;
+    if N.NodeType <> 'exprCall' then Exit;
+    Ent:= N.ChildByField('entity');
+    if Ent.IsNull or (Ent.NodeType <> 'identifier') or not SameText(NodeStr(Ent), 'FreeAndNil') then Exit;
+    Args:= N.ChildByField('args');
+    if Args.IsNull or (Args.NamedChildCount < 1) then Exit;
+    A0:= Args.NamedChild(0);
+    if A0.NodeType = 'identifier' then begin AVar:= LowerCase(NodeStr(A0)); Result:= True; end;
+  end;
+
+  { Find an 'X.<member>' access where X is in AFreed; returns the node or null-via-found-flag. }
+  function FindUse(const N: TTSNode; AFreed: TDictionary<string, Boolean>; out AHit: TTSNode): Boolean;
+  var
+    I   : Integer;
+    L   : TTSNode;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'exprDot' then
+    begin
+      L:= N.ChildByField('lhs');
+      if (not L.IsNull) and (L.NodeType = 'identifier') and AFreed.ContainsKey(LowerCase(NodeStr(L))) then
+      begin
+        AHit:= N;
+        Exit(True);
+      end;
+    end;
+    for I:= 0 to N.ChildCount - 1 do
+      if FindUse(N.Child(I), AFreed, AHit) then Exit(True);
+  end;
+
+  procedure CheckBlock(const ABlock: TTSNode);
+  var
+    Freed: TDictionary<string, Boolean>;
+    I    : Integer    ;
+    Child: TTSNode    ;
+    Prim : TTSNode    ;
+    Hit  : TTSNode    ;
+    V    : string     ;
+    P    : TTSPoint   ;
+    F    : TLintFinding;
+  begin
+    Freed:= TDictionary<string, Boolean>.Create;
+    try
+      for I:= 0 to ABlock.NamedChildCount - 1 do
+      begin
+        Child:= ABlock.NamedChild(I);
+        if Child.IsNull or Child.NodeType.StartsWith('k') then Continue;
+        { step 1: any use of an already-freed var in this statement? }
+        if (Freed.Count > 0) and FindUse(Child, Freed, Hit) then
+        begin
+          P:= Hit.StartPoint;
+          F:= Default(TLintFinding);
+          F.RuleId  := 'use-after-free';
+          F.Severity:= 'warning';
+          F.Message := 'Use of an object after it was freed (dangling reference) -- nil it after Free, or use FreeAndNil';
+          F.FilePath:= AFile;
+          F.StartLine:= Integer(P.Row   ) + 1;
+          F.StartCol := Integer(P.Column) + 1;
+          F.EndLine:= F.StartLine;
+          F.EndCol := F.StartCol + 1;
+          Findings.Add(F);
+          if Findings.Count >= 200 then Break;
+        end;
+        { step 2: update the freed set for subsequent statements }
+        Prim:= Primary(Child);
+        if (Child.NodeType = 'assignment') then
+        begin
+          var Lv: TTSNode:= Child.ChildByField('lhs');
+          if (not Lv.IsNull) and (Lv.NodeType = 'identifier') then Freed.Remove(LowerCase(NodeStr(Lv)));
+        end
+        else if IsFreeAndNil(Prim, V) then Freed.Remove(V)
+        else if IsRawFree(Prim, V) then Freed.AddOrSetValue(V, True);
+      end;
+    finally
+      Freed.Free;
+    end;
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var
+    I: Integer;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if (N.NodeType = 'block') or (N.NodeType = 'statements') then CheckBlock(N);
+    for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
+  end;
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then Visit(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
     Findings.Free;
   end;
 end; // function
