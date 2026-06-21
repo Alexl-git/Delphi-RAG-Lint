@@ -61,6 +61,16 @@ type
       /// propagating out of the protected section. Walks each finally body, not descending into nested
       /// try blocks. Companion to CheckRaiseInFinally. Pure AST; no DB. Never raises.</remarks>
       class function CheckControlFlowInFinally(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Routine size/complexity metrics: too many parameters, too many locals,
+      /// method too long, and excessive nesting depth.</summary>
+      /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
+      /// <param name="AMaxParams">Parameter count above which 'too-many-parameters' fires.</param>
+      /// <param name="AMaxLocals">Local-variable count above which 'too-many-locals' fires.</param>
+      /// <param name="AMaxLines">Body line span above which 'method-too-long' fires.</param>
+      /// <param name="AMaxNesting">Control-structure nesting depth above which 'deep-nesting' fires.</param>
+      /// <returns>Findings tagged with the four metric rule ids; empty if all within limits.</returns>
+      /// <remarks>One AST walk per routine. Pure AST; no DB. Never raises.</remarks>
+      class function CheckRoutineMetrics(const AFile: string; AMaxParams, AMaxLocals, AMaxLines, AMaxNesting: Integer): TArray<TLintFinding>;
   end;
 
 implementation
@@ -986,6 +996,168 @@ var
       end;
     end;
     for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then Visit(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckRoutineMetrics(const AFile: string; AMaxParams, AMaxLocals, AMaxLines, AMaxNesting: Integer): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { Counts the declared names in a declArgs/declVars container (handles 'A, B: T'
+    multi-name items by counting identifiers that precede the item's 'type' field). }
+  function CountNames(const ADecls: TTSNode; const AItemKind: string): Integer;
+  var
+    I, J     : Integer;
+    Item     : TTSNode;
+    TypeNode : TTSNode;
+    NameId   : TTSNode;
+    TypeStart: Integer;
+  begin
+    Result:= 0;
+    if ADecls.IsNull then Exit;
+    for I:= 0 to ADecls.NamedChildCount - 1 do
+    begin
+      Item:= ADecls.NamedChild(I);
+      if Item.NodeType <> AItemKind then Continue;
+      TypeNode:= Item.ChildByField('type');
+      if TypeNode.IsNull then TypeStart:= MaxInt else TypeStart:= Integer(TypeNode.StartByte);
+      for J:= 0 to Item.NamedChildCount - 1 do
+      begin
+        NameId:= Item.NamedChild(J);
+        if (NameId.NodeType = 'identifier') and (Integer(NameId.StartByte) < TypeStart) then Inc(Result);
+      end;
+    end;
+  end;
+
+  { Deepest nesting of control structures within N. }
+  function MaxNest(const N: TTSNode; ADepth: Integer): Integer;
+  var
+    I, D, M: Integer;
+    Inc1   : Integer;
+  begin
+    Result:= ADepth;
+    if N.IsNull then Exit;
+    Inc1:= 0;
+    if (N.NodeType = 'if') or (N.NodeType = 'ifElse') or (N.NodeType = 'while') or (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
+      (N.NodeType = 'with') or (N.NodeType = 'try') then Inc1:= 1;
+    M:= ADepth;
+    for I:= 0 to N.ChildCount - 1 do
+    begin
+      D:= MaxNest(N.Child(I), ADepth + Inc1);
+      if D > M then M:= D;
+    end;
+    Result:= M;
+  end;
+
+  procedure CheckProc(const ADefProc: TTSNode);
+  var
+    Hdr  : TTSNode     ;
+    Args : TTSNode     ;
+    Loc  : TTSNode     ;
+    Body : TTSNode     ;
+    Nm   : TTSNode     ;
+    Name : string      ;
+    NP   : Integer     ;
+    NL   : Integer     ;
+    Lines: Integer     ;
+    Nest : Integer     ;
+    HP   : TTSPoint    ;
+    F    : TLintFinding;
+
+    procedure Emit(const AId, AMsg: string);
+    begin
+      F:= Default(TLintFinding);
+      F.RuleId  := AId;
+      F.Severity:= 'info';
+      F.Message := AMsg;
+      F.FilePath:= AFile;
+      F.StartLine:= Integer(HP.Row   ) + 1;
+      F.StartCol := Integer(HP.Column) + 1;
+      F.EndLine:= F.StartLine;
+      F.EndCol := F.StartCol + 1;
+      Findings.Add(F);
+    end;
+
+  begin
+    Hdr:= ADefProc.ChildByField('header');
+    if Hdr.IsNull then Exit;
+    HP:= Hdr.StartPoint;
+    Name:= '';
+    Nm:= Hdr.ChildByField('name');
+    if not Nm.IsNull then Name:= NodeStr(Nm);
+
+    Args:= Hdr.ChildByField('args');
+    NP:= CountNames(Args, 'declArg');
+    if (AMaxParams > 0) and (NP > AMaxParams) then
+      Emit('too-many-parameters', Format('Routine %s has %d parameters (max %d) -- consider grouping into a record', [Name, NP, AMaxParams]));
+
+    Loc:= ADefProc.ChildByField('local');
+    NL:= CountNames(Loc, 'declVar');
+    if (AMaxLocals > 0) and (NL > AMaxLocals) then
+      Emit('too-many-locals', Format('Routine %s declares %d local variables (max %d) -- consider extracting sub-routines', [Name, NL, AMaxLocals]));
+
+    Body:= ADefProc.ChildByField('body');
+    if not Body.IsNull then
+    begin
+      Lines:= Integer(Body.EndPoint.Row) - Integer(Body.StartPoint.Row) + 1;
+      if (AMaxLines > 0) and (Lines > AMaxLines) then
+        Emit('method-too-long', Format('Routine %s body is %d lines (max %d) -- consider breaking it up', [Name, Lines, AMaxLines]));
+      Nest:= MaxNest(Body, 0);
+      if (AMaxNesting > 0) and (Nest > AMaxNesting) then
+        Emit('deep-nesting', Format('Routine %s nests control structures %d deep (max %d) -- flatten with early exits or sub-routines', [Name, Nest, AMaxNesting]));
+    end;
+  end; // procedure
+
+  procedure Visit(const N: TTSNode);
+  var
+    I: Integer;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.NodeType = 'defProc' then CheckProc(N);
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
   end; // procedure
 
 begin

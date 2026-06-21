@@ -146,6 +146,11 @@ Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag
   body never calls `inherited` (skips ancestor init/cleanup). Class ctors/dtors and asm bodies skipped.
 - **`control-flow-in-finally`** (warning): `Exit`/`Break`/`Continue`/`Halt` inside a `finally` block
   silently discards the in-flight exception (companion to `raise-in-finally`).
+- **`too-many-parameters`** / **`too-many-locals`** / **`method-too-long`** / **`deep-nesting`** (info):
+  routine size/complexity metrics with conservative defaults (params > 7, locals > 25, body > 120
+  lines, nesting > 5). Use `--disable <id>` to turn any off.
+
+Index-wide rules (need `--db`, run via `drag-lint lint-project`): **`god-class`**, **`unused-public-symbol`**.
 
 Plus `field-by-name-in-loop` and `inline-comment-in-multiline-args` from the linter core, and
 `unit-not-in-dpr` (project check).

@@ -1,0 +1,2 @@
+# 6 nested ifs (depth 6 > 5) fires on the routine header (line 7)
+deep-nesting 7

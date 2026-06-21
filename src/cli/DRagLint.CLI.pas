@@ -84,6 +84,7 @@ type
     Rule            : string        ;
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
+    Disable         : string        ; // --disable id1,id2,...: rule ids to drop from lint output
     Format          : string        ;
     Output          : string        ;
     OutputDir       : string        ;
@@ -199,7 +200,7 @@ begin
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--db ...] [--json]');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
-  Writeln('  drag-lint lint  <path>       [--rule <id>] [--rules-dir <dir>] [--json]');
+  Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol] [--json]');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
@@ -430,6 +431,11 @@ begin
     begin
       Inc(i);
       Result.RulesDir:= ParamStr(i);
+    end
+    else if (A = '--disable') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Disable:= ParamStr(i);
     end
     else if A = '--json'    then Result.AsJson:= True
     else if A = '--dry-run' then Result.DryRun:= True
@@ -4011,10 +4017,11 @@ begin
   if (AArgs.Rule <> '') and (AArgs.Rule <> 'field-by-name-in-loop') and (AArgs.Rule <> 'unit-not-in-dpr') and (AArgs.Rule <> 'inline-comment-in-multiline-args') and
   (AArgs.Rule <> 'unused-local') and (AArgs.Rule <> 'syntax-error') and (AArgs.Rule <> 'unbalanced-begin-end') and (AArgs.Rule <> 'raise-in-finally') and
   (AArgs.Rule <> 'code-after-exit') and (AArgs.Rule <> 'missing-inherited-ctor') and (AArgs.Rule <> 'missing-inherited-dtor') and
-  (AArgs.Rule <> 'control-flow-in-finally') then
+  (AArgs.Rule <> 'control-flow-in-finally') and (AArgs.Rule <> 'too-many-parameters') and (AArgs.Rule <> 'too-many-locals') and
+  (AArgs.Rule <> 'method-too-long') and (AArgs.Rule <> 'deep-nesting') then
   begin
     Writeln(Format(
-        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally)',
+        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4068,10 +4075,30 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'missing-inherited-ctor') or (AArgs.Rule = 'missing-inherited-dtor') then
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(AArgs.Path) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      { v0.48: routine size/complexity metrics (conservative defaults: params>7, locals>25, body>120 lines, nesting>5) }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-parameters') or (AArgs.Rule = 'too-many-locals') or (AArgs.Rule = 'method-too-long') or (AArgs.Rule = 'deep-nesting') then
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(AArgs.Path, 7, 25, 120, 5) do
+          if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
     end;
   end; // if
   { v0.47: honor '// drag-lint:ignore [rule ...]' line suppressions across all findings }
   Findings:= ApplyLineSuppressions(Findings);
+  { v0.48: --disable id1,id2,... drops those rule ids entirely }
+  if AArgs.Disable <> '' then
+  begin
+    var DisabledIds: TArray<string>:= AArgs.Disable.Split([',', ' ', ';']);
+    var KeptF: TArray<TLintFinding>:= nil;
+    var DId: string;
+    var Drop: Boolean;
+    for F in Findings do
+    begin
+      Drop:= False;
+      for DId in DisabledIds do
+        if SameText(Trim(DId), F.RuleId) then begin Drop:= True; Break; end;
+      if not Drop then KeptF:= KeptF + [F];
+    end;
+    Findings:= KeptF;
+  end;
   if AArgs.AsJson then
   begin
     JArr:= TJSONArray.Create;

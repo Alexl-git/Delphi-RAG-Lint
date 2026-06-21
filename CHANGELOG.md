@@ -11,8 +11,13 @@ breaking changes** until v1.0.
 - `redundant-not-not` (info): `not not X` double negation.
 - `public-field` (info): public data field on a class breaks encapsulation.
 - `empty-on-handler` (warning): `on E: ... do ;` empty handler swallows the exception.
+- Routine metrics (info, built-in, conservative defaults): `too-many-parameters` (>7),
+  `too-many-locals` (>25), `method-too-long` (>120 lines), `deep-nesting` (>5).
 
 ### Added (CLI)
+
+- **`--disable id1,id2,...`** on `lint` -- drop those rule ids from the output
+  (per-rule control without editing files).
 
 - **Per-line suppression** -- `// drag-lint:ignore` (silence all rules on that
   line) or `// drag-lint:ignore <rule-id> [<rule-id> ...]` (silence specific
