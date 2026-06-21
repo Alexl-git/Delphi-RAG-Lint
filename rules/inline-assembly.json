@@ -1,0 +1,6 @@
+{
+  "id": "inline-assembly",
+  "severity": "info",
+  "message": "Inline asm block -- not portable across compilers/platforms; prefer Pascal where possible.",
+  "warn_capture": "warn"
+}

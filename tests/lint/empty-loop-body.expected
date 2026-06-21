@@ -1,0 +1,5 @@
+# empty while (9), for (10), repeat (11) fire; non-empty while (16) must not
+empty-loop-body 9
+empty-loop-body 10
+empty-loop-body 11
+!empty-loop-body 16

@@ -1,0 +1,3 @@
+# 'X = nil' (line 11) and 'X <> nil' (line 13)
+nil-comparison 11
+nil-comparison 13

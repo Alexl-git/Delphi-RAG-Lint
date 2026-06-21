@@ -1,0 +1,2 @@
+# 'raise E;' re-raise by instance at line 15
+reraise-loses-stack 15

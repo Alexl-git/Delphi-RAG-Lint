@@ -1,0 +1,6 @@
+{
+  "id": "reraise-loses-stack",
+  "severity": "warning",
+  "message": "'raise E;' resets the stack trace -- use a bare 'raise;' to re-raise and preserve the original origin.",
+  "warn_capture": "warn"
+}

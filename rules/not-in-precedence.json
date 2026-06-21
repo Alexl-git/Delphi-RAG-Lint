@@ -1,0 +1,6 @@
+{
+  "id": "not-in-precedence",
+  "severity": "warning",
+  "message": "'not X in S' parses as '(not X) in S' -- almost certainly a bug; write 'not (X in S)'.",
+  "warn_capture": "warn"
+}

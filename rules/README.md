@@ -86,6 +86,57 @@ extensions don't silently filter matches.
 | `redundant-as-tobject` | info | `(X as TObject)` -- every Delphi object is already a TObject |
 | `inherited-bare` | info | Bare `inherited;` call -- verify it invokes the intended ancestor method |
 
+## Shipped rules (v0.47 -- lint expansion, Wave 1)
+
+New high-signal, low-false-positive rules (see `docs/lint/REPORT-2-draglint-implementation-plan.md`).
+Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_tests.ps1`.
+
+| Rule id | Severity | Description |
+|---------|----------|-------------|
+| `empty-except` | warning | Empty `except` block silently swallows every exception |
+| `empty-finally` | warning | Empty `finally` block does nothing |
+| `bare-except` | info | `except` with no `on E: ... do` clause catches everything (incl. EOutOfMemory) |
+| `empty-conditional` | warning | Empty `then`/`else` branch -- stray `;` after `then`/`else` |
+| `raise-bare-exception` | warning | `raise Exception.Create(...)` raises the root class -- use a subclass |
+| `reraise-loses-stack` | warning | `raise E;` resets the stack trace -- use a bare `raise;` |
+| `off-by-one-count` | warning | `for I := 0 to X.Count/Length(X)` runs one past the end |
+| `nil-comparison` | info | Prefer `Assigned(X)` over `X = nil` / `X <> nil` |
+| `not-in-precedence` | warning | `not X in S` parses as `(not X) in S` -- write `not (X in S)` |
+| `classname-string-compare` | warning | `X.ClassName = 'TFoo'` is fragile -- use `is` / `InheritsFrom` |
+| `inline-assembly` | info | `asm ... end` block -- not portable across platforms |
+| `self-assignment` | warning | `X := X` is a no-op self-assignment -- likely a copy-paste error |
+| `with-multiple-items` | warning | `with A, B do` -- multiple objects make name resolution highly ambiguous |
+| `empty-loop-body` | warning | `while/for ... do ;` or `repeat until` with no body -- stray `;` or busy-wait |
+| `redundant-assigned-free` | info | `if Assigned(X) then X.Free` -- guard redundant (Free/FreeAndNil handle nil) |
+| `sql-injection-concat` | warning | SQL string literal concatenated with a variable -- injection risk (CWE-89) |
+| `hardcoded-credential` | warning | secret-named variable OR const set to a string literal -- hardcoded credential (CWE-798) |
+| `comparison-same-operands` | warning | `X = X` / `X < X` -- both operands identical, result is constant (likely a typo) |
+| `division-by-zero-literal` | warning | `X div 0` / `X / 0` / `X mod 0` -- always raises a runtime division error |
+| `empty-case-branch` | info | `1: ;` -- case branch with a label but no statement |
+
+Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<> False`;
+`assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`
+also matches `BUG`.
+
+### Built-in rules (compiled into the exe, not `.scm`)
+
+Some rules need scope/flow analysis a single tree-sitter query can't express, so they live in
+Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag-lint lint <file>`
+(single `.pas`/`.inc`): `unused-local` (H2164), `syntax-error`, `unbalanced-begin-end`,
+`undeclared-identifier` (needs `--db`), and -- new in v0.47:
+- **`raise-in-finally`** (warning): a `raise` inside a `finally` masks the in-flight exception
+  (walks the finally subtree, not descending into nested `try`).
+- **`code-after-exit`** (warning): unreachable statement directly after an unconditional
+  `Exit`/`raise`/`Break`/`Continue`/`Halt` (same statement list; a terminator nested in an if/case
+  does not flag code after the if/case).
+- **`missing-inherited-ctor`** / **`missing-inherited-dtor`** (warning): a constructor/destructor whose
+  body never calls `inherited` (skips ancestor init/cleanup). Class ctors/dtors and asm bodies skipped.
+- **`control-flow-in-finally`** (warning): `Exit`/`Break`/`Continue`/`Halt` inside a `finally` block
+  silently discards the in-flight exception (companion to `raise-in-finally`).
+
+Plus `field-by-name-in-loop` and `inline-comment-in-multiline-args` from the linter core, and
+`unit-not-in-dpr` (project check).
+
 ### Tip
 
 If you want to discover what AST nodes look like for a fragment of Delphi

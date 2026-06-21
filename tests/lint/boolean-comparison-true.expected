@@ -1,0 +1,3 @@
+# 'B = True' (line 11) and 'B <> False' (line 13, newly covered)
+boolean-comparison-true 11
+boolean-comparison-true 13

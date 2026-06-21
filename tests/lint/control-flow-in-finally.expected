@@ -1,0 +1,3 @@
+# Exit in finally (12) fires; Exit in the try body (18) must not
+control-flow-in-finally 12
+!control-flow-in-finally 18

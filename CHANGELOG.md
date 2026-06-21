@@ -3,6 +3,45 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.47.0-alpha -- 2026-06-21
+
+### Added (lint rule expansion -- 25 new rules)
+
+A research-backed first stage of a real Delphi linter (see
+`docs/lint/REPORT-1-delphi-lint-landscape.md` and `REPORT-2-...-implementation-plan.md`).
+**20 new external `.scm` rules** (data-driven, hot-loaded from `rules\`) and
+**5 new built-in rules** (compiled in; need flow/scope analysis), all TDD-tested
+via `tests\lint\run_lint_tests.ps1` (28/28).
+
+- **Exceptions:** `empty-except`, `empty-finally`, `bare-except`,
+  `raise-bare-exception`, `reraise-loses-stack`, `raise-in-finally` (built-in),
+  `control-flow-in-finally` (built-in).
+- **Control flow / dead code:** `empty-conditional`, `empty-loop-body`,
+  `empty-case-branch`, `not-in-precedence`, `off-by-one-count`,
+  `code-after-exit` (built-in).
+- **Expression bugs:** `comparison-same-operands`, `division-by-zero-literal`,
+  `nil-comparison`, `self-assignment`, `classname-string-compare`,
+  `boolean-comparison-true` (now also `<>`).
+- **Resources / clarity:** `redundant-assigned-free`, `with-multiple-items`,
+  `inline-assembly`, `assert-call` (now single-arg only),
+  `missing-inherited-ctor` / `missing-inherited-dtor` (built-ins).
+- **Security:** `sql-injection-concat` (CWE-89), `hardcoded-credential`
+  (CWE-798; `var` and `const`).
+- Refined `compiler-magic-comments` to also flag `BUG`.
+
+### Added (CLI)
+
+- **`drag-lint lint <file> --rules-dir <path>`** -- point the linter at an
+  explicit external-rules folder (CI / IDE / testing).
+- `lint` now prints a one-line note to stderr when **0** external `.scm` rules
+  are loaded, so a missing `rules\` folder is no longer silent (built-in checks
+  still run).
+
+### Packaging
+
+- The release archive now bundles the `rules\` folder next to `drag-lint.exe`
+  (required for the `.scm` rules to load). See `INSTALL.md`.
+
 ## v0.44.0-alpha -- 2026-06-14
 
 ### Added (forms-csv test-helper navigation map)

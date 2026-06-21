@@ -1,0 +1,6 @@
+{
+  "id": "off-by-one-count",
+  "severity": "warning",
+  "message": "'for I := 0 to X.Count/Length(X)' runs one past the end -- use 'to X.Count - 1' (or 'to High(X)').",
+  "warn_capture": "warn"
+}

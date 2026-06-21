@@ -1,0 +1,3 @@
+# empty branch '1: ;' (10) fires; non-empty branch (11) must not
+empty-case-branch 10
+!empty-case-branch 11

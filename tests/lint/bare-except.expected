@@ -1,0 +1,3 @@
+# bare except body (plain statements, no on-clause) pins to the statements at line 12
+bare-except 12
+!empty-except

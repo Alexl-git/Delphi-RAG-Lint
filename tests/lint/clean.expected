@@ -1,0 +1,10 @@
+# Well-formed code: none of the new warning/info rules may fire (false-positive guard).
+# (Other rules like writeln-in-source may legitimately fire and are not asserted here.)
+!empty-except
+!empty-finally
+!bare-except
+!empty-conditional
+!raise-bare-exception
+!reraise-loses-stack
+!off-by-one-count
+!nil-comparison

@@ -1,0 +1,6 @@
+{
+  "id": "empty-loop-body",
+  "severity": "warning",
+  "message": "Empty loop body -- a stray ';' after 'do', or a busy-wait that should sleep/yield.",
+  "warn_capture": "warn"
+}

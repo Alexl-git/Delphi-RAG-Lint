@@ -1,0 +1,6 @@
+{
+  "id": "redundant-assigned-free",
+  "severity": "info",
+  "message": "'if Assigned(X) then X.Free' -- the guard is redundant; Free and FreeAndNil already handle nil.",
+  "warn_capture": "warn"
+}

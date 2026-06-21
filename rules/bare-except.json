@@ -1,0 +1,6 @@
+{
+  "id": "bare-except",
+  "severity": "info",
+  "message": "Bare except (no 'on E: ... do') catches every exception, even EOutOfMemory -- catch a specific exception class.",
+  "warn_capture": "warn"
+}

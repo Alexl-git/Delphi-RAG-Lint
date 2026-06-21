@@ -1,0 +1,3 @@
+# 'raise Exception.Create' at line 11 fires; specific subclass at line 16 must not
+raise-bare-exception 11
+!raise-bare-exception 16

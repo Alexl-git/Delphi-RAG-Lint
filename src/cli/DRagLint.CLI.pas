@@ -82,6 +82,7 @@ type
     InFile          : string        ; // --in <file.pas> (resolve-uses scope context)
     Rule            : string        ;
     ProjectPath     : string        ;
+    RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     Format          : string        ;
     Output          : string        ;
     OutputDir       : string        ;
@@ -197,7 +198,7 @@ begin
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--db ...] [--json]');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
-  Writeln('  drag-lint lint  <path>       [--rule field-by-name-in-loop] [--json]');
+  Writeln('  drag-lint lint  <path>       [--rule <id>] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server)');
@@ -422,6 +423,11 @@ begin
     begin
       Inc(i);
       Result.ProjectPath:= ParamStr(i);
+    end
+    else if (A = '--rules-dir') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RulesDir:= ParamStr(i);
     end
     else if A = '--json'    then Result.AsJson:= True
     else if A = '--dry-run' then Result.DryRun:= True
@@ -3939,10 +3945,12 @@ begin
     Exit   (2                                                        );
   end;
   if (AArgs.Rule <> '') and (AArgs.Rule <> 'field-by-name-in-loop') and (AArgs.Rule <> 'unit-not-in-dpr') and (AArgs.Rule <> 'inline-comment-in-multiline-args') and
-  (AArgs.Rule <> 'unused-local') and (AArgs.Rule <> 'syntax-error') and (AArgs.Rule <> 'unbalanced-begin-end') then
+  (AArgs.Rule <> 'unused-local') and (AArgs.Rule <> 'syntax-error') and (AArgs.Rule <> 'unbalanced-begin-end') and (AArgs.Rule <> 'raise-in-finally') and
+  (AArgs.Rule <> 'code-after-exit') and (AArgs.Rule <> 'missing-inherited-ctor') and (AArgs.Rule <> 'missing-inherited-dtor') and
+  (AArgs.Rule <> 'control-flow-in-finally') then
   begin
     Writeln(Format(
-        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end)',
+        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -3958,8 +3966,12 @@ begin
   end;
   if AArgs.Path <> '' then
   begin
-    Linter:= DRagLint.Lint.Linter.TLinter.Create;
+    Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
     try
+      { Surface the deploy gap instead of silently running with no external rules:
+        the exe loads <exe-dir>\rules by default (or --rules-dir). }
+      if Linter.ExternalRuleCount = 0 then
+        Writeln(ErrOutput, 'drag-lint: note: 0 external .scm rules loaded -- place a "rules" folder next to drag-lint.exe, or pass --rules-dir <path> (built-in checks still run).');
       if TFile.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFile(AArgs.Path)
       else if TDirectory.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFolder(AArgs.Path, True)
       else
@@ -3982,6 +3994,16 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'syntax-error') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors(AArgs.Path);
       { unbalanced begin/end (a common edit-time mistake) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'unbalanced-begin-end') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd(AArgs.Path);
+      { v0.47: raise inside a finally block (masks the in-flight exception) }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'raise-in-finally') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally(AArgs.Path);
+      { v0.47: unreachable code after Exit/raise/Break/Continue/Halt }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'code-after-exit') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit(AArgs.Path);
+      { v0.47: Exit/Break/Continue/Halt inside a finally block }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'control-flow-in-finally') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally(AArgs.Path);
+      { v0.47: constructor/destructor without an inherited call (one walk emits both ids) }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'missing-inherited-ctor') or (AArgs.Rule = 'missing-inherited-dtor') then
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(AArgs.Path) do
+          if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
     end;
   end; // if
   if AArgs.AsJson then

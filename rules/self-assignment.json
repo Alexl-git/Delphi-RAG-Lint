@@ -1,0 +1,6 @@
+{
+  "id": "self-assignment",
+  "severity": "warning",
+  "message": "'X := X' is a no-op self-assignment -- likely a copy-paste error.",
+  "warn_capture": "warn"
+}

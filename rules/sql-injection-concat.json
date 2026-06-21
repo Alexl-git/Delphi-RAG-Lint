@@ -1,0 +1,6 @@
+{
+  "id": "sql-injection-concat",
+  "severity": "warning",
+  "message": "SQL string concatenated with a variable -- SQL injection risk (CWE-89); use a parameterized query.",
+  "warn_capture": "warn"
+}

@@ -1,0 +1,6 @@
+{
+  "id": "classname-string-compare",
+  "severity": "warning",
+  "message": "Comparing ClassName to a string literal is fragile -- use 'is' or InheritsFrom().",
+  "warn_capture": "warn"
+}
