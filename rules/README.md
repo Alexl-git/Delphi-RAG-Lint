@@ -156,6 +156,8 @@ Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag
   on an interface-typed variable).
 - **`firedac-open-execsql-mismatch`** (warning): `Open` on a DML statement or `ExecSQL` on a SELECT
   (correlates a literal `X.SQL.Text := '...'` with a later `X.Open`/`X.ExecSQL` on the same variable).
+- **`unprotected-object-free`** (warning): a locally-created object freed without `try-finally`
+  (leaks if code between creation and `Free`/`FreeAndNil` raises).
 
 Index-wide rules (need `--db`, run via `drag-lint lint-project`): **`god-class`**, **`unused-public-symbol`**.
 

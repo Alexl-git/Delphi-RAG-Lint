@@ -87,6 +87,14 @@ type
       /// program order. Only fires when the SQL is a recognizable literal, so false positives are rare.
       /// Pure AST; no DB. Never raises.</remarks>
       class function CheckFireDacSqlMismatch(const AFile: string): TArray<TLintFinding>;
+      /// <summary>A locally-created object that is freed without try-finally protection (leaks if
+      /// code between creation and Free raises).</summary>
+      /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
+      /// <returns>'unprotected-object-free' findings; empty if none.</returns>
+      /// <remarks>Per routine, in program order: records 'X := ...Create...' constructions, then flags a
+      /// later 'X.Free' / 'FreeAndNil(X)' on the same variable that is NOT lexically inside a finally
+      /// block. Requiring same-routine construction filters destructor field-frees. Pure AST; no DB. Never raises.</remarks>
+      class function CheckUnprotectedFree(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -1505,6 +1513,185 @@ var
           WalkBody(Body, Map);
         finally
           Map.Free;
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do VisitProcs(N.NamedChild(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then VisitProcs(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckUnprotectedFree(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { 'X := <something>.Create[...]' (paren or no-paren) -> returns lowercased X. }
+  function IsConstruction(const ANode: TTSNode; out AVar: string): Boolean;
+  var
+    Lhs, Rhs, Ent, Mth: TTSNode;
+    HasMth            : Boolean;
+  begin
+    Result:= False;
+    if ANode.NodeType <> 'assignment' then Exit;
+    Lhs:= ANode.ChildByField('lhs');
+    if Lhs.IsNull or (Lhs.NodeType <> 'identifier') then Exit;
+    Rhs:= ANode.ChildByField('rhs');
+    if Rhs.IsNull then Exit;
+    HasMth:= False;
+    if Rhs.NodeType = 'exprDot' then
+    begin
+      Mth:= Rhs.ChildByField('rhs');
+      HasMth:= True;
+    end
+    else if Rhs.NodeType = 'exprCall' then
+    begin
+      Ent:= Rhs.ChildByField('entity');
+      if (not Ent.IsNull) and (Ent.NodeType = 'exprDot') then
+      begin
+        Mth:= Ent.ChildByField('rhs');
+        HasMth:= True;
+      end;
+    end;
+    if (not HasMth) or Mth.IsNull or (Mth.NodeType <> 'identifier') then Exit;
+    if not UpperCase(NodeStr(Mth)).StartsWith('CREATE') then Exit;
+    AVar:= LowerCase(NodeStr(Lhs));
+    Result:= True;
+  end;
+
+  { 'X.Free' (exprDot) or 'FreeAndNil(X)' (exprCall) -> returns lowercased X. }
+  function IsFree(const ANode: TTSNode; out AVar: string): Boolean;
+  var
+    Lhs, Rhs, Ent, Args, A0: TTSNode;
+  begin
+    Result:= False;
+    if ANode.NodeType = 'exprDot' then
+    begin
+      Lhs:= ANode.ChildByField('lhs');
+      Rhs:= ANode.ChildByField('rhs');
+      if (not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier') and (Rhs.NodeType = 'identifier') and SameText(NodeStr(Rhs), 'Free') then
+      begin
+        AVar:= LowerCase(NodeStr(Lhs));
+        Result:= True;
+      end;
+    end
+    else if ANode.NodeType = 'exprCall' then
+    begin
+      Ent:= ANode.ChildByField('entity');
+      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') and SameText(NodeStr(Ent), 'FreeAndNil') then
+      begin
+        Args:= ANode.ChildByField('args');
+        if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
+        begin
+          A0:= Args.NamedChild(0);
+          if A0.NodeType = 'identifier' then
+          begin
+            AVar:= LowerCase(NodeStr(A0));
+            Result:= True;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  procedure WalkBody(const N: TTSNode; AInFinally: Boolean; AConstructed: TDictionary<string, Boolean>);
+  var
+    I  : Integer    ;
+    V  : string     ;
+    Lf : Boolean    ;
+    C  : TTSNode    ;
+    P  : TTSPoint   ;
+    F  : TLintFinding;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.NodeType = 'defProc' then Exit; { nested routine handled separately }
+    if (N.NodeType = 'assignment') and IsConstruction(N, V) then AConstructed.AddOrSetValue(V, True)
+    else if (not AInFinally) and IsFree(N, V) and AConstructed.ContainsKey(V) then
+    begin
+      P:= N.StartPoint;
+      F:= Default(TLintFinding);
+      F.RuleId  := 'unprotected-object-free';
+      F.Severity:= 'warning';
+      F.Message := Format('Object %s is created and freed without try-finally -- it leaks if code in between raises; wrap creation and use in try..finally', [V]);
+      F.FilePath:= AFile;
+      F.StartLine:= Integer(P.Row   ) + 1;
+      F.StartCol := Integer(P.Column) + 1;
+      F.EndLine:= F.StartLine;
+      F.EndCol := F.StartCol + 1;
+      Findings.Add(F);
+    end;
+    if N.NodeType = 'try' then
+    begin
+      Lf:= False;
+      for I:= 0 to N.ChildCount - 1 do
+      begin
+        C:= N.Child(I);
+        if C.NodeType = 'kFinally' then Lf:= True;
+        WalkBody(C, AInFinally or Lf, AConstructed);
+      end;
+    end
+    else
+      for I:= 0 to N.ChildCount - 1 do WalkBody(N.Child(I), AInFinally, AConstructed);
+  end; // procedure
+
+  procedure VisitProcs(const N: TTSNode);
+  var
+    I   : Integer                    ;
+    Body: TTSNode                    ;
+    Con : TDictionary<string, Boolean>;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then
+    begin
+      Body:= N.ChildByField('body');
+      if not Body.IsNull then
+      begin
+        Con:= TDictionary<string, Boolean>.Create;
+        try
+          WalkBody(Body, False, Con);
+        finally
+          Con.Free;
         end;
       end;
     end;

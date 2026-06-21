@@ -3,6 +3,16 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.50.0-alpha -- 2026-06-21
+
+### Added (resource lifetime)
+
+- `unprotected-object-free` (warning): a locally-created object freed without
+  try-finally protection -- it leaks if code between creation and `Free` raises.
+  Per routine, correlates `X := ...Create...` with a later `X.Free` / `FreeAndNil(X)`
+  on the same variable that is NOT inside a `finally` (so destructor field-frees and
+  correctly-protected frees are not flagged).
+
 ## v0.49.0-alpha -- 2026-06-21
 
 ### Added (FireDAC)

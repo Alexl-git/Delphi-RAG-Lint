@@ -1,0 +1,3 @@
+# X.Free without try-finally (15) fires; Y.Free inside finally (26) must not
+unprotected-object-free 15
+!unprotected-object-free 26
