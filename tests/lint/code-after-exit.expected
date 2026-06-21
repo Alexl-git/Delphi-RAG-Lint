@@ -1,0 +1,3 @@
+# dead code after unconditional Exit (10); code after a conditional Exit (17) is reachable
+code-after-exit 10
+!code-after-exit 17

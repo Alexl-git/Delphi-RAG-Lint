@@ -1,0 +1,5 @@
+# TFoo ctor (18) + dtor (23) lack inherited; TBar ctor (28) + dtor (34) call it and must not fire
+missing-inherited-ctor 18
+missing-inherited-dtor 23
+!missing-inherited-ctor 28
+!missing-inherited-dtor 34

@@ -120,10 +120,17 @@ also matches `BUG`.
 Some rules need scope/flow analysis a single tree-sitter query can't express, so they live in
 Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag-lint lint <file>`
 (single `.pas`/`.inc`): `unused-local` (H2164), `syntax-error`, `unbalanced-begin-end`,
-`undeclared-identifier` (needs `--db`), and -- new in v0.47 -- **`raise-in-finally`** (warning: a
-`raise` inside a `finally` block masks the in-flight exception; walks the finally subtree, not
-descending into nested `try`). Plus `field-by-name-in-loop` and `inline-comment-in-multiline-args`
-from the linter core, and `unit-not-in-dpr` (project check).
+`undeclared-identifier` (needs `--db`), and -- new in v0.47:
+- **`raise-in-finally`** (warning): a `raise` inside a `finally` masks the in-flight exception
+  (walks the finally subtree, not descending into nested `try`).
+- **`code-after-exit`** (warning): unreachable statement directly after an unconditional
+  `Exit`/`raise`/`Break`/`Continue`/`Halt` (same statement list; a terminator nested in an if/case
+  does not flag code after the if/case).
+- **`missing-inherited-ctor`** / **`missing-inherited-dtor`** (warning): a constructor/destructor whose
+  body never calls `inherited` (skips ancestor init/cleanup). Class ctors/dtors and asm bodies skipped.
+
+Plus `field-by-name-in-loop` and `inline-comment-in-multiline-args` from the linter core, and
+`unit-not-in-dpr` (project check).
 
 ### Tip
 

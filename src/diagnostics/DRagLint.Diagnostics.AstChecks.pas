@@ -40,6 +40,20 @@ type
       /// section. The walk does not descend into nested try blocks, so each try's finally is attributed
       /// to that try. Pure tree-sitter AST; no DB or compiler required. Never raises.</remarks>
       class function CheckRaiseInFinally(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags the first statement that follows an unconditional Exit / raise / Break /
+      /// Continue / Halt within the same statement list (unreachable code).</summary>
+      /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
+      /// <returns>One 'code-after-exit' finding per statement list with dead code (capped); empty if none.</returns>
+      /// <remarks>Only direct siblings are considered, so a terminator nested inside an if/case does not
+      /// mark code after the if/case as dead. Pure tree-sitter AST; no DB. Never raises.</remarks>
+      class function CheckCodeAfterExit(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags a constructor or destructor whose body never calls 'inherited'.</summary>
+      /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
+      /// <returns>Findings tagged 'missing-inherited-ctor' / 'missing-inherited-dtor'; empty if none.</returns>
+      /// <remarks>A missing inherited Create skips ancestor initialization; a missing inherited Destroy
+      /// skips ancestor cleanup (resource leak). Class constructors/destructors and asm-bodied routines
+      /// are skipped. The search ignores 'inherited' inside nested routines. Pure AST; no DB. Never raises.</remarks>
+      class function CheckMissingInherited(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -611,6 +625,239 @@ var
       end;
     end;
     for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then Visit(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckCodeAfterExit(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { Is this statement an unconditional flow-terminator (Exit/raise/Break/Continue/Halt)? }
+  function IsTerminator(const Stmt: TTSNode): Boolean;
+  var
+    Inner : TTSNode;
+    Entity: TTSNode;
+    Nm    : string ;
+  begin
+    Result:= False;
+    if Stmt.IsNull then Exit;
+    if Stmt.NodeType = 'raise' then Exit(True);
+    if Stmt.NodeType <> 'statement' then Exit;
+    if Stmt.NamedChildCount = 0 then Exit;
+    Inner:= Stmt.NamedChild(0);
+    if Inner.NodeType = 'identifier' then
+    begin
+      Nm:= LowerCase(NodeStr(Inner));
+      Result:= (Nm = 'exit') or (Nm = 'break') or (Nm = 'continue') or (Nm = 'halt');
+    end
+    else if Inner.NodeType = 'exprCall' then
+    begin
+      Entity:= Inner.ChildByField('entity');
+      if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
+      begin
+        Nm:= LowerCase(NodeStr(Entity));
+        Result:= (Nm = 'exit') or (Nm = 'halt');
+      end;
+    end;
+  end; // function
+
+  { In a block/statements node, flag the first real statement that directly
+    follows a terminator. Keyword children (kBegin/kEnd/kUntil...) are skipped. }
+  procedure CheckList(const Parent: TTSNode);
+  var
+    I   : Integer         ;
+    C   : TTSNode         ;
+    Kids: TList<TTSNode>  ;
+    P   : TTSPoint        ;
+    F   : TLintFinding    ;
+  begin
+    Kids:= TList<TTSNode>.Create;
+    try
+      for I:= 0 to Parent.NamedChildCount - 1 do
+      begin
+        C:= Parent.NamedChild(I);
+        if C.IsNull then Continue;
+        if C.NodeType.StartsWith('k') then Continue; { keyword token, not a statement }
+        Kids.Add(C);
+      end;
+      for I:= 0 to Kids.Count - 2 do
+        if IsTerminator(Kids[I]) then
+        begin
+          C:= Kids[I + 1];
+          P:= C.StartPoint;
+          F:= Default(TLintFinding);
+          F.RuleId  := 'code-after-exit';
+          F.Severity:= 'warning';
+          F.Message := 'Unreachable code: this statement follows an unconditional Exit/raise/Break/Continue/Halt';
+          F.FilePath:= AFile;
+          F.StartLine:= Integer(P.Row   ) + 1;
+          F.StartCol := Integer(P.Column) + 1;
+          F.EndLine:= F.StartLine;
+          F.EndCol := F.StartCol + 1;
+          Findings.Add(F);
+          Break; { one finding per statement list }
+        end;
+    finally
+      Kids.Free;
+    end;
+  end; // procedure
+
+  procedure Visit(const N: TTSNode);
+  var
+    I: Integer;
+  begin
+    if N.IsNull or (Findings.Count >= 100) then Exit;
+    if (N.NodeType = 'block') or (N.NodeType = 'statements') then CheckList(N);
+    for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then Visit(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckMissingInherited(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  { Does the subtree call 'inherited' anywhere, not counting nested routines? }
+  function HasInherited(const N: TTSNode): Boolean;
+  var
+    I: Integer;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'inherited' then Exit(True);
+    if N.NodeType = 'defProc' then Exit(False); { nested routine -> its inherited is its own }
+    for I:= 0 to N.ChildCount - 1 do
+      if HasInherited(N.Child(I)) then Exit(True);
+  end; // function
+
+  procedure CheckProc(const ADefProc: TTSNode);
+  var
+    Hdr  : TTSNode     ;
+    Body : TTSNode     ;
+    I    : Integer     ;
+    Kind : string      ;
+    IsCtor: Boolean    ;
+    IsDtor: Boolean    ;
+    P    : TTSPoint    ;
+    F    : TLintFinding;
+  begin
+    Hdr:= ADefProc.ChildByField('header');
+    if Hdr.IsNull then Exit;
+    IsCtor:= False; IsDtor:= False;
+    for I:= 0 to Hdr.ChildCount - 1 do
+    begin
+      Kind:= Hdr.Child(I).NodeType;
+      if Kind = 'kConstructor' then IsCtor:= True
+      else if Kind = 'kDestructor' then IsDtor:= True
+      else if Kind = 'kClass' then Exit; { class constructor/destructor -> no inherited }
+    end;
+    if not (IsCtor or IsDtor) then Exit;
+    Body:= ADefProc.ChildByField('body');
+    if Body.IsNull then Exit;
+    if Body.NodeType = 'asm' then Exit;
+    if HasInherited(Body) then Exit;
+    P:= Hdr.StartPoint;
+    F:= Default(TLintFinding);
+    F.Severity:= 'warning';
+    if IsCtor then
+    begin
+      F.RuleId := 'missing-inherited-ctor';
+      F.Message:= 'Constructor does not call inherited -- ancestor initialization may be skipped';
+    end
+    else
+    begin
+      F.RuleId := 'missing-inherited-dtor';
+      F.Message:= 'Destructor does not call inherited -- ancestor cleanup may be skipped (resource leak)';
+    end;
+    F.FilePath:= AFile;
+    F.StartLine:= Integer(P.Row   ) + 1;
+    F.StartCol := Integer(P.Column) + 1;
+    F.EndLine:= F.StartLine;
+    F.EndCol := F.StartCol + 5;
+    Findings.Add(F);
+  end; // procedure
+
+  procedure Visit(const N: TTSNode);
+  var
+    I: Integer;
+  begin
+    if N.IsNull or (Findings.Count >= 100) then Exit;
+    if N.NodeType = 'defProc' then CheckProc(N);
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
   end; // procedure
 
 begin
