@@ -1,0 +1,6 @@
+{
+  "id": "hardcoded-ip-address",
+  "severity": "info",
+  "message": "Hardcoded IP address -- ties the code to one host/network; read it from config.",
+  "warn_capture": "warn"
+}

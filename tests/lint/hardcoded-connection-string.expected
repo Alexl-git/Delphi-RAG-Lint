@@ -1,0 +1,3 @@
+# connection string with credentials (11) fires; plain label (12) must not
+hardcoded-connection-string 11
+!hardcoded-connection-string 12

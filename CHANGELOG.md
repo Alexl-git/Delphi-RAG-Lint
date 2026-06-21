@@ -3,6 +3,16 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.55.0-alpha -- 2026-06-21
+
+### Added (batch)
+
+- `hardcoded-connection-string` (warning): a string literal with connection-string
+  keywords (`Password=`, `User ID=`, `Data Source=`, ...) -- a hardcoded secret (CWE-798).
+- `gettickcount-wraparound` (warning): `GetTickCount` wraps after ~49.7 days; use
+  `GetTickCount64` for elapsed-time math.
+- `hardcoded-ip-address` (info): a string literal that is an IPv4 address.
+
 ## v0.54.0-alpha -- 2026-06-21
 
 ### Added (architecture)

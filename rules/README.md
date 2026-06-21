@@ -131,6 +131,9 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `uppercase-compare` | warning | `UpperCase(X) = 'literal'` -- fragile/slow; use `SameText` |
 | `outputdebugstring` | info | `OutputDebugString` debug tracing left in code |
 | `length-zero-compare` | info | `Length(X) = 0` / `> 0` -- prefer `X = ''` for strings |
+| `hardcoded-connection-string` | warning | string literal with connection-string keywords (CWE-798) |
+| `gettickcount-wraparound` | warning | `GetTickCount` wraps after ~49.7 days -- use `GetTickCount64` |
+| `hardcoded-ip-address` | info | string literal that is an IPv4 address |
 
 Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<> False`;
 `assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`

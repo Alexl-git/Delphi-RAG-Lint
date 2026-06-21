@@ -1,0 +1,6 @@
+{
+  "id": "gettickcount-wraparound",
+  "severity": "warning",
+  "message": "GetTickCount wraps after ~49.7 days -- use GetTickCount64 for elapsed-time calculations.",
+  "warn_capture": "warn"
+}

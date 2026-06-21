@@ -1,0 +1,3 @@
+# IPv4 literal (11) fires; plain text (12) must not
+hardcoded-ip-address 11
+!hardcoded-ip-address 12

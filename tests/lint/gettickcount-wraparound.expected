@@ -1,0 +1,3 @@
+# GetTickCount (11) fires; GetTickCount64 (12) must not
+gettickcount-wraparound 11
+!gettickcount-wraparound 12

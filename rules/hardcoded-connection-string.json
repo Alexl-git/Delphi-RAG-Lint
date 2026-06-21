@@ -1,0 +1,6 @@
+{
+  "id": "hardcoded-connection-string",
+  "severity": "warning",
+  "message": "Hardcoded connection string -- embeds credentials / environment coupling (CWE-798); load it from config.",
+  "warn_capture": "warn"
+}
