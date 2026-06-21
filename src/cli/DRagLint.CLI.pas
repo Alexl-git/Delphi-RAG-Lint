@@ -82,6 +82,7 @@ type
     InFile          : string        ; // --in <file.pas> (resolve-uses scope context)
     Rule            : string        ;
     ProjectPath     : string        ;
+    RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     Format          : string        ;
     Output          : string        ;
     OutputDir       : string        ;
@@ -197,7 +198,7 @@ begin
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--db ...] [--json]');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
-  Writeln('  drag-lint lint  <path>       [--rule field-by-name-in-loop] [--json]');
+  Writeln('  drag-lint lint  <path>       [--rule <id>] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server)');
@@ -422,6 +423,11 @@ begin
     begin
       Inc(i);
       Result.ProjectPath:= ParamStr(i);
+    end
+    else if (A = '--rules-dir') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RulesDir:= ParamStr(i);
     end
     else if A = '--json'    then Result.AsJson:= True
     else if A = '--dry-run' then Result.DryRun:= True
@@ -3960,8 +3966,12 @@ begin
   end;
   if AArgs.Path <> '' then
   begin
-    Linter:= DRagLint.Lint.Linter.TLinter.Create;
+    Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
     try
+      { Surface the deploy gap instead of silently running with no external rules:
+        the exe loads <exe-dir>\rules by default (or --rules-dir). }
+      if Linter.ExternalRuleCount = 0 then
+        Writeln(ErrOutput, 'drag-lint: note: 0 external .scm rules loaded -- place a "rules" folder next to drag-lint.exe, or pass --rules-dir <path> (built-in checks still run).');
       if TFile.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFile(AArgs.Path)
       else if TDirectory.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFolder(AArgs.Path, True)
       else
