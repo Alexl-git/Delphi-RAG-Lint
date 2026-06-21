@@ -1,0 +1,6 @@
+{
+  "id": "empty-case-branch",
+  "severity": "info",
+  "message": "Empty case branch -- the label has no statement (forgotten body, or add a comment if intentional).",
+  "warn_capture": "warn"
+}

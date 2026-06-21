@@ -1,0 +1,6 @@
+{
+  "id": "comparison-same-operands",
+  "severity": "warning",
+  "message": "Both operands of this comparison are identical -- the result is constant; likely a typo.",
+  "warn_capture": "warn"
+}

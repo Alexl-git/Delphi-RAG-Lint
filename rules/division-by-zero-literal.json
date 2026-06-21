@@ -1,0 +1,6 @@
+{
+  "id": "division-by-zero-literal",
+  "severity": "warning",
+  "message": "Division/modulo by a literal zero -- always raises a runtime division error.",
+  "warn_capture": "warn"
+}

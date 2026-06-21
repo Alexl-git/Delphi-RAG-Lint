@@ -1,0 +1,3 @@
+# 'X = X' (9) fires; 'X < Y' (11) must not
+comparison-same-operands 9
+!comparison-same-operands 11

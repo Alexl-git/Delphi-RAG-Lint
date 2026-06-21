@@ -1,0 +1,4 @@
+# 'X div 0' (11) and 'X mod 0' (12) fire; 'X div 2' (13) must not
+division-by-zero-literal 11
+division-by-zero-literal 12
+!division-by-zero-literal 13

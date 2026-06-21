@@ -110,6 +110,9 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `redundant-assigned-free` | info | `if Assigned(X) then X.Free` -- guard redundant (Free/FreeAndNil handle nil) |
 | `sql-injection-concat` | warning | SQL string literal concatenated with a variable -- injection risk (CWE-89) |
 | `hardcoded-credential` | warning | secret-named variable assigned a string literal -- hardcoded credential (CWE-798) |
+| `comparison-same-operands` | warning | `X = X` / `X < X` -- both operands identical, result is constant (likely a typo) |
+| `division-by-zero-literal` | warning | `X div 0` / `X / 0` / `X mod 0` -- always raises a runtime division error |
+| `empty-case-branch` | info | `1: ;` -- case branch with a label but no statement |
 
 Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<> False`;
 `assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`
