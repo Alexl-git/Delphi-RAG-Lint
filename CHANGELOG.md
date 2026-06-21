@@ -3,6 +3,17 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.56.0-alpha -- 2026-06-21
+
+### Added (thread-safety)
+
+- `ui-access-in-thread` (warning): VCL/FMX UI access from a background thread.
+  Inside a method named `Execute` whose class (declared in the same file) has a
+  base whose name contains `Thread`, it flags strong UI members -- assignment to
+  `.Caption`, or calls to `.SetFocus`/`.Repaint`/`.BringToFront` -- that are NOT
+  inside a nested anonymous method (a likely `Synchronize`/`Queue` body). Tuned
+  for low false positives.
+
 ## v0.55.0-alpha -- 2026-06-21
 
 ### Added (batch)

@@ -110,6 +110,15 @@ type
       /// flags a later 'X.&lt;member&gt;' access (incl. a second X.Free) until X is reassigned. FreeAndNil(X)
       /// clears tracking (it nils X). Pure AST; no DB. Never raises.</remarks>
       class function CheckUseAfterFree(const AFile: string): TArray<TLintFinding>;
+      /// <summary>UI (VCL/FMX) access inside a TThread.Execute that is not on the main thread.</summary>
+      /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
+      /// <returns>'ui-access-in-thread' findings; empty if none.</returns>
+      /// <remarks>Heuristic, tuned for low false positives: only inside a method named 'Execute' whose
+      /// class (declared in the same file) has a base type whose name contains 'Thread', and only for
+      /// strong UI members (assignment to '.Caption'; calls to '.SetFocus'/'.Repaint'/'.BringToFront').
+      /// Access inside a nested anonymous method (a likely Synchronize/Queue body) is skipped. Pure AST;
+      /// no DB. Never raises.</remarks>
+      class function CheckUiThread(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -2180,6 +2189,179 @@ begin
   finally
     Tree.Free;
     Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckUiThread(const AFile: string): TArray<TLintFinding>;
+var
+  Src      : TBytes                    ;
+  Parser   : TTSParser                 ;
+  Tree     : TTSTree                   ;
+  Findings : TList<TLintFinding>       ;
+  ClassBase: TDictionary<string,string>; { classLower -> base type name (as written) }
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { Record className -> base type name for every class declaration. }
+  procedure CollectClasses(const N: TTSNode);
+  var
+    I, J     : Integer;
+    NameN    : TTSNode;
+    TypeN    : TTSNode;
+    Cls      : TTSNode;
+    FoundCls : Boolean;
+    Ch       : TTSNode;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'declType' then
+    begin
+      NameN:= N.ChildByField('name');
+      TypeN:= N.ChildByField('type');
+      if (not NameN.IsNull) and (not TypeN.IsNull) then
+      begin
+        FoundCls:= False;
+        if TypeN.NodeType = 'declClass' then begin Cls:= TypeN; FoundCls:= True; end
+        else
+          for J:= 0 to TypeN.ChildCount - 1 do
+            if TypeN.Child(J).NodeType = 'declClass' then begin Cls:= TypeN.Child(J); FoundCls:= True; Break; end;
+        if FoundCls then
+          for J:= 0 to Cls.ChildCount - 1 do
+          begin
+            Ch:= Cls.Child(J);
+            if Ch.NodeType = 'typeref' then
+            begin
+              ClassBase.AddOrSetValue(LowerCase(NodeStr(NameN)), NodeStr(Ch));
+              Break; { first parent typeref = base class }
+            end;
+          end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectClasses(N.NamedChild(I));
+  end;
+
+  procedure Flag(const ANode: TTSNode; const AMember: string);
+  var
+    P: TTSPoint    ;
+    F: TLintFinding;
+  begin
+    P:= ANode.StartPoint;
+    F:= Default(TLintFinding);
+    F.RuleId  := 'ui-access-in-thread';
+    F.Severity:= 'warning';
+    F.Message := Format('UI access (.%s) inside a TThread.Execute -- VCL/FMX is not thread-safe; wrap it in Synchronize/Queue', [AMember]);
+    F.FilePath:= AFile;
+    F.StartLine:= Integer(P.Row   ) + 1;
+    F.StartCol := Integer(P.Column) + 1;
+    F.EndLine:= F.StartLine;
+    F.EndCol := F.StartCol + 1;
+    Findings.Add(F);
+  end;
+
+  procedure WalkExec(const N: TTSNode);
+  var
+    I    : Integer;
+    Lhs  : TTSNode;
+    Rhs  : TTSNode;
+    Mname: string ;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if (N.NodeType = 'lambda') or (N.NodeType = 'defProc') then Exit; { likely Synchronize/Queue body, or nested routine }
+    if N.NodeType = 'assignment' then
+    begin
+      Lhs:= N.ChildByField('lhs');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'exprDot') then
+      begin
+        Rhs:= Lhs.ChildByField('rhs');
+        if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') and SameText(NodeStr(Rhs), 'Caption') then Flag(Lhs, 'Caption');
+      end;
+    end
+    else if N.NodeType = 'exprDot' then
+    begin
+      Rhs:= N.ChildByField('rhs');
+      if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
+      begin
+        Mname:= NodeStr(Rhs);
+        if SameText(Mname, 'SetFocus') or SameText(Mname, 'Repaint') or SameText(Mname, 'BringToFront') then Flag(N, Mname);
+      end;
+    end;
+    for I:= 0 to N.ChildCount - 1 do WalkExec(N.Child(I));
+  end;
+
+  procedure VisitProcs(const N: TTSNode);
+  var
+    I    : Integer;
+    Hdr  : TTSNode;
+    Nm   : TTSNode;
+    Lhs  : TTSNode;
+    Rhs  : TTSNode;
+    Body : TTSNode;
+    Base : string ;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then
+    begin
+      Hdr:= N.ChildByField('header');
+      if not Hdr.IsNull then
+      begin
+        Nm:= Hdr.ChildByField('name');
+        if (not Nm.IsNull) and (Nm.NodeType = 'genericDot') then
+        begin
+          Lhs:= Nm.ChildByField('lhs');
+          Rhs:= Nm.ChildByField('rhs');
+          if (not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier') and SameText(NodeStr(Rhs), 'Execute') then
+            if ClassBase.TryGetValue(LowerCase(NodeStr(Lhs)), Base) and (Pos('thread', LowerCase(Base)) > 0) then
+            begin
+              Body:= N.ChildByField('body');
+              if not Body.IsNull then WalkExec(Body);
+            end;
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do VisitProcs(N.NamedChild(I));
+  end;
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings := TList<TLintFinding>.Create;
+  ClassBase:= TDictionary<string,string>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then
+    begin
+      CollectClasses(Tree.RootNode);
+      VisitProcs(Tree.RootNode);
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    ClassBase.Free;
     Findings.Free;
   end;
 end; // function

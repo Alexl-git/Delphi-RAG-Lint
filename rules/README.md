@@ -169,6 +169,8 @@ Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag
   `X` is reassigned (block-scoped; `FreeAndNil` clears tracking).
 - **`win64-pointer-cast`** (warning): a 32-bit cast (`Integer`/`Cardinal`/...) of a pointer-typed
   value -- truncates on Win64; use `NativeInt`/`NativeUInt`.
+- **`ui-access-in-thread`** (warning): VCL/FMX UI access (`.Caption :=`, `.SetFocus`, ...) inside a
+  `TThread.Execute` not wrapped in `Synchronize`/`Queue` -- VCL/FMX is not thread-safe.
 
 Index-wide rules (need `--db`, run via `drag-lint lint-project`): **`god-class`**, **`unused-public-symbol`**,
 **`interface-reference-cycle`** (class A holds an interface implemented by B and vice-versa -- ARC leak;

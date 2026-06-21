@@ -1,0 +1,3 @@
+# direct UI access in Execute (15) fires; access inside the Synchronize anon method (19) must not
+ui-access-in-thread 15
+!ui-access-in-thread 19
