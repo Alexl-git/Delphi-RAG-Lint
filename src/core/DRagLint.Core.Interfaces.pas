@@ -141,6 +141,7 @@ type
     // the indexer post-parse from the files table.
     UsesEntries: TArray<TUnitUse>     ;
     DiBindings : TArray<TDiBindingRow>; // v8: Spring4D DI registrations
+    Literals   : TArray<TStringLiteral>; // v10: indexed string content (text search)
   end;
 
   IParser = interface
