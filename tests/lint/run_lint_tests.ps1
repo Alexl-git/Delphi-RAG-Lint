@@ -1,8 +1,10 @@
 <#
   run_lint_tests.ps1 -- TDD harness for drag-lint lint rules (external .scm + built-ins).
 
-  For each tests\lint\*.pas that has a sibling *.expected file, runs
+  For each tests\lint\*.pas and *.dfm that has a sibling *.expected file, runs
   `drag-lint lint <file> --json` and checks the findings against expectations.
+  (.dfm fixtures cover the DFM grammar path: valid forms must be clean, only a
+  genuinely malformed DFM may surface a parser-error.)
 
   .expected format (one directive per line; blank lines and #-comments ignored):
       <rule-id> <line>      -> a finding with this rule id at this 1-based line MUST be present
@@ -43,7 +45,7 @@ if (Test-Path (Join-Path $rulesSrc "builtin-symbols.txt")) {
 
 $pass = 0; $fail = 0; $failed = @()
 
-$fixtures = Get-ChildItem (Join-Path $Tests "*.pas") | Where-Object { $_.BaseName -like $Filter }
+$fixtures = Get-ChildItem -Path (Join-Path $Tests "*.pas"),(Join-Path $Tests "*.dfm") | Where-Object { $_.BaseName -like $Filter }
 foreach ($pas in $fixtures) {
   $expFile = [IO.Path]::ChangeExtension($pas.FullName, ".expected")
   if (-not (Test-Path $expFile)) { continue }

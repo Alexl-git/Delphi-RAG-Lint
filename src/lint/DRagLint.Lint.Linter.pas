@@ -25,12 +25,25 @@ type
     public
       constructor Create(const ARulesDir: string = '');
       destructor Destroy; override;
+      /// <summary>Lints a single file, dispatching by extension. A <c>.dfm</c> is parsed
+      /// with the tree-sitter DFM grammar and only genuine grammar errors surface (as
+      /// 'parser-error'); any other extension is parsed with the Pascal grammar and run
+      /// through the built-in walks plus the external <c>.scm</c> query rules.</summary>
+      /// <param name="AFilePath">Path to an existing file.</param>
+      /// <returns>All findings for the file; empty array if clean.</returns>
       function LintFile(const AFilePath: string): TArray<TLintFinding>                          ;
       function LintFolder(const APath: string; ARecursive: Boolean = True): TArray<TLintFinding>;
       function ExternalRuleCount: Integer                                                       ;
   end;
 
 implementation
+
+{ The DFM grammar lives in tree-sitter-dfm.dll (already a runtime dependency of
+  the exe via the indexer's TDFMParser). Re-declared here so the linter can parse
+  .dfm files with the correct grammar -- same pattern AstChecks uses for
+  tree_sitter_delphi13. }
+function tree_sitter_dfm: PTSLanguage; cdecl;
+external 'tree-sitter-dfm';
 
 function NodeText(const ANode: TTSNode; const ASource: TBytes): string;
 var
@@ -240,6 +253,48 @@ begin
   for I:= 0 to ANode.NamedChildCount - 1 do WalkForFieldByNameInLoop(ANode.NamedChild(I), ASource, AFilePath, ChildInLoop, AFindings);
 end; // procedure
 
+// v0.57: DFM files are parsed with the dedicated tree-sitter DFM grammar
+// (tree_sitter_dfm), not the Pascal grammar. The Pascal grammar cannot represent
+// the textual-DFM `object .. end` form or the Pascal set-literals used in property
+// values ([biSystemMenu, biHelp], [], [akLeft, akTop, akRight]), so it emitted one
+// spurious ERROR -> 'parser-error' per construct on every *valid* DFM. Under the
+// DFM grammar a valid form parses clean; only a genuinely malformed DFM yields
+// ERROR/MISSING nodes -- surfaced here as the same 'parser-error' rule id/message
+// the .scm rule uses for Pascal, so a real DFM problem is still caught. Mirrors
+// the ERROR/MISSING walk in TAstChecker.CheckSyntaxErrors (cap 100, no descent
+// into an error node, skip clean subtrees via HasError).
+procedure CollectDfmParseErrors(const ARoot: TTSNode; const AFilePath: string; AFindings: TList<TLintFinding>);
+
+  procedure Visit(const N: TTSNode);
+  var
+    I: Integer     ;
+    F: TLintFinding;
+    P: TTSPoint    ;
+  begin
+    if N.IsNull or (AFindings.Count >= 100) then Exit;
+    if N.IsError or N.IsMissing then
+    begin
+      P:= N.StartPoint;
+      F:= Default(TLintFinding);
+      F.RuleId  := 'parser-error';
+      F.Severity:= 'error';
+      F.Message := 'Syntax error: parser failed to recognize this construct';
+      F.FilePath:= AFilePath;
+      F.StartLine:= Integer(P.Row   ) + 1;
+      F.StartCol := Integer(P.Column) + 1;
+      F.EndLine  := F.StartLine;
+      F.EndCol   := F.StartCol + 1;
+      AFindings.Add(F);
+      Exit; { do not descend into an error node }
+    end; // if
+    if not N.HasError then Exit; { clean subtree -> skip }
+    for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
+  end; // procedure
+
+begin
+  Visit(ARoot);
+end; // procedure
+
 { TLinter }
 
 constructor TLinter.Create(const ARulesDir: string);
@@ -272,27 +327,41 @@ var
   Tree    : TTSTree            ;
   Source  : TBytes             ;
   Findings: TList<TLintFinding>;
+  IsDfm   : Boolean            ;
 begin
   Findings:= TList<TLintFinding>.Create;
   Tree  := nil;
   Parser:= nil;
   try
     Source:= TFile.ReadAllBytes(AFilePath);
+    { Pick the grammar by extension: .dfm -> DFM grammar, everything else -> Pascal.
+      Parsing a .dfm with the Pascal grammar produced a spurious parser-error per
+      set-literal/root object (see CollectDfmParseErrors). }
+    IsDfm:= SameText(ExtractFileExt(AFilePath), '.dfm');
     Parser:= TTSParser.Create;
-    Parser.Language:= FLanguage;
+    if IsDfm then Parser.Language:= tree_sitter_dfm
+    else Parser.Language:= FLanguage;
     Tree:= Parser.Parse(
       function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes var Remaining: Integer; begin Remaining:= Length(Source)
         - Integer(AByteIndex); if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end; SetLength(Result, Remaining); Move(Source[AByteIndex], Result[0],
           Remaining); ABytesRead:= Remaining; end, TTSInputEncoding.TSInputEncodingUTF8);
-    WalkForFieldByNameInLoop(Tree.RootNode, Source, AFilePath, 0, Findings);
-    CheckInlineCommentInMultilineArgs(Source, AFilePath, Findings);
-    // External *.scm rules
-    var R: TQueryRule;
-    for R in FQueryRules do
+    if IsDfm then
+      { DFM: the Pascal *.scm rules and the Pascal-specific walks key off node types
+        that don't exist in the DFM grammar (and the queries are compiled against the
+        Pascal language), so the only meaningful diagnostic is a genuine grammar error. }
+      CollectDfmParseErrors(Tree.RootNode, AFilePath, Findings)
+    else
     begin
-      var QFindings:= R.Run(Tree.RootNode, Source, AFilePath);
-      var F: TLintFinding;
-      for F in QFindings do Findings.Add(F);
+      WalkForFieldByNameInLoop(Tree.RootNode, Source, AFilePath, 0, Findings);
+      CheckInlineCommentInMultilineArgs(Source, AFilePath, Findings);
+      // External *.scm rules
+      var R: TQueryRule;
+      for R in FQueryRules do
+      begin
+        var QFindings:= R.Run(Tree.RootNode, Source, AFilePath);
+        var F: TLintFinding;
+        for F in QFindings do Findings.Add(F);
+      end;
     end;
     Result:= Findings.ToArray;
   finally

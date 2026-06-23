@@ -1,0 +1,2 @@
+# a genuinely malformed DFM must still surface a real syntax error
+parser-error 3

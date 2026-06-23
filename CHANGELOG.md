@@ -3,6 +3,26 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.57.0-alpha -- 2026-06-23
+
+### Fixed (DFM)
+
+- `lint` no longer mis-parses `.dfm` files with the Pascal grammar. The linter
+  now selects the tree-sitter grammar by file extension: a `.dfm` is parsed with
+  the dedicated DFM grammar (`tree_sitter_dfm`, already used by indexing), so a
+  valid form is clean instead of emitting one spurious `parser-error` per Pascal
+  set-literal (`[akLeft, akTop, akRight]`, `[]`) and per root `object .. end`.
+  A genuinely malformed DFM still surfaces a real `parser-error` from the DFM
+  grammar (ERROR/MISSING walk, mirroring `CheckSyntaxErrors`). Only single-file
+  `lint <x.dfm>` was affected (folder lint already globbed only `*.pas/*.dpr/*.dpk`)
+  -- which is exactly what the on-save hook runs. Reported: every `.dfm` produced
+  4-45 false errors; e.g. the 11.5k-line `Blueprint4.dfm` ribbon form went 45 -> 0.
+
+### Tests
+
+- `tests/lint/dfm-valid.dfm` (must be clean) + `tests/lint/dfm-broken.dfm` (must
+  flag a real error); `run_lint_tests.ps1` now also globs `*.dfm`. 53/53 pass.
+
 ## v0.56.0-alpha -- 2026-06-21
 
 ### Added (thread-safety)
