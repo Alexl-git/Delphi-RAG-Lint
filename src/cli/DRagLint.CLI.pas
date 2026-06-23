@@ -7963,6 +7963,40 @@ begin
   end; // try
 end; // function
 
+// --selftest-fts5: prove FTS5 + trigram tokenizer are compiled in.
+function DoSelfTestFts5: Integer;
+var
+  Conn: TFDConnection;
+  Q   : TFDQuery;
+begin
+  Result:= 1;
+  Conn:= TFDConnection.Create(nil);
+  try
+    Conn.DriverName:= 'SQLite';
+    Conn.Params.Values['Database']:= ':memory:';
+    Conn.Connected:= True;
+    Conn.ExecSQL('CREATE VIRTUAL TABLE t USING fts5(x, tokenize=''trigram'')');
+    Conn.ExecSQL('INSERT INTO t(rowid, x) VALUES (1, ''Folder not found'')');
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= Conn;
+      Q.SQL.Text:= 'SELECT rowid FROM t WHERE t MATCH ''older''';  // substring
+      Q.Open;
+      if (not Q.Eof) and (Q.FieldByName('rowid').AsInteger = 1) then
+      begin
+        Writeln('FTS5+trigram OK');
+        Result:= 0;
+      end
+      else Writeln('FTS5 present but trigram match failed');
+    finally
+      Q.Free;
+    end;
+  except
+    on E: Exception do Writeln('FTS5 unavailable: ', E.Message);
+  end;
+  Conn.Free;
+end;
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -8253,6 +8287,7 @@ function Run: Integer;
 var
   Args: TArgs;
 begin
+  if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
   try
     Args:= ParseArgs;
     if Args.ShowHelp then
