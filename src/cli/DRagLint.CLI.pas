@@ -8000,6 +8000,42 @@ begin
   end;
 end;
 
+// --selftest-schema: open --db and print all table/view names from sqlite_master.
+function DoSelfTestSchema(const ADbPath: string): Integer;
+var
+  Conn: TFDConnection;
+  Q   : TFDQuery;
+begin
+  Result:= 1;
+  Conn:= TFDConnection.Create(nil);
+  try
+    try
+      Conn.DriverName:= 'SQLite';
+      Conn.Params.Values['Database']:= ADbPath;
+      Conn.Connected:= True;
+      Q:= TFDQuery.Create(nil);
+      try
+        Q.Connection:= Conn;
+        Q.SQL.Text:= 'SELECT name FROM sqlite_master WHERE type IN (''table'',''view'') ORDER BY name';
+        Q.Open;
+        while not Q.Eof do
+        begin
+          Write(Q.Fields[0].AsString, ' ');
+          Q.Next;
+        end;
+        Writeln;
+        Result:= 0;
+      finally
+        Q.Free;
+      end;
+    except
+      on E: Exception do Writeln('selftest-schema error: ', E.Message);
+    end;
+  finally
+    Conn.Free;
+  end;
+end;
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -8291,6 +8327,7 @@ var
   Args: TArgs;
 begin
   if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
+  if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(3)));
   try
     Args:= ParseArgs;
     if Args.ShowHelp then
