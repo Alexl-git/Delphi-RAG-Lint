@@ -176,6 +176,8 @@ var
   DocRegions    : TList<TDocCommentRegion>   ;
   DocRegion     : TDocCommentRegion          ;
   ParsedDoc     : TParsedDoc                 ;
+  Lit           : TStringLiteral             ;
+  Encl          : TSymbol                    ;
 begin
   Parser:= ParserFor(ExtractFileExt(AFilePath));
   if Parser = nil then Exit;
@@ -246,6 +248,17 @@ begin
           transaction to ensure consistency on rollback. }
         FStore.DeleteUnitUsesForFile(Token.FileId);
         for I:= 0 to High(ParseRes.UsesEntries) do FStore.UpsertUnitUse(Token, ParseRes.UsesEntries[I]);
+        // v10: text-content index. Resolve each literal's enclosing symbol by line,
+        // then persist. Per-file delete keeps re-index idempotent (FTS cascades via triggers).
+        FStore.DeleteStringLiteralsForFile(Token.FileId);
+        for I:= 0 to High(ParseRes.Literals) do
+        begin
+          Lit:= ParseRes.Literals[I];
+          Lit.FileId:= Token.FileId;
+          Encl:= FStore.FindContainingSymbol(Token.FileId, Lit.StartLine);
+          if Encl.Id > 0 then Lit.SymbolId:= Encl.Id;
+          FStore.UpsertStringLiteral(Token, Lit);
+        end;
         FStore.CommitFileTx(Token);
         ReportProgress(AFilePath, Length(ParseRes.Symbols), Length(ParseRes.References), Length(ParseRes.Diagnostics));
       except
