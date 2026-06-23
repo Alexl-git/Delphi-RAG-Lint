@@ -29,8 +29,10 @@ type
       FQInsertRef            : TFDQuery     ;
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
-      FQUpsertDiBinding      : TFDQuery     ;
-      FQDeleteFileDiBindings : TFDQuery     ;
+      FQUpsertDiBinding          : TFDQuery     ;
+      FQDeleteFileDiBindings     : TFDQuery     ;
+      FQUpsertStringLiteral      : TFDQuery     ;
+      FQDeleteFileStringLiterals : TFDQuery     ;
       FQFindByName           : TFDQuery     ;
       FQFindByQName          : TFDQuery     ;
       FQCountSymbols         : TFDQuery     ;
@@ -71,6 +73,9 @@ type
       procedure UpsertReference(const AToken: TFileTxToken; const ARef    : TReference   );
       procedure UpsertDiBinding(const AToken: TFileTxToken; const ABinding: TDiBindingRow);
       procedure DeleteDiBindingsForFile(AFileId: Int64);
+      procedure UpsertStringLiteral(const AToken: TFileTxToken; const ALit: TStringLiteral);
+      procedure DeleteStringLiteralsForFile(AFileId: Int64);
+      function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
       function FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
       function FindDiResolveSites   ( const AInterfaceName: string): TArray<TReference   >;
       function FindDiUnresolved: TArray<TReference>                                       ;
@@ -189,6 +194,8 @@ begin
   FQDeleteFileRefs.Free;
   FQUpsertDiBinding.Free;
   FQDeleteFileDiBindings.Free;
+  FQUpsertStringLiteral.Free;
+  FQDeleteFileStringLiterals.Free;
   FQFindByName.Free;
   FQFindByQName.Free;
   FQCountSymbols.Free;
@@ -366,6 +373,11 @@ begin
     'INSERT INTO di_bindings(file_id, interface_name, impl_name, lifetime, ' + '  start_line, start_col, end_line, end_col) ' +
     'VALUES (:fid, :intf, :impl, :life, :sl, :sc, :el, :ec)');
   FQDeleteFileDiBindings:= NewQuery( 'DELETE FROM di_bindings WHERE file_id = :fid'                    );
+  FQUpsertStringLiteral:= NewQuery(
+    'INSERT INTO string_literals(file_id, symbol_id, source, kind, owner_name, text, ' +
+    '  start_line, start_col, end_line, end_col) ' +
+    'VALUES (:fid, :sid, :src, :kind, :owner, :txt, :sl, :sc, :el, :ec)');
+  FQDeleteFileStringLiterals:= NewQuery('DELETE FROM string_literals WHERE file_id = :fid');
   FQFindByName          := NewQuery( 'SELECT * FROM symbols WHERE name = :name ORDER BY qualified_name');
   FQFindByQName         := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname'             );
   FQCountSymbols        := NewQuery('SELECT COUNT(*) AS n FROM symbols'                                );
@@ -649,6 +661,98 @@ procedure TSQLiteSymbolStore.DeleteDiBindingsForFile(AFileId: Int64);
 begin
   FQDeleteFileDiBindings.ParamByName('fid').AsLargeInt:= AFileId;
   FQDeleteFileDiBindings.ExecSQL;
+end;
+
+procedure TSQLiteSymbolStore.UpsertStringLiteral(const AToken: TFileTxToken; const ALit: TStringLiteral);
+begin
+  FQUpsertStringLiteral.ParamByName('fid').AsLargeInt:= AToken.FileId;
+  FQUpsertStringLiteral.ParamByName('sid').DataType:= ftLargeint;
+  if ALit.SymbolId > 0 then FQUpsertStringLiteral.ParamByName('sid').AsLargeInt:= ALit.SymbolId
+  else FQUpsertStringLiteral.ParamByName('sid').Clear;
+  FQUpsertStringLiteral.ParamByName('src'  ).AsString  := ALit.Source;
+  FQUpsertStringLiteral.ParamByName('kind' ).AsString  := ALit.Kind;
+  FQUpsertStringLiteral.ParamByName('owner').AsString  := ALit.OwnerName;
+  FQUpsertStringLiteral.ParamByName('txt'  ).AsString  := ALit.Text;
+  FQUpsertStringLiteral.ParamByName('sl').AsInteger := ALit.StartLine;
+  FQUpsertStringLiteral.ParamByName('sc').AsInteger := ALit.StartCol;
+  FQUpsertStringLiteral.ParamByName('el').AsInteger := ALit.EndLine;
+  FQUpsertStringLiteral.ParamByName('ec').AsInteger := ALit.EndCol;
+  FQUpsertStringLiteral.ExecSQL;
+end;
+
+procedure TSQLiteSymbolStore.DeleteStringLiteralsForFile(AFileId: Int64);
+begin
+  FQDeleteFileStringLiterals.ParamByName('fid').AsLargeInt:= AFileId;
+  FQDeleteFileStringLiterals.ExecSQL;  // triggers cascade the FTS 'delete'
+end;
+
+function TSQLiteSymbolStore.SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
+var
+  Q   : TFDQuery              ;
+  List: TList<TStringLitMatch>;
+  M   : TStringLitMatch       ;
+  FtsTable, MatchExpr, Sql: string;
+
+  function QuotePhrase(const S: string): string;
+  begin // FTS5: wrap in double quotes, doubling embedded quotes -> phrase match
+    Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"';
+  end;
+
+begin
+  List:= TList<TStringLitMatch>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    if SameText(AMode, 'substring') then
+    begin
+      FtsTable := 'string_fts_tri';
+      MatchExpr:= QuotePhrase(AQuery); // trigram: phrase-quote -> substring match
+    end
+    else if SameText(AMode, 'anyorder') then
+    begin
+      FtsTable := 'string_fts';
+      MatchExpr:= AQuery; // bare terms -> implicit AND (all words, any order)
+    end
+    else
+    begin
+      FtsTable := 'string_fts';
+      MatchExpr:= QuotePhrase(AQuery); // default: exact phrase, in order
+    end;
+    Sql:=
+      'SELECT sl.text AS txt, sl.source AS src, sl.kind AS kind, sl.owner_name AS owner, ' +
+      '  sl.start_line AS sl_, sl.start_col AS sc_, sl.end_line AS el_, sl.end_col AS ec_, ' +
+      '  f.path AS fpath, s.qualified_name AS encl ' +
+      'FROM ' + FtsTable + ' ft ' +
+      'JOIN string_literals sl ON sl.id = ft.rowid ' +
+      'JOIN files f ON f.id = sl.file_id ' +
+      'LEFT JOIN symbols s ON s.id = sl.symbol_id ' +
+      'WHERE ' + FtsTable + ' MATCH :q ';
+    if ASource <> '' then Sql:= Sql + 'AND sl.source = :src ';
+    Sql:= Sql + 'ORDER BY f.path, sl.start_line LIMIT :lim';
+    Q.SQL.Text:= Sql;
+    Q.ParamByName('q').AsString:= MatchExpr;
+    if ASource <> '' then Q.ParamByName('src').AsString:= ASource;
+    Q.ParamByName('lim').AsInteger:= ALimit;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      M:= Default(TStringLitMatch);
+      M.Text          := Q.FieldByName('txt'  ).AsString;
+      M.Source        := Q.FieldByName('src'  ).AsString;
+      M.Kind          := Q.FieldByName('kind' ).AsString;
+      M.OwnerName     := Q.FieldByName('owner').AsString;
+      M.FilePath      := Q.FieldByName('fpath').AsString;
+      M.EnclosingQName:= Q.FieldByName('encl' ).AsString;
+      M.StartLine:= Q.FieldByName('sl_').AsInteger; M.StartCol:= Q.FieldByName('sc_').AsInteger;
+      M.EndLine  := Q.FieldByName('el_').AsInteger; M.EndCol  := Q.FieldByName('ec_').AsInteger;
+      List.Add(M);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
 end;
 
 function TSQLiteSymbolStore.FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;

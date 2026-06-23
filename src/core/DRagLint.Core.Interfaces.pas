@@ -129,6 +129,19 @@ type
     /// component event (kind='event-binding'). NameText is the handler method;
     /// FileId/StartLine point at the .dfm OnXxx line.</summary>
     function FindEventHandlersForForm( const AFormName: string): TArray<TReference>;
+
+    // v10: string-content (text) index.
+    /// <summary>Insert one string-literal occurrence into the text index for
+    /// the file identified by AToken. AToken.FileId must already exist.</summary>
+    procedure UpsertStringLiteral(const AToken: TFileTxToken; const ALit: TStringLiteral);
+    /// <summary>Remove all string-literal rows (and their FTS entries) for the
+    /// given file. Call before re-indexing a file to avoid duplicates.</summary>
+    procedure DeleteStringLiteralsForFile(AFileId: Int64);
+    /// <summary>Full-text search over indexed string literals. AMode selects the
+    /// FTS strategy: 'phrase' (default, exact order), 'anyorder' (all words any
+    /// order), 'substring' (trigram-based). ASource filters by source language
+    /// ('pas'|'dfm'|'sql'); '' = all. Returns up to ALimit hits.</summary>
+    function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
   end;
 
   TParseResult = record
