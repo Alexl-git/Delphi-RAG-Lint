@@ -3,6 +3,17 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.59.4-alpha -- 2026-06-24
+
+### Added
+
+- **"Copy All Diagnostics" context menu** -- right-clicking in the Structure
+  panel's diagnostic tree now includes a "Copy All Diagnostics" item (below a
+  separator). Clicking it copies all diagnostics for the current file to the
+  clipboard as plain text, one per line:
+  `[sev] (line:col) message  [rule-code]`
+  prefixed with the file path. Handy for pasting into bug reports or search.
+
 ## v0.59.3-alpha -- 2026-06-24
 
 ### Fixed (critical -- reindex FTS5 crash, third pass)

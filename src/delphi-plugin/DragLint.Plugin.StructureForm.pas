@@ -47,6 +47,7 @@ uses
   , Vcl.StdCtrls
   , Vcl.ExtCtrls
   , Vcl.Menus
+  , Vcl.Clipbrd
   , Winapi.Windows
   , ToolsAPI
   , DragLint.Plugin.DiagnosticCache
@@ -100,6 +101,7 @@ type
       procedure GoToDeclarationClick   (Sender: TObject);
       procedure GoToImplementationClick(Sender: TObject);
       procedure FindUsagesClick        (Sender: TObject);
+      procedure CopyDiagnosticsClick   (Sender: TObject);
     public
       constructor Create(AOwner: TComponent); override;
       procedure RefreshActive; { v0.42: re-read the active editor file }
@@ -306,6 +308,8 @@ begin
   AddPopupItem(FPopup, 'Go to &Declaration'          , GoToDeclarationClick   );
   AddPopupItem(FPopup, 'Go to &Implementation (body)', GoToImplementationClick);
   AddPopupItem(FPopup, 'Find &Usages'                , FindUsagesClick        );
+  AddPopupItem(FPopup, '-'                           , nil                    ); { separator }
+  AddPopupItem(FPopup, '&Copy All Diagnostics'       , CopyDiagnosticsClick  );
   FTree.PopupMenu:= FPopup;
 end; // constructor
 
@@ -603,6 +607,31 @@ begin
   Db:= ResolveDbForFile;
   if Db <> '' then ShowFindUsages(ND.Name, ResolveExePath, [Db])
   else ShowFindUsages(ND.Name, ResolveExePath, TArray<string>.Create());
+end;
+
+procedure TDragLintStructureForm.CopyDiagnosticsClick(Sender: TObject);
+var
+  SB: TStringBuilder;
+  D : TDragLintDiagnostic;
+  Line: string;
+begin
+  if Length(FDiags) = 0 then Exit;
+  SB:= TStringBuilder.Create;
+  try
+    if FCurrentFile <> '' then
+      SB.AppendLine(FCurrentFile);
+    for D in FDiags do
+    begin
+      Line:= SeverityPrefix(D.Severity)
+           + Format('(%d:%d) ', [D.Line + 1, D.StartCol + 1])
+           + D.Message;
+      if D.Code <> '' then Line:= Line + '  [' + D.Code + ']';
+      SB.AppendLine(Line);
+    end;
+    Clipboard.AsText:= SB.ToString;
+  finally
+    SB.Free;
+  end;
 end;
 
 { ---- public factory ---- }
