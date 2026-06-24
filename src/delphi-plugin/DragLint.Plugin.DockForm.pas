@@ -45,7 +45,6 @@ uses
   , DragLint.Plugin.Telemetry
   , { TEMP debug telemetry }
     DragLint.Plugin.UsagesForm
-  , DragLint.Plugin.SymbolSearchForm
   , DragLint.Plugin.SearchForm
   , DragLint.Plugin.GraphWindow
   , DragLint.Plugin.DbResolver
@@ -68,8 +67,7 @@ type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools, matchin
       FStructure     : TForm       ; { embedded TDragLintStructureForm }
       FTabStruct          : TTabSheet   ;
       FTabUnifiedSearch   : TTabSheet   ;
-      FTabUsages          : TTabSheet   ;
-      FTabSearch          : TTabSheet   ;
+      FTabBlast           : TTabSheet   ;
       FTabGraph           : TTabSheet   ;
       FInited        : Boolean     ;
       FInitTimer     : TTimer      ; { v0.42: defers the embed off the ctor }
@@ -209,8 +207,7 @@ begin
     (native controls) + Graph (a button) are safe to build immediately. }
   FTabStruct       := AddTab('Structure'      );
   FTabUnifiedSearch:= AddTab('Search (no grep)');
-  FTabUsages       := AddTab('Find Usages'    );
-  FTabSearch       := AddTab('Symbol Search'  );
+  FTabBlast        := AddTab('Blast Radius'   );
   { v0.46: the Graph tab was removed -- the graph is now its own dockable tool
     window (View > Tool Windows > drag-lint Graph), so the in-dock launcher tab
     was just stale clutter. }
@@ -313,15 +310,9 @@ begin
   end;
 
   try
-    CreateEmbeddedUsages(Self, FTabUsages);
+    CreateEmbeddedUsages(Self, FTabBlast);
   except
-    on E: Exception do AddPlaceholder(FTabUsages, 'Find Usages failed to load: ' + E.Message);
-  end;
-
-  try
-    CreateEmbeddedSymbolSearch(Self, FTabSearch, ResolveExe, ResolveDbArgs);
-  except
-    on E: Exception do AddPlaceholder(FTabSearch, 'Symbol Search failed to load: ' + E.Message);
+    on E: Exception do AddPlaceholder(FTabBlast, 'Blast Radius failed to load: ' + E.Message);
   end;
 end; // procedure
 
