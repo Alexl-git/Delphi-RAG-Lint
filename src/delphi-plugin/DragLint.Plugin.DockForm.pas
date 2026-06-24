@@ -55,11 +55,10 @@ uses
 
 {$R *.dfm}
 
-type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools, matching
-    the delphi-terminal sample's single-window-with-tabs layout: Structure,
-    Find Usages, Symbol Search (all live) + a Graph launcher. The form-reparent
-    embeds (Structure, Find Usages) are built in HandleInitTimer, one message
-    turn after construction, because reparenting a TForm while the IDE is still
+type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools:
+    Structure, Search (no grep), and Blast Radius. The form-reparent embeds
+    (Structure, Blast Radius) are built in HandleInitTimer, one message turn
+    after construction, because reparenting a TForm while the IDE is still
     constructing the dock host AV'd. }
   TDragLintDockFrame = class(TCustomFrame)
     private
@@ -201,10 +200,9 @@ begin
   FPages.Align   := alClient;
   FPages.OnChange:= HandlePageChange;
 
-  { Tabs are created here (empty); the form-reparent embeds (Structure, Find
-    Usages) are filled in HandleInitTimer, one message turn later, because
-    reparenting a TForm during the IDE's dock construction AV'd. Symbol Search
-    (native controls) + Graph (a button) are safe to build immediately. }
+  { Tabs are created here (empty); the form-reparent embeds (Structure,
+    Blast Radius) are filled in HandleInitTimer, one message turn later, because
+    reparenting a TForm during the IDE's dock construction AV'd. }
   FTabStruct       := AddTab('Structure'      );
   FTabUnifiedSearch:= AddTab('Search (no grep)');
   FTabBlast        := AddTab('Blast Radius'   );

@@ -10,7 +10,7 @@ For the full end-to-end pass see `TEST-PLAN-IDE-FULL.md`.
 Tools > drag-lint > Dockable Panel (or dock it from a previous session).
 
 - [ ] B1. Click any form-unit result (from any tab) -> opens the .pas code editor, NOT the form designer.
-- [ ] B2. Blast Radius tab shows clickable callers + impact roll-up (transitive call depth, unit count per depth).
+- [ ] B2. Blast Radius tab shows direct usages by category (Reads, Writes, Calls, etc.) and a unit-impact count roll-up; each row is clickable and jumps to source.
 - [ ] B3. No "Symbol Search" tab appears (it was folded into Search / Blast Radius tabs).
 
 ### C4.1. Search (no grep) tab
@@ -20,9 +20,9 @@ Tools > drag-lint > Dockable Panel (or dock it from a previous session).
 - [ ] S3. Kind=Text, type a known message/caption phrase -> grid lists Source|Text|Location; double-click jumps. Toggle Advanced -> Substring/Any-word + Source filter appear and change results.
 - [ ] S4. Kind=Usages, type a known symbol -> grid lists Category|Detail|Location (Decl/Read/Write/Call...); double-click jumps. Advanced -> Width changes the snippet width.
 - [ ] S5. Search something not indexed (a local variable) -> a single clean "No matches ... drag-lint indexes ..." status line. NO JSON, NO == DEBUG == anywhere.
-- [ ] S6. Blast Radius tab on a symbol -> shows transitive callers grouped by depth, with unit count per depth. Each caller is clickable.
+- [ ] S6. Blast Radius tab on a symbol -> shows direct usages grouped by category (Decl/Read/Write/Call/Type-use/Event), with a unit-impact count summary. Each row is clickable.
 
 ### C4.2. Blast Radius tab
 
 - [ ] B4. Open the Blast Radius tab, type a known symbol (e.g., a public method), and verify the tab label says "Blast radius of: <symbol>".
-- [ ] B5. Results show a tree-like drill-down (or flat list with depth indicator) of callers at each transitive level, with unit counts per depth.
+- [ ] B5. Results show a flat list of direct usages by category (Reads, Writes, Calls, etc.) with a unit-impact count summary; no multi-level tree (transitive drill-down is a deferred follow-up).
