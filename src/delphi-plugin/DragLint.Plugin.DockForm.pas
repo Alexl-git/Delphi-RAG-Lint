@@ -46,6 +46,7 @@ uses
   , { TEMP debug telemetry }
     DragLint.Plugin.UsagesForm
   , DragLint.Plugin.SymbolSearchForm
+  , DragLint.Plugin.SearchForm
   , DragLint.Plugin.GraphWindow
   , DragLint.Plugin.DbResolver
   , DragLint.Plugin.EditViewNotifier
@@ -65,10 +66,11 @@ type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools, matchin
     private
       FPages         : TPageControl;
       FStructure     : TForm       ; { embedded TDragLintStructureForm }
-      FTabStruct     : TTabSheet   ;
-      FTabUsages     : TTabSheet   ;
-      FTabSearch     : TTabSheet   ;
-      FTabGraph      : TTabSheet   ;
+      FTabStruct          : TTabSheet   ;
+      FTabUnifiedSearch   : TTabSheet   ;
+      FTabUsages          : TTabSheet   ;
+      FTabSearch          : TTabSheet   ;
+      FTabGraph           : TTabSheet   ;
       FInited        : Boolean     ;
       FInitTimer     : TTimer      ; { v0.42: defers the embed off the ctor }
       FWatchTimer    : TTimer      ; { v0.46: auto-refresh Structure on code-tab switch }
@@ -205,9 +207,10 @@ begin
     Usages) are filled in HandleInitTimer, one message turn later, because
     reparenting a TForm during the IDE's dock construction AV'd. Symbol Search
     (native controls) + Graph (a button) are safe to build immediately. }
-  FTabStruct:= AddTab('Structure'    );
-  FTabUsages:= AddTab('Find Usages'  );
-  FTabSearch:= AddTab('Symbol Search');
+  FTabStruct       := AddTab('Structure'      );
+  FTabUnifiedSearch:= AddTab('Search (no grep)');
+  FTabUsages       := AddTab('Find Usages'    );
+  FTabSearch       := AddTab('Symbol Search'  );
   { v0.46: the Graph tab was removed -- the graph is now its own dockable tool
     window (View > Tool Windows > drag-lint Graph), so the in-dock launcher tab
     was just stale clutter. }
@@ -301,6 +304,12 @@ begin
       FStructure:= nil;
       AddPlaceholder(FTabStruct, 'Structure failed to load: ' + E.Message);
     end;
+  end;
+
+  try
+    CreateEmbeddedSearch(Self, FTabUnifiedSearch);
+  except
+    on E: Exception do AddPlaceholder(FTabUnifiedSearch, 'Search failed to load: ' + E.Message);
   end;
 
   try
