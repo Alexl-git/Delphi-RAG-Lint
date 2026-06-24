@@ -10,8 +10,7 @@ breaking changes** until v1.0.
 - `query --text "<phrase>"`: full-text search over indexed string content --
   error messages, DFM captions, SQL exception text, resourcestrings. Searches
   string literals only, never identifiers. Default mode is exact phrase match.
-  - `--any-order`: words may appear in any order (FTS5 implicit AND, word-order
-    relaxed via unicode61 tokenizer).
+  - `--any-order`: all terms must match in any order (FTS5 implicit AND across tokens).
   - `--substring`: trigram index match; finds the phrase as a substring of a
     literal (e.g. `query --text "password" --substring` catches
     `'Invalid password'` and `'Password mismatch'`).

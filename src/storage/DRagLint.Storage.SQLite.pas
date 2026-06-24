@@ -711,7 +711,13 @@ begin
     else if SameText(AMode, 'anyorder') then
     begin
       FtsTable := 'string_fts';
-      MatchExpr:= AQuery; // bare terms -> implicit AND (all words, any order)
+      MatchExpr:= '';
+      for var Term in AQuery.Split([' ', #9, #10, #13], TStringSplitOptions.ExcludeEmpty) do
+      begin
+        if MatchExpr <> '' then MatchExpr := MatchExpr + ' ';
+        MatchExpr := MatchExpr + QuotePhrase(Term);
+      end;
+      if MatchExpr = '' then MatchExpr := QuotePhrase(AQuery);
     end
     else
     begin

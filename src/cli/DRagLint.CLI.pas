@@ -2003,6 +2003,8 @@ begin
   else if AArgs.TextAnyOrder then Mode:= 'anyorder'
   else Mode:= 'phrase';
   if AArgs.Limit > 0 then Lim:= AArgs.Limit else Lim:= 200;
+  if (Mode = 'substring') and (Length(Trim(AArgs.TextQuery)) < 3) then
+    Writeln('NOTE: --substring needs a query of at least 3 characters (trigram tokenizer); "' + AArgs.TextQuery + '" is too short - try --any-order for shorter terms.');
 
   PathsToScan:= ResolveConsumerDbs(AArgs);
   for DbPath in PathsToScan do
@@ -2025,6 +2027,7 @@ begin
       AllMatches[High(AllMatches)]:= M;
     end;
   end;
+  if Length(AllMatches) > Lim then SetLength(AllMatches, Lim);
 
   if AArgs.AsJson then
   begin

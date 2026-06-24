@@ -24,6 +24,9 @@ Check "phrase finds .pas const"          (($const | Where-Object { $_.kind -eq '
 $any = & $exe query --text "folder found" --any-order --db $db --json | ConvertFrom-Json
 Check "any-order matches" ($any.Count -ge 1)
 
+& $exe query --text "foo (bar" --any-order --db $db *> $null
+Check "any-order neutralizes FTS5 operators (clean exit)" ($LASTEXITCODE -le 1)
+
 $sub = & $exe query --text "older" --substring --db $db --json | ConvertFrom-Json
 Check "substring 'older' matches 'Folder'" ($sub.Count -ge 1)
 
