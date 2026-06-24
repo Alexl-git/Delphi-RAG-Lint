@@ -33,6 +33,10 @@ breaking changes** until v1.0.
 - **Self-diagnostics:** `--selftest-fts5` checks FTS5 availability;
   `--selftest-schema` verifies schema v10 tables and triggers are present.
 
+### Added (IDE plugin)
+
+- IDE plugin: new unified **Search (no grep)** dock tab - one Kind dropdown (Symbol/Text/Usages) + query field + a clickable results grid that jumps to source; Advanced toggle exposes per-kind refinements (kind filter / text mode+source / usages width). Find Usages no longer shows a debug dump on no-results.
+
 ## v0.57.0-alpha -- 2026-06-23
 
 ### Fixed (DFM)

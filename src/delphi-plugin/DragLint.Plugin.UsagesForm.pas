@@ -40,8 +40,8 @@ uses
   , Winapi.Windows
   , ToolsAPI
   , DragLint.Plugin.DbResolver
-  , { v0.40.5: ResolverDiagnostic for debug node }
-    DragLint.Plugin.Settings
+  , DragLint.Plugin.Settings
+  , DragLint.Plugin.ProcRun
   ;
 
 { v0.40.5: local copy of the BPL build-stamp helper to avoid circular use
@@ -102,70 +102,6 @@ type
 
 var
   GUsagesForm: TDragLintUsagesForm = nil;
-
-  { ---- helper: spawn process and capture stdout+stderr ---- }
-
-function RunCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer): Integer;
-var
-  SA       : TSecurityAttributes       ;
-  ReadPipe : THandle                   ;
-  WritePipe: THandle                   ;
-  SI       : TStartupInfoW             ;
-  PI       : TProcessInformation       ;
-  Buf      : array[0..4095] of AnsiChar;
-  BytesRead: DWORD                     ;
-  ExitCode : DWORD                     ;
-  WideCmd  : string                    ;
-  SB       : TStringBuilder            ;
-  TV       : DWORD                     ;
-begin
-  Result:= -1;
-  AOutput:= '';
-  SA.nLength:= SizeOf(SA);
-  SA.bInheritHandle:= True;
-  SA.lpSecurityDescriptor:= nil;
-  if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then Exit;
-  try
-    SetHandleInformation(ReadPipe, HANDLE_FLAG_INHERIT, 0);
-    FillChar(SI, SizeOf(SI), 0);
-    SI.cb:= SizeOf(SI);
-    SI.dwFlags   := STARTF_USESTDHANDLES;
-    SI.hStdOutput:= WritePipe;
-    SI.hStdError := WritePipe;
-    SI.hStdInput:= GetStdHandle(STD_INPUT_HANDLE);
-    FillChar(PI, SizeOf(PI), 0);
-    WideCmd:= ACmdLine;
-    UniqueString(WideCmd);
-    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
-    begin
-      CloseHandle(WritePipe);
-      Exit;
-    end;
-    CloseHandle(WritePipe);
-    SB:= TStringBuilder.Create;
-    try
-      repeat
-        BytesRead:= 0;
-        if not ReadFile(ReadPipe, Buf[0], SizeOf(Buf) - 1, BytesRead, nil) then Break;
-        if BytesRead = 0 then Break;
-        Buf[BytesRead]:= #0;
-        SB.Append(string(AnsiString(Buf)));
-      until False;
-      AOutput:= SB.ToString;
-    finally
-      SB.Free;
-    end;
-    if ATimeoutMs <= 0 then TV:= INFINITE
-    else TV:= DWORD(ATimeoutMs);
-    WaitForSingleObject(PI.hProcess, TV      );
-    GetExitCodeProcess (PI.hProcess, ExitCode);
-    Result:= Integer(ExitCode);
-    CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread );
-  finally
-    CloseHandle(ReadPipe);
-  end; // try
-end; // function
 
 { ---- TDragLintUsagesForm ---- }
 
@@ -653,54 +589,14 @@ begin
 
     if FTree.Items.Count = 0 then
     begin
-      { v0.40.5: dump the raw command line + first 400 chars of stdout +
-        every --db argument the resolver passed, so we can see what the
-        plugin actually ran when 0 callers comes back. Top-level node
-        for each. }
-      var DbgRoot:= AddNodeData(nil, '== DEBUG (v0.40.5): command + output ==', '', 0);
-      AddNodeData(DbgRoot, 'Exit code: ' + IntToStr(ExitCode), '', 0);
-      AddNodeData(DbgRoot, 'CmdLine: ' + CmdLine, '', 0);
-      AddNodeData(DbgRoot, 'Output length: ' + IntToStr(Length(Output)), '', 0);
-      var DbgOut:= Copy(Output, 1, 400);
-      AddNodeData(DbgRoot, 'Output[0..400]: ' + DbgOut, '', 0);
-      if Length(FDbPaths) > 0 then
-      begin
-        AddNodeData(DbgRoot, 'FDbPaths count: ' + IntToStr(Length(FDbPaths)), '', 0);
-        for var p2 in FDbPaths do AddNodeData(DbgRoot, '  - ' + p2 + ' (exists=' + BoolToStr(FileExists(p2), True) + ')', '', 0);
-      end
-      else AddNodeData(DbgRoot, 'FDbPaths is empty; FDbPath="' + FDbPath + '"', '', 0);
-
-      { v0.40.5: full resolver diagnostic so we can see WHY the project DB
-        was or wasn't selected. }
-      var DiagRoot:= AddNodeData(nil, '== DEBUG: resolver state ==', '', 0);
-      var Diag:= ResolverDiagnostic(LoadSettings);
-      var DiagLines:= TStringList.Create;
-      try
-        DiagLines.Text:= Diag;
-        for var DL in DiagLines do AddNodeData(DiagRoot, DL, '', 0);
-      finally
-        DiagLines.Free;
-      end;
-      DiagRoot.Expand(False);
-      DbgRoot .Expand(False);
-
-      { v0.40.3: be honest about scope. drag-lint's indexer captures
-        top-level declarations (types, methods, fields, properties,
-        constants, units) but NOT procedure parameters or local
-        variables. If the user asked about a local they're never
-        going to get a hit, so surface a useful hint instead of just
-        "(no callers found)". The lowercase-A leading prefix
-        (AItemLink, AButton, AParam, ASender...) is the Delphi
-        convention for parameters and a strong scope signal. }
       var Hint: string;
-      Hint:= '(no callers found)';
-      if (Length(FSymbolName) > 1) and CharInSet(FSymbolName[1], ['A', 'a']) and CharInSet(FSymbolName[2], ['A'..'Z']) then Hint:= Hint +
-      '  -  "' + FSymbolName + '" looks like a parameter (A-prefix).' + '  drag-lint indexes types, methods, fields, and constants -' +
-      ' not procedure parameters or local variables.'
-      else if (Length(FSymbolName) > 1) and CharInSet(FSymbolName[1], ['F', 'f']) and CharInSet(FSymbolName[2], ['A'..'Z']) then Hint:= Hint +
-      '  -  "' + FSymbolName + '" looks like a private field (F-prefix).' + '  If this is on a class declared in the project,' +
-      ' make sure the project DB is current (Tools > drag-lint > Lint Buffer).'
-      else Hint:= Hint + '  -  if "' + FSymbolName + '" is a procedure parameter or' + ' local variable, that is expected -' + ' drag-lint does not index local scopes.';
+      Hint:= '(no usages found)';
+      if (Length(FSymbolName) > 1) and CharInSet(FSymbolName[1], ['A', 'a']) and CharInSet(FSymbolName[2], ['A'..'Z']) then
+        Hint:= Hint + '  -  "' + FSymbolName + '" looks like a parameter (A-prefix); drag-lint does not index parameters or local variables.'
+      else if (Length(FSymbolName) > 1) and CharInSet(FSymbolName[1], ['F', 'f']) and CharInSet(FSymbolName[2], ['A'..'Z']) then
+        Hint:= Hint + '  -  "' + FSymbolName + '" looks like a private field; make sure the project DB is current (Tools > drag-lint > Lint Buffer).'
+      else
+        Hint:= Hint + '  -  if "' + FSymbolName + '" is a parameter or local variable, that is expected - drag-lint indexes types, methods, fields and constants only.';
       AddNodeData(nil, Hint, '', 0);
     end; // if
 

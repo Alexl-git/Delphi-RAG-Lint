@@ -54,6 +54,7 @@ contains
   DragLint.Plugin.StructureForm in 'DragLint.Plugin.StructureForm.pas',
   DragLint.Plugin.OptionsFrame in 'DragLint.Plugin.OptionsFrame.pas',
   DragLint.Plugin.Options in 'DragLint.Plugin.Options.pas',
+  DragLint.Plugin.ProcRun in 'DragLint.Plugin.ProcRun.pas',
   DragLint.Plugin.UsagesForm in 'DragLint.Plugin.UsagesForm.pas',
   DragLint.Plugin.SymbolSearchForm in 'DragLint.Plugin.SymbolSearchForm.pas',
   DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas',
@@ -66,6 +67,8 @@ contains
   DragLint.Plugin.Providers in 'DragLint.Plugin.Providers.pas',
   DragLint.Plugin.LiveDiagnostics in 'DragLint.Plugin.LiveDiagnostics.pas',
   DragLint.Plugin.JobObject in 'DragLint.Plugin.JobObject.pas',
-  DragLint.Plugin.GraphWindow in 'DragLint.Plugin.GraphWindow.pas';
+  DragLint.Plugin.GraphWindow in 'DragLint.Plugin.GraphWindow.pas',
+  DragLint.Plugin.SearchParse in 'DragLint.Plugin.SearchParse.pas',
+  DragLint.Plugin.SearchForm in 'DragLint.Plugin.SearchForm.pas';
 
 end.

@@ -95,6 +95,7 @@
         <DCCReference Include="DragLint.Plugin.StructureForm.pas"/>
         <DCCReference Include="DragLint.Plugin.OptionsFrame.pas"/>
         <DCCReference Include="DragLint.Plugin.Options.pas"/>
+        <DCCReference Include="DragLint.Plugin.ProcRun.pas"/>
         <DCCReference Include="DragLint.Plugin.UsagesForm.pas"/>
         <DCCReference Include="DragLint.Plugin.SymbolSearchForm.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
@@ -112,6 +113,8 @@
         <DCCReference Include="DragLint.Plugin.LiveDiagnostics.pas"/>
         <DCCReference Include="DragLint.Plugin.JobObject.pas"/>
         <DCCReference Include="DragLint.Plugin.GraphWindow.pas"/>
+        <DCCReference Include="DragLint.Plugin.SearchParse.pas"/>
+        <DCCReference Include="DragLint.Plugin.SearchForm.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
