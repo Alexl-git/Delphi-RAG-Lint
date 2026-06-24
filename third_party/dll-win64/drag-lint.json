@@ -8,7 +8,7 @@
   },
   "indexes": {
     "outDir": "C:\\Projects\\.drag-lint",
-    "exclude": ["*BACKUP*", "*_OLD*.pas", "* - Copy.pas", "*- Copy.PAS", "*-Copy.PAS"],
+    "exclude": ["*BACKUP*", "*_OLD*.pas", "* - Copy.pas", "*- Copy.PAS", "*-Copy.PAS", "Win64"],
     "sections": [
       { "name": "ORM3", "db": "C:\\Projects\\DB\\ORM3\\drag-lint.sqlite",
         "include": ["C:\\Projects\\DB\\ORM3"], "useIgnoreFiles": true },
