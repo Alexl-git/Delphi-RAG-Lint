@@ -47,6 +47,7 @@ type
     procedure SetEmpty(const AMsg: string);
     procedure KindChange(Sender: TObject);
     procedure AdvChange(Sender: TObject);
+    procedure AdvControlChange(Sender: TObject);
     procedure QueryKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure QueryChange(Sender: TObject);
     procedure DebounceFired(Sender: TObject);
@@ -188,6 +189,7 @@ begin
   if Length(Rows) = 0 then
   begin
     if Trim(DbArgs) = '' then SetEmpty('No project index found - run Tools > drag-lint > Lint Buffer, or set the exe/DB in settings.')
+    else if (K = 'Symbol') and (FKindFilter.ItemIndex > 0) then SetEmpty(Format('No %s matches for "%s"', [FKindFilter.Text, Q]))
     else if (K = 'Symbol') then SetEmpty(Format('No matches for "%s"  -  drag-lint indexes types/methods/fields/consts, not locals or parameters.', [Q]))
     else if (K = 'Text') and (FTextMode.ItemIndex = 1) and (Length(Q) < 3) then SetEmpty('--substring needs >= 3 characters; try Any-word.')
     else SetEmpty(Format('No matches for "%s"', [Q]));
@@ -200,6 +202,9 @@ begin Reconfigure; RebuildColumns; if Trim(FQuery.Text) <> '' then RunSearch; en
 
 procedure TSearchHandler.AdvChange(Sender: TObject);
 begin FAdvPanel.Visible:= FAdvChk.Checked; end;
+
+procedure TSearchHandler.AdvControlChange(Sender: TObject);
+begin if Trim(FQuery.Text) <> '' then RunSearch; end;
 
 procedure TSearchHandler.QueryKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin if Key = VK_RETURN then begin Key:= 0; RunSearch; end; end;
@@ -243,13 +248,13 @@ begin
   H.FAdvPanel:= TPanel.Create(AOwner); H.FAdvPanel.Parent:= AParent; H.FAdvPanel.Align:= alTop; H.FAdvPanel.Height:= 28; H.FAdvPanel.BevelOuter:= bvNone; H.FAdvPanel.Visible:= False;
   H.FKindFilter:= TComboBox.Create(AOwner); H.FKindFilter.Parent:= H.FAdvPanel; H.FKindFilter.Align:= alLeft; H.FKindFilter.Width:= 110; H.FKindFilter.Style:= csDropDownList;
   for var s in ['Any','Method','Type/Class','Field/Var','Const','Property','Unit'] do H.FKindFilter.Items.Add(s);
-  H.FKindFilter.ItemIndex:= 0; H.FKindFilter.OnChange:= H.AdvChange;
+  H.FKindFilter.ItemIndex:= 0; H.FKindFilter.OnChange:= H.AdvControlChange;
   H.FTextMode:= TComboBox.Create(AOwner); H.FTextMode.Parent:= H.FAdvPanel; H.FTextMode.Align:= alLeft; H.FTextMode.Width:= 100; H.FTextMode.Style:= csDropDownList;
-  for var s in ['Phrase','Substring','Any-word'] do H.FTextMode.Items.Add(s); H.FTextMode.ItemIndex:= 0;
+  for var s in ['Phrase','Substring','Any-word'] do H.FTextMode.Items.Add(s); H.FTextMode.ItemIndex:= 0; H.FTextMode.OnChange:= H.AdvControlChange;
   H.FTextSource:= TComboBox.Create(AOwner); H.FTextSource.Parent:= H.FAdvPanel; H.FTextSource.Align:= alLeft; H.FTextSource.Width:= 90; H.FTextSource.Style:= csDropDownList;
-  for var s in ['All','pas','dfm','sql'] do H.FTextSource.Items.Add(s); H.FTextSource.ItemIndex:= 0;
+  for var s in ['All','pas','dfm','sql'] do H.FTextSource.Items.Add(s); H.FTextSource.ItemIndex:= 0; H.FTextSource.OnChange:= H.AdvControlChange;
   H.FWidth:= TComboBox.Create(AOwner); H.FWidth.Parent:= H.FAdvPanel; H.FWidth.Align:= alLeft; H.FWidth.Width:= 100; H.FWidth.Style:= csDropDownList;
-  for var s in ['Narrow','Wide','Very wide'] do H.FWidth.Items.Add(s); H.FWidth.ItemIndex:= 0;
+  for var s in ['Narrow','Wide','Very wide'] do H.FWidth.Items.Add(s); H.FWidth.ItemIndex:= 0; H.FWidth.OnChange:= H.AdvControlChange;
 
   // status + grid
   H.FStatus:= TLabel.Create(AOwner); H.FStatus.Parent:= AParent; H.FStatus.Align:= alBottom; H.FStatus.Layout:= tlCenter; H.FStatus.Height:= 18; H.FStatus.Caption:= 'Type to search.';
