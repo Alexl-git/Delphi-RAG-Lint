@@ -45,7 +45,6 @@ uses
   , DragLint.Plugin.Telemetry
   , { TEMP debug telemetry }
     DragLint.Plugin.UsagesForm
-  , DragLint.Plugin.SymbolSearchForm
   , DragLint.Plugin.SearchForm
   , DragLint.Plugin.GraphWindow
   , DragLint.Plugin.DbResolver
@@ -56,11 +55,10 @@ uses
 
 {$R *.dfm}
 
-type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools, matching
-    the delphi-terminal sample's single-window-with-tabs layout: Structure,
-    Find Usages, Symbol Search (all live) + a Graph launcher. The form-reparent
-    embeds (Structure, Find Usages) are built in HandleInitTimer, one message
-    turn after construction, because reparenting a TForm while the IDE is still
+type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools:
+    Structure, Search (no grep), and Blast Radius. The form-reparent embeds
+    (Structure, Blast Radius) are built in HandleInitTimer, one message turn
+    after construction, because reparenting a TForm while the IDE is still
     constructing the dock host AV'd. }
   TDragLintDockFrame = class(TCustomFrame)
     private
@@ -68,8 +66,7 @@ type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools, matchin
       FStructure     : TForm       ; { embedded TDragLintStructureForm }
       FTabStruct          : TTabSheet   ;
       FTabUnifiedSearch   : TTabSheet   ;
-      FTabUsages          : TTabSheet   ;
-      FTabSearch          : TTabSheet   ;
+      FTabBlast           : TTabSheet   ;
       FTabGraph           : TTabSheet   ;
       FInited        : Boolean     ;
       FInitTimer     : TTimer      ; { v0.42: defers the embed off the ctor }
@@ -203,14 +200,12 @@ begin
   FPages.Align   := alClient;
   FPages.OnChange:= HandlePageChange;
 
-  { Tabs are created here (empty); the form-reparent embeds (Structure, Find
-    Usages) are filled in HandleInitTimer, one message turn later, because
-    reparenting a TForm during the IDE's dock construction AV'd. Symbol Search
-    (native controls) + Graph (a button) are safe to build immediately. }
+  { Tabs are created here (empty); the form-reparent embeds (Structure,
+    Blast Radius) are filled in HandleInitTimer, one message turn later, because
+    reparenting a TForm during the IDE's dock construction AV'd. }
   FTabStruct       := AddTab('Structure'      );
   FTabUnifiedSearch:= AddTab('Search (no grep)');
-  FTabUsages       := AddTab('Find Usages'    );
-  FTabSearch       := AddTab('Symbol Search'  );
+  FTabBlast        := AddTab('Blast Radius'   );
   { v0.46: the Graph tab was removed -- the graph is now its own dockable tool
     window (View > Tool Windows > drag-lint Graph), so the in-dock launcher tab
     was just stale clutter. }
@@ -313,15 +308,9 @@ begin
   end;
 
   try
-    CreateEmbeddedUsages(Self, FTabUsages);
+    CreateEmbeddedUsages(Self, FTabBlast);
   except
-    on E: Exception do AddPlaceholder(FTabUsages, 'Find Usages failed to load: ' + E.Message);
-  end;
-
-  try
-    CreateEmbeddedSymbolSearch(Self, FTabSearch, ResolveExe, ResolveDbArgs);
-  except
-    on E: Exception do AddPlaceholder(FTabSearch, 'Symbol Search failed to load: ' + E.Message);
+    on E: Exception do AddPlaceholder(FTabBlast, 'Blast Radius failed to load: ' + E.Message);
   end;
 end; // procedure
 

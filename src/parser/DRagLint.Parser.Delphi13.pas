@@ -1103,6 +1103,32 @@ begin
   end;
 end;
 
+/// <summary>Walks the parse tree collecting ERROR/MISSING node positions into ADiags (max AMaxErrors).</summary>
+/// <remarks>Only recurses into subtrees where HasError is set; exits early once the cap is reached.</remarks>
+procedure CollectParseErrors(const ARoot: TTSNode; const AFilePath: string; var ADiags: TArray<string>; AMaxErrors, ADepth: Integer);
+var
+  ChildIdx: Integer;
+  Child   : TTSNode;
+  Pt      : TTSPoint;
+begin
+  if ARoot.IsNull then Exit;
+  if ADepth > 30 then Exit;
+  if Length(ADiags) >= AMaxErrors then Exit;
+  if ARoot.IsError or ARoot.IsMissing then
+  begin
+    Pt:= ARoot.StartPoint;
+    ADiags:= ADiags + [Format('%s(%d,%d): parse error [%s]', [AFilePath, Integer(Pt.row) + 1, Integer(Pt.column) + 1, ARoot.NodeType])];
+    Exit; { don't descend into ERROR node's children - they are noise }
+  end;
+  if ARoot.HasError then
+    for ChildIdx:= 0 to ARoot.ChildCount - 1 do
+    begin
+      if Length(ADiags) >= AMaxErrors then Break;
+      Child:= ARoot.Child(ChildIdx);
+      CollectParseErrors(Child, AFilePath, ADiags, AMaxErrors, ADepth + 1);
+    end;
+end;
+
 function TDelphi13Parser.Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
 var
   Parser: TTSParser ;
@@ -1127,7 +1153,7 @@ begin
     State:= TWalkState.Create(Source);
     State.EmitUsageRefs:= EmitUsageRefs; { v0.42: deep scan }
     Root:= Tree.RootNode;
-    if Root.HasError then Result.Diagnostics:= ['parse contains syntax errors (Tree.RootNode.HasError = true)'];
+    if Root.HasError then CollectParseErrors(Root, AFilePath, Result.Diagnostics, 10, 0);
     Walk(Root, State, -1, '');
     Result.Symbols    := State.Symbols    .ToArray;
     Result.References := State.References .ToArray;

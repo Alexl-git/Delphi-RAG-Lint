@@ -261,6 +261,8 @@ begin
         end;
         FStore.CommitFileTx(Token);
         ReportProgress(AFilePath, Length(ParseRes.Symbols), Length(ParseRes.References), Length(ParseRes.Diagnostics));
+        for var Diag in ParseRes.Diagnostics do
+          Writeln('    DIAG: ' + Diag);
       except
         on E: Exception do
         begin

@@ -108,13 +108,43 @@ var
   ActSvc: IOTAActionServices;
   EdSvc : IOTAEditorServices;
   View  : IOTAEditView      ;
+  MS    : IOTAModuleServices;
+  Module: IOTAModule        ;
+  Editor: IOTAEditor        ;
+  Src   : IOTASourceEditor  ;
+  i     : Integer           ;
+  SrcFound: Boolean         ;
 begin
   { v0.46.x: never feed OpenFile a non-absolute path -- a bare unit filename
     ("Foo.pas") resolves against the IDE working dir (...\bin) and raises
     "Cannot create file". Require a rooted path. }
   if (AFile = '') or (ExtractFileDrive(AFile) = '') then Exit;
-  if not Supports(BorlandIDEServices, IOTAActionServices, ActSvc) then Exit;
-  ActSvc.OpenFile(AFile);
+  { v0.46.x: for a FORM unit, IOTAActionServices.OpenFile can surface the form
+    designer/DFM view instead of the .pas source. Force the IOTASourceEditor
+    (code view) explicitly; fall back to OpenFile only if that fails. }
+  SrcFound:= False;
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then
+  begin
+    Module:= MS.OpenModule(AFile);
+    if Module <> nil then
+    begin
+      for i:= 0 to Module.GetModuleFileCount - 1 do
+      begin
+        Editor:= Module.GetModuleFileEditor(i);
+        if Supports(Editor, IOTASourceEditor, Src) then
+        begin
+          Src.Show; { forces the .pas code view, not the form designer }
+          SrcFound:= True;
+          Break;
+        end;
+      end;
+    end;
+  end;
+  if not SrcFound then
+  begin
+    if not Supports(BorlandIDEServices, IOTAActionServices, ActSvc) then Exit;
+    ActSvc.OpenFile(AFile);
+  end;
   if Supports(BorlandIDEServices, IOTAEditorServices, EdSvc) then
   begin
     View:= EdSvc.TopView;

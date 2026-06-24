@@ -221,6 +221,32 @@ begin
   end;
 end; // procedure
 
+/// <summary>Walks the parse tree collecting ERROR/MISSING node positions into ADiags (max AMaxErrors).</summary>
+/// <remarks>Only recurses into subtrees where HasError is set; exits early once the cap is reached.</remarks>
+procedure CollectParseErrors(const ARoot: TTSNode; const AFilePath: string; var ADiags: TArray<string>; AMaxErrors, ADepth: Integer);
+var
+  ChildIdx: Integer;
+  Child   : TTSNode;
+  Pt      : TTSPoint;
+begin
+  if ARoot.IsNull then Exit;
+  if ADepth > 30 then Exit;
+  if Length(ADiags) >= AMaxErrors then Exit;
+  if ARoot.IsError or ARoot.IsMissing then
+  begin
+    Pt:= ARoot.StartPoint;
+    ADiags:= ADiags + [Format('%s(%d,%d): parse error [%s]', [AFilePath, Integer(Pt.row) + 1, Integer(Pt.column) + 1, ARoot.NodeType])];
+    Exit; { don't descend into ERROR node's children - they are noise }
+  end;
+  if ARoot.HasError then
+    for ChildIdx:= 0 to ARoot.ChildCount - 1 do
+    begin
+      if Length(ADiags) >= AMaxErrors then Break;
+      Child:= ARoot.Child(ChildIdx);
+      CollectParseErrors(Child, AFilePath, ADiags, AMaxErrors, ADepth + 1);
+    end;
+end;
+
 { TDFMParser }
 
 constructor TDFMParser.Create;
@@ -250,6 +276,12 @@ var
   i     : Integer  ;
 begin
   Result:= Default(TParseResult);
+  { Binary DFM files start with $FF; the text-DFM parser cannot handle them. }
+  if (Length(ASource) > 0) and (ASource[0] = $FF) then
+  begin
+    Result.Diagnostics:= [AFilePath + ': binary DFM (TPF0) -- save as Text DFM in the IDE to index this file'];
+    Exit;
+  end;
   Source:= ASource;
   Tree  := nil;
   Parser:= nil;
@@ -264,7 +296,7 @@ begin
 
     State:= TDfmState.Create(Source);
     Root:= Tree.RootNode;
-    if Root.HasError then Result.Diagnostics:= ['parse contains syntax errors'];
+    if Root.HasError then CollectParseErrors(Root, AFilePath, Result.Diagnostics, 10, 0);
     // source_file -> [object ...]. Top-level objects are forms.
     for i:= 0 to Root.NamedChildCount - 1 do
     begin

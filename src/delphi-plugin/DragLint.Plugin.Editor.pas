@@ -3203,13 +3203,37 @@ end;
 
 procedure InvokeReindexProject(Sender: TObject);
 var
+  Cmd    : string;
+  OutPath: string;
   Db, Proj, ProjDir: string; MS: IOTAModuleServices;
 begin
   Proj:= GetActiveProjectFile; Db:= GetActiveProjectDb;
   if (Proj = '') or (Db = '') then begin ShowMessage('drag-lint: no project/index found.'); Exit; end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
   ProjDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
-  DLRunReport(Format('index "%s" --db "%s"', [ProjDir, Db]), 'drag-lint-reindex.txt');
+  Cmd    := Format('"%s" index "%s" --db "%s"', [DLExe, ProjDir, Db]);
+  OutPath:= TPath.Combine(TPath.GetTempPath, 'drag-lint-reindex.txt');
+  DLT('menu', 'run(async+lsp-restart): ' + Cmd);
+  TThread.CreateAnonymousThread(
+    procedure
+    var Output: string;
+    begin
+      Output:= '';
+      try
+        RunAndCaptureStdout(Cmd, Output, 180000);
+      except
+        on E: Exception do Output:= 'drag-lint: reindex failed: ' + E.ClassName + ': ' + E.Message;
+      end;
+      if Trim(Output) = '' then Output:= '(no output)';
+      try TFile.WriteAllText(OutPath, Output); except end;
+      { Restart the LSP client on the main thread so the next query picks up the fresh index. }
+      TThread.Queue(nil,
+        procedure
+        begin
+          if GLspClient <> nil then begin GLspClient.Stop; FreeAndNil(GLspClient); end;
+          DLOpenInEditor(OutPath);
+        end);
+    end).Start;
 end;
 
 procedure InvokeResolveDbs(Sender: TObject);
