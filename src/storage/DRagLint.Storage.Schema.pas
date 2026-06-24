@@ -3,11 +3,11 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 9;
+  SCHEMA_VERSION = 10;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
-  SCHEMA_DDL: array[0..42] of string = (
+  SCHEMA_DDL: array[0..51] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' + '  key   TEXT PRIMARY KEY,' + '  value TEXT NOT NULL' + ')',
 
     'CREATE TABLE IF NOT EXISTS files (' + '  id          INTEGER PRIMARY KEY,' + '  path        TEXT NOT NULL UNIQUE,' + '  mtime_unix  INTEGER NOT NULL,' +
@@ -136,7 +136,32 @@ const
     'CREATE TABLE IF NOT EXISTS di_bindings (' + '  id             INTEGER PRIMARY KEY,' + '  file_id        INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
     '  interface_name TEXT NOT NULL,' + '  impl_name      TEXT NOT NULL,' + '  lifetime       TEXT NOT NULL,' + '  start_line     INTEGER NOT NULL,' +
     '  start_col      INTEGER NOT NULL,' + '  end_line       INTEGER NOT NULL,' + '  end_col        INTEGER NOT NULL' + ')',
-    'CREATE INDEX IF NOT EXISTS idx_di_interface ON di_bindings(interface_name)', 'CREATE INDEX IF NOT EXISTS idx_di_impl      ON di_bindings(impl_name)');
+    'CREATE INDEX IF NOT EXISTS idx_di_interface ON di_bindings(interface_name)', 'CREATE INDEX IF NOT EXISTS idx_di_impl      ON di_bindings(impl_name)'
+    // v10: string-content index (text search) --------------------------------
+    , 'CREATE TABLE IF NOT EXISTS string_literals (' + '  id         INTEGER PRIMARY KEY,' +
+    '  file_id    INTEGER NOT NULL REFERENCES files(id)  ON DELETE CASCADE,' +
+    '  symbol_id  INTEGER          REFERENCES symbols(id) ON DELETE SET NULL,' +
+    '  source     TEXT NOT NULL,' + '  kind       TEXT NOT NULL,' + '  owner_name TEXT,' +
+    '  text       TEXT NOT NULL,' + '  start_line INTEGER NOT NULL,' + '  start_col INTEGER NOT NULL,' +
+    '  end_line   INTEGER NOT NULL,' + '  end_col   INTEGER NOT NULL' + ')'
+    , 'CREATE INDEX IF NOT EXISTS idx_string_literals_file   ON string_literals(file_id)'
+    , 'CREATE INDEX IF NOT EXISTS idx_string_literals_symbol ON string_literals(symbol_id)'
+    , 'CREATE INDEX IF NOT EXISTS idx_string_literals_source ON string_literals(source)'
+    , 'CREATE VIRTUAL TABLE IF NOT EXISTS string_fts USING fts5(' +
+    '  text, content=''string_literals'', content_rowid=''id'', tokenize=''unicode61'')'
+    , 'CREATE VIRTUAL TABLE IF NOT EXISTS string_fts_tri USING fts5(' +
+    '  text, content=''string_literals'', content_rowid=''id'', tokenize=''trigram'')'
+    , 'CREATE TRIGGER IF NOT EXISTS string_literals_ai AFTER INSERT ON string_literals BEGIN' +
+    '  INSERT INTO string_fts(rowid, text) VALUES (new.id, new.text);' +
+    '  INSERT INTO string_fts_tri(rowid, text) VALUES (new.id, new.text); END'
+    , 'CREATE TRIGGER IF NOT EXISTS string_literals_ad AFTER DELETE ON string_literals BEGIN' +
+    '  INSERT INTO string_fts(string_fts, rowid, text) VALUES (''delete'', old.id, old.text);' +
+    '  INSERT INTO string_fts_tri(string_fts_tri, rowid, text) VALUES (''delete'', old.id, old.text); END'
+    , 'CREATE TRIGGER IF NOT EXISTS string_literals_au AFTER UPDATE ON string_literals BEGIN' +
+    '  INSERT INTO string_fts(string_fts, rowid, text) VALUES (''delete'', old.id, old.text);' +
+    '  INSERT INTO string_fts_tri(string_fts_tri, rowid, text) VALUES (''delete'', old.id, old.text);' +
+    '  INSERT INTO string_fts(rowid, text) VALUES (new.id, new.text);' +
+    '  INSERT INTO string_fts_tri(rowid, text) VALUES (new.id, new.text); END');
 
 implementation
 

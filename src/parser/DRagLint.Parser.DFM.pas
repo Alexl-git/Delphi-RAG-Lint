@@ -45,9 +45,10 @@ end;
 
 type
   TDfmState = class
-    Source    : TBytes           ;
-    Symbols   : TList<TSymbol>   ;
-    References: TList<TReference>;
+    Source    : TBytes                ;
+    Symbols   : TList<TSymbol>        ;
+    References: TList<TReference>     ;
+    Literals  : TList<TStringLiteral> ;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     function Emit(AKind: TSymbolKind; const AName, AQualifiedName, ASignature: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode): Integer;
@@ -58,14 +59,16 @@ constructor TDfmState.Create(const ASource: TBytes);
 begin
   inherited Create;
   Source:= ASource;
-  Symbols   := TList<TSymbol   >.Create;
-  References:= TList<TReference>.Create;
+  Symbols   := TList<TSymbol         >.Create;
+  References:= TList<TReference      >.Create;
+  Literals  := TList<TStringLiteral  >.Create;
 end;
 
 destructor TDfmState.Destroy;
 begin
   Symbols.Free;
   References.Free;
+  Literals.Free;
   inherited;
 end;
 
@@ -109,6 +112,31 @@ end;
 
 procedure WalkObject(const ANode: TTSNode; const AState: TDfmState; AParentSymbolIdx: Integer; const AParentQualifiedName: string; AIsRoot: Boolean); forward;
 
+/// <summary>Decodes a DFM `string` value node to its logical text: joins
+/// quoted_string atoms (unescaping '' -> '), and renders char_code (#nn)
+/// atoms as a single space (search-friendly).</summary>
+function DfmDecodeString(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  i   : Integer;
+  Atom: TTSNode;
+  Raw : string ;
+begin
+  Result:= '';
+  for i:= 0 to ANode.NamedChildCount - 1 do
+  begin
+    Atom:= ANode.NamedChild(i);
+    if Atom.NodeType = 'quoted_string' then
+    begin
+      Raw:= NodeText(Atom, ASource);
+      if (Length(Raw) >= 2) and (Raw[1] = '''') and (Raw[Length(Raw)] = '''') then
+        Raw:= Copy(Raw, 2, Length(Raw) - 2);
+      Result:= Result + StringReplace(Raw, '''''', '''', [rfReplaceAll]);
+    end
+    else if Atom.NodeType = 'char_code' then
+      Result:= Result + ' ';
+  end;
+end;
+
 procedure WalkProperty(const ANode: TTSNode; const AState: TDfmState);
 var
   NameNode   : TTSNode;
@@ -139,6 +167,23 @@ begin
       end;
     end;
     if HandlerName <> '' then AState.EmitRef('event-binding', HandlerName, ValueNode);
+  end;
+  // v10: harvest string property text for the text index.
+  if (not ValueNode.IsNull) and (ValueNode.NodeType = 'string') then
+  begin
+    var Lit: TStringLiteral; Lit:= Default(TStringLiteral);
+    Lit.Source   := 'dfm';
+    Lit.Kind     := 'dfm-prop';
+    Lit.OwnerName:= PropName;
+    Lit.Text     := DfmDecodeString(ValueNode, AState.Source);
+    if Lit.Text <> '' then
+    begin
+      Lit.StartLine:= Integer(ValueNode.StartPoint.row   ) + 1;
+      Lit.StartCol := Integer(ValueNode.StartPoint.column) + 1;
+      Lit.EndLine  := Integer(ValueNode.EndPoint  .row   ) + 1;
+      Lit.EndCol   := Integer(ValueNode.EndPoint  .column) + 1;
+      AState.Literals.Add(Lit);
+    end;
   end;
 end; // procedure
 
@@ -228,6 +273,7 @@ begin
     end;
     Result.Symbols   := State.Symbols   .ToArray;
     Result.References:= State.References.ToArray;
+    Result.Literals  := State.Literals  .ToArray;
   finally
     State.Free;
     Tree.Free;

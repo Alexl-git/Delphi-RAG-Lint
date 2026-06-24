@@ -59,9 +59,10 @@ implementation
 
 type
   TSqlState = class
-    Symbols   : TList<TSymbol>   ;
-    References: TList<TReference>;
-    SourceText: string           ;
+    Symbols   : TList<TSymbol>       ;
+    References: TList<TReference>    ;
+    Literals  : TList<TStringLiteral>;
+    SourceText: string               ;
     constructor Create(const AText: string);
     destructor Destroy; override;
     function AddSymbol(AKind: TSymbolKind; const AName, AQName: string; AParentIdx: Integer; AStartLine, AStartCol, AEndLine,
@@ -73,14 +74,16 @@ constructor TSqlState.Create(const AText: string);
 begin
   inherited Create;
   SourceText:= AText;
-  Symbols   := TList<TSymbol   >.Create;
-  References:= TList<TReference>.Create;
+  Symbols   := TList<TSymbol        >.Create;
+  References:= TList<TReference     >.Create;
+  Literals  := TList<TStringLiteral >.Create;
 end;
 
 destructor TSqlState.Destroy;
 begin
   Symbols.Free;
   References.Free;
+  Literals.Free;
   inherited;
 end;
 
@@ -292,6 +295,44 @@ begin
   FlushItem(Start, AEndPos);
 end; // begin
 
+// v10: read the single-quoted message after `CREATE EXCEPTION name`. AScanFrom
+// is 1-based, just past the name. Skips whitespace; if the next non-space char
+// is a quote, decodes the literal ('' -> ') and returns it, setting AOpenPos/
+// AClosePos (1-based) to the opening/closing quote positions. Returns '' with
+// AOpenPos=0 when no string follows (a bare re-raise).
+function ReadSqlExceptionMessage(const ARaw: string; AScanFrom: Integer;
+  out AOpenPos, AClosePos: Integer): string;
+var i, n: Integer; ch: Char;
+begin
+  Result:= ''; AOpenPos:= 0; AClosePos:= 0;
+  n:= Length(ARaw);
+  i:= AScanFrom;
+  while (i <= n) and (ARaw[i] <= ' ') do Inc(i);
+  if (i > n) or (ARaw[i] <> '''') then Exit;
+  AOpenPos:= i;
+  Inc(i);
+  while i <= n do
+  begin
+    ch:= ARaw[i];
+    if ch = '''' then
+    begin
+      if (i < n) and (ARaw[i + 1] = '''') then
+      begin
+        Result:= Result + '''';
+        Inc(i, 2);
+        Continue;
+      end
+      else
+      begin
+        AClosePos:= i;
+        Break;
+      end;
+    end;
+    Result:= Result + ch;
+    Inc(i);
+  end;
+end;
+
 { ---- TFirebirdSqlParser ---- }
 
 function TFirebirdSqlParser.LanguageName: string;
@@ -410,6 +451,23 @@ begin
       Name:= M.Groups[1].Value;
       ComputeLineCol(Raw, M.Index, Line, Col);
       State.AddSymbol(skSqlException, Name, Name, -1, Line, Col, Line, Col + Length(Name));
+      // v10: harvest the exception message text for the text index.
+      var OpenPos, ClosePos: Integer;
+      var Msg: string;
+      Msg:= ReadSqlExceptionMessage(Raw, M.Groups[1].Index + M.Groups[1].Length, OpenPos, ClosePos);
+      if (Msg <> '') and (OpenPos > 0) then
+      begin
+        var MLine, MCol, ELine, ECol: Integer;
+        ComputeLineCol(Raw, OpenPos, MLine, MCol);
+        if ClosePos > 0 then ComputeLineCol(Raw, ClosePos, ELine, ECol)
+        else begin ELine:= MLine; ECol:= MCol + Length(Msg); end;
+        var Lit: TStringLiteral;
+        Lit:= Default(TStringLiteral);
+        Lit.Source:= 'sql'; Lit.Kind:= 'sql-exception'; Lit.OwnerName:= Name; Lit.Text:= Msg;
+        Lit.StartLine:= MLine; Lit.StartCol:= MCol;
+        Lit.EndLine:= ELine; Lit.EndCol:= ECol + 1;
+        State.Literals.Add(Lit);
+      end;
       M:= M.NextMatch;
     end;
 
@@ -434,6 +492,7 @@ begin
 
     Result.Symbols   := State.Symbols   .ToArray;
     Result.References:= State.References.ToArray;
+    Result.Literals  := State.Literals  .ToArray;
   finally
     State.Free;
   end; // try

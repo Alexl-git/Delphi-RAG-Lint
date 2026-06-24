@@ -4,6 +4,7 @@ interface
 
 uses
   System.SysUtils
+  , System.StrUtils
   , System.Classes
   , System.Generics.Collections
   , TreeSitter
@@ -1033,6 +1034,75 @@ begin
   Result:= ['.pas', '.dpr', '.dpk', '.inc'];
 end;
 
+// v10: collect every non-empty string literal for the text index.
+// kind: 'resourcestring' if under a resourcestring section; 'const' if under a const section;
+// 'format' if it carries a % specifier; else 'literal'. SymbolId left 0 (indexer resolves enclosing symbol).
+function HarvestStringLiterals(const ARoot: TTSNode; const ASource: TBytes): TArray<TStringLiteral>;
+var
+  Acc: TList<TStringLiteral>;
+
+  function DecodeLiteral(const ARaw: string): string;
+  begin // strip outer quotes, unescape doubled quotes; leave #nn out of scope here
+    Result:= ARaw;
+    if (Length(Result) >= 2) and (Result[1] = '''') and (Result[Length(Result)] = '''') then
+      Result:= Copy(Result, 2, Length(Result) - 2);
+    Result:= StringReplace(Result, '''''', '''', [rfReplaceAll]);
+  end;
+
+  function ClassifyKind(const N: TTSNode; const ADecoded: string): string;
+  var Anc: TTSNode; AncT: string;
+  begin
+    Result:= 'literal';
+    if Pos('%', ADecoded) > 0 then Result:= 'format';
+    Anc:= N.Parent;
+    while not Anc.IsNull do
+    begin
+      AncT:= Anc.NodeType;
+      // const items are 'declConst' under a 'declConsts' section; the section's
+      // leading text is the 'const' or 'resourcestring' keyword. (Verified vs the
+      // working symbol walker, line ~851.)
+      if AncT = 'declConsts' then
+      begin
+        if StartsText('resourcestring', TrimLeft(NodeText(Anc, ASource)))
+          then Exit('resourcestring')
+          else Exit('const');
+      end;
+      Anc:= Anc.Parent;
+    end;
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var I: Integer; Lit: TStringLiteral; Raw, Dec: string; P: TTSPoint;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'literalString' then
+    begin
+      Raw:= NodeText(N, ASource);            // existing helper in this unit
+      Dec:= DecodeLiteral(Raw);
+      if Dec <> '' then
+      begin
+        Lit:= Default(TStringLiteral);
+        Lit.Source:= 'pas';
+        Lit.Kind  := ClassifyKind(N, Dec);
+        Lit.Text  := Dec;
+        P:= N.StartPoint; Lit.StartLine:= Integer(P.Row)+1; Lit.StartCol:= Integer(P.Column)+1;
+        P:= N.EndPoint;   Lit.EndLine  := Integer(P.Row)+1; Lit.EndCol  := Integer(P.Column)+1;
+        Acc.Add(Lit);
+      end;
+    end;
+    for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
+  end;
+
+begin
+  Acc:= TList<TStringLiteral>.Create;
+  try
+    Visit(ARoot);
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
 function TDelphi13Parser.Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
 var
   Parser: TTSParser ;
@@ -1063,6 +1133,7 @@ begin
     Result.References := State.References .ToArray;
     Result.UsesEntries:= State.UsesEntries.ToArray;
     Result.DiBindings := State.DiBindings .ToArray;
+    Result.Literals   := HarvestStringLiterals(Root, Source);
   finally
     State.Free;
     Tree.Free;

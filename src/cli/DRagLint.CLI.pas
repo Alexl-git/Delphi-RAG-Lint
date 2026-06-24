@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.57.0-alpha';
+  VERSION = '0.58.0-alpha';
 
 function Run: Integer;
 
@@ -185,6 +185,11 @@ type
     // v0.48: multi-overlay -- a manifest with one 'realpath<TAB>bufferpath' per
     // line, so ALL unsaved units are overlaid for a single compile.
     GhostOverlays: string; // --overlays <manifest>
+    // v0.57: text-constant search (Tasks 3-8)
+    TextQuery    : string ; // --text "<phrase>"
+    TextAnyOrder : Boolean; // --any-order
+    TextSubstring: Boolean; // --substring
+    TextSource   : string ; // --source pas|dfm|sql ('' = all)
   end; // record
 
 procedure PrintHelp;
@@ -199,6 +204,7 @@ begin
   Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--dry-run [--json]] [--jobs <n>]');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
+  Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--limit N] [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--db ...] [--json]');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
@@ -692,6 +698,19 @@ begin
       Inc(i);
       Result.GhostOverlays:= ParamStr(i);
     end
+    // v0.57: text-constant search flags
+    else if (A = '--text') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.TextQuery:= ParamStr(i);
+    end
+    else if (A = '--source') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.TextSource:= ParamStr(i);
+    end
+    else if A = '--any-order'  then Result.TextAnyOrder := True
+    else if A = '--substring'  then Result.TextSubstring:= True
     else if (Result.Path = '') and (not A.StartsWith('--')) then Result.Path:= A
     else raise Exception.CreateFmt('Unknown argument: %s', [A]);
     Inc(i);
@@ -1964,6 +1983,85 @@ begin
   end; // try
 end; // begin
 
+// v0.57 Task 8: text-constant search (phrase / any-order / substring).
+// Placed immediately before DoQuery so no forward declaration is needed.
+function DoQueryText(const AArgs: TArgs): Integer;
+var
+  PathsToScan: TArray<string>        ;
+  DbPath     : string                ;
+  Store      : ISymbolStore          ;
+  Mode       : string                ;
+  Lim        : Integer               ;
+  Matches    : TArray<TStringLitMatch>;
+  AllMatches : TArray<TStringLitMatch>;
+  M          : TStringLitMatch       ;
+  JArr       : TJSONArray            ;
+  JObj       : TJSONObject           ;
+begin
+  if AArgs.TextQuery = '' then begin Writeln('ERROR: query --text requires a phrase'); Exit(2); end;
+  if AArgs.TextSubstring then Mode:= 'substring'
+  else if AArgs.TextAnyOrder then Mode:= 'anyorder'
+  else Mode:= 'phrase';
+  if AArgs.Limit > 0 then Lim:= AArgs.Limit else Lim:= 200;
+  if (Mode = 'substring') and (Length(Trim(AArgs.TextQuery)) < 3) then
+    Writeln('NOTE: --substring needs a query of at least 3 characters (trigram tokenizer); "' + AArgs.TextQuery + '" is too short - try --any-order for shorter terms.');
+
+  PathsToScan:= ResolveConsumerDbs(AArgs);
+  for DbPath in PathsToScan do
+    if not TFile.Exists(DbPath) then
+    begin
+      Writeln('ERROR: database not found: ', DbPath);
+      Writeln('Run "drag-lint index <path>" first.');
+      Exit(2);
+    end;
+
+  SetLength(AllMatches, 0);
+  for DbPath in PathsToScan do
+  begin
+    Store:= TSQLiteSymbolStore.Create(DbPath);
+    Store.Migrate;
+    Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, Lim);
+    for M in Matches do
+    begin
+      SetLength(AllMatches, Length(AllMatches) + 1);
+      AllMatches[High(AllMatches)]:= M;
+    end;
+  end;
+  if Length(AllMatches) > Lim then SetLength(AllMatches, Lim);
+
+  if AArgs.AsJson then
+  begin
+    JArr:= TJSONArray.Create;
+    try
+      for M in AllMatches do
+      begin
+        JObj:= TJSONObject.Create;
+        JObj.AddPair('file_path',   M.FilePath  );
+        JObj.AddPair('start_line',  TJSONNumber.Create(M.StartLine));
+        JObj.AddPair('start_col',   TJSONNumber.Create(M.StartCol ));
+        JObj.AddPair('source',      M.Source    );
+        JObj.AddPair('kind',        M.Kind      );
+        JObj.AddPair('owner_name',  M.OwnerName );
+        JObj.AddPair('text',        M.Text      );
+        JObj.AddPair('enclosing',   M.EnclosingQName);
+        JArr.AddElement(JObj);
+      end;
+      Writeln(JArr.Format(2));
+    finally
+      JArr.Free;
+    end;
+  end
+  else
+  begin
+    for M in AllMatches do
+      Writeln(Format('%s:%d:%d  [%s/%s]  %s%s',
+        [M.FilePath, M.StartLine, M.StartCol, M.Source, M.Kind, M.Text,
+         IfThen(M.EnclosingQName <> '', '  -> ' + M.EnclosingQName, '')]));
+    Writeln(Format('%d match(es)', [Length(AllMatches)]));
+  end;
+  if Length(AllMatches) > 0 then Result:= 0 else Result:= 1;
+end;
+
 function DoQuery(const AArgs: TArgs): Integer;
 var
   Symbols       : TArray<TSymbol>                 ;
@@ -1981,6 +2079,9 @@ var
   LastStore     : ISymbolStore                    ;
   EffSizeGuardMB: Integer                         ;
 begin
+  // v0.57 Task 8: text-content search routes to its own handler.
+  if AArgs.TextQuery <> '' then Exit(DoQueryText(AArgs));
+
   // v0.45 Task 9: resolve DB list (explicit --db or manifest-driven).
   PathsToScan:= ResolveConsumerDbs(AArgs);
   for DbPath in PathsToScan do
@@ -7963,6 +8064,79 @@ begin
   end; // try
 end; // function
 
+// --selftest-fts5: prove FTS5 + trigram tokenizer are compiled in.
+function DoSelfTestFts5: Integer;
+var
+  Conn: TFDConnection;
+  Q   : TFDQuery;
+begin
+  Result:= 1;
+  Conn:= TFDConnection.Create(nil);
+  try
+    try
+      Conn.DriverName:= 'SQLite';
+      Conn.Params.Values['Database']:= ':memory:';
+      Conn.Connected:= True;
+      Conn.ExecSQL('CREATE VIRTUAL TABLE t USING fts5(x, tokenize=''trigram'')');
+      Conn.ExecSQL('INSERT INTO t(rowid, x) VALUES (1, ''Folder not found'')');
+      Q:= TFDQuery.Create(nil);
+      try
+        Q.Connection:= Conn;
+        Q.SQL.Text:= 'SELECT rowid FROM t WHERE t MATCH ''older''';  // substring
+        Q.Open;
+        if (not Q.Eof) and (Q.FieldByName('rowid').AsInteger = 1) then
+        begin
+          Writeln('FTS5+trigram OK');
+          Result:= 0;
+        end
+        else Writeln('FTS5 present but trigram match failed');
+      finally
+        Q.Free;
+      end;
+    except
+      on E: Exception do Writeln('FTS5 unavailable: ', E.Message);
+    end;
+  finally
+    Conn.Free;
+  end;
+end;
+
+// --selftest-schema: open --db and print all table/view names from sqlite_master.
+function DoSelfTestSchema(const ADbPath: string): Integer;
+var
+  Conn: TFDConnection;
+  Q   : TFDQuery;
+begin
+  Result:= 1;
+  Conn:= TFDConnection.Create(nil);
+  try
+    try
+      Conn.DriverName:= 'SQLite';
+      Conn.Params.Values['Database']:= ADbPath;
+      Conn.Connected:= True;
+      Q:= TFDQuery.Create(nil);
+      try
+        Q.Connection:= Conn;
+        Q.SQL.Text:= 'SELECT name FROM sqlite_master WHERE type IN (''table'',''view'') ORDER BY name';
+        Q.Open;
+        while not Q.Eof do
+        begin
+          Write(Q.Fields[0].AsString, ' ');
+          Q.Next;
+        end;
+        Writeln;
+        Result:= 0;
+      finally
+        Q.Free;
+      end;
+    except
+      on E: Exception do Writeln('selftest-schema error: ', E.Message);
+    end;
+  finally
+    Conn.Free;
+  end;
+end;
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -8253,6 +8427,8 @@ function Run: Integer;
 var
   Args: TArgs;
 begin
+  if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
+  if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(3)));
   try
     Args:= ParseArgs;
     if Args.ShowHelp then

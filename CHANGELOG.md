@@ -3,6 +3,36 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.58.0-alpha -- 2026-06-23
+
+### Added (text-constant index / query --text)
+
+- `query --text "<phrase>"`: full-text search over indexed string content --
+  error messages, DFM captions, SQL exception text, resourcestrings. Searches
+  string literals only, never identifiers. Default mode is exact phrase match.
+  - `--any-order`: all terms must match in any order (FTS5 implicit AND across tokens).
+  - `--substring`: trigram index match; finds the phrase as a substring of a
+    literal (e.g. `query --text "password" --substring` catches
+    `'Invalid password'` and `'Password mismatch'`).
+  - `--source pas|dfm|sql`: restrict to one source kind.
+  - `--limit N`: cap results (default 200).
+  - `--json`: machine-readable output with `file_path`, `start_line`,
+    `start_col`, `source`, `kind`, `owner_name`, `text`, `enclosing` fields.
+- **Sources indexed:**
+  - Delphi `.pas`: string literals, `const` string constants,
+    `resourcestring` declarations, and `Format`-call format strings.
+  - DFM `.dfm`: string properties (captions, hints, messages).
+  - SQL: `CREATE EXCEPTION` messages -- indexed only from `MS*.sql` files by
+    default (migration-script convention). Pass `--no-sql-ms` to index every
+    `.sql` file.
+- **Engine:** FTS5 with `unicode61` tokenizer (phrase + any-order) and a
+  parallel `trigram` FTS5 table (substring). Storage schema v10 adds
+  `string_literals` (base table), `string_fts` (phrase/any-order external-
+  content FTS5 vtab), and `string_fts_tri` (trigram substring vtab), kept in
+  sync via `AFTER INSERT/DELETE` triggers on `string_literals`.
+- **Self-diagnostics:** `--selftest-fts5` checks FTS5 availability;
+  `--selftest-schema` verifies schema v10 tables and triggers are present.
+
 ## v0.57.0-alpha -- 2026-06-23
 
 ### Fixed (DFM)

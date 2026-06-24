@@ -76,6 +76,43 @@ type
     EndCol       : Integer;
   end;
 
+  /// <summary>One indexed string-literal occurrence (a message, caption, or
+  /// exception text). SymbolId is the enclosing routine/component, resolved by
+  /// the indexer post-parse (0 in parser output). Text is the DECODED logical
+  /// string (escapes/`#nn`/continuations resolved); never empty.</summary>
+  TStringLiteral = record
+    Id       : Int64  ;
+    FileId   : Int64  ;
+    /// <summary>Enclosing symbol; 0 until indexer resolves it.</summary>
+    SymbolId : Int64  ;
+    /// <summary>Source language: 'pas' | 'dfm' | 'sql'.</summary>
+    Source   : string ;
+    /// <summary>Literal kind: 'literal'|'const'|'resourcestring'|'format'|'dfm-prop'|'sql-exception'.</summary>
+    Kind     : string ;
+    /// <summary>Const name / DFM property / exception name; '' if n/a.</summary>
+    OwnerName: string ;
+    Text     : string ;
+    StartLine: Integer;
+    StartCol : Integer;
+    EndLine  : Integer;
+    EndCol   : Integer;
+  end;
+
+  /// <summary>A text-search hit returned by ISymbolStore.SearchText: a
+  /// TStringLiteral enriched with the file path and enclosing qualified name.</summary>
+  TStringLitMatch = record
+    FilePath      : string ;
+    Source        : string ;
+    Kind          : string ;
+    OwnerName     : string ;
+    Text          : string ;
+    EnclosingQName: string ;
+    StartLine     : Integer;
+    StartCol      : Integer;
+    EndLine       : Integer;
+    EndCol        : Integer;
+  end;
+
   TChunk = record
     Id       : Int64  ;
     FileId   : Int64  ;
