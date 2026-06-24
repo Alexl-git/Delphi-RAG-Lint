@@ -323,6 +323,25 @@ var
     try FConn.ExecSQL(ASql); except end;
   end;
 
+  function ProbeFts5: Boolean;
+  begin
+    { Use a TEMP virtual table as the probe so the result is independent of
+      what tables already exist in the main DB. CREATE VIRTUAL TABLE IF NOT
+      EXISTS on string_fts would short-circuit silently when the table already
+      exists from a prior fts5-capable index run, masking the unavailability
+      of the module on this SQLite build. }
+    Result := True;
+    try
+      FConn.ExecSQL('CREATE VIRTUAL TABLE IF NOT EXISTS temp.fts5_probe USING fts5(x)');
+      TryExec('DROP TABLE IF EXISTS temp.fts5_probe');
+    except on E: Exception do
+      if Pos('fts5', LowerCase(E.Message)) > 0 then
+        Result := False
+      else
+        raise;
+    end;
+  end;
+
 begin
   FConn.StartTransaction;
   try
@@ -334,24 +353,21 @@ begin
     FConn.Rollback;
     raise;
   end;
-  { FTS5 virtual tables and their sync triggers -- optional.
-    Silently skipped when the sqlite3.dll lacks the fts5 module (e.g. the
-    default Embarcadero DLL). In that case drag-lint works normally; only
-    the --text search command is unavailable. }
-  FFts5Available := True;
-  for I := SCHEMA_DDL_FTS5_FIRST to High(SCHEMA_DDL) do
+  { FTS5 virtual tables and sync triggers -- optional.
+    Probe via a temp virtual table (bypasses IF NOT EXISTS masking when
+    string_fts already exists from a prior fts5-capable index run).
+    If unavailable: drop any leftover sync triggers so INSERTs into
+    string_literals do not fire them and crash. }
+  FFts5Available := ProbeFts5;
+  if FFts5Available then
   begin
-    try
-      FConn.ExecSQL(SCHEMA_DDL[I]);
-    except on E: Exception do
-      if Pos('fts5', LowerCase(E.Message)) > 0 then
-      begin
-        FFts5Available := False;
-        Break; // skip remaining FTS5 statements
-      end
-      else
-        raise;
-    end;
+    for I := SCHEMA_DDL_FTS5_FIRST to High(SCHEMA_DDL) do TryExec(SCHEMA_DDL[I]);
+  end
+  else
+  begin
+    TryExec('DROP TRIGGER IF EXISTS string_literals_ai');
+    TryExec('DROP TRIGGER IF EXISTS string_literals_ad');
+    TryExec('DROP TRIGGER IF EXISTS string_literals_au');
   end;
   { v9: additive body-span columns for pre-v9 symbols tables. CREATE TABLE IF
     NOT EXISTS never adds columns to an existing table, so ALTER explicitly
