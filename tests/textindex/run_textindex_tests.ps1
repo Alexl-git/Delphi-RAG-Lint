@@ -16,7 +16,10 @@ $phrase = & $exe query --text "folder not found" --db $db --json | ConvertFrom-J
 Check "phrase finds .pas resourcestring" ($phrase.kind -contains 'resourcestring')
 Check "phrase finds .dfm caption"        (($phrase | Where-Object { $_.source -eq 'dfm' }).Count -ge 1)
 Check "phrase finds .sql exception"      (($phrase | Where-Object { $_.source -eq 'sql' }).Count -ge 1)
-Check "R8: no identifier hits"           (($phrase | Where-Object { $_.text -match '^\s*$' }).Count -eq 0)
+Check "phrase hits are message text only" (($phrase.Count -ge 3) -and (($phrase | Where-Object { $_.text -ne 'Folder not found' }).Count -eq 0))
+
+$const = & $exe query --text "save as" --db $db --json | ConvertFrom-Json
+Check "phrase finds .pas const"          (($const | Where-Object { $_.kind -eq 'const' }).Count -ge 1)
 
 $any = & $exe query --text "folder found" --any-order --db $db --json | ConvertFrom-Json
 Check "any-order matches" ($any.Count -ge 1)
@@ -25,7 +28,7 @@ $sub = & $exe query --text "older" --substring --db $db --json | ConvertFrom-Jso
 Check "substring 'older' matches 'Folder'" ($sub.Count -ge 1)
 
 $dfm = & $exe query --text "folder" --source dfm --db $db --json | ConvertFrom-Json
-Check "source filter dfm" (($dfm | Where-Object { $_.source -ne 'dfm' }).Count -eq 0)
+Check "source filter dfm" (($dfm.Count -ge 1) -and (($dfm | Where-Object { $_.source -ne 'dfm' }).Count -eq 0))
 
 # negative: the *.pas variable/method named Folder must never appear as a hit
 $allFolder = & $exe query --text "folder" --substring --db $db --json | ConvertFrom-Json
