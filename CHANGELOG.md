@@ -36,6 +36,9 @@ breaking changes** until v1.0.
 ### Added (IDE plugin)
 
 - IDE plugin: new unified **Search (no grep)** dock tab - one Kind dropdown (Symbol/Text/Usages) + query field + a clickable results grid that jumps to source; Advanced toggle exposes per-kind refinements (kind filter / text mode+source / usages width). Find Usages no longer shows a debug dump on no-results.
+- **Blast Radius tab** (renamed from Find Usages) - displays transitive callers per depth with unit-impact roll-up; clickable drill-down tree or flat-list with depth indicator. Companion to the new `impact` CLI command.
+- **Navigation for form units** - clicking a result in any dock tab that refers to a form unit (e.g., `TfrmFoo` in `uMyForm.pas`) now opens the `.pas` code editor directly, not the form designer.
+- **Symbol Search tab removal** - folded into the unified Search and Blast Radius tabs; no longer a separate dock tab.
 
 ## v0.57.0-alpha -- 2026-06-23
 
