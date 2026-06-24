@@ -327,6 +327,16 @@ var
     try FConn.ExecSQL(ASql); except end;
   end;
 
+  procedure DropTriggerVerbose(const AName: string);
+  begin
+    try
+      FConn.ExecSQL('DROP TRIGGER IF EXISTS ' + AName);
+      Writeln('  DROP TRIGGER ', AName, ': OK');
+    except on E: Exception do
+      Writeln('  DROP TRIGGER ', AName, ': FAILED (', E.ClassName, ': ', E.Message, ')');
+    end;
+  end;
+
   function ProbeFts5: Boolean;
   begin
     { Use a TEMP virtual table as the probe so the result is independent of
@@ -338,11 +348,34 @@ var
     try
       FConn.ExecSQL('CREATE VIRTUAL TABLE IF NOT EXISTS temp.fts5_probe USING fts5(x)');
       TryExec('DROP TABLE IF EXISTS temp.fts5_probe');
+      Writeln('  FTS5 probe: AVAILABLE');
     except on E: Exception do
       if Pos('fts5', LowerCase(E.Message)) > 0 then
-        Result := False
+      begin
+        Result := False;
+        Writeln('  FTS5 probe: UNAVAILABLE (', E.Message, ')');
+      end
       else
         raise;
+    end;
+  end;
+
+  procedure PrintTriggerCount(const ALabel: string);
+  var Q: TFDQuery;
+  begin
+    try
+      Q := TFDQuery.Create(nil);
+      try
+        Q.Connection := FConn;
+        Q.SQL.Text := 'SELECT COUNT(*) FROM sqlite_master ' +
+                      'WHERE type=''trigger'' AND name LIKE ''string_literals%''';
+        Q.Open;
+        Writeln('  ', ALabel, ': ', Q.Fields[0].AsInteger);
+      finally
+        Q.Free;
+      end;
+    except on E: Exception do
+      Writeln('  ', ALabel, ': query failed (', E.Message, ')');
     end;
   end;
 
@@ -369,15 +402,16 @@ begin
   end
   else
   begin
-    { Attempt to drop the sync triggers so later INSERTs into string_literals
-      do not fire them. busy_timeout (set in Connect) gives this 5 s to acquire
-      the exclusive WAL lock against a concurrent LSP reader. If the drop still
-      fails (TryExec silently swallows SQLITE_BUSY), the FFts5Available=False
-      guard on UpsertStringLiteral / DeleteStringLiteralsForFile is the final
-      backstop -- those methods become no-ops, so the triggers never fire. }
-    TryExec('DROP TRIGGER IF EXISTS string_literals_ai');
-    TryExec('DROP TRIGGER IF EXISTS string_literals_ad');
-    TryExec('DROP TRIGGER IF EXISTS string_literals_au');
+    { Drop sync triggers so the string_literals ON DELETE CASCADE (fired when
+      FQUpsertFile's ON CONFLICT DO UPDATE replaces a row, or when files are
+      removed) cannot reach the fts5 tables. busy_timeout (set in Connect)
+      gives each DROP up to 5 s to acquire the exclusive WAL lock against a
+      concurrent LSP reader. }
+    PrintTriggerCount('string_literals triggers before DROP');
+    DropTriggerVerbose('string_literals_ai');
+    DropTriggerVerbose('string_literals_ad');
+    DropTriggerVerbose('string_literals_au');
+    PrintTriggerCount('string_literals triggers after DROP');
     Writeln('WARNING: FTS5 unavailable in sqlite3.dll; ' +
             'text-search index (string_literals) will not be updated.');
   end;
@@ -401,15 +435,21 @@ procedure TSQLiteSymbolStore.PrepareStatements;
   end;
 begin
   FQInsertFile:= NewQuery( 'INSERT INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
-  // v0.37: ON CONFLICT DO UPDATE requires SQLite 3.24+; Win32 FireDAC ships
-  // an older bundled sqlite that rejects this syntax. INSERT OR REPLACE is
-  // supported in every SQLite version. (Behavior difference: REPLACE deletes
-  // the existing row and inserts a new one, which changes files.id and would
-  // break FK references. Mitigation: the files table is only inserted into,
-  // never updated — the v0.4 incremental-skip path uses FileIsUpToDate to
-  // bypass before reaching this query, and the indexer's cascade deletes
-  // happen on the symbols/refs side, not files. New id on re-index is fine.)
-  FQUpsertFile:= NewQuery( 'INSERT OR REPLACE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
+  // v0.59.4: ON CONFLICT DO UPDATE (SQLite 3.24+, safe with Embarcadero 3.45.3).
+  // Previously INSERT OR REPLACE was used, but REPLACE = DELETE old row +
+  // INSERT new row, which triggers ON DELETE CASCADE on string_literals and
+  // fires the string_literals_ai/ad/au FTS5 sync triggers -- crashing when the
+  // SQLite build lacks the fts5 module. ON CONFLICT DO UPDATE updates the row
+  // in-place: no DELETE, no CASCADE, no trigger fire. File id is preserved so
+  // existing FK children (symbols, refs, string_literals) remain valid.
+  FQUpsertFile:= NewQuery(
+    'INSERT INTO files(path, mtime_unix, sha256, parsed_at, language) ' +
+    'VALUES (:path, :mtime, :sha, :parsed, :lang) ' +
+    'ON CONFLICT(path) DO UPDATE SET ' +
+    '  mtime_unix = excluded.mtime_unix, ' +
+    '  sha256     = excluded.sha256, ' +
+    '  parsed_at  = excluded.parsed_at, ' +
+    '  language   = excluded.language');
   FQInsertSymbol:= NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, start_line, start_col, end_line, end_col, ' +
     '  impl_start_line, impl_end_line) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, ' + '  :sl, :sc, :el, :ec, :isl, :iel)');
