@@ -3,6 +3,38 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.59.0-alpha -- 2026-06-24
+
+### Fixed (IDE plugin)
+
+- **Find Usages tab name restored** -- the tab was briefly renamed "Blast Radius"
+  in v0.58.0-alpha, which was semantically incorrect. Blast Radius (transitive
+  impact analysis, callers of callers, N levels deep) is a separate future feature
+  that needs engine work. The current tab shows direct usages and is named
+  "Find Usages" again.
+
+### Improved (index diagnostics)
+
+- **Binary DFM detection** -- before parsing, the DFM indexer now detects binary
+  (TPF0) DFMs (`$FF` magic byte) and emits a clear advisory message instead of
+  a generic "parse contains syntax errors". Fix: save the form as Text DFM in the
+  IDE (`File > Save As Text`).
+- **Located parse errors** -- when tree-sitter reports syntax errors, both the DFM
+  and Delphi 13 parsers now walk the ERROR/MISSING nodes and report each as
+  `file(line,col): parse error [TYPE]` (up to 10 per file) instead of a single
+  generic string. The reindex report in the IDE now shows exact source locations.
+- **Win64 build output excluded** -- `"Win64"` added to the global `exclude` list
+  in `drag-lint.json`. Build output dirs (`Win64\Debug\`, `Win64\Release\`, etc.)
+  are pruned from all index walks, eliminating stale DCU/EXE content from results.
+
+### Fixed (IDE plugin -- LSP freshness after reindex)
+
+- **LSP restart after reindex** -- after "Reindex This Project" completes, the
+  plugin now stops and frees `GLspClient` on the main thread so the next query
+  (hover, Find Usages, Search) uses the freshly built index. Previously the LSP
+  server kept the old index loaded in memory and queries returned stale data until
+  the IDE was restarted.
+
 ## v0.58.0-alpha -- 2026-06-23
 
 ### Added (text-constant index / query --text)
