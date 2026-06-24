@@ -114,6 +114,7 @@
         <DCCReference Include="DragLint.Plugin.JobObject.pas"/>
         <DCCReference Include="DragLint.Plugin.GraphWindow.pas"/>
         <DCCReference Include="DragLint.Plugin.SearchParse.pas"/>
+        <DCCReference Include="DragLint.Plugin.SearchForm.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
