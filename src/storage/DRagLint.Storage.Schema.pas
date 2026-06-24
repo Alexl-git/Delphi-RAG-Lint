@@ -5,6 +5,10 @@ interface
 const
   SCHEMA_VERSION = 10;
 
+  // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
+  // Statements before this index are plain DDL safe on any SQLite build.
+  SCHEMA_DDL_FTS5_FIRST = 47;
+
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
   SCHEMA_DDL: array[0..51] of string = (

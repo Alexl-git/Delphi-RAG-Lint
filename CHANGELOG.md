@@ -3,6 +3,20 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.59.1-alpha -- 2026-06-24
+
+### Fixed (critical -- reindex FATAL crash)
+
+- **FTS5 graceful degradation** -- reindexing any project crashed with
+  `ESQLiteNativeException: no such module: fts5` on the default Embarcadero
+  SQLite DLL (which is built without `SQLITE_ENABLE_FTS5`). The v0.58
+  text-constant index added FTS5 virtual tables; `Migrate()` ran them inside the
+  main transaction, so the first `CREATE VIRTUAL TABLE ... USING fts5` aborted
+  the entire migration. Fix: FTS5 DDL is now applied outside the core
+  transaction and silently skipped if the fts5 module is absent. All other
+  drag-lint features continue to work normally; only `query --text` will report
+  "FTS5 not available" on affected SQLite builds.
+
 ## v0.59.0-alpha -- 2026-06-24
 
 ### Fixed (IDE plugin)

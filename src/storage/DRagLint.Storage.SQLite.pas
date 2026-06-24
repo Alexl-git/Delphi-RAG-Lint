@@ -52,6 +52,7 @@ type
       FQFindNoCallers        : TFDQuery     ;
       FQFindCompilerFindings : TFDQuery     ;
       FQInsertCompilerFinding: TFDQuery     ;
+      FFts5Available         : Boolean     ; // set by Migrate; False when sqlite3.dll lacks fts5
       // v0.40.4: uses-clause persistence
       FQInsertUnitUse        : TFDQuery;
       FQDeleteFileUnitUses   : TFDQuery;
@@ -313,7 +314,7 @@ end;
 
 procedure TSQLiteSymbolStore.Migrate;
 var
-  Stmt: string;
+  I: Integer;
 
   procedure TryExec(const ASql: string);
   begin
@@ -325,12 +326,32 @@ var
 begin
   FConn.StartTransaction;
   try
-    for Stmt in SCHEMA_DDL do FConn.ExecSQL(Stmt);
+    // Core schema (no FTS5): required; any failure aborts the migration.
+    for I := 0 to SCHEMA_DDL_FTS5_FIRST - 1 do FConn.ExecSQL(SCHEMA_DDL[I]);
     FConn.ExecSQL( 'INSERT OR REPLACE INTO schema_meta(key, value) VALUES (''schema_version'', ?)', [IntToStr(SCHEMA_VERSION)]);
     FConn.Commit;
   except
     FConn.Rollback;
     raise;
+  end;
+  { FTS5 virtual tables and their sync triggers -- optional.
+    Silently skipped when the sqlite3.dll lacks the fts5 module (e.g. the
+    default Embarcadero DLL). In that case drag-lint works normally; only
+    the --text search command is unavailable. }
+  FFts5Available := True;
+  for I := SCHEMA_DDL_FTS5_FIRST to High(SCHEMA_DDL) do
+  begin
+    try
+      FConn.ExecSQL(SCHEMA_DDL[I]);
+    except on E: Exception do
+      if Pos('fts5', LowerCase(E.Message)) > 0 then
+      begin
+        FFts5Available := False;
+        Break; // skip remaining FTS5 statements
+      end
+      else
+        raise;
+    end;
   end;
   { v9: additive body-span columns for pre-v9 symbols tables. CREATE TABLE IF
     NOT EXISTS never adds columns to an existing table, so ALTER explicitly
@@ -699,6 +720,10 @@ var
   end;
 
 begin
+  if not FFts5Available then
+    raise ENotSupportedException.Create(
+      'Text search (--text) requires FTS5; the current sqlite3.dll was built ' +
+      'without SQLITE_ENABLE_FTS5. Replace it with an FTS5-enabled build.');
   List:= TList<TStringLitMatch>.Create;
   Q:= TFDQuery.Create(nil);
   try
