@@ -67,6 +67,7 @@ contains
   DragLint.Plugin.Providers in 'DragLint.Plugin.Providers.pas',
   DragLint.Plugin.LiveDiagnostics in 'DragLint.Plugin.LiveDiagnostics.pas',
   DragLint.Plugin.JobObject in 'DragLint.Plugin.JobObject.pas',
-  DragLint.Plugin.GraphWindow in 'DragLint.Plugin.GraphWindow.pas';
+  DragLint.Plugin.GraphWindow in 'DragLint.Plugin.GraphWindow.pas',
+  DragLint.Plugin.SearchParse in 'DragLint.Plugin.SearchParse.pas';
 
 end.
