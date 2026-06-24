@@ -434,22 +434,17 @@ procedure TSQLiteSymbolStore.PrepareStatements;
     // the first set of param values, so do NOT call Prepare here.
   end;
 begin
-  FQInsertFile:= NewQuery( 'INSERT INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
-  // v0.59.4: ON CONFLICT DO UPDATE (SQLite 3.24+, safe with Embarcadero 3.45.3).
-  // Previously INSERT OR REPLACE was used, but REPLACE = DELETE old row +
-  // INSERT new row, which triggers ON DELETE CASCADE on string_literals and
-  // fires the string_literals_ai/ad/au FTS5 sync triggers -- crashing when the
-  // SQLite build lacks the fts5 module. ON CONFLICT DO UPDATE updates the row
-  // in-place: no DELETE, no CASCADE, no trigger fire. File id is preserved so
-  // existing FK children (symbols, refs, string_literals) remain valid.
-  FQUpsertFile:= NewQuery(
-    'INSERT INTO files(path, mtime_unix, sha256, parsed_at, language) ' +
-    'VALUES (:path, :mtime, :sha, :parsed, :lang) ' +
-    'ON CONFLICT(path) DO UPDATE SET ' +
-    '  mtime_unix = excluded.mtime_unix, ' +
-    '  sha256     = excluded.sha256, ' +
-    '  parsed_at  = excluded.parsed_at, ' +
-    '  language   = excluded.language');
+  // v0.59.4: two-query upsert: UPDATE existing row, INSERT OR IGNORE for new files.
+  // INSERT OR REPLACE deletes + re-inserts, which cascades to string_literals
+  // and fires the FTS5 sync triggers even when FFts5Available=False. UPDATE
+  // modifies the row in-place (no DELETE, no CASCADE, no trigger). File id is
+  // preserved so FK children remain valid. INSERT OR IGNORE is safe because this
+  // path is only reached when no row exists for the given path.
+  // ON CONFLICT DO UPDATE is avoided -- Win32 Embarcadero sqlite3.dll is older
+  // than 3.24 and rejects that syntax with "near ON: syntax error".
+  FQUpsertFile:= NewQuery( 'UPDATE files SET mtime_unix=:mtime, sha256=:sha, ' +
+    'parsed_at=:parsed, language=:lang WHERE path=:path');
+  FQInsertFile:= NewQuery( 'INSERT OR IGNORE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol:= NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, start_line, start_col, end_line, end_col, ' +
     '  impl_start_line, impl_end_line) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, ' + '  :sl, :sc, :el, :ec, :isl, :iel)');
@@ -652,12 +647,23 @@ begin
   NP:= NormalizeStoredPath(APath);
   FConn.StartTransaction;
   try
-    FQUpsertFile.ParamByName('path' ).AsString  := NP;
-    FQUpsertFile.ParamByName('mtime').AsLargeInt:= AMtimeUnix;
-    FQUpsertFile.ParamByName('sha'  ).AsString  := ASha;
-    FQUpsertFile.ParamByName('parsed').AsLargeInt:= DateTimeToUnix(Now, False);
-    FQUpsertFile.ParamByName('lang').AsString:= ALanguage;
+    { UPDATE existing row in-place (no DELETE → no cascade → no FTS5 trigger).
+      If no row exists yet (new file) fall through to INSERT OR IGNORE. }
+    FQUpsertFile.ParamByName('path'  ).AsString   := NP;
+    FQUpsertFile.ParamByName('mtime' ).AsLargeInt := AMtimeUnix;
+    FQUpsertFile.ParamByName('sha'   ).AsString   := ASha;
+    FQUpsertFile.ParamByName('parsed').AsLargeInt := DateTimeToUnix(Now, False);
+    FQUpsertFile.ParamByName('lang'  ).AsString   := ALanguage;
     FQUpsertFile.ExecSQL;
+    if FQUpsertFile.RowsAffected = 0 then
+    begin
+      FQInsertFile.ParamByName('path'  ).AsString   := NP;
+      FQInsertFile.ParamByName('mtime' ).AsLargeInt := AMtimeUnix;
+      FQInsertFile.ParamByName('sha'   ).AsString   := ASha;
+      FQInsertFile.ParamByName('parsed').AsLargeInt := DateTimeToUnix(Now, False);
+      FQInsertFile.ParamByName('lang'  ).AsString   := ALanguage;
+      FQInsertFile.ExecSQL;
+    end;
 
     Q:= TFDQuery.Create(nil);
     try
