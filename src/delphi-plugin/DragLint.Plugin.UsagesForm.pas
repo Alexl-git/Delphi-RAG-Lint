@@ -774,7 +774,7 @@ begin
   Lbl.Parent := Pnl;
   Lbl.Align  := alLeft;
   Lbl.Layout := tlCenter;
-  Lbl.Caption:= ' Blast radius of: ';
+  Lbl.Caption:= ' Usages of: ';
 
   Combo:= TComboBox.Create(AOwner);
   Combo.Parent:= Pnl;
