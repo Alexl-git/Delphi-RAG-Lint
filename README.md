@@ -229,6 +229,7 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `index --scan-libraries-win` | Index the IDE's Win32+Win64 Library + Browsing paths (from the registry) |
 | `index --scan-libraries-all` | Same, but every registered platform (adds Posix/iOS/Android/OSX source) |
 | `query --name <name>` | Find symbols by name (fuzzy) |
+| `query --text "<phrase>"` | Search indexed string content -- messages, captions, exception text (never identifiers). Flags: `--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N`, `--json`. SQL `CREATE EXCEPTION` messages are indexed from `MS*.sql` files only by default (`--no-sql-ms` to index every `.sql`). |
 | `surface --qname <qname>` | Show the full source surface of a symbol |
 | `slice --qname <qname>` | Extract the call-slice reachable from a symbol |
 | `impact --qname <qname>` | Show everything that would be affected by changing a symbol |

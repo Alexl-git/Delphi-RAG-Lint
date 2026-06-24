@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.57.0-alpha';
+  VERSION = '0.58.0-alpha';
 
 function Run: Integer;
 
@@ -1998,6 +1998,7 @@ var
   JArr       : TJSONArray            ;
   JObj       : TJSONObject           ;
 begin
+  if AArgs.TextQuery = '' then begin Writeln('ERROR: query --text requires a phrase'); Exit(2); end;
   if AArgs.TextSubstring then Mode:= 'substring'
   else if AArgs.TextAnyOrder then Mode:= 'anyorder'
   else Mode:= 'phrase';
