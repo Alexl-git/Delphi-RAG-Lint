@@ -93,6 +93,8 @@ Single-click selects; **double-click or Enter** on a navigable row opens the sou
   - Text kind, substring < 3 chars: `--substring needs >= 3 characters; try Any-word.`
 - **No** command line / raw stdout / resolver-state dumps in normal use. (A single optional "Copy diagnostics" affordance MAY be added later; not in this scope.)
 
+**Hard invariant:** the results grid and status line NEVER display raw JSON, command lines, or diagnostic dumps - only parsed, human-readable rows (Category/Kind + text, clickable to jump) and short status/error lines. Even when the output cannot be parsed, show a one-line error, never the raw payload. This is a checkable acceptance criterion.
+
 ### Find Usages cleanup (in scope)
 
 Remove the `== DEBUG (v0.40.5) ==` and `== DEBUG: resolver state ==` blocks from `TDragLintUsagesForm.RunQuery` (UsagesForm.pas ~654-705). Replace with the same clean single-line empty-state + the existing scope hint (keep the helpful "looks like a parameter/field" hint; drop the command/output/FDbPaths/resolver dumps).
