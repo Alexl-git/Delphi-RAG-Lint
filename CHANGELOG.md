@@ -3,6 +3,21 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.59.2-alpha -- 2026-06-24
+
+### Fixed (critical -- reindex FTS5 crash, second pass)
+
+- **FTS5 probe via temp table** -- the v0.59.1 fix used `CREATE VIRTUAL TABLE
+  IF NOT EXISTS string_fts USING fts5(...)` to detect fts5 availability, but
+  `IF NOT EXISTS` short-circuits silently when `string_fts` already exists in
+  the DB from a prior fts5-capable index run. This left `FFts5Available=True`
+  while the module was absent, so the sync triggers still fired on every
+  `INSERT INTO string_literals` and crashed with the same FATAL error.
+  Fix: probe by creating `temp.fts5_probe USING fts5(x)` -- a throw-away temp
+  virtual table that is always independent of what tables exist in the main DB.
+  If the probe fails, any leftover sync triggers are dropped so INSERTs into
+  `string_literals` cannot reach the fts5 module at all.
+
 ## v0.59.1-alpha -- 2026-06-24
 
 ### Fixed (critical -- reindex FATAL crash)
