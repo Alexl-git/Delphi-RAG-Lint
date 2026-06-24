@@ -300,6 +300,10 @@ begin
   FConn.LoginPrompt:= False;
   FConn.Connected  := True;
   FConn.ExecSQL('PRAGMA foreign_keys = ON');
+  { Give DDL ops (e.g. DROP TRIGGER) up to 5 s to acquire the exclusive WAL
+    lock when a concurrent LSP reader holds the DB. Without this, any schema
+    change races against the LSP server and silently fails (SQLITE_BUSY). }
+  FConn.ExecSQL('PRAGMA busy_timeout = 5000');
   { v0.42 perf: per-file insert throughput collapses as the DB grows past ~1 GB
     (full C:\Projects scan ran at 0.55 s/file vs ~0.04 s/file historically). The
     cause is index B-tree maintenance (symbol_trigrams especially) thrashing
@@ -365,9 +369,17 @@ begin
   end
   else
   begin
+    { Attempt to drop the sync triggers so later INSERTs into string_literals
+      do not fire them. busy_timeout (set in Connect) gives this 5 s to acquire
+      the exclusive WAL lock against a concurrent LSP reader. If the drop still
+      fails (TryExec silently swallows SQLITE_BUSY), the FFts5Available=False
+      guard on UpsertStringLiteral / DeleteStringLiteralsForFile is the final
+      backstop -- those methods become no-ops, so the triggers never fire. }
     TryExec('DROP TRIGGER IF EXISTS string_literals_ai');
     TryExec('DROP TRIGGER IF EXISTS string_literals_ad');
     TryExec('DROP TRIGGER IF EXISTS string_literals_au');
+    Writeln('WARNING: FTS5 unavailable in sqlite3.dll; ' +
+            'text-search index (string_literals) will not be updated.');
   end;
   { v9: additive body-span columns for pre-v9 symbols tables. CREATE TABLE IF
     NOT EXISTS never adds columns to an existing table, so ALTER explicitly
@@ -702,6 +714,11 @@ end;
 
 procedure TSQLiteSymbolStore.UpsertStringLiteral(const AToken: TFileTxToken; const ALit: TStringLiteral);
 begin
+  { Safety net: if FTS5 is unavailable the sync triggers were (hopefully)
+    dropped in Migrate, but DROP TRIGGER can fail silently when the LSP holds
+    a concurrent WAL read lock. Skip the INSERT entirely so a surviving trigger
+    never fires and crashes with "no such module: fts5". }
+  if not FFts5Available then Exit;
   FQUpsertStringLiteral.ParamByName('fid').AsLargeInt:= AToken.FileId;
   FQUpsertStringLiteral.ParamByName('sid').DataType:= ftLargeint;
   if ALit.SymbolId > 0 then FQUpsertStringLiteral.ParamByName('sid').AsLargeInt:= ALit.SymbolId
@@ -719,6 +736,7 @@ end;
 
 procedure TSQLiteSymbolStore.DeleteStringLiteralsForFile(AFileId: Int64);
 begin
+  if not FFts5Available then Exit; // same guard as UpsertStringLiteral
   FQDeleteFileStringLiterals.ParamByName('fid').AsLargeInt:= AFileId;
   FQDeleteFileStringLiterals.ExecSQL;  // triggers cascade the FTS 'delete'
 end;

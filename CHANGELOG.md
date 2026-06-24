@@ -3,6 +3,38 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.59.3-alpha -- 2026-06-24
+
+### Fixed (critical -- reindex FTS5 crash, third pass)
+
+- **Root cause identified**: the Embarcadero SQLite 3.45.3 (64-bit) lacks
+  `SQLITE_ENABLE_FTS5`. The v0.59.2 probe correctly detected this and set
+  `FFts5Available=False`, but the `DROP TRIGGER` calls that follow need an
+  **exclusive WAL lock** -- and the LSP server's concurrently-open connection
+  blocks that lock, causing `DROP TRIGGER` to fail silently (swallowed by
+  `TryExec`). The FTS5 sync triggers from a prior index run remained alive,
+  so every `INSERT INTO string_literals` still fired them and crashed.
+
+  Three-layer fix:
+
+  1. **`PRAGMA busy_timeout = 5000`** (Connect): gives `DROP TRIGGER` up to
+     5 seconds to acquire the exclusive lock once the LSP releases its reader,
+     instead of failing instantly with `SQLITE_BUSY`.
+
+  2. **`UpsertStringLiteral` / `DeleteStringLiteralsForFile` guard**: when
+     `FFts5Available=False`, both methods are silent no-ops. Even if `DROP
+     TRIGGER` still fails despite the timeout, the triggers can never fire
+     because we never touch `string_literals`. This is the definitive backstop.
+
+  3. **Plugin: stop LSP before indexing** (requires IDE restart to load new
+     BPL): `InvokeReindexProject` now stops `GLspClient` on the UI thread
+     before spawning the background indexer, eliminating the WAL lock race
+     entirely. The LSP is restarted lazily on the next hover/query.
+
+  Side effect: when FTS5 is unavailable the `string_literals` table is not
+  updated during reindex (text search returns an informative error). This is
+  correct -- without FTS5 the text-search index is unusable regardless.
+
 ## v0.59.2-alpha -- 2026-06-24
 
 ### Fixed (critical -- reindex FTS5 crash, second pass)

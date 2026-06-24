@@ -3214,6 +3214,13 @@ begin
   Cmd    := Format('"%s" index "%s" --db "%s"', [DLExe, ProjDir, Db]);
   OutPath:= TPath.Combine(TPath.GetTempPath, 'drag-lint-reindex.txt');
   DLT('menu', 'run(async+lsp-restart): ' + Cmd);
+  { Stop the LSP server NOW, on the UI thread, before the indexer runs.
+    The indexer needs an exclusive WAL lock to drop the FTS5 sync triggers;
+    a concurrently-open LSP connection blocks that lock and causes DROP TRIGGER
+    to fail silently, leaving the triggers alive and crashing on string_literal
+    inserts. Stopping here gives the indexer exclusive DB access. The LSP will
+    be restarted lazily on the next hover / completion query. }
+  if GLspClient <> nil then begin GLspClient.Stop; FreeAndNil(GLspClient); end;
   TThread.CreateAnonymousThread(
     procedure
     var Output: string;
@@ -3226,13 +3233,7 @@ begin
       end;
       if Trim(Output) = '' then Output:= '(no output)';
       try TFile.WriteAllText(OutPath, Output); except end;
-      { Restart the LSP client on the main thread so the next query picks up the fresh index. }
-      TThread.Queue(nil,
-        procedure
-        begin
-          if GLspClient <> nil then begin GLspClient.Stop; FreeAndNil(GLspClient); end;
-          DLOpenInEditor(OutPath);
-        end);
+      TThread.Queue(nil, procedure begin DLOpenInEditor(OutPath); end);
     end).Start;
 end;
 
