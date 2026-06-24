@@ -749,7 +749,7 @@ git commit -m "feat(plugin): unified Search embed (Kind dropdown + grid + jump)"
 - [ ] **Step 1: Add the field + tab + embed.** In `TDragLintDockFrame` private fields (near `FTabSearch: TTabSheet;`, ~line 70) add `FTabUnifiedSearch: TTabSheet;`. In the constructor where tabs are created (~line 208-210, after `FTabStruct:= AddTab('Structure');`) insert as the second tab:
 
 ```pascal
-  FTabUnifiedSearch:= AddTab('Search');
+  FTabUnifiedSearch:= AddTab('Search (no grep)');
 ```
 
 In `HandleInitTimer` (after the `CreateEmbeddedStructure` try-block, before the existing `CreateEmbeddedUsages` block) add:
@@ -825,7 +825,7 @@ git commit -m "fix(plugin): replace Find Usages debug dump with a clean no-resul
 - [ ] **Step 1: Append an IDE checklist** to `docs\TEST-CHECKLIST.md` under the docking section:
 
 ```
-[ ] S1. Tools > drag-lint dockable panel -> a "Search" tab appears (2nd, after Structure).
+[ ] S1. Tools > drag-lint dockable panel -> a "Search (no grep)" tab appears (2nd, after Structure).
 [ ] S2. Kind=Symbol, type a known type/method name -> grid lists Kind|Name|Location; double-click jumps to the .pas at the right line.
 [ ] S3. Kind=Text, type a known message/caption phrase -> grid lists Source|Text|Location; double-click jumps. Toggle Advanced -> Substring/Any-word + Source filter appear and change results.
 [ ] S4. Kind=Usages, type a known symbol -> grid lists Category|Detail|Location (Decl/Read/Write/Call...); double-click jumps. Advanced -> Width changes the snippet width.
@@ -836,7 +836,7 @@ git commit -m "fix(plugin): replace Find Usages debug dump with a clean no-resul
 - [ ] **Step 2: Add a CHANGELOG note** under the current top (unreleased/next alpha):
 
 ```
-- IDE plugin: new unified **Search** dock tab - one Kind dropdown (Symbol/Text/Usages) + query field + a clickable results grid that jumps to source; Advanced toggle exposes per-kind refinements (kind filter / text mode+source / usages width). Find Usages no longer shows a debug dump on no-results.
+- IDE plugin: new unified **Search (no grep)** dock tab - one Kind dropdown (Symbol/Text/Usages) + query field + a clickable results grid that jumps to source; Advanced toggle exposes per-kind refinements (kind filter / text mode+source / usages width). Find Usages no longer shows a debug dump on no-results.
 ```
 
 - [ ] **Step 3: Commit.**

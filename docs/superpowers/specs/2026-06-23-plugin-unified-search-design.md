@@ -109,7 +109,7 @@ Remove the `== DEBUG (v0.40.5) ==` and `== DEBUG: resolver state ==` blocks from
   - `procedure CreateEmbeddedSearch(AOwner: TComponent; AParent: TWinControl);`
   - internal handler class (owns controls, runs queries, fills grid) modeled on `TSymbolSearchHandler`; calls into `SearchParse` for all parsing so the form holds only UI + orchestration.
 - **New shared** `src/delphi-plugin/DragLint.Plugin.ProcRun.pas`: extract the duplicated `RunCapture`/`RunCaptureStdout` stdout-capture helper (identical in UsagesForm and SymbolSearchForm) into one exported `function RunCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer): Integer;`. Update UsagesForm and SymbolSearchForm to use it (delete their private copies). Avoids a third duplicate.
-- **DockForm** (`DragLint.Plugin.DockForm.pas`): add `FTabSearch2 := AddTab('Search');` and `CreateEmbeddedSearch(Self, FTabSearch2);` in `HandleInitTimer` (guarded like the others). Place the Search tab first or second per preference (default: after Structure, before Find Usages).
+- **DockForm** (`DragLint.Plugin.DockForm.pas`): add `FTabSearch2 := AddTab('Search (no grep)');` and `CreateEmbeddedSearch(Self, FTabSearch2);` in `HandleInitTimer` (guarded like the others). Place the Search tab second (after Structure, before Find Usages).
 - **Package**: add the new unit(s) to `dclDragLintWizard.dpk`/`.dproj` (a new unit needs BOTH the `.dpk`/`.dpr` contains/uses AND the `.dproj <DCCReference>`, else F2613).
 
 ## Testing
