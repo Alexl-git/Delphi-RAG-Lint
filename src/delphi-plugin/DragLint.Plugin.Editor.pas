@@ -274,10 +274,22 @@ begin
     DebugLog('EnsureLspClient: BPL dir = ' + BplDir);
     DebugLog('EnsureLspClient: BPL fullpath = ' + GetModuleName(HInstance));
 
-    { Look for drag-lint.exe next to the BPL first, then fall back to PATH }
-    ExePath:= BplDir + 'drag-lint.exe';
-    DebugLog('EnsureLspClient: candidate = ' + ExePath + ' (exists=' + BoolToStr(FileExists(ExePath), True) + ')');
-    if not FileExists(ExePath) then
+    { Prefer the Win64 exe in the sibling dll-win64\ folder -- a 32-bit BPL can
+      spawn a 64-bit child via CreateProcess, and the Win64 build carries its own
+      correct x64 tree-sitter DLLs. Fall back to an exe next to the BPL (for
+      non-standard layouts), then to PATH as last resort. }
+    var Win64Dir: string := ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64\';
+    if FileExists(Win64Dir + 'drag-lint.exe') then
+    begin
+      ExePath:= Win64Dir + 'drag-lint.exe';
+      DebugLog('EnsureLspClient: using Win64 exe = ' + ExePath);
+    end
+    else if FileExists(BplDir + 'drag-lint.exe') then
+    begin
+      ExePath:= BplDir + 'drag-lint.exe';
+      DebugLog('EnsureLspClient: Win64 sibling not found, using local exe = ' + ExePath);
+    end
+    else
     begin
       ExePath:= 'drag-lint.exe';
       DebugLog('EnsureLspClient: falling back to PATH lookup of drag-lint.exe');
