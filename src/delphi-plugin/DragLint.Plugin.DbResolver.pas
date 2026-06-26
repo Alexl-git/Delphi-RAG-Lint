@@ -297,6 +297,91 @@ begin
   Result:= Dir + 'drag-lint-library.sqlite'; { legacy default even if absent }
 end;
 
+/// <summary>Returns the active project's target platform via OTAPI.
+/// Returns '' if not determinable (non-IDE context).</summary>
+/// <remarks>Duplicates GetActiveProjectPlatform from Plugin.Editor to
+/// avoid a circular unit dependency (Editor already uses DbResolver).
+/// Not thread-safe; call from the main thread only.</remarks>
+function GetActivePlatformForLibrary: string;
+var
+  MS        : IOTAModuleServices;
+  ProjGroup : IOTAProjectGroup  ;
+  ActiveProj: IOTAProject       ;
+  P         : string            ;
+begin
+  Result:= '';
+  try
+    if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
+    if MS = nil then Exit;
+    ProjGroup:= MS.MainProjectGroup;
+    if ProjGroup = nil then Exit;
+    ActiveProj:= ProjGroup.ActiveProject;
+    if ActiveProj = nil then Exit;
+    P:= ActiveProj.CurrentPlatform;
+    if P <> '' then Result:= P;
+  except
+  end;
+end; // function
+
+/// <summary>Returns the platform-specific library DB path using the manifest
+/// outDir and the currently active project's platform from OTAPI.
+/// Falls back to GetLibraryDbPath if the manifest or file is unavailable.</summary>
+/// <param name="ASettings">Plugin settings; ExePath provides the engine dir
+/// where drag-lint.json is located.</param>
+/// <returns>Absolute path to the best available library DB.</returns>
+/// <remarks>Not thread-safe; call from the main thread only.</remarks>
+function GetPlatformAwareLibraryDbPath(
+  const ASettings: TDragLintSettings): string;
+var
+  EngineDir : string      ;
+  MPath     : string      ;
+  Content   : string      ;
+  OutDir    : string      ;
+  LibPlat   : string      ;
+  Db        : string      ;
+  RootVal   : TJSONValue  ;
+  IdxVal    : TJSONValue  ;
+  OutDirVal : TJSONValue  ;
+begin
+  try
+    // Locate the manifest beside the engine exe (from ExePath setting).
+    if ASettings.ExePath <> '' then
+      EngineDir:= ExtractFilePath(ASettings.ExePath)
+    else
+      EngineDir:= ExtractFilePath(GetModuleName(HInstance));
+    MPath:= TPath.Combine(EngineDir, 'drag-lint.json');
+    if TFile.Exists(MPath) then
+    begin
+      Content:= TFile.ReadAllText(MPath);
+      OutDir:= '';
+      RootVal:= TJSONObject.ParseJSONValue(Content);
+      if RootVal is TJSONObject then
+      try
+        IdxVal:= TJSONObject(RootVal).GetValue('indexes');
+        if IdxVal is TJSONObject then
+        begin
+          OutDirVal:= TJSONObject(IdxVal).GetValue('outDir');
+          if OutDirVal is TJSONString then
+            OutDir:= TJSONString(OutDirVal).Value;
+        end;
+      finally
+        RootVal.Free;
+      end; // try
+
+      if OutDir <> '' then
+      begin
+        LibPlat:= GetActivePlatformForLibrary;
+        if LibPlat = '' then LibPlat:= 'Win64';
+        Db:= TPath.Combine(OutDir, 'library-' + LibPlat + '.sqlite');
+        if TFile.Exists(Db) then Exit(Db);
+        // Platform DB missing -- fall through to legacy search.
+      end;
+    end;
+  except
+  end;
+  Result:= GetLibraryDbPath; // fallback: BPL-relative Win32/Win64/legacy
+end; // function
+
 function FindAncestorDb(const AStartDir: string; const ASettings: TDragLintSettings): string;
 { v0.40.5: many real-world projects (Micronite is the canonical case)
   store one shared drag-lint.sqlite ABOVE the .dproj directory because
@@ -413,7 +498,7 @@ begin
       if TFile.Exists(P) then AddUnique(Result, P);
     if ASettings.IncludeLibraryDb then
     begin
-      LibPath:= GetLibraryDbPath;
+      LibPath:= GetPlatformAwareLibraryDbPath(ASettings);
       if TFile.Exists(LibPath) then AddUnique(Result, LibPath);
     end;
     DLT('dbresolve', Format('editor=%s -> MANIFEST db=%s (+%d total)', [ExtractFileName(EditorPath), ManifestDb, Length(Result)]));
@@ -445,7 +530,7 @@ begin
 
   if ASettings.IncludeLibraryDb then
   begin
-    LibPath:= GetLibraryDbPath;
+    LibPath:= GetPlatformAwareLibraryDbPath(ASettings);
     if TFile.Exists(LibPath) then AddUnique(Result, LibPath);
   end;
   DLT('dbresolve', Format('editor=%s proj=%s -> %d db(s) (no manifest match)', [ExtractFileName(EditorPath), ExtractFileName(ProjPath), Length(Result)]));
