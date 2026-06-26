@@ -1312,6 +1312,76 @@ begin
   if FailedCount > 0 then Result:= 1 else Result:= 0;
 end; // function
 
+/// <summary>Resolves the DB path for an index operation. If --db was given
+/// explicitly, returns it unchanged. Otherwise finds the manifest section
+/// whose include path covers AIndexPath (longest-prefix match) and returns
+/// that section's resolved db. Falls back to AArgs.DbPath when no match.</summary>
+/// <param name="AArgs">Parsed arguments; explicit DbPaths short-circuit the lookup.</param>
+/// <param name="AIndexPath">Path being indexed (folder or file); used for matching.</param>
+/// <returns>Absolute path to the DB to use for this index operation.</returns>
+/// <remarks>Library sections (source=registry-libraries) are skipped. Not thread-safe.</remarks>
+function ResolveIndexDb(const AArgs: TArgs; const AIndexPath: string): string;
+var
+  Manifest : TIndexManifest  ;
+  Sec      : TIndexSection   ;
+  IncPath  : string          ;
+  PathNorm : string          ;
+  IncNorm  : string          ;
+  BestLen  : Integer         ;
+  BestDb   : string          ;
+  EngineDir: string          ;
+  OutDir   : string          ;
+  DbRaw    : string          ;
+begin
+  // Explicit --db always wins.
+  if Length(AArgs.DbPaths) > 0 then Exit(AArgs.DbPath);
+
+  BestLen:= -1;
+  BestDb := '';
+  try
+    EngineDir:= ExtractFilePath(ParamStr(0));
+    Manifest:= TManifestIO.Load(EngineDir, AIndexPath);
+    PathNorm:= IncludeTrailingPathDelimiter(
+                 TPath.GetFullPath(AIndexPath)).ToLower;
+
+    for Sec in Manifest.Sections do
+    begin
+      // Skip library sections -- never auto-select them for index.
+      if SameText(Sec.Source, 'registry-libraries') then Continue;
+      for IncPath in Sec.Include do
+      begin
+        IncNorm:= IncludeTrailingPathDelimiter(
+                    TPath.GetFullPath(IncPath)).ToLower;
+        if PathNorm.StartsWith(IncNorm) and (Length(IncNorm) > BestLen) then
+        begin
+          BestLen:= Length(IncNorm);
+          // Resolve Db to absolute using manifest OutDir/RootDir if relative.
+          DbRaw:= Sec.Db;
+          if DbRaw = '' then DbRaw:= Sec.Name + '.sqlite';
+          if not TPath.IsPathRooted(DbRaw) then
+          begin
+            OutDir:= Manifest.OutDir;
+            if OutDir <> '' then
+            begin
+              if TPath.IsPathRooted(OutDir) then
+                BestDb:= TPath.Combine(OutDir, DbRaw)
+              else
+                BestDb:= TPath.Combine(TPath.Combine(Manifest.RootDir, OutDir), DbRaw);
+            end
+            else BestDb:= TPath.Combine(Manifest.RootDir, DbRaw);
+          end
+          else BestDb:= DbRaw;
+        end;
+      end; // for IncPath
+    end; // for Sec
+  except
+    // Manifest unavailable -- fall through to default.
+  end;
+
+  if BestDb <> '' then Result:= BestDb
+  else Result:= AArgs.DbPath; // default: drag-lint.sqlite in CWD
+end; // function ResolveIndexDb
+
 function DoIndex(const AArgs: TArgs): Integer;
 var
   Store    : ISymbolStore                              ;
@@ -1345,9 +1415,11 @@ begin
     end;
   end;
 
-  Writeln('Database: ', AArgs.DbPath);
+  var ResolvedDb: string:= ResolveIndexDb(AArgs,
+    IfThen(AArgs.Path <> '', AArgs.Path, GetCurrentDir));
+  Writeln('Database: ', ResolvedDb);
 
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store:= TSQLiteSymbolStore.Create(ResolvedDb);
   Store.Migrate;
   { v0.42: deep scan emits identifier usage refs. Default deep, except a
     --scan-libraries scan defaults shallow (libraries are queried by call/type,
