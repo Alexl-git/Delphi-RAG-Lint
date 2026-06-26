@@ -5039,6 +5039,14 @@ begin
     if (Cfg = '') and FileExists('drag-lint-layers.json') then Cfg:= 'drag-lint-layers.json';
     if Cfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, Cfg);
   end;
+  { v0.61: unit-not-in-project -- cross-checks used units vs library DB and project .dpr/.dproj }
+  if (AArgs.Rule = '') or (AArgs.Rule = 'unit-not-in-project') then
+  begin
+    var LibDbPath2: string:= '';
+    if Length(AArgs.DbPaths) > 1 then LibDbPath2:= AArgs.DbPaths[1];
+    Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership(
+      Store, LibDbPath2, AArgs.ProjectPath);
+  end;
   if AArgs.AsJson then
   begin
     JArr:= TJSONArray.Create;
