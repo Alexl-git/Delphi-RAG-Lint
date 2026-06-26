@@ -1,5 +1,7 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> Last updated 2026-06-26 (session 3): 6.1 hg hook DONE; 6.3 Two-DB model DONE (v0.60.0-alpha, pushed).
+> Resume: next priorities are 6.2 (GridLayout popup note), 6.4 (unit-membership lint), 6.5 (global-form-var lint), 6.6 (batch lint runner).
 > Saved 2026-06-21 before a session reset. Companion docs:
 > [REPORT-1-delphi-lint-landscape.md](REPORT-1-delphi-lint-landscape.md) (the field),
 > [REPORT-2-draglint-implementation-plan.md](REPORT-2-draglint-implementation-plan.md) (the plan + changelog).
@@ -131,7 +133,123 @@ Detectable from AST / index today; pick batches of these:
 
 ---
 
-## 6. Pointers
+## 6. forms-csv + indexing backlog (new 2026-06-26d)
+
+These items were added by the user after the forms-csv false-DEAD investigation concluded.
+Priority order: 1 -> 2 -> 3 -> 4 -> 5 -> 6.
+
+### 6.1 hg post-commit auto-reindex hook (ORM3 repo) -- DONE 2026-06-26
+
+**Status: IMPLEMENTED.** User-level hook fires for all ORM3 sub-repos.
+
+**Files delivered:**
+- `C:\Users\alexanderl\mercurial.ini` -- added `[hooks] post-commit.orm3reindex = python:...`
+- `C:\Users\alexanderl\hg-hooks\orm3_reindex.py` -- Python hook; checks `repo.root` contains
+  `ORM3`; spawns `drag-lint index C:\Projects\DB\ORM3 --db C:\Projects\DB\ORM3\drag-lint.sqlite`
+  as a background process (CREATE_NO_WINDOW); logs to `C:\Users\alexanderl\hg-hooks\orm3_reindex.log`.
+
+**Verify:** commit any .pas in CLIENT/COMMON/SERVER/PACKAGE/tools, then:
+  `Get-Content C:\Users\alexanderl\hg-hooks\orm3_reindex.log`
+
+### 6.2 GridLayout: "popup on grid" note in forms-csv
+
+**Problem:** GridLayout (frmGridLayout, C:\Projects\DB\ORM3\CLIENT\GridLayout.pas) appears
+as "DEAD FORM - no callers found" in forms-csv because it is NOT launched by a form-to-form
+call. It is launched by the `TGridMenuPopup` component embedded in many forms, for Save
+Layout As / Load Layout functionality.
+
+**Fix:** Hard-code a special note for GridLayout in `DRagLint.FormsMap.pas` or use a
+"known popup forms" table. The note should say something like: "popup on grid (TGridMenuPopup
+Save/Load Layout)" in the Notes column instead of "DEAD FORM".
+
+**Alternative:** Detect `TGridMenuPopup` as a call site in BuildEdges -- query for refs to
+frmGridLayout from TGridMenuPopup and emit an edge like "TGridMenuPopup (Save Layout As)".
+
+**File:** src/forms/DRagLint.FormsMap.pas
+
+### 6.3 Two-DB indexing model (Platform + Project) -- DONE v0.60.0-alpha 2026-06-26
+
+**User request:** "For indexing let's use 2 libraries:
+1. Platform -- Delphi Library and browsing path for the given platform selected for the
+   current project (changes when platform changes)
+2. Project -- All project members compiled and scanned as forms, pas, Inc, etc...
+By default drag-lint should be working with these 2 SQLite DBs."
+
+**Spec:** `docs/superpowers/specs/2026-06-26-two-db-model-design.md` (committed ee10b25)
+**Plan:** `docs/superpowers/plans/2026-06-26-two-db-model.md` (committed a04f24a) -- 4 tasks ALL DONE
+**Commits:** cda2876 (CLI platform detect), 4ab9018 (plugin), 65da564 (index auto-DB), 92576bc (release)
+
+**Design (approved 2026-06-26):**
+- Platform DB: one DB per target platform (Win32/Win64) covering Delphi RTL + VCL +
+  DevExpress (all dirs on the IDE's Library Path and Browse Path for that platform).
+  Already partially exists as `C:\Projects\.drag-lint\library-Win32.sqlite` /
+  `library-Win64.sqlite` -- needs to become the canonical "Platform" DB.
+- Project DB: covers all units in the project's .dpr/.dproj (including COMMON/OBJECTS,
+  not just CLIENT). Already exists as `C:\Projects\DB\ORM3\drag-lint.sqlite`.
+- CLI consumers (query, lint, forms-csv) would auto-load both when no --db given;
+  `resolve-dbs --platform <p>` already does something similar via the manifest.
+- Model change: manifest `indexes` array -> tag each DB as `platform` or `project`; CLI
+  resolves by platform tag + project working dir.
+
+### 6.4 Unit-membership lint rule
+
+**User request:** "Lint function -- checks all used units if they do not belong to the
+Platform they must be in the project folder and must be member of both dpr and dproj.
+If not there should be a warning about it."
+
+**Implementation (not yet started):**
+- Walk all units in the Project DB; for each unit's `unit_uses` entries, check if the
+  used unit is in the Platform DB OR (exists in the project folder AND is listed in
+  both the .dpr uses clause AND the .dproj DCCReference list).
+- Report warning: `unit-not-in-project` (used unit not in Platform DB and not in .dpr/.dproj).
+- Requires parsing .dpr and .dproj to enumerate listed units -- .dpr `uses..in` clauses
+  and .dproj `<DCCReference Include="...">` elements.
+- Can be a `lint-project` rule (Store-based, operates on the whole index + project files).
+
+### 6.5 Form global-variable lint rule
+
+**User request:** "Forms often have global variables with the same name associated with
+them. I think we should comment this all out and report as a warning. The use of these
+may cause 2 different forms creating 2 TForm and saving it in the same variable causing a leak."
+
+**Background:** VCL's auto-generated unit-level global `var Form1: TForm1;` -- if two
+instances are created (ShowModal twice, or Show + ShowModal), the second overwrites the
+global pointer and the first leaks (no reference to Free it).
+
+**Implementation (not yet started):**
+- Detect unit-level variable declarations where:
+  (a) The variable type is a class that descends from TForm (or TCustomForm)
+  (b) The variable name matches the class name minus the `frm`/`T` prefix convention
+- Report as `global-form-variable` warning with message:
+  "Global form variable '<name>' may leak if the form is created more than once.
+   Consider removing the global and creating/freeing the form locally."
+- Can be a `.scm` rule or a built-in in TAstChecker.
+- For the "comment out" part: this would be an autofix suggestion (future; not in scope now).
+
+### 6.6 Batch lint runner
+
+**User request:** "There should be a function to run Lint over all project members.
+The output should be captured in some place that AI or user can read and AI can action upon it."
+
+**Background:** `lint-project --db <idx>` already runs project-wide rules; `lint <file>` runs
+per-file rules. What's missing is a single command that runs all rules over all project
+members and captures the consolidated output.
+
+**Implementation (not yet started):**
+- `drag-lint lint-all --project <dproj> --db <db> --out <report.txt|json|sarif>`:
+  (a) enumerate all .pas units in the .dproj
+  (b) run `lint` on each file (all per-file rules)
+  (c) run `lint-project` rules against the full index
+  (d) aggregate findings, deduplicate, sort by severity then file
+  (e) write to --out (default: `<project-dir>\docs\lint-report-<date>.txt`)
+- Output format should be AI-friendly: structured JSON with file, line, rule id, message.
+  Also a human summary (counts by severity/rule).
+- The AI can then read the report and action on the highest-severity items.
+- Relates to 6.3 (2-DB model): batch runner should auto-load Platform + Project DBs.
+
+---
+
+## 7. Pointers
 
 - Rule list (user-facing): `rules/README.md`. Per-file harness: `tests/lint/`. Project-rule fixtures:
   `tests/lint-project/`. Release script: `build/pack-lint-release.ps1`.
