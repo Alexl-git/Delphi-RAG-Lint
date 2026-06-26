@@ -69,6 +69,14 @@ implementation
 const
   FORMS_CSV_ALGORITHM = '2'; // bump when BuildEdges / NavPath algorithm changes
 
+type
+  TKnownPopupEntry = record Name: string; Note: string; end;
+
+const
+  KnownPopupForms: array[0..0] of TKnownPopupEntry = (
+    (Name: 'frmgridlayout'; Note: 'popup via TGridMenuPopup (Save/Load Layout)')
+  );
+
 /// <summary>Reads the immediate ancestor class name from a .pas class
 /// declaration at the given 1-based line (handles "T = class(TAncestor)").</summary>
 function ReadAncestor(const APasPath: string; AStartLine: Integer): string;
@@ -980,7 +988,15 @@ begin
           end;
           var CF:= CalledFrom(Edges, ClassToNode, N.FormClass);
           var Notes:= '';
-          if (Nav = '(no path from MAIN)') and (CF = '') then Notes:= 'DEAD FORM - no callers found';
+          if (Nav = '(no path from MAIN)') and (CF = '') then
+          begin
+            var PopupNote:= '';
+            var FormNameLower:= LowerCase(N.FormName);
+            for var KP in KnownPopupForms do
+              if KP.Name = FormNameLower then begin PopupNote:= KP.Note; Break; end;
+            if PopupNote <> '' then Notes:= PopupNote
+            else Notes:= 'DEAD FORM - no callers found';
+          end;
           Sb.Append(Idx).Append(',').Append(CsvField(N.UnitName)).Append(',').Append(CsvField(N.FormName)).Append(',').Append(N.PasLineCount).Append(',')
             .Append(CsvField(Nav)).Append(',').Append(CsvField(CF)).Append(',').Append(CsvField(Notes))
             .Append(#13#10);
