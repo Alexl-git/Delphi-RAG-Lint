@@ -3,6 +3,24 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.60.0-alpha -- 2026-06-26
+
+### Added
+
+- **Two-DB model** -- CLI consumers (`query`, `lint`, `forms-csv`, `resolve-dbs`)
+  now auto-select the correct platform library DB with no `--db` flags needed.
+  Platform is detected from the first `.dproj` found in the manifest section that
+  covers the current working directory (`<Platform Condition=...>` element); falls
+  back to `--platform` flag, then manifest `defaultPlatform`.
+- **`index` manifest auto-DB** -- `drag-lint index <path>` without `--db` now
+  looks up the manifest section covering `<path>` and uses that section's DB
+  (e.g. `index C:\Projects\DB\ORM3\CLIENT` auto-selects
+  `C:\Projects\DB\ORM3\drag-lint.sqlite` even when run from a different directory).
+- **Plugin platform-aware library DB** -- the IDE plugin's `ResolveActiveIndexDbs`
+  now reads `indexes.outDir` from the manifest beside the engine exe and calls
+  `IOTAProject.CurrentPlatform` to pick `library-Win64.sqlite` for Win64 projects
+  instead of always using `library-Win32.sqlite`.
+
 ## v0.59.4-alpha -- 2026-06-24
 
 ### Added
