@@ -1,0 +1,2 @@
+# global var FormFoo matches class TFormFoo -- must fire at the var declaration line
+global-form-variable 10

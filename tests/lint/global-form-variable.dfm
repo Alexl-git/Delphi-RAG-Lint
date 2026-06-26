@@ -1,0 +1,2 @@
+object FormFoo: TFormFoo
+end

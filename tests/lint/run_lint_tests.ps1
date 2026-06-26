@@ -47,7 +47,10 @@ $pass = 0; $fail = 0; $failed = @()
 
 $fixtures = Get-ChildItem -Path (Join-Path $Tests "*.pas"),(Join-Path $Tests "*.dfm") | Where-Object { $_.BaseName -like $Filter }
 foreach ($pas in $fixtures) {
-  $expFile = [IO.Path]::ChangeExtension($pas.FullName, ".expected")
+  # Prefer <file>.expected (full-name sibling) so .dfm companion files can have
+  # their own expectations separate from the matching .pas fixture.
+  $expFile = $pas.FullName + ".expected"
+  if (-not (Test-Path $expFile)) { $expFile = [IO.Path]::ChangeExtension($pas.FullName, ".expected") }
   if (-not (Test-Path $expFile)) { continue }
 
   $raw = & $exePath lint $pas.FullName --json 2>$null

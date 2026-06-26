@@ -119,6 +119,14 @@ type
       /// Access inside a nested anonymous method (a likely Synchronize/Queue body) is skipped. Pure AST;
       /// no DB. Never raises.</remarks>
       class function CheckUiThread(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Warns when a form unit declares a unit-level global variable whose type
+      /// matches a class declared in the same file. Such globals leak the first form instance
+      /// if the form is ever shown more than once.</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One finding per offending variable declaration.</returns>
+      /// <remarks>Skipped entirely when no sibling .dfm file exists beside AFile. Pure AST;
+      /// no DB. Never raises.</remarks>
+      class function CheckGlobalFormVars(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -2363,6 +2371,150 @@ begin
     Parser.Free;
     ClassBase.Free;
     Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckGlobalFormVars(const AFile: string): TArray<TLintFinding>;
+var
+  Src           : TBytes;
+  Parser        : TTSParser;
+  Tree          : TTSTree;
+  Findings      : TList<TLintFinding>;
+  FormClassNames: TDictionary<string, Boolean>;
+
+  function NodeStr(const ANode: TTSNode): string;
+  var B: TBytes;
+  begin
+    if ANode.IsNull or (ANode.StartByte >= ANode.EndByte) then Exit('');
+    SetLength(B, Integer(ANode.EndByte) - Integer(ANode.StartByte));
+    Move(Src[ANode.StartByte], B[0], Length(B));
+    Result:= TEncoding.UTF8.GetString(B);
+  end;
+
+  { Pass 1: collect unit-level class type names.
+    Mirrors CheckUiThread.CollectClasses: uses ChildByField('name'/'type') to detect
+    declType nodes that have a declClass body. Skips defProc/defFunc subtrees. }
+  procedure CollectClassNames(const N: TTSNode);
+  var
+    I     : Integer;
+    NmN   : TTSNode;
+    TypeN : TTSNode;
+    IsClass: Boolean;
+    ClsName: string;
+  begin
+    if N.IsNull then Exit;
+    if (N.NodeType = 'defProc') or (N.NodeType = 'defFunc') then Exit;
+    if N.NodeType = 'declType' then
+    begin
+      NmN  := N.ChildByField('name');
+      TypeN := N.ChildByField('type');
+      IsClass:= False;
+      if not TypeN.IsNull then
+      begin
+        if TypeN.NodeType = 'declClass' then IsClass:= True
+        else
+          for I:= 0 to TypeN.ChildCount - 1 do
+            if TypeN.Child(I).NodeType = 'declClass' then begin IsClass:= True; Break; end;
+      end;
+      if IsClass and (not NmN.IsNull) then
+      begin
+        ClsName:= LowerCase(NodeStr(NmN));
+        if ClsName <> '' then FormClassNames.AddOrSetValue(ClsName, True);
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do
+      CollectClassNames(N.NamedChild(I));
+  end;
+
+  { Pass 2: find global declVars entries whose declared type is a form class. }
+  procedure CheckGlobalVarDecls(const N: TTSNode);
+  var
+    I, J, K           : Integer;
+    DV, DVType, NameId: TTSNode;
+    VarTypeName, VarName: string;
+    TypeStart         : Integer;
+    P                 : TTSPoint;
+    F                 : TLintFinding;
+  begin
+    if N.IsNull then Exit;
+    { skip all procedure/function bodies -- vars inside are local }
+    if (N.NodeType = 'defProc') or (N.NodeType = 'defFunc') then Exit;
+    if N.NodeType = 'declVars' then
+    begin
+      for J:= 0 to N.NamedChildCount - 1 do
+      begin
+        DV:= N.NamedChild(J);
+        if DV.NodeType <> 'declVar' then Continue;
+        DVType:= DV.ChildByField('type');
+        if DVType.IsNull then Continue;
+        VarTypeName:= LowerCase(NodeStr(DVType));
+        if not FormClassNames.ContainsKey(VarTypeName) then Continue;
+        TypeStart:= Integer(DVType.StartByte);
+        for K:= 0 to DV.NamedChildCount - 1 do
+        begin
+          NameId:= DV.NamedChild(K);
+          if NameId.NodeType <> 'identifier' then Continue;
+          if Integer(NameId.StartByte) >= TypeStart then Continue;
+          VarName:= NodeStr(NameId);
+          if VarName = '' then Continue;
+          P:= NameId.StartPoint;
+          F:= Default(TLintFinding);
+          F.RuleId  := 'global-form-variable';
+          F.Severity:= 'warning';
+          F.Message := Format(
+            'Global form variable ''%s: %s'' may leak if the form is created more than ' +
+            'once. Consider removing the global and creating/freeing the form locally.',
+            [VarName, NodeStr(DVType)]);
+          F.FilePath := AFile;
+          F.StartLine:= Integer(P.Row   ) + 1;
+          F.StartCol := Integer(P.Column) + 1;
+          F.EndLine  := F.StartLine;
+          F.EndCol   := F.StartCol + Length(VarName);
+          Findings.Add(F);
+        end;
+      end;
+      Exit; { handled; do not recurse into the var block itself }
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do
+      CheckGlobalVarDecls(N.NamedChild(I));
+  end;
+
+begin
+  Result:= nil;
+  { Only analyse form units -- a sibling .dfm is the authoritative signal. }
+  if not TFile.Exists(ChangeFileExt(AFile, '.dfm')) then Exit;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  FormClassNames:= TDictionary<string, Boolean>.Create;
+  Parser:= TTSParser.Create;
+  try
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    try
+      if Tree <> nil then
+      begin
+        CollectClassNames(Tree.RootNode);
+        if FormClassNames.Count > 0 then
+          CheckGlobalVarDecls(Tree.RootNode);
+      end;
+      Result:= Findings.ToArray;
+    finally
+      Tree.Free;
+    end;
+  finally
+    FormClassNames.Free;
+    Findings.Free;
+    Parser.Free;
   end;
 end; // function
 

@@ -4046,10 +4046,10 @@ end; // begin
 
 // v0.17: drag-lint slice --qname <Foo.TBar> [--db <path>] [--format text|json]
 // Returns symbol-relevant chunks of the unit:
-//   1. unit-header  � lines 1 through the "interface" keyword line
-//   2. class-decl   � class symbol's start_line..end_line
-//   3. impl-method  � implementation body for each method child
-//   4. unit-trailer � the "end." line
+//   1. unit-header  ? lines 1 through the "interface" keyword line
+//   2. class-decl   ? class symbol's start_line..end_line
+//   3. impl-method  ? implementation body for each method child
+//   4. unit-trailer ? the "end." line
 // Text format: chunks separated by "--- <kind> ---" headers.
 // JSON format: {"qname":..., "chunks":[{"kind":..., "start_line":...,
 //               "end_line":..., "text":...}]}
@@ -4199,10 +4199,11 @@ begin
   (AArgs.Rule <> 'control-flow-in-finally') and (AArgs.Rule <> 'too-many-parameters') and (AArgs.Rule <> 'too-many-locals') and
   (AArgs.Rule <> 'method-too-long') and (AArgs.Rule <> 'deep-nesting') and (AArgs.Rule <> 'float-equality-comparison') and
   (AArgs.Rule <> 'freeandnil-on-interface') and (AArgs.Rule <> 'firedac-open-execsql-mismatch') and (AArgs.Rule <> 'unprotected-object-free') and
-  (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'ui-access-in-thread') then
+  (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'ui-access-in-thread') and
+  (AArgs.Rule <> 'global-form-variable') then
   begin
     Writeln(Format(
-        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' + 'use-after-free, win64-pointer-cast, ui-access-in-thread)',
+        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' + 'use-after-free, win64-pointer-cast, ui-access-in-thread, global-form-variable)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4272,6 +4273,8 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'use-after-free') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree(AArgs.Path);
       { v0.56: UI access inside a TThread.Execute (not thread-safe) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'ui-access-in-thread') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread(AArgs.Path);
+      { v0.61: unit-level global variable whose type is the form class -- potential leak }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'global-form-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars(AArgs.Path);
     end;
   end; // if
   { v0.47: honor '// drag-lint:ignore [rule ...]' line suppressions across all findings }
@@ -4536,12 +4539,12 @@ end; // function
 // but still terminate as leaves since we don't have their uses indexed).
 //
 // CSV columns:
-//   source_unit       — basename stem (no ext, no dir) of the source file
-//   used_unit         — verbatim unit_name as written in the uses clause
-//   depth             — 1 = direct use, 2 = via one hop, ...
-//   first_section     — section the edge was first reached through
-//   via_chain         — '>' separated unit chain from source -> used (excl. self)
-//   external          — 1 when target_file_id couldn't be resolved, else 0
+//   source_unit       ? basename stem (no ext, no dir) of the source file
+//   used_unit         ? verbatim unit_name as written in the uses clause
+//   depth             ? 1 = direct use, 2 = via one hop, ...
+//   first_section     ? section the edge was first reached through
+//   via_chain         ? '>' separated unit chain from source -> used (excl. self)
+//   external          ? 1 when target_file_id couldn't be resolved, else 0
 function DoUsesReport(const AArgs: TArgs): Integer;
 type
   TUsesEdge = record
@@ -4657,7 +4660,7 @@ var
       QFiles:= TFDQuery.Create(nil);
       try
         QFiles.Connection:= SQLiteStore.GetConnection;
-        { Filter out DFM rows — uses clauses only exist in pascal sources.
+        { Filter out DFM rows ? uses clauses only exist in pascal sources.
           Language tag is 'delphi13' for .pas/.dpr/.dpk in v0.40.x indexes. }
         QFiles.Sql.Text:= 'SELECT id, path FROM files ' + 'WHERE language NOT IN (''dfm'', ''json'', ''text'')';
         QFiles.Open;
@@ -7635,7 +7638,7 @@ begin
     Exit;
   end;
 
-  // Find <Platform Condition=...>Win64</Platform> — search for the opening tag
+  // Find <Platform Condition=...>Win64</Platform> ? search for the opening tag
   // directly so we are not confused by attribute quote style.
   P1:= Pos('<Platform Condition=', Xml);
   if P1 = 0 then
