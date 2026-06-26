@@ -3,6 +3,30 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.61.0-alpha -- 2026-06-26
+
+### Added
+
+- **`global-form-variable` lint rule** -- warns on unit-level variables whose
+  declared type is a form class (potential memory leak if the form is created
+  more than once without cleanup). Fires only when a sibling `.dfm` confirms
+  this is a form unit. Detected via built-in AST check; works in live edit mode.
+- **`unit-not-in-project` lint rule** -- `lint-project` cross-checks every unit
+  used by the indexed project against the platform library DB and the project's
+  `.dpr`/`.dproj`. Reports units that are neither a known library unit nor
+  formally registered as a project member.
+- **`frmGridLayout` popup note** -- `forms-csv` no longer labels `frmGridLayout`
+  as "DEAD FORM"; it now shows "popup via TGridMenuPopup (Save/Load Layout)" in
+  the Notes column. A `KnownPopupForms` table in `FormsMap.pas` generalises the
+  pattern for future popup-only forms.
+- **`lint-all` batch command** -- `drag-lint lint-all [--db <idx>] [--project
+  <.dproj>] [--disable id,...] [--output <file>]` runs every per-file AST rule
+  over all `.pas` files in the project index, then all project-wide rules
+  (god-class, unused-public-symbol, interface-reference-cycle, layering, unit
+  membership), applies `drag-lint:ignore` suppressions, and writes a consolidated
+  report. Files that trigger encoding errors are skipped with a stderr notice.
+  Exit 1 if any findings, 0 if none.
+
 ## v0.60.0-alpha -- 2026-06-26
 
 ### Added

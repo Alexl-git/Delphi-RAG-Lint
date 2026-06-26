@@ -1,7 +1,8 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> Last updated 2026-06-26 (session 3): 6.1 hg hook DONE; 6.3 Two-DB model DONE (v0.60.0-alpha, pushed).
-> Resume: next priorities are 6.2 (GridLayout popup note), 6.4 (unit-membership lint), 6.5 (global-form-var lint), 6.6 (batch lint runner).
+> Last updated 2026-06-26 (session 4): 6.1-6.6 ALL DONE -- shipped as v0.61.0-alpha.
+> 6.2 GridLayout popup note, 6.4 unit-not-in-project, 6.5 global-form-variable, 6.6 lint-all batch runner.
+> Resume: see section 6 below for next ideas.
 > Saved 2026-06-21 before a session reset. Companion docs:
 > [REPORT-1-delphi-lint-landscape.md](REPORT-1-delphi-lint-landscape.md) (the field),
 > [REPORT-2-draglint-implementation-plan.md](REPORT-2-draglint-implementation-plan.md) (the plan + changelog).

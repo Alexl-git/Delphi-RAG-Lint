@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.60.0-alpha';
+  VERSION = '0.61.0-alpha';
 
 function Run: Integer;
 
@@ -5005,6 +5005,202 @@ begin
   else Result:= 1;
 end; // function
 
+// v0.61: drag-lint lint-all [--db <index.sqlite>] [--project <.dproj>]
+//   [--disable id,...] [--output <report.txt>] [--json]
+// Batch lint runner: runs ALL per-file AST rules over every indexed .pas file,
+// then all project-wide rules, and writes a consolidated report.
+// Exit 1 if any findings, 0 if none, 2 on usage error.
+function DoLintAll(const AArgs: TArgs): Integer;
+var
+  Dbs      : TArray<string>              ;
+  ProjectDb: string                      ;
+  LibDb    : string                      ;
+  Store    : ISymbolStore                ;
+  Findings : TArray<TLintFinding>        ;
+  FilePaths: TArray<string>              ;
+  Fid      : Int64                       ;
+  PasPath  : string                      ;
+  Linter   : DRagLint.Lint.Linter.TLinter;
+  F        : TLintFinding                ;
+  DisIds   : TArray<string>              ;
+  KeptF    : TArray<TLintFinding>        ;
+  DId      : string                      ;
+  Drop     : Boolean                     ;
+  OutPath  : string                      ;
+  OutLines : TStringBuilder              ;
+  JArr     : TJSONArray                  ;
+  JObj     : TJSONObject                 ;
+  ErrCnt   : Integer                     ;
+  WarnCnt  : Integer                     ;
+  LayersCfg: string                      ;
+begin
+  { Resolve DBs: first existing = project index; second = library index }
+  Dbs:= ResolveConsumerDbs(AArgs);
+  ProjectDb:= '';
+  LibDb    := '';
+  for var D in Dbs do
+  begin
+    if not TFile.Exists(D) then Continue;
+    if ProjectDb = '' then ProjectDb:= D
+    else if LibDb = '' then LibDb:= D;
+  end;
+  if ProjectDb = '' then
+  begin
+    Writeln('ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.');
+    Exit(2);
+  end;
+
+  { Open project store }
+  Store:= TSQLiteSymbolStore.Create(ProjectDb);
+  Store.Migrate;
+  Findings:= nil;
+
+  { Enumerate all indexed .pas files from the project store }
+  FilePaths:= nil;
+  for Fid in Store.GetAllFileIds do
+  begin
+    PasPath:= Store.GetFilePath(Fid);
+    if SameText(ExtractFileExt(PasPath), '.pas') and TFile.Exists(PasPath) then
+      FilePaths:= FilePaths + [PasPath];
+  end;
+  Writeln(Format('lint-all: scanning %d .pas file(s)', [Length(FilePaths)]));
+
+  { Per-file rules: external .scm rules + all built-in AST checks }
+  Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
+  try
+    for PasPath in FilePaths do
+    begin
+      try
+        Findings:= Findings + Linter.LintFile(PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals    (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors    (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd(PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally  (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit   (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally(PasPath);
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(PasPath) do
+          Findings:= Findings + [F];
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(PasPath, 7, 25, 120, 5) do
+          Findings:= Findings + [F];
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(PasPath) do
+          Findings:= Findings + [F];
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch(PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree    (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread        (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars  (PasPath);
+      except
+        on E: Exception do
+          Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)',
+            [ExtractFileName(PasPath), E.ClassName, E.Message]));
+      end;
+    end;
+  finally
+    Linter.Free;
+  end;
+
+  { Project-wide rules }
+  Findings:= Findings +
+    DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, '');
+  { Interface reference cycles (needs all file paths) }
+  Findings:= Findings +
+    DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(FilePaths);
+  { Architecture layering (only if config present) }
+  LayersCfg:= AArgs.LayersPath;
+  if (LayersCfg = '') and FileExists('drag-lint-layers.json') then LayersCfg:= 'drag-lint-layers.json';
+  if LayersCfg <> '' then
+    Findings:= Findings +
+      DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, LayersCfg);
+  { DPR/dproj membership cross-check (unit-not-in-dpr) }
+  if AArgs.ProjectPath <> '' then
+    Findings:= Findings +
+      DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath);
+  { Unit membership against library DB (unit-not-in-project) }
+  Findings:= Findings +
+    DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership(Store, LibDb, AArgs.ProjectPath);
+
+  { Honor drag-lint:ignore suppressions }
+  Findings:= ApplyLineSuppressions(Findings);
+
+  { --disable id,... drops those rule ids entirely }
+  if AArgs.Disable <> '' then
+  begin
+    DisIds:= AArgs.Disable.Split([',', ' ', ';']);
+    KeptF := nil;
+    for F in Findings do
+    begin
+      Drop:= False;
+      for DId in DisIds do
+        if SameText(Trim(DId), F.RuleId) then begin Drop:= True; Break; end;
+      if not Drop then KeptF:= KeptF + [F];
+    end;
+    Findings:= KeptF;
+  end;
+
+  { Count by severity }
+  ErrCnt := 0;
+  WarnCnt:= 0;
+  for F in Findings do
+    if SameText(F.Severity, 'error') then Inc(ErrCnt) else Inc(WarnCnt);
+
+  { Resolve output path: --output, or lint-report-YYYYMMDD.txt beside the DB }
+  OutPath:= AArgs.Output;
+  if OutPath = '' then
+  begin
+    var BaseDir: string;
+    if AArgs.ProjectPath <> '' then BaseDir:= ExtractFilePath(AArgs.ProjectPath)
+    else BaseDir:= ExtractFilePath(ProjectDb);
+    OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', Now) + '.txt');
+  end;
+
+  if AArgs.AsJson then
+  begin
+    JArr:= TJSONArray.Create;
+    try
+      for F in Findings do
+      begin
+        JObj:= TJSONObject.Create;
+        JObj.AddPair('rule'      , F.RuleId  );
+        JObj.AddPair('severity'  , F.Severity);
+        JObj.AddPair('file_path' , F.FilePath);
+        JObj.AddPair('start_line', TJSONNumber.Create(F.StartLine));
+        JObj.AddPair('start_col' , TJSONNumber.Create(F.StartCol ));
+        JObj.AddPair('end_line'  , TJSONNumber.Create(F.EndLine  ));
+        JObj.AddPair('end_col'   , TJSONNumber.Create(F.EndCol   ));
+        JObj.AddPair('message'   , F.Message );
+        JArr.AddElement(JObj);
+      end;
+      TFile.WriteAllText(OutPath, JArr.ToJSON, TEncoding.UTF8);
+      Writeln(JArr.ToJSON);
+    finally
+      JArr.Free;
+    end;
+  end
+  else
+  begin
+    OutLines:= TStringBuilder.Create;
+    try
+      for F in Findings do
+        OutLines.AppendLine(Format('%s:%d:%d  [%s] %s: %s',
+          [F.FilePath, F.StartLine, F.StartCol, F.Severity, F.RuleId, F.Message]));
+      OutLines.AppendLine(Format(
+        'lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) scanned',
+        [Length(Findings), ErrCnt, WarnCnt, Length(FilePaths)]));
+      TFile.WriteAllText(OutPath, OutLines.ToString, TEncoding.UTF8);
+    finally
+      OutLines.Free;
+    end;
+    for F in Findings do
+      Writeln(Format('%s:%d:%d  [%s] %s: %s',
+        [F.FilePath, F.StartLine, F.StartCol, F.Severity, F.RuleId, F.Message]));
+    Writeln(Format(
+      'lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) -- report: %s',
+      [Length(Findings), ErrCnt, WarnCnt, Length(FilePaths), OutPath]));
+  end;
+
+  if Length(Findings) > 0 then Result:= 1 else Result:= 0;
+end; // function
+
 // v0.48: drag-lint lint-project --db <index.sqlite> [--rule <id>] [--json]
 // Index-wide ("project") lint rules (god-class, unused-public-symbol) that need
 // the whole symbol/refs graph. Exit 1 if any findings, 0 if none, 2 on usage error.
@@ -8655,6 +8851,7 @@ begin
     else if Args.Command = 'ghost-check'       then Result:= DoGhostCheck      (Args)
     else if Args.Command = 'ghost-recover'     then Result:= DoGhostRecover    (Args)
     else if Args.Command = 'check-unit'        then Result:= DoCheckUnit       (Args)
+    else if Args.Command = 'lint-all'           then Result:= DoLintAll         (Args)
     else if Args.Command = 'lint-project'      then Result:= DoLintProject     (Args)
     else if Args.Command = 'cycles'            then Result:= DoCycles          (Args)
     else if Args.Command = 'uses-audit'        then Result:= DoUsesAudit       (Args)
