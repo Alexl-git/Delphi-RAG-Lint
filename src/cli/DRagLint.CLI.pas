@@ -7496,6 +7496,93 @@ begin
     Writeln(ErrOutput, Format( 'WARNING: %s is %d MB; a 32-bit process may run out of memory. ' + 'Use the Win64 drag-lint.exe (third_party\dll-win64).', [ADbPath, FileSizeMB]));
 end; // procedure
 
+/// <summary>Reads the default platform from the first .dproj found under the
+/// manifest section that covers ACwd. Returns '' if not found.</summary>
+/// <param name="AManifest">Parsed manifest providing section include paths.</param>
+/// <param name="ACwd">Current working directory; used for longest-prefix match.</param>
+/// <returns>'Win32', 'Win64', or '' when no .dproj or Platform element is found.</returns>
+/// <remarks>Performs a top-directory-first search, then recursive if none found
+/// at the top level.  Not thread-safe; call from the main thread only.</remarks>
+function DetectPlatformFromDproj(const AManifest: TIndexManifest;
+  const ACwd: string): string;
+var
+  Sections  : TArray<TIndexSection>;
+  Sec       : TIndexSection        ;
+  IncPath   : string               ;
+  BestLen   : Integer              ;
+  BestInc   : string               ;
+  CwdNorm   : string               ;
+  IncNorm   : string               ;
+  DprojFile : string               ;
+  DprojFiles: TArray<string>       ;
+  Xml       : string               ;
+  P1, P2    : Integer              ;
+begin
+  Result:= '';
+  CwdNorm:= IncludeTrailingPathDelimiter(
+              TPath.GetFullPath(ACwd)).ToLower;
+  BestLen:= -1;
+  BestInc:= '';
+
+  // Find manifest section whose include is the longest ancestor of ACwd.
+  Sections:= AManifest.Sections;
+  for Sec in Sections do
+  begin
+    if SameText(Sec.Source, 'registry-libraries') then Continue;
+    for IncPath in Sec.Include do
+    begin
+      IncNorm:= IncludeTrailingPathDelimiter(
+                  TPath.GetFullPath(IncPath)).ToLower;
+      if CwdNorm.StartsWith(IncNorm) and (Length(IncNorm) > BestLen) then
+      begin
+        BestLen:= Length(IncNorm);
+        BestInc:= IncPath;
+      end;
+    end;
+  end;
+
+  if BestInc = '' then Exit;
+
+  // Find first .dproj under that include path (top dir first, then recursive).
+  try
+    DprojFiles:= TDirectory.GetFiles(BestInc, '*.dproj',
+                   TSearchOption.soTopDirectoryOnly);
+    if Length(DprojFiles) = 0 then
+      DprojFiles:= TDirectory.GetFiles(BestInc, '*.dproj',
+                     TSearchOption.soAllDirectories);
+    if Length(DprojFiles) = 0 then Exit;
+    DprojFile:= DprojFiles[0];
+  except
+    Exit;
+  end;
+
+  // Parse <Platform Condition="'$(Platform)'==''">Win64</Platform>
+  try
+    Xml:= TFile.ReadAllText(DprojFile);
+  except
+    Exit;
+  end;
+
+  // Find <Platform Condition=...>Win64</Platform> — search for the opening tag
+  // directly so we are not confused by attribute quote style.
+  P1:= Pos('<Platform Condition=', Xml);
+  if P1 = 0 then
+    P1:= Pos('<platform condition=', Xml.ToLower);
+  while P1 > 0 do
+  begin
+    P1:= Pos('>', Xml, P1);
+    if P1 = 0 then Break;
+    P2:= Pos('<', Xml, P1 + 1);
+    if P2 = 0 then Break;
+    Result:= Xml.Substring(P1, P2 - P1 - 1).Trim;
+    if (Result = 'Win32') or (Result = 'Win64') then Exit;
+    Result:= '';
+    // Search again from after this element (handles multiple Platform elements).
+    P1:= Pos('<Platform Condition=', Xml, P2);
+    if P1 = 0 then Break;
+  end;
+end; // function DetectPlatformFromDproj
+
 // v0.45 Task 9: resolve the DB list for consumer commands (query/lsp/serve)
 // when the user supplied no --db flags.
 // Steps:
@@ -7524,9 +7611,14 @@ begin
     EngineDir:= ExtractFilePath(ParamStr(0));
     Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
 
-    // Pick platform: CLI --platform > manifest defaultPlatform.
-    if AArgs.CheckPlatform <> '' then Platform:= AArgs.CheckPlatform
-    else Platform:= Manifest.Settings.DefaultPlatform;
+    // Pick platform: CLI --platform > .dproj detection > manifest defaultPlatform.
+    if AArgs.CheckPlatform <> '' then
+      Platform:= AArgs.CheckPlatform
+    else
+    begin
+      Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
+      if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
+    end;
 
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
@@ -7595,9 +7687,14 @@ begin
       end
       else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
 
-      // Pick platform: CLI --platform > manifest defaultPlatform.
-      if AArgs.CheckPlatform <> '' then Platform:= AArgs.CheckPlatform
-      else Platform:= Manifest.Settings.DefaultPlatform;
+      // Pick platform: CLI --platform > .dproj detection > manifest defaultPlatform.
+      if AArgs.CheckPlatform <> '' then
+        Platform:= AArgs.CheckPlatform
+      else
+      begin
+        Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
+        if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
+      end;
 
       Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
       try
