@@ -66,6 +66,9 @@ function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): strin
 
 implementation
 
+const
+  FORMS_CSV_ALGORITHM = '2'; // bump when BuildEdges / NavPath algorithm changes
+
 /// <summary>Reads the immediate ancestor class name from a .pas class
 /// declaration at the given 1-based line (handles "T = class(TAncestor)").</summary>
 function ReadAncestor(const APasPath: string; AStartLine: Integer): string;
@@ -263,6 +266,14 @@ begin
   Result:= (Pos(AFormClass + '.Create', ALine) > 0) or (Pos('CreateForm(' + AFormClass, StringReplace(ALine, ' ', '', [rfReplaceAll])) > 0);
 end;
 
+/// <summary>True if ALine shows a global singleton form instance via its design-time
+/// instance name: formName.Show* (covers .ShowModal, .Show) or formName.Execute.</summary>
+function IsShowLine(const ALine, AFormName: string): Boolean;
+begin
+  Result:= (Pos(AFormName + '.Show'   , ALine) > 0) or
+           (Pos(AFormName + '.Execute', ALine) > 0);
+end;
+
 /// <summary>Reads the Caption literal of a control from its .dfm line range
 /// (the first "Caption = '...'" before any nested object). Strips '&amp;'
 /// accelerators and joins simple multi-line string continuations.</summary>
@@ -316,7 +327,7 @@ begin
   ARoutine   := '';
   for I:= ALaunchLine - 1 downto 0 do
   begin
-    if (ALaunchLine - 1 - I) > 50 then Break;
+    if (ALaunchLine - 1 - I) > 100 then Break;
     T:= Trim(ALines[I]);
     Lc:= LowerCase(T);
     Kw:= '';
@@ -328,7 +339,17 @@ begin
     Rest:= Copy(T, Length(Kw) + 2, MaxInt); // skip keyword + space
     // Rest now: "ClassName.MethodName(..." or "MethodName(..." (standalone)
     P:= Pos('.', Rest);
-    if P = 0 then Continue; // no dot -> not a qualified class method
+    if P = 0 then
+    begin
+      // Standalone function/procedure -- no class prefix. Return empty owner
+      // class so ProcessSite can handle factory/hook patterns without marking
+      // the target form DEAD (instead of silently skipping the call site).
+      Q:= 1;
+      while (Q <= Length(Rest)) and CharInSet(Rest[Q], ['A'..'Z','a'..'z','0'..'9','_']) do Inc(Q);
+      ARoutine:= Copy(Rest, 1, Q - 1);
+      if ARoutine <> '' then begin AOwnerClass:= ''; Exit(True); end;
+      Continue;
+    end;
     // Extract class name (chars before the dot)
     Q:= 1;
     while (Q < P) and CharInSet(Rest[Q], ['A'..'Z','a'..'z','0'..'9','_']) do Inc(Q);
@@ -468,21 +489,98 @@ begin
   end;
 end; // function
 
-/// <summary>Builds launch edges X -> Y across all forms. For each target form Y,
-/// finds construction sites in any .pas, resolves the enclosing routine and its
-/// owning form X, and resolves the caption of the control that triggers it.</summary>
+/// <summary>Recursively walks the call graph upward from (AOwnerClass, ARoutine)
+/// to find the nearest ancestor call site that lies within a navigable form.
+/// Cycle-safe via AVisited keyed as 'OwnerClass.Routine' -- no depth cap; the
+/// visited set is the only termination guard.
+/// On success sets AFormClass to the form class and AFormRoutine to the method
+/// within that form that initiates the chain; returns True.</summary>
+/// <remarks>False positives are possible when method names are non-unique across
+/// the codebase; accepted trade-off for unlimited-depth traversal without full
+/// type inference.</remarks>
+function FindNearestFormCaller(
+  AStore       : TSQLiteSymbolStore;
+  const AOwnerClass, ARoutine: string;
+  AClassToNode : TDictionary<string, TFormNode>;
+  APasLines    : TDictionary<Int64, TArray<string>>;
+  AVisited     : TDictionary<string, Boolean>;
+  out AFormClass  : string;
+  out AFormRoutine: string
+): Boolean;
+var
+  Key   : string        ;
+  Q     : TFDQuery      ;
+  FId   : Int64         ;
+  SL    : Integer       ;
+  Path  : string        ;
+  Arr   : TArray<string>;
+  COwner: string        ;
+  CRout : string        ;
+begin
+  Result      := False;
+  AFormClass  := '';
+  AFormRoutine:= '';
+  Key:= AOwnerClass + '.' + ARoutine;
+  if AVisited.ContainsKey(Key) then Exit;
+  AVisited.Add(Key, True);
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= AStore.GetConnection;
+    Q.SQL.Text:=
+      'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
+      'FROM refs r JOIN files f ON f.id = r.file_id ' +
+      'WHERE r.name_text = :rout AND f.language LIKE ''delphi%''';
+    Q.ParamByName('rout').AsString:= ARoutine;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      FId := Q.FieldByName('fid').AsLargeInt;
+      SL  := Q.FieldByName('sl' ).AsInteger;
+      Path:= Q.FieldByName('p'  ).AsString;
+      if not APasLines.TryGetValue(FId, Arr) then
+      begin
+        if TFile.Exists(Path) then Arr:= TFile.ReadAllLines(Path, TEncoding.ANSI)
+        else Arr:= [];
+        APasLines.Add(FId, Arr);
+      end;
+      COwner:= '';
+      CRout := '';
+      if (SL >= 1) and (SL <= Length(Arr)) and
+         FindEnclosingImpl(Arr, SL, COwner, CRout) and
+         (COwner <> '') and (CRout <> '') then
+      begin
+        if AClassToNode.ContainsKey(COwner) then
+        begin
+          AFormClass  := COwner;
+          AFormRoutine:= CRout;
+          Exit(True);
+        end
+        else if FindNearestFormCaller(AStore, COwner, CRout, AClassToNode,
+                                      APasLines, AVisited,
+                                      AFormClass, AFormRoutine) then
+          Exit(True);
+      end;
+      Q.Next;
+    end; // while
+  finally
+    Q.Free;
+  end; // try
+end; // function
+
+/// <summary>Builds launch edges X -> Y across all forms using two passes:
+/// (1) construction-site refs by class name (TClass.Create / CreateForm); and
+/// (2) singleton show-site refs by instance name (formName.ShowModal/.Execute).
+/// When the immediate launch site is in a non-form class, recursively walks the
+/// call graph upward (unlimited depth, cycle-safe via visited set) until a
+/// navigable form ancestor is found. Duplicate (From, To, Caption) triples are
+/// suppressed.</summary>
 function BuildEdges(AStore: TSQLiteSymbolStore; ANodes: TList<TFormNode>; AClassToNode: TDictionary<string, TFormNode>): TList<TFormEdge>;
 var
-  Y         : TFormNode                                                  ;
-  Q         : TFDQuery                                                   ;
-  PasFileId : Int64                                                      ;
-  LaunchLine: Integer                                                    ;
-  LineText  : string                                                     ;
-  Routine   : string                                                     ;
-  OwnerClass: string                                                     ;
-  XNode     : TFormNode                                                  ;
-  Edge      : TFormEdge                                                  ;
-  PasLines  : TDictionary<Int64, TArray<string>>                         ;
+  Y        : TFormNode                         ;
+  Q        : TFDQuery                          ;
+  PasLines : TDictionary<Int64, TArray<string>>;
+  SeenEdges: TStringList                       ;
+
   function FileLines(AFileId: Int64; const APath: string): TArray<string>;
   begin
     if not PasLines.TryGetValue(AFileId, Result) then
@@ -492,51 +590,167 @@ var
       PasLines.Add(AFileId, Result);
     end;
   end;
+
+  procedure TryAddEdge(const AFrom, ATo, ACaption: string);
+  var EKey: string; E: TFormEdge;
+  begin
+    EKey:= AFrom + #1 + ATo + #1 + ACaption;
+    if SeenEdges.IndexOf(EKey) >= 0 then Exit;
+    SeenEdges.Add(EKey);
+    E:= Default(TFormEdge);
+    E.FromClass:= AFrom;
+    E.ToClass  := ATo;
+    E.Caption  := ACaption;
+    Result.Add(E);
+  end;
+
+  /// <summary>Resolves and records one launch edge from a single ref row.
+  /// AIsShowSite = True uses IsShowLine (instance-name show pattern);
+  /// False uses IsLaunchLine (class-name construction pattern).
+  /// When the enclosing class is not a form, calls FindNearestFormCaller to
+  /// walk the call graph upward until a form ancestor is found.</summary>
+  procedure ProcessSite(APasFileId: Int64; ALaunchLine: Integer; const APath: string;
+    const ATargetClass, ATargetName: string; AIsShowSite: Boolean);
+  var
+    Arr     : TArray<string>;
+    OC, Rout: string        ;
+    Cap     : string        ;
+    FormCls : string        ;
+    FormRout: string        ;
+    XN      : TFormNode     ;
+  begin
+    Arr:= FileLines(APasFileId, APath);
+    if (ALaunchLine < 1) or (ALaunchLine > Length(Arr)) then Exit;
+    if AIsShowSite then
+    begin
+      if not IsShowLine(Arr[ALaunchLine - 1], ATargetName) then Exit;
+    end
+    else
+    begin
+      if not IsLaunchLine(Arr[ALaunchLine - 1], ATargetClass) then Exit;
+    end;
+    if not FindEnclosingImpl(Arr, ALaunchLine, OC, Rout) then Exit;
+    if SameText(OC, ATargetClass) then Exit; // self-launch
+    if OC = '' then
+    begin
+      // Call site is inside a standalone function (no class owner).
+      // Try upward graph walk to find a form ancestor; if none, record the
+      // unit.function as a synthetic caller so the form is not labelled DEAD
+      // (it is reachable via factory/hook, just not statically traceable).
+      FormCls := '';
+      FormRout:= '';
+      var Vis2s:= TDictionary<string, Boolean>.Create;
+      try
+        if FindNearestFormCaller(AStore, '', Rout, AClassToNode, PasLines, Vis2s,
+                                 FormCls, FormRout) and
+           AClassToNode.TryGetValue(FormCls, XN) then
+        begin
+          var Vis3s:= TDictionary<string, Boolean>.Create;
+          try
+            Cap:= CaptionForHandler(AStore, XN, FormRout, Vis3s);
+          finally
+            Vis3s.Free;
+          end;
+          if Cap = '' then Cap:= '(via ' + Rout + ')';
+          TryAddEdge(FormCls, ATargetClass, Cap);
+        end
+        else
+          TryAddEdge(TPath.GetFileNameWithoutExtension(APath) + '.' + Rout,
+                     ATargetClass, '(via hook)');
+      finally
+        Vis2s.Free;
+      end;
+      Exit;
+    end;
+    if AClassToNode.TryGetValue(OC, XN) then
+    begin
+      // Direct form launcher - resolve caption from DFM event binding
+      var Vis1:= TDictionary<string, Boolean>.Create;
+      try
+        Cap:= CaptionForHandler(AStore, XN, Rout, Vis1);
+      finally
+        Vis1.Free;
+      end;
+      if Cap = '' then Cap:= '(via ' + Rout + ')';
+      TryAddEdge(OC, ATargetClass, Cap);
+    end
+    else
+    begin
+      // Non-form launcher: walk the call graph upward to find the ancestor form
+      FormCls := '';
+      FormRout:= '';
+      var Vis2:= TDictionary<string, Boolean>.Create;
+      try
+        if FindNearestFormCaller(AStore, OC, Rout, AClassToNode, PasLines, Vis2,
+                                 FormCls, FormRout) and
+           AClassToNode.TryGetValue(FormCls, XN) then
+        begin
+          var Vis3:= TDictionary<string, Boolean>.Create;
+          try
+            Cap:= CaptionForHandler(AStore, XN, FormRout, Vis3);
+          finally
+            Vis3.Free;
+          end;
+          if Cap = '' then Cap:= '(via ' + Rout + ')';
+          TryAddEdge(FormCls, ATargetClass, Cap);
+        end;
+      finally
+        Vis2.Free;
+      end;
+    end;
+  end;
+
 begin
-  Result:= TList<TFormEdge>.Create;
-  PasLines:= TDictionary<Int64, TArray<string>>.Create;
+  Result   := TList<TFormEdge>.Create;
+  PasLines := TDictionary<Int64, TArray<string>>.Create;
+  SeenEdges:= TStringList.Create;
+  SeenEdges.Sorted    := True;
+  SeenEdges.Duplicates:= dupIgnore;
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= AStore.GetConnection;
     for Y in ANodes do
     begin
+      // Pass 1: construction sites -- refs by class name (TClass.Create / CreateForm)
       Q.Close;
-      Q.SQL.Text:= 'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' + 'FROM refs r JOIN files f ON f.id = r.file_id ' +
-      'WHERE r.name_text = :cls AND f.language LIKE ''delphi%''';
+      Q.SQL.Text:=
+        'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
+        'FROM refs r JOIN files f ON f.id = r.file_id ' +
+        'WHERE r.name_text = :cls AND f.language LIKE ''delphi%''';
       Q.ParamByName('cls').AsString:= Y.FormClass;
       Q.Open;
       while not Q.Eof do
       begin
-        PasFileId := Q.FieldByName('fid').AsLargeInt;
-        LaunchLine:= Q.FieldByName('sl' ).AsInteger;
-        var Arr:= FileLines(PasFileId, Q.FieldByName('p').AsString);
-        if (LaunchLine >= 1) and (LaunchLine <= Length(Arr)) then LineText:= Arr[LaunchLine - 1]
-        else LineText:= '';
-        if IsLaunchLine(LineText, Y.FormClass) then
-        begin
-          if FindEnclosingImpl(Arr, LaunchLine, OwnerClass, Routine) and AClassToNode.TryGetValue(OwnerClass, XNode) and (OwnerClass <> Y.FormClass) then
-          begin
-            Edge:= Default(TFormEdge);
-            Edge.FromClass:= OwnerClass;
-            Edge.ToClass:= Y.FormClass;
-            var Vis:= TDictionary<string, Boolean>.Create;
-            try
-              Edge.Caption:= CaptionForHandler(AStore, XNode, Routine, Vis);
-            finally
-              Vis.Free;
-            end;
-            if Edge.Caption = '' then Edge.Caption:= '(via ' + Routine + ')';
-            Result.Add(Edge);
-          end;
-        end; // if
+        ProcessSite(Q.FieldByName('fid').AsLargeInt,
+                    Q.FieldByName('sl' ).AsInteger,
+                    Q.FieldByName('p'  ).AsString,
+                    Y.FormClass, Y.FormName, False);
         Q.Next;
       end; // while
-    end; // for
+
+      // Pass 2: singleton show sites -- refs by instance name (.ShowModal / .Execute)
+      Q.Close;
+      Q.SQL.Text:=
+        'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
+        'FROM refs r JOIN files f ON f.id = r.file_id ' +
+        'WHERE r.name_text = :nm AND f.language LIKE ''delphi%''';
+      Q.ParamByName('nm').AsString:= Y.FormName;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        ProcessSite(Q.FieldByName('fid').AsLargeInt,
+                    Q.FieldByName('sl' ).AsInteger,
+                    Q.FieldByName('p'  ).AsString,
+                    Y.FormClass, Y.FormName, True);
+        Q.Next;
+      end; // while
+    end; // for Y
   finally
     Q.Free;
     PasLines.Free;
+    SeenEdges.Free;
   end; // try
-end; // begin
+end; // function
 
 /// <summary>BFS shortest navigation path from the root form to AToClass.
 /// Returns "RootName -> 'Cap1' -> 'Cap2'" or '' if unreachable.</summary>
@@ -738,6 +952,21 @@ begin
       Edges:= BuildEdges(Store, Nodes, ClassToNode);
       try
         RootClass:= DetectRoot(AProjectFile, ARootForm, ClassToNode, Edges);
+        var SchemaVer:= 0;
+        var Qver:= TFDQuery.Create(nil);
+        try
+          Qver.Connection:= Store.GetConnection;
+          Qver.SQL.Text  := 'PRAGMA user_version';
+          Qver.Open;
+          if not Qver.IsEmpty then SchemaVer:= Qver.Fields[0].AsInteger;
+        finally
+          Qver.Free;
+        end;
+        Sb.Append('# forms-csv algorithm v' + FORMS_CSV_ALGORITHM +
+                  ' | db: ' + ADbPath +
+                  ' | schema v' + IntToStr(SchemaVer) +
+                  ' | ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Now))
+          .Append(#13#10);
         Sb.Append('#,Unit,FormName,PAS lines,Navigation,Called From,Notes').Append(#13#10);
         Idx:= 0;
         for N in Nodes do
@@ -750,8 +979,10 @@ begin
             if (Nav = '') and not SameText(N.FormClass, RootClass) then Nav:= '(no path from MAIN)';
           end;
           var CF:= CalledFrom(Edges, ClassToNode, N.FormClass);
+          var Notes:= '';
+          if (Nav = '(no path from MAIN)') and (CF = '') then Notes:= 'DEAD FORM - no callers found';
           Sb.Append(Idx).Append(',').Append(CsvField(N.UnitName)).Append(',').Append(CsvField(N.FormName)).Append(',').Append(N.PasLineCount).Append(',')
-            .Append(CsvField(Nav)).Append(',').Append(CsvField(CF)).Append(',').Append('') // Notes
+            .Append(CsvField(Nav)).Append(',').Append(CsvField(CF)).Append(',').Append(CsvField(Notes))
             .Append(#13#10);
         end; // for
         Result:= Sb.ToString;
