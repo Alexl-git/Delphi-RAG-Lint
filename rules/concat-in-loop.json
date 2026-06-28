@@ -1,0 +1,6 @@
+{
+  "id": "concat-in-loop",
+  "severity": "info",
+  "message": "S := S + X self-concatenation is O(n^2) -- each '+' allocates a new string. Accumulate with TStringList or use string.Join, especially inside loops.",
+  "warn_capture": "warn"
+}

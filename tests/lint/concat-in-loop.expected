@@ -1,0 +1,5 @@
+# S := S + ... at lines 13 and 14; SL := / SL.Add (22, 24) must not fire
+concat-in-loop 13
+concat-in-loop 14
+!concat-in-loop 22
+!concat-in-loop 24
