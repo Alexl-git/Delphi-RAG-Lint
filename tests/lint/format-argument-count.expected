@@ -1,0 +1,5 @@
+# '%s = %d' with 1 arg (13); '%d' with 3 args (14); Good calls (22,23) match
+format-argument-count 13
+format-argument-count 14
+!format-argument-count 22
+!format-argument-count 23

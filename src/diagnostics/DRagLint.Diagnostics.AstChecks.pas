@@ -151,6 +151,14 @@ type
       /// <remarks>Severity warning. Only the direct first statement is inspected, so an
       /// Exit nested in an if is not flagged. Pure AST; no DB. Never raises.</remarks>
       class function CheckLoopAtMostOnce(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Checks a Format('literal', [literals]) call for two faults: the conversion
+      /// specifier count not matching the argument count (format-argument-count), and a literal
+      /// argument whose type is incompatible with its specifier family (format-specifier-type-mismatch).</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>Findings tagged 'format-argument-count' and/or 'format-specifier-type-mismatch'.</returns>
+      /// <remarks>Severity error. Requires a literalString format + exprBrackets argument array;
+      /// skips silently otherwise. Variable arguments are not type-checked. Pure AST; no DB.</remarks>
+      class function CheckFormatCall(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -2855,6 +2863,150 @@ var
         F.EndLine:= F.StartLine;
         F.EndCol := F.StartCol + 1;
         Findings.Add(F);
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then Visit(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckFormatCall(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { Ordered conversion chars (lowercased) in a Format literal, excluding %% escapes. }
+  function SpecKinds(const ALit: string): TArray<Char>;
+  var
+    M    : TMatch     ;
+    Kinds: TList<Char>;
+    Body : string     ;
+    Conv : string     ;
+  begin
+    Body:= ALit;
+    if (Length(Body) >= 2) and (Body[1] = '''') then Body:= Copy(Body, 2, Length(Body) - 2);
+    Body:= StringReplace(Body, '%%', '', [rfReplaceAll]);
+    Kinds:= TList<Char>.Create;
+    try
+      for M in TRegEx.Matches(Body, '%[-+ 0#]*(\d+|\*)?(\.(\d+|\*))?([a-zA-Z])') do
+      begin
+        Conv:= M.Groups[4].Value;
+        if Conv <> '' then Kinds.Add(LowerCase(Conv)[1]);
+      end;
+      Result:= Kinds.ToArray;
+    finally
+      Kinds.Free;
+    end;
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var
+    I, J                     : Integer ;
+    Ent, Args, Fmt, Arr, Elem: TTSNode ;
+    Kinds                    : TArray<Char>;
+    P, PE                    : TTSPoint;
+    F                        : TLintFinding;
+    K                        : Char    ;
+    IsNum, IsIntOnly, BadType: Boolean ;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.NodeType = 'exprCall' then
+    begin
+      Ent:= N.ChildByField('entity');
+      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') and SameText(NodeStr(Ent), 'Format') then
+      begin
+        Args:= N.ChildByField('args');
+        if (not Args.IsNull) and (Args.NamedChildCount >= 2) then
+        begin
+          Fmt:= Args.NamedChild(0);
+          Arr:= Args.NamedChild(1);
+          if (Fmt.NodeType = 'literalString') and (Arr.NodeType = 'exprBrackets') then
+          begin
+            Kinds:= SpecKinds(NodeStr(Fmt));
+            { count check }
+            if Length(Kinds) <> Arr.NamedChildCount then
+            begin
+              P:= Ent.StartPoint;
+              F:= Default(TLintFinding);
+              F.RuleId  := 'format-argument-count';
+              F.Severity:= 'error';
+              F.Message := Format('Format string has %d specifier(s) but %d argument(s) were supplied.', [Length(Kinds), Arr.NamedChildCount]);
+              F.FilePath:= AFile;
+              F.StartLine:= Integer(P.Row   ) + 1;
+              F.StartCol := Integer(P.Column) + 1;
+              F.EndLine:= F.StartLine;
+              F.EndCol := F.StartCol + 1;
+              Findings.Add(F);
+            end;
+            { type check (literal arguments only) }
+            for J:= 0 to Length(Kinds) - 1 do
+            begin
+              if J >= Arr.NamedChildCount then Break;
+              Elem:= Arr.NamedChild(J);
+              K:= Kinds[J];
+              IsNum    := CharInSet(K, ['d', 'u', 'x', 'i', 'f', 'g', 'e', 'n']);
+              IsIntOnly:= CharInSet(K, ['d', 'u', 'x', 'i']);
+              BadType:= False;
+              if Elem.NodeType = 'literalString' then BadType:= IsNum
+              else if Elem.NodeType = 'literalNumber' then BadType:= IsIntOnly and (Pos('.', NodeStr(Elem)) > 0);
+              if BadType then
+              begin
+                PE:= Elem.StartPoint;
+                F:= Default(TLintFinding);
+                F.RuleId  := 'format-specifier-type-mismatch';
+                F.Severity:= 'error';
+                F.Message := Format('Argument %d is incompatible with format specifier "%%%s".', [J + 1, string(K)]);
+                F.FilePath:= AFile;
+                F.StartLine:= Integer(PE.Row   ) + 1;
+                F.StartCol := Integer(PE.Column) + 1;
+                F.EndLine:= F.StartLine;
+                F.EndCol := F.StartCol + 1;
+                Findings.Add(F);
+              end;
+            end;
+          end;
+        end;
       end;
     end;
     for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));

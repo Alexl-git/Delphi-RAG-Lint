@@ -1,0 +1,6 @@
+# %d with string (13), %f with string (14); int/string/variable args (22,23,24) clean
+format-specifier-type-mismatch 13
+format-specifier-type-mismatch 14
+!format-specifier-type-mismatch 22
+!format-specifier-type-mismatch 23
+!format-specifier-type-mismatch 24
