@@ -1,0 +1,6 @@
+# StrCopy/StrCat/StrMove/StrLen/StrPos calls at lines 13-17; Good proc clean
+unsafe-string-api 13
+unsafe-string-api 14
+unsafe-string-api 15
+unsafe-string-api 16
+unsafe-string-api 17

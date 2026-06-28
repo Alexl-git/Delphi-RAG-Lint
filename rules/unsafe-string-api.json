@@ -1,0 +1,6 @@
+{
+  "id": "unsafe-string-api",
+  "severity": "warning",
+  "message": "Unsafe PChar string routine -- no length bound. Use System.AnsiStrings or TStringHelper equivalents.",
+  "warn_capture": "warn"
+}
