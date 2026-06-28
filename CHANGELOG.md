@@ -3,6 +3,38 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.62.0-alpha -- 2026-06-28
+
+### Added
+
+Nine new pure `.scm` lint rules (no exe rebuild required to add a query rule;
+each ships with a TDD fixture under `tests/lint/` verified by
+`tests/lint/run_lint_tests.ps1`):
+
+- **`unsafe-string-api`** (warning) -- calls to `StrCopy`/`StrCat`/`StrPCopy`/
+  `StrMove`/`StrPos`/`StrLen`, unbounded C-style PChar routines with no length
+  guard. Prefer `System.AnsiStrings` equivalents or the string/`TStringHelper` APIs.
+- **`deprecated-rtl-function`** (info) -- `OemToAnsi`/`AnsiToOem`/`StrPas`,
+  obsolete RTL routines; prefer `TEncoding` / modern string APIs.
+- **`sleep-in-vcl`** (warning) -- `Sleep()` on the main thread freezes the VCL
+  UI; use `TTimer` for delays or `TThread.Sleep` in a background thread.
+- **`constant-condition`** (warning) -- `if True`/`if False`/`while False`, an
+  always-constant condition (dead code or logic error). `while True` (event
+  loop) is intentionally left alone.
+- **`ifthen-both-branches`** (warning) -- `SysUtils.IfThen` evaluates both
+  arguments before calling; side effects in either branch always execute. Use a
+  real `if`/`then`/`else` when branches have side effects.
+- **`sizeof-pointer-assumption`** (warning) -- `SizeOf(Pointer) = 4`/`8` bakes
+  in a platform assumption (breaks across Win32/Win64). Guard with
+  `{$IFDEF WIN64}` or compare to `SizeOf` of a platform-aware type.
+- **`pchar-arithmetic`** (warning) -- `+`/`-` on a PChar-named variable;
+  pointer arithmetic is unsafe and platform-specific. Use `PChar[N]` or string APIs.
+- **`boolean-result-returned-directly`** (info) -- redundant
+  `if Cond then Result := True else Result := False`; write `Result := Cond`
+  (or `Result := not Cond`) directly.
+- **`concat-in-loop`** (info) -- `S := S + X` self-concatenation is O(n^2);
+  accumulate with `TStringList` or use `string.Join`, especially inside loops.
+
 ## v0.61.0-alpha -- 2026-06-26
 
 ### Added

@@ -139,6 +139,23 @@ Refined existing rules: `boolean-comparison-true` now also matches `<> True`/`<>
 `assert-call` now fires only on single-argument `Assert` (no message); `compiler-magic-comments`
 also matches `BUG`.
 
+## Shipped rules (v0.62 -- Phase 1, pure `.scm`)
+
+Nine new query-only rules -- no exe rebuild is needed to add a `.scm` rule. Each
+has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_tests.ps1`.
+
+| Rule id | Severity | Description |
+|---------|----------|-------------|
+| `unsafe-string-api` | warning | Calls to `StrCopy`/`StrCat`/`StrPCopy`/`StrMove`/`StrPos`/`StrLen` -- unbounded PChar routines |
+| `deprecated-rtl-function` | info | `OemToAnsi`/`AnsiToOem`/`StrPas` -- obsolete RTL routines |
+| `sleep-in-vcl` | warning | `Sleep()` on the main thread freezes the VCL UI |
+| `constant-condition` | warning | `if True`/`if False`/`while False` -- always-constant condition (`while True` is left alone) |
+| `ifthen-both-branches` | warning | `SysUtils.IfThen` evaluates both branches unconditionally |
+| `sizeof-pointer-assumption` | warning | `SizeOf(Pointer) = 4`/`8` bakes in a platform assumption |
+| `pchar-arithmetic` | warning | `+`/`-` on a PChar-named variable -- unsafe pointer arithmetic |
+| `boolean-result-returned-directly` | info | redundant `if/else` assigning `True`/`False` to `Result` |
+| `concat-in-loop` | info | `S := S + X` self-concatenation is O(n^2) |
+
 ### Built-in rules (compiled into the exe, not `.scm`)
 
 Some rules need scope/flow analysis a single tree-sitter query can't express, so they live in
