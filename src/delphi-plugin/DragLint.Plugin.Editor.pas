@@ -3268,8 +3268,26 @@ var
   Proj, Db, OutPath, Cmd: string;
   MS: IOTAModuleServices;
 begin
-  Proj:= GetActiveProjectFile; Db:= GetActiveProjectDb;
-  if (Proj = '') or (Db = '') then begin ShowMessage('drag-lint: no active project or index found.'); Exit; end;
+  Proj:= GetActiveProjectFile;
+  if Proj = '' then begin ShowMessage('drag-lint: no active project.'); Exit; end;
+  { Resolve the index DB the manifest-aware way -- the index often lives in a
+    manifest outDir (e.g. ...\DB\ORM3\CLIENT\Micronite2027.sqlite), NOT next to
+    the .dproj, so the simple <dproj>.sqlite path misses it (false "no index"). }
+  Db:= '';
+  try
+    for var Dbc in ResolveActiveIndexDbs(LoadSettings) do
+      if FileExists(Dbc) then begin Db:= Dbc; Break; end;
+  except
+    Db:= '';
+  end;
+  if (Db = '') or not FileExists(Db) then Db:= ManifestDbForFile(Proj);
+  if (Db = '') or not FileExists(Db) then Db:= GetActiveProjectDb;
+  if (Db = '') or not FileExists(Db) then
+  begin
+    ShowMessage('drag-lint: no index found for this project. ' +
+      'Run drag-lint > Index && Maintenance > Reindex Project first.');
+    Exit;
+  end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
   OutPath:= TPath.Combine(ExtractFilePath(Proj), 'lint-report-' + FormatDateTime('yyyymmdd-hhnnss', Now) + '.txt');
   Cmd    := Format('"%s" lint-all --db "%s" --project "%s" --out "%s"', [DLExe, Db, Proj, OutPath]);
@@ -3369,6 +3387,7 @@ begin
   var SubQuality: TMenuItem:= TMenuItem.Create(RootMenu);
   SubQuality.Caption:= 'Code Quality';
   RootMenu.Add(SubQuality);
+  AddWrappedItem(SubQuality, 'Run Lint All (Full Report)...', InvokeLintAll         );
   AddWrappedItem(SubQuality, 'Find Dead Code...'            , InvokeFindDeadCode    );
   AddWrappedItem(SubQuality, 'Find Undocumented (public)...', InvokeFindUndocumented);
   AddWrappedItem(SubQuality, 'Scan TODOs / FIXMEs...'       , InvokeScanTodos       );
@@ -3397,7 +3416,6 @@ begin
   AddSeparator(RootMenu);
   AddSectionHeader(RootMenu, 'Diagnostics && Tests');
   AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)'      , InvokeDiagnostics    );
-  AddWrappedItem(RootMenu, 'Run Lint All (Full Report)'     , InvokeLintAll        );
   AddWrappedItem(RootMenu, 'Run AST Checks'                 , InvokeRunAstChecks   );
   AddWrappedItem(RootMenu, 'Lint Buffer (Unsaved)'          , InvokeLintBuffer     );
   AddWrappedItem(RootMenu, 'Copy Diagnostics (Current File)', InvokeCopyDiagnostics);
