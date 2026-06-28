@@ -1,0 +1,6 @@
+{
+  "id": "constant-condition",
+  "severity": "warning",
+  "message": "Condition is always the same constant -- likely dead code or a logic error.",
+  "warn_capture": "warn"
+}

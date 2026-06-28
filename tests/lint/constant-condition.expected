@@ -1,0 +1,6 @@
+# if True (9), if False (11), while False (13); while True (23) and if B (21) must not fire
+constant-condition 9
+constant-condition 11
+constant-condition 13
+!constant-condition 23
+!constant-condition 21
