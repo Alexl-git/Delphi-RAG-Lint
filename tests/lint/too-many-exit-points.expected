@@ -1,0 +1,3 @@
+# Bad has 6 Exits (> 5) -> fires at header (7); Good has 1 -> clean (17)
+too-many-exit-points 7
+!too-many-exit-points 17

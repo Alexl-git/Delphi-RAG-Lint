@@ -183,6 +183,12 @@ type
       /// <remarks>Severity error. Per-routine flow analysis (mirrors CheckDatasetOpen).
       /// Pure AST; no DB. Never raises.</remarks>
       class function CheckCriticalSection(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags a routine with more than 5 Exit statements -- hard to reason about
+      /// control flow; consolidate exits or use guard clauses consistently.</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One finding per routine exceeding the Exit-count threshold, at its header.</returns>
+      /// <remarks>Severity info. Threshold = 5 (const). Pure AST; no DB. Never raises.</remarks>
+      class function CheckTooManyExitPoints(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -3476,6 +3482,103 @@ begin
         ABytesRead:= Remaining;
       end, TTSInputEncoding.TSInputEncodingUTF8);
     if Tree <> nil then VisitProcs(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckTooManyExitPoints(const AFile: string): TArray<TLintFinding>;
+const
+  MAX_EXITS = 5;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  function CountExits(const N: TTSNode): Integer;
+  var
+    I: Integer;
+    T: string ;
+  begin
+    Result:= 0;
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then Exit; { nested routine counted separately }
+    if N.NodeType = 'identifier' then T:= NodeStr(N)
+    else if N.NodeType = 'exprCall' then T:= NodeStr(N.ChildByField('entity'))
+    else T:= '';
+    if SameText(T, 'Exit') then Inc(Result);
+    for I:= 0 to N.ChildCount - 1 do Result:= Result + CountExits(N.Child(I));
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var
+    I, NExit  : Integer ;
+    Hdr, Body : TTSNode ;
+    P         : TTSPoint;
+    F         : TLintFinding;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.NodeType = 'defProc' then
+    begin
+      Body:= N.ChildByField('body');
+      NExit:= CountExits(Body);
+      if NExit > MAX_EXITS then
+      begin
+        Hdr:= N.ChildByField('header');
+        if Hdr.IsNull then Hdr:= N;
+        P:= Hdr.StartPoint;
+        F:= Default(TLintFinding);
+        F.RuleId  := 'too-many-exit-points';
+        F.Severity:= 'info';
+        F.Message := Format('Routine has %d Exit statements (max %d) -- consolidate exits or use guard clauses.', [NExit, MAX_EXITS]);
+        F.FilePath:= AFile;
+        F.StartLine:= Integer(P.Row   ) + 1;
+        F.StartCol := Integer(P.Column) + 1;
+        F.EndLine:= F.StartLine;
+        F.EndCol := F.StartCol + 1;
+        Findings.Add(F);
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then Visit(Tree.RootNode);
     Result:= Findings.ToArray;
   finally
     Tree.Free;
