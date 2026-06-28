@@ -191,16 +191,32 @@ Implementation: `.scm` matches the structural pattern (loop body starts with
 exit/break/raise); Pascal post-filter confirms the statement is not nested inside a
 conditional by walking its parent chain.
 
-#### `format-argument-count` (error)
+#### `format-argument-count` (error) + `format-specifier-type-mismatch` (error)
 
-`Format('...', [...])` where the number of `%s`/`%d`/`%f`/`%g`/`%n`/`%e`/`%x`/
-`%p`/`%u` specifiers in the literal string does not match the element count of the
-array constructor. Both sides must be statically knowable (literal string + array
-constructor); if either is a variable, skip silently.
+Two checks on the same `Format('...', [...])` call; both require a literal string +
+array constructor (skip silently if either is a variable).
 
-Implementation: Pascal reads the string literal text via `NodeText`, counts specifiers
-with a regex or character scan, counts `exprArray` children. Zero FP when both are
-literals.
+**Count check** (`format-argument-count`): number of `%s`/`%d`/`%f`/`%g`/`%n`/`%e`/
+`%x`/`%p`/`%u` specifiers in the literal does not match the element count of the array
+constructor.
+
+**Type check** (`format-specifier-type-mismatch`): for each argument that is a literal
+node (not a variable), verify the specifier family is compatible:
+- `%d`/`%u`/`%x`/`%i` -- argument must be an integer literal; a string literal is an
+  error.
+- `%f`/`%g`/`%e`/`%n` -- argument must be a numeric literal (integer or float).
+- `%s` -- any literal is accepted (`%s` coerces via `string()`).
+- Variables and compound expressions -- skip type check, only count.
+
+Type checking for variable arguments (e.g. `Format('%d', [MyStr])`) requires a type
+resolver and is deferred to a future T5 pass. The literal-only subset still catches a
+meaningful class of copy/paste mistakes.
+
+Implementation: single `CheckFormatCall` Pascal method handles both checks in one walk.
+`NodeText` extracts the literal; `specifierFamily` maps each `%x` character to a family
+enum; per-argument node kind (`literalNumber`, `literalString`, `identifier`) drives the
+type gate. Both rule IDs share the same implementation file; they are wired separately
+in `DoLint` so each can be individually disabled.
 
 ### 5.2 T3 -- Pascal built-ins (flow / scope)
 
