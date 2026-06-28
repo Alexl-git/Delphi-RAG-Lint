@@ -1,10 +1,12 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> Last updated 2026-06-28 (handoff): 6.1-6.6 ALL DONE -- shipped as v0.61.0-alpha, tag + push complete.
+> Last updated 2026-06-28 (handoff): Design + Phase 1 plan for v0.62 COMPLETE (9 new .scm rules).
 > Plugin BPL rebuild still deferred (needs IDE closed): `build\pack-lint-release.ps1 -Version 0.61.0-alpha`
-> Resume: pick next item from section 6 below (cross-unit type resolver is the big-ticket; smaller
-> batches = new lint rules from REPORT-2).
-> Saved 2026-06-21 before a session reset. Companion docs:
+> Resume: implement Phase 1 -- read `docs/superpowers/plans/2026-06-28-new-lint-rules-v062.md`.
+> Start at Task 1 (unsafe-string-api). PUSH the 4 unpushed commits first (`git push`).
+> Design spec: `docs/superpowers/specs/2026-06-28-new-lint-rules-v062-v063-design.md`
+> lint-all ORM3 report: `C:\Projects\DB\ORM3\lint-report-20260628-122356.txt` (30,325 findings).
+> Saved 2026-06-28 before a session reset. Companion docs:
 > [REPORT-1-delphi-lint-landscape.md](REPORT-1-delphi-lint-landscape.md) (the field),
 > [REPORT-2-draglint-implementation-plan.md](REPORT-2-draglint-implementation-plan.md) (the plan + changelog).
 > This file = what is DONE, how to resume, and what is NOT done yet (ideas/plans).
