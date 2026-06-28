@@ -4201,10 +4201,10 @@ begin
   (AArgs.Rule <> 'freeandnil-on-interface') and (AArgs.Rule <> 'firedac-open-execsql-mismatch') and (AArgs.Rule <> 'unprotected-object-free') and
   (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'ui-access-in-thread') and
   (AArgs.Rule <> 'global-form-variable') and (AArgs.Rule <> 'unsafe-shellexecute') and (AArgs.Rule <> 'path-traversal') and (AArgs.Rule <> 'loop-executes-at-most-once') and
-  (AArgs.Rule <> 'format-argument-count') and (AArgs.Rule <> 'format-specifier-type-mismatch') and (AArgs.Rule <> 'try-except-swallowed') then
+  (AArgs.Rule <> 'format-argument-count') and (AArgs.Rule <> 'format-specifier-type-mismatch') and (AArgs.Rule <> 'try-except-swallowed') and (AArgs.Rule <> 'dataset-open-without-close') then
   begin
     Writeln(Format(
-        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' + 'use-after-free, win64-pointer-cast, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed)',
+        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' + 'use-after-free, win64-pointer-cast, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4288,6 +4288,8 @@ begin
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.63: try..except that swallows the exception (no raise/log/HandleException) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'try-except-swallowed') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(AArgs.Path);
+      { v0.63: dataset opened without a matching Close in a finally block }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'dataset-open-without-close') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen(AArgs.Path);
     end;
   end; // if
   { v0.47: honor '// drag-lint:ignore [rule ...]' line suppressions across all findings }
@@ -5108,6 +5110,7 @@ begin
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall(PasPath) do
           Findings:= Findings + [F];
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath);
       except
         on E: Exception do
           Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)',

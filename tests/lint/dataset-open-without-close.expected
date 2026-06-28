@@ -1,0 +1,3 @@
+# Bad opens Q without a finally Close (11); Good closes in finally (19) clean
+dataset-open-without-close 11
+!dataset-open-without-close 19
