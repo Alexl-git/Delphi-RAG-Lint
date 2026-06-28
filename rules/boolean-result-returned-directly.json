@@ -1,0 +1,6 @@
+{
+  "id": "boolean-result-returned-directly",
+  "severity": "info",
+  "message": "Redundant if/else assigning True/False to Result. Write 'Result := <cond>' (or 'Result := not <cond>') directly.",
+  "warn_capture": "warn"
+}

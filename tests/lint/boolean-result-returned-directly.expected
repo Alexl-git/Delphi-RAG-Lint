@@ -1,0 +1,4 @@
+# if/else assigning True/False to Result at lines 13 and 21; Result := N = 0 (29) clean
+boolean-result-returned-directly 13
+boolean-result-returned-directly 21
+!boolean-result-returned-directly 29
