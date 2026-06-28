@@ -347,10 +347,20 @@ currently-active project without leaving the IDE.
 
 ## 10. Release plan
 
-- **v0.62**: Phase 1 complete (10 `.scm` rules). Bump `VERSION`, update `CHANGELOG`,
-  update `rules/README.md` with new rule list, commit, push, `git tag v0.62.0-alpha`,
-  `gh release create`.
-- **v0.63**: Phase 2 complete (10 built-ins) + IDE lint-all menu command + BPL rebuild.
+- **v0.62**: SHIPPED 2026-06-28. Phase 1 complete (9 `.scm` rules); tagged `v0.62.0-alpha`,
+  GitHub release published with Win64+Win32 zips.
+- **v0.63**: Phase 2 complete (11 built-ins) + IDE lint-all menu command + BPL rebuild.
   Same release process; rebuild Win64+Win32 zips via
   `build/pack-lint-release.ps1 -Version 0.63.0-alpha`.
+
+  **v0.63 execution order (decided 2026-06-28): C -> A -> B -> D.**
+  - **C** first: the IDE "Run Lint All" menu command (section 8), so it is ready for
+    hands-on testing in RAD Studio as early as possible.
+  - **A**: the 5 T2 rules (section 5.1).
+  - **B**: the 6 T3 rules (section 5.2).
+  - **D**: release. Runs autonomously through code/commit/push, version bump, CHANGELOG,
+    README, and zip staging. **Release gate:** the final `git tag` + `gh release create`
+    is HELD until the user confirms the IDE menu (C) works in RAD Studio -- the menu's
+    in-IDE behaviour cannot be verified by the agent (only the BPL compile can). All
+    code is committed and pushed to `main` regardless; only the public publish waits.
 - **v0.64+**: Phase 3 TBD.
