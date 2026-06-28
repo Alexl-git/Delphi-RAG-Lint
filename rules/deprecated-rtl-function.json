@@ -1,0 +1,6 @@
+{
+  "id": "deprecated-rtl-function",
+  "severity": "info",
+  "message": "Obsolete RTL routine. Prefer TEncoding / modern string APIs.",
+  "warn_capture": "warn"
+}

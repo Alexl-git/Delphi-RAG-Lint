@@ -1,0 +1,4 @@
+# OemToAnsi/AnsiToOem/StrPas calls at lines 12-14
+deprecated-rtl-function 12
+deprecated-rtl-function 13
+deprecated-rtl-function 14
