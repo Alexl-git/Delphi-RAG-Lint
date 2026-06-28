@@ -143,6 +143,14 @@ type
       /// <remarks>Severity warning. Path-arg index: AssignFile=1, FileOpen/CreateFile=0,
       /// TFile.Open=0. Pure AST; no DB. Never raises.</remarks>
       class function CheckPathTraversal(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags a for/while/repeat loop whose body's first statement is an
+      /// unconditional Exit, Break, or raise -- the loop can never reach a second
+      /// iteration.</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One finding per loop whose first body statement is Exit/Break/raise.</returns>
+      /// <remarks>Severity warning. Only the direct first statement is inspected, so an
+      /// Exit nested in an if is not flagged. Pure AST; no DB. Never raises.</remarks>
+      class function CheckLoopAtMostOnce(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -2727,6 +2735,126 @@ var
             Findings.Add(F);
           end;
         end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then Visit(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckLoopAtMostOnce(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { The first executable statement of a loop body, unwrapped from its 'statement'
+    node. For a begin..end body (block) the first 'statement' child is taken,
+    skipping the kBegin/kEnd keyword tokens. Returns the body itself (which will
+    not match) when no statement is found. }
+  function FirstStmtInner(const ABody: TTSNode): TTSNode;
+  var
+    I    : Integer;
+    B    : TTSNode;
+    Found: Boolean;
+  begin
+    Result:= ABody;
+    B:= ABody;
+    if B.IsNull then Exit;
+    if B.NodeType = 'block' then
+    begin
+      Found:= False;
+      for I:= 0 to B.NamedChildCount - 1 do
+        if B.NamedChild(I).NodeType = 'statement' then
+        begin B:= B.NamedChild(I); Found:= True; Break; end;
+      if not Found then Exit;
+    end;
+    if B.NodeType = 'statement' then
+    begin
+      if B.NamedChildCount >= 1 then Result:= B.NamedChild(0) else Result:= B;
+    end
+    else
+      Result:= B;
+  end;
+
+  function IsAtMostOnceExit(const N: TTSNode): Boolean;
+  var
+    T: string;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'raise' then Exit(True);
+    if N.NodeType = 'identifier' then T:= NodeStr(N)
+    else if N.NodeType = 'exprCall' then T:= NodeStr(N.ChildByField('entity'))
+    else Exit(False);
+    Result:= SameText(T, 'Exit') or SameText(T, 'Break');
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var
+    I        : Integer ;
+    Body, Fs : TTSNode ;
+    P        : TTSPoint;
+    F        : TLintFinding;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if (N.NodeType = 'for') or (N.NodeType = 'while') or (N.NodeType = 'repeat') then
+    begin
+      Body:= N.ChildByField('body');
+      Fs:= FirstStmtInner(Body);
+      if IsAtMostOnceExit(Fs) then
+      begin
+        P:= Fs.StartPoint;
+        F:= Default(TLintFinding);
+        F.RuleId  := 'loop-executes-at-most-once';
+        F.Severity:= 'warning';
+        F.Message := 'Loop body begins with Exit/Break/raise -- the loop runs at most once. Move the statement before the loop, or fix the loop logic.';
+        F.FilePath:= AFile;
+        F.StartLine:= Integer(P.Row   ) + 1;
+        F.StartCol := Integer(P.Column) + 1;
+        F.EndLine:= F.StartLine;
+        F.EndCol := F.StartCol + 1;
+        Findings.Add(F);
       end;
     end;
     for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));

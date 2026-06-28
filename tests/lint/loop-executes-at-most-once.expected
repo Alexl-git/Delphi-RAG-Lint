@@ -1,0 +1,4 @@
+# Exit first in for-body (13), Break single-stmt while-body (17); nested-if Exit (25) NOT flagged
+loop-executes-at-most-once 13
+loop-executes-at-most-once 17
+!loop-executes-at-most-once 25
