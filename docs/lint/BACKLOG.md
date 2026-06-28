@@ -1,8 +1,9 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> Last updated 2026-06-26 (session 4): 6.1-6.6 ALL DONE -- shipped as v0.61.0-alpha.
-> 6.2 GridLayout popup note, 6.4 unit-not-in-project, 6.5 global-form-variable, 6.6 lint-all batch runner.
-> Resume: see section 6 below for next ideas.
+> Last updated 2026-06-28 (handoff): 6.1-6.6 ALL DONE -- shipped as v0.61.0-alpha, tag + push complete.
+> Plugin BPL rebuild still deferred (needs IDE closed): `build\pack-lint-release.ps1 -Version 0.61.0-alpha`
+> Resume: pick next item from section 6 below (cross-unit type resolver is the big-ticket; smaller
+> batches = new lint rules from REPORT-2).
 > Saved 2026-06-21 before a session reset. Companion docs:
 > [REPORT-1-delphi-lint-landscape.md](REPORT-1-delphi-lint-landscape.md) (the field),
 > [REPORT-2-draglint-implementation-plan.md](REPORT-2-draglint-implementation-plan.md) (the plan + changelog).
@@ -250,7 +251,41 @@ members and captures the consolidated output.
 
 ---
 
-## 7. Pointers
+## 7. IDE plugin -- lint-all menu command (target v0.63)
+
+**User request (2026-06-28):** "Create code that would generate such a report after
+parsing all .dpr/.dproj that I could invoke in the drag-lint menu in the IDE."
+
+**Goal:** A single IDE menu item "Run Lint All (Full Report)" that:
+1. Reads the currently-active project path from the IDE via OTAPI
+   (`(BorlandIDEServices as IOTAProjectManager).GetCurrentProject.FileName`)
+2. Resolves the two-DB pair (Platform + Project) via the manifest / `resolve-dbs`
+   logic already in the CLI -- or just hard-codes the manifest path for now.
+3. Spawns `drag-lint lint-all --project <active.dproj> --db <project.sqlite>` as a
+   background process (non-blocking -- the IDE must not freeze).
+4. Writes the report to `<project-dir>\docs\lint-report-<date>.txt`.
+5. On completion, opens the report file in the IDE's default editor
+   (`(BorlandIDEServices as IOTAFileSystem).OpenFile(reportPath)` or `ShellExecute`
+   to notepad if the IDE file system API is unavailable).
+6. Shows a brief status in the IDE's message view: "Lint-all complete: N findings
+   (E errors, W warnings) -- report: <path>".
+
+**Implementation notes:**
+- The wizard already has a toolbar/menu integration point (`TDragLintWizard`,
+  `dclDragLintWizard.bpl`). Add a new `TAction` / `TMenuItem` entry there.
+- Background process: use `TProcess` or `CreateProcess` + a `TThread` that waits on
+  the process handle and posts completion back to the main thread via
+  `TThread.Synchronize` (same pattern as existing index-on-save).
+- Requires BPL rebuild and re-deploy (`build\pack-lint-release.ps1`).
+- Must work even when the IDE currently has no project open (disable the menu item
+  in that case via `OnUpdate`).
+
+**Design doc:** `docs/superpowers/specs/2026-06-28-new-lint-rules-v062-v063-design.md`
+(see section 8 -- IDE lint-all menu).
+
+---
+
+## 8. Pointers
 
 - Rule list (user-facing): `rules/README.md`. Per-file harness: `tests/lint/`. Project-rule fixtures:
   `tests/lint-project/`. Release script: `build/pack-lint-release.ps1`.

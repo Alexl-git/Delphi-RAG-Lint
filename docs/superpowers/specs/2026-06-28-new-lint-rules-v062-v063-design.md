@@ -311,11 +311,46 @@ For T3 rules that need a DB (`virtual-method-in-constructor`): add a
 
 ---
 
-## 8. Release plan
+## 8. IDE plugin -- "Run Lint All" menu command (v0.63 bonus)
+
+A new menu item in the IDE wizard (`dclDragLintWizard.bpl`) that runs lint-all on the
+currently-active project without leaving the IDE.
+
+### Flow
+
+1. User clicks **Drag-Lint > Run Lint All (Full Report)** in the IDE toolbar/menu.
+2. Plugin reads the active project path via OTAPI:
+   `(BorlandIDEServices as IOTAProjectManager).GetCurrentProject.FileName`
+3. Plugin resolves the project DB using the manifest (`drag-lint.json` `outDir` for
+   the active `.dproj` parent directory). Falls back to prompting if not found.
+4. Spawns `drag-lint lint-all --project <dproj> --db <db>
+   --output <project-dir>\docs\lint-report-<date>.txt` as a background process via
+   `CreateProcess` (non-blocking; IDE must not freeze).
+5. A `TThread` waits on the process handle and calls `TThread.Synchronize` on
+   completion to:
+   a. Open the report file in the IDE editor or via `ShellExecute` to Notepad.
+   b. Write a summary line to the IDE Message view:
+      `"Lint-all: N findings (E errors, W warnings) -- docs\lint-report-<date>.txt"`
+6. The menu item is disabled (`OnUpdate`) when no project is open.
+
+### Implementation notes
+
+- Add `TAction` + `TMenuItem` to the existing wizard action list.
+- Background thread pattern: same as the existing index-on-save background spawn in
+  the plugin -- reuse the helper if one exists, otherwise add a minimal
+  `TLintAllThread` that wraps `CreateProcess` + `WaitForSingleObject`.
+- BPL rebuild required; deploy via `build\pack-lint-release.ps1`.
+- Report path: `<project-dir>\docs\lint-report-YYYYMMDD-HHmmss.txt` (text, not JSON,
+  for human readability; AI can consume either).
+
+---
+
+## 10. Release plan
 
 - **v0.62**: Phase 1 complete (10 `.scm` rules). Bump `VERSION`, update `CHANGELOG`,
   update `rules/README.md` with new rule list, commit, push, `git tag v0.62.0-alpha`,
   `gh release create`.
-- **v0.63**: Phase 2 complete (10 built-ins). Same release process; rebuild Win64+Win32
-  zips via `build/pack-lint-release.ps1 -Version 0.63.0-alpha`.
+- **v0.63**: Phase 2 complete (10 built-ins) + IDE lint-all menu command + BPL rebuild.
+  Same release process; rebuild Win64+Win32 zips via
+  `build/pack-lint-release.ps1 -Version 0.63.0-alpha`.
 - **v0.64+**: Phase 3 TBD.
