@@ -3,6 +3,53 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.63.0-alpha -- 2026-06-28
+
+### Added
+
+Ten new built-in (`TAstChecker`) lint rules and an IDE menu command. Each rule
+ships with a TDD fixture under `tests/lint/` verified by
+`tests/lint/run_lint_tests.ps1` (74/74 green). Built-ins are compiled into the
+exe (no `.scm`/`.json`); a Win64 rebuild is required to add one.
+
+**Security**
+- **`unsafe-shellexecute`** (error) -- `WinExec`/`ShellExecute`/`CreateProcess`
+  called with a non-literal command/executable argument (command injection, CWE-78).
+- **`path-traversal`** (warning) -- `AssignFile`/`FileOpen`/`CreateFile`/`TFile.Open`
+  whose path argument is a string concatenation (CWE-22).
+
+**Bugs / control flow**
+- **`loop-executes-at-most-once`** (warning) -- a `for`/`while`/`repeat` whose first
+  body statement is `Exit`/`Break`/`raise`.
+- **`format-argument-count`** (error) -- `Format('...', [...])` specifier count does
+  not match the argument count.
+- **`format-specifier-type-mismatch`** (error) -- a literal `Format` argument whose
+  type is incompatible with its specifier family.
+- **`try-except-swallowed`** (warning) -- a `try..except` whose handler neither
+  re-raises nor logs nor calls `Application.HandleException`.
+
+**Resource / lock safety**
+- **`dataset-open-without-close`** (warning) -- a dataset opened (`X.Open` /
+  `X.Active := True`) without a matching `Close` in a `finally` block.
+- **`criticalsection-not-released`** (error) -- `X.Enter`/`X.Acquire` without a
+  matching `Leave`/`Release` in a `finally` block.
+
+**Metrics**
+- **`too-many-exit-points`** (info) -- a routine with more than 5 `Exit` statements.
+- **`cyclomatic-complexity`** (info) -- a routine whose decision-point count exceeds 15.
+
+**IDE**
+- **Drag-Lint > Run Lint All (Full Report)** menu command in the wizard BPL --
+  spawns `drag-lint lint-all` on the active project in the background, opens the
+  report, and posts a summary to the Messages view.
+
+### Deferred
+
+- **`virtual-method-in-constructor`** -- designed but not yet shipped: it is
+  DB-backed (queries `ISymbolStore` for method modifiers) and runs only on the
+  store-bearing diagnostics path, so it needs a `tests/lint-project/` fixture and
+  wiring into the shared `TAstChecker.Check` aggregator. Planned for a follow-up.
+
 ## v0.62.0-alpha -- 2026-06-28
 
 ### Added

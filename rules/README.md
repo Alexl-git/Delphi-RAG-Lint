@@ -156,6 +156,27 @@ has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_tests.ps1
 | `boolean-result-returned-directly` | info | redundant `if/else` assigning `True`/`False` to `Result` |
 | `concat-in-loop` | info | `S := S + X` self-concatenation is O(n^2) |
 
+## Shipped rules (v0.63 -- Phase 2, built-ins)
+
+Ten new built-in (`TAstChecker`) rules -- compiled into the exe, no `.scm`/`.json`.
+Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_tests.ps1`.
+
+| Rule id | Severity | Description |
+|---------|----------|-------------|
+| `unsafe-shellexecute` | error | `WinExec`/`ShellExecute`/`CreateProcess` with a non-literal command (CWE-78) |
+| `path-traversal` | warning | concatenated path to `AssignFile`/`FileOpen`/`CreateFile`/`TFile.Open` (CWE-22) |
+| `loop-executes-at-most-once` | warning | `for`/`while`/`repeat` whose first body statement is `Exit`/`Break`/`raise` |
+| `format-argument-count` | error | `Format` specifier count != argument count |
+| `format-specifier-type-mismatch` | error | literal `Format` argument type incompatible with its specifier |
+| `try-except-swallowed` | warning | `try..except` with no raise/log/`HandleException` |
+| `dataset-open-without-close` | warning | dataset opened without a matching `Close` in a `finally` |
+| `criticalsection-not-released` | error | lock `Enter`/`Acquire` without a `finally` `Leave`/`Release` |
+| `too-many-exit-points` | info | routine with more than 5 `Exit` statements |
+| `cyclomatic-complexity` | info | routine decision-point count over 15 |
+
+(`virtual-method-in-constructor` is designed but deferred -- it is DB-backed and needs a
+`tests/lint-project/` fixture; see CHANGELOG.)
+
 ### Built-in rules (compiled into the exe, not `.scm`)
 
 Some rules need scope/flow analysis a single tree-sitter query can't express, so they live in
