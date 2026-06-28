@@ -1,0 +1,4 @@
+# SizeOf(Pointer) = 4 (11) and = 8 (13); = SizeOf(NativeInt) (21) must not fire
+sizeof-pointer-assumption 11
+sizeof-pointer-assumption 13
+!sizeof-pointer-assumption 21

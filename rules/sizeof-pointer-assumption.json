@@ -1,0 +1,6 @@
+{
+  "id": "sizeof-pointer-assumption",
+  "severity": "warning",
+  "message": "SizeOf(Pointer) compared to a literal -- breaks on Win32 vs Win64. Guard with {$IFDEF WIN64} or compare to SizeOf of a platform-aware type.",
+  "warn_capture": "warn"
+}
