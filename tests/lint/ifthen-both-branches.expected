@@ -1,0 +1,4 @@
+# IfThen calls at lines 19-20; the if/then/else in Good must not fire
+ifthen-both-branches 19
+ifthen-both-branches 20
+!ifthen-both-branches 27

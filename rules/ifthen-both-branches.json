@@ -1,0 +1,6 @@
+{
+  "id": "ifthen-both-branches",
+  "severity": "warning",
+  "message": "IfThen() evaluates both branches unconditionally -- side effects in either argument always execute. Use if/then/else instead.",
+  "warn_capture": "warn"
+}
