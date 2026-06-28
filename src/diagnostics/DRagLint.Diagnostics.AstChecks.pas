@@ -159,6 +159,14 @@ type
       /// <remarks>Severity error. Requires a literalString format + exprBrackets argument array;
       /// skips silently otherwise. Variable arguments are not type-checked. Pure AST; no DB.</remarks>
       class function CheckFormatCall(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags a try..except whose handler neither re-raises nor logs nor calls
+      /// Application.HandleException/ShowException -- the exception is silently swallowed.</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One finding per swallowing except clause, pinned to the 'except' keyword.</returns>
+      /// <remarks>Severity warning. A handler counts as handling if it contains a raise, or an
+      /// identifier/call whose text contains handleexception/showexception/log/report. try-finally
+      /// is ignored. Pure AST; no DB. Never raises.</remarks>
+      class function CheckSwallowedExcept(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -3010,6 +3018,119 @@ var
       end;
     end;
     for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then Visit(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckSwallowedExcept(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { True if the subtree contains a raise, or an identifier/call whose text names a
+    handler (HandleException/ShowException) or a logging/reporting routine. }
+  function HandlesException(const N: TTSNode): Boolean;
+  var
+    I: Integer;
+    T: string ;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'raise' then Exit(True);
+    if (N.NodeType = 'identifier') or (N.NodeType = 'exprCall') or (N.NodeType = 'exprDot') then
+    begin
+      T:= LowerCase(NodeStr(N));
+      if (Pos('handleexception', T) > 0) or (Pos('showexception', T) > 0)
+         or (Pos('log', T) > 0) or (Pos('report', T) > 0) then Exit(True);
+    end;
+    for I:= 0 to N.ChildCount - 1 do
+      if HandlesException(N.Child(I)) then Exit(True);
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var
+    I        : Integer ;
+    HasExcept: Boolean ;
+    Handled  : Boolean ;
+    C        : TTSNode ;
+    ExceptPt : TTSPoint;
+    F        : TLintFinding;
+  begin
+    if N.IsNull or (Findings.Count >= 100) then Exit;
+    if N.NodeType = 'try' then
+    begin
+      HasExcept:= False;
+      Handled  := False;
+      ExceptPt := Default(TTSPoint);
+      for I:= 0 to N.ChildCount - 1 do
+      begin
+        C:= N.Child(I);
+        if C.NodeType = 'kExcept' then
+        begin
+          HasExcept:= True;
+          ExceptPt := C.StartPoint;
+        end
+        else if HasExcept and (C.NodeType <> 'kEnd') and (C.NodeType <> 'kFinally') then
+        begin
+          if HandlesException(C) then Handled:= True;
+        end;
+      end;
+      if HasExcept and (not Handled) then
+      begin
+        F:= Default(TLintFinding);
+        F.RuleId  := 'try-except-swallowed';
+        F.Severity:= 'warning';
+        F.Message := 'Exception silently swallowed -- add raise, logging, or Application.HandleException.';
+        F.FilePath:= AFile;
+        F.StartLine:= Integer(ExceptPt.Row   ) + 1;
+        F.StartCol := Integer(ExceptPt.Column) + 1;
+        F.EndLine:= F.StartLine;
+        F.EndCol := F.StartCol + 6;
+        Findings.Add(F);
+      end;
+    end;
+    for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
   end; // procedure
 
 begin

@@ -1,0 +1,4 @@
+# empty except (13) fires; reraise (22) and on-E-do-Log (31) do not
+try-except-swallowed 13
+!try-except-swallowed 22
+!try-except-swallowed 31
