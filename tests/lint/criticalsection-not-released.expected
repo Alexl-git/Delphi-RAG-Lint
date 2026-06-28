@@ -1,0 +1,3 @@
+# Bad acquires Lock without a finally Leave (11); Good releases in finally (19) clean
+criticalsection-not-released 11
+!criticalsection-not-released 19

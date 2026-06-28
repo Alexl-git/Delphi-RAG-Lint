@@ -175,6 +175,14 @@ type
       /// <remarks>Severity warning. Per-routine flow analysis (mirrors CheckUnprotectedFree).
       /// Pure AST; no DB. Never raises.</remarks>
       class function CheckDatasetOpen(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags a critical section acquired (X.Enter or X.Acquire) in a routine with
+      /// no matching X.Leave / X.Release in a finally block -- a lock leaked on an exception
+      /// path deadlocks.</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One finding per acquired-but-not-finally-released lock variable.</returns>
+      /// <remarks>Severity error. Per-routine flow analysis (mirrors CheckDatasetOpen).
+      /// Pure AST; no DB. Never raises.</remarks>
+      class function CheckCriticalSection(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -3299,6 +3307,147 @@ var
         finally
           Opened.Free;
           ClosedInFinally.Free;
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do VisitProcs(N.NamedChild(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then VisitProcs(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckCriticalSection(const AFile: string): TArray<TLintFinding>;
+var
+  Src             : TBytes                       ;
+  Parser          : TTSParser                    ;
+  Tree            : TTSTree                      ;
+  Findings        : TList<TLintFinding>          ;
+  Acquired        : TDictionary<string, TTSPoint>;
+  ReleasedInFinally: TDictionary<string, Boolean>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { X.M or X.M(...) -> AVar=lower(X), AMethod=M. }
+  function DotMethod(const N: TTSNode; out AVar, AMethod: string): Boolean;
+  var
+    Dot, L, R, Ent: TTSNode;
+  begin
+    Result:= False;
+    Dot:= N;
+    if N.NodeType = 'exprCall' then
+    begin
+      Ent:= N.ChildByField('entity');
+      if Ent.IsNull or (Ent.NodeType <> 'exprDot') then Exit;
+      Dot:= Ent;
+    end
+    else if N.NodeType <> 'exprDot' then Exit;
+    L:= Dot.ChildByField('lhs');
+    R:= Dot.ChildByField('rhs');
+    if L.IsNull or R.IsNull or (L.NodeType <> 'identifier') or (R.NodeType <> 'identifier') then Exit;
+    AVar   := LowerCase(NodeStr(L));
+    AMethod:= NodeStr(R);
+    Result := True;
+  end;
+
+  procedure WalkBody(const N: TTSNode; AInFinally: Boolean);
+  var
+    I   : Integer;
+    V, M: string ;
+    Lf  : Boolean;
+    C   : TTSNode;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then Exit;
+    if DotMethod(N, V, M) then
+    begin
+      if SameText(M, 'Enter') or SameText(M, 'Acquire') then
+      begin if not Acquired.ContainsKey(V) then Acquired.Add(V, N.StartPoint); end
+      else if (SameText(M, 'Leave') or SameText(M, 'Release')) and AInFinally then ReleasedInFinally.AddOrSetValue(V, True);
+    end;
+    if N.NodeType = 'try' then
+    begin
+      Lf:= False;
+      for I:= 0 to N.ChildCount - 1 do
+      begin
+        C:= N.Child(I);
+        if C.NodeType = 'kFinally' then Lf:= True;
+        WalkBody(C, AInFinally or Lf);
+      end;
+    end
+    else
+      for I:= 0 to N.ChildCount - 1 do WalkBody(N.Child(I), AInFinally);
+  end; // procedure
+
+  procedure VisitProcs(const N: TTSNode);
+  var
+    I   : Integer ;
+    Body: TTSNode ;
+    Pair: TPair<string, TTSPoint>;
+    F   : TLintFinding;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.NodeType = 'defProc' then
+    begin
+      Body:= N.ChildByField('body');
+      if not Body.IsNull then
+      begin
+        Acquired         := TDictionary<string, TTSPoint>.Create;
+        ReleasedInFinally:= TDictionary<string, Boolean> .Create;
+        try
+          WalkBody(Body, False);
+          for Pair in Acquired do
+            if not ReleasedInFinally.ContainsKey(Pair.Key) then
+            begin
+              F:= Default(TLintFinding);
+              F.RuleId  := 'criticalsection-not-released';
+              F.Severity:= 'error';
+              F.Message := Format('Critical section %s is acquired without a matching Leave/Release in a finally block -- a lock leaked on an exception path deadlocks.', [Pair.Key]);
+              F.FilePath:= AFile;
+              F.StartLine:= Integer(Pair.Value.Row   ) + 1;
+              F.StartCol := Integer(Pair.Value.Column) + 1;
+              F.EndLine:= F.StartLine;
+              F.EndCol := F.StartCol + 1;
+              Findings.Add(F);
+            end;
+        finally
+          Acquired.Free;
+          ReleasedInFinally.Free;
         end;
       end;
     end;
