@@ -1,0 +1,5 @@
+# PStr + N (12), PStr + 1 (13); N + 1 (21) and S + 'x' (22) must not fire
+pchar-arithmetic 12
+pchar-arithmetic 13
+!pchar-arithmetic 21
+!pchar-arithmetic 22

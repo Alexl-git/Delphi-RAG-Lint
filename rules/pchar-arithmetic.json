@@ -1,0 +1,6 @@
+{
+  "id": "pchar-arithmetic",
+  "severity": "warning",
+  "message": "Pointer arithmetic on PChar -- unsafe and platform-specific (pointer size differs Win32/Win64). Use PChar[N] or string APIs.",
+  "warn_capture": "warn"
+}
