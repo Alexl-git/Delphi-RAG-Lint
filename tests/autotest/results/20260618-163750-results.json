@@ -1,0 +1,122 @@
+[
+  {
+    "Name": "--version exits 0",
+    "Ok": true,
+    "Detail": "drag-lint 0.46.0-alpha\r\n(loaded defaults from C:\\Projects\\.drag-lint.json)\r\n",
+    "Ms": 279.3932
+  },
+  {
+    "Name": "--version matches expected",
+    "Ok": true,
+    "Detail": "drag-lint 0.46.0-alpha\r\n(loaded defaults from C:\\Projects\\.drag-lint.json)\r\n",
+    "Ms": 0.0
+  },
+  {
+    "Name": "index fixture exits 0",
+    "Ok": true,
+    "Detail": "Done. Files: 1, Symbols: 15, Refs: 21, 0.01s",
+    "Ms": 91.0036
+  },
+  {
+    "Name": "index reports >= 1 symbol",
+    "Ok": true,
+    "Detail": "Done. Files: 1, Symbols: 15, Refs: 21, 0.01s",
+    "Ms": 0.0
+  },
+  {
+    "Name": "query KnownMethod returns 1+ match",
+    "Ok": true,
+    "Detail": "(5 lines)",
+    "Ms": 60.7653
+  },
+  {
+    "Name": "find-callers KnownMethod returns 1+ ref",
+    "Ok": true,
+    "Detail": "(18 lines)",
+    "Ms": 69.5246
+  },
+  {
+    "Name": "query ImplOnlyHelper (impl-only routine) returns a match",
+    "Ok": true,
+    "Detail": "(5 lines)",
+    "Ms": 0.0
+  },
+  {
+    "Name": "find-callers ImplOnlyHelper returns a ref",
+    "Ok": true,
+    "Detail": "(18 lines)",
+    "Ms": 0.0
+  },
+  {
+    "Name": "ImplOnlyHelper has a body range (impl_start_line > 0)",
+    "Ok": true,
+    "Detail": "impl_start_line=73",
+    "Ms": 0.0
+  },
+  {
+    "Name": "hover KnownMethod returns text",
+    "Ok": true,
+    "Detail": "(84 chars)",
+    "Ms": 66.868
+  },
+  {
+    "Name": "multi-DB query returns merged results",
+    "Ok": true,
+    "Detail": "(2 KnownMethod lines)",
+    "Ms": 91.6582
+  },
+  {
+    "Name": "SQL parser: sql_table SAMPLE indexed",
+    "Ok": true,
+    "Detail": "",
+    "Ms": 90.4947
+  },
+  {
+    "Name": "SQL parser: sql_generator indexed",
+    "Ok": true,
+    "Detail": "",
+    "Ms": 0.0
+  },
+  {
+    "Name": "link-orm command exits 0",
+    "Ok": true,
+    "Detail": "",
+    "Ms": 91.9087
+  },
+  {
+    "Name": "LSP server spawns",
+    "Ok": true,
+    "Detail": "",
+    "Ms": 9.0
+  },
+  {
+    "Name": "LSP initialize replies within timeout",
+    "Ok": true,
+    "Detail": "result=OK",
+    "Ms": 52.0
+  },
+  {
+    "Name": "LSP initialize response is JSON-RPC",
+    "Ok": true,
+    "Detail": "",
+    "Ms": 0.0
+  },
+  {
+    "Name": "LSP capabilities object present",
+    "Ok": true,
+    "Detail": "",
+    "Ms": 0.0
+  },
+  {
+    "Name": "LSP hover round-trip",
+    "Ok": true,
+    "Detail": "",
+    "Ms": 0.0
+  },
+  {
+    "Name": "LSP shutdown within timeout (no freeze regression)",
+    "Ok": true,
+    "Detail": "result=OK",
+    "Ms": 22.0
+  }
+]
