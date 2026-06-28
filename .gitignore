@@ -57,3 +57,10 @@ build/release-artifacts-0.41/
 
 # Lint rules deployed next to the binary by the test harness (source of truth is rules/)
 third_party/*/rules/
+
+# Local build scratch at repo root (ad-hoc rsvars+msbuild wrappers; `> nul` redirect
+# artifact from Git Bash, where `nul` is not a device name). `nul` is a reserved
+# Windows device name -- committing it can break `git checkout` for others.
+/nul
+/build*.bat
+/build*.err
