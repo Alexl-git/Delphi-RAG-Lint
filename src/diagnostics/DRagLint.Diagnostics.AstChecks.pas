@@ -127,6 +127,14 @@ type
       /// <remarks>Skipped entirely when no sibling .dfm file exists beside AFile. Pure AST;
       /// no DB. Never raises.</remarks>
       class function CheckGlobalFormVars(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags WinExec/ShellExecute/CreateProcess called with a non-literal
+      /// command/executable argument -- a runtime-built command path is a command-injection
+      /// risk (CWE-78).</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One finding per launcher call whose command argument is not a string literal.</returns>
+      /// <remarks>Severity error. Per-callee command-arg index: WinExec=0, ShellExecute=2,
+      /// CreateProcess=1. Pure AST; no DB. Never raises.</remarks>
+      class function CheckShellExec(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -2542,6 +2550,101 @@ begin
   finally
     All.Free;
   end; // try
+end; // function
+
+class function TAstChecker.CheckShellExec(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  function CmdArgIndex(const ACallee: string; out AIdx: Integer): Boolean;
+  begin
+    Result:= True;
+    AIdx  := -1;
+    if SameText(ACallee, 'WinExec') then AIdx:= 0
+    else if SameText(ACallee, 'ShellExecute') then AIdx:= 2
+    else if SameText(ACallee, 'CreateProcess') then AIdx:= 1
+    else Result:= False;
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var
+    I, Idx      : Integer ;
+    Ent, Args, A: TTSNode ;
+    P           : TTSPoint;
+    F           : TLintFinding;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.NodeType = 'exprCall' then
+    begin
+      Ent:= N.ChildByField('entity');
+      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') and CmdArgIndex(NodeStr(Ent), Idx) then
+      begin
+        Args:= N.ChildByField('args');
+        if (not Args.IsNull) and (Args.NamedChildCount > Idx) then
+        begin
+          A:= Args.NamedChild(Idx);
+          if A.NodeType <> 'literalString' then
+          begin
+            P:= Ent.StartPoint;
+            F:= Default(TLintFinding);
+            F.RuleId  := 'unsafe-shellexecute';
+            F.Severity:= 'error';
+            F.Message := Format('%s called with a non-literal command argument -- a runtime-built command path is an injection risk (CWE-78). Validate or use a fixed literal.', [NodeStr(Ent)]);
+            F.FilePath:= AFile;
+            F.StartLine:= Integer(P.Row   ) + 1;
+            F.StartCol := Integer(P.Column) + 1;
+            F.EndLine:= F.StartLine;
+            F.EndCol := F.StartCol + 1;
+            Findings.Add(F);
+          end;
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then Visit(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
 end; // function
 
 initialization

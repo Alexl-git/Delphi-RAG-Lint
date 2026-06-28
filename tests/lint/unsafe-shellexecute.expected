@@ -1,0 +1,5 @@
+# WinExec arg0 + ShellExecute arg2 are non-literal commands (lines 11,12); Good (17,18) clean
+unsafe-shellexecute 11
+unsafe-shellexecute 12
+!unsafe-shellexecute 17
+!unsafe-shellexecute 18
