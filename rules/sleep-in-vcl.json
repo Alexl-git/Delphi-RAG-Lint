@@ -1,0 +1,6 @@
+{
+  "id": "sleep-in-vcl",
+  "severity": "warning",
+  "message": "Sleep() on the main thread freezes the VCL UI. Use TTimer for delays or TThread.Sleep in a background thread.",
+  "warn_capture": "warn"
+}

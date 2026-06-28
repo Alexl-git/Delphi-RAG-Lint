@@ -1,0 +1,4 @@
+# Sleep calls at lines 11-12; the comment on line 17 must not fire
+sleep-in-vcl 11
+sleep-in-vcl 12
+!sleep-in-vcl 17
