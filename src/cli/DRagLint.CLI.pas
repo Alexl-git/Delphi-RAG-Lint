@@ -4200,10 +4200,10 @@ begin
   (AArgs.Rule <> 'method-too-long') and (AArgs.Rule <> 'deep-nesting') and (AArgs.Rule <> 'float-equality-comparison') and
   (AArgs.Rule <> 'freeandnil-on-interface') and (AArgs.Rule <> 'firedac-open-execsql-mismatch') and (AArgs.Rule <> 'unprotected-object-free') and
   (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'ui-access-in-thread') and
-  (AArgs.Rule <> 'global-form-variable') and (AArgs.Rule <> 'unsafe-shellexecute') then
+  (AArgs.Rule <> 'global-form-variable') and (AArgs.Rule <> 'unsafe-shellexecute') and (AArgs.Rule <> 'path-traversal') then
   begin
     Writeln(Format(
-        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' + 'use-after-free, win64-pointer-cast, ui-access-in-thread, global-form-variable, unsafe-shellexecute)',
+        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' + 'use-after-free, win64-pointer-cast, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4277,6 +4277,8 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'global-form-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars(AArgs.Path);
       { v0.63: WinExec/ShellExecute/CreateProcess with a non-literal command -- injection risk }
       if (AArgs.Rule = '') or (AArgs.Rule = 'unsafe-shellexecute') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec(AArgs.Path);
+      { v0.63: concatenated path to a file API -- path traversal risk }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'path-traversal') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal(AArgs.Path);
     end;
   end; // if
   { v0.47: honor '// drag-lint:ignore [rule ...]' line suppressions across all findings }
@@ -5092,6 +5094,7 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread        (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars  (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec       (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal   (PasPath);
       except
         on E: Exception do
           Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)',

@@ -135,6 +135,14 @@ type
       /// <remarks>Severity error. Per-callee command-arg index: WinExec=0, ShellExecute=2,
       /// CreateProcess=1. Pure AST; no DB. Never raises.</remarks>
       class function CheckShellExec(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags a file API (AssignFile/FileOpen/CreateFile/TFile.Open) whose path
+      /// argument is a string concatenation -- a user-controlled segment can escape the
+      /// intended directory (path traversal, CWE-22).</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One finding per call whose path argument is a binary '+' expression.</returns>
+      /// <remarks>Severity warning. Path-arg index: AssignFile=1, FileOpen/CreateFile=0,
+      /// TFile.Open=0. Pure AST; no DB. Never raises.</remarks>
+      class function CheckPathTraversal(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -2604,6 +2612,113 @@ var
             F.RuleId  := 'unsafe-shellexecute';
             F.Severity:= 'error';
             F.Message := Format('%s called with a non-literal command argument -- a runtime-built command path is an injection risk (CWE-78). Validate or use a fixed literal.', [NodeStr(Ent)]);
+            F.FilePath:= AFile;
+            F.StartLine:= Integer(P.Row   ) + 1;
+            F.StartCol := Integer(P.Column) + 1;
+            F.EndLine:= F.StartLine;
+            F.EndCol := F.StartCol + 1;
+            Findings.Add(F);
+          end;
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then Visit(Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckPathTraversal(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  Parser  : TTSParser          ;
+  Tree    : TTSTree            ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  function PathArgIndex(const N: TTSNode; out AIdx: Integer): Boolean;
+  var
+    Ent, R: TTSNode;
+    Nm    : string ;
+  begin
+    Result:= False;
+    AIdx  := -1;
+    Ent:= N.ChildByField('entity');
+    if Ent.IsNull then Exit;
+    if Ent.NodeType = 'identifier' then
+    begin
+      Nm:= NodeStr(Ent);
+      if SameText(Nm, 'AssignFile') then begin AIdx:= 1; Exit(True); end;
+      if SameText(Nm, 'FileOpen') or SameText(Nm, 'CreateFile') then begin AIdx:= 0; Exit(True); end;
+    end
+    else if Ent.NodeType = 'exprDot' then
+    begin
+      R:= Ent.ChildByField('rhs');
+      if (not R.IsNull) and (R.NodeType = 'identifier') and SameText(NodeStr(R), 'Open') then begin AIdx:= 0; Exit(True); end;
+    end;
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var
+    I, Idx     : Integer ;
+    Args, A, Op: TTSNode ;
+    P          : TTSPoint;
+    F          : TLintFinding;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if (N.NodeType = 'exprCall') and PathArgIndex(N, Idx) then
+    begin
+      Args:= N.ChildByField('args');
+      if (not Args.IsNull) and (Args.NamedChildCount > Idx) then
+      begin
+        A:= Args.NamedChild(Idx);
+        if A.NodeType = 'exprBinary' then
+        begin
+          Op:= A.ChildByField('operator');
+          if (not Op.IsNull) and (Op.NodeType = 'kAdd') then
+          begin
+            P:= A.StartPoint;
+            F:= Default(TLintFinding);
+            F.RuleId  := 'path-traversal';
+            F.Severity:= 'warning';
+            F.Message := 'Concatenated file path -- a user-controlled segment can escape the intended directory (path traversal, CWE-22). Validate or canonicalize the path.';
             F.FilePath:= AFile;
             F.StartLine:= Integer(P.Row   ) + 1;
             F.StartCol := Integer(P.Column) + 1;

@@ -1,0 +1,4 @@
+# AssignFile arg1 concat (13), FileOpen arg0 concat (14); literal AssignFile (21) clean
+path-traversal 13
+path-traversal 14
+!path-traversal 21
