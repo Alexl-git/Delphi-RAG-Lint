@@ -1,0 +1,3 @@
+# Complex exceeds 15 (~20) -> header (7); Simple is ~2 -> clean (22)
+cyclomatic-complexity 7
+!cyclomatic-complexity 22
