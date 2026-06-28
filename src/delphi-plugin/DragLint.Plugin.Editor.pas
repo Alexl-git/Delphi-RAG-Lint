@@ -2472,6 +2472,21 @@ begin
   if not FileExists(Result) then Result:= 'drag-lint.exe';
 end;
 
+{ Like DLExe but prefers the Win64 build (..\dll-win64\drag-lint.exe) for heavy,
+  long-running jobs (lint-all). The 32-bit IDE design package spawns drag-lint
+  as a SEPARATE child process over a pipe, so the child's bitness is independent
+  of the IDE; the Win64 exe is faster and does not OOM on large indexes, and it
+  carries its own correct x64 tree-sitter DLLs. Falls back to DLExe. }
+function DLExe64: string;
+var
+  BplDir, Win64Exe: string;
+begin
+  BplDir  := ExtractFilePath(GetModuleName(HInstance));
+  Win64Exe:= ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64\drag-lint.exe';
+  if FileExists(Win64Exe) then Exit(Win64Exe);
+  Result:= DLExe;
+end;
+
 procedure DLOpenInEditor(const AFilePath: string);
 var
   AS_: IOTAActionServices;
@@ -3290,8 +3305,12 @@ begin
   end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
   OutPath:= TPath.Combine(ExtractFilePath(Proj), 'lint-report-' + FormatDateTime('yyyymmdd-hhnnss', Now) + '.txt');
-  Cmd    := Format('"%s" lint-all --db "%s" --project "%s" --out "%s"', [DLExe, Db, Proj, OutPath]);
+  Cmd    := Format('"%s" lint-all --db "%s" --project "%s" --out "%s"', [DLExe64, Db, Proj, OutPath]);
   DLT('menu', 'run(async): ' + Cmd);
+  { instant feedback: there is no progress bar, so tell the user it started }
+  var MsgStart: IOTAMessageServices;
+  if Supports(BorlandIDEServices, IOTAMessageServices, MsgStart) then
+    MsgStart.AddTitleMessage('drag-lint: lint-all started -- running in the background; the report opens here when done (can take a minute on a large project).');
   TThread.CreateAnonymousThread(
     procedure
     var
