@@ -3259,6 +3259,48 @@ begin
   DLRunReport('library-drift', 'drag-lint-library-drift.txt');
 end;
 
+{ v0.63: run lint-all on the active project in the background, then open the
+  generated report and post a one-line summary to the Messages view. Mirrors
+  InvokeReindexProject (async thread + capture + TThread.Queue marshal-back).
+  lint-all exit codes: 0 = no findings, 1 = findings (both success), 2 = error. }
+procedure InvokeLintAll(Sender: TObject);
+var
+  Proj, Db, OutPath, Cmd: string;
+  MS: IOTAModuleServices;
+begin
+  Proj:= GetActiveProjectFile; Db:= GetActiveProjectDb;
+  if (Proj = '') or (Db = '') then begin ShowMessage('drag-lint: no active project or index found.'); Exit; end;
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+  OutPath:= TPath.Combine(ExtractFilePath(Proj), 'lint-report-' + FormatDateTime('yyyymmdd-hhnnss', Now) + '.txt');
+  Cmd    := Format('"%s" lint-all --db "%s" --project "%s" --out "%s"', [DLExe, Db, Proj, OutPath]);
+  DLT('menu', 'run(async): ' + Cmd);
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      Output, Summary: string;
+      ExitCode       : Integer;
+    begin
+      Output:= ''; ExitCode:= 2;
+      try
+        ExitCode:= RunAndCaptureStdout(Cmd, Output, 600000);
+      except
+        on E: Exception do Output:= 'drag-lint: lint-all failed: ' + E.ClassName + ': ' + E.Message;
+      end;
+      Summary:= Trim(Output);
+      if Summary <> '' then Summary:= Trim(Copy(Summary, LastDelimiter(#10, Summary) + 1, MaxInt));
+      TThread.Queue(nil,
+        procedure
+        var
+          MsgSvc: IOTAMessageServices;
+        begin
+          if ExitCode = 2 then begin ShowMessage('drag-lint: lint-all failed (no index?). See plugin log.'); Exit; end;
+          if FileExists(OutPath) then DLOpenInEditor(OutPath);
+          if Supports(BorlandIDEServices, IOTAMessageServices, MsgSvc) then
+            MsgSvc.AddTitleMessage('drag-lint ' + Summary);
+        end);
+    end).Start;
+end;
+
 procedure RegisterDragLintMenu;
 var
   Services: INTAServices;
@@ -3355,6 +3397,7 @@ begin
   AddSeparator(RootMenu);
   AddSectionHeader(RootMenu, 'Diagnostics && Tests');
   AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)'      , InvokeDiagnostics    );
+  AddWrappedItem(RootMenu, 'Run Lint All (Full Report)'     , InvokeLintAll        );
   AddWrappedItem(RootMenu, 'Run AST Checks'                 , InvokeRunAstChecks   );
   AddWrappedItem(RootMenu, 'Lint Buffer (Unsaved)'          , InvokeLintBuffer     );
   AddWrappedItem(RootMenu, 'Copy Diagnostics (Current File)', InvokeCopyDiagnostics);
