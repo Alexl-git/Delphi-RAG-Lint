@@ -67,6 +67,8 @@ contains
   DragLint.Plugin.Providers in 'DragLint.Plugin.Providers.pas',
   DragLint.Plugin.LiveDiagnostics in 'DragLint.Plugin.LiveDiagnostics.pas',
   DragLint.Plugin.JobObject in 'DragLint.Plugin.JobObject.pas',
+  DragLint.Plugin.JobQueue in 'DragLint.Plugin.JobQueue.pas',
+  DragLint.Plugin.StatusBar in 'DragLint.Plugin.StatusBar.pas',
   DragLint.Plugin.GraphWindow in 'DragLint.Plugin.GraphWindow.pas',
   DragLint.Plugin.SearchParse in 'DragLint.Plugin.SearchParse.pas',
   DragLint.Plugin.SearchForm in 'DragLint.Plugin.SearchForm.pas';
