@@ -3,6 +3,51 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.65.0-alpha -- 2026-06-29
+
+CLI-side false-positive fixes and internal tidies. The R2 IDE job queue + dock status
+bar (Stream B) are being developed on a separate branch and will land in a later
+prerelease after manual IDE testing.
+
+### Fixed
+
+**Project-membership false positives** (from the ORM3 field report,
+`LINT-FALSE-POSITIVES-20260628.md` FP-8 / FP-9)
+- **FP-8 `unit-not-in-dpr` mis-parsed the `.dpr`/`.dpk` uses clause.** Form-name hints
+  (`uMain in 'uMain.pas' {frmMain}`) and compiler directives (`{$IFDEF}` / `{$ENDIF}`)
+  were extracted as if they were unit names. The clause is now comment-scrubbed first
+  (`{...}`, `(* *)`, `//`, string literals preserved) so only real `Ident` /
+  `Ident in 'file.pas'` entries are treated as units. A stray `;` inside a hint can no
+  longer truncate the clause.
+- **FP-9 `unit-not-in-project` broke on dotted unit names.** `ChangeFileExt` stripped
+  `.ViewModel` from `Foo.ViewModel` as if it were a file extension, so a unit registered
+  as `Foo.ViewModel.pas` never matched the used `Foo.ViewModel`. Normalization now strips
+  only known source extensions (`.pas`/`.dpk`/`.dpr`) and both sides of every comparison
+  use the same `NormUnit`.
+- **FP-9: `*_SERVER` units are no longer flagged** against a CLIENT/COMMON project --
+  they belong to the sibling SERVER project (scope error).
+
+> The bulk of the `unit-not-in-project` volume (third-party `dx*`/`cx*`/EurekaLog units,
+> generated `COMMON\OBJECTS\` units) is an index-coverage / search-path-resolution problem,
+> deferred to v0.66 as a dedicated project-membership accuracy feature.
+
+**Internal (`CheckSyntaxErrors`)**
+- `BuildConditionalRanges` now reuses the once-decoded upper-cased source instead of
+  decoding the file again and upper-casing every line.
+- The conditional-region spanning check is now per-range, so a file with several separate
+  `{$IF}..{$IFEND}` blocks correctly suppresses an error node straddling a middle block
+  (previously only the outer first..last hull was tested).
+
+### Internal / tests
+- Pure parsing/normalization helpers split into the dependency-free unit
+  `DRagLint.Lint.ProjectChecks.Parse` (no SQLite/FireDAC/Core), unit-tested by a new
+  `tests\projectchecks\` console harness (21/21).
+
+### Notes
+All 78/78 lint fixtures + 21/21 project-checks tests pass.
+
+---
+
 ## v0.64.1-alpha -- 2026-06-29
 
 Fix-forward release completing and correcting v0.64.0-alpha (which shipped with several

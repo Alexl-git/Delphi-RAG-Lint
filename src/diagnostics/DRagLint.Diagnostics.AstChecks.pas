@@ -536,28 +536,39 @@ var
         Exit(True);
   end;
 
+  // True when an error node [AStart..AEnd] fully engulfs ANY single conditional
+  // region. Tested per-range (not against the outer hull) so a file with several
+  // separate {$IF}..{$IFEND} blocks still suppresses a node straddling a middle
+  // one, not only one spanning the entire first..last span.
+  function StraddlesConditionalRegion(AStart, AEnd: Integer): Boolean;
+  var
+    I: Integer;
+  begin
+    Result:= False;
+    for I:= 0 to Length(ConditionalRanges) - 1 do
+      if (AStart < ConditionalRanges[I].StartLine) and (AEnd > ConditionalRanges[I].EndLine) then
+        Exit(True);
+  end;
+
   procedure BuildConditionalRanges;
   var
-    S: string;
     I, Depth, Pos2, LineNum, StartLine: Integer;
-    Line: string;
     LineUp: string;
     R: TLineRange;
   begin
-    S:= TEncoding.UTF8.GetString(Src);
+    // Reuse the hoisted SrcUp (decoded + upper-cased once) rather than decoding
+    // Src again and AnsiUpperCase-ing every line -- the slices are already upper.
     Depth:= 0;
     StartLine:= -1;
     LineNum:= 1;
     I:= 1;
-    while I <= Length(S) do
+    while I <= Length(SrcUp) do
     begin
       Pos2:= I;
-      while (Pos2 <= Length(S)) and (S[Pos2] <> #10) do Inc(Pos2);
-      Line:= Copy(S, I, Pos2 - I);
-      if (Pos2 <= Length(S)) and (S[Pos2] = #10) then
+      while (Pos2 <= Length(SrcUp)) and (SrcUp[Pos2] <> #10) do Inc(Pos2);
+      LineUp:= Copy(SrcUp, I, Pos2 - I);
+      if (Pos2 <= Length(SrcUp)) and (SrcUp[Pos2] = #10) then
         Inc(Pos2);
-
-      LineUp:= AnsiUpperCase(Line);
 
       // Check closing directives FIRST: a line with IFEND must not also match
       // the opening IF prefix and spuriously increment Depth on the same line.
@@ -608,11 +619,11 @@ var
       if HasCond then
       begin
         if Length(ConditionalRanges) > 0 then
-          // Use IsInConditionalRegion for start AND end/spanning checks.
+          // Skip when the error starts or ends inside a region, or engulfs any
+          // single region (per-range straddle handles multiple separate blocks).
           SkipDueToConditional:= IsInConditionalRegion(ErrorLine)
             or IsInConditionalRegion(EndLine)
-            or ( (ErrorLine < ConditionalRanges[0].StartLine)
-                 and (EndLine > ConditionalRanges[Length(ConditionalRanges)-1].EndLine) )
+            or StraddlesConditionalRegion(ErrorLine, EndLine)
         else
           SkipDueToConditional:= False; // no ranges produced -- only M4 guard below
 

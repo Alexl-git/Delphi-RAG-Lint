@@ -5,6 +5,10 @@ unit DRagLint.Lint.ProjectChecks;
 // real-world hazard: Delphi compiles a unit if either the .dproj DCCReference
 // list OR the search path resolves it, so a unit can be "in the build" without
 // being listed in both places - and that silently breaks future re-IDE-opens.
+//
+// v0.65: the pure parsing/normalization helpers (NormUnit, ExtractUsesNames,
+// ReadDCCReferences, ...) live in DRagLint.Lint.ProjectChecks.Parse so they can
+// be unit-tested without dragging in SQLite/FireDAC/Core.
 
 interface
 
@@ -13,11 +17,11 @@ uses
   , System.StrUtils
   , System.Classes
   , System.IOUtils
-  , System.RegularExpressions
   , System  .Generics.Collections
   , System  .Generics.Defaults
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
+  , DRagLint.Lint    .ProjectChecks.Parse
   ;
 
 type
@@ -42,110 +46,6 @@ implementation
 uses
   FireDAC.Comp.Client
   ;
-
-function NormalizeUnitName(const APathOrName: string): string;
-var
-  Base: string;
-begin
-  Base:= ExtractFileName(APathOrName);
-  Base:= ChangeFileExt(Base, '');
-  Result:= LowerCase(Base);
-end;
-
-function ReadDCCReferences(const ADprojPath: string): TArray<string>;
-var
-  Content: string       ;
-  RE     : TRegEx       ;
-  M      : TMatch       ;
-  List   : TList<string>;
-  Inc    : string       ;
-begin
-  if not TFile.Exists(ADprojPath) then Exit(nil);
-  Content:= TFile.ReadAllText(ADprojPath);
-  RE:= TRegEx.Create('<DCCReference\s+Include="([^"]+)"', [roIgnoreCase, roSingleLine]);
-  List:= TList<string>.Create;
-  try
-    M:= RE.Match(Content);
-    while M.Success do
-    begin
-      Inc:= M.Groups[1].Value;
-      // Only track .pas/.dpr/.dpk units; skip .rc, .res, .dfm, etc.
-      if SameText(ExtractFileExt(Inc), '.pas') or SameText(ExtractFileExt(Inc), '.dpk') then List.Add(Inc);
-      M:= M.NextMatch;
-    end;
-    Result:= List.ToArray;
-  finally
-    List.Free;
-  end;
-end; // function
-
-function FindSiblingProgramFile(const ADprojPath: string): string;
-var
-  Base     : string;
-  Dir      : string;
-  Candidate: string;
-begin
-  Dir:= ExtractFilePath(ADprojPath);
-  Base:= ChangeFileExt(ExtractFileName(ADprojPath), '');
-  Candidate:= TPath.Combine(Dir, Base + '.dpr');
-  if TFile.Exists(Candidate) then Exit(Candidate);
-  Candidate:= TPath.Combine(Dir, Base + '.dpk');
-  if TFile.Exists(Candidate) then Exit(Candidate);
-  Result:= '';
-end;
-
-function ExtractUsesNames(const AProgramPath: string; out AUsesStartLine: Integer): TArray<string>;
-// Pulls every unit name from every `uses` clause in a .dpr/.dpk. A
-// .dpk has two: `requires` (other packages) and `contains` (.pas units).
-// We treat both as inputs for membership comparison since both feed the
-// compile set.
-var
-  Content  : string       ;
-  RE       : TRegEx       ;
-  UnitRE   : TRegEx       ;
-  M        : TMatch       ;
-  U        : TMatch       ;
-  Clause   : string       ;
-  List     : TList<string>;
-  Idx      : Integer      ;
-  LineCount: Integer      ;
-  Pos      : Integer      ;
-begin
-  AUsesStartLine:= 1;
-  if not TFile.Exists(AProgramPath) then Exit(nil);
-  Content:= TFile.ReadAllText(AProgramPath);
-  // Match `uses ... ;` and `contains ... ;` and `requires ... ;`
-  RE:= TRegEx.Create( '\b(uses|contains|requires)\b\s*(.*?);', [roIgnoreCase, roSingleLine]);
-  // Inside the clause, a unit reference looks like `Name` or `Name in ''...''`
-  UnitRE:= TRegEx.Create('([A-Za-z_][A-Za-z0-9_\.]*)\s*(?:in\s+''[^'']*'')?', [roIgnoreCase]);
-  List:= TList<string>.Create;
-  try
-    M:= RE.Match(Content);
-    while M.Success do
-    begin
-      Clause:= M.Groups[2].Value;
-      // Track line of first uses clause for the finding's location.
-      if List.Count = 0 then
-      begin
-        LineCount:= 1;
-        Pos:= M.Index;
-        for Idx:= 1 to Pos do
-          if (Idx <= Length(Content)) and (Content[Idx] = #10) then Inc(LineCount);
-        AUsesStartLine:= LineCount;
-      end;
-      U:= UnitRE.Match(Clause);
-      while U.Success do
-      begin
-        if (U.Groups[1].Value <> '') and (not SameText(U.Groups[1].Value, 'in')) then List.Add(U.Groups[1].Value);
-        U:= U.NextMatch;
-      end;
-      M:= M.NextMatch;
-    end; // while
-    Result:= List.ToArray;
-  finally
-    List.Free;
-  end; // try
-end; // function
 
 class function TProjectChecks.CheckUnitsInDpr( const ADprojPath: string): TArray<TLintFinding>;
 var
@@ -181,8 +81,10 @@ begin
     end;
     ProgramUses:= ExtractUsesNames(ProgramPath, UsesLine);
 
-    for RefPath in DCCRefs     do DCCSet .AddOrSetValue(NormalizeUnitName(RefPath), RefPath);
-    for Name    in ProgramUses do UsesSet.AddOrSetValue(LowerCase        (Name   ), Name   );
+    // Normalize BOTH sides identically (NormUnit) so dotted unit names like
+    // 'Foo.ViewModel' / 'Foo.ViewModel.pas' compare equal (FP-9 class of bug).
+    for RefPath in DCCRefs     do DCCSet .AddOrSetValue(NormUnit(RefPath), RefPath);
+    for Name    in ProgramUses do UsesSet.AddOrSetValue(NormUnit(Name   ), Name   );
 
     // In .dproj but not in .dpr/.dpk uses -> most dangerous case.
     for Pair in DCCSet do
@@ -254,21 +156,11 @@ var
   DummyLine : Integer;
   DCCSet    : TDictionary<string, Boolean>;
   DprSet    : TDictionary<string, Boolean>;
-  Ref, RefNorm: string;
+  Ref       : string;
   OnDisk, InDpr, InDproj: Boolean;
   F         : TLintFinding;
   LibConn   : TFDConnection;
   LibQ      : TFDQuery;
-
-  { Normalize a unit name or file path to a bare lower-case unit name segment.
-    'System.SysUtils' -> 'sysutils';  'uMyUnit.pas' -> 'umyunit'. }
-  function NormUnit(const AName: string): string;
-  var DotPos: Integer;
-  begin
-    Result:= LowerCase(ChangeFileExt(ExtractFileName(AName), ''));
-    DotPos:= LastDelimiter('.', Result);
-    if DotPos > 0 then Result:= Copy(Result, DotPos + 1, MaxInt);
-  end;
 
   function IsInLibDb(const ANorm: string): Boolean;
   begin
@@ -341,6 +233,9 @@ begin
       UnitOrig:= Seen[UnitNorm];
       { Skip known built-ins never present in any index }
       if SameText(UnitNorm, 'system') or SameText(UnitNorm, 'sysinit') then Continue;
+      { FP-9: *_SERVER units belong to the sibling SERVER project, not this one;
+        flagging them against a CLIENT/COMMON project is a scope error. }
+      if EndsText('_server', UnitNorm) then Continue;
       { 1. Library DB check }
       if IsInLibDb(UnitNorm) then Continue;
       { 2. Project membership check (.dpr + .dproj + disk) }
