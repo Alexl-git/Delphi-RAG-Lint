@@ -15,7 +15,8 @@ uses
   TreeSitter in '..\..\third_party\delphi-tree-sitter\TreeSitter.pas',
   DRagLint.Diagnostics.ParseCache in '..\..\src\diagnostics\DRagLint.Diagnostics.ParseCache.pas',
   DRagLint.Analysis.Cfg in '..\..\src\analysis\DRagLint.Analysis.Cfg.pas',
-  DRagLint.Analysis.DataFlow in '..\..\src\analysis\DRagLint.Analysis.DataFlow.pas';
+  DRagLint.Analysis.DataFlow in '..\..\src\analysis\DRagLint.Analysis.DataFlow.pas',
+  DRagLint.Analysis.Flow.Lattices in '..\..\src\analysis\DRagLint.Analysis.Flow.Lattices.pas';
 
 type
   { Toy forward analysis: "has any block with >=1 item executed upstream?" --
@@ -192,6 +193,61 @@ begin
   finally Cfg.Free; end;
 end;
 
+{ Solve definite-assignment for the first proc of ASource; return the must/may
+  at the Exit block's IN plus the var table (caller frees both Cfg and Vars). }
+procedure SolveDefAsgn(const ASource: string; out ACfg: TCfg; out AVars: TRoutineVarTable;
+  out AIn, AOut: TArray<TDefAsgnVal>);
+var Tmp: string; PF: TParsedFile; Procs: TArray<TTSNode>;
+begin
+  ACfg := nil; AVars := nil;
+  Tmp := TPath.Combine(TPath.GetTempPath, 'da_' + TPath.GetGUIDFileName + '.pas');
+  TFile.WriteAllText(Tmp, ASource);
+  try
+    PF := TAstParseCache.Get(Tmp);
+    if PF.Tree = nil then Exit;
+    Procs := CfgFindProcs(PF.Tree.RootNode);
+    if Length(Procs) = 0 then Exit;
+    ACfg := TCfgBuilder.Build(Procs[0], PF.Src);
+    AVars := TRoutineVarTable.Build(Procs[0], PF.Src);
+    TDataFlowSolver<TDefAsgnVal>.Solve(ACfg, TDefiniteAssignment.Create(AVars, PF.Src), AIn, AOut);
+  finally
+    TAstParseCache.Clear; TFile.Delete(Tmp);
+  end;
+end;
+
+procedure TestDefiniteAssignmentMust;
+var Cfg: TCfg; Vars: TRoutineVarTable; AIn, AOut: TArray<TDefAsgnVal>; Ix: Integer;
+begin
+  { x assigned on BOTH branches -> must at Exit. }
+  SolveDefAsgn(
+    'unit u; interface implementation function F(b: Boolean): Integer;' + sLineBreak +
+    'var x: Integer; begin if b then x := 1 else x := 2; Result := x; end; end.',
+    Cfg, Vars, AIn, AOut);
+  try
+    Check('def-assign: built', (Cfg <> nil) and (Vars <> nil));
+    if Cfg = nil then Exit;
+    Ix := Vars.IndexOf('x');
+    Check('def-assign: x must-assigned at Exit', AIn[Cfg.ExitIdx].Must[Ix]);
+    Check('def-assign: Result must-assigned at Exit', AIn[Cfg.ExitIdx].Must[Vars.IndexOf('result')]);
+  finally Cfg.Free; Vars.Free; end;
+end;
+
+procedure TestDefiniteAssignmentMayOnly;
+var Cfg: TCfg; Vars: TRoutineVarTable; AIn, AOut: TArray<TDefAsgnVal>; Ix: Integer;
+begin
+  { x assigned on ONE branch -> may but not must at Exit. }
+  SolveDefAsgn(
+    'unit u; interface implementation function F(b: Boolean): Integer;' + sLineBreak +
+    'var x: Integer; begin if b then x := 1; Result := x; end; end.',
+    Cfg, Vars, AIn, AOut);
+  try
+    if Cfg = nil then begin Check('def-assign-may: built', False); Exit; end;
+    Ix := Vars.IndexOf('x');
+    Check('def-assign-may: x may at Exit', AIn[Cfg.ExitIdx].May[Ix]);
+    Check('def-assign-may: x NOT must at Exit', not AIn[Cfg.ExitIdx].Must[Ix]);
+  finally Cfg.Free; Vars.Free; end;
+end;
+
 begin
   GPass := 0; GFail := 0;
   try
@@ -201,6 +257,8 @@ begin
     TestForRecordsLoopVar;
     TestTryFinallyBuilds;
     TestSolverForwardFixpoint;
+    TestDefiniteAssignmentMust;
+    TestDefiniteAssignmentMayOnly;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;
