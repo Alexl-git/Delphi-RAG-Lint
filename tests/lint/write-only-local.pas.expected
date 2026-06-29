@@ -1,0 +1,5 @@
+# x is assigned but never read -> write-only-local (reported at the var declaration, line 5)
+write-only-local 5
+# y is read by Writeln -> not write-only; x's single store is write-only, not a dead-store
+!write-only-local 8
+!overwrite-before-read 7

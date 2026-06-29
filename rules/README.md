@@ -177,6 +177,8 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `used-before-assignment` | warning/info | unmanaged local read before assignment (warning = on every path; info = on some path) |
 | `function-result-not-set` | warning/info | function `Result` not assigned (warning = never; info = not on every path) |
 | `out-param-not-set` | warning/info | `out` parameter not assigned on every path |
+| `overwrite-before-read` | info | local assigned then overwritten/discarded before any read (dead store) |
+| `write-only-local` | info | local assigned at least once but never read |
 
 ### Built-in rules (compiled into the exe, not `.scm`)
 

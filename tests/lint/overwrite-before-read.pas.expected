@@ -1,0 +1,4 @@
+# x := 1 is overwritten by x := 2 before any read (x is read later by Writeln) -> dead store
+overwrite-before-read 7
+# x := 2 is read by Writeln -> not a dead store
+!overwrite-before-read 8

@@ -74,6 +74,25 @@ type
     function Equals(const A, B: TDefAsgnVal): Boolean;
   end;
 
+  /// <summary>Backward may-live-variables analysis: `live`[i] = var i may be read
+  /// on some path after this point before being reassigned. Powers dead-store
+  /// (overwrite-before-read) and write-only-local detection.</summary>
+  /// <remarks>Transfer receives the block's live-OUT and returns its live-IN.
+  /// An opaque (`with`-body) item conservatively marks every local live.</remarks>
+  TLiveness = class(TInterfacedObject, IDataFlowAnalysis<TArray<Boolean>>)
+  strict private
+    FVars: TRoutineVarTable;
+    FSrc : TBytes;
+  public
+    constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes);
+    function Direction: TFlowDir;
+    function Bottom: TArray<Boolean>;
+    function Boundary: TArray<Boolean>;
+    function Join(const A, B: TArray<Boolean>): TArray<Boolean>;
+    function Transfer(const ABlock: TCfgBlock; const AIn: TArray<Boolean>): TArray<Boolean>;
+    function Equals(const A, B: TArray<Boolean>): Boolean;
+  end;
+
 /// <summary>Lowercased identifier text of N, trimmed.</summary>
 function NodeText(const N: TTSNode; const ASrc: TBytes): string;
 
@@ -270,7 +289,6 @@ var
 
 begin
   Tbl := TRoutineVarTable.Create;
-  ResultIdx := -1;
   Header := AProc.ChildByField('header');
   if not Header.IsNull then
   begin
@@ -304,6 +322,32 @@ end;
 
 { ----- read/def collection ----- }
 
+{ Leftmost-identifier base var of an expression: `x`, `x.f`, `x[i]`, `x.f.g` -> x.
+  Returns -1 when the base is not a routine var. }
+function LeftmostBaseVar(const N: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable): Integer;
+var Cur, Nxt, IdN: TTSNode; Guard: Integer;
+begin
+  Result := -1; Cur := N; Guard := 0;
+  while (not Cur.IsNull) and (Guard < 32) do
+  begin
+    Inc(Guard);
+    if Cur.NodeType = 'identifier' then
+      Exit(AVars.IndexOf(LowerCase(NodeStr(Cur, ASrc))));
+    if Cur.NodeType = 'varAssignDef' then
+    begin
+      IdN := Cur.ChildByField('name');
+      if IdN.IsNull and (Cur.NamedChildCount > 0) then IdN := Cur.NamedChild(0);
+      if IdN.IsNull then Exit(-1);
+      Exit(AVars.IndexOf(LowerCase(NodeStr(IdN, ASrc))));
+    end;
+    Nxt := Cur.ChildByField('lhs');
+    if Nxt.IsNull then Nxt := Cur.ChildByField('entity');
+    if Nxt.IsNull and (Cur.NamedChildCount > 0) then Nxt := Cur.NamedChild(0);
+    if Nxt.IsNull then Exit(-1);
+    Cur := Nxt;
+  end;
+end;
+
 procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
   AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>);
 
@@ -334,13 +378,12 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
         for I := 0 to ArgsN.NamedChildCount - 1 do
         begin
           Arg := ArgsN.NamedChild(I);
-          if Arg.NodeType = 'identifier' then
-          begin
-            Idx := AVars.IndexOf(LowerCase(NodeStr(Arg, ASrc)));
-            if (Idx >= 0) and (ACallDefs.IndexOf(Idx) < 0) then ACallDefs.Add(Idx);
-          end
-          else
-            Walk(Arg, False);
+          { the arg's base var may be assigned by the callee (var/out param, e.g.
+            SetLength(Result.Must,..) / SetLength(arr,..)) -> a possible def }
+          Idx := LeftmostBaseVar(Arg, ASrc, AVars);
+          if (Idx >= 0) and (ACallDefs.IndexOf(Idx) < 0) then ACallDefs.Add(Idx);
+          { still walk non-identifier args for reads of OTHER vars (indices etc.) }
+          if Arg.NodeType <> 'identifier' then Walk(Arg, False);
         end;
       Walk(N.ChildByField('entity'), False);
       Exit;
@@ -372,30 +415,8 @@ end;
 
 function AssignmentBaseIndex(const ANode: TTSNode; const ASrc: TBytes;
   AVars: TRoutineVarTable): Integer;
-var Cur, Nxt, IdN: TTSNode; Guard: Integer;
 begin
-  Result := -1;
-  Cur := ANode.ChildByField('lhs');
-  Guard := 0;
-  while (not Cur.IsNull) and (Guard < 32) do
-  begin
-    Inc(Guard);
-    if Cur.NodeType = 'identifier' then
-      Exit(AVars.IndexOf(LowerCase(NodeStr(Cur, ASrc))));
-    if Cur.NodeType = 'varAssignDef' then
-    begin
-      IdN := Cur.ChildByField('name');
-      if IdN.IsNull and (Cur.NamedChildCount > 0) then IdN := Cur.NamedChild(0);
-      if IdN.IsNull then Exit(-1);
-      Exit(AVars.IndexOf(LowerCase(NodeStr(IdN, ASrc))));
-    end;
-    { exprDot / index / call: descend to the base (lhs, else entity, else child 0) }
-    Nxt := Cur.ChildByField('lhs');
-    if Nxt.IsNull then Nxt := Cur.ChildByField('entity');
-    if Nxt.IsNull and (Cur.NamedChildCount > 0) then Nxt := Cur.NamedChild(0);
-    if Nxt.IsNull then Exit(-1);
-    Cur := Nxt;
-  end;
+  Result := LeftmostBaseVar(ANode.ChildByField('lhs'), ASrc, AVars);
 end;
 
 { ----- TDefiniteAssignment ----- }
@@ -462,7 +483,9 @@ begin
       begin
         { reads on the rhs happen BEFORE the def of the lhs }
         CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), FSrc, FVars, Reads, CallDefs);
-        for J := 0 to CallDefs.Count - 1 do Result.May[CallDefs[J]] := True;
+        { a var passed to a call (or @x) may be a var/out param the callee assigns
+          (e.g. SetLength(Result,..)); treat as assigned to suppress the finding }
+        for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True; Result.May[CallDefs[J]] := True; end;
         { base index: a partial write (Result.f := / a[i] :=) still defines the base }
         Tgt := AssignmentBaseIndex(It.Node, FSrc, FVars);
         if Tgt >= 0 then begin Result.Must[Tgt] := True; Result.May[Tgt] := True; end;
@@ -470,7 +493,9 @@ begin
       else
       begin
         CollectReadsAndCallDefs(It.Node, FSrc, FVars, Reads, CallDefs);
-        for J := 0 to CallDefs.Count - 1 do Result.May[CallDefs[J]] := True;
+        { a var passed to a call (or @x) may be a var/out param the callee assigns
+          (e.g. SetLength(Result,..)); treat as assigned to suppress the finding }
+        for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True; Result.May[CallDefs[J]] := True; end;
         if (It.Node.NodeType = 'exprCall')
            and (NodeText(It.Node.ChildByField('entity'), FSrc) = 'exit') then
         begin
@@ -491,6 +516,91 @@ begin
   if (Length(A.Must) <> Length(B.Must)) or (Length(A.May) <> Length(B.May)) then Exit;
   for I := 0 to High(A.Must) do
     if (A.Must[I] <> B.Must[I]) or (A.May[I] <> B.May[I]) then Exit;
+  Result := True;
+end;
+
+{ ----- TLiveness ----- }
+
+constructor TLiveness.Create(AVars: TRoutineVarTable; const ASrc: TBytes);
+begin inherited Create; FVars := AVars; FSrc := ASrc; end;
+
+function TLiveness.Direction: TFlowDir; begin Result := fdBackward; end;
+
+function TLiveness.Bottom: TArray<Boolean>;
+var I: Integer;
+begin
+  SetLength(Result, FVars.Count);
+  for I := 0 to FVars.Count - 1 do Result[I] := False;
+end;
+
+function TLiveness.Boundary: TArray<Boolean>;
+var I: Integer; V: TRoutineVar;
+begin
+  SetLength(Result, FVars.Count);
+  for I := 0 to FVars.Count - 1 do
+  begin
+    V := FVars.Get(I);
+    { the caller observes out/var params and the function Result after return }
+    Result[I] := V.Kind in [vkParamOut, vkParamVar, vkResult];
+  end;
+end;
+
+function TLiveness.Join(const A, B: TArray<Boolean>): TArray<Boolean>;
+var I: Integer;
+begin
+  SetLength(Result, FVars.Count);
+  for I := 0 to FVars.Count - 1 do Result[I] := A[I] or B[I];
+end;
+
+function TLiveness.Transfer(const ABlock: TCfgBlock; const AIn: TArray<Boolean>): TArray<Boolean>;
+var I, J, Tgt: Integer; It: TCfgItem; Reads, CallDefs: TList<Integer>;
+begin
+  Result := Copy(AIn); { AIn is the block's live-OUT; we return live-IN }
+  Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+  try
+    for I := ABlock.Items.Count - 1 downto 0 do
+    begin
+      It := ABlock.Items[I];
+      if It.Opaque then
+      begin
+        for J := 0 to FVars.Count - 1 do
+          if FVars.Get(J).Kind = vkLocal then Result[J] := True;
+        Continue;
+      end;
+      Reads.Clear; CallDefs.Clear;
+      if It.Node.NodeType = 'assignment' then
+      begin
+        Tgt := AssignmentTargetIndex(It.Node, FSrc, FVars); { whole-var def kills }
+        if Tgt >= 0 then Result[Tgt] := False;
+        CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), FSrc, FVars, Reads, CallDefs);
+        for J := 0 to Reads.Count - 1 do Result[Reads[J]] := True;     { gen reads }
+        for J := 0 to CallDefs.Count - 1 do Result[CallDefs[J]] := True; { rhs call args are uses }
+        { a partial write (a[i] := / x.f :=) reads its base + index -> live }
+        if Tgt < 0 then
+        begin
+          Reads.Clear; CallDefs.Clear;
+          CollectReadsAndCallDefs(It.Node.ChildByField('lhs'), FSrc, FVars, Reads, CallDefs);
+          for J := 0 to Reads.Count - 1 do Result[Reads[J]] := True;
+          for J := 0 to CallDefs.Count - 1 do Result[CallDefs[J]] := True;
+        end;
+      end
+      else
+      begin
+        CollectReadsAndCallDefs(It.Node, FSrc, FVars, Reads, CallDefs);
+        { for liveness a call argument IS a use (callee may read it) }
+        for J := 0 to Reads.Count - 1 do Result[Reads[J]] := True;
+        for J := 0 to CallDefs.Count - 1 do Result[CallDefs[J]] := True;
+      end;
+    end;
+  finally Reads.Free; CallDefs.Free; end;
+end;
+
+function TLiveness.Equals(const A, B: TArray<Boolean>): Boolean;
+var I: Integer;
+begin
+  Result := False;
+  if Length(A) <> Length(B) then Exit;
+  for I := 0 to High(A) do if A[I] <> B[I] then Exit;
   Result := True;
 end;
 

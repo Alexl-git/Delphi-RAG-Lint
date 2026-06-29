@@ -398,8 +398,13 @@ begin
     if not FinNode.IsNull then
     begin
       HdrIdx := Cfg.NewBlock.Index; { finally entry }
-      Cfg.Blocks[BodyIdx].AddSucc(HdrIdx);                        { exceptional: skips try body }
-      if TryAfter >= 0 then Cfg.Blocks[TryAfter].AddSucc(HdrIdx); { normal }
+      { Normal completion flows try-body -> finally -> follow. We deliberately do
+        NOT add an exceptional tryEntry->finally edge: it would route the
+        "try-body assignments skipped" state into the normal post-finally exit and
+        falsely flag function-result-not-set on routines that set Result in the
+        try. FP policy: prefer missing a used-before INSIDE a finally over that FP. }
+      if TryAfter >= 0 then Cfg.Blocks[TryAfter].AddSucc(HdrIdx)  { normal completion }
+      else Cfg.Blocks[BodyIdx].AddSucc(HdrIdx);                   { try always diverts: keep finally reachable }
       FinAfter := EmitStmt(HdrIdx, FinNode);
       if FinAfter >= 0 then Cfg.Blocks[FinAfter].AddSucc(FollowIdx)
       else Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);

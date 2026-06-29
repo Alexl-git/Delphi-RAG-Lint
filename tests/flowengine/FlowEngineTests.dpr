@@ -248,6 +248,29 @@ begin
   finally Cfg.Free; Vars.Free; end;
 end;
 
+procedure TestLivenessBackward;
+const SRC =
+  'unit u; interface implementation procedure P(a: Integer);' + sLineBreak +
+  'var x: Integer; begin x := a; Writeln(x); end; end.';
+var
+  Tmp: string; PF: TParsedFile; Procs: TArray<TTSNode>;
+  Cfg: TCfg; Vars: TRoutineVarTable; LIn, LOut: TArray<TArray<Boolean>>;
+begin
+  Tmp := TPath.Combine(TPath.GetTempPath, 'lv_' + TPath.GetGUIDFileName + '.pas');
+  TFile.WriteAllText(Tmp, SRC);
+  try
+    PF := TAstParseCache.Get(Tmp);
+    Procs := CfgFindProcs(PF.Tree.RootNode);
+    Cfg := TCfgBuilder.Build(Procs[0], PF.Src);
+    Vars := TRoutineVarTable.Build(Procs[0], PF.Src);
+    try
+      TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, TLiveness.Create(Vars, PF.Src), LIn, LOut);
+      Check('liveness: value param "a" live at entry', LIn[Cfg.EntryIdx][Vars.IndexOf('a')]);
+      Check('liveness: local "x" not live at entry', not LIn[Cfg.EntryIdx][Vars.IndexOf('x')]);
+    finally Cfg.Free; Vars.Free; end;
+  finally TAstParseCache.Clear; TFile.Delete(Tmp); end;
+end;
+
 begin
   GPass := 0; GFail := 0;
   try
@@ -259,6 +282,7 @@ begin
     TestSolverForwardFixpoint;
     TestDefiniteAssignmentMust;
     TestDefiniteAssignmentMayOnly;
+    TestLivenessBackward;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

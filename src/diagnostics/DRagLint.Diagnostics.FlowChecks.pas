@@ -91,6 +91,9 @@ var
     B, I, J, ROW, COL, Tgt, Idx, RIx: Integer; It: TCfgItem; V: TRoutineVar;
     Reads, CallDefs: TList<Integer>;
     CurMust, CurMay: TArray<Boolean>;
+    LiveAna: IDataFlowAnalysis<TArray<Boolean>>;
+    LIn, LOut: TArray<TArray<Boolean>>;
+    ReadAny, AsgnAny, Live: TArray<Boolean>;
   begin
     Cfg := TCfgBuilder.Build(AProc, PF.Src);
     Vars := TRoutineVarTable.Build(AProc, PF.Src);
@@ -139,8 +142,9 @@ var
                       Format('Local "%s" is used before it is assigned.', [V.Name]), ROW, COL);
                 end;
               end;
-            { advance must/may by this item's defs (reads already handled) }
-            for J := 0 to CallDefs.Count - 1 do CurMay[CallDefs[J]] := True;
+            { advance must/may by this item's defs (reads already handled);
+              a call arg / @x is treated as assigned (callee may be a var/out sink) }
+            for J := 0 to CallDefs.Count - 1 do begin CurMust[CallDefs[J]] := True; CurMay[CallDefs[J]] := True; end;
             if It.Node.NodeType = 'assignment' then
             begin
               Tgt := AssignmentBaseIndex(It.Node, PF.Src, Vars);
@@ -188,6 +192,98 @@ var
             else
               Emit('out-param-not-set', 'warning',
                 Format('Out parameter "%s" is not assigned.', [V.Name]),
+                V.DeclLine, V.DeclCol);
+          end;
+        end;
+
+        { ============ liveness checks: overwrite-before-read + write-only-local ============ }
+        LiveAna := TLiveness.Create(Vars, PF.Src);
+        if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, LiveAna, LIn, LOut) then
+        begin
+          SetLength(ReadAny, Vars.Count); SetLength(AsgnAny, Vars.Count);
+          for I := 0 to Vars.Count - 1 do begin ReadAny[I] := False; AsgnAny[I] := False; end;
+          { precompute read-anywhere / assigned-anywhere over all blocks }
+          for B := 0 to Cfg.BlockCount - 1 do
+            for I := 0 to Cfg.Blocks[B].Items.Count - 1 do
+            begin
+              It := Cfg.Blocks[B].Items[I];
+              Reads.Clear; CallDefs.Clear;
+              if It.Node.NodeType = 'assignment' then
+              begin
+                CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs);
+                Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars);
+                if Tgt >= 0 then AsgnAny[Tgt] := True
+                else
+                begin
+                  { partial write (a[i]:= / x.f:=): assigns AND reads the base }
+                  Idx := AssignmentBaseIndex(It.Node, PF.Src, Vars);
+                  if Idx >= 0 then begin AsgnAny[Idx] := True; ReadAny[Idx] := True; end;
+                  CollectReadsAndCallDefs(It.Node.ChildByField('lhs'), PF.Src, Vars, Reads, CallDefs);
+                end;
+              end
+              else
+                CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs);
+              for J := 0 to Reads.Count - 1 do ReadAny[Reads[J]] := True;
+              for J := 0 to CallDefs.Count - 1 do ReadAny[CallDefs[J]] := True; { call arg = use }
+            end;
+
+          { overwrite-before-read: a whole-var store to a local not live afterwards,
+            where the local IS read somewhere (else it is write-only, reported below) }
+          for B := 0 to Cfg.BlockCount - 1 do
+          begin
+            Live := Copy(LOut[B]);
+            for I := Cfg.Blocks[B].Items.Count - 1 downto 0 do
+            begin
+              It := Cfg.Blocks[B].Items[I];
+              if It.Opaque then
+              begin
+                for J := 0 to Vars.Count - 1 do
+                  if Vars.Get(J).Kind = vkLocal then Live[J] := True;
+                Continue;
+              end;
+              if It.Node.NodeType = 'assignment' then
+              begin
+                Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars); { whole-var only }
+                if (Tgt >= 0) and (Vars.Get(Tgt).Kind = vkLocal)
+                   and ReadAny[Tgt] and (not Live[Tgt]) then
+                begin
+                  ROW := Integer(It.Node.StartPoint.Row) + 1;
+                  COL := Integer(It.Node.StartPoint.Column) + 1;
+                  Emit('overwrite-before-read', 'info',
+                    Format('Assignment to "%s" is overwritten before it is read (dead store).',
+                      [Vars.Get(Tgt).Name]), ROW, COL);
+                end;
+                { backward transfer for this item (mirror TLiveness.Transfer) }
+                Reads.Clear; CallDefs.Clear;
+                if Tgt >= 0 then Live[Tgt] := False;
+                CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs);
+                for J := 0 to Reads.Count - 1 do Live[Reads[J]] := True;
+                for J := 0 to CallDefs.Count - 1 do Live[CallDefs[J]] := True; { rhs call args are uses }
+                if Tgt < 0 then
+                begin
+                  Reads.Clear; CallDefs.Clear;
+                  CollectReadsAndCallDefs(It.Node.ChildByField('lhs'), PF.Src, Vars, Reads, CallDefs);
+                  for J := 0 to Reads.Count - 1 do Live[Reads[J]] := True;
+                  for J := 0 to CallDefs.Count - 1 do Live[CallDefs[J]] := True;
+                end;
+              end
+              else
+              begin
+                Reads.Clear; CallDefs.Clear;
+                CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs);
+                for J := 0 to Reads.Count - 1 do Live[Reads[J]] := True;
+                for J := 0 to CallDefs.Count - 1 do Live[CallDefs[J]] := True;
+              end;
+            end;
+          end;
+
+          { write-only-local: a local assigned at least once but read nowhere }
+          for I := 0 to Vars.Count - 1 do
+          begin
+            V := Vars.Get(I);
+            if (V.Kind = vkLocal) and AsgnAny[I] and (not ReadAny[I]) then
+              Emit('write-only-local', 'info',
+                Format('Local "%s" is assigned but never read.', [V.Name]),
                 V.DeclLine, V.DeclCol);
           end;
         end;
