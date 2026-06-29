@@ -21,6 +21,17 @@ type
     class function FromText(const AText: string): TSymbolKind; static;
   end;
 
+  /// <summary>v11 (M1): the broad category a declared/aliased type resolves to.
+  /// Drives the type-aware rule family (float/string-equality, freeandnil-on-
+  /// interface, win64-pointer-cast). tcUnknown = could not resolve.</summary>
+  TTypeCategory = (
+    tcUnknown, tcFloat, tcString, tcChar, tcOrdinal, tcBoolean,
+    tcInterface, tcClass, tcRecord, tcPointer, tcEnum);
+
+  TTypeCategoryHelper = record helper for TTypeCategory
+    function ToText: string;
+  end;
+
   TFileTxToken = record
     FileId: Int64 ;
     Path  : string;
@@ -313,6 +324,23 @@ const
 function TSymbolKindHelper.ToText: string;
 begin
   Result:= KindText[Self];
+end;
+
+function TTypeCategoryHelper.ToText: string;
+begin
+  case Self of
+    tcFloat    : Result:= 'float';
+    tcString   : Result:= 'string';
+    tcChar     : Result:= 'char';
+    tcOrdinal  : Result:= 'ordinal';
+    tcBoolean  : Result:= 'boolean';
+    tcInterface: Result:= 'interface';
+    tcClass    : Result:= 'class';
+    tcRecord   : Result:= 'record';
+    tcPointer  : Result:= 'pointer';
+    tcEnum     : Result:= 'enum';
+    else         Result:= 'unknown';
+  end;
 end;
 
 class function TSymbolKindHelper.FromText(const AText: string): TSymbolKind;

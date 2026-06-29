@@ -213,6 +213,7 @@ begin
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--db ...] [--json]');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
+  Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation] [--layers <f.json>] [--json]');
@@ -2326,6 +2327,31 @@ begin
     if AArgs.AsJson then Writeln(Format('{"name":"%s","ancestors":[]}', [AArgs.Name]))
     else Writeln('type not found: ', AArgs.Name);
     Exit(1);
+  end;
+
+  // v11 (M1): resolve a type name to its broad category (intrinsic / declared /
+  // alias-chased). Useful standalone and as the test surface for the resolver.
+  if AArgs.SubCommand = 'typecat' then
+  begin
+    if AArgs.Name = '' then
+    begin
+      Writeln('ERROR: query typecat requires --name <type>');
+      Exit(2);
+    end;
+    Store:= TSQLiteSymbolStore.Create(PathsToScan[0]);
+    Store.Migrate;
+    var Cat:= Store.ResolveTypeCategory(AArgs.Name, 0).ToText;
+    if AArgs.AsJson then
+    begin
+      var JO:= TJSONObject.Create;
+      try
+        JO.AddPair('name', AArgs.Name);
+        JO.AddPair('category', Cat);
+        Writeln(JO.Format(2));
+      finally JO.Free; end;
+    end
+    else Writeln(Format('%s: %s', [AArgs.Name, Cat]));
+    Exit(0);
   end;
 
   if AArgs.SubCommand <> '' then

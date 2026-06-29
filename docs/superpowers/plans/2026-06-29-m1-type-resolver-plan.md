@@ -132,10 +132,21 @@ bundled exe parses .pas directly). **CONFIRMED findings:**
   edge, resolved-kind check, is-descendant/implements via `--of`. 9/9 green; lint harness 80/80; v10->v11
   migration verified on an existing DB (no crash, table+column added).
 
-### Phase 3 -- type-category resolver
-- `ResolveTypeCategory` (intrinsics + alias chase + symbol-kind) + `GetImplementedInterfaces`.
-- Unit tests (a console test like `tests/projectchecks/`) over crafted type names + a fixture with
-  `type TMyFloat = Double;` alias.
+### Phase 3 -- type-category resolver -- DONE 2026-06-29
+- `TTypeCategory` enum (tcUnknown/Float/String/Char/Ordinal/Boolean/Interface/Class/Record/Pointer/Enum)
+  + `ToText` in Core.Model.
+- `ISymbolStore.ResolveTypeCategory(typeName, fileId)`: intrinsics by name first (IntrinsicCategory:
+  float/string/char/boolean/ordinal sets + Pointer + `P[A-Z]` heuristic), then a declared
+  class/interface/enum/record symbol's kind, chasing `type X = Y` aliases to a fixpoint (depth cap 8,
+  prefer in-file definition). 
+- Parser: new `TryWalkAlias` emits **skTypeAlias** for simple type-reference aliases (`type X = SomeType;`,
+  direct `typeref` target only -- sets/subranges/proc-types/classes/etc. skipped), storing the target in
+  `Signature` so the resolver can chase it. Wired into the declType dispatch after TryWalkEnum.
+- CLI `query typecat --name <T> [--json]`. Test `tests/heritage/typecat.pas` + `run_typecat_test.ps1`:
+  intrinsics (Double/Single/string/Integer/Boolean/Char/Pointer/PChar), declared class/interface/enum,
+  alias->intrinsic + alias->alias->intrinsic chase, unknown. 14/14 green; lint harness 80/80; heritage +
+  ancestry regressions green (skTypeAlias emission did not regress them).
+- (Deferred: `GetImplementedInterfaces` not needed -- `ImplementsInterface` (P2) covers the rule need.)
 
 ### Phase 4 -- upgrade the heuristic rules (the payoff)
 Build `TTypeContext` from the store in the CLI lint-all/check-ast paths; thread into the checks with a

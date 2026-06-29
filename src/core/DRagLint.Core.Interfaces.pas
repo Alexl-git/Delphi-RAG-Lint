@@ -107,6 +107,11 @@ type
     /// <summary>True when AClassName's transitive closure reaches AInterfaceName
     /// via an interface-kind edge (i.e. AClassName implements that interface).</summary>
     function ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
+    /// <summary>Resolve a type name to its broad category: intrinsics by name
+    /// first, then a declared class/interface/enum/record symbol's kind, chasing
+    /// `type X = Y` aliases to a fixpoint. AFileId disambiguates same-named types
+    /// (prefer the one declared in that file). tcUnknown when unresolvable.</summary>
+    function ResolveTypeCategory(const ATypeName: string; AFileId: Int64): TTypeCategory;
     function FindByDocTag(const ATag: string): TArray<TSymbol>                           ;
     function FindUndocumented(const AKind: string; APublicOnly: Boolean): TArray<TSymbol>;
     function FindByDocContains(const ASubstring: string): TArray<TSymbol>                ;

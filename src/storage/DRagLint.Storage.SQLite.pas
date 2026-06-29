@@ -112,6 +112,7 @@ type
       function GetTransitiveAncestors(ASymbolId: Int64): TArray<TTypeAncestor>;
       function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
       function ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
+      function ResolveTypeCategory(const ATypeName: string; AFileId: Int64): TTypeCategory;
 
       { v0.40.4: leaf accessor for utilities that need raw SQL access
       (uses-report walks the whole files + unit_uses tables). Not part
@@ -157,6 +158,8 @@ type
       // v11 (M1): resolve a type name to its defining class/interface/record
       // symbol id, preferring a definition in AFileId. 0 if none.
       function ResolveTypeSymbolId(const AName: string; AFileId: Int64): Int64;
+      // v11 (M1): depth-capped alias-chasing core of ResolveTypeCategory.
+      function ResolveTypeCategoryDepth(const ATypeName: string; AFileId: Int64; ADepth: Integer): TTypeCategory;
       // v0.17 slice helpers
       function FindChildSymbols(AParentId: Int64): TArray<TSymbol>;
       // FindImplLine: searches ALines (0-based) for a line matching
@@ -2463,6 +2466,26 @@ begin
   end;
 end;
 
+// v11 (M1): map an intrinsic (RTL built-in) type name to its category, or
+// tcUnknown when AName is not an intrinsic. P-prefixed names (PChar, PFoo) are
+// treated as pointers, matching the win64-pointer-cast intrinsic set.
+function IntrinsicCategory(const AName: string): TTypeCategory;
+  function Eq(const A: string): Boolean;
+  begin
+    Result:= SameText(AName, A);
+  end;
+begin
+  if Eq('Double') or Eq('Single') or Eq('Extended') or Eq('Real') or Eq('Real48') or Eq('Currency') or Eq('Comp') then Exit(tcFloat);
+  if Eq('string') or Eq('AnsiString') or Eq('UnicodeString') or Eq('WideString') or Eq('ShortString') or Eq('RawByteString') or Eq('UTF8String') then Exit(tcString);
+  if Eq('Char') or Eq('WideChar') or Eq('AnsiChar') or Eq('UCS2Char') or Eq('UCS4Char') then Exit(tcChar);
+  if Eq('Boolean') or Eq('ByteBool') or Eq('WordBool') or Eq('LongBool') then Exit(tcBoolean);
+  if Eq('Integer') or Eq('Cardinal') or Eq('Int64') or Eq('UInt64') or Eq('Byte') or Eq('Word') or Eq('SmallInt') or Eq('ShortInt') or Eq('LongInt') or Eq('LongWord') or
+     Eq('NativeInt') or Eq('NativeUInt') or Eq('Int8') or Eq('Int16') or Eq('Int32') or Eq('UInt8') or Eq('UInt16') or Eq('UInt32') or Eq('FixedInt') or Eq('FixedUInt') then Exit(tcOrdinal);
+  if Eq('Pointer') then Exit(tcPointer);
+  if (Length(AName) >= 2) and CharInSet(AName[1], ['P', 'p']) and CharInSet(AName[2], ['A'..'Z']) then Exit(tcPointer);
+  Result:= tcUnknown;
+end;
+
 procedure TSQLiteSymbolStore.ResolveAncestry;
 { Whole-DB pass: for each class/interface with heritage text, split it, resolve
   each ancestor to a defining class/interface symbol (preferring one in scope of
@@ -2720,6 +2743,43 @@ begin
   if StartId <= 0 then Exit;
   for A in GetTransitiveAncestors(StartId) do
     if SameText(A.Name, AInterfaceName) and SameText(A.Kind, 'interface') then Exit(True);
+end;
+
+function TSQLiteSymbolStore.ResolveTypeCategoryDepth(const ATypeName: string; AFileId: Int64; ADepth: Integer): TTypeCategory;
+var
+  N       : string        ;
+  Best    : TSymbol       ;
+  HaveBest: Boolean       ;
+  S       : TSymbol       ;
+begin
+  Result:= tcUnknown;
+  N:= NormalizeAncestorName(ATypeName);
+  if N = '' then Exit;
+  { 1. intrinsics first (cheap, authoritative). }
+  Result:= IntrinsicCategory(N);
+  if Result <> tcUnknown then Exit;
+  { 2. declared type symbol; chase aliases (cap depth to avoid cycles). }
+  if ADepth > 8 then Exit;
+  HaveBest:= False;
+  for S in FindSymbolsByExactName(N) do
+    if S.Kind in [skClass, skInterface, skEnum, skRecord, skTypeAlias] then
+    begin
+      if (AFileId > 0) and (S.FileId = AFileId) then begin Best:= S; HaveBest:= True; Break; end;
+      if not HaveBest then begin Best:= S; HaveBest:= True; end;
+    end;
+  if not HaveBest then Exit(tcUnknown);
+  case Best.Kind of
+    skClass    : Result:= tcClass;
+    skInterface: Result:= tcInterface;
+    skEnum     : Result:= tcEnum;
+    skRecord   : Result:= tcRecord;
+    skTypeAlias: Result:= ResolveTypeCategoryDepth(Best.Signature, AFileId, ADepth + 1);
+  end;
+end;
+
+function TSQLiteSymbolStore.ResolveTypeCategory(const ATypeName: string; AFileId: Int64): TTypeCategory;
+begin
+  Result:= ResolveTypeCategoryDepth(ATypeName, AFileId, 0);
 end;
 
 end.

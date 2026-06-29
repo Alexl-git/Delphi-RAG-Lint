@@ -539,6 +539,37 @@ begin
   Result:= True;
 end; // function
 
+// v11 (M1): simple type-reference alias `type X = SomeType;` -> emit skTypeAlias
+// with the target type text in Signature, so ResolveTypeCategory can chase
+// `type TMyFloat = Double;` to its intrinsic. ONLY a direct `typeref` target
+// qualifies; sets/subranges/proc-types/classes/interfaces/enums are handled by
+// the earlier TryWalk* dispatch (or left unemitted) and are skipped here.
+function TryWalkAlias(const ADeclTypeNode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
+var
+  TypeWrapNode: TTSNode;
+  RefNode     : TTSNode;
+  NameNode    : TTSNode;
+  TypeName    : string ;
+  QName       : string ;
+  Target      : string ;
+begin
+  Result:= False;
+  TypeWrapNode:= ADeclTypeNode.ChildByField('type');
+  if TypeWrapNode.IsNull then Exit;
+  if TypeWrapNode.NodeType = 'typeref' then RefNode:= TypeWrapNode
+  else RefNode:= FindNamedChildOfType(TypeWrapNode, 'typeref');
+  if RefNode.IsNull then Exit;
+  NameNode:= ADeclTypeNode.ChildByField('name');
+  if NameNode.IsNull then Exit;
+  TypeName:= NodeText(NameNode, AState.Source);
+  if TypeName = '' then Exit;
+  Target:= Trim(NodeText(RefNode, AState.Source));
+  if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
+  else QName:= TypeName;
+  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target);
+  Result:= True;
+end; // function
+
 // Text of a node's `type:` field (field/property/const type, or a proc's
 // return type), whitespace-collapsed. Empty when there is no type child.
 function TypeTextOf(const ANode: TTSNode; const ASource: TBytes): string;
@@ -834,7 +865,8 @@ begin
     if TryWalkInterface    (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
     if TryWalkClassOrRecord(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
     if TryWalkEnum         (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
-    // Unknown shape (type alias, set, etc.) - fall through to default recurse.
+    if TryWalkAlias        (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { v11 (M1) }
+    // Unknown shape (set, subrange, proc-type, etc.) - fall through to default recurse.
   end;
 
   // declProc: emit a method (when inside class/record/interface) or a free
