@@ -78,18 +78,39 @@ possible. Concretely, upgrade five shipped heuristics and unblock the cast famil
 
 ## Phases (each: TDD fixture -> implement -> harness green -> Win64 build -> reindex -> commit)
 
-### Phase 0 -- confirm the heritage AST (foundational, do FIRST)
-Dump the parse tree of `type T = class(TBar, IBaz) end;` and `IFoo = interface(IBar) end;` with the
-bundled `third_party/delphi-tree-sitter/ConsoleReadPasFile.dpr` (build via dcc). Record the exact node
-type + field name for the ancestor list (likely `typeref` children of `declClass` before the first
-`declSection`). **Everything else depends on this.** Capture findings in this doc.
+### Phase 0 -- confirm the heritage AST (foundational, do FIRST) -- DONE 2026-06-29
+Dumped via `C:\Projects\tree-sitter-delphi13\tree-sitter.exe parse <fixture>` (no dcc build needed; the
+bundled exe parses .pas directly). **CONFIRMED findings:**
+- Ancestor list = named **`parent:` fields**, one per ancestor, each node kind **`typeref`**, sitting as
+  **direct named children** of the `declClass` (class/record) / `declIntf` (interface) node. Multiple
+  ancestors -> multiple `parent:` typeref children, in source order. They are the ONLY bare `typeref`
+  direct children (members live inside `declSection`/`declField`/...), so the capture can just collect
+  direct named children of kind `typeref`.
+- Class node = `declClass`, wrapped in a `(type ...)` node under the declType's `type:` field (parser
+  already finds it via `FindNamedChildOfType(TypeWrapNode,'declClass')`, `Delphi13.pas:401`).
+- Interface node = `declIntf`, sits **directly** under the declType `type:` field (no `(type)` wrapper)
+  (`Delphi13.pas:433-435`).
+- Ancestor name shapes inside a `typeref`:
+  - plain: `typeref > identifier` (e.g. `TBar`, `IBaz`).
+  - qualified: `typeref > typerefDot` with nested `lhs/operator(kDot)/rhs` -> dotted tail = innermost
+    `rhs` identifier (e.g. `System.Classes.TComponent` -> `TComponent`).
+  - generic: `typeref > typerefTpl` with `entity:` identifier = base name (strip `<...>`), e.g.
+    `TList<TFoo>` -> `TList`.
+- Capture plan: store collapsed raw heritage text (e.g. `TBar, IBaz`) on the symbol via `NodeText` of
+  each `typeref` joined by `, `; the resolve pass (P2) does name normalization (strip `<...>`, dotted tail).
 
-### Phase 1 -- capture heritage
-- ALTER `symbols ADD COLUMN heritage TEXT`; SCHEMA_VERSION 11; migration (`Schema.pas`, `SQLite.pas`).
-- Parser: in `TryWalkClassOrRecord`/`TryWalkInterface`, read the Phase-0 node, store collapsed text.
-- Plumb `heritage` through `TSymbol`, the insert/read SQL, `ReadSymbolFromQuery`.
-- Test: index a fixture, assert `symbols.heritage` for a class with ancestors (a tiny `query --json`
-  or a storage unit test under `tests/`).
+### Phase 1 -- capture heritage -- DONE 2026-06-29
+- ALTER `symbols ADD COLUMN heritage TEXT`; SCHEMA_VERSION 10->11; migration (`Schema.pas` CREATE +
+  `SQLite.pas` Migrate ALTER, before PrepareStatements so the INSERT's `:her` col exists).
+- Parser: new `HeritageTextOf` collects the bare `typeref` named children of `declClass`/`declIntf`,
+  whitespace-collapses each, joins with `, `; wired into `TryWalkClassOrRecord` (passes `ClassNode`) and
+  `TryWalkInterface` (passes `TypeNode`/declIntf) via a new optional `AHeritage` param on `Emit`.
+- Plumbed `heritage` through `TSymbol.Heritage`, the INSERT SQL + `UpsertSymbol` (`her` param, NULL when
+  empty), `ReadSymbolFromQuery` (FindField-guarded for pre-v11 DBs), and `query --json` (omitted when empty).
+- Test: `tests/heritage/` (fixture + `run_heritage_test.ps1`): index -> `query --name <T> --json` ->
+  assert heritage. Covers class+iface (`TBar, IBaz`), iface-parent (`IBar`), no-ancestor (empty/NULL),
+  and verbatim qualified (`System.Classes.TComponent`) + generic (`TBar, IList<IBaz>`) capture. 5/5 green;
+  full lint harness 80/80; baseline RED confirmed first (TFoo/IFoo had no heritage field).
 
 ### Phase 2 -- resolve ancestry + `IsDescendantOf`
 - New `type_ancestors` table + DDL.

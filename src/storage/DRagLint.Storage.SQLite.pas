@@ -421,6 +421,9 @@ begin
     main schema transaction). }
   TryExec('ALTER TABLE symbols ADD COLUMN impl_start_line INTEGER');
   TryExec('ALTER TABLE symbols ADD COLUMN impl_end_line INTEGER'  );
+  { v11 (M1): raw ancestor list text on class/interface symbols. Additive
+    column; ALTER onto pre-v11 tables for the same reason as the v9 columns. }
+  TryExec('ALTER TABLE symbols ADD COLUMN heritage TEXT');
   PrepareStatements;
 end; // begin
 
@@ -446,8 +449,8 @@ begin
     'parsed_at=:parsed, language=:lang WHERE path=:path');
   FQInsertFile:= NewQuery( 'INSERT OR IGNORE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol:= NewQuery(
-    'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, start_line, start_col, end_line, end_col, ' +
-    '  impl_start_line, impl_end_line) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, ' + '  :sl, :sc, :el, :ec, :isl, :iel)');
+    'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, start_line, start_col, end_line, end_col, ' +
+    '  impl_start_line, impl_end_line) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, ' + '  :sl, :sc, :el, :ec, :isl, :iel)');
   FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
   FQInsertRef:= NewQuery(
     'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col) ' + 'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec)');
@@ -704,6 +707,10 @@ begin
   FQInsertSymbol.ParamByName('sig'  ).AsString := ASymbol.Signature;
   FQInsertSymbol.ParamByName('mods' ).AsString := ASymbol.Modifiers;
   FQInsertSymbol.ParamByName('sec'  ).AsString := ASymbol.Section;
+  { v11: NULL when no ancestors so non-class/interface rows stay clean. }
+  FQInsertSymbol.ParamByName('her'  ).DataType := ftString;
+  if ASymbol.Heritage <> '' then FQInsertSymbol.ParamByName('her').AsString:= ASymbol.Heritage
+  else FQInsertSymbol.ParamByName('her').Clear;
   FQInsertSymbol.ParamByName('sl'   ).AsInteger:= ASymbol.StartLine;
   FQInsertSymbol.ParamByName('sc'   ).AsInteger:= ASymbol.StartCol;
   FQInsertSymbol.ParamByName('el'   ).AsInteger:= ASymbol.EndLine;
@@ -1031,6 +1038,8 @@ begin
   Result.Modifiers    := AQ.FieldByName('modifiers'     ).AsString;
   if AQ.FindField('section') <> nil then { tolerate pre-v7 databases }
     Result.Section  := AQ.FieldByName('section'   ).AsString;
+  if AQ.FindField('heritage') <> nil then { v11: tolerate pre-v11 databases }
+    Result.Heritage := AQ.FieldByName('heritage'  ).AsString;
   Result  .StartLine:= AQ.FieldByName('start_line').AsInteger;
   Result  .StartCol := AQ.FieldByName('start_col' ).AsInteger;
   Result  .EndLine  := AQ.FieldByName('end_line'  ).AsInteger;

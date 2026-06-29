@@ -1786,6 +1786,8 @@ begin
         JObj.AddPair('signature'     , Sym.Signature    );
         JObj.AddPair('modifiers'     , Sym.Modifiers    );
         JObj.AddPair('section'       , Sym.Section      );
+        { v11 (M1): class/interface ancestor list; omitted when empty. }
+        if Sym.Heritage <> '' then JObj.AddPair('heritage', Sym.Heritage);
         { interface-section symbols (and members of interface-section types) are
           callable from another unit; implementation-only ones are not. }
         JObj.AddPair('usable_from_other_units', TJSONBool.Create(Sym.Section <> 'implementation'));

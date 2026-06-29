@@ -3,7 +3,7 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 10;
+  SCHEMA_VERSION = 11;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
@@ -20,6 +20,10 @@ const
     'CREATE TABLE IF NOT EXISTS symbols (' + '  id              INTEGER PRIMARY KEY,' + '  file_id         INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
     '  parent_id       INTEGER REFERENCES symbols(id) ON DELETE CASCADE,' + '  kind            TEXT NOT NULL,' + '  name            TEXT NOT NULL,' +
     '  qualified_name  TEXT NOT NULL,' + '  signature       TEXT,' + '  modifiers       TEXT,' + '  section         TEXT,' + // interface | implementation (usability)
+    // v11 (M1): raw ancestor list text for class/interface symbols ('TBar, IBaz');
+    // NULL for non-class/interface or no ancestors. Migrate() ALTERs it onto
+    // pre-v11 tables. Name normalization + cross-unit resolution happen later.
+    '  heritage        TEXT,' +
     '  start_line      INTEGER NOT NULL,' + '  start_col       INTEGER NOT NULL,' + '  end_line        INTEGER NOT NULL,' + '  end_col         INTEGER NOT NULL,' +
     // v9: implementation body span (header..final 'end'); 0 when no body.
     // Migrate() ALTERs these onto pre-v9 tables (CREATE TABLE IF NOT EXISTS

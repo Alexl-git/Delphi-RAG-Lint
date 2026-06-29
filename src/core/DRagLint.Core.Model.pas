@@ -36,6 +36,10 @@ type
     Signature    : string     ;
     Modifiers    : string     ;
     Section      : string     ; // 'interface' | 'implementation' | '' (usable-from-other-units)
+    // v11 (M1): raw ancestor list text for class/interface symbols, e.g.
+    // 'TBar, IBaz'. Empty for non-class/interface or no ancestors. The
+    // resolve pass normalizes names + links them cross-unit (type_ancestors).
+    Heritage     : string     ;
     StartLine    : Integer    ;
     StartCol     : Integer    ;
     EndLine      : Integer    ;

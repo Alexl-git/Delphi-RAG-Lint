@@ -92,7 +92,8 @@ type
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     function Emit(
-      AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature: string = ''; const AModifiers: string = ''
+      AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature: string = ''; const AModifiers: string = '';
+      const AHeritage: string = ''
     ): Integer;
     procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
     procedure EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
@@ -156,7 +157,7 @@ begin
 end;
 
 function TWalkState.Emit(AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature,
-  AModifiers: string): Integer;
+  AModifiers, AHeritage: string): Integer;
 var
   Sym: TSymbol;
 begin
@@ -167,6 +168,7 @@ begin
   Sym.Signature    := ASignature;
   Sym.Modifiers    := AModifiers;
   Sym.Section      := CurrentSection;
+  Sym.Heritage     := AHeritage; { v11 (M1): class/interface ancestor list text }
   if AParentSymbolIdx >= 0 then Sym.ParentId:= AParentSymbolIdx
   else Sym.ParentId:= -1;
   if not ARangeNode.IsNull then
@@ -383,6 +385,53 @@ begin
   else Result:= Vis;
 end; // function
 
+// v11 (M1): collapse a class/interface node's ancestor list to raw source text,
+// e.g. 'TBar, IBaz'. The ancestors are the bare `typeref` named children of the
+// declClass/declIntf node -- verified that member field/property/method types
+// are nested inside declField/declProp/declSection (never direct typeref
+// children) and that records with no parent yield ''. Names are kept verbatim
+// (qualified/generic intact); the resolve pass normalizes + links them later.
+function HeritageTextOf(const ATypeNode: TTSNode; const ASource: TBytes): string;
+var
+  i    : Integer;
+  Child: TTSNode;
+  Raw  : string ;
+  Clean: string ;
+  k    : Integer;
+  Ch   : Char   ;
+  Prev : Boolean; // previous char was whitespace
+begin
+  Result:= '';
+  for i:= 0 to ATypeNode.NamedChildCount - 1 do
+  begin
+    Child:= ATypeNode.NamedChild(i);
+    if Child.NodeType <> 'typeref' then Continue;
+    Raw:= NodeText(Child, ASource);
+    { collapse any internal whitespace (a wrapped generic arg list) to single
+      spaces so the stored heritage is one clean line. }
+    Clean:= '';
+    Prev := False;
+    for k:= 1 to Length(Raw) do
+    begin
+      Ch:= Raw[k];
+      if (Ch = #9) or (Ch = #10) or (Ch = #13) or (Ch = ' ') then
+      begin
+        if not Prev then Clean:= Clean + ' ';
+        Prev:= True;
+      end
+      else
+      begin
+        Clean:= Clean + Ch;
+        Prev := False;
+      end;
+    end;
+    Clean:= Trim(Clean);
+    if Clean = '' then Continue;
+    if Result = '' then Result:= Clean
+    else Result:= Result + ', ' + Clean;
+  end;
+end; // function
+
 function TryWalkClassOrRecord(const ADeclTypeNode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
 var
   TypeWrapNode: TTSNode    ;
@@ -408,7 +457,7 @@ begin
   else QName:= TypeName;
   if ClassNodeIsRecord(ClassNode) then Kind:= skRecord
   else Kind:= skClass;
-  TypeIdx:= AState.Emit(Kind, TypeName, QName, AParentSymbolIdx, ADeclTypeNode);
+  TypeIdx:= AState.Emit(Kind, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', HeritageTextOf(ClassNode, AState.Source));
   { Members before any visibility keyword default to 'public'; declSection
     handlers update it as they are walked.  Save/restore so a nested type does
     not leak its sections to the enclosing one. }
@@ -439,7 +488,7 @@ begin
   if TypeName = '' then Exit;
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
-  Idx:= AState.Emit(skInterface, TypeName, QName, AParentSymbolIdx, ADeclTypeNode);
+  Idx:= AState.Emit(skInterface, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', HeritageTextOf(TypeNode, AState.Source));
   { All interface members are public. }
   OldVis:= AState.CurrentVisibility;
   AState.CurrentVisibility:= 'public';
