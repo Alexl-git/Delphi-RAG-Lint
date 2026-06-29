@@ -5,9 +5,13 @@ unit DragLint.Plugin.ProcRun;
 
 interface
 
+uses
+  System.SysUtils;
+
 type
-  /// <summary>Line callback for RunCaptureStreaming.</summary>
-  TOnLineProc = procedure(const ALine: string) of object;
+  /// <summary>Line callback for RunCaptureStreaming. TProc&lt;string&gt; allows
+  /// anonymous closures so callers can capture local variables inline.</summary>
+  TOnLineProc = TProc<string>;
 
 /// <summary>Spawns ACmdLine (CREATE_NO_WINDOW), captures stdout+stderr into
 /// AOutput, waits up to ATimeoutMs (&lt;=0 = INFINITE), and returns the child
@@ -25,7 +29,7 @@ function RunCaptureStreaming(const ACmdLine: string; AOnLine: TOnLineProc; out A
 implementation
 
 uses
-  System.SysUtils, Winapi.Windows;
+  Winapi.Windows;
 
 function RunCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer): Integer;
 var

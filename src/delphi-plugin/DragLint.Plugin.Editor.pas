@@ -121,6 +121,7 @@ uses
   , DragLint.Plugin.Telemetry
   , { TEMP debug telemetry }
     DragLint.Plugin.DbResolver
+  , DragLint.Plugin.ProcRun
   ;
 
 { ---- PluginBuildTag ---- }
@@ -423,7 +424,10 @@ end; // function
 { v0.40.7: forward decls so FetchHoverCallers / InvokeHover compose can call
   helpers defined later in this unit. }
 function RunAndCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer = 60000): Integer; forward;
-function IdentifierAtCursor: string; forward                                                                            ;
+function IdentifierAtCursor: string; forward;
+{ v0.64.1: forward so all heavy-command handlers above can call DLExe64
+  before its implementation appears later in this unit. }
+function DLExe64: string; forward;
 
 function FetchHoverCallers(const AExe, ASymName: string; const ADbList: TArray<string>): TArray<TDragLintCallerInfo>;
 var
@@ -720,9 +724,7 @@ begin
     HoverText:= StripFirstHeaderLine(HoverText);
     SymName := IdentifierAtCursor;
     Settings:= LoadSettings;
-    ExePath:= Settings.ExePath;
-    if (ExePath = '') or not FileExists(ExePath) then ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-    if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
+    ExePath:= DLExe64;
     try
       DbList:= ResolveActiveIndexDbs(Settings);
     except
@@ -1092,9 +1094,7 @@ begin
 
   { Resolve project DB and exe path }
   ProjDb:= GetActiveProjectDb;
-  ExePath:= LoadSettings.ExePath;
-  if (ExePath = '') or not FileExists(ExePath) then ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
+  ExePath:= DLExe64;
 
   { Open the refactor preview form.
     For v0.27 simplicity the qname field starts empty; the user fills it in.
@@ -1131,9 +1131,7 @@ begin
   end;
 
   { Resolve drag-lint.exe }
-  ExePath:= LoadSettings.ExePath;
-  if (ExePath = '') or not FileExists(ExePath) then ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
+  ExePath:= DLExe64;
 
   { For v0.27: do not auto-save; spawn YADF against the current on-disk file.
     The user should save the file before invoking this command. }
@@ -1331,8 +1329,7 @@ begin
     if AInteractive then ShowMessage('drag-lint: a compile is already running -- please wait.');
     Exit;
   end;
-  ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
+  ExePath:= DLExe64;
 
   TThread.CreateAnonymousThread(
     procedure var CmdLine, Output: string; ExitCode, nErr, nWarn,
@@ -1534,8 +1531,7 @@ begin
     Exit(False); { retry later }
   end;
 
-  ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
+  ExePath:= DLExe64;
   Plat:= GetActiveProjectPlatform;
 
   TThread.CreateAnonymousThread(
@@ -1571,8 +1567,7 @@ begin
   ProjFile:= AProjFile;
   if ProjFile = '' then
   begin if AInteractive then ShowMessage('drag-lint: no active project.'); Exit; end;
-  ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
+  ExePath:= DLExe64;
   TThread.CreateAnonymousThread(
     procedure var CmdLine, Output: string; ExitCode: Integer; DidRecover: Boolean; begin DidRecover:= False; try CmdLine:= Format('"%s" ghost-recover "%s"', [ExePath,
             ProjFile]); ExitCode:= RunAndCaptureStdout(CmdLine, Output, 60000); DidRecover:= Pos('Recovered ', Output) > 0; DebugLog(Format('GhostRecover: exit=%d recovered=%s', [ExitCode,
@@ -1632,8 +1627,7 @@ begin
     Dlg.Free;
   end;
 
-  ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
+  ExePath:= DLExe64;
 
   if DbPath <> '' then CmdLine:= Format('"%s" import-log "%s" --db "%s"', [ExePath, LogFile, DbPath])
   else CmdLine:= Format('"%s" import-log "%s"', [ExePath, LogFile]);
@@ -1717,9 +1711,7 @@ begin
     Exit;
   end;
 
-  ExePath:= LoadSettings.ExePath;
-  if (ExePath = '') or not FileExists(ExePath) then ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
+  ExePath:= DLExe64;
 
   DbPath:= GetActiveProjectDb;
 
@@ -1847,9 +1839,7 @@ var
   Settings: TDragLintSettings;
 begin
   Settings:= LoadSettings;
-  ExePath:= Settings.ExePath;
-  if (ExePath = '') or not FileExists(ExePath) then ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
+  ExePath:= DLExe64;
 
   { v0.40.3: resolve every relevant DB (project + sibling subprojects +
     explicit list + library) instead of the broken single-project lookup. }
@@ -1893,9 +1883,7 @@ var
   EV      : IOTAEditView      ;
   Pos     : IOTAEditPosition  ;
 begin
-  ExePath:= LoadSettings.ExePath;
-  if (ExePath = '') or not FileExists(ExePath) then ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
+  ExePath:= DLExe64;
 
   ProjDb:= GetActiveProjectDb;
   Selected:= ShowSymbolSearch(ExePath, ProjDb);
@@ -1970,10 +1958,8 @@ begin
     Exit;
   end;
 
-  { Resolve drag-lint.exe the same way the other handlers do. }
-  ExePath:= LoadSettings.ExePath;
-  if (ExePath = '') or not FileExists(ExePath) then ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
+  { Resolve drag-lint.exe -- prefer Win64 build for heavy jobs. }
+  ExePath:= DLExe64;
 
   { Prompt for the output CSV path. }
   Dlg:= TSaveDialog.Create(nil);
@@ -2230,12 +2216,7 @@ begin
   end;
 
   Cfg:= LoadSettings;
-  ExePath:= Cfg.ExePath;
-  if (ExePath = '') or not FileExists(ExePath) then
-  begin
-    ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-    if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
-  end;
+  ExePath:= DLExe64;
 
   { Spawn detached: drag-lint lint <tmp> --json. We don't capture stdout
     in v0.40.3a -- the diagnostic-publish path will be wired in v0.40.4
@@ -2313,13 +2294,8 @@ begin
     Exit;
   end;
 
-  { Prefer the engine bundled beside the BPL (current), like the LSP. }
-  Exe:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(Exe) then
-  begin
-    Exe:= LoadSettings.ExePath;
-    if (Exe = '') or not FileExists(Exe) then Exe:= 'drag-lint.exe';
-  end;
+  { Prefer the Win64 engine (avoids 32-bit OOM on large indexes). }
+  Exe:= DLExe64;
 
   CmdLine:= Format('"%s" lint "%s"', [Exe, FilePath]);
   Output:= '';
@@ -2506,7 +2482,7 @@ begin
     marshalled back to the main thread via TThread.Queue -- same pattern as
     LiveDiagnostics.TLiveRunner. Cmd/OutPath are locals captured (heap-promoted)
     by the closure, so they outlive this procedure's return. }
-  Cmd:= Format('"%s" %s', [DLExe, ACmdTail]);
+  Cmd:= Format('"%s" %s', [DLExe64, ACmdTail]);
   OutPath:= TPath.Combine(TPath.GetTempPath, ABaseName);
   DLT('menu', 'run(async): ' + Cmd);
   TThread.CreateAnonymousThread(
@@ -2610,7 +2586,7 @@ var
 begin
   Result:= '';
   if (AQName = '') or (ADb = '') or not FileExists(ADb) then Exit;
-  Cmd:= Format('"%s" query --qname "%s" --db "%s" --json', [DLExe, AQName, ADb]);
+  Cmd:= Format('"%s" query --qname "%s" --db "%s" --json', [DLExe64, AQName, ADb]);
   Output:= '';
   RunAndCaptureStdout(Cmd, Output, 15000);
   P:= Pos('[', Output); { skip any "(loaded defaults...)" banner prefix }
@@ -2896,7 +2872,7 @@ begin
     Exit;
   end;
 
-  Cmd:= Format('"%s" check-unit "%s" --resolve-uses --db "%s" --format json', [DLExe, Pas, LibDb]);
+  Cmd:= Format('"%s" check-unit "%s" --resolve-uses --db "%s" --format json', [DLExe64, Pas, LibDb]);
   if Proj <> '' then Cmd:= Cmd + Format(' --project "%s"', [Proj]);
   DLT('uses', 'suggest-missing: ' + Cmd);
   Output:= '';
@@ -2994,7 +2970,7 @@ begin
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
   Pas:= FileName; Proj:= GetActiveProjectFile; LibDb:= DLLibraryDb;
   if not FileExists(LibDb) then Exit;
-  Cmd:= Format('"%s" check-unit "%s" --resolve-uses --db "%s" --format json', [DLExe, Pas, LibDb]);
+  Cmd:= Format('"%s" check-unit "%s" --resolve-uses --db "%s" --format json', [DLExe64, Pas, LibDb]);
   if Proj <> '' then Cmd:= Cmd + Format(' --project "%s"', [Proj]);
   Output:= '';
   RunAndCaptureStdout(Cmd, Output, 90000);
@@ -3220,7 +3196,7 @@ begin
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   Dir:= TPath.Combine(TPath.GetTempPath, 'drag-lint-obsidian');
   try TDirectory.CreateDirectory(Dir); except end;
-  Cmd:= Format('"%s" export obsidian --db "%s" --output-dir "%s"', [DLExe, Db, Dir]);
+  Cmd:= Format('"%s" export obsidian --db "%s" --output-dir "%s"', [DLExe64, Db, Dir]);
   DLT('menu', 'run: ' + Cmd);
   Output:= '';
   RunAndCaptureStdout(Cmd, Output, 180000);
@@ -3238,7 +3214,7 @@ begin
   if (Proj = '') or (Db = '') then begin ShowMessage('drag-lint: no project/index found.'); Exit; end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
   ProjDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
-  Cmd    := Format('"%s" index "%s" --db "%s"', [DLExe, ProjDir, Db]);
+  Cmd    := Format('"%s" index "%s" --db "%s"', [DLExe64, ProjDir, Db]);
   OutPath:= TPath.Combine(TPath.GetTempPath, 'drag-lint-reindex.txt');
   DLT('menu', 'run(async+lsp-restart): ' + Cmd);
   { Stop the LSP server NOW, on the UI thread, before the indexer runs.
@@ -3272,6 +3248,24 @@ end;
 procedure InvokeLibraryDrift(Sender: TObject);
 begin
   DLRunReport('library-drift', 'drag-lint-library-drift.txt');
+end;
+
+{ v0.64.1: build a main-thread closure that posts ONE lint-all progress line to
+  the IDE Messages view. S is taken BY VALUE as a parameter, so each call frame
+  owns its own copy -- the returned closure captures that frame's S, not a shared
+  outer var. (A var in the streaming callback would be a single heap-promoted slot
+  reused across lines, so a later line could overwrite it before TThread.Queue
+  drains it on the main thread.) }
+function MakeLintAllProgressMsg(const S: string): TThreadProcedure;
+begin
+  Result:=
+    procedure
+    var
+      MS: IOTAMessageServices;
+    begin
+      if Supports(BorlandIDEServices, IOTAMessageServices, MS) then
+        MS.AddTitleMessage('drag-lint lint-all: ' + S);
+    end;
 end;
 
 { v0.63: run lint-all on the active project in the background, then open the
@@ -3314,16 +3308,52 @@ begin
   TThread.CreateAnonymousThread(
     procedure
     var
-      Output, Summary: string;
-      ExitCode       : Integer;
+      SB         : TStringBuilder;
+      Summary    : string        ;
+      ExitCode   : Integer       ;
+      LastPct    : Integer       ;
+      StreamOk   : Boolean       ;
     begin
-      Output:= ''; ExitCode:= 2;
+      SB:= TStringBuilder.Create;
+      ExitCode:= 2; LastPct:= -1; StreamOk:= False;
       try
-        ExitCode:= RunAndCaptureStdout(Cmd, Output, 600000);
+        StreamOk:= RunCaptureStreaming(Cmd,
+          procedure(ALine: string)
+          var
+            Pct: Integer; P, B, E: Integer;
+          begin
+            SB.AppendLine(ALine);
+            { Parse progress lines emitted by lint-all: "lint-all: [i/N] NN% file"
+              (CLI format, DRagLint.CLI.pas ~5117). Read the digit-run that ends
+              just before the '%' sign -- e.g. "50" from "[12/345] 50% Foo.pas".
+              Lines without a '%' (e.g. the initial "lint-all: scanning N") yield
+              Pct=-1 and are skipped. }
+            if (Length(ALine) > 9) and (Copy(ALine, 1, 9) = 'lint-all:') then
+            begin
+              P:= Pos('%', ALine);
+              if P > 1 then
+              begin
+                E:= P - 1; B:= E;
+                while (B >= 1) and CharInSet(ALine[B], ['0'..'9']) do Dec(B);
+                Pct:= StrToIntDef(Copy(ALine, B + 1, E - B), -1);
+              end
+              else
+                Pct:= -1;
+              if (Pct >= 0) and (Pct <> LastPct) then
+              begin
+                LastPct:= Pct;
+                { capture-by-value: helper copies ALine into its own param frame }
+                TThread.Queue(nil, MakeLintAllProgressMsg(ALine));
+              end;
+            end;
+          end,
+          ExitCode);
+        if not StreamOk then ExitCode:= 2;
       except
-        on E: Exception do Output:= 'drag-lint: lint-all failed: ' + E.ClassName + ': ' + E.Message;
+        on E: Exception do SB.AppendLine('drag-lint: lint-all failed: ' + E.ClassName + ': ' + E.Message);
       end;
-      Summary:= Trim(Output);
+      Summary:= Trim(SB.ToString);
+      SB.Free;
       if Summary <> '' then Summary:= Trim(Copy(Summary, LastDelimiter(#10, Summary) + 1, MaxInt));
       TThread.Queue(nil,
         procedure
