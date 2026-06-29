@@ -13,4 +13,9 @@
   operator: (_) @op) @warn
   (#eq? @op "=")
   (#not-match? @warn "= *(0|[1-9][0-9]*|[0-9]+[.][0-9]+|[$][0-9A-Fa-f]+|nil|Nil|NIL|true|True|TRUE|false|False|FALSE|-[0-9]+) *$")
-  (#not-match? @warn "^ *(0|[1-9][0-9]*|[0-9]+[.][0-9]+|[$][0-9A-Fa-f]+|nil|Nil|NIL|true|True|TRUE|false|False|FALSE|-[0-9]+) *= "))
+  (#not-match? @warn "^ *(0|[1-9][0-9]*|[0-9]+[.][0-9]+|[$][0-9A-Fa-f]+|nil|Nil|NIL|true|True|TRUE|false|False|FALSE|-[0-9]+) *= ")
+  ; v0.65.x: also skip when an operand is a quoted string/char literal with NO
+  ; alphabetic characters (e.g. '+', '-', '0', '-.', #13). Case-insensitivity is
+  ; irrelevant for such constants, so suggesting SameText is noise.
+  (#not-match? @warn "= *('[^a-zA-Z']*'|#[0-9]+|#[$][0-9A-Fa-f]+) *$")
+  (#not-match? @warn "^ *('[^a-zA-Z']*'|#[0-9]+|#[$][0-9A-Fa-f]+) *= "))

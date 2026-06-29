@@ -1,0 +1,7 @@
+# non-alpha quoted/char literals -> case folding is moot -> must NOT fire
+!string-equality-comparison 17
+!string-equality-comparison 18
+!string-equality-comparison 19
+!string-equality-comparison 20
+# literal with a letter -> case matters -> MUST still fire
+string-equality-comparison 21
