@@ -3,6 +3,35 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.65.1-alpha -- 2026-06-29
+
+IDE plugin release: the **R2 background job queue + dock status bar**, plus **clickable
+lint findings** in the Messages view. (CLI unchanged from v0.65.0 except the version.)
+
+### Added (IDE plugin)
+- **R2 background job queue** -- reindex / lint-all / forms-csv now run through one
+  serialized worker thread, so they no longer collide on the project SQLite DB
+  ("database is locked"). `forms-csv` no longer freezes the IDE (it was a synchronous
+  UI-thread call). Duplicate enqueues coalesce by key; clean join-on-shutdown.
+- **Dock status bar** -- a strip along the bottom of the drag-lint dock window shows the
+  running job + live %, queue depth ("N queued"), the last result, and a **Cancel**
+  button (clears pending jobs). New units `DragLint.Plugin.JobQueue` +
+  `DragLint.Plugin.StatusBar`.
+- **Clickable lint findings** -- Run Lint All posts each finding to the IDE **Messages**
+  view as a tool message; double-click jumps to `file:line`. Capped at 2000/run so a
+  huge project cannot flood the pane (the full list still opens as the report).
+
+### Fixed
+- Status bar no longer crashes dock creation ("control has no parent window"): layout
+  moved out of the constructor into a `Resize` override, so no window handle is forced
+  before the panel has a parent.
+
+### Notes
+The IDE plugin ships as the Win32 BPL in the repo (`third_party/dll-win32`). The release
+zips are the CLI, unchanged from v0.65.0 except the version string.
+
+---
+
 ## v0.65.0-alpha -- 2026-06-29
 
 CLI-side false-positive fixes and internal tidies. The R2 IDE job queue + dock status
