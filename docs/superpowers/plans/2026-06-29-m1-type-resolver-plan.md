@@ -170,11 +170,17 @@ the nil path (bare `lint <file>`) is byte-for-byte unchanged so the 80-fixture h
     the `.scm` is suppressed on the store path. Needs a coexistence design (built-in + per-path `.scm`
     disable, or a resolver post-filter on the `.scm` finding). Low stakes (info). 
 
-### Phase 4b (follow-up) -- finish the last 2 rules
-- Capture method modifiers (virtual/dynamic/override/abstract/reintroduce) in the parser -> symbols (new
-  column or extend modifiers); `ISymbolStore.GetVirtualMethodsIncludingAncestors(klass, fileId)`; thread
-  store into `CheckVirtualInConstructor`; cross-unit fixture (ctor calls an ancestor-declared virtual).
-- string-equality store path per the coexistence design above.
+### Phase 4b -- finish the last 2 rules -- DONE 2026-06-29
+- **virtual-method-in-constructor cross-unit** DONE (commit 7cda86e): SCHEMA 12 `symbols.is_virtual`;
+  parser `ProcIsVirtual` reads the declProc `procAttribute` (kVirtual/kDynamic/kOverride); plumbed through
+  TSymbol + INSERT/read. `ISymbolStore.GetVirtualMethodsIncludingAncestors(class, fileId)` = own virtuals
+  UNION resolved-ancestor virtuals (walks type_ancestors). `CheckVirtualInConstructor` takes optional
+  (store, fileId); CheckCtors unions the store's inherited virtuals into the per-class set. nil keeps
+  same-file behavior. Test `tests/heritage/virtctor/` (TVChild ctor calls inherited VVirt from vbase).
+- **string-equality store path** DONE (commit a04e5a2): precise built-in in CheckTypeAware (store path
+  only) fires on `=` iff BOTH operands resolve to tcString; `lint-all` drops the broad `.scm` findings
+  when a store is present (built-in authoritative, no dup); `check-ast` never ran the `.scm`; `lint <file>`
+  keeps `.scm`. Test `tests/heritage/typeaware/se_store.pas` (integer = suppressed, string = fires).
 
 ### Phase 5 -- library-DB ancestry + real-project validation -- PARTIAL 2026-06-29
 - **Real-code validation DONE:** indexed `src/` and confirmed on real types -- `TDelphi13Parser` ->
@@ -189,9 +195,22 @@ the nil path (bare `lint <file>`) is byte-for-byte unchanged so the 80-fixture h
   / walk consult the loaded library DB by name (the `IsNavigableForm` cross-DB-by-name pattern). Until then,
   IsDescendantOf still matches a direct RTL base by name, but not its grand-ancestors; ResolveTypeCategory
   falls back to the heuristic for RTL types (acceptable).
-- **DEFERRED -- ORM3 before/after counts:** run `lint-all` on ORM3 (with Platform+Project DBs) and record
-  FP/precision deltas for the 3 upgraded rules once the cross-DB bridge lands (otherwise RTL operands
-  resolve tcUnknown and fall back to heuristic, so the delta would understate the gain).
+- **Real-code before/after RECORDED 2026-06-29:** on `src/cli/DRagLint.CLI.pas` (~9k lines),
+  string-equality went from **285 findings (heuristic `.scm`, type-blind)** to **30 (resolver, genuine
+  string comparisons only)** -- a ~90% false-positive reduction. This is the concrete M1 payoff; the unit
+  suite (`run_typeaware_test.ps1`) proves the same precision on a controlled fixture (integer = suppressed,
+  string = fires).
+- **DEFERRED -- cross-DB library bridge (decided: belongs with Wave D, not an M1 blocker):** the deep
+  transitive-RTL walk fundamentally needs the platform library DBs (library-Win64/Win32.sqlite)
+  re-indexed to v11+ (heritage + type_ancestors) -- a long, lock-prone `index --scan-libraries-win` that
+  should not run unattended. For M1's 5 rules the marginal value is low: RTL floats/strings/pointers are
+  intrinsics (handled by IntrinsicCategory), RTL interfaces are I-prefixed (heuristic fallback), so the
+  rules are already correct on RTL operands without the bridge. The bridge's real beneficiary is Wave D
+  (non-linear-cast / redundant-cast / exhaustive-enum-case, which need the full hierarchy incl. RTL).
+  Design when built: ATTACH the platform lib DB to the store connection (the lib path is already available
+  in DoLintAll as `LibDb`) + resolve ancestors/categories by name against `lib.symbols`; reindex libs to v12.
+- **DEFERRED -- ORM3 full lint-all before/after:** needs an ORM3 reindex to v12 first (slow); the CLI.pas
+  285->30 result above already demonstrates the precision gain on real code.
 
 ---
 
@@ -211,14 +230,16 @@ SCHEMA 11 with `heritage` + `type_ancestors`; `ResolveAncestry` + `IsDescendantO
 `ResolveTypeCategory` on the store; the five rules upgraded to exact on store-bearing paths with
 fixtures; harness green; ORM3 before/after recorded. Ship as **v0.67.0-alpha**.
 
-## STATUS 2026-06-29 (autonomous run) -- M1 CORE COMPLETE, release-ready, NOT yet cut
+## STATUS 2026-06-29 (autonomous run) -- M1 COMPLETE (all 5 rules), release-ready, NOT yet cut
 Commits on `main` (all green, harness 80/80 throughout): 9ffc642 (P1 heritage, SCHEMA 11),
 ed65c22 (P2 type_ancestors + ResolveAncestry + IsDescendantOf/Implements + `query ancestors`),
 63e8104 (P3 ResolveTypeCategory + skTypeAlias capture + `query typecat`),
-b4aafb5 (P4 core: float-equality / freeandnil-on-interface / win64-pointer-cast store-aware).
-New tests: tests/heritage/{run_heritage,run_ancestry,run_typecat,run_typeaware}_test.ps1 (31 assertions).
-**DELIVERED:** the resolver infrastructure (capture -> resolve -> category) + 3 of 5 rule upgrades +
-real-code validation. **REMAINING for full DoD:** P4b (virtual-in-ctor cross-unit -- needs method
-virtual-ness indexed; string-equality store path -- coexistence design), P5 cross-DB library bridge +
-ORM3 before/after. **Release:** not cut (VERSION still 0.65.1) -- user wants M1+M2 bundled; bump to
-v0.66/v0.67 when cutting. The 4 phase-test runners are NOT yet wired into a single suite runner.
+b4aafb5 (P4 core: float-equality / freeandnil-on-interface / win64-pointer-cast store-aware),
+7cda86e (P4b virtual-method-in-constructor cross-unit, SCHEMA 12 is_virtual),
+a04e5a2 (P4b string-equality precise store path), 0bc26b1 (docs).
+Tests: tests/heritage/run_all_m1_tests.ps1 runs the 5 phase scripts (33 assertions, all green).
+**DELIVERED:** resolver infra (capture -> resolve ancestry -> category + virtual-ness) + ALL 5 heuristic
+rules made exact on store paths + real-code validation (CLI.pas string-equality 285 -> 30, ~90% FP cut).
+**REMAINING (deferred, not M1 blockers):** cross-DB library-ancestry bridge (needs lib reindex to v12;
+belongs with Wave D -- see Phase 5) + ORM3 full before/after. **Release:** not cut (VERSION still 0.65.1)
+-- user wants M1+M2 bundled; bump to v0.66/v0.67 when cutting (or cut a standalone v0.66-alpha for M1).

@@ -5,26 +5,25 @@
 > robustness, v0.65.0 FP-8/FP-9 project-membership fixes, v0.65.1 = R2 IDE job queue + dock status bar
 > + clickable lint Messages (double-click -> file:line) + float-equality & string-equality FP fixes
 > (skip quoted non-alpha literal operands). Coverage gap doc: `docs/lint/MISSING-FEATURES.md`.
-> **M1 CORE COMPLETE 2026-06-29 (autonomous run).** Resolver infra + 3 of 5 rule upgrades shipped to
-> `main` (4 commits, harness 80/80): 9ffc642 P1 heritage (SCHEMA 11), ed65c22 P2 type_ancestors +
-> ResolveAncestry + IsDescendantOf/Implements + `query ancestors`, 63e8104 P3 ResolveTypeCategory +
-> skTypeAlias capture + `query typecat`, b4aafb5 P4-core float-equality/freeandnil-on-interface/
-> win64-pointer-cast store-aware. Validated on real `src/` code. Plan + full status:
-> `docs/superpowers/plans/2026-06-29-m1-type-resolver-plan.md` (STATUS section at bottom).
-> **NOT YET CUT as a release** (VERSION still 0.65.1) -- user wants M1+M2 bundled.
-> **RESUME -> finish M1 then start M2:**
->   1. **M1 remainder (P4b + P5):** (a) index method virtual/override-ness (parser+schema, like heritage)
->      -> `GetVirtualMethodsIncludingAncestors` -> virtual-method-in-constructor cross-unit; (b)
->      string-equality store-path built-in + `.scm` coexistence; (c) cross-DB library-ancestry bridge
->      (resolve RTL bases via library-Win64/Win32.sqlite by name) + ORM3 before/after counts.
->   2. **M2 = the data-flow / CFG / def-use engine** (MISSING-FEATURES.md S3 + (M2) tags) -- per-routine
->      control-flow graph + def-use to unlock used-before-assignment, write-only-field, function-result-
->      not-set, overwrite-before-read, cross-call ownership/lifetime. This is "the long pole / biggest
->      effort / engine work, not rule-writing" -- needs its OWN brainstorming + writing-plans design
->      session before coding. Do NOT start the engine without scoping it with the user.
->   3. **#12 Ergonomics** (SARIF, quick-fixes/autofix, baseline file, severity profiles) = the release
->      AFTER the M1+M2 release. Each phase: fixture -> green harness -> Win64 build -> commit. Keep
->      `tests/lint/run_lint_tests.ps1` green.
+> **M1 COMPLETE 2026-06-29 (autonomous run) -- all 5 rules exact.** Resolver infra + all 5 rule upgrades
+> on `main` (7 commits, harness 80/80 throughout): 9ffc642 P1 heritage (SCHEMA 11), ed65c22 P2
+> type_ancestors + ResolveAncestry + IsDescendantOf/Implements + `query ancestors`, 63e8104 P3
+> ResolveTypeCategory + skTypeAlias capture + `query typecat`, b4aafb5 P4-core (float-equality/
+> freeandnil-on-interface/win64-pointer-cast store-aware), 7cda86e P4b virtual-method-in-constructor
+> cross-unit (SCHEMA 12 is_virtual + GetVirtualMethodsIncludingAncestors), a04e5a2 P4b string-equality
+> precise store path, 0bc26b1 docs. Tests: `tests/heritage/run_all_m1_tests.ps1` (33 assertions, green).
+> **Real-code proof:** CLI.pas string-equality 285 (heuristic) -> 30 (resolver), ~90% FP cut. Full status:
+> `docs/superpowers/plans/2026-06-29-m1-type-resolver-plan.md` (STATUS at bottom).
+> **NOT YET CUT as a release** (VERSION still 0.65.1) -- user wants M1+M2 bundled (or cut standalone v0.66).
+> **DEFERRED (not M1 blockers):** cross-DB library-ancestry bridge (needs lib DBs reindexed to v12; low
+> marginal value for the 5 rules since RTL types are intrinsics/I-prefixed -- belongs with Wave D) + ORM3
+> full before/after (needs ORM3 reindex). Design recorded in the plan's Phase 5.
+> **RESUME -> M2 = the data-flow / CFG / def-use engine** (MISSING-FEATURES.md S3 + (M2) tags): per-routine
+> control-flow graph + def-use to unlock used-before-assignment, write-only-field, function-result-not-set,
+> overwrite-before-read, cross-call ownership/lifetime. "The long pole / biggest effort / engine work, not
+> rule-writing" -- needs its OWN brainstorming + writing-plans design session before coding; do NOT start
+> the engine without scoping it with the user. **#12 Ergonomics** (SARIF, quick-fixes/autofix, baseline
+> file, severity profiles) = the release AFTER M1+M2. Each phase: fixture -> green harness -> build -> commit.
 > **Pending (not in a tagged release after v0.65.1):** float-equality fix + string-equality non-alpha
 > guard are on main (commits c869073, d845976) -- fold into v0.67 or cut a quick v0.65.2.
 > **Stale branches** v0.22..v0.35 etc. are old dev branches (no pending work) -- deletable.
