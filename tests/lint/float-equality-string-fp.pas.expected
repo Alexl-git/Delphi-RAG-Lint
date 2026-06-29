@@ -1,0 +1,5 @@
+# FP: a quoted string literal operand is never a float -- must NOT fire on the
+# 'SS = ''-''/''+''/''-.''/''+.''' line even when the flat type map mis-types SS as double.
+!float-equality-comparison 25
+# Positive: a genuine float = float-literal comparison MUST still fire.
+float-equality-comparison 27

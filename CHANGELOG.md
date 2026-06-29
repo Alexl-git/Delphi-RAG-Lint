@@ -6,7 +6,7 @@ breaking changes** until v1.0.
 ## v0.65.1-alpha -- 2026-06-29
 
 IDE plugin release: the **R2 background job queue + dock status bar**, plus **clickable
-lint findings** in the Messages view. (CLI unchanged from v0.65.0 except the version.)
+lint findings** in the Messages view -- and one CLI false-positive fix.
 
 ### Added (IDE plugin)
 - **R2 background job queue** -- reindex / lint-all / forms-csv now run through one
@@ -22,13 +22,18 @@ lint findings** in the Messages view. (CLI unchanged from v0.65.0 except the ver
   huge project cannot flood the pane (the full list still opens as the report).
 
 ### Fixed
+- **`float-equality-comparison` no longer fires on a quoted string/char literal operand**
+  (e.g. `SS = '+'`, `SS = '-.'`). A quoted literal is never a float, so it now forces
+  string context -- this guards against the flat (no-scope) type map mis-resolving a
+  same-named variable to a float when another routine declares it `Double`. Regression
+  fixture `float-equality-string-fp` (FP silent + a real `i = 0.0` still fires). Harness 79/79.
 - Status bar no longer crashes dock creation ("control has no parent window"): layout
   moved out of the constructor into a `Resize` override, so no window handle is forced
   before the panel has a parent.
 
 ### Notes
 The IDE plugin ships as the Win32 BPL in the repo (`third_party/dll-win32`). The release
-zips are the CLI, unchanged from v0.65.0 except the version string.
+zips are the CLI (one FP fix over v0.65.0).
 
 ---
 

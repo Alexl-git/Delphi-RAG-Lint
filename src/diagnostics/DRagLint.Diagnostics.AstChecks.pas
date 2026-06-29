@@ -1445,6 +1445,20 @@ var
     end;
   end;
 
+  { A quoted string/char literal ('...' or #NN) can never be a float, so it forces
+    string/char context. Guards float-equality against the flat (no-scope) type map
+    mis-resolving a same-named variable to a float -- e.g. SS = '+' where another
+    routine declares SS: Double (the documented heuristic limitation). }
+  function OperandIsStringLiteral(const N: TTSNode): Boolean;
+  var
+    Txt: string;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    Txt:= Trim(NodeStr(N));
+    Result:= (Txt <> '') and ((Txt[1] = '''') or (Txt[1] = '#'));
+  end;
+
   procedure CheckExpr(const N: TTSNode);
   var
     I     : Integer    ;
@@ -1466,7 +1480,8 @@ var
       begin
         L:= N.ChildByField('lhs');
         R:= N.ChildByField('rhs');
-        if OperandIsFloat(L) or OperandIsFloat(R) then
+        if (OperandIsFloat(L) or OperandIsFloat(R))
+           and not (OperandIsStringLiteral(L) or OperandIsStringLiteral(R)) then
         begin
           P:= N.StartPoint;
           F:= Default(TLintFinding);
