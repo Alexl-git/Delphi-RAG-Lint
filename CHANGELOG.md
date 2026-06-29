@@ -7,9 +7,9 @@ breaking changes** until v1.0.
 
 ### Added
 
-Ten new built-in (`TAstChecker`) lint rules and an IDE menu command. Each rule
+Eleven new built-in (`TAstChecker`) lint rules and an IDE menu command. Each rule
 ships with a TDD fixture under `tests/lint/` verified by
-`tests/lint/run_lint_tests.ps1` (74/74 green). Built-ins are compiled into the
+`tests/lint/run_lint_tests.ps1` (75/75 green). Built-ins are compiled into the
 exe (no `.scm`/`.json`); a Win64 rebuild is required to add one.
 
 **Security**
@@ -27,6 +27,9 @@ exe (no `.scm`/`.json`); a Win64 rebuild is required to add one.
   type is incompatible with its specifier family.
 - **`try-except-swallowed`** (warning) -- a `try..except` whose handler neither
   re-raises nor logs nor calls `Application.HandleException`.
+- **`virtual-method-in-constructor`** (warning) -- a constructor that calls a
+  `virtual`/`dynamic`/`override` method declared in its own class; the call
+  dispatches to a descendant override before that descendant is initialised.
 
 **Resource / lock safety**
 - **`dataset-open-without-close`** (warning) -- a dataset opened (`X.Open` /
@@ -43,12 +46,15 @@ exe (no `.scm`/`.json`); a Win64 rebuild is required to add one.
   spawns `drag-lint lint-all` on the active project in the background, opens the
   report, and posts a summary to the Messages view.
 
-### Deferred
+### Notes
 
-- **`virtual-method-in-constructor`** -- designed but not yet shipped: it is
-  DB-backed (queries `ISymbolStore` for method modifiers) and runs only on the
-  store-bearing diagnostics path, so it needs a `tests/lint-project/` fixture and
-  wiring into the shared `TAstChecker.Check` aggregator. Planned for a follow-up.
+- **`virtual-method-in-constructor`** shipped as a pure-AST, same-file check
+  (no DB). The original DB-backed design was dropped: the index's `modifiers`
+  column records only visibility (`public`/`protected`/...), not
+  `virtual`/`dynamic`/`override`, so the attribute is read straight from each
+  class's declaration in the file being linted. This covers the common
+  same-class case; cross-unit ancestry (calling an inherited virtual declared in
+  a base unit) still needs the planned type resolver.
 
 ## v0.62.0-alpha -- 2026-06-28
 

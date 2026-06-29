@@ -196,6 +196,16 @@ type
       /// <remarks>Severity info. Threshold = 15 (const). Node kinds: kAnd/kOr/caseCase verified
       /// against the grammar. Pure AST; no DB. Never raises.</remarks>
       class function CheckCyclomaticComplexity(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags a constructor that calls a virtual/dynamic/override method declared in
+      /// its OWN class -- the VMT is live before the body runs, so the call dispatches to a
+      /// descendant override whose fields are not yet initialised (AV or corrupt state).</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One 'virtual-method-in-constructor' finding per offending call site.</returns>
+      /// <remarks>Severity warning. Same-file, same-class only: the virtual-method set is gathered
+      /// from each class's own declaration in this file (procAttribute kVirtual/kDynamic/kOverride);
+      /// inherited (static ancestor) calls and methods inherited unchanged from a base class are not
+      /// flagged. Cross-unit ancestry needs a type resolver (future). Pure AST; no DB. Never raises.</remarks>
+      class function CheckVirtualInConstructor(const AFile: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -3734,6 +3744,235 @@ begin
   finally
     Tree.Free;
     Parser.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckVirtualInConstructor(const AFile: string): TArray<TLintFinding>;
+var
+  Src        : TBytes                                          ;
+  Parser     : TTSParser                                       ;
+  Tree       : TTSTree                                         ;
+  Findings   : TList<TLintFinding>                             ;
+  VirtByClass: TDictionary<string, TDictionary<string, Boolean>>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { True if the subtree declares a virtual/dynamic/override attribute. }
+  function HasVirtualAttr(const N: TTSNode): Boolean;
+  var
+    I: Integer;
+    K: string ;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    K:= N.NodeType;
+    if (K = 'kVirtual') or (K = 'kDynamic') or (K = 'kOverride') then Exit(True);
+    for I:= 0 to N.ChildCount - 1 do
+      if HasVirtualAttr(N.Child(I)) then Exit(True);
+  end;
+
+  { Add the names of virtually-dispatched methods declared directly in ADeclClass. }
+  procedure CollectClassMethods(const ADeclClass: TTSNode; const ASet: TDictionary<string, Boolean>);
+
+    procedure Walk(const N: TTSNode);
+    var
+      I       : Integer;
+      NameNode: TTSNode;
+      MName   : string ;
+    begin
+      if N.IsNull then Exit;
+      if N.NodeType = 'declProc' then
+      begin
+        if HasVirtualAttr(N) then
+        begin
+          NameNode:= N.ChildByField('name');
+          if (not NameNode.IsNull) and (NameNode.NodeType = 'identifier') then
+          begin
+            MName:= LowerCase(NodeStr(NameNode));
+            if MName <> '' then ASet.AddOrSetValue(MName, True);
+          end;
+        end;
+        Exit; { a method decl has no virtual methods of its own nested below }
+      end;
+      for I:= 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+    end; // procedure
+
+  begin
+    Walk(ADeclClass);
+  end; // procedure
+
+  { Pass 1: map each class name (lower) -> set of its virtual method names (lower). }
+  procedure CollectClasses(const N: TTSNode);
+  var
+    I, K              : Integer ;
+    NameNode, TypeNode: TTSNode ;
+    CName             : string  ;
+    Setm              : TDictionary<string, Boolean>;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'declType' then
+    begin
+      NameNode:= N.ChildByField('name');
+      TypeNode:= N.ChildByField('type');
+      if (not NameNode.IsNull) and (not TypeNode.IsNull) then
+        for K:= 0 to TypeNode.ChildCount - 1 do
+          if TypeNode.Child(K).NodeType = 'declClass' then
+          begin
+            CName:= LowerCase(NodeStr(NameNode));
+            if CName <> '' then
+            begin
+              if not VirtByClass.TryGetValue(CName, Setm) then
+              begin
+                Setm:= TDictionary<string, Boolean>.Create;
+                VirtByClass.Add(CName, Setm);
+              end;
+              CollectClassMethods(TypeNode.Child(K), Setm);
+            end;
+            Break;
+          end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectClasses(N.NamedChild(I));
+  end; // procedure
+
+  { Flag any virtually-dispatched self-call inside a constructor body. }
+  procedure FlagCalls(const M: TTSNode; const ASet: TDictionary<string, Boolean>);
+  var
+    I        : Integer    ;
+    Lhs, Rhs : TTSNode    ;
+    P        : TTSPoint   ;
+    F        : TLintFinding;
+  begin
+    if M.IsNull or (Findings.Count >= 200) then Exit;
+    if (M.NodeType = 'defProc') or (M.NodeType = 'inherited') then Exit; { nested routine / static ancestor call }
+    if M.NodeType = 'exprDot' then
+    begin
+      Lhs:= M.ChildByField('lhs');
+      Rhs:= M.ChildByField('rhs');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and SameText(NodeStr(Lhs), 'Self') and
+         (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') and ASet.ContainsKey(LowerCase(NodeStr(Rhs))) then
+      begin
+        P:= Rhs.StartPoint;
+        F:= Default(TLintFinding);
+        F.RuleId  := 'virtual-method-in-constructor';
+        F.Severity:= 'warning';
+        F.Message := Format('Constructor calls virtual/dynamic method "%s" -- it dispatches to a descendant override whose fields are not yet initialised. Move the call out of the constructor or make the method non-virtual.', [NodeStr(Rhs)]);
+        F.FilePath:= AFile;
+        F.StartLine:= Integer(P.Row   ) + 1;
+        F.StartCol := Integer(P.Column) + 1;
+        F.EndLine:= F.StartLine;
+        F.EndCol := F.StartCol + Length(NodeStr(Rhs));
+        Findings.Add(F);
+      end;
+      FlagCalls(Lhs, ASet); { receiver may itself contain a call; member name (rhs) is not a self-call }
+      Exit;
+    end;
+    if M.NodeType = 'identifier' then
+    begin
+      if ASet.ContainsKey(LowerCase(NodeStr(M))) then
+      begin
+        P:= M.StartPoint;
+        F:= Default(TLintFinding);
+        F.RuleId  := 'virtual-method-in-constructor';
+        F.Severity:= 'warning';
+        F.Message := Format('Constructor calls virtual/dynamic method "%s" -- it dispatches to a descendant override whose fields are not yet initialised. Move the call out of the constructor or make the method non-virtual.', [NodeStr(M)]);
+        F.FilePath:= AFile;
+        F.StartLine:= Integer(P.Row   ) + 1;
+        F.StartCol := Integer(P.Column) + 1;
+        F.EndLine:= F.StartLine;
+        F.EndCol := F.StartCol + Length(NodeStr(M));
+        Findings.Add(F);
+      end;
+      Exit;
+    end;
+    for I:= 0 to M.NamedChildCount - 1 do FlagCalls(M.NamedChild(I), ASet);
+  end; // procedure
+
+  { Pass 2: walk constructor implementations, resolve their class's virtual set. }
+  procedure CheckCtors(const N: TTSNode);
+  var
+    I              : Integer;
+    Hdr, NameNode  : TTSNode;
+    Lhs, Body      : TTSNode;
+    CName          : string ;
+    IsCtor         : Boolean;
+    Setm           : TDictionary<string, Boolean>;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then
+    begin
+      Hdr:= N.ChildByField('header');
+      if not Hdr.IsNull then
+      begin
+        IsCtor:= False;
+        for I:= 0 to Hdr.ChildCount - 1 do
+          if Hdr.Child(I).NodeType = 'kConstructor' then begin IsCtor:= True; Break; end;
+        if IsCtor then
+        begin
+          NameNode:= Hdr.ChildByField('name');
+          if (not NameNode.IsNull) and (NameNode.NodeType = 'genericDot') then
+          begin
+            Lhs:= NameNode.ChildByField('lhs');
+            if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then
+            begin
+              CName:= LowerCase(NodeStr(Lhs));
+              if VirtByClass.TryGetValue(CName, Setm) and (Setm.Count > 0) then
+              begin
+                Body:= N.ChildByField('body');
+                if not Body.IsNull then FlagCalls(Body, Setm);
+              end;
+            end;
+          end;
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CheckCtors(N.NamedChild(I));
+  end; // procedure
+
+var
+  Inner: TDictionary<string, Boolean>;
+begin
+  Result:= nil;
+  if not TFile.Exists(AFile) then Exit;
+  Src:= TFile.ReadAllBytes(AFile);
+  Findings:= TList<TLintFinding>.Create;
+  VirtByClass:= TDictionary<string, TDictionary<string, Boolean>>.Create;
+  Parser:= nil;
+  Tree  := nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_delphi13;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    if Tree <> nil then
+    begin
+      CollectClasses(Tree.RootNode);
+      CheckCtors   (Tree.RootNode);
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Tree.Free;
+    Parser.Free;
+    for Inner in VirtByClass.Values do Inner.Free;
+    VirtByClass.Free;
     Findings.Free;
   end;
 end; // function

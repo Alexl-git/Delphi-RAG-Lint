@@ -4201,10 +4201,10 @@ begin
   (AArgs.Rule <> 'freeandnil-on-interface') and (AArgs.Rule <> 'firedac-open-execsql-mismatch') and (AArgs.Rule <> 'unprotected-object-free') and
   (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'ui-access-in-thread') and
   (AArgs.Rule <> 'global-form-variable') and (AArgs.Rule <> 'unsafe-shellexecute') and (AArgs.Rule <> 'path-traversal') and (AArgs.Rule <> 'loop-executes-at-most-once') and
-  (AArgs.Rule <> 'format-argument-count') and (AArgs.Rule <> 'format-specifier-type-mismatch') and (AArgs.Rule <> 'try-except-swallowed') and (AArgs.Rule <> 'dataset-open-without-close') and (AArgs.Rule <> 'criticalsection-not-released') and (AArgs.Rule <> 'too-many-exit-points') and (AArgs.Rule <> 'cyclomatic-complexity') then
+  (AArgs.Rule <> 'format-argument-count') and (AArgs.Rule <> 'format-specifier-type-mismatch') and (AArgs.Rule <> 'try-except-swallowed') and (AArgs.Rule <> 'dataset-open-without-close') and (AArgs.Rule <> 'criticalsection-not-released') and (AArgs.Rule <> 'too-many-exit-points') and (AArgs.Rule <> 'cyclomatic-complexity') and (AArgs.Rule <> 'virtual-method-in-constructor') then
   begin
     Writeln(Format(
-        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' + 'use-after-free, win64-pointer-cast, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity)',
+        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' + 'use-after-free, win64-pointer-cast, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4296,6 +4296,8 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-exit-points') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(AArgs.Path);
       { v0.63: cyclomatic complexity over 15 }
       if (AArgs.Rule = '') or (AArgs.Rule = 'cyclomatic-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(AArgs.Path);
+      { v0.63: virtual/dynamic method called from a constructor of its own class }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'virtual-method-in-constructor') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(AArgs.Path);
     end;
   end; // if
   { v0.47: honor '// drag-lint:ignore [rule ...]' line suppressions across all findings }
@@ -5120,6 +5122,7 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath);
       except
         on E: Exception do
           Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)',

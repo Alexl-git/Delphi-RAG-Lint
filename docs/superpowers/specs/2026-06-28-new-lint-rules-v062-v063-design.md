@@ -255,10 +255,17 @@ A call to a `virtual` or `dynamic` method inside a constructor body. The VMT is 
 before the constructor runs, so the call dispatches to the descendant's override -- but
 the descendant's fields are uninitialised at this point, causing AV or corrupt state.
 
-Implementation: `TAstChecker.CheckVirtualInConstructor` identifies the enclosing routine
-as a constructor (node kind `constructor`), then for each `exprCall`/`exprDot` call,
-queries `ISymbolStore` for the called method's `modifiers` column to check for `virtual`
-or `dynamic`. Requires `--db`; skips gracefully if no DB.
+Implementation (SHIPPED v0.63 -- design revised): `TAstChecker.CheckVirtualInConstructor`
+is a **pure-AST, same-file** check with **no DB**. The original DB-backed plan was
+dropped because the index `modifiers` column records only visibility
+(`public`/`protected`/...), not `virtual`/`dynamic`/`override`. Instead the check reads
+the attribute directly from each class declaration in the file being linted: pass 1
+maps every class to the set of its own method names declared with
+`procAttribute` `kVirtual`/`kDynamic`/`kOverride`; pass 2 walks each constructor's
+`defProc` body and flags a bare `identifier` or `Self.<id>` call whose name is in that
+class's set (skipping `inherited` static calls and nested routines). This covers the
+common same-class case; cross-unit ancestry (an inherited virtual declared in a base
+unit) still needs the planned type resolver.
 
 #### `too-many-exit-points` (info, default threshold: 5)
 
@@ -349,9 +356,10 @@ currently-active project without leaving the IDE.
 
 - **v0.62**: SHIPPED 2026-06-28. Phase 1 complete (9 `.scm` rules); tagged `v0.62.0-alpha`,
   GitHub release published with Win64+Win32 zips.
-- **v0.63**: Phase 2 complete (11 built-ins) + IDE lint-all menu command + BPL rebuild.
-  Same release process; rebuild Win64+Win32 zips via
-  `build/pack-lint-release.ps1 -Version 0.63.0-alpha`.
+- **v0.63**: Phase 2 complete (11 built-ins, incl. `virtual-method-in-constructor`) +
+  IDE lint-all menu command + BPL rebuild. C/A/B all done; IDE menu validated in
+  RAD Studio (2026-06-28), clearing the release gate. Same release process; rebuild
+  Win64+Win32 zips via `build/pack-lint-release.ps1 -Version 0.63.0-alpha`.
 
   **v0.63 execution order (decided 2026-06-28): C -> A -> B -> D.**
   - **C** first: the IDE "Run Lint All" menu command (section 8), so it is ready for

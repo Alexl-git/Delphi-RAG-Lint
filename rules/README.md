@@ -158,7 +158,7 @@ has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_tests.ps1
 
 ## Shipped rules (v0.63 -- Phase 2, built-ins)
 
-Ten new built-in (`TAstChecker`) rules -- compiled into the exe, no `.scm`/`.json`.
+Eleven new built-in (`TAstChecker`) rules -- compiled into the exe, no `.scm`/`.json`.
 Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_tests.ps1`.
 
 | Rule id | Severity | Description |
@@ -173,9 +173,7 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `criticalsection-not-released` | error | lock `Enter`/`Acquire` without a `finally` `Leave`/`Release` |
 | `too-many-exit-points` | info | routine with more than 5 `Exit` statements |
 | `cyclomatic-complexity` | info | routine decision-point count over 15 |
-
-(`virtual-method-in-constructor` is designed but deferred -- it is DB-backed and needs a
-`tests/lint-project/` fixture; see CHANGELOG.)
+| `virtual-method-in-constructor` | warning | constructor calls a `virtual`/`dynamic`/`override` method of its own class |
 
 ### Built-in rules (compiled into the exe, not `.scm`)
 

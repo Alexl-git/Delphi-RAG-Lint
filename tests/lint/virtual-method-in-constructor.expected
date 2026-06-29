@@ -1,0 +1,14 @@
+# A constructor that calls a virtual/dynamic/override method of its OWN class
+# dispatches to a descendant override before the descendant's fields are set.
+# FIRE: DoInit (virtual, 45), Self.DoDyn (dynamic, 46), DoWork (virtual, 47),
+#       DoInit (override, 63 -- in TDerived.Create).
+# NOT:  inherited Create (44, 62 -- static ancestor call), DoPlain (48 -- not
+#       virtual), DoInit at 53 (inside a normal method, not a constructor).
+virtual-method-in-constructor 45
+virtual-method-in-constructor 46
+virtual-method-in-constructor 47
+virtual-method-in-constructor 63
+!virtual-method-in-constructor 44
+!virtual-method-in-constructor 48
+!virtual-method-in-constructor 53
+!virtual-method-in-constructor 62
