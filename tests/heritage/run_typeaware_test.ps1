@@ -31,6 +31,14 @@ Check 'float-equality fires on alias-to-Double (line 30)' (Has 'float-equality-c
 Check 'freeandnil fires on non-I-prefix interface (line 31)' (Has 'freeandnil-on-interface' 31)
 Check 'freeandnil SUPPRESSED on I-prefix class (line 32)' (-not (Has 'freeandnil-on-interface' 32))
 
+# string-equality store-path (se_store.pas): integer '=' suppressed, string '=' fires.
+$rawSE = (& $exe check-ast (Join-Path $dir 'typeaware\se_store.pas') --db $db --format json 2>$null | Out-String)
+$idxSE = $rawSE.IndexOf('[')
+$findingsSE = if ($idxSE -ge 0) { $rawSE.Substring($idxSE) | ConvertFrom-Json } else { @() }
+function HasSE($line) { return @($findingsSE | Where-Object { $_.rule -eq 'string-equality-comparison' -and $_.start_line -eq $line }).Count -ge 1 }
+Check 'string-equality NOT on integer = (line 18)' (-not (HasSE 18))
+Check 'string-equality fires on string = (line 19)' (HasSE 19)
+
 if (Test-Path $db) { Remove-Item $db -Force -ErrorAction SilentlyContinue }
 if ($fail -gt 0) { Write-Host "$fail FAILED"; exit 1 }
 Write-Host 'typeaware: all pass'; exit 0

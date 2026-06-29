@@ -5238,7 +5238,18 @@ begin
             LastPct:= Pct;
           end;
         end;
-        Findings:= Findings + Linter.LintFile(PasPath);
+        { v12 (M1): the precise store-path string-equality built-in (in CheckTypeAware
+          below) supersedes the broad .scm rule when a store is present -- drop the
+          .scm findings so we don't double-report and so its type-blind FPs are gone. }
+        var LintF:= Linter.LintFile(PasPath);
+        if Store <> nil then
+        begin
+          var KeptSE: TArray<TLintFinding>;
+          for var LF in LintF do
+            if not SameText(LF.RuleId, 'string-equality-comparison') then KeptSE:= KeptSE + [LF];
+          LintF:= KeptSE;
+        end;
+        Findings:= Findings + LintF;
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals    (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors    (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd(PasPath);

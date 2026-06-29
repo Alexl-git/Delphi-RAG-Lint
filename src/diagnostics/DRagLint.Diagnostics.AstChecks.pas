@@ -1501,6 +1501,29 @@ var
     Result:= (Txt <> '') and ((Txt[1] = '''') or (Txt[1] = '#'));
   end;
 
+  { v12 (M1): operand resolves to a string -- a string-typed identifier (via the
+    store) or a quoted literal with alphabetic content. Backs the precise
+    store-path string-equality built-in. (A non-alpha literal like '+' is not a
+    case-sensitivity concern, matching the .scm rule's guard.) }
+  function OperandIsString(const N: TTSNode): Boolean;
+  var
+    T, Txt: string ;
+    i     : Integer;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'identifier' then
+    begin
+      if TypeMap.TryGetValue(LowerCase(NodeStr(N)), T) then Result:= (CatOf(T) = tcString);
+    end
+    else if N.NodeType = 'literalString' then
+    begin
+      Txt:= NodeStr(N);
+      for i:= 1 to Length(Txt) do
+        if CharInSet(Txt[i], ['A'..'Z', 'a'..'z']) then Exit(True);
+    end;
+  end;
+
   procedure CheckExpr(const N: TTSNode);
   var
     I     : Integer    ;
@@ -1530,6 +1553,24 @@ var
           F.RuleId  := 'float-equality-comparison';
           F.Severity:= 'warning';
           F.Message := 'Floating-point values compared with = / <> -- rounding makes exact equality unreliable; use SameValue or an epsilon';
+          F.FilePath:= AFile;
+          F.StartLine:= Integer(P.Row   ) + 1;
+          F.StartCol := Integer(P.Column) + 1;
+          F.EndLine:= F.StartLine;
+          F.EndCol := F.StartCol + 1;
+          Findings.Add(F);
+        end;
+        { v12 (M1): precise string-equality (store path only, '=' as in the .scm).
+          Fires only when BOTH operands resolve to a string type -- replaces the
+          broad .scm rule on store-bearing paths (lint-all drops the .scm finding
+          when a store is present; check-ast never runs the .scm). }
+        if (AStore <> nil) and (Op.NodeType = 'kEq') and OperandIsString(L) and OperandIsString(R) then
+        begin
+          P:= N.StartPoint;
+          F:= Default(TLintFinding);
+          F.RuleId  := 'string-equality-comparison';
+          F.Severity:= 'info';
+          F.Message := '''='' compares strings case-sensitively. Use SameText for case-insensitive comparison.';
           F.FilePath:= AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
           F.StartCol := Integer(P.Column) + 1;
