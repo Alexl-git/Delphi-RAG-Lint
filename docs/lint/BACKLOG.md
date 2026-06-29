@@ -1,11 +1,25 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> Last updated 2026-06-28 (handoff). **v0.63.0-alpha SHIPPED + RELEASED** (11 built-ins + IDE
-> Run Lint All menu, incl. virtual-method-in-constructor; harness 75/75). Git clean + pushed.
-> **RESUME NEXT SESSION -> execute R1 (v0.64):** read `docs/superpowers/plans/2026-06-28-lint-r1-robustness.md`
-> (7 tasks: per-file parse cache -> convert all CheckXxx to parse-once -> lint-all progress + --quiet ->
-> IDE live progress -> FP-1 {$IFEND} syntax-error fix -> fortification audit -> release). Execute via
-> superpowers:subagent-driven-development; keep `tests/lint/run_lint_tests.ps1` green.
+> Last updated 2026-06-29 (handoff). **v0.65.1-alpha SHIPPED + RELEASED** (origin/main @ 0613e48,
+> tag v0.65.1-alpha, GitHub PRERELEASE, harness **80/80**). Git clean + pushed. Since v0.63: v0.64.x
+> robustness, v0.65.0 FP-8/FP-9 project-membership fixes, v0.65.1 = R2 IDE job queue + dock status bar
+> + clickable lint Messages (double-click -> file:line) + float-equality & string-equality FP fixes
+> (skip quoted non-alpha literal operands). Coverage gap doc: `docs/lint/MISSING-FEATURES.md`.
+> **RESUME NEXT SESSION -> implement M1 type & hierarchy resolver (-> v0.67):** read
+> `docs/superpowers/plans/2026-06-29-m1-type-resolver-plan.md`. START at **Phase 0** -- build
+> `third_party/delphi-tree-sitter/ConsoleReadPasFile.dpr` and dump the AST of
+> `type T = class(TBar, IBaz) end;` to confirm the heritage node/field name (all phases depend on it).
+> Then P1 capture heritage (ALTER symbols ADD heritage, SCHEMA_VERSION->11) -> P2 type_ancestors +
+> IsDescendantOf (generalize FormsMap.IsNavigableForm) -> P3 ResolveTypeCategory -> P4 upgrade the 5
+> heuristics (float/string/freeandnil/win64/virtual-method-in-ctor) via a nil-safe TTypeContext on the
+> store-bearing path -> P5 lib-DB ancestry + ORM3 before/after. Each phase: fixture -> green harness ->
+> Win64 build -> reindex -> commit. Keep `tests/lint/run_lint_tests.ps1` green.
+> **Pending (not in a tagged release after v0.65.1):** float-equality fix + string-equality non-alpha
+> guard are on main (commits c869073, d845976) -- fold into v0.67 or cut a quick v0.65.2.
+> **Stale branches** v0.22..v0.35 etc. are old dev branches (no pending work) -- deletable.
+> **IDE build gotchas:** any BPL change needs RAD Studio CLOSED (bpl lock) + a manual test cycle; a VCL
+> control must NOT read ClientHeight/Width (or any handle-bound prop) in its ctor before being parented
+> (forces CreateWnd -> "control has no parent window") -- lay out in a Resize override.
 > **Roadmap (the through-line):** `docs/superpowers/specs/2026-06-28-lint-completeness-roadmap-design.md`
 > -- R1 robustness -> R2 IDE job queue -> M1 type resolver (early) -> Waves A-E (no-resolver rules,
 > naming on-by-default, metrics/CK, type-dependent, cross-call-graph frontier). Decisions: serialize
