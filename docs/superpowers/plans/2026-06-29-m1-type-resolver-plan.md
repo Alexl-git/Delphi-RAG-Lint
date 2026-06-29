@@ -148,23 +148,50 @@ bundled exe parses .pas directly). **CONFIRMED findings:**
   ancestry regressions green (skTypeAlias emission did not regress them).
 - (Deferred: `GetImplementedInterfaces` not needed -- `ImplementsInterface` (P2) covers the rule need.)
 
-### Phase 4 -- upgrade the heuristic rules (the payoff)
-Build `TTypeContext` from the store in the CLI lint-all/check-ast paths; thread into the checks with a
-nil-safe fallback. Then:
-- **float-equality**: operand category = tcFloat (resolved), drop the flat-map naming guess.
-- **freeandnil-on-interface**: operand category = tcInterface (skInterface), drop the `I`-prefix.
-- **win64-pointer-cast**: operand category = tcPointer, drop the `P`-prefix.
-- **string-equality**: fire iff BOTH operands resolve to string categories (replace the `.scm` with a
-  context-aware built-in, or keep `.scm` for the no-store path + a store-path built-in).
-- **virtual-method-in-constructor**: extend the virtual-method set with inherited virtuals from
-  ancestors via `GetVirtualMethodsIncludingAncestors` (cross-unit).
-- Keep every existing fixture green; add negative+positive fixtures proving the exact behavior (e.g.
-  `float-equality-string-fp` no longer needs the literal guard once types are real -- but keep it).
+### Phase 4 -- upgrade the heuristic rules (the payoff) -- CORE DONE 2026-06-29 (3 of 5)
+Threaded an optional `(AStore, AFileId)` into `CheckTypeAware` (no separate TTypeContext type -- direct
+params, YAGNI). Decision policy: **store category authoritative when known (<> tcUnknown), name heuristic
+fallback otherwise** -- this both catches non-conventional types AND suppresses the heuristic's FPs, while
+the nil path (bare `lint <file>`) is byte-for-byte unchanged so the 80-fixture harness is untouched.
+- **float-equality** DONE: operand category = tcFloat (resolved, incl. alias chase); heuristic fallback.
+- **freeandnil-on-interface** DONE: tcInterface authoritative (catches non-`I` interfaces; suppresses the
+  `I`-prefixed-CLASS false positive); `I`-prefix fallback when unresolved.
+- **win64-pointer-cast** DONE: tcPointer resolved; `P`-prefix fallback.
+- Wired store into `lint-all` (5252) + `check-ast` (DoCheckAst) call sites; `lint <file>` (4392) stays nil.
+- Test: `tests/heritage/typeaware/tc_store.pas` via `check-ast --db --format json` (3 divergence cases),
+  3/3 green; harness 80/80. Committed b4aafb5.
+- **DEFERRED (2 of 5), documented blockers:**
+  - **virtual-method-in-constructor cross-unit** -- BLOCKED: method virtual/dynamic/override-ness is NOT
+    indexed (`symbols.modifiers` = visibility only). Needs a capture mini-phase (emit method directives,
+    like heritage was) before `GetVirtualMethodsIncludingAncestors` can read ancestor virtuals from the
+    index. The rule stays same-file/same-class (today's behavior) until then.
+  - **string-equality** -- DEFERRED: the `.scm` rule (info-severity) already runs on every path incl.
+    lint-all; a store-path built-in firing on `both operands resolve to tcString` would DUPLICATE it unless
+    the `.scm` is suppressed on the store path. Needs a coexistence design (built-in + per-path `.scm`
+    disable, or a resolver post-filter on the `.scm` finding). Low stakes (info). 
 
-### Phase 5 -- library-DB ancestry + real-project validation
-- Confirm ancestor resolution bridges into the library DB by name across the loaded DB set.
-- Run `lint-all` on ORM3; confirm the upgraded rules' FP/precision improved (e.g. string-equality no
-  longer fires on integer `=`; freeandnil-on-interface precision). Record before/after counts.
+### Phase 4b (follow-up) -- finish the last 2 rules
+- Capture method modifiers (virtual/dynamic/override/abstract/reintroduce) in the parser -> symbols (new
+  column or extend modifiers); `ISymbolStore.GetVirtualMethodsIncludingAncestors(klass, fileId)`; thread
+  store into `CheckVirtualInConstructor`; cross-unit fixture (ctor calls an ancestor-declared virtual).
+- string-equality store path per the coexistence design above.
+
+### Phase 5 -- library-DB ancestry + real-project validation -- PARTIAL 2026-06-29
+- **Real-code validation DONE:** indexed `src/` and confirmed on real types -- `TDelphi13Parser` ->
+  ancestors `IParser` (resolved=true, cross-unit) + `TInterfacedObject` (resolved=false, kind '?', since
+  it lives in the RTL/library DB not in `src/`); `--of IParser` -> is_descendant+implements both true;
+  enums -> tcEnum. Proves cross-unit ancestry + category resolution work on real code, and shows exactly
+  where the cross-DB bridge is needed (the unresolved RTL bases).
+- **DEFERRED -- cross-DB library bridge:** `ResolveAncestry`/`GetTransitiveAncestors`/`ResolveTypeCategory`
+  currently resolve within ONE store/connection (the project DB). RTL/VCL bases (TComponent, TForm,
+  TInterfacedObject, TPersistent) live in `library-Win64/Win32.sqlite`, so they resolve by NAME only
+  (unresolved edge, kind '?') -- the transitive walk can't step INTO them. To bridge: make the resolve pass
+  / walk consult the loaded library DB by name (the `IsNavigableForm` cross-DB-by-name pattern). Until then,
+  IsDescendantOf still matches a direct RTL base by name, but not its grand-ancestors; ResolveTypeCategory
+  falls back to the heuristic for RTL types (acceptable).
+- **DEFERRED -- ORM3 before/after counts:** run `lint-all` on ORM3 (with Platform+Project DBs) and record
+  FP/precision deltas for the 3 upgraded rules once the cross-DB bridge lands (otherwise RTL operands
+  resolve tcUnknown and fall back to heuristic, so the delta would understate the gain).
 
 ---
 
@@ -183,3 +210,15 @@ nil-safe fallback. Then:
 SCHEMA 11 with `heritage` + `type_ancestors`; `ResolveAncestry` + `IsDescendantOf`/`Implements`/
 `ResolveTypeCategory` on the store; the five rules upgraded to exact on store-bearing paths with
 fixtures; harness green; ORM3 before/after recorded. Ship as **v0.67.0-alpha**.
+
+## STATUS 2026-06-29 (autonomous run) -- M1 CORE COMPLETE, release-ready, NOT yet cut
+Commits on `main` (all green, harness 80/80 throughout): 9ffc642 (P1 heritage, SCHEMA 11),
+ed65c22 (P2 type_ancestors + ResolveAncestry + IsDescendantOf/Implements + `query ancestors`),
+63e8104 (P3 ResolveTypeCategory + skTypeAlias capture + `query typecat`),
+b4aafb5 (P4 core: float-equality / freeandnil-on-interface / win64-pointer-cast store-aware).
+New tests: tests/heritage/{run_heritage,run_ancestry,run_typecat,run_typeaware}_test.ps1 (31 assertions).
+**DELIVERED:** the resolver infrastructure (capture -> resolve -> category) + 3 of 5 rule upgrades +
+real-code validation. **REMAINING for full DoD:** P4b (virtual-in-ctor cross-unit -- needs method
+virtual-ness indexed; string-equality store path -- coexistence design), P5 cross-DB library bridge +
+ORM3 before/after. **Release:** not cut (VERSION still 0.65.1) -- user wants M1+M2 bundled; bump to
+v0.66/v0.67 when cutting. The 4 phase-test runners are NOT yet wired into a single suite runner.

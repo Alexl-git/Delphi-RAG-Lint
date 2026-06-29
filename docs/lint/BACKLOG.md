@@ -5,15 +5,26 @@
 > robustness, v0.65.0 FP-8/FP-9 project-membership fixes, v0.65.1 = R2 IDE job queue + dock status bar
 > + clickable lint Messages (double-click -> file:line) + float-equality & string-equality FP fixes
 > (skip quoted non-alpha literal operands). Coverage gap doc: `docs/lint/MISSING-FEATURES.md`.
-> **RESUME NEXT SESSION -> implement M1 type & hierarchy resolver (-> v0.67):** read
-> `docs/superpowers/plans/2026-06-29-m1-type-resolver-plan.md`. START at **Phase 0** -- build
-> `third_party/delphi-tree-sitter/ConsoleReadPasFile.dpr` and dump the AST of
-> `type T = class(TBar, IBaz) end;` to confirm the heritage node/field name (all phases depend on it).
-> Then P1 capture heritage (ALTER symbols ADD heritage, SCHEMA_VERSION->11) -> P2 type_ancestors +
-> IsDescendantOf (generalize FormsMap.IsNavigableForm) -> P3 ResolveTypeCategory -> P4 upgrade the 5
-> heuristics (float/string/freeandnil/win64/virtual-method-in-ctor) via a nil-safe TTypeContext on the
-> store-bearing path -> P5 lib-DB ancestry + ORM3 before/after. Each phase: fixture -> green harness ->
-> Win64 build -> reindex -> commit. Keep `tests/lint/run_lint_tests.ps1` green.
+> **M1 CORE COMPLETE 2026-06-29 (autonomous run).** Resolver infra + 3 of 5 rule upgrades shipped to
+> `main` (4 commits, harness 80/80): 9ffc642 P1 heritage (SCHEMA 11), ed65c22 P2 type_ancestors +
+> ResolveAncestry + IsDescendantOf/Implements + `query ancestors`, 63e8104 P3 ResolveTypeCategory +
+> skTypeAlias capture + `query typecat`, b4aafb5 P4-core float-equality/freeandnil-on-interface/
+> win64-pointer-cast store-aware. Validated on real `src/` code. Plan + full status:
+> `docs/superpowers/plans/2026-06-29-m1-type-resolver-plan.md` (STATUS section at bottom).
+> **NOT YET CUT as a release** (VERSION still 0.65.1) -- user wants M1+M2 bundled.
+> **RESUME -> finish M1 then start M2:**
+>   1. **M1 remainder (P4b + P5):** (a) index method virtual/override-ness (parser+schema, like heritage)
+>      -> `GetVirtualMethodsIncludingAncestors` -> virtual-method-in-constructor cross-unit; (b)
+>      string-equality store-path built-in + `.scm` coexistence; (c) cross-DB library-ancestry bridge
+>      (resolve RTL bases via library-Win64/Win32.sqlite by name) + ORM3 before/after counts.
+>   2. **M2 = the data-flow / CFG / def-use engine** (MISSING-FEATURES.md S3 + (M2) tags) -- per-routine
+>      control-flow graph + def-use to unlock used-before-assignment, write-only-field, function-result-
+>      not-set, overwrite-before-read, cross-call ownership/lifetime. This is "the long pole / biggest
+>      effort / engine work, not rule-writing" -- needs its OWN brainstorming + writing-plans design
+>      session before coding. Do NOT start the engine without scoping it with the user.
+>   3. **#12 Ergonomics** (SARIF, quick-fixes/autofix, baseline file, severity profiles) = the release
+>      AFTER the M1+M2 release. Each phase: fixture -> green harness -> Win64 build -> commit. Keep
+>      `tests/lint/run_lint_tests.ps1` green.
 > **Pending (not in a tagged release after v0.65.1):** float-equality fix + string-equality non-alpha
 > guard are on main (commits c869073, d845976) -- fold into v0.67 or cut a quick v0.65.2.
 > **Stale branches** v0.22..v0.35 etc. are old dev branches (no pending work) -- deletable.
