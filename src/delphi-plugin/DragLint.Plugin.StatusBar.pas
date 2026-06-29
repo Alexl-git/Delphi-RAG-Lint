@@ -31,10 +31,11 @@ type
     FHasLast : Boolean     ;
     procedure HandleTimer (Sender: TObject);
     procedure HandleCancel(Sender: TObject);
-    procedure HandleResize(Sender: TObject);
     procedure Relayout;
     procedure ApplyState(const AState: TQueueState);
     function  StatesEqual(const A, B: TQueueState): Boolean;
+  protected
+    procedure Resize; override; { lays out once parented/sized (handle-safe) }
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -77,9 +78,10 @@ begin
   FCancel.Enabled := False;
   FCancel.OnClick := HandleCancel;
 
-  OnResize:= HandleResize;
-  Relayout;
-
+  { NB: do NOT lay out here -- reading ClientHeight/Width (or any handle-bound
+    property) in the ctor forces handle creation while the panel still has no
+    parent -> "control has no parent window". Layout happens in Resize, which the
+    VCL calls after the dock frame parents + aligns us. }
   FTimer:= TTimer.Create(Self);
   FTimer.Interval:= 200;
   FTimer.OnTimer := HandleTimer;
@@ -90,16 +92,21 @@ procedure TDragLintStatusBar.Relayout;
 var
   H, W: Integer;
 begin
-  H:= ClientHeight;
-  W:= ClientWidth;
+  { Guard: Resize can fire during construction (Align/Height set) before the
+    child controls exist; and use Height/Width (field reads) not ClientHeight/
+    ClientWidth (which force a window handle). }
+  if FCancel = nil then Exit;
+  H:= Height;
+  W:= Width;
   FCancel  .SetBounds(W - 4 - 60, (H - 22) div 2, 60, 22);
   FBar     .SetBounds(FCancel.Left - 8 - 150, (H - 14) div 2, 150, 14);
   FDepthLbl.SetBounds(FBar.Left - 8 - 80, 0, 80, H);
   FStateLbl.SetBounds(6, 0, FDepthLbl.Left - 10, H);
 end;
 
-procedure TDragLintStatusBar.HandleResize(Sender: TObject);
+procedure TDragLintStatusBar.Resize;
 begin
+  inherited;
   Relayout;
 end;
 
