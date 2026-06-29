@@ -9,6 +9,7 @@ interface
 
 uses
   System.SysUtils,
+  System.IOUtils,
   System.Generics.Collections,
   System.Character,
   TreeSitter,
@@ -67,6 +68,123 @@ begin
   Result := False;
 end;
 
+{ ===== interprocedural object-leak: callee-ownership helpers ===== }
+
+{ Lowercased leftmost-identifier text of an expression (x / x.f / x[i] -> x). }
+function BaseIdentText(const N: TTSNode; const ASrc: TBytes): string;
+var Cur, Nxt: TTSNode; G: Integer;
+begin
+  Result := ''; Cur := N; G := 0;
+  while (not Cur.IsNull) and (G < 32) do
+  begin
+    Inc(G);
+    if Cur.NodeType = 'identifier' then Exit(LowerCase(Trim(NodeStr(Cur, ASrc))));
+    Nxt := Cur.ChildByField('lhs');
+    if Nxt.IsNull then Nxt := Cur.ChildByField('entity');
+    if Nxt.IsNull and (Cur.NamedChildCount > 0) then Nxt := Cur.NamedChild(0);
+    if Nxt.IsNull then Exit('');
+    Cur := Nxt;
+  end;
+end;
+
+{ True if the lowercased identifier AName appears anywhere in N. }
+function ExprMentionsIdent(const N: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+var I: Integer;
+begin
+  Result := False;
+  if N.IsNull then Exit;
+  if (N.NodeType = 'identifier') and (LowerCase(Trim(NodeStr(N, ASrc))) = AName) then Exit(True);
+  for I := 0 to N.NamedChildCount - 1 do
+    if ExprMentionsIdent(N.NamedChild(I), AName, ASrc) then Exit(True);
+end;
+
+{ The lowercased name of the AArgIdx-th parameter (flattening multi-name declArgs). }
+function ParamNameAtIndex(const ADefProc: TTSNode; AArgIdx: Integer; const ASrc: TBytes): string;
+var Hdr, Args, DA, NameId: TTSNode; I, J, Idx: Integer;
+begin
+  Result := '';
+  Hdr := ADefProc.ChildByField('header');
+  if Hdr.IsNull then Exit;
+  Args := Hdr.ChildByField('args');
+  if Args.IsNull then Exit;
+  Idx := 0;
+  for I := 0 to Args.NamedChildCount - 1 do
+  begin
+    DA := Args.NamedChild(I);
+    if DA.NodeType <> 'declArg' then Continue;
+    for J := 0 to DA.NamedChildCount - 1 do
+    begin
+      NameId := DA.NamedChild(J);
+      if NameId.NodeType = 'identifier' then
+      begin
+        if Idx = AArgIdx then Exit(LowerCase(Trim(NodeStr(NameId, ASrc))));
+        Inc(Idx);
+      end;
+    end;
+  end;
+end;
+
+{ Find the implementation defProc named AName whose body spans AImplStartLine
+  (falls back to the first same-named defProc). }
+function FindCalleeDefProc(const ARoot: TTSNode; const AName: string;
+  AImplStartLine: Integer; const ASrc: TBytes): TTSNode;
+var Procs: TArray<TTSNode>; I, SR, ER: Integer; Hdr, Nm, Fallback: TTSNode;
+begin
+  Result := Default(TTSNode); Fallback := Default(TTSNode);
+  Procs := CfgFindProcs(ARoot);
+  for I := 0 to High(Procs) do
+  begin
+    Hdr := Procs[I].ChildByField('header');
+    if Hdr.IsNull then Continue;
+    Nm := Hdr.ChildByField('name');
+    if Nm.IsNull or (LowerCase(Trim(NodeStr(Nm, ASrc))) <> LowerCase(AName)) then Continue;
+    if Fallback.IsNull then Fallback := Procs[I];
+    SR := Integer(Procs[I].StartPoint.Row) + 1; ER := Integer(Procs[I].EndPoint.Row) + 1;
+    if (AImplStartLine >= SR) and (AImplStartLine <= ER) then Exit(Procs[I]);
+  end;
+  Result := Fallback;
+end;
+
+{ True ONLY when param APName is used purely as a read/receiver in the callee
+  body -- never freed, never passed as a call argument, never on an assignment
+  rhs (aliased/stored). Such a callee clearly does NOT take ownership. }
+function ParamClearlyNonOwning(const ADefProc: TTSNode; const APName: string; const ASrc: TBytes): Boolean;
+var Body: TTSNode; Bad: Boolean;
+  procedure Walk(const N: TTSNode);
+  var I: Integer; Args, Arg, Rhs: TTSNode; M: string;
+  begin
+    if N.IsNull or Bad then Exit;
+    if N.NodeType = 'exprDot' then
+    begin
+      M := LowerCase(Trim(NodeStr(N.ChildByField('rhs'), ASrc)));
+      if ((M = 'free') or (M = 'disposeof'))
+         and (BaseIdentText(N.ChildByField('lhs'), ASrc) = APName) then
+      begin Bad := True; Exit; end;
+    end;
+    if N.NodeType = 'exprCall' then
+    begin
+      Args := N.ChildByField('args');
+      if not Args.IsNull then
+        for I := 0 to Args.NamedChildCount - 1 do
+        begin
+          Arg := Args.NamedChild(I);
+          if BaseIdentText(Arg, ASrc) = APName then begin Bad := True; Exit; end;
+        end;
+    end;
+    if N.NodeType = 'assignment' then
+    begin
+      Rhs := N.ChildByField('rhs');
+      if ExprMentionsIdent(Rhs, APName, ASrc) then begin Bad := True; Exit; end;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+  end;
+begin
+  Bad := False;
+  Body := ADefProc.ChildByField('body');
+  Walk(Body);
+  Result := not Bad;
+end;
+
 class function TFlowChecker.Check(const AFile: string; const AStore: ISymbolStore;
   AFileId: Int64): TArray<TLintFinding>;
 var
@@ -74,6 +192,8 @@ var
   Findings: TList<TLintFinding>;
   Procs: TArray<TTSNode>;
   PI: Integer;
+  OwnCache: TDictionary<string, Boolean>;
+  OwnsOracle: TCallArgOwns;
 
   procedure Emit(const ARule, ASev, AMsg: string; ALine, ACol: Integer);
   var F: TLintFinding;
@@ -284,7 +404,8 @@ var
           for I := 0 to Vars.Count - 1 do
           begin
             V := Vars.Get(I);
-            if (V.Kind = vkLocal) and AsgnAny[I] and (not ReadAny[I]) then
+            { captured locals are read inside a nested routine/lambda -> not write-only }
+            if (V.Kind = vkLocal) and AsgnAny[I] and (not ReadAny[I]) and (not V.Captured) then
               Emit('write-only-local', 'info',
                 Format('Local "%s" is assigned but never read.', [V.Name]),
                 V.DeclLine, V.DeclCol);
@@ -341,7 +462,7 @@ var
         end;
 
         { ============ object-leak (store-free, conservative) ============ }
-        EscAna := TEscape.Create(Vars, PF.Src);
+        EscAna := TEscape.Create(Vars, PF.Src, OwnsOracle);
         if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, EscAna, EIn2, EOut2) then
         begin
           SetLength(CreateRow, Vars.Count); SetLength(CreateCol, Vars.Count);
@@ -377,12 +498,53 @@ begin
   PF := TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Findings := TList<TLintFinding>.Create;
+  OwnCache := TDictionary<string, Boolean>.Create;
+  { Interprocedural object-leak: with a store, the escape analysis asks this oracle
+    whether a callee OWNS its argument. True (owns/unknown) keeps the conservative
+    escape; False (clearly non-owning unit proc) lets a real leak surface. }
+  if AStore <> nil then
+    OwnsOracle :=
+      function(const ACalleeName: string; AArgIdx: Integer): Boolean
+      var
+        Key, CPath, PName: string; B, Ambig, Have: Boolean; Syms: TArray<TSymbol>;
+        RSym: TSymbol; I: Integer; FId: Int64; CPF: TParsedFile; DP: TTSNode;
+      begin
+        Result := True; { conservative default: owns/unknown -> escape }
+        Key := ACalleeName + '#' + IntToStr(AArgIdx);
+        if OwnCache.TryGetValue(Key, B) then Exit(B);
+        OwnCache.AddOrSetValue(Key, True); { pre-seed (guards re-entry) }
+        Syms := AStore.FindSymbolsByExactName(ACalleeName);
+        { resolve to a single routine: an interface forward-decl + its impl share a
+          file (fine); only routines spanning DIFFERENT files are truly ambiguous. }
+        Have := False; Ambig := False; FId := -1; RSym := Default(TSymbol);
+        for I := 0 to High(Syms) do
+          if Syms[I].Kind in [skProcedure, skFunction, skMethod] then
+          begin
+            if not Have then begin FId := Syms[I].FileId; RSym := Syms[I]; Have := True; end
+            else if Syms[I].FileId <> FId then Ambig := True;
+            if Syms[I].ImplStartLine > 0 then RSym := Syms[I]; { prefer the bodied one }
+          end;
+        if (not Have) or Ambig then Exit; { unresolved / cross-file -> conservative }
+        CPath := AStore.GetFilePath(RSym.FileId);
+        if (CPath = '') or (not TFile.Exists(CPath)) then Exit;
+        CPF := TAstParseCache.Get(CPath);
+        if CPF.Tree = nil then Exit;
+        DP := FindCalleeDefProc(CPF.Tree.RootNode, ACalleeName, RSym.ImplStartLine, CPF.Src);
+        if DP.IsNull then Exit;
+        PName := ParamNameAtIndex(DP, AArgIdx, CPF.Src);
+        if PName = '' then Exit;
+        Result := not ParamClearlyNonOwning(DP, PName, CPF.Src); { non-owning -> False (leak) }
+        OwnCache.AddOrSetValue(Key, Result);
+      end
+  else
+    OwnsOracle := nil;
   try
     Procs := CfgFindProcs(PF.Tree.RootNode);
     for PI := 0 to High(Procs) do CheckRoutine(Procs[PI]);
     Result := Findings.ToArray;
   finally
     Findings.Free;
+    OwnCache.Free;
   end;
 end;
 

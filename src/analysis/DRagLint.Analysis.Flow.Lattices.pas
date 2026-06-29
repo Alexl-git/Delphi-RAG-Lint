@@ -93,18 +93,30 @@ type
     function Equals(const A, B: TArray<Boolean>): Boolean;
   end;
 
+  /// <summary>Ownership oracle: returns True if a call to ACalleeName OWNS its
+  /// argument at AArgIdx (the arg escapes), False if the callee is clearly
+  /// non-owning (the arg may leak). Supplied by TFlowChecker when a store is
+  /// present; nil => store-free (any pass-to-call escapes).</summary>
+  TCallArgOwns = reference to function(const ACalleeName: string; AArgIdx: Integer): Boolean;
+
+  /// <summary>A variable passed as a call argument: the callee's bare-identifier
+  /// name (empty for method calls), the 0-based argument position, and the var.</summary>
+  TCallArgRef = record CalleeName: string; ArgIdx, VarIdx: Integer; end;
+
   /// <summary>Forward "may-open" escape analysis for object-leak detection:
   /// `MaybeOpen`[i] = local i was assigned from a constructor and, on some path,
   /// has not since been freed (`x.Free`/`FreeAndNil`/`x.DisposeOf`) or escaped
   /// (returned via Result, stored in a field, passed to a call, or aliased).</summary>
-  /// <remarks>Conservative + store-free: ANY pass-to-call counts as escape, so a
-  /// finding fires only on the clear "create then fall out of scope" case.</remarks>
+  /// <remarks>Store-free default: ANY pass-to-call counts as escape. With an
+  /// ownership oracle (store-backed), a pass to a clearly non-owning unit proc
+  /// does NOT escape, so a genuine interprocedural leak surfaces.</remarks>
   TEscape = class(TInterfacedObject, IDataFlowAnalysis<TArray<Boolean>>)
   strict private
     FVars: TRoutineVarTable;
     FSrc : TBytes;
+    FOwns: TCallArgOwns;
   public
-    constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes);
+    constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes; AOwns: TCallArgOwns = nil);
     function Direction: TFlowDir;
     function Bottom: TArray<Boolean>;
     function Boundary: TArray<Boolean>;
@@ -120,6 +132,12 @@ function ExprIsConstructor(const N: TTSNode; const ASrc: TBytes): Boolean;
 /// <summary>If ANode is `x.Free` / `x.DisposeOf` / `FreeAndNil(x)`, return the
 /// freed local's index, else -1.</summary>
 function DetectFreedVar(const ANode: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable): Integer;
+
+/// <summary>Collect every routine var passed as a call argument anywhere under
+/// ANode, with the callee's bare-identifier name (empty for method calls) and
+/// the 0-based argument position.</summary>
+function CollectCallArgs(const ANode: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable): TArray<TCallArgRef>;
 
 /// <summary>Lowercased identifier text of N, trimmed.</summary>
 function NodeText(const N: TTSNode; const ASrc: TBytes): string;
@@ -287,7 +305,7 @@ var
   var I: Integer; Lhs, IdN: TTSNode; R: TRoutineVar;
   begin
     if N.IsNull then Exit;
-    if N.NodeType = 'defProc' then Exit; { nested routine: own scope }
+    if (N.NodeType = 'defProc') or (N.NodeType = 'lambda') then Exit; { own scope }
     if N.NodeType = 'declVars' then AddDeclVars(N);
     if N.NodeType = 'foreach' then
     begin
@@ -338,7 +356,8 @@ var
       if Idx >= 0 then Tbl.MarkCaptured(Idx);
     end;
     for I := 0 to N.NamedChildCount - 1 do
-      if N.NamedChild(I).NodeType = 'defProc' then MarkCaptures(N.NamedChild(I), ADepth + 1)
+      if (N.NamedChild(I).NodeType = 'defProc') or (N.NamedChild(I).NodeType = 'lambda') then
+        MarkCaptures(N.NamedChild(I), ADepth + 1)
       else MarkCaptures(N.NamedChild(I), ADepth);
   end;
 
@@ -707,8 +726,44 @@ begin
   end;
 end;
 
-constructor TEscape.Create(AVars: TRoutineVarTable; const ASrc: TBytes);
-begin inherited Create; FVars := AVars; FSrc := ASrc; end;
+function CollectCallArgs(const ANode: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable): TArray<TCallArgRef>;
+var Acc: TList<TCallArgRef>;
+  procedure Walk(const N: TTSNode);
+  var I, VI: Integer; Ent, Args, Arg: TTSNode; Nm: string; Rec: TCallArgRef;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'exprCall' then
+    begin
+      Ent := N.ChildByField('entity');
+      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then
+        Nm := Trim(NodeStr(Ent, ASrc)) { original case: the store keys on it }
+      else Nm := ''; { method call (exprDot entity) -> not resolvable by bare name }
+      Args := N.ChildByField('args');
+      if not Args.IsNull then
+        for I := 0 to Args.NamedChildCount - 1 do
+        begin
+          Arg := Args.NamedChild(I);
+          VI := LeftmostBaseVar(Arg, ASrc, AVars);
+          if VI >= 0 then
+          begin Rec.CalleeName := Nm; Rec.ArgIdx := I; Rec.VarIdx := VI; Acc.Add(Rec); end;
+          Walk(Arg); { nested calls inside the argument }
+        end;
+      Walk(Ent);   { the receiver may itself contain a call }
+      Exit;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+  end;
+begin
+  Acc := TList<TCallArgRef>.Create;
+  try
+    Walk(ANode);
+    Result := Acc.ToArray;
+  finally Acc.Free; end;
+end;
+
+constructor TEscape.Create(AVars: TRoutineVarTable; const ASrc: TBytes; AOwns: TCallArgOwns);
+begin inherited Create; FVars := AVars; FSrc := ASrc; FOwns := AOwns; end;
 
 function TEscape.Direction: TFlowDir; begin Result := fdForward; end;
 
@@ -728,21 +783,24 @@ end;
 
 function TEscape.Transfer(const ABlock: TCfgBlock; const AIn: TArray<Boolean>): TArray<Boolean>;
 var
-  I, J, Tgt, FreedV, SrcIdx: Integer; It: TCfgItem;
-  Reads, CallDefs: TList<Integer>; Rhs: TTSNode;
+  I, Tgt, FreedV, SrcIdx: Integer; It: TCfgItem; Rhs: TTSNode;
+  CA: TCallArgRef; Owns: Boolean;
 begin
   Result := Copy(AIn);
-  Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
-  try
+  begin
     for I := 0 to ABlock.Items.Count - 1 do
     begin
       It := ABlock.Items[I];
       FreedV := DetectFreedVar(It.Node, FSrc, FVars);
       if FreedV >= 0 then Result[FreedV] := False;            { freed }
-      Reads.Clear; CallDefs.Clear;
-      CollectReadsAndCallDefs(It.Node, FSrc, FVars, Reads, CallDefs);
-      for J := 0 to CallDefs.Count - 1 do
-        if CallDefs[J] <> FreedV then Result[CallDefs[J]] := False; { passed to a call -> escaped }
+      { passed to a call -> escaped, UNLESS the oracle proves the callee non-owning }
+      for CA in CollectCallArgs(It.Node, FSrc, FVars) do
+      begin
+        if CA.VarIdx = FreedV then Continue;
+        Owns := True;
+        if Assigned(FOwns) and (CA.CalleeName <> '') then Owns := FOwns(CA.CalleeName, CA.ArgIdx);
+        if Owns then Result[CA.VarIdx] := False;
+      end;
       if It.Node.NodeType = 'assignment' then
       begin
         Rhs := It.Node.ChildByField('rhs');
@@ -767,7 +825,7 @@ begin
         end;
       end;
     end;
-  finally Reads.Free; CallDefs.Free; end;
+  end;
 end;
 
 function TEscape.Equals(const A, B: TArray<Boolean>): Boolean;
