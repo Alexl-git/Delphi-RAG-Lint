@@ -107,6 +107,11 @@ type
       function GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>          ;
       function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
       procedure ResolveUnitUseTargets;
+      // v11 (M1): type & hierarchy resolution (see ISymbolStore).
+      procedure ResolveAncestry;
+      function GetTransitiveAncestors(ASymbolId: Int64): TArray<TTypeAncestor>;
+      function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
+      function ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
 
       { v0.40.4: leaf accessor for utilities that need raw SQL access
       (uses-report walks the whole files + unit_uses tables). Not part
@@ -149,6 +154,9 @@ type
     private
       // v0.42: path-tolerant file-id resolution for FindSymbolsByFile (outline)
       function ResolveFileIdTolerant(const APath: string): Int64;
+      // v11 (M1): resolve a type name to its defining class/interface/record
+      // symbol id, preferring a definition in AFileId. 0 if none.
+      function ResolveTypeSymbolId(const AName: string; AFileId: Int64): Int64;
       // v0.17 slice helpers
       function FindChildSymbols(AParentId: Int64): TArray<TSymbol>;
       // FindImplLine: searches ALines (0-based) for a line matching
@@ -424,6 +432,21 @@ begin
   { v11 (M1): raw ancestor list text on class/interface symbols. Additive
     column; ALTER onto pre-v11 tables for the same reason as the v9 columns. }
   TryExec('ALTER TABLE symbols ADD COLUMN heritage TEXT');
+  { v11 (M1): direct ancestor edges (one row per heritage entry). Created here
+    rather than in SCHEMA_DDL to avoid renumbering the FTS5 split index; it is
+    plain DDL that must always exist (independent of FTS5 availability).
+    ancestor_symbol_id NULL = unresolved (external/RTL/by-name only). The
+    ON DELETE CASCADE clears a symbol's edges when its file is re-indexed;
+    ResolveAncestry rebuilds the whole table each run. }
+  TryExec('CREATE TABLE IF NOT EXISTS type_ancestors (' +
+          '  symbol_id          INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  ordinal            INTEGER NOT NULL,' +
+          '  ancestor_name      TEXT NOT NULL,' +
+          '  ancestor_kind      TEXT,' +
+          '  ancestor_symbol_id INTEGER,' +
+          '  ancestor_file_id   INTEGER)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_type_ancestors_symbol ON type_ancestors(symbol_id)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_type_ancestors_name   ON type_ancestors(ancestor_name)');
   PrepareStatements;
 end; // begin
 
@@ -2391,5 +2414,312 @@ begin
     StemToFileId.Free;
   end; // try
 end; // procedure
+
+// v11 (M1): normalize one raw heritage ancestor token to a name comparable to
+// symbols.name: trim, drop a generic argument list (TList<TFoo> -> TList) and
+// take the dotted tail (System.Classes.TComponent -> TComponent).
+function NormalizeAncestorName(const ARaw: string): string;
+var
+  S: string ;
+  P: Integer;
+begin
+  S:= Trim(ARaw);
+  P:= Pos('<', S);
+  if P > 0 then S:= Trim(Copy(S, 1, P - 1));
+  P:= LastDelimiter('.', S);
+  if P > 0 then S:= Copy(S, P + 1, MaxInt);
+  Result:= Trim(S);
+end;
+
+// v11 (M1): split a heritage list on top-level commas only, so a generic
+// ancestor's own comma (TDictionary<string, Integer>) does not split it.
+function SplitHeritageList(const AHeritage: string): TArray<string>;
+var
+  Parts: TList<string>;
+  i    : Integer      ;
+  Depth: Integer      ;
+  Start: Integer      ;
+  Ch   : Char         ;
+begin
+  Parts:= TList<string>.Create;
+  try
+    Depth:= 0;
+    Start:= 1;
+    for i:= 1 to Length(AHeritage) do
+    begin
+      Ch:= AHeritage[i];
+      if Ch = '<' then Inc(Depth)
+      else if Ch = '>' then Dec(Depth)
+      else if (Ch = ',') and (Depth <= 0) then
+      begin
+        Parts.Add(Copy(AHeritage, Start, i - Start));
+        Start:= i + 1;
+      end;
+    end;
+    if Start <= Length(AHeritage) then Parts.Add(Copy(AHeritage, Start, MaxInt));
+    Result:= Parts.ToArray;
+  finally
+    Parts.Free;
+  end;
+end;
+
+procedure TSQLiteSymbolStore.ResolveAncestry;
+{ Whole-DB pass: for each class/interface with heritage text, split it, resolve
+  each ancestor to a defining class/interface symbol (preferring one in scope of
+  the declaring file via the unit_uses graph), and rebuild type_ancestors.
+  Mirrors ResolveUnitUseTargets: pull everything, resolve in memory, batch write. }
+var
+  Q          : TFDQuery                            ;
+  QIns       : TFDQuery                            ;
+  NameToCands: TObjectDictionary<string, TList<TSymbol>>;
+  FileScope  : TObjectDictionary<Int64,  TList<Int64>>  ;
+  Lc         : string                             ;
+  Sym        : TSymbol                            ;
+
+  function CandInScope(ADeclFile, ACandFile: Int64): Boolean;
+  var L: TList<Int64>;
+  begin
+    Result:= (ADeclFile = ACandFile);
+    if Result then Exit;
+    if FileScope.TryGetValue(ADeclFile, L) then Result:= L.IndexOf(ACandFile) >= 0;
+  end;
+
+begin
+  NameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
+  FileScope  := TObjectDictionary<Int64,  TList<Int64>>.Create([doOwnsValues]);
+  Q   := TFDQuery.Create(nil);
+  QIns:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { 1. candidate class/interface symbols, indexed by lowercased simple name. }
+    Q.SQL.Text:= 'SELECT id, file_id, kind, name FROM symbols WHERE kind IN (''class'',''interface'')';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Sym:= Default(TSymbol);
+      Sym.Id    := Q.FieldByName('id'     ).AsLargeInt;
+      Sym.FileId:= Q.FieldByName('file_id').AsLargeInt;
+      Sym.Kind  := TSymbolKind.FromText(Q.FieldByName('kind').AsString);
+      Sym.Name  := Q.FieldByName('name'   ).AsString;
+      Lc:= LowerCase(Sym.Name);
+      if not NameToCands.ContainsKey(Lc) then NameToCands.Add(Lc, TList<TSymbol>.Create);
+      NameToCands[Lc].Add(Sym);
+      Q.Next;
+    end;
+    Q.Close;
+    { 2. per-file in-scope set: the resolved target_file_id of each used unit. }
+    Q.SQL.Text:= 'SELECT file_id, target_file_id FROM unit_uses WHERE target_file_id IS NOT NULL';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      var Fid:= Q.FieldByName('file_id'       ).AsLargeInt;
+      var Tid:= Q.FieldByName('target_file_id').AsLargeInt;
+      if not FileScope.ContainsKey(Fid) then FileScope.Add(Fid, TList<Int64>.Create);
+      FileScope[Fid].Add(Tid);
+      Q.Next;
+    end;
+    Q.Close;
+    { 3. rebuild edges from scratch (simple + correct; whole-DB). }
+    QIns.Connection:= FConn;
+    QIns.SQL.Text  := 'INSERT INTO type_ancestors(symbol_id, ordinal, ancestor_name, ' +
+                      '  ancestor_kind, ancestor_symbol_id, ancestor_file_id) ' +
+                      'VALUES (:sid, :ord, :an, :ak, :asid, :afid)';
+    QIns.Params.ParamByName('asid').DataType:= ftLargeint;
+    QIns.Params.ParamByName('afid').DataType:= ftLargeint;
+    Q.SQL.Text:= 'SELECT id, file_id, heritage FROM symbols ' +
+                 'WHERE kind IN (''class'',''interface'') AND heritage IS NOT NULL AND heritage <> ''''';
+    FConn.StartTransaction;
+    try
+      FConn.ExecSQL('DELETE FROM type_ancestors');
+      Q.Open;
+      while not Q.Eof do
+      begin
+        var SymId  := Q.FieldByName('id'      ).AsLargeInt;
+        var SymFile:= Q.FieldByName('file_id' ).AsLargeInt;
+        var Tokens := SplitHeritageList(Q.FieldByName('heritage').AsString);
+        for var Ord:= 0 to High(Tokens) do
+        begin
+          var AncName:= NormalizeAncestorName(Tokens[Ord]);
+          if AncName = '' then Continue;
+          var RSymId : Int64  := 0;
+          var RFileId: Int64  := 0;
+          var RKind  : string := '?';
+          var Cands  : TList<TSymbol>;
+          if NameToCands.TryGetValue(LowerCase(AncName), Cands) then
+          begin
+            var InScopeIdx  := -1;
+            var InScopeCount:= 0;
+            for var ci:= 0 to Cands.Count - 1 do
+              if CandInScope(SymFile, Cands[ci].FileId) then
+              begin
+                Inc(InScopeCount);
+                if InScopeIdx < 0 then InScopeIdx:= ci;
+              end;
+            { Resolve when unambiguous: exactly one in-scope candidate, or (none
+              in scope) a single global definition. Otherwise leave unresolved
+              (FP policy: when unsure, don't claim). }
+            if InScopeCount = 1 then
+            begin
+              RSymId := Cands[InScopeIdx].Id;
+              RFileId:= Cands[InScopeIdx].FileId;
+              RKind  := Cands[InScopeIdx].Kind.ToText;
+            end
+            else if (InScopeCount = 0) and (Cands.Count = 1) then
+            begin
+              RSymId := Cands[0].Id;
+              RFileId:= Cands[0].FileId;
+              RKind  := Cands[0].Kind.ToText;
+            end;
+          end;
+          QIns.ParamByName('sid').AsLargeInt:= SymId;
+          QIns.ParamByName('ord').AsInteger := Ord;
+          QIns.ParamByName('an' ).AsString  := AncName;
+          QIns.ParamByName('ak' ).AsString  := RKind;
+          if RSymId > 0 then
+          begin
+            QIns.ParamByName('asid').AsLargeInt:= RSymId;
+            QIns.ParamByName('afid').AsLargeInt:= RFileId;
+          end
+          else
+          begin
+            QIns.ParamByName('asid').Clear;
+            QIns.ParamByName('afid').Clear;
+          end;
+          QIns.ExecSQL;
+        end;
+        Q.Next;
+      end;
+      Q.Close;
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
+    end;
+  finally
+    QIns.Free;
+    Q.Free;
+    NameToCands.Free;
+    FileScope.Free;
+  end; // try
+end; // procedure
+
+function TSQLiteSymbolStore.GetTransitiveAncestors(ASymbolId: Int64): TArray<TTypeAncestor>;
+{ BFS over type_ancestors. Resolved edges are expanded (recurse into the
+  ancestor's own edges); unresolved edges are name-only leaves. A per-name Seen
+  set dedups + breaks cycles; a per-symbol expand set + hop cap bound the walk. }
+var
+  Acc      : TList<TTypeAncestor>      ;
+  Seen     : TDictionary<string, Boolean>;
+  Expanded : TDictionary<Int64, Boolean> ;
+  Queue    : TQueue<Int64>             ;
+  Q        : TFDQuery                  ;
+  Hops     : Integer                   ;
+begin
+  Acc     := TList<TTypeAncestor>.Create;
+  Seen    := TDictionary<string, Boolean>.Create;
+  Expanded:= TDictionary<Int64, Boolean>.Create;
+  Queue   := TQueue<Int64>.Create;
+  Q       := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT ordinal, ancestor_name, ancestor_kind, ancestor_symbol_id, ' +
+                   '  ancestor_file_id FROM type_ancestors WHERE symbol_id = :sid ORDER BY ordinal';
+    Queue.Enqueue(ASymbolId);
+    Expanded.AddOrSetValue(ASymbolId, True);
+    Hops:= 0;
+    while (Queue.Count > 0) and (Hops < 64) do
+    begin
+      Inc(Hops);
+      var Cur:= Queue.Dequeue;
+      var Direct: TArray<TTypeAncestor>;
+      SetLength(Direct, 0);
+      Q.ParamByName('sid').AsLargeInt:= Cur;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        var A: TTypeAncestor;
+        A.Ordinal := Q.FieldByName('ordinal'      ).AsInteger;
+        A.Name    := Q.FieldByName('ancestor_name').AsString;
+        A.Kind    := Q.FieldByName('ancestor_kind').AsString;
+        A.Resolved:= not Q.FieldByName('ancestor_symbol_id').IsNull;
+        if A.Resolved then
+        begin
+          A.SymbolId:= Q.FieldByName('ancestor_symbol_id').AsLargeInt;
+          A.FileId  := Q.FieldByName('ancestor_file_id'  ).AsLargeInt;
+        end
+        else
+        begin
+          A.SymbolId:= 0;
+          A.FileId  := 0;
+        end;
+        Direct:= Direct + [A];
+        Q.Next;
+      end;
+      Q.Close;
+      for var A in Direct do
+      begin
+        var Key:= LowerCase(A.Name);
+        if not Seen.ContainsKey(Key) then
+        begin
+          Seen.Add(Key, True);
+          Acc.Add(A);
+        end;
+        if A.Resolved and (A.SymbolId > 0) and not Expanded.ContainsKey(A.SymbolId) then
+        begin
+          Expanded.Add(A.SymbolId, True);
+          Queue.Enqueue(A.SymbolId);
+        end;
+      end;
+    end; // while
+    Result:= Acc.ToArray;
+  finally
+    Q.Free;
+    Queue.Free;
+    Expanded.Free;
+    Seen.Free;
+    Acc.Free;
+  end; // try
+end; // function
+
+// Resolve a type name to its defining class/interface/record symbol id,
+// preferring a definition in AFileId when given. 0 if none.
+function TSQLiteSymbolStore.ResolveTypeSymbolId(const AName: string; AFileId: Int64): Int64;
+var
+  Cands: TArray<TSymbol>;
+  S    : TSymbol        ;
+begin
+  Result:= 0;
+  Cands := FindSymbolsByExactName(AName);
+  for S in Cands do
+    if S.Kind in [skClass, skInterface, skRecord] then
+    begin
+      if (AFileId > 0) and (S.FileId = AFileId) then Exit(S.Id);
+      if Result = 0 then Result:= S.Id;
+    end;
+end;
+
+function TSQLiteSymbolStore.IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
+var
+  StartId: Int64                ;
+  A      : TTypeAncestor        ;
+begin
+  Result := False;
+  StartId:= ResolveTypeSymbolId(AClassName, AFileId);
+  if StartId <= 0 then Exit;
+  for A in GetTransitiveAncestors(StartId) do
+    if SameText(A.Name, AAncestorName) then Exit(True);
+end;
+
+function TSQLiteSymbolStore.ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
+var
+  StartId: Int64                ;
+  A      : TTypeAncestor        ;
+begin
+  Result := False;
+  StartId:= ResolveTypeSymbolId(AClassName, AFileId);
+  if StartId <= 0 then Exit;
+  for A in GetTransitiveAncestors(StartId) do
+    if SameText(A.Name, AInterfaceName) and SameText(A.Kind, 'interface') then Exit(True);
+end;
 
 end.

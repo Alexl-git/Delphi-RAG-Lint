@@ -92,6 +92,21 @@ type
     function GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>          ;
     function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
     procedure ResolveUnitUseTargets;
+    // v11 (M1): type & hierarchy resolution. ResolveAncestry is a whole-DB
+    // post-index pass (run after ResolveUnitUseTargets) that splits each
+    // class/interface's `heritage` text, resolves each ancestor to a defining
+    // symbol via the file's in-scope uses graph, and writes type_ancestors edges.
+    procedure ResolveAncestry;
+    /// <summary>Transitive ancestor closure of the symbol (resolved edges are
+    /// walked recursively; unresolved ones are name-only leaves). Cycle-safe,
+    /// hop-capped.</summary>
+    function GetTransitiveAncestors(ASymbolId: Int64): TArray<TTypeAncestor>;
+    /// <summary>True when class/interface AClassName (resolved in-scope of
+    /// AFileId) has AAncestorName anywhere in its transitive ancestor closure.</summary>
+    function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
+    /// <summary>True when AClassName's transitive closure reaches AInterfaceName
+    /// via an interface-kind edge (i.e. AClassName implements that interface).</summary>
+    function ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
     function FindByDocTag(const ATag: string): TArray<TSymbol>                           ;
     function FindUndocumented(const AKind: string; APublicOnly: Boolean): TArray<TSymbol>;
     function FindByDocContains(const ASubstring: string): TArray<TSymbol>                ;

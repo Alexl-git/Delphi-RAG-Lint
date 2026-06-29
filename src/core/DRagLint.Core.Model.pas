@@ -52,6 +52,20 @@ type
     ImplEndLine  : Integer;
   end; // record
 
+  /// <summary>v11 (M1): one resolved ancestor edge of a class/interface --
+  /// either a direct heritage entry (type_ancestors row) or, in a transitive
+  /// closure, a reachable ancestor. Name is the normalized ancestor type name;
+  /// Kind is 'class'|'interface'|'?' ('?' when unresolved). Resolved is True
+  /// when the ancestor was linked to a defining symbol (SymbolId/FileId set).</summary>
+  TTypeAncestor = record
+    Name    : string ;
+    Kind    : string ;
+    Resolved: Boolean;
+    SymbolId: Int64  ;
+    FileId  : Int64  ;
+    Ordinal : Integer; // position in the declaring type's heritage list (direct edges)
+  end;
+
   TReference = record
     Id         : Int64  ;
     SymbolId   : Int64  ;

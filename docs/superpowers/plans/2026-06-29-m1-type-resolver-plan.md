@@ -112,14 +112,25 @@ bundled exe parses .pas directly). **CONFIRMED findings:**
   and verbatim qualified (`System.Classes.TComponent`) + generic (`TBar, IList<IBaz>`) capture. 5/5 green;
   full lint harness 80/80; baseline RED confirmed first (TFoo/IFoo had no heritage field).
 
-### Phase 2 -- resolve ancestry + `IsDescendantOf`
-- New `type_ancestors` table + DDL.
-- `ResolveAncestry` pass (per design #4); call it after `ResolveUnitUseTargets` at the CLI index sites.
-- `ISymbolStore.IsDescendantOf` + `Implements` (transitive walk over `type_ancestors`, library-DB
-  by-name fallback, hop cap). Generalize `FormsMap.IsNavigableForm`'s logic; consider refactoring
-  FormsMap to reuse it.
-- Tests: a multi-unit project fixture (TChild in unit A `class(TBase)` in unit B) -> assert
-  `IsDescendantOf('TChild','TBase')`; and an RTL case (`TStringList` descends `TPersistent`) via lib DB.
+### Phase 2 -- resolve ancestry + `IsDescendantOf` -- DONE 2026-06-29
+- `type_ancestors(symbol_id, ordinal, ancestor_name, ancestor_kind, ancestor_symbol_id, ancestor_file_id)`
+  + 2 indexes, created in `Migrate` via TryExec (avoids renumbering the SCHEMA_DDL FTS5 split index;
+  plain DDL that must always exist). `ON DELETE CASCADE` on symbol_id.
+- `ResolveAncestry` (SQLite.pas): whole-DB pass mirroring `ResolveUnitUseTargets`. Builds an in-memory
+  name->candidates map (class/interface symbols) + per-file in-scope set (from `unit_uses.target_file_id`),
+  splits each heritage (top-level-comma aware, generics safe), normalizes each token (`NormalizeAncestorName`:
+  strip `<...>`, dotted tail), resolves to a defining symbol (exactly-one-in-scope, else single-global; else
+  unresolved kind '?' per FP policy), and rebuilds `type_ancestors`. Wired after all 3 `ResolveUnitUseTargets`
+  CLI sites. Heritage is read from the index now -- no per-query `.pas` text-scan (unlike FormsMap.ReadAncestor).
+- `ISymbolStore`: `GetTransitiveAncestors` (BFS, cycle-safe, hop-capped, resolved edges expanded /
+  unresolved name-only leaves), `IsDescendantOf`, `ImplementsInterface` (thin wrappers via private
+  `ResolveTypeSymbolId`, prefer in-file definition). `Implements` renamed to `ImplementsInterface` (avoid
+  the `implements` directive). Library-DB by-name fallback deferred to Phase 5.
+- New CLI surface `query ancestors --name <T> [--of <A>] [--json]` (transitive closure; `--of` = is-descendant
+  + implements). Test: `tests/heritage/ancestry/` (unita uses unitb) + `run_ancestry_test.ps1`: cross-unit
+  transitive class chain (TChild->TBase->TGrand), cross-unit iface parent (IChild->IBase), implemented-iface
+  edge, resolved-kind check, is-descendant/implements via `--of`. 9/9 green; lint harness 80/80; v10->v11
+  migration verified on an existing DB (no crash, table+column added).
 
 ### Phase 3 -- type-category resolver
 - `ResolveTypeCategory` (intrinsics + alias chase + symbol-kind) + `GetImplementedInterfaces`.

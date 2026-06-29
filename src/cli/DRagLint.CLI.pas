@@ -82,6 +82,7 @@ type
     Width           : string        ; // v0.42: usages width narrow|wide|very-wide
     Name            : string        ;
     QName           : string        ;
+    OfName          : string        ; // v11 (M1): query ancestors --of <ancestor> (is-descendant check)
     InFile          : string        ; // --in <file.pas> (resolve-uses scope context)
     Rule            : string        ;
     ProjectPath     : string        ;
@@ -211,6 +212,7 @@ begin
   Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--limit N] [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--db ...] [--json]');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
+  Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation] [--layers <f.json>] [--json]');
@@ -410,6 +412,11 @@ begin
     begin
       Inc(i);
       Result.QName:= ParamStr(i);
+    end
+    else if (A = '--of') and (i < ParamCount) then { v11 (M1): query ancestors --of }
+    begin
+      Inc(i);
+      Result.OfName:= ParamStr(i);
     end
     else if (A = '--rule') and (i < ParamCount) then
     begin
@@ -1032,6 +1039,7 @@ begin
     end; // case
 
     Store.ResolveUnitUseTargets;
+    Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
     Elapsed:= (Now - T0) * 86400;
 
     var PlatSuffix:= '';
@@ -1520,6 +1528,7 @@ begin
       Done here (not inside the per-file transaction) because resolution
       needs to see every file the indexer has just written. }
     Store.ResolveUnitUseTargets;
+    Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
     Elapsed:= (Now - StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
@@ -1567,6 +1576,7 @@ begin
     else Writeln('  (skip, not found) ', F);
   end;
   Store.ResolveUnitUseTargets;
+  Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
   AElapsedSec:= (Now - T0) * 86400;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
   Result:= True;
@@ -2236,6 +2246,86 @@ begin
   begin
     Result:= DoQueryFind(AArgs);
     Exit;
+  end;
+
+  // v11 (M1): transitive type ancestry. `--name T` lists T's resolved ancestor
+  // closure; adding `--of A` reports whether T descends from / implements A.
+  if AArgs.SubCommand = 'ancestors' then
+  begin
+    if AArgs.Name = '' then
+    begin
+      Writeln('ERROR: query ancestors requires --name <type>');
+      Exit(2);
+    end;
+    for DbPath in PathsToScan do
+    begin
+      Store:= TSQLiteSymbolStore.Create(DbPath);
+      Store.Migrate;
+      var StartId  : Int64  := 0;
+      var StartKind: string := '';
+      for S in Store.FindSymbolsByExactName(AArgs.Name) do
+        if S.Kind in [skClass, skInterface, skRecord] then
+        begin
+          StartId  := S.Id;
+          StartKind:= S.Kind.ToText;
+          Break;
+        end;
+      if StartId <= 0 then Continue; { try the next DB }
+
+      if AArgs.OfName <> '' then
+      begin
+        var IsDesc:= Store.IsDescendantOf(AArgs.Name, AArgs.OfName, 0);
+        var Impl  := Store.ImplementsInterface(AArgs.Name, AArgs.OfName, 0);
+        if AArgs.AsJson then
+        begin
+          var JO:= TJSONObject.Create;
+          try
+            JO.AddPair('name', AArgs.Name);
+            JO.AddPair('of'  , AArgs.OfName);
+            JO.AddPair('is_descendant', TJSONBool.Create(IsDesc));
+            JO.AddPair('implements'   , TJSONBool.Create(Impl  ));
+            Writeln(JO.Format(2));
+          finally JO.Free; end;
+        end
+        else Writeln(Format('%s descends %s: %s; implements: %s',
+          [AArgs.Name, AArgs.OfName, BoolToStr(IsDesc, True), BoolToStr(Impl, True)]));
+        Exit(0);
+      end;
+
+      var Ancs:= Store.GetTransitiveAncestors(StartId);
+      if AArgs.AsJson then
+      begin
+        var JO:= TJSONObject.Create;
+        try
+          JO.AddPair('name', AArgs.Name);
+          JO.AddPair('kind', StartKind);
+          var Arr:= TJSONArray.Create;
+          for var A in Ancs do
+          begin
+            var AO:= TJSONObject.Create;
+            AO.AddPair('name'    , A.Name);
+            AO.AddPair('kind'    , A.Kind);
+            AO.AddPair('resolved', TJSONBool.Create(A.Resolved));
+            Arr.AddElement(AO);
+          end;
+          JO.AddPair('ancestors', Arr);
+          Writeln(JO.Format(2));
+        finally JO.Free; end;
+      end
+      else
+      begin
+        Writeln(AArgs.Name, ' ancestors:');
+        for var A in Ancs do
+          if A.Resolved then Writeln(Format('  %s [%s]', [A.Name, A.Kind]))
+          else Writeln(Format('  %s [%s] (unresolved)', [A.Name, A.Kind]));
+        if Length(Ancs) = 0 then Writeln('  (none)');
+      end;
+      Exit(0);
+    end; // for DbPath
+
+    if AArgs.AsJson then Writeln(Format('{"name":"%s","ancestors":[]}', [AArgs.Name]))
+    else Writeln('type not found: ', AArgs.Name);
+    Exit(1);
   end;
 
   if AArgs.SubCommand <> '' then
