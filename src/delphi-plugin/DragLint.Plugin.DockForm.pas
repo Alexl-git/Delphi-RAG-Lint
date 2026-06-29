@@ -51,6 +51,8 @@ uses
   , DragLint.Plugin.EditViewNotifier
   , { v0.47: ForceGutterRepaint }
     DragLint.Plugin.Settings
+  , DragLint.Plugin.JobQueue
+  , DragLint.Plugin.StatusBar
   ;
 
 {$R *.dfm}
@@ -63,6 +65,7 @@ type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools:
   TDragLintDockFrame = class(TCustomFrame)
     private
       FPages         : TPageControl;
+      FStatusBar     : TDragLintStatusBar; { v0.65.1: R2 job-queue status strip (alBottom) }
       FStructure     : TForm       ; { embedded TDragLintStructureForm }
       FTabStruct          : TTabSheet   ;
       FTabUnifiedSearch   : TTabSheet   ;
@@ -194,6 +197,11 @@ end; // procedure
 constructor TDragLintDockFrame.Create(AOwner: TComponent);
 begin
   inherited;
+
+  { v0.65.1: R2 job-queue status strip along the bottom, visible across all tabs.
+    Created before the page control so the alClient pages fill the area above it. }
+  FStatusBar:= TDragLintStatusBar.Create(Self);
+  FStatusBar.Parent:= Self;
 
   FPages:= TPageControl.Create(Self);
   FPages.Parent  := Self;
