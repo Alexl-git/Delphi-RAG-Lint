@@ -1,5 +1,50 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-06-29 (handoff) -- M1+M2 DONE; #12 Ergonomics DESIGNED; next = writing-plans then code
+>
+> **Branch `feat/m2-dataflow-cfg-engine`** (off LOCAL main, which carries M1; **NOTHING PUSHED** -- all
+> 21 commits `a77bfbb..2cfc518` incl. M1 are unpushed; the user publishes **v0.66.0-alpha = M1 + M2 + #12**
+> together). Working tree clean. VERSION const (`CLI.pas:6`) already = `0.66.0-alpha`; CHANGELOG has the
+> M1+M2 entry (an Ergonomics section gets added when #12 is coded).
+>
+> **DONE this session:**
+> - **M2 data-flow/CFG engine COMPLETE** -- all 8 plan stages
+>   (`docs/superpowers/plans/2026-06-29-m2-dataflow-cfg-engine-plan.md`). Units `DRagLint.Analysis.Cfg`,
+>   `.DataFlow`, `.Flow.Lattices`, `Diagnostics.FlowChecks`; **7 flow checks** (used-before-assignment,
+>   function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop,
+>   object-leak incl. store-backed interprocedural), wired into `DoLint`/`DoLintAll`/`DoCheckAst`,
+>   definite=warning/possible=info, managed-type exact via M1 store. Tests: `tests/flowengine` **24/24**,
+>   `tests/lint/run_lint_tests.ps1` **91/91**, plus `tests/lint-project/objleak-interproc` +
+>   `tests/lint-project/managed-class` (store, check-ast --db) PASS. Own units dogfood to 0 flow findings.
+> - **#12 Ergonomics/output spec WRITTEN + user-approved** (commit 2cfc518:
+>   `docs/superpowers/specs/2026-06-29-ergonomics-output-design.md`).
+>
+> **NEXT ACTION (resume here):** invoke the **writing-plans** skill on the ergonomics spec, then build its
+> 6 staged commits (section 10): (1) `DRagLint.Output.Sarif` + `--format sarif`; (2) `--fail-on` exit-code;
+> (3) `DRagLint.Lint.Config` (`drag-lint-lint.json`: severity/enable-disable/thresholds/profiles +
+> `--config`/`--enable`/`--profile` + honor `.scm "enabled":false`); (4) `DRagLint.Lint.Baseline`
+> (`--baseline`/`--write-baseline`, line-shift-stable fingerprints); (5) one shared `FinalizeAndOutput`
+> tail refactoring the 3 commands; (6) docs + CHANGELOG Ergonomics section. **Autofix DEFERRED.**
+> Non-breaking by default (no config/baseline/--fail-on => current behavior). Per-stage cycle:
+> fixture(red) -> code -> rebuild CLI via the **delphi-build** skill (`scratchpad build_cli.bat`,
+> PowerShell `Start-Process -Wait`, read log: `BUILD_EXITCODE=0`, no `[dcc64 Error]`) -> deploy exe to
+> `third_party\dll-win64\drag-lint.exe` -> harness green -> normalize touched `.pas` to CRLF/UTF8-no-BOM
+> -> commit.
+>
+> **Then PUBLISH 0.66 (user's gate, or on request):** merge `feat/m2-dataflow-cfg-engine` -> `main`;
+> `build\pack-lint-release.ps1 -Version 0.66.0-alpha` (builds win64+win32 zips, deploys exe);
+> `git push origin main --tags`; `git tag v0.66.0-alpha`;
+> `gh release create v0.66.0-alpha --repo Alexl-git/Delphi-RAG-Lint --prerelease --notes-file ... <zips>`.
+>
+> **Gotchas:** `.pas`/`.dfm` strict 7-bit ASCII + CRLF (Edit/Write emit LF -> normalize before commit);
+> a NEW unit needs BOTH the `.dpr` `uses ... in '..'` AND a `.dproj` `<DCCReference>`; tree-sitter
+> grammar quirks confirmed in the M2 plan header (try `finally` field is doubled, `varAssignDef` first
+> named child is `kVar`, anon method = `lambda` = own scope, `for var X in` iterator = `varAssignDef`,
+> Break/Continue/Exit = bare identifiers). check-ast/lint-all are the store-bearing paths; `--format json`
+> output has a `FTS5 probe` preamble line before the JSON (slice from first `[`).
+>
+> --- (history below) ---
+
 > Last updated 2026-06-29 (handoff). **v0.65.1-alpha SHIPPED + RELEASED** (origin/main @ 0613e48,
 > tag v0.65.1-alpha, GitHub PRERELEASE, harness **80/80**). Git clean + pushed. Since v0.63: v0.64.x
 > robustness, v0.65.0 FP-8/FP-9 project-membership fixes, v0.65.1 = R2 IDE job queue + dock status bar
