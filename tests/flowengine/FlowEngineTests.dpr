@@ -14,7 +14,32 @@ uses
   TreeSitterLib in '..\..\third_party\delphi-tree-sitter\TreeSitterLib.pas',
   TreeSitter in '..\..\third_party\delphi-tree-sitter\TreeSitter.pas',
   DRagLint.Diagnostics.ParseCache in '..\..\src\diagnostics\DRagLint.Diagnostics.ParseCache.pas',
-  DRagLint.Analysis.Cfg in '..\..\src\analysis\DRagLint.Analysis.Cfg.pas';
+  DRagLint.Analysis.Cfg in '..\..\src\analysis\DRagLint.Analysis.Cfg.pas',
+  DRagLint.Analysis.DataFlow in '..\..\src\analysis\DRagLint.Analysis.DataFlow.pas';
+
+type
+  { Toy forward analysis: "has any block with >=1 item executed upstream?" --
+    a finite-height boolean lattice used only to exercise the solver. }
+  TBoolVal = TArray<Boolean>;
+
+  TToyForward = class(TInterfacedObject, IDataFlowAnalysis<TBoolVal>)
+    function Direction: TFlowDir;
+    function Bottom: TBoolVal;
+    function Boundary: TBoolVal;
+    function Join(const A, B: TBoolVal): TBoolVal;
+    function Transfer(const ABlock: TCfgBlock; const AIn: TBoolVal): TBoolVal;
+    function Equals(const A, B: TBoolVal): Boolean;
+  end;
+
+function TToyForward.Direction: TFlowDir; begin Result := fdForward; end;
+function TToyForward.Bottom: TBoolVal;   begin Result := [False]; end;
+function TToyForward.Boundary: TBoolVal; begin Result := [False]; end;
+function TToyForward.Join(const A, B: TBoolVal): TBoolVal;
+begin Result := [A[0] or B[0]]; end;
+function TToyForward.Transfer(const ABlock: TCfgBlock; const AIn: TBoolVal): TBoolVal;
+begin Result := [AIn[0] or (ABlock.Items.Count > 0)]; end;
+function TToyForward.Equals(const A, B: TBoolVal): Boolean;
+begin Result := A[0] = B[0]; end;
 
 var
   GPass, GFail: Integer;
@@ -149,6 +174,24 @@ begin
   finally Cfg.Free; end;
 end;
 
+procedure TestSolverForwardFixpoint;
+const SRC =
+  'unit u; interface implementation procedure P; var x: Integer; begin' + sLineBreak +
+  '  x := 1; if x > 0 then x := 2; x := 3;' + sLineBreak +
+  'end; end.';
+var Cfg: TCfg; AIn, AOut: TArray<TBoolVal>; OK: Boolean;
+begin
+  Cfg := BuildCfgFor(SRC);
+  try
+    Check('solver: cfg built', Cfg <> nil);
+    if Cfg = nil then Exit;
+    OK := TDataFlowSolver<TBoolVal>.Solve(Cfg, TToyForward.Create, AIn, AOut);
+    Check('solver: solved', OK);
+    if not OK then Exit;
+    Check('solver: reaches true at Exit', AOut[Cfg.ExitIdx][0]);
+  finally Cfg.Free; end;
+end;
+
 begin
   GPass := 0; GFail := 0;
   try
@@ -157,6 +200,7 @@ begin
     TestGotoSkips;
     TestForRecordsLoopVar;
     TestTryFinallyBuilds;
+    TestSolverForwardFixpoint;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;
