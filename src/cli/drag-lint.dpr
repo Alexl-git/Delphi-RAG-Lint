@@ -40,6 +40,7 @@ uses
   DRagLint.Format.Yadf in '..\refactor\DRagLint.Format.Yadf.pas',
   DRagLint.Diagnostics.CompileCheck in '..\diagnostics\DRagLint.Diagnostics.CompileCheck.pas',
   DRagLint.Diagnostics.AstChecks in '..\diagnostics\DRagLint.Diagnostics.AstChecks.pas',
+  DRagLint.Diagnostics.ParseCache in '..\diagnostics\DRagLint.Diagnostics.ParseCache.pas',
   DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas',
   DRagLint.Index.Manifest in '..\index\DRagLint.Index.Manifest.pas',
   DRagLint.Index.Glob in '..\index\DRagLint.Index.Glob.pas',
