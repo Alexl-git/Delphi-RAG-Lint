@@ -18,12 +18,20 @@
 > **DEFERRED (not M1 blockers):** cross-DB library-ancestry bridge (needs lib DBs reindexed to v12; low
 > marginal value for the 5 rules since RTL types are intrinsics/I-prefixed -- belongs with Wave D) + ORM3
 > full before/after (needs ORM3 reindex). Design recorded in the plan's Phase 5.
-> **RESUME -> M2 = the data-flow / CFG / def-use engine** (MISSING-FEATURES.md S3 + (M2) tags): per-routine
-> control-flow graph + def-use to unlock used-before-assignment, write-only-field, function-result-not-set,
-> overwrite-before-read, cross-call ownership/lifetime. "The long pole / biggest effort / engine work, not
-> rule-writing" -- needs its OWN brainstorming + writing-plans design session before coding; do NOT start
-> the engine without scoping it with the user. **#12 Ergonomics** (SARIF, quick-fixes/autofix, baseline
-> file, severity profiles) = the release AFTER M1+M2. Each phase: fixture -> green harness -> build -> commit.
+> **M2 DESIGN DONE 2026-06-29 (spec ae02d57, user-approved).** The data-flow/CFG/def-use engine is fully
+> designed: `docs/superpowers/specs/2026-06-29-m2-dataflow-cfg-engine-design.md`. Decisions: intraprocedural
+> CFG engine + interprocedural object-leak in ONE milestone; full monotone dataflow-lattice framework;
+> 4 check families (definite-assignment: used-before-assignment / function-result-not-set / out-param-not-set;
+> liveness: overwrite-before-read / write-only-local; loop-var-after-loop; object-leak); FP stance
+> definite=warning / possible=info, opaque @var/var/out calls = possible assignment; managed types skipped
+> (W1036), exact via M1 ResolveTypeCategory when store present. Units: DRagLint.Analysis.Cfg -> .DataFlow ->
+> .Flow.Lattices -> Diagnostics.FlowChecks; intra checks need NO store (standard tests/lint harness).
+> **RESUME -> invoke the writing-plans skill** on that spec to produce the staged implementation plan, then
+> build **stage 1 (CFG builder + tests/flowengine unit tests)** per spec section 10. Confirm tree-sitter
+> control-flow node kinds (while/for/repeat/case/try/kFinally/kExcept/Break/Continue) against real parses
+> first (grep the fixture, never trust assumed names).
+> **#12 Ergonomics** (SARIF, quick-fixes/autofix, baseline file, severity profiles) = the release AFTER
+> M1+M2. Each phase: fixture -> green harness -> Win64 build -> commit. Keep tests/lint/run_lint_tests.ps1 green.
 > **Pending (not in a tagged release after v0.65.1):** float-equality fix + string-equality non-alpha
 > guard are on main (commits c869073, d845976) -- fold into v0.67 or cut a quick v0.65.2.
 > **Stale branches** v0.22..v0.35 etc. are old dev branches (no pending work) -- deletable.
