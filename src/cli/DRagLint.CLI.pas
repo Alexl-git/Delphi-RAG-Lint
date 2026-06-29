@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.63.0-alpha';
+  VERSION = '0.64.0-alpha';
 
 function Run: Integer;
 
@@ -20,6 +20,7 @@ uses
   , System.DateUtils
   , System.RegularExpressions
   , System.Generics.Collections
+  , System.Math
   , Data.DB
   , FireDAC.Comp.Client
   , FireDAC.Phys.SQLite
