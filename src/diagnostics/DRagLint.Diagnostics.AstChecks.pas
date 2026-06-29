@@ -12,8 +12,8 @@ uses
   , TreeSitterLib
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
-  ;
   , DRagLint.Diagnostics.ParseCache
+  ;
 
 type
   TAstChecker = class
@@ -278,14 +278,14 @@ var
   Finding  : TLintFinding                ;
   LineStart: Integer                     ;
   SrcBytes : TBytes                      ;
+  PF       : TParsedFile                 ;
   I        : Integer                     ;
   LineNum  : Integer                     ;
   ColNum   : Integer                     ;
 begin
   if AStore = nil then Exit(nil);
-  if not TFile.Exists(AFile) then Exit(nil);
-
-  SrcBytes:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  SrcBytes:= PF.Src;
   Source:= TEncoding.Default.GetString(SrcBytes);
 
   Findings:= TList<TLintFinding>.Create;
@@ -341,6 +341,7 @@ class function TAstChecker.CheckUnbalancedBeginEnd( const AFile: string): TArray
 var
   Source           : string      ;
   SrcBytes         : TBytes      ;
+  PF               : TParsedFile ;
   I                : Integer     ;
   Len              : Integer     ;
   C                : Char        ;
@@ -359,9 +360,9 @@ var
   Finding          : TLintFinding;
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-
-  SrcBytes:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  SrcBytes:= PF.Src;
   Source:= TEncoding.Default.GetString(SrcBytes);
   Len:= Length(Source);
 
@@ -513,8 +514,7 @@ end; // function
 class function TAstChecker.CheckSyntaxErrors( const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   procedure Visit(const N: TTSNode);
@@ -546,23 +546,14 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes var Remaining: Integer; begin Remaining:= Length(Src)
-        - Integer(AByteIndex); if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end; SetLength(Result, Remaining); Move(Src[AByteIndex], Result[0],
-          Remaining); ABytesRead:= Remaining; end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // begin
@@ -570,8 +561,7 @@ end; // begin
 class function TAstChecker.CheckUnusedLocals( const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -701,23 +691,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes var Remaining: Integer; begin Remaining:= Length(Src)
-        - Integer(AByteIndex); if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end; SetLength(Result, Remaining); Move(Src[AByteIndex], Result[0],
-          Remaining); ABytesRead:= Remaining; end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then VisitProcs(Tree.RootNode);
+
+    VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // begin
@@ -725,8 +707,7 @@ end; // begin
 class function TAstChecker.CheckRaiseInFinally(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   { Search a finally body subtree for raise statements. Does NOT descend into a
@@ -782,30 +763,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -813,8 +779,7 @@ end; // function
 class function TAstChecker.CheckCodeAfterExit(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -910,30 +875,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -941,8 +891,7 @@ end; // function
 class function TAstChecker.CheckMissingInherited(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   { Does the subtree call 'inherited' anywhere, not counting nested routines? }
@@ -1016,30 +965,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -1047,8 +981,7 @@ end; // function
 class function TAstChecker.CheckControlFlowInFinally(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -1137,30 +1070,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -1168,8 +1086,7 @@ end; // function
 class function TAstChecker.CheckRoutineMetrics(const AFile: string; AMaxParams, AMaxLocals, AMaxLines, AMaxNesting: Integer): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -1299,30 +1216,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -1330,8 +1232,7 @@ end; // function
 class function TAstChecker.CheckTypeAware(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes                    ;
-  Parser  : TTSParser                 ;
-  Tree    : TTSTree                   ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>       ;
   TypeMap : TDictionary<string,string>;
 
@@ -1515,35 +1416,20 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
   TypeMap := TDictionary<string,string>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then
+
+    if PF.Tree <> nil then
     begin
-      CollectDecls(Tree.RootNode);
-      CheckExpr(Tree.RootNode);
+      CollectDecls(PF.Tree.RootNode);
+      CheckExpr(PF.Tree.RootNode);
     end;
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     TypeMap.Free;
     Findings.Free;
   end;
@@ -1552,8 +1438,7 @@ end; // function
 class function TAstChecker.CheckFireDacSqlMismatch(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -1673,30 +1558,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then VisitProcs(Tree.RootNode);
+
+    VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -1704,8 +1574,7 @@ end; // function
 class function TAstChecker.CheckUnprotectedFree(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
   Locals  : TDictionary<string, Boolean>; { the current routine's declared local var names }
 
@@ -1883,30 +1752,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then VisitProcs(Tree.RootNode);
+
+    VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -1966,8 +1820,7 @@ var
   procedure ExtractFile(const APath: string);
   var
     Src   : TBytes   ;
-    Parser: TTSParser;
-    Tree  : TTSTree  ;
+    PF    : TParsedFile;
 
     function NodeStr(const N: TTSNode): string;
     var
@@ -2057,28 +1910,10 @@ var
 
   begin
     if not TFile.Exists(APath) then Exit;
-    Src:= TFile.ReadAllBytes(APath);
-    Parser:= nil;
-    Tree  := nil;
-    try
-      Parser:= TTSParser.Create;
-      Parser.Language:= tree_sitter_delphi13;
-      Tree:= Parser.Parse(
-        function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-        var
-          Remaining: Integer;
-        begin
-          Remaining:= Length(Src) - Integer(AByteIndex);
-          if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-          SetLength(Result, Remaining);
-          Move(Src[AByteIndex], Result[0], Remaining);
-          ABytesRead:= Remaining;
-        end, TTSInputEncoding.TSInputEncodingUTF8);
-      if Tree <> nil then Walk(Tree.RootNode);
-    finally
-      Tree.Free;
-      Parser.Free;
-    end;
+    PF:= TAstParseCache.Get(APath);
+    if PF.Tree = nil then Exit;
+    Src:= PF.Src;
+    Walk(PF.Tree.RootNode);
   end; // ExtractFile
 
   { does class AFrom hold an interface implemented by class ATo? }
@@ -2154,8 +1989,7 @@ end; // function
 class function TAstChecker.CheckUseAfterFree(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -2285,30 +2119,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -2316,8 +2135,7 @@ end; // function
 class function TAstChecker.CheckUiThread(const AFile: string): TArray<TLintFinding>;
 var
   Src      : TBytes                    ;
-  Parser   : TTSParser                 ;
-  Tree     : TTSTree                   ;
+  PF      : TParsedFile        ;
   Findings : TList<TLintFinding>       ;
   ClassBase: TDictionary<string,string>; { classLower -> base type name (as written) }
 
@@ -2452,35 +2270,20 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings := TList<TLintFinding>.Create;
   ClassBase:= TDictionary<string,string>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then
+
+    if PF.Tree <> nil then
     begin
-      CollectClasses(Tree.RootNode);
-      VisitProcs(Tree.RootNode);
+      CollectClasses(PF.Tree.RootNode);
+      VisitProcs(PF.Tree.RootNode);
     end;
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     ClassBase.Free;
     Findings.Free;
   end;
@@ -2489,8 +2292,7 @@ end; // function
 class function TAstChecker.CheckGlobalFormVars(const AFile: string): TArray<TLintFinding>;
 var
   Src           : TBytes;
-  Parser        : TTSParser;
-  Tree          : TTSTree;
+  PF      : TParsedFile        ;
   Findings      : TList<TLintFinding>;
   FormClassNames: TDictionary<string, Boolean>;
 
@@ -2595,38 +2397,19 @@ begin
   Result:= nil;
   { Only analyse form units -- a sibling .dfm is the authoritative signal. }
   if not TFile.Exists(ChangeFileExt(AFile, '.dfm')) then Exit;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
   FormClassNames:= TDictionary<string, Boolean>.Create;
-  Parser:= TTSParser.Create;
   try
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    try
-      if Tree <> nil then
-      begin
-        CollectClassNames(Tree.RootNode);
-        if FormClassNames.Count > 0 then
-          CheckGlobalVarDecls(Tree.RootNode);
-      end;
-      Result:= Findings.ToArray;
-    finally
-      Tree.Free;
-    end;
+    CollectClassNames(PF.Tree.RootNode);
+    if FormClassNames.Count > 0 then
+      CheckGlobalVarDecls(PF.Tree.RootNode);
+    Result:= Findings.ToArray;
   finally
     FormClassNames.Free;
     Findings.Free;
-    Parser.Free;
   end;
 end; // function
 
@@ -2659,8 +2442,7 @@ end; // function
 class function TAstChecker.CheckShellExec(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -2723,30 +2505,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -2754,8 +2521,7 @@ end; // function
 class function TAstChecker.CheckPathTraversal(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -2830,30 +2596,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -2861,8 +2612,7 @@ end; // function
 class function TAstChecker.CheckLoopAtMostOnce(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -2957,30 +2707,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -2988,8 +2723,7 @@ end; // function
 class function TAstChecker.CheckFormatCall(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -3110,30 +2844,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -3141,8 +2860,7 @@ end; // function
 class function TAstChecker.CheckSwallowedExcept(const AFile: string): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -3223,30 +2941,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -3254,8 +2957,7 @@ end; // function
 class function TAstChecker.CheckDatasetOpen(const AFile: string): TArray<TLintFinding>;
 var
   Src            : TBytes                     ;
-  Parser         : TTSParser                  ;
-  Tree           : TTSTree                    ;
+  PF      : TParsedFile        ;
   Findings       : TList<TLintFinding>        ;
   Opened         : TDictionary<string, TTSPoint>;
   ClosedInFinally: TDictionary<string, Boolean> ;
@@ -3387,30 +3089,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then VisitProcs(Tree.RootNode);
+
+    VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -3418,8 +3105,7 @@ end; // function
 class function TAstChecker.CheckCriticalSection(const AFile: string): TArray<TLintFinding>;
 var
   Src             : TBytes                       ;
-  Parser          : TTSParser                    ;
-  Tree            : TTSTree                      ;
+  PF      : TParsedFile        ;
   Findings        : TList<TLintFinding>          ;
   Acquired        : TDictionary<string, TTSPoint>;
   ReleasedInFinally: TDictionary<string, Boolean>;
@@ -3528,30 +3214,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then VisitProcs(Tree.RootNode);
+
+    VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -3561,8 +3232,7 @@ const
   MAX_EXITS = 5;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -3625,30 +3295,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -3658,8 +3313,7 @@ const
   MAX_CC = 15;
 var
   Src     : TBytes             ;
-  Parser  : TTSParser          ;
-  Tree    : TTSTree            ;
+  PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -3721,30 +3375,15 @@ var
 
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then Visit(Tree.RootNode);
+
+    Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     Findings.Free;
   end;
 end; // function
@@ -3752,8 +3391,7 @@ end; // function
 class function TAstChecker.CheckVirtualInConstructor(const AFile: string): TArray<TLintFinding>;
 var
   Src        : TBytes                                          ;
-  Parser     : TTSParser                                       ;
-  Tree       : TTSTree                                         ;
+  PF      : TParsedFile        ;
   Findings   : TList<TLintFinding>                             ;
   VirtByClass: TDictionary<string, TDictionary<string, Boolean>>;
 
@@ -3943,35 +3581,20 @@ var
   Inner: TDictionary<string, Boolean>;
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then Exit;
-  Src:= TFile.ReadAllBytes(AFile);
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
   VirtByClass:= TDictionary<string, TDictionary<string, Boolean>>.Create;
-  Parser:= nil;
-  Tree  := nil;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var
-        Remaining: Integer;
-      begin
-        Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
-        SetLength(Result, Remaining);
-        Move(Src[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
-    if Tree <> nil then
+
+    if PF.Tree <> nil then
     begin
-      CollectClasses(Tree.RootNode);
-      CheckCtors   (Tree.RootNode);
+      CollectClasses(PF.Tree.RootNode);
+      CheckCtors   (PF.Tree.RootNode);
     end;
     Result:= Findings.ToArray;
   finally
-    Tree.Free;
-    Parser.Free;
     for Inner in VirtByClass.Values do Inner.Free;
     VirtByClass.Free;
     Findings.Free;

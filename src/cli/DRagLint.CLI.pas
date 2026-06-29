@@ -54,6 +54,7 @@ uses
   , DRagLint.Format     .Yadf
   , DRagLint.Diagnostics.CompileCheck
   , DRagLint.Diagnostics.AstChecks
+  , DRagLint.Diagnostics.ParseCache
   , DRagLint.Workspace  .Config
   , DRagLint.Index      .Manifest
   , DRagLint.Index      .Glob
@@ -4298,6 +4299,8 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'cyclomatic-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(AArgs.Path);
       { v0.63: virtual/dynamic method called from a constructor of its own class }
       if (AArgs.Rule = '') or (AArgs.Rule = 'virtual-method-in-constructor') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(AArgs.Path);
+      { Free cached tree after single-file lint }
+      DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
     end;
   end; // if
   { v0.47: honor '// drag-lint:ignore [rule ...]' line suppressions across all findings }
@@ -5128,6 +5131,8 @@ begin
           Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)',
             [ExtractFileName(PasPath), E.ClassName, E.Message]));
       end;
+      { Free cached tree for this file before moving to the next }
+      DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
     end;
   finally
     Linter.Free;
@@ -7462,6 +7467,7 @@ begin
   end
   else Store:= nil;
   Findings:= TAstChecker.Check(Store, AArgs.Target);
+  DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
 
   if SameText(AArgs.Format, 'json') then
   begin
