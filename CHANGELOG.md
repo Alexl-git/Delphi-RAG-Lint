@@ -3,6 +3,46 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.66.0-alpha -- 2026-06-29
+
+The **M1 type/hierarchy resolver** and the **M2 data-flow / CFG engine** -- two
+milestones bundled. M1 makes the existing heuristic rules exact when a symbol index
+is present; M2 adds a per-routine control-flow + data-flow engine and seven new
+flow-sensitive checks.
+
+### Added (M2 -- flow-sensitive analysis engine)
+- **Per-routine CFG + monotone data-flow framework** -- new units
+  `DRagLint.Analysis.Cfg` (control-flow graph builder), `DRagLint.Analysis.DataFlow`
+  (generic `IDataFlowAnalysis<TValue>` + worklist solver), `DRagLint.Analysis.Flow.Lattices`
+  (variable table + definite-assignment / liveness / escape analyses), and
+  `DRagLint.Diagnostics.FlowChecks` (`TFlowChecker`). Verified by a console engine
+  test suite (`tests/flowengine`).
+- **7 new flow checks** (definite violation = `warning`, possible = `info`):
+  - `used-before-assignment` -- an unmanaged local read before assignment.
+  - `function-result-not-set` -- `Result` not assigned on every path.
+  - `out-param-not-set` -- an `out` parameter not assigned on every path.
+  - `overwrite-before-read` -- a dead store (assignment overwritten before any read).
+  - `write-only-local` -- a local assigned but never read.
+  - `loop-var-after-loop` -- a `for` control variable read after the loop (undefined).
+  - `object-leak` -- a local object created but neither freed nor transferred on some
+    path; store-free is conservative, and with an index it refines interprocedurally
+    (a leak through a clearly non-owning unit proc surfaces).
+- Managed types (`string`, interfaces, `Variant`, dynamic arrays) are skipped for
+  definite-assignment (matching the compiler's W1036): a name heuristic without an
+  index, **exact** via the M1 resolver when one is present.
+
+### Added (M1 -- type / hierarchy resolver)
+- Cross-unit heritage capture + ancestry resolution (`query ancestors`), broad type
+  categorisation (`query typecat` -> `ResolveTypeCategory`, chasing `type X = Y`
+  aliases), and method virtuality indexing. These make `float-equality-comparison`,
+  `freeandnil-on-interface`, `win64-pointer-cast`, `string-equality-comparison`, and
+  cross-unit `virtual-method-in-constructor` exact on the store-bearing paths
+  (`lint-all`, `check-ast`); the bare `lint <file>` path keeps the heuristics.
+
+### Notes
+- Flow checks run on `lint <file>` (heuristic), and on `lint-all` / `check-ast --db`
+  with index-backed precision. Existing per-file lint harness stays green.
+
 ## v0.65.1-alpha -- 2026-06-29
 
 IDE plugin release: the **R2 background job queue + dock status bar**, plus **clickable

@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.65.1-alpha';
+  VERSION = '0.66.0-alpha';
 
 function Run: Integer;
 
