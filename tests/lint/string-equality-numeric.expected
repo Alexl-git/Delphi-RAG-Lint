@@ -1,0 +1,4 @@
+# string-equality-comparison must NOT fire when an operand is a numeric literal.
+# It MUST still fire when both operands are identifiers (no type info available).
+string-equality-comparison 15
+!string-equality-comparison 17
