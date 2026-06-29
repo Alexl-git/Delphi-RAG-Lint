@@ -535,9 +535,11 @@ var
   function HasConditionalDirectives: Boolean;
   var
     S: string;
+    SUp: string;
   begin
     S:= TEncoding.UTF8.GetString(Src);
-    Result:= (Pos('{$IF', S) > 0) or (Pos('{$IFEND', S) > 0) or (Pos('{$ENDIF', S) > 0);
+    SUp:= AnsiUpperCase(S);
+    Result:= (Pos('{$IF', SUp) > 0) or (Pos('{$IFEND', SUp) > 0) or (Pos('{$ENDIF', SUp) > 0);
   end;
 
   procedure BuildConditionalRanges;
