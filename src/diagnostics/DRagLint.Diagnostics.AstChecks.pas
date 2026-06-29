@@ -863,6 +863,7 @@ var
         C:= Parent.NamedChild(I);
         if C.IsNull then Continue;
         if C.NodeType.StartsWith('k') then Continue; { keyword token, not a statement }
+        if C.NodeType = 'comment' then Continue; { a trailing/standalone comment is not executable code (FP-5/FP-6) }
         Kids.Add(C);
       end;
       for I:= 0 to Kids.Count - 2 do
