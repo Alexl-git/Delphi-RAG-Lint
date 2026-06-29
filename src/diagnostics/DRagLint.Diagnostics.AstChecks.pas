@@ -2954,20 +2954,27 @@ var
   end;
 
   { Ordered conversion chars (lowercased) in a Format literal, excluding %% escapes. }
-  function SpecKinds(const ALit: string): TArray<Char>;
+  { Conversion chars (lowercased) in a Format literal, excluding %% escapes. Sets
+    AComplex when the format uses an argument index (%N:) or a *-width/precision,
+    which consume arguments in ways this simple counter cannot model -- the caller
+    then skips the call (better silent than a false positive; field report FP-2/FP-3). }
+  function SpecKinds(const ALit: string; out AComplex: Boolean): TArray<Char>;
   var
     M    : TMatch     ;
     Kinds: TList<Char>;
     Body : string     ;
     Conv : string     ;
   begin
+    AComplex:= False;
     Body:= ALit;
     if (Length(Body) >= 2) and (Body[1] = '''') then Body:= Copy(Body, 2, Length(Body) - 2);
     Body:= StringReplace(Body, '%%', '', [rfReplaceAll]);
+    if TRegEx.IsMatch(Body, '%\d+\s*:') then AComplex:= True; { %N: argument index }
     Kinds:= TList<Char>.Create;
     try
       for M in TRegEx.Matches(Body, '%[-+ 0#]*(\d+|\*)?(\.(\d+|\*))?([a-zA-Z])') do
       begin
+        if Pos('*', M.Value) > 0 then AComplex:= True; { *-width or *-precision }
         Conv:= M.Groups[4].Value;
         if Conv <> '' then Kinds.Add(LowerCase(Conv)[1]);
       end;
@@ -2986,6 +2993,7 @@ var
     F                        : TLintFinding;
     K                        : Char    ;
     IsNum, IsIntOnly, BadType: Boolean ;
+    IsComplex                : Boolean ;
   begin
     if N.IsNull or (Findings.Count >= 200) then Exit;
     if N.NodeType = 'exprCall' then
@@ -3000,9 +3008,9 @@ var
           Arr:= Args.NamedChild(1);
           if (Fmt.NodeType = 'literalString') and (Arr.NodeType = 'exprBrackets') then
           begin
-            Kinds:= SpecKinds(NodeStr(Fmt));
-            { count check }
-            if Length(Kinds) <> Arr.NamedChildCount then
+            Kinds:= SpecKinds(NodeStr(Fmt), IsComplex);
+            { count check -- skipped for indexed/star formats we cannot count reliably }
+            if (not IsComplex) and (Length(Kinds) <> Arr.NamedChildCount) then
             begin
               P:= Ent.StartPoint;
               F:= Default(TLintFinding);
@@ -3016,7 +3024,8 @@ var
               F.EndCol := F.StartCol + 1;
               Findings.Add(F);
             end;
-            { type check (literal arguments only) }
+            { type check (literal arguments only) -- skipped for complex formats }
+            if not IsComplex then
             for J:= 0 to Length(Kinds) - 1 do
             begin
               if J >= Arr.NamedChildCount then Break;

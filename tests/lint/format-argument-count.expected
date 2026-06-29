@@ -1,5 +1,9 @@
-# '%s = %d' with 1 arg (13); '%d' with 3 args (14); Good calls (22,23) match
+# '%s = %d' with 1 arg (13); '%d' with 3 args (14). Good (22,23) match; indexed %N: (24)
+# and *-width/precision (25,26) are NOT counted (FP-2/FP-3 from the field report).
 format-argument-count 13
 format-argument-count 14
 !format-argument-count 22
 !format-argument-count 23
+!format-argument-count 24
+!format-argument-count 25
+!format-argument-count 26
