@@ -3,6 +3,46 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.64.1-alpha -- 2026-06-29
+
+Fix-forward release completing and correcting v0.64.0-alpha (which shipped with several
+items unreviewed/incomplete).
+
+### Added / Completed
+
+**IDE plugin**
+- **All plugin commands now use the Win64 `drag-lint.exe`** (via a shared `DLExe64`
+  resolver preferring `..\dll-win64\`), not just LSP + lint-all. Heavy commands
+  (Analyse/References/compile-check/ghost-recover/check-ast/find-usages/symbol-search/
+  forms-csv/rename/format/index/etc.) no longer run the 32-bit exe, which OOMed on large
+  indexes. Falls back gracefully when the Win64 exe is absent.
+- **Run Lint All streams live progress** to the IDE Messages view (completes the
+  v0.64.0 "IDE plugin TBD"): `RunCaptureStreaming` reads the child pipe line-by-line and
+  posts throttled `lint-all: [i/N] NN% file` updates on the main thread (`TThread.Queue`).
+
+### Fixed
+
+**False positives / rules**
+- **Fortification (real guards, replacing v0.64.0's documentation-only stub):**
+  - `large-magic-number` now exempts 0/1/-1/2, powers of two (4,8,...,65536), and hex
+    literals from firing.
+  - `string-equality-comparison` now skips comparisons where an operand is a numeric,
+    `nil`, or boolean literal (conservative heuristic pending the v0.65 type resolver).
+  - Each backed by a RED->GREEN negative fixture that also asserts the rule still fires.
+- **FP-1 `{$IF}/{$IFEND}` cleanup:** hoisted the directive scan (removed a per-error-node
+  O(N) source re-decode), removed dead code, fixed an `{$IFEND}` open/close double-match,
+  and narrowed the line-1 root-error suppression so a genuine line-1 error still fires.
+  The `syntax-error-ifend` fixture now also asserts a genuine error fires (line 17).
+
+### Changed
+- `lint-all --quiet` is now documented in `--help`.
+
+### Notes
+All 78/78 test fixtures pass. (FP-2..FP-9 from the field false-positive report are
+scheduled for v0.65, along with the grep-elimination indexer wishlist.)
+
+---
+
 ## v0.64.0-alpha -- 2026-06-28
 
 ### Added
