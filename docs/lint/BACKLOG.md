@@ -1,14 +1,19 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> Last updated 2026-06-28 (handoff): Design + Phase 1 plan for v0.62 COMPLETE (9 new .scm rules).
-> Plugin BPL rebuild still deferred (needs IDE closed): `build\pack-lint-release.ps1 -Version 0.61.0-alpha`
-> Resume: implement Phase 1 -- read `docs/superpowers/plans/2026-06-28-new-lint-rules-v062.md`.
-> Start at Task 1 (unsafe-string-api). PUSH the 4 unpushed commits first (`git push`).
-> Design spec: `docs/superpowers/specs/2026-06-28-new-lint-rules-v062-v063-design.md`
-> lint-all ORM3 report: `C:\Projects\DB\ORM3\lint-report-20260628-122356.txt` (30,325 findings).
-> Saved 2026-06-28 before a session reset. Companion docs:
-> [REPORT-1-delphi-lint-landscape.md](REPORT-1-delphi-lint-landscape.md) (the field),
-> [REPORT-2-draglint-implementation-plan.md](REPORT-2-draglint-implementation-plan.md) (the plan + changelog).
+> Last updated 2026-06-28 (handoff). **v0.63.0-alpha SHIPPED + RELEASED** (11 built-ins + IDE
+> Run Lint All menu, incl. virtual-method-in-constructor; harness 75/75). Git clean + pushed.
+> **RESUME NEXT SESSION -> execute R1 (v0.64):** read `docs/superpowers/plans/2026-06-28-lint-r1-robustness.md`
+> (7 tasks: per-file parse cache -> convert all CheckXxx to parse-once -> lint-all progress + --quiet ->
+> IDE live progress -> FP-1 {$IFEND} syntax-error fix -> fortification audit -> release). Execute via
+> superpowers:subagent-driven-development; keep `tests/lint/run_lint_tests.ps1` green.
+> **Roadmap (the through-line):** `docs/superpowers/specs/2026-06-28-lint-completeness-roadmap-design.md`
+> -- R1 robustness -> R2 IDE job queue -> M1 type resolver (early) -> Waves A-E (no-resolver rules,
+> naming on-by-default, metrics/CK, type-dependent, cross-call-graph frontier). Decisions: serialize
+> heavy IDE jobs (keep LSP live), build type resolver EARLY, naming ON by default, FP policy = when
+> unsure don't report but keep the rule.
+> Companion research: [REPORT-1-delphi-lint-landscape.md](REPORT-1-delphi-lint-landscape.md) (the field),
+> [REPORT-2-draglint-implementation-plan.md](REPORT-2-draglint-implementation-plan.md) (original waves).
+> Last lint-all ORM3 report: `C:\Projects\DB\ORM3\lint-report-20260628-122356.txt`.
 > This file = what is DONE, how to resume, and what is NOT done yet (ideas/plans).
 
 ---
