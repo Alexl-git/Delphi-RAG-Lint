@@ -1696,6 +1696,7 @@ var
   Parser  : TTSParser          ;
   Tree    : TTSTree            ;
   Findings: TList<TLintFinding>;
+  Locals  : TDictionary<string, Boolean>; { the current routine's declared local var names }
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -1776,6 +1777,31 @@ var
     end;
   end;
 
+  { Populate ASet with the routine's declared local var names (the 'local' declVars
+    block). Used to restrict the rule to LOCALS -- class fields, Result, and params
+    are not in here, so created-and-freed fields/Result are not flagged (FP-7). }
+  procedure CollectLocals(const ADefProc: TTSNode; ASet: TDictionary<string, Boolean>);
+  var
+    Loc, Item, NameId, TypeNode: TTSNode;
+    I, J, TypeStart            : Integer;
+  begin
+    Loc:= ADefProc.ChildByField('local');
+    if Loc.IsNull then Exit;
+    for I:= 0 to Loc.NamedChildCount - 1 do
+    begin
+      Item:= Loc.NamedChild(I);
+      if Item.NodeType <> 'declVar' then Continue;
+      TypeNode:= Item.ChildByField('type');
+      if TypeNode.IsNull then TypeStart:= MaxInt else TypeStart:= Integer(TypeNode.StartByte);
+      for J:= 0 to Item.NamedChildCount - 1 do
+      begin
+        NameId:= Item.NamedChild(J);
+        if (NameId.NodeType = 'identifier') and (Integer(NameId.StartByte) < TypeStart) then
+          ASet.AddOrSetValue(LowerCase(NodeStr(NameId)), True);
+      end;
+    end;
+  end;
+
   procedure WalkBody(const N: TTSNode; AInFinally: Boolean; AConstructed: TDictionary<string, Boolean>);
   var
     I  : Integer    ;
@@ -1788,7 +1814,7 @@ var
     if N.IsNull or (Findings.Count >= 200) then Exit;
     if N.NodeType = 'defProc' then Exit; { nested routine handled separately }
     if (N.NodeType = 'assignment') and IsConstruction(N, V) then AConstructed.AddOrSetValue(V, True)
-    else if (not AInFinally) and IsFree(N, V) and AConstructed.ContainsKey(V) then
+    else if (not AInFinally) and IsFree(N, V) and (V <> 'result') and Locals.ContainsKey(V) and AConstructed.ContainsKey(V) then
     begin
       P:= N.StartPoint;
       F:= Default(TLintFinding);
@@ -1808,7 +1834,9 @@ var
       for I:= 0 to N.ChildCount - 1 do
       begin
         C:= N.Child(I);
-        if C.NodeType = 'kFinally' then Lf:= True;
+        { both finally AND except are protected/cleanup regions -- a Free there is
+          not an unprotected leak (FP-7: free-in-except then re-raise is the idiom). }
+        if (C.NodeType = 'kFinally') or (C.NodeType = 'kExcept') then Lf:= True;
         WalkBody(C, AInFinally or Lf, AConstructed);
       end;
     end
@@ -1828,11 +1856,14 @@ var
       Body:= N.ChildByField('body');
       if not Body.IsNull then
       begin
-        Con:= TDictionary<string, Boolean>.Create;
+        Con   := TDictionary<string, Boolean>.Create;
+        Locals:= TDictionary<string, Boolean>.Create;
         try
+          CollectLocals(N, Locals);
           WalkBody(Body, False, Con);
         finally
           Con.Free;
+          Locals.Free;
         end;
       end;
     end;

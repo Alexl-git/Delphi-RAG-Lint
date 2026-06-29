@@ -1,3 +1,7 @@
-# X.Free without try-finally (15) fires; Y.Free inside finally (26) must not
-unprotected-object-free 15
-!unprotected-object-free 26
+# true positive: a local X created + freed without try-finally (21) fires.
+# FP-7: a class field (40), the Result return value (47), and a free inside an
+# except handler (58) are NOT leaks here -- must not fire.
+unprotected-object-free 21
+!unprotected-object-free 40
+!unprotected-object-free 47
+!unprotected-object-free 58
