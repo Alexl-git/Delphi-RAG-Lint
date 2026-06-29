@@ -1,4 +1,8 @@
-# Exit first in for-body (13), Break single-stmt while-body (17); nested-if Exit (25) NOT flagged
+# Exit first in for-body (13), Break single-stmt while-body (17); nested-if Exit (26) NOT flagged.
+# FP-4: a loop whose first statement is a bare 'case' node, with Exit AFTER it (39), must NOT
+# fire -- the first statement is the case (35), not the Exit.
 loop-executes-at-most-once 13
 loop-executes-at-most-once 17
-!loop-executes-at-most-once 25
+!loop-executes-at-most-once 26
+!loop-executes-at-most-once 35
+!loop-executes-at-most-once 39

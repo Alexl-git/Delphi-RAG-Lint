@@ -2840,7 +2840,7 @@ var
   function FirstStmtInner(const ABody: TTSNode): TTSNode;
   var
     I    : Integer;
-    B    : TTSNode;
+    B, C : TTSNode;
     Found: Boolean;
   begin
     Result:= ABody;
@@ -2850,8 +2850,15 @@ var
     begin
       Found:= False;
       for I:= 0 to B.NamedChildCount - 1 do
-        if B.NamedChild(I).NodeType = 'statement' then
-        begin B:= B.NamedChild(I); Found:= True; Break; end;
+      begin
+        C:= B.NamedChild(I);
+        { Skip keyword tokens (kBegin/kEnd). The first real statement is the first
+          non-keyword child -- which may be a BARE construct node (case/if/while/for/
+          with/try) and NOT a 'statement' wrapper. Searching only for 'statement'
+          here skipped a leading 'case' and wrongly landed on a later Exit (FP-4). }
+        if (C.NodeType <> '') and (C.NodeType[1] = 'k') then Continue;
+        B:= C; Found:= True; Break;
+      end;
       if not Found then Exit;
     end;
     if B.NodeType = 'statement' then

@@ -28,4 +28,16 @@ begin
   end;
 end;
 
+procedure GoodCase(N: Integer);
+begin
+  while N > 0 do
+  begin
+    case N of
+      1: N := 0;
+      2: N := N - 1;
+    end;
+    Exit;
+  end;
+end;
+
 end.
