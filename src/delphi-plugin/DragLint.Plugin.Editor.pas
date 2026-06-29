@@ -3270,22 +3270,53 @@ begin
   DLRunReport('library-drift', 'drag-lint-library-drift.txt');
 end;
 
-{ v0.64.1: build a main-thread closure that posts ONE lint-all progress line to
-  the IDE Messages view. S is taken BY VALUE as a parameter, so each call frame
-  owns its own copy -- the returned closure captures that frame's S, not a shared
-  outer var. (A var in the streaming callback would be a single heap-promoted slot
-  reused across lines, so a later line could overwrite it before TThread.Queue
-  drains it on the main thread.) }
-function MakeLintAllProgressMsg(const S: string): TThreadProcedure;
+const
+  LINTALL_MSG_CAP = 2000; { max clickable findings posted per run (avoid flooding the pane) }
+
+{ v0.65.1: parse the lint-all report and post each finding to the IDE Messages
+  view as a CLICKABLE tool message -- double-click jumps to file:line. Capped so a
+  huge run (ORM3 saw 30k findings) cannot flood/freeze the pane; the full list
+  stays in the opened report. Report line format (CLI DoLintAll):
+    <fullpath>:<line>:<col>  [<severity>] <rule-id>: <message>
+  Parsed right-to-left by ':' so the drive-letter colon in 'C:\...' is safe. }
+procedure PostLintReportToMessages(const AReportPath: string);
+var
+  MS   : IOTAMessageServices;
+  Lines: TArray<string>;
+  Ln, Loc, Loc2, Rest, FName: string;
+  P, C1, C2, Line, Col, Posted, Total: Integer;
 begin
-  Result:=
-    procedure
-    var
-      MS: IOTAMessageServices;
-    begin
-      if Supports(BorlandIDEServices, IOTAMessageServices, MS) then
-        MS.AddTitleMessage('drag-lint lint-all: ' + S);
-    end;
+  if not Supports(BorlandIDEServices, IOTAMessageServices, MS) then Exit;
+  if not FileExists(AReportPath) then Exit;
+  try Lines:= TFile.ReadAllLines(AReportPath); except Exit; end;
+  Posted:= 0;
+  Total := 0;
+  for Ln in Lines do
+  begin
+    P:= Pos('  [', Ln); { two spaces before "[severity]" separate location from the rest }
+    if P < 2 then Continue;
+    Inc(Total);
+    if Posted >= LINTALL_MSG_CAP then Continue;
+    Loc := Copy(Ln, 1, P - 1);
+    Rest:= Copy(Ln, P + 2, MaxInt);
+    C2:= LastDelimiter(':', Loc);
+    if C2 < 2 then Continue;
+    Col := StrToIntDef(Copy(Loc, C2 + 1, MaxInt), 0);
+    Loc2:= Copy(Loc, 1, C2 - 1);
+    C1:= LastDelimiter(':', Loc2);
+    if C1 < 2 then Continue;
+    Line := StrToIntDef(Copy(Loc2, C1 + 1, MaxInt), 0);
+    FName:= Copy(Loc2, 1, C1 - 1);
+    if (FName = '') or (Line <= 0) then Continue;
+    MS.AddToolMessage(FName, Rest, 'drag-lint', Line, Col);
+    Inc(Posted);
+  end;
+  if Total > Posted then
+    MS.AddTitleMessage(Format('drag-lint: %d of %d findings posted as clickable messages (capped) -- full list in %s', [Posted, Total, AReportPath]))
+  else if Posted > 0 then
+    MS.AddTitleMessage(Format('drag-lint: %d clickable finding(s) -- double-click a line to jump to source.', [Posted]))
+  else
+    MS.AddTitleMessage('drag-lint: no findings.');
 end;
 
 { v0.63: run lint-all on the active project in the background, then open the
