@@ -1,0 +1,4 @@
+# P: loop var i is read (s := s + i) after the for loop, never reassigned -> undefined
+loop-var-after-loop 9
+# Q: i is reassigned (i := 0, line 17) before the read at line 18 -> no finding
+!loop-var-after-loop 18

@@ -179,6 +179,7 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `out-param-not-set` | warning/info | `out` parameter not assigned on every path |
 | `overwrite-before-read` | info | local assigned then overwritten/discarded before any read (dead store) |
 | `write-only-local` | info | local assigned at least once but never read |
+| `loop-var-after-loop` | warning | a `for` loop control variable is read after the loop (value undefined) |
 
 ### Built-in rules (compiled into the exe, not `.scm`)
 

@@ -288,6 +288,55 @@ var
           end;
         end;
 
+        { ============ loop-var-after-loop: a `for` control var read after the loop ============ }
+        for I := 0 to Cfg.ForVars.Count - 1 do
+        begin
+          Idx := Vars.IndexOf(Cfg.ForVars[I].VarName);
+          if Idx < 0 then Continue;
+          { BFS over post-loop blocks; flag the first read of the loop var before
+            it is reassigned (a whole-var def). Visited set guards cycles. }
+          var Q := TQueue<Integer>.Create;
+          var Seen := TList<Integer>.Create;
+          try
+            Q.Enqueue(Cfg.ForVars[I].FollowIdx);
+            while Q.Count > 0 do
+            begin
+              B := Q.Dequeue;
+              if Seen.IndexOf(B) >= 0 then Continue;
+              Seen.Add(B);
+              var StopPath := False;
+              for J := 0 to Cfg.Blocks[B].Items.Count - 1 do
+              begin
+                It := Cfg.Blocks[B].Items[J];
+                if It.Opaque then Continue;
+                Reads.Clear; CallDefs.Clear;
+                if It.Node.NodeType = 'assignment' then
+                  CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs)
+                else
+                  CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs);
+                if Reads.IndexOf(Idx) >= 0 then { a genuine value read of the stale counter }
+                begin
+                  ROW := Integer(It.Node.StartPoint.Row) + 1;
+                  COL := Integer(It.Node.StartPoint.Column) + 1;
+                  Emit('loop-var-after-loop', 'warning',
+                    Format('Loop variable "%s" is read after the loop; its value is undefined there.',
+                      [Cfg.ForVars[I].VarName]), ROW, COL);
+                  StopPath := True; Break;
+                end;
+                { passed to a call: may be an out/var param that REASSIGNS it
+                  (e.g. TryGetValue(.., counter)); FP-safe -> treat as reassigned }
+                if CallDefs.IndexOf(Idx) >= 0 then begin StopPath := True; Break; end;
+                if (It.Node.NodeType = 'assignment')
+                   and (AssignmentTargetIndex(It.Node, PF.Src, Vars) = Idx) then
+                begin StopPath := True; Break; end; { reassigned -> safe on this path }
+              end;
+              if not StopPath then
+                for RIx := 0 to Cfg.Blocks[B].Succ.Count - 1 do
+                  Q.Enqueue(Cfg.Blocks[B].Succ[RIx]);
+            end;
+          finally Q.Free; Seen.Free; end;
+        end;
+
       finally Reads.Free; CallDefs.Free; end;
     finally Cfg.Free; Vars.Free; end;
   end;
