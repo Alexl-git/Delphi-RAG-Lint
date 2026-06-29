@@ -79,7 +79,10 @@ type
       /// <remarks>The type map is flat (declared types of vars/params/fields, no scope resolution),
       /// so rare same-name shadowing may mis-type; the rules are heuristic. Interface detection uses the
       /// Delphi I-prefix convention. Pure AST; no DB. Never raises.</remarks>
-      class function CheckTypeAware(const AFile: string): TArray<TLintFinding>;
+      // v11 (M1): AStore (+ AFileId, the file's id in that store) make the
+      // operand-type decisions exact via ResolveTypeCategory; when AStore is nil
+      // (the bare `lint <file>` path) it falls back to the name heuristics.
+      class function CheckTypeAware(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
       /// <summary>FireDAC misuse: 'Open' on a data-modifying statement, or 'ExecSQL' on a SELECT.</summary>
       /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
       /// <returns>'firedac-open-execsql-mismatch' findings; empty if none.</returns>
@@ -1354,12 +1357,21 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckTypeAware(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckTypeAware(const AFile: string; const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
   Src     : TBytes                    ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>       ;
   TypeMap : TDictionary<string,string>;
+
+  { v11 (M1): the store's resolved category for a declared type text, or
+    tcUnknown when there is no store / it can't resolve (caller then falls back
+    to the name heuristic). }
+  function CatOf(const T: string): TTypeCategory;
+  begin
+    if AStore <> nil then Result:= AStore.ResolveTypeCategory(T, AFileId)
+    else Result:= tcUnknown;
+  end;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -1399,6 +1411,33 @@ var
     Result:= SameText(S, 'Pointer') or ((Length(S) >= 2) and (S[1] = 'P') and CharInSet(S[2], ['A'..'Z']));
   end;
 
+  { v11 (M1): store category authoritative when known, name heuristic otherwise.
+    This both catches non-conventional types (a non-I interface, an aliased float)
+    and suppresses the heuristic's false positives (an I-prefixed class). }
+  function TypeTextIsFloat(const T: string): Boolean;
+  var C: TTypeCategory;
+  begin
+    C:= CatOf(T);
+    if C <> tcUnknown then Result:= (C = tcFloat)
+    else Result:= IsFloatType(T);
+  end;
+
+  function TypeTextIsInterface(const T: string): Boolean;
+  var C: TTypeCategory;
+  begin
+    C:= CatOf(T);
+    if C <> tcUnknown then Result:= (C = tcInterface)
+    else Result:= IsInterfaceType(T);
+  end;
+
+  function TypeTextIsPointer(const T: string): Boolean;
+  var C: TTypeCategory;
+  begin
+    C:= CatOf(T);
+    if C <> tcUnknown then Result:= (C = tcPointer)
+    else Result:= IsPointerType(T);
+  end;
+
   { Collect declared name -> type text for vars, params and fields (flat map). }
   procedure CollectDecls(const N: TTSNode);
   var
@@ -1436,7 +1475,7 @@ var
     if N.IsNull then Exit;
     if N.NodeType = 'identifier' then
     begin
-      if TypeMap.TryGetValue(LowerCase(NodeStr(N)), T) then Result:= IsFloatType(T);
+      if TypeMap.TryGetValue(LowerCase(NodeStr(N)), T) then Result:= TypeTextIsFloat(T);
     end
     else if N.NodeType = 'literalNumber' then
     begin
@@ -1506,7 +1545,7 @@ var
         if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
         begin
           A0:= Args.NamedChild(0);
-          if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) and IsInterfaceType(T) then
+          if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) and TypeTextIsInterface(T) then
           begin
             P:= Entity.StartPoint;
             F:= Default(TLintFinding);
@@ -1533,7 +1572,7 @@ var
           if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
           begin
             A0:= Args.NamedChild(0);
-            if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) and IsPointerType(T) then
+            if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) and TypeTextIsPointer(T) then
             begin
               P:= Entity.StartPoint;
               F:= Default(TLintFinding);

@@ -5249,7 +5249,7 @@ begin
           Findings:= Findings + [F];
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(PasPath, 7, 25, 120, 5) do
           Findings:= Findings + [F];
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(PasPath) do
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(PasPath, Store, Store.FindFileIdByPath(PasPath)) do { v11 (M1): exact type resolution }
           Findings:= Findings + [F];
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch(PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree (PasPath);
@@ -7608,6 +7608,11 @@ begin
   end
   else Store:= nil;
   Findings:= TAstChecker.Check(Store, AArgs.Target);
+  { v11 (M1): type-aware rules with exact resolution when a store is present
+    (store-bearing path per the M1 plan); heuristic fallback when --db is absent. }
+  var TcFid: Int64:= 0;
+  if Store <> nil then TcFid:= Store.FindFileIdByPath(AArgs.Target);
+  Findings:= Findings + TAstChecker.CheckTypeAware(AArgs.Target, Store, TcFid);
   DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
 
   if SameText(AArgs.Format, 'json') then
