@@ -191,6 +191,8 @@ type
     TextAnyOrder : Boolean; // --any-order
     TextSubstring: Boolean; // --substring
     TextSource   : string ; // --source pas|dfm|sql ('' = all)
+    // v0.64: lint-all progress
+    Quiet        : Boolean; // --quiet  suppress per-file progress to stderr
   end; // record
 
 procedure PrintHelp;
@@ -452,6 +454,7 @@ begin
     end
     else if A = '--json'    then Result.AsJson:= True
     else if A = '--dry-run' then Result.DryRun:= True
+    else if A = '--quiet' then Result.Quiet:= True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
     else if A = '--scan-libraries-all' then
     begin
@@ -5059,6 +5062,9 @@ var
   ErrCnt   : Integer                     ;
   WarnCnt  : Integer                     ;
   LayersCfg: string                      ;
+  FileIdx  : Integer                     ;
+  LastPct  : Integer                     ;
+  Pct      : Integer                     ;
 begin
   { Resolve DBs: first existing = project index; second = library index }
   Dbs:= ResolveConsumerDbs(AArgs);
@@ -5093,10 +5099,24 @@ begin
 
   { Per-file rules: external .scm rules + all built-in AST checks }
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
+  LastPct:= -1;
   try
-    for PasPath in FilePaths do
+    for FileIdx:= 0 to Length(FilePaths) - 1 do
     begin
+      PasPath:= FilePaths[FileIdx];
       try
+        { Progress output (throttled by percentage) }
+        if (not AArgs.Quiet) then
+        begin
+          Pct:= ((FileIdx + 1) * 100) div Max(1, Length(FilePaths));
+          if (FileIdx = 0) or (FileIdx = Length(FilePaths) - 1) or (Pct <> LastPct) then
+          begin
+            Writeln(ErrOutput, Format('lint-all: [%d/%d] %d%% %s',
+              [FileIdx + 1, Length(FilePaths), Pct, ExtractFileName(PasPath)]));
+            Flush(ErrOutput);
+            LastPct:= Pct;
+          end;
+        end;
         Findings:= Findings + Linter.LintFile(PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals    (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors    (PasPath);
