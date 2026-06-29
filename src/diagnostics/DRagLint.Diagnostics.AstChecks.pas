@@ -521,7 +521,11 @@ var
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
   ConditionalRanges: TArray<TLineRange>;
+  HasCond   : Boolean          ; // hoisted: true iff file has any conditional directives
+  TotalLines: Integer          ; // hoisted: total line count, used by M4 line-1 guard
+  SrcUp     : string           ; // hoisted upper-case source, decoded once
 
+  // Returns True when ALine falls inside any conditional compilation region.
   function IsInConditionalRegion(ALine: Integer): Boolean;
   var
     I: Integer;
@@ -532,44 +536,32 @@ var
         Exit(True);
   end;
 
-  function HasConditionalDirectives: Boolean;
-  var
-    S: string;
-    SUp: string;
-  begin
-    S:= TEncoding.UTF8.GetString(Src);
-    SUp:= AnsiUpperCase(S);
-    Result:= (Pos('{$IF', SUp) > 0) or (Pos('{$IFEND', SUp) > 0) or (Pos('{$ENDIF', SUp) > 0);
-  end;
-
   procedure BuildConditionalRanges;
   var
     S: string;
-    I, Depth, Pos, LineNum, StartLine: Integer;
-    LineStart: Integer;
+    I, Depth, Pos2, LineNum, StartLine: Integer;
     Line: string;
+    LineUp: string;
     R: TLineRange;
   begin
     S:= TEncoding.UTF8.GetString(Src);
     Depth:= 0;
     StartLine:= -1;
     LineNum:= 1;
-    LineStart:= 1;
     I:= 1;
     while I <= Length(S) do
     begin
-      Pos:= I;
-      while (Pos <= Length(S)) and (S[Pos] <> #10) do Inc(Pos);
-      Line:= Copy(S, I, Pos - I);
-      if (Pos <= Length(S)) and (S[Pos] = #10) then
-        Inc(Pos);
+      Pos2:= I;
+      while (Pos2 <= Length(S)) and (S[Pos2] <> #10) do Inc(Pos2);
+      Line:= Copy(S, I, Pos2 - I);
+      if (Pos2 <= Length(S)) and (S[Pos2] = #10) then
+        Inc(Pos2);
 
-      if System.Pos('{$IF', AnsiUpperCase(Line)) > 0 then
-      begin
-        if Depth = 0 then StartLine:= LineNum;
-        Inc(Depth);
-      end;
-      if (System.Pos('{$IFEND', AnsiUpperCase(Line)) > 0) or (System.Pos('{$ENDIF', AnsiUpperCase(Line)) > 0) then
+      LineUp:= AnsiUpperCase(Line);
+
+      // Check closing directives FIRST: a line with IFEND must not also match
+      // the opening IF prefix and spuriously increment Depth on the same line.
+      if (System.Pos('{$IFEND', LineUp) > 0) or (System.Pos('{$ENDIF', LineUp) > 0) then
       begin
         if Depth > 0 then Dec(Depth);
         if (Depth = 0) and (StartLine >= 0) then
@@ -580,10 +572,19 @@ var
           ConditionalRanges[Length(ConditionalRanges) - 1]:= R;
           StartLine:= -1;
         end;
+      end
+      // Opening directive -- only reached when the line has NO closing directive.
+      // Matches IF/IFDEF/IFNDEF/IFOPT but NOT IFEND/ENDIF (handled above).
+      else if System.Pos('{$IF', LineUp) > 0 then
+      begin
+        if Depth = 0 then StartLine:= LineNum;
+        Inc(Depth);
       end;
-      I:= Pos;
+
+      I:= Pos2;
       Inc(LineNum);
     end;
+    TotalLines:= LineNum - 1;
   end;
 
   procedure Visit(const N: TTSNode);
@@ -592,8 +593,6 @@ var
     F: TLintFinding;
     P, EndP: TTSPoint;
     ErrorLine, EndLine: Integer;
-    J: Integer;
-    HasConditionalOverlap: Boolean;
     SkipDueToConditional: Boolean;
   begin
     if N.IsNull or (Findings.Count >= 100) then Exit;
@@ -606,47 +605,45 @@ var
 
       SkipDueToConditional:= False;
 
-      if HasConditionalDirectives then
+      if HasCond then
       begin
         if Length(ConditionalRanges) > 0 then
-        begin
-          HasConditionalOverlap:= False;
-          for J:= 0 to Length(ConditionalRanges) - 1 do
-          begin
-            if (ErrorLine >= ConditionalRanges[J].StartLine) and (ErrorLine <= ConditionalRanges[J].EndLine) then
-            begin
-              HasConditionalOverlap:= True;
-              Break;
-            end;
-            if (EndLine >= ConditionalRanges[J].StartLine) and (EndLine <= ConditionalRanges[J].EndLine) then
-            begin
-              HasConditionalOverlap:= True;
-              Break;
-            end;
-            if (ErrorLine < ConditionalRanges[J].StartLine) and (EndLine > ConditionalRanges[J].EndLine) then
-            begin
-              HasConditionalOverlap:= True;
-              Break;
-            end;
-          end;
-          SkipDueToConditional:= HasConditionalOverlap;
-        end else
-          SkipDueToConditional:= (ErrorLine = 1);
+          // Use IsInConditionalRegion for start AND end/spanning checks.
+          SkipDueToConditional:= IsInConditionalRegion(ErrorLine)
+            or IsInConditionalRegion(EndLine)
+            or ( (ErrorLine < ConditionalRanges[0].StartLine)
+                 and (EndLine > ConditionalRanges[Length(ConditionalRanges)-1].EndLine) )
+        else
+          SkipDueToConditional:= False; // no ranges produced -- only M4 guard below
+
+        // M4 narrow line-1 guard: a root ERROR node at line 1 that spans nearly
+        // the whole file is a grammar-confusion artefact of conditional directives,
+        // not a genuine error. Suppress only when end row >= 75 % of file length.
+        // A small genuine line-1 error (EndLine near line 1) always fires.
+        if (not SkipDueToConditional) and (ErrorLine = 1)
+           and (TotalLines > 1)
+           and ((EndLine - ErrorLine) >= (TotalLines * 3) div 4) then
+          SkipDueToConditional:= True;
       end;
 
-      if SkipDueToConditional then Exit;
-
-      F:= Default(TLintFinding);
-      F.RuleId  := 'syntax-error';
-      F.Severity:= 'error';
-      if N.IsMissing then F.Message:= 'Syntax error: missing token'
-      else F.Message:= 'Syntax error near here';
-      F.FilePath:= AFile;
-      F.StartLine:= ErrorLine;
-      F.StartCol := Integer(P.Column) + 1;
-      F.EndLine:= F.StartLine;
-      F.EndCol:= F.StartCol + 1;
-      Findings.Add(F);
+      if not SkipDueToConditional then
+      begin
+        F:= Default(TLintFinding);
+        F.RuleId  := 'syntax-error';
+        F.Severity:= 'error';
+        if N.IsMissing then F.Message:= 'Syntax error: missing token'
+        else F.Message:= 'Syntax error near here';
+        F.FilePath:= AFile;
+        F.StartLine:= ErrorLine;
+        F.StartCol := Integer(P.Column) + 1;
+        F.EndLine:= F.StartLine;
+        F.EndCol:= F.StartCol + 1;
+        Findings.Add(F);
+        Exit; // reported -- children of this error node are part of the same error; stop here
+      end;
+      // Skipped due to conditional region or M4 guard: still descend into children
+      // so genuine errors nested inside the suppressed node are not lost.
+      for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
       Exit;
     end; // if
     if not N.HasError then Exit;
@@ -658,7 +655,13 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
-  if HasConditionalDirectives then
+  // Hoist the directive scan: decode once, reuse HasCond in both Visit and
+  // BuildConditionalRanges (was re-decoded per error node = O(N)).
+  SrcUp:= AnsiUpperCase(TEncoding.UTF8.GetString(Src));
+  HasCond:= (System.Pos('{$IF', SrcUp) > 0) or (System.Pos('{$IFEND', SrcUp) > 0)
+            or (System.Pos('{$ENDIF', SrcUp) > 0);
+  TotalLines:= 1;
+  if HasCond then
     BuildConditionalRanges;
   Findings:= TList<TLintFinding>.Create;
   try

@@ -1,8 +1,9 @@
-# {$IF}/{$IFEND} must NOT produce syntax-error findings (grammar gap, FP-1)
+# {$IF}/{$IFEND} must NOT produce syntax-error findings inside the conditional region
 !syntax-error 8
 !syntax-error 9
 !syntax-error 10
 !syntax-error 11
-# but a genuine malformed line still fires somewhere in RealTypo
-# (the root error at line 1 encompasses the whole file due to grammar confusion from {$IFEND})
+# the large grammar-confusion root node (line 1 spanning whole file) is suppressed by M4 guard
 !syntax-error 1
+# but the genuine typo in RealTypo (outside any conditional region) MUST still fire
+syntax-error 17
