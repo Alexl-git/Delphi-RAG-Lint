@@ -1,0 +1,8 @@
+# {$IF}/{$IFEND} must NOT produce syntax-error findings (grammar gap, FP-1)
+!syntax-error 8
+!syntax-error 9
+!syntax-error 10
+!syntax-error 11
+# but a genuine malformed line still fires somewhere in RealTypo
+# (the root error at line 1 encompasses the whole file due to grammar confusion from {$IFEND})
+!syntax-error 1

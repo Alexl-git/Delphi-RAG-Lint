@@ -512,35 +512,142 @@ begin
 end; // function
 
 class function TAstChecker.CheckSyntaxErrors( const AFile: string): TArray<TLintFinding>;
+type
+  TLineRange = record
+    StartLine, EndLine: Integer;
+  end;
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
+  ConditionalRanges: TArray<TLineRange>;
+
+  function IsInConditionalRegion(ALine: Integer): Boolean;
+  var
+    I: Integer;
+  begin
+    Result:= False;
+    for I:= 0 to Length(ConditionalRanges) - 1 do
+      if (ALine >= ConditionalRanges[I].StartLine) and (ALine <= ConditionalRanges[I].EndLine) then
+        Exit(True);
+  end;
+
+  function HasConditionalDirectives: Boolean;
+  var
+    S: string;
+  begin
+    S:= TEncoding.UTF8.GetString(Src);
+    Result:= (Pos('{$IF', S) > 0) or (Pos('{$IFEND', S) > 0) or (Pos('{$ENDIF', S) > 0);
+  end;
+
+  procedure BuildConditionalRanges;
+  var
+    S: string;
+    I, Depth, Pos, LineNum, StartLine: Integer;
+    LineStart: Integer;
+    Line: string;
+    R: TLineRange;
+  begin
+    S:= TEncoding.UTF8.GetString(Src);
+    Depth:= 0;
+    StartLine:= -1;
+    LineNum:= 1;
+    LineStart:= 1;
+    I:= 1;
+    while I <= Length(S) do
+    begin
+      Pos:= I;
+      while (Pos <= Length(S)) and (S[Pos] <> #10) do Inc(Pos);
+      Line:= Copy(S, I, Pos - I);
+      if (Pos <= Length(S)) and (S[Pos] = #10) then
+        Inc(Pos);
+
+      if System.Pos('{$IF', AnsiUpperCase(Line)) > 0 then
+      begin
+        if Depth = 0 then StartLine:= LineNum;
+        Inc(Depth);
+      end;
+      if (System.Pos('{$IFEND', AnsiUpperCase(Line)) > 0) or (System.Pos('{$ENDIF', AnsiUpperCase(Line)) > 0) then
+      begin
+        if Depth > 0 then Dec(Depth);
+        if (Depth = 0) and (StartLine >= 0) then
+        begin
+          R.StartLine:= StartLine;
+          R.EndLine:= LineNum;
+          SetLength(ConditionalRanges, Length(ConditionalRanges) + 1);
+          ConditionalRanges[Length(ConditionalRanges) - 1]:= R;
+          StartLine:= -1;
+        end;
+      end;
+      I:= Pos;
+      Inc(LineNum);
+    end;
+  end;
 
   procedure Visit(const N: TTSNode);
   var
     I: Integer     ;
     F: TLintFinding;
-    P: TTSPoint    ;
+    P, EndP: TTSPoint;
+    ErrorLine, EndLine: Integer;
+    J: Integer;
+    HasConditionalOverlap: Boolean;
+    SkipDueToConditional: Boolean;
   begin
     if N.IsNull or (Findings.Count >= 100) then Exit;
     if N.IsError or N.IsMissing then
     begin
       P:= N.StartPoint;
+      EndP:= N.EndPoint;
+      ErrorLine:= Integer(P.Row) + 1;
+      EndLine:= Integer(EndP.Row) + 1;
+
+      SkipDueToConditional:= False;
+
+      if HasConditionalDirectives then
+      begin
+        if Length(ConditionalRanges) > 0 then
+        begin
+          HasConditionalOverlap:= False;
+          for J:= 0 to Length(ConditionalRanges) - 1 do
+          begin
+            if (ErrorLine >= ConditionalRanges[J].StartLine) and (ErrorLine <= ConditionalRanges[J].EndLine) then
+            begin
+              HasConditionalOverlap:= True;
+              Break;
+            end;
+            if (EndLine >= ConditionalRanges[J].StartLine) and (EndLine <= ConditionalRanges[J].EndLine) then
+            begin
+              HasConditionalOverlap:= True;
+              Break;
+            end;
+            if (ErrorLine < ConditionalRanges[J].StartLine) and (EndLine > ConditionalRanges[J].EndLine) then
+            begin
+              HasConditionalOverlap:= True;
+              Break;
+            end;
+          end;
+          SkipDueToConditional:= HasConditionalOverlap;
+        end else
+          SkipDueToConditional:= (ErrorLine = 1);
+      end;
+
+      if SkipDueToConditional then Exit;
+
       F:= Default(TLintFinding);
       F.RuleId  := 'syntax-error';
       F.Severity:= 'error';
       if N.IsMissing then F.Message:= 'Syntax error: missing token'
       else F.Message:= 'Syntax error near here';
       F.FilePath:= AFile;
-      F.StartLine:= Integer(P.Row   ) + 1;
+      F.StartLine:= ErrorLine;
       F.StartCol := Integer(P.Column) + 1;
       F.EndLine:= F.StartLine;
       F.EndCol:= F.StartCol + 1;
       Findings.Add(F);
-      Exit; { do not descend into an error node }
+      Exit;
     end; // if
-    if not N.HasError then Exit; { clean subtree -> skip }
+    if not N.HasError then Exit;
     for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
   end; // procedure
 
@@ -549,6 +656,8 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
+  if HasConditionalDirectives then
+    BuildConditionalRanges;
   Findings:= TList<TLintFinding>.Create;
   try
     Visit(PF.Tree.RootNode);
@@ -556,7 +665,7 @@ begin
   finally
     Findings.Free;
   end;
-end; // begin
+end;
 
 class function TAstChecker.CheckUnusedLocals( const AFile: string): TArray<TLintFinding>;
 var
