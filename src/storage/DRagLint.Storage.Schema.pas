@@ -3,7 +3,7 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 11;
+  SCHEMA_VERSION = 12;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
@@ -24,6 +24,9 @@ const
     // NULL for non-class/interface or no ancestors. Migrate() ALTERs it onto
     // pre-v11 tables. Name normalization + cross-unit resolution happen later.
     '  heritage        TEXT,' +
+    // v12 (M1): 1 when a method is virtually dispatched (virtual/dynamic/override),
+    // else 0/NULL. Powers cross-unit virtual-method-in-constructor. Migrate() ALTERs.
+    '  is_virtual      INTEGER,' +
     '  start_line      INTEGER NOT NULL,' + '  start_col       INTEGER NOT NULL,' + '  end_line        INTEGER NOT NULL,' + '  end_col         INTEGER NOT NULL,' +
     // v9: implementation body span (header..final 'end'); 0 when no body.
     // Migrate() ALTERs these onto pre-v9 tables (CREATE TABLE IF NOT EXISTS

@@ -112,6 +112,10 @@ type
     /// `type X = Y` aliases to a fixpoint. AFileId disambiguates same-named types
     /// (prefer the one declared in that file). tcUnknown when unresolvable.</summary>
     function ResolveTypeCategory(const ATypeName: string; AFileId: Int64): TTypeCategory;
+    /// <summary>Lowercased names of every virtually-dispatched method visible on
+    /// AClassName -- its own virtuals plus those inherited from resolved ancestors
+    /// (cross-unit). Backs cross-unit virtual-method-in-constructor.</summary>
+    function GetVirtualMethodsIncludingAncestors(const AClassName: string; AFileId: Int64): TArray<string>;
     function FindByDocTag(const ATag: string): TArray<TSymbol>                           ;
     function FindUndocumented(const AKind: string; APublicOnly: Boolean): TArray<TSymbol>;
     function FindByDocContains(const ASubstring: string): TArray<TSymbol>                ;

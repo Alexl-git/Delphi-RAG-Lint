@@ -5266,7 +5266,7 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath)); { v12 (M1): cross-unit }
       except
         on E: Exception do
           Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)',
@@ -7613,6 +7613,7 @@ begin
   var TcFid: Int64:= 0;
   if Store <> nil then TcFid:= Store.FindFileIdByPath(AArgs.Target);
   Findings:= Findings + TAstChecker.CheckTypeAware(AArgs.Target, Store, TcFid);
+  Findings:= Findings + TAstChecker.CheckVirtualInConstructor(AArgs.Target, Store, TcFid); { v12 (M1) }
   DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
 
   if SameText(AArgs.Format, 'json') then

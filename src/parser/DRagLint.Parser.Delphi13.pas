@@ -93,7 +93,7 @@ type
     destructor Destroy; override;
     function Emit(
       AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature: string = ''; const AModifiers: string = '';
-      const AHeritage: string = ''
+      const AHeritage: string = ''; AIsVirtual: Boolean = False
     ): Integer;
     procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
     procedure EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
@@ -157,7 +157,7 @@ begin
 end;
 
 function TWalkState.Emit(AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature,
-  AModifiers, AHeritage: string): Integer;
+  AModifiers, AHeritage: string; AIsVirtual: Boolean): Integer;
 var
   Sym: TSymbol;
 begin
@@ -169,6 +169,7 @@ begin
   Sym.Modifiers    := AModifiers;
   Sym.Section      := CurrentSection;
   Sym.Heritage     := AHeritage; { v11 (M1): class/interface ancestor list text }
+  Sym.IsVirtual    := AIsVirtual; { v12 (M1): method virtual dispatch flag }
   if AParentSymbolIdx >= 0 then Sym.ParentId:= AParentSymbolIdx
   else Sym.ParentId:= -1;
   if not ARangeNode.IsNull then
@@ -653,6 +654,28 @@ begin
   else Result:= ArgsText;
 end; // function
 
+// v12 (M1): a declProc is virtually dispatched if it carries a virtual/dynamic/
+// override directive -- exposed as `attribute: (procAttribute (kVirtual|kDynamic|
+// kOverride))` children of the declProc node.
+function ProcIsVirtual(const ANode: TTSNode): Boolean;
+var
+  i, j : Integer;
+  Attr : TTSNode;
+  K    : string ;
+begin
+  Result:= False;
+  for i:= 0 to ANode.NamedChildCount - 1 do
+  begin
+    Attr:= ANode.NamedChild(i);
+    if Attr.NodeType <> 'procAttribute' then Continue;
+    for j:= 0 to Attr.NamedChildCount - 1 do
+    begin
+      K:= Attr.NamedChild(j).NodeType;
+      if (K = 'kVirtual') or (K = 'kDynamic') or (K = 'kOverride') then Exit(True);
+    end;
+  end;
+end; // function
+
 procedure WalkDeclProc(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string; AAsMethod: Boolean);
 var
   NameNode : TTSNode    ;
@@ -689,7 +712,7 @@ begin
   else Modifiers:= '';
   { v0.42: Signature = full parameter list + return type (Code-Insight style),
     e.g. '(const A: Integer): Boolean'. Was return-type-only before. }
-  AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, ProcSignatureOf(ANode, AState.Source), Modifiers);
+  AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, ProcSignatureOf(ANode, AState.Source), Modifiers, '', AAsMethod and ProcIsVirtual(ANode));
 end; // procedure
 
 { v0.48: does the in-memory symbol list already hold a free routine (proc/func) by

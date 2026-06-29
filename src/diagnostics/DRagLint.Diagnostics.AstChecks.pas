@@ -209,7 +209,10 @@ type
       /// from each class's own declaration in this file (procAttribute kVirtual/kDynamic/kOverride);
       /// inherited (static ancestor) calls and methods inherited unchanged from a base class are not
       /// flagged. Cross-unit ancestry needs a type resolver (future). Pure AST; no DB. Never raises.</remarks>
-      class function CheckVirtualInConstructor(const AFile: string): TArray<TLintFinding>;
+      // v12 (M1): when AStore is present, the virtual-method set is augmented with
+      // inherited virtuals from cross-unit ancestors (GetVirtualMethodsIncludingAncestors);
+      // nil keeps the same-file/same-class behavior.
+      class function CheckVirtualInConstructor(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
   end;
 
 implementation
@@ -3567,7 +3570,7 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckVirtualInConstructor(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckVirtualInConstructor(const AFile: string; const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
   Src        : TBytes                                          ;
   PF      : TParsedFile        ;
@@ -3743,10 +3746,24 @@ var
             if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then
             begin
               CName:= LowerCase(NodeStr(Lhs));
-              if VirtByClass.TryGetValue(CName, Setm) and (Setm.Count > 0) then
-              begin
-                Body:= N.ChildByField('body');
-                if not Body.IsNull then FlagCalls(Body, Setm);
+              { Effective virtual set = this class's own virtuals (from the file
+                AST) UNION, when a store is present, the inherited virtuals from
+                cross-unit ancestors. So a ctor calling an ancestor-declared
+                virtual is caught even though it is not declared in this file. }
+              var Eff:= TDictionary<string, Boolean>.Create;
+              try
+                if VirtByClass.TryGetValue(CName, Setm) then
+                  for var Kn in Setm.Keys do Eff.AddOrSetValue(Kn, True);
+                if AStore <> nil then
+                  for var Vn in AStore.GetVirtualMethodsIncludingAncestors(NodeStr(Lhs), AFileId) do
+                    Eff.AddOrSetValue(LowerCase(Vn), True);
+                if Eff.Count > 0 then
+                begin
+                  Body:= N.ChildByField('body');
+                  if not Body.IsNull then FlagCalls(Body, Eff);
+                end;
+              finally
+                Eff.Free;
               end;
             end;
           end;

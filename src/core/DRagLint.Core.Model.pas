@@ -51,6 +51,10 @@ type
     // 'TBar, IBaz'. Empty for non-class/interface or no ancestors. The
     // resolve pass normalizes names + links them cross-unit (type_ancestors).
     Heritage     : string     ;
+    // v12 (M1): True when this method is virtually dispatched (virtual/dynamic/
+    // override). False for non-methods / static methods. Backs cross-unit
+    // virtual-method-in-constructor.
+    IsVirtual    : Boolean     ;
     StartLine    : Integer    ;
     StartCol     : Integer    ;
     EndLine      : Integer    ;

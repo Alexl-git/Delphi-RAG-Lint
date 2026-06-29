@@ -113,6 +113,7 @@ type
       function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
       function ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
       function ResolveTypeCategory(const ATypeName: string; AFileId: Int64): TTypeCategory;
+      function GetVirtualMethodsIncludingAncestors(const AClassName: string; AFileId: Int64): TArray<string>;
 
       { v0.40.4: leaf accessor for utilities that need raw SQL access
       (uses-report walks the whole files + unit_uses tables). Not part
@@ -435,6 +436,8 @@ begin
   { v11 (M1): raw ancestor list text on class/interface symbols. Additive
     column; ALTER onto pre-v11 tables for the same reason as the v9 columns. }
   TryExec('ALTER TABLE symbols ADD COLUMN heritage TEXT');
+  { v12 (M1): per-method virtual-dispatch flag (virtual/dynamic/override). }
+  TryExec('ALTER TABLE symbols ADD COLUMN is_virtual INTEGER');
   { v11 (M1): direct ancestor edges (one row per heritage entry). Created here
     rather than in SCHEMA_DDL to avoid renumbering the FTS5 split index; it is
     plain DDL that must always exist (independent of FTS5 availability).
@@ -475,8 +478,8 @@ begin
     'parsed_at=:parsed, language=:lang WHERE path=:path');
   FQInsertFile:= NewQuery( 'INSERT OR IGNORE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol:= NewQuery(
-    'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, start_line, start_col, end_line, end_col, ' +
-    '  impl_start_line, impl_end_line) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, ' + '  :sl, :sc, :el, :ec, :isl, :iel)');
+    'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, is_virtual, start_line, start_col, end_line, end_col, ' +
+    '  impl_start_line, impl_end_line) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, ' + '  :sl, :sc, :el, :ec, :isl, :iel)');
   FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
   FQInsertRef:= NewQuery(
     'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col) ' + 'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec)');
@@ -737,6 +740,7 @@ begin
   FQInsertSymbol.ParamByName('her'  ).DataType := ftString;
   if ASymbol.Heritage <> '' then FQInsertSymbol.ParamByName('her').AsString:= ASymbol.Heritage
   else FQInsertSymbol.ParamByName('her').Clear;
+  FQInsertSymbol.ParamByName('virt' ).AsInteger:= Ord(ASymbol.IsVirtual); { v12 }
   FQInsertSymbol.ParamByName('sl'   ).AsInteger:= ASymbol.StartLine;
   FQInsertSymbol.ParamByName('sc'   ).AsInteger:= ASymbol.StartCol;
   FQInsertSymbol.ParamByName('el'   ).AsInteger:= ASymbol.EndLine;
@@ -1066,6 +1070,8 @@ begin
     Result.Section  := AQ.FieldByName('section'   ).AsString;
   if AQ.FindField('heritage') <> nil then { v11: tolerate pre-v11 databases }
     Result.Heritage := AQ.FieldByName('heritage'  ).AsString;
+  if AQ.FindField('is_virtual') <> nil then { v12: tolerate pre-v12 databases }
+    Result.IsVirtual := AQ.FieldByName('is_virtual').AsInteger <> 0;
   Result  .StartLine:= AQ.FieldByName('start_line').AsInteger;
   Result  .StartCol := AQ.FieldByName('start_col' ).AsInteger;
   Result  .EndLine  := AQ.FieldByName('end_line'  ).AsInteger;
@@ -2780,6 +2786,48 @@ end;
 function TSQLiteSymbolStore.ResolveTypeCategory(const ATypeName: string; AFileId: Int64): TTypeCategory;
 begin
   Result:= ResolveTypeCategoryDepth(ATypeName, AFileId, 0);
+end;
+
+function TSQLiteSymbolStore.GetVirtualMethodsIncludingAncestors(const AClassName: string; AFileId: Int64): TArray<string>;
+var
+  StartId: Int64                       ;
+  Names  : TDictionary<string, Boolean>;
+  Q      : TFDQuery                    ;
+  A      : TTypeAncestor               ;
+
+  procedure CollectFor(ASymId: Int64);
+  begin
+    if ASymId <= 0 then Exit;
+    Q.ParamByName('pid').AsLargeInt:= ASymId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Names.AddOrSetValue(LowerCase(Q.FieldByName('name').AsString), True);
+      Q.Next;
+    end;
+    Q.Close;
+  end;
+
+begin
+  Names:= TDictionary<string, Boolean>.Create;
+  Q    := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT name FROM symbols WHERE parent_id = :pid AND is_virtual = 1';
+    StartId:= ResolveTypeSymbolId(AClassName, AFileId);
+    if StartId > 0 then
+    begin
+      CollectFor(StartId);
+      { GetTransitiveAncestors returns a fully-materialized array (its own cursor
+        is closed), so reusing Q in CollectFor afterwards is safe. }
+      for A in GetTransitiveAncestors(StartId) do
+        if A.Resolved and (A.SymbolId > 0) then CollectFor(A.SymbolId);
+    end;
+    Result:= Names.Keys.ToArray;
+  finally
+    Q.Free;
+    Names.Free;
+  end;
 end;
 
 end.
