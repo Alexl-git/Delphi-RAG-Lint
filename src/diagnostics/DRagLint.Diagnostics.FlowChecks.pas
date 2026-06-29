@@ -94,6 +94,9 @@ var
     LiveAna: IDataFlowAnalysis<TArray<Boolean>>;
     LIn, LOut: TArray<TArray<Boolean>>;
     ReadAny, AsgnAny, Live: TArray<Boolean>;
+    EscAna: IDataFlowAnalysis<TArray<Boolean>>;
+    EIn2, EOut2: TArray<TArray<Boolean>>;
+    CreateRow, CreateCol: TArray<Integer>;
   begin
     Cfg := TCfgBuilder.Build(AProc, PF.Src);
     Vars := TRoutineVarTable.Build(AProc, PF.Src);
@@ -335,6 +338,34 @@ var
                   Q.Enqueue(Cfg.Blocks[B].Succ[RIx]);
             end;
           finally Q.Free; Seen.Free; end;
+        end;
+
+        { ============ object-leak (store-free, conservative) ============ }
+        EscAna := TEscape.Create(Vars, PF.Src);
+        if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, EscAna, EIn2, EOut2) then
+        begin
+          SetLength(CreateRow, Vars.Count); SetLength(CreateCol, Vars.Count);
+          for I := 0 to Vars.Count - 1 do begin CreateRow[I] := 0; CreateCol[I] := 0; end;
+          { record each local's constructor-assignment site }
+          for B := 0 to Cfg.BlockCount - 1 do
+            for J := 0 to Cfg.Blocks[B].Items.Count - 1 do
+            begin
+              It := Cfg.Blocks[B].Items[J];
+              if It.Node.NodeType <> 'assignment' then Continue;
+              Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars);
+              if (Tgt >= 0) and (Vars.Get(Tgt).Kind = vkLocal)
+                 and ExprIsConstructor(It.Node.ChildByField('rhs'), PF.Src) then
+              begin
+                CreateRow[Tgt] := Integer(It.Node.StartPoint.Row) + 1;
+                CreateCol[Tgt] := Integer(It.Node.StartPoint.Column) + 1;
+              end;
+            end;
+          { a created local still may-open at the routine exit -> possible leak }
+          for I := 0 to Vars.Count - 1 do
+            if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and EIn2[Cfg.ExitIdx][I] then
+              Emit('object-leak', 'info',
+                Format('Object "%s" may be leaked: created but not freed or transferred on some path.',
+                  [Vars.Get(I).Name]), CreateRow[I], CreateCol[I]);
         end;
 
       finally Reads.Free; CallDefs.Free; end;

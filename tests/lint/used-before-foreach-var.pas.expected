@@ -1,0 +1,3 @@
+# `for var x in L` declares + assigns x each iteration -> reading x in the body
+# must NOT be a used-before-assignment false positive.
+!used-before-assignment

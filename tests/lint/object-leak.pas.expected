@@ -1,0 +1,8 @@
+# P1: created, never freed or transferred -> leak (info) at the create site
+object-leak 8
+# P2: freed in the finally -> no leak
+!object-leak 14
+# P3: ownership returned via Result -> no leak
+!object-leak 19
+# P4: passed to a call (escape) -> no leak
+!object-leak 24

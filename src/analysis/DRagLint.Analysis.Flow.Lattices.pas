@@ -93,6 +93,34 @@ type
     function Equals(const A, B: TArray<Boolean>): Boolean;
   end;
 
+  /// <summary>Forward "may-open" escape analysis for object-leak detection:
+  /// `MaybeOpen`[i] = local i was assigned from a constructor and, on some path,
+  /// has not since been freed (`x.Free`/`FreeAndNil`/`x.DisposeOf`) or escaped
+  /// (returned via Result, stored in a field, passed to a call, or aliased).</summary>
+  /// <remarks>Conservative + store-free: ANY pass-to-call counts as escape, so a
+  /// finding fires only on the clear "create then fall out of scope" case.</remarks>
+  TEscape = class(TInterfacedObject, IDataFlowAnalysis<TArray<Boolean>>)
+  strict private
+    FVars: TRoutineVarTable;
+    FSrc : TBytes;
+  public
+    constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes);
+    function Direction: TFlowDir;
+    function Bottom: TArray<Boolean>;
+    function Boundary: TArray<Boolean>;
+    function Join(const A, B: TArray<Boolean>): TArray<Boolean>;
+    function Transfer(const ABlock: TCfgBlock; const AIn: TArray<Boolean>): TArray<Boolean>;
+    function Equals(const A, B: TArray<Boolean>): Boolean;
+  end;
+
+/// <summary>True if the expression subtree is a constructor call (`T.Create...`):
+/// it contains an `exprDot` whose member identifier is `Create`.</summary>
+function ExprIsConstructor(const N: TTSNode; const ASrc: TBytes): Boolean;
+
+/// <summary>If ANode is `x.Free` / `x.DisposeOf` / `FreeAndNil(x)`, return the
+/// freed local's index, else -1.</summary>
+function DetectFreedVar(const ANode: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable): Integer;
+
 /// <summary>Lowercased identifier text of N, trimmed.</summary>
 function NodeText(const N: TTSNode; const ASrc: TBytes): string;
 
@@ -134,6 +162,16 @@ end;
 function NodeText(const N: TTSNode; const ASrc: TBytes): string;
 begin
   Result := LowerCase(Trim(NodeStr(N, ASrc)));
+end;
+
+{ The first `identifier` named child of N (e.g. the var name in a `varAssignDef`,
+  whose first named child is the `kVar` keyword, not the identifier). }
+function FirstIdentChild(const N: TTSNode): TTSNode;
+var I: Integer;
+begin
+  Result := Default(TTSNode);
+  for I := 0 to N.NamedChildCount - 1 do
+    if N.NamedChild(I).NodeType = 'identifier' then Exit(N.NamedChild(I));
 end;
 
 { ----- TRoutineVarTable ----- }
@@ -251,13 +289,30 @@ var
     if N.IsNull then Exit;
     if N.NodeType = 'defProc' then Exit; { nested routine: own scope }
     if N.NodeType = 'declVars' then AddDeclVars(N);
+    if N.NodeType = 'foreach' then
+    begin
+      { `for var X in` declares an inline loop variable }
+      var ItN := N.ChildByField('iterator');
+      if (not ItN.IsNull) and (ItN.NodeType = 'varAssignDef') then
+      begin
+        IdN := FirstIdentChild(ItN);
+        if not IdN.IsNull then
+        begin
+          R := Default(TRoutineVar);
+          R.Name := LowerCase(NodeStr(IdN, ASrc)); R.Kind := vkLocal; R.TypeText := '';
+          R.DeclLine := Integer(IdN.StartPoint.Row) + 1;
+          R.DeclCol  := Integer(IdN.StartPoint.Column) + 1;
+          Tbl.Add(R);
+        end;
+      end;
+    end;
     if N.NodeType = 'assignment' then
     begin
       Lhs := N.ChildByField('lhs');
       if (not Lhs.IsNull) and (Lhs.NodeType = 'varAssignDef') then
       begin
         IdN := Lhs.ChildByField('name');
-        if IdN.IsNull and (Lhs.NamedChildCount > 0) then IdN := Lhs.NamedChild(0);
+        if IdN.IsNull then IdN := FirstIdentChild(Lhs);
         if not IdN.IsNull then
         begin
           R := Default(TRoutineVar);
@@ -336,7 +391,7 @@ begin
     if Cur.NodeType = 'varAssignDef' then
     begin
       IdN := Cur.ChildByField('name');
-      if IdN.IsNull and (Cur.NamedChildCount > 0) then IdN := Cur.NamedChild(0);
+      if IdN.IsNull then IdN := FirstIdentChild(Cur);
       if IdN.IsNull then Exit(-1);
       Exit(AVars.IndexOf(LowerCase(NodeStr(IdN, ASrc))));
     end;
@@ -596,6 +651,126 @@ begin
 end;
 
 function TLiveness.Equals(const A, B: TArray<Boolean>): Boolean;
+var I: Integer;
+begin
+  Result := False;
+  if Length(A) <> Length(B) then Exit;
+  for I := 0 to High(A) do if A[I] <> B[I] then Exit;
+  Result := True;
+end;
+
+{ ----- escape / object-leak helpers + TEscape ----- }
+
+function ExprIsConstructor(const N: TTSNode; const ASrc: TBytes): Boolean;
+var Ent: TTSNode;
+begin
+  Result := False;
+  if N.IsNull then Exit;
+  if N.NodeType = 'exprDot' then
+    Exit(NodeText(N.ChildByField('rhs'), ASrc) = 'create');
+  if N.NodeType = 'exprCall' then
+  begin
+    Ent := N.ChildByField('entity');
+    if (not Ent.IsNull) and (Ent.NodeType = 'exprDot') then
+      Exit(NodeText(Ent.ChildByField('rhs'), ASrc) = 'create');
+  end;
+end;
+
+function DetectFreedVar(const ANode: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable): Integer;
+var Inner, Ent, ArgsN: TTSNode; M: string;
+begin
+  Result := -1;
+  if ANode.IsNull then Exit;
+  Inner := ANode;
+  if (Inner.NodeType = 'statement') and (Inner.NamedChildCount > 0) then Inner := Inner.NamedChild(0);
+  if Inner.NodeType = 'exprDot' then
+  begin
+    M := NodeText(Inner.ChildByField('rhs'), ASrc);
+    if (M = 'free') or (M = 'disposeof') then
+      Exit(LeftmostBaseVar(Inner.ChildByField('lhs'), ASrc, AVars));
+  end;
+  if Inner.NodeType = 'exprCall' then
+  begin
+    Ent := Inner.ChildByField('entity');
+    if (not Ent.IsNull) and (Ent.NodeType = 'exprDot') then
+    begin
+      M := NodeText(Ent.ChildByField('rhs'), ASrc);
+      if (M = 'free') or (M = 'disposeof') then
+        Exit(LeftmostBaseVar(Ent.ChildByField('lhs'), ASrc, AVars));
+    end;
+    if (not Ent.IsNull) and (Ent.NodeType = 'identifier') and (NodeText(Ent, ASrc) = 'freeandnil') then
+    begin
+      ArgsN := Inner.ChildByField('args');
+      if (not ArgsN.IsNull) and (ArgsN.NamedChildCount > 0) then
+        Exit(LeftmostBaseVar(ArgsN.NamedChild(0), ASrc, AVars));
+    end;
+  end;
+end;
+
+constructor TEscape.Create(AVars: TRoutineVarTable; const ASrc: TBytes);
+begin inherited Create; FVars := AVars; FSrc := ASrc; end;
+
+function TEscape.Direction: TFlowDir; begin Result := fdForward; end;
+
+function TEscape.Bottom: TArray<Boolean>;
+var I: Integer;
+begin SetLength(Result, FVars.Count); for I := 0 to FVars.Count - 1 do Result[I] := False; end;
+
+function TEscape.Boundary: TArray<Boolean>;
+begin Result := Bottom; end;
+
+function TEscape.Join(const A, B: TArray<Boolean>): TArray<Boolean>;
+var I: Integer;
+begin
+  SetLength(Result, FVars.Count);
+  for I := 0 to FVars.Count - 1 do Result[I] := A[I] or B[I]; { may-open: union }
+end;
+
+function TEscape.Transfer(const ABlock: TCfgBlock; const AIn: TArray<Boolean>): TArray<Boolean>;
+var
+  I, J, Tgt, FreedV, SrcIdx: Integer; It: TCfgItem;
+  Reads, CallDefs: TList<Integer>; Rhs: TTSNode;
+begin
+  Result := Copy(AIn);
+  Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+  try
+    for I := 0 to ABlock.Items.Count - 1 do
+    begin
+      It := ABlock.Items[I];
+      FreedV := DetectFreedVar(It.Node, FSrc, FVars);
+      if FreedV >= 0 then Result[FreedV] := False;            { freed }
+      Reads.Clear; CallDefs.Clear;
+      CollectReadsAndCallDefs(It.Node, FSrc, FVars, Reads, CallDefs);
+      for J := 0 to CallDefs.Count - 1 do
+        if CallDefs[J] <> FreedV then Result[CallDefs[J]] := False; { passed to a call -> escaped }
+      if It.Node.NodeType = 'assignment' then
+      begin
+        Rhs := It.Node.ChildByField('rhs');
+        Tgt := AssignmentTargetIndex(It.Node, FSrc, FVars);
+        if (Tgt >= 0) and (FVars.Get(Tgt).Kind = vkLocal) then
+        begin
+          if ExprIsConstructor(Rhs, FSrc) then Result[Tgt] := True   { created }
+          else if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
+          begin
+            SrcIdx := FVars.IndexOf(LowerCase(NodeStr(Rhs, FSrc)));
+            if SrcIdx >= 0 then
+            begin Result[Tgt] := Result[SrcIdx]; Result[SrcIdx] := False; end { alias: ownership moves }
+            else Result[Tgt] := False;
+          end
+          else Result[Tgt] := False;                                { reassigned to other }
+        end
+        else if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
+        begin
+          { lhs is Result / a field / a partial write -> a bare local rhs escapes }
+          SrcIdx := FVars.IndexOf(LowerCase(NodeStr(Rhs, FSrc)));
+          if SrcIdx >= 0 then Result[SrcIdx] := False;
+        end;
+      end;
+    end;
+  finally Reads.Free; CallDefs.Free; end;
+end;
+
+function TEscape.Equals(const A, B: TArray<Boolean>): Boolean;
 var I: Integer;
 begin
   Result := False;

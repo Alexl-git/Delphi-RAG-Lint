@@ -359,6 +359,11 @@ begin
     FollowIdx := Cfg.NewBlock.Index;
     BodyIdx := Cfg.NewBlock.Index;
     IterN := ANode.ChildByField('iterator');
+    { `for var X in` -> the iterator is a varAssignDef; use its identifier child }
+    if (not IterN.IsNull) and (IterN.NodeType = 'varAssignDef') then
+      for I := 0 to IterN.NamedChildCount - 1 do
+        if IterN.NamedChild(I).NodeType = 'identifier' then
+        begin IterN := IterN.NamedChild(I); Break; end;
     if not IterN.IsNull then Cfg.Blocks[BodyIdx].EntryDefs := [LowerText(IterN, Cfg.Src)];
     Cfg.Blocks[HdrIdx].AddSucc(BodyIdx);
     Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
@@ -390,7 +395,15 @@ begin
   if K = 'try' then
   begin
     TryNode := ANode.ChildByField('try');
-    FinNode := ANode.ChildByField('finally');
+    { the grammar labels BOTH the `kFinally` token and the finally statements with
+      the field name 'finally', so ChildByField returns the token -- scan for the
+      first non-kEnd child after kFinally to get the actual finally body. }
+    FinNode := Default(TTSNode);
+    var SeenFinally := False;
+    for I := 0 to ANode.NamedChildCount - 1 do
+      if ANode.NamedChild(I).NodeType = 'kFinally' then SeenFinally := True
+      else if SeenFinally and (ANode.NamedChild(I).NodeType <> 'kEnd') then
+      begin FinNode := ANode.NamedChild(I); Break; end;
     BodyIdx := Cfg.NewBlock.Index; { try region entry }
     Cfg.Blocks[ACur].AddSucc(BodyIdx);
     FollowIdx := Cfg.NewBlock.Index;

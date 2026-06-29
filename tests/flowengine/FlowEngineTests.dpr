@@ -271,6 +271,36 @@ begin
   finally TAstParseCache.Clear; TFile.Delete(Tmp); end;
 end;
 
+function EscapeOpenAtExit(const ASource: string): Boolean;
+var Tmp: string; PF: TParsedFile; Procs: TArray<TTSNode>;
+    Cfg: TCfg; Vars: TRoutineVarTable; EIn, EOut: TArray<TArray<Boolean>>; oi: Integer;
+begin
+  Result := False;
+  Tmp := TPath.Combine(TPath.GetTempPath, 'esc_' + TPath.GetGUIDFileName + '.pas');
+  TFile.WriteAllText(Tmp, ASource);
+  try
+    PF := TAstParseCache.Get(Tmp);
+    Procs := CfgFindProcs(PF.Tree.RootNode);
+    Cfg := TCfgBuilder.Build(Procs[0], PF.Src);
+    Vars := TRoutineVarTable.Build(Procs[0], PF.Src);
+    try
+      TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, TEscape.Create(Vars, PF.Src), EIn, EOut);
+      oi := Vars.IndexOf('o');
+      if oi >= 0 then Result := EIn[Cfg.ExitIdx][oi];
+    finally Cfg.Free; Vars.Free; end;
+  finally TAstParseCache.Clear; TFile.Delete(Tmp); end;
+end;
+
+procedure TestEscapeLeak;
+begin
+  Check('escape: created+unfreed is open at exit',
+    EscapeOpenAtExit('unit u; interface implementation procedure P; var o: TObject;' + sLineBreak +
+      'begin o := TObject.Create; end; end.'));
+  Check('escape: freed is not open at exit',
+    not EscapeOpenAtExit('unit u; interface implementation procedure P; var o: TObject;' + sLineBreak +
+      'begin o := TObject.Create; o.Free; end; end.'));
+end;
+
 begin
   GPass := 0; GFail := 0;
   try
@@ -283,6 +313,7 @@ begin
     TestDefiniteAssignmentMust;
     TestDefiniteAssignmentMayOnly;
     TestLivenessBackward;
+    TestEscapeLeak;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;
