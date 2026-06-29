@@ -1,0 +1,13 @@
+# Powers of two and common hex bitmasks must NOT fire.
+# A genuinely arbitrary constant (86400 = seconds in a day) MUST still fire.
+!large-magic-number 15
+!large-magic-number 16
+!large-magic-number 22
+!large-magic-number 23
+!large-magic-number 24
+!large-magic-number 25
+!large-magic-number 26
+!large-magic-number 27
+!large-magic-number 30
+!large-magic-number 31
+large-magic-number 33
