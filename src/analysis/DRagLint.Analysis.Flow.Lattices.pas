@@ -85,10 +85,19 @@ function NodeText(const N: TTSNode; const ASrc: TBytes): string;
 procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
   AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>);
 
-/// <summary>Index of the variable an `assignment` node defines (its plain lhs),
-/// or -1 when the lhs is an indexed/qualified write (a[i] / x.f) rather than a
-/// whole-variable definition.</summary>
+/// <summary>Index of the variable an `assignment` node defines as a WHOLE
+/// (its plain lhs), or -1 when the lhs is an indexed/qualified write (a[i] / x.f)
+/// rather than a whole-variable definition. Used by liveness (a partial write
+/// must NOT kill the whole var).</summary>
 function AssignmentTargetIndex(const ANode: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable): Integer;
+
+/// <summary>Index of the routine var at the BASE of an assignment's lhs --
+/// the leftmost identifier of `x`, `x.f`, `x[i]`, `x.f.g := ...`. For
+/// definite-assignment a partial write (`Result.Must := ...`) still counts as
+/// assigning the base (`Result`), preventing false function-result-not-set /
+/// used-before findings. Returns -1 when the base is not a routine var.</summary>
+function AssignmentBaseIndex(const ANode: TTSNode; const ASrc: TBytes;
   AVars: TRoutineVarTable): Integer;
 
 implementation
@@ -287,7 +296,9 @@ begin
     if Sec.NodeType = 'declVars' then AddDeclVars(Sec);
   end;
   AddInlineVars(AProc.ChildByField('body'));
-  MarkCaptures(AProc.ChildByField('body'), 0);
+  { nested routines are `local:` defProc siblings of the body (declared before
+    `begin`), so walk the whole defProc -- not just the body -- to find captures. }
+  MarkCaptures(AProc, 0);
   Result := Tbl;
 end;
 
@@ -359,6 +370,34 @@ begin
   { indexed/qualified writes (a[i] := / x.f :=) are NOT whole-var definitions }
 end;
 
+function AssignmentBaseIndex(const ANode: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable): Integer;
+var Cur, Nxt, IdN: TTSNode; Guard: Integer;
+begin
+  Result := -1;
+  Cur := ANode.ChildByField('lhs');
+  Guard := 0;
+  while (not Cur.IsNull) and (Guard < 32) do
+  begin
+    Inc(Guard);
+    if Cur.NodeType = 'identifier' then
+      Exit(AVars.IndexOf(LowerCase(NodeStr(Cur, ASrc))));
+    if Cur.NodeType = 'varAssignDef' then
+    begin
+      IdN := Cur.ChildByField('name');
+      if IdN.IsNull and (Cur.NamedChildCount > 0) then IdN := Cur.NamedChild(0);
+      if IdN.IsNull then Exit(-1);
+      Exit(AVars.IndexOf(LowerCase(NodeStr(IdN, ASrc))));
+    end;
+    { exprDot / index / call: descend to the base (lhs, else entity, else child 0) }
+    Nxt := Cur.ChildByField('lhs');
+    if Nxt.IsNull then Nxt := Cur.ChildByField('entity');
+    if Nxt.IsNull and (Cur.NamedChildCount > 0) then Nxt := Cur.NamedChild(0);
+    if Nxt.IsNull then Exit(-1);
+    Cur := Nxt;
+  end;
+end;
+
 { ----- TDefiniteAssignment ----- }
 
 constructor TDefiniteAssignment.Create(AVars: TRoutineVarTable; const ASrc: TBytes);
@@ -384,8 +423,9 @@ begin
     if V.Kind in [vkParamVar, vkParamConst, vkParamValue] then
     begin Result.Must[I] := True; Result.May[I] := True; end
     else begin Result.Must[I] := False; Result.May[I] := False; end;
-    { captured-by-nested-routine locals: possibly assigned on entry (FP guard) }
-    if V.Captured then Result.May[I] := True;
+    { captured-by-nested-routine locals: treated as assigned-on-entry (FP guard --
+      a nested routine may assign them; prefer suppression over a false positive) }
+    if V.Captured then begin Result.Must[I] := True; Result.May[I] := True; end;
   end;
 end;
 
@@ -423,7 +463,8 @@ begin
         { reads on the rhs happen BEFORE the def of the lhs }
         CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), FSrc, FVars, Reads, CallDefs);
         for J := 0 to CallDefs.Count - 1 do Result.May[CallDefs[J]] := True;
-        Tgt := AssignmentTargetIndex(It.Node, FSrc, FVars);
+        { base index: a partial write (Result.f := / a[i] :=) still defines the base }
+        Tgt := AssignmentBaseIndex(It.Node, FSrc, FVars);
         if Tgt >= 0 then begin Result.Must[Tgt] := True; Result.May[Tgt] := True; end;
       end
       else

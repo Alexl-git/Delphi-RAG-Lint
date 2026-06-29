@@ -1,0 +1,4 @@
+# x read before any assignment (no path assigns) -> warning
+used-before-assignment 7
+# x assigned on one branch only -> possible (info)
+used-before-assignment 14

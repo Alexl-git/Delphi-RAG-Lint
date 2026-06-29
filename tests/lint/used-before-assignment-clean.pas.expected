@@ -1,0 +1,3 @@
+# x assigned on all branches; s is managed (string) -> no findings
+!used-before-assignment
+!function-result-not-set

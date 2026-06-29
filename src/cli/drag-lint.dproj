@@ -1,4 +1,4 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{9ECF674F-154F-4413-B44B-C1D3A7EAA640}</ProjectGuid>
         <ProjectVersion>20.4</ProjectVersion>
@@ -132,6 +132,10 @@
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.CompileCheck.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.AstChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ParseCache.pas"/>
+        <DCCReference Include="..\analysis\DRagLint.Analysis.Cfg.pas"/>
+        <DCCReference Include="..\analysis\DRagLint.Analysis.DataFlow.pas"/>
+        <DCCReference Include="..\analysis\DRagLint.Analysis.Flow.Lattices.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.FlowChecks.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Manifest.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Glob.pas"/>

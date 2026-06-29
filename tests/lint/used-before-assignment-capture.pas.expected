@@ -1,0 +1,3 @@
+# x is assigned inside the nested routine Inner -> treated as assigned-on-entry
+# (FP guard): no false used-before-assignment on the read at line 12.
+!used-before-assignment

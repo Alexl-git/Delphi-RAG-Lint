@@ -1,0 +1,6 @@
+# P1 (line 4): out param never assigned -> warning
+out-param-not-set 4
+# P2 (line 7): out param assigned on all paths -> no finding
+!out-param-not-set 7
+# P3 (line 11): var param exempt -> no finding
+!out-param-not-set 11

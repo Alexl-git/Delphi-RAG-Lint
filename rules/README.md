@@ -174,6 +174,9 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `too-many-exit-points` | info | routine with more than 5 `Exit` statements |
 | `cyclomatic-complexity` | info | routine decision-point count over 15 |
 | `virtual-method-in-constructor` | warning | constructor calls a `virtual`/`dynamic`/`override` method of its own class |
+| `used-before-assignment` | warning/info | unmanaged local read before assignment (warning = on every path; info = on some path) |
+| `function-result-not-set` | warning/info | function `Result` not assigned (warning = never; info = not on every path) |
+| `out-param-not-set` | warning/info | `out` parameter not assigned on every path |
 
 ### Built-in rules (compiled into the exe, not `.scm`)
 

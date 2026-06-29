@@ -1,0 +1,6 @@
+# F1 (line 4): Result never assigned -> warning
+function-result-not-set 4
+# F2 (line 7): Result set on one path only -> possible (info)
+function-result-not-set 7
+# F3 assigns Result on all paths; P is a procedure -> no findings there
+!function-result-not-set 11

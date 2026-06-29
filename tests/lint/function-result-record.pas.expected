@@ -1,0 +1,3 @@
+# Result.A / Result.B are partial writes that still assign the base Result on
+# every path -> no false function-result-not-set.
+!function-result-not-set
