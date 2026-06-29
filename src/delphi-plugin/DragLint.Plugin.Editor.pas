@@ -3373,7 +3373,11 @@ begin
       Summary: string;
     begin
       if AExit = 2 then begin ShowMessage('drag-lint: lint-all failed (no index?). See plugin log.'); Exit; end;
-      if FileExists(OutPath) then DLOpenInEditor(OutPath);
+      if FileExists(OutPath) then
+      begin
+        PostLintReportToMessages(OutPath); { post each finding as a clickable Messages entry }
+        DLOpenInEditor(OutPath);           { + open the full report }
+      end;
       Summary:= Trim(AOut);
       if Summary <> '' then Summary:= Trim(Copy(Summary, LastDelimiter(#10, Summary) + 1, MaxInt));
       if Supports(BorlandIDEServices, IOTAMessageServices, MsgSvc) then
