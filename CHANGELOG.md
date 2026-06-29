@@ -3,6 +3,32 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.64.0-alpha -- 2026-06-28
+
+### Added
+
+**Performance & Visibility**
+- **Parse-once optimization** -- Per-file parse cache in `TAstParseCache` so all ~36
+  `TAstChecker` methods reuse one `TTSTree` instead of each re-reading and re-parsing
+  the file. Expected: materially faster `lint-all` on large projects.
+- **Lint-all progress streaming** -- CLI streams per-file progress to stderr; IDE
+  plugin reads incrementally and posts throttled progress updates (v0.64 IDE plugin TBD).
+
+**False-positive fixes**
+- **FP-1: `{$IF}/{$IFEND}` syntax-error suppression** -- `CheckSyntaxErrors` now
+  detects unbalanced conditional-compilation directives and suppresses ERROR/MISSING
+  nodes within those regions. This eliminates ~12 false positives in codebases using
+  `{$IF}/{$IFEND}` blocks that the tree-sitter grammar cannot fully parse.
+- **Fortification audit** -- Documented known false positives in `string-equality-comparison`
+  and `nil-comparison` rules pending type-aware guards (v0.19+ milestone). Fixtures added
+  to guide future type-resolution integration.
+
+### Notes
+
+All 76/76 test fixtures pass. Harness includes syntax-error-ifend fixture (FP-1 guard test).
+
+---
+
 ## v0.63.0-alpha -- 2026-06-28
 
 ### Added
