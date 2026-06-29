@@ -13,6 +13,7 @@ uses
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   ;
+  , DRagLint.Diagnostics.ParseCache
 
 type
   TAstChecker = class
