@@ -64,3 +64,4 @@ third_party/*/rules/
 /nul
 /build*.bat
 /build*.err
+scratchpad/
