@@ -1,0 +1,5 @@
+# implicit-first published DevExpress component fields must NOT fire (T+lowercase)
+!field-name-prefix 6
+!field-name-prefix 7
+# explicit-private DevExpress field missing F MUST fire
+field-name-prefix 9

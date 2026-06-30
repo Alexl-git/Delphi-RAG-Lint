@@ -383,7 +383,7 @@ var
       if not ModNode.IsNull then
       begin
         var UnitName: string:= Trim(NodeStr(ModNode));
-        var FileBase: string:= ChangeFileExt(ExtractFileName(AFile), '');
+        var FileBase: string:= ChangeFileExt(ExtractFileName(StringReplace(AFile, '/', PathDelim, [rfReplaceAll])), '');
         if (UnitName <> '') and (not SameText(UnitName, FileBase)) then
           EmitAt(ModNode, 'unit-name-matches-file',
             Format('Unit name "%s" does not match file name "%s"',
@@ -538,7 +538,7 @@ var
               var FieldType: string:= '';
               if not TypeNode.IsNull then FieldType:= Trim(NodeStr(TypeNode));
               IsComponentField:= (Length(FieldType) >= 2)
-                and (FieldType[1] = 'T') and CharInSet(FieldType[2], ['A'..'Z']);
+                and (FieldType[1] = 'T') and CharInSet(FieldType[2], ['A'..'Z', 'a'..'z']);
             end;
             if not IsComponentField then
             begin

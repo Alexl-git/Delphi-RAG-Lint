@@ -1,0 +1,2 @@
+# unit name equals file base name -- must NOT fire
+!unit-name-matches-file
