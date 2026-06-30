@@ -39,6 +39,7 @@ uses
   , DRagLint.Sql    .FbSnapshot
   , DRagLint.Sql    .OrmLinker
   , DRagLint.Lint   .Config
+  , DRagLint.Lint   .RuleCatalog
   , DRagLint.Lint   .Linter
   , DRagLint.Lint   .ProjectChecks
   , DRagLint.Lint   .ProjectRules
@@ -94,6 +95,7 @@ type
     Rule            : string        ;
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
+    RuleCategory    : string        ; // --category <name>: filter `rules` output
     Disable         : string        ; // --disable id1,id2,...: rule ids to drop from lint output
     LayersPath      : string        ; // --layers <file.json>: architecture-layer config for lint-project
     Format          : string        ;
@@ -228,6 +230,7 @@ begin
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
+  Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses] [--layers <f.json>] [--json]');
@@ -475,6 +478,11 @@ begin
     begin
       Inc(i);
       Result.RulesDir:= ParamStr(i);
+    end
+    else if (A = '--category') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RuleCategory:= ParamStr(i);
     end
     else if (A = '--disable') and (i < ParamCount) then
     begin
@@ -4455,6 +4463,108 @@ begin
 
   { 4: exit code. }
   Result:= ExitCodeFor(Survivors, AArgs.FailOn, ADefaultExit);
+end;
+
+/// <summary>`drag-lint rules [--json] [--category &lt;name&gt;] [--rules-dir &lt;dir&gt;]` --
+/// emit the full rule catalog (built-ins + external .scm). Default = grouped text
+/// table; --json = the structured catalog + summary.</summary>
+function DoRules(const AArgs: TArgs): Integer;
+var
+  Cat   : TArray<TRuleInfo>;
+  Sum   : TCatalogSummary;
+  R     : TRuleInfo;
+  P     : TRuleParam;
+  Pr    : TPair<string, Integer>;
+  Sb    : TStringBuilder;
+  CurCat: string;
+  procedure AddParamsJson(AObj: TJSONObject; const AParams: TArray<TRuleParam>);
+  var PA: TJSONArray; Q: TRuleParam; PO: TJSONObject;
+  begin
+    PA:= TJSONArray.Create;
+    for Q in AParams do
+    begin
+      PO:= TJSONObject.Create;
+      PO.AddPair('name', Q.Name);
+      PO.AddPair('type', Q.ParamType);
+      PO.AddPair('default', Q.DefaultVal);
+      PA.AddElement(PO);
+    end;
+    AObj.AddPair('params', PA);
+  end;
+begin
+  Cat:= TRuleCatalog.BuildCatalog(AArgs.RulesDir, AArgs.RuleCategory);
+  Sum:= TRuleCatalog.Summarize(Cat);
+
+  if AArgs.AsJson then
+  begin
+    var Root: TJSONObject:= TJSONObject.Create;
+    try
+      var Arr: TJSONArray:= TJSONArray.Create;
+      for R in Cat do
+      begin
+        var O: TJSONObject:= TJSONObject.Create;
+        O.AddPair('id', R.Id);
+        O.AddPair('category', R.Category);
+        O.AddPair('title', R.Title);
+        O.AddPair('default_severity', R.DefaultSeverity);
+        O.AddPair('default_enabled', TJSONBool.Create(R.DefaultEnabled));
+        O.AddPair('source', R.Source);
+        AddParamsJson(O, R.Params);
+        Arr.AddElement(O);
+      end;
+      Root.AddPair('rules', Arr);
+      var SumO: TJSONObject:= TJSONObject.Create;
+      SumO.AddPair('total', TJSONNumber.Create(Sum.Total));
+      SumO.AddPair('categories', TJSONNumber.Create(Sum.Categories));
+      var PcA: TJSONArray:= TJSONArray.Create;
+      for Pr in Sum.PerCategory do
+      begin
+        var PcO: TJSONObject:= TJSONObject.Create;
+        PcO.AddPair('category', Pr.Key);
+        PcO.AddPair('count', TJSONNumber.Create(Pr.Value));
+        PcA.AddElement(PcO);
+      end;
+      SumO.AddPair('per_category', PcA);
+      Root.AddPair('summary', SumO);
+      Writeln(Root.ToJSON);
+    finally
+      Root.Free;
+    end;
+    Exit(0);
+  end;
+
+  { text mode: header + grouped table }
+  Sb:= TStringBuilder.Create;
+  try
+    Sb.AppendLine(Format('%d rules across %d categories', [Sum.Total, Sum.Categories]));
+    CurCat:= #1; { sentinel so the first real category prints a header }
+    for R in Cat do
+    begin
+      if R.Category <> CurCat then
+      begin
+        CurCat:= R.Category;
+        Sb.AppendLine('');
+        Sb.AppendLine('[' + CurCat + ']');
+      end;
+      var Flags: string:= R.DefaultSeverity;
+      if not R.DefaultEnabled then Flags:= Flags + ', off';
+      if Length(R.Params) > 0 then
+      begin
+        var Names: string:= '';
+        for P in R.Params do
+        begin
+          if Names <> '' then Names:= Names + ',';
+          Names:= Names + P.Name + '=' + P.DefaultVal;
+        end;
+        Flags:= Flags + '; ' + Names;
+      end;
+      Sb.AppendLine(Format('  %-34s %-8s (%s)', [R.Id, R.Source, Flags]));
+    end;
+    Writeln(Sb.ToString);
+  finally
+    Sb.Free;
+  end;
+  Result:= 0;
 end;
 
 function DoLint(const AArgs: TArgs): Integer;
@@ -9094,6 +9204,7 @@ begin
       else Result:= DoIndex(Args)
     end
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
+    else if Args.Command = 'rules'             then Result:= DoRules           (Args)
     else if Args.Command = 'lint'              then Result:= DoLint            (Args)
     else if Args.Command = 'export'            then Result:= DoExport          (Args)
     else if Args.Command = 'top'               then Result:= DoTop             (Args)

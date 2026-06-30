@@ -22,6 +22,7 @@ uses
   DRagLint.Parser.DocComments in '..\parser\DRagLint.Parser.DocComments.pas',
   DRagLint.Query.Fuzzy in '..\query\DRagLint.Query.Fuzzy.pas',
   DRagLint.Lint.Config in '..\lint\DRagLint.Lint.Config.pas',
+  DRagLint.Lint.RuleCatalog in '..\lint\DRagLint.Lint.RuleCatalog.pas',
   DRagLint.Lint.Baseline in '..\lint\DRagLint.Lint.Baseline.pas',
   DRagLint.Lint.QueryRules in '..\lint\DRagLint.Lint.QueryRules.pas',
   DRagLint.Lint.Linter in '..\lint\DRagLint.Lint.Linter.pas',
