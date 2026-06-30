@@ -241,6 +241,9 @@ Use that output to write your query.
 - `--format sarif` -- SARIF 2.1.0 to stdout (alongside the existing `text` / `json`/`--json`).
 - `--fail-on error|warning|info|none` -- process exits nonzero iff a surviving finding is at/above that level; `none` always exits 0. Absent => the historic exit code (1 if any finding).
 - `--baseline <file>` -- report only findings NOT in the baseline. `--write-baseline <file>` records the current findings and exits 0. Fingerprints are line-shift stable (rule + path + hashed source-line text), so inserting unrelated lines does not re-surface a baselined finding.
+
+  Note: `--baseline` filters which findings are *reported*, but on its own it does not change the exit code -- `lint --baseline X` still exits non-zero whenever the file had any findings (you'll see "0 finding(s)" yet a non-zero exit). For a CI gate that fails only on NEW findings, pair them: `lint --baseline X --fail-on warning` (or your chosen level) -- `--fail-on` ranks the post-baseline survivors (the new findings).
+
 - Config file `drag-lint-lint.json` (auto-discovered in CWD, or `--config <path>`):
 
   ```json

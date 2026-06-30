@@ -16,7 +16,7 @@ flow-sensitive checks.
 - `drag-lint-lint.json` config (auto-discovered or `--config`): per-rule `severity` overrides, `disabled`/`enabled` lists, metric `thresholds`, and named `profiles`; `--enable`/`--disable`/`--profile` compose with it. `.scm` rules may ship off-by-default via sidecar `"enabled": false`.
 - `--baseline`/`--write-baseline`: line-shift-stable baseline so legacy codebases report only NEW findings.
 - All four flow through one shared `FinalizeAndOutput` tail; default (no-flag) behavior is unchanged. `check-ast` additionally gains `// drag-lint:ignore` suppression support.
-- `lint-all --json` no longer writes the dated `lint-report-*.txt` file; JSON now goes to stdout only (the dated report file is still written in text mode). Machine consumers should read stdout.
+- `lint-all --json` no longer writes the dated `lint-report-*.txt` file; JSON now goes to stdout only (the dated report file is still written in text mode) and is now pretty-printed (2-space indent), matching `lint --json`. Machine consumers should read stdout.
 - Autofix / quick-fixes remain deferred (a milestone of their own).
 
 ### Added (M2 -- flow-sensitive analysis engine)
