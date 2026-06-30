@@ -688,15 +688,18 @@ var
             if ClassName <> '' then
             begin
               Fields:= TList<TFieldInfo>.Create;
-              CollectPrivateFields(ClassN, Fields);
-              if Fields.Count > 0 then
-              begin
-                CI.NameLower:= ClassName;
-                CI.Fields   := Fields;
-                AClasses.Add(CI);
-              end
-              else
-                Fields.Free;
+              try
+                CollectPrivateFields(ClassN, Fields);
+                if Fields.Count > 0 then
+                begin
+                  CI.NameLower:= ClassName;
+                  CI.Fields   := Fields;
+                  AClasses.Add(CI);
+                  Fields:= nil; { ownership transferred to AClasses -- do not free }
+                end;
+              finally
+                if Assigned(Fields) then Fields.Free;
+              end;
             end;
           end;
         end;

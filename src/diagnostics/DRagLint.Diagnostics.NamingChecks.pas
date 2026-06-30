@@ -239,11 +239,6 @@ var
     sections inside a defProc are the ones we check; unit-level var sections
     reached while this is False are skipped. }
   InProcBody: Boolean;
-  { Class-body state: True while the walker is inside a declClass body.
-    Used to distinguish class-member declProc nodes (where section visibility
-    matters for method-pascalcase) from unit-level routines (always checked).
-    Saved/restored on declClass entry. }
-  InClassBody: Boolean;
   { Method-case skip flag: True when method-pascalcase should be suppressed
     for declProc nodes in the current scope. Set True when entering a declClass
     body (implicit-first assumption for direct members) and updated by each
@@ -474,17 +469,14 @@ var
         encountered directly under the class body (without an enclosing
         declSection) is treated as the implicit-first section and is exempt
         from method-pascalcase. Each nested declSection will override it.
-      Save/restore both flags and InClassBody around recursion. }
+      Save/restore both flags around recursion. }
     if N.NodeType = 'declClass' then
     begin
-      var SavedInClass    : Boolean:= InClassBody;
       var SavedSkipMeth   : Boolean:= CurSectionSkipsMethodCase;
       var SavedExplicit   : Boolean:= InExplicitSection;
-      InClassBody               := True;
       CurSectionSkipsMethodCase := True; { implicit-first until a section is entered }
       InExplicitSection         := False;
       for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
-      InClassBody               := SavedInClass;
       CurSectionSkipsMethodCase := SavedSkipMeth;
       InExplicitSection         := SavedExplicit;
       Exit;
@@ -769,7 +761,6 @@ begin
   Findings:= TList<TLintFinding>.Create;
   InExplicitSection         := False; { root and class-body level = implicit-first section }
   InProcBody                := False; { not inside a routine body at the root level }
-  InClassBody               := False; { not inside a class body at the root level }
   CurSectionSkipsMethodCase := False; { root-level routines are always checked }
   try
     Visit(PF.Tree.RootNode);

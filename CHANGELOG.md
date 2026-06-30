@@ -125,7 +125,7 @@ DevExpress code:
   `unused-unit-in-uses` run on the `lint-all --db` / `lint-project --db` path.
 - Deferred (NON-GOALS for v0.68): `function-result-ignored`, `commented-out-code`,
   `redundant-parentheses`, `multiple-statements-per-line`.
-- Harness: 109/109 fixtures green.
+- Harness: 112/112 fixtures green.
 
 ## v0.67.0-alpha -- 2026-06-29
 
