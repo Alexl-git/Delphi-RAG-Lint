@@ -1,6 +1,0 @@
-{
-  "id": "length-zero-compare",
-  "severity": "info",
-  "message": "'Length(X) = 0' / '> 0' -- for strings prefer X = '' / X <> '' (clearer).",
-  "warn_capture": "warn"
-}

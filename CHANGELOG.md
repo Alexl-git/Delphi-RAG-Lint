@@ -3,6 +3,27 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.67.0-alpha -- 2026-06-29
+
+Rule-accuracy fixes (false positives reported on real ORM3 code).
+
+### Fixed
+- **length-zero-compare** no longer fires on dynamic arrays. The `X = '' / X <> ''`
+  suggestion is valid only for strings, so the rule is now type-aware: it fires
+  only when the `Length()` argument resolves to a string type (exact via the symbol
+  store on `check-ast --db` / `lint-all --db`; the intrinsic-string-type name
+  heuristic via the per-file declaration map on the no-store `lint <file>` path).
+  `Length(B)` where `B: TBytes` (or any array) is no longer flagged. Reimplemented
+  as a built-in (`CheckTypeAware`); the broad `.scm` rule is removed. This also means
+  `check-ast` now reports `length-zero-compare` (it previously skipped `.scm` rules).
+- **string-equality-comparison** no longer fires on non-string operands on the
+  no-store path: `.AsInteger` / `.AsLargeInt` / `.AsFloat` / `.AsBoolean` / `.AsBytes`
+  and other non-string `TField` accessors, and enum-valued `.State`, are skipped
+  (these are integer/enum comparisons, not case-sensitivity concerns). The precise
+  store path was already type-exact; this guards the heuristic `.scm` path.
+- Added TDD harness fixtures for both rules (string positive + array/accessor
+  negatives) -- both rules were previously untested.
+
 ## v0.66.0-alpha -- 2026-06-29
 
 The **M1 type/hierarchy resolver** and the **M2 data-flow / CFG engine** -- two

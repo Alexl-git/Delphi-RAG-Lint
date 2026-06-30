@@ -18,4 +18,10 @@
   ; alphabetic characters (e.g. '+', '-', '0', '-.', #13). Case-insensitivity is
   ; irrelevant for such constants, so suggesting SameText is noise.
   (#not-match? @warn "= *('[^a-zA-Z']*'|#[0-9]+|#[$][0-9A-Fa-f]+) *$")
-  (#not-match? @warn "^ *('[^a-zA-Z']*'|#[0-9]+|#[$][0-9A-Fa-f]+) *= "))
+  (#not-match? @warn "^ *('[^a-zA-Z']*'|#[0-9]+|#[$][0-9A-Fa-f]+) *= ")
+  ; v0.67: skip non-string TField / numeric accessors (.AsInteger / .AsLargeInt /
+  ; .AsFloat / .AsBoolean ...) and enum-valued .State -- these are integer/enum
+  ; comparisons, not case-sensitivity concerns. Full type-aware detection runs on
+  ; the store path (check-ast --db / lint-all --db); this guards the no-store path.
+  (#not-match? @warn "(?i)[.]As(Integer|Int64|LargeInt|Float|Boolean|Currency|DateTime|Extended|Single|Word|SmallInt|Byte|Cardinal|BCD|Bytes|Variant)")
+  (#not-match? @warn "(?i)[.]State([^A-Za-z]|$)"))

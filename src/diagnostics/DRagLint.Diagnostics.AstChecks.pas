@@ -1453,6 +1453,30 @@ var
     else Result:= IsPointerType(T);
   end;
 
+  { Intrinsic string types by name (no store needed). ShortString[n] handled via
+    the 'string[' prefix. }
+  function IsStringType(const T: string): Boolean;
+  var
+    L: string;
+  begin
+    L:= LowerCase(Trim(T));
+    Result:= (L = 'string') or (L = 'ansistring') or (L = 'widestring')
+          or (L = 'unicodestring') or (L = 'shortstring') or (L = 'utf8string')
+          or (L = 'rawbytestring') or (Copy(L, 1, 7) = 'string[');
+  end;
+
+  { v0.67: operand resolves to a string -- store category authoritative when
+    known, the intrinsic-string name heuristic otherwise. Backs the type-aware
+    length-zero-compare: the X = '' / X <> '' suggestion is valid ONLY for strings;
+    for dynamic arrays Length(X) = 0 is the idiomatic check with no clearer form. }
+  function TypeTextIsString(const T: string): Boolean;
+  var C: TTypeCategory;
+  begin
+    C:= CatOf(T);
+    if C <> tcUnknown then Result:= (C = tcString)
+    else Result:= IsStringType(T);
+  end;
+
   { Collect declared name -> type text for vars, params and fields (flat map). }
   procedure CollectDecls(const N: TTSNode);
   var
@@ -1548,6 +1572,8 @@ var
     T     : string     ;
     P     : TTSPoint   ;
     F     : TLintFinding;
+    Call    : TTSNode  ; // v0.67: the Length() call side of a length-zero compare
+    HaveCall: Boolean  ;
   begin
     if N.IsNull or (Findings.Count >= 200) then Exit;
     if N.NodeType = 'exprBinary' then
@@ -1589,6 +1615,49 @@ var
           F.EndLine:= F.StartLine;
           F.EndCol := F.StartCol + 1;
           Findings.Add(F);
+        end;
+      end;
+      { v0.67: type-aware length-zero-compare. Length(X) compared to 0 with
+        = <> > or < -- the X = empty-string suggestion is correct ONLY when X is a
+        string; for a dynamic array it is wrong advice. Fire only when the Length
+        argument is a simple identifier whose declared type resolves to a string
+        (store-exact, or the intrinsic-string name heuristic on the no-store path). }
+      if (not Op.IsNull) and ((Op.NodeType = 'kEq') or (Op.NodeType = 'kNeq') or (Op.NodeType = 'kGt') or (Op.NodeType = 'kLt')) then
+      begin
+        L:= N.ChildByField('lhs');
+        R:= N.ChildByField('rhs');
+        HaveCall:= False;
+        if (not R.IsNull) and (R.NodeType = 'literalNumber') and (Trim(NodeStr(R)) = '0') and (not L.IsNull) and (L.NodeType = 'exprCall') then
+        begin Call:= L; HaveCall:= True; end
+        else if (not L.IsNull) and (L.NodeType = 'literalNumber') and (Trim(NodeStr(L)) = '0') and (not R.IsNull) and (R.NodeType = 'exprCall') then
+        begin Call:= R; HaveCall:= True; end;
+        if HaveCall then
+        begin
+          Entity:= Call.ChildByField('entity');
+          if (not Entity.IsNull) and (Entity.NodeType = 'identifier') and SameText(NodeStr(Entity), 'Length') then
+          begin
+            Args:= Call.ChildByField('args');
+            if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
+            begin
+              A0:= Args.NamedChild(0);
+              if (not A0.IsNull) and (A0.NodeType = 'identifier')
+                 and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T)
+                 and TypeTextIsString(T) then
+              begin
+                P:= N.StartPoint;
+                F:= Default(TLintFinding);
+                F.RuleId  := 'length-zero-compare';
+                F.Severity:= 'info';
+                F.Message := '''Length(X) = 0'' / ''> 0'' -- for strings prefer X = '''' / X <> '''' (clearer).';
+                F.FilePath:= AFile;
+                F.StartLine:= Integer(P.Row   ) + 1;
+                F.StartCol := Integer(P.Column) + 1;
+                F.EndLine:= F.StartLine;
+                F.EndCol := F.StartCol + 1;
+                Findings.Add(F);
+              end;
+            end;
+          end;
         end;
       end;
     end;
