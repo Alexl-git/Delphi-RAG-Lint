@@ -2,6 +2,8 @@
 # Indexes a tiny multi-unit project, runs lint-all --db, and asserts:
 #   - unused-private-member fires for UnusedPrivateMethod and FUnusedField in producer.pas
 #   - unused-private-member does NOT fire for UsedPublicMethod
+#   - unused-private-member does NOT fire for GetCount / SetCount / FCount
+#     (property accessors -- protected by the property-accessor guard, v0.68)
 #   - unused-unit-in-uses fires for helper (implementation-section, zero symbols used)
 #   - unused-unit-in-uses fires for helper2 (interface-section, zero symbols used)
 #   - unused-unit-in-uses does NOT fire for producer (UsedPublicMethod referenced)
@@ -43,13 +45,20 @@ $hasUnusedHelper = ($usesFindings | Where-Object { $_.message -like "*'helper'*"
 $hasUnusedHelper2 = ($usesFindings | Where-Object { $_.message -like "*'helper2'*" }).Count -gt 0
 # ASSERT 6: unused-unit-in-uses does NOT fire for producer (symbols ARE referenced)
 $noProducerFP    = ($usesFindings | Where-Object { $_.message -like "*'producer'*" }).Count -eq 0
+# ASSERT 7: unused-private-member does NOT fire for GetCount (property read accessor)
+$noGetCountFP    = ($privFindings | Where-Object { $_.message -like '*GetCount*' }).Count -eq 0
+# ASSERT 8: unused-private-member does NOT fire for SetCount (property write accessor)
+$noSetCountFP    = ($privFindings | Where-Object { $_.message -like '*SetCount*' }).Count -eq 0
+# ASSERT 9: unused-private-member does NOT fire for FCount (property backing field)
+$noFCountFP      = ($privFindings | Where-Object { $_.message -like '*FCount*' }).Count -eq 0
 
-$pass = $hasUnusedMethod -and $hasUnusedField -and $noPublicFP -and $hasUnusedHelper -and $hasUnusedHelper2 -and $noProducerFP
+$pass = $hasUnusedMethod -and $hasUnusedField -and $noPublicFP -and $hasUnusedHelper -and $hasUnusedHelper2 -and $noProducerFP `
+     -and $noGetCountFP -and $noSetCountFP -and $noFCountFP
 
 if ($pass) {
-  Write-Host "PASS  unused-private + unused-unit-in-uses (impl + interface section)"
+  Write-Host "PASS  unused-private + unused-unit-in-uses (impl + interface section) + property-accessor guard"
   exit 0
 } else {
-  Write-Host ("FAIL  hasUnusedMethod={0} hasUnusedField={1} noPublicFP={2} hasUnusedHelper={3} hasUnusedHelper2={4} noProducerFP={5}" -f $hasUnusedMethod, $hasUnusedField, $noPublicFP, $hasUnusedHelper, $hasUnusedHelper2, $noProducerFP)
+  Write-Host ("FAIL  hasUnusedMethod={0} hasUnusedField={1} noPublicFP={2} hasUnusedHelper={3} hasUnusedHelper2={4} noProducerFP={5} noGetCountFP={6} noSetCountFP={7} noFCountFP={8}" -f $hasUnusedMethod, $hasUnusedField, $noPublicFP, $hasUnusedHelper, $hasUnusedHelper2, $noProducerFP, $noGetCountFP, $noSetCountFP, $noFCountFP)
   exit 1
 }

@@ -15,9 +15,12 @@ uses
   , System.IOUtils
   , System.JSON
   , System.Generics.Collections
+  , TreeSitter
+  , TreeSitterLib
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Index.Glob
+  , DRagLint.Diagnostics.ParseCache
   ;
 
 type
@@ -64,6 +67,103 @@ begin
   Result:= False;
 end;
 
+{ Walk the tree-sitter AST for AFile and collect every identifier that appears
+  as a getter ('read') or setter ('write') accessor in a declProp node, plus
+  the property's own backing-field name when it appears literally in those
+  clauses.  Returns a lowercased-name set (TDictionary<string,Boolean>) that
+  the caller must free.  Returns nil when the file cannot be parsed.
+
+  Grammar reference (tree-sitter-delphi13/grammar.js, declProp rule):
+    seq($.kRead,  field('getter', $._ref))
+    seq($.kWrite, field('setter', $._ref))
+  _ref is an identifier in the simple case; for qualified/array refs we
+  extract only the base (leftmost) identifier so that 'FField.Sub' -> 'ffield'.
+  This is an exact AST-based guard: nearly zero false negatives (a private
+  method whose name matches a property accessor is correctly excluded). }
+function BuildPropertyAccessorSet(const AFile: string): TDictionary<string, Boolean>;
+var
+  PF   : TParsedFile;
+  Src  : TBytes     ;
+  Dict : TDictionary<string, Boolean>;
+
+  { Extract raw bytes from a TTSNode. }
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { Return the bare base identifier from a _ref node (e.g. 'FCount',
+    'FList[0]' -> 'flist', 'Provider.Data' -> 'provider').
+    We take the full text and strip everything from the first '.' or '['. }
+  function BaseIdentOf(const ARefNode: TTSNode): string;
+  var
+    Raw  : string ;
+    I    : Integer;
+    Stop : Integer;
+  begin
+    Result:= '';
+    Raw:= Trim(NodeStr(ARefNode));
+    if Raw = '' then Exit;
+    Stop:= Length(Raw) + 1;
+    for I:= 1 to Length(Raw) do
+      if (Raw[I] = '.') or (Raw[I] = '[') then
+      begin
+        Stop:= I;
+        Break;
+      end;
+    Result:= LowerCase(Trim(Copy(Raw, 1, Stop - 1)));
+  end;
+
+  { Recursively walk AST, collecting getter/setter accessor names from
+    every declProp node encountered. }
+  procedure Walk(const N: TTSNode);
+  var
+    I      : Integer;
+    GNode  : TTSNode;
+    SNode  : TTSNode;
+    GName  : string ;
+    SName  : string ;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'declProp' then
+    begin
+      { getter = read accessor; setter = write accessor. }
+      GNode:= N.ChildByField('getter');
+      if not GNode.IsNull then
+      begin
+        GName:= BaseIdentOf(GNode);
+        if GName <> '' then Dict.AddOrSetValue(GName, True);
+      end;
+      SNode:= N.ChildByField('setter');
+      if not SNode.IsNull then
+      begin
+        SName:= BaseIdentOf(SNode);
+        if SName <> '' then Dict.AddOrSetValue(SName, True);
+      end;
+      { No need to recurse inside declProp: nested declProp is not valid
+        Delphi, so we exit early to avoid false matches from the type ref. }
+      Exit;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+  end;
+
+begin
+  Result:= nil;
+  if AFile = '' then Exit;
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src := PF.Src;
+  Dict:= TDictionary<string, Boolean>.Create;
+  Walk(PF.Tree.RootNode);
+  Result:= Dict;
+end;
+
 class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>;
 var
   Findings      : TList<TLintFinding>         ;
@@ -88,6 +188,7 @@ var
   UF            : TLintFinding                ;
   PrivModifiers : string                      ;
   IsPrivate     : Boolean                     ;
+  PropAccessors : TDictionary<string, Boolean>;
 
   function WantRule(const AId: string): Boolean;
   begin
@@ -189,59 +290,86 @@ begin
         end; // if Length(UsesList) > 0
       end; // if WantRule
 
-      for Sym in Syms do
-      begin
-        { god-class: a class with both many methods and many fields. }
-        if WantRule('god-class') and (Sym.Kind = skClass) then
-        begin
-          Children:= AStore.FindAllChildSymbols(Sym.Id);
-          NMethods:= 0;
-          NFields := 0;
-          for Ch in Children do
-            case Ch.Kind of
-              skMethod, skFunction, skProcedure, skConstructor, skDestructor: Inc(NMethods);
-              skField: Inc(NFields);
-            end;
-          if (NMethods > 20) and (NFields > 15) then
-            Add('god-class', 'info', Format('God class: %s has %d methods and %d fields -- consider splitting responsibilities', [Sym.Name, NMethods, NFields]), Sym);
-        end;
+      { Build the property-accessor guard set for unused-private-member.
+        ParseCache.Get re-uses an already-parsed tree when available; cost
+        is near-zero on subsequent calls for the same file within a run.
+        Must be freed at end of per-file scope (see finally below). }
+      PropAccessors:= nil;
+      if WantRule('unused-private-member') then
+        PropAccessors:= BuildPropertyAccessorSet(Path);
+      try
 
-        { unused-public-symbol: an exported (interface-section) free routine that
-          nothing in the index references or calls -- likely dead public API.
-          Restricted to unit-level routines (not class methods) so DFM-wired
-          event handlers and virtual/override methods are not false positives. }
-        if WantRule('unused-public-symbol') and (Sym.Section = 'interface') and (Sym.Kind in [skFunction, skProcedure]) and (Sym.ParentId > 0) and
-          (Pos('override', LowerCase(Sym.Modifiers)) = 0) and not SameText(Sym.Name, 'Register') then
+        for Sym in Syms do
         begin
-          Parent:= AStore.GetSymbolById(Sym.ParentId);
-          if (Parent.Id = Sym.ParentId) and (Parent.Kind = skUnit) then
-            if (Length(AStore.FindReferencesTo(Sym.Id)) = 0) and (Length(AStore.FindCallersByName(Sym.Name)) = 0) then
-              Add('unused-public-symbol', 'info', Format('Exported routine %s has no references in the index -- possible dead public API', [Sym.Name]), Sym);
-        end;
-
-        { unused-private-member: a private or strict private member (method,
-          field, const, nested type) that has zero references in the index.
-          Guards: skip virtual/override (may be called via dispatch table);
-          skip if any reference exists (conservative). Published members
-          are never private so DFM-streamed components are not affected. }
-        if WantRule('unused-private-member') then
-        begin
-          PrivModifiers:= LowerCase(Sym.Modifiers);
-          IsPrivate:= (Pos('private', PrivModifiers) > 0);
-          if IsPrivate and
-            (Sym.Kind in [skMethod, skFunction, skProcedure, skConstructor, skDestructor,
-                          skField, skConstDecl, skTypeAlias, skClass, skInterface, skRecord, skEnum]) and
-            (Pos('override', PrivModifiers) = 0) and
-            (not Sym.IsVirtual) then
+          { god-class: a class with both many methods and many fields. }
+          if WantRule('god-class') and (Sym.Kind = skClass) then
           begin
-            if (Length(AStore.FindReferencesTo(Sym.Id)) = 0) and
-               (Length(AStore.FindCallersByName(Sym.Name)) = 0) then
-              Add('unused-private-member', 'warning',
-                Format('Private member ''%s'' has no references in the index -- possible dead code', [Sym.Name]), Sym);
+            Children:= AStore.FindAllChildSymbols(Sym.Id);
+            NMethods:= 0;
+            NFields := 0;
+            for Ch in Children do
+              case Ch.Kind of
+                skMethod, skFunction, skProcedure, skConstructor, skDestructor: Inc(NMethods);
+                skField: Inc(NFields);
+              end;
+            if (NMethods > 20) and (NFields > 15) then
+              Add('god-class', 'info', Format('God class: %s has %d methods and %d fields -- consider splitting responsibilities', [Sym.Name, NMethods, NFields]), Sym);
           end;
-        end;
 
-      end; // for Sym
+          { unused-public-symbol: an exported (interface-section) free routine that
+            nothing in the index references or calls -- likely dead public API.
+            Restricted to unit-level routines (not class methods) so DFM-wired
+            event handlers and virtual/override methods are not false positives. }
+          if WantRule('unused-public-symbol') and (Sym.Section = 'interface') and (Sym.Kind in [skFunction, skProcedure]) and (Sym.ParentId > 0) and
+            (Pos('override', LowerCase(Sym.Modifiers)) = 0) and not SameText(Sym.Name, 'Register') then
+          begin
+            Parent:= AStore.GetSymbolById(Sym.ParentId);
+            if (Parent.Id = Sym.ParentId) and (Parent.Kind = skUnit) then
+              if (Length(AStore.FindReferencesTo(Sym.Id)) = 0) and (Length(AStore.FindCallersByName(Sym.Name)) = 0) then
+                Add('unused-public-symbol', 'info', Format('Exported routine %s has no references in the index -- possible dead public API', [Sym.Name]), Sym);
+          end;
+
+          { unused-private-member: a private or strict private member (method,
+            field, const, nested type) that has zero references in the index.
+            Guards:
+              - skip virtual/override (may be called via dispatch table);
+              - skip if any reference exists (conservative);
+              - skip property accessors: getter/setter methods and backing fields
+                that appear in a property's 'read'/'write' clause have zero
+                FindReferencesTo + FindCallersByName because the index does NOT
+                record a reference from the property declaration to its accessor.
+                PropAccessors (built above from the file's AST declProp nodes via
+                the 'getter' and 'setter' grammar fields) covers this case exactly.
+            Published members are never private so DFM-streamed components are
+            not affected. }
+          if WantRule('unused-private-member') then
+          begin
+            PrivModifiers:= LowerCase(Sym.Modifiers);
+            IsPrivate:= (Pos('private', PrivModifiers) > 0);
+            if IsPrivate and
+              (Sym.Kind in [skMethod, skFunction, skProcedure, skConstructor, skDestructor,
+                            skField, skConstDecl, skTypeAlias, skClass, skInterface, skRecord, skEnum]) and
+              (Pos('override', PrivModifiers) = 0) and
+              (not Sym.IsVirtual) then
+            begin
+              { Skip members whose name appears as a property accessor or backing
+                storage in this file (exact AST match; case-insensitive). }
+              if (PropAccessors <> nil) and PropAccessors.ContainsKey(LowerCase(Sym.Name)) then
+                { property accessor or backing field -- not dead code, skip }
+              else
+              if (Length(AStore.FindReferencesTo(Sym.Id)) = 0) and
+                 (Length(AStore.FindCallersByName(Sym.Name)) = 0) then
+                Add('unused-private-member', 'warning',
+                  Format('Private member ''%s'' has no references in the index -- possible dead code', [Sym.Name]), Sym);
+            end;
+          end;
+
+        end; // for Sym
+
+      finally
+        PropAccessors.Free;
+        PropAccessors:= nil;
+      end;
 
     end; // for Fid
     Result:= Findings.ToArray;
