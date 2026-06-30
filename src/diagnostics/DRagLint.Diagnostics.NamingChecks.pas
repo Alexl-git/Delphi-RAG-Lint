@@ -40,6 +40,12 @@ type
     /// clean or could not be parsed.</returns>
     /// <remarks>Thread-safe if the parse cache is thread-safe for the caller's
     /// use pattern; the checker itself has no shared mutable state.
+    /// Prefix matching is case-SENSITIVE (so a 'PName' param fails the lowercase
+    /// 'p' ParamPrefix and is flagged). The field-name-prefix guard is
+    /// section-aware: a T-typed field is skipped ONLY in the implicit-first
+    /// section (the auto-generated published DFM component dump, whose fields
+    /// sit directly under declClass); a T-typed field in an EXPLICIT
+    /// private/protected/public/published section still must carry the F prefix.
     /// Task 3 extends this same function with 4 additional naming rule ids.</remarks>
     class function Check(const AFile: string; const ANaming: TNamingConfig;
       const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
@@ -47,10 +53,14 @@ type
 
 implementation
 
-{ Returns True when AName carries APrefix followed by an uppercase letter.
-  An empty APrefix always returns False (disables the check for that prefix).
+{ Returns True when AName carries APrefix (matched case-SENSITIVELY) followed
+  by an uppercase letter. An empty APrefix always returns False (disables the
+  check for that prefix). The prefix match must be exact case so that the
+  lowercase ParamPrefix 'p' is not satisfied by a capital-P name: a param named
+  'PName' must FAIL HasPrefix(.,'p') and therefore be flagged.
   Examples: HasPrefix('TFoo','T')=True; HasPrefix('Tfoo','T')=False;
-  HasPrefix('Things','T')=False; HasPrefix('T','T')=False. }
+  HasPrefix('Things','T')=False; HasPrefix('T','T')=False;
+  HasPrefix('pName','p')=True; HasPrefix('PName','p')=False. }
 function HasPrefix(const AName, APrefix: string): Boolean;
 var
   PLen: Integer;
@@ -59,18 +69,26 @@ begin
   PLen:= Length(APrefix);
   if PLen = 0 then Exit;
   if Length(AName) <= PLen then Exit;
-  if not SameText(Copy(AName, 1, PLen), APrefix) then Exit;
+  { Case-SENSITIVE prefix comparison (not SameText) -- see remark above. }
+  if Copy(AName, 1, PLen) <> APrefix then Exit;
   { char immediately after the prefix must be A..Z (uppercase) to avoid
-    matching e.g. 'Things' against prefix 'T'. Case-sensitive check here. }
+    matching e.g. 'Things' against prefix 'T'. }
   Result:= CharInSet(AName[PLen + 1], ['A'..'Z']);
 end;
 
 class function TNamingChecker.Check(const AFile: string; const ANaming: TNamingConfig;
   const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
-  Src     : TBytes             ;
-  PF      : TParsedFile        ;
-  Findings: TList<TLintFinding>;
+  Src       : TBytes             ;
+  PF        : TParsedFile        ;
+  Findings  : TList<TLintFinding>;
+  { Section state for field-name-prefix: True while the walker is inside an
+    EXPLICIT visibility section (private/protected/public/published/strict).
+    A declField reached while this is False is in the implicit-first section
+    (the auto-generated DFM published component dump) and gets the T-typed skip;
+    a declField reached while this is True must carry the F prefix regardless
+    of type. Saved/restored around each declSection recursion. }
+  InExplicitSection: Boolean;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -115,6 +133,31 @@ var
     if ATypeNode.IsNull then Exit;
     Raw:= Trim(NodeStr(ATypeNode));
     Result:= (Length(Raw) > 0) and (Raw[1] = '^');
+  end;
+
+  { True when ASection (a declSection) carries an explicit visibility keyword.
+    Mirrors the keyword check in DRagLint.Parser.Delphi13.VisibilityOfSection
+    (replicated here because that function is implementation-only). A section
+    with no kPrivate/kProtected/kPublic/kPublished/kStrict named child is the
+    implicit-first section (its members are auto-generated published fields). }
+  function SectionIsExplicit(const ASection: TTSNode): Boolean;
+  var
+    K : Integer;
+    Ch: TTSNode;
+    NT: string ;
+  begin
+    Result:= False;
+    for K:= 0 to ASection.NamedChildCount - 1 do
+    begin
+      Ch:= ASection.NamedChild(K);
+      NT:= Ch.NodeType;
+      if (NT = 'kPrivate') or (NT = 'kProtected') or (NT = 'kPublic')
+        or (NT = 'kPublished') or (NT = 'kStrict') then
+      begin
+        Result:= True;
+        Exit;
+      end;
+    end;
   end;
 
   { Walk the entire AST once; emit findings for each rule whose prefix is set. }
@@ -203,17 +246,29 @@ var
       Exit;
     end;
 
+    { declSection: an explicit visibility section sets InExplicitSection=True
+      for the duration of its subtree so the field guard below knows the
+      enclosed fields are NOT implicit-first members. A keyword-less declSection
+      (rare) is treated as implicit (False). Save/restore around recursion. }
+    if N.NodeType = 'declSection' then
+    begin
+      var SavedSection: Boolean:= InExplicitSection;
+      InExplicitSection:= SectionIsExplicit(N);
+      for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+      InExplicitSection:= SavedSection;
+      Exit;
+    end;
+
     { field-name-prefix: visit declField nodes inside class bodies.
-      Guard: skip fields in a published section whose declared type starts with
-      'T' -- these are auto-generated DFM component fields (Name: TType) on
-      form/frame classes. The heuristic is conservative (near-zero-FP): when a
-      field looks like a published component reference, do not flag it.
-      Implementation: we read the current section visibility from the parent
-      declSection sibling walk; but since we visit only the declField here (not
-      tracking parent state), we detect "published" by checking whether the
-      declField's own type text begins with 'T'. This means truly private/public
-      fields whose type starts with 'T' are also guarded -- accepted trade-off
-      documented here as a known FP-suppression heuristic. }
+      Section-aware guard: the T-typed component-field skip applies ONLY in the
+      implicit-first section (InExplicitSection=False). Verified AST shape:
+      implicit-first fields (e.g. `Button1: TButton;` on a form) sit as DIRECT
+      children of declClass with no enclosing declSection, so InExplicitSection
+      is False there and the T-typed skip suppresses the auto-generated DFM
+      component dump. Fields inside an EXPLICIT private/protected/public/
+      published section (InExplicitSection=True) must carry the F prefix
+      regardless of their declared type -- a private `Grid: TStringList`
+      missing F is a real violation and fires. }
     if N.NodeType = 'declField' then
     begin
       if ANaming.FieldPrefix <> '' then
@@ -225,12 +280,16 @@ var
           TypeName:= Trim(NodeStr(NameNode));
           if TypeName <> '' then
           begin
-            { Heuristic guard: if the field's declared type starts with 'T' it
-              may be a VCL component reference in a published section -- skip. }
-            var FieldType: string:= '';
-            if not TypeNode.IsNull then FieldType:= Trim(NodeStr(TypeNode));
-            var IsComponentField: Boolean:= (Length(FieldType) >= 2)
-              and (FieldType[1] = 'T') and CharInSet(FieldType[2], ['A'..'Z']);
+            { Component-field skip: only honoured in the implicit-first section.
+              In an explicit section a T-typed field still must carry F. }
+            var IsComponentField: Boolean:= False;
+            if not InExplicitSection then
+            begin
+              var FieldType: string:= '';
+              if not TypeNode.IsNull then FieldType:= Trim(NodeStr(TypeNode));
+              IsComponentField:= (Length(FieldType) >= 2)
+                and (FieldType[1] = 'T') and CharInSet(FieldType[2], ['A'..'Z']);
+            end;
             if not IsComponentField then
             begin
               if not HasPrefix(TypeName, ANaming.FieldPrefix) then
@@ -311,6 +370,7 @@ begin
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
+  InExplicitSection:= False; { root and class-body level = implicit-first section }
   try
     Visit(PF.Tree.RootNode);
     Raw:= Findings.ToArray;

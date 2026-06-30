@@ -1,0 +1,6 @@
+# implicit-first published component field must NOT fire (Button1: TButton)
+!field-name-prefix 6
+# explicit-private T-typed field missing F MUST fire (Grid: TStringList)
+field-name-prefix 8
+# explicit-private non-T field missing F fires (Count: Integer)
+field-name-prefix 10
