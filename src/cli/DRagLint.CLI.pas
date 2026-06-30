@@ -104,6 +104,13 @@ type
     Open            : Boolean       ;
     ShowHelp        : Boolean       ;
     ShowVersion     : Boolean       ;
+    // v0.66: ergonomics #12 output/CI flags
+    FailOn       : string ; // --fail-on error|warning|info|none (ergonomics #12)
+    Baseline     : string ; // --baseline <file>: report only findings NOT in it
+    WriteBaseline: string ; // --write-baseline <file>: record current findings, exit 0
+    ConfigPath   : string ; // --config <file>: drag-lint-lint.json override path
+    Enable       : string ; // --enable id1,id2: re-include disabled/off-by-default rules
+    Profile      : string ; // --profile <name>: merge a named enable/disable set
     // v0.16: query find flags
     DocTag     : string ;
     DocContains: string ;
@@ -254,6 +261,15 @@ begin
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH]');
   Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
+  Writeln('');
+  Writeln('  Output/CI (lint, lint-all, check-ast):');
+  Writeln('    --format sarif            emit SARIF 2.1.0 (in addition to text|json)');
+  Writeln('    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info (or none)');
+  Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
+  Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
+  Writeln('    --profile <name>          merge a named enable/disable set from the config');
+  Writeln('    --baseline <file>         report only findings absent from the baseline');
+  Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace status [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
@@ -484,6 +500,36 @@ begin
     begin
       Inc(i);
       Result.Format:= ParamStr(i);
+    end
+    else if (A = '--fail-on') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.FailOn:= ParamStr(i);
+    end
+    else if (A = '--baseline') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Baseline:= ParamStr(i);
+    end
+    else if (A = '--write-baseline') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.WriteBaseline:= ParamStr(i);
+    end
+    else if (A = '--config') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.ConfigPath:= ParamStr(i);
+    end
+    else if (A = '--enable') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Enable:= ParamStr(i);
+    end
+    else if (A = '--profile') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Profile:= ParamStr(i);
     end
     else if ((A = '--output') or (A = '--out')) and (i < ParamCount) then
     begin

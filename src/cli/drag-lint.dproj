@@ -137,6 +137,7 @@
         <DCCReference Include="..\analysis\DRagLint.Analysis.Flow.Lattices.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.FlowChecks.pas"/>
         <DCCReference Include="..\output\DRagLint.Output.Sarif.pas"/>
+        <DCCReference Include="..\output\DRagLint.Output.ExitCode.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Manifest.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Glob.pas"/>
