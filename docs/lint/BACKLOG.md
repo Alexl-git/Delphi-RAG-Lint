@@ -1,6 +1,22 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-06-30 (LATEST) -- **v0.69 D3 SHIPPED to `main` (NOT yet published); NEXT = D1 (rule catalog + Lint Options tab)**
+> ## RESUME 2026-06-30 (LATEST) -- **v0.69 D3 + D1a SHIPPED to `main` (NOT published); NEXT = D1b (IDE Lint Options tab, MANUAL gate)**
+>
+> **v0.69 D1a DONE + MERGED to `main`** (local `main`=`6cbce9d`, ff from `29f3be3`, **NOT pushed/tagged**). New command
+> **`drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]`** = the single machine-readable catalog of every
+> rule (built-in + external `.scm`). New unit `src/lint/DRagLint.Lint.RuleCatalog.pas` (in-code REGISTRY of ~62 built-ins
+> + `.scm` sidecar-json merge -> `TRuleInfo{id,category,title,default_severity,default_enabled,source,params}` + summary
+> counts); thin `DoRules` CLI handler (text + `--json`). Real output = **115 rules across 12 categories**. Subagent-driven
+> (5 tasks, plan `docs/superpowers/plans/2026-06-30-v069-d1a-rules-catalog-plan.md`), each reviewed + OPUS whole-branch =
+> READY TO MERGE, no Critical/Important (registry severities/thresholds cross-checked vs live code, zero mismatches).
+> Tests: rulecatalog console **29/29**, rules-cli **11/11**, lint **117/117**, lintconfig **30/30**. FOLLOW-UP: decide at
+> D1b whether index-only `check-ast` diagnostics (`undeclared-identifier`) belong in the catalog. **NEXT = D1b** (the IDE
+> "Lint Options" dock tab CONSUMING `drag-lint rules --json` -- SEPARATE plan, **MANUAL BPL gate**: RAD Studio closed to
+> build the BPL + a human click-test; not fully autonomous) -> then **D2** (refactor CLI). Ledger `.superpowers/sdd/progress.md`.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-06-30 -- v0.69 D3 SHIPPED to `main`; NEXT = D1
 >
 > **v0.69 D3 DONE + MERGED to `main`** (local `main`=`d829b79`, fast-forward from `08f8e8f`, **NOT pushed/tagged** -- v0.69
 > publishes only after D2). Two naming rules close MISSING-FEATURES #1: **`reserved-word-casing`** (info, ON -- non-lowercase
