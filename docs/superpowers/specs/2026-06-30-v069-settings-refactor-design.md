@@ -225,7 +225,10 @@ Both close MISSING-FEATURES #1 entirely (mark the `[ ]` line `[x]`).
 - **D1 hosting in `drag-lint-config.exe`** -- the frame is built host-agnostic, but
   wiring it into the config exe's tab set ships later.
 - Background research: `.superpowers/sdd/delphi-refactor-research.md` and
-  `docs/lint/Comprehensive report on the refactor.md`.
+  `docs/lint/Comprehensive report on the refactor.md`. **Canonical refactoring mechanics
+  (for D2 + the deferred set): Martin Fowler's catalog -- https://refactoring.com/catalog/
+  (user-flagged 2026-06-30; consult per-refactoring when building the rename/safe-delete/find-unit
+  edits and when designing the deferred Extract Method / Change Params / etc).**
 
 ---
 

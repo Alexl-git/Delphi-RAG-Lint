@@ -1,6 +1,6 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-06-30 -- v0.68.0-alpha SHIPPED; NEXT = AUTO-RENAME params autofix (needs design)
+> ## RESUME 2026-06-30 (LATE) -- v0.68.0-alpha SHIPPED; **v0.69 PLANNED + SPECCED, NEXT = IMPLEMENT (writing-plans)**
 >
 > **Branch `main`**, working tree clean. **v0.68.0-alpha SHIPPED + RELEASED** (origin/main=`be67919`, tag
 > `v0.68.0-alpha`, GitHub PRERELEASE win32+win64; lint harness **112/112**):
@@ -17,12 +17,28 @@
 > methods + `Sender`-first params, PROPERTY-ACCESSOR exclusion for `unused-private-member` (parses declProp
 > getter/setter -> **5747->957 on ORM3**), separator-robust `unit-name-matches-file`. DevExpress form 30 findings -> 0.
 >
-> **NEXT ACTION (user-sequenced AFTER v0.68) -- AUTO-RENAME parameters autofix:** user requested an option to
-> auto-add the prefix to params (2026-06-30). NEW `src/refactor` feature; a param is routine-LOCAL so the rename is
-> single-routine-scoped (SAFE). Needs a brainstorm/design first: new-name derivation, interface `declProc` + impl
-> `defProc` header sync, dry-run/preview, `--fix` flag, ANSI/CRLF preservation. Pairs with the naming SETTINGS PAGE
-> + convention presets (A/p/My) request. (Both captured in auto-memory: `feature-autofix-param-rename`,
-> `feature-naming-settings-presets`.)
+> **NEXT ACTION -- IMPLEMENT v0.69 (3 independent deliverables; each its OWN writing-plans plan; build order D3 -> D1 -> D2).**
+> Spec (brainstormed + approved, ASCII): **`docs/superpowers/specs/2026-06-30-v069-settings-refactor-design.md`**.
+> - **D3 (close MISSING-FEATURES #1, smallest -- start here):** 2 naming rules in `NamingChecks` (extend `TNamingChecker.Check`,
+>   same 4-site wiring + `naming` config): `reserved-word-casing` (info, ON -- non-lowercase Pascal keywords) +
+>   `hungarian-or-short-identifier` (info, OFF by default -- short names + Hungarian prefixes; FP-prone). New `naming`
+>   fields keyword_case / min_identifier_len / hungarian_prefixes / short_identifier_check.
+> - **D1 (catalog + IDE tab):** new `drag-lint rules [--json]` = single rule catalog (in-code REGISTRY for built-ins +
+>   the `.scm` jsons; emits id/category/severity/enabled/params + counts). Then a 4th IDE-dock tab "Lint Options"
+>   (`DragLint.Plugin.DockForm.AddTab`; new `TLintOptionsFrame`): rules grouped by category, section tri-state + per-item
+>   checkboxes + inline param editors -> reads/writes the active project `drag-lint-lint.json`. BPL manual-test gate.
+> - **D2 (refactor CLI -- PACKAGING, engine EXISTS):** `src/refactor/DRagLint.Refactor.Rename.pas` already has
+>   `TRenameRefactoring.Build/Apply/RenderDryRun` (+ `resolve-uses`, `TDeadCodeFinder`; current `rename --qname` wraps it).
+>   Ship `rename --kind symbol` (cross-unit; harden overloads/qualified/DFM/keyword-conflict), `rename --kind param`
+>   (NEW single-file routine-local builder `BuildLocal` = the `param-name-prefix` AUTOFIX, the user's #1 ask), `find-unit`
+>   (add-to-uses via resolve-uses), `safe-delete` (verify 0 refs then delete). All dry-run preview + `--apply` (backups,
+>   ANSI/CRLF). New `tests/refactor` DB-fixture harness.
+> **DEFERRED -> MISSING-FEATURES section 13:** in-IDE Refactor tab + OTAPI apply (M); HARD refactorings (Change Params,
+> Extract Method, Extract Interface/Superclass, Pull/Push, Declare/Introduce Var/Field).
+> **REFERENCES for D2 + deferred:** Delphi 11/12 Refactor catalog + why it degraded -> `docs/lint/Comprehensive report on
+> the refactor.md` + `.superpowers/sdd/delphi-refactor-research.md`; **Martin Fowler refactoring catalog
+> https://refactoring.com/catalog/ (user-flagged 2026-06-30 -- canonical mechanics).** Feature memories:
+> `feature-autofix-param-rename` (=D2 param-rename), `feature-naming-settings-presets` (=D1 tab + a future preset selector).
 >
 > **FOLLOW-UPS (non-blocking, logged in the SDD ledger `.superpowers/sdd/progress.md`):** `unused-private-member`
 > intra-class-call residual FP + perf (cache `FindSymbolsByExactName` -- SLOW on the 64MB ORM3 index, 2-min timeout);
