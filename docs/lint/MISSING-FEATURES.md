@@ -7,12 +7,16 @@ analysis (`docs/lint/REPORT-1-delphi-lint-landscape.md`) cross-checked against t
 inventory (`rules/*.scm`, `src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`,
 `src/lint/DRagLint.Lint.ProjectRules.pas`).
 
-**Where we stand:** ~100 rules, roughly **55-65%** of the catalogued breadth. We **lead** on
-security, architecture/layering, and exception handling. We are **weak/absent** on naming,
-data-flow, and deep type-system casts.
+**Where we stand (updated v0.66.0-alpha):** ~107 rules, roughly **65-72%** of the catalogued
+breadth. **M1 (type/hierarchy resolver) and M2 (CFG/data-flow engine) both SHIPPED** -- the
+data-flow frontier that was the long pole is now substantially covered (7 flow checks). We
+**lead** on security, architecture/layering, and exception handling. The remaining gaps are
+**naming** (~0, the biggest cheap win) and the **cheap index tail** (unused-* family, clones,
+metrics) -- both pure-AST/index, no new engine needed -- plus **autofix/quick-fixes** (#12).
 
-Legend: `[ ]` not started · **(now)** = pure-AST/index, doable without new engines ·
-**(M1)** = needs the type/hierarchy resolver · **(M2)** = needs a control-flow/def-use engine.
+Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
+**(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use
+engine (SHIPPED v0.66).
 
 ---
 
@@ -32,19 +36,23 @@ Have: `code-after-exit`, `self-assignment`, `comparison-same-operands`, `redunda
 - [ ] `unused-private-member` (method/field/const/type)  -- index already has the refs
 - [ ] `unused-parameter`
 - [ ] `unused-unit-in-uses`  -- the resolved uses-graph already exists
-- [ ] `write-only-field` / `assigned-never-read`  **(M2)**
-- [ ] `overwrite-before-read` (value clobbered before use)  **(M2)**
+- [x] `write-only-field` / `assigned-never-read`  -- shipped v0.66 as `write-only-local` **(M2)**
+- [x] `overwrite-before-read` (value clobbered before use)  -- shipped v0.66 **(M2)**
 - [ ] `function-result-ignored` at call sites
 - [ ] `commented-out-code` detection
 - [ ] `redundant-parentheses`, `identical-then-else`, `multiple-statements-per-line`
 
-## 3. Data-flow / uninitialized variables  -- ~5% (the hard frontier)  **(M2)**
-PAL's crown jewel; the compiler does some (W1035/W1036). Needs a per-routine CFG + def-use pass.
-- [ ] `used-before-assignment` (definite + possible-via-opaque-call)
-- [ ] `function-result-not-set` on some path
-- [ ] `referenced-never-set` / `set-never-referenced`
-- [ ] for-loop variable read after the loop; out-param never written
-> This cluster is *most* of the distance from ~60% to PAL parity. Engine work, not rule-writing.
+## 3. Data-flow / uninitialized variables  -- SHIPPED v0.66 (the long pole, now covered)  **(M2)**
+PAL's crown jewel; the compiler does some (W1035/W1036). The M2 per-routine CFG + monotone def-use
+engine (`DRagLint.Analysis.Cfg`/`.DataFlow`/`.Flow.Lattices` + `Diagnostics.FlowChecks`) shipped in
+v0.66 with definite=warning / possible=info FP stance and managed-type exactness via the M1 store.
+- [x] `used-before-assignment` (definite + possible-via-opaque-call)  -- shipped v0.66
+- [x] `function-result-not-set` on some path  -- shipped v0.66 (`function-result-not-set`)
+- [x] `set-never-referenced`  -- shipped v0.66 as `write-only-local`
+- [x] for-loop variable read after the loop (`loop-var-after-loop`); out-param never written (`out-param-not-set`)  -- shipped v0.66
+- [ ] `referenced-never-set` (read of a never-assigned non-local field) -- still open; needs cross-routine field-flow
+> Was *most* of the distance from ~60% to PAL parity. Largely closed by the M2 engine; the remaining
+> tail (cross-routine field def-use, possible-via-opaque refinement) is incremental, not a new engine.
 
 ## 4. Type-system / casts  -- weak  **(M1)**
 Have heuristics only: `redundant-as-tobject` (lexical), `freeandnil-on-interface`.
@@ -62,7 +70,7 @@ Have: `unprotected-object-free`, `use-after-free`, `criticalsection-not-released
 - [ ] `double-free`
 - [ ] `stream/file/bitmap created-not-freed` pairing (same technique as criticalsection)
 - [ ] `abstract-method-instantiation`; `destructor-missing-override`
-- [ ] true ownership/lifetime across calls (created here, leaked on some path)  **(M2)**
+- [x] true ownership/lifetime across calls (created here, leaked on some path)  -- shipped v0.66 as `object-leak` (store-backed interprocedural ownership oracle)  **(M2)**
 
 ## 6. Complexity / metrics  -- partial  **(now, index-backed)**
 Have: `cyclomatic-complexity`, `deep-nesting`, `method-too-long`, `too-many-parameters`,
@@ -114,13 +122,21 @@ Have: `layering-violation`, `interface-reference-cycle`, `god-class`, `unit-not-
 
 ---
 
-## Highest-leverage next additions (coverage per effort)
-1. **Naming wave (#1)** -- cheap, deterministic, closes the worst breadth gap.
-2. **M1 type/hierarchy resolver** -- makes 4 shipped heuristics exact + unblocks #4.
-3. **M2 data-flow/CFG engine** -- unlocks #3, the real path to PAL parity. Biggest effort.
-4. **Cheap index tail** (#2 unused-* family, #6 metrics + clones) + **SARIF/quick-fixes** (#12).
+## Highest-leverage next additions (coverage per effort) -- post-v0.66 (M1+M2+#12 shipped)
+1. **Naming wave (#1)** -- ~14 deterministic, near-zero-FP `.scm` rules. Now the single biggest, cheapest
+   breadth gap (M1/M2 done). The best coverage-per-effort win left.
+2. **Cheap index tail** (#2 unused-private-member / unused-parameter / unused-unit-in-uses;
+   #6 cognitive complexity + clone detection) -- pure index/AST, no new engine.
+3. **Type-system casts (#4)** -- now unblocked by the shipped M1 resolver (unsafe-typecast, redundant-cast,
+   lossy Ansi<->Unicode).
+4. **Autofix / quick-fixes (#12)** -- the remaining ergonomics gap (SonarDelphi ~14; we have 0); its own milestone.
+5. **Rule-accuracy / FP polish** -- e.g. length-zero-compare must gate on string operands (not arrays);
+   line/col position fidelity. Ongoing, ships in point releases (v0.67+).
 
 ## Verdict
-"Everything the commercial tools do" is **not** reachable on a pure-AST path: ~60% today,
-**~70-80% attainable** with the naming wave + M1, and true PAL parity gated on the M2 data-flow
-engine (the long pole). We already **lead** on security and architecture.
+"Everything the commercial tools do" is **not** reachable on a pure-AST path, but the two engine long-poles
+are now behind us: **M1 (type resolver) and M2 (data-flow/CFG) shipped in v0.66**. We sit at **~65-72%** of
+the catalogued breadth and **lead** on security and architecture. The realistic ceiling is **~80-85%** via
+the naming wave + cheap index tail + M1-backed cast rules; the last stretch (clone detection, full CK suite,
+cross-routine field flow, autofix) is incremental. We already exceed FixInsight's breadth and approach
+SonarDelphi's on the dimensions we cover.
