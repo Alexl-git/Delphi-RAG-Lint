@@ -33,9 +33,13 @@ type
       /// declaration identifier sits at (ALine, ACol) (1-based) in AFile. Emits a
       /// TRenameEdit for the declaration, every in-scope use within the owning
       /// routine body, and the matching parameter in any same-named forward/interface
-      /// declProc header. Shadowing nested routines, qualified members (X.Name), and
-      /// with-statement members are conservatively skipped. Empty array if no
-      /// param/local decl is found at that position. Pure AST -- no symbol store.</summary>
+      /// declProc header. Shadowing nested routines, qualified members (X.Name) on
+      /// both exprDot and genericDot rhs sides, and with-statement members are
+      /// conservatively skipped. Empty array if no param/local decl is found at that
+      /// position. Pure AST -- no symbol store.
+      /// Known limitations (deliberate conservative choices): occurrences inside a
+      /// with block are skipped entirely; a same-named param in an unrelated same-name
+      /// overload header may be touched (header-only, not a body rename).</summary>
       class function BuildLocal(const AFile: string; ALine, ACol: Integer; const ANewName: string): TArray<TRenameEdit>;
   end;
 
@@ -345,7 +349,8 @@ var
 
   { Walk the owning routine subtree, emitting edits for bare-identifier uses of
     Target. Skip: a nested defProc that re-declares Target (shadowing); the rhs
-    of an exprDot (member access); a 'with' statement subtree (ambiguous). }
+    of an exprDot or genericDot (qualified member access); a 'with' statement
+    subtree (ambiguous). }
   procedure Walk(const N: TTSNode);
   var I: Integer; Ch: TTSNode;
   begin
@@ -364,8 +369,12 @@ var
     for I:= 0 to N.NamedChildCount - 1 do
     begin
       Ch:= N.NamedChild(I);
-      { Exclude exprDot rhs (member access): skip the last child of an exprDot. }
-      if (N.NodeType = 'exprDot') and (I = N.NamedChildCount - 1) then Continue;
+      { Exclude qualified-member rhs (member access): skip the last named child of
+        exprDot (Foo.Value) and genericDot (TType.Value / UnitName.Value). Both are
+        [lhs, rhs] two-child nodes; skipping index NamedChildCount-1 skips the rhs
+        member while still walking the lhs. }
+      if ((N.NodeType = 'exprDot') or (N.NodeType = 'genericDot'))
+          and (I = N.NamedChildCount - 1) then Continue;
       Walk(Ch);
     end;
   end;

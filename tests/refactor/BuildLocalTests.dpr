@@ -55,8 +55,24 @@ const
     '  Value := 1;'#13#10 +                            { 12 outer use -> renamed }
     'end;'#13#10 +                                     { 13 }
     'end.'#13#10;                                      { 14 }
+
+  { Regression: genericDot member rhs must NOT be renamed.
+    Local 'Value' (line 5 col 5) is renamed; 'TColor.Value' on line 7 has
+    'Value' as the rhs of a genericDot -- that member must stay untouched.
+    Expected edits = 2: decl (line 5) + lhs use (line 7). }
+  SRC_GENDOT =
+    'unit u;'#13#10 +                              { 1 }
+    'interface'#13#10 +                            { 2 }
+    'implementation'#13#10 +                       { 3 }
+    'procedure P;'#13#10 +                         { 4 }
+    'var Value: Integer;'#13#10 +                  { 5  local decl 'Value' at col 5 }
+    'begin'#13#10 +                                { 6 }
+    '  Value := TColor.Value;'#13#10 +             { 7  LHS col 3 renamed; .Value rhs NOT }
+    'end;'#13#10 +                                 { 8 }
+    'end.'#13#10;                                  { 9 }
 var
   E: TArray<TRenameEdit>;
+  EG: TArray<TRenameEdit>;
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -76,6 +92,17 @@ begin
   except
     on Ex: Exception do begin Writeln('EXCEPTION ', Ex.ClassName, ': ', Ex.Message); Inc(GFail); end;
   end;
+
+  { genericDot member guard regression: 'var Value' at line 5 col 5. }
+  try
+    EG:= RunOn(SRC_GENDOT, 5, 5, 'pValue');
+    Check('genericDot: decl (line 5) renamed', HasEdit(EG, 5, 5));
+    Check('genericDot: LHS use (line 7 col 3) renamed', HasEdit(EG, 7, 3));
+    Check('genericDot member not renamed (exactly 2 edits)', Length(EG) = 2);
+  except
+    on Ex: Exception do begin Writeln('EXCEPTION ', Ex.ClassName, ': ', Ex.Message); Inc(GFail); end;
+  end;
+
   Writeln('');
   Writeln(Format('buildlocal-tests: %d pass / %d fail / %d total', [GPass, GFail, GPass + GFail]));
   if GFail > 0 then Halt(1) else Halt(0);
