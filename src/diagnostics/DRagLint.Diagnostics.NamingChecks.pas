@@ -1,17 +1,24 @@
 unit DRagLint.Diagnostics.NamingChecks;
 
 { v0.68 -- naming-convention rules driven by TNamingConfig.
-  Rules implemented here (Task 2 -- prefix rules):
-    type-name-prefix  : class/interface/pointer type name must carry the configured prefix.
-    field-name-prefix : class instance field name must carry the configured prefix.
-    param-name-prefix : routine parameter name must carry the configured prefix.
-  Task 3 will extend TNamingChecker.Check with the remaining 4 naming-rule ids
-  (method-pascalcase, const-casing, unit-name-matches-file, local-var-casing). }
+  Rules implemented here:
+    type-name-prefix      : class/interface/pointer type name must carry the
+                            configured prefix.
+    field-name-prefix     : class instance field name must carry the configured
+                            prefix.
+    param-name-prefix     : routine parameter name must carry the configured
+                            prefix.
+    method-pascalcase     : routine/method name must match MethodCase.
+    const-casing          : constant name must match one of ConstCase.
+    local-var-casing      : local variable name must match LocalCase.
+    unit-name-matches-file: unit name must equal the file base name
+                            (case-insensitive). }
 
 interface
 
 uses
   System.SysUtils
+  , System.StrUtils
   , System.Classes
   , System.Generics.Collections
   , TreeSitter
@@ -46,7 +53,10 @@ type
     /// section (the auto-generated published DFM component dump, whose fields
     /// sit directly under declClass); a T-typed field in an EXPLICIT
     /// private/protected/public/published section still must carry the F prefix.
-    /// Task 3 extends this same function with 4 additional naming rule ids.</remarks>
+    /// local-var-casing fires only for variables declared inside a defProc body
+    /// (not unit-level var sections or class fields).
+    /// unit-name-matches-file fires when the unit name differs from the file
+    /// base name (case-insensitive); program/library roots are skipped.</remarks>
     class function Check(const AFile: string; const ANaming: TNamingConfig;
       const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
   end;
@@ -76,6 +86,90 @@ begin
   Result:= CharInSet(AName[PLen + 1], ['A'..'Z']);
 end;
 
+{ Returns True when S looks like PascalCase:
+  - first char is A..Z
+  - no underscore characters
+  - not all-uppercase-and-digits (i.e. not UPPER_SNAKE_CASE).
+  An empty string returns False. }
+function IsPascalCase(const S: string): Boolean;
+var
+  I       : Integer;
+  HasLower: Boolean;
+begin
+  Result:= False;
+  if S = '' then Exit;
+  if not CharInSet(S[1], ['A'..'Z']) then Exit;
+  { reject names with underscores }
+  for I:= 1 to Length(S) do
+    if S[I] = '_' then Exit;
+  { require at least one lowercase letter (distinguishes PascalCase from
+    UPPER_CASE names like 'OK' or 'ID'); single-letter uppercase names like
+    'P' are accepted (short local/counter names). }
+  HasLower:= False;
+  for I:= 1 to Length(S) do
+    if CharInSet(S[I], ['a'..'z']) then begin HasLower:= True; Break; end;
+  { single-char uppercase identifiers (P, I, J, ...) are PascalCase-compliant }
+  Result:= HasLower or (Length(S) = 1);
+end;
+
+{ Returns True when S looks like UPPER_SNAKE_CASE:
+  - only chars A..Z, 0..9, '_'
+  - at least one letter present. }
+function IsUpperSnake(const S: string): Boolean;
+var
+  I      : Integer;
+  HasLet : Boolean;
+begin
+  Result:= False;
+  if S = '' then Exit;
+  HasLet:= False;
+  for I:= 1 to Length(S) do
+  begin
+    if CharInSet(S[I], ['A'..'Z']) then HasLet:= True
+    else if not CharInSet(S[I], ['0'..'9', '_']) then Exit;
+  end;
+  Result:= HasLet;
+end;
+
+{ Returns True when S looks like camelCase:
+  - first char is a..z
+  - no underscores. }
+function IsCamelCase(const S: string): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  if S = '' then Exit;
+  if not CharInSet(S[1], ['a'..'z']) then Exit;
+  for I:= 1 to Length(S) do
+    if S[I] = '_' then Exit;
+  Result:= True;
+end;
+
+{ Dispatches on ACase to the appropriate casing predicate.
+  Supported values: 'PascalCase', 'UPPER_CASE', 'camelCase'.
+  Returns True (no finding) for any unknown ACase value. }
+function MatchesCase(const S, ACase: string): Boolean;
+begin
+  if ACase = 'PascalCase' then Result:= IsPascalCase(S)
+  else if ACase = 'UPPER_CASE' then Result:= IsUpperSnake(S)
+  else if ACase = 'camelCase' then Result:= IsCamelCase(S)
+  else Result:= True; { unknown case style: skip }
+end;
+
+{ Returns True when S matches ANY of the casing styles in ACases.
+  Returns True (no finding) when ACases is empty. }
+function MatchesAnyCase(const S: string; const ACases: TArray<string>): Boolean;
+var
+  C: string;
+begin
+  Result:= True;
+  if Length(ACases) = 0 then Exit;
+  for C in ACases do
+    if MatchesCase(S, C) then Exit;
+  Result:= False;
+end;
+
 class function TNamingChecker.Check(const AFile: string; const ANaming: TNamingConfig;
   const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
@@ -89,6 +183,11 @@ var
     a declField reached while this is True must carry the F prefix regardless
     of type. Saved/restored around each declSection recursion. }
   InExplicitSection: Boolean;
+  { Body state for local-var-casing: True while the walker is inside a defProc
+    body (implementation block). Saved/restored on defProc entry. Local var
+    sections inside a defProc are the ones we check; unit-level var sections
+    reached while this is False are skipped. }
+  InProcBody: Boolean;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -160,23 +259,57 @@ var
     end;
   end;
 
+  { Find the first named child of AParent whose NodeType = AType. }
+  function FindChildOfType(const AParent: TTSNode; const AType: string): TTSNode;
+  var
+    K: Integer;
+  begin
+    Result:= Default(TTSNode);
+    for K:= 0 to AParent.NamedChildCount - 1 do
+      if AParent.NamedChild(K).NodeType = AType then
+        Exit(AParent.NamedChild(K));
+  end;
+
   { Walk the entire AST once; emit findings for each rule whose prefix is set. }
   procedure Visit(const N: TTSNode);
   var
-    I         : Integer;
-    NameNode  : TTSNode;
-    TypeNode  : TTSNode;
-    HdrNode   : TTSNode;
-    ArgsNode  : TTSNode;
-    ArgNode   : TTSNode;
-    NameId    : TTSNode;
-    TypeStart : Integer;
-    TypeName  : string ;
-    ArgName   : string ;
-    J         : Integer;
+    I        : Integer;
+    NameNode : TTSNode;
+    TypeNode : TTSNode;
+    HdrNode  : TTSNode;
+    ArgsNode : TTSNode;
+    ArgNode  : TTSNode;
+    NameId   : TTSNode;
+    TypeStart: Integer;
+    TypeName : string ;
+    ArgName  : string ;
+    J        : Integer;
     IsExcClass: Boolean;
+    VarTypeStart: Integer;
+    VarNameId: TTSNode;
   begin
     if N.IsNull then Exit;
+
+    { unit-name-matches-file: check the unit declaration name vs the file base.
+      Only 'unit' roots are checked; 'program' and 'library' are skipped.
+      The moduleName named child holds the full unit name (e.g. Foo.Bar). We
+      compare case-insensitively against ChangeFileExt(ExtractFileName(AFile),''). }
+    if N.NodeType = 'unit' then
+    begin
+      var ModNode: TTSNode:= FindChildOfType(N, 'moduleName');
+      if not ModNode.IsNull then
+      begin
+        var UnitName: string:= Trim(NodeStr(ModNode));
+        var FileBase: string:= ChangeFileExt(ExtractFileName(AFile), '');
+        if (UnitName <> '') and (not SameText(UnitName, FileBase)) then
+          EmitAt(ModNode, 'unit-name-matches-file',
+            Format('Unit name "%s" does not match file name "%s"',
+              [UnitName, FileBase]));
+      end;
+      { Still recurse so inner declarations are checked by other rules. }
+      for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+      Exit;
+    end;
 
     { type-name-prefix: visit declType nodes in interface/implementation sections.
       Grammar note: ChildByField('type') on a declType returns a wrapper node
@@ -305,41 +438,46 @@ var
       Exit;
     end;
 
-    { param-name-prefix: visit both declProc (forward/interface declarations)
+    { method-pascalcase: on declProc nodes check that the routine name matches
+      ANaming.MethodCase. Also fires on defProc header names so both the forward
+      declaration and implementation bodies are checked (de-dup handles doubles
+      from the same name/line). Operator overloads (name starting with 'operator'
+      case-insensitively) are skipped.
+      param-name-prefix: visit both declProc (forward/interface declarations)
       and defProc (implementations). Each physical header is checked independently.
       NOTE: declProc has 'args' as a direct field; defProc has 'args' nested
       under 'header'. Both patterns are handled below. }
-    if (N.NodeType = 'declProc') or (N.NodeType = 'defProc') then
+    if N.NodeType = 'declProc' then
     begin
+      NameNode:= N.ChildByField('name');
+      if (not NameNode.IsNull) and (ANaming.MethodCase <> '') then
+      begin
+        var MethName: string:= Trim(NodeStr(NameNode));
+        if (MethName <> '') and (not StartsText('operator', MethName)) then
+        begin
+          if not MatchesCase(MethName, ANaming.MethodCase) then
+            EmitAt(NameNode, 'method-pascalcase',
+              Format('Method "%s" should be %s', [MethName, ANaming.MethodCase]));
+        end;
+      end;
       if ANaming.ParamPrefix <> '' then
       begin
-        { declProc (forward/interface decl) exposes 'args' as a direct field.
-          defProc (implementation) nests 'args' under 'header'. Try header first
-          so defProc is handled correctly; fall back to direct 'args' for declProc. }
-        ArgsNode:= Default(TTSNode);
-        HdrNode:= N.ChildByField('header');
-        if not HdrNode.IsNull then
-          ArgsNode:= HdrNode.ChildByField('args');
-        if ArgsNode.IsNull then
-          ArgsNode:= N.ChildByField('args');
+        ArgsNode:= N.ChildByField('args');
         if not ArgsNode.IsNull then
         begin
           for I:= 0 to ArgsNode.NamedChildCount - 1 do
           begin
             ArgNode:= ArgsNode.NamedChild(I);
             if ArgNode.NodeType <> 'declArg' then Continue;
-            { Get the type field position to identify name identifiers. }
             TypeNode:= ArgNode.ChildByField('type');
             TypeStart:= MaxInt;
             if not TypeNode.IsNull then TypeStart:= Integer(TypeNode.StartByte);
-            { Iterate named children: identifier nodes before the type are param names. }
             for J:= 0 to ArgNode.NamedChildCount - 1 do
             begin
               NameId:= ArgNode.NamedChild(J);
               if NameId.NodeType <> 'identifier' then Continue;
               if Integer(NameId.StartByte) >= TypeStart then Continue;
               ArgName:= Trim(NodeStr(NameId));
-              { Skip 'Self' parameter (Delphi implicit). }
               if SameText(ArgName, 'Self') then Continue;
               if not HasPrefix(ArgName, ANaming.ParamPrefix) then
                 EmitAt(NameId, 'param-name-prefix',
@@ -350,6 +488,127 @@ var
         end;
       end;
       { Recurse into the body/local sections (may contain nested routines). }
+      for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+      Exit;
+    end;
+
+    { defProc: the implementation body of a routine. Set InProcBody=True so
+      local-var-casing fires for declVar children of this body. Also check the
+      header name for method-pascalcase (catches implementation-only routines
+      and complements the declProc check; de-dup handles any overlap).
+      Also check params for param-name-prefix via the header node. }
+    if N.NodeType = 'defProc' then
+    begin
+      HdrNode:= N.ChildByField('header');
+      if not HdrNode.IsNull then
+      begin
+        { method-pascalcase on the defProc header name }
+        NameNode:= HdrNode.ChildByField('name');
+        if (not NameNode.IsNull) and (ANaming.MethodCase <> '') then
+        begin
+          var MethName: string:= Trim(NodeStr(NameNode));
+          { For TClass.Method qualified names compare only the simple part after
+            the last dot so we don't flag the qualified form.
+            We still emit at the full NameNode position; the de-dup key is
+            (rule, line, col) so the interface declProc and the impl defProc
+            at a DIFFERENT line are separate findings. }
+          var SimpleName: string:= MethName;
+          var DotPos: Integer:= LastDelimiter('.', MethName);
+          if DotPos > 0 then SimpleName:= Copy(MethName, DotPos + 1, MaxInt);
+          if (SimpleName <> '') and (not StartsText('operator', SimpleName)) then
+          begin
+            if not MatchesCase(SimpleName, ANaming.MethodCase) then
+              EmitAt(NameNode, 'method-pascalcase',
+                Format('Method "%s" should be %s', [SimpleName, ANaming.MethodCase]));
+          end;
+        end;
+        { param-name-prefix on the defProc args }
+        if ANaming.ParamPrefix <> '' then
+        begin
+          ArgsNode:= HdrNode.ChildByField('args');
+          if not ArgsNode.IsNull then
+          begin
+            for I:= 0 to ArgsNode.NamedChildCount - 1 do
+            begin
+              ArgNode:= ArgsNode.NamedChild(I);
+              if ArgNode.NodeType <> 'declArg' then Continue;
+              TypeNode:= ArgNode.ChildByField('type');
+              TypeStart:= MaxInt;
+              if not TypeNode.IsNull then TypeStart:= Integer(TypeNode.StartByte);
+              for J:= 0 to ArgNode.NamedChildCount - 1 do
+              begin
+                NameId:= ArgNode.NamedChild(J);
+                if NameId.NodeType <> 'identifier' then Continue;
+                if Integer(NameId.StartByte) >= TypeStart then Continue;
+                ArgName:= Trim(NodeStr(NameId));
+                if SameText(ArgName, 'Self') then Continue;
+                if not HasPrefix(ArgName, ANaming.ParamPrefix) then
+                  EmitAt(NameId, 'param-name-prefix',
+                    Format('Parameter "%s" should start with the "%s" prefix',
+                      [ArgName, ANaming.ParamPrefix]));
+              end;
+            end;
+          end;
+        end;
+      end;
+      { Enter proc body scope for local-var-casing. }
+      var SavedInProcBody: Boolean:= InProcBody;
+      InProcBody:= True;
+      for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+      InProcBody:= SavedInProcBody;
+      Exit;
+    end;
+
+    { const-casing: visit declConst nodes (covers unit-level, class, and
+      resourcestring consts). Fire when the name does not match any of
+      ANaming.ConstCase. Skipped when ConstCase is empty. }
+    if N.NodeType = 'declConst' then
+    begin
+      if Length(ANaming.ConstCase) > 0 then
+      begin
+        NameNode:= N.ChildByField('name');
+        if not NameNode.IsNull then
+        begin
+          var ConstName: string:= Trim(NodeStr(NameNode));
+          if (ConstName <> '') and (not MatchesAnyCase(ConstName, ANaming.ConstCase)) then
+            EmitAt(NameNode, 'const-casing',
+              Format('Constant "%s" should be %s',
+                [ConstName, String.Join(' or ', ANaming.ConstCase)]));
+        end;
+      end;
+      for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+      Exit;
+    end;
+
+    { local-var-casing: visit declVar nodes ONLY when inside a defProc body
+      (InProcBody=True). Unit-level var sections and class fields are skipped.
+      Fire when the name does not match ANaming.LocalCase, OR when the name
+      carries the FieldPrefix or ParamPrefix (a local named like a field/param
+      is a naming-convention smell). Skipped when LocalCase=''. }
+    if N.NodeType = 'declVar' then
+    begin
+      if InProcBody and (ANaming.LocalCase <> '') then
+      begin
+        TypeNode:= N.ChildByField('type');
+        VarTypeStart:= MaxInt;
+        if not TypeNode.IsNull then VarTypeStart:= Integer(TypeNode.StartByte);
+        for I:= 0 to N.NamedChildCount - 1 do
+        begin
+          VarNameId:= N.NamedChild(I);
+          if VarNameId.NodeType <> 'identifier' then Continue;
+          if Integer(VarNameId.StartByte) >= VarTypeStart then Continue;
+          var VarName: string:= Trim(NodeStr(VarNameId));
+          if VarName = '' then Continue;
+          { Fire when casing is wrong OR the name carries field/param prefix. }
+          var CasingBad: Boolean:= not MatchesCase(VarName, ANaming.LocalCase);
+          var HasFieldPfx: Boolean:= (ANaming.FieldPrefix <> '') and HasPrefix(VarName, ANaming.FieldPrefix);
+          var HasParamPfx: Boolean:= (ANaming.ParamPrefix <> '') and HasPrefix(VarName, ANaming.ParamPrefix);
+          if CasingBad or HasFieldPfx or HasParamPfx then
+            EmitAt(VarNameId, 'local-var-casing',
+              Format('Local variable "%s" should be %s and not carry a field/param prefix',
+                [VarName, ANaming.LocalCase]));
+        end;
+      end;
       for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
       Exit;
     end;
@@ -371,6 +630,7 @@ begin
   Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
   InExplicitSection:= False; { root and class-body level = implicit-first section }
+  InProcBody:= False;        { not inside a routine body at the root level }
   try
     Visit(PF.Tree.RootNode);
     Raw:= Findings.ToArray;
