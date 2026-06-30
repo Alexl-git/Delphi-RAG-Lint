@@ -1,35 +1,45 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-06-29 -- M1+M2+#12 CODE COMPLETE; NEXT = publish v0.66.0-alpha
+> ## RESUME 2026-06-30 -- v0.68 DESIGNED + PLANNED; NEXT = IMPLEMENT (subagent-driven)
 >
-> **Branch `feat/m2-dataflow-cfg-engine`** (off LOCAL main, which carries M1; **NOTHING PUSHED** -- all
-> commits `a77bfbb..HEAD` incl. M1+M2+#12 are unpushed; publish = M1+M2+#12 together as v0.66.0-alpha).
-> Working tree clean. VERSION const (`CLI.pas:6`) = `0.66.0-alpha`; CHANGELOG has the M1+M2+Ergonomics entries.
+> **Branch `main`**, working tree clean. **v0.66.0-alpha + v0.67.0-alpha both SHIPPED + RELEASED**
+> (origin/main=b9d154c tag v0.67.0-alpha; GitHub PRERELEASEs win32+win64; harness **94/94**). **3 unpushed
+> DOC commits on main** (8524203 v0.68 spec, 5d1e33b SQL-DDL wishlist, c0d5a67 v0.68 plan) -- offer to push.
+> VERSION const (`CLI.pas:6`) = `0.67.0-alpha` (Task 7 bumps to 0.68.0-alpha).
 >
-> **DONE (#12 Ergonomics/output -- all 6 tasks reviewed and merged into branch):**
-> - Task 1: `DRagLint.Output.Sarif` + `--format sarif` (SARIF 2.1.0 to stdout)
-> - Task 2: `--fail-on error|warning|info|none` (severity-gated exit code)
-> - Task 3: `DRagLint.Lint.Config` (`drag-lint-lint.json`: severity/disabled/enabled/thresholds/profiles;
->   `--config`/`--enable`/`--disable`/`--profile`; `.scm "enabled":false` ships-off-by-default)
-> - Task 4: `DRagLint.Lint.Baseline` (`--baseline`/`--write-baseline`, line-shift-stable fingerprints)
-> - Task 5: shared `FinalizeAndOutput` tail (config -> baseline -> format -> exit code) in all 3 commands;
->   `lint-all --json` now goes to stdout only (dated report still written in text mode)
-> - Task 6: docs (CHANGELOG Ergonomics section, `rules/README.md` CI/output section, MISSING-FEATURES #12 closed)
-> - **Autofix DEFERRED** -- next milestone of its own.
+> **NEXT ACTION -- IMPLEMENT v0.68 via subagent-driven-development:**
+> Plan: **`docs/superpowers/plans/2026-06-30-v068-naming-deadcode-plan.md`** (7 tasks).
+> Spec: `docs/superpowers/specs/2026-06-30-v068-naming-deadcode-design.md`.
+> v0.68 = **12 new rules, enabled by default**, closing MISSING-FEATURES #1 (naming) + #2 tail + #3:
+> - **Naming (#1, 7 rules):** config-driven BUILT-INS in a new `DRagLint.Diagnostics.NamingChecks`,
+>   reading a new `naming` block in `drag-lint-lint.json` (`TNamingConfig` on `TLintConfig`, defaults =
+>   CLAUDE.md conventions T/E/I/P/F/p/PascalCase). `type-name-prefix` (E-prefix uses M1 store when present),
+>   `field-name-prefix`, `param-name-prefix`, `method-pascalcase`, `const-casing`, `local-var-casing`,
+>   `unit-name-matches-file`. (`.scm` can't read config -> these MUST be built-ins.)
+> - **Dead-code (#2, 4 rules):** `unused-parameter` + `identical-then-else` (AST, new
+>   `DRagLint.Diagnostics.DeadCodeChecks`, `lint <file>`); `unused-private-member` + `unused-unit-in-uses`
+>   (store-backed, extend `DRagLint.Lint.ProjectRules`). DEFERRED: function-result-ignored,
+>   multiple-statements-per-line, commented-out-code, redundant-parentheses.
+> - **referenced-never-set (#3):** SINGLE-UNIT whole-class field def-use (private fields are unit-scoped ->
+>   NO store/DB; runs on `lint <file>`); guards = private-only + skip form/published fields.
+> Per-task loop (the v0.67/#12 recipe): fixture RED -> code (copy the v0.67 length-zero built-in in
+> `AstChecks.CheckTypeAware` ~line 1620 as the emit template) -> 4-site CLI wiring (allow-list ~4476, help
+> ~4486, DoLint dispatch, DoLintAll dispatch) -> delphi-build Win64 (scratchpad bat via Start-Process -Wait)
+> -> deploy exe to `third_party\dll-win64` -> harness `pwsh -File tests\lint\run_lint_tests.ps1` stays
+> 94/94+ -> normalize CRLF/ASCII -> commit. Task 7 = docs + bump VERSION 0.68.0-alpha + publish (pack/tag/gh).
 >
-> **NEXT ACTION -- PUBLISH v0.66.0-alpha (user's gate, or on request):**
-> 1. Merge `feat/m2-dataflow-cfg-engine` -> `main` (all M1+M2+#12 commits together).
-> 2. `pwsh -File build\pack-lint-release.ps1 -Version 0.66.0-alpha` (builds win64+win32 zips, deploys exe,
->    bundles `rules/`).
-> 3. `git push origin main`; `git tag v0.66.0-alpha`; `git push origin --tags`.
-> 4. `gh release create v0.66.0-alpha --repo Alexl-git/Delphi-RAG-Lint --prerelease --notes-file <notes> <zips>`.
+> **Side TODO (user-flagged "very soon", NOT linter):** structured SQL DDL schema index (CREATE TABLE/VIEW/
+> PROC/GENERATOR/EXCEPTION) to eliminate grepping `.sql` -- captured at
+> `docs/superpowers/specs/2026-06-29-grep-elimination-indexer-wishlist.md` (P2 item 9).
 >
 > **Gotchas:** `.pas`/`.dfm` strict 7-bit ASCII + CRLF (Edit/Write emit LF -> normalize before commit);
-> a NEW unit needs BOTH the `.dpr` `uses ... in '..'` AND a `.dproj` `<DCCReference>`; tree-sitter
-> grammar quirks confirmed in the M2 plan header (try `finally` field is doubled, `varAssignDef` first
-> named child is `kVar`, anon method = `lambda` = own scope, `for var X in` iterator = `varAssignDef`,
-> Break/Continue/Exit = bare identifiers). check-ast/lint-all are the store-bearing paths; `--format json`
-> output has a `FTS5 probe` preamble line before the JSON (slice from first `[`).
+> **NEVER put `}` or a nested `{` inside a `{ }` Pascal comment -- it closes the comment early = real dcc64
+> syntax error (hit in v0.67)**; a NEW unit needs BOTH the `.dpr` `uses ... in '..'` AND a `.dproj`
+> `<DCCReference>`; CONFIRM tree-sitter node kinds against a real parse before coding each naming rule
+> (parser walkers in `DRagLint.Parser.Delphi13.pas`: declType@886/declClass@451/declIntf@485/declField@907/
+> declProc@898/defProc@986/declArg/declVar/declConst@960/unit@859); tune each fixture `.expected` line to the
+> emitted position during GREEN. `CatOf` returns tcUnknown with NO store (built-ins use a NAME heuristic on
+> the no-store `lint <file>` path -- see v0.67 length-zero `IsStringType`/`TypeTextIsString`).
 >
 > --- (history below) ---
 
