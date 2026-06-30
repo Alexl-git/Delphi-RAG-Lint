@@ -3,6 +3,90 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.68.0-alpha -- 2026-06-30
+
+Naming-convention wave (#1), dead/redundant-code tail (#2), and the final data-flow
+item (#3). 12 new rules, all enabled by default. Naming rules are `info`; dead-code
+and data-flow rules are `warning`.
+
+### Added (naming conventions -- 7 rules, `info`, `lint <file>`)
+
+All naming rules are config-driven via a new `naming` block in `drag-lint-lint.json`.
+Built-in defaults match the project's CLAUDE.md conventions (no config file required
+for zero false positives on this codebase). Disable any individual check by setting
+its value to `""` (string) or `[]` (array) in the config, or by listing the rule id
+under `disabled`.
+
+**New `naming` config block** (shown with defaults):
+
+```json
+"naming": {
+  "type_prefix":  { "class": "T", "exception": "E", "interface": "I", "pointer": "P" },
+  "field_prefix": "F",
+  "param_prefix": "p",
+  "method_case":  "PascalCase",
+  "const_case":   ["PascalCase", "UPPER_CASE"],
+  "local_case":   "PascalCase"
+}
+```
+
+- **`type-name-prefix`** -- class type must start with `T`; interface with `I`; pointer
+  type with `P`; exception class (ancestry reaches `Exception`) with `E`. The
+  exception-class sub-check uses the M1 resolver when a symbol store is present; falls
+  back to the `T` rule on the no-store `lint <file>` path (no guessing).
+- **`field-name-prefix`** -- class instance field name must start with `F`. Published
+  auto-generated DFM component fields on form/frame classes are skipped.
+- **`param-name-prefix`** -- routine parameter name must start with `p`. `Self` is
+  skipped; set `"param_prefix": ""` to disable.
+- **`method-pascalcase`** -- method/routine name must be PascalCase.
+- **`const-casing`** -- declared constant or enum member name must match one of
+  `const_case` (default: `PascalCase` or `UPPER_CASE`).
+- **`local-var-casing`** -- local variable name must be PascalCase and must not carry
+  the field or param prefix (`FFoo`/`pFoo` in a local is a naming smell).
+- **`unit-name-matches-file`** -- the `unit X;` identifier must equal the file's base
+  name (case-insensitive on Windows). One finding per unit.
+
+### Added (dead/redundant-code -- 3 AST rules + 1 data-flow rule, `warning`)
+
+**Per-file (`lint <file>`) path:**
+
+- **`unused-parameter`** -- a parameter never read in the routine body. Guards: skips
+  parameters of `override` methods, interface-method implementations, event-handler
+  signatures (e.g. `Sender: TObject`), message-method directives, and
+  `assembler`/`external` bodies -- all of which must keep the parameter for signature
+  compatibility. Also skips `out`/`var` parameters (caller-visible).
+- **`identical-then-else`** -- an `if C then S1 else S2` where `S1` and `S2` are
+  syntactically identical (normalized subtree text comparison). Flags real copy-paste
+  bugs; the two branches always produce the same result regardless of `C`.
+- **`referenced-never-set`** -- a `private`/`strict private` class field that has at
+  least one read but zero writes anywhere in the declaring unit. The field always holds
+  its zero value, making every read return a misleading default. Guards: skips
+  `published` fields, form/frame/`TComponent`-streamed classes (DFM/RTTI streaming
+  writes them invisibly), and fields initialized in their declaration.
+
+**Store-backed (`lint-all --db` / `lint-project --db`) path:**
+
+- **`unused-private-member`** -- a `private`/`strict private` method, field, const, or
+  nested type with zero references in the symbol index. Mirrors `unused-public-symbol`
+  but scoped to private visibility (lower false-positive rate -- privates cannot be
+  used cross-unit). Guards: skips published fields and RTTI/`{$M+}`-streamed members.
+- **`unused-unit-in-uses`** -- a unit in a `uses` clause none of whose exported symbols
+  are referenced by the using unit. Conservative guard: skips units plausibly used only
+  for operator overloads, class/record helpers, or `initialization`/`finalization`
+  side effects; also skips a small allow-list of known side-effect units. Flags only
+  when zero referenced symbols are affirmatively found.
+
+### Notes
+
+- All 12 rules flow through the v0.66 `FinalizeAndOutput` tail: severity remap,
+  `disabled`/`enabled`, `--disable`, `--fail-on`, SARIF output, and baseline all apply
+  without per-rule plumbing.
+- Naming rules run on the `lint <file>` path. `unused-private-member` and
+  `unused-unit-in-uses` run on the `lint-all --db` / `lint-project --db` path.
+- Deferred (NON-GOALS for v0.68): `function-result-ignored`, `commented-out-code`,
+  `redundant-parentheses`, `multiple-statements-per-line`.
+- Harness: 109/109 fixtures green.
+
 ## v0.67.0-alpha -- 2026-06-29
 
 Rule-accuracy fixes (false positives reported on real ORM3 code).

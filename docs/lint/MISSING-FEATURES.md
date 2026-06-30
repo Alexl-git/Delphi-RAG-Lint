@@ -7,12 +7,11 @@ analysis (`docs/lint/REPORT-1-delphi-lint-landscape.md`) cross-checked against t
 inventory (`rules/*.scm`, `src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`,
 `src/lint/DRagLint.Lint.ProjectRules.pas`).
 
-**Where we stand (updated v0.66.0-alpha):** ~107 rules, roughly **65-72%** of the catalogued
-breadth. **M1 (type/hierarchy resolver) and M2 (CFG/data-flow engine) both SHIPPED** -- the
-data-flow frontier that was the long pole is now substantially covered (7 flow checks). We
-**lead** on security, architecture/layering, and exception handling. The remaining gaps are
-**naming** (~0, the biggest cheap win) and the **cheap index tail** (unused-* family, clones,
-metrics) -- both pure-AST/index, no new engine needed -- plus **autofix/quick-fixes** (#12).
+**Where we stand (updated v0.68.0-alpha):** ~119 rules, roughly **72-78%** of the catalogued
+breadth. **M1 (type/hierarchy resolver), M2 (CFG/data-flow engine), naming wave (#1), and
+dead-code tail (#2) all SHIPPED.** We **lead** on security, architecture/layering, and exception
+handling. The remaining gaps are the **cheap index tail** (clone detection, cognitive complexity,
+cast rules #4) and **autofix/quick-fixes** (#12).
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
 **(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use
@@ -20,27 +19,29 @@ engine (SHIPPED v0.66).
 
 ---
 
-## 1. Naming conventions  -- ~0% today (biggest, cheapest gap)  **(now)**
-- [ ] Type prefix: `T`/`E`/`I`/`P` for class/exception/interface/pointer types
-- [ ] Field prefix `F`; getter/setter `Get*`/`Set*`; event prefix `On*`/`Do*`
-- [ ] Const / enum-member casing; PascalCase methods; param prefix convention
-- [ ] Unit name must equal file name; identifiers differing only by case
-- [ ] Reserved-word casing (lowercase keywords); Hungarian/short-identifier flags
-> ~14 deterministic, near-zero-FP `.scm` rules. The single best breadth-per-effort win.
+## 1. Naming conventions  -- SHIPPED v0.68 (7 rules, `info`, config-driven)  **(now)**
+- [x] Type prefix: `T`/`E`/`I`/`P` for class/exception/interface/pointer types -- shipped v0.68 as `type-name-prefix`
+- [x] Field prefix `F` -- shipped v0.68 as `field-name-prefix`; getter/setter/event prefixes deferred
+- [x] Const / enum-member casing; PascalCase methods; param prefix convention -- shipped v0.68 as `const-casing`, `method-pascalcase`, `param-name-prefix`
+- [x] Unit name must equal file name -- shipped v0.68 as `unit-name-matches-file`
+- [x] Local variable casing -- shipped v0.68 as `local-var-casing`
+- [ ] Reserved-word casing (lowercase keywords); Hungarian/short-identifier flags -- deferred
+> 7 config-driven rules shipped. Defaults match CLAUDE.md conventions. Disable any check via `"param_prefix": ""` / `[]` or the `disabled` list.
 
 ## 2. Dead / redundant code  -- partial  **(now, except where noted)**
 Have: `code-after-exit`, `self-assignment`, `comparison-same-operands`, `redundant-assigned-free`,
 `redundant-as-tobject`, `redundant-not-not`, `boolean-comparison-true`,
 `boolean-result-returned-directly`, `inherited-bare`, `empty-*`, `unused-public-symbol`,
 `unused-local`.
-- [ ] `unused-private-member` (method/field/const/type)  -- index already has the refs
-- [ ] `unused-parameter`
-- [ ] `unused-unit-in-uses`  -- the resolved uses-graph already exists
+- [x] `unused-private-member` (method/field/const/type)  -- shipped v0.68 (store-backed, `warning`)
+- [x] `unused-parameter`  -- shipped v0.68 (AST, `warning`, with override/event-handler guards)
+- [x] `unused-unit-in-uses`  -- shipped v0.68 (store-backed, `warning`, conservative allow-list)
 - [x] `write-only-field` / `assigned-never-read`  -- shipped v0.66 as `write-only-local` **(M2)**
 - [x] `overwrite-before-read` (value clobbered before use)  -- shipped v0.66 **(M2)**
-- [ ] `function-result-ignored` at call sites
-- [ ] `commented-out-code` detection
-- [ ] `redundant-parentheses`, `identical-then-else`, `multiple-statements-per-line`
+- [x] `identical-then-else`  -- shipped v0.68 (AST, `warning`)
+- [ ] `function-result-ignored` at call sites -- deferred (FP-prone without type resolution)
+- [ ] `commented-out-code` detection -- deferred
+- [ ] `redundant-parentheses`, `multiple-statements-per-line` -- deferred
 
 ## 3. Data-flow / uninitialized variables  -- SHIPPED v0.66 (the long pole, now covered)  **(M2)**
 PAL's crown jewel; the compiler does some (W1035/W1036). The M2 per-routine CFG + monotone def-use
@@ -50,7 +51,7 @@ v0.66 with definite=warning / possible=info FP stance and managed-type exactness
 - [x] `function-result-not-set` on some path  -- shipped v0.66 (`function-result-not-set`)
 - [x] `set-never-referenced`  -- shipped v0.66 as `write-only-local`
 - [x] for-loop variable read after the loop (`loop-var-after-loop`); out-param never written (`out-param-not-set`)  -- shipped v0.66
-- [ ] `referenced-never-set` (read of a never-assigned non-local field) -- still open; needs cross-routine field-flow
+- [x] `referenced-never-set` (read of a never-assigned non-local field) -- shipped v0.68 (single-unit private field scan, `warning`)
 > Was *most* of the distance from ~60% to PAL parity. Largely closed by the M2 engine; the remaining
 > tail (cross-routine field def-use, possible-via-opaque refinement) is incremental, not a new engine.
 
@@ -122,21 +123,19 @@ Have: `layering-violation`, `interface-reference-cycle`, `god-class`, `unit-not-
 
 ---
 
-## Highest-leverage next additions (coverage per effort) -- post-v0.66 (M1+M2+#12 shipped)
-1. **Naming wave (#1)** -- ~14 deterministic, near-zero-FP `.scm` rules. Now the single biggest, cheapest
-   breadth gap (M1/M2 done). The best coverage-per-effort win left.
-2. **Cheap index tail** (#2 unused-private-member / unused-parameter / unused-unit-in-uses;
-   #6 cognitive complexity + clone detection) -- pure index/AST, no new engine.
-3. **Type-system casts (#4)** -- now unblocked by the shipped M1 resolver (unsafe-typecast, redundant-cast,
-   lossy Ansi<->Unicode).
-4. **Autofix / quick-fixes (#12)** -- the remaining ergonomics gap (SonarDelphi ~14; we have 0); its own milestone.
-5. **Rule-accuracy / FP polish** -- e.g. length-zero-compare must gate on string operands (not arrays);
-   line/col position fidelity. Ongoing, ships in point releases (v0.67+).
+## Highest-leverage next additions (coverage per effort) -- post-v0.68 (M1+M2+#12+naming+dead-code shipped)
+1. **Cheap index tail remaining** (#2 deferred: `function-result-ignored` / `commented-out-code` /
+   `redundant-parentheses` / `multiple-statements-per-line`; #6 cognitive complexity + clone detection)
+   -- pure AST/index, no new engine. Clone detection is the biggest remaining single item.
+2. **Type-system casts (#4)** -- unblocked by the shipped M1 resolver (unsafe-typecast, redundant-cast,
+   lossy Ansi<->Unicode). Medium effort, medium breadth gain.
+3. **Autofix / quick-fixes (#12)** -- the remaining ergonomics gap (SonarDelphi ~14; we have 0); its own milestone.
+4. **Rule-accuracy / FP polish** -- ongoing; ships in point releases.
 
 ## Verdict
-"Everything the commercial tools do" is **not** reachable on a pure-AST path, but the two engine long-poles
-are now behind us: **M1 (type resolver) and M2 (data-flow/CFG) shipped in v0.66**. We sit at **~65-72%** of
-the catalogued breadth and **lead** on security and architecture. The realistic ceiling is **~80-85%** via
-the naming wave + cheap index tail + M1-backed cast rules; the last stretch (clone detection, full CK suite,
-cross-routine field flow, autofix) is incremental. We already exceed FixInsight's breadth and approach
-SonarDelphi's on the dimensions we cover.
+"Everything the commercial tools do" is **not** reachable on a pure-AST path, but the major engine milestones
+are now behind us: **M1 (type resolver), M2 (data-flow/CFG), naming wave (#1), and dead-code tail (#2)
+all shipped by v0.68**. We sit at **~72-78%** of the catalogued breadth and **lead** on security and
+architecture. The realistic ceiling is **~80-85%** via the remaining cheap index tail + M1-backed cast rules;
+the last stretch (clone detection, full CK suite, cross-routine field flow, autofix) is incremental. We
+already exceed FixInsight's breadth and approach SonarDelphi's on the dimensions we cover.
