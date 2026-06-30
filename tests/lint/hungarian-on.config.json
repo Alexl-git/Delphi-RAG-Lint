@@ -1,0 +1,1 @@
+{ "naming": { "short_identifier_check": true, "min_identifier_len": 3, "hungarian_prefixes": ["lpsz", "int", "str"] } }

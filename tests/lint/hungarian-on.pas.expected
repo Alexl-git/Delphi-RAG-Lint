@@ -1,0 +1,7 @@
+# short_identifier_check=true with prefixes [lpsz,int,str], min_len 3:
+#   lpszName (4) -> Hungarian; x2 (7) -> too short; strBuf (8) -> Hungarian.
+#   Value (4) clean (no prefix, len 5); i (6) loop-counter exempt.
+hungarian-or-short-identifier 4
+hungarian-or-short-identifier 7
+hungarian-or-short-identifier 8
+!hungarian-or-short-identifier 6

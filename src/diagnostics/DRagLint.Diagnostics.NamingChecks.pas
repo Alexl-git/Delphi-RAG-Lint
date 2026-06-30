@@ -255,6 +255,35 @@ begin
   Result:= (ALowerText = 'true') or (ALowerText = 'false') or (ALowerText = 'nil');
 end;
 
+{ Returns True when AName is a conventional loop-counter / coordinate identifier
+  (i, j, k, n, x, y) that is exempt from the short-identifier check. Case-
+  insensitive. }
+function IsLoopCounterName(const AName: string): Boolean;
+begin
+  Result:= SameText(AName, 'i') or SameText(AName, 'j') or SameText(AName, 'k')
+    or SameText(AName, 'n') or SameText(AName, 'x') or SameText(AName, 'y');
+end;
+
+{ Returns True when AName carries one of APrefixes as a Hungarian type prefix:
+  it starts with the prefix (case-sensitive) AND the next character is uppercase
+  (so 'intCount' = int+Count, 'lpszName' = lpsz+Name, but 'internal' = int+e..
+  is NOT flagged). An empty prefix is ignored. }
+function HasHungarianPrefix(const AName: string; const APrefixes: TArray<string>): Boolean;
+var
+  Pfx: string;
+  PLen: Integer;
+begin
+  Result:= False;
+  for Pfx in APrefixes do
+  begin
+    PLen:= Length(Pfx);
+    if PLen = 0 then Continue;
+    if Length(AName) <= PLen then Continue;
+    if Copy(AName, 1, PLen) <> Pfx then Continue;
+    if CharInSet(AName[PLen + 1], ['A'..'Z']) then Exit(True);
+  end;
+end;
+
 class function TNamingChecker.Check(const AFile: string; const ANaming: TNamingConfig;
   const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
@@ -311,6 +340,24 @@ var
     F.EndLine  := F.StartLine;
     F.EndCol   := F.StartCol + Length(Trim(NodeStr(ANameNode)));
     Findings.Add(F);
+  end;
+
+  { Emit a hungarian-or-short-identifier finding for a declaration name when the
+    rule is enabled. Short check: shorter than MinIdentifierLen and not a loop
+    counter. Hungarian check: carries a configured type prefix. At most one
+    finding per name (short takes precedence). }
+  procedure EmitShortHungarian(const ANameNode: TTSNode; const AName: string);
+  begin
+    if not ANaming.ShortIdentifierCheck then Exit;
+    if AName = '' then Exit;
+    if IsLoopCounterName(AName) then Exit;
+    if Length(AName) < ANaming.MinIdentifierLen then
+      EmitAt(ANameNode, 'hungarian-or-short-identifier',
+        Format('Identifier "%s" is shorter than %d characters',
+          [AName, ANaming.MinIdentifierLen]))
+    else if HasHungarianPrefix(AName, ANaming.HungarianPrefixes) then
+      EmitAt(ANameNode, 'hungarian-or-short-identifier',
+        Format('Identifier "%s" uses a Hungarian type prefix', [AName]));
   end;
 
   { True when ATypeNode (the `type:` field child of a declType) is a pointer
@@ -623,7 +670,7 @@ var
               Format('Method "%s" should be %s', [MethName, ANaming.MethodCase]));
         end;
       end;
-      if ANaming.ParamPrefix <> '' then
+      if (ANaming.ParamPrefix <> '') or ANaming.ShortIdentifierCheck then
       begin
         ArgsNode:= N.ChildByField('args');
         if not ArgsNode.IsNull then
@@ -642,10 +689,11 @@ var
               if Integer(NameId.StartByte) >= TypeStart then Continue;
               ArgName:= Trim(NodeStr(NameId));
               if SameText(ArgName, 'Self') then Continue;
-              if not HasPrefix(ArgName, ANaming.ParamPrefix) then
+              if (ANaming.ParamPrefix <> '') and (not HasPrefix(ArgName, ANaming.ParamPrefix)) then
                 EmitAt(NameId, 'param-name-prefix',
                   Format('Parameter "%s" should start with the "%s" prefix',
                     [ArgName, ANaming.ParamPrefix]));
+              EmitShortHungarian(NameId, ArgName);
             end;
           end;
         end;
@@ -695,7 +743,7 @@ var
           end;
         end;
         { param-name-prefix on the defProc args }
-        if ANaming.ParamPrefix <> '' then
+        if (ANaming.ParamPrefix <> '') or ANaming.ShortIdentifierCheck then
         begin
           ArgsNode:= HdrNode.ChildByField('args');
           if not ArgsNode.IsNull then
@@ -714,10 +762,11 @@ var
                 if Integer(NameId.StartByte) >= TypeStart then Continue;
                 ArgName:= Trim(NodeStr(NameId));
                 if SameText(ArgName, 'Self') then Continue;
-                if not HasPrefix(ArgName, ANaming.ParamPrefix) then
+                if (ANaming.ParamPrefix <> '') and (not HasPrefix(ArgName, ANaming.ParamPrefix)) then
                   EmitAt(NameId, 'param-name-prefix',
                     Format('Parameter "%s" should start with the "%s" prefix',
                       [ArgName, ANaming.ParamPrefix]));
+                EmitShortHungarian(NameId, ArgName);
               end;
             end;
           end;
@@ -759,7 +808,7 @@ var
       is a naming-convention smell). Skipped when LocalCase=''. }
     if N.NodeType = 'declVar' then
     begin
-      if InProcBody and (ANaming.LocalCase <> '') then
+      if InProcBody and ((ANaming.LocalCase <> '') or ANaming.ShortIdentifierCheck) then
       begin
         TypeNode:= N.ChildByField('type');
         VarTypeStart:= MaxInt;
@@ -778,14 +827,18 @@ var
             (strict: next-char must be uppercase) so that e.g. a local named
             'Form' is NOT flagged as carrying the 'F' prefix -- only 'FCount'
             (F + uppercase next char) would fire the carry check. }
-          var CasingBad: Boolean:= (not MatchesCase(VarName, ANaming.LocalCase))
-            and (not IsShortAllCaps(VarName));
-          var HasFieldPfx: Boolean:= (ANaming.FieldPrefix <> '') and HasPrefix(VarName, ANaming.FieldPrefix);
-          var HasParamPfx: Boolean:= (ANaming.ParamPrefix <> '') and HasPrefix(VarName, ANaming.ParamPrefix);
-          if CasingBad or HasFieldPfx or HasParamPfx then
-            EmitAt(VarNameId, 'local-var-casing',
-              Format('Local variable "%s" should be %s and not carry a field/param prefix',
-                [VarName, ANaming.LocalCase]));
+          if ANaming.LocalCase <> '' then
+          begin
+            var CasingBad: Boolean:= (not MatchesCase(VarName, ANaming.LocalCase))
+              and (not IsShortAllCaps(VarName));
+            var HasFieldPfx: Boolean:= (ANaming.FieldPrefix <> '') and HasPrefix(VarName, ANaming.FieldPrefix);
+            var HasParamPfx: Boolean:= (ANaming.ParamPrefix <> '') and HasPrefix(VarName, ANaming.ParamPrefix);
+            if CasingBad or HasFieldPfx or HasParamPfx then
+              EmitAt(VarNameId, 'local-var-casing',
+                Format('Local variable "%s" should be %s and not carry a field/param prefix',
+                  [VarName, ANaming.LocalCase]));
+          end;
+          EmitShortHungarian(VarNameId, VarName);
         end;
       end;
       for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));

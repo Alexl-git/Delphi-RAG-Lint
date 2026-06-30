@@ -1,0 +1,2 @@
+# OFF by default (short_identifier_check=false) -> rule never fires.
+!hungarian-or-short-identifier
