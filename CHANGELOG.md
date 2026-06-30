@@ -37,6 +37,17 @@ breaking changes** until v1.0.
   conservatively skips shadowing nested routines, qualified members (`exprDot`/`genericDot`),
   and `with` blocks.
 
+### Added (refactor CLI -- D2b)
+
+- **`drag-lint find-unit --name <Symbol> --in <file>`** -- add the unit that
+  declares `<Symbol>` to `<file>`'s uses clause (implementation uses preferred).
+  Dry-run default; `--json`; `--apply` (backups on, ANSI/CRLF preserved). No-op
+  when the unit is already imported.
+- **`drag-lint safe-delete --name <QName>`** -- delete a symbol's declaration
+  (and implementation body, for a routine) ONLY when it has zero references
+  (name-text check); refuses otherwise. Dry-run default; `--json`; `--apply`.
+- New unit `DRagLint.Refactor.TextEdit` (range insert/delete applier) backs both.
+
 ### Fixed
 
 - The FireDAC `FTS5 probe` diagnostic now writes to stderr instead of stdout, so it
