@@ -152,6 +152,11 @@ type
     // v0.24: rename
     RenameTo: string ; // --to <NewName>
     NoBackup: Boolean; // --no-backup
+    // v0.69 D2a: rename --kind symbol|param
+    // RenameKind reuses Kind (--kind already parsed into Kind)
+    // RefFile    reuses InFile (--file already parsed into InFile)
+    RefLine  : Integer; // --line <L> (param rename, 1-based)
+    RefCol   : Integer; // --col <C>  (param rename, 1-based)
     // v0.25: doc-stub generator + dead-code finder
     DocStubFormat : string ; // --format xmldoc|pasdoc (default 'xmldoc')
     IncludePrivate: Boolean; // --include-private
@@ -259,6 +264,8 @@ begin
   Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
+  Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
+  Writeln('  drag-lint rename --kind param  --file <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
@@ -698,6 +705,11 @@ begin
       Result.RenameTo:= ParamStr(i);
     end
     else if A = '--no-backup'       then Result.NoBackup      := True
+    // v0.69 D2a: rename --kind param positional args
+    // Note: --kind  already parsed into Result.Kind   (line ~638)
+    //       --file  already parsed into Result.InFile (line ~433)
+    else if (A = '--line') and (i < ParamCount) then begin Inc(i); Result.RefLine:= StrToIntDef(ParamStr(i), 0); end
+    else if (A = '--col')  and (i < ParamCount) then begin Inc(i); Result.RefCol := StrToIntDef(ParamStr(i), 0); end
     else if A = '--include-private' then Result.IncludePrivate:= True
     else if (A = '--target') and (i < ParamCount) then
     begin
@@ -5697,6 +5709,90 @@ var
   Edits       : TArray<TRenameEdit>;
   FilesTouched: Integer            ;
 begin
+  { v0.69 D2a: --kind symbol|param path (dry-run default, --apply writes, --json edit set).
+    Collision notes: --kind parsed into AArgs.Kind; --file parsed into AArgs.InFile.
+    Legacy --qname path below is unchanged. }
+  if AArgs.Kind <> '' then
+  begin
+    if SameText(AArgs.Kind, 'param') then
+    begin
+      if (AArgs.InFile = '') or (AArgs.RefLine <= 0) or (AArgs.RefCol <= 0)
+          or (AArgs.RenameTo = '') then
+      begin
+        Writeln('ERROR: rename --kind param needs --file --line --col --to');
+        Exit(2);
+      end;
+      if TRenameRefactoring.IsReservedWord(AArgs.RenameTo) then
+      begin
+        Writeln(Format('ERROR: "%s" is a reserved word', [AArgs.RenameTo]));
+        Exit(2);
+      end;
+      Edits:= TRenameRefactoring.BuildLocal(
+        AArgs.InFile, AArgs.RefLine, AArgs.RefCol, AArgs.RenameTo);
+    end
+    else if SameText(AArgs.Kind, 'symbol') then
+    begin
+      var QN: string:= AArgs.QName;
+      if QN = '' then QN:= AArgs.Name;
+      if QN = '' then
+      begin
+        Writeln('ERROR: rename --kind symbol needs --name <QualifiedName> --to <New>');
+        Exit(2);
+      end;
+      if AArgs.RenameTo = '' then
+      begin Writeln('ERROR: --to required'); Exit(2); end;
+      if AArgs.DbPath = '' then
+      begin Writeln('ERROR: --db required for --kind symbol'); Exit(2); end;
+      var KStore: ISymbolStore:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+      KStore.Migrate;
+      var Reason: string:= TRenameRefactoring.ConflictReason(KStore, QN, AArgs.RenameTo);
+      if Reason <> '' then
+      begin Writeln('ERROR: cannot rename -- ' + Reason); Exit(2); end;
+      Edits:= TRenameRefactoring.Build(KStore, QN, AArgs.RenameTo);
+    end
+    else
+    begin
+      Writeln('ERROR: --kind must be symbol or param');
+      Exit(2);
+    end;
+
+    if Length(Edits) = 0 then
+    begin Writeln('No edits computed.'); Exit(1); end;
+
+    if AArgs.AsJson then
+    begin
+      var Arr: TJSONArray:= TJSONArray.Create;
+      try
+        for var Ed in Edits do
+        begin
+          var O: TJSONObject:= TJSONObject.Create;
+          O.AddPair('file', Ed.FilePath);
+          O.AddPair('line', TJSONNumber.Create(Ed.Line));
+          O.AddPair('col',  TJSONNumber.Create(Ed.Col));
+          O.AddPair('old',  Ed.OldName);
+          O.AddPair('new',  Ed.NewName);
+          Arr.AddElement(O);
+        end;
+        Writeln(Arr.ToJSON);
+      finally
+        Arr.Free;
+      end;
+      Exit(0);
+    end;
+
+    if not AArgs.Apply then
+    begin
+      Writeln(TRenameRefactoring.RenderDryRun(Edits));
+      Writeln(Format('Dry run: %d edit(s). Pass --apply to write.', [Length(Edits)]));
+      Exit(0);
+    end;
+
+    var Touched: Integer:= TRenameRefactoring.Apply(Edits, not AArgs.NoBackup);
+    Writeln(Format('Applied: %d edit(s), %d file(s).', [Length(Edits), Touched]));
+    Exit(0);
+  end;
+  { ----- legacy --qname path below (unchanged) ----- }
+
   if (AArgs.QName = '') or (AArgs.RenameTo = '') then
   begin
     Writeln('Usage: drag-lint rename --qname Foo.TBar.Baz --to NewName ' + '[--db PATH] [--dry-run] [--no-backup]');
