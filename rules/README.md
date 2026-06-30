@@ -264,9 +264,9 @@ Use that output to write your query.
 
 With no config, no baseline, and no `--fail-on`, every command behaves exactly as before.
 
-## Naming conventions (v0.68)
+## Naming conventions (v0.68-0.69)
 
-Seven config-driven naming rules added in v0.68. All are `info` severity, enabled by
+Nine config-driven naming rules (seven in v0.68, two in v0.69). All are `info` severity, enabled by
 default, and run on the `lint <file>` path. They read conventions from the `naming`
 block in `drag-lint-lint.json`; if no config file is present, built-in defaults apply.
 Built-in defaults follow common Delphi conventions; tune the `naming` block per project.
@@ -280,7 +280,11 @@ Built-in defaults follow common Delphi conventions; tune the `naming` block per 
   "param_prefix": "",
   "method_case":  "PascalCase",
   "const_case":   ["PascalCase", "UPPER_CASE"],
-  "local_case":   "PascalCase"
+  "local_case":   "PascalCase",
+  "keyword_case": "lowercase",
+  "min_identifier_len": 3,
+  "hungarian_prefixes": ["lpsz", "psz", "sz", "lp", "int", "str", "dw", "b", "p", "n"],
+  "short_identifier_check": false
 }
 ```
 
@@ -297,6 +301,10 @@ Built-in defaults follow common Delphi conventions; tune the `naming` block per 
 | `method_case` | string | `"PascalCase"` | Required casing for method/routine names |
 | `const_case` | string or array | `["PascalCase","UPPER_CASE"]` | Allowed casing(s) for constants and enum members |
 | `local_case` | string | `"PascalCase"` | Required casing for local variable names |
+| `keyword_case` | string | `"lowercase"` | Required casing for reserved words; `""` disables `reserved-word-casing` |
+| `min_identifier_len` | int | `3` | Shortest allowed identifier for `hungarian-or-short-identifier` |
+| `hungarian_prefixes` | array | `["lpsz","psz","sz","lp","int","str","dw","b","p","n"]` | Type-prefix denylist for `hungarian-or-short-identifier` |
+| `short_identifier_check` | bool | `false` | Master on/off for `hungarian-or-short-identifier` (**off by default**) |
 
 Supported casing values: `"PascalCase"` | `"UPPER_CASE"` | `"camelCase"`.
 
@@ -316,7 +324,7 @@ entirely by id, use the top-level `disabled` list:
 "disabled": ["param-name-prefix", "local-var-casing"]
 ```
 
-### Shipped naming rules (v0.68)
+### Shipped naming rules (v0.68-0.69)
 
 | Rule id | Severity | Description |
 |---------|----------|-------------|
@@ -327,6 +335,8 @@ entirely by id, use the top-level `disabled` list:
 | `const-casing` | info | Declared constants and enum members must match one of the configured casing styles (default: `PascalCase` or `UPPER_CASE`). |
 | `local-var-casing` | info | Local variable names must be PascalCase (configurable via `local_case`) and must not carry the field or param prefix (`FFoo`/`pFoo` as a local is a naming smell). |
 | `unit-name-matches-file` | info | The `unit X;` identifier must equal the file's base name (case-insensitive on Windows). One finding per unit. |
+| `reserved-word-casing` | info | Pascal reserved words / keywords must be written in lowercase (`begin`/`end`/`var`/...). **On by default** (`keyword_case: "lowercase"`); `True`/`False`/`nil` are convention-exempt. |
+| `hungarian-or-short-identifier` | info | Parameter and local-variable names must not be overly short (< `min_identifier_len`) or use a Hungarian type prefix (`lpszName`, `intCount`). **Off by default** (`short_identifier_check: false`); loop counters `i`/`j`/`k`/`n`/`x`/`y` exempt. FP-prone -- opt in per project. |
 
 ### False-positive hardening (naming rules)
 
@@ -348,6 +358,12 @@ VCL, and DevExpress code:
   override / interface / message / asm / external / var / out guards.
 - **`unit-name-matches-file`**: basename comparison is path-separator-robust (handles
   both `/` and `\`).
+- **`reserved-word-casing`**: only keyword (`kXxx`) tokens are checked, never
+  identifiers; symbol operators and the `True`/`False`/`nil` literals are exempt.
+- **`hungarian-or-short-identifier`**: ships **off** (`short_identifier_check:
+  false`); scoped to parameter and local-variable declarations only; loop-counter
+  names `i`/`j`/`k`/`n`/`x`/`y` are exempt. Domain abbreviations and legitimate
+  short names mean this rule is opt-in.
 - **`unused-private-member`**: property getter/setter accessors and read/write-clause
   backing fields are excluded -- a property's `read GetX write SetX` accessors are not
   flagged as unused even though the index does not link them via the property clause.

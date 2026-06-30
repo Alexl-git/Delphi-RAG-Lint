@@ -19,14 +19,14 @@ engine (SHIPPED v0.66).
 
 ---
 
-## 1. Naming conventions  -- SHIPPED v0.68 (7 rules, `info`, config-driven)  **(now)**
+## 1. Naming conventions  -- SHIPPED v0.68-0.69 (9 rules, `info`, config-driven)  **(now)**
 - [x] Type prefix: `T`/`E`/`I`/`P` for class/exception/interface/pointer types -- shipped v0.68 as `type-name-prefix`
 - [x] Field prefix `F` -- shipped v0.68 as `field-name-prefix`; getter/setter/event prefixes deferred
 - [x] Const / enum-member casing; PascalCase methods; param prefix convention -- shipped v0.68 as `const-casing`, `method-pascalcase`, `param-name-prefix`
 - [x] Unit name must equal file name -- shipped v0.68 as `unit-name-matches-file`
 - [x] Local variable casing -- shipped v0.68 as `local-var-casing`
-- [ ] Reserved-word casing (lowercase keywords); Hungarian/short-identifier flags -- PLANNED v0.69 (D3: `reserved-word-casing` ON + `hungarian-or-short-identifier` OFF) -> closes #1. See section 13.
-> 7 config-driven rules shipped. Defaults match CLAUDE.md conventions. Disable any check via `"param_prefix": ""` / `[]` or the `disabled` list.
+- [x] Reserved-word casing (lowercase keywords); Hungarian/short-identifier flags -- shipped v0.69 D3 as `reserved-word-casing` (ON) + `hungarian-or-short-identifier` (OFF). Closes #1.
+> 9 config-driven rules shipped. Defaults match CLAUDE.md conventions. Disable any check via `"param_prefix": ""` / `[]` or the `disabled` list.
 
 ## 2. Dead / redundant code  -- partial  **(now, except where noted)**
 Have: `code-after-exit`, `self-assignment`, `comparison-same-operands`, `redundant-assigned-free`,

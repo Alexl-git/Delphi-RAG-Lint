@@ -3,6 +3,20 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.69.0-alpha (in progress)
+
+### Added (naming -- D3, closes MISSING-FEATURES #1)
+
+- **`reserved-word-casing`** (`info`, **on by default**) -- flags Pascal keyword
+  tokens not written in lowercase (`Begin`/`VAR`/`And`). `True`/`False`/`nil` are
+  convention-exempt; disable via `"keyword_case": ""`.
+- **`hungarian-or-short-identifier`** (`info`, **off by default**) -- flags
+  parameter/local names that are overly short (< `min_identifier_len`) or carry a
+  Hungarian type prefix. Enable via `"short_identifier_check": true`. Loop counters
+  `i`/`j`/`k`/`n`/`x`/`y` exempt.
+- New `naming` config keys: `keyword_case`, `min_identifier_len`,
+  `hungarian_prefixes`, `short_identifier_check`.
+
 ## v0.68.0-alpha -- 2026-06-30
 
 Naming-convention wave (#1), dead/redundant-code tail (#2), and the final data-flow
