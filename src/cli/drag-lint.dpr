@@ -46,6 +46,7 @@ uses
   DRagLint.Analysis.DataFlow in '..\analysis\DRagLint.Analysis.DataFlow.pas',
   DRagLint.Analysis.Flow.Lattices in '..\analysis\DRagLint.Analysis.Flow.Lattices.pas',
   DRagLint.Diagnostics.FlowChecks in '..\diagnostics\DRagLint.Diagnostics.FlowChecks.pas',
+  DRagLint.Output.Sarif in '..\output\DRagLint.Output.Sarif.pas',
   DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas',
   DRagLint.Index.Manifest in '..\index\DRagLint.Index.Manifest.pas',
   DRagLint.Index.Glob in '..\index\DRagLint.Index.Glob.pas',
