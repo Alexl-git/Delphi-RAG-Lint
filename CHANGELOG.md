@@ -10,6 +10,15 @@ milestones bundled. M1 makes the existing heuristic rules exact when a symbol in
 is present; M2 adds a per-routine control-flow + data-flow engine and seven new
 flow-sensitive checks.
 
+### Ergonomics / output (#12)
+- `--format sarif`: SARIF 2.1.0 output for `lint`/`lint-all`/`check-ast` (GitHub code-scanning / CI ingestion).
+- `--fail-on error|warning|info|none`: severity-gated process exit code.
+- `drag-lint-lint.json` config (auto-discovered or `--config`): per-rule `severity` overrides, `disabled`/`enabled` lists, metric `thresholds`, and named `profiles`; `--enable`/`--disable`/`--profile` compose with it. `.scm` rules may ship off-by-default via sidecar `"enabled": false`.
+- `--baseline`/`--write-baseline`: line-shift-stable baseline so legacy codebases report only NEW findings.
+- All four flow through one shared `FinalizeAndOutput` tail; default (no-flag) behavior is unchanged. `check-ast` additionally gains `// drag-lint:ignore` suppression support.
+- `lint-all --json` no longer writes the dated `lint-report-*.txt` file; JSON now goes to stdout only (the dated report file is still written in text mode). Machine consumers should read stdout.
+- Autofix / quick-fixes remain deferred (a milestone of their own).
+
 ### Added (M2 -- flow-sensitive analysis engine)
 - **Per-routine CFG + monotone data-flow framework** -- new units
   `DRagLint.Analysis.Cfg` (control-flow graph builder), `DRagLint.Analysis.DataFlow`

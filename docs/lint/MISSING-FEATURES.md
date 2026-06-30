@@ -107,10 +107,10 @@ Have: `layering-violation`, `interface-reference-cycle`, `god-class`, `unit-not-
 - [ ] `circular-uses` report (cycle listing, not just the cross-check)
 - [ ] DIT/CBO depth metrics (overlaps #6)
 
-## 12. Ergonomics / output  -- gap (adoption, not analysis)
-- [ ] **SARIF output** (CI integration)
-- [ ] **quick-fixes / autofixes** (SonarDelphi ships ~14; we have 0)
-- [ ] baseline / suppression file; per-rule severity overrides + **rule on/off profiles** (v0.66 Tier 5)
+## 12. Ergonomics / output  -- DONE v0.66 (SARIF, --fail-on, baseline, drag-lint-lint.json; autofix still deferred)
+- [x] **SARIF output** (CI integration) -- shipped v0.66
+- [x] baseline / suppression file; per-rule severity overrides + **rule on/off profiles** -- shipped v0.66
+- [ ] **quick-fixes / autofixes** (SonarDelphi ships ~14; we have 0) -- deferred, next milestone
 
 ---
 

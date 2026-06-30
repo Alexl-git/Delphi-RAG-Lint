@@ -233,3 +233,30 @@ C:\Projects\tree-sitter-delphi13\node_modules\tree-sitter-cli\tree-sitter.exe pa
 ```
 
 Use that output to write your query.
+
+## CI / output ergonomics (v0.66)
+
+`lint`, `lint-all`, and `check-ast` share an output tail:
+
+- `--format sarif` -- SARIF 2.1.0 to stdout (alongside the existing `text` / `json`/`--json`).
+- `--fail-on error|warning|info|none` -- process exits nonzero iff a surviving finding is at/above that level; `none` always exits 0. Absent => the historic exit code (1 if any finding).
+- `--baseline <file>` -- report only findings NOT in the baseline. `--write-baseline <file>` records the current findings and exits 0. Fingerprints are line-shift stable (rule + path + hashed source-line text), so inserting unrelated lines does not re-surface a baselined finding.
+- Config file `drag-lint-lint.json` (auto-discovered in CWD, or `--config <path>`):
+
+  ```json
+  {
+    "disabled":  ["rule-id"],
+    "enabled":   ["rule-id"],
+    "severity":  { "rule-id": "error|warning|info|hint" },
+    "thresholds":{ "too-many-parameters": 7, "too-many-locals": 25,
+                   "method-too-long": 120, "deep-nesting": 5,
+                   "cyclomatic-complexity": 15, "too-many-exit-points": 5 },
+    "profiles":  { "ci": { "disabled": ["deep-nesting"], "enabled": [] } }
+  }
+  ```
+
+  - `--enable id1,id2` and `--disable id1,id2` compose with the config.
+  - `--profile <name>` merges a named profile's `disabled`/`enabled` over the top level.
+  - A `.scm` rule whose sidecar `.json` has `"enabled": false` ships off-by-default; list its id under `enabled` (or `--enable`) to turn it on.
+
+With no config, no baseline, and no `--fail-on`, every command behaves exactly as before.
