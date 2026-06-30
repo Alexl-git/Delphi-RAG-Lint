@@ -52,7 +52,7 @@ begin
   if not ACache.TryGetValue(AFile, Lines) then
   begin
     if TFile.Exists(AFile) then
-      Lines:= TFile.ReadAllLines(AFile)
+      Lines:= TFile.ReadAllLines(AFile, TEncoding.UTF8)
     else
       Lines:= [];
     ACache.Add(AFile, Lines);
@@ -78,7 +78,7 @@ begin
       BaseKey:= LowerCase(F.RuleId) + '|' + NormPath(F.FilePath) + '|' + LineTxt;
       if not Counts.TryGetValue(BaseKey, N) then N:= 0;
       Counts.AddOrSetValue(BaseKey, N + 1);
-      if N = 0 then Ord:= '' else Ord:= ':' + IntToStr(N);
+      if N = 0 then Ord:= '' else Ord:= #0 + IntToStr(N);
       Raw:= BaseKey + Ord;
       Result:= Result + [THashSHA2.GetHashString(Raw)];
     end;
@@ -140,7 +140,6 @@ begin
       Arr:= (RootVal as TJSONObject).GetValue('fingerprints') as TJSONArray;
       for V in Arr do Known.AddOrSetValue(V.Value, True);
     end;
-    RootVal.Free;
 
     Result:= nil;
     Fps:= FingerprintsOf(AFindings);
@@ -148,6 +147,7 @@ begin
       if not Known.ContainsKey(Fps[i]) then
         Result:= Result + [AFindings[i]];
   finally
+    RootVal.Free;
     Known.Free;
   end;
 end;

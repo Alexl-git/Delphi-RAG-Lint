@@ -62,6 +62,14 @@ begin
   Filtered:= TBaseline.Filter(BasePath, [MkFinding('used-before-assignment', SrcPath, 4)]);
   Check('line-shift stable => still 0 new', Length(Filtered) = 0);
 
+  // Two findings on the same (rule, file, line text): both fingerprinted distinctly,
+  // both recorded, both suppressed on re-run.
+  TBaseline.Write(BasePath, [MkFinding('used-before-assignment', SrcPath, 4),
+                             MkFinding('used-before-assignment', SrcPath, 4)]);
+  Filtered:= TBaseline.Filter(BasePath, [MkFinding('used-before-assignment', SrcPath, 4),
+                                         MkFinding('used-before-assignment', SrcPath, 4)]);
+  Check('duplicate identical findings both suppressed', Length(Filtered) = 0);
+
   // A genuinely new finding (different line content) reports.
   Filtered:= TBaseline.Filter(BasePath, [MkFinding('used-before-assignment', SrcPath, 1)]); // line 1 = 'unit X;'
   Check('new finding (diff line text) reported', Length(Filtered) = 1);
