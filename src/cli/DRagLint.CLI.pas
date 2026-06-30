@@ -69,6 +69,9 @@ uses
   , DRagLint.Index      .Drift
   , DRagLint.Index      .Coverage
   , DRagLint.Wiring
+  , DRagLint.Output.Sarif
+  , DRagLint.Output.ExitCode
+  , DRagLint.Lint  .Baseline
   ;
 
 type
@@ -4365,15 +4368,102 @@ begin
   if AArgs.Enable  <> '' then Result.AddEnabled (AArgs.Enable .Split([',', ' ', ';']));
 end;
 
+/// <summary>Shared output tail for the finding-producing commands. Applies line
+/// suppressions, config (severity remap + enable/disable), and the baseline, then
+/// emits the survivors as SARIF, JSON, or -- via AEmitText -- the command's own
+/// text, and returns the policy exit code.</summary>
+/// <param name="AArgs">Parsed CLI args (format, fail-on, baseline, config...).</param>
+/// <param name="AFindings">Raw findings the command produced.</param>
+/// <param name="ADefaultExit">Exit code to use when --fail-on is absent
+/// (preserves each command's historic 1-if-any/0 behavior).</param>
+/// <param name="ADefaultDisabled">Off-by-default rule ids (TLinter.DefaultDisabledRuleIds), or nil.</param>
+/// <param name="AEmitText">Renders the text output for this command; called only on the text path.</param>
+/// <returns>The process exit code.</returns>
+function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>;
+  ADefaultExit: Integer; const ADefaultDisabled: TArray<string>;
+  const AEmitText: TProc<TArray<TLintFinding>>): Integer;
+var
+  Cfg     : TLintConfig         ;
+  Survivors: TArray<TLintFinding>;
+  F       : TLintFinding        ;
+  MF      : TLintFinding        ;
+  IsDefDis: Boolean             ;
+  DId     : string              ;
+  JArr    : TJSONArray          ;
+  JObj    : TJSONObject         ;
+begin
+  { 0: source-level ignore directives. }
+  AFindings:= ApplyLineSuppressions(AFindings);
+
+  { 1: config -- severity remap + enable/disable filter. }
+  Cfg:= LoadLintConfig(AArgs);
+  Survivors:= nil;
+  for F in AFindings do
+  begin
+    IsDefDis:= False;
+    for DId in ADefaultDisabled do
+      if SameText(DId, F.RuleId) then begin IsDefDis:= True; Break; end;
+    if Cfg.ShouldKeep(F.RuleId, IsDefDis) then
+    begin
+      MF:= F;
+      MF.Severity:= Cfg.ApplySeverity(F.RuleId, F.Severity);
+      Survivors:= Survivors + [MF];
+    end;
+  end;
+
+  { 2a: --write-baseline records the current (config-filtered) state and exits. }
+  if AArgs.WriteBaseline <> '' then
+  begin
+    DRagLint.Lint.Baseline.TBaseline.Write(AArgs.WriteBaseline, Survivors);
+    Writeln(Format('baseline written: %d fingerprint(s) -> %s', [Length(Survivors), AArgs.WriteBaseline]));
+    Exit(0);
+  end;
+
+  { 2b: --baseline keeps only findings absent from the baseline. }
+  if AArgs.Baseline <> '' then
+    Survivors:= DRagLint.Lint.Baseline.TBaseline.Filter(AArgs.Baseline, Survivors);
+
+  { 3: output. }
+  if SameText(AArgs.Format, 'sarif') then
+    Writeln(DRagLint.Output.Sarif.TSarifWriter.ToJson(Survivors, VERSION))
+  else if AArgs.AsJson or SameText(AArgs.Format, 'json') then
+  begin
+    JArr:= TJSONArray.Create;
+    try
+      for F in Survivors do
+      begin
+        JObj:= TJSONObject.Create;
+        JObj.AddPair('rule'      , F.RuleId  );
+        JObj.AddPair('severity'  , F.Severity);
+        JObj.AddPair('file_path' , F.FilePath);
+        JObj.AddPair('start_line', TJSONNumber.Create(F.StartLine));
+        JObj.AddPair('start_col' , TJSONNumber.Create(F.StartCol ));
+        JObj.AddPair('end_line'  , TJSONNumber.Create(F.EndLine  ));
+        JObj.AddPair('end_col'   , TJSONNumber.Create(F.EndCol   ));
+        JObj.AddPair('message'   , F.Message );
+        JArr.AddElement(JObj);
+      end;
+      Writeln(JArr.Format(2));
+    finally
+      JArr.Free;
+    end;
+  end
+  else if Assigned(AEmitText) then
+    AEmitText(Survivors);
+
+  { 4: exit code. }
+  Result:= ExitCodeFor(Survivors, AArgs.FailOn, ADefaultExit);
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
   Findings    : TArray<TLintFinding>        ;
   ProjFindings: TArray<TLintFinding>        ;
   F           : TLintFinding                ;
-  JArr        : TJSONArray                  ;
-  JObj        : TJSONObject                 ;
+  DefDisabled : TArray<string>              ;
 begin
+  DefDisabled:= nil;
   if (AArgs.Path = '') and (AArgs.ProjectPath = '') then
   begin
     Writeln('ERROR: lint requires a <path> or --project <file.dproj>');
@@ -4415,6 +4505,7 @@ begin
         the exe loads <exe-dir>\rules by default (or --rules-dir). }
       if Linter.ExternalRuleCount = 0 then
         Writeln(ErrOutput, 'drag-lint: note: 0 external .scm rules loaded -- place a "rules" folder next to drag-lint.exe, or pass --rules-dir <path> (built-in checks still run).');
+      DefDisabled:= Linter.DefaultDisabledRuleIds;   // capture before Free
       if TFile.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFile(AArgs.Path)
       else if TDirectory.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFolder(AArgs.Path, True)
       else
@@ -4497,53 +4588,14 @@ begin
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
     end;
   end; // if
-  { v0.47: honor '// drag-lint:ignore [rule ...]' line suppressions across all findings }
-  Findings:= ApplyLineSuppressions(Findings);
-  { v0.48: --disable id1,id2,... drops those rule ids entirely }
-  if AArgs.Disable <> '' then
-  begin
-    var DisabledIds: TArray<string>:= AArgs.Disable.Split([',', ' ', ';']);
-    var KeptF: TArray<TLintFinding>:= nil;
-    var DId: string;
-    var Drop: Boolean;
-    for F in Findings do
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), DefDisabled,
+    procedure(ASurv: TArray<TLintFinding>)
+    var FF: TLintFinding;
     begin
-      Drop:= False;
-      for DId in DisabledIds do
-        if SameText(Trim(DId), F.RuleId) then begin Drop:= True; Break; end;
-      if not Drop then KeptF:= KeptF + [F];
-    end;
-    Findings:= KeptF;
-  end;
-  if AArgs.AsJson then
-  begin
-    JArr:= TJSONArray.Create;
-    try
-      for F in Findings do
-      begin
-        JObj:= TJSONObject.Create;
-        JObj.AddPair('rule'     , F.RuleId  );
-        JObj.AddPair('severity' , F.Severity);
-        JObj.AddPair('file_path', F.FilePath);
-        JObj.AddPair('start_line', TJSONNumber.Create(F.StartLine));
-        JObj.AddPair('start_col' , TJSONNumber.Create(F.StartCol ));
-        JObj.AddPair('end_line'  , TJSONNumber.Create(F.EndLine  ));
-        JObj.AddPair('end_col'   , TJSONNumber.Create(F.EndCol   ));
-        JObj.AddPair('message', F.Message);
-        JArr.AddElement(JObj);
-      end;
-      Writeln(JArr.Format(2));
-    finally
-      JArr.Free;
-    end; // try
-  end // if
-  else
-  begin
-    for F in Findings do Writeln(Format('%s:%d:%d  [%s] %s: %s', [F.FilePath, F.StartLine, F.StartCol, F.Severity, F.RuleId, F.Message]));
-    Writeln(Format('%d finding(s)', [Length(Findings)]));
-  end;
-  if Length(Findings) > 0 then Result:= 1
-  else Result:= 0;
+      for FF in ASurv do
+        Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
+      Writeln(Format('%d finding(s)', [Length(ASurv)]));
+    end);
 end; // function
 
 // v0.18: drag-lint context --task "verb qname" [--db <path>]
@@ -5242,16 +5294,7 @@ var
   PasPath  : string                      ;
   Linter   : DRagLint.Lint.Linter.TLinter;
   F        : TLintFinding                ;
-  DisIds   : TArray<string>              ;
-  KeptF    : TArray<TLintFinding>        ;
-  DId      : string                      ;
-  Drop     : Boolean                     ;
   OutPath  : string                      ;
-  OutLines : TStringBuilder              ;
-  JArr     : TJSONArray                  ;
-  JObj     : TJSONObject                 ;
-  ErrCnt   : Integer                     ;
-  WarnCnt  : Integer                     ;
   LayersCfg: string                      ;
   FileIdx  : Integer                     ;
   LastPct  : Integer                     ;
@@ -5384,30 +5427,6 @@ begin
   Findings:= Findings +
     DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership(Store, LibDb, AArgs.ProjectPath);
 
-  { Honor drag-lint:ignore suppressions }
-  Findings:= ApplyLineSuppressions(Findings);
-
-  { --disable id,... drops those rule ids entirely }
-  if AArgs.Disable <> '' then
-  begin
-    DisIds:= AArgs.Disable.Split([',', ' ', ';']);
-    KeptF := nil;
-    for F in Findings do
-    begin
-      Drop:= False;
-      for DId in DisIds do
-        if SameText(Trim(DId), F.RuleId) then begin Drop:= True; Break; end;
-      if not Drop then KeptF:= KeptF + [F];
-    end;
-    Findings:= KeptF;
-  end;
-
-  { Count by severity }
-  ErrCnt := 0;
-  WarnCnt:= 0;
-  for F in Findings do
-    if SameText(F.Severity, 'error') then Inc(ErrCnt) else Inc(WarnCnt);
-
   { Resolve output path: --output, or lint-report-YYYYMMDD.txt beside the DB }
   OutPath:= AArgs.Output;
   if OutPath = '' then
@@ -5418,52 +5437,31 @@ begin
     OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', Now) + '.txt');
   end;
 
-  if AArgs.AsJson then
-  begin
-    JArr:= TJSONArray.Create;
-    try
-      for F in Findings do
-      begin
-        JObj:= TJSONObject.Create;
-        JObj.AddPair('rule'      , F.RuleId  );
-        JObj.AddPair('severity'  , F.Severity);
-        JObj.AddPair('file_path' , F.FilePath);
-        JObj.AddPair('start_line', TJSONNumber.Create(F.StartLine));
-        JObj.AddPair('start_col' , TJSONNumber.Create(F.StartCol ));
-        JObj.AddPair('end_line'  , TJSONNumber.Create(F.EndLine  ));
-        JObj.AddPair('end_col'   , TJSONNumber.Create(F.EndCol   ));
-        JObj.AddPair('message'   , F.Message );
-        JArr.AddElement(JObj);
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), nil,
+    procedure(ASurv: TArray<TLintFinding>)
+    var
+      FF: TLintFinding;
+      EC, WC: Integer;
+      OL: TStringBuilder;
+    begin
+      EC:= 0; WC:= 0;
+      for FF in ASurv do
+        if SameText(FF.Severity, 'error') then Inc(EC) else Inc(WC);
+      OL:= TStringBuilder.Create;
+      try
+        for FF in ASurv do
+          OL.AppendLine(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
+        OL.AppendLine(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) scanned',
+          [Length(ASurv), EC, WC, Length(FilePaths)]));
+        TFile.WriteAllText(OutPath, OL.ToString, TEncoding.UTF8);
+      finally
+        OL.Free;
       end;
-      TFile.WriteAllText(OutPath, JArr.ToJSON, TEncoding.UTF8);
-      Writeln(JArr.ToJSON);
-    finally
-      JArr.Free;
-    end;
-  end
-  else
-  begin
-    OutLines:= TStringBuilder.Create;
-    try
-      for F in Findings do
-        OutLines.AppendLine(Format('%s:%d:%d  [%s] %s: %s',
-          [F.FilePath, F.StartLine, F.StartCol, F.Severity, F.RuleId, F.Message]));
-      OutLines.AppendLine(Format(
-        'lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) scanned',
-        [Length(Findings), ErrCnt, WarnCnt, Length(FilePaths)]));
-      TFile.WriteAllText(OutPath, OutLines.ToString, TEncoding.UTF8);
-    finally
-      OutLines.Free;
-    end;
-    for F in Findings do
-      Writeln(Format('%s:%d:%d  [%s] %s: %s',
-        [F.FilePath, F.StartLine, F.StartCol, F.Severity, F.RuleId, F.Message]));
-    Writeln(Format(
-      'lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) -- report: %s',
-      [Length(Findings), ErrCnt, WarnCnt, Length(FilePaths), OutPath]));
-  end;
-
-  if Length(Findings) > 0 then Result:= 1 else Result:= 0;
+      for FF in ASurv do
+        Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
+      Writeln(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) -- report: %s',
+        [Length(ASurv), EC, WC, Length(FilePaths), OutPath]));
+    end);
 end; // function
 
 // v0.48: drag-lint lint-project --db <index.sqlite> [--rule <id>] [--json]
@@ -7672,9 +7670,6 @@ function DoCheckAst(const AArgs: TArgs): Integer;
 var
   Store   : ISymbolStore        ;
   Findings: TArray<TLintFinding>;
-  F       : TLintFinding        ;
-  JArr    : TJSONArray          ;
-  JObj    : TJSONObject         ;
 begin
   if AArgs.Target = '' then
   begin
@@ -7702,36 +7697,14 @@ begin
   Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(AArgs.Target, Store, TcFid); { M2: flow checks }
   DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
 
-  if SameText(AArgs.Format, 'json') then
-  begin
-    JArr:= TJSONArray.Create;
-    try
-      for F in Findings do
-      begin
-        JObj:= TJSONObject.Create;
-        JObj.AddPair('rule'     , F.RuleId  );
-        JObj.AddPair('severity' , F.Severity);
-        JObj.AddPair('file_path', F.FilePath);
-        JObj.AddPair('start_line', TJSONNumber.Create(F.StartLine));
-        JObj.AddPair('start_col' , TJSONNumber.Create(F.StartCol ));
-        JObj.AddPair('end_line'  , TJSONNumber.Create(F.EndLine  ));
-        JObj.AddPair('end_col'   , TJSONNumber.Create(F.EndCol   ));
-        JObj.AddPair('message', F.Message);
-        JArr.AddElement(JObj);
-      end;
-      Writeln(JArr.Format(2));
-    finally
-      JArr.Free;
-    end; // try
-  end // if
-  else
-  begin
-    for F in Findings do Writeln(Format('%s(%d,%d): %s %s: %s', [AArgs.Target, F.StartLine, F.StartCol, F.Severity, F.RuleId, F.Message]));
-    Writeln(Format('AST findings: %d', [Length(Findings)]));
-  end;
-
-  if Length(Findings) > 0 then Result:= 1
-  else Result:= 0;
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), nil,
+    procedure(ASurv: TArray<TLintFinding>)
+    var FF: TLintFinding;
+    begin
+      for FF in ASurv do
+        Writeln(Format('%s(%d,%d): %s %s: %s', [AArgs.Target, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
+      Writeln(Format('AST findings: %d', [Length(ASurv)]));
+    end);
 end; // function
 
 // v0.27: drag-lint format <file> [--yadf-path PATH]
