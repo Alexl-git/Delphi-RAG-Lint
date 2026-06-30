@@ -112,6 +112,7 @@
         <DCCReference Include="..\parser\DRagLint.Parser.DocComments.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Fuzzy.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Config.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.Baseline.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.QueryRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Linter.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.pas"/>
