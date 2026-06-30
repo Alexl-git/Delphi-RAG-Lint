@@ -6,6 +6,18 @@ uses
   System.SysUtils, System.JSON, System.IOUtils, DRagLint.Core.Model;
 
 type
+  /// <summary>Configurable naming conventions read from the drag-lint-lint.json
+  /// "naming" block. Empty-string prefixes disable that prefix check; empty
+  /// ConstCase disables const casing. Defaults match the project conventions
+  /// (TMyClass / EMyException / IMyIntf / PMyType / FMyField / pMyParam, PascalCase).</summary>
+  TNamingConfig = record
+    ClassPrefix, ExceptionPrefix, InterfacePrefix, PointerPrefix: string;
+    FieldPrefix, ParamPrefix: string;
+    MethodCase, LocalCase   : string;        // 'PascalCase' | 'UPPER_CASE' | 'camelCase'
+    ConstCase               : TArray<string>;
+    class function Default: TNamingConfig; static;
+  end;
+
   /// <summary>Per-project lint configuration loaded from drag-lint-lint.json:
   /// severity overrides, enable/disable lists, metric thresholds, and named
   /// profiles. A value type -- Load returns a fresh copy; AddEnabled/AddDisabled
@@ -23,6 +35,9 @@ type
     class function Contains(const AArr: TArray<string>; const AId: string): Boolean; static;
     procedure MergeListsFrom(const AObj: TJSONObject);
   public
+    /// <summary>Naming conventions parsed from the "naming" block; always
+    /// populated with TNamingConfig.Default when no block is present.</summary>
+    Naming: TNamingConfig;
     /// <summary>Loads config from APath (JSON). Empty/missing APath yields a
     /// no-op default config. If AProfile is non-empty and present under
     /// "profiles", its disabled/enabled lists are merged over the top level.</summary>
@@ -43,6 +58,19 @@ type
   end;
 
 implementation
+
+class function TNamingConfig.Default: TNamingConfig;
+begin
+  Result.ClassPrefix    := 'T';
+  Result.ExceptionPrefix:= 'E';
+  Result.InterfacePrefix:= 'I';
+  Result.PointerPrefix  := 'P';
+  Result.FieldPrefix    := 'F';
+  Result.ParamPrefix    := 'p';
+  Result.MethodCase     := 'PascalCase';
+  Result.LocalCase      := 'PascalCase';
+  Result.ConstCase      := ['PascalCase', 'UPPER_CASE'];
+end;
 
 class function TLintConfig.Contains(const AArr: TArray<string>; const AId: string): Boolean;
 var
@@ -79,6 +107,7 @@ var
   RootVal: TJSONValue;
 begin
   Result:= Default(TLintConfig);
+  Result.Naming:= TNamingConfig.Default;
   if (APath = '') or (not TFile.Exists(APath)) then Exit;
 
   RawText:= TFile.ReadAllText(APath, TEncoding.UTF8);
@@ -110,6 +139,29 @@ begin
       begin
         Result.FThreshNames := Result.FThreshNames  + [Pair.JsonString.Value                      ];
         Result.FThreshValues:= Result.FThreshValues + [StrToIntDef(Pair.JsonValue.Value, 0)];
+      end;
+    end;
+
+    if Root.GetValue('naming') is TJSONObject then
+    begin
+      var NJ: TJSONObject:= Root.GetValue('naming') as TJSONObject;
+      if NJ.GetValue('type_prefix') is TJSONObject then
+      begin
+        var TP: TJSONObject:= NJ.GetValue('type_prefix') as TJSONObject;
+        if TP.GetValue('class')     <> nil then Result.Naming.ClassPrefix    := TP.GetValue('class').Value;
+        if TP.GetValue('exception') <> nil then Result.Naming.ExceptionPrefix:= TP.GetValue('exception').Value;
+        if TP.GetValue('interface') <> nil then Result.Naming.InterfacePrefix:= TP.GetValue('interface').Value;
+        if TP.GetValue('pointer')   <> nil then Result.Naming.PointerPrefix  := TP.GetValue('pointer').Value;
+      end;
+      if NJ.GetValue('field_prefix') <> nil then Result.Naming.FieldPrefix:= NJ.GetValue('field_prefix').Value;
+      if NJ.GetValue('param_prefix') <> nil then Result.Naming.ParamPrefix:= NJ.GetValue('param_prefix').Value;
+      if NJ.GetValue('method_case')  <> nil then Result.Naming.MethodCase := NJ.GetValue('method_case').Value;
+      if NJ.GetValue('local_case')   <> nil then Result.Naming.LocalCase  := NJ.GetValue('local_case').Value;
+      if NJ.GetValue('const_case') is TJSONArray then
+      begin
+        Result.Naming.ConstCase:= nil;
+        for var V in (NJ.GetValue('const_case') as TJSONArray) do
+          Result.Naming.ConstCase:= Result.Naming.ConstCase + [V.Value];
       end;
     end;
 

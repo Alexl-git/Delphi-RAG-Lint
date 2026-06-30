@@ -26,6 +26,32 @@ const
     '  "profiles": { "ci": { "disabled": ["deep-nesting"] } }'#10 +
     '}'#10;
 
+procedure TestNaming;
+var
+  Cfg: TLintConfig;
+  Path: string;
+begin
+  // 1. No config -> defaults match the repo conventions.
+  Cfg:= TLintConfig.Load('', '');
+  Check('naming default class prefix T', Cfg.Naming.ClassPrefix = 'T');
+  Check('naming default field prefix F', Cfg.Naming.FieldPrefix = 'F');
+  Check('naming default param prefix p', Cfg.Naming.ParamPrefix = 'p');
+  Check('naming default method PascalCase', Cfg.Naming.MethodCase = 'PascalCase');
+
+  // 2. Override: disable param prefix, change field prefix.
+  Path:= TPath.Combine(TPath.GetTempPath, 'dl-naming.json');
+  TFile.WriteAllText(Path,
+    '{ "naming": { "param_prefix": "", "field_prefix": "Fld" } }', TEncoding.UTF8);
+  try
+    Cfg:= TLintConfig.Load(Path, '');
+    Check('naming param prefix disabled (empty)', Cfg.Naming.ParamPrefix = '');
+    Check('naming field prefix overridden', Cfg.Naming.FieldPrefix = 'Fld');
+    Check('naming class prefix still default', Cfg.Naming.ClassPrefix = 'T');
+  finally
+    if TFile.Exists(Path) then TFile.Delete(Path);
+  end;
+end;
+
 procedure TestConfig;
 var
   Cfg: TLintConfig;
@@ -85,6 +111,7 @@ begin
   GPass:= 0; GFail:= 0;
   try
     TestConfig;
+    TestNaming;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;
