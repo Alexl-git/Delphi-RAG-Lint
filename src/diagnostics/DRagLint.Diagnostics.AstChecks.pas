@@ -192,14 +192,26 @@ type
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
       /// <returns>One finding per routine exceeding the Exit-count threshold, at its header.</returns>
       /// <remarks>Severity info. Threshold = 5 (const). Pure AST; no DB. Never raises.</remarks>
-      class function CheckTooManyExitPoints(const AFile: string): TArray<TLintFinding>;
+      class function CheckTooManyExitPoints(const AFile: string): TArray<TLintFinding>; overload;
+      /// <summary>Flags routines exceeding AMaxExits Exit statements (configurable threshold).</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <param name="AMaxExits">Maximum allowed Exit statements before flagging (inclusive).</param>
+      /// <returns>One finding per routine exceeding the threshold, at its header.</returns>
+      /// <remarks>Severity info. Pure AST; no DB. Never raises.</remarks>
+      class function CheckTooManyExitPoints(const AFile: string; AMaxExits: Integer): TArray<TLintFinding>; overload;
       /// <summary>Flags a routine whose cyclomatic complexity exceeds 15. Decision points:
       /// if/ifElse/while/for/repeat, each case branch, and each and/or operator; base 1.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
       /// <returns>One finding per routine over the complexity threshold, at its header.</returns>
       /// <remarks>Severity info. Threshold = 15 (const). Node kinds: kAnd/kOr/caseCase verified
       /// against the grammar. Pure AST; no DB. Never raises.</remarks>
-      class function CheckCyclomaticComplexity(const AFile: string): TArray<TLintFinding>;
+      class function CheckCyclomaticComplexity(const AFile: string): TArray<TLintFinding>; overload;
+      /// <summary>Flags routines exceeding AMaxComplexity cyclomatic complexity (configurable threshold).</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <param name="AMaxComplexity">Maximum allowed complexity before flagging (inclusive).</param>
+      /// <returns>One finding per routine over the threshold, at its header.</returns>
+      /// <remarks>Severity info. Pure AST; no DB. Never raises.</remarks>
+      class function CheckCyclomaticComplexity(const AFile: string; AMaxComplexity: Integer): TArray<TLintFinding>; overload;
       /// <summary>Flags a constructor that calls a virtual/dynamic/override method declared in
       /// its OWN class -- the VMT is live before the body runs, so the call dispatches to a
       /// descendant override whose fields are not yet initialised (AV or corrupt state).</summary>
@@ -3451,8 +3463,11 @@ begin
 end; // function
 
 class function TAstChecker.CheckTooManyExitPoints(const AFile: string): TArray<TLintFinding>;
-const
-  MAX_EXITS = 5;
+begin
+  Result:= CheckTooManyExitPoints(AFile, 5);   // historic default
+end;
+
+class function TAstChecker.CheckTooManyExitPoints(const AFile: string; AMaxExits: Integer): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
@@ -3496,7 +3511,7 @@ var
     begin
       Body:= N.ChildByField('body');
       NExit:= CountExits(Body);
-      if NExit > MAX_EXITS then
+      if NExit > AMaxExits then
       begin
         Hdr:= N.ChildByField('header');
         if Hdr.IsNull then Hdr:= N;
@@ -3504,7 +3519,7 @@ var
         F:= Default(TLintFinding);
         F.RuleId  := 'too-many-exit-points';
         F.Severity:= 'info';
-        F.Message := Format('Routine has %d Exit statements (max %d) -- consolidate exits or use guard clauses.', [NExit, MAX_EXITS]);
+        F.Message := Format('Routine has %d Exit statements (max %d) -- consolidate exits or use guard clauses.', [NExit, AMaxExits]);
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
         F.StartCol := Integer(P.Column) + 1;
@@ -3532,8 +3547,11 @@ begin
 end; // function
 
 class function TAstChecker.CheckCyclomaticComplexity(const AFile: string): TArray<TLintFinding>;
-const
-  MAX_CC = 15;
+begin
+  Result:= CheckCyclomaticComplexity(AFile, 15);   // historic default
+end;
+
+class function TAstChecker.CheckCyclomaticComplexity(const AFile: string; AMaxComplexity: Integer): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
@@ -3576,7 +3594,7 @@ var
     begin
       Body:= N.ChildByField('body');
       CC:= 1 + CountDecisions(Body);
-      if CC > MAX_CC then
+      if CC > AMaxComplexity then
       begin
         Hdr:= N.ChildByField('header');
         if Hdr.IsNull then Hdr:= N;
@@ -3584,7 +3602,7 @@ var
         F:= Default(TLintFinding);
         F.RuleId  := 'cyclomatic-complexity';
         F.Severity:= 'info';
-        F.Message := Format('Routine has cyclomatic complexity %d (max %d) -- consider extracting sub-routines.', [CC, MAX_CC]);
+        F.Message := Format('Routine has cyclomatic complexity %d (max %d) -- consider extracting sub-routines.', [CC, AMaxComplexity]);
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
         F.StartCol := Integer(P.Column) + 1;

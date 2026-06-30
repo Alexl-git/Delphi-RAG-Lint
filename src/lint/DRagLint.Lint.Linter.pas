@@ -34,6 +34,10 @@ type
       function LintFile(const AFilePath: string): TArray<TLintFinding>                          ;
       function LintFolder(const APath: string; ARecursive: Boolean = True): TArray<TLintFinding>;
       function ExternalRuleCount: Integer                                                       ;
+      /// <summary>Rule ids of loaded .scm rules whose sidecar json declared
+      /// "enabled": false (ship off-by-default). Findings from these are dropped
+      /// downstream unless re-enabled via config "enabled" / --enable.</summary>
+      function DefaultDisabledRuleIds: TArray<string>                                          ;
   end;
 
 implementation
@@ -319,6 +323,16 @@ end;
 function TLinter.ExternalRuleCount: Integer;
 begin
   Result:= Length(FQueryRules);
+end;
+
+function TLinter.DefaultDisabledRuleIds: TArray<string>;
+var
+  R: TQueryRule;
+begin
+  Result:= nil;
+  for R in FQueryRules do
+    if (not R.Enabled) and (R.RuleId <> '') then
+      Result:= Result + [R.RuleId];
 end;
 
 function TLinter.CheckFileImpl( const AFilePath: string): TArray<TLintFinding>;

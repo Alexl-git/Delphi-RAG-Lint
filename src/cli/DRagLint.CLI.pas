@@ -38,6 +38,7 @@ uses
   , DRagLint.Parser .Sql
   , DRagLint.Sql    .FbSnapshot
   , DRagLint.Sql    .OrmLinker
+  , DRagLint.Lint   .Config
   , DRagLint.Lint   .Linter
   , DRagLint.Lint   .ProjectChecks
   , DRagLint.Lint   .ProjectRules
@@ -4350,6 +4351,20 @@ begin
   end;
 end; // function
 
+/// <summary>Builds the effective TLintConfig for a command: discovers the config
+/// file (--config, else drag-lint-lint.json in CWD), applies the named --profile,
+/// and composes --disable/--enable from the command line.</summary>
+function LoadLintConfig(const AArgs: TArgs): TLintConfig;
+var
+  Path: string;
+begin
+  Path:= AArgs.ConfigPath;
+  if (Path = '') and TFile.Exists('drag-lint-lint.json') then Path:= 'drag-lint-lint.json';
+  Result:= TLintConfig.Load(Path, AArgs.Profile);
+  if AArgs.Disable <> '' then Result.AddDisabled(AArgs.Disable.Split([',', ' ', ';']));
+  if AArgs.Enable  <> '' then Result.AddEnabled (AArgs.Enable .Split([',', ' ', ';']));
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
@@ -4415,6 +4430,7 @@ begin
       as live edit-time diagnostics. }
     if TFile.Exists(AArgs.Path) and (SameText(ExtractFileExt(AArgs.Path), '.pas') or SameText(ExtractFileExt(AArgs.Path), '.inc')) then
     begin
+      var Cfg: TLintConfig:= LoadLintConfig(AArgs);
       { unused local variables (H2164) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'unused-local') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(AArgs.Path);
       { syntax errors (tree-sitter ERROR/MISSING) -- this is what makes a typed
@@ -4434,7 +4450,9 @@ begin
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.48: routine size/complexity metrics (conservative defaults: params>7, locals>25, body>120 lines, nesting>5) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-parameters') or (AArgs.Rule = 'too-many-locals') or (AArgs.Rule = 'method-too-long') or (AArgs.Rule = 'deep-nesting') then
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(AArgs.Path, 7, 25, 120, 5) do
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(AArgs.Path,
+            Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25),
+            Cfg.ThresholdFor('method-too-long', 120), Cfg.ThresholdFor('deep-nesting', 5)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map }
       if (AArgs.Rule = '') or (AArgs.Rule = 'float-equality-comparison') or (AArgs.Rule = 'freeandnil-on-interface') or (AArgs.Rule = 'win64-pointer-cast') then
@@ -4467,9 +4485,9 @@ begin
       { v0.63: critical section acquired without a matching Leave/Release in finally }
       if (AArgs.Rule = '') or (AArgs.Rule = 'criticalsection-not-released') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(AArgs.Path);
       { v0.63: routine with more than 5 Exit statements }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-exit-points') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-exit-points') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(AArgs.Path, Cfg.ThresholdFor('too-many-exit-points', 5));
       { v0.63: cyclomatic complexity over 15 }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'cyclomatic-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'cyclomatic-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(AArgs.Path, Cfg.ThresholdFor('cyclomatic-complexity', 15));
       { v0.63: virtual/dynamic method called from a constructor of its own class }
       if (AArgs.Rule = '') or (AArgs.Rule = 'virtual-method-in-constructor') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(AArgs.Path);
       { M2: flow-sensitive checks (definite-assignment etc.); no store on the bare lint path }
@@ -5271,6 +5289,7 @@ begin
   Writeln(Format('lint-all: scanning %d .pas file(s)', [Length(FilePaths)]));
 
   { Per-file rules: external .scm rules + all built-in AST checks }
+  var Cfg: TLintConfig:= LoadLintConfig(AArgs);
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
   LastPct:= -1;
   try
@@ -5310,7 +5329,9 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally(PasPath);
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(PasPath) do
           Findings:= Findings + [F];
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(PasPath, 7, 25, 120, 5) do
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(PasPath,
+            Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25),
+            Cfg.ThresholdFor('method-too-long', 120), Cfg.ThresholdFor('deep-nesting', 5)) do
           Findings:= Findings + [F];
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(PasPath, Store, Store.FindFileIdByPath(PasPath)) do { v11 (M1): exact type resolution }
           Findings:= Findings + [F];
@@ -5327,8 +5348,8 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(PasPath, Cfg.ThresholdFor('too-many-exit-points', 5));
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath, Cfg.ThresholdFor('cyclomatic-complexity', 15));
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath)); { v12 (M1): cross-unit }
         Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath)); { M2: flow checks, store-exact managed types }
       except
