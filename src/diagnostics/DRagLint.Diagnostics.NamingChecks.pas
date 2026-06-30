@@ -1,6 +1,6 @@
 unit DRagLint.Diagnostics.NamingChecks;
 
-{ v0.68 -- naming-convention rules driven by TNamingConfig.
+{ v0.68/v0.69 -- naming-convention rules driven by TNamingConfig.
   Rules implemented here:
     type-name-prefix      : class/interface/pointer type name must carry the
                             configured prefix.
@@ -12,7 +12,9 @@ unit DRagLint.Diagnostics.NamingChecks;
     const-casing          : constant name must match one of ConstCase.
     local-var-casing      : local variable name must match LocalCase.
     unit-name-matches-file: unit name must equal the file base name
-                            (case-insensitive). }
+                            (case-insensitive).
+    reserved-word-casing  : Pascal keyword tokens must be all-lowercase
+                            (begin/end/var/...); True/False/nil exempt. }
 
 interface
 
@@ -221,6 +223,38 @@ begin
   Result:= False;
 end;
 
+{ Returns True when AType is a tree-sitter keyword node kind: 'k' followed by an
+  uppercase letter (kBegin, kEnd, kVar, kClass, kAnd, ...). Symbol-operator kinds
+  (kEq, kGt, kNeq) also match the pattern but are filtered out by the alphabetic
+  text guard in the caller. }
+function IsKeywordKind(const AType: string): Boolean;
+begin
+  Result:= (Length(AType) >= 2) and (AType[1] = 'k')
+    and CharInSet(AType[2], ['A'..'Z']);
+end;
+
+{ Returns True when every character of S is an ASCII letter (A..Z or a..z) and S
+  is non-empty. Used to keep reserved-word-casing on word keywords (and, begin)
+  and off symbol-operator keyword nodes (=, <>) whose text is not alphabetic. }
+function IsWordAllAlpha(const S: string): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  if S = '' then Exit;
+  for I:= 1 to Length(S) do
+    if not CharInSet(S[I], ['A'..'Z', 'a'..'z']) then Exit;
+  Result:= True;
+end;
+
+{ Returns True for keyword tokens that Delphi convention does NOT write in all
+  lowercase, so reserved-word-casing must not flag them: True, False, nil.
+  Compared case-insensitively against the lowercased token text. }
+function IsCaseExemptKeyword(const ALowerText: string): Boolean;
+begin
+  Result:= (ALowerText = 'true') or (ALowerText = 'false') or (ALowerText = 'nil');
+end;
+
 class function TNamingChecker.Check(const AFile: string; const ANaming: TNamingConfig;
   const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
@@ -367,6 +401,21 @@ var
     VarNameId: TTSNode;
   begin
     if N.IsNull then Exit;
+
+    { reserved-word-casing: a keyword (kXxx) token whose source text is not
+      all-lowercase, when KeywordCase='lowercase'. Excludes symbol-operator
+      keyword kinds (non-alphabetic text) and the convention-exempt literals
+      True/False/nil. Does NOT Exit -- the walk continues so other rules and
+      child nodes are still visited (keyword nodes are leaves anyway). }
+    if (ANaming.KeywordCase = 'lowercase') and IsKeywordKind(N.NodeType) then
+    begin
+      var KwText: string:= Trim(NodeStr(N));
+      if (KwText <> '') and IsWordAllAlpha(KwText)
+        and (not IsCaseExemptKeyword(LowerCase(KwText)))
+        and (KwText <> LowerCase(KwText)) then
+        EmitAt(N, 'reserved-word-casing',
+          Format('Reserved word "%s" should be written in lowercase', [KwText]));
+    end;
 
     { unit-name-matches-file: check the unit declaration name vs the file base.
       Only 'unit' roots are checked; 'program' and 'library' are skipped.

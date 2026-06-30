@@ -1,0 +1,8 @@
+# 'Const' (3), 'Var' (7), 'And' (11) are non-lowercase keyword tokens -> fire.
+# Line 9 'begin' is lowercase (clean); line 10 'if'/'then' lowercase and 'True'
+# is convention-exempt -> no finding on those lines.
+reserved-word-casing 3
+reserved-word-casing 7
+reserved-word-casing 11
+!reserved-word-casing 9
+!reserved-word-casing 10

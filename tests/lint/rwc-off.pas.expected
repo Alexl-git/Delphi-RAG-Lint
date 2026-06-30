@@ -1,0 +1,2 @@
+# keyword_case:"" disables the rule -> 'Var' (line 5) must NOT fire.
+!reserved-word-casing
