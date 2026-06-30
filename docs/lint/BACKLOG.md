@@ -1,6 +1,21 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-06-30 (LATE) -- v0.68.0-alpha SHIPPED; **v0.69 PLANNED + SPECCED, NEXT = IMPLEMENT (writing-plans)**
+> ## RESUME 2026-06-30 (LATEST) -- **v0.69 D3 SHIPPED to `main` (NOT yet published); NEXT = D1 (rule catalog + Lint Options tab)**
+>
+> **v0.69 D3 DONE + MERGED to `main`** (local `main`=`d829b79`, fast-forward from `08f8e8f`, **NOT pushed/tagged** -- v0.69
+> publishes only after D2). Two naming rules close MISSING-FEATURES #1: **`reserved-word-casing`** (info, ON -- non-lowercase
+> Pascal keyword tokens; `True`/`False`/`nil` + symbol-ops exempt) + **`hungarian-or-short-identifier`** (info, OFF by default,
+> `short_identifier_check=false` -- short/Hungarian param+local names; i/j/k/n/x/y exempt). 4 new `TNamingConfig` fields
+> (`keyword_case`/`min_identifier_len`/`hungarian_prefixes`/`short_identifier_check`); per-fixture `.config.json` harness
+> support (also covers `param-name-prefix` ON). Subagent-driven (plan `docs/superpowers/plans/2026-06-30-v069-d3-naming-rules-plan.md`),
+> 6 commits, each task-reviewed + OPUS whole-branch review = **READY TO MERGE, no Critical/Important**. lint harness
+> **117/117**, lintconfig **30/30**. ORM3 sanity: both rules 0 on real code (quiet by default, ideal). **VERSION still
+> `0.68.0-alpha`** (D3 does not bump). Naming wave now **9 rules**; MISSING-FEATURES #1 = `[x]`. Ledger:
+> `.superpowers/sdd/progress.md`. **NEXT = D1 (next deliverable) -> invoke writing-plans on the v0.69 spec section 1.**
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-06-30 (LATE) -- v0.68.0-alpha SHIPPED; v0.69 PLANNED + SPECCED, NEXT = IMPLEMENT (writing-plans)
 >
 > **Branch `main`**, working tree clean. **v0.68.0-alpha SHIPPED + RELEASED** (origin/main=`be67919`, tag
 > `v0.68.0-alpha`, GitHub PRERELEASE win32+win64; lint harness **112/112**):
@@ -19,7 +34,7 @@
 >
 > **NEXT ACTION -- IMPLEMENT v0.69 (3 independent deliverables; each its OWN writing-plans plan; build order D3 -> D1 -> D2).**
 > Spec (brainstormed + approved, ASCII): **`docs/superpowers/specs/2026-06-30-v069-settings-refactor-design.md`**.
-> - **D3 (close MISSING-FEATURES #1, smallest -- start here):** 2 naming rules in `NamingChecks` (extend `TNamingChecker.Check`,
+> - **D3 [SHIPPED to main d829b79 -- see latest RESUME above]:** 2 naming rules in `NamingChecks` (extend `TNamingChecker.Check`,
 >   same 4-site wiring + `naming` config): `reserved-word-casing` (info, ON -- non-lowercase Pascal keywords) +
 >   `hungarian-or-short-identifier` (info, OFF by default -- short names + Hungarian prefixes; FP-prone). New `naming`
 >   fields keyword_case / min_identifier_len / hungarian_prefixes / short_identifier_check.
