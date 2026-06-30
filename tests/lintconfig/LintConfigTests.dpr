@@ -50,6 +50,30 @@ begin
   finally
     if TFile.Exists(Path) then TFile.Delete(Path);
   end;
+
+  // 3. New v0.69 D3 fields: defaults + overrides.
+  Cfg:= TLintConfig.Load('', '');
+  Check('naming default keyword_case lowercase', Cfg.Naming.KeywordCase = 'lowercase');
+  Check('naming default min_identifier_len 3', Cfg.Naming.MinIdentifierLen = 3);
+  Check('naming default short_identifier_check off', Cfg.Naming.ShortIdentifierCheck = False);
+  Check('naming default hungarian_prefixes nonempty', Length(Cfg.Naming.HungarianPrefixes) > 0);
+
+  Path:= TPath.Combine(TPath.GetTempPath, 'dl-naming-d3.json');
+  TFile.WriteAllText(Path,
+    '{ "naming": { "keyword_case": "", "min_identifier_len": 5, ' +
+    '"short_identifier_check": true, "hungarian_prefixes": ["foo","bar"] } }',
+    TEncoding.UTF8);
+  try
+    Cfg:= TLintConfig.Load(Path, '');
+    Check('naming keyword_case overridden empty', Cfg.Naming.KeywordCase = '');
+    Check('naming min_identifier_len overridden 5', Cfg.Naming.MinIdentifierLen = 5);
+    Check('naming short_identifier_check overridden true', Cfg.Naming.ShortIdentifierCheck = True);
+    Check('naming hungarian_prefixes overridden len 2', Length(Cfg.Naming.HungarianPrefixes) = 2);
+    Check('naming hungarian_prefixes first foo',
+      (Length(Cfg.Naming.HungarianPrefixes) = 2) and (Cfg.Naming.HungarianPrefixes[0] = 'foo'));
+  finally
+    if TFile.Exists(Path) then TFile.Delete(Path);
+  end;
 end;
 
 procedure TestConfig;

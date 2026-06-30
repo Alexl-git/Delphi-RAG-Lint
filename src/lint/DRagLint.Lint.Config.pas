@@ -8,13 +8,19 @@ uses
 type
   /// <summary>Configurable naming conventions read from the drag-lint-lint.json
   /// "naming" block. Empty-string prefixes disable that prefix check; empty
-  /// ConstCase disables const casing. Defaults match the project conventions
-  /// (TMyClass / EMyException / IMyIntf / PMyType / FMyField / pMyParam, PascalCase).</summary>
+  /// ConstCase disables const casing. KeywordCase='' disables reserved-word-casing;
+  /// ShortIdentifierCheck=False (default) disables hungarian-or-short-identifier.
+  /// Defaults match the project conventions (TMyClass / EMyException / IMyIntf /
+  /// PMyType / FMyField / pMyParam, PascalCase, lowercase keywords).</summary>
   TNamingConfig = record
     ClassPrefix, ExceptionPrefix, InterfacePrefix, PointerPrefix: string;
     FieldPrefix, ParamPrefix: string;
     MethodCase, LocalCase   : string;        // 'PascalCase' | 'UPPER_CASE' | 'camelCase'
     ConstCase               : TArray<string>;
+    KeywordCase             : string;        // 'lowercase' (default) | '' disables reserved-word-casing
+    MinIdentifierLen        : Integer;       // shortest allowed identifier (hungarian-or-short rule)
+    HungarianPrefixes       : TArray<string>;// type-prefix denylist for the hungarian rule
+    ShortIdentifierCheck    : Boolean;       // master on/off for hungarian-or-short-identifier (default False)
     class function Default: TNamingConfig; static;
   end;
 
@@ -70,6 +76,10 @@ begin
   Result.MethodCase     := 'PascalCase';
   Result.LocalCase      := 'PascalCase';
   Result.ConstCase      := ['PascalCase', 'UPPER_CASE'];
+  Result.KeywordCase         := 'lowercase';  { reserved-word-casing ON by default }
+  Result.MinIdentifierLen    := 3;
+  Result.HungarianPrefixes   := ['lpsz', 'psz', 'sz', 'lp', 'int', 'str', 'dw', 'b', 'p', 'n'];
+  Result.ShortIdentifierCheck:= False;        { hungarian-or-short-identifier OFF by default }
 end;
 
 class function TLintConfig.Contains(const AArr: TArray<string>; const AId: string): Boolean;
@@ -162,6 +172,18 @@ begin
         Result.Naming.ConstCase:= nil;
         for var V in (NJ.GetValue('const_case') as TJSONArray) do
           Result.Naming.ConstCase:= Result.Naming.ConstCase + [V.Value];
+      end;
+      if NJ.GetValue('keyword_case') <> nil then
+        Result.Naming.KeywordCase:= NJ.GetValue('keyword_case').Value;
+      if NJ.GetValue('min_identifier_len') <> nil then
+        Result.Naming.MinIdentifierLen:= StrToIntDef(NJ.GetValue('min_identifier_len').Value, 3);
+      if NJ.GetValue('short_identifier_check') <> nil then
+        Result.Naming.ShortIdentifierCheck:= SameText(NJ.GetValue('short_identifier_check').Value, 'true');
+      if NJ.GetValue('hungarian_prefixes') is TJSONArray then
+      begin
+        Result.Naming.HungarianPrefixes:= nil;
+        for var HV in (NJ.GetValue('hungarian_prefixes') as TJSONArray) do
+          Result.Naming.HungarianPrefixes:= Result.Naming.HungarianPrefixes + [HV.Value];
       end;
     end;
 
