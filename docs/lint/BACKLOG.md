@@ -1,6 +1,25 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-06-30 (LATEST) -- **v0.69 D3 + D1a SHIPPED to `main` (NOT published); NEXT = D1b (IDE Lint Options tab, MANUAL gate)**
+> ## RESUME 2026-06-30 (LATEST) -- **v0.69 D3 + D1a + D2a SHIPPED to `main` (NOT published); NEXT = D2b then D1b**
+>
+> **v0.69 D2a DONE + MERGED to `main`** (local `main`=`6cbce9d`->`6d6d1c5`; **NOT pushed/tagged**; `main` 13 commits ahead
+> of origin). Two `drag-lint rename` subcommands packaging the existing `TRenameRefactoring` engine: **`rename --kind
+> symbol --name <QName> --to <New>`** (index-driven cross-unit; dry-run default + `--json` + `--apply`; conflict guard =
+> reserved word + sibling scope) + **`rename --kind param --file <F> --line <L> --col <C> --to <New>`** (NEW `BuildLocal`
+> single-file AST routine-local rename = the param-name-prefix AUTOFIX, the user's #1 ask; conservative -- skips
+> shadowing/qualified-members(exprDot+genericDot)/with). Subagent-driven (5 tasks, plan
+> `docs/superpowers/plans/2026-06-30-v069-d2a-rename-refactor-plan.md`); a Task-1 opus review caught+FIXED a genericDot
+> over-rename gap; OPUS whole-branch = READY TO MERGE, no over-rename path constructible, no Critical/Important. Tests:
+> buildlocal **14/14**, rename-symbol **5/5**, rename-param **6/6**, lint **117/117**. ORM3 sanity: real param-rename
+> dry-run correct + file unchanged. FOLLOW-UPS (non-blocking, in ledger): symbol-path inherits legacy name-global caller
+> resolution (scope-filter later); BuildLocal `with`-block + overload-header under-rename (documented). **NEXT = D2b**
+> (find-unit [uses-clause INSERT] + safe-delete [decl/body DELETE] -- NEW edit primitives beyond the replace-only Apply;
+> own plan; FindSymbolsWithNoCallers/FindReferencesTo + declUses/declUsesUnit) -> then **D1b** (IDE "Lint Options" tab,
+> MANUAL BPL gate). v0.69 publishes only after D2b + D1b.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-06-30 -- v0.69 D3 + D1a SHIPPED to `main`; NEXT = D1b (IDE Lint Options tab, MANUAL gate)
 >
 > **v0.69 D1a DONE + MERGED to `main`** (local `main`=`6cbce9d`, ff from `29f3be3`, **NOT pushed/tagged**). New command
 > **`drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]`** = the single machine-readable catalog of every
