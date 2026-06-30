@@ -1,7 +1,7 @@
 program RuleCatalogTests;
 {$APPTYPE CONSOLE}
 uses
-  System.SysUtils, System.Generics.Collections,
+  System.SysUtils, System.IOUtils, System.Generics.Collections,
   DRagLint.Lint.RuleCatalog in '..\..\src\lint\DRagLint.Lint.RuleCatalog.pas';
 var
   GPass, GFail: Integer;
@@ -16,6 +16,70 @@ begin
   Result:= False;
   for R in A do if R.Id = AId then begin AInfo:= R; Exit(True); end;
 end;
+procedure TestMerge;
+const
+  CanonicalBuckets: array[0..11] of string = (
+    'bug-patterns','resource-lifetime','security','platform',
+    'complexity','structure','naming','dead-code',
+    'data-flow','firedac','project-wide','other');
+var
+  Cat: TArray<TRuleInfo>;
+  Info: TRuleInfo;
+  Sum: TCatalogSummary;
+  P: TPair<string, Integer>;
+  NamingCount: Integer;
+  AllValid: Boolean;
+  R: TRuleInfo;
+  BucketOk: Boolean;
+  I: Integer;
+  RulesDir: string;
+begin
+  { point at the repo rules/ dir -- resolved from EXE location (tests\rules-catalog) }
+  RulesDir:= TPath.GetFullPath(
+    TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), '..\..\rules'));
+  Cat:= TRuleCatalog.BuildCatalog(RulesDir, '');
+  Check('catalog has >= 100 rules', Length(Cat) >= 100);
+
+  { a known .scm rule is present, source scm, sensible category }
+  Check('goto-statement present', Find(Cat, 'goto-statement', Info));
+  Check('goto-statement source scm', Info.Source = 'scm');
+  Check('goto-statement category structure', Info.Category = 'structure');
+
+  { a known security .scm rule }
+  Check('sql-injection-concat present + scm + security',
+    Find(Cat, 'sql-injection-concat', Info) and (Info.Source = 'scm') and (Info.Category = 'security'));
+
+  { built-in still wins dedup + keeps builtin source }
+  Check('too-many-parameters still builtin after merge',
+    Find(Cat, 'too-many-parameters', Info) and (Info.Source = 'builtin'));
+
+  { summary: non-zero total + category count, naming bucket present }
+  Sum:= TRuleCatalog.Summarize(Cat);
+  Check('summary total matches length', Sum.Total = Length(Cat));
+  Check('summary categories >= 8', Sum.Categories >= 8);
+  NamingCount:= 0;
+  for P in Sum.PerCategory do if P.Key = 'naming' then NamingCount:= P.Value;
+  Check('summary naming count = 9', NamingCount = 9);
+
+  { category filter returns only that category }
+  Cat:= TRuleCatalog.BuildCatalog(RulesDir, 'naming');
+  Check('category filter naming -> 9 rules', Length(Cat) = 9);
+  for Info in Cat do
+    if Info.Category <> 'naming' then begin Check('filtered all naming', False); Break; end;
+
+  { every rule category is a canonical bucket }
+  Cat:= TRuleCatalog.BuildCatalog(RulesDir, '');
+  AllValid:= True;
+  for R in Cat do
+  begin
+    BucketOk:= False;
+    for I:= 0 to High(CanonicalBuckets) do
+      if R.Category = CanonicalBuckets[I] then begin BucketOk:= True; Break; end;
+    if not BucketOk then begin AllValid:= False; Break; end;
+  end;
+  Check('every category is a canonical bucket', AllValid);
+end;
+
 procedure TestRegistry;
 var
   Reg: TArray<TRuleInfo>;
@@ -76,6 +140,11 @@ begin
   GPass:= 0; GFail:= 0;
   try
     TestRegistry;
+  except
+    on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
+  end;
+  try
+    TestMerge;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;
