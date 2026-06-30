@@ -117,7 +117,7 @@ type
 
       { v0.40.4: leaf accessor for utilities that need raw SQL access
       (uses-report walks the whole files + unit_uses tables). Not part
-      of ISymbolStore ? caller must know it's calling into the SQLite
+      of ISymbolStore -- caller must know it's calling into the SQLite
       implementation. }
       function GetConnection: TFDConnection;
 
@@ -679,7 +679,7 @@ begin
   NP:= NormalizeStoredPath(APath);
   FConn.StartTransaction;
   try
-    { UPDATE existing row in-place (no DELETE ? no cascade ? no FTS5 trigger).
+    { UPDATE existing row in-place (no DELETE -- no cascade -- no FTS5 trigger).
       If no row exists yet (new file) fall through to INSERT OR IGNORE. }
     FQUpsertFile.ParamByName('path'  ).AsString   := NP;
     FQUpsertFile.ParamByName('mtime' ).AsLargeInt := AMtimeUnix;
@@ -1517,7 +1517,7 @@ begin
     Result.Deprecated:= FQGetSymbolDoc.FieldByName('deprecated').AsInteger = 1;
     Result.StartLine:= FQGetSymbolDoc.FieldByName('start_line').AsInteger;
     Result.EndLine  := FQGetSymbolDoc.FieldByName('end_line'  ).AsInteger;
-    // Raw JSON strings ? v0.16 renderers read these directly; v0.17 may parse.
+    // Raw JSON strings -- v0.16 renderers read these directly; v0.17 may parse.
     Result.ParamsJsonRaw    := FQGetSymbolDoc.FieldByName('params_json'    ).AsString;
     Result.ExceptionsJsonRaw:= FQGetSymbolDoc.FieldByName('exceptions_json').AsString;
     Result.SeeAlsoJsonRaw   := FQGetSymbolDoc.FieldByName('seealso_json'   ).AsString;
