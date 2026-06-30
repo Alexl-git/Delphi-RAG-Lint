@@ -44,6 +44,7 @@ uses
   DRagLint.Diagnostics.CompileCheck in '..\diagnostics\DRagLint.Diagnostics.CompileCheck.pas',
   DRagLint.Diagnostics.AstChecks in '..\diagnostics\DRagLint.Diagnostics.AstChecks.pas',
   DRagLint.Diagnostics.NamingChecks in '..\diagnostics\DRagLint.Diagnostics.NamingChecks.pas',
+  DRagLint.Diagnostics.DeadCodeChecks in '..\diagnostics\DRagLint.Diagnostics.DeadCodeChecks.pas',
   DRagLint.Diagnostics.ParseCache in '..\diagnostics\DRagLint.Diagnostics.ParseCache.pas',
   DRagLint.Analysis.Cfg in '..\analysis\DRagLint.Analysis.Cfg.pas',
   DRagLint.Analysis.DataFlow in '..\analysis\DRagLint.Analysis.DataFlow.pas',

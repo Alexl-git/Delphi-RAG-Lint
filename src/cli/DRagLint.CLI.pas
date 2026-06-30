@@ -57,6 +57,7 @@ uses
   , DRagLint.Diagnostics.CompileCheck
   , DRagLint.Diagnostics.AstChecks
   , DRagLint.Diagnostics.NamingChecks
+  , DRagLint.Diagnostics.DeadCodeChecks
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Diagnostics.FlowChecks
   , DRagLint.Workspace  .Config
@@ -4483,12 +4484,13 @@ begin
   (AArgs.Rule <> 'overwrite-before-read') and (AArgs.Rule <> 'write-only-local') and (AArgs.Rule <> 'loop-var-after-loop') and
   (AArgs.Rule <> 'object-leak') and
   (AArgs.Rule <> 'type-name-prefix') and (AArgs.Rule <> 'field-name-prefix') and (AArgs.Rule <> 'param-name-prefix') and
-  (AArgs.Rule <> 'method-pascalcase') and (AArgs.Rule <> 'const-casing') and (AArgs.Rule <> 'local-var-casing') and (AArgs.Rule <> 'unit-name-matches-file') then
+  (AArgs.Rule <> 'method-pascalcase') and (AArgs.Rule <> 'const-casing') and (AArgs.Rule <> 'local-var-casing') and (AArgs.Rule <> 'unit-name-matches-file') and
+  (AArgs.Rule <> 'unused-parameter') and (AArgs.Rule <> 'identical-then-else') then
   begin
     Writeln(Format(
         'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' +
         'use-after-free, win64-pointer-cast, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
-        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file)',
+        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, ' + 'unused-parameter, identical-then-else)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4593,6 +4595,10 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'type-name-prefix') or (AArgs.Rule = 'field-name-prefix') or (AArgs.Rule = 'param-name-prefix') or
          (AArgs.Rule = 'method-pascalcase') or (AArgs.Rule = 'const-casing') or (AArgs.Rule = 'local-var-casing') or (AArgs.Rule = 'unit-name-matches-file') then
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(AArgs.Path, Cfg.Naming) do
+          if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      { v0.68: dead-code checks (unused-parameter, identical-then-else) }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'unused-parameter') or (AArgs.Rule = 'identical-then-else') then
+        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(AArgs.Path) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { Free cached tree after single-file lint }
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
@@ -5407,6 +5413,9 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath)); { M2: flow checks, store-exact managed types }
         { v0.68: naming-convention prefix rules (store-optional; enables exception-ancestry sub-check) }
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath)) do
+          Findings:= Findings + [F];
+        { v0.68: dead-code checks (unused-parameter, identical-then-else) }
+        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(PasPath) do
           Findings:= Findings + [F];
       except
         on E: Exception do
