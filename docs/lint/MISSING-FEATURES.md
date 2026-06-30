@@ -25,7 +25,7 @@ engine (SHIPPED v0.66).
 - [x] Const / enum-member casing; PascalCase methods; param prefix convention -- shipped v0.68 as `const-casing`, `method-pascalcase`, `param-name-prefix`
 - [x] Unit name must equal file name -- shipped v0.68 as `unit-name-matches-file`
 - [x] Local variable casing -- shipped v0.68 as `local-var-casing`
-- [ ] Reserved-word casing (lowercase keywords); Hungarian/short-identifier flags -- deferred
+- [ ] Reserved-word casing (lowercase keywords); Hungarian/short-identifier flags -- PLANNED v0.69 (D3: `reserved-word-casing` ON + `hungarian-or-short-identifier` OFF) -> closes #1. See section 13.
 > 7 config-driven rules shipped. Defaults match CLAUDE.md conventions. Disable any check via `"param_prefix": ""` / `[]` or the `disabled` list.
 
 ## 2. Dead / redundant code  -- partial  **(now, except where noted)**
@@ -120,6 +120,23 @@ Have: `layering-violation`, `interface-reference-cycle`, `god-class`, `unit-not-
 - [x] **SARIF output** (CI integration) -- shipped v0.66
 - [x] baseline / suppression file; per-rule severity overrides + **rule on/off profiles** -- shipped v0.66
 - [ ] **quick-fixes / autofixes** (SonarDelphi ships ~14; we have 0) -- deferred, next milestone
+
+---
+
+## 13. Refactoring + settings UI  -- PLANNED v0.69 (CLI + Lint Options tab; IDE refactor tab deferred)
+Spec: `docs/superpowers/specs/2026-06-30-v069-settings-refactor-design.md`. Value prop: drag-lint's
+persisted, deterministic SQLite index is the substrate the IDE's own (flaky async-LSP) Refactor lacks.
+- [ ] **v0.69:** `drag-lint rules [--json]` rule catalog (single source of truth + counts) + a 4th IDE-dock
+  **"Lint Options"** tab -- enable/disable every check by section + item, edit params -> writes `drag-lint-lint.json`.
+- [ ] **v0.69:** refactor CLI, packaging the EXISTING `TRenameRefactoring` / `resolve-uses` / dead-code engines
+  (dry-run preview + `--apply`): `rename --kind symbol` (cross-unit), `rename --kind param` (routine-local --
+  the `param-name-prefix` autofix), `find-unit` (add-to-uses), `safe-delete`.
+- [ ] **DEFERRED (v0.70+):** in-IDE **"Refactor" tab + OTAPI apply** (Delphi-style Refactorings-Pane preview;
+  edits applied to editor buffers) -- the v0.69 CLI commands are its deterministic foundation.
+- [ ] **DEFERRED (hard -- need type inference / call-site rewrite):** Change Parameters, Extract Method,
+  Extract Interface/Superclass, Pull Up / Push Down, Move, Inline, Declare/Introduce Variable/Field.
+> Native Delphi 11/12 Refactor catalog + why it degraded (flaky async LSP / background compiler):
+> `docs/lint/Comprehensive report on the refactor.md` + `.superpowers/sdd/delphi-refactor-research.md`.
 
 ---
 
