@@ -32,6 +32,19 @@
 5. **`query files --glob <pat>`** -- list indexed files by name/glob, replacing Glob for file discovery within indexed roots.
 6. **Literal-usage query.** "Where is the string literal/const value `'drag-lint.exe'` used?" as a first-class query (distinct from symbol/caption text search), returning located usages.
 
+### P2 -- SQL DDL schema index (user-flagged 2026-06-30, "very soon")
+9. **Structured SQL DDL index -- eliminate grepping `.sql`.** Today `.sql` is only in the FTS *text*
+   index (phrase/substring), so "what columns does TOOLASSG have?", "which table has an OPERID FK?",
+   "where is generator/exception X defined?" still fall back to Grep over `.sql`. Add a **structured
+   DDL parse** of `CREATE TABLE/VIEW/PROCEDURE/TRIGGER/GENERATOR/EXCEPTION/INDEX` (+ `ALTER TABLE`)
+   into queryable rows: table -> columns (name/type/nullable/default), PK/FK/unique constraints,
+   view definitions, proc/trigger signatures, generators, exceptions. Then `drag-lint sql describe
+   <table>`, `... sql columns <table>`, `... sql refs <table|column>`, `... sql find <name>` --
+   schema queries without Grep. Firebird-4 dialect first (DECFLOAT, 63-char ids, `FETCH FIRST`);
+   reuse the existing `DRagLint.Parser.Sql` + `MS*.sql` migration-file convention. Pairs with the
+   `fb_*` Firebird MCP (which queries a *live* DB) -- this indexes the *DDL source files* so it works
+   offline and tracks the schema-as-written in git.
+
 ### P3 -- ergonomics
 7. **Freshness reporting.** `query` warns when the index mtime is older than the newest source file under its roots (so a stale answer is never silently trusted). Pairs with P1.
 8. **One-shot "reindex-then-query".** A convenience flag (`query --reindex-first`) that incrementally refreshes the target DB's changed files before answering, for scripted/agent use.
