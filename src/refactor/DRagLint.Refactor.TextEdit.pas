@@ -37,6 +37,17 @@ type
     class function RenderDryRun(const AEdits: TArray<TTextEdit>): string;
   end;
 
+  TFindUnitRefactoring = class
+  public
+    /// <summary>Computes edits to add the unit declaring AName to AInFile's uses
+    /// clause. AResolvedUnit = the chosen unit; AAlreadyUsed=True (empty result)
+    /// when it is already imported. Empty result + AResolvedUnit='' when AName is
+    /// unresolvable. Inserts into the implementation uses if present, else the
+    /// interface uses, else a fresh implementation uses block.</summary>
+    class function Build(const AStore: ISymbolStore; const AName, AInFile: string;
+      out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>;
+  end;
+
 implementation
 
 { Sort key for back-to-front application within a file: larger line first; for
@@ -163,6 +174,125 @@ begin
     Result:= SB.ToString;
   finally
     SB.Free;
+  end;
+end;
+
+class function TFindUnitRefactoring.Build(const AStore: ISymbolStore;
+  const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>;
+var
+  Syms : TArray<TSymbol>;
+  S    : TSymbol;
+  Cands: TDictionary<string, Integer>; { unit -> score }
+  Best : string; BestScore: Integer;
+  FullPath: string; InFileId: Int64;
+  Uses_: TArray<TUnitUse>; U: TUnitUse;
+  UsedSet: TDictionary<string, Boolean>;
+  UnitName: string;
+  TargetSection: TUnitUseSection;
+  LastInSection: TUnitUse; HaveLast: Boolean;
+  Edit: TTextEdit;
+  Pair: TPair<string, Integer>;
+begin
+  Result:= nil; AResolvedUnit:= ''; AAlreadyUsed:= False;
+
+  { 1. resolve the best declaring unit }
+  Syms:= AStore.FindSymbolsByExactName(AName);
+  if Length(Syms) = 0 then Exit;
+  Cands:= TDictionary<string, Integer>.Create;
+  try
+    for S in Syms do
+    begin
+      UnitName:= ChangeFileExt(ExtractFileName(AStore.GetFilePath(S.FileId)), '');
+      if UnitName = '' then Continue;
+      var Sc: Integer:= 1;
+      if not SameText(S.Section, 'implementation') then Inc(Sc, 10); { interface-visible }
+      var Cur: Integer;
+      if not Cands.TryGetValue(UnitName, Cur) then Cur:= 0;
+      Cands.AddOrSetValue(UnitName, Cur + Sc);
+    end;
+    Best:= ''; BestScore:= -1;
+    for Pair in Cands do
+      if Pair.Value > BestScore then begin BestScore:= Pair.Value; Best:= Pair.Key; end;
+  finally
+    Cands.Free;
+  end;
+  if Best = '' then Exit;
+  AResolvedUnit:= Best;
+
+  { do not add a unit to itself }
+  if SameText(ChangeFileExt(ExtractFileName(AInFile), ''), Best) then Exit;
+
+  { 2. load the target file's existing uses }
+  FullPath:= TPath.GetFullPath(AInFile);
+  InFileId:= AStore.FindFileIdByPath(FullPath);
+  if InFileId <= 0 then InFileId:= AStore.FindFileIdByPath(AInFile);
+  Uses_:= nil;
+  if InFileId > 0 then Uses_:= AStore.GetUnitUsesForFile(InFileId);
+
+  UsedSet:= TDictionary<string, Boolean>.Create;
+  try
+    for U in Uses_ do UsedSet.AddOrSetValue(LowerCase(U.UnitName), True);
+    if UsedSet.ContainsKey(LowerCase(Best)) then begin AAlreadyUsed:= True; Exit; end;
+
+    { 3. choose target section: implementation uses if present, else interface }
+    TargetSection:= uusImplementation;
+    HaveLast:= False;
+    var HasImpl: Boolean:= False; var HasIntf: Boolean:= False;
+    for U in Uses_ do
+    begin
+      if U.Section = uusImplementation then HasImpl:= True;
+      if U.Section = uusInterface then HasIntf:= True;
+    end;
+    if HasImpl then TargetSection:= uusImplementation
+    else if HasIntf then TargetSection:= uusInterface
+    else TargetSection:= uusImplementation; { fresh block goes to implementation }
+
+    { last entry in the chosen section -> append ', Best' after it }
+    for U in Uses_ do
+      if U.Section = TargetSection then
+        if (not HaveLast) or (U.StartLine > LastInSection.StartLine)
+           or ((U.StartLine = LastInSection.StartLine) and (U.StartCol > LastInSection.StartCol)) then
+        begin LastInSection:= U; HaveLast:= True; end;
+
+    if HaveLast then
+    begin
+      { insert ', Best' at the end of the last unit entry (before the ';') }
+      Edit.FilePath:= AInFile; Edit.Kind:= tekInsertInLine;
+      Edit.Line:= LastInSection.EndLine; Edit.Col:= LastInSection.EndCol;
+      Edit.EndLine:= 0; Edit.Text:= ', ' + Best;
+      Result:= [Edit];
+    end
+    else
+    begin
+      { no uses clause in the file at all -> a fresh "uses Best;" block.
+        Insert after the 'implementation' line if the file has one, else after
+        'interface'. We locate the keyword by reading the file (cheap, single file). }
+      var KeywordLine: Integer:= 0;
+      if TFile.Exists(AInFile) then
+      begin
+        var Raw: string:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AInFile));
+        var SL: TStringList:= TStringList.Create;
+        try
+          SL.Text:= Raw;
+          var WantImpl: Boolean:= (TargetSection = uusImplementation);
+          for var I: Integer:= 0 to SL.Count - 1 do
+          begin
+            var T: string:= LowerCase(Trim(SL[I]));
+            if WantImpl and (T = 'implementation') then begin KeywordLine:= I + 1; Break; end;
+            if (not WantImpl) and (T = 'interface') then begin KeywordLine:= I + 1; Break; end;
+          end;
+        finally
+          SL.Free;
+        end;
+      end;
+      if KeywordLine = 0 then Exit; { cannot place safely }
+      Edit.FilePath:= AInFile; Edit.Kind:= tekInsertLines;
+      Edit.Line:= KeywordLine; Edit.Col:= 0; Edit.EndLine:= 0;
+      Edit.Text:= ''#13#10'uses ' + Best + ';';
+      Result:= [Edit];
+    end;
+  finally
+    UsedSet.Free;
   end;
 end;
 

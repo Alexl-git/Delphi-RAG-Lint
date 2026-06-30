@@ -128,6 +128,7 @@
         <DCCReference Include="..\context\DRagLint.Context.Bundler.pas"/>
         <DCCReference Include="..\resolver\DRagLint.Resolver.TypeAt.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.Rename.pas"/>
+        <DCCReference Include="..\refactor\DRagLint.Refactor.TextEdit.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.DocStub.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.DeadCode.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.TestStub.pas"/>

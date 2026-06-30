@@ -51,6 +51,7 @@ uses
   , DRagLint.Context    .Bundler
   , DRagLint.Resolver   .TypeAt
   , DRagLint.Refactor   .Rename
+  , DRagLint.Refactor   .TextEdit
   , DRagLint.Refactor   .DocStub
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
@@ -268,6 +269,7 @@ begin
   Writeln('  drag-lint rename --kind param  --file <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
+  Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
@@ -5396,6 +5398,49 @@ begin
   Result:= 0;
 end; // function
 
+// v0.69 D2b: drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>
+// Resolves the unit declaring Symbol and inserts it into InFile's uses clause.
+// Exit 0 on success or already-used; 1 if unresolvable or no edit; 2 on usage error.
+function DoFindUnit(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore; Edits: TArray<TTextEdit>; ResolvedUnit: string; Already: Boolean;
+begin
+  if (AArgs.Name = '') or (AArgs.InFile = '') then
+  begin Writeln('ERROR: find-unit needs --name <Symbol> --in <file>'); Exit(2); end;
+  if AArgs.DbPath = '' then begin Writeln('ERROR: --db required'); Exit(2); end;
+  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate;
+  Edits:= TFindUnitRefactoring.Build(Store, AArgs.Name, AArgs.InFile, ResolvedUnit, Already);
+  if Already then begin Writeln(Format('"%s" is already in the uses clause.', [ResolvedUnit])); Exit(0); end;
+  if ResolvedUnit = '' then begin Writeln(Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
+  if Length(Edits) = 0 then begin Writeln('No edit computed.'); Exit(1); end;
+  if AArgs.AsJson then
+  begin
+    var Arr: TJSONArray:= TJSONArray.Create;
+    try
+      for var E in Edits do
+      begin
+        var O: TJSONObject:= TJSONObject.Create;
+        O.AddPair('file', E.FilePath);
+        O.AddPair('unit', ResolvedUnit);
+        O.AddPair('line', TJSONNumber.Create(E.Line));
+        O.AddPair('text', E.Text);
+        Arr.AddElement(O);
+      end;
+      Writeln(Arr.ToJSON);
+    finally Arr.Free; end;
+    Exit(0);
+  end;
+  if not AArgs.Apply then
+  begin
+    Writeln(TTextEditApplier.RenderDryRun(Edits));
+    Writeln(Format('Dry run: add unit "%s". Pass --apply to write.', [ResolvedUnit]));
+    Exit(0);
+  end;
+  var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
+  Writeln(Format('Applied: added "%s" (%d file).', [ResolvedUnit, Touched]));
+  Result:= 0;
+end; // function
+
 // v0.25: drag-lint find-deadcode [--kind K] [--include-private] [--db PATH]
 // Lists symbols with no callers in the index. Exit 0 if any found, 1 if none,
 // 2 on usage error.
@@ -9324,6 +9369,7 @@ begin
     else if Args.Command = 'link-orm'          then Result:= DoLinkOrm         (Args)
     else if Args.Command = 'rename'            then Result:= DoRename          (Args)
     else if Args.Command = 'generate-docs'     then Result:= DoGenerateDocs    (Args)
+    else if Args.Command = 'find-unit'         then Result:= DoFindUnit         (Args)
     else if Args.Command = 'find-deadcode'     then Result:= DoFindDeadCode    (Args)
     else if Args.Command = 'compile-check'     then Result:= DoCompileCheck    (Args)
     else if Args.Command = 'ghost-check'       then Result:= DoGhostCheck      (Args)

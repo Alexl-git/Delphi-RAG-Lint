@@ -38,6 +38,7 @@ uses
   DRagLint.Context.Bundler in '..\context\DRagLint.Context.Bundler.pas',
   DRagLint.Resolver.TypeAt in '..\resolver\DRagLint.Resolver.TypeAt.pas',
   DRagLint.Refactor.Rename in '..\refactor\DRagLint.Refactor.Rename.pas',
+  DRagLint.Refactor.TextEdit in '..\refactor\DRagLint.Refactor.TextEdit.pas',
   DRagLint.Refactor.DocStub in '..\refactor\DRagLint.Refactor.DocStub.pas',
   DRagLint.Refactor.DeadCode in '..\refactor\DRagLint.Refactor.DeadCode.pas',
   DRagLint.Refactor.TestStub in '..\refactor\DRagLint.Refactor.TestStub.pas',
