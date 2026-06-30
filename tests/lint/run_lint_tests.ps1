@@ -53,7 +53,15 @@ foreach ($pas in $fixtures) {
   if (-not (Test-Path $expFile)) { $expFile = [IO.Path]::ChangeExtension($pas.FullName, ".expected") }
   if (-not (Test-Path $expFile)) { continue }
 
-  $raw = & $exePath lint $pas.FullName --json 2>$null
+  # Per-fixture config: if <fixture>.config.json exists, pass it via --config so
+  # config-driven rules (param_prefix, keyword_case, short_identifier_check) can be
+  # exercised. Without it the CLI uses built-in defaults.
+  $cfgFile = [IO.Path]::ChangeExtension($pas.FullName, ".config.json")
+  if (Test-Path $cfgFile) {
+    $raw = & $exePath lint $pas.FullName --config $cfgFile --json 2>$null
+  } else {
+    $raw = & $exePath lint $pas.FullName --json 2>$null
+  }
   $findings = @()
   try { $findings = ($raw | ConvertFrom-Json) } catch { $findings = @() }
   if ($null -eq $findings) { $findings = @() }

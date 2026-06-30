@@ -1,0 +1,4 @@
+# param-name-prefix enabled via sibling .config.json (param_prefix=p).
+# 'Value' lacks the 'p' prefix and fires at its two header sites; 'pName' clean.
+param-name-prefix 3
+param-name-prefix 5
