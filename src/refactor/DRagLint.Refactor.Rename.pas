@@ -8,8 +8,11 @@ uses
   , System.IOUtils
   , System  .Generics.Collections
   , System  .Generics.Defaults
+  , TreeSitter
+  , TreeSitterLib
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
+  , DRagLint.Diagnostics.ParseCache
   ;
 
 type
@@ -26,6 +29,14 @@ type
       class function Build(const AStore: ISymbolStore; const AQName, ANewName: string): TArray<TRenameEdit>;
       class function Apply(const AEdits: TArray<TRenameEdit>; AWriteBackups: Boolean) : Integer            ; // returns files touched
       class function RenderDryRun(const AEdits: TArray<TRenameEdit>)                  : string             ;
+      /// <summary>Routine-local rename of the parameter or local variable whose
+      /// declaration identifier sits at (ALine, ACol) (1-based) in AFile. Emits a
+      /// TRenameEdit for the declaration, every in-scope use within the owning
+      /// routine body, and the matching parameter in any same-named forward/interface
+      /// declProc header. Shadowing nested routines, qualified members (X.Name), and
+      /// with-statement members are conservatively skipped. Empty array if no
+      /// param/local decl is found at that position. Pure AST -- no symbol store.</summary>
+      class function BuildLocal(const AFile: string; ALine, ACol: Integer; const ANewName: string): TArray<TRenameEdit>;
   end;
 
 implementation
@@ -247,5 +258,237 @@ begin
     SB.Free;
   end;
 end; // function
+
+class function TRenameRefactoring.BuildLocal(const AFile: string; ALine, ACol: Integer;
+  const ANewName: string): TArray<TRenameEdit>;
+var
+  PF       : TParsedFile        ;
+  Src      : TBytes             ;
+  Edits    : TList<TRenameEdit> ;
+  Target   : string             ;
+  OwnerProc: TTSNode            ;
+
+  function NStr(const N: TTSNode): string;
+  var S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  function NLine(const N: TTSNode): Integer;
+  begin Result:= Integer(N.StartPoint.Row) + 1; end;
+
+  function NColOf(const N: TTSNode): Integer;
+  begin Result:= Integer(N.StartPoint.Column) + 1; end;
+
+  procedure AddEdit(const N: TTSNode);
+  var Ed: TRenameEdit;
+  begin
+    Ed.FilePath:= AFile; Ed.Line:= NLine(N); Ed.Col:= NColOf(N);
+    Ed.OldName:= Target; Ed.NewName:= ANewName;
+    Edits.Add(Ed);
+  end;
+
+  { Find the identifier node at (ALine,ACol). Returns null node if none. }
+  function FindIdentAt(const N: TTSNode): TTSNode;
+  var I: Integer; Ch, R: TTSNode;
+  begin
+    Result:= Default(TTSNode);
+    if N.IsNull then Exit;
+    if (N.NodeType = 'identifier') and (NLine(N) = ALine) and (NColOf(N) = ACol) then
+      Exit(N);
+    for I:= 0 to N.NamedChildCount - 1 do
+    begin
+      Ch:= N.NamedChild(I);
+      R:= FindIdentAt(Ch);
+      if not R.IsNull then Exit(R);
+    end;
+  end;
+
+  { Smallest enclosing defProc of a node, by byte span. }
+  function EnclosingProc(const ATargetByte: Integer; const N: TTSNode; const ABest: TTSNode): TTSNode;
+  var I: Integer; Ch: TTSNode;
+  begin
+    Result:= ABest;
+    if N.IsNull then Exit;
+    if (N.NodeType = 'defProc')
+      and (Integer(N.StartByte) <= ATargetByte) and (Integer(N.EndByte) >= ATargetByte) then
+      Result:= N;
+    for I:= 0 to N.NamedChildCount - 1 do
+    begin
+      Ch:= N.NamedChild(I);
+      Result:= EnclosingProc(ATargetByte, Ch, Result);
+    end;
+  end;
+
+  { True when a defProc's header args re-declare Target (shadowing guard). }
+  function NestedRedeclares(const AProc: TTSNode): Boolean;
+  var HN, AN, Nm: TTSNode; K, J: Integer;
+  begin
+    Result:= False;
+    HN:= AProc.ChildByField('header');
+    if HN.IsNull then Exit;
+    AN:= HN.ChildByField('args');
+    if AN.IsNull then Exit;
+    for K:= 0 to AN.NamedChildCount - 1 do
+    begin
+      Nm:= AN.NamedChild(K);
+      if Nm.NodeType <> 'declArg' then Continue;
+      for J:= 0 to Nm.NamedChildCount - 1 do
+        if (Nm.NamedChild(J).NodeType = 'identifier')
+          and SameText(Trim(NStr(Nm.NamedChild(J))), Target) then Exit(True);
+    end;
+  end;
+
+  { Walk the owning routine subtree, emitting edits for bare-identifier uses of
+    Target. Skip: a nested defProc that re-declares Target (shadowing); the rhs
+    of an exprDot (member access); a 'with' statement subtree (ambiguous). }
+  procedure Walk(const N: TTSNode);
+  var I: Integer; Ch: TTSNode;
+  begin
+    if N.IsNull then Exit;
+    { Entering a nested defProc that shadows Target -> stop descending for renames. }
+    if (not (N = OwnerProc)) and (N.NodeType = 'defProc') and NestedRedeclares(N) then
+      Exit;
+    { Skip with-statement subtrees (ambiguous). }
+    if N.NodeType = 'with' then Exit;
+    { An identifier matching Target. }
+    if (N.NodeType = 'identifier') and SameText(Trim(NStr(N)), Target) then
+    begin
+      AddEdit(N);
+      Exit;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do
+    begin
+      Ch:= N.NamedChild(I);
+      { Exclude exprDot rhs (member access): skip the last child of an exprDot. }
+      if (N.NodeType = 'exprDot') and (I = N.NamedChildCount - 1) then Continue;
+      Walk(Ch);
+    end;
+  end;
+
+  { Add the matching parameter in any forward/interface declProc with the same
+    routine name as OwnerProc. Scans all declProc nodes in the file.
+    NOTE: declProc has 'args' as a direct child field (no 'header' wrapper). }
+  procedure SyncForwardHeaders(const ARoot: TTSNode);
+  var I   : Integer;
+    OwnerName: string;
+
+    function HdrName(const AProc: TTSNode): string;
+    var H, Nm: TTSNode;
+    begin
+      Result:= '';
+      { defProc: name is under header field }
+      H:= AProc.ChildByField('header');
+      if not H.IsNull then
+      begin
+        Nm:= H.ChildByField('name');
+        if not Nm.IsNull then begin Result:= Trim(NStr(Nm)); Exit; end;
+      end;
+      { declProc: name is a direct child field }
+      Nm:= AProc.ChildByField('name');
+      if not Nm.IsNull then Result:= Trim(NStr(Nm));
+    end;
+
+    procedure ScanDeclArgs(const AProc: TTSNode);
+    var AN, NmN, Id: TTSNode; K, J: Integer; TypeStart: Integer; TN: TTSNode;
+    begin
+      { declProc: args is direct child field }
+      AN:= AProc.ChildByField('args');
+      if AN.IsNull then Exit;
+      for K:= 0 to AN.NamedChildCount - 1 do
+      begin
+        NmN:= AN.NamedChild(K);
+        if NmN.NodeType <> 'declArg' then Continue;
+        TN:= NmN.ChildByField('type'); TypeStart:= MaxInt;
+        if not TN.IsNull then TypeStart:= Integer(TN.StartByte);
+        for J:= 0 to NmN.NamedChildCount - 1 do
+        begin
+          Id:= NmN.NamedChild(J);
+          if Id.NodeType <> 'identifier' then Continue;
+          if Integer(Id.StartByte) >= TypeStart then Continue;
+          if SameText(Trim(NStr(Id)), Target) then AddEdit(Id);
+        end;
+      end;
+    end;
+
+  var
+    Stack: TList<TTSNode>;
+    Cur  : TTSNode;
+  begin
+    OwnerName:= HdrName(OwnerProc);
+    if OwnerName = '' then Exit;
+    Stack:= TList<TTSNode>.Create;
+    try
+      Stack.Add(ARoot);
+      while Stack.Count > 0 do
+      begin
+        Cur:= Stack[Stack.Count - 1];
+        Stack.Delete(Stack.Count - 1);
+        if Cur.NodeType = 'declProc' then
+        begin
+          if SameText(HdrName(Cur), OwnerName) then ScanDeclArgs(Cur);
+        end;
+        for I:= 0 to Cur.NamedChildCount - 1 do Stack.Add(Cur.NamedChild(I));
+      end;
+    finally
+      Stack.Free;
+    end;
+  end;
+
+var
+  IdNode  : TTSNode;
+  Dedup   : TDictionary<string, Boolean>;
+  Ed      : TRenameEdit;
+  Key     : string;
+  Comparer: IComparer<TRenameEdit>;
+  Final   : TList<TRenameEdit>;
+begin
+  Result:= nil;
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
+
+  IdNode:= FindIdentAt(PF.Tree.RootNode);
+  if IdNode.IsNull then Exit;
+  Target:= Trim(NStr(IdNode));
+  if Target = '' then Exit;
+
+  OwnerProc:= EnclosingProc(Integer(IdNode.StartByte), PF.Tree.RootNode, Default(TTSNode));
+  if OwnerProc.IsNull then Exit;
+
+  Edits:= TList<TRenameEdit>.Create;
+  try
+    Walk(OwnerProc);
+    SyncForwardHeaders(PF.Tree.RootNode);
+
+    { De-dup by (line,col); sort back-to-front for Apply. }
+    Dedup:= TDictionary<string, Boolean>.Create;
+    Final:= TList<TRenameEdit>.Create;
+    try
+      for Ed in Edits do
+      begin
+        Key:= IntToStr(Ed.Line) + ':' + IntToStr(Ed.Col);
+        if not Dedup.ContainsKey(Key) then begin Dedup.Add(Key, True); Final.Add(Ed); end;
+      end;
+      Comparer:= TComparer<TRenameEdit>.Construct(
+        function(const A, B: TRenameEdit): Integer
+        begin
+          Result:= B.Line - A.Line;
+          if Result = 0 then Result:= B.Col - A.Col;
+        end);
+      Final.Sort(Comparer);
+      Result:= Final.ToArray;
+    finally
+      Final.Free;
+      Dedup.Free;
+    end;
+  finally
+    Edits.Free;
+  end;
+end;
 
 end.
