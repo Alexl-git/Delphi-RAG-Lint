@@ -5,10 +5,6 @@ interface
 uses
   System.SysUtils, DRagLint.Core.Model;
 
-/// <summary>Numeric rank of a drag-lint severity for ordering/comparison.
-/// error=3, warning=2, info=1, hint/unknown=0.</summary>
-function SeverityRank(const ASeverity: string): Integer;
-
 /// <summary>Computes a process exit code from the surviving findings and the
 /// --fail-on policy.</summary>
 /// <param name="AFindings">Final surviving findings.</param>
@@ -17,10 +13,13 @@ function SeverityRank(const ASeverity: string): Integer;
 /// <param name="ADefaultCode">The command's pre-existing exit code, used when
 /// AFailOn is '' (preserves today's behavior).</param>
 /// <returns>0 or 1 per the policy, or ADefaultCode when AFailOn is ''.</returns>
+/// <remarks>Pure function; no state; thread-safe.</remarks>
 function ExitCodeFor(const AFindings: TArray<TLintFinding>; const AFailOn: string; ADefaultCode: Integer): Integer;
 
 implementation
 
+/// <summary>Numeric rank of a drag-lint severity for ordering/comparison.
+/// error=3, warning=2, info=1, hint/unknown=0.</summary>
 function SeverityRank(const ASeverity: string): Integer;
 begin
   if SameText(ASeverity, 'error') then Result:= 3

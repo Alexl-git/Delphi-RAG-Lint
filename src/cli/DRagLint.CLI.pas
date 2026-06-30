@@ -519,7 +519,11 @@ begin
     else if (A = '--config') and (i < ParamCount) then
     begin
       Inc(i);
-      Result.ConfigPath:= ParamStr(i);
+      { --config is shared: lint/lint-all/check-ast read ConfigPath (drag-lint-lint.json);
+        index/workspace/reconcile/library-drift/selftest read WorkspaceConfig (the manifest).
+        A single CLI run targets one command, so populating both is harmless. }
+      Result.ConfigPath     := ParamStr(i);
+      Result.WorkspaceConfig:= ParamStr(i);
     end
     else if (A = '--enable') and (i < ParamCount) then
     begin
@@ -711,11 +715,6 @@ begin
     begin
       Inc(i);
       Result.YadfPath:= ParamStr(i);
-    end
-    else if (A = '--config') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.WorkspaceConfig:= ParamStr(i);
     end
     else if (A = '--root') and (i < ParamCount) then
     begin

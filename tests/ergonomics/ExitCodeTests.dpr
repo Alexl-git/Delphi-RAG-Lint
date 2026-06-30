@@ -49,6 +49,9 @@ begin
   // info threshold (anything info+ trips it).
   Check('fail-on info: info -> 1', ExitCodeFor(Infos, 'info', 0) = 1);
   Check('fail-on info: empty -> 0', ExitCodeFor(Empty, 'info', 0) = 0);
+
+  // Unknown --fail-on value ranks 0, so any finding (rank >= 0) trips it.
+  Check('fail-on unknown: warning -> 1', ExitCodeFor(Warns, 'typo', 0) = 1);
 end;
 
 begin
