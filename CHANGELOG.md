@@ -25,6 +25,23 @@ breaking changes** until v1.0.
   per-category and total counts. New unit `DRagLint.Lint.RuleCatalog` holds the
   built-in registry; `.scm` rules are merged from their sidecar `.json`.
 
+### Added (refactor CLI -- D2a)
+
+- **`drag-lint rename --kind symbol --name <QName> --to <New>`** -- index-driven
+  cross-unit rename. Dry-run preview by default; `--json` emits the edit set;
+  `--apply` writes (backups on, `--no-backup` to suppress; ANSI/CRLF preserved).
+  Refuses to rename to a reserved word or to a name already declared in the same scope.
+- **`drag-lint rename --kind param --file <F> --line <L> --col <C> --to <New>`** --
+  routine-local rename of a parameter or local variable (the `param-name-prefix`
+  autofix). Single-file, AST-driven; syncs the matching forward/interface header;
+  conservatively skips shadowing nested routines, qualified members (`exprDot`/`genericDot`),
+  and `with` blocks.
+
+### Fixed
+
+- The FireDAC `FTS5 probe` diagnostic now writes to stderr instead of stdout, so it
+  no longer corrupts `--json` output from store-backed commands.
+
 ## v0.68.0-alpha -- 2026-06-30
 
 Naming-convention wave (#1), dead/redundant-code tail (#2), and the final data-flow
