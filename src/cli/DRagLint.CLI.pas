@@ -270,6 +270,7 @@ begin
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
+  Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
@@ -5441,6 +5442,46 @@ begin
   Result:= 0;
 end; // function
 
+// v0.69 D2b: drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>
+// Deletes the declaration (and impl body) of QName iff it has zero references.
+// Exit 0 on success; 2 on refused (referenced symbol) or usage error; 1 on no edit.
+function DoSafeDelete(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore; Edits: TArray<TTextEdit>; Reason: string;
+begin
+  if AArgs.Name = '' then begin Writeln('ERROR: safe-delete needs --name <QualifiedName>'); Exit(2); end;
+  if AArgs.DbPath = '' then begin Writeln('ERROR: --db required'); Exit(2); end;
+  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate;
+  Edits:= TSafeDeleteRefactoring.Build(Store, AArgs.Name, Reason);
+  if Reason <> '' then begin Writeln('REFUSED: ' + Reason); Exit(2); end;
+  if Length(Edits) = 0 then begin Writeln('No edit computed.'); Exit(1); end;
+  if AArgs.AsJson then
+  begin
+    var Arr: TJSONArray:= TJSONArray.Create;
+    try
+      for var E in Edits do
+      begin
+        var O: TJSONObject:= TJSONObject.Create;
+        O.AddPair('file', E.FilePath);
+        O.AddPair('delete_from', TJSONNumber.Create(E.Line));
+        O.AddPair('delete_to', TJSONNumber.Create(E.EndLine));
+        Arr.AddElement(O);
+      end;
+      Writeln(Arr.ToJSON);
+    finally Arr.Free; end;
+    Exit(0);
+  end;
+  if not AArgs.Apply then
+  begin
+    Writeln(TTextEditApplier.RenderDryRun(Edits));
+    Writeln(Format('Dry run: delete "%s". Pass --apply to write.', [AArgs.Name]));
+    Exit(0);
+  end;
+  var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
+  Writeln(Format('Deleted "%s" (%d file).', [AArgs.Name, Touched]));
+  Result:= 0;
+end; // function
+
 // v0.25: drag-lint find-deadcode [--kind K] [--include-private] [--db PATH]
 // Lists symbols with no callers in the index. Exit 0 if any found, 1 if none,
 // 2 on usage error.
@@ -9370,6 +9411,7 @@ begin
     else if Args.Command = 'rename'            then Result:= DoRename          (Args)
     else if Args.Command = 'generate-docs'     then Result:= DoGenerateDocs    (Args)
     else if Args.Command = 'find-unit'         then Result:= DoFindUnit         (Args)
+    else if Args.Command = 'safe-delete'       then Result:= DoSafeDelete      (Args)
     else if Args.Command = 'find-deadcode'     then Result:= DoFindDeadCode    (Args)
     else if Args.Command = 'compile-check'     then Result:= DoCompileCheck    (Args)
     else if Args.Command = 'ghost-check'       then Result:= DoGhostCheck      (Args)

@@ -48,6 +48,17 @@ type
       out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>;
   end;
 
+  TSafeDeleteRefactoring = class
+  public
+    /// <summary>Edits to delete the declaration (and impl body, for a routine)
+    /// of AQName, but ONLY when it has zero references. Reference check uses
+    /// FindCallersByName(short name) -- FindReferencesTo is unreliable (refs.
+    /// symbol_id is NULL in the index). Returns empty + ARefuseReason when the
+    /// symbol is referenced or not found.</summary>
+    class function Build(const AStore: ISymbolStore; const AQName: string;
+      out ARefuseReason: string): TArray<TTextEdit>;
+  end;
+
 implementation
 
 { Sort key for back-to-front application within a file: larger line first; for
@@ -293,6 +304,71 @@ begin
     end;
   finally
     UsedSet.Free;
+  end;
+end;
+
+function LastSeg(const S: string): string;
+var P: Integer;
+begin
+  P:= LastDelimiter('.', S);
+  if P > 0 then Result:= Copy(S, P + 1, MaxInt) else Result:= S;
+end;
+
+class function TSafeDeleteRefactoring.Build(const AStore: ISymbolStore;
+  const AQName: string; out ARefuseReason: string): TArray<TTextEdit>;
+var
+  Syms        : TArray<TSymbol>  ;
+  Sym         : TSymbol          ;
+  Refs        : TArray<TReference>;
+  Short       : string           ;
+  Path        : string           ;
+  Edits       : TList<TTextEdit> ;
+  E           : TTextEdit        ;
+  R           : TReference       ;
+  ExternalRefs: Integer          ;
+begin
+  Result:= nil; ARefuseReason:= '';
+  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+  if Length(Syms) = 0 then begin ARefuseReason:= Format('symbol "%s" not found', [AQName]); Exit; end;
+  Sym:= Syms[0];
+  Short:= LastSeg(AQName);
+
+  { Zero-reference check via name-text match (FindReferencesTo is unreliable:
+    refs.symbol_id is NULL in the index, so it always returns empty). Any ref
+    row returned by FindCallersByName that is NOT at exactly the declaration's
+    (FileId, StartLine) is a real external usage. If ExternalRefs > 0, refuse. }
+  Refs:= AStore.FindCallersByName(Short);
+  ExternalRefs:= 0;
+  for R in Refs do
+    if not ((R.FileId = Sym.FileId) and (R.StartLine = Sym.StartLine)) then Inc(ExternalRefs);
+  if ExternalRefs > 0 then
+  begin
+    ARefuseReason:= Format('"%s" has %d reference(s) -- refusing to delete', [AQName, ExternalRefs]);
+    Exit;
+  end;
+
+  Path:= AStore.GetFilePath(Sym.FileId);
+  if Path = '' then begin ARefuseReason:= 'declaration file path unknown'; Exit; end;
+
+  Edits:= TList<TTextEdit>.Create;
+  try
+    { impl body first (higher line numbers), then declaration.
+      The applier sorts back-to-front anyway, but emit in logical order. }
+    if (Sym.ImplStartLine > 0) and (Sym.ImplEndLine >= Sym.ImplStartLine) then
+    begin
+      E.FilePath:= Path; E.Kind:= tekDeleteLines;
+      E.Line:= Sym.ImplStartLine; E.EndLine:= Sym.ImplEndLine; E.Col:= 0; E.Text:= '';
+      Edits.Add(E);
+    end;
+    if (Sym.StartLine > 0) and (Sym.EndLine >= Sym.StartLine) then
+    begin
+      E.FilePath:= Path; E.Kind:= tekDeleteLines;
+      E.Line:= Sym.StartLine; E.EndLine:= Sym.EndLine; E.Col:= 0; E.Text:= '';
+      Edits.Add(E);
+    end;
+    Result:= Edits.ToArray;
+  finally
+    Edits.Free;
   end;
 end;
 
