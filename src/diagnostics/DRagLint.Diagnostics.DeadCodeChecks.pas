@@ -47,6 +47,12 @@ type
     ///     directives are NOT repeated -- they exist only on the interface-section
     ///     declProc. This two-pass design correctly handles that grammar structure.
     ///   - Routines with an 'asm' body (assembler block).
+    ///   - VCL/FMX event handlers: a routine whose FIRST parameter is named
+    ///     'Sender' (case-insensitive) is treated as an event handler -- all of
+    ///     its parameters are fixed by the event-type signature and cannot be
+    ///     freely removed. The entire method is skipped. Additionally, any
+    ///     individual parameter named 'Sender' (any position) is also skipped
+    ///     as a defensive secondary guard (some handlers list Sender later).
     ///   - external routines: these never reach the body pass at all. An
     ///     'external' declaration (both interface-section and implementation-
     ///     section forms, e.g. `procedure Foo(A: Integer); external 'x.dll';`)
@@ -272,6 +278,38 @@ var
     ArgsNode:= HdrNode.ChildByField('args');
     if ArgsNode.IsNull then Exit;
 
+    { EVENT-HANDLER GUARD: if the FIRST declArg's first name identifier is
+      'Sender' (case-insensitive), this is a VCL/FMX event handler. All
+      parameters are fixed by the event-type signature and cannot be removed --
+      skip the entire method. }
+    begin
+      var FirstArg: TTSNode:= Default(TTSNode);
+      var FAIdx: Integer;
+      for FAIdx:= 0 to ArgsNode.NamedChildCount - 1 do
+      begin
+        if ArgsNode.NamedChild(FAIdx).NodeType = 'declArg' then
+        begin
+          FirstArg:= ArgsNode.NamedChild(FAIdx);
+          Break;
+        end;
+      end;
+      if not FirstArg.IsNull then
+      begin
+        var FATy: TTSNode:= FirstArg.ChildByField('type');
+        var FATyStart: Integer:= MaxInt;
+        if not FATy.IsNull then FATyStart:= Integer(FATy.StartByte);
+        var FANameIdx: Integer;
+        for FANameIdx:= 0 to FirstArg.NamedChildCount - 1 do
+        begin
+          var FANId: TTSNode:= FirstArg.NamedChild(FANameIdx);
+          if FANId.NodeType <> 'identifier' then Continue;
+          if Integer(FANId.StartByte) >= FATyStart then Continue;
+          if SameText(Trim(NodeStr(FANId)), 'Sender') then Exit;
+          Break; { only check the first name identifier }
+        end;
+      end;
+    end;
+
     { Count all identifiers in the entire defProc subtree (including header).
       A parameter name appearing only in the header decl counts as 1; any use
       in the body raises the count above 1. }
@@ -316,6 +354,11 @@ var
 
           { Skip the implicit Self parameter. }
           if ParamLower = 'self' then Continue;
+
+          { SECONDARY EVENT-HANDLER GUARD: skip any parameter named 'Sender'
+            regardless of position -- defensive guard for non-standard handler
+            signatures where Sender appears later. }
+          if ParamLower = 'sender' then Continue;
 
           { Count = 1 means the name appears only in the header declaration (no
             uses in the body); count = 0 would be a grammar anomaly -- both are

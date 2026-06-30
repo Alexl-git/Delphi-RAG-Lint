@@ -1,0 +1,5 @@
+# Event-handler guard: Sender-first methods must NOT fire unused-parameter.
+!unused-parameter 14
+!unused-parameter 19
+# Non-event-handler Plain(A, B): B unused -- must still fire.
+unused-parameter 23
