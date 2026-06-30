@@ -5,6 +5,23 @@ Drop tree-sitter S-expression query files here. `drag-lint lint` loads every
 grammar, and runs all of them against every file. Match captures produce
 `TLintFinding` rows.
 
+## The rule catalog (`drag-lint rules`)
+
+`drag-lint rules` is the single machine-readable source of truth for every rule --
+built-in and external `.scm`:
+
+```
+drag-lint rules                       # grouped text table + a "N rules across M categories" header
+drag-lint rules --json                # structured catalog: [{id,category,title,default_severity,default_enabled,source,params}] + summary
+drag-lint rules --category naming      # only one category
+drag-lint rules --rules-dir <dir>      # point at a specific rules folder (default <exe-dir>\rules)
+```
+
+Built-in rules carry their category/severity/params from an in-code registry
+(`DRagLint.Lint.RuleCatalog`); external `.scm` rules contribute id/severity/message
+from their sidecar `.json`. This command replaces the hand-maintained rule tables
+below as the canonical inventory.
+
 ## Rule files
 
 Each rule is a pair:

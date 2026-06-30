@@ -17,6 +17,14 @@ breaking changes** until v1.0.
 - New `naming` config keys: `keyword_case`, `min_identifier_len`,
   `hungarian_prefixes`, `short_identifier_check`.
 
+### Added (rule catalog -- D1a)
+
+- **`drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]`** -- a single
+  machine-readable catalog of every rule (built-in + external `.scm`) with id,
+  category, title, default severity, default-enabled, source, and parameters, plus
+  per-category and total counts. New unit `DRagLint.Lint.RuleCatalog` holds the
+  built-in registry; `.scm` rules are merged from their sidecar `.json`.
+
 ## v0.68.0-alpha -- 2026-06-30
 
 Naming-convention wave (#1), dead/redundant-code tail (#2), and the final data-flow
