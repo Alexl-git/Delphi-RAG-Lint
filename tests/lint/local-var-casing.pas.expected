@@ -1,2 +1,3 @@
 local-var-casing 6
 local-var-casing 7
+!local-var-casing 9

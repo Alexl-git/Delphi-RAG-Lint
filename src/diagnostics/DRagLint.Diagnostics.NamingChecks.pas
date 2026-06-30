@@ -70,7 +70,11 @@ implementation
   'PName' must FAIL HasPrefix(.,'p') and therefore be flagged.
   Examples: HasPrefix('TFoo','T')=True; HasPrefix('Tfoo','T')=False;
   HasPrefix('Things','T')=False; HasPrefix('T','T')=False;
-  HasPrefix('pName','p')=True; HasPrefix('PName','p')=False. }
+  HasPrefix('pName','p')=True; HasPrefix('PName','p')=False.
+  NOTE: used ONLY for the param-name-prefix check and the local-var-casing
+  field/param-carry smell (where a strict next-char-uppercase guard is
+  intentional). type-name-prefix and field-name-prefix use StartsWithPrefix
+  (relaxed -- accepts Tfrm, FfID). }
 function HasPrefix(const AName, APrefix: string): Boolean;
 var
   PLen: Integer;
@@ -84,6 +88,53 @@ begin
   { char immediately after the prefix must be A..Z (uppercase) to avoid
     matching e.g. 'Things' against prefix 'T'. }
   Result:= CharInSet(AName[PLen + 1], ['A'..'Z']);
+end;
+
+{ Returns True when AName starts with APrefix (case-SENSITIVE, exact match)
+  and has at least one more character after the prefix. Unlike HasPrefix, the
+  character after the prefix does NOT need to be uppercase -- so TfrmMain and
+  FfID are accepted as carrying their respective prefixes. An empty APrefix
+  always returns False (disables the check for that prefix).
+  Used for type-name-prefix (class/pointer) and field-name-prefix checks so
+  that common form-class and field naming conventions (Tfrm..., FfID...) do
+  not produce false positives.
+  Examples: StartsWithPrefix('TfrmMain','T')=True;
+  StartsWithPrefix('TFoo','T')=True; StartsWithPrefix('T','T')=False;
+  StartsWithPrefix('Widget','T')=False. }
+function StartsWithPrefix(const AName, APrefix: string): Boolean;
+var
+  PLen: Integer;
+begin
+  Result:= False;
+  PLen:= Length(APrefix);
+  if PLen = 0 then Exit;
+  if Length(AName) <= PLen then Exit;
+  Result:= Copy(AName, 1, PLen) = APrefix;
+end;
+
+{ Returns True when S is a short all-uppercase abbreviation (e.g. GLE, BS, OK,
+  FF, ID) that should be exempt from PascalCase / camelCase requirements.
+  Criteria: length 1..4, every character is A..Z or 0..9, and at least one
+  character is A..Z (rules out pure-digit tokens). No underscores allowed.
+  Used to suppress method-pascalcase and local-var-casing false positives on
+  common Delphi short-caps names.
+  Examples: IsShortAllCaps('GLE')=True; IsShortAllCaps('BS')=True;
+  IsShortAllCaps('OK')=True; IsShortAllCaps('FF')=True;
+  IsShortAllCaps('ABCDE')=False (>4 chars); IsShortAllCaps('Foo')=False. }
+function IsShortAllCaps(const S: string): Boolean;
+var
+  I      : Integer;
+  HasLet : Boolean;
+begin
+  Result:= False;
+  if (Length(S) = 0) or (Length(S) > 4) then Exit;
+  HasLet:= False;
+  for I:= 1 to Length(S) do
+  begin
+    if CharInSet(S[I], ['A'..'Z']) then HasLet:= True
+    else if not CharInSet(S[I], ['0'..'9']) then Exit; { lowercase or underscore -> False }
+  end;
+  Result:= HasLet;
 end;
 
 { Returns True when S looks like PascalCase:
@@ -188,6 +239,20 @@ var
     sections inside a defProc are the ones we check; unit-level var sections
     reached while this is False are skipped. }
   InProcBody: Boolean;
+  { Class-body state: True while the walker is inside a declClass body.
+    Used to distinguish class-member declProc nodes (where section visibility
+    matters for method-pascalcase) from unit-level routines (always checked).
+    Saved/restored on declClass entry. }
+  InClassBody: Boolean;
+  { Method-case skip flag: True when method-pascalcase should be suppressed
+    for declProc nodes in the current scope. Set True when entering a declClass
+    body (implicit-first assumption for direct members) and updated by each
+    declSection: True for published or implicit-first sections, False for
+    private/protected/public sections. Saved/restored around each declSection
+    and declClass recursion. Form event handlers (btnOkClick etc.) declared in
+    the published or implicit-first section are IDE-generated / DFM-wired and
+    must not be renamed, so they are exempt from the PascalCase requirement. }
+  CurSectionSkipsMethodCase: Boolean;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -256,6 +321,24 @@ var
         Result:= True;
         Exit;
       end;
+    end;
+  end;
+
+  { True when ASection (a declSection) has the explicit 'published' keyword.
+    Used together with SectionIsExplicit to determine whether a section is
+    the published visibility section (as opposed to private/protected/public).
+    Form event-handler declarations live in published sections and are IDE-
+    generated / DFM-wired -- skipped for method-pascalcase. }
+  function SectionIsPublished(const ASection: TTSNode): Boolean;
+  var
+    K : Integer;
+    Ch: TTSNode;
+  begin
+    Result:= False;
+    for K:= 0 to ASection.NamedChildCount - 1 do
+    begin
+      Ch:= ASection.NamedChild(K);
+      if Ch.NodeType = 'kPublished' then begin Result:= True; Exit; end;
     end;
   end;
 
@@ -343,16 +426,20 @@ var
             if (AStore <> nil) and (ANaming.ExceptionPrefix <> '') then
               IsExcClass:= AStore.IsDescendantOf(TypeName, 'Exception', AFileId);
 
+            { StartsWithPrefix is used (not HasPrefix) so that form-style names
+              such as TfrmAssignGroups pass the T-prefix check. The relaxed guard
+              still rejects bare-prefix names (e.g. just 'T') and names with no
+              prefix at all (e.g. 'Widget'). }
             if IsExcClass then
             begin
-              if (ANaming.ExceptionPrefix <> '') and (not HasPrefix(TypeName, ANaming.ExceptionPrefix)) then
+              if (ANaming.ExceptionPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.ExceptionPrefix)) then
                 EmitAt(NameNode, 'type-name-prefix',
                   Format('Exception class "%s" should start with the "%s" prefix',
                     [TypeName, ANaming.ExceptionPrefix]));
             end
             else
             begin
-              if (ANaming.ClassPrefix <> '') and (not HasPrefix(TypeName, ANaming.ClassPrefix)) then
+              if (ANaming.ClassPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.ClassPrefix)) then
                 EmitAt(NameNode, 'type-name-prefix',
                   Format('Class "%s" should start with the "%s" prefix',
                     [TypeName, ANaming.ClassPrefix]));
@@ -360,14 +447,14 @@ var
           end
           else if TypeNode.NodeType = 'declIntf' then
           begin
-            if (ANaming.InterfacePrefix <> '') and (not HasPrefix(TypeName, ANaming.InterfacePrefix)) then
+            if (ANaming.InterfacePrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.InterfacePrefix)) then
               EmitAt(NameNode, 'type-name-prefix',
                 Format('Interface "%s" should start with the "%s" prefix',
                   [TypeName, ANaming.InterfacePrefix]));
           end
           else if TypeNodeIsPointer(TypeNode) then
           begin
-            if (ANaming.PointerPrefix <> '') and (not HasPrefix(TypeName, ANaming.PointerPrefix)) then
+            if (ANaming.PointerPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.PointerPrefix)) then
               EmitAt(NameNode, 'type-name-prefix',
                 Format('Pointer type "%s" should start with the "%s" prefix',
                   [TypeName, ANaming.PointerPrefix]));
@@ -379,16 +466,46 @@ var
       Exit;
     end;
 
+    { declClass: entering a class body. Reset section context for the two
+      orthogonal tracking flags:
+      - InExplicitSection stays False for direct (implicit-first) members and
+        is updated per declSection (unchanged semantics for field-name-prefix).
+      - CurSectionSkipsMethodCase is set True here so that any declProc
+        encountered directly under the class body (without an enclosing
+        declSection) is treated as the implicit-first section and is exempt
+        from method-pascalcase. Each nested declSection will override it.
+      Save/restore both flags and InClassBody around recursion. }
+    if N.NodeType = 'declClass' then
+    begin
+      var SavedInClass    : Boolean:= InClassBody;
+      var SavedSkipMeth   : Boolean:= CurSectionSkipsMethodCase;
+      var SavedExplicit   : Boolean:= InExplicitSection;
+      InClassBody               := True;
+      CurSectionSkipsMethodCase := True; { implicit-first until a section is entered }
+      InExplicitSection         := False;
+      for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+      InClassBody               := SavedInClass;
+      CurSectionSkipsMethodCase := SavedSkipMeth;
+      InExplicitSection         := SavedExplicit;
+      Exit;
+    end;
+
     { declSection: an explicit visibility section sets InExplicitSection=True
       for the duration of its subtree so the field guard below knows the
       enclosed fields are NOT implicit-first members. A keyword-less declSection
-      (rare) is treated as implicit (False). Save/restore around recursion. }
+      (rare) is treated as implicit (False). Also updates CurSectionSkipsMethodCase:
+      True for published or implicit-first sections (exempt from method-pascalcase);
+      False for private/protected/public (still checked). Save/restore around
+      recursion. }
     if N.NodeType = 'declSection' then
     begin
-      var SavedSection: Boolean:= InExplicitSection;
-      InExplicitSection:= SectionIsExplicit(N);
+      var SavedSection : Boolean:= InExplicitSection;
+      var SavedSkipMeth: Boolean:= CurSectionSkipsMethodCase;
+      InExplicitSection         := SectionIsExplicit(N);
+      CurSectionSkipsMethodCase := (not InExplicitSection) or SectionIsPublished(N);
       for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
-      InExplicitSection:= SavedSection;
+      InExplicitSection         := SavedSection;
+      CurSectionSkipsMethodCase := SavedSkipMeth;
       Exit;
     end;
 
@@ -425,7 +542,7 @@ var
             end;
             if not IsComponentField then
             begin
-              if not HasPrefix(TypeName, ANaming.FieldPrefix) then
+              if not StartsWithPrefix(TypeName, ANaming.FieldPrefix) then
                 EmitAt(NameNode, 'field-name-prefix',
                   Format('Field "%s" should start with the "%s" prefix',
                     [TypeName, ANaming.FieldPrefix]));
@@ -450,12 +567,17 @@ var
     if N.NodeType = 'declProc' then
     begin
       NameNode:= N.ChildByField('name');
-      if (not NameNode.IsNull) and (ANaming.MethodCase <> '') then
+      { method-pascalcase: skip when the section is published or implicit-first
+        (DFM event handlers are IDE-generated / DFM-wired and not renamable).
+        Also skip short all-caps abbreviations (FF, OK, BS, etc.). }
+      if (not NameNode.IsNull) and (ANaming.MethodCase <> '')
+        and (not CurSectionSkipsMethodCase) then
       begin
         var MethName: string:= Trim(NodeStr(NameNode));
         if (MethName <> '') and (not StartsText('operator', MethName)) then
         begin
-          if not MatchesCase(MethName, ANaming.MethodCase) then
+          if (not MatchesCase(MethName, ANaming.MethodCase))
+            and (not IsShortAllCaps(MethName)) then
             EmitAt(NameNode, 'method-pascalcase',
               Format('Method "%s" should be %s', [MethName, ANaming.MethodCase]));
         end;
@@ -502,24 +624,33 @@ var
       HdrNode:= N.ChildByField('header');
       if not HdrNode.IsNull then
       begin
-        { method-pascalcase on the defProc header name }
+        { method-pascalcase on the defProc header name.
+          For qualified names (TClass.Method) the corresponding declProc in the
+          class body is the authoritative check -- the implementation body is
+          supplementary for implementation-only (non-forward) unit routines only.
+          Qualified defProc names are therefore skipped here: if the class method
+          was published or implicit-first the declProc check already suppressed it;
+          if it was private/public the declProc check already caught it.
+          Skipping qualified names also avoids double-reporting for non-event
+          class methods. Un-qualified names (unit-level routines with no forward
+          declaration) are still checked. }
         NameNode:= HdrNode.ChildByField('name');
         if (not NameNode.IsNull) and (ANaming.MethodCase <> '') then
         begin
           var MethName: string:= Trim(NodeStr(NameNode));
-          { For TClass.Method qualified names compare only the simple part after
-            the last dot so we don't flag the qualified form.
-            We still emit at the full NameNode position; the de-dup key is
-            (rule, line, col) so the interface declProc and the impl defProc
-            at a DIFFERENT line are separate findings. }
-          var SimpleName: string:= MethName;
           var DotPos: Integer:= LastDelimiter('.', MethName);
-          if DotPos > 0 then SimpleName:= Copy(MethName, DotPos + 1, MaxInt);
-          if (SimpleName <> '') and (not StartsText('operator', SimpleName)) then
+          { Skip qualified names (class method implementations -- handled by declProc). }
+          if DotPos = 0 then
           begin
-            if not MatchesCase(SimpleName, ANaming.MethodCase) then
-              EmitAt(NameNode, 'method-pascalcase',
-                Format('Method "%s" should be %s', [SimpleName, ANaming.MethodCase]));
+            var SimpleName: string:= MethName;
+            { Skip short all-caps abbreviations (FF, OK, BS, etc.) to avoid FP. }
+            if (SimpleName <> '') and (not StartsText('operator', SimpleName)) then
+            begin
+              if (not MatchesCase(SimpleName, ANaming.MethodCase))
+                and (not IsShortAllCaps(SimpleName)) then
+                EmitAt(NameNode, 'method-pascalcase',
+                  Format('Method "%s" should be %s', [SimpleName, ANaming.MethodCase]));
+            end;
           end;
         end;
         { param-name-prefix on the defProc args }
@@ -599,8 +730,15 @@ var
           if Integer(VarNameId.StartByte) >= VarTypeStart then Continue;
           var VarName: string:= Trim(NodeStr(VarNameId));
           if VarName = '' then Continue;
-          { Fire when casing is wrong OR the name carries field/param prefix. }
-          var CasingBad: Boolean:= not MatchesCase(VarName, ANaming.LocalCase);
+          { Fire when casing is wrong OR the name carries field/param prefix.
+            Short all-caps abbreviations (GLE, BS, MS, etc.) are exempt from
+            the casing check -- they are intentional initialisms, not casing
+            violations. The field/param prefix-carry check still uses HasPrefix
+            (strict: next-char must be uppercase) so that e.g. a local named
+            'Form' is NOT flagged as carrying the 'F' prefix -- only 'FCount'
+            (F + uppercase next char) would fire the carry check. }
+          var CasingBad: Boolean:= (not MatchesCase(VarName, ANaming.LocalCase))
+            and (not IsShortAllCaps(VarName));
           var HasFieldPfx: Boolean:= (ANaming.FieldPrefix <> '') and HasPrefix(VarName, ANaming.FieldPrefix);
           var HasParamPfx: Boolean:= (ANaming.ParamPrefix <> '') and HasPrefix(VarName, ANaming.ParamPrefix);
           if CasingBad or HasFieldPfx or HasParamPfx then
@@ -629,8 +767,10 @@ begin
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
-  InExplicitSection:= False; { root and class-body level = implicit-first section }
-  InProcBody:= False;        { not inside a routine body at the root level }
+  InExplicitSection         := False; { root and class-body level = implicit-first section }
+  InProcBody                := False; { not inside a routine body at the root level }
+  InClassBody               := False; { not inside a class body at the root level }
+  CurSectionSkipsMethodCase := False; { root-level routines are always checked }
   try
     Visit(PF.Tree.RootNode);
     Raw:= Findings.ToArray;

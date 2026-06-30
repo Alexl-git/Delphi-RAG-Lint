@@ -66,7 +66,7 @@ begin
   Result.InterfacePrefix:= 'I';
   Result.PointerPrefix  := 'P';
   Result.FieldPrefix    := 'F';
-  Result.ParamPrefix    := 'p';
+  Result.ParamPrefix    := '';  { off by default; set to 'p' in config to enable }
   Result.MethodCase     := 'PascalCase';
   Result.LocalCase      := 'PascalCase';
   Result.ConstCase      := ['PascalCase', 'UPPER_CASE'];

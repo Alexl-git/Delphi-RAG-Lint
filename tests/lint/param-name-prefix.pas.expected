@@ -1,2 +1,3 @@
-param-name-prefix 3
-param-name-prefix 5
+# param-name-prefix is off by default (ParamPrefix=''); enable via config.
+# This fixture verifies the rule does not fire under default config.
+!param-name-prefix

@@ -35,7 +35,7 @@ begin
   Cfg:= TLintConfig.Load('', '');
   Check('naming default class prefix T', Cfg.Naming.ClassPrefix = 'T');
   Check('naming default field prefix F', Cfg.Naming.FieldPrefix = 'F');
-  Check('naming default param prefix p', Cfg.Naming.ParamPrefix = 'p');
+  Check('naming default param prefix empty (off by default)', Cfg.Naming.ParamPrefix = '');
   Check('naming default method PascalCase', Cfg.Naming.MethodCase = 'PascalCase');
 
   // 2. Override: disable param prefix, change field prefix.
