@@ -1,45 +1,40 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-06-30 -- v0.68 DESIGNED + PLANNED; NEXT = IMPLEMENT (subagent-driven)
+> ## RESUME 2026-06-30 -- v0.68.0-alpha SHIPPED; NEXT = AUTO-RENAME params autofix (needs design)
 >
-> **Branch `main`**, working tree clean. **v0.66.0-alpha + v0.67.0-alpha both SHIPPED + RELEASED**
-> (origin/main=b9d154c tag v0.67.0-alpha; GitHub PRERELEASEs win32+win64; harness **94/94**). **3 unpushed
-> DOC commits on main** (8524203 v0.68 spec, 5d1e33b SQL-DDL wishlist, c0d5a67 v0.68 plan) -- offer to push.
-> VERSION const (`CLI.pas:6`) = `0.67.0-alpha` (Task 7 bumps to 0.68.0-alpha).
+> **Branch `main`**, working tree clean. **v0.68.0-alpha SHIPPED + RELEASED** (origin/main=`be67919`, tag
+> `v0.68.0-alpha`, GitHub PRERELEASE win32+win64; lint harness **112/112**):
+> https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.68.0-alpha . VERSION (`CLI.pas:6`) = `0.68.0-alpha`.
+> 12 new rules built subagent-driven (plan `docs/superpowers/plans/2026-06-30-v068-naming-deadcode-plan.md`), each
+> task-reviewed, opus whole-branch review = no Critical/Important: 7 NAMING (new `DRagLint.Diagnostics.NamingChecks`,
+> config-driven via a `naming` block + `TNamingConfig`); 3 AST DEAD-CODE (new `DRagLint.Diagnostics.DeadCodeChecks`);
+> 2 STORE-BACKED (extend `DRagLint.Lint.ProjectRules`). Naming=info, dead-code/data-flow=warning, all on by default
+> EXCEPT `param-name-prefix` (ships OFF, `param_prefix=''` -- param conventions are project-specific).
 >
-> **NEXT ACTION -- IMPLEMENT v0.68 via subagent-driven-development:**
-> Plan: **`docs/superpowers/plans/2026-06-30-v068-naming-deadcode-plan.md`** (7 tasks).
-> Spec: `docs/superpowers/specs/2026-06-30-v068-naming-deadcode-design.md`.
-> v0.68 = **12 new rules, enabled by default**, closing MISSING-FEATURES #1 (naming) + #2 tail + #3:
-> - **Naming (#1, 7 rules):** config-driven BUILT-INS in a new `DRagLint.Diagnostics.NamingChecks`,
->   reading a new `naming` block in `drag-lint-lint.json` (`TNamingConfig` on `TLintConfig`, defaults =
->   CLAUDE.md conventions T/E/I/P/F/p/PascalCase). `type-name-prefix` (E-prefix uses M1 store when present),
->   `field-name-prefix`, `param-name-prefix`, `method-pascalcase`, `const-casing`, `local-var-casing`,
->   `unit-name-matches-file`. (`.scm` can't read config -> these MUST be built-ins.)
-> - **Dead-code (#2, 4 rules):** `unused-parameter` + `identical-then-else` (AST, new
->   `DRagLint.Diagnostics.DeadCodeChecks`, `lint <file>`); `unused-private-member` + `unused-unit-in-uses`
->   (store-backed, extend `DRagLint.Lint.ProjectRules`). DEFERRED: function-result-ignored,
->   multiple-statements-per-line, commented-out-code, redundant-parentheses.
-> - **referenced-never-set (#3):** SINGLE-UNIT whole-class field def-use (private fields are unit-scoped ->
->   NO store/DB; runs on `lint <file>`); guards = private-only + skip form/published fields.
-> Per-task loop (the v0.67/#12 recipe): fixture RED -> code (copy the v0.67 length-zero built-in in
-> `AstChecks.CheckTypeAware` ~line 1620 as the emit template) -> 4-site CLI wiring (allow-list ~4476, help
-> ~4486, DoLint dispatch, DoLintAll dispatch) -> delphi-build Win64 (scratchpad bat via Start-Process -Wait)
-> -> deploy exe to `third_party\dll-win64` -> harness `pwsh -File tests\lint\run_lint_tests.ps1` stays
-> 94/94+ -> normalize CRLF/ASCII -> commit. Task 7 = docs + bump VERSION 0.68.0-alpha + publish (pack/tag/gh).
+> **FP-HARDENING wave (post-implementation, driven by REAL ORM3/DevExpress sanity -- the unit harness passed but
+> real code was noisy; the "defaults=zero FP" design assumption did NOT hold):** relaxed T/F prefix (accept
+> `TfrmMain`/`FfID` + DevExpress `Tdx`/`Tcx`), short-all-caps exemption (`OK`/`GLE`), skip published/event-handler
+> methods + `Sender`-first params, PROPERTY-ACCESSOR exclusion for `unused-private-member` (parses declProp
+> getter/setter -> **5747->957 on ORM3**), separator-robust `unit-name-matches-file`. DevExpress form 30 findings -> 0.
 >
-> **Side TODO (user-flagged "very soon", NOT linter):** structured SQL DDL schema index (CREATE TABLE/VIEW/
-> PROC/GENERATOR/EXCEPTION) to eliminate grepping `.sql` -- captured at
-> `docs/superpowers/specs/2026-06-29-grep-elimination-indexer-wishlist.md` (P2 item 9).
+> **NEXT ACTION (user-sequenced AFTER v0.68) -- AUTO-RENAME parameters autofix:** user requested an option to
+> auto-add the prefix to params (2026-06-30). NEW `src/refactor` feature; a param is routine-LOCAL so the rename is
+> single-routine-scoped (SAFE). Needs a brainstorm/design first: new-name derivation, interface `declProc` + impl
+> `defProc` header sync, dry-run/preview, `--fix` flag, ANSI/CRLF preservation. Pairs with the naming SETTINGS PAGE
+> + convention presets (A/p/My) request. (Both captured in auto-memory: `feature-autofix-param-rename`,
+> `feature-naming-settings-presets`.)
 >
-> **Gotchas:** `.pas`/`.dfm` strict 7-bit ASCII + CRLF (Edit/Write emit LF -> normalize before commit);
-> **NEVER put `}` or a nested `{` inside a `{ }` Pascal comment -- it closes the comment early = real dcc64
-> syntax error (hit in v0.67)**; a NEW unit needs BOTH the `.dpr` `uses ... in '..'` AND a `.dproj`
-> `<DCCReference>`; CONFIRM tree-sitter node kinds against a real parse before coding each naming rule
-> (parser walkers in `DRagLint.Parser.Delphi13.pas`: declType@886/declClass@451/declIntf@485/declField@907/
-> declProc@898/defProc@986/declArg/declVar/declConst@960/unit@859); tune each fixture `.expected` line to the
-> emitted position during GREEN. `CatOf` returns tcUnknown with NO store (built-ins use a NAME heuristic on
-> the no-store `lint <file>` path -- see v0.67 length-zero `IsStringType`/`TypeTextIsString`).
+> **FOLLOW-UPS (non-blocking, logged in the SDD ledger `.superpowers/sdd/progress.md`):** `unused-private-member`
+> intra-class-call residual FP + perf (cache `FindSymbolsByExactName` -- SLOW on the 64MB ORM3 index, 2-min timeout);
+> `unused-unit-in-uses` operator/helper allow-list (`KSideEffectUnits`) is narrow; add a private-class-method
+> `method-pascalcase` fixture + a nested-class `referenced-never-set` fixture. **SQL DDL index TODO** still open
+> (grep-elimination wishlist `docs/superpowers/specs/2026-06-29-grep-elimination-indexer-wishlist.md` P2 item 9).
+>
+> **Gotchas (still apply):** `.pas`/`.dfm` strict 7-bit ASCII + CRLF (Edit/Write emit LF -> normalize before commit);
+> NEVER put `}` or a nested `{` inside a `{ }` Pascal comment (real dcc64 error); a NEW unit needs BOTH the `.dpr`
+> `uses ... in '..'` AND a `.dproj` `<DCCReference>`; new-unit build via the delphi-build skill (scratchpad bat +
+> `Start-Process -Wait`); after a build that changed symbols, kill orphaned `drag-lint.exe`/`drag_lint_graph.exe`
+> (they lock `third_party\dll-win64\drag-lint.exe` -> pack/deploy "used by another process").
 >
 > --- (history below) ---
 
