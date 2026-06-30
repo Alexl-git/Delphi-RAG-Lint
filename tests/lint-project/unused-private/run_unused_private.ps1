@@ -1,9 +1,10 @@
 # unused-private-member + unused-unit-in-uses fixture test.
-# Indexes a tiny 3-unit project, runs lint-all --db, and asserts:
+# Indexes a tiny multi-unit project, runs lint-all --db, and asserts:
 #   - unused-private-member fires for UnusedPrivateMethod and FUnusedField in producer.pas
 #   - unused-private-member does NOT fire for UsedPublicMethod
-#   - unused-unit-in-uses fires for helper in consumer.pas (zero symbols used)
-#   - unused-unit-in-uses does NOT fire for producer in consumer.pas (UsedPublicMethod referenced)
+#   - unused-unit-in-uses fires for helper (implementation-section, zero symbols used)
+#   - unused-unit-in-uses fires for helper2 (interface-section, zero symbols used)
+#   - unused-unit-in-uses does NOT fire for producer (UsedPublicMethod referenced)
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
@@ -36,17 +37,19 @@ $hasUnusedMethod = ($privFindings | Where-Object { $_.message -like '*UnusedPriv
 $hasUnusedField  = ($privFindings | Where-Object { $_.message -like '*FUnusedField*' }).Count -gt 0
 # ASSERT 3: unused-private-member does NOT fire for UsedPublicMethod (it is public, not private)
 $noPublicFP      = ($privFindings | Where-Object { $_.message -like '*UsedPublicMethod*' }).Count -eq 0
-# ASSERT 4: unused-unit-in-uses fires for helper in consumer.pas
-$hasUnusedHelper = ($usesFindings | Where-Object { $_.message -like '*helper*' }).Count -gt 0
-# ASSERT 5: unused-unit-in-uses does NOT fire for producer in consumer.pas
-$noProducerFP    = ($usesFindings | Where-Object { $_.message -like '*producer*' }).Count -eq 0
+# ASSERT 4: unused-unit-in-uses fires for helper (implementation-section import; match 'helper' exactly, not helper2)
+$hasUnusedHelper = ($usesFindings | Where-Object { $_.message -like "*'helper'*" }).Count -gt 0
+# ASSERT 5: unused-unit-in-uses fires for helper2 (interface-section import)
+$hasUnusedHelper2 = ($usesFindings | Where-Object { $_.message -like "*'helper2'*" }).Count -gt 0
+# ASSERT 6: unused-unit-in-uses does NOT fire for producer (symbols ARE referenced)
+$noProducerFP    = ($usesFindings | Where-Object { $_.message -like "*'producer'*" }).Count -eq 0
 
-$pass = $hasUnusedMethod -and $hasUnusedField -and $noPublicFP -and $hasUnusedHelper -and $noProducerFP
+$pass = $hasUnusedMethod -and $hasUnusedField -and $noPublicFP -and $hasUnusedHelper -and $hasUnusedHelper2 -and $noProducerFP
 
 if ($pass) {
-  Write-Host "PASS  unused-private + unused-unit-in-uses"
+  Write-Host "PASS  unused-private + unused-unit-in-uses (impl + interface section)"
   exit 0
 } else {
-  Write-Host ("FAIL  hasUnusedMethod={0} hasUnusedField={1} noPublicFP={2} hasUnusedHelper={3} noProducerFP={4}" -f $hasUnusedMethod, $hasUnusedField, $noPublicFP, $hasUnusedHelper, $noProducerFP)
+  Write-Host ("FAIL  hasUnusedMethod={0} hasUnusedField={1} noPublicFP={2} hasUnusedHelper={3} hasUnusedHelper2={4} noProducerFP={5}" -f $hasUnusedMethod, $hasUnusedField, $noPublicFP, $hasUnusedHelper, $hasUnusedHelper2, $noProducerFP)
   exit 1
 }

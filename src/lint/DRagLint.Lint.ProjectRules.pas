@@ -285,17 +285,18 @@ begin
   Result:= nil;
   if (AStore = nil) or (AConfigPath = '') or (not TFile.Exists(AConfigPath)) then Exit;
   Root:= nil;
-  var ConfigText: string;
+  { Per the <remarks>Never raises</remarks> contract, a bad/unreadable config must
+    NOT propagate -- log a single diagnostic line and return an empty result. }
   try
-    ConfigText:= TFile.ReadAllText(AConfigPath);
-  except
+    Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(AConfigPath));
+  except // drag-lint:ignore try-except-swallowed (log-then-return-empty: honors the Never-raises contract)
     on E: Exception do
     begin
-      Writeln(ErrOutput, Format('[layering] cannot read config %s: %s', [AConfigPath, E.Message]));
-      raise;
+      Writeln(ErrOutput, Format('[layering] skipping bad config %s: %s', [AConfigPath, E.Message]));
+      Root.Free;
+      Exit;
     end;
   end;
-  Root:= TJSONObject.ParseJSONValue(ConfigText);
   if not (Root is TJSONObject) then begin Root.Free; Exit; end;
   Obj:= TJSONObject(Root);
 

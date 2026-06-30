@@ -2,6 +2,8 @@ unit consumer;
 
 interface
 
+uses helper2;
+
 implementation
 
 uses producer, helper;
