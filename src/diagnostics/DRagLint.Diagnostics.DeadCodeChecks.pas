@@ -43,6 +43,15 @@ type
     ///     directives are NOT repeated -- they exist only on the interface-section
     ///     declProc. This two-pass design correctly handles that grammar structure.
     ///   - Routines with an 'asm' body (assembler block).
+    ///   - external routines: these never reach the body pass at all. An
+    ///     'external' declaration (both interface-section and implementation-
+    ///     section forms, e.g. `procedure Foo(A: Integer); external 'x.dll';`)
+    ///     is parsed by tree-sitter as a body-less declProc, NOT a defProc, so
+    ///     CheckUnusedParams (which only visits defProc nodes) is never invoked
+    ///     for it. Verified empirically: an external routine with an obviously-
+    ///     unused parameter produces zero unused-parameter findings. This is
+    ///     deliberate -- the external body is in a foreign module and the
+    ///     parameter cannot be removed.
     /// Known limitation: interface-method implementations are not detected
     /// syntactically (requires a symbol store). If an interface method body slips
     /// through with an unused parameter it will be reported; this is an acceptable
