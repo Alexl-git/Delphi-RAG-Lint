@@ -1,6 +1,26 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-06-30 (LATEST) -- **v0.69 D3 + D1a + D2a SHIPPED to `main` (NOT published); NEXT = D2b then D1b**
+> ## RESUME 2026-06-30 (LATEST) -- **v0.69 D3 + D1a + D2a + D2b SHIPPED to `main` (NOT published); NEXT = D1b ONLY (IDE tab, MANUAL gate)**
+>
+> **v0.69 D2b DONE + MERGED to `main`** (local `main`=`951de40`; **NOT pushed/tagged**; `main` 21 commits ahead of origin).
+> Two more `drag-lint` refactor subcommands, backed by a new range-edit primitive (new unit `DRagLint.Refactor.TextEdit`:
+> `TTextEdit` + `TTextEditApplier` insert/delete + builders): **`find-unit --name <Sym> --in <file>`** (add the unit
+> declaring <Sym> to <file>'s uses clause; impl-uses preferred; no-op if already imported) + **`safe-delete --name
+> <QName>`** (delete decl + impl body ONLY when zero references; **REFUSES otherwise**). Both store-driven, dry-run default
+> + `--json` + `--apply`. CORRECTNESS: safe-delete's zero-ref check uses `FindCallersByName` (NOT `FindReferencesTo`, which
+> is always-empty because refs.symbol_id is NULL). Subagent-driven 5 tasks (plan
+> `docs/superpowers/plans/2026-06-30-v069-d2b-finunit-safedelete-plan.md`); safe-delete got an OPUS review (verified at the
+> SQL layer; every failure mode = over-REFUSAL never over-deletion); OPUS whole-branch = READY TO MERGE, no Critical/
+> Important. Tests: textedit **5/5**, find-unit **5/5**, safe-delete **3/3** (incl. the refuse case), lint **117/117**.
+> ORM3 sanity: safe-delete on a 161-caller symbol correctly REFUSED (exit 2). **D2 COMPLETE (D2a + D2b).** FOLLOW-UPS
+> (non-blocking, in ledger): find-unit multi-entry-uses test + alias normalization; safe-delete both-spans fixture +
+> refuse-on-ambiguous-QName. **NEXT = D1b ONLY** -- the IDE "Lint Options" dock tab consuming `drag-lint rules --json`;
+> **MANUAL BPL gate** (RAD Studio closed to build the BPL + a human click-test; NOT fully autonomous). v0.69 publishes
+> (VERSION bump 0.69.0-alpha + tag + GitHub release) only after D1b.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-06-30 -- v0.69 D3 + D1a + D2a SHIPPED to `main`; NEXT = D2b then D1b
 >
 > **v0.69 D2a DONE + MERGED to `main`** (local `main`=`6cbce9d`->`6d6d1c5`; **NOT pushed/tagged**; `main` 13 commits ahead
 > of origin). Two `drag-lint rename` subcommands packaging the existing `TRenameRefactoring` engine: **`rename --kind
