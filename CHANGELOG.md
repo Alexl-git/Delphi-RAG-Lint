@@ -12,10 +12,10 @@ and data-flow rules are `warning`.
 ### Added (naming conventions -- 7 rules, `info`, `lint <file>`)
 
 All naming rules are config-driven via a new `naming` block in `drag-lint-lint.json`.
-Built-in defaults match the project's CLAUDE.md conventions (no config file required
-for zero false positives on this codebase). Disable any individual check by setting
-its value to `""` (string) or `[]` (array) in the config, or by listing the rule id
-under `disabled`.
+Built-in defaults follow common Delphi conventions; the rules are hardened against
+frequent real-world patterns (see below). Tune the `naming` block per project.
+Disable any individual check by setting its value to `""` (string) or `[]` (array)
+in the config, or by listing the rule id under `disabled`.
 
 **New `naming` config block** (shown with defaults):
 
@@ -23,7 +23,7 @@ under `disabled`.
 "naming": {
   "type_prefix":  { "class": "T", "exception": "E", "interface": "I", "pointer": "P" },
   "field_prefix": "F",
-  "param_prefix": "p",
+  "param_prefix": "",
   "method_case":  "PascalCase",
   "const_case":   ["PascalCase", "UPPER_CASE"],
   "local_case":   "PascalCase"
@@ -36,8 +36,10 @@ under `disabled`.
   back to the `T` rule on the no-store `lint <file>` path (no guessing).
 - **`field-name-prefix`** -- class instance field name must start with `F`. Published
   auto-generated DFM component fields on form/frame classes are skipped.
-- **`param-name-prefix`** -- routine parameter name must start with `p`. `Self` is
-  skipped; set `"param_prefix": ""` to disable.
+- **`param-name-prefix`** -- routine parameter name must start with the configured
+  prefix. `Self` is always skipped. **Disabled by default** (`param_prefix: ""`);
+  param-prefix conventions are project-specific (e.g. `"p"` for pFoo-style, `"A"` for
+  Embarcadero-style). Set a non-empty prefix to enable.
 - **`method-pascalcase`** -- method/routine name must be PascalCase.
 - **`const-casing`** -- declared constant or enum member name must match one of
   `const_case` (default: `PascalCase` or `UPPER_CASE`).
@@ -75,6 +77,44 @@ under `disabled`.
   for operator overloads, class/record helpers, or `initialization`/`finalization`
   side effects; also skips a small allow-list of known side-effect units. Flags only
   when zero referenced symbols are affirmatively found.
+
+### False-positive hardening
+
+The rules include several guards that make them near-zero-FP on real Delphi, VCL, and
+DevExpress code:
+
+- **`type-name-prefix` / `field-name-prefix`**: accept the prefix followed by any
+  letter, so `TfrmMain` (T + lowercase form convention), `FfID`, and DevExpress component
+  types such as `TdxBarManager` / `TcxGrid` (T + lowercase) are recognized -- not flagged.
+- **`field-name-prefix`**: auto-generated published DFM component fields on form/frame
+  classes (the implicit-first section, any component type including DevExpress controls)
+  are skipped entirely; only fields in explicit `private`/`protected`/`public` sections
+  are checked.
+- **`method-pascalcase` / `local-var-casing`**: short all-caps abbreviations (`OK`,
+  `ID`, `GLE`, `FF`, length <= 4) are exempt from the PascalCase requirement.
+- **`method-pascalcase`**: methods in a `published` or implicit-first section (form event
+  handlers such as `btnOkClick`) are skipped.
+- **`unused-parameter`**: VCL/FMX event handlers -- a routine whose first parameter is
+  `Sender` -- are skipped entirely (all params are signature-bound); plus the existing
+  override / interface / message / asm / external / var / out guards.
+- **`unit-name-matches-file`**: basename comparison is path-separator-robust (handles
+  both `/` and `\`).
+- **`unused-private-member`**: property getter/setter accessors and read/write-clause
+  backing fields are excluded -- a property's `read GetX write SetX` accessors are not
+  flagged as unused even though the index does not link them via the property clause.
+
+### Known limitations
+
+- **`unused-private-member`**: the index does not track all intra-class private
+  method-to-method calls, so a private method called only by another method of the same
+  class may still be reported (a residual false positive, shared with
+  `unused-public-symbol`).
+- **`unused-unit-in-uses`**: near-zero-FP by construction (it only over-credits
+  references, so it never flags a genuinely-used unit), but a unit used ONLY for
+  operator overloads, class/record helpers, or `initialization`/`finalization` side
+  effects without a referenced symbol may be flagged unless it is in the built-in
+  side-effect allow-list (which is intentionally small). Expand the allow-list or
+  disable per-project if needed.
 
 ### Notes
 
@@ -924,7 +964,7 @@ and DFM:
   + `icudt63.dll` + `icuin63.dll` + `icuuc63.dll` + `msvcp140.dll` +
   `vcruntime140.dll` + `zlib1.dll`. Source: `%FIREBIRD%\WOW64\`.
 
-- **Tier 3: Delphi ↔ SQL ORM linker** (`drag-lint link-orm --db
+- **Tier 3: Delphi ? SQL ORM linker** (`drag-lint link-orm --db
   <proj.sqlite> --db <sql.sqlite>`). Cross-references Delphi
   classes/interfaces/fields against SQL tables/columns by Delphi/Micronite
   naming convention (T/I/F-prefix strip). New `orm_links` table records
@@ -936,15 +976,15 @@ and DFM:
 
 ### Added (storage)
 
-Schema bumped **v5 → v6** (additive; existing DBs migrate cleanly):
+Schema bumped **v5 ? v6** (additive; existing DBs migrate cleanly):
 
 - `fb_relations`, `fb_columns`, `fb_field_info`, `fb_datasets`,
-  `fb_enum_values` — Tier 2 snapshot tables
-- `orm_links` — Tier 3 cross-DB bindings
+  `fb_enum_values` ? Tier 2 snapshot tables
+- `orm_links` ? Tier 3 cross-DB bindings
 
 `TSQLiteSymbolStore.GetConnection: TFDConnection` exposed as a leaf
 accessor for utilities (uses-report, fb-snapshot, link-orm) that need
-raw table scans. Intentionally **not** on `ISymbolStore` — calling
+raw table scans. Intentionally **not** on `ISymbolStore` ? calling
 code knows it's reaching into the SQLite impl.
 
 ### Added (autotest)
@@ -963,7 +1003,7 @@ DDL kind. Total now **17 PASS** in ~1.5s.
 
 ## v0.40.2-alpha -- 2026-05-31
 
-### Fixed (critical — IDE freeze)
+### Fixed (critical ? IDE freeze)
 
 User pressed `Tools > drag-lint > Test Connection...` on v0.40.1, the
 LSP handshake succeeded (confirmed in the debug log), then the IDE
@@ -978,12 +1018,12 @@ froze.
 
 Fix in `Stop`:
 
-1. **`TerminateProcess(FProcessHandle, 0)` first** — kills the child
+1. **`TerminateProcess(FProcessHandle, 0)` first** ? kills the child
    immediately. Its write end of stdout closes, causing our reader's
    `ReadFile` to return `ERROR_BROKEN_PIPE`. Reader exits naturally.
 2. Close the pipe handles next.
 3. `WaitForSingleObject(ReaderHandle, 2000ms)` with a hard upper
-   bound — `TThread.WaitFor` has no timeout overload, so the raw
+   bound ? `TThread.WaitFor` has no timeout overload, so the raw
    Windows API is the correct primitive here. If the reader still
    hasn't exited in 2s, log it and leak the thread instance (the OS
    will reclaim once the child is fully gone) rather than freezing
@@ -999,7 +1039,7 @@ slow, the IDE thread is no longer involved.
 
 The plugin log path now actually matches what the dialogs claim
 (v0.40.1 fix). If you saw `C:\TEMP\drag-lint-plugin.log` doesn't
-exist after Test Connection on v0.39, that was the bug — the real
+exist after Test Connection on v0.39, that was the bug ? the real
 log was at `%LOCALAPPDATA%\Temp\drag-lint-plugin.log`.
 
 ---
@@ -1023,7 +1063,7 @@ log was at `%LOCALAPPDATA%\Temp\drag-lint-plugin.log`.
 
 ### Fixed (logging)
 
-- **Plugin log path mismatch** — `DebugLog` wrote to
+- **Plugin log path mismatch** ? `DebugLog` wrote to
   `TPath.GetTempPath` while the diagnostic dialogs printed
   `GetEnvironmentVariable('TEMP')`. Under Windows TMP/TEMP precedence
   the two can diverge, so users opened the displayed path and found
@@ -1102,7 +1142,7 @@ subprocess + pipe setup).
 
 ### Added (plugin diagnostics)
 
-- **`Tools > drag-lint > Test Connection...`** — runs through the exact
+- **`Tools > drag-lint > Test Connection...`** ? runs through the exact
   LSP startup sequence the plugin uses internally and shows a
   human-readable report:
   - BPL path + directory
@@ -1113,7 +1153,7 @@ subprocess + pipe setup).
   All without the user having to install/uninstall the package or
   trigger a real hover.
 
-- **`Tools > drag-lint > Open Plugin Log`** — opens
+- **`Tools > drag-lint > Open Plugin Log`** ? opens
   `%TEMP%\drag-lint-plugin.log` in the user's default text editor.
   When the log doesn't exist yet (first run before any plugin LSP
   invocation), shows an informational dialog.
@@ -1132,7 +1172,7 @@ subprocess + pipe setup).
 
 ### Added (diagnostics)
 
-- **`%TEMP%\drag-lint-plugin.log`** — the IDE plugin's LSP client now
+- **`%TEMP%\drag-lint-plugin.log`** ? the IDE plugin's LSP client now
   writes a detailed timestamped log of every subprocess event, send,
   receive, and error to a file in the user's temp dir. Created
   automatically on first plugin invocation; appended thereafter.
@@ -1142,7 +1182,7 @@ subprocess + pipe setup).
 
 ### Fixed
 
-- **`CreateProcessW` cmd-line did not quote the exe path** — if the BPL
+- **`CreateProcessW` cmd-line did not quote the exe path** ? if the BPL
   was installed at a path containing spaces (e.g.
   `C:\Program Files\drag-lint\dclDragLintWizard.bpl`), the cmd line
   `<unquoted exe> lsp` was tokenized by Windows and the process spawn
@@ -1152,7 +1192,7 @@ subprocess + pipe setup).
 - **`CREATE_NO_WINDOW` flag added** to `CreateProcessW` so the
   spawned drag-lint subprocess does not pop a console window.
 
-- **`Initialize` request timeout bumped from 5s to 10s** — the 5s
+- **`Initialize` request timeout bumped from 5s to 10s** ? the 5s
   timeout was occasionally too short on slow disks / first-run cold
   starts.
 
@@ -1162,9 +1202,9 @@ subprocess + pipe setup).
   up the v0.38 BPL changes you must either:
   1. Close RAD Studio entirely, replace
      `dclDragLintWizard.bpl`, and restart, OR
-  2. Component → Install Packages → uncheck drag-lint → OK,
+  2. Component ? Install Packages ? uncheck drag-lint ? OK,
      replace the BPL file, then re-check it.
-- The `drag-lint.exe` standalone is unchanged behavior from v0.37 —
+- The `drag-lint.exe` standalone is unchanged behavior from v0.37 ?
   only the BPL plugin gained logging.
 
 ---
@@ -1196,27 +1236,27 @@ subprocess + pipe setup).
 
 - **Dual-architecture release artifacts.** Every binary now ships in
   two matched variants:
-  - `drag-lint-v0.36.0-alpha-win32.zip` — `drag-lint.exe` + 3 DLLs as
+  - `drag-lint-v0.36.0-alpha-win32.zip` ? `drag-lint.exe` + 3 DLLs as
     PE32 (Intel i386). **Required for the IDE plugin** since RAD Studio
     13 itself is a 32-bit process; the `dclDragLintWizard.bpl` is also
     Win32 and goes in this bundle.
-  - `drag-lint-v0.36.0-alpha-win64.zip` — same contents as PE32+
+  - `drag-lint-v0.36.0-alpha-win64.zip` ? same contents as PE32+
     (x86-64). For standalone CLI / LSP / MCP usage where the process
     runs outside any IDE.
 
 - **New build scripts** at `build/`:
-  - `build_draglint_win32.bat` / `build_draglint_win64.bat` —
+  - `build_draglint_win32.bat` / `build_draglint_win64.bat` ?
     msbuild-driven Delphi 13 builds for either platform; output staged
     to `third_party/dll-win32/` or `dll-win64/`.
-  - `_buildruntime32.bat` / `_buildruntime64.bat` — `cl.exe` build of
+  - `_buildruntime32.bat` / `_buildruntime64.bat` ? `cl.exe` build of
     `tree-sitter.dll` runtime library with explicit `/MACHINE:X86` or
     `/MACHINE:X64`.
-  - `_buildgrammar32_manual.bat` / `_buildgrammar64_manual.bat` —
+  - `_buildgrammar32_manual.bat` / `_buildgrammar64_manual.bat` ?
     direct `cl.exe` build of `tree-sitter-delphi13.dll` from
     `parser.c + scanner.c`. Replaces the `tree-sitter build` invocation
     because the bundled tree-sitter CLI defaults to x64 and ignores
     `vcvars32.bat` for cross-arch.
-  - `_builddfm32_manual.bat` / `_builddfm64_manual.bat` — same for
+  - `_builddfm32_manual.bat` / `_builddfm64_manual.bat` ? same for
     `tree-sitter-dfm.dll`.
 
 ### Notes
@@ -1228,7 +1268,7 @@ subprocess + pipe setup).
   have a working install; only the `third_party/dll/` bundled folder
   was broken.
 - For the IDE plugin, copy the Win32 bundle next to the BPL or onto
-  PATH. The Win64 bundle is irrelevant in that context — the IDE is
+  PATH. The Win64 bundle is irrelevant in that context ? the IDE is
   Win32.
 
 ---
@@ -1557,7 +1597,7 @@ these; deferred to a future session with a flow analysis pass.
 
 ## v0.26.0-alpha -- 2026-05-29
 
-### Added — compiler diagnostic integration (replaces Error Insight)
+### Added ? compiler diagnostic integration (replaces Error Insight)
 
 The pipeline that lets the plugin replace RAD Studio's Error Insight with
 the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
@@ -1691,7 +1731,7 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
 
 - **Background reindex on file save** (`DragLint.Plugin.SaveNotifier`).
   `TDragLintSaveNotifier` implements `IOTAModuleNotifier` (NOT
-  `IOTAIDENotifier.ofnFileSaved` — that enum value doesn't exist in
+  `IOTAIDENotifier.ofnFileSaved` ? that enum value doesn't exist in
   Delphi 13's ToolsAPI). `AfterSave` per-module; checks the
   `AutoReindexOnSave` setting + extension whitelist (.pas/.dpr/.dpk/.inc/
   .dfm) + cached project DB path, then spawns `drag-lint.exe index <file>
@@ -1699,13 +1739,13 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
   project-open hook.
 
 - **New setting `AutoReindexOnSave`** (REG_DWORD, default 1). Toggle in
-  Tools → drag-lint → Settings dialog.
+  Tools ? drag-lint ? Settings dialog.
 
 ### Notes
 
-- True incremental `textDocument/didChange` remains deferred — we still
+- True incremental `textDocument/didChange` remains deferred ? we still
   treat on-disk file as source of truth.
-- IOTAOptionsForm (proper Tools → Options integration) still deferred.
+- IOTAOptionsForm (proper Tools ? Options integration) still deferred.
 
 ---
 
@@ -1730,10 +1770,10 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
 
 - **Keystroke bindings** (`DragLint.Plugin.Keyboard`) via
   `IOTAKeyboardServices.AddKeyboardBinding`:
-  - `Ctrl+Alt+H` → Hover at Cursor
-  - `Ctrl+Alt+C` → Show Completion
-  - `Ctrl+Alt+S` → Show Signature Help
-  - `Ctrl+Alt+D` → Run Diagnostics
+  - `Ctrl+Alt+H` ? Hover at Cursor
+  - `Ctrl+Alt+C` ? Show Completion
+  - `Ctrl+Alt+S` ? Show Signature Help
+  - `Ctrl+Alt+D` ? Run Diagnostics
   Each handler checks the corresponding Enable* setting before invoking.
 
 - **Custom hover popup form** (`DragLint.Plugin.HoverForm`). Borderless
@@ -1755,32 +1795,32 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
 
 ### Added
 
-- **Delphi IDE plugin (OTAPI design-time package)** — `src/delphi-plugin/` with
+- **Delphi IDE plugin (OTAPI design-time package)** ? `src/delphi-plugin/` with
   `dclDragLintWizard.bpl` design-time package for RAD Studio 13 Florence (37.0).
   Registers as a wizard in the IDE's Tools menu with four entries: Hover at Cursor,
   Show Completion, Show Signature Help, Run Diagnostics. Menu invocations are
-  modal for v0.21 (no custom popup forms or keystroke bindings — deferred to v0.22).
+  modal for v0.21 (no custom popup forms or keystroke bindings ? deferred to v0.22).
 
-- **LSP client (`TDragLintLspClient`)** — spawns `drag-lint.exe lsp` as a persistent
+- **LSP client (`TDragLintLspClient`)** ? spawns `drag-lint.exe lsp` as a persistent
   subprocess with `Winapi.Windows.CreateProcess` and round-trips JSON-RPC 2.0
-  requests over anonymous pipes (`CreatePipe`). Handles `initialize` → `hover` /
-  `completion` / `signatureHelp` → `shutdown` lifecycle. Implemented in
+  requests over anonymous pipes (`CreatePipe`). Handles `initialize` ? `hover` /
+  `completion` / `signatureHelp` ? `shutdown` lifecycle. Implemented in
   `DragLint.Plugin.LspClient` (unit).
 
-- **publishDiagnostics notification routing** — LSP `textDocument/publishDiagnostics`
+- **publishDiagnostics notification routing** ? LSP `textDocument/publishDiagnostics`
   notifications are collected and posted to RAD Studio's Messages pane via
   `IOTAMessageServices.AddToolMessage`. Thread-safe via `TThread.Queue` to marshal
   IDE callbacks from the LSP client's read pump.
 
 ### Notes
 
-- **v0.21 is scope-reduced** — Tools menu invocation only (no keystroke bindings,
+- **v0.21 is scope-reduced** ? Tools menu invocation only (no keystroke bindings,
   no custom popup forms). Full editor integration with hot-keys and rich popups
   moves to v0.22 pending polish of OTAPI event wiring.
-- **LSP client tested standalone** — `tests/fixtures/T27_lsp_client.dpr` exercises
+- **LSP client tested standalone** ? `tests/fixtures/T27_lsp_client.dpr` exercises
   the client with real `drag-lint.exe` binary; round-trips initialize + shutdown
   + basic requests verify the pipe protocol and JSON-RPC framing.
-- **Requires PATH setup** — the v0.21 wizard expects `drag-lint.exe` on the system
+- **Requires PATH setup** ? the v0.21 wizard expects `drag-lint.exe` on the system
   PATH; plugin will not launch without it.
 - **No schema changes.** All features are read-only over v0.20 symbol tables.
 
@@ -1790,33 +1830,33 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
 
 ### Added
 
-- **LSP `textDocument/completion`** — member completion after `.` (resolves LHS
+- **LSP `textDocument/completion`** ? member completion after `.` (resolves LHS
   via TTypeAtResolver, enumerates child symbols), identifier completion via
   prefix LIKE match. Trigger characters `[".", "(", ","]`. Returns `CompletionList`
   with `isIncomplete: false`.
 
-- **LSP `textDocument/signatureHelp`** — parses function/procedure signature,
+- **LSP `textDocument/signatureHelp`** ? parses function/procedure signature,
   computes `activeParameter` from comma count in the call context. Trigger
   characters `["(", ","]`.
 
-- **LSP `textDocument/didOpen` + `textDocument/didSave`** — triggers lint run;
+- **LSP `textDocument/didOpen` + `textDocument/didSave`** ? triggers lint run;
   results pushed as `textDocument/publishDiagnostics` notifications. Mapped
   severities (Error/Warning/Information/Hint) + source="drag-lint" + rule code.
 
-- **Module: `DRagLint.LSP.Completion`** — TLspCompletion class for building
+- **Module: `DRagLint.LSP.Completion`** ? TLspCompletion class for building
   completion and signature items.
 
-- **Storage helpers: `FindSymbolsByPrefix` + `FindAllChildSymbols`** — query the
+- **Storage helpers: `FindSymbolsByPrefix` + `FindAllChildSymbols`** ? query the
   symbol_table for prefix-matched identifiers and child symbols of a given
   parent.
 
 ### Notes
 
-- **`didChange` deliberately not wired in v0.20** — server re-runs lint only on
+- **`didChange` deliberately not wired in v0.20** ? server re-runs lint only on
   `didSave` (file-based, matching the indexer model). v0.21 OTAPI will be the
   path to incremental updates.
-- **Completion uses prefix-LIKE** — no fuzzy matching yet. Defer to v0.21+.
-- **Integration verified** — LoopFBN.pas test confirms 5 lint findings round-trip
+- **Completion uses prefix-LIKE** ? no fuzzy matching yet. Defer to v0.21+.
+- **Integration verified** ? LoopFBN.pas test confirms 5 lint findings round-trip
   into LSP diagnostics correctly.
 
 ---
@@ -1825,18 +1865,18 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
 
 ### Added
 
-- **`drag-lint typeat file:line:col`** — resolves the identifier at the given
+- **`drag-lint typeat file:line:col`** ? resolves the identifier at the given
   source position and returns containing symbol (unit, class, method),
   token text, resolved symbol (with qualified name), signature, and documentation.
   Supports dotted access (e.g., `Foo.Bar`) via parent_id lookup against class
   / record / interface parent symbols. Example: `drag-lint typeat Docs.pas:42:15
   --db myproj.sqlite` resolves the symbol at line 42, column 15.
 
-- **MCP: `get_type_at_position` tool** — same as CLI `typeat` but callable from
+- **MCP: `get_type_at_position` tool** ? same as CLI `typeat` but callable from
   Claude Code, Cursor, or Zed. Arguments: `file` (relative path from repo root),
   `line` (1-based), `col` (1-based), `db` (optional path to SQLite).
 
-- **LSP: textDocument/hover enriched** — when hovering over an identifier
+- **LSP: textDocument/hover enriched** ? when hovering over an identifier
   reference (not just declaration), hover now includes resolved symbol info
   (qualified name, signature, doc) via the type-at-position resolver.
 
@@ -1847,7 +1887,7 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
   positions (e.g., inside `with` statements, generic substitutions, local
   variables) return a clear note rather than an error.
 - **Deferred to v0.21 (OTAPI):** Local variable inference, generic type
-  substitution, scope-based symbol lookup (e.g., `with TMyClass do Foo` →
+  substitution, scope-based symbol lookup (e.g., `with TMyClass do Foo` ?
   resolve Foo as a method of TMyClass).
 
 ---
@@ -1856,7 +1896,7 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
 
 ### Added
 
-- **`drag-lint context --task "verb qname"`** — composes v0.16 docs + v0.17
+- **`drag-lint context --task "verb qname"`** ? composes v0.16 docs + v0.17
   surface/slice/callers/impact into one AI-ready Markdown/JSON/raw payload.
   Verbs: `modify` (default), `inspect`, `refactor`, `delete`, `extend`.
   Automatically includes class surface, implementation slice, caller context
@@ -1864,7 +1904,7 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
   formats: `--format md|json|raw`. Example: `drag-lint context --task "modify
   Foo.TBar.Baz" --caller-context 3 --max-callers 10 --db myproj.sqlite`.
 
-- **`drag-lint bench-context [--n N] [--md]`** — measures AI token-reduction
+- **`drag-lint bench-context [--n N] [--md]`** ? measures AI token-reduction
   ratio by sampling N random documented symbols from the database. For each
   symbol, computes the bundle token estimate (using chars / 3.7 heuristic) and
   compares against the baseline (full source file char count / 3.7). Reports
@@ -1873,7 +1913,7 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
   codebases. Token estimate is a heuristic (not BPE); v0.19+ may add real
   tokenization.
 
-- **MCP: `get_context_bundle` tool** — same as CLI `context` but callable from
+- **MCP: `get_context_bundle` tool** ? same as CLI `context` but callable from
   Claude Code, Cursor, or Zed. Arguments: `task` (string), `db` (optional path
   to SQLite), `caller_context` (optional integer, default 3), `max_callers`
   (optional integer, default 5), `format` (optional "md"|"json"|"raw").
@@ -1894,13 +1934,13 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
 
 ### Added
 
-- **`drag-lint impact --qname X [--depth N]`** — transitive callers via
+- **`drag-lint impact --qname X [--depth N]`** ? transitive callers via
   `WITH RECURSIVE` SQLite CTE. Walks the reference graph to depth N (default 3)
   and reports per-depth caller count + distinct unit count. Useful for
   blast-radius analysis: "how many units would a change to this symbol
   impact?" Output format: `Depth 1: 42 callers in 8 units (+42)`.
 
-- **`drag-lint surface --qname TFoo [--include-impl] [--all-visibility]`** —
+- **`drag-lint surface --qname TFoo [--include-impl] [--all-visibility]`** ?
   returns the class/interface/record declaration block sliced from the source
   file (interface section only, unless `--include-impl` is set). No method
   bodies, just the interface. `--all-visibility` includes private/protected
@@ -1908,7 +1948,7 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
   but covers 95% of real codebases). Use case: feed the surface to an AI to
   understand a type's contract without drowning in implementation detail.
 
-- **`drag-lint slice --qname Foo.TBar`** — returns a minimal multi-chunk
+- **`drag-lint slice --qname Foo.TBar`** ? returns a minimal multi-chunk
   source extraction: unit header + class declaration + per-method impl bodies
   (~70% smaller than the full unit, optimised for AI context windows). Chunks
   are tagged (`unit-header`, `class-decl`, `impl-method`, `unit-trailer`) so
@@ -1916,18 +1956,18 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
   (searches for next `procedure`/`function`/`end.` line); works on standard
   formatting but may over/under-include on unusual layouts.
 
-- **`drag-lint query find-callers --context N`** — extends the v0.16
+- **`drag-lint query find-callers --context N`** ? extends the v0.16
   `find-callers` command to include N lines of surrounding source per match.
   Each result row includes the `context_text` field (N lines before + the call
   + N lines after, from the source file). Formats: text (one per line) and
   JSON (nested array). Zero context (default) suppresses the field for
   backward compatibility.
 
-- **MCP: 3 new tools** —
-  - `get_impact` — same as CLI `impact`, returns transitive callers by depth.
-  - `get_surface` — same as CLI `surface`, returns class interface slice.
-  - `get_slice` — same as CLI `slice`, returns symbol-relevant unit chunks.
-  - `find_callers` extended — new optional `context` arg (integer, default 0);
+- **MCP: 3 new tools** ?
+  - `get_impact` ? same as CLI `impact`, returns transitive callers by depth.
+  - `get_surface` ? same as CLI `surface`, returns class interface slice.
+  - `get_slice` ? same as CLI `slice`, returns symbol-relevant unit chunks.
+  - `find_callers` extended ? new optional `context` arg (integer, default 0);
     when set, each result includes `context_text`.
 
 ### Notes
@@ -2037,7 +2077,7 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
 - **Mojibake in Obsidian-export notes.** Source files contained
   literal Unicode em-dashes (`U+2014`), pipe arrows (`U+2192`), and
   ellipses (`U+2026`) interpreted by Delphi 13 as Windows-1252 bytes,
-  producing `â€"` etc. when written out as UTF-8. All non-ASCII
+  producing `??"` etc. when written out as UTF-8. All non-ASCII
   characters scrubbed from `.pas` sources per the project's strict-
   ASCII rule. Re-export to refresh existing vaults.
 
@@ -2046,7 +2086,7 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
 ## v0.14.0-alpha -- 2026-05-27
 
 ### Added
-- **`.drag-lint.json`** — per-project config. Located in cwd or any
+- **`.drag-lint.json`** ? per-project config. Located in cwd or any
   ancestor directory. Loaded before CLI flags; CLI overrides config.
   Recognised keys:
   ```json
@@ -2072,10 +2112,10 @@ the real dcc32/dcc64 H/W/E/F output. Four components ship in v0.26:
 
 ---
 
-## v0.13.0-alpha — 2026-05-27
+## v0.13.0-alpha ? 2026-05-27
 
 ### Added
-- **`drag-lint diff --db <old.sqlite> --db <new.sqlite>`** — compare two
+- **`drag-lint diff --db <old.sqlite> --db <new.sqlite>`** ? compare two
   indexes by `qualified_name`. Reports added, removed, and signature-
   changed symbols. Use case: "what did this PR change in the public
   API?" Build an index before the change, build one after, run diff.
@@ -2094,15 +2134,15 @@ That diff was the captured drag-lint API delta from v0.7 to v0.13.
 
 ---
 
-## v0.12.0-alpha — 2026-05-27
+## v0.12.0-alpha ? 2026-05-27
 
 ### Added
-- **`drag-lint todos [<path>]`** — scan `.pas`/`.dpr`/`.dpk`/`.inc` for
+- **`drag-lint todos [<path>]`** ? scan `.pas`/`.dpr`/`.dpk`/`.inc` for
   `// TODO`, `// FIXME`, `// HACK`, `// XXX`, `// REVIEW`, `// NOTE`
   comments. Word-boundaried so noise like "fixmessage" doesn't false-
   trip. Skips `//` inside string literals (odd-quote check on the line
   prefix). Optional author tag captured from `// TODO @alex ...` or
-  `// TODO Alex: ...` forms — must start with a letter, so Delphi's
+  `// TODO Alex: ...` forms ? must start with a letter, so Delphi's
   built-in `// TODO 1 -oAuthor -cCategory : ...` priority digits don't
   consume the slot. `--json` for tool integration.
 
@@ -2118,10 +2158,10 @@ drag-lint self-corpus.
 
 ---
 
-## v0.11.0-alpha — 2026-05-27
+## v0.11.0-alpha ? 2026-05-27
 
 ### Added
-- **`drag-lint index --watch [--interval N]`** — keep the index hot by
+- **`drag-lint index --watch [--interval N]`** ? keep the index hot by
   polling the target folder(s) every `N` seconds (default 5). Each tick
   re-walks every resolved file; the existing mtime+sha256 incremental
   skip means unchanged files cost roughly nothing. Self-test on the
@@ -2138,43 +2178,43 @@ drag-lint self-corpus.
 
 ---
 
-## v0.10.0-alpha — 2026-05-27
+## v0.10.0-alpha ? 2026-05-27
 
 ### Added
-- **`drag-lint graph`** — emit a unit-level dependency graph from the
+- **`drag-lint graph`** ? emit a unit-level dependency graph from the
   index. One node per indexed source file, one edge per (file A
   references symbol defined in file B) pair, edge weight = count of
   references. Two output formats:
-  - `--format dot` — Graphviz, renders via `dot -Tsvg drag-graph.dot -o
+  - `--format dot` ? Graphviz, renders via `dot -Tsvg drag-graph.dot -o
     drag-graph.svg` (or pasted into any online Graphviz viewer)
-  - `--format mermaid` — Mermaid syntax, renders inline in
+  - `--format mermaid` ? Mermaid syntax, renders inline in
     GitHub/Obsidian/most Markdown viewers without external tools
 - `--name <substr>` filter restricts the graph to edges whose source OR
   target path contains the substring. Useful for "show me everything
-  depending on or used by the parser layer" → `--name Parser`.
+  depending on or used by the parser layer" ? `--name Parser`.
 - `--output <file>` writes the graph to a file instead of stdout.
 
 ### Notes
 - Edge resolution is name-only: refs are joined to symbols by
   `LOWER(name)` because the indexer leaves `refs.symbol_id` NULL today.
   That means a ref to a generic name like `Create` will fan out to every
-  unit defining a `Create`. Still useful as a structural snapshot — the
+  unit defining a `Create`. Still useful as a structural snapshot ? the
   real architectural arrows dominate the small noise. A future iteration
   will resolve `symbol_id` at index time.
 - Self-test on drag-lint corpus: `CLI -> Storage.SQLite (48), CLI ->
-  Core.Indexer (46), CLI -> Lint.Linter (44), ...` — matches the real
+  Core.Indexer (46), CLI -> Lint.Linter (44), ...` ? matches the real
   hierarchy.
 
 ---
 
-## v0.9.0-alpha — 2026-05-27
+## v0.9.0-alpha ? 2026-05-27
 
-### Added — two project-shaped lint rules
+### Added ? two project-shaped lint rules
 
 - **`unit-not-in-dpr`** (project-level). Cross-checks the .dproj's
   `<DCCReference Include="..."/>` list against the matching .dpr/.dpk's
   `uses` clause. Emits a warning for every unit listed in the .dproj but
-  missing from the program/package source (the dangerous case — drops out
+  missing from the program/package source (the dangerous case ? drops out
   of the build on next IDE re-open), and an info-level finding for the
   reverse (compiles via search path today, but IDE doesn't track it).
   Invoked via `drag-lint lint --project <file.dproj>`. Self-test on
@@ -2184,7 +2224,7 @@ drag-lint self-corpus.
 
 - **`inline-comment-in-multiline-args`** (file-level, layout heuristic).
   Detects trailing `// ...` comments placed inside multi-line argument
-  lists, array/set literals, and record initialisers — the exact pattern
+  lists, array/set literals, and record initialisers ? the exact pattern
   that YADF and other Pascal reformatters reflow incorrectly, silently
   destroying the next array element. Tracks paren/bracket depth,
   `{...}` and `(* ... *)` block comments, and `'string'` literals so URL
@@ -2200,38 +2240,38 @@ drag-lint self-corpus.
 
 ---
 
-## v0.8.0-alpha — 2026-05-27
+## v0.8.0-alpha ? 2026-05-27
 
 ### Added
 - **Type-use references.** The indexer now emits `kind='type_use'` references
-  for every `typeref` AST node — field types, parameter types, function
+  for every `typeref` AST node ? field types, parameter types, function
   return types, class/interface inheritance lists, generic type arguments,
   and qualified type names (`Unit.TFoo`). `find-callers --name ISymbolStore`
   on the drag-lint self-corpus now returns 5 sites (was 1): the interface
   decl, the field decl in the Indexer, the ctor parameter, the LSP field,
   and the concrete `TSQLiteSymbolStore` inheritance line. Total refs across
-  the same corpus went 1251 → 1528 (+277).
-- **`drag-lint import-log <logfile>`** — parse a msbuild/dcc compiler log
+  the same corpus went 1251 ? 1528 (+277).
+- **`drag-lint import-log <logfile>`** ? parse a msbuild/dcc compiler log
   and store findings in a new `compiler_findings` table (schema v3). Cross-
   references each finding to the indexed `files` row when the path matches,
   preserves the raw path otherwise. Accepts three formats:
   - `Foo.pas(45,10): Error E2010: ...`
   - `Foo.pas(45): Hint warning H2077: Value assigned to 'X' never used`
   - `[dcc64 Error] Foo.pas(45,10): E2010 ...`
-- **`drag-lint query hints --name <code>`** — query the compiler-finding
+- **`drag-lint query hints --name <code>`** ? query the compiler-finding
   store. `--name H2077` returns every dead-write the compiler flagged across
   the project, with file/line. `--rule <severity>` filters by severity
-  (Fatal/Error/Warning/Hint). Useful answer to "where's the dead code?" —
+  (Fatal/Error/Warning/Hint). Useful answer to "where's the dead code?" ?
   the Delphi compiler already knows; this just stores its answer for
   cross-session querying.
 
 ### Notes
 - Schema bumped to v3 (`compiler_findings` table + index). v2 indexes are
-  upgraded transparently — existing fuzzy/symbol tables are untouched.
+  upgraded transparently ? existing fuzzy/symbol tables are untouched.
 
 ---
 
-## v0.7.0-alpha — 2026-05-27
+## v0.7.0-alpha ? 2026-05-27
 
 ### Added
 - **LSP position resolution.** `textDocument/definition`,
@@ -2251,10 +2291,10 @@ drag-lint self-corpus.
 
 ### Verified
 - Cursor on `FStore.UpsertSymbol` in `DRagLint.Core.Indexer.pas`:
-  - definition → 2 results: `ISymbolStore.UpsertSymbol` (interface) and
+  - definition ? 2 results: `ISymbolStore.UpsertSymbol` (interface) and
     `TSQLiteSymbolStore.UpsertSymbol` (concrete impl), each with proper
     file URI + range
-  - references → 3 results: the call site + both declarations
+  - references ? 3 results: the call site + both declarations
 - Cursor on `ISymbolStore` in the interface declaration: definition
   returns the interface decl range; references currently returns just
   the declaration because v0.7 refs are call-site-only (not type-use).
@@ -2263,7 +2303,7 @@ drag-lint self-corpus.
 ### Known limitations to flag publicly
 - LSP `textDocument/references` only finds call sites today. Type uses
   (`X: ISymbolStore`, class inheritance, parameter types) are NOT
-  emitted as refs by the indexer — they'd need a parser-side
+  emitted as refs by the indexer ? they'd need a parser-side
   enhancement. Tracked as v0.8.
 - No incremental parse on `textDocument/didChange`. The LSP server uses
   the on-disk index + reparses the cursor's file on each request.
@@ -2272,22 +2312,22 @@ drag-lint self-corpus.
 
 ---
 
-## v0.6.0-alpha — 2026-05-27
+## v0.6.0-alpha ? 2026-05-27
 
 ### Added
-- **`drag-lint lsp`** — Language Server Protocol stdio server, framed with
+- **`drag-lint lsp`** ? Language Server Protocol stdio server, framed with
   Content-Length headers per spec. `initialize`, `shutdown`, `exit`, and
   `workspace/symbol` work today. `textDocument/definition` and
-  `textDocument/references` return empty arrays (placeholders) — they
+  `textDocument/references` return empty arrays (placeholders) ? they
   need position-to-token resolution which is a v0.7 item (tree-sitter
   reparse on cursor position).
-- **`drag-lint top --by fanin`** — ranks names by reference count across
+- **`drag-lint top --by fanin`** ? ranks names by reference count across
   the index. Aggregates refs by name first (fast path), then attaches a
   sample symbol for context. 1.5 s on 473 k-symbol corpora.
-- **`drag-lint export enums`** — emit every `(enum, value)` pair from the
+- **`drag-lint export enums`** ? emit every `(enum, value)` pair from the
   index. Four formats: `firebird-sql` (CREATE TABLE + INSERTs), `csv`,
   `json` (nested-values), `delphi-const` (paste-ready arrays).
-- **`drag-lint export obsidian`** — write one `.md` per unit with YAML
+- **`drag-lint export obsidian`** ? write one `.md` per unit with YAML
   frontmatter, full symbol list, and a "Referenced by" section using
   `[[wikilinks]]` so Obsidian's graph view becomes a navigable
   cross-reference map of the codebase.
@@ -2302,15 +2342,15 @@ drag-lint self-corpus.
 
 ---
 
-## v0.4.0-alpha — 2026-05-27
+## v0.4.0-alpha ? 2026-05-27
 
 ### Added
-- **MCP stdio server** — `drag-lint serve --db <file>` speaks JSON-RPC 2.0
+- **MCP stdio server** ? `drag-lint serve --db <file>` speaks JSON-RPC 2.0
   / MCP `2024-11-05` and exposes `find_symbol`, `find_callers`, and `lint`
   as typed tools. Claude Code / Cursor / Zed can wire it via the standard
   `mcpServers` config block. The CLI is still available for token-tight
   use; same engine underneath.
-- **Incremental reindex** — `IndexFile` skips files whose `mtime_unix` AND
+- **Incremental reindex** ? `IndexFile` skips files whose `mtime_unix` AND
   `sha256` are already in the `files` table. Reformatting an entire
   project (e.g. with YADF) and re-running `index` only re-parses the
   files that actually changed. The CLI summary line reports the skip
@@ -2325,18 +2365,18 @@ drag-lint self-corpus.
 
 ---
 
-## v0.3.0-alpha — 2026-05-27
+## v0.3.0-alpha ? 2026-05-27
 
 ### Added
 - **Persistent trigram index for fuzzy lookup.** Schema bumped to v2 with a
   new `symbol_trigrams` table populated alongside every symbol insert.
   Fuzzy queries on 473k-symbol indexes drop from ~5,500 ms to ~520 ms
-  (>10× improvement). Legacy v1 databases are upgraded lazily on first
+  (>10? improvement). Legacy v1 databases are upgraded lazily on first
   fuzzy query.
-- **`drag-lint index --scan-libraries`** — index Delphi Library + Browsing
+- **`drag-lint index --scan-libraries`** ? index Delphi Library + Browsing
   paths from the registry (HKCU + HKLM, Win32 + Win64) without needing a
   `.dproj`. Useful as a one-time "library knowledge base" build.
-- **Multi-database queries** — repeat `--db <file.sqlite>` to query across
+- **Multi-database queries** ? repeat `--db <file.sqlite>` to query across
   several indexes at once. Results are concatenated. Useful for separating
   per-project indexes from a shared `delphi-libs.sqlite`.
 - **Tree-sitter query predicates** (`#eq?`, `#not-eq?`, `#match?`,
@@ -2348,15 +2388,15 @@ drag-lint self-corpus.
 - README + design docs reworded to avoid naming any prior commercial tool.
 
 ### Known limitations
-- Fuzzy lookup latency target was <500 ms — we hit ~520 ms on 473k symbols.
+- Fuzzy lookup latency target was <500 ms ? we hit ~520 ms on 473k symbols.
   Further wins likely need a daemon (MCP server in v0.4).
-- `--scan-libraries` pulls in a wide path set — a large 3rd-party VCL
+- `--scan-libraries` pulls in a wide path set ? a large 3rd-party VCL
   component library alone can take 3 minutes to index. Use `--dry-run`
   first to inspect what will be scanned.
 
 ---
 
-## v0.2.0-alpha — 2026-05-27
+## v0.2.0-alpha ? 2026-05-27
 
 ### Added
 - **Full symbol coverage**: `interface`, `record`, `enum`, `enum_value`,
@@ -2376,12 +2416,12 @@ drag-lint self-corpus.
 - `--dry-run` flag to inspect the resolved folder list without indexing.
 
 ### Changed
-- `FindCallersByName` no longer hardcodes `kind='call'` — matches all
+- `FindCallersByName` no longer hardcodes `kind='call'` ? matches all
   reference kinds including DFM event-bindings.
 
 ---
 
-## v0.1.0-alpha — 2026-05-27
+## v0.1.0-alpha ? 2026-05-27
 
 Initial public surface:
 - Indexer for `.pas`, `.dpr`, `.dpk` via `tree-sitter-delphi13`
@@ -2392,9 +2432,9 @@ Initial public surface:
 - CLI: index / query / lint / --json / --version / --help
 
 Scaled tested on:
-- Micronite ORM3 (708 .pas + 86 .dfm + .dpr + .dpk = 795 files) → 44 169
+- Micronite ORM3 (708 .pas + 86 .dfm + .dpr + .dpk = 795 files) ? 44 169
   symbols, 42 341 references, 8 s
-- Delphi RTL+VCL+FMX+Data (1295 files) → 212 083 symbols, 250 663 references,
+- Delphi RTL+VCL+FMX+Data (1295 files) ? 212 083 symbols, 250 663 references,
   60 s
-- Large 3rd-party VCL component library full install (4460 files) →
+- Large 3rd-party VCL component library full install (4460 files) ?
   473 756 symbols, 387 668 references, 179 s

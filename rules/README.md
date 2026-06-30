@@ -268,8 +268,8 @@ With no config, no baseline, and no `--fail-on`, every command behaves exactly a
 
 Seven config-driven naming rules added in v0.68. All are `info` severity, enabled by
 default, and run on the `lint <file>` path. They read conventions from the `naming`
-block in `drag-lint-lint.json`; if no config file is present, built-in defaults apply
-(matching the CLAUDE.md project conventions).
+block in `drag-lint-lint.json`; if no config file is present, built-in defaults apply.
+Built-in defaults follow common Delphi conventions; tune the `naming` block per project.
 
 ### `naming` block schema (with built-in defaults)
 
@@ -277,7 +277,7 @@ block in `drag-lint-lint.json`; if no config file is present, built-in defaults 
 "naming": {
   "type_prefix":  { "class": "T", "exception": "E", "interface": "I", "pointer": "P" },
   "field_prefix": "F",
-  "param_prefix": "p",
+  "param_prefix": "",
   "method_case":  "PascalCase",
   "const_case":   ["PascalCase", "UPPER_CASE"],
   "local_case":   "PascalCase"
@@ -293,7 +293,7 @@ block in `drag-lint-lint.json`; if no config file is present, built-in defaults 
 | `type_prefix.interface` | string | `"I"` | Required prefix for interface type declarations |
 | `type_prefix.pointer` | string | `"P"` | Required prefix for pointer type declarations |
 | `field_prefix` | string | `"F"` | Required prefix for class instance fields |
-| `param_prefix` | string | `"p"` | Required prefix for routine parameters |
+| `param_prefix` | string | `""` | Prefix for routine parameters -- **empty = disabled by default**; set `"p"`, `"A"`, etc. to enable |
 | `method_case` | string | `"PascalCase"` | Required casing for method/routine names |
 | `const_case` | string or array | `["PascalCase","UPPER_CASE"]` | Allowed casing(s) for constants and enum members |
 | `local_case` | string | `"PascalCase"` | Required casing for local variable names |
@@ -322,11 +322,48 @@ entirely by id, use the top-level `disabled` list:
 |---------|----------|-------------|
 | `type-name-prefix` | info | Class/interface/pointer/exception type names must carry the configured prefix (`T`/`I`/`P`/`E`). Exception-class detection uses M1 ancestry when a DB is present; falls back to the `T` rule on the no-DB path. |
 | `field-name-prefix` | info | Class instance field names must start with the configured prefix (`F`). Published/DFM-generated fields on form and frame classes are skipped. |
-| `param-name-prefix` | info | Routine parameter names must start with the configured prefix (`p`). Skips `Self`; override/interface-impl/event-handler/message-method parameters are also skipped (signature compatibility). |
+| `param-name-prefix` | info | Routine parameter names must start with the configured prefix. **Disabled by default** (`param_prefix: ""`); set a prefix like `"p"` or `"A"` to enable. Skips `Self`; override/interface-impl/event-handler/message-method parameters are also skipped (signature compatibility). |
 | `method-pascalcase` | info | Method and free-routine names must be PascalCase (configurable via `method_case`). |
 | `const-casing` | info | Declared constants and enum members must match one of the configured casing styles (default: `PascalCase` or `UPPER_CASE`). |
 | `local-var-casing` | info | Local variable names must be PascalCase (configurable via `local_case`) and must not carry the field or param prefix (`FFoo`/`pFoo` as a local is a naming smell). |
 | `unit-name-matches-file` | info | The `unit X;` identifier must equal the file's base name (case-insensitive on Windows). One finding per unit. |
+
+### False-positive hardening (naming rules)
+
+The naming rules include several guards that make them near-zero-FP on real Delphi,
+VCL, and DevExpress code:
+
+- **`type-name-prefix` / `field-name-prefix`**: accept the prefix followed by any
+  letter, so `TfrmMain` (T + lowercase form convention), `FfID`, and DevExpress component
+  types such as `TdxBarManager` / `TcxGrid` (T + lowercase) are recognized -- not flagged.
+- **`field-name-prefix`**: auto-generated published DFM component fields on form/frame
+  classes (the implicit-first section, any component type including DevExpress controls)
+  are skipped; only fields in explicit `private`/`protected`/`public` sections are checked.
+- **`method-pascalcase` / `local-var-casing`**: short all-caps abbreviations (`OK`,
+  `ID`, `GLE`, `FF`, length <= 4) are exempt from the PascalCase requirement.
+- **`method-pascalcase`**: methods in a `published` or implicit-first section (form event
+  handlers such as `btnOkClick`) are skipped.
+- **`unused-parameter`**: VCL/FMX event handlers -- a routine whose first parameter is
+  `Sender` -- are skipped entirely (all params are signature-bound); plus the existing
+  override / interface / message / asm / external / var / out guards.
+- **`unit-name-matches-file`**: basename comparison is path-separator-robust (handles
+  both `/` and `\`).
+- **`unused-private-member`**: property getter/setter accessors and read/write-clause
+  backing fields are excluded -- a property's `read GetX write SetX` accessors are not
+  flagged as unused even though the index does not link them via the property clause.
+
+### Known limitations (store-backed rules)
+
+- **`unused-private-member`**: the index does not track all intra-class private
+  method-to-method calls, so a private method called only by another method of the same
+  class may still be reported (a residual false positive, shared with
+  `unused-public-symbol`).
+- **`unused-unit-in-uses`**: near-zero-FP by construction (it only over-credits
+  references, so it never flags a genuinely-used unit), but a unit used ONLY for
+  operator overloads, class/record helpers, or `initialization`/`finalization` side
+  effects without a referenced symbol may be flagged unless it is in the built-in
+  side-effect allow-list (which is intentionally small). Expand the allow-list or
+  disable per-project if needed.
 
 ## Shipped rules (v0.68 -- dead/redundant-code tail)
 
@@ -335,8 +372,8 @@ run on the `lint-all --db` / `lint-project --db` path (store-backed). All are `w
 
 | Rule id | Severity | Path | Description |
 |---------|----------|------|-------------|
-| `unused-parameter` | warning | `lint <file>` | Parameter declared but never read in the routine body. Guards: skips `override`, interface-impl, event-handler-shaped, `message`, `assembler`, and `external` routines; skips `out`/`var` parameters. |
+| `unused-parameter` | warning | `lint <file>` | Parameter declared but never read in the routine body. Guards: skips `override`, interface-impl, event-handler-shaped (first param is `Sender`), `message`, `assembler`, and `external` routines; skips `out`/`var` parameters. |
 | `identical-then-else` | warning | `lint <file>` | `if C then S1 else S2` where S1 and S2 are syntactically identical (normalized text). Real copy-paste bug -- result is the same regardless of the condition. |
 | `referenced-never-set` | warning | `lint <file>` | A `private`/`strict private` class field with >= 1 read and 0 writes anywhere in the declaring unit. Field always holds its zero value. Guards: skips `published` fields, form/frame/`TComponent`-streamed classes, and fields with initializers. |
-| `unused-private-member` | warning | `lint-all --db` / `lint-project --db` | A `private`/`strict private` method, field, const, or nested type with zero references in the symbol index. Mirrors `unused-public-symbol` for private scope. Guards: skips published fields and RTTI/`{$M+}`-streamed members. |
-| `unused-unit-in-uses` | warning | `lint-all --db` / `lint-project --db` | A unit in a `uses` clause with zero of its exported symbols referenced by the using unit. Conservative: skips plausible operator-overload / helper / side-effect-only units and a known allow-list. |
+| `unused-private-member` | warning | `lint-all --db` / `lint-project --db` | A `private`/`strict private` method, field, const, or nested type with zero references in the symbol index. Mirrors `unused-public-symbol` for private scope. Guards: skips published fields, RTTI/`{$M+}`-streamed members, and property accessor methods/fields. See Known limitations above for a residual intra-class FP. |
+| `unused-unit-in-uses` | warning | `lint-all --db` / `lint-project --db` | A unit in a `uses` clause with zero of its exported symbols referenced by the using unit. Conservative: skips plausible operator-overload / helper / side-effect-only units and a known allow-list. A unit used only for operator overloads or side effects without a referenced symbol may still be flagged; see Known limitations above. |
