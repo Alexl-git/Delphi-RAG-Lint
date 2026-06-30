@@ -103,6 +103,12 @@ begin
     on Ex: Exception do begin Writeln('EXCEPTION ', Ex.ClassName, ': ', Ex.Message); Inc(GFail); end;
   end;
 
+  { Reserved-word guard. }
+  Check('IsReservedWord(begin) = True', TRenameRefactoring.IsReservedWord('Begin'));
+  Check('IsReservedWord(end) = True', TRenameRefactoring.IsReservedWord('END'));
+  Check('IsReservedWord(Foo) = False', not TRenameRefactoring.IsReservedWord('Foo'));
+  Check('IsReservedWord(pValue) = False', not TRenameRefactoring.IsReservedWord('pValue'));
+
   Writeln('');
   Writeln(Format('buildlocal-tests: %d pass / %d fail / %d total', [GPass, GFail, GPass + GFail]));
   if GFail > 0 then Halt(1) else Halt(0);

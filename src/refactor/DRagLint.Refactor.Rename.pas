@@ -29,6 +29,13 @@ type
       class function Build(const AStore: ISymbolStore; const AQName, ANewName: string): TArray<TRenameEdit>;
       class function Apply(const AEdits: TArray<TRenameEdit>; AWriteBackups: Boolean) : Integer            ; // returns files touched
       class function RenderDryRun(const AEdits: TArray<TRenameEdit>)                  : string             ;
+      /// <summary>True when AName is a Delphi reserved word (case-insensitive) and
+      /// therefore cannot be used as an identifier.</summary>
+      class function IsReservedWord(const AName: string): Boolean;
+      /// <summary>Non-empty human reason when renaming AQName to ANewName would be
+      /// unsafe: ANewName is a reserved word, or a sibling symbol named ANewName
+      /// already exists under the same parent. '' when the rename is safe.</summary>
+      class function ConflictReason(const AStore: ISymbolStore; const AQName, ANewName: string): string;
       /// <summary>Routine-local rename of the parameter or local variable whose
       /// declaration identifier sits at (ALine, ACol) (1-based) in AFile. Emits a
       /// TRenameEdit for the declaration, every in-scope use within the owning
@@ -498,6 +505,53 @@ begin
   finally
     Edits.Free;
   end;
+end;
+
+
+// ---------------------------------------------------------------------------
+// Conflict detection helpers
+// ---------------------------------------------------------------------------
+
+class function TRenameRefactoring.IsReservedWord(const AName: string): Boolean;
+const
+  KReserved: array[0..63] of string = (
+    'and','array','as','asm','begin','case','class','const','constructor','destructor',
+    'dispinterface','div','do','downto','else','end','except','exports','file','finalization',
+    'finally','for','function','goto','if','implementation','in','inherited','initialization',
+    'inline','interface','is','label','library','mod','nil','not','object','of','or',
+    'packed','procedure','program','property','raise','record','repeat','resourcestring',
+    'set','shl','shr','string','then','threadvar','to','try','type','unit','until','uses',
+    'var','while','with','xor');
+var L, H, M, C: Integer; Low: string;
+begin
+  Low:= LowerCase(AName);
+  L:= 0; H:= High(KReserved);
+  while L <= H do
+  begin
+    M:= (L + H) div 2;
+    C:= CompareStr(Low, KReserved[M]);
+    if C = 0 then Exit(True)
+    else if C < 0 then H:= M - 1
+    else L:= M + 1;
+  end;
+  Result:= False;
+end;
+
+class function TRenameRefactoring.ConflictReason(const AStore: ISymbolStore;
+  const AQName, ANewName: string): string;
+var
+  Syms: TArray<TSymbol>;
+  Sib : TSymbol;
+begin
+  Result:= '';
+  if IsReservedWord(ANewName) then
+    Exit(Format('"%s" is a reserved word', [ANewName]));
+  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+  if Length(Syms) = 0 then Exit;
+  { sibling-name collision under the same parent }
+  Sib:= AStore.FindChildSymbolByName(Syms[0].ParentId, ANewName);
+  if Sib.Id <> 0 then
+    Exit(Format('a symbol named "%s" already exists in the same scope', [ANewName]));
 end;
 
 end.
