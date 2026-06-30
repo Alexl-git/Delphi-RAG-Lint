@@ -76,10 +76,50 @@ begin
     Check('result2 level error->error',
       (Results.Items[2] as TJSONObject).GetValue('level').Value = 'error');
 
-    Check('result0 has region.startLine=10',
+    var Region0: TJSONObject :=
       (((Res0.GetValue('locations') as TJSONArray).Items[0] as TJSONObject)
-        .GetValue('physicalLocation') as TJSONObject).GetValue('region')
-        is TJSONObject);
+        .GetValue('physicalLocation') as TJSONObject).GetValue('region') as TJSONObject;
+    Check('result0 region.startLine = 10',
+      (Region0.GetValue('startLine') as TJSONNumber).AsInt = 10);
+  finally
+    V.Free;
+  end;
+end;
+
+procedure TestZeroCoordinateClamp;
+var
+  Findings: TArray<TLintFinding>;
+  F: TLintFinding;
+  Root, Run, Res0, Region0: TJSONObject;
+  Runs, Results: TJSONArray;
+  Txt: string;
+  V: TJSONValue;
+begin
+  F:= Default(TLintFinding);
+  F.RuleId   := 'used-before-assignment';
+  F.Severity := 'warning';
+  F.FilePath := 'C:\proj\Z.pas';
+  F.StartLine:= 0; F.StartCol:= 0;
+  F.EndLine  := 0; F.EndCol  := 0;
+  F.Message  := 'zero-coord test';
+  Findings:= [F];
+  Txt:= TSarifWriter.ToJson(Findings, '0.66.0-alpha');
+
+  V:= TJSONObject.ParseJSONValue(Txt);
+  Check('clamp: SARIF parses', V <> nil);
+  if V = nil then Exit;
+  try
+    Root:= V as TJSONObject;
+    Runs:= Root.GetValue('runs') as TJSONArray;
+    Run := Runs.Items[0] as TJSONObject;
+    Results:= Run.GetValue('results') as TJSONArray;
+    Res0:= Results.Items[0] as TJSONObject;
+    Region0:= (((Res0.GetValue('locations') as TJSONArray).Items[0] as TJSONObject)
+      .GetValue('physicalLocation') as TJSONObject).GetValue('region') as TJSONObject;
+    Check('clamp: startLine 0 -> 1',
+      (Region0.GetValue('startLine') as TJSONNumber).AsInt = 1);
+    Check('clamp: startColumn 0 -> 1',
+      (Region0.GetValue('startColumn') as TJSONNumber).AsInt = 1);
   finally
     V.Free;
   end;
@@ -89,6 +129,7 @@ begin
   GPass:= 0; GFail:= 0;
   try
     TestSarifShape;
+    TestZeroCoordinateClamp;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;
