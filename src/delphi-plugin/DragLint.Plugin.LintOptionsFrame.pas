@@ -45,6 +45,7 @@ uses
   , Vcl.Forms
   , Vcl.ExtCtrls
   , Vcl.StdCtrls
+  , DRagLint.Lint.Config
   ;
 
 type
@@ -54,23 +55,31 @@ type
   TLintOptionsFrame = class(TForm)
   private
     { top bar }
-    FPanelTop  : TPanel  ;
-    FLblCounts : TLabel  ;
-    FBtnReload : TButton ;
-    FBtnSave   : TButton ;
+    FPanelTop  : TPanel   ;
+    FLblCounts : TLabel   ;
+    FBtnReload : TButton  ;
+    FBtnSave   : TButton  ;
+    FLblProfile: TLabel   ;
+    FCboProfile: TComboBox;
     { scrollable body }
     FScroll    : TScrollBox;
     { internal catalog + config state }
-    FCatalogJSON: string;   { last successful raw JSON from "rules --json" }
-    FHasData   : Boolean;   { True after at least one successful load }
+    FCatalogJSON: string;       { last successful raw JSON from "rules --json" }
+    FHasData   : Boolean;       { True after at least one successful load }
+    FProfile   : string;        { active profile name; '' = base config }
+    FCfg       : TLintConfig;   { active config (base or profile-merged) }
     procedure BuildControls;
-    procedure BtnReloadClick(Sender: TObject);
-    procedure BtnSaveClick  (Sender: TObject);
-    procedure CatHeaderClick(Sender: TObject);
-    procedure RuleChecked   (Sender: TObject);
+    procedure BtnReloadClick  (Sender: TObject);
+    procedure BtnSaveClick    (Sender: TObject);
+    procedure CatHeaderClick  (Sender: TObject);
+    procedure RuleChecked     (Sender: TObject);
+    procedure ProfileSelected (Sender: TObject);
     procedure ClearBody;
     procedure RenderCatalog(const AJSON: string);
     procedure UpdateCountsLabel;
+    { helpers }
+    function  CfgPath: string;
+    procedure ReloadProfileList;
   public
     /// <summary>Creates the frame and builds all controls dynamically.
     /// No catalog is loaded yet; call ReloadCatalogAndConfig explicitly.</summary>
@@ -102,7 +111,6 @@ uses
   , ToolsAPI
   , DragLint.Plugin.ProcRun
   , DragLint.Plugin.Settings
-  , DRagLint.Lint.Config
   , DRagLint.Lint.ConfigWriter
   ;
 
@@ -507,6 +515,8 @@ begin
   inherited CreateNew(AOwner);
   FCatalogJSON:= '';
   FHasData    := False;
+  FProfile    := '';
+  FCfg        := TLintConfig.Load('', '');  { default no-op config }
   BuildControls;
 end;
 
@@ -543,6 +553,28 @@ begin
   FBtnReload.Anchors := [akTop, akRight];
   FBtnReload.Left    := FBtnSave.Left - FBtnReload.Width - 4;
   FBtnReload.OnClick := BtnReloadClick;
+
+  { Profile combo: editable drop-down; (base) = top-level config, any other
+    name = named profile.  Placed to the left of Reload with a short label. }
+  FCboProfile:= TComboBox.Create(Self);
+  FCboProfile.Parent  := FPanelTop;
+  FCboProfile.Style   := csDropDown;   { editable -- lets the user type a new name }
+  FCboProfile.Width   := 100;
+  FCboProfile.Height  := 24;
+  FCboProfile.Top     := 4;
+  FCboProfile.Anchors := [akTop, akRight];
+  FCboProfile.Left    := FBtnReload.Left - FCboProfile.Width - 4;
+  FCboProfile.OnSelect:= ProfileSelected;
+  FCboProfile.Items.Add('(base)');
+  FCboProfile.ItemIndex:= 0;
+
+  FLblProfile:= TLabel.Create(Self);
+  FLblProfile.Parent  := FPanelTop;
+  FLblProfile.Caption := 'Profile:';
+  FLblProfile.AutoSize:= True;
+  FLblProfile.Top     := 10;
+  FLblProfile.Left    := FCboProfile.Left - 48;
+  FLblProfile.Anchors := [akTop, akRight];
 
   FLblCounts:= TLabel.Create(Self);
   FLblCounts.Parent  := FPanelTop;
@@ -646,9 +678,6 @@ end;
 procedure TLintOptionsFrame.RenderCatalog(const AJSON: string);
 var
   Rules   : TCatalogRules;
-  Cfg     : TLintConfig  ;
-  ProjPath: string       ;
-  CfgPath : string       ;
   CatNames: TList<string>;
   GrpMap  : TDictionary<string, TGroupBox>;
   RuleMap : TDictionary<string, TCheckBox>; { id -> checkbox, for cat tristate }
@@ -699,13 +728,8 @@ begin
     Exit;
   end;
 
-  { Load project config }
-  ProjPath:= GetActiveProjDir;
-  if ProjPath <> '' then
-    CfgPath:= IncludeTrailingPathDelimiter(ProjPath) + 'drag-lint-lint.json'
-  else
-    CfgPath:= '';
-  Cfg:= TLintConfigWriter.LoadOrDefault(CfgPath);
+  { Config is loaded into FCfg by ReloadCatalogAndConfig before RenderCatalog
+    is called; use it directly here. }
 
   { Collect categories in order of first appearance }
   CatNames := TList<string>.Create;
@@ -786,7 +810,7 @@ begin
       GrpY   := CatYMap[CatName];
 
       { Enabled overlay: ShouldKeep(id, not default_enabled) }
-      Checked:= Cfg.ShouldKeep(Rule.Id, not Rule.DefaultEnabled);
+      Checked:= FCfg.ShouldKeep(Rule.Id, not Rule.DefaultEnabled);
 
       RuleCB:= TCheckBox.Create(Self);
       RuleCB.Parent  := Grp;
@@ -823,9 +847,9 @@ begin
 
           { min_identifier_len -> Naming.MinIdentifierLen (NOT thresholds) }
           if IsNamingIntParam(Param.Name) then
-            DefVal:= Cfg.Naming.MinIdentifierLen
+            DefVal:= FCfg.Naming.MinIdentifierLen
           else
-            DefVal:= Cfg.ThresholdFor(Rule.Id, DefVal); { key by rule id, not param name }
+            DefVal:= FCfg.ThresholdFor(Rule.Id, DefVal); { key by rule id, not param name }
 
           SpnEdt:= TSpinEdit.Create(Self);
           SpnEdt.Parent  := Grp;
@@ -849,7 +873,7 @@ begin
           StrEdt.Top     := GrpY;
           StrEdt.Width   := GrpW - 16;
           StrEdt.Height  := EH;
-          StrEdt.Text    := LoadParamInitText(Cfg, Param);
+          StrEdt.Text    := LoadParamInitText(FCfg, Param);
           StrEdt.Anchors := [akLeft, akTop, akRight];
           Inc(GrpY, PEH + 4);
 
@@ -951,6 +975,7 @@ procedure TLintOptionsFrame.ReloadCatalogAndConfig;
 var
   ExePath, Cmd, JSON: string;
   ExitCode: Integer;
+  CP: string;
 begin
   ExePath := ResolveExe;
   Cmd     := '"' + ExePath + '" rules --json';
@@ -973,7 +998,12 @@ begin
     FLblCounts.Caption:= 'Load failed.';
     Exit;
   end;
+  { Load the active config (base or profile-merged) into the field so
+    RenderCatalog can reference it directly. }
+  CP    := CfgPath;
+  FCfg  := TLintConfig.Load(CP, FProfile);
   RenderCatalog(JSON);
+  ReloadProfileList;  { refresh combo after successful load }
 end;
 
 { ============================================================
@@ -984,25 +1014,23 @@ end;
 
 procedure TLintOptionsFrame.Save;
 var
-  ProjPath : string       ;
-  CfgPath  : string       ;
-  Cfg      : TLintConfig  ;
-  i, j     : Integer      ;
-  GB       : TGroupBox    ;
-  CB       : TCheckBox    ;
-  RT       : TRuleTag     ;
-  Rule     : TCatalogRule ;
-  PE       : TParamEditor ;
-  SpnEdt   : TSpinEdit    ;
-  StrEdt   : TEdit        ;
+  CP   : string       ;
+  Cfg  : TLintConfig  ;
+  i, j : Integer      ;
+  GB   : TGroupBox    ;
+  CB   : TCheckBox    ;
+  RT   : TRuleTag     ;
+  Rule : TCatalogRule ;
+  PE   : TParamEditor ;
+  SpnEdt: TSpinEdit   ;
+  StrEdt: TEdit       ;
 begin
   if not FHasData then Exit;
 
-  ProjPath:= GetActiveProjDir;
-  if ProjPath = '' then Exit; { no active project -- silently skip }
+  CP:= CfgPath;
+  if CP = '' then Exit; { no active project -- silently skip }
 
-  CfgPath:= IncludeTrailingPathDelimiter(ProjPath) + 'drag-lint-lint.json';
-  Cfg    := TLintConfigWriter.LoadOrDefault(CfgPath);
+  Cfg:= TLintConfigWriter.LoadOrDefault(CP);
 
   { Walk group boxes then their child checkboxes }
   for i:= 0 to FScroll.ControlCount - 1 do
@@ -1055,8 +1083,90 @@ begin
     end;
   end;
 
-  TLintConfigWriter.SaveToFile(CfgPath, Cfg);
+  { Branch destination: base config or named profile }
+  var Target: string:= Trim(FCboProfile.Text);
+  if (Target = '') or SameText(Target, '(base)') then
+    TLintConfigWriter.SaveToFile(CP, Cfg)
+  else
+  begin
+    TLintConfigWriter.SaveToProfile(CP, Target, Cfg);
+    FProfile:= Target;
+    ReloadProfileList;                                  { include a newly-typed name }
+    FCboProfile.ItemIndex:= FCboProfile.Items.IndexOf(Target);
+  end;
   UpdateCountsLabel;
+end;
+
+{ ============================================================
+  CfgPath: returns the active project's drag-lint-lint.json path,
+  or '' when no project is open.
+  ============================================================ }
+
+function TLintOptionsFrame.CfgPath: string;
+var
+  ProjDir: string;
+begin
+  ProjDir:= GetActiveProjDir;
+  if ProjDir = '' then
+    Result:= ''
+  else
+    Result:= IncludeTrailingPathDelimiter(ProjDir) + 'drag-lint-lint.json';
+end;
+
+{ ============================================================
+  ReloadProfileList: fills FCboProfile with '(base)' plus any
+  named profiles found in the on-disk config file.
+  ============================================================ }
+
+procedure TLintOptionsFrame.ReloadProfileList;
+var
+  CP    : string;
+  Names : TArray<string>;
+  N     : string;
+  Idx   : Integer;
+begin
+  CP:= CfgPath;
+  FCboProfile.Items.BeginUpdate;
+  try
+    FCboProfile.Items.Clear;
+    FCboProfile.Items.Add('(base)');
+    if CP <> '' then
+    begin
+      Names:= TLintConfigWriter.ListProfileNames(CP);
+      for N in Names do
+        FCboProfile.Items.Add(N);
+    end;
+    { Restore selection to the active profile }
+    if FProfile = '' then
+      FCboProfile.ItemIndex:= 0
+    else
+    begin
+      Idx:= FCboProfile.Items.IndexOf(FProfile);
+      if Idx >= 0 then
+        FCboProfile.ItemIndex:= Idx
+      else
+        FCboProfile.Text:= FProfile; { typed name not yet on disk }
+    end;
+  finally
+    FCboProfile.Items.EndUpdate;
+  end;
+end;
+
+{ ============================================================
+  ProfileSelected: fires when the user picks or edits the combo.
+  Updates FProfile and reloads catalog + config.
+  ============================================================ }
+
+procedure TLintOptionsFrame.ProfileSelected(Sender: TObject);
+var
+  Sel: string;
+begin
+  Sel:= Trim(FCboProfile.Text);
+  if SameText(Sel, '(base)') or (Sel = '') then
+    FProfile:= ''
+  else
+    FProfile:= Sel;
+  ReloadCatalogAndConfig;
 end;
 
 { ============================================================
