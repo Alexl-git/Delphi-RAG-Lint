@@ -34,6 +34,7 @@
         <DCC_BplOutput>..\..\third_party\dll-win32</DCC_BplOutput>
         <DCC_DcpOutput>..\..\third_party\dll-win32</DCC_DcpOutput>
         <DCC_UnitSearchPath>..\core;..\lint;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UsePackage>rtl;vcl;vclsmp;designide;$(DCC_UsePackage)</DCC_UsePackage>
         <DCC_E>false</DCC_E>
         <DCC_N>false</DCC_N>
         <DCC_S>false</DCC_S>
@@ -45,7 +46,9 @@
         <GenPackage>true</GenPackage>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
-        <DCC_UsePackage>rtl;vcl;vclsmp;designide;$(DCC_UsePackage)</DCC_UsePackage>
+        <!-- DCC_UsePackage now lives in the Base group (applies to BOTH Win32 and
+             Win64); a command-line Win32 build must link vclsmp/designide too, not
+             just Win64. -->
         <!-- The Base group sends the BPL/DCP to dll-win32; for a Win64 build that
              would clobber the 32-bit IDE's package with a 64-bit binary ("not a
              valid Win32 application"). Redirect Win64 output to dll-win64 so each
