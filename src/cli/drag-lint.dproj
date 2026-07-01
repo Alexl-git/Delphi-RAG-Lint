@@ -137,6 +137,7 @@
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.AstChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.NamingChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.DeadCodeChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.CloneChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ParseCache.pas"/>
         <DCCReference Include="..\analysis\DRagLint.Analysis.Cfg.pas"/>
         <DCCReference Include="..\analysis\DRagLint.Analysis.DataFlow.pas"/>
