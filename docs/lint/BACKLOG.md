@@ -18,6 +18,18 @@
 > **MANUAL BPL gate** (RAD Studio closed to build the BPL + a human click-test; NOT fully autonomous). v0.69 publishes
 > (VERSION bump 0.69.0-alpha + tag + GitHub release) only after D1b.
 >
+> **>>> D1b PLAN IS WRITTEN (commit 234ba5e): `docs/superpowers/plans/2026-06-30-v069-d1b-lint-options-tab-plan.md`.**
+> NEXT ACTION = invoke **superpowers:subagent-driven-development** on that plan (NOT writing-plans -- the plan exists).
+> Start Task 1 (`DRagLint.Lint.ConfigWriter` -- pure config serializer, console-testable T63). Tasks 2-3 = the
+> `TLintOptionsFrame` VCL frame + dock wiring. **Task 4 BUILDS THE BPL and REQUIRES RAD Studio (`bds.exe`) CLOSED**
+> (`_bpl_build.bat`; deploy via `deploy-staged.bat` -> `third_party\dll-win32`). Task 5 = the USER's manual in-IDE
+> click-test checklist (agent cannot verify the UI). The plan embeds the full plugin-surface map (dock `AddTab` returns
+> TTabSheet; mirror `OptionsFrame` TFrame pattern; `ProcRun.RunCaptureStdout`; OTAPI `GetActiveProjDir`; the two JSON
+> shapes; the `.dpk` `contains` + `.dproj` `<DCCReference>` for BOTH new units). CAVEAT: the plan was written near a
+> context ceiling -- Task 1 Step 3 (serializer body) + Task 2 Step 3 (frame render loop) are specified as algorithms,
+> not line-by-line code; a fresh implementer has every integration fact but should flesh those two bodies (standard
+> System.JSON + dynamic-VCL). ALSO at D1b: decide the D1a follow-up (index-only `undeclared-identifier` in the catalog?).
+>
 > --- (prior milestone) ---
 >
 > ## RESUME 2026-06-30 -- v0.69 D3 + D1a + D2a SHIPPED to `main`; NEXT = D2b then D1b
