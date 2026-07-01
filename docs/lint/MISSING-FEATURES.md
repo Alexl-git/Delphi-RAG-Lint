@@ -7,11 +7,12 @@ analysis (`docs/lint/REPORT-1-delphi-lint-landscape.md`) cross-checked against t
 inventory (`rules/*.scm`, `src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`,
 `src/lint/DRagLint.Lint.ProjectRules.pas`).
 
-**Where we stand (updated v0.68.0-alpha):** ~119 rules, roughly **72-78%** of the catalogued
-breadth. **M1 (type/hierarchy resolver), M2 (CFG/data-flow engine), naming wave (#1), and
-dead-code tail (#2) all SHIPPED.** We **lead** on security, architecture/layering, and exception
-handling. The remaining gaps are the **cheap index tail** (clone detection, cognitive complexity,
-cast rules #4) and **autofix/quick-fixes** (#12).
+**Where we stand (updated v0.71.0-alpha):** ~123 rules, roughly **74-80%** of the catalogued
+breadth. **M1 (type/hierarchy resolver), M2 (CFG/data-flow engine), naming wave (#1), dead-code
+tail (#2), the pure-AST cast rules (#4), and the autofix subsystem (#12) all SHIPPED.** We **lead**
+on security, architecture/layering, and exception handling. The remaining gaps are the **cheap
+index tail** (clone detection, cognitive complexity, the #5/#6/#7 pure-AST items) and the
+**store-backed cast rules** (#4: lossy Ansi/Unicode, exhaustive enum-case, nullability).
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
 **(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use
@@ -64,13 +65,19 @@ v0.66 with definite=warning / possible=info FP stance and managed-type exactness
 > Was *most* of the distance from ~60% to PAL parity. Largely closed by the M2 engine; the remaining
 > tail (cross-routine field def-use, possible-via-opaque refinement) is incremental, not a new engine.
 
-## 4. Type-system / casts  -- weak  **(M1)**
-Have heuristics only: `redundant-as-tobject` (lexical), `freeandnil-on-interface`.
-- [ ] `non-linear-cast` / `redundant-cast` / `platform-dependent-cast`
-- [ ] `unsafe-typecast-without-is` (hard cast where `is`/`as` is safer)
-- [ ] lossy Ansi<->Unicode cast (compiler W1057/W1058 -- needs real types)
-- [ ] interface/object mixing; `exhaustive-enum-case` (needs the enum member set)
-- [ ] nullability / not-assigned-interface use
+## 4. Type-system / casts  -- pure-AST casts SHIPPED v0.71; store-backed deferred  **(M1 for the rest)**
+Have: `redundant-as-tobject` (lexical), `freeandnil-on-interface`, plus the v0.71 cast pair below.
+- [x] `redundant-cast`  -- shipped v0.71 (AST, `hint`; `TFoo(x)` where `x` is declared exactly `TFoo`,
+      via the per-file type map; T-prefixed class-like target + single-identifier arg; near-0 FP).
+      **Autofixable** (`lint --fix` strips the cast).
+- [x] `unsafe-typecast-without-is`  -- shipped v0.71 **OFF by default** (AST, `warning`; hard cast
+      `TFoo(x)` of an object ref to a *different* class with no guarding `x is TFoo`. Fires only on
+      genuine down/cross-casts -- value/record casts, `TObject` upcasts, redundant + guarded casts are
+      skipped. src FP-sanity = 3, all `T...(Sender)` handler casts. Opt in via config/`--rule`).
+- [ ] `non-linear-cast` / `platform-dependent-cast`
+- [ ] lossy Ansi<->Unicode cast (compiler W1057/W1058 -- needs real types)  **(M1, deferred -- untestable in the file harness)**
+- [ ] interface/object mixing; `exhaustive-enum-case` (needs the enum member set)  **(M1, deferred)**
+- [ ] nullability / not-assigned-interface use  **(M1, deferred)**
 
 ## 5. Resource / memory  -- strong, some gaps  **(now; cross-call ones M1/M2)**
 Have: `unprotected-object-free`, `use-after-free`, `criticalsection-not-released`,
@@ -125,10 +132,14 @@ Have: `layering-violation`, `interface-reference-cycle`, `god-class`, `unit-not-
 - [ ] `circular-uses` report (cycle listing, not just the cross-check)
 - [ ] DIT/CBO depth metrics (overlaps #6)
 
-## 12. Ergonomics / output  -- DONE v0.66 (SARIF, --fail-on, baseline, drag-lint-lint.json; autofix still deferred)
+## 12. Ergonomics / output  -- DONE (SARIF, --fail-on, baseline, drag-lint-lint.json v0.66; autofix v0.71)
 - [x] **SARIF output** (CI integration) -- shipped v0.66
 - [x] baseline / suppression file; per-rule severity overrides + **rule on/off profiles** -- shipped v0.66
-- [ ] **quick-fixes / autofixes** (SonarDelphi ships ~14; we have 0) -- deferred, next milestone
+- [x] **quick-fixes / autofixes** -- autofix subsystem shipped v0.71: `lint <file> --fix [--apply]`
+      (and `lint-all`), a new `tekReplaceInLine` char-range primitive, dry-run by default, `--apply`
+      writes with a `.bak`. Fixes: `self-assignment` (delete line), `redundant-parentheses` (strip
+      parens), `redundant-cast` (`TFoo(x)`->`x`). More `.scm`-defined-rule fixes need an explicit
+      fix-spec payload on `TLintFinding` (deferred -- span-surgery from message text is fragile).
 
 ---
 
@@ -158,14 +169,15 @@ persisted, deterministic SQLite index is the substrate the IDE's own (flaky asyn
 
 ---
 
-## Highest-leverage next additions (coverage per effort) -- post-v0.68 (M1+M2+#12+naming+dead-code shipped)
-1. **Cheap index tail remaining** (#2 deferred: `function-result-ignored` / `commented-out-code` /
-   `redundant-parentheses` / `multiple-statements-per-line`; #6 cognitive complexity + clone detection)
-   -- pure AST/index, no new engine. Clone detection is the biggest remaining single item.
-2. **Type-system casts (#4)** -- unblocked by the shipped M1 resolver (unsafe-typecast, redundant-cast,
-   lossy Ansi<->Unicode). Medium effort, medium breadth gain.
-3. **Autofix / quick-fixes (#12)** -- the remaining ergonomics gap (SonarDelphi ~14; we have 0); its own milestone.
-4. **Rule-accuracy / FP polish** -- ongoing; ships in point releases.
+## Highest-leverage next additions (coverage per effort) -- post-v0.71 (M1+M2+#1+#2+#4-casts+#12-autofix shipped)
+1. **Pure-AST tail across #5/#6/#7** -- resource pairing (`destructor-without-override`, `create-inside-try`),
+   complexity metrics (`case-with-too-few-branches`, `boolean-expression-complexity`, cognitive complexity,
+   `unit-too-large`), exception patterns (`exception-constructed-but-not-raised`, `duplicate-exception-handler`).
+   All pure-AST/index, console-testable, no new engine. **The v0.72 chunk.**
+2. **Clone / duplicate-code detection (#6)** -- the biggest remaining single item; a token-hash pass. Its own chunk.
+3. **Store-backed cast rules (#4)** -- lossy Ansi<->Unicode, exhaustive enum-case, nullability. Need the M1
+   enum-member set / exact cross-unit types; untestable in the file-only harness -> a `check-ast --db` path.
+4. **More `.scm`-rule autofixes (#12)** -- needs a fix-spec payload on `TLintFinding`. Rule-accuracy / FP polish ongoing.
 
 ## Verdict
 "Everything the commercial tools do" is **not** reachable on a pure-AST path, but the major engine milestones
