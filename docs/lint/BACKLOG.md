@@ -1,6 +1,34 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.74.0-alpha PUBLISHED -- #4 exhaustive-enum-case (store-aware) + #6 unit-too-large DONE; NEXT = #9/#10/#11 pure-AST tails (user-requested)**
+> ## RESUME 2026-07-01 (LATEST) -- **v0.75.0-alpha PUBLISHED -- 4 rules across #4/#5/#6/#10 DONE; NEXT = remaining tails (see below)**
+>
+> **v0.75.0-alpha SHIPPED + RELEASED.** `main`=`fab7ee5`, origin synced, tag `v0.75.0-alpha`, GitHub PRERELEASE win32+win64:
+> https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.75.0-alpha . VERSION `CLI.pas:6`=`0.75.0-alpha`. Harness
+> **135/135**, catalog **29/29**, ~136 rules (80 built-in). Commit `6a9b300`.
+> - **#4 `lossy-cast`** (info) -- AstChecks.CheckTypeAware, in the exprCall cast region: Ansi-narrowing cast
+>   (ansistring/ansichar/shortstring/rawbytestring) of a Unicode-string operand (TypeMap type string/unicodestring/
+>   widestring/widechar). src FP=2 (real).
+> - **#5 `create-inside-try`** (warning) -- DeadCodeChecks try branch: a try WITH a `kFinally` whose FIRST protected
+>   statement (first named child that is not a `k`-keyword) is `X := TFoo.Create`. **GOTCHA: a paren-less `TFoo.Create`
+>   is an `exprDot` (NOT exprCall); with parens `TFoo.Create(...)` is `exprCall(entity=exprDot)` -- `IsConstructorAssignment`
+>   handles both.** `UnwrapStmt` drills through `statement`/`statements` wrappers. FixInsight-parity. src FP=12 (real).
+> - **#6 `cognitive-complexity`** (info, **threshold 25**) -- new `AstChecks.CheckCognitiveComplexity` (mirrors
+>   CheckCyclomaticComplexity): per-defProc score = each if/ifElse/while/for/repeat/case/exceptionHandler adds `1+nesting`,
+>   each kAnd/kOr/kXor adds 1; recursion stops at nested defProc. **Default 25 (NOT 15): cognitive scores higher than
+>   cyclomatic -- at 15 it gave 216 findings on src/ vs cyclomatic's 115@15; 25 gives 100 = comparable.**
+> - **#10 `weak-random-for-security`** (warning) -- DeadCodeChecks `assignment` branch: lhs is a security-named identifier
+>   (`IsSecurityName`: password/passphrase/secret/token/apikey/privatekey/salt/nonce/sessionid/cryptokey/securitykey) and
+>   rhs subtree calls System.Random/RandomRange. src FP=0. (`assignment` node = fields `lhs:`/`operator:`(kAssign)/`rhs:`.)
+>
+> **>>> NEXT (remaining tails):** #10 `dfm-hardcoded-credential` (scan DFM password props -- needs the DFM parse path) +
+> `insecure-temp-file`; #6 **clone / duplicate-code detection** (biggest remaining, token-hash pass) + CK suite (needs
+> graph); #4 nullability (flow); #5 abstract-method-instantiation (store); #9 nativeint-truncation (M1) +
+> variant-record-type-punning; #11 circular-uses report + DIT/CBO (uses-graph). Many remaining need M1/M2/graph -> a
+> `check-ast --db` test harness would unblock them. Also #2 multiple-statements-per-line still open (easy pure-AST).
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-01 -- **v0.74.0-alpha PUBLISHED -- #4 exhaustive-enum-case (store-aware) + #6 unit-too-large DONE; NEXT = #9/#10/#11 pure-AST tails (user-requested)**
 >
 > **v0.74.0-alpha SHIPPED + RELEASED.** `main`=`df331c8`, origin synced, tag `v0.74.0-alpha`, GitHub PRERELEASE win32+win64:
 > https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.74.0-alpha . VERSION `CLI.pas:6`=`0.74.0-alpha`. Harness
