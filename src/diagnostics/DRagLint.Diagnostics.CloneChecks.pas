@@ -44,6 +44,10 @@ type
     Line : Integer; { 1-based source line }
   end;
 
+  TCloneCand = record
+    A, B, Len: Integer;
+  end;
+
 { NodeText is only exported from the parser unit's implementation section (not
   visible outside it) -- reimplement the same StartByte/EndByte/UTF8 pattern
   used locally by DRagLint.Diagnostics.DeadCodeChecks.NodeStr. }
@@ -191,11 +195,14 @@ var
   {$OVERFLOWCHECKS OFF} { rolling hash relies on natural UInt64 wraparound (mod 2^64) }
   procedure Match;
   var
-    N, i, start, a, b, p, q, L, MaxBucket: Integer;
+    N, i, start, a, b, p, q, L, MaxBucket, cvA, cvB, k: Integer;
     NextBar  : TArray<Integer>;
     Base, PowW, h: UInt64;
     Buckets  : TDictionary<UInt64, TList<Integer>>;
     lst      : TList<Integer>;
+    Cands    : TList<TCloneCand>;
+    Covered  : TArray<Boolean>;
+    cand     : TCloneCand;
   begin
     N := Toks.Count;
     if N < W then Exit;
@@ -210,6 +217,7 @@ var
       if Toks[i].Code <= 0 then NextBar[i] := i else NextBar[i] := NextBar[i + 1];
 
     Buckets := TDictionary<UInt64, TList<Integer>>.Create;
+    Cands   := TList<TCloneCand>.Create;
     try
       h := 0;
       for i := 0 to N - 1 do
@@ -229,17 +237,21 @@ var
         end;
       end;
 
-      MaxBucket := 64; { degenerate boilerplate guard -- skip pathological buckets }
+      MaxBucket := 400; { perf guard; log when skipped so it is not a silent cap }
       for lst in Buckets.Values do
       begin
         if lst.Count < 2 then Continue;
-        if lst.Count > MaxBucket then Continue;
+        if lst.Count > MaxBucket then
+        begin
+          Writeln(ErrOutput, Format('duplicate-code: skipped a %d-window hash bucket (> %d cap)', [lst.Count, MaxBucket]));
+          Continue;
+        end;
         for p := 0 to lst.Count - 2 do
           for q := p + 1 to lst.Count - 1 do
           begin
             a := lst[p]; b := lst[q];
             if not TokensEqual(a, b, W) then Continue; { hash-collision guard }
-            { left-maximal: skip if this is a right-shift of a longer match }
+            { left-maximal: skip if this is a right-shift of a longer aligned match }
             if (a > 0) and (b > 0)
                and (Toks[a - 1].Code > 0) and (Toks[b - 1].Code > 0)
                and (Toks[a - 1].Code = Toks[b - 1].Code) then Continue;
@@ -249,11 +261,42 @@ var
                   and (Toks[a + L].Code > 0)
                   and (Toks[a + L].Code = Toks[b + L].Code) do
               Inc(L);
-            if Abs(a - b) < L then Continue; { same-routine overlap }
-            EmitPair(a, b, L);
+            if Abs(a - b) < L then Continue; { same-region overlap }
+            cand.A := a; cand.B := b; cand.Len := L;
+            Cands.Add(cand);
           end;
       end;
+
+      { coverage suppression: emit longest clones first; skip a candidate whose BOTH
+        occurrences are already >= 50% covered by previously-emitted (longer) clones.
+        This collapses the sliding/self-similar overlap family to one finding per
+        genuinely-duplicated region-pair. }
+      Cands.Sort(TComparer<TCloneCand>.Construct(
+        function(const X, Y: TCloneCand): Integer
+        begin
+          Result := Y.Len - X.Len;
+        end));
+      SetLength(Covered, N);
+      for i := 0 to N - 1 do Covered[i] := False;
+      for cand in Cands do
+      begin
+        a := cand.A; b := cand.B; L := cand.Len;
+        cvA := 0; cvB := 0;
+        for k := 0 to L - 1 do
+        begin
+          if Covered[a + k] then Inc(cvA);
+          if Covered[b + k] then Inc(cvB);
+        end;
+        if (cvA * 2 >= L) and (cvB * 2 >= L) then Continue; { both sides already covered }
+        EmitPair(a, b, L);
+        for k := 0 to L - 1 do
+        begin
+          Covered[a + k] := True;
+          Covered[b + k] := True;
+        end;
+      end;
     finally
+      Cands.Free;
       for lst in Buckets.Values do lst.Free;
       Buckets.Free;
     end;
