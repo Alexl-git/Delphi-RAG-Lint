@@ -1,0 +1,5 @@
+# 'a := 1; b := 2;' packs two statements on line 11 (fires at the 2nd).
+# The one-statement-per-line procedure stays clean.
+multiple-statements-per-line 11
+!multiple-statements-per-line 12
+!multiple-statements-per-line 20

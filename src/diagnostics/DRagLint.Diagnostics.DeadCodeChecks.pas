@@ -663,6 +663,56 @@ var
       if SubtreeCallsRandom(N.Child(I)) then Exit(True);
   end;
 
+  { v0.76 #2: True if a node type is a top-level statement (an item that can be a
+    direct sibling in a begin..end / try block). Used to detect two statements on
+    one source line. Deliberately excludes expression/keyword nodes. }
+  function IsStatementNodeType(const ANt: string): Boolean;
+  begin
+    Result:=
+      (ANt = 'statement') or (ANt = 'assignment') or (ANt = 'exprCall') or
+      (ANt = 'if') or (ANt = 'ifElse') or (ANt = 'while') or (ANt = 'repeat') or
+      (ANt = 'for') or (ANt = 'forIn') or (ANt = 'case') or (ANt = 'with') or
+      (ANt = 'try') or (ANt = 'raise') or (ANt = 'inherited') or (ANt = 'goto');
+  end;
+
+  { v0.76 #10: True if the callee text of an exprCall is a file read/write API
+    (a temp path handed to one of these lands data in a predictable location). }
+  function IsFileApiCallee(const AText: string): Boolean;
+  var L: string;
+  begin
+    L:= LowerCase(AText);
+    Result:= (Pos('savetofile', L) > 0) or (Pos('loadfromfile', L) > 0)
+          or (Pos('writealltext', L) > 0) or (Pos('writeallbytes', L) > 0)
+          or (Pos('readalltext', L) > 0) or (Pos('readallbytes', L) > 0)
+          or (Pos('filecreate', L) > 0) or (Pos('assignfile', L) > 0)
+          or (Pos('tfilestream', L) > 0);
+  end;
+
+  { v0.76 #10: True if a literalString's raw text is a hardcoded temp path. }
+  function IsTempPathText(const AText: string): Boolean;
+  var L: string;
+  begin
+    L:= LowerCase(AText);
+    Result:= (Pos('\temp\', L) > 0) or (Pos('c:\temp', L) > 0)
+          or (Pos('/tmp/', L) > 0) or (Pos('\windows\temp', L) > 0)
+          or (Pos('\winnt\temp', L) > 0);
+  end;
+
+  { v0.76 #10: emit insecure-temp-file at the first hardcoded-temp-path string
+    literal in a subtree (one per call site is enough). }
+  procedure EmitTempPathLiteral(const N: TTSNode);
+  var I: Integer;
+  begin
+    if N.IsNull then Exit;
+    if (N.NodeType = 'literalString') and IsTempPathText(NodeStr(N)) then
+    begin
+      EmitAt(N, 'insecure-temp-file',
+        'Hardcoded temp path in a file API -- predictable, world-readable location prone to races/symlink attacks. Use TPath.GetTempFileName / a per-user secured directory.');
+      Exit;
+    end;
+    for I:= 0 to N.ChildCount - 1 do EmitTempPathLiteral(N.Child(I));
+  end;
+
   { v0.75 #5: drill through 'statement'/'statements' wrappers to the innermost
     first named child (the actual assignment/call); N unchanged if not a wrapper. }
   function UnwrapStmt(const N: TTSNode): TTSNode;
@@ -967,6 +1017,40 @@ var
         if (PTxt <> '') and (IdentSelfRefCount(N, PTxt, Integer(PName.StartByte), PType) >= 1) then
           EmitAt(PName, 'property-references-itself',
             Format('Property "%s" is read/written through itself -- this recurses forever. Use the backing field or an accessor method.', [PTxt]));
+      end;
+    end;
+
+    { insecure-temp-file (#10): a file read/write API called with a hardcoded temp
+      path string literal. Conservative -- fires only when the callee is a known
+      file API, so a temp path used elsewhere (logging, a message) stays quiet. }
+    if N.NodeType = 'exprCall' then
+    begin
+      var Ent: TTSNode:= N.ChildByField('entity');
+      if (not Ent.IsNull) and IsFileApiCallee(Trim(NodeStr(Ent))) then
+        EmitTempPathLiteral(N);
+    end;
+
+    { multiple-statements-per-line (#2): two or more sibling statements (direct
+      named children of the same block/try) that start on the same source line.
+      Off by default (pure style). Comparing SIBLINGS means a single-line
+      'if..then X' or 'for..do X' is ONE child and never trips it; only genuine
+      'a := 1; b := 2;' packing fires. Container-agnostic: works whether the block
+      inlines statements directly or wraps them in a 'statement' node. }
+    begin
+      var PrevRow: Integer:= -1;
+      var LastFlagged: Integer:= -1;   { one finding per line, not one per extra statement }
+      for I:= 0 to N.NamedChildCount - 1 do
+      begin
+        var Stmt: TTSNode:= N.NamedChild(I);
+        if Stmt.IsNull or (not IsStatementNodeType(Stmt.NodeType)) then Continue;
+        var Row: Integer:= Integer(Stmt.StartPoint.Row);
+        if (PrevRow >= 0) and (Row = PrevRow) and (Row <> LastFlagged) then
+        begin
+          EmitAt(Stmt, 'multiple-statements-per-line',
+            'More than one statement on this line -- put each statement on its own line for readability and cleaner diffs.');
+          LastFlagged:= Row;
+        end;
+        PrevRow:= Row;
       end;
     end;
 

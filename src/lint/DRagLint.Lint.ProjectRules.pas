@@ -164,6 +164,180 @@ begin
   Result:= Dict;
 end;
 
+{ v0.76 circular-uses (#11): report each strongly-connected component of the unit
+  uses-graph (a set of units that transitively use each other). A pure interface-
+  section cycle does not compile, so a real cycle in a building project runs through
+  an implementation-section 'uses' -- still a coupling smell worth surfacing.
+  Distinct from interface-reference-cycle (which is about interface-section symbol
+  references). Uses Tarjan's SCC over file ids; one finding per component. }
+function CollectCircularUses(const AStore: ISymbolStore): TArray<TLintFinding>;
+var
+  Findings  : TList<TLintFinding>          ;
+  UnitName  : TDictionary<Int64, string>   ; { fid -> display unit name }
+  FileOfUnit: TDictionary<string, Int64>   ; { lower full unit name -> fid }
+  FileOfStem: TDictionary<string, Int64>   ; { lower last-segment stem -> fid }
+  UnitLine  : TDictionary<Int64, Integer>  ; { fid -> unit decl line }
+  Adj       : TDictionary<Int64, TList<Int64>>;
+  { Tarjan state }
+  Index     : TDictionary<Int64, Integer>  ;
+  LowLink   : TDictionary<Int64, Integer>  ;
+  OnStack   : TDictionary<Int64, Boolean>  ;
+  Stack     : TList<Int64>                 ;
+  Counter   : Integer                      ;
+
+  procedure StrongConnect(V: Int64);
+  var
+    W  : Int64;
+    Lst: TList<Int64>;
+    Idx: Integer;
+  begin
+    Index.AddOrSetValue(V, Counter);
+    LowLink.AddOrSetValue(V, Counter);
+    Inc(Counter);
+    Stack.Add(V);
+    OnStack.AddOrSetValue(V, True);
+    if Adj.TryGetValue(V, Lst) then
+      for W in Lst do
+      begin
+        if not Index.ContainsKey(W) then
+        begin
+          StrongConnect(W);
+          if LowLink[W] < LowLink[V] then LowLink[V]:= LowLink[W];
+        end
+        else if OnStack.ContainsKey(W) and OnStack[W] then
+        begin
+          if Index[W] < LowLink[V] then LowLink[V]:= Index[W];
+        end;
+      end;
+    { Root of an SCC -> pop it off the stack. }
+    if LowLink[V] = Index[V] then
+    begin
+      var Comp: TList<Int64>:= TList<Int64>.Create;
+      try
+        repeat
+          W:= Stack[Stack.Count - 1];
+          Stack.Delete(Stack.Count - 1);
+          OnStack[W]:= False;
+          Comp.Add(W);
+        until W = V;
+        if Comp.Count >= 2 then
+        begin
+          { Deterministic output regardless of traversal order: sort member names
+            alphabetically; anchor the finding at the alphabetically-first unit. }
+          var Sorted: TStringList:= TStringList.Create;
+          try
+            Sorted.CaseSensitive:= False;
+            Sorted.Duplicates:= dupIgnore;
+            Sorted.Sorted:= True;
+            for Idx:= 0 to Comp.Count - 1 do
+            begin
+              var Nm0: string;
+              if UnitName.TryGetValue(Comp[Idx], Nm0) then Sorted.Add(Nm0);
+            end;
+            var Names: string:= '';
+            for Idx:= 0 to Sorted.Count - 1 do
+            begin
+              if Names <> '' then Names:= Names + ' -> ';
+              Names:= Names + Sorted[Idx];
+            end;
+          { Anchor at the alphabetically-first unit's fid. }
+          var Anchor: Int64:= Comp[Comp.Count - 1];
+          if Sorted.Count > 0 then
+          begin
+            var FirstName: string:= Sorted[0];
+            var Af: Int64;
+            if FileOfUnit.TryGetValue(LowerCase(FirstName), Af) then Anchor:= Af;
+          end;
+          var F: TLintFinding:= Default(TLintFinding);
+          F.RuleId  := 'circular-uses';
+          F.Severity:= 'warning';
+          F.Message := Format('Circular unit dependency among %d units: %s -- break the cycle (extract shared code or move a use to the implementation section)', [Comp.Count, Names]);
+          F.FilePath:= AStore.GetFilePath(Anchor);
+          var Ln: Integer:= 1;
+          UnitLine.TryGetValue(Anchor, Ln);
+          F.StartLine:= Ln; F.StartCol:= 1; F.EndLine:= Ln; F.EndCol:= 1;
+          Findings.Add(F);
+          finally
+            Sorted.Free;
+          end;
+        end;
+      finally
+        Comp.Free;
+      end;
+    end;
+  end;
+
+var
+  Fid : Int64          ;
+  Sym : TSymbol        ;
+  U   : TUnitUse       ;
+  Path: string         ;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  Findings  := TList<TLintFinding>.Create;
+  UnitName  := TDictionary<Int64, string>.Create;
+  FileOfUnit:= TDictionary<string, Int64>.Create;
+  FileOfStem:= TDictionary<string, Int64>.Create;
+  UnitLine  := TDictionary<Int64, Integer>.Create;
+  Adj       := TDictionary<Int64, TList<Int64>>.Create;
+  Index     := TDictionary<Int64, Integer>.Create;
+  LowLink   := TDictionary<Int64, Integer>.Create;
+  OnStack   := TDictionary<Int64, Boolean>.Create;
+  Stack     := TList<Int64>.Create;
+  try
+    { 1) map every indexed unit's fid <-> name (full + stem). }
+    for Fid in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      for Sym in AStore.FindSymbolsByFile(Path) do
+        if Sym.Kind = skUnit then
+        begin
+          var Nm: string:= Sym.QualifiedName;
+          if Nm = '' then Nm:= Sym.Name;
+          if Nm = '' then Break;
+          UnitName.AddOrSetValue(Fid, Nm);
+          UnitLine.AddOrSetValue(Fid, Sym.StartLine);
+          FileOfUnit.AddOrSetValue(LowerCase(Nm), Fid);
+          var Stem: string:= LowerCase(Nm);
+          var Dp: Integer:= LastDelimiter('.', Stem);
+          if Dp > 0 then Stem:= Copy(Stem, Dp + 1, MaxInt);
+          FileOfStem.AddOrSetValue(Stem, Fid);
+          Break;
+        end;
+    end;
+    { 2) build the directed uses-graph among indexed units only. }
+    for Fid in UnitName.Keys do
+    begin
+      var Lst: TList<Int64>:= TList<Int64>.Create;
+      Adj.Add(Fid, Lst);
+      for U in AStore.GetUnitUsesForFile(Fid) do
+      begin
+        var Tgt: Int64:= 0;
+        if not FileOfUnit.TryGetValue(LowerCase(U.UnitName), Tgt) then
+        begin
+          var S: string:= LowerCase(U.UnitName);
+          var Dp: Integer:= LastDelimiter('.', S);
+          if Dp > 0 then S:= Copy(S, Dp + 1, MaxInt);
+          FileOfStem.TryGetValue(S, Tgt);
+        end;
+        if (Tgt > 0) and (Tgt <> Fid) and (not Lst.Contains(Tgt)) then Lst.Add(Tgt);
+      end;
+    end;
+    { 3) Tarjan SCC over all nodes. }
+    Counter:= 0;
+    for Fid in UnitName.Keys do
+      if not Index.ContainsKey(Fid) then StrongConnect(Fid);
+    Result:= Findings.ToArray;
+  finally
+    for var L in Adj.Values do L.Free;
+    Adj.Free;
+    Stack.Free; OnStack.Free; LowLink.Free; Index.Free;
+    UnitLine.Free; FileOfStem.Free; FileOfUnit.Free; UnitName.Free;
+    Findings.Free;
+  end;
+end; // function
+
 class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>;
 var
   Findings      : TList<TLintFinding>         ;
@@ -216,6 +390,10 @@ begin
   if AStore = nil then Exit;
   Findings:= TList<TLintFinding>.Create;
   try
+    { circular-uses: whole-graph SCC pass (not per-file). }
+    if WantRule('circular-uses') then
+      for var Cf in CollectCircularUses(AStore) do Findings.Add(Cf);
+
     FileIds:= AStore.GetAllFileIds;
     for Fid in FileIds do
     begin

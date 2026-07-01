@@ -107,14 +107,18 @@ begin
     B('use-after-free',                'resource-lifetime', 'warning', 'Object used after X.Free');
     B('destructor-without-override',   'resource-lifetime', 'warning', 'Destructor not declared ''override'' -- hides the inherited destructor (leak)');
     B('create-inside-try',             'resource-lifetime', 'warning', 'Object constructed as the first statement inside its try..finally -- construct before the try');
+    B('abstract-method-instantiation', 'resource-lifetime', 'warning', 'TFoo.Create on a class with an unimplemented abstract method -- raises EAbstractError (store-backed)');
 
     { --- security --- }
     B('unsafe-shellexecute',           'security', 'error',   'WinExec/ShellExecute/CreateProcess with a non-literal command');
     B('path-traversal',                'security', 'warning', 'Concatenated path passed to a file API -- path traversal risk');
     B('weak-random-for-security',      'security', 'warning', 'A security-named variable is generated with System.Random (not a CSPRNG)');
+    B('dfm-hardcoded-credential',      'security', 'warning', 'A credential-named DFM property (Password/Secret/ApiKey) holds a literal string');
+    B('insecure-temp-file',            'security', 'warning', 'File written to a hardcoded temp path (\Temp\, C:\Temp) -- predictable/insecure location');
 
     { --- platform --- }
     B('win64-pointer-cast',            'platform', 'warning', 'Pointer cast to a 32-bit integer type -- unsafe on Win64');
+    B('nativeint-truncation',          'platform', 'warning', 'NativeInt/pointer-sized value cast to a 32-bit integer type -- truncates on Win64');
 
     { --- complexity (all parameterized) --- }
     B('too-many-parameters',  'complexity', 'info', 'Routine has too many parameters', True, [MkParam('threshold','int','7')]);
@@ -176,6 +180,7 @@ begin
 
     { --- structure --- }
     B('inline-comment-in-multiline-args', 'structure', 'warning', 'Inline comment inside a multi-line argument list');
+    B('multiple-statements-per-line',     'structure', 'hint',    'Two or more statements share one source line', False); { OFF by default -- pure style; opt in via "enabled" }
 
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');
@@ -186,6 +191,7 @@ begin
     B('unused-private-member', 'project-wide', 'warning', 'Private member is never referenced');
     B('layering-violation',    'project-wide', 'warning', 'Unit dependency crosses an architectural layer');
     B('interface-reference-cycle','project-wide','warning','Interface reference cycle (ARC leak)');
+    B('circular-uses',         'project-wide', 'warning', 'Circular unit dependency (a uses-graph cycle among project units)');
 
     Result:= L.ToArray;
   finally

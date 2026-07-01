@@ -1,0 +1,3 @@
+# alpha and beta use each other (implementation-section) -> one circular-uses
+# finding for the SCC, anchored at the alphabetically-first unit (alpha) line 1.
+circular-uses alpha.pas:1

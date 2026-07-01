@@ -299,6 +299,104 @@ begin
   Visit(ARoot);
 end; // procedure
 
+// v0.76 (#10 security): scan a parsed DFM tree for a credential-named property
+// (Password/Pwd/Secret/ApiKey/...) assigned a non-empty string LITERAL. A secret
+// checked into a form resource is an anti-pattern (it ships in the exe and lands
+// in source control). Only a `string` value node fires -- an empty string, an
+// event binding, or a numeric/set value does not. Uses the DFM grammar node
+// types (see DRagLint.Parser.DFM: object -> property{name,value}; value 'string'
+// is quoted_string/char_code atoms). Emitted as a 'warning' rule; low-FP.
+function DfmDecodeStringValue(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  i   : Integer;
+  Atom: TTSNode;
+  Raw : string ;
+begin
+  Result:= '';
+  for i:= 0 to ANode.NamedChildCount - 1 do
+  begin
+    Atom:= ANode.NamedChild(i);
+    if Atom.IsNull then Continue;
+    if Atom.NodeType = 'quoted_string' then
+    begin
+      Raw:= NodeText(Atom, ASource);
+      if (Length(Raw) >= 2) and (Raw[1] = '''') and (Raw[Length(Raw)] = '''') then
+        Raw:= Copy(Raw, 2, Length(Raw) - 2);
+      Result:= Result + StringReplace(Raw, '''''', '''', [rfReplaceAll]);
+    end
+    else if Atom.NodeType = 'char_code' then
+      Result:= Result + ' ';
+  end;
+end; // function
+
+function IsCredentialPropName(const AName: string): Boolean;
+var
+  Seg: string;
+  P  : Integer;
+begin
+  // Match the final dotted segment so 'DB.Password' fires but 'PasswordHint'
+  // (a caption) does not accidentally widen the net beyond the keyword set.
+  Seg:= LowerCase(Trim(AName));
+  P:= LastDelimiter('.', Seg);
+  if P > 0 then Seg:= Copy(Seg, P + 1, MaxInt);
+  Result:=
+    (Seg = 'password') or (Seg = 'passwd') or (Seg = 'pwd') or
+    (Seg = 'secret') or (Seg = 'apikey') or (Seg = 'privatekey') or
+    (Seg = 'passphrase') or (Seg = 'connectionpassword');
+end; // function
+
+procedure CheckDfmCredentials(const ARoot: TTSNode; const ASource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
+
+  procedure Visit(const N: TTSNode);
+  var
+    I        : Integer     ;
+    Child    : TTSNode     ;
+    NameNode : TTSNode     ;
+    ValueNode: TTSNode     ;
+    PropName : string      ;
+    Secret   : string      ;
+    F        : TLintFinding;
+    P        : TTSPoint    ;
+  begin
+    if N.IsNull or (AFindings.Count >= 100) then Exit;
+    if N.NodeType = 'property' then
+    begin
+      NameNode := N.ChildByField('name' );
+      ValueNode:= N.ChildByField('value');
+      if (not NameNode.IsNull) and (not ValueNode.IsNull) and (ValueNode.NodeType = 'string') then
+      begin
+        PropName:= NodeText(NameNode, ASource);
+        if IsCredentialPropName(PropName) then
+        begin
+          Secret:= DfmDecodeStringValue(ValueNode, ASource);
+          if Trim(Secret) <> '' then
+          begin
+            P:= N.StartPoint;
+            F:= Default(TLintFinding);
+            F.RuleId  := 'dfm-hardcoded-credential';
+            F.Severity:= 'warning';
+            F.Message := Format('Hardcoded credential in DFM: property "%s" assigns a literal string; move secrets out of the form resource', [PropName]);
+            F.FilePath:= AFilePath;
+            F.StartLine:= Integer(P.Row   ) + 1;
+            F.StartCol := Integer(P.Column) + 1;
+            F.EndLine  := F.StartLine;
+            F.EndCol   := F.StartCol + 1;
+            AFindings.Add(F);
+          end;
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do
+    begin
+      Child:= N.NamedChild(I);
+      if not Child.IsNull then Visit(Child);
+    end;
+  end; // procedure
+
+begin
+  Visit(ARoot);
+end; // procedure
+
 { TLinter }
 
 constructor TLinter.Create(const ARulesDir: string);
@@ -363,7 +461,10 @@ begin
       { DFM: the Pascal *.scm rules and the Pascal-specific walks key off node types
         that don't exist in the DFM grammar (and the queries are compiled against the
         Pascal language), so the only meaningful diagnostic is a genuine grammar error. }
-      CollectDfmParseErrors(Tree.RootNode, AFilePath, Findings)
+    begin
+      CollectDfmParseErrors(Tree.RootNode, AFilePath, Findings);
+      CheckDfmCredentials(Tree.RootNode, Source, AFilePath, Findings); // v0.76 #10
+    end
     else
     begin
       WalkForFieldByNameInLoop(Tree.RootNode, Source, AFilePath, 0, Findings);

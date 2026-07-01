@@ -1,0 +1,6 @@
+# SaveToFile with a hardcoded 'C:\Temp\...' literal fires at line 15.
+# A proper TPath.GetTempFileName call (27) is clean; a temp path that is only
+# in a ShowMessage caption (35) is not a file API -> clean.
+insecure-temp-file 15
+!insecure-temp-file 27
+!insecure-temp-file 35

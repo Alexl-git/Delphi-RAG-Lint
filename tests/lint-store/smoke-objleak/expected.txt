@@ -1,0 +1,5 @@
+# Smoke: interprocedural object-leak via the store. Indexing callers+helpers
+# lets check-ast see that UseButDontFree does NOT own `o` (leak at line 12),
+# while TakeAndFree frees it (clean at line 19). Validates the store harness.
+object-leak callers.pas:12
+!object-leak callers.pas:19

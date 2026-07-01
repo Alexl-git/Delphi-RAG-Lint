@@ -53,7 +53,7 @@ Have: `code-after-exit`, `self-assignment`, `comparison-same-operands`, `redunda
       sanity gave 73 findings on clean code, ~all INTENTIONAL discards (builder/adder/runner functions) -- discarding
       a result is common+usually-intentional in Delphi and no pure-AST heuristic separates bug from intent. A future
       store-backed + purity/effect-aware pass could make it default-on; cross-unit resolution is the next step.
-- [ ] `multiple-statements-per-line` -- deferred (low-FP + easy, but a pure style rule; pick up in a later chunk)
+- [x] `multiple-statements-per-line` -- **DONE v0.76** (`hint`, off by default; one finding per line)
 
 ## 3. Data-flow / uninitialized variables  -- SHIPPED v0.66 (the long pole, now covered)  **(M2)**
 PAL's crown jewel; the compiler does some (W1035/W1036). The M2 per-routine CFG + monotone def-use
@@ -99,7 +99,7 @@ Have: `unprotected-object-free`, `use-after-free`, `criticalsection-not-released
       reference. Handles paren-less + parenthesised constructors; FixInsight-parity)
 - [ ] `double-free`
 - [ ] `stream/file/bitmap created-not-freed` pairing (same technique as criticalsection)
-- [ ] `abstract-method-instantiation` (needs the store: is-the-class-abstract)  **(M1, deferred)**
+- [x] `abstract-method-instantiation` -- **DONE v0.76** (store-backed: virtual method with no body, unoverridden across the hierarchy)
 - [x] true ownership/lifetime across calls (created here, leaked on some path)  -- shipped v0.66 as `object-leak` (store-backed interprocedural ownership oracle)  **(M2)**
 
 ## 6. Complexity / metrics  -- partial  **(now, index-backed)**
@@ -140,8 +140,8 @@ Have: `with-statement`, `nested-with`, `goto-statement`, `off-by-one-count`,
 Have: `win64-pointer-cast` (heuristic), `sizeof-pointer-assumption`, `pchar-arithmetic`,
 `gettickcount-wraparound`, `locale-sensitive-conversion`, `deprecated-rtl-function`,
 `inline-assembly`, `unsafe-string-api`.
-- [ ] `nativeint-truncation`; `default-encoding-io`  (exact ones need types -- **M1**)
-- [ ] `variant-record-type-punning`
+- [x] `nativeint-truncation` -- **DONE v0.76** (`warning`; 32-bit cast of a NativeInt/pointer-sized value, sibling of win64-pointer-cast). `default-encoding-io` still open (needs **M1**).
+- [ ] `variant-record-type-punning` -- deferred (needs flow; no clean pure-AST signal)
 
 ## 10. Security  -- LEADING the field (ahead of PAL/FixInsight/Sonar)
 Have: `sql-injection-concat`, `unsafe-shellexecute`, `path-traversal`, `hardcoded-credential`,
@@ -150,14 +150,14 @@ Have: `sql-injection-concat`, `unsafe-shellexecute`, `path-traversal`, `hardcode
 - [x] `weak-random-for-security`  -- shipped v0.75 (AST, `warning`; a security-named variable
       (token/password/secret/salt/nonce/apikey/...) assigned from System.Random/RandomRange -- not
       a CSPRNG. src FP = 0)
-- [ ] `dfm-hardcoded-credential` (scan DFM property values)
-- [ ] `insecure-temp-file`; `unvalidated-deserialization`
+- [x] `dfm-hardcoded-credential` -- **DONE v0.76** (`warning`; credential-named DFM property with a literal string value)
+- [x] `insecure-temp-file` -- **DONE v0.76** (`warning`; hardcoded temp path in a file API). `unvalidated-deserialization` still open (no clean signal).
 
 ## 11. Architecture  -- LEADING (resolved uses-graph layering is unique)
 Have: `layering-violation`, `interface-reference-cycle`, `god-class`, `unit-not-in-dpr`,
 `unit-not-in-project`.
-- [ ] `circular-uses` report (cycle listing, not just the cross-check)
-- [ ] DIT/CBO depth metrics (overlaps #6)
+- [x] `circular-uses` report -- **DONE v0.76** (`warning`, store-backed; Tarjan SCC over the unit uses-graph, one finding per cycle)
+- [ ] DIT/CBO depth metrics (overlaps #6) -- deferred to v0.77 with the CK suite (NOC/RFC/LCOM)
 
 ## 12. Ergonomics / output  -- DONE (SARIF, --fail-on, baseline, drag-lint-lint.json v0.66; autofix v0.71)
 - [x] **SARIF output** (CI integration) -- shipped v0.66

@@ -1950,6 +1950,42 @@ var
           end;
         end;
       end;
+      { v0.76 nativeint-truncation (#9): a 32-bit cast (Integer/Cardinal/LongInt/
+        LongWord) of a NativeInt/NativeUInt/pointer-sized-integer value. NativeInt is
+        64-bit on Win64, so the cast silently drops the high 32 bits -- use NativeInt/
+        NativeUInt (or Int64) for the result. Distinct from win64-pointer-cast (which
+        fires on true pointer types); this covers the integer pointer-sized family. }
+      if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
+      begin
+        var Cn: string:= LowerCase(NodeStr(Entity));
+        if (Cn = 'integer') or (Cn = 'cardinal') or (Cn = 'longint') or (Cn = 'longword') then
+        begin
+          Args:= N.ChildByField('args');
+          if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
+          begin
+            A0:= Args.NamedChild(0);
+            if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) then
+            begin
+              var Tl: string:= LowerCase(Trim(T));
+              if (Tl = 'nativeint') or (Tl = 'nativeuint') or (Tl = 'intptr') or (Tl = 'uintptr')
+                 or (Tl = 'ptrint') or (Tl = 'ptruint') then
+              begin
+                P:= Entity.StartPoint;
+                F:= Default(TLintFinding);
+                F.RuleId  := 'nativeint-truncation';
+                F.Severity:= 'warning';
+                F.Message := Format('32-bit cast (%s) of NativeInt-sized %s -- truncates the high 32 bits on Win64; use NativeInt/NativeUInt or Int64.', [NodeStr(Entity), NodeStr(A0)]);
+                F.FilePath:= AFile;
+                F.StartLine:= Integer(P.Row   ) + 1;
+                F.StartCol := Integer(P.Column) + 1;
+                F.EndLine := F.StartLine;
+                F.EndCol  := F.StartCol + Length(NodeStr(Entity));
+                Findings.Add(F);
+              end;
+            end;
+          end;
+        end;
+      end;
       { v0.71: redundant-cast -- 'TFoo(x)' where x is declared EXACTLY TFoo (per
         the per-file TypeMap) is a no-op cast. T-prefixed class-like entity only
         (avoids scalar-cast noise), single identifier argument only. Pure-AST via
@@ -2054,6 +2090,74 @@ var
                 Findings.Add(F);
               end;
             end;
+          end;
+        end;
+      end;
+    end;
+    { v0.76 abstract-method-instantiation (#5, store-backed): a constructor call
+      'TFoo.Create' (with or without parens -- both surface the exprDot 'TFoo.Create')
+      where TFoo or a class ancestor declares an abstract method that has NO concrete
+      override anywhere in the hierarchy. Instantiating such a class and calling that
+      method raises EAbstractError (compiler W1020). Needs the store to see methods +
+      ancestors across units. }
+    if (AStore <> nil) and (N.NodeType = 'exprDot') then
+    begin
+      var Rhs: TTSNode:= N.ChildByField('rhs');
+      var Lhs: TTSNode:= N.ChildByField('lhs');
+      if (not Rhs.IsNull) and (not Lhs.IsNull) and (Lhs.NodeType = 'identifier')
+         and SameText(Trim(NodeStr(Rhs)), 'Create') then
+      begin
+        var ClsName: string:= Trim(NodeStr(Lhs));
+        var ClsSym : TSymbol; var Found: Boolean:= False;
+        for var Sy in AStore.FindSymbolsByExactName(ClsName) do
+          if Sy.Kind = skClass then begin ClsSym:= Sy; Found:= True; Break; end;
+        if Found then
+        begin
+          var AbstractNames: TStringList:= TStringList.Create;
+          var ConcreteNames: TStringList:= TStringList.Create;
+          var ClassIds     : TList<Int64>:= TList<Int64>.Create;
+          try
+            AbstractNames.CaseSensitive:= False; AbstractNames.Sorted:= False;
+            ConcreteNames.CaseSensitive:= False;
+            ClassIds.Add(ClsSym.Id);
+            for var Anc in AStore.GetTransitiveAncestors(ClsSym.Id) do
+              if (Anc.SymbolId > 0) and SameText(Anc.Kind, 'class') then ClassIds.Add(Anc.SymbolId);
+            for var Cid in ClassIds do
+              for var M in AStore.FindAllChildSymbols(Cid) do
+                if (M.Kind = skMethod) or (M.Kind = skProcedure) or (M.Kind = skFunction) then
+                begin
+                  { The store records visibility ('public') in Modifiers, not the
+                    virtual/abstract directive -- so detect an abstract method by its
+                    shape instead: a VIRTUAL method with NO implementation body
+                    (ImplStartLine = 0). A concrete method (any body) overrides it. }
+                  if M.IsVirtual and (M.ImplStartLine = 0) then
+                  begin if AbstractNames.IndexOf(M.Name) < 0 then AbstractNames.Add(M.Name); end
+                  else if M.ImplStartLine > 0 then
+                  begin if ConcreteNames.IndexOf(M.Name) < 0 then ConcreteNames.Add(M.Name); end;
+                end;
+            var Unimpl: string:= '';
+            for var AName in AbstractNames do
+              if ConcreteNames.IndexOf(AName) < 0 then
+              begin
+                if Unimpl <> '' then Unimpl:= Unimpl + ', ';
+                Unimpl:= Unimpl + AName;
+              end;
+            if Unimpl <> '' then
+            begin
+              P:= Lhs.StartPoint;
+              F:= Default(TLintFinding);
+              F.RuleId  := 'abstract-method-instantiation';
+              F.Severity:= 'warning';
+              F.Message := Format('%s.Create instantiates a class with unimplemented abstract method(s): %s -- calling one raises EAbstractError.', [ClsName, Unimpl]);
+              F.FilePath:= AFile;
+              F.StartLine:= Integer(P.Row   ) + 1;
+              F.StartCol := Integer(P.Column) + 1;
+              F.EndLine := F.StartLine;
+              F.EndCol  := F.StartCol + Length(ClsName);
+              Findings.Add(F);
+            end;
+          finally
+            ClassIds.Free; AbstractNames.Free; ConcreteNames.Free;
           end;
         end;
       end;

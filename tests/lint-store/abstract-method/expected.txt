@@ -1,0 +1,4 @@
+# TShape has abstract Area with no override -> instantiating it (line 14) fires.
+# TCircle overrides Area (concrete) -> instantiating it (line 15) is clean.
+abstract-method-instantiation app.pas:14
+!abstract-method-instantiation app.pas:15

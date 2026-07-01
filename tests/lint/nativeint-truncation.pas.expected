@@ -1,0 +1,5 @@
+# Integer(n) and Cardinal(p) truncate NativeInt/NativeUInt on Win64 (lines 15, 16).
+# Integer(a) where a is a plain Integer (line 24) is fine.
+nativeint-truncation 15
+nativeint-truncation 16
+!nativeint-truncation 24

@@ -5,6 +5,68 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.76.0-alpha -- 2026-07-01
+
+Closes the last pure-AST loose ends and adds the first cheap store/graph-backed
+rules on a new store-fixture test harness.
+
+### Test infrastructure
+
+- **`tests/lint-store/` store-fixture harness** (`run_store_tests.ps1`) -- indexes
+  each case directory into a throwaway SQLite store, then runs the store-bearing
+  check path (`check-ast --db` per file, or `lint-all --db` for the whole project)
+  and compares against an `expected.txt` directive file. This unblocks testing
+  store / uses-graph rules that the file-only `lint <file>` harness cannot exercise.
+
+### Added -- security (MISSING-FEATURES #10)
+
+- **`dfm-hardcoded-credential`** (`warning`) -- a credential-named DFM property
+  (`Password`, `Pwd`, `Secret`, `ApiKey`, `PrivateKey`, `Passphrase`) assigned a
+  non-empty string literal in a form resource. Secrets in a `.dfm` ship in the exe
+  and land in source control.
+- **`insecure-temp-file`** (`warning`) -- a file read/write API (`SaveToFile`,
+  `LoadFromFile`, `WriteAllText`, `TFileStream.Create`, ...) called with a
+  hardcoded temp path (`C:\Temp\`, `\Temp\`, `/tmp/`, `\Windows\Temp`). Predictable,
+  world-readable location prone to races/symlink attacks.
+
+### Added -- resource / memory (MISSING-FEATURES #5)
+
+- **`abstract-method-instantiation`** (`warning`, store-backed) -- `TFoo.Create`
+  where `TFoo` or a class ancestor declares an abstract method (a virtual method
+  with no body) that no class in the hierarchy overrides -- instantiating it and
+  calling that method raises `EAbstractError` (compiler W1020). Resolves methods +
+  ancestors across units via the symbol store.
+
+### Added -- platform / portability (MISSING-FEATURES #9)
+
+- **`nativeint-truncation`** (`warning`) -- a 32-bit cast (`Integer`, `Cardinal`,
+  `LongInt`, `LongWord`) of a `NativeInt`/`NativeUInt`/`IntPtr`/`UIntPtr`/`PtrInt`/
+  `PtrUInt` value truncates the high 32 bits on Win64. Sibling of
+  `win64-pointer-cast` (which fires on true pointer types).
+
+### Added -- architecture (MISSING-FEATURES #11)
+
+- **`circular-uses`** (`warning`, store-backed) -- a strongly-connected component
+  of the unit uses-graph (a set of units that transitively use each other). Tarjan
+  SCC over the store's uses edges; one finding per cycle, anchored at the
+  alphabetically-first unit with the full member list. Distinct from
+  `interface-reference-cycle` (interface-section symbol references).
+
+### Added -- style (MISSING-FEATURES #2)
+
+- **`multiple-statements-per-line`** (`hint`, **off by default**) -- two or more
+  statements sharing one source line (`a := 1; b := 2;`). One finding per line.
+  Opt in via `"enabled"` / `--rule` (pure style; noisy on terse codebases).
+
+### Deferred
+
+- **DIT/CBO** and the rest of the CK metric suite (NOC/RFC/LCOM) are deferred to
+  v0.77 so the class-metric rules ship together; a project-only store lacks RTL
+  ancestors, which limits DIT signal in isolation.
+- **`variant-record-type-punning`**, **`double-free`**, **nullability**, and
+  **clone/duplicate-code detection** remain for later (need M2 flow / a dedicated
+  clone engine).
+
 ## v0.75.0-alpha -- 2026-07-01
 
 ### Added -- type-system / casts (MISSING-FEATURES #4)
