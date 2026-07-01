@@ -1,0 +1,5 @@
+# cognitive-complexity (#6, threshold via config = 3): each control-flow structure
+# adds 1 + its nesting depth. Complex has three nested ifs = 1+2+3 = 6 > 3 -> fires
+# at its header (line 4); Simple has one if = 1 -> NOT flagged (line 11).
+cognitive-complexity 4
+!cognitive-complexity 11

@@ -1,0 +1,5 @@
+# weak-random-for-security (#10): a security-named variable assigned from
+# System.Random. Fires on SessionToken (line 9, name contains 'token'); NOT on X
+# (line 10, not a security-sensitive name).
+weak-random-for-security 9
+!weak-random-for-security 10

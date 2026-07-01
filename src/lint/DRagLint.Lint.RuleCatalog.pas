@@ -99,16 +99,19 @@ begin
     B('repeated-else-if-condition',    'bug-patterns', 'warning', 'The same condition repeats in an if/else-if chain -- the later branch is unreachable');
     B('property-references-itself',    'bug-patterns', 'warning', 'A property''s read/write accessor is the property itself -- infinite recursion');
     B('exhaustive-enum-case',          'bug-patterns', 'warning', 'case on an enum type omits some members and has no else (store-aware; same-file enums covered without a DB)', False); { OFF by default -- a case handling a subset with no else is common; opt in via "enabled" }
+    B('lossy-cast',                    'bug-patterns', 'info',    'Ansi-narrowing cast of a Unicode string -- characters outside the code page are lost (W1057)');
 
     { --- resource-lifetime --- }
     B('freeandnil-on-interface',       'resource-lifetime', 'warning', 'FreeAndNil on an interface reference');
     B('unprotected-object-free',       'resource-lifetime', 'warning', 'Object created + freed without try-finally');
     B('use-after-free',                'resource-lifetime', 'warning', 'Object used after X.Free');
     B('destructor-without-override',   'resource-lifetime', 'warning', 'Destructor not declared ''override'' -- hides the inherited destructor (leak)');
+    B('create-inside-try',             'resource-lifetime', 'warning', 'Object constructed as the first statement inside its try..finally -- construct before the try');
 
     { --- security --- }
     B('unsafe-shellexecute',           'security', 'error',   'WinExec/ShellExecute/CreateProcess with a non-literal command');
     B('path-traversal',                'security', 'warning', 'Concatenated path passed to a file API -- path traversal risk');
+    B('weak-random-for-security',      'security', 'warning', 'A security-named variable is generated with System.Random (not a CSPRNG)');
 
     { --- platform --- }
     B('win64-pointer-cast',            'platform', 'warning', 'Pointer cast to a 32-bit integer type -- unsafe on Win64');
@@ -120,6 +123,7 @@ begin
     B('deep-nesting',         'complexity', 'info', 'Nesting is too deep', True, [MkParam('threshold','int','5')]);
     B('too-many-exit-points', 'complexity', 'info', 'Routine has too many Exit statements', True, [MkParam('threshold','int','5')]);
     B('cyclomatic-complexity','complexity', 'info', 'Cyclomatic complexity is too high', True, [MkParam('threshold','int','15')]);
+    B('cognitive-complexity', 'complexity', 'info', 'Cognitive complexity is too high (nesting-weighted)', True, [MkParam('threshold','int','25')]);
     B('case-with-too-few-branches','complexity', 'hint', 'case has fewer than N branches -- an if is clearer', True, [MkParam('threshold','int','2')]);
     B('boolean-expression-complexity','complexity', 'info', 'Boolean expression has more than N and/or/xor operators', True, [MkParam('threshold','int','4')]);
     B('unit-too-large',       'complexity', 'info', 'Unit exceeds N source lines', True, [MkParam('threshold','int','2000')]);

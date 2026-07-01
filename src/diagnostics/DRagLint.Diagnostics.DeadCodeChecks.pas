@@ -634,6 +634,62 @@ var
       Inc(Result, IdentSelfRefCount(N.Child(I), AName, ANameStart, AType));
   end;
 
+  { v0.75 #10: True if AName (a variable/field name) looks security-sensitive --
+    a substring match on a focused, low-FP set. Backs weak-random-for-security. }
+  function IsSecurityName(const AName: string): Boolean;
+  var L: string;
+  begin
+    L:= LowerCase(AName);
+    Result:= (Pos('password', L) > 0) or (Pos('passphrase', L) > 0) or (Pos('secret', L) > 0)
+          or (Pos('token', L) > 0) or (Pos('apikey', L) > 0) or (Pos('privatekey', L) > 0)
+          or (Pos('salt', L) > 0) or (Pos('nonce', L) > 0) or (Pos('sessionid', L) > 0)
+          or (Pos('cryptokey', L) > 0) or (Pos('securitykey', L) > 0);
+  end;
+
+  { v0.75 #10: True if N's subtree calls System.Random / RandomRange. }
+  function SubtreeCallsRandom(const N: TTSNode): Boolean;
+  var I: Integer; Ent: TTSNode;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'exprCall' then
+    begin
+      Ent:= N.ChildByField('entity');
+      if (not Ent.IsNull) and (Ent.NodeType = 'identifier')
+         and (SameText(Trim(NodeStr(Ent)), 'Random') or SameText(Trim(NodeStr(Ent)), 'RandomRange')) then
+        Exit(True);
+    end;
+    for I:= 0 to N.ChildCount - 1 do
+      if SubtreeCallsRandom(N.Child(I)) then Exit(True);
+  end;
+
+  { v0.75 #5: drill through 'statement'/'statements' wrappers to the innermost
+    first named child (the actual assignment/call); N unchanged if not a wrapper. }
+  function UnwrapStmt(const N: TTSNode): TTSNode;
+  begin
+    Result:= N;
+    while (not Result.IsNull) and ((Result.NodeType = 'statement') or (Result.NodeType = 'statements'))
+          and (Result.NamedChildCount >= 1) do
+      Result:= Result.NamedChild(0);
+  end;
+
+  { v0.75 #5: True if N is an assignment whose rhs is a constructor call --
+    'TFoo.Create(...)' (exprCall whose entity is an exprDot '.Create') OR the
+    paren-less 'TFoo.Create' (a bare exprDot '.Create'). }
+  function IsConstructorAssignment(const N: TTSNode): Boolean;
+  var Rhs, Dot, Dr: TTSNode;
+  begin
+    Result:= False;
+    if N.IsNull or (N.NodeType <> 'assignment') then Exit;
+    Rhs:= N.ChildByField('rhs');
+    if Rhs.IsNull then Exit;
+    if Rhs.NodeType = 'exprCall' then Dot:= Rhs.ChildByField('entity')
+    else Dot:= Rhs;
+    if Dot.IsNull or (Dot.NodeType <> 'exprDot') then Exit;
+    Dr:= Dot.ChildByField('rhs');
+    Result:= (not Dr.IsNull) and (Dr.NodeType = 'identifier') and SameText(Trim(NodeStr(Dr)), 'Create');
+  end;
+
   { PASS 2: Walk looking for defProc (unused-parameter) and ifElse
     (identical-then-else). }
   procedure Visit(const N: TTSNode);
@@ -815,6 +871,40 @@ var
         FlagDupHandlers(N, SeenH, True);
       finally
         SeenH.Free;
+      end;
+      { create-inside-try (#5): a try..finally whose FIRST protected statement is
+        'X := TFoo.Create(...)'. If Create raises, X is undefined and the finally's
+        X.Free crashes -- construct BEFORE the try. Only when the try has a finally
+        and the first real statement is a constructor assignment. }
+      var HasFin: Boolean:= False;
+      for var Fi:= 0 to N.ChildCount - 1 do
+        if N.Child(Fi).NodeType = 'kFinally' then begin HasFin:= True; Break; end;
+      if HasFin then
+        for var Pi:= 0 to N.NamedChildCount - 1 do
+        begin
+          var Pc: TTSNode:= N.NamedChild(Pi);
+          var Pt: string := Pc.NodeType;
+          if Pt = 'kFinally' then Break;
+          if (Length(Pt) > 0) and (Pt[1] = 'k') then Continue; { skip kTry etc. }
+          { first real protected statement }
+          if IsConstructorAssignment(UnwrapStmt(Pc)) then
+            EmitAt(UnwrapStmt(Pc), 'create-inside-try',
+              'Object is constructed as the first statement INSIDE its try..finally -- if the constructor raises, the finally frees an undefined reference. Construct it before the try.');
+          Break;
+        end;
+    end;
+
+    { weak-random-for-security (#10): a security-named variable assigned from
+      System.Random/RandomRange -- not cryptographically secure. }
+    if N.NodeType = 'assignment' then
+    begin
+      var Lhs: TTSNode:= N.ChildByField('lhs');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and IsSecurityName(NodeStr(Lhs)) then
+      begin
+        var Rhs: TTSNode:= N.ChildByField('rhs');
+        if (not Rhs.IsNull) and SubtreeCallsRandom(Rhs) then
+          EmitAt(N, 'weak-random-for-security',
+            Format('"%s" is generated with System.Random -- not cryptographically secure. Use a CSPRNG (e.g. TRandomGenerator / OS crypto) for security tokens, keys, or salts.', [Trim(NodeStr(Lhs))]));
       end;
     end;
 

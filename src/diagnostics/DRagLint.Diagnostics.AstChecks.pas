@@ -212,6 +212,11 @@ type
       /// <returns>One finding per routine over the threshold, at its header.</returns>
       /// <remarks>Severity info. Pure AST; no DB. Never raises.</remarks>
       class function CheckCyclomaticComplexity(const AFile: string; AMaxComplexity: Integer): TArray<TLintFinding>; overload;
+      /// <summary>v0.75 (#6): flags routines whose SonarSource-style cognitive complexity exceeds
+      /// the threshold -- each control-flow structure adds 1 + its nesting depth, each and/or/xor
+      /// adds 1. Rewards flat code, penalises deep nesting (unlike flat cyclomatic count).</summary>
+      class function CheckCognitiveComplexity(const AFile: string): TArray<TLintFinding>; overload;
+      class function CheckCognitiveComplexity(const AFile: string; AMaxScore: Integer): TArray<TLintFinding>; overload;
       /// <summary>Flags a constructor that calls a virtual/dynamic/override method declared in
       /// its OWN class -- the VMT is live before the body runs, so the call dispatches to a
       /// descendant override whose fields are not yet initialised (AV or corrupt state).</summary>
@@ -2012,6 +2017,40 @@ var
                 F.StartCol := Integer(P.Column) + 1;
                 F.EndLine := F.StartLine;
                 F.EndCol  := F.StartCol + Length(Un);
+                Findings.Add(F);
+              end;
+            end;
+          end;
+        end;
+      end;
+      { v0.75 lossy-cast (#4): an Ansi-narrowing cast of a Unicode-string operand
+        drops characters outside the active code page (compiler W1057). Fires on an
+        Ansi-family cast (AnsiString/AnsiChar/ShortString/RawByteString) of a single
+        identifier whose declared type is a Unicode string. }
+      if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
+      begin
+        var Cn: string:= LowerCase(NodeStr(Entity));
+        if (Cn = 'ansistring') or (Cn = 'ansichar') or (Cn = 'shortstring') or (Cn = 'rawbytestring') then
+        begin
+          Args:= N.ChildByField('args');
+          if (not Args.IsNull) and (Args.NamedChildCount = 1) then
+          begin
+            A0:= Args.NamedChild(0);
+            if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) then
+            begin
+              var Tl: string:= LowerCase(Trim(T));
+              if (Tl = 'string') or (Tl = 'unicodestring') or (Tl = 'widestring') or (Tl = 'widechar') then
+              begin
+                P:= Entity.StartPoint;
+                F:= Default(TLintFinding);
+                F.RuleId  := 'lossy-cast';
+                F.Severity:= 'info';
+                F.Message := Format('%s(%s) narrows a Unicode string to Ansi -- characters outside the active code page are lost (W1057).', [NodeStr(Entity), NodeStr(A0)]);
+                F.FilePath:= AFile;
+                F.StartLine:= Integer(P.Row   ) + 1;
+                F.StartCol := Integer(P.Column) + 1;
+                F.EndLine := F.StartLine;
+                F.EndCol  := F.StartCol + Length(NodeStr(Entity));
                 Findings.Add(F);
               end;
             end;
@@ -4002,6 +4041,82 @@ begin
   Findings:= TList<TLintFinding>.Create;
   try
 
+    Visit(PF.Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckCognitiveComplexity(const AFile: string): TArray<TLintFinding>;
+begin
+  Result:= CheckCognitiveComplexity(AFile, 25);   // default limit (cognitive scores higher than cyclomatic)
+end;
+
+class function TAstChecker.CheckCognitiveComplexity(const AFile: string; AMaxScore: Integer): TArray<TLintFinding>;
+var
+  PF      : TParsedFile        ;
+  Findings: TList<TLintFinding>;
+
+  { SonarSource-style: each control-flow structure adds 1 + its nesting depth;
+    each boolean operator (and/or/xor) adds 1 (no nesting). Nested routines are
+    scored separately (recursion stops at a nested defProc). }
+  function Score(const N: TTSNode; ANest: Integer): Integer;
+  var I: Integer; K: string;
+  begin
+    Result:= 0;
+    if N.IsNull then Exit;
+    K:= N.NodeType;
+    if K = 'defProc' then Exit;
+    if (K = 'if') or (K = 'ifElse') or (K = 'while') or (K = 'for') or (K = 'repeat')
+       or (K = 'case') or (K = 'exceptionHandler') then
+    begin
+      Result:= 1 + ANest;
+      for I:= 0 to N.ChildCount - 1 do Result:= Result + Score(N.Child(I), ANest + 1);
+      Exit;
+    end;
+    if (K = 'kAnd') or (K = 'kOr') or (K = 'kXor') then Result:= 1;
+    for I:= 0 to N.ChildCount - 1 do Result:= Result + Score(N.Child(I), ANest);
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var
+    I, CC     : Integer ;
+    Hdr, Body : TTSNode ;
+    P         : TTSPoint;
+    F         : TLintFinding;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.NodeType = 'defProc' then
+    begin
+      Body:= N.ChildByField('body');
+      CC:= Score(Body, 0);
+      if CC > AMaxScore then
+      begin
+        Hdr:= N.ChildByField('header');
+        if Hdr.IsNull then Hdr:= N;
+        P:= Hdr.StartPoint;
+        F:= Default(TLintFinding);
+        F.RuleId  := 'cognitive-complexity';
+        F.Severity:= 'info';
+        F.Message := Format('Routine cognitive complexity %d (max %d) -- deeply nested / branchy control flow is hard to follow; flatten or extract sub-routines.', [CC, AMaxScore]);
+        F.FilePath:= AFile;
+        F.StartLine:= Integer(P.Row   ) + 1;
+        F.StartCol := Integer(P.Column) + 1;
+        F.EndLine:= F.StartLine;
+        F.EndCol := F.StartCol + 1;
+        Findings.Add(F);
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Findings:= TList<TLintFinding>.Create;
+  try
     Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally

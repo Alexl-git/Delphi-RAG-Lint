@@ -1,0 +1,5 @@
+# lossy-cast (#4): an Ansi-narrowing cast of a Unicode-string operand. Fires on
+# AnsiString(U) where U:string (line 9, narrowing -> W1057); NOT on string(A)
+# where A:AnsiString (line 10, widening is safe).
+lossy-cast 9
+!lossy-cast 10

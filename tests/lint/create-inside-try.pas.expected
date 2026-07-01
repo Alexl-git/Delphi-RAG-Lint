@@ -1,0 +1,8 @@
+# create-inside-try (#5): a try..finally whose FIRST protected statement is
+# X := TFoo.Create. Fires on line 10 (Create inside the try); NOT on the correct
+# pattern where the object is created before the try (line 15) and the try's first
+# statement is SL.Add (line 16/17).
+create-inside-try 10
+!create-inside-try 15
+!create-inside-try 16
+!create-inside-try 17
