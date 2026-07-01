@@ -1,0 +1,7 @@
+# exhaustive-enum-case (#4, store-aware; same-file enum here so no --db needed):
+# a case on an enum-typed selector that omits members and has no else. Fires on
+# the case missing ckBlue (line 8); NOT on the fully-covered case (line 12) nor the
+# case with an else (line 17).
+exhaustive-enum-case 8
+!exhaustive-enum-case 12
+!exhaustive-enum-case 17

@@ -1,0 +1,4 @@
+# unit-too-large (#6, threshold via config sidecar = 5): the unit exceeds N source
+# lines. This fixture is ~14 lines; the sibling unit-too-large.config.json lowers the
+# limit to 5 so it fires. Reported once at line 1.
+unit-too-large 1

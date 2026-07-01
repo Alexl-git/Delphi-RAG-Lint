@@ -4742,7 +4742,7 @@ begin
   (AArgs.Rule <> 'control-flow-in-finally') and (AArgs.Rule <> 'too-many-parameters') and (AArgs.Rule <> 'too-many-locals') and
   (AArgs.Rule <> 'method-too-long') and (AArgs.Rule <> 'deep-nesting') and (AArgs.Rule <> 'float-equality-comparison') and
   (AArgs.Rule <> 'freeandnil-on-interface') and (AArgs.Rule <> 'firedac-open-execsql-mismatch') and (AArgs.Rule <> 'unprotected-object-free') and
-  (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'redundant-cast') and (AArgs.Rule <> 'unsafe-typecast-without-is') and (AArgs.Rule <> 'length-zero-compare') and (AArgs.Rule <> 'ui-access-in-thread') and
+  (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'redundant-cast') and (AArgs.Rule <> 'unsafe-typecast-without-is') and (AArgs.Rule <> 'exhaustive-enum-case') and (AArgs.Rule <> 'length-zero-compare') and (AArgs.Rule <> 'ui-access-in-thread') and
   (AArgs.Rule <> 'global-form-variable') and (AArgs.Rule <> 'unsafe-shellexecute') and (AArgs.Rule <> 'path-traversal') and (AArgs.Rule <> 'loop-executes-at-most-once') and
   (AArgs.Rule <> 'format-argument-count') and (AArgs.Rule <> 'format-specifier-type-mismatch') and (AArgs.Rule <> 'try-except-swallowed') and (AArgs.Rule <> 'dataset-open-without-close') and (AArgs.Rule <> 'criticalsection-not-released') and (AArgs.Rule <> 'too-many-exit-points') and (AArgs.Rule <> 'cyclomatic-complexity') and (AArgs.Rule <> 'virtual-method-in-constructor') and
   (AArgs.Rule <> 'used-before-assignment') and (AArgs.Rule <> 'function-result-not-set') and (AArgs.Rule <> 'out-param-not-set') and
@@ -4757,12 +4757,12 @@ begin
   (AArgs.Rule <> 'destructor-without-override') and (AArgs.Rule <> 'case-with-too-few-branches') and
   (AArgs.Rule <> 'boolean-expression-complexity') and (AArgs.Rule <> 'exception-constructed-but-not-raised') and
   (AArgs.Rule <> 'duplicate-exception-handler') and (AArgs.Rule <> 'repeated-else-if-condition') and
-  (AArgs.Rule <> 'property-references-itself') then
+  (AArgs.Rule <> 'property-references-itself') and (AArgs.Rule <> 'unit-too-large') then
   begin
     Writeln(Format(
         'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' +
-        'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
-        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself)',
+        'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, exhaustive-enum-case, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
+        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4794,6 +4794,10 @@ begin
         is often provably safe to the author -> too noisy for the default set). }
       if AArgs.Rule <> 'unsafe-typecast-without-is' then
         DefDisabled:= DefDisabled + ['unsafe-typecast-without-is'];
+      { v0.74: exhaustive-enum-case OFF by default (a case that intentionally handles
+        a subset of an enum with no else is common -> opt in for enum-heavy code). }
+      if AArgs.Rule <> 'exhaustive-enum-case' then
+        DefDisabled:= DefDisabled + ['exhaustive-enum-case'];
       if TFile.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFile(AArgs.Path)
       else if TDirectory.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFolder(AArgs.Path, True)
       else
@@ -4834,7 +4838,7 @@ begin
             Cfg.ThresholdFor('method-too-long', 120), Cfg.ThresholdFor('deep-nesting', 5)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'float-equality-comparison') or (AArgs.Rule = 'freeandnil-on-interface') or (AArgs.Rule = 'win64-pointer-cast') or (AArgs.Rule = 'redundant-cast') or (AArgs.Rule = 'unsafe-typecast-without-is') or (AArgs.Rule = 'length-zero-compare') then
+      if (AArgs.Rule = '') or (AArgs.Rule = 'float-equality-comparison') or (AArgs.Rule = 'freeandnil-on-interface') or (AArgs.Rule = 'win64-pointer-cast') or (AArgs.Rule = 'redundant-cast') or (AArgs.Rule = 'unsafe-typecast-without-is') or (AArgs.Rule = 'exhaustive-enum-case') or (AArgs.Rule = 'length-zero-compare') then
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(AArgs.Path) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.49: FireDAC Open/ExecSQL vs SQL-kind mismatch }
@@ -4886,9 +4890,10 @@ begin
         + duplicate-exception-handler (#7) -- all from the same TDeadCodeChecker.Check }
       if (AArgs.Rule = '') or (AArgs.Rule = 'unused-parameter') or (AArgs.Rule = 'identical-then-else') or (AArgs.Rule = 'referenced-never-set') or (AArgs.Rule = 'redundant-parentheses') or (AArgs.Rule = 'commented-out-code') or (AArgs.Rule = 'function-result-ignored')
         or (AArgs.Rule = 'destructor-without-override') or (AArgs.Rule = 'case-with-too-few-branches') or (AArgs.Rule = 'boolean-expression-complexity') or (AArgs.Rule = 'exception-constructed-but-not-raised') or (AArgs.Rule = 'duplicate-exception-handler')
-        or (AArgs.Rule = 'repeated-else-if-condition') or (AArgs.Rule = 'property-references-itself') then
+        or (AArgs.Rule = 'repeated-else-if-condition') or (AArgs.Rule = 'property-references-itself') or (AArgs.Rule = 'unit-too-large') then
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(AArgs.Path,
-            Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4)) do
+            Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4),
+            Cfg.ThresholdFor('unit-too-large', 2000)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { Free cached tree after single-file lint }
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
@@ -5790,7 +5795,8 @@ begin
         { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set);
           v0.70-72: + redundant-parens/commented-out-code/function-result-ignored + #5/#6/#7 rules }
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(PasPath,
-            Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4)) do
+            Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4),
+            Cfg.ThresholdFor('unit-too-large', 2000)) do
           Findings:= Findings + [F];
       except
         on E: Exception do
@@ -5834,9 +5840,9 @@ begin
     OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', Now) + '.txt');
   end;
 
-  { v0.71: function-result-ignored + unsafe-typecast-without-is are OFF by default
-    here too (opt in via config "enabled"). }
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is'],
+  { v0.71/v0.74: function-result-ignored + unsafe-typecast-without-is +
+    exhaustive-enum-case are OFF by default here too (opt in via config "enabled"). }
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;

@@ -1379,6 +1379,7 @@ var
   Findings: TList<TLintFinding>       ;
   TypeMap : TDictionary<string,string>;
   Guards  : TDictionary<string,Integer>; { v0.71: 'x|TFoo' set of 'x is TFoo' guards }
+  EnumMems: TDictionary<string,TStringList>; { v0.74: same-file enum type (lower) -> member names }
 
   { v11 (M1): the store's resolved category for a declared type text, or
     tcUnknown when there is no store / it can't resolve (caller then falls back
@@ -1561,6 +1562,100 @@ var
     for I:= 0 to N.ChildCount - 1 do CollectGuards(N.Child(I));
   end;
 
+  { v0.74: collect same-file enum types -> member-name lists. A declType whose
+    'type' child wraps a declEnum: name = declType.name, members = each
+    declEnumValue's 'name'. Backs exhaustive-enum-case on the no-store path (the
+    file harness); the store supplies cross-unit enums. }
+  { recursively fill AOut with declEnumValue names if M's subtree contains a
+    declEnum (the declEnum may be the 'type' field directly or nested in it). }
+  function FindEnumMembers(const M: TTSNode; const AOut: TStringList): Boolean;
+  var
+    K     : Integer;
+    ValN  : TTSNode;
+    VNameN: TTSNode;
+    VN    : string ;
+  begin
+    Result:= False;
+    if M.IsNull then Exit;
+    if M.NodeType = 'declEnum' then
+    begin
+      for K:= 0 to M.NamedChildCount - 1 do
+      begin
+        ValN:= M.NamedChild(K);
+        if ValN.NodeType = 'declEnumValue' then
+        begin
+          VNameN:= ValN.ChildByField('name');
+          if VNameN.IsNull and (ValN.NamedChildCount >= 1) then VNameN:= ValN.NamedChild(0);
+          if not VNameN.IsNull then
+          begin
+            VN:= Trim(NodeStr(VNameN));
+            if VN <> '' then AOut.Add(VN);
+          end;
+        end;
+      end;
+      Exit(True);
+    end;
+    for K:= 0 to M.ChildCount - 1 do
+      if FindEnumMembers(M.Child(K), AOut) then Exit(True);
+  end;
+
+  procedure CollectEnums(const N: TTSNode);
+  var
+    I       : Integer ;
+    NameN, TypeN: TTSNode;
+    Members : TStringList;
+    En      : string  ;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'declType' then
+    begin
+      NameN:= N.ChildByField('name');
+      TypeN:= N.ChildByField('type');
+      if (not NameN.IsNull) and (not TypeN.IsNull) then
+      begin
+        En:= LowerCase(Trim(NodeStr(NameN)));
+        if (En <> '') and (not EnumMems.ContainsKey(En)) then
+        begin
+          Members:= TStringList.Create;
+          Members.CaseSensitive:= False;
+          if FindEnumMembers(TypeN, Members) and (Members.Count > 0) then
+            EnumMems.Add(En, Members)
+          else
+            Members.Free;
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectEnums(N.NamedChild(I));
+  end;
+
+  { v0.74: enum member names for a declared type text -- the same-file map first,
+    then the store (skEnum symbol -> its skEnumValue children). Returns nil when
+    the type is not a known enum. The caller OWNS + frees the returned list. }
+  function ResolveEnumMembers(const ATypeText: string): TStringList;
+  var
+    L   : string      ;
+    Own : TStringList ;
+  begin
+    Result:= nil;
+    L:= LowerCase(Trim(ATypeText));
+    if L = '' then Exit;
+    if EnumMems.TryGetValue(L, Own) then
+    begin
+      Result:= TStringList.Create; Result.CaseSensitive:= False;
+      Result.AddStrings(Own);
+      Exit;
+    end;
+    if AStore <> nil then
+      for var S in AStore.FindSymbolsByExactName(Trim(ATypeText)) do
+        if S.Kind = skEnum then
+        begin
+          Result:= TStringList.Create; Result.CaseSensitive:= False;
+          for var K in AStore.FindAllChildSymbols(S.Id) do
+            if K.Kind = skEnumValue then Result.Add(K.Name);
+          Break;
+        end;
+  end;
+
   function OperandIsFloat(const N: TTSNode): Boolean;
   var
     T  : string;
@@ -1632,6 +1727,86 @@ var
     HaveCall: Boolean  ;
   begin
     if N.IsNull or (Findings.Count >= 200) then Exit;
+    { v0.74: exhaustive-enum-case -- a 'case' on an enum-typed selector that omits
+      some members AND has no 'else' silently ignores them (and any future member
+      added to the enum). Selector = NamedChild(0) when it is a plain identifier;
+      resolve its declared type to an enum (same-file map or store); flag the
+      missing members. Bail on a range label (can't expand without ordinals). }
+    if N.NodeType = 'case' then
+    begin
+      var HasElse: Boolean:= False;
+      for var Ei:= 0 to N.ChildCount - 1 do
+        if N.Child(Ei).NodeType = 'kElse' then begin HasElse:= True; Break; end;
+      if not HasElse then
+      begin
+        { the selector is the first named child that is an expression -- skip the
+          keyword tokens (kCase/kOf/...), the caseCase arms, and any else body. }
+        var Selector: TTSNode:= N.ChildByField('selector');
+        if Selector.IsNull then
+          for var Si:= 0 to N.NamedChildCount - 1 do
+          begin
+            var Sc: TTSNode:= N.NamedChild(Si);
+            var St: string:= Sc.NodeType;
+            if (St <> 'caseCase') and (St <> 'statement') and (St <> 'statements')
+               and ((Length(St) = 0) or (St[1] <> 'k')) then
+            begin Selector:= Sc; Break; end;
+          end;
+        if (not Selector.IsNull) and (Selector.NodeType = 'identifier')
+           and TypeMap.TryGetValue(LowerCase(NodeStr(Selector)), T) then
+        begin
+          var Members: TStringList:= ResolveEnumMembers(T);
+          if Members <> nil then
+          try
+            var Covered: TStringList:= TStringList.Create;
+            Covered.CaseSensitive:= False;
+            var HasRange: Boolean:= False;
+            try
+              for var Ci:= 0 to N.NamedChildCount - 1 do
+              begin
+                var Arm: TTSNode:= N.NamedChild(Ci);
+                if Arm.NodeType <> 'caseCase' then Continue;
+                var Lbl: TTSNode:= Arm.ChildByField('label');
+                if Lbl.IsNull then Continue;
+                for var Li:= 0 to Lbl.ChildCount - 1 do
+                begin
+                  var Lc: TTSNode:= Lbl.Child(Li);
+                  if Lc.NodeType = 'identifier' then Covered.Add(Trim(NodeStr(Lc)))
+                  else if Trim(NodeStr(Lc)) = '..' then HasRange:= True;
+                end;
+              end;
+              if not HasRange then
+              begin
+                var Missing: string:= '';
+                for var Mi:= 0 to Members.Count - 1 do
+                  if Covered.IndexOf(Members[Mi]) < 0 then
+                  begin
+                    if Missing <> '' then Missing:= Missing + ', ';
+                    Missing:= Missing + Members[Mi];
+                  end;
+                if Missing <> '' then
+                begin
+                  P:= N.StartPoint;
+                  F:= Default(TLintFinding);
+                  F.RuleId  := 'exhaustive-enum-case';
+                  F.Severity:= 'warning';
+                  F.Message := Format('case on enum %s does not handle %s and has no else -- handle the missing value(s) or add an else', [Trim(T), Missing]);
+                  F.FilePath:= AFile;
+                  F.StartLine:= Integer(P.Row   ) + 1;
+                  F.StartCol := Integer(P.Column) + 1;
+                  F.EndLine := F.StartLine;
+                  F.EndCol  := F.StartCol + 4;
+                  Findings.Add(F);
+                end;
+              end;
+            finally
+              Covered.Free;
+            end;
+          finally
+            Members.Free;
+          end;
+        end;
+      end;
+    end;
     if N.NodeType = 'exprBinary' then
     begin
       Op:= N.ChildByField('operator');
@@ -1855,16 +2030,20 @@ begin
   Findings:= TList<TLintFinding>.Create;
   TypeMap := TDictionary<string,string>.Create;
   Guards  := TDictionary<string,Integer>.Create;
+  EnumMems:= TDictionary<string,TStringList>.Create;
   try
 
     if PF.Tree <> nil then
     begin
       CollectDecls (PF.Tree.RootNode);
       CollectGuards(PF.Tree.RootNode);
+      CollectEnums (PF.Tree.RootNode);
       CheckExpr    (PF.Tree.RootNode);
     end;
     Result:= Findings.ToArray;
   finally
+    for var Ml in EnumMems.Values do Ml.Free;
+    EnumMems.Free;
     Guards.Free;
     TypeMap.Free;
     Findings.Free;

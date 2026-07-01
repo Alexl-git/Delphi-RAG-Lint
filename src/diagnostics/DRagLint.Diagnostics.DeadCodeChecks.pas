@@ -105,13 +105,13 @@ type
     /// Thread-safe if the parse cache is thread-safe for the caller's pattern;
     /// the checker itself has no shared mutable state.</remarks>
     class function Check(const AFile: string; AMinCaseBranches: Integer = 2;
-      AMaxBoolOps: Integer = 4): TArray<TLintFinding>;
+      AMaxBoolOps: Integer = 4; AMaxUnitLines: Integer = 2000): TArray<TLintFinding>;
   end;
 
 implementation
 
 class function TDeadCodeChecker.Check(const AFile: string; AMinCaseBranches: Integer;
-  AMaxBoolOps: Integer): TArray<TLintFinding>;
+  AMaxBoolOps: Integer; AMaxUnitLines: Integer): TArray<TLintFinding>;
 var
   Src            : TBytes                      ;
   PF             : TParsedFile                 ;
@@ -1322,6 +1322,22 @@ begin
   ContractMethods:= TDictionary<string, Boolean>.Create;
   LocalFunctions := TDictionary<string, Boolean>.Create;
   try
+    { v0.74: unit-too-large (#6) -- one info finding when the unit exceeds
+      AMaxUnitLines source lines (root node's last row). }
+    if (AMaxUnitLines > 0) and (PF.Tree <> nil) then
+    begin
+      var ULines: Integer:= Integer(PF.Tree.RootNode.EndPoint.Row) + 1;
+      if ULines > AMaxUnitLines then
+      begin
+        var UF: TLintFinding:= Default(TLintFinding);
+        UF.RuleId  := 'unit-too-large';
+        UF.Severity:= 'info';
+        UF.Message := Format('Unit is %d lines (limit %d) -- consider splitting it into smaller units', [ULines, AMaxUnitLines]);
+        UF.FilePath:= AFile;
+        UF.StartLine:= 1; UF.StartCol:= 1; UF.EndLine:= 1; UF.EndCol:= 1;
+        Findings.Add(UF);
+      end;
+    end;
     { Pass 1: collect all declProc names with contract-binding directives. }
     CollectContractDecls(PF.Tree.RootNode);
     { Pass 1b: collect same-unit function names for function-result-ignored. }
