@@ -1714,6 +1714,39 @@ var
           end;
         end;
       end;
+      { v0.71: redundant-cast -- 'TFoo(x)' where x is declared EXACTLY TFoo (per
+        the per-file TypeMap) is a no-op cast. T-prefixed class-like entity only
+        (avoids scalar-cast noise), single identifier argument only. Pure-AST via
+        the type map -> near-zero FP (an exact declared-type match to the cast
+        target is not a protected-member hack, which needs a base-typed operand). }
+      if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
+      begin
+        var En: string:= NodeStr(Entity);
+        if (Length(En) >= 2) and (En[1] = 'T') and (En[2] >= 'A') and (En[2] <= 'Z') then
+        begin
+          Args:= N.ChildByField('args');
+          if (not Args.IsNull) and (Args.NamedChildCount = 1) then
+          begin
+            A0:= Args.NamedChild(0);
+            if (A0.NodeType = 'identifier')
+               and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T)
+               and SameText(Trim(T), En) then
+            begin
+              P:= Entity.StartPoint;
+              F:= Default(TLintFinding);
+              F.RuleId  := 'redundant-cast';
+              F.Severity:= 'hint';
+              F.Message := Format('Redundant cast: %s is already of type %s', [NodeStr(A0), En]);
+              F.FilePath:= AFile;
+              F.StartLine:= Integer(P.Row   ) + 1;
+              F.StartCol := Integer(P.Column) + 1;
+              F.EndLine := F.StartLine;
+              F.EndCol  := F.StartCol + Length(En);
+              Findings.Add(F);
+            end;
+          end;
+        end;
+      end;
     end;
     for I:= 0 to N.ChildCount - 1 do CheckExpr(N.Child(I));
   end;

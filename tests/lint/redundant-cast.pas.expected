@@ -1,0 +1,7 @@
+# redundant-cast: TStringList(SL) where SL is already TStringList (line 11) fires.
+# Must NOT fire on the constructor call (10), a plain call (12), or a non-T-prefixed
+# scalar cast Integer(N) (13, deliberately excluded to avoid scalar-cast noise).
+redundant-cast 11
+!redundant-cast 10
+!redundant-cast 12
+!redundant-cast 13
