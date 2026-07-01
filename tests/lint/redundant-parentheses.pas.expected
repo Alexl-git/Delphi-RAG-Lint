@@ -1,5 +1,7 @@
-# redundant-parentheses: fires on '(X)' (lone term) and '((X+1))' (nested);
-# must NOT fire on '(X + 1)' (parens around a binary expression).
-redundant-parentheses 6
-redundant-parentheses 7
-!redundant-parentheses 8
+# redundant-parentheses fires on '(X)' (line 10, lone term) and '((X+1))'
+# (line 11, nested); must NOT fire on '(X + 1)' (line 12, binary) nor on the
+# single-element const array constructor '= (''x'')' (line 6, initializer ctx).
+redundant-parentheses 10
+redundant-parentheses 11
+!redundant-parentheses 6
+!redundant-parentheses 12

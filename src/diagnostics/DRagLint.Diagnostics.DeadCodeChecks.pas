@@ -11,7 +11,16 @@ unit DRagLint.Diagnostics.DeadCodeChecks;
     redundant-parentheses: (v0.70) an exprParens wrapping either another
                            exprParens ('((X))') or a lone atomic term ('(X)',
                            '(1)'); severity 'hint'. Composite inner expressions
-                           are not flagged (conservative, near-zero FP). }
+                           are not flagged, and initializer/constructor contexts
+                           (const/var defaultValue, arr/rec initializers) are
+                           skipped -- there '(x)' is a required constructor
+                           (conservative, near-zero FP).
+    commented-out-code   : (v0.70) a comment whose ENTIRE stripped text is a
+                           single statement -- an anchored 'lhs := rhs;' with a
+                           bare lvalue path, or 'idpath(...);'. Prose that merely
+                           quotes ':=' or a call inside a sentence is NOT flagged
+                           (that was the dominant false positive). Severity
+                           'hint'; directives and doc comments are skipped. }
 
 interface
 
@@ -37,7 +46,7 @@ type
     /// <returns>Array of findings (severity 'warning'); empty when the file is
     /// clean or could not be parsed.</returns>
     /// <remarks>Rules implemented: unused-parameter, identical-then-else,
-    /// referenced-never-set, and redundant-parentheses.
+    /// referenced-never-set, redundant-parentheses, and commented-out-code.
     /// unused-parameter guards (parameters NOT flagged even if unreferenced):
     ///   - var/out parameters (caller-visible side effects).
     ///   - Self (implicit class parameter).
@@ -166,6 +175,98 @@ var
     finally
       Buf.Free;
     end;
+  end;
+
+  { Strip the leading/trailing comment delimiters from a raw comment token
+    (line-slashes, brace pair, or paren-star pair), returning the trimmed inner
+    text. Assumes ARaw is already trimmed. }
+  function StripComment(const ARaw: string): string;
+  var
+    S: string;
+  begin
+    S:= ARaw;
+    if S.StartsWith('//') then
+      S:= Copy(S, 3, MaxInt)
+    else if S.StartsWith('(*') then
+    begin
+      S:= Copy(S, 3, MaxInt);
+      if S.EndsWith('*)') then S:= Copy(S, 1, Length(S) - 2);
+    end
+    else if S.StartsWith('{') then
+    begin
+      S:= Copy(S, 2, MaxInt);
+      if S.EndsWith('}') then S:= Copy(S, 1, Length(S) - 1);
+    end;
+    Result:= Trim(S);
+  end;
+
+  { True if C can start a Delphi identifier (A..Z, a..z, _). Uses ordinal
+    comparisons (not a set-range literal) so the tree-sitter self-parser is happy. }
+  function IsIdentStartCh(const C: Char): Boolean;
+  begin
+    Result:= ((C >= 'A') and (C <= 'Z')) or ((C >= 'a') and (C <= 'z')) or (C = '_');
+  end;
+
+  { True if C can continue an idpath (ident chars plus digits and '.'). }
+  function IsIdentContCh(const C: Char): Boolean;
+  begin
+    Result:= IsIdentStartCh(C) or ((C >= '0') and (C <= '9')) or (C = '.');
+  end;
+
+  { True if the whole S is a bare lvalue path: ident chars, dots and brackets,
+    NO spaces or other prose punctuation -- e.g. 'X', 'a[i]', 'Obj.Field'. Used
+    to reject prose that merely quotes an assignment inside a sentence. }
+  function IsLValuePath(const S: string): Boolean;
+  var
+    I: Integer;
+  begin
+    Result:= False;
+    if S = '' then Exit;
+    if not IsIdentStartCh(S[1]) then Exit;
+    for I:= 1 to Length(S) do
+      if not (IsIdentContCh(S[I]) or (S[I] = '[') or (S[I] = ']')) then Exit;
+    Result:= True;
+  end;
+
+  { Conservative: is the WHOLE stripped comment a single assignment statement,
+    'lhs := rhs;', whose lhs is a bare lvalue path (no prose)? This rejects the
+    common false positive of a doc/explanatory comment that quotes ':=' inside a
+    sentence (there the text before ':=' contains spaces / punctuation). }
+  function LooksLikeAssignment(const S: string): Boolean;
+  var
+    P  : Integer;
+    Lhs: string ;
+    Rhs: string ;
+  begin
+    Result:= False;
+    if (Length(S) < 4) or (S[Length(S)] <> ';') then Exit;   { must end with ';' }
+    P:= Pos(':=', S);
+    if P <= 1 then Exit;
+    Lhs:= Trim(Copy(S, 1, P - 1));
+    Rhs:= Trim(Copy(S, P + 2, MaxInt));                       { includes trailing ';' }
+    Result:= IsLValuePath(Lhs) and (Length(Rhs) > 1);         { non-empty rhs before ';' }
+  end;
+
+  { Conservative test: is the WHOLE stripped comment a single Delphi call
+    statement '<idpath>( ... );' -- an identifier/dotted path with the '('
+    IMMEDIATELY after it (no space), then a trailing ');'. Anchoring + the
+    no-space rule reject prose like 'see Foo (1);' and 'v11 (M1): ... (x);'. }
+  function LooksLikeCallStatement(const S: string): Boolean;
+  var
+    I, N, J: Integer;
+  begin
+    Result:= False;
+    N:= Length(S);
+    if N < 4 then Exit;                 { need at least 'a();' }
+    if S[N] <> ';' then Exit;           { must end with ';' }
+    I:= 1;
+    if not IsIdentStartCh(S[I]) then Exit;
+    while (I <= N) and IsIdentContCh(S[I]) do Inc(I);
+    if (I > N) or (S[I] <> '(') then Exit;   { '(' must IMMEDIATELY follow the idpath }
+    { last non-space char before the ';' must be ')' }
+    J:= N - 1;
+    while (J >= 1) and (S[J] = ' ') do Dec(J);
+    Result:= (J >= 1) and (S[J] = ')');
   end;
 
   { Count every identifier occurrence (lowercased) anywhere in subtree N.
@@ -422,7 +523,17 @@ var
       Conservative by design -> near-zero false positives. }
     if N.NodeType = 'exprParens' then
     begin
-      if N.NamedChildCount >= 1 then
+      { Skip constant/variable initializer + array/record constructor contexts:
+        there '(x)' is a REQUIRED single-element constructor (e.g. a typed
+        const 'array[0..0] of string = (''x'')'), not a redundant expression
+        paren -- and the two cannot be told apart without type analysis. }
+      var PrntN: TTSNode:= N.Parent;
+      var PT   : string := '';
+      if not PrntN.IsNull then PT:= PrntN.NodeType;
+      if (PT <> 'defaultValue') and (PT <> 'arrInitializer') and
+         (PT <> 'recInitializer') and (PT <> 'recInitializerField') and
+         (PT <> 'declConst') and (PT <> 'constInline') and
+         (N.NamedChildCount >= 1) then
       begin
         var Inner: TTSNode:= N.NamedChild(0);
         if Inner.NodeType = 'exprParens' then
@@ -430,6 +541,22 @@ var
         else if Inner.NamedChildCount = 0 then
           EmitAt(N, 'redundant-parentheses',
             'Redundant parentheses around a single term', 'hint');
+      end;
+    end;
+
+    { commented-out-code: a comment token whose stripped inner text looks like
+      Delphi code -- it contains an assignment operator (prose almost never
+      does) or is an anchored call statement. Compiler directives and doc
+      comments are skipped. Severity 'hint'; conservative -> near-zero FP. }
+    if N.NodeType = 'comment' then
+    begin
+      var Raw: string:= Trim(NodeStr(N));
+      if not (Raw.StartsWith('///') or Raw.StartsWith('{$') or Raw.StartsWith('(*$')) then
+      begin
+        var Inner: string:= StripComment(Raw);
+        if (Inner <> '') and (LooksLikeAssignment(Inner) or LooksLikeCallStatement(Inner)) then
+          EmitAt(N, 'commented-out-code',
+            'Commented-out code -- remove it or restore it', 'hint');
       end;
     end;
 

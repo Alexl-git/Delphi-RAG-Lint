@@ -1,0 +1,6 @@
+# commented-out-code: fires on a commented assignment (line 7) and a commented
+# call statement (line 8); must NOT fire on prose (lines 10, 11) or directives.
+commented-out-code 7
+commented-out-code 8
+!commented-out-code 10
+!commented-out-code 11
