@@ -5,6 +5,22 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.73.0-alpha -- 2026-07-01
+
+### Added -- control-flow / expression (MISSING-FEATURES #8)
+
+- **`repeated-else-if-condition`** (`warning`) -- the same condition text repeats
+  in one `if` / `else if` chain, so the later branch is unreachable. The chain is
+  walked from its top via the `else` field, comparing normalised condition text
+  case-insensitively.
+- **`property-references-itself`** (`warning`) -- a property whose `read`/`write`
+  accessor is the property itself, which recurses forever. Detected by counting
+  identifiers in the `declProp` that match the property name (excluding the name
+  node and the type), so it needs no accessor-field knowledge.
+
+Both pure-AST, on by default, 0 findings over the `src/` sanity sweep. Closes #8's
+pure-AST items.
+
 ## v0.72.0-alpha -- 2026-07-01
 
 ### Added -- resource / memory (MISSING-FEATURES #5)

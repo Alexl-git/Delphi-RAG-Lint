@@ -7,10 +7,10 @@ analysis (`docs/lint/REPORT-1-delphi-lint-landscape.md`) cross-checked against t
 inventory (`rules/*.scm`, `src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`,
 `src/lint/DRagLint.Lint.ProjectRules.pas`).
 
-**Where we stand (updated v0.72.0-alpha):** ~128 rules, roughly **75-80%** of the catalogued
+**Where we stand (updated v0.73.0-alpha):** ~130 rules, roughly **76-80%** of the catalogued
 breadth. **M1 (type/hierarchy resolver), M2 (CFG/data-flow engine), naming wave (#1), dead-code
-tail (#2), the pure-AST cast rules (#4), the autofix subsystem (#12), and the #5/#6/#7 pure-AST
-tail all SHIPPED.** We **lead** on security, architecture/layering, and exception handling. The
+tail (#2), the pure-AST cast rules (#4), the autofix subsystem (#12), and the #5/#6/#7/#8 pure-AST
+tails all SHIPPED.** We **lead** on security, architecture/layering, and exception handling. The
 remaining gaps are **clone detection + cognitive complexity + the CK suite** (#6) and the
 **store-backed rules** (#4 lossy casts / enum-case; #5 abstract-method-instantiation).
 
@@ -117,8 +117,11 @@ Have: `empty-except`, `empty-on-handler`, `empty-finally`, `bare-except`,
 Have: `with-statement`, `nested-with`, `goto-statement`, `off-by-one-count`,
 `not-in-precedence`, `constant-condition`, `ifthen-both-branches`,
 `loop-executes-at-most-once`, `division-by-zero-literal`, `float-equality-comparison`.
-- [ ] `property-references-itself`
-- [ ] `repeated-else-if-condition` (same test twice)
+- [x] `property-references-itself`  -- shipped v0.73 (AST, `warning`; a property whose read/write
+      accessor names the property itself -> infinite recursion. Counts declProp identifiers matching
+      the property name, excluding the name node + type subtree; src FP = 0)
+- [x] `repeated-else-if-condition`  -- shipped v0.73 (AST, `warning`; the same condition text repeats
+      in one if/else-if chain -- the later branch is unreachable. Walks the chain via the `else` field)
 
 ## 9. Portability / Win64 / locale  -- strong/leading
 Have: `win64-pointer-cast` (heuristic), `sizeof-pointer-assumption`, `pchar-arithmetic`,
