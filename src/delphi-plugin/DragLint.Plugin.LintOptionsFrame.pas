@@ -3,7 +3,7 @@ unit DragLint.Plugin.LintOptionsFrame;
 { TLintOptionsFrame: dock tab for per-project lint rule enable/disable and
   param editing.  Loads the rule catalog via "drag-lint rules --json", renders
   each category as a TGroupBox with per-rule TCheckBoxes and inline param
-  editors (TSpinEdit for int params, TEdit for string/stringlist), and
+  editors (TSpinEdit for int params, TEdit for string/stringlist/bool), and
   round-trips the active project's drag-lint-lint.json via TLintConfigWriter.
 
   Design notes:
@@ -14,7 +14,28 @@ unit DragLint.Plugin.LintOptionsFrame;
     user enable or disable an entire rule group with one click.
   - A "Save" button (rather than autosave) is the round-trip trigger; simpler
     and safer than per-control change handlers mutating the file on every
-    keystroke. }
+    keystroke.
+
+  Param routing (all params of all rules are round-tripped):
+    naming scalar string params -> cfg.Naming.* fields (by param name):
+      class_prefix     -> Naming.ClassPrefix    (under naming.type_prefix.class)
+      exception_prefix -> Naming.ExceptionPrefix (naming.type_prefix.exception)
+      interface_prefix -> Naming.InterfacePrefix (naming.type_prefix.interface)
+      pointer_prefix   -> Naming.PointerPrefix   (naming.type_prefix.pointer)
+      field_prefix     -> Naming.FieldPrefix
+      param_prefix     -> Naming.ParamPrefix
+      method_case      -> Naming.MethodCase
+      local_case       -> Naming.LocalCase
+      keyword_case     -> Naming.KeywordCase
+    naming array params (TEdit, joined/split on comma):
+      const_case           -> Naming.ConstCase (TArray<string>)
+      hungarian_prefixes   -> Naming.HungarianPrefixes (TArray<string>)
+    naming int param:
+      min_identifier_len   -> Naming.MinIdentifierLen  (NOT the thresholds block)
+    naming bool param (TEdit "true"/"false"):
+      short_identifier_check -> Naming.ShortIdentifierCheck
+    any other int param -> thresholds block via SetThreshold (e.g. complexity rules)
+}
 
 interface
 
@@ -111,28 +132,43 @@ type
   TCatalogRules = TArray<TCatalogRule>;
 
 { ============================================================
+  TParamEditor: holds ONE param control (SpinEdit or TEdit)
+  together with its param name and kind so Save can route it.
+  ============================================================ }
+
+type
+  TParamEditor = record
+    ParamName: string    ;
+    Kind     : TParamKind;
+    Ctrl     : TControl  ;  { TSpinEdit for pkInt, TEdit for pkString/pkStringList/pkBool }
+  end;
+
+{ ============================================================
   Tag object: each rule checkbox carries one of these as Tag
-  so the Save walk can recover (Rule, optional SpinEdit / Edit).
+  so the Save walk can recover (Rule, ALL param editors).
   We use a TComponent-descendant so VCL owns it.
   ============================================================ }
 
 type
   TRuleTag = class(TComponent)
   public
-    Rule        : TCatalogRule;
-    { Optional param controls -- at most one int and one string per rule for
-      the current catalog shape; add more as needed. }
-    SpinEdit    : TSpinEdit;  { for the first "int" param, if any }
-    StringEdit  : TEdit    ;  { for the first "string"/"stringlist" param }
+    Rule    : TCatalogRule;
+    Editors : TArray<TParamEditor>;  { one entry per rule param, in catalog order }
     constructor CreateForRule(AOwner: TComponent; const ARule: TCatalogRule);
+    destructor  Destroy; override;
   end;
 
 constructor TRuleTag.CreateForRule(AOwner: TComponent; const ARule: TCatalogRule);
 begin
   inherited Create(AOwner);
-  Rule:= ARule;
-  SpinEdit  := nil;
-  StringEdit:= nil;
+  Rule   := ARule;
+  Editors:= nil;
+end;
+
+destructor TRuleTag.Destroy;
+begin
+  Editors:= nil;
+  inherited;
 end;
 
 { ============================================================
@@ -285,9 +321,136 @@ begin
 end;
 
 { ============================================================
-  Helper: collect enabled count across all rendered checkboxes
-  Counts boxes that have a TRuleTag as Tag (skip cat headers)
+  Helper: join a string array into a comma-separated string
   ============================================================ }
+
+function JoinStrArr(const AArr: TArray<string>): string;
+var
+  i: Integer;
+begin
+  Result:= '';
+  for i:= 0 to High(AArr) do
+  begin
+    if i > 0 then Result:= Result + ', ';
+    Result:= Result + AArr[i];
+  end;
+end;
+
+{ ============================================================
+  Helper: split a comma-separated string into a trimmed array,
+  dropping empty parts
+  ============================================================ }
+
+function SplitCommaTrimmed(const AText: string): TArray<string>;
+var
+  Parts: TArray<string>;
+  S    : string;
+begin
+  Result:= nil;
+  Parts:= AText.Split([',']);
+  for S in Parts do
+    if Trim(S) <> '' then
+      Result:= Result + [Trim(S)];
+end;
+
+{ ============================================================
+  Helper: is this param name a naming-block int param?
+  Only min_identifier_len maps to Naming.MinIdentifierLen.
+  ============================================================ }
+
+function IsNamingIntParam(const AName: string): Boolean;
+begin
+  Result:= SameText(AName, 'min_identifier_len');
+end;
+
+{ ============================================================
+  Helper: is this param name a naming-block bool param?
+  ============================================================ }
+
+function IsNamingBoolParam(const AName: string): Boolean;
+begin
+  Result:= SameText(AName, 'short_identifier_check');
+end;
+
+{ ============================================================
+  Helper: is this param name a naming-block array param?
+  ============================================================ }
+
+function IsNamingArrayParam(const AName: string): Boolean;
+begin
+  Result:= SameText(AName, 'const_case') or SameText(AName, 'hungarian_prefixes');
+end;
+
+{ ============================================================
+  Helper: is this param name a naming-block scalar string?
+  ============================================================ }
+
+function IsNamingStringParam(const AName: string): Boolean;
+begin
+  Result:= SameText(AName, 'class_prefix') or
+           SameText(AName, 'exception_prefix') or
+           SameText(AName, 'interface_prefix') or
+           SameText(AName, 'pointer_prefix') or
+           SameText(AName, 'field_prefix') or
+           SameText(AName, 'param_prefix') or
+           SameText(AName, 'method_case') or
+           SameText(AName, 'local_case') or
+           SameText(AName, 'keyword_case');
+end;
+
+{ ============================================================
+  Helper: read a naming scalar string from cfg by param name
+  ============================================================ }
+
+function GetNamingString(const ACfg: TLintConfig; const AName: string): string;
+begin
+  if SameText(AName, 'class_prefix') then
+    Result:= ACfg.Naming.ClassPrefix
+  else if SameText(AName, 'exception_prefix') then
+    Result:= ACfg.Naming.ExceptionPrefix
+  else if SameText(AName, 'interface_prefix') then
+    Result:= ACfg.Naming.InterfacePrefix
+  else if SameText(AName, 'pointer_prefix') then
+    Result:= ACfg.Naming.PointerPrefix
+  else if SameText(AName, 'field_prefix') then
+    Result:= ACfg.Naming.FieldPrefix
+  else if SameText(AName, 'param_prefix') then
+    Result:= ACfg.Naming.ParamPrefix
+  else if SameText(AName, 'method_case') then
+    Result:= ACfg.Naming.MethodCase
+  else if SameText(AName, 'local_case') then
+    Result:= ACfg.Naming.LocalCase
+  else if SameText(AName, 'keyword_case') then
+    Result:= ACfg.Naming.KeywordCase
+  else
+    Result:= '';
+end;
+
+{ ============================================================
+  Helper: write a naming scalar string back to cfg by param name
+  ============================================================ }
+
+procedure SetNamingString(var ACfg: TLintConfig; const AName, AValue: string);
+begin
+  if SameText(AName, 'class_prefix') then
+    ACfg.Naming.ClassPrefix:= AValue
+  else if SameText(AName, 'exception_prefix') then
+    ACfg.Naming.ExceptionPrefix:= AValue
+  else if SameText(AName, 'interface_prefix') then
+    ACfg.Naming.InterfacePrefix:= AValue
+  else if SameText(AName, 'pointer_prefix') then
+    ACfg.Naming.PointerPrefix:= AValue
+  else if SameText(AName, 'field_prefix') then
+    ACfg.Naming.FieldPrefix:= AValue
+  else if SameText(AName, 'param_prefix') then
+    ACfg.Naming.ParamPrefix:= AValue
+  else if SameText(AName, 'method_case') then
+    ACfg.Naming.MethodCase:= AValue
+  else if SameText(AName, 'local_case') then
+    ACfg.Naming.LocalCase:= AValue
+  else if SameText(AName, 'keyword_case') then
+    ACfg.Naming.KeywordCase:= AValue;
+end;
 
 { ============================================================
   Helper: recompute category header tri-state from its rule boxes
@@ -442,6 +605,28 @@ begin
   end;
 end;
 
+{ ============================================================
+  Helper: Load initial text for a non-int param editor from cfg
+  ============================================================ }
+
+function LoadParamInitText(const ACfg: TLintConfig; const AParam: TRuleParam): string;
+begin
+  { Naming int (min_identifier_len): handled by pkInt branch in RenderCatalog }
+  if IsNamingStringParam(AParam.Name) then
+    Result:= GetNamingString(ACfg, AParam.Name)
+  else if SameText(AParam.Name, 'const_case') then
+    Result:= JoinStrArr(ACfg.Naming.ConstCase)
+  else if SameText(AParam.Name, 'hungarian_prefixes') then
+    Result:= JoinStrArr(ACfg.Naming.HungarianPrefixes)
+  else if SameText(AParam.Name, 'short_identifier_check') then
+  begin
+    if ACfg.Naming.ShortIdentifierCheck then Result:= 'true'
+    else Result:= 'false';
+  end
+  else
+    Result:= AParam.DefaultValue;
+end;
+
 { ---- RenderCatalog: clear body, parse, build GroupBoxes + controls ---- }
 
 procedure TLintOptionsFrame.RenderCatalog(const AJSON: string);
@@ -472,6 +657,7 @@ var
   Checked : Boolean     ;
   DefVal  : Integer     ;
   GrpLeft : Integer     ;
+  PE      : TParamEditor;
 const
   LM  = 8 ;   { left margin inside group }
   GM  = 6 ;   { gap between group boxes }
@@ -602,23 +788,30 @@ begin
       RuleTag:= TRuleTag.CreateForRule(Self, Rule);
       RuleCB.Tag:= NativeInt(RuleTag);
 
-      { Param editors }
+      { Param editors -- build one TParamEditor per param (ALL params) }
       for Param in Rule.Params do
       begin
+        PrmLbl:= TLabel.Create(Self);
+        PrmLbl.Parent  := Grp;
+        PrmLbl.Left    := LM + 16;
+        PrmLbl.Top     := GrpY;
+        PrmLbl.Width   := GrpW - 16;
+        PrmLbl.Caption := Param.Name + ':';
+        PrmLbl.AutoSize:= True;
+        Inc(GrpY, PH);
+
+        PE.ParamName:= Param.Name;
+        PE.Kind     := Param.Kind;
+
         if Param.Kind = pkInt then
         begin
-          { Check if this is a known naming param mapped to cfg.Naming }
-          { note: ThresholdFor reads from the thresholds block of config }
           DefVal:= StrToIntDef(Param.DefaultValue, 0);
 
-          PrmLbl:= TLabel.Create(Self);
-          PrmLbl.Parent  := Grp;
-          PrmLbl.Left    := LM + 16;
-          PrmLbl.Top     := GrpY;
-          PrmLbl.Width   := GrpW - 16;
-          PrmLbl.Caption := Param.Name + ':';
-          PrmLbl.AutoSize:= True;
-          Inc(GrpY, PH);
+          { min_identifier_len -> Naming.MinIdentifierLen (NOT thresholds) }
+          if IsNamingIntParam(Param.Name) then
+            DefVal:= Cfg.Naming.MinIdentifierLen
+          else
+            DefVal:= Cfg.ThresholdFor(Param.Name, DefVal);
 
           SpnEdt:= TSpinEdit.Create(Self);
           SpnEdt.Parent  := Grp;
@@ -628,63 +821,28 @@ begin
           SpnEdt.Height  := EH;
           SpnEdt.MinValue:= 0;
           SpnEdt.MaxValue:= 9999;
-          SpnEdt.Value   := Cfg.ThresholdFor(Param.Name, DefVal);
+          SpnEdt.Value   := DefVal;
           Inc(GrpY, PEH + 4);
 
-          { If RuleTag has no SpinEdit yet, assign it (one per rule) }
-          if RuleTag.SpinEdit = nil then RuleTag.SpinEdit:= SpnEdt;
+          PE.Ctrl:= SpnEdt;
         end
         else
         begin
-          { string / stringlist / bool params -> TEdit }
-          { Naming-block params: map by name }
-          var InitText: string:= Param.DefaultValue;
-
-          { note: naming block params are identified by name; we map the
-            common ones directly; unrecognised names fall back to default.
-            Task 5 human gate validates runtime behaviour. }
-          if SameText(Param.Name, 'param_prefix') then
-            InitText:= Cfg.Naming.ParamPrefix
-          else if SameText(Param.Name, 'field_prefix') then
-            InitText:= Cfg.Naming.FieldPrefix
-          else if SameText(Param.Name, 'method_case') then
-            InitText:= Cfg.Naming.MethodCase
-          else if SameText(Param.Name, 'local_case') then
-            InitText:= Cfg.Naming.LocalCase
-          else if SameText(Param.Name, 'keyword_case') then
-            InitText:= Cfg.Naming.KeywordCase
-          else if SameText(Param.Name, 'class_prefix') then
-            InitText:= Cfg.Naming.ClassPrefix
-          else if SameText(Param.Name, 'exception_prefix') then
-            InitText:= Cfg.Naming.ExceptionPrefix
-          else if SameText(Param.Name, 'interface_prefix') then
-            InitText:= Cfg.Naming.InterfacePrefix
-          else if SameText(Param.Name, 'pointer_prefix') then
-            InitText:= Cfg.Naming.PointerPrefix;
-          { note: const_case and hungarian_prefixes are TArray<string>; if
-            needed later, join with comma here.  For now left as default. }
-
-          PrmLbl:= TLabel.Create(Self);
-          PrmLbl.Parent  := Grp;
-          PrmLbl.Left    := LM + 16;
-          PrmLbl.Top     := GrpY;
-          PrmLbl.Width   := GrpW - 16;
-          PrmLbl.Caption := Param.Name + ':';
-          PrmLbl.AutoSize:= True;
-          Inc(GrpY, PH);
-
+          { string / stringlist / bool params -> TEdit, loaded from correct location }
           StrEdt:= TEdit.Create(Self);
           StrEdt.Parent  := Grp;
           StrEdt.Left    := LM + 16;
           StrEdt.Top     := GrpY;
           StrEdt.Width   := GrpW - 16;
           StrEdt.Height  := EH;
-          StrEdt.Text    := InitText;
+          StrEdt.Text    := LoadParamInitText(Cfg, Param);
           StrEdt.Anchors := [akLeft, akTop, akRight];
           Inc(GrpY, PEH + 4);
 
-          if RuleTag.StringEdit = nil then RuleTag.StringEdit:= StrEdt;
+          PE.Ctrl:= StrEdt;
         end;
+
+        RuleTag.Editors:= RuleTag.Editors + [PE];
       end;
 
       CatYMap[CatName]:= GrpY;
@@ -805,21 +963,24 @@ begin
 end;
 
 { ============================================================
-  Public: Save
+  Public: Save -- routes every catalog param to the location
+  the linter actually reads (naming block or thresholds block).
+  Iterates ALL params of ALL rules; no Break after first match.
   ============================================================ }
 
 procedure TLintOptionsFrame.Save;
 var
-  ProjPath: string       ;
-  CfgPath : string       ;
-  Cfg     : TLintConfig  ;
-  i, j    : Integer      ;
-  GB      : TGroupBox    ;
-  CB      : TCheckBox    ;
-  RT      : TRuleTag     ;
-  Rule    : TCatalogRule ;
-  Param   : TRuleParam   ;
-  ParamIdx: Integer      ;
+  ProjPath : string       ;
+  CfgPath  : string       ;
+  Cfg      : TLintConfig  ;
+  i, j     : Integer      ;
+  GB       : TGroupBox    ;
+  CB       : TCheckBox    ;
+  RT       : TRuleTag     ;
+  Rule     : TCatalogRule ;
+  PE       : TParamEditor ;
+  SpnEdt   : TSpinEdit    ;
+  StrEdt   : TEdit        ;
 begin
   if not FHasData then Exit;
 
@@ -849,49 +1010,32 @@ begin
       else
         TLintConfigWriter.SetRuleEnabled(Cfg, Rule.Id, CB.Checked);
 
-      { Persist int param (SpinEdit) via threshold }
-      if RT.SpinEdit <> nil then
+      { Persist ALL param editors -- no Break; route each to the correct location }
+      for PE in RT.Editors do
       begin
-        { find the first int param name }
-        for ParamIdx:= 0 to High(Rule.Params) do
-          if Rule.Params[ParamIdx].Kind = pkInt then
-          begin
-            TLintConfigWriter.SetThreshold(Cfg, Rule.Params[ParamIdx].Name, RT.SpinEdit.Value);
-            Break;
-          end;
-      end;
+        if PE.Ctrl = nil then Continue;
 
-      { Persist string param (StringEdit) via naming block or threshold }
-      if RT.StringEdit <> nil then
-      begin
-        for ParamIdx:= 0 to High(Rule.Params) do
+        if PE.Kind = pkInt then
         begin
-          Param:= Rule.Params[ParamIdx];
-          if Param.Kind in [pkString, pkStringList, pkBool] then
-          begin
-            { Map to naming block fields by param name }
-            if SameText(Param.Name, 'param_prefix') then
-              Cfg.Naming.ParamPrefix:= RT.StringEdit.Text
-            else if SameText(Param.Name, 'field_prefix') then
-              Cfg.Naming.FieldPrefix:= RT.StringEdit.Text
-            else if SameText(Param.Name, 'method_case') then
-              Cfg.Naming.MethodCase:= RT.StringEdit.Text
-            else if SameText(Param.Name, 'local_case') then
-              Cfg.Naming.LocalCase:= RT.StringEdit.Text
-            else if SameText(Param.Name, 'keyword_case') then
-              Cfg.Naming.KeywordCase:= RT.StringEdit.Text
-            else if SameText(Param.Name, 'class_prefix') then
-              Cfg.Naming.ClassPrefix:= RT.StringEdit.Text
-            else if SameText(Param.Name, 'exception_prefix') then
-              Cfg.Naming.ExceptionPrefix:= RT.StringEdit.Text
-            else if SameText(Param.Name, 'interface_prefix') then
-              Cfg.Naming.InterfacePrefix:= RT.StringEdit.Text
-            else if SameText(Param.Name, 'pointer_prefix') then
-              Cfg.Naming.PointerPrefix:= RT.StringEdit.Text;
-            { note: unrecognised string params are left unmapped.
-              Task 5 human gate validates runtime behaviour for any edge cases. }
-            Break;
-          end;
+          SpnEdt:= TSpinEdit(PE.Ctrl);
+          { min_identifier_len -> Naming.MinIdentifierLen (naming block, NOT thresholds) }
+          if IsNamingIntParam(PE.ParamName) then
+            Cfg.Naming.MinIdentifierLen:= SpnEdt.Value
+          else
+            TLintConfigWriter.SetThreshold(Cfg, PE.ParamName, SpnEdt.Value);
+        end
+        else
+        begin
+          StrEdt:= TEdit(PE.Ctrl);
+          if IsNamingStringParam(PE.ParamName) then
+            SetNamingString(Cfg, PE.ParamName, StrEdt.Text)
+          else if SameText(PE.ParamName, 'const_case') then
+            Cfg.Naming.ConstCase:= SplitCommaTrimmed(StrEdt.Text)
+          else if SameText(PE.ParamName, 'hungarian_prefixes') then
+            Cfg.Naming.HungarianPrefixes:= SplitCommaTrimmed(StrEdt.Text)
+          else if SameText(PE.ParamName, 'short_identifier_check') then
+            Cfg.Naming.ShortIdentifierCheck:= SameText(Trim(StrEdt.Text), 'true');
+          { unrecognised params are silently skipped; Task 5 human gate validates }
         end;
       end;
     end;
