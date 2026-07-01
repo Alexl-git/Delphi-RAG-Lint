@@ -5834,6 +5834,11 @@ begin
   { Project-wide rules }
   Findings:= Findings +
     DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, '');
+  { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
+    lint-all (never the per-file Check) so within-file clones are reported once. }
+  Findings:= Findings +
+    DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths,
+      Cfg.ThresholdFor('duplicate-code', 60));
   { Interface reference cycles (needs all file paths) }
   Findings:= Findings +
     DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(FilePaths);
