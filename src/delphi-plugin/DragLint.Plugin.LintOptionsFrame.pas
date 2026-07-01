@@ -200,11 +200,22 @@ end;
   ============================================================ }
 
 function ResolveExe: string;
+var
+  BplDir, Win64Exe: string;
 begin
+  { 1) An explicit, valid ExePath setting always wins. }
   Result:= LoadSettings.ExePath;
-  if (Result = '') or not FileExists(Result) then
-    Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(Result) then Result:= 'drag-lint.exe';
+  if (Result <> '') and FileExists(Result) then Exit;
+  { 2) Prefer the Win64 engine in the sibling dll-win64\ folder -- the same
+    resolution the rest of the plugin uses (DLExe64). The 32-bit BPL lives in
+    dll-win32\, whose drag-lint.exe may be a stale build predating `rules`; the
+    Win64 exe is the current engine. A 32-bit process can spawn a 64-bit child. }
+  BplDir  := ExtractFilePath(GetModuleName(HInstance));
+  Win64Exe:= ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64\drag-lint.exe';
+  if FileExists(Win64Exe) then Exit(Win64Exe);
+  { 3) Fall back to the exe next to the BPL, then PATH. }
+  if FileExists(BplDir + 'drag-lint.exe') then Exit(BplDir + 'drag-lint.exe');
+  Result:= 'drag-lint.exe';
 end;
 
 { ============================================================
