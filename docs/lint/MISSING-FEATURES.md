@@ -39,9 +39,15 @@ Have: `code-after-exit`, `self-assignment`, `comparison-same-operands`, `redunda
 - [x] `write-only-field` / `assigned-never-read`  -- shipped v0.66 as `write-only-local` **(M2)**
 - [x] `overwrite-before-read` (value clobbered before use)  -- shipped v0.66 **(M2)**
 - [x] `identical-then-else`  -- shipped v0.68 (AST, `warning`)
-- [ ] `function-result-ignored` at call sites -- deferred (FP-prone without type resolution)
-- [ ] `commented-out-code` detection -- deferred
-- [ ] `redundant-parentheses`, `multiple-statements-per-line` -- deferred
+- [x] `redundant-parentheses`  -- shipped v0.70 (AST, `hint`; flags '((X))' and lone-term '(X)'/'(1)';
+      skips const/var initializer + arr/rec constructor contexts where '(x)' is required; 0 FP over src sanity)
+- [x] `commented-out-code`  -- shipped v0.70 (AST, `hint`; whole-comment-is-a-statement heuristic: anchored
+      'lhs := rhs;' or 'idpath(...);'; skips directives + doc comments; 0 FP over src after tightening from a
+      20/20-FP first cut that merely matched ':=' quoted in prose)
+- [ ] `function-result-ignored` at call sites -- STILL deferred (needs symbol-store type resolution to tell a
+      function from a procedure, and is FP-prone even then -- many APIs legitimately discard results; revisit
+      after the type-resolver work, not shippable clean as pure-AST)
+- [ ] `multiple-statements-per-line` -- deferred (low-FP + easy, but a pure style rule; pick up in a later chunk)
 
 ## 3. Data-flow / uninitialized variables  -- SHIPPED v0.66 (the long pole, now covered)  **(M2)**
 PAL's crown jewel; the compiler does some (W1035/W1036). The M2 per-routine CFG + monotone def-use

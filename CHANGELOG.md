@@ -3,6 +3,34 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v0.70.0-alpha -- 2026-07-01
+
+### Added (dead-code tail -- MISSING-FEATURES #2)
+
+- **`redundant-parentheses`** (`hint`) -- flags an expression wrapped in
+  redundant parentheses: nested `((X))` or a lone term `(X)` / `(1)`. Parens
+  around a composite expression (binary, call, dotted access, ...) are kept.
+  Const/var initializer and array/record constructor contexts are skipped --
+  there a single-element `(x)` is a required constructor, not a redundant paren.
+- **`commented-out-code`** (`hint`) -- flags a comment whose entire stripped
+  text is a single Delphi statement: an anchored `lhs := rhs;` (bare lvalue
+  path) or `idpath(...);`. Compiler directives (`{$...}`) and `///` doc comments
+  are skipped; prose that merely quotes `:=` or a call inside a sentence is not
+  flagged (that was the dominant false positive, tuned out against a src sanity).
+
+### Changed (plugin -- Lint Options tab)
+
+- Rule search moved onto its own row with a magnifier glyph + `Search` label.
+- Profile switching no longer re-spawns `drag-lint rules --json`; it re-renders
+  from the cached catalog (the rule set is static across profiles) -- noticeably
+  faster.
+
+### Deferred
+
+- `function-result-ignored` (needs symbol-store type resolution; FP-prone as
+  pure AST) and `multiple-statements-per-line` remain deferred -- see
+  MISSING-FEATURES #2.
+
 ## v0.69.0-alpha -- 2026-07-01
 
 ### Added (naming -- D3, closes MISSING-FEATURES #1)
