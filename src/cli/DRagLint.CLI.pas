@@ -4753,12 +4753,15 @@ begin
   (AArgs.Rule <> 'reserved-word-casing') and (AArgs.Rule <> 'hungarian-or-short-identifier') and
   (AArgs.Rule <> 'unused-parameter') and (AArgs.Rule <> 'identical-then-else') and
   (AArgs.Rule <> 'referenced-never-set') and (AArgs.Rule <> 'redundant-parentheses') and
-  (AArgs.Rule <> 'commented-out-code') and (AArgs.Rule <> 'function-result-ignored') then
+  (AArgs.Rule <> 'commented-out-code') and (AArgs.Rule <> 'function-result-ignored') and
+  (AArgs.Rule <> 'destructor-without-override') and (AArgs.Rule <> 'case-with-too-few-branches') and
+  (AArgs.Rule <> 'boolean-expression-complexity') and (AArgs.Rule <> 'exception-constructed-but-not-raised') and
+  (AArgs.Rule <> 'duplicate-exception-handler') then
   begin
     Writeln(Format(
         'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' +
         'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
-        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored)',
+        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4876,9 +4879,14 @@ begin
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set)
         v0.70: + redundant-parentheses + commented-out-code
-        v0.71: + function-result-ignored (all emitted from the same TDeadCodeChecker.Check) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'unused-parameter') or (AArgs.Rule = 'identical-then-else') or (AArgs.Rule = 'referenced-never-set') or (AArgs.Rule = 'redundant-parentheses') or (AArgs.Rule = 'commented-out-code') or (AArgs.Rule = 'function-result-ignored') then
-        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(AArgs.Path) do
+        v0.71: + function-result-ignored
+        v0.72: + destructor-without-override (#5) + case-with-too-few-branches +
+        boolean-expression-complexity (#6, thresholds) + exception-constructed-but-not-raised
+        + duplicate-exception-handler (#7) -- all from the same TDeadCodeChecker.Check }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'unused-parameter') or (AArgs.Rule = 'identical-then-else') or (AArgs.Rule = 'referenced-never-set') or (AArgs.Rule = 'redundant-parentheses') or (AArgs.Rule = 'commented-out-code') or (AArgs.Rule = 'function-result-ignored')
+        or (AArgs.Rule = 'destructor-without-override') or (AArgs.Rule = 'case-with-too-few-branches') or (AArgs.Rule = 'boolean-expression-complexity') or (AArgs.Rule = 'exception-constructed-but-not-raised') or (AArgs.Rule = 'duplicate-exception-handler') then
+        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(AArgs.Path,
+            Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { Free cached tree after single-file lint }
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
@@ -5777,8 +5785,10 @@ begin
         { v0.68: naming-convention prefix rules (store-optional; enables exception-ancestry sub-check) }
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath)) do
           Findings:= Findings + [F];
-        { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set) }
-        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(PasPath) do
+        { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set);
+          v0.70-72: + redundant-parens/commented-out-code/function-result-ignored + #5/#6/#7 rules }
+        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(PasPath,
+            Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4)) do
           Findings:= Findings + [F];
       except
         on E: Exception do

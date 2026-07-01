@@ -1,0 +1,5 @@
+# boolean-expression-complexity (#6, threshold=4): a boolean expression with more
+# than 4 and/or/xor operators is hard to read. Fires once at the top of the chain
+# (line 6: five 'and' operators > 4); NOT on the single-operator 'a and b' (line 8).
+boolean-expression-complexity 6
+!boolean-expression-complexity 8

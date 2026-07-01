@@ -1,0 +1,7 @@
+# exception-constructed-but-not-raised (#7): a bare-statement 'E...Create(...)' on
+# an exception-looking class with no 'raise'. Fires on line 9 (bare construction);
+# NOT on line 10 (raised -- the call is the raise's 'exception' field, parent is
+# 'raise' not 'statement') nor line 11 (assigned to E, not a bare statement).
+exception-constructed-but-not-raised 9
+!exception-constructed-but-not-raised 10
+!exception-constructed-but-not-raised 11

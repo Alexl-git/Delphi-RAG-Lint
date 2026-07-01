@@ -104,12 +104,14 @@ type
     ///     Task 6).
     /// Thread-safe if the parse cache is thread-safe for the caller's pattern;
     /// the checker itself has no shared mutable state.</remarks>
-    class function Check(const AFile: string): TArray<TLintFinding>;
+    class function Check(const AFile: string; AMinCaseBranches: Integer = 2;
+      AMaxBoolOps: Integer = 4): TArray<TLintFinding>;
   end;
 
 implementation
 
-class function TDeadCodeChecker.Check(const AFile: string): TArray<TLintFinding>;
+class function TDeadCodeChecker.Check(const AFile: string; AMinCaseBranches: Integer;
+  AMaxBoolOps: Integer): TArray<TLintFinding>;
 var
   Src            : TBytes                      ;
   PF             : TParsedFile                 ;
@@ -525,6 +527,95 @@ var
     end;
   end;
 
+  { ---- v0.72 helpers: resource (#5), complexity (#6), exceptions (#7) ---- }
+
+  { True if N's subtree carries a virtual-family directive (virtual/dynamic/
+    override/abstract). Backs destructor-without-override. }
+  function HasVirtOverrideAttr(const N: TTSNode): Boolean;
+  var I: Integer; K: string;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    K:= N.NodeType;
+    if (K = 'kVirtual') or (K = 'kDynamic') or (K = 'kOverride') or (K = 'kAbstract') then Exit(True);
+    for I:= 0 to N.ChildCount - 1 do
+      if HasVirtOverrideAttr(N.Child(I)) then Exit(True);
+  end;
+
+  { True if N's subtree contains a node of type AKind. A declProc has no nested
+    procs, so a full scan is safe for the destructor keyword / class qualifier. }
+  function SubtreeHasNodeType(const N: TTSNode; const AKind: string): Boolean;
+  var I: Integer;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    if N.NodeType = AKind then Exit(True);
+    for I:= 0 to N.ChildCount - 1 do
+      if SubtreeHasNodeType(N.Child(I), AKind) then Exit(True);
+  end;
+
+  { True if AName looks like an exception class -- 'E'+Uppercase (EFoo) or ends
+    with 'Exception'. Backs exception-constructed-but-not-raised. }
+  function LooksLikeExceptionClass(const AName: string): Boolean;
+  var S: string;
+  begin
+    S:= Trim(AName);
+    Result:= ((Length(S) >= 2) and (S[1] = 'E') and (S[2] >= 'A') and (S[2] <= 'Z'))
+          or ((Length(S) >= 9) and SameText(Copy(S, Length(S) - 8, 9), 'Exception'));
+  end;
+
+  { The class-type text (original case) of an 'on <v>: <Type> do' handler, or ''.
+    Tries the 'type' field, else the first named child that is not the variable. }
+  function HandlerClassText(const H: TTSNode): string;
+  var I: Integer; T, V, C: TTSNode;
+  begin
+    Result:= '';
+    T:= H.ChildByField('type');
+    if not T.IsNull then Exit(Trim(NodeStr(T)));
+    V:= H.ChildByField('variable');
+    for I:= 0 to H.NamedChildCount - 1 do
+    begin
+      C:= H.NamedChild(I);
+      if (not V.IsNull) and (Integer(C.StartByte) = Integer(V.StartByte)) then Continue;
+      if (C.NodeType = 'typeref') or (C.NodeType = 'identifier') then Exit(Trim(NodeStr(C)));
+    end;
+  end;
+
+  { Count boolean operator nodes (and/or/xor) in N's subtree. Backs
+    boolean-expression-complexity. }
+  function CountBoolOps(const N: TTSNode): Integer;
+  var I: Integer; K: string;
+  begin
+    Result:= 0;
+    if N.IsNull then Exit;
+    K:= N.NodeType;
+    if (K = 'kAnd') or (K = 'kOr') or (K = 'kXor') then Inc(Result);
+    for I:= 0 to N.ChildCount - 1 do Inc(Result, CountBoolOps(N.Child(I)));
+  end;
+
+  { duplicate-exception-handler: within one try's except clause, flag a second
+    'on <Class>' for a class already handled. Recurses but stops at a nested
+    'try' (its handlers are its own). ASeen is a case-insensitive TStringList. }
+  procedure FlagDupHandlers(const N: TTSNode; const ASeen: TStringList; const ATop: Boolean);
+  var I: Integer; Cls: string;
+  begin
+    if N.IsNull then Exit;
+    if (not ATop) and (N.NodeType = 'try') then Exit;
+    if N.NodeType = 'exceptionHandler' then
+    begin
+      Cls:= HandlerClassText(N);
+      if Cls <> '' then
+      begin
+        if ASeen.IndexOf(Cls) >= 0 then
+          EmitAt(N, 'duplicate-exception-handler',
+            Format('Duplicate exception handler for "%s" -- an earlier ''on'' already handles it; this branch is unreachable', [Cls]))
+        else
+          ASeen.Add(Cls);
+      end;
+    end;
+    for I:= 0 to N.ChildCount - 1 do FlagDupHandlers(N.Child(I), ASeen, False);
+  end;
+
   { PASS 2: Walk looking for defProc (unused-parameter) and ifElse
     (identical-then-else). }
   procedure Visit(const N: TTSNode);
@@ -620,7 +711,92 @@ var
           if (CName <> '') and LocalFunctions.ContainsKey(CName) then
             EmitAt(N, 'function-result-ignored',
               Format('Result of function "%s" is ignored', [Trim(NodeStr(Ent))]), 'hint');
+        end
+        { exception-constructed-but-not-raised: a bare-statement 'EFoo.Create(...)'
+          (entity = exprDot '.Create' on an exception-looking class) with no
+          'raise'. A raise wraps the call in its 'exception' field, so its parent
+          would be 'raise', not 'statement' -> a statement-parent construction is
+          an unraised exception (a common forgotten-raise bug). }
+        else if (not Ent.IsNull) and (Ent.NodeType = 'exprDot') then
+        begin
+          var Rhs: TTSNode:= Ent.ChildByField('rhs');
+          var Lhs: TTSNode:= Ent.ChildByField('lhs');
+          if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') and SameText(Trim(NodeStr(Rhs)), 'Create')
+             and (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and LooksLikeExceptionClass(NodeStr(Lhs)) then
+            EmitAt(N, 'exception-constructed-but-not-raised',
+              Format('%s.Create(...) is constructed as a statement but never raised -- did you mean ''raise %s.Create(...)''?',
+                [Trim(NodeStr(Lhs)), Trim(NodeStr(Lhs))]), 'warning');
         end;
+      end;
+    end;
+
+    { destructor-without-override (#5): a class-declaration destructor with no
+      virtual-family directive hides the inherited (virtual) destructor and leaks.
+      declProc only (the declaration -- where 'override' belongs); a 'class
+      destructor' is exempt (it has no inherited to override). }
+    if N.NodeType = 'declProc' then
+    begin
+      { The class-declaration destructor has a simple identifier name ('Destroy');
+        an IMPLEMENTATION signature (a defProc's header is also a declProc) has a
+        qualified 'genericDot' name ('TFoo.Destroy') and never carries 'override'
+        -- exclude it so we flag only the declaration where 'override' belongs. }
+      var NameN: TTSNode:= N.ChildByField('name');
+      if (not NameN.IsNull) and (NameN.NodeType = 'identifier')
+         and SubtreeHasNodeType(N, 'kDestructor') and not SubtreeHasNodeType(N, 'kClass')
+         and not HasVirtOverrideAttr(N) then
+        EmitAt(N, 'destructor-without-override',
+          'Destructor is not declared ''override'' -- it hides the inherited destructor (objects leak). Add ''override''.');
+    end;
+
+    { case-with-too-few-branches (#6): a case with fewer than AMinCaseBranches arms
+      reads better as an if. Counts 'caseCase' children only (the 'else' part is
+      not a caseCase). }
+    if N.NodeType = 'case' then
+    begin
+      var Arms: Integer:= 0;
+      for I:= 0 to N.NamedChildCount - 1 do
+        if N.NamedChild(I).NodeType = 'caseCase' then Inc(Arms);
+      if (Arms >= 1) and (Arms < AMinCaseBranches) then
+        EmitAt(N, 'case-with-too-few-branches',
+          Format('case has only %d branch(es) -- an if statement is clearer', [Arms]), 'hint');
+    end;
+
+    { boolean-expression-complexity (#6): a boolean expression (and/or/xor) with
+      more than AMaxBoolOps operators is hard to read. Flag once at the TOP of a
+      boolean-operator chain (parent is not itself a boolean exprBinary) so a long
+      chain is reported a single time. }
+    if N.NodeType = 'exprBinary' then
+    begin
+      var Op: TTSNode:= N.ChildByField('operator');
+      if (not Op.IsNull) and ((Op.NodeType = 'kAnd') or (Op.NodeType = 'kOr') or (Op.NodeType = 'kXor')) then
+      begin
+        var Par: TTSNode:= N.Parent;
+        var ParIsBool: Boolean:= False;
+        if (not Par.IsNull) and (Par.NodeType = 'exprBinary') then
+        begin
+          var POp: TTSNode:= Par.ChildByField('operator');
+          ParIsBool:= (not POp.IsNull) and ((POp.NodeType = 'kAnd') or (POp.NodeType = 'kOr') or (POp.NodeType = 'kXor'));
+        end;
+        if not ParIsBool then
+        begin
+          var Cnt: Integer:= CountBoolOps(N);
+          if Cnt > AMaxBoolOps then
+            EmitAt(N, 'boolean-expression-complexity',
+              Format('Boolean expression has %d and/or/xor operators (limit %d) -- extract named boolean sub-expressions', [Cnt, AMaxBoolOps]), 'info');
+        end;
+      end;
+    end;
+
+    { duplicate-exception-handler (#7): two 'on <Class>' clauses for the same class
+      in one try's except -- the second is unreachable. }
+    if N.NodeType = 'try' then
+    begin
+      var SeenH: TStringList:= TStringList.Create;
+      try
+        SeenH.CaseSensitive:= False;
+        FlagDupHandlers(N, SeenH, True);
+      finally
+        SeenH.Free;
       end;
     end;
 

@@ -1,0 +1,8 @@
+# destructor-without-override (#5): a class-declaration destructor with no
+# virtual-family directive hides the inherited (virtual) destructor and leaks.
+# Fires on the declaration 'destructor Destroy;' (line 6, no override); NOT on the
+# one with 'override' (line 10) nor on the implementation defProc (line 13 --
+# 'override' belongs on the declaration, not the impl).
+destructor-without-override 6
+!destructor-without-override 10
+!destructor-without-override 13

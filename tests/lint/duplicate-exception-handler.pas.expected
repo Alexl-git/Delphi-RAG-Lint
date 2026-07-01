@@ -1,0 +1,7 @@
+# duplicate-exception-handler (#7): two 'on <Class>' clauses for the same class in
+# one try's except -- the second is unreachable. Fires on the second EConvertError
+# (line 12); NOT on the first EConvertError (line 10) nor the distinct
+# EAccessViolation (line 11).
+duplicate-exception-handler 12
+!duplicate-exception-handler 10
+!duplicate-exception-handler 11
