@@ -51,7 +51,7 @@ type
   /// <summary>Dock tab frame that loads the drag-lint rule catalog and lets
   /// the user enable/disable rules and edit per-rule parameters, then saves
   /// the result back to the active project's drag-lint-lint.json.</summary>
-  TLintOptionsFrame = class(TFrame)
+  TLintOptionsFrame = class(TForm)
   private
     { top bar }
     FPanelTop  : TPanel  ;
@@ -490,7 +490,10 @@ end;
 
 constructor TLintOptionsFrame.Create(AOwner: TComponent);
 begin
-  inherited Create(AOwner);
+  { CreateNew (NOT Create) -- this is a code-built form with NO .dfm resource;
+    the TFrame/TCustomForm Create path would call InitInheritedComponent and
+    raise EResNotFound. Mirrors TDragLintStructureForm (the working dock tab). }
+  inherited CreateNew(AOwner);
   FCatalogJSON:= '';
   FHasData    := False;
   BuildControls;
@@ -1070,8 +1073,12 @@ var
   Frame: TLintOptionsFrame;
 begin
   Frame:= TLintOptionsFrame.Create(AOwner);
-  Frame.Parent:= AParent;
-  Frame.Align := alClient;
+  Frame.BorderStyle:= bsNone;      { embed child-style, no window frame }
+  Frame.FormStyle  := fsNormal;
+  Frame.Align      := alClient;
+  Frame.Parent     := AParent;
+  Frame.Visible    := True;        { CreateNew forms default to invisible }
+  Frame.ReloadCatalogAndConfig;    { load the catalog on open (graceful on failure) }
 end;
 
 end.
