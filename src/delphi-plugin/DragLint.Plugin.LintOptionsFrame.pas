@@ -723,7 +723,7 @@ begin
         CatName:= Rule.Category;
         if not CatHeights.ContainsKey(CatName) then
         begin
-          CatHeights[CatName]:= GHH + CH; { header checkbox }
+          CatHeights.AddOrSetValue(CatName, GHH + CH); { header checkbox }
           CatNames.Add(CatName);
         end;
         { one checkbox row }
@@ -753,11 +753,11 @@ begin
         Grp.Caption := CatName;
         Grp.Anchors := [akLeft, akTop, akRight];
         Inc(GrpTop, Grp.Height + GM);
-        GrpMap[CatName]:= Grp;
+        GrpMap.AddOrSetValue(CatName, Grp);
 
         { Category header tri-state checkbox }
         CatTag:= TCatTag.CreateForCat(Self);
-        CatTagMap[CatName]:= CatTag;
+        CatTagMap.AddOrSetValue(CatName, CatTag);
 
         CatCB:= TCheckBox.Create(Self);
         CatCB.Parent     := Grp;
@@ -769,9 +769,9 @@ begin
         CatCB.State      := cbGrayed;
         CatCB.Tag        := NativeInt(CatTag);
         CatCB.OnClick    := CatHeaderClick;
-        CatCBMap[CatName]:= CatCB;
+        CatCBMap.AddOrSetValue(CatName, CatCB);
 
-        CatYMap[CatName] := GHH + CH; { y for next rule row inside this grp }
+        CatYMap.AddOrSetValue(CatName, GHH + CH); { y for next rule row inside this grp }
       end;
     finally
       CatHeights.Free;
@@ -863,7 +863,7 @@ begin
 
       { Register this rule checkbox with the category tag }
       CatTagMap[CatName].RuleBoxes.Add(RuleCB);
-      RuleMap[Rule.Id]:= RuleCB;
+      RuleMap.AddOrSetValue(Rule.Id, RuleCB);
     end;
 
     { Recompute all cat header states }
