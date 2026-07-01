@@ -16,6 +16,8 @@ Debug/
 Release/
 *.exe
 *.dll
+*.bpl
+*.dcp
 *.exp
 *.lib
 *.obj

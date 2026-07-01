@@ -33,6 +33,7 @@
         <DCC_DcuOutput>.\$(Platform)\$(Config)</DCC_DcuOutput>
         <DCC_BplOutput>..\..\third_party\dll-win32</DCC_BplOutput>
         <DCC_DcpOutput>..\..\third_party\dll-win32</DCC_DcpOutput>
+        <DCC_UnitSearchPath>..\core;..\lint;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <DCC_E>false</DCC_E>
         <DCC_N>false</DCC_N>
         <DCC_S>false</DCC_S>
@@ -44,7 +45,7 @@
         <GenPackage>true</GenPackage>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
-        <DCC_UsePackage>rtl;vcl;designide;$(DCC_UsePackage)</DCC_UsePackage>
+        <DCC_UsePackage>rtl;vcl;vclsmp;designide;$(DCC_UsePackage)</DCC_UsePackage>
         <!-- The Base group sends the BPL/DCP to dll-win32; for a Win64 build that
              would clobber the 32-bit IDE's package with a 64-bit binary ("not a
              valid Win32 application"). Redirect Win64 output to dll-win64 so each
@@ -74,6 +75,7 @@
         </DelphiCompile>
         <DCCReference Include="rtl.dcp"/>
         <DCCReference Include="vcl.dcp"/>
+        <DCCReference Include="vclsmp.dcp"/>
         <DCCReference Include="designide.dcp"/>
         <DCCReference Include="DragLint.Plugin.Wizard.pas"/>
         <DCCReference Include="DragLint.Plugin.LspClient.pas"/>
@@ -117,6 +119,7 @@
         <DCCReference Include="DragLint.Plugin.GraphWindow.pas"/>
         <DCCReference Include="DragLint.Plugin.SearchParse.pas"/>
         <DCCReference Include="DragLint.Plugin.SearchForm.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.Model.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Config.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ConfigWriter.pas"/>
         <DCCReference Include="DragLint.Plugin.LintOptionsFrame.pas"/>
@@ -143,6 +146,7 @@
                 <Packages>
                     <Package Name="rtl">rtl</Package>
                     <Package Name="vcl">vcl</Package>
+                    <Package Name="vclsmp">vclsmp</Package>
                     <Package Name="designide">designide</Package>
                 </Packages>
             </Delphi.Personality>

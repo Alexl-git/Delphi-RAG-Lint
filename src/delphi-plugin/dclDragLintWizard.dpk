@@ -31,6 +31,7 @@ package dclDragLintWizard;
 requires
   rtl,
   vcl,
+  vclsmp,
   designide;
 
 contains
@@ -72,6 +73,7 @@ contains
   DragLint.Plugin.GraphWindow in 'DragLint.Plugin.GraphWindow.pas',
   DragLint.Plugin.SearchParse in 'DragLint.Plugin.SearchParse.pas',
   DragLint.Plugin.SearchForm in 'DragLint.Plugin.SearchForm.pas',
+  DRagLint.Core.Model in '..\core\DRagLint.Core.Model.pas',
   DRagLint.Lint.Config in '..\lint\DRagLint.Lint.Config.pas',
   DRagLint.Lint.ConfigWriter in '..\lint\DRagLint.Lint.ConfigWriter.pas',
   DragLint.Plugin.LintOptionsFrame in 'DragLint.Plugin.LintOptionsFrame.pas';
