@@ -1,6 +1,39 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.69 CODE-COMPLETE: D1b DONE + MERGED to local `main` @ `d4cac28`; NEXT = HUMAN in-IDE gate + v0.69 PUBLISH**
+> ## RESUME 2026-07-01 (LATEST) -- **v0.69.0-alpha PUBLISHED; NEXT = AUTONOMOUS MISSING-FEATURES LOOP (start #2 dead-code tail -> v0.70)**
+>
+> **v0.69.0-alpha SHIPPED + RELEASED** (origin/main=`b21c5af`, tag `v0.69.0-alpha`, GitHub PRERELEASE win32+win64:
+> https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.69.0-alpha ; VERSION `CLI.pas:6`=`0.69.0-alpha`; harness
+> **117/117**). Bundle: D3 (2 naming rules) + D1a (`drag-lint rules` catalog) + D2a (`rename --kind symbol|param`) +
+> D2b (`find-unit`+`safe-delete`) + D1b (IDE "Lint Options" dock tab) + **profiles+search** (tab now saves/loads FULL-config
+> named profiles via an editable combo; `drag-lint lint --profile <name>` applies the full config; live rule search).
+> Profiles+search: `Config.Load` full-profile override (lists REPLACE, maps override per-key; `ApplyConfigObject`/
+> `ApplyNamingObject`), `ConfigWriter.ListProfileNames`+`SaveToProfile` (merge-preserving), tab combo + search + `FCfg`
+> baseline. Subagent-driven, opus final review clean; t65 15/0, t63 39/0, t64 compile PASS.
+>
+> **D1b tab is CONFIRMED WORKING in the 32-bit IDE** after 4 post-merge fixes (all on main): (1) build the plugin **Win32**
+> (not Win64) -> `third_party\dll-win32` (the IDE's load path); `_bpl_build.bat` is now Win32; `DCC_UsePackage` moved to the
+> `.dproj` Base group so a cmdline Win32 build links `vclsmp`. (2) the frame is a code-built **`TForm`+`CreateNew`**, not a
+> `TFrame` (a `.dfm`-less TFrame raises `EResNotFound`). (3) `ResolveExe` prefers the sibling `dll-win64\drag-lint.exe`
+> engine (like `DLExe64`) -- the `dll-win32` exe can be a stale build predating `rules`. (4) `RenderCatalog` uses
+> `AddOrSetValue`, never `Dict[key]:=` (SetItem raises "Item not found").
+>
+> **>>> NEXT = the AUTONOMOUS MISSING-FEATURES LOOP** (user directive 2026-07-01, user away). Go through
+> `docs/lint/MISSING-FEATURES.md` top-down (#1..end), implement OPEN items + publish in CHUNKS (a section ~= a prerelease).
+> Roadmap + per-rule cadence + release recipe: **`.superpowers/sdd/missing-features-roadmap.md`**. Most items are
+> **CLI/lint/config** = console-testable + autonomously publishable; **section 13 (IDE Refactor tab + hard refactors) needs a
+> human gate -> DEFER**. NEXT OPEN CHUNK = **#2 dead-code tail** (`function-result-ignored` [info, FP-prone],
+> `commented-out-code` [lexer/comment scan], `redundant-parentheses` [AST]) -> bump v0.70 -> handoff -> repeat (#4 casts ->
+> #5 -> #6 -> #7 -> #8 -> #9 -> #10 -> #11 -> #12 autofix). Per-rule: fixture (tree-sitter-verify) -> `CheckXxx` in
+> `src/diagnostics/DRagLint.Diagnostics.AstChecks.pas` -> ~4 CLI wiring edits in `src/cli/DRagLint.CLI.pas` -> `tests/lint`
+> fixture -> rebuild CLI Win64 (`build\build_draglint_win64.bat` via Start-Process -Wait + log) -> harness green ->
+> normalize CRLF -> commit. Ledger `.superpowers/sdd/progress.md`; rule-adding node-kinds in memory `project_lint_rules_v062.md`.
+> **CAVEAT:** the profiles+search tab UI is COMPILE-verified only -- the in-IDE click-test (profiles combo + search) is
+> PENDING; the fresh Win32 BPL is deployed in `third_party\dll-win32`; fix-forward v0.69.1 if the user's click-test finds a bug.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-01 -- **v0.69 CODE-COMPLETE: D1b DONE + MERGED to local `main` @ `d4cac28`; NEXT = HUMAN in-IDE gate + v0.69 PUBLISH**
 >
 > **v0.69 D1b DONE + MERGED to local `main`** (ff `28597c3..d4cac28`; branch `feat/v069-d1b-lint-options-tab` deleted;
 > **NOT pushed/tagged**; `main` 37 commits ahead of origin; VERSION still `0.68.0-alpha`). The 4th drag-lint IDE dock tab
