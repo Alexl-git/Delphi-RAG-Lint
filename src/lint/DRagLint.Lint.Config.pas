@@ -55,8 +55,10 @@ type
     Naming: TNamingConfig;
     /// <summary>Loads config from APath (JSON). Empty/missing APath yields a
     /// no-op default config. If AProfile is non-empty and present under
-    /// "profiles", its entire config (disabled/enabled, thresholds, severity,
-    /// naming) REPLACES the top-level values (full-profile override).</summary>
+    /// "profiles", the profile is merged over the top-level values: list fields
+    /// (disabled, enabled) are replaced wholesale; map fields (severity,
+    /// thresholds, naming) are updated per-key so base entries the profile
+    /// omits are inherited unchanged.</summary>
     class function Load(const APath, AProfile: string): TLintConfig; static;
     /// <summary>Returns the configured severity for ARuleId, else ADefault.</summary>
     function ApplySeverity(const ARuleId, ADefault: string): string;
@@ -176,12 +178,10 @@ begin
   end;
   if AObj.GetValue('severity') is TJSONObject then
   begin
-    if AReplace then begin FSevNames:= nil; FSevValues:= nil; end;
+    { profile semantics: update-or-add each severity key; base keys not
+      mentioned in the profile are inherited unchanged (consistent with thresholds) }
     for Pair in (AObj.GetValue('severity') as TJSONObject) do
-    begin
-      FSevNames := FSevNames  + [Pair.JsonString.Value];
-      FSevValues:= FSevValues + [Pair.JsonValue.Value ];
-    end;
+      SetSeverityPair(Pair.JsonString.Value, Pair.JsonValue.Value);
   end;
   if AObj.GetValue('thresholds') is TJSONObject then
   begin
