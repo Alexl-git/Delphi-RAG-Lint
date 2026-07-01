@@ -5838,7 +5838,7 @@ begin
     lint-all (never the per-file Check) so within-file clones are reported once. }
   Findings:= Findings +
     DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths,
-      Cfg.ThresholdFor('duplicate-code', 60));
+      Cfg.ThresholdFor('duplicate-code', 100));
   { Interface reference cycles (needs all file paths) }
   Findings:= Findings +
     DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(FilePaths);
