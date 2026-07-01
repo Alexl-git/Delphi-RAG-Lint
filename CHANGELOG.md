@@ -5,6 +5,36 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.75.0-alpha -- 2026-07-01
+
+### Added -- type-system / casts (MISSING-FEATURES #4)
+
+- **`lossy-cast`** (`info`) -- an Ansi-narrowing cast (`AnsiString`, `AnsiChar`,
+  `ShortString`, `RawByteString`) of a Unicode-string operand drops characters
+  outside the active code page (compiler W1057).
+
+### Added -- resource / memory (MISSING-FEATURES #5)
+
+- **`create-inside-try`** (`warning`) -- a `try..finally` whose first protected
+  statement is `X := TFoo.Create` -- if the constructor raises, the `finally`
+  frees an undefined reference. Construct the object before the `try`. Handles
+  both paren-less `TFoo.Create` and `TFoo.Create(...)`.
+
+### Added -- complexity / metrics (MISSING-FEATURES #6)
+
+- **`cognitive-complexity`** (`info`, threshold `25`) -- a SonarSource-style
+  cognitive-complexity metric: each control-flow structure adds 1 + its nesting
+  depth, and each `and`/`or`/`xor` adds 1. It rewards flat code and penalises deep
+  nesting (unlike the flat cyclomatic count). Default 25 (cognitive scores higher
+  than cyclomatic); configurable via `"thresholds"`.
+
+### Added -- security (MISSING-FEATURES #10)
+
+- **`weak-random-for-security`** (`warning`) -- a security-named variable
+  (token/password/secret/salt/nonce/apikey/...) assigned from `System.Random` /
+  `RandomRange`, which is not cryptographically secure. Use a CSPRNG for tokens,
+  keys, and salts.
+
 ## v0.74.0-alpha -- 2026-07-01
 
 ### Added -- type-system / casts (MISSING-FEATURES #4)

@@ -7,13 +7,14 @@ analysis (`docs/lint/REPORT-1-delphi-lint-landscape.md`) cross-checked against t
 inventory (`rules/*.scm`, `src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`,
 `src/lint/DRagLint.Lint.ProjectRules.pas`).
 
-**Where we stand (updated v0.74.0-alpha):** ~132 rules, roughly **77-81%** of the catalogued
-breadth. **M1 (type/hierarchy resolver), M2 (CFG/data-flow engine), naming wave (#1), dead-code
-tail (#2), the cast rules (#4, incl. the store-aware exhaustive-enum-case), the autofix subsystem
-(#12), and the #5/#6/#7/#8 pure-AST tails all SHIPPED.** We **lead** on security, architecture/
-layering, and exception handling. The remaining gaps are **clone detection + cognitive complexity +
-the CK suite** (#6), the **flow/type store-backed rules** (#4 lossy casts / nullability; #5
-abstract-method-instantiation), and the **#9/#10/#11 pure-AST tails** (next).
+**Where we stand (updated v0.75.0-alpha):** ~136 rules, roughly **78-82%** of the catalogued
+breadth. **M1 (type resolver), M2 (CFG/data-flow), naming (#1), dead-code (#2), the cast rules
+(#4, incl. store-aware exhaustive-enum-case + lossy-cast), autofix (#12), the #5/#6/#7/#8 pure-AST
+tails, cognitive complexity (#6), and the security tail (#10 weak-random) all SHIPPED.** We
+**lead** on security, architecture/layering, and exception handling. The remaining gaps are
+**clone detection + the CK suite** (#6), the **store/flow rules** (#4 nullability; #5
+abstract-method-instantiation; #9 nativeint-truncation; #11 circular-uses/DIT-CBO), and a few
+**pure-AST tails** (#10 dfm-hardcoded-credential/insecure-temp-file).
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
 **(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use
@@ -76,7 +77,9 @@ Have: `redundant-as-tobject` (lexical), `freeandnil-on-interface`, plus the v0.7
       genuine down/cross-casts -- value/record casts, `TObject` upcasts, redundant + guarded casts are
       skipped. src FP-sanity = 3, all `T...(Sender)` handler casts. Opt in via config/`--rule`).
 - [ ] `non-linear-cast` / `platform-dependent-cast`
-- [ ] lossy Ansi<->Unicode cast (compiler W1057/W1058 -- needs real types)  **(M1, deferred -- untestable in the file harness)**
+- [x] lossy Ansi<->Unicode cast  -- shipped v0.75 as `lossy-cast` (AST, `info`; an Ansi-narrowing
+      cast `AnsiString`/`AnsiChar`/`ShortString`/`RawByteString`(x) of a Unicode-string operand
+      drops characters outside the code page, compiler W1057; src FP = 2 real)
 - [x] `exhaustive-enum-case`  -- shipped v0.74 (AST, `warning`, **OFF by default**; a case on an
       enum-typed selector that omits members and has no else. Enum members resolve from a same-file
       map (declEnum, no --db needed) OR the store (skEnum children) for cross-unit enums. Opt in via
@@ -91,7 +94,9 @@ Have: `unprotected-object-free`, `use-after-free`, `criticalsection-not-released
 - [x] `destructor-without-override`  -- shipped v0.72 (AST, `warning`; a class-declaration
       destructor with no virtual/dynamic/override/abstract directive hides the inherited
       virtual Destroy and leaks. Excludes `class destructor` + impl signatures; src FP = 0)
-- [ ] `create-inside-try` (object created inside the try it's protected by)
+- [x] `create-inside-try`  -- shipped v0.75 (AST, `warning`; a try..finally whose FIRST protected
+      statement is `X := TFoo.Create` -- if the constructor raises, the finally frees an undefined
+      reference. Handles paren-less + parenthesised constructors; FixInsight-parity)
 - [ ] `double-free`
 - [ ] `stream/file/bitmap created-not-freed` pairing (same technique as criticalsection)
 - [ ] `abstract-method-instantiation` (needs the store: is-the-class-abstract)  **(M1, deferred)**
@@ -106,7 +111,9 @@ Have: `cyclomatic-complexity`, `deep-nesting`, `method-too-long`, `too-many-para
       fewer than N `caseCase` arms reads better as an if)
 - [x] `unit-too-large`  -- shipped v0.74 (AST, `info`, threshold=2000; flags a unit exceeding N
       source lines. Configurable via `"thresholds": { "unit-too-large": N }`)
-- [ ] cognitive complexity (weighted-nesting metric)  -- moderate; its own chunk
+- [x] cognitive complexity  -- shipped v0.75 as `cognitive-complexity` (AST, `info`, threshold=25;
+      SonarSource-style: each control-flow structure adds 1 + its nesting depth, each and/or/xor
+      adds 1. Default 25 -- cognitive scores higher than cyclomatic. Configurable)
 - [ ] CK suite: DIT / NOC / CBO / RFC / LCOM; fan-in / fan-out  -- needs the uses/type graph
 - [ ] **clone / duplicate-code detection** (PAL CLON1-2)  -- the biggest remaining item; a token-hash pass
 
@@ -140,7 +147,9 @@ Have: `win64-pointer-cast` (heuristic), `sizeof-pointer-assumption`, `pchar-arit
 Have: `sql-injection-concat`, `unsafe-shellexecute`, `path-traversal`, `hardcoded-credential`,
 `hardcoded-connection-string`, `hardcoded-ip-address`, `hardcoded-absolute-path`,
 `unsafe-string-api`, `format-argument-count`, `format-specifier-type-mismatch`.
-- [ ] `weak-random-for-security` (Random for tokens)
+- [x] `weak-random-for-security`  -- shipped v0.75 (AST, `warning`; a security-named variable
+      (token/password/secret/salt/nonce/apikey/...) assigned from System.Random/RandomRange -- not
+      a CSPRNG. src FP = 0)
 - [ ] `dfm-hardcoded-credential` (scan DFM property values)
 - [ ] `insecure-temp-file`; `unvalidated-deserialization`
 
