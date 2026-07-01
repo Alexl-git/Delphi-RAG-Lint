@@ -159,14 +159,15 @@ begin
       DisArr:= DisArr + [AId];
     // remove from enabled to avoid contradiction
     EnArr:= RemoveId(EnArr, AId);
+    ACfg.SetDisabled(DisArr);
+    ACfg.SetEnabled(EnArr);
   end
   else
   begin
     // remove from disabled only
     DisArr:= RemoveId(DisArr, AId);
+    ACfg.SetDisabled(DisArr);
   end;
-  ACfg.SetDisabled(DisArr);
-  ACfg.SetEnabled(EnArr);
 end;
 
 class procedure TLintConfigWriter.SetRuleEnabled(var ACfg: TLintConfig;
@@ -183,14 +184,15 @@ begin
       EnArr:= EnArr + [AId];
     // remove from disabled to avoid contradiction
     DisArr:= RemoveId(DisArr, AId);
+    ACfg.SetDisabled(DisArr);
+    ACfg.SetEnabled(EnArr);
   end
   else
   begin
     // remove from enabled only
     EnArr:= RemoveId(EnArr, AId);
+    ACfg.SetEnabled(EnArr);
   end;
-  ACfg.SetDisabled(DisArr);
-  ACfg.SetEnabled(EnArr);
 end;
 
 class procedure TLintConfigWriter.SetThreshold(var ACfg: TLintConfig;
