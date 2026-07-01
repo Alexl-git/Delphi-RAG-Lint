@@ -53,6 +53,7 @@ uses
     DragLint.Plugin.Settings
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.StatusBar
+  , DragLint.Plugin.LintOptionsFrame
   ;
 
 {$R *.dfm}
@@ -71,6 +72,7 @@ type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools:
       FTabUnifiedSearch   : TTabSheet   ;
       FTabUsages          : TTabSheet   ;
       FTabGraph           : TTabSheet   ;
+      FTabLintOptions     : TTabSheet   ;
       FInited        : Boolean     ;
       FInitTimer     : TTimer      ; { v0.42: defers the embed off the ctor }
       FWatchTimer    : TTimer      ; { v0.46: auto-refresh Structure on code-tab switch }
@@ -214,6 +216,7 @@ begin
   FTabStruct       := AddTab('Structure'      );
   FTabUnifiedSearch:= AddTab('Search (no grep)');
   FTabUsages       := AddTab('Find Usages'    );
+  FTabLintOptions  := AddTab('Lint Options'   );
   { v0.46: the Graph tab was removed -- the graph is now its own dockable tool
     window (View > Tool Windows > drag-lint Graph), so the in-dock launcher tab
     was just stale clutter. }
@@ -319,6 +322,12 @@ begin
     CreateEmbeddedUsages(Self, FTabUsages);
   except
     on E: Exception do AddPlaceholder(FTabUsages, 'Find Usages failed to load: ' + E.Message);
+  end;
+
+  try
+    CreateEmbeddedLintOptions(Self, FTabLintOptions);
+  except
+    on E: Exception do AddPlaceholder(FTabLintOptions, 'Lint Options failed to load: ' + E.Message);
   end;
 end; // procedure
 

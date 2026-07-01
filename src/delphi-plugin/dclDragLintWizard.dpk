@@ -71,6 +71,9 @@ contains
   DragLint.Plugin.StatusBar in 'DragLint.Plugin.StatusBar.pas',
   DragLint.Plugin.GraphWindow in 'DragLint.Plugin.GraphWindow.pas',
   DragLint.Plugin.SearchParse in 'DragLint.Plugin.SearchParse.pas',
-  DragLint.Plugin.SearchForm in 'DragLint.Plugin.SearchForm.pas';
+  DragLint.Plugin.SearchForm in 'DragLint.Plugin.SearchForm.pas',
+  DRagLint.Lint.Config in '..\lint\DRagLint.Lint.Config.pas',
+  DRagLint.Lint.ConfigWriter in '..\lint\DRagLint.Lint.ConfigWriter.pas',
+  DragLint.Plugin.LintOptionsFrame in 'DragLint.Plugin.LintOptionsFrame.pas';
 
 end.
