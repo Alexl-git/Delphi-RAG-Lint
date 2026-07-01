@@ -1,6 +1,44 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.71.0-alpha PUBLISHED -- #4 casts + #12 autofix DONE; NEXT = continue MISSING-FEATURES loop (#5) OR #12 .scm-rule FixText autofixes**
+> ## RESUME 2026-07-01 (LATEST) -- **v0.72.0-alpha PUBLISHED -- #5/#6/#7 pure-AST tail (5 rules) DONE; NEXT = #8 (repeated-else-if-condition / property-references-itself) OR clone detection (#6)**
+>
+> **v0.72.0-alpha SHIPPED + RELEASED.** `main`=`c661d4e`, origin synced, tag `v0.72.0-alpha`, GitHub PRERELEASE win32+win64:
+> https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.72.0-alpha . VERSION `CLI.pas:6`=`0.72.0-alpha`. Harness
+> **127/127**, catalog **29/29**. **5 new pure-AST rules, all as branches in `TDeadCodeChecker.Visit`** (commit `2a6a970`;
+> `src/diagnostics/DRagLint.Diagnostics.DeadCodeChecks.pas`) -- auto-covered by DoLintAll; DoLint dispatch + allow-list + help
+> in `CLI.pas` (thresholds from `Cfg.ThresholdFor`); catalog `B()` in `RuleCatalog.pas`:
+> - **#5 `destructor-without-override`** (warning) -- a class-decl destructor (`declProc` with a simple-`identifier` name, NOT a
+>   `genericDot` impl signature) with no `kVirtual/kDynamic/kOverride/kAbstract` in its subtree. Excludes `class destructor`
+>   (`kClass`). **GOTCHA learned: a defProc's header IS a declProc**, so guard on name-kind = identifier (decl) vs genericDot (impl).
+> - **#6 `case-with-too-few-branches`** (hint, threshold=2) -- count `caseCase` children of a `case` node; flag `< N` (>=1).
+> - **#6 `boolean-expression-complexity`** (info, threshold=4) -- count `kAnd/kOr/kXor` op nodes in an `exprBinary` subtree;
+>   flag once at the chain TOP (parent operator is not itself boolean). Thresholds via new `Check(AFile, AMinCaseBranches=2, AMaxBoolOps=4)`.
+> - **#7 `exception-constructed-but-not-raised`** (warning) -- an `exprCall` whose parent is `statement` (a raise wraps the call
+>   in its `exception` field -> parent `raise`) and entity is `exprDot` `.Create` on an `E`+Upper / `*Exception` class.
+> - **#7 `duplicate-exception-handler`** (warning) -- walk a `try` collecting `exceptionHandler` class texts (`HandlerClassText`:
+>   `type` field else first non-variable typeref/identifier), case-insensitive; flag a repeat. Stops at nested `try`.
+>
+> FP-sanity src/ (101 files): 4 rules = 0; boolean-expression-complexity = 26 (ALL legit complex exprs 5-64 ops, info sev).
+> **NODE-TYPE REFERENCE (verified this session):** `declProc`/`defProc` both have a `header` field (kConstructor/kDestructor
+> children); directives (`kVirtual/kDynamic/kOverride/kAbstract`) are descendant nodes; `case`>`caseCase`>`caseLabel`;
+> `try` with `exceptionHandler` (fields `variable:`, `body:`, type via `type`/scan); `raise` field `exception:`; qualified call
+> entity = `exprDot` (lhs/rhs); boolean ops = `exprBinary` `operator:` -> `kAnd/kOr/kXor`; bare-stmt call parent = `statement`.
+>
+> **>>> NEXT (continue the loop):**
+> 1. **#8 control-flow/expression** (pure-AST): `repeated-else-if-condition` (same test twice in an if/else-if chain -- need the
+>    ifElse **condition** field name, verify first) + `property-references-itself` (a property read/write accessor naming the
+>    property itself -> infinite recursion -- need property-decl structure). -> v0.73.
+> 2. **#6 clone / duplicate-code detection** -- the biggest remaining single item; a token-hash pass. Its own chunk.
+> 3. **Store-backed** (#4 lossy casts/enum-case, #5 abstract-method-instantiation, #6 CK suite) -- need M1/graph; `check-ast --db`.
+> 4. Still pending (human): v0.70 Lint Options tab in-IDE click-test.
+>
+> **Add-a-rule pattern (v0.72-verified, node-triggered rules):** branch in `DeadCodeChecks.Visit` -> `EmitAt(node,id,msg,sev)`
+> + allow-list + help + DoLint dispatch guard in `CLI.pas` (+ thresholds arg if parameterized) + `B()` catalog + `tests/lint/<id>.pas`+`.expected`.
+> DoLintAll auto-covers. Build `build\build_draglint_win64.bat` (kill drag-lint.exe first). Publish `build\pack-lint-release.ps1 -Version X`.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-01 -- **v0.71.0-alpha PUBLISHED -- #4 casts + #12 autofix DONE; NEXT = continue MISSING-FEATURES loop (#5) OR #12 .scm-rule FixText autofixes**
 >
 > **v0.71.0-alpha SHIPPED + RELEASED.** `main`=`bf273b3`, **origin synced (0 ahead)**, tag `v0.71.0-alpha`, GitHub PRERELEASE
 > win32+win64: https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.71.0-alpha . VERSION `CLI.pas:6`=`0.71.0-alpha`.
