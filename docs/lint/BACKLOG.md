@@ -1,6 +1,49 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.70.0-alpha PUBLISHED; rule 3 function-result-ignored DONE (OFF-by-default) on `main` UNRELEASED; NEXT = publish v0.71 OR continue #4 casts**
+> ## RESUME 2026-07-01 (LATEST) -- **v0.71 IN PROGRESS on `main` UNRELEASED -- #12 autofix + #4 redundant-cast SHIPPED; finish #4/#12 then publish v0.71**
+>
+> **User directive: "complete #4 and #12 then publish as 0.71; handoff+clear+resume when context nears 75%."** This handoff is
+> that checkpoint (long session; clean point). `main`=`7d3163f`, **origin synced (0 ahead)**, tag still `v0.70.0-alpha`, tree clean
+> (only untracked `.vscode/`). Harness **121/121**, catalog **29/29**.
+>
+> **DONE this session (both committed + pushed):**
+> - **#12 autofix subsystem** (commit `df1bf6a`): `drag-lint lint <file> --fix` (and `lint-all`). Dry-run preview by default;
+>   `--apply` writes with a `.bak` (unless `--no-backup`). New primitive **`tekReplaceInLine`** (char-range replace on one line)
+>   + `EndCol` field in `src/refactor/DRagLint.Refactor.TextEdit.pas`. `BuildAutofixEdits` (in `src/cli/DRagLint.CLI.pas`, just
+>   above `FinalizeAndOutput`, invoked from FinalizeAndOutput after config+baseline filtering) dispatches by rule id. Seed fixes:
+>   `self-assignment` -> delete line (fits the existing line-applier); `redundant-parentheses` -> strip the outer `(` `)` of the
+>   span. Verified: `X := (1);`->`X := 1;`, `X := X;` deleted, `Writeln((X));`->`Writeln(X);`.
+> - **#4 `redundant-cast`** (commit `7d3163f`): pure-AST, low-FP. In `AstChecks.CheckTypeAware` (the per-file `TypeMap` check,
+>   beside `win64-pointer-cast`): flags `TFoo(x)` where `x` is declared EXACTLY `TFoo`. T-prefixed class-like entity + single
+>   identifier arg + exact case-insensitive type match -> 0 FP over src. `hint`, category `dead-code`. Wired allow-list + help +
+>   DoLint dispatch (`CheckTypeAware`); DoLintAll auto-covers. Fixture `tests/lint/redundant-cast.pas`.
+>
+> **>>> NEXT (ordered):**
+> 1. **#4 `unsafe-typecast-without-is`** -- a hard cast `TFoo(x)` with no guarding `x is TFoo`. Pure-AST feasible via T-prefix +
+>    scan enclosing block for an `is` guard, but FP-prone (many unguarded casts are safe) -> ship **OFF-by-default** like
+>    `function-result-ignored` (add to `DefDisabled` in DoLint ~4643 + DoLintAll ~5681; catalog `default_enabled=false`; test via
+>    an enabling `unsafe-typecast-without-is.config.json` = `{ "enabled": [...] }`). A hard cast is an `exprCall` (no dedicated
+>    node); `as`-cast = `exprBinary`+`kAs`.
+> 2. **#4 lossy Ansi<->Unicode / exhaustive-enum-case / nullability** -- genuinely need the **M1 store** (enum member set, exact
+>    types). Store rules can't be tested by the file harness (`lint <file>`, no `--db`). **Likely DEFER + document** (mirror the
+>    function-result-ignored honesty). Consider a store-backed path tested via `check-ast --db`.
+> 3. **#12 more autofixes** (`redundant-not-not`, `boolean-comparison-true`, `redundant-as-tobject`) -- these are **.scm** rules
+>    with NO code emission point, so span-surgery from the finding text is fragile. Do it right: add an optional **`FixText`/fix-kind
+>    to `TLintFinding`** (populated by the check / a `.scm` sidecar `fix` spec) so `BuildAutofixEdits` has an exact replacement.
+> 4. **PUBLISH v0.71**: bump `VERSION` `src/cli/DRagLint.CLI.pas:6` -> `0.71.0-alpha`; move CHANGELOG "Unreleased" -> `## v0.71.0-alpha`
+>    (already has function-result-ignored; add autofix + redundant-cast); `build\pack-lint-release.ps1 -Version 0.71.0-alpha`;
+>    `git tag v0.71.0-alpha`; `gh release create ... --prerelease` (win32+win64 zips); push.
+>
+> **GOTCHAS:** (a) the build `.bat` `copy` step SILENTLY fails if `drag-lint.exe` is locked (the edit-hook spawns it) yet echoes OK
+> -> ALWAYS `Stop-Process drag-lint -Force` then `Copy-Item` manually + verify LastWriteTime. (b) Add-a-rule = branch/emit + 3 CLI
+> edits (allow-list ~4709/4614, help ~4724/4620, DoLint dispatch) + `B()` catalog + `tests/lint/<id>.pas`+`.expected`; DoLintAll
+> usually auto-covers. (c) `.pas`+`.expected` must be CRLF + 7-bit ASCII. (d) config sidecar name = `ChangeExtension(pas,'.config.json')`
+> = `<base>.config.json`, NOT `.pas.config.json`. (e) tree-sitter self-parser chokes on set-range literals `['A'..'Z']` -> use `>=`/`<=`;
+> a `{ }` comment containing `{..}` closes early (breaks dcc). Also still pending: **v0.70 Lint Options tab in-IDE click-test** (human).
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-01 -- **v0.70.0-alpha PUBLISHED; rule 3 function-result-ignored DONE (OFF-by-default) on `main` UNRELEASED; NEXT = publish v0.71 OR continue #4 casts**
 >
 > **function-result-ignored SHIPPED to `main` (commit `48a0dc6`), UNRELEASED (main ahead of tag `v0.70.0-alpha`).**
 > Pure-AST, same-unit (no store): flags a bare-statement call (exprCall whose parent is a `statement` node) to an
