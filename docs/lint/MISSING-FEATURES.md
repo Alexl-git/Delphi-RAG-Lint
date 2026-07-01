@@ -7,12 +7,12 @@ analysis (`docs/lint/REPORT-1-delphi-lint-landscape.md`) cross-checked against t
 inventory (`rules/*.scm`, `src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`,
 `src/lint/DRagLint.Lint.ProjectRules.pas`).
 
-**Where we stand (updated v0.71.0-alpha):** ~123 rules, roughly **74-80%** of the catalogued
+**Where we stand (updated v0.72.0-alpha):** ~128 rules, roughly **75-80%** of the catalogued
 breadth. **M1 (type/hierarchy resolver), M2 (CFG/data-flow engine), naming wave (#1), dead-code
-tail (#2), the pure-AST cast rules (#4), and the autofix subsystem (#12) all SHIPPED.** We **lead**
-on security, architecture/layering, and exception handling. The remaining gaps are the **cheap
-index tail** (clone detection, cognitive complexity, the #5/#6/#7 pure-AST items) and the
-**store-backed cast rules** (#4: lossy Ansi/Unicode, exhaustive enum-case, nullability).
+tail (#2), the pure-AST cast rules (#4), the autofix subsystem (#12), and the #5/#6/#7 pure-AST
+tail all SHIPPED.** We **lead** on security, architecture/layering, and exception handling. The
+remaining gaps are **clone detection + cognitive complexity + the CK suite** (#6) and the
+**store-backed rules** (#4 lossy casts / enum-case; #5 abstract-method-instantiation).
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
 **(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use
@@ -83,26 +83,35 @@ Have: `redundant-as-tobject` (lexical), `freeandnil-on-interface`, plus the v0.7
 Have: `unprotected-object-free`, `use-after-free`, `criticalsection-not-released`,
 `dataset-open-without-close`, `missing-inherited-ctor/-dtor`, `virtual-method-in-constructor`,
 `interface-reference-cycle`.
+- [x] `destructor-without-override`  -- shipped v0.72 (AST, `warning`; a class-declaration
+      destructor with no virtual/dynamic/override/abstract directive hides the inherited
+      virtual Destroy and leaks. Excludes `class destructor` + impl signatures; src FP = 0)
 - [ ] `create-inside-try` (object created inside the try it's protected by)
 - [ ] `double-free`
 - [ ] `stream/file/bitmap created-not-freed` pairing (same technique as criticalsection)
-- [ ] `abstract-method-instantiation`; `destructor-missing-override`
+- [ ] `abstract-method-instantiation` (needs the store: is-the-class-abstract)  **(M1, deferred)**
 - [x] true ownership/lifetime across calls (created here, leaked on some path)  -- shipped v0.66 as `object-leak` (store-backed interprocedural ownership oracle)  **(M2)**
 
 ## 6. Complexity / metrics  -- partial  **(now, index-backed)**
 Have: `cyclomatic-complexity`, `deep-nesting`, `method-too-long`, `too-many-parameters`,
 `too-many-locals`, `too-many-exit-points`, `god-class`.
-- [ ] cognitive complexity; boolean-expression complexity
+- [x] `boolean-expression-complexity`  -- shipped v0.72 (AST, `info`, threshold=4; flags an
+      and/or/xor expression with more than N operators, once at the top of the chain)
+- [x] `case-with-too-few-branches`  -- shipped v0.72 (AST, `hint`, threshold=2; a case with
+      fewer than N `caseCase` arms reads better as an if)
+- [ ] cognitive complexity (weighted-nesting metric)
 - [ ] CK suite: DIT / NOC / CBO / RFC / LCOM; fan-in / fan-out
-- [ ] `unit-too-large`; `case-with-too-few-branches`
+- [ ] `unit-too-large`
 - [ ] **clone / duplicate-code detection** (PAL CLON1-2)
 
 ## 7. Exceptions  -- strong (near parity)
 Have: `empty-except`, `empty-on-handler`, `empty-finally`, `bare-except`,
 `raise-bare-exception`, `reraise-loses-stack`, `raise-in-finally`, `control-flow-in-finally`,
 `try-except-swallowed`.
-- [ ] `exception-constructed-but-not-raised` (missing `raise`)
-- [ ] `duplicate-on-class` in a try/except
+- [x] `exception-constructed-but-not-raised`  -- shipped v0.72 (AST, `warning`; a bare-statement
+      `E...Create(...)` on an exception-looking class with no `raise` -- a forgotten `raise`)
+- [x] `duplicate-on-class` in a try/except  -- shipped v0.72 as `duplicate-exception-handler`
+      (AST, `warning`; two `on <Class>` for the same class in one try -- the second is unreachable)
 
 ## 8. Control-flow / expression  -- strong
 Have: `with-statement`, `nested-with`, `goto-statement`, `off-by-one-count`,

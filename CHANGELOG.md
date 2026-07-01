@@ -5,6 +5,40 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.72.0-alpha -- 2026-07-01
+
+### Added -- resource / memory (MISSING-FEATURES #5)
+
+- **`destructor-without-override`** (`warning`) -- a class-declaration destructor
+  that carries no `virtual`/`dynamic`/`override`/`abstract` directive hides the
+  inherited virtual `Destroy` (objects leak). Flags the declaration only (a
+  `class destructor` and the implementation signature are excluded).
+
+### Added -- complexity / metrics (MISSING-FEATURES #6)
+
+- **`case-with-too-few-branches`** (`hint`, threshold `2`) -- a `case` with fewer
+  than N branches reads better as an `if`. Counts `caseCase` arms (an `else` is
+  not one). Configurable via `"thresholds": { "case-with-too-few-branches": N }`.
+- **`boolean-expression-complexity`** (`info`, threshold `4`) -- a boolean
+  expression with more than N `and`/`or`/`xor` operators is hard to read; flagged
+  once at the top of the operator chain. Configurable threshold.
+
+### Added -- exceptions (MISSING-FEATURES #7)
+
+- **`exception-constructed-but-not-raised`** (`warning`) -- a bare-statement
+  `E...Create(...)` (an exception-looking class constructed as a statement) with
+  no `raise` -- a common forgotten-`raise` bug. A raised call is the `raise`
+  node's operand, so it is not flagged; an assigned one is not a bare statement.
+- **`duplicate-exception-handler`** (`warning`) -- two `on <Class>` handlers for
+  the same class in one `try`'s `except` -- the second is unreachable. Scoped to a
+  single `try` (nested `try` handlers are its own).
+
+### Notes
+
+- All five are pure-AST, on by default. FP-sanity over `src/` (101 files): four
+  produce 0 findings; `boolean-expression-complexity` produces 26, all legitimate
+  complex expressions (5-64 operators) at `info` severity with a configurable limit.
+
 ## v0.71.0-alpha -- 2026-07-01
 
 ### Added -- autofix subsystem (MISSING-FEATURES #12)
