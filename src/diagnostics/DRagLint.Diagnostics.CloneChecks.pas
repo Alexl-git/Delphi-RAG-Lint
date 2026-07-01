@@ -328,6 +328,7 @@ begin
       begin
         Result := CompareStr(L.FilePath, R.FilePath);
         if Result = 0 then Result := L.StartLine - R.StartLine;
+        if Result = 0 then Result := CompareStr(L.Message, R.Message);
       end));
     Result := Findings.ToArray;
   finally
