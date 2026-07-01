@@ -170,7 +170,8 @@ type
     Edges          : Boolean; // --edges (cycles: show the actual uses edges)
     Causes         : Boolean; // --causes (cycles: pinpoint the symbols forcing each interface edge)
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
-    Apply          : Boolean; // --apply (uses-fix: write changes, not dry-run)
+    Apply          : Boolean; // --apply (uses-fix / autofix: write changes, not dry-run)
+    Fix            : Boolean; // --fix (lint: autofix findings that have a quick-fix; dry-run unless --apply)
     RemoveUnused   : Boolean; // --remove-unused (uses-fix: also comment unused)
     // v0.27: generate-test + format
     TestFramework: string; // --framework dunitx|dunit (default 'dunitx')
@@ -729,6 +730,7 @@ begin
     else if A = '--causes'        then Result.Causes         := True
     else if A = '--plan'          then Result.Plan           := True
     else if A = '--apply'         then Result.Apply          := True
+    else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
     else if (A = '--platform') and (i < ParamCount) then
     begin
@@ -4393,6 +4395,86 @@ begin
   if AArgs.Enable  <> '' then Result.AddEnabled (AArgs.Enable .Split([',', ' ', ';']));
 end;
 
+/// <summary>Builds the quick-fix text edits for the subset of AFindings whose
+/// rule has a registered autofix. v0.71 seed set (mechanical, no type info):
+///   self-assignment       -> delete the offending statement line(s);
+///   redundant-parentheses -> strip the outer '(' ')' of the flagged span.
+/// AFixableCount returns how many findings produced a fix. Rules without a fix
+/// are silently skipped.</summary>
+/// <remarks>Deliberately conservative: only rules whose fix is an exact,
+/// side-effect-free text edit are wired. redundant-parentheses is fixed only
+/// when the flagged span is single-line and literally starts with '(' and ends
+/// with ')'. Best for non-overlapping findings; same-line multi-fixes are not
+/// column-reconciled (the applier orders by line).</remarks>
+function BuildAutofixEdits(const AFindings: TArray<TLintFinding>;
+  out AFixableCount: Integer): TArray<TTextEdit>;
+var
+  F    : TLintFinding;
+  E    : TTextEdit   ;
+  EndL : Integer     ;
+  Cache: TDictionary<string, TStringList>;
+  SL   : TStringList ;
+  Ln, Span, Repl: string;
+
+  function LinesFor(const APath: string): TStringList;
+  begin
+    if not Cache.TryGetValue(APath, Result) then
+    begin
+      Result:= TStringList.Create;
+      if TFile.Exists(APath) then
+        Result.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
+      Cache.Add(APath, Result);
+    end;
+  end;
+begin
+  Result:= nil;
+  AFixableCount:= 0;
+  Cache:= TDictionary<string, TStringList>.Create;
+  try
+    for F in AFindings do
+    begin
+      if SameText(F.RuleId, 'self-assignment') then
+      begin
+        EndL:= F.EndLine;
+        if EndL < F.StartLine then EndL:= F.StartLine;
+        E:= Default(TTextEdit);
+        E.FilePath:= F.FilePath;
+        E.Kind    := tekDeleteLines;
+        E.Line    := F.StartLine;
+        E.EndLine := EndL;
+        Result:= Result + [E];
+        Inc(AFixableCount);
+      end
+      else if SameText(F.RuleId, 'redundant-parentheses')
+              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          if (Length(Span) >= 2) and (Span[1] = '(') and (Span[Length(Span)] = ')') then
+          begin
+            Repl:= Copy(Span, 2, Length(Span) - 2);   { strip the outer parens }
+            E:= Default(TTextEdit);
+            E.FilePath:= F.FilePath;
+            E.Kind    := tekReplaceInLine;
+            E.Line    := F.StartLine;
+            E.Col     := F.StartCol;
+            E.EndCol  := F.EndCol;
+            E.Text    := Repl;
+            Result:= Result + [E];
+            Inc(AFixableCount);
+          end;
+        end;
+      end;
+    end;
+  finally
+    for SL in Cache.Values do SL.Free;
+    Cache.Free;
+  end;
+end;
+
 /// <summary>Shared output tail for the finding-producing commands. Applies line
 /// suppressions, config (severity remap + enable/disable), and the baseline, then
 /// emits the survivors as SARIF, JSON, or -- via AEmitText -- the command's own
@@ -4447,6 +4529,28 @@ begin
   { 2b: --baseline keeps only findings absent from the baseline. }
   if AArgs.Baseline <> '' then
     Survivors:= DRagLint.Lint.Baseline.TBaseline.Filter(AArgs.Baseline, Survivors);
+
+  { 2c: --fix -- apply (or preview) quick-fixes for the config-surviving findings.
+    Dry-run by default; --apply writes (with .bak unless --no-backup). }
+  if AArgs.Fix then
+  begin
+    var FixCount: Integer;
+    var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Survivors, FixCount);
+    if FixCount = 0 then
+      Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Survivors)) + ' finding(s))')
+    else if AArgs.Apply then
+    begin
+      var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
+      Writeln(Format('autofix: applied %d fix(es) across %d file(s)%s',
+        [FixCount, Touched, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+    end
+    else
+    begin
+      Write(TTextEditApplier.RenderDryRun(Edits));
+      Writeln(Format('autofix: %d fixable finding(s) -- pass --apply to write', [FixCount]));
+    end;
+    Exit(0);
+  end;
 
   { 3: output. }
   if SameText(AArgs.Format, 'sarif') then

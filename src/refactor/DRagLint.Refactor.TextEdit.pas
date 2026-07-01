@@ -14,16 +14,19 @@ uses
   DRagLint.Core.Model, DRagLint.Core.Interfaces;
 
 type
-  TTextEditKind = (tekInsertInLine, tekInsertLines, tekDeleteLines);
+  TTextEditKind = (tekInsertInLine, tekInsertLines, tekDeleteLines, tekReplaceInLine);
 
   /// <summary>One text edit. tekInsertInLine: insert Text into line Line at
   /// 1-based column Col. tekInsertLines: insert Text (CRLF-joined) after line
-  /// Line (0 = top). tekDeleteLines: delete lines Line..EndLine inclusive.</summary>
+  /// Line (0 = top). tekDeleteLines: delete lines Line..EndLine inclusive.
+  /// tekReplaceInLine: on line Line, replace the characters in 1-based columns
+  /// [Col, EndCol) (EndCol exclusive) with Text (Text may be '' to delete).</summary>
   TTextEdit = record
     FilePath: string;
     Kind    : TTextEditKind;
     Line    : Integer;
     Col     : Integer;
+    EndCol  : Integer;      { tekReplaceInLine: 1-based exclusive end column }
     EndLine : Integer;
     Text    : string;
   end;
@@ -139,6 +142,17 @@ begin
                   Lines[E.Line - 1]:= Copy(S, 1, C - 1) + E.Text + Copy(S, C, MaxInt);
                 end;
               end;
+            tekReplaceInLine:
+              begin
+                if (E.Line >= 1) and (E.Line <= Lines.Count) then
+                begin
+                  var S: string:= Lines[E.Line - 1];
+                  var C: Integer:= E.Col;    if C < 1 then C:= 1;
+                  var EC: Integer:= E.EndCol; if EC < C then EC:= C;
+                  if EC > Length(S) + 1 then EC:= Length(S) + 1;
+                  Lines[E.Line - 1]:= Copy(S, 1, C - 1) + E.Text + Copy(S, EC, MaxInt);
+                end;
+              end;
           end;
         end;
 
@@ -180,6 +194,7 @@ begin
         tekDeleteLines : SB.AppendLine(Format('  delete lines %d..%d', [E.Line, E.EndLine]));
         tekInsertLines : SB.AppendLine(Format('  insert after line %d: %s', [E.Line, E.Text]));
         tekInsertInLine: SB.AppendLine(Format('  insert at L%d:C%d: %s', [E.Line, E.Col, E.Text]));
+        tekReplaceInLine: SB.AppendLine(Format('  replace L%d:C%d..%d -> "%s"', [E.Line, E.Col, E.EndCol, E.Text]));
       end;
     end;
     Result:= SB.ToString;
