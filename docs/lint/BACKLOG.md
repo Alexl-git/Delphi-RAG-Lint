@@ -1,6 +1,45 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.71 IN PROGRESS on `main` UNRELEASED -- #12 autofix + #4 redundant-cast SHIPPED; finish #4/#12 then publish v0.71**
+> ## RESUME 2026-07-01 (LATEST) -- **v0.71.0-alpha PUBLISHED -- #4 casts + #12 autofix DONE; NEXT = continue MISSING-FEATURES loop (#5) OR #12 .scm-rule FixText autofixes**
+>
+> **v0.71.0-alpha SHIPPED + RELEASED.** `main`=`bf273b3`, **origin synced (0 ahead)**, tag `v0.71.0-alpha`, GitHub PRERELEASE
+> win32+win64: https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.71.0-alpha . VERSION `CLI.pas:6`=`0.71.0-alpha`.
+> Harness **122/122**, catalog **29/29**. Tree clean (only untracked `.vscode/`).
+>
+> **DONE this session (user directive "complete #4 + #12 then publish v0.71"):**
+> - **#4 `unsafe-typecast-without-is`** (commit `8e6f96f`, **OFF by default**): pure-AST in `AstChecks.CheckTypeAware` beside
+>   redundant-cast. Flags a hard cast `TFoo(x)` of an object ref to a DIFFERENT class with no guarding `x is TFoo`. Fires only
+>   when target is a plausible class (`LooksLikeClassType`: T-prefix minus a value/record denylist TDateTime/TColor/TRect/... ;
+>   store `tcClass` authoritative when present) AND `x` declared `TObject` or a *different* T-class. Skips redundant same-type
+>   cast, `TObject` upcast, guarded + value casts. `is` guards collected file-wide by operator **source text** ('is') via new
+>   `CollectGuards` pre-pass (grammar-node-name independent) into a `'x|TFoo'` set. FP-sanity src/ (101 files) = **3**, all
+>   `T...(Sender)` handler downcasts. Off-wiring mirrors function-result-ignored: `DefDisabled` in DoLint(~4751)+DoLintAll(~5786),
+>   catalog `B(..,False)`, opt in via `<base>.config.json "enabled"` / `--rule`. Fixture + `.expected` + `.config.json`.
+> - **#12 `redundant-cast` autofix** (commit `4c012de`): 3rd quick-fix in `BuildAutofixEdits` (`CLI.pas:~4448`). `TFoo(x)`->`x`
+>   via `tekReplaceInLine` over `[StartCol, ')'+1)`; safe because redundant-cast fires only on a single-identifier arg (no
+>   nested paren -> ')' is the first after '('). Verified `TStringList(SL).Add('x');`->`SL.Add('x');` (dry-run + --apply/.bak).
+> - **Release** (commit `bf273b3`): VERSION bump + CHANGELOG "Unreleased" -> `## v0.71.0-alpha` (autofix subsystem + both cast
+>   rules + function-result-ignored + a Deferred note); `build\pack-lint-release.ps1 -Version 0.71.0-alpha` (both exes verified
+>   0.71.0-alpha); tag + push + `gh release create --prerelease` (2 assets).
+>
+> **>>> NEXT (user to choose / continue the loop):**
+> 1. **#12 `.scm`-rule autofixes** (`redundant-not-not`, `boolean-comparison-true`, `redundant-as-tobject`) -- these `.scm` rules
+>    have NO code emission point, so span-surgery from the finding text is fragile. Do it right: add an optional **`FixText`/fix-kind
+>    to `TLintFinding`** (populated by the check or a `.scm` sidecar `fix` spec) so `BuildAutofixEdits` gets an exact replacement.
+> 2. **#4 store-backed cast rules** (lossy Ansi<->Unicode, exhaustive enum-case, nullability) -- need the **M1 store** (member
+>    sets, exact cross-unit types); UNtestable by the file-only `lint <file>` harness -> a store-backed path tested via `check-ast
+>    --db`. **DEFERRED** (documented in CHANGELOG). 
+> 3. **Continue MISSING-FEATURES loop at #5** (roadmap `.superpowers/sdd/missing-features-roadmap.md`) -> bundle -> publish v0.72.
+> 4. **Still pending (human):** v0.70 Lint Options tab in-IDE click-test.
+>
+> **GOTCHAS unchanged:** (a) build `.bat` `copy` silently fails on an exe lock -> `Stop-Process drag-lint -Force` + verify
+> LastWriteTime. (b) the bare `src\cli\Win64\Release\drag-lint.exe` produces NO output for `--version` (missing tree-sitter DLLs
+> in that dir) -> test the canonical `third_party\dll-win64\drag-lint.exe` (has DLLs) or the zip. (c) `.pas`/`.expected` CRLF +
+> 7-bit ASCII; config sidecar = `ChangeExtension(pas,'.config.json')`.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-01 -- **v0.71 IN PROGRESS on `main` UNRELEASED -- #12 autofix + #4 redundant-cast SHIPPED; finish #4/#12 then publish v0.71**
 >
 > **User directive: "complete #4 and #12 then publish as 0.71; handoff+clear+resume when context nears 75%."** This handoff is
 > that checkpoint (long session; clean point). `main`=`7d3163f`, **origin synced (0 ahead)**, tag still `v0.70.0-alpha`, tree clean
