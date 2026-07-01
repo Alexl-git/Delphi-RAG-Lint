@@ -1071,7 +1071,11 @@ begin
   CP:= CfgPath;
   if CP = '' then Exit; { no active project -- silently skip }
 
-  Cfg:= TLintConfigWriter.LoadOrDefault(CP);
+  { Baseline from the currently-displayed config so a search filter or loaded
+    profile does not overwrite unrendered rules with stale on-disk values.
+    FCfg holds the base-or-profile-merged config set in ReloadCatalogAndConfig.
+    Rendered rules will override their values below; unrendered rules keep FCfg. }
+  Cfg:= FCfg;
 
   { Walk group boxes then their child checkboxes }
   for i:= 0 to FScroll.ControlCount - 1 do
