@@ -1,6 +1,37 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.73.0-alpha PUBLISHED -- #8 (2 rules) DONE; #1-#8 pure-AST items now closed. NEXT = clone detection (#6) OR store-backed rules (#4/#5/#6)**
+> ## RESUME 2026-07-01 (LATEST) -- **v0.74.0-alpha PUBLISHED -- #4 exhaustive-enum-case (store-aware) + #6 unit-too-large DONE; NEXT = #9/#10/#11 pure-AST tails (user-requested)**
+>
+> **v0.74.0-alpha SHIPPED + RELEASED.** `main`=`df331c8`, origin synced, tag `v0.74.0-alpha`, GitHub PRERELEASE win32+win64:
+> https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.74.0-alpha . VERSION `CLI.pas:6`=`0.74.0-alpha`. Harness
+> **131/131**, catalog **29/29**. Commit `558c2d1`.
+> - **#4 `exhaustive-enum-case`** (warning, **OFF by default**) -- in `AstChecks.CheckTypeAware`. A `case` on an enum-typed
+>   selector that omits members and has no `else`. **FIRST store-aware rule that ALSO works pure-AST** (same-file enums): new
+>   `CollectEnums` builds a same-file map from `declType`>`declEnum`>`declEnumValue` (name field); `ResolveEnumMembers` uses
+>   that map first, then the store (`FindSymbolsByExactName`->`skEnum`->`FindAllChildSymbols`->`skEnumValue`). **KEY GOTCHA
+>   (cost 4 debug builds): a `case` node's NAMED children INCLUDE the keyword tokens `kCase`/`kOf`/`kElse`/`kEnd`** -- so
+>   NamedChild(0) is `kCase`, NOT the selector. Selector = first named child that is not a caseCase/statement and does not
+>   start with 'k'. `else` = presence of a `kElse` child. caseCase has a `body` field + a `label` field (`caseLabel`>identifier).
+>   Bails on a range label ('..'). OFF-by-default (subset-without-else is common); opt in via `"enabled"`/`--rule`. Config
+>   sidecar `exhaustive-enum-case.config.json`. **Calling `.NodeType` on a NULL TTSNode ACCESS-VIOLATES in tree-sitter.DLL --
+>   always guard with `.IsNull` first (short-circuit `and`).**
+> - **#6 `unit-too-large`** (info, threshold=2000) -- in `DeadCodeChecks.Check` (new `AMaxUnitLines` param; root node
+>   `EndPoint.Row+1`). Configurable; test via a low-threshold config sidecar.
+>
+> **INDEXER NOTE (user feedback this session): use the drag-lint SELF-INDEX, not Grep, for Delphi symbol lookups** --
+> `Delphi-RAG-lint.sqlite` (outDir `C:\Projects\.drag-lint\`); `drag-lint query --name <Sym> --db <db>` /
+> `drag-lint context --task "modify <Sym>" --db <db>`. CAVEAT: the self-index is dated ~Jun 29 so it MISSES today's new
+> symbols (e.g. ResolveTypeCategory) -- reindex incrementally when querying just-changed code. Log substitutions to
+> `stats/draglint-usage.log`.
+>
+> **>>> NEXT (user-requested order): #9 (portability), #10 (security), #11 (architecture) -- pure-AST tails.** Candidates:
+> #9 `nativeint-truncation` (M1), `variant-record-type-punning`; #10 `weak-random-for-security` (Random for tokens),
+> `dfm-hardcoded-credential` (scan DFM prop values), `insecure-temp-file`; #11 `circular-uses` report (cycle listing).
+> Then: #6 clone detection (biggest); #4 lossy casts / nullability (flow/type); #6 cognitive-complexity + CK suite.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-01 -- **v0.73.0-alpha PUBLISHED -- #8 (2 rules) DONE; #1-#8 pure-AST items now closed. NEXT = clone detection (#6) OR store-backed rules (#4/#5/#6)**
 >
 > **v0.73.0-alpha SHIPPED + RELEASED.** `main`=`b3ec317`, origin synced, tag `v0.73.0-alpha`, GitHub PRERELEASE win32+win64:
 > https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.73.0-alpha . VERSION `CLI.pas:6`=`0.73.0-alpha`. Harness
