@@ -1,6 +1,33 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.72.0-alpha PUBLISHED -- #5/#6/#7 pure-AST tail (5 rules) DONE; NEXT = #8 (repeated-else-if-condition / property-references-itself) OR clone detection (#6)**
+> ## RESUME 2026-07-01 (LATEST) -- **v0.73.0-alpha PUBLISHED -- #8 (2 rules) DONE; #1-#8 pure-AST items now closed. NEXT = clone detection (#6) OR store-backed rules (#4/#5/#6)**
+>
+> **v0.73.0-alpha SHIPPED + RELEASED.** `main`=`b3ec317`, origin synced, tag `v0.73.0-alpha`, GitHub PRERELEASE win32+win64:
+> https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.73.0-alpha . VERSION `CLI.pas:6`=`0.73.0-alpha`. Harness
+> **129/129**, catalog **29/29**. **2 new pure-AST rules in `TDeadCodeChecker.Visit`** (commit `d936310`), same add-a-rule
+> pattern as v0.72:
+> - **#8 `repeated-else-if-condition`** (warning) -- same condition text twice in one if/else-if chain (later branch dead).
+>   Walk the chain from its TOP (an `ifElse` that is NOT the else-slot of another if/ifElse) via the `else` field; compare
+>   `NormaliseText(ChildByField('condition'))` case-insensitively. `if`/`ifElse` both have `condition:` + `else` fields.
+> - **#8 `property-references-itself`** (warning) -- a property read/write accessor that names the property itself (infinite
+>   recursion). Count identifier descendants of a `declProp` matching `ChildByField('name')`, EXCLUDING the name node
+>   (by StartByte) and the type subtree (`ChildByField('type')` by Start/EndByte). No accessor-field knowledge needed.
+>
+> Both 0 FP over src/. **This session shipped v0.71 (unsafe-typecast + redundant-cast autofix), v0.72 (5 rules #5/#6/#7),
+> v0.73 (2 rules #8) -- the pure-AST items in MISSING-FEATURES #1-#8 are now all closed.**
+>
+> **>>> NEXT (the remaining tail is bigger / needs engines):**
+> 1. **#6 clone / duplicate-code detection** -- the biggest single remaining pure-AST-ish item; a token/hash pass over
+>    routine bodies. Its own chunk (design first).
+> 2. **Store-backed rules** (untestable in the file-only `lint <file>` harness -> need a `check-ast --db` test path):
+>    #4 lossy Ansi<->Unicode / exhaustive-enum-case / nullability; #5 abstract-method-instantiation; #6 CK suite (DIT/NOC/
+>    CBO/RFC/LCOM), cognitive complexity, unit-too-large; #9 nativeint-truncation. Also #10 more security (weak-random,
+>    dfm-hardcoded-credential), #12 more .scm-rule autofixes (need a FixText payload on TLintFinding).
+> 3. Still pending (human): v0.70 Lint Options tab in-IDE click-test.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-01 -- **v0.72.0-alpha PUBLISHED -- #5/#6/#7 pure-AST tail (5 rules) DONE; NEXT = #8 (repeated-else-if-condition / property-references-itself) OR clone detection (#6)**
 >
 > **v0.72.0-alpha SHIPPED + RELEASED.** `main`=`c661d4e`, origin synced, tag `v0.72.0-alpha`, GitHub PRERELEASE win32+win64:
 > https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.72.0-alpha . VERSION `CLI.pas:6`=`0.72.0-alpha`. Harness
