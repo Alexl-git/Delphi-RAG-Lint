@@ -1,0 +1,5 @@
+# redundant-parentheses: fires on '(X)' (lone term) and '((X+1))' (nested);
+# must NOT fire on '(X + 1)' (parens around a binary expression).
+redundant-parentheses 6
+redundant-parentheses 7
+!redundant-parentheses 8

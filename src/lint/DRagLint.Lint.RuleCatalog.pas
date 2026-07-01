@@ -124,6 +124,7 @@ begin
     B('unused-parameter',      'dead-code', 'warning', 'Parameter is never used');
     B('identical-then-else',   'dead-code', 'warning', 'then and else branches are identical');
     B('referenced-never-set',  'dead-code', 'warning', 'Private field is read but never assigned');
+    B('redundant-parentheses', 'dead-code', 'hint',    'Redundant parentheses around a single term or nested parens');
 
     { --- data-flow --- }
     B('used-before-assignment','data-flow', 'warning', 'Variable used before assignment');

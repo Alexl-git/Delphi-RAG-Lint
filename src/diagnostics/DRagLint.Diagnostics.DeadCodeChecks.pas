@@ -2,12 +2,16 @@ unit DRagLint.Diagnostics.DeadCodeChecks;
 
 { v0.68 -- dead-code / redundant-code rules (pure AST, no DB required).
   Rules implemented here:
-    unused-parameter    : a routine parameter never referenced in the body.
-    identical-then-else : an if-else whose then and else branches are textually
-                          identical (copy-paste bug).
-    referenced-never-set: a private/strict-private class field that is read in
-                          at least one method body but never written anywhere in
-                          the class -- always holds its zero value (latent bug). }
+    unused-parameter     : a routine parameter never referenced in the body.
+    identical-then-else  : an if-else whose then and else branches are textually
+                           identical (copy-paste bug).
+    referenced-never-set : a private/strict-private class field that is read in
+                           at least one method body but never written anywhere in
+                           the class -- always holds its zero value (latent bug).
+    redundant-parentheses: (v0.70) an exprParens wrapping either another
+                           exprParens ('((X))') or a lone atomic term ('(X)',
+                           '(1)'); severity 'hint'. Composite inner expressions
+                           are not flagged (conservative, near-zero FP). }
 
 interface
 
@@ -32,8 +36,8 @@ type
     /// <param name="AFile">Absolute path to the .pas source file.</param>
     /// <returns>Array of findings (severity 'warning'); empty when the file is
     /// clean or could not be parsed.</returns>
-    /// <remarks>Rules implemented: unused-parameter, identical-then-else, and
-    /// referenced-never-set.
+    /// <remarks>Rules implemented: unused-parameter, identical-then-else,
+    /// referenced-never-set, and redundant-parentheses.
     /// unused-parameter guards (parameters NOT flagged even if unreferenced):
     ///   - var/out parameters (caller-visible side effects).
     ///   - Self (implicit class parameter).
@@ -110,8 +114,10 @@ var
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
 
-  { Emit one finding pointing at ANode with severity 'warning'. }
-  procedure EmitAt(const ANode: TTSNode; const ARuleId, AMessage: string);
+  { Emit one finding pointing at ANode. Severity defaults to 'warning'; pass
+    ASeverity to override (e.g. 'hint' for cosmetic rules). }
+  procedure EmitAt(const ANode: TTSNode; const ARuleId, AMessage: string;
+    const ASeverity: string = 'warning');
   var
     P: TTSPoint    ;
     F: TLintFinding;
@@ -119,7 +125,7 @@ var
     P:= ANode.StartPoint;
     F:= Default(TLintFinding);
     F.RuleId   := ARuleId;
-    F.Severity := 'warning';
+    F.Severity := ASeverity;
     F.Message  := AMessage;
     F.FilePath := AFile;
     F.StartLine:= Integer(P.Row   ) + 1;
@@ -405,6 +411,25 @@ var
         if (ThenTxt <> '') and (ElseTxt <> '') and (ThenTxt = ElseTxt) then
           EmitAt(N, 'identical-then-else',
             'Both branches of this if-statement are identical');
+      end;
+    end;
+
+    { redundant-parentheses: an exprParens is redundant (cosmetic) when its sole
+      wrapped expression either is itself an exprParens -- '((X))' -- or is a
+      lone atomic term (identifier / integer literal; NamedChildCount = 0), e.g.
+      '(X)' or '(1)'. Parens around a composite expression (exprBinary, exprCall,
+      exprDot, ...) are NOT flagged: they may aid readability or precedence.
+      Conservative by design -> near-zero false positives. }
+    if N.NodeType = 'exprParens' then
+    begin
+      if N.NamedChildCount >= 1 then
+      begin
+        var Inner: TTSNode:= N.NamedChild(0);
+        if Inner.NodeType = 'exprParens' then
+          EmitAt(N, 'redundant-parentheses', 'Redundant nested parentheses', 'hint')
+        else if Inner.NamedChildCount = 0 then
+          EmitAt(N, 'redundant-parentheses',
+            'Redundant parentheses around a single term', 'hint');
       end;
     end;
 
