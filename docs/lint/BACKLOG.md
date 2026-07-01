@@ -1,5 +1,39 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-01 (LATEST) -- **v0.69 CODE-COMPLETE: D1b DONE + MERGED to local `main` @ `d4cac28`; NEXT = HUMAN in-IDE gate + v0.69 PUBLISH**
+>
+> **v0.69 D1b DONE + MERGED to local `main`** (ff `28597c3..d4cac28`; branch `feat/v069-d1b-lint-options-tab` deleted;
+> **NOT pushed/tagged**; `main` 37 commits ahead of origin; VERSION still `0.68.0-alpha`). The 4th drag-lint IDE dock tab
+> **"Lint Options"**: a VCL `TLintOptionsFrame` (`src/delphi-plugin/DragLint.Plugin.LintOptionsFrame.pas`) that shells
+> `drag-lint rules --json` (via `ProcRun.RunCaptureStdout`), renders rules grouped by category (tri-state header + per-rule
+> checkbox + per-param editors + counts header), and round-trips the active project's `drag-lint-lint.json` through a NEW
+> pure serializer `TLintConfigWriter` (`src/lint/DRagLint.Lint.ConfigWriter.pas`; merge-preserving `SaveToFile`; + read
+> accessors/write mutators on `TLintConfig`). Wired via `DockForm.AddTab` (guarded `CreateEmbeddedLintOptions`); registered
+> in `.dpk`/`.dproj` with `DCC_UnitSearchPath ..\core;..\lint` + `Core.Model` + `vclsmp` (TSpinEdit). BPL builds clean Win64
+> (0 errors). Subagent-driven 5 tasks, each per-task-reviewed; **opus FINAL whole-branch review caught 2 real bugs the
+> diff-scoped reviews missed, both FIXED + re-reviewed clean:** (Critical) complexity thresholds were keyed by param name
+> `'threshold'` but the linter reads by RULE ID (`CLI.pas:4679-4715`) -> editing them was a silent no-op -> fixed to key by
+> `Rule.Id`; (Important) `SaveToFile` whole-file overwrite dropped a project's `profiles` block (data loss) -> fixed to
+> merge-preserve non-owned top-level keys (+T63 regression). Tests: T63 config round-trip **35/0**, T64 frame compile-smoke
+> **OK**. `undeclared-identifier` decision: EXCLUDED from the catalog (index-only `check-ast` diagnostic, not
+> `drag-lint-lint.json`-configurable; documented in `MISSING-FEATURES.md` section 13).
+>
+> **>>> REMAINING v0.69 (BOTH need the USER -- the agent CANNOT do these):**
+> **(1) HUMAN in-IDE gate** -- open RAD Studio (it loads the FRESH BPL the build wrote to `third_party/dll-win64`, which
+> shows ` M` tracked-but-uncommitted). Confirm a 4th **"Lint Options"** tab appears -> catalog loads
+> (`115 rules across 12 categories, K enabled`) -> toggle a rule / a section tri-state / a param / a naming prefix -> Save
+> -> `drag-lint-lint.json` round-trips. **TWO regression-specific checks the reviews surfaced:** (a) edit a COMPLEXITY
+> threshold (e.g. `deep-nesting`) + confirm `drag-lint check` actually changes; (b) open a project whose `drag-lint-lint.json`
+> has a `profiles` block + Save + confirm the profiles SURVIVE on disk.
+> **(2) v0.69 PUBLISH** (separate gate, after the in-IDE gate): bump VERSION `0.69.0-alpha` (`src/cli/DRagLint.CLI.pas:6`)
+> + CHANGELOG date + `git tag v0.69.0-alpha` + push + GitHub prerelease (win32+win64 zips).
+> NOTE: win32-vs-win64 deploy path is the user's env detail (the plan's `C:\TEMP1\bpl_staging` staging is STALE -- the
+> Win64 build writes straight to `third_party/dll-win64`); the new `*.bpl`/`*.dcp` gitignore is harmless (tracked BPLs stay
+> tracked + committable). **v0.69 is now CODE-COMPLETE (D3 + D1a + D1b + D2a + D2b all on `main`).** Ledger:
+> `.superpowers/sdd/progress.md`; task reports `.superpowers/sdd/d1b-*`.
+>
+> --- (prior milestone) ---
+>
 > ## RESUME 2026-06-30 (LATEST) -- **v0.69 D3 + D1a + D2a + D2b SHIPPED to `main` (NOT published); NEXT = D1b ONLY (IDE tab, MANUAL gate)**
 >
 > **v0.69 D2b DONE + MERGED to `main`** (local `main`=`951de40`; **NOT pushed/tagged**; `main` 21 commits ahead of origin).
