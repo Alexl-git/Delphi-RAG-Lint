@@ -4706,7 +4706,7 @@ begin
   (AArgs.Rule <> 'control-flow-in-finally') and (AArgs.Rule <> 'too-many-parameters') and (AArgs.Rule <> 'too-many-locals') and
   (AArgs.Rule <> 'method-too-long') and (AArgs.Rule <> 'deep-nesting') and (AArgs.Rule <> 'float-equality-comparison') and
   (AArgs.Rule <> 'freeandnil-on-interface') and (AArgs.Rule <> 'firedac-open-execsql-mismatch') and (AArgs.Rule <> 'unprotected-object-free') and
-  (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'redundant-cast') and (AArgs.Rule <> 'length-zero-compare') and (AArgs.Rule <> 'ui-access-in-thread') and
+  (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'redundant-cast') and (AArgs.Rule <> 'unsafe-typecast-without-is') and (AArgs.Rule <> 'length-zero-compare') and (AArgs.Rule <> 'ui-access-in-thread') and
   (AArgs.Rule <> 'global-form-variable') and (AArgs.Rule <> 'unsafe-shellexecute') and (AArgs.Rule <> 'path-traversal') and (AArgs.Rule <> 'loop-executes-at-most-once') and
   (AArgs.Rule <> 'format-argument-count') and (AArgs.Rule <> 'format-specifier-type-mismatch') and (AArgs.Rule <> 'try-except-swallowed') and (AArgs.Rule <> 'dataset-open-without-close') and (AArgs.Rule <> 'criticalsection-not-released') and (AArgs.Rule <> 'too-many-exit-points') and (AArgs.Rule <> 'cyclomatic-complexity') and (AArgs.Rule <> 'virtual-method-in-constructor') and
   (AArgs.Rule <> 'used-before-assignment') and (AArgs.Rule <> 'function-result-not-set') and (AArgs.Rule <> 'out-param-not-set') and
@@ -4721,7 +4721,7 @@ begin
   begin
     Writeln(Format(
         'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' +
-        'use-after-free, win64-pointer-cast, redundant-cast, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
+        'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
         'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored)',
         [AArgs.Rule]));
     Exit(2);
@@ -4750,6 +4750,10 @@ begin
         "enabled": ["function-result-ignored"] or --rule function-result-ignored. }
       if AArgs.Rule <> 'function-result-ignored' then
         DefDisabled:= DefDisabled + ['function-result-ignored'];
+      { v0.71: unsafe-typecast-without-is also OFF by default (an unguarded hard cast
+        is often provably safe to the author -> too noisy for the default set). }
+      if AArgs.Rule <> 'unsafe-typecast-without-is' then
+        DefDisabled:= DefDisabled + ['unsafe-typecast-without-is'];
       if TFile.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFile(AArgs.Path)
       else if TDirectory.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFolder(AArgs.Path, True)
       else
@@ -4790,7 +4794,7 @@ begin
             Cfg.ThresholdFor('method-too-long', 120), Cfg.ThresholdFor('deep-nesting', 5)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'float-equality-comparison') or (AArgs.Rule = 'freeandnil-on-interface') or (AArgs.Rule = 'win64-pointer-cast') or (AArgs.Rule = 'redundant-cast') or (AArgs.Rule = 'length-zero-compare') then
+      if (AArgs.Rule = '') or (AArgs.Rule = 'float-equality-comparison') or (AArgs.Rule = 'freeandnil-on-interface') or (AArgs.Rule = 'win64-pointer-cast') or (AArgs.Rule = 'redundant-cast') or (AArgs.Rule = 'unsafe-typecast-without-is') or (AArgs.Rule = 'length-zero-compare') then
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(AArgs.Path) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.49: FireDAC Open/ExecSQL vs SQL-kind mismatch }
@@ -5782,8 +5786,9 @@ begin
     OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', Now) + '.txt');
   end;
 
-  { v0.71: function-result-ignored is OFF by default here too (opt in via config). }
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored'],
+  { v0.71: function-result-ignored + unsafe-typecast-without-is are OFF by default
+    here too (opt in via config "enabled"). }
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;

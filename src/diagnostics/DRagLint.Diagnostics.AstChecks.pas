@@ -1378,6 +1378,7 @@ var
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>       ;
   TypeMap : TDictionary<string,string>;
+  Guards  : TDictionary<string,Integer>; { v0.71: 'x|TFoo' set of 'x is TFoo' guards }
 
   { v11 (M1): the store's resolved category for a declared type text, or
     tcUnknown when there is no store / it can't resolve (caller then falls back
@@ -1477,6 +1478,30 @@ var
     else Result:= IsStringType(T);
   end;
 
+  { v0.71: a T-prefixed name that is plausibly a CLASS (reference) type -- excludes
+    the well-known value/record/alias T-types where 'is'/'as' do not apply (a hard
+    'value cast' like TDateTime(d) is not a downcast). Name-only heuristic for the
+    no-store file-harness path; backs unsafe-typecast-without-is. When a store is
+    present it is authoritative (tcClass). }
+  function LooksLikeClassType(const T: string): Boolean;
+  var
+    S, L: string;
+    C   : TTypeCategory;
+  begin
+    S:= Trim(T);
+    Result:= (Length(S) >= 2) and (S[1] = 'T') and (S[2] >= 'A') and (S[2] <= 'Z');
+    if not Result then Exit;
+    C:= CatOf(S);
+    if C <> tcUnknown then begin Result:= (C = tcClass); Exit; end;
+    L:= LowerCase(S);
+    if (L = 'tdatetime') or (L = 'tdate') or (L = 'ttime') or (L = 'tcolor')
+    or (L = 'talphacolor') or (L = 'tpoint') or (L = 'tsize') or (L = 'trect')
+    or (L = 'tsmallpoint') or (L = 'tguid') or (L = 'tbytes') or (L = 'tvalue')
+    or (L = 'tpair') or (L = 'tdatetimefield')
+    or (Copy(L, 1, 6) = 'tarray') or (Copy(L, 1, 5) = 'tproc') or (Copy(L, 1, 5) = 'tfunc') then
+      Result:= False;
+  end;
+
   { Collect declared name -> type text for vars, params and fields (flat map). }
   procedure CollectDecls(const N: TTSNode);
   var
@@ -1503,6 +1528,37 @@ var
       end;
     end;
     for I:= 0 to N.NamedChildCount - 1 do CollectDecls(N.NamedChild(I));
+  end;
+
+  { v0.71: collect 'x is TFoo' guards into a set of 'x|TFoo' keys (both lowercased).
+    lhs must be a simple identifier; rhs is taken by source text (single token) so
+    this is independent of whether the grammar labels the type node identifier/typeref.
+    The operator is matched by TEXT ('is') to avoid depending on its node-kind name.
+    Backs unsafe-typecast-without-is: a hard cast TFoo(x) is suppressed when some
+    'x is TFoo' guard exists anywhere in the file (flat, file-scoped like TypeMap). }
+  procedure CollectGuards(const N: TTSNode);
+  var
+    I      : Integer;
+    Op, L, R: TTSNode;
+    RT     : string ;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'exprBinary' then
+    begin
+      Op:= N.ChildByField('operator');
+      if (not Op.IsNull) and SameText(Trim(NodeStr(Op)), 'is') then
+      begin
+        L:= N.ChildByField('lhs');
+        R:= N.ChildByField('rhs');
+        if (not L.IsNull) and (L.NodeType = 'identifier') and (not R.IsNull) then
+        begin
+          RT:= Trim(NodeStr(R));
+          if (RT <> '') and (Pos(' ', RT) = 0) then
+            Guards.AddOrSetValue(LowerCase(NodeStr(L)) + '|' + LowerCase(RT), 1);
+        end;
+      end;
+    end;
+    for I:= 0 to N.ChildCount - 1 do CollectGuards(N.Child(I));
   end;
 
   function OperandIsFloat(const N: TTSNode): Boolean;
@@ -1747,6 +1803,46 @@ var
           end;
         end;
       end;
+      { v0.71: unsafe-typecast-without-is (OFF by default) -- a hard cast TFoo(x) of
+        an object reference to a DIFFERENT class, with no guarding 'x is TFoo'. If x
+        is not really a TFoo at run time the cast crashes/corrupts. Pure-AST cannot
+        prove the run-time type, so this is a heuristic: fire only when both target
+        and operand are plausible class types (x declared TObject or a *different*
+        T-class -> a genuine down/cross-cast), never for value/record casts, the
+        redundant exact-type case, or a TObject upcast. Still FP-prone (many
+        unguarded casts are provably safe to the author) -> ships OFF; opt in via
+        drag-lint-lint.json "enabled" or --rule unsafe-typecast-without-is. }
+      if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
+      begin
+        var Un: string:= NodeStr(Entity);
+        if LooksLikeClassType(Un) and not SameText(Un, 'TObject') then
+        begin
+          Args:= N.ChildByField('args');
+          if (not Args.IsNull) and (Args.NamedChildCount = 1) then
+          begin
+            A0:= Args.NamedChild(0);
+            if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) then
+            begin
+              var Xn: string:= NodeStr(A0);
+              if (SameText(Trim(T), 'TObject') or (LooksLikeClassType(T) and not SameText(Trim(T), Un)))
+                 and not Guards.ContainsKey(LowerCase(Xn) + '|' + LowerCase(Un)) then
+              begin
+                P:= Entity.StartPoint;
+                F:= Default(TLintFinding);
+                F.RuleId  := 'unsafe-typecast-without-is';
+                F.Severity:= 'warning';
+                F.Message := Format('Unchecked hard cast %s(%s) -- no ''%s is %s'' guard; a wrong run-time type crashes or corrupts. Guard with ''is'' or use the ''as'' operator.', [Un, Xn, Xn, Un]);
+                F.FilePath:= AFile;
+                F.StartLine:= Integer(P.Row   ) + 1;
+                F.StartCol := Integer(P.Column) + 1;
+                F.EndLine := F.StartLine;
+                F.EndCol  := F.StartCol + Length(Un);
+                Findings.Add(F);
+              end;
+            end;
+          end;
+        end;
+      end;
     end;
     for I:= 0 to N.ChildCount - 1 do CheckExpr(N.Child(I));
   end;
@@ -1758,15 +1854,18 @@ begin
   Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
   TypeMap := TDictionary<string,string>.Create;
+  Guards  := TDictionary<string,Integer>.Create;
   try
 
     if PF.Tree <> nil then
     begin
-      CollectDecls(PF.Tree.RootNode);
-      CheckExpr(PF.Tree.RootNode);
+      CollectDecls (PF.Tree.RootNode);
+      CollectGuards(PF.Tree.RootNode);
+      CheckExpr    (PF.Tree.RootNode);
     end;
     Result:= Findings.ToArray;
   finally
+    Guards.Free;
     TypeMap.Free;
     Findings.Free;
   end;

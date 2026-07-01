@@ -1,0 +1,15 @@
+# unsafe-typecast-without-is is OFF by default (heuristic); the sibling
+# unsafe-typecast-without-is.config.json enables it via "enabled": [...] so this
+# fixture exercises it. FIRES on an unguarded hard cast of an object reference to
+# a DIFFERENT class:
+#   line 12  TButton(Sender)  -- Sender:TObject downcast, no 'Sender is TButton'
+#   line 15  TButton(E)       -- E:TEdit cross-cast, no 'E is TButton'
+# Must NOT fire when guarded (14, 'Sender is TComboBox' on line 13), on a TObject
+# upcast (16), on the redundant same-type cast (17, TEdit(E) where E:TEdit), or a
+# value/alias cast whose target is not a class (18, TColor).
+unsafe-typecast-without-is 12
+unsafe-typecast-without-is 15
+!unsafe-typecast-without-is 14
+!unsafe-typecast-without-is 16
+!unsafe-typecast-without-is 17
+!unsafe-typecast-without-is 18
