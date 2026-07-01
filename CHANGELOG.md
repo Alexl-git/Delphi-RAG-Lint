@@ -3,6 +3,19 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Added (dead-code #2 tail, cont.)
+
+- **`function-result-ignored`** (`hint`, **OFF by default**) -- flags a
+  bare-statement call (a call used as a statement, result discarded) to a
+  same-unit function (a routine declared with a return type). Opt in via
+  `drag-lint-lint.json` `"enabled": ["function-result-ignored"]` or
+  `--rule function-result-ignored`. It ships off because discarding a function
+  result is common and usually intentional in Delphi (builder/adder/runner
+  functions), so on real code it is dominated by false positives; a future
+  store-backed, effect-aware pass could make it default-on.
+
 ## v0.70.0-alpha -- 2026-07-01
 
 ### Added (dead-code tail -- MISSING-FEATURES #2)

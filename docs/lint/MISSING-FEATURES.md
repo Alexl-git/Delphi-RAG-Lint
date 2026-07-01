@@ -44,9 +44,12 @@ Have: `code-after-exit`, `self-assignment`, `comparison-same-operands`, `redunda
 - [x] `commented-out-code`  -- shipped v0.70 (AST, `hint`; whole-comment-is-a-statement heuristic: anchored
       'lhs := rhs;' or 'idpath(...);'; skips directives + doc comments; 0 FP over src after tightening from a
       20/20-FP first cut that merely matched ':=' quoted in prose)
-- [ ] `function-result-ignored` at call sites -- STILL deferred (needs symbol-store type resolution to tell a
-      function from a procedure, and is FP-prone even then -- many APIs legitimately discard results; revisit
-      after the type-resolver work, not shippable clean as pure-AST)
+- [x] `function-result-ignored`  -- shipped v0.71 **OFF by default** (AST, `hint`, opt-in via
+      `"enabled": ["function-result-ignored"]` or `--rule`). Same-unit only (flags a bare-statement call to a
+      same-unit function -- a declProc with a return-type `type` field; no store). Shipped OFF because a real src/
+      sanity gave 73 findings on clean code, ~all INTENTIONAL discards (builder/adder/runner functions) -- discarding
+      a result is common+usually-intentional in Delphi and no pure-AST heuristic separates bug from intent. A future
+      store-backed + purity/effect-aware pass could make it default-on; cross-unit resolution is the next step.
 - [ ] `multiple-statements-per-line` -- deferred (low-FP + easy, but a pure style rule; pick up in a later chunk)
 
 ## 3. Data-flow / uninitialized variables  -- SHIPPED v0.66 (the long pole, now covered)  **(M2)**

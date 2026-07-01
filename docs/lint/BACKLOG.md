@@ -1,6 +1,26 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.70.0-alpha PUBLISHED; NEXT = function-result-ignored (rule 3, user-approved) -> v0.71**
+> ## RESUME 2026-07-01 (LATEST) -- **v0.70.0-alpha PUBLISHED; rule 3 function-result-ignored DONE (OFF-by-default) on `main` UNRELEASED; NEXT = publish v0.71 OR continue #4 casts**
+>
+> **function-result-ignored SHIPPED to `main` (commit `48a0dc6`), UNRELEASED (main ahead of tag `v0.70.0-alpha`).**
+> Pure-AST, same-unit (no store): flags a bare-statement call (exprCall whose parent is a `statement` node) to an
+> unqualified identifier naming a same-unit FUNCTION (declProc with a return-type `type` field; collected in a pre-pass
+> `LocalFunctions`). **SHIPS OFF BY DEFAULT** -- a real src/ FP-sanity gave **73 findings on clean code, ~all INTENTIONAL
+> discards** (builder/adder `AddWrappedItem`/`AddNodeData`/`NewLabel`, runner `RunAndCaptureStdout`); discarding a result
+> is common+usually-intentional in Delphi, no pure-AST heuristic separates bug from intent (why MISSING-FEATURES deferred
+> it). Off-by-default wiring: appended to `DefDisabled` in DoLint (~4643) + DoLintAll (~5681 was `nil`); `ShouldKeep`
+> suppresses it unless config `"enabled": ["function-result-ignored"]`; catalog `default_enabled=false`. Opt in via that
+> config or `--rule function-result-ignored`. Fixture `tests/lint/function-result-ignored.pas` + enabling sidecar
+> **`function-result-ignored.config.json`** (harness uses `ChangeExtension(pas, '.config.json')` = `<base>.config.json`,
+> NOT `.pas.config.json`). Full harness **120/120**, catalog 29/29, default src run = 0.
+>
+> **>>> NEXT (user to choose):** (a) publish **v0.71** (bump VERSION 0.71.0-alpha + move CHANGELOG "Unreleased" -> v0.71 +
+> pack + tag + gh prerelease + push) -- for one opt-in-off rule; OR (b) continue the MISSING-FEATURES loop at **#4 casts**
+> (redundant-cast, unsafe-typecast-without-is [both pure-AST], lossy Ansi/Unicode, enum-case, nullability [M1-backed]) and
+> bundle function-result-ignored into that release. Roadmap `.superpowers/sdd/missing-features-roadmap.md`.
+> **Also still pending: the v0.70 Lint Options tab UI in-IDE click-test (search row + profile switch); fix-forward if bad.**
+>
+> --- (prior milestone -- v0.70 detail below) ---
 >
 > **v0.70.0-alpha SHIPPED + RELEASED** (origin/main=`636ffd2`, tag `v0.70.0-alpha`, GitHub PRERELEASE win32+win64:
 > https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.70.0-alpha ; VERSION `CLI.pas:6`=`0.70.0-alpha`;
