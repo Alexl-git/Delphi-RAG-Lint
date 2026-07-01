@@ -616,6 +616,24 @@ var
     for I:= 0 to N.ChildCount - 1 do FlagDupHandlers(N.Child(I), ASeen, False);
   end;
 
+  { v0.73: count identifier descendants of a declProp whose text equals the
+    property name -- EXCLUDING the name node itself (ANameStart) and the property's
+    type subtree (AType). A non-zero count means an accessor (read/write) names the
+    property itself -> infinite recursion. Backs property-references-itself. }
+  function IdentSelfRefCount(const N: TTSNode; const AName: string;
+    ANameStart: Integer; const AType: TTSNode): Integer;
+  var I: Integer;
+  begin
+    Result:= 0;
+    if N.IsNull then Exit;
+    if (not AType.IsNull) and (Integer(N.StartByte) = Integer(AType.StartByte))
+       and (Integer(N.EndByte) = Integer(AType.EndByte)) then Exit; { skip the type }
+    if (N.NodeType = 'identifier') and (Integer(N.StartByte) <> ANameStart)
+       and SameText(Trim(NodeStr(N)), AName) then Inc(Result);
+    for I:= 0 to N.ChildCount - 1 do
+      Inc(Result, IdentSelfRefCount(N.Child(I), AName, ANameStart, AType));
+  end;
+
   { PASS 2: Walk looking for defProc (unused-parameter) and ifElse
     (identical-then-else). }
   procedure Visit(const N: TTSNode);
@@ -797,6 +815,68 @@ var
         FlagDupHandlers(N, SeenH, True);
       finally
         SeenH.Free;
+      end;
+    end;
+
+    { repeated-else-if-condition (#8): the same condition text appears twice in one
+      if / else-if chain -- the later branch is unreachable. Walk the chain from its
+      TOP (an ifElse that is not itself the else-slot of another if/ifElse) via the
+      'else' field, collecting NormaliseText(condition). }
+    if N.NodeType = 'ifElse' then
+    begin
+      var Par: TTSNode:= N.Parent;
+      var IsCont: Boolean:= False;
+      if (not Par.IsNull) and ((Par.NodeType = 'if') or (Par.NodeType = 'ifElse')) then
+      begin
+        var PElse: TTSNode:= Par.ChildByField('else');
+        IsCont:= (not PElse.IsNull) and (Integer(PElse.StartByte) = Integer(N.StartByte));
+      end;
+      if not IsCont then
+      begin
+        var SeenC: TStringList:= TStringList.Create;
+        try
+          SeenC.CaseSensitive:= False;
+          var Cur: TTSNode:= N;
+          while (not Cur.IsNull) and ((Cur.NodeType = 'if') or (Cur.NodeType = 'ifElse')) do
+          begin
+            var Cond: TTSNode:= Cur.ChildByField('condition');
+            if not Cond.IsNull then
+            begin
+              var CT: string:= NormaliseText(NodeStr(Cond));
+              if CT <> '' then
+              begin
+                if SeenC.IndexOf(CT) >= 0 then
+                  EmitAt(Cond, 'repeated-else-if-condition',
+                    'This else-if repeats an earlier condition in the chain -- the branch is unreachable')
+                else
+                  SeenC.Add(CT);
+              end;
+            end;
+            var Els: TTSNode:= Cur.ChildByField('else');
+            if (not Els.IsNull) and ((Els.NodeType = 'if') or (Els.NodeType = 'ifElse')) then
+              Cur:= Els
+            else
+              Break;
+          end;
+        finally
+          SeenC.Free;
+        end;
+      end;
+    end;
+
+    { property-references-itself (#8): a property whose read/write accessor is the
+      property itself -> infinite recursion. Count identifiers in the declProp that
+      match the property name, excluding the name node + the type subtree. }
+    if N.NodeType = 'declProp' then
+    begin
+      var PName: TTSNode:= N.ChildByField('name');
+      if (not PName.IsNull) and (PName.NodeType = 'identifier') then
+      begin
+        var PTxt: string:= Trim(NodeStr(PName));
+        var PType: TTSNode:= N.ChildByField('type');
+        if (PTxt <> '') and (IdentSelfRefCount(N, PTxt, Integer(PName.StartByte), PType) >= 1) then
+          EmitAt(PName, 'property-references-itself',
+            Format('Property "%s" is read/written through itself -- this recurses forever. Use the backing field or an accessor method.', [PTxt]));
       end;
     end;
 

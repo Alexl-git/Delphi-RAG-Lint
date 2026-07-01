@@ -1,0 +1,6 @@
+# property-references-itself (#8): a property whose read/write accessor names the
+# property itself recurses forever. Fires on 'property Bar ... read Bar' (line 8:
+# the accessor equals the property name); NOT on 'property Baz ... read FBar write
+# FBar' (line 9: accessors are the backing field, not the property).
+property-references-itself 8
+!property-references-itself 9

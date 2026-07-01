@@ -1,0 +1,8 @@
+# repeated-else-if-condition (#8): the same condition text repeats in one if/else-if
+# chain -- the later branch is unreachable. Fires on the third branch's condition
+# 'X = 1' (line 10) which repeats line 6; NOT on the first 'X = 1' (line 6), the
+# distinct 'X = 2' (line 8), nor the separate chain's 'X = 6' (line 14).
+repeated-else-if-condition 10
+!repeated-else-if-condition 6
+!repeated-else-if-condition 8
+!repeated-else-if-condition 14

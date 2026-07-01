@@ -96,6 +96,8 @@ begin
     B('unsafe-typecast-without-is',    'bug-patterns', 'warning', 'Hard cast TFoo(x) of an object reference with no guarding ''x is TFoo''', False); { OFF by default -- heuristic; many unguarded casts are provably safe. Opt in via "enabled" }
     B('exception-constructed-but-not-raised', 'bug-patterns', 'warning', 'Exception E...Create(...) constructed as a statement but never raised');
     B('duplicate-exception-handler',   'bug-patterns', 'warning', 'Two ''on <Class>'' handlers for the same class in one try -- the second is unreachable');
+    B('repeated-else-if-condition',    'bug-patterns', 'warning', 'The same condition repeats in an if/else-if chain -- the later branch is unreachable');
+    B('property-references-itself',    'bug-patterns', 'warning', 'A property''s read/write accessor is the property itself -- infinite recursion');
 
     { --- resource-lifetime --- }
     B('freeandnil-on-interface',       'resource-lifetime', 'warning', 'FreeAndNil on an interface reference');
