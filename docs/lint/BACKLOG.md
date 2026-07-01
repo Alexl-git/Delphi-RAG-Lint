@@ -1,6 +1,39 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.69.0-alpha PUBLISHED; NEXT = AUTONOMOUS MISSING-FEATURES LOOP (start #2 dead-code tail -> v0.70)**
+> ## RESUME 2026-07-01 (LATEST) -- **v0.70.0-alpha PUBLISHED; NEXT = function-result-ignored (rule 3, user-approved) -> v0.71**
+>
+> **v0.70.0-alpha SHIPPED + RELEASED** (origin/main=`636ffd2`, tag `v0.70.0-alpha`, GitHub PRERELEASE win32+win64:
+> https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.70.0-alpha ; VERSION `CLI.pas:6`=`0.70.0-alpha`;
+> harness **119/119**, rule-catalog **29/29**). v0.70 = the #2 dead-code tail (2 of the 4 items) + the Lint Options tab UI:
+> - **`redundant-parentheses`** (AST `hint`): flags nested `((X))` or a lone-term `(X)`/`(1)`; skips composite inners
+>   AND initializer/constructor contexts (`N.Parent.NodeType` in defaultValue/arr|recInitializer/declConst/constInline --
+>   there a single-element `(x)` is a REQUIRED constructor, e.g. `array[0..0] of string = ('x')`).
+> - **`commented-out-code`** (AST `hint`): flags a comment whose ENTIRE stripped text is one statement -- anchored
+>   `lhs := rhs;` (bare lvalue) or `idpath(...);` (paren immediately after id); skips `{$..}` + `///`.
+> - Both **FP-hardened to 0 FP** over a real `src/` sanity (101 files). commented-out-code's naive first cut (`Pos(':=')>0`)
+>   was **20/20 FP** on doc comments quoting code -> tightened to whole-statement anchoring.
+> - Lint Options tab UI (commit `320cf9b`): search on its own row w/ a Segoe MDL2 magnifier glyph (`WideChar($E721)`,
+>   keeps .pas 7-bit ASCII) + `Search` label; profile switch no longer respawns `drag-lint rules --json` (re-renders from
+>   cached `FCatalogJSON`). **COMPILE-verified only; in-IDE click-test PENDING** (user chose publish-now over hold).
+>
+> **Add-a-rule pattern (v0.70-verified):** branch in `DeadCodeChecks.pas` `Visit` closure -> `EmitAt(node,id,msg,severity)`
+> (EmitAt gained an optional severity, default 'warning') + 3 edits in `DRagLint.CLI.pas` (allow-list ~4614, help ~4620,
+> DoLint dispatch ~4728; DoLintAll ~5628 runs the checker unconditionally = auto-covers) + `B(id,cat,sev,title)` in
+> `RuleCatalog.pas` + `tests/lint/<id>.pas`+`.pas.expected` + rebuild `build\build_draglint_win64.bat` + `run_lint_tests.ps1`.
+> **GOTCHA: the build .bat `copy` step silently fails on an exe lock (the edit-hook spawns drag-lint.exe) yet echoes OK ->
+> STALE staged exe. Always `Stop-Process drag-lint -Force` then Copy-Item manually + verify LastWriteTime.**
+>
+> **>>> NEXT = `function-result-ignored` (user-approved 2026-07-01), targeting v0.71.** Needs symbol-store type resolution
+> (function vs procedure) -> it CANNOT live in pure-AST `TDeadCodeChecker.Check(file)`; it needs a store-bearing checker +
+> wiring in the store-backed DoLint/DoLintAll path (see `check-ast` -> `TAstChecker.Check(Store,file)` / `CheckTypeAware`).
+> FP-prone even with the store (`List.Add`/`TStringList.Add`/`IndexOf` results are legitimately discarded) -> will need a
+> denylist or user-defined-only scoping + an indexed-corpus sanity pass (mirror the src/ FP-harden loop; use ORM3 DB or the
+> self-index). After rule 3 -> continue the loop at **#4 casts** (roadmap `.superpowers/sdd/missing-features-roadmap.md`).
+> `multiple-statements-per-line` still deferred (easy/low-FP; a later chunk).
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-01 -- **v0.69.0-alpha PUBLISHED; NEXT = AUTONOMOUS MISSING-FEATURES LOOP (start #2 dead-code tail -> v0.70)**
 >
 > **v0.69.0-alpha SHIPPED + RELEASED** (origin/main=`b21c5af`, tag `v0.69.0-alpha`, GitHub PRERELEASE win32+win64:
 > https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.69.0-alpha ; VERSION `CLI.pas:6`=`0.69.0-alpha`; harness
@@ -30,6 +63,14 @@
 > normalize CRLF -> commit. Ledger `.superpowers/sdd/progress.md`; rule-adding node-kinds in memory `project_lint_rules_v062.md`.
 > **CAVEAT:** the profiles+search tab UI is COMPILE-verified only -- the in-IDE click-test (profiles combo + search) is
 > PENDING; the fresh Win32 BPL is deployed in `third_party\dll-win32`; fix-forward v0.69.1 if the user's click-test finds a bug.
+>
+> **UI FOLLOW-UP 2026-07-01 (commit `320cf9b` on `main`, uncommitted->committed; COMPILE-verified, click-test PENDING):** per
+> user feedback ("profile save-load works, though slow" + "put search on its own line with a word + icon-glyph"):
+> (1) search TEdit moved out of the top button panel onto a dedicated 2nd row = a Segoe MDL2 Assets magnifier glyph
+> (U+E721, set via `WideChar($E721)` so the .pas stays 7-bit ASCII) + a "Search" label + width-stretched edit;
+> (2) `ProfileSelected` fast-path: skip re-spawning `drag-lint rules --json` on profile switch (catalog is static; reload
+> `FCfg` + re-render from cached `FCatalogJSON`). Both platform BPLs rebuilt (dll-win32 + dll-win64), 0 errors/19 pre-existing
+> hints. `DragLint.Plugin.LintOptionsFrame.pas`.
 >
 > --- (prior milestone) ---
 >
