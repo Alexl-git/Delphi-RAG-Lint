@@ -3,7 +3,8 @@ unit DRagLint.Lint.Config;
 interface
 
 uses
-  System.SysUtils, System.JSON, System.IOUtils, DRagLint.Core.Model;
+  System.SysUtils, System.JSON, System.IOUtils, System.Generics.Collections,
+  DRagLint.Core.Model;
 
 type
   /// <summary>Configurable naming conventions read from the drag-lint-lint.json
@@ -61,6 +62,24 @@ type
     procedure AddEnabled(const AIds: TArray<string>);
     /// <summary>Appends ids to the effective disabled set (for --disable).</summary>
     procedure AddDisabled(const AIds: TArray<string>);
+    // -- Read accessors (for serialization) --
+    /// <summary>Returns a copy of the disabled rule-id list.</summary>
+    function DisabledIds: TArray<string>;
+    /// <summary>Returns a copy of the enabled rule-id list.</summary>
+    function EnabledIds: TArray<string>;
+    /// <summary>Returns severity pairs (rule id, severity string).</summary>
+    function SeverityPairs: TArray<TPair<string,string>>;
+    /// <summary>Returns threshold pairs (metric name, integer value).</summary>
+    function ThresholdPairs: TArray<TPair<string,Integer>>;
+    // -- Write mutators (for config writer) --
+    /// <summary>Replaces the disabled list with AIds.</summary>
+    procedure SetDisabled(const AIds: TArray<string>);
+    /// <summary>Replaces the enabled list with AIds.</summary>
+    procedure SetEnabled(const AIds: TArray<string>);
+    /// <summary>Sets or updates the severity override for AId.</summary>
+    procedure SetSeverityPair(const AId, ASev: string);
+    /// <summary>Sets or updates the threshold override for AName.</summary>
+    procedure SetThresholdPair(const AName: string; AValue: Integer);
   end;
 
 implementation
@@ -245,6 +264,72 @@ var
 begin
   for S in AIds do
     if Trim(S) <> '' then FDisabled:= FDisabled + [Trim(S)];
+end;
+
+function TLintConfig.DisabledIds: TArray<string>;
+begin
+  Result:= FDisabled;
+end;
+
+function TLintConfig.EnabledIds: TArray<string>;
+begin
+  Result:= FEnabled;
+end;
+
+function TLintConfig.SeverityPairs: TArray<TPair<string,string>>;
+var
+  i: Integer;
+begin
+  SetLength(Result, Length(FSevNames));
+  for i:= 0 to High(FSevNames) do
+    Result[i]:= TPair<string,string>.Create(FSevNames[i], FSevValues[i]);
+end;
+
+function TLintConfig.ThresholdPairs: TArray<TPair<string,Integer>>;
+var
+  i: Integer;
+begin
+  SetLength(Result, Length(FThreshNames));
+  for i:= 0 to High(FThreshNames) do
+    Result[i]:= TPair<string,Integer>.Create(FThreshNames[i], FThreshValues[i]);
+end;
+
+procedure TLintConfig.SetDisabled(const AIds: TArray<string>);
+begin
+  FDisabled:= AIds;
+end;
+
+procedure TLintConfig.SetEnabled(const AIds: TArray<string>);
+begin
+  FEnabled:= AIds;
+end;
+
+procedure TLintConfig.SetSeverityPair(const AId, ASev: string);
+var
+  i: Integer;
+begin
+  for i:= 0 to High(FSevNames) do
+    if SameText(FSevNames[i], AId) then
+    begin
+      FSevValues[i]:= ASev;
+      Exit;
+    end;
+  FSevNames := FSevNames  + [AId];
+  FSevValues:= FSevValues + [ASev];
+end;
+
+procedure TLintConfig.SetThresholdPair(const AName: string; AValue: Integer);
+var
+  i: Integer;
+begin
+  for i:= 0 to High(FThreshNames) do
+    if SameText(FThreshNames[i], AName) then
+    begin
+      FThreshValues[i]:= AValue;
+      Exit;
+    end;
+  FThreshNames := FThreshNames  + [AName];
+  FThreshValues:= FThreshValues + [AValue];
 end;
 
 end.
