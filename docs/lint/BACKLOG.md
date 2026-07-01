@@ -1,6 +1,60 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.75.0-alpha PUBLISHED; NEXT = execute the v0.76 CLOSE PLAN (user: "close completely #4/#5/#6 + maybe #9/#10/#11, release 0.76")**
+> ## RESUME 2026-07-01 (LATEST) -- **v0.76.0-alpha PUBLISHED -- 6 rules (#2/#5/#9/#10/#11) + store-fixture harness; NEXT = v0.77 (CK suite + M2 flow items)**
+>
+> **v0.76.0-alpha SHIPPED + RELEASED.** `main`=`2e4e131`, origin synced, tag `v0.76.0-alpha`, GitHub PRERELEASE win32+win64:
+> https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.76.0-alpha . VERSION `CLI.pas:6`=`0.76.0-alpha`. Harness
+> **file 139/139 + store 3/3 + catalog 29/29**. Executed the v0.76 CLOSE PLAN (`docs/lint/PLAN-v076-close-sections.md`):
+> - **Phase 0 -- `tests/lint-store/` store-fixture harness** (`run_store_tests.ps1`): indexes each `<case>/` dir to a
+>   throwaway SQLite store, runs `check-ast --db` (per-file, default) or `lint-all --db` (via `case.json` `"mode"`),
+>   diffs vs `expected.txt` (`<rule> <file>:<line>` / `!<rule>` / `none`; single-subject shorthand `<rule> <line>`).
+>   Optional `config.json` (--config) for OFF/thresholded rules. Smoke case = interproc object-leak. README documents it.
+> - **#10 `dfm-hardcoded-credential`** (warning) -- `DRagLint.Lint.Linter.CheckDfmCredentials` in the DFM branch: a DFM
+>   `property` whose name's last dotted segment is password/pwd/secret/apikey/privatekey/passphrase AND whose `value` is a
+>   `string` node with non-empty decoded text. DFM grammar nodes: object>property{name,value}; value 'string' = quoted_string/char_code atoms.
+> - **#10 `insecure-temp-file`** (warning) -- DeadCodeChecks: an exprCall whose entity text is a file API
+>   (savetofile/loadfromfile/writealltext/tfilestream/...) containing a literalString with a hardcoded temp path
+>   (`\temp\`/`c:\temp`/`/tmp/`/`\windows\temp`). src FP=0.
+> - **#2 `multiple-statements-per-line`** (hint, **OFF by default**) -- DeadCodeChecks: 2+ sibling statement-type named
+>   children of a node sharing StartPoint.Row; one finding per line (LastFlagged guard). Container-agnostic (IsStatementNodeType
+>   set, not a fixed 'statements' container -- statements appear un-wrapped as assignment/exprCall/if/... in this grammar).
+> - **#9 `nativeint-truncation`** (warning) -- AstChecks.CheckTypeAware cast region (sibling of win64-pointer-cast): a 32-bit
+>   cast (integer/cardinal/longint/longword) of a TypeMap operand typed nativeint/nativeuint/intptr/uintptr/ptrint/ptruint.
+>   Works pure-AST (same-file TypeMap) so file-harness-testable. src FP=0.
+> - **#5 `abstract-method-instantiation`** (warning, STORE) -- CheckTypeAware exprDot branch (needs AStore<>nil): `TFoo.Create`
+>   (exprDot rhs='Create', catches both paren + paren-less) where TFoo or a class ancestor has an abstract method with no
+>   override. **KEY GOTCHA: the store records Modifiers as VISIBILITY ('public'), NOT the virtual/abstract directive.** Detect
+>   abstract by SHAPE instead: `M.IsVirtual and (M.ImplStartLine = 0)` (virtual method, no body); concrete = ImplStartLine>0.
+>   Walk ClsSym + GetTransitiveAncestors (Kind='class' only) -> FindAllChildSymbols; unimplemented = abstract names not in
+>   concrete names. src FP=0.
+> - **#11 `circular-uses`** (warning, STORE) -- `DRagLint.Lint.ProjectRules.CollectCircularUses` (called from `Run` when
+>   WantRule; lint-all runs Run unconditionally): Tarjan SCC over the unit uses-graph. Build fid<->unitname (full+stem) from
+>   skUnit syms; edges from GetUnitUsesForFile resolved to indexed units; SCC size>=2 -> one finding, anchored at the
+>   ALPHABETICALLY-FIRST unit (deterministic output), full member list in the message. Found 1 REAL 8-unit cycle in
+>   DragLint.Plugin.* (true positive). Distinct from interface-reference-cycle.
+>
+> **STORE API CHEAT-SHEET (from this session):** `ISymbolStore` (`src/core/DRagLint.Core.Interfaces.pas`): FindSymbolsByExactName,
+> FindAllChildSymbols(parentId), GetTransitiveAncestors(symId)->TTypeAncestor{Name,Kind('class'|'interface'),SymbolId},
+> GetUnitUsesForFile(fid)->TUnitUse{UnitName,Section,StartLine}, GetAllFileIds, GetFilePath, FindSymbolsByFile.
+> **TSymbol** (`Core.Model.pas`): Kind(skClass/skMethod/skUnit/...), Name, ParentId, **Modifiers=VISIBILITY not directive**,
+> **IsVirtual:Bool**, **ImplStartLine (0 = no body = abstract/interface)**. CheckTypeAware sig:
+> `(AFile; AStore:ISymbolStore=nil; AFileId:Int64=0)`; DoLintAll calls it with the store at CLI ~5783; ProjectRules.Run at ~5827.
+> **Add-a-store-rule = branch in CheckTypeAware (uses AStore) OR ProjectRules.Run + `tests/lint-store/<case>/`** (NOT tests/lint).
+>
+> **>>> NEXT (v0.77, the big/flow items -- do NOT rush):** #6 **clone/duplicate-code detection** (rolling-hash, biggest single
+> item, own design doc) + **CK suite** NOC/RFC/LCOM + **DIT/CBO** (deferred here -- project store lacks RTL ancestors so DIT
+> signal is limited in isolation; ship all class metrics together); #4 **nullability**/not-assigned-interface (M2 flow) +
+> interface/object mixing; #5 **double-free** (M2 flow: X.Free reachable twice, no reassignment); #9 default-encoding-io (M1),
+> variant-record-type-punning (deferred, no clean pure-AST signal); #10 unvalidated-deserialization (no clean signal).
+> Phase-3 plan detail is still in `docs/lint/PLAN-v076-close-sections.md` (Phase 3 section).
+>
+> **UNCOMMITTED NOTE:** a few docs (INSTALL.md/README.md/docs/INSTALL.md/src/delphi-plugin/README.md) showed unexplained
+> working-tree edits (stale "25 rules"->"130+" freshness fixes) NOT made this session; left OUT of the v0.76 commit for
+> transparency. `.claude/`+`.vscode/` local settings also untracked/left out. Review + commit separately if wanted.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-01 -- **v0.75.0-alpha PUBLISHED; the v0.76 CLOSE PLAN (user: "close completely #4/#5/#6 + maybe #9/#10/#11, release 0.76")**
 >
 > **>>> NEXT SESSION: read `docs/lint/PLAN-v076-close-sections.md` -- the full phased plan.** TL;DR: the pure-AST fruit
 > is picked; every remaining #4/#5/#6 item needs the M1 store / uses-graph / M2 flow, and the file-only harness can't test
