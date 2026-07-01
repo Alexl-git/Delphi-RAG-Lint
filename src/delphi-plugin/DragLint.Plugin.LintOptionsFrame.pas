@@ -68,12 +68,16 @@ type
     FHasData   : Boolean;       { True after at least one successful load }
     FProfile   : string;        { active profile name; '' = base config }
     FCfg       : TLintConfig;   { active config (base or profile-merged) }
+    { search filter }
+    FSearch    : string;        { current trimmed search text; '' = show all }
+    FEdtSearch : TEdit;         { search box in top panel }
     procedure BuildControls;
     procedure BtnReloadClick  (Sender: TObject);
     procedure BtnSaveClick    (Sender: TObject);
     procedure CatHeaderClick  (Sender: TObject);
     procedure RuleChecked     (Sender: TObject);
     procedure ProfileSelected (Sender: TObject);
+    procedure SearchChanged   (Sender: TObject);
     procedure ClearBody;
     procedure RenderCatalog(const AJSON: string);
     procedure UpdateCountsLabel;
@@ -103,6 +107,7 @@ implementation
 
 uses
   System.SysUtils
+  , System.StrUtils
   , System.JSON
   , System.Generics.Collections
   , Winapi.Windows
@@ -504,6 +509,29 @@ begin
 end;
 
 { ============================================================
+  Search helpers
+  ============================================================ }
+
+/// <summary>Returns True iff ARule should be shown given ASearch filter.
+/// Case-insensitive substring match on Id or Title; empty ASearch = show all.</summary>
+function RuleMatchesSearch(const ARule: TCatalogRule; const ASearch: string): Boolean;
+begin
+  if ASearch = '' then
+    Result:= True
+  else
+    Result:= ContainsText(ARule.Id, ASearch) or ContainsText(ARule.Title, ASearch);
+end;
+
+/// <summary>OnChange handler for the search TEdit.  Updates FSearch and
+/// re-renders the catalog from the cached JSON without a CLI re-call.</summary>
+procedure TLintOptionsFrame.SearchChanged(Sender: TObject);
+begin
+  FSearch:= Trim(FEdtSearch.Text);
+  if FHasData then
+    RenderCatalog(FCatalogJSON);
+end;
+
+{ ============================================================
   TLintOptionsFrame
   ============================================================ }
 
@@ -575,6 +603,17 @@ begin
   FLblProfile.Top     := 10;
   FLblProfile.Left    := FCboProfile.Left - 48;
   FLblProfile.Anchors := [akTop, akRight];
+
+  { Search box: placed between counts label and profile label }
+  FEdtSearch:= TEdit.Create(Self);
+  FEdtSearch.Parent   := FPanelTop;
+  FEdtSearch.Width    := 120;
+  FEdtSearch.Height   := 24;
+  FEdtSearch.Top      := 4;
+  FEdtSearch.Anchors  := [akTop, akRight];
+  FEdtSearch.Left     := FLblProfile.Left - FEdtSearch.Width - 4;
+  FEdtSearch.TextHint := 'Search rules...';
+  FEdtSearch.OnChange := SearchChanged;
 
   FLblCounts:= TLabel.Create(Self);
   FLblCounts.Parent  := FPanelTop;
@@ -744,6 +783,7 @@ begin
     try
       for Rule in Rules do
       begin
+        if not RuleMatchesSearch(Rule, FSearch) then Continue;
         CatName:= Rule.Category;
         if not CatHeights.ContainsKey(CatName) then
         begin
@@ -804,6 +844,7 @@ begin
     { Second pass: create rule controls }
     for Rule in Rules do
     begin
+      if not RuleMatchesSearch(Rule, FSearch) then Continue;
       CatName:= Rule.Category;
       Grp    := GrpMap[CatName];
       GrpW   := Grp.Width - LM * 2;
