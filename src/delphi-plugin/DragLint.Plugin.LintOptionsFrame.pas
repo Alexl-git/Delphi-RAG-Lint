@@ -811,7 +811,7 @@ begin
           if IsNamingIntParam(Param.Name) then
             DefVal:= Cfg.Naming.MinIdentifierLen
           else
-            DefVal:= Cfg.ThresholdFor(Param.Name, DefVal);
+            DefVal:= Cfg.ThresholdFor(Rule.Id, DefVal); { key by rule id, not param name }
 
           SpnEdt:= TSpinEdit.Create(Self);
           SpnEdt.Parent  := Grp;
@@ -1022,7 +1022,7 @@ begin
           if IsNamingIntParam(PE.ParamName) then
             Cfg.Naming.MinIdentifierLen:= SpnEdt.Value
           else
-            TLintConfigWriter.SetThreshold(Cfg, PE.ParamName, SpnEdt.Value);
+            TLintConfigWriter.SetThreshold(Cfg, Rule.Id, SpnEdt.Value); { key by rule id, not param name }
         end
         else
         begin

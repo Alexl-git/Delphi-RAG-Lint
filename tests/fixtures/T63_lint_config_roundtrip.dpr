@@ -2,6 +2,7 @@ program T63_lint_config_roundtrip;
 {$APPTYPE CONSOLE}
 uses
   System.SysUtils, System.IOUtils, System.Generics.Collections,
+  System.JSON,
   DRagLint.Lint.Config,
   DRagLint.Lint.ConfigWriter;
 
@@ -20,12 +21,19 @@ begin
 end;
 
 var
-  Cfg, Cfg2: TLintConfig;
-  SamplePath, TmpPath: string;
-  SampleJson: string;
+  Cfg, Cfg2  : TLintConfig;
+  MergeCfg   : TLintConfig;
+  SamplePath , TmpPath, MergePath: string;
+  SampleJson , MergeJson, SavedText: string;
   DisIds, EnIds: TArray<string>;
   Found: Boolean;
   S: string;
+  SavedObj   : TJSONObject;
+  ProfilesVal: TJSONValue;
+  StrictVal  : TJSONValue;
+  CKVal      : TJSONValue;
+  ThrVal     : TJSONValue;
+  DNVal      : TJSONValue;
 
 begin
   Pass:= 0;
@@ -168,6 +176,68 @@ begin
     'ToJson: short_identifier_check is string "true"');
   Check(Pos('"short_identifier_check": true', Json) = 0,
     'ToJson: short_identifier_check is NOT a bare bool true');
+
+  // ------------------------------------------------------------------
+  // Fix B regression: SaveToFile must preserve non-owned keys (profiles,
+  // custom_key) while updating owned keys (thresholds).
+  // ------------------------------------------------------------------
+  MergePath:= TPath.Combine(TPath.GetTempPath, 't63-merge.json');
+  MergeJson:=
+    '{'#13#10 +
+    '  "disabled": [],'#13#10 +
+    '  "enabled":  [],'#13#10 +
+    '  "severity": {},'#13#10 +
+    '  "thresholds": { "too-many-parameters": 5 },'#13#10 +
+    '  "naming": {},'#13#10 +
+    '  "profiles": { "strict": { "disabled": ["magic-number"] } },'#13#10 +
+    '  "custom_key": 123'#13#10 +
+    '}';
+  TFile.WriteAllText(MergePath, MergeJson);
+
+  MergeCfg:= TLintConfigWriter.LoadOrDefault(MergePath);
+  TLintConfigWriter.SetThreshold(MergeCfg, 'deep-nesting', 9);
+  TLintConfigWriter.SaveToFile(MergePath, MergeCfg);
+
+  { Re-read raw saved file and verify }
+  SavedText:= TFile.ReadAllText(MergePath);
+  SavedObj := TJSONObject.ParseJSONValue(SavedText) as TJSONObject;
+  Check(SavedObj <> nil, 'Fix B: saved file parses as JSON object');
+  if SavedObj <> nil then
+  begin
+    { (a) profiles block preserved }
+    ProfilesVal:= SavedObj.GetValue('profiles');
+    Check(ProfilesVal <> nil, 'Fix B: profiles key preserved after SaveToFile');
+    if ProfilesVal is TJSONObject then
+    begin
+      StrictVal:= TJSONObject(ProfilesVal).GetValue('strict');
+      Check(StrictVal <> nil, 'Fix B: profiles.strict preserved');
+    end
+    else
+      Check(False, 'Fix B: profiles is a JSON object');
+
+    { (b) custom_key preserved = 123 }
+    CKVal:= SavedObj.GetValue('custom_key');
+    Check(CKVal <> nil, 'Fix B: custom_key preserved after SaveToFile');
+    if CKVal is TJSONNumber then
+      Check(TJSONNumber(CKVal).AsInt = 123, 'Fix B: custom_key = 123')
+    else
+      Check(False, 'Fix B: custom_key is a number');
+
+    { (c) mutated threshold written }
+    ThrVal:= SavedObj.GetValue('thresholds');
+    Check(ThrVal is TJSONObject, 'Fix B: thresholds is object');
+    if ThrVal is TJSONObject then
+    begin
+      DNVal:= TJSONObject(ThrVal).GetValue('deep-nesting');
+      Check(DNVal is TJSONNumber, 'Fix B: thresholds.deep-nesting exists');
+      if DNVal is TJSONNumber then
+        Check(TJSONNumber(DNVal).AsInt = 9, 'Fix B: thresholds.deep-nesting = 9');
+    end;
+
+    SavedObj.Free;
+  end;
+
+  TFile.Delete(MergePath);
 
   // ------------------------------------------------------------------
   // Cleanup

@@ -214,12 +214,70 @@ end;
 
 class procedure TLintConfigWriter.SaveToFile(const APath: string;
   const ACfg: TLintConfig);
+{ Writer-owned top-level keys; all others are preserved from an existing file. }
+const
+  OwnedKeys: array[0..4] of string = (
+    'disabled', 'enabled', 'severity', 'thresholds', 'naming');
 var
   Json, Normalized: string;
-  Bytes: TBytes;
-  i: Integer;
+  Bytes  : TBytes;
+  i, k   : Integer;
+  Existing, OwnedObj, Merged: TJSONObject;
+  ExistText: string;
+  Pair  : TJSONPair;
+  IsOwned: Boolean;
 begin
+  { Build the owned-keys object from ACfg }
   Json:= ToJson(ACfg);
+
+  { If the file already exists, parse it and copy non-owned keys into the
+    merged output so that sections like "profiles" are never dropped. }
+  Merged:= nil;
+  Existing:= nil;
+  OwnedObj:= nil;
+  try
+    if TFile.Exists(APath) then
+    begin
+      try
+        ExistText:= TFile.ReadAllText(APath);
+        Existing:= TJSONObject.ParseJSONValue(ExistText) as TJSONObject;
+      except
+        Existing:= nil; { parse failure -- fall through to plain write }
+      end;
+    end;
+
+    if Existing <> nil then
+    begin
+      OwnedObj:= TJSONObject.ParseJSONValue(Json) as TJSONObject;
+      if OwnedObj <> nil then
+      begin
+        Merged:= TJSONObject.Create;
+        { 1. Copy non-owned pairs from existing file (preserves profiles, etc.) }
+        for Pair in Existing do
+        begin
+          IsOwned:= False;
+          for k:= 0 to High(OwnedKeys) do
+            if SameText(Pair.JsonString.Value, OwnedKeys[k]) then
+            begin
+              IsOwned:= True;
+              Break;
+            end;
+          if not IsOwned then
+            Merged.AddPair(
+              TJSONPair(Pair.Clone));
+        end;
+        { 2. Add freshly-serialized owned pairs }
+        for Pair in OwnedObj do
+          Merged.AddPair(TJSONPair(Pair.Clone));
+        Json:= Merged.Format(2);
+      end;
+    end;
+  finally
+    Merged.Free;
+    OwnedObj.Free;
+    Existing.Free;
+  end;
+
   // normalise to CRLF
   Normalized:= StringReplace(Json, #13#10, #10, [rfReplaceAll]);
   Normalized:= StringReplace(Normalized, #10, #13#10, [rfReplaceAll]);
