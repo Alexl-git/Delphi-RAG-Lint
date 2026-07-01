@@ -7,12 +7,13 @@ analysis (`docs/lint/REPORT-1-delphi-lint-landscape.md`) cross-checked against t
 inventory (`rules/*.scm`, `src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`,
 `src/lint/DRagLint.Lint.ProjectRules.pas`).
 
-**Where we stand (updated v0.73.0-alpha):** ~130 rules, roughly **76-80%** of the catalogued
+**Where we stand (updated v0.74.0-alpha):** ~132 rules, roughly **77-81%** of the catalogued
 breadth. **M1 (type/hierarchy resolver), M2 (CFG/data-flow engine), naming wave (#1), dead-code
-tail (#2), the pure-AST cast rules (#4), the autofix subsystem (#12), and the #5/#6/#7/#8 pure-AST
-tails all SHIPPED.** We **lead** on security, architecture/layering, and exception handling. The
-remaining gaps are **clone detection + cognitive complexity + the CK suite** (#6) and the
-**store-backed rules** (#4 lossy casts / enum-case; #5 abstract-method-instantiation).
+tail (#2), the cast rules (#4, incl. the store-aware exhaustive-enum-case), the autofix subsystem
+(#12), and the #5/#6/#7/#8 pure-AST tails all SHIPPED.** We **lead** on security, architecture/
+layering, and exception handling. The remaining gaps are **clone detection + cognitive complexity +
+the CK suite** (#6), the **flow/type store-backed rules** (#4 lossy casts / nullability; #5
+abstract-method-instantiation), and the **#9/#10/#11 pure-AST tails** (next).
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
 **(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use
@@ -76,8 +77,12 @@ Have: `redundant-as-tobject` (lexical), `freeandnil-on-interface`, plus the v0.7
       skipped. src FP-sanity = 3, all `T...(Sender)` handler casts. Opt in via config/`--rule`).
 - [ ] `non-linear-cast` / `platform-dependent-cast`
 - [ ] lossy Ansi<->Unicode cast (compiler W1057/W1058 -- needs real types)  **(M1, deferred -- untestable in the file harness)**
-- [ ] interface/object mixing; `exhaustive-enum-case` (needs the enum member set)  **(M1, deferred)**
-- [ ] nullability / not-assigned-interface use  **(M1, deferred)**
+- [x] `exhaustive-enum-case`  -- shipped v0.74 (AST, `warning`, **OFF by default**; a case on an
+      enum-typed selector that omits members and has no else. Enum members resolve from a same-file
+      map (declEnum, no --db needed) OR the store (skEnum children) for cross-unit enums. Opt in via
+      `"enabled"` / `--rule` -- built for enum-heavy code like ORM3. src FP: 0 same-file)
+- [ ] interface/object mixing (needs deeper type analysis)  **(M1, deferred)**
+- [ ] nullability / not-assigned-interface use  **(M1, deferred -- flow-based)**
 
 ## 5. Resource / memory  -- strong, some gaps  **(now; cross-call ones M1/M2)**
 Have: `unprotected-object-free`, `use-after-free`, `criticalsection-not-released`,
@@ -99,10 +104,11 @@ Have: `cyclomatic-complexity`, `deep-nesting`, `method-too-long`, `too-many-para
       and/or/xor expression with more than N operators, once at the top of the chain)
 - [x] `case-with-too-few-branches`  -- shipped v0.72 (AST, `hint`, threshold=2; a case with
       fewer than N `caseCase` arms reads better as an if)
-- [ ] cognitive complexity (weighted-nesting metric)
-- [ ] CK suite: DIT / NOC / CBO / RFC / LCOM; fan-in / fan-out
-- [ ] `unit-too-large`
-- [ ] **clone / duplicate-code detection** (PAL CLON1-2)
+- [x] `unit-too-large`  -- shipped v0.74 (AST, `info`, threshold=2000; flags a unit exceeding N
+      source lines. Configurable via `"thresholds": { "unit-too-large": N }`)
+- [ ] cognitive complexity (weighted-nesting metric)  -- moderate; its own chunk
+- [ ] CK suite: DIT / NOC / CBO / RFC / LCOM; fan-in / fan-out  -- needs the uses/type graph
+- [ ] **clone / duplicate-code detection** (PAL CLON1-2)  -- the biggest remaining item; a token-hash pass
 
 ## 7. Exceptions  -- strong (near parity)
 Have: `empty-except`, `empty-on-handler`, `empty-finally`, `bare-except`,

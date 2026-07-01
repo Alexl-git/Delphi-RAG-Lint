@@ -5,6 +5,33 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.74.0-alpha -- 2026-07-01
+
+### Added -- type-system / casts (MISSING-FEATURES #4)
+
+- **`exhaustive-enum-case`** (`warning`, **OFF by default**) -- a `case` on an
+  enum-typed selector that omits some members and has no `else` silently ignores
+  them (and any member added to the enum later). Enum members are resolved from a
+  same-file map (built from `declEnum`/`declEnumValue`, so it works with no `--db`)
+  or, cross-unit, from the symbol store (`skEnum` -> its `skEnumValue` children).
+  Bails on a range label (can't expand without ordinals). Ships OFF because a case
+  that intentionally handles a subset with no `else` is common; opt in via
+  `drag-lint-lint.json` `"enabled": ["exhaustive-enum-case"]` or `--rule` -- built
+  for enum-heavy codebases.
+
+### Added -- complexity / metrics (MISSING-FEATURES #6)
+
+- **`unit-too-large`** (`info`, threshold `2000`) -- flags a unit exceeding N
+  source lines. Configurable via `"thresholds": { "unit-too-large": N }`.
+
+### Notes
+
+- `exhaustive-enum-case` is the first store-aware lint rule that also works purely
+  from a single file's AST (same-file enums) -- so it is exercised by the file-only
+  test harness while still resolving cross-unit enums when a store is present.
+- Still deferred in #4: lossy Ansi<->Unicode casts and nullability (flow/type
+  analysis); in #6: cognitive complexity, the CK suite, and clone detection.
+
 ## v0.73.0-alpha -- 2026-07-01
 
 ### Added -- control-flow / expression (MISSING-FEATURES #8)
