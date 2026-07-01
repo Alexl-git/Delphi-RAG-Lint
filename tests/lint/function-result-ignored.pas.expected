@@ -1,0 +1,9 @@
+# function-result-ignored is OFF by default (FP-prone); the sibling
+# function-result-ignored.config.json enables it via "enabled": [...] so this
+# fixture exercises it. Fires on a bare-statement call to a same-unit function
+# (line 17, Compute); must NOT fire when the result is used (line 18 assignment,
+# line 20 condition) nor on a procedure call (line 19, DoStuff has no return type).
+function-result-ignored 17
+!function-result-ignored 18
+!function-result-ignored 19
+!function-result-ignored 20

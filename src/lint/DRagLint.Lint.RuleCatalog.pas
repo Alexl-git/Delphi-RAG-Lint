@@ -126,6 +126,7 @@ begin
     B('referenced-never-set',  'dead-code', 'warning', 'Private field is read but never assigned');
     B('redundant-parentheses', 'dead-code', 'hint',    'Redundant parentheses around a single term or nested parens');
     B('commented-out-code',    'dead-code', 'hint',    'Comment appears to be commented-out code (assignment or call)');
+    B('function-result-ignored','dead-code','hint',    'Result of a same-unit function call is discarded', False); { OFF by default -- FP-prone (builders/adders/runners legitimately discard results); opt in via "enabled" }
 
     { --- data-flow --- }
     B('used-before-assignment','data-flow', 'warning', 'Variable used before assignment');

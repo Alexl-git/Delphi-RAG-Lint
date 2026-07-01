@@ -20,7 +20,13 @@ unit DRagLint.Diagnostics.DeadCodeChecks;
                            bare lvalue path, or 'idpath(...);'. Prose that merely
                            quotes ':=' or a call inside a sentence is NOT flagged
                            (that was the dominant false positive). Severity
-                           'hint'; directives and doc comments are skipped. }
+                           'hint'; directives and doc comments are skipped.
+    function-result-ignored: (v0.71) a bare-statement call (exprCall whose parent
+                           is a 'statement' node) to an UNqualified identifier
+                           naming a SAME-UNIT function (a declProc carrying a
+                           return-type 'type' field) -- the return value is
+                           discarded. Same-unit + pure AST (no symbol store);
+                           cross-unit callees are not resolved. Severity 'hint'. }
 
 interface
 
@@ -46,7 +52,8 @@ type
     /// <returns>Array of findings (severity 'warning'); empty when the file is
     /// clean or could not be parsed.</returns>
     /// <remarks>Rules implemented: unused-parameter, identical-then-else,
-    /// referenced-never-set, redundant-parentheses, and commented-out-code.
+    /// referenced-never-set, redundant-parentheses, commented-out-code, and
+    /// function-result-ignored.
     /// unused-parameter guards (parameters NOT flagged even if unreferenced):
     ///   - var/out parameters (caller-visible side effects).
     ///   - Self (implicit class parameter).
@@ -111,6 +118,11 @@ var
     directive (virtual/dynamic/override/message/abstract) in their declProc.
     A defProc whose unqualified name matches an entry here is skipped. }
   ContractMethods: TDictionary<string, Boolean>;
+  { Bare lower-cased names of routines declared in THIS unit that are FUNCTIONS
+    (declProc header carries a return-type 'type' field). Used by
+    function-result-ignored -- a bare-statement call to one of these discards a
+    return value. Same-unit only (pure AST, no symbol store). }
+  LocalFunctions : TDictionary<string, Boolean>;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -339,6 +351,37 @@ var
     for I:= 0 to N.NamedChildCount - 1 do CollectContractDecls(N.NamedChild(I));
   end;
 
+  { Collect the bare (unqualified, lower-cased) names of every routine declared
+    in THIS unit that is a FUNCTION -- its declProc header carries a return-type
+    'type' field (grammar: 'function Foo(...): T'). Both interface-section
+    declProc declarations and implementation defProc headers are declProc nodes,
+    so a single whole-tree walk catches every function (incl. nested). Used by
+    function-result-ignored. }
+  procedure CollectLocalFunctions(const N: TTSNode);
+  var
+    I     : Integer;
+    NameN : TTSNode;
+    Nm    : string ;
+    DotPos: Integer;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'declProc' then
+    begin
+      if not N.ChildByField('type').IsNull then   { has a return type -> function }
+      begin
+        NameN:= N.ChildByField('name');
+        if not NameN.IsNull then
+        begin
+          Nm:= LowerCase(Trim(NodeStr(NameN)));
+          DotPos:= LastDelimiter('.', Nm);         { strip 'TClass.' qualifier }
+          if DotPos > 0 then Nm:= Copy(Nm, DotPos + 1, MaxInt);
+          if Nm <> '' then LocalFunctions.AddOrSetValue(Nm, True);
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectLocalFunctions(N.NamedChild(I));
+  end;
+
   { Check one defProc for unused-parameter findings. }
   procedure CheckUnusedParams(const ADefProc: TTSNode);
   var
@@ -557,6 +600,27 @@ var
         if (Inner <> '') and (LooksLikeAssignment(Inner) or LooksLikeCallStatement(Inner)) then
           EmitAt(N, 'commented-out-code',
             'Commented-out code -- remove it or restore it', 'hint');
+      end;
+    end;
+
+    { function-result-ignored: a bare-statement call whose return value is
+      discarded. Bare-statement = the exprCall's parent is a 'statement' node
+      (not an assignment rhs / expression / argument). Only UNqualified
+      identifier callees resolved against LocalFunctions (same-unit functions)
+      are flagged -- keeps it store-free and near-zero FP on callee identity. }
+    if N.NodeType = 'exprCall' then
+    begin
+      var Prnt: TTSNode:= N.Parent;
+      if (not Prnt.IsNull) and (Prnt.NodeType = 'statement') then
+      begin
+        var Ent: TTSNode:= N.ChildByField('entity');
+        if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then
+        begin
+          var CName: string:= LowerCase(Trim(NodeStr(Ent)));
+          if (CName <> '') and LocalFunctions.ContainsKey(CName) then
+            EmitAt(N, 'function-result-ignored',
+              Format('Result of function "%s" is ignored', [Trim(NodeStr(Ent))]), 'hint');
+        end;
       end;
     end;
 
@@ -1000,10 +1064,13 @@ begin
   Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
   ContractMethods:= TDictionary<string, Boolean>.Create;
+  LocalFunctions := TDictionary<string, Boolean>.Create;
   try
     { Pass 1: collect all declProc names with contract-binding directives. }
     CollectContractDecls(PF.Tree.RootNode);
-    { Pass 2: walk defProc bodies and ifElse nodes. }
+    { Pass 1b: collect same-unit function names for function-result-ignored. }
+    CollectLocalFunctions(PF.Tree.RootNode);
+    { Pass 2: walk defProc bodies, ifElse, exprParens, comments, exprCall. }
     Visit(PF.Tree.RootNode);
     { Pass 3: referenced-never-set field def-use. }
     CheckReferencedNeverSet;
@@ -1011,6 +1078,7 @@ begin
   finally
     Findings.Free;
     ContractMethods.Free;
+    LocalFunctions.Free;
   end;
   { De-duplicate by (RuleId, StartLine, StartCol). }
   Seen:= TDictionary<string, Boolean>.Create;

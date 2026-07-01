@@ -4613,12 +4613,12 @@ begin
   (AArgs.Rule <> 'reserved-word-casing') and (AArgs.Rule <> 'hungarian-or-short-identifier') and
   (AArgs.Rule <> 'unused-parameter') and (AArgs.Rule <> 'identical-then-else') and
   (AArgs.Rule <> 'referenced-never-set') and (AArgs.Rule <> 'redundant-parentheses') and
-  (AArgs.Rule <> 'commented-out-code') then
+  (AArgs.Rule <> 'commented-out-code') and (AArgs.Rule <> 'function-result-ignored') then
   begin
     Writeln(Format(
         'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' +
         'use-after-free, win64-pointer-cast, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
-        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code)',
+        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4641,6 +4641,11 @@ begin
       if Linter.ExternalRuleCount = 0 then
         Writeln(ErrOutput, 'drag-lint: note: 0 external .scm rules loaded -- place a "rules" folder next to drag-lint.exe, or pass --rules-dir <path> (built-in checks still run).');
       DefDisabled:= Linter.DefaultDisabledRuleIds;   // capture before Free
+      { v0.71: function-result-ignored ships OFF by default (FP-prone -- builders/
+        adders/runners legitimately discard results). Opt in via drag-lint-lint.json
+        "enabled": ["function-result-ignored"] or --rule function-result-ignored. }
+      if AArgs.Rule <> 'function-result-ignored' then
+        DefDisabled:= DefDisabled + ['function-result-ignored'];
       if TFile.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFile(AArgs.Path)
       else if TDirectory.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFolder(AArgs.Path, True)
       else
@@ -4726,8 +4731,9 @@ begin
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(AArgs.Path, Cfg.Naming) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set)
-        v0.70: + redundant-parentheses + commented-out-code (all emitted from the same TDeadCodeChecker.Check) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'unused-parameter') or (AArgs.Rule = 'identical-then-else') or (AArgs.Rule = 'referenced-never-set') or (AArgs.Rule = 'redundant-parentheses') or (AArgs.Rule = 'commented-out-code') then
+        v0.70: + redundant-parentheses + commented-out-code
+        v0.71: + function-result-ignored (all emitted from the same TDeadCodeChecker.Check) }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'unused-parameter') or (AArgs.Rule = 'identical-then-else') or (AArgs.Rule = 'referenced-never-set') or (AArgs.Rule = 'redundant-parentheses') or (AArgs.Rule = 'commented-out-code') or (AArgs.Rule = 'function-result-ignored') then
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(AArgs.Path) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { Free cached tree after single-file lint }
@@ -5672,7 +5678,8 @@ begin
     OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', Now) + '.txt');
   end;
 
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), nil,
+  { v0.71: function-result-ignored is OFF by default here too (opt in via config). }
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;
