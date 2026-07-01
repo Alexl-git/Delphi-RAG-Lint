@@ -4913,7 +4913,7 @@ begin
         not double-reported. }
       if (AArgs.Rule = '') or (AArgs.Rule = 'duplicate-code') then
         for F in DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check(AArgs.Path,
-            Cfg.ThresholdFor('duplicate-code', 100)) do
+            Cfg.ThresholdFor('duplicate-code', 90)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { Free cached tree after single-file lint }
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
@@ -5838,7 +5838,7 @@ begin
     lint-all (never the per-file Check) so within-file clones are reported once. }
   Findings:= Findings +
     DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths,
-      Cfg.ThresholdFor('duplicate-code', 100));
+      Cfg.ThresholdFor('duplicate-code', 90));
   { Interface reference cycles (needs all file paths) }
   Findings:= Findings +
     DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(FilePaths);

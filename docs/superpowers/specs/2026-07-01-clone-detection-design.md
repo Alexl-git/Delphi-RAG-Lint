@@ -155,9 +155,11 @@ FP-sanity on the project's own `src/` (110 files):
    placeholder (so a copy that changed only string/number constants is still flagged), with the
    overlap suppression above taming the resulting DSL-block noise.
 
-**Default threshold = 100 tokens** (matches the PMD CPD default). Measured `duplicate-code` counts
-on `src/` after overlap suppression: 60 -> 446, 80 -> 260, 100 -> 142, 120 -> 81, 150 -> 43,
-200 -> 18. At 100 the surviving findings are genuine structural duplication (spot-verified, e.g.
-the `while`/`for` CFG-emit blocks in `DRagLint.Analysis.Cfg.pas`). Tunable per-project via the
+**Default threshold = 90 tokens** (near the PMD CPD default of 100, lowered so a verbatim copy of a
+~12-line routine -- about 96 tokens -- is caught out of the box; a real BASICSF.pas copy sat at 96
+and slipped under 100). Measured `duplicate-code` counts on `src/` after overlap suppression:
+60 -> 446, 80 -> 260, 90 -> ~190, 100 -> 142, 120 -> 81, 150 -> 43, 200 -> 18. At 90 the surviving
+findings are genuine structural duplication (spot-verified, e.g. the `while`/`for` CFG-emit blocks
+in `DRagLint.Analysis.Cfg.pas`, and whole-routine copies). Tunable per-project via the
 `threshold` param. Per-bucket comparison is capped at 400 windows (a stderr note is emitted when a
 bucket is skipped -- no silent cap).
