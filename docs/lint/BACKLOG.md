@@ -1,6 +1,14 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.75.0-alpha PUBLISHED -- 4 rules across #4/#5/#6/#10 DONE; NEXT = remaining tails (see below)**
+> ## RESUME 2026-07-01 (LATEST) -- **v0.75.0-alpha PUBLISHED; NEXT = execute the v0.76 CLOSE PLAN (user: "close completely #4/#5/#6 + maybe #9/#10/#11, release 0.76")**
+>
+> **>>> NEXT SESSION: read `docs/lint/PLAN-v076-close-sections.md` -- the full phased plan.** TL;DR: the pure-AST fruit
+> is picked; every remaining #4/#5/#6 item needs the M1 store / uses-graph / M2 flow, and the file-only harness can't test
+> them. **Phase 0 = build a `check-ast --db` fixture harness (`tests/lint-store/`)** -- the enabler. Then Phase 1 (last
+> pure-AST: dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line) closes #10+#2; Phase 2 (store:
+> abstract-method-instantiation, nativeint-truncation, circular-uses, DIT/CBO) closes #9+#11+most of #5 -> **that is v0.76**.
+> Phase 3 (clone detection, CK suite, nullability [M2], double-free [M2]) is what fully closes #4+#6 -> **v0.77** (do NOT
+> rush the flow/clone items). Full per-item approach + node types + store API + gotchas are in the PLAN doc.
 >
 > **v0.75.0-alpha SHIPPED + RELEASED.** `main`=`fab7ee5`, origin synced, tag `v0.75.0-alpha`, GitHub PRERELEASE win32+win64:
 > https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.75.0-alpha . VERSION `CLI.pas:6`=`0.75.0-alpha`. Harness
