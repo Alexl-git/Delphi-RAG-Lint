@@ -57,28 +57,21 @@ drag-lint index --scan-libraries --db "third_party\dll-win32\drag-lint-library.s
   library DB, and you query libraries by *definition/call*, not usage.
 - Includes `.inc` files (so include-file symbols like `csmRed` are findable).
 
-### c) One command for everything: `scan-all`
-Create `C:\Projects\.drag-lint.json`:
-```json
-{ "scan": {
-    "outDir": "C:\\Projects\\.drag-lint",
-    "library": true,
-    "projectsRoot": "C:\\Projects",
-    "projects": [ "C:\\Projects\\DB\\ORM3", "C:\\Projects\\TableTools",
-                  "C:\\Projects\\DB\\SQL", "C:\\Projects\\YADF" ]
-} }
-```
+### c) One command for everything: `index --all`
+drag-lint reads a named-index manifest (`drag-lint.json`, with `settings` +
+`indexes` sections) that lives next to `drag-lint.exe`. The shipped file is the
+template -- edit the `indexes` list to point at your project and library roots.
 Then:
 ```
-drag-lint scan-all          # builds library.sqlite (shallow) + active-projects.sqlite (deep)
-                            # + projects.sqlite (deep, dedup'd vs the other two)
-drag-lint scan-all --dry-run   # show the plan + timings only
+drag-lint index --all              # build every configured index
+drag-lint index --all --dry-run    # show the plan + timings only
 ```
-`scan-all` prunes `*BACKUP*` folders, `.scanignore`'d folders, and only indexes
-`MS*.SQL` among `.sql`. It reports per-dictionary timing.
+`index --all` prunes `*BACKUP*` and `.scanignore`'d folders. Add
+`--only <Sec1,Sec2>` to rebuild just named indexes, `--jobs <n>` to parallelize,
+`--platform win32|win64` to pick the library set.
 
 > Drop an empty `.scanignore` file in any folder to exclude it (and its subtree)
-> from `scan-all` / `index` — useful for big vendor trees you don't query.
+> from `index` — useful for big vendor trees you don't query.
 
 ## 4. (Optional) Install the graph component packages
 Build order: `DragLintGraph` → `DragLintGraphDb` → `DragLintGraphDcl`
@@ -89,8 +82,8 @@ without installing anything.
 
 ## 5. Verify
 ```
-drag-lint query --name TStringList --db <yourdb>      # exact symbol lookup
-drag-lint usages --name <YourComponent> --db <yourdb> --deep-built-db
+drag-lint query --name TStringList --db <yourdb>                    # exact symbol lookup
+drag-lint query find-callers --name <YourComponent> --db <yourdb>   # all call-sites
 ```
 In the IDE: open **View → Tool Windows → drag-lint**, dock it, check the
-Structure / Find Usages / Symbol Search tabs.
+Structure / Find Usages tabs.

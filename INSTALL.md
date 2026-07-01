@@ -75,9 +75,10 @@ or more rule ids it silences only those. Applies to both `.scm` and built-in rul
 
 ## 4. What it checks
 
-This release ships **25 rules across exceptions, control-flow / dead code,
-expression bugs, resource/lifetime, and security** (SQL injection, hardcoded
-credentials). The full list with one-line descriptions is in
+This release ships **130+ rules** (and growing) across exceptions, control-flow
+/ dead code, expression bugs, resource/lifetime, naming, and security (SQL
+injection, hardcoded credentials). Run `drag-lint rules` for the full,
+always-current catalog. The list with one-line descriptions is also in
 [`rules\README.md`](rules/README.md); the design rationale and the wider Delphi
 lint landscape are in [`docs\lint\`](docs/lint/) (REPORT-1 / REPORT-2).
 

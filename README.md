@@ -244,7 +244,7 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `cycles` | Circular unit dependencies (`--edges` shows edges + move/layering candidates) |
 | `uses-audit <unit.pas>` | Propose interface→implementation moves + unused units |
 | `uses-fix <unit.pas> --project <dproj>` | Compiler-verified uses cleanup (move/remove; dry-run by default, `--apply`) |
-| `resolve-uses --name <X>` | Which unit defines `X` and should be added to `uses` |
+| `find-unit --name <X> --in <file>` | Add the unit that declares `X` to `<file>`'s `uses` clause (`--apply` to write) |
 | `import-log <log>` | Import a saved msbuild log into the DB |
 | `format <file>` | Format a .pas file with the YADF formatter |
 | `check-ast <file>` | Run tree-sitter lint rules without compiling |
@@ -284,7 +284,11 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `workspace_status` | Workspace project/file summary |
 | `workspace_index` | Re-index all workspace projects |
 
-### Lint rule pack (~13 built-in rules)
+### Lint rule pack (130+ rules)
+
+Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
+external `.scm`, 130+ and growing). The table below is a small sample of the
+built-in rules:
 
 | Rule id | Severity | Description |
 |---------|----------|-------------|
@@ -308,10 +312,10 @@ Drop custom `.scm` + `.json` pairs in the `rules/` directory; see
 
 ### RAD Studio plugin
 
-**Tools menu** (20+ items, organized into submenus): Hover at Cursor, Show Completion, 
+**`drag-lint` menu** (top-level on the main menu bar -- falls back under Tools -- with ~30 items organized into submenus): Hover at Cursor, Show Completion, 
 Show Signature Help, Run Diagnostics, Rename Symbol, Compile & Diagnose, Import Build Log,
 Format with YADF, Show Structure, Run AST Checks, Find Usages, Symbol Search, dockable 
-panels (Structure / Usages / Symbol Search / Graph), Generate Test Helper CSV..., 
+panels (Structure / Usages / Graph), Generate Test Helper CSV..., 
 **Uses & Dependencies** submenu (cycles, uses-audit, uses-fix, reconcile, wiring, impact), 
 **Inspect Symbol** submenu (surface, slice, type-at-cursor), 
 **Code Quality** submenu (dead code, undocumented, TODOs, compiler hints, top symbols),
