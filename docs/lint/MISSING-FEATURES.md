@@ -123,20 +123,29 @@ Have: `layering-violation`, `interface-reference-cycle`, `god-class`, `unit-not-
 
 ---
 
-## 13. Refactoring + settings UI  -- PLANNED v0.69 (CLI + Lint Options tab; IDE refactor tab deferred)
+## 13. Refactoring + settings UI  -- SHIPPED v0.69 (CLI + Lint Options tab; IDE refactor tab deferred)
 Spec: `docs/superpowers/specs/2026-06-30-v069-settings-refactor-design.md`. Value prop: drag-lint's
 persisted, deterministic SQLite index is the substrate the IDE's own (flaky async-LSP) Refactor lacks.
-- [ ] **v0.69:** `drag-lint rules [--json]` rule catalog (single source of truth + counts) + a 4th IDE-dock
-  **"Lint Options"** tab -- enable/disable every check by section + item, edit params -> writes `drag-lint-lint.json`.
-- [ ] **v0.69:** refactor CLI, packaging the EXISTING `TRenameRefactoring` / `resolve-uses` / dead-code engines
+- [x] **v0.69 D1a:** `drag-lint rules [--json]` rule catalog (single source of truth + counts) -- shipped v0.69 D1a.
+- [x] **v0.69 D1b:** 4th IDE-dock **"Lint Options"** tab -- enable/disable every check by section + item,
+  tri-state category header, inline param editors, reads/writes `drag-lint-lint.json` via `TLintConfigWriter` --
+  shipped v0.69 D1b. (Manual IDE click-test is a separate human gate.)
+- [x] **v0.69 D2:** refactor CLI, packaging the EXISTING `TRenameRefactoring` / `resolve-uses` / dead-code engines
   (dry-run preview + `--apply`): `rename --kind symbol` (cross-unit), `rename --kind param` (routine-local --
-  the `param-name-prefix` autofix), `find-unit` (add-to-uses), `safe-delete`.
+  the `param-name-prefix` autofix), `find-unit` (add-to-uses), `safe-delete` -- shipped v0.69 D2a+D2b.
 - [ ] **DEFERRED (v0.70+):** in-IDE **"Refactor" tab + OTAPI apply** (Delphi-style Refactorings-Pane preview;
   edits applied to editor buffers) -- the v0.69 CLI commands are its deterministic foundation.
 - [ ] **DEFERRED (hard -- need type inference / call-site rewrite):** Change Parameters, Extract Method,
   Extract Interface/Superclass, Pull Up / Push Down, Move, Inline, Declare/Introduce Variable/Field.
 > Native Delphi 11/12 Refactor catalog + why it degraded (flaky async LSP / background compiler):
 > `docs/lint/Comprehensive report on the refactor.md` + `.superpowers/sdd/delphi-refactor-research.md`.
+
+> **Decision -- `undeclared-identifier` excluded from the `rules` catalog and Lint Options tab (D1a/D1b
+> follow-up):** `undeclared-identifier` is an index-backed `check-ast` diagnostic, not a file-based lint
+> rule that `drag-lint-lint.json` enables/disables/thresholds. The `drag-lint rules` catalog and the Lint
+> Options tab expose only the configurable lint rule set; surfacing a non-configurable index diagnostic
+> there would misleadingly imply it is toggleable via the JSON config. Index-only `check-ast` diagnostics
+> of this kind are intentionally excluded from the catalog.
 
 ---
 

@@ -48,6 +48,25 @@ breaking changes** until v1.0.
   (name-text check); refuses otherwise. Dry-run default; `--json`; `--apply`.
 - New unit `DRagLint.Refactor.TextEdit` (range insert/delete applier) backs both.
 
+### Added (IDE -- D1b)
+
+- **"Lint Options" dock tab** (4th tab, next to Structure / Search / Find Usages)
+  -- a VCL `TFrame` (`TLintOptionsFrame`) that shells out to `drag-lint rules
+  --json` to load the rule catalog, then renders rules grouped by category. Each
+  category has a tri-state header checkbox that toggles the whole group; each rule
+  gets an individual checkbox plus inline param editors (`TSpinEdit` for int
+  params, `TEdit` for string/naming params). A counts header shows `N rules across
+  M categories, K enabled`. Reads and writes the active project's
+  `drag-lint-lint.json` via the new pure serializer `TLintConfigWriter`
+  (`DRagLint.Lint.ConfigWriter`). Every catalog param round-trips to the exact
+  config location the linter reads (naming params -> the `naming` block,
+  complexity thresholds -> the `thresholds` block, `min_identifier_len` ->
+  `naming.min_identifier_len`). The CLI remains the consumer of record; the tab
+  only edits the JSON. Completes v0.69 deliverable D1 (D1a shipped the `drag-lint
+  rules --json` catalog; D1b is the IDE tab that consumes it).
+- New units: `TLintOptionsFrame` (`src\delphi-plugin\DragLint.Plugin.LintOptionsFrame.pas`),
+  `TLintConfigWriter` (`src\lint\DRagLint.Lint.ConfigWriter.pas`).
+
 ### Fixed
 
 - The FireDAC `FTS5 probe` diagnostic now writes to stderr instead of stdout, so it
