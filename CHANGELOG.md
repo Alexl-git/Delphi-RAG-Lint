@@ -5,6 +5,8 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+- feat(lint): `duplicate-code` (#6) -- Type-2 (renamed-identifier tolerant) clone detection, within-file and cross-file (lint-all), via Rabin-Karp maximal-match with coverage-based overlap suppression. `info`, ON by default, `threshold` (min normalized tokens) default 100.
+
 ## v0.76.0-alpha -- 2026-07-01
 
 Closes the last pure-AST loose ends and adds the first cheap store/graph-backed

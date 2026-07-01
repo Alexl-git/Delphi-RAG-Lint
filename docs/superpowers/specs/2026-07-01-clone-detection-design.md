@@ -138,3 +138,26 @@ Folds into the v0.77 milestone alongside the CK suite and M2-flow items. Standar
 `run_lint_tests.ps1` + `run_store_tests.ps1` + `run_rulecatalog_tests.ps1`, FP-sanity, bump
 VERSION/CHANGELOG, pack, tag, gh release. Ship v0.77 only when the other chosen items land too
 (user directive: all of v0.77).
+
+## Post-implementation calibration (2026-07-01)
+
+Implemented on branch `feat/duplicate-code-clone-detection` (v0.77). Two refinements emerged from
+FP-sanity on the project's own `src/` (110 files):
+
+1. **Overlap suppression added.** The initial left-maximal dedup did not collapse self-similar
+   repetitive regions (e.g. `PrintHelp`'s 58 consecutive `Writeln('...')` statements, long
+   `case`/catalog lists), which produced hundreds of overlapping re-reports of one region. The
+   engine now collects all candidate maximal matches, sorts them longest-first, and emits a
+   candidate only if it is not already >= 50% covered on BOTH occurrences by a previously-emitted
+   (longer) clone. This collapses the family to one finding per genuinely-duplicated region-pair.
+
+2. **Literal normalization kept (user decision).** Literals remain normalized to a single `LIT`
+   placeholder (so a copy that changed only string/number constants is still flagged), with the
+   overlap suppression above taming the resulting DSL-block noise.
+
+**Default threshold = 100 tokens** (matches the PMD CPD default). Measured `duplicate-code` counts
+on `src/` after overlap suppression: 60 -> 446, 80 -> 260, 100 -> 142, 120 -> 81, 150 -> 43,
+200 -> 18. At 100 the surviving findings are genuine structural duplication (spot-verified, e.g.
+the `while`/`for` CFG-emit blocks in `DRagLint.Analysis.Cfg.pas`). Tunable per-project via the
+`threshold` param. Per-bucket comparison is capped at 400 windows (a stderr note is emitted when a
+bucket is skipped -- no silent cap).

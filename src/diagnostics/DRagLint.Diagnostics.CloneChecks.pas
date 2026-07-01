@@ -21,12 +21,12 @@ type
     /// <param name="AFile">Path to the .pas file to scan.</param>
     /// <param name="AMinTokens">Minimum clone length in normalized tokens.</param>
     /// <returns>One info finding per maximal clone pair, sorted by (FilePath, StartLine).</returns>
-    class function Check(const AFile: string; AMinTokens: Integer = 60): TArray<TLintFinding>;
+    class function Check(const AFile: string; AMinTokens: Integer = 100): TArray<TLintFinding>;
     /// <summary>Within + cross-file clones across AFiles (used by lint-all).</summary>
     /// <param name="AFiles">All .pas files in the project scan.</param>
     /// <param name="AMinTokens">Minimum clone length in normalized tokens.</param>
     /// <returns>One info finding per maximal clone pair, sorted by (FilePath, StartLine).</returns>
-    class function CheckProject(const AFiles: TArray<string>; AMinTokens: Integer = 60): TArray<TLintFinding>;
+    class function CheckProject(const AFiles: TArray<string>; AMinTokens: Integer = 100): TArray<TLintFinding>;
   end;
 
 implementation

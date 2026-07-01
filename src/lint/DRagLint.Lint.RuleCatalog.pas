@@ -130,7 +130,7 @@ begin
     B('cognitive-complexity', 'complexity', 'info', 'Cognitive complexity is too high (nesting-weighted)', True, [MkParam('threshold','int','25')]);
     B('case-with-too-few-branches','complexity', 'hint', 'case has fewer than N branches -- an if is clearer', True, [MkParam('threshold','int','2')]);
     B('boolean-expression-complexity','complexity', 'info', 'Boolean expression has more than N and/or/xor operators', True, [MkParam('threshold','int','4')]);
-    B('duplicate-code',       'complexity', 'info', 'Duplicated code block detected (Type-2, renamed-identifier tolerant)', True, [MkParam('threshold','int','60')]);
+    B('duplicate-code',       'complexity', 'info', 'Duplicated code block detected (Type-2, renamed-identifier tolerant)', True, [MkParam('threshold','int','100')]);
     B('unit-too-large',       'complexity', 'info', 'Unit exceeds N source lines', True, [MkParam('threshold','int','2000')]);
 
     { --- firedac --- }

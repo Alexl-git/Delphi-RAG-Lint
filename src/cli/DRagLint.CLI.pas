@@ -4913,7 +4913,7 @@ begin
         not double-reported. }
       if (AArgs.Rule = '') or (AArgs.Rule = 'duplicate-code') then
         for F in DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check(AArgs.Path,
-            Cfg.ThresholdFor('duplicate-code', 60)) do
+            Cfg.ThresholdFor('duplicate-code', 100)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { Free cached tree after single-file lint }
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
