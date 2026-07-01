@@ -240,6 +240,25 @@ begin
   TFile.Delete(MergePath);
 
   // ------------------------------------------------------------------
+  // --- profiles (Task 2) ---
+  // ------------------------------------------------------------------
+  var PPath: string:= TPath.Combine(TPath.GetTempPath, 't63_prof.json');
+  TFile.WriteAllText(PPath,
+    '{ "thresholds": { "deep-nesting": 5 },'#10 +
+    '  "profiles": { "keep": { "disabled": ["x"] } } }');
+  var PCfg: TLintConfig:= TLintConfigWriter.LoadOrDefault(PPath);
+  TLintConfigWriter.SetThreshold(PCfg, 'deep-nesting', 9);
+  TLintConfigWriter.SaveToProfile(PPath, 'strict', PCfg);
+  var Names: TArray<string>:= TLintConfigWriter.ListProfileNames(PPath);
+  Check((Length(Names) = 2), 't63: two profiles after save');
+  var Raw: string:= TFile.ReadAllText(PPath);
+  Check(Pos('"keep"', Raw) > 0, 't63: existing profile keep preserved');
+  Check(Pos('"strict"', Raw) > 0, 't63: new profile strict written');
+  var Applied: TLintConfig:= TLintConfig.Load(PPath, 'strict');
+  Check(Applied.ThresholdFor('deep-nesting', 0) = 9, 't63: profile strict deep-nesting=9');
+  TFile.Delete(PPath);
+
+  // ------------------------------------------------------------------
   // Cleanup
   // ------------------------------------------------------------------
   TFile.Delete(SamplePath);

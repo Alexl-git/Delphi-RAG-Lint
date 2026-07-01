@@ -16,6 +16,10 @@ type
     class function ArrayToJsonArr(const AArr: TArray<string>): TJSONArray; static;
     class function RemoveId(const AArr: TArray<string>; const AId: string): TArray<string>; static;
     class function ContainsId(const AArr: TArray<string>; const AId: string): Boolean; static;
+    // builds the owned TJSONObject from ACfg (caller frees)
+    class function BuildOwnedObject(const ACfg: TLintConfig): TJSONObject; static;
+    // normalise CRLF, encode as ANSI bytes, write to APath
+    class procedure WriteAnsiCrlf(const APath, AJson: string); static;
   public
     /// <summary>Serialises ACfg to a pretty-printed JSON string matching the
     /// shape TLintConfig.Load reads. short_identifier_check is emitted as a
@@ -48,6 +52,18 @@ type
 
     /// <summary>Writes ToJson to APath as strict ANSI bytes, CRLF, no BOM.</summary>
     class procedure SaveToFile(const APath: string; const ACfg: TLintConfig); static;
+
+    /// <summary>Returns the names of all profiles defined under the "profiles"
+    /// key in APath. Returns nil when the file is absent, unparseable, or has
+    /// no "profiles" object.</summary>
+    class function ListProfileNames(const APath: string): TArray<string>; static;
+
+    /// <summary>Writes ACfg as a named profile under the "profiles" key in
+    /// APath, preserving the base config and all other profiles. Creates the
+    /// file (or the "profiles" object) if absent. Replaces an existing profile
+    /// with the same name.</summary>
+    class procedure SaveToProfile(const APath, AName: string;
+      const ACfg: TLintConfig); static;
   end;
 
 implementation
@@ -83,62 +99,85 @@ begin
   Result:= False;
 end;
 
-class function TLintConfigWriter.ToJson(const ACfg: TLintConfig): string;
+class function TLintConfigWriter.BuildOwnedObject(
+  const ACfg: TLintConfig): TJSONObject;
 var
-  Root, SevObj, ThrObj, NamObj, TypePfxObj: TJSONObject;
+  SevObj, ThrObj, NamObj, TypePfxObj: TJSONObject;
   P  : TPair<string,string>;
   PI : TPair<string,Integer>;
   N  : TNamingConfig;
   S  : string;
 begin
-  Root:= TJSONObject.Create;
+  Result:= TJSONObject.Create;
+  // disabled / enabled arrays
+  Result.AddPair('disabled', ArrayToJsonArr(ACfg.DisabledIds));
+  Result.AddPair('enabled',  ArrayToJsonArr(ACfg.EnabledIds));
+
+  // severity object
+  SevObj:= TJSONObject.Create;
+  for P in ACfg.SeverityPairs do
+    SevObj.AddPair(P.Key, P.Value);
+  Result.AddPair('severity', SevObj);
+
+  // thresholds object
+  ThrObj:= TJSONObject.Create;
+  for PI in ACfg.ThresholdPairs do
+    ThrObj.AddPair(PI.Key, TJSONNumber.Create(PI.Value));
+  Result.AddPair('thresholds', ThrObj);
+
+  // naming block
+  N:= ACfg.Naming;
+  NamObj:= TJSONObject.Create;
+
+  TypePfxObj:= TJSONObject.Create;
+  TypePfxObj.AddPair('class',     N.ClassPrefix);
+  TypePfxObj.AddPair('exception', N.ExceptionPrefix);
+  TypePfxObj.AddPair('interface', N.InterfacePrefix);
+  TypePfxObj.AddPair('pointer',   N.PointerPrefix);
+  NamObj.AddPair('type_prefix', TypePfxObj);
+
+  NamObj.AddPair('field_prefix', N.FieldPrefix);
+  NamObj.AddPair('param_prefix', N.ParamPrefix);
+  NamObj.AddPair('method_case',  N.MethodCase);
+  NamObj.AddPair('local_case',   N.LocalCase);
+  NamObj.AddPair('const_case',   ArrayToJsonArr(N.ConstCase));
+  NamObj.AddPair('keyword_case', N.KeywordCase);
+  NamObj.AddPair('min_identifier_len', TJSONNumber.Create(N.MinIdentifierLen));
+
+  // short_identifier_check is a JSON string "true"/"false", not a bool
+  if N.ShortIdentifierCheck then
+    S:= 'true'
+  else
+    S:= 'false';
+  NamObj.AddPair('short_identifier_check', TJSONString.Create(S));
+
+  NamObj.AddPair('hungarian_prefixes', ArrayToJsonArr(N.HungarianPrefixes));
+
+  Result.AddPair('naming', NamObj);
+end;
+
+class procedure TLintConfigWriter.WriteAnsiCrlf(const APath, AJson: string);
+var
+  Normalized: string;
+  Bytes: TBytes;
+  i: Integer;
+begin
+  // normalise to CRLF
+  Normalized:= StringReplace(AJson, #13#10, #10, [rfReplaceAll]);
+  Normalized:= StringReplace(Normalized, #10, #13#10, [rfReplaceAll]);
+  // encode as ANSI bytes (7-bit ASCII; content must be ASCII-safe)
+  SetLength(Bytes, Length(Normalized));
+  for i:= 1 to Length(Normalized) do
+    Bytes[i - 1]:= Ord(Normalized[i]);
+  TFile.WriteAllBytes(APath, Bytes);
+end;
+
+class function TLintConfigWriter.ToJson(const ACfg: TLintConfig): string;
+var
+  Root: TJSONObject;
+begin
+  Root:= BuildOwnedObject(ACfg);
   try
-    // disabled / enabled arrays
-    Root.AddPair('disabled', ArrayToJsonArr(ACfg.DisabledIds));
-    Root.AddPair('enabled',  ArrayToJsonArr(ACfg.EnabledIds));
-
-    // severity object
-    SevObj:= TJSONObject.Create;
-    for P in ACfg.SeverityPairs do
-      SevObj.AddPair(P.Key, P.Value);
-    Root.AddPair('severity', SevObj);
-
-    // thresholds object
-    ThrObj:= TJSONObject.Create;
-    for PI in ACfg.ThresholdPairs do
-      ThrObj.AddPair(PI.Key, TJSONNumber.Create(PI.Value));
-    Root.AddPair('thresholds', ThrObj);
-
-    // naming block
-    N:= ACfg.Naming;
-    NamObj:= TJSONObject.Create;
-
-    TypePfxObj:= TJSONObject.Create;
-    TypePfxObj.AddPair('class',     N.ClassPrefix);
-    TypePfxObj.AddPair('exception', N.ExceptionPrefix);
-    TypePfxObj.AddPair('interface', N.InterfacePrefix);
-    TypePfxObj.AddPair('pointer',   N.PointerPrefix);
-    NamObj.AddPair('type_prefix', TypePfxObj);
-
-    NamObj.AddPair('field_prefix', N.FieldPrefix);
-    NamObj.AddPair('param_prefix', N.ParamPrefix);
-    NamObj.AddPair('method_case',  N.MethodCase);
-    NamObj.AddPair('local_case',   N.LocalCase);
-    NamObj.AddPair('const_case',   ArrayToJsonArr(N.ConstCase));
-    NamObj.AddPair('keyword_case', N.KeywordCase);
-    NamObj.AddPair('min_identifier_len', TJSONNumber.Create(N.MinIdentifierLen));
-
-    // short_identifier_check is a JSON string "true"/"false", not a bool
-    if N.ShortIdentifierCheck then
-      S:= 'true'
-    else
-      S:= 'false';
-    NamObj.AddPair('short_identifier_check', TJSONString.Create(S));
-
-    NamObj.AddPair('hungarian_prefixes', ArrayToJsonArr(N.HungarianPrefixes));
-
-    Root.AddPair('naming', NamObj);
-
     Result:= Root.Format(2);
   finally
     Root.Free;
@@ -219,8 +258,7 @@ const
   OwnedKeys: array[0..4] of string = (
     'disabled', 'enabled', 'severity', 'thresholds', 'naming');
 var
-  Json, Normalized: string;
-  Bytes  : TBytes;
+  Json   : string;
   i, k   : Integer;
   Existing, OwnedObj, Merged: TJSONObject;
   ExistText: string;
@@ -278,14 +316,68 @@ begin
     Existing.Free;
   end;
 
-  // normalise to CRLF
-  Normalized:= StringReplace(Json, #13#10, #10, [rfReplaceAll]);
-  Normalized:= StringReplace(Normalized, #10, #13#10, [rfReplaceAll]);
-  // encode as ANSI bytes (7-bit ASCII; content must be ASCII-safe)
-  SetLength(Bytes, Length(Normalized));
-  for i:= 1 to Length(Normalized) do
-    Bytes[i - 1]:= Ord(Normalized[i]);
-  TFile.WriteAllBytes(APath, Bytes);
+  WriteAnsiCrlf(APath, Json);
+end;
+
+class function TLintConfigWriter.ListProfileNames(
+  const APath: string): TArray<string>;
+var
+  Root, Profs: TJSONObject;
+  RootVal: TJSONValue;
+  Pair: TJSONPair;
+begin
+  Result:= nil;
+  if not TFile.Exists(APath) then Exit;
+  RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath));
+  if not (RootVal is TJSONObject) then begin RootVal.Free; Exit; end;
+  try
+    Root:= RootVal as TJSONObject;
+    if Root.GetValue('profiles') is TJSONObject then
+    begin
+      Profs:= Root.GetValue('profiles') as TJSONObject;
+      for Pair in Profs do Result:= Result + [Pair.JsonString.Value];
+    end;
+  finally
+    RootVal.Free;
+  end;
+end;
+
+class procedure TLintConfigWriter.SaveToProfile(const APath, AName: string;
+  const ACfg: TLintConfig);
+var
+  Root, Profs, Owned: TJSONObject;
+  RootVal: TJSONValue;
+  RemovedPair: TJSONPair;
+begin
+  { start from existing file, or a fresh object }
+  Root:= nil; RootVal:= nil;
+  if TFile.Exists(APath) then
+  begin
+    try RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath)); except RootVal:= nil; end;
+    if RootVal is TJSONObject then Root:= RootVal as TJSONObject
+    else begin RootVal.Free; RootVal:= nil; end;
+  end;
+  if Root = nil then Root:= TJSONObject.Create;
+  try
+    { ensure a "profiles" object }
+    if not (Root.GetValue('profiles') is TJSONObject) then
+    begin
+      RemovedPair:= Root.RemovePair('profiles');
+      if RemovedPair <> nil then RemovedPair.Free;
+      Profs:= TJSONObject.Create;
+      Root.AddPair('profiles', Profs);
+    end
+    else
+      Profs:= Root.GetValue('profiles') as TJSONObject;
+    { set profiles.<AName> := owned config (replace if present) }
+    RemovedPair:= Profs.RemovePair(AName);
+    if RemovedPair <> nil then RemovedPair.Free;
+    Owned:= BuildOwnedObject(ACfg);
+    Profs.AddPair(AName, Owned);
+    WriteAnsiCrlf(APath, Root.Format(2));
+  finally
+    Root.Free;   { frees the whole tree incl. Profs + Owned }
+  end;
 end;
 
 end.
