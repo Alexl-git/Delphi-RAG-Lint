@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## v0.69.0-alpha (in progress)
+## v0.69.0-alpha -- 2026-07-01
 
 ### Added (naming -- D3, closes MISSING-FEATURES #1)
 
@@ -64,8 +64,18 @@ breaking changes** until v1.0.
   `naming.min_identifier_len`). The CLI remains the consumer of record; the tab
   only edits the JSON. Completes v0.69 deliverable D1 (D1a shipped the `drag-lint
   rules --json` catalog; D1b is the IDE tab that consumes it).
+- **Named profiles** -- the Lint Options tab manages a named-profile combo: profiles
+  are stored in `drag-lint-lint.json` under a `profiles` key, each capturing the full
+  settings snapshot (enabled/disabled rules, thresholds, naming params). The combo is
+  editable (rename, add, delete); switching profiles instantly reloads the panel.
+- **`drag-lint lint --profile <name>`** -- CLI flag that loads and applies a named
+  profile's complete settings (enable/disable + thresholds + naming) before running,
+  previously enable/disable only.
+- **Live rule-search box** -- a filter input above the rule list; typing narrows the
+  visible rules by id or title substring (case-insensitive, instant).
 - New units: `TLintOptionsFrame` (`src\delphi-plugin\DragLint.Plugin.LintOptionsFrame.pas`),
   `TLintConfigWriter` (`src\lint\DRagLint.Lint.ConfigWriter.pas`).
+- Note: IDE tab UI is compile-verified; final in-IDE click-test pending.
 
 ### Fixed
 
