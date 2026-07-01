@@ -4467,6 +4467,42 @@ begin
             Inc(AFixableCount);
           end;
         end;
+      end
+      else if SameText(F.RuleId, 'redundant-cast')
+              and (F.StartLine = F.EndLine) then
+      begin
+        { redundant-cast fires only on 'TFoo(x)' with x a SINGLE identifier (the
+          rule's precondition), so there is no nested paren: the ')' is the first
+          one after the '('. The finding span [StartCol, EndCol) covers the entity
+          name 'TFoo'; scan on to '(' then to ')' and replace 'TFoo(x)' with 'x'. }
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          var OpenP: Integer:= F.EndCol;   { 1-based; '(' expected at/after the name }
+          while (OpenP <= Length(Ln)) and (Ln[OpenP] <> '(') do Inc(OpenP);
+          if (OpenP <= Length(Ln)) and (Ln[OpenP] = '(') then
+          begin
+            var CloseP: Integer:= OpenP + 1;
+            while (CloseP <= Length(Ln)) and (Ln[CloseP] <> ')') do Inc(CloseP);
+            if (CloseP <= Length(Ln)) and (Ln[CloseP] = ')') then
+            begin
+              var Inner: string:= Trim(Copy(Ln, OpenP + 1, CloseP - OpenP - 1));
+              if Inner <> '' then
+              begin
+                E:= Default(TTextEdit);
+                E.FilePath:= F.FilePath;
+                E.Kind    := tekReplaceInLine;
+                E.Line    := F.StartLine;
+                E.Col     := F.StartCol;
+                E.EndCol  := CloseP + 1;    { exclusive end -- one past the ')' }
+                E.Text    := Inner;
+                Result:= Result + [E];
+                Inc(AFixableCount);
+              end;
+            end;
+          end;
+        end;
       end;
     end;
   finally
