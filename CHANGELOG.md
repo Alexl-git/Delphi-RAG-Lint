@@ -5,7 +5,36 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
-### Added (dead-code #2 tail, cont.)
+## v0.71.0-alpha -- 2026-07-01
+
+### Added -- autofix subsystem (MISSING-FEATURES #12)
+
+- **`drag-lint lint <file> --fix [--apply]`** (and `lint-all`) -- a quick-fix
+  engine. Dry-run by default: it prints the edits it *would* make; `--apply`
+  writes them, backing each file up to `<file>.bak` first (`--no-backup` to
+  skip). Built on a new `tekReplaceInLine` char-range text-edit primitive.
+  Seed fixes: **`self-assignment`** (delete the line), **`redundant-parentheses`**
+  (strip the outer parens), and **`redundant-cast`** (`TFoo(x)` -> `x`).
+
+### Added -- cast rules (MISSING-FEATURES #4)
+
+- **`redundant-cast`** (`hint`, on by default) -- flags a no-op hard cast
+  `TFoo(x)` where `x` is already declared exactly `TFoo` (pure-AST, via a
+  per-file type map). T-prefixed class-like target + single-identifier argument
+  only, to avoid scalar-cast noise; near-zero false positives. Autofixable.
+- **`unsafe-typecast-without-is`** (`warning`, **OFF by default**) -- flags a
+  hard cast `TFoo(x)` of an object reference to a *different* class with no
+  guarding `x is TFoo`. If `x` is not really a `TFoo` at run time the cast
+  crashes or corrupts. Fires only when both target and operand are plausible
+  class types (`x` declared `TObject` or a different `T`-class -- a genuine
+  down/cross-cast); value/record casts (`TDateTime`/`TColor`/`TRect`...), the
+  redundant same-type cast, `TObject` upcasts, and guarded casts are all
+  skipped. Ships off because many unguarded casts are provably safe to the
+  author (a src sweep found only event-handler `T...(Sender)` casts). Opt in via
+  `drag-lint-lint.json` `"enabled": ["unsafe-typecast-without-is"]` or
+  `--rule unsafe-typecast-without-is`.
+
+### Added -- dead-code #2 tail (cont.)
 
 - **`function-result-ignored`** (`hint`, **OFF by default**) -- flags a
   bare-statement call (a call used as a statement, result discarded) to a
@@ -15,6 +44,15 @@ breaking changes** until v1.0.
   result is common and usually intentional in Delphi (builder/adder/runner
   functions), so on real code it is dominated by false positives; a future
   store-backed, effect-aware pass could make it default-on.
+
+### Deferred
+
+- The remaining #4 cast rules (lossy Ansi<->Unicode, exhaustive enum-case,
+  nullability) need the symbol store (member sets, exact cross-unit types) and
+  cannot be exercised by the file-only lint harness -- deferred to a later
+  store-backed pass. More `--fix` quick-fixes for `.scm`-defined rules
+  (`redundant-not-not`, `boolean-comparison-true`) await an explicit fix-spec
+  payload on the finding (span-surgery from message text is fragile).
 
 ## v0.70.0-alpha -- 2026-07-01
 
