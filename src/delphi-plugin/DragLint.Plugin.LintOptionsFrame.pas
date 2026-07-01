@@ -68,9 +68,12 @@ type
     FHasData   : Boolean;       { True after at least one successful load }
     FProfile   : string;        { active profile name; '' = base config }
     FCfg       : TLintConfig;   { active config (base or profile-merged) }
-    { search filter }
-    FSearch    : string;        { current trimmed search text; '' = show all }
-    FEdtSearch : TEdit;         { search box in top panel }
+    { search filter (own row below the top panel) }
+    FSearch       : string;      { current trimmed search text; '' = show all }
+    FPanelSearch  : TPanel;      { second top row hosting the search field }
+    FLblSearchIcon: TLabel;      { magnifier glyph (Segoe MDL2 Assets) }
+    FLblSearch    : TLabel;      { the word "Search" }
+    FEdtSearch    : TEdit;       { search box }
     procedure BuildControls;
     procedure BtnReloadClick  (Sender: TObject);
     procedure BtnSaveClick    (Sender: TObject);
@@ -604,17 +607,6 @@ begin
   FLblProfile.Left    := FCboProfile.Left - 48;
   FLblProfile.Anchors := [akTop, akRight];
 
-  { Search box: placed between counts label and profile label }
-  FEdtSearch:= TEdit.Create(Self);
-  FEdtSearch.Parent   := FPanelTop;
-  FEdtSearch.Width    := 120;
-  FEdtSearch.Height   := 24;
-  FEdtSearch.Top      := 4;
-  FEdtSearch.Anchors  := [akTop, akRight];
-  FEdtSearch.Left     := FLblProfile.Left - FEdtSearch.Width - 4;
-  FEdtSearch.TextHint := 'Search rules...';
-  FEdtSearch.OnChange := SearchChanged;
-
   FLblCounts:= TLabel.Create(Self);
   FLblCounts.Parent  := FPanelTop;
   FLblCounts.Left    := 8;
@@ -622,6 +614,42 @@ begin
   FLblCounts.Caption := 'Not loaded';
   FLblCounts.AutoSize:= True;
   FLblCounts.Anchors := [akLeft, akTop, akRight];
+
+  { --- Search row: its own line below the top button panel --- }
+  FPanelSearch:= TPanel.Create(Self);
+  FPanelSearch.Parent     := Self;
+  FPanelSearch.Align      := alTop;
+  FPanelSearch.Top        := PH;      { stack directly below FPanelTop }
+  FPanelSearch.Height     := 30;
+  FPanelSearch.BevelOuter := bvNone;
+
+  { Magnifier glyph -- Segoe MDL2 Assets U+E721 (Search). Assigned via WideChar
+    so the .pas source stays strict 7-bit ASCII (no literal Unicode glyph). }
+  FLblSearchIcon:= TLabel.Create(Self);
+  FLblSearchIcon.Parent    := FPanelSearch;
+  FLblSearchIcon.Left      := 8;
+  FLblSearchIcon.Top       := 7;
+  FLblSearchIcon.AutoSize  := True;
+  FLblSearchIcon.Font.Name := 'Segoe MDL2 Assets';
+  FLblSearchIcon.Font.Size := 10;
+  FLblSearchIcon.Caption   := WideChar($E721);
+
+  FLblSearch:= TLabel.Create(Self);
+  FLblSearch.Parent  := FPanelSearch;
+  FLblSearch.Left    := FLblSearchIcon.Left + 22;
+  FLblSearch.Top     := 7;
+  FLblSearch.AutoSize:= True;
+  FLblSearch.Caption := 'Search';
+
+  FEdtSearch:= TEdit.Create(Self);
+  FEdtSearch.Parent   := FPanelSearch;
+  FEdtSearch.Left     := FLblSearch.Left + 50;
+  FEdtSearch.Top      := 3;
+  FEdtSearch.Height   := 24;
+  FEdtSearch.Width    := FPanelSearch.Width - FEdtSearch.Left - 8;
+  FEdtSearch.Anchors  := [akLeft, akTop, akRight];
+  FEdtSearch.TextHint := 'Search rules...';
+  FEdtSearch.OnChange := SearchChanged;
 
   { --- Scrollable body --- }
   FScroll:= TScrollBox.Create(Self);
@@ -1211,7 +1239,17 @@ begin
     FProfile:= ''
   else
     FProfile:= Sel;
-  ReloadCatalogAndConfig;
+  { Fast path: the rule catalog is static and does not change between profiles --
+    only the config overlay does. When the catalog JSON is already cached, just
+    reload the config and re-render from that cache; skip the (slow) re-spawn of
+    "drag-lint rules --json". The Reload button still forces the full CLI path. }
+  if FHasData and (FCatalogJSON <> '') then
+  begin
+    FCfg:= TLintConfig.Load(CfgPath, FProfile);
+    RenderCatalog(FCatalogJSON);
+  end
+  else
+    ReloadCatalogAndConfig;
 end;
 
 { ============================================================
