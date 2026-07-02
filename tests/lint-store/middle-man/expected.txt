@@ -1,0 +1,8 @@
+# TMiddle: 3 of 4 body methods are pure one-line delegations to FImpl (strict
+# majority 3*2 > 4) -> middle-man fires, anchored at the CLASS DECL line (Emit
+# uses DeclLine), not a method line. 'TMiddle = class' is sample.pas line 15.
+middle-man sample.pas:15
+# TReal: 3 body methods, all real multi-statement work -> must NOT fire.
+!middle-man sample.pas:28
+# TTiny: only 2 delegating methods (< MIDDLE_MAN_MIN_METHODS=3) -> must NOT fire.
+!middle-man sample.pas:40

@@ -193,6 +193,7 @@ begin
     B('loop-control-flag', 'refactoring', 'hint', 'Loop exit driven by a boolean flag -- consider Break', False); { OFF by default -- riskiest heuristic of the batch; opt in via "enabled" }
     B('mutable-global-variable', 'refactoring', 'info', 'Mutable global variable -- shared mutable state (Fowler Global Data)', False); { OFF by default -- see FP-sanity note in AstChecks.pas; opt in via "enabled" }
     B('repeated-type-switch', 'refactoring', 'info', 'Same case-selector repeated across 3+ methods -- Replace Conditional with Polymorphism (project-wide)', False); { OFF by default -- medium-FP (message-map dispatches, name-based grouping); opt in via "enabled" }
+    B('middle-man', 'refactoring', 'info', 'Class mostly delegates to one field -- Remove Middle Man (inline or expose the delegate)', False); { OFF by default -- facades/interposers/OTA-NTA wrappers are legitimate middle-men; opt in via "enabled" }
 
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');

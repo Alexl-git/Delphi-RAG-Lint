@@ -5910,9 +5910,11 @@ begin
   { v0.71/v0.74/v0.79/v0.80: function-result-ignored + unsafe-typecast-without-is +
     exhaustive-enum-case + multiple-statements-per-line + magic-literal +
     boolean-flag-parameter + public-writable-field + loop-control-flag +
-    mutable-global-variable + repeated-type-switch are OFF by default here too
-    (opt in via config "enabled"). }
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch'],
+    mutable-global-variable + repeated-type-switch + middle-man are OFF by default
+    here too (opt in via config "enabled"). middle-man is emitted by
+    TClassMetrics.Run above; catalog False alone does not suppress CLI output, so
+    it must be listed here for the ShouldKeep filter to drop it by default. }
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;

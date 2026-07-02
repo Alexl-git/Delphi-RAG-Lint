@@ -43,6 +43,15 @@ type
 implementation
 
 type
+  { Result of the per-class middle-man delegation scan: how many body methods
+    are pure one-line delegations to the dominant field, out of how many total,
+    and that field's name. Flag = BestCount * 2 > Total (strict majority). }
+  TMiddleManResult = record
+    Total    : Integer; { body-bearing methods considered }
+    BestCount: Integer; { methods delegating to the dominant field }
+    BestField: string ; { the dominant delegate field's name }
+  end;
+
   TClassInfo = record
     Id         : Int64          ;
     Name       : string         ;
@@ -55,6 +64,11 @@ type
     Methods    : TArray<TSymbol>; { method-kind children }
     Fields     : TArray<TSymbol>; { skField children }
   end;
+
+const
+  { A class must have at least this many body-bearing methods before the
+    middle-man ratio is meaningful (a 1-2 method wrapper is not a smell). }
+  MIDDLE_MAN_MIN_METHODS = 3;
 
 function IsMethodKind(AKind: TSymbolKind): Boolean;
 begin
@@ -472,6 +486,205 @@ var
     end;
   end;
 
+  { Middle-man delegation scan (Fowler "Remove Middle Man"). For each body
+    method, decides whether its body is a PURE single-statement delegation to a
+    base FIELD of the class and, if so, to which field; then groups by target
+    field and reports the dominant group. A method delegates when its body's one
+    real statement (skipping begin/end) is EITHER an assignment 'Result :=
+    <field>.X[(...)]' (lhs = Result or the method's own name) OR a bare void call
+    '<field>.X[(...)];'. The delegate root must be a declared field (CI.Fields,
+    case-insensitive) -- this both groups by "same object" and cuts false
+    positives (delegation to a local/param/global is not a middle-man). The
+    caller flags the class when Total >= MIDDLE_MAN_MIN_METHODS and the dominant
+    group is a strict majority (BestCount * 2 > Total). }
+  function ComputeMiddleMan(const AInfo: TClassInfo): TMiddleManResult;
+  var
+    PF        : TParsedFile               ;
+    BodyM     : TArray<TSymbol>           ;
+    M         : TSymbol                   ;
+    FieldNames: TDictionary<string, Boolean>;
+    ProcByLine: TDictionary<Integer, TTSNode>;
+    ProcNodes : TList<TTSNode>            ;
+    Groups    : TDictionary<string, Integer>;
+    Display   : TDictionary<string, string> ; { lowercase field -> original casing }
+    I         : Integer                   ;
+    Field, Lo : string                    ;
+    Cnt, Best : Integer                   ;
+    Pair      : TPair<string, Integer>    ;
+
+    procedure CollectDefProcNodes(const ANode: TTSNode);
+    var
+      C  : Integer;
+      Ln : Integer;
+    begin
+      if ANode.IsNull then Exit;
+      if ANode.NodeType = 'defProc' then
+      begin
+        Ln:= Integer(ANode.StartPoint.row) + 1;
+        if not ProcByLine.ContainsKey(Ln) then ProcByLine.Add(Ln, ANode);
+        ProcNodes.Add(ANode);
+      end;
+      for C:= 0 to ANode.NamedChildCount - 1 do CollectDefProcNodes(ANode.NamedChild(C));
+    end;
+
+    function FindProcContainingLine(ALine: Integer): TTSNode;
+    var
+      P: TTSNode;
+      S, E: Integer;
+    begin
+      Result:= Default(TTSNode);
+      for P in ProcNodes do
+      begin
+        S:= Integer(P.StartPoint.row) + 1;
+        E:= Integer(P.EndPoint.row) + 1;
+        if (ALine >= S) and (ALine <= E) then Exit(P);
+      end;
+    end;
+
+    { The base (leftmost-rooted) identifier text of a delegate expression, or ''.
+      Unwraps exprCall (entity: field), then walks the exprDot lhs: chain down to
+      the deepest single identifier -- 'FImpl.X' -> 'FImpl', 'FA.FB.X' -> 'FA'. }
+    function DelegateBaseField(ANode: TTSNode): string;
+    var
+      Cur, Lhs: TTSNode;
+      Guard   : Integer;
+    begin
+      Result:= '';
+      if ANode.IsNull then Exit;
+      if ANode.NodeType = 'exprCall' then
+        ANode:= ANode.ChildByField('entity');
+      if ANode.IsNull then Exit;
+      if ANode.NodeType <> 'exprDot' then Exit; { not a member access -> not a delegation }
+      Cur:= ANode;
+      Guard:= 0;
+      while (not Cur.IsNull) and (Cur.NodeType = 'exprDot') and (Guard < 64) do
+      begin
+        Lhs:= Cur.ChildByField('lhs');
+        if Lhs.IsNull then Exit;
+        Cur:= Lhs;
+        Inc(Guard);
+      end;
+      if (not Cur.IsNull) and (Cur.NodeType = 'identifier') then
+        Result:= NodeText(Cur, PF.Src);
+    end;
+
+    { The single real statement of a block body (skips begin/end keyword nodes),
+      or a null node when the body has zero or more than one real statement. }
+    function SoleStatement(const ABlock: TTSNode): TTSNode;
+    var
+      C, RealN: Integer;
+      Kid     : TTSNode;
+    begin
+      Result:= Default(TTSNode);
+      RealN:= 0;
+      for C:= 0 to ABlock.NamedChildCount - 1 do
+      begin
+        Kid:= ABlock.NamedChild(C);
+        if Kid.IsNull then Continue;
+        if Copy(Kid.NodeType, 1, 1) = 'k' then Continue; { kBegin / kEnd / kComment-ish keyword tokens }
+        Inc(RealN);
+        if RealN > 1 then Exit(Default(TTSNode)); { more than one statement -> not a delegation }
+        Result:= Kid;
+      end;
+      if RealN <> 1 then Result:= Default(TTSNode);
+    end;
+
+    { The delegate field a defProc body forwards to, or '' if not a pure
+      single-statement delegation. Recognises 'Result := <field>.X' assignments
+      and bare '<field>.X;' void calls. AMethodName lets 'FnName := ...' (the
+      old-style function-result assignment) count as a Result assignment. }
+    function DelegationField(const ADefProc: TTSNode; const AMethodName: string): string;
+    var
+      Body, Stmt, Lhs, Rhs, Delegate: TTSNode;
+      LhsTxt                        : string ;
+    begin
+      Result:= '';
+      if ADefProc.IsNull then Exit;
+      Body:= ADefProc.ChildByField('body');
+      if Body.IsNull or (Body.NodeType <> 'block') then Exit;
+      Stmt:= SoleStatement(Body);
+      if Stmt.IsNull then Exit;
+
+      Delegate:= Default(TTSNode);
+      if Stmt.NodeType = 'assignment' then
+      begin
+        Lhs:= Stmt.ChildByField('lhs');
+        if Lhs.IsNull or (Lhs.NodeType <> 'identifier') then Exit;
+        LhsTxt:= NodeText(Lhs, PF.Src);
+        if not (SameText(LhsTxt, 'Result') or SameText(LhsTxt, AMethodName)) then Exit;
+        Rhs:= Stmt.ChildByField('rhs');
+        if Rhs.IsNull then Exit;
+        Delegate:= Rhs;
+      end
+      else if Stmt.NodeType = 'statement' then
+      begin
+        { bare void call is wrapped in a 'statement' node with one named child }
+        if Stmt.NamedChildCount <> 1 then Exit;
+        Delegate:= Stmt.NamedChild(0);
+      end
+      else if (Stmt.NodeType = 'exprCall') or (Stmt.NodeType = 'exprDot') then
+        Delegate:= Stmt { defensive: an unwrapped bare expression }
+      else
+        Exit;
+
+      if Delegate.IsNull then Exit;
+      if not ((Delegate.NodeType = 'exprDot') or (Delegate.NodeType = 'exprCall')) then Exit;
+      Result:= DelegateBaseField(Delegate);
+    end;
+
+  begin
+    Result:= Default(TMiddleManResult);
+    BodyM:= nil;
+    for M in AInfo.Methods do
+      if M.ImplStartLine > 0 then BodyM:= BodyM + [M];
+    Result.Total:= Length(BodyM);
+    if Result.Total < MIDDLE_MAN_MIN_METHODS then Exit;
+
+    PF:= TAstParseCache.Get(AInfo.Path);
+    if PF.Tree = nil then Exit; { unparseable -> no delegation signal }
+
+    FieldNames:= TDictionary<string, Boolean>.Create;
+    ProcByLine:= TDictionary<Integer, TTSNode>.Create;
+    ProcNodes := TList<TTSNode>.Create;
+    Groups    := TDictionary<string, Integer>.Create;
+    Display   := TDictionary<string, string>.Create;
+    try
+      for M in AInfo.Fields do FieldNames.AddOrSetValue(LowerCase(M.Name), True);
+      CollectDefProcNodes(PF.Tree.RootNode);
+
+      for I:= 0 to High(BodyM) do
+      begin
+        var Node: TTSNode;
+        if not ProcByLine.TryGetValue(BodyM[I].ImplStartLine, Node) then
+          Node:= FindProcContainingLine(BodyM[I].ImplStartLine);
+        if Node.IsNull then Continue;
+        Field:= DelegationField(Node, BodyM[I].Name);
+        if Field = '' then Continue;
+        Lo:= LowerCase(Field);
+        if not FieldNames.ContainsKey(Lo) then Continue; { delegate to a real field only }
+        Groups.TryGetValue(Lo, Cnt);
+        Groups.AddOrSetValue(Lo, Cnt + 1);
+        if not Display.ContainsKey(Lo) then Display.Add(Lo, Field);
+      end;
+
+      Best:= 0;
+      for Pair in Groups do
+        if Pair.Value > Best then
+        begin
+          Best:= Pair.Value;
+          if not Display.TryGetValue(Pair.Key, Result.BestField) then
+            Result.BestField:= Pair.Key;
+        end;
+      Result.BestCount:= Best;
+    finally
+      Display.Free;
+      Groups.Free;
+      ProcNodes.Free;
+      ProcByLine.Free;
+      FieldNames.Free;
+    end;
+  end;
+
 begin
   Result:= nil;
   if AStore = nil then Exit;
@@ -539,6 +752,15 @@ begin
         if Lc > TLCOM then
           Emit('low-cohesion',
             Format('Low cohesion: %s has LCOM4=%d (>%d) -- the class may combine unrelated responsibilities; consider splitting', [CI.Name, Lc, TLCOM]),
+            CI);
+      end;
+
+      if WantRule('middle-man') then
+      begin
+        var MM: TMiddleManResult:= ComputeMiddleMan(CI);
+        if (MM.Total >= MIDDLE_MAN_MIN_METHODS) and (MM.BestCount * 2 > MM.Total) then
+          Emit('middle-man',
+            Format('Middle man: %s forwards %d of %d methods to field ''%s'' -- consider removing the middle man (inline the delegate or expose it).', [CI.Name, MM.BestCount, MM.Total, MM.BestField]),
             CI);
       end;
     end;
