@@ -1,6 +1,8 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-02 (LATEST) -- **v0.79.0-alpha PUBLISHED -- M2-flow (#4 not-assigned-interface + #5 double-free) + Fowler refactoring-catalog batch (5 rules); NEXT = v0.80 (deferred cleanups + store-backed refactoring signals)**
+> ## RESUME 2026-07-02 (LATEST) -- **v0.79.0-alpha PUBLISHED -- M2-flow (#4 not-assigned-interface + #5 double-free) + Fowler refactoring-catalog batch (5 rules); NEXT = execute `docs/superpowers/plans/2026-07-02-v080-plan.md` (v0.80: deferred cleanups + store-backed refactoring signals) via subagent-driven-development, ship v0.80, then report remaining MISSING-FEATURES**
+>
+> **>>> NEXT ACTION (resume target): run superpowers:subagent-driven-development on `docs/superpowers/plans/2026-07-02-v080-plan.md`.** Phase 1 = 4 quick v0.79-review cleanups (flowengine test rename; double-free warning-vs-info message; not-assigned-interface X-as-T fixture; magic-literal compound-const exempt). Phase 2 = store-backed refactoring signals, SCOUT the store's member-access attribution FIRST, then mutable-global-variable -> middle-man -> repeated-type-switch -> feature-envy (feature-envy may DEFER if name-based signal too weak). Then release v0.80.0-alpha + report. Branch from main @ `21947a7`.
 >
 > **v0.79.0-alpha SHIPPED + RELEASED (autonomous session).** `main`=`6bd271a`, origin synced, tag `v0.79.0-alpha`,
 > GitHub PRERELEASE win32+win64. VERSION `CLI.pas:6`=`0.79.0-alpha`. Harness **file 148/148 + store 11/11 + catalog 29/29
