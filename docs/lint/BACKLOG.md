@@ -1,6 +1,53 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-01 (LATEST) -- **v0.76.0-alpha PUBLISHED -- 6 rules (#2/#5/#9/#10/#11) + store-fixture harness; NEXT = v0.77 (CK suite + M2 flow items)**
+> ## RESUME 2026-07-02 (LATEST) -- **v0.77.0-alpha PUBLISHED -- #6 duplicate-code clone detection + LSP config parity; NEXT = v0.78 (CK class metrics + M2 flow)**
+>
+> **v0.77.0-alpha SHIPPED + RELEASED.** `main`=`ed2ec77`, origin synced, tag `v0.77.0-alpha`, GitHub PRERELEASE win32+win64.
+> VERSION `CLI.pas:6`=`0.77.0-alpha`. Harness **file 141/141 + store 4/4 + catalog 29/29**.
+>
+> **What shipped:**
+> - **#6 `duplicate-code`** (complexity, `info`, ON, `threshold` default **90**) -- NEW unit
+>   `src/diagnostics/DRagLint.Diagnostics.CloneChecks.pas`. Type-2 (renamed-identifier tolerant) clone detection:
+>   walk each `defProc` body's leaf tokens, normalize identifiers+literals to placeholders, Rabin-Karp maximal-match
+>   over the concatenated token stream (unique per-routine barriers so a clone can't span routines), **coverage-based
+>   overlap suppression** (collect candidates -> sort longest-first -> emit only if not already >=50% covered on BOTH
+>   sides) collapses self-similar/repetitive regions. `TCloneChecker.Check(AFile)` = within-file (wired into CLI
+>   `DoLint` ~4914); `TCloneChecker.CheckProject(FilePaths)` = within+cross-file (wired into `DoLintAll` ~5840, runs
+>   ONLY there -- no double-report). Anchors at the lexicographically-later `(FilePath,StartLine)`; findings sorted with
+>   a Message tiebreaker. Fixtures: `tests/lint/duplicate-code[.pas|-none.pas]` + `tests/lint-store/duplicate-code/`.
+>   FP-sanity on src/: 90->~190, 100->142 (all genuine); chose 90 so a copy-pasted ~12-line routine (~96 tokens) is caught.
+> - **LSP config parity** -- `src/lsp/DRagLint.LSP.Completion.pas` `BuildDiagnostics` now (a) runs the clone check and
+>   (b) discovers an up-tree `drag-lint-lint.json`/`drag-lint.json` (`DiscoverLintConfig`) and filters lint+clone findings
+>   via `Cfg.ShouldKeep`/`ApplySeverity`. Syntax errors + compiler findings always shown.
+>
+> **KEY GOTCHAS (cost real time this session -- will bite a cold start):**
+> - **The IDE gets diagnostics from the `drag-lint lsp` SERVER via `TLspCompletion.BuildDiagnostics`
+>   (= `TLinter.LintFile` + `CheckSyntaxErrors` + compiler findings), a DIFFERENT code path from the CLI `DoLint`.**
+>   A rule wired into DoLint/DoLintAll does NOT appear in the IDE until it is ALSO added to `BuildDiagnostics`.
+> - **The IDE pins a long-running `drag-lint.exe lsp` process and CACHES diagnostics** (the dock panel's "Copy
+>   Diagnostics" dumps that cache = `FDiags`). Rebuilding the exe changes NOTHING in the IDE until you **kill every
+>   `drag-lint.exe` AND fully restart RAD Studio**, then re-lint (edit+save). A partial restart keeps the stale LSP.
+> - Plugin exe path = registry `HKCU\Software\drag-lint\DelphiPlugin\ExePath` (already -> `dll-win64`). A 32-bit IDE
+>   spawns the 64-bit exe fine (separate process). No Win32 build needed for the engine.
+> - `build\pack-lint-release.ps1` builds the win32 zip from `src\cli\Win32\Release` but only copies **win64** into
+>   `third_party\` -- so `third_party\dll-win32\drag-lint.exe` stays STALE (still 0.63). Verify the ZIP's exe, not that path.
+> - To drive the LSP headless for testing: `lsp` over stdin with `Content-Length`-framed initialize/initialized/didOpen,
+>   Start-Process with `-RedirectStandardInput <file>` (blocking `ReadLine` on stdout hangs -- use file redirection).
+> - The drag-lint tree-sitter self-parser errors on `{$I %DATE%}` -- don't put that directive in a `.pas`.
+>
+> **NEXT = v0.78 (authoritative per-item plan: `docs/lint/PLAN-v076-close-sections.md` Phase 3):**
+> - **CK class metrics** (store-backed, use `tests/lint-store` harness): NOC / RFC / LCOM + DIT / CBO -- ship as one bundle.
+> - **M2-flow** (extend `FlowChecks`): nullability / not-assigned-interface (#4), double-free (#5).
+> - **#9 `default-encoding-io`** if cheap.
+> - First task (CK suite) gets a fresh brainstorm -> writing-plans cycle.
+>
+> **WORKING-TREE NOTE:** `dclDragLintWizard.dproj` + `third_party/dll-win32/dclDragLintWizard.bpl|.dcp` show as modified
+> -- RAD Studio IDE-session artifacts (the IDE rebuilt/touched the plugin BPL), NOT edits made this session; left
+> uncommitted. `.claude/` + `.vscode/` untracked (local settings). Review/revert/commit separately if wanted.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-01 -- **v0.76.0-alpha PUBLISHED -- 6 rules (#2/#5/#9/#10/#11) + store-fixture harness; NEXT = v0.77 (CK suite + M2 flow items)**
 >
 > **v0.76.0-alpha SHIPPED + RELEASED.** `main`=`2e4e131`, origin synced, tag `v0.76.0-alpha`, GitHub PRERELEASE win32+win64:
 > https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.76.0-alpha . VERSION `CLI.pas:6`=`0.76.0-alpha`. Harness

@@ -7,14 +7,17 @@ analysis (`docs/lint/REPORT-1-delphi-lint-landscape.md`) cross-checked against t
 inventory (`rules/*.scm`, `src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`,
 `src/lint/DRagLint.Lint.ProjectRules.pas`).
 
-**Where we stand (updated v0.75.0-alpha):** ~136 rules, roughly **78-82%** of the catalogued
+**Where we stand (updated v0.77.0-alpha):** ~150 rules, roughly **80-83%** of the catalogued
 breadth. **M1 (type resolver), M2 (CFG/data-flow), naming (#1), dead-code (#2), the cast rules
 (#4, incl. store-aware exhaustive-enum-case + lossy-cast), autofix (#12), the #5/#6/#7/#8 pure-AST
-tails, cognitive complexity (#6), and the security tail (#10 weak-random) all SHIPPED.** We
-**lead** on security, architecture/layering, and exception handling. The remaining gaps are
-**clone detection + the CK suite** (#6), the **store/flow rules** (#4 nullability; #5
-abstract-method-instantiation; #9 nativeint-truncation; #11 circular-uses/DIT-CBO), and a few
-**pure-AST tails** (#10 dfm-hardcoded-credential/insecure-temp-file).
+tails, cognitive complexity (#6), the v0.76 store/AST tails (#5 abstract-method, #9
+nativeint-truncation, #10 dfm-credential/insecure-temp, #11 circular-uses), and #6
+clone/duplicate-code detection (v0.77) all SHIPPED.** As of v0.77 the IDE (LSP) surfaces the same
+rules as the CLI and honors an up-tree `drag-lint-lint.json` config. We **lead** on security,
+architecture/layering, and exception handling. The remaining gaps are the **CK class-metric suite**
+(#6/#11: DIT/NOC/CBO/RFC/LCOM) and the **M2-flow rules** (#4 nullability, #5 double-free) -- both
+the **v0.78** milestone -- plus small deferred tails (#9 default-encoding-io; #4 interface/object
+mixing; and a few low-signal items documented as won't-fix).
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
 **(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use
@@ -85,7 +88,7 @@ Have: `redundant-as-tobject` (lexical), `freeandnil-on-interface`, plus the v0.7
       map (declEnum, no --db needed) OR the store (skEnum children) for cross-unit enums. Opt in via
       `"enabled"` / `--rule` -- built for enum-heavy code like ORM3. src FP: 0 same-file)
 - [ ] interface/object mixing (needs deeper type analysis)  **(M1, deferred)**
-- [ ] nullability / not-assigned-interface use  **(M1, deferred -- flow-based)**
+- [ ] nullability / not-assigned-interface use  **(M2 flow) -- NEXT (v0.78)**: an interface-typed local used (method call / `as`) on a path where it was never assigned; extends the FlowChecks def-use lattice to interface refs.
 
 ## 5. Resource / memory  -- strong, some gaps  **(now; cross-call ones M1/M2)**
 Have: `unprotected-object-free`, `use-after-free`, `criticalsection-not-released`,
@@ -97,8 +100,8 @@ Have: `unprotected-object-free`, `use-after-free`, `criticalsection-not-released
 - [x] `create-inside-try`  -- shipped v0.75 (AST, `warning`; a try..finally whose FIRST protected
       statement is `X := TFoo.Create` -- if the constructor raises, the finally frees an undefined
       reference. Handles paren-less + parenthesised constructors; FixInsight-parity)
-- [ ] `double-free`
-- [ ] `stream/file/bitmap created-not-freed` pairing (same technique as criticalsection)
+- [ ] `double-free` -- **NEXT (v0.78, M2)**: extend `FlowChecks` -- `X.Free`/`FreeAndNil(X)` reachable twice on a path with no reassignment between.
+- [ ] `stream/file/bitmap created-not-freed` pairing (same technique as criticalsection) -- first VERIFY the M2 `object-leak` oracle doesn't already cover it before adding a targeted rule.
 - [x] `abstract-method-instantiation` -- **DONE v0.76** (store-backed: virtual method with no body, unoverridden across the hierarchy)
 - [x] true ownership/lifetime across calls (created here, leaked on some path)  -- shipped v0.66 as `object-leak` (store-backed interprocedural ownership oracle)  **(M2)**
 
@@ -114,8 +117,12 @@ Have: `cyclomatic-complexity`, `deep-nesting`, `method-too-long`, `too-many-para
 - [x] cognitive complexity  -- shipped v0.75 as `cognitive-complexity` (AST, `info`, threshold=25;
       SonarSource-style: each control-flow structure adds 1 + its nesting depth, each and/or/xor
       adds 1. Default 25 -- cognitive scores higher than cyclomatic. Configurable)
-- [ ] CK suite: DIT / NOC / CBO / RFC / LCOM; fan-in / fan-out  -- needs the uses/type graph
-- [ ] **clone / duplicate-code detection** (PAL CLON1-2)  -- the biggest remaining item; a token-hash pass
+- [ ] CK suite: DIT / NOC / CBO / RFC / LCOM; fan-in / fan-out  -- needs the uses/type graph. **NEXT (v0.78)** -- store-backed, use the `tests/lint-store` harness; ship the whole class-metric bundle together (DIT/CBO overlap #11).
+- [x] **clone / duplicate-code detection** (PAL CLON1-2)  -- **DONE v0.77** as `duplicate-code` (complexity, `info`, ON,
+      `threshold` default 90). New unit `DRagLint.Diagnostics.CloneChecks.pas`: Type-2 (renamed-identifier tolerant)
+      Rabin-Karp maximal-match over normalized-token streams (ids+literals -> placeholders; unique per-routine barriers),
+      with coverage-based overlap suppression to collapse self-similar regions. `Check` (within-file, CLI `DoLint`) +
+      `CheckProject` (within+cross-file, `DoLintAll`); also wired into the LSP `BuildDiagnostics` so it shows in the IDE.
 
 ## 7. Exceptions  -- strong (near parity)
 Have: `empty-except`, `empty-on-handler`, `empty-finally`, `bare-except`,
@@ -157,7 +164,7 @@ Have: `sql-injection-concat`, `unsafe-shellexecute`, `path-traversal`, `hardcode
 Have: `layering-violation`, `interface-reference-cycle`, `god-class`, `unit-not-in-dpr`,
 `unit-not-in-project`.
 - [x] `circular-uses` report -- **DONE v0.76** (`warning`, store-backed; Tarjan SCC over the unit uses-graph, one finding per cycle)
-- [ ] DIT/CBO depth metrics (overlaps #6) -- deferred to v0.77 with the CK suite (NOC/RFC/LCOM)
+- [ ] DIT/CBO depth metrics (overlaps #6) -- **NEXT (v0.78)** with the CK suite (NOC/RFC/LCOM); ship all class metrics as one store-backed bundle.
 
 ## 12. Ergonomics / output  -- DONE (SARIF, --fail-on, baseline, drag-lint-lint.json v0.66; autofix v0.71)
 - [x] **SARIF output** (CI integration) -- shipped v0.66
@@ -201,15 +208,17 @@ persisted, deterministic SQLite index is the substrate the IDE's own (flaky asyn
    complexity metrics (`case-with-too-few-branches`, `boolean-expression-complexity`, cognitive complexity,
    `unit-too-large`), exception patterns (`exception-constructed-but-not-raised`, `duplicate-exception-handler`).
    All pure-AST/index, console-testable, no new engine. **The v0.72 chunk.**
-2. **Clone / duplicate-code detection (#6)** -- the biggest remaining single item; a token-hash pass. Its own chunk.
-3. **Store-backed cast rules (#4)** -- lossy Ansi<->Unicode, exhaustive enum-case, nullability. Need the M1
-   enum-member set / exact cross-unit types; untestable in the file-only harness -> a `check-ast --db` path.
-4. **More `.scm`-rule autofixes (#12)** -- needs a fix-spec payload on `TLintFinding`. Rule-accuracy / FP polish ongoing.
+2. **Clone / duplicate-code detection (#6)** -- **DONE v0.77** (`duplicate-code`; Rabin-Karp token-hash pass).
+3. **CK class-metric suite (#6/#11) -- NEXT (v0.78)** -- DIT/NOC/CBO/RFC/LCOM, store-backed, `tests/lint-store` harness. One bundle.
+4. **M2-flow rules (#4/#5) -- NEXT (v0.78)** -- nullability/not-assigned-interface (#4), double-free (#5); extend `FlowChecks`.
+5. **More `.scm`-rule autofixes (#12)** -- needs a fix-spec payload on `TLintFinding`. Rule-accuracy / FP polish ongoing.
 
 ## Verdict
 "Everything the commercial tools do" is **not** reachable on a pure-AST path, but the major engine milestones
 are now behind us: **M1 (type resolver), M2 (data-flow/CFG), naming wave (#1), and dead-code tail (#2)
-all shipped by v0.68**. We sit at **~72-78%** of the catalogued breadth and **lead** on security and
-architecture. The realistic ceiling is **~80-85%** via the remaining cheap index tail + M1-backed cast rules;
-the last stretch (clone detection, full CK suite, cross-routine field flow, autofix) is incremental. We
-already exceed FixInsight's breadth and approach SonarDelphi's on the dimensions we cover.
+all shipped by v0.68**, and by v0.77 clone/duplicate-code detection + full CLI/IDE(LSP) rule parity are in.
+We sit at **~80-83%** of the catalogued breadth and **lead** on security and architecture. The realistic
+ceiling is **~80-85%**; the last stretch -- the **CK class-metric suite** (#6/#11) and **M2-flow rules**
+(#4 nullability, #5 double-free), both slated for **v0.78**, then cross-routine field flow, autofix breadth,
+and the deferred in-IDE Refactor tab (#13) -- is incremental or UX-heavy, not new-engine work. We already
+exceed FixInsight's breadth and approach SonarDelphi's on the dimensions we cover.
