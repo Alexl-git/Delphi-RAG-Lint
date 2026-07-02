@@ -16,6 +16,7 @@ uses
   , DRagLint.Resolver   .TypeAt
   , DRagLint.Diagnostics.AstChecks
   , DRagLint.Diagnostics.CloneChecks
+  , DRagLint.Lint       .Config
   ;
 
 type
@@ -392,10 +393,36 @@ begin
   end; // try
 end; // function
 
+{ v0.77: discover a lint config by walking up from AFile's directory. The plugin
+  writes 'drag-lint-lint.json' next to the project; a plain 'drag-lint.json' is
+  also honored. Returns '' when none is found (Load then yields a no-op default
+  that keeps everything). This lets the IDE (LSP) honor rule enable/disable +
+  severity overrides the same way the CLI does -- previously the LSP ignored all
+  config, so noisy rules could not be silenced in the editor. }
+function DiscoverLintConfig(const AFile: string): string;
+const
+  CANDIDATES: array[0..1] of string = ('drag-lint-lint.json', 'drag-lint.json');
+var
+  Dir, Parent, Cand: string;
+begin
+  Result:= '';
+  Dir:= ExtractFilePath(AFile);
+  while Dir <> '' do
+  begin
+    for Cand in CANDIDATES do
+      if TFile.Exists(Dir + Cand) then Exit(Dir + Cand);
+    Parent:= ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
+    if (Parent = '') or (Parent = Dir) then Break;
+    Dir:= Parent;
+  end;
+end;
+
 class function TLspCompletion.BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray;
 var
   Findings: TArray<TLintFinding>;
   F       : TLintFinding        ;
+  Cfg     : TLintConfig         ;
+  Sev     : string              ;
   DiagObj : TJSONObject         ;
   RangeObj: TJSONObject         ;
   StartObj: TJSONObject         ;
@@ -411,12 +438,19 @@ begin
   Result:= TJSONArray.Create;
   if not TFile.Exists(AFile) then Exit;
 
+  { v0.77: honor an up-tree lint config so the IDE can disable noisy rules /
+    override severities, matching the CLI. Empty path -> no-op default (keep all). }
+  Cfg:= TLintConfig.Load(DiscoverLintConfig(AFile), '');
+
   // --- Lint findings ---
   if Assigned(ALinter) then
   begin
     Findings:= ALinter.LintFile(AFile);
     for F in Findings do
     begin
+      if not Cfg.ShouldKeep(F.RuleId, False) then Continue; { config-disabled rule }
+      Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
+
       DiagObj:= TJSONObject.Create;
 
       StartObj:= TJSONObject.Create;
@@ -432,7 +466,7 @@ begin
       RangeObj.AddPair('end'  , EndObj  );
 
       DiagObj.AddPair('range', RangeObj);
-      DiagObj.AddPair('severity', TJSONNumber.Create(MapLintSeverityToLspSeverity(F.Severity)));
+      DiagObj.AddPair('severity', TJSONNumber.Create(MapLintSeverityToLspSeverity(Sev)));
       DiagObj.AddPair('source', 'drag-lint');
       DiagObj.AddPair('code'   , F.RuleId );
       DiagObj.AddPair('message', F.Message);
@@ -481,6 +515,8 @@ begin
   if SameText(ExtractFileExt(AFile), '.pas') or SameText(ExtractFileExt(AFile), '.inc') then
     for F in TCloneChecker.Check(AFile) do
     begin
+      if not Cfg.ShouldKeep(F.RuleId, False) then Continue; { config-disabled }
+      Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
       DiagObj := TJSONObject.Create;
       StartObj:= TJSONObject.Create;
       StartObj.AddPair('line'     , TJSONNumber.Create(F.StartLine - 1));
@@ -492,7 +528,7 @@ begin
       RangeObj.AddPair('start', StartObj);
       RangeObj.AddPair('end'  , EndObj  );
       DiagObj .AddPair('range', RangeObj);
-      DiagObj.AddPair('severity', TJSONNumber.Create(MapLintSeverityToLspSeverity(F.Severity)));
+      DiagObj.AddPair('severity', TJSONNumber.Create(MapLintSeverityToLspSeverity(Sev)));
       DiagObj.AddPair('source', 'drag-lint');
       DiagObj.AddPair('code'   , F.RuleId );
       DiagObj.AddPair('message', F.Message);
