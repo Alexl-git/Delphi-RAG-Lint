@@ -1,6 +1,46 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-02 (LATEST) -- **v0.78.0-alpha PUBLISHED -- #6/#11 CK class-metric suite (NOC/DIT/CBO/RFC/LCOM4); NEXT = v0.79 (M2-flow: nullability #4 + double-free #5) or the Fowler refactoring-catalog batch (#14)**
+> ## RESUME 2026-07-02 (LATEST) -- **v0.79.0-alpha PUBLISHED -- M2-flow (#4 not-assigned-interface + #5 double-free) + Fowler refactoring-catalog batch (5 rules); NEXT = v0.80 (deferred cleanups + store-backed refactoring signals)**
+>
+> **v0.79.0-alpha SHIPPED + RELEASED (autonomous session).** `main`=`6bd271a`, origin synced, tag `v0.79.0-alpha`,
+> GitHub PRERELEASE win32+win64. VERSION `CLI.pas:6`=`0.79.0-alpha`. Harness **file 148/148 + store 11/11 + catalog 29/29
+> + flowengine 31/31**. Spec `docs/superpowers/specs/2026-07-02-v079-flow-refactoring-rules-design.md`.
+>
+> **What shipped (7 rules + cleanup), each subagent-implemented + reviewed (C1/C2 got full opus reviews):**
+> - **M2 data-flow (category `data-flow`, ON):** **`not-assigned-interface`** (#4 nullability, `warning`) -- interface-typed
+>   local DEREFERENCED (`X.member`/`X as T`) before assignment; reuses the definite-assignment Must/May lattice for the
+>   interface subset `used-before-assignment` skips (`IsInterfaceType`: store `tcInterface` or `'I'`+uppercase fallback),
+>   deref-only, warning(Must)/info(May). **`double-free`** (#5, `warning`) -- raw `X.Free` twice with no reassign/nil between;
+>   NEW forward `TFreedState{Must,May}` lattice in `Flow.Lattices.pas` (Join Must:=and/May:=or), `DetectFreedVarKind`
+>   (fkRawFree->dangling / fkNiling[FreeAndNil/DisposeOf]->safe), per-item replay emit-BEFORE-advance, reassignment clears.
+> - **Fowler refactoring-catalog (NEW category `refactoring`; DeadCodeChecks.Visit branches):** `message-chain` (Hide
+>   Delegate, `hint`, **ON**, threshold 4; left-nested exprDot spine; src/ FP=0); `magic-literal` (Replace Magic Literal,
+>   `hint`, **OFF**; literalNumber not 0/1/-1/2 + not const/enum/case/range/initializer; src/ FP=696); `boolean-flag-parameter`
+>   (Remove Flag Argument, `hint`, **OFF**; Boolean param in if/case/while condition, skips override+Sender; FP=42);
+>   `public-writable-field` (Encapsulate Variable, `info`, **OFF**; `public` class field, excl published/records; FP=44);
+>   `loop-control-flag` (Replace Control Flag with Break, `hint`, **OFF**; flag var True/False in loop body + in condition; FP=1).
+> - **Cleanup:** dropped unused MethNames in ComputeLCOM4; moved `metrics` catalog block after project-wide; DIT cycle-guard fixture.
+>
+> **KEY GOTCHAS / DECISIONS (v0.79):**
+> - New category `refactoring` -> MUST be added to `tests/rules-catalog/RuleCatalogTests.dpr` `CanonicalBuckets` (else catalog self-test fails).
+> - `drag-lint lint <folder>` runs ONLY `.scm` rules (skips built-in AST checks) -> FP-sanity must lint files INDIVIDUALLY (or use lint-all --db).
+> - Numeric-literal node = `literalNumber`; qualified type/unit names = `typerefDot`/`moduleName` (distinct from value `exprDot`).
+> - Add-a-flow-rule = emit inside `TFlowChecker.Check`'s CheckRoutine (runs unconditionally; filtered client-side) + `--rule`
+>   allow-list/help + catalog `B(...,'data-flow',...)`; file-harness-testable (nil-store). Unit-test a lattice via `tests/flowengine/FlowEngineTests.dpr`.
+> - `not-assigned-interface` KNOWN LIMITATION (documented in CHANGELOG): the short-circuit `and`/`or` seeding suppresses derefs
+>   after ANY call passing the var (not just out/var params) -> a SAFE-DIRECTION false-negative; tightening needs callee-arity/store.
+>
+> **DEFERRED to v0.80 (from reviews -- all non-blocking):** (1) C2 flowengine test `TestFreedStateReassignClears` rename
+> (asserts end-dangling; behavior correct); (2) `double-free` warning+info share one message string ("may be freed twice"
+> reads oddly for the definite/warning case -> use "is freed twice" for warning); (3) `not-assigned-interface` add an `X as T`
+> / multi-hop-chain fixture; (4) `magic-literal` exempt uses DIRECT parent only (compound const initializers `const K=60*1000`
+> not exempt -- OK since OFF). **Store-backed refactoring signals (MISSING-FEATURES #14, next real batch):** `middle-man`,
+> `feature-envy`, `repeated-type-switch`, generalize `global-form-variable`->`mutable-global-variable`. Also open: #9
+> default-encoding-io, #4 interface/object mixing, CK fan-in/fan-out. The realistic ceiling is ~85%.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-02 -- **v0.78.0-alpha PUBLISHED -- #6/#11 CK class-metric suite (NOC/DIT/CBO/RFC/LCOM4); NEXT = v0.79 (M2-flow: nullability #4 + double-free #5) or the Fowler refactoring-catalog batch (#14)**
 >
 > **v0.78.0-alpha SHIPPED + RELEASED.** `main`=`e861a82`, origin synced, tag `v0.78.0-alpha`, GitHub PRERELEASE
 > win32+win64. VERSION `CLI.pas:6`=`0.78.0-alpha`. Harness **file 141/141 + store 10/10 + catalog 29/29**.

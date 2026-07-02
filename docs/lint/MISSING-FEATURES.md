@@ -7,17 +7,19 @@ analysis (`docs/lint/REPORT-1-delphi-lint-landscape.md`) cross-checked against t
 inventory (`rules/*.scm`, `src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`,
 `src/lint/DRagLint.Lint.ProjectRules.pas`).
 
-**Where we stand (updated v0.78.0-alpha):** ~155 rules, roughly **82-85%** of the catalogued
+**Where we stand (updated v0.79.0-alpha):** ~162 rules, roughly **83-86%** of the catalogued
 breadth. **M1 (type resolver), M2 (CFG/data-flow), naming (#1), dead-code (#2), the cast rules
 (#4, incl. store-aware exhaustive-enum-case + lossy-cast), autofix (#12), the #5/#6/#7/#8 pure-AST
 tails, cognitive complexity (#6), the v0.76 store/AST tails (#5 abstract-method, #9
 nativeint-truncation, #10 dfm-credential/insecure-temp, #11 circular-uses), #6
-clone/duplicate-code detection (v0.77), and the #6/#11 CK class-metric suite (v0.78:
-DIT/NOC/CBO/RFC/LCOM4) all SHIPPED.** As of v0.77 the IDE (LSP) surfaces the same
-rules as the CLI and honors an up-tree `drag-lint-lint.json` config. We **lead** on security,
-architecture/layering, and exception handling. The remaining gaps are the **M2-flow rules**
-(#4 nullability/not-assigned-interface, #5 double-free) -- the **v0.79** milestone -- plus small
-deferred tails (#9 default-encoding-io; #4 interface/object mixing; CK fan-in/fan-out; and a few
+clone/duplicate-code detection (v0.77), the #6/#11 CK class-metric suite (v0.78:
+DIT/NOC/CBO/RFC/LCOM4), the #4/#5 M2-flow rules (v0.79: not-assigned-interface + double-free),
+and the v0.79 Fowler refactoring-catalog batch (magic-literal / boolean-flag-parameter /
+message-chain / public-writable-field / loop-control-flag, category `refactoring`) all SHIPPED.**
+As of v0.77 the IDE (LSP) surfaces the same rules as the CLI and honors an up-tree
+`drag-lint-lint.json` config. We **lead** on security, architecture/layering, and exception
+handling. The remaining gaps are small deferred tails (#9 default-encoding-io; #4 interface/object
+mixing; CK fan-in/fan-out; the store-backed refactoring signals middle-man/feature-envy/repeated-type-switch; and a few
 low-signal items documented as won't-fix).
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
@@ -89,7 +91,7 @@ Have: `redundant-as-tobject` (lexical), `freeandnil-on-interface`, plus the v0.7
       map (declEnum, no --db needed) OR the store (skEnum children) for cross-unit enums. Opt in via
       `"enabled"` / `--rule` -- built for enum-heavy code like ORM3. src FP: 0 same-file)
 - [ ] interface/object mixing (needs deeper type analysis)  **(M1, deferred)**
-- [ ] nullability / not-assigned-interface use  **(M2 flow) -- NEXT (v0.78)**: an interface-typed local used (method call / `as`) on a path where it was never assigned; extends the FlowChecks def-use lattice to interface refs.
+- [x] nullability / not-assigned-interface use  **(M2 flow) -- DONE v0.79** as `not-assigned-interface` (`warning`, ON): an interface-typed local dereferenced (`X.member`/`X as T`) on a path where it was never assigned. Reuses the definite-assignment lattice for the interface subset used-before-assignment skips; warning(Must)/info(May). Known limitation: short-circuit `and`/`or` seeding is a safe-direction false-negative (see CHANGELOG).
 
 ## 5. Resource / memory  -- strong, some gaps  **(now; cross-call ones M1/M2)**
 Have: `unprotected-object-free`, `use-after-free`, `criticalsection-not-released`,
@@ -101,7 +103,7 @@ Have: `unprotected-object-free`, `use-after-free`, `criticalsection-not-released
 - [x] `create-inside-try`  -- shipped v0.75 (AST, `warning`; a try..finally whose FIRST protected
       statement is `X := TFoo.Create` -- if the constructor raises, the finally frees an undefined
       reference. Handles paren-less + parenthesised constructors; FixInsight-parity)
-- [ ] `double-free` -- **NEXT (v0.78, M2)**: extend `FlowChecks` -- `X.Free`/`FreeAndNil(X)` reachable twice on a path with no reassignment between.
+- [x] `double-free` -- **DONE v0.79** (`warning`, ON, M2): a raw `X.Free` reachable twice on a path with no reassignment/nil-ing between (frees a dangling pointer). New forward `TFreedState` lattice; `FreeAndNil`/`DisposeOf` clears the dangling state so FreeAndNil-then-Free is silent; warning(Must)/info(May). Aliased frees are a documented false-negative.
 - [ ] `stream/file/bitmap created-not-freed` pairing (same technique as criticalsection) -- first VERIFY the M2 `object-leak` oracle doesn't already cover it before adding a targeted rule.
 - [x] `abstract-method-instantiation` -- **DONE v0.76** (store-backed: virtual method with no body, unoverridden across the hierarchy)
 - [x] true ownership/lifetime across calls (created here, leaked on some path)  -- shipped v0.66 as `object-leak` (store-backed interprocedural ownership oracle)  **(M2)**
@@ -240,18 +242,17 @@ From <https://refactoring.com/catalog/>: many refactorings are triggered by a **
 `duplicate-code`; Replace Nested Conditional w/ Guard Clauses -> `deep-nesting`; Consolidate/Decompose
 Conditional -> `boolean-expression-complexity`). The **new** detectable signals worth adding:
 
-Pure-AST (no new engine), good value:
-- [ ] `magic-literal` (Replace Magic Literal) -- an unexplained numeric/string literal used in code (not a
-      const/resourcestring). Config allowlist (0, 1, -1, '' and small loop bounds exempt). Highest-value,
-      medium-FP -> ship configurable, likely OFF-by-default or with a conservative default set.
-- [ ] `boolean-flag-parameter` (Remove Flag Argument) -- a routine with a `Boolean` parameter that selects
-      behavior (the param drives an `if` in the body). Pure-AST; `hint`.
-- [ ] `message-chain` (Hide Delegate) -- a member-access chain `a.b.c.d...` deeper than N hops (count nested
-      `exprDot`). Pure-AST; threshold; `hint`.
-- [ ] `public-writable-field` (Encapsulate Variable/Record) -- a `public`/`published` instance field (not a
-      property) -- Delphi idiom is a property. Pure-AST (visibility + `skField`); `info`.
-- [ ] `loop-control-flag` (Replace Control Flag with Break) -- a Boolean set inside a loop purely to exit it.
-      Mostly-AST; medium.
+Pure-AST (no new engine), good value -- **all 5 DONE v0.79** (category `refactoring`):
+- [x] `magic-literal` (Replace Magic Literal) -- **DONE v0.79** (`hint`, OFF-by-default). Numeric literals only;
+      exempt 0/1/-1/2 + const/enum/case/range/initializer contexts. src/ FP=696 -> OFF (opt-in).
+- [x] `boolean-flag-parameter` (Remove Flag Argument) -- **DONE v0.79** (`hint`, OFF-by-default). Boolean param
+      driving an if/case/while condition; skips overrides + Sender handlers. src/ FP=42.
+- [x] `message-chain` (Hide Delegate) -- **DONE v0.79** (`hint`, **ON**, threshold 4). Left-nested `exprDot`
+      spine; qualified type/unit names excluded structurally. src/ FP=0.
+- [x] `public-writable-field` (Encapsulate Variable) -- **DONE v0.79** (`info`, OFF-by-default). `public` class
+      field (excludes `published` DFM components + records). src/ FP=44.
+- [x] `loop-control-flag` (Replace Control Flag with Break) -- **DONE v0.79** (`hint`, OFF-by-default). Boolean
+      flag assigned True/False in a loop body + referenced in its condition. src/ FP=1.
 
 Store-backed:
 - [ ] `middle-man` (Remove Middle Man) -- a class most of whose methods just delegate to one field/object.
