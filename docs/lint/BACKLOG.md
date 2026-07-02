@@ -1,6 +1,41 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-02 (LATEST) -- **v0.80.0 PUBLISHED -- FIRST FULL (non-prerelease) RELEASE. 3 store-backed refactoring rules (mutable-global-variable / repeated-type-switch / middle-man, all OFF-by-default) + v0.79 review cleanups + lint-project OFF-rule suppression fix. feature-envy DEFERRED to v0.81. NEXT = v0.81 (feature-envy IF the store gains enclosing-method ref attribution; #9 default-encoding-io; #4 interface/object mixing; CK fan-in/fan-out; the exit-code-from-survivors follow-up).**
+> ## RESUME 2026-07-02 (LATEST) -- **v0.81.0 PUBLISHED (full release) -- `default-encoding-io` (#9 portability) + CK `fan-out`/`fan-in` coupling metrics, all OFF-by-default. NEXT = v0.82 = the `enclosing_symbol_id` reference-index extension, which unblocks `feature-envy` + `#4 interface/object mixing` and lets CBO/RFC/LCOM read stored per-method attribution instead of AST re-walks; plus CK `instability` (Ce/(Ca+Ce), range-flag) + the 2 v0.81 review Minors + the exit-code-from-survivors quirk.**
+>
+> **v0.81.0 SHIPPED + RELEASED.** `main`=`32f189b` (+ this docs commit), origin synced, tag `v0.81.0`, GitHub FULL release
+> (isPrerelease=false, repo `latest`) win32+win64 (https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.81.0).
+> VERSION `CLI.pas:6`=`0.81.0`. Harness **file 150/150 + store 14/14 + catalog 29/29 + flowengine 33/33**. Plan
+> `docs/superpowers/plans/2026-07-02-v081-plan.md`; scout `.superpowers/sdd/v081-scout-brief.md`. Executed via SDD
+> (subagent-per-task + 2-stage review + final whole-branch opus review = Ready-to-merge:Yes, verified OFF-suppression at runtime).
+>
+> **What shipped (2 rules -> 3 rule ids, all OFF-by-default):**
+> - `default-encoding-io` (#9, `platform`, `warning`) -- pure-AST twin of `insecure-temp-file` in DeadCodeChecks.pas:
+>   `IsDefaultEncodingApi` (callee match SaveToFile/LoadFromFile/TFile.*/TStreamReader/Writer) + `ArgsHaveNoEncoding`
+>   (scans `exprArgs` NamedChildren for a `TEncoding` arg). OFF (src/ FP=65, mostly intentional ReadAllText on config files).
+> - CK `fan-out` (Ce) + `fan-in` (Ca) in ClassMetrics.pas (`metrics`, `info`): fan-out reuses `ComputeCBO` (untouched);
+>   fan-in = NEW `ComputeAllFanIn` whole-project reverse aggregation (inverts CBO's efferent set, deduped per source, same
+>   self+ancestor exclusions; FanIn dict freed in Run's finally). Both OFF; DefDisabled in DoLintAll (ClassMetrics is
+>   lint-all-only -- single call site, no lint-project/LSP leak). Config thresholds via `"thresholds":{...}`.
+>
+> **KEY DECISIONS / GOTCHAS (v0.81):**
+> - User chose "fan-in + explicit fan-out alias" (fan-out numerically == the ON `high-coupling`/CBO -> ship fan-out OFF so it
+>   does not double-fire in default output; opt-in for the fan-in/fan-out framing). CK `instability` deferred (range-flag shape, not a count).
+> - `#4 interface/object mixing` DEFERRED to v0.82: the cheap slice (`.Free`/`.DisposeOf` on a pure interface var) generally
+>   won't compile -> low value; the useful dual-handle form needs instance-aliasing/data-flow the codebase lacks. Bundle with feature-envy.
+> - OFF-by-default reminder (v0.80 lesson, held): catalog `False` + the id in `DefDisabled` in EVERY emitting CLI path. The
+>   final review verified no leak at runtime (0 findings unconfigured, N with --rule).
+> - `.gitattributes *.pas eol=crlf` + `core.autocrlf=true` store all .pas as LF and check out CRLF -> a reviewer seeing an
+>   "LF-only" .pas working-tree file is a transient artifact, NOT a defect; git serves CRLF on checkout.
+> - v0.81 review MINORS (-> v0.82 backlog, non-blocking): (1) default-encoding-io `ArgsHaveNoEncoding` scans string-literal
+>   args too, so a filename containing "TEncoding" falsely suppresses (only matters if promoted ON; fix = skip literalString
+>   named children). (2) carried: exit code from RAW findings not survivors (bare cmd can print "0 finding(s)" yet exit 1).
+>
+> **v0.82 SCOPE (next session):** design the `enclosing_symbol_id` reference-index extension FIRST (schema migration +
+> reindex/backfill + populate the enclosing method during the index AST walk) -- this is a real DB capability the user
+> greenlit; it unblocks `feature-envy` (per-method cross-class attribution), enables `#4` dual-handle detection, sharpens
+> CBO/RFC/LCOM (read stored attribution vs AST re-walk), and gives method-level find-callers. Then CK `instability` + the 2 Minors.
+>
+> --- (prior milestone) ---
 >
 > **v0.80.0 SHIPPED + RELEASED.** `main`=`f3d3882`, origin synced, tag `v0.80.0`, GitHub FULL release (isPrerelease=false, repo `latest`) win32+win64 (https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.80.0). VERSION `CLI.pas:6`=`0.80.0`. Harness **file 149/149 + store 13/13 + catalog 29/29 + flowengine 33/33**. Plan `docs/superpowers/plans/2026-07-02-v080-plan.md`.
 >
