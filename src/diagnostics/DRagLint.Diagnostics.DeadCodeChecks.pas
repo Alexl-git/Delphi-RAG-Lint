@@ -1129,7 +1129,17 @@ var
         - an array/set range bound (e.g. 'array[0..9]'): parent 'range';
         - a typed-const/const-array initializer element: parent 'arrInitializer',
           'recInitializer', or 'recInitializerField' (mirrors the exempt set
-          redundant-parentheses already uses for the same constructor contexts). }
+          redundant-parentheses already uses for the same constructor contexts);
+        - a COMPOUND const initializer expression (e.g. 'const K = 60*1000;'):
+          the literal's direct parent is an operator node (e.g. 'exprBinary'),
+          not 'defaultValue' itself, since the arithmetic sits BETWEEN the
+          literal and the defaultValue wrapper (verified via dumptree: chain is
+          literalNumber -> exprBinary -> defaultValue -> declConst ->
+          declConsts). Walk up the parent chain, bounded to 6 hops, and exempt
+          if any ancestor is 'defaultValue', 'declConst', 'declConsts', or
+          'declEnumValue' -- this only widens the EXISTING const/enum/default
+          exemption to compound expressions; it does not touch caseLabel/range/
+          initializer contexts (those stay direct-parent-only, unchanged). }
     if N.NodeType = 'literalNumber' then
     begin
       var LitTxt: string:= Trim(NodeStr(N));
@@ -1138,8 +1148,27 @@ var
         var LitPrnt: TTSNode:= N.Parent;
         var LitPT  : string := '';
         if not LitPrnt.IsNull then LitPT:= LitPrnt.NodeType;
-        if (LitPT <> 'defaultValue') and (LitPT <> 'caseLabel') and (LitPT <> 'range')
-           and (LitPT <> 'arrInitializer') and (LitPT <> 'recInitializer') and (LitPT <> 'recInitializerField') then
+        var IsExempt: Boolean :=
+          (LitPT = 'defaultValue') or (LitPT = 'caseLabel') or (LitPT = 'range')
+          or (LitPT = 'arrInitializer') or (LitPT = 'recInitializer') or (LitPT = 'recInitializerField');
+        if not IsExempt then
+        begin
+          var Anc: TTSNode := LitPrnt;
+          var Hop: Integer := 0;
+          while (not Anc.IsNull) and (Hop < 6) do
+          begin
+            var AncT: string := Anc.NodeType;
+            if (AncT = 'defaultValue') or (AncT = 'declConst') or (AncT = 'declConsts')
+               or (AncT = 'declEnumValue') then
+            begin
+              IsExempt := True;
+              Break;
+            end;
+            Anc := Anc.Parent;
+            Inc(Hop);
+          end;
+        end;
+        if not IsExempt then
           EmitAt(N, 'magic-literal',
             'Unexplained numeric literal -- extract a named constant', 'hint');
       end;

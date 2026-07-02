@@ -1,10 +1,14 @@
 # V declared then dereferenced with no assignment on any path -> warning
-not-assigned-interface 19
+not-assigned-interface 23
 # V assigned then dereferenced -> absent (must-assigned)
-!not-assigned-interface 27
+!not-assigned-interface 31
 # V assigned on one if-branch only, then dereferenced after -> fires (info)
-not-assigned-interface 35
+not-assigned-interface 39
 # plain copy W := V with no dereference of V -> absent (not a deref)
-!not-assigned-interface 42
+!not-assigned-interface 46
 # Supports(..,out V) and V.Method within one and-chain -> absent (sequencing)
-!not-assigned-interface 55
+!not-assigned-interface 59
+# V as IBar deref of an unassigned interface -> fires (warning)
+not-assigned-interface 67
+# multi-hop chain V.Child.Bar with V unassigned -> fires (warning), base of chain
+not-assigned-interface 74

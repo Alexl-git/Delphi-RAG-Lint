@@ -468,7 +468,7 @@ var
                   COL := Integer(It.Node.StartPoint.Column) + 1;
                   if CurFMust[FreedV] then
                     Emit('double-free', 'warning',
-                      Format('Object "%s" may be freed twice (double free) -- reassign or FreeAndNil after the first Free.', [V.Name]),
+                      Format('Object "%s" is freed twice (double free) -- reassign or FreeAndNil after the first Free.', [V.Name]),
                       ROW, COL)
                   else
                     Emit('double-free', 'info',

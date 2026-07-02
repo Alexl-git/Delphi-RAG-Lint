@@ -4,6 +4,7 @@ implementation
 
 const
   K_LIMIT = 99;
+  K_COMPOUND = 60*1000;
 
 type
   TColor = (clRed, clGreen = 5, clBlue);

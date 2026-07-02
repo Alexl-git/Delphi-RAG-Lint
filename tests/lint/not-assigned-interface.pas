@@ -1,9 +1,13 @@
 unit notassignedinterface;
 interface
 type
+  IBar = interface
+    procedure Baz;
+  end;
   IFoo = interface
     procedure Bar;
     function IsReady: Boolean;
+    function Child: IFoo;
   end;
 function GetFoo: IFoo;
 implementation
@@ -53,5 +57,20 @@ var
   OK: Boolean;
 begin
   OK := Supports(Src, IID, V) and V.IsReady;
+end;
+{ declared then deref'd via `as` with no assignment on any path -> warning }
+procedure P6;
+var
+  V: IFoo;
+  B: IBar;
+begin
+  B := V as IBar;
+end;
+{ multi-hop chain V.Child.Bar with V unassigned -> warning (base of the chain) }
+procedure P7;
+var
+  V: IFoo;
+begin
+  V.Child.Bar;
 end;
 end.

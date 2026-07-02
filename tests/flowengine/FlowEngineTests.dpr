@@ -342,7 +342,7 @@ begin
   Check('freedstate: linear raw-free -> may-dangling at exit', May);
 end;
 
-procedure TestFreedStateReassignClears;
+procedure TestFreedStateReassignThenFreeEndsDangling;
 var Must, May: Boolean;
 begin
   { reassigned between two frees -> NOT dangling at exit (2nd free acts on a
@@ -353,6 +353,19 @@ begin
     '  x := TObject.Create; x.Free; x := TObject.Create; x.Free;' + sLineBreak +
     'end; end.', 'x', Must, May);
   Check('freedstate: reassign-between -> still ends dangling (final Free)', Must);
+end;
+
+procedure TestFreedStateReassignClears;
+var Must, May: Boolean;
+begin
+  { reassign after a free, with NO free following -> the fresh object is live,
+    so x is NOT dangling at exit: proves reassignment clears the freed state. }
+  FreedStateAtExit(
+    'unit u; interface implementation procedure P; var x: TObject; begin' + sLineBreak +
+    '  x := TObject.Create; x.Free; x := TObject.Create;' + sLineBreak +
+    'end; end.', 'x', Must, May);
+  Check('freedstate: reassign-after-free clears dangling (must)', not Must);
+  Check('freedstate: reassign-after-free clears dangling (may)', not May);
 end;
 
 procedure TestFreedStateFreeAndNilClears;
@@ -393,6 +406,7 @@ begin
     TestLivenessBackward;
     TestEscapeLeak;
     TestFreedStateLinearDangling;
+    TestFreedStateReassignThenFreeEndsDangling;
     TestFreedStateReassignClears;
     TestFreedStateFreeAndNilClears;
     TestFreedStateBranchMergeMayOnly;
