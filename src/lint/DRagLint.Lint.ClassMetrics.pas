@@ -98,6 +98,7 @@ var
   Findings    : TList<TLintFinding>              ;
   TNOC        : Integer                          ;
   TDIT        : Integer                          ;
+  TRFC        : Integer                          ;
   CI          : TClassInfo                       ;
 
   function WantRule(const AId: string): Boolean;
@@ -264,6 +265,26 @@ var
     Result:= Depth;
   end;
 
+  { Response for a class: own method count + distinct callee names invoked from
+    within the class's method bodies (case-insensitive). }
+  function ComputeRFC(const AInfo: TClassInfo): Integer;
+  var
+    Refs  : TArray<TReference>       ;
+    R     : TReference              ;
+    Called: TDictionary<string, Boolean>;
+  begin
+    Called:= TDictionary<string, Boolean>.Create;
+    try
+      Refs:= GetRefs(AInfo.FileId);
+      for R in Refs do
+        if SameText(R.Kind, 'call') and (R.NameText <> '') and InAnyMethodBody(AInfo, R.StartLine) then
+          Called.AddOrSetValue(LowerCase(R.NameText), True);
+      Result:= Length(AInfo.Methods) + Called.Count;
+    finally
+      Called.Free;
+    end;
+  end;
+
 begin
   Result:= nil;
   if AStore = nil then Exit;
@@ -278,6 +299,7 @@ begin
   try
     TNOC:= ACfg.ThresholdFor('too-many-children', 10);
     TDIT:= ACfg.ThresholdFor('deep-inheritance', 6);
+    TRFC:= ACfg.ThresholdFor('high-response', 50);
 
     BuildInventory;
     ResolveParents;
@@ -301,6 +323,15 @@ begin
         if D > TDIT then
           Emit('deep-inheritance',
             Format('Deep inheritance: %s is %d levels deep (>%d) -- deep hierarchies are hard to follow', [CI.Name, D, TDIT]),
+            CI);
+      end;
+
+      if WantRule('high-response') then
+      begin
+        var Rfc: Integer:= ComputeRFC(CI);
+        if Rfc > TRFC then
+          Emit('high-response',
+            Format('High RFC: %s has a response set of %d (>%d) -- many methods and calls to test/understand', [CI.Name, Rfc, TRFC]),
             CI);
       end;
     end;

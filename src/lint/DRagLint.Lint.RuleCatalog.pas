@@ -192,6 +192,7 @@ begin
     { --- metrics (CK class metrics; v0.78) --- }
     B('too-many-children', 'metrics', 'info', 'Class has too many direct subclasses (NOC)', True, [MkParam('threshold','int','10')]);
     B('deep-inheritance', 'metrics', 'info', 'Class inheritance is too deep (DIT)', True, [MkParam('threshold','int','6')]);
+    B('high-response', 'metrics', 'info', 'Class response set is too large (RFC)', True, [MkParam('threshold','int','50')]);
 
     B('unused-public-symbol',  'project-wide', 'info',    'Public symbol is never referenced');
     B('unused-private-member', 'project-wide', 'warning', 'Private member is never referenced');
