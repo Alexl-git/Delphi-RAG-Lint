@@ -99,6 +99,7 @@ var
   TNOC        : Integer                          ;
   TDIT        : Integer                          ;
   TRFC        : Integer                          ;
+  TCBO        : Integer                          ;
   CI          : TClassInfo                       ;
 
   function WantRule(const AId: string): Boolean;
@@ -285,6 +286,43 @@ var
     end;
   end;
 
+  { Efferent coupling: distinct OTHER classes named (type_use) in the class's decl
+    span or method bodies. Excludes self and the class's transitive ancestors. }
+  function ComputeCBO(const AInfo: TClassInfo): Integer;
+  var
+    Coupled: TDictionary<string, Boolean>;
+    Exclude: TDictionary<string, Boolean>;
+    Anc    : TArray<TTypeAncestor>       ;
+    A      : TTypeAncestor               ;
+    Refs   : TArray<TReference>          ;
+    R      : TReference                  ;
+    Nm     : string                      ;
+  begin
+    Coupled:= TDictionary<string, Boolean>.Create;
+    Exclude:= TDictionary<string, Boolean>.Create;
+    try
+      Exclude.AddOrSetValue(LowerCase(AInfo.Name), True);
+      Anc:= AStore.GetTransitiveAncestors(AInfo.Id);
+      for A in Anc do
+        if A.Name <> '' then Exclude.AddOrSetValue(LowerCase(A.Name), True);
+      Refs:= GetRefs(AInfo.FileId);
+      for R in Refs do
+      begin
+        if not SameText(R.Kind, 'type_use') then Continue;
+        if R.NameText = '' then Continue;
+        if not (InDeclSpan(AInfo, R.StartLine) or InAnyMethodBody(AInfo, R.StartLine)) then Continue;
+        Nm:= LowerCase(R.NameText);
+        if Exclude.ContainsKey(Nm) then Continue;
+        if AStore.ResolveTypeCategory(R.NameText, AInfo.FileId) = tcClass then
+          Coupled.AddOrSetValue(Nm, True);
+      end;
+      Result:= Coupled.Count;
+    finally
+      Exclude.Free;
+      Coupled.Free;
+    end;
+  end;
+
 begin
   Result:= nil;
   if AStore = nil then Exit;
@@ -300,6 +338,7 @@ begin
     TNOC:= ACfg.ThresholdFor('too-many-children', 10);
     TDIT:= ACfg.ThresholdFor('deep-inheritance', 6);
     TRFC:= ACfg.ThresholdFor('high-response', 50);
+    TCBO:= ACfg.ThresholdFor('high-coupling', 20);
 
     BuildInventory;
     ResolveParents;
@@ -332,6 +371,15 @@ begin
         if Rfc > TRFC then
           Emit('high-response',
             Format('High RFC: %s has a response set of %d (>%d) -- many methods and calls to test/understand', [CI.Name, Rfc, TRFC]),
+            CI);
+      end;
+
+      if WantRule('high-coupling') then
+      begin
+        var Cbo: Integer:= ComputeCBO(CI);
+        if Cbo > TCBO then
+          Emit('high-coupling',
+            Format('High CBO: %s is coupled to %d other classes (>%d) -- consider reducing dependencies', [CI.Name, Cbo, TCBO]),
             CI);
       end;
     end;

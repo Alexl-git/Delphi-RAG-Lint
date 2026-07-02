@@ -1,0 +1,2 @@
+high-coupling coupled.pas:15
+!high-coupling coupled.pas:22
