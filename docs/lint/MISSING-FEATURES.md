@@ -14,13 +14,15 @@ tails, cognitive complexity (#6), the v0.76 store/AST tails (#5 abstract-method,
 nativeint-truncation, #10 dfm-credential/insecure-temp, #11 circular-uses), #6
 clone/duplicate-code detection (v0.77), the #6/#11 CK class-metric suite (v0.78:
 DIT/NOC/CBO/RFC/LCOM4), the #4/#5 M2-flow rules (v0.79: not-assigned-interface + double-free),
-and the v0.79 Fowler refactoring-catalog batch (magic-literal / boolean-flag-parameter /
-message-chain / public-writable-field / loop-control-flag, category `refactoring`) all SHIPPED.**
+the v0.79 Fowler refactoring-catalog batch (magic-literal / boolean-flag-parameter /
+message-chain / public-writable-field / loop-control-flag, category `refactoring`), and the v0.80
+store-backed refactoring signals (mutable-global-variable / repeated-type-switch / middle-man, all
+OFF-by-default) all SHIPPED.**
 As of v0.77 the IDE (LSP) surfaces the same rules as the CLI and honors an up-tree
 `drag-lint-lint.json` config. We **lead** on security, architecture/layering, and exception
 handling. The remaining gaps are small deferred tails (#9 default-encoding-io; #4 interface/object
-mixing; CK fan-in/fan-out; the store-backed refactoring signals middle-man/feature-envy/repeated-type-switch; and a few
-low-signal items documented as won't-fix).
+mixing; CK fan-in/fan-out; **`feature-envy` deferred to v0.81** -- needs per-method cross-class
+attribution the name-based store lacks; and a few low-signal items documented as won't-fix).
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
 **(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use
@@ -254,14 +256,17 @@ Pure-AST (no new engine), good value -- **all 5 DONE v0.79** (category `refactor
 - [x] `loop-control-flag` (Replace Control Flag with Break) -- **DONE v0.79** (`hint`, OFF-by-default). Boolean
       flag assigned True/False in a loop body + referenced in its condition. src/ FP=1.
 
-Store-backed:
-- [ ] `middle-man` (Remove Middle Man) -- a class most of whose methods just delegate to one field/object.
-- [ ] `feature-envy` (Move Function) -- a method that references another class's members more than its own
-      (overlaps CBO; needs member-access attribution -- harder given name-based refs).
-- [ ] `repeated-type-switch` (Replace Conditional w/ Polymorphism) -- the same enum/type-code `case` selector
-      appearing across multiple methods (a polymorphism candidate).
-- [ ] generalize `global-form-variable` -> `mutable-global-variable` (Global Data) -- any writable unit-level
-      global var, not just form types.
+Store-backed / project-wide -- **3 of 4 DONE v0.80** (category `refactoring`, all OFF-by-default):
+- [x] generalize `global-form-variable` -> `mutable-global-variable` (Global Data) -- **DONE v0.80** (`info`, OFF).
+      Any writable unit-level global var, not just form types. src/ FP=68/27 files -> OFF (opt-in).
+- [x] `repeated-type-switch` (Replace Conditional w/ Polymorphism) -- **DONE v0.80** (`info`, OFF). Same `case`
+      selector text across 3+ distinct methods; project-wide, deterministic. src/ FP=4 (name-based) -> OFF (opt-in).
+- [x] `middle-man` (Remove Middle Man) -- **DONE v0.80** (`info`, OFF). Class with 3+ body methods, >half pure
+      one-line delegations to the same declared field. Reuses the LCOM4 body-walk. src/ FP=0 (OFF: facades legit).
+- [ ] `feature-envy` (Move Function) -- **DEFERRED to v0.81.** A method referencing another class's members more
+      than its own. Needs per-method cross-class attribution, but store refs have NO enclosing-method column and
+      `FindContainingSymbol` keys the declaration span not the impl-body span; the AST fallback lacks expression-
+      level type inference to split own-vs-other-class touches -> unacceptable FP without more machinery.
 
 Needs M2 flow:
 - [ ] `split-variable` (Split Variable) -- one local reused for two unrelated purposes (distinct def-use spans).

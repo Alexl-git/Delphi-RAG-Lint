@@ -5,6 +5,51 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.80.0 -- 2026-07-02
+
+**First full (non-pre-release) build.** v0.71-v0.79 were `-alpha` pre-releases; v0.80.0 graduates off the
+alpha suffix. The project is still pre-1.0 (expect breaking changes until v1.0), but published releases are
+now marked as full releases rather than pre-releases.
+
+### Added -- store-backed refactoring signals (category `refactoring`, all OFF-by-default)
+- `mutable-global-variable` (Global Data, `info`, **OFF by default**) -- a writable unit-level global `var`
+  (generalizes `global-form-variable` to any type, not just form classes). Pure-AST: unit-scope `declVars`
+  only, procedure-locals and `const`/typed-const excluded. src/ FP=68 across 27 files (mostly legitimate
+  `G`-prefixed singletons) -> OFF; opt in via `"enabled": ["mutable-global-variable"]` or `--rule`.
+- `repeated-type-switch` (Replace Conditional with Polymorphism, `info`, **OFF by default**) -- the same
+  `case` selector text appearing across **3+ distinct methods** (a polymorphism candidate). Project-wide
+  (`lint-all`/`lint-project`); groups normalized selector text across enclosing methods, one finding per
+  occurrence, deterministic ordering. Name-based, so unrelated classes sharing a selector name can group
+  (a documented false-positive) -> OFF; opt in. src/ FP=4 (all shared param-name collisions).
+- `middle-man` (Remove Middle Man, `info`, **OFF by default**) -- a class with 3+ body methods where **more
+  than half** are pure one-line delegations to the **same** declared field (`Result := FImpl.X(...)` /
+  `FImpl.Y;`). Store-backed per class, reuses the LCOM4 method-body walk; target is restricted to declared
+  fields (`Self`/locals/params/globals excluded) to cut noise. Documented false-negatives: only
+  single-statement `Result:=`/bare-void bodies, only declared-field targets. src/ FP=0, but facades/wrappers
+  are legitimate middle-men -> OFF; opt in.
+
+### Fixed
+- `lint-project` now filters its output through the shared config/`ShouldKeep` path (`FinalizeAndOutput`), so
+  an OFF-by-default project rule (e.g. `repeated-type-switch`) no longer leaks into a bare `lint-project`
+  run. ON-by-default project rules are unaffected. (Side effect: `lint-project --json` is now pretty-printed
+  to match `lint-all`; field names/order are unchanged.)
+
+### Changed -- v0.79 review cleanups
+- `double-free`: the `warning` (definite) branch now reads "Object X **is** freed twice" while the `info`
+  (possible) branch keeps "may be freed twice" -- the two severities no longer share one message string.
+- `magic-literal`: numeric literals inside a **compound const initializer** (e.g. `const K = 60*1000;`) are
+  now exempt via a bounded, null-safe parent walk (previously only a direct `defaultValue` parent was exempt).
+- `not-assigned-interface`: added fixtures exercising the `X as T` deref and multi-hop `X.A.B` chain paths.
+- Flow-engine tests: renamed the misleading `TestFreedStateReassignClears` to
+  `TestFreedStateReassignThenFreeEndsDangling` and added a genuine reassign-clears test.
+
+### Deferred
+- `feature-envy` (Move Function, #14) is **deferred to v0.81**. A scout confirmed the symbol store cannot
+  attribute a reference to its enclosing **method** (references have no enclosing-method column, and
+  `FindContainingSymbol` keys on the declaration span, not the implementation-body span), so per-method
+  cross-class member-access attribution can't be done at an acceptable false-positive rate without
+  expression-level type inference. See `docs/lint/MISSING-FEATURES.md` section 14.
+
 ## v0.79.0-alpha -- 2026-07-02
 
 ### Added -- data-flow (M2) rules
