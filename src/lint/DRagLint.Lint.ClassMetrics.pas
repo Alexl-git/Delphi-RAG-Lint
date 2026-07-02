@@ -335,6 +335,7 @@ var
     FieldNames: TDictionary<string, Boolean>;
     MethNames : TDictionary<string, Boolean>;
     ProcByLine: TDictionary<Integer, TTSNode>;
+    ProcNodes : TList<TTSNode>            ;
     IdSets    : TArray<TDictionary<string, Boolean>>;
     N, I, J   : Integer                   ;
     UF        : TArray<Integer>           ;
@@ -350,22 +351,45 @@ var
       begin
         Ln:= Integer(ANode.StartPoint.row) + 1;
         if not ProcByLine.ContainsKey(Ln) then ProcByLine.Add(Ln, ANode);
+        ProcNodes.Add(ANode);
       end;
       for C:= 0 to ANode.NamedChildCount - 1 do CollectDefProcNodes(ANode.NamedChild(C));
     end;
 
-    procedure CollectIdentifiers(const ANode: TTSNode; ADst: TDictionary<string, Boolean>);
+    { Collects identifiers under ARoot's own body, stopping at any NESTED
+      defProc boundary (a local procedure/function) so its identifiers don't
+      fold into the enclosing method's set -- same idiom as CloneChecks.
+      CollectLeaves: recurse everywhere except into a non-root defProc. }
+    procedure CollectIdentifiers(const ARoot, ANode: TTSNode; ADst: TDictionary<string, Boolean>);
     var
       C: Integer;
       T: string ;
     begin
       if ANode.IsNull then Exit;
+      if (not (ANode = ARoot)) and (ANode.NodeType = 'defProc') then Exit; { nested routine excluded }
       if ANode.NodeType = 'identifier' then
       begin
         T:= LowerCase(NodeText(ANode, PF.Src));
         if T <> '' then ADst.AddOrSetValue(T, True);
       end;
-      for C:= 0 to ANode.NamedChildCount - 1 do CollectIdentifiers(ANode.NamedChild(C), ADst);
+      for C:= 0 to ANode.NamedChildCount - 1 do CollectIdentifiers(ARoot, ANode.NamedChild(C), ADst);
+    end;
+
+    { Fallback when no defProc starts exactly on ImplStartLine (line-numbering
+      skew between the store and the parser): pick the defProc whose row range
+      contains the target line. }
+    function FindProcContainingLine(ALine: Integer): TTSNode;
+    var
+      P: TTSNode;
+      S, E: Integer;
+    begin
+      Result:= Default(TTSNode);
+      for P in ProcNodes do
+      begin
+        S:= Integer(P.StartPoint.row) + 1;
+        E:= Integer(P.EndPoint.row) + 1;
+        if (ALine >= S) and (ALine <= E) then Exit(P);
+      end;
     end;
 
     function Find(X: Integer): Integer;
@@ -412,6 +436,7 @@ var
     FieldNames:= TDictionary<string, Boolean>.Create;
     MethNames := TDictionary<string, Boolean>.Create;
     ProcByLine:= TDictionary<Integer, TTSNode>.Create;
+    ProcNodes := TList<TTSNode>.Create;
     SetLength(IdSets, N);
     SetLength(UF, N);
     try
@@ -424,8 +449,10 @@ var
         IdSets[I]:= TDictionary<string, Boolean>.Create;
         UF[I]:= I;
         var Node: TTSNode;
-        if ProcByLine.TryGetValue(BodyM[I].ImplStartLine, Node) then
-          CollectIdentifiers(Node, IdSets[I]);
+        if not ProcByLine.TryGetValue(BodyM[I].ImplStartLine, Node) then
+          Node:= FindProcContainingLine(BodyM[I].ImplStartLine); { fallback: range containment }
+        if not Node.IsNull then
+          CollectIdentifiers(Node, Node, IdSets[I]);
       end;
 
       for I:= 0 to N - 2 do
@@ -442,6 +469,7 @@ var
     finally
       for I:= 0 to N - 1 do
         if IdSets[I] <> nil then IdSets[I].Free;
+      ProcNodes.Free;
       ProcByLine.Free;
       MethNames.Free;
       FieldNames.Free;
