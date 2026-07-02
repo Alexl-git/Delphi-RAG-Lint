@@ -1,0 +1,1 @@
+deep-inheritance cycle.pas:6

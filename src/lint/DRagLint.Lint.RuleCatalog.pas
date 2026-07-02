@@ -188,6 +188,11 @@ begin
     B('unit-not-in-project',   'project-wide', 'warning', 'Unit is not a member of the project');
     B('unused-unit-in-uses',   'project-wide', 'warning', 'Unit in uses is never referenced');
     B('god-class',             'project-wide', 'info',    'Class has too many members/responsibilities');
+    B('unused-public-symbol',  'project-wide', 'info',    'Public symbol is never referenced');
+    B('unused-private-member', 'project-wide', 'warning', 'Private member is never referenced');
+    B('layering-violation',    'project-wide', 'warning', 'Unit dependency crosses an architectural layer');
+    B('interface-reference-cycle','project-wide','warning','Interface reference cycle (ARC leak)');
+    B('circular-uses',         'project-wide', 'warning', 'Circular unit dependency (a uses-graph cycle among project units)');
 
     { --- metrics (CK class metrics; v0.78) --- }
     B('too-many-children', 'metrics', 'info', 'Class has too many direct subclasses (NOC)', True, [MkParam('threshold','int','10')]);
@@ -195,12 +200,6 @@ begin
     B('high-response', 'metrics', 'info', 'Class response set is too large (RFC)', True, [MkParam('threshold','int','50')]);
     B('high-coupling', 'metrics', 'info', 'Class is coupled to too many other classes (CBO)', True, [MkParam('threshold','int','20')]);
     B('low-cohesion', 'metrics', 'info', 'Class methods lack cohesion (LCOM4)', True, [MkParam('threshold','int','26')]);
-
-    B('unused-public-symbol',  'project-wide', 'info',    'Public symbol is never referenced');
-    B('unused-private-member', 'project-wide', 'warning', 'Private member is never referenced');
-    B('layering-violation',    'project-wide', 'warning', 'Unit dependency crosses an architectural layer');
-    B('interface-reference-cycle','project-wide','warning','Interface reference cycle (ARC leak)');
-    B('circular-uses',         'project-wide', 'warning', 'Circular unit dependency (a uses-graph cycle among project units)');
 
     Result:= L.ToArray;
   finally

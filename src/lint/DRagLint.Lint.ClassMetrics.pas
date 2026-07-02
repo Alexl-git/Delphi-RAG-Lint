@@ -333,7 +333,6 @@ var
     BodyM     : TArray<TSymbol>           ;
     M         : TSymbol                   ;
     FieldNames: TDictionary<string, Boolean>;
-    MethNames : TDictionary<string, Boolean>;
     ProcByLine: TDictionary<Integer, TTSNode>;
     ProcNodes : TList<TTSNode>            ;
     IdSets    : TArray<TDictionary<string, Boolean>>;
@@ -434,14 +433,12 @@ var
     if PF.Tree = nil then Exit(1); { unparseable -> treat as cohesive }
 
     FieldNames:= TDictionary<string, Boolean>.Create;
-    MethNames := TDictionary<string, Boolean>.Create;
     ProcByLine:= TDictionary<Integer, TTSNode>.Create;
     ProcNodes := TList<TTSNode>.Create;
     SetLength(IdSets, N);
     SetLength(UF, N);
     try
       for M in AInfo.Fields do FieldNames.AddOrSetValue(LowerCase(M.Name), True);
-      for I:= 0 to N - 1 do MethNames.AddOrSetValue(LowerCase(BodyM[I].Name), True);
       CollectDefProcNodes(PF.Tree.RootNode);
 
       for I:= 0 to N - 1 do
@@ -471,7 +468,6 @@ var
         if IdSets[I] <> nil then IdSets[I].Free;
       ProcNodes.Free;
       ProcByLine.Free;
-      MethNames.Free;
       FieldNames.Free;
     end;
   end;
