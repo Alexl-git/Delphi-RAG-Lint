@@ -1,6 +1,15 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-02 (LATEST) -- **v0.81.0 PUBLISHED (full release) -- `default-encoding-io` (#9 portability) + CK `fan-out`/`fan-in` coupling metrics, all OFF-by-default. NEXT = v0.82 = the `enclosing_symbol_id` reference-index extension, which unblocks `feature-envy` + `#4 interface/object mixing` and lets CBO/RFC/LCOM read stored per-method attribution instead of AST re-walks; plus CK `instability` (Ce/(Ca+Ce), range-flag) + the 2 v0.81 review Minors + the exit-code-from-survivors quirk.**
+> ## RESUME 2026-07-02 (LATEST) -- **v0.81.0 PUBLISHED (full release); v0.82 DESIGNED + PLANNED (not yet implemented). NEXT ACTION = execute `docs/superpowers/plans/2026-07-02-v082-plan.md` via superpowers:subagent-driven-development.** Spec: `docs/superpowers/specs/2026-07-02-v082-enclosing-symbol-attribution-design.md`. v0.82 = `refs.enclosing_symbol_id` per-file attribution (schema v13) + feature-envy + CBO/RFC/fan-in-out retrofit (LCOM4 excluded) + CK instability + first-cut #4 + the 2 v0.81 Minors; ship **v0.82.0-alpha** (alpha suffix BACK, but FULL release gh --latest) + reindex all DBs. Read the plan + spec FIRST.
+>
+> **>>> v0.82 KEY DESIGN DECISIONS (user-approved, so the cold session does not re-litigate):** scope=BROAD (foundation +
+> all consumers + independents). Attribution hook = **per-file in-memory in `IndexFile`** (innermost impl-range containment
+> vs the file's in-memory symbols, map array idx->DB id via the in-scope `IdxToId`; NO parser-walk plumbing, NO whole-DB
+> pass). Backfill = **NONE -- explicit full reindex of all DBs** once after the new exe ships (fast; per-file resolution
+> keeps it current thereafter). Release carries `-alpha` again (schema still changing) but is a FULL `gh --latest` release.
+> feature-envy ships OFF (enclosing attribution exact, but target-class own/foreign split stays name-based/heuristic).
+> CBO/RFC retrofit has a mandatory NO-REGRESSION guardrail (existing CK fixtures + FP diff); LCOM4 stays (AST re-walk, not
+> ref-based). #4 is ATTEMPT-OR-DEFER (ship nothing if too FP-prone). Task order + grounding file:line anchors in the plan/spec.
 >
 > **v0.81.0 SHIPPED + RELEASED.** `main`=`32f189b` (+ this docs commit), origin synced, tag `v0.81.0`, GitHub FULL release
 > (isPrerelease=false, repo `latest`) win32+win64 (https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.81.0).
@@ -30,10 +39,11 @@
 >   args too, so a filename containing "TEncoding" falsely suppresses (only matters if promoted ON; fix = skip literalString
 >   named children). (2) carried: exit code from RAW findings not survivors (bare cmd can print "0 finding(s)" yet exit 1).
 >
-> **v0.82 SCOPE (next session):** design the `enclosing_symbol_id` reference-index extension FIRST (schema migration +
-> reindex/backfill + populate the enclosing method during the index AST walk) -- this is a real DB capability the user
-> greenlit; it unblocks `feature-envy` (per-method cross-class attribution), enables `#4` dual-handle detection, sharpens
-> CBO/RFC/LCOM (read stored attribution vs AST re-walk), and gives method-level find-callers. Then CK `instability` + the 2 Minors.
+> **v0.82 STATUS: DESIGNED + PLANNED (2026-07-02) -- ready to EXECUTE cold.** Spec
+> `docs/superpowers/specs/2026-07-02-v082-enclosing-symbol-attribution-design.md`, plan
+> `docs/superpowers/plans/2026-07-02-v082-plan.md` (7 tasks, dependency-ordered, SDD). Next session: create branch
+> `feat/v082-enclosing-attribution` from main, run superpowers:subagent-driven-development on the plan. Design decisions are
+> locked (see the KEY DESIGN DECISIONS block at the top of this file) -- do not re-litigate scope/attribution/backfill.
 >
 > --- (prior milestone) ---
 >
