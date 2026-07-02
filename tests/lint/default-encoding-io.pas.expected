@@ -1,0 +1,11 @@
+# SaveToFile/LoadFromFile/TFile.WriteAllText/ReadAllText/TStreamReader.Create
+# without an explicit TEncoding argument fire; the same calls with a trailing
+# TEncoding.UTF8 argument are clean.
+default-encoding-io 15
+!default-encoding-io 27
+default-encoding-io 39
+default-encoding-io 47
+!default-encoding-io 52
+default-encoding-io 59
+default-encoding-io 66
+!default-encoding-io 78

@@ -4768,12 +4768,12 @@ begin
   (AArgs.Rule <> 'duplicate-code') and (AArgs.Rule <> 'magic-literal') and (AArgs.Rule <> 'boolean-flag-parameter') and
   (AArgs.Rule <> 'message-chain') and (AArgs.Rule <> 'public-writable-field') and
   (AArgs.Rule <> 'loop-control-flag') and (AArgs.Rule <> 'double-free') and
-  (AArgs.Rule <> 'mutable-global-variable') then
+  (AArgs.Rule <> 'mutable-global-variable') and (AArgs.Rule <> 'default-encoding-io') then
   begin
     Writeln(Format(
         'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' +
         'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, exhaustive-enum-case, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
-        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, double-free, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag, mutable-global-variable)',
+        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, double-free, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag, mutable-global-variable, default-encoding-io)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4841,6 +4841,13 @@ begin
         "enabled": ["mutable-global-variable"] or --rule mutable-global-variable. }
       if AArgs.Rule <> 'mutable-global-variable' then
         DefDisabled:= DefDisabled + ['mutable-global-variable'];
+      { v0.81: default-encoding-io OFF by default -- FP-sanity over src/ found 65
+        findings across 16/103 files, mostly TFile.ReadAllText on known-ASCII
+        project/config files (dproj/json) -- a common, often-intentional pattern
+        in this codebase. Opt in via "enabled": ["default-encoding-io"] or
+        --rule default-encoding-io. }
+      if AArgs.Rule <> 'default-encoding-io' then
+        DefDisabled:= DefDisabled + ['default-encoding-io'];
       if TFile.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFile(AArgs.Path)
       else if TDirectory.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFolder(AArgs.Path, True)
       else
@@ -4940,7 +4947,7 @@ begin
         or (AArgs.Rule = 'weak-random-for-security') or (AArgs.Rule = 'create-inside-try')
         or (AArgs.Rule = 'insecure-temp-file') or (AArgs.Rule = 'multiple-statements-per-line')
         or (AArgs.Rule = 'magic-literal') or (AArgs.Rule = 'boolean-flag-parameter') or (AArgs.Rule = 'message-chain')
-        or (AArgs.Rule = 'public-writable-field') or (AArgs.Rule = 'loop-control-flag') then
+        or (AArgs.Rule = 'public-writable-field') or (AArgs.Rule = 'loop-control-flag') or (AArgs.Rule = 'default-encoding-io') then
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(AArgs.Path,
             Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4),
             Cfg.ThresholdFor('unit-too-large', 2000), Cfg.ThresholdFor('message-chain', 4)) do
@@ -5907,14 +5914,14 @@ begin
     OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', Now) + '.txt');
   end;
 
-  { v0.71/v0.74/v0.79/v0.80: function-result-ignored + unsafe-typecast-without-is +
+  { v0.71/v0.74/v0.79/v0.80/v0.81: function-result-ignored + unsafe-typecast-without-is +
     exhaustive-enum-case + multiple-statements-per-line + magic-literal +
     boolean-flag-parameter + public-writable-field + loop-control-flag +
-    mutable-global-variable + repeated-type-switch + middle-man are OFF by default
-    here too (opt in via config "enabled"). middle-man is emitted by
+    mutable-global-variable + repeated-type-switch + middle-man + default-encoding-io
+    are OFF by default here too (opt in via config "enabled"). middle-man is emitted by
     TClassMetrics.Run above; catalog False alone does not suppress CLI output, so
     it must be listed here for the ShouldKeep filter to drop it by default. }
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man'],
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;

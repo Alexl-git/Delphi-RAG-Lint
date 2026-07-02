@@ -119,6 +119,7 @@ begin
     { --- platform --- }
     B('win64-pointer-cast',            'platform', 'warning', 'Pointer cast to a 32-bit integer type -- unsafe on Win64');
     B('nativeint-truncation',          'platform', 'warning', 'NativeInt/pointer-sized value cast to a 32-bit integer type -- truncates on Win64');
+    B('default-encoding-io',           'platform', 'warning', 'File I/O (LoadFromFile/SaveToFile, TFile.*, TStreamReader/Writer) with no explicit TEncoding -- defaults to ANSI/locale', False); { OFF by default -- FP-sanity over src/ found 65 findings across 16/103 files, mostly TFile.ReadAllText on known-ASCII project/config files (dproj/json); opt in via "enabled": ["default-encoding-io"] }
 
     { --- complexity (all parameterized) --- }
     B('too-many-parameters',  'complexity', 'info', 'Routine has too many parameters', True, [MkParam('threshold','int','7')]);

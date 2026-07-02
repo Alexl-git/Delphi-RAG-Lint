@@ -934,6 +934,45 @@ var
           or (Pos('tfilestream', L) > 0);
   end;
 
+  { v0.81 #9: True if the callee text of an exprCall is a file I/O API whose
+    no-argument (or no-TEncoding-argument) overload silently defaults to the
+    ANSI/locale encoding -- a Win64/Unicode data-corruption + portability
+    hazard when the underlying file is not guaranteed to be plain ASCII.
+    Matches TStrings/TStringList.LoadFromFile/SaveToFile, TFile.ReadAllText/
+    WriteAllText/ReadAllLines/AppendAllText, and TStreamReader/TStreamWriter
+    .Create. Each of these RTL methods also has a sibling overload that takes
+    a trailing TEncoding argument -- that overload is the safe one and is
+    excluded by the "no encoding arg" scan in EmitDefaultEncodingIo, not by
+    this name match (the callee text is identical for both overloads). }
+  function IsDefaultEncodingApi(const AText: string): Boolean;
+  var L: string;
+  begin
+    L:= LowerCase(AText);
+    Result:= (Pos('savetofile', L) > 0) or (Pos('loadfromfile', L) > 0)
+          or (Pos('readalltext', L) > 0) or (Pos('writealltext', L) > 0)
+          or (Pos('readalllines', L) > 0) or (Pos('appendalltext', L) > 0)
+          or (Pos('tstreamreader', L) > 0) or (Pos('tstreamwriter', L) > 0);
+  end;
+
+  { v0.81 #9: True if none of an exprCall's arguments mentions TEncoding --
+    i.e. the call used the default-encoding overload rather than passing an
+    explicit TEncoding (TEncoding.UTF8, TEncoding.ANSI, a custom TEncoding
+    variable, etc). Text-based rather than arity-based (compare against a
+    per-API expected arg count) because the match set spans APIs with
+    different signatures (1-arg SaveToFile vs 2-arg WriteAllText) and this
+    single check covers all of them uniformly: any argument whose source
+    text contains "TEncoding" counts as an explicit encoding, regardless of
+    which positional slot it occupies. }
+  function ArgsHaveNoEncoding(const AArgs: TTSNode): Boolean;
+  var I: Integer;
+  begin
+    Result:= True;
+    if AArgs.IsNull then Exit;
+    for I:= 0 to AArgs.NamedChildCount - 1 do
+      if Pos('tencoding', LowerCase(NodeStr(AArgs.NamedChild(I)))) > 0 then
+        Exit(False);
+  end;
+
   { v0.76 #10: True if a literalString's raw text is a hardcoded temp path. }
   function IsTempPathText(const AText: string): Boolean;
   var L: string;
@@ -1428,6 +1467,23 @@ var
       var Ent: TTSNode:= N.ChildByField('entity');
       if (not Ent.IsNull) and IsFileApiCallee(Trim(NodeStr(Ent))) then
         EmitTempPathLiteral(N);
+    end;
+
+    { default-encoding-io (#9): a file I/O call (LoadFromFile/SaveToFile,
+      TFile.ReadAllText/WriteAllText/ReadAllLines/AppendAllText,
+      TStreamReader/TStreamWriter.Create) whose arguments carry no explicit
+      TEncoding -- silently uses the ANSI/locale default, which corrupts
+      non-ASCII data and is not portable across machines/locales. }
+    if N.NodeType = 'exprCall' then
+    begin
+      var Ent: TTSNode:= N.ChildByField('entity');
+      if (not Ent.IsNull) and IsDefaultEncodingApi(Trim(NodeStr(Ent))) then
+      begin
+        var ArgsN: TTSNode:= N.ChildByField('args');
+        if ArgsHaveNoEncoding(ArgsN) then
+          EmitAt(N, 'default-encoding-io',
+            'File I/O without an explicit encoding -- defaults to ANSI/locale and corrupts non-ASCII data on Win64. Pass a TEncoding (e.g. TEncoding.UTF8).');
+      end;
     end;
 
     { message-chain (#14, Fowler "Hide Delegate"): a member-access chain
