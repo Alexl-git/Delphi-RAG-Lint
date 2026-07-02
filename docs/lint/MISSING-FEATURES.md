@@ -117,7 +117,9 @@ Have: `cyclomatic-complexity`, `deep-nesting`, `method-too-long`, `too-many-para
 - [x] cognitive complexity  -- shipped v0.75 as `cognitive-complexity` (AST, `info`, threshold=25;
       SonarSource-style: each control-flow structure adds 1 + its nesting depth, each and/or/xor
       adds 1. Default 25 -- cognitive scores higher than cyclomatic. Configurable)
-- [ ] CK suite: DIT / NOC / CBO / RFC / LCOM; fan-in / fan-out  -- needs the uses/type graph. **NEXT (v0.78)** -- store-backed, use the `tests/lint-store` harness; ship the whole class-metric bundle together (DIT/CBO overlap #11).
+- [x] CK suite: DIT / NOC / CBO / RFC / LCOM  -- **DONE v0.78** as `deep-inheritance` / `too-many-children` /
+      `high-coupling` / `high-response` / `low-cohesion` (category `metrics`, `info`, ON, store-backed,
+      per-rule `threshold`). LCOM shipped as LCOM4 (connected components). fan-in / fan-out still open.
 - [x] **clone / duplicate-code detection** (PAL CLON1-2)  -- **DONE v0.77** as `duplicate-code` (complexity, `info`, ON,
       `threshold` default 90). New unit `DRagLint.Diagnostics.CloneChecks.pas`: Type-2 (renamed-identifier tolerant)
       Rabin-Karp maximal-match over normalized-token streams (ids+literals -> placeholders; unique per-routine barriers),
@@ -164,7 +166,7 @@ Have: `sql-injection-concat`, `unsafe-shellexecute`, `path-traversal`, `hardcode
 Have: `layering-violation`, `interface-reference-cycle`, `god-class`, `unit-not-in-dpr`,
 `unit-not-in-project`.
 - [x] `circular-uses` report -- **DONE v0.76** (`warning`, store-backed; Tarjan SCC over the unit uses-graph, one finding per cycle)
-- [ ] DIT/CBO depth metrics (overlaps #6) -- **NEXT (v0.78)** with the CK suite (NOC/RFC/LCOM); ship all class metrics as one store-backed bundle.
+- [x] DIT/CBO depth metrics (overlaps #6) -- **DONE v0.78** with the CK suite (NOC/RFC/LCOM), shipped as one store-backed bundle.
 
 ## 12. Ergonomics / output  -- DONE (SARIF, --fail-on, baseline, drag-lint-lint.json v0.66; autofix v0.71)
 - [x] **SARIF output** (CI integration) -- shipped v0.66

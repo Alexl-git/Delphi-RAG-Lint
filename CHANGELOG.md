@@ -5,6 +5,14 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Added
+- CK class metrics (#6): `deep-inheritance` (DIT), `too-many-children` (NOC),
+  `high-coupling` (CBO), `high-response` (RFC), `low-cohesion` (LCOM4). Store-backed,
+  project-wide (lint-all / lint-project), ON by default, category `metrics`,
+  configurable `threshold` per rule. LCOM shipped as LCOM4 (connected components).
+  Known limits: DIT undercounts without the RTL/library index (external parents
+  count as one hop); resolution is name-based; CBO is efferent (type-use) only.
+
 ## v0.77.0-alpha -- 2026-07-02
 
 - feat(lint): `duplicate-code` (#6) -- Type-2 (renamed-identifier tolerant) clone detection, within-file and cross-file (lint-all), via Rabin-Karp maximal-match with coverage-based overlap suppression. `info`, ON by default, `threshold` (min normalized tokens) default 90 (catches a copy-pasted ~12-line routine, ~96 tokens).

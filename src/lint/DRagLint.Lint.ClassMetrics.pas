@@ -492,7 +492,7 @@ begin
     TDIT:= ACfg.ThresholdFor('deep-inheritance', 6);
     TRFC:= ACfg.ThresholdFor('high-response', 50);
     TCBO:= ACfg.ThresholdFor('high-coupling', 20);
-    TLCOM:= ACfg.ThresholdFor('low-cohesion', 3);
+    TLCOM:= ACfg.ThresholdFor('low-cohesion', 26);
 
     BuildInventory;
     ResolveParents;
