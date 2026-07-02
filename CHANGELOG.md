@@ -5,6 +5,39 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.79.0-alpha -- 2026-07-02
+
+### Added -- data-flow (M2) rules
+- `not-assigned-interface` (#4 nullability, `warning`, ON) -- an interface-typed local
+  **dereferenced** (`X.Method` / `X as T`) on a path where it was never assigned -> a nil-interface
+  call (EAccessViolation/EInvalidCast). Reuses the M2 definite-assignment lattice for the interface
+  subset that `used-before-assignment` skips; `warning` when unassigned on all paths, `info` on some.
+  **Known limitation:** the short-circuit heuristic that keeps `if Supports(X, IFoo) and X.M then`
+  quiet also suppresses a deref of any var passed as an argument to an earlier `and`/`or` operand's
+  call (not just `out`/`var` params), so a genuine nil-deref guarded that way is a (safe-direction)
+  false-negative -- tightening it needs callee parameter-mode resolution (a store).
+- `double-free` (#5, `warning`, ON) -- `X.Free` reachable twice on a path with no reassignment and no
+  nil-ing between (frees a dangling pointer). New forward `TFreedState` data-flow lattice; a raw
+  `X.Free` leaves the var dangling while `FreeAndNil(X)`/`X.DisposeOf` clears it, so `FreeAndNil` then
+  `Free` is correctly silent. `warning` when double-freed on all paths, `info` on some. Name-based
+  (aliased frees `Y := X; X.Free; Y.Free` are a documented false-negative).
+
+### Added -- Fowler refactoring-catalog signals (new category `refactoring`)
+- `message-chain` (Hide Delegate, `hint`, ON, `threshold` default 4) -- a member-access chain
+  `a.b.c.d...` longer than the threshold. Qualified type/unit names are excluded structurally.
+- `magic-literal` (Replace Magic Literal, `hint`, **OFF by default**) -- an unexplained numeric literal
+  (not `0`/`1`/`-1`/`2`, not in a const/enum/case/range/initializer context). Opt in via `"enabled"`.
+- `boolean-flag-parameter` (Remove Flag Argument, `hint`, **OFF by default**) -- a `Boolean` parameter
+  that drives an `if`/`case`/`while` condition in the body (selects behavior). Skips overrides + Sender handlers.
+- `public-writable-field` (Encapsulate Variable, `info`, **OFF by default**) -- a `public` instance field
+  of a class (expose via a property). Excludes `published` (DFM components) and records.
+- `loop-control-flag` (Replace Control Flag with Break, `hint`, **OFF by default**) -- a `while`/`repeat`
+  whose exit is driven by a Boolean flag assigned `True`/`False` in the loop body.
+
+### Changed
+- Cleanup: removed an unused dictionary in the LCOM4 metric; grouped the `metrics` catalog block after
+  the `project-wide` rules. Added a DIT cycle-guard store fixture.
+
 ## v0.78.0-alpha -- 2026-07-02
 
 ### Added
