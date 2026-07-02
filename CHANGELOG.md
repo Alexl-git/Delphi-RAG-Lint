@@ -5,7 +5,10 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.77.0-alpha -- 2026-07-02
+
 - feat(lint): `duplicate-code` (#6) -- Type-2 (renamed-identifier tolerant) clone detection, within-file and cross-file (lint-all), via Rabin-Karp maximal-match with coverage-based overlap suppression. `info`, ON by default, `threshold` (min normalized tokens) default 90 (catches a copy-pasted ~12-line routine, ~96 tokens).
+- feat(lsp): the IDE (LSP) diagnostic path now surfaces `duplicate-code` and honors an up-tree lint config (`drag-lint-lint.json` / `drag-lint.json`) for rule enable/disable + severity overrides -- previously the LSP ignored all config, so noisy rules could not be silenced in the editor. Syntax errors + compiler findings are always shown.
 
 ## v0.76.0-alpha -- 2026-07-01
 
