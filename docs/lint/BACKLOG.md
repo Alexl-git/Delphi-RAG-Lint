@@ -1,6 +1,49 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-02 (LATEST) -- **v0.77.0-alpha PUBLISHED -- #6 duplicate-code clone detection + LSP config parity; NEXT = v0.78 (CK class metrics + M2 flow)**
+> ## RESUME 2026-07-02 (LATEST) -- **v0.78.0-alpha PUBLISHED -- #6/#11 CK class-metric suite (NOC/DIT/CBO/RFC/LCOM4); NEXT = v0.79 (M2-flow: nullability #4 + double-free #5) or the Fowler refactoring-catalog batch (#14)**
+>
+> **v0.78.0-alpha SHIPPED + RELEASED.** `main`=`e861a82`, origin synced, tag `v0.78.0-alpha`, GitHub PRERELEASE
+> win32+win64. VERSION `CLI.pas:6`=`0.78.0-alpha`. Harness **file 141/141 + store 10/10 + catalog 29/29**.
+>
+> **What shipped:** the 5 CK class metrics as one store-backed, project-wide bundle (CLI `lint-all`/`lint-project`
+> only -- NOT the per-file LSP), ON by default, severity `info`, NEW category `metrics`, per-rule `threshold`.
+> New unit `src/lint/DRagLint.Lint.ClassMetrics.pas` (`TClassMetrics.Run(AStore, ACfg, ARuleId)`), invoked in
+> `DoLintAll` right after `TProjectLintRules.Run`. Rules: **`too-many-children`** (NOC, direct subclasses, default 10),
+> **`deep-inheritance`** (DIT, parent-chain depth, default 6), **`high-response`** (RFC = own methods + distinct
+> call-names in bodies, default 50), **`high-coupling`** (CBO = distinct other-class `type_use` in decl/bodies minus
+> self+ancestors, default 20), **`low-cohesion`** (LCOM4 = connected components of the method graph [shared-field OR
+> call edges], per-method AST re-walk, default **26**). Six `tests/lint-store/` fixtures.
+>
+> **KEY DECISIONS / GOTCHAS (v0.78):**
+> - **LCOM shipped as LCOM4** (connected components) and defaults **HIGH (26)** on purpose: OTA/NTA interface-implementer
+>   classes and stateless `class function` facades structurally maximize LCOM4 without being god-classes, so a low
+>   default is pure noise on idiomatic Delphi (all 14 findings @3 on src/ were such artifacts; max observed 25). The
+>   other 4 defaults calibrated over src/ = 0 or all-genuine (RFC=11, all legitimately large classes).
+> - **LCOM4 per-method AST re-walk** matches each body-method to its `defProc` node by `StartPoint.row+1 == ImplStartLine`
+>   (exact), with a **range-containment fallback** (`FindProcContainingLine`) if that skews. **Excludes NESTED routines**
+>   from a method's identifier set (root-guard, `CloneChecks.CollectLeaves` idiom, `TTSNode.Equal`) -- else a nested
+>   proc's idents fold into the parent and falsely lower LCOM4. Both were review-caught + fixed.
+> - **The store's refs are name-based** (`symbol_id` NULL); resolve `NameText` via `FindSymbolsByExactName`/
+>   `ResolveTypeCategory`. `read`/`write` refs are partial -> LCOM uses AST, not refs. **DIT undercounts without an
+>   RTL/library `--db`** (external parents count as 1 hop). CBO is efferent (type_use) only.
+> - New category `metrics` needed adding to `tests/rules-catalog/RuleCatalogTests.dpr` `CanonicalBuckets` allowlist.
+> - Spec `docs/superpowers/specs/2026-07-02-ck-class-metrics-design.md`; plan `docs/superpowers/plans/2026-07-02-ck-class-metrics.md`.
+>
+> **DEFERRED v0.79 cleanup (from the final whole-branch review -- Minors, none blocking):** delete the unused
+> `MethNames` dict in `ComputeLCOM4`; optionally refactor the ~360-line `TClassMetrics.Run` (5 nested compute fns) into
+> private methods; move the `metrics` catalog `B()` block out of the middle of the `project-wide` comment section; add
+> fixtures for the DIT external-parent/cycle paths + the LCOM4 range-fallback; consider memoizing `GetTransitiveAncestors`
+> per class and periodic `TAstParseCache.Clear` on huge indexes.
+>
+> **NEXT (choose): (a) v0.79 M2-flow rules** -- `#4 nullability`/not-assigned-interface (interface-typed local used
+> before assignment; extend `FlowChecks` def-use lattice to interface refs) + `#5 double-free` (`X.Free`/`FreeAndNil(X)`
+> reachable twice, no reassignment between). **(b) the Fowler refactoring-catalog batch** -- see `MISSING-FEATURES.md`
+> section 14 (top picks: `magic-literal`, `boolean-flag-parameter`, `message-chain`, `public-writable-field`; then the
+> store-backed `middle-man`/`feature-envy`/`repeated-type-switch`). Most of (b) is pure-AST, no new engine.
+>
+> --- (prior milestone) ---
+>
+> ## RESUME 2026-07-02 -- **v0.77.0-alpha PUBLISHED -- #6 duplicate-code clone detection + LSP config parity; NEXT = v0.78 (CK class metrics + M2 flow)**
 >
 > **v0.77.0-alpha SHIPPED + RELEASED.** `main`=`ed2ec77`, origin synced, tag `v0.77.0-alpha`, GitHub PRERELEASE win32+win64.
 > VERSION `CLI.pas:6`=`0.77.0-alpha`. Harness **file 141/141 + store 4/4 + catalog 29/29**.

@@ -7,17 +7,18 @@ analysis (`docs/lint/REPORT-1-delphi-lint-landscape.md`) cross-checked against t
 inventory (`rules/*.scm`, `src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`,
 `src/lint/DRagLint.Lint.ProjectRules.pas`).
 
-**Where we stand (updated v0.77.0-alpha):** ~150 rules, roughly **80-83%** of the catalogued
+**Where we stand (updated v0.78.0-alpha):** ~155 rules, roughly **82-85%** of the catalogued
 breadth. **M1 (type resolver), M2 (CFG/data-flow), naming (#1), dead-code (#2), the cast rules
 (#4, incl. store-aware exhaustive-enum-case + lossy-cast), autofix (#12), the #5/#6/#7/#8 pure-AST
 tails, cognitive complexity (#6), the v0.76 store/AST tails (#5 abstract-method, #9
-nativeint-truncation, #10 dfm-credential/insecure-temp, #11 circular-uses), and #6
-clone/duplicate-code detection (v0.77) all SHIPPED.** As of v0.77 the IDE (LSP) surfaces the same
+nativeint-truncation, #10 dfm-credential/insecure-temp, #11 circular-uses), #6
+clone/duplicate-code detection (v0.77), and the #6/#11 CK class-metric suite (v0.78:
+DIT/NOC/CBO/RFC/LCOM4) all SHIPPED.** As of v0.77 the IDE (LSP) surfaces the same
 rules as the CLI and honors an up-tree `drag-lint-lint.json` config. We **lead** on security,
-architecture/layering, and exception handling. The remaining gaps are the **CK class-metric suite**
-(#6/#11: DIT/NOC/CBO/RFC/LCOM) and the **M2-flow rules** (#4 nullability, #5 double-free) -- both
-the **v0.78** milestone -- plus small deferred tails (#9 default-encoding-io; #4 interface/object
-mixing; and a few low-signal items documented as won't-fix).
+architecture/layering, and exception handling. The remaining gaps are the **M2-flow rules**
+(#4 nullability/not-assigned-interface, #5 double-free) -- the **v0.79** milestone -- plus small
+deferred tails (#9 default-encoding-io; #4 interface/object mixing; CK fan-in/fan-out; and a few
+low-signal items documented as won't-fix).
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
 **(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use
@@ -211,16 +212,59 @@ persisted, deterministic SQLite index is the substrate the IDE's own (flaky asyn
    `unit-too-large`), exception patterns (`exception-constructed-but-not-raised`, `duplicate-exception-handler`).
    All pure-AST/index, console-testable, no new engine. **The v0.72 chunk.**
 2. **Clone / duplicate-code detection (#6)** -- **DONE v0.77** (`duplicate-code`; Rabin-Karp token-hash pass).
-3. **CK class-metric suite (#6/#11) -- NEXT (v0.78)** -- DIT/NOC/CBO/RFC/LCOM, store-backed, `tests/lint-store` harness. One bundle.
-4. **M2-flow rules (#4/#5) -- NEXT (v0.78)** -- nullability/not-assigned-interface (#4), double-free (#5); extend `FlowChecks`.
-5. **More `.scm`-rule autofixes (#12)** -- needs a fix-spec payload on `TLintFinding`. Rule-accuracy / FP polish ongoing.
+3. **CK class-metric suite (#6/#11)** -- **DONE v0.78** (DIT/NOC/CBO/RFC/LCOM4, store-backed, `tests/lint-store` harness, one bundle).
+4. **M2-flow rules (#4/#5) -- NEXT (v0.79)** -- nullability/not-assigned-interface (#4), double-free (#5); extend `FlowChecks`.
+5. **Fowler refactoring-catalog signals (#14)** -- a fresh batch of pure-AST/store rules distilled from the
+   refactoring catalog (magic-literal, boolean-flag-parameter, message-chain, public-writable-field, ...). See section 14.
+6. **More `.scm`-rule autofixes (#12)** -- needs a fix-spec payload on `TLintFinding`. Rule-accuracy / FP polish ongoing.
 
 ## Verdict
 "Everything the commercial tools do" is **not** reachable on a pure-AST path, but the major engine milestones
 are now behind us: **M1 (type resolver), M2 (data-flow/CFG), naming wave (#1), and dead-code tail (#2)
-all shipped by v0.68**, and by v0.77 clone/duplicate-code detection + full CLI/IDE(LSP) rule parity are in.
-We sit at **~80-83%** of the catalogued breadth and **lead** on security and architecture. The realistic
-ceiling is **~80-85%**; the last stretch -- the **CK class-metric suite** (#6/#11) and **M2-flow rules**
-(#4 nullability, #5 double-free), both slated for **v0.78**, then cross-routine field flow, autofix breadth,
-and the deferred in-IDE Refactor tab (#13) -- is incremental or UX-heavy, not new-engine work. We already
-exceed FixInsight's breadth and approach SonarDelphi's on the dimensions we cover.
+all shipped by v0.68**; by v0.77 clone/duplicate-code detection + full CLI/IDE(LSP) rule parity are in; and
+v0.78 adds the **CK class-metric suite** (#6/#11: DIT/NOC/CBO/RFC/LCOM4). We sit at **~82-85%** of the
+catalogued breadth and **lead** on security and architecture. The realistic ceiling is **~85%**; the last
+stretch -- the **M2-flow rules** (#4 nullability, #5 double-free, slated for **v0.79**), the Fowler
+refactoring-catalog batch (#14), then cross-routine field flow, autofix breadth, and the deferred in-IDE
+Refactor tab (#13) -- is incremental or UX-heavy, not new-engine work. We already exceed FixInsight's breadth
+and approach SonarDelphi's on the dimensions we cover.
+
+---
+
+## 14. Fowler refactoring-catalog signals -- candidate rules  (researched 2026-07-02)
+
+From <https://refactoring.com/catalog/>: many refactorings are triggered by a **statically detectable**
+"before" state. Most catalog entries are already covered by existing rules (Extract Function ->
+`method-too-long`/complexity; Extract Class -> `god-class`+CK suite; Remove Dead Code -> `code-after-exit`/
+`unused-*`; Change Function Declaration/long params -> `too-many-parameters`; Duplicated Code ->
+`duplicate-code`; Replace Nested Conditional w/ Guard Clauses -> `deep-nesting`; Consolidate/Decompose
+Conditional -> `boolean-expression-complexity`). The **new** detectable signals worth adding:
+
+Pure-AST (no new engine), good value:
+- [ ] `magic-literal` (Replace Magic Literal) -- an unexplained numeric/string literal used in code (not a
+      const/resourcestring). Config allowlist (0, 1, -1, '' and small loop bounds exempt). Highest-value,
+      medium-FP -> ship configurable, likely OFF-by-default or with a conservative default set.
+- [ ] `boolean-flag-parameter` (Remove Flag Argument) -- a routine with a `Boolean` parameter that selects
+      behavior (the param drives an `if` in the body). Pure-AST; `hint`.
+- [ ] `message-chain` (Hide Delegate) -- a member-access chain `a.b.c.d...` deeper than N hops (count nested
+      `exprDot`). Pure-AST; threshold; `hint`.
+- [ ] `public-writable-field` (Encapsulate Variable/Record) -- a `public`/`published` instance field (not a
+      property) -- Delphi idiom is a property. Pure-AST (visibility + `skField`); `info`.
+- [ ] `loop-control-flag` (Replace Control Flag with Break) -- a Boolean set inside a loop purely to exit it.
+      Mostly-AST; medium.
+
+Store-backed:
+- [ ] `middle-man` (Remove Middle Man) -- a class most of whose methods just delegate to one field/object.
+- [ ] `feature-envy` (Move Function) -- a method that references another class's members more than its own
+      (overlaps CBO; needs member-access attribution -- harder given name-based refs).
+- [ ] `repeated-type-switch` (Replace Conditional w/ Polymorphism) -- the same enum/type-code `case` selector
+      appearing across multiple methods (a polymorphism candidate).
+- [ ] generalize `global-form-variable` -> `mutable-global-variable` (Global Data) -- any writable unit-level
+      global var, not just form types.
+
+Needs M2 flow:
+- [ ] `split-variable` (Split Variable) -- one local reused for two unrelated purposes (distinct def-use spans).
+- [ ] `separate-query-from-modifier` -- a function that both returns a value and mutates state (noisy; assess).
+
+Deferred / low-signal: Replace Temp with Query, Replace Derived Variable with Query, Primitive Obsession,
+Speculative Generality, Data Clumps (Introduce Parameter Object) -- weak/expensive static signals.
