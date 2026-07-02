@@ -1,0 +1,21 @@
+# boolean-flag-parameter (#14, Fowler "Remove Flag Argument"): a routine
+# parameter typed exactly Boolean whose identifier drives an if/while/repeat
+# condition or a case selector inside the body -- it selects behavior rather
+# than carrying data. OFF by default -- run with
+# boolean-flag-parameter.config.json ("enabled": ["boolean-flag-parameter"]).
+# Line 14 'DoIt(AApply: Boolean)' -- AApply drives 'if AApply then' at line 19
+# -> FLAGGED (emitted at the parameter's declaration name, line 14).
+boolean-flag-parameter 14
+# Line 25 'Store(AKeep: Boolean)' -- AKeep is only assigned to a local
+# ('Saved := AKeep'), never referenced in a condition -> not flagged.
+!boolean-flag-parameter 25
+# Line 36 'TDer.Handle(AFlag: Boolean)' overrides TBase.Handle (line 11
+# 'override' on the interface-section declProc; not repeated on the defProc
+# header, but ContractMethods still marks the bare name 'handle') and AFlag
+# drives 'if AFlag then' at line 38 -- would otherwise be flagged, but the
+# contract-bound signature can't be freely changed -> not flagged.
+!boolean-flag-parameter 36
+# Line 42 'ButtonClick(Sender: TObject; ASkip: Boolean)' -- event-handler
+# shaped (a parameter named Sender) even though ASkip drives 'if ASkip then'
+# at line 44 -> not flagged (event signature is fixed).
+!boolean-flag-parameter 42

@@ -185,6 +185,7 @@ begin
 
     { --- refactoring (Fowler catalog; v0.79) --- }
     B('magic-literal', 'refactoring', 'hint', 'Unexplained numeric literal -- extract a named constant', False); { OFF by default -- medium-FP, opt in via "enabled" }
+    B('boolean-flag-parameter', 'refactoring', 'hint', 'Boolean flag parameter selects behavior -- consider splitting the routine', False); { OFF by default -- see FP-sanity note in DeadCodeChecks.pas }
 
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');

@@ -4765,12 +4765,12 @@ begin
   (AArgs.Rule <> 'multiple-statements-per-line') and
   (AArgs.Rule <> 'abstract-method-instantiation') and (AArgs.Rule <> 'nativeint-truncation') and
   (AArgs.Rule <> 'lossy-cast') and (AArgs.Rule <> 'cognitive-complexity') and
-  (AArgs.Rule <> 'duplicate-code') and (AArgs.Rule <> 'magic-literal') then
+  (AArgs.Rule <> 'duplicate-code') and (AArgs.Rule <> 'magic-literal') and (AArgs.Rule <> 'boolean-flag-parameter') then
   begin
     Writeln(Format(
         'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' +
         'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, exhaustive-enum-case, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
-        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal)',
+        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4813,6 +4813,11 @@ begin
         drag-lint-lint.json "enabled": ["magic-literal"] or --rule magic-literal). }
       if AArgs.Rule <> 'magic-literal' then
         DefDisabled:= DefDisabled + ['magic-literal'];
+      { v0.79: boolean-flag-parameter OFF by default (Boolean flag params are
+        common in this codebase -- opt in via "enabled": ["boolean-flag-parameter"]
+        or --rule boolean-flag-parameter). }
+      if AArgs.Rule <> 'boolean-flag-parameter' then
+        DefDisabled:= DefDisabled + ['boolean-flag-parameter'];
       if TFile.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFile(AArgs.Path)
       else if TDirectory.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFolder(AArgs.Path, True)
       else
@@ -4909,7 +4914,7 @@ begin
         or (AArgs.Rule = 'repeated-else-if-condition') or (AArgs.Rule = 'property-references-itself') or (AArgs.Rule = 'unit-too-large')
         or (AArgs.Rule = 'weak-random-for-security') or (AArgs.Rule = 'create-inside-try')
         or (AArgs.Rule = 'insecure-temp-file') or (AArgs.Rule = 'multiple-statements-per-line')
-        or (AArgs.Rule = 'magic-literal') then
+        or (AArgs.Rule = 'magic-literal') or (AArgs.Rule = 'boolean-flag-parameter') then
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(AArgs.Path,
             Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4),
             Cfg.ThresholdFor('unit-too-large', 2000)) do
@@ -5876,9 +5881,10 @@ begin
   end;
 
   { v0.71/v0.74/v0.79: function-result-ignored + unsafe-typecast-without-is +
-    exhaustive-enum-case + multiple-statements-per-line + magic-literal are OFF
-    by default here too (opt in via config "enabled"). }
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal'],
+    exhaustive-enum-case + multiple-statements-per-line + magic-literal +
+    boolean-flag-parameter are OFF by default here too (opt in via config
+    "enabled"). }
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;

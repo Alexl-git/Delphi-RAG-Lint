@@ -33,7 +33,15 @@ unit DRagLint.Diagnostics.DeadCodeChecks;
                            value/default-param, a case label, a range bound,
                            or a typed-const-array initializer element. Numbers
                            only. Severity 'hint'; OFF by default (medium-FP,
-                           opt-in). }
+                           opt-in).
+    boolean-flag-parameter: (v0.79, #14, Fowler "Remove Flag Argument") a
+                           routine parameter typed exactly Boolean whose
+                           identifier is referenced inside an if/ifElse/while/
+                           repeat CONDITION, or is the case selector, inside
+                           the routine body -- it selects behavior rather than
+                           carrying data. Skips override methods (contract-
+                           bound signature) and event-handler-shaped routines
+                           (any parameter named Sender). Severity 'hint'. }
 
 interface
 
@@ -534,6 +542,156 @@ var
     end;
   end;
 
+  { boolean-flag-parameter (Fowler "Remove Flag Argument", #14): True if the
+    identifier ALower (already lower-cased) is referenced anywhere inside the
+    CONDITION of an if/ifElse/while/repeat, or as the case selector, within
+    the subtree N. The case selector has no grammar field (verified against
+    grammar.js: the case-of expression is an unfielded $._expr) -- its NAMED
+    children include keyword tokens (kCase/kOf/kElse/kEnd) plus caseCase arms,
+    so the selector is the first named child that is neither a keyword
+    ('k'-prefixed NodeType) nor a caseCase/statement/statements wrapper. }
+  function SubtreeUsesIdentInCondition(const N: TTSNode; const ALower: string): Boolean;
+
+    function IdentSubtreeMatches(const AExpr: TTSNode): Boolean;
+    var K: Integer;
+    begin
+      Result:= False;
+      if AExpr.IsNull then Exit;
+      if (AExpr.NodeType = 'identifier') and SameText(Trim(NodeStr(AExpr)), ALower) then Exit(True);
+      for K:= 0 to AExpr.ChildCount - 1 do
+        if IdentSubtreeMatches(AExpr.Child(K)) then Exit(True);
+    end;
+
+  var
+    I    : Integer;
+    Cond : TTSNode;
+    Sel  : TTSNode;
+    Kid  : TTSNode;
+    KT   : string;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+
+    if (N.NodeType = 'if') or (N.NodeType = 'ifElse') or (N.NodeType = 'while') or (N.NodeType = 'repeat') then
+    begin
+      Cond:= N.ChildByField('condition');
+      if IdentSubtreeMatches(Cond) then Exit(True);
+    end
+    else if N.NodeType = 'case' then
+    begin
+      Sel:= Default(TTSNode);
+      for I:= 0 to N.NamedChildCount - 1 do
+      begin
+        Kid:= N.NamedChild(I);
+        KT := Kid.NodeType;
+        if (Length(KT) > 0) and (KT[1] = 'k') then Continue;
+        if (KT = 'caseCase') or (KT = 'statement') or (KT = 'statements') then Continue;
+        Sel:= Kid;
+        Break;
+      end;
+      if IdentSubtreeMatches(Sel) then Exit(True);
+    end;
+
+    for I:= 0 to N.NamedChildCount - 1 do
+      if SubtreeUsesIdentInCondition(N.NamedChild(I), ALower) then Exit(True);
+  end;
+
+  { Check one defProc for boolean-flag-parameter findings: a Boolean-typed
+    parameter whose identifier drives an if/while/repeat condition or a case
+    selector in the body -- it selects behavior rather than carrying data
+    (Fowler "Remove Flag Argument"). Skips virtual/override methods (interface/
+    inheritance contract -- the signature can't be freely changed; reuses the
+    same ContractMethods set CheckUnusedParams relies on, because Delphi does
+    NOT repeat virtual/override on the implementation defProc header -- only on
+    the interface-section declProc) and event-handler-shaped routines (any
+    parameter named 'Sender'). }
+  procedure CheckBooleanFlagParam(const ADefProc: TTSNode);
+  var
+    HdrNode  : TTSNode;
+    ArgsNode : TTSNode;
+    ArgNode  : TTSNode;
+    BodyNode : TTSNode;
+    TypeNode : TTSNode;
+    NameId   : TTSNode;
+    I, J     : Integer;
+    TypeStart: Integer;
+    ParamName: string;
+    HasSender: Boolean;
+    FullName : string;
+    BareName : string;
+    DotPos   : Integer;
+  begin
+    HdrNode:= ADefProc.ChildByField('header');
+    if HdrNode.IsNull then Exit;
+
+    { Skip virtual/override methods: contract-bound signature, can't split the
+      routine. Mirrors CheckUnusedParams -- the directive is only present on
+      the interface-section declProc, not repeated here on the defProc. }
+    var NameNode: TTSNode:= HdrNode.ChildByField('name');
+    if not NameNode.IsNull then
+    begin
+      FullName:= LowerCase(Trim(NodeStr(NameNode)));
+      DotPos:= LastDelimiter('.', FullName);
+      if DotPos > 0 then BareName:= Copy(FullName, DotPos + 1, MaxInt)
+      else BareName:= FullName;
+      if ContractMethods.ContainsKey(BareName) then Exit;
+    end;
+
+    ArgsNode:= HdrNode.ChildByField('args');
+    if ArgsNode.IsNull then Exit;
+
+    BodyNode:= ADefProc.ChildByField('body');
+    if BodyNode.IsNull then Exit;
+    if BodyNode.NodeType = 'asm' then Exit;
+
+    { Event-handler guard: any parameter named 'Sender' (any position) marks
+      this as a VCL/FMX event handler -- the Boolean param (if any) is fixed
+      by the event-type signature, not a design choice. }
+    HasSender:= False;
+    for I:= 0 to ArgsNode.NamedChildCount - 1 do
+    begin
+      ArgNode:= ArgsNode.NamedChild(I);
+      if ArgNode.NodeType <> 'declArg' then Continue;
+      TypeNode:= ArgNode.ChildByField('type');
+      TypeStart:= MaxInt;
+      if not TypeNode.IsNull then TypeStart:= Integer(TypeNode.StartByte);
+      for J:= 0 to ArgNode.NamedChildCount - 1 do
+      begin
+        NameId:= ArgNode.NamedChild(J);
+        if NameId.NodeType <> 'identifier' then Continue;
+        if Integer(NameId.StartByte) >= TypeStart then Continue;
+        if SameText(Trim(NodeStr(NameId)), 'Sender') then HasSender:= True;
+      end;
+    end;
+    if HasSender then Exit;
+
+    for I:= 0 to ArgsNode.NamedChildCount - 1 do
+    begin
+      ArgNode:= ArgsNode.NamedChild(I);
+      if ArgNode.NodeType <> 'declArg' then Continue;
+
+      TypeNode:= ArgNode.ChildByField('type');
+      if TypeNode.IsNull then Continue;
+      if not SameText(Trim(NodeStr(TypeNode)), 'Boolean') then Continue;
+
+      TypeStart:= Integer(TypeNode.StartByte);
+      for J:= 0 to ArgNode.NamedChildCount - 1 do
+      begin
+        NameId:= ArgNode.NamedChild(J);
+        if NameId.NodeType <> 'identifier' then Continue;
+        if Integer(NameId.StartByte) >= TypeStart then Continue;
+
+        ParamName:= Trim(NodeStr(NameId));
+        if SameText(ParamName, 'Self') then Continue;
+
+        if SubtreeUsesIdentInCondition(BodyNode, LowerCase(ParamName)) then
+          EmitAt(NameId, 'boolean-flag-parameter',
+            Format('Boolean flag parameter "%s" selects behavior -- consider splitting into two routines', [ParamName]),
+            'hint');
+      end;
+    end;
+  end;
+
   { ---- v0.72 helpers: resource (#5), complexity (#6), exceptions (#7) ---- }
 
   { True if N's subtree carries a virtual-family directive (virtual/dynamic/
@@ -762,6 +920,7 @@ var
     if N.NodeType = 'defProc' then
     begin
       CheckUnusedParams(N);
+      CheckBooleanFlagParam(N);
       for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
       Exit;
     end;
