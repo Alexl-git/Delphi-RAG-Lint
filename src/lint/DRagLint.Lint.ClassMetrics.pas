@@ -1,9 +1,11 @@
 unit DRagLint.Lint.ClassMetrics;
 
-{ v0.78 CK class metrics (#6): DIT, NOC, CBO, RFC, LCOM4. Store-backed,
-  project-wide -- runs only in lint-all / lint-project (not the per-file LSP).
-  Complements the coarse god-class rule with individually-tunable metrics.
-  Stateless; reads an open store; never raises. }
+{ v0.78 CK class metrics (#6): DIT, NOC, CBO, RFC, LCOM4. v0.80 refactoring
+  signal: middle-man. v0.81 coupling metrics: fan-out (Ce, aliases CBO) and
+  fan-in (Ca, whole-project reverse aggregation). Store-backed, project-wide --
+  runs only in lint-all (not lint-project, not the per-file LSP). Complements the
+  coarse god-class rule with individually-tunable metrics. Stateless; reads an
+  open store; never raises. }
 
 interface
 
@@ -109,12 +111,15 @@ var
   HasExtParent: TDictionary<Int64, Boolean>      ;
   NocCount    : TDictionary<Int64, Integer>      ;
   RefsCache   : TDictionary<Int64, TArray<TReference>>;
+  FanIn       : TDictionary<Int64, Integer>      ; { v0.81: target class id -> distinct inbound source count (Ca) }
   Findings    : TList<TLintFinding>              ;
   TNOC        : Integer                          ;
   TDIT        : Integer                          ;
   TRFC        : Integer                          ;
   TCBO        : Integer                          ;
   TLCOM       : Integer                          ;
+  TFanOut     : Integer                          ;
+  TFanIn      : Integer                          ;
   CI          : TClassInfo                       ;
 
   function WantRule(const AId: string): Boolean;
@@ -335,6 +340,68 @@ var
     finally
       Exclude.Free;
       Coupled.Free;
+    end;
+  end;
+
+  { v0.81 -- afferent coupling (Ca / fan-in), whole-project reverse aggregation.
+    Builds the FanIn dictionary ONCE (target class id -> count of distinct OTHER
+    classes that reference it). Inverts ComputeCBO's efferent logic: for each
+    source class Src, recompute its set of coupled class NAMES exactly as
+    ComputeCBO does (type_use refs in Src's decl span or method bodies, excluding
+    Src itself and Src's transitive ancestors, deduped into a name set); then for
+    each coupled name resolve to target class id(s) via ByName and add +1. Because
+    each source's names are deduped, a source contributes at most +1 per target,
+    so FanIn[t] = the number of distinct OTHER classes referencing class t.
+    Caveat (same as CBO): resolution is name-based, so a coupled name shared by
+    two classes in different units increments BOTH -- a documented over-count the
+    CK suite already tolerates. Adds no new store calls; reuses GetRefs + ByName. }
+  procedure ComputeAllFanIn;
+  var
+    Src    : TClassInfo                  ;
+    Coupled: TDictionary<string, Boolean>;
+    Exclude: TDictionary<string, Boolean>;
+    Anc    : TArray<TTypeAncestor>       ;
+    A      : TTypeAncestor               ;
+    Refs   : TArray<TReference>          ;
+    R      : TReference                  ;
+    Nm     : string                      ;
+    Tgts   : TList<Int64>                ;
+    Tid    : Int64                       ;
+    Cur    : Integer                     ;
+  begin
+    for Src in Inv.Values do
+    begin
+      Coupled:= TDictionary<string, Boolean>.Create;
+      Exclude:= TDictionary<string, Boolean>.Create;
+      try
+        Exclude.AddOrSetValue(LowerCase(Src.Name), True);
+        Anc:= AStore.GetTransitiveAncestors(Src.Id);
+        for A in Anc do
+          if A.Name <> '' then Exclude.AddOrSetValue(LowerCase(A.Name), True);
+        Refs:= GetRefs(Src.FileId);
+        for R in Refs do
+        begin
+          if not SameText(R.Kind, 'type_use') then Continue;
+          if R.NameText = '' then Continue;
+          if not (InDeclSpan(Src, R.StartLine) or InAnyMethodBody(Src, R.StartLine)) then Continue;
+          Nm:= LowerCase(R.NameText);
+          if Exclude.ContainsKey(Nm) then Continue;
+          if AStore.ResolveTypeCategory(R.NameText, Src.FileId) = tcClass then
+            Coupled.AddOrSetValue(Nm, True);
+        end;
+        { each deduped coupled name contributes +1 to every class id it resolves to }
+        for Nm in Coupled.Keys do
+          if ByName.TryGetValue(Nm, Tgts) then
+            for Tid in Tgts do
+            begin
+              Cur:= 0;
+              FanIn.TryGetValue(Tid, Cur);
+              FanIn.AddOrSetValue(Tid, Cur + 1);
+            end;
+      finally
+        Exclude.Free;
+        Coupled.Free;
+      end;
     end;
   end;
 
@@ -695,6 +762,7 @@ begin
   HasExtParent:= TDictionary<Int64, Boolean>.Create;
   NocCount    := TDictionary<Int64, Integer>.Create;
   RefsCache   := TDictionary<Int64, TArray<TReference>>.Create;
+  FanIn       := TDictionary<Int64, Integer>.Create;
   Findings    := TList<TLintFinding>.Create;
   try
     TNOC:= ACfg.ThresholdFor('too-many-children', 10);
@@ -702,10 +770,13 @@ begin
     TRFC:= ACfg.ThresholdFor('high-response', 50);
     TCBO:= ACfg.ThresholdFor('high-coupling', 20);
     TLCOM:= ACfg.ThresholdFor('low-cohesion', 26);
+    TFanOut:= ACfg.ThresholdFor('fan-out', 20); { aliases CBO; field-tune }
+    TFanIn := ACfg.ThresholdFor('fan-in', 20);  { field-tune }
 
     BuildInventory;
     ResolveParents;
     ComputeNOC;
+    ComputeAllFanIn;
 
     for CI in Inv.Values do
     begin
@@ -763,6 +834,28 @@ begin
             Format('Middle man: %s forwards %d of %d methods to field ''%s'' -- consider removing the middle man (inline the delegate or expose it).', [CI.Name, MM.BestCount, MM.Total, MM.BestField]),
             CI);
       end;
+
+      if WantRule('fan-out') then
+      begin
+        { efferent coupling (Ce); intentionally aliases high-coupling/CBO -- ships
+          OFF by default so it does not double-fire with the ON high-coupling rule }
+        var Ce: Integer:= ComputeCBO(CI);
+        if Ce > TFanOut then
+          Emit('fan-out',
+            Format('High fan-out: %s depends on %d other classes (>%d) -- high efferent coupling; this class is fragile to changes in its dependencies', [CI.Name, Ce, TFanOut]),
+            CI);
+      end;
+
+      if WantRule('fan-in') then
+      begin
+        { afferent coupling (Ca): distinct OTHER classes that reference this one }
+        var Ca: Integer:= 0;
+        FanIn.TryGetValue(CI.Id, Ca);
+        if Ca > TFanIn then
+          Emit('fan-in',
+            Format('High fan-in: %s is referenced by %d other classes (>%d) -- a widely-depended-on hub; changes here ripple widely', [CI.Name, Ca, TFanIn]),
+            CI);
+      end;
     end;
 
     Result:= Findings.ToArray;
@@ -774,6 +867,7 @@ begin
     HasExtParent.Free;
     NocCount.Free;
     RefsCache.Free;
+    FanIn.Free;
     Findings.Free;
     TAstParseCache.Clear;
   end;

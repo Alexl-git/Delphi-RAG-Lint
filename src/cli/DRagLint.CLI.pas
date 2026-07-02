@@ -5917,11 +5917,13 @@ begin
   { v0.71/v0.74/v0.79/v0.80/v0.81: function-result-ignored + unsafe-typecast-without-is +
     exhaustive-enum-case + multiple-statements-per-line + magic-literal +
     boolean-flag-parameter + public-writable-field + loop-control-flag +
-    mutable-global-variable + repeated-type-switch + middle-man + default-encoding-io
-    are OFF by default here too (opt in via config "enabled"). middle-man is emitted by
-    TClassMetrics.Run above; catalog False alone does not suppress CLI output, so
-    it must be listed here for the ShouldKeep filter to drop it by default. }
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io'],
+    mutable-global-variable + repeated-type-switch + middle-man + default-encoding-io +
+    fan-out + fan-in
+    are OFF by default here too (opt in via config "enabled"). middle-man / fan-out /
+    fan-in are emitted by TClassMetrics.Run above; catalog False alone does not
+    suppress CLI output, so they must be listed here for the ShouldKeep filter to
+    drop them by default. }
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;

@@ -1,0 +1,1 @@
+{ "enabled": ["fan-in", "fan-out"], "thresholds": { "fan-in": 2, "fan-out": 2 } }

@@ -1,0 +1,7 @@
+# TWidget (line 6) is referenced as a field type by TAlpha/TBeta/TGamma -> Ca=3 > 2 -> fan-in fires
+fan-in sample.pas:6
+# TApp (line 26) has fields typed TAlpha/TBeta/TGamma -> Ce=3 > 2 -> fan-out fires
+fan-out sample.pas:26
+# TLoner (line 33) references nothing and is referenced by nothing -> neither fires
+!fan-in sample.pas:33
+!fan-out sample.pas:33

@@ -213,6 +213,11 @@ begin
     B('high-response', 'metrics', 'info', 'Class response set is too large (RFC)', True, [MkParam('threshold','int','50')]);
     B('high-coupling', 'metrics', 'info', 'Class is coupled to too many other classes (CBO)', True, [MkParam('threshold','int','20')]);
     B('low-cohesion', 'metrics', 'info', 'Class methods lack cohesion (LCOM4)', True, [MkParam('threshold','int','26')]);
+    { v0.81 coupling metrics -- OFF by default. fan-out aliases high-coupling/CBO
+      (so it does not double-fire); fan-in is a whole-project reverse aggregation.
+      Both need field-tuned thresholds; opt in via "enabled". }
+    B('fan-out', 'metrics', 'info', 'Class depends on too many other classes (efferent coupling Ce; aliases CBO)', False, [MkParam('threshold','int','20')]);
+    B('fan-in', 'metrics', 'info', 'Class is referenced by too many other classes (afferent coupling Ca)', False, [MkParam('threshold','int','20')]);
 
     Result:= L.ToArray;
   finally
