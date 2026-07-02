@@ -41,7 +41,21 @@ unit DRagLint.Diagnostics.DeadCodeChecks;
                            the routine body -- it selects behavior rather than
                            carrying data. Skips override methods (contract-
                            bound signature) and event-handler-shaped routines
-                           (any parameter named Sender). Severity 'hint'. }
+                           (any parameter named Sender). Severity 'hint'.
+    message-chain         : (v0.79, #14, Fowler "Hide Delegate") a member-access
+                           chain 'a.b.c.d...' in VALUE-expression context deeper
+                           than a configurable threshold (default 4 dotted
+                           hops -- fires at 5+). Only 'exprDot' nodes count (a
+                           left-nested lhs/rhs chain); the walk drills through an
+                           intermediate 'exprCall' via its 'entity' field so
+                           'a.b().c().d' also counts as a chain. Qualified type/
+                           unit names use distinct node types in this grammar
+                           ('typerefDot' for ancestor/typeref position,
+                           'moduleName' for the uses clause) so they never match
+                           'exprDot' and need no separate exemption. Flagged once
+                           at the outermost 'exprDot' of the chain (a node whose
+                           parent is not itself a link in the same chain).
+                           Severity 'hint', configurable threshold. }
 
 interface
 
@@ -120,13 +134,14 @@ type
     /// Thread-safe if the parse cache is thread-safe for the caller's pattern;
     /// the checker itself has no shared mutable state.</remarks>
     class function Check(const AFile: string; AMinCaseBranches: Integer = 2;
-      AMaxBoolOps: Integer = 4; AMaxUnitLines: Integer = 2000): TArray<TLintFinding>;
+      AMaxBoolOps: Integer = 4; AMaxUnitLines: Integer = 2000;
+      AMaxChainHops: Integer = 4): TArray<TLintFinding>;
   end;
 
 implementation
 
 class function TDeadCodeChecker.Check(const AFile: string; AMinCaseBranches: Integer;
-  AMaxBoolOps: Integer; AMaxUnitLines: Integer): TArray<TLintFinding>;
+  AMaxBoolOps: Integer; AMaxUnitLines: Integer; AMaxChainHops: Integer): TArray<TLintFinding>;
 var
   Src            : TBytes                      ;
   PF             : TParsedFile                 ;
@@ -878,6 +893,55 @@ var
     for I:= 0 to N.ChildCount - 1 do EmitTempPathLiteral(N.Child(I));
   end;
 
+  { v0.79 #14 (message-chain, Fowler "Hide Delegate"): True if AParent is a node
+    that continues the SAME dotted chain as a child 'exprDot' sitting in its
+    lhs/entity spine -- i.e. AChild is not the outermost link. Two shapes chain:
+      - AParent is 'exprDot' and AChild is AParent's 'lhs' (a.B.C -- C's lhs is
+        the exprDot for a.B);
+      - AParent is 'exprCall' and AChild is AParent's 'entity' (a.B() -- the
+        exprCall wraps the exprDot as a qualified call, still mid-chain), AND
+        that exprCall is itself further dotted (checked by the caller walking
+        one level up: an exprCall is only "mid-chain" when ITS parent continues
+        the chain too -- handled by IsChainLink being called on the exprCall's
+        parent from CountChainHops, not here). }
+  function IsChainLink(const AParent, AChild: TTSNode): Boolean;
+  begin
+    Result:= False;
+    if AParent.IsNull or AChild.IsNull then Exit;
+    if AParent.NodeType = 'exprDot' then
+      Result:= Integer(AParent.ChildByField('lhs').StartByte) = Integer(AChild.StartByte)
+    else if AParent.NodeType = 'exprCall' then
+      Result:= Integer(AParent.ChildByField('entity').StartByte) = Integer(AChild.StartByte);
+  end;
+
+  { v0.79 #14: count the dotted hops of a member-access chain rooted at
+    ATop (an 'exprDot'), walking DOWN the lhs spine and drilling through an
+    intermediate 'exprCall' via its 'entity' field so 'a.b().c().d' counts the
+    same as 'a.b.c.d'. Each 'exprDot' visited contributes one hop (its 'rhs'
+    member). 'a.b.c.d.e' = 4 hops (b,c,d,e off a). }
+  function CountChainHops(const ATop: TTSNode): Integer;
+  var
+    Cur: TTSNode;
+  begin
+    Result:= 0;
+    Cur:= ATop;
+    while (not Cur.IsNull) and (Cur.NodeType = 'exprDot') do
+    begin
+      Inc(Result);
+      Cur:= Cur.ChildByField('lhs');
+      while (not Cur.IsNull) and (Cur.NodeType = 'exprCall') do
+        Cur:= Cur.ChildByField('entity');
+    end;
+  end;
+
+  { v0.79 #14: True when N (an 'exprDot') is the OUTERMOST link of its chain --
+    its parent does not continue the same chain (see IsChainLink). Only the
+    outermost link is flagged, so a 6-hop chain emits exactly one finding. }
+  function IsTopOfChain(const N: TTSNode): Boolean;
+  begin
+    Result:= (not N.Parent.IsNull) and (not IsChainLink(N.Parent, N));
+  end;
+
   { v0.75 #5: drill through 'statement'/'statements' wrappers to the innermost
     first named child (the actual assignment/call); N unchanged if not a wrapper. }
   function UnwrapStmt(const N: TTSNode): TTSNode;
@@ -1225,6 +1289,20 @@ var
       var Ent: TTSNode:= N.ChildByField('entity');
       if (not Ent.IsNull) and IsFileApiCallee(Trim(NodeStr(Ent))) then
         EmitTempPathLiteral(N);
+    end;
+
+    { message-chain (#14, Fowler "Hide Delegate"): a member-access chain
+      'a.b.c.d...' in value-expression context longer than AMaxChainHops hops.
+      Only 'exprDot' nodes count (a left-nested lhs/rhs chain); qualified type/
+      unit names use distinct node types ('typerefDot', 'moduleName') so they
+      never reach here -- no separate exemption needed. Flag once, at the
+      outermost link of the chain, so a long chain gets exactly one finding. }
+    if (N.NodeType = 'exprDot') and IsTopOfChain(N) then
+    begin
+      var Hops: Integer:= CountChainHops(N);
+      if Hops > AMaxChainHops then
+        EmitAt(N, 'message-chain',
+          Format('Message chain of %d members -- consider Hide Delegate', [Hops]), 'hint');
     end;
 
     { multiple-statements-per-line (#2): two or more sibling statements (direct

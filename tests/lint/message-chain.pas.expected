@@ -1,0 +1,15 @@
+# message-chain (#14, Fowler "Hide Delegate"): a member-access chain
+# 'a.b.c.d...' in value-expression context deeper than the configurable
+# threshold (default 4 dotted hops -- fires at 5+ hops). Hop-count definition:
+# the number of dotted member accesses off the base identifier -- 'a.b.c.d.e'
+# is 4 hops (b, c, d, e). Flagged once, at the outermost exprDot (start of the
+# whole chain, i.e. the base identifier's position). ON by default.
+# Line 10 'Order.Customer.Address.City.Zip.Length' -- 5 hops (Customer,
+# Address, City, Zip, Length), 5 > 4 -> FLAGGED.
+message-chain 10
+# Line 11 'Order.Customer.Name' -- 2 hops (Customer, Name), 2 <= 4 -> not
+# flagged (short chain, ordinary field/property access).
+!message-chain 11
+# Line 12 'Order.Customer.Address.Zip.Value.Digits.Count' -- 6 hops
+# (Customer, Address, Zip, Value, Digits, Count), 6 > 4 -> FLAGGED.
+message-chain 12
