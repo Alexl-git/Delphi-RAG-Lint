@@ -20,6 +20,11 @@ uses
   ;
 
 type
+  /// <summary>Computes the five Chidamber and Kemerer class metrics
+  /// (DIT/NOC/CBO/RFC/LCOM4) over an indexed symbol store and returns 'info'
+  /// findings for classes whose value exceeds the configured threshold.</summary>
+  /// <remarks>Stateless; project-wide -- invoke from the lint-all / lint-project
+  /// store path only, never the per-file LSP. Reads the store read-only; never raises.</remarks>
   TClassMetrics = class
   public
     /// <summary>Computes the five CK class metrics (DIT/NOC/CBO/RFC/LCOM4) over
