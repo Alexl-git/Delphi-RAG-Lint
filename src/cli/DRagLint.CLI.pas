@@ -5944,11 +5944,9 @@ end; // function
 // the whole symbol/refs graph. Exit 1 if any findings, 0 if none, 2 on usage error.
 function DoLintProject(const AArgs: TArgs): Integer;
 var
-  Store   : ISymbolStore        ;
-  Findings: TArray<TLintFinding> ;
-  F       : TLintFinding         ;
-  JArr    : TJSONArray           ;
-  JObj    : TJSONObject          ;
+  Store      : ISymbolStore        ;
+  Findings   : TArray<TLintFinding> ;
+  DefDisabled: TArray<string>       ;
 begin
   if not FileExists(AArgs.DbPath) then
   begin
@@ -5957,6 +5955,13 @@ begin
   end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
+  { v0.80 review fix: repeated-type-switch is OFF by default (medium name-based FP --
+    see .superpowers/sdd/v080-task-4-report.md). Route through FinalizeAndOutput below
+    so the DefDisabled + ShouldKeep filter actually applies to lint-project output
+    (previously this command wrote Findings straight to stdout, unfiltered). }
+  DefDisabled:= nil;
+  if AArgs.Rule <> 'repeated-type-switch' then
+    DefDisabled:= DefDisabled + ['repeated-type-switch'];
   Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, AArgs.Rule);
   { v0.51: interface reference cycles -- needs the AST of all project files (parsed here) }
   if (AArgs.Rule = '') or (AArgs.Rule = 'interface-reference-cycle') then
@@ -5981,35 +5986,14 @@ begin
     Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership(
       Store, LibDbPath2, AArgs.ProjectPath);
   end;
-  if AArgs.AsJson then
-  begin
-    JArr:= TJSONArray.Create;
-    try
-      for F in Findings do
-      begin
-        JObj:= TJSONObject.Create;
-        JObj.AddPair('rule'      , F.RuleId  );
-        JObj.AddPair('severity'  , F.Severity);
-        JObj.AddPair('file_path' , F.FilePath);
-        JObj.AddPair('start_line', TJSONNumber.Create(F.StartLine));
-        JObj.AddPair('start_col' , TJSONNumber.Create(F.StartCol ));
-        JObj.AddPair('end_line'  , TJSONNumber.Create(F.EndLine  ));
-        JObj.AddPair('end_col'   , TJSONNumber.Create(F.EndCol   ));
-        JObj.AddPair('message'   , F.Message );
-        JArr.AddElement(JObj);
-      end;
-      Writeln(JArr.ToJSON);
-    finally
-      JArr.Free;
-    end;
-  end
-  else
-  begin
-    for F in Findings do
-      Writeln(Format('%s:%d:%d  [%s] %s: %s', [F.FilePath, F.StartLine, F.StartCol, F.Severity, F.RuleId, F.Message]));
-    Writeln(Format('%d finding(s)', [Length(Findings)]));
-  end;
-  if Length(Findings) > 0 then Result:= 1 else Result:= 0;
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), DefDisabled,
+    procedure(ASurv: TArray<TLintFinding>)
+    var FF: TLintFinding;
+    begin
+      for FF in ASurv do
+        Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
+      Writeln(Format('%d finding(s)', [Length(ASurv)]));
+    end);
 end; // function
 
 // v0.24: count distinct file paths across edit set.
