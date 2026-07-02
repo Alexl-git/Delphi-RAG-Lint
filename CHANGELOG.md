@@ -5,6 +5,8 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.78.0-alpha -- 2026-07-02
+
 ### Added
 - CK class metrics (#6): `deep-inheritance` (DIT), `too-many-children` (NOC),
   `high-coupling` (CBO), `high-response` (RFC), `low-cohesion` (LCOM4). Store-backed,
