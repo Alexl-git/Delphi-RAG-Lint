@@ -12,6 +12,11 @@ breaking changes** until v1.0.
   configurable `threshold` per rule. LCOM shipped as LCOM4 (connected components).
   Known limits: DIT undercounts without the RTL/library index (external parents
   count as one hop); resolution is name-based; CBO is efferent (type-use) only.
+  `low-cohesion` defaults high (`threshold` 26, vs 6-50 for its siblings) on
+  purpose: OTA/NTA interface-implementer classes and stateless `class function`
+  utility/facade classes structurally maximize LCOM4 without being genuine
+  god-classes, so a low default is pure noise on idiomatic Delphi -- lower it if
+  your codebase does not lean on those idioms.
 
 ## v0.77.0-alpha -- 2026-07-02
 
