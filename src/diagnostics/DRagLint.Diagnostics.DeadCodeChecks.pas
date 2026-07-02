@@ -70,7 +70,19 @@ unit DRagLint.Diagnostics.DeadCodeChecks;
                            files, almost all intentional public field-bag
                            "record-like classes" (e.g. TCfgBlock/TCfg internal
                            data carriers, plugin form-helper classes) rather
-                           than scattered accidental encapsulation breaks. }
+                           than scattered accidental encapsulation breaks.
+    loop-control-flag      : (v0.79, #14, Fowler "Replace Control Flag with
+                           Break") a while/repeat loop whose CONDITION
+                           references an identifier that is also assigned a
+                           BARE True/False literal ('kTrue'/'kFalse' token,
+                           never a computed boolean) somewhere inside the loop
+                           BODY -- the "flag variable drives the exit" pattern
+                           a 'Break' would express more directly. Severity
+                           'hint'; OFF by default -- heuristic and the
+                           riskiest rule of the v0.79 batch (a benign var that
+                           happens to be both referenced in the condition and
+                           reset to True/False inside the loop for unrelated
+                           reasons would also trip it), gated on src/ FP-sanity. }
 
 interface
 
@@ -858,6 +870,45 @@ var
       if SubtreeCallsRandom(N.Child(I)) then Exit(True);
   end;
 
+  { v0.79 #14 loop-control-flag helper: recursively collect every identifier
+    name (lower-cased) referenced anywhere inside AExpr into AAcc. Used to
+    pull the candidate flag names out of a while/repeat CONDITION subtree
+    (handles wrappers like 'exprUnary not X' or 'exprBinary X = True'). }
+  procedure LcfCollectIdents(const AExpr: TTSNode; AAcc: TList<string>);
+  var K: Integer;
+  begin
+    if AExpr.IsNull then Exit;
+    if AExpr.NodeType = 'identifier' then
+    begin
+      AAcc.Add(LowerCase(Trim(NodeStr(AExpr))));
+      Exit;
+    end;
+    for K:= 0 to AExpr.ChildCount - 1 do
+      LcfCollectIdents(AExpr.Child(K), AAcc);
+  end;
+
+  { v0.79 #14 loop-control-flag helper: True if ABody's subtree contains an
+    'assignment' whose lhs is the bare identifier AFlagLower and whose rhs is
+    a BARE True/False literal token ('kTrue'/'kFalse', not a computed boolean
+    expression). This is the sentinel-flag-assignment signal. }
+  function LcfBodyAssignsFlag(const ABody: TTSNode; const AFlagLower: string): Boolean;
+  var K: Integer; Lhs, Rhs: TTSNode;
+  begin
+    Result:= False;
+    if ABody.IsNull then Exit;
+    if ABody.NodeType = 'assignment' then
+    begin
+      Lhs:= ABody.ChildByField('lhs');
+      Rhs:= ABody.ChildByField('rhs');
+      if (not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier')
+         and SameText(Trim(NodeStr(Lhs)), AFlagLower)
+         and ((Rhs.NodeType = 'kTrue') or (Rhs.NodeType = 'kFalse')) then
+        Exit(True);
+    end;
+    for K:= 0 to ABody.ChildCount - 1 do
+      if LcfBodyAssignsFlag(ABody.Child(K), AFlagLower) then Exit(True);
+  end;
+
   { v0.76 #2: True if a node type is a top-level statement (an item that can be a
     direct sibling in a begin..end / try block). Used to detect two statements on
     one source line. Deliberately excludes expression/keyword nodes. }
@@ -1091,6 +1142,50 @@ var
            and (LitPT <> 'arrInitializer') and (LitPT <> 'recInitializer') and (LitPT <> 'recInitializerField') then
           EmitAt(N, 'magic-literal',
             'Unexplained numeric literal -- extract a named constant', 'hint');
+      end;
+    end;
+
+    { loop-control-flag (Fowler "Replace Control Flag with Break", #14): a
+      while/repeat loop whose CONDITION references an identifier that is
+      assigned a bare True/False literal somewhere inside the loop BODY --
+      the classic "flag variable drives the exit" pattern that a 'Break'
+      would express more directly. OFF by default (heuristic, FP-prone --
+      any counter/state var that happens to be reassigned a boolean inside
+      the loop and also appear in the condition trips it; kept conservative
+      by requiring a BARE literal True/False rhs, never a computed boolean).
+      Grammar (verified via dumptree): while/repeat both expose 'condition'
+      and 'body' fields; 'while X' wraps the guard directly (e.g. exprUnary
+      'not Found'), 'repeat' places 'body' BEFORE 'condition' in source order
+      but the field names are the same. A True/False literal is a bare
+      'kTrue'/'kFalse' token node (verified elsewhere in this codebase, e.g.
+      the X.Active := True/False check) -- not a sub-expression, so a computed
+      boolean rhs ('Found := (I >= N)') is never mistaken for the sentinel
+      pattern. }
+    if (N.NodeType = 'while') or (N.NodeType = 'repeat') then
+    begin
+      var LcfCond: TTSNode:= N.ChildByField('condition');
+      var LcfBody: TTSNode:= N.ChildByField('body');
+      if (not LcfCond.IsNull) and (not LcfBody.IsNull) then
+      begin
+        var LcfFlagName: string:= '';
+        var LcfCondNames: TList<string>:= TList<string>.Create;
+        try
+          LcfCollectIdents(LcfCond, LcfCondNames);
+          for var LcfName in LcfCondNames do
+          begin
+            if LcfBodyAssignsFlag(LcfBody, LcfName) then
+            begin
+              LcfFlagName:= LcfName;
+              Break;
+            end;
+          end;
+        finally
+          LcfCondNames.Free;
+        end;
+
+        if LcfFlagName <> '' then
+          EmitAt(N, 'loop-control-flag',
+            Format('Loop exit driven by a boolean flag "%s" -- consider Break', [LcfFlagName]), 'hint');
       end;
     end;
 

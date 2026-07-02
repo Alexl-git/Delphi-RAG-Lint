@@ -1,0 +1,18 @@
+# loop-control-flag (#14, Fowler "Replace Control Flag with Break"): a
+# while/repeat loop whose CONDITION references an identifier that is also
+# assigned a bare True/False literal inside the loop BODY -- the "flag
+# variable drives the exit" pattern a Break would express more directly.
+# OFF by default (riskiest heuristic of the v0.79 batch) -- run with
+# loop-control-flag.config.json ("enabled": ["loop-control-flag"]).
+# Line 13 'while not Found do' -- Found is referenced in the condition and
+# assigned True inside the body -> FLAGGED (emitted at the while node).
+loop-control-flag 13
+# Line 28 'repeat' -- Stop is referenced in the 'until Stop = True' condition
+# and assigned True inside the body -> FLAGGED (emitted at the repeat node).
+loop-control-flag 28
+# Line 39 'while I < N do' -- a plain numeric counter loop; I/N are never
+# assigned a bare True/False literal -> not flagged.
+!loop-control-flag 39
+# Line 46 'while not Eof(F) do' -- the condition calls a function, and no
+# identifier in it is ever assigned True/False in the body -> not flagged.
+!loop-control-flag 46
