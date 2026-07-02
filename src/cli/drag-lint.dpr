@@ -29,6 +29,7 @@ uses
   DRagLint.Lint.ProjectChecks in '..\lint\DRagLint.Lint.ProjectChecks.pas',
   DRagLint.Lint.ProjectChecks.Parse in '..\lint\DRagLint.Lint.ProjectChecks.Parse.pas',
   DRagLint.Lint.ProjectRules in '..\lint\DRagLint.Lint.ProjectRules.pas',
+  DRagLint.Lint.ClassMetrics in '..\lint\DRagLint.Lint.ClassMetrics.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   DRagLint.FormsMap in '..\forms\DRagLint.FormsMap.pas',
   DRagLint.MCP.Server in '..\mcp\DRagLint.MCP.Server.pas',

@@ -43,6 +43,7 @@ uses
   , DRagLint.Lint   .Linter
   , DRagLint.Lint   .ProjectChecks
   , DRagLint.Lint   .ProjectRules
+  , DRagLint.Lint   .ClassMetrics
   , DRagLint.Project.Resolver
   , DRagLint.FormsMap
   , DRagLint.MCP        .Server
@@ -5834,6 +5835,9 @@ begin
   { Project-wide rules }
   Findings:= Findings +
     DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, '');
+  { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; runs only here. }
+  Findings:= Findings +
+    DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, '');
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   Findings:= Findings +

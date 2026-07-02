@@ -1,0 +1,2 @@
+too-many-children base.pas:6
+!too-many-children base.pas:11

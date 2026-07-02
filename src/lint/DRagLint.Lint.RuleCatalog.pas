@@ -188,6 +188,10 @@ begin
     B('unit-not-in-project',   'project-wide', 'warning', 'Unit is not a member of the project');
     B('unused-unit-in-uses',   'project-wide', 'warning', 'Unit in uses is never referenced');
     B('god-class',             'project-wide', 'info',    'Class has too many members/responsibilities');
+
+    { --- metrics (CK class metrics; v0.78) --- }
+    B('too-many-children', 'metrics', 'info', 'Class has too many direct subclasses (NOC)', True, [MkParam('threshold','int','10')]);
+
     B('unused-public-symbol',  'project-wide', 'info',    'Public symbol is never referenced');
     B('unused-private-member', 'project-wide', 'warning', 'Private member is never referenced');
     B('layering-violation',    'project-wide', 'warning', 'Unit dependency crosses an architectural layer');

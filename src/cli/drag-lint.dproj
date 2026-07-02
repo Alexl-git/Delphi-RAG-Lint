@@ -119,6 +119,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.Parse.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectRules.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.ClassMetrics.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
         <DCCReference Include="..\forms\DRagLint.FormsMap.pas"/>
         <DCCReference Include="..\mcp\DRagLint.MCP.Server.pas"/>
