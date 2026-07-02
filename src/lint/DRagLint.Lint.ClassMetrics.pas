@@ -97,6 +97,7 @@ var
   RefsCache   : TDictionary<Int64, TArray<TReference>>;
   Findings    : TList<TLintFinding>              ;
   TNOC        : Integer                          ;
+  TDIT        : Integer                          ;
   CI          : TClassInfo                       ;
 
   function WantRule(const AId: string): Boolean;
@@ -228,6 +229,41 @@ var
     end;
   end;
 
+  { Depth of inheritance: hops up the internal parent chain; a known-but-unindexed
+    (external/RTL) parent adds one final hop. Cycle-guarded, hard-capped at 32. }
+  function ComputeDIT(AId: Int64): Integer;
+  var
+    Cur    : Int64            ;
+    Depth  : Integer          ;
+    Visited: TDictionary<Int64, Boolean>;
+    P      : Int64            ;
+  begin
+    Depth:= 0;
+    Cur:= AId;
+    Visited:= TDictionary<Int64, Boolean>.Create;
+    try
+      while True do
+      begin
+        if Visited.ContainsKey(Cur) then Break;
+        Visited.Add(Cur, True);
+        if ParentOf.TryGetValue(Cur, P) then
+        begin
+          Inc(Depth);
+          Cur:= P;
+          if Depth >= 32 then Break;
+        end
+        else
+        begin
+          if HasExtParent.ContainsKey(Cur) then Inc(Depth);
+          Break;
+        end;
+      end;
+    finally
+      Visited.Free;
+    end;
+    Result:= Depth;
+  end;
+
 begin
   Result:= nil;
   if AStore = nil then Exit;
@@ -241,6 +277,7 @@ begin
   Findings    := TList<TLintFinding>.Create;
   try
     TNOC:= ACfg.ThresholdFor('too-many-children', 10);
+    TDIT:= ACfg.ThresholdFor('deep-inheritance', 6);
 
     BuildInventory;
     ResolveParents;
@@ -255,6 +292,15 @@ begin
         if N > TNOC then
           Emit('too-many-children',
             Format('High NOC: %s has %d direct subclasses (>%d) -- a wide, fragile base class', [CI.Name, N, TNOC]),
+            CI);
+      end;
+
+      if WantRule('deep-inheritance') then
+      begin
+        var D: Integer:= ComputeDIT(CI.Id);
+        if D > TDIT then
+          Emit('deep-inheritance',
+            Format('Deep inheritance: %s is %d levels deep (>%d) -- deep hierarchies are hard to follow', [CI.Name, D, TDIT]),
             CI);
       end;
     end;

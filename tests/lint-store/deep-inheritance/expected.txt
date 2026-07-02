@@ -1,0 +1,2 @@
+deep-inheritance chain.pas:15
+!deep-inheritance chain.pas:9
