@@ -22,22 +22,24 @@ uses
   ;
 
 type
-  /// <summary>Computes the five Chidamber and Kemerer class metrics
-  /// (DIT/NOC/CBO/RFC/LCOM4) over an indexed symbol store and returns 'info'
-  /// findings for classes whose value exceeds the configured threshold.</summary>
-  /// <remarks>Stateless; project-wide -- invoke from the lint-all / lint-project
-  /// store path only, never the per-file LSP. Reads the store read-only; never raises.</remarks>
+  /// <summary>Computes per-class design metrics over an indexed symbol store and
+  /// returns 'info' findings for classes exceeding the configured threshold: the
+  /// Chidamber-Kemerer suite (DIT/NOC/CBO/RFC/LCOM4), the coupling pair
+  /// fan-out (Ce) / fan-in (Ca), and the middle-man delegation signal.</summary>
+  /// <remarks>Stateless; project-wide -- invoke from the lint-all store path only
+  /// (not lint-project or the per-file LSP). Reads the store read-only; never raises.</remarks>
   TClassMetrics = class
   public
-    /// <summary>Computes the five CK class metrics (DIT/NOC/CBO/RFC/LCOM4) over
-    /// AStore and returns findings for classes exceeding each rule's configured
-    /// threshold. A nil store yields no findings. ARuleId, when non-empty,
-    /// restricts evaluation to that one rule id.</summary>
+    /// <summary>Computes the per-class metrics (CK: DIT/NOC/CBO/RFC/LCOM4; the
+    /// coupling pair fan-out/fan-in; and middle-man) over AStore and returns
+    /// findings for classes exceeding each rule's configured threshold. A nil
+    /// store yields no findings. ARuleId, when non-empty, restricts evaluation
+    /// to that one rule id.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil -> empty result.</param>
     /// <param name="ACfg">Active lint config (supplies per-rule thresholds).</param>
-    /// <param name="ARuleId">Single-rule filter for --rule; '' evaluates all five.</param>
+    /// <param name="ARuleId">Single-rule filter for --rule; '' evaluates every metric.</param>
     /// <returns>'info' findings anchored at each offending class declaration.</returns>
-    /// <remarks>Project-wide; call from lint-all / lint-project only. Never raises.</remarks>
+    /// <remarks>Project-wide; call from lint-all only. Never raises.</remarks>
     class function Run(const AStore: ISymbolStore; const ACfg: TLintConfig;
       const ARuleId: string = ''): TArray<TLintFinding>;
   end;
