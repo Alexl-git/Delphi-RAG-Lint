@@ -242,7 +242,7 @@ begin
   Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
-  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses] [--layers <f.json>] [--json]');
+  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch] [--layers <f.json>] [--json]');
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet]');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
@@ -5910,8 +5910,9 @@ begin
   { v0.71/v0.74/v0.79/v0.80: function-result-ignored + unsafe-typecast-without-is +
     exhaustive-enum-case + multiple-statements-per-line + magic-literal +
     boolean-flag-parameter + public-writable-field + loop-control-flag +
-    mutable-global-variable are OFF by default here too (opt in via config "enabled"). }
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable'],
+    mutable-global-variable + repeated-type-switch are OFF by default here too
+    (opt in via config "enabled"). }
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;

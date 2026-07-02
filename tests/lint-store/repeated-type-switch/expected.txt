@@ -1,0 +1,7 @@
+# 'case FKind of' repeats across 3 distinct methods (Alpha/Beta/Gamma) ->
+# repeated-type-switch fires at each of the three shared-selector case sites.
+repeated-type-switch sample.pas:22
+repeated-type-switch sample.pas:32
+repeated-type-switch sample.pas:42
+# 'case FState of' (Delta) uses a DIFFERENT selector -> must NOT be grouped.
+!repeated-type-switch sample.pas:52

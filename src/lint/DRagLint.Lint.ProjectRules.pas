@@ -15,6 +15,7 @@ uses
   , System.IOUtils
   , System.JSON
   , System.Generics.Collections
+  , System.Generics.Defaults
   , TreeSitter
   , TreeSitterLib
   , DRagLint.Core.Model
@@ -338,6 +339,237 @@ begin
   end;
 end; // function
 
+type
+  { One recorded 'case' occurrence whose selector text is shared across methods. }
+  TSwitchSite = record
+    MethodKey: string ;  { Path + ':' + row of the enclosing defProc -- method identity }
+    FilePath : string ;
+    Line     : Integer;  { 1-based case.StartPoint.Row }
+    Col      : Integer;  { 1-based case.StartPoint.Column }
+    Original : string ;  { original-cased selector text (for the message) }
+  end;
+
+/// <summary>v0.80 repeated-type-switch (#14 refactoring): flags the SAME case-selector
+/// text appearing across three or more DISTINCT methods -- a 'Replace Conditional with
+/// Polymorphism' candidate. Pure AST grouping over every indexed .pas: it walks each tree
+/// carrying the enclosing method identity, extracts each case node's selector text (the
+/// exhaustive-enum-case idiom), normalises it (trim + collapse whitespace + lowercase) as
+/// the group key, and when a normalised selector spans &gt;= MIN_DISTINCT_METHODS distinct
+/// methods emits one 'info' finding at every recorded occurrence site.</summary>
+/// <param name="AStore">An open, migrated symbol store; nil yields no findings. Used only to
+/// enumerate files/paths -- the match itself is AST-based, not store-ref-based.</param>
+/// <returns>'repeated-type-switch' findings; empty if none. Deterministic: sites are emitted
+/// in (file, line) order over selector keys visited in sorted order.</returns>
+/// <remarks>Known name-based FP: identically-named selectors in unrelated classes (e.g. a
+/// field named FKind in two different hierarchies) group together, and legitimately-repeated
+/// dispatches (message-map 'case Msg.Msg of' handlers) are flagged. Ships OFF by default.
+/// Never raises.</remarks>
+function CollectRepeatedTypeSwitch(const AStore: ISymbolStore): TArray<TLintFinding>;
+const
+  MIN_DISTINCT_METHODS = 3;
+var
+  Findings : TList<TLintFinding>              ;
+  Groups   : TDictionary<string, TList<TSwitchSite>>; { normalised selector key -> sites }
+  KeyOrder : TStringList                      ; { sorted, dedup group keys for stable output }
+  Fid      : Int64                            ;
+  Path     : string                           ;
+  PF       : TParsedFile                      ;
+  Src      : TBytes                           ;
+
+  { Extract raw source bytes spanned by a node as a string. }
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { Trim, collapse internal whitespace runs to single spaces, lowercase. }
+  function NormalizeSelector(const AText: string): string;
+  var
+    I  : Integer;
+    C  : Char   ;
+    Sb : TStringBuilder;
+    Ws : Boolean;
+  begin
+    Sb:= TStringBuilder.Create;
+    try
+      Ws:= False;
+      for I:= 1 to Length(AText) do
+      begin
+        C:= AText[I];
+        if (C = ' ') or (C = #9) or (C = #10) or (C = #13) then
+          Ws:= True
+        else
+        begin
+          if Ws and (Sb.Length > 0) then Sb.Append(' ');
+          Ws:= False;
+          Sb.Append(C);
+        end;
+      end;
+      Result:= LowerCase(Trim(Sb.ToString));
+    finally
+      Sb.Free;
+    end;
+  end;
+
+  { Record one shared-selector case occurrence under its normalised key. }
+  procedure RecordSite(const AKey, AOriginal: string; const ACaseNode: TTSNode;
+    const AMethodKey: string);
+  var
+    Lst : TList<TSwitchSite>;
+    Site: TSwitchSite       ;
+    P   : TTSPoint          ;
+  begin
+    if not Groups.TryGetValue(AKey, Lst) then
+    begin
+      Lst:= TList<TSwitchSite>.Create;
+      Groups.Add(AKey, Lst);
+      KeyOrder.Add(AKey);
+    end;
+    P:= ACaseNode.StartPoint;
+    Site.MethodKey:= AMethodKey;
+    Site.FilePath := Path;
+    Site.Line     := Integer(P.Row) + 1;
+    Site.Col      := Integer(P.Column) + 1;
+    Site.Original := AOriginal;
+    Lst.Add(Site);
+  end;
+
+  { Recursively walk N carrying the enclosing-method key. On entering a defProc/
+    defFunc, the new current method = Path + ':' + row; nested procs replace it for
+    their own subtree. At each 'case' node extract + record the selector text. }
+  procedure Walk(const N: TTSNode; const AMethodKey: string);
+  var
+    I       : Integer;
+    Cur     : string ;
+    Selector: TTSNode;
+    St      : string ;
+    RawSel  : string ;
+    Key     : string ;
+  begin
+    if N.IsNull then Exit;
+    Cur:= AMethodKey;
+    St := N.NodeType;
+    if (St = 'defProc') or (St = 'defFunc') then
+      Cur:= Path + ':' + IntToStr(Integer(N.StartPoint.Row));
+
+    if St = 'case' then
+    begin
+      { Selector = the 'selector' field when present, else the first named child that
+        is not a caseCase arm / statement body and is not a keyword token (k...). }
+      Selector:= N.ChildByField('selector');
+      if Selector.IsNull then
+        for I:= 0 to N.NamedChildCount - 1 do
+        begin
+          var Sc: TTSNode:= N.NamedChild(I);
+          if Sc.IsNull then Continue;
+          var Sct: string:= Sc.NodeType;
+          if (Sct <> 'caseCase') and (Sct <> 'statement') and (Sct <> 'statements')
+             and ((Length(Sct) = 0) or (Sct[1] <> 'k')) then
+          begin Selector:= Sc; Break; end;
+        end;
+      if (not Selector.IsNull) and (Cur <> '') then
+      begin
+        RawSel:= Trim(NodeStr(Selector));
+        Key   := NormalizeSelector(RawSel);
+        if Key <> '' then RecordSite(Key, RawSel, N, Cur);
+      end;
+    end;
+
+    for I:= 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), Cur);
+  end;
+
+  function CountDistinctMethods(const ASites: TList<TSwitchSite>): Integer;
+  var
+    Seen: TDictionary<string, Boolean>;
+    S   : TSwitchSite                 ;
+  begin
+    Seen:= TDictionary<string, Boolean>.Create;
+    try
+      for S in ASites do Seen.AddOrSetValue(S.MethodKey, True);
+      Result:= Seen.Count;
+    finally
+      Seen.Free;
+    end;
+  end;
+
+var
+  Idx   : Integer         ;
+  Sites : TList<TSwitchSite>;
+  Sorted: TList<TSwitchSite>;
+  S     : TSwitchSite      ;
+  NDistinct: Integer       ;
+  F     : TLintFinding     ;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  Findings:= TList<TLintFinding>.Create;
+  Groups  := TDictionary<string, TList<TSwitchSite>>.Create;
+  KeyOrder:= TStringList.Create;
+  try
+    KeyOrder.CaseSensitive:= True;
+    KeyOrder.Duplicates:= dupIgnore;
+    KeyOrder.Sorted:= False; { we sort explicitly after collection }
+
+    { 1) walk every indexed .pas, grouping case-selector text by normalised key. }
+    for Fid in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      PF:= TAstParseCache.Get(Path);
+      if PF.Tree = nil then Continue;
+      Src:= PF.Src;
+      Walk(PF.Tree.RootNode, '');
+    end;
+
+    { 2) deterministic order: sort the group keys, then within each qualifying group
+         sort sites by (file, line). Emit one finding per site. }
+    KeyOrder.Sort;
+    for Idx:= 0 to KeyOrder.Count - 1 do
+    begin
+      if not Groups.TryGetValue(KeyOrder[Idx], Sites) then Continue;
+      NDistinct:= CountDistinctMethods(Sites);
+      if NDistinct < MIN_DISTINCT_METHODS then Continue;
+      Sorted:= TList<TSwitchSite>.Create;
+      try
+        Sorted.AddRange(Sites);
+        Sorted.Sort(TComparer<TSwitchSite>.Construct(
+          function(const A, B: TSwitchSite): Integer
+          begin
+            Result:= CompareText(A.FilePath, B.FilePath);
+            if Result = 0 then Result:= A.Line - B.Line;
+          end));
+        for S in Sorted do
+        begin
+          F:= Default(TLintFinding);
+          F.RuleId  := 'repeated-type-switch';
+          F.Severity:= 'info';
+          F.Message := Format('Type-switch on ''%s'' is repeated across %d methods -- consider replacing the conditional with polymorphism.', [S.Original, NDistinct]);
+          F.FilePath:= S.FilePath;
+          F.StartLine:= S.Line;
+          F.StartCol := S.Col;
+          F.EndLine  := S.Line;
+          F.EndCol   := S.Col + 4; { length of 'case' keyword }
+          Findings.Add(F);
+        end;
+      finally
+        Sorted.Free;
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    for var L in Groups.Values do L.Free;
+    Groups.Free;
+    KeyOrder.Free;
+    Findings.Free;
+  end;
+end; // function
+
 class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>;
 var
   Findings      : TList<TLintFinding>         ;
@@ -393,6 +625,10 @@ begin
     { circular-uses: whole-graph SCC pass (not per-file). }
     if WantRule('circular-uses') then
       for var Cf in CollectCircularUses(AStore) do Findings.Add(Cf);
+
+    { repeated-type-switch (v0.80 #14): cross-file case-selector grouping pass. }
+    if WantRule('repeated-type-switch') then
+      for var Rf in CollectRepeatedTypeSwitch(AStore) do Findings.Add(Rf);
 
     FileIds:= AStore.GetAllFileIds;
     for Fid in FileIds do
