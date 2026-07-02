@@ -183,6 +183,9 @@ begin
     B('inline-comment-in-multiline-args', 'structure', 'warning', 'Inline comment inside a multi-line argument list');
     B('multiple-statements-per-line',     'structure', 'hint',    'Two or more statements share one source line', False); { OFF by default -- pure style; opt in via "enabled" }
 
+    { --- refactoring (Fowler catalog; v0.79) --- }
+    B('magic-literal', 'refactoring', 'hint', 'Unexplained numeric literal -- extract a named constant', False); { OFF by default -- medium-FP, opt in via "enabled" }
+
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');
     B('unit-not-in-project',   'project-wide', 'warning', 'Unit is not a member of the project');

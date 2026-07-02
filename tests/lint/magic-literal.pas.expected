@@ -1,0 +1,16 @@
+# magic-literal (#14, Fowler "Replace Magic Literal"): a numeric literal not in
+# {0,1,-1,2} and not the direct value of a const/default-param/enum-value, a
+# case label, or a range bound. OFF by default -- run with
+# magic-literal.config.json ("enabled": ["magic-literal"]).
+# Line 17 'if Total > 42' -- 42 is a genuine magic literal -> FLAGGED.
+magic-literal 17
+# Line 6 'K_LIMIT = 99' -- the literal IS the named constant (defaultValue
+# parent of a declConst) -> exempt, not flagged.
+!magic-literal 6
+# Line 9 'clGreen = 5' -- enum-value assignment (defaultValue parent of a
+# declEnumValue); 5 is not in the exempt-value set, so this proves the
+# exempt-CONTEXT logic (not just the exempt-value shortlist) -> not flagged.
+!magic-literal 9
+# Line 21 '99: Total := 2' -- case label 99 (caseLabel parent); 99 is not in
+# the exempt-value set either -> proves the case-label exempt context.
+!magic-literal 21

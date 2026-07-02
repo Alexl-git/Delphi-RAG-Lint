@@ -26,7 +26,14 @@ unit DRagLint.Diagnostics.DeadCodeChecks;
                            naming a SAME-UNIT function (a declProc carrying a
                            return-type 'type' field) -- the return value is
                            discarded. Same-unit + pure AST (no symbol store);
-                           cross-unit callees are not resolved. Severity 'hint'. }
+                           cross-unit callees are not resolved. Severity 'hint'.
+    magic-literal        : (v0.79, #14, Fowler "Replace Magic Literal") a
+                           numeric literal not in the set 0, 1, -1, 2 and not
+                           the direct value of a const/resourcestring/enum-
+                           value/default-param, a case label, a range bound,
+                           or a typed-const-array initializer element. Numbers
+                           only. Severity 'hint'; OFF by default (medium-FP,
+                           opt-in). }
 
 interface
 
@@ -815,6 +822,37 @@ var
         if (Inner <> '') and (LooksLikeAssignment(Inner) or LooksLikeCallStatement(Inner)) then
           EmitAt(N, 'commented-out-code',
             'Commented-out code -- remove it or restore it', 'hint');
+      end;
+    end;
+
+    { magic-literal (Fowler "Replace Magic Literal", #14): a numeric literal
+      ('literalNumber') used in an expression that is not a named constant.
+      Numbers only -- string literals are excluded (too noisy). Off by default
+      (medium-FP, opt-in). Exempt:
+        - the values 0, 1, -1, 2 (common sentinels/increments, rarely "magic");
+          '-1' is a single literalNumber token here (the grammar folds the sign
+          into the literal, verified via dumptree -- NOT a unary-minus wrapper);
+        - the literal IS the constant: parent 'defaultValue' covers a const/
+          resourcestring initializer (declConst), an enum-value assignment
+          (declEnumValue), AND a default parameter value (declArg) -- all three
+          share the same 'defaultValue: (kEq) <value>' wrapper in this grammar;
+        - a case label: parent 'caseLabel';
+        - an array/set range bound (e.g. 'array[0..9]'): parent 'range';
+        - a typed-const/const-array initializer element: parent 'arrInitializer',
+          'recInitializer', or 'recInitializerField' (mirrors the exempt set
+          redundant-parentheses already uses for the same constructor contexts). }
+    if N.NodeType = 'literalNumber' then
+    begin
+      var LitTxt: string:= Trim(NodeStr(N));
+      if (LitTxt <> '0') and (LitTxt <> '1') and (LitTxt <> '-1') and (LitTxt <> '2') then
+      begin
+        var LitPrnt: TTSNode:= N.Parent;
+        var LitPT  : string := '';
+        if not LitPrnt.IsNull then LitPT:= LitPrnt.NodeType;
+        if (LitPT <> 'defaultValue') and (LitPT <> 'caseLabel') and (LitPT <> 'range')
+           and (LitPT <> 'arrInitializer') and (LitPT <> 'recInitializer') and (LitPT <> 'recInitializerField') then
+          EmitAt(N, 'magic-literal',
+            'Unexplained numeric literal -- extract a named constant', 'hint');
       end;
     end;
 

@@ -18,10 +18,10 @@ begin
 end;
 procedure TestMerge;
 const
-  CanonicalBuckets: array[0..12] of string = (
+  CanonicalBuckets: array[0..13] of string = (
     'bug-patterns','resource-lifetime','security','platform',
     'complexity','structure','naming','dead-code',
-    'data-flow','firedac','project-wide','metrics','other');
+    'data-flow','firedac','project-wide','metrics','other','refactoring');
 var
   Cat: TArray<TRuleInfo>;
   Info: TRuleInfo;
