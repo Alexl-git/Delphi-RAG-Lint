@@ -1,0 +1,2 @@
+low-cohesion split.pas:6
+!low-cohesion cohesive.pas

@@ -100,6 +100,7 @@ var
   TDIT        : Integer                          ;
   TRFC        : Integer                          ;
   TCBO        : Integer                          ;
+  TLCOM       : Integer                          ;
   CI          : TClassInfo                       ;
 
   function WantRule(const AId: string): Boolean;
@@ -323,6 +324,130 @@ var
     end;
   end;
 
+  { LCOM4: connected components of the method graph. Nodes = body-bearing methods.
+    Edge when two methods share an accessed field OR one calls the other. Field/
+    call access is read from a complete AST re-walk of each method body. }
+  function ComputeLCOM4(const AInfo: TClassInfo): Integer;
+  var
+    PF        : TParsedFile               ;
+    BodyM     : TArray<TSymbol>           ;
+    M         : TSymbol                   ;
+    FieldNames: TDictionary<string, Boolean>;
+    MethNames : TDictionary<string, Boolean>;
+    ProcByLine: TDictionary<Integer, TTSNode>;
+    IdSets    : TArray<TDictionary<string, Boolean>>;
+    N, I, J   : Integer                   ;
+    UF        : TArray<Integer>           ;
+    Roots     : TDictionary<Integer, Boolean>;
+
+    procedure CollectDefProcNodes(const ANode: TTSNode);
+    var
+      C  : Integer;
+      Ln : Integer;
+    begin
+      if ANode.IsNull then Exit;
+      if ANode.NodeType = 'defProc' then
+      begin
+        Ln:= Integer(ANode.StartPoint.row) + 1;
+        if not ProcByLine.ContainsKey(Ln) then ProcByLine.Add(Ln, ANode);
+      end;
+      for C:= 0 to ANode.NamedChildCount - 1 do CollectDefProcNodes(ANode.NamedChild(C));
+    end;
+
+    procedure CollectIdentifiers(const ANode: TTSNode; ADst: TDictionary<string, Boolean>);
+    var
+      C: Integer;
+      T: string ;
+    begin
+      if ANode.IsNull then Exit;
+      if ANode.NodeType = 'identifier' then
+      begin
+        T:= LowerCase(NodeText(ANode, PF.Src));
+        if T <> '' then ADst.AddOrSetValue(T, True);
+      end;
+      for C:= 0 to ANode.NamedChildCount - 1 do CollectIdentifiers(ANode.NamedChild(C), ADst);
+    end;
+
+    function Find(X: Integer): Integer;
+    begin
+      while UF[X] <> X do
+      begin
+        UF[X]:= UF[UF[X]];
+        X:= UF[X];
+      end;
+      Result:= X;
+    end;
+
+    procedure Union(X, Y: Integer);
+    var
+      Rx, Ry: Integer;
+    begin
+      Rx:= Find(X); Ry:= Find(Y);
+      if Rx <> Ry then UF[Rx]:= Ry;
+    end;
+
+    function Connected(A, B: Integer): Boolean;
+    var
+      K: string;
+    begin
+      Result:= False;
+      { shared field access }
+      for K in IdSets[A].Keys do
+        if FieldNames.ContainsKey(K) and IdSets[B].ContainsKey(K) then Exit(True);
+      { A calls B or B calls A (by method name) }
+      if IdSets[A].ContainsKey(LowerCase(BodyM[B].Name)) then Exit(True);
+      if IdSets[B].ContainsKey(LowerCase(BodyM[A].Name)) then Exit(True);
+    end;
+
+  begin
+    BodyM:= nil;
+    for M in AInfo.Methods do
+      if M.ImplStartLine > 0 then BodyM:= BodyM + [M];
+    N:= Length(BodyM);
+    if N <= 1 then Exit(N); { 0 or 1 body-method -> 0 or 1 component }
+
+    PF:= TAstParseCache.Get(AInfo.Path);
+    if PF.Tree = nil then Exit(1); { unparseable -> treat as cohesive }
+
+    FieldNames:= TDictionary<string, Boolean>.Create;
+    MethNames := TDictionary<string, Boolean>.Create;
+    ProcByLine:= TDictionary<Integer, TTSNode>.Create;
+    SetLength(IdSets, N);
+    SetLength(UF, N);
+    try
+      for M in AInfo.Fields do FieldNames.AddOrSetValue(LowerCase(M.Name), True);
+      for I:= 0 to N - 1 do MethNames.AddOrSetValue(LowerCase(BodyM[I].Name), True);
+      CollectDefProcNodes(PF.Tree.RootNode);
+
+      for I:= 0 to N - 1 do
+      begin
+        IdSets[I]:= TDictionary<string, Boolean>.Create;
+        UF[I]:= I;
+        var Node: TTSNode;
+        if ProcByLine.TryGetValue(BodyM[I].ImplStartLine, Node) then
+          CollectIdentifiers(Node, IdSets[I]);
+      end;
+
+      for I:= 0 to N - 2 do
+        for J:= I + 1 to N - 1 do
+          if Connected(I, J) then Union(I, J);
+
+      Roots:= TDictionary<Integer, Boolean>.Create;
+      try
+        for I:= 0 to N - 1 do Roots.AddOrSetValue(Find(I), True);
+        Result:= Roots.Count;
+      finally
+        Roots.Free;
+      end;
+    finally
+      for I:= 0 to N - 1 do
+        if IdSets[I] <> nil then IdSets[I].Free;
+      ProcByLine.Free;
+      MethNames.Free;
+      FieldNames.Free;
+    end;
+  end;
+
 begin
   Result:= nil;
   if AStore = nil then Exit;
@@ -339,6 +464,7 @@ begin
     TDIT:= ACfg.ThresholdFor('deep-inheritance', 6);
     TRFC:= ACfg.ThresholdFor('high-response', 50);
     TCBO:= ACfg.ThresholdFor('high-coupling', 20);
+    TLCOM:= ACfg.ThresholdFor('low-cohesion', 3);
 
     BuildInventory;
     ResolveParents;
@@ -380,6 +506,15 @@ begin
         if Cbo > TCBO then
           Emit('high-coupling',
             Format('High CBO: %s is coupled to %d other classes (>%d) -- consider reducing dependencies', [CI.Name, Cbo, TCBO]),
+            CI);
+      end;
+
+      if WantRule('low-cohesion') then
+      begin
+        var Lc: Integer:= ComputeLCOM4(CI);
+        if Lc > TLCOM then
+          Emit('low-cohesion',
+            Format('Low cohesion: %s has LCOM4=%d (>%d) -- the class may combine unrelated responsibilities; consider splitting', [CI.Name, Lc, TLCOM]),
             CI);
       end;
     end;
