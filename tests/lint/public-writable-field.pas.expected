@@ -1,0 +1,21 @@
+# public-writable-field (#14, Fowler "Encapsulate Variable"): a field
+# declared under an EXPLICIT 'public' visibility section of a class -- expose
+# it through a property instead. Excludes records, 'published' sections
+# (auto-generated DFM components), and the implicit/default section. OFF by
+# default -- run with public-writable-field.config.json
+# ("enabled": ["public-writable-field"]).
+# Line 11 'FHidden: Integer' is under 'private' -> not flagged.
+!public-writable-field 11
+# Line 13 'FFoo: Integer' is under an explicit 'public' section of a class
+# -> FLAGGED (emitted at the field's name, line 13).
+public-writable-field 13
+# Line 15 'FBar: TControl' is under 'published' (auto-generated DFM
+# component dump) -> not flagged.
+!public-writable-field 15
+# Line 19 'FImplicit: Integer' is in the implicit/default section (no
+# visibility keyword yet at the top of the class body) -> not flagged.
+!public-writable-field 19
+# Line 24 'RX: Integer' is under 'public' but the enclosing type is a
+# record (TCoord), not a class -- records legitimately expose fields
+# -> not flagged.
+!public-writable-field 24

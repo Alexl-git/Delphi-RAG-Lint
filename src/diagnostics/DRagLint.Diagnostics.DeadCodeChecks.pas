@@ -55,7 +55,22 @@ unit DRagLint.Diagnostics.DeadCodeChecks;
                            'exprDot' and need no separate exemption. Flagged once
                            at the outermost 'exprDot' of the chain (a node whose
                            parent is not itself a link in the same chain).
-                           Severity 'hint', configurable threshold. }
+                           Severity 'hint', configurable threshold.
+    public-writable-field : (v0.79, #14, Fowler "Encapsulate Variable") a
+                           'declField' under an EXPLICIT 'public' visibility
+                           section ('declSection' carrying a 'kPublic' token
+                           child) of a class ('declClass' without a 'kRecord'
+                           token). Excludes: records (legitimately expose
+                           fields), 'published' sections (auto-generated DFM
+                           components -- huge noise if flagged), and the
+                           implicit/default section (members listed before any
+                           visibility keyword -- also the published-DFM-dump
+                           shape). Severity 'info'; OFF by default -- FP-sanity
+                           over src/ found 44 findings concentrated in 6/103
+                           files, almost all intentional public field-bag
+                           "record-like classes" (e.g. TCfgBlock/TCfg internal
+                           data carriers, plugin form-helper classes) rather
+                           than scattered accidental encapsulation breaks. }
 
 interface
 
@@ -1363,6 +1378,30 @@ var
     end;
   end;
 
+  { Returns True when ASectionNode (a declSection) is an EXPLICIT public
+    section -- carries a kPublic named child. Mirrors SectionIsPrivate. Note
+    this deliberately does NOT match the implicit/default section (members
+    listed directly under declClass before any visibility keyword, which the
+    symbol-store walker treats as 'public' for UML purposes) -- those are the
+    published-DFM-component-dump shape and must NOT be flagged here; only an
+    explicit 'public' keyword counts (public-writable-field, #14). }
+  function SectionIsPublic(const ASectionNode: TTSNode): Boolean;
+  var
+    I : Integer;
+    Ch: TTSNode;
+  begin
+    Result:= False;
+    for I:= 0 to ASectionNode.NamedChildCount - 1 do
+    begin
+      Ch:= ASectionNode.NamedChild(I);
+      if Ch.NodeType = 'kPublic' then
+      begin
+        Result:= True;
+        Exit;
+      end;
+    end;
+  end;
+
   { Returns True when the class whose declClass node is AClassNode should be
     excluded from the referenced-never-set check because it descends from a
     form / frame / component base (DFM/RTTI streaming writes fields invisibly).
@@ -1431,6 +1470,105 @@ var
         AFields.Add(FInfo);
       end;
     end;
+  end;
+
+  { True when AClassNode (a declClass node) is a record shape (carries a
+    kRecord token child) rather than a class (kClass). Local copy of the same
+    check in DRagLint.Parser.Delphi13.ClassNodeIsRecord (not exported from
+    that unit); used to exclude records from public-writable-field -- records
+    legitimately expose fields, only classes get the "wrap it in a property"
+    smell. }
+  function IsRecordClassNode(const AClassNode: TTSNode): Boolean;
+  var
+    I: Integer;
+    C: TTSNode;
+    T: string ;
+  begin
+    Result:= False;
+    for I:= 0 to AClassNode.ChildCount - 1 do
+    begin
+      C:= AClassNode.Child(I);
+      T:= C.NodeType;
+      if T = 'kClass'  then Exit(False);
+      if T = 'kRecord' then Exit(True );
+    end;
+  end;
+
+  { public-writable-field (#14, Fowler "Encapsulate Variable"): a field
+    declared under an EXPLICIT 'public' visibility section of a class (not a
+    record -- records legitimately expose fields; not 'published' -- those are
+    auto-generated DFM components; not the implicit/default section -- that is
+    the published-DFM-component-dump shape). Walk every declClass reachable
+    from AClassNode's declSection children and emit one finding per field. }
+  procedure EmitPublicFieldsInClass(const AClassNode: TTSNode);
+  var
+    I     : Integer;
+    SecN  : TTSNode;
+    J     : Integer;
+    FieldN: TTSNode;
+    NameN : TTSNode;
+    FName : string    ;
+  begin
+    for I:= 0 to AClassNode.NamedChildCount - 1 do
+    begin
+      SecN:= AClassNode.NamedChild(I);
+      if SecN.NodeType <> 'declSection' then Continue;
+      if not SectionIsPublic(SecN) then Continue;
+      for J:= 0 to SecN.NamedChildCount - 1 do
+      begin
+        FieldN:= SecN.NamedChild(J);
+        if FieldN.NodeType <> 'declField' then Continue;
+        NameN:= FieldN.ChildByField('name');
+        if NameN.IsNull then Continue;
+        FName:= Trim(NodeStr(NameN));
+        if FName = '' then Continue;
+        EmitAt(NameN, 'public-writable-field',
+          Format('Public field "%s" -- expose it through a property instead', [FName]),
+          'info');
+      end;
+    end;
+  end;
+
+  { Walk every declType in the unit (including nested types), and for each
+    declClass that is NOT a record, flag its explicit-public fields. Mirrors
+    the CollectClasses walk shape but drives EmitPublicFieldsInClass directly
+    instead of accumulating a list -- this rule has no cross-reference pass. }
+  procedure CheckPublicWritableFields(const ARoot: TTSNode);
+  var
+    I      : Integer;
+    J      : Integer;
+    NameN  : TTSNode;
+    TypeWN : TTSNode;
+    ClassN : TTSNode;
+  begin
+    if ARoot.IsNull then Exit;
+    if ARoot.NodeType = 'declType' then
+    begin
+      NameN := ARoot.ChildByField('name');
+      TypeWN:= ARoot.ChildByField('type');
+      if (not NameN.IsNull) and (not TypeWN.IsNull) then
+      begin
+        ClassN:= Default(TTSNode);
+        if TypeWN.NodeType = 'declClass' then ClassN:= TypeWN
+        else
+        begin
+          for J:= 0 to TypeWN.NamedChildCount - 1 do
+            if TypeWN.NamedChild(J).NodeType = 'declClass' then
+            begin
+              ClassN:= TypeWN.NamedChild(J);
+              Break;
+            end;
+        end;
+        if (not ClassN.IsNull) and (not IsRecordClassNode(ClassN)) then
+          EmitPublicFieldsInClass(ClassN);
+      end;
+      { Recurse into nested type declarations. }
+      for I:= 0 to ARoot.NamedChildCount - 1 do
+        CheckPublicWritableFields(ARoot.NamedChild(I));
+      Exit;
+    end;
+    for I:= 0 to ARoot.NamedChildCount - 1 do
+      CheckPublicWritableFields(ARoot.NamedChild(I));
   end;
 
   { Find the leftmost base identifier in an LHS expression (handles
@@ -1795,6 +1933,8 @@ begin
     Visit(PF.Tree.RootNode);
     { Pass 3: referenced-never-set field def-use. }
     CheckReferencedNeverSet;
+    { Pass 4: public-writable-field (#14, Fowler "Encapsulate Variable"). }
+    CheckPublicWritableFields(PF.Tree.RootNode);
     Raw:= Findings.ToArray;
   finally
     Findings.Free;
