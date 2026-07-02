@@ -1,0 +1,10 @@
+# V declared then dereferenced with no assignment on any path -> warning
+not-assigned-interface 19
+# V assigned then dereferenced -> absent (must-assigned)
+!not-assigned-interface 27
+# V assigned on one if-branch only, then dereferenced after -> fires (info)
+not-assigned-interface 35
+# plain copy W := V with no dereference of V -> absent (not a deref)
+!not-assigned-interface 42
+# Supports(..,out V) and V.Method within one and-chain -> absent (sequencing)
+!not-assigned-interface 55

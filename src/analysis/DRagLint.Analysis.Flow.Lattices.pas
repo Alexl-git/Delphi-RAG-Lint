@@ -142,6 +142,11 @@ function CollectCallArgs(const ANode: TTSNode; const ASrc: TBytes;
 /// <summary>Lowercased identifier text of N, trimmed.</summary>
 function NodeText(const N: TTSNode; const ASrc: TBytes): string;
 
+/// <summary>Leftmost-identifier base var of an expression: `x`, `x.f`, `x[i]`,
+/// `x.f.g` -> the routine-var index of `x`. Returns -1 when the base is not a
+/// routine var (a literal, a type name, an unresolvable expression, ...).</summary>
+function LeftmostBaseVar(const N: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable): Integer;
+
 /// <summary>Collect lowercased identifier reads in an expression subtree that
 /// resolve to a routine var. Skips the member-name child after a `.` (kDot) and
 /// treats call arguments / `@x` as POSSIBLE defs (FP-safe), not reads -- so

@@ -156,6 +156,7 @@ begin
     B('write-only-local',      'data-flow', 'info',    'Local assigned but never read');
     B('loop-var-after-loop',   'data-flow', 'warning', 'Loop variable used after the loop');
     B('object-leak',           'data-flow', 'info',    'Created object may leak (not freed on every path)');
+    B('not-assigned-interface','data-flow', 'warning', 'Interface variable dereferenced before assignment (nil interface call)');
 
     { --- naming (all info; two ship disabled) --- }
     B('type-name-prefix',    'naming', 'info', 'Type name must carry the configured prefix', True,

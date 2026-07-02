@@ -68,6 +68,131 @@ begin
   Result := False;
 end;
 
+{ Interface-typed subset of IsManagedType, for not-assigned-interface: store-exact
+  via ResolveTypeCategory = tcInterface when a store is present, else the same
+  'I' + uppercase-letter naming-convention fallback used by IsManagedType. }
+function IsInterfaceType(const ATypeText: string; const AStore: ISymbolStore; AFileId: Int64): Boolean;
+var Cat: TTypeCategory; T: string;
+begin
+  if AStore <> nil then
+  begin
+    Cat := AStore.ResolveTypeCategory(ATypeText, AFileId);
+    if Cat <> tcUnknown then Exit(Cat = tcInterface);
+  end;
+  T := Trim(ATypeText);
+  Result := (Length(T) >= 2) and (T[1] = 'I') and T[2].IsUpper;
+end;
+
+{ A single interface dereference site: the routine-var index of the base
+  identifier plus the position of the dereferencing node (the `exprDot` /
+  `as`-exprBinary itself, so the finding points at the member access, not the
+  whole containing statement). }
+type
+  TIfaceDeref = record
+    VarIdx: Integer;
+    Row, Col: Integer;
+  end;
+
+{ Collect every interface-var dereference under ANode: an `exprDot` whose lhs
+  base identifier resolves to an interface-typed routine var (`X.Member`), or
+  an `as`-exprBinary (`operator` field text 'as') whose lhs base identifier
+  resolves to one (`X as T`). Recurses into both sides so a chained/nested
+  expression (`(X as IBar).Member`, call arguments, rhs of an assignment)
+  still surfaces every base-var deref, not just the outermost one. Skips the
+  member-name child of an exprDot (kDot rhs) since it is not itself a var read.
+  Does not treat a bare identifier reference (a plain copy `Y := X`) as a
+  dereference -- callers only see explicit exprDot/`as` nodes here.
+
+  Sequencing within `and`/`or` chains: Delphi short-circuit evaluates left to
+  right, so the common `Supports(Intf, IFoo, V) and V.Method` idiom assigns V
+  (a call-arg def, see CollectReadsAndCallDefs) BEFORE the rhs dereferences it,
+  even though both operands are one AST node / one CFG item. ALocallyAssigned
+  accumulates such intra-item defs (identifiers whose text names a var made
+  Must-assigned by an earlier operand in the SAME `and`/`or` chain) so the rhs
+  walk does not re-flag them; it does not touch the caller's real May/Must
+  arrays -- it is a same-item, left-to-right refinement only. }
+procedure CollectInterfaceDerefs(const ANode: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable; const AStore: ISymbolStore; AFileId: Int64; AAcc: TList<TIfaceDeref>);
+var
+  LocallyAssigned: TList<Integer>;
+
+  { Vars this subtree assigns via a call argument (e.g. Supports(.., V)) -- used
+    to seed sequencing for the NEXT operand of an enclosing and/or chain. }
+  procedure CollectLocalCallDefs(const N: TTSNode);
+  var Reads, CallDefs: TList<Integer>; K: Integer;
+  begin
+    Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+    try
+      CollectReadsAndCallDefs(N, ASrc, AVars, Reads, CallDefs);
+      for K := 0 to CallDefs.Count - 1 do
+        if LocallyAssigned.IndexOf(CallDefs[K]) < 0 then LocallyAssigned.Add(CallDefs[K]);
+    finally
+      Reads.Free; CallDefs.Free;
+    end;
+  end;
+
+  procedure Walk(const N: TTSNode);
+  var
+    I, VarIdx: Integer; Op, L, R: TTSNode; D: TIfaceDeref; OpText: string;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'exprDot' then
+    begin
+      L := N.ChildByField('lhs');
+      VarIdx := LeftmostBaseVar(L, ASrc, AVars);
+      if (VarIdx >= 0) and (LocallyAssigned.IndexOf(VarIdx) < 0)
+         and IsInterfaceType(AVars.Get(VarIdx).TypeText, AStore, AFileId) then
+      begin
+        D.VarIdx := VarIdx;
+        D.Row := Integer(N.StartPoint.Row) + 1;
+        D.Col := Integer(N.StartPoint.Column) + 1;
+        AAcc.Add(D);
+      end;
+      Walk(L); { the lhs may itself contain other derefs / calls }
+      Exit; { skip rhs: it's the member name, not a var read }
+    end;
+    if N.NodeType = 'exprBinary' then
+    begin
+      Op := N.ChildByField('operator');
+      OpText := '';
+      if not Op.IsNull then OpText := LowerCase(Trim(NodeStr(Op, ASrc)));
+      if OpText = 'as' then
+      begin
+        L := N.ChildByField('lhs');
+        VarIdx := LeftmostBaseVar(L, ASrc, AVars);
+        if (VarIdx >= 0) and (LocallyAssigned.IndexOf(VarIdx) < 0)
+           and IsInterfaceType(AVars.Get(VarIdx).TypeText, AStore, AFileId) then
+        begin
+          D.VarIdx := VarIdx;
+          D.Row := Integer(N.StartPoint.Row) + 1;
+          D.Col := Integer(N.StartPoint.Column) + 1;
+          AAcc.Add(D);
+        end;
+        Walk(L);
+        Exit; { rhs is a type reference, not a var read }
+      end;
+      if (OpText = 'and') or (OpText = 'or') then
+      begin
+        L := N.ChildByField('lhs');
+        R := N.ChildByField('rhs');
+        Walk(L);
+        CollectLocalCallDefs(L); { seed rhs sequencing: Supports(.., V) and V.Method }
+        Walk(R);
+        Exit;
+      end;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+  end;
+
+begin
+  LocallyAssigned := TList<Integer>.Create;
+  try
+    Walk(ANode);
+  finally
+    LocallyAssigned.Free;
+  end;
+end;
+
 { ===== interprocedural object-leak: callee-ownership helpers ===== }
 
 { Lowercased leftmost-identifier text of an expression (x / x.f / x[i] -> x). }
@@ -211,6 +336,7 @@ var
     B, I, J, ROW, COL, Tgt, Idx, RIx: Integer; It: TCfgItem; V: TRoutineVar;
     Reads, CallDefs: TList<Integer>;
     CurMust, CurMay: TArray<Boolean>;
+    Derefs: TList<TIfaceDeref>; Dr: TIfaceDeref;
     LiveAna: IDataFlowAnalysis<TArray<Boolean>>;
     LIn, LOut: TArray<TArray<Boolean>>;
     ReadAny, AsgnAny, Live: TArray<Boolean>;
@@ -226,6 +352,7 @@ var
       if not TDataFlowSolver<TDefAsgnVal>.Solve(Cfg, Ana, AIn, AOut) then Exit;
 
       Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+      Derefs := TList<TIfaceDeref>.Create;
       try
         { ---- used-before-assignment: per-item replay of must/may within a block ---- }
         for B := 0 to Cfg.BlockCount - 1 do
@@ -265,6 +392,34 @@ var
                       Format('Local "%s" is used before it is assigned.', [V.Name]), ROW, COL);
                 end;
               end;
+            { ---- not-assigned-interface: interface-var dereferences (exprDot /
+              `as`) not yet must-assigned at this point. Interfaces are managed
+              (IsManagedType skips them above), so this fills that gap on the SAME
+              replay state, before it is advanced past this item's own defs. Scans
+              the whole item (both the assignment's rhs AND lhs, since a partial
+              write `V.Prop := x` still dereferences V's base before the store). }
+            if not It.Opaque then
+            begin
+              Derefs.Clear;
+              CollectInterfaceDerefs(It.Node, PF.Src, Vars, AStore, AFileId, Derefs);
+              for J := 0 to Derefs.Count - 1 do
+              begin
+                Dr := Derefs[J];
+                V := Vars.Get(Dr.VarIdx);
+                if V.Kind <> vkLocal then Continue;
+                if not CurMust[Dr.VarIdx] then
+                begin
+                  if CurMay[Dr.VarIdx] then
+                    Emit('not-assigned-interface', 'info',
+                      Format('Interface variable "%s" may be used before it is assigned (nil dereference).', [V.Name]),
+                      Dr.Row, Dr.Col)
+                  else
+                    Emit('not-assigned-interface', 'warning',
+                      Format('Interface variable "%s" is used before it is assigned (nil dereference).', [V.Name]),
+                      Dr.Row, Dr.Col);
+                end;
+              end;
+            end;
             { advance must/may by this item's defs (reads already handled);
               a call arg / @x is treated as assigned (callee may be a var/out sink) }
             for J := 0 to CallDefs.Count - 1 do begin CurMust[CallDefs[J]] := True; CurMay[CallDefs[J]] := True; end;
@@ -489,7 +644,7 @@ var
                   [Vars.Get(I).Name]), CreateRow[I], CreateCol[I]);
         end;
 
-      finally Reads.Free; CallDefs.Free; end;
+      finally Reads.Free; CallDefs.Free; Derefs.Free; end;
     finally Cfg.Free; Vars.Free; end;
   end;
 
