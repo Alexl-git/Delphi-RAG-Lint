@@ -4767,12 +4767,13 @@ begin
   (AArgs.Rule <> 'lossy-cast') and (AArgs.Rule <> 'cognitive-complexity') and
   (AArgs.Rule <> 'duplicate-code') and (AArgs.Rule <> 'magic-literal') and (AArgs.Rule <> 'boolean-flag-parameter') and
   (AArgs.Rule <> 'message-chain') and (AArgs.Rule <> 'public-writable-field') and
-  (AArgs.Rule <> 'loop-control-flag') and (AArgs.Rule <> 'double-free') then
+  (AArgs.Rule <> 'loop-control-flag') and (AArgs.Rule <> 'double-free') and
+  (AArgs.Rule <> 'mutable-global-variable') then
   begin
     Writeln(Format(
         'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' +
         'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, exhaustive-enum-case, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
-        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, double-free, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag)',
+        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, double-free, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag, mutable-global-variable)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4834,6 +4835,12 @@ begin
         flag"] or --rule loop-control-flag. }
       if AArgs.Rule <> 'loop-control-flag' then
         DefDisabled:= DefDisabled + ['loop-control-flag'];
+      { v0.80: mutable-global-variable OFF by default -- FP-sanity over src/ found
+        68 findings across 27/103 files (mostly legitimate G-prefixed plugin
+        singletons/caches) -- too common in this codebase to be ON. Opt in via
+        "enabled": ["mutable-global-variable"] or --rule mutable-global-variable. }
+      if AArgs.Rule <> 'mutable-global-variable' then
+        DefDisabled:= DefDisabled + ['mutable-global-variable'];
       if TFile.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFile(AArgs.Path)
       else if TDirectory.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFolder(AArgs.Path, True)
       else
@@ -4887,6 +4894,8 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'ui-access-in-thread') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread(AArgs.Path);
       { v0.61: unit-level global variable whose type is the form class -- potential leak }
       if (AArgs.Rule = '') or (AArgs.Rule = 'global-form-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars(AArgs.Path);
+      { v0.80: any unit-level writable var -- Fowler "Global Data" refactoring smell (#14) }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'mutable-global-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(AArgs.Path);
       { v0.63: WinExec/ShellExecute/CreateProcess with a non-literal command -- injection risk }
       if (AArgs.Rule = '') or (AArgs.Rule = 'unsafe-shellexecute') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec(AArgs.Path);
       { v0.63: concatenated path to a file API -- path traversal risk }
@@ -5825,6 +5834,7 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree    (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread        (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars  (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec       (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal   (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce  (PasPath);
@@ -5897,11 +5907,11 @@ begin
     OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', Now) + '.txt');
   end;
 
-  { v0.71/v0.74/v0.79: function-result-ignored + unsafe-typecast-without-is +
+  { v0.71/v0.74/v0.79/v0.80: function-result-ignored + unsafe-typecast-without-is +
     exhaustive-enum-case + multiple-statements-per-line + magic-literal +
-    boolean-flag-parameter + public-writable-field + loop-control-flag are OFF
-    by default here too (opt in via config "enabled"). }
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag'],
+    boolean-flag-parameter + public-writable-field + loop-control-flag +
+    mutable-global-variable are OFF by default here too (opt in via config "enabled"). }
+  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;

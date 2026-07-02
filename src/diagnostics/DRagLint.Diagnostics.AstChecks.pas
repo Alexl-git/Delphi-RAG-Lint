@@ -131,6 +131,16 @@ type
       /// <remarks>Skipped entirely when no sibling .dfm file exists beside AFile. Pure AST;
       /// no DB. Never raises.</remarks>
       class function CheckGlobalFormVars(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags every unit-level writable 'var' declaration (Fowler "Global Data"
+      /// refactoring smell): shared mutable state is hard to reason about and test.</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One finding per declared identifier name in a unit-scope declVars block.</returns>
+      /// <remarks>Unit-scope only: recursion exits on defProc/defFunc so local vars and
+      /// parameters are excluded. 'const' sections are a distinct declConst node, so named
+      /// and typed constants are naturally excluded (no special-casing needed). Runs on every
+      /// .pas file (no .dfm gate, no type filter) -- broader than CheckGlobalFormVars, which
+      /// this method does not modify. Pure AST; no DB. Never raises.</remarks>
+      class function CheckMutableGlobalVars(const AFile: string): TArray<TLintFinding>;
       /// <summary>Flags WinExec/ShellExecute/CreateProcess called with a non-literal
       /// command/executable argument -- a runtime-built command path is a command-injection
       /// risk (CWE-78).</summary>
@@ -3167,6 +3177,87 @@ begin
     Result:= Findings.ToArray;
   finally
     FormClassNames.Free;
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckMutableGlobalVars(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes;
+  PF      : TParsedFile;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const ANode: TTSNode): string;
+  var B: TBytes;
+  begin
+    if ANode.IsNull or (ANode.StartByte >= ANode.EndByte) then Exit('');
+    SetLength(B, Integer(ANode.EndByte) - Integer(ANode.StartByte));
+    Move(Src[ANode.StartByte], B[0], Length(B));
+    Result:= TEncoding.UTF8.GetString(B);
+  end;
+
+  { Find every unit-scope declVars -> declVar and emit one finding per declared identifier.
+    Exits on defProc/defFunc so locals/params are excluded. 'const' sections are declConst
+    nodes (not declVars), so they are never visited here. }
+  procedure CheckGlobalVarDecls(const N: TTSNode);
+  var
+    I, J, K   : Integer;
+    DV, DVType, NameId: TTSNode;
+    VarName   : string;
+    TypeStart : Integer;
+    P         : TTSPoint;
+    F         : TLintFinding;
+  begin
+    if N.IsNull then Exit;
+    { skip all procedure/function bodies -- vars inside are local }
+    if (N.NodeType = 'defProc') or (N.NodeType = 'defFunc') then Exit;
+    if N.NodeType = 'declVars' then
+    begin
+      for J:= 0 to N.NamedChildCount - 1 do
+      begin
+        DV:= N.NamedChild(J);
+        if DV.NodeType <> 'declVar' then Continue;
+        DVType:= DV.ChildByField('type');
+        if DVType.IsNull then Continue;
+        TypeStart:= Integer(DVType.StartByte);
+        for K:= 0 to DV.NamedChildCount - 1 do
+        begin
+          NameId:= DV.NamedChild(K);
+          if NameId.NodeType <> 'identifier' then Continue;
+          if Integer(NameId.StartByte) >= TypeStart then Continue;
+          VarName:= NodeStr(NameId);
+          if VarName = '' then Continue;
+          P:= NameId.StartPoint;
+          F:= Default(TLintFinding);
+          F.RuleId  := 'mutable-global-variable';
+          F.Severity:= 'info';
+          F.Message := Format(
+            'Mutable global variable ''%s'' -- shared mutable state; prefer a scoped/encapsulated alternative.',
+            [VarName]);
+          F.FilePath := AFile;
+          F.StartLine:= Integer(P.Row   ) + 1;
+          F.StartCol := Integer(P.Column) + 1;
+          F.EndLine  := F.StartLine;
+          F.EndCol   := F.StartCol + Length(VarName);
+          Findings.Add(F);
+        end;
+      end;
+      Exit; { handled; do not recurse into the var block itself }
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do
+      CheckGlobalVarDecls(N.NamedChild(I));
+  end;
+
+begin
+  Result:= nil;
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
+  Findings:= TList<TLintFinding>.Create;
+  try
+    CheckGlobalVarDecls(PF.Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
     Findings.Free;
   end;
 end; // function

@@ -1,0 +1,11 @@
+# mutable-global-variable (#14, Fowler "Global Data"): a unit-scope 'var'
+# declaration -- shared mutable state. OFF by default -- run with
+# mutable-global-variable.config.json ("enabled": ["mutable-global-variable"]).
+# Line 6 'G: Integer;' -- unit-level var -> FLAGGED.
+mutable-global-variable 6
+# Line 9 'K = 5;' -- const section is a declConst node, not declVars -> exempt,
+# not flagged.
+!mutable-global-variable 9
+# Line 15 'Local: Integer;' -- local var inside a procedure body -> exempt,
+# not flagged (recursion exits on defProc/defFunc).
+!mutable-global-variable 15

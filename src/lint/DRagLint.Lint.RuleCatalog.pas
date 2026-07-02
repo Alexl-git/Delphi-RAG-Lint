@@ -191,6 +191,7 @@ begin
     B('message-chain', 'refactoring', 'hint', 'Message chain too long -- consider Hide Delegate', True, [MkParam('threshold','int','4')]); { ON by default -- see FP-sanity note in DeadCodeChecks.pas }
     B('public-writable-field', 'refactoring', 'info', 'Public class field -- expose via a property instead', False); { OFF by default -- 44 findings/6 files on src/, mostly intentional field-bag DTOs; opt in via "enabled" }
     B('loop-control-flag', 'refactoring', 'hint', 'Loop exit driven by a boolean flag -- consider Break', False); { OFF by default -- riskiest heuristic of the batch; opt in via "enabled" }
+    B('mutable-global-variable', 'refactoring', 'info', 'Mutable global variable -- shared mutable state (Fowler Global Data)', False); { OFF by default -- see FP-sanity note in AstChecks.pas; opt in via "enabled" }
 
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');
