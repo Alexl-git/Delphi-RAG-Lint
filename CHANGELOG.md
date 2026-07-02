@@ -5,6 +5,33 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.81.0 -- 2026-07-02
+
+Portability + architecture "tail" rules. All three new rules ship **OFF-by-default** (opt in via
+`drag-lint-lint.json` `"enabled"` or `--rule`).
+
+### Added -- portability (category `platform`)
+- `default-encoding-io` (#9, `warning`, **OFF**) -- file I/O that uses the default (ANSI/locale) encoding where an
+  explicit `TEncoding` should be passed (a Win64/Unicode data-corruption hazard): `TStrings/TStringList.LoadFromFile`/
+  `SaveToFile`, `TFile.ReadAllText`/`WriteAllText`/`ReadAllLines`/`AppendAllText`, and `TStreamReader`/`TStreamWriter.Create`
+  called with no `TEncoding` argument. Pure-AST (a twin of `insecure-temp-file`). OFF-by-default: src/ FP=65 across 16
+  files (dominated by intentional `ReadAllText` on config/project files).
+
+### Added -- architecture coupling metrics (category `metrics`)
+- `fan-out` (efferent coupling Ce, `info`, **OFF**) -- a class that depends on more than the threshold of other classes.
+  Reuses the CBO computation, so it intentionally mirrors `high-coupling`; it ships OFF-by-default (opt-in) to avoid
+  double-firing with the ON `high-coupling` in default output, for users who prefer the fan-in/fan-out framing.
+- `fan-in` (afferent coupling Ca, `info`, **OFF**) -- a class referenced by more than the threshold of OTHER classes (a
+  widely-depended-on hub whose changes ripple widely). A new whole-project reverse-aggregation over `type_use` references
+  (inverts CBO's efferent set, deduped per source, excluding self + transitive ancestors). Default threshold 20 (needs
+  field tuning; ships OFF). Name-based like CBO -- a class name shared across units can over-count (documented).
+
+### Deferred (planned for v0.82, needs the indexer/flow work)
+- `#4 interface/object mixing`, CK `instability` (`Ce/(Ca+Ce)` -- needs a range-based flag shape), and `feature-envy`
+  are deferred to v0.82. feature-envy specifically needs a new `enclosing_symbol_id` on the reference index (references
+  currently have no enclosing-method attribution), which will also sharpen CBO/RFC/LCOM and enable method-level
+  find-callers.
+
 ## v0.80.0 -- 2026-07-02
 
 **First full (non-pre-release) build.** v0.71-v0.79 were `-alpha` pre-releases; v0.80.0 graduates off the

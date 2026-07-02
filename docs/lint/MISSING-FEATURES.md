@@ -20,9 +20,10 @@ store-backed refactoring signals (mutable-global-variable / repeated-type-switch
 OFF-by-default) all SHIPPED.**
 As of v0.77 the IDE (LSP) surfaces the same rules as the CLI and honors an up-tree
 `drag-lint-lint.json` config. We **lead** on security, architecture/layering, and exception
-handling. The remaining gaps are small deferred tails (#9 default-encoding-io; #4 interface/object
-mixing; CK fan-in/fan-out; **`feature-envy` deferred to v0.81** -- needs per-method cross-class
-attribution the name-based store lacks; and a few low-signal items documented as won't-fix).
+handling. `#9 default-encoding-io` and CK `fan-in`/`fan-out` shipped in **v0.81** (all OFF-by-default). The
+remaining gaps are slated for **v0.82** (which adds an `enclosing_symbol_id` reference-index extension):
+`#4 interface/object mixing`, CK `instability` (`Ce/(Ca+Ce)`), and **`feature-envy`** (needs the per-method
+cross-class attribution the name-based store lacks); plus a few low-signal items documented as won't-fix.
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
 **(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use
@@ -124,7 +125,9 @@ Have: `cyclomatic-complexity`, `deep-nesting`, `method-too-long`, `too-many-para
       adds 1. Default 25 -- cognitive scores higher than cyclomatic. Configurable)
 - [x] CK suite: DIT / NOC / CBO / RFC / LCOM  -- **DONE v0.78** as `deep-inheritance` / `too-many-children` /
       `high-coupling` / `high-response` / `low-cohesion` (category `metrics`, `info`, ON, store-backed,
-      per-rule `threshold`). LCOM shipped as LCOM4 (connected components). fan-in / fan-out still open.
+      per-rule `threshold`). LCOM shipped as LCOM4 (connected components). **fan-out (Ce) + fan-in (Ca) DONE
+      v0.81** (`metrics`, `info`, OFF-by-default; fan-out reuses CBO, fan-in is a reverse-aggregation over type_use
+      refs). CK `instability` (`Ce/(Ca+Ce)`) still open -> v0.82 (needs a range-based flag shape).
 - [x] **clone / duplicate-code detection** (PAL CLON1-2)  -- **DONE v0.77** as `duplicate-code` (complexity, `info`, ON,
       `threshold` default 90). New unit `DRagLint.Diagnostics.CloneChecks.pas`: Type-2 (renamed-identifier tolerant)
       Rabin-Karp maximal-match over normalized-token streams (ids+literals -> placeholders; unique per-routine barriers),
@@ -154,7 +157,8 @@ Have: `with-statement`, `nested-with`, `goto-statement`, `off-by-one-count`,
 Have: `win64-pointer-cast` (heuristic), `sizeof-pointer-assumption`, `pchar-arithmetic`,
 `gettickcount-wraparound`, `locale-sensitive-conversion`, `deprecated-rtl-function`,
 `inline-assembly`, `unsafe-string-api`.
-- [x] `nativeint-truncation` -- **DONE v0.76** (`warning`; 32-bit cast of a NativeInt/pointer-sized value, sibling of win64-pointer-cast). `default-encoding-io` still open (needs **M1**).
+- [x] `nativeint-truncation` -- **DONE v0.76** (`warning`; 32-bit cast of a NativeInt/pointer-sized value, sibling of win64-pointer-cast).
+- [x] `default-encoding-io` -- **DONE v0.81** (`platform`, `warning`, OFF-by-default; pure-AST, a twin of `insecure-temp-file` -- file I/O with no explicit `TEncoding`). Shipped OFF: src/ FP=65 (mostly intentional `ReadAllText` on config files).
 - [ ] `variant-record-type-punning` -- deferred (needs flow; no clean pure-AST signal)
 
 ## 10. Security  -- LEADING the field (ahead of PAL/FixInsight/Sonar)
