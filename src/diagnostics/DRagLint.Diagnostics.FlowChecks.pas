@@ -343,6 +343,10 @@ var
     EscAna: IDataFlowAnalysis<TArray<Boolean>>;
     EIn2, EOut2: TArray<TArray<Boolean>>;
     CreateRow, CreateCol: TArray<Integer>;
+    FreedAna: IDataFlowAnalysis<TFreedVal>;
+    FIn, FOut: TArray<TFreedVal>;
+    CurFMust, CurFMay: TArray<Boolean>;
+    FreedV: Integer; FKind: TFreeKind;
   begin
     Cfg := TCfgBuilder.Build(AProc, PF.Src);
     Vars := TRoutineVarTable.Build(AProc, PF.Src);
@@ -433,6 +437,55 @@ var
             begin
               Idx := Vars.IndexOf('result');
               if Idx >= 0 then begin CurMust[Idx] := True; CurMay[Idx] := True; end;
+            end;
+          end;
+        end;
+
+        { ---- double-free: per-item replay of the freed/dangling must/may
+          state within a block. Mirrors the used-before-assignment replay
+          above but on the TFreedState lattice: at each free site (raw .Free/
+          .DisposeOf OR FreeAndNil), check the IN-state BEFORE advancing --
+          if the var may already be dangling here, this free is itself a
+          double-free (freeing an already-dangling pointer, whichever kind of
+          free it is). Then advance the state per the free's own kind. }
+        FreedAna := TFreedState.Create(Vars, PF.Src);
+        if TDataFlowSolver<TFreedVal>.Solve(Cfg, FreedAna, FIn, FOut) then
+        begin
+          for B := 0 to Cfg.BlockCount - 1 do
+          begin
+            CurFMust := Copy(FIn[B].Must); CurFMay := Copy(FIn[B].May);
+            for I := 0 to Cfg.Blocks[B].Items.Count - 1 do
+            begin
+              It := Cfg.Blocks[B].Items[I];
+              if It.Opaque then Continue; { with-body: conservative, skip }
+              FreedV := DetectFreedVarKind(It.Node, PF.Src, Vars, FKind);
+              if FreedV >= 0 then
+              begin
+                V := Vars.Get(FreedV);
+                if CurFMay[FreedV] then
+                begin
+                  ROW := Integer(It.Node.StartPoint.Row) + 1;
+                  COL := Integer(It.Node.StartPoint.Column) + 1;
+                  if CurFMust[FreedV] then
+                    Emit('double-free', 'warning',
+                      Format('Object "%s" may be freed twice (double free) -- reassign or FreeAndNil after the first Free.', [V.Name]),
+                      ROW, COL)
+                  else
+                    Emit('double-free', 'info',
+                      Format('Object "%s" may be freed twice (double free) -- reassign or FreeAndNil after the first Free.', [V.Name]),
+                      ROW, COL);
+                end;
+                case FKind of
+                  fkRawFree: begin CurFMust[FreedV] := True;  CurFMay[FreedV] := True;  end;
+                  fkNiling:  begin CurFMust[FreedV] := False; CurFMay[FreedV] := False; end;
+                end;
+                Continue;
+              end;
+              if It.Node.NodeType = 'assignment' then
+              begin
+                Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars);
+                if Tgt >= 0 then begin CurFMust[Tgt] := False; CurFMay[Tgt] := False; end;
+              end;
             end;
           end;
         end;

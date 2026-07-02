@@ -74,6 +74,39 @@ type
     function Equals(const A, B: TDefAsgnVal): Boolean;
   end;
 
+  /// <summary>Freed-var lattice value: `Must`[i] = var i is DANGLING (freed via
+  /// a raw `.Free`/`.DisposeOf` and not since nil-ed or reassigned) on EVERY
+  /// path here; `May`[i] = dangling on SOME path.</summary>
+  TFreedVal = record
+    Must: TArray<Boolean>;
+    May : TArray<Boolean>;
+  end;
+
+  /// <summary>Forward must+may "dangling pointer" analysis for double-free
+  /// detection. A raw `X.Free`/`X.DisposeOf` frees the object but leaves X
+  /// non-nil (dangling); `FreeAndNil(X)` frees AND nils X (safe to re-Free);
+  /// any whole-identifier assignment to X re-points it (safe). See
+  /// `DetectFreedVarKind` for the free-site classification this Transfer
+  /// consumes.</summary>
+  /// <remarks>This lattice only tracks STATE (dangling or not) between CFG
+  /// items; it does not itself emit findings -- the double-free rule replays
+  /// items per block (mirroring TDefiniteAssignment's used-before-assignment
+  /// replay) so it can check the IN-state at each free site BEFORE advancing,
+  /// distinguishing "this free's own effect" from "a prior free's effect".</remarks>
+  TFreedState = class(TInterfacedObject, IDataFlowAnalysis<TFreedVal>)
+  strict private
+    FVars: TRoutineVarTable;
+    FSrc : TBytes;
+  public
+    constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes);
+    function Direction: TFlowDir;
+    function Bottom: TFreedVal;
+    function Boundary: TFreedVal;
+    function Join(const A, B: TFreedVal): TFreedVal;
+    function Transfer(const ABlock: TCfgBlock; const AIn: TFreedVal): TFreedVal;
+    function Equals(const A, B: TFreedVal): Boolean;
+  end;
+
   /// <summary>Backward may-live-variables analysis: `live`[i] = var i may be read
   /// on some path after this point before being reassigned. Powers dead-store
   /// (overwrite-before-read) and write-only-local detection.</summary>
@@ -132,6 +165,18 @@ function ExprIsConstructor(const N: TTSNode; const ASrc: TBytes): Boolean;
 /// <summary>If ANode is `x.Free` / `x.DisposeOf` / `FreeAndNil(x)`, return the
 /// freed local's index, else -1.</summary>
 function DetectFreedVar(const ANode: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable): Integer;
+
+/// <summary>Kind of free site: a raw `.Free`/`.DisposeOf` leaves the pointer
+/// DANGLING (non-nil); `FreeAndNil` nils it (safe to re-Free afterwards).</summary>
+type
+  TFreeKind = (fkRawFree, fkNiling);
+
+/// <summary>Same detection as `DetectFreedVar`, plus AKind telling the caller
+/// whether the site is a raw free (`x.Free`/`x.DisposeOf`, dangling result) or
+/// a nil-ing free (`FreeAndNil(x)`, safe result). Returns -1 (AKind undefined)
+/// when ANode is not a free site.</summary>
+function DetectFreedVarKind(const ANode: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable;
+  out AKind: TFreeKind): Integer;
 
 /// <summary>Collect every routine var passed as a call argument anywhere under
 /// ANode, with the callee's bare-identifier name (empty for method calls) and
@@ -598,6 +643,77 @@ begin
   Result := True;
 end;
 
+{ ----- TFreedState ----- }
+
+constructor TFreedState.Create(AVars: TRoutineVarTable; const ASrc: TBytes);
+begin inherited Create; FVars := AVars; FSrc := ASrc; end;
+
+function TFreedState.Direction: TFlowDir; begin Result := fdForward; end;
+
+function TFreedState.Bottom: TFreedVal;
+var I: Integer;
+begin
+  { Bottom for MUST (intersection) is "all dangling"; MAY (union) is "none". }
+  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := True; Result.May[I] := False; end;
+end;
+
+function TFreedState.Boundary: TFreedVal;
+var I: Integer;
+begin
+  { on entry no var is dangling (params/locals start un-freed). }
+  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := False; Result.May[I] := False; end;
+end;
+
+function TFreedState.Join(const A, B: TFreedVal): TFreedVal;
+var I: Integer;
+begin
+  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do
+  begin
+    Result.Must[I] := A.Must[I] and B.Must[I]; { dangling on EVERY incoming path }
+    Result.May[I]  := A.May[I] or B.May[I];    { dangling on SOME incoming path }
+  end;
+end;
+
+function TFreedState.Transfer(const ABlock: TCfgBlock; const AIn: TFreedVal): TFreedVal;
+var
+  I, Tgt, FreedV: Integer; It: TCfgItem; Kind: TFreeKind;
+begin
+  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := AIn.Must[I]; Result.May[I] := AIn.May[I]; end;
+  for I := 0 to ABlock.Items.Count - 1 do
+  begin
+    It := ABlock.Items[I];
+    if It.Opaque then Continue; { with-body: conservative, state unchanged }
+    FreedV := DetectFreedVarKind(It.Node, FSrc, FVars, Kind);
+    if FreedV >= 0 then
+    begin
+      case Kind of
+        fkRawFree: begin Result.Must[FreedV] := True;  Result.May[FreedV] := True;  end;  { now dangling }
+        fkNiling:  begin Result.Must[FreedV] := False; Result.May[FreedV] := False; end;  { nil-ed / safe }
+      end;
+      Continue; { a free site is not also a whole-var assignment }
+    end;
+    if It.Node.NodeType = 'assignment' then
+    begin
+      Tgt := AssignmentTargetIndex(It.Node, FSrc, FVars); { whole-identifier lhs only }
+      if Tgt >= 0 then begin Result.Must[Tgt] := False; Result.May[Tgt] := False; end; { re-pointed }
+    end;
+  end;
+end;
+
+function TFreedState.Equals(const A, B: TFreedVal): Boolean;
+var I: Integer;
+begin
+  Result := False;
+  if (Length(A.Must) <> Length(B.Must)) or (Length(A.May) <> Length(B.May)) then Exit;
+  for I := 0 to High(A.Must) do
+    if (A.Must[I] <> B.Must[I]) or (A.May[I] <> B.May[I]) then Exit;
+  Result := True;
+end;
+
 { ----- TLiveness ----- }
 
 constructor TLiveness.Create(AVars: TRoutineVarTable; const ASrc: TBytes);
@@ -727,6 +843,48 @@ begin
       ArgsN := Inner.ChildByField('args');
       if (not ArgsN.IsNull) and (ArgsN.NamedChildCount > 0) then
         Exit(LeftmostBaseVar(ArgsN.NamedChild(0), ASrc, AVars));
+    end;
+  end;
+end;
+
+function DetectFreedVarKind(const ANode: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable;
+  out AKind: TFreeKind): Integer;
+var Inner, Ent, ArgsN: TTSNode; M: string;
+begin
+  Result := -1;
+  AKind := fkRawFree;
+  if ANode.IsNull then Exit;
+  Inner := ANode;
+  if (Inner.NodeType = 'statement') and (Inner.NamedChildCount > 0) then Inner := Inner.NamedChild(0);
+  if Inner.NodeType = 'exprDot' then
+  begin
+    M := NodeText(Inner.ChildByField('rhs'), ASrc);
+    if (M = 'free') or (M = 'disposeof') then
+    begin
+      AKind := fkRawFree; { raw .Free / .DisposeOf: object freed, pointer left dangling }
+      Exit(LeftmostBaseVar(Inner.ChildByField('lhs'), ASrc, AVars));
+    end;
+  end;
+  if Inner.NodeType = 'exprCall' then
+  begin
+    Ent := Inner.ChildByField('entity');
+    if (not Ent.IsNull) and (Ent.NodeType = 'exprDot') then
+    begin
+      M := NodeText(Ent.ChildByField('rhs'), ASrc);
+      if (M = 'free') or (M = 'disposeof') then
+      begin
+        AKind := fkRawFree;
+        Exit(LeftmostBaseVar(Ent.ChildByField('lhs'), ASrc, AVars));
+      end;
+    end;
+    if (not Ent.IsNull) and (Ent.NodeType = 'identifier') and (NodeText(Ent, ASrc) = 'freeandnil') then
+    begin
+      ArgsN := Inner.ChildByField('args');
+      if (not ArgsN.IsNull) and (ArgsN.NamedChildCount > 0) then
+      begin
+        AKind := fkNiling; { FreeAndNil: object freed AND pointer nil-ed -> safe }
+        Exit(LeftmostBaseVar(ArgsN.NamedChild(0), ASrc, AVars));
+      end;
     end;
   end;
 end;

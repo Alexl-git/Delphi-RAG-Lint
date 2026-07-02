@@ -301,6 +301,84 @@ begin
       'begin o := TObject.Create; o.Free; end; end.'));
 end;
 
+{ Solve TFreedState for the first proc of ASource; return Must/May dangling
+  at the routine Exit's IN for var AVarName. Caller need not free anything --
+  Cfg/Vars are local. }
+procedure FreedStateAtExit(const ASource, AVarName: string; out AMust, AMay: Boolean);
+var
+  Tmp: string; PF: TParsedFile; Procs: TArray<TTSNode>;
+  Cfg: TCfg; Vars: TRoutineVarTable; FIn, FOut: TArray<TFreedVal>; Ix: Integer;
+begin
+  AMust := False; AMay := False;
+  Tmp := TPath.Combine(TPath.GetTempPath, 'fs_' + TPath.GetGUIDFileName + '.pas');
+  TFile.WriteAllText(Tmp, ASource);
+  try
+    PF := TAstParseCache.Get(Tmp);
+    if PF.Tree = nil then Exit;
+    Procs := CfgFindProcs(PF.Tree.RootNode);
+    if Length(Procs) = 0 then Exit;
+    Cfg := TCfgBuilder.Build(Procs[0], PF.Src);
+    Vars := TRoutineVarTable.Build(Procs[0], PF.Src);
+    try
+      if Cfg.Skipped then Exit;
+      if not TDataFlowSolver<TFreedVal>.Solve(Cfg, TFreedState.Create(Vars, PF.Src), FIn, FOut) then Exit;
+      Ix := Vars.IndexOf(LowerCase(AVarName));
+      if Ix < 0 then Exit;
+      AMust := FIn[Cfg.ExitIdx].Must[Ix];
+      AMay  := FIn[Cfg.ExitIdx].May[Ix];
+    finally Cfg.Free; Vars.Free; end;
+  finally TAstParseCache.Clear; TFile.Delete(Tmp); end;
+end;
+
+procedure TestFreedStateLinearDangling;
+var Must, May: Boolean;
+begin
+  { X.Free; X.Free; -> dangling (must) at exit: both frees leave X non-nil. }
+  FreedStateAtExit(
+    'unit u; interface implementation procedure P; var x: TObject; begin' + sLineBreak +
+    '  x := TObject.Create; x.Free; x.Free;' + sLineBreak +
+    'end; end.', 'x', Must, May);
+  Check('freedstate: linear raw-free -> must-dangling at exit', Must);
+  Check('freedstate: linear raw-free -> may-dangling at exit', May);
+end;
+
+procedure TestFreedStateReassignClears;
+var Must, May: Boolean;
+begin
+  { reassigned between two frees -> NOT dangling at exit (2nd free acts on a
+    fresh object, and itself leaves it dangling again -- but only ONE free
+    follows the reassignment, so must/may here reflects that final Free). }
+  FreedStateAtExit(
+    'unit u; interface implementation procedure P; var x: TObject; begin' + sLineBreak +
+    '  x := TObject.Create; x.Free; x := TObject.Create; x.Free;' + sLineBreak +
+    'end; end.', 'x', Must, May);
+  Check('freedstate: reassign-between -> still ends dangling (final Free)', Must);
+end;
+
+procedure TestFreedStateFreeAndNilClears;
+var Must, May: Boolean;
+begin
+  { FreeAndNil nils x -> NOT dangling at exit. }
+  FreedStateAtExit(
+    'unit u; interface implementation procedure P; var x: TObject; begin' + sLineBreak +
+    '  x := TObject.Create; FreeAndNil(x);' + sLineBreak +
+    'end; end.', 'x', Must, May);
+  Check('freedstate: FreeAndNil -> not dangling (must)', not Must);
+  Check('freedstate: FreeAndNil -> not dangling (may)', not May);
+end;
+
+procedure TestFreedStateBranchMergeMayOnly;
+var Must, May: Boolean;
+begin
+  { free on ONE if-branch only -> may-dangling but not must-dangling at exit. }
+  FreedStateAtExit(
+    'unit u; interface implementation procedure P(b: Boolean); var x: TObject; begin' + sLineBreak +
+    '  x := TObject.Create; if b then x.Free;' + sLineBreak +
+    'end; end.', 'x', Must, May);
+  Check('freedstate: branch-merge -> may-dangling', May);
+  Check('freedstate: branch-merge -> NOT must-dangling', not Must);
+end;
+
 begin
   GPass := 0; GFail := 0;
   try
@@ -314,6 +392,10 @@ begin
     TestDefiniteAssignmentMayOnly;
     TestLivenessBackward;
     TestEscapeLeak;
+    TestFreedStateLinearDangling;
+    TestFreedStateReassignClears;
+    TestFreedStateFreeAndNilClears;
+    TestFreedStateBranchMergeMayOnly;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

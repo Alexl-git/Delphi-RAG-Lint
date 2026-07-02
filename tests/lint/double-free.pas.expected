@@ -1,0 +1,12 @@
+# P1: linear X.Free; X.Free; -> the 2nd Free is a double-free (warning, must-dangling)
+double-free 15
+# P2: reassigned between the two frees -> absent
+!double-free 25
+# P3: FreeAndNil then raw Free -> absent (nil-ed between)
+!double-free 34
+# P4: free on one if-branch only, then a common free after -> info (may-dangling)
+double-free 45
+# P5: single free guarded by Assigned -> absent (only one Free site)
+!double-free 53
+# P6: single free inside try/finally -> absent (only one Free site)
+!double-free 64
