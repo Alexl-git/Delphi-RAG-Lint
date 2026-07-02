@@ -15,6 +15,7 @@ uses
   , DRagLint.Lint       .Linter
   , DRagLint.Resolver   .TypeAt
   , DRagLint.Diagnostics.AstChecks
+  , DRagLint.Diagnostics.CloneChecks
   ;
 
 type
@@ -451,6 +452,34 @@ begin
   //     hide real errors.) Gated to source files. ---
   if SameText(ExtractFileExt(AFile), '.pas') or SameText(ExtractFileExt(AFile), '.inc') then
     for F in TAstChecker.CheckSyntaxErrors(AFile) do
+    begin
+      DiagObj := TJSONObject.Create;
+      StartObj:= TJSONObject.Create;
+      StartObj.AddPair('line'     , TJSONNumber.Create(F.StartLine - 1));
+      StartObj.AddPair('character', TJSONNumber.Create(F.StartCol  - 1));
+      EndObj:= TJSONObject.Create;
+      EndObj.AddPair('line'     , TJSONNumber.Create(F.EndLine - 1));
+      EndObj.AddPair('character', TJSONNumber.Create(F.EndCol  - 1));
+      RangeObj:= TJSONObject.Create;
+      RangeObj.AddPair('start', StartObj);
+      RangeObj.AddPair('end'  , EndObj  );
+      DiagObj .AddPair('range', RangeObj);
+      DiagObj.AddPair('severity', TJSONNumber.Create(MapLintSeverityToLspSeverity(F.Severity)));
+      DiagObj.AddPair('source', 'drag-lint');
+      DiagObj.AddPair('code'   , F.RuleId );
+      DiagObj.AddPair('message', F.Message);
+      Result.AddElement(DiagObj);
+    end; // for
+
+  // --- v0.77: duplicate-code (clone) findings, for PARITY with the CLI `lint`
+  //     path. BuildDiagnostics runs the TLinter set + syntax errors + compiler
+  //     findings, but NOT the extra checks DoLint layers on top -- clone
+  //     detection among them -- so the IDE (which reads these LSP diagnostics)
+  //     never surfaced duplicated code. Run the within-file clone pass here so it
+  //     appears inline. The CLI path already runs it via DoLint/DoLintAll, so this
+  //     LSP-only addition does not double-report. Gated to source files. ---
+  if SameText(ExtractFileExt(AFile), '.pas') or SameText(ExtractFileExt(AFile), '.inc') then
+    for F in TCloneChecker.Check(AFile) do
     begin
       DiagObj := TJSONObject.Create;
       StartObj:= TJSONObject.Create;
