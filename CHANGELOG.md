@@ -5,6 +5,16 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.84.0-alpha -- 2026-07-03
+
+### Changed
+- **forms-csv Navigation column (algorithm v3)** -- the click path now interleaves the landing form's
+  name after every button caption and ends with the target form, e.g.
+  `frmMAIN -> 'Job List' -> frmJobList -> 'Open Folder' -> frmBlueprint4 -> 'Exit to Control Plan 2'
+  -> frmControlPlan2 -> 'Plan' -> Z14slctFrm` -- a tester can now tell WHICH form each button is
+  pressed on. Rendering is isolated in one `RenderPath` function for future format changes
+  (e.g. tester sentences). Called From column unchanged. CSV provenance header reports `algorithm v3`.
+
 ## v0.83.1-alpha -- 2026-07-03
 
 Hotfix: the v13 migration was unreachable on any pre-v13 database.
