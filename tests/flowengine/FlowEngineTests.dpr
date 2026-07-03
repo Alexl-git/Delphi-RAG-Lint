@@ -16,7 +16,8 @@ uses
   DRagLint.Diagnostics.ParseCache in '..\..\src\diagnostics\DRagLint.Diagnostics.ParseCache.pas',
   DRagLint.Analysis.Cfg in '..\..\src\analysis\DRagLint.Analysis.Cfg.pas',
   DRagLint.Analysis.DataFlow in '..\..\src\analysis\DRagLint.Analysis.DataFlow.pas',
-  DRagLint.Analysis.Flow.Lattices in '..\..\src\analysis\DRagLint.Analysis.Flow.Lattices.pas';
+  DRagLint.Analysis.Flow.Lattices in '..\..\src\analysis\DRagLint.Analysis.Flow.Lattices.pas',
+  DRagLint.Analysis.Liveness in '..\..\src\analysis\DRagLint.Analysis.Liveness.pas';
 
 type
   { Toy forward analysis: "has any block with >=1 item executed upstream?" --
@@ -392,6 +393,99 @@ begin
   Check('freedstate: branch-merge -> NOT must-dangling', not Must);
 end;
 
+{ Find the (block index, item index) of the first CFG item whose source text
+  starts with ANeedle (case-insensitive; NeedLe should already be lowercase).
+  Returns False if not found. Scans blocks in index order, low to high, so a
+  substring that appears in multiple items always matches the earliest one --
+  fine for these fixtures, where each needle is unique. }
+function FindItem(const ACfg: TCfg; const ASrc: TBytes; const ANeedle: string;
+  out ABlockIdx, AItemIdx: Integer): Boolean;
+var B, I: Integer; Txt: string;
+begin
+  Result := False;
+  ABlockIdx := -1; AItemIdx := -1;
+  for B := 0 to ACfg.BlockCount - 1 do
+    for I := 0 to ACfg.Blocks[B].Items.Count - 1 do
+    begin
+      Txt := NodeText(ACfg.Blocks[B].Items[I].Node, ASrc);
+      if Txt.StartsWith(ANeedle) then
+      begin
+        ABlockIdx := B; AItemIdx := I; Exit(True);
+      end;
+    end;
+end;
+
+{ Boundary-liveness (M2 core): a branchy routine --
+    procedure P(a: Integer);
+    var x, y: Integer;
+    begin
+      x := a;           // item 0: def x, use a
+      if a > 0 then
+        y := x           // then-branch: def y, use x
+      else
+        y := 0;          // else-branch: def y
+      Writeln(y);        // last item: use y
+    end;
+  LiveAfterItem right after "x := a" must include x (read by both branches'
+  "y := x" -- well, only the then-branch reads x, but liveness is a MAY
+  analysis: x is live if read on SOME path -- and exclude y (not yet defined,
+  and even once defined its later uses don't reach back through x's def).
+  LiveAfterItem right after "Writeln(y)" (the join block's last item) must
+  exclude both: nothing left downstream reads either var. }
+procedure TestBoundaryLiveness;
+const SRC =
+  'unit u; interface implementation procedure P(a: Integer);' + sLineBreak +
+  'var x, y: Integer; begin' + sLineBreak +
+  '  x := a;' + sLineBreak +
+  '  if a > 0 then' + sLineBreak +
+  '    y := x' + sLineBreak +
+  '  else' + sLineBreak +
+  '    y := 0;' + sLineBreak +
+  '  Writeln(y);' + sLineBreak +
+  'end; end.';
+var
+  Tmp: string; PF: TParsedFile; Procs: TArray<TTSNode>;
+  Cfg: TCfg; Vars: TRoutineVarTable;
+  BIdx, IIdx: Integer;
+  Live: TArray<Boolean>;
+  XIx, YIx: Integer;
+begin
+  Tmp := TPath.Combine(TPath.GetTempPath, 'bl_' + TPath.GetGUIDFileName + '.pas');
+  TFile.WriteAllText(Tmp, SRC);
+  try
+    PF := TAstParseCache.Get(Tmp);
+    Procs := CfgFindProcs(PF.Tree.RootNode);
+    Cfg := TCfgBuilder.Build(Procs[0], PF.Src);
+    Vars := TRoutineVarTable.Build(Procs[0], PF.Src);
+    try
+      Check('boundary-liveness: cfg built + not skipped', (Cfg <> nil) and not Cfg.Skipped);
+      if (Cfg = nil) or Cfg.Skipped then Exit;
+      XIx := Vars.IndexOf('x');
+      YIx := Vars.IndexOf('y');
+      Check('boundary-liveness: var table has x and y', (XIx >= 0) and (YIx >= 0));
+
+      { after "x := a": x live (used on the then-path "y := x"); y not live. }
+      Check('boundary-liveness: found "x := a"', FindItem(Cfg, PF.Src, 'x := a', BIdx, IIdx));
+      Live := LiveAfterItem(Cfg, Vars, PF.Src, BIdx, IIdx);
+      Check('boundary-liveness: after "x := a", x is live', Live[XIx]);
+      Check('boundary-liveness: after "x := a", y is not live', not Live[YIx]);
+
+      { after "Writeln(y)" (last item of the join block): nothing downstream
+        reads x or y -> both dead. }
+      Check('boundary-liveness: found "writeln(y)"', FindItem(Cfg, PF.Src, 'writeln(y)', BIdx, IIdx));
+      Live := LiveAfterItem(Cfg, Vars, PF.Src, BIdx, IIdx);
+      Check('boundary-liveness: after "Writeln(y)", x is not live', not Live[XIx]);
+      Check('boundary-liveness: after "Writeln(y)", y is not live', not Live[YIx]);
+
+      { LiveBeforeItem at "Writeln(y)" must include y (it is about to be read)
+        and exclude x (still dead). }
+      Live := LiveBeforeItem(Cfg, Vars, PF.Src, BIdx, IIdx);
+      Check('boundary-liveness: before "Writeln(y)", y is live', Live[YIx]);
+      Check('boundary-liveness: before "Writeln(y)", x is not live', not Live[XIx]);
+    finally Cfg.Free; Vars.Free; end;
+  finally TAstParseCache.Clear; TFile.Delete(Tmp); end;
+end;
+
 begin
   GPass := 0; GFail := 0;
   try
@@ -410,6 +504,7 @@ begin
     TestFreedStateReassignClears;
     TestFreedStateFreeAndNilClears;
     TestFreedStateBranchMergeMayOnly;
+    TestBoundaryLiveness;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;
