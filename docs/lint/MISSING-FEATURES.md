@@ -20,10 +20,12 @@ store-backed refactoring signals (mutable-global-variable / repeated-type-switch
 OFF-by-default) all SHIPPED.**
 As of v0.77 the IDE (LSP) surfaces the same rules as the CLI and honors an up-tree
 `drag-lint-lint.json` config. We **lead** on security, architecture/layering, and exception
-handling. `#9 default-encoding-io` and CK `fan-in`/`fan-out` shipped in **v0.81** (all OFF-by-default). The
-remaining gaps are slated for **v0.82** (which adds an `enclosing_symbol_id` reference-index extension):
-`#4 interface/object mixing`, CK `instability` (`Ce/(Ca+Ce)`), and **`feature-envy`** (needs the per-method
-cross-class attribution the name-based store lacks); plus a few low-signal items documented as won't-fix.
+handling. `#9 default-encoding-io` and CK `fan-in`/`fan-out` shipped in **v0.81** (all OFF-by-default).
+**v0.82** added the `enclosing_symbol_id` reference-index extension (schema v13: each ref attributed to its innermost
+enclosing routine) and, on top of it, **`feature-envy`** (#14, `refactoring`), CK **`instability`** (`Ce/(Ca+Ce)`, #11,
+`metrics`), and a first-cut **`interface-object-mixing`** (#4 same-routine dual-handle, `resource-lifetime`) -- all
+OFF-by-default; the CBO/RFC/fan-in/fan-out coupling metrics were retrofitted onto the exact attribution (LCOM4 left as an
+AST re-walk). That closes the v0.82 gap list; remaining items are a few low-signal ones documented as won't-fix.
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
 **(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use

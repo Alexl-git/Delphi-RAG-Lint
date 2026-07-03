@@ -5,6 +5,43 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.82.0-alpha -- 2026-07-02
+
+Reference-index `enclosing_symbol_id` attribution (schema v13) + three new OFF-by-default rules + a coupling-metric
+retrofit. Resumes the `-alpha` suffix (the index schema is still evolving); shipped as a full release.
+
+### Index / schema (v13)
+- `refs.enclosing_symbol_id` -- every indexed reference is now attributed to the innermost enclosing routine (by
+  `impl_start_line..impl_end_line` containment), computed per-file in the indexer. Additive migration
+  (`ALTER TABLE refs ADD COLUMN enclosing_symbol_id`), NULL-safe (reads as 0) on un-reindexed DBs.
+  **Reindex all DBs once** after upgrading to populate it. New `drag-lint dump-refs <file> --db` diagnostic surfaces
+  the attribution (`name_text|start_line|enclosing_symbol_id|enclosing_symbol_name`).
+
+### Added -- rules (all OFF-by-default; opt in via `drag-lint-lint.json` `"enabled"` or `--rule`)
+- `feature-envy` (#14, category `refactoring`, `info`, **OFF**) -- a method that references another class's members more
+  than its own class's (`maxForeign > own` and `maxForeign >= minAccess`, default 3). Groups the class's `call` refs by
+  the new enclosing attribution, then splits own/foreign via a name-based member->declaring-class map (names declared by
+  >1 class are skipped). Target-class resolution is name-based (no expression type inference) -> precision is bounded ->
+  ships OFF. src/ FP=36 (dominated by RTL name collisions, e.g. a project `Format` method vs `SysUtils.Format`).
+- `instability` (#11, category `metrics`, `info`, **OFF**) -- CK instability `I = Ce/(Ca+Ce)`; flags a class when its
+  instability percent `>= instability` (default 80) AND `Ca+Ce >= instability-floor` (default 5). Pure integer arithmetic
+  on CBO (Ce, efferent) + fan-in (Ca, afferent).
+- `interface-object-mixing` (#4 first cut, category `resource-lifetime`, `info`, **OFF**) -- a same-routine dual handle:
+  an object local aliased into an interface-typed variable AND manually `Free`d/`FreeAndNil`'d in the same routine -- the
+  ARC/manual double-free hazard. Pure-AST, narrow same-routine slice (reuses the `freeandnil-on-interface` type map).
+  src/ FP=0.
+
+### Changed -- coupling metrics
+- CBO / RFC / fan-in / fan-out now read `enclosing_symbol_id` for exact reference attribution instead of a per-ref
+  line-range scan (more precise for nested procedures / overlapping spans, and cheaper). Guardrail: findings are
+  byte-identical on a full src/ sanity run. `LCOM4` is unchanged (it is an AST identifier re-walk, not ref-attribution).
+
+### Fixed (v0.81 review carry-overs)
+- `default-encoding-io`: a filename string literal that merely contains the text "TEncoding" no longer falsely suppresses
+  the finding (string-literal argument nodes are skipped in the encoding scan).
+- Exit code is derived from the post-suppression survivor set, so a bare command whose only matches were OFF-by-default
+  rules now prints "0 finding(s)" AND exits 0 -- consistently across `lint` / `lint-all` / `lint-project`.
+
 ## v0.81.0 -- 2026-07-02
 
 Portability + architecture "tail" rules. All three new rules ship **OFF-by-default** (opt in via
