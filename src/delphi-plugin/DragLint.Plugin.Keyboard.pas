@@ -189,15 +189,20 @@ end;
 { ---- Extract Method (Ctrl+Alt+M) ---- }
 
 function DLExtractMethodExe: string;
-{ Same resolution algorithm as DragLint.Plugin.Editor's private DLExe64:
-  prefer the Win64 build staged next to this BPL (third_party/dll-win64
-  layout: "<bpl-dir>\..\dll-win64\drag-lint.exe"); fall back to bare
-  "drag-lint.exe" (resolved via PATH by CreateProcess) if that is absent.
-  Duplicated here (not exported by Editor.pas) to keep this unit's changes
-  self-contained per the Extract Method IDE-integration task scope. }
+{ KEEP IN SYNC with DragLint.Plugin.Editor's private DLExe/DLExe64 (its
+  implementation section -- neither is exported, so the logic is replicated
+  here rather than called). Resolution order:
+    1. the user-configured Settings ExePath override, if set and the file
+       exists (same check DLExe performs; the shipped default value is the
+       bare name 'drag-lint.exe', which fails FileExists and falls through);
+    2. the Win64 build staged next to this BPL (third_party/dll-win64
+       layout: "<bpl-dir>\..\dll-win64\drag-lint.exe") -- DLExe64's pick;
+    3. bare "drag-lint.exe" (resolved via PATH by CreateProcess). }
 var
   BplDir, Win64Exe: string;
 begin
+  Result:= LoadSettings.ExePath;
+  if (Result <> '') and FileExists(Result) then Exit;
   BplDir  := ExtractFilePath(GetModuleName(HInstance));
   Win64Exe:= ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64\drag-lint.exe';
   if FileExists(Win64Exe) then Exit(Win64Exe);
