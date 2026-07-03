@@ -197,6 +197,7 @@ begin
     B('repeated-type-switch', 'refactoring', 'info', 'Same case-selector repeated across 3+ methods -- Replace Conditional with Polymorphism (project-wide)', False); { OFF by default -- medium-FP (message-map dispatches, name-based grouping); opt in via "enabled" }
     B('middle-man', 'refactoring', 'info', 'Class mostly delegates to one field -- Remove Middle Man (inline or expose the delegate)', False); { OFF by default -- facades/interposers/OTA-NTA wrappers are legitimate middle-men; opt in via "enabled" }
     B('feature-envy', 'refactoring', 'info', 'Method accesses another class more than its own -- Move Method closer to the data it uses', False, [MkParam('minAccess','int','3')]); { OFF by default -- target-class resolution is name-based (no type inference), so the own/foreign split is heuristic; opt in via "enabled" }
+    B('split-variable', 'refactoring', 'info', 'Local reused for two unrelated purposes (disjoint lifetimes) -- Split Variable into two locals', False); { OFF by default -- M2 two-live-range flow signal (linear routines only); opt in via "enabled" }
 
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');

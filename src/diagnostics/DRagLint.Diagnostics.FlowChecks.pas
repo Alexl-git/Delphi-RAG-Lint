@@ -618,6 +618,125 @@ var
                 Format('Local "%s" is assigned but never read.', [V.Name]),
                 V.DeclLine, V.DeclCol);
           end;
+
+          { ============ split-variable (refactoring, OFF): a local reused for two
+            UNRELATED purposes -- it has >=2 DISJOINT def-use lifetimes. Distinct
+            from overwrite-before-read (a dead store whose value is NEVER read):
+            split-variable requires the EARLIER lifetime to be def+read (its value
+            IS consumed) AND the later whole-var def to start a SECOND live range
+            whose value is also read. Two genuinely-used ranges share one local.
+
+            Restricted to LINEAR routines (no branch/merge) to keep it low-FP and
+            sound without a per-path forward lattice: a branch could make the two
+            "lifetimes" mutually exclusive alternatives (one variable, one purpose
+            per path) rather than a real sequential reuse. On any branching routine
+            we bail (emit nothing) -- conservative, never a false positive. }
+          if Cfg.BlockCount > 0 then
+          begin
+            var Linear := True;
+            for B := 0 to Cfg.BlockCount - 1 do
+              if (Cfg.Blocks[B].Succ.Count > 1) or (Cfg.Blocks[B].Pred.Count > 1) then
+              begin Linear := False; Break; end;
+            if Linear then
+            begin
+              { flatten items in execution order by following the single-succ chain
+                from Entry; guard against cycles (a self-loop would not be linear
+                anyway, but stay safe). }
+              var Flat := TList<TCfgItem>.Create;
+              var ChainSeen := TList<Integer>.Create;
+              try
+                var Cur := Cfg.EntryIdx;
+                while (Cur >= 0) and (ChainSeen.IndexOf(Cur) < 0) do
+                begin
+                  ChainSeen.Add(Cur);
+                  for I := 0 to Cfg.Blocks[Cur].Items.Count - 1 do
+                    Flat.Add(Cfg.Blocks[Cur].Items[I]);
+                  if Cfg.Blocks[Cur].Succ.Count = 1 then Cur := Cfg.Blocks[Cur].Succ[0]
+                  else Cur := -1;
+                end;
+
+                { LiveAfter[k][v] = local v is read on the linear tail AFTER item k
+                  before being wholly redefined. Single backward sweep. }
+                var LiveNow: TArray<Boolean>; SetLength(LiveNow, Vars.Count);
+                for J := 0 to Vars.Count - 1 do LiveNow[J] := False;
+                var LiveAfter := TList<TArray<Boolean>>.Create;
+                try
+                  for J := 0 to Flat.Count - 1 do LiveAfter.Add(nil);
+                  for I := Flat.Count - 1 downto 0 do
+                  begin
+                    LiveAfter[I] := Copy(LiveNow);
+                    It := Flat[I];
+                    if It.Opaque then
+                    begin
+                      for J := 0 to Vars.Count - 1 do
+                        if Vars.Get(J).Kind = vkLocal then LiveNow[J] := True;
+                      Continue;
+                    end;
+                    Reads.Clear; CallDefs.Clear;
+                    if It.Node.NodeType = 'assignment' then
+                    begin
+                      Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars); { whole-var only }
+                      if Tgt >= 0 then LiveNow[Tgt] := False; { killed by this store }
+                      CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs);
+                      if Tgt < 0 then { partial write reads its base }
+                        CollectReadsAndCallDefs(It.Node.ChildByField('lhs'), PF.Src, Vars, Reads, CallDefs);
+                    end
+                    else
+                      CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs);
+                    for J := 0 to Reads.Count - 1 do LiveNow[Reads[J]] := True;
+                    for J := 0 to CallDefs.Count - 1 do LiveNow[CallDefs[J]] := True;
+                  end;
+
+                  { forward sweep: ReadSinceDef[v] = v has been read since its most
+                    recent whole-var def. A whole-var store to a local that has been
+                    read since its last def AND whose new value is live afterwards
+                    starts a second used lifetime -> split-variable. }
+                  var ReadSinceDef: TArray<Boolean>; SetLength(ReadSinceDef, Vars.Count);
+                  for J := 0 to Vars.Count - 1 do ReadSinceDef[J] := False;
+                  for I := 0 to Flat.Count - 1 do
+                  begin
+                    It := Flat[I];
+                    if It.Opaque then Continue;
+                    Reads.Clear; CallDefs.Clear;
+                    if It.Node.NodeType = 'assignment' then
+                    begin
+                      Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars);
+                      { reads on the rhs happen BEFORE the store: mark them first }
+                      CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs);
+                      if Tgt < 0 then
+                        CollectReadsAndCallDefs(It.Node.ChildByField('lhs'), PF.Src, Vars, Reads, CallDefs);
+                      for J := 0 to Reads.Count - 1 do ReadSinceDef[Reads[J]] := True;
+                      for J := 0 to CallDefs.Count - 1 do ReadSinceDef[CallDefs[J]] := True;
+                      if (Tgt >= 0) and (Vars.Get(Tgt).Kind = vkLocal) then
+                      begin
+                        { this store overwrites Tgt; if a prior used lifetime exists
+                          and the new value will be read, the local serves two roles }
+                        if ReadSinceDef[Tgt] and LiveAfter[I][Tgt] then
+                        begin
+                          ROW := Integer(It.Node.StartPoint.Row) + 1;
+                          COL := Integer(It.Node.StartPoint.Column) + 1;
+                          Emit('split-variable', 'info',
+                            Format('Local "%s" is reused for two unrelated purposes (disjoint lifetimes); split it into two variables.',
+                              [Vars.Get(Tgt).Name]), ROW, COL);
+                        end;
+                        ReadSinceDef[Tgt] := False; { new lifetime begins }
+                      end;
+                    end
+                    else
+                    begin
+                      CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs);
+                      for J := 0 to Reads.Count - 1 do ReadSinceDef[Reads[J]] := True;
+                      for J := 0 to CallDefs.Count - 1 do ReadSinceDef[CallDefs[J]] := True;
+                    end;
+                  end;
+                finally
+                  LiveAfter.Free;
+                end;
+              finally
+                Flat.Free; ChainSeen.Free;
+              end;
+            end;
+          end;
         end;
 
         { ============ loop-var-after-loop: a `for` control var read after the loop ============ }

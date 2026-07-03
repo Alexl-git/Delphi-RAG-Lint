@@ -1,0 +1,10 @@
+# TwoPurposes: temp reused for two unrelated purposes (two disjoint used
+# lifetimes) -- split-variable fires at the second whole-var def (line 17).
+split-variable 17
+# Accumulate: running accumulator (sum := sum + i reads the running value) --
+# NOT a split; one continuous live range.
+!split-variable 30
+# DeadStore: first store clobbered before any read -- that is overwrite-before-
+# read, NOT split-variable.
+!split-variable 40
+!split-variable 41
