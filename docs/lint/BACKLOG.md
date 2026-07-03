@@ -1,5 +1,27 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-03 (LATEST-3) -- **v0.85.0-alpha PUBLISHED (Extract Method, refactoring-APPLY #1). Manual IDE smoke = the ONE open item.**
+> `main`=`2c303e4` = tag `v0.85.0-alpha` (GitHub full release, `--latest`, win32+win64 zips:
+> https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.85.0-alpha). VERSION `CLI.pas:6`=`0.85.0-alpha`. No schema
+> change (still v13). Suites at ship: lint 153/153 + store 16/16 + catalog 29/29 + flowengine 43/43 (+10 boundary-liveness)
+> + extract-method unit 81/81 + e2e 17/17 (2x dcc64 compile-verified) + formsmap + migrate-v12.
+> **SHIPPED: Extract Method v1** -- CLI `extract-method --file --from-line --to-line --name [--dry-run|--apply|--json|--no-backup]`
+> (preview default, REFUSE-not-guess: 18+ reasons) + IDE **Ctrl+Alt+M** (preview dialog -> apply -> reload) + reusable
+> `DRagLint.Analysis.Liveness.pas` (LiveAfterItem/LiveBeforeItem). Executed via SDD (7 tasks; notable catches: T3 tests
+> exposed 2 real classification defects -> recursive must-def + exit-edge-only live-out + conditionally-assigned-escapes
+> refuse; final review caught the IDE Apply spawn omitting `--apply` -- the extract-method verb previews by default, unlike
+> legacy rename -- fixed + BPL rebuilt BEFORE the tag). Interim releases folded into the notes: v0.83.1 (migration hotfix),
+> v0.84.0 (forms-csv Navigation v3).
+> **>>> NEXT ACTION 1 (user, 5 min): manual IDE smoke** -- close RAD Studio, deploy the BPL (deploy-staged.bat), open a
+> sample unit, select whole statements, Ctrl+Alt+M: check preview shows the new method, Apply rewrites the file (.bak
+> appears), buffer reloads, result compiles. Items to watch (untestable outside the IDE): keybinding registration,
+> EndingColumn<=1 whole-line-selection heuristic, CloseModule/OpenModule reload. Then remove the "manual IDE smoke pending"
+> notes from CHANGELOG.md + REFACTOR-LIST.md.
+> **>>> NEXT ACTION 2: Change Signature** (recommended next refactoring per REFACTOR-LIST.md) -- brainstorm -> spec -> plan,
+> reusing rename's cross-unit machinery + the new liveness pass. Also queued: consolidate the verbose Extract Method Notes
+> cell in REFACTOR-LIST.md; reconcile refuse-output stream (extract-method uses stderr, older verbs stdout).
+>
+> --- (prior) ---
 > ## RESUME 2026-07-03 (LATEST-2) -- **v0.83.0-alpha SHIPPED; REFACTORING-APPLY frontier KICKED OFF -- Extract Method spec+plan WRITTEN, ready to implement.**
 > `main`=`703c84b` (clean, pushed). Lint-DETECTION coverage CLOSED (see `docs/lint/MISSING-FEATURES.md`). The growth frontier is
 > now refactoring-APPLY, tracked in **`docs/lint/REFACTOR-LIST.md`** (all ~30 refactorings + difficulty + progress; shipped =
