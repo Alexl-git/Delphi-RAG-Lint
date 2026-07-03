@@ -37,11 +37,12 @@ Check 'pas line count for frmEdit' ($csv -match 'uDemoEdit,frmEdit,16,')
 # v2 (9a81345): output gained a '# forms-csv algorithm v2 | ...' provenance line
 Check 'row count is 7 forms + 2 header lines' ($rows.Count -eq 9)
 Check 'frmMain is root (blank nav)'   ($csv -match "uDemoMain,frmMain,\d+,,")
-Check 'frmList nav via Lists'         ($csv -match "uDemoList,frmList,\d+,frmMain -> 'Lists',")
-Check 'frmEdit nav via Lists>Edit'    ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> 'Edit Item',")
-Check 'frmChild nav via named ctor'   ($csv -match "uDemoChild,frmChild,\d+,frmMain -> 'Lists' -> 'Open Child',")
-Check 'action-bound caption (Reports)' ($csv -match "uDemoReports,frmReports,\d+,frmMain -> 'Reports',")
-Check 'keep-the-gap via routine'       ($csv -match "uDemoGap,frmGap,\d+,frmMain -> \(via ")
+Check 'frmList nav via Lists'         ($csv -match "uDemoList,frmList,\d+,frmMain -> 'Lists' -> frmList,")
+Check 'frmEdit nav via Lists>Edit'    ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> frmList -> 'Edit Item' -> frmEdit,")
+Check 'frmChild nav via named ctor'   ($csv -match "uDemoChild,frmChild,\d+,frmMain -> 'Lists' -> frmList -> 'Open Child' -> frmChild,")
+Check 'action-bound caption (Reports)' ($csv -match "uDemoReports,frmReports,\d+,frmMain -> 'Reports' -> frmReports,")
+Check 'keep-the-gap via routine'       ($csv -match "uDemoGap,frmGap,\d+,frmMain -> \(via [^)]+\) -> frmGap,")
+Check 'nav interleaves landing forms'  ($csv -match "-> 'Lists' -> frmList -> 'Edit Item' ->")
 Check 'unreachable form'               ($csv -match 'uDemoUnreached,frmLonely,\d+,\(no path from MAIN\),')
 # v2 (9a81345): standalone-function call sites (Demo.RunAdminBootstrap) are also
 # listed as callers, so frmList need not be first in the Called From field.
@@ -49,7 +50,7 @@ Check 'called-from for frmEdit'        ($csv -match "uDemoEdit,frmEdit,\d+,[^,]*
 Check 'no hang (script completed)'     ($true)
 # Task 7b: root regression (bootstrap procedure must not steal root)
 Check 'root regression: frmMain root (blank nav)' ($csv -match "uDemoMain,frmMain,\d+,,")
-Check 'root regression: frmEdit still reachable'  ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> 'Edit Item',")
+Check 'root regression: frmEdit still reachable'  ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> frmList -> 'Edit Item' -> frmEdit,")
 # Task 7b: backup copy exclusion
 Check 'backup copy excluded'  (-not ($csv -match '- Copy'))
 Check 'no duplicate frmEdit'  ((($csv -split "`r`n") | Select-String ',frmEdit,').Count -eq 1)

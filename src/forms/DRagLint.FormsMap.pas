@@ -67,7 +67,7 @@ function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): strin
 implementation
 
 const
-  FORMS_CSV_ALGORITHM = '2'; // bump when BuildEdges / NavPath algorithm changes
+  FORMS_CSV_ALGORITHM = '3'; // bump when BuildEdges / NavPath algorithm changes
 
 type
   TKnownPopupEntry = record Name: string; Note: string; end;
@@ -760,11 +760,37 @@ begin
   end; // try
 end; // function
 
+type
+  /// <summary>One navigation hop: the button caption (or synthetic '(via X)'
+  /// marker) and the FormName of the form the click lands on.</summary>
+  THop = record
+    Caption    : string;
+    LandingName: string;
+  end;
+
+/// <summary>Renders the root form name plus hops into the Navigation cell text.
+/// v3 (interleaved): every caption is followed by the landing form's name, e.g.
+/// frmMAIN -> 'Job List' -> frmJobList -> ... -> Z14slctFrm. Quoted captions keep
+/// quotes; synthetic '(...)' captions render unquoted. This is the SOLE place hop
+/// data becomes text -- change future path formats here only.</summary>
+function RenderPath(const ARootName: string; const AHops: TArray<THop>): string;
+var
+  H: THop;
+begin
+  Result:= ARootName;
+  for H in AHops do
+  begin
+    if Copy(H.Caption, 1, 1) = '(' then Result:= Result + ' -> ' + H.Caption
+    else Result:= Result + ' -> ''' + H.Caption + '''';
+    Result:= Result + ' -> ' + H.LandingName;
+  end; // for
+end; // function
+
 /// <summary>BFS shortest navigation path from the root form to AToClass.
-/// Returns "RootName -> 'Cap1' -> 'Cap2'" or '' if unreachable.</summary>
+/// Returns "RootName -> 'Cap1' -> frmNext -> 'Cap2' -> frmDest" or '' if unreachable.</summary>
 function NavPath(AEdges: TList<TFormEdge>; AClassToNode: TDictionary<string, TFormNode>; const ARootClass, AToClass: string): string;
 type
-  TStep = record Cls: string; Path: string; end;
+  TStep = record Cls: string; Hops: TArray<THop>; end;
 var
   Queue   : TQueue<TStep>               ;
   Visited : TDictionary<string, Boolean>;
@@ -772,15 +798,19 @@ var
   Nxt     : TStep                       ;
   E       : TFormEdge                   ;
   RootNode: TFormNode                   ;
+  RootName: string                      ;
+  ToNode  : TFormNode                   ;
+  Hop     : THop                        ;
 begin
   Result:= '';
   if SameText(ARootClass, AToClass) then Exit;
   Queue:= TQueue<TStep>.Create;
   Visited:= TDictionary<string, Boolean>.Create;
   try
-    if AClassToNode.TryGetValue(ARootClass, RootNode) then Cur.Path:= RootNode.FormName
-    else Cur.Path:= ARootClass;
-    Cur.Cls:= ARootClass;
+    if AClassToNode.TryGetValue(ARootClass, RootNode) then RootName:= RootNode.FormName
+    else RootName:= ARootClass;
+    Cur.Cls := ARootClass;
+    Cur.Hops:= nil;
     Queue.Enqueue(Cur);
     Visited.Add(ARootClass, True);
     while Queue.Count > 0 do
@@ -789,19 +819,21 @@ begin
       for E in AEdges do
         if SameText(E.FromClass, Cur.Cls) and not Visited.ContainsKey(E.ToClass) then
         begin
-          Nxt.Cls:= E.ToClass;
-          if Copy(E.Caption, 1, 1) = '(' then Nxt.Path:= Cur.Path + ' -> ' + E.Caption
-          else Nxt.Path:= Cur.Path + ' -> ''' + E.Caption + '''';
-          if SameText(E.ToClass, AToClass) then Exit(Nxt.Path);
+          Hop.Caption:= E.Caption;
+          if AClassToNode.TryGetValue(E.ToClass, ToNode) then Hop.LandingName:= ToNode.FormName
+          else Hop.LandingName:= E.ToClass; // defensive: edges target inventory nodes today
+          Nxt.Cls := E.ToClass;
+          Nxt.Hops:= Cur.Hops + [Hop]; // fresh array per branch -- no aliasing
+          if SameText(E.ToClass, AToClass) then Exit(RenderPath(RootName, Nxt.Hops));
           Visited.Add(E.ToClass, True);
           Queue.Enqueue(Nxt);
         end;
-    end;
+    end; // while
   finally
     Queue.Free;
     Visited.Free;
   end; // try
-end; // begin
+end; // function
 
 /// <summary>Determines the root form class from the sibling .dpr: scans lines
 /// in order, remembers the last Application.CreateForm(Tclass) whose class is a
