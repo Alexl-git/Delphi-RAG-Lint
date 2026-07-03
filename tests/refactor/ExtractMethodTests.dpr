@@ -13,6 +13,9 @@ uses
   TreeSitter in '..\..\third_party\delphi-tree-sitter\TreeSitter.pas',
   DRagLint.Diagnostics.ParseCache in '..\..\src\diagnostics\DRagLint.Diagnostics.ParseCache.pas',
   DRagLint.Analysis.Cfg in '..\..\src\analysis\DRagLint.Analysis.Cfg.pas',
+  DRagLint.Analysis.DataFlow in '..\..\src\analysis\DRagLint.Analysis.DataFlow.pas',
+  DRagLint.Analysis.Flow.Lattices in '..\..\src\analysis\DRagLint.Analysis.Flow.Lattices.pas',
+  DRagLint.Analysis.Liveness in '..\..\src\analysis\DRagLint.Analysis.Liveness.pas',
   DRagLint.Refactor.TextEdit in '..\..\src\refactor\DRagLint.Refactor.TextEdit.pas',
   DRagLint.Refactor.ExtractMethod in '..\..\src\refactor\DRagLint.Refactor.ExtractMethod.pas';
 
@@ -41,6 +44,66 @@ begin
     TAstParseCache.Clear;
     if TFile.Exists(P) then TFile.Delete(P);
   end;
+end;
+
+{ Task 3 TDD harness: write ASource to a temp .pas, resolve the selection
+  [AFromLine..AToLine] (must succeed -- callers pick shapes Task 2 accepts),
+  build the routine's var table + CFG, and classify. Mirrors RefuseFor's
+  temp-file / parse-cache discipline exactly. AVarNames returns the lower-
+  cased var-table names by index (index-aligned, 1:1 with AVars.Count) so
+  tests can assert "Inputs contains a" by name, not by hardcoded index. }
+function ClassifyFor(const ASource: string; AFromLine, AToLine: Integer;
+  out AVarNames: TArray<string>): TExtractVars;
+var
+  P: string;
+  PF: TParsedFile;
+  Sel: TExtractSelection;
+  Refuse: string;
+  Vars: TRoutineVarTable;
+  Cfg: TCfg;
+  I: Integer;
+begin
+  AVarNames:= nil;
+  P:= TPath.Combine(TPath.GetTempPath, 'em_classify_' + TPath.GetGUIDFileName + '.pas');
+  TFile.WriteAllText(P, ASource, TEncoding.ANSI);
+  TAstParseCache.Clear;
+  try
+    if ResolveExtractSelection(P, AFromLine, AToLine, Sel, Refuse) <> eoOK then
+    begin
+      Result:= Default(TExtractVars);
+      Result.Refuse:= 'resolve failed: ' + Refuse;
+      Exit;
+    end;
+    PF:= TAstParseCache.Get(P);
+    Vars:= TRoutineVarTable.Build(Sel.Proc, PF.Src);
+    try
+      SetLength(AVarNames, Vars.Count);
+      for I:= 0 to Vars.Count - 1 do AVarNames[I]:= Vars.Get(I).Name;
+      Cfg:= TCfgBuilder.Build(Sel.Proc, PF.Src);
+      try
+        Cfg.ComputePreds;
+        Result:= TExtractMethodRefactoring.ClassifyVars(Sel, Cfg, Vars, PF.Src);
+      finally
+        Cfg.Free;
+      end;
+    finally
+      Vars.Free;
+    end;
+  finally
+    TAstParseCache.Clear;
+    if TFile.Exists(P) then TFile.Delete(P);
+  end;
+end;
+
+{ True when AArr contains the var-table index whose name (via ANames) equals
+  ALowerName. Lets tests assert set membership by name. }
+function ContainsVarName(const AArr: TArray<Integer>; const ANames: TArray<string>; const ALowerName: string): Boolean;
+var I: Integer;
+begin
+  Result:= False;
+  for I:= 0 to High(AArr) do
+    if (AArr[I] >= 0) and (AArr[I] < Length(ANames)) and (ANames[AArr[I]] = ALowerName) then
+      Exit(True);
 end;
 
 { (a) range spans two routines -> refuse "selection is not inside a single routine" }
@@ -270,6 +333,153 @@ begin
   Check('safe-selection: nil edits (not yet synthesized)', Edits = nil);
 end;
 
+{ ===========================================================================
+  Task 3: variable classification (ClassifyVars)
+  =========================================================================== }
+
+{ (a) run reads param `a`, computes local `t`; nothing the run defines is
+  live after it (the routine ends right after) -> Inputs = [a], OutputIdx=-1,
+  Internals = [t]. }
+procedure TestClassifyInputOnlyNoOutput;
+const
+  SRC =
+    'unit u;'#13#10 +                             { 1 }
+    'interface'#13#10 +                           { 2 }
+    'implementation'#13#10 +                      { 3 }
+    'procedure P(a: Integer);'#13#10 +             { 4 }
+    'var t: Integer;'#13#10 +                     { 5 }
+    'begin'#13#10 +                               { 6 }
+    '  t := a + 1;'#13#10 +                       { 7 }
+    '  Writeln(t);'#13#10 +                       { 8 }
+    'end;'#13#10 +                                { 9 }
+    'end.'#13#10;                                 { 10 }
+var
+  V: TExtractVars;
+  Names: TArray<string>;
+begin
+  V:= ClassifyFor(SRC, 7, 8, Names);
+  Check('classify-a: no refuse', V.Refuse = '');
+  Check('classify-a: Inputs contains a', ContainsVarName(V.Inputs, Names, 'a'));
+  Check('classify-a: Inputs count = 1', Length(V.Inputs) = 1);
+  Check('classify-a: OutputIdx = -1', V.OutputIdx = -1);
+  Check('classify-a: Internals contains t', ContainsVarName(V.Internals, Names, 't'));
+  Check('classify-a: OutputIsInput = False', not V.OutputIsInput);
+end;
+
+{ (b) run computes local `sum`, used after the run -> OutputIdx=sum. The
+  run's only input is the param it reads; Inputs may be empty of `sum` itself
+  (sum is a def+output, not an input -- it is never read before being
+  defined within the run). }
+procedure TestClassifyOutputUsedAfter;
+const
+  SRC =
+    'unit u;'#13#10 +                             { 1 }
+    'interface'#13#10 +                           { 2 }
+    'implementation'#13#10 +                      { 3 }
+    'procedure P(a, b: Integer);'#13#10 +          { 4 }
+    'var sum: Integer;'#13#10 +                   { 5 }
+    'begin'#13#10 +                               { 6 }
+    '  sum := a + b;'#13#10 +                     { 7 }
+    '  Writeln(sum);'#13#10 +                     { 8 }
+    'end;'#13#10 +                                { 9 }
+    'end.'#13#10;                                 { 10 }
+var
+  V: TExtractVars;
+  Names: TArray<string>;
+begin
+  { extract only line 7 -- `sum` is live after it (read on line 8, outside
+    the run) -> Outputs = defs [sum] INTERSECT live-out [sum] = [sum]. }
+  V:= ClassifyFor(SRC, 7, 7, Names);
+  Check('classify-b: no refuse', V.Refuse = '');
+  Check('classify-b: OutputIdx is sum', (V.OutputIdx >= 0) and (Names[V.OutputIdx] = 'sum'));
+  Check('classify-b: Inputs does not contain sum', not ContainsVarName(V.Inputs, Names, 'sum'));
+  Check('classify-b: OutputIsInput = False', not V.OutputIsInput);
+end;
+
+{ (c) `x := x + d;` -- x is read (rhs) before being defined by the SAME
+  statement, and live after (read on the following line) -> x is both an
+  Input (upward-exposed use) and the Output (def INTERSECT live-out) ->
+  OutputIsInput = True. Inputs also contains d. }
+procedure TestClassifyInOutSameVar;
+const
+  SRC =
+    'unit u;'#13#10 +                             { 1 }
+    'interface'#13#10 +                           { 2 }
+    'implementation'#13#10 +                      { 3 }
+    'procedure P(d: Integer);'#13#10 +             { 4 }
+    'var x: Integer;'#13#10 +                     { 5 }
+    'begin'#13#10 +                               { 6 }
+    '  x := 1;'#13#10 +                           { 7 }
+    '  x := x + d;'#13#10 +                       { 8 }
+    '  Writeln(x);'#13#10 +                       { 9 }
+    'end;'#13#10 +                                { 10 }
+    'end.'#13#10;                                 { 11 }
+var
+  V: TExtractVars;
+  Names: TArray<string>;
+begin
+  { extract only line 8: `x` is upward-exposed (read on the rhs, no prior def
+    inside the run) AND live-out (read on line 9) -> in+out single var. }
+  V:= ClassifyFor(SRC, 8, 8, Names);
+  Check('classify-c: no refuse', V.Refuse = '');
+  Check('classify-c: OutputIdx is x', (V.OutputIdx >= 0) and (Names[V.OutputIdx] = 'x'));
+  Check('classify-c: OutputIsInput = True', V.OutputIsInput);
+  Check('classify-c: Inputs contains x', ContainsVarName(V.Inputs, Names, 'x'));
+  Check('classify-c: Inputs contains d', ContainsVarName(V.Inputs, Names, 'd'));
+end;
+
+{ (d) run defines two locals, BOTH live after -> 2 values would need to
+  escape the extracted method; Extract Method supports only a single Result,
+  so this must refuse rather than guess which one to return. }
+procedure TestClassifyTwoOutputsRefuses;
+const
+  SRC =
+    'unit u;'#13#10 +                             { 1 }
+    'interface'#13#10 +                           { 2 }
+    'implementation'#13#10 +                      { 3 }
+    'procedure P(a: Integer);'#13#10 +             { 4 }
+    'var x, y: Integer;'#13#10 +                  { 5 }
+    'begin'#13#10 +                               { 6 }
+    '  x := a + 1;'#13#10 +                       { 7 }
+    '  y := a + 2;'#13#10 +                       { 8 }
+    '  Writeln(x + y);'#13#10 +                   { 9 }
+    'end;'#13#10 +                                { 10 }
+    'end.'#13#10;                                 { 11 }
+var
+  V: TExtractVars;
+  Names: TArray<string>;
+begin
+  V:= ClassifyFor(SRC, 7, 8, Names);
+  Check('classify-d: refuses', V.Refuse <> '');
+  Check('classify-d: reason mentions 2 values escape', Pos('2 values escape', V.Refuse) > 0);
+end;
+
+{ (e) an Input's declared type is unknown (empty TypeText) -- an inline
+  `var t := ...` local has no recorded type text (TRoutineVarTable.Build
+  never infers one for inline decls) -- so if a LATER run reads it as an
+  upward-exposed use, Extract Method cannot synthesize a typed parameter for
+  it and must refuse rather than guess the type. }
+procedure TestClassifyUnknownTypeRefuses;
+const
+  SRC =
+    'unit u;'#13#10 +                             { 1 }
+    'interface'#13#10 +                           { 2 }
+    'implementation'#13#10 +                      { 3 }
+    'procedure P;'#13#10 +                         { 4 }
+    'begin'#13#10 +                               { 5 }
+    '  var t := 1;'#13#10 +                       { 6  inline decl -- TypeText = '' }
+    '  Writeln(t);'#13#10 +                       { 7  run: upward-exposed use of t }
+    'end;'#13#10 +                                { 8 }
+    'end.'#13#10;                                 { 9 }
+var
+  V: TExtractVars;
+  Names: TArray<string>;
+begin
+  V:= ClassifyFor(SRC, 7, 7, Names);
+  Check('classify-e: refuses', V.Refuse <> '');
+  Check('classify-e: reason mentions unknown type', Pos('unknown type', V.Refuse) > 0);
+end;
+
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -281,6 +491,11 @@ begin
     TestCrossesNesting;
     TestSameLineSiblings;
     TestSafeSelectionReachesNotYetImplemented;
+    TestClassifyInputOnlyNoOutput;
+    TestClassifyOutputUsedAfter;
+    TestClassifyInOutSameVar;
+    TestClassifyTwoOutputsRefuses;
+    TestClassifyUnknownTypeRefuses;
   except
     on Ex: Exception do begin Writeln('EXCEPTION ', Ex.ClassName, ': ', Ex.Message); Inc(GFail); end;
   end;

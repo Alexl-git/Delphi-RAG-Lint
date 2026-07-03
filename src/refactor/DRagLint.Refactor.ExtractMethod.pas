@@ -23,6 +23,8 @@ uses
   , System.Generics.Collections
   , TreeSitter
   , DRagLint.Analysis.Cfg
+  , DRagLint.Analysis.Flow.Lattices
+  , DRagLint.Analysis.Liveness
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Refactor.TextEdit
   ;
@@ -55,6 +57,37 @@ type
     EndCol    : Integer;
   end;
 
+  /// <summary>Classification of a resolved TExtractSelection's variables into
+  /// the roles Extract Method's synthesis step (Task 4) needs: which routine
+  /// vars become value parameters of the new method (Inputs), which single
+  /// var (if any) becomes its return value (OutputIdx), and which vars stay
+  /// purely local to the new method's body (Internals).</summary>
+  /// <remarks>See TExtractMethodRefactoring.ClassifyVars for the algorithm.
+  /// Refuse is set (non-empty) rather than guessing whenever the run needs
+  /// more than one escaping value (Extract Method supports a single Result
+  /// only) or an Input/Output's declared type is unknown (empty TypeText,
+  /// e.g. an inline `var x := ...` local with no recorded type text) -- a
+  /// new method parameter or return type cannot be synthesized without it.
+  /// All fields are undefined when Refuse <> ''.</remarks>
+  TExtractVars = record
+    /// <summary>Var-table indices that become value parameters of the new
+    /// method, in the order each was first used (read) within the run.</summary>
+    Inputs: TArray<Integer>;
+    /// <summary>Var-table index of the single var the new method returns as
+    /// its Result, or -1 if the run escapes no value.</summary>
+    OutputIdx: Integer;
+    /// <summary>Var-table indices defined within the run that are neither an
+    /// Input nor the Output -- declared as locals inside the new method.</summary>
+    Internals: TArray<Integer>;
+    /// <summary>True when OutputIdx's var is ALSO in Inputs (e.g. `x := x + d`
+    /// with x live both before and after the run) -- the new method both
+    /// receives and returns the same logical value.</summary>
+    OutputIsInput: Boolean;
+    /// <summary>'' when classification succeeded; otherwise a specific reason
+    /// (">=2 outputs" or "unknown type") and every other field is undefined.</summary>
+    Refuse: string;
+  end;
+
   /// <summary>Orchestrator for the Extract Method refactoring: resolves a
   /// line-range selection, validates it is safe to extract, and (in later
   /// tasks) synthesizes the new method and emits the edit set. Every
@@ -62,6 +95,30 @@ type
   /// guessing -- see the module comment.</summary>
   TExtractMethodRefactoring = class
   public
+    /// <summary>Classifies ASel's variables into Inputs/Output/Internals for
+    /// the new method's signature (see TExtractVars).</summary>
+    /// <param name="ASel">A resolved, safe selection (see
+    /// ResolveExtractSelection); ASel.Proc/FirstItem/LastItem drive the
+    /// analysis.</param>
+    /// <param name="ACfg">ASel.Proc's control-flow graph (M2), used to locate
+    /// the run's live-out boundary via LiveAfterItem/LiveBeforeItem.</param>
+    /// <param name="AVars">ASel.Proc's variable table (locals/params/Result).</param>
+    /// <param name="ASrc">The unit's source bytes, matching ACfg's own Src.</param>
+    /// <returns>A TExtractVars with Refuse = '' on success, or a specific
+    /// non-empty Refuse reason (see TExtractVars remarks) with every other
+    /// field undefined.</returns>
+    /// <remarks>Algorithm: `defs` = run statements' whole-var assignment
+    /// targets (AssignmentTargetIndex); upward-exposed uses (a var read
+    /// before any def of it within the run) become Inputs, in first-use
+    /// order; live-out = LiveAfterItem/LiveBeforeItem at the run's tail
+    /// boundary (see the CFG-coordinate mapping note above ClassifyVars'
+    /// implementation); Outputs = defs INTERSECT live-out. >=2 Outputs
+    /// refuses. Internals = defs minus Inputs minus {OutputIdx}. Identifiers
+    /// not in AVars (Self, fields, globals) are skipped entirely -- they need
+    /// no parameter.</remarks>
+    class function ClassifyVars(const ASel: TExtractSelection; ACfg: TCfg;
+      AVars: TRoutineVarTable; const ASrc: TBytes): TExtractVars;
+
     /// <summary>Computes the text edits that extract lines
     /// [AFromLine..AToLine] of AFile into a new method/procedure named
     /// ANewName, replacing the selection with a call.</summary>
@@ -640,8 +697,280 @@ begin
 end;
 
 { ---------------------------------------------------------------------------
-  TExtractMethodRefactoring
+  ClassifyVars
   --------------------------------------------------------------------------- }
+
+/// <summary>True when ANode's (line, col) span falls within [ASel.StartLine,
+/// ASel.StartCol .. ASel.EndLine, ASel.EndCol] (inclusive) -- used to test
+/// whether a CFG item "belongs to" the run's AST span. Point-based (not
+/// byte-based) to match TExtractSelection's own StartLine/StartCol/EndLine/
+/// EndCol fields, which are already the run's authoritative span regardless
+/// of how deeply the run's own statement list is nested inside ASel.Proc
+/// (see TExtractSelection's remarks on FirstItem/LastItem being local to
+/// the run's own list, not a global index).</summary>
+function ItemInRunSpan(const N: TTSNode; const ASel: TExtractSelection): Boolean;
+var SLine, SCol, ELine, ECol: Integer;
+begin
+  if N.IsNull then Exit(False);
+  SLine:= NLine(N); SCol:= NCol(N);
+  ELine:= NEndLine(N); ECol:= NEndCol(N);
+  if (SLine < ASel.StartLine) or ((SLine = ASel.StartLine) and (SCol < ASel.StartCol)) then Exit(False);
+  if (ELine > ASel.EndLine) or ((ELine = ASel.EndLine) and (ECol > ASel.EndCol)) then Exit(False);
+  Result:= True;
+end;
+
+/// <summary>Live-variable bitset at the boundary immediately AFTER the run
+/// [ASel.FirstItem..ASel.LastItem] of ASel's enclosing statement list.</summary>
+/// <remarks><para><b>CFG-coordinate mapping.</b> ASel.FirstItem/LastItem index
+/// the AST statement-list node, not the CFG's (block, item) coordinates that
+/// LiveAfterItem needs (see TExtractSelection's remarks). When the run's last
+/// statement is SIMPLE (assignment/call/expression-statement), TCfgBuilder
+/// emits it as exactly one TCfgItem whose Node is that same statement node,
+/// and LiveAfterItem at that single coordinate IS the run's live-out.</para>
+/// <para>When the run's last statement is COMPOUND (if/case/while/for/repeat/
+/// try/with), TCfgBuilder never stores the compound node itself as an item --
+/// it decomposes it into several items (conditions, nested-body statements)
+/// spread across multiple blocks that all eventually flow to one control-flow
+/// join/follow block. Rather than re-deriving that join block's index (not
+/// returned by TCfgBuilder.Build), this walks EVERY item in the whole CFG,
+/// keeps the ones whose (line, col) span falls inside the run's own span (see
+/// ItemInRunSpan -- a compound statement's sub-items are always nested inside
+/// it), and unions LiveAfterItem over each such item that is the LAST run-item
+/// in its own block (its block's frontier). Every control-flow path leaving
+/// the run passes through exactly one such frontier item, so the union of
+/// their post-item liveness equals the liveness immediately after the whole
+/// construct. This degrades exactly to the single-item case above when the
+/// tail is simple (exactly one frontier item, in one block).</para></remarks>
+function LiveOutOfRun(const ASel: TExtractSelection; ACfg: TCfg; AVars: TRoutineVarTable;
+  const ASrc: TBytes): TArray<Boolean>;
+var
+  B, I, J: Integer;
+  Block: TCfgBlock;
+  LastRunItemInBlock: Integer;
+  Item: TArray<Boolean>;
+begin
+  SetLength(Result, AVars.Count);
+  for J:= 0 to AVars.Count - 1 do Result[J]:= False;
+
+  for B:= 0 to ACfg.BlockCount - 1 do
+  begin
+    Block:= ACfg.Blocks[B];
+    LastRunItemInBlock:= -1;
+    for I:= 0 to Block.Items.Count - 1 do
+      if ItemInRunSpan(Block.Items[I].Node, ASel) then
+        LastRunItemInBlock:= I;
+    if LastRunItemInBlock >= 0 then
+    begin
+      Item:= LiveAfterItem(ACfg, AVars, ASrc, B, LastRunItemInBlock);
+      for J:= 0 to AVars.Count - 1 do
+        if Item[J] then Result[J]:= True;
+    end;
+  end;
+end;
+
+/// <summary>True when AIdx (a var-table index) is referenced -- read OR
+/// written, whole-var or partial -- anywhere in ANode's subtree OUTSIDE the
+/// run's own span (ASel). Used to verify an Internal candidate is genuinely
+/// local to the extracted run before declaring it a new-method local: if the
+/// routine still uses it elsewhere, it cannot be dropped from the enclosing
+/// routine's scope.</summary>
+function VarUsedOutsideRun(const ANode: TTSNode; const ASel: TExtractSelection;
+  const ASrc: TBytes; AVars: TRoutineVarTable; AIdx: Integer): Boolean;
+var
+  I: Integer;
+  Reads, CallDefs: TList<Integer>;
+  Tgt: Integer;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'defProc' then Exit; { nested routine: own scope, not our concern }
+
+  { Only test actual statement-shaped items (mirrors what the CFG would treat
+    as an item); recursing into every node type as well as its children would
+    double-count, but CollectReadsAndCallDefs already walks a whole subtree
+    per call, so test each item-like node once and do not recurse further
+    into ones already handled by AssignmentTargetIndex/CollectReadsAndCallDefs. }
+  if (ANode.NodeType = 'assignment') or (ANode.NodeType = 'statement')
+    or (ANode.NodeType = 'exprCall') or (ANode.NodeType = 'exprDot')
+    or (ANode.NodeType = 'identifier') or (ANode.NodeType = 'if') or (ANode.NodeType = 'ifElse')
+    or (ANode.NodeType = 'case') or (ANode.NodeType = 'while') or (ANode.NodeType = 'for')
+    or (ANode.NodeType = 'foreach') or (ANode.NodeType = 'repeat') or (ANode.NodeType = 'try')
+    or (ANode.NodeType = 'with') or (ANode.NodeType = 'raise') then
+  begin
+    if not ItemInRunSpan(ANode, ASel) then
+    begin
+      Reads:= TList<Integer>.Create;
+      CallDefs:= TList<Integer>.Create;
+      try
+        if ANode.NodeType = 'assignment' then
+        begin
+          Tgt:= AssignmentTargetIndex(ANode, ASrc, AVars);
+          if Tgt = AIdx then Exit(True);
+          CollectReadsAndCallDefs(ANode.ChildByField('rhs'), ASrc, AVars, Reads, CallDefs);
+          if Tgt < 0 then
+            CollectReadsAndCallDefs(ANode.ChildByField('lhs'), ASrc, AVars, Reads, CallDefs);
+        end
+        else
+          CollectReadsAndCallDefs(ANode, ASrc, AVars, Reads, CallDefs);
+        if (Reads.IndexOf(AIdx) >= 0) or (CallDefs.IndexOf(AIdx) >= 0) then Exit(True);
+      finally
+        Reads.Free; CallDefs.Free;
+      end;
+      { fall through to recurse into children below for compound statements,
+        whose own condition/entity was just checked above but whose nested
+        body statements are separate items not covered by CollectReadsAndCallDefs
+        (which does not descend into nested 'block'/'statements' bodies -- it
+        is only ever called on a single item's own node in the rest of the
+        codebase). }
+    end;
+  end;
+
+  for I:= 0 to ANode.NamedChildCount - 1 do
+    if VarUsedOutsideRun(ANode.NamedChild(I), ASel, ASrc, AVars, AIdx) then Exit(True);
+end;
+
+class function TExtractMethodRefactoring.ClassifyVars(const ASel: TExtractSelection; ACfg: TCfg;
+  AVars: TRoutineVarTable; const ASrc: TBytes): TExtractVars;
+var
+  StmtList: TTSNode;
+  CutCompound: Boolean;
+  I, J, Idx, Tgt: Integer;
+  Item: TTSNode;
+  Defs, Inputs, Internals, Outputs: TList<Integer>;
+  DefinedSoFar: TArray<Boolean>;
+  Reads, CallDefs: TList<Integer>;
+  LiveOut: TArray<Boolean>;
+  V: TRoutineVar;
+begin
+  Result:= Default(TExtractVars);
+  Result.OutputIdx:= -1;
+
+  { ASel.FirstItem/LastItem index the run's own containing statement list --
+    NOT necessarily ASel.Proc's top-level body list, since the run may be
+    nested inside if/while/etc. Re-derive the same list ResolveExtractSelection
+    found, by re-running its own descent (LocateStatementList) from the
+    routine's top-level body down to ASel.StartLine; CutCompound is unused
+    here (Task 2 already proved this line resolves cleanly). }
+  CutCompound:= False;
+  StmtList:= LocateStatementList(RoutineBodyList(ASel.Proc), ASel.StartLine, CutCompound);
+  if StmtList.IsNull then
+  begin
+    Result.Refuse:= 'internal error: could not re-locate run statement list';
+    Exit;
+  end;
+
+  Defs:= TList<Integer>.Create;
+  Inputs:= TList<Integer>.Create;
+  Internals:= TList<Integer>.Create;
+  Outputs:= TList<Integer>.Create;
+  Reads:= TList<Integer>.Create;
+  CallDefs:= TList<Integer>.Create;
+  try
+    SetLength(DefinedSoFar, AVars.Count);
+    for J:= 0 to AVars.Count - 1 do DefinedSoFar[J]:= False;
+
+    { ----- pass 1: defs (whole-var assignment targets) + upward-exposed uses
+      (a read of a var not yet defined within the run -> Inputs, in first-use
+      order). Mirrors ApplyItemBackward / the split-variable forward sweep's
+      read-then-kill-then-define per-item order: reads on an assignment's rhs
+      (or lhs, for a partial write) happen BEFORE that statement's own def. }
+    for I:= ASel.FirstItem to ASel.LastItem do
+    begin
+      Item:= StmtList.NamedChild(I);
+      Reads.Clear; CallDefs.Clear;
+      Tgt:= -1;
+      if Item.NodeType = 'assignment' then
+      begin
+        Tgt:= AssignmentTargetIndex(Item, ASrc, AVars);
+        CollectReadsAndCallDefs(Item.ChildByField('rhs'), ASrc, AVars, Reads, CallDefs);
+        if Tgt < 0 then
+          CollectReadsAndCallDefs(Item.ChildByField('lhs'), ASrc, AVars, Reads, CallDefs);
+      end
+      else
+        CollectReadsAndCallDefs(Item, ASrc, AVars, Reads, CallDefs);
+
+      for J:= 0 to Reads.Count - 1 do
+      begin
+        Idx:= Reads[J];
+        if (not DefinedSoFar[Idx]) and (Inputs.IndexOf(Idx) < 0) then Inputs.Add(Idx);
+      end;
+      for J:= 0 to CallDefs.Count - 1 do
+      begin
+        { a call-def (var/out arg) both reads the base var's current value
+          (the callee may only partially update it) and re-defines it -- an
+          upward-exposed use if not yet defined within the run. }
+        Idx:= CallDefs[J];
+        if (not DefinedSoFar[Idx]) and (Inputs.IndexOf(Idx) < 0) then Inputs.Add(Idx);
+        if Defs.IndexOf(Idx) < 0 then Defs.Add(Idx);
+        DefinedSoFar[Idx]:= True;
+      end;
+
+      if Tgt >= 0 then
+      begin
+        if Defs.IndexOf(Tgt) < 0 then Defs.Add(Tgt);
+        DefinedSoFar[Tgt]:= True;
+      end;
+    end;
+
+    { ----- pass 2: live-out + Outputs = Defs INTERSECT live-out ----- }
+    LiveOut:= LiveOutOfRun(ASel, ACfg, AVars, ASrc);
+    for I:= 0 to Defs.Count - 1 do
+      if LiveOut[Defs[I]] then Outputs.Add(Defs[I]);
+
+    if Outputs.Count >= 2 then
+    begin
+      Result.Refuse:= Format('%d values escape the selection (only a single Result is supported)', [Outputs.Count]);
+      Exit;
+    end;
+
+    if Outputs.Count = 1 then
+    begin
+      Result.OutputIdx:= Outputs[0];
+      Result.OutputIsInput:= Inputs.IndexOf(Outputs[0]) >= 0;
+    end;
+
+    { ----- Internals = Defs minus Inputs minus the Output var, verified
+      unused outside the run ----- }
+    for I:= 0 to Defs.Count - 1 do
+    begin
+      Idx:= Defs[I];
+      if Idx = Result.OutputIdx then Continue;
+      if Inputs.IndexOf(Idx) >= 0 then Continue;
+      if VarUsedOutsideRun(ASel.Proc, ASel, ASrc, AVars, Idx) then
+      begin
+        Result.Refuse:= Format('local "%s" is used outside the selection', [AVars.Get(Idx).Name]);
+        Exit;
+      end;
+      Internals.Add(Idx);
+    end;
+
+    { ----- type check: every Input and the Output must have a known type ----- }
+    for I:= 0 to Inputs.Count - 1 do
+    begin
+      V:= AVars.Get(Inputs[I]);
+      if Trim(V.TypeText) = '' then
+      begin
+        Result.Refuse:= Format('unknown type for "%s" (cannot synthesize a parameter)', [V.Name]);
+        Exit;
+      end;
+    end;
+    if Result.OutputIdx >= 0 then
+    begin
+      V:= AVars.Get(Result.OutputIdx);
+      if Trim(V.TypeText) = '' then
+      begin
+        Result.Refuse:= Format('unknown type for "%s" (cannot synthesize a return type)', [V.Name]);
+        Exit;
+      end;
+    end;
+
+    Result.Inputs:= Inputs.ToArray;
+    Result.Internals:= Internals.ToArray;
+    Result.Refuse:= '';
+  finally
+    Defs.Free; Inputs.Free; Internals.Free; Outputs.Free; Reads.Free; CallDefs.Free;
+  end;
+end;
 
 class function TExtractMethodRefactoring.Build(const AFile: string; AFromLine, AToLine: Integer;
   const ANewName: string; out ARefuse: string): TArray<TTextEdit>;
