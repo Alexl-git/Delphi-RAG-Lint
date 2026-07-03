@@ -36,6 +36,7 @@ uses
   , DragLint.Plugin.Editor
   , DragLint.Plugin.EditViewNotifier
   , DragLint.Plugin.RefactorForm
+  , DragLint.Plugin.Telemetry
   ;
 
 { Forward decl: ExtractMethodKey (declared below, before InvokeExtractMethod's
@@ -225,7 +226,6 @@ var
   MS       : IOTAModuleServices ;
   EditView : IOTAEditView       ;
   Block    : IOTAEditBlock      ;
-  Modu     : IOTAModule         ;
   FilePath : string             ;
   FromLine : Integer            ;
   ToLine   : Integer            ;
@@ -276,17 +276,40 @@ begin
 
   if Applied then
   begin
-    { Reload from disk: close the module (discarding the now-stale in-memory
-      buffer) and reopen it so the IDE shows the CLI's edits. Mirrors the
-      rename dialog's "the file changed on disk, show the new content"
-      intent; rename itself never needed this because it can touch files
-      that are not open, but Extract Method always rewrites the open file. }
-    if Supports(BorlandIDEServices, IOTAModuleServices, MS) then
-    begin
-      Modu:= MS.FindModule(FilePath);
-      if Modu <> nil then Modu.CloseModule(False);
-      MS.OpenModule(FilePath);
-    end;
+    { Reload from disk -- DEFERRED past the key-binding unwind, via the OTAPI
+      reload primitive IOTAModule.Refresh(ForceRefresh) ("Reloads the
+      file/project from disk" -- ToolsAPI.pas, IOTAModule).
+
+      Do NOT call CloseModule/OpenModule here: this procedure runs inside the
+      editor control's own key dispatch (TCustomEditControl.DoKeyDown is still
+      on the stack beneath us) and that dispatch still holds references into
+      the active module's edit buffer/edit source. Destroying the module's
+      buffers from this callback leaves a dangling TEditSource refcount and
+      closes the tab -- confirmed by a live-IDE crash during the manual smoke
+      ("Instance of Class TEditSource Has dangling reference count of 1",
+      stack: TCodeIDocModule.CloseModule <- InvokeExtractMethod <- ... <-
+      TCustomEditControl.DoKeyDown).
+
+      TThread.ForceQueue runs the refresh on the main thread AFTER the
+      keystroke has returned to the message loop. The closure captures ONLY
+      the FilePath string -- no OTAPI interface reference may outlive this
+      callback; the module is re-resolved inside the queued proc. Exceptions
+      are swallowed into the plugin log (a queued proc must never throw into
+      the IDE message loop). }
+    TThread.ForceQueue(nil,
+      procedure
+      var
+        QMS : IOTAModuleServices;
+        QMod: IOTAModule        ;
+      begin
+        try
+          if not Supports(BorlandIDEServices, IOTAModuleServices, QMS) then Exit;
+          QMod:= QMS.FindModule(FilePath);
+          if QMod <> nil then QMod.Refresh(True);
+        except
+          on E: Exception do DLT('extract-method', 'deferred Refresh failed: ' + E.ClassName + ': ' + E.Message);
+        end; // try
+      end);
   end;
 end; // procedure
 
