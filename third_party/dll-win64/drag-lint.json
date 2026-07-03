@@ -25,9 +25,7 @@
       { "name": "OCRPDF", "db": "OCRPDF.sqlite",
         "include": ["C:\\Projects\\OCRPDF"] },
       { "name": "Library", "source": "registry-libraries", "platforms": "all",
-        "db": "library-{platform}.sqlite" },
-      { "name": "AllProjects", "db": "C:\\Projects\\drag-lint-all.sqlite",
-        "include": ["C:\\Projects"], "dedupAgainst": "*" }
+        "db": "library-{platform}.sqlite" }
     ]
   }
 }
