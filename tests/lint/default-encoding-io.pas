@@ -83,4 +83,16 @@ begin
   end;
 end;
 
+procedure SavesWithFilenameLiteralMentioningEncoding;
+var
+  List: TStringList;
+begin
+  List := TStringList.Create;
+  try
+    List.SaveToFile('c:\out\TEncoding_dump.txt');
+  finally
+    List.Free;
+  end;
+end;
+
 end.

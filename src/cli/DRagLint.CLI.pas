@@ -4521,13 +4521,15 @@ end;
 /// text, and returns the policy exit code.</summary>
 /// <param name="AArgs">Parsed CLI args (format, fail-on, baseline, config...).</param>
 /// <param name="AFindings">Raw findings the command produced.</param>
-/// <param name="ADefaultExit">Exit code to use when --fail-on is absent
-/// (preserves each command's historic 1-if-any/0 behavior).</param>
 /// <param name="ADefaultDisabled">Off-by-default rule ids (TLinter.DefaultDisabledRuleIds), or nil.</param>
 /// <param name="AEmitText">Renders the text output for this command; called only on the text path.</param>
 /// <returns>The process exit code.</returns>
+/// <remarks>v0.81 review Minor: the --fail-on-absent default exit code is derived
+/// from the post-ShouldKeep/baseline Survivors set computed inside this function,
+/// not from the caller's raw AFindings -- so a bare command whose only matches were
+/// OFF-by-default (suppressed) rules prints "0 finding(s)" AND exits 0.</remarks>
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>;
-  ADefaultExit: Integer; const ADefaultDisabled: TArray<string>;
+  const ADefaultDisabled: TArray<string>;
   const AEmitText: TProc<TArray<TLintFinding>>): Integer;
 var
   Cfg     : TLintConfig         ;
@@ -4621,7 +4623,7 @@ begin
     AEmitText(Survivors);
 
   { 4: exit code. }
-  Result:= ExitCodeFor(Survivors, AArgs.FailOn, ADefaultExit);
+  Result:= ExitCodeFor(Survivors, AArgs.FailOn, IfThen(Length(Survivors) > 0, 1, 0));
 end;
 
 /// <summary>`drag-lint rules [--json] [--category &lt;name&gt;] [--rules-dir &lt;dir&gt;]` --
@@ -4965,7 +4967,7 @@ begin
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
     end;
   end; // if
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), DefDisabled,
+  Result:= FinalizeAndOutput(AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>)
     var FF: TLintFinding;
     begin
@@ -5925,7 +5927,7 @@ begin
     fan-in are emitted by TClassMetrics.Run above; catalog False alone does not
     suppress CLI output, so they must be listed here for the ShouldKeep filter to
     drop them by default. }
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in'],
+  Result:= FinalizeAndOutput(AArgs, Findings, ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;
@@ -5999,7 +6001,7 @@ begin
     Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership(
       Store, LibDbPath2, AArgs.ProjectPath);
   end;
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), DefDisabled,
+  Result:= FinalizeAndOutput(AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>)
     var FF: TLintFinding;
     begin
@@ -8253,7 +8255,7 @@ begin
   Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(AArgs.Target, Store, TcFid); { M2: flow checks }
   DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
 
-  Result:= FinalizeAndOutput(AArgs, Findings, IfThen(Length(Findings) > 0, 1, 0), nil,
+  Result:= FinalizeAndOutput(AArgs, Findings, nil,
     procedure(ASurv: TArray<TLintFinding>)
     var FF: TLintFinding;
     begin

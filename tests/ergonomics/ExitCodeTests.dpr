@@ -4,6 +4,7 @@ program ExitCodeTests;
 
 uses
   System.SysUtils,
+  System.Math,
   DRagLint.Core.Model in '..\..\src\core\DRagLint.Core.Model.pas',
   DRagLint.Output.ExitCode in '..\..\src\output\DRagLint.Output.ExitCode.pas';
 
@@ -52,6 +53,19 @@ begin
 
   // Unknown --fail-on value ranks 0, so any finding (rank >= 0) trips it.
   Check('fail-on unknown: warning -> 1', ExitCodeFor(Warns, 'typo', 0) = 1);
+
+  { v0.81 review Minor: FinalizeAndOutput must derive ADefaultCode from the
+    post-ShouldKeep Survivors set, not from the command's raw (pre-filter)
+    findings. Model both sides of that contract here: a command whose 2 raw
+    findings were BOTH suppressed as OFF-by-default (Survivors = Empty) must
+    exit 0 -- the pre-fix caller wired ADefaultCode from
+    IfThen(Length(RawFindings) > 0, 1, 0) = 1, which this proves would have
+    been wrong; the fixed caller wires it from
+    IfThen(Length(Survivors) > 0, 1, 0) = 0, which is correct. }
+  Check('survivors-derived default: all-suppressed raw findings -> 0 (fixed contract)',
+    ExitCodeFor(Empty, '', IfThen(Length(Empty) > 0, 1, 0)) = 0);
+  Check('survivors-derived default: pre-fix raw-findings-derived default would have been 1 (bug)',
+    IfThen(Length(Warns) > 0, 1, 0) = 1);
 end;
 
 begin

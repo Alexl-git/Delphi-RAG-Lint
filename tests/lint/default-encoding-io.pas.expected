@@ -9,3 +9,7 @@ default-encoding-io 47
 default-encoding-io 59
 default-encoding-io 66
 !default-encoding-io 78
+# v0.81 review Minor: a filename literal containing the text "TEncoding" must
+# NOT suppress the finding -- string literals can never themselves be a
+# TEncoding argument.
+default-encoding-io 92

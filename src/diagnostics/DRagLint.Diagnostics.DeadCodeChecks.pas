@@ -964,13 +964,21 @@ var
     text contains "TEncoding" counts as an explicit encoding, regardless of
     which positional slot it occupies. }
   function ArgsHaveNoEncoding(const AArgs: TTSNode): Boolean;
-  var I: Integer;
+  var I: Integer; Arg: TTSNode;
   begin
     Result:= True;
     if AArgs.IsNull then Exit;
     for I:= 0 to AArgs.NamedChildCount - 1 do
-      if Pos('tencoding', LowerCase(NodeStr(AArgs.NamedChild(I)))) > 0 then
+    begin
+      Arg:= AArgs.NamedChild(I);
+      { v0.81 review Minor: a string literal can never itself be a TEncoding
+        expression -- skip it so a filename literal that merely contains the
+        text "TEncoding" (e.g. 'TEncoding_dump.txt') cannot falsely suppress
+        the finding. }
+      if Arg.NodeType = 'literalString' then Continue;
+      if Pos('tencoding', LowerCase(NodeStr(Arg))) > 0 then
         Exit(False);
+    end;
   end;
 
   { v0.76 #10: True if a literalString's raw text is a hardcoded temp path. }
