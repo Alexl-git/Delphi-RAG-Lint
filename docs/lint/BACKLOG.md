@@ -1,10 +1,15 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## BRANCH `feat/v083-deepen-rules` (AUTONOMOUS FORK, NOT yet released) -- awaiting human review
+> ## RESUME 2026-07-03 (LATEST) -- **v0.83.0-alpha PUBLISHED (FULL release, gh --latest, win32+win64). Autonomous fork reviewed + merged.**
+> `main` at tag `v0.83.0-alpha`, origin synced. VERSION `CLI.pas:6`=`0.83.0-alpha`. **No schema change (still v13.)**
+> Harness **lint 153/153 + store 16/16 + catalog 29/29 + flowengine 33/33**; OFF-suppression runtime-verified (both new rules
+> bare=0, opt-in=1). Release zips are self-contained (Release exe + 3 tree-sitter DLLs + docs + `rules/`), 123 files each.
+> **NEXT MAIN FOCUS = REFACTORING-APPLY frontier** (Extract Method / Change Signature via IDE+OTAPI -- a new, bigger project;
+> lint-DETECTION coverage is effectively complete). No in-flight v0.83 work remains.
 >
-> An unsupervised worker executed `docs/superpowers/plans/2026-07-02-v083-deepen-rules-plan.md` on branch
-> `feat/v083-deepen-rules` (forked from `main` @ v0.82.0-alpha). **VERSION deliberately left at `0.82.0-alpha`** -- the human
-> bumps + releases after review. Branch is fully pushed. Final commit on the branch = the Item 3 deferral doc.
+> The autonomous fork `feat/v083-deepen-rules` (forked from `main` @ v0.82.0-alpha) was ff-merged to main after a full code
+> review (both rules clean: null-safe walks, correct OFF-by-default wiring, well-discriminating tests). Then bumped VERSION +
+> CHANGELOG, rebuilt (Win64 Debug for tests + Win32/Win64 Release for zips), all harnesses green, published.
 >
 > **SHIPPED (2 new rules, both OFF-by-default, both clean src/ FP):**
 > - **`split-variable`** (`refactoring`/`info`, OFF) -- a local reused for two UNRELATED purposes (>=2 disjoint def-use
@@ -29,10 +34,9 @@
 > flowengine **33**, exitcode **11 unit + 4 CLI**. OFF-suppression runtime-verified for both new rules (bare=0; --rule /
 > --config enabled=1). Build: Win64 ExitCode 0, `OK: staged`, no `[dcc] Error`/`Fatal`.
 >
-> **DECISIONS FOR THE HUMAN:** (1) accept both OFF rules (both have defensible/clean src/ FP -- recommend ship); (2) accept
-> the Item 3 deferral (recommend accept -- the enhancement is a no-op that can only introduce FPs on an ON rule); (3) bump
-> VERSION + release when ready (worker left it untouched per instructions). Files changed: `FlowChecks.pas`, `AstChecks.pas`,
-> `RuleCatalog.pas`, `CLI.pas`, 6 new test fixtures under `tests/lint/`, 1 new deferral doc. No `.claude/`/`.vscode/` staged.
+> **DECISIONS (RESOLVED at release):** (1) both OFF rules accepted + shipped; (2) Item 3 deferral accepted (no-op that could
+> only add FPs to an ON rule); (3) VERSION bumped to `0.83.0-alpha` + released FULL (`gh --latest`). Files that shipped:
+> `FlowChecks.pas`, `AstChecks.pas`, `RuleCatalog.pas`, `CLI.pas`, 6 new test fixtures under `tests/lint/`, 1 deferral doc.
 
 > ## RESUME 2026-07-02 (LATEST) -- **v0.82.0-alpha PUBLISHED (FULL release, gh --latest, win32+win64). All 7 SDD tasks done + final whole-branch review (opus) clean.** `main`=`29967f4`, origin synced, tag `v0.82.0-alpha` (isPrerelease=false, repo `latest`; https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.82.0-alpha). VERSION `CLI.pas:6`=`0.82.0-alpha`, **schema v13**. Harness **file 151/151 + store 16/16 + catalog 29/29 + flowengine 33/33** (+ ergonomics exit-code 12 unit+4 CLI, Task 1 enclosing-attribution verify.ps1). SDD ledger `.superpowers/sdd/progress.md`. Full CHANGELOG entry in `CHANGELOG.md`. NEXT = next milestone (won't-fix tail in MISSING-FEATURES); no in-flight v0.82 work remains.
 >

@@ -5,6 +5,29 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.83.0-alpha -- 2026-07-03
+
+Two new OFF-by-default refactoring rules deepening flow + CQS coverage. No index-schema change (still v13); ships as a
+full release. Both rules were built and verified on an autonomous fork, then reviewed before merge.
+
+### Added -- rules (all OFF-by-default; opt in via `drag-lint-lint.json` `"enabled"` or `--rule`)
+- `split-variable` (category `refactoring`, `info`, **OFF**) -- a local reused for two unrelated purposes: it has >=2
+  DISJOINT def-use lifetimes where the earlier range is def+read AND a later whole-var def starts a second range that is
+  also read (distinct from `overwrite-before-read`, whose first store is never read). Flow-based (backward liveness +
+  forward read-since-def sweep). Restricted to LINEAR routines (bails on any branch/merge) to stay sound without a
+  per-path lattice -- conservative, never a false positive. src/ FP=0 (10 genuine findings across 3 files).
+- `separate-query-from-modifier` (category `refactoring`, `info`, **OFF**) -- a value-returning function that also mutates
+  observable state (Command-Query Separation violation, Fowler). Conservative mutation predicate: a write to a class
+  field (`Self.X := ...` or a bare `F`-prefixed identifier that is not a local/param). Only value-returning functions are
+  considered (naturally excludes constructors, destructors, setter procedures). Pure-AST, fires once per function at its
+  header. Inherently noisy in general (lazy-caching getters, fluent mutators) -> ships OFF. src/ FP=0 (3 genuine findings).
+
+### Notes
+- `object-leak` OwnsOracle enhancement (a candidate v0.83 item) was investigated and DEFERRED as an empirical no-op:
+  `object-leak`'s "created" flag is purely syntactic (`ExprIsConstructor`), not gated on a type-ownership oracle, so it
+  ALREADY catches `TFileStream`/`TMemoryStream`/`TBitmap` leaks. The ON rule was left untouched. Probe table in
+  `docs/lint/DEFER-v083-object-leak-ownsoracle.md`.
+
 ## v0.82.0-alpha -- 2026-07-02
 
 Reference-index `enclosing_symbol_id` attribution (schema v13) + three new OFF-by-default rules + a coupling-metric
