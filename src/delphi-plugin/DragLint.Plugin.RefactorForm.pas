@@ -424,10 +424,14 @@ begin
   Result := False;
   AOutput:= '';
 
-  { Build command line }
+  { Build command line. NOTE: unlike the legacy "rename" verb (which writes
+    by default and takes --dry-run to opt OUT), "extract-method" PREVIEWS by
+    default and writes only with an explicit --apply -- so the apply spawn
+    must pass --apply or it silently re-runs the preview and changes nothing. }
   CmdLine:= Format('"%s" extract-method --file "%s" --from-line %d --to-line %d --name "%s"',
     [FExePath, FFilePath, FFromLine, FToLine, FEdName.Text]);
-  if ADryRun then CmdLine:= CmdLine + ' --dry-run';
+  if ADryRun then CmdLine:= CmdLine + ' --dry-run'
+  else CmdLine:= CmdLine + ' --apply';
   if not FCbBackup.Checked then CmdLine:= CmdLine + ' --no-backup';
 
   SA.nLength:= SizeOf(SA);
