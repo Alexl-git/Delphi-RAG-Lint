@@ -5779,7 +5779,7 @@ begin
   if Length(Edits) = 0 then
   begin
     Writeln(ErrOutput, 'No edit computed.');
-    Exit(2);
+    Exit(1);
   end;
   if AArgs.AsJson then
   begin
