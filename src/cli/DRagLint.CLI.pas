@@ -4754,7 +4754,7 @@ begin
   (AArgs.Rule <> 'format-argument-count') and (AArgs.Rule <> 'format-specifier-type-mismatch') and (AArgs.Rule <> 'try-except-swallowed') and (AArgs.Rule <> 'dataset-open-without-close') and (AArgs.Rule <> 'criticalsection-not-released') and (AArgs.Rule <> 'too-many-exit-points') and (AArgs.Rule <> 'cyclomatic-complexity') and (AArgs.Rule <> 'virtual-method-in-constructor') and
   (AArgs.Rule <> 'used-before-assignment') and (AArgs.Rule <> 'function-result-not-set') and (AArgs.Rule <> 'out-param-not-set') and
   (AArgs.Rule <> 'overwrite-before-read') and (AArgs.Rule <> 'write-only-local') and (AArgs.Rule <> 'loop-var-after-loop') and
-  (AArgs.Rule <> 'object-leak') and (AArgs.Rule <> 'not-assigned-interface') and (AArgs.Rule <> 'split-variable') and
+  (AArgs.Rule <> 'object-leak') and (AArgs.Rule <> 'not-assigned-interface') and (AArgs.Rule <> 'split-variable') and (AArgs.Rule <> 'separate-query-from-modifier') and
   (AArgs.Rule <> 'type-name-prefix') and (AArgs.Rule <> 'field-name-prefix') and (AArgs.Rule <> 'param-name-prefix') and
   (AArgs.Rule <> 'method-pascalcase') and (AArgs.Rule <> 'const-casing') and (AArgs.Rule <> 'local-var-casing') and (AArgs.Rule <> 'unit-name-matches-file') and
   (AArgs.Rule <> 'reserved-word-casing') and (AArgs.Rule <> 'hungarian-or-short-identifier') and
@@ -4778,7 +4778,7 @@ begin
     Writeln(Format(
         'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' +
         'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, exhaustive-enum-case, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
-        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, split-variable, double-free, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag, mutable-global-variable, default-encoding-io, interface-object-mixing)',
+        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, split-variable, separate-query-from-modifier, double-free, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag, mutable-global-variable, default-encoding-io, interface-object-mixing)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -4863,6 +4863,12 @@ begin
         ["split-variable"] or --rule split-variable. }
       if AArgs.Rule <> 'split-variable' then
         DefDisabled:= DefDisabled + ['split-variable'];
+      { v0.83: separate-query-from-modifier OFF by default -- Command-Query Separation
+        is inherently noisy (lazy-caching getters, fluent mutators). Conservative
+        field-write predicate keeps FP low, but ships OFF. Opt in via "enabled":
+        ["separate-query-from-modifier"] or --rule separate-query-from-modifier. }
+      if AArgs.Rule <> 'separate-query-from-modifier' then
+        DefDisabled:= DefDisabled + ['separate-query-from-modifier'];
       if TFile.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFile(AArgs.Path)
       else if TDirectory.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFolder(AArgs.Path, True)
       else
@@ -4918,6 +4924,8 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'global-form-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars(AArgs.Path);
       { v0.80: any unit-level writable var -- Fowler "Global Data" refactoring smell (#14) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'mutable-global-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(AArgs.Path);
+      { v0.83: value-returning function that also mutates a field -- Command-Query Separation (OFF) }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'separate-query-from-modifier') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(AArgs.Path);
       { v0.63: WinExec/ShellExecute/CreateProcess with a non-literal command -- injection risk }
       if (AArgs.Rule = '') or (AArgs.Rule = 'unsafe-shellexecute') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec(AArgs.Path);
       { v0.63: concatenated path to a file API -- path traversal risk }
@@ -5857,6 +5865,7 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread        (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars  (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(PasPath); { v0.83: CQS (OFF) }
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec       (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal   (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce  (PasPath);
@@ -5933,13 +5942,14 @@ begin
     exhaustive-enum-case + multiple-statements-per-line + magic-literal +
     boolean-flag-parameter + public-writable-field + loop-control-flag +
     mutable-global-variable + repeated-type-switch + middle-man + default-encoding-io +
-    fan-out + fan-in + feature-envy + instability + split-variable
+    fan-out + fan-in + feature-envy + instability + split-variable +
+    separate-query-from-modifier
     are OFF by default here too (opt in via config "enabled"). middle-man / fan-out /
     fan-in / feature-envy / instability are emitted by TClassMetrics.Run above; catalog
     False alone does not suppress CLI output, so they must be listed here for the
-    ShouldKeep filter to drop them by default. split-variable is a flow rule emitted
-    by TFlowChecker.Check above -- same reasoning. }
-  Result:= FinalizeAndOutput(AArgs, Findings, ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in', 'feature-envy', 'instability', 'interface-object-mixing', 'split-variable'],
+    ShouldKeep filter to drop them by default. split-variable (flow) and
+    separate-query-from-modifier (AST) are emitted above -- same reasoning. }
+  Result:= FinalizeAndOutput(AArgs, Findings, ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in', 'feature-envy', 'instability', 'interface-object-mixing', 'split-variable', 'separate-query-from-modifier'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;

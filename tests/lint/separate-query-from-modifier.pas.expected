@@ -1,0 +1,8 @@
+# BumpAndGet: a value-returning function that also mutates FCount -- CQS
+# violation. Fires at the function header (line 19).
+separate-query-from-modifier 19
+# Peek: pure query, no mutation -- absent.
+!separate-query-from-modifier 26
+# Reset: a procedure (no Result) -- only functions are the target; absent.
+!separate-query-from-modifier 33
+!separate-query-from-modifier 35

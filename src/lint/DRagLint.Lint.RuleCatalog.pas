@@ -198,6 +198,7 @@ begin
     B('middle-man', 'refactoring', 'info', 'Class mostly delegates to one field -- Remove Middle Man (inline or expose the delegate)', False); { OFF by default -- facades/interposers/OTA-NTA wrappers are legitimate middle-men; opt in via "enabled" }
     B('feature-envy', 'refactoring', 'info', 'Method accesses another class more than its own -- Move Method closer to the data it uses', False, [MkParam('minAccess','int','3')]); { OFF by default -- target-class resolution is name-based (no type inference), so the own/foreign split is heuristic; opt in via "enabled" }
     B('split-variable', 'refactoring', 'info', 'Local reused for two unrelated purposes (disjoint lifetimes) -- Split Variable into two locals', False); { OFF by default -- M2 two-live-range flow signal (linear routines only); opt in via "enabled" }
+    B('separate-query-from-modifier', 'refactoring', 'info', 'Value-returning function also mutates state -- Command-Query Separation violation; split into a pure query and a command', False); { OFF by default -- inherently noisy (lazy getters, fluent mutators); conservative field-write predicate; opt in via "enabled" }
 
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');

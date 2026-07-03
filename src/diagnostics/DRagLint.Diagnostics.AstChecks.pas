@@ -141,6 +141,18 @@ type
       /// .pas file (no .dfm gate, no type filter) -- broader than CheckGlobalFormVars, which
       /// this method does not modify. Pure AST; no DB. Never raises.</remarks>
       class function CheckMutableGlobalVars(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags a value-returning FUNCTION that also mutates observable state
+      /// (a Command-Query Separation violation, Fowler): a query that is also a command.
+      /// The conservative mutation predicate is a write to a class FIELD -- either an
+      /// explicit 'Self.X := ...' or a bare 'FXxx := ...' whose target is an F-prefixed
+      /// identifier NOT declared as a local/parameter of that function (the project's
+      /// FMyField convention). Only functions with a return type are considered, which
+      /// naturally excludes constructors, destructors and setter procedures.</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One finding per offending function, at its header.</returns>
+      /// <remarks>OFF by default (inherently noisy -- getters that lazily cache, fluent
+      /// mutators). Fires at most once per function. Pure AST; no DB. Never raises.</remarks>
+      class function CheckSeparateQueryFromModifier(const AFile: string): TArray<TLintFinding>;
       /// <summary>Flags WinExec/ShellExecute/CreateProcess called with a non-literal
       /// command/executable argument -- a runtime-built command path is a command-injection
       /// risk (CWE-78).</summary>
@@ -3398,6 +3410,179 @@ begin
   Findings:= TList<TLintFinding>.Create;
   try
     CheckGlobalVarDecls(PF.Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckSeparateQueryFromModifier(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes;
+  PF      : TParsedFile;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const ANode: TTSNode): string;
+  var B: TBytes;
+  begin
+    if ANode.IsNull or (ANode.StartByte >= ANode.EndByte) then Exit('');
+    SetLength(B, Integer(ANode.EndByte) - Integer(ANode.StartByte));
+    Move(Src[ANode.StartByte], B[0], Length(B));
+    Result:= TEncoding.UTF8.GetString(B);
+  end;
+
+  { True when AName looks like an F-prefixed field ('F' + an uppercase letter). }
+  function LooksLikeFieldName(const AName: string): Boolean;
+  begin
+    Result:= (Length(AName) >= 2) and (AName[1] = 'F') and CharInSet(AName[2], ['A'..'Z']);
+  end;
+
+  { Collect the lowercased names of a function's locals + parameters, so an
+    F-prefixed LOCAL (a shadowing local, rare but possible) is not mistaken for a
+    field write. Walks the defProc's declArgs (header) and declVars sections; does
+    NOT descend into nested defProcs (their vars are their own scope). }
+  procedure CollectLocalsAndParams(const ADefProc: TTSNode; ANames: TDictionary<string, Boolean>);
+    procedure AddIdentsUnder(const N: TTSNode; ATypeBoundary: Integer);
+    var I: Integer; Nm: string;
+    begin
+      if N.IsNull then Exit;
+      if N.NodeType = 'identifier' then
+      begin
+        { for declVar/declArg the name identifiers precede the type node; skip
+          identifiers at/after the type start (they name the type, not a var). }
+        if (ATypeBoundary < 0) or (Integer(N.StartByte) < ATypeBoundary) then
+        begin
+          Nm:= LowerCase(NodeStr(N));
+          if Nm <> '' then ANames.AddOrSetValue(Nm, True);
+        end;
+        Exit;
+      end;
+      for I:= 0 to N.NamedChildCount - 1 do AddIdentsUnder(N.NamedChild(I), ATypeBoundary);
+    end;
+    procedure WalkDecls(const N: TTSNode);
+    var I: Integer; TypeN: TTSNode; TB: Integer;
+    begin
+      if N.IsNull then Exit;
+      if (N.NodeType = 'declArg') or (N.NodeType = 'declVar') then
+      begin
+        TypeN:= N.ChildByField('type');
+        TB:= -1;
+        if not TypeN.IsNull then TB:= Integer(TypeN.StartByte);
+        AddIdentsUnder(N, TB);
+        Exit;
+      end;
+      for I:= 0 to N.NamedChildCount - 1 do
+      begin
+        { do not cross into a nested routine's own scope (the top-level call is on
+          ADefProc itself, so a defProc encountered as a descendant is always a
+          nested routine). }
+        if N.NamedChild(I).NodeType = 'defProc' then Continue;
+        WalkDecls(N.NamedChild(I));
+      end;
+    end;
+  begin
+    WalkDecls(ADefProc);
+  end;
+
+  { True if this defProc header declares a value-returning function (has a return
+    'type' child). Constructors/destructors/procedures have no return type. }
+  function IsFunction(const ADefProc: TTSNode): Boolean;
+  var Hdr: TTSNode;
+  begin
+    Hdr:= ADefProc.ChildByField('header');
+    Result:= (not Hdr.IsNull) and (not Hdr.ChildByField('type').IsNull);
+  end;
+
+  { Scan a function body for a state mutation: 'Self.X := ...' OR 'FXxx := ...'
+    (F-prefixed, not a local/param). Returns True on the first hit. Does not
+    descend into nested defProcs (own scope). }
+  function BodyMutatesField(const ABody: TTSNode; ALocals: TDictionary<string, Boolean>): Boolean;
+  var Hit: Boolean;
+    procedure Walk(const N: TTSNode);
+    var I: Integer; Lhs, Base, Mem: TTSNode; Nm: string;
+    begin
+      if N.IsNull or Hit then Exit;
+      if N.NodeType = 'defProc' then Exit; { nested routine -- its own scope }
+      if N.NodeType = 'assignment' then
+      begin
+        Lhs:= N.ChildByField('lhs');
+        if not Lhs.IsNull then
+        begin
+          { 'Self.X := ...' -- explicit field/property write }
+          if Lhs.NodeType = 'exprDot' then
+          begin
+            Base:= Lhs.ChildByField('lhs');
+            Mem := Lhs.ChildByField('rhs');
+            if (not Base.IsNull) and (Base.NodeType = 'identifier')
+               and SameText(NodeStr(Base), 'Self') and (not Mem.IsNull) then
+            begin Hit:= True; Exit; end;
+          end
+          { 'FXxx := ...' -- bare F-prefixed identifier that is not a local/param }
+          else if Lhs.NodeType = 'identifier' then
+          begin
+            Nm:= NodeStr(Lhs);
+            if LooksLikeFieldName(Nm) and (not ALocals.ContainsKey(LowerCase(Nm))) then
+            begin Hit:= True; Exit; end;
+          end;
+        end;
+      end;
+      for I:= 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+    end;
+  begin
+    Hit:= False;
+    Walk(ABody);
+    Result:= Hit;
+  end;
+
+  procedure VisitProc(const ADefProc: TTSNode);
+  var
+    Body, Hdr: TTSNode;
+    Locals   : TDictionary<string, Boolean>;
+    P        : TTSPoint;
+    F        : TLintFinding;
+  begin
+    if not IsFunction(ADefProc) then Exit;
+    Body:= ADefProc.ChildByField('body');
+    if Body.IsNull then Exit;
+    Locals:= TDictionary<string, Boolean>.Create;
+    try
+      CollectLocalsAndParams(ADefProc, Locals);
+      if BodyMutatesField(Body, Locals) then
+      begin
+        Hdr:= ADefProc.ChildByField('header');
+        P:= Hdr.StartPoint;
+        F:= Default(TLintFinding);
+        F.RuleId  := 'separate-query-from-modifier';
+        F.Severity:= 'info';
+        F.Message := 'Function returns a value AND mutates state (writes a field) -- a Command-Query Separation violation. Split it into a pure query and a separate command.';
+        F.FilePath:= AFile;
+        F.StartLine:= Integer(P.Row   ) + 1;
+        F.StartCol := Integer(P.Column) + 1;
+        F.EndLine := F.StartLine;
+        F.EndCol  := F.StartCol + 1;
+        Findings.Add(F);
+      end;
+    finally
+      Locals.Free;
+    end;
+  end;
+
+  procedure VisitProcs(const N: TTSNode);
+  var I: Integer;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then VisitProc(N);
+    for I:= 0 to N.NamedChildCount - 1 do VisitProcs(N.NamedChild(I));
+  end;
+
+begin
+  Result:= nil;
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
+  Findings:= TList<TLintFinding>.Create;
+  try
+    VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
     Findings.Free;
