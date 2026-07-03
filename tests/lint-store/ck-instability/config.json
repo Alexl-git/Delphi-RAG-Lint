@@ -1,0 +1,1 @@
+{ "enabled": ["instability"], "thresholds": { "instability": 80, "instability-floor": 2 } }

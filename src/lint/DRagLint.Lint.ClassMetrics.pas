@@ -125,6 +125,8 @@ var
   TFanOut     : Integer                          ;
   TFanIn      : Integer                          ;
   TFEnvy      : Integer                          ; { v0.82 feature-envy: minAccess floor }
+  TInstPct    : Integer                          ; { v0.82 instability: I=Ce/(Ca+Ce) threshold, as a percent }
+  TInstFloor  : Integer                          ; { v0.82 instability: noise floor on Ca+Ce (also guards div-by-zero) }
   CI          : TClassInfo                       ;
 
   function WantRule(const AId: string): Boolean;
@@ -914,6 +916,8 @@ begin
     TFanOut:= ACfg.ThresholdFor('fan-out', 20); { aliases CBO; field-tune }
     TFanIn := ACfg.ThresholdFor('fan-in', 20);  { field-tune }
     TFEnvy := ACfg.ThresholdFor('feature-envy', 3); { min foreign accesses to flag }
+    TInstPct  := ACfg.ThresholdFor('instability', 80);       { percent form of I threshold (default 0.8) }
+    TInstFloor:= ACfg.ThresholdFor('instability-floor', 5);  { noise floor on Ca+Ce; keeps Total > 0 }
 
     BuildInventory;
     ResolveParents;
@@ -997,6 +1001,22 @@ begin
         if Ca > TFanIn then
           Emit('fan-in',
             Format('High fan-in: %s is referenced by %d other classes (>%d) -- a widely-depended-on hub; changes here ripple widely', [CI.Name, Ca, TFanIn]),
+            CI);
+      end;
+
+      if WantRule('instability') then
+      begin
+        { v0.82 (#11): I = Ce/(Ca+Ce) as an integer percent, cross-multiplied to
+          avoid floats/div-by-zero. Flag only near the unstable extreme (high Ce,
+          low Ca) and only above the noise floor -- ignore trivially-coupled classes. }
+        var Ce: Integer:= ComputeCBO(CI);
+        var Ca: Integer:= 0;
+        FanIn.TryGetValue(CI.Id, Ca);
+        var Total: Integer:= Ca + Ce;
+        if (Total >= TInstFloor) and (Ce * 100 >= TInstPct * Total) then
+          Emit('instability',
+            Format('Unstable: %s has instability I=%d%% (Ce=%d efferent, Ca=%d afferent, >=%d%%) -- depends on many, nothing depends on it; hard to change safely',
+                   [CI.Name, (Ce * 100) div Total, Ce, Ca, TInstPct]),
             CI);
       end;
 

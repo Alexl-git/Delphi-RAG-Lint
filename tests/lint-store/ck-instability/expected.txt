@@ -1,0 +1,6 @@
+# TApp (line 26) has fields typed TAlpha/TBeta/TGamma -> Ce=3, Ca=0, Total=3>=2, I=100%>=80% -> instability fires
+instability sample.pas:26
+# TWidget (line 6) is referenced by TAlpha/TBeta/TGamma -> Ce=0, Ca=3, Total=3>=2, I=0%<80% -> does not fire
+!instability sample.pas:6
+# TLoner (line 33) references nothing and is referenced by nothing -> Ce=0, Ca=0, Total=0<2 (below floor) -> does not fire (also proves no div-by-zero)
+!instability sample.pas:33

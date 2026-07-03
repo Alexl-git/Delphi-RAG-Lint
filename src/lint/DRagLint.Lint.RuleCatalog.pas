@@ -219,6 +219,7 @@ begin
       Both need field-tuned thresholds; opt in via "enabled". }
     B('fan-out', 'metrics', 'info', 'Class depends on too many other classes (efferent coupling Ce; aliases CBO)', False, [MkParam('threshold','int','20')]);
     B('fan-in', 'metrics', 'info', 'Class is referenced by too many other classes (afferent coupling Ca)', False, [MkParam('threshold','int','20')]);
+    B('instability', 'metrics', 'info', 'Class instability (I=Ce/(Ca+Ce)) is high -- unstable: depends on many, nothing depends on it', False, [MkParam('threshold','int','80'), MkParam('noiseFloor','int','5')]);
 
     Result:= L.ToArray;
   finally
