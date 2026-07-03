@@ -1,7 +1,7 @@
 unit DragLint.Plugin.Keyboard;
 
 { Keystroke bindings for the drag-lint IDE plugin.
-  Registers Ctrl+Alt+H/C/S/D via IOTAKeyboardServices.AddKeyboardBinding.
+  Registers Ctrl+Alt+H/C/S/D/... via IOTAKeyboardServices.AddKeyboardBinding.
   Each binding checks the corresponding Enable* setting before dispatching
   to the matching Invoke* procedure in DragLint.Plugin.Editor.
 
@@ -10,7 +10,13 @@ unit DragLint.Plugin.Keyboard;
   Invoke*).  Delphi allows mutual implementation-section references.
 
   TKeyBindingProc is "of object", so key handlers must be methods of the
-  binding object itself, not plain procedures. }
+  binding object itself, not plain procedures.
+
+  Ctrl+Alt+M (Extract Method) is the one exception: it is self-contained in
+  this unit rather than delegating to DragLint.Plugin.Editor, because it
+  needs OTAPI selection-block access and a preview-dialog round trip that
+  Editor.pas does not otherwise expose. It calls
+  DragLint.Plugin.RefactorForm.ShowExtractMethodDialog directly. }
 
 interface
 
@@ -23,11 +29,18 @@ uses
   System.SysUtils
   , System.Classes
   , Vcl.Menus
+  , Vcl.Dialogs
+  , Winapi.Windows
   , ToolsAPI
   , DragLint.Plugin.Settings
   , DragLint.Plugin.Editor
   , DragLint.Plugin.EditViewNotifier
+  , DragLint.Plugin.RefactorForm
   ;
+
+{ Forward decl: ExtractMethodKey (declared below, before InvokeExtractMethod's
+  own definition further down this implementation section) calls it. }
+procedure InvokeExtractMethod; forward;
 
 { ---- IOTAKeyboardBinding implementation ---- }
 
@@ -50,6 +63,7 @@ type
       procedure SignatureKey   (const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
       procedure DiagnosticsKey (const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
       procedure RenameKey      (const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
+      procedure ExtractMethodKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
       procedure InlineInfoKey  (const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
       procedure FindUsagesKey  (const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
       procedure SymbolSearchKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
@@ -83,6 +97,7 @@ begin
   BindingServices.AddKeyBinding( [ShortCut(Ord('S'), [ssCtrl, ssAlt])], SignatureKey   , nil);
   BindingServices.AddKeyBinding( [ShortCut(Ord('D'), [ssCtrl, ssAlt])], DiagnosticsKey , nil);
   BindingServices.AddKeyBinding( [ShortCut(Ord('R'), [ssCtrl, ssAlt])], RenameKey      , nil);
+  BindingServices.AddKeyBinding( [ShortCut(Ord('M'), [ssCtrl, ssAlt])], ExtractMethodKey, nil);
   BindingServices.AddKeyBinding( [ShortCut(Ord('I'), [ssCtrl, ssAlt])], InlineInfoKey  , nil);
   BindingServices.AddKeyBinding( [ShortCut(Ord('F'), [ssCtrl, ssAlt])], FindUsagesKey  , nil);
   BindingServices.AddKeyBinding( [ShortCut(Ord('T'), [ssCtrl, ssAlt])], SymbolSearchKey, nil);
@@ -140,6 +155,12 @@ begin
   BindingResult:= krHandled;
 end;
 
+procedure TDragLintKeyboardBinding.ExtractMethodKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
+begin
+  InvokeExtractMethod;
+  BindingResult:= krHandled;
+end;
+
 procedure TDragLintKeyboardBinding.InlineInfoKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
 begin
   if not LoadSettings.EnableInlineMarkers then Exit;
@@ -164,6 +185,105 @@ begin
   InvokeQuickFixUses(nil);
   BindingResult:= krHandled;
 end;
+
+{ ---- Extract Method (Ctrl+Alt+M) ---- }
+
+function DLExtractMethodExe: string;
+{ Same resolution algorithm as DragLint.Plugin.Editor's private DLExe64:
+  prefer the Win64 build staged next to this BPL (third_party/dll-win64
+  layout: "<bpl-dir>\..\dll-win64\drag-lint.exe"); fall back to bare
+  "drag-lint.exe" (resolved via PATH by CreateProcess) if that is absent.
+  Duplicated here (not exported by Editor.pas) to keep this unit's changes
+  self-contained per the Extract Method IDE-integration task scope. }
+var
+  BplDir, Win64Exe: string;
+begin
+  BplDir  := ExtractFilePath(GetModuleName(HInstance));
+  Win64Exe:= ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64\drag-lint.exe';
+  if FileExists(Win64Exe) then Exit(Win64Exe);
+  Result:= 'drag-lint.exe';
+end;
+
+/// <summary>Ctrl+Alt+M handler. Reads the active IOTAEditView's non-empty
+/// selection block and file name, saves the active module (the CLI reads
+/// the file from disk), then opens the Extract Method preview dialog
+/// (name prompt -&gt; dry-run preview -&gt; apply). On a successful apply the
+/// module is closed and reopened so the IDE picks up the CLI's edits from
+/// disk instead of showing the stale in-memory buffer.</summary>
+/// <remarks>Shows a message and returns without opening the dialog if there
+/// is no active editor view or the selection is empty (mirrors InvokeRename's
+/// "no active editor view" guard in DragLint.Plugin.Editor). Call from the
+/// main IDE thread only (creates a modal VCL form).</remarks>
+procedure InvokeExtractMethod;
+var
+  ESS      : IOTAEditorServices ;
+  MS       : IOTAModuleServices ;
+  EditView : IOTAEditView       ;
+  Block    : IOTAEditBlock      ;
+  Modu     : IOTAModule         ;
+  FilePath : string             ;
+  FromLine : Integer            ;
+  ToLine   : Integer            ;
+  ExePath  : string             ;
+  Applied  : Boolean            ;
+begin
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
+  begin
+    ShowMessage('drag-lint: no editor services available');
+    Exit;
+  end;
+  EditView:= ESS.TopView;
+  if EditView = nil then
+  begin
+    ShowMessage('drag-lint: no active editor view');
+    Exit;
+  end;
+  FilePath:= EditView.Buffer.FileName;
+  if FilePath = '' then
+  begin
+    ShowMessage('drag-lint: active buffer has no file name');
+    Exit;
+  end;
+
+  { Selection read: IOTAEditBlock rows are 1-based, matching --from-line/
+    --to-line's contract. IsValid/Size = 0 both mean "no real selection". }
+  Block:= EditView.Block;
+  if (Block = nil) or not Block.IsValid or (Block.Size <= 0) then
+  begin
+    ShowMessage('drag-lint: select a run of statements first (Ctrl+Alt+M needs a non-empty selection).');
+    Exit;
+  end;
+  FromLine:= Block.StartingRow;
+  ToLine  := Block.EndingRow;
+  { A selection ending at column 1 of ToLine does not actually include any
+    text on that line (e.g. a whole-line selection made by dragging to the
+    start of the next line) -- treat it as ending on the previous line, same
+    convention editors use when reporting "lines selected". }
+  if (ToLine > FromLine) and (Block.EndingColumn <= 1) then Dec(ToLine);
+
+  { Save so the on-disk file matches the editor before the CLI reads it
+    (same rule InvokeGenerateFormsCsv/InvokeUsesFix/etc. follow in Editor.pas). }
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+
+  ExePath:= DLExtractMethodExe;
+
+  Applied:= ShowExtractMethodDialog(FilePath, FromLine, ToLine, ExePath);
+
+  if Applied then
+  begin
+    { Reload from disk: close the module (discarding the now-stale in-memory
+      buffer) and reopen it so the IDE shows the CLI's edits. Mirrors the
+      rename dialog's "the file changed on disk, show the new content"
+      intent; rename itself never needed this because it can touch files
+      that are not open, but Extract Method always rewrites the open file. }
+    if Supports(BorlandIDEServices, IOTAModuleServices, MS) then
+    begin
+      Modu:= MS.FindModule(FilePath);
+      if Modu <> nil then Modu.CloseModule(False);
+      MS.OpenModule(FilePath);
+    end;
+  end;
+end; // procedure
 
 { ---- register / unregister ---- }
 
