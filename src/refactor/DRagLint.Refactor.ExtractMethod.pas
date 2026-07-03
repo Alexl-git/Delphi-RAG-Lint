@@ -11,9 +11,10 @@ unit DRagLint.Refactor.ExtractMethod;
   and the refuse guards only: mapping a line range to a single enclosing
   routine's contiguous statement run, and rejecting every unsafe shape (two
   routines, cut statement, goto/asm, Exit, escaping Break/Continue, nesting
-  cross). Variable classification (Task 3) and method synthesis (Task 4) are
-  layered on top of TExtractSelection in later tasks; until then every
-  otherwise-valid selection refuses with 'not-yet-implemented'. }
+  cross, ambiguous same-line sibling statements). Variable classification
+  (Task 3) and method synthesis (Task 4) are layered on top of
+  TExtractSelection in later tasks; until then every otherwise-valid
+  selection refuses with 'not-yet-implemented'. }
 
 interface
 
@@ -192,6 +193,18 @@ begin
   Result:= (ALine > NLine(ANode)) and (ALine < NEndLine(ANode));
 end;
 
+/// <summary>True when K is a COMPOUND statement node kind -- one of the
+/// branch/loop/try/with constructs TCfgBuilder.EmitStmt decomposes in
+/// DRagLint.Analysis.Cfg ('if'/'ifElse'/'case'/'while'/'for'/'foreach'/
+/// 'repeat'/'try'/'with'). A selection line landing strictly inside one of
+/// these (with no deeper resolvable statement list) crosses a NESTING level;
+/// landing strictly inside a simple statement merely cuts it.</summary>
+function IsCompoundStatementKind(const K: string): Boolean;
+begin
+  Result:= (K = 'if') or (K = 'ifElse') or (K = 'case') or (K = 'while')
+    or (K = 'for') or (K = 'foreach') or (K = 'repeat') or (K = 'try') or (K = 'with');
+end;
+
 /// <summary>Finds the statement-list node ('block'/'statements') that
 /// directly holds the run covering source line ATargetLine, at the DEEPEST
 /// nesting level reachable without cutting a statement. Walks AList's own
@@ -203,7 +216,15 @@ end;
 /// every such nested list looking for one whose own child span covers
 /// ATargetLine at a deeper level. Returns a null node when ATargetLine is
 /// not covered by any child of AList at any depth.</summary>
-function LocateStatementList(const AList: TTSNode; ATargetLine: Integer): TTSNode;
+/// <param name="ACutCompound">Set to True (never reset back -- the caller
+/// initializes it to False) when resolution failed because ATargetLine lands
+/// strictly inside a COMPOUND statement (see IsCompoundStatementKind) with
+/// no deeper list resolving it -- i.e. the line lives at a different nesting
+/// level than any reachable statement list. Lets the caller refuse with
+/// 'selection crosses nesting levels' instead of the generic cut-statement
+/// reason.</param>
+function LocateStatementList(const AList: TTSNode; ATargetLine: Integer;
+  var ACutCompound: Boolean): TTSNode;
 var J, K: Integer; C, Nested, Found: TTSNode;
 begin
   Result:= Default(TTSNode);
@@ -222,11 +243,16 @@ begin
         Nested:= C.NamedChild(K);
         if (Nested.NodeType = 'block') or (Nested.NodeType = 'statements') then
         begin
-          Found:= LocateStatementList(Nested, ATargetLine);
+          Found:= LocateStatementList(Nested, ATargetLine, ACutCompound);
           if not Found.IsNull then Exit(Found);
         end;
       end;
-      Exit; { cuts C and no deeper list resolves it: unresolvable at this level }
+      { cuts C and no deeper list resolves it: unresolvable at this level.
+        A compound C means the line lives at a nested level inside it (a
+        nesting cross); a simple C means the selection cuts a multi-line
+        statement in half. }
+      if IsCompoundStatementKind(C.NodeType) then ACutCompound:= True;
+      Exit;
     end;
   end;
 end;
@@ -349,7 +375,7 @@ begin
     Exit;
   end;
 
-  if (K = 'statement') or (K = 'exprCall') or (K = 'identifier') then
+  if (K = 'statement') or (K = 'exprCall') or (K = 'exprDot') or (K = 'identifier') then
   begin
     if K = 'exprCall' then Txt:= LowerNodeText(ANode.ChildByField('entity'), ASrc)
     else Txt:= LowerNodeText(ANode, ASrc);
@@ -397,11 +423,14 @@ var
   Cfg       : TCfg;
   StmtList  : TTSNode;
   TargetList: TTSNode;
+  TargetListTo: TTSNode;
+  CutCompound : Boolean;
   FromByte  : Integer;
   ToByte    : Integer;
   FromLine, ToLine: Integer;
   I         : Integer;
   FirstIdx, LastIdx: Integer;
+  CountFrom, CountTo: Integer;
   Ch        : TTSNode;
   Reason    : string;
   OwnerClass: string;
@@ -497,16 +526,27 @@ begin
     Exit;
   end;
 
-  { The statement list directly containing the FIRST selected statement is
-    the run's nesting level: descend from the routine's top-level statement
-    list to the deepest list whose own child span covers FromLine (see
-    LocateStatementList). If FromLine cuts into a statement with no deeper
-    list resolving it, refuse below. }
+  { The statement list directly containing the selection is the run's
+    nesting level: resolve BOTH endpoints independently (descend from the
+    routine's top-level statement list to the deepest list whose own child
+    span covers the line -- see LocateStatementList). Refuse when either
+    endpoint is unresolvable (a compound statement in the way = the line
+    lives at a different nesting level; a simple statement = the selection
+    cuts it) or when the two endpoints resolve to DIFFERENT lists (the
+    selection starts and ends at different nesting levels). }
   FirstIdx:= -1; LastIdx:= -1;
-  TargetList:= LocateStatementList(StmtList, FromLine);
-  if TargetList.IsNull then
+  CutCompound:= False;
+  TargetList  := LocateStatementList(StmtList, FromLine, CutCompound);
+  TargetListTo:= LocateStatementList(StmtList, ToLine, CutCompound);
+  if TargetList.IsNull or TargetListTo.IsNull then
   begin
-    ARefuse:= 'selection must be whole statements';
+    if CutCompound then ARefuse:= 'selection crosses nesting levels'
+    else ARefuse:= 'selection must be whole statements';
+    Exit;
+  end;
+  if not (TargetList = TargetListTo) then
+  begin
+    ARefuse:= 'selection crosses nesting levels';
     Exit;
   end;
 
@@ -529,6 +569,26 @@ begin
   if (FirstIdx < 0) or (LastIdx < 0) then
   begin
     ARefuse:= 'selection must be whole statements';
+    Exit;
+  end;
+
+  { Ambiguity guard: the line-to-statement mapping must be UNIQUE at both
+    selection boundaries. With two statements on one line ('a := 1; b := 2;')
+    a line-based selection cannot say which of them it means -- the naive
+    first-match pick would silently DROP the trailing sibling(s) from the
+    run, violating the prime directive (refuse rather than guess). Refuse
+    whenever more than one statement in the run's list touches the start
+    line or the end line. }
+  CountFrom:= 0; CountTo:= 0;
+  for I:= 0 to TargetList.NamedChildCount - 1 do
+  begin
+    Ch:= TargetList.NamedChild(I);
+    if (NLine(Ch) <= FromLine) and (NEndLine(Ch) >= FromLine) then Inc(CountFrom);
+    if (NLine(Ch) <= ToLine) and (NEndLine(Ch) >= ToLine) then Inc(CountTo);
+  end;
+  if (CountFrom > 1) or (CountTo > 1) then
+  begin
+    ARefuse:= 'multiple statements share a line in the selection';
     Exit;
   end;
 

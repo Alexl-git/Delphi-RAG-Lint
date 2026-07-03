@@ -206,7 +206,42 @@ begin
   { starts inside the then-branch (line 8), ends after the if statement (line 11) }
   Reason:= RefuseFor(SRC, 8, 11, 'NewMeth', Edits);
   Check('crosses-nesting: refuses', Reason <> '');
+  Check('crosses-nesting: reason mentions nesting levels',
+    Pos('selection crosses nesting levels', Reason) > 0);
   Check('crosses-nesting: nil edits', Edits = nil);
+end;
+
+{ Regression: two statements on ONE line -> the line-to-statement mapping is
+  ambiguous; a naive first-match pick would silently DROP the trailing
+  sibling from the run. Must refuse, never guess. }
+procedure TestSameLineSiblings;
+const
+  SRC =
+    'unit u;'#13#10 +                          { 1 }
+    'interface'#13#10 +                        { 2 }
+    'implementation'#13#10 +                   { 3 }
+    'procedure P;'#13#10 +                      { 4 }
+    'var x, y: Integer;'#13#10 +               { 5 }
+    'begin'#13#10 +                            { 6 }
+    '  x := 1; y := 2;'#13#10 +                { 7  TWO statements share this line }
+    '  x := 3;'#13#10 +                        { 8 }
+    'end;'#13#10 +                             { 9 }
+    'end.'#13#10;                              { 10 }
+var
+  Reason: string;
+  Edits: TArray<TTextEdit>;
+begin
+  { selecting line 7 alone: which of the two statements is meant? refuse }
+  Reason:= RefuseFor(SRC, 7, 7, 'NewMeth', Edits);
+  Check('same-line-siblings: refuses', Reason <> '');
+  Check('same-line-siblings: reason mentions shared line',
+    Pos('multiple statements share a line in the selection', Reason) > 0);
+  Check('same-line-siblings: nil edits', Edits = nil);
+
+  { selecting lines 7-8 hits the same ambiguity at the start boundary }
+  Reason:= RefuseFor(SRC, 7, 8, 'NewMeth', Edits);
+  Check('same-line-siblings: [7..8] also refuses',
+    Pos('multiple statements share a line in the selection', Reason) > 0);
 end;
 
 { Sanity: a clean, safe, whole-statement single-routine selection with no
@@ -244,6 +279,7 @@ begin
     TestContainsExit;
     TestEscapingBreak;
     TestCrossesNesting;
+    TestSameLineSiblings;
     TestSafeSelectionReachesNotYetImplemented;
   except
     on Ex: Exception do begin Writeln('EXCEPTION ', Ex.ClassName, ': ', Ex.Message); Inc(GFail); end;
