@@ -1,0 +1,8 @@
+# interface-object-mixing (OFF, first cut): within ONE routine, an object local
+# X aliased into an interface-typed var AND manually X.Free'd -> the ARC/manual
+# dual-handle double-free. Fires at the manual-free site. A plain object
+# create+free (no interface alias) or an interface assignment with no manual
+# free must NOT fire.
+interface-object-mixing 34
+!interface-object-mixing 47
+!interface-object-mixing 57

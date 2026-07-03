@@ -103,6 +103,7 @@ begin
 
     { --- resource-lifetime --- }
     B('freeandnil-on-interface',       'resource-lifetime', 'warning', 'FreeAndNil on an interface reference');
+    B('interface-object-mixing',       'resource-lifetime', 'info',    'Object aliased into an interface AND manually freed in the same routine -- dual-handle double-free risk', False); { OFF by default -- first-cut same-routine heuristic; opt in via "enabled" }
     B('unprotected-object-free',       'resource-lifetime', 'warning', 'Object created + freed without try-finally');
     B('use-after-free',                'resource-lifetime', 'warning', 'Object used after X.Free');
     B('destructor-without-override',   'resource-lifetime', 'warning', 'Destructor not declared ''override'' -- hides the inherited destructor (leak)');

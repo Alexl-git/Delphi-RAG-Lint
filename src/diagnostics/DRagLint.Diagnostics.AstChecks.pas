@@ -2175,6 +2175,145 @@ var
     for I:= 0 to N.ChildCount - 1 do CheckExpr(N.Child(I));
   end;
 
+  { v0.82 (#4 first cut): interface-object-mixing (OFF) -- the ARC/manual
+    dual-handle double-free, restricted to a NARROW, low-FP SAME-ROUTINE slice.
+    Within ONE routine body detect the co-occurrence of BOTH:
+      (a) an object local X (class-typed) aliased into an interface-typed var
+          I in the same routine -- 'I := X' or 'I := X as ISomething'; AND
+      (b) that same X manually freed in that routine -- 'X.Free' / 'FreeAndNil(X)'.
+    When X has both an interface alias (refcount lifetime) and a manual free,
+    the object is double-freed once the last interface reference drops. Fire at
+    the manual-free site, 'info'. If only (a) OR only (b) is present we do NOT
+    fire (a plain object create+free, or a lone interface assignment, is fine) --
+    that single-handle exclusion is the whole point of the narrow slice. Pure-AST,
+    same-routine, reusing TypeMap/TypeTextIsInterface/LooksLikeClassType; accepts
+    the flat-TypeMap type approximation (same limitation freeandnil-on-interface
+    tolerates). }
+  procedure VisitDualHandle(const ADefProc: TTSNode);
+  var
+    Aliased : TDictionary<string, Boolean>; { X (lower) aliased into an interface var }
+    FreedAt : TDictionary<string, TTSNode>; { X (lower) -> the manual-free node (fire site) }
+
+    { 'I := X' / 'I := X as ISomething' where I is interface-typed and X is a
+      simple class-typed identifier -> record X (lower) in Aliased. }
+    procedure ScanAlias(const N: TTSNode);
+    var
+      Lhs, Rhs, Src2: TTSNode;
+      TI, TX, Xn    : string ;
+      I             : Integer;
+    begin
+      if N.IsNull then Exit;
+      if N.NodeType = 'defProc' then Exit; { nested routine handled separately }
+      if N.NodeType = 'assignment' then
+      begin
+        Lhs:= N.ChildByField('lhs');
+        Rhs:= N.ChildByField('rhs');
+        if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and (not Rhs.IsNull)
+           and TypeMap.TryGetValue(LowerCase(NodeStr(Lhs)), TI) and TypeTextIsInterface(TI) then
+        begin
+          { RHS is either a bare identifier X, or 'X as ISomething' (exprBinary,
+            operator text 'as', lhs = identifier X). }
+          Src2:= Default(TTSNode);
+          if Rhs.NodeType = 'identifier' then Src2:= Rhs
+          else if Rhs.NodeType = 'exprBinary' then
+          begin
+            var OpN: TTSNode:= Rhs.ChildByField('operator');
+            if (not OpN.IsNull) and SameText(Trim(NodeStr(OpN)), 'as') then
+            begin
+              var Ln: TTSNode:= Rhs.ChildByField('lhs');
+              if (not Ln.IsNull) and (Ln.NodeType = 'identifier') then Src2:= Ln;
+            end;
+          end;
+          if (not Src2.IsNull) and (Src2.NodeType = 'identifier') then
+          begin
+            Xn:= LowerCase(NodeStr(Src2));
+            { X must be a declared CLASS-typed local (an object handle), not itself
+              an interface -- that is what makes it a genuine dual handle. }
+            if TypeMap.TryGetValue(Xn, TX) and LooksLikeClassType(TX) and (not TypeTextIsInterface(TX)) then
+              Aliased.AddOrSetValue(Xn, True);
+          end;
+        end;
+      end;
+      for I:= 0 to N.ChildCount - 1 do ScanAlias(N.Child(I));
+    end;
+
+    { 'X.Free' (exprDot) or 'FreeAndNil(X)' (exprCall) -> record X (lower) -> node. }
+    procedure ScanFree(const N: TTSNode);
+    var
+      Lhs, Rhs, Ent, Args, A0: TTSNode;
+      I                      : Integer;
+    begin
+      if N.IsNull then Exit;
+      if N.NodeType = 'defProc' then Exit; { nested routine handled separately }
+      if N.NodeType = 'exprDot' then
+      begin
+        Lhs:= N.ChildByField('lhs');
+        Rhs:= N.ChildByField('rhs');
+        if (not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier')
+           and (Rhs.NodeType = 'identifier') and SameText(NodeStr(Rhs), 'Free') then
+          if not FreedAt.ContainsKey(LowerCase(NodeStr(Lhs))) then
+            FreedAt.Add(LowerCase(NodeStr(Lhs)), N);
+      end
+      else if N.NodeType = 'exprCall' then
+      begin
+        Ent:= N.ChildByField('entity');
+        if (not Ent.IsNull) and (Ent.NodeType = 'identifier') and SameText(NodeStr(Ent), 'FreeAndNil') then
+        begin
+          Args:= N.ChildByField('args');
+          if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
+          begin
+            A0:= Args.NamedChild(0);
+            if (A0.NodeType = 'identifier') and not FreedAt.ContainsKey(LowerCase(NodeStr(A0))) then
+              FreedAt.Add(LowerCase(NodeStr(A0)), N);
+          end;
+        end;
+      end;
+      for I:= 0 to N.ChildCount - 1 do ScanFree(N.Child(I));
+    end;
+
+  var
+    Body   : TTSNode     ;
+    Pair   : TPair<string, TTSNode>;
+    P      : TTSPoint    ;
+    F      : TLintFinding;
+  begin
+    Body:= ADefProc.ChildByField('body');
+    if Body.IsNull then Exit;
+    Aliased:= TDictionary<string, Boolean>.Create;
+    FreedAt:= TDictionary<string, TTSNode>.Create;
+    try
+      ScanAlias(Body);
+      ScanFree (Body);
+      for Pair in FreedAt do
+        if Aliased.ContainsKey(Pair.Key) then
+        begin
+          P:= Pair.Value.StartPoint;
+          F:= Default(TLintFinding);
+          F.RuleId  := 'interface-object-mixing';
+          F.Severity:= 'info';
+          F.Message := Format('%s is both aliased into an interface (reference-counted lifetime) and manually freed in the same routine -- a dual handle risks a double free when the last interface reference drops. Keep it purely an object OR purely an interface.', [Pair.Key]);
+          F.FilePath:= AFile;
+          F.StartLine:= Integer(P.Row   ) + 1;
+          F.StartCol := Integer(P.Column) + 1;
+          F.EndLine := F.StartLine;
+          F.EndCol  := F.StartCol + 1;
+          Findings.Add(F);
+        end;
+    finally
+      FreedAt.Free;
+      Aliased.Free;
+    end;
+  end;
+
+  procedure VisitProcsDualHandle(const N: TTSNode);
+  var
+    I: Integer;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then VisitDualHandle(N);
+    for I:= 0 to N.NamedChildCount - 1 do VisitProcsDualHandle(N.NamedChild(I));
+  end;
+
 begin
   Result:= nil;
   PF:= TAstParseCache.Get(AFile);
@@ -2192,6 +2331,7 @@ begin
       CollectGuards(PF.Tree.RootNode);
       CollectEnums (PF.Tree.RootNode);
       CheckExpr    (PF.Tree.RootNode);
+      VisitProcsDualHandle(PF.Tree.RootNode); { v0.82 #4 first cut (OFF): interface-object-mixing }
     end;
     Result:= Findings.ToArray;
   finally
