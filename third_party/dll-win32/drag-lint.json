@@ -24,7 +24,7 @@
         "include": ["C:\\Projects\\Delphi-RAG-Lint-Graph"] },
       { "name": "OCRPDF", "db": "OCRPDF.sqlite",
         "include": ["C:\\Projects\\OCRPDF"] },
-      { "name": "Library", "source": "registry-libraries", "platforms": "all",
+      { "name": "Library", "source": "registry-libraries", "platforms": ["Win32", "Win64"],
         "db": "library-{platform}.sqlite" }
     ]
   }
