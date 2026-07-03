@@ -319,29 +319,34 @@ begin
 end;
 
 { Sanity: a clean, safe, whole-statement single-routine selection with no
-  escaping control flow reaches the 'not-yet-implemented' refuse (Tasks 3-4
-  fill in synthesis) rather than any of the guard refusals above. }
-procedure TestSafeSelectionReachesNotYetImplemented;
+  escaping control flow now SYNTHESIZES (Task 4) rather than refusing. Here the
+  run defines x (dead after -> internal) and y (read after -> the single
+  output), reads nothing upward-exposed -> a function returning y with x as a
+  local. Asserts a non-refuse, non-empty edit set (exact text is pinned by the
+  dedicated synthesis fixtures below). }
+procedure TestSafeSelectionSynthesizes;
 const
   SRC =
     'unit u;'#13#10 +                          { 1 }
     'interface'#13#10 +                        { 2 }
     'implementation'#13#10 +                   { 3 }
     'procedure P;'#13#10 +                      { 4 }
-    'var x, y: Integer;'#13#10 +               { 5 }
-    'begin'#13#10 +                            { 6 }
-    '  x := 1;'#13#10 +                        { 7 }
-    '  y := x + 1;'#13#10 +                    { 8 }
-    '  Writeln(y);'#13#10 +                    { 9 }
-    'end;'#13#10 +                             { 10 }
-    'end.'#13#10;                              { 11 }
+    'var'#13#10 +                              { 5 }
+    '  x: Integer;'#13#10 +                    { 6 }
+    '  y: Integer;'#13#10 +                    { 7 }
+    'begin'#13#10 +                            { 8 }
+    '  x := 1;'#13#10 +                        { 9 }
+    '  y := x + 1;'#13#10 +                    { 10 }
+    '  Writeln(y);'#13#10 +                    { 11 }
+    'end;'#13#10 +                             { 12 }
+    'end.'#13#10;                              { 13 }
 var
   Reason: string;
   Edits: TArray<TTextEdit>;
 begin
-  Reason:= RefuseFor(SRC, 7, 8, 'NewMeth', Edits);
-  Check('safe-selection: reaches not-yet-implemented', Reason = 'not-yet-implemented');
-  Check('safe-selection: nil edits (not yet synthesized)', Edits = nil);
+  Reason:= RefuseFor(SRC, 9, 10, 'NewMeth', Edits);
+  Check('safe-selection: no refuse (synthesizes)', Reason = '');
+  Check('safe-selection: non-empty edits', Length(Edits) > 0);
 end;
 
 { ===========================================================================
@@ -610,6 +615,401 @@ begin
     Pos('conditionally assigned', V.Refuse) > 0);
 end;
 
+{ (i) CARRY-OVER (Task 3 review): the run ENDS on a try-finally whose try body
+  assigns the escaping var. The optimistic try-finally must-def model treats a
+  var assigned in the try body as must-defined downstream (code after the try
+  only runs on normal completion; an exception propagates out of the routine).
+  Here v is assigned in the try body and read after the run -> a valid single
+  output, NOT a conditionally-assigned refuse. Pins that model before synthesis
+  relies on it. }
+procedure TestClassifyTryFinallyTailMustDef;
+const
+  SRC =
+    'unit u;'#13#10 +                                 { 1 }
+    'interface'#13#10 +                               { 2 }
+    'implementation'#13#10 +                          { 3 }
+    'procedure P(a: Integer);'#13#10 +                 { 4 }
+    'var v: Integer;'#13#10 +                         { 5 }
+    'begin'#13#10 +                                   { 6 }
+    '  try'#13#10 +                                   { 7  run start (single try statement) }
+    '    v := a + 1;'#13#10 +                         { 8 }
+    '  finally'#13#10 +                               { 9 }
+    '    Writeln(''done'');'#13#10 +                  { 10 }
+    '  end;'#13#10 +                                  { 11  run end }
+    '  Writeln(v);'#13#10 +                           { 12  v read after -> escapes }
+    'end;'#13#10 +                                    { 13 }
+    'end.'#13#10;                                     { 14 }
+var
+  V: TExtractVars;
+  Names: TArray<string>;
+begin
+  { extract the whole try-finally (lines 7-11): v is assigned in the try body,
+    must-defined downstream by the optimistic model, and live after -> output. }
+  V:= ClassifyFor(SRC, 7, 11, Names);
+  Check('classify-i: no refuse (optimistic try-finally must-def)', V.Refuse = '');
+  Check('classify-i: OutputIdx is v',
+    (V.OutputIdx >= 0) and (V.OutputIdx < Length(Names)) and (Names[V.OutputIdx] = 'v'));
+  Check('classify-i: OutputIsInput = False', not V.OutputIsInput);
+  Check('classify-i: Inputs contains a', ContainsVarName(V.Inputs, Names, 'a'));
+end;
+
+{ ===========================================================================
+  Task 4: method synthesis + edit emission (Build)
+  =========================================================================== }
+
+{ Write ASource to a temp .pas, call Build over [AFromLine..AToLine], APPLY the
+  returned edits IN PLACE (TTextEditApplier reads/writes the file), and read the
+  edited source back. AReason = the refuse reason ('' on success). On refuse the
+  file is returned unchanged. Mirrors RefuseFor's temp-file / parse-cache
+  discipline. }
+function SynthFor(const ASource: string; AFromLine, AToLine: Integer;
+  const ANewName: string; out AReason: string): string;
+var
+  P: string;
+  Edits: TArray<TTextEdit>;
+begin
+  P:= TPath.Combine(TPath.GetTempPath, 'em_synth_' + TPath.GetGUIDFileName + '.pas');
+  TFile.WriteAllText(P, ASource, TEncoding.ANSI);
+  TAstParseCache.Clear;
+  try
+    Edits:= TExtractMethodRefactoring.Build(P, AFromLine, AToLine, ANewName, AReason);
+    if (AReason = '') and (Length(Edits) > 0) then
+      TTextEditApplier.Apply(Edits, False);
+    Result:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(P));
+  finally
+    TAstParseCache.Clear;
+    if TFile.Exists(P) then TFile.Delete(P);
+  end;
+end;
+
+{ (a) 0-output procedure extraction (free routine). Inputs = [a], no output,
+  internal local t. The new proc is inserted BEFORE the caller; the moved
+  local t is removed from the caller (emptying its var section -> the `var`
+  line goes too); the run is replaced with the call `Extracted(a);`. }
+procedure TestSynth0OutputProc;
+const
+  SRC =
+    'unit u;'#13#10 +                          { 1 }
+    'interface'#13#10 +                        { 2 }
+    'implementation'#13#10 +                   { 3 }
+    'procedure P(a: Integer);'#13#10 +          { 4 }
+    'var t: Integer;'#13#10 +                  { 5 }
+    'begin'#13#10 +                            { 6 }
+    '  t := a + 1;'#13#10 +                    { 7 }
+    '  Writeln(t);'#13#10 +                    { 8 }
+    'end;'#13#10 +                             { 9 }
+    'end.'#13#10;                              { 10 }
+  EXPECTED =
+    'unit u;'#13#10 +
+    'interface'#13#10 +
+    'implementation'#13#10 +
+    'procedure Extracted(a: Integer);'#13#10 +
+    'var'#13#10 +
+    '  t: Integer;'#13#10 +
+    'begin'#13#10 +
+    '  t := a + 1;'#13#10 +
+    '  Writeln(t);'#13#10 +
+    'end;'#13#10 +
+    ''#13#10 +
+    'procedure P(a: Integer);'#13#10 +
+    'begin'#13#10 +
+    '  Extracted(a);'#13#10 +
+    'end;'#13#10 +
+    'end.'#13#10;
+var
+  Reason, Got: string;
+begin
+  Got:= SynthFor(SRC, 7, 8, 'Extracted', Reason);
+  Check('synth-0out: no refuse', Reason = '');
+  Check('synth-0out: edited source matches', Got = EXPECTED);
+  if Got <> EXPECTED then begin Writeln('--- GOT ---'); Writeln(Got); Writeln('--- EXPECTED ---'); Writeln(EXPECTED); end;
+end;
+
+{ (b) 1-output function (free routine). Inputs = [a, b], Output = sum (a local,
+  not an input) -> return type Integer, sum declared as a new-method local,
+  `Result := sum;` appended. Call site is `sum := Compute(a, b);`; sum stays in
+  the caller's var section (still read after the run). }
+procedure TestSynth1OutputFunction;
+const
+  SRC =
+    'unit u;'#13#10 +                          { 1 }
+    'interface'#13#10 +                        { 2 }
+    'implementation'#13#10 +                   { 3 }
+    'procedure P(a, b: Integer);'#13#10 +       { 4 }
+    'var sum: Integer;'#13#10 +                { 5 }
+    'begin'#13#10 +                            { 6 }
+    '  sum := a + b;'#13#10 +                  { 7 }
+    '  Writeln(sum);'#13#10 +                  { 8 }
+    'end;'#13#10 +                             { 9 }
+    'end.'#13#10;                              { 10 }
+  EXPECTED =
+    'unit u;'#13#10 +
+    'interface'#13#10 +
+    'implementation'#13#10 +
+    'function Compute(a, b: Integer): Integer;'#13#10 +
+    'var'#13#10 +
+    '  sum: Integer;'#13#10 +
+    'begin'#13#10 +
+    '  sum := a + b;'#13#10 +
+    '  Result := sum;'#13#10 +
+    'end;'#13#10 +
+    ''#13#10 +
+    'procedure P(a, b: Integer);'#13#10 +
+    'var sum: Integer;'#13#10 +
+    'begin'#13#10 +
+    '  sum := Compute(a, b);'#13#10 +
+    '  Writeln(sum);'#13#10 +
+    'end;'#13#10 +
+    'end.'#13#10;
+var
+  Reason, Got: string;
+begin
+  Got:= SynthFor(SRC, 7, 7, 'Compute', Reason);
+  Check('synth-1out: no refuse', Reason = '');
+  Check('synth-1out: edited source matches', Got = EXPECTED);
+  if Got <> EXPECTED then begin Writeln('--- GOT ---'); Writeln(Got); Writeln('--- EXPECTED ---'); Writeln(EXPECTED); end;
+end;
+
+{ (c) in+out single var (free routine). x is both upward-exposed (read on the
+  rhs before any def in the run) and live-out -> OutputIsInput. x becomes a
+  value parameter (Delphi value params are assignable), `Result := x;` is
+  appended, and the call site is `x := Bump(x, d);`. No new-method locals. }
+procedure TestSynthInOutSingleVar;
+const
+  SRC =
+    'unit u;'#13#10 +                          { 1 }
+    'interface'#13#10 +                        { 2 }
+    'implementation'#13#10 +                   { 3 }
+    'procedure P(d: Integer);'#13#10 +          { 4 }
+    'var x: Integer;'#13#10 +                  { 5 }
+    'begin'#13#10 +                            { 6 }
+    '  x := 1;'#13#10 +                        { 7 }
+    '  x := x + d;'#13#10 +                    { 8 }
+    '  Writeln(x);'#13#10 +                    { 9 }
+    'end;'#13#10 +                             { 10 }
+    'end.'#13#10;                              { 11 }
+  EXPECTED =
+    'unit u;'#13#10 +
+    'interface'#13#10 +
+    'implementation'#13#10 +
+    'function Bump(x, d: Integer): Integer;'#13#10 +
+    'begin'#13#10 +
+    '  x := x + d;'#13#10 +
+    '  Result := x;'#13#10 +
+    'end;'#13#10 +
+    ''#13#10 +
+    'procedure P(d: Integer);'#13#10 +
+    'var x: Integer;'#13#10 +
+    'begin'#13#10 +
+    '  x := 1;'#13#10 +
+    '  x := Bump(x, d);'#13#10 +
+    '  Writeln(x);'#13#10 +
+    'end;'#13#10 +
+    'end.'#13#10;
+var
+  Reason, Got: string;
+begin
+  Got:= SynthFor(SRC, 8, 8, 'Bump', Reason);
+  Check('synth-inout: no refuse', Reason = '');
+  Check('synth-inout: edited source matches', Got = EXPECTED);
+  if Got <> EXPECTED then begin Writeln('--- GOT ---'); Writeln(Got); Writeln('--- EXPECTED ---'); Writeln(EXPECTED); end;
+end;
+
+{ (d) internal-local move with survivors. t is an internal moved into the new
+  method; keep is used outside the run and must stay in the caller. Only t's
+  own `declVar` line is deleted; the `var` keyword and `keep` survive. }
+procedure TestSynthInternalLocalMove;
+const
+  SRC =
+    'unit u;'#13#10 +                          { 1 }
+    'interface'#13#10 +                        { 2 }
+    'implementation'#13#10 +                   { 3 }
+    'procedure P(a: Integer);'#13#10 +          { 4 }
+    'var'#13#10 +                              { 5 }
+    '  t: Integer;'#13#10 +                    { 6 }
+    '  keep: Integer;'#13#10 +                 { 7 }
+    'begin'#13#10 +                            { 8 }
+    '  keep := 5;'#13#10 +                     { 9 }
+    '  t := a + 1;'#13#10 +                    { 10 }
+    '  Writeln(t);'#13#10 +                    { 11 }
+    '  Writeln(keep);'#13#10 +                 { 12 }
+    'end;'#13#10 +                             { 13 }
+    'end.'#13#10;                              { 14 }
+  EXPECTED =
+    'unit u;'#13#10 +
+    'interface'#13#10 +
+    'implementation'#13#10 +
+    'procedure Inner(a: Integer);'#13#10 +
+    'var'#13#10 +
+    '  t: Integer;'#13#10 +
+    'begin'#13#10 +
+    '  t := a + 1;'#13#10 +
+    '  Writeln(t);'#13#10 +
+    'end;'#13#10 +
+    ''#13#10 +
+    'procedure P(a: Integer);'#13#10 +
+    'var'#13#10 +
+    '  keep: Integer;'#13#10 +
+    'begin'#13#10 +
+    '  keep := 5;'#13#10 +
+    '  Inner(a);'#13#10 +
+    '  Writeln(keep);'#13#10 +
+    'end;'#13#10 +
+    'end.'#13#10;
+var
+  Reason, Got: string;
+begin
+  Got:= SynthFor(SRC, 10, 11, 'Inner', Reason);
+  Check('synth-internal-move: no refuse', Reason = '');
+  Check('synth-internal-move: edited source matches', Got = EXPECTED);
+  if Got <> EXPECTED then begin Writeln('--- GOT ---'); Writeln(Got); Writeln('--- EXPECTED ---'); Writeln(EXPECTED); end;
+end;
+
+{ (e) method extraction into a class with a private section. The new method's
+  declaration goes into the private declSection; its implementation goes AFTER
+  the enclosing method's end; qualified with the owner class name. }
+procedure TestSynthMethodIntoPrivate;
+const
+  SRC =
+    'unit u;'#13#10 +                          { 1 }
+    'interface'#13#10 +                        { 2 }
+    'type'#13#10 +                             { 3 }
+    '  TFoo = class'#13#10 +                   { 4 }
+    '  private'#13#10 +                        { 5 }
+    '    FBar: Integer;'#13#10 +               { 6 }
+    '  public'#13#10 +                         { 7 }
+    '    procedure Go(a: Integer);'#13#10 +    { 8 }
+    '  end;'#13#10 +                           { 9 }
+    'implementation'#13#10 +                   { 10 }
+    'procedure TFoo.Go(a: Integer);'#13#10 +   { 11 }
+    'var t: Integer;'#13#10 +                  { 12 }
+    'begin'#13#10 +                            { 13 }
+    '  t := a + 1;'#13#10 +                    { 14 }
+    '  Writeln(t);'#13#10 +                    { 15 }
+    'end;'#13#10 +                             { 16 }
+    'end.'#13#10;                              { 17 }
+  EXPECTED =
+    'unit u;'#13#10 +
+    'interface'#13#10 +
+    'type'#13#10 +
+    '  TFoo = class'#13#10 +
+    '  private'#13#10 +
+    '    FBar: Integer;'#13#10 +
+    '    procedure Helper(a: Integer);'#13#10 +
+    '  public'#13#10 +
+    '    procedure Go(a: Integer);'#13#10 +
+    '  end;'#13#10 +
+    'implementation'#13#10 +
+    'procedure TFoo.Go(a: Integer);'#13#10 +
+    'begin'#13#10 +
+    '  Helper(a);'#13#10 +
+    'end;'#13#10 +
+    ''#13#10 +
+    'procedure TFoo.Helper(a: Integer);'#13#10 +
+    'var'#13#10 +
+    '  t: Integer;'#13#10 +
+    'begin'#13#10 +
+    '  t := a + 1;'#13#10 +
+    '  Writeln(t);'#13#10 +
+    'end;'#13#10 +
+    'end.'#13#10;
+var
+  Reason, Got: string;
+begin
+  Got:= SynthFor(SRC, 14, 15, 'Helper', Reason);
+  Check('synth-method: no refuse', Reason = '');
+  Check('synth-method: edited source matches', Got = EXPECTED);
+  if Got <> EXPECTED then begin Writeln('--- GOT ---'); Writeln(Got); Writeln('--- EXPECTED ---'); Writeln(EXPECTED); end;
+end;
+
+{ (f) name collision -> Build refuses. The class already declares a member named
+  'Go'; extracting a new method also called 'Go' would collide -> refuse, no
+  edits. }
+procedure TestSynthCollisionRefuses;
+const
+  SRC =
+    'unit u;'#13#10 +                          { 1 }
+    'interface'#13#10 +                        { 2 }
+    'type'#13#10 +                             { 3 }
+    '  TFoo = class'#13#10 +                   { 4 }
+    '  private'#13#10 +                        { 5 }
+    '    FBar: Integer;'#13#10 +               { 6 }
+    '  public'#13#10 +                         { 7 }
+    '    procedure Go(a: Integer);'#13#10 +    { 8 }
+    '  end;'#13#10 +                           { 9 }
+    'implementation'#13#10 +                   { 10 }
+    'procedure TFoo.Go(a: Integer);'#13#10 +   { 11 }
+    'var t: Integer;'#13#10 +                  { 12 }
+    'begin'#13#10 +                            { 13 }
+    '  t := a + 1;'#13#10 +                    { 14 }
+    '  Writeln(t);'#13#10 +                    { 15 }
+    'end;'#13#10 +                             { 16 }
+    'end.'#13#10;                              { 17 }
+var
+  Reason, Got: string;
+begin
+  { new name 'Go' already exists as a member of TFoo }
+  Got:= SynthFor(SRC, 14, 15, 'Go', Reason);
+  Check('synth-collision: refuses', Reason <> '');
+  Check('synth-collision: reason mentions already exists', Pos('already exists', Reason) > 0);
+  Check('synth-collision: source unchanged', Got = SRC);
+end;
+
+{ (g) method extraction where the class has NO private section -> Build refuses
+  rather than guess where to put the declaration. }
+procedure TestSynthNoPrivateSectionRefuses;
+const
+  SRC =
+    'unit u;'#13#10 +                          { 1 }
+    'interface'#13#10 +                        { 2 }
+    'type'#13#10 +                             { 3 }
+    '  TFoo = class'#13#10 +                   { 4 }
+    '  public'#13#10 +                         { 5 }
+    '    procedure Go(a: Integer);'#13#10 +    { 6 }
+    '  end;'#13#10 +                           { 7 }
+    'implementation'#13#10 +                   { 8 }
+    'procedure TFoo.Go(a: Integer);'#13#10 +   { 9 }
+    'var t: Integer;'#13#10 +                  { 10 }
+    'begin'#13#10 +                            { 11 }
+    '  t := a + 1;'#13#10 +                    { 12 }
+    '  Writeln(t);'#13#10 +                    { 13 }
+    'end;'#13#10 +                             { 14 }
+    'end.'#13#10;                              { 15 }
+var
+  Reason, Got: string;
+begin
+  Got:= SynthFor(SRC, 12, 13, 'Helper', Reason);
+  Check('synth-no-private: refuses', Reason <> '');
+  Check('synth-no-private: reason mentions private section', Pos('private section', Reason) > 0);
+  Check('synth-no-private: source unchanged', Got = SRC);
+end;
+
+{ (h) an Internal to move shares a multi-variable declaration line
+  (`var x, y: Integer;`) with a var that stays. v1 does not rewrite/split a
+  shared declaration line, so Build refuses rather than corrupt it. }
+procedure TestSynthMultiVarSplitRefuses;
+const
+  SRC =
+    'unit u;'#13#10 +                          { 1 }
+    'interface'#13#10 +                        { 2 }
+    'implementation'#13#10 +                   { 3 }
+    'procedure P;'#13#10 +                      { 4 }
+    'var x, y: Integer;'#13#10 +               { 5  x internal, y output -> shared line }
+    'begin'#13#10 +                            { 6 }
+    '  x := 1;'#13#10 +                        { 7 }
+    '  y := x + 1;'#13#10 +                    { 8 }
+    '  Writeln(y);'#13#10 +                    { 9 }
+    'end;'#13#10 +                             { 10 }
+    'end.'#13#10;                              { 11 }
+var
+  Reason, Got: string;
+begin
+  Got:= SynthFor(SRC, 7, 8, 'NewMeth', Reason);
+  Check('synth-multivar-split: refuses', Reason <> '');
+  Check('synth-multivar-split: reason mentions multi-variable', Pos('multi-variable', Reason) > 0);
+  Check('synth-multivar-split: source unchanged', Got = SRC);
+end;
+
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -620,7 +1020,7 @@ begin
     TestEscapingBreak;
     TestCrossesNesting;
     TestSameLineSiblings;
-    TestSafeSelectionReachesNotYetImplemented;
+    TestSafeSelectionSynthesizes;
     TestClassifyInputOnlyNoOutput;
     TestClassifyOutputUsedAfter;
     TestClassifyInOutSameVar;
@@ -629,6 +1029,15 @@ begin
     TestClassifyCompoundTailIfElse;
     TestClassifyBranchLocalDeadIsInternal;
     TestClassifyConditionalEscapeRefuses;
+    TestClassifyTryFinallyTailMustDef;
+    TestSynth0OutputProc;
+    TestSynth1OutputFunction;
+    TestSynthInOutSingleVar;
+    TestSynthInternalLocalMove;
+    TestSynthMethodIntoPrivate;
+    TestSynthCollisionRefuses;
+    TestSynthNoPrivateSectionRefuses;
+    TestSynthMultiVarSplitRefuses;
   except
     on Ex: Exception do begin Writeln('EXCEPTION ', Ex.ClassName, ': ', Ex.Message); Inc(GFail); end;
   end;

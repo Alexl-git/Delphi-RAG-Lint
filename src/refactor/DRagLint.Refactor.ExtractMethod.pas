@@ -27,6 +27,7 @@ uses
   , DRagLint.Analysis.Liveness
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Refactor.TextEdit
+  , DRagLint.Refactor.Rename
   ;
 
 type
@@ -831,9 +832,17 @@ end;
 /// <summary>True when AIdx (a var-table index) is referenced -- read OR
 /// written, whole-var or partial -- anywhere in ANode's subtree OUTSIDE the
 /// run's own span (ASel). Used to verify an Internal candidate is genuinely
-/// local to the extracted run before declaring it a new-method local: if the
-/// routine still uses it elsewhere, it cannot be dropped from the enclosing
-/// routine's scope.</summary>
+/// local to the extracted run before declaring it a new-method local (and,
+/// in Task 4 synthesis, before DELETING its declaration from the enclosing
+/// routine): if the routine still uses it elsewhere, it cannot be dropped
+/// from the enclosing routine's scope.</summary>
+/// <remarks>Call with ANode = ASel.Proc (the whole enclosing routine).
+/// Declaration-site identifiers are NOT counted as reads: the routine's
+/// header (declProc/declArgs) and var sections (declVars) are skipped
+/// entirely, so a var's own `var t: Integer;` / parameter declaration does
+/// not register as a "use outside the run" -- only executable statement
+/// occurrences do. Nested defProc subtrees are also skipped (their own
+/// scope). The recursion therefore descends only into the routine body.</remarks>
 function VarUsedOutsideRun(const ANode: TTSNode; const ASel: TExtractSelection;
   const ASrc: TBytes; AVars: TRoutineVarTable; AIdx: Integer): Boolean;
 var
@@ -843,7 +852,12 @@ var
 begin
   Result:= False;
   if ANode.IsNull then Exit;
-  if ANode.NodeType = 'defProc' then Exit; { nested routine: own scope, not our concern }
+  { Skip a NESTED routine (own scope) -- but NOT the root ASel.Proc itself,
+    which is a defProc we must scan. Skip declaration sections entirely so a
+    var's own declaration identifier never counts as a read (see remarks). }
+  if (ANode.NodeType = 'defProc') and (not (ANode = ASel.Proc)) then Exit;
+  if (ANode.NodeType = 'declProc') or (ANode.NodeType = 'declVars')
+    or (ANode.NodeType = 'declArgs') then Exit;
 
   { NOTE: the node-kind list below is a "test this node directly" filter (which
     nodes get their own AssignmentTargetIndex/CollectReadsAndCallDefs probe) --
@@ -1223,20 +1237,599 @@ begin
   end;
 end;
 
+{ ---------------------------------------------------------------------------
+  Task 4 synthesis helpers
+  --------------------------------------------------------------------------- }
+
+/// <summary>The `declClass` node of the class named AClassName (case-
+/// insensitive), searched over every `declType` in ATree, or a null node when
+/// no such class is declared. Mirrors DRagLint.Parser.Delphi13's
+/// TryWalkClassOrRecord: a `declType` carries the class name as its child
+/// field 'name' and wraps the class body under child field 'type' ->
+/// `declClass` (FindNamedChildOfType-equivalent scan for the first descendant
+/// of kind 'declClass').</summary>
+function FindDeclClass(const ARoot: TTSNode; const AClassName: string; const ASrc: TBytes): TTSNode;
+var
+  Found: TTSNode;
+
+  function FirstDeclClass(const N: TTSNode): TTSNode;
+  var I: Integer; R: TTSNode;
+  begin
+    Result:= Default(TTSNode);
+    if N.IsNull then Exit;
+    if N.NodeType = 'declClass' then Exit(N);
+    for I:= 0 to N.NamedChildCount - 1 do
+    begin
+      R:= FirstDeclClass(N.NamedChild(I));
+      if not R.IsNull then Exit(R);
+    end;
+  end;
+
+  procedure Walk(const N: TTSNode);
+  var I: Integer; NameN, TypeN, ClassN: TTSNode;
+  begin
+    if N.IsNull or (not Found.IsNull) then Exit;
+    if N.NodeType = 'declType' then
+    begin
+      NameN:= N.ChildByField('name');
+      if (not NameN.IsNull) and SameText(Trim(NStr(NameN, ASrc)), AClassName) then
+      begin
+        TypeN:= N.ChildByField('type');
+        if not TypeN.IsNull then
+        begin
+          ClassN:= FirstDeclClass(TypeN);
+          if (not ClassN.IsNull) and (ClassN.NodeType = 'declClass') then
+          begin
+            Found:= ClassN;
+            Exit;
+          end;
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do
+    begin
+      Walk(N.NamedChild(I));
+      if not Found.IsNull then Exit;
+    end;
+  end;
+
+begin
+  Found:= Default(TTSNode);
+  Walk(ARoot);
+  Result:= Found;
+end;
+
+/// <summary>1-based end line of the FIRST `private` (or `strict private`)
+/// `declSection` of ADeclClass -- the line after which a new method
+/// declaration should be inserted -- or -1 when the class has no private
+/// section. A `declSection`'s visibility is carried by a leading kPrivate
+/// token child (optionally preceded by kStrict), exactly as
+/// DRagLint.Parser.Delphi13's VisibilityOfSection reads it.</summary>
+function PrivateSectionEndLine(const ADeclClass: TTSNode): Integer;
+var I, J: Integer; Sec, Kw: TTSNode; IsPrivate: Boolean;
+begin
+  Result:= -1;
+  if ADeclClass.IsNull then Exit;
+  for I:= 0 to ADeclClass.NamedChildCount - 1 do
+  begin
+    Sec:= ADeclClass.NamedChild(I);
+    if Sec.NodeType <> 'declSection' then Continue;
+    IsPrivate:= False;
+    for J:= 0 to Sec.NamedChildCount - 1 do
+    begin
+      Kw:= Sec.NamedChild(J);
+      if Kw.NodeType = 'kPrivate' then IsPrivate:= True
+      else if Kw.NodeType = 'kStrict' then { keep scanning; strict private still counts }
+      else Break; { past the visibility keyword(s), into members }
+    end;
+    if IsPrivate then Exit(NEndLine(Sec));
+  end;
+end;
+
+/// <summary>True when ADeclClass already declares a member (field, method, or
+/// property identifier) whose bare name equals AName (case-insensitive) --
+/// used to refuse an Extract Method whose new name would collide with an
+/// existing class member. Scans direct `declProc`/`declField`/`declProp`
+/// members and those inside every `declSection`, taking each member's leading
+/// identifier as its name (mirrors the parser's member walk).</summary>
+function ClassHasMemberNamed(const ADeclClass: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+
+  function MemberName(const AMember: TTSNode): string;
+  var I: Integer; C: TTSNode;
+  begin
+    Result:= '';
+    for I:= 0 to AMember.NamedChildCount - 1 do
+    begin
+      C:= AMember.NamedChild(I);
+      if C.NodeType = 'identifier' then Exit(Trim(NStr(C, ASrc)));
+    end;
+  end;
+
+  function ScanMembers(const AContainer: TTSNode): Boolean;
+  var I: Integer; M: TTSNode;
+  begin
+    Result:= False;
+    for I:= 0 to AContainer.NamedChildCount - 1 do
+    begin
+      M:= AContainer.NamedChild(I);
+      if (M.NodeType = 'declProc') or (M.NodeType = 'declField') or (M.NodeType = 'declProp') then
+      begin
+        if SameText(MemberName(M), AName) then Exit(True);
+      end
+      else if M.NodeType = 'declSection' then
+        if ScanMembers(M) then Exit(True);
+    end;
+  end;
+
+begin
+  Result:= False;
+  if ADeclClass.IsNull then Exit;
+  Result:= ScanMembers(ADeclClass);
+end;
+
+/// <summary>True when the implementation section already declares a free
+/// routine (defProc/declProc) whose bare name equals AName (case-insensitive),
+/// so a new free procedure of that name would collide. Bare name = the
+/// identifier header child (a qualified genericDot header is a method, never a
+/// free routine, so it is ignored here).</summary>
+function UnitHasFreeRoutineNamed(const ARoot: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+var
+  Hit: Boolean;
+
+  procedure Walk(const N: TTSNode);
+  var I: Integer; Hdr, NameN: TTSNode;
+  begin
+    if N.IsNull or Hit then Exit;
+    if (N.NodeType = 'defProc') or (N.NodeType = 'declProc') then
+    begin
+      if N.NodeType = 'defProc' then Hdr:= N.ChildByField('header') else Hdr:= N;
+      if not Hdr.IsNull then
+      begin
+        NameN:= Hdr.ChildByField('name');
+        if (not NameN.IsNull) and (NameN.NodeType = 'identifier')
+          and SameText(Trim(NStr(NameN, ASrc)), AName) then
+        begin
+          Hit:= True;
+          Exit;
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do
+    begin
+      Walk(N.NamedChild(I));
+      if Hit then Exit;
+    end;
+  end;
+
+begin
+  Hit:= False;
+  Walk(ARoot);
+  Result:= Hit;
+end;
+
+/// <summary>Semicolon-separated parameter list from AVars for the given
+/// var-table AIndices, in order, COALESCING consecutive parameters that share
+/// an identical declared type into one `n1, n2: Type` group (idiomatic Delphi,
+/// e.g. `a, b: Integer`). Names are the (lowercased) var-table names; Delphi
+/// is case-insensitive, so a synthesized parameter/argument named `x` binds
+/// the caller's `X` identically. Types come from TRoutineVar.TypeText (already
+/// validated non-empty by ClassifyVars).</summary>
+function ParamListText(AVars: TRoutineVarTable; const AIndices: TArray<Integer>): string;
+var
+  I: Integer;
+  V: TRoutineVar;
+  Names, GroupType: string;
+begin
+  Result:= '';
+  Names:= '';
+  GroupType:= '';
+  for I:= 0 to High(AIndices) do
+  begin
+    V:= AVars.Get(AIndices[I]);
+    if (Names <> '') and (not SameText(V.TypeText, GroupType)) then
+    begin
+      if Result <> '' then Result:= Result + '; ';
+      Result:= Result + Names + ': ' + GroupType;
+      Names:= '';
+    end;
+    if Names = '' then GroupType:= V.TypeText
+    else Names:= Names + ', ';
+    Names:= Names + V.Name;
+  end;
+  if Names <> '' then
+  begin
+    if Result <> '' then Result:= Result + '; ';
+    Result:= Result + Names + ': ' + GroupType;
+  end;
+end;
+
+/// <summary>Comma-joined argument list (bare var names) from AVars for the
+/// given var-table AIndices, in order -- the call site's actual arguments.</summary>
+function ArgListText(AVars: TRoutineVarTable; const AIndices: TArray<Integer>): string;
+var I: Integer;
+begin
+  Result:= '';
+  for I:= 0 to High(AIndices) do
+  begin
+    if I > 0 then Result:= Result + ', ';
+    Result:= Result + AVars.Get(AIndices[I]).Name;
+  end;
+end;
+
+/// <summary>The sole identifier-name of a `declVar` node, or '' when the
+/// declaration lists more than one name (`x, y: T`). A `declVar` is a run of
+/// identifier children terminated by the ':' before the 'type' field; the
+/// declaration is single-name iff exactly one identifier child precedes the
+/// type. Extract Method only deletes single-name declarations (splitting a
+/// shared `x, y: T` line safely is out of v1 scope).</summary>
+function SoleDeclVarName(const ADeclVar: TTSNode; const ASrc: TBytes): string;
+var
+  I, IdCount, TypeStart: Integer;
+  C, TypeN: TTSNode;
+  LastId: TTSNode;
+begin
+  Result:= '';
+  if ADeclVar.IsNull then Exit;
+  TypeN:= ADeclVar.ChildByField('type');
+  if TypeN.IsNull then TypeStart:= MaxInt else TypeStart:= Integer(TypeN.StartByte);
+  IdCount:= 0;
+  LastId:= Default(TTSNode);
+  for I:= 0 to ADeclVar.NamedChildCount - 1 do
+  begin
+    C:= ADeclVar.NamedChild(I);
+    if (C.NodeType = 'identifier') and (Integer(C.StartByte) < TypeStart) then
+    begin
+      Inc(IdCount);
+      LastId:= C;
+    end;
+  end;
+  if IdCount = 1 then Result:= LowerCase(Trim(NStr(LastId, ASrc)));
+end;
+
+/// <summary>Emits tekDeleteLines edits removing every moved Internal var's
+/// declaration from ASel.Proc's `var` section(s), and (when a `declVars` node
+/// is left with no surviving `declVar`) its now-orphaned `var` keyword line
+/// too. Refuses (returns False, sets ARefuse) when an Internal to move shares
+/// a multi-name `declVar` line (`x, y: T`) that cannot be split without
+/// rewriting the line -- never corrupt a shared declaration. Returns True with
+/// no error when there is nothing to delete.</summary>
+function EmitInternalDeletions(const ASel: TExtractSelection; AVars: TRoutineVarTable;
+  const ACV: TExtractVars; const ASrc: TBytes; const AFile: string;
+  AEdits: TList<TTextEdit>; out ARefuse: string): Boolean;
+var
+  I, J, K: Integer;
+  ToMove: TList<Integer>;
+  DeclVarsList: TList<TTSNode>;
+  DV, KwVar, Child, Member: TTSNode;
+  MemberName: string;
+  E: TTextEdit;
+  AnyKept, AnyDeleted: Boolean;
+  KwLine: Integer;
+
+  procedure CollectDeclVars(const N: TTSNode);
+  var X: Integer;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then
+    begin
+      { only the routine's OWN var sections -- do not descend into nested
+        routines (they carry their own defProc, skip after the root) }
+      if not (N = ASel.Proc) then Exit;
+    end;
+    if N.NodeType = 'declVars' then DeclVarsList.Add(N);
+    for X:= 0 to N.NamedChildCount - 1 do CollectDeclVars(N.NamedChild(X));
+  end;
+
+begin
+  Result:= True;
+  ARefuse:= '';
+  if Length(ACV.Internals) = 0 then Exit;
+
+  ToMove:= TList<Integer>.Create;
+  DeclVarsList:= TList<TTSNode>.Create;
+  try
+    for I:= 0 to High(ACV.Internals) do ToMove.Add(ACV.Internals[I]);
+    CollectDeclVars(ASel.Proc);
+
+    for I:= 0 to DeclVarsList.Count - 1 do
+    begin
+      DV:= DeclVarsList[I];
+      KwVar:= Default(TTSNode);
+      AnyKept:= False;
+      AnyDeleted:= False;
+      for J:= 0 to DV.NamedChildCount - 1 do
+      begin
+        Member:= DV.NamedChild(J);
+        if Member.NodeType = 'kVar' then begin KwVar:= Member; Continue; end;
+        if Member.NodeType <> 'declVar' then Continue;
+        MemberName:= SoleDeclVarName(Member, ASrc);
+        { is this declVar one of the internals we must move? }
+        K:= -1;
+        if MemberName <> '' then K:= ToMove.IndexOf(AVars.IndexOf(MemberName));
+        { A multi-name declVar (MemberName='') that contains an internal to
+          move cannot be split safely -> refuse. Detect by checking whether any
+          to-move var's declaration line equals this declVar's line. }
+        if MemberName = '' then
+        begin
+          for var M: Integer:= 0 to ToMove.Count - 1 do
+          begin
+            var VV: TRoutineVar:= AVars.Get(ToMove[M]);
+            if (VV.DeclLine >= NLine(Member)) and (VV.DeclLine <= NEndLine(Member)) then
+            begin
+              ARefuse:= Format('local "%s" shares a multi-variable declaration line that cannot be split', [VV.Name]);
+              Exit(False);
+            end;
+          end;
+          AnyKept:= True;
+          Continue;
+        end;
+        if K >= 0 then
+        begin
+          E:= Default(TTextEdit);
+          E.FilePath:= AFile; E.Kind:= tekDeleteLines;
+          E.Line:= NLine(Member); E.EndLine:= NEndLine(Member);
+          AEdits.Add(E);
+          AnyDeleted:= True;
+        end
+        else
+          AnyKept:= True;
+      end;
+
+      { orphaned `var` keyword: no surviving declVar in this section. Delete the
+        kVar line ONLY when it is on its own line (not already removed as part
+        of a deleted declVar that shared its line, e.g. `var t: Integer;`). }
+      if AnyDeleted and (not AnyKept) and (not KwVar.IsNull) then
+      begin
+        KwLine:= NLine(KwVar);
+        { was the kVar line already covered by a deleted declVar on the same line? }
+        var Covered: Boolean:= False;
+        for J:= 0 to DV.NamedChildCount - 1 do
+        begin
+          Child:= DV.NamedChild(J);
+          if (Child.NodeType = 'declVar') and (NLine(Child) = KwLine) then
+          begin Covered:= True; Break; end;
+        end;
+        if not Covered then
+        begin
+          E:= Default(TTextEdit);
+          E.FilePath:= AFile; E.Kind:= tekDeleteLines;
+          E.Line:= KwLine; E.EndLine:= KwLine;
+          AEdits.Add(E);
+        end;
+      end;
+    end;
+  finally
+    ToMove.Free;
+    DeclVarsList.Free;
+  end;
+end;
+
 class function TExtractMethodRefactoring.Build(const AFile: string; AFromLine, AToLine: Integer;
   const ANewName: string; out ARefuse: string): TArray<TTextEdit>;
 var
-  Sel: TExtractSelection;
+  Sel     : TExtractSelection;
+  PF      : TParsedFile;
+  Src     : TBytes;
+  Vars    : TRoutineVarTable;
+  Cfg     : TCfg;
+  CV      : TExtractVars;
+  Edits   : TList<TTextEdit>;
+  E       : TTextEdit;
+  SrcText : string;
+  Lines   : TArray<string>;
+  Indent  : string;
+  CallText: string;
+  SigBody : string;   { unqualified `name(params): type;` -- class declaration }
+  SigHead : string;   { implementation header (SigBody, qualified for a method) }
+  ProcText: string;
+  Locals  : TList<Integer>;
+  I       : Integer;
+  IsFunc  : Boolean;
+  OutName : string;
+  OutType : string;
+  CRLF    : string;
+  DeclClass  : TTSNode;
+  PrivEndLine: Integer;
+  ImplInsertLine: Integer;
+  BodyLine : Integer;
+  V        : TRoutineVar;
+
+  { Append one internal/local var decl line to ProcText's var block. }
+  procedure AddLocalDecl(AIdx: Integer);
+  var LV: TRoutineVar;
+  begin
+    LV:= Vars.Get(AIdx);
+    ProcText:= ProcText + '  ' + LV.Name + ': ' + LV.TypeText + ';' + CRLF;
+  end;
+
 begin
   Result:= nil;
+  CRLF:= #13#10;
+
   if ResolveExtractSelection(AFile, AFromLine, AToLine, Sel, ARefuse) = eoRefused then Exit;
 
-  { Selection resolution + safety guards succeeded. Variable classification
-    (Task 3) and method synthesis + edit emission (Task 4) are not
-    implemented yet -- refuse explicitly rather than emit a partial or
-    incorrect edit set. }
-  ARefuse:= 'not-yet-implemented';
-  Result:= nil;
+  { Name-safety: a reserved word can never be a routine name; a collision with
+    an existing member (method path) or free routine (free-routine path) would
+    shadow/redeclare. Reuse TRenameRefactoring.IsReservedWord (pure, store-free)
+    for the reserved-word half of ConflictReason's logic, and an AST scan of
+    the target scope for the sibling-collision half. Refuse rather than guess. }
+  if TRenameRefactoring.IsReservedWord(ANewName) then
+  begin
+    ARefuse:= Format('"%s" is a reserved word', [ANewName]);
+    Exit;
+  end;
+
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then begin ARefuse:= 'could not parse file'; Exit; end;
+  Src:= PF.Src;
+
+  Vars:= TRoutineVarTable.Build(Sel.Proc, Src);
+  Cfg := TCfgBuilder.Build(Sel.Proc, Src);
+  Edits := TList<TTextEdit>.Create;
+  Locals:= TList<Integer>.Create;
+  try
+    Cfg.ComputePreds;
+
+    CV:= ClassifyVars(Sel, Cfg, Vars, Src);
+    if CV.Refuse <> '' then begin ARefuse:= CV.Refuse; Result:= nil; Exit; end;
+
+    { ----- collision check in the target scope ----- }
+    if Sel.IsMethod then
+    begin
+      DeclClass:= FindDeclClass(PF.Tree.RootNode, Sel.OwnerClass, Src);
+      if DeclClass.IsNull then
+      begin
+        ARefuse:= Format('could not find the declaration of class "%s"', [Sel.OwnerClass]);
+        Exit;
+      end;
+      if ClassHasMemberNamed(DeclClass, ANewName, Src) then
+      begin
+        ARefuse:= Format('a symbol named "%s" already exists in the same scope', [ANewName]);
+        Exit;
+      end;
+      PrivEndLine:= PrivateSectionEndLine(DeclClass);
+      if PrivEndLine < 0 then
+      begin
+        ARefuse:= Format('class "%s" has no private section to hold the new method declaration', [Sel.OwnerClass]);
+        Exit;
+      end;
+    end
+    else
+    begin
+      DeclClass:= Default(TTSNode);
+      PrivEndLine:= -1;
+      if UnitHasFreeRoutineNamed(PF.Tree.RootNode, ANewName, Src) then
+      begin
+        ARefuse:= Format('a symbol named "%s" already exists in the same scope', [ANewName]);
+        Exit;
+      end;
+    end;
+
+    { ----- signature shape ----- }
+    IsFunc := CV.OutputIdx >= 0;
+    OutName:= '';
+    OutType:= '';
+    if IsFunc then
+    begin
+      V:= Vars.Get(CV.OutputIdx);
+      OutName:= V.Name;
+      OutType:= V.TypeText;
+    end;
+
+    { The new method's locals = the classified Internals, PLUS the output var
+      when it is a local (not also an input): an in+out var is a value
+      parameter (assignable in Delphi), so it needs no local declaration. }
+    for I:= 0 to High(CV.Internals) do Locals.Add(CV.Internals[I]);
+    if IsFunc and (not CV.OutputIsInput) then Locals.Add(CV.OutputIdx);
+
+    { ----- signature header text ----- SigBody is the unqualified declaration
+      (used verbatim in the class private section); SigHead is the
+      implementation header, which for a method prepends the `Owner.` qualifier
+      after the procedure/function keyword. }
+    SigBody:= ANewName;
+    if Length(CV.Inputs) > 0 then
+      SigBody:= SigBody + '(' + ParamListText(Vars, CV.Inputs) + ')';
+    if IsFunc then SigBody:= SigBody + ': ' + OutType;
+    SigBody:= SigBody + ';';
+
+    if IsFunc then SigHead:= 'function ' else SigHead:= 'procedure ';
+    if Sel.IsMethod then SigHead:= SigHead + Sel.OwnerClass + '.';
+    SigHead:= SigHead + SigBody;
+
+    if IsFunc then SigBody:= 'function ' + SigBody else SigBody:= 'procedure ' + SigBody;
+
+    { ----- body lines (verbatim source of the run) ----- }
+    SrcText:= TEncoding.ANSI.GetString(Src);
+    Lines  := SrcText.Replace(#13#10, #10).Split([#10]);
+
+    { ----- full new-method text ----- }
+    ProcText:= SigHead + CRLF;
+    if Locals.Count > 0 then
+    begin
+      ProcText:= ProcText + 'var' + CRLF;
+      for I:= 0 to Locals.Count - 1 do AddLocalDecl(Locals[I]);
+    end;
+    ProcText:= ProcText + 'begin' + CRLF;
+    for BodyLine:= Sel.StartLine to Sel.EndLine do
+      if (BodyLine >= 1) and (BodyLine <= Length(Lines)) then
+        ProcText:= ProcText + Lines[BodyLine - 1] + CRLF;
+    if IsFunc then ProcText:= ProcText + '  Result := ' + OutName + ';' + CRLF;
+    ProcText:= ProcText + 'end;';
+
+    { ----- call site text (replaces the run) ----- }
+    Indent:= StringOfChar(' ', Sel.StartCol - 1);
+    CallText:= Indent + ANewName;
+    if Length(CV.Inputs) > 0 then CallText:= CallText + '(' + ArgListText(Vars, CV.Inputs) + ')';
+    CallText:= CallText + ';';
+    if IsFunc then CallText:= Indent + OutName + ' := ' + ANewName +
+      '(' + ArgListText(Vars, CV.Inputs) + ');';
+
+    { ===== emit edits ===== }
+
+    { (1) replace the run with the call: delete the run's lines, insert the
+      call line where the run began (after the line before it). }
+    E:= Default(TTextEdit);
+    E.FilePath:= AFile; E.Kind:= tekInsertLines;
+    E.Line:= Sel.StartLine - 1; E.Text:= CallText;
+    Edits.Add(E);
+
+    E:= Default(TTextEdit);
+    E.FilePath:= AFile; E.Kind:= tekDeleteLines;
+    E.Line:= Sel.StartLine; E.EndLine:= Sel.EndLine;
+    Edits.Add(E);
+
+    { (2) insert the new method implementation. Method: after the enclosing
+      routine's end; (a leading blank line separates it). Free routine:
+      immediately before the enclosing routine (a trailing blank line
+      separates it), so the new proc is genuinely declared BEFORE its
+      caller. }
+    E:= Default(TTextEdit);
+    E.FilePath:= AFile; E.Kind:= tekInsertLines;
+    if Sel.IsMethod then
+    begin
+      ImplInsertLine:= NEndLine(Sel.Proc);
+      E.Line:= ImplInsertLine;
+      E.Text:= CRLF + ProcText;
+    end
+    else
+    begin
+      ImplInsertLine:= NLine(Sel.Proc) - 1;
+      E.Line:= ImplInsertLine;
+      E.Text:= ProcText + CRLF;
+    end;
+    Edits.Add(E);
+
+    { (3) method path: insert the new method's declaration into the class
+      private section (after its last member line). }
+    if Sel.IsMethod then
+    begin
+      E:= Default(TTextEdit);
+      E.FilePath:= AFile; E.Kind:= tekInsertLines;
+      E.Line:= PrivEndLine;
+      E.Text:= '    ' + SigBody;
+      Edits.Add(E);
+    end;
+
+    { (4) delete each moved Internal's declaration from the enclosing routine.
+      Only whole single-var `declVar` lines are removed; a var sharing a
+      `declVar` line with other names is refused earlier only if it is an
+      Internal we must move -- guard here and refuse rather than corrupt a
+      shared declaration line. If deleting the sole declaration empties the
+      `var` section, delete the `var` keyword line too. }
+    if not EmitInternalDeletions(Sel, Vars, CV, Src, AFile, Edits, ARefuse) then
+    begin
+      Result:= nil;
+      Exit;
+    end;
+
+    Result:= Edits.ToArray;
+    ARefuse:= '';
+  finally
+    Edits.Free;
+    Locals.Free;
+    Cfg.Free;
+    Vars.Free;
+  end;
 end;
 
 class function TExtractMethodRefactoring.RenderDryRun(const AEdits: TArray<TTextEdit>): string;
