@@ -1,6 +1,23 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-03 (LATEST) -- **v0.83.0-alpha PUBLISHED (FULL release, gh --latest, win32+win64). Autonomous fork reviewed + merged.**
+> ## RESUME 2026-07-03 (LATEST-2) -- **v0.83.0-alpha SHIPPED; REFACTORING-APPLY frontier KICKED OFF -- Extract Method spec+plan WRITTEN, ready to implement.**
+> `main`=`703c84b` (clean, pushed). Lint-DETECTION coverage CLOSED (see `docs/lint/MISSING-FEATURES.md`). The growth frontier is
+> now refactoring-APPLY, tracked in **`docs/lint/REFACTOR-LIST.md`** (all ~30 refactorings + difficulty + progress; shipped =
+> rename/find-unit/safe-delete; in-progress = extract-method).
+> **>>> NEXT ACTION: execute the Extract Method implementation plan** `docs/superpowers/plans/2026-07-03-extract-method-plan.md`
+> via **superpowers:subagent-driven-development** -- 7 TDD tasks: T1 boundary-liveness helper -> T2 selection+refuse guards ->
+> T3 variable classification -> T4 synthesis+TextEdit emission -> T5 CLI verb + compile-verified e2e -> T6 IDE Ctrl+Alt+M ->
+> T7 ship v0.84. Spec: `docs/superpowers/specs/2026-07-03-extract-method-design.md`. **Cut line if oversized = defer IDE (T6)
+> to a fast-follow** (ship T1-5+7 first). Flip extract-method `[~]`->`[x]` in REFACTOR-LIST.md at ship.
+> **Key design facts (so the cold session does not re-derive):** single-file (NO `--db`); v1 = value in-params + a SINGLE
+> `Result` output (2+ outputs REFUSE); param types come from `TRoutineVar.TypeText` (NO type inference); "full M2 liveness" is
+> LARGELY ALREADY BUILT -- `TDataFlowSolver` (fwd/bwd worklist) + `TLiveness` exist in `src/analysis`, Extract Method only adds
+> boundary querying (replay per-item transfer, like `split-variable` does). Reuse `TTextEditApplier`,
+> `TRenameRefactoring.BuildLocal`/`ConflictReason`. Prime directive = REFUSE rather than emit wrong code. Build = THIS Windows box
+> only (delphi-build skill: rsvars+msbuild). Recommended refactor order after Extract Method = Change Signature (REFACTOR-LIST.md).
+>
+> --- (prior, v0.83 release) ---
+> ## RESUME 2026-07-03 -- **v0.83.0-alpha PUBLISHED (FULL release, gh --latest, win32+win64). Autonomous fork reviewed + merged.**
 > `main` at tag `v0.83.0-alpha`, origin synced. VERSION `CLI.pas:6`=`0.83.0-alpha`. **No schema change (still v13.)**
 > Harness **lint 153/153 + store 16/16 + catalog 29/29 + flowengine 33/33**; OFF-suppression runtime-verified (both new rules
 > bare=0, opt-in=1). Release zips are self-contained (Release exe + 3 tree-sitter DLLs + docs + `rules/`), 123 files each.
