@@ -3,15 +3,15 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 12;
+  SCHEMA_VERSION = 13;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
-  SCHEMA_DDL_FTS5_FIRST = 47;
+  SCHEMA_DDL_FTS5_FIRST = 48;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
-  SCHEMA_DDL: array[0..51] of string = (
+  SCHEMA_DDL: array[0..52] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' + '  key   TEXT PRIMARY KEY,' + '  value TEXT NOT NULL' + ')',
 
     'CREATE TABLE IF NOT EXISTS files (' + '  id          INTEGER PRIMARY KEY,' + '  path        TEXT NOT NULL UNIQUE,' + '  mtime_unix  INTEGER NOT NULL,' +
@@ -38,7 +38,13 @@ const
 
     'CREATE TABLE IF NOT EXISTS refs (' + '  id          INTEGER PRIMARY KEY,' + '  symbol_id   INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
     '  file_id     INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' + '  kind        TEXT NOT NULL,' + '  name_text   TEXT NOT NULL,' + '  start_line  INTEGER NOT NULL,' +
-    '  start_col   INTEGER NOT NULL,' + '  end_line    INTEGER NOT NULL,' + '  end_col     INTEGER NOT NULL' + ')',
+    '  start_col   INTEGER NOT NULL,' + '  end_line    INTEGER NOT NULL,' + '  end_col     INTEGER NOT NULL,' +
+    // v13 (v0.82): the innermost routine whose impl body [impl_start_line..
+    // impl_end_line] contains this ref's start_line; NULL when the ref is not
+    // inside any routine body. Attributed per-file in IndexFile. Migrate()
+    // ALTERs it onto pre-v13 tables (additive; CREATE TABLE IF NOT EXISTS
+    // never adds columns to an existing table).
+    '  enclosing_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL' + ')',
 
     // v0.42 perf: per-file re-index does DELETE FROM refs WHERE file_id, and
     // deleting a symbol fires the FK refs.symbol_id ON DELETE SET NULL. Without
@@ -46,6 +52,9 @@ const
     // indexing cost grew with the DB (0.04 -> 0.55 s/file fresh; ~3.2 s/file
     // re-index on a 1.2 GB DB). With them it's an index seek.
     'CREATE INDEX IF NOT EXISTS idx_refs_file ON refs(file_id)', 'CREATE INDEX IF NOT EXISTS idx_refs_symbol ON refs(symbol_id)',
+    // v13 (v0.82): seek refs by enclosing routine (feature-envy + CBO/RFC/fan
+    // retrofit iterate a method's refs via enclosing_symbol_id).
+    'CREATE INDEX IF NOT EXISTS idx_refs_enclosing ON refs(enclosing_symbol_id)',
 
     // v2: trigram inverted index for fast fuzzy lookup. Populated lazily on
     // first fuzzy query for any DB that's missing it (so v1 .sqlite files

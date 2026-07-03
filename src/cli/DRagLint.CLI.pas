@@ -283,6 +283,7 @@ begin
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH]');
   Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
+  Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('');
   Writeln('  Output/CI (lint, lint-all, check-ast):');
   Writeln('    --format sarif            emit SARIF 2.1.0 (in addition to text|json)');
@@ -765,6 +766,7 @@ begin
     else if ((Result.Command = 'check-unit') or (Result.Command = 'uses-audit') or (Result.Command = 'uses-fix')) and (Result.Target = '') and (not A.StartsWith('--')) then
       Result.Target:= A
     else if (Result.Command = 'check-ast') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
+    else if (Result.Command = 'dump-refs') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'format'   ) and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (A = '--dir') and (i < ParamCount) then
@@ -8261,6 +8263,50 @@ begin
     end);
 end; // function
 
+/// <summary>v0.82: drag-lint dump-refs &lt;file&gt; --db PATH -- diagnostic dump of
+/// every indexed reference in &lt;file&gt;, one per line, as
+/// name_text|start_line|enclosing_symbol_id|enclosing_symbol_name. The enclosing
+/// name is resolved from enclosing_symbol_id (empty when 0/NULL). Used to verify
+/// per-file enclosing-method attribution (refs.enclosing_symbol_id).</summary>
+/// <param name="AArgs">Parsed CLI args; Target is the source file, DbPath the index.</param>
+/// <returns>0 on success, 2 on usage error / missing file / file not indexed.</returns>
+function DoDumpRefs(const AArgs: TArgs): Integer;
+var
+  Store : ISymbolStore      ;
+  FileId: Int64             ;
+  Refs  : TArray<TReference>;
+  R     : TReference        ;
+  EnclNm: string            ;
+begin
+  if AArgs.Target = '' then
+  begin
+    Writeln('Usage: drag-lint dump-refs <file> --db PATH');
+    Exit   (2                                           );
+  end;
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(2);
+  end;
+  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+  FileId:= Store.FindFileIdByPath(TPath.GetFullPath(AArgs.Target));
+  if FileId <= 0 then FileId:= Store.FindFileIdByPath(AArgs.Target);
+  if FileId <= 0 then
+  begin
+    Writeln(Format('File not indexed: %s', [AArgs.Target]));
+    Exit(2);
+  end;
+  Refs:= Store.GetReferencesFromFile(FileId);
+  for R in Refs do
+  begin
+    if R.EnclosingSymbolId > 0 then EnclNm:= Store.GetSymbolById(R.EnclosingSymbolId).Name
+    else EnclNm:= '';
+    Writeln(Format('%s|%d|%d|%s', [R.NameText, R.StartLine, R.EnclosingSymbolId, EnclNm]));
+  end;
+  Result:= 0;
+end; // function
+
 // v0.27: drag-lint format <file> [--yadf-path PATH]
 // Runs YADF formatter on the given file (YADF rewrites in place).
 // Exit 2 on usage error, 1 on formatter failure, 0 on success.
@@ -9663,6 +9709,7 @@ begin
     else if Args.Command = 'generate-test'     then Result:= DoGenerateTest    (Args)
     else if Args.Command = 'format'            then Result:= DoFormat          (Args)
     else if Args.Command = 'check-ast'         then Result:= DoCheckAst        (Args)
+    else if Args.Command = 'dump-refs'         then Result:= DoDumpRefs        (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
     else if Args.Command = 'workspace'         then Result:= DoWorkspace       (Args)
     else if Args.Command = 'selftest'          then Result:= DoSelfTest        (Args)

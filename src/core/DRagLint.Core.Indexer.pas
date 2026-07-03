@@ -32,6 +32,18 @@ type
       function IsUnderExcludeRoot  (const APath: string): Boolean;
       function ShouldPruneDir      (const ADir : string): Boolean;
       function SqlFileAllowedFilter(const APath: string): Boolean;
+      /// <summary>v13 (v0.82): resolve a ref's innermost enclosing routine.
+      /// Among ASymbols of routine kind (method/function/procedure/constructor/
+      /// destructor) with ImplStartLine &gt; 0 whose [ImplStartLine..ImplEndLine]
+      /// contains ALine, pick the one with the LARGEST ImplStartLine (innermost --
+      /// so a nested procedure wins over its outer routine), then map its array
+      /// index to its DB id via AIdxToId.</summary>
+      /// <param name="ASymbols">The file's just-parsed symbols (index i == the key used in AIdxToId).</param>
+      /// <param name="AIdxToId">Array-index -&gt; inserted DB id map built by the symbols loop.</param>
+      /// <param name="ALine">The ref's StartLine.</param>
+      /// <returns>The enclosing routine's DB id, or 0 when the line is in no routine body.</returns>
+      function ResolveEnclosingSymbolId(const ASymbols: TArray<TSymbol>;
+        const AIdxToId: TDictionary<Integer, Int64>; ALine: Integer): Int64;
       procedure WalkAndIndex(const ADir: string; ARecursive: Boolean);
     public
       constructor Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig); overload;
@@ -159,6 +171,39 @@ begin
   end;
 end; // function
 
+function TIndexer.ResolveEnclosingSymbolId(const ASymbols: TArray<TSymbol>;
+  const AIdxToId: TDictionary<Integer, Int64>; ALine: Integer): Int64;
+var
+  I         : Integer;
+  BestIdx   : Integer;
+  BestStart : Integer;
+  DbId      : Int64  ;
+begin
+  Result   := 0 ;
+  BestIdx  := -1;
+  BestStart:= 0 ; // any real ImplStartLine is > 0, so the first hit always wins
+  for I:= 0 to High(ASymbols) do
+  begin
+    case ASymbols[I].Kind of
+      skMethod, skFunction, skProcedure, skConstructor, skDestructor: ; // routine kinds
+    else
+      Continue;
+    end;
+    if ASymbols[I].ImplStartLine <= 0 then Continue;
+    if (ALine >= ASymbols[I].ImplStartLine) and (ALine <= ASymbols[I].ImplEndLine) then
+    begin
+      // Innermost wins: a nested routine has a LARGER ImplStartLine than the
+      // outer routine whose body encloses it.
+      if ASymbols[I].ImplStartLine > BestStart then
+      begin
+        BestStart:= ASymbols[I].ImplStartLine;
+        BestIdx  := I;
+      end;
+    end;
+  end;
+  if (BestIdx >= 0) and AIdxToId.TryGetValue(BestIdx, DbId) then Result:= DbId;
+end; // function
+
 procedure TIndexer.IndexFile(const AFilePath: string);
 var
   Parser        : IParser                    ;
@@ -241,7 +286,16 @@ begin
             if ParsedDoc.HasContent then FStore.UpsertSymbolDoc(Token, NewSymId, ParsedDoc);
           end;
         end; // for
-        for I:= 0 to High(ParseRes.References) do FStore.UpsertReference(Token, ParseRes.References[I]);
+        // v13 (v0.82): attribute each ref to the innermost routine whose impl
+        // body contains its StartLine (0 when in no body). IdxToId is in scope
+        // (symbols already inserted with real ids), so this is a pure in-memory
+        // resolution -- no DB round-trips.
+        for I:= 0 to High(ParseRes.References) do
+        begin
+          var Ref := ParseRes.References[I];
+          Ref.EnclosingSymbolId:= ResolveEnclosingSymbolId(ParseRes.Symbols, IdxToId, Ref.StartLine);
+          FStore.UpsertReference(Token, Ref);
+        end;
         for I:= 0 to High(ParseRes.DiBindings) do FStore.UpsertDiBinding(Token, ParseRes.DiBindings[I]);
         { v0.40.4: wipe-and-rewrite uses for this file so we never carry
           stale rows. DeleteUnitUsesForFile must run inside the open

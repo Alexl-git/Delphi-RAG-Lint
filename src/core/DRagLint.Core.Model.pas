@@ -92,6 +92,11 @@ type
     EndLine    : Integer;
     EndCol     : Integer;
     ContextText: string ; // v0.17: surrounding source lines (find-callers --context N)
+    // v13 (v0.82): DB id of the innermost routine whose impl body contains this
+    // ref's StartLine; 0 when the ref is not inside any routine body. Set by the
+    // indexer (per-file attribution) and read back by the ref-reading store
+    // methods (NULL -> 0). Distinct from SymbolId (the ref's target slot).
+    EnclosingSymbolId: Int64;
   end;
 
   /// <summary>v8: one Spring4D DI registration (interface implemented by impl,

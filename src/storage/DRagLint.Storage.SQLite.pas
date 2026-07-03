@@ -438,6 +438,11 @@ begin
   TryExec('ALTER TABLE symbols ADD COLUMN heritage TEXT');
   { v12 (M1): per-method virtual-dispatch flag (virtual/dynamic/override). }
   TryExec('ALTER TABLE symbols ADD COLUMN is_virtual INTEGER');
+  { v13 (v0.82): per-ref enclosing-routine attribution. Additive column; ALTER
+    onto pre-v13 refs tables for the same reason as the v9 body-span columns.
+    Populated per-file in IndexFile; NULL when the ref is in no routine body. }
+  TryExec('ALTER TABLE refs ADD COLUMN enclosing_symbol_id INTEGER');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_refs_enclosing ON refs(enclosing_symbol_id)');
   { v11 (M1): direct ancestor edges (one row per heritage entry). Created here
     rather than in SCHEMA_DDL to avoid renumbering the FTS5 split index; it is
     plain DDL that must always exist (independent of FTS5 availability).
@@ -482,7 +487,8 @@ begin
     '  impl_start_line, impl_end_line) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, ' + '  :sl, :sc, :el, :ec, :isl, :iel)');
   FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
   FQInsertRef:= NewQuery(
-    'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col) ' + 'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec)');
+    'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id) ' +
+    'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec, :esid)');
   FQDeleteFileSymbols:= NewQuery('DELETE FROM symbols WHERE file_id = :fid');
   FQDeleteFileRefs   := NewQuery('DELETE FROM refs WHERE file_id = :fid'   );
   FQUpsertDiBinding:= NewQuery(
@@ -773,6 +779,10 @@ begin
   FQInsertRef.ParamByName('sc'  ).AsInteger := ARef  .StartCol;
   FQInsertRef.ParamByName('el'  ).AsInteger := ARef  .EndLine;
   FQInsertRef.ParamByName('ec'  ).AsInteger := ARef  .EndCol;
+  { v13 (v0.82): enclosing routine id; NULL when the ref is in no routine body. }
+  FQInsertRef.ParamByName('esid').DataType:= ftLargeint;
+  if ARef.EnclosingSymbolId > 0 then FQInsertRef.ParamByName('esid').AsLargeInt:= ARef.EnclosingSymbolId
+  else FQInsertRef.ParamByName('esid').Clear;
   FQInsertRef.ExecSQL;
 end;
 
@@ -1247,6 +1257,10 @@ begin
       R.NameText := Q.FieldByName('name_text' ).AsString;
       R.StartLine:= Q.FieldByName('start_line').AsInteger;
       R.StartCol := Q.FieldByName('start_col' ).AsInteger;
+      R.EndLine  := Q.FieldByName('end_line'  ).AsInteger; // v0.82: pre-existing read gap
+      R.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
+      if not Q.FieldByName('enclosing_symbol_id').IsNull then
+        R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt; // v13
       List.Add(R);
       Q.Next;
     end;
@@ -1282,6 +1296,8 @@ begin
       R.StartCol := Q.FieldByName('start_col' ).AsInteger;
       R.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
       R.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
+      if not Q.FieldByName('enclosing_symbol_id').IsNull then
+        R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt; // v13
       List.Add(R);
       Q.Next;
     end;
@@ -1399,6 +1415,8 @@ begin
       R.StartCol := Q.FieldByName('start_col' ).AsInteger;
       R.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
       R.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
+      if not Q.FieldByName('enclosing_symbol_id').IsNull then
+        R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt; // v13
       R.ContextText:= ''; // v0.17: initialize context (unless set by FindCallersByNameWithContext)
       List.Add(R);
       Q.Next;
