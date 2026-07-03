@@ -114,6 +114,8 @@ var
   NocCount    : TDictionary<Int64, Integer>      ;
   RefsCache   : TDictionary<Int64, TArray<TReference>>;
   FanIn       : TDictionary<Int64, Integer>      ; { v0.81: target class id -> distinct inbound source count (Ca) }
+  MemberToClass  : TDictionary<string, Int64>   ; { v0.82 feature-envy: LowerCase(method name) -> declaring class id }
+  AmbiguousMember: TDictionary<string, Boolean> ; { v0.82 feature-envy: method names declared by >1 distinct class (excluded) }
   Findings    : TList<TLintFinding>              ;
   TNOC        : Integer                          ;
   TDIT        : Integer                          ;
@@ -122,6 +124,7 @@ var
   TLCOM       : Integer                          ;
   TFanOut     : Integer                          ;
   TFanIn      : Integer                          ;
+  TFEnvy      : Integer                          ; { v0.82 feature-envy: minAccess floor }
   CI          : TClassInfo                       ;
 
   function WantRule(const AId: string): Boolean;
@@ -757,6 +760,137 @@ var
     end;
   end;
 
+  { v0.82 feature-envy support -- build the method-name -> declaring-class-id map
+    over the whole inventory. A method NAME (case-insensitive) maps to the id of
+    the class that declares it; when the SAME name is declared by two DISTINCT
+    classes it is marked AMBIGUOUS and later excluded from own/foreign resolution
+    (a documented FP-avoidance: name-based resolution cannot pick between two
+    classes that both declare 'Load'). RTL/unindexed classes are not in Inv, so
+    calls to their members simply resolve to nothing and are ignored. }
+  procedure BuildMemberMap;
+  var
+    Info: TClassInfo;
+    M   : TSymbol   ;
+    Low : string    ;
+    Owner: Int64    ;
+  begin
+    for Info in Inv.Values do
+      for M in Info.Methods do
+      begin
+        if M.Name = '' then Continue;
+        Low:= LowerCase(M.Name);
+        if AmbiguousMember.ContainsKey(Low) then Continue; { already poisoned }
+        if MemberToClass.TryGetValue(Low, Owner) then
+        begin
+          if Owner <> Info.Id then
+          begin
+            { same name in a second, distinct class -> ambiguous; drop it }
+            AmbiguousMember.AddOrSetValue(Low, True);
+            MemberToClass.Remove(Low);
+          end;
+          { same class re-declaring (overload) -> keep the single mapping }
+        end
+        else
+          MemberToClass.AddOrSetValue(Low, Info.Id);
+      end;
+  end;
+
+  { v0.82 feature-envy (#14, category refactoring, info, OFF-by-default). For class
+    C, group C's 'call' refs by their enclosing method M (EnclosingSymbolId, which
+    must be one of C's own methods), then split each call by resolving the CALLED
+    method name via MemberToClass: a call whose name declares in C is an 'own'
+    access; a call resolving to another class X is a 'foreign' access to X;
+    ambiguous/unresolved names are skipped. Flag M when the most-envied class X's
+    foreign count strictly exceeds M's own-class count AND meets the minAccess
+    floor. Emits at M's DECLARATION line so two envious methods of one class produce
+    distinct findings. KEY LIMITATION: target-class resolution is name-based (no
+    expression type inference), so the own/foreign split is heuristic and precision
+    is bounded -> the rule ships OFF-by-default. }
+  procedure ComputeFeatureEnvy(const AInfo: TClassInfo; AMinAccess: Integer);
+  var
+    Refs   : TArray<TReference>              ;
+    R      : TReference                      ;
+    Low    : string                          ;
+    Tgt    : Int64                           ;
+    Own    : TDictionary<Int64, Integer>     ; { method id -> own-class call count }
+    Foreign: TDictionary<Int64, TDictionary<Int64, Integer>>; { method id -> (foreign class id -> count) }
+    ForByX : TDictionary<Int64, Integer>     ;
+    Cur    : Integer                         ;
+    M      : TSymbol                          ;
+    OwnC, MaxF: Integer                       ;
+    EnviedX: Int64                           ;
+    Pair   : TPair<Int64, Integer>           ;
+    XInfo  : TClassInfo                      ;
+    XName  : string                          ;
+  begin
+    Own    := TDictionary<Int64, Integer>.Create;
+    Foreign:= TDictionary<Int64, TDictionary<Int64, Integer>>.Create;
+    try
+      Refs:= GetRefs(AInfo.FileId);
+      for R in Refs do
+      begin
+        if not SameText(R.Kind, 'call') then Continue;
+        if R.NameText = '' then Continue;
+        if not EnclosedByOwnMethod(AInfo, R.EnclosingSymbolId) then Continue;
+        Low:= LowerCase(R.NameText);
+        if AmbiguousMember.ContainsKey(Low) then Continue;   { name declared by >1 class -> skip }
+        if not MemberToClass.TryGetValue(Low, Tgt) then Continue; { RTL/unindexed -> ignore }
+        if Tgt = AInfo.Id then
+        begin
+          Cur:= 0;
+          Own.TryGetValue(R.EnclosingSymbolId, Cur);
+          Own.AddOrSetValue(R.EnclosingSymbolId, Cur + 1);
+        end
+        else
+        begin
+          if not Foreign.TryGetValue(R.EnclosingSymbolId, ForByX) then
+          begin
+            ForByX:= TDictionary<Int64, Integer>.Create;
+            Foreign.Add(R.EnclosingSymbolId, ForByX);
+          end;
+          Cur:= 0;
+          ForByX.TryGetValue(Tgt, Cur);
+          ForByX.AddOrSetValue(Tgt, Cur + 1);
+        end;
+      end;
+
+      { evaluate each method M of C against its most-envied foreign class }
+      for M in AInfo.Methods do
+      begin
+        if not Foreign.TryGetValue(M.Id, ForByX) then Continue; { no foreign access -> not envious }
+        MaxF:= 0; EnviedX:= 0;
+        for Pair in ForByX do
+          if Pair.Value > MaxF then
+          begin
+            MaxF:= Pair.Value;
+            EnviedX:= Pair.Key;
+          end;
+        OwnC:= 0;
+        Own.TryGetValue(M.Id, OwnC);
+        if (MaxF > OwnC) and (MaxF >= AMinAccess) then
+        begin
+          XName:= '?';
+          if Inv.TryGetValue(EnviedX, XInfo) then XName:= XInfo.Name;
+          var F: TLintFinding:= Default(TLintFinding);
+          F.RuleId   := 'feature-envy';
+          F.Severity := 'info';
+          F.Message  := Format('Feature envy: %s.%s accesses %s %d times but its own class only %d -- consider moving it closer to %s',
+            [AInfo.Name, M.Name, XName, MaxF, OwnC, XName]);
+          F.FilePath := AInfo.Path;
+          F.StartLine:= M.StartLine;
+          F.StartCol := M.StartCol;
+          F.EndLine  := M.StartLine;
+          F.EndCol   := M.StartCol + Length(M.Name);
+          Findings.Add(F);
+        end;
+      end;
+    finally
+      for var D in Foreign.Values do D.Free;
+      Foreign.Free;
+      Own.Free;
+    end;
+  end;
+
 begin
   Result:= nil;
   if AStore = nil then Exit;
@@ -768,6 +902,8 @@ begin
   NocCount    := TDictionary<Int64, Integer>.Create;
   RefsCache   := TDictionary<Int64, TArray<TReference>>.Create;
   FanIn       := TDictionary<Int64, Integer>.Create;
+  MemberToClass  := TDictionary<string, Int64>.Create;
+  AmbiguousMember:= TDictionary<string, Boolean>.Create;
   Findings    := TList<TLintFinding>.Create;
   try
     TNOC:= ACfg.ThresholdFor('too-many-children', 10);
@@ -777,11 +913,13 @@ begin
     TLCOM:= ACfg.ThresholdFor('low-cohesion', 26);
     TFanOut:= ACfg.ThresholdFor('fan-out', 20); { aliases CBO; field-tune }
     TFanIn := ACfg.ThresholdFor('fan-in', 20);  { field-tune }
+    TFEnvy := ACfg.ThresholdFor('feature-envy', 3); { min foreign accesses to flag }
 
     BuildInventory;
     ResolveParents;
     ComputeNOC;
     ComputeAllFanIn;
+    if WantRule('feature-envy') then BuildMemberMap;
 
     for CI in Inv.Values do
     begin
@@ -861,6 +999,10 @@ begin
             Format('High fan-in: %s is referenced by %d other classes (>%d) -- a widely-depended-on hub; changes here ripple widely', [CI.Name, Ca, TFanIn]),
             CI);
       end;
+
+      if WantRule('feature-envy') then
+        { OFF-by-default (#14): emits at the envious method's decl line, not CI's }
+        ComputeFeatureEnvy(CI, TFEnvy);
     end;
 
     Result:= Findings.ToArray;
@@ -873,6 +1015,8 @@ begin
     NocCount.Free;
     RefsCache.Free;
     FanIn.Free;
+    MemberToClass.Free;
+    AmbiguousMember.Free;
     Findings.Free;
     TAstParseCache.Clear;
   end;

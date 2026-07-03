@@ -5922,12 +5922,12 @@ begin
     exhaustive-enum-case + multiple-statements-per-line + magic-literal +
     boolean-flag-parameter + public-writable-field + loop-control-flag +
     mutable-global-variable + repeated-type-switch + middle-man + default-encoding-io +
-    fan-out + fan-in
+    fan-out + fan-in + feature-envy
     are OFF by default here too (opt in via config "enabled"). middle-man / fan-out /
-    fan-in are emitted by TClassMetrics.Run above; catalog False alone does not
-    suppress CLI output, so they must be listed here for the ShouldKeep filter to
-    drop them by default. }
-  Result:= FinalizeAndOutput(AArgs, Findings, ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in'],
+    fan-in / feature-envy are emitted by TClassMetrics.Run above; catalog False alone
+    does not suppress CLI output, so they must be listed here for the ShouldKeep filter
+    to drop them by default. }
+  Result:= FinalizeAndOutput(AArgs, Findings, ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in', 'feature-envy'],
     procedure(ASurv: TArray<TLintFinding>)
     var
       FF: TLintFinding;

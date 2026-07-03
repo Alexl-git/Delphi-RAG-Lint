@@ -1,0 +1,7 @@
+# TReport.Print (decl line 21) calls TFormatter 4x (Bold/Italic/Indent/Wrap) but its
+# own class only 1x (Header) -> maxForeign=4 > own=1 AND 4 >= minAccess(3) -> feature-envy fires,
+# anchored at the envious method's declaration line.
+feature-envy sample.pas:21
+# TReport.Balanced (decl line 22) calls its own class 3x (Header/Footer/Summarize) and a
+# foreign class only 1x (Bold) -> maxForeign=1 not > own=3, and 1 < minAccess(3) -> must NOT fire.
+!feature-envy sample.pas:22

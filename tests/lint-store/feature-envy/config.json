@@ -1,0 +1,1 @@
+{ "enabled": ["feature-envy"], "thresholds": { "feature-envy": 3 } }
