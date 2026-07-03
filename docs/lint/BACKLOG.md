@@ -1,6 +1,10 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-02 (LATEST) -- **v0.81.0 PUBLISHED (full release); v0.82 DESIGNED + PLANNED (not yet implemented). NEXT ACTION = execute `docs/superpowers/plans/2026-07-02-v082-plan.md` via superpowers:subagent-driven-development.** Spec: `docs/superpowers/specs/2026-07-02-v082-enclosing-symbol-attribution-design.md`. v0.82 = `refs.enclosing_symbol_id` per-file attribution (schema v13) + feature-envy + CBO/RFC/fan-in-out retrofit (LCOM4 excluded) + CK instability + first-cut #4 + the 2 v0.81 Minors; ship **v0.82.0-alpha** (alpha suffix BACK, but FULL release gh --latest) + reindex all DBs. Read the plan + spec FIRST.
+> ## RESUME 2026-07-02 (LATEST) -- **v0.82.0-alpha PUBLISHED (FULL release, gh --latest, win32+win64). All 7 SDD tasks done + final whole-branch review (opus) clean.** `main`=`29967f4`, origin synced, tag `v0.82.0-alpha` (isPrerelease=false, repo `latest`; https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.82.0-alpha). VERSION `CLI.pas:6`=`0.82.0-alpha`, **schema v13**. Harness **file 151/151 + store 16/16 + catalog 29/29 + flowengine 33/33** (+ ergonomics exit-code 12 unit+4 CLI, Task 1 enclosing-attribution verify.ps1). SDD ledger `.superpowers/sdd/progress.md`. Full CHANGELOG entry in `CHANGELOG.md`. NEXT = next milestone (won't-fix tail in MISSING-FEATURES); no in-flight v0.82 work remains.
+>
+> **What shipped (v0.82.0-alpha, 7 SDD tasks):** (T1) `refs.enclosing_symbol_id` schema v13 -- per-file innermost enclosing-routine attribution in `Indexer.IndexFile` (`ResolveEnclosingSymbolId`, largest-ImplStartLine tie-break, `IdxToId` map), `TReference.EnclosingSymbolId`, 3 consumer reads (+ fixed `GetReferencesFromFile` end_line/end_col gap), new `dump-refs` diagnostic. Additive `ALTER` migration, NULL-safe (reads 0 on old DBs). PARSER LIMIT: tree-sitter doesn't emit nested procs -> nested-proc refs dropped (top-level method bodies are exact; doesn't affect CK/feature-envy). (T2) 2 v0.81 Minors: `ArgsHaveNoEncoding` skips literalString; exit code from post-suppression Survivors (dropped `ADefaultExit` param). (T3) CBO/RFC/fan-in/fan-out retrofit -> `EnclosedByOwnMethod(EnclosingSymbolId)` replaces `InAnyMethodBody`; **guardrail byte-identical (120 findings src/)**; LCOM4 unchanged. (T4) `feature-envy` (#14 refactoring/info/OFF; method-name->declaring-class map, ambiguous skipped; src/ FP=36 RTL collisions). (T5) `instability` (#11 metrics/info/OFF; I=Ce/(Ca+Ce) integer-percent; config keys `instability`/`instability-floor`). (T6) `interface-object-mixing` (#4 first cut, resource-lifetime/info/OFF; same-routine object-aliased-into-interface AND manually-freed; **SHIPPED, src/ FP=0**). All 3 new rules OFF (catalog False + DefDisabled), runtime OFF-suppression controller-confirmed. Final review Important (instability `noiseFloor`->`instability-floor` param-name) FIXED (6a09dc2).
+>
+> **Reindex rollout (schema v13):** self-index (Delphi-RAG-lint.sqlite) reindexed + validated (enclosing_symbol_id populated). Full `index --all` (ORM3/SQL/AllProjects/Library/etc.) kicked off after release -- confirm it completed (log: scratchpad `v082-reindex-all.log`).
 >
 > **>>> v0.82 KEY DESIGN DECISIONS (user-approved, so the cold session does not re-litigate):** scope=BROAD (foundation +
 > all consumers + independents). Attribution hook = **per-file in-memory in `IndexFile`** (innermost impl-range containment
@@ -39,11 +43,11 @@
 >   args too, so a filename containing "TEncoding" falsely suppresses (only matters if promoted ON; fix = skip literalString
 >   named children). (2) carried: exit code from RAW findings not survivors (bare cmd can print "0 finding(s)" yet exit 1).
 >
-> **v0.82 STATUS: DESIGNED + PLANNED (2026-07-02) -- ready to EXECUTE cold.** Spec
+> **v0.82 STATUS: SHIPPED (2026-07-02) -- v0.82.0-alpha released.** Executed via SDD on branch
+> `feat/v082-enclosing-attribution` (merged --ff-only to main `29967f4`, tag `v0.82.0-alpha`). Spec
 > `docs/superpowers/specs/2026-07-02-v082-enclosing-symbol-attribution-design.md`, plan
-> `docs/superpowers/plans/2026-07-02-v082-plan.md` (7 tasks, dependency-ordered, SDD). Next session: create branch
-> `feat/v082-enclosing-attribution` from main, run superpowers:subagent-driven-development on the plan. Design decisions are
-> locked (see the KEY DESIGN DECISIONS block at the top of this file) -- do not re-litigate scope/attribution/backfill.
+> `docs/superpowers/plans/2026-07-02-v082-plan.md`, ledger `.superpowers/sdd/progress.md`. See the v0.82 SHIPPED
+> block at the TOP of this file for the full summary. The KEY DESIGN DECISIONS block below is retained as the design record.
 >
 > --- (prior milestone) ---
 >
