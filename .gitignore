@@ -31,6 +31,8 @@ Release/
 
 # IDE
 .vs/
+.vscode/
+.claude/
 
 # Indexer artifacts
 *.kbvs

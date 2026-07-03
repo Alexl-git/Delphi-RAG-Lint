@@ -25,7 +25,9 @@ handling. `#9 default-encoding-io` and CK `fan-in`/`fan-out` shipped in **v0.81*
 enclosing routine) and, on top of it, **`feature-envy`** (#14, `refactoring`), CK **`instability`** (`Ce/(Ca+Ce)`, #11,
 `metrics`), and a first-cut **`interface-object-mixing`** (#4 same-routine dual-handle, `resource-lifetime`) -- all
 OFF-by-default; the CBO/RFC/fan-in/fan-out coupling metrics were retrofitted onto the exact attribution (LCOM4 left as an
-AST re-walk). That closes the v0.82 gap list; remaining items are a few low-signal ones documented as won't-fix.
+AST re-walk). **v0.83** added the last two M2-flow refactoring rules **`split-variable`** + **`separate-query-from-modifier`**
+(both `refactoring`, OFF-by-default, src/ FP=0). **With v0.83, lint-DETECTION coverage is effectively COMPLETE** -- the
+remaining catalogued items are all low-signal won't-fix. The growth frontier is now refactoring-APPLY (a separate project).
 
 Legend: `[ ]` not started · `[x]` shipped · **(now)** = pure-AST/index, doable without new engines ·
 **(M1)** = uses the type/hierarchy resolver (SHIPPED v0.66) · **(M2)** = uses the control-flow/def-use
@@ -290,9 +292,15 @@ Store-backed / project-wide -- **3 of 4 DONE v0.80** (category `refactoring`, al
       declaring-class map, ambiguous names skipped) -> precision bounded -> OFF. src/ FP=36 (RTL name collisions, e.g. a
       project `Format` method vs `SysUtils.Format`).
 
-Needs M2 flow:
-- [ ] `split-variable` (Split Variable) -- one local reused for two unrelated purposes (distinct def-use spans).
-- [ ] `separate-query-from-modifier` -- a function that both returns a value and mutates state (noisy; assess).
+Needs M2 flow -- **BOTH DONE v0.83** (category `refactoring`, all OFF-by-default):
+- [x] `split-variable` (Split Variable) -- **DONE v0.83** (`info`, OFF). A local with >=2 disjoint def-use lifetimes,
+      both used (distinct from `overwrite-before-read`). Flow-based (backward liveness + forward read-since-def),
+      linear-routine-only to stay sound. src/ FP=0.
+- [x] `separate-query-from-modifier` (Command-Query Separation) -- **DONE v0.83** (`info`, OFF). A value-returning
+      function that also writes a class field (`Self.X :=` or a bare `F`-prefixed non-local). Pure-AST. src/ FP=0.
 
-Deferred / low-signal: Replace Temp with Query, Replace Derived Variable with Query, Primitive Obsession,
-Speculative Generality, Data Clumps (Introduce Parameter Object) -- weak/expensive static signals.
+Deferred / low-signal (won't-fix): Replace Temp with Query, Replace Derived Variable with Query, Primitive Obsession,
+Speculative Generality, Data Clumps (Introduce Parameter Object), variant-record-type-punning -- weak/expensive static signals.
+
+**Lint-DETECTION coverage is now effectively COMPLETE.** The remaining growth frontier is refactoring-APPLY (actually
+performing Extract Method / Change Signature / etc. via the IDE + OTAPI), tracked separately, not as a detection gap.
