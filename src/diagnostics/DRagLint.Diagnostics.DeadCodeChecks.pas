@@ -962,7 +962,9 @@ var
     different signatures (1-arg SaveToFile vs 2-arg WriteAllText) and this
     single check covers all of them uniformly: any argument whose source
     text contains "TEncoding" counts as an explicit encoding, regardless of
-    which positional slot it occupies. }
+    which positional slot it occupies. literalString argument nodes are
+    skipped, so a filename literal that merely contains the text "TEncoding"
+    is not mistaken for a real encoding argument. }
   function ArgsHaveNoEncoding(const AArgs: TTSNode): Boolean;
   var I: Integer; Arg: TTSNode;
   begin

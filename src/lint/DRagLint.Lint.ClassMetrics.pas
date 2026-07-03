@@ -876,8 +876,8 @@ var
           var F: TLintFinding:= Default(TLintFinding);
           F.RuleId   := 'feature-envy';
           F.Severity := 'info';
-          F.Message  := Format('Feature envy: %s.%s accesses %s %d times but its own class only %d -- consider moving it closer to %s',
-            [AInfo.Name, M.Name, XName, MaxF, OwnC, XName]);
+          F.Message  := Format('Feature envy: %s.%s accesses %s %d times vs %d on its own class -- consider moving it there',
+            [AInfo.Name, M.Name, XName, MaxF, OwnC]);
           F.FilePath := AInfo.Path;
           F.StartLine:= M.StartLine;
           F.StartCol := M.StartCol;

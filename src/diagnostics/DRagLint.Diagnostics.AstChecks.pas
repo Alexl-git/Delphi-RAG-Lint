@@ -2191,11 +2191,12 @@ var
     tolerates). }
   procedure VisitDualHandle(const ADefProc: TTSNode);
   var
-    Aliased : TDictionary<string, Boolean>; { X (lower) aliased into an interface var }
+    Aliased : TDictionary<string, string>;  { X (lower) -> X's original-case source text, aliased into an interface var }
     FreedAt : TDictionary<string, TTSNode>; { X (lower) -> the manual-free node (fire site) }
 
     { 'I := X' / 'I := X as ISomething' where I is interface-typed and X is a
-      simple class-typed identifier -> record X (lower) in Aliased. }
+      simple class-typed identifier -> record X (lower key, original-case
+      value) in Aliased. }
     procedure ScanAlias(const N: TTSNode);
     var
       Lhs, Rhs, Src2: TTSNode;
@@ -2230,7 +2231,7 @@ var
             { X must be a declared CLASS-typed local (an object handle), not itself
               an interface -- that is what makes it a genuine dual handle. }
             if TypeMap.TryGetValue(Xn, TX) and LooksLikeClassType(TX) and (not TypeTextIsInterface(TX)) then
-              Aliased.AddOrSetValue(Xn, True);
+              Aliased.AddOrSetValue(Xn, NodeStr(Src2));
           end;
         end;
       end;
@@ -2272,26 +2273,27 @@ var
     end;
 
   var
-    Body   : TTSNode     ;
-    Pair   : TPair<string, TTSNode>;
-    P      : TTSPoint    ;
-    F      : TLintFinding;
+    Body    : TTSNode     ;
+    Pair    : TPair<string, TTSNode>;
+    P       : TTSPoint    ;
+    F       : TLintFinding;
+    OrigName: string      ;
   begin
     Body:= ADefProc.ChildByField('body');
     if Body.IsNull then Exit;
-    Aliased:= TDictionary<string, Boolean>.Create;
+    Aliased:= TDictionary<string, string>.Create;
     FreedAt:= TDictionary<string, TTSNode>.Create;
     try
       ScanAlias(Body);
       ScanFree (Body);
       for Pair in FreedAt do
-        if Aliased.ContainsKey(Pair.Key) then
+        if Aliased.TryGetValue(Pair.Key, OrigName) then
         begin
           P:= Pair.Value.StartPoint;
           F:= Default(TLintFinding);
           F.RuleId  := 'interface-object-mixing';
           F.Severity:= 'info';
-          F.Message := Format('%s is both aliased into an interface (reference-counted lifetime) and manually freed in the same routine -- a dual handle risks a double free when the last interface reference drops. Keep it purely an object OR purely an interface.', [Pair.Key]);
+          F.Message := Format('%s is both aliased into an interface (reference-counted lifetime) and manually freed in the same routine -- a dual handle risks a double free when the last interface reference drops. Keep it purely an object OR purely an interface.', [OrigName]);
           F.FilePath:= AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
           F.StartCol := Integer(P.Column) + 1;

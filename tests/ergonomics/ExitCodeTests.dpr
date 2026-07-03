@@ -64,8 +64,6 @@ begin
     IfThen(Length(Survivors) > 0, 1, 0) = 0, which is correct. }
   Check('survivors-derived default: all-suppressed raw findings -> 0 (fixed contract)',
     ExitCodeFor(Empty, '', IfThen(Length(Empty) > 0, 1, 0)) = 0);
-  Check('survivors-derived default: pre-fix raw-findings-derived default would have been 1 (bug)',
-    IfThen(Length(Warns) > 0, 1, 0) = 1);
 end;
 
 begin
