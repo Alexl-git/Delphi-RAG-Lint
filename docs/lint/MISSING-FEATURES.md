@@ -87,7 +87,10 @@ Have: `redundant-as-tobject` (lexical), `freeandnil-on-interface`, plus the v0.7
       `TFoo(x)` of an object ref to a *different* class with no guarding `x is TFoo`. Fires only on
       genuine down/cross-casts -- value/record casts, `TObject` upcasts, redundant + guarded casts are
       skipped. src FP-sanity = 3, all `T...(Sender)` handler casts. Opt in via config/`--rule`).
-- [ ] `non-linear-cast` / `platform-dependent-cast`
+- [~] `non-linear-cast` / `platform-dependent-cast` -- **effectively COVERED by shipped rules (won't-fix as separate rules).**
+      `platform-dependent-cast` == `win64-pointer-cast` (v0.72) + `nativeint-truncation` (v0.76) -- both flag pointer/
+      NativeInt values cast to 32-bit ints (the Win64 hazard). `non-linear-cast` (a hard cast between unrelated types)
+      overlaps `unsafe-typecast-without-is` (v0.71). No distinct low-FP signal remains -> not a separate rule.
 - [x] lossy Ansi<->Unicode cast  -- shipped v0.75 as `lossy-cast` (AST, `info`; an Ansi-narrowing
       cast `AnsiString`/`AnsiChar`/`ShortString`/`RawByteString`(x) of a Unicode-string operand
       drops characters outside the code page, compiler W1057; src FP = 2 real)
@@ -112,7 +115,15 @@ Have: `unprotected-object-free`, `use-after-free`, `criticalsection-not-released
       statement is `X := TFoo.Create` -- if the constructor raises, the finally frees an undefined
       reference. Handles paren-less + parenthesised constructors; FixInsight-parity)
 - [x] `double-free` -- **DONE v0.79** (`warning`, ON, M2): a raw `X.Free` reachable twice on a path with no reassignment/nil-ing between (frees a dangling pointer). New forward `TFreedState` lattice; `FreeAndNil`/`DisposeOf` clears the dangling state so FreeAndNil-then-Free is silent; warning(Must)/info(May). Aliased frees are a documented false-negative.
-- [ ] `stream/file/bitmap created-not-freed` pairing (same technique as criticalsection) -- first VERIFY the M2 `object-leak` oracle doesn't already cover it before adding a targeted rule.
+- [~] `stream/file/bitmap created-not-freed` pairing -- **COVERED by `object-leak` (won't-fix as a separate rule).**
+      v0.82 recon confirmed `object-leak` (`FlowChecks.pas`) is the general mechanism: it records every `X := TFoo.Create`
+      local (`ExprIsConstructor`), runs an escape/data-flow analysis with an ownership oracle (`OwnsOracle`), and flags any
+      local still "open" (created, not freed/transferred) at the routine exit -- streams/files/bitmaps included, not
+      type-specific. It stayed silent on a bare RTL fixture only because the oracle is CONSERVATIVE and couldn't confirm
+      `TFileStream` is an owned `TObject` without the type hierarchy resolved (a resolution artifact, not a design gap). So
+      a dedicated create-not-freed rule would be redundant. **The real lever, if leaks are missed in practice, is to
+      strengthen `object-leak`'s `OwnsOracle` to recognize known RTL owned bases (`TStream`/`TGraphic`/`TStrings`/...)** --
+      an enhancement to an existing ON rule, not a new rule.
 - [x] `abstract-method-instantiation` -- **DONE v0.76** (store-backed: virtual method with no body, unoverridden across the hierarchy)
 - [x] true ownership/lifetime across calls (created here, leaked on some path)  -- shipped v0.66 as `object-leak` (store-backed interprocedural ownership oracle)  **(M2)**
 
