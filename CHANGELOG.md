@@ -5,6 +5,28 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.83.1-alpha -- 2026-07-03
+
+Hotfix: the v13 migration was unreachable on any pre-v13 database.
+
+### Fixed
+- **Migration abort on every pre-v13 DB** -- `CREATE INDEX idx_refs_enclosing ON refs(enclosing_symbol_id)` sat in the
+  core `SCHEMA_DDL` array, which runs BEFORE the `Migrate()` ALTER that retrofits the column onto old refs tables
+  (`CREATE TABLE IF NOT EXISTS` never reshapes an existing table). Result: EVERY command that opens a v12-or-older index
+  (`index`, `forms-csv`, `lint-all`, ...) died with `no such column: enclosing_symbol_id` instead of migrating -- old DBs
+  could not self-heal. Seen in the wild via the IDE plugin's "Forms CSV" menu on a v12 per-project DB. The index is now
+  created only in `Migrate()` after its ALTER (its sole creation site, matching the v9/v11/v12 retrofit pattern), and
+  `SCHEMA_DDL` carries an INVARIANT comment forbidding statements that reference retrofitted columns. No schema bump
+  (still v13); fresh DBs are byte-identical.
+- **Stale forms-csv smoke checks** -- `tests/autotest/run_formsmap.ps1` still encoded pre-v2 output (no provenance
+  header line; `frmList` required first in Called From, predating standalone-function call-site detection). Updated to
+  the intended v2 behavior; the suite is green again.
+
+### Added
+- `tests/autotest/run_migrate_v12.ps1` -- regression harness: builds a v12-shaped index (refs without
+  `enclosing_symbol_id`), then asserts `index` and `forms-csv` migrate it transparently (column added, `schema_version`
+  stamped 13, `idx_refs_enclosing` created) and exit 0.
+
 ## v0.83.0-alpha -- 2026-07-03
 
 Two new OFF-by-default refactoring rules deepening flow + CQS coverage. No index-schema change (still v13); ships as a

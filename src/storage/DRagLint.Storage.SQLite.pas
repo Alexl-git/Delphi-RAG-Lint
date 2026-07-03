@@ -440,7 +440,10 @@ begin
   TryExec('ALTER TABLE symbols ADD COLUMN is_virtual INTEGER');
   { v13 (v0.82): per-ref enclosing-routine attribution. Additive column; ALTER
     onto pre-v13 refs tables for the same reason as the v9 body-span columns.
-    Populated per-file in IndexFile; NULL when the ref is in no routine body. }
+    Populated per-file in IndexFile; NULL when the ref is in no routine body.
+    v0.83.1: this is the SOLE creation site of idx_refs_enclosing -- it must
+    run after the ALTER. In SCHEMA_DDL (before the ALTER) it aborted the whole
+    migration on every pre-v13 DB with "no such column: enclosing_symbol_id". }
   TryExec('ALTER TABLE refs ADD COLUMN enclosing_symbol_id INTEGER');
   TryExec('CREATE INDEX IF NOT EXISTS idx_refs_enclosing ON refs(enclosing_symbol_id)');
   { v11 (M1): direct ancestor edges (one row per heritage entry). Created here

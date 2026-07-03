@@ -34,7 +34,8 @@ Check 'frmList row present'  ($csv -match 'uDemoList,frmList,')
 Check 'frmEdit row present'  ($csv -match 'uDemoEdit,frmEdit,')
 Check 'data module excluded' (-not ($csv -match 'dmDemo'))
 Check 'pas line count for frmEdit' ($csv -match 'uDemoEdit,frmEdit,16,')
-Check 'row count is 7 forms + header' ($rows.Count -eq 8)
+# v2 (9a81345): output gained a '# forms-csv algorithm v2 | ...' provenance line
+Check 'row count is 7 forms + 2 header lines' ($rows.Count -eq 9)
 Check 'frmMain is root (blank nav)'   ($csv -match "uDemoMain,frmMain,\d+,,")
 Check 'frmList nav via Lists'         ($csv -match "uDemoList,frmList,\d+,frmMain -> 'Lists',")
 Check 'frmEdit nav via Lists>Edit'    ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> 'Edit Item',")
@@ -42,7 +43,9 @@ Check 'frmChild nav via named ctor'   ($csv -match "uDemoChild,frmChild,\d+,frmM
 Check 'action-bound caption (Reports)' ($csv -match "uDemoReports,frmReports,\d+,frmMain -> 'Reports',")
 Check 'keep-the-gap via routine'       ($csv -match "uDemoGap,frmGap,\d+,frmMain -> \(via ")
 Check 'unreachable form'               ($csv -match 'uDemoUnreached,frmLonely,\d+,\(no path from MAIN\),')
-Check 'called-from for frmEdit'        ($csv -match "uDemoEdit,frmEdit,\d+,[^,]*,frmList")
+# v2 (9a81345): standalone-function call sites (Demo.RunAdminBootstrap) are also
+# listed as callers, so frmList need not be first in the Called From field.
+Check 'called-from for frmEdit'        ($csv -match "uDemoEdit,frmEdit,\d+,[^,]*,[^,]*frmList")
 Check 'no hang (script completed)'     ($true)
 # Task 7b: root regression (bootstrap procedure must not steal root)
 Check 'root regression: frmMain root (blank nav)' ($csv -match "uDemoMain,frmMain,\d+,,")

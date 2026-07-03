@@ -7,11 +7,19 @@ const
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
-  SCHEMA_DDL_FTS5_FIRST = 48;
+  SCHEMA_DDL_FTS5_FIRST = 47;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
-  SCHEMA_DDL: array[0..52] of string = (
+  //
+  // INVARIANT (v0.83.1): no statement here may reference a column that was
+  // retrofitted onto an existing table by a Migrate() ALTER (v9 impl spans,
+  // v11 heritage, v12 is_virtual, v13 refs.enclosing_symbol_id). This array
+  // runs BEFORE the ALTERs, and CREATE TABLE IF NOT EXISTS leaves an old
+  // table's shape untouched -- so e.g. an index on such a column aborts the
+  // whole migration with "no such column" on every pre-vN database. Indexes
+  // on retrofitted columns belong in Migrate(), after their ALTER.
+  SCHEMA_DDL: array[0..51] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' + '  key   TEXT PRIMARY KEY,' + '  value TEXT NOT NULL' + ')',
 
     'CREATE TABLE IF NOT EXISTS files (' + '  id          INTEGER PRIMARY KEY,' + '  path        TEXT NOT NULL UNIQUE,' + '  mtime_unix  INTEGER NOT NULL,' +
@@ -52,9 +60,9 @@ const
     // indexing cost grew with the DB (0.04 -> 0.55 s/file fresh; ~3.2 s/file
     // re-index on a 1.2 GB DB). With them it's an index seek.
     'CREATE INDEX IF NOT EXISTS idx_refs_file ON refs(file_id)', 'CREATE INDEX IF NOT EXISTS idx_refs_symbol ON refs(symbol_id)',
-    // v13 (v0.82): seek refs by enclosing routine (feature-envy + CBO/RFC/fan
-    // retrofit iterate a method's refs via enclosing_symbol_id).
-    'CREATE INDEX IF NOT EXISTS idx_refs_enclosing ON refs(enclosing_symbol_id)',
+    // v13 note: idx_refs_enclosing (on refs.enclosing_symbol_id) is created in
+    // Migrate() after the ALTER that retrofits the column -- see the INVARIANT
+    // comment above SCHEMA_DDL. Do not add it here.
 
     // v2: trigram inverted index for fast fuzzy lookup. Populated lazily on
     // first fuzzy query for any DB that's missing it (so v1 .sqlite files
