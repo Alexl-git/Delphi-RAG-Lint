@@ -5,6 +5,35 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.85.0-alpha -- 2026-07-03
+
+Extract Method: the first refactoring-APPLY transformation with data-flow analysis behind it (the CFG
+**liveness** pass this milestone built is reusable for future refactorings). No index-schema change (still v13).
+
+### Added
+- `extract-method` CLI verb (`--file --from-line --to-line --name`, `[--dry-run|--apply|--json|--no-backup]`,
+  dry-run default) -- extracts a contiguous statement range in a single file into a new routine. v1 scope: value
+  in-params + a single `Result` output. Refuses (exit 2, reason on stderr) on: 2+ escaping outputs, a
+  conditionally-assigned escaping variable, escaping control flow (`Exit`/`goto`/a `Break`/`Continue` that would
+  escape the extracted block), a selection that cuts a statement / crosses nesting / contains same-line
+  multi-statements, an unknown parameter type, a name collision, a missing class `private` section, multi-var
+  declaration lines for internal locals, and `with`/`asm`/`goto` routines.
+- IDE **Ctrl+Alt+M** -- selection -> preview dialog -> apply -> reload, wired the same way as the other refactor
+  keybindings. Manual IDE smoke test still pending.
+- `DRagLint.Analysis.Liveness.pas` -- new reusable analysis unit (`LiveAfterItem`/`LiveBeforeItem` boundary
+  queries) built for Extract Method's variable classification (in/out/internal); the general-CFG liveness pass is
+  intended to be reused by future refactorings (e.g. Split Variable apply, Inline Variable).
+
+### Fixed
+- A latent `VarUsedOutsideRun` no-op found en route while building the liveness pass.
+- `drag-lint.dproj` was missing a `DCC_UnitSearchPath` entry, a gap surfaced while wiring the new analysis unit.
+
+### Also since v0.83.0-alpha
+- **v0.83.1-alpha** (hotfix, not separately released on GitHub) -- fixed the v13 migration being unreachable on
+  any pre-v13 database (see below).
+- **v0.84.0-alpha** (not separately released on GitHub) -- forms-csv Navigation column algorithm v3, interleaving
+  the landing form's name into the click path (see below).
+
 ## v0.84.0-alpha -- 2026-07-03
 
 ### Changed

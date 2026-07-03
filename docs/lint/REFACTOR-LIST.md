@@ -45,7 +45,7 @@ editor, previews changes, applies, reloads), not merely a CLI proof-of-concept.
 
 | Refactoring | Status | Difficulty | Notes |
 |---|---|---|---|
-| **Extract Method** | `[~]` | **Hard** | v1 = in-params + single `Result` output; refuses on 2+ outputs / escaping control flow. Builds the general-CFG **liveness** pass (reusable), the CLI verb, and full IDE integration. Spec: `docs/superpowers/specs/` (this milestone). |
+| **Extract Method** | `[x]` | **Hard** | v1 = in-params + single `Result` output; refuses on 2+ outputs / escaping control flow. Builds the general-CFG **liveness** pass (reusable), the CLI verb, and full IDE integration. Spec: `docs/superpowers/specs/` (this milestone). (CLI + IDE wired; manual IDE smoke pending; v1 = value in-params + single Result) |
 
 ---
 
