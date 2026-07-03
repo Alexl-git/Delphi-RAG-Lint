@@ -56,6 +56,7 @@ uses
   , DRagLint.Refactor   .DocStub
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
+  , DRagLint.Refactor   .ExtractMethod
   , DRagLint.Format     .Yadf
   , DRagLint.Diagnostics.CompileCheck
   , DRagLint.Diagnostics.AstChecks
@@ -160,6 +161,11 @@ type
     // RefFile    reuses InFile (--file already parsed into InFile)
     RefLine  : Integer; // --line <L> (param rename, 1-based)
     RefCol   : Integer; // --col <C>  (param rename, 1-based)
+    // v0.84: extract-method
+    // ExFile reuses InFile (--file already parsed into InFile)
+    // ExName reuses Name    (--name already parsed into Name)
+    FromLine: Integer; // --from-line <L1> (1-based, inclusive)
+    ToLine  : Integer; // --to-line <L2>   (1-based, inclusive)
     // v0.25: doc-stub generator + dead-code finder
     DocStubFormat : string ; // --format xmldoc|pasdoc (default 'xmldoc')
     IncludePrivate: Boolean; // --include-private
@@ -274,6 +280,7 @@ begin
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
   Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
+  Writeln('  drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
@@ -717,6 +724,9 @@ begin
     //       --file  already parsed into Result.InFile (line ~433)
     else if (A = '--line') and (i < ParamCount) then begin Inc(i); Result.RefLine:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--col')  and (i < ParamCount) then begin Inc(i); Result.RefCol := StrToIntDef(ParamStr(i), 0); end
+    // v0.84: extract-method --from-line/--to-line (1-based, inclusive)
+    else if (A = '--from-line') and (i < ParamCount) then begin Inc(i); Result.FromLine:= StrToIntDef(ParamStr(i), 0); end
+    else if (A = '--to-line')   and (i < ParamCount) then begin Inc(i); Result.ToLine  := StrToIntDef(ParamStr(i), 0); end
     else if A = '--include-private' then Result.IncludePrivate:= True
     else if (A = '--target') and (i < ParamCount) then
     begin
@@ -5736,6 +5746,71 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>drag-lint extract-method --file &lt;F&gt; --from-line &lt;L1&gt;
+/// --to-line &lt;L2&gt; --name &lt;N&gt; [--json|--apply|--no-backup]. Pulls the
+/// complete-statement run [L1..L2] out of its enclosing routine in F into a
+/// new method/procedure named N, replacing the run with a call. Single-file,
+/// no index/--db needed (TExtractMethodRefactoring.Build parses F directly).</summary>
+/// <param name="AArgs">Parsed CLI args; consumes InFile (--file), FromLine
+/// (--from-line), ToLine (--to-line), Name (--name), AsJson, Apply,
+/// NoBackup.</param>
+/// <returns>0 on success (dry-run preview, --json edit set, or --apply
+/// applied); 2 on a refused/unsafe selection or usage error.</returns>
+/// <remarks>Dry-run (default) prints TExtractMethodRefactoring.RenderDryRun;
+/// --json prints the raw TTextEdit array; --apply writes via
+/// TTextEditApplier.Apply (backup unless --no-backup). Every refusal reason
+/// is written to stderr so scripts can capture it independently of stdout.</remarks>
+function DoExtractMethod(const AArgs: TArgs): Integer;
+var
+  Edits : TArray<TTextEdit>;
+  Refuse: string;
+begin
+  if (AArgs.InFile = '') or (AArgs.FromLine <= 0) or (AArgs.ToLine <= 0) or (AArgs.Name = '') then
+  begin
+    Writeln(ErrOutput, 'ERROR: extract-method needs --file <F> --from-line <L1> --to-line <L2> --name <N>');
+    Exit(2);
+  end;
+  Edits:= TExtractMethodRefactoring.Build(AArgs.InFile, AArgs.FromLine, AArgs.ToLine, AArgs.Name, Refuse);
+  if Refuse <> '' then
+  begin
+    Writeln(ErrOutput, 'REFUSED: ' + Refuse);
+    Exit(2);
+  end;
+  if Length(Edits) = 0 then
+  begin
+    Writeln(ErrOutput, 'No edit computed.');
+    Exit(2);
+  end;
+  if AArgs.AsJson then
+  begin
+    var Arr: TJSONArray:= TJSONArray.Create;
+    try
+      for var E in Edits do
+      begin
+        var O: TJSONObject:= TJSONObject.Create;
+        O.AddPair('file', E.FilePath);
+        O.AddPair('line', TJSONNumber.Create(E.Line));
+        O.AddPair('col',  TJSONNumber.Create(E.Col));
+        O.AddPair('endLine', TJSONNumber.Create(E.EndLine));
+        O.AddPair('endCol',  TJSONNumber.Create(E.EndCol));
+        O.AddPair('text', E.Text);
+        Arr.AddElement(O);
+      end;
+      Writeln(Arr.ToJSON);
+    finally Arr.Free; end;
+    Exit(0);
+  end;
+  if not AArgs.Apply then
+  begin
+    Writeln(TExtractMethodRefactoring.RenderDryRun(Edits));
+    Writeln(Format('Dry run: extract "%s". Pass --apply to write.', [AArgs.Name]));
+    Exit(0);
+  end;
+  var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
+  Writeln(Format('Applied: extracted "%s" (%d file).', [AArgs.Name, Touched]));
+  Result:= 0;
+end; // function
+
 // v0.25: drag-lint find-deadcode [--kind K] [--include-private] [--db PATH]
 // Lists symbols with no callers in the index. Exit 0 if any found, 1 if none,
 // 2 on usage error.
@@ -9719,6 +9794,7 @@ begin
     else if Args.Command = 'generate-docs'     then Result:= DoGenerateDocs    (Args)
     else if Args.Command = 'find-unit'         then Result:= DoFindUnit         (Args)
     else if Args.Command = 'safe-delete'       then Result:= DoSafeDelete      (Args)
+    else if Args.Command = 'extract-method'    then Result:= DoExtractMethod   (Args)
     else if Args.Command = 'find-deadcode'     then Result:= DoFindDeadCode    (Args)
     else if Args.Command = 'compile-check'     then Result:= DoCompileCheck    (Args)
     else if Args.Command = 'ghost-check'       then Result:= DoGhostCheck      (Args)
