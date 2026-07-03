@@ -154,14 +154,17 @@ var
     end;
   end;
 
-  function InAnyMethodBody(const AInfo: TClassInfo; ALine: Integer): Boolean;
+  { v0.82: exact ref-attribution -- True if AEnclId (a ref's EnclosingSymbolId, the
+    innermost enclosing routine) is one of AInfo's own methods. Replaces the
+    line-range InAnyMethodBody span test with precise enclosing-symbol membership. }
+  function EnclosedByOwnMethod(const AInfo: TClassInfo; AEnclId: Int64): Boolean;
   var
     M: TSymbol;
   begin
-    for M in AInfo.Methods do
-      if (M.ImplStartLine > 0) and (ALine >= M.ImplStartLine) and (ALine <= M.ImplEndLine) then
-        Exit(True);
     Result:= False;
+    if AEnclId <= 0 then Exit;
+    for M in AInfo.Methods do
+      if M.Id = AEnclId then Exit(True);
   end;
 
   function InDeclSpan(const AInfo: TClassInfo; ALine: Integer): Boolean;
@@ -300,7 +303,7 @@ var
     try
       Refs:= GetRefs(AInfo.FileId);
       for R in Refs do
-        if SameText(R.Kind, 'call') and (R.NameText <> '') and InAnyMethodBody(AInfo, R.StartLine) then
+        if SameText(R.Kind, 'call') and (R.NameText <> '') and EnclosedByOwnMethod(AInfo, R.EnclosingSymbolId) then
           Called.AddOrSetValue(LowerCase(R.NameText), True);
       Result:= Length(AInfo.Methods) + Called.Count;
     finally
@@ -332,7 +335,7 @@ var
       begin
         if not SameText(R.Kind, 'type_use') then Continue;
         if R.NameText = '' then Continue;
-        if not (InDeclSpan(AInfo, R.StartLine) or InAnyMethodBody(AInfo, R.StartLine)) then Continue;
+        if not (InDeclSpan(AInfo, R.StartLine) or EnclosedByOwnMethod(AInfo, R.EnclosingSymbolId)) then Continue;
         Nm:= LowerCase(R.NameText);
         if Exclude.ContainsKey(Nm) then Continue;
         if AStore.ResolveTypeCategory(R.NameText, AInfo.FileId) = tcClass then
@@ -385,7 +388,7 @@ var
         begin
           if not SameText(R.Kind, 'type_use') then Continue;
           if R.NameText = '' then Continue;
-          if not (InDeclSpan(Src, R.StartLine) or InAnyMethodBody(Src, R.StartLine)) then Continue;
+          if not (InDeclSpan(Src, R.StartLine) or EnclosedByOwnMethod(Src, R.EnclosingSymbolId)) then Continue;
           Nm:= LowerCase(R.NameText);
           if Exclude.ContainsKey(Nm) then Continue;
           if AStore.ResolveTypeCategory(R.NameText, Src.FileId) = tcClass then
