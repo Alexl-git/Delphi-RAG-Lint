@@ -84,7 +84,9 @@ type
     /// receives and returns the same logical value.</summary>
     OutputIsInput: Boolean;
     /// <summary>'' when classification succeeded; otherwise a specific reason
-    /// (">=2 outputs" or "unknown type") and every other field is undefined.</summary>
+    /// (">=2 values escape", "conditionally assigned variable escapes",
+    /// "used outside the selection", or "unknown type") and every other
+    /// field is undefined.</summary>
     Refuse: string;
   end;
 
@@ -107,15 +109,22 @@ type
     /// <returns>A TExtractVars with Refuse = '' on success, or a specific
     /// non-empty Refuse reason (see TExtractVars remarks) with every other
     /// field undefined.</returns>
-    /// <remarks>Algorithm: `defs` = run statements' whole-var assignment
-    /// targets (AssignmentTargetIndex); upward-exposed uses (a var read
-    /// before any def of it within the run) become Inputs, in first-use
-    /// order; live-out = LiveAfterItem/LiveBeforeItem at the run's tail
-    /// boundary (see the CFG-coordinate mapping note above ClassifyVars'
-    /// implementation); Outputs = defs INTERSECT live-out. >=2 Outputs
-    /// refuses. Internals = defs minus Inputs minus {OutputIdx}. Identifiers
-    /// not in AVars (Self, fields, globals) are skipped entirely -- they need
-    /// no parameter.</remarks>
+    /// <remarks>Algorithm: `defs` = every whole-var assignment target
+    /// (AssignmentTargetIndex) anywhere in the run, including inside
+    /// compound statements (if/case/loop/try bodies are walked recursively
+    /// with per-branch MUST-defined state; see ProcessStmt); upward-exposed
+    /// uses (a var read before being must-defined within the run) become
+    /// Inputs, in first-use order; live-out = the union over the run's
+    /// control-flow exit edges via LiveAfterItem/LiveBeforeItem (see the
+    /// CFG-coordinate mapping note on LiveOutOfRun); Outputs = defs
+    /// INTERSECT live-out. Refuses when >=2 values escape, when the single
+    /// escaping var is not assigned on EVERY path through the run
+    /// (conditionally assigned -- pass-through in/out semantics v1 does not
+    /// synthesize), when an Internal candidate is still used elsewhere in
+    /// the routine, or when an Input/Output has empty TypeText. Internals =
+    /// defs minus Inputs minus the Output. Identifiers not in AVars (Self,
+    /// fields, globals) are skipped entirely -- they need no
+    /// parameter.</remarks>
     class function ClassifyVars(const ASel: TExtractSelection; ACfg: TCfg;
       AVars: TRoutineVarTable; const ASrc: TBytes): TExtractVars;
 
@@ -723,48 +732,99 @@ end;
 /// [ASel.FirstItem..ASel.LastItem] of ASel's enclosing statement list.</summary>
 /// <remarks><para><b>CFG-coordinate mapping.</b> ASel.FirstItem/LastItem index
 /// the AST statement-list node, not the CFG's (block, item) coordinates that
-/// LiveAfterItem needs (see TExtractSelection's remarks). When the run's last
-/// statement is SIMPLE (assignment/call/expression-statement), TCfgBuilder
-/// emits it as exactly one TCfgItem whose Node is that same statement node,
-/// and LiveAfterItem at that single coordinate IS the run's live-out.</para>
-/// <para>When the run's last statement is COMPOUND (if/case/while/for/repeat/
-/// try/with), TCfgBuilder never stores the compound node itself as an item --
-/// it decomposes it into several items (conditions, nested-body statements)
-/// spread across multiple blocks that all eventually flow to one control-flow
-/// join/follow block. Rather than re-deriving that join block's index (not
-/// returned by TCfgBuilder.Build), this walks EVERY item in the whole CFG,
-/// keeps the ones whose (line, col) span falls inside the run's own span (see
-/// ItemInRunSpan -- a compound statement's sub-items are always nested inside
-/// it), and unions LiveAfterItem over each such item that is the LAST run-item
-/// in its own block (its block's frontier). Every control-flow path leaving
-/// the run passes through exactly one such frontier item, so the union of
-/// their post-item liveness equals the liveness immediately after the whole
-/// construct. This degrades exactly to the single-item case above when the
-/// tail is simple (exactly one frontier item, in one block).</para></remarks>
+/// LiveAfterItem/LiveBeforeItem need (see TExtractSelection's remarks), so run
+/// items are located by span containment (ItemInRunSpan) instead: a compound
+/// tail statement (if/case/loop/try) is never stored as one TCfgItem -- the
+/// builder decomposes it into condition/body items spread over several blocks,
+/// but all of those sub-items sit inside the compound statement's own span.</para>
+/// <para>The run's live-out is the union of liveness over every CONTROL-FLOW
+/// EXIT of the run -- each place control passes from a run item to a non-run
+/// item: (1) fall-through within one block (the last run item of a block is
+/// followed by a non-run item in the same block) -> LiveAfterItem at that
+/// coordinate; (2) a block-final run item -> control leaves via the block's
+/// successor edges, and each successor that does not lead straight back into
+/// the run (its first item is not a run item) contributes its entry liveness:
+/// LiveBeforeItem(succ, 0) for non-empty successors, transitive recursion
+/// through empty join/follow/header blocks, and the caller-observed boundary
+/// (out/var params + Result, mirroring TLiveness.Boundary) at the routine
+/// exit. Successors whose first item IS a run item are interior edges (e.g. a
+/// condition block feeding its own then/else branches, or a loop back-edge)
+/// and contribute nothing -- their own blocks' run tails are separate frontier
+/// entries.</para>
+/// <para>This is exact for simple tails (one fall-through or one join edge)
+/// and for compound tails: every path out of the run crosses exactly one
+/// counted exit edge, and INTERIOR liveness (values only used between run
+/// items, e.g. branch-local temporaries) is never conflated into the
+/// result.</para></remarks>
 function LiveOutOfRun(const ASel: TExtractSelection; ACfg: TCfg; AVars: TRoutineVarTable;
   const ASrc: TBytes): TArray<Boolean>;
 var
-  B, I, J: Integer;
+  B, I, J, LastRun: Integer;
   Block: TCfgBlock;
-  LastRunItemInBlock: Integer;
-  Item: TArray<Boolean>;
+  Visited: TList<Integer>;
+
+  procedure UnionInto(const ABits: TArray<Boolean>);
+  var J: Integer;
+  begin
+    for J:= 0 to High(ABits) do
+      if ABits[J] then Result[J]:= True;
+  end;
+
+  { Contribution of one run exit edge landing on block AIdx: skip edges that
+    lead straight back into the run (first item is a run item -- interior);
+    non-empty out-of-run blocks contribute their entry liveness
+    (LiveBeforeItem at item 0); empty join/follow/header blocks are traversed
+    transitively; the routine exit contributes the caller-observed boundary
+    (out/var params + Result), mirroring TLiveness.Boundary. Visited guards
+    against cycles and duplicate (idempotent) contributions. }
+  procedure AddExitEdge(AIdx: Integer);
+  var S, J: Integer; Blk: TCfgBlock;
+  begin
+    if (AIdx < 0) or (AIdx >= ACfg.BlockCount) then Exit;
+    if Visited.IndexOf(AIdx) >= 0 then Exit;
+    Visited.Add(AIdx);
+    Blk:= ACfg.Blocks[AIdx];
+    if Blk.Items.Count > 0 then
+    begin
+      if not ItemInRunSpan(Blk.Items[0].Node, ASel) then
+        UnionInto(LiveBeforeItem(ACfg, AVars, ASrc, AIdx, 0));
+      { else: an interior edge back into the run -- that block's own last
+        run item produces its own frontier entry; contribute nothing here }
+      Exit;
+    end;
+    if (AIdx = ACfg.ExitIdx) or (Blk.Succ.Count = 0) then
+    begin
+      for J:= 0 to AVars.Count - 1 do
+        if AVars.Get(J).Kind in [vkParamOut, vkParamVar, vkResult] then
+          Result[J]:= True;
+      Exit;
+    end;
+    for S:= 0 to Blk.Succ.Count - 1 do AddExitEdge(Blk.Succ[S]);
+  end;
+
 begin
   SetLength(Result, AVars.Count);
   for J:= 0 to AVars.Count - 1 do Result[J]:= False;
 
-  for B:= 0 to ACfg.BlockCount - 1 do
-  begin
-    Block:= ACfg.Blocks[B];
-    LastRunItemInBlock:= -1;
-    for I:= 0 to Block.Items.Count - 1 do
-      if ItemInRunSpan(Block.Items[I].Node, ASel) then
-        LastRunItemInBlock:= I;
-    if LastRunItemInBlock >= 0 then
+  Visited:= TList<Integer>.Create;
+  try
+    for B:= 0 to ACfg.BlockCount - 1 do
     begin
-      Item:= LiveAfterItem(ACfg, AVars, ASrc, B, LastRunItemInBlock);
-      for J:= 0 to AVars.Count - 1 do
-        if Item[J] then Result[J]:= True;
+      Block:= ACfg.Blocks[B];
+      LastRun:= -1;
+      for I:= 0 to Block.Items.Count - 1 do
+        if ItemInRunSpan(Block.Items[I].Node, ASel) then LastRun:= I;
+      if LastRun < 0 then Continue;
+      if LastRun < Block.Items.Count - 1 then
+        { fall-through exit within the block: the item after the run's last
+          item in this block is outside the run (run items are contiguous) }
+        UnionInto(LiveAfterItem(ACfg, AVars, ASrc, B, LastRun))
+      else
+        { the run item ends its block: control leaves via successor edges }
+        for I:= 0 to Block.Succ.Count - 1 do AddExitEdge(Block.Succ[I]);
     end;
+  finally
+    Visited.Free;
   end;
 end;
 
@@ -785,11 +845,11 @@ begin
   if ANode.IsNull then Exit;
   if ANode.NodeType = 'defProc' then Exit; { nested routine: own scope, not our concern }
 
-  { Only test actual statement-shaped items (mirrors what the CFG would treat
-    as an item); recursing into every node type as well as its children would
-    double-count, but CollectReadsAndCallDefs already walks a whole subtree
-    per call, so test each item-like node once and do not recurse further
-    into ones already handled by AssignmentTargetIndex/CollectReadsAndCallDefs. }
+  { NOTE: the node-kind list below is a "test this node directly" filter (which
+    nodes get their own AssignmentTargetIndex/CollectReadsAndCallDefs probe) --
+    it does NOT restrict the recursion: children of EVERY node are still walked
+    at the bottom of this function, so nothing is skipped, some subtrees are
+    merely probed redundantly (idempotent for a boolean any-use test). }
   if (ANode.NodeType = 'assignment') or (ANode.NodeType = 'statement')
     or (ANode.NodeType = 'exprCall') or (ANode.NodeType = 'exprDot')
     or (ANode.NodeType = 'identifier') or (ANode.NodeType = 'if') or (ANode.NodeType = 'ifElse')
@@ -834,13 +894,230 @@ class function TExtractMethodRefactoring.ClassifyVars(const ASel: TExtractSelect
 var
   StmtList: TTSNode;
   CutCompound: Boolean;
-  I, J, Idx, Tgt: Integer;
-  Item: TTSNode;
+  I, Idx: Integer;
   Defs, Inputs, Internals, Outputs: TList<Integer>;
-  DefinedSoFar: TArray<Boolean>;
-  Reads, CallDefs: TList<Integer>;
+  MustDef: TArray<Boolean>;
   LiveOut: TArray<Boolean>;
   V: TRoutineVar;
+
+  { Collect AExpr's reads + call-defs against the current MUST-defined state:
+    a read of a var not must-defined yet within the run is upward-exposed ->
+    Inputs (first-use order). A call-def (var/out-capable argument) is both a
+    possible read of the current value (the callee may only partially update
+    it) and a def. Mirrors TLiveness / ApplyItemBackward's use of
+    CollectReadsAndCallDefs. }
+  procedure CollectExprUses(const AExpr: TTSNode; var AMust: TArray<Boolean>);
+  var R, C: TList<Integer>; J, Ix: Integer;
+  begin
+    if AExpr.IsNull then Exit;
+    R:= TList<Integer>.Create; C:= TList<Integer>.Create;
+    try
+      CollectReadsAndCallDefs(AExpr, ASrc, AVars, R, C);
+      for J:= 0 to R.Count - 1 do
+      begin
+        Ix:= R[J];
+        if (not AMust[Ix]) and (Inputs.IndexOf(Ix) < 0) then Inputs.Add(Ix);
+      end;
+      for J:= 0 to C.Count - 1 do
+      begin
+        Ix:= C[J];
+        if (not AMust[Ix]) and (Inputs.IndexOf(Ix) < 0) then Inputs.Add(Ix);
+        if Defs.IndexOf(Ix) < 0 then Defs.Add(Ix);
+        AMust[Ix]:= True;
+      end;
+    finally
+      R.Free; C.Free;
+    end;
+  end;
+
+  { Process one run statement in execution order, tracking MUST-defined vars
+    (assigned on every path so far within the run). Branch bodies evolve
+    COPIES of the state; ifElse merges by intersection; a loop body may run
+    zero times so its defs never become must-defs. MAY-defs (every whole-var
+    assignment target + call-def anywhere in the run) always accumulate into
+    Defs -- they are the Output/Internal candidates. Node kinds and child
+    fields mirror TCfgBuilder.EmitStmt exactly (grounding rule). Under-
+    approximating must-defs is always SAFE here: it can only add spurious
+    Inputs (an extra value param never changes behaviour) or trigger the
+    conditionally-assigned refuse (refuse rather than guess). }
+  procedure ProcessStmt(const AStmt: TTSNode; var AMust: TArray<Boolean>);
+  var
+    K: string;
+    J, IterIdx: Integer;
+    Tgt: Integer;
+    MThen, MElse, MBranch: TArray<Boolean>;
+    StartN, BodyN, TryN, FinN, IterN: TTSNode;
+    SeenFinally: Boolean;
+  begin
+    if AStmt.IsNull then Exit;
+    K:= AStmt.NodeType;
+
+    if (K = 'block') or (K = 'statements') then
+    begin
+      for J:= 0 to AStmt.NamedChildCount - 1 do
+        ProcessStmt(AStmt.NamedChild(J), AMust);
+      Exit;
+    end;
+
+    if K = 'assignment' then
+    begin
+      Tgt:= AssignmentTargetIndex(AStmt, ASrc, AVars);
+      CollectExprUses(AStmt.ChildByField('rhs'), AMust);
+      if Tgt < 0 then
+        CollectExprUses(AStmt.ChildByField('lhs'), AMust) { partial write reads its base }
+      else
+      begin
+        if Defs.IndexOf(Tgt) < 0 then Defs.Add(Tgt);
+        AMust[Tgt]:= True;
+      end;
+      Exit;
+    end;
+
+    if (K = 'if') or (K = 'ifElse') then
+    begin
+      CollectExprUses(AStmt.ChildByField('condition'), AMust);
+      MThen:= Copy(AMust);
+      ProcessStmt(AStmt.ChildByField('then'), MThen);
+      if K = 'ifElse' then
+      begin
+        MElse:= Copy(AMust);
+        ProcessStmt(AStmt.ChildByField('else'), MElse);
+        for J:= 0 to High(AMust) do AMust[J]:= MThen[J] and MElse[J];
+      end;
+      { plain if: the skip path leaves AMust unchanged }
+      Exit;
+    end;
+
+    if K = 'case' then
+    begin
+      { selector = first named child that is not a caseCase (mirrors EmitStmt) }
+      for J:= 0 to AStmt.NamedChildCount - 1 do
+        if AStmt.NamedChild(J).NodeType <> 'caseCase' then
+        begin
+          CollectExprUses(AStmt.NamedChild(J), AMust);
+          Break;
+        end;
+      for J:= 0 to AStmt.NamedChildCount - 1 do
+        if AStmt.NamedChild(J).NodeType = 'caseCase' then
+        begin
+          MBranch:= Copy(AMust);
+          ProcessStmt(AStmt.NamedChild(J).ChildByField('body'), MBranch);
+        end;
+      { the no-match fall-through path leaves AMust unchanged }
+      Exit;
+    end;
+
+    if K = 'while' then
+    begin
+      CollectExprUses(AStmt.ChildByField('condition'), AMust);
+      MBranch:= Copy(AMust);
+      ProcessStmt(AStmt.ChildByField('body'), MBranch); { may run zero times }
+      Exit;
+    end;
+
+    if K = 'for' then
+    begin
+      { the start assignment always executes; the remaining non-start,
+        non-body named children are the bound expression(s) -> reads }
+      StartN:= AStmt.ChildByField('start');
+      BodyN := AStmt.ChildByField('body');
+      ProcessStmt(StartN, AMust);
+      for J:= 0 to AStmt.NamedChildCount - 1 do
+        if (not (AStmt.NamedChild(J) = StartN)) and (not (AStmt.NamedChild(J) = BodyN)) then
+          CollectExprUses(AStmt.NamedChild(J), AMust);
+      MBranch:= Copy(AMust);
+      ProcessStmt(BodyN, MBranch); { may run zero times }
+      Exit;
+    end;
+
+    if K = 'foreach' then
+    begin
+      CollectExprUses(AStmt.ChildByField('iterable'), AMust);
+      { `for var X in` -> the iterator is a varAssignDef; use its identifier
+        child (mirrors EmitStmt) }
+      IterN:= AStmt.ChildByField('iterator');
+      if (not IterN.IsNull) and (IterN.NodeType = 'varAssignDef') then
+        for J:= 0 to IterN.NamedChildCount - 1 do
+          if IterN.NamedChild(J).NodeType = 'identifier' then
+          begin
+            IterN:= IterN.NamedChild(J);
+            Break;
+          end;
+      IterIdx:= -1;
+      if not IterN.IsNull then IterIdx:= AVars.IndexOf(LowerNodeText(IterN, ASrc));
+      if (IterIdx >= 0) and (Defs.IndexOf(IterIdx) < 0) then
+        Defs.Add(IterIdx); { may-def only: the loop may not run at all }
+      MBranch:= Copy(AMust);
+      if IterIdx >= 0 then MBranch[IterIdx]:= True; { defined on entry to each iteration }
+      ProcessStmt(AStmt.ChildByField('body'), MBranch);
+      Exit;
+    end;
+
+    if K = 'repeat' then
+    begin
+      { the body always runs at least once, but may contain Break/Continue
+        (allowed when the loop is fully inside the run), so conservatively
+        treat its defs as may-only; the until-condition is evaluated against
+        the PRE-loop state for upward-exposure (over-approximates Inputs --
+        a spurious extra value param never changes behaviour) }
+      MBranch:= Copy(AMust);
+      ProcessStmt(AStmt.ChildByField('body'), MBranch);
+      MBranch:= Copy(AMust);
+      CollectExprUses(AStmt.ChildByField('condition'), MBranch);
+      Exit;
+    end;
+
+    if K = 'try' then
+    begin
+      TryN:= AStmt.ChildByField('try');
+      { the grammar labels the kFinally token itself with the 'finally'
+        field; scan for the first non-kEnd child after kFinally to get the
+        finally body -- mirrors TCfgBuilder.EmitStmt }
+      FinN:= Default(TTSNode);
+      SeenFinally:= False;
+      for J:= 0 to AStmt.NamedChildCount - 1 do
+        if AStmt.NamedChild(J).NodeType = 'kFinally' then SeenFinally:= True
+        else if SeenFinally and (AStmt.NamedChild(J).NodeType <> 'kEnd') then
+        begin
+          FinN:= AStmt.NamedChild(J);
+          Break;
+        end;
+      if not FinN.IsNull then
+      begin
+        { try-finally: code after the try only runs when the try body
+          completed normally (an exception propagates out of the routine),
+          so the body's must-defs hold downstream, and the finally always
+          runs -- mirrors the CFG builder's normal-completion-only edge }
+        ProcessStmt(TryN, AMust);
+        ProcessStmt(FinN, AMust);
+      end
+      else
+      begin
+        { try-except: downstream code runs after EITHER the body or a
+          handler; conservative merge = keep only the pre-try must-state }
+        MBranch:= Copy(AMust);
+        ProcessStmt(TryN, MBranch);
+        for J:= 0 to AStmt.NamedChildCount - 1 do
+          if AStmt.NamedChild(J).NodeType = 'exceptionHandler' then
+          begin
+            MBranch:= Copy(AMust);
+            ProcessStmt(AStmt.NamedChild(J).ChildByField('body'), MBranch);
+          end
+          else if (AStmt.NamedChild(J).NodeType = 'statements') and (J > 0) then
+          begin
+            MBranch:= Copy(AMust);
+            ProcessStmt(AStmt.NamedChild(J), MBranch);
+          end;
+      end;
+      Exit;
+    end;
+
+    { default: simple statement / expression statement / raise / call --
+      exactly what TLiveness's non-assignment transfer sees ('with' cannot
+      reach here: Task 2 refuses any run containing one) }
+    CollectExprUses(AStmt, AMust);
+  end;
+
 begin
   Result:= Default(TExtractVars);
   Result.OutputIdx:= -1;
@@ -863,54 +1140,17 @@ begin
   Inputs:= TList<Integer>.Create;
   Internals:= TList<Integer>.Create;
   Outputs:= TList<Integer>.Create;
-  Reads:= TList<Integer>.Create;
-  CallDefs:= TList<Integer>.Create;
   try
-    SetLength(DefinedSoFar, AVars.Count);
-    for J:= 0 to AVars.Count - 1 do DefinedSoFar[J]:= False;
+    SetLength(MustDef, AVars.Count);
+    for I:= 0 to AVars.Count - 1 do MustDef[I]:= False;
 
-    { ----- pass 1: defs (whole-var assignment targets) + upward-exposed uses
-      (a read of a var not yet defined within the run -> Inputs, in first-use
-      order). Mirrors ApplyItemBackward / the split-variable forward sweep's
-      read-then-kill-then-define per-item order: reads on an assignment's rhs
-      (or lhs, for a partial write) happen BEFORE that statement's own def. }
+    { ----- pass 1: MAY-defs + upward-exposed uses (a read of a var not
+      MUST-defined yet within the run -> Inputs, in first-use order),
+      recursing through compound statements with per-branch must-def state
+      (see ProcessStmt). Read-then-define per-statement order mirrors
+      ApplyItemBackward / the split-variable forward sweep. }
     for I:= ASel.FirstItem to ASel.LastItem do
-    begin
-      Item:= StmtList.NamedChild(I);
-      Reads.Clear; CallDefs.Clear;
-      Tgt:= -1;
-      if Item.NodeType = 'assignment' then
-      begin
-        Tgt:= AssignmentTargetIndex(Item, ASrc, AVars);
-        CollectReadsAndCallDefs(Item.ChildByField('rhs'), ASrc, AVars, Reads, CallDefs);
-        if Tgt < 0 then
-          CollectReadsAndCallDefs(Item.ChildByField('lhs'), ASrc, AVars, Reads, CallDefs);
-      end
-      else
-        CollectReadsAndCallDefs(Item, ASrc, AVars, Reads, CallDefs);
-
-      for J:= 0 to Reads.Count - 1 do
-      begin
-        Idx:= Reads[J];
-        if (not DefinedSoFar[Idx]) and (Inputs.IndexOf(Idx) < 0) then Inputs.Add(Idx);
-      end;
-      for J:= 0 to CallDefs.Count - 1 do
-      begin
-        { a call-def (var/out arg) both reads the base var's current value
-          (the callee may only partially update it) and re-defines it -- an
-          upward-exposed use if not yet defined within the run. }
-        Idx:= CallDefs[J];
-        if (not DefinedSoFar[Idx]) and (Inputs.IndexOf(Idx) < 0) then Inputs.Add(Idx);
-        if Defs.IndexOf(Idx) < 0 then Defs.Add(Idx);
-        DefinedSoFar[Idx]:= True;
-      end;
-
-      if Tgt >= 0 then
-      begin
-        if Defs.IndexOf(Tgt) < 0 then Defs.Add(Tgt);
-        DefinedSoFar[Tgt]:= True;
-      end;
-    end;
+      ProcessStmt(StmtList.NamedChild(I), MustDef);
 
     { ----- pass 2: live-out + Outputs = Defs INTERSECT live-out ----- }
     LiveOut:= LiveOutOfRun(ASel, ACfg, AVars, ASrc);
@@ -925,6 +1165,17 @@ begin
 
     if Outputs.Count = 1 then
     begin
+      { the single escaping var must be assigned on EVERY path through the
+        run: a conditionally-assigned escape needs pass-through in/out
+        semantics (on the unassigned path the caller's old value survives)
+        that v1's single-Result synthesis does not express -- refuse rather
+        than guess }
+      if not MustDef[Outputs[0]] then
+      begin
+        Result.Refuse:= Format('conditionally assigned variable "%s" escapes the selection (assigned on only some paths)',
+          [AVars.Get(Outputs[0]).Name]);
+        Exit;
+      end;
       Result.OutputIdx:= Outputs[0];
       Result.OutputIsInput:= Inputs.IndexOf(Outputs[0]) >= 0;
     end;
@@ -968,7 +1219,7 @@ begin
     Result.Internals:= Internals.ToArray;
     Result.Refuse:= '';
   finally
-    Defs.Free; Inputs.Free; Internals.Free; Outputs.Free; Reads.Free; CallDefs.Free;
+    Defs.Free; Inputs.Free; Internals.Free; Outputs.Free;
   end;
 end;
 

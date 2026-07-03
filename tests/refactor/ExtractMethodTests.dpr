@@ -106,6 +106,17 @@ begin
       Exit(True);
 end;
 
+{ Position of the var named ALowerName (resolved via ANames) within AArr, or
+  -1 when absent. Lets tests assert the ORDER of Inputs (first-use order). }
+function IndexOfVarName(const AArr: TArray<Integer>; const ANames: TArray<string>; const ALowerName: string): Integer;
+var I: Integer;
+begin
+  Result:= -1;
+  for I:= 0 to High(AArr) do
+    if (AArr[I] >= 0) and (AArr[I] < Length(ANames)) and (ANames[AArr[I]] = ALowerName) then
+      Exit(I);
+end;
+
 { (a) range spans two routines -> refuse "selection is not inside a single routine" }
 procedure TestSpansTwoRoutines;
 const
@@ -394,6 +405,7 @@ begin
   Check('classify-b: OutputIdx is sum', (V.OutputIdx >= 0) and (Names[V.OutputIdx] = 'sum'));
   Check('classify-b: Inputs does not contain sum', not ContainsVarName(V.Inputs, Names, 'sum'));
   Check('classify-b: OutputIsInput = False', not V.OutputIsInput);
+  Check('classify-b: Internals empty', Length(V.Internals) = 0);
 end;
 
 { (c) `x := x + d;` -- x is read (rhs) before being defined by the SAME
@@ -426,6 +438,13 @@ begin
   Check('classify-c: OutputIsInput = True', V.OutputIsInput);
   Check('classify-c: Inputs contains x', ContainsVarName(V.Inputs, Names, 'x'));
   Check('classify-c: Inputs contains d', ContainsVarName(V.Inputs, Names, 'd'));
+  { the brief requires Inputs "in run order of first use": on the rhs
+    `x + d`, x is read before d (left-to-right) -> x at position 0, d at 1 }
+  Check('classify-c: Inputs = [x, d] in first-use order',
+    (Length(V.Inputs) = 2)
+    and (IndexOfVarName(V.Inputs, Names, 'x') = 0)
+    and (IndexOfVarName(V.Inputs, Names, 'd') = 1));
+  Check('classify-c: Internals empty', Length(V.Internals) = 0);
 end;
 
 { (d) run defines two locals, BOTH live after -> 2 values would need to
@@ -480,6 +499,117 @@ begin
   Check('classify-e: reason mentions unknown type', Pos('unknown type', V.Refuse) > 0);
 end;
 
+{ (f) COMPOUND-TAIL live-out: the run's LAST statement is an if/else whose
+  branches live in separate CFG blocks. u := a + 1 is a must-defined local
+  consumed only inside the run; t is assigned in BOTH branches (must-def on
+  every path) and read after the selection -> the single output. Expected:
+  Inputs = [a, c, b] (first-use order: a on line 7, condition c on line 8,
+  b on line 11 -- u is read on line 9 but AFTER its own def, so not an
+  input, and t is only written, never upward-exposed), OutputIdx = t,
+  OutputIsInput = False, Internals = [u]. Also locks in that the live-out
+  boundary excludes INTERIOR liveness: values only live BETWEEN run items
+  (u and b are live after the condition, inside the run) must not leak into
+  live-out and wrongly become outputs. }
+procedure TestClassifyCompoundTailIfElse;
+const
+  SRC =
+    'unit u;'#13#10 +                                 { 1 }
+    'interface'#13#10 +                               { 2 }
+    'implementation'#13#10 +                          { 3 }
+    'procedure P(a, b: Integer; c: Boolean);'#13#10 +  { 4 }
+    'var t, u: Integer;'#13#10 +                      { 5 }
+    'begin'#13#10 +                                   { 6 }
+    '  u := a + 1;'#13#10 +                           { 7  run start }
+    '  if c then'#13#10 +                             { 8  compound tail }
+    '    t := u'#13#10 +                              { 9 }
+    '  else'#13#10 +                                  { 10 }
+    '    t := b;'#13#10 +                             { 11  run end }
+    '  Writeln(t);'#13#10 +                           { 12  t read after -> output }
+    'end;'#13#10 +                                    { 13 }
+    'end.'#13#10;                                     { 14 }
+var
+  V: TExtractVars;
+  Names: TArray<string>;
+begin
+  V:= ClassifyFor(SRC, 7, 11, Names);
+  Check('classify-f: no refuse', V.Refuse = '');
+  Check('classify-f: OutputIdx is t',
+    (V.OutputIdx >= 0) and (V.OutputIdx < Length(Names)) and (Names[V.OutputIdx] = 't'));
+  Check('classify-f: OutputIsInput = False', not V.OutputIsInput);
+  Check('classify-f: Inputs = [a, c, b] in first-use order',
+    (Length(V.Inputs) = 3)
+    and (IndexOfVarName(V.Inputs, Names, 'a') = 0)
+    and (IndexOfVarName(V.Inputs, Names, 'c') = 1)
+    and (IndexOfVarName(V.Inputs, Names, 'b') = 2));
+  Check('classify-f: t not an Input', not ContainsVarName(V.Inputs, Names, 't'));
+  Check('classify-f: Internals = [u]',
+    (Length(V.Internals) = 1) and ContainsVarName(V.Internals, Names, 'u'));
+end;
+
+{ (g) a var assigned only inside ONE branch of the run's compound tail and
+  DEAD afterwards (never read anywhere else in the routine) is a plain
+  Internal: a may-def that does not escape. Nothing the run defines is live
+  after -> OutputIdx = -1. Expected: Inputs = [c, a] (condition first),
+  Internals = [v]. }
+procedure TestClassifyBranchLocalDeadIsInternal;
+const
+  SRC =
+    'unit u;'#13#10 +                                 { 1 }
+    'interface'#13#10 +                               { 2 }
+    'implementation'#13#10 +                          { 3 }
+    'procedure P(a: Integer; c: Boolean);'#13#10 +     { 4 }
+    'var v: Integer;'#13#10 +                         { 5 }
+    'begin'#13#10 +                                   { 6 }
+    '  if c then'#13#10 +                             { 7  run start (single if statement) }
+    '    v := a;'#13#10 +                             { 8  run end -- v assigned on one path only }
+    '  Writeln(a);'#13#10 +                           { 9  v NOT read after -> dead -> not an output }
+    'end;'#13#10 +                                    { 10 }
+    'end.'#13#10;                                     { 11 }
+var
+  V: TExtractVars;
+  Names: TArray<string>;
+begin
+  V:= ClassifyFor(SRC, 7, 8, Names);
+  Check('classify-g: no refuse', V.Refuse = '');
+  Check('classify-g: OutputIdx = -1', V.OutputIdx = -1);
+  Check('classify-g: Internals = [v]',
+    (Length(V.Internals) = 1) and ContainsVarName(V.Internals, Names, 'v'));
+  Check('classify-g: Inputs = [c, a] in first-use order',
+    (Length(V.Inputs) = 2)
+    and (IndexOfVarName(V.Inputs, Names, 'c') = 0)
+    and (IndexOfVarName(V.Inputs, Names, 'a') = 1));
+end;
+
+{ (h) a var assigned on only SOME paths through the run (one branch of an
+  if without else) but read AFTER the selection: on the unassigned path the
+  caller's old value survives, i.e. pass-through in/out semantics that v1's
+  single-Result synthesis does not support -> must REFUSE (mentioning the
+  conditional assignment), never silently classify it as a plain output. }
+procedure TestClassifyConditionalEscapeRefuses;
+const
+  SRC =
+    'unit u;'#13#10 +                                 { 1 }
+    'interface'#13#10 +                               { 2 }
+    'implementation'#13#10 +                          { 3 }
+    'procedure P(a: Integer; c: Boolean);'#13#10 +     { 4 }
+    'var v: Integer;'#13#10 +                         { 5 }
+    'begin'#13#10 +                                   { 6 }
+    '  v := 0;'#13#10 +                               { 7  v defined BEFORE the run }
+    '  if c then'#13#10 +                             { 8  run start }
+    '    v := a;'#13#10 +                             { 9  run end -- v assigned on one path only }
+    '  Writeln(v);'#13#10 +                           { 10  v read after -> escapes conditionally }
+    'end;'#13#10 +                                    { 11 }
+    'end.'#13#10;                                     { 12 }
+var
+  V: TExtractVars;
+  Names: TArray<string>;
+begin
+  V:= ClassifyFor(SRC, 8, 9, Names);
+  Check('classify-h: refuses', V.Refuse <> '');
+  Check('classify-h: reason mentions conditionally assigned',
+    Pos('conditionally assigned', V.Refuse) > 0);
+end;
+
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -496,6 +626,9 @@ begin
     TestClassifyInOutSameVar;
     TestClassifyTwoOutputsRefuses;
     TestClassifyUnknownTypeRefuses;
+    TestClassifyCompoundTailIfElse;
+    TestClassifyBranchLocalDeadIsInternal;
+    TestClassifyConditionalEscapeRefuses;
   except
     on Ex: Exception do begin Writeln('EXCEPTION ', Ex.ClassName, ': ', Ex.Message); Inc(GFail); end;
   end;
