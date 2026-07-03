@@ -95,7 +95,10 @@ Have: `redundant-as-tobject` (lexical), `freeandnil-on-interface`, plus the v0.7
       enum-typed selector that omits members and has no else. Enum members resolve from a same-file
       map (declEnum, no --db needed) OR the store (skEnum children) for cross-unit enums. Opt in via
       `"enabled"` / `--rule` -- built for enum-heavy code like ORM3. src FP: 0 same-file)
-- [ ] interface/object mixing (needs deeper type analysis)  **(M1, deferred)**
+- [~] interface/object mixing  -- **first cut DONE v0.82** as `interface-object-mixing` (`resource-lifetime`, `info`, OFF):
+      a same-routine dual handle -- an object local aliased into an interface-typed var AND manually `Free`d/`FreeAndNil`'d
+      in the same routine (ARC/manual double-free). Pure-AST, narrow slice; src/ FP=0. Cross-routine / field-aliased dual
+      handles remain open (need instance-aliasing / deeper type analysis the codebase lacks).
 - [x] nullability / not-assigned-interface use  **(M2 flow) -- DONE v0.79** as `not-assigned-interface` (`warning`, ON): an interface-typed local dereferenced (`X.member`/`X as T`) on a path where it was never assigned. Reuses the definite-assignment lattice for the interface subset used-before-assignment skips; warning(Must)/info(May). Known limitation: short-circuit `and`/`or` seeding is a safe-direction false-negative (see CHANGELOG).
 
 ## 5. Resource / memory  -- strong, some gaps  **(now; cross-call ones M1/M2)**
@@ -129,7 +132,8 @@ Have: `cyclomatic-complexity`, `deep-nesting`, `method-too-long`, `too-many-para
       `high-coupling` / `high-response` / `low-cohesion` (category `metrics`, `info`, ON, store-backed,
       per-rule `threshold`). LCOM shipped as LCOM4 (connected components). **fan-out (Ce) + fan-in (Ca) DONE
       v0.81** (`metrics`, `info`, OFF-by-default; fan-out reuses CBO, fan-in is a reverse-aggregation over type_use
-      refs). CK `instability` (`Ce/(Ca+Ce)`) still open -> v0.82 (needs a range-based flag shape).
+      refs). CK `instability` (`Ce/(Ca+Ce)`) -- **DONE v0.82** as `instability` (`metrics`, `info`, OFF; integer-percent
+      flag `I >= instability`% AND `Ca+Ce >= instability-floor`; keys `instability`/`instability-floor`).
 - [x] **clone / duplicate-code detection** (PAL CLON1-2)  -- **DONE v0.77** as `duplicate-code` (complexity, `info`, ON,
       `threshold` default 90). New unit `DRagLint.Diagnostics.CloneChecks.pas`: Type-2 (renamed-identifier tolerant)
       Rabin-Karp maximal-match over normalized-token streams (ids+literals -> placeholders; unique per-routine barriers),
@@ -269,10 +273,11 @@ Store-backed / project-wide -- **3 of 4 DONE v0.80** (category `refactoring`, al
       selector text across 3+ distinct methods; project-wide, deterministic. src/ FP=4 (name-based) -> OFF (opt-in).
 - [x] `middle-man` (Remove Middle Man) -- **DONE v0.80** (`info`, OFF). Class with 3+ body methods, >half pure
       one-line delegations to the same declared field. Reuses the LCOM4 body-walk. src/ FP=0 (OFF: facades legit).
-- [ ] `feature-envy` (Move Function) -- **DEFERRED to v0.81.** A method referencing another class's members more
-      than its own. Needs per-method cross-class attribution, but store refs have NO enclosing-method column and
-      `FindContainingSymbol` keys the declaration span not the impl-body span; the AST fallback lacks expression-
-      level type inference to split own-vs-other-class touches -> unacceptable FP without more machinery.
+- [x] `feature-envy` (Move Function) -- **DONE v0.82** (`refactoring`, `info`, OFF). A method referencing another class's
+      members more than its own (`maxForeign > own` AND `maxForeign >= minAccess`, default 3). Unblocked by the v0.82
+      `refs.enclosing_symbol_id` column (exact per-method attribution); own-vs-foreign split is name-based (member-name ->
+      declaring-class map, ambiguous names skipped) -> precision bounded -> OFF. src/ FP=36 (RTL name collisions, e.g. a
+      project `Format` method vs `SysUtils.Format`).
 
 Needs M2 flow:
 - [ ] `split-variable` (Split Variable) -- one local reused for two unrelated purposes (distinct def-use spans).
