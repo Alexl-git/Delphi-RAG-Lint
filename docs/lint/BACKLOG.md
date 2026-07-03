@@ -1,5 +1,39 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## BRANCH `feat/v083-deepen-rules` (AUTONOMOUS FORK, NOT yet released) -- awaiting human review
+>
+> An unsupervised worker executed `docs/superpowers/plans/2026-07-02-v083-deepen-rules-plan.md` on branch
+> `feat/v083-deepen-rules` (forked from `main` @ v0.82.0-alpha). **VERSION deliberately left at `0.82.0-alpha`** -- the human
+> bumps + releases after review. Branch is fully pushed. Final commit on the branch = the Item 3 deferral doc.
+>
+> **SHIPPED (2 new rules, both OFF-by-default, both clean src/ FP):**
+> - **`split-variable`** (`refactoring`/`info`, OFF) -- a local reused for two UNRELATED purposes (>=2 disjoint def-use
+>   lifetimes, both used). New M2 flow pass in `FlowChecks.pas` `CheckRoutine`, LINEAR-routine-only (bails on any branch/merge)
+>   to stay sound + low-FP. Distinct from `overwrite-before-read` (RED run PROVED it: dead-store vs two-used-lifetimes).
+>   src/ FP = **10 findings / 3 files**, all genuine reused-scratch-local idioms (col per TListColumn, GY layout cursor).
+>   Commit `feat(lint): split-variable rule ...`.
+> - **`separate-query-from-modifier`** (`refactoring`/`info`, OFF, CQS) -- a value-returning FUNCTION that also writes a field
+>   (`Self.X :=` or `FXxx :=` not-a-local). New standalone AST check `TAstChecker.CheckSeparateQueryFromModifier`. src/ FP =
+>   **3 findings / 3 files, ALL genuine CQS violations, ZERO false positives** (2 memoizing getters + 1 do-and-return-status).
+>   Commit `feat(lint): separate-query-from-modifier rule ...`.
+>
+> **DEFERRED (Item 3, an ON rule -- NO code touched):**
+> - **`object-leak` OwnsOracle enhancement** -- DEFERRED as an **empirical no-op**. The plan's premise is FALSE: verified with
+>   the built exe (bare-lint AND check-ast) that object-leak ALREADY catches TFileStream/TMemoryStream/TBitmap
+>   created-and-never-freed, and correctly excludes freed + all transfer cases. `object-leak`'s "created" flag is purely
+>   syntactic (`ExprIsConstructor` = any `.Create`), never gated on a type-ownership oracle; there is no gap to strengthen.
+>   Touching the ON rule = zero benefit + pure FP risk, so per the strict guardrail: defer, touch nothing. Evidence +
+>   probe table in `docs/lint/DEFER-v083-object-leak-ownsoracle.md`. Commit `docs: defer object-leak OwnsOracle ...`.
+>
+> **Harness end-state (all green, NO regression):** lint **153** (151 -> +2 fixtures), store **16**, catalog **29**,
+> flowengine **33**, exitcode **11 unit + 4 CLI**. OFF-suppression runtime-verified for both new rules (bare=0; --rule /
+> --config enabled=1). Build: Win64 ExitCode 0, `OK: staged`, no `[dcc] Error`/`Fatal`.
+>
+> **DECISIONS FOR THE HUMAN:** (1) accept both OFF rules (both have defensible/clean src/ FP -- recommend ship); (2) accept
+> the Item 3 deferral (recommend accept -- the enhancement is a no-op that can only introduce FPs on an ON rule); (3) bump
+> VERSION + release when ready (worker left it untouched per instructions). Files changed: `FlowChecks.pas`, `AstChecks.pas`,
+> `RuleCatalog.pas`, `CLI.pas`, 6 new test fixtures under `tests/lint/`, 1 new deferral doc. No `.claude/`/`.vscode/` staged.
+
 > ## RESUME 2026-07-02 (LATEST) -- **v0.82.0-alpha PUBLISHED (FULL release, gh --latest, win32+win64). All 7 SDD tasks done + final whole-branch review (opus) clean.** `main`=`29967f4`, origin synced, tag `v0.82.0-alpha` (isPrerelease=false, repo `latest`; https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.82.0-alpha). VERSION `CLI.pas:6`=`0.82.0-alpha`, **schema v13**. Harness **file 151/151 + store 16/16 + catalog 29/29 + flowengine 33/33** (+ ergonomics exit-code 12 unit+4 CLI, Task 1 enclosing-attribution verify.ps1). SDD ledger `.superpowers/sdd/progress.md`. Full CHANGELOG entry in `CHANGELOG.md`. NEXT = next milestone (won't-fix tail in MISSING-FEATURES); no in-flight v0.82 work remains.
 >
 > **What shipped (v0.82.0-alpha, 7 SDD tasks):** (T1) `refs.enclosing_symbol_id` schema v13 -- per-file innermost enclosing-routine attribution in `Indexer.IndexFile` (`ResolveEnclosingSymbolId`, largest-ImplStartLine tie-break, `IdxToId` map), `TReference.EnclosingSymbolId`, 3 consumer reads (+ fixed `GetReferencesFromFile` end_line/end_col gap), new `dump-refs` diagnostic. Additive `ALTER` migration, NULL-safe (reads 0 on old DBs). PARSER LIMIT: tree-sitter doesn't emit nested procs -> nested-proc refs dropped (top-level method bodies are exact; doesn't affect CK/feature-envy). (T2) 2 v0.81 Minors: `ArgsHaveNoEncoding` skips literalString; exit code from post-suppression Survivors (dropped `ADefaultExit` param). (T3) CBO/RFC/fan-in/fan-out retrofit -> `EnclosedByOwnMethod(EnclosingSymbolId)` replaces `InAnyMethodBody`; **guardrail byte-identical (120 findings src/)**; LCOM4 unchanged. (T4) `feature-envy` (#14 refactoring/info/OFF; method-name->declaring-class map, ambiguous skipped; src/ FP=36 RTL collisions). (T5) `instability` (#11 metrics/info/OFF; I=Ce/(Ca+Ce) integer-percent; config keys `instability`/`instability-floor`). (T6) `interface-object-mixing` (#4 first cut, resource-lifetime/info/OFF; same-routine object-aliased-into-interface AND manually-freed; **SHIPPED, src/ FP=0**). All 3 new rules OFF (catalog False + DefDisabled), runtime OFF-suppression controller-confirmed. Final review Important (instability `noiseFloor`->`instability-floor` param-name) FIXED (6a09dc2).
