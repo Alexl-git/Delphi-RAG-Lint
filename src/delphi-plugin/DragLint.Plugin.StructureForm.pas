@@ -43,6 +43,7 @@ uses
   , System.StrUtils
   , System.RegularExpressions
   , System.IOUtils
+  , System.JSON
   , System.Generics.Collections
   , System.Generics.Defaults
   , Vcl.ComCtrls
@@ -60,6 +61,7 @@ uses
   , DragLint.Plugin.DbResolver
   , DragLint.Plugin.Settings
   , DragLint.Plugin.ExeResolver
+  , DragLint.Plugin.Editor { v0.88 AutoFix: RunAndCaptureStdout for the fix verbs }
   ;
 
 { ---- TStructureNodeData: stores line info in tree node.Data ---- }
@@ -70,6 +72,7 @@ type
     Name : string     ; { symbol name -- for Find Usages }
     QName: string     ; { qualified name -- for Go to Implementation }
     Kind : TSymbolKind; { so we only offer impl/usages on proc-likes }
+    Code : string     ; { v0.88 AutoFix: rule-id on a diagnostic node ('' on symbol nodes) }
   end;
 
   { ---- TDragLintStructureForm ---- }
@@ -87,6 +90,12 @@ type
       FSyms       : TArray<TSymbolInfo>        ; { cached so filtering doesn't re-shell }
       FDiags      : TArray<TDragLintDiagnostic>;
       FPopup      : TPopupMenu                 ; { v0.43: right-click nav menu }
+      { v0.88 AutoFix: right-click Fix menu state. }
+      FItemFixIt      : TMenuItem   ; { 'Fix it' -- single fixable finding }
+      FItemFixUnit    : TMenuItem   ; { 'Fix all in unit' -- Diagnostics root }
+      FItemFixProject : TMenuItem   ; { 'Fix all in project' -- Diagnostics root }
+      FRootDiag       : TTreeNode   ; { the current 'Diagnostics (N)' root, for node discrimination }
+      FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
       procedure BtnRefreshClick(Sender: TObject);
       procedure BtnDiagClick   (Sender: TObject);
       procedure FormActivate   (Sender: TObject);
@@ -105,6 +114,15 @@ type
       procedure GoToImplementationClick(Sender: TObject);
       procedure FindUsagesClick        (Sender: TObject);
       procedure CopyDiagnosticsClick   (Sender: TObject);
+      { v0.88 AutoFix handlers + helpers. }
+      procedure EnsureFixableRules;
+      function  NodeIsDiagnosticsRoot(ANode: TTreeNode): Boolean;
+      function  NodeIsFixableFinding (ANode: TTreeNode): Boolean;
+      procedure ReloadCurrentFileBuffer;
+      procedure PopupPopup             (Sender: TObject);
+      procedure FixItClick             (Sender: TObject);
+      procedure FixAllInUnitClick      (Sender: TObject);
+      procedure FixAllInProjectClick   (Sender: TObject);
     public
       constructor Create(AOwner: TComponent); override;
       procedure RefreshActive; { v0.42: re-read the active editor file }
@@ -311,12 +329,23 @@ begin
   AddPopupItem(FPopup, 'Find &Usages'                , FindUsagesClick        );
   AddPopupItem(FPopup, '-'                           , nil                    ); { separator }
   AddPopupItem(FPopup, '&Copy All Diagnostics'       , CopyDiagnosticsClick  );
+  { v0.88 AutoFix: run the CLI fix verbs on the clicked node. Enablement is set
+    per-popup by PopupPopup, so we keep references to the three items. }
+  AddPopupItem(FPopup, '-'                           , nil                    ); { separator }
+  AddPopupItem(FPopup, '&Fix it'                     , FixItClick             );
+  AddPopupItem(FPopup, 'Fix all in &unit'            , FixAllInUnitClick      );
+  AddPopupItem(FPopup, 'Fix all in &project'         , FixAllInProjectClick   );
+  FItemFixIt     := FPopup.Items[FPopup.Items.Count - 3];
+  FItemFixUnit   := FPopup.Items[FPopup.Items.Count - 2];
+  FItemFixProject:= FPopup.Items[FPopup.Items.Count - 1];
+  FPopup.OnPopup := PopupPopup;
   FTree.PopupMenu:= FPopup;
 end; // constructor
 
 procedure TDragLintStructureForm.FormDestroy(Sender: TObject);
 begin
   ClearNodeData;
+  FreeAndNil(FFixableRules); { v0.88 AutoFix: release the cached fixable-rule set }
 end;
 
 procedure TDragLintStructureForm.ClearNodeData;
@@ -410,6 +439,7 @@ var
 begin
   FTree.Items.BeginUpdate;
   try
+    FRootDiag:= nil; { v0.88 AutoFix: about to invalidate all nodes; reassigned below }
     ClearNodeData;
     FTree.Items.Clear;
 
@@ -435,11 +465,13 @@ begin
 
     RootDiag:= FTree.Items.Add(nil, Format('Diagnostics (%d)', [Length(FDiags)]));
     RootDiag.Data:= nil;
+    FRootDiag:= RootDiag; { v0.88 AutoFix: remember the root for node discrimination }
     for i:= 0 to High(DiagOrder) do
     begin
       D:= FDiags[DiagOrder[i]];
       ND:= TStructureNodeData.Create;
       ND.Line:= D.Line + 1;
+      ND.Code:= D.Code; { v0.88 AutoFix: rule-id so the popup can offer a per-finding fix }
       Node:= FTree.Items.AddChild(RootDiag, SeverityPrefix(D.Severity) + Format('(%d) ', [D.Line + 1]) + D.Message);
       Node.Data:= ND;
     end;
@@ -653,6 +685,227 @@ begin
     SB.Free;
   end;
 end;
+
+{ ---- v0.88 AutoFix: right-click Fix it / Fix all ---- }
+
+{ Fetch (once, then cache) the set of rule-ids the CLI reports as having a
+  registered quick-fix. We ask the same exe every other spawn site uses:
+  "drag-lint rules --json" emits a top-level "rules" array whose objects each
+  carry an "id" string and a "fixable" boolean. Rule-ids are stored lower-cased
+  so membership tests are case-insensitive. Any spawn/parse failure leaves
+  FFixableRules an EMPTY (non-nil) list -- the popup then simply never offers
+  'Fix it', which is the safe degradation. }
+procedure TDragLintStructureForm.EnsureFixableRules;
+var
+  Cmd    : string      ;
+  Output : string      ;
+  ExitVal: Integer     ;
+  Root   : TJSONObject ;
+  Arr    : TJSONArray  ;
+  V      : TJSONValue  ;
+  Obj    : TJSONObject ;
+  IdV    : TJSONValue  ;
+  FixV   : TJSONValue  ;
+begin
+  if FFixableRules <> nil then Exit;
+  FFixableRules:= TStringList.Create;
+  FFixableRules.CaseSensitive:= False;
+  FFixableRules.Duplicates   := dupIgnore;
+  FFixableRules.Sorted       := True;
+  try
+    Cmd    := Format('"%s" rules --json', [ResolveExePath]);
+    ExitVal:= RunAndCaptureStdout(Cmd, Output, 15000);
+    if (ExitVal <> 0) or (Output = '') then
+    begin
+      DLT('autofix', Format('rules --json failed (exit=%d, len=%d)', [ExitVal, Length(Output)]));
+      Exit;
+    end;
+    Root:= TJSONObject.ParseJSONValue(Output) as TJSONObject;
+    if Root = nil then
+    begin
+      DLT('autofix', 'rules --json: not a JSON object');
+      Exit;
+    end;
+    try
+      Arr:= Root.GetValue('rules') as TJSONArray;
+      if Arr = nil then Exit;
+      for V in Arr do
+      begin
+        Obj:= V as TJSONObject;
+        if Obj = nil then Continue;
+        FixV:= Obj.GetValue('fixable');
+        IdV := Obj.GetValue('id'     );
+        if (FixV is TJSONBool) and TJSONBool(FixV).AsBoolean and (IdV <> nil) then
+          FFixableRules.Add(LowerCase(IdV.Value));
+      end;
+      DLT('autofix', Format('fixable rules cached: %d', [FFixableRules.Count]));
+    finally
+      Root.Free;
+    end;
+  except
+    on E: Exception do
+      DLT('autofix', 'EnsureFixableRules failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end; // procedure
+
+{ The 'Diagnostics (N)' root is the node we cached in BuildTree: top-level
+  (Parent = nil), Data = nil. Identity against FRootDiag is the primary test;
+  the caption/shape check is a belt-and-braces fallback should the reference go
+  stale. Code Elements' root also has Data = nil, so we must not treat it as the
+  diagnostics root -- the FRootDiag identity check keeps them apart. }
+function TDragLintStructureForm.NodeIsDiagnosticsRoot(ANode: TTreeNode): Boolean;
+begin
+  Result:= (ANode <> nil) and (ANode = FRootDiag)
+       and (ANode.Parent = nil) and (ANode.Data = nil);
+end;
+
+{ A fixable finding node hangs off the Diagnostics root, carries per-finding
+  node data (Data <> nil) whose Code is a rule-id in the cached fixable set. }
+function TDragLintStructureForm.NodeIsFixableFinding(ANode: TTreeNode): Boolean;
+var
+  ND: TStructureNodeData;
+begin
+  Result:= False;
+  if (ANode = nil) or (ANode.Data = nil) then Exit;
+  if ANode.Parent <> FRootDiag then Exit; { only diagnostics children are findings }
+  ND:= TStructureNodeData(ANode.Data);
+  if ND.Code = '' then Exit;
+  EnsureFixableRules;
+  Result:= (FFixableRules <> nil) and (FFixableRules.IndexOf(LowerCase(ND.Code)) >= 0);
+end;
+
+{ Reload the on-disk file into the IDE editor buffer AFTER the current callback
+  unwinds. Copied from Keyboard.pas:284-297 (Extract Method): the closure must
+  capture ONLY the FilePath string -- no OTAPI interface may outlive this
+  callback or the module's edit-buffer refcount dangles and the tab closes. The
+  module is re-resolved inside the queued proc; exceptions are swallowed into the
+  plugin log (a queued proc must never throw into the IDE message loop). Refresh
+  the diagnostics tree afterwards so it reflects the just-applied fix. }
+procedure TDragLintStructureForm.ReloadCurrentFileBuffer;
+var
+  FilePath: string;
+begin
+  FilePath:= FCurrentFile; { capture as a plain string only }
+  if FilePath = '' then Exit;
+  TThread.ForceQueue(nil,
+    procedure
+    var
+      QMS : IOTAModuleServices;
+      QMod: IOTAModule        ;
+    begin
+      try
+        if not Supports(BorlandIDEServices, IOTAModuleServices, QMS) then Exit;
+        QMod:= QMS.FindModule(FilePath);
+        if QMod <> nil then QMod.Refresh(True);
+      except
+        on E: Exception do DLT('autofix', 'deferred Refresh failed: ' + E.ClassName + ': ' + E.Message);
+      end; // try
+    end);
+  { Re-read diagnostics + rebuild the tree so fixed findings drop off. Also
+    deferred, and after the buffer reload is queued, so it runs on a settled UI. }
+  TThread.ForceQueue(nil,
+    procedure
+    begin
+      try
+        RefreshDiagnosticsOnly;
+      except
+        on E: Exception do DLT('autofix', 'deferred diag refresh failed: ' + E.ClassName + ': ' + E.Message);
+      end; // try
+    end);
+end; // procedure
+
+{ Enable exactly the item(s) that apply to the clicked/selected node:
+  - Diagnostics root  -> 'Fix all in unit' + 'Fix all in project'; 'Fix it' off.
+  - fixable finding    -> 'Fix it'; both 'Fix all' off.
+  - anything else      -> all three disabled (nav items are untouched). }
+procedure TDragLintStructureForm.PopupPopup(Sender: TObject);
+var
+  Node    : TTreeNode;
+  IsRoot  : Boolean  ;
+  IsFinding: Boolean ;
+begin
+  Node     := FTree.Selected;
+  IsRoot   := NodeIsDiagnosticsRoot(Node);
+  IsFinding:= NodeIsFixableFinding (Node);
+  FItemFixIt     .Enabled:= IsFinding;
+  FItemFixUnit   .Enabled:= IsRoot   ;
+  FItemFixProject.Enabled:= IsRoot   ;
+end;
+
+{ 'Fix it' -- apply the single fixable finding under the cursor:
+  drag-lint lint --file <FCurrentFile> --fix --fix-line <L> --fix-rule <id> --apply
+  On exit 0, reload the buffer + refresh the tree; otherwise log and do nothing. }
+procedure TDragLintStructureForm.FixItClick(Sender: TObject);
+var
+  ND     : TStructureNodeData;
+  Cmd    : string           ;
+  Output : string           ;
+  ExitVal: Integer          ;
+begin
+  try
+    if not NodeIsFixableFinding(FTree.Selected) then Exit;
+    ND:= TStructureNodeData(FTree.Selected.Data);
+    if FCurrentFile = '' then Exit;
+    Cmd:= Format('"%s" lint --file "%s" --fix --fix-line %d --fix-rule "%s" --apply',
+      [ResolveExePath, FCurrentFile, ND.Line, ND.Code]);
+    ExitVal:= RunAndCaptureStdout(Cmd, Output, 60000);
+    DLT('autofix', Format('Fix it %s line %d rule %s -> exit=%d', [ExtractFileName(FCurrentFile), ND.Line, ND.Code, ExitVal]));
+    if ExitVal = 0 then ReloadCurrentFileBuffer
+    else DLT('autofix', 'Fix it non-zero exit; output: ' + Copy(Output, 1, 400));
+  except
+    on E: Exception do DLT('autofix', 'FixItClick failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end; // procedure
+
+{ 'Fix all in unit' -- apply every fixable finding in the current file:
+  drag-lint lint --file <FCurrentFile> --fix --apply. }
+procedure TDragLintStructureForm.FixAllInUnitClick(Sender: TObject);
+var
+  Cmd    : string ;
+  Output : string ;
+  ExitVal: Integer;
+begin
+  try
+    if FCurrentFile = '' then Exit;
+    Cmd:= Format('"%s" lint --file "%s" --fix --apply', [ResolveExePath, FCurrentFile]);
+    ExitVal:= RunAndCaptureStdout(Cmd, Output, 120000);
+    DLT('autofix', Format('Fix all in unit %s -> exit=%d', [ExtractFileName(FCurrentFile), ExitVal]));
+    if ExitVal = 0 then ReloadCurrentFileBuffer
+    else DLT('autofix', 'Fix all in unit non-zero exit; output: ' + Copy(Output, 1, 400));
+  except
+    on E: Exception do DLT('autofix', 'FixAllInUnitClick failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end; // procedure
+
+{ 'Fix all in project' -- apply every fixable finding across the indexed project:
+  drag-lint lint-all --db <projDb> --fix --apply, where <projDb> is resolved the
+  same way the outline uses (ResolveDbForFile = first/highest-priority index DB).
+  Only the CURRENT file's buffer is reloaded here; OTHER edited files stay stale
+  in their editor buffers until re-opened (documented in the smoke notes) --
+  sweeping every open module is intentionally out of scope for this chunk. }
+procedure TDragLintStructureForm.FixAllInProjectClick(Sender: TObject);
+var
+  Db     : string ;
+  Cmd    : string ;
+  Output : string ;
+  ExitVal: Integer;
+begin
+  try
+    Db:= ResolveDbForFile;
+    if Db = '' then
+    begin
+      DLT('autofix', 'Fix all in project: no index DB resolved -- aborted');
+      Exit;
+    end;
+    Cmd:= Format('"%s" lint-all --db "%s" --fix --apply', [ResolveExePath, Db]);
+    ExitVal:= RunAndCaptureStdout(Cmd, Output, 600000);
+    DLT('autofix', Format('Fix all in project db=%s -> exit=%d', [ExtractFileName(Db), ExitVal]));
+    if ExitVal = 0 then ReloadCurrentFileBuffer
+    else DLT('autofix', 'Fix all in project non-zero exit; output: ' + Copy(Output, 1, 400));
+  except
+    on E: Exception do DLT('autofix', 'FixAllInProjectClick failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end; // procedure
 
 { ---- public factory ---- }
 

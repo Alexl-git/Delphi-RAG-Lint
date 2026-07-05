@@ -49,6 +49,17 @@ function QueryHoverText(const AUri: string; ALine, ACol: Integer; ATimeoutMs: In
 function ExtractHoverHeader  (const AMarkdown: string): string;
 function StripFirstHeaderLine(const AMarkdown: string): string;
 
+/// <summary>Spawns ACmdLine via CreateProcessW with merged stdout+stderr
+/// capture and blocks until the child exits (or ATimeoutMs elapses).</summary>
+/// <param name="ACmdLine">Full command line (exe path already quoted by the caller).</param>
+/// <param name="AOutput">Receives the full captured text output.</param>
+/// <param name="ATimeoutMs">Wait budget in ms; 0 means INFINITE.</param>
+/// <returns>The process exit code, or -1 on spawn failure.</returns>
+/// <remarks>v0.88: exposed so the Structure form's AutoFix menu can reuse the
+/// one shared spawn helper instead of duplicating CreateProcess plumbing.
+/// Synchronous -- call from a context where a brief block is acceptable.</remarks>
+function RunAndCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer = 60000): Integer;
+
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
 
@@ -424,8 +435,10 @@ begin
 end; // function
 
 { v0.40.7: forward decls so FetchHoverCallers / InvokeHover compose can call
-  helpers defined later in this unit. }
-function RunAndCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer = 60000): Integer; forward;
+  helpers defined later in this unit. RunAndCaptureStdout is now declared in the
+  interface (v0.88: exposed for the Structure form's AutoFix menu), so its
+  implementation-section forward is no longer needed -- the interface decl serves
+  as the forward for ordering. }
 function IdentifierAtCursor: string; forward;
 { v0.64.1: forward so all heavy-command handlers above can call DLExe64
   before its implementation appears later in this unit. }
