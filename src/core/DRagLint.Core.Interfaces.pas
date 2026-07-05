@@ -52,6 +52,12 @@ type
   ISymbolStore = interface
     ['{6B9F8AC4-3F19-4E1A-9D38-1A2C3B7EF501}']
     procedure Migrate;
+    // v0.86 Task 4: read-only, no-DDL schema-version probe. AFound receives the
+    // DB's stored schema_version (0 when absent); AExpected receives the engine's
+    // SCHEMA_VERSION. Returns AFound >= AExpected. Read verbs call this after a
+    // read-only open to emit the actionable stale-schema message instead of
+    // running a query against a pre-current schema.
+    function IsSchemaCurrent(out AFound, AExpected: Integer): Boolean;
     // v0.4: returns True if this file is already indexed at exactly this
     // mtime AND sha256 - so the indexer can skip re-parsing it.
     function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;

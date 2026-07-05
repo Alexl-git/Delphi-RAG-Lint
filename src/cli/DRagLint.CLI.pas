@@ -941,6 +941,31 @@ begin
   end;
 end; // procedure
 
+// v0.86 Task 4: open a store READ-ONLY for a query verb and validate its schema
+// without any DDL-on-read. Read verbs (outline, query, surface, context,
+// dump-refs, find-unit) use this instead of `Create + Migrate`: a read-only open
+// cannot mutate the shared index (no stamp, no FTS5 probe, no DROP TRIGGER),
+// which is what silently dropped the string_literals sync triggers on the win32
+// sqlite3.dll. On a pre-current schema the DB is NOT migrated (read verbs never
+// write): AOk is set False and the actionable stale-schema line is printed --
+//   index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate
+// -- so the caller exits nonzero instead of hitting a "no such column" field
+// error. Returns the store (never nil on a successful open); check AOk.
+function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean): ISymbolStore;
+var
+  Found, Expected: Integer;
+begin
+  Result := TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
+  if Result.IsSchemaCurrent(Found, Expected) then
+    AOk := True
+  else
+  begin
+    AOk := False;
+    Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate',
+      [Found, Expected]));
+  end;
+end;
+
 // v0.45: serialise a TIndexManifest to a TJSONObject for the dry-run JSON view.
 // Delegates to TManifestIO.ToJson for the canonical manifest structure, then
 // adds the extra 'indexes.rootDir' field (richer than the saved file). Caller owns + frees.
@@ -1960,8 +1985,9 @@ begin
     Exit   (2                                    );
   end;
 
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
 
   if AArgs.NoDocs then Syms:= Store.FindUndocumented(AArgs.Kind, AArgs.PublicOnly)
   else if AArgs.DocTag <> '' then Syms:= Store.FindByDocTag(AArgs.DocTag)
@@ -2201,8 +2227,9 @@ begin
   SetLength(AllMatches, 0);
   for DbPath in PathsToScan do
   begin
-    Store:= TSQLiteSymbolStore.Create(DbPath);
-    Store.Migrate;
+    var RoOk: Boolean;
+    Store:= OpenReadOnlyStore(DbPath, RoOk);
+    if not RoOk then Continue; { stale DB reported; skip, scan the rest }
     Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, Lim);
     for M in Matches do
     begin
@@ -2310,8 +2337,9 @@ begin
     var TotalRefs:= 0;
     for DbPath in PathsToScan do
     begin
-      Store:= TSQLiteSymbolStore.Create(DbPath);
-      Store.Migrate;
+      var RoOk: Boolean;
+      Store:= OpenReadOnlyStore(DbPath, RoOk);
+      if not RoOk then Continue; { stale DB reported; skip, scan the rest }
       // v0.17: use context variant if --context N is provided
       if AArgs.ContextLines > 0 then Refs:= Store.FindCallersByNameWithContext(AArgs.Name, AArgs.ContextLines)
       else Refs:= Store.FindCallersByName(AArgs.Name);
@@ -2351,8 +2379,9 @@ begin
     end;
     for DbPath in PathsToScan do
     begin
-      Store:= TSQLiteSymbolStore.Create(DbPath);
-      Store.Migrate;
+      var RoOk: Boolean;
+      Store:= OpenReadOnlyStore(DbPath, RoOk);
+      if not RoOk then Continue; { stale DB reported; skip, scan the rest }
       var StartId  : Int64  := 0;
       var StartKind: string := '';
       for S in Store.FindSymbolsByExactName(AArgs.Name) do
@@ -2429,8 +2458,9 @@ begin
       Writeln('ERROR: query typecat requires --name <type>');
       Exit(2);
     end;
-    Store:= TSQLiteSymbolStore.Create(PathsToScan[0]);
-    Store.Migrate;
+    var RoOk: Boolean;
+    Store:= OpenReadOnlyStore(PathsToScan[0], RoOk);
+    if not RoOk then Exit(1);
     var Cat:= Store.ResolveTypeCategory(AArgs.Name, 0).ToText;
     if AArgs.AsJson then
     begin
@@ -2459,8 +2489,9 @@ begin
 
   for DbPath in PathsToScan do
   begin
-    Store:= TSQLiteSymbolStore.Create(DbPath);
-    Store.Migrate;
+    var RoOk: Boolean;
+    Store:= OpenReadOnlyStore(DbPath, RoOk);
+    if not RoOk then Continue; { stale DB reported; skip, scan the rest }
     if AArgs.QName <> '' then Symbols:= Store.FindSymbolsByQualifiedName(AArgs.QName)
     else Symbols:= Store.FindSymbolsByExactName(AArgs.Name);
     for S in Symbols do
@@ -2478,8 +2509,9 @@ begin
     // Fuzzy fallback: hit each DB, accumulate, top-K overall.
     for DbPath in PathsToScan do
     begin
-      Store:= TSQLiteSymbolStore.Create(DbPath);
-      Store.Migrate;
+      var RoOk: Boolean;
+      Store:= OpenReadOnlyStore(DbPath, RoOk);
+      if not RoOk then Continue; { stale DB reported; skip, scan the rest }
       Symbols:= Store.FindSymbolsFuzzy(AArgs.Name, 10);
       for S in Symbols do
       begin
@@ -4022,8 +4054,9 @@ begin
     Exit   (2                                    );
   end;
 
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
 
   // Validate that the symbol exists and is a class/record/interface.
   Syms:= Store.FindSymbolsByQualifiedName(AArgs.QName);
@@ -4095,8 +4128,9 @@ begin
     Exit   (2                                    );
   end;
 
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
   Syms:= Store.FindSymbolsByFile(AArgs.InFile);
 
   if LowerCase(AArgs.Format) = 'json' then
@@ -5028,8 +5062,9 @@ begin
     Writeln(Format('Database not found: %s', [AArgs.DbPath]));
     Exit(2);
   end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
   IncDocs:= not AArgs.NoDocs;
   IncSurface:= AArgs.IncludeClassSurface;
   IncImpl:= SameText(AArgs.Verb, 'modify') or SameText(AArgs.Verb, 'refactor') or SameText(AArgs.Verb, 'extend');
@@ -5673,7 +5708,9 @@ begin
   if (AArgs.Name = '') or (AArgs.InFile = '') then
   begin Writeln('ERROR: find-unit needs --name <Symbol> --in <file>'); Exit(2); end;
   if AArgs.DbPath = '' then begin Writeln('ERROR: --db required'); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
   Edits:= TFindUnitRefactoring.Build(Store, AArgs.Name, AArgs.InFile, ResolvedUnit, Already);
   if Already then begin Writeln(Format('"%s" is already in the uses clause.', [ResolvedUnit])); Exit(0); end;
   if ResolvedUnit = '' then begin Writeln(Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
@@ -8387,8 +8424,9 @@ begin
     Writeln(Format('Database not found: %s', [AArgs.DbPath]));
     Exit(2);
   end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
   FileId:= Store.FindFileIdByPath(TPath.GetFullPath(AArgs.Target));
   if FileId <= 0 then FileId:= Store.FindFileIdByPath(AArgs.Target);
   if FileId <= 0 then

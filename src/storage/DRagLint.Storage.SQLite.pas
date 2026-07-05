@@ -53,20 +53,45 @@ type
       FQFindCompilerFindings : TFDQuery     ;
       FQInsertCompilerFinding: TFDQuery     ;
       FFts5Available         : Boolean     ; // set by Migrate; False when sqlite3.dll lacks fts5
+      FReadOnly              : Boolean     ; // v0.86 Task 4: opened read-only (no DDL/writes)
       // v0.40.4: uses-clause persistence
       FQInsertUnitUse        : TFDQuery;
       FQDeleteFileUnitUses   : TFDQuery;
       FQGetFileUnitUses      : TFDQuery;
       FQFindUsersOfUnit      : TFDQuery;
       FQResolveUnitUseTargets: TFDQuery;
-      procedure Connect(const ADbPath: string);
+      procedure Connect(const ADbPath: string; AReadOnly: Boolean);
       procedure PrepareStatements;
       procedure EnsureTrigramTablePopulated;
+      // v0.86 Task 4: read-only FTS5 detection -- does the string_fts virtual
+      // table exist? (a SELECT on sqlite_master; issues no DDL). Used only on a
+      // read-only open, where the write-path temp-table probe cannot run.
+      function Fts5TableExists: Boolean;
     public
-      constructor Create(const ADbPath: string);
+      /// <summary>Opens (or creates) the SQLite index at ADbPath.</summary>
+      /// <param name="ADbPath">Full path to the .sqlite index file.</param>
+      /// <param name="AReadOnly">When True the connection is opened
+      ///  SQLITE_OPEN_READONLY and NO DDL/migration is performed: the caller must
+      ///  NOT invoke Migrate or any Upsert/Delete/Insert method. Only the
+      ///  read-safe init runs (connect + PrepareStatements), so query verbs never
+      ///  issue DDL-on-read (which on a win32 sqlite3.dll silently DROPs the
+      ///  string_literals sync triggers). Default False = today's write behavior,
+      ///  byte-identical.</param>
+      /// <remarks>Read-only callers should first check IsSchemaCurrent and emit
+      ///  the actionable stale-schema message rather than run a query against a
+      ///  pre-current schema. Not thread-safe; single owning thread only.</remarks>
+      constructor Create(const ADbPath: string; AReadOnly: Boolean = False);
       destructor Destroy; override;
 
       procedure Migrate;
+
+      /// <summary>Reads the stored schema_version and compares it to the engine's
+      ///  SCHEMA_VERSION without mutating the DB (safe on a read-only open).</summary>
+      /// <param name="AFound">Receives the DB's stored schema_version, or 0 when
+      ///  the schema_meta row/table is absent (treated as pre-any-version).</param>
+      /// <param name="AExpected">Receives SCHEMA_VERSION (the engine's current).</param>
+      /// <returns>True when AFound &gt;= AExpected (current enough to read).</returns>
+      function IsSchemaCurrent(out AFound, AExpected: Integer): Boolean;
 
       function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
       function OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
@@ -190,10 +215,54 @@ uses
 
 { TSQLiteSymbolStore }
 
-constructor TSQLiteSymbolStore.Create(const ADbPath: string);
+constructor TSQLiteSymbolStore.Create(const ADbPath: string; AReadOnly: Boolean = False);
 begin
   inherited Create;
-  Connect(ADbPath);
+  FReadOnly := AReadOnly;
+  Connect(ADbPath, AReadOnly);
+  { v0.86 Task 4: a read-only open still needs its SELECT queries built. In the
+    write path PrepareStatements is Migrate's last step; read verbs never call
+    Migrate, so build the statements here. PrepareStatements executes no SQL
+    (FireDAC auto-prepares on first use) -- safe on a read-only connection. }
+  if FReadOnly then
+  begin
+    { Only build the SELECT statements when the schema is current. On a pre-
+      current DB some tables the queries reference may be absent, and the read
+      verb will not run any query anyway -- it calls IsSchemaCurrent, sees False,
+      prints the actionable stale-schema message, and exits. Preparing against a
+      missing table would raise here (before the CLI can emit that message). }
+    var RoFound, RoExpected: Integer;
+    if IsSchemaCurrent(RoFound, RoExpected) then
+    begin
+      PrepareStatements;
+      { The write path sets FFts5Available via a temp-table probe (a write). On a
+        read-only open, detect FTS5 read-only: the string_fts virtual table
+        exists in sqlite_master iff the index was built by an FTS5-capable
+        engine. This lets SearchText (query --text) run; it never issues DDL. }
+      FFts5Available := Fts5TableExists;
+    end;
+  end;
+end;
+
+function TSQLiteSymbolStore.Fts5TableExists: Boolean;
+var
+  Q: TFDQuery;
+begin
+  Result := False;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text := 'SELECT 1 FROM sqlite_master ' +
+                  'WHERE type = ''table'' AND name = ''string_fts'' LIMIT 1';
+    try
+      Q.Open;
+      Result := not Q.IsEmpty;
+    except
+      Result := False;
+    end;
+  finally
+    Q.Free;
+  end;
 end;
 
 destructor TSQLiteSymbolStore.Destroy;
@@ -251,6 +320,13 @@ var
   SymId  : Int64         ;
   SymName: string        ;
 begin
+  { v0.86 Task 4: on a read-only open (query verbs' fuzzy fallback) the DB must
+    not be written. A normally-indexed DB already has trigrams (populated in
+    UpsertSymbol at index time), so the populate below is a no-op there; only a
+    DB whose trigrams were never built would want it, and on a read-only handle
+    the INSERT would fail. Skip it -- fuzzy simply matches fewer rows, never
+    crashes. }
+  if FReadOnly then Exit;
   // Check whether symbol_trigrams already has rows. If yes, we're good - the
   // table is kept in sync by triggers (next iteration); for now we just
   // populate-on-demand here. If empty, populate from symbols.
@@ -301,11 +377,36 @@ begin
   end; // try
 end; // procedure
 
-procedure TSQLiteSymbolStore.Connect(const ADbPath: string);
+procedure TSQLiteSymbolStore.Connect(const ADbPath: string; AReadOnly: Boolean);
 begin
   FConn:= TFDConnection.Create(nil);
   FConn.DriverName:= 'SQLite';
   FConn.Params.Values['Database'   ]:= ADbPath;
+  if AReadOnly then
+  begin
+    { v0.86 Task 4: query verbs must never mutate the shared index. We do NOT use
+      FireDAC OpenMode=ReadOnly (SQLITE_OPEN_READONLY): a WAL-mode DB cannot be
+      opened that way without write access to its -shm wal-index file, which
+      fails with "disk I/O error" (SQLite docs, wal.html: read-only WAL needs
+      write privilege on -shm). Instead open with the SAME params as the write
+      path -- so the -shm handling and WAL reads work normally -- then enforce
+      no-writes with 'PRAGMA query_only = ON': every CREATE/DROP/INSERT/UPDATE/
+      DELETE returns SQLITE_READONLY, so no DDL-on-read (no stamp, no FTS5 probe,
+      no DROP TRIGGER) and no data change is possible. query_only is
+      per-connection (does not disturb a concurrent LSP/writer). Journal mode is
+      untouched, so the DB file's bytes are unchanged by a read verb. }
+    FConn.Params.Values['LockingMode']:= 'Normal';
+    FConn.Params.Values['JournalMode']:= 'WAL';
+    FConn.Params.Values['Synchronous']:= 'Normal';
+    FConn.LoginPrompt:= False;
+    FConn.Connected  := True;
+    FConn.ExecSQL('PRAGMA query_only = ON'); { reject every write on this handle }
+    FConn.ExecSQL('PRAGMA busy_timeout = 5000');
+    FConn.ExecSQL('PRAGMA cache_size = -262144'  ); { 256 MB page cache }
+    FConn.ExecSQL('PRAGMA mmap_size = 1073741824'); { 1 GB read mmap }
+    FConn.ExecSQL('PRAGMA temp_store = MEMORY'   );
+    Exit;
+  end;
   FConn.Params.Values['LockingMode']:= 'Normal';
   FConn.Params.Values['JournalMode']:= 'WAL';
   FConn.Params.Values['Synchronous']:= 'Normal';
@@ -463,6 +564,32 @@ begin
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_ancestors_name   ON type_ancestors(ancestor_name)');
   PrepareStatements;
 end; // begin
+
+function TSQLiteSymbolStore.IsSchemaCurrent(out AFound, AExpected: Integer): Boolean;
+var
+  Q: TFDQuery;
+begin
+  { Read-only, no-DDL schema probe. schema_meta always exists on any real index
+    (it is SCHEMA_DDL[0]); a missing table/row is treated as 0 (pre-any-version)
+    so a read verb reports the stale-schema message instead of a field error. }
+  AExpected := SCHEMA_VERSION;
+  AFound    := 0;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text := 'SELECT value FROM schema_meta WHERE key = ''schema_version'' LIMIT 1';
+    try
+      Q.Open;
+      if not Q.IsEmpty then AFound := StrToIntDef(Q.Fields[0].AsString, 0);
+    except
+      { table absent (pre-schema_meta DB) -> leave AFound = 0. }
+      AFound := 0;
+    end;
+  finally
+    Q.Free;
+  end;
+  Result := AFound >= AExpected;
+end;
 
 procedure TSQLiteSymbolStore.PrepareStatements;
   function NewQuery(const ASql: string): TFDQuery;
