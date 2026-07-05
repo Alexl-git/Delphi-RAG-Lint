@@ -1,5 +1,27 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-05 (LATEST-5) -- **v0.86.0-alpha ship-prep DONE (commit-only). Awaiting controller final review + tag/push/gh-release.**
+> `main` HEAD = this task's commit (VERSION/CHANGELOG/comment fix; see `git log -1`), on top of `a92fa45` (T1-T4 all done +
+> reviewed). VERSION `CLI.pas:6` = `0.86.0-alpha`. **NOT yet tagged/pushed/released** -- the controller runs a final
+> whole-branch review on this commit, then tags `v0.86.0-alpha`, pushes, and `gh release create ... --latest`.
+> **Full battery green on the freshly-built Release win64 exe:** lint 153/153, store 16/16, catalog 29/29, flowengine
+> 43/43, extractmethod-unit 81/81, extract-method e2e 17/17, migrate-v12 8/8, formsmap 18/18, encoding-ingest 12/12,
+> readonly-verbs 21/21. Pre-existing (NOT regressions, unrelated to v0.86): smoke suite FTS5-unavailable + LSP-init-timeout
+> failures (win32 sqlite3.dll lacks FTS5 in that harness path; LSP server startup timing), pipeline "disabled rule drops
+> finding" -- all present before this milestone's Tasks 1-4 too. Zips packed via `build\pack-lint-release.ps1
+> -Version 0.86.0-alpha`; both win64/win32 zip exes confirmed printing `drag-lint 0.86.0-alpha`. Plugin BPL: no plugin
+> source changed since Task 2's commit (`606d659`) -- rebuilt Win32 Debug to confirm 0 errors (same 19 pre-existing hints),
+> then reverted the resulting binary diff (non-deterministic rebuild bytes only) so the shipped BPL/DCP stay exactly
+> Task 2's committed artifact.
+> **>>> NEXT ACTION (controller): final whole-branch review of this commit, then `git tag v0.86.0-alpha` -> push -> `gh
+> release create v0.86.0-alpha` (mirror v0.85 mechanics: full release, win32+win64 zips, `--latest`, notes file).**
+> **>>> AFTER tag/release: USER SMOKE** (brief Step 5) -- restart IDE, Structure tab on BASICSF.pas shows sorted
+> Diagnostics + ~240 Code Elements; reindex from the IDE indexes SOFTWID.PAS (not SKIP); text-search still works after a
+> Structure refresh (FTS5 triggers intact).
+> **After v0.86: Change Signature** (REFACTOR-LIST.md "recommended next") -- new brainstorm -> spec -> plan; reuses
+> rename's cross-unit apply + Extract Method's liveness pass.
+>
+> --- (prior) ---
 > ## RESUME 2026-07-05 (LATEST-4) -- **v0.85 fully DONE (IDE smoke verified). NEXT ACTION = execute the v0.86 plan.**
 > `main`=`b5c53a1` (clean, pushed). VERSION=`0.85.0-alpha`, tag `v0.85.0-alpha`=`2c303e4` released.
 > **>>> Execute `docs/superpowers/plans/2026-07-05-win64-default-and-ide-fixes-plan.md` via

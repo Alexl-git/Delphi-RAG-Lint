@@ -5,6 +5,26 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.86.0-alpha -- 2026-07-05
+
+IDE robustness pass: the plugin now defaults to the Win64 CLI everywhere, the Structure tab survives CLI
+preamble/stderr noise, ANSI/UTF-16 sources index instead of being skipped, and read-only verbs can no longer
+mutate the shared index. No index-schema change (still v13).
+
+### Fixed
+- **IDE Win64-by-default:** every drag-lint process the IDE plugin spawns now defaults to the Win64 CLI (the
+  32-bit BPL is the only 32-bit artifact); one shared resolver replaced ~11 ad-hoc ones that were silently
+  running a stale Win32 exe.
+- **Structure tab robustness:** the outline JSON is sliced out of any CLI preamble noise and stderr is captured
+  on its own pipe, so the Structure tab no longer shows "Code Elements 0"; Diagnostics are now sorted by line.
+- **ANSI/UTF-16 source ingest:** valid CP1252 / UTF-16 source files (e.g. a `resourcestring` with (R)/(C) high
+  bytes, SOFTWID.PAS class) now transcode to UTF-8 at ingest and INDEX instead of being skipped with an
+  encoding error; their string literals become text-searchable.
+- **Read-only query verbs:** outline/query/find-unit/surface/context/dump-refs now open the index read-only
+  (`PRAGMA query_only`), so a read-looking command can never mutate the shared DB -- this kills the Win32
+  trigger-drop side effect (a read verb was dropping the text-search sync triggers) and any DDL-on-read.
+  Stale-schema DBs now get an actionable "run drag-lint index ... to migrate" message instead of a field error.
+
 ## v0.85.0-alpha -- 2026-07-03
 
 Extract Method: the first refactoring-APPLY transformation with data-flow analysis behind it (the CFG
