@@ -37,6 +37,7 @@ Assert-Fix 'boolean_comparison.pas' 15 'boolean-comparison-true' 'if not Flag th
 Assert-Fix 'boolean_comparison.pas' 16 'boolean-comparison-true' 'if not (A and B) then Flag := False;' '[bc:compound]'
 Assert-Fix 'reserved_word_casing.pas' 12 'reserved-word-casing' 'if Flag then Flag := False;' '[kw-casing]'
 Assert-Fix 'redundant_assigned_free.pas' 16 'redundant-assigned-free' 'Obj.Free;' '[assigned-free]'
+Assert-Fix 'off_by_one.pas' 14 'off-by-one-count' 'for I := 0 to List.Count - 1 do' '[off-by-one]'
 
 # guard: the 'Authenticated' line (contains substring 'then') must be untouched by the line-16 fix
 $scratch18 = Join-Path C:\TEMP 'draglint_newrules_redundant_assigned_free'

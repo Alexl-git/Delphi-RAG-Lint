@@ -4455,9 +4455,10 @@ end;
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
   BuildAutofixEdits (kept in lockstep; a guard test asserts they agree). }
 const
-  FIXABLE_RULE_IDS: array[0..5] of string =
+  FIXABLE_RULE_IDS: array[0..6] of string =
     ('self-assignment', 'redundant-parentheses', 'redundant-cast',
-     'redundant-not-not', 'reserved-word-casing', 'redundant-assigned-free');
+     'redundant-not-not', 'reserved-word-casing', 'redundant-assigned-free',
+     'off-by-one-count');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var S: string;
@@ -4472,6 +4473,23 @@ var I: Integer;
 begin
   SetLength(Result, Length(FIXABLE_RULE_IDS));
   for I := 0 to High(FIXABLE_RULE_IDS) do Result[I] := FIXABLE_RULE_IDS[I];
+end;
+
+{ Behaviour-CHANGING fixes: still applied by Fix-it/Fix-all, but tagged so a
+  human/AI orchestrator is warned. Currently only off-by-one-count (appends
+  ' - 1' to a loop bound, which breaks an intentionally-inclusive loop). }
+const
+  RISKY_FIX_RULE_IDS: array[0..0] of string = ('off-by-one-count');
+
+/// <summary>True iff the rule's registered fix is behaviour-CHANGING (not merely
+/// a redundant-code cleanup). Such fixes are still applied, but callers surface a
+/// 'risky' flag so a human/AI reviews before trusting a batch apply.</summary>
+function IsRiskyFixRule(const ARuleId: string): Boolean;
+var S: string;
+begin
+  for S in RISKY_FIX_RULE_IDS do
+    if SameText(S, ARuleId) then Exit(True);
+  Result := False;
 end;
 
 /// <summary>True iff S (trimmed) needs NO extra parentheses to be the operand of
@@ -4548,7 +4566,8 @@ end;
 ///   redundant-as-tobject  -> strip the ' as TObject' suffix;
 ///   boolean-comparison-true -> X=True/X&lt;&gt;False->X; X=False/X&lt;&gt;True->not X;
 ///   reserved-word-casing  -> lowercase the keyword token;
-///   redundant-assigned-free -> drop the 'if Assigned(X) then' guard.
+///   redundant-assigned-free -> drop the 'if Assigned(X) then' guard;
+///   off-by-one-count      -> append ' - 1' to the loop bound (RISKY).
 /// AFixableCount returns how many findings produced a fix. Rules without a fix
 /// are silently skipped.</summary>
 /// <remarks>Deliberately conservative: only rules whose fix is an exact,
@@ -4856,6 +4875,31 @@ begin
             end;
           end;
         end;
+      end
+      else if SameText(F.RuleId, 'off-by-one-count')
+              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        { span covers the loop end-bound (X.Count / Length(X)). Append ' - 1'.
+          BEHAVIOUR-CHANGING (tagged risky via IsRiskyFixRule). The bound is
+          isolated by 'to .. do', so no precedence hazard. }
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          if Trim(Span) <> '' then
+          begin
+            E:= Default(TTextEdit);
+            E.FilePath:= F.FilePath;
+            E.Kind    := tekReplaceInLine;
+            E.Line    := F.StartLine;
+            E.Col     := F.StartCol;
+            E.EndCol  := F.EndCol;
+            E.Text    := Span + ' - 1';
+            Result:= Result + [E];
+            Inc(AFixableCount);
+          end;
+        end;
       end;
     end;
   finally
@@ -4961,6 +5005,7 @@ begin
           JObj.AddPair('fixable', TJSONBool.Create(IsFixableRule(F.RuleId)));
           JObj.AddPair('applied', TJSONBool.Create(AArgs.Apply));
           JObj.AddPair('preview', TJSONBool.Create(not AArgs.Apply));
+          JObj.AddPair('risky'  , TJSONBool.Create(IsRiskyFixRule(F.RuleId)));
           JArr.AddElement(JObj);
         end;
         Writeln(JArr.Format(2));
@@ -4981,6 +5026,11 @@ begin
     else
     begin
       Write(TTextEditApplier.RenderDryRun(Edits));
+      var HasRisky: Boolean:= False;
+      for F in Targeted do
+        if IsRiskyFixRule(F.RuleId) then begin HasRisky:= True; Break; end;
+      if HasRisky then
+        Writeln('[risky] one or more fixes are behaviour-changing -- review before --apply.');
       Writeln(Format('autofix: %d fixable finding(s) -- pass --apply to write', [FixCount]));
     end;
     Exit(0);
