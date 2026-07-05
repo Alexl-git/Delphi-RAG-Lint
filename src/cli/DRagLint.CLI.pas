@@ -4474,9 +4474,11 @@ begin
 end;
 
 /// <summary>Builds the quick-fix text edits for the subset of AFindings whose
-/// rule has a registered autofix. v0.71 seed set (mechanical, no type info):
+/// rule has a registered autofix (the FIXABLE_RULE_IDS set). Mechanical, no
+/// type info:
 ///   self-assignment       -> delete the offending statement line(s);
-///   redundant-parentheses -> strip the outer '(' ')' of the flagged span.
+///   redundant-parentheses -> strip the outer '(' ')' of the flagged span;
+///   redundant-cast        -> strip a 'TFoo(x)' cast where x is one identifier.
 /// AFixableCount returns how many findings produced a fix. Rules without a fix
 /// are silently skipped.</summary>
 /// <remarks>Deliberately conservative: only rules whose fix is an exact,
