@@ -4474,10 +4474,12 @@ begin
   for I := 0 to High(FIXABLE_RULE_IDS) do Result[I] := FIXABLE_RULE_IDS[I];
 end;
 
-/// <summary>True iff S (trimmed) is a lone primary term -- an identifier or
-/// dotted chain, optionally followed only by balanced call '(...)' / index
-/// '[...]' groups and '.ident' segments, with NO top-level operator and NO
-/// top-level whitespace. Answers "can 'not S' be written WITHOUT parentheses?".
+/// <summary>True iff S (trimmed) needs NO extra parentheses to be the operand of
+/// a unary 'not'. That holds when S is either (a) a lone primary term -- an
+/// identifier or dotted chain, optionally followed only by balanced call '(...)'
+/// / index '[...]' groups and '.ident' segments, with NO top-level operator and
+/// NO top-level whitespace -- OR (b) already a single fully-enclosing '(...)'
+/// group (the opening paren balances exactly at the last character).
 /// Errs toward False (compound): over-wrapping 'not (X)' is harmless, but
 /// under-wrapping 'not a and b' silently changes meaning.</summary>
 function IsSingleTokenAtom(const S: string): Boolean;
@@ -4492,7 +4494,28 @@ var
   begin Result:= CharInSet(Ch, ['A'..'Z','a'..'z','_','0'..'9']); end;
 begin
   T:= Trim(S);
-  if (T = '') or (not IsIdentStart(T[1])) then Exit(False);
+  if T = '' then Exit(False);
+
+  { (b) already a single fully-enclosing '(...)' group: the leading '(' must
+    balance to depth 0 only at the very last character (so '(a) and (b)' does
+    NOT qualify -- its first '(' closes mid-string). }
+  if T[1] = '(' then
+  begin
+    Depth:= 0;
+    for I:= 1 to Length(T) do
+    begin
+      if T[I] = '(' then Inc(Depth)
+      else if T[I] = ')' then
+      begin
+        Dec(Depth);
+        if (Depth = 0) then Exit(I = Length(T));  { balanced only at the end => atomic }
+      end;
+    end;
+    Exit(False);  { unbalanced }
+  end;
+
+  { (a) lone primary term. }
+  if not IsIdentStart(T[1]) then Exit(False);
   Depth:= 0;
   I:= 1;
   while I <= Length(T) do
@@ -4522,7 +4545,8 @@ end;
 ///   redundant-parentheses -> strip the outer '(' ')' of the flagged span;
 ///   redundant-cast        -> strip a 'TFoo(x)' cast where x is one identifier;
 ///   redundant-not-not     -> strip the two leading 'not' keywords;
-///   redundant-as-tobject  -> strip the ' as TObject' suffix.
+///   redundant-as-tobject  -> strip the ' as TObject' suffix;
+///   boolean-comparison-true -> X=True/X&lt;&gt;False->X; X=False/X&lt;&gt;True->not X.
 /// AFixableCount returns how many findings produced a fix. Rules without a fix
 /// are silently skipped.</summary>
 /// <remarks>Deliberately conservative: only rules whose fix is an exact,
@@ -4692,6 +4716,65 @@ begin
             Repl:= TrimRight(Copy(Span, 1, AsPos - 1));
             if Repl <> '' then
             begin
+              E:= Default(TTextEdit);
+              E.FilePath:= F.FilePath;
+              E.Kind    := tekReplaceInLine;
+              E.Line    := F.StartLine;
+              E.Col     := F.StartCol;
+              E.EndCol  := F.EndCol;
+              E.Text    := Repl;
+              Result:= Result + [E];
+              Inc(AFixableCount);
+            end;
+          end;
+        end;
+      end
+      else if SameText(F.RuleId, 'boolean-comparison-true')
+              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        { span covers 'X op bool', op is '=' or '<>', bool is True or False.
+          Scan for the LAST depth-0 '=' or '<>' operator; split into lhs/op/rhs.
+          positive (= True / <> False) -> lhs; negative (= False / <> True) ->
+          'not ' + (lhs, parenthesized when not a single-token atom). }
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          var Depth: Integer:= 0;
+          var OpPos: Integer:= 0;
+          var OpLen: Integer:= 0;
+          for var K: Integer:= 1 to Length(Span) do
+          begin
+            var Ch: Char:= Span[K];
+            if (Ch = '(') or (Ch = '[') then Inc(Depth)
+            else if (Ch = ')') or (Ch = ']') then Dec(Depth)
+            else if Depth = 0 then
+            begin
+              if (K < Length(Span)) and (Ch = '<') and (Span[K+1] = '>') then
+              begin OpPos:= K; OpLen:= 2; end
+              else if Ch = '=' then
+              begin OpPos:= K; OpLen:= 1; end;
+            end;
+          end;
+          if OpPos > 1 then
+          begin
+            var LhsText: string:= Trim(Copy(Span, 1, OpPos - 1));
+            var OpText : string:= Copy(Span, OpPos, OpLen);
+            var RhsText: string:= Trim(Copy(Span, OpPos + OpLen, MaxInt));
+            var IsTrue : Boolean:= SameText(RhsText, 'True');
+            var IsFalse: Boolean:= SameText(RhsText, 'False');
+            var Positive: Boolean;
+            if (LhsText <> '') and (IsTrue or IsFalse) then
+            begin
+              { (= True) or (<> False) => positive; (= False) or (<> True) => negative }
+              if OpText = '=' then Positive:= IsTrue else Positive:= IsFalse;
+              if Positive then
+                Repl:= LhsText
+              else if IsSingleTokenAtom(LhsText) then
+                Repl:= 'not ' + LhsText
+              else
+                Repl:= 'not (' + LhsText + ')';
               E:= Default(TTextEdit);
               E.FilePath:= F.FilePath;
               E.Kind    := tekReplaceInLine;

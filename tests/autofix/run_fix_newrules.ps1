@@ -15,8 +15,8 @@ function Assert-Fix($fixtureName, $L, $R, $expect, $tag) {
   Copy-Item $fixture $target -Force
   Push-Location C:\TEMP
   try {
-    $args = @('lint','--file',$target,'--fix','--fix-line',$L,'--fix-rule',$R,'--json','--apply')
-    $raw = & $exePath @args 2>$null | Out-String
+    $fixArgs = @('lint','--file',$target,'--fix','--fix-line',$L,'--fix-rule',$R,'--json','--apply')
+    $raw = & $exePath @fixArgs 2>$null | Out-String
     $arr = $null; try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
     if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
     $t = $null; if ($null -ne $arr) { $t = $arr | Where-Object { $_.rule -eq $R } | Select-Object -First 1 }
@@ -30,5 +30,10 @@ function Assert-Fix($fixtureName, $L, $R, $expect, $tag) {
 
 Assert-Fix 'redundant_not_not.pas' 12 'redundant-not-not' 'B := Flag;' '[not-not]'
 Assert-Fix 'redundant_as_tobject.pas' 14 'redundant-as-tobject' 'Obj := Sender;' '[as-tobject]'
+Assert-Fix 'boolean_comparison.pas' 12 'boolean-comparison-true' 'if Flag then Flag := False;'        '[bc:=True]'
+Assert-Fix 'boolean_comparison.pas' 13 'boolean-comparison-true' 'if Flag then Flag := False;'        '[bc:<>False]'
+Assert-Fix 'boolean_comparison.pas' 14 'boolean-comparison-true' 'if not Flag then Flag := False;'    '[bc:=False]'
+Assert-Fix 'boolean_comparison.pas' 15 'boolean-comparison-true' 'if not Flag then Flag := False;'    '[bc:<>True]'
+Assert-Fix 'boolean_comparison.pas' 16 'boolean-comparison-true' 'if not (A and B) then Flag := False;' '[bc:compound]'
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
