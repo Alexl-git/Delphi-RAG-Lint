@@ -512,7 +512,8 @@ end; // function
 /// launch body lives in the concrete C.EditForm) is already found -- the concrete
 /// method and every interface call site share the same name_text, and the call
 /// site's enclosing_symbol_id resolves to the calling form. See the query comment
-/// below and .superpowers/sdd/task-2-report.md (branch (a) diagnosis).</remarks>
+/// below and docs/superpowers/specs/2026-07-05-forms-csv-v4-hook-and-interface-navigation-design.md
+/// section D1 (branch (a) diagnosis).</remarks>
 function FindNearestFormCaller(
   AStore       : TSQLiteSymbolStore;
   const AOwnerClass, ARoutine: string;
@@ -763,6 +764,9 @@ var
       R:= Trim(Copy(S, P + 2, MaxInt));
       // strip a single trailing ';' (and any trailing spaces) from the RHS
       if (R <> '') and (R[Length(R)] = ';') then R:= Trim(Copy(R, 1, Length(R) - 1));
+      // strip a single leading '@' so the address-of idiom ":= @Routine" matches
+      // the same as the bare ":= Routine" form (both bind the same launcher name).
+      if (R <> '') and (R[1] = '@') then R:= Trim(Copy(R, 2, MaxInt));
       // RHS must be a single bare identifier (the launcher routine, address-of)
       if not IsIdent(R) then Exit;
       // LHS: bare identifier, or exactly one qualifier "Unit.Field" -- take Field
@@ -1267,6 +1271,14 @@ begin
         end;
         Sb.Append('#,Unit,FormName,PAS lines,Navigation,Called From,Notes').Append(#13#10);
         Idx:= 0;
+        { v4 Layer 0 (spec D0) db-scope guardrail counter. Counts forms that ended
+          '(no path from MAIN)' yet have a NON-EMPTY Called From: a known caller
+          routine IS indexed but its upward chain to MAIN is severed -- the
+          signature of an interface-dispatch launch body whose bridge to MAIN
+          lives outside the scanned db (e.g. COMMON absent from a CLIENT-only db).
+          Forms with EMPTY Called From are genuine dead forms (no callers at all)
+          and are deliberately NOT counted. }
+        var UnresolvedWithCaller:= 0;
         for N in Nodes do
         begin
           Inc(Idx);
@@ -1277,6 +1289,7 @@ begin
             if (Nav = '') and not SameText(N.FormClass, RootClass) then Nav:= '(no path from MAIN)';
           end;
           var CF:= CalledFrom(Edges, ClassToNode, N.FormClass);
+          if (Nav = '(no path from MAIN)') and (CF <> '') then Inc(UnresolvedWithCaller);
           var Notes:= '';
           if (Nav = '(no path from MAIN)') and (CF = '') then
           begin
@@ -1291,6 +1304,14 @@ begin
             .Append(CsvField(Nav)).Append(',').Append(CsvField(CF)).Append(',').Append(CsvField(Notes))
             .Append(#13#10);
         end; // for
+        { v4 Layer 0 (spec D0) guardrail: announce, on stderr only, when forms
+          have an indexed caller that could not be walked back to MAIN -- almost
+          always a db-scope problem (the interface-dispatch launch bodies live in
+          a unit outside this db, e.g. COMMON missing from a CLIENT-only index).
+          A scope gap thus announces itself instead of silently printing
+          '(no path)'. stderr-only: this does NOT alter any CSV cell. }
+        if UnresolvedWithCaller > 0 then
+          Writeln(ErrOutput, Format('forms-csv: %d form(s) with callers could not be traced to MAIN -- db may not include COMMON (interface-dispatch launch bodies); run against the full-tree index', [UnresolvedWithCaller]));
         { Metadata footer: the algorithm/db/schema/timestamp line moved from the
           top to the bottom so the column header is row 1 (spreadsheet-friendly).
           6 leading commas push the '#' cell into the 7th (Notes) column, out of
