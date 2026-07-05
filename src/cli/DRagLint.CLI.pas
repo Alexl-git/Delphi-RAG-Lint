@@ -4473,6 +4473,47 @@ begin
   for I := 0 to High(FIXABLE_RULE_IDS) do Result[I] := FIXABLE_RULE_IDS[I];
 end;
 
+/// <summary>True iff S (trimmed) is a lone primary term -- an identifier or
+/// dotted chain, optionally followed only by balanced call '(...)' / index
+/// '[...]' groups and '.ident' segments, with NO top-level operator and NO
+/// top-level whitespace. Answers "can 'not S' be written WITHOUT parentheses?".
+/// Errs toward False (compound): over-wrapping 'not (X)' is harmless, but
+/// under-wrapping 'not a and b' silently changes meaning.</summary>
+function IsSingleTokenAtom(const S: string): Boolean;
+var
+  T    : string ;
+  I    : Integer;
+  Depth: Integer;
+  C    : Char   ;
+  function IsIdentStart(Ch: Char): Boolean;
+  begin Result:= CharInSet(Ch, ['A'..'Z','a'..'z','_']); end;
+  function IsIdentChar(Ch: Char): Boolean;
+  begin Result:= CharInSet(Ch, ['A'..'Z','a'..'z','_','0'..'9']); end;
+begin
+  T:= Trim(S);
+  if (T = '') or (not IsIdentStart(T[1])) then Exit(False);
+  Depth:= 0;
+  I:= 1;
+  while I <= Length(T) do
+  begin
+    C:= T[I];
+    if (C = '(') or (C = '[') then Inc(Depth)
+    else if (C = ')') or (C = ']') then
+    begin
+      Dec(Depth);
+      if Depth < 0 then Exit(False);
+    end
+    else if Depth = 0 then
+    begin
+      { at top level, only identifier chars and a '.' between segments are allowed;
+        anything else (whitespace, operator char, ',', ':', etc.) => compound. }
+      if not (IsIdentChar(C) or (C = '.')) then Exit(False);
+    end;
+    Inc(I);
+  end;
+  Result:= (Depth = 0);
+end;
+
 /// <summary>Builds the quick-fix text edits for the subset of AFindings whose
 /// rule has a registered autofix (the FIXABLE_RULE_IDS set). Mechanical, no
 /// type info:
