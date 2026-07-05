@@ -4969,6 +4969,11 @@ begin
     Dry-run by default; --apply writes (with .bak unless --no-backup). }
   if AArgs.Fix then
   begin
+    { Minor 2: fix mode cannot emit SARIF. Warn on stderr and fall through to
+      JSON/text output rather than silently swallowing --format sarif. }
+    if SameText(AArgs.Format, 'sarif') then
+      Writeln(ErrOutput, '--fix does not support SARIF output; using text output.');
+
     { AutoFix Chunk 1 (Task 3): narrow to a single finding when --fix-line and/or
       --fix-rule are given. Each SET flag filters; an unset flag matches all. With
       neither flag the set is unchanged, so whole-file --fix is byte-identical. }
