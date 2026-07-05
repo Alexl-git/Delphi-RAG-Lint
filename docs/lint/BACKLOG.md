@@ -1,5 +1,40 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-05 (LATEST-10) -- **v0.88.0-alpha SHIPPED (AutoFix Chunk 1). NEXT MILESTONE = AutoFix Chunk 2.**
+> `main` tag `v0.88.0-alpha` (pushed, origin synced, clean). VERSION CLI.pas:6=`0.88.0-alpha`, **schema still v13**.
+> GitHub release live (win64 3.67MB + win32 2.94MB zips, `--latest`, isPrerelease=false).
+> **Executed via superpowers:subagent-driven-development, 8 tasks + final whole-branch opus review (READY TO RELEASE,
+> 0 Critical/0 Important) + 1 bundled doc fast-follow (`4dec6f1` -- BuildAutofixEdits summary listed all 3 rules).**
+> SDD ledger `.superpowers/sdd/progress.md` (archive: progress-formscsv-v4-archive.md).
+> **What shipped (AutoFix Chunk 1 = the full "Fix it" vertical slice on the 3 existing fixable rules):** T1 fix registry
+> (`FIXABLE_RULE_IDS`+`IsFixableRule`, output-neutral) -> T2 `fixable` flag in `rules --json` -> T3 `lint --file F --fix
+> --fix-line L --fix-rule R [--json]` single-finding fix (+ bundled fix: `lint` now honours `--file` as a path alias,
+> which the IDE + spec contract needed) -> T4 whole-unit fix (test) -> T5 whole-project fix via `lint-all --fix --apply`
+> (already worked through the shared FinalizeAndOutput --fix block; test locks it) -> T6 `FAutoFix` id-array in TLintConfig
+> (`autofix` array round-trips drag-lint-lint.json) -> T7 IDE "Fix it"/"Fix all in unit|project" context menu on the
+> Diagnostics tree (StructureForm.pas; ForceQueue string-only reload) -> T8 per-rule "auto-fix" checkbox in Lint Options
+> (only on fixable rules). Battery green at ship: lint 154/154, store 16/16, fixable-catalog + fix-single + fix-unit +
+> fix-project all exit 0. **IDE LIVE SMOKE PASSED (user, 2026-07-05): "Fix it" removed redundant parentheses in the real
+> IDE.** BPL built clean (Win32); user deployed via deploy-staged.bat.
+> **>>> NEXT MILESTONE = AutoFix Chunk 2. LEAD ITEM (user decision 2026-07-05, REPLACES the deferred per-rule auto-fix
+> gating): batch autofix ("Fix all in unit|project", CLI `lint --fix`/`lint-all --fix`) must consult the ACTIVE RULE
+> SET -- the existing enable/disable checkboxes (TLintConfig FEnabled/FDisabled/ShouldKeep, drag-lint-lint.json
+> enabled/disabled) -- and apply ONLY fixes for rules that are CHECKED (enabled). This reuses the enable state users
+> already set, cleaner than the separate FAutoFix checkbox for gating. Mechanism: the CLI --fix path currently fixes
+> EVERY fixable finding regardless of config; wire it to skip findings whose rule is not ShouldKeep/enabled (or add an
+> `--autofix-only`/`--respect-config` flag that Task 7's "Fix all" passes). Note: findings already flow through
+> FinalizeAndOutput's config filter (ShouldKeep) BEFORE the --fix block via `Survivors` -- VERIFY whether disabled-rule
+> findings are already excluded from Survivors (they may be -- if so, batch fix ALREADY respects enabled rules and this
+> is a test + doc task, not a code change; DIAGNOSE FIRST like T5).** Then the FAutoFix checkbox becomes a save-time
+> auto-apply control (Track-1 later item), not the batch gate.**
+> CADENCE (user, unchanged): publish chunk -> plan next batch -> handoff -> clear -> implement -> publish.
+> Chunk-2 also-includes (from final-review Minors, all deferred): untargeted `lint --fix --json --apply` reports
+> applied:true for no-edit findings (fold into gating, same JSON/edit accounting); `--fix --format sarif` falls to text;
+> WIDEN the fixable-rule set beyond the 3 (each = a FIXABLE_RULE_IDS entry + a BuildAutofixEdits branch + a fixture).
+> **Roadmap:** `docs/lint/drag-lint TODO plan.md` (Track 1 AutoFix -> Track 2 AutoDocument -> Track 3 Convert Components;
+> Track 4 Refactoring = REFACTOR-LIST). Spec of what shipped: `docs/superpowers/specs/2026-07-05-autofix-chunk1-fix-it-design.md`.
+>
+> --- (prior) ---
 > ## RESUME 2026-07-05 (LATEST-9) -- **NEXT = execute the AutoFix Chunk 1 plan via subagent-driven-development.**
 > `main`=`21b287c` (clean, pushed, synced with origin). **>>> Execute
 > `docs/superpowers/plans/2026-07-05-autofix-chunk1-plan.md` via superpowers:subagent-driven-development** -- 9 TDD

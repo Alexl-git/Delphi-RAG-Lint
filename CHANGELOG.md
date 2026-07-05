@@ -5,6 +5,49 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.88.0-alpha -- 2026-07-05
+
+AutoFix Chunk 1: the full "Fix it" vertical slice. drag-lint could already detect
+lint problems and apply a whole-file `--fix` for three rules; now a single finding,
+a unit, or a whole project can be fixed from the CLI (with `--json` for AI
+orchestration) or from the IDE via a context menu, and the rule catalog advertises
+which rules are fixable. Proven end-to-end on the three existing fixable rules
+(`self-assignment`, `redundant-parentheses`, `redundant-cast`); widening the set is
+a later chunk. No index-schema change (still v13).
+
+### Added
+- **Queryable fix registry.** The fixable-rule set (`self-assignment`,
+  `redundant-parentheses`, `redundant-cast`) is now a single source of truth
+  (`FIXABLE_RULE_IDS` + `IsFixableRule`) that both the catalog and the fixer read
+  from; `BuildAutofixEdits` behaviour is byte-identical.
+- **`fixable` flag in the rule catalog.** `rules --json` now emits
+  `"fixable": true|false` per rule -- the one field that drives every downstream UI
+  decision (which rules show a "Fix it" item and an auto-fix checkbox).
+- **Single-finding fix.** `lint --file F --fix --fix-line L --fix-rule R [--apply|--json|--no-backup]`
+  fixes exactly the finding at `(L, R)`. `--json` emits one object per targeted
+  finding (`file, line, rule, fixable, applied, preview`) so an AI orchestrator can
+  drive fixes token-free, bounded by the safe-fix registry. With no targeting flags,
+  `--fix` behaves exactly as before (whole file).
+- **Whole-unit and whole-project fix.** `lint <F> --fix --apply` fixes every fixable
+  finding in a unit; `lint-all --fix --apply` fixes across every indexed unit and
+  reports `applied N fix(es) across M file(s)`, `--json` aggregating per file.
+- **IDE: "Fix it" / "Fix all" on the Diagnostics tree.** A context-sensitive popup:
+  right-click a fixable finding -> **Fix it** (strips the issue, reloads the buffer,
+  writes a `.bak`); right-click the **Diagnostics** root -> **Fix all in unit** /
+  **Fix all in project**. Non-fixable findings grey the item. The buffer reload uses
+  the deferred `ForceQueue` + `IOTAModule.Refresh` pattern.
+- **IDE: per-rule "auto-fix" checkbox in Lint Options.** Every fixable rule gains a
+  second **auto-fix** checkbox that round-trips an `"autofix"` array in the project's
+  `drag-lint-lint.json` (new `FAutoFix` id-array in `TLintConfig`). (Gating "Fix all"
+  by the active rule set lands in the next chunk.)
+
+### Fixed
+- **`lint` honours `--file` as a path alias.** `lint` previously read its target only
+  positionally; it now accepts `--file <F>` (positional still wins if both are given),
+  so the IDE's `lint --file ... --fix` command and the documented contract work.
+- **`BuildAutofixEdits` doc-comment** now lists all three fixable rules (was missing
+  `redundant-cast`).
+
 ## v0.87.0-alpha -- 2026-07-05
 
 forms-csv navigation v4: the plan-editor form family that a tester reaches through the
