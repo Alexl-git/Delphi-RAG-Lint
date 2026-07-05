@@ -1,5 +1,28 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-05 (LATEST-4) -- **v0.85 fully DONE (IDE smoke verified). NEXT ACTION = execute the v0.86 plan.**
+> `main`=`b5c53a1` (clean, pushed). VERSION=`0.85.0-alpha`, tag `v0.85.0-alpha`=`2c303e4` released.
+> **>>> Execute `docs/superpowers/plans/2026-07-05-win64-default-and-ide-fixes-plan.md` via
+> superpowers:subagent-driven-development** -- 5 tasks: T1 shared `DragLintExe` resolver (Win64 default for EVERY plugin
+> spawn; the 32-bit BPL is the only 32-bit artifact; win32 exe stays staged "just in case") -> T2 Structure tab: slice JSON
+> out of the CLI output + separate stderr pipe + sort Diagnostics by line -> T3 `EnsureUtf8Bytes` ingest transcode (valid-
+> CP1252/UTF-16 sources index instead of SKIP; sha stays over raw bytes) -> T4 read-only store opens for query verbs (no
+> DDL-on-read; actionable stale-schema message) -> T5 ship **v0.86.0-alpha** (full battery + zips; final review BEFORE
+> tag/push/gh; then USER smoke: BASICSF structure shows sorted diags + ~240 elements, SOFTWID indexes).
+> Spec (all root-cause evidence): `docs/superpowers/specs/2026-07-05-win64-default-and-ide-fixes-design.md`.
+> **Root causes proven 2026-07-05:** Structure "Code Elements 0" = 4 plugin resolvers pick `<bpl-dir>\drag-lint.exe` (STALE
+> 0.84 WIN32, FTS5-less) whose preamble/DROP-TRIGGER noise lands in the MERGED stdout+stderr pipe before the JSON -> parse
+> fails -> cached 0. SOFTWID.PAS skip = pipeline assumes UTF-8; the file is valid CP1252 (0xAE/0xA9 in a resourcestring).
+> Win32 exe DB opens DROP the string_literals FTS triggers (Migrate DDL on read-looking verbs) -- degrades text search
+> until the next win64 index run.
+> **Gotchas for the cold session:** plugin BPL builds fail F2039 while RAD Studio is open (user must close; rebuild wrote
+> directly into third_party\dll-win32 last time -- deploy-staged.bat copies from C:\TEMP1\bpl_staging which can be STALE,
+> refresh it after every BPL rebuild); the extract-method verb PREVIEWS by default (--apply writes) unlike legacy rename;
+> never CloseModule the active module from a key binding (use deferred IOTAModule.Refresh -- see Keyboard.pas comment).
+> **After v0.86: Change Signature** is the recommended next refactoring (REFACTOR-LIST.md) -- new brainstorm->spec->plan;
+> reuses rename's cross-unit apply + the Extract Method liveness pass.
+>
+> --- (prior) ---
 > ## RESUME 2026-07-03 (LATEST-3) -- **v0.85.0-alpha PUBLISHED (Extract Method, refactoring-APPLY #1). Manual IDE smoke = the ONE open item.**
 > `main`=`2c303e4` = tag `v0.85.0-alpha` (GitHub full release, `--latest`, win32+win64 zips:
 > https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.85.0-alpha). VERSION `CLI.pas:6`=`0.85.0-alpha`. No schema
