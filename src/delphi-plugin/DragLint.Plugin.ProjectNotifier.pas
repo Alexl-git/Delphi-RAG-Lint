@@ -39,6 +39,7 @@ uses
   , DragLint.Plugin.SaveNotifier
   , DragLint.Plugin.LiveDiagnostics
   , DragLint.Plugin.Editor
+  , DragLint.Plugin.ExeResolver
   ;
 
 { ---- IOTANotifier stubs ---- }
@@ -127,12 +128,10 @@ end; // procedure
 
 class function TDragLintProjectNotifier.ResolveExePath( const ACfgExePath: string): string;
 begin
-  Result:= ACfgExePath;
-  if (Result = '') or (Result = 'drag-lint.exe') then
-  begin
-    Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-    if not FileExists(Result) then Result:= 'drag-lint.exe';
-  end;
+  { v0.86: ACfgExePath is ignored in favor of the shared resolver -- its value
+    came from the same Settings the shared unit already reads, and centralizing
+    keeps ONE Win64-default policy for every spawn site. }
+  Result:= DragLintExe;
 end;
 
 { ---- FileNotification ---- }

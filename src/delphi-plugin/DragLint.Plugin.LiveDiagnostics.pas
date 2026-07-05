@@ -56,6 +56,7 @@ uses
     DragLint.Plugin.EditViewNotifier
   , { v0.47: GGutterAnchorHwnd for forced repaint }
     DragLint.Plugin.Settings
+  , DragLint.Plugin.ExeResolver
   ;
 
 const
@@ -656,14 +657,10 @@ begin
       Exit;
     end;
 
-    { v0.46: PREFER the engine bundled beside the BPL (kept current with the
-      plugin), like the LSP client does -- otherwise a stale Settings.ExePath
-      runs an OLD engine for lint while hover uses the new one, so new rules
-      (e.g. unused-local/H2164) silently never appear. Fall back to the
-      configured ExePath, then PATH. }
-    Exe:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-    if not FileExists(Exe) then Exe:= Settings.ExePath;
-    if (Exe = '') or not FileExists(Exe) then Exe:= 'drag-lint.exe';
+    { v0.86: shared resolver -- Win64 build beside the BPL by default (kept
+      current with the plugin, like the LSP client), Settings.ExePath override
+      still wins if the user set one, PATH as last resort. }
+    Exe:= DragLintExe;
 
     Tmp:= TPath.Combine(TPath.GetTempPath, Format('drag-lint-live-%d.pas', [GetTickCount]));
     Bytes:= TEncoding.UTF8.GetBytes(BufText);

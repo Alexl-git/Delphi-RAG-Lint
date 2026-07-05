@@ -123,6 +123,7 @@ uses
     DragLint.Plugin.DbResolver
   , DragLint.Plugin.ProcRun
   , DragLint.Plugin.JobQueue
+  , DragLint.Plugin.ExeResolver
   ;
 
 { ---- PluginBuildTag ---- }
@@ -2456,24 +2457,19 @@ end;
 
 function DLExe: string;
 begin
-  Result:= LoadSettings.ExePath;
-  if (Result = '') or not FileExists(Result) then Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(Result) then Result:= 'drag-lint.exe';
+  Result:= DragLintExe;
 end;
 
 { Like DLExe but prefers the Win64 build (..\dll-win64\drag-lint.exe) for heavy,
   long-running jobs (lint-all). The 32-bit IDE design package spawns drag-lint
   as a SEPARATE child process over a pipe, so the child's bitness is independent
   of the IDE; the Win64 exe is faster and does not OOM on large indexes, and it
-  carries its own correct x64 tree-sitter DLLs. Falls back to DLExe. }
+  carries its own correct x64 tree-sitter DLLs. v0.86: delegates to the shared
+  resolver (single Win64-first policy for every spawn site); kept as a distinct
+  function name so callers don't churn. }
 function DLExe64: string;
-var
-  BplDir, Win64Exe: string;
 begin
-  BplDir  := ExtractFilePath(GetModuleName(HInstance));
-  Win64Exe:= ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64\drag-lint.exe';
-  if FileExists(Win64Exe) then Exit(Win64Exe);
-  Result:= DLExe;
+  Result:= DragLintExe;
 end;
 
 procedure DLOpenInEditor(const AFilePath: string);

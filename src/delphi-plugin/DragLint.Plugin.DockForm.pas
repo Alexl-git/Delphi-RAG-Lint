@@ -54,6 +54,7 @@ uses
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.StatusBar
   , DragLint.Plugin.LintOptionsFrame
+  , DragLint.Plugin.ExeResolver
   ;
 
 {$R *.dfm}
@@ -149,9 +150,7 @@ end;
 
 function TDragLintDockFrame.ResolveExe: string;
 begin
-  Result:= LoadSettings.ExePath;
-  if (Result = '') or not FileExists(Result) then Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(Result) then Result:= 'drag-lint.exe';
+  Result:= DragLintExe;
 end;
 
 function TDragLintDockFrame.ResolveDbArgs: string;

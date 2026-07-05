@@ -42,6 +42,7 @@ uses
   , DragLint.Plugin.DbResolver
   , DragLint.Plugin.Settings
   , DragLint.Plugin.ProcRun
+  , DragLint.Plugin.ExeResolver
   ;
 
 { v0.40.5: local copy of the BPL build-stamp helper to avoid circular use
@@ -733,9 +734,7 @@ var
   Dbs: TArray<string>;
 begin
   if (ASym = '') or (FUsages = nil) then Exit;
-  Exe:= LoadSettings.ExePath;
-  if (Exe = '') or not FileExists(Exe) then Exe:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(Exe) then Exe:= 'drag-lint.exe';
+  Exe:= DragLintExe;
   Dbs:= ResolveActiveIndexDbs(LoadSettings);
   FUsages.SetWidth(CurrentWidth); { set width before the query }
   FUsages.LoadUsages(ASym, Exe, Dbs);

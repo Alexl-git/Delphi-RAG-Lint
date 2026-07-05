@@ -83,6 +83,7 @@ implementation
 
 uses
   Winapi.Windows
+  , DragLint.Plugin.ExeResolver
   ;
 
 { ---- helpers ---- }
@@ -188,13 +189,8 @@ begin
     { v0.42: coalesce rapid re-fires for the same file. }
     if ShouldDebounceReindex(FileName) then Exit;
 
-    { Resolve drag-lint.exe: configured path, then next to BPL, then PATH }
-    ExePath:= Cfg.ExePath;
-    if (ExePath = '') or (ExePath = 'drag-lint.exe') then
-    begin
-      ExePath:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-      if not FileExists(ExePath) then ExePath:= 'drag-lint.exe';
-    end;
+    { v0.86: shared resolver -- honors Cfg.ExePath if set, else Win64 default. }
+    ExePath:= DragLintExe;
 
     SavedFile:= FileName;
 

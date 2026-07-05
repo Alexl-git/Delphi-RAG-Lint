@@ -19,7 +19,8 @@ uses
   System.SysUtils, System.Generics.Collections,
   Vcl.StdCtrls, Vcl.ComCtrls, Vcl.ExtCtrls, Winapi.Windows,
   DragLint.Plugin.ProcRun, DragLint.Plugin.SearchParse,
-  DragLint.Plugin.HoverForm, DragLint.Plugin.DbResolver, DragLint.Plugin.Settings;
+  DragLint.Plugin.HoverForm, DragLint.Plugin.DbResolver, DragLint.Plugin.Settings,
+  DragLint.Plugin.ExeResolver;
 
 type
   TSearchHandler = class(TComponent)
@@ -57,9 +58,7 @@ type
 
 function TSearchHandler.ResolveExe: string;
 begin
-  Result:= LoadSettings.ExePath;
-  if (Result = '') or not FileExists(Result) then Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(Result) then Result:= 'drag-lint.exe';
+  Result:= DragLintExe;
 end;
 
 function TSearchHandler.DbArgs: string;

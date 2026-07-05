@@ -76,6 +76,7 @@ contains
   DRagLint.Core.Model in '..\core\DRagLint.Core.Model.pas',
   DRagLint.Lint.Config in '..\lint\DRagLint.Lint.Config.pas',
   DRagLint.Lint.ConfigWriter in '..\lint\DRagLint.Lint.ConfigWriter.pas',
-  DragLint.Plugin.LintOptionsFrame in 'DragLint.Plugin.LintOptionsFrame.pas';
+  DragLint.Plugin.LintOptionsFrame in 'DragLint.Plugin.LintOptionsFrame.pas',
+  DragLint.Plugin.ExeResolver in 'DragLint.Plugin.ExeResolver.pas';
 
 end.

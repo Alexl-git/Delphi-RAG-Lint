@@ -57,6 +57,7 @@ uses
   , DragLint.Plugin.UsagesForm
   , DragLint.Plugin.DbResolver
   , DragLint.Plugin.Settings
+  , DragLint.Plugin.ExeResolver
   ;
 
 { ---- TStructureNodeData: stores line info in tree node.Data ---- }
@@ -156,9 +157,7 @@ end; // function
 
 function ResolveExePath: string;
 begin
-  Result:= LoadSettings.ExePath;
-  if (Result = '') or not FileExists(Result) then Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.exe';
-  if not FileExists(Result) then Result:= 'drag-lint.exe';
+  Result:= DragLintExe;
 end;
 
 procedure AddPopupItem(AMenu: TPopupMenu; const ACaption: string; AHandler: TNotifyEvent);
