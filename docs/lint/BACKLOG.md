@@ -1,5 +1,26 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-05 (LATEST-8) -- **v0.87.0-alpha PUBLISHED (forms-csv v4 navigation). Milestone COMPLETE.**
+> `main` includes merge `b4c0268` (forms-csv v4) + tag `v0.87.0-alpha`. GitHub release live (win64+win32 zips,
+> `--latest`, isPrerelease=false). VERSION `CLI.pas:6`=`0.87.0-alpha`. **No index-schema change (still v13).**
+> Executed via superpowers:subagent-driven-development, 5 tasks + final whole-branch opus review (READY-TO-MERGE, 0
+> Critical/0 Important) + 1 bundled fast-follow (schema-footer fix `fc18cce`). SDD ledger `.superpowers/sdd/progress.md`.
+> **What shipped:** forms-csv resolves the plan-editor family (Z14slctFrm/Z19slctFrm + ~18 `TxxxPlan.EditForm`) from
+> "(no path from MAIN)" to `frmMAIN -> ... -> frmControlPlan2 -> 'Plan' -> <form>` (VERIFIED against the full ORM3 db:
+> all 6 named family forms resolve). **L1** interface dispatch = the existing name-based caller walk already bridges it
+> (diagnosis proved the heritage helper = YAGNI, comment-only). **L2** proc-var hook (`PlanEditFormHook := ShowPlanEditor`,
+> invisible to refs) = bounded source text-scan (`BuildHookMap`/`ParseHookAssign`) + dead-end continuation
+> (`FindFormViaHook`) at the ProcessSite OC='' branch, reuses the L1 walk, loop-safe single hop. **L0** stderr guardrail:
+> forms with callers but no MAIN-path (COMMON-absent db) -> "run against the full-tree index" note. `FORMS_CSV_ALGORITHM`=4.
+> Also fixed the provenance footer (`schema v0`->real `schema_meta` version) and BUNDLED 2 same-day fixes now in a release:
+> forms-csv header-move `fc7e630` + live-lint `unit-name-matches-file` FP `bb6eb82`. All in `DRagLint.FormsMap.pas`.
+> **OPEN (fast-follows, sec 6.x -- none blocks anything):** (a) regression-guard the guardrail + `@Routine` hook form (2nd
+> fixture unit + stderr assertion; verified out-of-band only); (b) BuildHookMap Pass A micro-opt; (c) IDE menu -> full-tree
+> db (Layer 0 delivery); (d) D5 indexer milestone (receiver-type/proc-assign/impl_of refs -> removes L2 text-scan; own
+> brainstorm->spec->plan, schema bump). **NEXT MILESTONE (unchanged): Change Signature** (REFACTOR-LIST.md "recommended
+> next") -- brainstorm -> spec -> plan; reuses rename's cross-unit apply + Extract Method's liveness pass.
+>
+> --- (prior) ---
 > ## RESUME 2026-07-05 (LATEST-7) -- **NEXT = execute the forms-csv v4 navigation plan via subagent-driven-development.**
 > `main`=`812fab1` (clean, pushed, synced with origin). **>>> Execute
 > `docs/superpowers/plans/2026-07-05-forms-csv-v4-navigation-plan.md` via superpowers:subagent-driven-development** -- 5 TDD
@@ -1202,6 +1223,33 @@ members and captures the consolidated output.
   Also a human summary (counts by severity/rule).
 - The AI can then read the report and action on the highest-severity items.
 - Relates to 6.3 (2-DB model): batch runner should auto-load Platform + Project DBs.
+
+### 6.x forms-csv v4 fast-follows (filed 2026-07-05, post-v0.87 ship)
+
+v0.87 shipped forms-csv v4 (interface-dispatch + hook navigation). The whole-branch review
+cleared it Ready-to-merge; the schema-footer Minor was bundled into the release. These
+remain as low-priority fast-follows (none affects shipped navigation correctness):
+
+- **Regression-guard the Layer 0 guardrail + the `@Routine` hook form.** Both are verified
+  only OUT-OF-BAND (the formsmap harness pipes forms-csv stderr to `Out-Null`, and the v4
+  fixture uses the bare `Field := Routine` hook form). Add: (a) a 2nd hook-registration
+  fixture unit exercising `PlanHook := @ShowThing4` (the address-of idiom the real ORM3 tree
+  may use), and (b) a harness assertion that captures forms-csv stderr and checks the
+  guardrail note fires N=<expected> on a bodies-absent index. Higher-value of the two = the
+  `@`-form fixture (that path touches real navigation output; a regression would silently
+  drop an edge). `ParseHookAssign` already strips one leading `@` (v0.87); this just guards it.
+- **`BuildHookMap` Pass A micro-optimization (optional).** Pass A is
+  `O(files x lines x ANodes)` -- bounded in practice (PasLines cached; the full 66 MB ORM3 db
+  runs in 12.6 s), so this is a nice-to-have. Early-out lines without a `.Create`/`CreateForm`
+  token before the per-node `IsLaunchLine` loop.
+- **Layer 0 delivery (invocation, not algorithm) -- carried from 6.x:** the IDE forms-csv
+  menu should pass a COMMON-inclusive (full-tree) db so the plan-editor family resolves in
+  the IDE, not just from the CLI against the full ORM3 db. (Plugin invocation change.)
+- **D5 indexer milestone (schema bump, separate brainstorm->spec->plan):** receiver-type on
+  call refs (`receiver_type_symbol_id`) + proc-variable-assignment refs (`kind='proc-assign'`)
+  + interface-implementation method edges (`impl_of`). Removes L2's text-scan and makes
+  polymorphic dispatch precise (benefits find-callers / impact / graph too). Spec D5 has the
+  rationale.
 
 ---
 

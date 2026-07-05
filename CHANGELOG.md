@@ -5,6 +5,41 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.87.0-alpha -- 2026-07-05
+
+forms-csv navigation v4: the plan-editor form family that a tester reaches through the
+`frmControlPlan2` **Plan** button -- but that static call-graph fan-in could not follow --
+now renders a real click-path instead of "(no path from MAIN)". Bundles two earlier
+same-day forms-csv / live-lint fixes into a release. No index-schema change (still v13).
+
+### Added
+- **forms-csv v4 -- interface-dispatch + hook-registration navigation.** The plan-editor
+  family (`Z14slctFrm`, `Z19slctFrm`, and ~18 `TxxxPlan.EditForm` editors) now resolves to
+  `frmMAIN -> ... -> frmControlPlan2 -> 'Plan' -> <form>` on a COMMON-inclusive (full-tree)
+  index. Three layers: **L1** -- polymorphic interface dispatch (`APlan.EditForm`) is bridged
+  by the existing name-based caller walk (the `refs` row records the bare method name +
+  enclosing form method, so no interface/heritage lookup is needed); **L2** -- the
+  proc-variable hook (`PlanEditFormHook := ShowPlanEditor`), invisible to any `refs` query,
+  is recovered by a bounded source text-scan of hook registrations plus a dead-end
+  continuation that rejoins the interface walk (one hook hop; multi-hop chains stay
+  "(no path)"); **L0** -- a stderr guardrail: when forms have callers but cannot trace to
+  MAIN (the launch bodies live in COMMON, absent from a CLIENT-only db), forms-csv now emits
+  a one-line note "run against the full-tree index" instead of silently printing "(no path)".
+  `FORMS_CSV_ALGORITHM` bumped to `4`. All changes are in `DRagLint.FormsMap.pas`;
+  navigation for forms already resolved by plain edges is unchanged.
+
+### Fixed
+- **forms-csv provenance footer schema version.** The footer read `PRAGMA user_version`
+  (which the engine never writes), so a current v13 index always printed `schema v0`,
+  misleading a user into thinking the index was stale. It now reads `schema_meta.value`
+  (the value migrate actually writes); a v13 index prints `schema v13`.
+- **forms-csv header/provenance layout** (bundled from earlier this day): the
+  `# forms-csv algorithm v...` provenance line moved from the top to a padded footer so the
+  column header is row 1 (spreadsheet-friendly); total line count unchanged.
+- **live-lint `unit-name-matches-file` false positive** (bundled): the rule now skips
+  `drag-lint-live-*` buffer-snapshot files, so it no longer fires on every unsaved edit in
+  the IDE (it was flagging in-flight buffers whose synthetic name never matches the real unit).
+
 ## v0.86.0-alpha -- 2026-07-05
 
 IDE robustness pass: the plugin now defaults to the Win64 CLI everywhere, the Structure tab survives CLI
