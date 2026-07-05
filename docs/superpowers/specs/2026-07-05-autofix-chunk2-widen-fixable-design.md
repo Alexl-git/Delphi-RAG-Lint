@@ -1,5 +1,5 @@
 ---
-title: "AutoFix Chunk 2: Widen the fixable-rule set (+3) + batch-gating test/doc + 2 Minors"
+title: "AutoFix Chunk 2: Widen the fixable-rule set (+6) + risky-fix tag + batch-gating test/doc + 2 Minors"
 date: 2026-07-05
 status: approved
 author: Claude
@@ -7,6 +7,13 @@ supersedes-scope-note: >
   Chunk 1 (v0.88.0-alpha, spec 2026-07-05-autofix-chunk1-fix-it-design.md) built the
   full "Fix it" vertical slice on the 3 existing fixable rules. Chunk 2 WIDENS that set
   and closes the small deferred items. No new CLI verbs, no IDE code, no schema change.
+revision-note: >
+  Revised after the exhaustive 163-rule fixability sweep (2026-07-05) verified the full
+  safe set. Scope grew from 3 to 6 new fixable rules (user decision): the original 3 plus
+  reserved-word-casing, redundant-assigned-free, and off-by-one-count. off-by-one-count is
+  the only BEHAVIOUR-CHANGING fix, so this revision adds a "risky" tag mechanism to contain
+  it (confirmation-preview approach: tagged risky:true in the fix JSON/message; Fix-it and
+  Fix-all both apply it, no batch exclusion). nil-comparison remains dropped.
 ---
 
 # AutoFix Chunk 2 -- Widen the fixable-rule set
@@ -21,14 +28,16 @@ is deliberately cheap: each new rule = one `FIXABLE_RULE_IDS` entry + one branch
 `BuildAutofixEdits` + one fixture. The catalog flag, "Fix it" menu item, and auto-fix
 checkbox all light up automatically.
 
-Chunk 2 makes **3 more rules fixable** (doubling the safe set to 6), locks and documents
-the already-correct batch-gating behaviour (the user's original lead item), and closes 2
-deferred final-review Minors. It ships as release **v0.89.0-alpha**.
+Chunk 2 makes **6 more rules fixable** (taking the total from 3 to 9), adds a **risky-fix
+tag** to contain the one behaviour-changing rule, locks and documents the already-correct
+batch-gating behaviour (the user's original lead item), and closes 2 deferred final-review
+Minors. It ships as release **v0.89.0-alpha**.
 
-An **exhaustive 163-rule fixability sweep** runs in parallel (its own workflow, results
-land in the scratchpad); **Chunk 3** will widen to the full evidence-backed safe set. This
-spec is intentionally scoped to the 3 highest-confidence, zero/low-risk rules so Chunk 2
-stays small and shippable.
+The **exhaustive 163-rule fixability sweep** (2026-07-05) confirmed the mechanically-safe
+frontier is small (**9 total fixable of 163**; the other 153 are report-only detectors that
+need type/flow/rename/restructure). Chunk 2 now includes ALL of the sweep's verified finds,
+so there is no separate widening left for a Chunk 3 (Chunk 3 becomes the next Track-1 item,
+e.g. the FAutoFix save-time auto-apply control, not more rule-widening).
 
 ## Background: how a fix is built
 
@@ -40,55 +49,84 @@ stays small and shippable.
 
 A rule is **mechanically fixable** iff the correct fix is a single deterministic edit of
 one of those kinds, computable from the finding's span + that line's text ALONE -- no type
-resolution, no cross-line/flow reasoning, no rename, no multi-line restructure.
+resolution, no cross-line/flow reasoning, no rename, no multi-line restructure. A fix may be
+**behaviour-preserving** (rewrites redundant code to an equivalent) or, in ONE case
+(`off-by-one-count`), **behaviour-changing** (assumes the flagged code is a bug and alters
+runtime semantics) -- the latter is tagged `risky` (see the Design section).
 
 Finding spans come from two engines:
 
 - **`.scm` (declarative) rules**: span = the `@warn`-captured node's full
   `StartPoint..EndPoint` (`src/lint/DRagLint.Lint.QueryRules.pas:306-309`). The
-  `rules/<id>.scm` file decides what `@warn` covers. For the 3 rules here, `@warn` is on
-  the whole offending expression node, so the span bounds exactly the text to rewrite.
+  `rules/<id>.scm` file decides what `@warn` covers. For the redundant-* rules here, `@warn`
+  is on the whole offending expression node, so the span bounds exactly the text to rewrite;
+  for `off-by-one-count` it is on the loop end-bound only, and for `redundant-assigned-free`
+  on the whole single-line `if` statement including its trailing `;`.
 - **Pascal-emitted rules**: span set at a `src/diagnostics/*.pas` emission site (often via
-  an `EmitAt` helper: `EndCol := StartCol + Length(Trim(NodeStr(node)))`).
+  an `EmitAt` helper: `EndCol := StartCol + Length(Trim(NodeStr(node)))`). `reserved-word-casing`
+  (NamingChecks.pas:463) uses `EmitAt` on the keyword token -> span = the keyword text.
 
 ## Scope
 
 ### In scope
 
-1. Make 3 rules fixable:
-   - `redundant-not-not`  (`.scm`, dead-code)
-   - `redundant-as-tobject` (`.scm`, dead-code)
-   - `boolean-comparison-true` (`.scm`, dead-code)
-2. Batch-gating regression test + documentation (already-correct behaviour, never tested).
-3. Minor 1: `applied` accounting for no-edit findings.
-4. Minor 2: `--fix --format sarif` stderr note.
-5. Publish v0.89.0-alpha.
+1. Make 6 rules fixable (behaviour-PRESERVING unless noted):
+   - `redundant-not-not`  (`.scm`, dead-code) -- `not not X` -> `X`.
+   - `redundant-as-tobject` (`.scm`, dead-code) -- `X as TObject` -> `X`.
+   - `boolean-comparison-true` (`.scm`, dead-code) -- `=True`/`<>False` -> `X`;
+     `=False`/`<>True` -> `not X` (compound-operand paren guard).
+   - `reserved-word-casing` (Pascal, naming) -- LowerCase the keyword token.
+   - `redundant-assigned-free` (`.scm`, resource-lifetime) -- `if Assigned(X) then X.Free;`
+     -> `X.Free;` (single-line + delimited-`then` guards).
+   - `off-by-one-count` (`.scm`, bug-patterns) -- append ` - 1` to the loop end-bound.
+     **BEHAVIOUR-CHANGING** -> tagged `risky` (see 2).
+2. **Risky-fix tag:** a registry of behaviour-changing rule-ids (`RISKY_FIX_RULE_IDS`,
+   currently just `off-by-one-count`) + a `risky` boolean in the `--fix --json` output and a
+   note in the text/dry-run output. Containment = **confirmation-preview**: `Fix it` and
+   `Fix all` BOTH apply it (no batch exclusion), but the JSON/message flags `risky:true` so a
+   human or AI orchestrator sees the warning before/when applying. `IsFixableRule` still
+   returns true for it (Fix-it works); `IsRiskyFixRule(id)` is the new predicate.
+3. Batch-gating regression test + documentation (already-correct behaviour, never tested).
+4. Minor 1: `applied` accounting for no-edit findings.
+5. Minor 2: `--fix --format sarif` stderr note.
+6. Publish v0.89.0-alpha.
 
 ### Explicitly NOT in scope
 
 - `nil-comparison` -- its `X <> nil -> Assigned(X)` swap has an **undetectable** behaviour
   edge for procedure-of-object / method-pointer references (per the rule's own `.scm`
   comment: `<> nil` checks only the code pointer; `Assigned` checks both). We cannot tell
-  X's type from text alone, so the swap is not strictly side-effect-free. Returns to the
-  Chunk 3 sweep for possible type-gating. **Dropped.**
+  X's type from text alone, so the swap is not strictly side-effect-free. Not in the sweep's
+  verified set. **Dropped.**
 - Any new CLI verb, IDE code, or index-schema change (all inherited from Chunk 1).
-- `boolean-result-returned-directly`, `redundant-assigned-free`, `length-zero-compare`,
-  `commented-out-code`, etc. -- deferred to Chunk 3 (multi-line / type-gated / judgment).
+- `boolean-result-returned-directly`, `length-zero-compare`, `commented-out-code`, etc. --
+  the sweep confirmed these are NOT mechanically fixable (multi-line / type-gated / judgment);
+  they stay report-only. `nil-comparison` likewise (see above).
 
 ## Design
 
-### 1. Registry
+### 1. Registries
 
-Extend `FIXABLE_RULE_IDS` (`src/cli/DRagLint.CLI.pas:4458`) from 3 to 6 entries, adding
-`redundant-not-not`, `redundant-as-tobject`, `boolean-comparison-true`. The existing
+Extend `FIXABLE_RULE_IDS` (`src/cli/DRagLint.CLI.pas:4458`) from 3 to 9 entries, adding
+`redundant-not-not`, `redundant-as-tobject`, `boolean-comparison-true`,
+`reserved-word-casing`, `redundant-assigned-free`, `off-by-one-count`. The existing
 lockstep guard test (`FIXABLE_RULE_IDS` <-> `BuildAutofixEdits` agree) must still pass.
+
+Add a second small registry for behaviour-changing fixes:
+
+```pascal
+const
+  RISKY_FIX_RULE_IDS: array[0..0] of string = ('off-by-one-count');
+
+function IsRiskyFixRule(const ARuleId: string): Boolean;  { SameText scan, mirrors IsFixableRule }
+```
 
 ### 2. Fix branches in `BuildAutofixEdits`
 
-All three add an `else if SameText(F.RuleId, '<id>') and (F.StartLine = F.EndLine)` branch
-emitting one `tekReplaceInLine` over `[F.StartCol, F.EndCol)`. Each branch is fully guarded:
-a malformed / unexpected span produces NO edit (silently skipped, `AFixableCount` not
-incremented) -- matching the existing conservative style.
+Each new rule adds an `else if SameText(F.RuleId, '<id>') and (F.StartLine = F.EndLine)`
+branch emitting one `tekReplaceInLine` over `[F.StartCol, F.EndCol)`. Each branch is fully
+guarded: a malformed / unexpected span produces NO edit (silently skipped, `AFixableCount`
+not incremented) -- matching the existing conservative style.
 
 **`redundant-not-not`** -- span covers `not not X`.
 - `Span := Copy(Ln, StartCol, EndCol-StartCol)`.
@@ -119,6 +157,47 @@ bool in {`True`,`False`}.
   `Operand := '(' + Operand + ')'`; `Repl := 'not ' + Operand`.
 - Replace the span with `Repl`.
 
+**`reserved-word-casing`** -- span covers the keyword token (Pascal `EmitAt`, single-line).
+- `Span := Copy(Ln, StartCol, EndCol-StartCol)`.
+- Guard: `Span` is non-empty and `Span <> LowerCase(Span)` (there is something to fix).
+- `Repl := LowerCase(Span)`. Replace the span with `Repl`. (Behaviour-preserving: Pascal
+  keywords are case-insensitive and have no reference sites -- this is a local text edit, not
+  a rename.)
+
+**`redundant-assigned-free`** -- span covers the whole single-line `if Assigned(X) then
+<stmt>;` (`.scm` `@warn` on the `if` node, incl. trailing `;`).
+- Guard: `F.StartLine = F.EndLine` (single-line only; multi-line `if`/`then` splits are
+  skipped).
+- Scan `Span` for the delimited `then` keyword: whole-word `then` (preceded and followed by
+  whitespace / non-identifier), NOT a substring of an identifier (a var named e.g.
+  `Authenticated` must not match). Take the text AFTER `then` (trimmed-left) to end of span
+  as `Repl` (this is `X.Free;` or `FreeAndNil(X);`, semicolon preserved).
+- Guard: `Repl` non-empty. Replace the span with `Repl`. (Behaviour-preserving: `TObject.Free`
+  is nil-safe and `FreeAndNil` tolerates nil, so the `Assigned` guard is redundant; the
+  else-clause form does not fire -- the rule only matches the guard-less `if`.)
+
+**`off-by-one-count`** -- span covers the loop END-BOUND only (`.scm` `@warn` on the
+`exprDot X.Count` / `exprCall Length(X)` node, single-line). **BEHAVIOUR-CHANGING.**
+- Guard: `F.StartLine = F.EndLine` and `Span` non-empty.
+- `Repl := Span + ' - 1'` (the bound is isolated by `to .. do`, no precedence hazard).
+- Replace the span with `Repl`. This fix is registered in `RISKY_FIX_RULE_IDS`; it is still
+  applied by both Fix-it and Fix-all, but every emission path tags it `risky` (see 3a).
+
+### 3a. Risky-fix tag (containment for `off-by-one-count`)
+
+`off-by-one-count` assumes `for I := 0 to List.Count do` is a bug (iterates one too far) and
+rewrites the bound. This is *usually* right, but a deliberately-inclusive loop would be
+broken. Containment = **confirmation-preview** (no batch exclusion):
+
+- `--fix --json`: each finding object gains a `risky` boolean (`IsRiskyFixRule(F.RuleId)`).
+  For non-risky rules it is `false`.
+- `--fix` text / dry-run: when any emitted edit is for a risky rule, `RenderDryRun` (or the
+  fix summary) prints a `[risky: behaviour-changing]` note next to that edit / in the summary.
+- `Fix it` and `Fix all` both still apply it (fixable=true). Documented in AI-USAGE +
+  CHANGELOG so a human/AI orchestrator is warned.
+- The IDE menu / catalog `fixable` flag are unchanged (off-by-one-count shows as fixable);
+  no new IDE code -- the `risky` signal is a CLI-JSON/message concern this chunk.
+
 ### 3. `IsSingleTokenAtom(const S: string): Boolean` -- correctness-critical helper
 
 Answers: *can `not <S>` be written WITHOUT parentheses?* Factored out for direct testability.
@@ -144,16 +223,22 @@ exists, directly): `Foo`->T, `Foo.Bar`->T, `Fn(a,b)`->T, `Arr[i]`->T, `a and b`-
 
 ### 4. Fixtures & tests
 
-Three new fixtures in `tests/autofix/fixtures/`, one per rule (mirrors `redundant_parens.pas`):
+Six new fixtures in `tests/autofix/fixtures/`, one per rule (mirrors `redundant_parens.pas`):
 
-- `redundant_not_not.pas` -- `B := not not Flag;` on a known line -> apply -> `B := Flag;`.
+- `redundant_not_not.pas` -- `B := not not Flag;` -> apply -> `B := Flag;`.
 - `redundant_as_tobject.pas` -- `Obj := Sender as TObject;` -> apply -> `Obj := Sender;`.
-- `boolean_comparison.pas` -- 5 asserted lines, each with its expected result:
+- `boolean_comparison.pas` -- 5 asserted lines:
   - `if Flag = True then`      -> `if Flag then`
   - `if Flag <> False then`    -> `if Flag then`
   - `if Flag = False then`     -> `if not Flag then`
   - `if Flag <> True then`     -> `if not Flag then`
   - `if (A and B) = False then`-> `if not (A and B) then`   (compound guard fires)
+- `reserved_word_casing.pas` -- a keyword in wrong case, e.g. `BEGIN` / `IF` -> apply ->
+  lowercased (`begin` / `if`). Fixture must contain the mis-cased keyword on a known line.
+- `redundant_assigned_free.pas` -- `if Assigned(Obj) then Obj.Free;` -> apply -> `Obj.Free;`;
+  include a second line with a var whose name contains `then` (e.g. `Authenticated`) that must
+  NOT be mangled by the delimited-`then` scan (assert that line unchanged / correctly split).
+- `off_by_one.pas` -- `for I := 0 to List.Count do` -> apply -> `for I := 0 to List.Count - 1 do`.
 
 All fixtures are strict 7-bit ASCII, CRLF, with a unit name matching the file (keeps
 `unit-name-matches-file` quiet), per project encoding rules.
@@ -162,10 +247,13 @@ Test harnesses (extend the existing `tests/autofix/*.ps1` pattern -- copy fixtur
 scratch dir under C:\TEMP, preview then apply, assert exact resulting line + `.bak`):
 
 - **`run_fix_newrules.ps1`** (new) -- per-rule preview+apply+`.bak` contract for each new
-  fixture, asserting the exact resulting line for every case above.
+  fixture, asserting the exact resulting line for every case above (all 6 rules).
+- **`run_fix_risky_tag.ps1`** (new) -- `off-by-one-count` fix `--json` reports `risky:true`;
+  a behaviour-preserving rule (e.g. `redundant-not-not`) reports `risky:false`; the text
+  dry-run output for the off-by-one fix contains the `[risky` note.
 - **`run_fixable_catalog.ps1`** (existing) -- auto-covers the new rules; update its expected
-  set so the 3 new ids report `fixable=true` and the fixable total = 6.
-- **Lockstep guard test** (existing) -- must pass with the 3 new registry entries.
+  set so all 6 new ids report `fixable=true` and the fixable total = **9**.
+- **Lockstep guard test** (existing) -- must pass with the 6 new registry entries.
 
 ### 5. Batch-gating regression test + doc (the user's lead item)
 
@@ -201,8 +289,9 @@ note, stdout is text not SARIF).
 
 - Build the CLI via the delphi-build skill (staged win64 exe in `third_party/dll-win64/`).
 - Full battery green: lint 154/154, store 16/16, all autofix suites + `run_fix_newrules`
-  + `run_fix_respects_config` + `run_fixable_catalog` (6 fixable) + lockstep guard.
-- No schema change (still v13). No IDE code change (menu/flag/checkbox auto-light for the 3
+  (6 rules) + `run_fix_risky_tag` + `run_fix_respects_config` + `run_fixable_catalog`
+  (9 fixable) + lockstep guard.
+- No schema change (still v13). No IDE code change (menu/flag/checkbox auto-light for the 6
   new ids). Optional live smoke: confirm one new rule ("Fix it" on a `redundant-not-not` or
   `boolean-comparison-true` finding) in the real IDE.
 - Final whole-branch opus review -> bump `VERSION` (`src/cli/DRagLint.CLI.pas:6`) to
@@ -214,6 +303,12 @@ note, stdout is text not SARIF).
 
 - **Compound-operand mis-classification** -> wrong `not X` fix. Mitigated by
   `IsSingleTokenAtom` erring toward wrapping + the `(A and B) = False` fixture case.
+- **`off-by-one-count` breaks an intentionally-inclusive loop** -- the fix is
+  behaviour-changing. Mitigated by the `risky` tag (JSON `risky:true` + text `[risky` note)
+  so a human/AI orchestrator is warned. NOT batch-excluded (user decision: confirmation-
+  preview, not exclusion). Documented in AI-USAGE + CHANGELOG.
+- **`redundant-assigned-free` delimited-`then` mis-match** (a var named `...then...`) ->
+  wrong split. Mitigated by whole-word `then` matching + the fixture's `Authenticated` case.
 - **`.scm` span not covering the whole expression** -> mis-slice. Mitigated by each branch
   guarding its expected token shape and skipping (no edit) on mismatch, plus preview mode
   (`--fix` without `--apply`) never touching disk.
@@ -223,7 +318,9 @@ note, stdout is text not SARIF).
 
 ## Out-of-band context
 
-- Parallel: `autofix-fixability-sweep` workflow classifies all 163 rules -> Chunk 3 widens
-  to the full safe set. Report lands in the session scratchpad.
-- Roadmap: `docs/lint/drag-lint TODO plan.md` (Track 1 AutoFix).
+- The `autofix-fixability-sweep` workflow (2026-07-05) classified all 163 rules; its verified
+  finds are ALL included here (9 total fixable). Report saved in the session scratchpad
+  (`sweep-result.json`). No rule-widening remains for a Chunk 3.
+- Roadmap: `docs/lint/drag-lint TODO plan.md` (Track 1 AutoFix). Next Track-1 item after this
+  = the FAutoFix save-time auto-apply control (was "Chunk 3").
 - Cadence (user): publish chunk -> plan next -> handoff -> clear -> implement -> publish.

@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make 3 more lint rules mechanically fixable (`redundant-not-not`, `redundant-as-tobject`, `boolean-comparison-true`), lock+document the already-correct batch-gating behaviour, close 2 deferred Minors, and publish v0.89.0-alpha.
+**Goal:** Make 6 more lint rules mechanically fixable (`redundant-not-not`, `redundant-as-tobject`, `boolean-comparison-true`, `reserved-word-casing`, `redundant-assigned-free`, `off-by-one-count`), add a `risky`-fix tag to contain the one behaviour-changing rule, lock+document the already-correct batch-gating behaviour, close 2 deferred Minors, and publish v0.89.0-alpha.
 
-**Architecture:** AutoFix keys off one registry (`FIXABLE_RULE_IDS` in `src/cli/DRagLint.CLI.pas`) and one builder (`BuildAutofixEdits`). Each new rule = one array entry + one guarded `else if` branch emitting a single `tekReplaceInLine` edit over the finding's span. The catalog `fixable` flag, the CLI fix verbs, the IDE "Fix it" menu, and the auto-fix checkbox all read the registry, so they light up automatically. No new CLI verb, no IDE code, no index-schema change.
+**Architecture:** AutoFix keys off one registry (`FIXABLE_RULE_IDS` in `src/cli/DRagLint.CLI.pas`) and one builder (`BuildAutofixEdits`). Each new rule = one array entry + one guarded `else if` branch emitting a single `tekReplaceInLine` edit over the finding's span. The catalog `fixable` flag, the CLI fix verbs, the IDE "Fix it" menu, and the auto-fix checkbox all read the registry, so they light up automatically. A second registry `RISKY_FIX_RULE_IDS` + `IsRiskyFixRule` tags the one behaviour-changing rule (`off-by-one-count`); its fix still applies (Fix-it + Fix-all) but the `--fix --json` output carries `risky:true` and the text output notes it. No new CLI verb, no IDE code, no index-schema change.
+
+**Scope note (revised):** The original plan had 3 fixable rules (Tasks 2-4). This revision adds 3 more (Tasks 4A reserved-word-casing, 4B redundant-assigned-free, 4C off-by-one-count) + the risky-tag mechanism (Task 4D, done before 4C's test needs it), per the 163-rule sweep + user decision to include ALL verified finds. Task 5 (catalog) now expects **9** fixable. Tasks 6-9 unchanged in intent.
 
 **Tech Stack:** Delphi 13 (RAD Studio 37), Object Pascal, tree-sitter (`.scm` query rules + Pascal AST checks), PowerShell test harnesses, delphi-build skill (rsvars + msbuild).
 
@@ -505,30 +507,476 @@ git commit -m "feat(autofix): boolean-comparison-true is fixable (=True->X, =Fal
 
 ---
 
-## Task 5: Fixable-catalog test update (6 fixable)
+## Task 4A: `reserved-word-casing` fix branch + fixture
+
+**Files:**
+- Modify: `src/cli/DRagLint.CLI.pas` -- add `'reserved-word-casing'` to `FIXABLE_RULE_IDS`; add a branch in `BuildAutofixEdits`; update the summary.
+- Create: `tests/autofix/fixtures/reserved_word_casing.pas`
+- Modify: `tests/autofix/run_fix_newrules.ps1` (add the case)
+
+**Interfaces:**
+- Consumes: `BuildAutofixEdits`, `Assert-Fix` (Task 2).
+- Produces: fixture with a mis-cased keyword.
+
+**Span note:** `reserved-word-casing` is a Pascal-emitted rule (`NamingChecks.pas:463`, via `EmitAt` at :341: `EndCol := StartCol + Length(Trim(NodeStr(keyword)))`). The finding span exactly bounds the keyword token on one line. The rule only fires when the keyword is not already all-lowercase and is not True/False/nil.
+
+- [ ] **Step 1: Write the failing test (fixture + harness case)**
+
+Create `tests/autofix/fixtures/reserved_word_casing.pas` (ASCII, CRLF). Note the mis-cased `IF` keyword on line 12:
+
+```pascal
+unit reserved_word_casing;
+
+interface
+
+implementation
+
+procedure Demo;
+var
+  Flag: Boolean;
+begin
+  Flag := True;
+  IF Flag then Flag := False;
+end;
+
+end.
+```
+
+(The `IF` keyword is on line 12 at column 3.)
+
+Add to `tests/autofix/run_fix_newrules.ps1` after the boolean-comparison cases:
+
+```powershell
+Assert-Fix 'reserved_word_casing.pas' 12 'reserved-word-casing' 'if Flag then Flag := False;' '[kw-casing]'
+```
+
+- [ ] **Step 2: Run the harness to verify the new case fails**
+
+From `C:\TEMP`: `pwsh -File ...\run_fix_newrules.ps1`
+Expected: FAIL on `[kw-casing]` (rule not yet fixable; line stays `IF Flag then Flag := False;`). Prior cases still PASS.
+
+- [ ] **Step 3: Add the rule to the registry + a fix branch**
+
+Extend `FIXABLE_RULE_IDS` to `array[0..6]` adding `'reserved-word-casing'`.
+
+Add this branch after the `boolean-comparison-true` branch:
+
+```pascal
+      else if SameText(F.RuleId, 'reserved-word-casing')
+              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        { span covers the keyword token; keywords are case-insensitive and have no
+          reference sites, so lowercasing the span is a safe local edit. }
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          if (Span <> '') and (Span <> LowerCase(Span)) then
+          begin
+            E:= Default(TTextEdit);
+            E.FilePath:= F.FilePath;
+            E.Kind    := tekReplaceInLine;
+            E.Line    := F.StartLine;
+            E.Col     := F.StartCol;
+            E.EndCol  := F.EndCol;
+            E.Text    := LowerCase(Span);
+            Result:= Result + [E];
+            Inc(AFixableCount);
+          end;
+        end;
+      end
+```
+
+Append to the summary: `///   reserved-word-casing   -> LowerCase the keyword token;`
+
+- [ ] **Step 4: Build, then run the harness to verify it passes**
+
+Build (`BUILD_EXITCODE=0`). From `C:\TEMP`: `pwsh -File ...\run_fix_newrules.ps1`
+Expected: PASS on `[kw-casing]` (line 12 becomes `if Flag then Flag := False;`) + all prior cases.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/cli/DRagLint.CLI.pas tests/autofix/fixtures/reserved_word_casing.pas tests/autofix/run_fix_newrules.ps1
+git commit -m "feat(autofix): reserved-word-casing is fixable (lowercase the keyword)"
+```
+
+---
+
+## Task 4B: `redundant-assigned-free` fix branch + fixture
+
+**Files:**
+- Modify: `src/cli/DRagLint.CLI.pas` -- add `'redundant-assigned-free'` to `FIXABLE_RULE_IDS`; add a branch in `BuildAutofixEdits`; update the summary.
+- Create: `tests/autofix/fixtures/redundant_assigned_free.pas`
+- Modify: `tests/autofix/run_fix_newrules.ps1` (add cases)
+
+**Interfaces:**
+- Consumes: `BuildAutofixEdits`, `Assert-Fix` (Task 2).
+- Produces: fixture with `if Assigned(X) then X.Free;` + a `then`-substring var guard case.
+
+**Span note:** `.scm` rule (`rules/redundant-assigned-free.scm`); `@warn` is on the whole single-line `if` statement including the trailing `;` (sweep-verified: e.g. cols [3,34) for `if Assigned(Obj) then Obj.Free;`). The else-clause form does NOT fire (the rule matches only the guard-less `if`).
+
+- [ ] **Step 1: Write the failing test (fixture + harness cases)**
+
+Create `tests/autofix/fixtures/redundant_assigned_free.pas` (ASCII, CRLF):
+
+```pascal
+unit redundant_assigned_free;
+
+interface
+
+uses
+  System.Classes, System.SysUtils;
+
+implementation
+
+procedure Demo;
+var
+  Obj: TObject;
+  Authenticated: Boolean;
+begin
+  Obj := TObject.Create;
+  if Assigned(Obj) then Obj.Free;
+  Authenticated := True;
+  if Authenticated then Obj := nil;
+end;
+
+end.
+```
+
+Line map: line 16 `if Assigned(Obj) then Obj.Free;` = redundant-assigned-free. Line 18 `if Authenticated then Obj := nil;` has a var whose name contains `then` inside `Authenticated` -- it must NOT be flagged (it is not an Assigned-guard, so the rule does not fire; but the delimited-`then` scan in the fix must not mis-split if a future finding lands near it). This is a guard fixture: it should produce NO redundant-assigned-free finding on line 18.
+
+Add to `tests/autofix/run_fix_newrules.ps1`:
+
+```powershell
+Assert-Fix 'redundant_assigned_free.pas' 16 'redundant-assigned-free' 'Obj.Free;' '[assigned-free]'
+```
+
+Also add a direct no-mangle assertion (line 18 must be unchanged after the line-16 fix -- `Assert-Fix` only touches the targeted finding, so this holds; add an explicit check by re-reading the file inside a small inline block, OR rely on `Assert-Fix` targeting only line 16). For clarity add after the Assert-Fix call:
+
+```powershell
+# guard: the 'Authenticated' line (contains substring 'then') must be untouched
+$scratch18 = Join-Path C:\TEMP 'draglint_newrules_redundant_assigned_free'
+$t18 = Join-Path $scratch18 'redundant_assigned_free.pas'
+if (Test-Path $t18) {
+  $l18 = ([IO.File]::ReadAllLines($t18))[17].Trim()
+  Check '[assigned-free] line 18 (Authenticated) untouched' ($l18 -eq 'if Authenticated then Obj := nil;')
+}
+```
+
+- [ ] **Step 2: Run the harness to verify the new case fails**
+
+From `C:\TEMP`: `pwsh -File ...\run_fix_newrules.ps1`
+Expected: FAIL on `[assigned-free]` (rule not yet fixable; line 16 unchanged). Prior cases PASS.
+
+- [ ] **Step 3: Add the rule to the registry + a fix branch**
+
+Extend `FIXABLE_RULE_IDS` to `array[0..7]` adding `'redundant-assigned-free'`.
+
+Add this branch after the `reserved-word-casing` branch:
+
+```pascal
+      else if SameText(F.RuleId, 'redundant-assigned-free')
+              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        { span covers 'if Assigned(X) then <stmt>;'. Take the text after the
+          delimited 'then' keyword (whole word, not a substring of an identifier)
+          to end of span. The Assigned guard is redundant (Free is nil-safe). }
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          { find delimited 'then' at depth 0 }
+          var Depth: Integer:= 0;
+          var ThenEnd: Integer:= 0;  { 1-based index one past the 'then' }
+          var LS: string:= LowerCase(Span);
+          for var K: Integer:= 1 to Length(Span) - 3 do
+          begin
+            var Ch: Char:= Span[K];
+            if (Ch = '(') or (Ch = '[') then Inc(Depth)
+            else if (Ch = ')') or (Ch = ']') then Dec(Depth)
+            else if (Depth = 0)
+                    and (Copy(LS, K, 4) = 'then')
+                    and ((K = 1) or (Span[K-1] <= ' ') or (Span[K-1] = ')'))
+                    and ((K + 4 > Length(Span)) or (Span[K+4] <= ' ')) then
+            begin ThenEnd:= K + 4; Break; end;
+          end;
+          if ThenEnd > 0 then
+          begin
+            Repl:= TrimLeft(Copy(Span, ThenEnd, MaxInt));
+            if Repl <> '' then
+            begin
+              E:= Default(TTextEdit);
+              E.FilePath:= F.FilePath;
+              E.Kind    := tekReplaceInLine;
+              E.Line    := F.StartLine;
+              E.Col     := F.StartCol;
+              E.EndCol  := F.EndCol;
+              E.Text    := Repl;
+              Result:= Result + [E];
+              Inc(AFixableCount);
+            end;
+          end;
+        end;
+      end
+```
+
+Append to the summary: `///   redundant-assigned-free-> drop the 'if Assigned(X) then' guard;`
+
+- [ ] **Step 4: Build, then run the harness to verify it passes**
+
+Build (`BUILD_EXITCODE=0`). From `C:\TEMP`: `pwsh -File ...\run_fix_newrules.ps1`
+Expected: PASS on `[assigned-free]` (line 16 becomes `Obj.Free;`) + line-18-untouched guard + all prior cases.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/cli/DRagLint.CLI.pas tests/autofix/fixtures/redundant_assigned_free.pas tests/autofix/run_fix_newrules.ps1
+git commit -m "feat(autofix): redundant-assigned-free is fixable (drop the Assigned guard)"
+```
+
+---
+
+## Task 4D: Risky-fix registry + `risky` tag in fix output
+
+**(Do this BEFORE Task 4C, because 4C's test asserts `risky:true`.)**
+
+**Files:**
+- Modify: `src/cli/DRagLint.CLI.pas` -- add `RISKY_FIX_RULE_IDS` + `IsRiskyFixRule` near `FIXABLE_RULE_IDS` (line ~4458); add a `risky` pair to the `--fix --json` emit block (line ~4688) and a `[risky]` note to the text/dry-run path.
+- Create: `tests/autofix/run_fix_risky_tag.ps1`
+
+**Interfaces:**
+- Produces: `function IsRiskyFixRule(const ARuleId: string): Boolean;`; a `risky` boolean in each `--fix --json` finding object; a `[risky: behaviour-changing]` note in the `--fix` text output when a risky-rule edit is present.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `tests/autofix/run_fix_risky_tag.ps1`. It uses the `off_by_one.pas` fixture created in Task 4C -- so create a minimal off-by-one fixture now (Task 4C reuses it):
+
+Create `tests/autofix/fixtures/off_by_one.pas` (ASCII, CRLF):
+
+```pascal
+unit off_by_one;
+
+interface
+
+uses
+  System.Generics.Collections;
+
+implementation
+
+procedure Demo(List: TList<Integer>);
+var
+  I: Integer;
+begin
+  for I := 0 to List.Count do
+    List[I] := 0;
+end;
+
+end.
+```
+
+(The `for I := 0 to List.Count do` is line 14; the `List.Count` end-bound is what @warn captures.)
+
+```powershell
+[CmdletBinding()]
+param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+$ErrorActionPreference = 'Stop'; $fail = $false
+function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
+$exePath = (Resolve-Path $Exe).Path
+function CopyFixture($name) {
+  $src = (Resolve-Path (Join-Path $PSScriptRoot "fixtures\$name")).Path
+  $dir = Join-Path C:\TEMP ('draglint_risky_' + [IO.Path]::GetFileNameWithoutExtension($name))
+  if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+  New-Item -ItemType Directory -Path $dir | Out-Null
+  $dst = Join-Path $dir $name; Copy-Item $src $dst -Force; return $dst
+}
+Push-Location C:\TEMP
+try {
+  # risky rule -> risky:true (preview JSON)
+  $t = CopyFixture 'off_by_one.pas'
+  $raw = & $exePath lint --file $t --fix --fix-line 14 --fix-rule off-by-one-count --json 2>$null | Out-String
+  $arr = $null; try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
+  if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
+  $o = $arr | Where-Object { $_.rule -eq 'off-by-one-count' } | Select-Object -First 1
+  Check 'off-by-one-count fixable=true'  ($o.fixable -eq $true)
+  Check 'off-by-one-count risky=true'    ($o.risky   -eq $true)
+
+  # non-risky rule -> risky:false
+  $t2 = CopyFixture 'redundant_not_not.pas'
+  $raw2 = & $exePath lint --file $t2 --fix --fix-line 12 --fix-rule redundant-not-not --json 2>$null | Out-String
+  $arr2 = $null; try { $arr2 = ($raw2 | ConvertFrom-Json) } catch { $arr2 = $null }
+  if ($null -ne $arr2 -and $arr2 -isnot [System.Array]) { $arr2 = @($arr2) }
+  $n = $arr2 | Where-Object { $_.rule -eq 'redundant-not-not' } | Select-Object -First 1
+  Check 'redundant-not-not risky=false' ($n.risky -eq $false)
+
+  # text dry-run for the risky fix mentions [risky
+  $raw3 = & $exePath lint --file $t --fix --fix-line 14 --fix-rule off-by-one-count 2>$null | Out-String
+  Check 'text dry-run notes [risky' ($raw3 -match '\[risky')
+} finally { Pop-Location }
+if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+From `C:\TEMP`: `pwsh -File ...\run_fix_risky_tag.ps1`
+Expected: FAIL -- off-by-one-count is not yet fixable (no finding produced) AND `risky` is absent. (Both the fixability and the tag are added in Task 4C + this task; run again after both.)
+
+- [ ] **Step 3: Add the risky registry + JSON/text tagging**
+
+In `src/cli/DRagLint.CLI.pas`, right after the `FixableRuleIds` function (line ~4474), add:
+
+```pascal
+{ Behaviour-CHANGING fixes: still applied by Fix-it/Fix-all, but tagged so a
+  human/AI orchestrator is warned. Currently only off-by-one-count (adds ' - 1'
+  to a loop bound, which breaks an intentionally-inclusive loop). }
+const
+  RISKY_FIX_RULE_IDS: array[0..0] of string = ('off-by-one-count');
+
+function IsRiskyFixRule(const ARuleId: string): Boolean;
+var S: string;
+begin
+  for S in RISKY_FIX_RULE_IDS do
+    if SameText(S, ARuleId) then Exit(True);
+  Result := False;
+end;
+```
+
+In the `--fix --json` emit block, add the `risky` pair right after the `applied`/`preview` pairs (the exact insertion depends on Task 7's rework; add it inside the same `for F in Targeted` loop):
+
+```pascal
+            JObj.AddPair('risky', TJSONBool.Create(IsRiskyFixRule(F.RuleId)));
+```
+
+For the text dry-run, after `Write(TTextEditApplier.RenderDryRun(Edits));` (line ~4710), add a risky note when any targeted finding is a risky rule:
+
+```pascal
+      var HasRisky: Boolean:= False;
+      for F in Targeted do
+        if IsRiskyFixRule(F.RuleId) then begin HasRisky:= True; Break; end;
+      if HasRisky then
+        Writeln('[risky] one or more fixes are behaviour-changing -- review before --apply.');
+```
+
+- [ ] **Step 4: Build; verify the tag (after Task 4C makes off-by-one fixable)**
+
+Task 4C adds the off-by-one-count fix branch. After BOTH 4C and this task are implemented and built (`BUILD_EXITCODE=0`), from `C:\TEMP`: `pwsh -File ...\run_fix_risky_tag.ps1`
+Expected: PASS (off-by-one-count fixable=true + risky=true; redundant-not-not risky=false; text dry-run notes [risky). If running this task's build BEFORE 4C, the fixability checks will still FAIL -- that is expected; the tag plumbing is in place and 4C completes it.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/cli/DRagLint.CLI.pas tests/autofix/run_fix_risky_tag.ps1 tests/autofix/fixtures/off_by_one.pas
+git commit -m "feat(autofix): risky-fix registry + risky tag in --fix output (behaviour-changing fixes)"
+```
+
+---
+
+## Task 4C: `off-by-one-count` fix branch (behaviour-changing, risky-tagged)
+
+**Files:**
+- Modify: `src/cli/DRagLint.CLI.pas` -- add `'off-by-one-count'` to `FIXABLE_RULE_IDS`; add a branch in `BuildAutofixEdits`; update the summary.
+- Modify: `tests/autofix/run_fix_newrules.ps1` (add the case)
+- (Fixture `off_by_one.pas` already created in Task 4D.)
+
+**Interfaces:**
+- Consumes: `BuildAutofixEdits`, `Assert-Fix` (Task 2), `IsRiskyFixRule` (Task 4D, for the risky tag).
+- Produces: the off-by-one-count fix; combined with Task 4D's tag, `run_fix_risky_tag.ps1` passes.
+
+**Span note:** `.scm` rule (`rules/off-by-one-count.scm`); `@warn` is on the loop END-BOUND only (`exprDot X.Count` or `exprCall Length(X)`), single-line. The fix appends ` - 1`. BEHAVIOUR-CHANGING.
+
+- [ ] **Step 1: Write the failing test (harness case)**
+
+Add to `tests/autofix/run_fix_newrules.ps1` after the redundant-assigned-free case:
+
+```powershell
+Assert-Fix 'off_by_one.pas' 14 'off-by-one-count' 'for I := 0 to List.Count - 1 do' '[off-by-one]'
+```
+
+- [ ] **Step 2: Run the harness to verify the new case fails**
+
+From `C:\TEMP`: `pwsh -File ...\run_fix_newrules.ps1`
+Expected: FAIL on `[off-by-one]` (rule not yet fixable; line stays `for I := 0 to List.Count do`). Prior cases PASS.
+
+- [ ] **Step 3: Add the rule to the registry + a fix branch**
+
+Extend `FIXABLE_RULE_IDS` to `array[0..8]` adding `'off-by-one-count'`.
+
+Add this branch after the `redundant-assigned-free` branch:
+
+```pascal
+      else if SameText(F.RuleId, 'off-by-one-count')
+              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        { span covers the loop end-bound (X.Count / Length(X)). Append ' - 1'.
+          BEHAVIOUR-CHANGING (tagged risky via IsRiskyFixRule). The bound is
+          isolated by 'to .. do', so no precedence hazard. }
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          if Trim(Span) <> '' then
+          begin
+            E:= Default(TTextEdit);
+            E.FilePath:= F.FilePath;
+            E.Kind    := tekReplaceInLine;
+            E.Line    := F.StartLine;
+            E.Col     := F.StartCol;
+            E.EndCol  := F.EndCol;
+            E.Text    := Span + ' - 1';
+            Result:= Result + [E];
+            Inc(AFixableCount);
+          end;
+        end;
+      end
+```
+
+Append to the summary: `///   off-by-one-count       -> append ' - 1' to the loop bound (RISKY);`
+
+- [ ] **Step 4: Build, then run both harnesses to verify they pass**
+
+Build (`BUILD_EXITCODE=0`). From `C:\TEMP`:
+- `pwsh -File ...\run_fix_newrules.ps1` -> PASS on `[off-by-one]` (line 14 becomes `for I := 0 to List.Count - 1 do`) + all prior cases.
+- `pwsh -File ...\run_fix_risky_tag.ps1` -> PASS (now that off-by-one-count is fixable AND tagged risky).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/cli/DRagLint.CLI.pas tests/autofix/run_fix_newrules.ps1
+git commit -m "feat(autofix): off-by-one-count is fixable (append ' - 1'), tagged risky"
+```
+
+---
+
+## Task 5: Fixable-catalog test update (9 fixable)
 
 **Files:**
 - Modify: `tests/autofix/run_fixable_catalog.ps1`
 
 **Interfaces:**
-- Consumes: `rules --json` `fixable` flags (already emit for the 3 new ids via `IsFixableRule`, added in Tasks 2-4).
+- Consumes: `rules --json` `fixable` flags (emit for the 6 new ids via `IsFixableRule`, added in Tasks 2-4, 4A-4C).
 
 - [ ] **Step 1: Extend the catalog assertions**
 
 Add after line 12 (the `redundant-cast` check) in `tests/autofix/run_fixable_catalog.ps1`:
 
 ```powershell
-  Check 'redundant-not-not fixable=true'      ($byId['redundant-not-not'].fixable -eq $true)
-  Check 'redundant-as-tobject fixable=true'   ($byId['redundant-as-tobject'].fixable -eq $true)
+  Check 'redundant-not-not fixable=true'       ($byId['redundant-not-not'].fixable -eq $true)
+  Check 'redundant-as-tobject fixable=true'    ($byId['redundant-as-tobject'].fixable -eq $true)
   Check 'boolean-comparison-true fixable=true' ($byId['boolean-comparison-true'].fixable -eq $true)
+  Check 'reserved-word-casing fixable=true'    ($byId['reserved-word-casing'].fixable -eq $true)
+  Check 'redundant-assigned-free fixable=true' ($byId['redundant-assigned-free'].fixable -eq $true)
+  Check 'off-by-one-count fixable=true'        ($byId['off-by-one-count'].fixable -eq $true)
   $fixableCount = ($obj.rules | Where-Object { $_.fixable -eq $true }).Count
-  Check 'exactly 6 fixable rules' ($fixableCount -eq 6)
+  Check 'exactly 9 fixable rules' ($fixableCount -eq 9)
 ```
 
 - [ ] **Step 2: Run to verify it passes**
 
 From `C:\TEMP`: `pwsh -File C:\Projects\Delphi-RAG-lint\tests\autofix\run_fixable_catalog.ps1`
-Expected: PASS (all 6 fixable checks + the count = 6). No rebuild needed (exe already built in Task 4).
+Expected: PASS (all 6 new-rule fixable checks + the 3 existing + the count = 9). No rebuild needed (exe already built in Task 4C).
 
 - [ ] **Step 3: Commit**
 
@@ -860,7 +1308,7 @@ git commit -m "fix(autofix): --fix --format sarif prints a stderr note and uses 
 
 From `C:\TEMP`, run every suite and confirm all PASS:
 - lint suite (154/154), store (16/16) -- the standard harness runners.
-- `run_fix_single.ps1`, `run_fix_unit.ps1`, `run_fix_project.ps1`, `run_fixable_catalog.ps1` (6 fixable), `run_fix_newrules.ps1` (8 cases), `run_fix_respects_config.ps1`, `run_fix_applied_accounting.ps1`, `run_fix_sarif_note.ps1`.
+- `run_fix_single.ps1`, `run_fix_unit.ps1`, `run_fix_project.ps1`, `run_fixable_catalog.ps1` (9 fixable), `run_fix_newrules.ps1` (all 6 new rules' cases), `run_fix_risky_tag.ps1`, `run_fix_respects_config.ps1`, `run_fix_applied_accounting.ps1`, `run_fix_sarif_note.ps1`.
 
 Record the exact pass counts. Any FAIL blocks the release.
 
@@ -870,7 +1318,7 @@ Use superpowers:requesting-code-review on the whole Chunk-2 branch diff (all com
 
 - [ ] **Step 3: Bump VERSION + CHANGELOG + BACKLOG**
 
-Set `src/cli/DRagLint.CLI.pas:6` to `VERSION = '0.89.0-alpha';`. Add a CHANGELOG entry for v0.89.0-alpha listing: 3 new fixable rules (redundant-not-not, redundant-as-tobject, boolean-comparison-true), batch-fix-respects-config (test+doc), Minor 1 (applied accounting), Minor 2 (fix+sarif stderr note). Update BACKLOG resume section to "v0.89.0-alpha SHIPPED; NEXT = AutoFix Chunk 3 (widen to the full sweep-verified safe set)".
+Set `src/cli/DRagLint.CLI.pas:6` to `VERSION = '0.89.0-alpha';`. Add a CHANGELOG entry for v0.89.0-alpha listing: 6 new fixable rules (redundant-not-not, redundant-as-tobject, boolean-comparison-true, reserved-word-casing, redundant-assigned-free, off-by-one-count [risky]), the risky-fix tag (behaviour-changing fixes flagged `risky:true` in `--fix --json` + text note; off-by-one-count applies but is warned), batch-fix-respects-config (test+doc), Minor 1 (applied accounting), Minor 2 (fix+sarif stderr note). Note in the CHANGELOG that the 163-rule sweep confirmed 9/163 total fixable (no rule-widening remains). Update BACKLOG resume section to "v0.89.0-alpha SHIPPED (9 fixable, all sweep-verified); NEXT Track-1 item = FAutoFix save-time auto-apply control".
 
 - [ ] **Step 4: Rebuild the CLI, reindex self, pack the release zips**
 
@@ -880,7 +1328,7 @@ Build the CLI (`BUILD_EXITCODE=0`), stage the win64 exe. Reindex the drag-lint s
 
 ```bash
 git add src/cli/DRagLint.CLI.pas CHANGELOG.md docs/lint/BACKLOG.md
-git commit -m "release: v0.89.0-alpha -- AutoFix Chunk 2 (widen fixable set +3, gating test/doc, 2 Minors)"
+git commit -m "release: v0.89.0-alpha -- AutoFix Chunk 2 (widen fixable set +6, risky tag, gating test/doc, 2 Minors)"
 git tag v0.89.0-alpha
 git push && git push --tags
 ```
@@ -889,12 +1337,13 @@ Then create the GitHub release (`gh release create v0.89.0-alpha ... --latest`, 
 
 - [ ] **Step 6: Update auto-memory + handoff pointer**
 
-Update `project_lint_rules_v062.md` RESUME + `MEMORY.md` index line to record v0.89.0-alpha shipped and NEXT = Chunk 3.
+Update `project_lint_rules_v062.md` RESUME + `MEMORY.md` index line to record v0.89.0-alpha shipped (9 fixable, all sweep-verified) and NEXT Track-1 item = FAutoFix save-time auto-apply control.
 
 ---
 
 ## Self-review notes (author)
 
-- **Spec coverage:** 3 rules (Tasks 2-4) + IsSingleTokenAtom (Task 1) + catalog test (Task 5) + gating test/doc (Task 6) + Minor 1 (Task 7) + Minor 2 (Task 8) + publish (Task 9). All spec sections mapped.
-- **Type consistency:** `IsSingleTokenAtom(const S: string): Boolean` defined in Task 1, consumed by name in Task 4. `Edits: TArray<TTextEdit>`, `TTextEdit.FilePath/Line`, `tekReplaceInLine` used consistently with `DRagLint.Refactor.TextEdit.pas`. `FIXABLE_RULE_IDS` array bounds grow 0..2 -> 0..3 (Task 2) -> 0..4 (Task 3) -> 0..5 (Task 4).
-- **Known soft spots flagged inline:** Task 6 config key (`"disabled"`) may differ -- inspect `LoadLintConfig` if the gating assertion fails. Task 7 no-edit-but-fixable case is not deterministically reproducible from real input; the test asserts the accounting invariant (preview=>applied:false, apply+edit=>applied:true) and the fix makes `applied` conditional on `HasEdit`. Task 8 `ErrOutput` idiom -- confirm the unit's existing stderr pattern.
+- **Spec coverage:** 6 rules (Tasks 2-4, 4A-4C) + risky tag (Task 4D) + IsSingleTokenAtom (Task 1) + catalog test =9 (Task 5) + gating test/doc (Task 6) + Minor 1 (Task 7) + Minor 2 (Task 8) + publish (Task 9). All spec sections mapped.
+- **Task order note:** Task 4D (risky registry + tag plumbing) is placed BEFORE Task 4C (off-by-one-count fix) because 4C's `run_fix_risky_tag.ps1` asserts `risky:true` -- but 4D also depends on 4C to make off-by-one-count *fixable* (so a finding is produced). Resolution: 4D creates the `off_by_one.pas` fixture + tag plumbing and its risky-tag test partially fails until 4C lands; 4C completes it. Both must be green before Task 5. Alternatively implement 4C then 4D -- either order works as long as both are done before Task 5. Task 7 (Minor 1) reworks the same `--fix --json` loop where 4D adds the `risky` pair; when doing Task 7, PRESERVE the `risky` pair inside the rebuilt loop.
+- **Type consistency:** `IsSingleTokenAtom(const S: string): Boolean` (Task 1) consumed in Task 4. `IsRiskyFixRule(const ARuleId: string): Boolean` (Task 4D) consumed in the `--fix` JSON/text paths + Task 4C context. `Edits: TArray<TTextEdit>`, `TTextEdit.FilePath/Line`, `tekReplaceInLine` consistent with `DRagLint.Refactor.TextEdit.pas`. `FIXABLE_RULE_IDS` bounds grow 0..2 -> 0..3 (T2) -> 0..4 (T3) -> 0..5 (T4) -> 0..6 (T4A) -> 0..7 (T4B) -> 0..8 (T4C). `RISKY_FIX_RULE_IDS` = array[0..0].
+- **Known soft spots flagged inline:** Task 6 config key (`"disabled"`) may differ -- inspect `LoadLintConfig` if the gating assertion fails. Task 7 no-edit-but-fixable case is not deterministically reproducible from real input; the test asserts the accounting invariant (preview=>applied:false, apply+edit=>applied:true) and the fix makes `applied` conditional on `HasEdit`. Task 8 `ErrOutput` idiom -- confirm the unit's existing stderr pattern. Task 4B delimited-`then` scan: the fixture's `Authenticated` line is the guard; whole-word `then` matching (bounded by whitespace/`)`) is required. Task 4C off-by-one is behaviour-changing -- its risky tag (Task 4D) is what keeps it safe to ship.
