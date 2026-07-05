@@ -180,6 +180,10 @@ type
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
     Apply          : Boolean; // --apply (uses-fix / autofix: write changes, not dry-run)
     Fix            : Boolean; // --fix (lint: autofix findings that have a quick-fix; dry-run unless --apply)
+    // AutoFix Chunk 1 (Task 3): single-finding fix targeting. Each SET flag
+    // narrows the fixable set; unset = no filter. Default FixLine:=0, FixRule:=''.
+    FixLine        : Integer; // --fix-line <L> (1-based; 0 = all lines)
+    FixRule        : string ; // --fix-rule <id> ('' = all rules)
     RemoveUnused   : Boolean; // --remove-unused (uses-fix: also comment unused)
     // v0.27: generate-test + format
     TestFramework: string; // --framework dunitx|dunit (default 'dunitx')
@@ -727,6 +731,9 @@ begin
     // v0.84: extract-method --from-line/--to-line (1-based, inclusive)
     else if (A = '--from-line') and (i < ParamCount) then begin Inc(i); Result.FromLine:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--to-line')   and (i < ParamCount) then begin Inc(i); Result.ToLine  := StrToIntDef(ParamStr(i), 0); end
+    // AutoFix Chunk 1 (Task 3): single-finding fix targeting (lint --fix)
+    else if (A = '--fix-line') and (i < ParamCount) then begin Inc(i); Result.FixLine:= StrToIntDef(ParamStr(i), 0); end
+    else if (A = '--fix-rule') and (i < ParamCount) then begin Inc(i); Result.FixRule:= ParamStr(i); end
     else if A = '--include-private' then Result.IncludePrivate:= True
     else if (A = '--target') and (i < ParamCount) then
     begin
@@ -4643,10 +4650,53 @@ begin
     Dry-run by default; --apply writes (with .bak unless --no-backup). }
   if AArgs.Fix then
   begin
+    { AutoFix Chunk 1 (Task 3): narrow to a single finding when --fix-line and/or
+      --fix-rule are given. Each SET flag filters; an unset flag matches all. With
+      neither flag the set is unchanged, so whole-file --fix is byte-identical. }
+    var Targeted: TArray<TLintFinding>;
+    if (AArgs.FixLine > 0) or (AArgs.FixRule <> '') then
+    begin
+      Targeted:= nil;
+      for F in Survivors do
+        if ((AArgs.FixLine = 0)  or (F.StartLine = AArgs.FixLine))
+       and ((AArgs.FixRule = '') or SameText(F.RuleId, AArgs.FixRule)) then
+          Targeted:= Targeted + [F];
+    end
+    else
+      Targeted:= Survivors;
+
     var FixCount: Integer;
-    var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Survivors, FixCount);
+    var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Targeted, FixCount);
+
+    if AArgs.AsJson or SameText(AArgs.Format, 'json') then
+    begin
+      { Structured per-finding output so an AI orchestrator can drive fixes
+        token-free. Build the JSON from the TARGETED findings, apply (when
+        --apply) writing a .bak unless --no-backup, then emit the array. }
+      if AArgs.Apply and (FixCount > 0) then
+        TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
+      JArr:= TJSONArray.Create;
+      try
+        for F in Targeted do
+        begin
+          JObj:= TJSONObject.Create;
+          JObj.AddPair('file'   , F.FilePath);
+          JObj.AddPair('line'   , TJSONNumber.Create(F.StartLine));
+          JObj.AddPair('rule'   , F.RuleId);
+          JObj.AddPair('fixable', TJSONBool.Create(IsFixableRule(F.RuleId)));
+          JObj.AddPair('applied', TJSONBool.Create(AArgs.Apply));
+          JObj.AddPair('preview', TJSONBool.Create(not AArgs.Apply));
+          JArr.AddElement(JObj);
+        end;
+        Writeln(JArr.Format(2));
+      finally
+        JArr.Free;
+      end;
+      Exit(0);
+    end;
+
     if FixCount = 0 then
-      Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Survivors)) + ' finding(s))')
+      Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Targeted)) + ' finding(s))')
     else if AArgs.Apply then
     begin
       var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
@@ -4846,7 +4896,8 @@ begin
     Writeln(Format(
         'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' +
         'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, exhaustive-enum-case, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
-        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, split-variable, separate-query-from-modifier, double-free, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag, mutable-global-variable, default-encoding-io, interface-object-mixing)',
+        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, split-variable, separate-query-from-modifier, double-free, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' +
+        'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag, mutable-global-variable, default-encoding-io, interface-object-mixing)',
         [AArgs.Rule]));
     Exit(2);
   end;
