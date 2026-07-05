@@ -4455,10 +4455,10 @@ end;
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
   BuildAutofixEdits (kept in lockstep; a guard test asserts they agree). }
 const
-  FIXABLE_RULE_IDS: array[0..6] of string =
+  FIXABLE_RULE_IDS: array[0..8] of string =
     ('self-assignment', 'redundant-parentheses', 'redundant-cast',
-     'redundant-not-not', 'reserved-word-casing', 'redundant-assigned-free',
-     'off-by-one-count');
+     'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true',
+     'reserved-word-casing', 'redundant-assigned-free', 'off-by-one-count');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var S: string;
