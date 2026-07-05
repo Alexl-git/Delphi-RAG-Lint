@@ -4443,6 +4443,29 @@ begin
   if AArgs.Enable  <> '' then Result.AddEnabled (AArgs.Enable .Split([',', ' ', ';']));
 end;
 
+{ The set of rule-ids that have a registered, mechanical, side-effect-free
+  quick-fix. Single source of truth for both the rules-catalog 'fixable' flag
+  and the fix verbs. Widening AutoFix = add an id here AND a branch in
+  BuildAutofixEdits (kept in lockstep; a guard test asserts they agree). }
+const
+  FIXABLE_RULE_IDS: array[0..2] of string =
+    ('self-assignment', 'redundant-parentheses', 'redundant-cast');
+
+function IsFixableRule(const ARuleId: string): Boolean;
+var S: string;
+begin
+  for S in FIXABLE_RULE_IDS do
+    if SameText(S, ARuleId) then Exit(True);
+  Result := False;
+end;
+
+function FixableRuleIds: TArray<string>;
+var I: Integer;
+begin
+  SetLength(Result, Length(FIXABLE_RULE_IDS));
+  for I := 0 to High(FIXABLE_RULE_IDS) do Result[I] := FIXABLE_RULE_IDS[I];
+end;
+
 /// <summary>Builds the quick-fix text edits for the subset of AFindings whose
 /// rule has a registered autofix. v0.71 seed set (mechanical, no type info):
 ///   self-assignment       -> delete the offending statement line(s);
