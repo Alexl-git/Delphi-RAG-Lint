@@ -87,30 +87,68 @@ Layer-1 + Layer-2.)
 
 ### D1. Interface-method fan-in bridge (the core of v4)
 
-Extend `FindNearestFormCaller` (or a helper it calls) so that when it is walking
-callers of a method `M` defined on a concrete class `C`, and `C` implements an
-interface `I` that also declares `M`, it ALSO considers callers of `I.M`
-(interface-typed call sites). Symmetrically, when a launch body is found inside
-a concrete implementation `C.M`, the walk may reach `C.M` from an
-interface-typed `APlan.M` call in a form.
+**Backward-chain, fully index-queryable -- NO text-scan needed** (confirmed
+against the live ORM3 index 2026-07-05). `FindNearestFormCaller` already walks
+`refs WHERE name_text = M` by method name. The bridge adds interface awareness
+to that walk:
 
-- Interface<->implementation linkage source: the v0.82 `type_ancestors` /
-  `heritage` data (a class's ancestor/interface list) plus method-name match
-  (`M` present on both the interface and the class). When `C`'s heritage lists
-  interface `I` and both declare method `M`, treat `I.M` call sites as callers
-  of `C.M`.
+When the walk is looking for callers of a method `M` defined on a concrete class
+`C` and finds none directly, ALSO look for callers of `M` reached through an
+interface `C` implements. The chain, all from existing tables:
+
+1. Launch body found inside concrete `C.M` (e.g. `TANSIZ14Plan.EditForm` does
+   `TZ14slctFrm.Create`). The launch ref is already enclosing-attributed to
+   `EditForm` via `enclosing_symbol_id` (v0.82).
+2. `C`'s heritage from `type_ancestors` (VERIFIED present): `TANSIZ14Plan` ->
+   `[TmcPLANLIST (class, ord 0), IANSIZ14Plan (interface, ord 1)]`.
+3. Find `call` refs where `name_text = M` (`EditForm`): each carries its
+   `enclosing_symbol_id`. At `ControlPlan2.pas:1451` `APlan.EditForm`, the ref
+   is `EditForm | enclosing = btnSelFinalPlanClick` -- a FORM method with a DFM
+   button binding. (VERIFIED: `dump-refs` shows `EditForm|1451|...|btnSelFinalPlanClick`.)
+4. Resolve that enclosing form method -> its owning form (`frmControlPlan2`) ->
+   MAIN via the normal edge graph, and its DFM caption via `CaptionForHandler`.
+
+- **Matching is by method NAME across the interface family**, not by resolving
+  the exact receiver type. The `refs` row for `EditForm` records only the bare
+  method name + line + enclosing symbol; it does NOT record that `APlan`'s type
+  is `iPLANLIST` (see the receiver-type gap in D5). Name-based matching is
+  CORRECT here: every `TxxxPlan.EditForm` is reachable via the same Plan button,
+  so attributing all of them to `frmControlPlan2 -> 'Plan'` is the true nav.
+- `type_ancestors` lists the per-plan interface (`IANSIZ14Plan`) while call
+  sites use the base interface (`ImcPLANLIST.EditForm`); since matching is by
+  method name (`EditForm`), the specific interface identity is not required --
+  any indexed `EditForm` call site whose enclosing symbol is a navigable form is
+  a valid caller. (If false positives arise from an unrelated `EditForm`, D5's
+  receiver-type index would disambiguate; not needed for v4 correctness here.)
 - Bound the fan-in with the existing `AVisited` set (already present) so the
   1->many interface dispatch cannot loop or explode; each concrete
   implementation resolves independently to its own editor form.
 - Result: every `TxxxPlan.EditForm` that directly launches an editor form
-  (Z14 class) now attributes its edge to `frmControlPlan2`.
+  (the ~18 direct-create plan classes incl. Z14) attributes its edge to
+  `frmControlPlan2` with the `'Plan'` caption.
 
 ### D2. Hook-registration synthetic edges (Layer 2, on top of D1)
 
-Pre-pass over `refs`: find assignment sites of shape `<lhs> := <RoutineName>`
-where `<RoutineName>` resolves to a routine whose body (transitively) launches a
-form. Record `HandlerRoutine -> HookField` (`ShowPlanEditor -> PlanEditFormHook`)
-and the hook field's name.
+**Detection is a TEXT-SCAN of the source, NOT a refs query** (confirmed against
+the live index 2026-07-05). At the registration line
+`uPLANLIST.PlanEditFormHook := ShowPlanEditor;` (uPlanEditForms.pas:123, inside
+an `initialization` block), the ONLY ref the parser emits is `uPLANLIST` (the
+unit) -- there is NO ref for the hook field `PlanEditFormHook` and NO ref for
+the RHS routine `ShowPlanEditor`. So the registration is invisible to any
+`refs`-based query (`find-callers ShowPlanEditor` returns 0; the function is
+`[impl-only]`). This is WHY the current algorithm cannot see the hook.
+
+Text-scan pre-pass (mirrors the existing `IsLaunchLine`/`FindEnclosingImpl`
+source-line scanning already in `BuildEdges`): for each already-known
+form-launching routine `R` (routines whose body constructs a form -- we compute
+these during the normal launch-site pass), scan `.pas` sources for an assignment
+line of shape `<HookField> := R` (optionally unit-qualified: `Unit.HookField := R`).
+Record `R -> HookField` (`ShowPlanEditor -> PlanEditFormHook`). Only routines
+already identified as form-launchers are candidates, which bounds the scan and
+avoids matching ordinary assignments.
+
+(D5 proposes indexing proc-variable assignments so this scan becomes a clean
+`refs` query in a later milestone; v4 uses the text-scan.)
 
 When the D1 fan-in dead-ends on a handler routine `R` (a form-launching routine
 with no direct callers -- because its only reference is the registration), look
@@ -119,7 +157,7 @@ fan-in from `H`'s INVOCATION sites (`PlanEditFormHook()` inside
 `TANSIZ19Plan.EditForm`) -- which then rejoins the D1 interface bridge back to
 `frmControlPlan2`.
 
-- Detection keys off the assignment kind in `refs`; no schema change.
+- Detection is the text-scan above; no schema change in v4.
 - Only ONE hook hop is bridged in v4 (see Out of scope).
 
 ### D3. Hop caption (name the UI trigger, not the mechanism)
@@ -137,6 +175,51 @@ Fall back to `(via EditForm)` / `(via <hook> hook)` only when no DFM caption
 resolves (mirrors the existing `if Cap = '' then Cap := '(via ' + Rout + ')'`
 convention). This is the same caption path normal form edges already use,
 applied at the dispatch-invoking form -- near-zero new machinery.
+
+### D5. Indexer enhancements to eliminate/reduce text-scans (future, not v4)
+
+v4 makes Layer 1 fully index-driven but Layer 2 (hook detection) falls back to a
+text-scan because the current index does not capture two source facts we can
+plainly see. Adding them would let navigation -- and any other consumer -- query
+clean relationships instead of scanning `.pas` bytes. These are proposed as a
+SEPARATE indexer milestone (schema-bumping), not part of v4:
+
+1. **Receiver type on `call` refs (`receiver_type_symbol_id`).** Today a `call`
+   ref records only the bare method name + line + enclosing symbol (VERIFIED:
+   `refs` columns are `symbol_id, file_id, kind, name_text, start/end line/col,
+   enclosing_symbol_id`). At `APlan.EditForm` the index knows `EditForm` is
+   called and that `APlan` is on the same line, but NOT that `APlan`'s declared
+   type is the interface `iPLANLIST`. If the parser resolved the receiver's
+   declared type (from the local/param/field declaration in scope) and stamped
+   its symbol id on the call ref, polymorphic dispatch would resolve exactly:
+   "who calls `iPLANLIST.EditForm`" becomes a precise query, no name-only
+   matching, no false-positive risk from unrelated `EditForm` methods. This is
+   the single highest-value addition -- it turns interface/virtual dispatch from
+   a heuristic into indexed data and benefits find-callers, impact, and graphing
+   too.
+
+2. **Proc-variable assignment refs (`kind='proc-assign'`).** At
+   `PlanEditFormHook := ShowPlanEditor` the parser currently emits only a ref to
+   the unit. Emitting a ref that links the LHS hook field to the RHS routine
+   (an "address-of-routine assignment") would replace D2's text-scan with a
+   `refs` query and generalize to every callback/hook registration in the code
+   base (EnsureJobListHook, PlanEditFormHook, and any future ones), not just the
+   ones forms-csv happens to scan for.
+
+3. **Interface-implementation method edges (`impl_of`).** `type_ancestors`
+   already links a class to its interfaces; a per-METHOD link ("`TANSIZ14Plan.
+   EditForm` implements `IANSIZ14Plan.EditForm`") would let consumers walk
+   interface->all-implementations and implementation->interface directly, rather
+   than matching by method name. Complements #1: #1 resolves the call's target
+   interface, #3 expands that interface to its concrete bodies.
+
+Rationale (user, 2026-07-05): we can SEE in the source that a specific interface
+object's specific method is called, so the physical incarnations are a bounded,
+resolvable set -- and tracing backward from a form we already reach the calling
+method and object. Where the index doesn't yet record that, we should add it, so
+polymorphic navigation stops depending on text search. v4 ships the navigation
+win now (Layer 1 via existing data + Layer 2 via a bounded scan); this indexer
+milestone removes the scan and sharpens dispatch resolution afterward.
 
 ## Out of scope (documented future todos)
 
@@ -184,5 +267,8 @@ applied at the dispatch-invoking form -- near-zero new machinery.
 
 ## After this milestone
 
-Backlog: IDE forms-csv menu -> full-tree db (Layer 0 delivery); multi-hop hook
-chains; slider->plan-type mapping (if ever wanted).
+- **Indexer milestone (D5):** receiver-type on call refs + proc-assign refs +
+  interface-impl method edges -- removes Layer 2's text-scan and makes
+  polymorphic dispatch precise. Its own brainstorm -> spec -> plan (schema bump).
+- Backlog: IDE forms-csv menu -> full-tree db (Layer 0 delivery); multi-hop hook
+  chains; slider->plan-type mapping (if ever wanted).
