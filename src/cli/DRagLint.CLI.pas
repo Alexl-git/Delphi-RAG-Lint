@@ -4521,7 +4521,8 @@ end;
 ///   self-assignment       -> delete the offending statement line(s);
 ///   redundant-parentheses -> strip the outer '(' ')' of the flagged span;
 ///   redundant-cast        -> strip a 'TFoo(x)' cast where x is one identifier;
-///   redundant-not-not     -> strip the two leading 'not' keywords.
+///   redundant-not-not     -> strip the two leading 'not' keywords;
+///   redundant-as-tobject  -> strip the ' as TObject' suffix.
 /// AFixableCount returns how many findings produced a fix. Rules without a fix
 /// are silently skipped.</summary>
 /// <remarks>Deliberately conservative: only rules whose fix is an exact,
@@ -4660,6 +4661,47 @@ begin
             E.Text    := Rest;
             Result:= Result + [E];
             Inc(AFixableCount);
+          end;
+        end;
+      end
+      else if SameText(F.RuleId, 'redundant-as-tobject')
+              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        { span covers 'X as TObject' (the exprBinary). Find the depth-0 whole-word
+          'as' keyword; the lhs before it is X. }
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          { scan for ' as ' at bracket depth 0 (whole word, case-insensitive) }
+          var Depth: Integer:= 0;
+          var AsPos: Integer:= 0;
+          for var K: Integer:= 2 to Length(Span) - 2 do
+          begin
+            var Ch: Char:= Span[K];
+            if (Ch = '(') or (Ch = '[') then Inc(Depth)
+            else if (Ch = ')') or (Ch = ']') then Dec(Depth)
+            else if (Depth = 0) and (Span[K-1] <= ' ')
+                    and SameText(Copy(Span, K, 2), 'as')
+                    and ((K + 2 > Length(Span)) or (Span[K+2] <= ' ')) then
+            begin AsPos:= K; Break; end;
+          end;
+          if AsPos > 1 then
+          begin
+            Repl:= TrimRight(Copy(Span, 1, AsPos - 1));
+            if Repl <> '' then
+            begin
+              E:= Default(TTextEdit);
+              E.FilePath:= F.FilePath;
+              E.Kind    := tekReplaceInLine;
+              E.Line    := F.StartLine;
+              E.Col     := F.StartCol;
+              E.EndCol  := F.EndCol;
+              E.Text    := Repl;
+              Result:= Result + [E];
+              Inc(AFixableCount);
+            end;
           end;
         end;
       end;

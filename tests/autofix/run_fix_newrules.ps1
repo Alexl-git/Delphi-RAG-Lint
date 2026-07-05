@@ -29,5 +29,6 @@ function Assert-Fix($fixtureName, $L, $R, $expect, $tag) {
 }
 
 Assert-Fix 'redundant_not_not.pas' 12 'redundant-not-not' 'B := Flag;' '[not-not]'
+Assert-Fix 'redundant_as_tobject.pas' 14 'redundant-as-tobject' 'Obj := Sender;' '[as-tobject]'
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
