@@ -19,7 +19,8 @@ Extract Method: the first refactoring-APPLY transformation with data-flow analys
   multi-statements, an unknown parameter type, a name collision, a missing class `private` section, multi-var
   declaration lines for internal locals, and `with`/`asm`/`goto` routines.
 - IDE **Ctrl+Alt+M** -- selection -> preview dialog -> apply -> reload, wired the same way as the other refactor
-  keybindings. Manual IDE smoke test still pending.
+  keybindings. Manual IDE smoke verified 2026-07-05 (after a reload-mechanism fix: deferred `IOTAModule.Refresh`
+  replaced `CloseModule`/`OpenModule`, which crashed the IDE when invoked from the active editor's key binding).
 - `DRagLint.Analysis.Liveness.pas` -- new reusable analysis unit (`LiveAfterItem`/`LiveBeforeItem` boundary
   queries) built for Extract Method's variable classification (in/out/internal); the general-CFG liveness pass is
   intended to be reused by future refactorings (e.g. Split Variable apply, Inline Variable).

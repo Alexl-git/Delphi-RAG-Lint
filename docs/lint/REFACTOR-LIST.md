@@ -45,7 +45,7 @@ editor, previews changes, applies, reloads), not merely a CLI proof-of-concept.
 
 | Refactoring | Status | Difficulty | Notes |
 |---|---|---|---|
-| **Extract Method** | `[x]` | **Hard** | v1 = in-params + single `Result` output; refuses on 2+ outputs / escaping control flow. Builds the general-CFG **liveness** pass (reusable), the CLI verb, and full IDE integration. Spec: `docs/superpowers/specs/` (this milestone). (CLI + IDE wired; manual IDE smoke pending; v1 = value in-params + single Result) |
+| **Extract Method** | `[x]` v0.85 | **Hard** | v1 = single-file, value in-params + single `Result` output; REFUSES on 2+ outputs / conditional escape / escaping control flow / unknown types. CLI verb + IDE Ctrl+Alt+M, smoke-verified in the live IDE 2026-07-05. Built the reusable general-CFG liveness pass (`DRagLint.Analysis.Liveness.pas`). Spec: `docs/superpowers/specs/2026-07-03-extract-method-design.md`. |
 
 ---
 
