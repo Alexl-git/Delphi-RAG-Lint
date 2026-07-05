@@ -4853,9 +4853,18 @@ var
   ProjFindings: TArray<TLintFinding>        ;
   F           : TLintFinding                ;
   DefDisabled : TArray<string>              ;
+  EffPath     : string                      ;
 begin
   DefDisabled:= nil;
-  if (AArgs.Path = '') and (AArgs.ProjectPath = '') then
+  { AutoFix Chunk 1: accept --file <F> as an alias for the positional <path>.
+    The AutoFix spec's fix contract and the IDE spawn (Task 7) both invoke
+    `lint --file <FCurrentFile> --fix ...`, but lint otherwise reads its target
+    positionally into AArgs.Path. Positional path wins if both are supplied;
+    otherwise fall back to AArgs.InFile (--file/--in). Computed once and used for
+    every path check below so the whole `lint` command honours --file, not just
+    the fix path. }
+  EffPath:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
+  if (EffPath = '') and (AArgs.ProjectPath = '') then
   begin
     Writeln('ERROR: lint requires a <path> or --project <file.dproj>');
     Exit   (2                                                        );
@@ -4911,7 +4920,7 @@ begin
       Findings:= Findings + ProjFindings;
     end;
   end;
-  if AArgs.Path <> '' then
+  if EffPath <> '' then
   begin
     Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
     try
@@ -4988,11 +4997,11 @@ begin
         ["separate-query-from-modifier"] or --rule separate-query-from-modifier. }
       if AArgs.Rule <> 'separate-query-from-modifier' then
         DefDisabled:= DefDisabled + ['separate-query-from-modifier'];
-      if TFile.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFile(AArgs.Path)
-      else if TDirectory.Exists(AArgs.Path) then Findings:= Findings + Linter.LintFolder(AArgs.Path, True)
+      if TFile.Exists(EffPath) then Findings:= Findings + Linter.LintFile(EffPath)
+      else if TDirectory.Exists(EffPath) then Findings:= Findings + Linter.LintFolder(EffPath, True)
       else
       begin
-        Writeln('ERROR: path does not exist: ', AArgs.Path);
+        Writeln('ERROR: path does not exist: ', EffPath);
         Exit(2);
       end;
     finally
@@ -5001,81 +5010,81 @@ begin
     { v0.46: AST checks that need no DB -- single .pas file only. The plugin's
       lint provider runs `lint <buffer>` with no --rule, so all of these surface
       as live edit-time diagnostics. }
-    if TFile.Exists(AArgs.Path) and (SameText(ExtractFileExt(AArgs.Path), '.pas') or SameText(ExtractFileExt(AArgs.Path), '.inc')) then
+    if TFile.Exists(EffPath) and (SameText(ExtractFileExt(EffPath), '.pas') or SameText(ExtractFileExt(EffPath), '.inc')) then
     begin
       var Cfg: TLintConfig:= LoadLintConfig(AArgs);
       { unused local variables (H2164) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'unused-local') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'unused-local') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(EffPath);
       { syntax errors (tree-sitter ERROR/MISSING) -- this is what makes a typed
         syntax error show up in the editor like the IDE's Error Insight. }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'syntax-error') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'syntax-error') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors(EffPath);
       { unbalanced begin/end (a common edit-time mistake) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'unbalanced-begin-end') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'unbalanced-begin-end') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd(EffPath);
       { v0.47: raise inside a finally block (masks the in-flight exception) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'raise-in-finally') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'raise-in-finally') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally(EffPath);
       { v0.47: unreachable code after Exit/raise/Break/Continue/Halt }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'code-after-exit') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'code-after-exit') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit(EffPath);
       { v0.47: Exit/Break/Continue/Halt inside a finally block }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'control-flow-in-finally') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'control-flow-in-finally') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally(EffPath);
       { v0.47: constructor/destructor without an inherited call (one walk emits both ids) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'missing-inherited-ctor') or (AArgs.Rule = 'missing-inherited-dtor') then
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(AArgs.Path) do
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(EffPath) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.48: routine size/complexity metrics (conservative defaults: params>7, locals>25, body>120 lines, nesting>5) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-parameters') or (AArgs.Rule = 'too-many-locals') or (AArgs.Rule = 'method-too-long') or (AArgs.Rule = 'deep-nesting') then
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(AArgs.Path,
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(EffPath,
             Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25),
             Cfg.ThresholdFor('method-too-long', 120), Cfg.ThresholdFor('deep-nesting', 5)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map }
       if (AArgs.Rule = '') or (AArgs.Rule = 'float-equality-comparison') or (AArgs.Rule = 'freeandnil-on-interface') or (AArgs.Rule = 'win64-pointer-cast') or (AArgs.Rule = 'redundant-cast') or (AArgs.Rule = 'unsafe-typecast-without-is') or (AArgs.Rule = 'exhaustive-enum-case') or (AArgs.Rule = 'lossy-cast') or (AArgs.Rule = 'nativeint-truncation') or (AArgs.Rule = 'abstract-method-instantiation') or (AArgs.Rule = 'length-zero-compare') or (AArgs.Rule = 'interface-object-mixing') then
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(AArgs.Path) do
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.49: FireDAC Open/ExecSQL vs SQL-kind mismatch }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'firedac-open-execsql-mismatch') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'firedac-open-execsql-mismatch') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch(EffPath);
       { v0.50: object created + freed without try-finally (leak on exception) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'unprotected-object-free') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'unprotected-object-free') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree(EffPath);
       { v0.52: use of an object after X.Free (dangling reference) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'use-after-free') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'use-after-free') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree(EffPath);
       { v0.56: UI access inside a TThread.Execute (not thread-safe) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'ui-access-in-thread') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'ui-access-in-thread') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread(EffPath);
       { v0.61: unit-level global variable whose type is the form class -- potential leak }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'global-form-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'global-form-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars(EffPath);
       { v0.80: any unit-level writable var -- Fowler "Global Data" refactoring smell (#14) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'mutable-global-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'mutable-global-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(EffPath);
       { v0.83: value-returning function that also mutates a field -- Command-Query Separation (OFF) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'separate-query-from-modifier') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'separate-query-from-modifier') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(EffPath);
       { v0.63: WinExec/ShellExecute/CreateProcess with a non-literal command -- injection risk }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'unsafe-shellexecute') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'unsafe-shellexecute') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec(EffPath);
       { v0.63: concatenated path to a file API -- path traversal risk }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'path-traversal') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'path-traversal') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal(EffPath);
       { v0.63: loop whose first body statement is Exit/Break/raise -- runs at most once }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'loop-executes-at-most-once') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'loop-executes-at-most-once') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce(EffPath);
       { v0.63: Format() specifier/argument count + literal type mismatch (one walk, two ids) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'format-argument-count') or (AArgs.Rule = 'format-specifier-type-mismatch') then
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall(AArgs.Path) do
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall(EffPath) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.63: try..except that swallows the exception (no raise/log/HandleException) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'try-except-swallowed') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'try-except-swallowed') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(EffPath);
       { v0.63: dataset opened without a matching Close in a finally block }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'dataset-open-without-close') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'dataset-open-without-close') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen(EffPath);
       { v0.63: critical section acquired without a matching Leave/Release in finally }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'criticalsection-not-released') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'criticalsection-not-released') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(EffPath);
       { v0.63: routine with more than 5 Exit statements }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-exit-points') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(AArgs.Path, Cfg.ThresholdFor('too-many-exit-points', 5));
+      if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-exit-points') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(EffPath, Cfg.ThresholdFor('too-many-exit-points', 5));
       { v0.63: cyclomatic complexity over 15 }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'cyclomatic-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(AArgs.Path, Cfg.ThresholdFor('cyclomatic-complexity', 15));
-      if (AArgs.Rule = '') or (AArgs.Rule = 'cognitive-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(AArgs.Path, Cfg.ThresholdFor('cognitive-complexity', 25));
+      if (AArgs.Rule = '') or (AArgs.Rule = 'cyclomatic-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(EffPath, Cfg.ThresholdFor('cyclomatic-complexity', 15));
+      if (AArgs.Rule = '') or (AArgs.Rule = 'cognitive-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(EffPath, Cfg.ThresholdFor('cognitive-complexity', 25));
       { v0.63: virtual/dynamic method called from a constructor of its own class }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'virtual-method-in-constructor') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(AArgs.Path);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'virtual-method-in-constructor') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(EffPath);
       { M2: flow-sensitive checks (definite-assignment etc.); no store on the bare lint path }
-      for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(AArgs.Path) do
+      for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath) do
         if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.68: naming-convention prefix rules (config-driven, no store on bare lint path) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'type-name-prefix') or (AArgs.Rule = 'field-name-prefix') or (AArgs.Rule = 'param-name-prefix') or
          (AArgs.Rule = 'method-pascalcase') or (AArgs.Rule = 'const-casing') or (AArgs.Rule = 'local-var-casing') or (AArgs.Rule = 'unit-name-matches-file') or
          (AArgs.Rule = 'reserved-word-casing') or (AArgs.Rule = 'hungarian-or-short-identifier') then
-        for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(AArgs.Path, Cfg.Naming) do
+        for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(EffPath, Cfg.Naming) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set)
         v0.70: + redundant-parentheses + commented-out-code
@@ -5090,7 +5099,7 @@ begin
         or (AArgs.Rule = 'insecure-temp-file') or (AArgs.Rule = 'multiple-statements-per-line')
         or (AArgs.Rule = 'magic-literal') or (AArgs.Rule = 'boolean-flag-parameter') or (AArgs.Rule = 'message-chain')
         or (AArgs.Rule = 'public-writable-field') or (AArgs.Rule = 'loop-control-flag') or (AArgs.Rule = 'default-encoding-io') then
-        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(AArgs.Path,
+        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(EffPath,
             Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4),
             Cfg.ThresholdFor('unit-too-large', 2000), Cfg.ThresholdFor('message-chain', 4)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
@@ -5098,7 +5107,7 @@ begin
         lint-all uses CheckProject instead (LATER task) so within-file clones are
         not double-reported. }
       if (AArgs.Rule = '') or (AArgs.Rule = 'duplicate-code') then
-        for F in DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check(AArgs.Path,
+        for F in DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check(EffPath,
             Cfg.ThresholdFor('duplicate-code', 90)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { Free cached tree after single-file lint }
