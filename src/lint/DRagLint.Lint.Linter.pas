@@ -12,6 +12,7 @@ uses
   , TreeSitter
   , TreeSitterLib
   , DRagLint.Core  .Model
+  , DRagLint.Core  .Encoding
   , DRagLint.Parser.Delphi13
   , DRagLint.Lint  .QueryRules
   ;
@@ -445,7 +446,10 @@ begin
   Tree  := nil;
   Parser:= nil;
   try
-    Source:= TFile.ReadAllBytes(AFilePath);
+    // v0.86 (Task 3): transcode ANSI/UTF-16 sources to valid UTF-8 before the
+    // parse/slice pipeline (both assume UTF-8). This is the direct lint/lint-all
+    // path; without it a valid CP1252 file (SOFTWID class) errored here.
+    Source:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFilePath));
     { Pick the grammar by extension: .dfm -> DFM grammar, everything else -> Pascal.
       Parsing a .dfm with the Pascal grammar produced a spurious parser-error per
       set-literal/root object (see CollectDfmParseErrors). }

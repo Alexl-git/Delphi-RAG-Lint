@@ -105,6 +105,7 @@
         <DCCReference Include="..\..\third_party\delphi-tree-sitter\TreeSitter.Query.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.Model.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.Interfaces.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.Encoding.pas"/>
         <DCCReference Include="..\core\DRagLint.Wiring.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.Indexer.pas"/>
         <DCCReference Include="..\storage\DRagLint.Storage.Schema.pas"/>

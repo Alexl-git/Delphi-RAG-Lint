@@ -12,6 +12,7 @@ uses
   , System  .Generics.Collections
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
+  , DRagLint.Core    .Encoding
   , DRagLint.Index   .Glob
   , DRagLint.Index   .IgnoreFiles
   , DRagLint.Parser  .DocComments
@@ -207,7 +208,8 @@ end; // function
 procedure TIndexer.IndexFile(const AFilePath: string);
 var
   Parser        : IParser                    ;
-  Source        : TBytes                     ;
+  Source        : TBytes                     ; { raw on-disk bytes: sha/mtime/up-to-date }
+  Utf8          : TBytes                     ; { v0.86: transcoded UTF-8 fed to parser/slices }
   SourceText    : string                     ;
   Sha           : string                     ;
   Mtime         : Int64                      ;
@@ -245,6 +247,10 @@ begin
     end;
   end;
   Source:= TFile.ReadAllBytes(AFilePath);
+  // Sha/Mtime/up-to-date stay computed over the RAW on-disk bytes so file
+  // identity + the incremental-skip contract are byte-identical to before the
+  // v0.86 encoding fix (changing the sha basis would invalidate every already
+  // indexed file's stored sha -> forced mass reindex).
   Sha:= THashSHA2.GetHashString(TEncoding.ANSI.GetString(Source));
   Mtime:= DateTimeToUnix(TFile.GetLastWriteTime(AFilePath), False);
   // v0.4: incremental skip. If the file's already in the DB with the same
@@ -255,10 +261,18 @@ begin
     Inc(FSkippedUpToDate);
     Exit;
   end;
-  ParseRes:= Parser.Parse(Source, AFilePath);
+  // v0.86 (Task 3): transcode ANSI/UTF-16 sources to valid UTF-8 before the
+  // parse/slice pipeline (which assumes UTF-8). A valid CP1252 file (0xAE/0xA9
+  // in a resourcestring -- the SOFTWID.PAS class) was SKIPPED here with
+  // EEncodingError; now it parses. Downstream slice helpers see UTF-8.
+  Utf8:= EnsureUtf8Bytes(Source);
+  ParseRes:= Parser.Parse(Utf8, AFilePath);
   // v0.16: scan doc-comment regions from the source text once per file
   // so we can associate them with symbols by line proximity below.
-  SourceText:= TEncoding.ANSI.GetString(Source);
+  // Decode from the TRANSCODED bytes (what the parser saw) so doc-comment text
+  // and the symbol line positions agree; for pure-ASCII files this is identical
+  // to the prior ANSI decode of the raw bytes.
+  SourceText:= TEncoding.UTF8.GetString(Utf8);
   DocRegions:= TDocCommentScanner.Scan(SourceText);
   try
     Token:= FStore.OpenFileTx(AFilePath, Mtime, Sha, Parser.LanguageName);

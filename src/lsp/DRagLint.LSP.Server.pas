@@ -13,6 +13,7 @@ uses
   , TreeSitterLib
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
+  , DRagLint.Core    .Encoding
   , DRagLint.Storage .SQLite
   , DRagLint.Parser  .Delphi13
   , DRagLint.Hover   .Renderer
@@ -436,7 +437,10 @@ var
 begin
   Result:= '';
   if not TFile.Exists(APath) then Exit;
-  Source:= TFile.ReadAllBytes(APath);
+  // v0.86 (Task 3): transcode ANSI/UTF-16 sources to valid UTF-8 before the
+  // parse/slice pipeline (both assume UTF-8); a valid CP1252 file (SOFTWID
+  // class) errored here otherwise.
+  Source:= EnsureUtf8Bytes(TFile.ReadAllBytes(APath));
   Parser:= nil;
   Tree  := nil;
   try

@@ -37,7 +37,7 @@ function tree_sitter_delphi13: PTSLanguage; cdecl; external 'tree-sitter-delphi1
 implementation
 
 uses
-  System.IOUtils;
+  System.IOUtils, DRagLint.Core.Encoding;
 
 class function TAstParseCache.Get(const AFile: string): TParsedFile;
 var
@@ -53,7 +53,10 @@ begin
   PF.Tree:= nil;
   if TFile.Exists(AFile) then
   begin
-    PF.Src:= TFile.ReadAllBytes(AFile);
+    // v0.86 (Task 3): transcode ANSI/UTF-16 sources to valid UTF-8 up front.
+    // PF.Src is fed to tree-sitter below AND sliced by every AST rule
+    // downstream (all assume UTF-8), so transcoding here fixes them all.
+    PF.Src:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));
     Parser:= TTSParser.Create;
     try
       Parser.Language:= tree_sitter_delphi13;

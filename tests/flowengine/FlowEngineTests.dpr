@@ -13,6 +13,7 @@ uses
   System.Generics.Collections,
   TreeSitterLib in '..\..\third_party\delphi-tree-sitter\TreeSitterLib.pas',
   TreeSitter in '..\..\third_party\delphi-tree-sitter\TreeSitter.pas',
+  DRagLint.Core.Encoding in '..\..\src\core\DRagLint.Core.Encoding.pas',
   DRagLint.Diagnostics.ParseCache in '..\..\src\diagnostics\DRagLint.Diagnostics.ParseCache.pas',
   DRagLint.Analysis.Cfg in '..\..\src\analysis\DRagLint.Analysis.Cfg.pas',
   DRagLint.Analysis.DataFlow in '..\..\src\analysis\DRagLint.Analysis.DataFlow.pas',
