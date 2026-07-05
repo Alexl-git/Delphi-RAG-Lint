@@ -4455,9 +4455,9 @@ end;
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
   BuildAutofixEdits (kept in lockstep; a guard test asserts they agree). }
 const
-  FIXABLE_RULE_IDS: array[0..4] of string =
+  FIXABLE_RULE_IDS: array[0..5] of string =
     ('self-assignment', 'redundant-parentheses', 'redundant-cast',
-     'redundant-not-not', 'reserved-word-casing');
+     'redundant-not-not', 'reserved-word-casing', 'redundant-assigned-free');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var S: string;
@@ -4547,7 +4547,8 @@ end;
 ///   redundant-not-not     -> strip the two leading 'not' keywords;
 ///   redundant-as-tobject  -> strip the ' as TObject' suffix;
 ///   boolean-comparison-true -> X=True/X&lt;&gt;False->X; X=False/X&lt;&gt;True->not X;
-///   reserved-word-casing  -> lowercase the keyword token.
+///   reserved-word-casing  -> lowercase the keyword token;
+///   redundant-assigned-free -> drop the 'if Assigned(X) then' guard.
 /// AFixableCount returns how many findings produced a fix. Rules without a fix
 /// are silently skipped.</summary>
 /// <remarks>Deliberately conservative: only rules whose fix is an exact,
@@ -4810,6 +4811,49 @@ begin
             E.Text    := LowerCase(Span);
             Result:= Result + [E];
             Inc(AFixableCount);
+          end;
+        end;
+      end
+      else if SameText(F.RuleId, 'redundant-assigned-free')
+              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        { span covers 'if Assigned(X) then <stmt>;'. Take the text after the
+          delimited 'then' keyword (whole word, not a substring of an identifier)
+          to end of span. The Assigned guard is redundant -- Free is nil-safe. }
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          var Depth: Integer:= 0;
+          var ThenEnd: Integer:= 0;  { 1-based index one past the 'then' }
+          var LS: string:= LowerCase(Span);
+          for var K: Integer:= 1 to Length(Span) - 3 do
+          begin
+            var Ch: Char:= Span[K];
+            if (Ch = '(') or (Ch = '[') then Inc(Depth)
+            else if (Ch = ')') or (Ch = ']') then Dec(Depth)
+            else if (Depth = 0)
+                    and (Copy(LS, K, 4) = 'then')
+                    and ((K = 1) or (Span[K-1] <= ' ') or (Span[K-1] = ')'))
+                    and ((K + 4 > Length(Span)) or (Span[K+4] <= ' ')) then
+            begin ThenEnd:= K + 4; Break; end;
+          end;
+          if ThenEnd > 0 then
+          begin
+            Repl:= TrimLeft(Copy(Span, ThenEnd, MaxInt));
+            if Repl <> '' then
+            begin
+              E:= Default(TTextEdit);
+              E.FilePath:= F.FilePath;
+              E.Kind    := tekReplaceInLine;
+              E.Line    := F.StartLine;
+              E.Col     := F.StartCol;
+              E.EndCol  := F.EndCol;
+              E.Text    := Repl;
+              Result:= Result + [E];
+              Inc(AFixableCount);
+            end;
           end;
         end;
       end;

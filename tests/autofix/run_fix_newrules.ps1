@@ -36,5 +36,14 @@ Assert-Fix 'boolean_comparison.pas' 14 'boolean-comparison-true' 'if not Flag th
 Assert-Fix 'boolean_comparison.pas' 15 'boolean-comparison-true' 'if not Flag then Flag := False;'    '[bc:<>True]'
 Assert-Fix 'boolean_comparison.pas' 16 'boolean-comparison-true' 'if not (A and B) then Flag := False;' '[bc:compound]'
 Assert-Fix 'reserved_word_casing.pas' 12 'reserved-word-casing' 'if Flag then Flag := False;' '[kw-casing]'
+Assert-Fix 'redundant_assigned_free.pas' 16 'redundant-assigned-free' 'Obj.Free;' '[assigned-free]'
+
+# guard: the 'Authenticated' line (contains substring 'then') must be untouched by the line-16 fix
+$scratch18 = Join-Path C:\TEMP 'draglint_newrules_redundant_assigned_free'
+$t18 = Join-Path $scratch18 'redundant_assigned_free.pas'
+if (Test-Path $t18) {
+  $l18 = ([IO.File]::ReadAllLines($t18))[17].Trim()
+  Check '[assigned-free] line 18 (Authenticated) untouched' ($l18 -eq 'if Authenticated then Obj := nil;')
+}
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
