@@ -505,7 +505,14 @@ end; // function
 /// within that form that initiates the chain; returns True.</summary>
 /// <remarks>False positives are possible when method names are non-unique across
 /// the codebase; accepted trade-off for unlimited-depth traversal without full
-/// type inference.</remarks>
+/// type inference.
+/// v4 Layer 1 (interface-method dispatch) needs NO extra code here: the caller
+/// query below matches by bare method NAME with no owner-class filter, so a call
+/// site that dispatches through an interface reference (APlan.EditForm, where the
+/// launch body lives in the concrete C.EditForm) is already found -- the concrete
+/// method and every interface call site share the same name_text, and the call
+/// site's enclosing_symbol_id resolves to the calling form. See the query comment
+/// below and .superpowers/sdd/task-2-report.md (branch (a) diagnosis).</remarks>
 function FindNearestFormCaller(
   AStore       : TSQLiteSymbolStore;
   const AOwnerClass, ARoutine: string;
@@ -534,6 +541,21 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= AStore.GetConnection;
+    { Name-only caller query: match by bare method name_text, NOT by receiver
+      type or owner class. This is what makes the v4 Layer 1 interface-method
+      bridge work with no extra machinery: when the launch body lives in a
+      concrete C.M (e.g. TDirectPlan4.EditThing constructs the editor form) but
+      the call site dispatches through an interface reference (APlan.EditThing in
+      the calling form), the interface call site is indexed as a plain 'EditThing'
+      ref whose enclosing_symbol_id resolves to the calling form's method. Because
+      this query keys on name_text alone, that interface-dispatch call site is
+      already returned here -- no HeritageInterfaces / type_ancestors lookup is
+      needed (would be dead code; YAGNI). The same holds for the Layer 2 hook
+      continuation (Task 3): once the hook edge is synthesized, the fan-in lands
+      on THookPlan4.EditThing and this same name walk carries it up to the form.
+      (Trade-off: name-only matching can over-match a same-named method on an
+      unrelated class -- the accepted false-positive noted in <remarks> above;
+      a receiver-type index (spec D5.1) would tighten it if that ever bites.) }
     Q.SQL.Text:=
       'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
       'FROM refs r JOIN files f ON f.id = r.file_id ' +
