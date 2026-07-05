@@ -62,6 +62,7 @@ uses
   , System.Classes
   , System.JSON
   , System.IOUtils
+  , DragLint.Plugin.Telemetry
   ;
 
 { ---- module-level singleton ---- }
@@ -108,19 +109,35 @@ end; // function
 { ---- RunAndCaptureSurface: shell out to drag-lint surface ---- }
 
 { We cannot call Editor.RunAndCaptureStdout from here (circular dep).
-  Duplicate the minimal spawn logic instead. }
+  Duplicate the minimal spawn logic instead.
+
+  v0.86 (spec Finding 1): stdout and stderr used to share ONE pipe
+  (SI.hStdOutput = SI.hStdError = WritePipe), so any stale-exe startup
+  chatter or error text landed IN the JSON stream ParseOutlineJson has to
+  parse. stderr now gets its OWN pipe: stdout is drained first (unchanged --
+  the outline JSON is the thing we actually need and can be arbitrarily
+  large), then stderr is drained into a small side buffer once the child has
+  exited. This is safe from deadlock only because outline's stderr is
+  expected to be tiny (a few diagnostic lines at most) and comfortably fits
+  the pipe's kernel buffer without the child blocking on a full-buffer write
+  while we're still busy reading stdout; see LspClient.pas for the general
+  two-stream case, which this unit intentionally does not need. }
 function RunAndCaptureSurface(const ACmdLine: string; out AOutput: string): Boolean;
 var
-  SA       : TSecurityAttributes       ;
-  ReadPipe : THandle                   ;
-  WritePipe: THandle                   ;
-  SI       : TStartupInfoW             ;
-  PI       : TProcessInformation       ;
-  Buf      : array[0..4095] of AnsiChar;
-  BytesRead: DWORD                     ;
-  ExitCode : DWORD                     ;
-  WideCmd  : string                    ;
-  SB       : TStringBuilder            ;
+  SA        : TSecurityAttributes       ;
+  ReadPipe  : THandle                   ;
+  WritePipe : THandle                   ;
+  ReadErr   : THandle                   ;
+  WriteErr  : THandle                   ;
+  SI        : TStartupInfoW             ;
+  PI        : TProcessInformation       ;
+  Buf       : array[0..4095] of AnsiChar;
+  BytesRead : DWORD                     ;
+  ExitCode  : DWORD                     ;
+  WideCmd   : string                    ;
+  SB        : TStringBuilder            ;
+  ErrText   : string                    ;
+  ErrTail   : string                    ;
 begin
   Result := False;
   AOutput:= '';
@@ -130,39 +147,72 @@ begin
   if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then Exit;
   try
     SetHandleInformation(ReadPipe, HANDLE_FLAG_INHERIT, 0);
-    FillChar(SI, SizeOf(SI), 0);
-    SI.cb:= SizeOf(SI);
-    SI.dwFlags   := STARTF_USESTDHANDLES;
-    SI.hStdOutput:= WritePipe;
-    SI.hStdError := WritePipe;
-    SI.hStdInput:= GetStdHandle(STD_INPUT_HANDLE);
-    FillChar(PI, SizeOf(PI), 0);
-    WideCmd:= ACmdLine;
-    UniqueString(WideCmd);
-    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
-    begin
-      CloseHandle(WritePipe);
-      Exit;
-    end;
-    CloseHandle(WritePipe);
-    SB:= TStringBuilder.Create;
+    if not CreatePipe(ReadErr, WriteErr, @SA, 0) then Exit;
     try
-      repeat
-        BytesRead:= 0;
-        if not ReadFile(ReadPipe, Buf[0], SizeOf(Buf) - 1, BytesRead, nil) then Break;
-        if BytesRead = 0 then Break;
-        Buf[BytesRead]:= #0;
-        SB.Append(string(AnsiString(Buf)));
-      until False;
-      AOutput:= SB.ToString;
+      SetHandleInformation(ReadErr, HANDLE_FLAG_INHERIT, 0);
+      FillChar(SI, SizeOf(SI), 0);
+      SI.cb:= SizeOf(SI);
+      SI.dwFlags   := STARTF_USESTDHANDLES;
+      SI.hStdOutput:= WritePipe;
+      SI.hStdError := WriteErr;
+      SI.hStdInput:= GetStdHandle(STD_INPUT_HANDLE);
+      FillChar(PI, SizeOf(PI), 0);
+      WideCmd:= ACmdLine;
+      UniqueString(WideCmd);
+      if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
+      begin
+        CloseHandle(WritePipe);
+        CloseHandle(WriteErr );
+        Exit;
+      end;
+      CloseHandle(WritePipe);
+      CloseHandle(WriteErr );
+      SB:= TStringBuilder.Create;
+      try
+        repeat
+          BytesRead:= 0;
+          if not ReadFile(ReadPipe, Buf[0], SizeOf(Buf) - 1, BytesRead, nil) then Break;
+          if BytesRead = 0 then Break;
+          Buf[BytesRead]:= #0;
+          SB.Append(string(AnsiString(Buf)));
+        until False;
+        AOutput:= SB.ToString;
+      finally
+        SB.Free;
+      end;
+      WaitForSingleObject(PI.hProcess, 15000   );
+      GetExitCodeProcess (PI.hProcess, ExitCode);
+
+      { Drain stderr AFTER stdout + the wait -- by now the child has exited
+        (or been given up on) so its stderr write end is closed/quiescent
+        and this loop cannot block indefinitely. }
+      ErrText:= '';
+      SB:= TStringBuilder.Create;
+      try
+        repeat
+          BytesRead:= 0;
+          if not ReadFile(ReadErr, Buf[0], SizeOf(Buf) - 1, BytesRead, nil) then Break;
+          if BytesRead = 0 then Break;
+          Buf[BytesRead]:= #0;
+          SB.Append(string(AnsiString(Buf)));
+        until False;
+        ErrText:= SB.ToString;
+      finally
+        SB.Free;
+      end;
+      if (ExitCode <> 0) and (ErrText <> '') then
+      begin
+        ErrTail:= ErrText;
+        if Length(ErrTail) > 300 then ErrTail:= Copy(ErrTail, Length(ErrTail) - 299, 300);
+        DLT('structure', 'outline stderr: ' + ErrTail);
+      end;
+
+      CloseHandle(PI.hProcess);
+      CloseHandle(PI.hThread );
+      Result:= True;
     finally
-      SB.Free;
-    end;
-    WaitForSingleObject(PI.hProcess, 15000   );
-    GetExitCodeProcess (PI.hProcess, ExitCode);
-    CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread );
-    Result:= True;
+      CloseHandle(ReadErr);
+    end; // try
   finally
     CloseHandle(ReadPipe);
   end; // try
@@ -172,20 +222,36 @@ end; // function
 { JSON is an array of objects with keys: kind, name, qname, line, signature,
   modifiers. }
 
+{ v0.86 (spec Finding 1): a STALE Win32 drag-lint.exe prints a startup preamble
+  (e.g. "loaded defaults"/"FTS5 probe" lines) plus a DROP-TRIGGER block on
+  stdout BEFORE the JSON array, and RunAndCaptureSurface historically merged
+  stderr into the same pipe -- so the raw output can have non-JSON text ahead
+  of (or after) the "[...]" array. Slice from the first '[' to the last ']'
+  before handing the text to ParseJSONValue so the parse is tolerant of that
+  noise regardless of its source. Task 1 fixed the exe resolver to prefer
+  Win64 by default; this is defense in depth on the plugin side. }
 function ParseOutlineJson(const AOutput: string): TArray<TSymbolInfo>;
 var
-  Root: TJSONValue        ;
-  Arr : TJSONArray        ;
-  Obj : TJSONObject       ;
-  S   : TSymbolInfo       ;
-  List: TList<TSymbolInfo>;
-  i   : Integer           ;
+  Root     : TJSONValue        ;
+  Arr      : TJSONArray        ;
+  Obj      : TJSONObject       ;
+  S        : TSymbolInfo       ;
+  List     : TList<TSymbolInfo>;
+  i        : Integer           ;
+  ParseText: string             ;
+  PosOpen  : Integer            ;
+  PosClose : Integer            ;
 begin
   List:= TList<TSymbolInfo>.Create;
   try
+    ParseText:= AOutput;
+    PosOpen  := Pos('[', AOutput);
+    PosClose := LastDelimiter(']', AOutput);
+    if (PosOpen > 0) and (PosClose > PosOpen) then
+      ParseText:= Copy(AOutput, PosOpen, PosClose - PosOpen + 1);
     Root:= nil;
     try
-      Root:= TJSONObject.ParseJSONValue(AOutput);
+      Root:= TJSONObject.ParseJSONValue(ParseText);
     except
       Root:= nil;
     end;

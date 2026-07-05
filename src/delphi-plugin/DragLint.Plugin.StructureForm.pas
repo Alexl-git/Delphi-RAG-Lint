@@ -43,6 +43,8 @@ uses
   , System.StrUtils
   , System.RegularExpressions
   , System.IOUtils
+  , System.Generics.Collections
+  , System.Generics.Defaults
   , Vcl.ComCtrls
   , Vcl.StdCtrls
   , Vcl.ExtCtrls
@@ -395,15 +397,16 @@ end;
 
 procedure TDragLintStructureForm.BuildTree(const AFilter: string);
 var
-  RootDiag: TTreeNode          ;
-  RootSym : TTreeNode          ;
-  Node    : TTreeNode          ;
-  ND      : TStructureNodeData ;
-  D       : TDragLintDiagnostic;
-  S       : TSymbolInfo        ;
-  i       : Integer            ;
-  Shown   : Integer            ;
-  Caption : string             ;
+  RootDiag   : TTreeNode          ;
+  RootSym    : TTreeNode          ;
+  Node       : TTreeNode          ;
+  ND         : TStructureNodeData ;
+  D          : TDragLintDiagnostic;
+  S          : TSymbolInfo        ;
+  i          : Integer            ;
+  Shown      : Integer            ;
+  Caption    : string             ;
+  DiagOrder  : TArray<Integer>    ; { indices into FDiags, sorted by (Line, original index) }
 begin
   FTree.Items.BeginUpdate;
   try
@@ -411,12 +414,30 @@ begin
     FTree.Items.Clear;
 
     { --- Diagnostics root (not filtered: diagnostics are about lines/messages,
-          not symbol names) --- }
+          not symbol names) ---
+      v0.86: with ~hundreds of findings per file, CLI/cache order (typically
+      rule-then-file order) is unusable -- display in ascending-line order so
+      the list reads top-to-bottom like the file. FDiags itself is left
+      untouched (CopyDiagnosticsClick and RefreshDiagnosticsOnly both still
+      want the original cache order). TArray.Sort is not guaranteed stable, so
+      we sort an INDEX array instead, comparing by Line and breaking ties by
+      the original index -- that tie-break makes the ordering stable (diags on
+      the same line keep their original relative order) without depending on
+      the sort algorithm's own stability. }
+    SetLength(DiagOrder, Length(FDiags));
+    for i:= 0 to High(DiagOrder) do DiagOrder[i]:= i;
+    TArray.Sort<Integer>(DiagOrder, TComparer<Integer>.Construct(
+      function(const A, B: Integer): Integer
+      begin
+        Result:= FDiags[A].Line - FDiags[B].Line;
+        if Result = 0 then Result:= A - B;
+      end));
+
     RootDiag:= FTree.Items.Add(nil, Format('Diagnostics (%d)', [Length(FDiags)]));
     RootDiag.Data:= nil;
-    for i:= 0 to High(FDiags) do
+    for i:= 0 to High(DiagOrder) do
     begin
-      D:= FDiags[i];
+      D:= FDiags[DiagOrder[i]];
       ND:= TStructureNodeData.Create;
       ND.Line:= D.Line + 1;
       Node:= FTree.Items.AddChild(RootDiag, SeverityPrefix(D.Severity) + Format('(%d) ', [D.Line + 1]) + D.Message);
