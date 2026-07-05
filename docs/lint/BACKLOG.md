@@ -1,24 +1,30 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-05 (LATEST-5) -- **v0.86.0-alpha ship-prep DONE (commit-only). Awaiting controller final review + tag/push/gh-release.**
-> `main` HEAD = this task's commit (VERSION/CHANGELOG/comment fix; see `git log -1`), on top of `a92fa45` (T1-T4 all done +
-> reviewed). VERSION `CLI.pas:6` = `0.86.0-alpha`. **NOT yet tagged/pushed/released** -- the controller runs a final
-> whole-branch review on this commit, then tags `v0.86.0-alpha`, pushes, and `gh release create ... --latest`.
-> **Full battery green on the freshly-built Release win64 exe:** lint 153/153, store 16/16, catalog 29/29, flowengine
-> 43/43, extractmethod-unit 81/81, extract-method e2e 17/17, migrate-v12 8/8, formsmap 18/18, encoding-ingest 12/12,
-> readonly-verbs 21/21. Pre-existing (NOT regressions, unrelated to v0.86): smoke suite FTS5-unavailable + LSP-init-timeout
-> failures (win32 sqlite3.dll lacks FTS5 in that harness path; LSP server startup timing), pipeline "disabled rule drops
-> finding" -- all present before this milestone's Tasks 1-4 too. Zips packed via `build\pack-lint-release.ps1
-> -Version 0.86.0-alpha`; both win64/win32 zip exes confirmed printing `drag-lint 0.86.0-alpha`. Plugin BPL: no plugin
-> source changed since Task 2's commit (`606d659`) -- rebuilt Win32 Debug to confirm 0 errors (same 19 pre-existing hints),
-> then reverted the resulting binary diff (non-deterministic rebuild bytes only) so the shipped BPL/DCP stay exactly
-> Task 2's committed artifact.
-> **>>> NEXT ACTION (controller): final whole-branch review of this commit, then `git tag v0.86.0-alpha` -> push -> `gh
-> release create v0.86.0-alpha` (mirror v0.85 mechanics: full release, win32+win64 zips, `--latest`, notes file).**
-> **>>> AFTER tag/release: USER SMOKE** (brief Step 5) -- restart IDE, Structure tab on BASICSF.pas shows sorted
-> Diagnostics + ~240 Code Elements; reindex from the IDE indexes SOFTWID.PAS (not SKIP); text-search still works after a
-> Structure refresh (FTS5 triggers intact).
-> **After v0.86: Change Signature** (REFACTOR-LIST.md "recommended next") -- new brainstorm -> spec -> plan; reuses
+> ## RESUME 2026-07-05 (LATEST-6) -- **v0.86.0-alpha PUBLISHED (full GitHub release, `--latest`, win32+win64). Milestone COMPLETE.**
+> `main` = `65f317e` (clean, pushed, synced with origin), tag `v0.86.0-alpha` on `65f317e`, GitHub release live + `Latest`
+> (isPrerelease=false): https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.86.0-alpha . VERSION `CLI.pas:6` =
+> `0.86.0-alpha`. **No index-schema change (still v13).** Executed via superpowers:subagent-driven-development, 5 tasks,
+> final whole-branch opus review (READY-WITH-FIXES -> 1 blocking comment fix applied `65f317e` + 1 fast-follow filed).
+> **What shipped (D1-D4):** (D1/T1) shared `DragLint.Plugin.ExeResolver.DragLintExe` -- Win64-default resolution routed
+> through ALL 11 plugin exe-spawn sites (plan named 5; sweep found 11, user approved delegating all; the 32-bit BPL is the
+> only 32-bit artifact). (D2/T2) Structure tab: `ParseOutlineJson` slices first-`[`..last-`]` past CLI preamble noise +
+> separate stderr pipe + line-sorted Diagnostics. (D3/T3) new `DRagLint.Core.Encoding.EnsureUtf8Bytes` (UTF-8 BOM strip /
+> UTF-16 transcode / strict-scan passthrough / CP1252 fallback) at 4 ingest sites (Indexer/ParseCache/Linter/LSP) -- ANSI/
+> UTF-16 sources (SOFTWID.PAS class, 0xAE/0xA9) now INDEX not SKIP + literals text-searchable; sha stays over RAW bytes
+> (no re-index churn). (D4/T4) `TSQLiteSymbolStore.Create(;AReadOnly)` + `IsSchemaCurrent` -- 6 read verbs (outline/query*/
+> find-unit/surface/context/dump-refs) open via `PRAGMA query_only=ON` (NOT OpenMode=ReadOnly, which fails on WAL) -> no
+> DDL-on-read, kills the win32 FTS5-trigger-drop; stale DBs get actionable migrate message. Full battery green (lint 153/
+> store 16/catalog 29/flowengine 43/extractmethod 81+e2e 17/migrate-v12 8/formsmap 18/encoding-ingest 12/readonly-verbs 21).
+> Self-index reindexed incrementally 2026-07-05 (new symbols queryable). SDD ledger: `.superpowers/sdd/progress.md`.
+> **>>> OPEN ITEM 1 (USER, ~5 min): manual IDE smoke.** Close RAD Studio, deploy the BPL (deploy-staged.bat -- note the
+> committed BPL `606d659` already carries T1+T2 fixes; refresh C:\TEMP1\bpl_staging if it's stale before deploying), open
+> BASICSF.pas: Structure tab shows SORTED Diagnostics + ~240 Code Elements (not "0"); run a reindex FROM the IDE -> SOFTWID
+> .PAS indexes (not SKIP); text-search still works after a Structure refresh (FTS5 triggers intact). Report back.
+> **>>> OPEN ITEM 2 (fast-follow, tracked in sec.5): read-only opens for the ~11 analytical read verbs** (hover/impact/
+> usages/slice/cycles/resolve-uses/uses-report/typeat/bench-context/uses-audit/generate-docs) -- still Create+Migrate, would
+> drop FTS5 triggers ONLY on a manual win32 invocation (IDE vector closed by T1; spec D4 scoped to the 6 named verbs).
+> Convert to `OpenReadOnlyStore` (v0.86.1/backlog) to complete the DDL-on-read guarantee.
+> **>>> NEXT MILESTONE: Change Signature** (REFACTOR-LIST.md "recommended next") -- new brainstorm -> spec -> plan; reuses
 > rename's cross-unit apply + Extract Method's liveness pass.
 >
 > --- (prior) ---
