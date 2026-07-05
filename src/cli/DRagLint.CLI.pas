@@ -4991,26 +4991,39 @@ begin
     begin
       { Structured per-finding output so an AI orchestrator can drive fixes
         token-free. Build the JSON from the TARGETED findings, apply (when
-        --apply) writing a .bak unless --no-backup, then emit the array. }
-      if AArgs.Apply and (FixCount > 0) then
-        TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
-      JArr:= TJSONArray.Create;
+        --apply) writing a .bak unless --no-backup, then emit the array.
+        Minor 1: 'applied'/'preview' reflect whether an edit was actually
+        produced for THIS finding (keyed by file|line), not merely that --apply
+        was passed -- a fixable-rule finding whose branch guard produced no edit
+        (or a non-fixable finding) reports applied=false. }
+      var EditedKeys: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
       try
-        for F in Targeted do
-        begin
-          JObj:= TJSONObject.Create;
-          JObj.AddPair('file'   , F.FilePath);
-          JObj.AddPair('line'   , TJSONNumber.Create(F.StartLine));
-          JObj.AddPair('rule'   , F.RuleId);
-          JObj.AddPair('fixable', TJSONBool.Create(IsFixableRule(F.RuleId)));
-          JObj.AddPair('applied', TJSONBool.Create(AArgs.Apply));
-          JObj.AddPair('preview', TJSONBool.Create(not AArgs.Apply));
-          JObj.AddPair('risky'  , TJSONBool.Create(IsRiskyFixRule(F.RuleId)));
-          JArr.AddElement(JObj);
+        for var Ed: TTextEdit in Edits do
+          EditedKeys.AddOrSetValue(LowerCase(Ed.FilePath) + '|' + IntToStr(Ed.Line), True);
+        if AArgs.Apply and (FixCount > 0) then
+          TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
+        JArr:= TJSONArray.Create;
+        try
+          for F in Targeted do
+          begin
+            var HasEdit: Boolean:= EditedKeys.ContainsKey(
+              LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine));
+            JObj:= TJSONObject.Create;
+            JObj.AddPair('file'   , F.FilePath);
+            JObj.AddPair('line'   , TJSONNumber.Create(F.StartLine));
+            JObj.AddPair('rule'   , F.RuleId);
+            JObj.AddPair('fixable', TJSONBool.Create(IsFixableRule(F.RuleId)));
+            JObj.AddPair('applied', TJSONBool.Create(AArgs.Apply and HasEdit));
+            JObj.AddPair('preview', TJSONBool.Create((not AArgs.Apply) and HasEdit));
+            JObj.AddPair('risky'  , TJSONBool.Create(IsRiskyFixRule(F.RuleId)));
+            JArr.AddElement(JObj);
+          end;
+          Writeln(JArr.Format(2));
+        finally
+          JArr.Free;
         end;
-        Writeln(JArr.Format(2));
       finally
-        JArr.Free;
+        EditedKeys.Free;
       end;
       Exit(0);
     end;
