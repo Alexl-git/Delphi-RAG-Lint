@@ -1259,13 +1259,20 @@ begin
       Edges:= BuildEdges(Store, Nodes, ClassToNode);
       try
         RootClass:= DetectRoot(AProjectFile, ARootForm, ClassToNode, Edges);
+        { Schema version lives in schema_meta (written at migrate), NOT in
+          PRAGMA user_version (which the engine never writes -> always 0).
+          Mirror IsSchemaCurrent's query; a missing table/row falls back to 0. }
         var SchemaVer:= 0;
         var Qver:= TFDQuery.Create(nil);
         try
           Qver.Connection:= Store.GetConnection;
-          Qver.SQL.Text  := 'PRAGMA user_version';
-          Qver.Open;
-          if not Qver.IsEmpty then SchemaVer:= Qver.Fields[0].AsInteger;
+          Qver.SQL.Text  := 'SELECT value FROM schema_meta WHERE key = ''schema_version'' LIMIT 1';
+          try
+            Qver.Open;
+            if not Qver.IsEmpty then SchemaVer:= StrToIntDef(Qver.Fields[0].AsString, 0);
+          except
+            SchemaVer:= 0; // pre-schema_meta db
+          end;
         finally
           Qver.Free;
         end;
