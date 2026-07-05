@@ -5,6 +5,56 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.89.0-alpha -- 2026-07-05
+
+AutoFix Chunk 2: widen the fixable-rule set and close the deferred items. Chunk 1
+proved the "Fix it" vertical slice on three rules; this release makes **six more
+rules fixable** (three total -> nine), adds a **risky-fix tag** to contain the one
+behaviour-changing fix, locks the already-correct batch-gating behaviour with a
+test + docs, and closes two Minors. An exhaustive 163-rule sweep confirmed nine is
+the full mechanically-safe set -- the other 154 rules are report-only detectors that
+need type/flow/rename/restructure, so no rule-widening remains. No index-schema
+change (still v13); no IDE code change (the catalog `fixable` flag, "Fix it" menu,
+and auto-fix checkbox all light up automatically from the registry).
+
+### Added
+- **Six more fixable rules** (each = a `FIXABLE_RULE_IDS` entry + a
+  `BuildAutofixEdits` branch + a fixture): `redundant-not-not` (`not not X` -> `X`),
+  `redundant-as-tobject` (`X as TObject` -> `X`), `boolean-comparison-true`
+  (`X = True`/`X <> False` -> `X`; `X = False`/`X <> True` -> `not X`, with a
+  compound-operand paren guard so `(A and B) = False` -> `not (A and B)`),
+  `reserved-word-casing` (lowercase the keyword), `redundant-assigned-free`
+  (`if Assigned(X) then X.Free;` -> `X.Free;`, whole-word `then` match + single-line
+  guard), and `off-by-one-count` (append ` - 1` to the loop bound -- see Risky).
+- **Risky-fix tag.** `off-by-one-count` is behaviour-CHANGING (it assumes a
+  `to List.Count do` loop is a bug). Its fix is still applied by `--fix`, but the
+  `--fix --json` output flags it `"risky": true` and the text preview prints a
+  `[risky]` note so a human/AI reviews before a batch apply. Backed by a new
+  `RISKY_FIX_RULE_IDS` registry + `IsRiskyFixRule`.
+- **`IsSingleTokenAtom` helper** -- decides whether `not X` needs parentheses;
+  treats an already fully-parenthesized operand as atomic (no double-wrapping).
+
+### Changed
+- **Batch fix respects the active rule set (documented + tested).** `lint --fix`
+  and `lint-all --fix` apply quick-fixes only for *enabled* rules: a rule disabled
+  in `drag-lint-lint.json` (or via `--disable`) is filtered out before the fix stage,
+  so its findings are neither reported nor fixed. This already held (findings pass
+  the `ShouldKeep` config filter before the `--fix` block); it is now locked by a
+  regression test and documented in `docs/AI-USAGE.md`.
+
+### Fixed
+- **`--fix --json` `applied` is now per-finding.** It reflects whether an edit was
+  actually produced for that finding (keyed by file|line|rule), not merely that
+  `--apply` was passed -- a fixable-rule finding whose guard yields no edit, or a
+  non-fixable finding targeted with `--apply`, now correctly reports `applied: false`.
+- **`--fix --format sarif`** no longer silently falls back to text: it prints a
+  clear stderr note (`--fix does not support SARIF output; using text output.`) and
+  proceeds. Non-breaking.
+- **Registry desync** -- `redundant-as-tobject` and `boolean-comparison-true` had
+  fix branches but were missing from `FIXABLE_RULE_IDS`, so `rules --json` reported
+  them `fixable: false` and the IDE "Fix it" menu would not offer them. Both are now
+  registered (caught by the fixable-catalog test before release).
+
 ## v0.88.0-alpha -- 2026-07-05
 
 AutoFix Chunk 1: the full "Fix it" vertical slice. drag-lint could already detect

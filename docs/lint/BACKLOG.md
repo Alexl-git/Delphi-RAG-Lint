@@ -1,5 +1,31 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-05 (LATEST-11) -- **v0.89.0-alpha SHIPPED (AutoFix Chunk 2). AutoFix TRACK COMPLETE. NEXT = AutoDocument.**
+> `main` tag `v0.89.0-alpha` (release commit; pushed, origin synced, clean). VERSION CLI.pas:6=`0.89.0-alpha`, **schema still v13**.
+> Executed via superpowers:executing-plans (13 tasks + final whole-branch review: 0 Critical, 1 Important verified-safe [no change],
+> 1 Minor fixed [EditedKeys keyed by file|line|rule]). Plan `docs/superpowers/plans/2026-07-05-autofix-chunk2-plan.md`;
+> spec `docs/superpowers/specs/2026-07-05-autofix-chunk2-widen-fixable-design.md`.
+> **What shipped (AutoFix Chunk 2 = widen the fixable set 3 -> 9, all sweep-verified):** 6 new fixable rules --
+> `redundant-not-not` (not not X -> X), `redundant-as-tobject` (X as TObject -> X), `boolean-comparison-true`
+> (=True/<>False -> X; =False/<>True -> not X, compound-operand paren-guarded via `IsSingleTokenAtom` incl. already-paren'd LHS),
+> `reserved-word-casing` (lowercase keyword), `redundant-assigned-free` (drop `if Assigned(X) then` guard; delimited-then + single-line),
+> `off-by-one-count` (append ' - 1'; **behaviour-CHANGING** -> `risky` tag). + risky-fix registry (`RISKY_FIX_RULE_IDS`+`IsRiskyFixRule`;
+> `--fix --json` emits `risky:true`, text preview prints `[risky]`; Fix-it + Fix-all both apply it). + batch-fix-respects-config
+> (already-correct via FinalizeAndOutput ShouldKeep; now TESTED `run_fix_respects_config.ps1` + DOCUMENTED docs/AI-USAGE.md sec 4b).
+> + Minor 1 (`applied` per-finding, keyed file|line|rule) + Minor 2 (`--fix --format sarif` stderr note + text). Battery green at ship:
+> lint 154/154, store 16/16, autofix 9 suites (single/unit/project/catalog=9/newrules/risky-tag/respects-config/applied-accounting/sarif-note).
+> **3 pre-release bugs caught by tests:** registry desync (as-tobject+boolean-comparison had branches but weren't in FIXABLE_RULE_IDS ->
+> caught by catalog=9 test); double-paren `(A and B) = False` -> `not ((A and B))` (fixed via IsSingleTokenAtom fully-paren'd fast-path);
+> `applied:true` on no-edit findings (Minor 1). LESSON: literal `{`/`}` inside a Pascal `{ }` comment breaks compilation -- the self-lint
+> error-count jump (16 -> 54) is a useful canary; the real Delphi build is the authoritative gate.
+> **>>> AUTOFIX TRACK IS COMPLETE.** The 163-rule sweep (`scratchpad/sweep-result.json`) proved 9/163 is the full mechanically-safe set;
+> the other 154 rules are report-only detectors (need type/flow/rename/restructure). No rule-widening remains.
+> **>>> NEXT TRACK = AutoDocument** (Track 2 in `docs/lint/drag-lint TODO plan.md`): brainstorm -> spec -> plan -> SDD -> publish.
+> Optional deferred Track-1 tail (not blocking): FAutoFix save-time auto-apply control (the per-rule IDE checkbox becomes a live
+> auto-fix-on-save preference); `boolean-comparison-true` "last vs first depth-0 op" is verified-safe for all real inputs (review Important,
+> no change). CADENCE (user, unchanged): publish chunk -> plan next -> handoff -> clear -> implement -> publish.
+>
+> --- (prior) ---
 > ## RESUME 2026-07-05 (LATEST-10) -- **v0.88.0-alpha SHIPPED (AutoFix Chunk 1). NEXT MILESTONE = AutoFix Chunk 2.**
 > `main` tag `v0.88.0-alpha` (pushed, origin synced, clean). VERSION CLI.pas:6=`0.88.0-alpha`, **schema still v13**.
 > GitHub release live (win64 3.67MB + win32 2.94MB zips, `--latest`, isPrerelease=false).

@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.88.0-alpha';
+  VERSION = '0.89.0-alpha';
 
 function Run: Integer;
 
@@ -5001,10 +5001,28 @@ begin
         produced for THIS finding (keyed by file|line), not merely that --apply
         was passed -- a fixable-rule finding whose branch guard produced no edit
         (or a non-fixable finding) reports applied=false. }
+      { Key edits by file|line|rule so two findings on the same line are not
+        conflated -- BuildAutofixEdits emits at most one edit per fixable finding,
+        and the edit's line matches the finding's StartLine, so file|line|rule
+        uniquely maps an emitted edit back to its finding. }
       var EditedKeys: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
       try
-        for var Ed: TTextEdit in Edits do
-          EditedKeys.AddOrSetValue(LowerCase(Ed.FilePath) + '|' + IntToStr(Ed.Line), True);
+        { Edits carry no rule id, so re-derive the edited keys from the Targeted
+          findings whose rule produced a fix: an edit exists at (file, StartLine)
+          AND the rule is fixable. This is exact because each fixable finding emits
+          one edit on its own StartLine. }
+        var EditLineKeys: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+        try
+          for var Ed: TTextEdit in Edits do
+            EditLineKeys.AddOrSetValue(LowerCase(Ed.FilePath) + '|' + IntToStr(Ed.Line), True);
+          for F in Targeted do
+            if IsFixableRule(F.RuleId)
+               and EditLineKeys.ContainsKey(LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine)) then
+              EditedKeys.AddOrSetValue(
+                LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId), True);
+        finally
+          EditLineKeys.Free;
+        end;
         if AArgs.Apply and (FixCount > 0) then
           TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
         JArr:= TJSONArray.Create;
@@ -5012,7 +5030,7 @@ begin
           for F in Targeted do
           begin
             var HasEdit: Boolean:= EditedKeys.ContainsKey(
-              LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine));
+              LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId));
             JObj:= TJSONObject.Create;
             JObj.AddPair('file'   , F.FilePath);
             JObj.AddPair('line'   , TJSONNumber.Create(F.StartLine));
