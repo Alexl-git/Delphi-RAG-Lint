@@ -1,0 +1,7 @@
+# Live-diagnostics buffer snapshot: the IDE plugin writes an unsaved editor
+# buffer to %TEMP%\drag-lint-live-<tickcount>.pas and lints THAT, so the file
+# base name is a synthetic temp that never matches any real unit name. The
+# unit-name-matches-file rule must SKIP such buffers (else it fires on every
+# unsaved edit of every unit -- the SOFTWID.PAS live-lint false positive).
+# Unit name "SoftWid" != file base "drag-lint-live-99999", yet must NOT fire.
+!unit-name-matches-file

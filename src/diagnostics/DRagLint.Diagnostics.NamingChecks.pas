@@ -475,7 +475,14 @@ var
       begin
         var UnitName: string:= Trim(NodeStr(ModNode));
         var FileBase: string:= ChangeFileExt(ExtractFileName(StringReplace(AFile, '/', PathDelim, [rfReplaceAll])), '');
-        if (UnitName <> '') and (not SameText(UnitName, FileBase)) then
+        { Skip the synthetic live-diagnostics buffer: the IDE plugin snapshots an
+          unsaved editor buffer to %TEMP%\drag-lint-live-<tickcount>.pas and lints
+          THAT, so FileBase is a random temp name that never matches any real unit
+          name -- the rule would fire on EVERY unsaved edit of EVERY unit. The
+          saved file (e.g. SOFTWID.PAS) is checked normally. See
+          DragLint.Plugin.LiveDiagnostics 'drag-lint-live-%d.pas'. }
+        if (UnitName <> '') and (not SameText(UnitName, FileBase)) and
+           (not StartsText('drag-lint-live-', FileBase)) then
           EmitAt(ModNode, 'unit-name-matches-file',
             Format('Unit name "%s" does not match file name "%s"',
               [UnitName, FileBase]));
