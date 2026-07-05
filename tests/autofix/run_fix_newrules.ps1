@@ -35,5 +35,6 @@ Assert-Fix 'boolean_comparison.pas' 13 'boolean-comparison-true' 'if Flag then F
 Assert-Fix 'boolean_comparison.pas' 14 'boolean-comparison-true' 'if not Flag then Flag := False;'    '[bc:=False]'
 Assert-Fix 'boolean_comparison.pas' 15 'boolean-comparison-true' 'if not Flag then Flag := False;'    '[bc:<>True]'
 Assert-Fix 'boolean_comparison.pas' 16 'boolean-comparison-true' 'if not (A and B) then Flag := False;' '[bc:compound]'
+Assert-Fix 'reserved_word_casing.pas' 12 'reserved-word-casing' 'if Flag then Flag := False;' '[kw-casing]'
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

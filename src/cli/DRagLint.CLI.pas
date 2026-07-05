@@ -4455,9 +4455,9 @@ end;
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
   BuildAutofixEdits (kept in lockstep; a guard test asserts they agree). }
 const
-  FIXABLE_RULE_IDS: array[0..3] of string =
+  FIXABLE_RULE_IDS: array[0..4] of string =
     ('self-assignment', 'redundant-parentheses', 'redundant-cast',
-     'redundant-not-not');
+     'redundant-not-not', 'reserved-word-casing');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var S: string;
@@ -4546,7 +4546,8 @@ end;
 ///   redundant-cast        -> strip a 'TFoo(x)' cast where x is one identifier;
 ///   redundant-not-not     -> strip the two leading 'not' keywords;
 ///   redundant-as-tobject  -> strip the ' as TObject' suffix;
-///   boolean-comparison-true -> X=True/X&lt;&gt;False->X; X=False/X&lt;&gt;True->not X.
+///   boolean-comparison-true -> X=True/X&lt;&gt;False->X; X=False/X&lt;&gt;True->not X;
+///   reserved-word-casing  -> lowercase the keyword token.
 /// AFixableCount returns how many findings produced a fix. Rules without a fix
 /// are silently skipped.</summary>
 /// <remarks>Deliberately conservative: only rules whose fix is an exact,
@@ -4785,6 +4786,30 @@ begin
               Result:= Result + [E];
               Inc(AFixableCount);
             end;
+          end;
+        end;
+      end
+      else if SameText(F.RuleId, 'reserved-word-casing')
+              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        { span covers the keyword token; keywords are case-insensitive and have no
+          reference sites, so lowercasing the span is a safe local edit. }
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          if (Span <> '') and (Span <> LowerCase(Span)) then
+          begin
+            E:= Default(TTextEdit);
+            E.FilePath:= F.FilePath;
+            E.Kind    := tekReplaceInLine;
+            E.Line    := F.StartLine;
+            E.Col     := F.StartCol;
+            E.EndCol  := F.EndCol;
+            E.Text    := LowerCase(Span);
+            Result:= Result + [E];
+            Inc(AFixableCount);
           end;
         end;
       end;
