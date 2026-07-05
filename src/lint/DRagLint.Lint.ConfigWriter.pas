@@ -112,6 +112,7 @@ begin
   // disabled / enabled arrays
   Result.AddPair('disabled', ArrayToJsonArr(ACfg.DisabledIds));
   Result.AddPair('enabled',  ArrayToJsonArr(ACfg.EnabledIds));
+  Result.AddPair('autofix',  ArrayToJsonArr(ACfg.AutoFixIds));
 
   // severity object
   SevObj:= TJSONObject.Create;
@@ -255,8 +256,8 @@ class procedure TLintConfigWriter.SaveToFile(const APath: string;
   const ACfg: TLintConfig);
 { Writer-owned top-level keys; all others are preserved from an existing file. }
 const
-  OwnedKeys: array[0..4] of string = (
-    'disabled', 'enabled', 'severity', 'thresholds', 'naming');
+  OwnedKeys: array[0..5] of string = (
+    'disabled', 'enabled', 'autofix', 'severity', 'thresholds', 'naming');
 var
   Json   : string;
   i, k   : Integer;

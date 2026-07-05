@@ -5,7 +5,8 @@ program LintConfigTests;
 uses
   System.SysUtils, System.IOUtils,
   DRagLint.Core.Model in '..\..\src\core\DRagLint.Core.Model.pas',
-  DRagLint.Lint.Config in '..\..\src\lint\DRagLint.Lint.Config.pas';
+  DRagLint.Lint.Config in '..\..\src\lint\DRagLint.Lint.Config.pas',
+  DRagLint.Lint.ConfigWriter in '..\..\src\lint\DRagLint.Lint.ConfigWriter.pas';
 
 var
   GPass, GFail: Integer;
@@ -131,11 +132,62 @@ begin
   end;
 end;
 
+procedure TestAutoFix;
+var
+  Cfg, Cfg2: TLintConfig;
+  Path, Json: string;
+begin
+  Path:= TPath.Combine(TPath.GetTempPath, 'dl-autofix-test.json');
+  TFile.WriteAllText(Path,
+    '{ "autofix": ["redundant-cast"] }', TEncoding.UTF8);
+  try
+    // 1. load + read
+    Cfg:= TLintConfig.Load(Path, '');
+    Check('autofix redundant-cast is IsAutoFix=True', Cfg.IsAutoFix('redundant-cast'));
+    Check('autofix self-assignment is IsAutoFix=False', not Cfg.IsAutoFix('self-assignment'));
+
+    // 2. independence from enabled/disabled: autofix does not add to the
+    // enabled list, and adding to enabled does not add to autofix.
+    Check('autofix rule not in EnabledIds', Length(Cfg.EnabledIds) = 0);
+    Cfg.AddEnabled(['redundant-cast']);
+    Check('enabling autofix rule keeps IsAutoFix true', Cfg.IsAutoFix('redundant-cast'));
+    Check('enabling a rule does not add it to autofix',
+      not Cfg.IsAutoFix('some-newly-enabled-rule'));
+    Cfg.AddDisabled(['redundant-cast']);
+    Check('disabling an autofix rule keeps IsAutoFix true (independent)',
+      Cfg.IsAutoFix('redundant-cast'));
+
+    // 3. AddAutoFix + round-trip via writer
+    Cfg2:= TLintConfig.Load(Path, '');
+    Cfg2.AddAutoFix(['self-assignment']);
+    Check('AddAutoFix adds without removing prior', Cfg2.IsAutoFix('redundant-cast'));
+    Check('AddAutoFix adds new id', Cfg2.IsAutoFix('self-assignment'));
+
+    Json:= TLintConfigWriter.ToJson(Cfg2);
+    Check('serialized json contains autofix key', Pos('"autofix"', Json) > 0);
+    Check('serialized json contains redundant-cast', Pos('redundant-cast', Json) > 0);
+    Check('serialized json contains self-assignment', Pos('self-assignment', Json) > 0);
+
+    TFile.WriteAllText(Path, Json, TEncoding.UTF8);
+    Cfg2:= TLintConfig.Load(Path, '');
+    Check('reload after round-trip: redundant-cast still autofix', Cfg2.IsAutoFix('redundant-cast'));
+    Check('reload after round-trip: self-assignment still autofix', Cfg2.IsAutoFix('self-assignment'));
+    Check('reload after round-trip: unrelated rule not autofix',
+      not Cfg2.IsAutoFix('some-other-rule'));
+
+    // 4. AutoFixIds returns both
+    Check('AutoFixIds length 2', Length(Cfg2.AutoFixIds) = 2);
+  finally
+    if TFile.Exists(Path) then TFile.Delete(Path);
+  end;
+end;
+
 begin
   GPass:= 0; GFail:= 0;
   try
     TestConfig;
     TestNaming;
+    TestAutoFix;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

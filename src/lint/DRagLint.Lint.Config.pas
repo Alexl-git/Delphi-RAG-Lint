@@ -35,6 +35,7 @@ type
   strict private
     FDisabled    : TArray<string> ;
     FEnabled     : TArray<string> ;
+    FAutoFix     : TArray<string> ;
     FSevNames    : TArray<string> ; // parallel arrays: rule id -> severity
     FSevValues   : TArray<string> ;
     FThreshNames : TArray<string> ; // parallel arrays: metric name -> value
@@ -67,17 +68,25 @@ type
     function ShouldKeep(const ARuleId: string; ADefaultDisabled: Boolean): Boolean;
     /// <summary>Convenience: ShouldKeep(ARuleId, False).</summary>
     function IsEnabled(const ARuleId: string): Boolean;
+    /// <summary>Returns True when ARuleId is in the configured auto-fix set.
+    /// Independent of enabled/disabled -- a rule may be enabled without being
+    /// auto-fixed, or auto-fixed while off by default.</summary>
+    function IsAutoFix(const ARuleId: string): Boolean;
     /// <summary>Returns the configured threshold for AName, else ADefault.</summary>
     function ThresholdFor(const AName: string; ADefault: Integer): Integer;
     /// <summary>Appends ids to the effective enabled set (for --enable).</summary>
     procedure AddEnabled(const AIds: TArray<string>);
     /// <summary>Appends ids to the effective disabled set (for --disable).</summary>
     procedure AddDisabled(const AIds: TArray<string>);
+    /// <summary>Appends ids to the effective auto-fix set.</summary>
+    procedure AddAutoFix(const AIds: TArray<string>);
     // -- Read accessors (for serialization) --
     /// <summary>Returns a copy of the disabled rule-id list.</summary>
     function DisabledIds: TArray<string>;
     /// <summary>Returns a copy of the enabled rule-id list.</summary>
     function EnabledIds: TArray<string>;
+    /// <summary>Returns a copy of the auto-fix rule-id list.</summary>
+    function AutoFixIds: TArray<string>;
     /// <summary>Returns severity pairs (rule id, severity string).</summary>
     function SeverityPairs: TArray<TPair<string,string>>;
     /// <summary>Returns threshold pairs (metric name, integer value).</summary>
@@ -87,6 +96,8 @@ type
     procedure SetDisabled(const AIds: TArray<string>);
     /// <summary>Replaces the enabled list with AIds.</summary>
     procedure SetEnabled(const AIds: TArray<string>);
+    /// <summary>Replaces the auto-fix list with AIds.</summary>
+    procedure SetAutoFix(const AIds: TArray<string>);
     /// <summary>Sets or updates the severity override for AId.</summary>
     procedure SetSeverityPair(const AId, ASev: string);
     /// <summary>Sets or updates the threshold override for AName.</summary>
@@ -175,6 +186,11 @@ begin
   begin
     if AReplace then FEnabled:= nil;
     for V in (AObj.GetValue('enabled') as TJSONArray) do FEnabled:= FEnabled + [V.Value];
+  end;
+  if AObj.GetValue('autofix') is TJSONArray then
+  begin
+    if AReplace then FAutoFix:= nil;
+    for V in (AObj.GetValue('autofix') as TJSONArray) do FAutoFix:= FAutoFix + [V.Value];
   end;
   if AObj.GetValue('severity') is TJSONObject then
   begin
@@ -268,6 +284,11 @@ begin
   Result:= ShouldKeep(ARuleId, False);
 end;
 
+function TLintConfig.IsAutoFix(const ARuleId: string): Boolean;
+begin
+  Result:= Contains(FAutoFix, ARuleId);
+end;
+
 function TLintConfig.ThresholdFor(const AName: string; ADefault: Integer): Integer;
 var
   i: Integer;
@@ -293,6 +314,14 @@ begin
     if Trim(S) <> '' then FDisabled:= FDisabled + [Trim(S)];
 end;
 
+procedure TLintConfig.AddAutoFix(const AIds: TArray<string>);
+var
+  S: string;
+begin
+  for S in AIds do
+    if Trim(S) <> '' then FAutoFix:= FAutoFix + [Trim(S)];
+end;
+
 function TLintConfig.DisabledIds: TArray<string>;
 begin
   Result:= FDisabled;
@@ -301,6 +330,11 @@ end;
 function TLintConfig.EnabledIds: TArray<string>;
 begin
   Result:= FEnabled;
+end;
+
+function TLintConfig.AutoFixIds: TArray<string>;
+begin
+  Result:= FAutoFix;
 end;
 
 function TLintConfig.SeverityPairs: TArray<TPair<string,string>>;
@@ -329,6 +363,11 @@ end;
 procedure TLintConfig.SetEnabled(const AIds: TArray<string>);
 begin
   FEnabled:= AIds;
+end;
+
+procedure TLintConfig.SetAutoFix(const AIds: TArray<string>);
+begin
+  FAutoFix:= AIds;
 end;
 
 procedure TLintConfig.SetSeverityPair(const AId, ASev: string);
