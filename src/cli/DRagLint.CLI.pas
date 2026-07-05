@@ -4455,8 +4455,9 @@ end;
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
   BuildAutofixEdits (kept in lockstep; a guard test asserts they agree). }
 const
-  FIXABLE_RULE_IDS: array[0..2] of string =
-    ('self-assignment', 'redundant-parentheses', 'redundant-cast');
+  FIXABLE_RULE_IDS: array[0..3] of string =
+    ('self-assignment', 'redundant-parentheses', 'redundant-cast',
+     'redundant-not-not');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var S: string;
@@ -4519,7 +4520,8 @@ end;
 /// type info:
 ///   self-assignment       -> delete the offending statement line(s);
 ///   redundant-parentheses -> strip the outer '(' ')' of the flagged span;
-///   redundant-cast        -> strip a 'TFoo(x)' cast where x is one identifier.
+///   redundant-cast        -> strip a 'TFoo(x)' cast where x is one identifier;
+///   redundant-not-not     -> strip the two leading 'not' keywords.
 /// AFixableCount returns how many findings produced a fix. Rules without a fix
 /// are silently skipped.</summary>
 /// <remarks>Deliberately conservative: only rules whose fix is an exact,
@@ -4622,6 +4624,42 @@ begin
                 Inc(AFixableCount);
               end;
             end;
+          end;
+        end;
+      end
+      else if SameText(F.RuleId, 'redundant-not-not')
+              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        { span covers 'not not X' (the outer exprUnary). Strip the two leading
+          'not' keywords + their trailing whitespace; the remainder is X. }
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          var Rest: string:= Span;
+          var Ok: Boolean:= True;
+          { consume 'not' then >=1 whitespace, twice }
+          for var Pass: Integer:= 1 to 2 do
+          begin
+            var LR: string:= TrimLeft(Rest);
+            if (Length(LR) >= 3) and SameText(Copy(LR, 1, 3), 'not')
+               and ((Length(LR) = 3) or (LR[4] <= ' ')) then
+              Rest:= TrimLeft(Copy(LR, 4, MaxInt))
+            else
+            begin Ok:= False; Break; end;
+          end;
+          if Ok and (Rest <> '') then
+          begin
+            E:= Default(TTextEdit);
+            E.FilePath:= F.FilePath;
+            E.Kind    := tekReplaceInLine;
+            E.Line    := F.StartLine;
+            E.Col     := F.StartCol;
+            E.EndCol  := F.EndCol;
+            E.Text    := Rest;
+            Result:= Result + [E];
+            Inc(AFixableCount);
           end;
         end;
       end;
