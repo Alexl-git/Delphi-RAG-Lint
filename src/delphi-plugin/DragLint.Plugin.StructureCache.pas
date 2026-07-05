@@ -147,7 +147,11 @@ begin
   if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then Exit;
   try
     SetHandleInformation(ReadPipe, HANDLE_FLAG_INHERIT, 0);
-    if not CreatePipe(ReadErr, WriteErr, @SA, 0) then Exit;
+    if not CreatePipe(ReadErr, WriteErr, @SA, 0) then
+    begin
+      CloseHandle(WritePipe);
+      Exit;
+    end;
     try
       SetHandleInformation(ReadErr, HANDLE_FLAG_INHERIT, 0);
       FillChar(SI, SizeOf(SI), 0);
