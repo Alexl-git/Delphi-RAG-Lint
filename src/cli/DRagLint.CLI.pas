@@ -4737,6 +4737,7 @@ begin
         O.AddPair('default_severity', R.DefaultSeverity);
         O.AddPair('default_enabled', TJSONBool.Create(R.DefaultEnabled));
         O.AddPair('source', R.Source);
+        O.AddPair('fixable', TJSONBool.Create(IsFixableRule(R.Id)));
         AddParamsJson(O, R.Params);
         Arr.AddElement(O);
       end;
