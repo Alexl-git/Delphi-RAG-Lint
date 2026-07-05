@@ -1,5 +1,39 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-05 (LATEST-9) -- **NEXT = execute the AutoFix Chunk 1 plan via subagent-driven-development.**
+> `main`=`21b287c` (clean, pushed, synced with origin). **>>> Execute
+> `docs/superpowers/plans/2026-07-05-autofix-chunk1-plan.md` via superpowers:subagent-driven-development** -- 9 TDD
+> tasks (CLI-first/unit-testable, then IDE/live-smoke): T1 fix registry (extract `FIXABLE_RULE_IDS` + `IsFixableRule`
+> out of `BuildAutofixEdits`' hardcoded if/else, CLI.pas:4457, NO behavior change -- guardrail: lint suite 154/154
+> stays green) -> T2 `fixable` flag in `rules --json` (DoRules emitter CLI.pas:4710) -> T3 single-finding fix verb
+> `lint --file F --fix --fix-line L --fix-rule R [--apply|--json|--no-backup]` (extends the existing --fix block
+> CLI.pas:4621; --json is a 1st-class AGENT contract -- CLI verbs run token-free) -> T4 whole-unit fix (test-only,
+> whole-file path already exists) -> T5 whole-project fix (extend DoLintProject:6094 or DoLintAll:5878 -- DIAGNOSE
+> which first) -> T6 `FAutoFix` id-array in TLintConfig (Lint.Config.pas, `autofix` array in drag-lint-lint.json,
+> mirror FEnabled) -> T7 IDE StructureForm.pas: add `Code`/rule-id to TStructureNodeData, context-sensitive FPopup
+> ("Fix it" on a fixable FINDING node; "Fix all in unit"/"in project" on the "Diagnostics" ROOT node), reload via
+> Keyboard.pas:284 ForceQueue+IOTAModule.Refresh -> T8 2nd "auto-fix" checkbox per FIXABLE rule in LintOptionsFrame
+> (RenderCatalog:860 / Save:1071) -> T9 publish v0.88.0-alpha (bump CLI.pas:6, CHANGELOG, pack, final opus review,
+> tag, gh-release).
+> **Spec (approved):** `docs/superpowers/specs/2026-07-05-autofix-chunk1-fix-it-design.md`.
+> **Roadmap context:** `docs/lint/drag-lint TODO plan.md` was rewritten this session into 4 sequenced tracks
+> (Track 1 AutoFix -> Track 2 AutoDocument -> Track 3 Convert Components; Track 4 Refactoring links to REFACTOR-LIST).
+> AutoFix Chunk 1 = the full vertical slice PROVEN on the 3 existing fixable rules (self-assignment,
+> redundant-parentheses, redundant-cast); WIDENING the rule set = later chunks (each new rule = a FIXABLE_RULE_IDS
+> entry + a BuildAutofixEdits branch + a fixture; the catalog flag, "Fix it" item, and checkbox all light up
+> automatically).
+> **KEY DECISIONS (locked in brainstorm):** string rule-ids are canonical (NO numeric rule-number scheme); the 2nd
+> checkbox renders ONLY on fixable rules; CLI verbs are token-free for AI orchestration so `--json` is a supported
+> agent contract, bounded by the safe-fix registry (mechanical/side-effect-free rules only); CADENCE = publish each
+> chunk as a release, then plan next -> handoff -> clear -> implement.
+> **BUILD GOTCHAS (in the plan):** delphi-build recipe (staged win64 exe `third_party\dll-win64\` not the raw
+> Release exe = 0xC0000135); run PS harnesses from a NEUTRAL CWD (C:\TEMP); fixture .pas must be CRLF; the plugin
+> BPL only builds while RAD Studio is CLOSED, so T7/T8 end in a LIVE SMOKE (not unit-testable); additive guardrail =
+> `lint --fix` whole-file output byte-identical after T1's registry refactor.
+> **Also this session:** recorded the `handoff-always-safe` preference (never ask to confirm a handoff -- auto-memory
+> `feedback_handoff_always_safe.md`).
+>
+> --- (prior) ---
 > ## RESUME 2026-07-05 (LATEST-8) -- **v0.87.0-alpha PUBLISHED (forms-csv v4 navigation). Milestone COMPLETE.**
 > `main` includes merge `b4c0268` (forms-csv v4) + tag `v0.87.0-alpha`. GitHub release live (win64+win32 zips,
 > `--latest`, isPrerelease=false). VERSION `CLI.pas:6`=`0.87.0-alpha`. **No index-schema change (still v13).**
