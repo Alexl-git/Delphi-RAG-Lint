@@ -34,8 +34,13 @@ Check 'frmList row present'  ($csv -match 'uDemoList,frmList,')
 Check 'frmEdit row present'  ($csv -match 'uDemoEdit,frmEdit,')
 Check 'data module excluded' (-not ($csv -match 'dmDemo'))
 Check 'pas line count for frmEdit' ($csv -match 'uDemoEdit,frmEdit,16,')
-# v2 (9a81345): output gained a '# forms-csv algorithm v2 | ...' provenance line
-Check 'row count is 7 forms + 2 header lines' ($rows.Count -eq 9)
+# v2 (9a81345): output gained a '# forms-csv algorithm v...' provenance line.
+# v0.86 (header move): the column header is now row 1 and the provenance line is
+# the FOOTER (padded with 6 leading commas into the Notes column). Total lines
+# unchanged: 7 forms + 1 column-header + 1 provenance-footer = 9.
+Check 'row count is 7 forms + 1 header + 1 footer' ($rows.Count -eq 9)
+Check 'column header is row 1' ($rows[0] -eq '#,Unit,FormName,PAS lines,Navigation,Called From,Notes')
+Check 'provenance is footer (last row, in Notes col)' ($rows[-1] -match '^,,,,,,"?# forms-csv algorithm v')
 Check 'frmMain is root (blank nav)'   ($csv -match "uDemoMain,frmMain,\d+,,")
 Check 'frmList nav via Lists'         ($csv -match "uDemoList,frmList,\d+,frmMain -> 'Lists' -> frmList,")
 Check 'frmEdit nav via Lists>Edit'    ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> frmList -> 'Edit Item' -> frmEdit,")

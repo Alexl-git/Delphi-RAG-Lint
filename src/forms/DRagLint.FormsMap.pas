@@ -1002,11 +1002,6 @@ begin
         finally
           Qver.Free;
         end;
-        Sb.Append('# forms-csv algorithm v' + FORMS_CSV_ALGORITHM +
-                  ' | db: ' + ADbPath +
-                  ' | schema v' + IntToStr(SchemaVer) +
-                  ' | ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Now))
-          .Append(#13#10);
         Sb.Append('#,Unit,FormName,PAS lines,Navigation,Called From,Notes').Append(#13#10);
         Idx:= 0;
         for N in Nodes do
@@ -1033,6 +1028,17 @@ begin
             .Append(CsvField(Nav)).Append(',').Append(CsvField(CF)).Append(',').Append(CsvField(Notes))
             .Append(#13#10);
         end; // for
+        { Metadata footer: the algorithm/db/schema/timestamp line moved from the
+          top to the bottom so the column header is row 1 (spreadsheet-friendly).
+          6 leading commas push the '#' cell into the 7th (Notes) column, out of
+          the numbered-row column so it never looks like a data row. CsvField the
+          whole line since ADbPath may contain characters worth quoting. }
+        Sb.Append(',,,,,,')
+          .Append(CsvField('# forms-csv algorithm v' + FORMS_CSV_ALGORITHM +
+                  ' | db: ' + ADbPath +
+                  ' | schema v' + IntToStr(SchemaVer) +
+                  ' | ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Now)))
+          .Append(#13#10);
         Result:= Sb.ToString;
       finally
         Edges.Free;
