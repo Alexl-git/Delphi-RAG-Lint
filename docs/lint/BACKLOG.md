@@ -16,17 +16,21 @@
 > (only on fixable rules). Battery green at ship: lint 154/154, store 16/16, fixable-catalog + fix-single + fix-unit +
 > fix-project all exit 0. **IDE LIVE SMOKE PASSED (user, 2026-07-05): "Fix it" removed redundant parentheses in the real
 > IDE.** BPL built clean (Win32); user deployed via deploy-staged.bat.
-> **>>> NEXT MILESTONE = AutoFix Chunk 2. LEAD ITEM (user decision 2026-07-05, REPLACES the deferred per-rule auto-fix
-> gating): batch autofix ("Fix all in unit|project", CLI `lint --fix`/`lint-all --fix`) must consult the ACTIVE RULE
-> SET -- the existing enable/disable checkboxes (TLintConfig FEnabled/FDisabled/ShouldKeep, drag-lint-lint.json
-> enabled/disabled) -- and apply ONLY fixes for rules that are CHECKED (enabled). This reuses the enable state users
-> already set, cleaner than the separate FAutoFix checkbox for gating. Mechanism: the CLI --fix path currently fixes
-> EVERY fixable finding regardless of config; wire it to skip findings whose rule is not ShouldKeep/enabled (or add an
-> `--autofix-only`/`--respect-config` flag that Task 7's "Fix all" passes). Note: findings already flow through
-> FinalizeAndOutput's config filter (ShouldKeep) BEFORE the --fix block via `Survivors` -- VERIFY whether disabled-rule
-> findings are already excluded from Survivors (they may be -- if so, batch fix ALREADY respects enabled rules and this
-> is a test + doc task, not a code change; DIAGNOSE FIRST like T5).** Then the FAutoFix checkbox becomes a save-time
-> auto-apply control (Track-1 later item), not the batch gate.**
+> **>>> NEXT MILESTONE = AutoFix Chunk 2. DIAGNOSIS DONE (2026-07-05) -- LEAD ITEM RESOLVED to TEST+DOC, NOT code:**
+> The user asked that batch autofix ("Fix all in unit|project", `lint --fix`/`lint-all --fix`) apply ONLY fixes for
+> CHECKED (enabled) rules. **DIAGNOSIS (CLI.pas:4623-4651, CONFIRMED by reading FinalizeAndOutput):** findings pass
+> through `Cfg.ShouldKeep(F.RuleId, IsDefDis)` (the enable/disable config filter) into `Survivors` at 4626-4637
+> **BEFORE** the `--fix` block (2c, :4651) -- and `--fix` operates only on `Survivors`/`Targeted`. The block's own
+> comment says "quick-fixes for the CONFIG-SURVIVING findings." So **batch fix ALREADY skips disabled rules today**;
+> `lint-all` routes through the same FinalizeAndOutput (Task 5), so it's gated identically. The user's requested
+> behaviour ALREADY EXISTS -- it was just never TESTED or DOCUMENTED (the spec conflated the ENABLE checkbox with the
+> separate AUTO-FIX checkbox). **USER DECISION 2026-07-05: "test + document it"** -- Chunk 2 lead item = (a) a
+> regression test that toggles a rule OFF in drag-lint-lint.json, runs `lint --fix` (+ `lint-all --fix`), and asserts
+> that rule's findings are NOT fixed; (b) document "batch fix respects the active rule set" in AI-USAGE.md + CHANGELOG.
+> Small. The FAutoFix checkbox (Task 8) is thus NOT the batch gate -- it becomes a future SAVE-TIME auto-apply control
+> (Track-1 later item). **Chunk 2's SUBSTANCE = WIDEN the fixable-rule set beyond the 3** (each new rule = a
+> FIXABLE_RULE_IDS entry + a BuildAutofixEdits branch + a fixture; the catalog flag / "Fix it" item / auto-fix checkbox
+> all light up automatically -- pick the next mechanical/side-effect-free rules to make fixable).**
 > CADENCE (user, unchanged): publish chunk -> plan next batch -> handoff -> clear -> implement -> publish.
 > Chunk-2 also-includes (from final-review Minors, all deferred): untargeted `lint --fix --json --apply` reports
 > applied:true for no-edit findings (fold into gating, same JSON/edit accounting); `--fix --format sarif` falls to text;
