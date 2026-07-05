@@ -67,7 +67,7 @@ function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): strin
 implementation
 
 const
-  FORMS_CSV_ALGORITHM = '3'; // bump when BuildEdges / NavPath algorithm changes
+  FORMS_CSV_ALGORITHM = '4'; // bump when BuildEdges / NavPath algorithm changes
 
 type
   TKnownPopupEntry = record Name: string; Note: string; end;
@@ -505,7 +505,15 @@ end; // function
 /// within that form that initiates the chain; returns True.</summary>
 /// <remarks>False positives are possible when method names are non-unique across
 /// the codebase; accepted trade-off for unlimited-depth traversal without full
-/// type inference.</remarks>
+/// type inference.
+/// v4 Layer 1 (interface-method dispatch) needs NO extra code here: the caller
+/// query below matches by bare method NAME with no owner-class filter, so a call
+/// site that dispatches through an interface reference (APlan.EditForm, where the
+/// launch body lives in the concrete C.EditForm) is already found -- the concrete
+/// method and every interface call site share the same name_text, and the call
+/// site's enclosing_symbol_id resolves to the calling form. See the query comment
+/// below and docs/superpowers/specs/2026-07-05-forms-csv-v4-hook-and-interface-navigation-design.md
+/// section D1 (branch (a) diagnosis).</remarks>
 function FindNearestFormCaller(
   AStore       : TSQLiteSymbolStore;
   const AOwnerClass, ARoutine: string;
@@ -534,11 +542,114 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= AStore.GetConnection;
+    { Name-only caller query: match by bare method name_text, NOT by receiver
+      type or owner class. This is what makes the v4 Layer 1 interface-method
+      bridge work with no extra machinery: when the launch body lives in a
+      concrete C.M (e.g. TDirectPlan4.EditThing constructs the editor form) but
+      the call site dispatches through an interface reference (APlan.EditThing in
+      the calling form), the interface call site is indexed as a plain 'EditThing'
+      ref whose enclosing_symbol_id resolves to the calling form's method. Because
+      this query keys on name_text alone, that interface-dispatch call site is
+      already returned here -- no HeritageInterfaces / type_ancestors lookup is
+      needed (would be dead code; YAGNI). The same holds for the Layer 2 hook
+      continuation (Task 3): once the hook edge is synthesized, the fan-in lands
+      on THookPlan4.EditThing and this same name walk carries it up to the form.
+      (Trade-off: name-only matching can over-match a same-named method on an
+      unrelated class -- the accepted false-positive noted in <remarks> above;
+      a receiver-type index (spec D5.1) would tighten it if that ever bites.) }
     Q.SQL.Text:=
       'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
       'FROM refs r JOIN files f ON f.id = r.file_id ' +
       'WHERE r.name_text = :rout AND f.language LIKE ''delphi%''';
     Q.ParamByName('rout').AsString:= ARoutine;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      FId := Q.FieldByName('fid').AsLargeInt;
+      SL  := Q.FieldByName('sl' ).AsInteger;
+      Path:= Q.FieldByName('p'  ).AsString;
+      if not APasLines.TryGetValue(FId, Arr) then
+      begin
+        if TFile.Exists(Path) then Arr:= TFile.ReadAllLines(Path, TEncoding.ANSI)
+        else Arr:= [];
+        APasLines.Add(FId, Arr);
+      end;
+      COwner:= '';
+      CRout := '';
+      if (SL >= 1) and (SL <= Length(Arr)) and
+         FindEnclosingImpl(Arr, SL, COwner, CRout) and
+         (COwner <> '') and (CRout <> '') then
+      begin
+        if AClassToNode.ContainsKey(COwner) then
+        begin
+          AFormClass  := COwner;
+          AFormRoutine:= CRout;
+          Exit(True);
+        end
+        else if FindNearestFormCaller(AStore, COwner, CRout, AClassToNode,
+                                      APasLines, AVisited,
+                                      AFormClass, AFormRoutine) then
+          Exit(True);
+      end;
+      Q.Next;
+    end; // while
+  finally
+    Q.Free;
+  end; // try
+end; // function
+
+/// <summary>v4 Layer 2 hook continuation. When the fan-in dead-ends on a
+/// standalone form-launching routine R whose only reference is a proc-variable
+/// registration (AHookField := R, invisible to refs -- see spec D2), this
+/// resumes the walk from the hook field's INVOCATION sites. It finds every
+/// 'call' ref to AHookField (e.g. ThingHook() inside THookPlan4.EditThing),
+/// takes each call's enclosing class.method via FindEnclosingImpl, and hands it
+/// to FindNearestFormCaller so the SAME name-based interface bridge (Task 2)
+/// carries it up to a navigable form (frmRoot4.btnPlanClick). Returns the first
+/// form ancestor found. AVisited is shared with the caller's walk so the 1->many
+/// hook fan-in cannot loop; a hook field seen once is not re-expanded.</summary>
+/// <remarks>Detection of the AHookField binding is a text-scan built in
+/// BuildEdges (HandlerToHook); this function consumes the resolved field name and
+/// only issues indexed refs queries. v4 bridges ONE hook hop (spec Out of scope).</remarks>
+function FindFormViaHook(
+  AStore       : TSQLiteSymbolStore;
+  const AHookField: string;
+  AClassToNode : TDictionary<string, TFormNode>;
+  APasLines    : TDictionary<Int64, TArray<string>>;
+  AVisited     : TDictionary<string, Boolean>;
+  out AFormClass  : string;
+  out AFormRoutine: string
+): Boolean;
+var
+  Q     : TFDQuery      ;
+  FId   : Int64         ;
+  SL    : Integer       ;
+  Path  : string        ;
+  Arr   : TArray<string>;
+  COwner: string        ;
+  CRout : string        ;
+  HKey  : string        ;
+begin
+  Result      := False;
+  AFormClass  := '';
+  AFormRoutine:= '';
+  if AHookField = '' then Exit;
+  HKey:= '(hook)' + AHookField; // distinct namespace from OwnerClass.Routine keys
+  if AVisited.ContainsKey(HKey) then Exit;
+  AVisited.Add(HKey, True);
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= AStore.GetConnection;
+    { Invocation sites of the hook field: the proc-variable is CALLED here
+      (ThingHook() inside THookPlan4.EditThing). Unlike the registration line,
+      the invocation IS indexed as a plain 'call' ref (verified via dump-refs:
+      name=ThingHook kind=call enc=THookPlan4.EditThing). Its enclosing routine
+      rejoins the Task-2 name-based interface walk back to the calling form. }
+    Q.SQL.Text:=
+      'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
+      'FROM refs r JOIN files f ON f.id = r.file_id ' +
+      'WHERE r.name_text = :h AND r.kind = ''call'' AND f.language LIKE ''delphi%''';
+    Q.ParamByName('h').AsString:= AHookField;
     Q.Open;
     while not Q.Eof do
     begin
@@ -584,10 +695,14 @@ end; // function
 /// suppressed.</summary>
 function BuildEdges(AStore: TSQLiteSymbolStore; ANodes: TList<TFormNode>; AClassToNode: TDictionary<string, TFormNode>): TList<TFormEdge>;
 var
-  Y        : TFormNode                         ;
-  Q        : TFDQuery                          ;
-  PasLines : TDictionary<Int64, TArray<string>>;
-  SeenEdges: TStringList                       ;
+  Y         : TFormNode                         ;
+  Q         : TFDQuery                          ;
+  PasLines  : TDictionary<Int64, TArray<string>>;
+  SeenEdges : TStringList                       ;
+  { v4 Layer 2: routine-name-lowercased -> hook-field-name. Populated once by
+    BuildHookMap from a text-scan (proc-var registrations are invisible to refs;
+    see spec D2). Consulted only when a standalone launcher dead-ends. }
+  HandlerToHook: TDictionary<string, string>    ;
 
   function FileLines(AFileId: Int64; const APath: string): TArray<string>;
   begin
@@ -596,6 +711,136 @@ var
       if TFile.Exists(APath) then Result:= TFile.ReadAllLines(APath, TEncoding.ANSI)
       else Result:= [];
       PasLines.Add(AFileId, Result);
+    end;
+  end;
+
+  /// <summary>v4 Layer 2 pre-pass. Scans every indexed delphi .pas ONCE and
+  /// records proc-variable hook registrations of shape "H := R" (optionally
+  /// "Unit.H := R"), where R is a KNOWN form-launching routine, into
+  /// HandlerToHook (R-lowercased -> H). The launcher set is derived in the same
+  /// scan: a routine is a launcher iff a line in its body constructs one of the
+  /// project's form classes (IsLaunchLine) -- exactly the launchers the main
+  /// passes resolve. Strictness (simple-identifier LHS/RHS, ':=' assignment,
+  /// launcher-only RHS) keeps the scan from synthesizing edges for ordinary
+  /// assignments: the existing hook-free formsmap fixture yields an empty map.</summary>
+  procedure BuildHookMap;
+  var
+    Launchers: TDictionary<string, Boolean>;
+    Paths    : TStringList                 ;
+    QF       : TFDQuery                     ;
+    PIdx     : Integer                      ;
+    Lines    : TArray<string>              ;
+    LIdx     : Integer                      ;
+    T        : string                      ;
+    OC, Rout : string                      ;
+    N        : TFormNode                   ;
+    Launches : Boolean                     ;
+
+    { True if the trimmed line assigns a bare (optionally single-dot-qualified)
+      identifier LHS the value of a bare identifier RHS: "<lhs> := <rhs>" with an
+      optional trailing ';'. Returns the LHS field (last dotted segment) and RHS
+      identifier. Rejects anything with call parens, operators, or extra tokens. }
+    function ParseHookAssign(const ALine: string; out AField, ARhs: string): Boolean;
+    var
+      S, L, R: string;
+      P      : Integer;
+      I      : Integer;
+      DotP   : Integer;
+
+      function IsIdent(const V: string): Boolean;
+      var K: Integer;
+      begin
+        Result:= V <> '';
+        for K:= 1 to Length(V) do
+          if not CharInSet(V[K], ['A'..'Z','a'..'z','0'..'9','_']) then Exit(False);
+      end;
+
+    begin
+      Result:= False; AField:= ''; ARhs:= '';
+      S:= Trim(ALine);
+      P:= Pos(':=', S);
+      if P = 0 then Exit;
+      L:= Trim(Copy(S, 1, P - 1));
+      R:= Trim(Copy(S, P + 2, MaxInt));
+      // strip a single trailing ';' (and any trailing spaces) from the RHS
+      if (R <> '') and (R[Length(R)] = ';') then R:= Trim(Copy(R, 1, Length(R) - 1));
+      // strip a single leading '@' so the address-of idiom ":= @Routine" matches
+      // the same as the bare ":= Routine" form (both bind the same launcher name).
+      if (R <> '') and (R[1] = '@') then R:= Trim(Copy(R, 2, MaxInt));
+      // RHS must be a single bare identifier (the launcher routine, address-of)
+      if not IsIdent(R) then Exit;
+      // LHS: bare identifier, or exactly one qualifier "Unit.Field" -- take Field
+      DotP:= 0;
+      for I:= 1 to Length(L) do
+        if L[I] = '.' then
+        begin
+          if DotP <> 0 then Exit; // more than one dot -> not a simple hook field
+          DotP:= I;
+        end
+        else if not CharInSet(L[I], ['A'..'Z','a'..'z','0'..'9','_']) then
+          Exit; // any other char (space, paren, index) -> reject
+      if DotP > 0 then AField:= Copy(L, DotP + 1, MaxInt)
+      else AField:= L;
+      if not IsIdent(AField) then Exit;
+      ARhs:= R;
+      Result:= True;
+    end;
+
+  begin
+    Launchers:= TDictionary<string, Boolean>.Create;
+    Paths    := TStringList.Create;
+    try
+      // Collect distinct delphi .pas paths (+ their file ids for line caching).
+      QF:= TFDQuery.Create(nil);
+      try
+        QF.Connection:= AStore.GetConnection;
+        QF.SQL.Text:=
+          'SELECT DISTINCT f.id AS fid, f.path AS p FROM files f ' +
+          'WHERE f.language LIKE ''delphi%''';
+        QF.Open;
+        while not QF.Eof do
+        begin
+          Paths.AddObject(QF.FieldByName('p').AsString,
+                          TObject(NativeInt(QF.FieldByName('fid').AsLargeInt)));
+          QF.Next;
+        end;
+      finally
+        QF.Free;
+      end;
+
+      // Pass A: derive the launcher-routine set (a routine whose body constructs
+      // one of the project's form classes).
+      for PIdx:= 0 to Paths.Count - 1 do
+      begin
+        Lines:= FileLines(Int64(NativeInt(Paths.Objects[PIdx])), Paths[PIdx]);
+        for LIdx:= 0 to Length(Lines) - 1 do
+        begin
+          Launches:= False;
+          for N in ANodes do
+            if IsLaunchLine(Lines[LIdx], N.FormClass) then begin Launches:= True; Break; end;
+          if not Launches then Continue;
+          OC:= ''; Rout:= '';
+          if FindEnclosingImpl(Lines, LIdx + 1, OC, Rout) and (Rout <> '') then
+            Launchers.AddOrSetValue(LowerCase(Rout), True);
+        end;
+      end;
+
+      // Pass B: record H := R registrations whose RHS R is a known launcher.
+      for PIdx:= 0 to Paths.Count - 1 do
+      begin
+        Lines:= FileLines(Int64(NativeInt(Paths.Objects[PIdx])), Paths[PIdx]);
+        for LIdx:= 0 to Length(Lines) - 1 do
+        begin
+          T:= Lines[LIdx];
+          if Pos(':=', T) = 0 then Continue;
+          if ParseHookAssign(T, OC, Rout) then // OC=field, Rout=rhs routine
+            if Launchers.ContainsKey(LowerCase(Rout)) then
+              HandlerToHook.AddOrSetValue(LowerCase(Rout), OC);
+        end;
+      end;
+    finally
+      Launchers.Free;
+      Paths.Free;
     end;
   end;
 
@@ -649,9 +894,25 @@ var
       FormRout:= '';
       var Vis2s:= TDictionary<string, Boolean>.Create;
       try
-        if FindNearestFormCaller(AStore, '', Rout, AClassToNode, PasLines, Vis2s,
-                                 FormCls, FormRout) and
-           AClassToNode.TryGetValue(FormCls, XN) then
+        var Hooked:= False;
+        var HookField:= '';
+        if not (FindNearestFormCaller(AStore, '', Rout, AClassToNode, PasLines, Vis2s,
+                                      FormCls, FormRout) and
+                AClassToNode.TryGetValue(FormCls, XN)) then
+          // v4 Layer 2: the direct fan-in dead-ended. If Rout is a hook handler
+          // (registered as HookField := Rout, invisible to refs), resume from the
+          // hook field's invocation sites -- which rejoin the interface walk to a
+          // form. Reuse the SAME visited set so the fan-in cannot loop.
+          if HandlerToHook.TryGetValue(LowerCase(Rout), HookField) then
+            Hooked:= FindFormViaHook(AStore, HookField, AClassToNode, PasLines,
+                                     Vis2s, FormCls, FormRout) and
+                     AClassToNode.TryGetValue(FormCls, XN)
+          else
+            Hooked:= False
+        else
+          Hooked:= True; // direct walk already reached a form
+
+        if Hooked then
         begin
           var Vis3s:= TDictionary<string, Boolean>.Create;
           try
@@ -709,14 +970,19 @@ var
   end;
 
 begin
-  Result   := TList<TFormEdge>.Create;
-  PasLines := TDictionary<Int64, TArray<string>>.Create;
-  SeenEdges:= TStringList.Create;
+  Result       := TList<TFormEdge>.Create;
+  PasLines     := TDictionary<Int64, TArray<string>>.Create;
+  SeenEdges    := TStringList.Create;
+  HandlerToHook:= TDictionary<string, string>.Create;
   SeenEdges.Sorted    := True;
   SeenEdges.Duplicates:= dupIgnore;
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= AStore.GetConnection;
+    // v4 Layer 2: text-scan proc-var hook registrations BEFORE the launch passes
+    // so any launcher dead-end can consult HandlerToHook. Empty for hook-free
+    // projects (the map stays empty and the branch below is a no-op).
+    BuildHookMap;
     for Y in ANodes do
     begin
       // Pass 1: construction sites -- refs by class name (TClass.Create / CreateForm)
@@ -757,6 +1023,7 @@ begin
     Q.Free;
     PasLines.Free;
     SeenEdges.Free;
+    HandlerToHook.Free;
   end; // try
 end; // function
 
@@ -992,18 +1259,33 @@ begin
       Edges:= BuildEdges(Store, Nodes, ClassToNode);
       try
         RootClass:= DetectRoot(AProjectFile, ARootForm, ClassToNode, Edges);
+        { Schema version lives in schema_meta (written at migrate), NOT in
+          PRAGMA user_version (which the engine never writes -> always 0).
+          Mirror IsSchemaCurrent's query; a missing table/row falls back to 0. }
         var SchemaVer:= 0;
         var Qver:= TFDQuery.Create(nil);
         try
           Qver.Connection:= Store.GetConnection;
-          Qver.SQL.Text  := 'PRAGMA user_version';
-          Qver.Open;
-          if not Qver.IsEmpty then SchemaVer:= Qver.Fields[0].AsInteger;
+          Qver.SQL.Text  := 'SELECT value FROM schema_meta WHERE key = ''schema_version'' LIMIT 1';
+          try
+            Qver.Open;
+            if not Qver.IsEmpty then SchemaVer:= StrToIntDef(Qver.Fields[0].AsString, 0);
+          except
+            SchemaVer:= 0; // pre-schema_meta db
+          end;
         finally
           Qver.Free;
         end;
         Sb.Append('#,Unit,FormName,PAS lines,Navigation,Called From,Notes').Append(#13#10);
         Idx:= 0;
+        { v4 Layer 0 (spec D0) db-scope guardrail counter. Counts forms that ended
+          '(no path from MAIN)' yet have a NON-EMPTY Called From: a known caller
+          routine IS indexed but its upward chain to MAIN is severed -- the
+          signature of an interface-dispatch launch body whose bridge to MAIN
+          lives outside the scanned db (e.g. COMMON absent from a CLIENT-only db).
+          Forms with EMPTY Called From are genuine dead forms (no callers at all)
+          and are deliberately NOT counted. }
+        var UnresolvedWithCaller:= 0;
         for N in Nodes do
         begin
           Inc(Idx);
@@ -1014,6 +1296,7 @@ begin
             if (Nav = '') and not SameText(N.FormClass, RootClass) then Nav:= '(no path from MAIN)';
           end;
           var CF:= CalledFrom(Edges, ClassToNode, N.FormClass);
+          if (Nav = '(no path from MAIN)') and (CF <> '') then Inc(UnresolvedWithCaller);
           var Notes:= '';
           if (Nav = '(no path from MAIN)') and (CF = '') then
           begin
@@ -1028,6 +1311,14 @@ begin
             .Append(CsvField(Nav)).Append(',').Append(CsvField(CF)).Append(',').Append(CsvField(Notes))
             .Append(#13#10);
         end; // for
+        { v4 Layer 0 (spec D0) guardrail: announce, on stderr only, when forms
+          have an indexed caller that could not be walked back to MAIN -- almost
+          always a db-scope problem (the interface-dispatch launch bodies live in
+          a unit outside this db, e.g. COMMON missing from a CLIENT-only index).
+          A scope gap thus announces itself instead of silently printing
+          '(no path)'. stderr-only: this does NOT alter any CSV cell. }
+        if UnresolvedWithCaller > 0 then
+          Writeln(ErrOutput, Format('forms-csv: %d form(s) with callers could not be traced to MAIN -- db may not include COMMON (interface-dispatch launch bodies); run against the full-tree index', [UnresolvedWithCaller]));
         { Metadata footer: the algorithm/db/schema/timestamp line moved from the
           top to the bottom so the column header is row 1 (spreadsheet-friendly).
           6 leading commas push the '#' cell into the 7th (Notes) column, out of
