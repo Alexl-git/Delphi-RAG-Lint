@@ -41,6 +41,7 @@ interface
 
 uses
   System.Classes
+  , System.Generics.Collections
   , Vcl.Controls
   , Vcl.Forms
   , Vcl.ExtCtrls
@@ -68,6 +69,11 @@ type
     FHasData   : Boolean;       { True after at least one successful load }
     FProfile   : string;        { active profile name; '' = base config }
     FCfg       : TLintConfig;   { active config (base or profile-merged) }
+    { auto-fix checkboxes (rule-id -> box), one per FIXABLE rule. References
+      only; the boxes are owned by Self / their parent GroupBox and freed by
+      ClearBody. Persists past RenderCatalog so Save can read the toggles;
+      rebuilt (cleared) at the start of each RenderCatalog. }
+    FAutoFixCBs: TDictionary<string, TCheckBox>;
     { search filter (own row below the top panel) }
     FSearch       : string;      { current trimmed search text; '' = show all }
     FPanelSearch  : TPanel;      { second top row hosting the search field }
@@ -91,6 +97,9 @@ type
     /// <summary>Creates the frame and builds all controls dynamically.
     /// No catalog is loaded yet; call ReloadCatalogAndConfig explicitly.</summary>
     constructor Create(AOwner: TComponent); override;
+    /// <summary>Frees the auto-fix checkbox reference map (not the boxes,
+    /// which are owned by the form / their parent group boxes).</summary>
+    destructor Destroy; override;
     /// <summary>Runs "drag-lint rules --json", parses the catalog, loads the
     /// active project's drag-lint-lint.json, and re-renders all rule controls
     /// with the resulting enabled/disabled/param state.</summary>
@@ -112,7 +121,6 @@ uses
   System.SysUtils
   , System.StrUtils
   , System.JSON
-  , System.Generics.Collections
   , Winapi.Windows
   , Vcl.ComCtrls
   , Vcl.Samples.Spin
@@ -142,6 +150,7 @@ type
     Title          : string;
     DefaultSeverity: string;
     DefaultEnabled : Boolean;
+    Fixable        : Boolean;  { True iff this rule has a registered auto-fix }
     Source         : string;
     Params         : TArray<TRuleParam>;
   end;
@@ -275,6 +284,7 @@ var
   Rule    : TCatalogRule;
   Param   : TRuleParam  ;
   EnabledV: TJSONValue  ;
+  FixableV: TJSONValue  ;
   i       : Integer     ;
 begin
   Result:= nil;
@@ -295,6 +305,7 @@ begin
       Rule.Title          := RuleObj.GetValue('title')           .Value;
       Rule.DefaultSeverity:= '';
       Rule.Source         := '';
+      Rule.Fixable        := False;
       Rule.Params         := nil;
       if RuleObj.GetValue('default_severity') <> nil then
         Rule.DefaultSeverity:= RuleObj.GetValue('default_severity').Value;
@@ -308,6 +319,14 @@ begin
         Rule.DefaultEnabled:= SameText(EnabledV.Value, 'true')
       else
         Rule.DefaultEnabled:= True;
+      { fixable: JSON bool (absent -> False) }
+      FixableV:= RuleObj.GetValue('fixable');
+      if (FixableV <> nil) and (FixableV is TJSONBool) then
+        Rule.Fixable:= TJSONBool(FixableV).AsBoolean
+      else if FixableV <> nil then
+        Rule.Fixable:= SameText(FixableV.Value, 'true')
+      else
+        Rule.Fixable:= False;
       { params array }
       if RuleObj.GetValue('params') is TJSONArray then
       begin
@@ -535,7 +554,15 @@ begin
   FHasData    := False;
   FProfile    := '';
   FCfg        := TLintConfig.Load('', '');  { default no-op config }
+  FAutoFixCBs := TDictionary<string, TCheckBox>.Create;
   BuildControls;
+end;
+
+destructor TLintOptionsFrame.Destroy;
+begin
+  { Only holds references to VCL-owned checkboxes; free the map, not the boxes. }
+  FAutoFixCBs.Free;
+  inherited;
 end;
 
 procedure TLintOptionsFrame.BuildControls;
@@ -744,6 +771,7 @@ var
   Grp     : TGroupBox   ;
   CatCB   : TCheckBox   ;
   RuleCB  : TCheckBox   ;
+  AutoFixCB: TCheckBox  ;
   RuleTag : TRuleTag    ;
   CatTag  : TCatTag     ;
   SpnEdt  : TSpinEdit   ;
@@ -760,6 +788,7 @@ const
   GM  = 6 ;   { gap between group boxes }
   GHH = 26;   { group box header height }
   CH  = 22;   { checkbox row height }
+  AFW = 84;   { width reserved on the right for the 'auto-fix' checkbox }
   EH  = 22;   { edit height }
   PH  = 18;   { param label height }
   PEH = 24;   { param editor height }
@@ -768,6 +797,13 @@ const
 begin
   ClearBody;
   FCatalogJSON:= AJSON;
+
+  { ClearBody freed the old checkboxes; drop the now-dangling references.
+    The dictionary persists (form field) so Save can read the rebuilt set. }
+  if FAutoFixCBs = nil then
+    FAutoFixCBs:= TDictionary<string, TCheckBox>.Create
+  else
+    FAutoFixCBs.Clear;
 
   Rules:= ParseCatalog(AJSON);
   if Length(Rules) = 0 then
@@ -881,6 +917,28 @@ begin
 
       RuleTag:= TRuleTag.CreateForRule(Self, Rule);
       RuleCB.Tag:= NativeInt(RuleTag);
+
+      { For a FIXABLE rule, add a second 'auto-fix' checkbox on the SAME row,
+        right-aligned. Narrow the enable box to leave room. The auto-fix box
+        carries NO TRuleTag (Tag stays 0) so the Save enable-walk and
+        UpdateCountsLabel -- which both filter on (Tag<>0) and (Tag is TRuleTag)
+        -- never treat it as an enable box. It is tracked in FAutoFixCBs (by
+        rule-id) so Save can read its toggle. Do NOT Inc(GrpY) again -- the
+        enable box already advanced the row. }
+      if Rule.Fixable then
+      begin
+        RuleCB.Width:= GrpW - AFW;
+
+        AutoFixCB:= TCheckBox.Create(Self);
+        AutoFixCB.Parent  := Grp;
+        AutoFixCB.Top     := RuleCB.Top;
+        AutoFixCB.Left    := LM + (GrpW - AFW);
+        AutoFixCB.Width   := AFW;
+        AutoFixCB.Caption := 'auto-fix';
+        AutoFixCB.Checked := FCfg.IsAutoFix(Rule.Id);
+        AutoFixCB.Anchors := [akTop, akRight];
+        FAutoFixCBs.AddOrSetValue(Rule.Id, AutoFixCB);
+      end;
 
       { Param editors -- build one TParamEditor per param (ALL params) }
       for Param in Rule.Params do
@@ -1142,6 +1200,17 @@ begin
       end;
     end;
   end;
+
+  { Collect auto-fix state from the per-rule 'auto-fix' checkboxes. SetAutoFix
+    REPLACES the whole array, so toggling a box OFF removes its id (AddAutoFix
+    is append-only and would not remove -- do NOT use it here). Only fixable
+    rules ever get a box, so only fixable ids can appear. }
+  var AFIds: TArray<string>:= nil;
+  if FAutoFixCBs <> nil then
+    for var Pair in FAutoFixCBs do
+      if Pair.Value.Checked then
+        AFIds:= AFIds + [Pair.Key];
+  Cfg.SetAutoFix(AFIds);
 
   { Branch destination: base config or named profile }
   var Target: string:= Trim(FCboProfile.Text);
