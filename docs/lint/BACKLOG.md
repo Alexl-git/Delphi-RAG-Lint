@@ -1,5 +1,39 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-05 (LATEST-12) -- **v0.89.0-alpha SHIPPED. AutoDocument Chunk 1 DESIGNED (spec+plan). NEXT = EXECUTE the plan.**
+> `main`=`fcbb439` (clean, pushed, origin synced). VERSION CLI.pas:6=`0.89.0-alpha`, **schema still v13**.
+> **>>> NEXT ACTION = execute `docs/superpowers/plans/2026-07-05-autodocument-chunk1-plan.md` (8 tasks) via
+> superpowers:subagent-driven-development (or executing-plans).** Spec (approved):
+> `docs/superpowers/specs/2026-07-05-autodocument-chunk1-design.md`.
+> **AutoDocument Chunk 1 = generate + repair a DocInsight comment for ONE public declaration** (vertical slice;
+> Chunk 2 later widens to unit/project). Core = **managed regions**: drag-lint owns sentinel-fenced parts of the
+> comment -- a facts block `<!-- drag-lint:auto BEGIN -->...<!-- drag-lint:auto END -->` inside `<remarks>`, plus
+> per-param `<!-- drag-lint:auto param -->` markers -- regenerated idempotently, NEVER clobbering hand-written
+> prose. `<summary>`/`<param>` bodies are always `TODO: describe.` (never fabricate; a wrong summary is worse than
+> none). Facts block = **Called from / Calls / Used in units / Raises / Returns**, all index/AST-grounded, capped
+> at 10 with `(+N more)` when the true total > 15 (<=15 shows all).
+> **Plan tasks:** T1 scaffold 3 units under `src/doc/` (`DRagLint.Doc.Facts`/`.Regions`/`.Document`) + dproj
+> wiring -> T2 Facts Called-from+Returns+cap -> T3 Facts Calls/Used-in/Raises (**RISK: outgoing-"Calls" store
+> query is UNVERIFIED -- verify FIRST via a spike; body-scan fallback ready; the Calls section is omittable, since
+> Called-from is the solid headline**) -> T4 Regions managed-block + MergeComment (also EXPORT the DocStub param
+> helpers `ExtractParamList`/`ParseParamNames`/`SignatureHasReturn` to the interface) -> T5 `Doc.Document`
+> orchestrator + new `document --qname X [--apply|--json|--no-backup]` CLI verb (template = `DoFindUnit`
+> CLI.pas:6149; `generate-docs` stays legacy print-only) -> T6 six `tests/autodoc/run_doc_*.ps1` harnesses
+> (generate / idempotent / extend / stale-param / cap / verb) -> T7 IDE "Document it" menu (live-smoke, cut last)
+> -> T8 full battery + publish v0.90.0-alpha.
+> **REUSES (do not rebuild):** `TDocStubGenerator` sig helpers (DocStub.pas), `TDocCommentScanner.Scan` +
+> `FindDocRegionAbove` (Indexer.pas:148) + `TDocCommentParser.Dispatch`->`TParsedDoc`, `TTextEditApplier`,
+> `ISymbolStore.FindCallersByName`/`GetSymbolById`/`GetSymbolSlice`.
+> **BUILD GOTCHAS (in the plan):** new unit = a `<DCCReference>` in `src/cli/drag-lint.dproj` (after line 140) AND
+> a CLI `uses` entry; NO literal `{`/`}` inside a Pascal `{ }` comment (breaks the compile -- the PostToolUse
+> self-lint error-count jump is a canary, but the delphi-build result is the gate); run PS harnesses from a NEUTRAL
+> CWD (C:\TEMP); `${tag}:` not `"$tag:"` in PowerShell; fixtures ASCII/CRLF, unit name = filename.
+> **DEFERRED (user):** semantic-drift detection (behavior change -> hand-written prose needs updating) -- out of
+> scope; needs intent understanding, not structure. Next-chunk doc-source candidates: `<seealso>`, `<since>`/
+> `@deprecated`, whole-unit/project batch, the RAD Studio DocInsight-collection spike, a `missing-doc` lint rule.
+> CADENCE (user): plan -> handoff -> clear -> implement -> publish. (You are at CLEAR: run implementation next.)
+>
+> --- (prior) ---
 > ## RESUME 2026-07-05 (LATEST-11) -- **v0.89.0-alpha SHIPPED (AutoFix Chunk 2). AutoFix TRACK COMPLETE. NEXT = AutoDocument.**
 > `main` tag `v0.89.0-alpha` (release commit; pushed, origin synced, clean). VERSION CLI.pas:6=`0.89.0-alpha`, **schema still v13**.
 > Executed via superpowers:executing-plans (13 tasks + final whole-branch review: 0 Critical, 1 Important verified-safe [no change],
