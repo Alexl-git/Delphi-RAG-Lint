@@ -59,5 +59,33 @@ Check 'root regression: frmEdit still reachable'  ($csv -match "uDemoEdit,frmEdi
 # Task 7b: backup copy exclusion
 Check 'backup copy excluded'  (-not ($csv -match '- Copy'))
 Check 'no duplicate frmEdit'  ((($csv -split "`r`n") | Select-String ',frmEdit,').Count -eq 1)
+
+# --- v4 fixture: interface-dispatch + hook-registration navigation ---------
+# Task 1 of the forms-csv v4 plan (docs/superpowers/plans/2026-07-05-forms-csv-v4-navigation-plan.md).
+# Second, self-contained fixture project exercising two patterns v3 cannot
+# bridge: (a) APlan.EditThing dispatched through interface IThingPlan4 to a
+# concrete class's launch (Layer 1); (b) a proc-var hook registered in
+# initialization (ThingHook := ShowThing4) that indirects to a launch
+# (Layer 2). Uses separate variables so it never disturbs the block above.
+$FixtureDir4 = "$PSScriptRoot\..\fixtures\formsmap-v4"
+$WorkDir4    = "$env:TEMP\drag-lint-formsmap-v4"
+if (Test-Path $WorkDir4) { Remove-Item -Recurse -Force $WorkDir4 }
+New-Item -ItemType Directory $WorkDir4 | Out-Null
+$db4  = "$WorkDir4\fixture4.sqlite"
+$out4 = "$WorkDir4\forms4.csv"
+& $Exe index $FixtureDir4 --db $db4 2>&1 | Out-Null
+Check 'v4: index fixture exits 0' ($LASTEXITCODE -eq 0)
+& $Exe forms-csv --project "$FixtureDir4\Demo4.dproj" --db $db4 --out $out4 2>&1 | Out-Null
+Check 'v4: forms-csv exits 0' ($LASTEXITCODE -eq 0)
+Check 'v4: csv exists' (Test-Path $out4)
+$csv4 = Get-Content $out4 -Raw
+Check 'v4: header present' ($csv4 -match '#,Unit,FormName,PAS lines,Navigation,Called From,Notes')
+$rows4 = ($csv4 -split "`r`n") | Where-Object { $_ -ne '' }
+Check 'v4: footer/provenance line present' ($rows4[-1] -match '^,,,,,,"?# forms-csv algorithm v')
+# Layer 1: interface-dispatch bridge (APlan.EditThing -> TDirectPlan4.EditThing -> frmDirect4)
+Check 'v4: frmDirect4 nav via interface dispatch' ($csv4 -match "uDirect4,frmDirect4,\d+,frmRoot4 -> 'Plan' -> frmDirect4,")
+# Layer 1 + Layer 2: interface-dispatch + proc-var hook (APlan.EditThing -> THookPlan4.EditThing -> ThingHook() -> ShowThing4 -> frmHooked4)
+Check 'v4: frmHooked4 nav via interface dispatch + hook' ($csv4 -match "uHooked4,frmHooked4,\d+,frmRoot4 -> 'Plan' -> frmHooked4,")
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

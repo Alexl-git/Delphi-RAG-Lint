@@ -1,0 +1,13 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>Demo4.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="uRoot4.pas"><Form>frmRoot4</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uPlanIntf4.pas"/>
+    <DCCReference Include="uPlans4.pas"/>
+    <DCCReference Include="uDirect4.pas"><Form>frmDirect4</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uHooked4.pas"><Form>frmHooked4</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uHookReg4.pas"/>
+  </ItemGroup>
+</Project>
