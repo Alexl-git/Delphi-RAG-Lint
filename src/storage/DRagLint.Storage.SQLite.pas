@@ -597,8 +597,10 @@ procedure TSQLiteSymbolStore.PrepareStatements;
     Result:= TFDQuery.Create(nil);
     Result.Connection:= FConn;
     Result.SQL.Text:= ASql;
-    // Compiles the statement (.Prepare) but steps none -- safe on a read-only
-    // handle. Param types are inferred from the first set of param values.
+    // SQL.Text only -- no .Prepare here. FireDAC auto-prepares on first use, and
+    // preparing/compiling a statement steps nothing, so building these query
+    // objects is safe on a read-only (query_only) handle. Param types are
+    // inferred from the first set of param values.
   end;
 begin
   // v0.59.4: two-query upsert: UPDATE existing row, INSERT OR IGNORE for new files.

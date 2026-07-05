@@ -1024,6 +1024,18 @@ Detectable from AST / index today; pick batches of these:
 - **CI exit-code policy** by severity (fail build on `error`/`warning` but not `info`).
 - **A unified test runner** that also exercises the `lint-project` rules (index a fixture + assert) -- today
   those are manual (`tests/lint-project/README.md`).
+- **Read-only opens for the analytical read-verb family (v0.86 fast-follow).** v0.86 (D4) made the 6 SPEC-named
+  read verbs open read-only via `PRAGMA query_only=ON` (outline/query*/find-unit/surface/context/dump-refs), which
+  kills the DDL-on-read / win32 FTS5-trigger-drop for them. But ~11 other PURE-READ analytical verbs still use
+  `Create + Migrate` (write path) and would re-run Migrate's FTS5-probe/DROP-TRIGGER if invoked with a **win32** exe
+  against a shared DB: `resolve-uses` (CLI.pas:2072), `hover` (:3819), `impact` (:3988), `usages` (:4240), `slice`
+  (:4328), `bench-context` (:5115), `uses-report` (:5321), `typeat` (:5655), `cycles` (:7179), `uses-audit` (:7553),
+  and `generate-docs` (:5687 -- redundant write open; it also opens a read-only store at :5712). NOT a v0.86 blocker:
+  the spec scoped read-only to exactly the 6 verbs, and the IDE win32-exe vector is closed by the T1 Win64-default
+  resolver -- these only regress on a MANUAL `win32 drag-lint hover` against a shared DB. Fix: audit each verb's store
+  usage (read-method only) then switch to `OpenReadOnlyStore`; `generate-docs`/`check-unit` have conditional store use
+  -- verify before flipping. Completes the "kills DDL-on-read" guarantee for the whole read surface. (Whole-branch
+  review finding, v0.86 final review 2026-07-05.)
 
 ---
 
