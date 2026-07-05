@@ -124,6 +124,32 @@ hundred tokens versus tens of thousands to read the relevant 2,000-line units.
 
 ---
 
+## 4b. AutoFix (`--fix`)
+
+A subset of rules have a registered, mechanical quick-fix. `rules --json` marks
+each with `"fixable": true`. Apply them with `--fix`:
+
+- **One finding:** `lint --file F --fix --fix-line L --fix-rule R --json [--apply]`
+  (omit `--apply` to preview; `--json` reports `fixable`/`applied`/`preview`/`risky`).
+- **Whole unit / project:** `lint --file F --fix --apply` / `lint-all --fix --apply`.
+
+**Batch fix respects the active rule set.** `--fix` applies quick-fixes only for
+findings from *enabled* rules. A rule disabled in `drag-lint-lint.json` (its
+`"disabled"` array) or via `--disable` is filtered out **before** the fix stage,
+so its findings are neither reported nor fixed. Enabling/disabling a rule
+therefore also controls whether it participates in batch autofix. (The separate
+per-rule "auto-fix" checkbox in the IDE is a save-time auto-apply preference, not
+the batch gate.)
+
+**Risky fixes.** Most fixes are behaviour-preserving (they rewrite redundant code
+to an equivalent). One rule — `off-by-one-count` — is behaviour-**changing**: it
+assumes `for I := 0 to List.Count do` is a bug and rewrites the bound to
+`... - 1`. Its fix is still applied by `--fix`, but the `--json` output flags it
+`"risky": true` and the text preview prints a `[risky]` note. Review a risky fix
+before trusting it in a batch apply — a deliberately-inclusive loop would break.
+
+---
+
 ## 5. Warnings (please read)
 
 - **Alpha software.** Expect rough edges and breaking changes between versions.
