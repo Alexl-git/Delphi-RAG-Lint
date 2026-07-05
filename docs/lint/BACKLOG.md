@@ -1,5 +1,49 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-05 (LATEST-7) -- **NEXT = execute the forms-csv v4 navigation plan via subagent-driven-development.**
+> `main`=`812fab1` (clean, pushed, synced with origin). **>>> Execute
+> `docs/superpowers/plans/2026-07-05-forms-csv-v4-navigation-plan.md` via superpowers:subagent-driven-development** -- 5 TDD
+> tasks: T1 RED fixtures (a SECOND `tests/fixtures/formsmap-v4/` project: interface dispatch + hook) -> T2 Layer 1
+> interface-method fan-in bridge (DIAGNOSE-then-fix: run `dump-refs` on the RED fixture FIRST to see if the direct case
+> already resolves; YAGNI the heritage helper if so) -> T3 Layer 2 hook-registration TEXT-SCAN pre-pass + dead-end
+> continuation -> T4 'Plan' caption at the bridge + `FORMS_CSV_ALGORITHM`->'4' + Layer 0 db-scope stderr guardrail -> T5
+> real-DB smoke (Z14/Z19/family resolves against the FULL ORM3 db) + regression sweep.
+> **Spec (all grounded root-cause evidence):**
+> `docs/superpowers/specs/2026-07-05-forms-csv-v4-hook-and-interface-navigation-design.md`.
+> **v4 GOAL:** the plan-editor form family (Z14/Z19 + ~18 `TxxxPlan.EditForm`) shows "(no path from MAIN)"; make it render
+> `frmMAIN -> ... -> frmControlPlan2 -> 'Plan' -> <form>`. THREE grounded layers: **L0 db-scope (DOMINANT)** -- the report
+> ran against the CLIENT-only `Micronite2027.sqlite` which lacks `COMMON\OBJECTS\uPLANLIST.PAS` where the `EditForm` launch
+> bodies live (`query --name EditForm` = 0 on that db); run against the full `C:\Projects\DB\ORM3\drag-lint.sqlite` which has
+> them. **L1 interface bridge** -- BACKWARD-CHAIN, fully index-queryable: launch body -> `type_ancestors` heritage ->
+> `refs WHERE name_text='EditForm'` each carrying `enclosing_symbol_id` = the calling FORM method (VERIFIED at
+> `ControlPlan2.pas:1451` `EditForm|btnSelFinalPlanClick`) -> form -> MAIN + `CaptionForHandler` = 'Plan'. Match by method
+> NAME across the interface family (correct: all 19 plan editors share the one Plan button = a polymorphic dispatch hub; the
+> slider picks which plan). **L2 hook edges** -- `uPLANLIST.PlanEditFormHook := ShowPlanEditor` (uPlanEditForms.pas:123, in
+> `initialization`) is a proc-variable indirection; the parser emits NO ref for the hook field or the RHS routine there
+> (only a `uPLANLIST` unit ref), so `find-callers ShowPlanEditor`=0 and it MUST be a text-scan of the source (bounded to
+> already-known form-launching routines).
+> **All work in `src/forms/DRagLint.FormsMap.pas`:** `BuildEdges`:585, `FindNearestFormCaller`:509, `ProcessSite`:620,
+> `CaptionForHandler`:421, `FORMS_CSV_ALGORITHM`:70. No index-schema change in v4.
+> **NEW spec section D5 (future indexer milestone, schema bump):** receiver-type on call refs + proc-assign refs +
+> interface-impl method edges -> removes L2's text-scan + makes polymorphic dispatch precise (benefits find-callers/impact/
+> graph too). Separate brainstorm->spec->plan.
+> **BUILD GOTCHAS (in the plan):** run tests against the STAGED exe `third_party\dll-win64\drag-lint.exe` (the raw
+> `src\cli\Win64\Release\drag-lint.exe` dies `0xC0000135` DLL-not-found -- no tree-sitter DLLs beside it); after each
+> rebuild `copy src\cli\Win64\Release\drag-lint.exe third_party\dll-win64\`. Run `run_formsmap.ps1` from a NEUTRAL CWD
+> (`C:\TEMP`) or assert the CSV directly -- its `$ErrorActionPreference=Stop` + the exe's `(loaded defaults)` stderr line
+> = a spurious `NativeCommandError` from a config-bearing CWD. Fixture `.pas`/`.expected` must be CRLF (the Write tool emits
+> LF -> byte-rewrite before committing). forms-csv Migrates -> use a SCRATCH COPY of any real db.
+> **>>> AFTER v4 implementation: PUBLISH as a later release** (user directive) -- version bump + CHANGELOG + pack + tag +
+> gh-release (mirror v0.86 mechanics), BUNDLING the two fixes already shipped THIS session onto main:
+>   - `fc7e630` forms-csv header-move (provenance line -> padded footer, column header = row 1; 14 formsmap assertions pass).
+>   - `bb6eb82` live-lint `unit-name-matches-file` FP fix (skips `drag-lint-live-*` buffer snapshots -- was firing on every
+>     unsaved edit incl. SOFTWID.PAS during the v0.86 IDE smoke; RED->GREEN fixture `tests/lint/drag-lint-live-99999.pas`).
+>   Both are in committed SOURCE + the staged win64 exe already, but NOT in a release yet.
+> **STILL OPEN from v0.86 (unchanged):** (1) the win64 exe already carries the 2 fixes but the plugin BPL was NOT redeployed
+> (no plugin source changed -- so the running IDE plugin is unaffected; the exe changes take effect on next reindex/lint);
+> (2) fast-follow read-only for the ~11 analytical read verbs (sec.5).
+>
+> --- (prior) ---
 > ## RESUME 2026-07-05 (LATEST-6) -- **v0.86.0-alpha PUBLISHED (full GitHub release, `--latest`, win32+win64). Milestone COMPLETE.**
 > `main` = `65f317e` (clean, pushed, synced with origin), tag `v0.86.0-alpha` on `65f317e`, GitHub release live + `Latest`
 > (isPrerelease=false): https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v0.86.0-alpha . VERSION `CLI.pas:6` =
