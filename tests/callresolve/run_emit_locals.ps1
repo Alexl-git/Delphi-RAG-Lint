@@ -13,6 +13,15 @@
   (kind 'local_var') carrying its declared type (Signature) and parented -- by
   qualified name -- to its routine (locals.TWorker.Go).
 
+  D5 fast-follow (T3): also covers an OVERLOADED routine (two Combine(...)
+  declarations, same leaf name, different param types). Both overloads declare
+  a same-named local Tmp, so both emit the identical qualified_name
+  'locals.TWorker.Combine.Tmp' -- the qname alone cannot disambiguate them.
+  This regression-covers FindRoutineSymbolIndex's overload disambiguation (by
+  ImplStartLine): each Tmp must be parented to ITS OWN overload, proven by
+  each carrying that overload's own param type as Signature (Integer vs
+  TWorker), not both collapsing onto one overload's local.
+
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
@@ -43,6 +52,17 @@ function LocalByQName([string]$name, [string]$qname) {
   return $null
 }
 
+# D5 fast-follow (T3): overloaded routines can share one qualified_name for a
+# same-named local (both Combine overloads have a Tmp), so return ALL matches
+# rather than the first -- the overload-attribution proof is that TWO distinct
+# rows exist, each carrying its own overload's Signature.
+function LocalsByQName([string]$name, [string]$qname) {
+  $j = & $exePath query --name $name --db $db --json 2>$null | Out-String
+  $arr = $null; try { $arr = ($j | ConvertFrom-Json) } catch { $arr = $null }
+  if ($null -eq $arr) { return @() }
+  return @($arr | Where-Object { $_.kind -eq 'local_var' -and $_.qualified_name -eq $qname })
+}
+
 Push-Location C:\TEMP
 try {
   & $exePath index $scratch --db $db 2>$null | Out-Null
@@ -61,6 +81,18 @@ try {
   Check 'Go.X is local_var, type contains TWorker'        ($null -ne $x -and $x.signature -match 'TWorker')
   Check 'Go.Y is local_var, type contains TWorker'        ($null -ne $y -and $y.signature -match 'TWorker')
   Check 'grouped X,Y share the same type text'            ($null -ne $x -and $null -ne $y -and $x.signature -eq $y.signature)
+
+  # --- OVERLOAD: two Combine(...) overloads, each with its own Tmp local, same
+  # qualified_name -- must attribute to the RIGHT overload (by Signature). ---
+  $combineTmps = LocalsByQName 'Tmp' 'locals.TWorker.Combine.Tmp'
+  Check 'both Combine overloads emit their own Tmp (2 rows, same qname)' `
+    ($combineTmps.Count -eq 2)
+  $tmpInt    = @($combineTmps | Where-Object { $_.signature -match '^\s*Integer\s*$' })
+  $tmpWorker = @($combineTmps | Where-Object { $_.signature -match '^\s*TWorker\s*$' })
+  Check 'Combine(A: Integer) overload: its Tmp is local_var, type = Integer' `
+    ($tmpInt.Count -eq 1)
+  Check 'Combine(A: TWorker) overload: its Tmp is local_var, type = TWorker' `
+    ($tmpWorker.Count -eq 1)
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

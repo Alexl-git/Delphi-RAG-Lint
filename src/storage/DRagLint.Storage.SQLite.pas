@@ -972,7 +972,15 @@ begin
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
       'WHERE ce.target_symbol_id = :x ' +
-      'ORDER BY ce.confidence DESC, s.qualified_name';
+      // D5 fast-follow (T7): confidence is TEXT ('certain' | 'ambiguous'), and a
+      // plain 'ORDER BY ce.confidence DESC' only puts 'certain' first because
+      // 'c' > 'a' lexically -- an accident of English spelling, not an intended
+      // ordinal. An explicit CASE mapping makes the ordering a deliberate choice:
+      // 'certain' callers must sort before 'ambiguous' ones. If a THIRD confidence
+      // value is ever introduced, it must be slotted into this CASE on purpose --
+      // it will otherwise fall into the ELSE bucket (sorted last, alongside
+      // 'ambiguous') rather than silently reordering the existing two.
+      'ORDER BY CASE ce.confidence WHEN ''certain'' THEN 0 ELSE 1 END, s.qualified_name';
     Q.ParamByName('x').AsLargeInt:= ATargetSymbolId;
     Q.Open;
     while not Q.Eof do

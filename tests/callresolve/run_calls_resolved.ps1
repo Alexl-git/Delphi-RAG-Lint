@@ -64,6 +64,18 @@ try {
   Check 'STILL INCLUDES SetLength (unresolved, body-scan fallback)' `
     ($line -match '\bSetLength\b')
 
+  # --- D5 fast-follow (T10): SAME-LEAF-NAME, DIFFERENT-QUALIFIED targets. O.Run
+  # (typed-local receiver) resolves to callsfacts.TOther.Run -- a DIFFERENT
+  # method that merely shares the leaf name 'Run' with W.Run's target
+  # (callsfacts.TWorker.Run). Both must appear, fully qualified, and distinct --
+  # if the resolver ever collapsed same-leaf-name targets, this would either
+  # drop one qualified entry or double up a bare 'Run'.
+  Check 'INCLUDES resolved qualified callee callsfacts.TOther.Run' `
+    ($line -match 'callsfacts\.TOther\.Run')
+  $lineWithoutEitherQualified = $line -replace 'callsfacts\.TWorker\.Run', '' -replace 'callsfacts\.TOther\.Run', ''
+  Check 'EXCLUDES bare Run even with two distinct qualified Run targets' `
+    (-not ($lineWithoutEitherQualified -match '(?<!\.)\bRun\b'))
+
   # --- IDEMPOTENCY: reindex (call_edges is rebuilt) + apply again -> byte-identical.
   $before = [IO.File]::ReadAllBytes($target)
   & $exePath index $scratch --db $db 2>$null | Out-Null

@@ -1147,7 +1147,18 @@ begin
             symbols, parented to its (already-emitted) routine symbol. Only at
             RoutineDepth = 0 -- a nested proc is never walked here, so its locals
             do not leak. Uses the routine symbol's own unit-qualified name so the
-            local's QualifiedName is 'Unit.TClass.Method.VarName'. }
+            local's QualifiedName is 'Unit.TClass.Method.VarName'.
+            DEFERRED (D5 fast-follow, T3): EmitRoutineLocals only scans this
+            defProc's DIRECT `declVars` children (the classic `var` section
+            before `begin`). A Delphi 10.3+ INLINE var -- `var X: T := ...;`
+            declared mid-statement inside the `block` -- lives under a different
+            node shape further down the body and is NOT visited here, so it is
+            never emitted as an skLocalVar today. This is a known gap, not a
+            bug: the call resolver (Task 5) still degrades gracefully (an
+            inline-var receiver just stays untypable/'ambiguous' rather than
+            resolving), so nothing silently gives a wrong answer. Picking up
+            inline vars is future work if/when they show up as a real gap in
+            receiver-typing coverage. }
           if HdrName <> '' then
           begin
             var RoutineIdx:= FindRoutineSymbolIndex(AState, HdrName, Integer(ANode.StartPoint.row) + 1);

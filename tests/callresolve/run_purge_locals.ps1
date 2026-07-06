@@ -68,8 +68,17 @@ try {
   $purgeTxt = & $exePath purge-locals --db $db 2>$null | Out-String
   Check 'purge-locals exit 0'                  ($LASTEXITCODE -eq 0)
   # It must report a nonzero rows-removed count (receivers.pas has 1 param + 1 local).
+  # D5 fast-follow (T12/T13): this probe PARSES the verb's plain-text success
+  # message to recover the count -- inherently fragile if the wording changes.
+  # Loosened to match the essential tokens only (a removed/purged VERB followed
+  # by a NUMBER, in either order) rather than the whole sentence, so a minor
+  # wording tweak (e.g. "removed" -> "purged", or reordering "N symbol(s)
+  # removed") doesn't break this test. If the CLI ever stops reporting a count
+  # in plain text at all, prefer asserting via `--json` (already covered below)
+  # over patching this regex further.
   $removed = 0
-  if ($purgeTxt -match 'removed\D*(\d+)') { $removed = [int]$Matches[1] }
+  if ($purgeTxt -match '(?:removed|purged)\D*(\d+)') { $removed = [int]$Matches[1] }
+  elseif ($purgeTxt -match '(\d+)\D*(?:removed|purged)') { $removed = [int]$Matches[1] }
   Check 'purge reported >= 2 rows removed'     ($removed -ge 2)
 
   # --- AFTER purge: locals/params gone, call graph IDENTICAL. ---
@@ -92,7 +101,8 @@ try {
   $purge2Txt = & $exePath purge-locals --db $db 2>$null | Out-String
   Check 'second purge exit 0 (idempotent)'     ($LASTEXITCODE -eq 0)
   $removed2 = -1
-  if ($purge2Txt -match 'removed\D*(\d+)') { $removed2 = [int]$Matches[1] }
+  if ($purge2Txt -match '(?:removed|purged)\D*(\d+)') { $removed2 = [int]$Matches[1] }
+  elseif ($purge2Txt -match '(\d+)\D*(?:removed|purged)') { $removed2 = [int]$Matches[1] }
   Check 'second purge removed 0 rows'          ($removed2 -eq 0)
 
   # --json shape: rows removed + before/after size fields. Use a SEPARATE fresh
