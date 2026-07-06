@@ -250,6 +250,11 @@ type
     // --unit flag with ghost-check's GhostUnit, so it is parsed into a DISTINCT
     // field ONLY when Command='document' to avoid the ghost-check collision.
     DocUnit    : string; // document --unit <file.pas>
+    // AutoDocument (batch scope): --stubs flips the facts-only default. Off
+    // (default) documents only facts-backed / already-documented decls; on keeps
+    // the pure all-TODO create too (opt-in TODO stubs). Consumed by document /
+    // document --project / document-all via TDocBatchOptions.Stubs.
+    DocStubs   : Boolean; // document [...] --stubs
     // v0.48: multi-overlay -- a manifest with one 'realpath<TAB>bufferpath' per
     // line, so ALL unsaved units are overlaid for a single compile.
     GhostOverlays: string; // --overlays <manifest>
@@ -656,9 +661,12 @@ begin
     else if (A = '--unit') and (i < ParamCount) then
     begin
       Inc(i);
-      if Result.Command = 'document' then Result.DocUnit:= ParamStr(i)
+      if (Result.Command = 'document') or (Result.Command = 'document-all') then Result.DocUnit:= ParamStr(i)
       else Result.GhostUnit:= ParamStr(i);
     end
+    // AutoDocument batch: --stubs opt-in (flips the facts-only default for
+    // document / document --project / document-all).
+    else if A = '--stubs' then Result.DocStubs:= True
     else if (A = '--buffer') and (i < ParamCount) then begin Inc(i); Result.GhostBuffer:= ParamStr(i); end
     else if (A = '--overlays') and (i < ParamCount) then begin Inc(i); Result.GhostOverlays:= ParamStr(i); end
     // v0.57: text-constant search flags
@@ -5579,8 +5587,8 @@ begin
   if not Ok then Exit(2);
 
   Opts:= Default(TDocBatchOptions);
-  // Stubs stays False here = facts-only default; the --stubs flag + the other
-  // doc-source options are wired in later tasks.
+  // --stubs flips the facts-only default: on = keep pure all-TODO creates too.
+  Opts.Stubs:= AArgs.DocStubs;
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
@@ -5608,6 +5616,87 @@ begin
   Result:= 0;
 end; // function
 
+// Shared apply/report path for the multi-file AutoDocument batch results
+// (document --project / document-all). AScope names the source in --json
+// ('project' | 'all'); AScopeVal is the .dpr/.dproj path or '' for document-all.
+// Applies the aggregated per-file edits (TTextEditApplier groups+sorts per file)
+// unless dry-run, then prints the summary or the --json aggregate. Exit 0.
+function ReportDocBatch(const AArgs: TArgs; const ARes: TDocBatchResult;
+  const AScope, AScopeVal: string): Integer;
+var
+  O      : TJSONObject;
+  Applied: Boolean    ;
+begin
+  Applied:= AArgs.Apply and (Length(ARes.Edits) > 0);
+  if Applied then TTextEditApplier.Apply(ARes.Edits, not AArgs.NoBackup);
+
+  if AArgs.AsJson then
+  begin
+    O:= TJSONObject.Create;
+    try
+      O.AddPair(AScope, AScopeVal);
+      O.AddPair('declCount', TJSONNumber.Create(ARes.DeclCount));
+      O.AddPair('docCount' , TJSONNumber.Create(ARes.DocCount ));
+      O.AddPair('edits'    , TJSONNumber.Create(Length(ARes.Edits)));
+      O.AddPair('applied'  , TJSONBool.Create(Applied));
+      Writeln(O.ToJson);
+    finally
+      O.Free;
+    end;
+    Exit(0);
+  end;
+
+  if Length(ARes.Edits) = 0 then Writeln(Format('doc: %d public decl(s), nothing to document', [ARes.DeclCount]))
+  else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(ARes.Edits)); Writeln(Format('doc: %d/%d decl(s), %d edit(s) -- pass --apply to write', [ARes.DocCount, ARes.DeclCount, Length(ARes.Edits)])); end
+  else Writeln(Format('doc: %d/%d decl(s) documented, %d edit(s) applied%s', [ARes.DocCount, ARes.DeclCount, Length(ARes.Edits), IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+  Result:= 0;
+end; // function
+
+// AutoDocument (project-wide batch): drag-lint document --project <p.dpr/.dproj>
+//   [--stubs|--apply|--json|--no-backup] [--db PATH]
+// Documents every public decl across the project's compile closure via
+// TDocBatch.DocumentProject. Facts-only default; --stubs opts in the all-TODO
+// creates. Dry-run unless --apply. Exit 0 on ok, 2 on usage/db error.
+function DoDocumentProject(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore    ;
+  Ok   : Boolean         ;
+  Opts : TDocBatchOptions;
+  Res  : TDocBatchResult ;
+begin
+  if not TFile.Exists(AArgs.ProjectPath) then begin Writeln(Format('Project file not found: %s', [AArgs.ProjectPath])); Exit(2); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if not Ok then Exit(2);
+
+  Opts:= Default(TDocBatchOptions);
+  Opts.Stubs:= AArgs.DocStubs;
+  Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
+  Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
+end; // function
+
+// AutoDocument (whole-index batch): drag-lint document-all
+//   [--stubs|--apply|--json|--no-backup] [--db PATH]
+// Documents every public decl in EVERY indexed unit (no project scope) via
+// TDocBatch.DocumentAll. Facts-only default; --stubs opts in the all-TODO
+// creates. Dry-run unless --apply. Exit 0 on ok, 2 on usage/db error.
+function DoDocumentAll(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore    ;
+  Ok   : Boolean         ;
+  Opts : TDocBatchOptions;
+  Res  : TDocBatchResult ;
+begin
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if not Ok then Exit(2);
+
+  Opts:= Default(TDocBatchOptions);
+  Opts.Stubs:= AArgs.DocStubs;
+  Res:= TDocBatch.DocumentAll(Store, Opts);
+  Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
+end; // function
+
 // AutoDocument Chunk 1: drag-lint document --qname X [--apply|--json|--no-backup] [--db PATH]
 // Generates or repairs a managed-region DocInsight comment for the symbol. Dry-run
 // (prints the edit preview) unless --apply. Exit 0 on ok/unchanged, 1 not found,
@@ -5621,8 +5710,9 @@ var
   O      : TJSONObject                          ;
   Applied: Boolean                              ;
 begin
+  if AArgs.ProjectPath <> '' then Exit(DoDocumentProject(AArgs));
   if AArgs.DocUnit <> '' then Exit(DoDocumentUnit(AArgs));
-  if AArgs.QName = '' then begin Writeln('Usage: drag-lint document (--qname X | --unit F) [--apply|--json|--no-backup] [--db PATH]'); Exit (2 ); end;
+  if AArgs.QName = '' then begin Writeln('Usage: drag-lint document (--qname X | --unit F | --project P) [--stubs|--apply|--json|--no-backup] [--db PATH]'); Exit (2 ); end;
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
@@ -10079,6 +10169,7 @@ begin
     else if Args.Command = 'rename'            then Result:= DoRename          (Args)
     else if Args.Command = 'generate-docs'     then Result:= DoGenerateDocs    (Args)
     else if Args.Command = 'document'          then Result:= DoDocument        (Args)
+    else if Args.Command = 'document-all'      then Result:= DoDocumentAll     (Args)
     else if Args.Command = 'find-unit'         then Result:= DoFindUnit        (Args)
     else if Args.Command = 'safe-delete'       then Result:= DoSafeDelete      (Args)
     else if Args.Command = 'extract-method'    then Result:= DoExtractMethod   (Args)
