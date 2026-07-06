@@ -321,6 +321,7 @@ begin
   Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
+  Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('');
   Writeln('  Output/CI (lint, lint-all, check-ast):');
   Writeln('    --format sarif            emit SARIF 2.1.0 (in addition to text|json)');
@@ -8477,6 +8478,58 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>v14 (D5 T12): drag-lint purge-locals --db PATH [--json] -- the SIZE
+/// ESCAPE HATCH. Deletes every skLocalVar/skParam symbol (kind IN 'local_var',
+/// 'param'), then VACUUMs to reclaim the freed pages, and reports how many rows
+/// were removed plus the DB file size before/after. Once ResolveCallTargets has
+/// populated call_edges, these numerous per-local / per-param symbols have done
+/// their job (they let the resolver type call-site receivers), so purging them
+/// slims the index. The resolved CALL GRAPH is unchanged: call_edges references
+/// call TARGETS (methods) and receiver TYPES (classes), never a local/param, so
+/// no edge can cascade-delete. Requires an explicit --db (it MUTATES a specific
+/// index -- never purges across an auto-selected DB set). NOT wired into any
+/// auto-index path: a reindex re-emits locals/params and rebuilds call_edges, so
+/// this is a manual, point-in-time slim only, correctly re-inflated on the next
+/// full index. Idempotent: a second run removes 0 rows and still exits 0.</summary>
+/// <param name="AArgs">Parsed CLI args; DbPath is the index to purge; AsJson picks JSON output.</param>
+/// <returns>0 on success (including the idempotent 0-removed second run); 2 on
+/// usage error / missing --db / missing db file.</returns>
+function DoPurgeLocals(const AArgs: TArgs): Integer;
+var
+  Store     : ISymbolStore;
+  Removed   : Int64        ;
+  SizeBefore: Int64        ;
+  SizeAfter : Int64        ;
+begin
+  if AArgs.DbPath = '' then begin Writeln('ERROR: purge-locals needs an explicit --db <db>'); Exit(2); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+
+  SizeBefore:= TFile.GetSize(AArgs.DbPath);
+  { Read-WRITE open (purge MUTATES) -- same path as index/rename/safe-delete, NOT
+    the query_only OpenReadOnlyStore used by read verbs. Migrate ensures the
+    schema (incl. the symbols.kind values) is current before we touch it. }
+  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate;
+  Removed:= Store.PurgeLocals;
+  Store:= nil; { close the connection so the VACUUM's file resize is flushed before we stat }
+  SizeAfter:= TFile.GetSize(AArgs.DbPath);
+
+  if AArgs.AsJson then
+  begin
+    var JO: TJSONObject:= TJSONObject.Create;
+    try
+      JO.AddPair('db'         , AArgs.DbPath                      );
+      JO.AddPair('removed'    , TJSONNumber.Create(Removed   )    );
+      JO.AddPair('size_before', TJSONNumber.Create(SizeBefore)    );
+      JO.AddPair('size_after' , TJSONNumber.Create(SizeAfter )    );
+      Writeln(JO.Format(2));
+    finally JO.Free; end;
+  end
+  else
+    Writeln(Format('purge-locals: removed %d local/param symbol(s); db size %d -> %d bytes',
+      [Removed, SizeBefore, SizeAfter]));
+  Result:= 0;
+end; // function
+
 // v0.27: drag-lint format <file> [--yadf-path PATH]
 // Runs YADF formatter on the given file (YADF rewrites in place).
 // Exit 2 on usage error, 1 on formatter failure, 0 on success.
@@ -9687,6 +9740,7 @@ begin
     else if Args.Command = 'ambiguous-calls'   then Result:= DoAmbiguousCalls  (Args)
     else if Args.Command = 'call-path'         then Result:= DoCallPath        (Args)
     else if Args.Command = 'callgraph'         then Result:= DoCallGraph       (Args)
+    else if Args.Command = 'purge-locals'      then Result:= DoPurgeLocals     (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
     else if Args.Command = 'workspace'         then Result:= DoWorkspace       (Args)
     else if Args.Command = 'selftest'          then Result:= DoSelfTest        (Args)

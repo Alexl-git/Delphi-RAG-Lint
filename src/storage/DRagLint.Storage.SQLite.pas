@@ -110,6 +110,7 @@ type
       function FindUnresolvedNameCallers(const AName: string): TArray<TResolvedCaller>;
       function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
       function CountCallEdges: Int64;
+      function PurgeLocals: Int64;
       function GetTypeCandidates: TArray<TSymbol>;
       function GetUnitScopeEdges: TArray<TFileScopeEdge>;
       function DumpAllCallEdges: TArray<TCallEdge>;
@@ -1084,6 +1085,41 @@ begin
   finally
     Q.Free;
   end;
+end;
+
+function TSQLiteSymbolStore.PurgeLocals: Int64;
+{ v14 (D5): the size escape hatch. Count-then-DELETE the skLocalVar/skParam
+  symbols, then VACUUM to reclaim the freed pages. call_edges references call
+  TARGETS (methods, ON DELETE CASCADE) and receiver TYPES (classes, ON DELETE
+  SET NULL) -- NEVER a local/param -- so this delete can never cascade-remove a
+  call_edges row; the resolved call graph is byte-identical before and after.
+  A ref that pointed at a purged local gets refs.symbol_id NULLed (SET NULL),
+  the ref row survives, and call_edges.ref_id stays intact.
+  VACUUM must run OUTSIDE a transaction: FireDAC's default TxOptions.AutoCommit
+  is True, so the standalone ExecSQL('DELETE ...') commits before VACUUM runs.
+  We defensively commit any straggler open tx first so VACUUM can never hit
+  'cannot VACUUM from within a transaction'. }
+var
+  Q: TFDQuery;
+begin
+  { Count first so we can report exactly how many symbols were removed (also
+    doubles as the idempotency signal: 0 on a second run). }
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT COUNT(*) AS n FROM symbols WHERE kind IN (''local_var'',''param'')';
+    Q.Open;
+    Result:= Q.FieldByName('n').AsLargeInt;
+  finally
+    Q.Free;
+  end;
+
+  FConn.ExecSQL('DELETE FROM symbols WHERE kind IN (''local_var'',''param'')');
+
+  { VACUUM cannot run inside a transaction. AutoCommit already committed the
+    DELETE above, but be defensive: if some straggler tx is open, commit it. }
+  if FConn.InTransaction then FConn.Commit;
+  FConn.ExecSQL('VACUUM');
 end;
 
 function TSQLiteSymbolStore.GetTypeCandidates: TArray<TSymbol>;

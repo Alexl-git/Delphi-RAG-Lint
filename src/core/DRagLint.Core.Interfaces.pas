@@ -205,6 +205,25 @@ type
     function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
     /// <summary>Total row count in call_edges. Diagnostic/test probe.</summary>
     function CountCallEdges: Int64;
+    /// <summary>v14 (D5): SIZE ESCAPE HATCH -- delete every skLocalVar/skParam
+    /// symbol (kind IN 'local_var','param') then VACUUM to reclaim the freed
+    /// pages. Returns the number of local/param symbols removed. Once
+    /// ResolveCallTargets has populated call_edges, these numerous per-local /
+    /// per-param symbols have done their job (they let the resolver type
+    /// call-site receivers); purging them slims the index. SAFETY: call_edges
+    /// references call TARGETS (methods -&gt; ON DELETE CASCADE) and receiver
+    /// TYPES (classes -&gt; ON DELETE SET NULL), NEVER a local/param, so no
+    /// call_edges row can cascade-delete; the resolved call graph is unchanged.
+    /// A ref that pointed at a purged local's declaration gets its symbol_id
+    /// NULLed (refs.symbol_id ON DELETE SET NULL) -- the ref row survives, so
+    /// call_edges.ref_id is intact too. NOT part of any auto-index path -- a
+    /// reindex re-emits locals/params and rebuilds call_edges; this is a
+    /// manual, point-in-time slim only. Idempotent: a second call removes 0.
+    /// Must run OUTSIDE a transaction (SQLite rejects VACUUM in a tx); the
+    /// bare autocommit ExecSQL path satisfies this.</summary>
+    /// <returns>Count of local_var/param symbols deleted (0 if none remained).</returns>
+    /// <remarks>Not thread-safe; call from the owning thread on a writable store.</remarks>
+    function PurgeLocals: Int64;
     /// <summary>v14 (D5): every class/interface/record symbol (id, file_id, kind,
     /// name populated). Bulk read that backs TCallResolver's name-candidate map
     /// for receiver typing -- the same candidate set ResolveAncestry builds
