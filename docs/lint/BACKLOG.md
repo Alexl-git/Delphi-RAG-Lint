@@ -38,6 +38,14 @@
 > released binary is unchanged (test-only + cosmetic). Optional remaining (c) a Calls/Raises-bearing idempotency
 > fixture to harden the shift-invariance lock -- still open, low value. All other Minors DEFER-SAFE (T3 Calls
 > over-capture, T4 blank-line drop + `TODO:` desc edge -- documented, best-effort).
+> **>>> KNOWN BUG (found 2026-07-06 via real "Document it" use, USER-TRIAGED -> fix = D5 milestone):**
+> AutoDocument's **Called-from facts are NAME-BASED -> FALSE callers for common method names** (Run/
+> Execute/Create). `document --qname DRagLint.CLI.Run` listed DoFbSnapshot etc. that call a DIFFERENT
+> `Run`. Root cause: Doc.Facts:244/:312 use `FindCallersByName(name)` = every ref to the name. USER
+> CHOSE the proper fix (2026-07-06): resolve refs to symbol_id at index time = the **D5 indexer
+> milestone** (see sec 6.x / line ~1422), then switch Called-from to `FindReferencesTo(symbolId)`.
+> D5 now serves BOTH forms-csv AND AutoDocument. Full diagnosis in the D5 backlog item. Own chunk
+> (brainstorm->spec->plan->SDD); not a v0.90.x patch. AutoDocument Chunk 1 otherwise SHIPPED + solid.
 > CADENCE (user, unchanged): publish chunk -> plan next -> handoff -> clear -> implement -> publish.
 >
 > --- (prior) ---
@@ -1424,6 +1432,26 @@ remain as low-priority fast-follows (none affects shipped navigation correctness
   + interface-implementation method edges (`impl_of`). Removes L2's text-scan and makes
   polymorphic dispatch precise (benefits find-callers / impact / graph too). Spec D5 has the
   rationale.
+  **>>> NOW DOUBLY-MOTIVATED + USER CHOSE THIS as the AutoDocument Called-from fix (2026-07-06).**
+  BUG FOUND via real "Document it" use: the AutoDocument **Called-from facts are NAME-BASED and
+  produce FALSE callers for common method names** (Run/Execute/Create/Add...). `document --qname
+  DRagLint.CLI.Run` listed DoFbSnapshot/DoLinkOrm/DoLintAll/DoCompileCheck/DoGhostCheck as callers
+  -- but those call DIFFERENT `Run`s (TFbSnapshot.Run, TOrmLinker.Run, TCompileChecker.Run, ...).
+  ROOT CAUSE: `TDocFactsBuilder.Build` (src/doc/DRagLint.Doc.Facts.pas:244 + :312 for Used-in)
+  calls `FindCallersByName(LastSeg(qname))` -> `SELECT * FROM refs WHERE name_text = 'Run'` matches
+  EVERY ref to the name across the corpus (query --name Run shows ~13 DISTINCT symbols named Run).
+  This VIOLATES the feature's "every fact is ground-truth" promise -- confidently-wrong facts, worst
+  for exactly the common names people document most. VERIFIED refs are NOT resolved to the target
+  symbol_id (find-callers --name Run is equally noisy; dump-refs shows callee side name-only).
+  THE FIX (user-chosen 2026-07-06 = "resolve refs to symbol_id at index time, proper fix"): D5's
+  receiver-type resolution lets AutoDocument switch Called-from from `FindCallersByName(name)` to
+  `FindReferencesTo(symbolId)` (that store method ALREADY EXISTS, Interfaces.pas:76) for precise,
+  target-specific callers. So D5 now serves BOTH forms-csv (L2 removal) AND AutoDocument (correct
+  Called-from) -- stronger case to prioritize. When D5 lands, ALSO update Doc.Facts:244/:312 +
+  add a run_doc harness asserting a common-name symbol (e.g. a fixture with two same-named methods)
+  lists ONLY its real callers. INTERIM (if D5 is far off): consider labeling the fact "Referenced by
+  (by name)" so it doesn't read as ground-truth -- but the user chose the proper fix, so interim is
+  optional. This is NOT a v0.90.x quick patch; it's the D5 chunk (own brainstorm->spec->plan->SDD).
 
 ---
 
