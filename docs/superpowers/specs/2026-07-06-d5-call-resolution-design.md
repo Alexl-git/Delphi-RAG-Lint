@@ -68,6 +68,9 @@ benefit in later opt-in work). Schema bump v13 -> v14.
    and `call-path`/`callgraph` (the graph-traversal pair is the heaviest; cut first if
    trimming).
 7. Migration v13 -> v14; rollout step that auto-starts the library reindex in the background.
+8. **`purge-locals` verb** -- drop local/param symbols from a DB (after `call_edges` is built)
+   + VACUUM, to shed index size where locals have least value (esp. the library DBs). The call
+   graph stays precise (`call_edges` is independent of local symbols).
 
 ### Explicitly NOT in scope
 
@@ -251,6 +254,28 @@ This is a plan task (the final rollout step launches the background reindex); th
 does NOT auto-spawn reindexes on schema mismatch (surprising for a CLI). Per-project CLIENT/
 SERVER DBs and the manifest DBs reindex via the normal `index --all` flow on next touch.
 
+### 7. `purge-locals` -- size escape hatch
+
+Emitting all locals/params (Design 3) is the biggest size cost, and it lands hardest on the
+library DBs (RTL/VCL/DevExpress), where local-level awareness (hover/refactoring) matters least.
+**Key property:** local/param symbols are needed only at RESOLVE time. `call_edges` stores
+`target_symbol_id` (the callee) and `receiver_type_symbol_id` (the type) -- never the local
+symbol -- so once `call_edges` is built, dropping the local/param symbols leaves the precise
+call graph fully intact. Only the secondary value (context/hover/refactoring local-awareness) is
+lost, and it's recoverable by reindexing.
+
+**`drag-lint purge-locals --db <path> [--json]`:**
+- Deletes symbols of kind `skLocalVar` / `skParam` from the DB (and any now-orphaned rows that
+  reference only those symbols -- but NOT `call_edges`, whose targets are callees/types).
+- Runs `VACUUM` to reclaim file size.
+- Reports rows removed + before/after DB size.
+- Idempotent (a second run removes nothing).
+- **Selective by design:** run it on the big LIBRARY DBs after their reindex; keep locals on
+  working project DBs where hover/refactoring pays off. The call graph is precise on both.
+- The background library reindex (Design 6) MAY chain `purge-locals` after each library DB
+  finishes, so libraries end up call-graph-precise but slim by default -- confirm the library
+  auto-purge default during implementation (a `--purge-locals-after` flag on the reindex step).
+
 ## Testing
 
 - **`tests/callresolve/`** resolver harnesses: fixtures with each receiver kind (Self, field,
@@ -262,6 +287,10 @@ SERVER DBs and the manifest DBs reindex via the normal `index --all` flow on nex
 - **New verbs:** `find-callers --resolved`, `find-callees`, `ambiguous-calls`,
   `call-path`/`callgraph` -- fixture-driven, `--json` shape asserted.
 - **Migration:** a v13 DB -> open -> v14, `call_edges` present, reparse populates it.
+- **`purge-locals`:** index a fixture -> assert local/param symbols present + `call_edges` built
+  -> `purge-locals` -> assert local/param symbols GONE, `call_edges` UNCHANGED, and Called-from /
+  find-callers / find-callees still return the same resolved results (call graph precise post-
+  purge). Idempotent second run removes nothing.
 - **Guardrail (green throughout):** lint 154/154, store 16/16, autodoc 7/7, autofix 9/9.
 
 ## Verification & publish
@@ -282,9 +311,11 @@ SERVER DBs and the manifest DBs reindex via the normal `index --all` flow on nex
   case.
 - **Index-size growth from emitting ALL locals/params (>2x symbols, user-chosen).** Accepted for
   the broader value (complete local symbol table -> context/hover/refactorings). Reindex cost
-  absorbed by the unattended background library reindex (Design 6). Measure the real delta during
-  implementation and record it in ship notes. Fallback if prohibitive on the full library tree: a
-  config flag (default = emit-all) to restrict emission -- but emit-all is the chosen default.
+  absorbed by the unattended background library reindex (Design 6). **Primary escape hatch: the
+  `purge-locals` verb (Design 7)** -- shed local/param symbols from any DB (esp. libraries) after
+  `call_edges` is built, reclaiming most of the added size while keeping the call graph precise.
+  So the size cost is opt-out per-DB, not permanent. Measure the real delta during implementation
+  and record it in ship notes.
 - **Receiver-typing coverage gaps** (untyped receivers -> `?`). Honest by design: `?` marks
   the uncertainty rather than guessing; `ambiguous-calls` surfaces the gaps for iteration.
 - **Chunk size.** D5 is large (parser change + resolution pass + schema + 4 verbs + 2
