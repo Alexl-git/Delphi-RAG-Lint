@@ -1,5 +1,56 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-06 (LATEST-16) -- **PREPROCESSOR PORT MILESTONE: spec+plan DONE+PUSHED, about to EXECUTE via subagent-driven-development (12 tasks, on main). RESUME = dispatch PP-Task-1 implementer.**
+> `main` synced with origin (0 ahead, clean except IDE json/dsv + 3 untracked docs -- leave those).
+> **NO subagent work in flight** -- this handoff fired at a CLEAN boundary (before PP-Task-1 was dispatched),
+> so nothing is lost; the next session resumes by dispatching PP-Task-1.
+> **>>> READ FIRST: `.superpowers/sdd/progress.md` -> scroll to the "PREPROCESSOR PORT MILESTONE -- EXECUTION
+> LEDGER" section at the END of the file (below the D5 ledger). It has the full mode / global-constraints /
+> per-task model assignments / pre-flight-scan (CLEAN) / PP task status.**
+> **MILESTONE:** port the tree-sitter-delphi13 JavaScript preprocessor to IN-PROCESS Object Pascal (NO Node.js
+> in the shipped exe) so drag-lint resolves `{$IFDEF}` before parsing -> per-config-accurate indexing
+> (~98.2% -> 99.3% on the grammar team's corpus; fixes the `{$IFDEF}`-cross-branch parse-failure class,
+> the largest single class of misses). Spec `docs/superpowers/specs/2026-07-06-preprocessor-port-design.md`;
+> plan `docs/superpowers/plans/2026-07-06-preprocessor-port-plan.md` (12 tasks, TDD, oracle-diff) -- both
+> APPROVED + PUSHED.
+> **KEY DESIGN DECISIONS (all approved in brainstorm):**
+> - In-process port: 3 units (`DRagLint.Preprocess.Lexer/Expr/Preprocess`, ~500 lines mirroring the JS
+>   `lexer.js`/`evalExpr.js`/`preprocess.js`) + a `DRagLint.Preprocess.Profile` define-profile resolver. No
+>   Node, no subprocess, no server/frame protocol (all collapsed by the port decision).
+> - `defines-only` include mode (read a `.inc`'s `{$DEFINE}`/`{$UNDEF}` into the parent, blank the `{$I}`
+>   body) -> `Length(output) == Length(input)` -> offsets 1:1 -> NO source map (spans stored as original-file
+>   offsets directly). Port ONLY `defines-only` + `off`; NEVER `expand` (body-splice).
+> - Build against the CURRENT full grammar first (a valid shippable intermediate -- the full grammar parses
+>   already-resolved single-branch input). The `pure` grammar DLL is a POST-MILESTONE follow-up (request it
+>   from the grammar team AFTER the port is built). PP-Task-8 is a GATE that empirically verifies
+>   preprocess->current-full-grammar parses resolved input at least as well as raw; a T8 FAILURE STOPS the
+>   plan (pure DLL becomes a prerequisite after all).
+> - FULLY per-config: BOTH within-file symbol extraction (T9) AND the `Index.Closure` uses-scanner (T10)
+>   honor the active define profile. The index reflects exactly one build config; cross-platform coverage is
+>   preserved at the multi-DB level (separate library-Win32 / library-Win64 DBs).
+> - Define profile: from the `.dproj` (platform built-ins UNION Base + RELEASE config `DCC_Define`;
+>   `--config Debug` / `--platform Win32` override) for projects; platform built-ins only for library scans;
+>   Win64 built-ins fallback for a missing/loose `.dproj`.
+> - The JS at `C:\Projects\tree-sitter-delphi13\preprocessor\` is the byte-for-byte TEST ORACLE (node
+>   v24.13.0 confirmed) -- Node is a TEST-ONLY / dev dependency; the shipped drag-lint exe never calls it.
+> **USER CONSENT:** execute directly on main (AskUserQuestion 2026-07-06). Execute all 12 tasks +
+> task-reviews autonomously; final whole-branch review; PAUSE before Task 12 publish (version bump / tag /
+> release) for user sign-off.
+> **CROSS-REPO:** our preprocessor reply is committed + pushed to the tree-sitter-delphi13 repo (`60a57e7`);
+> they DELIVERED all three of our asks (`docs/INBOX-tree-sitter-delivered.md` -- defines-only mode + serve.js
+> [which we WON'T consume, since we're porting in-process] + README fix). NOTIFY them the preprocessor is
+> PORTED + passing vs their oracle, and REQUEST the pure grammar DLL = Task 12 step 3 (AFTER the port is built).
+> **STILL PENDING from D5 (LATEST-15, unchanged):** the D5 fast-follow tidy-up (5 deferred minors, 1 commit
+> -- T7 confidence-sort comment / T3 inline-var+overload fixture / T10 same-leaf Calls assertion / T12-T13
+> regex+probe tidy / T1 KindText figure). Non-blocking; do it before or after the preprocessor milestone.
+> **GOTCHAS (preprocessor):** (1) the feature is ABOUT `{$..}` directives -- NEVER a literal `{` or `}` inside
+> a Pascal `{ }` comment (directive literals are STRING constants; comments describing directives use `//`
+> only). (2) byte-verify every new `.pas`/`.ps1` is CRLF (dcc64 + node both tolerate LF, so the build won't
+> catch a lone-LF -- D5 lesson). (3) T2 must use a TBytes-based scanner (byte offsets, not char count) so
+> UTF-8 offsets match tree-sitter -- the one real JS-divergence risk. (4) T5 fixtures are EXPECTED to expose
+> lexer divergences (strings/comments/passthrough) -- that's the oracle-diff doing its job, not a defect.
+>
+> --- (prior) ---
 > ## RESUME 2026-07-06 (LATEST-15) -- **v0.91.0-alpha SHIPPED (D5 call resolution -- THE Called-from bug fix). NEXT = D5 fast-follow tidy-up, THEN tree-sitter preprocessor discussion.**
 > `main` = the v0.91.0-alpha release commit (VERSION CLI.pas:6=`0.91.0-alpha`, CHANGELOG + BACKLOG),
 > tag `v0.91.0-alpha`, pushed + origin synced. **schema NOW v14** (call_edges + skLocalVar/skParam).
