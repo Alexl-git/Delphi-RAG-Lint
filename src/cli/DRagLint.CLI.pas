@@ -307,6 +307,7 @@ begin
   Writeln('  drag-lint format <file> [--yadf-path PATH]');
   Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
+  Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
   Writeln('');
   Writeln('  Output/CI (lint, lint-all, check-ast):');
   Writeln('    --format sarif            emit SARIF 2.1.0 (in addition to text|json)');
@@ -929,7 +930,8 @@ begin
 
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
-    Elapsed:= (Now - T0) * 86400;
+    Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
+    Elapsed:= (Now -T0) * 86400;
 
     var PlatSuffix:= '';
     if AItem.Platform <> '' then PlatSuffix:= ' [' + AItem.Platform + ']';
@@ -1361,7 +1363,8 @@ begin
       needs to see every file the indexer has just written. }
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
-    Elapsed:= (Now - StartTime) * 86400;
+    Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
+    Elapsed:= (Now -StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
     else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Elapsed]));
@@ -1405,6 +1408,7 @@ begin
   end;
   Store.ResolveUnitUseTargets;
   Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
+  Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
   AElapsedSec:= (Now - T0) * 86400;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
   Result:= True;
@@ -7887,6 +7891,34 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>v14 (D5): drag-lint dump-call-edges --db PATH -- diagnostic dump of
+/// every resolved call edge in the index, one per line, as
+/// ref_id|target_qname|confidence. target_qname is the resolved target symbol's
+/// qualified name (empty when the symbol is missing). Used to verify the
+/// ResolveCallTargets pass populates call_edges with the right resolutions.</summary>
+/// <param name="AArgs">Parsed CLI args; DbPath is the index to dump.</param>
+/// <returns>0 on success, 2 on usage error / missing db.</returns>
+function DoDumpCallEdges(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore     ;
+  Edges: TArray<TCallEdge>;
+  E    : TCallEdge        ;
+  QName: string           ;
+begin
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
+  Edges:= Store.DumpAllCallEdges;
+  for E in Edges do
+  begin
+    if E.TargetSymbolId > 0 then QName:= Store.GetSymbolById(E.TargetSymbolId).QualifiedName
+    else QName:= '';
+    Writeln(Format('%d|%s|%s', [E.RefId, QName, E.Confidence]));
+  end;
+  Result:= 0;
+end; // function
+
 // v0.27: drag-lint format <file> [--yadf-path PATH]
 // Runs YADF formatter on the given file (YADF rewrites in place).
 // Exit 2 on usage error, 1 on formatter failure, 0 on success.
@@ -9092,6 +9124,7 @@ begin
     else if Args.Command = 'format'            then Result:= DoFormat          (Args)
     else if Args.Command = 'check-ast'         then Result:= DoCheckAst        (Args)
     else if Args.Command = 'dump-refs'         then Result:= DoDumpRefs        (Args)
+    else if Args.Command = 'dump-call-edges'   then Result:= DoDumpCallEdges   (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
     else if Args.Command = 'workspace'         then Result:= DoWorkspace       (Args)
     else if Args.Command = 'selftest'          then Result:= DoSelfTest        (Args)

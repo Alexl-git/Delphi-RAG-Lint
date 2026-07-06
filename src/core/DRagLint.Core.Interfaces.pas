@@ -103,6 +103,12 @@ type
     // class/interface's `heritage` text, resolves each ancestor to a defining
     // symbol via the file's in-scope uses graph, and writes type_ancestors edges.
     procedure ResolveAncestry;
+    /// <summary>v14 (D5): whole-DB call-resolution pass (run after ResolveAncestry,
+    /// which it depends on for the ancestor chain). Wipes call_edges, then types
+    /// the receiver of every 'call' ref and writes a resolved edge (target symbol +
+    /// 'certain'|'ambiguous' confidence) for each site it can resolve; unresolved
+    /// sites get no row (FP-conservative). Rebuilds all edges each run.</summary>
+    procedure ResolveCallTargets;
     /// <summary>Transitive ancestor closure of the symbol (resolved edges are
     /// walked recursively; unresolved ones are name-only leaves). Cycle-safe,
     /// hop-capped.</summary>
@@ -200,6 +206,11 @@ type
     /// TCallResolver's per-file in-scope set (mirrors ResolveAncestry's
     /// FileScope). Unresolved uses rows (NULL target) are excluded.</summary>
     function GetUnitScopeEdges: TArray<TFileScopeEdge>;
+    /// <summary>v14 (D5): every call_edges row (ref_id, target_symbol_id,
+    /// confidence, receiver_type_symbol_id), unordered. Diagnostic dump backing
+    /// the dump-call-edges verb / tests; not for production queries (use
+    /// FindResolvedCallers / GetCallEdgesFromSymbol for those).</summary>
+    function DumpAllCallEdges: TArray<TCallEdge>;
   end;
 
   TParseResult = record

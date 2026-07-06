@@ -111,6 +111,7 @@ type
       function CountCallEdges: Int64;
       function GetTypeCandidates: TArray<TSymbol>;
       function GetUnitScopeEdges: TArray<TFileScopeEdge>;
+      function DumpAllCallEdges: TArray<TCallEdge>;
       function FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
       function FindDiResolveSites   ( const AInterfaceName: string): TArray<TReference   >;
       function FindDiUnresolved: TArray<TReference>                                       ;
@@ -143,6 +144,8 @@ type
       procedure ResolveUnitUseTargets;
       // v11 (M1): type & hierarchy resolution (see ISymbolStore).
       procedure ResolveAncestry;
+      // v14 (D5): whole-DB call-resolution pass (see ISymbolStore).
+      procedure ResolveCallTargets;
       function GetTransitiveAncestors(ASymbolId: Int64): TArray<TTypeAncestor>;
       function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
       function ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
@@ -220,6 +223,7 @@ uses
   , System.Math
   , DRagLint.Storage.Schema
   , DRagLint.Query  .Fuzzy
+  , DRagLint.Index.CallResolver // v14 (D5): receiver-typing engine for ResolveCallTargets
   ;
 
 { TSQLiteSymbolStore }
@@ -1090,6 +1094,39 @@ begin
     begin
       E.FileId      := Q.FieldByName('file_id'       ).AsLargeInt;
       E.TargetFileId:= Q.FieldByName('target_file_id').AsLargeInt;
+      List.Add(E);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.DumpAllCallEdges: TArray<TCallEdge>;
+{ v14 (D5): diagnostic dump of every call_edges row. Backs the dump-call-edges
+  verb + tests; the CLI resolves target_symbol_id -> qname for display. }
+var
+  Q   : TFDQuery       ;
+  List: TList<TCallEdge>;
+  E   : TCallEdge       ;
+begin
+  List:= TList<TCallEdge>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT ref_id, target_symbol_id, confidence, receiver_type_symbol_id ' +
+                   'FROM call_edges ORDER BY ref_id';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      E:= Default(TCallEdge);
+      E.RefId         := Q.FieldByName('ref_id'          ).AsLargeInt;
+      E.TargetSymbolId:= Q.FieldByName('target_symbol_id').AsLargeInt;
+      E.Confidence    := Q.FieldByName('confidence'       ).AsString;
+      if not Q.FieldByName('receiver_type_symbol_id').IsNull then
+        E.ReceiverTypeSymbolId:= Q.FieldByName('receiver_type_symbol_id').AsLargeInt;
       List.Add(E);
       Q.Next;
     end;
@@ -2961,6 +2998,75 @@ begin
     Q.Free;
     NameToCands.Free;
     FileScope.Free;
+  end; // try
+end; // procedure
+
+procedure TSQLiteSymbolStore.ResolveCallTargets;
+{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
+  (wipe the table, resolve in memory, batch-write in one transaction). Builds one
+  TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
+  every 'call' ref through ResolveOne. Non-resolving sites (Edge.TargetSymbolId=0)
+  get NO row -- the FP-conservative '?' bucket. UpsertCallEdge writes via the
+  prepared FQInsertCallEdge; its AToken is unused (call_edges stores no file id),
+  so a default token is passed. The whole loop runs in one transaction: thousands
+  of refs at per-row autocommit would be pathologically slow. }
+var
+  Resolver: TCallResolver ;
+  Q       : TFDQuery      ;
+  Ref     : TReference    ;
+  Edge    : TCallEdge     ;
+  DummyTok: TFileTxToken  ;
+  Written : Int64         ;
+begin
+  ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
+  DummyTok:= Default(TFileTxToken);
+  Written := 0;
+  Resolver:= TCallResolver.Create(Self); // prepare name/scope maps ONCE
+  Q       := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { Only 'call'-kind refs are call sites (the parser emits kind='call' for every
+      invocation, dotted or bare). Filtering here is faster + cleaner than letting
+      ResolveOne return Target=0 for every non-call ref. }
+    Q.SQL.Text:=
+      'SELECT id, symbol_id, file_id, kind, name_text, start_line, start_col, ' +
+      '  end_line, end_col, enclosing_symbol_id FROM refs WHERE kind = ''call''';
+    FConn.StartTransaction;
+    try
+      Q.Open;
+      while not Q.Eof do
+      begin
+        Ref:= Default(TReference);
+        Ref.Id:= Q.FieldByName('id').AsLargeInt;
+        if not Q.FieldByName('symbol_id').IsNull then Ref.SymbolId:= Q.FieldByName('symbol_id').AsLargeInt;
+        Ref.FileId   := Q.FieldByName('file_id'   ).AsLargeInt;
+        Ref.Kind     := Q.FieldByName('kind'      ).AsString;
+        Ref.NameText := Q.FieldByName('name_text' ).AsString;
+        Ref.StartLine:= Q.FieldByName('start_line').AsInteger;
+        Ref.StartCol := Q.FieldByName('start_col' ).AsInteger;
+        Ref.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
+        Ref.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
+        if not Q.FieldByName('enclosing_symbol_id').IsNull then
+          Ref.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
+
+        Edge:= Resolver.ResolveOne(Ref);
+        if Edge.TargetSymbolId > 0 then
+        begin
+          Edge.RefId:= Ref.Id; // ensure the natural key is the ref we resolved
+          UpsertCallEdge(DummyTok, Edge);
+          Inc(Written);
+        end;
+        Q.Next;
+      end;
+      Q.Close;
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
+    end;
+  finally
+    Q.Free;
+    Resolver.Free;
   end; // try
 end; // procedure
 
