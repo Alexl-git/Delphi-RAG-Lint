@@ -154,6 +154,7 @@ type
     AllVisibility : Boolean;
     WiringCoverage: Boolean; // v8: --coverage for the wiring command
     ContextLines  : Integer; // v0.17: find-callers --context N
+    Resolved      : Boolean; // v14 (D5 T8): find-callers --resolved (precise callers via call_edges)
     // v0.18: context bundle
     Task               : string ; // raw --task value
     Verb               : string ; // parsed verb (modify/inspect/refactor/delete/extend)
@@ -256,7 +257,8 @@ begin
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
   Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--limit N] [--db ...] [--json]');
-  Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--db ...] [--json]');
+  Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--resolved] [--db ...] [--json]');
+  Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous)');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
@@ -535,6 +537,7 @@ begin
     else if A = '--all-visibility' then Result.AllVisibility := True
     else if A = '--coverage'       then Result.WiringCoverage:= True
     else if (A = '--context') and (i < ParamCount) then begin Inc(i); Result.ContextLines:= StrToIntDef(ParamStr(i), 0); end
+    else if A = '--resolved' then Result.Resolved:= True // v14 (D5 T8): find-callers --resolved
     else if (A = '--task') and (i < ParamCount) then
     begin
       Inc(i);
@@ -2007,6 +2010,59 @@ begin
   if AArgs.SubCommand = 'find-callers' then
   begin
     if AArgs.Name = '' then begin Writeln('ERROR: find-callers requires --name <callee>'); Exit (2 ); end;
+
+    // v14 (D5 T8): --resolved is a pure additive branch -- WITHOUT it, the
+    // name-based path below (unchanged) still runs. With it, we resolve
+    // --name to its matching target symbol(s) PER STORE and render only the
+    // PRECISE callers (via call_edges), grouped by which target they resolved
+    // to -- this is what fixes the name-collision noise the plain path has.
+    if AArgs.Resolved then
+    begin
+      var TotalCallers:= 0;
+      var JOut: TJSONArray:= nil;
+      if AArgs.AsJson then JOut:= TJSONArray.Create;
+      try
+        for DbPath in PathsToScan do
+        begin
+          var RoOk: Boolean;
+          Store:= OpenReadOnlyStore(DbPath, RoOk);
+          if not RoOk then Continue; { stale DB reported; skip, scan the rest }
+          var Targets:= Store.FindSymbolsByExactName(AArgs.Name);
+          for var T in Targets do
+          begin
+            var RCallers:= Store.FindResolvedCallers(T.Id);
+            if Length(RCallers) = 0 then Continue;
+            if not AArgs.AsJson then Writeln(Format('  %s:', [T.QualifiedName]));
+            for var RC in RCallers do
+            begin
+              if AArgs.AsJson then
+              begin
+                var JObj:= TJSONObject.Create;
+                JObj.AddPair('caller_qname', RC.EnclosingQName);
+                JObj.AddPair('file'        , RC.Location      );
+                JObj.AddPair('confidence'  , RC.Confidence    );
+                JObj.AddPair('target_qname', T.QualifiedName  );
+                // Location is file-name-only (idempotency design, Task 7); the
+                // line number is sourced from the caller SYMBOL's own start
+                // line (routine-granular, not the exact call-site line).
+                if RC.EnclosingSymbolId > 0 then
+                  JObj.AddPair('line', TJSONNumber.Create(Store.GetSymbolById(RC.EnclosingSymbolId).StartLine));
+                JOut.AddElement(JObj);
+              end
+              else Writeln(Format('    %s  (%s)  [%s]', [RC.EnclosingQName, RC.Location, RC.Confidence]));
+              Inc(TotalCallers);
+            end; // for RC
+          end; // for T
+        end; // for DbPath
+        if AArgs.AsJson then Writeln(JOut.Format(2))
+        else if TotalCallers = 0 then Writeln('0 caller(s)');
+      finally
+        JOut.Free;
+      end; // try
+      if TotalCallers = 0 then Result:= 1 else Result:= 0;
+      Exit;
+    end; // if AArgs.Resolved
+
     var TotalRefs:= 0;
     for DbPath in PathsToScan do
     begin
