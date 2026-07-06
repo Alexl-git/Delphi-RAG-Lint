@@ -1,6 +1,30 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-06 (LATEST-16) -- **PREPROCESSOR PORT MILESTONE: spec+plan DONE+PUSHED, about to EXECUTE via subagent-driven-development (12 tasks, on main). RESUME = dispatch PP-Task-1 implementer.**
+> ## RESUME 2026-07-06 (LATEST-17) -- **v0.92.0-alpha SHIPPED: in-process {$IFDEF} preprocessor + per-config indexing. Milestone COMPLETE (all 12 SDD tasks + gate + final review READY-TO-PUBLISH).**
+> `main` = release commit for v0.92.0-alpha, tag `v0.92.0-alpha`, VERSION CLI.pas:6=`0.92.0-alpha`, **schema still v14**.
+> GH release LIVE (win64 3.78MB + win32 3.02MB CLI-only zips). The milestone ported the tree-sitter-delphi13 JS
+> preprocessor to IN-PROCESS Object Pascal (NO Node in the shipped exe) so drag-lint resolves `{$IFDEF}` BEFORE
+> parsing -> per-config-accurate indexing (only the active branch's symbols + `uses` indexed; the
+> `{$IFDEF}`-cross-branch parse-failure class eliminated). Executed via superpowers:subagent-driven-development
+> (11 impl tasks each impl+reviewed CLEAN 0-Crit/0-Imp; T8 empirical GATE PASSED raw-1->preprocessed-0; final
+> whole-branch opus review = READY TO PUBLISH). Preprocess is ON by default; `--no-preprocess` reverts to
+> all-branch; per-file try/except falls back to raw (never hard-fails). Offsets 1:1 (no source map). SDD ledger
+> `.superpowers/sdd/progress.md` (full per-task record + the T12 final-review verdict + accumulated-minors triage).
+> **>>> CROSS-REPO STATUS (important):** the tree-sitter-delphi13 grammar team REVIEWED our port + ran our
+> oracle-diff harness and declared **the Delphi port CANONICAL for drag-lint** (no node, no serve.js). The one
+> parity gap they flagged was **Task 6 (defines-only includes) -- which we SHIPPED**, so parity is COMPLETE and
+> **we are the release trigger they're HOLDING their coordinated npm publish on**. New inbox docs (now committed):
+> `docs/INBOX-tree-sitter-build-status-and-release-plan.md` (their v1.1.1-root/v1.1.0-pure build + coordinated
+> release plan + the 3 things they need back), `docs/INBOX-tree-sitter-delivered.md`, `...-preprocessor-adoption.md`.
+> **>>> OPEN FOLLOW-UPS (post-release, in progress this session):** (1) reply to the grammar team: PORTED +
+> parity-complete + Task-6-done = RELEASE TRIGGER; grammar-path call = we built against the CURRENT FULL grammar
+> (pure-DLL swap = separate follow-up); confirm JS preprocessor stays 1.0.0 (Delphi canonical, serve.js not
+> consumed); no DFM needs. (2) D5 fast-follow tidy-up (5 deferred minors, 1 commit). (3) DEFERRED (own cycle,
+> NOT this release, user consent): refresh the STALE bundled tree-sitter DLL (dated May 29) to the current
+> v1.1.x build -> src/ 97.3%->99.1% + CLI.pas 39->1 errors, NO code change (needs its own build+reindex+verify).
+> (4) POST-MILESTONE: swap to the pure grammar DLL (drops pp_* rules; needs pre-resolved source -- our
+> preprocessor now provides it) = separate follow-up milestone.
+> --- PRIOR RESUME (LATEST-16, now DONE) --- PREPROCESSOR PORT MILESTONE: spec+plan DONE+PUSHED, about to EXECUTE via subagent-driven-development (12 tasks, on main). RESUME = dispatch PP-Task-1 implementer.**
 > `main` synced with origin (0 ahead, clean except IDE json/dsv + 3 untracked docs -- leave those).
 > **NO subagent work in flight** -- this handoff fired at a CLEAN boundary (before PP-Task-1 was dispatched),
 > so nothing is lost; the next session resumes by dispatching PP-Task-1.

@@ -5,6 +5,57 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.92.0-alpha -- 2026-07-06
+
+In-process Delphi preprocessor: drag-lint now resolves `{$IFDEF}` compiler
+directives *before* parsing, so indexing is per-config-accurate -- only the
+active branch's symbols and `uses` are indexed for a given platform/config, and
+the `{$IFDEF}`-cross-branch parse-failure class is eliminated. This is a native
+Object Pascal port of the tree-sitter-delphi13 JavaScript preprocessor -- **no
+Node.js runtime dependency**; the JS remains a byte-for-byte test oracle only.
+The stage blanks inactive branches and all directives to spaces (newlines
+preserved) so output byte-length equals input byte-length -- offsets stay 1:1
+with the original file, so tree-sitter spans need no source map. Preprocessing is
+**ON by default**; `--no-preprocess` reverts to the prior all-branch behavior,
+and a per-file exception falls back to raw indexing for that file (never a
+hard-fail). The grammar team reviewed this port against their JS oracle and
+declared the Delphi port **canonical** for drag-lint. Built against the current
+full grammar DLL; a pure-grammar swap is a separate follow-up. No schema change
+(still v14).
+
+### Added
+
+- **`DRagLint.Preprocess.*` units** (`src/preprocess/`) -- a native directive
+  **Lexer** (byte-offset chunk stream), an **`{$IF expr}` Evaluator**
+  (recursive descent: `or`/`and`/`not`/comparison/`defined()`/`declared()`/
+  numeric `CompilerVersion` checks, conservative-false on any parse error), and a
+  chunk **Processor** that maintains an `{$IFDEF}`/`{$ELSE}`/`{$ELSEIF}`/
+  `{$ENDIF}` state stack + a live defines table and blanks inactive branches.
+- **Include handling** -- `defines-only` mode: a `{$I X.inc}`'s `{$DEFINE}`/
+  `{$UNDEF}` propagate to the *parent's* defines set (fixes the wrong-branch bug
+  when a config `.inc` defines a switch a parent `{$IFDEF}` tests), the `{$I}`
+  directive is blanked, the body is **not** spliced (offsets stay 1:1); plus
+  `off` mode. `expand` (body-splice) is deliberately not ported.
+- **Define-profile resolver** (`DRagLint.Preprocess.Profile.pas`) --
+  `ProfileFromDproj` derives the active defines from a `.dproj` (Base + selected
+  config `DCC_Define` union platform built-ins), `PlatformBuiltins` for library
+  scans. Win64/Win32 built-in define sets for RAD Studio 37 (CompilerVersion 37).
+- **Diagnostic verbs:** `preprocess-file --file F [--define X]... [--numeric K=V]...
+  [--include-mode off|defines-only]` (writes resolved source to stdout);
+  `pp-profile --dproj F [--platform P] [--config C]` (dumps the resolved define
+  set); plus `dump-pp-lex` / `dump-pp-eval` (lexer/evaluator diagnostics).
+
+### Changed
+
+- **The indexer runs `Preprocess` between UTF-8 transcoding and parsing** when
+  enabled, so only the active branch's symbols are extracted. The incremental
+  up-to-date sha is still computed over the raw on-disk bytes (no forced mass
+  reindex); doc-comment scanning follows the preprocessed bytes the parser saw.
+- **The closure/uses file-discovery scanner honors the active profile** -- a unit
+  `uses`d only under an inactive branch is no longer discovered/pulled into the
+  index (per-config file discovery). `--no-preprocess` keeps the prior
+  all-branch brace-strip scan byte-for-byte unchanged.
+
 ## v0.91.0-alpha -- 2026-07-06
 
 D5 call resolution: resolve each Delphi call site to its specific target symbol
