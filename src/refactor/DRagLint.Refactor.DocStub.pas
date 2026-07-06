@@ -18,6 +18,12 @@ type
       class function Generate(const AStore: ISymbolStore; const AQName: string; AFormat: TDocStubFormat): string;
   end;
 
+// Signature parser helpers. Exported so DRagLint.Doc.Regions / .Document can
+// reuse the same param-list extraction the generate-docs stub uses.
+function ExtractParamList(const ASig: string): string;
+function ParseParamNames(const AParamList: string): TArray<string>;
+function SignatureHasReturn(const ASig: string): Boolean;
+
 implementation
 
 uses
