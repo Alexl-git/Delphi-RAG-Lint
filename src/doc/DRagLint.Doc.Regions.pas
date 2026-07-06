@@ -46,8 +46,11 @@ var
   Head    : string ;
   Tail    : string ;
 begin
-  // Find the fenced block by the sentinel SUBSTRINGS (they may carry a leading
-  // /// prefix in stored Remarks, so match on the bare marker text).
+  // Input is POST-PARSER: the XML doc parser has already stripped the /// prefix
+  // and joined lines, so S is the bare Remarks prose (no leading ///). Find the
+  // fenced block by the sentinel SUBSTRINGS. The TrimRight over '/'/space below is
+  // a harmless safety net for a hypothetical raw-block caller that still carries a
+  // /// prefix; it is a no-op on parser-supplied input.
   BeginPos:= Pos(AUTO_BEGIN, S);
   if BeginPos = 0 then Exit(S);
   EndPos:= PosEx(AUTO_END, S, BeginPos);
@@ -57,7 +60,8 @@ begin
     Result:= Copy(S, 1, BeginPos - 1).TrimRight([#13, #10, ' ', '/']);
     Exit;
   end;
-  // Head = text before the BEGIN line. Walk back over the /// prefix + newline.
+  // Head = text before the BEGIN. Trim trailing newline/space (the '/' in the set
+  // is the safety net noted above; no /// arrives via the parser path).
   Head:= Copy(S, 1, BeginPos - 1).TrimRight([#13, #10, ' ', '/']);
   // Tail = text after the line that contains AUTO_END.
   EolPos:= EndPos + Length(AUTO_END);
@@ -143,6 +147,17 @@ begin
     if Trim(SummaryText) = '' then SummaryText:= 'TODO: describe.';
     Sb.AppendLine(APrefix + '<summary>' + SummaryText + '</summary>');
 
+    // MANAGED-vs-HAND-TYPED param detection is CONTENT-BASED, not sentinel-based.
+    // We APPEND the AUTO_PARAM sentinel after a managed <param> line for human /
+    // diff visibility, but the doc parser STRIPS trailing sentinels (and the ///
+    // prefix) before AExisting.Params is populated, so the marker does not survive
+    // a round-trip. On regeneration we therefore RE-DERIVE "managed" from the desc
+    // CONTENT: an empty desc or exactly 'TODO: describe.' => managed/regenerable
+    // (re-emit with the AUTO_PARAM marker); any OTHER desc => hand-typed (preserve
+    // as-is, no marker; flag if the param is stale). Edge case: a genuine hand-typed
+    // desc that is literally 'TODO: describe.' is treated as managed. Acceptable for
+    // Chunk 1. This content-based scheme is idempotency-safe: run N and run N+1 see
+    // the same desc content and classify identically.
     // existing params first, in signature order where possible
     for P in ASigParams do
     begin
@@ -183,7 +198,18 @@ begin
     if (Trim(Prose) <> '') or (Facts <> '') then
     begin
       Sb.AppendLine(APrefix + '<remarks>');
-      if Trim(Prose) <> '' then Sb.AppendLine(APrefix + Trim(Prose));
+      if Trim(Prose) <> '' then
+      begin
+        // Hand-written remarks prose may contain multiple lines (the parser joins
+        // them with bare #10). Emit EACH line APrefix-prefixed so every output line
+        // carries /// and the final CRLF join stays valid -- never one line with an
+        // embedded bare LF. Normalize CRLF/CR to LF, split, drop empty lines.
+        var NormProse: string:= StringReplace(Trim(Prose), #13#10, #10, [rfReplaceAll]);
+        NormProse:= StringReplace(NormProse, #13, #10, [rfReplaceAll]);
+        for var ProseLine in NormProse.Split([#10]) do
+          if Trim(ProseLine) <> '' then
+            Sb.AppendLine(APrefix + Trim(ProseLine));
+      end;
       if Facts <> '' then
       begin
         Sb.AppendLine(APrefix + AUTO_BEGIN);
