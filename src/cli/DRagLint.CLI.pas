@@ -8149,8 +8149,9 @@ end; // function
 /// <param name="AArgs">Parsed CLI args; CallFrom is A, RenameTo (--to) is B,
 /// MaxDepth the cap, DbPath the index.</param>
 /// <returns>0 when a path was found and printed; 1 when both endpoints resolved
-/// but no path exists within --max-depth; 2 on usage error / missing db /
-/// an endpoint that resolves to no symbol.</returns>
+/// but no path exists within --max-depth; 2 on usage error / missing or
+/// unreadable db (store-open failure) / an endpoint that resolves to no
+/// symbol.</returns>
 function DoCallPath(const AArgs: TArgs): Integer;
 var
   Store   : ISymbolStore              ;
@@ -8178,7 +8179,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
-  if not RoOk then Exit(1);
+  if not RoOk then Exit(2); // store-open/corruption failure = 2 (distinct from no-path = 1)
 
   FromIds:= ResolveEndpointIds(Store, AArgs.CallFrom);
   if Length(FromIds) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.CallFrom])); Exit(2); end;
@@ -8414,8 +8415,9 @@ end; // function
 /// <param name="AArgs">Parsed CLI args; QName is the root, Direction the
 /// direction, Depth the tree depth, DbPath the index.</param>
 /// <returns>0 when the store opened OK and --qname resolved to at least one
-/// symbol; 1 if --qname does not resolve; 2 on usage error / missing db / a bad
-/// --direction value.</returns>
+/// symbol; 1 if --qname does not resolve to any symbol; 2 on usage error /
+/// missing or unreadable db (store-open failure) / a bad --direction
+/// value.</returns>
 function DoCallGraph(const AArgs: TArgs): Integer;
 var
   Store  : ISymbolStore              ;
@@ -8441,7 +8443,7 @@ begin
 
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
-  if not RoOk then Exit(1);
+  if not RoOk then Exit(2); // store-open/corruption failure = 2 (distinct from unresolved-qname = 1)
 
   RootIds:= ResolveEndpointIds(Store, AArgs.QName);
   if Length(RootIds) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
