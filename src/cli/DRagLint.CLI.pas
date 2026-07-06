@@ -92,6 +92,7 @@ uses
   , DRagLint.Lint  .Baseline
   , DRagLint.Preprocess.Types
   , DRagLint.Preprocess.Lexer
+  , DRagLint.Preprocess.Expr
   ;
 
 type
@@ -251,6 +252,10 @@ type
     TextSource   : string ; // --source pas|dfm|sql ('' = all)
     // v0.64: lint-all progress
     Quiet : Boolean; // --quiet  suppress per-file progress to stderr
+    // PP-Task-3: dump-pp-eval diagnostic verb (the {$IF expr} evaluator)
+    PpExpr    : string        ; // --expr "<E>"        the compile-time expression to evaluate
+    PpDefines : TArray<string>; // --define <SYM>      repeatable defined symbols (lowercased on use)
+    PpNumeric : TArray<string>; // --numeric <K=V>     repeatable numeric defines (K=V, K lowercased on use)
   end; // record
 
 procedure PrintHelp;
@@ -634,6 +639,21 @@ begin
     else if (A = '--source') and (i < ParamCount) then begin Inc(i); Result.TextSource:= ParamStr(i); end
     else if A = '--any-order' then Result.TextAnyOrder := True
     else if A = '--substring' then Result.TextSubstring:= True
+    // PP-Task-3: dump-pp-eval flags. --expr is the expression; --define and
+    // --numeric are repeatable and accumulate into TArrays (parsed in DoDumpPpEval).
+    else if (A = '--expr') and (i < ParamCount) then begin Inc(i); Result.PpExpr:= ParamStr(i); end
+    else if (A = '--define') and (i < ParamCount) then
+    begin
+      Inc(i);
+      SetLength(Result.PpDefines, Length(Result.PpDefines) + 1);
+      Result.PpDefines[High(Result.PpDefines)]:= ParamStr(i);
+    end
+    else if (A = '--numeric') and (i < ParamCount) then
+    begin
+      Inc(i);
+      SetLength(Result.PpNumeric, Length(Result.PpNumeric) + 1);
+      Result.PpNumeric[High(Result.PpNumeric)]:= ParamStr(i);
+    end
     else if (Result.Path = '') and (not A.StartsWith('--')) then Result.Path:= A
     else raise Exception.CreateFmt('Unknown argument: %s', [A]);
     Inc(i);
@@ -8000,6 +8020,50 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>PP-Task-3: drag-lint dump-pp-eval --expr "E" [--define SYM]... [--numeric K=V]...
+/// -- diagnostic dump of the {$IF expr} evaluator. Builds a defines dictionary
+/// (each --define lowercased -> True) and a numeric dictionary (each --numeric
+/// K=V lowercased K -> integer V), calls EvalPPExpr, and prints the lowercase
+/// literal 'true' or 'false'. Used by tests/preprocess/run_expr.ps1 to verify the
+/// port of evalExpr.js.</summary>
+/// <param name="AArgs">Parsed CLI args; PpExpr (--expr) is the expression,
+/// PpDefines (--define) the symbols, PpNumeric (--numeric K=V) the numeric map.</param>
+/// <returns>Always 0 (the boolean result is on stdout; a bad --numeric token is
+/// skipped rather than treated as an error, matching the evaluator's conservatism).</returns>
+function DoDumpPpEval(const AArgs: TArgs): Integer;
+var
+  Defines: TDictionary<string, Boolean>;
+  Numeric: TDictionary<string, Integer>;
+  D      : string ;
+  N      : string ;
+  EqPos  : Integer;
+  Key    : string ;
+  ValStr : string ;
+  ValInt : Integer;
+begin
+  Defines:= TDictionary<string, Boolean>.Create;
+  Numeric:= TDictionary<string, Integer>.Create;
+  try
+    for D in AArgs.PpDefines do
+      if D <> '' then Defines.AddOrSetValue(D.ToLower, True);
+    for N in AArgs.PpNumeric do
+    begin
+      // Each --numeric token is 'KEY=VALUE'; split on the first '='. A token
+      // without '=' or with a non-integer value is skipped (best-effort).
+      EqPos:= Pos('=', N);
+      if EqPos <= 1 then Continue;
+      Key   := Copy(N, 1, EqPos - 1);
+      ValStr:= Copy(N, EqPos + 1, Length(N));
+      if TryStrToInt(ValStr, ValInt) then Numeric.AddOrSetValue(Key.ToLower, ValInt);
+    end;
+    if EvalPPExpr(AArgs.PpExpr, Defines, Numeric) then Writeln('true') else Writeln('false');
+  finally
+    Numeric.Free;
+    Defines.Free;
+  end;
+  Result:= 0;
+end; // function
+
 /// <summary>v14 (D5): drag-lint dump-call-edges --db PATH -- diagnostic dump of
 /// every resolved call edge in the index, one per line, as
 /// ref_id|target_qname|confidence. target_qname is the resolved target symbol's
@@ -9771,6 +9835,7 @@ begin
     else if Args.Command = 'check-ast'         then Result:= DoCheckAst        (Args)
     else if Args.Command = 'dump-refs'         then Result:= DoDumpRefs        (Args)
     else if Args.Command = 'dump-pp-lex'       then Result:= DoDumpPpLex       (Args)
+    else if Args.Command = 'dump-pp-eval'      then Result:= DoDumpPpEval      (Args)
     else if Args.Command = 'dump-call-edges'   then Result:= DoDumpCallEdges   (Args)
     else if Args.Command = 'find-callees'      then Result:= DoFindCallees     (Args)
     else if Args.Command = 'ambiguous-calls'   then Result:= DoAmbiguousCalls  (Args)
