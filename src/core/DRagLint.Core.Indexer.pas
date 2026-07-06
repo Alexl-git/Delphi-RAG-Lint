@@ -16,6 +16,8 @@ uses
   , DRagLint.Index   .Glob
   , DRagLint.Index   .IgnoreFiles
   , DRagLint.Parser  .DocComments
+  , DRagLint.Preprocess         { PP-Task-9: in-process directive preprocessor }
+  , DRagLint.Preprocess.Types   { TDefineProfile }
   ;
 
 type
@@ -28,6 +30,15 @@ type
       FExcludeRoots   : TList<string>                      ; { v0.42: normalized lowercase, trailing-sep }
       FWalkFilter     : TWalkFilter                        ; { v0.45: glob/ignore filtering }
       FIgnoreStack    : TIgnoreStack                       ; { v0.45: .gitignore/.hgignore stack; nil when not UseIgnoreFiles }
+      FPreprocessEnabled: Boolean                          ; { PP-Task-9: run Preprocess before parsing }
+      FProfile        : TDefineProfile                     ; { PP-Task-9: active define profile when preprocessing }
+      FPreprocessFellBack: Boolean                         ; { PP-Task-9: one-shot fallback-log latch }
+      /// <summary>PP-Task-9: log a per-file preprocess fallback the FIRST time it
+      /// happens in this run, then stay silent so a bad batch does not flood the
+      /// output with one line per file. The file is still indexed from its RAW
+      /// UTF-8 bytes (old behaviour) -- a preprocess exception never hard-fails
+      /// the run.</summary>
+      procedure LogPreprocessFallbackOnce(const AFilePath: string; const AError: Exception);
       function ParserFor(const AExtension: string): IParser;
       procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
       function IsUnderExcludeRoot  (const APath: string): Boolean;
@@ -55,6 +66,7 @@ type
       function SkippedUpToDate: Integer;
       procedure AddExcludeRoot(const APath: string);
       procedure SetWalkFilter(const AFilter: TWalkFilter);
+      procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
   end;
 
 implementation
@@ -69,6 +81,12 @@ begin
   FParsers:= TList<IParser>.Create;
   FExcludeRoots:= TList<string>.Create;
   FIgnoreStack:= nil;
+  { PP-Task-9: safe default -- preprocessing OFF until a caller opts in via
+    SetPreprocess. A bare TIndexer (tests, embedders) keeps the pre-Task-9 raw
+    all-branch behaviour; the CLI enables it by default (--no-preprocess opts
+    out). FProfile stays empty (an empty profile = no seeded defines). }
+  FPreprocessEnabled := False;
+  FPreprocessFellBack:= False;
   { v0.45: default filter preserves prior behaviour -- only MS*.SQL indexed. }
   FWalkFilter:= TWalkFilter.Create;
   for P in AParsers do FParsers.Add(P);
@@ -120,6 +138,28 @@ begin
   { (Re)create the ignore stack when UseIgnoreFiles is toggled. }
   FreeAndNil(FIgnoreStack);
   if FWalkFilter.UseIgnoreFiles then FIgnoreStack:= TIgnoreStack.Create;
+end;
+
+procedure TIndexer.SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+begin
+  { PP-Task-9: latch the per-run flag + profile. Reset the one-shot fallback
+    latch so each run gets its own first-fallback log line. }
+  FPreprocessEnabled := AEnabled;
+  FProfile           := AProfile;
+  FPreprocessFellBack:= False;
+end;
+
+procedure TIndexer.LogPreprocessFallbackOnce(const AFilePath: string; const AError: Exception);
+begin
+  { PP-Task-9: never hard-fail an index run because one file's preprocess threw
+    -- the file is still indexed from its RAW UTF-8 bytes (old behaviour). Log
+    only the FIRST fallback so a bad batch does not flood stderr with one line
+    per file. }
+  if FPreprocessFellBack then Exit;
+  FPreprocessFellBack:= True;
+  Writeln(ErrOutput, Format(
+    '  PREPROCESS FALLBACK: %s -- %s: %s (indexing raw; further fallbacks silent)',
+    [AFilePath, AError.ClassName, AError.Message]));
 end;
 
 function TIndexer.ParserFor(const AExtension: string): IParser;
@@ -210,6 +250,7 @@ var
   Parser        : IParser                    ;
   Source        : TBytes                     ; { raw on-disk bytes: sha/mtime/up-to-date }
   Utf8          : TBytes                     ; { v0.86: transcoded UTF-8 fed to parser/slices }
+  ParseBytes    : TBytes                     ; { PP-Task-9: bytes actually parsed (preprocessed when enabled, else = Utf8) }
   SourceText    : string                     ;
   Sha           : string                     ;
   Mtime         : Int64                      ;
@@ -266,13 +307,36 @@ begin
   // in a resourcestring -- the SOFTWID.PAS class) was SKIPPED here with
   // EEncodingError; now it parses. Downstream slice helpers see UTF-8.
   Utf8:= EnsureUtf8Bytes(Source);
-  ParseRes:= Parser.Parse(Utf8, AFilePath);
+  // PP-Task-9: when preprocessing is enabled, resolve compiler-directive
+  // branches per the active define profile BEFORE parsing. Preprocess blanks
+  // inactive-branch and directive bytes to spaces (LF preserved) and returns a
+  // buffer of IDENTICAL byte length -- the offset-identity invariant -- so every
+  // symbol/ref span the parser emits still maps 1:1 back to the original file
+  // with NO source map. A per-file exception must NOT hard-fail the whole run:
+  // log once, then index the RAW UTF-8 for that file (pre-Task-9 behaviour).
+  if FPreprocessEnabled then
+  begin
+    try
+      ParseBytes:= Preprocess(Utf8, FProfile);
+    except
+      on E: Exception do
+      begin
+        LogPreprocessFallbackOnce(AFilePath, E);
+        ParseBytes:= Utf8;
+      end;
+    end;
+  end
+  else
+    ParseBytes:= Utf8;
+  ParseRes:= Parser.Parse(ParseBytes, AFilePath);
   // v0.16: scan doc-comment regions from the source text once per file
   // so we can associate them with symbols by line proximity below.
-  // Decode from the TRANSCODED bytes (what the parser saw) so doc-comment text
-  // and the symbol line positions agree; for pure-ASCII files this is identical
-  // to the prior ANSI decode of the raw bytes.
-  SourceText:= TEncoding.UTF8.GetString(Utf8);
+  // Decode from the bytes the PARSER ACTUALLY SAW (ParseBytes -- preprocessed
+  // when enabled, else the transcoded UTF-8) so doc-comment text and symbol line
+  // positions agree. Blanking preserves byte length + LF, so the line structure
+  // is identical to the raw file; blanked regions carry no doc-comments. For
+  // pure-ASCII files with preprocessing off this is the prior UTF-8 decode.
+  SourceText:= TEncoding.UTF8.GetString(ParseBytes);
   DocRegions:= TDocCommentScanner.Scan(SourceText);
   try
     Token:= FStore.OpenFileTx(AFilePath, Mtime, Sha, Parser.LanguageName);

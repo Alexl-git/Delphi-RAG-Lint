@@ -5,6 +5,7 @@ interface
 uses
   System.SysUtils
   , DRagLint.Core.Model
+  , DRagLint.Preprocess.Types
   ;
 
 type
@@ -287,6 +288,21 @@ type
     /// <param name="AFilter">Filter settings; caller may leave unused fields
     /// at their zero-value defaults.</param>
     procedure SetWalkFilter(const AFilter: TWalkFilter);
+    /// <summary>PP-Task-9: enable/disable the in-process compiler-directive
+    /// preprocessor for subsequent IndexFile/IndexFolder calls, and set the
+    /// active define profile. When enabled, each file's UTF-8 bytes are passed
+    /// through Preprocess(bytes, AProfile) before parsing, so inactive
+    /// conditional branches (per config) are blanked and the parser sees only
+    /// the live branch. Offsets stay 1:1 (blanking preserves byte length), so
+    /// symbol/ref spans map back to the original file with no remapping. A
+    /// per-file preprocess exception falls back to the RAW UTF-8 for that file
+    /// (logged once). Must be called before the first IndexFile/IndexFolder to
+    /// take effect for that run.</summary>
+    /// <param name="AEnabled">True enables preprocessing (default indexing
+    /// path); False reverts to the prior raw all-branch behaviour.</param>
+    /// <param name="AProfile">The active define profile (platform built-ins or
+    /// a .dproj-derived config); ignored when AEnabled is False.</param>
+    procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
   end;
 
   ILinter = interface

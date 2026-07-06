@@ -262,6 +262,10 @@ type
     PpIncludeMode: string     ; // --include-mode <off|defines-only>  ('' => default 'off')
     // PP-Task-7: pp-profile define-profile resolver diagnostic verb
     PpDproj      : string     ; // --dproj <file.dproj>  the project whose config defines to resolve
+    // PP-Task-9: index-time preprocessing. Preprocessing is ON by default in the
+    // index verbs (per-config {$IFDEF} resolution before parsing); --no-preprocess
+    // reverts to the prior raw all-branch behaviour.
+    NoPreprocess : Boolean    ; // --no-preprocess  disable the in-process directive preprocessor for this index run
   end; // record
 
 procedure PrintHelp;
@@ -483,6 +487,7 @@ begin
     end
     else if A = '--deep' then begin Result.Deep:= True; Result.DeepExplicit:= True; end
     else if A = '--shallow' then begin Result.Deep:= False; Result.DeepExplicit:= True; end
+    else if A = '--no-preprocess' then Result.NoPreprocess:= True { PP-Task-9: revert index to raw all-branch parsing }
     else if (A = '--width') and (i < ParamCount) then begin Inc(i); Result.Width:= ParamStr(i); end
     else if (A = '--project') and (i < ParamCount) then begin Inc(i); Result.ProjectPath:= ParamStr(i); end
     else if (A = '--rules-dir') and (i < ParamCount) then begin Inc(i); Result.RulesDir:= ParamStr(i); end
@@ -902,11 +907,40 @@ begin
     if TFile.Exists(ADbPath + Suffix) then TFile.Delete(ADbPath + Suffix);
 end;
 
+/// <summary>PP-Task-9: resolve the define profile the indexer preprocesses
+/// against. When a .dproj is given, derive the per-config profile from it
+/// (ProfileFromDproj: Base + selected-config DCC_Define, unioned with the
+/// platform built-ins); otherwise fall back to PlatformBuiltins for the target
+/// platform (default Win64 -- the library/no-project fallback the plan
+/// specifies). ADproj '' selects the built-ins path. APlatform '' defaults to
+/// Win64 inside the resolver. AConfig '' is treated as Release by
+/// ProfileFromDproj.</summary>
+/// <param name="ADproj">Path to a .dproj, or '' for the built-ins fallback.</param>
+/// <param name="APlatform">Target platform ('Win32'/'Win64'); '' -&gt; Win64.</param>
+/// <param name="AConfig">'Release'/'Debug'; '' -&gt; Release. Ignored without a .dproj.</param>
+/// <returns>The active define profile for the index run.</returns>
+function ResolveIndexProfile(const ADproj, APlatform, AConfig: string): TDefineProfile;
+var
+  Plat: string;
+begin
+  Plat:= APlatform;
+  if Plat = '' then Plat:= 'Win64'; // library / no-project fallback (plan default)
+  if ADproj <> '' then Result:= ProfileFromDproj(ADproj, Plat, AConfig)
+  else Result:= Default(TDefineProfile);
+  if ADproj = '' then Result.Defines:= PlatformBuiltins(Plat);
+end;
+
 // v0.45 Task 7: build one plan item into its SQLite database.
 // Creates the Store + Indexer, applies filter + dedup roots, walks per mode,
 // then calls ResolveUnitUseTargets. Writes a one-line summary to stdout.
 // Returns True on success, False (and prints the error) on failure.
-function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig): Boolean;
+// PP-Task-9: APreprocess (default True) enables per-config directive
+// resolution for this section's index. The profile is derived from the
+// section's platform (library sections carry it; folder/closure default Win64)
+// -- unioned with a .dproj's config defines when the section is a single-project
+// closure. --no-preprocess (from index --all) passes False for a raw all-branch
+// build.
+function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True): Boolean;
 var
   Store          : ISymbolStore                              ;
   Indexer        : IIndexer                                  ;
@@ -939,6 +973,16 @@ begin
     // Library sections: shallow (no usage refs -- would ~double the DB size).
     DParser.EmitUsageRefs:= (AItem.Mode <> smLibrary);
     Indexer:= TIndexer.Create(Store, [DParser, TDFMParser.Create, TFirebirdSqlParser.Create], ADocs);
+
+    // PP-Task-9: per-config directive resolution for this section (default ON).
+    // A single-project closure section resolves defines from its .dproj; every
+    // other section uses the platform built-ins (library sections carry their
+    // platform; folder/multi-root sections default to Win64).
+    var SectionDproj: string:= '';
+    if (AItem.Mode = smClosure) and (Length(AItem.Roots) = 1) and
+       SameText(ExtractFileExt(AItem.Roots[0]), '.dproj') then
+      SectionDproj:= AItem.Roots[0];
+    Indexer.SetPreprocess(APreprocess, ResolveIndexProfile(SectionDproj, AItem.Platform, ''));
 
     // Apply walk filter from the resolved plan item.
     Indexer.SetWalkFilter(AItem.Filter);
@@ -1123,7 +1167,7 @@ begin
   if EffJobs <= 1 then
   begin
     AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs) then AnyFailed:= True; end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess) then AnyFailed:= True; end;
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -1135,7 +1179,7 @@ begin
   begin
     Writeln(ErrOutput, 'NOTE: --jobs >1 requires --config <path>; running sequentially.');
     AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs) then AnyFailed:= True; end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess) then AnyFailed:= True; end;
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -1189,6 +1233,9 @@ begin
       ChildCmdLine:= '"' + SelfExe + '" index --all --only "' + Plan.Items[i].Name + '"';
       if Plan.Items[i].Platform <> '' then ChildCmdLine:= ChildCmdLine + ' --platform "' + Plan.Items[i].Platform + '"';
       ChildCmdLine:= ChildCmdLine + ' --config "' + AArgs.WorkspaceConfig + '"' + ' --jobs 1';
+      // PP-Task-9: propagate --no-preprocess to the child so a parallel --all
+      // build honours the raw all-branch request across every spawned worker.
+      if AArgs.NoPreprocess then ChildCmdLine:= ChildCmdLine + ' --no-preprocess';
 
       SetLength(ChildCmdBuf, Length(ChildCmdLine) + 1);
       Move(PChar(ChildCmdLine)^, ChildCmdBuf[0], (Length(ChildCmdLine) + 1) * SizeOf(WideChar));
@@ -1348,6 +1395,18 @@ begin
   // doc regions to symbols.
   { v0.40.5 Tier 1: register the Firebird SQL parser alongside Delphi/DFM. }
   Indexer:= TIndexer.Create(Store, [Parser, TDFMParser.Create, TFirebirdSqlParser.Create], AArgs.Docs);
+
+  // PP-Task-9: enable the in-process directive preprocessor by default so
+  // conditional-compilation branches are resolved PER-CONFIG before parsing;
+  // --no-preprocess reverts to the prior raw all-branch behaviour. Profile comes
+  // from --project (a .dproj -> per-config defines) when given, else the platform
+  // built-ins (--platform, default Win64). Build config defaults to Release.
+  var PpPlatform: string:= AArgs.CheckPlatform;
+  if PpPlatform = '' then PpPlatform:= 'Win64';
+  Indexer.SetPreprocess(not AArgs.NoPreprocess,
+    ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  if not AArgs.NoPreprocess then Writeln('Preprocess: ON  (per-config directive resolution; platform=', PpPlatform, ')')
+  else Writeln('Preprocess: OFF  (--no-preprocess: raw all-branch parsing)');
 
   { v0.42: cross-dictionary dedup -- exclude any subtree the caller says is
     already covered by another index (library / active-project DB). }
@@ -1648,7 +1707,7 @@ begin
     TDirectory.CreateDirectory(OutDir);
     AnyFailed:= False;
     for var PS in Plan.Items do
-      if not BuildPlanItem(PS, AArgs.Docs) then AnyFailed:= True;
+      if not BuildPlanItem(PS, AArgs.Docs, not AArgs.NoPreprocess) then AnyFailed:= True;
 
     if AnyFailed then Result:= 1 else Result:= 0;
   finally
