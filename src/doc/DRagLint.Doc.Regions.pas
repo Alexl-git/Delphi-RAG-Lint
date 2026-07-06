@@ -22,8 +22,11 @@ type
   public
     /// <summary>Renders the fenced facts-block body lines (each prefixed
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
-    /// Raises. Empty sections omitted; '' when there are no facts. Displayed
-    /// counts below the true *Total get a ' (+N more)' suffix.</summary>
+    /// Raises / Deprecated. Empty sections omitted; '' when there are no
+    /// facts. Displayed counts below the true *Total get a ' (+N more)'
+    /// suffix. Deprecated is ground-truth from the Pascal 'deprecated'
+    /// directive (not the unrelated &lt;deprecated/&gt; doc-comment tag) --
+    /// emitted only when the directive was found on the declaration.</summary>
     class function RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string): string;
     /// <summary>Produces the full merged DocInsight comment text (///-prefixed
     /// lines joined by CRLF): preserved hand-written prose + a regenerated
@@ -109,6 +112,17 @@ begin
       Sb.AppendLine(APrefix + 'Used in units: ' + string.Join(', ', AFacts.UsedInUnits) + MoreSuffix(Length(AFacts.UsedInUnits), AFacts.UsedInTotal));
     if Length(AFacts.Raises) > 0 then
       Sb.AppendLine(APrefix + 'Raises: ' + string.Join(', ', AFacts.Raises));
+    // v(ADF T3): ground-truth 'deprecated' directive line. Emitted only when
+    // AFacts.Deprecated (the directive was actually found on the decl -- see
+    // TDocFactsBuilder.DetectDeprecated). A message renders 'Deprecated: <msg>';
+    // a bare directive (no message string) renders the bare 'Deprecated.' line.
+    if AFacts.Deprecated then
+    begin
+      if AFacts.DeprecatedMsg <> '' then
+        Sb.AppendLine(APrefix + 'Deprecated: ' + AFacts.DeprecatedMsg)
+      else
+        Sb.AppendLine(APrefix + 'Deprecated.');
+    end;
     Result:= Sb.ToString.TrimRight([#13, #10]);
   finally
     Sb.Free;

@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.Math,
-  System.Generics.Collections,
+  System.Generics.Collections, System.RegularExpressions,
   DRagLint.Core.Model, DRagLint.Core.Interfaces;
 
 type
@@ -30,6 +30,16 @@ type
     CalledFromTotal: Integer            ;
     CallsTotal     : Integer            ;
     UsedInTotal    : Integer            ;
+    // v(ADF T3): ground-truth from the Pascal 'deprecated' DIRECTIVE on the decl
+    // (NOT the <deprecated/> doc-comment TAG -- see DRagLint.Parser.DocComments'
+    // TParsedDoc.Deprecated for that unrelated concept). Neither Signature nor
+    // Modifiers captures the directive (Modifiers is visibility-only, Signature is
+    // args+return-type only -- confirmed empirically), so Build falls back to a
+    // source-line read at the declaration's StartLine. Deprecated=True whenever the
+    // directive is present; DeprecatedMsg holds the optional message string
+    // (quotes stripped), '' for a bare 'deprecated;'.
+    Deprecated     : Boolean            ;
+    DeprecatedMsg  : string             ;
   end;
 
   TDocFactsBuilder = class
@@ -214,6 +224,64 @@ begin
     end;
     Inc(I);
   end;
+end;
+
+// Reads the 1-based ALine of AFilePath, trimmed. '' on any error (missing
+// file, out-of-range line) -- same tolerant pattern the Calls/Raises sections
+// above use for their own TFile.ReadAllLines(..., TEncoding.ANSI) reads (source
+// is strict ANSI/CRLF per repo convention).
+function ReadDeclLine(const AFilePath: string; ALine: Integer): string;
+var Lines: TArray<string>;
+begin
+  Result:= '';
+  if (AFilePath = '') or (ALine <= 0) then Exit;
+  try
+    Lines:= System.IOUtils.TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+  except
+    Exit;
+  end;
+  if ALine <= Length(Lines) then Result:= Trim(Lines[ALine - 1]);
+end;
+
+// Detects a Pascal 'deprecated' DIRECTIVE on ASym's declaration and, when
+// present, extracts its optional trailing message string literal. This is
+// GROUND-TRUTH ONLY: called just once per Build and the caller sets
+// Result.Deprecated/DeprecatedMsg strictly from what this function finds --
+// no fabrication when the directive is absent.
+//
+// SOURCE: empirically confirmed (probe fixture, 'query --name X --json' on a
+// scratch DB) that NEITHER TSymbol.Signature (args+return-type only) NOR
+// TSymbol.Modifiers (visibility only, e.g. 'public') captures the directive --
+// both are '' for a routine regardless of a trailing 'deprecated' clause. The
+// parser (DRagLint.Parser.Delphi13.EmitProc et al.) never inspects the
+// procAttribute directive nodes for 'deprecated' at all. Fallback: read the
+// raw declaration line at ASym.StartLine (ReadDeclLine, above -- the same
+// tolerant ANSI-read idiom this unit already uses for Calls/Raises) and
+// regex-match the directive there.
+//
+// Matches (case-insensitive, whole-word 'deprecated'):
+//   procedure OldWay; deprecated 'use NewWay';   -> Deprecated=True,  Msg='use NewWay'
+//   procedure OldBare; deprecated;               -> Deprecated=True,  Msg=''
+//   procedure Fine;                              -> Deprecated=False, Msg=''
+function DetectDeprecated(const AStore: ISymbolStore; const ASym: TSymbol; out AMsg: string): Boolean;
+var
+  Line : string;
+  M    : TMatch;
+begin
+  Result:= False;
+  AMsg  := '';
+  if ASym.StartLine <= 0 then Exit;
+  Line:= ReadDeclLine(AStore.GetFilePath(ASym.FileId), ASym.StartLine);
+  if Line = '' then Exit;
+  // 'deprecated' as a whole word, optionally followed by a single-quoted
+  // message string, up to the terminating ';'. The message capture tolerates
+  // a Pascal-escaped '' (embedded quote) via the non-greedy .*? + literal ''.
+  M:= TRegEx.Match(Line, '\bdeprecated\b\s*(?:''(.*?)'')?\s*;', [roIgnoreCase]);
+  if not M.Success then Exit;
+  Result:= True;
+  if M.Groups.Count > 1 then
+    if M.Groups[1].Success then
+      AMsg:= StringReplace(M.Groups[1].Value, '''''', '''', [rfReplaceAll]);
 end;
 
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol): TDocFacts;
@@ -457,6 +525,12 @@ begin
       RaiseSet.Free;
     end;
   end;
+
+  // Deprecated: ground-truth 'deprecated' directive detection (see
+  // DetectDeprecated's header comment for the source/probe rationale).
+  var DepMsg: string;
+  Result.Deprecated:= DetectDeprecated(AStore, ASym, DepMsg);
+  Result.DeprecatedMsg:= DepMsg;
 end;
 
 end.
