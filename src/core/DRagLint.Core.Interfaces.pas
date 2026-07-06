@@ -220,6 +220,17 @@ type
     /// the dump-call-edges verb / tests; not for production queries (use
     /// FindResolvedCallers / GetCallEdgesFromSymbol for those).</summary>
     function DumpAllCallEdges: TArray<TCallEdge>;
+    /// <summary>v14 (D5 T9): the ambiguous-calls resolver-coverage diagnostic --
+    /// every ref that NAMES a known routine/method symbol (kind IN procedure,
+    /// function, method, constructor, destructor) AND that the resolver did NOT
+    /// pin to a single certain target: either it has a call_edges row with
+    /// confidence='ambiguous', or it has NO call_edges row at all (untypable
+    /// receiver). Confidence on the returned TResolvedCaller is 'ambiguous' or
+    /// 'unverified' respectively. Optionally scoped to AQName<>'' (the calling
+    /// routine's qualified name) or AFilePath<>'' (refs in that file); pass both
+    /// '' for the whole-DB coverage view. Location is file-name-only;
+    /// EnclosingQName is '' when the ref has no enclosing routine.</summary>
+    function GetAmbiguousCalls(const AQName, AFilePath: string): TArray<TResolvedCaller>;
   end;
 
   TParseResult = record

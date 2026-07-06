@@ -113,6 +113,7 @@ type
       function GetTypeCandidates: TArray<TSymbol>;
       function GetUnitScopeEdges: TArray<TFileScopeEdge>;
       function DumpAllCallEdges: TArray<TCallEdge>;
+      function GetAmbiguousCalls(const AQName, AFilePath: string): TArray<TResolvedCaller>;
       function FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
       function FindDiResolveSites   ( const AInterfaceName: string): TArray<TReference   >;
       function FindDiUnresolved: TArray<TReference>                                       ;
@@ -1174,6 +1175,64 @@ begin
       List.Add(E);
       Q.Next;
     end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.GetAmbiguousCalls(const AQName, AFilePath: string): TArray<TResolvedCaller>;
+{ v14 (D5 T9): resolver-coverage diagnostic. A ref counts as a "call" only when
+  its name_text matches a KNOWN routine/method symbol name (the IN subquery on
+  symbols.kind) -- without that filter every unresolved bare identifier would
+  flood the output, not just call sites. Of those name-matching refs, a row
+  qualifies when it is either NOT resolved at all (no call_edges row -- the
+  FindUnresolvedNameCallers case, receiver untypable) or resolved but flagged
+  'ambiguous' (multiple candidate targets, none certain). Confidence in the
+  result is 'unverified' for the no-edge case and 'ambiguous' for the flagged
+  case, mirroring FindUnresolvedNameCallers / FindResolvedCallers. Scope is
+  optional: AQName<>'' filters to refs enclosed by that qualified routine name;
+  AFilePath<>'' filters to refs in that file (matched by file name, tolerant of
+  path differences like the other file-scoped verbs); both '' = whole-DB. }
+var
+  Q     : TFDQuery              ;
+  List  : TList<TResolvedCaller>;
+  R     : TResolvedCaller       ;
+  SqlTxt: string                ;
+begin
+  List:= TList<TResolvedCaller>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    SqlTxt:=
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, ' +
+      '  CASE WHEN ce.confidence = ''ambiguous'' THEN ''ambiguous'' ELSE ''unverified'' END AS conf ' +
+      'FROM refs r ' +
+      'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
+      'JOIN files f ON f.id = r.file_id ' +
+      'LEFT JOIN call_edges ce ON ce.ref_id = r.id ' +
+      'WHERE r.name_text IN (SELECT name FROM symbols WHERE kind IN (''procedure'',''function'',''method'',''constructor'',''destructor'')) ' +
+      '  AND (ce.ref_id IS NULL OR ce.confidence = ''ambiguous'') ';
+    if AQName <> '' then SqlTxt:= SqlTxt + '  AND s.qualified_name = :qn ';
+    if AFilePath <> '' then SqlTxt:= SqlTxt + '  AND f.path LIKE :fp ';
+    SqlTxt:= SqlTxt + 'ORDER BY f.path, r.start_line';
+    Q.SQL.Text:= SqlTxt;
+    if AQName <> '' then Q.ParamByName('qn').AsString:= AQName;
+    if AFilePath <> '' then Q.ParamByName('fp').AsString:= '%' + ExtractFileName(AFilePath);
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R:= Default(TResolvedCaller);
+      if Q.FieldByName('enclosing_symbol_id').IsNull then R.EnclosingSymbolId:= 0
+      else R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
+      if Q.FieldByName('encl_qname').IsNull then R.EnclosingQName:= ''
+      else R.EnclosingQName:= Q.FieldByName('encl_qname').AsString;
+      R.Location  := ExtractFileName(Q.FieldByName('file_path').AsString);
+      R.Confidence:= Q.FieldByName('conf').AsString;
+      List.Add(R);
+      Q.Next;
+    end; // while
     Result:= List.ToArray;
   finally
     Q.Free;

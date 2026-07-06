@@ -310,6 +310,8 @@ begin
   Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
+  Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X)');
+  Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
   Writeln('');
   Writeln('  Output/CI (lint, lint-all, check-ast):');
   Writeln('    --format sarif            emit SARIF 2.1.0 (in addition to text|json)');
@@ -7975,6 +7977,119 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>v14 (D5 T9): drag-lint find-callees --qname X [--json] --db PATH --
+/// the mirror of find-callers --resolved: every RESOLVED outgoing call made
+/// from inside routine X's body (via call_edges), rendered as the target's
+/// qualified name + confidence. X is resolved via FindSymbolsByQualifiedName;
+/// an overloaded/duplicate qname is handled by unioning the callees of every
+/// matching symbol. A routine with no resolved outgoing calls prints "0
+/// callee(s)" (text) / an empty array (json) -- a valid, non-error answer.</summary>
+/// <param name="AArgs">Parsed CLI args; QName is the calling routine, DbPath the index.</param>
+/// <returns>0 when the store opened OK and --qname resolved to at least one symbol
+/// (even with zero callees); 1 if --qname does not resolve to any symbol; 2 on
+/// usage error / missing db.</returns>
+function DoFindCallees(const AArgs: TArgs): Integer;
+var
+  Store  : ISymbolStore     ;
+  Targets: TArray<TSymbol>  ;
+  T      : TSymbol          ;
+  Edges  : TArray<TCallEdge>;
+  E      : TCallEdge        ;
+  QName  : string           ;
+  Total  : Integer          ;
+begin
+  if AArgs.QName = '' then begin Writeln('Usage: drag-lint find-callees --qname X [--json] --db PATH'); Exit (2 ); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
+
+  Targets:= Store.FindSymbolsByQualifiedName(AArgs.QName);
+  if Length(Targets) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+
+  Total:= 0;
+  var JOut: TJSONArray:= nil;
+  if AArgs.AsJson then JOut:= TJSONArray.Create;
+  try
+    for T in Targets do
+    begin
+      Edges:= Store.GetCallEdgesFromSymbol(T.Id);
+      for E in Edges do
+      begin
+        if E.TargetSymbolId > 0 then QName:= Store.GetSymbolById(E.TargetSymbolId).QualifiedName
+        else QName:= '';
+        if AArgs.AsJson then
+        begin
+          var JObj:= TJSONObject.Create;
+          JObj.AddPair('target_qname', QName        );
+          JObj.AddPair('confidence'  , E.Confidence  );
+          JOut.AddElement(JObj);
+        end
+        else Writeln(Format('  %s  [%s]', [QName, E.Confidence]));
+        Inc(Total);
+      end; // for E
+    end; // for T
+    if AArgs.AsJson then Writeln(JOut.Format(2))
+    else if Total = 0 then Writeln('0 callee(s)');
+  finally
+    JOut.Free;
+  end; // try
+  Result:= 0;
+end; // function
+
+/// <summary>v14 (D5 T9): drag-lint ambiguous-calls [--qname X|--file F] [--json]
+/// --db PATH -- the resolver-coverage diagnostic. Lists call sites that name a
+/// known routine/method but that the resolver did NOT pin to a single certain
+/// target (confidence='ambiguous' in call_edges, or no call_edges row at all --
+/// untypable receiver). Optionally scoped to --qname (the enclosing routine's
+/// qualified name) or --file (a source file); with neither, it lists every
+/// ambiguous/unverified call site in the whole DB (the global coverage view --
+/// can be large; scoping is recommended). An empty result is a VALID "fully
+/// resolved" answer, not an error.</summary>
+/// <param name="AArgs">Parsed CLI args; QName and/or InFile (--file/--in) scope
+/// the query, DbPath is the index.</param>
+/// <returns>0 whenever the store opened OK, regardless of result count (empty
+/// is a valid answer); 2 on usage error / missing db.</returns>
+function DoAmbiguousCalls(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore          ;
+  Rows : TArray<TResolvedCaller>;
+  R    : TResolvedCaller        ;
+begin
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
+
+  Rows:= Store.GetAmbiguousCalls(AArgs.QName, AArgs.InFile);
+
+  if AArgs.AsJson then
+  begin
+    var JOut:= TJSONArray.Create;
+    try
+      for R in Rows do
+      begin
+        var JObj:= TJSONObject.Create;
+        JObj.AddPair('enclosing_qname', R.EnclosingQName);
+        JObj.AddPair('file'           , R.Location       );
+        JObj.AddPair('confidence'     , R.Confidence     );
+        JOut.AddElement(JObj);
+      end; // for R
+      Writeln(JOut.Format(2));
+    finally
+      JOut.Free;
+    end; // try
+  end
+  else
+  begin
+    for R in Rows do
+      Writeln(Format('  %s  (%s)  [%s]', [R.EnclosingQName, R.Location, R.Confidence]));
+    if Length(Rows) = 0 then Writeln('0 ambiguous call(s) -- fully resolved')
+    else Writeln(Format('%d ambiguous call(s)', [Length(Rows)]));
+  end; // if
+  Result:= 0;
+end; // function
+
 // v0.27: drag-lint format <file> [--yadf-path PATH]
 // Runs YADF formatter on the given file (YADF rewrites in place).
 // Exit 2 on usage error, 1 on formatter failure, 0 on success.
@@ -9181,6 +9296,8 @@ begin
     else if Args.Command = 'check-ast'         then Result:= DoCheckAst        (Args)
     else if Args.Command = 'dump-refs'         then Result:= DoDumpRefs        (Args)
     else if Args.Command = 'dump-call-edges'   then Result:= DoDumpCallEdges   (Args)
+    else if Args.Command = 'find-callees'      then Result:= DoFindCallees     (Args)
+    else if Args.Command = 'ambiguous-calls'   then Result:= DoAmbiguousCalls  (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
     else if Args.Command = 'workspace'         then Result:= DoWorkspace       (Args)
     else if Args.Command = 'selftest'          then Result:= DoSelfTest        (Args)
