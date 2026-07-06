@@ -55,8 +55,9 @@ benefit in later opt-in work). Schema bump v13 -> v14.
 
 ### In scope (D5)
 
-1. New parser emission: **typed local vars + params as symbols** (scoped to user-defined
-   class/interface/record types -- see Design 3).
+1. New parser emission: **all local vars + params as typed symbols** (a complete local symbol
+   table incl. primitives -- see Design 3). Powers D5's receiver typing AND future
+   context/hover/refactoring queries.
 2. New whole-DB pass **`ResolveCallTargets`** with maximal receiver typing (8 receiver kinds).
 3. New **`call_edges`** table (schema v14).
 4. AutoDocument **Called-from** switches to resolved callers (the bug fix), with the 3-way
@@ -158,11 +159,24 @@ data-backed after the parser addition below):
 8. **Function-return `GetFoo.M`** -> `GetFoo`'s return type (return types are captured).
 
 **New parser work (kinds 4 & 5):** emit local vars + params as symbols carrying `TypeTextOf`.
-**Scoping guard** to bound index growth: only emit a local/param whose declared type resolves
-to a **user-defined class / interface / record** (a possible method receiver). Skip primitives
-(`Integer`, `string`, `Boolean`, ...) and any type that can't receive a resolvable method call.
-This keeps added rows proportional to what resolution consumes. (Note: this still grows the
-index measurably -- reinforcing the library auto-reindex in Design 5.)
+**Emit ALL locals and params, including primitive-typed ones** (user decision 2026-07-06) --
+a complete local symbol table, not just receiver-eligible types. Rationale: locals/params have
+value well beyond D5's receiver typing -- context bundles, hover, and future refactorings
+(rename-local, inline-variable, unused-local, change-signature) all want typed locals in the
+index, and today they are dropped entirely (invisible to every query). D5 is the reason to build
+it; the value is broader and permanent.
+- New symbol kinds: `skLocalVar` and `skParam` (or reuse `skVarDecl` for locals + a new
+  `skParam`). Each carries its declared type in `Signature` (via `TypeTextOf`), `ParentId` =
+  the enclosing routine symbol, and its decl line span.
+- Params come from the routine header; locals from the routine's `var` section(s). Both are
+  scoped to the routine (looked up by `ParentId` = enclosing routine during resolution).
+- **Size impact (measured, honest):** on `src/` (118 files) the current index is 3,332 symbols;
+  emitting all locals+params is estimated at **roughly +8,000-10,000 symbols (>2x)** for source,
+  and the libraries (RTL/VCL/DevExpress) scale far larger in absolute rows. Reindex is
+  correspondingly slower -- which is exactly why the library reindex runs as an unattended
+  background rollout step (Design 6). Measure the real delta during implementation and record it
+  in the ship notes; if it proves prohibitive on the full library tree, the fallback is a config
+  flag (default on) to restrict local/param emission -- but the chosen default is emit-all.
 
 **Conservative at every step:** any receiver expression not in 1-8, a type name that doesn't
 resolve in scope, or alias-chasing past the depth cap -> **no `call_edges` row** (`?` bucket).
@@ -266,10 +280,11 @@ SERVER DBs and the manifest DBs reindex via the normal `index --all` flow on nex
   classifier (Design 4): any ambiguity -> `?` or no row; `certain` requires an unambiguous
   receiver type AND a single method match. The Called-from regression test locks the `Run`
   case.
-- **Index-size growth from typed locals/params.** Mitigated by the user-defined-type scoping
-  guard (Design 3) -- only receiver-eligible types emitted. Reindex cost mitigated by the
-  background library reindex (Design 6). Measure the growth during implementation; if a
-  concern, tighten the guard (e.g. only emit locals/params actually used as a call receiver).
+- **Index-size growth from emitting ALL locals/params (>2x symbols, user-chosen).** Accepted for
+  the broader value (complete local symbol table -> context/hover/refactorings). Reindex cost
+  absorbed by the unattended background library reindex (Design 6). Measure the real delta during
+  implementation and record it in ship notes. Fallback if prohibitive on the full library tree: a
+  config flag (default = emit-all) to restrict emission -- but emit-all is the chosen default.
 - **Receiver-typing coverage gaps** (untyped receivers -> `?`). Honest by design: `?` marks
   the uncertainty rather than guessing; `ambiguous-calls` surfaces the gaps for iteration.
 - **Chunk size.** D5 is large (parser change + resolution pass + schema + 4 verbs + 2
