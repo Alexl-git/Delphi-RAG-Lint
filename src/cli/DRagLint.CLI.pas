@@ -285,6 +285,7 @@ begin
   Writeln('  drag-lint rename --kind param  --file <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
+  Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup] [--db PATH]   - generate/repair a managed DocInsight comment');
   Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
   Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
   Writeln('  drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
@@ -6146,6 +6147,80 @@ begin
   Result:= 0;
 end; // function
 
+// AutoDocument Chunk 1: drag-lint document --qname X [--apply|--json|--no-backup] [--db PATH]
+// Generates or repairs a managed-region DocInsight comment for the symbol. Dry-run
+// (prints the edit preview) unless --apply. Exit 0 on ok/unchanged, 1 not found,
+// 2 usage/db error. Read-only DB access (writes source files, not the index).
+function DoDocument(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore;
+  Res  : DRagLint.Doc.Document.TDocumentResult;
+  Ok   : Boolean;
+  O    : TJSONObject;
+  Applied: Boolean;
+begin
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint document --qname X [--apply|--json|--no-backup] [--db PATH]');
+    Exit(2);
+  end;
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(2);
+  end;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if not Ok then Exit(2);
+
+  Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName);
+
+  if Res.Action = DRagLint.Doc.Document.daNotFound then
+  begin
+    Writeln(Format('symbol not found: %s', [AArgs.QName]));
+    Exit(1);
+  end;
+
+  Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
+  if Applied then
+    TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
+
+  if AArgs.AsJson then
+  begin
+    O:= TJSONObject.Create;
+    try
+      O.AddPair('qname', Res.QName);
+      O.AddPair('file', Res.FilePath);
+      O.AddPair('line', TJSONNumber.Create(Res.Line));
+      case Res.Action of
+        DRagLint.Doc.Document.daCreated  : O.AddPair('action', 'created'  );
+        DRagLint.Doc.Document.daExtended : O.AddPair('action', 'extended' );
+        DRagLint.Doc.Document.daUnchanged: O.AddPair('action', 'unchanged');
+      else                                 O.AddPair('action', 'not_found');
+      end;
+      O.AddPair('edits', TJSONNumber.Create(Length(Res.Edits)));
+      O.AddPair('applied', TJSONBool.Create(Applied));
+      Writeln(O.ToJSON);
+    finally
+      O.Free;
+    end;
+    Exit(0);
+  end;
+
+  if Res.Action = DRagLint.Doc.Document.daUnchanged then
+    Writeln('doc: up to date (no change)')
+  else if not AArgs.Apply then
+  begin
+    Writeln(TTextEditApplier.RenderDryRun(Res.Edits));
+    Writeln(Format('doc: %d edit(s) -- pass --apply to write', [Length(Res.Edits)]));
+  end
+  else
+    Writeln(Format('doc: %s -- %d edit(s) applied%s',
+      [IfThen(Res.Action = DRagLint.Doc.Document.daCreated, 'created', 'extended'),
+       Length(Res.Edits),
+       IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+  Result:= 0;
+end; // function
+
 // v0.69 D2b: drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>
 // Resolves the unit declaring Symbol and inserts it into InFile's uses clause.
 // Exit 0 on success or already-used; 1 if unresolvable or no edit; 2 on usage error.
@@ -10278,6 +10353,7 @@ begin
     else if Args.Command = 'link-orm'          then Result:= DoLinkOrm         (Args)
     else if Args.Command = 'rename'            then Result:= DoRename          (Args)
     else if Args.Command = 'generate-docs'     then Result:= DoGenerateDocs    (Args)
+    else if Args.Command = 'document'          then Result:= DoDocument        (Args)
     else if Args.Command = 'find-unit'         then Result:= DoFindUnit         (Args)
     else if Args.Command = 'safe-delete'       then Result:= DoSafeDelete      (Args)
     else if Args.Command = 'extract-method'    then Result:= DoExtractMethod   (Args)
