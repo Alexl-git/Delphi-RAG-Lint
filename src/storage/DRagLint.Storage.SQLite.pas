@@ -27,6 +27,7 @@ type
       FQInsertSymbol         : TFDQuery     ;
       FQInsertTrigram        : TFDQuery     ;
       FQInsertRef            : TFDQuery     ;
+      FQInsertCallEdge       : TFDQuery     ;
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -102,6 +103,12 @@ type
       procedure UpsertStringLiteral(const AToken: TFileTxToken; const ALit: TStringLiteral);
       procedure DeleteStringLiteralsForFile(AFileId: Int64);
       function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
+      // v14 (D5): resolved call-target edges (call_edges table).
+      procedure UpsertCallEdge(const AToken: TFileTxToken; const AEdge: TCallEdge);
+      procedure ClearCallEdges;
+      function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
+      function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
+      function CountCallEdges: Int64;
       function FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
       function FindDiResolveSites   ( const AInterfaceName: string): TArray<TReference   >;
       function FindDiUnresolved: TArray<TReference>                                       ;
@@ -272,6 +279,7 @@ begin
   FQInsertSymbol.Free;
   FQInsertTrigram.Free;
   FQInsertRef.Free;
+  FQInsertCallEdge.Free;
   FQDeleteFileSymbols.Free;
   FQDeleteFileRefs.Free;
   FQUpsertDiBinding.Free;
@@ -621,6 +629,9 @@ begin
   FQInsertRef:= NewQuery(
     'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id) ' +
     'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec, :esid)');
+  FQInsertCallEdge:= NewQuery(
+    'INSERT OR REPLACE INTO call_edges(ref_id, target_symbol_id, confidence, receiver_type_symbol_id) ' +
+    'VALUES (:rid, :tid, :conf, :rtid)');
   FQDeleteFileSymbols:= NewQuery('DELETE FROM symbols WHERE file_id = :fid');
   FQDeleteFileRefs   := NewQuery('DELETE FROM refs WHERE file_id = :fid'   );
   FQUpsertDiBinding:= NewQuery(
@@ -916,6 +927,112 @@ begin
   if ARef.EnclosingSymbolId > 0 then FQInsertRef.ParamByName('esid').AsLargeInt:= ARef.EnclosingSymbolId
   else FQInsertRef.ParamByName('esid').Clear;
   FQInsertRef.ExecSQL;
+end;
+
+procedure TSQLiteSymbolStore.UpsertCallEdge(const AToken: TFileTxToken; const AEdge: TCallEdge);
+begin
+  FQInsertCallEdge.ParamByName('rid' ).AsLargeInt:= AEdge.RefId;
+  FQInsertCallEdge.ParamByName('tid' ).AsLargeInt:= AEdge.TargetSymbolId;
+  FQInsertCallEdge.ParamByName('conf').AsString  := AEdge.Confidence;
+  { receiver_type_symbol_id is nullable (ON DELETE SET NULL); NULL it when unknown. }
+  FQInsertCallEdge.ParamByName('rtid').DataType:= ftLargeint;
+  if AEdge.ReceiverTypeSymbolId > 0 then FQInsertCallEdge.ParamByName('rtid').AsLargeInt:= AEdge.ReceiverTypeSymbolId
+  else FQInsertCallEdge.ParamByName('rtid').Clear;
+  FQInsertCallEdge.ExecSQL;
+end;
+
+procedure TSQLiteSymbolStore.ClearCallEdges;
+begin
+  FConn.ExecSQL('DELETE FROM call_edges');
+end;
+
+function TSQLiteSymbolStore.FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
+var
+  Q   : TFDQuery              ;
+  List: TList<TResolvedCaller>;
+  R   : TResolvedCaller       ;
+begin
+  List:= TList<TResolvedCaller>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:=
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ce.confidence ' +
+      'FROM call_edges ce ' +
+      'JOIN refs r ON r.id = ce.ref_id ' +
+      'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
+      'JOIN files f ON f.id = r.file_id ' +
+      'WHERE ce.target_symbol_id = :x ' +
+      'ORDER BY ce.confidence DESC, s.qualified_name';
+    Q.ParamByName('x').AsLargeInt:= ATargetSymbolId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R:= Default(TResolvedCaller);
+      if Q.FieldByName('enclosing_symbol_id').IsNull then R.EnclosingSymbolId:= 0
+      else R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
+      if Q.FieldByName('encl_qname').IsNull then R.EnclosingQName:= ''
+      else R.EnclosingQName:= Q.FieldByName('encl_qname').AsString;
+      R.Location  := ExtractFileName(Q.FieldByName('file_path').AsString);
+      R.Confidence:= Q.FieldByName('confidence').AsString;
+      List.Add(R);
+      Q.Next;
+    end; // while
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
+var
+  Q   : TFDQuery       ;
+  List: TList<TCallEdge>;
+  E   : TCallEdge       ;
+begin
+  List:= TList<TCallEdge>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:=
+      'SELECT ce.ref_id, ce.target_symbol_id, ce.confidence, ce.receiver_type_symbol_id ' +
+      'FROM call_edges ce ' +
+      'JOIN refs r ON r.id = ce.ref_id ' +
+      'WHERE r.enclosing_symbol_id = :x';
+    Q.ParamByName('x').AsLargeInt:= AEnclosingSymbolId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      E:= Default(TCallEdge);
+      E.RefId         := Q.FieldByName('ref_id'          ).AsLargeInt;
+      E.TargetSymbolId:= Q.FieldByName('target_symbol_id').AsLargeInt;
+      E.Confidence    := Q.FieldByName('confidence'       ).AsString;
+      if Q.FieldByName('receiver_type_symbol_id').IsNull then E.ReceiverTypeSymbolId:= 0
+      else E.ReceiverTypeSymbolId:= Q.FieldByName('receiver_type_symbol_id').AsLargeInt;
+      List.Add(E);
+      Q.Next;
+    end; // while
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.CountCallEdges: Int64;
+var
+  Q: TFDQuery;
+begin
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT COUNT(*) AS n FROM call_edges';
+    Q.Open;
+    Result:= Q.FieldByName('n').AsLargeInt;
+  finally
+    Q.Free;
+  end;
 end;
 
 procedure TSQLiteSymbolStore.UpsertDiBinding(const AToken: TFileTxToken; const ABinding: TDiBindingRow);

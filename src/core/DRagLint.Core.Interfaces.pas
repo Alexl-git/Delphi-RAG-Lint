@@ -172,6 +172,24 @@ type
     /// order), 'substring' (trigram-based). ASource filters by source language
     /// ('pas'|'dfm'|'sql'); '' = all. Returns up to ALimit hits.</summary>
     function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
+
+    // v14 (D5): resolved call-target edges (call_edges table).
+    /// <summary>Insert or replace the resolved call edge for one ref (ref_id is
+    /// the natural key -- a ref resolves to at most one target). NULLs
+    /// ReceiverTypeSymbolId when it is &lt;= 0 (unknown receiver type).</summary>
+    procedure UpsertCallEdge(const AToken: TFileTxToken; const AEdge: TCallEdge);
+    /// <summary>Wipes the entire call_edges table. Called once at the start of
+    /// the whole-DB ResolveCallTargets pass, which then rebuilds every edge.</summary>
+    procedure ClearCallEdges;
+    /// <summary>The Called-from query: every resolved caller of ATargetSymbolId,
+    /// most-confident first. Backs the AutoDocument Called-from facts block.</summary>
+    function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
+    /// <summary>Find-callees: every call edge whose ref is enclosed by
+    /// AEnclosingSymbolId (i.e. every resolved call made from inside that
+    /// routine's body).</summary>
+    function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
+    /// <summary>Total row count in call_edges. Diagnostic/test probe.</summary>
+    function CountCallEdges: Int64;
   end;
 
   TParseResult = record

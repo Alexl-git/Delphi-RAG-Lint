@@ -102,6 +102,29 @@ type
     EnclosingSymbolId: Int64;
   end;
 
+  /// <summary>v14 (D5): one resolved call-site edge, written by the
+  /// ResolveCallTargets pass and read back by the Called-from / find-callees
+  /// queries. Stored Confidence is ALWAYS 'certain' or 'ambiguous' (the two
+  /// values the resolver writes to call_edges.confidence).</summary>
+  TCallEdge = record
+    RefId               : Int64 ;
+    TargetSymbolId      : Int64 ;
+    ReceiverTypeSymbolId: Int64 ;
+    Confidence          : string;
+  end;
+
+  /// <summary>v14 (D5): a RENDERING value for one resolved (or best-effort
+  /// unresolved) caller of a target symbol. Confidence is 'certain' |
+  /// 'ambiguous' | 'unverified' -- the last for the no-call_edges-row '?'
+  /// bucket surfaced by FindUnresolvedNameCallers. Renderer: 'certain' ->
+  /// plain; 'ambiguous'/'unverified' -> append ' ?'.</summary>
+  TResolvedCaller = record
+    EnclosingSymbolId: Int64 ;
+    EnclosingQName   : string;
+    Location         : string;
+    Confidence       : string;
+  end;
+
   /// <summary>v8: one Spring4D DI registration (interface implemented by impl,
   /// with lifetime). Endpoint names are verbatim, including nested generics.
   /// FileId is filled by the store from the file transaction token.</summary>
