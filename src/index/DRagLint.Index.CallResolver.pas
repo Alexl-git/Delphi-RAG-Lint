@@ -336,6 +336,9 @@ begin
   N:= Trim(N);
   var LtPos: Integer:= Pos('<', N);
   if LtPos > 0 then N:= Trim(Copy(N, 1, LtPos - 1));
+  // DotPos is 0-based (TStringHelper.LastDelimiter, NOT the 1-based global
+  // LastDelimiter that ResolveAncestry uses), hence Copy from DotPos + 2 to land
+  // one char PAST the dot. A future "switch to 1-based" edit must also drop the +1.
   var DotPos: Integer:= N.LastDelimiter('.');
   if DotPos >= 0 then N:= Trim(Copy(N, DotPos + 2, MaxInt));
   if N = '' then Exit;
@@ -451,25 +454,20 @@ var
   ClassId : Int64  ;
   Member  : TSymbol;
   CastType: string ;
-  Anc     : TArray<TTypeAncestor>;
 begin
   Result:= 0;
   if ACallRef.EnclosingSymbolId <= 0 then Exit; // no enclosing routine -> give up
   Encl:= FStore.GetSymbolById(ACallRef.EnclosingSymbolId);
 
-  // --- Kind 1: bare M / Self.M / inherited M -> the enclosing routine's class.
+  // --- Kind 1: bare M / Self.M -> the enclosing routine's owning class.
+  // NOTE on `inherited M`: it has NO dot, so ExtractReceiverExpr returns '' for
+  // it -> it arrives here as a BARE kind-1 call (AReceiverExpr=''). That is SAFE:
+  // LookupMethodOnType walks the own class + its ancestor chain, so it finds the
+  // override on the class (or, when the class doesn't override, the ancestor M) --
+  // one match -> 'certain'. A dedicated ancestor-first branch is therefore
+  // unnecessary; `inherited` never reaches here as a literal receiver token.
   if (AReceiverExpr = '') or SameText(AReceiverExpr, 'Self') then
     Exit(Encl.ParentId);
-  if SameText(AReceiverExpr, 'inherited') then
-  begin
-    // inherited M dispatches to the FIRST direct ancestor of the class.
-    ClassId:= Encl.ParentId;
-    if ClassId <= 0 then Exit;
-    Anc:= FStore.GetTransitiveAncestors(ClassId);
-    for var A in Anc do
-      if A.Resolved and (A.SymbolId > 0) then Exit(A.SymbolId);
-    Exit; // no resolved ancestor -> 0
-  end;
 
   ClassId:= Encl.ParentId; // the enclosing routine's owning class (for kinds 2/3)
 
