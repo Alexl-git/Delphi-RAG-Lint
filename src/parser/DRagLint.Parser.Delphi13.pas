@@ -818,6 +818,87 @@ begin
   end;
 end; // procedure
 
+{ v14 (D5, Task 3): find the index of the routine symbol that a defProc's header
+  names, so its local vars can be parented to it. The routine symbol was already
+  emitted (by WalkDeclProc from the class/interface decl, or as an impl-only free
+  routine); this locates it by the same leaf-name + qualified-name-suffix match
+  SetRoutineImplRange uses. AImplStartLine (the defProc's start line, already
+  stamped onto the symbol by SetRoutineImplRange) disambiguates overloads: prefer
+  the symbol whose ImplStartLine matches this body. Returns -1 if none found. }
+function FindRoutineSymbolIndex(const AState: TWalkState; const AName: string; AImplStartLine: Integer): Integer;
+var
+  i      : Integer;
+  Sym    : TSymbol;
+  LastSeg: string ;
+begin
+  Result:= -1;
+  if AName = '' then Exit;
+  LastSeg:= AName;
+  if Pos('.', LastSeg) > 0 then LastSeg:= Copy(LastSeg, LastDelimiter('.', LastSeg) + 1, MaxInt);
+  for i:= AState.Symbols.Count - 1 downto 0 do
+  begin
+    Sym:= AState.Symbols[i];
+    if (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and SameText(Sym.Name, LastSeg)
+       and (SameText(Sym.QualifiedName, AName) or Sym.QualifiedName.EndsWith('.' + AName, True)) then
+    begin
+      // Exact-overload match: this defProc's start line was stamped onto its
+      // symbol by SetRoutineImplRange. Prefer it; fall back to the first
+      // name/qname match (records the candidate) if no line matches.
+      if (AImplStartLine > 0) and (Sym.ImplStartLine = AImplStartLine) then Exit(i);
+      if Result < 0 then Result:= i;
+    end;
+  end;
+end; // function
+
+{ v14 (D5, Task 3): emit each entry of a routine's local `var` section(s) as an
+  skLocalVar symbol parented to the routine (ARoutineIdx), Signature = declared
+  type text, so the call resolver (Task 5) can type a receiver that is a local.
+  Scans ONLY THIS defProc's DIRECT `declVars` children -- never recurses -- so a
+  nested procedure's own `declVars` (which lives inside the nested defProc child,
+  not here) cannot leak into the outer routine. Grouped `X, Y: T` emits one symbol
+  per name identifier, all sharing the one `type` child (parallel to params). }
+procedure EmitRoutineLocals(const ADefProcNode: TTSNode; const AState: TWalkState; ARoutineIdx: Integer; const ARoutineQualifiedName: string);
+var
+  Section : TTSNode;
+  DeclVar : TTSNode;
+  Child   : TTSNode;
+  TypeText: string ;
+  VarName : string ;
+  VarQN   : string ;
+  i, j, k : Integer;
+begin
+  if ARoutineIdx < 0 then Exit;
+  // Direct children of the defProc: declProc (header), zero+ declVars sections,
+  // nested defProc(s), and the block. Process only the declVars sections here.
+  for i:= 0 to ADefProcNode.NamedChildCount - 1 do
+  begin
+    Section:= ADefProcNode.NamedChild(i);
+    if Section.NodeType <> 'declVars' then Continue;
+    // Each declVars holds a `kVar` token plus one+ declVar entries.
+    for j:= 0 to Section.NamedChildCount - 1 do
+    begin
+      DeclVar:= Section.NamedChild(j);
+      if DeclVar.NodeType <> 'declVar' then Continue;
+      // One shared type for every name in this declVar (grouped locals).
+      TypeText:= TypeTextOf(DeclVar, AState.Source);
+      // Emit one skLocalVar per direct 'identifier' child (the var names). The
+      // type lives under a 'type' child, so only the name identifiers match.
+      for k:= 0 to DeclVar.NamedChildCount - 1 do
+      begin
+        Child:= DeclVar.NamedChild(k);
+        if Child.NodeType <> 'identifier' then Continue;
+        VarName:= NodeText(Child, AState.Source);
+        if VarName = '' then Continue;
+        if ARoutineQualifiedName <> '' then VarQN:= ARoutineQualifiedName + '.' + VarName
+        else VarQN:= VarName;
+        // Range = the var-name identifier; parent = the routine; Signature =
+        // the declared type text.
+        AState.Emit(skLocalVar, VarName, VarQN, ARoutineIdx, Child, TypeText);
+      end;
+    end;
+  end;
+end; // procedure
+
 // v8: walk a Spring4D fluent method-access chain (descend the lhs/entity spine of
 // exprDot / exprTpl / exprCall nodes), collect (method, type-arg) links, classify
 // via SpringDI, and emit DI facts. Type-arg text is the verbatim typeref source,
@@ -1062,6 +1143,17 @@ begin
           { v9: record this routine's body span on its symbol (decl or the
             impl-only one just emitted above). }
           if HdrName <> '' then SetRoutineImplRange(AState, HdrName, Integer(ANode.StartPoint.row) + 1, Integer(ANode.EndPoint.row) + 1);
+          { v14 (D5, Task 3): emit this routine's local `var` entries as skLocalVar
+            symbols, parented to its (already-emitted) routine symbol. Only at
+            RoutineDepth = 0 -- a nested proc is never walked here, so its locals
+            do not leak. Uses the routine symbol's own unit-qualified name so the
+            local's QualifiedName is 'Unit.TClass.Method.VarName'. }
+          if HdrName <> '' then
+          begin
+            var RoutineIdx:= FindRoutineSymbolIndex(AState, HdrName, Integer(ANode.StartPoint.row) + 1);
+            if RoutineIdx >= 0 then
+              EmitRoutineLocals(ANode, AState, RoutineIdx, AState.Symbols[RoutineIdx].QualifiedName);
+          end;
         end;
       end;
     end; // if
