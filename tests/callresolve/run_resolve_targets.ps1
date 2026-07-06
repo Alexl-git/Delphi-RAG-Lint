@@ -62,6 +62,17 @@ try {
   # distinct certain edges to the same target -- not one shared row).
   $alphaCount = @($lines | Where-Object { ($_ -split '\|')[1] -eq 'receivers.TAlpha.Run' -and ($_ -split '\|')[2] -eq 'certain' }).Count
   Check 'two certain edges to receivers.TAlpha.Run'          ($alphaCount -ge 2)
+
+  # FP-CONSERVATIVE NEGATIVE: ViaLocal also contains `B := TBeta.Create` (a
+  # constructor call whose receiver is the type name TBeta, not an instance) and
+  # `B.Free` (Free is on TObject, NOT on TBeta's own chain). The resolver must
+  # emit NO edge for either -- the '?' bucket. If it regressed and invented a
+  # constructor/Free edge, the count>=5 check would still pass (6+ is >=5), so we
+  # assert absence directly: NO edge's target qname may end in .Create or .Free
+  # (in EITHER confidence). This locks the "don't invent edges for non-method-
+  # dispatch sites" guarantee that is the whole point of D5's FP policy.
+  $ctorFreeEdges = @($lines | Where-Object { ($_ -split '\|')[1] -match '\.(Create|Free)$' })
+  Check 'no spurious edge for TBeta.Create / B.Free'         ($ctorFreeEdges.Count -eq 0)
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

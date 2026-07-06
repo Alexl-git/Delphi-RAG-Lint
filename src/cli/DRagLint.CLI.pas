@@ -931,7 +931,7 @@ begin
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
     Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
-    Elapsed:= (Now -T0) * 86400;
+    Elapsed:= (Now - T0) * 86400;
 
     var PlatSuffix:= '';
     if AItem.Platform <> '' then PlatSuffix:= ' [' + AItem.Platform + ']';
@@ -1364,7 +1364,7 @@ begin
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
     Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
-    Elapsed:= (Now -StartTime) * 86400;
+    Elapsed:= (Now - StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
     else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Elapsed]));
