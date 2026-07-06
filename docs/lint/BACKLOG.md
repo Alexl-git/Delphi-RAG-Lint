@@ -30,12 +30,14 @@
 > related symbols, `<since>`/`@deprecated` from VCS or `deprecated` directive); a `missing-doc` report-only lint
 > rule; the RAD Studio DocInsight-collection spike. **DEFERRED (user):** semantic-drift detection (behaviour change
 > -> hand prose needs updating -- needs intent understanding, not structure).
-> **>>> 2 CHEAP FAST-FOLLOWS (final review, non-blocking, bundle into ONE tidy-up commit):** (a) a 1-caller-twice
-> CalledFrom-dedupe REGRESSION fixture [the dedupe code path is untested -- all T6 fixtures call the target once so
-> the `Continue`-on-seen never fires]; (b) delete/relocate the DEAD `action=not_found` JSON arm in DoDocument
-> [daNotFound returns text+exit1 BEFORE the --json block -> unreachable, harmless]. Optional (c) a Calls/Raises-
-> bearing idempotency fixture to harden the shift-invariance lock. All other Minors DEFER-SAFE (T3 Calls over-capture,
-> T4 blank-line drop + `TODO:` desc edge -- documented, best-effort).
+> **>>> 2 CHEAP FAST-FOLLOWS = DONE (commit `9113e16`, 2026-07-06, pushed):** (a) CalledFrom-dedupe REGRESSION
+> fixture landed -- `tests/autodoc/run_doc_dedupe.ps1` + `doc_dedupe.pas` (CallsTwice invokes Target 2x -> dump-refs
+> PROVED both refs enclose CallsTwice=id3 -> without dedupe it'd render twice; test asserts ONCE); (b) DEAD
+> `action=not_found` JSON arm relabeled to defensive `'unknown'` + comment (daNotFound returns text+exit1 before the
+> --json block). autodoc now 7/7. NOTE: this is a POST-release tidy-up on main AFTER the v0.90.0-alpha tag -- the
+> released binary is unchanged (test-only + cosmetic). Optional remaining (c) a Calls/Raises-bearing idempotency
+> fixture to harden the shift-invariance lock -- still open, low value. All other Minors DEFER-SAFE (T3 Calls
+> over-capture, T4 blank-line drop + `TODO:` desc edge -- documented, best-effort).
 > CADENCE (user, unchanged): publish chunk -> plan next -> handoff -> clear -> implement -> publish.
 >
 > --- (prior) ---
