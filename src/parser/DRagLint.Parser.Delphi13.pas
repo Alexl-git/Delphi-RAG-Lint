@@ -676,6 +676,64 @@ begin
   end;
 end; // function
 
+// v14 (D5, Task 2): emit each formal parameter of a routine as an skParam
+// symbol carrying its declared type, parented to the routine. Enables Task 5
+// to type a call-site receiver that is a parameter (AFoo.M where AFoo: TFoo).
+//
+// Grammar shape (discovered by dumping the S-expression of the 'args' field):
+//   (declArgs
+//     (declArg name: (identifier) name: (identifier)                 // grouped A, B
+//              type: (type (typeref (identifier))))                  //   share one type
+//     (declArg (kConst) name: (identifier) type: (type ...))         // const/var/out
+//     (declArg (kVar) name: (identifier)))                           // untyped -> no type
+// So one declArg may carry MULTIPLE name: identifiers (grouped params) that
+// share a single type: field; const/var/out appear as leading token children
+// (kConst/kVar/kOut), NOT inside the type field; an untyped param (var E) has
+// no type: field at all. TypeTextOf reads the type: field and collapses
+// whitespace -- it therefore excludes the modifier tokens automatically and
+// returns '' for an untyped param.
+//
+// AParentQualifiedName is the routine's own qualified name (e.g.
+// 'params.TThing.Handle'); ARoutineIdx is the routine symbol's index in
+// AState.Symbols (its parent).
+procedure EmitRoutineParams(const ARoutineNode: TTSNode; const AState: TWalkState; ARoutineIdx: Integer; const ARoutineQualifiedName: string);
+var
+  ArgsNode : TTSNode;
+  DeclArg  : TTSNode;
+  Child    : TTSNode;
+  TypeText : string ;
+  ParamName: string ;
+  ParamQN  : string ;
+  i, j     : Integer;
+begin
+  if ARoutineIdx < 0 then Exit;
+  ArgsNode:= ARoutineNode.ChildByField('args');
+  if ArgsNode.IsNull then Exit;
+  for i:= 0 to ArgsNode.NamedChildCount - 1 do
+  begin
+    DeclArg:= ArgsNode.NamedChild(i);
+    if DeclArg.NodeType <> 'declArg' then Continue;
+    // One shared type for every name in this declArg (grouped params). Empty
+    // when the param is untyped (e.g. an untyped 'var').
+    TypeText:= TypeTextOf(DeclArg, AState.Source);
+    // Emit one skParam per direct 'identifier' child (the param names). The
+    // modifier tokens are kConst/kVar/kOut and the type lives nested under a
+    // 'type' child, so only the param-name identifiers match here.
+    for j:= 0 to DeclArg.NamedChildCount - 1 do
+    begin
+      Child:= DeclArg.NamedChild(j);
+      if Child.NodeType <> 'identifier' then Continue;
+      ParamName:= NodeText(Child, AState.Source);
+      if ParamName = '' then Continue;
+      if ARoutineQualifiedName <> '' then ParamQN:= ARoutineQualifiedName + '.' + ParamName
+      else ParamQN:= ParamName;
+      // Range = the param-name identifier; parent = the routine; Signature =
+      // the declared type text (empty when untyped).
+      AState.Emit(skParam, ParamName, ParamQN, ARoutineIdx, Child, TypeText);
+    end;
+  end;
+end; // procedure
+
 procedure WalkDeclProc(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string; AAsMethod: Boolean);
 var
   NameNode : TTSNode    ;
@@ -684,6 +742,7 @@ var
   QName    : string     ;
   Modifiers: string     ;
   Kind     : TSymbolKind;
+  RoutineIdx: Integer   ;
 begin
   NameNode:= ANode.ChildByField('name');
   if NameNode.IsNull then Exit;
@@ -712,7 +771,11 @@ begin
   else Modifiers:= '';
   { v0.42: Signature = full parameter list + return type (Code-Insight style),
     e.g. '(const A: Integer): Boolean'. Was return-type-only before. }
-  AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, ProcSignatureOf(ANode, AState.Source), Modifiers, '', AAsMethod and ProcIsVirtual(ANode));
+  RoutineIdx:= AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, ProcSignatureOf(ANode, AState.Source), Modifiers, '', AAsMethod and ProcIsVirtual(ANode));
+  // v14 (D5, Task 2): emit each formal parameter as an skParam symbol parented
+  // to this routine (RoutineIdx). Nested procs never reach WalkDeclProc (their
+  // defProc is skipped at RoutineDepth > 0), so their params cannot leak here.
+  EmitRoutineParams(ANode, AState, RoutineIdx, QName);
 end; // procedure
 
 { v0.48: does the in-memory symbol list already hold a free routine (proc/func) by
