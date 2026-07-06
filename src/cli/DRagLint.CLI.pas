@@ -5,6 +5,13 @@ interface
 const
   VERSION = '0.90.0-alpha';
 
+/// <summary>TODO: describe.</summary>
+/// <returns>TODO: describe.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), Config.IndexesFrame.TIndexesFrame.RunEngine (Config.IndexesFrame.pas), Run caller (drag-lint-config.dpr), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas) (+6 more)
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function Run: Integer;
 
 implementation
@@ -28,7 +35,7 @@ uses
   , FireDAC.Stan.Def
   , FireDAC.Stan.Param
   , { v0.42: lets TFDParam.SetAsX inline (was H2443) }
-    FireDAC.DApt
+      FireDAC.DApt
   , DRagLint.Core   .Model
   , DRagLint.Core   .Interfaces
   , DRagLint.Core   .Indexer
@@ -162,8 +169,8 @@ type
     // v0.69 D2a: rename --kind symbol|param
     // RenameKind reuses Kind (--kind already parsed into Kind)
     // RefFile    reuses InFile (--file already parsed into InFile)
-    RefLine  : Integer; // --line <L> (param rename, 1-based)
-    RefCol   : Integer; // --col <C>  (param rename, 1-based)
+    RefLine : Integer; // --line <L> (param rename, 1-based)
+    RefCol  : Integer; // --col <C>  (param rename, 1-based)
     // v0.84: extract-method
     // ExFile reuses InFile (--file already parsed into InFile)
     // ExName reuses Name    (--name already parsed into Name)
@@ -185,9 +192,9 @@ type
     Fix            : Boolean; // --fix (lint: autofix findings that have a quick-fix; dry-run unless --apply)
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting. Each SET flag
     // narrows the fixable set; unset = no filter. Default FixLine:=0, FixRule:=''.
-    FixLine        : Integer; // --fix-line <L> (1-based; 0 = all lines)
-    FixRule        : string ; // --fix-rule <id> ('' = all rules)
-    RemoveUnused   : Boolean; // --remove-unused (uses-fix: also comment unused)
+    FixLine      : Integer; // --fix-line <L> (1-based; 0 = all lines)
+    FixRule      : string ; // --fix-rule <id> ('' = all rules)
+    RemoveUnused : Boolean; // --remove-unused (uses-fix: also comment unused)
     // v0.27: generate-test + format
     TestFramework: string; // --framework dunitx|dunit (default 'dunitx')
     YadfPath     : string; // --yadf-path <YADF.exe>
@@ -232,7 +239,7 @@ type
     TextSubstring: Boolean; // --substring
     TextSource   : string ; // --source pas|dfm|sql ('' = all)
     // v0.64: lint-all progress
-    Quiet        : Boolean; // --quiet  suppress per-file progress to stderr
+    Quiet : Boolean; // --quiet  suppress per-file progress to stderr
   end; // record
 
 procedure PrintHelp;
@@ -350,11 +357,7 @@ begin
   Candidate:= '';
   while Dir <> '' do
   begin
-    if TFile.Exists(TPath.Combine(Dir, '.drag-lint.json')) then
-    begin
-      Candidate:= TPath.Combine(Dir, '.drag-lint.json');
-      Break;
-    end;
+    if TFile.Exists(TPath.Combine(Dir, '.drag-lint.json')) then begin Candidate:= TPath.Combine(Dir, '.drag-lint.json'); Break; end;
     if Dir = ExtractFilePath(Dir.TrimRight(['\','/'])) then Break;
     Dir:= ExtractFilePath(Dir.TrimRight(['\','/']));
   end;
@@ -376,13 +379,7 @@ begin
     V:= J.GetValue('rule');
     if (V <> nil) and (V.Value <> '') then AArgs.Rule:= V.Value;
     V:= J.GetValue('watch');
-    if V is TJSONObject then
-    begin
-      JWatch:= TJSONObject(V);
-      AArgs.Watch:= True;
-      N:= JWatch.GetValue('interval') as TJSONNumber;
-      if N <> nil then AArgs.Interval:= N.AsInt;
-    end;
+    if V is TJSONObject then begin JWatch:= TJSONObject(V); AArgs.Watch:= True; N:= JWatch.GetValue('interval') as TJSONNumber; if N <> nil then AArgs.Interval:= N.AsInt; end;
     // v0.16 Task 13: "docs" section
     V:= J.GetValue('docs');
     if V is TJSONObject then
@@ -415,33 +412,17 @@ begin
   Result.ContextLines       := 3;
   Result.BenchN             := 20;
   LoadConfigDefaults(Result);
-  if ParamCount = 0 then
-  begin
-    Result.ShowHelp:= True;
-    Exit;
-  end;
+  if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
-  if (Result.Command = '--help') or (Result.Command = '-h') then
-  begin
-    Result.ShowHelp:= True;
-    Exit;
-  end;
-  if Result.Command = '--version' then
-  begin
-    Result.ShowVersion:= True;
-    Exit;
-  end;
+  if (Result.Command = '--help') or (Result.Command = '-h') then begin Result.ShowHelp:= True; Exit; end;
+  if Result.Command = '--version' then begin Result.ShowVersion:= True; Exit; end;
 
   // Optional subcommand: ParamStr(2) if it doesn't start with '--'.
   i:= 2;
   if ((Result.Command = 'query') or (Result.Command = 'export') or (Result.Command = 'workspace') or (Result.Command = 'selftest')) and (ParamCount >= 2) then
   begin
     A:= ParamStr(2);
-    if (A <> '') and (not A.StartsWith('--')) then
-    begin
-      Result.SubCommand:= A;
-      i:= 3;
-    end;
+    if (A <> '') and (not A.StartsWith('--')) then begin Result.SubCommand:= A; i:= 3; end;
   end;
 
   while i <= ParamCount do
@@ -454,78 +435,32 @@ begin
       SetLength(Result.DbPaths, Length(Result.DbPaths) + 1);
       Result.DbPaths[High(Result.DbPaths)]:= ParamStr(i);
     end
-    else if (A = '--name') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Name:= ParamStr(i);
-    end
-    else if ((A = '--in') or (A = '--file')) and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.InFile:= ParamStr(i);
-    end
-    else if (A = '--qname') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.QName:= ParamStr(i);
-    end
+    else if (A = '--name') and (i < ParamCount) then begin Inc(i); Result.Name:= ParamStr(i); end
+    else if ((A = '--in') or (A = '--file')) and (i < ParamCount) then begin Inc(i); Result.InFile:= ParamStr(i); end
+    else if (A = '--qname') and (i < ParamCount) then begin Inc(i); Result.QName:= ParamStr(i); end
     else if (A = '--of') and (i < ParamCount) then { v11 (M1): query ancestors --of }
     begin
       Inc(i);
       Result.OfName:= ParamStr(i);
     end
-    else if (A = '--rule') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Rule:= ParamStr(i);
-    end
+    else if (A = '--rule') and (i < ParamCount) then begin Inc(i); Result.Rule:= ParamStr(i); end
     else if (A = '--exclude-under') and (i < ParamCount) then
     begin
       Inc(i);
       SetLength(Result.ExcludeUnder, Length(Result.ExcludeUnder) + 1);
       Result.ExcludeUnder[High(Result.ExcludeUnder)]:= ParamStr(i);
     end
-    else if A = '--deep' then
-    begin
-      Result.Deep:= True; Result.DeepExplicit:= True;
-    end
-    else if A = '--shallow' then
-    begin
-      Result.Deep:= False; Result.DeepExplicit:= True;
-    end
-    else if (A = '--width') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Width:= ParamStr(i);
-    end
-    else if (A = '--project') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.ProjectPath:= ParamStr(i);
-    end
-    else if (A = '--rules-dir') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.RulesDir:= ParamStr(i);
-    end
-    else if (A = '--category') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.RuleCategory:= ParamStr(i);
-    end
-    else if (A = '--disable') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Disable:= ParamStr(i);
-    end
-    else if (A = '--layers') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.LayersPath:= ParamStr(i);
-    end
+    else if A = '--deep' then begin Result.Deep:= True; Result.DeepExplicit:= True; end
+    else if A = '--shallow' then begin Result.Deep:= False; Result.DeepExplicit:= True; end
+    else if (A = '--width') and (i < ParamCount) then begin Inc(i); Result.Width:= ParamStr(i); end
+    else if (A = '--project') and (i < ParamCount) then begin Inc(i); Result.ProjectPath:= ParamStr(i); end
+    else if (A = '--rules-dir') and (i < ParamCount) then begin Inc(i); Result.RulesDir:= ParamStr(i); end
+    else if (A = '--category') and (i < ParamCount) then begin Inc(i); Result.RuleCategory:= ParamStr(i); end
+    else if (A = '--disable') and (i < ParamCount) then begin Inc(i); Result.Disable:= ParamStr(i); end
+    else if (A = '--layers') and (i < ParamCount) then begin Inc(i); Result.LayersPath:= ParamStr(i); end
     else if A = '--json'    then Result.AsJson:= True
     else if A = '--dry-run' then Result.DryRun:= True
-    else if A = '--quiet' then Result.Quiet:= True
+    else if A = '--quiet'   then Result.Quiet := True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
     else if A = '--scan-libraries-all' then
     begin
@@ -534,31 +469,11 @@ begin
     end
     else if A = '--watch' then Result.Watch:= True
     else if A = '--open'  then Result.Open := True
-    else if (A = '--interval') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Interval:= StrToIntDef(ParamStr(i), 5);
-    end
-    else if (A = '--format') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Format:= ParamStr(i);
-    end
-    else if (A = '--fail-on') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.FailOn:= ParamStr(i);
-    end
-    else if (A = '--baseline') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Baseline:= ParamStr(i);
-    end
-    else if (A = '--write-baseline') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.WriteBaseline:= ParamStr(i);
-    end
+    else if (A = '--interval') and (i < ParamCount) then begin Inc(i); Result.Interval:= StrToIntDef(ParamStr(i), 5); end
+    else if (A = '--format') and (i < ParamCount) then begin Inc(i); Result.Format:= ParamStr(i); end
+    else if (A = '--fail-on') and (i < ParamCount) then begin Inc(i); Result.FailOn:= ParamStr(i); end
+    else if (A = '--baseline') and (i < ParamCount) then begin Inc(i); Result.Baseline:= ParamStr(i); end
+    else if (A = '--write-baseline') and (i < ParamCount) then begin Inc(i); Result.WriteBaseline:= ParamStr(i); end
     else if (A = '--config') and (i < ParamCount) then
     begin
       Inc(i);
@@ -568,26 +483,10 @@ begin
       Result.ConfigPath     := ParamStr(i);
       Result.WorkspaceConfig:= ParamStr(i);
     end
-    else if (A = '--enable') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Enable:= ParamStr(i);
-    end
-    else if (A = '--profile') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Profile:= ParamStr(i);
-    end
-    else if ((A = '--output') or (A = '--out')) and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Output:= ParamStr(i);
-    end
-    else if (A = '--output-dir') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.OutputDir:= ParamStr(i);
-    end
+    else if (A = '--enable') and (i < ParamCount) then begin Inc(i); Result.Enable:= ParamStr(i); end
+    else if (A = '--profile') and (i < ParamCount) then begin Inc(i); Result.Profile:= ParamStr(i); end
+    else if ((A = '--output') or (A = '--out')) and (i < ParamCount) then begin Inc(i); Result.Output:= ParamStr(i); end
+    else if (A = '--output-dir') and (i < ParamCount) then begin Inc(i); Result.OutputDir:= ParamStr(i); end
     else if A = '--include-external' then Result.IncludeExternal:= True
     else if A = '--all-sources'      then Result.AllSources     := True
     else if A = '--all'              then Result.IndexAll       := True
@@ -599,11 +498,7 @@ begin
       for var P in Parts do
       begin
         var T:= Trim(P);
-        if T <> '' then
-        begin
-          SetLength(Result.OnlySections, Length(Result.OnlySections) + 1);
-          Result.OnlySections[High(Result.OnlySections)]:= T;
-        end;
+        if T <> '' then begin SetLength(Result.OnlySections, Length(Result.OnlySections) + 1); Result.OnlySections[High(Result.OnlySections)]:= T; end;
       end;
     end
     else if (A = '--exclude') and (i < ParamCount) then
@@ -620,70 +515,24 @@ begin
     end
     else if A = '--use-ignore' then Result.UseIgnore:= True
     else if A = '--no-sql-ms'  then Result.NoSqlMS  := True
-    else if (A = '--jobs') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Jobs:= StrToIntDef(ParamStr(i), 0);
-    end
+    else if (A = '--jobs') and (i < ParamCount) then begin Inc(i); Result.Jobs:= StrToIntDef(ParamStr(i), 0); end
     else if A = '--force32' then Result.Force32:= True
-    else if (A = '--size-guard-mb') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.SizeGuardMB:= StrToIntDef(ParamStr(i), 0);
-      Result.SizeGuardMBSet:= True;
-    end
-    else if (A = '--max-file-kb') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.MaxFileKB:= StrToIntDef(ParamStr(i), 2048);
-      Result.MaxFileKBSet:= True;
-    end
-    else if (A = '--connection') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.FbConnection:= ParamStr(i);
-    end
-    else if (A = '--limit') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Limit:= StrToIntDef(ParamStr(i), 50);
-    end
-    else if (A = '--by') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.SortBy:= ParamStr(i);
-    end
-    else if (A = '--doc-tag') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.DocTag:= ParamStr(i);
-    end
-    else if (A = '--doc-contains') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.DocContains:= ParamStr(i);
-    end
+    else if (A = '--size-guard-mb') and (i < ParamCount) then begin Inc(i); Result.SizeGuardMB:= StrToIntDef(ParamStr(i), 0); Result.SizeGuardMBSet:= True; end
+    else if (A = '--max-file-kb') and (i < ParamCount) then begin Inc(i); Result.MaxFileKB:= StrToIntDef(ParamStr(i), 2048); Result.MaxFileKBSet:= True; end
+    else if (A = '--connection') and (i < ParamCount) then begin Inc(i); Result.FbConnection:= ParamStr(i); end
+    else if (A = '--limit') and (i < ParamCount) then begin Inc(i); Result.Limit:= StrToIntDef(ParamStr(i), 50); end
+    else if (A = '--by') and (i < ParamCount) then begin Inc(i); Result.SortBy:= ParamStr(i); end
+    else if (A = '--doc-tag') and (i < ParamCount) then begin Inc(i); Result.DocTag:= ParamStr(i); end
+    else if (A = '--doc-contains') and (i < ParamCount) then begin Inc(i); Result.DocContains:= ParamStr(i); end
     else if (A = '--no-docs') then Result.NoDocs:= True
-    else if (A = '--kind') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Kind:= ParamStr(i);
-    end
+    else if (A = '--kind') and (i < ParamCount) then begin Inc(i); Result.Kind:= ParamStr(i); end
     else if (A = '--public') then Result.PublicOnly:= True
-    else if (A = '--depth') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Depth:= StrToIntDef(ParamStr(i), 3);
-    end
+    else if (A = '--depth') and (i < ParamCount) then begin Inc(i); Result.Depth:= StrToIntDef(ParamStr(i), 3); end
     else if A = '--include-impl'   then Result.IncludeImpl   := True
     else if A = '--full-surface'   then Result.FullSurface   := True
     else if A = '--all-visibility' then Result.AllVisibility := True
     else if A = '--coverage'       then Result.WiringCoverage:= True
-    else if (A = '--context') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.ContextLines:= StrToIntDef(ParamStr(i), 0);
-    end
+    else if (A = '--context') and (i < ParamCount) then begin Inc(i); Result.ContextLines:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--task') and (i < ParamCount) then
     begin
       Inc(i);
@@ -699,56 +548,28 @@ begin
           Result.Verb:= FirstToken;
           Result.BundleQName:= Trim(Copy(Result.Task, SpPos + 1, MaxInt));
         end
-        else
-        begin
-          Result.Verb:= 'modify';
-          Result.BundleQName:= Result.Task;
-        end;
+        else begin Result.Verb:= 'modify'; Result.BundleQName:= Result.Task; end;
       end
-      else
-      begin
-        Result.Verb:= 'modify';
-        Result.BundleQName:= Result.Task;
-      end;
+      else begin Result.Verb:= 'modify'; Result.BundleQName:= Result.Task; end;
     end // if
-    else if (A = '--max-callers') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.MaxCallers:= StrToIntDef(ParamStr(i), 5);
-    end
-    else if (A = '--n') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.BenchN:= StrToIntDef(ParamStr(i), 20);
-    end
-    else if (A = '--to') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.RenameTo:= ParamStr(i);
-    end
-    else if A = '--no-backup'       then Result.NoBackup      := True
+    else if (A = '--max-callers') and (i < ParamCount) then begin Inc(i); Result.MaxCallers:= StrToIntDef(ParamStr(i), 5); end
+    else if (A = '--n') and (i < ParamCount) then begin Inc(i); Result.BenchN:= StrToIntDef(ParamStr(i), 20); end
+    else if (A = '--to') and (i < ParamCount) then begin Inc(i); Result.RenameTo:= ParamStr(i); end
+    else if A = '--no-backup' then Result.NoBackup:= True
     // v0.69 D2a: rename --kind param positional args
     // Note: --kind  already parsed into Result.Kind   (line ~638)
     //       --file  already parsed into Result.InFile (line ~433)
     else if (A = '--line') and (i < ParamCount) then begin Inc(i); Result.RefLine:= StrToIntDef(ParamStr(i), 0); end
-    else if (A = '--col')  and (i < ParamCount) then begin Inc(i); Result.RefCol := StrToIntDef(ParamStr(i), 0); end
+    else if (A = '--col' ) and (i < ParamCount) then begin Inc(i); Result.RefCol := StrToIntDef(ParamStr(i), 0); end
     // v0.84: extract-method --from-line/--to-line (1-based, inclusive)
     else if (A = '--from-line') and (i < ParamCount) then begin Inc(i); Result.FromLine:= StrToIntDef(ParamStr(i), 0); end
-    else if (A = '--to-line')   and (i < ParamCount) then begin Inc(i); Result.ToLine  := StrToIntDef(ParamStr(i), 0); end
+    else if (A = '--to-line'  ) and (i < ParamCount) then begin Inc(i); Result.ToLine  := StrToIntDef(ParamStr(i), 0); end
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting (lint --fix)
     else if (A = '--fix-line') and (i < ParamCount) then begin Inc(i); Result.FixLine:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--fix-rule') and (i < ParamCount) then begin Inc(i); Result.FixRule:= ParamStr(i); end
     else if A = '--include-private' then Result.IncludePrivate:= True
-    else if (A = '--target') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Target:= ParamStr(i);
-    end
-    else if (A = '--shadow') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Shadow:= ParamStr(i);
-    end
+    else if (A = '--target') and (i < ParamCount) then begin Inc(i); Result.Target:= ParamStr(i); end
+    else if (A = '--shadow') and (i < ParamCount) then begin Inc(i); Result.Shadow:= ParamStr(i); end
     else if A = '--resolve-uses'  then Result.ResolveUsesFlag:= True
     else if A = '--edges'         then Result.Edges          := True
     else if A = '--causes'        then Result.Causes         := True
@@ -756,21 +577,9 @@ begin
     else if A = '--apply'         then Result.Apply          := True
     else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
-    else if (A = '--platform') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.CheckPlatform:= ParamStr(i);
-    end
-    else if (A = '--framework') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.TestFramework:= ParamStr(i);
-    end
-    else if (A = '--yadf-path') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.YadfPath:= ParamStr(i);
-    end
+    else if (A = '--platform') and (i < ParamCount) then begin Inc(i); Result.CheckPlatform:= ParamStr(i); end
+    else if (A = '--framework') and (i < ParamCount) then begin Inc(i); Result.TestFramework:= ParamStr(i); end
+    else if (A = '--yadf-path') and (i < ParamCount) then begin Inc(i); Result.YadfPath:= ParamStr(i); end
     else if (A = '--root') and (i < ParamCount) then
     begin
       Inc(i);
@@ -790,44 +599,16 @@ begin
     else if (Result.Command = 'dump-refs') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'format'   ) and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
-    else if (A = '--dir') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.Path:= ParamStr(i);
-    end
-    else if (A = '--parent-pid') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.ParentPid:= Cardinal(StrToInt64Def(ParamStr(i), 0));
-    end
-    else if (A = '--unit') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.GhostUnit:= ParamStr(i);
-    end
-    else if (A = '--buffer') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.GhostBuffer:= ParamStr(i);
-    end
-    else if (A = '--overlays') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.GhostOverlays:= ParamStr(i);
-    end
+    else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); end
+    else if (A = '--parent-pid') and (i < ParamCount) then begin Inc(i); Result.ParentPid:= Cardinal(StrToInt64Def(ParamStr(i), 0)); end
+    else if (A = '--unit') and (i < ParamCount) then begin Inc(i); Result.GhostUnit:= ParamStr(i); end
+    else if (A = '--buffer') and (i < ParamCount) then begin Inc(i); Result.GhostBuffer:= ParamStr(i); end
+    else if (A = '--overlays') and (i < ParamCount) then begin Inc(i); Result.GhostOverlays:= ParamStr(i); end
     // v0.57: text-constant search flags
-    else if (A = '--text') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.TextQuery:= ParamStr(i);
-    end
-    else if (A = '--source') and (i < ParamCount) then
-    begin
-      Inc(i);
-      Result.TextSource:= ParamStr(i);
-    end
-    else if A = '--any-order'  then Result.TextAnyOrder := True
-    else if A = '--substring'  then Result.TextSubstring:= True
+    else if (A = '--text') and (i < ParamCount) then begin Inc(i); Result.TextQuery:= ParamStr(i); end
+    else if (A = '--source') and (i < ParamCount) then begin Inc(i); Result.TextSource:= ParamStr(i); end
+    else if A = '--any-order' then Result.TextAnyOrder := True
+    else if A = '--substring' then Result.TextSubstring:= True
     else if (Result.Path = '') and (not A.StartsWith('--')) then Result.Path:= A
     else raise Exception.CreateFmt('Unknown argument: %s', [A]);
     Inc(i);
@@ -896,11 +677,7 @@ begin
   end // if
   else
   begin
-    for R in ARefs do
-    begin
-      Path:= AStore.GetFilePath(R.FileId);
-      Writeln(Format('%s:%d:%d  %s', [Path, R.StartLine, R.StartCol, R.NameText]));
-    end;
+    for R in ARefs do begin Path:= AStore.GetFilePath(R.FileId); Writeln(Format('%s:%d:%d  %s', [Path, R.StartLine, R.StartCol, R.NameText])); end;
     Writeln(Format('%d caller(s)', [Length(ARefs)]));
   end;
 end; // procedure
@@ -943,10 +720,7 @@ begin
     begin
       Path:= AStore.GetFilePath(R.FileId);
       Writeln(Format('%s:%d:%d  %s', [Path, R.StartLine, R.StartCol, R.NameText]));
-      if R.ContextText <> '' then
-      begin
-        Writeln('  ' + StringReplace(R.ContextText, sLineBreak, sLineBreak + '  ', [rfReplaceAll]));
-      end;
+      if R.ContextText <> '' then begin Writeln('  ' + StringReplace(R.ContextText, sLineBreak, sLineBreak + '  ', [rfReplaceAll])); end;
     end;
     Writeln(Format('%d caller(s)', [Length(ARefs)]));
   end;
@@ -964,17 +738,12 @@ end; // procedure
 // error. Returns the store (never nil on a successful open); check AOk.
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean): ISymbolStore;
 var
-  Found, Expected: Integer;
+  Found   : Integer;
+  Expected: Integer;
 begin
-  Result := TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
-  if Result.IsSchemaCurrent(Found, Expected) then
-    AOk := True
-  else
-  begin
-    AOk := False;
-    Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate',
-      [Found, Expected]));
-  end;
+  Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
+  if Result.IsSchemaCurrent(Found, Expected) then AOk:= True
+  else begin AOk:= False; Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
 end;
 
 // v0.45: serialise a TIndexManifest to a TJSONObject for the dry-run JSON view.
@@ -1049,12 +818,7 @@ begin
     if PS.Mode = smLibrary then
       // Library sections: emit count only (hundreds of folders)
       JSecObj.AddPair('rootsCount', TJSONNumber.Create(Length(PS.Roots)))
-    else
-    begin
-      JRoots:= TJSONArray.Create;
-      JSecObj.AddPair('roots', JRoots);
-      for S in PS.Roots do JRoots.AddElement(TJSONString.Create(S));
-    end;
+    else begin JRoots:= TJSONArray.Create; JSecObj.AddPair('roots', JRoots); for S in PS.Roots do JRoots.AddElement(TJSONString.Create(S)); end;
 
     JDedup:= TJSONArray.Create;
     JSecObj.AddPair('dedupExcludeRoots', JDedup);
@@ -1146,11 +910,7 @@ begin
           try
             for F in AItem.Roots do
             begin
-              if not TFile.Exists(F) then
-              begin
-                Writeln(Format('  (skip, project file not found) %s', [F]));
-                Continue;
-              end;
+              if not TFile.Exists(F) then begin Writeln(Format('  (skip, project file not found) %s', [F])); Continue; end;
               // Combine global + section exclude patterns for the closure.
               ExcludePatterns:= Concat( AItem.Filter.GlobalExclude, AItem.Filter.SectionExclude);
               CR:= Cl.Resolve(F, ExcludePatterns);
@@ -1207,11 +967,7 @@ begin
 
   if ConfigPath <> '' then
   begin
-    if not TFile.Exists(ConfigPath) then
-    begin
-      Writeln('ERROR: config file not found: ', ConfigPath);
-      Exit(2);
-    end;
+    if not TFile.Exists(ConfigPath) then begin Writeln('ERROR: config file not found: ', ConfigPath); Exit(2); end;
     var Content:= TFile.ReadAllText(ConfigPath);
     var RootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
     Manifest:= TManifestIO.ParseText(Content, RootDir);
@@ -1219,11 +975,7 @@ begin
   else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
 
   ErrMsg:= TManifestIO.Validate(Manifest);
-  if ErrMsg <> '' then
-  begin
-    Writeln(ErrOutput, 'ERROR: manifest invalid: ', ErrMsg);
-    Exit(2);
-  end;
+  if ErrMsg <> '' then begin Writeln(ErrOutput, 'ERROR: manifest invalid: ', ErrMsg); Exit(2); end;
 
   // Build platform filter from --platform (reuses CheckPlatform field).
   if AArgs.CheckPlatform <> '' then PlatFilter:= [AArgs.CheckPlatform]
@@ -1241,12 +993,7 @@ begin
   // 0 = unlimited (explicit opt-out); positive = new limit.
   if AArgs.MaxFileKBSet then
   begin
-    for i:= 0 to High(Plan.Items) do
-    begin
-      var PS2:= Plan.Items[i];
-      PS2.Filter.MaxFileKB:= AArgs.MaxFileKB;
-      Plan.Items[i]:= PS2;
-    end;
+    for i:= 0 to High(Plan.Items) do begin var PS2:= Plan.Items[i]; PS2.Filter.MaxFileKB:= AArgs.MaxFileKB; Plan.Items[i]:= PS2; end;
   end;
 
   // Apply --only filter: keep only items whose Name is in OnlySections.
@@ -1258,16 +1005,8 @@ begin
       var PS:= Plan.Items[i];
       var Keep:= False;
       for var OnlyName in AArgs.OnlySections do
-        if SameText(PS.Name, OnlyName) then
-        begin
-          Keep:= True;
-          Break;
-        end;
-      if Keep then
-      begin
-        SetLength(Filtered, Length(Filtered) + 1);
-        Filtered[High(Filtered)]:= PS;
-      end;
+        if SameText(PS.Name, OnlyName) then begin Keep:= True; Break; end;
+      if Keep then begin SetLength(Filtered, Length(Filtered) + 1); Filtered[High(Filtered)]:= PS; end;
     end;
     Plan.Items:= Filtered;
   end; // if
@@ -1326,10 +1065,7 @@ begin
   if EffJobs <= 1 then
   begin
     AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do
-    begin
-      if not BuildPlanItem(Plan.Items[i], AArgs.Docs) then AnyFailed:= True;
-    end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs) then AnyFailed:= True; end;
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -1341,10 +1077,7 @@ begin
   begin
     Writeln(ErrOutput, 'NOTE: --jobs >1 requires --config <path>; running sequentially.');
     AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do
-    begin
-      if not BuildPlanItem(Plan.Items[i], AArgs.Docs) then AnyFailed:= True;
-    end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs) then AnyFailed:= True; end;
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -1390,11 +1123,7 @@ begin
         CloseHandle(ProcHandles[SlotDW]);
         if ExitCode <> 0 then Inc(FailedCount);
         // Compact pool: swap finished slot with last entry.
-        if SlotDW < DWORD(PoolCount) - 1 then
-        begin
-          ProcHandles[SlotDW]:= ProcHandles[PoolCount - 1];
-          ProcItemIdx[SlotDW]:= ProcItemIdx[PoolCount - 1];
-        end;
+        if SlotDW < DWORD(PoolCount) - 1 then begin ProcHandles[SlotDW]:= ProcHandles[PoolCount - 1]; ProcItemIdx[SlotDW]:= ProcItemIdx[PoolCount - 1]; end;
         Dec(PoolCount);
       end; // while
 
@@ -1435,11 +1164,7 @@ begin
       GetExitCodeProcess(ProcHandles[SlotDW], ExitCode);
       CloseHandle(ProcHandles[SlotDW]);
       if ExitCode <> 0 then Inc(FailedCount);
-      if SlotDW < DWORD(PoolCount) - 1 then
-      begin
-        ProcHandles[SlotDW]:= ProcHandles[PoolCount - 1];
-        ProcItemIdx[SlotDW]:= ProcItemIdx[PoolCount - 1];
-      end;
+      if SlotDW < DWORD(PoolCount) - 1 then begin ProcHandles[SlotDW]:= ProcHandles[PoolCount - 1]; ProcItemIdx[SlotDW]:= ProcItemIdx[PoolCount - 1]; end;
       Dec(PoolCount);
     end; // while
 
@@ -1465,27 +1190,26 @@ end; // function
 /// <remarks>Library sections (source=registry-libraries) are skipped. Not thread-safe.</remarks>
 function ResolveIndexDb(const AArgs: TArgs; const AIndexPath: string): string;
 var
-  Manifest : TIndexManifest  ;
-  Sec      : TIndexSection   ;
-  IncPath  : string          ;
-  PathNorm : string          ;
-  IncNorm  : string          ;
-  BestLen  : Integer         ;
-  BestDb   : string          ;
-  EngineDir: string          ;
-  OutDir   : string          ;
-  DbRaw    : string          ;
+  Manifest : TIndexManifest ;
+  Sec      : TIndexSection  ;
+  IncPath  : string         ;
+  PathNorm : string         ;
+  IncNorm  : string         ;
+  BestLen  : Integer        ;
+  BestDb   : string         ;
+  EngineDir: string         ;
+  OutDir   : string         ;
+  DbRaw    : string         ;
 begin
   // Explicit --db always wins.
   if Length(AArgs.DbPaths) > 0 then Exit(AArgs.DbPath);
 
   BestLen:= -1;
-  BestDb := '';
+  BestDb:= '';
   try
     EngineDir:= ExtractFilePath(ParamStr(0));
     Manifest:= TManifestIO.Load(EngineDir, AIndexPath);
-    PathNorm:= IncludeTrailingPathDelimiter(
-                 TPath.GetFullPath(AIndexPath)).ToLower;
+    PathNorm:= IncludeTrailingPathDelimiter( TPath.GetFullPath(AIndexPath)).ToLower;
 
     for Sec in Manifest.Sections do
     begin
@@ -1493,33 +1217,30 @@ begin
       if SameText(Sec.Source, 'registry-libraries') then Continue;
       for IncPath in Sec.Include do
       begin
-        IncNorm:= IncludeTrailingPathDelimiter(
-                    TPath.GetFullPath(IncPath)).ToLower;
+        IncNorm:= IncludeTrailingPathDelimiter( TPath.GetFullPath(IncPath)).ToLower;
         if PathNorm.StartsWith(IncNorm) and (Length(IncNorm) > BestLen) then
         begin
           BestLen:= Length(IncNorm);
           // Resolve Db to absolute using manifest OutDir/RootDir if relative.
-          DbRaw:= Sec.Db;
+          DbRaw:= Sec.DB;
           if DbRaw = '' then DbRaw:= Sec.Name + '.sqlite';
           if not TPath.IsPathRooted(DbRaw) then
           begin
             OutDir:= Manifest.OutDir;
             if OutDir <> '' then
             begin
-              if TPath.IsPathRooted(OutDir) then
-                BestDb:= TPath.Combine(OutDir, DbRaw)
-              else
-                BestDb:= TPath.Combine(TPath.Combine(Manifest.RootDir, OutDir), DbRaw);
+              if TPath.IsPathRooted(OutDir) then BestDb:= TPath.Combine(OutDir, DbRaw)
+              else BestDb:= TPath.Combine(TPath.Combine(Manifest.RootDir, OutDir), DbRaw);
             end
             else BestDb:= TPath.Combine(Manifest.RootDir, DbRaw);
           end
           else BestDb:= DbRaw;
-        end;
+        end; // if
       end; // for IncPath
     end; // for Sec
   except
     // Manifest unavailable -- fall through to default.
-  end;
+  end; // try
 
   if BestDb <> '' then Result:= BestDb
   else Result:= AArgs.DbPath; // default: drag-lint.sqlite in CWD
@@ -1543,23 +1264,14 @@ begin
   end;
   if AArgs.Path <> '' then
   begin
-    if not (TDirectory.Exists(AArgs.Path) or TFile.Exists(AArgs.Path)) then
-    begin
-      Writeln('ERROR: path does not exist: ', AArgs.Path);
-      Exit(2);
-    end;
+    if not (TDirectory.Exists(AArgs.Path) or TFile.Exists(AArgs.Path)) then begin Writeln('ERROR: path does not exist: ', AArgs.Path); Exit(2); end;
   end;
   if AArgs.ProjectPath <> '' then
   begin
-    if not TFile.Exists(AArgs.ProjectPath) then
-    begin
-      Writeln('ERROR: .dproj not found: ', AArgs.ProjectPath);
-      Exit(2);
-    end;
+    if not TFile.Exists(AArgs.ProjectPath) then begin Writeln('ERROR: .dproj not found: ', AArgs.ProjectPath); Exit(2); end;
   end;
 
-  var ResolvedDb: string:= ResolveIndexDb(AArgs,
-    IfThen(AArgs.Path <> '', AArgs.Path, GetCurrentDir));
+  var ResolvedDb: string:= ResolveIndexDb(AArgs, IfThen(AArgs.Path <> '', AArgs.Path, GetCurrentDir));
   Writeln('Database: ', ResolvedDb);
 
   Store:= TSQLiteSymbolStore.Create(ResolvedDb);
@@ -1581,11 +1293,7 @@ begin
 
   { v0.42: cross-dictionary dedup -- exclude any subtree the caller says is
     already covered by another index (library / active-project DB). }
-  for var ExDir in AArgs.ExcludeUnder do
-  begin
-    Indexer.AddExcludeRoot(ExDir);
-    Writeln('Excluding subtree: ', ExDir);
-  end;
+  for var ExDir in AArgs.ExcludeUnder do begin Indexer.AddExcludeRoot(ExDir); Writeln('Excluding subtree: ', ExDir); end;
 
   { v0.45/v0.46: apply walk filter when any filter flag is present. Start from
     TWalkFilter.Create (SqlOnlyMS=True, MaxFileKB=2048 by default) so the
@@ -1632,12 +1340,7 @@ begin
   end
   else Folders:= [AArgs.Path];
 
-  if AArgs.DryRun then
-  begin
-    Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.');
-    Result:= 0;
-    Exit;
-  end;
+  if AArgs.DryRun then begin Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.'); Result:= 0; Exit; end;
 
   var Interval:= AArgs.Interval;
   if AArgs.Watch and (Interval <= 0) then Interval:= 5;
@@ -1695,11 +1398,7 @@ begin
   for Ex in AExcludeRoots do Indexer.AddExcludeRoot(Ex);
   for F in AFolders do
   begin
-    if TDirectory.Exists(F) then
-    begin
-      Writeln('  + ', F, '  (recursive, incl. subfolders)');
-      Indexer.IndexFolder(F, True);
-    end
+    if TDirectory.Exists(F) then begin Writeln('  + ', F, '  (recursive, incl. subfolders)'); Indexer.IndexFolder(F, True); end
     else if TFile.Exists(F) then Indexer.IndexFile(F)
     else Writeln('  (skip, not found) ', F);
   end;
@@ -1724,11 +1423,7 @@ begin
   Candidate:= '';
   while Dir <> '' do
   begin
-    if TFile.Exists(TPath.Combine(Dir, '.drag-lint.json')) then
-    begin
-      Candidate:= TPath.Combine(Dir, '.drag-lint.json');
-      Break;
-    end;
+    if TFile.Exists(TPath.Combine(Dir, '.drag-lint.json')) then begin Candidate:= TPath.Combine(Dir, '.drag-lint.json'); Break; end;
     if Dir = ExtractFilePath(Dir.TrimRight(['\','/'])) then Break;
     Dir:= ExtractFilePath(Dir.TrimRight(['\','/']));
   end;
@@ -1989,12 +1684,7 @@ begin
     Writeln('Usage: drag-lint query find [--doc-tag X | --doc-contains Y | --no-docs] ' + '[--kind K] [--public] [--db <file.sqlite>]');
     Exit(2);
   end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Writeln('Run "drag-lint index <path>" first.');
-    Exit   (2                                    );
-  end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
@@ -2004,11 +1694,7 @@ begin
   else if AArgs.DocTag <> '' then Syms:= Store.FindByDocTag(AArgs.DocTag)
   else Syms:= Store.FindByDocContains(AArgs.DocContains);
 
-  for S in Syms do
-  begin
-    FilePath:= Store.GetFilePath(S.FileId);
-    Writeln(System.SysUtils.Format('%s  [%s]  %s:%d', [S.QualifiedName, S.Kind.ToText, FilePath, S.StartLine]));
-  end;
+  for S in Syms do begin FilePath:= Store.GetFilePath(S.FileId); Writeln(System.SysUtils.Format('%s  [%s]  %s:%d', [S.QualifiedName, S.Kind.ToText, FilePath, S.StartLine])); end;
 
   if Length(Syms) = 0 then Result:= 1
   else Result:= 0;
@@ -2073,12 +1759,7 @@ begin
     Writeln('  Finds which unit(s) define <Symbol> and ranks which to add to ' + 'your uses clause.'                       );
     Exit(2);
   end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Writeln('Run "drag-lint index <path>" first.');
-    Exit   (2                                    );
-  end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
@@ -2093,11 +1774,7 @@ begin
     begin
       InFileId:= Store.FindFileIdByPath(TPath.GetFullPath(AArgs.InFile));
       if InFileId <= 0 then InFileId:= Store.FindFileIdByPath(AArgs.InFile);
-      if InFileId > 0 then
-      begin
-        UU:= Store.GetUnitUsesForFile(InFileId);
-        for U in UU do UsedUnits.AddOrSetValue(LowerCase(U.UnitName), True);
-      end;
+      if InFileId > 0 then begin UU:= Store.GetUnitUsesForFile(InFileId); for U in UU do UsedUnits.AddOrSetValue(LowerCase(U.UnitName), True); end;
     end;
 
     SetLength(Hits, 0);
@@ -2207,16 +1884,16 @@ end; // begin
 // Placed immediately before DoQuery so no forward declaration is needed.
 function DoQueryText(const AArgs: TArgs): Integer;
 var
-  PathsToScan: TArray<string>        ;
-  DbPath     : string                ;
-  Store      : ISymbolStore          ;
-  Mode       : string                ;
-  Lim        : Integer               ;
+  PathsToScan: TArray<string>         ;
+  DbPath     : string                 ;
+  Store      : ISymbolStore           ;
+  Mode       : string                 ;
+  Lim        : Integer                ;
   Matches    : TArray<TStringLitMatch>;
   AllMatches : TArray<TStringLitMatch>;
-  M          : TStringLitMatch       ;
-  JArr       : TJSONArray            ;
-  JObj       : TJSONObject           ;
+  M          : TStringLitMatch        ;
+  JArr       : TJSONArray             ;
+  JObj       : TJSONObject            ;
 begin
   if AArgs.TextQuery = '' then begin Writeln('ERROR: query --text requires a phrase'); Exit(2); end;
   if AArgs.TextSubstring then Mode:= 'substring'
@@ -2228,12 +1905,7 @@ begin
 
   PathsToScan:= ResolveConsumerDbs(AArgs);
   for DbPath in PathsToScan do
-    if not TFile.Exists(DbPath) then
-    begin
-      Writeln('ERROR: database not found: ', DbPath);
-      Writeln('Run "drag-lint index <path>" first.');
-      Exit(2);
-    end;
+    if not TFile.Exists(DbPath) then begin Writeln('ERROR: database not found: ', DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   SetLength(AllMatches, 0);
   for DbPath in PathsToScan do
@@ -2242,11 +1914,7 @@ begin
     Store:= OpenReadOnlyStore(DbPath, RoOk);
     if not RoOk then Continue; { stale DB reported; skip, scan the rest }
     Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, Lim);
-    for M in Matches do
-    begin
-      SetLength(AllMatches, Length(AllMatches) + 1);
-      AllMatches[High(AllMatches)]:= M;
-    end;
+    for M in Matches do begin SetLength(AllMatches, Length(AllMatches) + 1); AllMatches[High(AllMatches)]:= M; end;
   end;
   if Length(AllMatches) > Lim then SetLength(AllMatches, Lim);
 
@@ -2257,31 +1925,29 @@ begin
       for M in AllMatches do
       begin
         JObj:= TJSONObject.Create;
-        JObj.AddPair('file_path',   M.FilePath  );
-        JObj.AddPair('start_line',  TJSONNumber.Create(M.StartLine));
-        JObj.AddPair('start_col',   TJSONNumber.Create(M.StartCol ));
-        JObj.AddPair('source',      M.Source    );
-        JObj.AddPair('kind',        M.Kind      );
-        JObj.AddPair('owner_name',  M.OwnerName );
-        JObj.AddPair('text',        M.Text      );
-        JObj.AddPair('enclosing',   M.EnclosingQName);
+        JObj.AddPair('file_path', M.FilePath );
+        JObj.AddPair('start_line', TJSONNumber.Create(M.StartLine));
+        JObj.AddPair('start_col' , TJSONNumber.Create(M.StartCol ));
+        JObj.AddPair('source'    , M.Source        );
+        JObj.AddPair('kind'      , M.Kind          );
+        JObj.AddPair('owner_name', M.OwnerName     );
+        JObj.AddPair('text'      , M.Text          );
+        JObj.AddPair('enclosing' , M.EnclosingQName);
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
     finally
       JArr.Free;
-    end;
-  end
+    end; // try
+  end // if
   else
   begin
     for M in AllMatches do
-      Writeln(Format('%s:%d:%d  [%s/%s]  %s%s',
-        [M.FilePath, M.StartLine, M.StartCol, M.Source, M.Kind, M.Text,
-         IfThen(M.EnclosingQName <> '', '  -> ' + M.EnclosingQName, '')]));
+      Writeln(Format('%s:%d:%d  [%s/%s]  %s%s', [M.FilePath, M.StartLine, M.StartCol, M.Source, M.Kind, M.Text, IfThen(M.EnclosingQName <> '', '  -> ' + M.EnclosingQName, '')]));
     Writeln(Format('%d match(es)', [Length(AllMatches)]));
   end;
   if Length(AllMatches) > 0 then Result:= 0 else Result:= 1;
-end;
+end; // function
 
 function DoQuery(const AArgs: TArgs): Integer;
 var
@@ -2307,12 +1973,7 @@ begin
   PathsToScan:= ResolveConsumerDbs(AArgs);
   for DbPath in PathsToScan do
   begin
-    if not TFile.Exists(DbPath) then
-    begin
-      Writeln('ERROR: database not found: ', DbPath);
-      Writeln('Run "drag-lint index <path>" first.');
-      Exit   (2                                    );
-    end;
+    if not TFile.Exists(DbPath) then begin Writeln('ERROR: database not found: ', DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
   end;
   // Size guard: determine effective threshold then check each DB.
   if AArgs.SizeGuardMBSet then EffSizeGuardMB:= AArgs.SizeGuardMB
@@ -2340,11 +2001,7 @@ begin
   // store that owns the rows in that batch.
   if AArgs.SubCommand = 'find-callers' then
   begin
-    if AArgs.Name = '' then
-    begin
-      Writeln('ERROR: find-callers requires --name <callee>');
-      Exit   (2                                             );
-    end;
+    if AArgs.Name = '' then begin Writeln('ERROR: find-callers requires --name <callee>'); Exit (2 ); end;
     var TotalRefs:= 0;
     for DbPath in PathsToScan do
     begin
@@ -2367,62 +2024,44 @@ begin
     Exit;
   end; // if
 
-  if AArgs.SubCommand = 'hints' then
-  begin
-    Result:= DoQueryHints(AArgs);
-    Exit;
-  end;
+  if AArgs.SubCommand = 'hints' then begin Result:= DoQueryHints(AArgs); Exit; end;
 
-  if AArgs.SubCommand = 'find' then
-  begin
-    Result:= DoQueryFind(AArgs);
-    Exit;
-  end;
+  if AArgs.SubCommand = 'find' then begin Result:= DoQueryFind(AArgs); Exit; end;
 
   // v11 (M1): transitive type ancestry. `--name T` lists T's resolved ancestor
   // closure; adding `--of A` reports whether T descends from / implements A.
   if AArgs.SubCommand = 'ancestors' then
   begin
-    if AArgs.Name = '' then
-    begin
-      Writeln('ERROR: query ancestors requires --name <type>');
-      Exit(2);
-    end;
+    if AArgs.Name = '' then begin Writeln('ERROR: query ancestors requires --name <type>'); Exit (2 ); end;
     for DbPath in PathsToScan do
     begin
       var RoOk: Boolean;
       Store:= OpenReadOnlyStore(DbPath, RoOk);
       if not RoOk then Continue; { stale DB reported; skip, scan the rest }
-      var StartId  : Int64  := 0;
-      var StartKind: string := '';
+      var StartId : Int64:= 0   ;
+      var StartKind: string:= '';
       for S in Store.FindSymbolsByExactName(AArgs.Name) do
-        if S.Kind in [skClass, skInterface, skRecord] then
-        begin
-          StartId  := S.Id;
-          StartKind:= S.Kind.ToText;
-          Break;
-        end;
+        if S.Kind in [skClass, skInterface, skRecord] then begin StartId:= S.Id; StartKind:= S.Kind.ToText; Break; end;
       if StartId <= 0 then Continue; { try the next DB }
 
       if AArgs.OfName <> '' then
       begin
-        var IsDesc:= Store.IsDescendantOf(AArgs.Name, AArgs.OfName, 0);
+        var IsDesc:= Store.IsDescendantOf     (AArgs.Name, AArgs.OfName, 0);
         var Impl  := Store.ImplementsInterface(AArgs.Name, AArgs.OfName, 0);
         if AArgs.AsJson then
         begin
           var JO:= TJSONObject.Create;
           try
-            JO.AddPair('name', AArgs.Name);
+            JO.AddPair('name', AArgs.Name  );
             JO.AddPair('of'  , AArgs.OfName);
             JO.AddPair('is_descendant', TJSONBool.Create(IsDesc));
             JO.AddPair('implements'   , TJSONBool.Create(Impl  ));
             Writeln(JO.Format(2));
           finally JO.Free; end;
         end
-        else Writeln(Format('%s descends %s: %s; implements: %s',
-          [AArgs.Name, AArgs.OfName, BoolToStr(IsDesc, True), BoolToStr(Impl, True)]));
+        else Writeln(Format('%s descends %s: %s; implements: %s', [AArgs.Name, AArgs.OfName, BoolToStr(IsDesc, True), BoolToStr(Impl, True)]));
         Exit(0);
-      end;
+      end; // if
 
       var Ancs:= Store.GetTransitiveAncestors(StartId);
       if AArgs.AsJson then
@@ -2435,21 +2074,21 @@ begin
           for var A in Ancs do
           begin
             var AO:= TJSONObject.Create;
-            AO.AddPair('name'    , A.Name);
-            AO.AddPair('kind'    , A.Kind);
+            AO.AddPair('name' , A.Name);
+            AO.AddPair('kind' , A.Kind);
             AO.AddPair('resolved', TJSONBool.Create(A.Resolved));
             Arr.AddElement(AO);
           end;
           JO.AddPair('ancestors', Arr);
           Writeln(JO.Format(2));
         finally JO.Free; end;
-      end
+      end // if
       else
       begin
         Writeln(AArgs.Name, ' ancestors:');
         for var A in Ancs do
           if A.Resolved then Writeln(Format('  %s [%s]', [A.Name, A.Kind]))
-          else Writeln(Format('  %s [%s] (unresolved)', [A.Name, A.Kind]));
+        else Writeln(Format('  %s [%s] (unresolved)', [A.Name, A.Kind]));
         if Length(Ancs) = 0 then Writeln('  (none)');
       end;
       Exit(0);
@@ -2458,17 +2097,13 @@ begin
     if AArgs.AsJson then Writeln(Format('{"name":"%s","ancestors":[]}', [AArgs.Name]))
     else Writeln('type not found: ', AArgs.Name);
     Exit(1);
-  end;
+  end; // if
 
   // v11 (M1): resolve a type name to its broad category (intrinsic / declared /
   // alias-chased). Useful standalone and as the test surface for the resolver.
   if AArgs.SubCommand = 'typecat' then
   begin
-    if AArgs.Name = '' then
-    begin
-      Writeln('ERROR: query typecat requires --name <type>');
-      Exit(2);
-    end;
+    if AArgs.Name = '' then begin Writeln('ERROR: query typecat requires --name <type>'); Exit (2 ); end;
     var RoOk: Boolean;
     Store:= OpenReadOnlyStore(PathsToScan[0], RoOk);
     if not RoOk then Exit(1);
@@ -2484,19 +2119,11 @@ begin
     end
     else Writeln(Format('%s: %s', [AArgs.Name, Cat]));
     Exit(0);
-  end;
+  end; // if
 
-  if AArgs.SubCommand <> '' then
-  begin
-    Writeln('ERROR: unknown query subcommand: ', AArgs.SubCommand);
-    Exit(2);
-  end;
+  if AArgs.SubCommand <> '' then begin Writeln('ERROR: unknown query subcommand: ', AArgs.SubCommand); Exit(2); end;
 
-  if (AArgs.QName = '') and (AArgs.Name = '') then
-  begin
-    Writeln('ERROR: query requires --name or --qname');
-    Exit   (2                                        );
-  end;
+  if (AArgs.QName = '') and (AArgs.Name = '') then begin Writeln('ERROR: query requires --name or --qname'); Exit (2 ); end;
 
   for DbPath in PathsToScan do
   begin
@@ -2582,11 +2209,7 @@ begin
       Row.EnumQName:= Q.FieldByName('enum_qname').AsString;
       Row.EnumName := Q.FieldByName('enum_name' ).AsString;
       Row.ValueName:= Q.FieldByName('value_name').AsString;
-      if Row.EnumQName <> LastEnum then
-      begin
-        Ord:= 0;
-        LastEnum:= Row.EnumQName;
-      end;
+      if Row.EnumQName <> LastEnum then begin Ord:= 0; LastEnum:= Row.EnumQName; end;
       Row.Ordinal:= Ord;
       Inc(Ord);
       List.Add(Row);
@@ -2707,11 +2330,7 @@ begin
   try
     for R in ARows do
     begin
-      if R.EnumQName <> LastEnum then
-      begin
-        FlushBlock;
-        LastEnum:= R.EnumQName;
-      end;
+      if R.EnumQName <> LastEnum then begin FlushBlock; LastEnum:= R.EnumQName; end;
       Names.Add('''' + R.ValueName + '''');
     end;
     FlushBlock;
@@ -2727,16 +2346,8 @@ var
   Writer: TStreamWriter   ;
   Fmt   : string          ;
 begin
-  if AArgs.DbPath = '' then
-  begin
-    Writeln('ERROR: export enums requires --db <file.sqlite>');
-    Exit   (2                                                );
-  end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Exit(2);
-  end;
+  if AArgs.DbPath = '' then begin Writeln('ERROR: export enums requires --db <file.sqlite>'); Exit (2 ); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Fmt:= AArgs.Format;
   if Fmt = '' then Fmt:= 'firebird-sql';
 
@@ -2750,11 +2361,7 @@ begin
     else if Fmt = 'csv' then EmitEnumsCsv(Rows, Writer)
     else if Fmt = 'json' then EmitEnumsJson(Rows, Writer)
     else if Fmt = 'delphi-const' then EmitEnumsDelphiConst(Rows, Writer)
-    else
-    begin
-      Writeln('ERROR: unknown format: ', Fmt);
-      Exit(2);
-    end;
+    else begin Writeln('ERROR: unknown format: ', Fmt); Exit(2); end;
     Writer.Flush;
     if AArgs.Output <> '' then
     begin
@@ -2828,11 +2435,7 @@ begin
 
   // (2) Add to Obsidian's vault registry.
   ObsCfg:= TPath.Combine( GetEnvironmentVariable('APPDATA'), 'obsidian\obsidian.json');
-  if not TFile.Exists(ObsCfg) then
-  begin
-    Writeln('  (Obsidian config not found at ', ObsCfg, ' - is Obsidian installed?)');
-    Exit;
-  end;
+  if not TFile.Exists(ObsCfg) then begin Writeln('  (Obsidian config not found at ', ObsCfg, ' - is Obsidian installed?)'); Exit; end;
   Cfg:= nil;
   try
     try
@@ -2841,18 +2444,10 @@ begin
     except
       Cfg:= nil;
     end;
-    if Cfg = nil then
-    begin
-      Writeln('  (could not parse ', ObsCfg, ')');
-      Exit;
-    end;
+    if Cfg = nil then begin Writeln('  (could not parse ', ObsCfg, ')'); Exit; end;
 
     Vaults:= Cfg.GetValue('vaults') as TJSONObject;
-    if Vaults = nil then
-    begin
-      Vaults:= TJSONObject.Create;
-      Cfg.AddPair('vaults', Vaults);
-    end;
+    if Vaults = nil then begin Vaults:= TJSONObject.Create; Cfg.AddPair('vaults', Vaults); end;
 
     AlreadyRegistered:= False;
     for i:= 0 to Vaults.Count - 1 do
@@ -2864,11 +2459,7 @@ begin
         if PathV <> nil then
         begin
           Existing:= PathV.Value;
-          if SameText(Existing, AbsPath) then
-          begin
-            AlreadyRegistered:= True;
-            Break;
-          end;
+          if SameText(Existing, AbsPath) then begin AlreadyRegistered:= True; Break; end;
         end;
       end;
     end; // for
@@ -2926,21 +2517,9 @@ var
   Visited     : TDictionary<string, Boolean>;
   WrittenCount: Integer                     ;
 begin
-  if AArgs.DbPath = '' then
-  begin
-    Writeln('ERROR: export obsidian requires --db');
-    Exit   (2                                     );
-  end;
-  if AArgs.OutputDir = '' then
-  begin
-    Writeln('ERROR: export obsidian requires --output-dir <dir>');
-    Exit   (2                                                   );
-  end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Exit(2);
-  end;
+  if AArgs.DbPath = '' then begin Writeln('ERROR: export obsidian requires --db'); Exit (2 ); end;
+  if AArgs.OutputDir = '' then begin Writeln('ERROR: export obsidian requires --output-dir <dir>'); Exit (2 ); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   if not TDirectory.Exists(AArgs.OutputDir) then TDirectory.CreateDirectory(AArgs.OutputDir);
 
   Conn:= TFDConnection.Create(nil);
@@ -2958,12 +2537,7 @@ begin
         Q.Connection:= Conn;
         Q.Sql.Text:= 'SELECT u.name AS unit_name FROM symbols u WHERE u.kind = ''unit''';
         Q.Open;
-        while not Q.Eof do
-        begin
-          UnitName:= Q.FieldByName('unit_name').AsString;
-          UnitsByName.AddOrSetValue(UnitName, ObsidianSanitizeFilename(UnitName));
-          Q.Next;
-        end;
+        while not Q.Eof do begin UnitName:= Q.FieldByName('unit_name').AsString; UnitsByName.AddOrSetValue(UnitName, ObsidianSanitizeFilename(UnitName)); Q.Next; end;
       finally
         Q.Free;
       end;
@@ -3104,16 +2678,8 @@ var
   JObj : TJSONObject  ;
   Rows : Integer      ;
 begin
-  if AArgs.DbPath = '' then
-  begin
-    Writeln('ERROR: top requires --db');
-    Exit   (2                         );
-  end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Exit(2);
-  end;
+  if AArgs.DbPath = '' then begin Writeln('ERROR: top requires --db'); Exit (2 ); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   if AArgs.Limit > 0 then Limit:= AArgs.Limit else Limit:= 50;
 
   Conn:= TFDConnection.Create(nil);
@@ -3202,22 +2768,10 @@ var
   MatchedFile: Integer       ;
   FirstChar  : Char          ;
 begin
-  if AArgs.Path = '' then
-  begin
-    Writeln('ERROR: import-log requires a <logfile> argument');
-    Exit   (2                                                );
-  end;
-  if AArgs.DbPath = '' then
-  begin
-    Writeln('ERROR: import-log requires --db');
-    Exit   (2                                );
-  end;
+  if AArgs.Path = '' then begin Writeln('ERROR: import-log requires a <logfile> argument'); Exit (2 ); end;
+  if AArgs.DbPath = '' then begin Writeln('ERROR: import-log requires --db'); Exit (2 ); end;
   LogPath:= AArgs.Path;
-  if not TFile.Exists(LogPath) then
-  begin
-    Writeln('ERROR: log file not found: ', LogPath);
-    Exit(2);
-  end;
+  if not TFile.Exists(LogPath) then begin Writeln('ERROR: log file not found: ', LogPath); Exit(2); end;
 
   // Three common formats (we strip severity tokens and derive from code prefix):
   //   1. msbuild/dcc errors:   "Foo.pas(45,10): Error E2010: Incompatible types..."
@@ -3282,11 +2836,7 @@ begin
         FileQ.ParamByName('p').AsString:= RawPath;
         FileQ.ParamByName('p2').AsString:= '%' + ExtractFileName(RawPath);
         FileQ.Open;
-        if not FileQ.IsEmpty then
-        begin
-          FileId:= FileQ.FieldByName('id').AsLargeInt;
-          Inc(MatchedFile);
-        end;
+        if not FileQ.IsEmpty then begin FileId:= FileQ.FieldByName('id').AsLargeInt; Inc(MatchedFile); end;
         FileQ.Close;
 
         if FileId > 0 then Q.ParamByName('fid').AsLargeInt:= FileId
@@ -3325,16 +2875,8 @@ var
   Sql  : string       ;
   Rows : Integer      ;
 begin
-  if AArgs.DbPath = '' then
-  begin
-    Writeln('ERROR: query hints requires --db');
-    Exit   (2                                 );
-  end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Exit(2);
-  end;
+  if AArgs.DbPath = '' then begin Writeln('ERROR: query hints requires --db'); Exit (2 ); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Conn:= TFDConnection.Create(nil);
   Q   := TFDQuery     .Create(nil);
   try
@@ -3375,12 +2917,7 @@ function DoExport(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'enums' then Result:= DoExportEnums(AArgs)
   else if AArgs.SubCommand = 'obsidian' then Result:= DoExportObsidian(AArgs)
-  else
-  begin
-    Writeln('ERROR: unknown export subcommand: ', AArgs.SubCommand);
-    Writeln('Available: enums, obsidian');
-    Result:= 2;
-  end;
+  else begin Writeln('ERROR: unknown export subcommand: ', AArgs.SubCommand); Writeln('Available: enums, obsidian'); Result:= 2; end;
 end;
 
 // --- graph ------------------------------------------------------------------
@@ -3422,23 +2959,11 @@ var
   end;
 
 begin
-  if AArgs.DbPath = '' then
-  begin
-    Writeln('ERROR: graph requires --db');
-    Exit   (2                           );
-  end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Exit(2);
-  end;
+  if AArgs.DbPath = '' then begin Writeln('ERROR: graph requires --db'); Exit (2 ); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   if AArgs.Format <> '' then Format:= LowerCase(AArgs.Format)
   else Format:= 'dot';
-  if (Format <> 'dot') and (Format <> 'mermaid') then
-  begin
-    Writeln('ERROR: graph supports --format dot|mermaid (got "', Format, '")');
-    Exit(2);
-  end;
+  if (Format <> 'dot') and (Format <> 'mermaid') then begin Writeln('ERROR: graph supports --format dot|mermaid (got "', Format, '")'); Exit(2); end;
   RootSubstr:= AArgs.Name;
 
   Conn:= TFDConnection.Create(nil);
@@ -3495,11 +3020,7 @@ begin
     if Format = 'dot' then Buf.AppendLine('}');
 
     Output:= Buf.ToString;
-    if AArgs.Output <> '' then
-    begin
-      TFile.WriteAllText(AArgs.Output, Output);
-      Writeln('Wrote ', AArgs.Output);
-    end
+    if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Output); Writeln('Wrote ', AArgs.Output); end
     else Writeln(Output);
   finally
     Buf.Free;
@@ -3533,23 +3054,11 @@ var
   JObj   : TJSONObject                ;
   Tag    : string                     ;
 begin
-  if Length(AArgs.DbPaths) < 2 then
-  begin
-    Writeln('ERROR: diff requires two --db arguments ' + '(--db <old.sqlite> --db <new.sqlite>)');
-    Exit(2);
-  end;
+  if Length(AArgs.DbPaths) < 2 then begin Writeln('ERROR: diff requires two --db arguments ' + '(--db <old.sqlite> --db <new.sqlite>)'); Exit(2); end;
   DbA:= AArgs.DbPaths[0];
   DbB:= AArgs.DbPaths[1];
-  if not TFile.Exists(DbA) then
-  begin
-    Writeln('ERROR: --db ', DbA, ' not found');
-    Exit(2);
-  end;
-  if not TFile.Exists(DbB) then
-  begin
-    Writeln('ERROR: --db ', DbB, ' not found');
-    Exit(2);
-  end;
+  if not TFile.Exists(DbA) then begin Writeln('ERROR: --db ', DbA, ' not found'); Exit(2); end;
+  if not TFile.Exists(DbB) then begin Writeln('ERROR: --db ', DbB, ' not found'); Exit(2); end;
 
   ConnA:= TFDConnection.Create(nil);
   ConnB:= TFDConnection.Create(nil);
@@ -3571,17 +3080,9 @@ begin
     QA.Sql.Text:= 'SELECT qualified_name, kind, COALESCE(signature, '''') AS sig ' + 'FROM symbols WHERE qualified_name <> '''' ';
     QB.Sql.Text:= QA.Sql.Text;
     QA.Open;
-    while not QA.Eof do
-    begin
-      SetA.AddOrSetValue( QA.FieldByName('qualified_name').AsString, QA.FieldByName('kind').AsString + '|' + QA.FieldByName('sig').AsString);
-      QA.Next;
-    end;
+    while not QA.Eof do begin SetA.AddOrSetValue( QA.FieldByName('qualified_name').AsString, QA.FieldByName('kind').AsString + '|' + QA.FieldByName('sig').AsString); QA.Next; end;
     QB.Open;
-    while not QB.Eof do
-    begin
-      SetB.AddOrSetValue( QB.FieldByName('qualified_name').AsString, QB.FieldByName('kind').AsString + '|' + QB.FieldByName('sig').AsString);
-      QB.Next;
-    end;
+    while not QB.Eof do begin SetB.AddOrSetValue( QB.FieldByName('qualified_name').AsString, QB.FieldByName('kind').AsString + '|' + QB.FieldByName('sig').AsString); QB.Next; end;
 
     Added  := 0;
     Removed:= 0;
@@ -3629,26 +3130,10 @@ begin
     else
     begin
       for Pair in SetB do
-        if not SetA.ContainsKey(Pair.Key) then
-        begin
-          Tag:= Pair.Value.Split(['|'])[0];
-          Writeln('+ ', Pair.Key, '  [', Tag, ']');
-          Inc(Added);
-        end
-      else if SetA[Pair.Key] <> Pair.Value then
-      begin
-        Writeln('~ ', Pair.Key);
-        Writeln('    from: ', SetA[Pair.Key]);
-        Writeln('    to:   ', Pair.Value);
-        Inc(Changed);
-      end;
+        if not SetA.ContainsKey(Pair.Key) then begin Tag:= Pair.Value.Split(['|'])[0]; Writeln('+ ', Pair.Key, '  [', Tag, ']'); Inc(Added); end
+      else if SetA[Pair.Key] <> Pair.Value then begin Writeln('~ ', Pair.Key); Writeln('    from: ', SetA[Pair.Key]); Writeln('    to:   ', Pair.Value); Inc(Changed); end;
       for Pair in SetA do
-        if not SetB.ContainsKey(Pair.Key) then
-        begin
-          Tag:= Pair.Value.Split(['|'])[0];
-          Writeln('- ', Pair.Key, '  [', Tag, ']');
-          Inc(Removed);
-        end;
+        if not SetB.ContainsKey(Pair.Key) then begin Tag:= Pair.Value.Split(['|'])[0]; Writeln('- ', Pair.Key, '  [', Tag, ']'); Inc(Removed); end;
       Writeln(Format('Summary: %d added, %d removed, %d changed', [Added, Removed, Changed]));
     end; // else
 
@@ -3698,11 +3183,7 @@ var
 begin
   if AArgs.Path = '' then Path:= GetCurrentDir
   else Path:= AArgs.Path;
-  if not (TDirectory.Exists(Path) or TFile.Exists(Path)) then
-  begin
-    Writeln('ERROR: path does not exist: ', Path);
-    Exit(2);
-  end;
+  if not (TDirectory.Exists(Path) or TFile.Exists(Path)) then begin Writeln('ERROR: path does not exist: ', Path); Exit(2); end;
   // Keyword set is intentionally narrow and word-boundaried so noise like
   // "fixmessage" doesn't false-trip. Author tag accepts @alex or "Alex:"
   // forms, matching common Delphi codebase conventions.
@@ -3815,26 +3296,13 @@ var
   Doc  : TParsedDoc     ;
   Fmt  : string         ;
 begin
-  if AArgs.QName = '' then
-  begin
-    Writeln('Usage: drag-lint hover --qname <Foo.Bar> [--db <path>] ' + '[--format md|plain|json]');
-    Exit(2);
-  end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Writeln('Run "drag-lint index <path>" first.');
-    Exit   (2                                    );
-  end;
+  if AArgs.QName = '' then begin Writeln('Usage: drag-lint hover --qname <Foo.Bar> [--db <path>] ' + '[--format md|plain|json]'); Exit(2); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
   Syms:= Store.FindSymbolsByQualifiedName(AArgs.QName);
-  if Length(Syms) = 0 then
-  begin
-    Writeln(System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName]));
-    Exit(1);
-  end;
+  if Length(Syms) = 0 then begin Writeln(System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName])); Exit(1); end;
 
   Doc:= Store.GetSymbolDoc(Syms[0].Id);
   { v0.43: no doc comment is no longer fatal -- the renderer still shows the
@@ -3881,11 +3349,7 @@ begin
   DbToUse:= '';
   for D in Dbs do
     if TFile.Exists(D) then begin DbToUse:= D; Break; end;
-  if DbToUse = '' then
-  begin
-    Writeln('ERROR: no drag-lint index found (tried ', Length(Dbs), ' resolved path(s)). Pass --db <file.sqlite> or build the index first.');
-    Exit(2);
-  end;
+  if DbToUse = '' then begin Writeln('ERROR: no drag-lint index found (tried ', Length(Dbs), ' resolved path(s)). Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(DbToUse);
   Store.Migrate;
 
@@ -3975,24 +3439,10 @@ var
   JLevel    : TJSONObject         ;
   JArr      : TJSONArray          ;
 begin
-  if AArgs.QName = '' then
-  begin
-    Writeln('Usage: drag-lint impact --qname <Qualified.Name> ' + '[--depth N] [--db <path>] [--format text|json]');
-    Exit(2);
-  end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Writeln('Run "drag-lint index <path>" first.');
-    Exit   (2                                    );
-  end;
+  if AArgs.QName = '' then begin Writeln('Usage: drag-lint impact --qname <Qualified.Name> ' + '[--depth N] [--db <path>] [--format text|json]'); Exit(2); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
   Depth:= AArgs.Depth;
-  if Depth <= 0 then
-  begin
-    Writeln(AArgs.QName);
-    Writeln('  (depth 0 returns nothing)');
-    Exit   (1                            );
-  end;
+  if Depth <= 0 then begin Writeln(AArgs.QName); Writeln('  (depth 0 returns nothing)'); Exit (1 ); end;
   // Use the bare name (last segment) as the target for the CTE ref lookup,
   // since refs store the bare identifier name, not the qualified name.
   TargetName:= LastSegment(AArgs.QName, '.');
@@ -4029,11 +3479,7 @@ begin
       else Writeln(Format('  Depth %d: %3d callers in %d units', [L.Depth, L.CallerCount, L.UnitCount]));
       Prev:= L.CallerCount;
     end;
-    if Length(Levels) = 0 then
-    begin
-      Writeln('  (no callers)');
-      Exit   (1               );
-    end;
+    if Length(Levels) = 0 then begin Writeln('  (no callers)'); Exit (1 ); end;
   end; // else
   Result:= 0;
 end; // function
@@ -4058,12 +3504,7 @@ begin
     Writeln('Usage: drag-lint surface --qname <Foo.TBar> ' + '[--db <path>] [--include-impl] [--all-visibility] ' + '[--format text|json]');
     Exit(2);
   end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Writeln('Run "drag-lint index <path>" first.');
-    Exit   (2                                    );
-  end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
@@ -4071,11 +3512,7 @@ begin
 
   // Validate that the symbol exists and is a class/record/interface.
   Syms:= Store.FindSymbolsByQualifiedName(AArgs.QName);
-  if Length(Syms) = 0 then
-  begin
-    Writeln(System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName]));
-    Exit(1);
-  end;
+  if Length(Syms) = 0 then begin Writeln(System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName])); Exit(1); end;
   if not (Syms[0].Kind in [skClass, skRecord, skInterface]) then
   begin
     Writeln(System.SysUtils.Format( 'Symbol %s has kind "%s"; surface requires a class, record, or interface.', [Syms[0].QualifiedName, Syms[0].Kind.ToText]));
@@ -4083,11 +3520,7 @@ begin
   end;
 
   Lines:= Store.GetClassSurface(AArgs.QName, AArgs.IncludeImpl, AArgs.AllVisibility);
-  if Length(Lines) = 0 then
-  begin
-    Writeln('(no surface lines returned)');
-    Exit   (1                            );
-  end;
+  if Length(Lines) = 0 then begin Writeln('(no surface lines returned)'); Exit (1 ); end;
 
   if LowerCase(AArgs.Format) = 'json' then
   begin
@@ -4106,10 +3539,7 @@ begin
       JArr.Free;
     end;
   end // if
-  else
-  begin
-    for L in Lines do Writeln(L.Text);
-  end;
+  else begin for L in Lines do Writeln(L.Text); end;
   Result:= 0;
 end; // function
 
@@ -4127,17 +3557,8 @@ var
   JArr : TJSONArray     ;
   JObj : TJSONObject    ;
 begin
-  if AArgs.InFile = '' then
-  begin
-    Writeln('Usage: drag-lint outline --file <path.pas> ' + '[--db <path>] [--format text|json]');
-    Exit(2);
-  end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Writeln('Run "drag-lint index <path>" first.');
-    Exit   (2                                    );
-  end;
+  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint outline --file <path.pas> ' + '[--db <path>] [--format text|json]'); Exit(2); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
@@ -4164,10 +3585,7 @@ begin
       JArr.Free;
     end; // try
   end // if
-  else
-  begin
-    for S in Syms do Writeln(System.SysUtils.Format('%-10s %-40s %d', [S.Kind.ToText, S.QualifiedName, S.StartLine]));
-  end;
+  else begin for S in Syms do Writeln(System.SysUtils.Format('%-10s %-40s %d', [S.Kind.ToText, S.QualifiedName, S.StartLine])); end;
   Result:= 0;
 end; // function
 
@@ -4224,11 +3642,7 @@ var
   L    : TImpactLevel;
   DeclO: TJSONObject ;
 begin
-  if AArgs.Name = '' then
-  begin
-    Writeln('Usage: drag-lint usages --name <X> ' + '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json]');
-    Exit(2);
-  end;
+  if AArgs.Name = '' then begin Writeln('Usage: drag-lint usages --name <X> ' + '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json]'); Exit(2); end;
   Width:= LowerCase(AArgs.Width);
   if Width = '' then Width:= 'narrow';
 
@@ -4324,27 +3738,14 @@ var
   JArr : TJSONArray         ;
   JObj : TJSONObject        ;
 begin
-  if AArgs.QName = '' then
-  begin
-    Writeln('Usage: drag-lint slice --qname <Foo.TBar> ' + '[--db <path>] [--format text|json]');
-    Exit(2);
-  end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Writeln('Run "drag-lint index <path>" first.');
-    Exit   (2                                    );
-  end;
+  if AArgs.QName = '' then begin Writeln('Usage: drag-lint slice --qname <Foo.TBar> ' + '[--db <path>] [--format text|json]'); Exit(2); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
   Slice:= Store.GetSymbolSlice(AArgs.QName);
 
-  if Length(Slice) = 0 then
-  begin
-    Writeln(System.SysUtils.Format( 'No slice returned for qname: %s', [AArgs.QName]));
-    Exit(1);
-  end;
+  if Length(Slice) = 0 then begin Writeln(System.SysUtils.Format( 'No slice returned for qname: %s', [AArgs.QName])); Exit(1); end;
 
   if LowerCase(AArgs.Format) = 'json' then
   begin
@@ -4369,11 +3770,7 @@ begin
   end // if
   else
   begin
-    for C in Slice do
-    begin
-      Writeln('--- ', C.Kind, ' ---');
-      Writeln(C.Text);
-    end;
+    for C in Slice do begin Writeln('--- ', C.Kind, ' ---'); Writeln(C.Text); end;
   end;
   Result:= 0;
 end; // function
@@ -4387,20 +3784,20 @@ const
   MARK = 'drag-lint:ignore';
 var
   LineCache : TDictionary<string, TArray<string>>;
-  Lines     : TArray<string>     ;
-  Kept      : TList<TLintFinding>;
-  F         : TLintFinding       ;
-  LineTxt   : string             ;
-  Rest      : string             ;
-  Tok       : string             ;
-  Toks      : TArray<string>     ;
-  CPos      : Integer            ;
-  MPos      : Integer            ;
-  Suppressed: Boolean            ;
+  Lines     : TArray<string>                     ;
+  Kept      : TList<TLintFinding>                ;
+  F         : TLintFinding                       ;
+  LineTxt   : string                             ;
+  Rest      : string                             ;
+  Tok       : string                             ;
+  Toks      : TArray<string>                     ;
+  CPos      : Integer                            ;
+  MPos      : Integer                            ;
+  Suppressed: Boolean                            ;
 begin
   if Length(AFindings) = 0 then Exit(AFindings);
   LineCache:= TDictionary<string, TArray<string>>.Create;
-  Kept     := TList<TLintFinding>.Create;
+  Kept:= TList<TLintFinding>.Create;
   try
     for F in AFindings do
     begin
@@ -4423,21 +3820,17 @@ begin
           begin
             Toks:= Rest.Split([' ', ',', #9]);
             for Tok in Toks do
-              if SameText(Trim(Tok), F.RuleId) then
-              begin
-                Suppressed:= True;
-                Break;
-              end;
+              if SameText(Trim(Tok), F.RuleId) then begin Suppressed:= True; Break; end;
           end;
         end;
-      end;
+      end; // if
       if not Suppressed then Kept.Add(F);
-    end;
+    end; // for
     Result:= Kept.ToArray;
   finally
     Kept.Free;
     LineCache.Free;
-  end;
+  end; // try
 end; // function
 
 /// <summary>Builds the effective TLintConfig for a command: discovers the config
@@ -4459,24 +3852,25 @@ end;
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
   BuildAutofixEdits (kept in lockstep; a guard test asserts they agree). }
 const
-  FIXABLE_RULE_IDS: array[0..8] of string =
-    ('self-assignment', 'redundant-parentheses', 'redundant-cast',
-     'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true',
-     'reserved-word-casing', 'redundant-assigned-free', 'off-by-one-count');
+  FIXABLE_RULE_IDS: array[0..8] of string = (
+    'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
+    'redundant-assigned-free', 'off-by-one-count');
 
 function IsFixableRule(const ARuleId: string): Boolean;
-var S: string;
+var
+  S: string;
 begin
   for S in FIXABLE_RULE_IDS do
     if SameText(S, ARuleId) then Exit(True);
-  Result := False;
+  Result:= False;
 end;
 
 function FixableRuleIds: TArray<string>;
-var I: Integer;
+var
+  i: Integer;
 begin
   SetLength(Result, Length(FIXABLE_RULE_IDS));
-  for I := 0 to High(FIXABLE_RULE_IDS) do Result[I] := FIXABLE_RULE_IDS[I];
+  for i:= 0 to High(FIXABLE_RULE_IDS) do Result[i]:= FIXABLE_RULE_IDS[i];
 end;
 
 { Behaviour-CHANGING fixes: still applied by Fix-it/Fix-all, but tagged so a
@@ -4485,15 +3879,16 @@ end;
 const
   RISKY_FIX_RULE_IDS: array[0..0] of string = ('off-by-one-count');
 
-/// <summary>True iff the rule's registered fix is behaviour-CHANGING (not merely
-/// a redundant-code cleanup). Such fixes are still applied, but callers surface a
-/// 'risky' flag so a human/AI reviews before trusting a batch apply.</summary>
+  /// <summary>True iff the rule's registered fix is behaviour-CHANGING (not merely
+  /// a redundant-code cleanup). Such fixes are still applied, but callers surface a
+  /// 'risky' flag so a human/AI reviews before trusting a batch apply.</summary>
 function IsRiskyFixRule(const ARuleId: string): Boolean;
-var S: string;
+var
+  S: string;
 begin
   for S in RISKY_FIX_RULE_IDS do
     if SameText(S, ARuleId) then Exit(True);
-  Result := False;
+  Result:= False;
 end;
 
 /// <summary>True iff S (trimmed) needs NO extra parentheses to be the operand of
@@ -4506,10 +3901,10 @@ end;
 /// under-wrapping 'not a and b' silently changes meaning.</summary>
 function IsSingleTokenAtom(const S: string): Boolean;
 var
-  T    : string ;
-  I    : Integer;
-  Depth: Integer;
-  C    : Char   ;
+  T    : string                           ;
+  i    : Integer                          ;
+  Depth: Integer                          ;
+  C    : Char                             ;
   function IsIdentStart(Ch: Char): Boolean;
   begin Result:= CharInSet(Ch, ['A'..'Z','a'..'z','_']); end;
   function IsIdentChar(Ch: Char): Boolean;
@@ -4524,41 +3919,37 @@ begin
   if T[1] = '(' then
   begin
     Depth:= 0;
-    for I:= 1 to Length(T) do
+    for i:= 1 to Length(T) do
     begin
-      if T[I] = '(' then Inc(Depth)
-      else if T[I] = ')' then
+      if T[i]      = '(' then Inc(Depth)
+      else if T[i] = ')' then
       begin
         Dec(Depth);
-        if (Depth = 0) then Exit(I = Length(T));  { balanced only at the end => atomic }
+        if (Depth = 0) then Exit(i = Length(T)); { balanced only at the end => atomic }
       end;
     end;
-    Exit(False);  { unbalanced }
+    Exit(False); { unbalanced }
   end;
 
   { (a) lone primary term. }
   if not IsIdentStart(T[1]) then Exit(False);
   Depth:= 0;
-  I:= 1;
-  while I <= Length(T) do
+  i    := 1;
+  while i <= Length(T) do
   begin
-    C:= T[I];
+    C:= T[i];
     if (C = '(') or (C = '[') then Inc(Depth)
-    else if (C = ')') or (C = ']') then
-    begin
-      Dec(Depth);
-      if Depth < 0 then Exit(False);
-    end
+    else if (C = ')') or (C = ']') then begin Dec(Depth); if Depth < 0 then Exit(False); end
     else if Depth = 0 then
     begin
       { at top level, only identifier chars and a '.' between segments are allowed;
         anything else (whitespace, operator char, ',', ':', etc.) => compound. }
       if not (IsIdentChar(C) or (C = '.')) then Exit(False);
     end;
-    Inc(I);
+    Inc(i);
   end;
   Result:= (Depth = 0);
-end;
+end; // begin
 
 /// <summary>Builds the quick-fix text edits for the subset of AFindings whose
 /// rule has a registered autofix (the FIXABLE_RULE_IDS set). Mechanical, no
@@ -4579,23 +3970,23 @@ end;
 /// when the flagged span is single-line and literally starts with '(' and ends
 /// with ')'. Best for non-overlapping findings; same-line multi-fixes are not
 /// column-reconciled (the applier orders by line).</remarks>
-function BuildAutofixEdits(const AFindings: TArray<TLintFinding>;
-  out AFixableCount: Integer): TArray<TTextEdit>;
+function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;
 var
-  F    : TLintFinding;
-  E    : TTextEdit   ;
-  EndL : Integer     ;
+  F    : TLintFinding                    ;
+  E    : TTextEdit                       ;
+  EndL : Integer                         ;
   Cache: TDictionary<string, TStringList>;
-  SL   : TStringList ;
-  Ln, Span, Repl: string;
+  SL   : TStringList                     ;
+  Ln   : string                          ;
+  Span : string                          ;
+  Repl : string                          ;
 
   function LinesFor(const APath: string): TStringList;
   begin
     if not Cache.TryGetValue(APath, Result) then
     begin
       Result:= TStringList.Create;
-      if TFile.Exists(APath) then
-        Result.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
+      if TFile.Exists(APath) then Result.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
       Cache.Add(APath, Result);
     end;
   end;
@@ -4612,14 +4003,13 @@ begin
         if EndL < F.StartLine then EndL:= F.StartLine;
         E:= Default(TTextEdit);
         E.FilePath:= F.FilePath;
-        E.Kind    := tekDeleteLines;
-        E.Line    := F.StartLine;
-        E.EndLine := EndL;
+        E.Kind:= tekDeleteLines;
+        E.Line:= F.StartLine;
+        E.EndLine:= EndL;
         Result:= Result + [E];
         Inc(AFixableCount);
       end
-      else if SameText(F.RuleId, 'redundant-parentheses')
-              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      else if SameText(F.RuleId, 'redundant-parentheses') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         SL:= LinesFor(F.FilePath);
         if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
@@ -4628,21 +4018,20 @@ begin
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
           if (Length(Span) >= 2) and (Span[1] = '(') and (Span[Length(Span)] = ')') then
           begin
-            Repl:= Copy(Span, 2, Length(Span) - 2);   { strip the outer parens }
+            Repl:= Copy(Span, 2, Length(Span) - 2); { strip the outer parens }
             E:= Default(TTextEdit);
             E.FilePath:= F.FilePath;
-            E.Kind    := tekReplaceInLine;
-            E.Line    := F.StartLine;
-            E.Col     := F.StartCol;
-            E.EndCol  := F.EndCol;
-            E.Text    := Repl;
+            E.Kind:= tekReplaceInLine;
+            E.Line  := F.StartLine;
+            E.Col   := F.StartCol;
+            E.EndCol:= F.EndCol;
+            E.Text:= Repl;
             Result:= Result + [E];
             Inc(AFixableCount);
           end;
-        end;
-      end
-      else if SameText(F.RuleId, 'redundant-cast')
-              and (F.StartLine = F.EndLine) then
+        end; // if
+      end // if
+      else if SameText(F.RuleId, 'redundant-cast') and (F.StartLine = F.EndLine) then
       begin
         { redundant-cast fires only on 'TFoo(x)' with x a SINGLE identifier (the
           rule's precondition), so there is no nested paren: the ')' is the first
@@ -4652,7 +4041,7 @@ begin
         if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
         begin
           Ln:= SL[F.StartLine - 1];
-          var OpenP: Integer:= F.EndCol;   { 1-based; '(' expected at/after the name }
+          var OpenP: Integer:= F.EndCol; { 1-based; '(' expected at/after the name }
           while (OpenP <= Length(Ln)) and (Ln[OpenP] <> '(') do Inc(OpenP);
           if (OpenP <= Length(Ln)) and (Ln[OpenP] = '(') then
           begin
@@ -4665,20 +4054,19 @@ begin
               begin
                 E:= Default(TTextEdit);
                 E.FilePath:= F.FilePath;
-                E.Kind    := tekReplaceInLine;
-                E.Line    := F.StartLine;
-                E.Col     := F.StartCol;
-                E.EndCol  := CloseP + 1;    { exclusive end -- one past the ')' }
-                E.Text    := Inner;
+                E.Kind:= tekReplaceInLine;
+                E.Line:= F.StartLine;
+                E.Col := F.StartCol;
+                E.EndCol:= CloseP + 1; { exclusive end -- one past the ')' }
+                E.Text:= Inner;
                 Result:= Result + [E];
                 Inc(AFixableCount);
               end;
             end;
-          end;
-        end;
-      end
-      else if SameText(F.RuleId, 'redundant-not-not')
-              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+          end; // if
+        end; // if
+      end // if
+      else if SameText(F.RuleId, 'redundant-not-not') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         { span covers 'not not X' (the outer exprUnary). Strip the two leading
           'not' keywords + their trailing whitespace; the remainder is X. }
@@ -4688,14 +4076,12 @@ begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
           var Rest: string:= Span;
-          var Ok: Boolean:= True;
+          var Ok: Boolean:= True ;
           { consume 'not' then >=1 whitespace, twice }
           for var Pass: Integer:= 1 to 2 do
           begin
             var LR: string:= TrimLeft(Rest);
-            if (Length(LR) >= 3) and SameText(Copy(LR, 1, 3), 'not')
-               and ((Length(LR) = 3) or (LR[4] <= ' ')) then
-              Rest:= TrimLeft(Copy(LR, 4, MaxInt))
+            if (Length(LR) >= 3) and SameText(Copy(LR, 1, 3), 'not') and ((Length(LR) = 3) or (LR[4] <= ' ')) then Rest:= TrimLeft(Copy(LR, 4, MaxInt))
             else
             begin Ok:= False; Break; end;
           end;
@@ -4703,18 +4089,17 @@ begin
           begin
             E:= Default(TTextEdit);
             E.FilePath:= F.FilePath;
-            E.Kind    := tekReplaceInLine;
-            E.Line    := F.StartLine;
-            E.Col     := F.StartCol;
-            E.EndCol  := F.EndCol;
-            E.Text    := Rest;
+            E.Kind:= tekReplaceInLine;
+            E.Line  := F.StartLine;
+            E.Col   := F.StartCol;
+            E.EndCol:= F.EndCol;
+            E.Text:= Rest;
             Result:= Result + [E];
             Inc(AFixableCount);
           end;
-        end;
-      end
-      else if SameText(F.RuleId, 'redundant-as-tobject')
-              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+        end; // if
+      end // if
+      else if SameText(F.RuleId, 'redundant-as-tobject') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         { span covers 'X as TObject' (the exprBinary). Find the depth-0 whole-word
           'as' keyword; the lhs before it is X. }
@@ -4731,9 +4116,7 @@ begin
             var Ch: Char:= Span[K];
             if (Ch = '(') or (Ch = '[') then Inc(Depth)
             else if (Ch = ')') or (Ch = ']') then Dec(Depth)
-            else if (Depth = 0) and (Span[K-1] <= ' ')
-                    and SameText(Copy(Span, K, 2), 'as')
-                    and ((K + 2 > Length(Span)) or (Span[K+2] <= ' ')) then
+            else if (Depth = 0) and (Span[K - 1] <= ' ') and SameText(Copy(Span, K, 2), 'as') and ((K + 2 > Length(Span)) or (Span[K + 2] <= ' ')) then
             begin AsPos:= K; Break; end;
           end;
           if AsPos > 1 then
@@ -4743,19 +4126,18 @@ begin
             begin
               E:= Default(TTextEdit);
               E.FilePath:= F.FilePath;
-              E.Kind    := tekReplaceInLine;
-              E.Line    := F.StartLine;
-              E.Col     := F.StartCol;
-              E.EndCol  := F.EndCol;
-              E.Text    := Repl;
+              E.Kind:= tekReplaceInLine;
+              E.Line  := F.StartLine;
+              E.Col   := F.StartCol;
+              E.EndCol:= F.EndCol;
+              E.Text:= Repl;
               Result:= Result + [E];
               Inc(AFixableCount);
             end;
           end;
-        end;
-      end
-      else if SameText(F.RuleId, 'boolean-comparison-true')
-              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+        end; // if
+      end // if
+      else if SameText(F.RuleId, 'boolean-comparison-true') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         { span covers 'X op bool', op is '=' or '<>', bool is True or False.
           Scan for the LAST depth-0 '=' or '<>' operator; split into lhs/op/rhs.
@@ -4776,7 +4158,7 @@ begin
             else if (Ch = ')') or (Ch = ']') then Dec(Depth)
             else if Depth = 0 then
             begin
-              if (K < Length(Span)) and (Ch = '<') and (Span[K+1] = '>') then
+              if (K < Length(Span)) and (Ch = '<') and (Span[K + 1] = '>') then
               begin OpPos:= K; OpLen:= 2; end
               else if Ch = '=' then
               begin OpPos:= K; OpLen:= 1; end;
@@ -4784,37 +4166,33 @@ begin
           end;
           if OpPos > 1 then
           begin
-            var LhsText: string:= Trim(Copy(Span, 1, OpPos - 1));
-            var OpText : string:= Copy(Span, OpPos, OpLen);
+            var LhsText: string:= Trim(Copy(Span, 1, OpPos - 1))         ;
+            var OpText : string:= Copy(Span, OpPos, OpLen)               ;
             var RhsText: string:= Trim(Copy(Span, OpPos + OpLen, MaxInt));
-            var IsTrue : Boolean:= SameText(RhsText, 'True');
+            var IsTrue : Boolean:= SameText(RhsText, 'True' );
             var IsFalse: Boolean:= SameText(RhsText, 'False');
-            var Positive: Boolean;
+            var Positive: Boolean                                        ;
             if (LhsText <> '') and (IsTrue or IsFalse) then
             begin
               { (= True) or (<> False) => positive; (= False) or (<> True) => negative }
               if OpText = '=' then Positive:= IsTrue else Positive:= IsFalse;
-              if Positive then
-                Repl:= LhsText
-              else if IsSingleTokenAtom(LhsText) then
-                Repl:= 'not ' + LhsText
-              else
-                Repl:= 'not (' + LhsText + ')';
+              if Positive then Repl:= LhsText
+              else if IsSingleTokenAtom(LhsText) then Repl:= 'not ' + LhsText
+              else Repl:= 'not (' + LhsText + ')';
               E:= Default(TTextEdit);
               E.FilePath:= F.FilePath;
-              E.Kind    := tekReplaceInLine;
-              E.Line    := F.StartLine;
-              E.Col     := F.StartCol;
-              E.EndCol  := F.EndCol;
-              E.Text    := Repl;
+              E.Kind:= tekReplaceInLine;
+              E.Line  := F.StartLine;
+              E.Col   := F.StartCol;
+              E.EndCol:= F.EndCol;
+              E.Text:= Repl;
               Result:= Result + [E];
               Inc(AFixableCount);
-            end;
-          end;
-        end;
-      end
-      else if SameText(F.RuleId, 'reserved-word-casing')
-              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+            end; // if
+          end; // if
+        end; // if
+      end // if
+      else if SameText(F.RuleId, 'reserved-word-casing') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         { span covers the keyword token; keywords are case-insensitive and have no
           reference sites, so lowercasing the span is a safe local edit. }
@@ -4827,18 +4205,17 @@ begin
           begin
             E:= Default(TTextEdit);
             E.FilePath:= F.FilePath;
-            E.Kind    := tekReplaceInLine;
-            E.Line    := F.StartLine;
-            E.Col     := F.StartCol;
-            E.EndCol  := F.EndCol;
-            E.Text    := LowerCase(Span);
+            E.Kind:= tekReplaceInLine;
+            E.Line  := F.StartLine;
+            E.Col   := F.StartCol;
+            E.EndCol:= F.EndCol;
+            E.Text:= LowerCase(Span);
             Result:= Result + [E];
             Inc(AFixableCount);
           end;
-        end;
-      end
-      else if SameText(F.RuleId, 'redundant-assigned-free')
-              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+        end; // if
+      end // if
+      else if SameText(F.RuleId, 'redundant-assigned-free') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         { span covers 'if Assigned(X) then <stmt>;'. Take the text after the
           delimited 'then' keyword (whole word, not a substring of an identifier)
@@ -4848,18 +4225,15 @@ begin
         begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
-          var Depth: Integer:= 0;
-          var ThenEnd: Integer:= 0;  { 1-based index one past the 'then' }
+          var Depth  : Integer:= 0;
+          var ThenEnd: Integer:= 0; { 1-based index one past the 'then' }
           var LS: string:= LowerCase(Span);
           for var K: Integer:= 1 to Length(Span) - 3 do
           begin
             var Ch: Char:= Span[K];
             if (Ch = '(') or (Ch = '[') then Inc(Depth)
             else if (Ch = ')') or (Ch = ']') then Dec(Depth)
-            else if (Depth = 0)
-                    and (Copy(LS, K, 4) = 'then')
-                    and ((K = 1) or (Span[K-1] <= ' ') or (Span[K-1] = ')'))
-                    and ((K + 4 > Length(Span)) or (Span[K+4] <= ' ')) then
+            else if (Depth = 0) and (Copy(LS, K, 4) = 'then') and ((K = 1) or (Span[K - 1] <= ' ') or (Span[K - 1] = ')')) and ((K + 4 > Length(Span)) or (Span[K + 4] <= ' ')) then
             begin ThenEnd:= K + 4; Break; end;
           end;
           if ThenEnd > 0 then
@@ -4869,19 +4243,18 @@ begin
             begin
               E:= Default(TTextEdit);
               E.FilePath:= F.FilePath;
-              E.Kind    := tekReplaceInLine;
-              E.Line    := F.StartLine;
-              E.Col     := F.StartCol;
-              E.EndCol  := F.EndCol;
-              E.Text    := Repl;
+              E.Kind:= tekReplaceInLine;
+              E.Line  := F.StartLine;
+              E.Col   := F.StartCol;
+              E.EndCol:= F.EndCol;
+              E.Text:= Repl;
               Result:= Result + [E];
               Inc(AFixableCount);
             end;
           end;
-        end;
-      end
-      else if SameText(F.RuleId, 'off-by-one-count')
-              and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+        end; // if
+      end // if
+      else if SameText(F.RuleId, 'off-by-one-count') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         { span covers the loop end-bound (X.Count / Length(X)). Append ' - 1'.
           BEHAVIOUR-CHANGING (tagged risky via IsRiskyFixRule). The bound is
@@ -4895,22 +4268,22 @@ begin
           begin
             E:= Default(TTextEdit);
             E.FilePath:= F.FilePath;
-            E.Kind    := tekReplaceInLine;
-            E.Line    := F.StartLine;
-            E.Col     := F.StartCol;
-            E.EndCol  := F.EndCol;
-            E.Text    := Span + ' - 1';
+            E.Kind:= tekReplaceInLine;
+            E.Line  := F.StartLine;
+            E.Col   := F.StartCol;
+            E.EndCol:= F.EndCol;
+            E.Text:= Span + ' - 1';
             Result:= Result + [E];
             Inc(AFixableCount);
           end;
-        end;
-      end;
-    end;
+        end; // if
+      end; // if
+    end; // for
   finally
     for SL in Cache.Values do SL.Free;
     Cache.Free;
-  end;
-end;
+  end; // try
+end; // begin
 
 /// <summary>Shared output tail for the finding-producing commands. Applies line
 /// suppressions, config (severity remap + enable/disable), and the baseline, then
@@ -4925,18 +4298,16 @@ end;
 /// from the post-ShouldKeep/baseline Survivors set computed inside this function,
 /// not from the caller's raw AFindings -- so a bare command whose only matches were
 /// OFF-by-default (suppressed) rules prints "0 finding(s)" AND exits 0.</remarks>
-function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>;
-  const ADefaultDisabled: TArray<string>;
-  const AEmitText: TProc<TArray<TLintFinding>>): Integer;
+function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>): Integer;
 var
-  Cfg     : TLintConfig         ;
+  Cfg      : TLintConfig         ;
   Survivors: TArray<TLintFinding>;
-  F       : TLintFinding        ;
-  MF      : TLintFinding        ;
-  IsDefDis: Boolean             ;
-  DId     : string              ;
-  JArr    : TJSONArray          ;
-  JObj    : TJSONObject         ;
+  F        : TLintFinding        ;
+  MF       : TLintFinding        ;
+  IsDefDis : Boolean             ;
+  DId      : string              ;
+  JArr     : TJSONArray          ;
+  JObj     : TJSONObject         ;
 begin
   { 0: source-level ignore directives. }
   AFindings:= ApplyLineSuppressions(AFindings);
@@ -4949,12 +4320,7 @@ begin
     IsDefDis:= False;
     for DId in ADefaultDisabled do
       if SameText(DId, F.RuleId) then begin IsDefDis:= True; Break; end;
-    if Cfg.ShouldKeep(F.RuleId, IsDefDis) then
-    begin
-      MF:= F;
-      MF.Severity:= Cfg.ApplySeverity(F.RuleId, F.Severity);
-      Survivors:= Survivors + [MF];
-    end;
+    if Cfg.ShouldKeep(F.RuleId, IsDefDis) then begin MF:= F; MF.Severity:= Cfg.ApplySeverity(F.RuleId, F.Severity); Survivors:= Survivors + [MF]; end;
   end;
 
   { 2a: --write-baseline records the current (config-filtered) state and exits. }
@@ -4966,8 +4332,7 @@ begin
   end;
 
   { 2b: --baseline keeps only findings absent from the baseline. }
-  if AArgs.Baseline <> '' then
-    Survivors:= DRagLint.Lint.Baseline.TBaseline.Filter(AArgs.Baseline, Survivors);
+  if AArgs.Baseline <> '' then Survivors:= DRagLint.Lint.Baseline.TBaseline.Filter(AArgs.Baseline, Survivors);
 
   { 2c: --fix -- apply (or preview) quick-fixes for the config-surviving findings.
     Dry-run by default; --apply writes (with .bak unless --no-backup). }
@@ -4975,8 +4340,7 @@ begin
   begin
     { Minor 2: fix mode cannot emit SARIF. Warn on stderr and fall through to
       JSON/text output rather than silently swallowing --format sarif. }
-    if SameText(AArgs.Format, 'sarif') then
-      Writeln(ErrOutput, '--fix does not support SARIF output; using text output.');
+    if SameText(AArgs.Format, 'sarif') then Writeln(ErrOutput, '--fix does not support SARIF output; using text output.');
 
     { AutoFix Chunk 1 (Task 3): narrow to a single finding when --fix-line and/or
       --fix-rule are given. Each SET flag filters; an unset flag matches all. With
@@ -4986,14 +4350,11 @@ begin
     begin
       Targeted:= nil;
       for F in Survivors do
-        if ((AArgs.FixLine = 0)  or (F.StartLine = AArgs.FixLine))
-       and ((AArgs.FixRule = '') or SameText(F.RuleId, AArgs.FixRule)) then
-          Targeted:= Targeted + [F];
+        if ((AArgs.FixLine = 0) or (F.StartLine = AArgs.FixLine)) and ((AArgs.FixRule = '') or SameText(F.RuleId, AArgs.FixRule)) then Targeted:= Targeted + [F];
     end
-    else
-      Targeted:= Survivors;
+    else Targeted:= Survivors;
 
-    var FixCount: Integer;
+    var FixCount: Integer                                               ;
     var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Targeted, FixCount);
 
     if AArgs.AsJson or SameText(AArgs.Format, 'json') then
@@ -5017,51 +4378,44 @@ begin
           one edit on its own StartLine. }
         var EditLineKeys: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
         try
-          for var Ed: TTextEdit in Edits do
-            EditLineKeys.AddOrSetValue(LowerCase(Ed.FilePath) + '|' + IntToStr(Ed.Line), True);
+          for var Ed: TTextEdit in Edits do EditLineKeys.AddOrSetValue(LowerCase(Ed.FilePath) + '|' + IntToStr(Ed.Line), True);
           for F in Targeted do
-            if IsFixableRule(F.RuleId)
-               and EditLineKeys.ContainsKey(LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine)) then
-              EditedKeys.AddOrSetValue(
-                LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId), True);
+            if IsFixableRule(F.RuleId) and EditLineKeys.ContainsKey(LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine)) then
+              EditedKeys.AddOrSetValue( LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId), True);
         finally
           EditLineKeys.Free;
         end;
-        if AArgs.Apply and (FixCount > 0) then
-          TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
+        if AArgs.Apply and (FixCount > 0) then TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
         JArr:= TJSONArray.Create;
         try
           for F in Targeted do
           begin
-            var HasEdit: Boolean:= EditedKeys.ContainsKey(
-              LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId));
+            var HasEdit: Boolean:= EditedKeys.ContainsKey( LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId));
             JObj:= TJSONObject.Create;
-            JObj.AddPair('file'   , F.FilePath);
-            JObj.AddPair('line'   , TJSONNumber.Create(F.StartLine));
-            JObj.AddPair('rule'   , F.RuleId);
+            JObj.AddPair('file' , F.FilePath);
+            JObj.AddPair('line' , TJSONNumber.Create(F.StartLine));
+            JObj.AddPair('rule' , F.RuleId);
             JObj.AddPair('fixable', TJSONBool.Create(IsFixableRule(F.RuleId)));
             JObj.AddPair('applied', TJSONBool.Create(AArgs.Apply and HasEdit));
             JObj.AddPair('preview', TJSONBool.Create((not AArgs.Apply) and HasEdit));
-            JObj.AddPair('risky'  , TJSONBool.Create(IsRiskyFixRule(F.RuleId)));
+            JObj.AddPair('risky' , TJSONBool.Create(IsRiskyFixRule(F.RuleId)));
             JArr.AddElement(JObj);
           end;
           Writeln(JArr.Format(2));
         finally
           JArr.Free;
-        end;
+        end; // try
       finally
         EditedKeys.Free;
-      end;
+      end; // try
       Exit(0);
-    end;
+    end; // if
 
-    if FixCount = 0 then
-      Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Targeted)) + ' finding(s))')
+    if FixCount = 0 then Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Targeted)) + ' finding(s))')
     else if AArgs.Apply then
     begin
       var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
-      Writeln(Format('autofix: applied %d fix(es) across %d file(s)%s',
-        [FixCount, Touched, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+      Writeln(Format('autofix: applied %d fix(es) across %d file(s)%s', [FixCount, Touched, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
     end
     else
     begin
@@ -5069,16 +4423,14 @@ begin
       var HasRisky: Boolean:= False;
       for F in Targeted do
         if IsRiskyFixRule(F.RuleId) then begin HasRisky:= True; Break; end;
-      if HasRisky then
-        Writeln('[risky] one or more fixes are behaviour-changing -- review before --apply.');
+      if HasRisky then Writeln('[risky] one or more fixes are behaviour-changing -- review before --apply.');
       Writeln(Format('autofix: %d fixable finding(s) -- pass --apply to write', [FixCount]));
     end;
     Exit(0);
-  end;
+  end; // if
 
   { 3: output. }
-  if SameText(AArgs.Format, 'sarif') then
-    Writeln(DRagLint.Output.Sarif.TSarifWriter.ToJson(Survivors, VERSION))
+  if SameText(AArgs.Format, 'sarif') then Writeln(DRagLint.Output.Sarif.TSarifWriter.ToJson(Survivors, VERSION))
   else if AArgs.AsJson or SameText(AArgs.Format, 'json') then
   begin
     JArr:= TJSONArray.Create;
@@ -5093,45 +4445,38 @@ begin
         JObj.AddPair('start_col' , TJSONNumber.Create(F.StartCol ));
         JObj.AddPair('end_line'  , TJSONNumber.Create(F.EndLine  ));
         JObj.AddPair('end_col'   , TJSONNumber.Create(F.EndCol   ));
-        JObj.AddPair('message'   , F.Message );
+        JObj.AddPair('message' , F.Message );
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
     finally
       JArr.Free;
-    end;
-  end
-  else if Assigned(AEmitText) then
-    AEmitText(Survivors);
+    end; // try
+  end // if
+  else if Assigned(AEmitText) then AEmitText(Survivors);
 
   { 4: exit code. }
   Result:= ExitCodeFor(Survivors, AArgs.FailOn, IfThen(Length(Survivors) > 0, 1, 0));
-end;
+end; // function
 
 /// <summary>`drag-lint rules [--json] [--category &lt;name&gt;] [--rules-dir &lt;dir&gt;]` --
 /// emit the full rule catalog (built-ins + external .scm). Default = grouped text
 /// table; --json = the structured catalog + summary.</summary>
 function DoRules(const AArgs: TArgs): Integer;
 var
-  Cat   : TArray<TRuleInfo>;
-  Sum   : TCatalogSummary;
-  R     : TRuleInfo;
-  P     : TRuleParam;
+  Cat   : TArray<TRuleInfo>     ;
+  Sum   : TCatalogSummary       ;
+  R     : TRuleInfo             ;
+  P     : TRuleParam            ;
   Pr    : TPair<string, Integer>;
-  Sb    : TStringBuilder;
-  CurCat: string;
+  Sb    : TStringBuilder        ;
+  CurCat: string                ;
   procedure AddParamsJson(AObj: TJSONObject; const AParams: TArray<TRuleParam>);
-  var PA: TJSONArray; Q: TRuleParam; PO: TJSONObject;
+  var
+    PA: TJSONArray; Q: TRuleParam; PO: TJSONObject;
   begin
     PA:= TJSONArray.Create;
-    for Q in AParams do
-    begin
-      PO:= TJSONObject.Create;
-      PO.AddPair('name', Q.Name);
-      PO.AddPair('type', Q.ParamType);
-      PO.AddPair('default', Q.DefaultVal);
-      PA.AddElement(PO);
-    end;
+    for Q in AParams do begin PO:= TJSONObject.Create; PO.AddPair('name' , Q.Name ); PO.AddPair('type' , Q.ParamType ); PO.AddPair('default', Q.DefaultVal); PA.AddElement(PO); end;
     AObj.AddPair('params', PA);
   end;
 begin
@@ -5146,9 +4491,9 @@ begin
       for R in Cat do
       begin
         var O: TJSONObject:= TJSONObject.Create;
-        O.AddPair('id', R.Id);
-        O.AddPair('category', R.Category);
-        O.AddPair('title', R.Title);
+        O.AddPair('id'              , R.Id             );
+        O.AddPair('category'        , R.Category       );
+        O.AddPair('title'           , R.Title          );
         O.AddPair('default_severity', R.DefaultSeverity);
         O.AddPair('default_enabled', TJSONBool.Create(R.DefaultEnabled));
         O.AddPair('source', R.Source);
@@ -5158,7 +4503,7 @@ begin
       end;
       Root.AddPair('rules', Arr);
       var SumO: TJSONObject:= TJSONObject.Create;
-      SumO.AddPair('total', TJSONNumber.Create(Sum.Total));
+      SumO.AddPair('total'     , TJSONNumber.Create(Sum.Total     ));
       SumO.AddPair('categories', TJSONNumber.Create(Sum.Categories));
       var PcA: TJSONArray:= TJSONArray.Create;
       for Pr in Sum.PerCategory do
@@ -5168,14 +4513,14 @@ begin
         PcO.AddPair('count', TJSONNumber.Create(Pr.Value));
         PcA.AddElement(PcO);
       end;
-      SumO.AddPair('per_category', PcA);
-      Root.AddPair('summary', SumO);
-      Writeln(Root.ToJSON);
+      SumO.AddPair('per_category', PcA );
+      Root.AddPair('summary'     , SumO);
+      Writeln(Root.ToJson);
     finally
       Root.Free;
-    end;
+    end; // try
     Exit(0);
-  end;
+  end; // if
 
   { text mode: header + grouped table }
   Sb:= TStringBuilder.Create;
@@ -5184,32 +4529,23 @@ begin
     CurCat:= #1; { sentinel so the first real category prints a header }
     for R in Cat do
     begin
-      if R.Category <> CurCat then
-      begin
-        CurCat:= R.Category;
-        Sb.AppendLine('');
-        Sb.AppendLine('[' + CurCat + ']');
-      end;
+      if R.Category <> CurCat then begin CurCat:= R.Category; Sb.AppendLine(''); Sb.AppendLine('[' + CurCat + ']'); end;
       var Flags: string:= R.DefaultSeverity;
       if not R.DefaultEnabled then Flags:= Flags + ', off';
       if Length(R.Params) > 0 then
       begin
         var Names: string:= '';
-        for P in R.Params do
-        begin
-          if Names <> '' then Names:= Names + ',';
-          Names:= Names + P.Name + '=' + P.DefaultVal;
-        end;
+        for P in R.Params do begin if Names <> '' then Names:= Names + ','; Names:= Names + P.Name + '=' + P.DefaultVal; end;
         Flags:= Flags + '; ' + Names;
       end;
       Sb.AppendLine(Format('  %-34s %-8s (%s)', [R.Id, R.Source, Flags]));
-    end;
+    end; // for
     Writeln(Sb.ToString);
   finally
     Sb.Free;
-  end;
+  end; // try
   Result:= 0;
-end;
+end; // begin
 
 function DoLint(const AArgs: TArgs): Integer;
 var
@@ -5229,49 +4565,45 @@ begin
     every path check below so the whole `lint` command honours --file, not just
     the fix path. }
   EffPath:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
-  if (EffPath = '') and (AArgs.ProjectPath = '') then
-  begin
-    Writeln('ERROR: lint requires a <path> or --project <file.dproj>');
-    Exit   (2                                                        );
-  end;
+  if (EffPath = '') and (AArgs.ProjectPath = '') then begin Writeln('ERROR: lint requires a <path> or --project <file.dproj>'); Exit (2 ); end;
   if (AArgs.Rule <> '') and (AArgs.Rule <> 'field-by-name-in-loop') and (AArgs.Rule <> 'unit-not-in-dpr') and (AArgs.Rule <> 'inline-comment-in-multiline-args') and
   (AArgs.Rule <> 'unused-local') and (AArgs.Rule <> 'syntax-error') and (AArgs.Rule <> 'unbalanced-begin-end') and (AArgs.Rule <> 'raise-in-finally') and
   (AArgs.Rule <> 'code-after-exit') and (AArgs.Rule <> 'missing-inherited-ctor') and (AArgs.Rule <> 'missing-inherited-dtor') and
   (AArgs.Rule <> 'control-flow-in-finally') and (AArgs.Rule <> 'too-many-parameters') and (AArgs.Rule <> 'too-many-locals') and
   (AArgs.Rule <> 'method-too-long') and (AArgs.Rule <> 'deep-nesting') and (AArgs.Rule <> 'float-equality-comparison') and
   (AArgs.Rule <> 'freeandnil-on-interface') and (AArgs.Rule <> 'firedac-open-execsql-mismatch') and (AArgs.Rule <> 'unprotected-object-free') and
-  (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'redundant-cast') and (AArgs.Rule <> 'unsafe-typecast-without-is') and (AArgs.Rule <> 'exhaustive-enum-case') and (AArgs.Rule <> 'length-zero-compare') and (AArgs.Rule <> 'ui-access-in-thread') and
-  (AArgs.Rule <> 'interface-object-mixing') and
+  (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'redundant-cast') and (AArgs.Rule <> 'unsafe-typecast-without-is')
+    and (AArgs.Rule <> 'exhaustive-enum-case') and (AArgs.Rule <> 'length-zero-compare') and (AArgs.Rule <> 'ui-access-in-thread') and (AArgs.Rule <> 'interface-object-mixing') and
   (AArgs.Rule <> 'global-form-variable') and (AArgs.Rule <> 'unsafe-shellexecute') and (AArgs.Rule <> 'path-traversal') and (AArgs.Rule <> 'loop-executes-at-most-once') and
-  (AArgs.Rule <> 'format-argument-count') and (AArgs.Rule <> 'format-specifier-type-mismatch') and (AArgs.Rule <> 'try-except-swallowed') and (AArgs.Rule <> 'dataset-open-without-close') and (AArgs.Rule <> 'criticalsection-not-released') and (AArgs.Rule <> 'too-many-exit-points') and (AArgs.Rule <> 'cyclomatic-complexity') and (AArgs.Rule <> 'virtual-method-in-constructor') and
-  (AArgs.Rule <> 'used-before-assignment') and (AArgs.Rule <> 'function-result-not-set') and (AArgs.Rule <> 'out-param-not-set') and
-  (AArgs.Rule <> 'overwrite-before-read') and (AArgs.Rule <> 'write-only-local') and (AArgs.Rule <> 'loop-var-after-loop') and
+  (AArgs.Rule <> 'format-argument-count') and (AArgs.Rule <> 'format-specifier-type-mismatch') and (AArgs.Rule <> 'try-except-swallowed')
+    and (AArgs.Rule <> 'dataset-open-without-close') and (AArgs.Rule <> 'criticalsection-not-released') and (AArgs.Rule <> 'too-many-exit-points')
+    and (AArgs.Rule <> 'cyclomatic-complexity') and (AArgs.Rule <> 'virtual-method-in-constructor') and
+  (AArgs.Rule <> 'used-before-assignment') and (AArgs.Rule <> 'function-result-not-set') and (AArgs.Rule <> 'out-param-not-set'  ) and
+  (AArgs.Rule <> 'overwrite-before-read' ) and (AArgs.Rule <> 'write-only-local'       ) and (AArgs.Rule <> 'loop-var-after-loop') and
   (AArgs.Rule <> 'object-leak') and (AArgs.Rule <> 'not-assigned-interface') and (AArgs.Rule <> 'split-variable') and (AArgs.Rule <> 'separate-query-from-modifier') and
   (AArgs.Rule <> 'type-name-prefix') and (AArgs.Rule <> 'field-name-prefix') and (AArgs.Rule <> 'param-name-prefix') and
   (AArgs.Rule <> 'method-pascalcase') and (AArgs.Rule <> 'const-casing') and (AArgs.Rule <> 'local-var-casing') and (AArgs.Rule <> 'unit-name-matches-file') and
-  (AArgs.Rule <> 'reserved-word-casing') and (AArgs.Rule <> 'hungarian-or-short-identifier') and
-  (AArgs.Rule <> 'unused-parameter') and (AArgs.Rule <> 'identical-then-else') and
-  (AArgs.Rule <> 'referenced-never-set') and (AArgs.Rule <> 'redundant-parentheses') and
-  (AArgs.Rule <> 'commented-out-code') and (AArgs.Rule <> 'function-result-ignored') and
-  (AArgs.Rule <> 'destructor-without-override') and (AArgs.Rule <> 'case-with-too-few-branches') and
+  (AArgs.Rule <> 'reserved-word-casing') and (AArgs.Rule <> 'hungarian-or-short-identifier') and (AArgs.Rule <> 'unused-parameter') and (AArgs.Rule <> 'identical-then-else') and
+  (AArgs.Rule <> 'referenced-never-set') and (AArgs.Rule <> 'redundant-parentheses') and (AArgs.Rule <> 'commented-out-code') and (AArgs.Rule <> 'function-result-ignored') and
+  (AArgs.Rule <> 'destructor-without-override'  ) and (AArgs.Rule <> 'case-with-too-few-branches'          ) and
   (AArgs.Rule <> 'boolean-expression-complexity') and (AArgs.Rule <> 'exception-constructed-but-not-raised') and
-  (AArgs.Rule <> 'duplicate-exception-handler') and (AArgs.Rule <> 'repeated-else-if-condition') and
-  (AArgs.Rule <> 'property-references-itself') and (AArgs.Rule <> 'unit-too-large') and
-  (AArgs.Rule <> 'weak-random-for-security') and (AArgs.Rule <> 'create-inside-try') and
-  (AArgs.Rule <> 'dfm-hardcoded-credential') and (AArgs.Rule <> 'insecure-temp-file') and
-  (AArgs.Rule <> 'multiple-statements-per-line') and
-  (AArgs.Rule <> 'abstract-method-instantiation') and (AArgs.Rule <> 'nativeint-truncation') and
-  (AArgs.Rule <> 'lossy-cast') and (AArgs.Rule <> 'cognitive-complexity') and
+  (AArgs.Rule <> 'duplicate-exception-handler'  ) and (AArgs.Rule <> 'repeated-else-if-condition'          ) and
+  (AArgs.Rule <> 'property-references-itself') and (AArgs.Rule <> 'unit-too-large') and (AArgs.Rule <> 'weak-random-for-security') and (AArgs.Rule <> 'create-inside-try') and
+  (AArgs.Rule <> 'dfm-hardcoded-credential') and (AArgs.Rule <> 'insecure-temp-file') and (AArgs.Rule <> 'multiple-statements-per-line') and
+  (AArgs.Rule <> 'abstract-method-instantiation') and (AArgs.Rule <> 'nativeint-truncation') and (AArgs.Rule <> 'lossy-cast') and (AArgs.Rule <> 'cognitive-complexity') and
   (AArgs.Rule <> 'duplicate-code') and (AArgs.Rule <> 'magic-literal') and (AArgs.Rule <> 'boolean-flag-parameter') and
-  (AArgs.Rule <> 'message-chain') and (AArgs.Rule <> 'public-writable-field') and
-  (AArgs.Rule <> 'loop-control-flag') and (AArgs.Rule <> 'double-free') and
+  (AArgs.Rule <> 'message-chain') and (AArgs.Rule <> 'public-writable-field') and (AArgs.Rule <> 'loop-control-flag') and (AArgs.Rule <> 'double-free') and
   (AArgs.Rule <> 'mutable-global-variable') and (AArgs.Rule <> 'default-encoding-io') then
   begin
     Writeln(Format(
-        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, ' + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, ' + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, ' + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, ' +
-        'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, exhaustive-enum-case, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, ' +
-        'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, split-variable, separate-query-from-modifier, double-free, ' + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, ' +
-        'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag, mutable-global-variable, default-encoding-io, interface-object-mixing)',
+        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, '
+          + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, '
+          + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, '
+          + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, '
+          + 'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, exhaustive-enum-case, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, '
+          + 'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, split-variable, separate-query-from-modifier, double-free, '
+          + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, '
+          + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag, mutable-global-variable, default-encoding-io, interface-object-mixing)',
         [AArgs.Rule]));
     Exit(2);
   end;
@@ -5291,87 +4623,70 @@ begin
     try
       { Surface the deploy gap instead of silently running with no external rules:
         the exe loads <exe-dir>\rules by default (or --rules-dir). }
-      if Linter.ExternalRuleCount = 0 then
-        Writeln(ErrOutput, 'drag-lint: note: 0 external .scm rules loaded -- place a "rules" folder next to drag-lint.exe, or pass --rules-dir <path> (built-in checks still run).');
-      DefDisabled:= Linter.DefaultDisabledRuleIds;   // capture before Free
+      if Linter.ExternalRuleCount = 0 then Writeln(ErrOutput,
+        'drag-lint: note: 0 external .scm rules loaded -- place a "rules" folder next to drag-lint.exe, or pass --rules-dir <path> (built-in checks still run).');
+      DefDisabled:= Linter.DefaultDisabledRuleIds; // capture before Free
       { v0.71: function-result-ignored ships OFF by default (FP-prone -- builders/
         adders/runners legitimately discard results). Opt in via drag-lint-lint.json
         "enabled": ["function-result-ignored"] or --rule function-result-ignored. }
-      if AArgs.Rule <> 'function-result-ignored' then
-        DefDisabled:= DefDisabled + ['function-result-ignored'];
+      if AArgs.Rule <> 'function-result-ignored' then DefDisabled:= DefDisabled + ['function-result-ignored'];
       { v0.71: unsafe-typecast-without-is also OFF by default (an unguarded hard cast
         is often provably safe to the author -> too noisy for the default set). }
-      if AArgs.Rule <> 'unsafe-typecast-without-is' then
-        DefDisabled:= DefDisabled + ['unsafe-typecast-without-is'];
+      if AArgs.Rule <> 'unsafe-typecast-without-is' then DefDisabled:= DefDisabled + ['unsafe-typecast-without-is'];
       { v0.74: exhaustive-enum-case OFF by default (a case that intentionally handles
         a subset of an enum with no else is common -> opt in for enum-heavy code). }
-      if AArgs.Rule <> 'exhaustive-enum-case' then
-        DefDisabled:= DefDisabled + ['exhaustive-enum-case'];
+      if AArgs.Rule <> 'exhaustive-enum-case' then DefDisabled:= DefDisabled + ['exhaustive-enum-case'];
       { v0.82: interface-object-mixing OFF by default (#4 first cut -- a same-routine
         object/interface dual-handle heuristic; conservative but still opt-in). }
-      if AArgs.Rule <> 'interface-object-mixing' then
-        DefDisabled:= DefDisabled + ['interface-object-mixing'];
+      if AArgs.Rule <> 'interface-object-mixing' then DefDisabled:= DefDisabled + ['interface-object-mixing'];
       { v0.76: multiple-statements-per-line OFF by default (pure style). }
-      if AArgs.Rule <> 'multiple-statements-per-line' then
-        DefDisabled:= DefDisabled + ['multiple-statements-per-line'];
+      if AArgs.Rule <> 'multiple-statements-per-line' then DefDisabled:= DefDisabled + ['multiple-statements-per-line'];
       { v0.79: magic-literal OFF by default (medium-FP -- opt in via
         drag-lint-lint.json "enabled": ["magic-literal"] or --rule magic-literal). }
-      if AArgs.Rule <> 'magic-literal' then
-        DefDisabled:= DefDisabled + ['magic-literal'];
+      if AArgs.Rule <> 'magic-literal' then DefDisabled:= DefDisabled + ['magic-literal'];
       { v0.79: boolean-flag-parameter OFF by default (Boolean flag params are
         common in this codebase -- opt in via "enabled": ["boolean-flag-parameter"]
         or --rule boolean-flag-parameter). }
-      if AArgs.Rule <> 'boolean-flag-parameter' then
-        DefDisabled:= DefDisabled + ['boolean-flag-parameter'];
+      if AArgs.Rule <> 'boolean-flag-parameter' then DefDisabled:= DefDisabled + ['boolean-flag-parameter'];
       { v0.79: public-writable-field OFF by default -- FP-sanity over src/ found
         44 findings concentrated in 6/103 files, almost all intentional public
         field-bag "record-like classes" (TCfgBlock/TCfg internal data carriers,
         plugin form-helper classes) -- a deliberate codebase idiom, not scattered
         accidental encapsulation breaks. Opt in via "enabled": ["public-writable-
         field"] or --rule public-writable-field. }
-      if AArgs.Rule <> 'public-writable-field' then
-        DefDisabled:= DefDisabled + ['public-writable-field'];
+      if AArgs.Rule <> 'public-writable-field' then DefDisabled:= DefDisabled + ['public-writable-field'];
       { v0.79: loop-control-flag OFF by default -- the riskiest heuristic of
         the batch (a while/repeat condition identifier also reset to a bare
         True/False inside the body). Opt in via "enabled": ["loop-control-
         flag"] or --rule loop-control-flag. }
-      if AArgs.Rule <> 'loop-control-flag' then
-        DefDisabled:= DefDisabled + ['loop-control-flag'];
+      if AArgs.Rule <> 'loop-control-flag' then DefDisabled:= DefDisabled + ['loop-control-flag'];
       { v0.80: mutable-global-variable OFF by default -- FP-sanity over src/ found
         68 findings across 27/103 files (mostly legitimate G-prefixed plugin
         singletons/caches) -- too common in this codebase to be ON. Opt in via
         "enabled": ["mutable-global-variable"] or --rule mutable-global-variable. }
-      if AArgs.Rule <> 'mutable-global-variable' then
-        DefDisabled:= DefDisabled + ['mutable-global-variable'];
+      if AArgs.Rule <> 'mutable-global-variable' then DefDisabled:= DefDisabled + ['mutable-global-variable'];
       { v0.81: default-encoding-io OFF by default -- FP-sanity over src/ found 65
         findings across 16/103 files, mostly TFile.ReadAllText on known-ASCII
         project/config files (dproj/json) -- a common, often-intentional pattern
         in this codebase. Opt in via "enabled": ["default-encoding-io"] or
         --rule default-encoding-io. }
-      if AArgs.Rule <> 'default-encoding-io' then
-        DefDisabled:= DefDisabled + ['default-encoding-io'];
+      if AArgs.Rule <> 'default-encoding-io' then DefDisabled:= DefDisabled + ['default-encoding-io'];
       { v0.83: split-variable OFF by default -- M2 two-live-range flow signal
         (a local reused for two unrelated purposes). Linear-routine-only, low-FP,
         but a refactoring hint rather than a bug. Opt in via "enabled":
         ["split-variable"] or --rule split-variable. }
-      if AArgs.Rule <> 'split-variable' then
-        DefDisabled:= DefDisabled + ['split-variable'];
+      if AArgs.Rule <> 'split-variable' then DefDisabled:= DefDisabled + ['split-variable'];
       { v0.83: separate-query-from-modifier OFF by default -- Command-Query Separation
         is inherently noisy (lazy-caching getters, fluent mutators). Conservative
         field-write predicate keeps FP low, but ships OFF. Opt in via "enabled":
         ["separate-query-from-modifier"] or --rule separate-query-from-modifier. }
-      if AArgs.Rule <> 'separate-query-from-modifier' then
-        DefDisabled:= DefDisabled + ['separate-query-from-modifier'];
+      if AArgs.Rule <> 'separate-query-from-modifier' then DefDisabled:= DefDisabled + ['separate-query-from-modifier'];
       if TFile.Exists(EffPath) then Findings:= Findings + Linter.LintFile(EffPath)
       else if TDirectory.Exists(EffPath) then Findings:= Findings + Linter.LintFolder(EffPath, True)
-      else
-      begin
-        Writeln('ERROR: path does not exist: ', EffPath);
-        Exit(2);
-      end;
+      else begin Writeln('ERROR: path does not exist: ', EffPath); Exit(2); end;
     finally
       Linter.Free;
-    end;
+    end; // try
     { v0.46: AST checks that need no DB -- single .pas file only. The plugin's
       lint provider runs `lint <buffer>` with no --rule, so all of these surface
       as live edit-time diagnostics. }
@@ -5397,12 +4712,15 @@ begin
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.48: routine size/complexity metrics (conservative defaults: params>7, locals>25, body>120 lines, nesting>5) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-parameters') or (AArgs.Rule = 'too-many-locals') or (AArgs.Rule = 'method-too-long') or (AArgs.Rule = 'deep-nesting') then
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(EffPath,
-            Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25),
-            Cfg.ThresholdFor('method-too-long', 120), Cfg.ThresholdFor('deep-nesting', 5)) do
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(
+          EffPath, Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25), Cfg.ThresholdFor('method-too-long', 120),
+          Cfg.ThresholdFor('deep-nesting', 5)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'float-equality-comparison') or (AArgs.Rule = 'freeandnil-on-interface') or (AArgs.Rule = 'win64-pointer-cast') or (AArgs.Rule = 'redundant-cast') or (AArgs.Rule = 'unsafe-typecast-without-is') or (AArgs.Rule = 'exhaustive-enum-case') or (AArgs.Rule = 'lossy-cast') or (AArgs.Rule = 'nativeint-truncation') or (AArgs.Rule = 'abstract-method-instantiation') or (AArgs.Rule = 'length-zero-compare') or (AArgs.Rule = 'interface-object-mixing') then
+      if (AArgs.Rule = '') or (AArgs.Rule = 'float-equality-comparison') or (AArgs.Rule = 'freeandnil-on-interface') or (AArgs.Rule = 'win64-pointer-cast')
+        or (AArgs.Rule = 'redundant-cast') or (AArgs.Rule = 'unsafe-typecast-without-is') or (AArgs.Rule = 'exhaustive-enum-case') or (AArgs.Rule = 'lossy-cast')
+        or (AArgs.Rule = 'nativeint-truncation') or (AArgs.Rule = 'abstract-method-instantiation') or (AArgs.Rule = 'length-zero-compare')
+        or (AArgs.Rule = 'interface-object-mixing') then
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.49: FireDAC Open/ExecSQL vs SQL-kind mismatch }
@@ -5418,7 +4736,8 @@ begin
       { v0.80: any unit-level writable var -- Fowler "Global Data" refactoring smell (#14) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'mutable-global-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(EffPath);
       { v0.83: value-returning function that also mutates a field -- Command-Query Separation (OFF) }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'separate-query-from-modifier') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(EffPath);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'separate-query-from-modifier') then Findings:= Findings
+        + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(EffPath);
       { v0.63: WinExec/ShellExecute/CreateProcess with a non-literal command -- injection risk }
       if (AArgs.Rule = '') or (AArgs.Rule = 'unsafe-shellexecute') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec(EffPath);
       { v0.63: concatenated path to a file API -- path traversal risk }
@@ -5436,19 +4755,23 @@ begin
       { v0.63: critical section acquired without a matching Leave/Release in finally }
       if (AArgs.Rule = '') or (AArgs.Rule = 'criticalsection-not-released') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(EffPath);
       { v0.63: routine with more than 5 Exit statements }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-exit-points') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(EffPath, Cfg.ThresholdFor('too-many-exit-points', 5));
+      if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-exit-points') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(
+        EffPath, Cfg.ThresholdFor('too-many-exit-points', 5));
       { v0.63: cyclomatic complexity over 15 }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'cyclomatic-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(EffPath, Cfg.ThresholdFor('cyclomatic-complexity', 15));
-      if (AArgs.Rule = '') or (AArgs.Rule = 'cognitive-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(EffPath, Cfg.ThresholdFor('cognitive-complexity', 25));
+      if (AArgs.Rule = '') or (AArgs.Rule = 'cyclomatic-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(
+        EffPath, Cfg.ThresholdFor('cyclomatic-complexity', 15));
+      if (AArgs.Rule = '') or (AArgs.Rule = 'cognitive-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(
+        EffPath, Cfg.ThresholdFor('cognitive-complexity', 25));
       { v0.63: virtual/dynamic method called from a constructor of its own class }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'virtual-method-in-constructor') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(EffPath);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'virtual-method-in-constructor') then Findings:= Findings
+        + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(EffPath);
       { M2: flow-sensitive checks (definite-assignment etc.); no store on the bare lint path }
       for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath) do
         if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.68: naming-convention prefix rules (config-driven, no store on bare lint path) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'type-name-prefix') or (AArgs.Rule = 'field-name-prefix') or (AArgs.Rule = 'param-name-prefix') or
-         (AArgs.Rule = 'method-pascalcase') or (AArgs.Rule = 'const-casing') or (AArgs.Rule = 'local-var-casing') or (AArgs.Rule = 'unit-name-matches-file') or
-         (AArgs.Rule = 'reserved-word-casing') or (AArgs.Rule = 'hungarian-or-short-identifier') then
+      (AArgs.Rule = 'method-pascalcase') or (AArgs.Rule = 'const-casing') or (AArgs.Rule = 'local-var-casing') or (AArgs.Rule = 'unit-name-matches-file') or
+      (AArgs.Rule = 'reserved-word-casing') or (AArgs.Rule = 'hungarian-or-short-identifier') then
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(EffPath, Cfg.Naming) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set)
@@ -5457,36 +4780,33 @@ begin
         v0.72: + destructor-without-override (#5) + case-with-too-few-branches +
         boolean-expression-complexity (#6, thresholds) + exception-constructed-but-not-raised
         + duplicate-exception-handler (#7) -- all from the same TDeadCodeChecker.Check }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'unused-parameter') or (AArgs.Rule = 'identical-then-else') or (AArgs.Rule = 'referenced-never-set') or (AArgs.Rule = 'redundant-parentheses') or (AArgs.Rule = 'commented-out-code') or (AArgs.Rule = 'function-result-ignored')
-        or (AArgs.Rule = 'destructor-without-override') or (AArgs.Rule = 'case-with-too-few-branches') or (AArgs.Rule = 'boolean-expression-complexity') or (AArgs.Rule = 'exception-constructed-but-not-raised') or (AArgs.Rule = 'duplicate-exception-handler')
+      if (AArgs.Rule = '') or (AArgs.Rule = 'unused-parameter') or (AArgs.Rule = 'identical-then-else') or (AArgs.Rule = 'referenced-never-set')
+        or (AArgs.Rule = 'redundant-parentheses') or (AArgs.Rule = 'commented-out-code') or (AArgs.Rule = 'function-result-ignored')
+        or (AArgs.Rule = 'destructor-without-override') or (AArgs.Rule = 'case-with-too-few-branches') or (AArgs.Rule = 'boolean-expression-complexity')
+          or (AArgs.Rule = 'exception-constructed-but-not-raised') or (AArgs.Rule = 'duplicate-exception-handler')
         or (AArgs.Rule = 'repeated-else-if-condition') or (AArgs.Rule = 'property-references-itself') or (AArgs.Rule = 'unit-too-large')
-        or (AArgs.Rule = 'weak-random-for-security') or (AArgs.Rule = 'create-inside-try')
-        or (AArgs.Rule = 'insecure-temp-file') or (AArgs.Rule = 'multiple-statements-per-line')
+        or (AArgs.Rule = 'weak-random-for-security') or (AArgs.Rule = 'create-inside-try') or (AArgs.Rule = 'insecure-temp-file') or (AArgs.Rule = 'multiple-statements-per-line')
         or (AArgs.Rule = 'magic-literal') or (AArgs.Rule = 'boolean-flag-parameter') or (AArgs.Rule = 'message-chain')
         or (AArgs.Rule = 'public-writable-field') or (AArgs.Rule = 'loop-control-flag') or (AArgs.Rule = 'default-encoding-io') then
-        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(EffPath,
-            Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4),
-            Cfg.ThresholdFor('unit-too-large', 2000), Cfg.ThresholdFor('message-chain', 4)) do
+        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
+          EffPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
+          Cfg.ThresholdFor('message-chain', 4)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.77: clone / duplicate-code detection (#6) -- within-file (single-file lint).
         lint-all uses CheckProject instead (LATER task) so within-file clones are
         not double-reported. }
       if (AArgs.Rule = '') or (AArgs.Rule = 'duplicate-code') then
-        for F in DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check(EffPath,
-            Cfg.ThresholdFor('duplicate-code', 90)) do
+        for F in DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check(EffPath, Cfg.ThresholdFor('duplicate-code', 90)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { Free cached tree after single-file lint }
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
-    end;
+    end; // if
   end; // if
-  Result:= FinalizeAndOutput(AArgs, Findings, DefDisabled,
-    procedure(ASurv: TArray<TLintFinding>)
-    var FF: TLintFinding;
-    begin
-      for FF in ASurv do
-        Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
-      Writeln(Format('%d finding(s)', [Length(ASurv)]));
-    end);
+  Result:= FinalizeAndOutput(
+    AArgs, Findings, DefDisabled,
+    procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,
+            FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('%d finding(s)', [Length(ASurv)])); end
+  );
 end; // function
 
 // v0.18: drag-lint context --task "verb qname" [--db <path>]
@@ -5501,16 +4821,8 @@ var
   IncSurface: Boolean       ;
   IncImpl   : Boolean       ;
 begin
-  if AArgs.Task = '' then
-  begin
-    Writeln('Usage: drag-lint context --task "verb qname" [--db PATH] ' + '[--format md|json|raw]');
-    Exit(2);
-  end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
-    Exit(2);
-  end;
+  if AArgs.Task = '' then begin Writeln('Usage: drag-lint context --task "verb qname" [--db PATH] ' + '[--format md|json|raw]'); Exit(2); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if not RoOk then Exit(1);
@@ -5520,11 +4832,7 @@ begin
   Bundle:= TContextBundler.Build(
     Store, AArgs.Verb, AArgs.BundleQName, AArgs.ContextLines, AArgs.MaxCallers, IncDocs, IncSurface, IncImpl, {AExcludeDfmFields=}
     not AArgs.FullSurface);
-  if Bundle.QName = '' then
-  begin
-    Writeln(Format('No symbol matched: %s', [AArgs.BundleQName]));
-    Exit(1);
-  end;
+  if Bundle.QName = '' then begin Writeln(Format('No symbol matched: %s', [AArgs.BundleQName])); Exit(1); end;
   if SameText(AArgs.Format, 'json') then Writeln(TContextBundler.RenderJson(Bundle))
   else if SameText(AArgs.Format, 'raw') then Writeln(TContextBundler.RenderRaw(Bundle))
   else Writeln(TContextBundler.RenderMarkdown(Bundle));
@@ -5552,11 +4860,7 @@ var
   TotalBaseline : Double                     ;
   Count         : Integer                    ;
 begin
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
-    Exit(2);
-  end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
 
   N:= AArgs.BenchN;
   if N <= 0 then N:= 20;
@@ -5566,11 +4870,7 @@ begin
 
   // Fetch documented symbols (clamped to N).
   Syms:= Store.ListDocumentedSymbols(N);
-  if Length(Syms) = 0 then
-  begin
-    Writeln('No documented symbols found in: ', AArgs.DbPath);
-    Exit(1);
-  end;
+  if Length(Syms) = 0 then begin Writeln('No documented symbols found in: ', AArgs.DbPath); Exit(1); end;
 
   FileCache:= TDictionary<string, string>.Create;
   TotalBundle  := 0;
@@ -5608,11 +4908,7 @@ begin
     FileCache.Free;
   end; // try
 
-  if Count = 0 then
-  begin
-    Writeln('No valid symbols with accessible source files.');
-    Exit   (1                                               );
-  end;
+  if Count = 0 then begin Writeln('No valid symbols with accessible source files.'); Exit (1 ); end;
 
   var AvgBundle  := TotalBundle   / Count;
   var AvgBaseline:= TotalBaseline / Count;
@@ -5635,18 +4931,10 @@ var
   Stats : TFbSnapshotStats  ;
   DbPath: string            ;
 begin
-  if AArgs.FbConnection = '' then
-  begin
-    Writeln(ErrOutput, 'fb-snapshot: --connection "Database=...;User=...;Password=...;DriverID=FB" required');
-    Exit(2);
-  end;
+  if AArgs.FbConnection = '' then begin Writeln(ErrOutput, 'fb-snapshot: --connection "Database=...;User=...;Password=...;DriverID=FB" required'); Exit(2); end;
   if Length(AArgs.DbPaths) > 0 then DbPath:= AArgs.DbPaths[0]
   else DbPath:= AArgs.DbPath;
-  if DbPath = '' then
-  begin
-    Writeln(ErrOutput, 'fb-snapshot: --db <sql.sqlite> required');
-    Exit(2);
-  end;
+  if DbPath = '' then begin Writeln(ErrOutput, 'fb-snapshot: --db <sql.sqlite> required'); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(DbPath);
   try
     Store.Migrate;
@@ -5657,11 +4945,7 @@ begin
           [Stats.Relations, Stats.Columns, Stats.FieldInfos, Stats.Datasets, Stats.EnumValues, Stats.SnapshotAt]));
       Result:= 0;
     except
-      on E: Exception do
-      begin
-        Writeln(ErrOutput, 'fb-snapshot FAILED: ', E.ClassName, ': ', E.Message);
-        Result:= 3;
-      end;
+      on E: Exception do begin Writeln(ErrOutput, 'fb-snapshot FAILED: ', E.ClassName, ': ', E.Message); Result:= 3; end;
     end;
   finally
     Store.Free;
@@ -5673,22 +4957,14 @@ function DoLinkOrm(const AArgs: TArgs): Integer;
 var
   Stats: TOrmLinkerStats;
 begin
-  if Length(AArgs.DbPaths) < 1 then
-  begin
-    Writeln(ErrOutput, 'link-orm: pass each project + sql DB as --db <path>');
-    Exit(2);
-  end;
+  if Length(AArgs.DbPaths) < 1 then begin Writeln(ErrOutput, 'link-orm: pass each project + sql DB as --db <path>'); Exit(2); end;
   try
     Stats:= TOrmLinker.Run(AArgs.DbPaths);
     Writeln(Format(
         'link-orm: %d class_to_table, %d iface_to_table, %d field_to_column (across %d DBs)', [Stats.ClassLinks, Stats.IfaceLinks, Stats.FieldLinks, Length(AArgs.DbPaths)]));
     Result:= 0;
   except
-    on E: Exception do
-    begin
-      Writeln(ErrOutput, 'link-orm FAILED: ', E.ClassName, ': ', E.Message);
-      Result:= 3;
-    end;
+    on E: Exception do begin Writeln(ErrOutput, 'link-orm FAILED: ', E.ClassName, ': ', E.Message); Result:= 3; end;
   end;
 end; // function
 
@@ -5751,21 +5027,12 @@ var
   begin
     if Length(AArgs.DbPaths) > 0 then DbList:= AArgs.DbPaths
     else if AArgs.DbPath <> '' then DbList:= TArray<string>.Create(AArgs.DbPath)
-    else
-    begin
-      Writeln(ErrOutput, 'uses-report: need at least one --db');
-      Result:= 2;
-      Exit;
-    end;
+    else begin Writeln(ErrOutput, 'uses-report: need at least one --db'); Result:= 2; Exit; end;
     SetLength(Stores, 0);
     for i:= 0 to High(DbList) do
     begin
       Path:= DbList[i];
-      if not TFile.Exists(Path) then
-      begin
-        Writeln(ErrOutput, 'uses-report: db not found, skipping: ', Path);
-        Continue;
-      end;
+      if not TFile.Exists(Path) then begin Writeln(ErrOutput, 'uses-report: db not found, skipping: ', Path); Continue; end;
       SetLength(Stores, Length(Stores) + 1);
       Stores[High(Stores)]:= TSQLiteSymbolStore.Create(Path);
       Stores[High(Stores)].Migrate;
@@ -5780,11 +5047,7 @@ var
     Base:= APath;
     while Length(Base) > 0 do
     begin
-      if CharInSet(Base[Length(Base)], ['\','/']) then
-      begin
-        Delete(Base, Length(Base), 1);
-        Break;
-      end;
+      if CharInSet(Base[Length(Base)], ['\','/']) then begin Delete(Base, Length(Base), 1); Break; end;
       Break;
     end;
     Result:= LowerCase(ExtractFileName(Base));
@@ -5861,11 +5124,7 @@ var
           while not QUses.Eof do
           begin
             LocalFileId:= QUses.FieldByName('file_id').AsLargeInt;
-            if not FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or LocalFileId, GlobalIdx) then
-            begin
-              QUses.Next;
-              Continue;
-            end;
+            if not FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or LocalFileId, GlobalIdx) then begin QUses.Next; Continue; end;
 
             Edge.UnitName    := QUses.FieldByName('unit_name'     ).AsString;
             Edge.UnitNameNorm:= QUses.FieldByName('unit_name_norm').AsString;
@@ -5957,11 +5216,7 @@ var
         { Skip external rows when not requested, but DO still mark visited
             so we don't repeat them later via a different chain. }
       end
-      else
-      begin
-        EmitCsvRow(SourceMeta.Stem, Item.UsedUnit, Item.Depth, Item.Section, Item.Via, Item.External);
-        Inc(ARowCount);
-      end;
+      else begin EmitCsvRow(SourceMeta.Stem, Item.UsedUnit, Item.Depth, Item.Section, Item.Via, Item.External); Inc(ARowCount); end;
 
       if Item.External then Continue;
       if Item.Depth >= MaxDepth then Continue;
@@ -5998,11 +5253,7 @@ var
 begin
   Result:= 0;
 
-  if AArgs.Output = '' then
-  begin
-    Writeln(ErrOutput, 'uses-report: --output <path.csv> is required');
-    Exit(2);
-  end;
+  if AArgs.Output = '' then begin Writeln(ErrOutput, 'uses-report: --output <path.csv> is required'); Exit(2); end;
 
   MaxDepth:= AArgs.Depth;
   if MaxDepth <= 0 then MaxDepth:= 50;
@@ -6015,11 +5266,7 @@ begin
   try
     OpenStores;
     if Result <> 0 then Exit;
-    if Length(Stores) = 0 then
-    begin
-      Writeln(ErrOutput, 'uses-report: no usable DB');
-      Exit(2);
-    end;
+    if Length(Stores) = 0 then begin Writeln(ErrOutput, 'uses-report: no usable DB'); Exit(2); end;
 
     LoadFilesAndEdges;
 
@@ -6067,20 +5314,12 @@ var
   Fmt     : string        ;
 begin
   Pos:= AArgs.Position;
-  if Pos = '' then
-  begin
-    Writeln('Usage: drag-lint typeat <file>:<line>:<col> [--db <path>] ' + '[--format text|json]');
-    Exit(2);
-  end;
+  if Pos = '' then begin Writeln('Usage: drag-lint typeat <file>:<line>:<col> [--db <path>] ' + '[--format text|json]'); Exit(2); end;
 
   // Parse last two colon segments as line:col.
   // e.g. "C:\foo\bar.pas:17:8" -> Parts=[..,"17","8"]
   Parts:= Pos.Split([':']);
-  if Length(Parts) < 3 then
-  begin
-    Writeln('ERROR: position must be <file>:<line>:<col>, got: ', Pos);
-    Exit(2);
-  end;
+  if Length(Parts) < 3 then begin Writeln('ERROR: position must be <file>:<line>:<col>, got: ', Pos); Exit(2); end;
   Col:= StrToIntDef(Parts[High(Parts)], 0);
   Line:= StrToIntDef(Parts[High(Parts) - 1], 0);
   // Everything before the last two segments is the file path.
@@ -6088,18 +5327,9 @@ begin
   var PartCount:= Length(Parts) - 2;
   FilePart:= string.Join(':', System.Copy(Parts, 0, PartCount));
 
-  if (Line <= 0) or (Col <= 0) then
-  begin
-    Writeln('ERROR: line and col must be positive integers');
-    Exit   (2                                              );
-  end;
+  if (Line <= 0) or (Col <= 0) then begin Writeln('ERROR: line and col must be positive integers'); Exit (2 ); end;
 
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Writeln('Run "drag-lint index <path>" first.');
-    Exit   (2                                    );
-  end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
@@ -6123,26 +5353,14 @@ var
   Fmt  : TDocStubFormat;
   Stub : string        ;
 begin
-  if AArgs.QName = '' then
-  begin
-    Writeln('Usage: drag-lint generate-docs --qname X [--format xmldoc|pasdoc] [--db PATH]');
-    Exit   (2                                                                              );
-  end;
-  if not FileExists(AArgs.DbPath) then
-  begin
-    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
-    Exit(2);
-  end;
+  if AArgs.QName = '' then begin Writeln('Usage: drag-lint generate-docs --qname X [--format xmldoc|pasdoc] [--db PATH]'); Exit (2 ); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
   if SameText(AArgs.Format, 'pasdoc') then Fmt:= dsfPasDoc
   else Fmt:= dsfXmlDoc;
   Stub:= TDocStubGenerator.Generate(Store, AArgs.QName, Fmt);
-  if Stub = '' then
-  begin
-    Writeln(Format('No stub generated for %s (symbol not found)', [AArgs.QName]));
-    Exit(1);
-  end;
+  if Stub = '' then begin Writeln(Format('No stub generated for %s (symbol not found)', [AArgs.QName])); Exit(1); end;
   Writeln(Stub);
   Result:= 0;
 end; // function
@@ -6153,43 +5371,30 @@ end; // function
 // 2 usage/db error. Read-only DB access (writes source files, not the index).
 function DoDocument(const AArgs: TArgs): Integer;
 var
-  Store: ISymbolStore;
-  Res  : DRagLint.Doc.Document.TDocumentResult;
-  Ok   : Boolean;
-  O    : TJSONObject;
-  Applied: Boolean;
+  Store  : ISymbolStore                         ;
+  Res    : DRagLint.Doc.Document.TDocumentResult;
+  Ok     : Boolean                              ;
+  O      : TJSONObject                          ;
+  Applied: Boolean                              ;
 begin
-  if AArgs.QName = '' then
-  begin
-    Writeln('Usage: drag-lint document --qname X [--apply|--json|--no-backup] [--db PATH]');
-    Exit(2);
-  end;
-  if not FileExists(AArgs.DbPath) then
-  begin
-    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
-    Exit(2);
-  end;
+  if AArgs.QName = '' then begin Writeln('Usage: drag-lint document --qname X [--apply|--json|--no-backup] [--db PATH]'); Exit (2 ); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
 
   Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName);
 
-  if Res.Action = DRagLint.Doc.Document.daNotFound then
-  begin
-    Writeln(Format('symbol not found: %s', [AArgs.QName]));
-    Exit(1);
-  end;
+  if Res.Action = DRagLint.Doc.Document.daNotFound then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
-  if Applied then
-    TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
+  if Applied then TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
 
   if AArgs.AsJson then
   begin
     O:= TJSONObject.Create;
     try
-      O.AddPair('qname', Res.QName);
-      O.AddPair('file', Res.FilePath);
+      O.AddPair('qname', Res.QName   );
+      O.AddPair('file' , Res.FilePath);
       O.AddPair('line', TJSONNumber.Create(Res.Line));
       // daNotFound already returned above (text + exit 1) before this --json
       // block, so it can never reach here; the else is a defensive fallback for
@@ -6198,29 +5403,22 @@ begin
         DRagLint.Doc.Document.daCreated  : O.AddPair('action', 'created'  );
         DRagLint.Doc.Document.daExtended : O.AddPair('action', 'extended' );
         DRagLint.Doc.Document.daUnchanged: O.AddPair('action', 'unchanged');
-      else                                 O.AddPair('action', 'unknown'  );
+        else O.AddPair('action', 'unknown' );
       end;
       O.AddPair('edits', TJSONNumber.Create(Length(Res.Edits)));
       O.AddPair('applied', TJSONBool.Create(Applied));
-      Writeln(O.ToJSON);
+      Writeln(O.ToJson);
     finally
       O.Free;
-    end;
+    end; // try
     Exit(0);
-  end;
+  end; // if
 
-  if Res.Action = DRagLint.Doc.Document.daUnchanged then
-    Writeln('doc: up to date (no change)')
-  else if not AArgs.Apply then
-  begin
-    Writeln(TTextEditApplier.RenderDryRun(Res.Edits));
-    Writeln(Format('doc: %d edit(s) -- pass --apply to write', [Length(Res.Edits)]));
-  end
-  else
-    Writeln(Format('doc: %s -- %d edit(s) applied%s',
-      [IfThen(Res.Action = DRagLint.Doc.Document.daCreated, 'created', 'extended'),
-       Length(Res.Edits),
-       IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+  if Res.Action = DRagLint.Doc.Document.daUnchanged then Writeln('doc: up to date (no change)')
+  else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Res.Edits)); Writeln(Format('doc: %d edit(s) -- pass --apply to write', [Length(Res.Edits)])); end
+  else Writeln(Format(
+      'doc: %s -- %d edit(s) applied%s',
+      [IfThen(Res.Action = DRagLint.Doc.Document.daCreated, 'created', 'extended'), Length(Res.Edits), IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
   Result:= 0;
 end; // function
 
@@ -6239,7 +5437,7 @@ begin
   if not RoOk then Exit(1);
   Edits:= TFindUnitRefactoring.Build(Store, AArgs.Name, AArgs.InFile, ResolvedUnit, Already);
   if Already then begin Writeln(Format('"%s" is already in the uses clause.', [ResolvedUnit])); Exit(0); end;
-  if ResolvedUnit = '' then begin Writeln(Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
+  if ResolvedUnit  = '' then begin Writeln(Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
   if Length(Edits) = 0 then begin Writeln('No edit computed.'); Exit(1); end;
   if AArgs.AsJson then
   begin
@@ -6254,16 +5452,11 @@ begin
         O.AddPair('text', E.Text);
         Arr.AddElement(O);
       end;
-      Writeln(Arr.ToJSON);
+      Writeln(Arr.ToJson);
     finally Arr.Free; end;
     Exit(0);
-  end;
-  if not AArgs.Apply then
-  begin
-    Writeln(TTextEditApplier.RenderDryRun(Edits));
-    Writeln(Format('Dry run: add unit "%s". Pass --apply to write.', [ResolvedUnit]));
-    Exit(0);
-  end;
+  end; // if
+  if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Edits)); Writeln(Format('Dry run: add unit "%s". Pass --apply to write.', [ResolvedUnit])); Exit(0); end;
   var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
   Writeln(Format('Applied: added "%s" (%d file).', [ResolvedUnit, Touched]));
   Result:= 0;
@@ -6276,8 +5469,8 @@ function DoSafeDelete(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore; Edits: TArray<TTextEdit>; Reason: string;
 begin
-  if AArgs.Name = '' then begin Writeln('ERROR: safe-delete needs --name <QualifiedName>'); Exit(2); end;
-  if AArgs.DbPath = '' then begin Writeln('ERROR: --db required'); Exit(2); end;
+  if AArgs.Name   = '' then begin Writeln('ERROR: safe-delete needs --name <QualifiedName>'); Exit(2); end;
+  if AArgs.DbPath = '' then begin Writeln('ERROR: --db required'                           ); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate;
   Edits:= TSafeDeleteRefactoring.Build(Store, AArgs.Name, Reason);
   if Reason <> '' then begin Writeln('REFUSED: ' + Reason); Exit(2); end;
@@ -6290,20 +5483,15 @@ begin
       begin
         var O: TJSONObject:= TJSONObject.Create;
         O.AddPair('file', E.FilePath);
-        O.AddPair('delete_from', TJSONNumber.Create(E.Line));
-        O.AddPair('delete_to', TJSONNumber.Create(E.EndLine));
+        O.AddPair('delete_from', TJSONNumber.Create(E.Line   ));
+        O.AddPair('delete_to'  , TJSONNumber.Create(E.EndLine));
         Arr.AddElement(O);
       end;
-      Writeln(Arr.ToJSON);
+      Writeln(Arr.ToJson);
     finally Arr.Free; end;
     Exit(0);
   end;
-  if not AArgs.Apply then
-  begin
-    Writeln(TTextEditApplier.RenderDryRun(Edits));
-    Writeln(Format('Dry run: delete "%s". Pass --apply to write.', [AArgs.Name]));
-    Exit(0);
-  end;
+  if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Edits)); Writeln(Format('Dry run: delete "%s". Pass --apply to write.', [AArgs.Name])); Exit(0); end;
   var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
   Writeln(Format('Deleted "%s" (%d file).', [AArgs.Name, Touched]));
   Result:= 0;
@@ -6326,7 +5514,7 @@ end; // function
 function DoExtractMethod(const AArgs: TArgs): Integer;
 var
   Edits : TArray<TTextEdit>;
-  Refuse: string;
+  Refuse: string           ;
 begin
   if (AArgs.InFile = '') or (AArgs.FromLine <= 0) or (AArgs.ToLine <= 0) or (AArgs.Name = '') then
   begin
@@ -6334,16 +5522,8 @@ begin
     Exit(2);
   end;
   Edits:= TExtractMethodRefactoring.Build(AArgs.InFile, AArgs.FromLine, AArgs.ToLine, AArgs.Name, Refuse);
-  if Refuse <> '' then
-  begin
-    Writeln(ErrOutput, 'REFUSED: ' + Refuse);
-    Exit(2);
-  end;
-  if Length(Edits) = 0 then
-  begin
-    Writeln(ErrOutput, 'No edit computed.');
-    Exit(1);
-  end;
+  if Refuse <> '' then begin Writeln(ErrOutput, 'REFUSED: ' + Refuse); Exit(2); end;
+  if Length(Edits) = 0 then begin Writeln(ErrOutput, 'No edit computed.'); Exit(1); end;
   if AArgs.AsJson then
   begin
     var Arr: TJSONArray:= TJSONArray.Create;
@@ -6352,17 +5532,17 @@ begin
       begin
         var O: TJSONObject:= TJSONObject.Create;
         O.AddPair('file', E.FilePath);
-        O.AddPair('line', TJSONNumber.Create(E.Line));
-        O.AddPair('col',  TJSONNumber.Create(E.Col));
+        O.AddPair('line'   , TJSONNumber.Create(E.Line   ));
+        O.AddPair('col'    , TJSONNumber.Create(E.Col    ));
         O.AddPair('endLine', TJSONNumber.Create(E.EndLine));
-        O.AddPair('endCol',  TJSONNumber.Create(E.EndCol));
+        O.AddPair('endCol' , TJSONNumber.Create(E.EndCol ));
         O.AddPair('text', E.Text);
         Arr.AddElement(O);
       end;
-      Writeln(Arr.ToJSON);
+      Writeln(Arr.ToJson);
     finally Arr.Free; end;
     Exit(0);
-  end;
+  end; // if
   if not AArgs.Apply then
   begin
     Writeln(TExtractMethodRefactoring.RenderDryRun(Edits));
@@ -6382,11 +5562,7 @@ var
   Store  : ISymbolStore   ;
   Symbols: TArray<TSymbol>;
 begin
-  if not FileExists(AArgs.DbPath) then
-  begin
-    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
-    Exit(2);
-  end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
   Symbols:= TDeadCodeFinder.Find(Store, AArgs.Kind, AArgs.IncludePrivate);
@@ -6426,14 +5602,10 @@ begin
   for var D in Dbs do
   begin
     if not TFile.Exists(D) then Continue;
-    if ProjectDb = '' then ProjectDb:= D
+    if ProjectDb  = '' then ProjectDb:= D
     else if LibDb = '' then LibDb:= D;
   end;
-  if ProjectDb = '' then
-  begin
-    Writeln('ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.');
-    Exit(2);
-  end;
+  if ProjectDb = '' then begin Writeln('ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
 
   { Open project store }
   Store:= TSQLiteSymbolStore.Create(ProjectDb);
@@ -6445,8 +5617,7 @@ begin
   for Fid in Store.GetAllFileIds do
   begin
     PasPath:= Store.GetFilePath(Fid);
-    if SameText(ExtractFileExt(PasPath), '.pas') and TFile.Exists(PasPath) then
-      FilePaths:= FilePaths + [PasPath];
+    if SameText(ExtractFileExt(PasPath), '.pas') and TFile.Exists(PasPath) then FilePaths:= FilePaths + [PasPath];
   end;
   Writeln(Format('lint-all: scanning %d .pas file(s)', [Length(FilePaths)]));
 
@@ -6465,8 +5636,7 @@ begin
           Pct:= ((FileIdx + 1) * 100) div Max(1, Length(FilePaths));
           if (FileIdx = 0) or (FileIdx = Length(FilePaths) - 1) or (Pct <> LastPct) then
           begin
-            Writeln(ErrOutput, Format('lint-all: [%d/%d] %d%% %s',
-              [FileIdx + 1, Length(FilePaths), Pct, ExtractFileName(PasPath)]));
+            Writeln(ErrOutput, Format('lint-all: [%d/%d] %d%% %s', [FileIdx + 1, Length(FilePaths), Pct, ExtractFileName(PasPath)]));
             Flush(ErrOutput);
             LastPct:= Pct;
           end;
@@ -6483,32 +5653,29 @@ begin
           LintF:= KeptSE;
         end;
         Findings:= Findings + LintF;
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals    (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors    (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd(PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally  (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit   (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals        (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors        (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd  (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally      (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit       (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally(PasPath);
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(PasPath) do
-          Findings:= Findings + [F];
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(PasPath,
-            Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25),
-            Cfg.ThresholdFor('method-too-long', 120), Cfg.ThresholdFor('deep-nesting', 5)) do
-          Findings:= Findings + [F];
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(PasPath) do Findings:= Findings + [F];
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(
+          PasPath, Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25), Cfg.ThresholdFor('method-too-long', 120),
+          Cfg.ThresholdFor('deep-nesting', 5)) do Findings:= Findings + [F];
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(PasPath, Store, Store.FindFileIdByPath(PasPath)) do { v11 (M1): exact type resolution }
           Findings:= Findings + [F];
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch(PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree    (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread        (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars  (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch       (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree          (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree             (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread                 (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars           (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars        (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(PasPath); { v0.83: CQS (OFF) }
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec       (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal   (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce  (PasPath);
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall(PasPath) do
-          Findings:= Findings + [F];
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec                (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal            (PasPath);
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce           (PasPath);
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall(PasPath) do Findings:= Findings + [F];
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath);
@@ -6518,53 +5685,39 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath)); { v12 (M1): cross-unit }
         Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath)); { M2: flow checks, store-exact managed types }
         { v0.68: naming-convention prefix rules (store-optional; enables exception-ancestry sub-check) }
-        for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath)) do
-          Findings:= Findings + [F];
+        for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set);
           v0.70-72: + redundant-parens/commented-out-code/function-result-ignored + #5/#6/#7 rules }
-        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(PasPath,
-            Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4),
-            Cfg.ThresholdFor('unit-too-large', 2000), Cfg.ThresholdFor('message-chain', 4)) do
-          Findings:= Findings + [F];
+        for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
+          PasPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
+          Cfg.ThresholdFor('message-chain', 4)) do Findings:= Findings + [F];
       except
-        on E: Exception do
-          Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)',
-            [ExtractFileName(PasPath), E.ClassName, E.Message]));
-      end;
+        on E: Exception do Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)', [ExtractFileName(PasPath), E.ClassName, E.Message]));
+      end; // try
       { Free cached tree for this file before moving to the next }
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
-    end;
+    end; // for
   finally
     Linter.Free;
-  end;
+  end; // try
 
   { Project-wide rules }
-  Findings:= Findings +
-    DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, '');
+  Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, '');
   { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; runs only here. }
-  Findings:= Findings +
-    DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, '');
+  Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, '');
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
-  Findings:= Findings +
-    DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths,
-      Cfg.ThresholdFor('duplicate-code', 90));
+  Findings:= Findings + DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths, Cfg.ThresholdFor('duplicate-code', 90));
   { Interface reference cycles (needs all file paths) }
-  Findings:= Findings +
-    DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(FilePaths);
+  Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(FilePaths);
   { Architecture layering (only if config present) }
   LayersCfg:= AArgs.LayersPath;
   if (LayersCfg = '') and FileExists('drag-lint-layers.json') then LayersCfg:= 'drag-lint-layers.json';
-  if LayersCfg <> '' then
-    Findings:= Findings +
-      DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, LayersCfg);
+  if LayersCfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, LayersCfg);
   { DPR/dproj membership cross-check (unit-not-in-dpr) }
-  if AArgs.ProjectPath <> '' then
-    Findings:= Findings +
-      DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath);
+  if AArgs.ProjectPath <> '' then Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath);
   { Unit membership against library DB (unit-not-in-project) }
-  Findings:= Findings +
-    DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership(Store, LibDb, AArgs.ProjectPath);
+  Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership(Store, LibDb, AArgs.ProjectPath);
 
   { Resolve output path: --output, or lint-report-YYYYMMDD.txt beside the DB }
   OutPath:= AArgs.Output;
@@ -6587,31 +5740,15 @@ begin
     False alone does not suppress CLI output, so they must be listed here for the
     ShouldKeep filter to drop them by default. split-variable (flow) and
     separate-query-from-modifier (AST) are emitted above -- same reasoning. }
-  Result:= FinalizeAndOutput(AArgs, Findings, ['function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in', 'feature-envy', 'instability', 'interface-object-mixing', 'split-variable', 'separate-query-from-modifier'],
-    procedure(ASurv: TArray<TLintFinding>)
-    var
-      FF: TLintFinding;
-      EC, WC: Integer;
-      OL: TStringBuilder;
-    begin
-      EC:= 0; WC:= 0;
-      for FF in ASurv do
-        if SameText(FF.Severity, 'error') then Inc(EC) else Inc(WC);
-      OL:= TStringBuilder.Create;
-      try
-        for FF in ASurv do
-          OL.AppendLine(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
-        OL.AppendLine(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) scanned',
-          [Length(ASurv), EC, WC, Length(FilePaths)]));
-        TFile.WriteAllText(OutPath, OL.ToString, TEncoding.UTF8);
-      finally
-        OL.Free;
-      end;
-      for FF in ASurv do
-        Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
-      Writeln(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) -- report: %s',
-        [Length(ASurv), EC, WC, Length(FilePaths), OutPath]));
-    end);
+  Result:= FinalizeAndOutput(
+    AArgs, Findings, [
+      'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter',
+      'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in', 'feature-envy',
+      'instability', 'interface-object-mixing', 'split-variable', 'separate-query-from-modifier'],
+    procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; EC, WC: Integer; OL: TStringBuilder; begin EC:= 0; WC:= 0; for FF in ASurv do if SameText(FF.Severity,
+        'error') then Inc(EC) else Inc(WC); OL:= TStringBuilder.Create; try for FF in ASurv do OL.AppendLine(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine,
+              FF.StartCol, FF.Severity, FF.RuleId, FF.Message])); OL.AppendLine(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) scanned', [Length(ASurv), EC, WC, Length(FilePaths)])); TFile.WriteAllText(OutPath, OL.ToString, TEncoding.UTF8); finally OL.Free; end; for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) -- report: %s', [Length(ASurv), EC, WC, Length(FilePaths), OutPath])); end
+  );
 end; // function
 
 // v0.48: drag-lint lint-project --db <index.sqlite> [--rule <id>] [--json]
@@ -6619,15 +5756,11 @@ end; // function
 // the whole symbol/refs graph. Exit 1 if any findings, 0 if none, 2 on usage error.
 function DoLintProject(const AArgs: TArgs): Integer;
 var
-  Store      : ISymbolStore        ;
+  Store      : ISymbolStore         ;
   Findings   : TArray<TLintFinding> ;
   DefDisabled: TArray<string>       ;
 begin
-  if not FileExists(AArgs.DbPath) then
-  begin
-    Writeln(Format('Database not found: %s (pass --db <index.sqlite>)', [AArgs.DbPath]));
-    Exit(2);
-  end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s (pass --db <index.sqlite>)', [AArgs.DbPath])); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
   { v0.80 review fix: repeated-type-switch is OFF by default (medium name-based FP --
@@ -6635,14 +5768,13 @@ begin
     so the DefDisabled + ShouldKeep filter actually applies to lint-project output
     (previously this command wrote Findings straight to stdout, unfiltered). }
   DefDisabled:= nil;
-  if AArgs.Rule <> 'repeated-type-switch' then
-    DefDisabled:= DefDisabled + ['repeated-type-switch'];
+  if AArgs.Rule <> 'repeated-type-switch' then DefDisabled:= DefDisabled + ['repeated-type-switch'];
   Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, AArgs.Rule);
   { v0.51: interface reference cycles -- needs the AST of all project files (parsed here) }
   if (AArgs.Rule = '') or (AArgs.Rule = 'interface-reference-cycle') then
   begin
     var Paths: TArray<string>:= nil;
-    var Fid2 : Int64;
+    var Fid2 : Int64               ;
     for Fid2 in Store.GetAllFileIds do Paths:= Paths + [Store.GetFilePath(Fid2)];
     Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(Paths);
   end;
@@ -6658,17 +5790,13 @@ begin
   begin
     var LibDbPath2: string:= '';
     if Length(AArgs.DbPaths) > 1 then LibDbPath2:= AArgs.DbPaths[1];
-    Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership(
-      Store, LibDbPath2, AArgs.ProjectPath);
+    Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership( Store, LibDbPath2, AArgs.ProjectPath);
   end;
-  Result:= FinalizeAndOutput(AArgs, Findings, DefDisabled,
-    procedure(ASurv: TArray<TLintFinding>)
-    var FF: TLintFinding;
-    begin
-      for FF in ASurv do
-        Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
-      Writeln(Format('%d finding(s)', [Length(ASurv)]));
-    end);
+  Result:= FinalizeAndOutput(
+    AArgs, Findings, DefDisabled,
+    procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,
+            FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('%d finding(s)', [Length(ASurv)])); end
+  );
 end; // function
 
 // v0.24: count distinct file paths across edit set.
@@ -6703,29 +5831,19 @@ begin
   begin
     if SameText(AArgs.Kind, 'param') then
     begin
-      if (AArgs.InFile = '') or (AArgs.RefLine <= 0) or (AArgs.RefCol <= 0)
-          or (AArgs.RenameTo = '') then
+      if (AArgs.InFile = '') or (AArgs.RefLine <= 0) or (AArgs.RefCol <= 0) or (AArgs.RenameTo = '') then
       begin
         Writeln('ERROR: rename --kind param needs --file --line --col --to');
-        Exit(2);
+        Exit   (2                                                          );
       end;
-      if TRenameRefactoring.IsReservedWord(AArgs.RenameTo) then
-      begin
-        Writeln(Format('ERROR: "%s" is a reserved word', [AArgs.RenameTo]));
-        Exit(2);
-      end;
-      Edits:= TRenameRefactoring.BuildLocal(
-        AArgs.InFile, AArgs.RefLine, AArgs.RefCol, AArgs.RenameTo);
+      if TRenameRefactoring.IsReservedWord(AArgs.RenameTo) then begin Writeln(Format('ERROR: "%s" is a reserved word', [AArgs.RenameTo])); Exit(2); end;
+      Edits:= TRenameRefactoring.BuildLocal( AArgs.InFile, AArgs.RefLine, AArgs.RefCol, AArgs.RenameTo);
     end
     else if SameText(AArgs.Kind, 'symbol') then
     begin
       var QN: string:= AArgs.QName;
       if QN = '' then QN:= AArgs.Name;
-      if QN = '' then
-      begin
-        Writeln('ERROR: rename --kind symbol needs --name <QualifiedName> --to <New>');
-        Exit(2);
-      end;
+      if QN = '' then begin Writeln('ERROR: rename --kind symbol needs --name <QualifiedName> --to <New>'); Exit (2 ); end;
       if AArgs.RenameTo = '' then
       begin Writeln('ERROR: --to required'); Exit(2); end;
       if AArgs.DbPath = '' then
@@ -6736,12 +5854,8 @@ begin
       if Reason <> '' then
       begin Writeln('ERROR: cannot rename -- ' + Reason); Exit(2); end;
       Edits:= TRenameRefactoring.Build(KStore, QN, AArgs.RenameTo);
-    end
-    else
-    begin
-      Writeln('ERROR: --kind must be symbol or param');
-      Exit(2);
-    end;
+    end // if
+    else begin Writeln('ERROR: --kind must be symbol or param'); Exit (2 ); end;
 
     if Length(Edits) = 0 then
     begin Writeln('No edits computed.'); Exit(1); end;
@@ -6755,29 +5869,24 @@ begin
           var O: TJSONObject:= TJSONObject.Create;
           O.AddPair('file', Ed.FilePath);
           O.AddPair('line', TJSONNumber.Create(Ed.Line));
-          O.AddPair('col',  TJSONNumber.Create(Ed.Col));
-          O.AddPair('old',  Ed.OldName);
-          O.AddPair('new',  Ed.NewName);
+          O.AddPair('col' , TJSONNumber.Create(Ed.Col ));
+          O.AddPair('old', Ed.OldName);
+          O.AddPair('new', Ed.NewName);
           Arr.AddElement(O);
         end;
-        Writeln(Arr.ToJSON);
+        Writeln(Arr.ToJson);
       finally
         Arr.Free;
       end;
       Exit(0);
-    end;
+    end; // if
 
-    if not AArgs.Apply then
-    begin
-      Writeln(TRenameRefactoring.RenderDryRun(Edits));
-      Writeln(Format('Dry run: %d edit(s). Pass --apply to write.', [Length(Edits)]));
-      Exit(0);
-    end;
+    if not AArgs.Apply then begin Writeln(TRenameRefactoring.RenderDryRun(Edits)); Writeln(Format('Dry run: %d edit(s). Pass --apply to write.', [Length(Edits)])); Exit(0); end;
 
     var Touched: Integer:= TRenameRefactoring.Apply(Edits, not AArgs.NoBackup);
     Writeln(Format('Applied: %d edit(s), %d file(s).', [Length(Edits), Touched]));
     Exit(0);
-  end;
+  end; // if
   { ----- legacy --qname path below (unchanged) ----- }
 
   if (AArgs.QName = '') or (AArgs.RenameTo = '') then
@@ -6785,19 +5894,11 @@ begin
     Writeln('Usage: drag-lint rename --qname Foo.TBar.Baz --to NewName ' + '[--db PATH] [--dry-run] [--no-backup]');
     Exit(2);
   end;
-  if not FileExists(AArgs.DbPath) then
-  begin
-    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
-    Exit(1);
-  end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(1); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
   Edits:= TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo);
-  if Length(Edits) = 0 then
-  begin
-    Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName]));
-    Exit(1);
-  end;
+  if Length(Edits) = 0 then begin Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName])); Exit(1); end;
 
   if AArgs.DryRun then
   begin
@@ -6842,11 +5943,7 @@ begin
         as "[WEAKPACKAGEUNIT]" (over-stripping would also corrupt the dedup key). }
       Rec.Message:= TRegEx.Replace(Rec.Message, '\s*\[[^\]]*\.(?:dproj|dpk|dpr|proj)\]\s*$', '', [roIgnoreCase]);
       Key:= LowerCase(P) + '|' + IntToStr(Rec.LineNo) + '|' + Rec.Code + '|' + Rec.Message;
-      if not Seen.ContainsKey(Key) then
-      begin
-        Seen.Add(Key, True);
-        Acc.Add(Rec);
-      end;
+      if not Seen.ContainsKey(Key) then begin Seen.Add(Key, True); Acc.Add(Rec); end;
     end;
     Result:= Acc.ToArray;
   finally
@@ -6870,11 +5967,7 @@ var
 begin
   Target:= AArgs.Target;
   if Target = '' then Target:= AArgs.QName; // fallback: --qname used as target
-  if Target = '' then
-  begin
-    Writeln('Usage: drag-lint compile-check <target.dproj or target.pas> ' + '[--db PATH] [--format json|text]');
-    Exit(2);
-  end;
+  if Target = '' then begin Writeln('Usage: drag-lint compile-check <target.dproj or target.pas> ' + '[--db PATH] [--format json|text]'); Exit(2); end;
 
   Writeln('Compiling: ', Target);
   Res:= TCompileChecker.Run(Target);
@@ -6889,12 +5982,7 @@ begin
     else if SameText(F.Severity, 'Hint') then Inc(HintCount);
   end;
 
-  if TFile.Exists(AArgs.DbPath) then
-  begin
-    Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-    Store.Migrate;
-    TCompileChecker.InsertFindings(Store, Res.Findings);
-  end;
+  if TFile.Exists(AArgs.DbPath) then begin Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate; TCompileChecker.InsertFindings(Store, Res.Findings); end;
 
   Fmt:= LowerCase(AArgs.Format);
 
@@ -7161,12 +6249,7 @@ begin
     for i:= Entries.Count - 1 downto 0 do
     begin
       E:= Entries[i];
-      if (not TFile.Exists(E.RealPath)) or (not TFile.Exists(E.BufPath)) then
-      begin
-        Writeln('ghost-check: skip (missing): ', E.RealPath);
-        Entries.Delete(i);
-        Continue;
-      end;
+      if (not TFile.Exists(E.RealPath)) or (not TFile.Exists(E.BufPath)) then begin Writeln('ghost-check: skip (missing): ', E.RealPath); Entries.Delete(i); Continue; end;
       E.OrigBytes:= TFile.ReadAllBytes    (E.RealPath);
       E.OrigMtime:= TFile.GetLastWriteTime(E.RealPath);
       E.HaveFT:= ReadFileWriteTime(E.RealPath, E.OrigFT);
@@ -7257,11 +6340,7 @@ begin
   if SameText(ExtractFileExt(Root), '.dproj') then Root:= ExtractFilePath(Root);
   DragDir:= TPath.Combine(Root, '_D-RAG');
   Recovered:= 0;
-  if not TDirectory.Exists(DragDir) then
-  begin
-    Writeln('ghost-recover: nothing pending.');
-    Exit   (0                                );
-  end;
+  if not TDirectory.Exists(DragDir) then begin Writeln('ghost-recover: nothing pending.'); Exit (0 ); end;
   try
     Journals:= TDirectory.GetFiles(DragDir, '*.ghost-journal');
   except
@@ -7372,13 +6451,7 @@ begin
       if Usable then Inc(Score, 10000);
       if not AlreadyUsed then Inc(Score, 1000);
       if not IsLib       then Inc(Score, 100 );
-      if Score > BestScore then
-      begin
-        BestScore:= Score;
-        Result.Found   := True;
-        Result.UnitName:= UnitName;
-        Result.Usable  := Usable;
-      end;
+      if Score > BestScore then begin BestScore:= Score; Result.Found := True; Result.UnitName:= UnitName; Result.Usable := Usable; end;
     end; // for
   finally
     UsedUnits.Free;
@@ -7531,11 +6604,7 @@ begin
 
   { open the index only if --resolve-uses asked AND the db exists }
   HasStore:= AArgs.ResolveUsesFlag and TFile.Exists(AArgs.DbPath);
-  if HasStore then
-  begin
-    Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-    Store.Migrate;
-  end;
+  if HasStore then begin Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate; end;
 
   ErrCount:= 0; WarnCount:= 0;
   Sb:= TStringBuilder.Create;
@@ -7565,11 +6634,7 @@ begin
         begin
           Ident:= MID.Groups[1].Value;
           Sug:= SuggestUnitForSymbol(Store, Ident, AArgs.Target);
-          if Sug.Found and Sug.Usable then
-          begin
-            AddUnit:= Sug.UnitName;
-            Note:= Format(' -- add unit %s to the uses clause', [Sug.UnitName]);
-          end;
+          if Sug.Found and Sug.Usable then begin AddUnit:= Sug.UnitName; Note:= Format(' -- add unit %s to the uses clause', [Sug.UnitName]); end;
         end;
       end;
 
@@ -7690,18 +6755,14 @@ var
 var
   UU   : TArray<TUnitUse>;
   Uo   : TUnitUse        ;
-  FId  : Int64           ;
+  Fid  : Int64           ;
   UFrom: string          ;
   UTo  : string          ;
   Key  : string          ;
   K    : string          ;
   L    : TList<string>   ;
 begin
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Exit(2);
-  end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
 
@@ -7716,20 +6777,16 @@ begin
   Sccs:= TList<TArray<string>>.Create;
   try
     { build the adjacency from every indexed file's uses clauses }
-    for FId in Store.GetAllFileIds do
+    for Fid in Store.GetAllFileIds do
     begin
-      FilePath:= Store.GetFilePath(FId);
+      FilePath:= Store.GetFilePath(Fid);
       if not SameText(ExtractFileExt(FilePath), '.pas') then Continue;
       UFrom:= UnitNameOfFile(FilePath);
       if UFrom = '' then Continue;
       UnitFile.AddOrSetValue(UFrom, FilePath);
-      UnitFid .AddOrSetValue(UFrom, FId     );
-      UU:= Store.GetUnitUsesForFile(FId);
-      if not Adj.TryGetValue(UFrom, L) then
-      begin
-        L:= TList<string>.Create;
-        Adj.AddOrSetValue(UFrom, L);
-      end;
+      UnitFid .AddOrSetValue(UFrom, Fid     );
+      UU:= Store.GetUnitUsesForFile(Fid);
+      if not Adj.TryGetValue(UFrom, L) then begin L:= TList<string>.Create; Adj.AddOrSetValue(UFrom, L); end;
       for Uo in UU do
       begin
         UTo:= LowerCase(Uo.UnitName);
@@ -7767,19 +6824,10 @@ begin
 
         Writeln(Format('## Cycle %d: %s', [i + 1, string.Join(' <-> ', Comp)]));
         Writeln('');
-        if not HasIntf then
-        begin
-          Writeln('Status: **implementation-only** (legal in Delphi, low impact). ' + 'Skip unless it hurts build times.');
-          Writeln('');
-          Continue;
-        end;
+        if not HasIntf then begin Writeln('Status: **implementation-only** (legal in Delphi, low impact). ' + 'Skip unless it hurts build times.'); Writeln(''); Continue; end;
 
         Writeln('Files:');
-        for var A in Comp do
-        begin
-          var P: string:= ''; UnitFile.TryGetValue(A, P);
-          Writeln(Format('- `%s` -> `%s`', [A, P]));
-        end;
+        for var A in Comp do begin var P: string:= ''; UnitFile.TryGetValue(A, P); Writeln(Format('- `%s` -> `%s`', [A, P])); end;
         Writeln('');
 
         { detect a layering inversion edge (COMMON depending on CLIENT/SERVER) }
@@ -7791,9 +6839,9 @@ begin
           for var B in Comp do
             if (A <> B) and NbrL.Contains(B) then
             begin
-              var pa: string:= ''; var pb: string:= '';
-              UnitFile.TryGetValue(A, pa); UnitFile.TryGetValue(B, pb);
-              if (LayerOf(pa) = 'COMMON') and ((LayerOf(pb) = 'CLIENT') or (LayerOf(pb) = 'SERVER')) then
+              var PA: string:= ''; var pb: string:= '';
+              UnitFile.TryGetValue(A, PA); UnitFile.TryGetValue(B, pb);
+              if (LayerOf(PA) = 'COMMON') and ((LayerOf(pb) = 'CLIENT') or (LayerOf(pb) = 'SERVER')) then
               begin InvFrom:= A; InvTo:= B; end;
             end;
         end;
@@ -7809,13 +6857,13 @@ begin
             var ImplL: Integer:= MaxInt                           ;
             if TFile.Exists(APath) then
             begin
-              var Ls:= TStringList.Create;
+              var LS:= TStringList.Create;
               try
-                Ls.LoadFromFile(APath);
-                for var z:= 0 to Ls.Count - 1 do
-                  if SameText(Trim(Ls[z]), 'implementation') then
+                LS.LoadFromFile(APath);
+                for var z:= 0 to LS.Count - 1 do
+                  if SameText(Trim(LS[z]), 'implementation') then
                   begin ImplL:= z + 1; Break; end;
-              finally Ls.Free; end;
+              finally LS.Free; end;
             end;
             var Seen:= TDictionary<string, Boolean>.Create;
             var AnyFound:= False;
@@ -7838,7 +6886,7 @@ begin
               end; // for
               if not AnyFound then Writeln(Format(
                   '- `%s` interface uses `%s` but the index could not ' + 'resolve the symbol (likely a `set` type). **Open `%s` and find '
-                      + 'what its interface uses from `%s` by hand.**', [A, B, ExtractFileName(APath), B]));
+                    + 'what its interface uses from `%s` by hand.**', [A, B, ExtractFileName(APath), B]));
             finally Seen.Free; end; // try
           end; // for
         Writeln('');
@@ -7959,13 +7007,13 @@ begin
                 var ImplL: Integer:= MaxInt;
                 if TFile.Exists(APath) then
                 begin
-                  var Ls:= TStringList.Create;
+                  var LS:= TStringList.Create;
                   try
-                    Ls.LoadFromFile(APath);
-                    for var kk:= 0 to Ls.Count - 1 do
-                      if SameText(Trim(Ls[kk]), 'implementation') then
+                    LS.LoadFromFile(APath);
+                    for var kk:= 0 to LS.Count - 1 do
+                      if SameText(Trim(LS[kk]), 'implementation') then
                       begin ImplL:= kk + 1; Break; end;
-                  finally Ls.Free; end;
+                  finally LS.Free; end;
                 end;
 
                 var Seen:= TDictionary<string, Boolean>.Create;
@@ -7978,11 +7026,7 @@ begin
                     for var Sym in Store.FindSymbolsByExactName(R.NameText) do
                       if SameText(UnitNameOfFile(Store.GetFilePath(Sym.FileId)), B) then
                       begin
-                        if not HdrShown then
-                        begin
-                          Writeln(Format('      * %s''s INTERFACE needs %s via:', [A, B]));
-                          HdrShown:= True;
-                        end;
+                        if not HdrShown then begin Writeln(Format('      * %s''s INTERFACE needs %s via:', [A, B])); HdrShown:= True; end;
                         Writeln(Format('          line %d: %s  [%s]  -> move/extract this', [R.StartLine, R.NameText, Sym.Kind.ToText]));
                         Seen.AddOrSetValue(LowerCase(R.NameText), True);
                         Break;
@@ -8053,11 +7097,7 @@ var
     if NameCache.TryGetValue(AName, Result) then Exit;
     Us:= TList<string>.Create;
     try
-      for Sm in Store.FindSymbolsByExactName(AName) do
-      begin
-        St:= UnitStemOf(Store.GetFilePath(Sm.FileId));
-        if (St <> '') and not Us.Contains(St) then Us.Add(St);
-      end;
+      for Sm in Store.FindSymbolsByExactName(AName) do begin St:= UnitStemOf(Store.GetFilePath(Sm.FileId)); if (St <> '') and not Us.Contains(St) then Us.Add(St); end;
       Result:= Us.ToArray;
     finally
       Us.Free;
@@ -8066,16 +7106,8 @@ var
   end;
 
 begin
-  if AArgs.Target = '' then
-  begin
-    Writeln('Usage: drag-lint uses-audit <unit.pas> --db <sqlite> [--format json|text]');
-    Exit   (2                                                                          );
-  end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Exit(2);
-  end;
+  if AArgs.Target = '' then begin Writeln('Usage: drag-lint uses-audit <unit.pas> --db <sqlite> [--format json|text]'); Exit (2 ); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
 
@@ -8087,18 +7119,10 @@ begin
     { stem -> file_id for every indexed unit. Also lets us resolve the target by
       unit name, tolerant of the stored-path separator quirks that defeat a
       direct path lookup. }
-    for var Fid2 in Store.GetAllFileIds do
-    begin
-      U:= UnitStemOf(Store.GetFilePath(Fid2));
-      if U <> '' then IndexedUnits.AddOrSetValue(U, Fid2);
-    end;
+    for var Fid2 in Store.GetAllFileIds do begin U:= UnitStemOf(Store.GetFilePath(Fid2)); if U <> '' then IndexedUnits.AddOrSetValue(U, Fid2); end;
 
     ThisStem:= UnitStemOf(AArgs.Target);
-    if not IndexedUnits.TryGetValue(ThisStem, FileId) then
-    begin
-      Writeln('Not indexed (re-run "drag-lint index"): ', AArgs.Target);
-      Exit(2);
-    end;
+    if not IndexedUnits.TryGetValue(ThisStem, FileId) then begin Writeln('Not indexed (re-run "drag-lint index"): ', AArgs.Target); Exit(2); end;
 
     { which section references each indexed unit }
     ImplLine:= MaxInt;
@@ -8110,11 +7134,7 @@ begin
       try
         Lines.LoadFromFile(SrcPath);
         for i:= 0 to Lines.Count - 1 do
-          if SameText(Trim(Lines[i]), 'implementation') then
-          begin
-            ImplLine:= i + 1;
-            Break;
-          end;
+          if SameText(Trim(Lines[i]), 'implementation') then begin ImplLine:= i + 1; Break; end;
       finally
         Lines.Free;
       end;
@@ -8144,16 +7164,8 @@ begin
         if SameText(uStem, ThisStem) then Continue;
 
         var Verdict: string:= '';
-        if (not RefIntf.ContainsKey(uStem)) and (not RefImpl.ContainsKey(uStem)) then
-        begin
-          Verdict:= 'unused';
-          Inc(nUnused);
-        end
-        else if (Uo.Section = uusInterface) and (not RefIntf.ContainsKey(uStem)) then
-        begin
-          Verdict:= 'move-to-implementation';
-          Inc(nMove);
-        end;
+        if (not RefIntf.ContainsKey(uStem)) and (not RefImpl.ContainsKey(uStem)) then begin Verdict:= 'unused'; Inc(nUnused); end
+        else if (Uo.Section = uusInterface) and (not RefIntf.ContainsKey(uStem)) then begin Verdict:= 'move-to-implementation'; Inc(nMove); end;
         if Verdict = '' then Continue;
 
         if SameText(AArgs.Format, 'json') then
@@ -8310,11 +7322,7 @@ var
     if NameCache.TryGetValue(AName, Result) then Exit;
     Us:= TList<string>.Create;
     try
-      for Sm in Store.FindSymbolsByExactName(AName) do
-      begin
-        St:= UnitStemOf(Store.GetFilePath(Sm.FileId));
-        if (St <> '') and not Us.Contains(St) then Us.Add(St);
-      end;
+      for Sm in Store.FindSymbolsByExactName(AName) do begin St:= UnitStemOf(Store.GetFilePath(Sm.FileId)); if (St <> '') and not Us.Contains(St) then Us.Add(St); end;
       Result:= Us.ToArray;
     finally Us.Free; end;
     NameCache.AddOrSetValue(AName, Result);
@@ -8322,11 +7330,11 @@ var
 
   function HasInitSection(const AStem: string): Boolean;
   var
-    FId: Int64; Sym: TSymbol; Syms: TArray<TSymbol>;
+    Fid: Int64; Sym: TSymbol; Syms: TArray<TSymbol>;
   begin
     Result:= True;
-    if not IndexedUnits.TryGetValue(AStem, FId) then Exit;
-    Syms:= Store.FindSymbolsByFile(Store.GetFilePath(FId));
+    if not IndexedUnits.TryGetValue(AStem, Fid) then Exit;
+    Syms:= Store.FindSymbolsByFile(Store.GetFilePath(Fid));
     if Length(Syms) = 0 then Exit;
     Result:= False;
     for Sym in Syms do
@@ -8334,7 +7342,7 @@ var
   end;
 
 var
-  FId        : Int64             ;
+  Fid        : Int64             ;
   Path       : string            ;
   ThisStem   : string            ;
   SrcPath    : string            ;
@@ -8349,11 +7357,7 @@ var
   Uo         : TUnitUse          ;
   HeaderShown: Boolean           ;
 begin
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Exit(2);
-  end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   RootFilter:= LowerCase(StringReplace(AArgs.InFile, '/', '\', [rfReplaceAll]));
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
@@ -8364,19 +7368,15 @@ begin
   RefImpl:= TDictionary<string, Boolean>.Create;
   Lines:= TStringList.Create;
   try
-    for FId in Store.GetAllFileIds do
-    begin
-      U:= UnitStemOf(Store.GetFilePath(FId));
-      if U <> '' then IndexedUnits.AddOrSetValue(U, FId);
-    end;
+    for Fid in Store.GetAllFileIds do begin U:= UnitStemOf(Store.GetFilePath(Fid)); if U <> '' then IndexedUnits.AddOrSetValue(U, Fid); end;
 
     TotalMove:= 0; TotalUnused:= 0; UnitsWithChanges:= 0;
     Writeln('Project uses sweep (DRY-RUN, index proposal -- apply per-unit to verify):');
     Writeln(''                                                                         );
 
-    for FId in Store.GetAllFileIds do
+    for Fid in Store.GetAllFileIds do
     begin
-      Path:= StringReplace(Store.GetFilePath(FId), '/', '\', [rfReplaceAll]);
+      Path:= StringReplace(Store.GetFilePath(Fid), '/', '\', [rfReplaceAll]);
       if not SameText(ExtractFileExt(Path), '.pas') then Continue;
       if (RootFilter <> '') and (Pos(RootFilter, LowerCase(Path)) = 0) then Continue;
       ThisStem:= UnitStemOf(Path);
@@ -8390,7 +7390,7 @@ begin
       end;
 
       RefIntf.Clear; RefImpl.Clear;
-      Refs:= Store.GetReferencesFromFile(FId);
+      Refs:= Store.GetReferencesFromFile(Fid);
       for R in Refs do
         for U in UnitsDefining(R.NameText) do
         begin
@@ -8400,7 +7400,7 @@ begin
         end;
 
       HeaderShown:= False;
-      UU:= Store.GetUnitUsesForFile(FId);
+      UU:= Store.GetUnitUsesForFile(Fid);
       for Uo in UU do
       begin
         uStem:= LowerCase(Uo.UnitName);
@@ -8417,12 +7417,7 @@ begin
         end;
         if Verdict = '' then Continue;
 
-        if not HeaderShown then
-        begin
-          Writeln(Format('%s  (%s)', [ExtractFileName(Path), Path]));
-          HeaderShown:= True;
-          Inc(UnitsWithChanges);
-        end;
+        if not HeaderShown then begin Writeln(Format('%s  (%s)', [ExtractFileName(Path), Path])); HeaderShown:= True; Inc(UnitsWithChanges); end;
         Writeln(Format('    line %4d: %s', [Uo.StartLine, Verdict]));
       end; // for
     end; // for
@@ -8484,11 +7479,7 @@ var
     if NameCache.TryGetValue(AName, Result) then Exit;
     Us:= TList<string>.Create;
     try
-      for Sm in Store.FindSymbolsByExactName(AName) do
-      begin
-        St:= UnitStemOf(Store.GetFilePath(Sm.FileId));
-        if (St <> '') and not Us.Contains(St) then Us.Add(St);
-      end;
+      for Sm in Store.FindSymbolsByExactName(AName) do begin St:= UnitStemOf(Store.GetFilePath(Sm.FileId)); if (St <> '') and not Us.Contains(St) then Us.Add(St); end;
       Result:= Us.ToArray;
     finally Us.Free; end;
     NameCache.AddOrSetValue(AName, Result);
@@ -8498,11 +7489,11 @@ var
     cannot tell, assume YES (never auto-remove a possible side-effect unit). }
   function HasInitSection(const AStem: string): Boolean;
   var
-    FId: Int64; Sym: TSymbol; Syms: TArray<TSymbol>;
+    Fid: Int64; Sym: TSymbol; Syms: TArray<TSymbol>;
   begin
     Result:= True;
-    if not IndexedUnits.TryGetValue(AStem, FId) then Exit;
-    Syms:= Store.FindSymbolsByFile(Store.GetFilePath(FId));
+    if not IndexedUnits.TryGetValue(AStem, Fid) then Exit;
+    Syms:= Store.FindSymbolsByFile(Store.GetFilePath(Fid));
     if Length(Syms) = 0 then Exit; { unknown -> be safe }
     Result:= False;
     for Sym in Syms do
@@ -8706,11 +7697,7 @@ begin
     Writeln('   or: drag-lint uses-fix --project <dproj> --db <sqlite> [--in <dir>] [--remove-unused]   (sweep report)');
     Exit   (2                                                                                                          );
   end;
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Exit(2);
-  end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Proj:= AArgs.ProjectPath;
   Plat:= AArgs.CheckPlatform;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
@@ -8723,27 +7710,15 @@ begin
   Orig:= TStringList.Create;
   Work:= TStringList.Create;
   try
-    for var Fid2 in Store.GetAllFileIds do
-    begin
-      U:= UnitStemOf(Store.GetFilePath(Fid2));
-      if U <> '' then IndexedUnits.AddOrSetValue(U, Fid2);
-    end;
+    for var Fid2 in Store.GetAllFileIds do begin U:= UnitStemOf(Store.GetFilePath(Fid2)); if U <> '' then IndexedUnits.AddOrSetValue(U, Fid2); end;
     ThisStem:= UnitStemOf(AArgs.Target);
-    if not IndexedUnits.TryGetValue(ThisStem, FileId) then
-    begin
-      Writeln('Not indexed (re-run "drag-lint index"): ', AArgs.Target);
-      Exit(2);
-    end;
+    if not IndexedUnits.TryGetValue(ThisStem, FileId) then begin Writeln('Not indexed (re-run "drag-lint index"): ', AArgs.Target); Exit(2); end;
     { normalise separators: stored paths can be mixed ('C:/x\y.pas'), which
       breaks ExtractFileName -> wrong shadow filename -> the verify would compile
       the REAL file instead of the edit (a false pass). }
     SrcPath:= StringReplace(Store.GetFilePath(FileId), '/', '\', [rfReplaceAll]);
     if not TFile.Exists(SrcPath) then SrcPath:= AArgs.Target;
-    if not TFile.Exists(SrcPath) then
-    begin
-      Writeln('Source file not found on disk: ', SrcPath);
-      Exit(2);
-    end;
+    if not TFile.Exists(SrcPath) then begin Writeln('Source file not found on disk: ', SrcPath); Exit(2); end;
     Orig.LoadFromFile(SrcPath);
     Work.Assign      (Orig   );
 
@@ -8783,11 +7758,7 @@ begin
           Inc(nMove);
           Writeln(Format('  MOVED  %s  interface -> implementation (line %d)', [Uo.UnitName, Uo.StartLine]));
         end
-        else
-        begin
-          Inc(nSkip);
-          Writeln(Format('  skip   %s  (move did not verify / not a clean entry)', [Uo.UnitName]));
-        end;
+        else begin Inc(nSkip); Writeln(Format('  skip   %s  (move did not verify / not a clean entry)', [Uo.UnitName])); end;
       end
       { REMOVE: never referenced, only with --remove-unused, and only if it has
         no init/final section (side-effect units stay) }
@@ -8798,24 +7769,12 @@ begin
           Inc(nSkip);
           Writeln(Format('  skip   %s  (unreferenced but has init/final -- ' + 'possible side-effect unit, NOT removed)', [Uo.UnitName]));
         end
-        else if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'remove') then
-        begin
-          Inc(nRemove);
-          Writeln(Format('  REMOVE %s  commented out (line %d)', [Uo.UnitName, Uo.StartLine]));
-        end
-        else
-        begin
-          Inc(nSkip);
-          Writeln(Format('  skip   %s  (remove did not verify / not a clean entry)', [Uo.UnitName]));
-        end;
+        else if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'remove') then begin Inc(nRemove); Writeln(Format('  REMOVE %s  commented out (line %d)', [Uo.UnitName, Uo.StartLine])); end
+        else begin Inc(nSkip); Writeln(Format('  skip   %s  (remove did not verify / not a clean entry)', [Uo.UnitName])); end;
       end; // if
     end; // for
 
-    if (nMove + nRemove) = 0 then
-    begin
-      Writeln('  Nothing to change.');
-      Exit   (0                     );
-    end;
+    if (nMove + nRemove) = 0 then begin Writeln('  Nothing to change.'); Exit (0 ); end;
 
     if AArgs.Apply then
     begin
@@ -8835,11 +7794,7 @@ begin
       Writeln('   dependency, masking a real error). You MUST do a full project'  );
       Writeln('   build to confirm; revert from .bak if it fails.'                );
     end // if
-    else
-    begin
-      PrintDiff;
-      Writeln(Format('-- DRY-RUN: %d move(s), %d remove(s) (best-effort verify -- ' + 'a full project build is required to confirm).', [nMove, nRemove]));
-    end;
+    else begin PrintDiff; Writeln(Format('-- DRY-RUN: %d move(s), %d remove(s) (best-effort verify -- ' + 'a full project build is required to confirm).', [nMove, nRemove])); end;
     Result:= 0;
   finally
     RefIntf.Free; RefImpl.Free; IndexedUnits.Free; NameCache.Free;
@@ -8856,26 +7811,14 @@ var
   Framework: TTestFramework;
   Stub     : string        ;
 begin
-  if AArgs.QName = '' then
-  begin
-    Writeln('Usage: drag-lint generate-test --qname X [--framework dunitx|dunit] [--db PATH]');
-    Exit   (2                                                                                );
-  end;
-  if not FileExists(AArgs.DbPath) then
-  begin
-    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
-    Exit(2);
-  end;
+  if AArgs.QName = '' then begin Writeln('Usage: drag-lint generate-test --qname X [--framework dunitx|dunit] [--db PATH]'); Exit (2 ); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
   if SameText(AArgs.TestFramework, 'dunit') then Framework:= tfDUnit
   else Framework:= tfDUnitX;
   Stub:= TTestStubGenerator.Generate(Store, AArgs.QName, Framework);
-  if Stub = '' then
-  begin
-    Writeln(Format('No stub generated for %s', [AArgs.QName]));
-    Exit(1);
-  end;
+  if Stub = '' then begin Writeln(Format('No stub generated for %s', [AArgs.QName])); Exit(1); end;
   Writeln(Stub);
   Result:= 0;
 end; // function
@@ -8889,40 +7832,25 @@ var
   Store   : ISymbolStore        ;
   Findings: TArray<TLintFinding>;
 begin
-  if AArgs.Target = '' then
-  begin
-    Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--format text|json]');
-    Exit   (2                                                                   );
-  end;
-  if not TFile.Exists(AArgs.Target) then
-  begin
-    Writeln('ERROR: file not found: ', AArgs.Target);
-    Exit(2);
-  end;
-  if TFile.Exists(AArgs.DbPath) then
-  begin
-    Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-    Store.Migrate;
-  end
+  if AArgs.Target = '' then begin Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--format text|json]'); Exit (2 ); end;
+  if not TFile.Exists(AArgs.Target) then begin Writeln('ERROR: file not found: ', AArgs.Target); Exit(2); end;
+  if TFile.Exists(AArgs.DbPath) then begin Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate; end
   else Store:= nil;
   Findings:= TAstChecker.Check(Store, AArgs.Target);
   { v11 (M1): type-aware rules with exact resolution when a store is present
     (store-bearing path per the M1 plan); heuristic fallback when --db is absent. }
   var TcFid: Int64:= 0;
   if Store <> nil then TcFid:= Store.FindFileIdByPath(AArgs.Target);
-  Findings:= Findings + TAstChecker.CheckTypeAware(AArgs.Target, Store, TcFid);
+  Findings:= Findings + TAstChecker.CheckTypeAware           (AArgs.Target, Store, TcFid);
   Findings:= Findings + TAstChecker.CheckVirtualInConstructor(AArgs.Target, Store, TcFid); { v12 (M1) }
   Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(AArgs.Target, Store, TcFid); { M2: flow checks }
   DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
 
-  Result:= FinalizeAndOutput(AArgs, Findings, nil,
-    procedure(ASurv: TArray<TLintFinding>)
-    var FF: TLintFinding;
-    begin
-      for FF in ASurv do
-        Writeln(Format('%s(%d,%d): %s %s: %s', [AArgs.Target, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
-      Writeln(Format('AST findings: %d', [Length(ASurv)]));
-    end);
+  Result:= FinalizeAndOutput(
+    AArgs, Findings, nil,
+    procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s(%d,%d): %s %s: %s', [AArgs.Target, FF.StartLine, FF.StartCol,
+            FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('AST findings: %d', [Length(ASurv)])); end
+  );
 end; // function
 
 /// <summary>v0.82: drag-lint dump-refs &lt;file&gt; --db PATH -- diagnostic dump of
@@ -8940,26 +7868,14 @@ var
   R     : TReference        ;
   EnclNm: string            ;
 begin
-  if AArgs.Target = '' then
-  begin
-    Writeln('Usage: drag-lint dump-refs <file> --db PATH');
-    Exit   (2                                           );
-  end;
-  if not FileExists(AArgs.DbPath) then
-  begin
-    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
-    Exit(2);
-  end;
+  if AArgs.Target = '' then begin Writeln('Usage: drag-lint dump-refs <file> --db PATH'); Exit (2 ); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if not RoOk then Exit(1);
   FileId:= Store.FindFileIdByPath(TPath.GetFullPath(AArgs.Target));
   if FileId <= 0 then FileId:= Store.FindFileIdByPath(AArgs.Target);
-  if FileId <= 0 then
-  begin
-    Writeln(Format('File not indexed: %s', [AArgs.Target]));
-    Exit(2);
-  end;
+  if FileId <= 0 then begin Writeln(Format('File not indexed: %s', [AArgs.Target])); Exit(2); end;
   Refs:= Store.GetReferencesFromFile(FileId);
   for R in Refs do
   begin
@@ -8980,22 +7896,10 @@ var
 begin
   Target:= AArgs.Target;
   if Target = '' then Target:= AArgs.QName; // fallback: reuse qname slot
-  if Target = '' then
-  begin
-    Writeln('Usage: drag-lint format <file> [--yadf-path PATH]');
-    Exit   (2                                                  );
-  end;
-  if not FileExists(Target) then
-  begin
-    Writeln(Format('File not found: %s', [Target]));
-    Exit(2);
-  end;
+  if Target = '' then begin Writeln('Usage: drag-lint format <file> [--yadf-path PATH]'); Exit (2 ); end;
+  if not FileExists(Target) then begin Writeln(Format('File not found: %s', [Target])); Exit(2); end;
   Res:= TYadfFormatter.Format(Target, AArgs.YadfPath);
-  if not Res.Success then
-  begin
-    Writeln(Format('YADF format failed (exit %d):'#13#10'%s', [Res.ExitCode, Res.StdoutText]));
-    Exit(1);
-  end;
+  if not Res.Success then begin Writeln(Format('YADF format failed (exit %d):'#13#10'%s', [Res.ExitCode, Res.StdoutText])); Exit(1); end;
   Writeln(Format('Formatted: %s', [Target]));
   Result:= 0;
 end; // function
@@ -9032,21 +7936,12 @@ var
     SI.hStdInput := INVALID_HANDLE_VALUE;
     FillChar(PI, SizeOf(PI), 0);
     StrPCopy(CmdLineBuf, ACmd);
-    if not CreateProcessW(nil, CmdLineBuf, nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
-    begin
-      Writeln('ERROR: failed to spawn: ', ACmd);
-      Result:= -1;
-      Exit;
-    end;
+    if not CreateProcessW(nil, CmdLineBuf, nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then begin Writeln('ERROR: failed to spawn: ', ACmd); Result:= -1; Exit; end;
     // Drain stdout/stderr while child runs
     CloseHandle(WritePipe);
     WritePipe:= INVALID_HANDLE_VALUE;
     repeat
-      if ReadFile(ReadPipe, Buffer, SizeOf(Buffer) - 1, BytesRead, nil) then
-      begin
-        Buffer[BytesRead]:= #0;
-        Write(AnsiString(Buffer));
-      end
+      if ReadFile(ReadPipe, Buffer, SizeOf(Buffer) - 1, BytesRead, nil) then begin Buffer[BytesRead]:= #0; Write(AnsiString(Buffer)); end
       else Break;
     until BytesRead = 0;
     WaitForSingleObject(PI.hProcess, INFINITE);
@@ -9087,26 +7982,14 @@ begin
     // Try current dir and parents
     CfgPath:= TWorkspaceConfigIO.FindWorkspaceRoot(GetCurrentDir);
     if CfgPath <> '' then CfgPath:= TPath.Combine(CfgPath, WORKSPACE_FILENAME)
-    else
-    begin
-      Writeln('ERROR: .drag-lint-workspace.json not found. ' + 'Use --config <path> or run from a workspace root.');
-      Exit(2);
-    end;
+    else begin Writeln('ERROR: .drag-lint-workspace.json not found. ' + 'Use --config <path> or run from a workspace root.'); Exit(2); end;
   end;
-  if not TFile.Exists(CfgPath) then
-  begin
-    Writeln('ERROR: workspace config not found: ', CfgPath);
-    Exit(2);
-  end;
+  if not TFile.Exists(CfgPath) then begin Writeln('ERROR: workspace config not found: ', CfgPath); Exit(2); end;
 
   // --- workspace add ---
   if AArgs.SubCommand = 'add' then
   begin
-    if AArgs.Target = '' then
-    begin
-      Writeln('Usage: drag-lint workspace add <projfile> [--config PATH]');
-      Exit   (2                                                          );
-    end;
+    if AArgs.Target = '' then begin Writeln('Usage: drag-lint workspace add <projfile> [--config PATH]'); Exit (2 ); end;
     Cfg:= TWorkspaceConfigIO.LoadFromFile(CfgPath);
     NewProj:= Default(TWorkspaceProject);
     NewProj.Path:= AArgs.Target;
@@ -9195,16 +8078,8 @@ begin
     Writeln(CmdLine);
     CreatePipes;
     var EC:= SpawnSync(CmdLine);
-    if ReadPipe <> INVALID_HANDLE_VALUE then
-    begin
-      CloseHandle(ReadPipe);
-      ReadPipe:= INVALID_HANDLE_VALUE;
-    end;
-    if WritePipe <> INVALID_HANDLE_VALUE then
-    begin
-      CloseHandle(WritePipe);
-      WritePipe:= INVALID_HANDLE_VALUE;
-    end;
+    if ReadPipe <> INVALID_HANDLE_VALUE then begin CloseHandle(ReadPipe); ReadPipe:= INVALID_HANDLE_VALUE; end;
+    if WritePipe <> INVALID_HANDLE_VALUE then begin CloseHandle(WritePipe); WritePipe:= INVALID_HANDLE_VALUE; end;
     if EC = 0 then Inc(SuccessCount)
     else Writeln(Format('WARNING: index returned exit code %d for: %s', [EC, P.Path]));
   end; // for
@@ -9225,30 +8100,14 @@ var
 begin
   if Length(AArgs.DbPaths) > 0 then DbPath:= AArgs.DbPaths[0]
   else DbPath:= AArgs.DbPath;
-  if DbPath = '' then
-  begin
-    Writeln(ErrOutput, 'forms-csv: need --db <index.sqlite>');
-    Exit(2);
-  end;
-  if not TFile.Exists(DbPath) then
-  begin
-    Writeln(ErrOutput, 'forms-csv: db not found: ', DbPath);
-    Exit(2);
-  end;
+  if DbPath = '' then begin Writeln(ErrOutput, 'forms-csv: need --db <index.sqlite>'); Exit(2); end;
+  if not TFile.Exists(DbPath) then begin Writeln(ErrOutput, 'forms-csv: db not found: ', DbPath); Exit(2); end;
   try
     Csv:= DRagLint.FormsMap.GenerateFormsCsv(DbPath, AArgs.ProjectPath, AArgs.RootForm);
   except
-    on E: Exception do
-    begin
-      Writeln(ErrOutput, 'forms-csv: ', E.Message);
-      Exit(1);
-    end;
+    on E: Exception do begin Writeln(ErrOutput, 'forms-csv: ', E.Message); Exit(1); end;
   end;
-  if AArgs.Output <> '' then
-  begin
-    TFile.WriteAllText(AArgs.Output, Csv, TEncoding.ANSI);
-    Writeln('forms-csv: wrote ', AArgs.Output);
-  end
+  if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Csv, TEncoding.ANSI); Writeln('forms-csv: wrote ', AArgs.Output); end
   else Write(Csv);
   Result:= 0;
 end; // function
@@ -9291,8 +8150,7 @@ end; // procedure
 /// <returns>'Win32', 'Win64', or '' when no .dproj or Platform element is found.</returns>
 /// <remarks>Performs a top-directory-first search, then recursive if none found
 /// at the top level.  Not thread-safe; call from the main thread only.</remarks>
-function DetectPlatformFromDproj(const AManifest: TIndexManifest;
-  const ACwd: string): string;
+function DetectPlatformFromDproj(const AManifest: TIndexManifest; const ACwd: string): string;
 var
   Sections  : TArray<TIndexSection>;
   Sec       : TIndexSection        ;
@@ -9304,11 +8162,11 @@ var
   DprojFile : string               ;
   DprojFiles: TArray<string>       ;
   Xml       : string               ;
-  P1, P2    : Integer              ;
+  P1        : Integer              ;
+  P2        : Integer              ;
 begin
   Result:= '';
-  CwdNorm:= IncludeTrailingPathDelimiter(
-              TPath.GetFullPath(ACwd)).ToLower;
+  CwdNorm:= IncludeTrailingPathDelimiter( TPath.GetFullPath(ACwd)).ToLower;
   BestLen:= -1;
   BestInc:= '';
 
@@ -9319,13 +8177,8 @@ begin
     if SameText(Sec.Source, 'registry-libraries') then Continue;
     for IncPath in Sec.Include do
     begin
-      IncNorm:= IncludeTrailingPathDelimiter(
-                  TPath.GetFullPath(IncPath)).ToLower;
-      if CwdNorm.StartsWith(IncNorm) and (Length(IncNorm) > BestLen) then
-      begin
-        BestLen:= Length(IncNorm);
-        BestInc:= IncPath;
-      end;
+      IncNorm:= IncludeTrailingPathDelimiter( TPath.GetFullPath(IncPath)).ToLower;
+      if CwdNorm.StartsWith(IncNorm) and (Length(IncNorm) > BestLen) then begin BestLen:= Length(IncNorm); BestInc:= IncPath; end;
     end;
   end;
 
@@ -9333,11 +8186,8 @@ begin
 
   // Find first .dproj under that include path (top dir first, then recursive).
   try
-    DprojFiles:= TDirectory.GetFiles(BestInc, '*.dproj',
-                   TSearchOption.soTopDirectoryOnly);
-    if Length(DprojFiles) = 0 then
-      DprojFiles:= TDirectory.GetFiles(BestInc, '*.dproj',
-                     TSearchOption.soAllDirectories);
+    DprojFiles:= TDirectory.GetFiles(BestInc, '*.dproj', TSearchOption.soTopDirectoryOnly);
+    if Length(DprojFiles) = 0 then DprojFiles:= TDirectory.GetFiles(BestInc, '*.dproj', TSearchOption.soAllDirectories);
     if Length(DprojFiles) = 0 then Exit;
     DprojFile:= DprojFiles[0];
   except
@@ -9354,8 +8204,7 @@ begin
   // Find <Platform Condition=...>Win64</Platform> ? search for the opening tag
   // directly so we are not confused by attribute quote style.
   P1:= Pos('<Platform Condition=', Xml);
-  if P1 = 0 then
-    P1:= Pos('<platform condition=', Xml.ToLower);
+  if P1 = 0 then P1:= Pos('<platform condition=', Xml.ToLower);
   while P1 > 0 do
   begin
     P1:= Pos('>', Xml, P1);
@@ -9388,11 +8237,7 @@ var
   Resolved : TArray<string>                            ;
 begin
   // User supplied explicit --db: honour without modification.
-  if Length(AArgs.DbPaths) > 0 then
-  begin
-    Result:= AArgs.DbPaths;
-    Exit;
-  end;
+  if Length(AArgs.DbPaths) > 0 then begin Result:= AArgs.DbPaths; Exit; end;
 
   // Try manifest-driven selection.
   try
@@ -9400,13 +8245,8 @@ begin
     Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
 
     // Pick platform: CLI --platform > .dproj detection > manifest defaultPlatform.
-    if AArgs.CheckPlatform <> '' then
-      Platform:= AArgs.CheckPlatform
-    else
-    begin
-      Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
-      if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
-    end;
+    if AArgs.CheckPlatform <> '' then Platform:= AArgs.CheckPlatform
+    else begin Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir); if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform; end;
 
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
@@ -9476,13 +8316,8 @@ begin
       else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
 
       // Pick platform: CLI --platform > .dproj detection > manifest defaultPlatform.
-      if AArgs.CheckPlatform <> '' then
-        Platform:= AArgs.CheckPlatform
-      else
-      begin
-        Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
-        if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
-      end;
+      if AArgs.CheckPlatform <> '' then Platform:= AArgs.CheckPlatform
+      else begin Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir); if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform; end;
 
       Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
       try
@@ -9510,10 +8345,7 @@ begin
       J.Free;
     end;
   end
-  else
-  begin
-    for P in Paths do Writeln(P);
-  end;
+  else begin for P in Paths do Writeln(P); end;
 
   Result:= 0;
 end; // function
@@ -9532,23 +8364,11 @@ var
   P         : string                                    ;
 begin
   ConfigPath:= AArgs.WorkspaceConfig;
-  if ConfigPath = '' then
-  begin
-    Writeln(ErrOutput, 'selftest dbselect requires --config <path>');
-    Exit(2);
-  end;
-  if not TFile.Exists(ConfigPath) then
-  begin
-    Writeln(ErrOutput, 'selftest dbselect: config not found: ', ConfigPath);
-    Exit(2);
-  end;
+  if ConfigPath = '' then begin Writeln(ErrOutput, 'selftest dbselect requires --config <path>'); Exit(2); end;
+  if not TFile.Exists(ConfigPath) then begin Writeln(ErrOutput, 'selftest dbselect: config not found: ', ConfigPath); Exit(2); end;
 
   Platform:= AArgs.CheckPlatform;
-  if Platform = '' then
-  begin
-    Writeln(ErrOutput, 'selftest dbselect requires --platform <p>');
-    Exit(2);
-  end;
+  if Platform = '' then begin Writeln(ErrOutput, 'selftest dbselect requires --platform <p>'); Exit(2); end;
 
   var Content:= TFile.ReadAllText(ConfigPath);
   var RootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
@@ -9600,16 +8420,8 @@ begin
   if skMaxJobs                 in LocalKeys then Merged.Settings.MaxJobs                := Local.Settings.MaxJobs;
   if skCurrentProjectsIndexing in LocalKeys then Merged.Settings.CurrentProjectsIndexing:= Local.Settings.CurrentProjectsIndexing;
 
-  if Merged.Settings.CurrentProjectsIndexing = piPerGroup then
-  begin
-    Writeln('MERGE-OK');
-    Result:= 0;
-  end
-  else
-  begin
-    Writeln('MERGE-FAIL: expected piPerGroup but got ', Ord(Merged.Settings.CurrentProjectsIndexing));
-    Result:= 1;
-  end;
+  if Merged.Settings.CurrentProjectsIndexing = piPerGroup then begin Writeln('MERGE-OK'); Result:= 0; end
+  else begin Writeln('MERGE-FAIL: expected piPerGroup but got ', Ord(Merged.Settings.CurrentProjectsIndexing)); Result:= 1; end;
 end; // function
 
 // selftest glob: runs all TGlob.Matches / MatchesAny cases.
@@ -9618,11 +8430,7 @@ function DoSelfTestGlob: Integer;
 
   procedure Expect(const ADesc: string; AActual, AExpected: Boolean);
   begin
-    if AActual <> AExpected then
-    begin
-      Writeln('GLOB-FAIL: ', ADesc);
-      Halt(1);
-    end;
+    if AActual <> AExpected then begin Writeln('GLOB-FAIL: ', ADesc); Halt(1); end;
   end;
 
 begin
@@ -9654,20 +8462,12 @@ var
 
   procedure Assert(const ADesc: string; AActual, AExpected: Boolean);
   begin
-    if AActual <> AExpected then
-    begin
-      Writeln('IGNORE-FAIL: ', ADesc, ' (expected=', BoolToStr(AExpected, True), ' got=', BoolToStr(AActual, True), ')');
-      Halt(1);
-    end;
+    if AActual <> AExpected then begin Writeln('IGNORE-FAIL: ', ADesc, ' (expected=', BoolToStr(AExpected, True), ' got=', BoolToStr(AActual, True), ')'); Halt(1); end;
   end;
 
 begin
   ProjDir:= AArgs.Path;
-  if ProjDir = '' then
-  begin
-    Writeln('IGNORE-FAIL: --dir <proj> required');
-    Halt   (1                                   );
-  end;
+  if ProjDir = '' then begin Writeln('IGNORE-FAIL: --dir <proj> required'); Halt (1 ); end;
   SubDir:= TPath.Combine(ProjDir, 'sub');
 
   Stack:= TIgnoreStack.Create;
@@ -9706,11 +8506,7 @@ var
   F           : string                                    ;
   W           : string                                    ;
 begin
-  if AArgs.ProjectPath = '' then
-  begin
-    Writeln('ERROR: selftest closure requires --project <dpr/.dproj>');
-    Exit   (2                                                        );
-  end;
+  if AArgs.ProjectPath = '' then begin Writeln('ERROR: selftest closure requires --project <dpr/.dproj>'); Exit (2 ); end;
   ProjResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
   try
     LibRoots:= ProjResolver.ResolveLibraryPaths;
@@ -9738,18 +8534,10 @@ var
   Id     : Int64        ;
   Path   : string       ;
 begin
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Exit(2);
-  end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   FileIds:= Store.GetAllFileIds;
-  for Id in FileIds do
-  begin
-    Path:= Store.GetFilePath(Id);
-    if Path <> '' then Writeln(Path);
-  end;
+  for Id in FileIds do begin Path:= Store.GetFilePath(Id); if Path <> '' then Writeln(Path); end;
   Result:= 0;
 end; // function
 
@@ -9761,11 +8549,7 @@ var
   Missing: TArray<string>;
   M      : string        ;
 begin
-  if not TFile.Exists(AArgs.DbPath) then
-  begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
-    Exit(2);
-  end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Missing:= AnalyzeLibraryDrift(AArgs.DbPath, AArgs.Roots);
   for M in Missing do Writeln('MISSING ', M);
   if Length(Missing) = 0 then Writeln('DRIFT-OK')
@@ -9790,22 +8574,10 @@ var
   Line      : string                                    ;
 begin
   ConfigPath:= AArgs.WorkspaceConfig;
-  if ConfigPath = '' then
-  begin
-    Writeln(ErrOutput, 'selftest coverage requires --config <path>');
-    Exit(2);
-  end;
-  if not TFile.Exists(ConfigPath) then
-  begin
-    Writeln(ErrOutput, 'selftest coverage: config not found: ', ConfigPath);
-    Exit(2);
-  end;
+  if ConfigPath = '' then begin Writeln(ErrOutput, 'selftest coverage requires --config <path>'); Exit(2); end;
+  if not TFile.Exists(ConfigPath) then begin Writeln(ErrOutput, 'selftest coverage: config not found: ', ConfigPath); Exit(2); end;
 
-  if Length(AArgs.Roots) = 0 then
-  begin
-    Writeln(ErrOutput, 'selftest coverage requires --root <dir>');
-    Exit(2);
-  end;
+  if Length(AArgs.Roots) = 0 then begin Writeln(ErrOutput, 'selftest coverage requires --root <dir>'); Exit(2); end;
   RootDir:= AArgs.Roots[0];
 
   Content:= TFile.ReadAllText(ConfigPath);
@@ -9866,11 +8638,7 @@ begin
   Docs:= Default(TDocConfig);
 
   try
-    if not BuildPlanItem(Item, Docs) then
-    begin
-      Writeln('FAIL recreate: first build failed');
-      Exit   (1                                  );
-    end;
+    if not BuildPlanItem(Item, Docs) then begin Writeln('FAIL recreate: first build failed'); Exit (1 ); end;
     // Create() only connects; Migrate() prepares the count statements (and is
     // idempotent against the already-built schema).
     Store:= TSQLiteSymbolStore.Create(DbPath);
@@ -9878,27 +8646,15 @@ begin
     Count1:= Store.CountSymbols;
     Store:= nil; // close before second build deletes the file
 
-    if not BuildPlanItem(Item, Docs) then
-    begin
-      Writeln('FAIL recreate: second build failed');
-      Exit   (1                                   );
-    end;
+    if not BuildPlanItem(Item, Docs) then begin Writeln('FAIL recreate: second build failed'); Exit (1 ); end;
     Store:= TSQLiteSymbolStore.Create(DbPath);
     Store.Migrate;
     Count2:= Store.CountSymbols;
     Store:= nil;
 
     Writeln(Format('recreate: build1=%d build2=%d symbols', [Count1, Count2]));
-    if Count1 = 0 then
-    begin
-      Writeln('FAIL recreate: no symbols indexed (parser/setup issue)');
-      Result:= 1;
-    end
-    else if Count1 <> Count2 then
-    begin
-      Writeln(Format('FAIL recreate: symbol count changed on rebuild (%d -> %d)', [Count1, Count2]));
-      Result:= 1;
-    end
+    if Count1 = 0 then begin Writeln('FAIL recreate: no symbols indexed (parser/setup issue)'); Result:= 1; end
+    else if Count1 <> Count2 then begin Writeln(Format('FAIL recreate: symbol count changed on rebuild (%d -> %d)', [Count1, Count2])); Result:= 1; end
     else Writeln('PASS recreate: stable symbol count across rebuilds');
   finally
     Store:= nil;
@@ -9953,7 +8709,7 @@ end; // function
 function DoSelfTestFts5: Integer;
 var
   Conn: TFDConnection;
-  Q   : TFDQuery;
+  Q   : TFDQuery     ;
 begin
   Result:= 1;
   Conn:= TFDConnection.Create(nil);
@@ -9963,34 +8719,30 @@ begin
       Conn.Params.Values['Database']:= ':memory:';
       Conn.Connected:= True;
       Conn.ExecSQL('CREATE VIRTUAL TABLE t USING fts5(x, tokenize=''trigram'')');
-      Conn.ExecSQL('INSERT INTO t(rowid, x) VALUES (1, ''Folder not found'')');
+      Conn.ExecSQL('INSERT INTO t(rowid, x) VALUES (1, ''Folder not found'')'  );
       Q:= TFDQuery.Create(nil);
       try
         Q.Connection:= Conn;
-        Q.SQL.Text:= 'SELECT rowid FROM t WHERE t MATCH ''older''';  // substring
+        Q.Sql.Text:= 'SELECT rowid FROM t WHERE t MATCH ''older'''; // substring
         Q.Open;
-        if (not Q.Eof) and (Q.FieldByName('rowid').AsInteger = 1) then
-        begin
-          Writeln('FTS5+trigram OK');
-          Result:= 0;
-        end
+        if (not Q.Eof) and (Q.FieldByName('rowid').AsInteger = 1) then begin Writeln('FTS5+trigram OK'); Result:= 0; end
         else Writeln('FTS5 present but trigram match failed');
       finally
         Q.Free;
       end;
     except
       on E: Exception do Writeln('FTS5 unavailable: ', E.Message);
-    end;
+    end; // try
   finally
     Conn.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 // --selftest-schema: open --db and print all table/view names from sqlite_master.
 function DoSelfTestSchema(const ADbPath: string): Integer;
 var
   Conn: TFDConnection;
-  Q   : TFDQuery;
+  Q   : TFDQuery     ;
 begin
   Result:= 1;
   Conn:= TFDConnection.Create(nil);
@@ -10002,13 +8754,9 @@ begin
       Q:= TFDQuery.Create(nil);
       try
         Q.Connection:= Conn;
-        Q.SQL.Text:= 'SELECT name FROM sqlite_master WHERE type IN (''table'',''view'') ORDER BY name';
+        Q.Sql.Text:= 'SELECT name FROM sqlite_master WHERE type IN (''table'',''view'') ORDER BY name';
         Q.Open;
-        while not Q.Eof do
-        begin
-          Write(Q.Fields[0].AsString, ' ');
-          Q.Next;
-        end;
+        while not Q.Eof do begin Write(Q.Fields[0].AsString, ' '); Q.Next; end;
         Writeln;
         Result:= 0;
       finally
@@ -10016,11 +8764,11 @@ begin
       end;
     except
       on E: Exception do Writeln('selftest-schema error: ', E.Message);
-    end;
+    end; // try
   finally
     Conn.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
@@ -10068,16 +8816,8 @@ begin
   // Accept either positional arg (AArgs.Path) or explicit --project.
   ProjectFile:= AArgs.Path;
   if (ProjectFile = '') and (AArgs.ProjectPath <> '') then ProjectFile:= AArgs.ProjectPath;
-  if ProjectFile = '' then
-  begin
-    Writeln('ERROR: reconcile-project requires a .dpr or .dproj file path');
-    Exit   (2                                                             );
-  end;
-  if not TFile.Exists(ProjectFile) then
-  begin
-    Writeln('ERROR: project file not found: ', ProjectFile);
-    Exit(2);
-  end;
+  if ProjectFile = '' then begin Writeln('ERROR: reconcile-project requires a .dpr or .dproj file path'); Exit (2 ); end;
+  if not TFile.Exists(ProjectFile) then begin Writeln('ERROR: project file not found: ', ProjectFile); Exit(2); end;
 
   // Resolve library roots (used to exclude library files from the closure).
   ProjResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
@@ -10161,11 +8901,7 @@ begin
       end; // try
 
       // --apply still runs; write messages to stderr so stdout stays clean.
-      if AArgs.Apply then
-      begin
-        Reconciler.Apply(ProjectFile, RR);
-        Writeln(ErrOutput, 'Applied: Missing units added to .dpr and .dproj (.bak backups written).');
-      end;
+      if AArgs.Apply then begin Reconciler.Apply(ProjectFile, RR); Writeln(ErrOutput, 'Applied: Missing units added to .dpr and .dproj (.bak backups written).'); end;
     end // if
     else
     begin
@@ -10190,11 +8926,7 @@ begin
       Writeln('Run a full project build to verify after --apply.');
 
       // --apply: write changes to .dpr/.dproj (with .bak backups).
-      if AArgs.Apply then
-      begin
-        Reconciler.Apply(ProjectFile, RR);
-        Writeln('Applied: Missing units added to .dpr and .dproj (.bak backups written).');
-      end;
+      if AArgs.Apply then begin Reconciler.Apply(ProjectFile, RR); Writeln('Applied: Missing units added to .dpr and .dproj (.bak backups written).'); end;
     end; // else
   finally
     Reconciler.Free;
@@ -10231,11 +8963,7 @@ begin
 
   if ConfigPath <> '' then
   begin
-    if not TFile.Exists(ConfigPath) then
-    begin
-      Writeln(ErrOutput, 'library-drift: config not found: ', ConfigPath);
-      Exit(2);
-    end;
+    if not TFile.Exists(ConfigPath) then begin Writeln(ErrOutput, 'library-drift: config not found: ', ConfigPath); Exit(2); end;
     var Content:= TFile.ReadAllText(ConfigPath);
     var RootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
     Manifest:= TManifestIO.ParseText(Content, RootDir);
@@ -10243,11 +8971,7 @@ begin
   else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
 
   // Build platform filter from --platform arg.
-  if AArgs.CheckPlatform <> '' then
-  begin
-    SetLength(PFilter, 1);
-    PFilter[0]:= AArgs.CheckPlatform;
-  end
+  if AArgs.CheckPlatform <> '' then begin SetLength(PFilter, 1); PFilter[0]:= AArgs.CheckPlatform; end
   else PFilter:= nil;
 
   Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
@@ -10316,16 +9040,8 @@ begin
   if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(3)));
   try
     Args:= ParseArgs;
-    if Args.ShowHelp then
-    begin
-      PrintHelp;
-      Exit(0);
-    end;
-    if Args.ShowVersion then
-    begin
-      Writeln('drag-lint ', VERSION);
-      Exit(0);
-    end;
+    if Args.ShowHelp then begin PrintHelp; Exit(0); end;
+    if Args.ShowVersion then begin Writeln('drag-lint ', VERSION); Exit(0); end;
     if Args.Command = 'index' then
     begin
       if Args.IndexAll then Result:= DoIndexAll(Args)
@@ -10357,7 +9073,7 @@ begin
     else if Args.Command = 'rename'            then Result:= DoRename          (Args)
     else if Args.Command = 'generate-docs'     then Result:= DoGenerateDocs    (Args)
     else if Args.Command = 'document'          then Result:= DoDocument        (Args)
-    else if Args.Command = 'find-unit'         then Result:= DoFindUnit         (Args)
+    else if Args.Command = 'find-unit'         then Result:= DoFindUnit        (Args)
     else if Args.Command = 'safe-delete'       then Result:= DoSafeDelete      (Args)
     else if Args.Command = 'extract-method'    then Result:= DoExtractMethod   (Args)
     else if Args.Command = 'find-deadcode'     then Result:= DoFindDeadCode    (Args)
@@ -10365,7 +9081,7 @@ begin
     else if Args.Command = 'ghost-check'       then Result:= DoGhostCheck      (Args)
     else if Args.Command = 'ghost-recover'     then Result:= DoGhostRecover    (Args)
     else if Args.Command = 'check-unit'        then Result:= DoCheckUnit       (Args)
-    else if Args.Command = 'lint-all'           then Result:= DoLintAll         (Args)
+    else if Args.Command = 'lint-all'          then Result:= DoLintAll         (Args)
     else if Args.Command = 'lint-project'      then Result:= DoLintProject     (Args)
     else if Args.Command = 'cycles'            then Result:= DoCycles          (Args)
     else if Args.Command = 'uses-audit'        then Result:= DoUsesAudit       (Args)
@@ -10445,19 +9161,11 @@ begin
         Server.Free;
       end;
     end // if
-    else
-    begin
-      Writeln('ERROR: unknown command: ', Args.Command);
-      PrintHelp;
-      Result:= 2;
-    end;
+    else begin Writeln('ERROR: unknown command: ', Args.Command); PrintHelp; Result:= 2; end;
   except
-    on E: Exception do
-    begin
-      Writeln('FATAL: ', E.ClassName, ': ', E.Message);
-      Result:= 3;
-    end;
+    on E: Exception do begin Writeln('FATAL: ', E.ClassName, ': ', E.Message); Result:= 3; end;
   end; // try
 end; // function
 
 end.
+
