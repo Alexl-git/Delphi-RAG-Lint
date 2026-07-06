@@ -211,6 +211,9 @@ begin
     B('interface-reference-cycle','project-wide','warning','Interface reference cycle (ARC leak)');
     B('circular-uses',         'project-wide', 'warning', 'Circular unit dependency (a uses-graph cycle among project units)');
 
+    { --- documentation (ADF milestone) --- }
+    B('missing-doc', 'documentation', 'warning', 'Public declaration has no DocInsight doc-comment');
+
     { --- metrics (CK class metrics; v0.78) --- }
     B('too-many-children', 'metrics', 'info', 'Class has too many direct subclasses (NOC)', True, [MkParam('threshold','int','10')]);
     B('deep-inheritance', 'metrics', 'info', 'Class inheritance is too deep (DIT)', True, [MkParam('threshold','int','6')]);

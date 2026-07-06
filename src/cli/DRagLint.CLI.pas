@@ -51,6 +51,7 @@ uses
   , DRagLint.Lint   .ProjectChecks
   , DRagLint.Lint   .ProjectRules
   , DRagLint.Lint   .ClassMetrics
+  , DRagLint.Lint   .DocRules
   , DRagLint.Project.Resolver
   , DRagLint.FormsMap
   , DRagLint.MCP        .Server
@@ -6069,6 +6070,9 @@ begin
   Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, '');
   { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; runs only here. }
   Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, '');
+  { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
+    run where a store is open; ON by default (see RuleCatalog). }
+  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(Store);
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   Findings:= Findings + DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths, Cfg.ThresholdFor('duplicate-code', 90));
@@ -6156,6 +6160,9 @@ begin
     if Length(AArgs.DbPaths) > 1 then LibDbPath2:= AArgs.DbPaths[1];
     Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership( Store, LibDbPath2, AArgs.ProjectPath);
   end;
+  { ADF Task 7: missing-doc -- store-backed (symbol_docs join); ON by default. }
+  if (AArgs.Rule = '') or (AArgs.Rule = 'missing-doc') then
+    Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(Store);
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,
