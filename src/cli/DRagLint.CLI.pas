@@ -90,6 +90,8 @@ uses
   , DRagLint.Output.Sarif
   , DRagLint.Output.ExitCode
   , DRagLint.Lint  .Baseline
+  , DRagLint.Preprocess.Types
+  , DRagLint.Preprocess.Lexer
   ;
 
 type
@@ -7965,6 +7967,39 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>PP-Task-2: drag-lint dump-pp-lex --file PATH -- diagnostic dump of
+/// the directive lexer output. Reads the file at --file, runs LexDirectives, and
+/// prints ONE LINE PER CHUNK as kind|dir|srcStart|srcEnd|line|value-escaped
+/// (newline bytes in value rendered as a literal backslash-n so each chunk is one
+/// line). Used by tests/preprocess/run_lexer.ps1 to verify the port of lexer.js.</summary>
+/// <param name="AArgs">Parsed CLI args; InFile (--file) is the source to lex.</param>
+/// <returns>0 on success, 2 on usage error / missing file.</returns>
+function DoDumpPpLex(const AArgs: TArgs): Integer;
+var
+  Src   : string            ;
+  Chunks: TArray<TPPChunk>  ;
+  C     : TPPChunk          ;
+  KindS : string            ;
+  Esc   : string            ;
+begin
+  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint dump-pp-lex --file PATH'); Exit(2); end;
+  if not FileExists(AArgs.InFile) then begin Writeln(Format('File not found: %s', [AArgs.InFile])); Exit(2); end;
+  Src:= TFile.ReadAllText(AArgs.InFile, TEncoding.UTF8);
+  Chunks:= LexDirectives(Src);
+  for C in Chunks do
+  begin
+    if C.Kind = ckDirective then KindS:= 'directive' else KindS:= 'text';
+    // Escape both CR and LF so each chunk stays on one output line. The value
+    // field for a directive is its Args; for text it is the raw slice text.
+    Esc:= C.Value;
+    if C.Kind = ckDirective then Esc:= C.Args;
+    Esc:= StringReplace(Esc, #13, '\r', [rfReplaceAll]);
+    Esc:= StringReplace(Esc, #10, '\n', [rfReplaceAll]);
+    Writeln(Format('%s|%s|%d|%d|%d|%s', [KindS, C.Dir, C.SrcStart, C.SrcEnd, C.Line, Esc]));
+  end;
+  Result:= 0;
+end; // function
+
 /// <summary>v14 (D5): drag-lint dump-call-edges --db PATH -- diagnostic dump of
 /// every resolved call edge in the index, one per line, as
 /// ref_id|target_qname|confidence. target_qname is the resolved target symbol's
@@ -9735,6 +9770,7 @@ begin
     else if Args.Command = 'format'            then Result:= DoFormat          (Args)
     else if Args.Command = 'check-ast'         then Result:= DoCheckAst        (Args)
     else if Args.Command = 'dump-refs'         then Result:= DoDumpRefs        (Args)
+    else if Args.Command = 'dump-pp-lex'       then Result:= DoDumpPpLex       (Args)
     else if Args.Command = 'dump-call-edges'   then Result:= DoDumpCallEdges   (Args)
     else if Args.Command = 'find-callees'      then Result:= DoFindCallees     (Args)
     else if Args.Command = 'ambiguous-calls'   then Result:= DoAmbiguousCalls  (Args)
