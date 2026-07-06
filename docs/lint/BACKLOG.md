@@ -16,14 +16,19 @@
 > **we are the release trigger they're HOLDING their coordinated npm publish on**. New inbox docs (now committed):
 > `docs/INBOX-tree-sitter-build-status-and-release-plan.md` (their v1.1.1-root/v1.1.0-pure build + coordinated
 > release plan + the 3 things they need back), `docs/INBOX-tree-sitter-delivered.md`, `...-preprocessor-adoption.md`.
-> **>>> OPEN FOLLOW-UPS (post-release, in progress this session):** (1) reply to the grammar team: PORTED +
-> parity-complete + Task-6-done = RELEASE TRIGGER; grammar-path call = we built against the CURRENT FULL grammar
-> (pure-DLL swap = separate follow-up); confirm JS preprocessor stays 1.0.0 (Delphi canonical, serve.js not
-> consumed); no DFM needs. (2) D5 fast-follow tidy-up (5 deferred minors, 1 commit). (3) DEFERRED (own cycle,
-> NOT this release, user consent): refresh the STALE bundled tree-sitter DLL (dated May 29) to the current
-> v1.1.x build -> src/ 97.3%->99.1% + CLI.pas 39->1 errors, NO code change (needs its own build+reindex+verify).
-> (4) POST-MILESTONE: swap to the pure grammar DLL (drops pp_* rules; needs pre-resolved source -- our
-> preprocessor now provides it) = separate follow-up milestone.
+> **>>> FOLLOW-UPS -- CROSS-REPO LOOP CLOSED:** (1) DONE: replied to the grammar team (release trigger GO,
+> tree-sitter-delphi13 `53f6ac7`). They REPLIED `docs/INBOX-tree-sitter-published-live.md`: **PUBLISHED the
+> coordinated npm set** -- `tree-sitter-delphi13@1.1.1` (sha1 91a8e90fe854fab983e8919135c33db32bd0944e, the FULL
+> DLL we bind) + `tree-sitter-delphi13-pure@1.1.0` (sha1 b6bd60d0a53f4129600b9b5d6588999de1ee10fa), both live +
+> fresh-install-verified; JS `delphi13-preprocessor` stays 1.0.0 (Delphi canonical), DFM stays 1.0.0. Milestone
+> CLOSED on their side; NO new asks. (2) DONE: D5 fast-follow tidy-up (`97754d0`). (3) QUEUED (own cycle, not
+> gating anything -- their words): refresh the STALE bundled DLL `third_party/dll-win64/tree-sitter-delphi13.dll`
+> (May 29) to the v1.1.1 build -> src/ 97.3%->99.1% + CLI.pas 39->1 errors, NO code change (`npx tree-sitter
+> generate && node-gyp build` from master, or build from the npm tarball's src/; needs its own build+reindex+verify).
+> (4) QUEUED post-milestone: swap to the pure grammar DLL (`tree_sitter_delphi13_pure`; drops pp_* rules; needs
+> pre-resolved source -- our preprocessor now provides it) = separate milestone; grammar team offered to help line
+> up the pure DLL + a before/after corpus if we prioritize it. (5) QUEUED: self-index reindex `--all --only
+> DragLint` when the live IDE/LSP releases Delphi-RAG-lint.sqlite's lock (do NOT force-kill the IDE).
 > --- PRIOR RESUME (LATEST-16, now DONE) --- PREPROCESSOR PORT MILESTONE: spec+plan DONE+PUSHED, about to EXECUTE via subagent-driven-development (12 tasks, on main). RESUME = dispatch PP-Task-1 implementer.**
 > `main` synced with origin (0 ahead, clean except IDE json/dsv + 3 untracked docs -- leave those).
 > **NO subagent work in flight** -- this handoff fired at a CLEAN boundary (before PP-Task-1 was dispatched),
