@@ -94,6 +94,7 @@ type
       FItemFixIt      : TMenuItem   ; { 'Fix it' -- single fixable finding }
       FItemFixUnit    : TMenuItem   ; { 'Fix all in unit' -- Diagnostics root }
       FItemFixProject : TMenuItem   ; { 'Fix all in project' -- Diagnostics root }
+      FItemDocIt      : TMenuItem   ; { v0.90 AutoDocument: 'Document it' -- symbol node with a qname }
       FRootDiag       : TTreeNode   ; { the current 'Diagnostics (N)' root, for node discrimination }
       FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
       procedure BtnRefreshClick(Sender: TObject);
@@ -123,6 +124,9 @@ type
       procedure FixItClick             (Sender: TObject);
       procedure FixAllInUnitClick      (Sender: TObject);
       procedure FixAllInProjectClick   (Sender: TObject);
+      { v0.90 AutoDocument: 'Document it' handler + its enablement predicate. }
+      function  NodeIsDocumentable     (ANode: TTreeNode): Boolean;
+      procedure DocumentItClick        (Sender: TObject);
     public
       constructor Create(AOwner: TComponent); override;
       procedure RefreshActive; { v0.42: re-read the active editor file }
@@ -327,6 +331,10 @@ begin
   AddPopupItem(FPopup, 'Go to &Declaration'          , GoToDeclarationClick   );
   AddPopupItem(FPopup, 'Go to &Implementation (body)', GoToImplementationClick);
   AddPopupItem(FPopup, 'Find &Usages'                , FindUsagesClick        );
+  { v0.90 AutoDocument: 'Document it' acts on a symbol node (like Find Usages),
+    so it is grouped with the symbol nav items. Enablement is set per-popup. }
+  AddPopupItem(FPopup, '&Document it'                , DocumentItClick        );
+  FItemDocIt:= FPopup.Items[FPopup.Items.Count - 1];
   AddPopupItem(FPopup, '-'                           , nil                    ); { separator }
   AddPopupItem(FPopup, '&Copy All Diagnostics'       , CopyDiagnosticsClick  );
   { v0.88 AutoFix: run the CLI fix verbs on the clicked node. Enablement is set
@@ -830,6 +838,7 @@ begin
   FItemFixIt     .Enabled:= IsFinding;
   FItemFixUnit   .Enabled:= IsRoot   ;
   FItemFixProject.Enabled:= IsRoot   ;
+  FItemDocIt     .Enabled:= NodeIsDocumentable(Node); { v0.90 AutoDocument: symbol node with a qname }
 end;
 
 { 'Fix it' -- apply the single fixable finding under the cursor:
@@ -854,6 +863,56 @@ begin
     else DLT('autofix', 'Fix it non-zero exit; output: ' + Copy(Output, 1, 400));
   except
     on E: Exception do DLT('autofix', 'FixItClick failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end; // procedure
+
+{ ---- v0.90 AutoDocument: right-click Document it ---- }
+
+{ A documentable node is a symbol node (from the Code Elements root) carrying a
+  resolvable qualified name. Diagnostic finding nodes carry Code (a rule-id) and
+  QName = ''; symbol nodes carry QName (set in BuildTree) and Code = ''. The
+  QName test alone is therefore the discriminator -- only symbol nodes have one. }
+function TDragLintStructureForm.NodeIsDocumentable(ANode: TTreeNode): Boolean;
+begin
+  Result:= (ANode <> nil) and (ANode.Data <> nil)
+       and (TStructureNodeData(ANode.Data).QName <> '');
+end;
+
+{ 'Document it' -- generate/repair the DocInsight doc-comment for the selected
+  symbol via the CLI:
+    drag-lint document --qname <q> --db <projDb> --apply
+  Unlike the Fix verbs (which take --file), document is qname-driven and resolves
+  the declaration through the index, so we pass --db (ResolveDbForFile = the same
+  first/highest-priority index DB Find Usages / Fix-all use), NOT --file. The
+  --apply write updates the source file (+ a .bak) on disk; on exit 0 we reload
+  the buffer so the new comment appears in the editor and the tree refreshes.
+  Everything is wrapped in try/except -> DLT so a plugin fault never reaches the
+  IDE message loop. }
+procedure TDragLintStructureForm.DocumentItClick(Sender: TObject);
+var
+  ND     : TStructureNodeData;
+  Cmd    : string           ;
+  Output : string           ;
+  Db     : string           ;
+  ExitVal: Integer          ;
+begin
+  try
+    if not NodeIsDocumentable(FTree.Selected) then Exit;
+    ND:= TStructureNodeData(FTree.Selected.Data);
+    if FCurrentFile = '' then Exit;
+    Db:= ResolveDbForFile; { same DB resolver Find Usages / Fix-all use }
+    if Db = '' then
+    begin
+      DLT('autodoc', 'Document it: no index DB for ' + FCurrentFile);
+      Exit;
+    end;
+    Cmd:= Format('"%s" document --qname "%s" --db "%s" --apply', [ResolveExePath, ND.QName, Db]);
+    ExitVal:= RunAndCaptureStdout(Cmd, Output, 60000);
+    DLT('autodoc', Format('Document it %s -> exit=%d', [ND.QName, ExitVal]));
+    if ExitVal = 0 then ReloadCurrentFileBuffer
+    else DLT('autodoc', 'Document it non-zero exit; output: ' + Copy(Output, 1, 400));
+  except
+    on E: Exception do DLT('autodoc', 'DocumentItClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
 end; // procedure
 
