@@ -64,6 +64,7 @@ uses
   , DRagLint.Doc        .Facts
   , DRagLint.Doc        .Regions
   , DRagLint.Doc        .Document
+  , DRagLint.Doc        .Batch
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
   , DRagLint.Refactor   .ExtractMethod
@@ -244,6 +245,11 @@ type
     // by an unsaved buffer, with a guaranteed restore.
     GhostUnit  : string; // --unit <real .pas to overlay>
     GhostBuffer: string; // --buffer <temp file holding the buffer>
+    // AutoDocument (whole-unit batch): --unit <file.pas> for the `document`
+    // command means "document every public decl in this unit". It shares the
+    // --unit flag with ghost-check's GhostUnit, so it is parsed into a DISTINCT
+    // field ONLY when Command='document' to avoid the ghost-check collision.
+    DocUnit    : string; // document --unit <file.pas>
     // v0.48: multi-overlay -- a manifest with one 'realpath<TAB>bufferpath' per
     // line, so ALL unsaved units are overlaid for a single compile.
     GhostOverlays: string; // --overlays <manifest>
@@ -320,6 +326,7 @@ begin
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup] [--db PATH]   - generate/repair a managed DocInsight comment');
+  Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup] [--db PATH]         - document every public decl in the unit (facts-only)');
   Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
   Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
   Writeln('  drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
@@ -644,7 +651,14 @@ begin
     else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); end
     else if (A = '--parent-pid') and (i < ParamCount) then begin Inc(i); Result.ParentPid:= Cardinal(StrToInt64Def(ParamStr(i), 0)); end
-    else if (A = '--unit') and (i < ParamCount) then begin Inc(i); Result.GhostUnit:= ParamStr(i); end
+    // --unit routes to DocUnit for the `document` command (whole-unit batch),
+    // else to GhostUnit (ghost-check overlay). Distinct fields avoid a collision.
+    else if (A = '--unit') and (i < ParamCount) then
+    begin
+      Inc(i);
+      if Result.Command = 'document' then Result.DocUnit:= ParamStr(i)
+      else Result.GhostUnit:= ParamStr(i);
+    end
     else if (A = '--buffer') and (i < ParamCount) then begin Inc(i); Result.GhostBuffer:= ParamStr(i); end
     else if (A = '--overlays') and (i < ParamCount) then begin Inc(i); Result.GhostOverlays:= ParamStr(i); end
     // v0.57: text-constant search flags
@@ -5546,10 +5560,59 @@ begin
   Result:= 0;
 end; // function
 
+// AutoDocument (whole-unit batch): drag-lint document --unit <file.pas> [--apply|--json|--no-backup] [--db PATH]
+// Documents every PUBLIC (interface-section) decl in the unit via TDocBatch.
+// Facts-only default: decls that would produce only an all-TODO comment (no
+// facts, no prior doc) are skipped. Dry-run (edit preview) unless --apply.
+// Exit 0 on ok (even when 0 decls changed), 2 on usage/db error.
+function DoDocumentUnit(const AArgs: TArgs): Integer;
+var
+  Store  : ISymbolStore     ;
+  Ok     : Boolean          ;
+  Opts   : TDocBatchOptions ;
+  Res    : TDocBatchResult  ;
+  O      : TJSONObject      ;
+  Applied: Boolean          ;
+begin
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if not Ok then Exit(2);
+
+  Opts:= Default(TDocBatchOptions);
+  // Stubs stays False here = facts-only default; the --stubs flag + the other
+  // doc-source options are wired in later tasks.
+  Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
+
+  Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
+  if Applied then TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
+
+  if AArgs.AsJson then
+  begin
+    O:= TJSONObject.Create;
+    try
+      O.AddPair('unit', AArgs.DocUnit);
+      O.AddPair('declCount', TJSONNumber.Create(Res.DeclCount));
+      O.AddPair('docCount' , TJSONNumber.Create(Res.DocCount ));
+      O.AddPair('edits'    , TJSONNumber.Create(Length(Res.Edits)));
+      O.AddPair('applied'  , TJSONBool.Create(Applied));
+      Writeln(O.ToJson);
+    finally
+      O.Free;
+    end;
+    Exit(0);
+  end;
+
+  if Length(Res.Edits) = 0 then Writeln(Format('doc: %d public decl(s), nothing to document', [Res.DeclCount]))
+  else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Res.Edits)); Writeln(Format('doc: %d/%d decl(s), %d edit(s) -- pass --apply to write', [Res.DocCount, Res.DeclCount, Length(Res.Edits)])); end
+  else Writeln(Format('doc: %d/%d decl(s) documented, %d edit(s) applied%s', [Res.DocCount, Res.DeclCount, Length(Res.Edits), IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+  Result:= 0;
+end; // function
+
 // AutoDocument Chunk 1: drag-lint document --qname X [--apply|--json|--no-backup] [--db PATH]
 // Generates or repairs a managed-region DocInsight comment for the symbol. Dry-run
 // (prints the edit preview) unless --apply. Exit 0 on ok/unchanged, 1 not found,
 // 2 usage/db error. Read-only DB access (writes source files, not the index).
+// When --unit is given (instead of --qname), delegates to the whole-unit batch.
 function DoDocument(const AArgs: TArgs): Integer;
 var
   Store  : ISymbolStore                         ;
@@ -5558,7 +5621,8 @@ var
   O      : TJSONObject                          ;
   Applied: Boolean                              ;
 begin
-  if AArgs.QName = '' then begin Writeln('Usage: drag-lint document --qname X [--apply|--json|--no-backup] [--db PATH]'); Exit (2 ); end;
+  if AArgs.DocUnit <> '' then Exit(DoDocumentUnit(AArgs));
+  if AArgs.QName = '' then begin Writeln('Usage: drag-lint document (--qname X | --unit F) [--apply|--json|--no-backup] [--db PATH]'); Exit (2 ); end;
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
