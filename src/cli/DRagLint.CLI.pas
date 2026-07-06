@@ -4078,9 +4078,9 @@ end;
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
   BuildAutofixEdits (kept in lockstep; a guard test asserts they agree). }
 const
-  FIXABLE_RULE_IDS: array[0..8] of string = (
+  FIXABLE_RULE_IDS: array[0..9] of string = (
     'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
-    'redundant-assigned-free', 'off-by-one-count');
+    'redundant-assigned-free', 'off-by-one-count', 'doc-drift');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var
@@ -4524,7 +4524,8 @@ end; // begin
 /// from the post-ShouldKeep/baseline Survivors set computed inside this function,
 /// not from the caller's raw AFindings -- so a bare command whose only matches were
 /// OFF-by-default (suppressed) rules prints "0 finding(s)" AND exits 0.</remarks>
-function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>): Integer;
+function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
+  const AStore: ISymbolStore = nil): Integer;
 var
   Cfg      : TLintConfig         ;
   Survivors: TArray<TLintFinding>;
@@ -4582,6 +4583,34 @@ begin
 
     var FixCount: Integer                                               ;
     var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Targeted, FixCount);
+
+    { ADF Task 8: doc-drift is store-backed, so its fix cannot be produced by the
+      pure-text BuildAutofixEdits above -- it needs the store (facts + MergeComment).
+      When a store is present AND the surviving set carries a fixable doc-drift
+      finding, append the MergeComment-based repair edits (refresh managed facts
+      block + add missing <param>/<returns> stubs; hand prose preserved, report-only
+      signals untouched). Computed ONCE per decl by FixEditsForDocDrift regardless
+      of how many doc-drift findings target it, so the edits do not overlap. }
+    if AStore <> nil then
+    begin
+      var WantDocDrift: Boolean:= False;
+      for F in Targeted do
+        if SameText(F.RuleId, 'doc-drift') then begin WantDocDrift:= True; Break; end;
+      if WantDocDrift then
+      begin
+        var DDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift(AStore);
+        if Length(DDEdits) > 0 then
+        begin
+          Edits:= Edits + DDEdits;
+          { Count one fix per repaired doc span. BuildFor emits a delete+insert
+            PAIR per span, so the number of repaired decls is (pairs) = half the
+            edit count; count the insert edits (tekInsertLines) to avoid
+            double-counting. }
+          for var DDE: TTextEdit in DDEdits do
+            if DDE.Kind = tekInsertLines then Inc(FixCount);
+        end;
+      end;
+    end;
 
     if AArgs.AsJson or SameText(AArgs.Format, 'json') then
     begin
@@ -6073,6 +6102,9 @@ begin
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
   Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(Store);
+  { ADF Task 8: doc-drift -- store-backed (needs the doc graph + Raises facts);
+    ON by default. Its --fix subset is applied in FinalizeAndOutput (Store passed). }
+  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store);
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   Findings:= Findings + DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths, Cfg.ThresholdFor('duplicate-code', 90));
@@ -6115,7 +6147,8 @@ begin
       'instability', 'interface-object-mixing', 'split-variable', 'separate-query-from-modifier'],
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; EC, WC: Integer; OL: TStringBuilder; begin EC:= 0; WC:= 0; for FF in ASurv do if SameText(FF.Severity,
         'error') then Inc(EC) else Inc(WC); OL:= TStringBuilder.Create; try for FF in ASurv do OL.AppendLine(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine,
-              FF.StartCol, FF.Severity, FF.RuleId, FF.Message])); OL.AppendLine(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) scanned', [Length(ASurv), EC, WC, Length(FilePaths)])); TFile.WriteAllText(OutPath, OL.ToString, TEncoding.UTF8); finally OL.Free; end; for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) -- report: %s', [Length(ASurv), EC, WC, Length(FilePaths), OutPath])); end
+              FF.StartCol, FF.Severity, FF.RuleId, FF.Message])); OL.AppendLine(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) scanned', [Length(ASurv), EC, WC, Length(FilePaths)])); TFile.WriteAllText(OutPath, OL.ToString, TEncoding.UTF8); finally OL.Free; end; for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) -- report: %s', [Length(ASurv), EC, WC, Length(FilePaths), OutPath])); end,
+    Store { ADF Task 8: enables the store-backed doc-drift --fix path }
   );
 end; // function
 
@@ -6163,10 +6196,15 @@ begin
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join); ON by default. }
   if (AArgs.Rule = '') or (AArgs.Rule = 'missing-doc') then
     Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(Store);
+  { ADF Task 8: doc-drift -- store-backed; ON by default. --fix subset applied in
+    FinalizeAndOutput (Store passed below). }
+  if (AArgs.Rule = '') or (AArgs.Rule = 'doc-drift') then
+    Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store);
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,
-            FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('%d finding(s)', [Length(ASurv)])); end
+            FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('%d finding(s)', [Length(ASurv)])); end,
+    Store { ADF Task 8: enables the store-backed doc-drift --fix path }
   );
 end; // function
 
