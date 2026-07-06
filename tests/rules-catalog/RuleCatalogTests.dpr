@@ -18,10 +18,11 @@ begin
 end;
 procedure TestMerge;
 const
-  CanonicalBuckets: array[0..13] of string = (
+  CanonicalBuckets: array[0..14] of string = (
     'bug-patterns','resource-lifetime','security','platform',
     'complexity','structure','naming','dead-code',
-    'data-flow','firedac','project-wide','metrics','other','refactoring');
+    'data-flow','firedac','project-wide','metrics','other','refactoring',
+    'documentation'); { ADF milestone: missing-doc + doc-drift live in this bucket }
 var
   Cat: TArray<TRuleInfo>;
   Info: TRuleInfo;
