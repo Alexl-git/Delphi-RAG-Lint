@@ -257,6 +257,8 @@ type
     PpExpr    : string        ; // --expr "<E>"        the compile-time expression to evaluate
     PpDefines : TArray<string>; // --define <SYM>      repeatable defined symbols (lowercased on use)
     PpNumeric : TArray<string>; // --numeric <K=V>     repeatable numeric defines (K=V, K lowercased on use)
+    // PP-Task-6: preprocess-file include handling
+    PpIncludeMode: string     ; // --include-mode <off|defines-only>  ('' => default 'off')
   end; // record
 
 procedure PrintHelp;
@@ -655,6 +657,8 @@ begin
       SetLength(Result.PpNumeric, Length(Result.PpNumeric) + 1);
       Result.PpNumeric[High(Result.PpNumeric)]:= ParamStr(i);
     end
+    // PP-Task-6: preprocess-file include handling mode (off | defines-only).
+    else if (A = '--include-mode') and (i < ParamCount) then begin Inc(i); Result.PpIncludeMode:= ParamStr(i); end
     else if (Result.Path = '') and (not A.StartsWith('--')) then Result.Path:= A
     else raise Exception.CreateFmt('Unknown argument: %s', [A]);
     Inc(i);
@@ -8065,22 +8069,25 @@ begin
   Result:= 0;
 end; // function
 
-/// <summary>PP-Task-4: drag-lint preprocess-file --file PATH [--define SYM]...
-/// [--numeric K=V]... -- diagnostic dump of the chunk processor. Reads --file as
-/// raw BYTES, builds a TDefineProfile from the repeatable --define (lowercased)
-/// and --numeric (K=V) flags, runs Preprocess, and writes the resulting BYTES to
-/// stdout VERBATIM via WriteFile on the raw stdout handle -- no Writeln, so no CR
-/// injection, no encoding change, no trailing newline. This keeps the output
-/// byte-for-byte comparable to the JS oracle (offset-identity invariant). Used
-/// by tests/preprocess/run_preprocess_core.ps1.</summary>
+/// <summary>PP-Task-4/6: drag-lint preprocess-file --file PATH [--define SYM]...
+/// [--numeric K=V]... [--include-mode off|defines-only] -- diagnostic dump of the
+/// chunk processor. Reads --file as raw BYTES, builds a TDefineProfile from the
+/// repeatable --define (lowercased) and --numeric (K=V) flags, and a TPPOptions
+/// whose IncludeMode is --include-mode (default 'off') and whose BaseDir is the
+/// directory of --file (so a {$I config.inc} resolves next to the source), runs
+/// Preprocess, and writes the resulting BYTES to stdout VERBATIM via WriteFile on
+/// the raw stdout handle -- no Writeln, so no CR injection, no encoding change, no
+/// trailing newline. This keeps the output byte-for-byte comparable to the JS
+/// oracle (offset-identity invariant). Used by tests/preprocess/*.ps1.</summary>
 /// <param name="AArgs">Parsed CLI args; InFile (--file) is the source; PpDefines
-/// (--define) the symbols; PpNumeric (--numeric K=V) the numeric map.</param>
+/// (--define) the symbols; PpNumeric (--numeric K=V) the numeric map;
+/// PpIncludeMode (--include-mode) the include strategy.</param>
 /// <returns>0 on success, 2 on usage error / missing file.</returns>
 function DoPreprocessFile(const AArgs: TArgs): Integer;
 var
   InBytes : TBytes           ;
   OutBytes: TBytes           ;
-  Profile : TDefineProfile   ;
+  Options : TPPOptions       ;
   D       : string           ;
   N       : string           ;
   EqPos   : Integer          ;
@@ -8089,7 +8096,7 @@ var
   StdOut  : THandle          ;
   Written : DWORD            ;
 begin
-  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]...'); Exit(2); end;
+  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only]'); Exit(2); end;
   if not FileExists(AArgs.InFile) then begin Writeln(Format('File not found: %s', [AArgs.InFile])); Exit(2); end;
 
   InBytes:= TFile.ReadAllBytes(AArgs.InFile);
@@ -8099,8 +8106,8 @@ begin
   for D in AArgs.PpDefines do
     if D <> '' then
     begin
-      SetLength(Profile.Defines, Length(Profile.Defines) + 1);
-      Profile.Defines[High(Profile.Defines)]:= LowerCase(D);
+      SetLength(Options.Profile.Defines, Length(Options.Profile.Defines) + 1);
+      Options.Profile.Defines[High(Options.Profile.Defines)]:= LowerCase(D);
     end;
   Pairs:= TList<TPair<string, Integer>>.Create;
   try
@@ -8111,12 +8118,18 @@ begin
       if TryStrToInt(Copy(N, EqPos + 1, Length(N)), ValInt) then
         Pairs.Add(TPair<string, Integer>.Create(LowerCase(Copy(N, 1, EqPos - 1)), ValInt));
     end;
-    Profile.NumericDefines:= Pairs.ToArray;
+    Options.Profile.NumericDefines:= Pairs.ToArray;
   finally
     Pairs.Free;
   end;
 
-  OutBytes:= Preprocess(InBytes, Profile);
+  // PP-Task-6: include handling. Default 'off' preserves Task-4/5 behavior; the
+  // BaseDir is the source file's directory so a relative {$I} resolves beside it.
+  if AArgs.PpIncludeMode <> '' then Options.IncludeMode:= AArgs.PpIncludeMode
+  else Options.IncludeMode:= 'off';
+  Options.BaseDir:= TPath.GetDirectoryName(TPath.GetFullPath(AArgs.InFile));
+
+  OutBytes:= Preprocess(InBytes, Options);
 
   // Write the resolved bytes VERBATIM to the raw stdout handle so no newline
   // translation / encoding change touches them (Writeln would corrupt the

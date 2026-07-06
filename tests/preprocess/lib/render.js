@@ -11,6 +11,10 @@
 // which is the faithful comparison for the Pascal Preprocess().
 //
 // Usage: node render.js <fixture.pas> [--define SYM]... [--numeric K=V]...
+//                       [--include-mode <off|defines-only>]
+// PP-Task-6: --include-mode selects the oracle's include handling (default
+// 'defines-only', matching the Task-4/5 corpus behaviour). baseDir is always
+// path.dirname(file) so a {$I config.inc} resolves next to the fixture.
 // Node is a TEST-ONLY dependency; the shipped drag-lint exe never calls it.
 'use strict';
 
@@ -22,6 +26,7 @@ function main() {
   let file = null;
   const defines = [];
   const numericDefines = {};
+  let includeMode = 'defines-only';
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--define') defines.push(String(args[++i]).toLowerCase());
@@ -29,7 +34,8 @@ function main() {
       const kv = String(args[++i]);
       const eq = kv.indexOf('=');
       if (eq > 0) numericDefines[kv.slice(0, eq)] = parseInt(kv.slice(eq + 1), 10);
-    } else if (!a.startsWith('--') && !file) file = a;
+    } else if (a === '--include-mode') includeMode = String(args[++i]);
+    else if (!a.startsWith('--') && !file) file = a;
     else if (a.startsWith('--')) { process.stderr.write('unknown option: ' + a + '\n'); process.exit(2); }
   }
   if (!file) { process.stderr.write('no input file\n'); process.exit(2); }
@@ -38,7 +44,7 @@ function main() {
   const result = preprocess(source, {
     defines,
     numericDefines,
-    includeMode: 'defines-only',
+    includeMode,
     baseDir: require('path').dirname(file),
   });
   process.stdout.write(Buffer.from(result.text, 'utf8'));

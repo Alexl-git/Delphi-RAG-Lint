@@ -36,6 +36,21 @@ type
     NumericDefines: TArray<TPair<string, Integer>>;
   end;
 
+  /// <summary>PP-Task-6: options carrier for a Preprocess run that handles
+  /// includes. Profile is the active define profile (as above). IncludeMode is
+  /// the {$I}/{$INCLUDE} handling strategy: 'off' blanks the directive and
+  /// ignores its defines; 'defines-only' reads the .inc, applies its
+  /// {$DEFINE}/{$UNDEF} to the PARENT's live defines set, then blanks the
+  /// directive (NO body splice -- offsets stay 1:1). The 'expand' body-splice
+  /// mode of preprocess.js is deliberately NOT ported (it breaks the
+  /// offset-identity invariant). BaseDir is the directory a relative include
+  /// name resolves against; '' disables resolution (every include blanks).</summary>
+  TPPOptions = record
+    Profile    : TDefineProfile;
+    IncludeMode: string        ;
+    BaseDir    : string        ;
+  end;
+
 implementation
 
 end.
