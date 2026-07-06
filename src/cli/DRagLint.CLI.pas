@@ -6191,11 +6191,14 @@ begin
       O.AddPair('qname', Res.QName);
       O.AddPair('file', Res.FilePath);
       O.AddPair('line', TJSONNumber.Create(Res.Line));
+      // daNotFound already returned above (text + exit 1) before this --json
+      // block, so it can never reach here; the else is a defensive fallback for
+      // an unexpected action value, NOT a reachable 'not_found' result.
       case Res.Action of
         DRagLint.Doc.Document.daCreated  : O.AddPair('action', 'created'  );
         DRagLint.Doc.Document.daExtended : O.AddPair('action', 'extended' );
         DRagLint.Doc.Document.daUnchanged: O.AddPair('action', 'unchanged');
-      else                                 O.AddPair('action', 'not_found');
+      else                                 O.AddPair('action', 'unknown'  );
       end;
       O.AddPair('edits', TJSONNumber.Create(Length(Res.Edits)));
       O.AddPair('applied', TJSONBool.Create(Applied));
