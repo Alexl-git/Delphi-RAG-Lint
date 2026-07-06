@@ -109,6 +109,8 @@ type
       function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
       function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
       function CountCallEdges: Int64;
+      function GetTypeCandidates: TArray<TSymbol>;
+      function GetUnitScopeEdges: TArray<TFileScopeEdge>;
       function FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
       function FindDiResolveSites   ( const AInterfaceName: string): TArray<TReference   >;
       function FindDiUnresolved: TArray<TReference>                                       ;
@@ -1034,6 +1036,69 @@ begin
     Q.Free;
   end;
 end;
+
+function TSQLiteSymbolStore.GetTypeCandidates: TArray<TSymbol>;
+{ v14 (D5): every class/interface/record symbol, minimally populated (id,
+  file_id, kind, name). Mirrors ResolveAncestry's candidate query, plus 'record'
+  so record-typed receivers resolve. Backs TCallResolver's name-candidate map. }
+var
+  Q   : TFDQuery      ;
+  List: TList<TSymbol>;
+  S   : TSymbol       ;
+begin
+  List:= TList<TSymbol>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT id, file_id, kind, name FROM symbols ' +
+                   'WHERE kind IN (''class'',''interface'',''record'')';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      S:= Default(TSymbol);
+      S.Id    := Q.FieldByName('id'     ).AsLargeInt;
+      S.FileId:= Q.FieldByName('file_id').AsLargeInt;
+      S.Kind  := TSymbolKind.FromText(Q.FieldByName('kind').AsString);
+      S.Name  := Q.FieldByName('name'   ).AsString;
+      List.Add(S);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.GetUnitScopeEdges: TArray<TFileScopeEdge>;
+{ v14 (D5): resolved uses-scope edges (file_id -> target_file_id), the exact set
+  ResolveAncestry loads inline for its FileScope map. Unresolved rows (NULL
+  target_file_id) are excluded, so both ids are always > 0. }
+var
+  Q   : TFDQuery            ;
+  List: TList<TFileScopeEdge>;
+  E   : TFileScopeEdge      ;
+begin
+  List:= TList<TFileScopeEdge>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT file_id, target_file_id FROM unit_uses ' +
+                   'WHERE target_file_id IS NOT NULL';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      E.FileId      := Q.FieldByName('file_id'       ).AsLargeInt;
+      E.TargetFileId:= Q.FieldByName('target_file_id').AsLargeInt;
+      List.Add(E);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
 
 procedure TSQLiteSymbolStore.UpsertDiBinding(const AToken: TFileTxToken; const ABinding: TDiBindingRow);
 begin

@@ -1,0 +1,544 @@
+unit DRagLint.Index.CallResolver;
+
+// v14 (D5): the receiver-typing engine. Given one call-site reference (X.M),
+// type the receiver X to a concrete class/interface/record symbol, look M up on
+// that type's own methods + its type_ancestors chain, and return a TCallEdge
+// carrying the resolved target + a confidence ('certain' | 'ambiguous'), or
+// TargetSymbolId=0 when the receiver / method cannot be resolved (the '?' /
+// no-edge bucket). FP policy: when unsure, return 0 -- a wrong 'certain' is
+// worse than no edge.
+//
+// PREPARE-ONCE DESIGN: Task 6 runs ResolveOne over EVERY call ref in the DB, so
+// the two name/scope maps that drive type-name resolution (mirroring the store's
+// ResolveAncestry NameToCands + FileScope) are built ONCE in the constructor and
+// reused. Create the resolver once, then call ResolveOne in a loop.
+
+interface
+
+uses
+  System.SysUtils,
+  System.Classes,
+  System.IOUtils,
+  System.Generics.Collections,
+  DRagLint.Core.Model,
+  DRagLint.Core.Interfaces;
+
+type
+  /// <summary>v14 (D5): a set of symbol kinds -- lets the resolver's child scans
+  /// filter by "any method-shaped kind" / "any type-defining kind" in one test.</summary>
+  TSymbolKindSet = set of TSymbolKind;
+
+  /// <summary>v14 (D5): receiver-typing + method-chain call resolver. Prepare
+  /// once (Create builds the name-candidate + file-scope maps from the whole DB),
+  /// then call ResolveOne per call-site ref.</summary>
+  /// <remarks>Not thread-safe; single owning thread only. Holds the ISymbolStore
+  /// for the resolver's lifetime -- the store must outlive the resolver.</remarks>
+  TCallResolver = class
+  strict private
+    FStore      : ISymbolStore;
+    // Lowercased simple type name -> candidate class/interface/record symbols.
+    FNameToCands: TObjectDictionary<string, TList<TSymbol>>;
+    // Declaring file id -> the resolved target file ids it can see (uses graph).
+    FFileScope  : TObjectDictionary<Int64, TList<Int64>>;
+    // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
+    // per-ref field/method scan does not re-hit the DB for the same enclosing
+    // symbol repeatedly across a whole-DB pass.
+    FChildCache : TObjectDictionary<Int64, TList<TSymbol>>;
+    // Cache: source file id -> its lines (0-based array). A single whole-DB pass
+    // touches many refs in the same file; read each file at most once.
+    FLineCache  : TObjectDictionary<Int64, TStringList>;
+
+    procedure BuildMaps;
+    /// <summary>True when a candidate declared in ACandFile is visible from
+    /// ADeclFile (same file, or in ADeclFile's resolved uses scope).</summary>
+    function CandInScope(ADeclFile, ACandFile: Int64): Boolean;
+    /// <summary>Resolve a raw type text (a param/field/local Signature) to a
+    /// defining class/interface/record symbol id, in scope of ADeclFileId. 0 when
+    /// unresolvable OR ambiguous (FP-conservative, mirrors ResolveAncestry).</summary>
+    function ResolveTypeNameToSymbol(const ATypeText: string; ADeclFileId: Int64): Int64;
+    /// <summary>Direct children of AParentId (cached). Empty when none / 0.</summary>
+    function ChildrenOf(AParentId: Int64): TList<TSymbol>;
+    /// <summary>The source lines of the file AFileId (cached, ANSI). Nil-safe.</summary>
+    function LinesOf(AFileId: Int64): TStringList;
+    /// <summary>Find a direct child of AParentId whose Name matches AName (case-
+    /// insensitively) and whose Kind is in AKinds. Default(TSymbol) (Id=0) when
+    /// none.</summary>
+    function FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet): TSymbol;
+    /// <summary>Given a resolved receiver TYPE symbol id, look up a method named
+    /// AMethodName on the type's own children + its transitive ancestors. Sets
+    /// AConfidence ('certain' one match | 'ambiguous' >1) and returns the target
+    /// method id, or 0 (method not found on the chain).</summary>
+    function LookupMethodOnType(ATypeSymbolId: Int64; const AMethodName: string; out AConfidence: string): Int64;
+    /// <summary>Type the receiver expression left of the call. Returns the
+    /// receiver TYPE symbol id (0 when the receiver kind is unhandled or its type
+    /// is unresolvable). AReceiverExpr is '' for a bare / Self call, in which case
+    /// the enclosing routine's owning class is used.</summary>
+    function TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+  public
+    /// <summary>Builds the whole-DB name/scope maps from AStore. Call once.</summary>
+    constructor Create(const AStore: ISymbolStore);
+    destructor Destroy; override;
+
+    /// <summary>Resolve one call-site ref to a call edge. RefId is copied from
+    /// ACallRef; TargetSymbolId=0 means NO edge (unresolved / unhandled shape).
+    /// ReceiverTypeSymbolId is set whenever the receiver type resolved (even if
+    /// the method was not found on it); Confidence is 'certain' | 'ambiguous'
+    /// (only meaningful when TargetSymbolId>0).</summary>
+    function ResolveOne(const ACallRef: TReference): TCallEdge;
+  end;
+
+  /// <summary>Extract the receiver expression immediately left of a dotted call.
+  /// ARefCol is the 1-based column of the called method name's first char (the
+  /// ref position the parser stores for X.M -> col of M). Returns the receiver
+  /// text ('FBar', 'Self', 'A.B', '(X as TBar)', 'GetFoo') or '' for a bare /
+  /// non-dotted call. Pure over ASourceLine; unit-tested via
+  /// TCallResolver's own trace.</summary>
+  function ExtractReceiverExpr(const ASourceLine: string; ARefCol: Integer): string;
+
+  /// <summary>True when ATypeText, normalized, is a hard cast prefix shape
+  /// '(EXPR as TName)' or 'TName(EXPR)'; if so ATypeName receives the target
+  /// type name TName. Used by receiver kind 6 (cast). False otherwise.</summary>
+  function TryParseCastTarget(const AReceiverExpr: string; out ATypeName: string): Boolean;
+
+implementation
+
+const
+  // The set of type-defining kinds a receiver can be typed to.
+  TYPE_KINDS: TSymbolKindSet = [skClass, skInterface, skRecord];
+  // Method-shaped children we accept as a call target on a resolved type.
+  METHOD_KINDS: TSymbolKindSet = [skMethod, skProcedure, skFunction, skConstructor, skDestructor];
+
+// True when C can start / continue a Pascal identifier.
+function IsIdentStart(C: Char): Boolean; inline;
+begin
+  Result:= (C = '_') or ((C >= 'A') and (C <= 'Z')) or ((C >= 'a') and (C <= 'z'));
+end;
+
+function IsIdentPart(C: Char): Boolean; inline;
+begin
+  Result:= IsIdentStart(C) or ((C >= '0') and (C <= '9'));
+end;
+
+// v14 (D5): walk left from the dot preceding a call to capture the receiver.
+// Handles: dotted identifier chains (A.B.C), a bracket-balanced trailing group
+// ((expr) / [idx]) for cast / index / function-return receivers. Stops at the
+// first boundary that cannot be part of a primary expression.
+function ExtractReceiverExpr(const ASourceLine: string; ARefCol: Integer): string;
+var
+  Line : string ;
+  I    : Integer;
+  StopL: Integer; // leftmost captured index (inclusive)
+  Depth: Integer;
+  Ch   : Char   ;
+begin
+  Result:= '';
+  Line  := ASourceLine;
+  // ARefCol is 1-based at the method name; the char just before it must be '.'
+  // for this to be a dotted call. Guard the bounds first.
+  if (ARefCol <= 1) or (ARefCol > Length(Line) + 1) then Exit;
+  I:= ARefCol - 1; // index of the char immediately before the method name
+  if (I < 1) or (I > Length(Line)) or (Line[I] <> '.') then Exit; // bare / non-dotted
+  // Now capture the primary expression ending at I-1 (just left of the dot),
+  // skipping whitespace between the receiver and the dot.
+  I:= I - 1;
+  while (I >= 1) and (Line[I] = ' ') do Dec(I);
+  if I < 1 then Exit;
+  StopL:= I + 1; // will be overwritten as we consume tokens
+  // Loop: consume a selector segment (identifier or bracket group), then if the
+  // next char left is a '.', consume the dot and keep going (dotted chain).
+  while I >= 1 do
+  begin
+    Ch:= Line[I];
+    if (Ch = ')') or (Ch = ']') then
+    begin
+      // Balanced bracket group: walk left to its matching opener.
+      Depth:= 0;
+      while I >= 1 do
+      begin
+        if (Line[I] = ')') or (Line[I] = ']') then Inc(Depth)
+        else if (Line[I] = '(') or (Line[I] = '[') then
+        begin
+          Dec(Depth);
+          if Depth = 0 then Break;
+        end;
+        Dec(I);
+      end;
+      if Depth <> 0 then Exit; // unbalanced -> give up (return '')
+      StopL:= I;
+      // A '(' or '[' group may be preceded by an identifier: TName(expr) or Arr[i].
+      Dec(I);
+      while (I >= 1) and IsIdentPart(Line[I]) do begin StopL:= I; Dec(I); end;
+    end
+    else if IsIdentPart(Ch) then
+    begin
+      while (I >= 1) and IsIdentPart(Line[I]) do begin StopL:= I; Dec(I); end;
+    end
+    else
+      Break; // not part of a primary expression
+    // Continue a dotted chain only when a '.' immediately precedes (allowing no
+    // spaces -- dotted member access is written tight in practice).
+    if (I >= 1) and (Line[I] = '.') then
+    begin
+      StopL:= I;
+      Dec(I);
+    end
+    else
+      Break;
+  end;
+  Result:= Trim(Copy(Line, StopL, ARefCol - 1 - StopL));
+  // Copy above spans [StopL .. (ARefCol-2)] i.e. everything up to but excluding
+  // the '.' before the method name. Length = (ARefCol-1) - StopL.
+end;
+
+// v14 (D5): recognize the two hard-cast receiver shapes so kind 6 can take the
+// cast TARGET type directly. '(EXPR as TName)' -> TName; 'TName(EXPR)' -> TName.
+// Only fires on an outermost single cast; nested / chained shapes return False.
+function TryParseCastTarget(const AReceiverExpr: string; out ATypeName: string): Boolean;
+var
+  S      : string ;
+  P, Q   : Integer;
+  AsPos  : Integer;
+  Inner  : string ;
+  TypeTok: string ;
+  I      : Integer;
+begin
+  Result  := False;
+  ATypeName:= '';
+  S:= Trim(AReceiverExpr);
+  if S = '' then Exit;
+  // Shape A: '(EXPR as TName)' -- outermost parens, a top-level ' as ' inside.
+  if (S[1] = '(') and (S[Length(S)] = ')') then
+  begin
+    Inner:= Copy(S, 2, Length(S) - 2);
+    // Find a top-level ' as ' (depth 0) in Inner.
+    var Depth: Integer:= 0;
+    AsPos:= 0;
+    I:= 1;
+    while I <= Length(Inner) - 3 do
+    begin
+      case Inner[I] of
+        '(', '[': Inc(Depth);
+        ')', ']': Dec(Depth);
+      end;
+      if (Depth = 0) and (I > 1) and (Inner[I] = ' ') and
+         SameText(Copy(Inner, I + 1, 2), 'as') and (I + 3 <= Length(Inner)) and
+         (Inner[I + 3] = ' ') then
+      begin
+        AsPos:= I;
+        Break;
+      end;
+      Inc(I);
+    end;
+    if AsPos > 0 then
+    begin
+      TypeTok:= Trim(Copy(Inner, AsPos + 4, MaxInt));
+      // TypeTok should be a (possibly dotted) type name -- take its leading token.
+      P:= 1;
+      while (P <= Length(TypeTok)) and (IsIdentPart(TypeTok[P]) or (TypeTok[P] = '.')) do Inc(P);
+      TypeTok:= Copy(TypeTok, 1, P - 1);
+      if TypeTok <> '' then begin ATypeName:= TypeTok; Exit(True); end;
+    end;
+  end;
+  // Shape B: 'TName(EXPR)' -- leading identifier then a balanced paren to the end.
+  if (Length(S) >= 3) and IsIdentStart(S[1]) then
+  begin
+    P:= 1;
+    while (P <= Length(S)) and (IsIdentPart(S[P]) or (S[P] = '.')) do Inc(P);
+    if (P <= Length(S)) and (S[P] = '(') and (S[Length(S)] = ')') then
+    begin
+      TypeTok:= Copy(S, 1, P - 1);
+      // Ensure the paren that opens at P matches the final ')' (single outer cast).
+      var Depth2: Integer:= 0;
+      Q:= 0;
+      for I:= P to Length(S) do
+      begin
+        if S[I] = '(' then Inc(Depth2)
+        else if S[I] = ')' then
+        begin
+          Dec(Depth2);
+          if Depth2 = 0 then begin Q:= I; Break; end;
+        end;
+      end;
+      if (Q = Length(S)) and (TypeTok <> '') then begin ATypeName:= TypeTok; Exit(True); end;
+    end;
+  end;
+end;
+
+{ TCallResolver }
+
+constructor TCallResolver.Create(const AStore: ISymbolStore);
+begin
+  inherited Create;
+  FStore      := AStore;
+  FNameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
+  FFileScope  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
+  FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
+  FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
+  BuildMaps;
+end;
+
+destructor TCallResolver.Destroy;
+begin
+  FLineCache .Free;
+  FChildCache.Free;
+  FFileScope .Free;
+  FNameToCands.Free;
+  FStore:= nil;
+  inherited;
+end;
+
+procedure TCallResolver.BuildMaps;
+var
+  Cands: TArray<TSymbol>;
+  Edges: TArray<TFileScopeEdge>;
+  S    : TSymbol   ;
+  Lc   : string    ;
+  E    : TFileScopeEdge;
+begin
+  // 1. candidate type symbols by lowercased simple name.
+  Cands:= FStore.GetTypeCandidates;
+  for S in Cands do
+  begin
+    Lc:= LowerCase(S.Name);
+    if Lc = '' then Continue;
+    if not FNameToCands.ContainsKey(Lc) then FNameToCands.Add(Lc, TList<TSymbol>.Create);
+    FNameToCands[Lc].Add(S);
+  end;
+  // 2. per-file in-scope target file ids from the uses graph.
+  Edges:= FStore.GetUnitScopeEdges;
+  for E in Edges do
+  begin
+    if not FFileScope.ContainsKey(E.FileId) then FFileScope.Add(E.FileId, TList<Int64>.Create);
+    FFileScope[E.FileId].Add(E.TargetFileId);
+  end;
+end;
+
+function TCallResolver.CandInScope(ADeclFile, ACandFile: Int64): Boolean;
+var
+  L: TList<Int64>;
+begin
+  Result:= (ADeclFile = ACandFile);
+  if Result then Exit;
+  if FFileScope.TryGetValue(ADeclFile, L) then Result:= L.IndexOf(ACandFile) >= 0;
+end;
+
+function TCallResolver.ResolveTypeNameToSymbol(const ATypeText: string; ADeclFileId: Int64): Int64;
+var
+  N    : string        ;
+  Cands: TList<TSymbol>;
+  InScopeIdx, InScopeCount: Integer;
+  ci   : Integer       ;
+begin
+  Result:= 0;
+  // Normalize the same way ResolveAncestry does: strip generics + dotted qualifier.
+  N:= ATypeText;
+  // inline of NormalizeAncestorName (kept local to avoid a storage-unit dep):
+  N:= Trim(N);
+  var LtPos: Integer:= Pos('<', N);
+  if LtPos > 0 then N:= Trim(Copy(N, 1, LtPos - 1));
+  var DotPos: Integer:= N.LastDelimiter('.');
+  if DotPos >= 0 then N:= Trim(Copy(N, DotPos + 2, MaxInt));
+  if N = '' then Exit;
+  if not FNameToCands.TryGetValue(LowerCase(N), Cands) then Exit;
+  InScopeIdx  := -1;
+  InScopeCount:= 0;
+  for ci:= 0 to Cands.Count - 1 do
+    if CandInScope(ADeclFileId, Cands[ci].FileId) then
+    begin
+      Inc(InScopeCount);
+      if InScopeIdx < 0 then InScopeIdx:= ci;
+    end;
+  // Resolve only when unambiguous (mirrors ResolveAncestry's FP policy):
+  //   exactly one in-scope candidate, OR (none in scope) a single global def.
+  if InScopeCount = 1 then
+    Result:= Cands[InScopeIdx].Id
+  else if (InScopeCount = 0) and (Cands.Count = 1) then
+    Result:= Cands[0].Id;
+end;
+
+function TCallResolver.ChildrenOf(AParentId: Int64): TList<TSymbol>;
+var
+  Arr: TArray<TSymbol>;
+  S  : TSymbol        ;
+begin
+  if AParentId <= 0 then Exit(nil);
+  if FChildCache.TryGetValue(AParentId, Result) then Exit;
+  Result:= TList<TSymbol>.Create;
+  Arr   := FStore.FindAllChildSymbols(AParentId);
+  for S in Arr do Result.Add(S);
+  FChildCache.Add(AParentId, Result);
+end;
+
+function TCallResolver.LinesOf(AFileId: Int64): TStringList;
+var
+  Path: string;
+begin
+  if AFileId <= 0 then Exit(nil);
+  if FLineCache.TryGetValue(AFileId, Result) then Exit;
+  Result:= TStringList.Create;
+  Path  := FStore.GetFilePath(AFileId);
+  if Path <> '' then
+    try
+      // ANSI: source files are strict 7-bit ASCII / CP125x, matching Doc.Facts.
+      Result.Text:= TFile.ReadAllText(Path, TEncoding.ANSI);
+    except
+      // A missing / locked / unreadable source file is not fatal to the whole-DB
+      // pass: leave the line list empty so this ref's receiver stays unresolved
+      // (Target=0) rather than aborting resolution for every other ref.
+      Result.Clear;
+    end;
+  FLineCache.Add(AFileId, Result);
+end;
+
+function TCallResolver.FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet): TSymbol;
+var
+  Kids: TList<TSymbol>;
+  S   : TSymbol       ;
+begin
+  Result:= Default(TSymbol);
+  Kids  := ChildrenOf(AParentId);
+  if Kids = nil then Exit;
+  for S in Kids do
+    if (S.Kind in AKinds) and SameText(S.Name, AName) then Exit(S);
+end;
+
+function TCallResolver.LookupMethodOnType(ATypeSymbolId: Int64; const AMethodName: string; out AConfidence: string): Int64;
+var
+  MatchCount: Integer            ;
+  First     : Int64              ;
+  Kids      : TList<TSymbol>     ;
+  S         : TSymbol            ;
+  A         : TTypeAncestor      ;
+begin
+  Result    := 0;
+  AConfidence:= '';
+  MatchCount := 0;
+  First      := 0;
+  if ATypeSymbolId <= 0 then Exit;
+  // 1. the type's own methods.
+  Kids:= ChildrenOf(ATypeSymbolId);
+  if Kids <> nil then
+    for S in Kids do
+      if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then
+      begin
+        Inc(MatchCount);
+        if First = 0 then First:= S.Id;
+      end;
+  // 2. inherited methods along the transitive ancestor chain. A method defined
+  // on an ancestor counts too; overrides on the type itself already counted in
+  // step 1 (so a class + its base each declaring M yields MatchCount>=2 ->
+  // ambiguous, correctly flagging that the concrete target is uncertain).
+  for A in FStore.GetTransitiveAncestors(ATypeSymbolId) do
+  begin
+    if not A.Resolved or (A.SymbolId <= 0) then Continue;
+    Kids:= ChildrenOf(A.SymbolId);
+    if Kids = nil then Continue;
+    for S in Kids do
+      if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then
+      begin
+        Inc(MatchCount);
+        if First = 0 then First:= S.Id;
+      end;
+  end;
+  if MatchCount = 0 then Exit; // not found on the chain -> 0 / '?'
+  Result:= First;
+  if MatchCount = 1 then AConfidence:= 'certain' else AConfidence:= 'ambiguous';
+end;
+
+function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+var
+  Encl    : TSymbol;
+  ClassId : Int64  ;
+  Member  : TSymbol;
+  CastType: string ;
+  Anc     : TArray<TTypeAncestor>;
+begin
+  Result:= 0;
+  if ACallRef.EnclosingSymbolId <= 0 then Exit; // no enclosing routine -> give up
+  Encl:= FStore.GetSymbolById(ACallRef.EnclosingSymbolId);
+
+  // --- Kind 1: bare M / Self.M / inherited M -> the enclosing routine's class.
+  if (AReceiverExpr = '') or SameText(AReceiverExpr, 'Self') then
+    Exit(Encl.ParentId);
+  if SameText(AReceiverExpr, 'inherited') then
+  begin
+    // inherited M dispatches to the FIRST direct ancestor of the class.
+    ClassId:= Encl.ParentId;
+    if ClassId <= 0 then Exit;
+    Anc:= FStore.GetTransitiveAncestors(ClassId);
+    for var A in Anc do
+      if A.Resolved and (A.SymbolId > 0) then Exit(A.SymbolId);
+    Exit; // no resolved ancestor -> 0
+  end;
+
+  ClassId:= Encl.ParentId; // the enclosing routine's owning class (for kinds 2/3)
+
+  // --- Kind 6: cast '(X as TBar).M' / 'TBar(X).M' -> the cast target type.
+  if TryParseCastTarget(AReceiverExpr, CastType) then
+    Exit(ResolveTypeNameToSymbol(CastType, ACallRef.FileId));
+
+  // The remaining handled kinds require a simple identifier receiver.
+  if not IsIdentStart(AReceiverExpr[1]) then Exit; // dotted / complex -> unhandled
+  for var i:= 1 to Length(AReceiverExpr) do
+    if not IsIdentPart(AReceiverExpr[i]) then Exit; // e.g. 'A.B' chain -> unhandled
+
+  // --- Kind 4: typed LOCAL var 'L.M' -> local's declared type.
+  //     Kind 5: PARAM 'AFoo.M' -> param's declared type.
+  // Both are children of the enclosing ROUTINE. Try them first (an inner name
+  // shadows a field), then fall back to the class fields/properties.
+  Member:= FindChildOfKind(ACallRef.EnclosingSymbolId, AReceiverExpr, [skLocalVar, skParam]);
+  if Member.Id > 0 then
+    Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
+
+  // --- Kind 2: FIELD 'FBar.M' / Kind 3: PROPERTY 'Prop.M' -> member's type.
+  //     Members are children of the enclosing class.
+  if ClassId > 0 then
+  begin
+    Member:= FindChildOfKind(ClassId, AReceiverExpr, [skField, skProperty]);
+    if Member.Id > 0 then
+      Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
+  end;
+
+  // Unresolved receiver identifier (unknown local/param/field, or a global we do
+  // not track) -> Result stays 0 (leave unresolved).
+end;
+
+function TCallResolver.ResolveOne(const ACallRef: TReference): TCallEdge;
+var
+  Lines   : TStringList;
+  Line    : string     ;
+  Rcv     : string     ;
+  TypeId  : Int64      ;
+  Conf    : string     ;
+  Target  : Int64      ;
+begin
+  Result:= Default(TCallEdge);
+  Result.RefId:= ACallRef.Id;
+  Result.TargetSymbolId      := 0;
+  Result.ReceiverTypeSymbolId:= 0;
+  Result.Confidence          := '';
+
+  if ACallRef.NameText = '' then Exit;
+
+  // 1. read the source line and extract the receiver expression left of '.M'.
+  Rcv := '';
+  Lines:= LinesOf(ACallRef.FileId);
+  if (Lines <> nil) and (ACallRef.StartLine >= 1) and (ACallRef.StartLine <= Lines.Count) then
+  begin
+    Line:= Lines[ACallRef.StartLine - 1];
+    Rcv := ExtractReceiverExpr(Line, ACallRef.StartCol);
+  end;
+
+  // 2. type the receiver -> a class/interface/record symbol id.
+  TypeId:= TypeReceiver(ACallRef, Rcv);
+  Result.ReceiverTypeSymbolId:= TypeId; // 0 when the receiver type is unknown
+  if TypeId <= 0 then Exit; // unhandled shape / unresolvable type -> no edge
+
+  // 3. look the method up on the resolved type + its ancestor chain.
+  Target:= LookupMethodOnType(TypeId, ACallRef.NameText, Conf);
+  if Target <= 0 then Exit; // method not found on the chain -> '?' bucket, no edge
+  Result.TargetSymbolId:= Target;
+  Result.Confidence    := Conf;
+end;
+
+end.

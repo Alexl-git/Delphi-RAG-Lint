@@ -113,6 +113,16 @@ type
     Confidence          : string;
   end;
 
+  /// <summary>v14 (D5): one resolved uses-scope edge -- file AFileId can see
+  /// (has in its uses graph, directly) the unit whose file is ATargetFileId.
+  /// Bulk-read by TCallResolver to build its per-file in-scope set, mirroring
+  /// ResolveAncestry's FileScope map. Both ids are always &gt; 0 (the reader
+  /// filters out unresolved uses rows).</summary>
+  TFileScopeEdge = record
+    FileId      : Int64;
+    TargetFileId: Int64;
+  end;
+
   /// <summary>v14 (D5): a RENDERING value for one resolved (or best-effort
   /// unresolved) caller of a target symbol. Confidence is 'certain' |
   /// 'ambiguous' | 'unverified' -- the last for the no-call_edges-row '?'

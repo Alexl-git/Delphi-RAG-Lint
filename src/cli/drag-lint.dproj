@@ -168,6 +168,7 @@
         <DCCReference Include="..\index\DRagLint.Index.DbSelect.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Drift.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Coverage.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.CallResolver.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

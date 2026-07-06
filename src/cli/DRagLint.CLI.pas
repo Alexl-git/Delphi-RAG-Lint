@@ -85,6 +85,7 @@ uses
   , DRagLint.Index      .DbSelect
   , DRagLint.Index      .Drift
   , DRagLint.Index      .Coverage
+  , DRagLint.Index      .CallResolver
   , DRagLint.Wiring
   , DRagLint.Output.Sarif
   , DRagLint.Output.ExitCode

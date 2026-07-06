@@ -190,6 +190,16 @@ type
     function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
     /// <summary>Total row count in call_edges. Diagnostic/test probe.</summary>
     function CountCallEdges: Int64;
+    /// <summary>v14 (D5): every class/interface/record symbol (id, file_id, kind,
+    /// name populated). Bulk read that backs TCallResolver's name-candidate map
+    /// for receiver typing -- the same candidate set ResolveAncestry builds
+    /// inline, exposed so the resolver can prepare it once.</summary>
+    function GetTypeCandidates: TArray<TSymbol>;
+    /// <summary>v14 (D5): every resolved uses-scope edge (file_id -&gt;
+    /// target_file_id) from unit_uses where the target is resolved. Backs
+    /// TCallResolver's per-file in-scope set (mirrors ResolveAncestry's
+    /// FileScope). Unresolved uses rows (NULL target) are excluded.</summary>
+    function GetUnitScopeEdges: TArray<TFileScopeEdge>;
   end;
 
   TParseResult = record
