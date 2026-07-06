@@ -155,6 +155,13 @@ type
     WiringCoverage: Boolean; // v8: --coverage for the wiring command
     ContextLines  : Integer; // v0.17: find-callers --context N
     Resolved      : Boolean; // v14 (D5 T8): find-callers --resolved (precise callers via call_edges)
+    // v14 (D5 T11): call-graph traversal verbs (call-path / callgraph)
+    CallFrom : string ; // --from <A>  (call-path source routine name/qname)
+    // CallTo reuses RenameTo: --to is parsed into RenameTo (rename verb); call-path
+    // and rename never run together, so call-path reads its --to from RenameTo.
+    MaxDepth : Integer; // --max-depth N (call-path BFS safety cap; default 20)
+    // Depth (--depth, above, default 3) is reused as callgraph's tree depth.
+    Direction: string ; // --direction callers|callees (callgraph; default 'callees')
     // v0.18: context bundle
     Task               : string ; // raw --task value
     Verb               : string ; // parsed verb (modify/inspect/refactor/delete/extend)
@@ -312,6 +319,8 @@ begin
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
   Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X)');
   Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
+  Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
+  Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('');
   Writeln('  Output/CI (lint, lint-all, check-ast):');
   Writeln('    --format sarif            emit SARIF 2.1.0 (in addition to text|json)');
@@ -417,6 +426,8 @@ begin
   Result.IncludeClassSurface:= True;
   Result.ContextLines       := 3;
   Result.BenchN             := 20;
+  Result.MaxDepth           := 20;        // v14 (D5 T11): call-path BFS safety cap
+  Result.Direction          := 'callees'; // v14 (D5 T11): callgraph default direction
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
@@ -540,6 +551,10 @@ begin
     else if A = '--coverage'       then Result.WiringCoverage:= True
     else if (A = '--context') and (i < ParamCount) then begin Inc(i); Result.ContextLines:= StrToIntDef(ParamStr(i), 0); end
     else if A = '--resolved' then Result.Resolved:= True // v14 (D5 T8): find-callers --resolved
+    // v14 (D5 T11): call-path / callgraph traversal flags.
+    else if (A = '--from') and (i < ParamCount) then begin Inc(i); Result.CallFrom:= ParamStr(i); end
+    else if (A = '--max-depth') and (i < ParamCount) then begin Inc(i); Result.MaxDepth:= StrToIntDef(ParamStr(i), 20); end
+    else if (A = '--direction') and (i < ParamCount) then begin Inc(i); Result.Direction:= ParamStr(i); end
     else if (A = '--task') and (i < ParamCount) then
     begin
       Inc(i);
@@ -8090,6 +8105,376 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>v14 (D5 T11): resolve a --from/--to/--qname endpoint (a bare name
+/// OR a fully-qualified name) to symbol ids, for the call-graph traversal
+/// verbs. Tries exact-name first (FindSymbolsByExactName -- lets a test pass a
+/// bare method name like 'StepA'), then falls back to qualified-name lookup
+/// (FindSymbolsByQualifiedName -- 'unit.TClass.Method'). Returns every matching
+/// symbol id (an overloaded/duplicated name yields several); empty array when
+/// the name resolves to nothing.</summary>
+/// <param name="AStore">The open store to resolve against.</param>
+/// <param name="AName">The endpoint name (bare or qualified).</param>
+/// <returns>All matching symbol ids (may be empty).</returns>
+function ResolveEndpointIds(const AStore: ISymbolStore; const AName: string): TArray<Int64>;
+var
+  Syms: TArray<TSymbol>;
+  S   : TSymbol        ;
+  L   : TList<Int64>   ;
+begin
+  L:= TList<Int64>.Create;
+  try
+    Syms:= AStore.FindSymbolsByExactName(AName);
+    if Length(Syms) = 0 then Syms:= AStore.FindSymbolsByQualifiedName(AName);
+    for S in Syms do
+      if not L.Contains(S.Id) then L.Add(S.Id);
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end; // try
+end; // function
+
+/// <summary>v14 (D5 T11): drag-lint call-path --from A --to B [--max-depth N]
+/// [--json] --db PATH -- prints the SHORTEST resolved call path A -&gt; ... -&gt;
+/// B over the resolved call_edges (does A eventually call B, and by what
+/// route). A and B are resolved via ResolveEndpointIds (bare name or qname).
+/// Traversal is a breadth-first search over the CALLEES direction
+/// (GetCallEdgesFromSymbol -&gt; TargetSymbolId), starting from every id A
+/// resolves to, stopping at the first id B resolves to. A VISITED set guards
+/// cycles (a node is never revisited) and the search is additionally bounded by
+/// --max-depth (default 20). BFS yields the shortest path; it is rebuilt from a
+/// child-&gt;parent map. "No path within the cap" is a VALID answer (exit 1 +
+/// "no path from A to B" / json found:false), NOT an error. Traverses within a
+/// single DB -- ids are per-DB, so a path that would span indexes is out of
+/// scope.</summary>
+/// <param name="AArgs">Parsed CLI args; CallFrom is A, RenameTo (--to) is B,
+/// MaxDepth the cap, DbPath the index.</param>
+/// <returns>0 when a path was found and printed; 1 when both endpoints resolved
+/// but no path exists within --max-depth; 2 on usage error / missing db /
+/// an endpoint that resolves to no symbol.</returns>
+function DoCallPath(const AArgs: TArgs): Integer;
+var
+  Store   : ISymbolStore              ;
+  FromIds : TArray<Int64>             ;
+  ToIds   : TArray<Int64>             ;
+  ToSet   : TDictionary<Int64,Boolean>;
+  Visited : TDictionary<Int64,Boolean>;
+  Parent  : TDictionary<Int64,Int64>  ;
+  Depths  : TDictionary<Int64,Integer>;
+  Frontier: TQueue<Int64>             ;
+  Cur     : Int64                     ;
+  Hit     : Int64                     ;
+  Found   : Boolean                   ;
+  Edges   : TArray<TCallEdge>         ;
+  E       : TCallEdge                 ;
+  PathIds : TList<Int64>              ;
+  QNames  : TList<string>             ;
+  Walk    : Int64                     ;
+  ToB     : string                    ;
+  i       : Integer                   ;
+begin
+  ToB:= AArgs.RenameTo; // --to reuses RenameTo (rename + call-path never co-run)
+  if (AArgs.CallFrom = '') or (ToB = '') then
+  begin Writeln('Usage: drag-lint call-path --from A --to B [--max-depth N] [--json] --db PATH'); Exit(2); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
+
+  FromIds:= ResolveEndpointIds(Store, AArgs.CallFrom);
+  if Length(FromIds) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.CallFrom])); Exit(2); end;
+  ToIds:= ResolveEndpointIds(Store, ToB);
+  if Length(ToIds) = 0 then begin Writeln(Format('symbol not found: %s', [ToB])); Exit(2); end;
+
+  var Cap: Integer:= AArgs.MaxDepth;
+  if Cap <= 0 then Cap:= 20;
+
+  ToSet   := TDictionary<Int64,Boolean>.Create;
+  Visited := TDictionary<Int64,Boolean>.Create;
+  Parent  := TDictionary<Int64,Int64>.Create;
+  Depths  := TDictionary<Int64,Integer>.Create;
+  Frontier:= TQueue<Int64>.Create;
+  PathIds := TList<Int64>.Create;
+  QNames  := TList<string>.Create;
+  try
+    for Hit in ToIds do ToSet.AddOrSetValue(Hit, True);
+
+    // Seed the BFS with every id A resolves to (multi-source). A source that is
+    // itself a target = the trivial length-0 path.
+    Found:= False; Hit:= 0;
+    for Cur in FromIds do
+      if not Visited.ContainsKey(Cur) then
+      begin
+        Visited.Add(Cur, True);
+        Depths.AddOrSetValue(Cur, 0);
+        Frontier.Enqueue(Cur);
+        if ToSet.ContainsKey(Cur) and not Found then begin Found:= True; Hit:= Cur; end;
+      end;
+
+    while (not Found) and (Frontier.Count > 0) do
+    begin
+      Cur:= Frontier.Dequeue;
+      var D: Integer:= Depths[Cur];
+      if D >= Cap then Continue; // depth cap: do not expand past the cap
+      Edges:= Store.GetCallEdgesFromSymbol(Cur);
+      for E in Edges do
+      begin
+        if E.TargetSymbolId <= 0 then Continue;
+        if Visited.ContainsKey(E.TargetSymbolId) then Continue; // cycle/revisit guard
+        Visited.Add(E.TargetSymbolId, True);
+        Parent.AddOrSetValue(E.TargetSymbolId, Cur);
+        Depths.AddOrSetValue(E.TargetSymbolId, D + 1);
+        if ToSet.ContainsKey(E.TargetSymbolId) then
+        begin Found:= True; Hit:= E.TargetSymbolId; Break; end;
+        Frontier.Enqueue(E.TargetSymbolId);
+      end; // for E
+    end; // while
+
+    if not Found then
+    begin
+      if AArgs.AsJson then
+      begin
+        var JNo:= TJSONObject.Create;
+        try
+          JNo.AddPair('found', TJSONBool.Create(False));
+          JNo.AddPair('path' , TJSONArray.Create);
+          Writeln(JNo.Format(2));
+        finally JNo.Free; end;
+      end
+      else Writeln(Format('no path from %s to %s (within max-depth %d)', [AArgs.CallFrom, ToB, Cap]));
+      Exit(1); // "not found" is a valid answer, signalled by exit 1
+    end;
+
+    // Reconstruct: walk parent links from Hit back to a seed (no parent entry).
+    Walk:= Hit;
+    while True do
+    begin
+      PathIds.Add(Walk);
+      if not Parent.TryGetValue(Walk, Walk) then Break; // reached a BFS seed
+    end;
+    PathIds.Reverse; // parent-walk is target->source; flip to source->target
+
+    for i:= 0 to PathIds.Count - 1 do
+      QNames.Add(Store.GetSymbolById(PathIds[i]).QualifiedName);
+
+    if AArgs.AsJson then
+    begin
+      var JOut:= TJSONObject.Create;
+      try
+        JOut.AddPair('found', TJSONBool.Create(True));
+        var JArr:= TJSONArray.Create;
+        for i:= 0 to QNames.Count - 1 do JArr.Add(QNames[i]);
+        JOut.AddPair('path', JArr);
+        Writeln(JOut.Format(2));
+      finally JOut.Free; end;
+    end
+    else
+    begin
+      var Line: string:= '';
+      for i:= 0 to QNames.Count - 1 do
+      begin
+        if i > 0 then Line:= Line + ' -> ';
+        Line:= Line + QNames[i];
+      end;
+      Writeln(Line);
+    end;
+    Result:= 0;
+  finally
+    ToSet.Free; Visited.Free; Parent.Free; Depths.Free;
+    Frontier.Free; PathIds.Free; QNames.Free;
+  end; // try
+end; // function
+
+/// <summary>v14 (D5 T11): renders one node of the callgraph text tree (indented
+/// 2 spaces per level) and recurses to --depth in the chosen direction. Cycle
+/// policy is GLOBAL-VISITED: a symbol is expanded at most once across the whole
+/// traversal; a second encounter prints "&lt;qname&gt; (cycle)" and does NOT
+/// recurse, so the walk provably terminates (every recursion either hits the
+/// depth cap or a node not yet in the visited set, and the id space is finite).
+/// callees follows GetCallEdgesFromSymbol.TargetSymbolId; callers follows
+/// FindResolvedCallers.EnclosingSymbolId.</summary>
+/// <param name="AStore">Open store.</param>
+/// <param name="AId">Symbol id of this node.</param>
+/// <param name="ADepth">Remaining depth (0 = do not expand children).</param>
+/// <param name="ACallees">True = callees direction, False = callers.</param>
+/// <param name="AIndent">Current indent prefix.</param>
+/// <param name="AVisited">Global visited set (shared across the whole tree).</param>
+procedure RenderCallGraphText(const AStore: ISymbolStore; AId: Int64; ADepth: Integer;
+  ACallees: Boolean; const AIndent: string; AVisited: TDictionary<Int64,Boolean>);
+var
+  QName    : string             ;
+  Edges    : TArray<TCallEdge>  ;
+  E        : TCallEdge          ;
+  Callers  : TArray<TResolvedCaller>;
+  C        : TResolvedCaller    ;
+  ChildIds : TList<Int64>       ;
+  Cid      : Int64              ;
+begin
+  QName:= AStore.GetSymbolById(AId).QualifiedName;
+  if AVisited.ContainsKey(AId) then
+  begin
+    Writeln(Format('%s%s (cycle)', [AIndent, QName]));
+    Exit; // already expanded elsewhere -- print marker, do not recurse
+  end;
+  AVisited.Add(AId, True);
+  Writeln(Format('%s%s', [AIndent, QName]));
+  if ADepth <= 0 then Exit;
+
+  ChildIds:= TList<Int64>.Create;
+  try
+    if ACallees then
+    begin
+      Edges:= AStore.GetCallEdgesFromSymbol(AId);
+      for E in Edges do
+        if (E.TargetSymbolId > 0) and not ChildIds.Contains(E.TargetSymbolId) then
+          ChildIds.Add(E.TargetSymbolId);
+    end
+    else
+    begin
+      Callers:= AStore.FindResolvedCallers(AId);
+      for C in Callers do
+        if (C.EnclosingSymbolId > 0) and not ChildIds.Contains(C.EnclosingSymbolId) then
+          ChildIds.Add(C.EnclosingSymbolId);
+    end;
+    for Cid in ChildIds do
+      RenderCallGraphText(AStore, Cid, ADepth - 1, ACallees, AIndent + '  ', AVisited);
+  finally
+    ChildIds.Free;
+  end; // try
+end; // procedure
+
+/// <summary>v14 (D5 T11): builds one JSON node {qname, children:[...]} of the
+/// callgraph, recursing to --depth with the SAME global-visited cycle policy as
+/// the text renderer (a re-encountered node emits {qname, cycle:true} with no
+/// children). Caller owns the returned TJSONObject.</summary>
+/// <param name="AStore">Open store.</param>
+/// <param name="AId">Symbol id of this node.</param>
+/// <param name="ADepth">Remaining depth.</param>
+/// <param name="ACallees">True = callees, False = callers.</param>
+/// <param name="AVisited">Global visited set.</param>
+/// <returns>A newly allocated JSON node the caller must free.</returns>
+function BuildCallGraphJson(const AStore: ISymbolStore; AId: Int64; ADepth: Integer;
+  ACallees: Boolean; AVisited: TDictionary<Int64,Boolean>): TJSONObject;
+var
+  QName   : string             ;
+  Edges   : TArray<TCallEdge>  ;
+  E       : TCallEdge          ;
+  Callers : TArray<TResolvedCaller>;
+  C       : TResolvedCaller    ;
+  ChildIds: TList<Int64>       ;
+  Cid     : Int64              ;
+  Kids    : TJSONArray         ;
+begin
+  QName:= AStore.GetSymbolById(AId).QualifiedName;
+  Result:= TJSONObject.Create;
+  Result.AddPair('qname', QName);
+  if AVisited.ContainsKey(AId) then
+  begin
+    Result.AddPair('cycle', TJSONBool.Create(True));
+    Exit;
+  end;
+  AVisited.Add(AId, True);
+  Kids:= TJSONArray.Create;
+  Result.AddPair('children', Kids);
+  if ADepth <= 0 then Exit;
+
+  ChildIds:= TList<Int64>.Create;
+  try
+    if ACallees then
+    begin
+      Edges:= AStore.GetCallEdgesFromSymbol(AId);
+      for E in Edges do
+        if (E.TargetSymbolId > 0) and not ChildIds.Contains(E.TargetSymbolId) then
+          ChildIds.Add(E.TargetSymbolId);
+    end
+    else
+    begin
+      Callers:= AStore.FindResolvedCallers(AId);
+      for C in Callers do
+        if (C.EnclosingSymbolId > 0) and not ChildIds.Contains(C.EnclosingSymbolId) then
+          ChildIds.Add(C.EnclosingSymbolId);
+    end;
+    for Cid in ChildIds do
+      Kids.AddElement(BuildCallGraphJson(AStore, Cid, ADepth - 1, ACallees, AVisited));
+  finally
+    ChildIds.Free;
+  end; // try
+end; // function
+
+/// <summary>v14 (D5 T11): drag-lint callgraph --qname X [--direction
+/// callers|callees] [--depth N] [--json] --db PATH -- prints the N-deep
+/// resolved call tree rooted at X, over the resolved call_edges. --direction
+/// callees (default) follows outgoing calls; callers follows resolved callers.
+/// The tree is bounded by BOTH --depth (default 3) AND a global-visited set
+/// that guards cycles: a recursive call graph WILL contain cycles (A calls B
+/// calls A), and each node is expanded at most once -- a re-encounter prints
+/// "&lt;qname&gt; (cycle)" (text) / cycle:true (json) and does not recurse, so
+/// the traversal provably terminates. Renders an indented text tree (2 spaces
+/// per level) or a nested {qname, children:[...]} JSON object. Traverses within
+/// a single DB (ids are per-DB).</summary>
+/// <param name="AArgs">Parsed CLI args; QName is the root, Direction the
+/// direction, Depth the tree depth, DbPath the index.</param>
+/// <returns>0 when the store opened OK and --qname resolved to at least one
+/// symbol; 1 if --qname does not resolve; 2 on usage error / missing db / a bad
+/// --direction value.</returns>
+function DoCallGraph(const AArgs: TArgs): Integer;
+var
+  Store  : ISymbolStore              ;
+  RootIds: TArray<Int64>             ;
+  Visited: TDictionary<Int64,Boolean>;
+  Dir    : string                    ;
+  Callees: Boolean                   ;
+  Depth  : Integer                   ;
+  Rid    : Int64                     ;
+begin
+  if AArgs.QName = '' then
+  begin Writeln('Usage: drag-lint callgraph --qname X [--direction callers|callees] [--depth N] [--json] --db PATH'); Exit(2); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+
+  Dir:= LowerCase(Trim(AArgs.Direction));
+  if Dir = '' then Dir:= 'callees';
+  if (Dir <> 'callees') and (Dir <> 'callers') then
+  begin Writeln(Format('ERROR: --direction must be callers|callees (got "%s")', [AArgs.Direction])); Exit(2); end;
+  Callees:= (Dir = 'callees');
+
+  Depth:= AArgs.Depth;
+  if Depth < 0 then Depth:= 0;
+
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
+
+  RootIds:= ResolveEndpointIds(Store, AArgs.QName);
+  if Length(RootIds) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+
+  if AArgs.AsJson then
+  begin
+    var JRoots:= TJSONArray.Create;
+    try
+      for Rid in RootIds do
+      begin
+        Visited:= TDictionary<Int64,Boolean>.Create;
+        try
+          JRoots.AddElement(BuildCallGraphJson(Store, Rid, Depth, Callees, Visited));
+        finally Visited.Free; end;
+      end;
+      // A single root prints the bare object; multiple (overloads) print an array.
+      if JRoots.Count = 1 then Writeln((JRoots.Items[0] as TJSONObject).Format(2))
+      else Writeln(JRoots.Format(2));
+    finally JRoots.Free; end;
+  end
+  else
+  begin
+    for Rid in RootIds do
+    begin
+      Visited:= TDictionary<Int64,Boolean>.Create;
+      try
+        RenderCallGraphText(Store, Rid, Depth, Callees, '', Visited);
+      finally Visited.Free; end;
+    end;
+  end;
+  Result:= 0;
+end; // function
+
 // v0.27: drag-lint format <file> [--yadf-path PATH]
 // Runs YADF formatter on the given file (YADF rewrites in place).
 // Exit 2 on usage error, 1 on formatter failure, 0 on success.
@@ -9298,6 +9683,8 @@ begin
     else if Args.Command = 'dump-call-edges'   then Result:= DoDumpCallEdges   (Args)
     else if Args.Command = 'find-callees'      then Result:= DoFindCallees     (Args)
     else if Args.Command = 'ambiguous-calls'   then Result:= DoAmbiguousCalls  (Args)
+    else if Args.Command = 'call-path'         then Result:= DoCallPath        (Args)
+    else if Args.Command = 'callgraph'         then Result:= DoCallGraph       (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
     else if Args.Command = 'workspace'         then Result:= DoWorkspace       (Args)
     else if Args.Command = 'selftest'          then Result:= DoSelfTest        (Args)
