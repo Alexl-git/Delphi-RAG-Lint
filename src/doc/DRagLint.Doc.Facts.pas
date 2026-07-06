@@ -317,35 +317,94 @@ begin
   // Returns: type from the signature, else '' (procedures).
   Result.ReturnType:= ParseReturnType(ASym.Signature);
 
-  // Calls (outgoing): DECISION (t3-calls-spike-decision.md, verified via a live
-  // dump-refs spike) -- there is NO store method filtering refs by
+  // Calls (outgoing): v14 (D5 T10) -- PREFER RESOLVED callees, body-scan FALLBACK.
+  // T3's original decision (t3-calls-spike-decision.md) still holds for sites
+  // call_edges cannot resolve: there is no store method filtering refs by
   // enclosing_symbol_id, and GetReferencesFromFile emits EVERY identifier ref
-  // (locals, params, Result, Exit) with ref.Kind not discriminating calls, so an
-  // enclosing-ref filter over-captures. We use a bounded body TEXT-SCAN instead:
-  // scan the impl body (ImplStartLine..ImplEndLine) for 'Identifier(' call sites,
-  // lexer-skipping strings/comments, deduped. Minor over-capture (Create,
-  // SetLength, typecasts) is accepted for Chunk 1; the section is OMITTABLE.
+  // (locals, params, Result, Exit) with ref.Kind not discriminating calls, so a
+  // bounded body TEXT-SCAN ('Identifier(' call sites, lexer-skipping strings/
+  // comments) is still how UNRESOLVED sites are found. But now that
+  // ResolveCallTargets (T5/T6) populates call_edges, resolved sites can show the
+  // QUALIFIED callee (e.g. 'receivers.TAlpha.Run') instead of the bare, possibly
+  // ambiguous identifier ('Run').
+  //
+  // UNION WITHOUT DOUBLE-LISTING: a naive union of (resolved qualified names) +
+  // (body-scan bare names) would list the SAME call twice (once qualified, once
+  // bare) whenever a site resolved. Instead:
+  //   1. Pull GetCallEdgesFromSymbol(ASym.Id); for each edge with a resolved
+  //      target, add the target's QualifiedName to the final set AND record its
+  //      LAST SEGMENT (leaf, e.g. 'Run') in ResolvedLeaves (case-insensitive).
+  //   2. Run the existing body-scan into a bare-name set, as before.
+  //   3. Add each bare name to the final set UNLESS its leaf is already covered
+  //      by ResolvedLeaves -- that bare mention is the SAME call site already
+  //      shown qualified, so it is suppressed (not lost: still counted via the
+  //      qualified entry). A bare name whose leaf was never resolved (SetLength,
+  //      a typecast, an unresolved receiver) still appears -- nothing is lost.
+  // Example: TCaller calls TAlpha.Run (resolves) and TBeta.Run (resolves) and a
+  // bare 'B.Free' (does not resolve) in the same body -> final set shows BOTH
+  // qualified Run callees plus bare 'Free'; the bare 'Run' text is suppressed.
+  //
+  // IDEMPOTENCY: the final set is built into a Sorted/CaseInsensitive/dupIgnore
+  // TStringList (same discipline as the old CallSet), so the displayed order is
+  // deterministic regardless of GetCallEdgesFromSymbol's row order or body-scan
+  // encounter order. Qualified names carry no line numbers, so re-running
+  // document --apply after a reindex reproduces the identical list.
   if (ASym.ImplStartLine > 0) and (ASym.ImplEndLine >= ASym.ImplStartLine) then
   begin
-    var CallSet: TStringList:= TStringList.Create;
+    var FinalSet: TStringList:= TStringList.Create;
+    var ResolvedLeaves: TStringList:= TStringList.Create;
     try
-      CallSet.Sorted:= True;
-      CallSet.Duplicates:= dupIgnore;
-      CallSet.CaseSensitive:= False;
-      var Src: TArray<string>;
+      FinalSet.Sorted:= True;
+      FinalSet.Duplicates:= dupIgnore;
+      FinalSet.CaseSensitive:= False;
+      ResolvedLeaves.Sorted:= True;
+      ResolvedLeaves.Duplicates:= dupIgnore;
+      ResolvedLeaves.CaseSensitive:= False;
+
+      // 1. Resolved callees (qualified), via call_edges.
+      var Edges: TArray<TCallEdge>:= AStore.GetCallEdgesFromSymbol(ASym.Id);
+      for var Edge in Edges do
+        if Edge.TargetSymbolId > 0 then
+        begin
+          var TargetQName: string:= AStore.GetSymbolById(Edge.TargetSymbolId).QualifiedName;
+          if TargetQName <> '' then
+          begin
+            FinalSet.Add(TargetQName);
+            ResolvedLeaves.Add(LastSeg(TargetQName));
+          end;
+        end;
+
+      // 2. Body-scan fallback (bare names), unchanged mechanism.
+      var CallSet: TStringList:= TStringList.Create;
       try
-        Src:= System.IOUtils.TFile.ReadAllLines(AStore.GetFilePath(ASym.FileId), TEncoding.ANSI);
-      except
-        Src:= nil;
+        CallSet.Sorted:= True;
+        CallSet.Duplicates:= dupIgnore;
+        CallSet.CaseSensitive:= False;
+        var Src: TArray<string>;
+        try
+          Src:= System.IOUtils.TFile.ReadAllLines(AStore.GetFilePath(ASym.FileId), TEncoding.ANSI);
+        except
+          Src:= nil;
+        end;
+        for var Ln:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src)) do
+          CollectCallIdents(Src[Ln - 1], CallSet);
+
+        // 3. Add a bare name only when its leaf is NOT already covered by a
+        // resolved qualified callee (suppress the duplicate, keep the unresolved).
+        for var K:= 0 to CallSet.Count - 1 do
+          if ResolvedLeaves.IndexOf(CallSet[K]) < 0 then
+            FinalSet.Add(CallSet[K]);
+      finally
+        CallSet.Free;
       end;
-      for var Ln:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src)) do
-        CollectCallIdents(Src[Ln - 1], CallSet);
-      Result.CallsTotal:= CallSet.Count;
-      var ShownC: Integer:= DocDisplayCount(CallSet.Count);
+
+      Result.CallsTotal:= FinalSet.Count;
+      var ShownC: Integer:= DocDisplayCount(FinalSet.Count);
       SetLength(Result.Calls, ShownC);
-      for var J:= 0 to ShownC - 1 do Result.Calls[J]:= CallSet[J];
+      for var J:= 0 to ShownC - 1 do Result.Calls[J]:= FinalSet[J];
     finally
-      CallSet.Free;
+      ResolvedLeaves.Free;
+      FinalSet.Free;
     end;
   end;
 
