@@ -5,6 +5,71 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.91.0-alpha -- 2026-07-06
+
+D5 call resolution: resolve each Delphi call site to its specific target symbol
+by typing the receiver, and switch AutoDocument + the call-graph verbs to precise
+resolved callers instead of name matches. This fixes the AutoDocument "Called-from"
+name-collision bug -- `document --qname X.Run` no longer lists callers of every
+other `Run` in the codebase; it lists only the true callers of *that* `Run`,
+excludes callers confirmed to target a different method, and marks receivers it
+could not type with a trailing `?`. The whole feature is FP-conservative: when the
+receiver type or the target method is ambiguous, no edge is claimed (an honest `?`
+beats a wrong exclusion). Schema bumps **v13 -> v14** (forces a full reparse; a
+`call_edges` table is created automatically on the next index of an existing DB).
+
+### Added
+
+- **`call_edges` table (schema v14)** -- one row per resolved call site: `ref_id`
+  (the call), `target_symbol_id` (the resolved callee), `confidence`
+  (`certain`|`ambiguous`), `receiver_type_symbol_id` (the statically-known receiver
+  type). Rebuilt from scratch on every index by the new resolution pass.
+- **Typed local vars + params in the index** -- the parser now emits each routine's
+  formal parameters (`skParam`) and local `var`s (`skLocalVar`) as symbols carrying
+  their declared type, so a call-site receiver that is a param/local can be typed.
+  (Numerous; shed on demand with `purge-locals`.)
+- **`TCallResolver` receiver-typing engine** (`src/index/DRagLint.Index.CallResolver.pas`)
+  -- types the receiver at each `X.M` site across kinds: bare/`Self`/`inherited`,
+  field, property, typed local, param, and hard cast; resolves the type to a
+  class/interface/record symbol (single in-scope or single global, else unresolved);
+  walks the type + ancestor chain for `M`. Exactly one match -> `certain`; more than
+  one -> `ambiguous`; unresolved/unknown -> no edge.
+- **`ResolveCallTargets`** -- a whole-DB post-index pass (runs after `ResolveAncestry`)
+  that populates `call_edges`.
+- **Precise call-graph verbs:**
+  - `query find-callers --name X --resolved` -- callers grouped by resolved target,
+    each tagged `certain`/`ambiguous` (without `--resolved`, the old name-based list
+    is unchanged).
+  - `find-callees --qname X` -- the resolved outgoing calls of a routine.
+  - `ambiguous-calls [--qname X | --file F]` -- resolver-coverage diagnostic: call
+    sites that stayed `ambiguous` or untypable.
+  - `call-path --from A --to B [--max-depth N]` -- shortest resolved call path (BFS).
+  - `callgraph --qname X [--direction callers|callees] [--depth N]` -- an N-deep
+    resolved call tree (cycle-safe).
+  - `dump-call-edges --db X` -- diagnostic dump of the resolved edges.
+- **`purge-locals --db X [--json]`** -- size escape hatch: deletes the local/param
+  symbols and `VACUUM`s, while keeping `call_edges` (and every resolved query)
+  byte-identical. Re-inflated on the next full index.
+
+### Changed
+
+- **AutoDocument "Called-from" is now resolved** (the bug fix): built from the
+  resolved `call_edges` for the target symbol, not a name match. Certain callers of
+  the target render plain; callers confirmed to target a different method are
+  excluded; name-matching callers whose receiver could not be typed render with a
+  trailing `?`. Idempotency preserved (file-name-only locations, no line numbers).
+- **AutoDocument "Calls" facts prefer resolved qualified callees** -- a resolved
+  outgoing call shows its qualified name (`Unit.TType.M`); the bare-identifier
+  body-scan remains only for sites that did not resolve (nothing lost). Sorted for
+  idempotent output.
+- **`used-in` note:** `used-in` intentionally stays name-based (it counts type-name
+  references, which are not call sites and not in `call_edges`).
+
+### Migration
+
+- Opening a v13 index with this build creates the `call_edges` table and stamps
+  `schema_version = 14`; the next index populates the edges. No manual step needed.
+
 ## v0.90.0-alpha -- 2026-07-06
 
 AutoDocument Chunk 1: generate and repair DocInsight doc-comments from what the

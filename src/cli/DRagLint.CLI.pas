@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.90.0-alpha';
+  VERSION = '0.91.0-alpha';
 
 /// <summary>TODO: describe.</summary>
 /// <returns>TODO: describe.</returns>
