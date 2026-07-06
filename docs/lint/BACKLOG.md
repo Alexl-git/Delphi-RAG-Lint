@@ -1,5 +1,44 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-06 (LATEST-13) -- **v0.90.0-alpha SHIPPED (AutoDocument Chunk 1). NEXT = AutoDocument Chunk 2.**
+> `main` = release commit (pushed, origin synced, clean). VERSION CLI.pas:6=`0.90.0-alpha`, **schema still v13**.
+> Executed via superpowers:subagent-driven-development (8 tasks + final whole-branch opus review = READY TO
+> RELEASE, 0 Critical / 0 Important). Plan `docs/superpowers/plans/2026-07-05-autodocument-chunk1-plan.md`;
+> spec `docs/superpowers/specs/2026-07-05-autodocument-chunk1-design.md`. SDD ledger `.superpowers/sdd/progress.md`.
+> **What shipped (AutoDocument Chunk 1 = generate + repair a DocInsight comment for ONE public decl via MANAGED
+> REGIONS):** new `document --qname X [--apply|--json|--no-backup] [--db]` CLI verb + IDE "Document it" menu. Three
+> new units src/doc/: `DRagLint.Doc.Facts` (index -> TDocFacts: Called-from/Calls/Used-in/Raises/Returns; no text),
+> `DRagLint.Doc.Regions` (RenderFactsBlock + MergeComment: preserve hand prose, regen the sentinel-fenced facts
+> block + managed <param> tags, idempotent; no index), `DRagLint.Doc.Document` (orchestrator -> TArray<TTextEdit>,
+> classify created/extended/unchanged/not_found). Facts block fenced by `<!-- drag-lint:auto BEGIN/END -->` inside
+> <remarks>; per-param `<!-- drag-lint:auto param -->`. Cap: >15 -> 10 + `(+N more)`. NEVER fabricates (summary/
+> param = `TODO: describe.`); every fact index/AST-grounded. IDEMPOTENT (2nd run = unchanged, byte-identical --
+> reviewer-traced end-to-end). Also exported the DocStub sig helpers (visibility only; generate-docs unchanged).
+> **KEY BUILD DECISIONS / GOTCHAS (this ship):** (1) T3 outgoing-Calls = the flagged risk -- PRE-VERIFIED via a
+> live spike (no store method filters refs by enclosing_symbol_id; GetReferencesFromFile emits EVERY identifier so
+> the enclosing-filter over-captures locals/params) -> used the body-scan `Ident(` fallback (scratchpad/t3-calls-
+> spike-decision.md). (2) real TSymbol field is `QualifiedName` NOT `QName` (plan text wrong). (3) `HasRet` must use
+> `Facts.ReturnType<>''` (indexed Signature has no `function` kw; class fns=skMethod not skFunction). (4) TWO
+> idempotency bugs caught by T5 review: the daUnchanged compare `SameText(Trim(RawBlock),Trim(Merged))` COULD NEVER
+> MATCH (RawBlock has `///` stripped, Merged is `/// `-prefixed) -> fixed to per-line-normalized current-source-vs-
+> Merged; AND `Called from:` embedded caller LINE NUMBERS that shift every apply -> fixed to file-name-only. (5)
+> AUTO_PARAM sentinel is EMIT-ONLY (the doc parser strips it) -> managed/hand-typed is CONTENT-based. (6) multi-line
+> hand <remarks> prose must be emitted PER-LINE (bare-LF join bug caught by T4 review). Battery at ship: lint 154/154,
+> store 16/16, autodoc 6/6, autofix 9/9. IDE "Document it" LIVE SMOKE = DEFERRED TO USER (source Approved, BPL built).
+> **>>> NEXT = AutoDocument Chunk 2** (roadmap `docs/lint/drag-lint TODO plan.md` Track 2.2/2.3): brainstorm ->
+> spec -> plan -> SDD. Candidates: whole-UNIT / whole-PROJECT batch document; more doc sources (`<seealso>` from
+> related symbols, `<since>`/`@deprecated` from VCS or `deprecated` directive); a `missing-doc` report-only lint
+> rule; the RAD Studio DocInsight-collection spike. **DEFERRED (user):** semantic-drift detection (behaviour change
+> -> hand prose needs updating -- needs intent understanding, not structure).
+> **>>> 2 CHEAP FAST-FOLLOWS (final review, non-blocking, bundle into ONE tidy-up commit):** (a) a 1-caller-twice
+> CalledFrom-dedupe REGRESSION fixture [the dedupe code path is untested -- all T6 fixtures call the target once so
+> the `Continue`-on-seen never fires]; (b) delete/relocate the DEAD `action=not_found` JSON arm in DoDocument
+> [daNotFound returns text+exit1 BEFORE the --json block -> unreachable, harmless]. Optional (c) a Calls/Raises-
+> bearing idempotency fixture to harden the shift-invariance lock. All other Minors DEFER-SAFE (T3 Calls over-capture,
+> T4 blank-line drop + `TODO:` desc edge -- documented, best-effort).
+> CADENCE (user, unchanged): publish chunk -> plan next -> handoff -> clear -> implement -> publish.
+>
+> --- (prior) ---
 > ## RESUME 2026-07-05 (LATEST-12) -- **v0.89.0-alpha SHIPPED. AutoDocument Chunk 1 DESIGNED (spec+plan). NEXT = EXECUTE the plan.**
 > `main`=`fcbb439` (clean, pushed, origin synced). VERSION CLI.pas:6=`0.89.0-alpha`, **schema still v13**.
 > **>>> NEXT ACTION = execute `docs/superpowers/plans/2026-07-05-autodocument-chunk1-plan.md` (8 tasks) via

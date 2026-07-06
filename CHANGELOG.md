@@ -5,6 +5,51 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.90.0-alpha -- 2026-07-06
+
+AutoDocument Chunk 1: generate and repair DocInsight doc-comments from what the
+index already knows. This is the first slice of the AutoDocument track and the most
+differentiated capability drag-lint has -- nobody else can auto-write DocInsight
+from a symbol index. The core design is **managed regions**: drag-lint owns
+sentinel-fenced parts of a `///` comment and regenerates them idempotently, while
+everything outside those fences is hand-written and never touched. It never
+fabricates prose -- a missing `<summary>` or `<param>` gets a `TODO: describe.`
+marker, and every emitted fact is ground-truth from the index or the signature.
+No index-schema change (still v13); the DB is opened read-only.
+
+### Added
+- **`document --qname <Foo.TBar.Baz> [--apply] [--json] [--no-backup] [--db PATH]`**
+  CLI verb. Dry-run by default (prints the merged comment preview); `--apply` writes
+  the comment above the declaration (+ a `.bak` unless `--no-backup`); `--json`
+  emits `{qname, file, line, action, edits, applied}` with `action` in
+  `created | extended | unchanged | not_found`. Exit 0 on ok/unchanged, 1 on
+  not-found, 2 on usage. The legacy print-only `generate-docs` is unchanged.
+- **Managed-region model.** A fenced facts block inside `<remarks>`
+  (`<!-- drag-lint:auto BEGIN -->` .. `<!-- drag-lint:auto END -->`) carrying
+  index-grounded facts: **Called from**, **Calls**, **Used in units**, **Raises**,
+  and **Returns**. A list longer than 15 shows its top 10 + `(+N more)`. Auto-added
+  `<param>` tags carry a `<!-- drag-lint:auto param -->` marker. Regeneration is
+  idempotent -- a second `document` run on an up-to-date comment reports `unchanged`
+  and makes zero edits (verified byte-identical).
+- **Repair mode.** An existing comment's hand-written `<summary>`/`<param>`/`<remarks>`
+  prose is preserved verbatim (multi-line remarks kept per-line); missing `<param>`
+  tags are added, managed tags for deleted params are dropped, and a hand-typed
+  `<param>` for a deleted param is flagged (never deleted).
+- **IDE "Document it"** context-menu item on a symbol node in the Structure tab --
+  spawns `document --qname --apply` against the project index and reloads the buffer.
+- Three new focused units under `src/doc/`: `DRagLint.Doc.Facts` (index -> facts,
+  no text), `DRagLint.Doc.Regions` (sentinel-fenced text manipulation, no index),
+  `DRagLint.Doc.Document` (orchestrator -> `TArray<TTextEdit>`).
+
+### Notes
+- The outgoing **Calls** section is a bounded, best-effort body text-scan (an
+  identifier immediately followed by `(`, lexer-skipping strings/comments) -- it may
+  over-capture a few non-calls (e.g. `Create`, typecasts); the section is omittable
+  and **Called from** is the solid headline.
+- The `DocStub` signature helpers (`ExtractParamList`, `ParseParamNames`,
+  `SignatureHasReturn`) are now exported (visibility move only; `generate-docs`
+  unchanged).
+
 ## v0.89.0-alpha -- 2026-07-05
 
 AutoFix Chunk 2: widen the fixable-rule set and close the deferred items. Chunk 1
