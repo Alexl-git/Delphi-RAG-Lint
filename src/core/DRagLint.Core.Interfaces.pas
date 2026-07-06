@@ -190,6 +190,15 @@ type
     /// <summary>The Called-from query: every resolved caller of ATargetSymbolId,
     /// most-confident first. Backs the AutoDocument Called-from facts block.</summary>
     function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
+    /// <summary>v14 (D5): the AutoDocument '?' bucket -- every ref whose
+    /// name_text = AName AND that has NO call_edges row (its receiver could not be
+    /// typed, so the resolver emitted no edge). Each returned TResolvedCaller
+    /// carries Confidence = 'unverified' so the renderer marks it ' ?' (honest:
+    /// might or might not be the documented symbol). Ordered by file path then
+    /// start line to mirror FindCallersByName's first-seen ordering. Location is
+    /// file-name-only (idempotency: no volatile ':line'); EnclosingQName is '' when
+    /// the ref has no enclosing routine.</summary>
+    function FindUnresolvedNameCallers(const AName: string): TArray<TResolvedCaller>;
     /// <summary>Find-callees: every call edge whose ref is enclosed by
     /// AEnclosingSymbolId (i.e. every resolved call made from inside that
     /// routine's body).</summary>

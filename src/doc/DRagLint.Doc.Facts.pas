@@ -9,8 +9,13 @@ uses
 
 type
   TDocFactRef = record
-    Display : string;   { e.g. 'Unit1.DoThing' }
-    Location: string;   { file name only, e.g. 'U1.pas' -- NO :line (volatile) }
+    Display   : string;   { e.g. 'Unit1.DoThing' }
+    Location  : string;   { file name only, e.g. 'U1.pas' -- NO :line (volatile) }
+    // v14 (D5): 'certain' | 'ambiguous' | 'unverified' | ''. The renderer marks
+    // any value OTHER than 'certain'/'' with a trailing ' ?' (honest uncertainty):
+    // 'ambiguous' = resolved to this symbol but >1 candidate on the type chain;
+    // 'unverified' = a name-match with NO call_edges row (receiver untypable).
+    Confidence: string;
   end;
 
   /// <summary>Index-grounded facts about one symbol, for the managed
@@ -213,54 +218,93 @@ end;
 
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol): TDocFacts;
 var
-  Refs   : TArray<TReference>;
-  R      : TReference        ;
-  Encl   : TSymbol           ;
-  FR     : TDocFactRef       ;
-  Distinct: TList<TDocFactRef>;
-  Seen   : TDictionary<string, Boolean>;
-  Key    : string            ;
-  Shown  : Integer           ;
-  I      : Integer           ;
+  ResCallers: TArray<TResolvedCaller>;
+  RC        : TResolvedCaller        ;
+  FR        : TDocFactRef            ;
+  Distinct  : TList<TDocFactRef>     ;
+  Seen      : TDictionary<string, Boolean>;
+  Key       : string                 ;
+  Shown     : Integer                ;
+  I         : Integer                ;
+
+  // Map one resolved-caller row to a display ref. Display is the enclosing
+  // routine's qualified name (or the same fallback the name-based path used when
+  // the ref has no enclosing symbol); Location is already file-name-only.
+  function ToFactRef(const ARC: TResolvedCaller): TDocFactRef;
+  begin
+    Result:= Default(TDocFactRef);
+    Result.Display:= ARC.EnclosingQName;
+    if Result.Display = '' then Result.Display:= LastSeg(ASym.QualifiedName) + ' caller';
+    Result.Location  := ARC.Location;
+    Result.Confidence:= ARC.Confidence;
+  end;
+
+  // Add FR to Distinct unless a caller with the SAME 'Display|Location' key has
+  // already been added. First-seen wins -> resolved bucket (added first) beats a
+  // later unverified name-match for the same caller, so a caller that DID resolve
+  // to this symbol is never re-marked '?'.
+  procedure AddDistinct(const AFR: TDocFactRef);
+  begin
+    Key:= AFR.Display + '|' + AFR.Location;
+    if Seen.ContainsKey(Key) then Exit;
+    Seen.Add(Key, True);
+    Distinct.Add(AFR);
+  end;
+
 begin
   Result:= Default(TDocFacts);
 
-  // Called from: name-based caller refs -> display 'EnclosingQName (file)'.
+  // Called from: RESOLVED caller refs -> display 'EnclosingQName (file)'.
+  // v14 (D5) -- THE BUG FIX. Previously this was name-based
+  // (FindCallersByName(LastSeg)), so it listed callers of EVERY same-named method
+  // in the codebase. It is now grounded in call_edges (per-site resolved targets):
+  //   1. FindResolvedCallers(ASym.Id) -- callers whose resolved call target IS
+  //      this symbol. Confidence 'certain' -> plain; 'ambiguous' (>1 candidate on
+  //      the type chain) -> ' ?'. A caller resolved CERTAIN to a DIFFERENT symbol
+  //      is simply absent here -- that is the exclusion, automatic.
+  //   2. FindUnresolvedNameCallers(LastSeg) -- name-matching refs with NO
+  //      call_edges row (receiver untypable). These are 'unverified' -> ' ?'
+  //      (honest: might or might not be this symbol).
+  // The renderer (JoinRefs) appends ' ?' to any Confidence not 'certain'/''.
+  //
   // IDEMPOTENCY: the Location is the caller FILE NAME ONLY -- deliberately NO
   // ':line'. A line number is VOLATILE: applying this managed comment inserts N
   // lines above every caller that sits below the insertion point, so on the next
   // index+run the caller's StartLine has shifted and the regenerated facts block
   // would differ from what is on disk -- 'document' would re-write the file every
-  // run, breaking the managed-region idempotency promise. The file name is stable
-  // across edits and the caller's qualified name already lets a reader navigate.
+  // run, breaking the managed-region idempotency promise. TResolvedCaller.Location
+  // is already ExtractFileName'd, preserving this invariant on the resolved path.
   //
   // DEDUPE: a caller routine that references the target 2+ times yields multiple
-  // TReference rows that -- now that the volatile ':line' is dropped -- collapse
-  // to IDENTICAL (Display, Location) pairs. Fold them to a single entry keyed on
-  // 'Display|Location' (both line-free), preserving first-seen order, so a reader
-  // sees each DISTINCT caller once. CalledFromTotal is the DISTINCT count, so the
-  // '(+N more)' suffix reflects distinct callers, and the display cap applies to
-  // the deduped list.
-  Refs:= AStore.FindCallersByName(LastSeg(ASym.QualifiedName));
+  // rows that -- now that the volatile ':line' is dropped -- collapse to IDENTICAL
+  // (Display, Location) pairs. AddDistinct folds them to a single entry keyed on
+  // 'Display|Location' (both line-free). Resolved rows are added BEFORE unverified
+  // rows, so first-seen dedupe also keeps a caller in the STRONGER bucket (a
+  // resolved caller never re-appears as an unverified '?' for the same site).
+  // CalledFromTotal is the DISTINCT count and the display cap applies to it.
+  //
+  // ORDER: FindResolvedCallers orders 'certain' before 'ambiguous', so plain
+  // entries precede ' ?' entries within the resolved bucket; the unverified '?'
+  // bucket follows -- overall plain-before-'?' as the spec requires.
   Distinct:= TList<TDocFactRef>.Create;
   Seen    := TDictionary<string, Boolean>.Create;
   try
-    for I:= 0 to High(Refs) do
+    ResCallers:= AStore.FindResolvedCallers(ASym.Id);
+    for RC in ResCallers do
     begin
-      R:= Refs[I];
-      FR:= Default(TDocFactRef);
-      if R.EnclosingSymbolId > 0 then
-      begin
-        Encl:= AStore.GetSymbolById(R.EnclosingSymbolId);
-        FR.Display:= Encl.QualifiedName;
-      end;
-      if FR.Display = '' then FR.Display:= LastSeg(ASym.QualifiedName) + ' caller';
-      FR.Location:= ExtractFileName(AStore.GetFilePath(R.FileId));
-      Key:= FR.Display + '|' + FR.Location;
-      if Seen.ContainsKey(Key) then Continue;
-      Seen.Add(Key, True);
-      Distinct.Add(FR);
+      FR:= ToFactRef(RC);
+      AddDistinct(FR);
     end;
+    // Unverified name-match bucket: refs whose name matches but that have no
+    // call_edges row (untypable receiver).
+    ResCallers:= AStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName));
+    for RC in ResCallers do
+    begin
+      FR:= ToFactRef(RC);
+      FR.Confidence:= 'unverified'; // enforce the '?' marker regardless of store value
+      AddDistinct(FR);
+    end;
+
     Result.CalledFromTotal:= Distinct.Count;
     Shown:= DocDisplayCount(Distinct.Count);
     SetLength(Result.CalledFrom, Shown);
@@ -307,6 +351,13 @@ begin
 
   // Used in units: only for type-like kinds. Distinct owning units of refs to
   // the type name (FindCallersByName over its last segment).
+  // v14 (D5) NOTE -- DELIBERATELY still name-based (NOT call_edges resolved). This
+  // counts distinct units that reference a TYPE NAME; those are TYPE references,
+  // not method call sites, so they are NOT in call_edges at all (call_edges only
+  // holds resolved METHOD calls). The Called-from name-collision bug that D5 fixes
+  // does not exist here in the same form -- a type-name collision is far rarer and
+  // out of this milestone's scope -- so resolving UsedIn via call_edges does not
+  // apply and would break a working feature for zero bug-fix benefit. Left as-is.
   if ASym.Kind in [skClass, skInterface, skRecord] then
   begin
     var URefs: TArray<TReference>:= AStore.FindCallersByName(LastSeg(ASym.QualifiedName));

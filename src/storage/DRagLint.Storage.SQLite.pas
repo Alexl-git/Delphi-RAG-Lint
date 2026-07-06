@@ -107,6 +107,7 @@ type
       procedure UpsertCallEdge(const AToken: TFileTxToken; const AEdge: TCallEdge);
       procedure ClearCallEdges;
       function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
+      function FindUnresolvedNameCallers(const AName: string): TArray<TResolvedCaller>;
       function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
       function CountCallEdges: Int64;
       function GetTypeCandidates: TArray<TSymbol>;
@@ -981,6 +982,49 @@ begin
       else R.EnclosingQName:= Q.FieldByName('encl_qname').AsString;
       R.Location  := ExtractFileName(Q.FieldByName('file_path').AsString);
       R.Confidence:= Q.FieldByName('confidence').AsString;
+      List.Add(R);
+      Q.Next;
+    end; // while
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+/// <summary>v14 (D5): the AutoDocument '?' bucket -- name-matching refs with NO
+/// call_edges row (untypable receiver). Ordered by file path then start line to
+/// mirror FindCallersByName's first-seen ordering. Each row -> a TResolvedCaller
+/// with Confidence 'unverified'; Location is file-name-only; EnclosingQName is ''
+/// when the ref has no enclosing routine.</summary>
+function TSQLiteSymbolStore.FindUnresolvedNameCallers(const AName: string): TArray<TResolvedCaller>;
+var
+  Q   : TFDQuery              ;
+  List: TList<TResolvedCaller>;
+  R   : TResolvedCaller       ;
+begin
+  List:= TList<TResolvedCaller>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:=
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line ' +
+      'FROM refs r ' +
+      'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
+      'JOIN files f ON f.id = r.file_id ' +
+      'WHERE r.name_text = :n AND r.id NOT IN (SELECT ref_id FROM call_edges) ' +
+      'ORDER BY f.path, r.start_line';
+    Q.ParamByName('n').AsString:= AName;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R:= Default(TResolvedCaller);
+      if Q.FieldByName('enclosing_symbol_id').IsNull then R.EnclosingSymbolId:= 0
+      else R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
+      if Q.FieldByName('encl_qname').IsNull then R.EnclosingQName:= ''
+      else R.EnclosingQName:= Q.FieldByName('encl_qname').AsString;
+      R.Location  := ExtractFileName(Q.FieldByName('file_path').AsString);
+      R.Confidence:= 'unverified';
       List.Add(R);
       Q.Next;
     end; // while

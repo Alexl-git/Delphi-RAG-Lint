@@ -89,6 +89,13 @@ var
     begin
       if i > 0 then Result:= Result + ', ';
       Result:= Result + A[i].Display + ' (' + A[i].Location + ')';
+      // v14 (D5): mark honest uncertainty. A caller whose Confidence is anything
+      // OTHER than 'certain'/'' ('ambiguous' = >1 candidate on the type chain;
+      // 'unverified' = a name-match with no resolved call_edge) gets a trailing
+      // ' ?'. The Facts builder already orders plain (certain) callers before the
+      // '?' ones, so the rendered line reads plain-first.
+      if not ((A[i].Confidence = '') or SameText(A[i].Confidence, 'certain')) then
+        Result:= Result + ' ?';
     end;
   end;
 begin
