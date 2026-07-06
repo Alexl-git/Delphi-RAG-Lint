@@ -94,6 +94,7 @@ uses
   , DRagLint.Preprocess.Lexer
   , DRagLint.Preprocess.Expr
   , DRagLint.Preprocess
+  , DRagLint.Preprocess.Profile
   ;
 
 type
@@ -259,6 +260,8 @@ type
     PpNumeric : TArray<string>; // --numeric <K=V>     repeatable numeric defines (K=V, K lowercased on use)
     // PP-Task-6: preprocess-file include handling
     PpIncludeMode: string     ; // --include-mode <off|defines-only>  ('' => default 'off')
+    // PP-Task-7: pp-profile define-profile resolver diagnostic verb
+    PpDproj      : string     ; // --dproj <file.dproj>  the project whose config defines to resolve
   end; // record
 
 procedure PrintHelp;
@@ -659,6 +662,10 @@ begin
     end
     // PP-Task-6: preprocess-file include handling mode (off | defines-only).
     else if (A = '--include-mode') and (i < ParamCount) then begin Inc(i); Result.PpIncludeMode:= ParamStr(i); end
+    // PP-Task-7: pp-profile define-profile resolver -- the project whose config
+    // defines to resolve (--platform reuses CheckPlatform, --config reuses
+    // WorkspaceConfig from the shared arg handlers above).
+    else if (A = '--dproj') and (i < ParamCount) then begin Inc(i); Result.PpDproj:= ParamStr(i); end
     else if (Result.Path = '') and (not A.StartsWith('--')) then Result.Path:= A
     else raise Exception.CreateFmt('Unknown argument: %s', [A]);
     Inc(i);
@@ -8140,6 +8147,45 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>PP-Task-7: drag-lint pp-profile [--dproj PATH] [--platform Win32|Win64]
+/// [--config Release|Debug] -- diagnostic dump of the define-profile resolver.
+/// With --dproj it resolves ProfileFromDproj (platform built-ins UNION the .dproj
+/// Base + selected-config DCC_Define symbols); without --dproj it dumps
+/// PlatformBuiltins for the platform. Prints the resolved defines SORTED, one
+/// lowercased symbol per line, so tests/preprocess/run_profile.ps1 can grep for
+/// membership. --platform defaults to Win64, --config to Release.</summary>
+/// <param name="AArgs">Parsed CLI args; PpDproj (--dproj) the project;
+/// CheckPlatform (--platform) the target; WorkspaceConfig (--config) the
+/// config.</param>
+/// <returns>0 always (a missing .dproj degrades to built-ins, never an error).</returns>
+function DoPpProfile(const AArgs: TArgs): Integer;
+var
+  Platform: string        ;
+  Config  : string        ;
+  Profile : TDefineProfile;
+  Defines : TArray<string>;
+  Sym     : string        ;
+begin
+  Platform:= AArgs.CheckPlatform;
+  if Platform = '' then Platform:= 'Win64';
+  Config:= AArgs.WorkspaceConfig;
+  if Config = '' then Config:= 'Release';
+
+  if AArgs.PpDproj <> '' then
+    Profile:= ProfileFromDproj(AArgs.PpDproj, Platform, Config)
+  else
+  begin
+    Profile.Defines:= PlatformBuiltins(Platform);
+    Profile.NumericDefines:= nil;
+  end;
+
+  Defines:= Copy(Profile.Defines, 0, Length(Profile.Defines));
+  TArray.Sort<string>(Defines);
+  for Sym in Defines do
+    Writeln(Sym);
+  Result:= 0;
+end; // function
+
 /// <summary>v14 (D5): drag-lint dump-call-edges --db PATH -- diagnostic dump of
 /// every resolved call edge in the index, one per line, as
 /// ref_id|target_qname|confidence. target_qname is the resolved target symbol's
@@ -9913,6 +9959,7 @@ begin
     else if Args.Command = 'dump-pp-lex'       then Result:= DoDumpPpLex       (Args)
     else if Args.Command = 'dump-pp-eval'      then Result:= DoDumpPpEval      (Args)
     else if Args.Command = 'preprocess-file'   then Result:= DoPreprocessFile  (Args)
+    else if Args.Command = 'pp-profile'        then Result:= DoPpProfile       (Args)
     else if Args.Command = 'dump-call-edges'   then Result:= DoDumpCallEdges   (Args)
     else if Args.Command = 'find-callees'      then Result:= DoFindCallees     (Args)
     else if Args.Command = 'ambiguous-calls'   then Result:= DoAmbiguousCalls  (Args)
