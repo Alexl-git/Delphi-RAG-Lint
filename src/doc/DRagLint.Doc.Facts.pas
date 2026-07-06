@@ -5,7 +5,7 @@ interface
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.Math,
   System.Generics.Collections, System.RegularExpressions,
-  DRagLint.Core.Model, DRagLint.Core.Interfaces;
+  DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Doc.GitSince;
 
 const
   // Display cap for the <seealso> related-symbol list (ADF T4). At most this many
@@ -53,6 +53,14 @@ type
     // lines by default. NEVER holds a '?'-tagged/unverified/fabricated name --
     // "related" is a heuristic, but every entry is ground-truth.
     SeeAlso        : TArray<string>     ;
+    // v(ADF T5): OPT-IN <since> doc-source. The git commit date (YYYY-MM-DD) of
+    // the declaration line, derived via TGitSince.FirstCommitDate. Populated ONLY
+    // when Build's AIncludeSince is True (the --since opt-in) AND git CONFIDENTLY
+    // attributes the line; '' in every failure mode (no git, untracked file,
+    // non-zero exit, unparseable output, exception). NEVER a guessed/stale date
+    // -- absence over a wrong fact. Empty by default, so RenderFactsBlock emits no
+    // <since> line unless --since was passed and git succeeded.
+    Since          : string             ;
   end;
 
   TDocFactsBuilder = class
@@ -60,12 +68,19 @@ type
     /// <summary>Builds the grounded facts for ASym from the index. When
     /// AIncludeSeeAlso is True (the --seealso opt-in), also populates
     /// Result.SeeAlso with the capped related-symbol crefs (resolved callees +
-    /// siblings); when False, SeeAlso is left empty.</summary>
+    /// siblings); when False, SeeAlso is left empty. When AIncludeSince is True
+    /// (the --since opt-in), populates Result.Since with the git commit date of
+    /// the declaration line (via TGitSince, using ABaseDir as the repo root);
+    /// '' when git is absent / the line can't be attributed. NO git subprocess
+    /// runs unless AIncludeSince is True.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="ASym">The symbol to document.</param>
     /// <param name="AIncludeSeeAlso">Opt-in: compute the &lt;seealso&gt; related set. Default False.</param>
+    /// <param name="AIncludeSince">Opt-in: derive the git &lt;since&gt; date. Default False.</param>
+    /// <param name="ABaseDir">Repo root for the git &lt;since&gt; lookup; '' -&gt; the file's own directory. Default ''.</param>
     class function Build(const AStore: ISymbolStore; const ASym: TSymbol;
-      AIncludeSeeAlso: Boolean = False): TDocFacts;
+      AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
+      const ABaseDir: string = ''): TDocFacts;
   end;
 
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
@@ -305,7 +320,7 @@ begin
 end;
 
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
-  AIncludeSeeAlso: Boolean): TDocFacts;
+  AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string): TDocFacts;
 var
   ResCallers: TArray<TResolvedCaller>;
   RC        : TResolvedCaller        ;
@@ -608,6 +623,22 @@ begin
     finally
       SeeSet.Free;
     end;
+  end;
+
+  // Since (opt-in): git commit date of the declaration line. Computed ONLY when
+  // AIncludeSince (the --since flag) -- so a batch run WITHOUT --since never
+  // spawns git per decl (TGitSince.FirstCommitDate is the only git subprocess and
+  // it is behind this guard). GROUND-TRUTH: TGitSince returns 'YYYY-MM-DD' only on
+  // a confident git attribution and '' in every failure mode (no git, untracked,
+  // non-zero exit, unparseable, exception), so Result.Since is either a real
+  // commit date or '' -- never a guessed/stale date. Set only when non-empty, so
+  // RenderFactsBlock emits a <since> line only for a real date. ABaseDir is the
+  // repo root (TDocBatchOptions.BaseDir); '' -> the file's own directory.
+  if AIncludeSince then
+  begin
+    var SinceDate: string:= TGitSince.FirstCommitDate(
+      ABaseDir, AStore.GetFilePath(ASym.FileId), ASym.StartLine);
+    if SinceDate <> '' then Result.Since:= SinceDate;
   end;
 end;
 

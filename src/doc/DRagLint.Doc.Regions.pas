@@ -22,7 +22,7 @@ type
   public
     /// <summary>Renders the fenced facts-block body lines (each prefixed
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
-    /// Raises / Deprecated / SeeAlso. Empty sections omitted; '' when there are
+    /// Raises / Deprecated / Since / SeeAlso. Empty sections omitted; '' when there are
     /// no facts. Displayed counts below the true *Total get a ' (+N more)'
     /// suffix. Deprecated is ground-truth from the Pascal 'deprecated'
     /// directive (not the unrelated &lt;deprecated/&gt; doc-comment tag) --
@@ -126,6 +126,14 @@ begin
       else
         Sb.AppendLine(APrefix + 'Deprecated.');
     end;
+    // v(ADF T5): OPT-IN git <since> line. AFacts.Since is '' unless the caller
+    // built the facts with --since (TDocFactsBuilder.Build's AIncludeSince) AND
+    // git confidently attributed the declaration line, so this renders NOTHING by
+    // default and NOTHING on any git failure (absence over a wrong fact) -- the
+    // non-since managed block is unchanged. The date is a real git commit date
+    // (YYYY-MM-DD), never a guess; one line so the block regenerates idempotently.
+    if AFacts.Since <> '' then
+      Sb.AppendLine(APrefix + '<since>' + AFacts.Since + '</since>');
     // v(ADF T4): OPT-IN <seealso> cref lines. AFacts.SeeAlso is EMPTY unless the
     // caller built the facts with --seealso (TDocFactsBuilder.Build's
     // AIncludeSeeAlso), so this section renders NOTHING by default -- the

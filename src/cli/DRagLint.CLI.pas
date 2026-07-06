@@ -260,6 +260,13 @@ type
     // document --qname / --unit / --project / document-all via
     // TDocBatchOptions.IncludeSeeAlso (and BuildFor's AIncludeSeeAlso).
     DocSeeAlso : Boolean; // document [...] --seealso
+    // AutoDocument (ADF T5): --since opts in the <since> doc-source (git commit
+    // date of the decl line). Off by default; git is spawned ONLY when set.
+    // DocBaseDir is the repo root for the git lookup ('' -> the file's own dir).
+    // Consumed by document --qname / --unit / --project / document-all via
+    // TDocBatchOptions.IncludeSince / BaseDir (and BuildFor's AIncludeSince / ABaseDir).
+    DocSince   : Boolean; // document [...] --since
+    DocBaseDir : string ; // document [...] --base-dir <repoRoot>
     // v0.48: multi-overlay -- a manifest with one 'realpath<TAB>bufferpath' per
     // line, so ALL unsaved units are overlaid for a single compile.
     GhostOverlays: string; // --overlays <manifest>
@@ -338,6 +345,7 @@ begin
   Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup] [--db PATH]   - generate/repair a managed DocInsight comment');
   Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup] [--db PATH]         - document every public decl in the unit (facts-only)');
   Writeln('     add --seealso to any document mode to emit <seealso cref> links to related symbols (callees + siblings)');
+  Writeln('     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent');
   Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
   Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
   Writeln('  drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
@@ -675,6 +683,10 @@ begin
     else if A = '--stubs' then Result.DocStubs:= True
     // AutoDocument (ADF T4): --seealso opts in the <seealso> doc-source.
     else if A = '--seealso' then Result.DocSeeAlso:= True
+    // AutoDocument (ADF T5): --since opts in the git <since> doc-source; --base-dir
+    // sets the repo root for the git lookup (defaults to the file's own dir).
+    else if A = '--since' then Result.DocSince:= True
+    else if (A = '--base-dir') and (i < ParamCount) then begin Inc(i); Result.DocBaseDir:= ParamStr(i); end
     else if (A = '--buffer') and (i < ParamCount) then begin Inc(i); Result.GhostBuffer:= ParamStr(i); end
     else if (A = '--overlays') and (i < ParamCount) then begin Inc(i); Result.GhostOverlays:= ParamStr(i); end
     // v0.57: text-constant search flags
@@ -5598,6 +5610,7 @@ begin
   // --stubs flips the facts-only default: on = keep pure all-TODO creates too.
   Opts.Stubs:= AArgs.DocStubs;
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
+  Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
@@ -5681,6 +5694,7 @@ begin
   Opts:= Default(TDocBatchOptions);
   Opts.Stubs:= AArgs.DocStubs;
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
+  Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
 end; // function
@@ -5704,6 +5718,7 @@ begin
   Opts:= Default(TDocBatchOptions);
   Opts.Stubs:= AArgs.DocStubs;
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
+  Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Res:= TDocBatch.DocumentAll(Store, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
 end; // function
@@ -5728,7 +5743,8 @@ begin
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
 
-  Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, AArgs.DocSeeAlso);
+  Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, AArgs.DocSeeAlso,
+    AArgs.DocSince, AArgs.DocBaseDir); // ADF T5: --since (git <since> date) + --base-dir repo root.
 
   if Res.Action = DRagLint.Doc.Document.daNotFound then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 

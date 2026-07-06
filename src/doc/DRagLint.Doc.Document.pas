@@ -32,11 +32,14 @@ type
     /// <returns>The classified action plus file/line and the computed edits.</returns>
     /// <remarks>Does not write files; TTextEditApplier.Apply performs any I/O.
     /// AIncludeSeeAlso threads the --seealso opt-in into the facts builder; when
-    /// False (the default overload) no &lt;seealso&gt; crefs are generated.</remarks>
+    /// False (the default overload) no &lt;seealso&gt; crefs are generated.
+    /// AIncludeSince / ABaseDir thread the --since opt-in (git &lt;since&gt;
+    /// date, ABaseDir = repo root); no git spawn when AIncludeSince is False.</remarks>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string;
-      AIncludeSeeAlso: Boolean): TDocumentResult; overload;
+      AIncludeSeeAlso: Boolean; AIncludeSince: Boolean = False;
+      const ABaseDir: string = ''): TDocumentResult; overload;
     /// <summary>Back-compat overload: BuildFor with no doc-source opt-ins
-    /// (AIncludeSeeAlso = False).</summary>
+    /// (AIncludeSeeAlso = False, AIncludeSince = False).</summary>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult; overload;
   end;
 
@@ -126,7 +129,7 @@ begin
 end;
 
 class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;
-  AIncludeSeeAlso: Boolean): TDocumentResult;
+  AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string): TDocumentResult;
 var
   Syms     : TArray<TSymbol>                                   ;
   Sym      : TSymbol                                           ;
@@ -177,7 +180,7 @@ begin
   Sig      := Trim(Sym.Signature);
   SigParams:= ParseParamNames(ExtractParamList(Sig));
 
-  Facts := TDocFactsBuilder.Build(AStore, Sym, AIncludeSeeAlso);
+  Facts := TDocFactsBuilder.Build(AStore, Sym, AIncludeSeeAlso, AIncludeSince, ABaseDir);
 
   // Has a return value? The indexed Signature holds only '(params): RetType'
   // (no leading 'function' keyword), so SignatureHasReturn misses it, and class

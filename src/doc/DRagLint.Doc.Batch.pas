@@ -11,9 +11,10 @@ unit DRagLint.Doc.Batch;
   A declaration with a managed facts block (AUTO_BEGIN) -- or one that already
   had a doc-comment (daExtended) -- is kept. Set Stubs = True to keep every
   fresh TODO create as well (wired in a later task; the field gates the filter
-  here). IncludeSeeAlso (ADF T4) is threaded into TDocumenter.BuildFor so the
-  --seealso opt-in reaches the facts builder. The IncludeDeprecated / IncludeSince
-  / BaseDir options are threaded for forward compatibility and are no-ops here. }
+  here). IncludeSeeAlso (ADF T4) and IncludeSince / BaseDir (ADF T5) are threaded
+  into TDocumenter.BuildFor so the --seealso and --since opt-ins reach the facts
+  builder (BaseDir is the git repo root for the <since> lookup). IncludeDeprecated
+  is threaded for forward compatibility and is a no-op here. }
 
 interface
 
@@ -146,7 +147,8 @@ begin
 
       Inc(Result.DeclCount);
 
-      Res := TDocumenter.BuildFor(AStore, Sym.QualifiedName, AOptions.IncludeSeeAlso);
+      Res := TDocumenter.BuildFor(AStore, Sym.QualifiedName, AOptions.IncludeSeeAlso,
+        AOptions.IncludeSince, AOptions.BaseDir);
       if Length(Res.Edits) = 0 then Continue; // daUnchanged / daNotFound: nothing to do
 
       // Facts-only filter (Stubs=False, the default): keep the edit when the
