@@ -27,6 +27,7 @@ uses
   , System.IOUtils
   , System.Generics.Collections
   , System.RegularExpressions
+  , DRagLint.Preprocess.Types
   ;
 
 type
@@ -47,6 +48,23 @@ type
   TClosureResolver = class
     strict private
       FLibraryRoots: TArray<string>;
+
+      // PP-Task-10: per-config file discovery. When FPreprocessEnabled, source
+      // content is run through the in-process directive preprocessor under
+      // FProfile BEFORE its `uses` clause is scanned, so a unit `uses`d only
+      // under an inactive branch is blanked to spaces and never discovered.
+      // FPreprocessFellBack latches the one-shot fallback log (a per-file
+      // preprocess exception falls back to the raw content for that file).
+      FPreprocessEnabled : Boolean;
+      FProfile           : TDefineProfile;
+      FPreprocessFellBack: Boolean;
+
+      // Run the directive preprocessor over AContent under FProfile when
+      // FPreprocessEnabled, returning the resolved text (inactive-branch bytes
+      // blanked to spaces, offsets 1:1). When disabled -- or on a per-file
+      // preprocess exception (logged once) -- returns AContent unchanged so the
+      // caller falls back to the old all-branch scan for that file.
+      function MaybePreprocess(const AContent, AFileLabel: string): string;
 
       // ---- unit-file resolution helpers ----------------------------------------
 
@@ -98,6 +116,18 @@ type
       constructor Create(const ALibraryRoots: TArray<string>);
 
       /// <summary>
+      /// PP-Task-10: enable/disable per-config directive preprocessing of source
+      /// content before its `uses` clause is scanned. When enabled, a unit
+      /// `uses`d only under an inactive {$IFDEF} branch (per AProfile) is NOT
+      /// discovered/pulled into the closure. When disabled (the default), the
+      /// resolver keeps the prior all-branch scan + brace-stripping unchanged.
+      /// </summary>
+      /// <param name="AEnabled">True runs Preprocess before every uses-scan.</param>
+      /// <param name="AProfile">The active define profile (platform built-ins
+      /// and/or .dproj-derived DCC_Define). Used only when AEnabled.</param>
+      procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+
+      /// <summary>
       /// Resolve the compile closure of a .dpr or .dproj project.
       /// Returns the set of project-local .pas/.inc files that get compiled:
       /// the project member units + transitive project-local uses + {$I} files.
@@ -116,6 +146,8 @@ implementation
 
 uses
   DRagLint.Index.Glob
+  , DRagLint.Preprocess       // PP-Task-10: Preprocess(bytes, profile)
+  , DRagLint.Core.Encoding    // PP-Task-10: EnsureUtf8Bytes
   ;
 
 { ---- TClosureResolver ------------------------------------------------------- }
@@ -124,6 +156,49 @@ constructor TClosureResolver.Create(const ALibraryRoots: TArray<string>);
 begin
   inherited Create;
   FLibraryRoots:= ALibraryRoots;
+  // PP-Task-10: safe default -- a bare TClosureResolver keeps the pre-Task-10
+  // all-branch scan; the CLI opts in via SetPreprocess.
+  FPreprocessEnabled := False;
+  FProfile           := Default(TDefineProfile);
+  FPreprocessFellBack:= False;
+end;
+
+procedure TClosureResolver.SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+begin
+  FPreprocessEnabled := AEnabled;
+  FProfile           := AProfile;
+  FPreprocessFellBack:= False;   // reset the one-shot fallback latch per configure
+end;
+
+function TClosureResolver.MaybePreprocess(const AContent, AFileLabel: string): string;
+// PP-Task-10: when preprocessing is enabled, resolve compiler-directive branches
+// per FProfile BEFORE the caller scans `uses`, so inactive-branch unit names are
+// blanked to spaces and never discovered. Offsets do not matter here (the caller
+// needs unit NAMES, not spans), so we transcode string->UTF-8 bytes, preprocess,
+// and decode back. A per-file preprocess exception falls back to the RAW content
+// (logged once) so the closure never hard-fails on one bad file.
+var
+  Utf8    : TBytes;
+  Resolved: TBytes;
+begin
+  if not FPreprocessEnabled then Exit(AContent);
+  try
+    Utf8:= EnsureUtf8Bytes(TEncoding.UTF8.GetBytes(AContent));
+    Resolved:= Preprocess(Utf8, FProfile);
+    Result:= TEncoding.UTF8.GetString(Resolved);
+  except
+    on E: Exception do
+    begin
+      if not FPreprocessFellBack then
+      begin
+        FPreprocessFellBack:= True;
+        Writeln(ErrOutput, Format(
+          '  PREPROCESS FALLBACK (closure): %s -- %s: %s (scanning raw; further fallbacks silent)',
+          [AFileLabel, E.ClassName, E.Message]));
+      end;
+      Result:= AContent;   // fall back to the raw all-branch scan for this file
+    end;
+  end;
 end;
 
 function TClosureResolver.IsLibraryFile(const AFile: string): Boolean;
@@ -590,7 +665,7 @@ begin
       var DprPath:= TPath.ChangeExtension(ProjectAbs, '.dpr');
       if TFile.Exists(DprPath) then
       begin
-        var DprContent:= TFile.ReadAllText(DprPath);
+        var DprContent:= MaybePreprocess(TFile.ReadAllText(DprPath), DprPath);
         ParseDprUses(DprContent, BaseDir, UnitNames, UnitFilePaths);
       end;
       // Seed from DCCReference entries
@@ -598,7 +673,10 @@ begin
     end
     else // .dpr  (or .dpk)
     begin
-      ParseDprUses(Content, BaseDir, UnitNames, UnitFilePaths);
+      // PP-Task-10: preprocess the .dpr/.dpk source before its uses-scan so the
+      // inactive-branch units are blanked (per-config discovery). The .dproj XML
+      // branch above is NOT preprocessed (Content there feeds XML parsers).
+      ParseDprUses(MaybePreprocess(Content, ProjectAbs), BaseDir, UnitNames, UnitFilePaths);
     end;
 
     SearchArr:= SearchPaths.ToStringArray;
@@ -653,7 +731,13 @@ begin
       if FileExt = '.inc' then Continue; // don't recurse into .inc for uses, just leave it in Files
 
       UnitDir:= TPath.GetDirectoryName(Item.FilePath);
-      var UnitContent:= TFile.ReadAllText(Item.FilePath);
+      // PP-Task-10: preprocess the unit source before its uses-scan so a unit
+      // pulled in only under an inactive branch of THIS member unit is likewise
+      // not discovered (per-config transitive closure). {$I}/{$INCLUDE} scanning
+      // below uses the RAW content -- includes are file references we still want
+      // resolved regardless of branch, and MaybePreprocess blanks directives.
+      var RawUnitContent:= TFile.ReadAllText(Item.FilePath);
+      var UnitContent:= MaybePreprocess(RawUnitContent, Item.FilePath);
 
       // (a) Recurse into `uses` references
       SubUses:= ExtractUses(UnitContent);
@@ -672,8 +756,11 @@ begin
         end;
       end;
 
-      // (b) {$I}/{$INCLUDE} files -- add but don't recurse for uses
-      SubIncs:= ExtractIncludes(UnitContent);
+      // (b) {$I}/{$INCLUDE} files -- add but don't recurse for uses. Scan the
+      // RAW content: MaybePreprocess blanks ALL directives (including {$I}), so
+      // include discovery must read the original text. Include-file discovery is
+      // intentionally all-branch and thus identical to the pre-Task-10 behaviour.
+      SubIncs:= ExtractIncludes(RawUnitContent);
       for IncFile in SubIncs do
       begin
         ResolvedFile:= FindIncFile(IncFile, UnitDir, SearchArr);

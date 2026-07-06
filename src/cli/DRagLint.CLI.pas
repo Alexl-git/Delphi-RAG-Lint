@@ -982,7 +982,11 @@ begin
     if (AItem.Mode = smClosure) and (Length(AItem.Roots) = 1) and
        SameText(ExtractFileExt(AItem.Roots[0]), '.dproj') then
       SectionDproj:= AItem.Roots[0];
-    Indexer.SetPreprocess(APreprocess, ResolveIndexProfile(SectionDproj, AItem.Platform, ''));
+    // Resolve the section profile ONCE and reuse it for both the indexer and
+    // (PP-Task-10) the closure resolver, so uses-discovery and symbol-extraction
+    // honour the SAME active define profile.
+    var SectionProfile: TDefineProfile:= ResolveIndexProfile(SectionDproj, AItem.Platform, '');
+    Indexer.SetPreprocess(APreprocess, SectionProfile);
 
     // Apply walk filter from the resolved plan item.
     Indexer.SetWalkFilter(AItem.Filter);
@@ -1009,6 +1013,9 @@ begin
         try
           Cl:= TClosureResolver.Create(Resolver.ResolveLibraryPaths);
           try
+            // PP-Task-10: per-config uses-discovery -- honour the SAME profile
+            // the indexer uses for this section (default ON; --no-preprocess -> False).
+            Cl.SetPreprocess(APreprocess, SectionProfile);
             for F in AItem.Roots do
             begin
               if not TFile.Exists(F) then begin Writeln(Format('  (skip, project file not found) %s', [F])); Continue; end;
@@ -9439,6 +9446,15 @@ begin
   end;
   Resolver:= TClosureResolver.Create(LibRoots);
   try
+    // PP-Task-10: honour per-config uses-discovery (default ON; --no-preprocess
+    // reverts to the all-branch scan). Same profile rule the index verbs use:
+    // ProfileFromDproj when the project is a .dproj, else PlatformBuiltins for
+    // the platform (default Win64). A .dpr project carries no per-config defines
+    // of its own, so it resolves to the platform built-ins.
+    var Dproj: string:= '';
+    if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Dproj:= AArgs.ProjectPath;
+    Resolver.SetPreprocess(not AArgs.NoPreprocess,
+      ResolveIndexProfile(Dproj, AArgs.CheckPlatform, ''));
     CR:= Resolver.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
   finally
     Resolver.Free;
