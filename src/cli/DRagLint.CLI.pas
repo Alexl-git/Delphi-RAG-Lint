@@ -93,6 +93,7 @@ uses
   , DRagLint.Preprocess.Types
   , DRagLint.Preprocess.Lexer
   , DRagLint.Preprocess.Expr
+  , DRagLint.Preprocess
   ;
 
 type
@@ -8064,6 +8065,68 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>PP-Task-4: drag-lint preprocess-file --file PATH [--define SYM]...
+/// [--numeric K=V]... -- diagnostic dump of the chunk processor. Reads --file as
+/// raw BYTES, builds a TDefineProfile from the repeatable --define (lowercased)
+/// and --numeric (K=V) flags, runs Preprocess, and writes the resulting BYTES to
+/// stdout VERBATIM via WriteFile on the raw stdout handle -- no Writeln, so no CR
+/// injection, no encoding change, no trailing newline. This keeps the output
+/// byte-for-byte comparable to the JS oracle (offset-identity invariant). Used
+/// by tests/preprocess/run_preprocess_core.ps1.</summary>
+/// <param name="AArgs">Parsed CLI args; InFile (--file) is the source; PpDefines
+/// (--define) the symbols; PpNumeric (--numeric K=V) the numeric map.</param>
+/// <returns>0 on success, 2 on usage error / missing file.</returns>
+function DoPreprocessFile(const AArgs: TArgs): Integer;
+var
+  InBytes : TBytes           ;
+  OutBytes: TBytes           ;
+  Profile : TDefineProfile   ;
+  D       : string           ;
+  N       : string           ;
+  EqPos   : Integer          ;
+  ValInt  : Integer          ;
+  Pairs   : TList<TPair<string, Integer>>;
+  StdOut  : THandle          ;
+  Written : DWORD            ;
+begin
+  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]...'); Exit(2); end;
+  if not FileExists(AArgs.InFile) then begin Writeln(Format('File not found: %s', [AArgs.InFile])); Exit(2); end;
+
+  InBytes:= TFile.ReadAllBytes(AArgs.InFile);
+
+  // Build the define profile: each --define lowercased into Defines; each
+  // --numeric 'K=V' (integer V) into NumericDefines (K lowercased on use).
+  for D in AArgs.PpDefines do
+    if D <> '' then
+    begin
+      SetLength(Profile.Defines, Length(Profile.Defines) + 1);
+      Profile.Defines[High(Profile.Defines)]:= LowerCase(D);
+    end;
+  Pairs:= TList<TPair<string, Integer>>.Create;
+  try
+    for N in AArgs.PpNumeric do
+    begin
+      EqPos:= Pos('=', N);
+      if EqPos <= 1 then Continue;
+      if TryStrToInt(Copy(N, EqPos + 1, Length(N)), ValInt) then
+        Pairs.Add(TPair<string, Integer>.Create(LowerCase(Copy(N, 1, EqPos - 1)), ValInt));
+    end;
+    Profile.NumericDefines:= Pairs.ToArray;
+  finally
+    Pairs.Free;
+  end;
+
+  OutBytes:= Preprocess(InBytes, Profile);
+
+  // Write the resolved bytes VERBATIM to the raw stdout handle so no newline
+  // translation / encoding change touches them (Writeln would corrupt the
+  // byte-exact compare against the oracle).
+  StdOut:= GetStdHandle(STD_OUTPUT_HANDLE);
+  if Length(OutBytes) > 0 then
+    WriteFile(StdOut, OutBytes[0], Length(OutBytes), Written, nil);
+  Result:= 0;
+end; // function
+
 /// <summary>v14 (D5): drag-lint dump-call-edges --db PATH -- diagnostic dump of
 /// every resolved call edge in the index, one per line, as
 /// ref_id|target_qname|confidence. target_qname is the resolved target symbol's
@@ -9836,6 +9899,7 @@ begin
     else if Args.Command = 'dump-refs'         then Result:= DoDumpRefs        (Args)
     else if Args.Command = 'dump-pp-lex'       then Result:= DoDumpPpLex       (Args)
     else if Args.Command = 'dump-pp-eval'      then Result:= DoDumpPpEval      (Args)
+    else if Args.Command = 'preprocess-file'   then Result:= DoPreprocessFile  (Args)
     else if Args.Command = 'dump-call-edges'   then Result:= DoDumpCallEdges   (Args)
     else if Args.Command = 'find-callees'      then Result:= DoFindCallees     (Args)
     else if Args.Command = 'ambiguous-calls'   then Result:= DoAmbiguousCalls  (Args)

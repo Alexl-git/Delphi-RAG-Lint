@@ -172,6 +172,7 @@
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Types.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Lexer.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Expr.pas"/>
+        <DCCReference Include="..\preprocess\DRagLint.Preprocess.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
