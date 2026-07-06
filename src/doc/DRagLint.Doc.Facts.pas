@@ -217,7 +217,9 @@ var
   R      : TReference        ;
   Encl   : TSymbol           ;
   FR     : TDocFactRef       ;
-  Acc    : TList<TDocFactRef>;
+  Distinct: TList<TDocFactRef>;
+  Seen   : TDictionary<string, Boolean>;
+  Key    : string            ;
   Shown  : Integer           ;
   I      : Integer           ;
 begin
@@ -231,12 +233,19 @@ begin
   // would differ from what is on disk -- 'document' would re-write the file every
   // run, breaking the managed-region idempotency promise. The file name is stable
   // across edits and the caller's qualified name already lets a reader navigate.
+  //
+  // DEDUPE: a caller routine that references the target 2+ times yields multiple
+  // TReference rows that -- now that the volatile ':line' is dropped -- collapse
+  // to IDENTICAL (Display, Location) pairs. Fold them to a single entry keyed on
+  // 'Display|Location' (both line-free), preserving first-seen order, so a reader
+  // sees each DISTINCT caller once. CalledFromTotal is the DISTINCT count, so the
+  // '(+N more)' suffix reflects distinct callers, and the display cap applies to
+  // the deduped list.
   Refs:= AStore.FindCallersByName(LastSeg(ASym.QualifiedName));
-  Result.CalledFromTotal:= Length(Refs);
-  Shown:= DocDisplayCount(Length(Refs));
-  Acc:= TList<TDocFactRef>.Create;
+  Distinct:= TList<TDocFactRef>.Create;
+  Seen    := TDictionary<string, Boolean>.Create;
   try
-    for I:= 0 to Shown - 1 do
+    for I:= 0 to High(Refs) do
     begin
       R:= Refs[I];
       FR:= Default(TDocFactRef);
@@ -247,11 +256,18 @@ begin
       end;
       if FR.Display = '' then FR.Display:= LastSeg(ASym.QualifiedName) + ' caller';
       FR.Location:= ExtractFileName(AStore.GetFilePath(R.FileId));
-      Acc.Add(FR);
+      Key:= FR.Display + '|' + FR.Location;
+      if Seen.ContainsKey(Key) then Continue;
+      Seen.Add(Key, True);
+      Distinct.Add(FR);
     end;
-    Result.CalledFrom:= Acc.ToArray;
+    Result.CalledFromTotal:= Distinct.Count;
+    Shown:= DocDisplayCount(Distinct.Count);
+    SetLength(Result.CalledFrom, Shown);
+    for I:= 0 to Shown - 1 do Result.CalledFrom[I]:= Distinct[I];
   finally
-    Acc.Free;
+    Seen.Free;
+    Distinct.Free;
   end;
 
   // Returns: type from the signature, else '' (procedures).
