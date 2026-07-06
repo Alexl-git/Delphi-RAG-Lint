@@ -54,6 +54,9 @@ uses
   , DRagLint.Refactor   .Rename
   , DRagLint.Refactor   .TextEdit
   , DRagLint.Refactor   .DocStub
+  , DRagLint.Doc        .Facts
+  , DRagLint.Doc        .Regions
+  , DRagLint.Doc        .Document
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
   , DRagLint.Refactor   .ExtractMethod
