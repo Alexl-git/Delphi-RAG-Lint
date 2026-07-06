@@ -22,11 +22,14 @@ type
   public
     /// <summary>Renders the fenced facts-block body lines (each prefixed
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
-    /// Raises / Deprecated. Empty sections omitted; '' when there are no
-    /// facts. Displayed counts below the true *Total get a ' (+N more)'
+    /// Raises / Deprecated / SeeAlso. Empty sections omitted; '' when there are
+    /// no facts. Displayed counts below the true *Total get a ' (+N more)'
     /// suffix. Deprecated is ground-truth from the Pascal 'deprecated'
     /// directive (not the unrelated &lt;deprecated/&gt; doc-comment tag) --
-    /// emitted only when the directive was found on the declaration.</summary>
+    /// emitted only when the directive was found on the declaration. SeeAlso
+    /// emits one &lt;seealso cref&gt; line per entry; it is populated only when
+    /// the facts were built with the --seealso opt-in, so by default no
+    /// &lt;seealso&gt; line appears.</summary>
     class function RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string): string;
     /// <summary>Produces the full merged DocInsight comment text (///-prefixed
     /// lines joined by CRLF): preserved hand-written prose + a regenerated
@@ -123,6 +126,15 @@ begin
       else
         Sb.AppendLine(APrefix + 'Deprecated.');
     end;
+    // v(ADF T4): OPT-IN <seealso> cref lines. AFacts.SeeAlso is EMPTY unless the
+    // caller built the facts with --seealso (TDocFactsBuilder.Build's
+    // AIncludeSeeAlso), so this section renders NOTHING by default -- the
+    // non-seealso managed block is unchanged. Each entry is a real indexed
+    // qualified name (a resolved callee or a sibling), so no '?'-tagged cref is
+    // ever emitted. The list is pre-sorted+capped by Build; one cref per line so
+    // the block regenerates idempotently.
+    for var SeeI:= 0 to High(AFacts.SeeAlso) do
+      Sb.AppendLine(APrefix + '<seealso cref="' + AFacts.SeeAlso[SeeI] + '"/>');
     Result:= Sb.ToString.TrimRight([#13, #10]);
   finally
     Sb.Free;

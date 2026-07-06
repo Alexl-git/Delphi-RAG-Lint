@@ -30,8 +30,14 @@ type
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="AQName">Fully qualified symbol name, e.g. Unit.TType.Method.</param>
     /// <returns>The classified action plus file/line and the computed edits.</returns>
-    /// <remarks>Does not write files; TTextEditApplier.Apply performs any I/O.</remarks>
-    class function BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult;
+    /// <remarks>Does not write files; TTextEditApplier.Apply performs any I/O.
+    /// AIncludeSeeAlso threads the --seealso opt-in into the facts builder; when
+    /// False (the default overload) no &lt;seealso&gt; crefs are generated.</remarks>
+    class function BuildFor(const AStore: ISymbolStore; const AQName: string;
+      AIncludeSeeAlso: Boolean): TDocumentResult; overload;
+    /// <summary>Back-compat overload: BuildFor with no doc-source opt-ins
+    /// (AIncludeSeeAlso = False).</summary>
+    class function BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult; overload;
   end;
 
 implementation
@@ -114,6 +120,13 @@ begin
 end;
 
 class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult;
+begin
+  // Back-compat: no doc-source opt-ins.
+  Result:= BuildFor(AStore, AQName, False);
+end;
+
+class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;
+  AIncludeSeeAlso: Boolean): TDocumentResult;
 var
   Syms     : TArray<TSymbol>                                   ;
   Sym      : TSymbol                                           ;
@@ -164,7 +177,7 @@ begin
   Sig      := Trim(Sym.Signature);
   SigParams:= ParseParamNames(ExtractParamList(Sig));
 
-  Facts := TDocFactsBuilder.Build(AStore, Sym);
+  Facts := TDocFactsBuilder.Build(AStore, Sym, AIncludeSeeAlso);
 
   // Has a return value? The indexed Signature holds only '(params): RetType'
   // (no leading 'function' keyword), so SignatureHasReturn misses it, and class

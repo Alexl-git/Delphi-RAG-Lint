@@ -7,6 +7,11 @@ uses
   System.Generics.Collections, System.RegularExpressions,
   DRagLint.Core.Model, DRagLint.Core.Interfaces;
 
+const
+  // Display cap for the <seealso> related-symbol list (ADF T4). At most this many
+  // <seealso cref> lines are emitted, keeping the managed block terse.
+  SEEALSO_CAP = 5;
+
 type
   TDocFactRef = record
     Display   : string;   { e.g. 'Unit1.DoThing' }
@@ -40,12 +45,27 @@ type
     // (quotes stripped), '' for a bare 'deprecated;'.
     Deprecated     : Boolean            ;
     DeprecatedMsg  : string             ;
+    // v(ADF T4): OPT-IN <seealso> doc-source. The RELATED symbols for the decl,
+    // each a REAL indexed qualified name (a resolved outgoing callee UNION a
+    // sibling member of the same parent type), deduped, sorted, and capped at
+    // SEEALSO_CAP. Populated ONLY when Build's AIncludeSeeAlso is True (the
+    // --seealso opt-in); empty otherwise, so RenderFactsBlock emits no <seealso>
+    // lines by default. NEVER holds a '?'-tagged/unverified/fabricated name --
+    // "related" is a heuristic, but every entry is ground-truth.
+    SeeAlso        : TArray<string>     ;
   end;
 
   TDocFactsBuilder = class
   public
-    /// <summary>Builds the grounded facts for ASym from the index.</summary>
-    class function Build(const AStore: ISymbolStore; const ASym: TSymbol): TDocFacts;
+    /// <summary>Builds the grounded facts for ASym from the index. When
+    /// AIncludeSeeAlso is True (the --seealso opt-in), also populates
+    /// Result.SeeAlso with the capped related-symbol crefs (resolved callees +
+    /// siblings); when False, SeeAlso is left empty.</summary>
+    /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
+    /// <param name="ASym">The symbol to document.</param>
+    /// <param name="AIncludeSeeAlso">Opt-in: compute the &lt;seealso&gt; related set. Default False.</param>
+    class function Build(const AStore: ISymbolStore; const ASym: TSymbol;
+      AIncludeSeeAlso: Boolean = False): TDocFacts;
   end;
 
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
@@ -284,7 +304,8 @@ begin
       AMsg:= StringReplace(M.Groups[1].Value, '''''', '''', [rfReplaceAll]);
 end;
 
-class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol): TDocFacts;
+class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
+  AIncludeSeeAlso: Boolean): TDocFacts;
 var
   ResCallers: TArray<TResolvedCaller>;
   RC        : TResolvedCaller        ;
@@ -531,6 +552,63 @@ begin
   var DepMsg: string;
   Result.Deprecated:= DetectDeprecated(AStore, ASym, DepMsg);
   Result.DeprecatedMsg:= DepMsg;
+
+  // SeeAlso (opt-in): related-symbol crefs for the <seealso> doc-source. Only
+  // computed when AIncludeSeeAlso (the --seealso flag) -- otherwise SeeAlso stays
+  // empty and RenderFactsBlock emits nothing, so the default (no --seealso) facts
+  // block is byte-for-byte what it was before this doc-source existed.
+  //
+  // "Related" = RESOLVED outgoing callees UNION sibling members of the same parent
+  // type. GROUND-TRUTH: every entry is a REAL indexed qualified name --
+  //   1. Resolved callees: GetCallEdgesFromSymbol -> each edge's target
+  //      QualifiedName. This is the call_edges truth (D5), so it is NEVER a
+  //      '?'-tagged/unverified guess and NEVER a bare body-scan name -- an
+  //      UNRESOLVED site (TargetSymbolId <= 0) is simply skipped, so no unverified
+  //      name can leak in. (Result.Calls deliberately mixes in body-scan bare
+  //      names for the human 'Calls:' line; SeeAlso must not, hence we re-read the
+  //      edges here rather than reuse Result.Calls.)
+  //   2. Siblings: FindAllChildSymbols(ASym.ParentId) -- other members of the same
+  //      parent type -- EXCLUDING ASym itself (by Id). Each contributes its own
+  //      QualifiedName. ParentId <= 0 (a unit-level routine, no parent) yields no
+  //      siblings; that is fine, the callees still stand.
+  // DEDUPE + SORT + CAP: fold into a Sorted/CaseInsensitive/dupIgnore TStringList
+  // (deterministic order regardless of edge/sibling encounter order), then take
+  // the first SEEALSO_CAP entries. Qualified names carry no line numbers, so a
+  // re-run after reindex reproduces the identical list (idempotent).
+  if AIncludeSeeAlso then
+  begin
+    var SeeSet: TStringList:= TStringList.Create;
+    try
+      SeeSet.Sorted:= True;
+      SeeSet.Duplicates:= dupIgnore;
+      SeeSet.CaseSensitive:= False;
+
+      // 1. Resolved callees (qualified, ground-truth via call_edges).
+      var SeeEdges: TArray<TCallEdge>:= AStore.GetCallEdgesFromSymbol(ASym.Id);
+      for var SE in SeeEdges do
+        if SE.TargetSymbolId > 0 then
+        begin
+          var CalleeQName: string:= AStore.GetSymbolById(SE.TargetSymbolId).QualifiedName;
+          if CalleeQName <> '' then SeeSet.Add(CalleeQName);
+        end;
+
+      // 2. Sibling members of the same parent type (excluding ASym itself).
+      if ASym.ParentId > 0 then
+      begin
+        var Siblings: TArray<TSymbol>:= AStore.FindAllChildSymbols(ASym.ParentId);
+        for var Sib in Siblings do
+          if (Sib.Id <> ASym.Id) and (Sib.QualifiedName <> '') then
+            SeeSet.Add(Sib.QualifiedName);
+      end;
+
+      // CAP at SEEALSO_CAP (deduped, already sorted).
+      var ShownS: Integer:= Min(SeeSet.Count, SEEALSO_CAP);
+      SetLength(Result.SeeAlso, ShownS);
+      for var S:= 0 to ShownS - 1 do Result.SeeAlso[S]:= SeeSet[S];
+    finally
+      SeeSet.Free;
+    end;
+  end;
 end;
 
 end.
