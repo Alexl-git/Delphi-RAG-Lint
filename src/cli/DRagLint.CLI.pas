@@ -64,6 +64,7 @@ uses
   , DRagLint.Doc        .Facts
   , DRagLint.Doc        .Regions
   , DRagLint.Doc        .Document
+  , DRagLint.Doc        .Drift
   , DRagLint.Doc        .Batch
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
@@ -359,6 +360,7 @@ begin
   Writeln('  drag-lint format <file> [--yadf-path PATH]');
   Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
+  Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
   Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X)');
   Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
@@ -8248,6 +8250,80 @@ begin
   Result:= 0;
 end; // function
 
+// Maps a TDocDriftKind to its exact camelCase identifier for the --json output.
+function DocDriftKindStr(AKind: TDocDriftKind): string;
+begin
+  case AKind of
+    ddParamRenamedOrRemoved: Result:= 'ddParamRenamedOrRemoved';
+    ddParamMissing         : Result:= 'ddParamMissing';
+    ddParamVolatileMode    : Result:= 'ddParamVolatileMode';
+    ddReturnsButNoValue    : Result:= 'ddReturnsButNoValue';
+    ddValueButNoReturns    : Result:= 'ddValueButNoReturns';
+    ddReturnTypeChanged    : Result:= 'ddReturnTypeChanged';
+    ddExceptionNotRaised   : Result:= 'ddExceptionNotRaised';
+    ddIdentifierGone       : Result:= 'ddIdentifierGone';
+    ddFactsBlockStale      : Result:= 'ddFactsBlockStale';
+    else Result:= 'unknown';
+  end;
+end;
+
+/// <summary>ADF Task 6: drag-lint doc-drift --qname X --db PATH [--json] --
+/// diagnostic dump of the TDocDrift engine's findings for ONE symbol. Resolves
+/// the qname, scans its on-disk DocInsight comment live, runs the deterministic
+/// doc-vs-code diff, and prints one line per finding. With --json each line is a
+/// compact object {kind, detail, fixable, line}; without --json it is a readable
+/// 'kind[FIXABLE] detail (line N)' line. The verb exists to exercise the engine
+/// through the exe (tests/autodoc/run_doc_drift_engine.ps1); the missing-doc /
+/// doc-drift LINT rules + --fix are separate tasks that consume the same engine.</summary>
+/// <param name="AArgs">Parsed CLI args; QName is the symbol, DbPath the index,
+/// AsJson selects the JSON-per-line format.</param>
+/// <returns>0 on success (findings printed, or none), 1 when the symbol is not
+/// found / has no doc-comment, 2 on usage error / missing db.</returns>
+function DoDocDrift(const AArgs: TArgs): Integer;
+var
+  Store   : ISymbolStore              ;
+  RoOk    : Boolean                   ;
+  Sym     : TSymbol                   ;
+  Doc     : TParsedDoc                ;
+  Found   : Boolean                   ;
+  HasDoc  : Boolean                   ;
+  Findings: TArray<TDocDriftFinding>  ;
+  F       : TDocDriftFinding          ;
+  O       : TJSONObject               ;
+begin
+  if AArgs.QName = '' then begin Writeln('Usage: drag-lint doc-drift --qname X --db PATH [--json]'); Exit(2); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(1);
+
+  Doc:= DRagLint.Doc.Document.TDocumenter.ExistingDocFor(Store, AArgs.QName, Sym, Found, HasDoc);
+  if not Found then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  if not HasDoc then begin Writeln(Format('no doc-comment on: %s', [AArgs.QName])); Exit(1); end;
+
+  Findings:= TDocDrift.Analyze(Store, Sym, Doc);
+
+  for F in Findings do
+  begin
+    if AArgs.AsJson then
+    begin
+      O:= TJSONObject.Create;
+      try
+        O.AddPair('kind'   , DocDriftKindStr(F.Kind));
+        O.AddPair('detail' , F.Detail);
+        O.AddPair('fixable', TJSONBool.Create(F.Fixable));
+        O.AddPair('line'   , TJSONNumber.Create(F.Line));
+        Writeln(O.ToJson);
+      finally
+        O.Free;
+      end;
+    end
+    else
+      Writeln(Format('%s%s %s (line %d)',
+        [DocDriftKindStr(F.Kind), IfThen(F.Fixable, ' [FIXABLE]', ''), F.Detail, F.Line]));
+  end;
+  Result:= 0;
+end; // function
+
 /// <summary>PP-Task-2: drag-lint dump-pp-lex --file PATH -- diagnostic dump of
 /// the directive lexer output. Reads the file at --file, runs LexDirectives, and
 /// prints ONE LINE PER CHUNK as kind|dir|srcStart|srcEnd|line|value-escaped
@@ -10215,6 +10291,7 @@ begin
     else if Args.Command = 'format'            then Result:= DoFormat          (Args)
     else if Args.Command = 'check-ast'         then Result:= DoCheckAst        (Args)
     else if Args.Command = 'dump-refs'         then Result:= DoDumpRefs        (Args)
+    else if Args.Command = 'doc-drift'         then Result:= DoDocDrift        (Args)
     else if Args.Command = 'dump-pp-lex'       then Result:= DoDumpPpLex       (Args)
     else if Args.Command = 'dump-pp-eval'      then Result:= DoDumpPpEval      (Args)
     else if Args.Command = 'preprocess-file'   then Result:= DoPreprocessFile  (Args)

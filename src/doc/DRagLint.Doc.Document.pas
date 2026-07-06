@@ -41,6 +41,20 @@ type
     /// <summary>Back-compat overload: BuildFor with no doc-source opt-ins
     /// (AIncludeSeeAlso = False, AIncludeSince = False).</summary>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult; overload;
+    /// <summary>Resolves AQName and returns the DocInsight comment CURRENTLY on
+    /// its declaration (scanned live from the source file, ANSI), plus the
+    /// resolved symbol. AFound is False (and the outputs are Default) when the
+    /// symbol is not in the index or its file is missing; AHasDoc is False when
+    /// no comment sits above the decl. Used by the doc-drift diagnostic to feed
+    /// TDocDrift.Analyze with the on-disk doc. Reads only; writes nothing.</summary>
+    /// <param name="AStore">Open symbol store; not owned. Must not be nil.</param>
+    /// <param name="AQName">Fully qualified symbol name.</param>
+    /// <param name="ASym">OUT: the resolved symbol (Default when not found).</param>
+    /// <param name="AFound">OUT: True when the symbol + its file were resolved.</param>
+    /// <param name="AHasDoc">OUT: True when a doc-comment was found above the decl.</param>
+    /// <returns>The parsed on-disk doc (Default/empty when AHasDoc is False).</returns>
+    class function ExistingDocFor(const AStore: ISymbolStore; const AQName: string;
+      out ASym: TSymbol; out AFound: Boolean; out AHasDoc: Boolean): TParsedDoc;
   end;
 
 implementation
@@ -126,6 +140,45 @@ class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: st
 begin
   // Back-compat: no doc-source opt-ins.
   Result:= BuildFor(AStore, AQName, False);
+end;
+
+class function TDocumenter.ExistingDocFor(const AStore: ISymbolStore; const AQName: string;
+  out ASym: TSymbol; out AFound: Boolean; out AHasDoc: Boolean): TParsedDoc;
+var
+  Syms   : TArray<TSymbol>                                       ;
+  Path   : string                                               ;
+  Src    : string                                               ;
+  Regions: System.Generics.Collections.TList<TDocCommentRegion> ;
+  Region : TDocCommentRegion                                    ;
+begin
+  Result := Default(TParsedDoc);
+  ASym   := Default(TSymbol);
+  AFound := False;
+  AHasDoc:= False;
+
+  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+  if Length(Syms) = 0 then Exit;
+  ASym:= Syms[0];
+
+  Path:= AStore.GetFilePath(ASym.FileId);
+  if (Path = '') or (not TFile.Exists(Path)) then Exit;
+  AFound:= True;
+
+  Src:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(Path));
+
+  // Same live-scan the Documenter uses: nearest doc-comment above the decl,
+  // allow a 1-line gap, skip loose regions. Kind = TDocCommentKind(-1) = none.
+  Regions:= TDocCommentScanner.Scan(Src);
+  try
+    Region:= FindDocRegionAbove(Regions, ASym.StartLine, 1, False);
+    if Region.Kind <> TDocCommentKind(-1) then
+    begin
+      Result := TDocCommentParser.Dispatch(Region);
+      AHasDoc:= True;
+    end;
+  finally
+    Regions.Free;
+  end;
 end;
 
 class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;
