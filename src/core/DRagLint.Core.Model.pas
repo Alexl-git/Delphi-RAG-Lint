@@ -14,7 +14,10 @@ type
     // v0.41: unit initialization / finalization sections (no name; one each
     // per unit at most).  Emitted as unit-child markers so the structure view
     // can list them.
-    skInitialization, skFinalization);
+    skInitialization, skFinalization,
+    // v14 (D5): typed local vars + params, emitted so call-site receivers
+    // can be resolved to a concrete type. Populated starting Task 2.
+    skLocalVar, skParam);
 
   TSymbolKindHelper = record helper for TSymbolKind
     function ToText: string                                          ;
@@ -328,7 +331,8 @@ const
   KindText: array[TSymbolKind] of string = (
     'unit', 'program', 'package', 'class', 'interface', 'record', 'enum', 'enum_value', 'procedure', 'function', 'method', 'constructor', 'destructor', 'property', 'field', 'var',
     'const', 'type', 'form', 'component', 'sql_table', 'sql_column', 'sql_index', 'sql_trigger', 'sql_generator', 'sql_procedure', 'sql_view', 'sql_exception', 'sql_domain',
-    'sql_constraint', 'initialization', 'finalization');
+    'sql_constraint', 'initialization', 'finalization',
+    'local_var', 'param');   // v14 (D5)
 
 function TSymbolKindHelper.ToText: string;
 begin

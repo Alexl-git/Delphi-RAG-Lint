@@ -3,11 +3,15 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 13;
+  SCHEMA_VERSION = 14;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
-  SCHEMA_DDL_FTS5_FIRST = 47;
+  // v14 (D5): call_edges (base SQLite, no FTS5) was inserted at indices
+  // 47-49 (before the FTS5 block), so the FTS5-first index shifted from
+  // 47 to 50 -- update this constant whenever entries are inserted before
+  // the FTS5 block.
+  SCHEMA_DDL_FTS5_FIRST = 50;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
@@ -19,7 +23,7 @@ const
   // table's shape untouched -- so e.g. an index on such a column aborts the
   // whole migration with "no such column" on every pre-vN database. Indexes
   // on retrofitted columns belong in Migrate(), after their ALTER.
-  SCHEMA_DDL: array[0..51] of string = (
+  SCHEMA_DDL: array[0..54] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' + '  key   TEXT PRIMARY KEY,' + '  value TEXT NOT NULL' + ')',
 
     'CREATE TABLE IF NOT EXISTS files (' + '  id          INTEGER PRIMARY KEY,' + '  path        TEXT NOT NULL UNIQUE,' + '  mtime_unix  INTEGER NOT NULL,' +
@@ -164,7 +168,23 @@ const
     'CREATE TABLE IF NOT EXISTS di_bindings (' + '  id             INTEGER PRIMARY KEY,' + '  file_id        INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
     '  interface_name TEXT NOT NULL,' + '  impl_name      TEXT NOT NULL,' + '  lifetime       TEXT NOT NULL,' + '  start_line     INTEGER NOT NULL,' +
     '  start_col      INTEGER NOT NULL,' + '  end_line       INTEGER NOT NULL,' + '  end_col        INTEGER NOT NULL' + ')',
-    'CREATE INDEX IF NOT EXISTS idx_di_interface ON di_bindings(interface_name)', 'CREATE INDEX IF NOT EXISTS idx_di_impl      ON di_bindings(impl_name)'
+    'CREATE INDEX IF NOT EXISTS idx_di_interface ON di_bindings(interface_name)', 'CREATE INDEX IF NOT EXISTS idx_di_impl      ON di_bindings(impl_name)',
+
+    // v14 (D5): resolved call-site edges. One row per ref that was resolved
+    // to a concrete call target; ref_id is the PK so a ref resolves to at
+    // most one edge. receiver_type_symbol_id is the (optional) statically
+    // known type of the call receiver, used to disambiguate overloads/
+    // virtual dispatch in later D5 tasks. Base SQLite only (no FTS5), so it
+    // is placed before the FTS5 block -- keep SCHEMA_DDL_FTS5_FIRST in sync.
+    'CREATE TABLE IF NOT EXISTS call_edges (' +
+    '  ref_id                  INTEGER NOT NULL PRIMARY KEY REFERENCES refs(id) ON DELETE CASCADE,' +
+    '  target_symbol_id        INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+    '  confidence              TEXT    NOT NULL,' +
+    '  receiver_type_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL' +
+    ')',
+    'CREATE INDEX IF NOT EXISTS idx_call_edges_target ON call_edges(target_symbol_id)',
+    'CREATE INDEX IF NOT EXISTS idx_call_edges_ref    ON call_edges(ref_id)'
+
     // v10: string-content index (text search) --------------------------------
     , 'CREATE TABLE IF NOT EXISTS string_literals (' + '  id         INTEGER PRIMARY KEY,' +
     '  file_id    INTEGER NOT NULL REFERENCES files(id)  ON DELETE CASCADE,' +
