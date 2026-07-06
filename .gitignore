@@ -69,3 +69,6 @@ third_party/*/rules/
 /build*.bat
 /build*.err
 scratchpad/
+
+# YADF / tree-sitter test artifacts (user working copies, not tracked)
+.yadf-artifacts/

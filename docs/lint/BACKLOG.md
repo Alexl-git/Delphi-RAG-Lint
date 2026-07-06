@@ -1,5 +1,48 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-06 (LATEST-14) -- **D5 CALL-RESOLUTION IN FLIGHT (14-task SDD on main). T1 done-pending-review; 13 remain.**
+> `main`=`a14b58b` (T1 `1e281c9` + the CLI.pas-reformat commit `a14b58b`, LOCAL, ahead 2, NOT pushed).
+> VERSION CLI.pas:6=`0.90.0-alpha`, **schema NOW v14** (Task 1 bumped it).
+> **>>> WORKING-TREE CONFLICT RESOLVED 2026-07-06:** the user chose to COMMIT the IDE-reformatted CLI.pas
+> as-is (commit `a14b58b` -- 2876-line whitespace churn + the stray name-based Run doc-comment, builds clean).
+> So CLI.pas is now a CLEAN committed baseline and ALL D5 tasks (incl. the CLI-editing 5,6,8,9,11,12,14) can
+> proceed normally -- NO deferral. The YADF copy stays preserved at .yadf-artifacts/. D5 Task 7 regenerates
+> the stray Run doc-comment correctly (resolved). **RESUME = read SDD ledger -> dispatch T1 REVIEWER (sonnet)
+> -> T2..T13 via subagent-driven-development -> pause before T14 publish.** (The A/B/C options below are now
+> HISTORICAL -- kept for context; the answer was effectively a variant of A: commit rather than revert.) Plan `docs/superpowers/plans/2026-07-06-d5-call-resolution-plan.md`;
+> spec `docs/superpowers/specs/2026-07-06-d5-call-resolution-design.md` (both approved+pushed). SDD ledger
+> `.superpowers/sdd/progress.md` has the FULL resume point + the working-tree conflict below -- READ IT FIRST.
+> **D5 = receiver-type call resolution** (a whole-DB `ResolveCallTargets` pass types the receiver at each call
+> site, resolves to a target symbol, records it in a new `call_edges` table w/ confidence) to FIX the
+> AutoDocument Called-from NAME-COLLISION bug (`document --qname CLI.Run` lists callers of OTHER `Run`s --
+> ~13 distinct Run symbols). Emits ALL typed locals+params as symbols (user chose emit-all for broader
+> context/refactor value; `purge-locals` verb sheds them where too big). 3-way render: certain-ours=plain,
+> certain-different=EXCLUDED, <100%=`?`. 4 new verbs (find-callers --resolved, find-callees, ambiguous-calls,
+> call-path/callgraph). Schema v14 forces reparse -> T14 auto-starts the library reindex in the background.
+> **STATUS: Task 1 DONE (schema v14 + call_edges + skLocalVar/skParam kinds; commit `1e281c9`; build ExitCode 0,
+> guardrails lint154/store16/autodoc7/autofix9 GREEN, FTS5 probe verified AVAILABLE after SCHEMA_DDL_FTS5_FIRST
+> 47->50 bump) but REVIEW PENDING (handoff fired before the task-reviewer ran -- do NOT re-implement T1).**
+> **>>> CRITICAL WORKING-TREE CONFLICT (resolve at resume): src/cli/DRagLint.CLI.pas is DIRTY and the USER WANTS
+> IT KEPT** -- it's their YADF / tree-sitter test artifact (IDE "Document it" smoke reformatted it: 2876-line
+> whitespace churn = SAME code denser format, ~10463->9171 lines, + the buggy name-based Called-from doc-comment
+> on `function Run`). User ran YADF on it + it surfaced errors they want preserved while the grammar window fixes
+> tree-sitter. **DO NOT checkout/revert/commit/format CLI.pas without the user's OK.** Preserved byte-identical
+> at `.yadf-artifacts/DRagLint.CLI.pas.yadf-2026-07-06` (+ .bak) [gitignored]. **D5 tasks 5,6,8,9,11,12,14 EDIT
+> CLI.pas -> they CANNOT run on the reformatted copy.** RESUME OPTIONS (ASK the user): (A) YADF done -> `git
+> checkout src/cli/DRagLint.CLI.pas` [artifact stays safe], delete CLI.pas.bak, revert IDE json/dsv -> clean tree
+> -> resume D5 normally; (B) still need CLI.pas dirty -> run ONLY the CLI-FREE tasks now (T2 params, T3 locals,
+> T4 store, T7 Doc.Facts/Regions, T10 Doc.Facts, T13 test), DEFER CLI verbs (T6-wire/T8/T9/T11/T12) + publish;
+> (C) PAUSE D5 until tree-sitter fix + YADF done, then restore CLI.pas + run clean. RECOMMEND (A) if YADF served
+> its purpose, else (C). **RESUME SEQUENCE: read SDD ledger -> resolve CLI.pas conflict -> dispatch T1 REVIEWER
+> (sonnet) -> T2..T13 via superpowers:subagent-driven-development -> PAUSE before T14 publish.**
+> Other dirty (all leave-as-is or user-owned): CLI.pas.bak, drag-lint.delphilsp.json, drag-lint.dsv (IDE artifacts),
+> .gitignore (M -- added .yadf-artifacts/), + the pre-existing untracked forms-csv-v4 spec.
+> **PARALLEL THREAD (user-driven, separate window): tree-sitter-delphi13 grammar** -- statement-level gaps found
+> via drag-lint indexing (TODO.md in C:\Projects\tree-sitter-delphi13). `array of T` inline-var gap FIXED
+> (commit 6326e70, 98.240->98.257%). Remaining CLI.pas parse errors still to isolate. The user is driving that
+> in its own Opus window; the scheduled cron for it was cancelled.
+>
+> --- (prior) ---
 > ## RESUME 2026-07-06 (LATEST-13) -- **v0.90.0-alpha SHIPPED (AutoDocument Chunk 1). NEXT = AutoDocument Chunk 2.**
 > `main` = release commit (pushed, origin synced, clean). VERSION CLI.pas:6=`0.90.0-alpha`, **schema still v13**.
 > Executed via superpowers:subagent-driven-development (8 tasks + final whole-branch opus review = READY TO
