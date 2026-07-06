@@ -10,7 +10,7 @@ uses
 type
   TDocFactRef = record
     Display : string;   { e.g. 'Unit1.DoThing' }
-    Location: string;   { e.g. 'U1.pas:42' }
+    Location: string;   { file name only, e.g. 'U1.pas' -- NO :line (volatile) }
   end;
 
   /// <summary>Index-grounded facts about one symbol, for the managed
@@ -223,7 +223,14 @@ var
 begin
   Result:= Default(TDocFacts);
 
-  // Called from: name-based caller refs -> display 'EnclosingQName (file:line)'.
+  // Called from: name-based caller refs -> display 'EnclosingQName (file)'.
+  // IDEMPOTENCY: the Location is the caller FILE NAME ONLY -- deliberately NO
+  // ':line'. A line number is VOLATILE: applying this managed comment inserts N
+  // lines above every caller that sits below the insertion point, so on the next
+  // index+run the caller's StartLine has shifted and the regenerated facts block
+  // would differ from what is on disk -- 'document' would re-write the file every
+  // run, breaking the managed-region idempotency promise. The file name is stable
+  // across edits and the caller's qualified name already lets a reader navigate.
   Refs:= AStore.FindCallersByName(LastSeg(ASym.QualifiedName));
   Result.CalledFromTotal:= Length(Refs);
   Shown:= DocDisplayCount(Length(Refs));
@@ -239,7 +246,7 @@ begin
         FR.Display:= Encl.QualifiedName;
       end;
       if FR.Display = '' then FR.Display:= LastSeg(ASym.QualifiedName) + ' caller';
-      FR.Location:= ExtractFileName(AStore.GetFilePath(R.FileId)) + ':' + IntToStr(R.StartLine);
+      FR.Location:= ExtractFileName(AStore.GetFilePath(R.FileId));
       Acc.Add(FR);
     end;
     Result.CalledFrom:= Acc.ToArray;

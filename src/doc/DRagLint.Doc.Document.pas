@@ -41,6 +41,46 @@ uses
   DRagLint.Doc.Facts, DRagLint.Doc.Regions,
   DRagLint.Parser.DocComments, DRagLint.Refactor.DocStub;
 
+// Splits S into lines (normalizing CRLF/CR -> LF first), Trims each line, and
+// drops trailing empty lines. Used to compare the current source-comment span
+// against the merged comment apples-to-apples: BOTH sides are /// -prefixed
+// source lines, so a per-line Trim neutralizes source indentation vs the
+// prefix's trailing space and leaves the identical /// bodies aligned. Interior
+// blank lines are preserved (only TRAILING empties are dropped) so a genuine
+// structural difference is not masked.
+function NormalizeCommentLines(const S: string): TArray<string>;
+var
+  Norm : string        ;
+  Parts: TArray<string>;
+  Last : Integer       ;
+  I    : Integer       ;
+begin
+  Norm := StringReplace(S, #13#10, #10, [rfReplaceAll]);
+  Norm := StringReplace(Norm, #13, #10, [rfReplaceAll]);
+  Parts:= Norm.Split([#10]);
+  for I:= 0 to High(Parts) do
+    Parts[I]:= Trim(Parts[I]);
+  // Drop trailing empty lines (do NOT drop interior blanks).
+  Last:= High(Parts);
+  while (Last >= 0) and (Parts[Last] = '') do Dec(Last);
+  SetLength(Result, Last + 1);
+  for I:= 0 to Last do Result[I]:= Parts[I];
+end;
+
+// True when the normalized line sequences are identical (same count, each line
+// exactly equal). Exact '=' (not SameText): Merged is deterministic and both
+// sides come from /// -prefixed source, so casing never varies -- exact compare
+// gives the tighter idempotency guarantee.
+function CommentLinesEqual(const A, B: TArray<string>): Boolean;
+var
+  I: Integer;
+begin
+  if Length(A) <> Length(B) then Exit(False);
+  for I:= 0 to High(A) do
+    if A[I] <> B[I] then Exit(False);
+  Result:= True;
+end;
+
 // Returns the TDocCommentRegion immediately preceding ASymStartLine (EndLine in
 // [SymStartLine - 1 - AllowGap, SymStartLine - 1]). When ACaptureLoose is False,
 // loose regions are skipped. Sentinel: Result.Kind = TDocCommentKind(-1) means
@@ -88,6 +128,9 @@ var
   Merged   : string                                            ;
   Prefix   : string                                            ;
   Sig      : string                                            ;
+  SrcLines : TArray<string>                                    ;
+  CurBlock : string                                            ;
+  LineIx   : Integer                                           ;
   E        : TTextEdit                                         ;
 begin
   Result:= Default(TDocumentResult);
@@ -138,7 +181,27 @@ begin
   if Existing.HasContent then
   begin
     // Idempotency: a re-run on an already-current comment makes no edit.
-    if SameText(Trim(Existing.RawBlock), Trim(Merged)) then
+    // Compare the MERGED comment (the /// -prefixed lines drag-lint WOULD write)
+    // against the ACTUAL current comment lines in the source file -- both are
+    // /// -prefixed, so per-line-Trim aligns them. This round-trips: on apply we
+    // write Merged into the file; on the next run the scanner reads those exact
+    // lines back, MergeComment is idempotent (StripManagedBlock re-emits an
+    // identical fence, prose preserved per-line), so run 2's Merged equals what
+    // is on disk -> the normalized line sequences match -> daUnchanged, 0 edits.
+    // (The old SameText(Trim(RawBlock), Trim(Merged)) could NEVER match: RawBlock
+    // has the /// stripped and Merged does not, and outer Trim never aligns
+    // per-line indentation -- so document always re-wrote the file.)
+    SrcLines:= Src.Replace(#13#10, #10, [rfReplaceAll]).Replace(#13, #10, [rfReplaceAll]).Split([#10]);
+    // Extract the current comment's source lines [StartLine..EndLine] (1-based ->
+    // 0-based), clamped so an EndLine past EOF cannot index out of range.
+    CurBlock:= '';
+    for LineIx:= Existing.StartLine to Existing.EndLine do
+      if (LineIx >= 1) and (LineIx <= Length(SrcLines)) then
+      begin
+        if CurBlock <> '' then CurBlock:= CurBlock + #10;
+        CurBlock:= CurBlock + SrcLines[LineIx - 1];
+      end;
+    if CommentLinesEqual(NormalizeCommentLines(CurBlock), NormalizeCommentLines(Merged)) then
     begin
       Result.Action:= daUnchanged;
       Exit;
