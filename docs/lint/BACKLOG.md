@@ -1,5 +1,29 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-07 (LATEST-26) -- **HOVER RESTYLE DONE, DEBUG-STRIPPED, BUILT CLEAN, COMMITTED. Ready to push. Next: 3 user threads (#3 forms-csv, #4 Tools->Options, #5 Editor->Language) + 2 AutoDoc TODOs.**
+>
+> **STATE:** Closed out the hover Help-Insight restyle. Stripped ALL this-session debug scaffolding
+> (`DebugBuildStamp` fn + comment, the `[STRING | ...]` Caption stamp, the `FetchHoverModel:`/
+> `TryBuildHoverModel:`/`HoverTracker: STRUCTURED|STRING` `DebugLog` lines, and the unused
+> `JStart/JEnd/Depth/InStr/Esc/Ch` locals in `FetchHoverModel`). Caught + fixed a latent compile break: an
+> earlier partial strip had left a dangling `if not GotModel then` with no body in `HoverTracker` -- rewrote
+> it to `if LspText <> '' then GotModel:= TryBuildHoverModel(...)`. Rebuilt the Win32 BPL with RAD Studio
+> CLOSED: **Build succeeded, 0 Error(s), 20 hint-level warnings** (all pre-existing/benign). Ran
+> `run_hover_multidb.ps1` = **10/10 PASS**.
+>
+> **GIT:** two commits added on `main` this session -- a source commit (CLI `DoHover` multi-db +
+> `SliceJsonBracket` + dwell-structured `TryBuildHoverModel` + callers + all polish + z-order + green types +
+> by-reference + CALLED-FROM body label + grid spacing, plus the new `run_hover_multidb.ps1` regression test
+> and this BACKLOG update) and a separate `build(plugin):` commit for the rebuilt `dclDragLintWizard.bpl`/`.dcp`.
+> **User drives the push.** LEFT UNCOMMITTED on purpose (not this work): IDE-generated `drag-lint.delphilsp.json`
+> + `drag-lint.dsv`, the forms-csv v4 spec (thread #3), `tests/autotest/results/*.json`, `.superpowers/`.
+>
+> **STILL QUEUED:** 2 AUTODOC TODOs (Called-from parity via `SliceJsonBracket`+multi-db; Returns-format reuse)
+> and 3 user threads (#3 forms-csv regression on the deployed CSV, #4 Tools->Options pages spike, #5
+> Editor->Language tabs spike). Prior LATEST-25/24 blocks below retain the full root-cause + polish detail.
+>
+> ---
+>
 > ## RESUME 2026-07-07 (LATEST-25) -- **HOVER RESTYLE POLISH VISUALLY COMPLETE + USER-CONFIRMED ("Great!"). ONLY 2 THINGS LEFT: (1) strip debug scaffolding, (2) commit clean. Then user pushes. ALL fixes STILL UNCOMMITTED.**
 >
 > **STATE:** This session closed out the hover Help-Insight restyle live-smoke. It BUILT the pending
