@@ -17,6 +17,7 @@ uses
   DRagLint.Core.Model         in '..\..\src\core\DRagLint.Core.Model.pas',
   DRagLint.Core.Interfaces    in '..\..\src\core\DRagLint.Core.Interfaces.pas',
   DRagLint.Storage.SQLite     in '..\..\src\storage\DRagLint.Storage.SQLite.pas',
+  DRagLint.Refactor.TextEdit  in '..\..\src\refactor\DRagLint.Refactor.TextEdit.pas',
   DRagLint.Refactor.EnumHelper in '..\..\src\refactor\DRagLint.Refactor.EnumHelper.pas';
 
 var
@@ -217,19 +218,141 @@ begin
   Check('gen-nodesc: no ToDescription body', Pos('ToDescription', Gen.BodiesText) = 0);
 end;
 
+{ ---------------------------------------------------------------------------
+  Task 4: PLACE stage + top-level Build -- decl+bodies text edits, empty-impl
+  population, uses-clause edit for System.TypInfo, refuse rules. --------- }
+
+const
+  ALL6: TEnumHelperMethods =
+    [ehmToByte, ehmFromByte, ehmToInteger, ehmFromInteger, ehmToString, ehmFromString];
+
+{ Step 1-4: simple.pas -- Build should place a decl edit right after the enum
+  decl line and a bodies edit at/after 'implementation', plus a uses edit
+  adding System.TypInfo (NeedsTypInfo=True via tsmRtti, absent from uses). }
+procedure TestBuildSimple(const ADbPath: string);
+var
+  Store: ISymbolStore;
+  Res  : TEnumHelperResult;
+  E    : TTextEdit;
+  SawDecl, SawBodies, SawUses: Boolean;
+  DeclLine, BodiesLine: Integer;
+begin
+  Store:= TSQLiteSymbolStore.Create(ADbPath);
+  Store.Migrate;
+  Res:= TEnumHelperRefactoring.Build(Store, 'TColor', ALL6, tsmRtti);
+
+  Check('build-simple: Action = ehaBuilt', Res.Action = ehaBuilt);
+  Check('build-simple: EnumName = TColor', Res.EnumName = 'TColor');
+  Check('build-simple: at least 2 edits', Length(Res.Edits) >= 2);
+
+  SawDecl:= False; SawBodies:= False; SawUses:= False;
+  DeclLine:= -1; BodiesLine:= -1;
+  for E in Res.Edits do
+  begin
+    if (Pos('record helper for TColor', E.Text) > 0) then
+    begin SawDecl:= True; DeclLine:= E.Line; end;
+    if (Pos('TColorHelper.ToByte', E.Text) > 0) then
+    begin SawBodies:= True; BodiesLine:= E.Line; end;
+    if (Pos('System.TypInfo', E.Text) > 0) or (SameText(Trim(E.Text.Replace(#13#10,'')), 'uses System.TypInfo;')) then
+      SawUses:= True;
+  end;
+  Check('build-simple: has decl edit'  , SawDecl);
+  Check('build-simple: has bodies edit', SawBodies);
+  Check('build-simple: has uses edit (NeedsTypInfo + absent)', SawUses);
+  { simple.pas: enum on line 4 ('  TColor = (clRed, clGreen, clBlue);'),
+    'implementation' on line 5 (see fixtures\enumhelper\simple.pas). }
+  Check('build-simple: decl edit anchored at enum decl line', DeclLine = 4);
+  Check('build-simple: bodies edit at/after implementation line', BodiesLine >= 5);
+end;
+
+{ Step 5: interface-only-unit fixture -- empty implementation section must be
+  POPULATED (bodies land there), not refused. }
+procedure TestBuildInterfaceOnly(const ADbPath: string);
+var
+  Store: ISymbolStore;
+  Res  : TEnumHelperResult;
+  E    : TTextEdit;
+  SawBodies: Boolean;
+begin
+  Store:= TSQLiteSymbolStore.Create(ADbPath);
+  Store.Migrate;
+  Res:= TEnumHelperRefactoring.Build(Store, 'TSignal', ALL6, tsmRtti);
+
+  Check('build-ifaceonly: Action = ehaBuilt', Res.Action = ehaBuilt);
+  SawBodies:= False;
+  for E in Res.Edits do
+    if Pos('TSignalHelper.ToByte', E.Text) > 0 then SawBodies:= True;
+  Check('build-ifaceonly: bodies land in the (empty) implementation section', SawBodies);
+end;
+
+{ Step 5: already_has_helper.pas -- Build must refuse (ehaExists), no edits,
+  message names the unit. }
+procedure TestBuildRefuseExists(const ADbPath: string);
+var
+  Store: ISymbolStore;
+  Res  : TEnumHelperResult;
+begin
+  Store:= TSQLiteSymbolStore.Create(ADbPath);
+  Store.Migrate;
+  Res:= TEnumHelperRefactoring.Build(Store, 'TStatus', ALL6, tsmRtti);
+
+  Check('build-exists: Action = ehaExists', Res.Action = ehaExists);
+  Check('build-exists: no edits', Length(Res.Edits) = 0);
+  Check('build-exists: message non-empty', Res.Message <> '');
+end;
+
+{ Step 5: no-implementation-keyword fragment -- Build must refuse
+  (ehaNoImplSection), no edits. This fixture is NOT indexed via the real
+  parser tree (a malformed fragment may not parse); Build's refuse path must
+  trigger purely from the source-scan finding no 'implementation' keyword,
+  ahead of any Generate call, so it is exercised directly against the plain
+  text file rather than requiring a resolved enum. We still need a resolvable
+  enum to reach PLACE, so this fixture keeps a valid enum decl and only omits
+  'implementation'. }
+procedure TestBuildRefuseNoImpl(const ADbPath: string);
+var
+  Store: ISymbolStore;
+  Res  : TEnumHelperResult;
+begin
+  Store:= TSQLiteSymbolStore.Create(ADbPath);
+  Store.Migrate;
+  Res:= TEnumHelperRefactoring.Build(Store, 'TFlag', ALL6, tsmRtti);
+
+  Check('build-noimpl: Action = ehaNoImplSection', Res.Action = ehaNoImplSection);
+  Check('build-noimpl: no edits', Length(Res.Edits) = 0);
+  Check('build-noimpl: message non-empty', Res.Message <> '');
+end;
+
+{ Build on an unresolvable qname -> ehaNotFound. }
+procedure TestBuildRefuseNotFound(const ADbPath: string);
+var
+  Store: ISymbolStore;
+  Res  : TEnumHelperResult;
+begin
+  Store:= TSQLiteSymbolStore.Create(ADbPath);
+  Store.Migrate;
+  Res:= TEnumHelperRefactoring.Build(Store, 'TDoesNotExist', ALL6, tsmRtti);
+
+  Check('build-notfound: Action = ehaNotFound', Res.Action = ehaNotFound);
+  Check('build-notfound: no edits', Length(Res.Edits) = 0);
+end;
+
 var
   ArgDbSimple, ArgDbAlready, ArgDbSeparate: string;
+  ArgDbIfaceOnly, ArgDbNoImpl: string;
 begin
   GPass:= 0; GFail:= 0;
   try
-    if ParamCount < 3 then
+    if ParamCount < 5 then
     begin
-      Writeln('usage: EnumHelperTests <simple.sqlite> <already_has_helper.sqlite> <separate_unit.sqlite>');
+      Writeln('usage: EnumHelperTests <simple.sqlite> <already_has_helper.sqlite> <separate_unit.sqlite> <interface_only.sqlite> <no_impl.sqlite>');
       Halt(2);
     end;
-    ArgDbSimple  := ParamStr(1);
-    ArgDbAlready := ParamStr(2);
-    ArgDbSeparate:= ParamStr(3);
+    ArgDbSimple   := ParamStr(1);
+    ArgDbAlready  := ParamStr(2);
+    ArgDbSeparate := ParamStr(3);
+    ArgDbIfaceOnly:= ParamStr(4);
+    ArgDbNoImpl   := ParamStr(5);
 
     TestSimpleResolve      (ArgDbSimple  );
     TestAlreadyHasHelper    (ArgDbAlready );
@@ -240,6 +363,12 @@ begin
     TestGenerateCaseToString;
     TestGenerateDescriptions;
     TestGenerateNoDescriptions;
+
+    TestBuildSimple        (ArgDbSimple   );
+    TestBuildInterfaceOnly (ArgDbIfaceOnly);
+    TestBuildRefuseExists  (ArgDbAlready  );
+    TestBuildRefuseNoImpl  (ArgDbNoImpl   );
+    TestBuildRefuseNotFound(ArgDbSimple   );
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

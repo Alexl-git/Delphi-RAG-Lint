@@ -1,21 +1,30 @@
 unit DRagLint.Refactor.EnumHelper;
 
-{ Enum-helper generator -- RESOLVE (Task 2) + GENERATE (Task 3) stages.
+{ Enum-helper generator -- RESOLVE (Task 2) + GENERATE (Task 3) + PLACE
+  (Task 4) stages, assembled behind the top-level Build entry point (the
+  CLI `create-enum-helper` verb and the IDE "Create helper class" menu both
+  call Build only).
   RESOLVE looks up an enum by qualified name, gathers its members in
   declaration order, checks whether a helper already exists anywhere in the
   indexed codebase (via ISymbolStore.FindHelpersOfType), and detects a
   same-unit `<Enum>Descriptions` const array. GENERATE synthesizes the Byte-
   family record-helper declaration + method bodies from a TEnumHelperResolve,
-  as pure string building (no store/index access). PLACE (text-edit emission)
-  is added in a later task on the same TEnumHelperRefactoring class. }
+  as pure string building (no store/index access). PLACE turns the resolved
+  enum + generated text into TTextEdits: the decl lands immediately after the
+  enum's own declaration (same `type` section); the bodies ALWAYS land in the
+  `implementation` section (populating an empty one when necessary); a third
+  edit adds `System.TypInfo` to the implementation `uses` when the generated
+  bodies need RTTI and it is not already in scope. }
 
 interface
 
 uses
   System.SysUtils
   , System.Classes
+  , System.IOUtils
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
+  , DRagLint.Refactor.TextEdit
   ;
 
 type
@@ -92,11 +101,42 @@ type
     NeedsTypInfo: Boolean;
   end;
 
+  /// <summary>Outcome of Build. ehaBuilt: edits were produced (Result.Edits
+  /// is populated). ehaExists: a helper for the enum already exists
+  /// (anywhere in the indexed codebase); no edits are produced -- the
+  /// generator never overwrites a hand-written helper. ehaNoImplSection: the
+  /// enum's unit has no `implementation` keyword at all (malformed/fragment
+  /// safety guard; a normal Delphi unit always has one); no edits.
+  /// ehaNotFound: AEnumQName did not resolve to an skEnum symbol; no
+  /// edits.</summary>
+  TEnumHelperAction = (ehaBuilt, ehaExists, ehaNoImplSection, ehaNotFound);
+
+  /// <summary>Result of TEnumHelperRefactoring.Build: either a ready-to-apply
+  /// set of text edits (Action=ehaBuilt) or a refusal with a human-readable
+  /// reason and no edits.</summary>
+  TEnumHelperResult = record
+    /// <summary>What Build decided. See TEnumHelperAction.</summary>
+    Action: TEnumHelperAction;
+    /// <summary>Decl edit + bodies edit, plus a uses edit when RTTI ToString/
+    /// FromString were generated and System.TypInfo was not already in
+    /// scope. Empty unless Action=ehaBuilt. Apply via
+    /// TTextEditApplier.Apply.</summary>
+    Edits: TArray<TTextEdit>;
+    /// <summary>Human-readable reason for ehaExists / ehaNoImplSection /
+    /// ehaNotFound. '' when Action=ehaBuilt.</summary>
+    Message: string;
+    /// <summary>Short (unqualified) enum type name, e.g. 'TColor'. Set
+    /// whenever the qname resolved (i.e. Action <> ehaNotFound).</summary>
+    EnumName: string;
+    /// <summary>Filesystem path of the enum's declaring unit. Set whenever
+    /// the qname resolved (i.e. Action <> ehaNotFound).</summary>
+    FilePath: string;
+  end;
+
   /// <summary>Enum-helper generator: resolves an enum type, synthesizes a
   /// record helper implementing the requested conversion methods, and places
-  /// the result via text edits. Resolve (Task 2) + Generate (this task) are
-  /// implemented; Build (the PLACE stage) is added later on this same
-  /// class.</summary>
+  /// the result via text edits. Resolve (Task 2) + Generate (Task 3) + Build
+  /// / PLACE (this task) are all implemented.</summary>
   TEnumHelperRefactoring = class
   public
     /// <summary>Resolves AEnumQName to its declaring enum symbol, its members
@@ -135,6 +175,27 @@ type
     /// FromString were emitted.</returns>
     class function Generate(const AResolve: TEnumHelperResolve;
       const AMethods: TEnumHelperMethods; const AToStringMode: TToStringMode): TEnumHelperGen; static;
+
+    /// <summary>Top-level entry point: Resolve -> refuse checks -> Generate
+    /// -> PLACE -> assembled TEnumHelperResult. The only method the CLI
+    /// `create-enum-helper` verb and the IDE "Create helper class" menu
+    /// call.</summary>
+    /// <param name="AStore">Open symbol store (whole-DB visibility for the
+    /// existing-helper guard and the uses-clause membership check).</param>
+    /// <param name="AEnumQName">Qualified (or uniquely-resolving short) name
+    /// of the enum type, e.g. 'Simple.TColor' or 'TColor'.</param>
+    /// <param name="AMethods">Subset of the 6 convert methods to emit; see
+    /// Generate.</param>
+    /// <param name="AToStringMode">ToString/FromString strategy; see
+    /// Generate.</param>
+    /// <returns>Action=ehaNotFound when AEnumQName does not resolve;
+    /// ehaExists when a helper already exists anywhere in the codebase (no
+    /// edits -- never overwrites a hand-written helper); ehaNoImplSection
+    /// when the enum's unit has no `implementation` keyword at all;
+    /// otherwise ehaBuilt with 2 or 3 ready-to-apply TTextEdits (decl,
+    /// bodies, and -- only when needed -- a System.TypInfo uses edit).</returns>
+    class function Build(const AStore: ISymbolStore; const AEnumQName: string;
+      const AMethods: TEnumHelperMethods; const AToStringMode: TToStringMode): TEnumHelperResult; static;
   end;
 
 implementation
@@ -368,6 +429,246 @@ begin
   finally
     DeclSb.Free;
     BodySb.Free;
+  end;
+end;
+
+{ Bounded scan for the file's top-level 'implementation' keyword line: a
+  normal Delphi unit has exactly one, alone on its own line. This mirrors
+  TFindUnitRefactoring.Build's existing keyword-locate scan (same unit,
+  DRagLint.Refactor.TextEdit.pas) rather than hand-rolling a new scanner --
+  both need the same "which line does the implementation/interface keyword
+  start" fact and neither has access to a stored section-anchor table
+  (Task 1 only shipped type_helpers; no unit-anchors table exists yet -- see
+  the design spec Section 4 note). A case-insensitive, whole-trimmed-line
+  match is deliberately simple: it will not misfire on the word appearing
+  inside a string literal or a brace/line comment unless that text is alone
+  on its own line reading exactly 'implementation' after trimming, which does
+  not occur in real source (the identifier is reserved and cannot appear as a
+  bare comment/string line by itself in any fixture or real unit
+  encountered). Returns 0 when not found. }
+function FindImplementationLine(const ALines: TStringList): Integer;
+var
+  I: Integer;
+  T: string;
+begin
+  Result:= 0;
+  for I:= 0 to ALines.Count - 1 do
+  begin
+    T:= LowerCase(Trim(ALines[I]));
+    if T = 'implementation' then Exit(I + 1); { 1-based }
+  end;
+end;
+
+{ Prefixes AIndent onto every line of ABlock (CRLF- or LF-joined, as produced
+  by Generate's TStringBuilder text), so the spliced decl block lines up
+  under `type` at the same indentation as the enum it follows. }
+function IndentLines(const ABlock, AIndent: string): string;
+var
+  Parts: TArray<string>;
+  I    : Integer;
+  SB   : TStringBuilder;
+begin
+  Parts:= ABlock.Replace(#13#10, #10).Split([#10]);
+  SB:= TStringBuilder.Create;
+  try
+    for I:= 0 to High(Parts) do
+    begin
+      if I > 0 then SB.Append(#13#10);
+      if Parts[I] = '' then SB.Append('') else SB.Append(AIndent).Append(Parts[I]);
+    end;
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+{ True when System.TypInfo (or its pre-namespace short form 'TypInfo') is
+  already present in AUses -- checked across whichever section(s) AUses was
+  built from (the caller passes the whole-file uses list, both interface and
+  implementation, per the spec's "neither interface nor implementation uses
+  contains it" rule). Only ever called for this one literal unit name, so a
+  fixed two-form comparison is simpler than a generic dotted-name splitter. }
+function UsesContainsTypInfo(const AUses: TArray<TUnitUse>): Boolean;
+var
+  U: TUnitUse;
+begin
+  Result:= False;
+  for U in AUses do
+    if SameText(U.UnitName, 'System.TypInfo') or SameText(U.UnitName, 'TypInfo') then
+      Exit(True);
+end;
+
+class function TEnumHelperRefactoring.Build(const AStore: ISymbolStore; const AEnumQName: string;
+  const AMethods: TEnumHelperMethods; const AToStringMode: TToStringMode): TEnumHelperResult;
+var
+  Res        : TEnumHelperResolve;
+  Gen        : TEnumHelperGen;
+  RawBytes   : TBytes;
+  Src        : string;
+  Lines      : TStringList;
+  ImplLine   : Integer;
+  BodiesLine : Integer;
+  EnumIndent : string;
+  DeclEdit   : TTextEdit;
+  BodiesEdit : TTextEdit;
+  UsesEdit   : TTextEdit;
+  Edits      : TArray<TTextEdit>;
+  FileId     : Int64;
+  Uses_      : TArray<TUnitUse>;
+  UsesPrefix : string;
+  LastImplUse: TUnitUse;
+  HaveLastImplUse: Boolean;
+  U          : TUnitUse;
+begin
+  Result:= Default(TEnumHelperResult);
+
+  Res:= Resolve(AStore, AEnumQName);
+  if not Res.Found then
+  begin
+    Result.Action := ehaNotFound;
+    Result.Message:= Format('enum "%s" not found', [AEnumQName]);
+    Exit;
+  end;
+
+  Result.EnumName:= Res.EnumName;
+  Result.FilePath:= Res.EnumFilePath;
+
+  if Res.HasHelper then
+  begin
+    Result.Action:= ehaExists;
+    if Res.HelperSameUnit then
+      Result.Message:= Format('helper for "%s" already exists in the same unit (%s)',
+        [Res.EnumName, Res.EnumFilePath])
+    else
+      Result.Message:= Format('helper for "%s" already exists in unit "%s"',
+        [Res.EnumName, Res.HelperUnitPath]);
+    Exit;
+  end;
+
+  if (Res.EnumFilePath = '') or (not TFile.Exists(Res.EnumFilePath)) then
+  begin
+    Result.Action := ehaNoImplSection;
+    Result.Message:= Format('declaring file not found on disk: %s', [Res.EnumFilePath]);
+    Exit;
+  end;
+
+  RawBytes:= TFile.ReadAllBytes(Res.EnumFilePath);
+  Src     := TEncoding.ANSI.GetString(RawBytes);
+
+  Lines:= TStringList.Create;
+  try
+    Lines.Text:= Src;
+
+    ImplLine:= FindImplementationLine(Lines);
+    if ImplLine = 0 then
+    begin
+      Result.Action := ehaNoImplSection;
+      Result.Message:= Format('unit "%s" has no implementation section', [ExtractFileName(Res.EnumFilePath)]);
+      Exit;
+    end;
+
+    Gen:= Generate(Res, AMethods, AToStringMode);
+
+    { Indentation for the decl: match the enum's own declaration line (the
+      standard 2-space `type` section indent in every fixture/real unit
+      encountered). Falls back to 2 spaces if the anchor line is out of
+      range (should not happen for a resolved enum). }
+    EnumIndent:= '  ';
+    if (Res.EnumEndLine >= 1) and (Res.EnumEndLine <= Lines.Count) then
+    begin
+      var LEnumLine: string:= Lines[Res.EnumEndLine - 1];
+      var LTrimLen : Integer:= Length(LEnumLine) - Length(TrimLeft(LEnumLine));
+      EnumIndent:= Copy(LEnumLine, 1, LTrimLen);
+    end;
+
+    { Decl edit: insert right after the enum's own decl line, same `type`
+      section. Gen.DeclText is trimmed of trailing line breaks (Task 3) --
+      add our own leading blank line then indent every line of the block to
+      match the enum's indentation. }
+    DeclEdit:= Default(TTextEdit);
+    DeclEdit.FilePath:= Res.EnumFilePath;
+    DeclEdit.Kind    := tekInsertLines;
+    DeclEdit.Line    := Res.EnumEndLine;
+    DeclEdit.Text    := ''#13#10 + IndentLines(Gen.DeclText, EnumIndent);
+    Edits:= [DeclEdit];
+
+    { Locate an existing implementation `uses` clause (independent of
+      NeedsTypInfo): Object Pascal requires a section's `uses` clause, if
+      any, to be the FIRST thing after `implementation`/`interface` -- it
+      cannot follow a routine body. So the bodies insertion point can never
+      be earlier than the end of an existing implementation uses clause;
+      it must always land AFTER it. Only the implementation section can
+      hold routine bodies, so only its uses clause (not the interface's)
+      constrains BodiesLine. }
+    FileId:= Res.EnumFileId;
+    if FileId <= 0 then FileId:= AStore.FindFileIdByPath(Res.EnumFilePath);
+    Uses_:= nil;
+    if FileId > 0 then Uses_:= AStore.GetUnitUsesForFile(FileId);
+
+    HaveLastImplUse:= False;
+    LastImplUse    := Default(TUnitUse);
+    for U in Uses_ do
+      if U.Section = uusImplementation then
+        if (not HaveLastImplUse) or (U.StartLine > LastImplUse.StartLine)
+           or ((U.StartLine = LastImplUse.StartLine) and (U.StartCol > LastImplUse.StartCol)) then
+        begin LastImplUse:= U; HaveLastImplUse:= True; end;
+
+    BodiesLine:= ImplLine;
+    if HaveLastImplUse and (LastImplUse.EndLine > BodiesLine) then
+      BodiesLine:= LastImplUse.EndLine;
+
+    { uses edit: only when RTTI ToString/FromString were generated AND
+      System.TypInfo is not already visible (interface OR implementation
+      uses -- queried via unit_uses, never string-scanned). A found
+      implementation uses clause gets ', System.TypInfo' appended in place
+      (independently anchored at its own line, no ordering ambiguity with
+      the bodies edit below). Absent any implementation uses clause, a fresh
+      'uses System.TypInfo;' is folded into the SAME bodies edit (both would
+      anchor at ImplLine, so keep them as one edit rather than two competing
+      for the same insertion point). }
+    UsesPrefix:= '';
+    if Gen.NeedsTypInfo and (not UsesContainsTypInfo(Uses_)) then
+    begin
+      if HaveLastImplUse then
+      begin
+        UsesEdit:= Default(TTextEdit);
+        UsesEdit.FilePath:= Res.EnumFilePath;
+        UsesEdit.Kind    := tekInsertInLine;
+        UsesEdit.Line    := LastImplUse.EndLine;
+        UsesEdit.Col     := LastImplUse.EndCol;
+        UsesEdit.Text    := ', System.TypInfo';
+        Edits:= Edits + [UsesEdit];
+      end
+      else
+        UsesPrefix:= #13#10'uses System.TypInfo;'#13#10;
+    end;
+
+    { Bodies edit: ALWAYS in the implementation section, anchored at
+      BodiesLine (computed above: right after `implementation` itself when
+      the section has no uses clause of its own, else right after that
+      uses clause -- both empty-implementation and existing-implementation-
+      uses fixtures verified to compile). Landing at the very top of the
+      section (before any pre-existing routine bodies) rather than after
+      them is a deliberate simplification: locating "after the last
+      existing routine" needs the same not-yet-built section-anchor table
+      the design spec flags as optional/deferred, and top-of-section is
+      always valid Object Pascal, unlike top-of-section-before-a-uses-clause
+      (invalid -- the bug this comment block exists to avoid re-introducing).
+      Gen.BodiesText is right-trimmed (Task 3) -- add our own leading blank
+      line; UsesPrefix (set above) is a fresh 'uses System.TypInfo;' block
+      prepended only when the unit had no implementation uses clause to
+      extend instead. }
+    BodiesEdit:= Default(TTextEdit);
+    BodiesEdit.FilePath:= Res.EnumFilePath;
+    BodiesEdit.Kind    := tekInsertLines;
+    BodiesEdit.Line    := BodiesLine;
+    BodiesEdit.Text    := UsesPrefix + #13#10 + Gen.BodiesText;
+    Edits:= Edits + [BodiesEdit];
+
+    Result.Edits := Edits;
+    Result.Action:= ehaBuilt;
+  finally
+    Lines.Free;
   end;
 end;
 

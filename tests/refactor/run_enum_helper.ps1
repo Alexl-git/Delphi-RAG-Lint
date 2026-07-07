@@ -38,6 +38,16 @@ $dbSeparate = Join-Path $WorkDir "separate.sqlite"
 $out3 = & $exe index $sepSrc --db $dbSeparate 2>&1
 if ($LASTEXITCODE -ne 0) { Write-Host "FAIL: index separate-unit fixtures"; Write-Host $out3; exit 1 }
 
+# --- 4. (Task 4) interface_only.pas: enum in interface, EMPTY implementation ---
+$dbIfaceOnly = Join-Path $WorkDir "interface_only.sqlite"
+$out4 = & $exe index (Join-Path $dir "interface_only.pas") --db $dbIfaceOnly 2>&1
+if ($LASTEXITCODE -ne 0) { Write-Host "FAIL: index interface_only.pas"; Write-Host $out4; exit 1 }
+
+# --- 5. (Task 4) no_impl_fragment.pas: enum, NO 'implementation' keyword at all ---
+$dbNoImpl = Join-Path $WorkDir "no_impl.sqlite"
+$out5 = & $exe index (Join-Path $dir "no_impl_fragment.pas") --db $dbNoImpl 2>&1
+if ($LASTEXITCODE -ne 0) { Write-Host "FAIL: index no_impl_fragment.pas"; Write-Host $out5; exit 1 }
+
 # --- build the DUnitX-style console test ---
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 $searchPath = "$repo\src\core;$repo\src\storage;$repo\src\query;$repo\src\index;$repo\src\preprocess;$repo\src\refactor"
@@ -45,5 +55,5 @@ $buildOut = cmd /c "call `"$rs`" && cd /d `"$PSScriptRoot`" && dcc64 -B -NSSyste
 $err = $buildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
 if ($err) { Write-Host "BUILD FAILED:"; $err | Select-Object -First 12; exit 1 }
 
-& "$PSScriptRoot\EnumHelperTests.exe" $dbSimple $dbAlready $dbSeparate
+& "$PSScriptRoot\EnumHelperTests.exe" $dbSimple $dbAlready $dbSeparate $dbIfaceOnly $dbNoImpl
 exit $LASTEXITCODE
