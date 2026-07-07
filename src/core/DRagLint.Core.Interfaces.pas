@@ -167,6 +167,13 @@ type
     function FindFileIdByPath             (const APath: string): Int64;
     function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
     function FindChildSymbolByName(AParentId: Int64; const AName: string): TSymbol;
+    /// <summary>The innermost routine (procedure/function/method/constructor/
+    /// destructor) whose IMPLEMENTATION BODY span (impl_start_line..impl_end_line)
+    /// contains ALine in AFileId. Empty (Id=0) when the line is in no routine body.
+    /// Unlike FindContainingSymbol (which matches the DECLARATION span), this finds
+    /// the routine you are standing INSIDE -- needed to scope a bare identifier to
+    /// that routine's params/locals.</summary>
+    function FindEnclosingRoutineByImpl(AFileId: Int64; ALine: Integer): TSymbol;
 
     // v0.20: completion helpers
     function FindSymbolsByPrefix(const APrefix: string; ALimit: Integer): TArray<TSymbol>;

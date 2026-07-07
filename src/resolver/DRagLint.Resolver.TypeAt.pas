@@ -222,29 +222,52 @@ begin
   end // if
   else
   begin
-    ResolvedSym:= AStore.FindSymbolByExactNameAnywhere(Result.Token);
-    if ResolvedSym.Id > 0 then
+    { v0.94 (hover scope fix): a bare identifier inside a routine body most
+      often means THAT routine's own param/local, not some unrelated
+      same-named global. Scope-first: find the routine whose IMPLEMENTATION
+      BODY span contains the cursor line, and check whether Token is one of
+      its direct children (param/local). Only fall through to the flat
+      whole-DB name lookup when no such scoped match exists. }
+    if FileId > 0 then
     begin
-      Result.Resolved   := ResolvedSym;
-      Result.HasResolved:= True;
-    end
-    else
-    begin
-      { v0.46: infer a bare local var/param's declared type. }
-      var InferredType: string:= InferLocalVarType(Lines, ALine - 1, Result.Token);
-      if InferredType <> '' then
+      var EnclRoutine: TSymbol:= AStore.FindEnclosingRoutineByImpl(FileId, ALine);
+      if EnclRoutine.Id > 0 then
       begin
-        ResolvedSym:= AStore.FindSymbolByExactNameAnywhere(InferredType);
-        if ResolvedSym.Id > 0 then
+        var Local: TSymbol:= AStore.FindChildSymbolByName(EnclRoutine.Id, Result.Token);
+        if (Local.Id > 0) and (Local.Kind in [skParam, skLocalVar]) then
         begin
-          Result.Resolved   := ResolvedSym;
+          Result.Resolved   := Local;
           Result.HasResolved:= True;
-          Result.Note:= Format('%s: %s', [Result.Token, InferredType]);
-        end
-        else Result.Note:= Format('%s: %s (type not indexed)', [Result.Token, InferredType]);
+        end;
+      end;
+    end;
+
+    if not Result.HasResolved then
+    begin
+      ResolvedSym:= AStore.FindSymbolByExactNameAnywhere(Result.Token);
+      if ResolvedSym.Id > 0 then
+      begin
+        Result.Resolved   := ResolvedSym;
+        Result.HasResolved:= True;
       end
-      else Result.Note:= 'unresolved (local type not inferred)';
-    end; // else
+      else
+      begin
+        { v0.46: infer a bare local var/param's declared type. }
+        var InferredType: string:= InferLocalVarType(Lines, ALine - 1, Result.Token);
+        if InferredType <> '' then
+        begin
+          ResolvedSym:= AStore.FindSymbolByExactNameAnywhere(InferredType);
+          if ResolvedSym.Id > 0 then
+          begin
+            Result.Resolved   := ResolvedSym;
+            Result.HasResolved:= True;
+            Result.Note:= Format('%s: %s', [Result.Token, InferredType]);
+          end
+          else Result.Note:= Format('%s: %s (type not indexed)', [Result.Token, InferredType]);
+        end
+        else Result.Note:= 'unresolved (local type not inferred)';
+      end; // else
+    end; // if not Result.HasResolved
   end; // else
 
   if Result.HasResolved then

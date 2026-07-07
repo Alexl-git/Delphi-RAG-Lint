@@ -48,6 +48,7 @@ type
       FQFindContaining       : TFDQuery     ;
       FQFindFileId           : TFDQuery     ;
       FQFindChildByName      : TFDQuery     ;
+      FQFindEnclRoutine      : TFDQuery     ;
       FQFindByPrefix         : TFDQuery     ;
       FQFindAllChildren      : TFDQuery     ;
       FQFindNoCallers        : TFDQuery     ;
@@ -198,6 +199,7 @@ type
       function FindFileIdByPath             (const APath: string): Int64;
       function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
       function FindChildSymbolByName(AParentId: Int64; const AName: string): TSymbol;
+      function FindEnclosingRoutineByImpl(AFileId: Int64; ALine: Integer): TSymbol;
 
       // v0.20: completion helpers
       function FindSymbolsByPrefix(const APrefix: string; ALimit: Integer): TArray<TSymbol>;
@@ -332,6 +334,7 @@ begin
   FQFindContaining.Free;
   FQFindFileId.Free;
   FQFindChildByName.Free;
+  FQFindEnclRoutine.Free;
   FQFindByPrefix.Free;
   FQFindAllChildren.Free;
   FQFindNoCallers.Free;
@@ -743,6 +746,16 @@ begin
   FQFindFileId:= NewQuery( 'SELECT id FROM files ' + 'WHERE path = :p OR LOWER(path) = LOWER(:p) LIMIT 1');
 
   FQFindChildByName:= NewQuery( 'SELECT * FROM symbols WHERE parent_id = :pid AND name = :name LIMIT 1');
+
+  // v0.94 (hover scope fix): innermost routine whose IMPL BODY span contains
+  // the cursor line -- ORDER BY impl_start_line DESC so a nested routine
+  // (innermost) wins over its enclosing one.
+  FQFindEnclRoutine:= NewQuery(
+    'SELECT * FROM symbols ' +
+    'WHERE file_id = :fid AND impl_start_line IS NOT NULL AND impl_start_line > 0 ' +
+    '  AND impl_start_line <= :line AND impl_end_line >= :line ' +
+    '  AND kind IN (''procedure'',''function'',''method'',''constructor'',''destructor'') ' +
+    'ORDER BY impl_start_line DESC LIMIT 1');
 
   // v0.20: completion helpers
   // LIKE pattern: escape _ and % in user input, then append %.
@@ -2272,6 +2285,20 @@ begin
     if not FQFindChildByName.IsEmpty then Result:= ReadSymbolFromQuery(FQFindChildByName);
   finally
     FQFindChildByName.Close;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindEnclosingRoutineByImpl(AFileId: Int64; ALine: Integer): TSymbol;
+begin
+  Result:= Default(TSymbol);
+  if FQFindEnclRoutine.Active then FQFindEnclRoutine.Close;
+  FQFindEnclRoutine.ParamByName('fid' ).AsLargeInt:= AFileId;
+  FQFindEnclRoutine.ParamByName('line').AsInteger := ALine;
+  FQFindEnclRoutine.Open;
+  try
+    if not FQFindEnclRoutine.IsEmpty then Result:= ReadSymbolFromQuery(FQFindEnclRoutine);
+  finally
+    FQFindEnclRoutine.Close;
   end;
 end;
 
