@@ -1,36 +1,39 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-07 (LATEST-20) -- **ENUM-HELPER GENERATOR: brainstorm + spec + plan DONE + committed. NEXT = EXECUTE via subagent-driven-development from Task 0.**
-> `main`=`ddc3b24` (plan commit) on `c761c78` (spec commit). **2 commits AHEAD of origin/main, NOT pushed** (spec+plan;
-> committed on-disk so cold resume works regardless -- push is optional). Clean except IDE json/dsv + 1 untracked forms-csv
-> spec (LEAVE THOSE). schema v14 (Task 1 -> v15). VERSION CLI.pas:6=`0.93.0-alpha` (Task 10 -> `0.94.0-alpha`). NO subagent
-> work in flight (CLEAN boundary -- planning fully complete, ZERO code written).
-> **User authorized a FULL AUTONOMOUS run: plan -> [handoff + clear HERE] -> implement -> publish. I do NOT push or cut the
-> GitHub release without the human (plan Task 10 Step 5).**
-> **>>> READ FIRST, IN ORDER: (1) `docs/superpowers/plans/2026-07-07-enum-helper-generator.md`** = the 11-task implementation
-> plan (Task 0..10) to EXECUTE. **(2) `docs/superpowers/specs/2026-07-07-enum-helper-generator-design.md`** = the approved
-> design. (3) the project-memory RESUME block (`project_lint_rules_v062.md`) = every brainstorm decision (do NOT re-litigate).
-> **RESUME ACTION** = invoke **superpowers:subagent-driven-development** on that plan; dispatch the **Task 0** implementer
-> (AST probe: confirm how tree-sitter marks a `record helper for TX` + how its target type appears -- feeds the Task 1 parser
-> change). Same SDD flow as v0.92/v0.93.
-> **THREE COUPLED DELIVERABLES:** (A) the generator -- new `src/refactor/DRagLint.Refactor.EnumHelper.pas`
-> (RESOLVE->GENERATE->PLACE, reuse `TTextEditApplier`), CLI verb `create-enum-helper`, IDE "Create helper class" menu.
-> (B) **first-class HELPER INDEXING (schema 14->15)** -- new `type_helpers` table storing a `record/class helper for T` TARGET
-> as an edge (mirrors `type_ancestors`) so the create-only-if-missing guard + the lint rule NEVER parse the heritage string;
-> parser change at `TryWalkClassOrRecord` (`DRagLint.Parser.Delphi13.pas:436-461`). MIGRATION INVARIANT (v0.83.1): the new table
-> goes in BOTH `SCHEMA_DDL` AND `Migrate()` (mirror the `type_ancestors` block at `DRagLint.Storage.SQLite.pas:573`) or pre-v15
-> DBs die "no such table". (C) **`enum-helper-separate-units` lint rule -- ON BY DEFAULT** (user's explicit call; diverges from
-> the OFF-default convention); fires when a helper is in a different unit than its enum; MUST be honored in BOTH DoLintAll +
-> DoLintProject (AutoDocument LATEST-19 DefDisabled Critical). Task 9 records its FP count on own tree + ORM3 = the ON-default
-> risk check.
-> **KEY BRAINSTORM DECISIONS (do NOT re-open):** ONE Byte-family template for ALL enums (NO ShortInt variant; negative ordinal
-> = byte 0xFF; padding to 0..255 is the USER's/TableTools' job; generator references ONLY real named members, NEVER emits dummy
-> members). All From* use `case Ord(member) of ... else Result := <first member>` (NOT clamp -- clamp had a real MSCTYPES
-> copy-paste bug). To* = `Ord(Self)`. ToString/FromString = RTTI (`GetEnumName`/`GetEnumValue`) DEFAULT, `--tostring=case`
-> override. All 6 by default, `--methods` subsets; ToDescription auto ONLY when a same-unit `<Enum>Descriptions` array exists.
-> Placement (user-REVISED): ALWAYS put bodies in the impl section, populating an EMPTY impl (enum+helper stay in their unit);
-> refuse ONLY if source has no `implementation` keyword at all. Acceptance gate = build+round-trip test (Task 6 case 8), NOT
-> text-matching. Harness template = `tests/refactor/run_extract_method.ps1`.
+> ## RESUME 2026-07-07 (LATEST-21) -- **ENUM-HELPER GENERATOR: IMPLEMENTED via SDD, final opus review READY TO RELEASE (0 Crit/0 Imp). RELEASE COMMIT STAGED -- PAUSED FOR USER PUBLISH SIGN-OFF.**
+> `main` HEAD includes the release commit (VERSION `0.94.0-alpha` + this CHANGELOG + BACKLOG). **NOT pushed, NO GitHub release cut**
+> -- the human drives push/publish (plan Task 10 Step 5). Clean except IDE json/dsv + 1 untracked forms-csv spec (LEAVE THOSE).
+> **schema v15** (bumped from v14). Executed via **subagent-driven-development** (Tasks 0/1..9,9b + fixes, each implemented +
+> per-task-reviewed clean, then a final whole-branch OPUS review = READY TO RELEASE). SDD ledger: `.superpowers/sdd/progress.md`
+> (scroll to the "ENUM-HELPER GENERATOR MILESTONE" section at the END). Plan `docs/superpowers/plans/2026-07-07-enum-helper-generator.md`;
+> spec `docs/superpowers/specs/2026-07-07-enum-helper-generator-design.md`.
+> **>>> WHAT SHIPPED (3 coupled deliverables):**
+> (A) **Generator** -- new `src/refactor/DRagLint.Refactor.EnumHelper.pas` (RESOLVE->GENERATE->PLACE->Build, reuses
+> `TTextEditApplier`); CLI verbs `create-enum-helper` + `helpers-of`; IDE "Create helper class" menu (StructureForm.pas; BPL/DCP
+> rebuilt Win32 + committed after the user closed RAD Studio). ONE Byte-family template (To*=Ord(Self); From*=`case Ord(member)`
+> else first member; RTTI ToString/FromString default with `--tostring=case` override; ToDescription auto when a same-unit
+> `<Enum>Descriptions` array exists). Idempotent create-only-if-missing.
+> (B) **First-class helper indexing (schema v15)** -- new `type_helpers` edge table + `is_helper` symbol column (both in
+> SCHEMA_DDL + Migrate; pre-v15 DB self-heals, regression-tested). Parser gained `TryWalkHelper` (the target is a `declHelper`
+> node's `typeref` after `for`, NOT a plain `declClass`). Store methods `FindHelpersOfType(name)` +
+> `FindHelpersOfTypeSymbol(id)`.
+> (C) **`enum-helper-separate-units` lint rule (ON by default)** -- honored in BOTH DoLintAll + DoLintProject (single shared
+> `TProjectLintRules.Run` call site, absent from every DefDisabled list). Validated **0 FP** on the self-index.
+> **>>> KEY EXECUTION EVENTS (all resolved):** (1) Task 6 acceptance gate (real dcc64 compile+run) CAUGHT+FIXED a generator bug
+> (case-mode FromString emitted invalid `case` on a string -> if/else-if chain). (2) USER DECISION mid-run: enums with explicit
+> non-sequential ordinals lose Delphi auto-RTTI -> generator now AUTO-FALLS-BACK to case-mode even under default rtti (Task 6b,
+> reads the enum decl source span, conservative-safe). (3) Task 9 FP sweep found `enum-helper-separate-units` had an 83% FP rate
+> (name-only matching cross-linked same-named enums) -> Task 9b FIXED it via `FindHelpersOfTypeSymbol` symbol-identity match,
+> self-index FP 6->1 (the genuine TP). Final opus review's 3 Minors all addressed (2 stale comments corrected; the "LF fixture"
+> was a git-normalization false alarm -- `.gitattributes` stores all `.pas` as LF-in-blob/CRLF-on-checkout).
+> **>>> NEXT ACTION = USER PUBLISH SIGN-OFF, then Task 10 Steps 3-5:** release-build win64+win32 exes, pack CLI-only zips, tag
+> `v0.94.0-alpha`, push `main`+tag, cut the GitHub release (`--latest`, isPrerelease=false). **OPEN (user, deferred):** IDE live
+> smoke for "Create helper class" (10-step checklist in `.superpowers/sdd/task-8-report.md`).
+> **>>> FOLLOW-UP (own future milestone, unchanged):** the STRUCTURAL/SEMANTIC grep-elimination wishlist
+> (`docs/superpowers/specs/2026-06-29-grep-elimination-indexer-wishlist.md`, addendum 2026-07-07) -- helper edges S1.1 SHIPPED
+> here; section anchors S1.2 / uses-membership / decl-shape facts / outline-roster remain. The 2 old scoping docs
+> `docs/lint/DESIGN-enum-helper-generator.md` + `INVESTIGATION-enum-helper-pattern.md` are SUPERSEDED by the spec but stay useful
+> as ORM3 ground truth.
 > **ALSO DONE (non-code):** appended a STRUCTURAL/SEMANTIC grep-elimination wishlist (addendum 2026-07-07) to
 > `docs/superpowers/specs/2026-06-29-grep-elimination-indexer-wishlist.md` (helper edges S1.1 building now; section anchors S1.2
 > maybe-folded-into-Task-4; uses-membership; decl-shape facts; outline/roster) -- SCHEDULED as its own future "indexer awareness"

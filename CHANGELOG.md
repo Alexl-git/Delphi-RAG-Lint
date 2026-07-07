@@ -5,6 +5,63 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.94.0-alpha -- 2026-07-07
+
+Enum-Helper Generator: automates the standard enum `record helper`
+(`ToByte`/`FromByte`/`ToInteger`/`FromInteger`/`ToString`/`FromString`
+[+`ToDescription`]) that ORM3's `MSCTYPES.PAS` hand-writes ~45x. Right-click an
+enum (or enum member) in the IDE -- or run one CLI verb -- and drag-lint resolves
+the enum, generates a deterministic Byte-family helper referencing only the real
+named members, and places the declaration + method bodies into the unit (populating
+an empty implementation section if needed). Create-only-if-missing and idempotent (a
+second run is a byte-identical no-op). Backed by **first-class helper indexing**
+(new `type_helpers` edge table, **schema v14 -> v15**) so the guard and a new lint
+rule never string-parse heritage. The acceptance gate is a real build + round-trip
+test (the generated Pascal compiles and its converters round-trip), not text-matching.
+
+### Added
+
+- **`create-enum-helper` CLI verb** -- `create-enum-helper --qname <TEnum>
+  [--apply] [--no-backup] [--json] [--methods <csv>] [--tostring rtti|case]
+  [--db <db>]`. Mirrors `document --qname`: previews a `TTextEdit` set by default,
+  `--apply` writes it. `--methods` subsets the six converters (default all six);
+  `ToDescription` is added automatically when a same-unit `<Enum>Descriptions`
+  array exists. `--json` emits `{qname,file,action,edits,applied}`; refuse cases
+  (`exists`/`no_impl_section`/`not_found`) exit non-zero with a message.
+- **`helpers-of <T>` CLI verb** -- lists every record/class helper edge targeting
+  type `T` anywhere in the index (`--json`); exits 0 with an empty result when none
+  (drives the IDE menu's enablement).
+- **IDE "Create helper class" context menu** (Structure tab) -- enabled on an enum
+  (or an enum member) that has no helper yet; spawns `create-enum-helper --apply`
+  via the shared exe resolver and reloads the buffer. (Live smoke is user-driven,
+  as with every IDE feature.)
+- **First-class helper indexing (schema v15)** -- a new `type_helpers` table stores
+  each `record/class helper for T` as a resolved edge (helper symbol, target name,
+  resolved target symbol id/file), mirroring `type_ancestors`. New store methods
+  `FindHelpersOfType(name)` (name-scoped, for the diagnostic verb) and
+  `FindHelpersOfTypeSymbol(id)` (symbol-identity-scoped, for the guard + lint rule).
+  A pre-v15 DB self-heals via the migration path (new table + `is_helper` column);
+  regression-tested against a hand-built v14 DB.
+- **`enum-helper-separate-units` lint rule (ON by default)** -- flags a helper
+  declared in a different unit than its target enum, using the symbol-identity
+  helper edge (never a heritage string). Honored in **both** `lint-all` and
+  `lint-project`. Validated at **0 false positives** on the self-index (the
+  symbol-identity match avoids cross-linking same-named enums in different units).
+
+### Details
+
+- **One Byte-family template** for every enum: `To*` = `Ord(Self)`; `From*` = a
+  `case Ord(member)` mapping each real named member, `else` the first declared
+  member (no clamp, no ShortInt variant, no dummy filler members). Negative or
+  gapped ordinals are just their byte value -- padding is the enum author's job.
+- **`ToString`/`FromString`** default to RTTI (`GetEnumName`/`GetEnumValue`, adds
+  `System.TypInfo` to the implementation `uses` when needed); `--tostring=case`
+  emits editable per-member string literals instead. Enums with **explicit
+  non-sequential ordinals** lose Delphi's automatic RTTI, so the generator
+  **auto-falls-back to case-mode** for them even under the default -- the output
+  always compiles.
+- Generated Object Pascal is strict 7-bit ASCII / CRLF, like all project source.
+
 ## v0.93.0-alpha -- 2026-07-06
 
 AutoDocument Finish: completes the AutoDocument track. drag-lint now generates
