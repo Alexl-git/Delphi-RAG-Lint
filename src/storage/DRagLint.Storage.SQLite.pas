@@ -563,6 +563,10 @@ begin
   TryExec('ALTER TABLE symbols ADD COLUMN heritage TEXT');
   { v12 (M1): per-method virtual-dispatch flag (virtual/dynamic/override). }
   TryExec('ALTER TABLE symbols ADD COLUMN is_virtual INTEGER');
+  { v15: per-symbol record/class-helper flag (True for a declHelper-shaped
+    declaration). Additive column; ALTER onto pre-v15 tables for the same
+    reason as the v9/v11/v12 columns above. ResolveHelpers filters on it. }
+  TryExec('ALTER TABLE symbols ADD COLUMN is_helper INTEGER');
   { v13 (v0.82): per-ref enclosing-routine attribution. Additive column; ALTER
     onto pre-v13 refs tables for the same reason as the v9 body-span columns.
     Populated per-file in IndexFile; NULL when the ref is in no routine body.
@@ -651,8 +655,8 @@ begin
     'parsed_at=:parsed, language=:lang WHERE path=:path');
   FQInsertFile:= NewQuery( 'INSERT OR IGNORE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol:= NewQuery(
-    'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, is_virtual, start_line, start_col, end_line, end_col, ' +
-    '  impl_start_line, impl_end_line) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, ' + '  :sl, :sc, :el, :ec, :isl, :iel)');
+    'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, is_virtual, is_helper, start_line, start_col, end_line, end_col, ' +
+    '  impl_start_line, impl_end_line) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel)');
   FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
   FQInsertRef:= NewQuery(
     'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id) ' +
@@ -918,6 +922,7 @@ begin
   if ASymbol.Heritage <> '' then FQInsertSymbol.ParamByName('her').AsString:= ASymbol.Heritage
   else FQInsertSymbol.ParamByName('her').Clear;
   FQInsertSymbol.ParamByName('virt' ).AsInteger:= Ord(ASymbol.IsVirtual); { v12 }
+  FQInsertSymbol.ParamByName('ish'  ).AsInteger:= Ord(ASymbol.IsHelper); { v15 }
   FQInsertSymbol.ParamByName('sl'   ).AsInteger:= ASymbol.StartLine;
   FQInsertSymbol.ParamByName('sc'   ).AsInteger:= ASymbol.StartCol;
   FQInsertSymbol.ParamByName('el'   ).AsInteger:= ASymbol.EndLine;
@@ -1599,6 +1604,8 @@ begin
     Result.Heritage := AQ.FieldByName('heritage'  ).AsString;
   if AQ.FindField('is_virtual') <> nil then { v12: tolerate pre-v12 databases }
     Result.IsVirtual := AQ.FieldByName('is_virtual').AsInteger <> 0;
+  if AQ.FindField('is_helper') <> nil then { v15: tolerate pre-v15 databases }
+    Result.IsHelper := AQ.FieldByName('is_helper').AsInteger <> 0;
   Result  .StartLine:= AQ.FieldByName('start_line').AsInteger;
   Result  .StartCol := AQ.FieldByName('start_col' ).AsInteger;
   Result  .EndLine  := AQ.FieldByName('end_line'  ).AsInteger;
@@ -3168,10 +3175,18 @@ begin
 end; // procedure
 
 procedure TSQLiteSymbolStore.ResolveHelpers;
-{ v15: whole-DB pass: for each record/class helper (marked by non-empty heritage
-  text), identify its target type and populate type_helpers edges. Mirrors
+{ v15: whole-DB pass: for each record/class helper (symbols.is_helper = 1, set
+  by TryWalkHelper for a declHelper-shaped declaration -- see the Task 0 probe
+  finding in DRagLint.Parser.Delphi13.pas), identify its target type (stored
+  verbatim in heritage, reusing that column's slot since a genuine helper has
+  no ordinary ancestor list) and populate type_helpers edges. Mirrors
   ResolveAncestry's structure: candidates indexed by name, per-file in-scope
-  resolution, batch write in one transaction. }
+  resolution, batch write in one transaction.
+  NOTE: filtering on "kind IN ('record','class') AND heritage <> ''" alone
+  (without is_helper) would silently match nothing -- a plain record/class
+  never has heritage text (Delphi disallows record ancestors, and TryWalkHelper
+  is the ONLY emitter that ever populates Heritage on a helper-shaped symbol),
+  so is_helper is the load-bearing predicate here, not a redundant filter. }
 var
   Q          : TFDQuery                            ;
   QIns       : TFDQuery                            ;
@@ -3231,7 +3246,7 @@ begin
     QIns.Params.ParamByName('tsid').DataType:= ftLargeint;
     QIns.Params.ParamByName('tfid').DataType:= ftLargeint;
     Q.SQL.Text:= 'SELECT id, file_id, kind, heritage FROM symbols ' +
-                 'WHERE kind IN (''record'',''class'') AND heritage IS NOT NULL AND heritage <> ''''';
+                 'WHERE is_helper = 1 AND heritage IS NOT NULL AND heritage <> ''''';
     FConn.StartTransaction;
     try
       FConn.ExecSQL('DELETE FROM type_helpers');

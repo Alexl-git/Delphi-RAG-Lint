@@ -58,6 +58,12 @@ type
     // override). False for non-methods / static methods. Backs cross-unit
     // virtual-method-in-constructor.
     IsVirtual    : Boolean     ;
+    // v15: True when this class/record symbol is a `record helper for T` /
+    // `class helper for T` declaration (grammar node `declHelper`, distinct
+    // from `declClass`). When True, Heritage carries the helper's TARGET type
+    // name (e.g. 'TColor'), not an ancestor list (helpers have no ancestors).
+    // The resolve pass (ResolveHelpers) reads this to populate type_helpers.
+    IsHelper     : Boolean     ;
     StartLine    : Integer    ;
     StartCol     : Integer    ;
     EndLine      : Integer    ;

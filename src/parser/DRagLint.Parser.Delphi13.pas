@@ -93,7 +93,7 @@ type
     destructor Destroy; override;
     function Emit(
       AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature: string = ''; const AModifiers: string = '';
-      const AHeritage: string = ''; AIsVirtual: Boolean = False
+      const AHeritage: string = ''; AIsVirtual: Boolean = False; AIsHelper: Boolean = False
     ): Integer;
     procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
     procedure EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
@@ -157,7 +157,7 @@ begin
 end;
 
 function TWalkState.Emit(AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature,
-  AModifiers, AHeritage: string; AIsVirtual: Boolean): Integer;
+  AModifiers, AHeritage: string; AIsVirtual: Boolean; AIsHelper: Boolean): Integer;
 var
   Sym: TSymbol;
 begin
@@ -168,8 +168,9 @@ begin
   Sym.Signature    := ASignature;
   Sym.Modifiers    := AModifiers;
   Sym.Section      := CurrentSection;
-  Sym.Heritage     := AHeritage; { v11 (M1): class/interface ancestor list text }
+  Sym.Heritage     := AHeritage; { v11 (M1): class/interface ancestor list text; v15: helper target when IsHelper }
   Sym.IsVirtual    := AIsVirtual; { v12 (M1): method virtual dispatch flag }
+  Sym.IsHelper     := AIsHelper;  { v15: record/class helper declaration flag }
   if AParentSymbolIdx >= 0 then Sym.ParentId:= AParentSymbolIdx
   else Sym.ParentId:= -1;
   if not ARangeNode.IsNull then
@@ -431,6 +432,118 @@ begin
     if Result = '' then Result:= Clean
     else Result:= Result + ', ' + Clean;
   end;
+end; // function
+
+// v15: does a declHelper node describe a `record helper` (True) or `class
+// helper` (False)? Grammar rule: declHelper := choice(kClass, kRecord, kType),
+// kHelper, ... -- the FIRST of {kClass, kRecord, kType} child carries the
+// helper's own shape (distinct from the target after kFor). `type helper for
+// X` (kType) is rare/legacy; treated as a class helper (kind='class') since
+// it has no value-type storage semantics of its own.
+function HelperNodeIsRecord(const AHelperNode: TTSNode): Boolean;
+var
+  i: Integer;
+  C: TTSNode;
+  T: string ;
+begin
+  Result:= False;
+  for i:= 0 to AHelperNode.ChildCount - 1 do
+  begin
+    C:= AHelperNode.Child(i);
+    T:= C.NodeType;
+    if T = 'kRecord' then Exit(True );
+    if (T = 'kClass') or (T = 'kType') then Exit(False);
+    if T = 'kHelper' then Break; // past the shape token with no match - bail
+  end;
+end;
+
+// v15: extract the helper's TARGET type (the `for TX` in `record helper for
+// TX`). Grammar: declHelper := shape, kHelper, field('parent', optional('('
+// typeref,... ')')), kFor, typeref, _declClass(members...). The optional
+// parenthesized `parent` field is a DIFFERENT thing (a helper-of-helper
+// ancestor list, e.g. `record helper for TX (TBaseHelper)`) -- so the target
+// is NOT simply "the first typeref child"; it is the first typeref that
+// appears AFTER the kFor token. Scan children in order and take the first
+// typeref seen once kFor has been passed.
+function HelperTargetOf(const AHelperNode: TTSNode; const ASource: TBytes): string;
+var
+  i       : Integer;
+  C       : TTSNode;
+  PastFor : Boolean;
+begin
+  Result := '';
+  PastFor:= False;
+  for i:= 0 to AHelperNode.NamedChildCount - 1 do
+  begin
+    C:= AHelperNode.NamedChild(i);
+    if C.NodeType = 'kFor' then
+    begin
+      PastFor:= True;
+      Continue;
+    end;
+    if PastFor and (C.NodeType = 'typeref') then
+    begin
+      Result:= Trim(NodeText(C, ASource));
+      Exit;
+    end;
+  end;
+end;
+
+// v15: `record helper for TX` / `class helper for TX`. A DISTINCT grammar node
+// (declHelper) from declClass -- confirmed via the tree-sitter-delphi13
+// node-types.json grammar (declHelper := {kClass|kRecord|kType}, kHelper,
+// optional parent-helper-list, kFor, typeref-TARGET, member decls). Before this
+// function existed, a declHelper fell through TryWalkClassOrRecord (which only
+// recognizes declClass) and was mis-picked-up by TryWalkAlias's direct-typeref
+// scan -- emitting the whole helper as a flat skTypeAlias leaf with the target
+// in Signature and NEVER walking its members (e.g. a helper method like ToByte
+// was silently dropped from the index). This function fixes both: it emits a
+// proper skRecord/skClass symbol (so members are indexed) with IsHelper=True
+// and the target name in Heritage (reusing the ancestor-list slot, which is
+// otherwise always empty for a real record/class helper -- helpers cannot
+// have ordinary ancestors). ResolveHelpers reads IsHelper/Heritage to populate
+// type_helpers; consumers never need to string-scan for 'helper' themselves.
+function TryWalkHelper(const ADeclTypeNode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
+var
+  TypeWrapNode: TTSNode    ;
+  HelperNode  : TTSNode    ;
+  NameNode    : TTSNode    ;
+  TypeName    : string     ;
+  QName       : string     ;
+  Target      : string     ;
+  OldVis      : string     ;
+  TypeIdx     : Integer    ;
+  i           : Integer    ;
+  Kind        : TSymbolKind;
+begin
+  Result:= False;
+  TypeWrapNode:= ADeclTypeNode.ChildByField('type');
+  if TypeWrapNode.IsNull then Exit;
+  { Confirmed via `tree-sitter parse` on the Task 0 probe fixture: unlike
+    declClass (always wrapped one level deep in an intermediate `type` node --
+    type: (type (declClass ...))), declHelper is the direct `type` field child
+    itself -- type: (declHelper ...), no wrapper. Mirrors how TryWalkAlias
+    special-cases TypeWrapNode.NodeType = 'typeref' directly below. }
+  if TypeWrapNode.NodeType = 'declHelper' then HelperNode:= TypeWrapNode
+  else HelperNode:= FindNamedChildOfType(TypeWrapNode, 'declHelper');
+  if HelperNode.IsNull then Exit;
+  NameNode:= ADeclTypeNode.ChildByField('name');
+  if NameNode.IsNull then Exit;
+  TypeName:= NodeText(NameNode, AState.Source);
+  if TypeName = '' then Exit;
+  if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
+  else QName:= TypeName;
+  if HelperNodeIsRecord(HelperNode) then Kind:= skRecord
+  else Kind:= skClass;
+  Target:= HelperTargetOf(HelperNode, AState.Source);
+  TypeIdx:= AState.Emit(Kind, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', Target, False, True);
+  { Same member-walk convention as TryWalkClassOrRecord: default visibility
+    'public', save/restore so a nested type doesn't leak sections outward. }
+  OldVis:= AState.CurrentVisibility;
+  AState.CurrentVisibility:= 'public';
+  for i:= 0 to HelperNode.NamedChildCount - 1 do Walk(HelperNode.NamedChild(i), AState, TypeIdx, QName);
+  AState.CurrentVisibility:= OldVis;
+  Result:= True;
 end; // function
 
 function TryWalkClassOrRecord(const ADeclTypeNode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
@@ -1030,6 +1143,7 @@ begin
   if NodeType = 'declType' then
   begin
     if TryWalkInterface    (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
+    if TryWalkHelper       (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { v15: declHelper is distinct from declClass -- must be tried first or its target typeref gets grabbed by TryWalkAlias }
     if TryWalkClassOrRecord(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
     if TryWalkEnum         (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
     if TryWalkAlias        (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { v11 (M1) }
