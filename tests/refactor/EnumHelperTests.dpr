@@ -91,6 +91,132 @@ begin
   Check('separate-unit: HelperUnitPath set'    , (R.HelperUnitPath <> '') and (Pos('ModeHelperUnit', R.HelperUnitPath) > 0));
 end;
 
+{ ---------------------------------------------------------------------------
+  Task 3: GENERATE stage -- pure string-building, no store/index needed.
+  Resolve records are constructed by hand (Members/EnumName/DescArrayName are
+  the only fields GENERATE reads). --------------------------------------- }
+
+function MakeColorResolve: TEnumHelperResolve;
+begin
+  Result:= Default(TEnumHelperResolve);
+  Result.Found    := True;
+  Result.EnumName := 'TColor';
+  Result.Members  := ['clRed', 'clGreen', 'clBlue'];
+  Result.DescArrayName:= '';
+end;
+
+const
+  ALL_METHODS: TEnumHelperMethods =
+    [ehmToByte, ehmFromByte, ehmToInteger, ehmFromInteger, ehmToString, ehmFromString];
+
+{ Step 1-4: full method set, RTTI ToString/FromString. }
+procedure TestGenerateAllRtti;
+var
+  R  : TEnumHelperResolve;
+  Gen: TEnumHelperGen;
+begin
+  R:= MakeColorResolve;
+  Gen:= TEnumHelperRefactoring.Generate(R, ALL_METHODS, tsmRtti);
+
+  Check('gen-all-rtti: decl has helper header',
+    Pos('TColorHelper = record helper for TColor', Gen.DeclText) > 0);
+  Check('gen-all-rtti: decl has ToByte sig',
+    Pos('function ToByte: Byte;', Gen.DeclText) > 0);
+  Check('gen-all-rtti: decl has FromByte sig',
+    Pos('class function FromByte(const AValue: Byte): TColor; static;', Gen.DeclText) > 0);
+  Check('gen-all-rtti: decl has end',
+    Pos('end;', Gen.DeclText) > 0);
+
+  Check('gen-all-rtti: header comment',
+    Pos('{ TColorHelper }', Gen.BodiesText) > 0);
+  Check('gen-all-rtti: ToByte body Ord(Self)',
+    Pos('Result := Ord(Self);', Gen.BodiesText) > 0);
+  Check('gen-all-rtti: FromByte case header',
+    Pos('case AValue of', Gen.BodiesText) > 0);
+  Check('gen-all-rtti: FromByte arm clRed',
+    Pos('Ord(clRed): Result := clRed;', Gen.BodiesText) > 0);
+  Check('gen-all-rtti: FromByte arm clGreen',
+    Pos('Ord(clGreen): Result := clGreen;', Gen.BodiesText) > 0);
+  Check('gen-all-rtti: FromByte arm clBlue',
+    Pos('Ord(clBlue): Result := clBlue;', Gen.BodiesText) > 0);
+  Check('gen-all-rtti: FromByte else first member',
+    Pos('else' + sLineBreak + '    Result := clRed;', Gen.BodiesText) > 0);
+  Check('gen-all-rtti: RTTI ToString body',
+    Pos('Result := GetEnumName(TypeInfo(TColor), Ord(Self));', Gen.BodiesText) > 0);
+  Check('gen-all-rtti: RTTI FromString body',
+    Pos('Result := TColor(GetEnumValue(TypeInfo(TColor), AValue));', Gen.BodiesText) > 0);
+  Check('gen-all-rtti: NeedsTypInfo = True', Gen.NeedsTypInfo);
+end;
+
+{ Step 5a: subset -- only ToByte + FromByte requested. }
+procedure TestGenerateSubset;
+var
+  R  : TEnumHelperResolve;
+  Gen: TEnumHelperGen;
+begin
+  R:= MakeColorResolve;
+  Gen:= TEnumHelperRefactoring.Generate(R, [ehmToByte, ehmFromByte], tsmRtti);
+
+  Check('gen-subset: has ToByte sig'  , Pos('function ToByte: Byte;', Gen.DeclText) > 0);
+  Check('gen-subset: has FromByte sig', Pos('class function FromByte', Gen.DeclText) > 0);
+  Check('gen-subset: no ToInteger sig', Pos('ToInteger', Gen.DeclText) = 0);
+  Check('gen-subset: no ToString sig' , Pos('function ToString', Gen.DeclText) = 0);
+  Check('gen-subset: no FromString sig', Pos('FromString', Gen.DeclText) = 0);
+  Check('gen-subset: bodies no ToString', Pos('function TColorHelper.ToString', Gen.BodiesText) = 0);
+  Check('gen-subset: NeedsTypInfo = False (no ToString/FromString requested)', not Gen.NeedsTypInfo);
+end;
+
+{ Step 5b: tsmCase -- ToString/FromString use member-literal case, no RTTI. }
+procedure TestGenerateCaseToString;
+var
+  R  : TEnumHelperResolve;
+  Gen: TEnumHelperGen;
+begin
+  R:= MakeColorResolve;
+  Gen:= TEnumHelperRefactoring.Generate(R, [ehmToString, ehmFromString], tsmCase);
+
+  Check('gen-case: ToString has case header', Pos('case Self of', Gen.BodiesText) > 0);
+  Check('gen-case: ToString arm clRed literal',
+    Pos('clRed: Result := ''clRed'';', Gen.BodiesText) > 0);
+  Check('gen-case: ToString arm clBlue literal',
+    Pos('clBlue: Result := ''clBlue'';', Gen.BodiesText) > 0);
+  Check('gen-case: FromString arm clRed literal',
+    Pos('''clRed'': Result := clRed;', Gen.BodiesText) > 0);
+  Check('gen-case: no RTTI GetEnumName', Pos('GetEnumName', Gen.BodiesText) = 0);
+  Check('gen-case: no RTTI GetEnumValue', Pos('GetEnumValue', Gen.BodiesText) = 0);
+  Check('gen-case: NeedsTypInfo = False', not Gen.NeedsTypInfo);
+end;
+
+{ Step 5c: descriptions -- DescArrayName<>'' auto-includes ToDescription, even
+  though it is not one of the 6 AMethods flags. }
+procedure TestGenerateDescriptions;
+var
+  R  : TEnumHelperResolve;
+  Gen: TEnumHelperGen;
+begin
+  R:= MakeColorResolve;
+  R.DescArrayName:= 'TColorDescriptions';
+  Gen:= TEnumHelperRefactoring.Generate(R, [ehmToByte], tsmRtti);
+
+  Check('gen-desc: decl has ToDescription sig',
+    Pos('function ToDescription: string;', Gen.DeclText) > 0);
+  Check('gen-desc: body uses the array',
+    Pos('Result := TColorDescriptions[Self];', Gen.BodiesText) > 0);
+end;
+
+{ No descriptions array -> ToDescription omitted entirely. }
+procedure TestGenerateNoDescriptions;
+var
+  R  : TEnumHelperResolve;
+  Gen: TEnumHelperGen;
+begin
+  R:= MakeColorResolve;
+  Gen:= TEnumHelperRefactoring.Generate(R, [ehmToByte], tsmRtti);
+
+  Check('gen-nodesc: no ToDescription sig' , Pos('ToDescription', Gen.DeclText) = 0);
+  Check('gen-nodesc: no ToDescription body', Pos('ToDescription', Gen.BodiesText) = 0);
+end;
+
 var
   ArgDbSimple, ArgDbAlready, ArgDbSeparate: string;
 begin
@@ -108,6 +234,12 @@ begin
     TestSimpleResolve      (ArgDbSimple  );
     TestAlreadyHasHelper    (ArgDbAlready );
     TestSeparateUnitHelper  (ArgDbSeparate);
+
+    TestGenerateAllRtti;
+    TestGenerateSubset;
+    TestGenerateCaseToString;
+    TestGenerateDescriptions;
+    TestGenerateNoDescriptions;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

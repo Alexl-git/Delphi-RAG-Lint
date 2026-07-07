@@ -1,16 +1,19 @@
 unit DRagLint.Refactor.EnumHelper;
 
-{ Enum-helper generator -- RESOLVE stage (Task 2). Looks up an enum by
-  qualified name, gathers its members in declaration order, checks whether a
-  helper already exists anywhere in the indexed codebase (via
-  ISymbolStore.FindHelpersOfType), and detects a same-unit `<Enum>Descriptions`
-  const array. GENERATE (method-body synthesis) and PLACE (text-edit emission)
-  are added in later tasks on the same TEnumHelperRefactoring class. }
+{ Enum-helper generator -- RESOLVE (Task 2) + GENERATE (Task 3) stages.
+  RESOLVE looks up an enum by qualified name, gathers its members in
+  declaration order, checks whether a helper already exists anywhere in the
+  indexed codebase (via ISymbolStore.FindHelpersOfType), and detects a
+  same-unit `<Enum>Descriptions` const array. GENERATE synthesizes the Byte-
+  family record-helper declaration + method bodies from a TEnumHelperResolve,
+  as pure string building (no store/index access). PLACE (text-edit emission)
+  is added in a later task on the same TEnumHelperRefactoring class. }
 
 interface
 
 uses
   System.SysUtils
+  , System.Classes
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   ;
@@ -70,10 +73,29 @@ type
     DescArrayName: string;
   end;
 
+  /// <summary>Result of the GENERATE stage: the synthesized Object Pascal
+  /// text for a Byte-family record helper, ready for the PLACE stage to
+  /// splice into the target unit. Pure text -- no file positions here (those
+  /// live on TEnumHelperResolve).</summary>
+  TEnumHelperGen = record
+    /// <summary>The `T<Enum>Helper = record helper for T<Enum> ... end;`
+    /// type declaration block (CRLF-joined, no trailing line break).</summary>
+    DeclText: string;
+    /// <summary>The implementation-section method bodies, preceded by the
+    /// `{ T<Enum>Helper }` convention comment (CRLF-joined, no trailing line
+    /// break).</summary>
+    BodiesText: string;
+    /// <summary>True when RTTI-based ToString/FromString were emitted
+    /// (System.TypInfo.GetEnumName/GetEnumValue); the PLACE stage should add
+    /// System.TypInfo to the unit's uses clause if not already present. False
+    /// when no ToString/FromString were requested, or tsmCase was used.</summary>
+    NeedsTypInfo: Boolean;
+  end;
+
   /// <summary>Enum-helper generator: resolves an enum type, synthesizes a
   /// record helper implementing the requested conversion methods, and places
-  /// the result via text edits. This task implements Resolve only; Generate
-  /// and Build (the GENERATE and PLACE stages) are added later on this same
+  /// the result via text edits. Resolve (Task 2) + Generate (this task) are
+  /// implemented; Build (the PLACE stage) is added later on this same
   /// class.</summary>
   TEnumHelperRefactoring = class
   public
@@ -89,6 +111,30 @@ type
     /// <returns>A TEnumHelperResolve with Found=False when AEnumQName does
     /// not resolve to exactly one skEnum symbol.</returns>
     class function Resolve(const AStore: ISymbolStore; const AEnumQName: string): TEnumHelperResolve; static;
+
+    /// <summary>Synthesizes the Byte-family record-helper declaration and
+    /// method bodies for AResolve.EnumName, from AResolve.Members (real
+    /// named members only, declaration order). Pure function of its inputs:
+    /// no store/index/file access. `To*` methods return Ord(Self); `From*`
+    /// methods use a `case Ord(member)` idiom with `else` mapping to the
+    /// FIRST declared member (= low(T<Enum>)). ToDescription is NOT one of
+    /// AMethods -- it is emitted automatically, decl+body, whenever
+    /// AResolve.DescArrayName is non-empty.</summary>
+    /// <param name="AResolve">A resolved enum (Found must be True; EnumName
+    /// and Members are read, DescArrayName drives the auto-included
+    /// ToDescription method).</param>
+    /// <param name="AMethods">Subset of the 6 convert methods to emit; an
+    /// empty set emits an (almost) empty helper (still gets ToDescription if
+    /// DescArrayName is set).</param>
+    /// <param name="AToStringMode">tsmRtti (default) emits
+    /// GetEnumName/GetEnumValue-based bodies and sets NeedsTypInfo; tsmCase
+    /// emits a per-member string-literal case/if-chain with no RTTI
+    /// dependency.</param>
+    /// <returns>A TEnumHelperGen with DeclText/BodiesText in CRLF, 7-bit
+    /// ASCII text, and NeedsTypInfo reflecting whether RTTI ToString/
+    /// FromString were emitted.</returns>
+    class function Generate(const AResolve: TEnumHelperResolve;
+      const AMethods: TEnumHelperMethods; const AToStringMode: TToStringMode): TEnumHelperGen; static;
   end;
 
 implementation
@@ -165,6 +211,163 @@ begin
     if DescSym.Kind <> skConstDecl then Continue;
     Result.DescArrayName:= DescSym.Name;
     Break;
+  end;
+end;
+
+class function TEnumHelperRefactoring.Generate(const AResolve: TEnumHelperResolve;
+  const AMethods: TEnumHelperMethods; const AToStringMode: TToStringMode): TEnumHelperGen;
+var
+  EnumName    : string;
+  HelperName  : string;
+  FirstMember : string;
+  WantsDesc   : Boolean;
+  DeclSb      : TStringBuilder;
+  BodySb      : TStringBuilder;
+  M           : string;
+
+  { Emits `case <ACaseExpr> of` / one `Ord(member): Result := member;` arm per
+    real named member / `else Result := <FirstMember>;` / `end;` into ASb. Used
+    identically by FromByte and FromInteger -- only the case expression and
+    the parameter's declared type differ, both supplied by the caller. }
+  procedure EmitFromCase(ASb: TStringBuilder; const ACaseExpr: string);
+  var
+    LM: string;
+  begin
+    ASb.AppendLine('  case ' + ACaseExpr + ' of');
+    for LM in AResolve.Members do
+      ASb.AppendLine('    Ord(' + LM + '): Result := ' + LM + ';');
+    ASb.AppendLine('  else');
+    ASb.AppendLine('    Result := ' + FirstMember + ';');
+    ASb.AppendLine('  end;');
+  end;
+
+begin
+  Result:= Default(TEnumHelperGen);
+  EnumName  := AResolve.EnumName;
+  HelperName:= EnumName + 'Helper';
+  if Length(AResolve.Members) > 0 then FirstMember:= AResolve.Members[0] else FirstMember:= '';
+  WantsDesc := AResolve.DescArrayName <> '';
+
+  DeclSb:= TStringBuilder.Create;
+  BodySb:= TStringBuilder.Create;
+  try
+    // --- DECL ---
+    DeclSb.AppendLine(HelperName + ' = record helper for ' + EnumName);
+    DeclSb.AppendLine('  public');
+    if ehmToByte in AMethods then
+      DeclSb.AppendLine('    function ToByte: Byte;');
+    if ehmToInteger in AMethods then
+      DeclSb.AppendLine('    function ToInteger: Integer;');
+    if ehmToString in AMethods then
+      DeclSb.AppendLine('    function ToString: string;');
+    if ehmFromByte in AMethods then
+      DeclSb.AppendLine('    class function FromByte(const AValue: Byte): ' + EnumName + '; static;');
+    if ehmFromInteger in AMethods then
+      DeclSb.AppendLine('    class function FromInteger(const AValue: Integer): ' + EnumName + '; static;');
+    if ehmFromString in AMethods then
+      DeclSb.AppendLine('    class function FromString(const AValue: string): ' + EnumName + '; static;');
+    if WantsDesc then
+      DeclSb.AppendLine('    function ToDescription: string;');
+    DeclSb.Append('end;');
+
+    // --- BODIES ---
+    BodySb.AppendLine('{ ' + HelperName + ' }');
+    BodySb.AppendLine('');
+
+    if ehmToByte in AMethods then
+    begin
+      BodySb.AppendLine('function ' + HelperName + '.ToByte: Byte;');
+      BodySb.AppendLine('begin');
+      BodySb.AppendLine('  Result := Ord(Self);');
+      BodySb.AppendLine('end;');
+      BodySb.AppendLine('');
+    end;
+
+    if ehmToInteger in AMethods then
+    begin
+      BodySb.AppendLine('function ' + HelperName + '.ToInteger: Integer;');
+      BodySb.AppendLine('begin');
+      BodySb.AppendLine('  Result := Ord(Self);');
+      BodySb.AppendLine('end;');
+      BodySb.AppendLine('');
+    end;
+
+    if ehmFromByte in AMethods then
+    begin
+      BodySb.AppendLine('class function ' + HelperName + '.FromByte(const AValue: Byte): ' + EnumName + ';');
+      BodySb.AppendLine('begin');
+      EmitFromCase(BodySb, 'AValue');
+      BodySb.AppendLine('end;');
+      BodySb.AppendLine('');
+    end;
+
+    if ehmFromInteger in AMethods then
+    begin
+      BodySb.AppendLine('class function ' + HelperName + '.FromInteger(const AValue: Integer): ' + EnumName + ';');
+      BodySb.AppendLine('begin');
+      EmitFromCase(BodySb, 'AValue');
+      BodySb.AppendLine('end;');
+      BodySb.AppendLine('');
+    end;
+
+    if ehmToString in AMethods then
+    begin
+      BodySb.AppendLine('function ' + HelperName + '.ToString: string;');
+      BodySb.AppendLine('begin');
+      if AToStringMode = tsmRtti then
+      begin
+        BodySb.AppendLine('  Result := GetEnumName(TypeInfo(' + EnumName + '), Ord(Self));');
+        Result.NeedsTypInfo:= True;
+      end
+      else
+      begin
+        BodySb.AppendLine('  case Self of');
+        for M in AResolve.Members do
+          BodySb.AppendLine('    ' + M + ': Result := ''' + M + ''';');
+        BodySb.AppendLine('  else');
+        BodySb.AppendLine('    Result := '''';');
+        BodySb.AppendLine('  end;');
+      end;
+      BodySb.AppendLine('end;');
+      BodySb.AppendLine('');
+    end;
+
+    if ehmFromString in AMethods then
+    begin
+      BodySb.AppendLine('class function ' + HelperName + '.FromString(const AValue: string): ' + EnumName + ';');
+      BodySb.AppendLine('begin');
+      if AToStringMode = tsmRtti then
+      begin
+        BodySb.AppendLine('  Result := ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue));');
+        Result.NeedsTypInfo:= True;
+      end
+      else
+      begin
+        BodySb.AppendLine('  case AValue of');
+        for M in AResolve.Members do
+          BodySb.AppendLine('    ''' + M + ''': Result := ' + M + ';');
+        BodySb.AppendLine('  else');
+        BodySb.AppendLine('    Result := ' + FirstMember + ';');
+        BodySb.AppendLine('  end;');
+      end;
+      BodySb.AppendLine('end;');
+      BodySb.AppendLine('');
+    end;
+
+    if WantsDesc then
+    begin
+      BodySb.AppendLine('function ' + HelperName + '.ToDescription: string;');
+      BodySb.AppendLine('begin');
+      BodySb.AppendLine('  Result := ' + AResolve.DescArrayName + '[Self];');
+      BodySb.AppendLine('end;');
+      BodySb.AppendLine('');
+    end;
+
+    Result.DeclText  := DeclSb.ToString;
+    Result.BodiesText:= BodySb.ToString.TrimRight([#13, #10]);
+  finally
+    DeclSb.Free;
+    BodySb.Free;
   end;
 end;
 
