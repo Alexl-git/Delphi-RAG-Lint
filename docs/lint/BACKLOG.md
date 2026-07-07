@@ -1,5 +1,45 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-07 (LATEST-20) -- **ENUM-HELPER GENERATOR: brainstorm + spec + plan DONE + committed. NEXT = EXECUTE via subagent-driven-development from Task 0.**
+> `main`=`ddc3b24` (plan commit) on `c761c78` (spec commit). **2 commits AHEAD of origin/main, NOT pushed** (spec+plan;
+> committed on-disk so cold resume works regardless -- push is optional). Clean except IDE json/dsv + 1 untracked forms-csv
+> spec (LEAVE THOSE). schema v14 (Task 1 -> v15). VERSION CLI.pas:6=`0.93.0-alpha` (Task 10 -> `0.94.0-alpha`). NO subagent
+> work in flight (CLEAN boundary -- planning fully complete, ZERO code written).
+> **User authorized a FULL AUTONOMOUS run: plan -> [handoff + clear HERE] -> implement -> publish. I do NOT push or cut the
+> GitHub release without the human (plan Task 10 Step 5).**
+> **>>> READ FIRST, IN ORDER: (1) `docs/superpowers/plans/2026-07-07-enum-helper-generator.md`** = the 11-task implementation
+> plan (Task 0..10) to EXECUTE. **(2) `docs/superpowers/specs/2026-07-07-enum-helper-generator-design.md`** = the approved
+> design. (3) the project-memory RESUME block (`project_lint_rules_v062.md`) = every brainstorm decision (do NOT re-litigate).
+> **RESUME ACTION** = invoke **superpowers:subagent-driven-development** on that plan; dispatch the **Task 0** implementer
+> (AST probe: confirm how tree-sitter marks a `record helper for TX` + how its target type appears -- feeds the Task 1 parser
+> change). Same SDD flow as v0.92/v0.93.
+> **THREE COUPLED DELIVERABLES:** (A) the generator -- new `src/refactor/DRagLint.Refactor.EnumHelper.pas`
+> (RESOLVE->GENERATE->PLACE, reuse `TTextEditApplier`), CLI verb `create-enum-helper`, IDE "Create helper class" menu.
+> (B) **first-class HELPER INDEXING (schema 14->15)** -- new `type_helpers` table storing a `record/class helper for T` TARGET
+> as an edge (mirrors `type_ancestors`) so the create-only-if-missing guard + the lint rule NEVER parse the heritage string;
+> parser change at `TryWalkClassOrRecord` (`DRagLint.Parser.Delphi13.pas:436-461`). MIGRATION INVARIANT (v0.83.1): the new table
+> goes in BOTH `SCHEMA_DDL` AND `Migrate()` (mirror the `type_ancestors` block at `DRagLint.Storage.SQLite.pas:573`) or pre-v15
+> DBs die "no such table". (C) **`enum-helper-separate-units` lint rule -- ON BY DEFAULT** (user's explicit call; diverges from
+> the OFF-default convention); fires when a helper is in a different unit than its enum; MUST be honored in BOTH DoLintAll +
+> DoLintProject (AutoDocument LATEST-19 DefDisabled Critical). Task 9 records its FP count on own tree + ORM3 = the ON-default
+> risk check.
+> **KEY BRAINSTORM DECISIONS (do NOT re-open):** ONE Byte-family template for ALL enums (NO ShortInt variant; negative ordinal
+> = byte 0xFF; padding to 0..255 is the USER's/TableTools' job; generator references ONLY real named members, NEVER emits dummy
+> members). All From* use `case Ord(member) of ... else Result := <first member>` (NOT clamp -- clamp had a real MSCTYPES
+> copy-paste bug). To* = `Ord(Self)`. ToString/FromString = RTTI (`GetEnumName`/`GetEnumValue`) DEFAULT, `--tostring=case`
+> override. All 6 by default, `--methods` subsets; ToDescription auto ONLY when a same-unit `<Enum>Descriptions` array exists.
+> Placement (user-REVISED): ALWAYS put bodies in the impl section, populating an EMPTY impl (enum+helper stay in their unit);
+> refuse ONLY if source has no `implementation` keyword at all. Acceptance gate = build+round-trip test (Task 6 case 8), NOT
+> text-matching. Harness template = `tests/refactor/run_extract_method.ps1`.
+> **ALSO DONE (non-code):** appended a STRUCTURAL/SEMANTIC grep-elimination wishlist (addendum 2026-07-07) to
+> `docs/superpowers/specs/2026-06-29-grep-elimination-indexer-wishlist.md` (helper edges S1.1 building now; section anchors S1.2
+> maybe-folded-into-Task-4; uses-membership; decl-shape facts; outline/roster) -- SCHEDULED as its own future "indexer awareness"
+> brainstorm milestone (user wants grep eliminated to reduce context/memory load). The 2 old scoping docs
+> `docs/lint/DESIGN-enum-helper-generator.md` + `INVESTIGATION-enum-helper-pattern.md` are SUPERSEDED by the spec but stay
+> useful as ORM3 ground truth.
+> **--- v0.93.0-alpha + v0.92 both SHIPPED (LATEST-18/19 below); OPEN (none gating): IDE live smoke for the v0.93 Document
+> menus + doc-drift Fix-it = USER; DLL refresh to v1.1.1 + pure-grammar swap (from v0.92). ---**
+>
 > ## RESUME 2026-07-07 (LATEST-19) -- **NEXT FEATURE = ENUM-HELPER GENERATOR (planned, NOT started -- brainstorm it). v0.93 shipped.**
 > `main`=`2937f02` (enum-helper docs commit), synced w/ origin, clean except IDE json/dsv + 1 untracked forms-csv spec (leave). schema v14.
 > **User (2026-07-07) wants drag-lint to AUTOMATE the standard enum `record helper`** -- `ToByte`/`FromByte`/`ToInteger`/
