@@ -1,5 +1,28 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-06 (LATEST-18) -- **v0.93.0-alpha SHIPPED: AutoDocument Finish (Track 2 COMPLETE). Milestone done (14 SDD tasks + final whole-branch review that FOUND+FIXED 1 Critical).**
+> `main` = release commit for v0.93.0-alpha, tag `v0.93.0-alpha`, VERSION CLI.pas:6=`0.93.0-alpha`, **schema still v14**.
+> GH release LIVE (win64 3.82MB + win32 3.05MB CLI-only zips). Completes the AutoDocument track: whole-unit/project
+> BATCH (`document --unit/--project/document-all`, facts-only default + `--stubs`), three ground-truth DOC-SOURCES
+> (`@deprecated` directive / `<seealso>` call-graph capped / `<since>` git-opt-in-degrades-silently), the deterministic
+> (no-LLM) `TDocDrift` engine (9 staleness signals), two LINT RULES (`doc-drift` ON+`--fix`-safe-subset-never-rewrites-prose;
+> `missing-doc` OFF-by-default+single-fix-only-"Fix it"-excluded-from-batch), IDE menus (Document unit/project +
+> doc-drift Fix-it), + a DocInsight-collection spike (recommendation: drag-lint SUPERSEDES the built-in). Executed via
+> superpowers:subagent-driven-development (14 tasks each impl+reviewed CLEAN; final whole-branch opus review CAUGHT 1
+> Critical the per-task reviews+guardrail all missed -- missing-doc was catalog-OFF but STILL FIRED at runtime because
+> OFF-by-default is driven by the hardcoded DefDisabled list not the catalog flag; FIXED commit `e038503` in BOTH
+> DoLintAll+DoLintProject + a bare-lint-all-yields-0 regression test; re-verified clean). NO-FABRICATION + IDEMPOTENCY
+> both live-verified. Data-driven checkpoint: missing-doc measured 1302 on drag-lint's own tree -> USER chose OFF-by-default.
+> Full battery green (lint 154/store 16/autodoc/autofix fixable=11/callresolve 12/preprocess 9). SDD ledger
+> `.superpowers/sdd/progress.md` (full per-task + T13 final-review-found-Critical record). Spec/plan
+> `docs/superpowers/specs|plans/2026-07-06-autodocument-finish-*`.
+> **>>> OPEN (post-release):** (1) IDE LIVE SMOKE for the new Document unit/project menus + doc-drift Fix-it = DEFERRED TO
+> USER (T10; reopen RAD Studio, right-click a symbol/unit -> Document unit/project; right-click a doc-drift finding -> Fix it).
+> (2) plugin BPL (dclDragLintWizard) for the new menus was rebuilt in T10 commit `9883b7c` -- release ZIP is CLI-only per
+> convention, BPL distributed separately. (3) Deferred cosmetic minors (final-review triage, ship-as-is): T1 double-sort,
+> T2 scope-json-key, T3 3rd-local-read-helper, T6 facts-full-path-for-drift, T11c --fix-json-applied=false-on-fresh-insert
+> (shared w/ doc-drift). (4) The DocInsight spike's "supersede the built-in" recommendation = a FUTURE decision (optional
+> XML-doc emission), not scheduled. --- PRIOR (LATEST-17, now shipped as v0.92): in-process {$IFDEF} preprocessor. ---
 > ## RESUME 2026-07-06 (LATEST-17) -- **v0.92.0-alpha SHIPPED: in-process {$IFDEF} preprocessor + per-config indexing. Milestone COMPLETE (all 12 SDD tasks + gate + final review READY-TO-PUBLISH).**
 > `main` = release commit for v0.92.0-alpha, tag `v0.92.0-alpha`, VERSION CLI.pas:6=`0.92.0-alpha`, **schema still v14**.
 > GH release LIVE (win64 3.78MB + win32 3.02MB CLI-only zips). The milestone ported the tree-sitter-delphi13 JS

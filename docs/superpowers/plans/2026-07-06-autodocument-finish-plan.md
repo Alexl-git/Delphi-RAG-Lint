@@ -73,6 +73,8 @@ unit twopublics;
 interface
 type
   TThing = class
+  private
+    FLast: Integer;
   public
     function Add(A, B: Integer): Integer;
     procedure Reset;
@@ -81,9 +83,13 @@ implementation
 function TThing.Add(A, B: Integer): Integer;
 begin Result := A + B; end;
 procedure TThing.Reset;
-begin end;
+begin FLast := Add(0, 0); end;   // Reset CALLS Add -> a real Calls fact -> managed block
 end.
 ```
+(`Reset` MUST call `Add` so it has a real outgoing-Calls fact -> a managed block
+under the facts-only default; an empty `begin end;` Reset has no facts and would be
+correctly SKIPPED, contradicting the "2 decls documented" assertion. `FLast` is a
+private field, not a documented public decl.)
 `tests/autodoc/run_document_unit.ps1` (model on `tests/autodoc/run_*.ps1`): index the fixture dir to a scratch DB, run `document --unit fixtures/docunit/twopublics.pas --apply` (facts-only default), then assert on the rewritten file:
 - BOTH `TThing.Add` and `TThing.Reset` gained a `///` DocInsight comment (2 decls documented).
 - `Add` has a managed facts block (`<!-- drag-lint:auto BEGIN -->`) and NO `TODO: describe.` (facts-only default -- no stub summary).

@@ -5,6 +5,53 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.93.0-alpha -- 2026-07-06
+
+AutoDocument Finish: completes the AutoDocument track. drag-lint now generates
+and repairs DocInsight `///` doc-comments across a whole unit or project (not just
+one declaration), enriches them with three new ground-truth doc-sources, detects
+structurally-stale docs, and ships two documentation lint rules. Everything obeys
+the two AutoDocument invariants: **never fabricate prose** (a missing `<summary>`
+is a `TODO: describe.` marker, never a guess; every emitted fact is ground-truth
+from the index/signature/directive/git) and **idempotency** (a second run is
+byte-identical). No index-schema change (still v14).
+
+### Added
+
+- **Whole-unit / whole-project batch** -- `document --unit <file>`,
+  `document --project <dproj>`, `document-all` drive the single-declaration
+  documenter across every public (interface-section) declaration in one edit set.
+  **Facts-only by default** (only writes/refreshes the managed facts block +
+  preserves hand prose; skips a pure all-`TODO` create); `--stubs` opts in to a
+  `TODO: describe.` summary for a decl with no derivable facts.
+- **Three doc-sources** (into the managed `<!-- drag-lint:auto -->` block, all
+  ground-truth):
+  - **`@deprecated`** -- a deprecation note when the declaration carries Delphi's
+    `deprecated` directive (with its message).
+  - **`<seealso>`** -- `<seealso cref>` links to the most-related symbols
+    (resolved callees + type siblings), capped and deduped; opt-in via `--seealso`.
+  - **`<since>`** -- a `<since>YYYY-MM-DD</since>` from `git blame` of the
+    declaration line; opt-in via `--since`, and **degrades silently** (emits
+    nothing rather than a wrong date when git is absent or the line can't be
+    attributed).
+- **`doc-drift` lint rule** (ON by default) -- flags a doc-comment that is
+  structurally stale vs the code, via a deterministic doc-vs-code diff (no LLM):
+  renamed/removed/missing `<param>`, `<returns>` present-but-void or
+  value-but-undocumented, return-type change, `<exception cref>` no longer raised,
+  a summary/remarks identifier that was removed, and an out-of-date facts block.
+  `--fix` applies ONLY the mechanically-safe subset (refresh the facts block, add
+  a missing `<param>`/`<returns>` stub) and **never rewrites hand-written prose**.
+- **`missing-doc` lint rule** (OFF by default / opt-in) -- flags a public
+  declaration with no DocInsight doc-comment (public surface only). Its "Fix it"
+  inserts a full documenter-generated doc-comment for a **single** finding (IDE +
+  `lint --fix-line`); it is deliberately **excluded from the blanket
+  `lint-all --fix` batch** (project-wide documentation is `document --project`'s
+  job). Ships off-by-default after a measured first-run wave.
+- **IDE menus** -- "Document unit" / "Document project" context-menu items; the
+  existing "Fix it" menu now offers `doc-drift`'s safe fixes automatically.
+- **Diagnostic verbs** -- `preprocess`-style `doc-drift --qname X` (dump drift
+  findings for one symbol); `document --unit`/`--project`/`document-all` help.
+
 ## v0.92.0-alpha -- 2026-07-06
 
 In-process Delphi preprocessor: drag-lint now resolves `{$IFDEF}` compiler
