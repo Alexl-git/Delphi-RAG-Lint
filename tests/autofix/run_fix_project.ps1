@@ -33,13 +33,16 @@
 
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 
-  ADF Task 9 (guardrail): the fixture units are undocumented, so the two
-  ON-by-default doc rules (missing-doc, doc-drift) would fire on their public
-  decls -- adding 2 non-fixable missing-doc findings to lint-all's output and
-  breaking the "--fix --json returns exactly 2" assertion below (it returned 4).
+  ADF Task 9 (guardrail): the fixture units are undocumented, so the doc rules
+  would fire on their public decls -- doc-drift is ON by default; missing-doc is
+  OFF by default (ADF Task 13 -- the measured 1302-finding first-run wave), so it
+  no longer fires on a bare lint-all. Either would add non-fixable findings to
+  lint-all's output and break the "--fix --json returns exactly 2" assertion below.
   This suite tests AUTOFIX behavior, not the doc rules (those have their own
   coverage in tests\autodoc\run_missing_doc.ps1 / run_doc_drift_rule.ps1), so we
   scope every lint-all --fix invocation with --disable missing-doc,doc-drift.
+  The --disable doc-drift is load-bearing (ON by default); --disable missing-doc
+  is now belt-and-braces (OFF by default) but stays for clarity + defence in depth.
   The count is then GENUINELY 2 (the 2 fixable autofix edits), not a loosened
   assertion. Disabled findings are dropped by FinalizeAndOutput's ShouldKeep
   filter BEFORE the --fix block builds edits, so the fixable set is unaffected.

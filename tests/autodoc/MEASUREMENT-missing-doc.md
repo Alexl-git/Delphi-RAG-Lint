@@ -58,19 +58,25 @@ number: every one of those 550 is a case where a decl already HAS a doc comment
 that has drifted from the code (stale param, missing raises, etc.), not merely
 undocumented. That is a real, actionable signal, not noise from absence.
 
-FLAG for the user/controller (per the spec's data-driven checkpoint): shipping
-`missing-doc` ON by default means any drag-lint user who runs `lint-all` (or the
-IDE's live-lint) against a pre-existing, partially-documented codebase -- which
-describes most real Delphi codebases, including drag-lint's own -- will see a
-four-figure wave of warnings on the very first run. That is not necessarily
-wrong (the rule is opt-outable via `--disable missing-doc` or the config
-profile, and it only fires on public surface, and it is `warning` not `error`
-severity so it will not fail a default CI gate) -- but it is NOT a "reasonable,
-barely-noticeable default" either. This is a judgment call for the user at
-Task 13: keep `missing-doc` ON by default (accept that first run on an
-undocumented codebase is noisy, matching the "encourage documentation" intent),
-or flip its shipped default to OFF (opt-in) and let users turn it on once they
-are ready to invest in DocInsight coverage. `doc-drift` at 550, being a
-correctness-of-existing-docs signal rather than an absence signal, reads as a
-safer ON-by-default candidate on its own merits regardless of the `missing-doc`
-decision.
+## Decision (Task 11b / Task 13 -- FINAL)
+
+Driven by this measurement, `missing-doc` ships **OFF by default (opt-in)** and
+`doc-drift` ships **ON by default**. The reasoning:
+
+Shipping `missing-doc` ON would mean any drag-lint user who runs `lint-all` (or
+the IDE's live-lint) against a pre-existing, partially-documented codebase --
+which describes most real Delphi codebases, including drag-lint's own -- would
+see a four-figure wave of warnings on the very first run. It only fires on public
+surface and at `warning` severity (so a default `--fail-on error` CI gate would
+not break), but a 1302-finding first run is NOT a "reasonable, barely-noticeable
+default." So `missing-doc` ships OFF; users opt in via config
+`"enabled": ["missing-doc"]` (or `--rule missing-doc`) once they are ready to
+invest in DocInsight coverage. The rule catalog reports `default_enabled=false`,
+and the CLI's store-backed `lint-all` / `lint-project` paths add it to their
+default-disabled set so it is genuinely OFF at runtime (regression-guarded in
+`tests\autodoc\run_missing_doc.ps1`: a bare `lint-all` yields zero missing-doc
+findings, while the config-enabled run still fires).
+
+`doc-drift` at 550, being a correctness-of-existing-docs signal (a decl that
+already HAS a doc comment which drifted from the code) rather than an absence
+signal, is a safer ON-by-default candidate on its own merits and ships ON.

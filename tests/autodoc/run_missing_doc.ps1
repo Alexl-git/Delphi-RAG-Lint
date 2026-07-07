@@ -72,6 +72,24 @@ try {
   Check 'no missing-doc finding on TThing''s declaration line (26)' (-not ($lines -contains 26))
   Check 'no missing-doc finding on Helper''s declaration line (28)' (-not ($lines -contains 28))
   Check 'exactly-one-finding equals the Undocumented line' ($missingDoc.Count -eq 1 -and $lines[0] -eq 14)
+
+  # ADF Task 13 regression: missing-doc must be GENUINELY OFF at runtime, not just
+  # in the rules catalog. A BARE lint-all (no --config, no --disable) must yield
+  # ZERO missing-doc findings -- proving the store-backed lint-all path adds
+  # missing-doc to its default-disabled set (the catalog default_enabled=false does
+  # NOT suppress runtime output on its own; it is driven by DefDisabled/ShouldKeep).
+  # Before the fix this fired the full 1302-style wave on every bare run.
+  $bareOut = & $exePath lint-all --db $db --json 2>$null
+  $bareRaw = ($bareOut -join "`n")
+  $bS = $bareRaw.IndexOf('['); $bE = $bareRaw.LastIndexOf(']')
+  $bareFindings = @()
+  if ($bS -ge 0 -and $bE -gt $bS) { $bareFindings = @(ConvertFrom-Json $bareRaw.Substring($bS, $bE - $bS + 1)) }
+  $bareMissing = @($bareFindings | Where-Object { $_.rule -eq 'missing-doc' })
+  Check 'BARE lint-all (no config/disable) yields ZERO missing-doc findings (OFF by default at runtime)' ($bareMissing.Count -eq 0)
+  # ...and doc-drift is unaffected (stays ON) -- sanity that we only disabled missing-doc.
+  # (miss.pas has no drifted doc comments, so 0 doc-drift is expected regardless; the
+  #  point here is that the BARE run did not error and produced a parseable array.)
+  Check 'BARE lint-all emitted a JSON array (did not error)' (($bS -ge 0) -and ($bE -gt $bS))
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

@@ -6192,17 +6192,22 @@ begin
     boolean-flag-parameter + public-writable-field + loop-control-flag +
     mutable-global-variable + repeated-type-switch + middle-man + default-encoding-io +
     fan-out + fan-in + feature-envy + instability + split-variable +
-    separate-query-from-modifier
+    separate-query-from-modifier + missing-doc
     are OFF by default here too (opt in via config "enabled"). middle-man / fan-out /
     fan-in / feature-envy / instability are emitted by TClassMetrics.Run above; catalog
     False alone does not suppress CLI output, so they must be listed here for the
     ShouldKeep filter to drop them by default. split-variable (flow) and
-    separate-query-from-modifier (AST) are emitted above -- same reasoning. }
+    separate-query-from-modifier (AST) are emitted above -- same reasoning.
+    ADF Task 13 fix: missing-doc ships OFF (catalog default_enabled=false) but is
+    a PROJECT-level rule (TDocLintRules), so it is NOT in Linter.DefaultDisabledRuleIds
+    and would otherwise fire on every bare lint-all (the measured 1302-finding wave).
+    List it here so ShouldKeep drops it by default; config "enabled":["missing-doc"]
+    still overrides (opt-in). doc-drift stays ON -- do NOT list it. }
   Result:= FinalizeAndOutput(
     AArgs, Findings, [
       'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter',
       'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in', 'feature-envy',
-      'instability', 'interface-object-mixing', 'split-variable', 'separate-query-from-modifier'],
+      'instability', 'interface-object-mixing', 'split-variable', 'separate-query-from-modifier', 'missing-doc'],
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; EC, WC: Integer; OL: TStringBuilder; begin EC:= 0; WC:= 0; for FF in ASurv do if SameText(FF.Severity,
         'error') then Inc(EC) else Inc(WC); OL:= TStringBuilder.Create; try for FF in ASurv do OL.AppendLine(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine,
               FF.StartCol, FF.Severity, FF.RuleId, FF.Message])); OL.AppendLine(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) scanned', [Length(ASurv), EC, WC, Length(FilePaths)])); TFile.WriteAllText(OutPath, OL.ToString, TEncoding.UTF8); finally OL.Free; end; for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) -- report: %s', [Length(ASurv), EC, WC, Length(FilePaths), OutPath])); end,
@@ -6228,6 +6233,12 @@ begin
     (previously this command wrote Findings straight to stdout, unfiltered). }
   DefDisabled:= nil;
   if AArgs.Rule <> 'repeated-type-switch' then DefDisabled:= DefDisabled + ['repeated-type-switch'];
+  { ADF Task 13 fix: missing-doc ships OFF by default (catalog default_enabled=false)
+    but is a PROJECT-level rule (TDocLintRules), not in Linter.DefaultDisabledRuleIds,
+    so without this it fires on every bare lint-project. Add it to the default-disabled
+    set here too; the --rule guard keeps explicit --rule missing-doc opt-in-able, and
+    config "enabled":["missing-doc"] still overrides via ShouldKeep. doc-drift stays ON. }
+  if AArgs.Rule <> 'missing-doc' then DefDisabled:= DefDisabled + ['missing-doc'];
   Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, AArgs.Rule);
   { v0.51: interface reference cycles -- needs the AST of all project files (parsed here) }
   if (AArgs.Rule = '') or (AArgs.Rule = 'interface-reference-cycle') then

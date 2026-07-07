@@ -66,7 +66,11 @@ try {
   Check 'A0 missing-doc finding present on the Undocumented line (16)' ($md.Count -ge 1)
 
   # --- Part A: single-fix INSERTS the document-qname comment ---
-  & $exePath lint-all --db $db --fix --fix-line $L --fix-rule missing-doc --apply --no-backup 2>$null | Out-Null
+  # ADF Task 13: missing-doc ships OFF by default, so --fix must opt it in via
+  # --config (the same "enabled":["missing-doc"] used for the sanity lint above) --
+  # otherwise ShouldKeep drops the finding before the --fix block builds edits.
+  # --fix-rule NARROWS the surviving set; it does not re-enable a disabled rule.
+  & $exePath lint-all --db $db --config $cfg --fix --fix-line $L --fix-rule missing-doc --apply --no-backup 2>$null | Out-Null
   $txt = [IO.File]::ReadAllText($target)
   Check 'A1 inserted a /// DocInsight comment'          ($txt -match '///\s*<summary>')
   Check 'A2 inserted a managed drag-lint:auto block'   ($txt.Contains('<!-- drag-lint:auto BEGIN -->') -and $txt.Contains('<!-- drag-lint:auto END -->'))
@@ -92,7 +96,10 @@ try {
   $mdB = @($findingsB | Where-Object { $_.rule -eq 'missing-doc' -and $_.start_line -eq $L })
   Check 'B1 no missing-doc finding on the now-documented decl (idempotent)' ($mdB.Count -eq 0)
   $before2 = [IO.File]::ReadAllText($target)
-  & $exePath lint-all --db $db --fix --fix-line $L --fix-rule missing-doc --apply --no-backup 2>$null | Out-Null
+  # opt missing-doc in again (OFF by default -- ADF Task 13); the decl is now
+  # documented so this is a no-op regardless, but the finding must survive to reach
+  # the --fix block for the no-op path to be genuinely exercised.
+  & $exePath lint-all --db $db --config $cfg --fix --fix-line $L --fix-rule missing-doc --apply --no-backup 2>$null | Out-Null
   $after2 = [IO.File]::ReadAllText($target)
   Check 'B2 2nd single-fix is byte-identical (no-op)' ($before2 -eq $after2)
 
