@@ -189,8 +189,10 @@ const
 
     // v15: first-class helper-target edges. One row per record/class helper
     // declaration linked to its target type (e.g. 'record helper for TColor').
-    // Captured at parse time via heritage (the target type in typeref children
-    // of a declClass node), resolved and linked at index time (like type_ancestors).
+    // Captured at parse time from the declHelper node (the target type in the
+    // typeref after the 'for' keyword; helper-marked symbols carry is_helper=1
+    // and the target text in heritage), resolved and linked at index time
+    // (like type_ancestors).
     'CREATE TABLE IF NOT EXISTS type_helpers (' +
       '  helper_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
       '  target_name      TEXT NOT NULL,' +
