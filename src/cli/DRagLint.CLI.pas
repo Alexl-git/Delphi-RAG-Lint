@@ -56,7 +56,9 @@ uses
   , DRagLint.FormsMap
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
+  , Vcl.Graphics // v0.95 Task 1: clBlack/clRed for DoContrastSelfTest
   , DRagLint.Hover      .Renderer
+  , DRagLint.Hover      .Contrast
   , DRagLint.Context    .Bundler
   , DRagLint.Resolver   .TypeAt
   , DRagLint.Refactor   .Rename
@@ -3566,6 +3568,20 @@ begin
   else Write(RenderHoverPlain(Syms[0], Doc));
   Result:= 0;
 end; // function
+
+// v0.95 Task 1: hidden self-test verb for the WCAG contrast unit (no --db,
+// no fixture -- just known-answer ratios so the .ps1 can assert without an index).
+function DoContrastSelfTest: Integer;
+begin
+  // Known-answer lines: NAME=<ratio to 2dp> and READABLE=<hex of EnsureReadable>.
+  Writeln(Format('BLACK_ON_WHITE=%.2f', [ContrastRatio(clBlack, clWhite)]));      // 21.00
+  Writeln(Format('SAME=%.2f',           [ContrastRatio(clRed, clRed)]));          // 1.00
+  // #0B57D0 keyword-blue on a dark (#1E1E1E) bg fails 4.5; EnsureReadable fixes it.
+  Writeln(Format('DARKFAIL=%.2f',       [ContrastRatio($00D0570B, $001E1E1E)]));  // < 4.5
+  Writeln(Format('FIXED=%.2f',
+    [ContrastRatio(EnsureReadable($00D0570B, $001E1E1E, 4.5), $001E1E1E)]));       // >= 4.5
+  Result:= 0;
+end;
 
 // v0.17: drag-lint impact --qname <X> [--depth N] [--db <path>] [--format text|json]
 // Walks transitive callers of the last segment of <X> up to depth N.
@@ -10573,6 +10589,7 @@ begin
     else if Args.Command = 'graph'             then Result:= DoGraph           (Args)
     else if Args.Command = 'todos'             then Result:= DoTodos           (Args)
     else if Args.Command = 'hover'             then Result:= DoHover           (Args)
+    else if Args.Command = 'contrast-selftest' then Result:= DoContrastSelfTest
     else if Args.Command = 'impact'            then Result:= DoImpact          (Args)
     else if Args.Command = 'wiring'            then Result:= DoWiring          (Args)
     else if Args.Command = 'surface'           then Result:= DoSurface         (Args)
