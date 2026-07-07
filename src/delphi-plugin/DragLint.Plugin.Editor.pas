@@ -663,6 +663,183 @@ begin
   end;
 end; // function
 
+function ExtractHoverQname(const AMarkdown: string): string;
+{ v0.95 (Task 8): pull the FIRST fully-qualified name out of the LSP hover
+  markdown -- the "`<qname>` - line N" body entry that ExtractHoverHeader also
+  parses. This qname is exactly what the index stored, so it is the correct
+  argument for `hover --qname` (whose CLI resolver matches qualified_name
+  EXACTLY -- a bare IdentifierAtCursor name will NOT resolve). Returns '' when
+  the markdown carries no such entry (e.g. a plain string hover), so the caller
+  falls back to the legacy string popup. }
+var
+  Lines: TArray<string>;
+  L    : string        ;
+  P1   : Integer       ;
+  i    : Integer       ;
+begin
+  Result:= '';
+  if Trim(AMarkdown) = '' then Exit;
+  Lines:= AMarkdown.Split([#13, #10], TStringSplitOptions.ExcludeEmpty);
+  { The header line 0 is "**name** `kind`"; the qname lives on a later
+    "`<qname>` - line N" line (optionally prefixed by a "- " bullet). }
+  for i:= 0 to High(Lines) do
+  begin
+    L:= Trim(Lines[i]);
+    if (Length(L) >= 2) and (Copy(L, 1, 2) = '- ') then L:= Trim(Copy(L, 3, MaxInt));
+    if (L = '') or (L[1] <> '`') then Continue;
+    P1:= Pos('`', Copy(L, 2, MaxInt));
+    if P1 <= 0 then Continue;
+    Result:= Copy(L, 2, P1 - 1);
+    Exit;
+  end;
+end; // function
+
+function BuildHoverSignature(const AModel: TDragLintHoverModel): string;
+{ v0.95 (Task 8): the `hover --json` payload carries the parts (qname, params,
+  return_type) but NOT a flat signature string, while the form's RenderModel /
+  EmitSignatureHeader render AModel.Signature. Reconstruct a one-line display
+  signature "qname(mod name: type; ...): rettype" from the parts so the header
+  is never blank. Procedures (empty ReturnType) omit the ": rettype" tail. }
+var
+  SB: TStringBuilder     ;
+  i : Integer            ;
+  P : TDragLintHoverParam;
+begin
+  SB:= TStringBuilder.Create;
+  try
+    SB.Append(AModel.QualifiedName);
+    if Length(AModel.Params) > 0 then
+    begin
+      SB.Append('(');
+      for i:= 0 to High(AModel.Params) do
+      begin
+        P:= AModel.Params[i];
+        if i > 0 then SB.Append('; ');
+        if P.Modifier <> '' then SB.Append(P.Modifier).Append(' ');
+        SB.Append(P.Name);
+        if P.TypeText <> '' then SB.Append(': ').Append(P.TypeText);
+      end;
+      SB.Append(')');
+    end;
+    if AModel.ReturnType <> '' then SB.Append(': ').Append(AModel.ReturnType);
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end; // function
+
+/// <summary>Runs `"&lt;exe&gt;" hover --qname "&lt;qname&gt;" &lt;--db ...&gt; --format json`,
+/// captures stdout, and parses the structured Help-Insight model (qname, unit,
+/// def_line, params[], return_type, returns[], returns_more) into AModel. Also
+/// reconstructs AModel.Signature from the parts (the CLI json omits it) so the
+/// form's RenderModel header is never blank.</summary>
+/// <param name="AExe">Full path to drag-lint.exe; must exist.</param>
+/// <param name="AQName">The FULLY-QUALIFIED name to look up (the CLI matches
+/// qualified_name exactly -- a bare identifier will not resolve).</param>
+/// <param name="ADbList">Index DBs to search, passed as repeated --db flags.</param>
+/// <param name="AModel">Receives the parsed model on success.</param>
+/// <returns>True when the model was fetched + parsed; False (AModel left
+/// zeroed) on any failure -- missing exe, empty qname, non-zero exit, empty or
+/// non-object output, or a JSON parse error -- so the caller falls back to the
+/// legacy string hover path.</returns>
+/// <remarks>Mirrors FetchHoverCallers' spawn+parse plumbing; guarded end to end
+/// so a hover can never surface an exception. Main thread only (spawns a child
+/// synchronously with a short timeout).</remarks>
+function FetchHoverModel(const AExe, AQName: string; const ADbList: TArray<string>; out AModel: TDragLintHoverModel): Boolean;
+var
+  CmdLine : string           ;
+  Output  : string           ;
+  DbArgs  : string           ;
+  ExitCode: Integer          ;
+  i       : Integer          ;
+  JV      : TJSONValue       ;
+  JObj    : TJSONObject      ;
+  JParams : TJSONArray       ;
+  JReturns: TJSONArray       ;
+  PItem   : TJSONObject      ;
+  Param   : TDragLintHoverParam;
+  RetStr  : string           ;
+begin
+  Result:= False;
+  { Zero the out-param so a False return leaves a clean, empty model. }
+  AModel:= Default(TDragLintHoverModel);
+  if (AExe = '') or not FileExists(AExe) then Exit;
+  if Trim(AQName) = '' then Exit;
+
+  DbArgs:= '';
+  for i:= 0 to High(ADbList) do DbArgs:= DbArgs + Format(' --db "%s"', [ADbList[i]]);
+
+  CmdLine:= Format('"%s" hover --qname "%s"%s --format json', [AExe, AQName, DbArgs]);
+
+  ExitCode:= RunAndCaptureStdout(CmdLine, Output, 5000);
+  { Guard: non-zero exit (e.g. "No symbol matched qname" -> exit 1), empty
+    output, or output that isn't a JSON object all fall back to the string path. }
+  if (ExitCode <> 0) or (Trim(Output) = '') or (Trim(Output)[1] <> '{') then Exit;
+
+  JV:= nil;
+  try
+    JV:= TJSONObject.ParseJSONValue(Output);
+  except
+    JV:= nil;
+  end;
+  if (JV = nil) or not (JV is TJSONObject) then
+  begin
+    if JV <> nil then JV.Free;
+    Exit;
+  end;
+
+  try
+    JObj:= JV as TJSONObject;
+    AModel.QualifiedName:= JObj.GetValue<string> ('qname'      , '');
+    AModel.UnitFile     := JObj.GetValue<string> ('unit'       , '');
+    AModel.DefLine      := JObj.GetValue<Integer>('def_line'   , 0 );
+    AModel.ReturnType   := JObj.GetValue<string> ('return_type', '');
+    AModel.ReturnsMore  := JObj.GetValue<Integer>('returns_more', 0);
+
+    { params: array of param objects (modifier, name, type). }
+    SetLength(AModel.Params, 0);
+    if JObj.TryGetValue<TJSONArray>('params', JParams) then
+    begin
+      SetLength(AModel.Params, JParams.Count);
+      for i:= 0 to JParams.Count - 1 do
+      begin
+        Param.Modifier:= '';
+        Param.Name    := '';
+        Param.TypeText:= '';
+        if JParams.Items[i] is TJSONObject then
+        begin
+          PItem:= JParams.Items[i] as TJSONObject;
+          Param.Modifier:= PItem.GetValue<string>('modifier', '');
+          Param.Name    := PItem.GetValue<string>('name'    , '');
+          Param.TypeText:= PItem.GetValue<string>('type'    , '');
+        end;
+        AModel.Params[i]:= Param;
+      end;
+    end;
+
+    { returns: array of expression strings. }
+    SetLength(AModel.Returns, 0);
+    if JObj.TryGetValue<TJSONArray>('returns', JReturns) then
+    begin
+      SetLength(AModel.Returns, JReturns.Count);
+      for i:= 0 to JReturns.Count - 1 do
+      begin
+        RetStr:= '';
+        if JReturns.Items[i] is TJSONString then RetStr:= (JReturns.Items[i] as TJSONString).Value
+        else RetStr:= JReturns.Items[i].Value;
+        AModel.Returns[i]:= RetStr;
+      end;
+    end;
+
+    { The json omits a flat signature; RenderModel/EmitSignatureHeader render
+      AModel.Signature, so build it from the parts (else the header is blank). }
+    AModel.Signature:= BuildHoverSignature(AModel);
+    Result:= True;
+  finally
+    JV.Free;
+  end; // try
+end; // function
+
 procedure InvokeHover(Sender: TObject);
 var
   Client     : TDragLintLspClient         ;
@@ -672,6 +849,9 @@ var
   Params     : TJSONObject                ;
   Resp       : TJSONValue                 ;
   HoverText  : string                     ;
+  RawMarkdown: string                     ;
+  QName      : string                     ;
+  Model      : TDragLintHoverModel        ;
   ContentsVal: TJSONValue                 ;
   P          : TPoint                     ;
   SymName    : string                     ;
@@ -719,6 +899,10 @@ begin
 
     if HoverText = '' then HoverText:= '(no hover info: ' + Resp.Format(2) + ')';
 
+    { v0.95 (Task 8): keep the RAW markdown (before StripFirstHeaderLine mutates
+      HoverText below) so we can mine the fully-qualified name for hover --json. }
+    RawMarkdown:= HoverText;
+
     { v0.40.5: dump every hover invocation to the debug log + copy the
       rendered text to the clipboard so users can paste it back when the
       popup is too transient to screenshot. Logging happens BEFORE the
@@ -752,7 +936,24 @@ begin
     { v0.40.6: menu invocation is explicit -- replace any current popup. }
     CloseDragLintHover;
     GetCursorPos(P);
-    ShowDragLintHover(Header, HoverText, Callers, P.X, P.Y + 20);
+
+    { v0.95 (Task 8): PREFER the structured Help-Insight popup. Mine the
+      fully-qualified name from the raw LSP markdown, then fetch the structured
+      `hover --json` model. On success show the colored signature + Parameters +
+      Returns view; on ANY miss (no qname parsed, exe missing, non-zero exit,
+      unparseable output) fall back to the EXACT legacy string popup below so
+      the manual hover always shows something. }
+    QName:= ExtractHoverQname(RawMarkdown);
+    if (QName <> '') and FetchHoverModel(ExePath, QName, DbList, Model) then
+    begin
+      DLT('hover', Format('structured qname="%s" params=%d returns=%d ret="%s"', [Model.QualifiedName, Length(Model.Params), Length(Model.Returns), Model.ReturnType]));
+      ShowDragLintHover(Model, Callers, P.X, P.Y + 20);
+    end
+    else
+    begin
+      DLT('hover', Format('string-fallback qname="%s"', [QName]));
+      ShowDragLintHover(Header, HoverText, Callers, P.X, P.Y + 20);
+    end;
   finally
     Resp.Free;
   end; // try
