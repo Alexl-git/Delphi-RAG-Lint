@@ -97,6 +97,7 @@ type
       FItemDocIt      : TMenuItem   ; { v0.90 AutoDocument: 'Document it' -- symbol node with a qname }
       FItemDocUnit    : TMenuItem   ; { ADF T10 AutoDocument: 'Document unit' -- any node, active editor file }
       FItemDocProject : TMenuItem   ; { ADF T10 AutoDocument: 'Document project' -- any node, active .dproj }
+      FItemEnumHelper : TMenuItem   ; { Task 8 enum-helper: 'Create helper class' -- skEnum/skEnumValue node, no existing helper }
       FRootDiag       : TTreeNode   ; { the current 'Diagnostics (N)' root, for node discrimination }
       FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
       procedure BtnRefreshClick(Sender: TObject);
@@ -134,6 +135,11 @@ type
       function  GetActiveProjectFilePath: string;
       procedure DocumentUnitClick      (Sender: TObject);
       procedure DocumentProjectClick   (Sender: TObject);
+      { Task 8 enum-helper: 'Create helper class' handler + its enablement
+        predicate + the enum-qname resolver shared by both. }
+      function  EnumQNameForNode       (ANode: TTreeNode): string;
+      function  NodeIsEnumHelperTarget (ANode: TTreeNode): Boolean;
+      procedure CreateEnumHelperClick  (Sender: TObject);
     public
       constructor Create(AOwner: TComponent); override;
       procedure RefreshActive; { v0.42: re-read the active editor file }
@@ -350,6 +356,11 @@ begin
   FItemDocUnit:= FPopup.Items[FPopup.Items.Count - 1];
   AddPopupItem(FPopup, 'Document &project'           , DocumentProjectClick   );
   FItemDocProject:= FPopup.Items[FPopup.Items.Count - 1];
+  { Task 8 enum-helper: 'Create helper class' acts on a symbol node (an enum or
+    one of its values), so it is grouped with the other symbol-scoped items.
+    Enablement is set per-popup in PopupPopup. }
+  AddPopupItem(FPopup, 'Create &helper class'        , CreateEnumHelperClick  );
+  FItemEnumHelper:= FPopup.Items[FPopup.Items.Count - 1];
   AddPopupItem(FPopup, '-'                           , nil                    ); { separator }
   AddPopupItem(FPopup, '&Copy All Diagnostics'       , CopyDiagnosticsClick  );
   { v0.88 AutoFix: run the CLI fix verbs on the clicked node. Enablement is set
@@ -858,6 +869,7 @@ begin
     gated on there being an active file / active project to run against. }
   FItemDocUnit   .Enabled:= FCurrentFile <> '';
   FItemDocProject.Enabled:= GetActiveProjectFilePath <> '';
+  FItemEnumHelper.Enabled:= NodeIsEnumHelperTarget(Node); { Task 8: skEnum/skEnumValue node, no existing helper }
 end;
 
 { 'Fix it' -- apply the single fixable finding under the cursor:
@@ -932,6 +944,120 @@ begin
     else DLT('autodoc', 'Document it non-zero exit; output: ' + Copy(Output, 1, 400));
   except
     on E: Exception do DLT('autodoc', 'DocumentItClick failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end; // procedure
+
+{ ---- Task 8 enum-helper: right-click Create helper class ---- }
+
+{ Resolves the enum qname a right-clicked node targets:
+  - a skEnum node targets itself (ND.QName is already the enum's qname).
+  - a skEnumValue node targets its PARENT enum. The tree is flat (Code
+    Elements children are siblings, not nested under their declaring type --
+    see BuildTree), so there is no tree-parent link to walk; instead the value's
+    own QName carries the enum name as its second-to-last dotted segment (the
+    outline emits 'Unit.TEnum.Value' for enum values vs 'Unit.TEnum' for the
+    enum itself -- mirrors DRagLint.Parser.Delphi13's QName + '.' + ValName
+    emission). Stripping the trailing '.<Value>' segment recovers 'Unit.TEnum'.
+  Returns '' for any other node shape (including a malformed QName with no dot,
+  which cannot be a nested enum value). }
+function TDragLintStructureForm.EnumQNameForNode(ANode: TTreeNode): string;
+var
+  ND     : TStructureNodeData;
+  DotPos : Integer           ;
+begin
+  Result:= '';
+  if (ANode = nil) or (ANode.Data = nil) then Exit;
+  ND:= TStructureNodeData(ANode.Data);
+  if ND.Kind = skEnum then Exit(ND.QName);
+  if ND.Kind = skEnumValue then
+  begin
+    DotPos:= ND.QName.LastDelimiter('.');
+    if DotPos > 0 then Result:= Copy(ND.QName, 1, DotPos - 1);
+  end;
+end;
+
+{ An enum-helper target is a skEnum node, or a skEnumValue node whose parent
+  enum resolves (EnumQNameForNode <> ''), AND that enum has no existing helper
+  yet. The existing-helper check shells out to the read-only query verb:
+    drag-lint helpers-of <qname> --json --db <projDb>
+  which per its own doc-comment exits 0 with an empty "[]" for "no helper
+  found" (Task 5 designed the verb this way specifically so callers here don't
+  have to distinguish "no helper" from "query failed" by exit code alone --
+  we still treat any non-zero exit or unparseable output as "not a target", the
+  same safe-degradation the AutoFix EnsureFixableRules cache uses). Unlike
+  EnsureFixableRules this is NOT cached: helpers-of is a cheap single-symbol
+  lookup (not a whole-rules-catalog fetch), and the answer can change between
+  popups as the user runs 'Create helper class' on other enums, so a stale
+  cached "no helper" would wrongly re-enable the item. }
+function TDragLintStructureForm.NodeIsEnumHelperTarget(ANode: TTreeNode): Boolean;
+var
+  QName  : string     ;
+  Db     : string     ;
+  Cmd    : string     ;
+  Output : string     ;
+  ExitVal: Integer    ;
+  Arr    : TJSONValue ;
+begin
+  Result:= False;
+  QName:= EnumQNameForNode(ANode);
+  if QName = '' then Exit;
+  Db:= ResolveDbForFile; { same DB resolver Find Usages / Fix-all / Document it use }
+  if Db = '' then Exit;
+  try
+    Cmd:= Format('"%s" helpers-of "%s" --json --db "%s"', [ResolveExePath, QName, Db]);
+    ExitVal:= RunAndCaptureStdout(Cmd, Output, 15000);
+    if ExitVal <> 0 then Exit;
+    Arr:= TJSONObject.ParseJSONValue(Output);
+    if Arr = nil then Exit;
+    try
+      Result:= (Arr is TJSONArray) and (TJSONArray(Arr).Count = 0);
+    finally
+      Arr.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      DLT('enumhelper', 'NodeIsEnumHelperTarget failed: ' + E.ClassName + ': ' + E.Message);
+      Result:= False;
+    end;
+  end;
+end; // function
+
+{ 'Create helper class' -- generate a Byte-family record helper for the
+  targeted enum via the CLI:
+    drag-lint create-enum-helper --qname <TEnum> --db <projDb> --apply
+  Same --db reasoning as 'Document it' (qname-driven, resolves through the
+  index, so --db not --file). --apply writes the source file (+ a .bak) on
+  disk; DoCreateEnumHelper exits 0 only when Action=ehaBuilt (a refusal, e.g.
+  helper-already-exists or no-impl-section, exits 1 and makes no edit), so the
+  same "ExitVal = 0 -> reload" gate DocumentItClick uses is exactly correct
+  here too. Wrapped in try/except -> DLT so a plugin fault never reaches the
+  IDE message loop. }
+procedure TDragLintStructureForm.CreateEnumHelperClick(Sender: TObject);
+var
+  QName  : string ;
+  Cmd    : string ;
+  Output : string ;
+  Db     : string ;
+  ExitVal: Integer;
+begin
+  try
+    QName:= EnumQNameForNode(FTree.Selected);
+    if QName = '' then Exit;
+    if FCurrentFile = '' then Exit;
+    Db:= ResolveDbForFile; { same DB resolver Find Usages / Fix-all / Document it use }
+    if Db = '' then
+    begin
+      DLT('enumhelper', 'Create helper class: no index DB for ' + FCurrentFile);
+      Exit;
+    end;
+    Cmd:= Format('"%s" create-enum-helper --qname "%s" --db "%s" --apply', [ResolveExePath, QName, Db]);
+    ExitVal:= RunAndCaptureStdout(Cmd, Output, 60000);
+    DLT('enumhelper', Format('Create helper class %s -> exit=%d', [QName, ExitVal]));
+    if ExitVal = 0 then ReloadCurrentFileBuffer
+    else DLT('enumhelper', 'Create helper class non-zero exit; output: ' + Copy(Output, 1, 400));
+  except
+    on E: Exception do DLT('enumhelper', 'CreateEnumHelperClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
 end; // procedure
 
