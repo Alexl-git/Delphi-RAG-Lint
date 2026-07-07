@@ -115,8 +115,12 @@ Assert "refuse (exists fixture): nonzero exit" ($LASTEXITCODE -ne 0)
 $existsJson = & $exe create-enum-helper --qname TStatus --db $dbAlready --json 2>$null | ConvertFrom-Json
 Assert "refuse (exists fixture): action=exists" ($existsJson.action -eq 'exists')
 
-# ----- refuse: no implementation section -----
-& $exe create-enum-helper --qname TSignal2 --db $dbNoImpl --json 2>$null | Out-Null
+# ----- refuse: no implementation section (no_impl_fragment.pas has TFlag, no 'implementation' keyword) -----
+$noImplErr = (& $exe create-enum-helper --qname TFlag --db $dbNoImpl 2>&1) -join "`n"
+Assert "refuse (no-impl fixture): nonzero exit" ($LASTEXITCODE -ne 0)
+$noImplJson = & $exe create-enum-helper --qname TFlag --db $dbNoImpl --json 2>$null | ConvertFrom-Json
+Assert "refuse (no-impl fixture): action=no_impl_section" ($noImplJson.action -eq 'no_impl_section')
+Assert "refuse (no-impl fixture): message mentions implementation" ($noImplErr -match 'implementation')
 
 # ----- refuse: TNope not found -----
 $nopeOut = (& $exe create-enum-helper --qname TNope --db $dbSimple 2>&1) -join "`n"
