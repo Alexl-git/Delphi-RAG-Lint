@@ -102,7 +102,11 @@ cnt = c.execute("SELECT COUNT(*) FROM call_edges").fetchone()[0]
 print(ver, tbl is not None, idx_target is not None, idx_ref is not None, cnt, ",".join(sorted(cols)))
 '@ | Set-Content $after -Encoding ascii
     $state = (python $after $db) -split '\s+'
-    Check 'AFTER: schema_version == 14'            ($state[0] -eq '14')
+    # Assert >= 14 (not an exact '14') so later schema bumps (e.g. v15 for the
+    # enum-helper first-class indexing milestone) don't spuriously fail this
+    # v13-origin migration check -- the real assertion is "Migrate advanced the
+    # DB past v13 and (re)created call_edges", not a specific version literal.
+    Check 'AFTER: schema_version >= 14'            ([int]$state[0] -ge 14)
     Check 'AFTER: call_edges table EXISTS'          ($state[1] -eq 'True')
     Check 'AFTER: idx_call_edges_target created'    ($state[2] -eq 'True')
     Check 'AFTER: idx_call_edges_ref created'       ($state[3] -eq 'True')
