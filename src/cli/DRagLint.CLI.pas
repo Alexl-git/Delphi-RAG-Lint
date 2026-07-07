@@ -4080,11 +4080,14 @@ end;
 { The set of rule-ids that have a registered, mechanical, side-effect-free
   quick-fix. Single source of truth for both the rules-catalog 'fixable' flag
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
-  BuildAutofixEdits (kept in lockstep; a guard test asserts they agree). }
+  BuildAutofixEdits (kept in lockstep; a guard test asserts they agree).
+  EXCEPTION: store-backed fixes (doc-drift, missing-doc) are fixable but have NO
+  BuildAutofixEdits branch -- their edits come from TDocumenter.BuildFor via the
+  store-backed append in FinalizeAndOutput, not from the pure-text edit builder. }
 const
-  FIXABLE_RULE_IDS: array[0..9] of string = (
+  FIXABLE_RULE_IDS: array[0..10] of string = (
     'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
-    'redundant-assigned-free', 'off-by-one-count', 'doc-drift');
+    'redundant-assigned-free', 'off-by-one-count', 'doc-drift', 'missing-doc');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var
@@ -4117,6 +4120,27 @@ var
   S: string;
 begin
   for S in RISKY_FIX_RULE_IDS do
+    if SameText(S, ARuleId) then Exit(True);
+  Result:= False;
+end;
+
+{ Fixable rules whose fix is offered ONLY for a single targeted finding (the IDE
+  "Fix it" on one decl, or `lint-all --fix --fix-line/--fix-rule`), and DELIBERATELY
+  EXCLUDED from the blanket batch (`lint-all --fix` / "Fix all"). Currently only
+  missing-doc: batch-documenting every undocumented decl project-wide is what
+  `document --project` is for (facts-only default + --stubs control); folding it
+  into the blanket batch would inject TODO stubs across a whole project. }
+const
+  SINGLE_FIX_ONLY_RULE_IDS: array[0..0] of string = ('missing-doc');
+
+  /// <summary>True iff the rule's registered fix is SINGLE-FIX-ONLY: applied for a
+  /// single targeted finding (IDE "Fix it" / --fix-line + --fix-rule) but excluded
+  /// from the blanket `lint-all --fix` batch so it does not mass-inject edits.</summary>
+function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
+var
+  S: string;
+begin
+  for S in SINGLE_FIX_ONLY_RULE_IDS do
     if SameText(S, ARuleId) then Exit(True);
   Result:= False;
 end;
@@ -4612,6 +4636,36 @@ begin
             double-counting. }
           for var DDE: TTextEdit in DDEdits do
             if DDE.Kind = tekInsertLines then Inc(FixCount);
+        end;
+      end;
+
+      { ADF Task 11c: missing-doc is store-backed like doc-drift, BUT it is
+        SINGLE-FIX-ONLY (IsSingleFixOnlyRule) -- its "Fix it" inserts the exact
+        document-qname DocInsight comment for ONE targeted decl, and is
+        DELIBERATELY excluded from the blanket batch (batch-documenting a whole
+        project is `document --project`'s job, not a mass --fix that would inject
+        TODO stubs everywhere). THE GATE: append missing-doc's fix ONLY when this
+        is a TARGETED single-fix -- i.e. --fix-line and/or --fix-rule narrowed the
+        set (AArgs.FixLine > 0 or AArgs.FixRule <> ''). In the blanket batch
+        (FixLine = 0 AND FixRule = ''), Targeted = all Survivors and missing-doc is
+        SKIPPED. FixEditsForMissingDoc re-resolves each targeted missing-doc
+        finding's decl (by file+line) and runs BuildFor once per decl. }
+      var IsTargetedFix: Boolean:= (AArgs.FixLine > 0) or (AArgs.FixRule <> '');
+      var WantMissingDoc: Boolean:= False;
+      if IsTargetedFix then
+        for F in Targeted do
+          if SameText(F.RuleId, 'missing-doc') and IsSingleFixOnlyRule(F.RuleId) then begin WantMissingDoc:= True; Break; end;
+      if WantMissingDoc then
+      begin
+        var MDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc(AStore, Targeted);
+        if Length(MDEdits) > 0 then
+        begin
+          Edits:= Edits + MDEdits;
+          { One inserted doc-comment per decl -- count the insert edits so FixCount
+            reflects the number of decls documented (BuildFor on a fresh decl emits
+            an insert). }
+          for var MDE: TTextEdit in MDEdits do
+            if MDE.Kind = tekInsertLines then Inc(FixCount);
         end;
       end;
     end;

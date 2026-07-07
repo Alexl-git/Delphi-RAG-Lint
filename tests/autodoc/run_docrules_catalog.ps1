@@ -10,7 +10,9 @@
     * missing-doc default_enabled=false (OFF by default, opt-in -- ADF Task 11b:
       fires 1302x on drag-lint's own first-run wave, too noisy to ship ON)
     * doc-drift  fixable=true     (its --fix repairs the mechanically-safe subset)
-    * missing-doc fixable=false   (report-only -- nothing safe to auto-write)
+    * missing-doc fixable=true    (ADF Task 11c: SINGLE-FIX-ONLY -- its "Fix it"
+      inserts a document-qname doc-comment for ONE targeted decl; EXCLUDED from
+      the blanket batch. rules --json reports fixable=true so the IDE offers it.)
     * builtin rule count = 112  (= 110 pre-milestone + the 2 doc rules)
 
   If someone flips a default, drops the fixable flag, or adds/removes a built-in
@@ -41,7 +43,7 @@ if ($null -ne $md) {
   Assert 'missing-doc source=builtin'              ($md.source -eq 'builtin')
   Assert 'missing-doc category=documentation'      ($md.category -eq 'documentation')
   Assert 'missing-doc default_enabled=false (OFF)' ($md.default_enabled -eq $false)
-  Assert 'missing-doc fixable=false'               ($md.fixable -eq $false)
+  Assert 'missing-doc fixable=true (single-fix)'   ($md.fixable -eq $true)
 }
 if ($null -ne $dd) {
   Assert 'doc-drift source=builtin'              ($dd.source -eq 'builtin')

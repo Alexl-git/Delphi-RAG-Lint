@@ -83,6 +83,27 @@ type
     /// doc BuildFor returns daUnchanged (no edits), so a second --fix is a no-op.
     /// Never raises; per-symbol failures are swallowed.</remarks>
     class function FixEditsForDocDrift(const AStore: ISymbolStore): TArray<TTextEdit>;
+
+    /// <summary>Builds the DocInsight comment insert edits for a set of TARGETED
+    /// missing-doc findings -- the SINGLE-FIX "Fix it" on an undocumented public
+    /// decl. For each finding, resolves the symbol by (file, start-line) and
+    /// delegates to TDocumenter.BuildFor to generate the exact comment
+    /// `document --qname` produces (summary/param/returns skeleton + managed facts
+    /// block), then aggregates every finding's Edits.</summary>
+    /// <param name="AStore">An open, migrated symbol store; nil yields no edits.</param>
+    /// <param name="ATargeted">The already-narrowed missing-doc findings to fix
+    /// (each carries FilePath + StartLine; a non-missing-doc finding is ignored).</param>
+    /// <returns>The insert edits (one span per resolved decl); empty when nothing
+    /// resolves.</returns>
+    /// <remarks>SINGLE-FIX-ONLY: the caller (FinalizeAndOutput) invokes this only
+    /// on a targeted single-fix (--fix-line/--fix-rule), NEVER the blanket batch --
+    /// batch-documenting a whole project is `document --project`'s job. missing-doc
+    /// findings carry no qname, so the symbol is re-resolved here via
+    /// AStore.FindSymbolsByFile matched on StartLine. Idempotent: a decl that
+    /// already has a doc yields daUnchanged (no edits) -- but such a decl no longer
+    /// produces a missing-doc finding either. Never raises; per-finding failures are
+    /// swallowed so one bad decl cannot abort the fix.</remarks>
+    class function FixEditsForMissingDoc(const AStore: ISymbolStore; const ATargeted: TArray<TLintFinding>): TArray<TTextEdit>;
   end;
 
 implementation
@@ -272,6 +293,53 @@ begin
     end;
     Result:= Edits.ToArray;
   finally
+    Edits.Free;
+  end;
+end;
+
+class function TDocLintRules.FixEditsForMissingDoc(const AStore: ISymbolStore; const ATargeted: TArray<TLintFinding>): TArray<TTextEdit>;
+var
+  Edits : TList<TTextEdit>;
+  F     : TLintFinding    ;
+  Syms  : TArray<TSymbol> ;
+  Sym   : TSymbol         ;
+  QName : string          ;
+  DocRes: TDocumentResult ;
+  E     : TTextEdit       ;
+  Seen  : TDictionary<string, Boolean>;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  Edits:= TList<TTextEdit>.Create;
+  Seen := TDictionary<string, Boolean>.Create;
+  try
+    for F in ATargeted do
+    begin
+      if not SameText(F.RuleId, 'missing-doc') then Continue;
+      try
+        { missing-doc findings carry no qname -- re-resolve the symbol from the
+          store by (file, start-line): FindSymbolsByFile returns every symbol
+          declared in the file; pick the one whose StartLine matches the finding
+          (the decl RunMissingDoc anchored to), then use its QualifiedName. }
+        QName:= '';
+        Syms := AStore.FindSymbolsByFile(F.FilePath);
+        for Sym in Syms do
+          if Sym.StartLine = F.StartLine then begin QName:= Sym.QualifiedName; Break; end;
+        if QName = '' then Continue;
+        { Two findings could resolve to the same decl (defensive) -- BuildFor once
+          per decl so we never emit overlapping insert edits for one span. }
+        if Seen.ContainsKey(LowerCase(QName)) then Continue;
+        Seen.Add(LowerCase(QName), True);
+
+        DocRes:= TDocumenter.BuildFor(AStore, QName);
+        for E in DocRes.Edits do Edits.Add(E);
+      except
+        { A single malformed decl must not abort the whole fix sweep. }
+      end;
+    end;
+    Result:= Edits.ToArray;
+  finally
+    Seen.Free;
     Edits.Free;
   end;
 end;

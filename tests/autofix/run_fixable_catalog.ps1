@@ -17,9 +17,10 @@ try {
   Check 'redundant-assigned-free fixable=true' ($byId['redundant-assigned-free'].fixable -eq $true)
   Check 'off-by-one-count fixable=true'        ($byId['off-by-one-count'].fixable -eq $true)
   Check 'doc-drift fixable=true'               ($byId['doc-drift'].fixable -eq $true)
+  Check 'missing-doc fixable=true'             ($byId['missing-doc'].fixable -eq $true)
   # a rule with no fix must be false (pick a stable always-present rule):
   Check 'cyclomatic-complexity fixable=false' ($byId['cyclomatic-complexity'].fixable -eq $false)
   $fixableCount = ($obj.rules | Where-Object { $_.fixable -eq $true }).Count
-  Check 'exactly 10 fixable rules' ($fixableCount -eq 10)
+  Check 'exactly 11 fixable rules' ($fixableCount -eq 11)
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
