@@ -120,6 +120,7 @@
         <DCCReference Include="DragLint.Plugin.LintOptionsFrame.pas"/>
         <DCCReference Include="DragLint.Plugin.ExeResolver.pas"/>
         <DCCReference Include="DragLint.Plugin.Fonts.pas"/>
+        <DCCReference Include="..\core\DRagLint.Hover.Contrast.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
