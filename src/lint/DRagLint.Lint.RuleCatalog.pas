@@ -212,7 +212,7 @@ begin
     B('circular-uses',         'project-wide', 'warning', 'Circular unit dependency (a uses-graph cycle among project units)');
 
     { --- documentation (ADF milestone) --- }
-    B('missing-doc', 'documentation', 'warning', 'Public declaration has no DocInsight doc-comment');
+    B('missing-doc', 'documentation', 'warning', 'Public declaration has no DocInsight doc-comment', False); // OFF by default -- fires 1302x on drag-lint's own first-run wave; opt in via "enabled"
     B('doc-drift',   'documentation', 'warning', 'DocInsight comment has drifted from the code it documents (--fix repairs the mechanically-safe subset)'); { ON by default; marked fixable via FIXABLE_RULE_IDS -- its --fix applies only the safe subset (facts-block refresh + missing param/returns stubs), never rewriting hand prose }
 
     { --- metrics (CK class metrics; v0.78) --- }

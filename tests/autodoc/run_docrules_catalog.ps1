@@ -1,12 +1,14 @@
 <#
-  run_docrules_catalog.ps1 -- ADF Task 9 catalog LOCK for the two ON-by-default
-  documentation rules (missing-doc from Task 7, doc-drift from Task 8).
+  run_docrules_catalog.ps1 -- ADF Task 9 catalog LOCK for the two documentation
+  rules (missing-doc from Task 7, doc-drift from Task 8).
 
   Locks, against `drag-lint rules --json`, that the milestone shipped BOTH rules
   with the exact flags the design mandates and that they grew the BUILT-IN rule
   count by EXACTLY 2 (pre-milestone builtins = 110, current = 112):
     * both present, source=builtin, category=documentation
-    * both default_enabled=true  (ON by default -- the deliberate user decision)
+    * doc-drift  default_enabled=true   (ON by default -- safe correctness signal)
+    * missing-doc default_enabled=false (OFF by default, opt-in -- ADF Task 11b:
+      fires 1302x on drag-lint's own first-run wave, too noisy to ship ON)
     * doc-drift  fixable=true     (its --fix repairs the mechanically-safe subset)
     * missing-doc fixable=false   (report-only -- nothing safe to auto-write)
     * builtin rule count = 112  (= 110 pre-milestone + the 2 doc rules)
@@ -36,10 +38,10 @@ $dd = $json.rules | Where-Object { $_.id -eq 'doc-drift'   } | Select-Object -Fi
 Assert 'missing-doc present'                    ($null -ne $md)
 Assert 'doc-drift present'                       ($null -ne $dd)
 if ($null -ne $md) {
-  Assert 'missing-doc source=builtin'            ($md.source -eq 'builtin')
-  Assert 'missing-doc category=documentation'    ($md.category -eq 'documentation')
-  Assert 'missing-doc default_enabled=true (ON)' ($md.default_enabled -eq $true)
-  Assert 'missing-doc fixable=false'             ($md.fixable -eq $false)
+  Assert 'missing-doc source=builtin'              ($md.source -eq 'builtin')
+  Assert 'missing-doc category=documentation'      ($md.category -eq 'documentation')
+  Assert 'missing-doc default_enabled=false (OFF)' ($md.default_enabled -eq $false)
+  Assert 'missing-doc fixable=false'               ($md.fixable -eq $false)
 }
 if ($null -ne $dd) {
   Assert 'doc-drift source=builtin'              ($dd.source -eq 'builtin')

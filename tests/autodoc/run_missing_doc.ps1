@@ -30,11 +30,17 @@ $target = Join-Path $scratch 'miss.pas'
 $db     = Join-Path $scratch 'docmiss.sqlite'
 Copy-Item $fixture $target -Force
 
+# missing-doc ships OFF by default (ADF Task 11b -- 1302 first-run findings on
+# drag-lint's own tree); opt it in explicitly for this suite via --config, same
+# mechanism as the other OFF-by-default rules (feature-envy/split-variable).
+$cfg = Join-Path $scratch 'docmiss.config.json'
+'{ "enabled": ["missing-doc"] }' | Set-Content -Path $cfg -Encoding ascii -NoNewline
+
 Push-Location C:\TEMP
 try {
   & $exePath index $scratch --db $db 2>$null | Out-Null
 
-  $out = & $exePath lint-all --db $db --json 2>$null
+  $out = & $exePath lint-all --db $db --config $cfg --json 2>$null
   $raw = ($out -join "`n")
   # lint-all --json prints one pretty-printed JSON array preceded/followed by
   # plain progress/summary text on other lines -- extract just the array.
