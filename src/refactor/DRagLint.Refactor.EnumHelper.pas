@@ -285,6 +285,7 @@ var
   DeclSb      : TStringBuilder;
   BodySb      : TStringBuilder;
   M           : string;
+  MemberIdx   : Integer;
 
   { Emits `case <ACaseExpr> of` / one `Ord(member): Result := member;` arm per
     real named member / `else Result := <FirstMember>;` / `end;` into ASb. Used
@@ -404,12 +405,20 @@ begin
       end
       else
       begin
-        BodySb.AppendLine('  case AValue of');
-        for M in AResolve.Members do
-          BodySb.AppendLine('    ''' + M + ''': Result := ' + M + ';');
+        { AValue is a string -- Object Pascal `case` requires an ordinal
+          selector, so (unlike ToString's `case Self of`, valid because Self
+          is the enum) FromString's case-mode dispatch is an if/else-if
+          chain over string comparisons, not a case statement. }
+        for MemberIdx:= 0 to High(AResolve.Members) do
+        begin
+          M:= AResolve.Members[MemberIdx];
+          if MemberIdx = 0 then
+            BodySb.AppendLine('  if AValue = ''' + M + ''' then Result := ' + M)
+          else
+            BodySb.AppendLine('  else if AValue = ''' + M + ''' then Result := ' + M);
+        end;
         BodySb.AppendLine('  else');
         BodySb.AppendLine('    Result := ' + FirstMember + ';');
-        BodySb.AppendLine('  end;');
       end;
       BodySb.AppendLine('end;');
       BodySb.AppendLine('');

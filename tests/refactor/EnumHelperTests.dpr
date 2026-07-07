@@ -167,7 +167,12 @@ begin
   Check('gen-subset: NeedsTypInfo = False (no ToString/FromString requested)', not Gen.NeedsTypInfo);
 end;
 
-{ Step 5b: tsmCase -- ToString/FromString use member-literal case, no RTTI. }
+{ Step 5b: tsmCase -- ToString uses a member-literal `case Self of` (Self is
+  the enum, an ordinal type -- valid); FromString uses an if/else-if chain
+  over string comparisons (AValue is a string -- Object Pascal `case`
+  requires an ordinal selector, so a case statement here would not compile;
+  caught by the Task 6 negative_ordinal round-trip-build acceptance gate,
+  which actually dcc64-compiles this path). No RTTI either way. }
 procedure TestGenerateCaseToString;
 var
   R  : TEnumHelperResolve;
@@ -181,8 +186,10 @@ begin
     Pos('clRed: Result := ''clRed'';', Gen.BodiesText) > 0);
   Check('gen-case: ToString arm clBlue literal',
     Pos('clBlue: Result := ''clBlue'';', Gen.BodiesText) > 0);
-  Check('gen-case: FromString arm clRed literal',
-    Pos('''clRed'': Result := clRed;', Gen.BodiesText) > 0);
+  Check('gen-case: FromString if-chain arm clRed literal',
+    Pos('if AValue = ''clRed'' then Result := clRed', Gen.BodiesText) > 0);
+  Check('gen-case: FromString has no case-on-string (would not compile)',
+    Pos('case AValue of', Gen.BodiesText) = 0);
   Check('gen-case: no RTTI GetEnumName', Pos('GetEnumName', Gen.BodiesText) = 0);
   Check('gen-case: no RTTI GetEnumValue', Pos('GetEnumValue', Gen.BodiesText) = 0);
   Check('gen-case: NeedsTypInfo = False', not Gen.NeedsTypInfo);

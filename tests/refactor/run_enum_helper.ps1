@@ -165,5 +165,201 @@ $hoNone = & $exe helpers-of TColor --db $dbSimple --json 2>$null | ConvertFrom-J
 Assert "helpers-of json: no edges for TColor in simple db" (($null -eq $hoNone) -or ($hoNone.Count -eq 0))
 Assert "helpers-of: exit 0 even with zero edges" ($LASTEXITCODE -eq 0)
 
+# =====================================================================
+# Task 6: full 10-case spec suite (cases 2,3,5,7,9,10) + the build/
+# round-trip acceptance gate (case 8) + the mandatory has_impl_uses
+# fixture (Task 4 review gap). Each case gets its own temp source dir +
+# temp DB so counts/state never cross-contaminate (Task 2 lesson).
+# =====================================================================
+
+# ----- case 2: explicit_ordinals.pas -- TSpec=(sp_Undefined=0, sp_Double=1, sp_Upper=2) -----
+# FromByte case maps Ord(sp_Double)->sp_Double; else = first member (sp_Undefined); ToInteger=Ord.
+$dbOrdinals = Join-Path $WorkDir "explicit_ordinals.sqlite"
+& $exe index (Join-Path $dir "explicit_ordinals.pas") --db $dbOrdinals 2>&1 | Out-Null
+$ordinalsDry = (& $exe create-enum-helper --qname TSpec --db $dbOrdinals 2>$null) -join "`n"
+Assert "case2 explicit_ordinals: FromByte maps Ord(sp_Double) -> sp_Double" `
+    ($ordinalsDry -match 'Ord\(sp_Double\):\s*Result\s*:=\s*sp_Double;')
+Assert "case2 explicit_ordinals: else = first member (sp_Undefined)" `
+    ($ordinalsDry -match "(?s)case AValue of.*else\s*\r?\n\s*Result := sp_Undefined;")
+Assert "case2 explicit_ordinals: ToInteger returns Ord(Self)" `
+    ($ordinalsDry -match '(?s)function TSpecHelper\.ToInteger: Integer;.*Result := Ord\(Self\);')
+
+# ----- case 3: NegativeOrdinal.pas -- TTEST=(Elem1=-2, Elem2=0, Elem3) -----
+# One-Byte-template rule: FromByte/FromInteger is a plain `case` with ONE arm
+# per real member (Elem1 included -- it is a real named member like any
+# other; the template never special-cases negative/gapped ordinals), NO
+# ShortInt variant text, no source-ordinal read.
+# Compile-gate note: Delphi only emits automatic enum RTTI when the ordinals
+# are the sequential-from-0 default; TTEST's explicit, non-sequential,
+# negative-starting ordinals genuinely DISABLE default RTTI (verified via an
+# isolated probe: E2134 "has no type info" on GetEnumName/TypeInfo for this
+# exact shape, reproduced even with plain positive non-sequential ordinals --
+# it is the explicit-assignment-breaks-the-0-based-default rule, not
+# negativity specifically). So the round-trip COMPILE assertion below uses
+# --tostring case (the generator's own documented non-RTTI escape hatch) --
+# this is what a real caller must choose for such an enum; the point of this
+# case is the Byte/case-idiom collapse, not RTTI on a non-RTTI-able enum.
+$dbNeg = Join-Path $WorkDir "negative_ordinal.sqlite"
+$negSrcDir = Join-Path $WorkDir "negative_ordinal_src"
+New-Item -ItemType Directory $negSrcDir | Out-Null
+Copy-Item (Join-Path $dir "NegativeOrdinal.pas") $negSrcDir
+$negPas = Join-Path $negSrcDir "NegativeOrdinal.pas"
+& $exe index $negSrcDir --db $dbNeg 2>&1 | Out-Null
+$negDry = (& $exe create-enum-helper --qname TTEST --db $dbNeg 2>$null) -join "`n"
+Assert "case3 negative_ordinal: case has arm for Elem1 (real member, incl. negative ordinal)" `
+    ($negDry -match 'Ord\(Elem1\):\s*Result\s*:=\s*Elem1;')
+Assert "case3 negative_ordinal: case over real members (Elem2)" ($negDry -match 'Ord\(Elem2\):\s*Result\s*:=\s*Elem2;')
+Assert "case3 negative_ordinal: case over real members (Elem3)" ($negDry -match 'Ord\(Elem3\):\s*Result\s*:=\s*Elem3;')
+Assert "case3 negative_ordinal: else = first member (Elem1)" `
+    ($negDry -match "(?s)case AValue of.*else\s*\r?\n\s*Result := Elem1;")
+Assert "case3 negative_ordinal: no ShortInt variant text" (-not ($negDry -match 'ShortInt'))
+& $exe create-enum-helper --qname TTEST --db $dbNeg --apply --no-backup --tostring case 2>$null | Out-Null
+Assert "case3 negative_ordinal: applied result (--tostring case) compiles (dcc64)" (Test-Compiles $negPas)
+$negApplied = Get-Content $negPas -Raw
+Assert "case3 negative_ordinal: applied text has no ShortInt variant" (-not ($negApplied -match 'ShortInt'))
+# Scope the "no source-ordinal read" check to the GENERATED helper block only
+# (from '{ TTESTHelper }' onward) -- the enum's own decl line (untouched
+# user source, line 4) legitimately still reads 'Elem1 = -2'; the point is
+# that the GENERATOR never echoes/reads that literal into its own output.
+$negHelperBlock = $negApplied.Substring($negApplied.IndexOf('{ TTESTHelper }'))
+Assert "case3 negative_ordinal: generated helper block has no source-ordinal literal (-2)" `
+    (-not ($negHelperBlock -match '-2'))
+
+# ----- case 5: doc_interleaved.pas -- {$REGION}/{$ENDREGION} + /// doc lines between members -----
+# Generated helper members must equal the REAL enum members (noise skipped
+# via the v0.92 preprocessor); no stRegion/stEndregion-style bogus members.
+$dbDoc = Join-Path $WorkDir "doc_interleaved.sqlite"
+& $exe index (Join-Path $dir "doc_interleaved.pas") --db $dbDoc 2>&1 | Out-Null
+$docJson = & $exe create-enum-helper --qname TStage --db $dbDoc --json 2>$null | ConvertFrom-Json
+Assert "case5 doc_interleaved: action=built" ($docJson.action -eq 'built')
+$docDry = (& $exe create-enum-helper --qname TStage --db $dbDoc 2>$null) -join "`n"
+Assert "case5 doc_interleaved: FromByte has stPending arm" ($docDry -match 'Ord\(stPending\):\s*Result\s*:=\s*stPending;')
+Assert "case5 doc_interleaved: FromByte has stRunning arm" ($docDry -match 'Ord\(stRunning\):\s*Result\s*:=\s*stRunning;')
+Assert "case5 doc_interleaved: FromByte has stDone arm"    ($docDry -match 'Ord\(stDone\):\s*Result\s*:=\s*stDone;')
+Assert "case5 doc_interleaved: exactly 3 real members (no noise members; FromByte+FromInteger = 6 arms)" `
+    (([regex]::Matches($docDry, 'Ord\(st\w+\):')).Count -eq 6)
+
+# ----- case 7: descriptions_reuse.pas -- enum + <Enum>Descriptions array -----
+# A ToDescription method is generated reusing the const array.
+$dbDesc = Join-Path $WorkDir "descriptions_reuse.sqlite"
+& $exe index (Join-Path $dir "descriptions_reuse.pas") --db $dbDesc 2>&1 | Out-Null
+$descDry = (& $exe create-enum-helper --qname TSignalColor --db $dbDesc 2>$null) -join "`n"
+Assert "case7 descriptions_reuse: ToDescription declared"        ($descDry -match 'function ToDescription: string;')
+Assert "case7 descriptions_reuse: body indexes TSignalColorDescriptions" `
+    ($descDry -match 'Result := TSignalColorDescriptions\[Self\];')
+
+# ----- case 9: placement -- decl immediately after enum decl; bodies in impl -----
+# (interface_only.pas already exists from Task 4 -- assert placement here too.)
+# Copied to a filename matching its `unit InterfaceOnly;` clause (dcc64
+# requires filename == unit identifier to compile standalone -- E1038
+# otherwise; the repo fixture keeps its Task-4 snake_case filename since it
+# is only ever indexed there, never compiled).
+$dbPlace = Join-Path $WorkDir "placement_interface_only.sqlite"
+$placeSrcDir = Join-Path $WorkDir "placement_interface_only_src"
+New-Item -ItemType Directory $placeSrcDir | Out-Null
+Copy-Item (Join-Path $dir "interface_only.pas") (Join-Path $placeSrcDir "InterfaceOnly.pas")
+$placePas = Join-Path $placeSrcDir "InterfaceOnly.pas"
+& $exe index $placeSrcDir --db $dbPlace 2>&1 | Out-Null
+& $exe create-enum-helper --qname TSignal --db $dbPlace --apply --no-backup 2>$null | Out-Null
+$placedSrc = Get-Content $placePas -Raw
+Assert "case9 placement: decl inserted immediately after enum decl (same type section)" `
+    ($placedSrc -match '(?s)TSignal = \(sgRed, sgYellow, sgGreen\);\s*\r?\n\s*\r?\n\s*TSignalHelper = record helper for TSignal')
+Assert "case9 placement: bodies land right after 'implementation' (populates empty impl)" `
+    ($placedSrc -match '(?s)implementation\s*\r?\n\s*\r?\n\s*uses System\.TypInfo;\s*\r?\n\s*\r?\n\s*\{ TSignalHelper \}')
+Assert "case9 placement: applied result compiles (dcc64)" (Test-Compiles $placePas)
+
+# ----- case 10: CLI/IDE parity -- Build called twice with identical args -> identical edits -----
+# The CLI verb and the IDE menu both call TEnumHelperRefactoring.Build only
+# (design Section 4); running the CLI verb twice against an unmodified DB
+# (dry-run, no --apply) is the cheapest proof both callers get the SAME text.
+$dbParity = Join-Path $WorkDir "parity.sqlite"
+& $exe index (Join-Path $dir "simple.pas") --db $dbParity 2>&1 | Out-Null
+$parity1 = (& $exe create-enum-helper --qname TColor --db $dbParity 2>$null) -join "`n"
+$parity2 = (& $exe create-enum-helper --qname TColor --db $dbParity 2>$null) -join "`n"
+Assert "case10 parity: repeated Build calls produce identical dry-run text" ($parity1 -ceq $parity2)
+$parityJson1 = & $exe create-enum-helper --qname TColor --db $dbParity --json 2>$null
+$parityJson2 = & $exe create-enum-helper --qname TColor --db $dbParity --json 2>$null
+Assert "case10 parity: repeated Build calls produce identical json" ($parityJson1 -ceq $parityJson2)
+
+# =====================================================================
+# Case 8 -- THE ACCEPTANCE GATE: apply the helper to a temp copy of
+# simple.pas, dcc64-compile a console program that USES it and asserts
+# round-trips, and RUN the resulting exe -- exit 0 required. Text-matching
+# alone (as above) is not sufficient; this is the real gate per the spec.
+# =====================================================================
+$gateDir = Join-Path $WorkDir "gate_simple"
+New-Item -ItemType Directory $gateDir | Out-Null
+Copy-Item (Join-Path $dir "simple.pas") $gateDir
+Copy-Item (Join-Path $dir "RoundTripSimple.dpr") $gateDir
+$gatePas = Join-Path $gateDir "simple.pas"
+$dbGate  = Join-Path $WorkDir "gate_simple.sqlite"
+& $exe index $gatePas --db $dbGate 2>&1 | Out-Null
+& $exe create-enum-helper --qname TColor --db $dbGate --apply --no-backup 2>$null | Out-Null
+Assert "case8 gate: create-enum-helper apply exit 0" ($LASTEXITCODE -eq 0)
+Assert "case8 gate: applied simple.pas compiles standalone (dcc64)" (Test-Compiles $gatePas)
+
+$rsPath = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
+$gateBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$gateDir`" && dcc64 -B `"RoundTripSimple.dpr`"" 2>&1
+$gateBuildErr = $gateBuildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
+if ($gateBuildErr) {
+    Write-Host "FAIL  case8 gate: RoundTripSimple.dpr compiles" -ForegroundColor Red
+    $gateBuildErr | Select-Object -First 12
+    $script:fail++
+} else {
+    Write-Host "PASS  case8 gate: RoundTripSimple.dpr compiles"
+}
+$gateExePath = Join-Path $gateDir "RoundTripSimple.exe"
+if (Test-Path $gateExePath) {
+    $gateRunOut = & $gateExePath 2>&1
+    Write-Host ($gateRunOut -join "`n")
+    Assert "case8 gate: round-trip asserter exits 0 (ALL asserts passed)" ($LASTEXITCODE -eq 0)
+} else {
+    Assert "case8 gate: RoundTripSimple.exe was produced" $false
+}
+
+# =====================================================================
+# Mandatory Task-6 addition (Task 4 review gap): HasImplUses.pas has a
+# PRE-EXISTING implementation 'uses System.SysUtils;' clause. Applying the
+# RTTI helper (needs System.TypInfo) must merge into that existing uses
+# clause (not add a second/duplicate uses clause), place bodies AFTER it
+# (no E2029), compile, and round-trip -- proven by actually compiling +
+# running the companion asserter program, not just text-matching.
+# Filename matches the `unit HasImplUses;` clause (dcc64 requires this to
+# compile standalone -- E1038 otherwise).
+# =====================================================================
+$implUsesDir = Join-Path $WorkDir "gate_has_impl_uses"
+New-Item -ItemType Directory $implUsesDir | Out-Null
+Copy-Item (Join-Path $dir "HasImplUses.pas") $implUsesDir
+Copy-Item (Join-Path $dir "RoundTripImplUses.dpr") $implUsesDir
+$implUsesPas = Join-Path $implUsesDir "HasImplUses.pas"
+$dbImplUses  = Join-Path $WorkDir "gate_has_impl_uses.sqlite"
+& $exe index $implUsesPas --db $dbImplUses 2>&1 | Out-Null
+& $exe create-enum-helper --qname TShade --db $dbImplUses --apply --no-backup 2>$null | Out-Null
+Assert "has_impl_uses gate: create-enum-helper apply exit 0" ($LASTEXITCODE -eq 0)
+$implUsesApplied = Get-Content $implUsesPas -Raw
+Assert "has_impl_uses gate: System.TypInfo merged into the EXISTING uses clause" `
+    ($implUsesApplied -match 'uses\s*\r?\n\s*System\.SysUtils\s*,\s*System\.TypInfo;')
+Assert "has_impl_uses gate: exactly ONE implementation uses clause (no duplicate)" `
+    (([regex]::Matches($implUsesApplied, '(?m)^uses\s*$')).Count -eq 1)
+Assert "has_impl_uses gate: applied unit compiles standalone (dcc64)" (Test-Compiles $implUsesPas)
+
+$implUsesBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$implUsesDir`" && dcc64 -B `"RoundTripImplUses.dpr`"" 2>&1
+$implUsesBuildErr = $implUsesBuildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
+if ($implUsesBuildErr) {
+    Write-Host "FAIL  has_impl_uses gate: RoundTripImplUses.dpr compiles (no E2029)" -ForegroundColor Red
+    $implUsesBuildErr | Select-Object -First 12
+    $script:fail++
+} else {
+    Write-Host "PASS  has_impl_uses gate: RoundTripImplUses.dpr compiles (no E2029)"
+}
+$implUsesExePath = Join-Path $implUsesDir "RoundTripImplUses.exe"
+if (Test-Path $implUsesExePath) {
+    $implUsesRunOut = & $implUsesExePath 2>&1
+    Write-Host ($implUsesRunOut -join "`n")
+    Assert "has_impl_uses gate: round-trip asserter exits 0 (ALL asserts passed)" ($LASTEXITCODE -eq 0)
+} else {
+    Assert "has_impl_uses gate: RoundTripImplUses.exe was produced" $false
+}
+
 Write-Host ""
 if ($fail -gt 0) { Write-Host "enum-helper CLI: $fail FAIL"; exit 1 } else { Write-Host "enum-helper CLI: all pass"; exit 0 }
