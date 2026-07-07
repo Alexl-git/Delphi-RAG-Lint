@@ -37,6 +37,7 @@ uses
   DRagLint.LSP.Completion in '..\lsp\DRagLint.LSP.Completion.pas',
   DRagLint.Hover.Renderer in 'DRagLint.Hover.Renderer.pas',
   DRagLint.Hover.Contrast in '..\core\DRagLint.Hover.Contrast.pas',
+  DRagLint.Hover.Returns in 'DRagLint.Hover.Returns.pas',
   DRagLint.Context.Bundler in '..\context\DRagLint.Context.Bundler.pas',
   DRagLint.Resolver.TypeAt in '..\resolver\DRagLint.Resolver.TypeAt.pas',
   DRagLint.Refactor.Rename in '..\refactor\DRagLint.Refactor.Rename.pas',

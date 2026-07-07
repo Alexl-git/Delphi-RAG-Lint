@@ -135,6 +135,7 @@
         <DCCReference Include="..\lsp\DRagLint.LSP.Completion.pas"/>
         <DCCReference Include="DRagLint.Hover.Renderer.pas"/>
         <DCCReference Include="..\core\DRagLint.Hover.Contrast.pas"/>
+        <DCCReference Include="DRagLint.Hover.Returns.pas"/>
         <DCCReference Include="..\context\DRagLint.Context.Bundler.pas"/>
         <DCCReference Include="..\resolver\DRagLint.Resolver.TypeAt.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.Rename.pas"/>
