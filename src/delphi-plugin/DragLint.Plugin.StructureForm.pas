@@ -95,6 +95,8 @@ type
       FItemFixUnit    : TMenuItem   ; { 'Fix all in unit' -- Diagnostics root }
       FItemFixProject : TMenuItem   ; { 'Fix all in project' -- Diagnostics root }
       FItemDocIt      : TMenuItem   ; { v0.90 AutoDocument: 'Document it' -- symbol node with a qname }
+      FItemDocUnit    : TMenuItem   ; { ADF T10 AutoDocument: 'Document unit' -- any node, active editor file }
+      FItemDocProject : TMenuItem   ; { ADF T10 AutoDocument: 'Document project' -- any node, active .dproj }
       FRootDiag       : TTreeNode   ; { the current 'Diagnostics (N)' root, for node discrimination }
       FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
       procedure BtnRefreshClick(Sender: TObject);
@@ -127,6 +129,11 @@ type
       { v0.90 AutoDocument: 'Document it' handler + its enablement predicate. }
       function  NodeIsDocumentable     (ANode: TTreeNode): Boolean;
       procedure DocumentItClick        (Sender: TObject);
+      { ADF T10 AutoDocument: 'Document unit' / 'Document project' -- act on the
+        active editor file / active .dproj regardless of which node is clicked. }
+      function  GetActiveProjectFilePath: string;
+      procedure DocumentUnitClick      (Sender: TObject);
+      procedure DocumentProjectClick   (Sender: TObject);
     public
       constructor Create(AOwner: TComponent); override;
       procedure RefreshActive; { v0.42: re-read the active editor file }
@@ -335,6 +342,14 @@ begin
     so it is grouped with the symbol nav items. Enablement is set per-popup. }
   AddPopupItem(FPopup, '&Document it'                , DocumentItClick        );
   FItemDocIt:= FPopup.Items[FPopup.Items.Count - 1];
+  { ADF T10 AutoDocument: whole-file / whole-project batch. Unlike 'Document it'
+    these do not need a symbol node -- they act on the active editor file / the
+    active .dproj regardless of what is clicked, so enablement is "always on"
+    (guarded only by having an active file/project at all; see PopupPopup). }
+  AddPopupItem(FPopup, 'Document &unit'              , DocumentUnitClick      );
+  FItemDocUnit:= FPopup.Items[FPopup.Items.Count - 1];
+  AddPopupItem(FPopup, 'Document &project'           , DocumentProjectClick   );
+  FItemDocProject:= FPopup.Items[FPopup.Items.Count - 1];
   AddPopupItem(FPopup, '-'                           , nil                    ); { separator }
   AddPopupItem(FPopup, '&Copy All Diagnostics'       , CopyDiagnosticsClick  );
   { v0.88 AutoFix: run the CLI fix verbs on the clicked node. Enablement is set
@@ -839,6 +854,10 @@ begin
   FItemFixUnit   .Enabled:= IsRoot   ;
   FItemFixProject.Enabled:= IsRoot   ;
   FItemDocIt     .Enabled:= NodeIsDocumentable(Node); { v0.90 AutoDocument: symbol node with a qname }
+  { ADF T10: file-/project-scoped batch actions are node-independent -- only
+    gated on there being an active file / active project to run against. }
+  FItemDocUnit   .Enabled:= FCurrentFile <> '';
+  FItemDocProject.Enabled:= GetActiveProjectFilePath <> '';
 end;
 
 { 'Fix it' -- apply the single fixable finding under the cursor:
@@ -913,6 +932,104 @@ begin
     else DLT('autodoc', 'Document it non-zero exit; output: ' + Copy(Output, 1, 400));
   except
     on E: Exception do DLT('autodoc', 'DocumentItClick failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end; // procedure
+
+{ ---- ADF T10 AutoDocument: right-click Document unit / Document project ---- }
+
+{ Returns the absolute path of the .dproj owning the currently-active project,
+  or '' if none is open. Local ToolsAPI-only helper (mirrors the identically
+  shaped resolvers in DragLint.Plugin.Editor / DbResolver / LintOptionsFrame --
+  each of those keeps its own copy rather than exporting one, since the walk is
+  three ToolsAPI calls and self-contained try/except is cheap to duplicate). }
+function TDragLintStructureForm.GetActiveProjectFilePath: string;
+var
+  MS        : IOTAModuleServices;
+  ProjGroup : IOTAProjectGroup  ;
+  ActiveProj: IOTAProject       ;
+begin
+  Result:= '';
+  try
+    if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
+    if MS = nil then Exit;
+    ProjGroup:= MS.MainProjectGroup;
+    if ProjGroup = nil then Exit;
+    ActiveProj:= ProjGroup.ActiveProject;
+    if ActiveProj = nil then Exit;
+    Result:= ActiveProj.FileName;
+  except
+    Result:= '';
+  end;
+end;
+
+{ 'Document unit' -- generate/repair DocInsight comments for every public decl
+  in the ACTIVE EDITOR FILE (not just the one clicked node) via the CLI:
+    drag-lint document --unit <FCurrentFile> --db <projDb> --apply
+  Same --db reasoning as 'Document it' (document --unit still resolves through
+  the index, so it needs --db, not just the file path). --apply writes the
+  source file (+ .bak) directly; on exit 0 reload the buffer so the new
+  comments appear and the Diagnostics/Code Elements tree refreshes. }
+procedure TDragLintStructureForm.DocumentUnitClick(Sender: TObject);
+var
+  Cmd    : string ;
+  Output : string ;
+  Db     : string ;
+  ExitVal: Integer;
+begin
+  try
+    if FCurrentFile = '' then Exit;
+    Db:= ResolveDbForFile; { same DB resolver Find Usages / Fix-all / Document it use }
+    if Db = '' then
+    begin
+      DLT('autodoc', 'Document unit: no index DB for ' + FCurrentFile);
+      Exit;
+    end;
+    Cmd:= Format('"%s" document --unit "%s" --db "%s" --apply', [ResolveExePath, FCurrentFile, Db]);
+    ExitVal:= RunAndCaptureStdout(Cmd, Output, 120000);
+    DLT('autodoc', Format('Document unit %s -> exit=%d', [ExtractFileName(FCurrentFile), ExitVal]));
+    if ExitVal = 0 then ReloadCurrentFileBuffer
+    else DLT('autodoc', 'Document unit non-zero exit; output: ' + Copy(Output, 1, 400));
+  except
+    on E: Exception do DLT('autodoc', 'DocumentUnitClick failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end; // procedure
+
+{ 'Document project' -- generate/repair DocInsight comments for every public
+  decl across the ACTIVE PROJECT's compile closure via the CLI:
+    drag-lint document --project <activeDproj> --db <projDb> --apply
+  The project path comes from GetActiveProjectFilePath (the true active .dproj,
+  NOT ResolveDbForFile's file-owning-project walk); the --db is still the same
+  shared resolver every other spawn site uses. Only the CURRENT file's buffer is
+  reloaded (mirrors 'Fix all in project' -- other open files stay stale in their
+  editor buffers until reopened; documented in the smoke notes). }
+procedure TDragLintStructureForm.DocumentProjectClick(Sender: TObject);
+var
+  ProjFile: string ;
+  Db      : string ;
+  Cmd     : string ;
+  Output  : string ;
+  ExitVal : Integer;
+begin
+  try
+    ProjFile:= GetActiveProjectFilePath;
+    if ProjFile = '' then
+    begin
+      DLT('autodoc', 'Document project: no active project');
+      Exit;
+    end;
+    Db:= ResolveDbForFile;
+    if Db = '' then
+    begin
+      DLT('autodoc', 'Document project: no index DB for ' + ProjFile);
+      Exit;
+    end;
+    Cmd:= Format('"%s" document --project "%s" --db "%s" --apply', [ResolveExePath, ProjFile, Db]);
+    ExitVal:= RunAndCaptureStdout(Cmd, Output, 600000);
+    DLT('autodoc', Format('Document project %s -> exit=%d', [ExtractFileName(ProjFile), ExitVal]));
+    if ExitVal = 0 then ReloadCurrentFileBuffer
+    else DLT('autodoc', 'Document project non-zero exit; output: ' + Copy(Output, 1, 400));
+  except
+    on E: Exception do DLT('autodoc', 'DocumentProjectClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
 end; // procedure
 
