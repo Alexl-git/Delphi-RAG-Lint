@@ -248,6 +248,13 @@ begin
   end;
 end;
 
+/// <summary>How many caller rows to display: all when total <= 15, else 10.</summary>
+/// <returns>Row count to render; caller adds a "NN more" trailer when it is < total.</returns>
+function DisplayedCallerCount(ATotal: Integer): Integer;
+begin
+  if ATotal <= 15 then Result:= ATotal else Result:= 10;
+end;
+
 { ---- IDE theme follow (v0.46) ---- }
 
 var
@@ -946,6 +953,8 @@ var
   Ln          : string   ;
   MaxLen      : Integer  ;
   CleanSummary: string   ;
+  ShownCount  : Integer  ;
+  HasTrailer  : Boolean  ;
 begin
   FStructured   := False; { legacy string path -> definition-row click parsing }
   FAnchorDismiss:= AAnchorDismiss;
@@ -982,11 +991,24 @@ begin
   end
   else Caption:= 'drag-lint hover';
 
+  { v0.94 Task 7: cap the displayed rows at 15/10 (DisplayedCallerCount) so a
+    routine with hundreds of callers doesn't blow out the popup -- the upstream
+    Editor already hard-caps the fetch at 200. When capped, a final trailer row
+    ("... and NN more") is appended with EMPTY SubItems so HandleCallerDblClick's
+    existing `SubItems.Count = 0` guard skips navigation on it, and it is
+    deliberately NOT added to FCallerPaths (index alignment would otherwise be
+    wrong for it anyway, since it has no source file). The column header carries
+    the TOTAL count ("Called from (N)") since Task 6 removed the standalone
+    header label as redundant noise. }
+  ShownCount:= DisplayedCallerCount(Length(ACallers));
+  HasTrailer:= ShownCount < Length(ACallers);
+  if Length(ACallers) > 0 then FCallers.Columns[0].Caption:= 'Unit -- Called from (' + IntToStr(Length(ACallers)) + ')'
+  else FCallers.Columns[0].Caption:= 'Unit';
   FCallerPaths.Clear;
   FCallers.Items.BeginUpdate;
   try
     FCallers.Items.Clear;
-    for I:= 0 to High(ACallers) do
+    for I:= 0 to ShownCount - 1 do
     begin
       LI:= FCallers.Items.Add;
       ShortName:= ExtractFileName(ACallers[I].FilePath);
@@ -995,12 +1017,21 @@ begin
       LI.SubItems.Add(ACallers[I].CodeText);
       FCallerPaths.Add(ACallers[I].FilePath);
     end;
+    if HasTrailer then
+    begin
+      LI:= FCallers.Items.Add;
+      LI.Caption:= '... and ' + IntToStr(Length(ACallers) - ShownCount) + ' more';
+      { SubItems left empty: HandleCallerDblClick exits on SubItems.Count = 0,
+        and the row is not in FCallerPaths -- so it can never navigate. }
+    end;
   finally
     FCallers.Items.EndUpdate;
   end;
 
   { Sizing: header 22 + summary lines * 16 + callers (header + rows * 18).
-    v0.46: size to the CLEANED text (fewer blank lines after the trim). }
+    v0.46: size to the CLEANED text (fewer blank lines after the trim).
+    v0.94 Task 7: size to the DISPLAYED row count (capped) + trailer, not the
+    full untruncated count, so a huge caller list doesn't oversize the popup. }
   HeaderH:= 22;
   SummaryH:= 16 * (1 + Length(CleanSummary.Split([#10]))); { rough }
   if SummaryH < 60 then SummaryH:= 60;
@@ -1013,7 +1044,7 @@ begin
   else
   begin
     FCallers.Visible:= True;
-    CallersH:= 28 + Length(ACallers) * 18;
+    CallersH:= 28 + (ShownCount + IfThen(HasTrailer, 1, 0)) * 18;
     if CallersH < 60 then CallersH:= 60;
     if CallersH > 200 then CallersH:= 200;
     FCallers.Height:= CallersH;
@@ -1097,6 +1128,8 @@ var
   BodyH   : Integer  ;
   BodyLines: Integer ;
   ShortName: string  ;
+  ShownCount: Integer;
+  HasTrailer: Boolean;
 begin
   FAnchorDismiss:= AAnchorDismiss;
   if AAnchorX >= 0 then FDwellAnchor:= Point(AAnchorX, AAnchorY)
@@ -1111,11 +1144,17 @@ begin
   if AModel.QualifiedName <> '' then Caption:= 'drag-lint -- ' + AModel.QualifiedName
   else Caption:= 'drag-lint hover';
 
+  { v0.94 Task 7: same 15/10 display cap + "... and NN more" trailer + column-
+    header count as the string ShowAt overload (see the comment there). }
+  ShownCount:= DisplayedCallerCount(Length(ACallers));
+  HasTrailer:= ShownCount < Length(ACallers);
+  if Length(ACallers) > 0 then FCallers.Columns[0].Caption:= 'Unit -- Called from (' + IntToStr(Length(ACallers)) + ')'
+  else FCallers.Columns[0].Caption:= 'Unit';
   FCallerPaths.Clear;
   FCallers.Items.BeginUpdate;
   try
     FCallers.Items.Clear;
-    for I:= 0 to High(ACallers) do
+    for I:= 0 to ShownCount - 1 do
     begin
       LI:= FCallers.Items.Add;
       ShortName:= ExtractFileName(ACallers[I].FilePath);
@@ -1124,13 +1163,21 @@ begin
       LI.SubItems.Add(ACallers[I].CodeText);
       FCallerPaths.Add(ACallers[I].FilePath);
     end;
+    if HasTrailer then
+    begin
+      LI:= FCallers.Items.Add;
+      LI.Caption:= '... and ' + IntToStr(Length(ACallers) - ShownCount) + ' more';
+      { empty SubItems -- HandleCallerDblClick guards on SubItems.Count = 0, and
+        this row is never added to FCallerPaths, so it can't navigate. }
+    end;
   finally
     FCallers.Items.EndUpdate;
   end;
 
   { Sizing: body sized to its actual rendered line count (header + params +
     returns), callers grid same rule as the string path. Structured hovers keep
-    the full width so long signatures + the callers grid fit. }
+    the full width so long signatures + the callers grid fit.
+    v0.94 Task 7: callers height uses the DISPLAYED (capped) count + trailer. }
   BodyLines:= FBody.Lines.Count;
   if BodyLines < 3 then BodyLines:= 3;
   BodyH:= 22 + BodyLines * 16;
@@ -1145,7 +1192,7 @@ begin
   else
   begin
     FCallers.Visible:= True;
-    CallersH:= 28 + Length(ACallers) * 18;
+    CallersH:= 28 + (ShownCount + IfThen(HasTrailer, 1, 0)) * 18;
     if CallersH < 60  then CallersH:= 60;
     if CallersH > 200 then CallersH:= 200;
     FCallers.Height:= CallersH;
