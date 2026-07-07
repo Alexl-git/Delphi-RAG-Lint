@@ -292,6 +292,12 @@ type
     // index verbs (per-config {$IFDEF} resolution before parsing); --no-preprocess
     // reverts to the prior raw all-branch behaviour.
     NoPreprocess : Boolean    ; // --no-preprocess  disable the in-process directive preprocessor for this index run
+    // Task 5: create-enum-helper CLI verb (--qname reuses QName; --db/--apply/
+    // --no-backup/--json already shared). EnumMethodsStr is the raw --methods
+    // CSV ('' = default all 6, parsed by DoCreateEnumHelper); EnumToString is
+    // the raw --tostring value ('' -> tsmRtti default, else 'rtti'|'case').
+    EnumMethodsStr: string; // --methods tobyte,frombyte,...
+    EnumToString  : string; // --tostring rtti|case
   end; // record
 
 procedure PrintHelp;
@@ -353,6 +359,10 @@ begin
   Writeln('     add --seealso to any document mode to emit <seealso cref> links to related symbols (callees + siblings)');
   Writeln('     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent');
   Writeln('     @deprecated is auto-detected from the Pascal ''deprecated'' directive on the decl -- no flag needed');
+  Writeln('  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH]  - generate a Byte-family record helper for an enum');
+  Writeln('     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)');
+  Writeln('     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit');
+  Writeln('  drag-lint helpers-of <T> [--json] --db <db>   - list record/class helper edges targeting type T anywhere in the index');
   Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
   Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
   Writeln('  drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
@@ -694,6 +704,11 @@ begin
     // AutoDocument (ADF T5): --since opts in the git <since> doc-source; --base-dir
     // sets the repo root for the git lookup (defaults to the file's own dir).
     else if A = '--since' then Result.DocSince:= True
+    // Task 5: create-enum-helper --methods <csv> / --tostring rtti|case.
+    // Kept as raw strings here; DoCreateEnumHelper parses/validates them (usage
+    // errors need access to Writeln/Exit, which the arg parser does not use).
+    else if (A = '--methods') and (i < ParamCount) then begin Inc(i); Result.EnumMethodsStr:= ParamStr(i); end
+    else if (A = '--tostring') and (i < ParamCount) then begin Inc(i); Result.EnumToString:= ParamStr(i); end
     else if (A = '--base-dir') and (i < ParamCount) then begin Inc(i); Result.DocBaseDir:= ParamStr(i); end
     else if (A = '--buffer') and (i < ParamCount) then begin Inc(i); Result.GhostBuffer:= ParamStr(i); end
     else if (A = '--overlays') and (i < ParamCount) then begin Inc(i); Result.GhostOverlays:= ParamStr(i); end
@@ -5878,6 +5893,190 @@ begin
   Result:= 0;
 end; // function
 
+// Task 5: parses the --methods <csv> flag into a TEnumHelperMethods set.
+// '' (flag absent) -> all 6 (the documented default). Recognized tokens:
+// tobyte,frombyte,tointeger,frominteger,tostring,fromstring (case-insensitive,
+// comma-separated, blank entries skipped). Returns False (AMethods undefined)
+// on any unrecognized token so the caller can raise a usage error -- this
+// mirrors --disable/--enable's CSV-of-ids convention elsewhere in this file,
+// but those are validated downstream by the rule catalog; enum-helper methods
+// have no catalog to check against, so parsing itself is the validation gate.
+function TryParseEnumMethods(const ACsv: string; out AMethods: TEnumHelperMethods): Boolean;
+const
+  cAllMethods = [ehmToByte, ehmFromByte, ehmToInteger, ehmFromInteger, ehmToString, ehmFromString];
+var
+  Token: string;
+  T    : string;
+begin
+  if Trim(ACsv) = '' then begin AMethods:= cAllMethods; Exit(True); end;
+  AMethods:= [];
+  for Token in ACsv.Split([',']) do
+  begin
+    T:= LowerCase(Trim(Token));
+    if T = '' then Continue
+    else if T = 'tobyte'      then Include(AMethods, ehmToByte)
+    else if T = 'frombyte'    then Include(AMethods, ehmFromByte)
+    else if T = 'tointeger'   then Include(AMethods, ehmToInteger)
+    else if T = 'frominteger' then Include(AMethods, ehmFromInteger)
+    else if T = 'tostring'    then Include(AMethods, ehmToString)
+    else if T = 'fromstring'  then Include(AMethods, ehmFromString)
+    else Exit(False);
+  end;
+  Result:= True;
+end; // function
+
+/// <summary>drag-lint create-enum-helper --qname &lt;TEnum&gt; [--apply|--json|
+/// --no-backup] [--methods &lt;csv&gt;] [--tostring rtti|case] [--db PATH].
+/// Generates a Byte-family record helper for an enum type via
+/// TEnumHelperRefactoring.Build (Resolve+Generate+Place). Dry-run (preview)
+/// unless --apply. Mirrors the `document --qname` verb's shape.</summary>
+/// <param name="AArgs">Consumes QName (--qname), DbPath (--db), Apply,
+/// NoBackup, AsJson, EnumMethodsStr (--methods), EnumToString (--tostring).</param>
+/// <returns>0 when Action=ehaBuilt (preview, --json, or --apply all succeed);
+/// 1 when the enum resolves but Build refuses (ehaExists/ehaNoImplSection) or
+/// AEnumQName does not resolve (ehaNotFound); 2 on a usage/db error.</returns>
+/// <remarks>Idempotent: once the generated helper is indexed, a second
+/// --apply run resolves Action=ehaExists and makes no edit (Build never
+/// overwrites a hand-written or previously-generated helper). Refusal reasons
+/// are written to stderr (and to the JSON 'action'/'file' fields under
+/// --json) so scripts can detect them independently of stdout.</remarks>
+function DoCreateEnumHelper(const AArgs: TArgs): Integer;
+var
+  Store     : ISymbolStore     ;
+  Ok        : Boolean          ;
+  Methods   : TEnumHelperMethods;
+  ToStrMode : TToStringMode    ;
+  Res       : TEnumHelperResult;
+  O         : TJSONObject      ;
+  Applied   : Boolean          ;
+  ActionStr : string           ;
+begin
+  if AArgs.QName = '' then
+  begin
+    Writeln(ErrOutput, 'Usage: drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH]');
+    Exit(2);
+  end;
+  if not TryParseEnumMethods(AArgs.EnumMethodsStr, Methods) then
+  begin
+    Writeln(ErrOutput, Format('ERROR: unrecognized --methods token in "%s" (expected tobyte,frombyte,tointeger,frominteger,tostring,fromstring)', [AArgs.EnumMethodsStr]));
+    Exit(2);
+  end;
+  if SameText(AArgs.EnumToString, 'case') then ToStrMode:= tsmCase
+  else if (AArgs.EnumToString = '') or SameText(AArgs.EnumToString, 'rtti') then ToStrMode:= tsmRtti
+  else begin Writeln(ErrOutput, Format('ERROR: --tostring must be rtti or case, got "%s"', [AArgs.EnumToString])); Exit(2); end;
+
+  if not FileExists(AArgs.DbPath) then begin Writeln(ErrOutput, Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if not Ok then Exit(2);
+
+  Res:= TEnumHelperRefactoring.Build(Store, AArgs.QName, Methods, ToStrMode);
+
+  case Res.Action of
+    ehaBuilt          : ActionStr:= 'built';
+    ehaExists         : ActionStr:= 'exists';
+    ehaNoImplSection  : ActionStr:= 'no_impl_section';
+    ehaNotFound       : ActionStr:= 'not_found';
+    else                ActionStr:= 'unknown';
+  end;
+
+  Applied:= AArgs.Apply and (Res.Action = ehaBuilt) and (Length(Res.Edits) > 0);
+  if Applied then TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
+
+  if AArgs.AsJson then
+  begin
+    O:= TJSONObject.Create;
+    try
+      O.AddPair('qname' , Res.EnumName);
+      O.AddPair('file'  , Res.FilePath);
+      O.AddPair('action', ActionStr   );
+      O.AddPair('edits' , TJSONNumber.Create(Length(Res.Edits)));
+      O.AddPair('applied', TJSONBool.Create(Applied));
+      Writeln(O.ToJson);
+    finally
+      O.Free;
+    end; // try
+    if Res.Action <> ehaBuilt then Exit(1);
+    Exit(0);
+  end; // if
+
+  if Res.Action <> ehaBuilt then
+  begin
+    Writeln(ErrOutput, Format('REFUSED: %s', [Res.Message]));
+    Exit(1);
+  end;
+
+  if not AArgs.Apply then
+  begin
+    Writeln(TTextEditApplier.RenderDryRun(Res.Edits));
+    Writeln(Format('create-enum-helper: %d edit(s) for %s -- pass --apply to write', [Length(Res.Edits), Res.EnumName]));
+  end
+  else
+    Writeln(Format('create-enum-helper: %s helper built, %d edit(s) applied%s',
+      [Res.EnumName, Length(Res.Edits), IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+  Result:= 0;
+end; // function
+
+/// <summary>drag-lint helpers-of &lt;T&gt; [--json] [--db PATH]. Prints every
+/// record/class helper edge targeting type T anywhere in the indexed
+/// codebase, via ISymbolStore.FindHelpersOfType. Read-only; used by the
+/// enum-helper generator's own existing-helper guard (Task 1/2) and by the
+/// IDE menu enablement predicate (Task 8).</summary>
+/// <param name="AArgs">Consumes Name (positional &lt;T&gt; or --name), DbPath
+/// (--db), AsJson.</param>
+/// <returns>0 always (zero edges is a valid, non-error result -- "no helper
+/// exists yet" is exactly what the IDE enablement check wants to see); 2 on a
+/// usage/db error.</returns>
+function DoHelpersOf(const AArgs: TArgs): Integer;
+var
+  Store: ISymbolStore     ;
+  Ok   : Boolean          ;
+  Edges: TArray<THelperEdge>;
+  E    : THelperEdge      ;
+  TargetName: string      ;
+  HelperSym : TSymbol     ;
+  UnitPath  : string      ;
+begin
+  TargetName:= AArgs.Name;
+  if TargetName = '' then TargetName:= AArgs.Path; // positional <T> falls into Path (no --name given)
+  if TargetName = '' then begin Writeln(ErrOutput, 'Usage: drag-lint helpers-of <T> [--json] --db <db>'); Exit(2); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(ErrOutput, Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if not Ok then Exit(2);
+
+  Edges:= Store.FindHelpersOfType(TargetName);
+
+  if AArgs.AsJson then
+  begin
+    var Arr: TJSONArray:= TJSONArray.Create;
+    try
+      for E in Edges do
+      begin
+        HelperSym:= Store.GetSymbolById(E.HelperSymbolId);
+        UnitPath := Store.GetFilePath(HelperSym.FileId);
+        var O: TJSONObject:= TJSONObject.Create;
+        O.AddPair('helper', HelperSym.Name);
+        O.AddPair('target', E.TargetName  );
+        O.AddPair('unit'  , UnitPath       );
+        Arr.AddElement(O);
+      end;
+      Writeln(Arr.ToJson);
+    finally
+      Arr.Free;
+    end; // try
+    Exit(0);
+  end; // if
+
+  if Length(Edges) = 0 then Writeln(Format('helpers-of %s: no helper found', [TargetName]))
+  else
+    for E in Edges do
+    begin
+      HelperSym:= Store.GetSymbolById(E.HelperSymbolId);
+      UnitPath := Store.GetFilePath(HelperSym.FileId);
+      Writeln(Format('%s helper for %s in %s', [HelperSym.Name, E.TargetName, UnitPath]));
+    end;
+  Result:= 0;
+end; // function
+
 // v0.69 D2b: drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>
 // Resolves the unit declaring Symbol and inserts it into InFile's uses clause.
 // Exit 0 on success or already-used; 1 if unresolvable or no edit; 2 on usage error.
@@ -10391,6 +10590,8 @@ begin
     else if Args.Command = 'generate-docs'     then Result:= DoGenerateDocs    (Args)
     else if Args.Command = 'document'          then Result:= DoDocument        (Args)
     else if Args.Command = 'document-all'      then Result:= DoDocumentAll     (Args)
+    else if Args.Command = 'create-enum-helper' then Result:= DoCreateEnumHelper(Args)
+    else if Args.Command = 'helpers-of'         then Result:= DoHelpersOf       (Args)
     else if Args.Command = 'find-unit'         then Result:= DoFindUnit        (Args)
     else if Args.Command = 'safe-delete'       then Result:= DoSafeDelete      (Args)
     else if Args.Command = 'extract-method'    then Result:= DoExtractMethod   (Args)
