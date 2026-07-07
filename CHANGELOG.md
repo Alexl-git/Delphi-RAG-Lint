@@ -5,6 +5,21 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+- **Hover Help-Insight restyle** -- the IDE hover popup renders as a
+  Delphi-Help-Insight-style tooltip instead of a plain-text dump: a one-line
+  clickable signature header (`unit.pas Line N` right-aligned, click -> jump to
+  definition), a colored + selectable `TRichEdit` body using the IDE's own editor
+  font and syntax colors (WCAG-contrast-guarded against unreadable dark-theme
+  pairings, `src/cli/DRagLint.Hover.Contrast.pas`), column-aligned parameters with
+  `const`/`var` modifiers, a mined **Returns** section (distinct `Result :=`/
+  `Exit(...)` RHS expressions from the routine body span, capped at 10,
+  `src/cli/DRagLint.Hover.Returns.pas`), and a **Called from** section matching
+  AutoDoc's caller-facts display (<=15 shown in full, >15 shown as 10 +
+  "...and NN more"). Includes a hardening guard in `DoHover`
+  (`src/cli/DRagLint.CLI.pas`) against an inverted body-line span on a stale
+  index (`ImplStartLine` past EOF), which now yields an empty Returns mine
+  instead of crashing. IDE live smoke is open (user-driven, per convention).
+
 ## v0.94.0-alpha -- 2026-07-07
 
 Enum-Helper Generator: automates the standard enum `record helper`

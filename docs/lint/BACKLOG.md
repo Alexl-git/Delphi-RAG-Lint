@@ -1,5 +1,92 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-07 (LATEST-23) -- **HOVER HELP-INSIGHT RESTYLE IMPLEMENTED (Tasks 1-9, commits `365a471..f8bb756` + this task's hardening fix). OPEN: IDE LIVE SMOKE (user).**
+> Executed as a 9-task sequence (SDD-style, one commit per task). What shipped: the IDE hover popup now renders as a
+> Delphi-Help-Insight-style tooltip instead of a plain-text dump. **(1)** one-line clickable **signature header**
+> (unit.pas + line number right-aligned; click -> jump to definition; line-0 hit test survives a wrapped/long
+> signature). **(2)** body renders in a **TRichEdit**, colored + selectable (Ctrl+C copies), using the **IDE's own
+> editor font** and **real IDE syntax colors** read via the registry (`DragLint.Plugin.RegistryColors.pas`/
+> `DragLint.Plugin.Fonts.pas`), falling back to a built-in palette when the IDE colors aren't available. **(3)**
+> parameters listed one per line with **const/var modifiers**, types **column-aligned**. **(4)** **Returns** section:
+> mines distinct `Result :=` / `Exit(...)` RHS expressions out of the routine's body span (`ImplStartLine..
+> ImplEndLine`) via `src/cli/DRagLint.Hover.Returns.pas` (`MineReturnExpressions`) -- caps at **10 distinct**, shows
+> "and NN more" beyond that; loop-only `ExitLoop(...)` calls are correctly excluded from mining. **(5)** **Called
+> from** section reuses the AutoDoc caller-facts path, same display convention as AutoDoc: **<=15 show all, >15 show
+> 10 + "...and NN more"** trailer (trailer text does not navigate; real rows do). **(6)** **WCAG contrast guard**
+> (`src/cli/DRagLint.Hover.Contrast.pas`, `ContrastRatio`/`EnsureReadable`) -- any colour pairing that would fail a
+> 4.5:1 ratio (e.g. keyword-blue on a very dark theme background) is nudged to a readable variant before painting, so
+> dark-theme readability holds even with a customized editor palette.
+> **THIS TASK (9 of 9) folded in one hardening fix** caught in the Task 4 review: `DoHover` in
+> `src/cli/DRagLint.CLI.pas` mines the Returns section by slicing `AllLines[Lo..Hi]` from `ImplStartLine`/
+> `ImplEndLine` (1-based -> 0-based, `Hi` clamped to `High(AllLines)`); on a badly stale index `ImplStartLine` could
+> sit past EOF making `Lo > Hi`, which fed a negative length into `SetLength(Body, Hi-Lo+1)`. Added a guard: if
+> `Hi < Lo`, `Body` is zero-length (no returns mined, no crash) instead of computing the SetLength/copy. Verified
+> against the full battery (`run_hover_returns`/`run_hover_contrast`/`run_typeat_scope`/`run_smoke`, 4/4 green) and a
+> clean Win64 rebuild (0 dcc errors). Self-index (`tests/draglint_self.sqlite`) reindexed fresh (stale pre-`section`-
+> column schema forced a delete+full-reindex rather than incremental; 132 files / 11,709 symbols / 60,038 refs / 0
+> errors) -- confirms `DRagLint.Hover.Contrast`, `DRagLint.Hover.Returns`, `DragLint.Plugin.Fonts` are all indexed.
+> **OPEN: IDE LIVE SMOKE (user)** -- reopen RAD Studio with the rebuilt BPL and walk
+> `.superpowers/sdd/hover-ide-smoke-checklist.md` (11-point checklist: colored header in IDE font, clickable header,
+> aligned params, mined Returns, Called-from cap, selectable+copyable body, dark-theme contrast, custom-color
+> reflection, wrapped-header navigation, overload first-wins, DB-miss fallback).
+
+> ## RESUME 2026-07-07 (LATEST-22) -- **v0.94.0-alpha SHIPPED (enum-helper). POST-SHIP: HOVER SCOPE BUG FIXED + ORM3 REINDEXED. 4 USER THREADS QUEUED (user picks order).**
+> **Git:** `main` has **2 UNPUSHED local commits** past the v0.94 release: `ba5676d` (hover fix) + `e5039a8`
+> (readonly-verbs test fix). Origin/main is still at the release commit `29ac50e` (v0.94.0-alpha, GH release
+> LIVE + Latest, tag pushed). Working tree clean except IDE `delphilsp.json`/`.dsv` + 1 untracked forms-csv
+> spec doc -- LEAVE THOSE. **Push of ba5676d+e5039a8 awaits user consent** (project rule: push only on request).
+> schema **v15**.
+>
+> **HOVER BUG FIXED (`ba5676d`, reviewed clean 0-Crit/0-Imp).** Hovering a routine's PARAMETER/LOCAL VAR
+> (e.g. `N` in `function Pad0(const N,DIGITS:integer)` at `C:\Projects\DB\ORM3\CLIENT\BASICSF.pas:1346`) resolved
+> to an UNRELATED same-named GLOBAL. Root cause: `TTypeAtResolver.Resolve`
+> (`src/resolver/DRagLint.Resolver.TypeAt.pas`) bare-identifier branch did a FLAT whole-DB name lookup
+> (`FindSymbolByExactNameAnywhere`), no scope filter; `FindContainingSymbol` matches DECL-span not impl-body-span
+> so returned the unit. FIX = new `ISymbolStore.FindEnclosingRoutineByImpl(fileId,line)` (routine whose
+> `impl_start_line..impl_end_line` contains the line; kind IN the SHORT stored strings
+> `'procedure'/'function'/'method'/'constructor'/'destructor'`) + scope-first pre-check: find enclosing routine ->
+> `FindChildSymbolByName` -> use IF `Kind in [skParam,skLocalVar]` ELSE fall through to the unchanged global lookup.
+> Surgical (dotted/member-access branch untouched). LSP hover benefits automatically (filters candidates by
+> `TAResult.Resolved.QualifiedName`). Test `tests/autotest/run_typeat_scope.ps1` (shadow fixture, 7/7). Verified:
+> N + DIGITS -> `BASICSF.Pad0.N`/`.DIGITS` `integer` at signature + body.
+>
+> **ORM3 REINDEXED (fix relies on params being indexed -- the DB predated the v14 skParam/skLocalVar feature).**
+> `drag-lint index --all --only ORM3` -> `C:\Projects\DB\ORM3\drag-lint.sqlite` = 820 files, 64,732 symbols,
+> **13,617 params + 7,049 local_vars**, schema v15, 0 errors, 106s. Hover fix now LIVE tree-wide. (Manifest ORM3
+> section covers `C:\Projects\DB\ORM3` incl `CLIENT/`; `ResolveDbForFile` -> primary manifest DB = this one. The
+> per-project CLIENT `Micronite2027.sqlite` is separate + still stale, but hover uses the manifest DB.)
+>
+> **4 USER THREADS STILL QUEUED (user picks order; #2 is the natural next since hover resolution is now correct):**
+> - **#2 HOVER TOOLTIP FORMAT / FEATURE** -- match Delphi Help Insight: (a) respect dark/light THEME + IDE
+>   FONTS/SIZES (from settings); (b) param name + type on ONE line (compact); (c) TOP HEADER LINE clickable ->
+>   go to definition; (d) ADD a "Called from" section (like AutoDoc's caller facts), each line clickable -> jump
+>   to that call site; (e) caller CAP: <=15 show all; >15 show 10 + "and NN more". Renderer
+>   `src/cli/DRagLint.Hover.Renderer.pas` + plugin `DragLint.Plugin.HoverForm.pas`/`HoverTracker.pas`. Caller data:
+>   reuse AutoDoc's Called-from facts path (`src/doc/DRagLint.Doc.Facts.pas` uses call_edges / resolved callers).
+> - **#3 FORMS CSV REGRESSION** -- the DEPLOYED tester report
+>   `\\htrtest\MICDATA_D\ATEST\TESTER\Micronite2027-forms 2026-07-07.csv` STILL reports some forms as "DEAD FORM"
+>   that our forms-csv v4 fix (v0.87, `src/forms/DRagLint.FormsMap.pas`) was supposed to resolve; user says "our
+>   preliminary review was working fine" -> DIAGNOSE why the fix isn't in the deployed report (stale deployed exe?
+>   stale/per-project db passed by the IDE menu? a real regression?). Some forms ARE genuinely dead; the point is
+>   the ones we KNOW how to resolve are still shown as dead.
+> - **#4 TOOLS->OPTIONS PAGES** (OTAPI spike, research-first) -- register our own Tools->Options pages
+>   (Indexer / Linter / YADF on separate pages) via `INTAAddInOptions` / `IOTAOptionsWizard`. May be large.
+> - **#5 EDITOR->LANGUAGE TABS** (OTAPI spike, research-first) -- insert drag-lint under
+>   Tools->Options->Editor->Language alongside Syntax Highlighter / Error Insight / Code Insight. May be
+>   partly impossible via the public OTAPI -- report feasibility before building.
+>
+> **IMMEDIATE TODO (user, 2026-07-07) -- AFTER the current hover cycle finishes:** Reuse the hover "Returns"
+> format (mined distinct `Result :=` / `Exit(...)` RHS -- shipping now via `src/cli/DRagLint.Hover.Returns.pas`
+> `MineReturnExpressions`) inside **AutoDocumentation** so a generated `<returns>` doc can enumerate the actual
+> return cases instead of a bare TODO. Difference from hover: AutoDoc may list MORE distinct cases -- **cap up to
+> 20** (hover caps at 10), and make the cap **CONFIGURABLE** (a setting, e.g. in the docs config / drag-lint.json;
+> hover=10 / autodoc=20 as defaults). Touch points: `src/doc/DRagLint.Doc.Facts.pas` (return facts) +
+> `src/doc/DRagLint.Doc.Document.pas` (emit into `<returns>`); reuse `MineReturnExpressions` (already pure +
+> shared). Own brainstorm->spec->plan mini-cycle. NOT part of the hover milestone; queued for right after it.
+>
+> **OPEN from v0.94 (user, deferred):** IDE live smoke for the "Create helper class" menu (reopen RAD Studio;
+> 10-step checklist in `.superpowers/sdd/task-8-report.md`; BPL already built + committed `f16c5a3`).
+
 > ## RESUME 2026-07-07 (LATEST-21) -- **ENUM-HELPER GENERATOR: IMPLEMENTED via SDD, final opus review READY TO RELEASE (0 Crit/0 Imp). RELEASE COMMIT STAGED -- PAUSED FOR USER PUBLISH SIGN-OFF.**
 > `main` HEAD includes the release commit (VERSION `0.94.0-alpha` + this CHANGELOG + BACKLOG). **NOT pushed, NO GitHub release cut**
 > -- the human drives push/publish (plan Task 10 Step 5). Clean except IDE json/dsv + 1 untracked forms-csv spec (LEAVE THOSE).

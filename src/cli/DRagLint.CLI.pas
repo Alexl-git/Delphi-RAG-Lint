@@ -3575,8 +3575,13 @@ begin
       if Lo < 0 then Lo:= 0;
       if Hi > High(AllLines) then Hi:= High(AllLines);
       var Body: TArray<string>;
-      SetLength(Body, Hi - Lo + 1);
-      for var k:= Lo to Hi do Body[k - Lo]:= AllLines[k];
+      if Hi < Lo then
+        SetLength(Body, 0)   // stale/invalid span -> no returns, no crash
+      else
+      begin
+        SetLength(Body, Hi - Lo + 1);
+        for var k:= Lo to Hi do Body[k - Lo]:= AllLines[k];
+      end;
       Rhs:= MineReturnExpressions(Body);
     end;
   end;
