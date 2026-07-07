@@ -27,6 +27,59 @@ function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 // when the signature has no parameter list (containers, fields, properties).
 function RenderSignatureParamsMarkdown(const ASignature: string): string;
 
+/// <summary>One parsed parameter from a routine signature: the leading
+/// const/var/out modifier (if any), the parameter name, and its type text.</summary>
+type
+  TParamPart = record
+    Modifier: string;
+    Name    : string;
+    TypeText: string;
+  end;
+
+/// <summary>One mined `Result:= <Expr>` / `Exit(<Expr>)` return expression,
+/// as produced by the Task 2 returns-miner.</summary>
+type
+  TReturnFact = record
+    Expr: string;
+  end;
+
+/// <summary>Structured hover model: the parsed pieces of a symbol's
+/// signature, doc-comment, and mined return facts, ready for a renderer to
+/// lay out / color without re-parsing a flat string.</summary>
+type
+  THoverModel = record
+    QualifiedName: string             ;
+    Kind         : string             ;
+    Signature    : string             ;
+    UnitFile     : string             ;
+    DefLine      : Integer            ;
+    Params       : TArray<TParamPart> ;
+    ReturnType   : string             ;
+    Returns      : TArray<TReturnFact>;
+    ReturnsMore  : Integer            ;
+    Doc          : TParsedDoc         ;
+  end;
+
+/// <summary>Parses a routine signature's parameter list -- e.g.
+/// '(AOwner: TComponent; const AName: string): Boolean' -- into one
+/// TParamPart per parameter name (multi-name segments like 'A, B: Integer'
+/// expand to one part each). Returns an empty array when the signature has
+/// no parameter list.</summary>
+/// <param name="ASignature">The routine's raw signature text.</param>
+/// <returns>One TParamPart per parameter name, in declaration order.</returns>
+function ParseSignatureParams(const ASignature: string): TArray<TParamPart>;
+
+/// <summary>Assembles a THoverModel from an indexed symbol, its parsed
+/// doc-comment, the resolved unit file path, and mined return-expression
+/// text. Caps Returns at 10 entries, recording the overflow count in
+/// ReturnsMore.</summary>
+/// <param name="ASym">The symbol being hovered over.</param>
+/// <param name="ADoc">The symbol's parsed doc-comment (may be empty).</param>
+/// <param name="AUnitFile">Resolved path of the unit declaring ASym.</param>
+/// <param name="AReturnRhs">Mined `Result:=`/`Exit()` return expressions.</param>
+/// <returns>A populated THoverModel.</returns>
+function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUnitFile: string; const AReturnRhs: TArray<string>): THoverModel;
+
 implementation
 
 uses
@@ -83,6 +136,55 @@ begin
     '(', '[', '<': Inc(Depth)                  ;
     ')', ']', '>': if Depth > 0 then Dec(Depth);
     ':'          : if Depth = 0 then Result:= i;
+  end;
+end;
+
+function ParseSignatureParams(const ASignature: string): TArray<TParamPart>;
+var
+  Sig, ParamsPart: string;
+  OpenParen, CloseParen, Depth, i, ColonPos: Integer;
+  Seg, Names, Typ, ModWord, MW, Nm: string;
+  Parts: TList<TParamPart>;
+  PP: TParamPart;
+begin
+  Parts:= TList<TParamPart>.Create;
+  try
+    Sig:= Trim(ASignature);
+    OpenParen:= Pos('(', Sig);
+    if OpenParen > 0 then
+    begin
+      Depth:= 0; CloseParen:= 0;
+      for i:= OpenParen to Length(Sig) do
+      begin
+        if Sig[i] = '(' then Inc(Depth)
+        else if Sig[i] = ')' then begin Dec(Depth); if Depth = 0 then begin CloseParen:= i; Break; end; end;
+      end;
+      if CloseParen > 0 then
+      begin
+        ParamsPart:= Trim(Copy(Sig, OpenParen + 1, CloseParen - OpenParen - 1));
+        for Seg in SplitTopLevel(ParamsPart, ';') do
+        begin
+          if Trim(Seg) = '' then Continue;
+          ColonPos:= LastTopLevelColon(Seg);
+          if ColonPos > 0 then
+          begin Names:= Trim(Copy(Seg, 1, ColonPos - 1)); Typ:= Trim(Copy(Seg, ColonPos + 1, MaxInt)); end
+          else begin Names:= Trim(Seg); Typ:= ''; end;
+          ModWord:= '';
+          for MW in ['const ', 'var ', 'out '] do
+            if StartsText(MW, Names) then
+            begin ModWord:= Trim(MW); Names:= Trim(Copy(Names, Length(MW) + 1, MaxInt)); Break; end;
+          for Nm in SplitTopLevel(Names, ',') do
+            if Trim(Nm) <> '' then
+            begin
+              PP.Modifier:= ModWord; PP.Name:= Trim(Nm); PP.TypeText:= Typ;
+              Parts.Add(PP);
+            end;
+        end;
+      end;
+    end;
+    Result:= Parts.ToArray;
+  finally
+    Parts.Free;
   end;
 end;
 
@@ -265,6 +367,47 @@ begin
     '{"qname":"%s","format":"%s","summary":"%s","returns":"%s",' + '"since":"%s","deprecated":%s}', [
       JsonEscape(ASym.QualifiedName), DocFormatToStr(ADoc.Format), JsonEscape(ADoc.Summary), JsonEscape(ADoc.ReturnsText), JsonEscape(ADoc.SinceText),
       IfThen(ADoc.Deprecated, 'true', 'false')]);
+end;
+
+// Parses the trailing '): <Type>;' from a routine signature. Inlined here
+// rather than reusing DRagLint.Doc.Facts.ParseReturnType, which is private
+// to that unit.
+function ReturnTypeFromSig(const ASig: string): string;
+var
+  CloseParen, ColonP, SemiP: Integer;
+  Tail: string;
+begin
+  Result:= '';
+  CloseParen:= LastDelimiter(')', ASig);
+  if CloseParen = 0 then Exit;
+  Tail:= Copy(ASig, CloseParen + 1, MaxInt);
+  ColonP:= Pos(':', Tail);
+  if ColonP = 0 then Exit;
+  Tail:= Trim(Copy(Tail, ColonP + 1, MaxInt));
+  SemiP:= Pos(';', Tail);
+  if SemiP > 0 then Tail:= Copy(Tail, 1, SemiP - 1);
+  Result:= Trim(Tail);
+end;
+
+function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc;
+  const AUnitFile: string; const AReturnRhs: TArray<string>): THoverModel;
+var
+  i: Integer;
+  Cap: Integer;
+begin
+  Result.QualifiedName:= ASym.QualifiedName;
+  Result.Signature    := ASym.Signature;
+  Result.UnitFile     := AUnitFile;
+  Result.DefLine      := ASym.StartLine;
+  Result.Params       := ParseSignatureParams(ASym.Signature);
+  Result.ReturnType   := ReturnTypeFromSig(ASym.Signature);
+  Result.Doc          := ADoc;
+  Result.Kind         := ''; // filled by caller from ASym.Kind if desired
+  Cap:= Length(AReturnRhs);
+  if Cap > 10 then begin Result.ReturnsMore:= Cap - 10; Cap:= 10; end
+  else Result.ReturnsMore:= 0;
+  SetLength(Result.Returns, Cap);
+  for i:= 0 to Cap - 1 do Result.Returns[i].Expr:= AReturnRhs[i];
 end;
 
 end.
