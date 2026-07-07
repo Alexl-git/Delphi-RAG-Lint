@@ -119,6 +119,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.ConfigWriter.pas"/>
         <DCCReference Include="DragLint.Plugin.LintOptionsFrame.pas"/>
         <DCCReference Include="DragLint.Plugin.ExeResolver.pas"/>
+        <DCCReference Include="DragLint.Plugin.Fonts.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
