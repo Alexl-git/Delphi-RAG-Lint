@@ -164,11 +164,7 @@ begin
       browser, etc.) when the cursor happens to sit over the IDE. }
     if not IdeIsForeground then
     begin
-      if not FLastForegroundFail then
-      begin
-        DebugLog('HoverTracker: bail -- IDE not foreground');
-        FLastForegroundFail:= True;
-      end;
+      if not FLastForegroundFail then FLastForegroundFail:= True;
       ResetState;
       Exit;
     end;
@@ -329,16 +325,41 @@ begin
       new one. Without this the singleton in HoverForm refuses to show
       because the previous popup is still on screen, leaving the user
       reading stale data while pointing at a new identifier. }
-    var DwellHeader: string:= ExtractHoverHeader(Combined);
-    Combined:= StripFirstHeaderLine(Combined);
     var DwellCallers: TArray<TDragLintCallerInfo>;
     SetLength(DwellCallers, 0);
-    DebugLog(Format('HoverTracker: spawning popup at (%d,%d), %d chars, header="%s"', [Pos.X, Pos.Y + 20, Length(Combined), DwellHeader]));
     CloseDragLintHover;
-    { v0.42: dwell popups dismiss against the original mouse point (Pos), not
-      the wide popup rect -- so a small drift, or leaving the editor, clears
-      them. The popup is still drawn at Pos.Y+20 (below the cursor). }
-    ShowDragLintHover(DwellHeader, Combined, DwellCallers, Pos.X, Pos.Y + 20, True, Pos.X, Pos.Y);
+    { v0.94.1: PREFER the structured Help-Insight model on the DWELL path so a
+      MOUSE hover shows the colored signature + Parameters + Returns. Mine the
+      qname from the RAW LSP markdown (LspText, before StripFirstHeaderLine) and
+      fetch `hover --json`. We try this EVEN when a diagnostic is present -- the
+      structured view is the priority; a diagnostic on the same line is rare and
+      the user can use the menu Hover for the full diag text. On any miss (no
+      qname / json fetch fails) we fall back to the legacy string popup so the
+      user always sees something. Callers skipped here (light for the 200ms
+      timer). Detailed logging tells a live smoke exactly why a fallback fired. }
+    var Model: TDragLintHoverModel;
+    var ModelCallers: TArray<TDragLintCallerInfo>;
+    SetLength(ModelCallers, 0);
+    var GotModel: Boolean:= False;
+    if LspText <> '' then
+    begin
+      GotModel:= TryBuildHoverModel(LspText, Model, ModelCallers);
+    end;
+
+    if GotModel then
+    begin
+      { v0.42: dwell popups dismiss against the original mouse point (Pos). }
+      ShowDragLintHover(Model, ModelCallers, Pos.X, Pos.Y + 20, True, Pos.X, Pos.Y);
+    end
+    else
+    begin
+      var DwellHeader: string:= ExtractHoverHeader(Combined);
+      Combined:= StripFirstHeaderLine(Combined);
+      { v0.42: dwell popups dismiss against the original mouse point (Pos), not
+        the wide popup rect -- so a small drift, or leaving the editor, clears
+        them. The popup is still drawn at Pos.Y+20 (below the cursor). }
+      ShowDragLintHover(DwellHeader, Combined, DwellCallers, Pos.X, Pos.Y + 20, True, Pos.X, Pos.Y);
+    end;
     FLastShownKey:= LspKey; { v0.42: don't re-pop this same caret }
   except
     { Swallow all exceptions: this fires in a VCL timer inside the IDE.

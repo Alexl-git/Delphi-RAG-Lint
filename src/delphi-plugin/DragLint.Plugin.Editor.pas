@@ -49,6 +49,14 @@ function QueryHoverText(const AUri: string; ALine, ACol: Integer; ATimeoutMs: In
 function ExtractHoverHeader  (const AMarkdown: string): string;
 function StripFirstHeaderLine(const AMarkdown: string): string;
 
+{ v0.94.1: exposed for the dwell tracker so a MOUSE hover shows the same
+  structured Help-Insight model (colored signature + Parameters + Returns +
+  Called-from) as the menu InvokeHover -- not just the plain string popup. Given
+  the RAW LSP hover markdown, mine the qualified name, fetch `hover --json`, and
+  fetch the callers. Returns True + fills AModel/ACallers on success; False
+  (caller shows the string popup) on any miss. }
+function TryBuildHoverModel(const ARawMarkdown: string; out AModel: TDragLintHoverModel; out ACallers: TArray<TDragLintCallerInfo>): Boolean;
+
 /// <summary>Spawns ACmdLine via CreateProcessW with merged stdout+stderr
 /// capture and blocks until the child exits (or ATimeoutMs elapses).</summary>
 /// <param name="ACmdLine">Full command line (exe path already quoted by the caller).</param>
@@ -444,6 +452,43 @@ function IdentifierAtCursor: string; forward;
   before its implementation appears later in this unit. }
 function DLExe64: string; forward;
 
+function SliceJsonBracket(const AText: string; AOpen, AClose: Char): string;
+// v0.94.1: extract the first balanced AOpen..AClose region from AText, ignoring
+// anything before/after. RunAndCaptureStdout merges the CLI's stderr banners in
+// with the JSON, and Delphi's TJSONObject.ParseJSONValue is a STRICT parser that
+// returns nil on any trailing non-JSON. Walking the brackets (string-aware, so a
+// bracket inside a "quoted string" is ignored) yields just the JSON to parse.
+// Returns empty when no balanced region is found. Pass the object or array
+// delimiters as AOpen/AClose.
+var
+  Start, Depth, i: Integer;
+  InStr, Esc     : Boolean;
+  Ch             : Char   ;
+begin
+  Result:= '';
+  Start:= Pos(AOpen, AText);
+  if Start = 0 then Exit;
+  Depth:= 0; InStr:= False; Esc:= False;
+  for i:= Start to Length(AText) do
+  begin
+    Ch:= AText[i];
+    if Esc then
+      Esc:= False
+    else if InStr then
+    begin
+      if Ch = #92 then Esc:= True          { #92 = backslash: escapes the next char }
+      else if Ch = '"' then InStr:= False;
+    end
+    else if Ch = '"' then InStr:= True
+    else if Ch = AOpen then Inc(Depth)
+    else if Ch = AClose then
+    begin
+      Dec(Depth);
+      if Depth = 0 then Exit(Copy(AText, Start, i - Start + 1));
+    end;
+  end;
+end;
+
 function FetchHoverCallers(const AExe, ASymName: string; const ADbList: TArray<string>): TArray<TDragLintCallerInfo>;
 var
   CmdLine   : string             ;
@@ -472,7 +517,15 @@ begin
   CmdLine:= Format('"%s" query find-callers --name "%s"%s --json --context 1', [AExe, ASymName, DbArgs]);
 
   ExitCode:= RunAndCaptureStdout(CmdLine, Output, 5000);
-  if (ExitCode <> 0) or (Trim(Output) = '') or (Output[1] <> '[') then Exit;
+  if (ExitCode <> 0) or (Trim(Output) = '') then Exit;
+
+  // v0.94.1 BUGFIX (same as FetchHoverModel): RunAndCaptureStdout merges the
+  // CLI's stderr banners ("(loaded defaults...)", "  FTS5 probe: ...") into
+  // Output AFTER the JSON array. TJSONObject.ParseJSONValue is strict, so that
+  // trailing text made it return nil -> 0 callers -> the Called-from grid was
+  // always empty on the dwell path. Slice the balanced [...] array first.
+  Output:= SliceJsonBracket(Output, '[', ']');
+  if Output = '' then Exit;
 
   JV:= nil;
   try
@@ -787,15 +840,22 @@ begin
   CmdLine:= Format('"%s" hover --qname "%s"%s --format json', [AExe, AQName, DbArgs]);
 
   ExitCode:= RunAndCaptureStdout(CmdLine, Output, 5000);
-  { Guard: non-zero exit (e.g. "No symbol matched qname" -> exit 1), empty
-    output, or output that isn't a JSON object all fall back to the string path. }
-  if (ExitCode <> 0) or (Trim(Output) = '') or (Trim(Output)[1] <> '{') then Exit;
+  { Guard: non-zero exit (e.g. "No symbol matched qname" -> exit 1) or empty
+    output falls back to the string path. }
+  if (ExitCode <> 0) or (Trim(Output) = '') then Exit;
+
+  // v0.94.1 BUGFIX: RunAndCaptureStdout merges the CLI's stderr banners into
+  // Output around the JSON; TJSONObject.ParseJSONValue is strict and returns nil
+  // on trailing non-JSON, so the structured view fell back to the string popup
+  // for EVERY symbol. Slice the balanced {...} object (shared helper) first.
+  Output:= SliceJsonBracket(Output, '{', '}');
+  if Output = '' then Exit;
 
   JV:= nil;
   try
     JV:= TJSONObject.ParseJSONValue(Output);
   except
-    JV:= nil;
+    on E: Exception do JV:= nil;
   end;
   if (JV = nil) or not (JV is TJSONObject) then
   begin
@@ -854,6 +914,40 @@ begin
     JV.Free;
   end; // try
 end; // function
+
+function TryBuildHoverModel(const ARawMarkdown: string; out AModel: TDragLintHoverModel; out ACallers: TArray<TDragLintCallerInfo>): Boolean;
+{ v0.94.1: shared by the menu InvokeHover AND the dwell HoverTracker so a MOUSE
+  hover shows the same colored structured model + Called-from grid. Mine the
+  qname from the raw LSP markdown, resolve the exe + active DBs (guarded), fetch
+  `hover --json`, then fetch callers by the qname's last segment. }
+var
+  QName  : string          ;
+  ExePath: string          ;
+  DbList : TArray<string>  ;
+  BareName: string         ;
+  DotP   : Integer         ;
+begin
+  Result:= False;
+  AModel:= Default(TDragLintHoverModel);
+  SetLength(ACallers, 0);
+  QName:= ExtractHoverQname(ARawMarkdown);
+  if QName = '' then Exit;
+  ExePath:= DLExe64;
+  try
+    DbList:= ResolveActiveIndexDbs(LoadSettings);
+  except
+    SetLength(DbList, 0);
+  end;
+  Result:= FetchHoverModel(ExePath, QName, DbList, AModel);
+  if not Result then Exit;
+
+  { Called-from: find-callers wants the BARE routine name (last dotted segment).
+    Guarded inside FetchHoverCallers; empty on any miss so the grid just hides. }
+  BareName:= QName;
+  DotP:= LastDelimiter('.', BareName);
+  if DotP > 0 then BareName:= Copy(BareName, DotP + 1, MaxInt);
+  ACallers:= FetchHoverCallers(ExePath, BareName, DbList);
+end;
 
 procedure InvokeHover(Sender: TObject);
 var
@@ -923,13 +1017,10 @@ begin
       popup is too transient to screenshot. Logging happens BEFORE the
       popup shows; clipboard is set unconditionally so even a Hover that
       immediately closes leaves the text behind. }
-    DebugLog('InvokeHover: raw response (' + IntToStr(Length(Resp.ToString)) + ' chars): ' + Resp.ToString);
-    DebugLog('InvokeHover: extracted HoverText (' + IntToStr(Length(HoverText)) + ' chars):' + sLineBreak + HoverText);
     try
       Vcl.Clipbrd.Clipboard.AsText:= HoverText;
-      DebugLog('InvokeHover: clipboard updated');
     except
-      on E: Exception do DebugLog('InvokeHover: clipboard FAILED: ' + E.Message);
+      { clipboard update failure -- silently ignore }
     end;
 
     { v0.40.7: compose the three-section popup.
@@ -945,7 +1036,6 @@ begin
       SetLength(DbList, 0);
     end;
     Callers:= FetchHoverCallers(ExePath, SymName, DbList);
-    DebugLog(Format('InvokeHover: callers fetched: %d', [Length(Callers)]));
     DLT('hover', Format('sym="%s" dbs=%d callers=%d hdr="%s" bodyLen=%d', [SymName, Length(DbList), Length(Callers), Header, Length(HoverText)]));
 
     { v0.40.6: menu invocation is explicit -- replace any current popup. }

@@ -74,7 +74,7 @@ type
   /// IDE editor color (Tools > Options > Editor) when available, falling back
   /// to the fixed CL_* palette otherwise; every color still passes through the
   /// WCAG contrast guard against the actual popup background.</summary>
-  TDLSynRole = (srKeyword, srType, srName, srParam, srOperator, srLiteralNum, srLiteralStr, srMuted);
+  TDLSynRole = (srKeyword, srType, srName, srParam, srOperator, srLiteralNum, srLiteralStr, srMuted, srSection);
 
   TDragLintHoverForm = class(TForm)
     private
@@ -115,7 +115,7 @@ type
       procedure Emit(const AText: string; AColor: TColor; ABold: Boolean);
       function  GetSyntaxColor(ARole: TDLSynRole): TColor;
       procedure EmitSignatureHeader(const ASignature, AUnitFile: string; ADefLine: Integer);
-      procedure RenderModel(const AModel: TDragLintHoverModel);
+      procedure RenderModel(const AModel: TDragLintHoverModel; ACallerCount: Integer);
       { v0.94: shared final placement + no-steal-focus show, used by BOTH ShowAt
       overloads so the focus/dwell mechanics can never drift between them. }
       procedure PlaceAndShow(X, Y, W, H: Integer);
@@ -188,6 +188,9 @@ const
   CL_LITNUM  = TColor($001515A3); // #A31515
   CL_LITSTR  = TColor($001515A3);
   CL_MUT     = TColor($008A8A8A);
+  { v0.94.1: section headers (PARAMETERS / RETURNS / USED IN) -- a strong blue,
+    distinct from the softer keyword blue. #1560D6 -> BGR $00D66015. }
+  CL_SECTION = TColor($00D66015); // #1560D6
 
   { Delphi reserved words we color as keywords in the one-line signature. Lower-
     case; the tokenizer compares case-insensitively. Kept tight to what appears
@@ -297,9 +300,12 @@ begin
     - No 30-second auto-close timer. Only ways to dismiss:
         (a) mouse moves > 20 px off the popup
         (b) ESC pressed
-        (c) Close button in the toolwindow title bar }
-  Caption    := 'drag-lint hover';
-  BorderStyle:= bsSizeToolWin;
+    v0.94.1: BORDERLESS (bsNone) like Delphi's Code Insight popup -- no OS title
+    bar. The colored signature line (body line 0) IS the header now, so a
+    "drag-lint" title bar was redundant chrome. A thin 1px border is drawn in
+    CreateParams (WS_BORDER) so the popup still reads as a distinct window. }
+  Caption    := 'drag-lint';
+  BorderStyle:= bsNone;
   FormStyle  := fsStayOnTop;
   Color      := clWindow;
   KeyPreview := True;
@@ -320,11 +326,22 @@ begin
   FCallers.RowSelect        := True;
   FCallers.ReadOnly         := True;
   FCallers.GridLines        := False;
-  FCallers.ShowColumnHeaders:= True;
+  { v0.94.1: the grey OS column-header row is HIDDEN. The "CALLED FROM (N)" label
+    is now a blue bold section line at the bottom of the body (RenderModel),
+    matching PARAMETERS/RETURNS -- guaranteed bold+blue in every theme, unlike a
+    themed ListView header which ignores custom-draw font/color. }
+  FCallers.ShowColumnHeaders:= False;
   FCallers.HideSelection    := False;
-  with FCallers.Columns.Add do begin Caption:= 'Unit'; Width:= 180; end;
-  with FCallers.Columns.Add do begin Caption:= 'Line'; Width:= 50 ; end;
-  with FCallers.Columns.Add do begin Caption:= 'Code'; Width:= 420; end;
+  { v0.94.1: opt the grid out of VCL/DevExpress style-hooking (same reason as
+    FBody) so it renders on the light window surface like the body -- not the
+    theme's dark grid -- and reads as one popup. }
+  FCallers.StyleElements:= [];
+  FCallers.Color        := clWindow;
+  { Columns: Unit / Line / Code. Headers are hidden (label lives in the body), so
+    these captions are never shown -- only the widths matter for column layout. }
+  with FCallers.Columns.Add do begin Caption:= 'Unit'; Width:= 260; end;
+  with FCallers.Columns.Add do begin Caption:= 'Line'; Width:= 55 ; end;
+  with FCallers.Columns.Add do begin Caption:= 'Code'; Width:= 620; end;
   FCallers.OnDblClick:= HandleCallerDblClick;
   FCallers.OnKeyDown := HandleCallerKey;
   FCallers.Cursor    := crHandPoint; { every row navigates -> hand cursor }
@@ -338,9 +355,20 @@ begin
   FBody.Align      := alClient;
   FBody.BorderStyle:= bsNone;
   FBody.ReadOnly   := True;
-  FBody.ScrollBars := ssVertical;
+  { v0.94.1: no word-wrap so the signature header stays on ONE line (like the
+    Delphi IDE). If the window is narrower than the signature, a horizontal
+    scrollbar appears instead of wrapping the header. ssBoth enables both bars. }
+  FBody.WordWrap   := False;
+  FBody.ScrollBars := ssBoth;
   FBody.Color      := clWindow;
   FBody.TabStop    := False;
+  { v0.94.1: CRITICAL for the colored render. When VCL styles / DevExpress IDE
+    theming are active, TRichEditStyleHook repaints the control and OVERRIDES the
+    per-run SelAttributes.Color we set in Emit -- so every token comes out the
+    theme's default foreground (i.e. "no colors"). StyleElements := [] opts this
+    one control out of style-hooking, letting our syntax colors + IDE font
+    survive. The popup form itself still follows the theme (ApplyIdeTheme). }
+  FBody.StyleElements:= [];
   FBody.OnClick    := HandleMemoClick;
   FBody.OnMouseMove:= HandleMemoMouseMove; { hand cursor over clickable lines }
 
@@ -407,6 +435,15 @@ var
   ExtRect: TRect ;
   AncRect: TRect ;
 begin
+  { v0.94.1 z-order: the IDE's OWN Code Insight / parameter-hint popup can spawn
+    AFTER ours and claim the topmost slot, sliding in front of us. Re-assert our
+    topmost position on every tick (SWP_NOACTIVATE so we never steal focus from
+    the editor caret) -- within one 150 ms tick we reclaim the top and the IDE
+    popup drops behind. Cheap idempotent no-op when we are already on top. }
+  if Visible and HandleAllocated then
+    SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0,
+      SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+
   if not GetCursorPos(Pt) then Exit;
 
   if FAnchorDismiss then
@@ -742,13 +779,28 @@ var
 begin
   case ARole of
     srKeyword   : begin Code:= atReservedWord; Fallback:= CL_KEYWORD; end;
-    srType      : begin Code:= atIdentifier  ; Fallback:= CL_TYPE   ; end;
+    srType      :
+      begin
+        { v0.94.1: types always render in the fixed Help-Insight green (like the
+          srSection blue). The IDE's atIdentifier color (dark/grey on most themes)
+          made types indistinguishable from names; a fixed green reads as "this is
+          a type" at a glance, matching the user's requested look. }
+        Result:= CL_TYPE;
+        Exit;
+      end;
     srName      : begin Code:= atIdentifier  ; Fallback:= CL_NAME   ; end;
     srParam     : begin Code:= atIdentifier  ; Fallback:= CL_PARAM  ; end;
     srOperator  : begin Code:= atSymbol      ; Fallback:= CL_OP     ; end;
     srLiteralNum: begin Code:= atNumber      ; Fallback:= CL_LITNUM ; end;
     srLiteralStr: begin Code:= atString      ; Fallback:= CL_LITSTR ; end;
     srMuted     : begin Code:= atComment     ; Fallback:= CL_MUT    ; end;
+    srSection   :
+      begin
+        { Section headers (PARAMETERS/RETURNS/USED IN) always use the fixed
+          strong blue -- the IDE has no "section header" syntax kind to read. }
+        Result:= CL_SECTION;
+        Exit;
+      end;
   else
     begin Code:= atIdentifier; Fallback:= CL_NAME; end;
   end;
@@ -834,13 +886,15 @@ begin
   end;
 end;
 
-procedure TDragLintHoverForm.RenderModel(const AModel: TDragLintHoverModel);
+procedure TDragLintHoverForm.RenderModel(const AModel: TDragLintHoverModel; ACallerCount: Integer);
 { Clear the body and lay out the Help-Insight view: colored signature header
   (line 0, click-navigates), a "Parameters" block (one aligned
-  `modifier name : type` line per param), and a "Returns" block (single
+  `modifier name : type` line per param), a "Returns" block (single
   `type : Result := expr` or a list of `Result := expr` lines + "... and N
-  more"). Returns is omitted entirely for procedures (no return type, no mined
-  returns). Resolves the IDE color interface ONCE here into FSynOpts. }
+  more"), and -- when ACallerCount > 0 -- a blue bold "CALLED FROM (N)" section
+  label as the LAST body line (the callers grid docks directly beneath it).
+  Returns is omitted entirely for procedures (no return type, no mined returns).
+  Resolves the IDE color interface ONCE here into FSynOpts. }
 var
   Svcs     : INTACodeEditorServices;
   MaxNameLen: Integer              ;
@@ -874,7 +928,7 @@ begin
     if Length(AModel.Params) > 0 then
     begin
       Emit(sLineBreak + sLineBreak, GetSyntaxColor(srMuted), False);
-      Emit('Parameters', GetSyntaxColor(srKeyword), True);
+      Emit('PARAMETERS', GetSyntaxColor(srSection), True);
       MaxNameLen:= 0;
       for I:= 0 to High(AModel.Params) do
         MaxNameLen:= Max(MaxNameLen, Length(AModel.Params[I].Name));
@@ -887,35 +941,38 @@ begin
         while Length(NamePad) < MaxNameLen + 1 do NamePad:= NamePad + ' ';
         Emit(NamePad, GetSyntaxColor(srParam), False);
         Emit(': ', GetSyntaxColor(srMuted), False);
-        Emit(P.TypeText, GetSyntaxColor(srType), False);
+        { v0.94.1: an untyped var/out parameter (Delphi allows `var X` with no
+          type -- passed by address) has no TypeText; label it "by reference" in
+          the muted color so it reads as a note, not a real type name. }
+        if P.TypeText <> '' then
+          Emit(P.TypeText, GetSyntaxColor(srType), False)
+        else
+          Emit('by reference', GetSyntaxColor(srMuted), False);
       end;
     end;
 
     { (3) Returns -- omitted for procedures (no return type AND no mined
-      returns). Single mined value -> "type : Result := expr"; multiple ->
-      a "type" header then one "Result := expr" per line, + "... and N more". }
+      returns). v0.94.1: the return TYPE sits on the RETURNS label line to save
+      vertical space ("RETURNS: boolean"). A single mined value goes inline too
+      ("RETURNS: boolean = Result := expr"); multiple values list one per line. }
     HasReturns:= (AModel.ReturnType <> '') or (Length(AModel.Returns) > 0);
     if HasReturns then
     begin
       Emit(sLineBreak + sLineBreak, GetSyntaxColor(srMuted), False);
-      Emit('Returns', GetSyntaxColor(srKeyword), True);
+      Emit('RETURNS', GetSyntaxColor(srSection), True);
+      if AModel.ReturnType <> '' then
+      begin
+        Emit(': ', GetSyntaxColor(srMuted), True);
+        Emit(AModel.ReturnType, GetSyntaxColor(srType), True);
+      end;
       if Length(AModel.Returns) = 1 then
       begin
-        Emit(sLineBreak + '  ', GetSyntaxColor(srMuted), False);
-        if AModel.ReturnType <> '' then
-        begin
-          Emit(AModel.ReturnType, GetSyntaxColor(srType), False);
-          Emit(' : ', GetSyntaxColor(srMuted), False);
-        end;
+        { inline on the RETURNS line: "  =  Result := expr" }
+        Emit('   =   ', GetSyntaxColor(srMuted), False);
         Emit('Result := ' + AModel.Returns[0], GetSyntaxColor(srName), False);
       end
-      else
+      else if Length(AModel.Returns) > 1 then
       begin
-        if AModel.ReturnType <> '' then
-        begin
-          Emit(sLineBreak + '  ', GetSyntaxColor(srMuted), False);
-          Emit(AModel.ReturnType, GetSyntaxColor(srType), False);
-        end;
         for I:= 0 to High(AModel.Returns) do
         begin
           Emit(sLineBreak + '  ', GetSyntaxColor(srMuted), False);
@@ -927,6 +984,15 @@ begin
           Emit('... and ' + IntToStr(AModel.ReturnsMore) + ' more', GetSyntaxColor(srMuted), False);
         end;
       end;
+    end;
+
+    { (4) CALLED FROM label -- blue bold section line (like PARAMETERS/RETURNS),
+      the LAST body line; the callers ListView (headers hidden) docks right under
+      it. Only when there is at least one caller. }
+    if ACallerCount > 0 then
+    begin
+      Emit(sLineBreak + sLineBreak, GetSyntaxColor(srMuted), False);
+      Emit('CALLED FROM (' + IntToStr(ACallerCount) + ')', GetSyntaxColor(srSection), True);
     end;
 
     { keep the caret at the top so the header (line 0) is what shows first. }
@@ -943,6 +1009,9 @@ begin
   inherited CreateParams(Params);
   { Info popup: never take keyboard focus; keep off the taskbar/alt-tab. }
   Params.ExStyle:= Params.ExStyle or WS_EX_NOACTIVATE or WS_EX_TOOLWINDOW;
+  { v0.94.1: borderless form (bsNone) -- add a thin 1px frame so the popup still
+    reads as a distinct window against the editor, like Delphi's Code Insight. }
+  Params.Style:= Params.Style or WS_BORDER;
 end;
 
 procedure TDragLintHoverForm.ShowAt(
@@ -1014,6 +1083,7 @@ begin
   HasTrailer:= ShownCount < Length(ACallers);
   if Length(ACallers) > 0 then FCallers.Columns[0].Caption:= 'Unit -- Called from (' + IntToStr(Length(ACallers)) + ')'
   else FCallers.Columns[0].Caption:= 'Unit';
+
   FCallerPaths.Clear;
   FCallers.Items.BeginUpdate;
   try
@@ -1089,18 +1159,35 @@ procedure TDragLintHoverForm.PlaceAndShow(X, Y, W, H: Integer);
   Callers pass the already-computed W/H; anchor state (FAnchorDismiss/
   FDwellAnchor) is set by the caller before this runs. }
 var
-  MonR: TRect;
+  MonR   : TRect  ;
+  AvailH : Integer;
 begin
-  Width := W;
-  Height:= H;
-
+  { v0.94.1: expand to fit the content, but never past the screen. First try to
+    grow DOWNWARD from Y; if the content is taller than the space below, pull the
+    top up to use the space above too; only if it still doesn't fit the whole
+    work area do we clamp H to the work-area height (the TRichEdit then scrolls).
+    So: use available space first, fall back to the screen edge -- never run off. }
   if SystemParametersInfo(SPI_GETWORKAREA, 0, @MonR, 0) then
   begin
-    if X + W > MonR.Right  then X:= MonR.Right  - W;
-    if Y + H > MonR.Bottom then Y:= MonR.Bottom - H;
+    if X + W > MonR.Right then X:= MonR.Right - W;
     if X < MonR.Left then X:= MonR.Left;
-    if Y < MonR.Top  then Y:= MonR.Top;
+
+    AvailH:= MonR.Bottom - Y;            { space below the anchor }
+    if H > AvailH then
+    begin
+      { not enough room below -- move the top up so the bottom sits on the edge }
+      Y:= MonR.Bottom - H;
+      if Y < MonR.Top then
+      begin
+        { still taller than the whole work area -- pin to the top and clamp H so
+          the popup exactly fills the work area height (scrollbar takes over). }
+        Y:= MonR.Top;
+        H:= MonR.Bottom - MonR.Top;
+      end;
+    end;
   end;
+  Width := W;
+  Height:= H;
   Left:= X;
   Top := Y;
   FAnchor.X:= X;
@@ -1126,8 +1213,13 @@ end; // procedure
 procedure TDragLintHoverForm.ShowAt(
   X, Y: Integer; const AModel: TDragLintHoverModel; const ACallers: TArray<TDragLintCallerInfo>; AAnchorDismiss: Boolean; AAnchorX, AAnchorY: Integer);
 const
-  MAX_W = 900;
-  MAX_H = 700;
+  MAX_W = 1200;
+  { v0.94.1: MAX_H is a generous ceiling -- PlaceAndShow clamps the final rect to
+    the monitor work area, so a tall popup shrinks to the screen edge rather than
+    running off it. We size to the ACTUAL content (below) so no scrollbar is
+    needed when there is room; only when content genuinely exceeds the screen
+    does the scrollbar appear. }
+  MAX_H = 1000;
   PAD   = 8;
 var
   I       : Integer  ;
@@ -1146,20 +1238,22 @@ begin
   else FDwellAnchor:= Point(X, Y);
 
   { Render the colored, selectable Help-Insight body (sets FStructured := True,
-    FModelQName/FModelDefLine for the clickable header). }
-  RenderModel(AModel);
+    FModelQName/FModelDefLine for the clickable header). The caller count drives
+    the blue bold "CALLED FROM (N)" label at the bottom of the body. }
+  RenderModel(AModel, Length(ACallers));
 
   { Title bar: "drag-lint -- <qname>" (no file/line -- the header line carries
     the unit + line already). }
-  if AModel.QualifiedName <> '' then Caption:= 'drag-lint -- ' + AModel.QualifiedName
-  else Caption:= 'drag-lint hover';
+  { v0.94.1: the colored signature header line (line 0) IS the header now, so the
+    title bar just carries the tool name -- repeating the qname there was noise. }
+  Caption:= 'drag-lint';
 
-  { v0.94 Task 7: same 15/10 display cap + "... and NN more" trailer + column-
-    header count as the string ShowAt overload (see the comment there). }
+  { v0.94 Task 7: same 15/10 display cap + "... and NN more" trailer as the string
+    ShowAt overload. v0.94.1: the count now lives in the body's "CALLED FROM (N)"
+    label (RenderModel), so no column caption is set here (headers are hidden). }
   ShownCount:= DisplayedCallerCount(Length(ACallers));
   HasTrailer:= ShownCount < Length(ACallers);
-  if Length(ACallers) > 0 then FCallers.Columns[0].Caption:= 'Unit -- Called from (' + IntToStr(Length(ACallers)) + ')'
-  else FCallers.Columns[0].Caption:= 'Unit';
+
   FCallerPaths.Clear;
   FCallers.Items.BeginUpdate;
   try
@@ -1190,9 +1284,17 @@ begin
     v0.94 Task 7: callers height uses the DISPLAYED (capped) count + trailer. }
   BodyLines:= FBody.Lines.Count;
   if BodyLines < 3 then BodyLines:= 3;
-  BodyH:= 22 + BodyLines * 16;
-  if BodyH < 60  then BodyH:= 60;
-  if BodyH > 320 then BodyH:= 320;
+  { v0.94.1: size the body to its rendered lines so no scrollbar is needed when
+    the screen has room. PlaceAndShow clamps the whole popup to the monitor work
+    area afterward, so an over-tall value just means "as tall as the screen
+    allows"; only genuinely huge content (capped at MAX_H) scrolls.
+    The last body line is the "CALLED FROM (N)" label; the alBottom callers grid
+    docks against the body's bottom edge, so we trim ~1 line-height off the body
+    height to pull the grid up snug under that label (no dead gap) while the label
+    line itself is still fully drawn. }
+  BodyH:= BodyLines * 18 - 24;
+  if BodyH < 64  then BodyH:= 64;
+  if BodyH > 920 then BodyH:= 920;
 
   if Length(ACallers) = 0 then
   begin
@@ -1202,13 +1304,31 @@ begin
   else
   begin
     FCallers.Visible:= True;
-    CallersH:= 28 + (ShownCount + IfThen(HasTrailer, 1, 0)) * 18;
-    if CallersH < 60  then CallersH:= 60;
+    { v0.94.1: no header row anymore (ShowColumnHeaders=False) -- drop the ~28px
+      header allowance to a small pad so the grid is exactly its rows tall and
+      docks tight under the "CALLED FROM (N)" body label. }
+    CallersH:= 6 + (ShownCount + IfThen(HasTrailer, 1, 0)) * 18;
+    if CallersH < 24  then CallersH:= 24;
     if CallersH > 200 then CallersH:= 200;
     FCallers.Height:= CallersH;
   end;
 
-  W:= MAX_W;
+  { v0.94.1: width sized to the widest rendered line so long signatures don't
+    wrap, with a roomier floor + a higher ceiling. PlaceAndShow clamps to the
+    monitor, so an over-wide value just fills to the screen edge. ~7.3 px/char
+    at the IDE editor font + padding. }
+  { v0.94.1: measure the LONGEST logical line from the MODEL, not FBody.Lines --
+    the rich edit has already word-wrapped its Lines[] at the current (narrow)
+    width, so measuring those undercounts and the signature stays wrapped. The
+    signature header (+ its "   unit.pas (line)" locator) is almost always the
+    widest line; also consider the widest param line. }
+  var LongestChars: Integer:= Length(AModel.Signature) + Length(AModel.UnitFile) + 12;
+  for I:= 0 to High(AModel.Params) do
+    LongestChars:= Max(LongestChars, Length(AModel.Params[I].Modifier) + Length(AModel.Params[I].Name) + Length(AModel.Params[I].TypeText) + 8);
+  W:= 70 + Round(LongestChars * 7.6);
+  if W < 480   then W:= 480;
+  if W > MAX_W then W:= MAX_W;
+
   H:= BodyH + CallersH + PAD * 2;
   if H > MAX_H then H:= MAX_H;
   if H < 120 then H:= 120;

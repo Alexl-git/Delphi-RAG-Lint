@@ -1,5 +1,156 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-07 (LATEST-25) -- **HOVER RESTYLE POLISH VISUALLY COMPLETE + USER-CONFIRMED ("Great!"). ONLY 2 THINGS LEFT: (1) strip debug scaffolding, (2) commit clean. Then user pushes. ALL fixes STILL UNCOMMITTED.**
+>
+> **STATE:** This session closed out the hover Help-Insight restyle live-smoke. It BUILT the pending
+> Win32 BPL (RAD Studio was closed), fixed the z-order bug, then iterated the visual polish live with the
+> user until they confirmed "Great!". The structured hover popup is DONE: a 1-line colored signature
+> header (green `unit.pas (line)` locator, click-navigates to the definition); a PARAMETERS block with
+> **fixed-green** types and untyped `var`/`out` params labelled **"by reference"**; a RETURNS block
+> (type inline + mined `Result :=` lines); and a **blue + bold "CALLED FROM (N)" body label** with the
+> callers grid docked tight beneath it (grey OS grid headers hidden; no body scrollbar).
+>
+> **GIT:** `main`=`0e80625` (still only the AV-crash fix committed). 13 commits ahead of origin. **ALL
+> live-smoke + polish fixes REMAIN UNCOMMITTED** (user chose leave-uncommitted; commit comes after the
+> debug-strip): `src/cli/DRagLint.CLI.pas`, `src/delphi-plugin/DragLint.Plugin.Editor.pas` +
+> `.HoverForm.pas` + `.HoverTracker.pas`, `docs/lint/BACKLOG.md`, new `tests/autotest/run_hover_multidb.ps1`.
+> Plus the usual LEAVE-THOSE (IDE json/dsv, rebuilt bpl/dcp, forms-csv spec, `results/*.json`). Latest
+> deployed BPL = `third_party/dll-win32/dclDragLintWizard.bpl` @ 2026-07-07 17:10 (6561964 bytes).
+>
+> **WHAT THIS SESSION ADDED (on top of LATEST-24's 4 root-cause fixes, all still in the tree):**
+> 1. **z-order fix** (`HoverForm.HandleWatchTick`): the IDE's own Code Insight popup jumped in front of
+>    ours. Fixed by re-asserting `HWND_TOPMOST` on every 150 ms watch tick via
+>    `SetWindowPos(..., SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE)` (NOACTIVATE = never steals editor
+>    focus), guarded by `Visible and HandleAllocated`.
+> 2. **Param types render FIXED green:** `GetSyntaxColor(srType)` now returns `CL_TYPE` (#217A3C) always
+>    and Exits (like `srSection` blue), instead of reading `atIdentifier` (the user's IDE identifier
+>    color was dark/grey, making types unreadable). User decision: "fixed green always".
+> 3. **Untyped `var`/`out` params labelled "by reference":** in `RenderModel`, `P.TypeText=''` emits
+>    `by reference` (muted) instead of a blank type. User decision: "by reference".
+> 4. **CALLED FROM = a blue + bold BODY label, NOT a grid header (a deliberate pivot).** First attempt
+>    made the ListView column-header bold+blue via `NM_CUSTOMDRAW`/`CN_NOTIFY` -- FRAGILE: a themed
+>    header ignores `CDRF_NEWFONT`'s font (ended up blue-only, then neither). ABANDONED and fully
+>    REVERTED (removed `CNNotify`, `FCallerHeaderFont`, `FHeaderUnthemed`, the `SetWindowTheme` un-theme,
+>    and the `Winapi.CommCtrl`/`Winapi.UxTheme` uses). Replaced with: `FCallers.ShowColumnHeaders:=False`
+>    (grey OS header hidden) + `RenderModel` gained an `ACallerCount` param and emits `CALLED FROM (N)`
+>    as a blue bold `srSection` line at the BOTTOM of the body -- guaranteed bold+blue in every theme
+>    because it is just colored RichEdit text. Signature: `RenderModel(const AModel; ACallerCount: Integer)`;
+>    call site passes `Length(ACallers)`.
+> 5. **Grid spacing tuned to the user's taste (final, confirmed):** callers-grid height dropped the ~28 px
+>    header allowance to `6 + rows*18` (headers hidden); body height is `BodyLines*18 - 24`, which pulls
+>    the grid up ~2 lines to dock under the label AND leaves just enough room to clear the body's vertical
+>    scrollbar (the user's last two asks: "move the grid 2 lines up" then "expand down 4-6 px to lose the
+>    scrollbar"). If the scrollbar ever returns on a differently-sized symbol, the clean size-independent
+>    fix is to suppress the body's vertical scrollbar when content fits (not more pixel-nudging).
+> 6. Already removed this session: the `[STRUCT | BPL <date>]` debug line in `RenderModel`.
+>
+> **REMAINING -- exactly 2 items, then the user pushes:**
+> 1. **STRIP DEBUG SCAFFOLDING** (the `[STRUCT]` block is already gone; still to remove): (a) `function
+>    DebugBuildStamp` in `HoverForm.pas` (now unused after the `[STRUCT]` removal -- delete it); (b) the
+>    `[STRING | ' + DebugBuildStamp + ']'` stamp appended to the STRING-fallback `Caption` (in the string
+>    `ShowAt` path, ~`HoverForm.pas:1057` area); (c) the diagnostic `DebugLog` lines -- `FetchHoverModel:
+>    ...` / `TryBuildHoverModel: ...` in `Editor.pas` and `HoverTracker: STRUCTURED/STRING ...` in
+>    `HoverTracker.pas`; (d) the unused locals `JStart/JEnd/Depth/InStr/Esc/Ch` in `FetchHoverModel`
+>    (`Editor.pas`, the H2164 hints left after it switched to `SliceJsonBracket`). Then REBUILD the BPL
+>    (RAD Studio CLOSED) and confirm 0 dcc errors.
+> 2. **COMMIT CLEAN**, then the user pushes: the clean hover fixes (CLI multi-db `DoHover` +
+>    `SliceJsonBracket` + dwell-structured `TryBuildHoverModel` + callers + all the polish + z-order +
+>    green types + by-reference + CALLED-FROM body label + grid spacing) and fold `run_hover_multidb.ps1`
+>    into the battery. The BPL/DCP go in a SEPARATE `build(plugin):` commit per the v0.88 convention.
+>
+> **STILL QUEUED after that:** 2 AUTODOC TODOs (below: Called-from parity via `SliceJsonBracket`+multi-db;
+> Returns-format reuse) and 3 user threads (#3 forms-csv regression on the deployed CSV, #4 Tools->Options
+> pages spike, #5 Editor->Language tabs spike).
+>
+> **BUILD RECIPE (proven all session):** Win32 BPL via a 3-line wrapper `.bat` (`rsvars` -> `cd
+> src/delphi-plugin` -> `msbuild /t:Build /p:Config=Debug /p:Platform=Win32 dclDragLintWizard.dproj`),
+> run from PowerShell `Start-Process cmd.exe -Wait` with the output redirected to a log; check
+> `BUILD_EXITCODE=0` and no `error F2039` / `[dcc32 Error]`. It auto-deploys to
+> `third_party/dll-win32/dclDragLintWizard.bpl`. GOTCHA CONFIRMED THIS SESSION: `bds.exe` (RAD Studio)
+> holds the BPL lock -> `F2039 Could not create output file` even when every unit compiled 0-error; the
+> user must CLOSE RAD Studio first. Check `Get-Process bds` before building.
+>
+> ---
+>
+> ## RESUME 2026-07-07 (LATEST-24) -- **HOVER RESTYLE LIVE-SMOKE DEBUG IN PROGRESS. Structured colored view NOW WORKS in the IDE. Finishing polish. ALL live-smoke fixes UNCOMMITTED (debug-quality).**
+>
+> **STATE:** The v0.94 hover milestone (LATEST-23 below) was declared done, then LIVE IDE SMOKE found real bugs.
+> After a long debug chain the structured colored Help-Insight view NOW RENDERS in the IDE -- user confirmed:
+> colored signature on ONE line, PARAMETERS/RETURNS bold blue (uppercase), green types, `RETURNS: boolean`
+> inline, mined `Result := False` / `Result := rlines <> 0` lines, and the CALLED FROM grid populated with
+> double-click navigation. What's left is VISUAL POLISH only.
+>
+> **GIT:** `main`=`0e80625` (the ONLY committed live-smoke fix = the AV crash). 13 commits ahead of origin
+> (12 milestone + `0e80625`). **ALL OTHER live-smoke fixes are UNCOMMITTED working-tree edits** (user chose
+> LEAVE UNCOMMITTED at the handoff): `src/cli/DRagLint.CLI.pas`, `src/delphi-plugin/DragLint.Plugin.Editor.pas`
+> + `.HoverForm.pas` + `.HoverTracker.pas`, `docs/lint/BACKLOG.md`, new `tests/autotest/run_hover_multidb.ps1`.
+> Plus the usual LEAVE-THOSE (IDE json/dsv, rebuilt bpl/dcp, forms-csv spec, `tests/autotest/results/*.json`).
+>
+> **4 ROOT-CAUSE BUGS FIXED THIS SESSION (all in the uncommitted tree except #1):**
+> 1. **AV crash (COMMITTED `0e80625`):** `HandleMemoMouseMove` used the TMemo idiom
+>    `Perform(EM_CHARFROMPOS,0,MakeLParam(X,Y))` on `FBody`, now a TRichEdit -> rich edit wants a `POINTL*` in
+>    lParam -> deref'd garbage -> AV in MSFTEDIT.DLL. Fixed: `SendMessage(EM_CHARFROMPOS,0,LPARAM(@Pt))` +
+>    `EM_EXLINEFROMCHAR` + `Winapi.RichEdit` in uses.
+> 2. **`hover --qname` used only the LAST `--db` (CLI `DoHover`):** the arg parser sets `AArgs.DbPath` on
+>    EVERY `--db` so it ends up = the LAST one; the plugin passes 3 dbs (ORM3, SQL, library) so hover queried
+>    `library` (no symbol) -> "No symbol matched" -> `FetchHoverModel` False -> string fallback. FIXED: `DoHover`
+>    now iterates `ResolveConsumerDbs(AArgs)` + uses the FIRST db that contains the qname. Regression test
+>    `tests/autotest/run_hover_multidb.ps1` (10/10 pass -- target db first/middle/last).
+> 3. **stderr-merged JSON -> parse nil (plugin `DragLint.Plugin.Editor.pas`):** `RunAndCaptureStdout` sets
+>    `SI.hStdError:=WritePipe` (MERGES stderr into the captured stdout); the CLI writes banners
+>    "(loaded defaults...)" / "  FTS5 probe:" to stderr AROUND the JSON, so `Output` = `{...json...}(loaded
+>    defaults...)`; strict `TJSONObject.ParseJSONValue` returns nil on trailing non-JSON -> silent empty.
+>    FIXED via a new shared `SliceJsonBracket(AText, AOpen, AClose)` (string-aware brace/bracket walk) used by
+>    BOTH `FetchHoverModel` (object) AND `FetchHoverCallers` (array). THIS is why CALLED FROM showed 0 callers
+>    even though `find-callers` returned data.
+> 4. **Dwell path never used the structured view:** mouse-hover fires via `HoverTracker` (NOT the menu
+>    `InvokeHover`); Task 8 only wired InvokeHover. FIXED: new interface fn
+>    `TryBuildHoverModel(rawmd; out AModel; out ACallers): Boolean` in Editor.pas (mines qname via
+>    `ExtractHoverQname`, fetches `hover --json` + callers-by-last-segment); HoverTracker calls it and shows
+>    the structured popup on success, the string popup on any miss.
+>
+> **POLISH DONE (uncommitted, NOT yet built into the BPL -- RAD Studio was OPEN, blocking the rebuild):**
+> - RETURNS inline (`RETURNS: boolean` + single value inline; multi lists below). New `srSection` role =
+>   strong blue `CL_SECTION` #1560D6 for the uppercase bold PARAMETERS/RETURNS labels. Types green (`srType`).
+> - Colors survive theming: `FBody.StyleElements:=[]` (TRichEditStyleHook was overriding `SelAttributes.Color`);
+>   same now on `FCallers.StyleElements:=[]` + `Color:=clWindow`.
+> - Window: `WordWrap:=False` + `ssBoth` so the signature stays 1 line; width measured from `AModel.Signature`
+>   (NOT `FBody.Lines` which are pre-wrapped); `MAX_W=1200`; `PlaceAndShow` expands into available screen then
+>   clamps to the work-area edge.
+> - Borderless: `BorderStyle:=bsNone` + `WS_BORDER` thin frame in `CreateParams` (like Delphi Code Insight; the
+>   colored signature line IS the header). Callers grid columns widened (Unit 260 / Line 55 / Code 620).
+>
+> **REMAINING POLISH (next session -- BUILD FIRST, then the user re-tests):** The user's LAST screenshot was
+> still `BPL 15:19`, i.e. BEFORE the borderless/grid edits were built (RAD Studio open blocked the rebuild).
+> So: (A) ensure RAD Studio CLOSED, rebuild the Win32 BPL (recipe below), user re-tests. Open items to verify
+> AFTER the build (they may already be fixed by the uncommitted edits): (i) CALLED FROM column header showed
+> "Called fro..." ABBREVIATED + the grid was a DARK color -> widened columns + `FCallers.StyleElements:=[]`
+> should fix; (ii) title bar still said 'drag-lint' -> `bsNone` removes it. (iii) **NEW z-order bug, NOT yet
+> addressed:** the Delphi IDE's OWN Code Insight popup jumps IN FRONT of ours (ours is `fsStayOnTop` +
+> `HWND_TOPMOST` but the IDE tooltip still overlays it). Needs a fix -- design not decided (re-assert topmost
+> after show / on a watch-timer tick, or detect+dismiss when the IDE popup appears).
+>
+> **AFTER POLISH IS VISUALLY CONFIRMED -- STRIP DEBUG THEN COMMIT CLEAN:** (a) the `[STRUCT | BPL <date>]`
+> bottom line in `RenderModel`; (b) `function DebugBuildStamp` in HoverForm; (c) the diagnostic `DebugLog`
+> lines (`FetchHoverModel: ...`, `TryBuildHoverModel: ...`, `HoverTracker: STRUCTURED/STRING ...`) in Editor.pas
+> + HoverTracker.pas; (d) the unused locals (JStart/JEnd/Depth/InStr/Esc/Ch) left in `FetchHoverModel` after it
+> switched to `SliceJsonBracket` (H2164 hints). THEN commit the clean fixes + fold `run_hover_multidb` into the
+> battery. Two AUTODOC follow-ups already filed below (Called-from parity via SliceJsonBracket+multi-db; Returns
+> format reuse). User drives push.
+>
+> **BUILD RECIPE (proven this session):** CLI Win64: rsvars + `msbuild /t:Build /p:Config=Debug
+> /p:Platform=Win64 src/cli/drag-lint.dproj` -> copy `src/cli/Win64/Debug/drag-lint.exe` to
+> `third_party/dll-win64/drag-lint.exe`. PLUGIN Win32 BPL: rsvars + `msbuild /p:Platform=Win32
+> src/delphi-plugin/dclDragLintWizard.dproj` (auto-deploys to `third_party/dll-win32/dclDragLintWizard.bpl`).
+> Run from PowerShell `Start-Process cmd.exe -Wait` w/ log; `BUILD_EXITCODE=0` + `0 Error(s)`. GOTCHA: RAD
+> Studio (bds.exe) holds the BPL lock -> `F2039 Could not create output file`; CLOSE it first. GOTCHA: the
+> drag-lint SELF-LINT reports FALSE-POSITIVE "errors" on literal `{ }` / `[ ]` inside `{ }` comments and on
+> `'\'` char literals (use `#92`); the REAL dcc compiler is the gate, not the self-lint. Debug WITHOUT the IDE:
+> self-test the CLI + slice logic via `.ps1` / PowerShell (this session PROVED both the multi-db fix AND the
+> slice extraction before reopening RAD Studio).
+>
+> ---
+>
 > ## RESUME 2026-07-07 (LATEST-23) -- **HOVER HELP-INSIGHT RESTYLE IMPLEMENTED (Tasks 1-9, commits `365a471..f8bb756` + this task's hardening fix). OPEN: IDE LIVE SMOKE (user).**
 > Executed as a 9-task sequence (SDD-style, one commit per task). What shipped: the IDE hover popup now renders as a
 > Delphi-Help-Insight-style tooltip instead of a plain-text dump. **(1)** one-line clickable **signature header**
@@ -83,6 +234,18 @@
 > hover=10 / autodoc=20 as defaults). Touch points: `src/doc/DRagLint.Doc.Facts.pas` (return facts) +
 > `src/doc/DRagLint.Doc.Document.pas` (emit into `<returns>`); reuse `MineReturnExpressions` (already pure +
 > shared). Own brainstorm->spec->plan mini-cycle. NOT part of the hover milestone; queued for right after it.
+>
+> **IMMEDIATE TODO (user, 2026-07-07) -- AUTODOC "Called from" PARITY:** the hover live-smoke surfaced a bug
+> class AutoDoc likely SHARES. In the plugin, `RunAndCaptureStdout` MERGES the CLI's stderr banners
+> ("(loaded defaults...)", "  FTS5 probe: ...") into captured stdout AROUND the JSON, and strict
+> `TJSONObject.ParseJSONValue` returns nil on trailing non-JSON -> silent EMPTY results. Fixed in hover via a
+> shared `SliceJsonBracket` helper (src/delphi-plugin/DragLint.Plugin.Editor.pas) for BOTH the `hover --json`
+> object AND the `find-callers --json` array. ALSO fixed: `hover --qname` (CLI DoHover) only used the LAST
+> `--db`, not all -> a symbol in an earlier db returned "No symbol matched". **AutoDoc's Called-from / Calls /
+> Used-in facts (`src/doc/DRagLint.Doc.Facts.pas`) draw on the SAME find-callers/refs data -- audit for (a) the
+> stderr-trailing-chatter JSON parse if AutoDoc shells out + captures merged stdout, and (b) multi-db coverage.
+> Make AutoDoc's Called-from behave like the hover's (same slice + all-db search).** Verify against a symbol
+> whose callers live in a NON-first db.
 >
 > **OPEN from v0.94 (user, deferred):** IDE live smoke for the "Create helper class" menu (reopen RAD Studio;
 > 10-step checklist in `.superpowers/sdd/task-8-report.md`; BPL already built + committed `f16c5a3`).

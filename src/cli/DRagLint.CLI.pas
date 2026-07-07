@@ -3547,14 +3547,35 @@ var
   Syms : TArray<TSymbol>;
   Doc  : TParsedDoc     ;
   Fmt  : string         ;
+  Dbs  : TArray<string> ;
+  Db   : string         ;
+  UsedDb: string        ;
 begin
   if AArgs.QName = '' then begin Writeln('Usage: drag-lint hover --qname <Foo.Bar> [--db <path>] ' + '[--format md|plain|json]'); Exit(2); end;
-  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
-  Syms:= Store.FindSymbolsByQualifiedName(AArgs.QName);
-  if Length(Syms) = 0 then begin Writeln(System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName])); Exit(1); end;
+  // v0.94.1 BUGFIX: hover must search ALL --db paths, not just one. The IDE (and
+  // manifest resolution) pass several --db values -- e.g. a project index, a SQL
+  // index, and a platform library index. The old code used AArgs.DbPath, which
+  // the parser sets to the LAST --db, so hovering a symbol that lives in an
+  // EARLIER db returned "No symbol matched" and the IDE silently fell back to the
+  // plain string popup. Now: iterate every resolved db and use the FIRST one that
+  // contains the qname (mirrors how query find-callers walks multiple dbs).
+  Dbs:= ResolveConsumerDbs(AArgs);
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+
+  Store := nil;
+  UsedDb:= '';
+  SetLength(Syms, 0);
+  for Db in Dbs do
+  begin
+    if not TFile.Exists(Db) then Continue;
+    Store:= TSQLiteSymbolStore.Create(Db);
+    Store.Migrate;
+    Syms:= Store.FindSymbolsByQualifiedName(AArgs.QName);
+    if Length(Syms) > 0 then begin UsedDb:= Db; Break; end;
+    Store:= nil; { release before trying the next db }
+  end;
+  if (Length(Syms) = 0) or (Store = nil) then begin Writeln(System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName])); Exit(1); end;
 
   Doc:= Store.GetSymbolDoc(Syms[0].Id);
   { v0.43: no doc comment is no longer fatal -- the renderer still shows the
