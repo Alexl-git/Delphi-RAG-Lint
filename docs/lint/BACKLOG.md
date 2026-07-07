@@ -1,5 +1,25 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-07 (LATEST-19) -- **NEXT FEATURE = ENUM-HELPER GENERATOR (planned, NOT started -- brainstorm it). v0.93 shipped.**
+> `main`=`2937f02` (enum-helper docs commit), synced w/ origin, clean except IDE json/dsv + 1 untracked forms-csv spec (leave). schema v14.
+> **User (2026-07-07) wants drag-lint to AUTOMATE the standard enum `record helper`** -- `ToByte`/`FromByte`/`ToInteger`/
+> `FromInteger`/`ToString`/`FromString` -- that ORM3's `C:\Projects\DB\ORM3\COMMON\MSCTYPES.PAS` hand-writes ~45x
+> (MSCLIST *uses* them; the TYPES + helpers live in MSCTYPES). **Entry point:** right-click an enum MEMBER or the enum
+> TYPE/class definition -> a context-menu item **"Create helper class"** (only when no helper exists yet).
+> **>>> READ FIRST: `docs/lint/DESIGN-enum-helper-generator.md`** (scoping note + 6 open design Qs: ToString-RTTI-vs-case,
+> helper placement, method set, member-vs-type trigger, CLI verb shape, IDE menu) **+ `docs/lint/INVESTIGATION-enum-helper-pattern.md`**
+> (ground-truth pattern from MSCTYPES + the confirmed index support + a 10-case TESTING PLAN incl. a build+round-trip gate).
+> **DE-RISKED:** the indexer ALREADY emits `skEnum` + `skEnumValue` (name+order, parser `DRagLint.Parser.Delphi13.pas:525-536`)
+> -> the generator emits `ord(<member>)` and Delphi computes the ordinal, so NO parser change is needed (query
+> `FindAllChildSymbols(enumId)` filtered to `skEnumValue`). It's a Track-4 Refactoring (code-gen action, sibling to
+> AutoDocument/AutoFix; reuses the index + CLI verb + TTextEditApplier + IDE-menu substrate). **RESUME = run
+> superpowers:brainstorming from those 2 docs (resolve the 6 Qs) -> writing-plans -> subagent-driven-development** (same
+> flow as the last 2 milestones). Optional: reindex ORM3 to v14 (currently v13) to validate live against MSCTYPES enums
+> (`drag-lint index C:\Projects\DB\ORM3 --db C:\Projects\DB\ORM3\drag-lint.sqlite`) -- NOT required (fixtures suffice).
+> **--- v0.93.0-alpha (AutoDocument Finish) + v0.92 (preprocessor) both SHIPPED this session; see LATEST-18 below.
+> OPEN (none gating): IDE live smoke for the Document unit/project menus + doc-drift Fix-it = USER (reopen RAD Studio);
+> DLL refresh to v1.1.1 + pure-grammar swap (from v0.92). ---**
+>
 > ## RESUME 2026-07-06 (LATEST-18) -- **v0.93.0-alpha SHIPPED: AutoDocument Finish (Track 2 COMPLETE). Milestone done (14 SDD tasks + final whole-branch review that FOUND+FIXED 1 Critical).**
 > `main` = release commit for v0.93.0-alpha, tag `v0.93.0-alpha`, VERSION CLI.pas:6=`0.93.0-alpha`, **schema still v14**.
 > GH release LIVE (win64 3.82MB + win32 3.05MB CLI-only zips). Completes the AutoDocument track: whole-unit/project
