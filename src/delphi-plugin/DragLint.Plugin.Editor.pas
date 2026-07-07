@@ -670,7 +670,13 @@ function ExtractHoverQname(const AMarkdown: string): string;
   argument for `hover --qname` (whose CLI resolver matches qualified_name
   EXACTLY -- a bare IdentifierAtCursor name will NOT resolve). Returns '' when
   the markdown carries no such entry (e.g. a plain string hover), so the caller
-  falls back to the legacy string popup. }
+  falls back to the legacy string popup.
+  Task 9 (final-review fix): a DOCUMENTED symbol's markdown opens with a
+  "# <QualifiedName>" H1 heading (RenderHoverMarkdown, no leading backtick)
+  instead of the "**name** `kind`" header used for undocumented symbols. If
+  present, that heading line already IS the full qname -- use it directly, so
+  the backtick-line scan below (which would otherwise land on the first
+  parameter bullet) is only reached as the undocumented-symbol fallback. }
 var
   Lines: TArray<string>;
   L    : string        ;
@@ -680,6 +686,15 @@ begin
   Result:= '';
   if Trim(AMarkdown) = '' then Exit;
   Lines:= AMarkdown.Split([#13, #10], TStringSplitOptions.ExcludeEmpty);
+  for i:= 0 to High(Lines) do
+  begin
+    L:= Trim(Lines[i]);
+    if (Length(L) >= 2) and (Copy(L, 1, 2) = '# ') then
+    begin
+      Result:= Trim(Copy(L, 3, MaxInt));
+      Exit;
+    end;
+  end;
   { The header line 0 is "**name** `kind`"; the qname lives on a later
     "`<qname>` - line N" line (optionally prefixed by a "- " bullet). }
   for i:= 0 to High(Lines) do
