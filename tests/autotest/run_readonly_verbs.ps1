@@ -7,9 +7,11 @@
 # the DB file's md5 AND the trigger count in sqlite_master: a pure read must
 # leave both byte-identical.
 #
-# Also asserts a pre-v13 (v12-shaped) DB gets the actionable
-#   index schema v12 < v13: run "drag-lint index <dir> --db <db>" to migrate
+# Also asserts a pre-current (v12-shaped) DB gets the actionable
+#   index schema v12 < v<N>: run "drag-lint index <dir> --db <db>" to migrate
 # message + nonzero exit from a read verb (outline), NOT a "no such column"
+# (the target version <N> is the CURRENT SCHEMA_VERSION -- assertion matches
+#  v12 < v\d+ so a future schema bump does not re-break this test)
 # field error.
 #
 # Usage: pwsh -File tests/autotest/run_readonly_verbs.ps1 [-Exe <path>]
@@ -148,7 +150,7 @@ $staleOut = (& $Exe outline --file $pas --db $dbv12 2>&1) -join "`n"
 $staleEc  = $LASTEXITCODE
 Check 'read verb on v12 db exits nonzero' ($staleEc -ne 0) "exit=$staleEc"
 Check 'read verb on v12 db prints actionable stale-schema line' `
-    ($staleOut -match 'index schema v12 < v13: run "drag-lint index <dir> --db <db>" to migrate') `
+    ($staleOut -match 'index schema v12 < v\d+: run "drag-lint index <dir> --db <db>" to migrate') `
     $staleOut
 Check 'read verb on v12 db does NOT print a field error' `
     (-not ($staleOut -match 'no such column')) `
