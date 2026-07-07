@@ -57,6 +57,19 @@ $dbOrdinalsUnit = Join-Path $WorkDir "explicit_ordinals_unit.sqlite"
 $out6 = & $exe index (Join-Path $dir "explicit_ordinals.pas") --db $dbOrdinalsUnit 2>&1
 if ($LASTEXITCODE -ne 0) { Write-Host "FAIL: index explicit_ordinals.pas (unit-test db)"; Write-Host $out6; exit 1 }
 
+# --- 7. (Task 6b review fix) MultiLineOrdinals.pas: TStage=(stInit=1, stMid=5,
+# stEnd=9) declared across MULTIPLE source lines, with the explicit ordinals
+# on lines AFTER the enum's own 'type'/'TStage = (' line -- the real-world
+# MSCTYPES.PAS shape ReadDeclSpan's multi-line span read exists for. Neither
+# explicit_ordinals.pas nor NegativeOrdinal.pas actually wraps across lines,
+# so this is the first fixture that proves the span read is genuinely
+# multi-line (a single-line-only regression would miss the '=' on stMid/
+# stEnd's lines). Own scoped DB -- unit-test use only (RESOLVE-level
+# assertion; see TestResolveMultiLineOrdinal in EnumHelperTests.dpr). ---
+$dbMultiLineUnit = Join-Path $WorkDir "multiline_ordinals_unit.sqlite"
+$out7 = & $exe index (Join-Path $dir "MultiLineOrdinals.pas") --db $dbMultiLineUnit 2>&1
+if ($LASTEXITCODE -ne 0) { Write-Host "FAIL: index MultiLineOrdinals.pas (unit-test db)"; Write-Host $out7; exit 1 }
+
 # --- build the DUnitX-style console test ---
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 $searchPath = "$repo\src\core;$repo\src\storage;$repo\src\query;$repo\src\index;$repo\src\preprocess;$repo\src\refactor"
@@ -64,7 +77,7 @@ $buildOut = cmd /c "call `"$rs`" && cd /d `"$PSScriptRoot`" && dcc64 -B -NSSyste
 $err = $buildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
 if ($err) { Write-Host "BUILD FAILED:"; $err | Select-Object -First 12; exit 1 }
 
-& "$PSScriptRoot\EnumHelperTests.exe" $dbSimple $dbAlready $dbSeparate $dbIfaceOnly $dbNoImpl $dbOrdinalsUnit
+& "$PSScriptRoot\EnumHelperTests.exe" $dbSimple $dbAlready $dbSeparate $dbIfaceOnly $dbNoImpl $dbOrdinalsUnit $dbMultiLineUnit
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # =====================================================================
@@ -416,6 +429,56 @@ if (Test-Path $ordinalsDefaultExePath) {
     Assert "ordinals-default gate: round-trip asserter exits 0 (ALL asserts passed)" ($LASTEXITCODE -eq 0)
 } else {
     Assert "ordinals-default gate: RoundTripOrdinalsDefault.exe was produced" $false
+}
+
+# =====================================================================
+# Task 6b review fix: MULTI-LINE explicit-ordinal ACCEPTANCE GATE.
+# MultiLineOrdinals.pas's TStage=(stInit=1, stMid=5, stEnd=9) is declared
+# across MULTIPLE source lines, with every explicit ordinal on a line AFTER
+# the enum's own 'type'/'TStage = (' line -- the real-world MSCTYPES.PAS
+# shape ReadDeclSpan's multi-line span read exists for (neither
+# explicit_ordinals.pas nor NegativeOrdinal.pas actually wraps across lines).
+# Apply create-enum-helper WITH NO --tostring FLAG AT ALL (the real CLI
+# default, tsmRtti) -- the generator must detect the explicit ordinals via
+# the multi-line span read and fall back to case-mode; the result must
+# compile + round-trip, proven the same way as the other Task 6/6b gates:
+# actually dcc64-compile a companion asserter program and RUN it. Filename
+# matches the `unit MultiLineOrdinals;` clause (dcc64 requires this to
+# compile standalone -- E1038 otherwise).
+# =====================================================================
+$multiLineDefaultDir = Join-Path $WorkDir "gate_multiline_default"
+New-Item -ItemType Directory $multiLineDefaultDir | Out-Null
+Copy-Item (Join-Path $dir "MultiLineOrdinals.pas") $multiLineDefaultDir
+Copy-Item (Join-Path $dir "RoundTripMultiLine.dpr") $multiLineDefaultDir
+$multiLineDefaultPas = Join-Path $multiLineDefaultDir "MultiLineOrdinals.pas"
+$dbMultiLineDefault  = Join-Path $WorkDir "gate_multiline_default.sqlite"
+& $exe index $multiLineDefaultPas --db $dbMultiLineDefault 2>&1 | Out-Null
+# NOTE: no --tostring flag here at all -- this is the point of the gate.
+& $exe create-enum-helper --qname TStage --db $dbMultiLineDefault --apply --no-backup 2>$null | Out-Null
+Assert "multiline-default gate: create-enum-helper apply exit 0" ($LASTEXITCODE -eq 0)
+$multiLineDefaultApplied = Get-Content $multiLineDefaultPas -Raw
+Assert "multiline-default gate: auto-fell-back to case-mode (no GetEnumName in applied text)" `
+    (-not ($multiLineDefaultApplied -match 'GetEnumName'))
+Assert "multiline-default gate: no System.TypInfo uses clause added (NeedsTypInfo=False)" `
+    (-not ($multiLineDefaultApplied -match 'System\.TypInfo'))
+Assert "multiline-default gate: applied result compiles (dcc64)" (Test-Compiles $multiLineDefaultPas)
+
+$multiLineDefaultBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$multiLineDefaultDir`" && dcc64 -B `"RoundTripMultiLine.dpr`"" 2>&1
+$multiLineDefaultBuildErr = $multiLineDefaultBuildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
+if ($multiLineDefaultBuildErr) {
+    Write-Host "FAIL  multiline-default gate: RoundTripMultiLine.dpr compiles" -ForegroundColor Red
+    $multiLineDefaultBuildErr | Select-Object -First 12
+    $script:fail++
+} else {
+    Write-Host "PASS  multiline-default gate: RoundTripMultiLine.dpr compiles"
+}
+$multiLineDefaultExePath = Join-Path $multiLineDefaultDir "RoundTripMultiLine.exe"
+if (Test-Path $multiLineDefaultExePath) {
+    $multiLineDefaultRunOut = & $multiLineDefaultExePath 2>&1
+    Write-Host ($multiLineDefaultRunOut -join "`n")
+    Assert "multiline-default gate: round-trip asserter exits 0 (ALL asserts passed)" ($LASTEXITCODE -eq 0)
+} else {
+    Assert "multiline-default gate: RoundTripMultiLine.exe was produced" $false
 }
 
 Write-Host ""

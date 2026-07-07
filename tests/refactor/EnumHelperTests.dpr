@@ -94,6 +94,34 @@ begin
   Check('explicit-ordinal: HasExplicitOrdinal = True' , R.HasExplicitOrdinal);
 end;
 
+{ Task 6b review fix: MultiLineOrdinals.pas -- TStage=(stInit=1, stMid=5,
+  stEnd=9) declared across MULTIPLE source lines (one member per line), with
+  the explicit ordinals on lines AFTER the enum's own `type`/`TStage = (`
+  line. This is the real-world MSCTYPES.PAS shape ReadDeclSpan exists for
+  (Task 6b's doc comment says so explicitly) -- but neither explicit_ordinals
+  .pas nor NegativeOrdinal.pas actually wraps across lines, so this is the
+  first fixture that would catch a single-line-only span read: if
+  ReadDeclSpan regressed to reading only EnumStartLine, this assertion would
+  flip to False (stMid=5/stEnd=9's '=' signs live on lines the single-line
+  read would never see) while stInit=1 (line 5, adjacent to the '(' on line
+  4) might still accidentally be visible depending on exactly how "single
+  line" was mis-implemented -- so this is a genuine multi-line witness, not
+  redundant with the existing single-line fixtures. }
+procedure TestResolveMultiLineOrdinal(const ADbPath: string);
+var
+  Store: ISymbolStore;
+  R    : TEnumHelperResolve;
+begin
+  Store:= TSQLiteSymbolStore.Create(ADbPath);
+  Store.Migrate;
+  R:= TEnumHelperRefactoring.Resolve(Store, 'TStage');
+  Check('multiline-ordinal: Found = True'            , R.Found);
+  Check('multiline-ordinal: EnumStartLine > 0'        , R.EnumStartLine > 0);
+  Check('multiline-ordinal: EnumEndLine > EnumStartLine (spans multiple lines)',
+    R.EnumEndLine > R.EnumStartLine);
+  Check('multiline-ordinal: HasExplicitOrdinal = True', R.HasExplicitOrdinal);
+end;
+
 { simple.pas's TColor = (clRed, clGreen, clBlue) has NO explicit ordinals at
   all -- HasExplicitOrdinal must be False, so Build keeps using RTTI under
   the default (no behaviour change for the common case). }
@@ -417,12 +445,13 @@ var
   ArgDbSimple, ArgDbAlready, ArgDbSeparate: string;
   ArgDbIfaceOnly, ArgDbNoImpl: string;
   ArgDbOrdinalsUnit: string;
+  ArgDbMultiLineUnit: string;
 begin
   GPass:= 0; GFail:= 0;
   try
-    if ParamCount < 6 then
+    if ParamCount < 7 then
     begin
-      Writeln('usage: EnumHelperTests <simple.sqlite> <already_has_helper.sqlite> <separate_unit.sqlite> <interface_only.sqlite> <no_impl.sqlite> <explicit_ordinals_unit.sqlite>');
+      Writeln('usage: EnumHelperTests <simple.sqlite> <already_has_helper.sqlite> <separate_unit.sqlite> <interface_only.sqlite> <no_impl.sqlite> <explicit_ordinals_unit.sqlite> <multiline_ordinals_unit.sqlite>');
       Halt(2);
     end;
     ArgDbSimple   := ParamStr(1);
@@ -431,11 +460,13 @@ begin
     ArgDbIfaceOnly:= ParamStr(4);
     ArgDbNoImpl   := ParamStr(5);
     ArgDbOrdinalsUnit:= ParamStr(6);
+    ArgDbMultiLineUnit:= ParamStr(7);
 
     TestSimpleResolve      (ArgDbSimple  );
     TestAlreadyHasHelper    (ArgDbAlready );
     TestSeparateUnitHelper  (ArgDbSeparate);
     TestResolveExplicitOrdinal          (ArgDbOrdinalsUnit);
+    TestResolveMultiLineOrdinal         (ArgDbMultiLineUnit);
     TestResolveSequentialNoExplicitOrdinal(ArgDbSimple    );
 
     TestGenerateAllRtti;
