@@ -70,6 +70,7 @@ uses
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
   , DRagLint.Refactor   .ExtractMethod
+  , DRagLint.Refactor   .EnumHelper
   , DRagLint.Format     .Yadf
   , DRagLint.Diagnostics.CompileCheck
   , DRagLint.Diagnostics.AstChecks

@@ -46,7 +46,7 @@ plain = c.execute(
     "SELECT * FROM type_helpers WHERE target_name = 'TPlain'"
 ).fetchall()
 tobyte = c.execute(
-    "SELECT qualified_name FROM symbols WHERE name = 'ToByte'"
+    "SELECT qualified_name FROM symbols WHERE qualified_name = 'ProbeHelper.TColorHelper.ToByte'"
 ).fetchall()
 print(len(helper), (helper[0][2] if helper else ''), (helper[0][1] if helper else ''), len(plain), len(tobyte))
 '@ | Set-Content $py1 -Encoding ascii
