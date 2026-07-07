@@ -29,25 +29,41 @@ begin
   if P > 0 then Result:= Copy(S, 1, P - 1) else Result:= S;
 end;
 
-// Extract '<rhs>' from 'Result := <rhs> ;' (drops trailing ';'), or '' if the
-// line is not a Result assignment.
+// Extract '<rhs>' from 'Result := <rhs> ;', including a guarded form like
+// 'if X then Result := <rhs>;' on the same line (drops trailing ';'), or ''
+// if the line has no top-level bare-Result assignment.
 function ResultRhs(const ALine: string): string;
 var
   T, Low: string;
-  P, SemiP: Integer;
+  P, SemiP, ScanFrom: Integer;
+  PrevOk, NextOk: Boolean;
 begin
   Result:= '';
   T:= Trim(StripLineComment(ALine));
   Low:= LowerCase(T);
-  if not StartsStr('result', Low) then Exit;
-  // require ':=' after 'result' (tolerate spaces)
-  P:= Pos(':=', T);
-  if P = 0 then Exit;
-  if Trim(Copy(T, 1, P - 1)).ToLower <> 'result' then Exit; // not a bare Result
-  T:= Trim(Copy(T, P + 2, MaxInt));
-  SemiP:= Pos(';', T);
-  if SemiP > 0 then T:= Copy(T, 1, SemiP - 1);
-  Result:= Trim(T);
+  ScanFrom:= 1;
+  while True do
+  begin
+    P:= Low.IndexOf('result', ScanFrom - 1) + 1; // 1-based Pos-style
+    if P = 0 then Exit;
+    // word boundary on both sides: not part of a longer identifier
+    // (MyResult, Result2, ResultSet, ...).
+    PrevOk:= (P = 1) or not CharInSet(Low[P - 1], ['a'..'z', 'A'..'Z', '0'..'9', '_']);
+    NextOk:= (P + 6 > Length(Low)) or not CharInSet(Low[P + 6], ['a'..'z', 'A'..'Z', '0'..'9', '_']);
+    if PrevOk and NextOk then
+    begin
+      // require ':=' immediately (tolerating spaces) after this 'result'
+      var Rest: string:= TrimLeft(Copy(T, P + 6, MaxInt));
+      if StartsStr(':=', Rest) then
+      begin
+        Rest:= Trim(Copy(Rest, 3, MaxInt));
+        SemiP:= Pos(';', Rest);
+        if SemiP > 0 then Rest:= Copy(Rest, 1, SemiP - 1);
+        Exit(Trim(Rest));
+      end;
+    end;
+    ScanFrom:= P + 6;
+  end;
 end;
 
 // Extract '<rhs>' from 'Exit(<rhs>)', or '' if not a value-form Exit.
@@ -60,6 +76,13 @@ begin
   T:= Trim(StripLineComment(ALine));
   Low:= LowerCase(T);
   if not StartsStr('exit', Low) then Exit;
+  // Word-boundary check: the char right after 'exit' must not be alnum/underscore,
+  // else this is an identifier call like ExitLoop(x)/Exitial, not a value-form Exit.
+  if Length(Low) > Length('exit') then
+  begin
+    var NextCh: Char:= Low[Length('exit') + 1];
+    if CharInSet(NextCh, ['a'..'z', '0'..'9', '_']) then Exit;
+  end;
   P:= Pos('(', T);
   if P = 0 then Exit; // bare Exit; -- no value
   // capture balanced parens content

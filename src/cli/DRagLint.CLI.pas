@@ -58,6 +58,7 @@ uses
   , DRagLint.LSP        .Server
   , Vcl.Graphics // v0.95 Task 1: clBlack/clRed for DoContrastSelfTest
   , DRagLint.Hover      .Renderer
+  , DRagLint.Hover      .Returns
   , DRagLint.Hover      .Contrast
   , DRagLint.Context    .Bundler
   , DRagLint.Resolver   .TypeAt
@@ -3560,10 +3561,33 @@ begin
     qualified name + an IDE-style Parameters block parsed from the signature,
     which is exactly what the LSP hover does. }
 
+  // v0.95: mine Result:= / Exit() RHS from the routine body span (if any).
+  var Rhs: TArray<string>;
+  SetLength(Rhs, 0);
+  if (Syms[0].ImplStartLine > 0) and (Syms[0].ImplEndLine >= Syms[0].ImplStartLine) then
+  begin
+    var Path: string:= Store.GetFilePath(Syms[0].FileId);
+    if (Path <> '') and TFile.Exists(Path) then
+    begin
+      var AllLines: TArray<string>:= TFile.ReadAllLines(Path, TEncoding.ANSI);
+      var Lo: Integer:= Syms[0].ImplStartLine - 1; // 1-based -> 0-based
+      var Hi: Integer:= Syms[0].ImplEndLine   - 1;
+      if Lo < 0 then Lo:= 0;
+      if Hi > High(AllLines) then Hi:= High(AllLines);
+      var Body: TArray<string>;
+      SetLength(Body, Hi - Lo + 1);
+      for var k:= Lo to Hi do Body[k - Lo]:= AllLines[k];
+      Rhs:= MineReturnExpressions(Body);
+    end;
+  end;
+
+  var UnitFile: string:= ExtractFileName(Store.GetFilePath(Syms[0].FileId));
+  var Model: THoverModel:= BuildHoverModel(Syms[0], Doc, UnitFile, Rhs);
+
   Fmt:= LowerCase(AArgs.Format);
   if Fmt = '' then Fmt:= 'plain';
 
-  if Fmt      = 'json' then Write(RenderHoverJson(Syms[0], Doc))
+  if Fmt      = 'json' then Write(DRagLint.Hover.Renderer.RenderHoverJson(Model))
   else if Fmt = 'md' then Write(RenderHoverMarkdown(Syms[0], Doc))
   else Write(RenderHoverPlain(Syms[0], Doc));
   Result:= 0;

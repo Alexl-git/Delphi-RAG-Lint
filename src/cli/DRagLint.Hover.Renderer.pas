@@ -19,7 +19,7 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 
 function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 
-function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string;
+function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string; overload;
 
 // v0.43: turn a proc-like signature -- e.g. '(AOwner: TComponent;
 // AFldrSystID: Int64): Boolean' -- into an IDE-style markdown block listing
@@ -79,6 +79,14 @@ function ParseSignatureParams(const ASignature: string): TArray<TParamPart>;
 /// <param name="AReturnRhs">Mined `Result:=`/`Exit()` return expressions.</param>
 /// <returns>A populated THoverModel.</returns>
 function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUnitFile: string; const AReturnRhs: TArray<string>): THoverModel;
+
+/// <summary>Serializes a structured THoverModel to the hover JSON shape:
+/// qname/unit/def_line/return_type/params (modifier/name/type each)/returns
+/// (mined RHS expressions)/returns_more (overflow count beyond the 10-entry
+/// cap)/summary. Used by `drag-lint hover --format json`.</summary>
+/// <param name="AModel">The hover model built by BuildHoverModel.</param>
+/// <returns>A single-line JSON object string.</returns>
+function RenderHoverJson(const AModel: THoverModel): string; overload;
 
 implementation
 
@@ -367,6 +375,38 @@ begin
     '{"qname":"%s","format":"%s","summary":"%s","returns":"%s",' + '"since":"%s","deprecated":%s}', [
       JsonEscape(ASym.QualifiedName), DocFormatToStr(ADoc.Format), JsonEscape(ADoc.Summary), JsonEscape(ADoc.ReturnsText), JsonEscape(ADoc.SinceText),
       IfThen(ADoc.Deprecated, 'true', 'false')]);
+end;
+
+function RenderHoverJson(const AModel: THoverModel): string;
+var
+  SB: TStringBuilder;
+  i: Integer;
+begin
+  SB:= TStringBuilder.Create;
+  try
+    SB.Append('{');
+    SB.Append(Format('"qname":"%s",', [JsonEscape(AModel.QualifiedName)]));
+    SB.Append(Format('"unit":"%s","def_line":%d,', [JsonEscape(AModel.UnitFile), AModel.DefLine]));
+    SB.Append(Format('"return_type":"%s",', [JsonEscape(AModel.ReturnType)]));
+    SB.Append('"params":[');
+    for i:= 0 to High(AModel.Params) do
+    begin
+      if i > 0 then SB.Append(',');
+      SB.Append(Format('{"modifier":"%s","name":"%s","type":"%s"}',
+        [JsonEscape(AModel.Params[i].Modifier), JsonEscape(AModel.Params[i].Name), JsonEscape(AModel.Params[i].TypeText)]));
+    end;
+    SB.Append('],"returns":[');
+    for i:= 0 to High(AModel.Returns) do
+    begin
+      if i > 0 then SB.Append(',');
+      SB.Append(Format('"%s"', [JsonEscape(AModel.Returns[i].Expr)]));
+    end;
+    SB.Append(Format('],"returns_more":%d,', [AModel.ReturnsMore]));
+    SB.Append(Format('"summary":"%s"}', [JsonEscape(AModel.Doc.Summary)]));
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
 end;
 
 // Parses the trailing '): <Type>;' from a routine signature. Inlined here
