@@ -159,8 +159,24 @@ type
       function ResolveTypeCategory(const ATypeName: string; AFileId: Int64): TTypeCategory;
       function GetVirtualMethodsIncludingAncestors(const AClassName: string; AFileId: Int64): TArray<string>;
       /// <summary>v15: all helpers (record/class) whose target type name matches
-      /// ATargetName (whole-DB). Empty when no helper targets that type.</summary>
+      /// ATargetName (whole-DB). Empty when no helper targets that type.
+      /// NAME-ONLY match: two unrelated same-named types in different units
+      /// (e.g. two distinct `TColor` enums) are indistinguishable to this call
+      /// -- prefer FindHelpersOfTypeSymbol when the candidate's own symbol id
+      /// is known, to avoid cross-linking unrelated same-named types.</summary>
       function FindHelpersOfType(const ATargetName: string): TArray<THelperEdge>;
+      /// <summary>Task 9b (FP fix): all helpers (record/class) whose edge
+      /// resolved its target to the EXACT symbol ATargetSymbolId (identity
+      /// match via type_helpers.target_symbol_id, not the target's bare name).
+      /// Only edges with a RESOLVED target_symbol_id can match -- an edge whose
+      /// target never resolved at index time (heritage name didn't uniquely
+      /// resolve in scope) is excluded, since it cannot be proven to target
+      /// ATargetSymbolId rather than some other same-named type. Use this
+      /// instead of FindHelpersOfType(name) whenever the candidate type's own
+      /// symbol id is known and false cross-links between same-named types in
+      /// different units must be avoided (enum-helper-separate-units lint rule,
+      /// enum-helper generator's existing-helper guard).</summary>
+      function FindHelpersOfTypeSymbol(ATargetSymbolId: Int64): TArray<THelperEdge>;
 
       { v0.40.4: leaf accessor for utilities that need raw SQL access
       (uses-report walks the whole files + unit_uses tables). Not part
@@ -3590,11 +3606,33 @@ begin
   end;
 end;
 
+{ Shared row-mapper for both FindHelpersOfType(name) and
+  FindHelpersOfTypeSymbol(id): both queries select the same th.* + s.kind
+  column set, only the WHERE clause differs. }
+procedure ReadHelperEdges(Q: TFDQuery; List: TList<THelperEdge>);
+var
+  Edge: THelperEdge;
+begin
+  while not Q.Eof do
+  begin
+    Edge:= Default(THelperEdge);
+    Edge.HelperSymbolId := Q.FieldByName('helper_symbol_id').AsLargeInt;
+    Edge.TargetName     := Q.FieldByName('target_name').AsString;
+    if not Q.FieldByName('target_symbol_id').IsNull then
+      Edge.TargetSymbolId:= Q.FieldByName('target_symbol_id').AsLargeInt;
+    if not Q.FieldByName('target_file_id').IsNull then
+      Edge.TargetFileId  := Q.FieldByName('target_file_id').AsLargeInt;
+    Edge.HelperKind     := Q.FieldByName('helper_kind').AsString;
+    List.Add(Edge);
+    Q.Next;
+  end;
+  Q.Close;
+end;
+
 function TSQLiteSymbolStore.FindHelpersOfType(const ATargetName: string): TArray<THelperEdge>;
 var
   Q   : TFDQuery           ;
   List: TList<THelperEdge>;
-  Edge: THelperEdge        ;
 begin
   List:= TList<THelperEdge>.Create;
   Q:= TFDQuery.Create(nil);
@@ -3605,20 +3643,35 @@ begin
                  'WHERE th.target_name = :target_name';
     Q.ParamByName('target_name').AsString:= ATargetName;
     Q.Open;
-    while not Q.Eof do
-    begin
-      Edge:= Default(THelperEdge);
-      Edge.HelperSymbolId := Q.FieldByName('helper_symbol_id').AsLargeInt;
-      Edge.TargetName     := Q.FieldByName('target_name').AsString;
-      if not Q.FieldByName('target_symbol_id').IsNull then
-        Edge.TargetSymbolId:= Q.FieldByName('target_symbol_id').AsLargeInt;
-      if not Q.FieldByName('target_file_id').IsNull then
-        Edge.TargetFileId  := Q.FieldByName('target_file_id').AsLargeInt;
-      Edge.HelperKind     := Q.FieldByName('helper_kind').AsString;
-      List.Add(Edge);
-      Q.Next;
-    end;
-    Q.Close;
+    ReadHelperEdges(Q, List);
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindHelpersOfTypeSymbol(ATargetSymbolId: Int64): TArray<THelperEdge>;
+{ Task 9b (FP fix): identity match on type_helpers.target_symbol_id. Rows
+  with a NULL target_symbol_id (heritage name did not uniquely resolve at
+  index time) never match ANY id, including ATargetSymbolId -- deliberate:
+  an unresolved edge cannot be proven to target this specific symbol rather
+  than some other same-named type, so treating it as a match would just
+  reintroduce the false-cross-link risk this method exists to remove. }
+var
+  Q   : TFDQuery           ;
+  List: TList<THelperEdge>;
+begin
+  List:= TList<THelperEdge>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT th.*, s.kind FROM type_helpers th ' +
+                 'JOIN symbols s ON s.id = th.helper_symbol_id ' +
+                 'WHERE th.target_symbol_id = :target_symbol_id';
+    Q.ParamByName('target_symbol_id').AsLargeInt:= ATargetSymbolId;
+    Q.Open;
+    ReadHelperEdges(Q, List);
     Result:= List.ToArray;
   finally
     Q.Free;

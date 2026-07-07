@@ -108,3 +108,82 @@ happens at parse time, not at migration time). Per Task 9 scope ("do NOT
 kick off a multi-hour whole-tree reindex"), a full ORM3 reindex was not run.
 ORM3 is therefore **not currently checkable** for this rule without a
 reindex; the self-index count above is the basis for the recommendation.
+
+## Post-fix (Task 9b)
+
+**Fix applied: option (a) from the recommendation above.** Added a dedicated
+`ISymbolStore.FindHelpersOfTypeSymbol(ATargetSymbolId: Int64): TArray<THelperEdge>`
+(new query `WHERE th.target_symbol_id = :target_symbol_id`, `src/storage/
+DRagLint.Storage.SQLite.pas`), and switched both callers from name-only
+`FindHelpersOfType(name)` to the symbol-id-aware call:
+- `CollectEnumHelperSeparateUnits` (`src/lint/DRagLint.Lint.ProjectRules.pas`)
+  now calls `AStore.FindHelpersOfTypeSymbol(Sym.Id)` per candidate `skEnum`
+  symbol, instead of `AStore.FindHelpersOfType(Sym.Name)`.
+- `TEnumHelperRefactoring.Resolve`'s existing-helper guard
+  (`src/refactor/DRagLint.Refactor.EnumHelper.pas`) now calls
+  `AStore.FindHelpersOfTypeSymbol(EnumSym.Id)`, same reasoning (the same
+  latent name-only bug existed there too, just not exercised by its own
+  tests, which use isolated single-enum fixture DBs).
+
+**NULL-frequency data (drove the semantics decision):** queried the
+self-index `type_helpers` table directly (Python sqlite3, no CLI verb
+needed): **0 of 9 rows have a NULL `target_symbol_id`** -- every helper edge
+in this repo, including the `TSymbolKindHelper` one that caused the FP,
+resolved a specific target symbol id at index time (`ResolveHelpers`'s
+"unambiguous: exactly one in-scope candidate, or a single global
+definition" resolution succeeded in all 9 cases; the FPs were never about an
+unresolved edge, they were about the OLD query matching **any** edge sharing
+the target's bare name regardless of which symbol id it actually resolved
+to). Chosen semantics: an edge only counts as targeting a given enum when
+`target_symbol_id` **equals** that enum's own symbol id; a NULL
+`target_symbol_id` never matches (can't prove identity against an
+unresolved edge) -- this is the query's WHERE clause, so it's exact-match
+by construction with no name fallback.
+
+**Regression suite (`run_enum_helper_separate_units.ps1`), rebuilt to 17
+checks (added Case C, a 3rd fixture `ModeUnrelated.pas`: an unrelated `TMode`
+enum with no helper, indexed alongside the genuine Mode.pas/ModeHelperUnit.pas
+pair):**
+- RED (pre-fix): Case C's 4 new checks FAILED -- the rule fired a spurious
+  finding on `ModeUnrelated.pas`'s `TMode`, reproducing the FP mechanism
+  exactly (name-only match paired `TModeHelper`'s edge with both `TMode`
+  enums). The genuine Mode/ModeHelperUnit pair still fired correctly.
+- GREEN (post-fix): all 17 checks pass, including both new assertions that
+  `ModeUnrelated.pas` produces **zero** findings and the fixture directory
+  produces **exactly 1** finding total (the genuine pair only) via both
+  `lint-all` and `lint-project`.
+
+**Self-index re-sweep (the headline result):** reindexed
+(`drag-lint index --all --only DragLint`: 532 files [+1 for the new
+`ModeUnrelated.pas` fixture], 14540 symbols, 26.6s; `type_helpers` still 9
+rows, still 0 NULL). Ran `lint-all --db <self-index> --json` again (7486
+total findings) and filtered to `enum-helper-separate-units`:
+
+| Before (Task 9) | After (Task 9b) |
+|---|---|
+| 6 findings (5 FP + 1 TP) | **1 finding (0 FP + 1 TP)** |
+
+The single surviving finding is the same genuine true positive as before:
+`helper TModeHelper (unit ...\ModeHelperUnit.pas) is separate from enum
+TMode (unit ...\Mode.pas); consider co-locating.` All 5 false positives
+(the real-code `TSymbolKindHelper`/`TSymbolKind` cross-link, plus the 4
+`_probe_helper.pas` `TColorHelper` fixture-noise hits) are gone.
+
+**No-regression confirmation:**
+- `tests/refactor/run_enum_helper.ps1` (EnumHelperTests.dpr + CLI battery):
+  **83/83 + full CLI suite green**, including `already_has_helper.pas`'s
+  `HasHelper=True`/`HelperSameUnit=True` case (isolated single-candidate DB,
+  symbol-id match trivially succeeds) and `helpers-of` verb behavior
+  (unchanged -- that CLI verb intentionally still uses the name-only
+  `FindHelpersOfType`, out of this fix's scope; see Task 9b report).
+- `tests/autotest/run_helper_edges.ps1`: 12/12 green (parser+resolve+store
+  end-to-end + v14->v15 migration regression, unaffected by this change).
+- `tests/StorageHelperEdgesTests.dpr` (rebuilt): 6/6 green -- the shared
+  row-mapper refactor (`ReadHelperEdges`, used by both `FindHelpersOfType`
+  and the new `FindHelpersOfTypeSymbol`) preserves `FindHelpersOfType`'s
+  exact prior behavior.
+
+Conclusion: the rule is now safe to ship ON by default -- the fix eliminates
+the systematic false-cross-link mechanism while preserving genuine
+cross-unit detection, confirmed by both a targeted regression fixture and
+a full self-index re-sweep.

@@ -135,8 +135,24 @@ type
     /// (cross-unit). Backs cross-unit virtual-method-in-constructor.</summary>
     function GetVirtualMethodsIncludingAncestors(const AClassName: string; AFileId: Int64): TArray<string>;
     /// <summary>v15: all helpers (record/class) whose target type name matches
-    /// ATargetName (whole-DB). Empty when no helper targets that type.</summary>
+    /// ATargetName (whole-DB). Empty when no helper targets that type.
+    /// NAME-ONLY match: two unrelated same-named types in different units
+    /// (e.g. two distinct `TColor` enums) are indistinguishable to this call
+    /// -- prefer FindHelpersOfTypeSymbol when the candidate's own symbol id
+    /// is known, to avoid cross-linking unrelated same-named types.</summary>
     function FindHelpersOfType(const ATargetName: string): TArray<THelperEdge>;
+    /// <summary>Task 9b (FP fix): all helpers (record/class) whose edge
+    /// resolved its target to the EXACT symbol ATargetSymbolId (identity
+    /// match via type_helpers.target_symbol_id, not the target's bare name).
+    /// Only edges with a RESOLVED target_symbol_id can match -- an edge whose
+    /// target never resolved at index time (heritage name didn't uniquely
+    /// resolve in scope) is excluded, since it cannot be proven to target
+    /// ATargetSymbolId rather than some other same-named type. Use this
+    /// instead of FindHelpersOfType(name) whenever the candidate type's own
+    /// symbol id is known and false cross-links between same-named types in
+    /// different units must be avoided (enum-helper-separate-units lint rule,
+    /// enum-helper generator's existing-helper guard).</summary>
+    function FindHelpersOfTypeSymbol(ATargetSymbolId: Int64): TArray<THelperEdge>;
     function FindByDocTag(const ATag: string): TArray<TSymbol>                           ;
     function FindUndocumented(const AKind: string; APublicOnly: Boolean): TArray<TSymbol>;
     function FindByDocContains(const ASubstring: string): TArray<TSymbol>                ;

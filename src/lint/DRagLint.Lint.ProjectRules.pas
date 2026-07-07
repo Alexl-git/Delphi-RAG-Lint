@@ -343,14 +343,23 @@ end; // function
 /// `record helper for TX` / `class helper for TX` (via the first-class type_helpers
 /// edge, v15) is declared in a DIFFERENT unit than TX itself -- a co-location
 /// advisory. Whole-DB pass: for every indexed `skEnum` symbol, queries
-/// AStore.FindHelpersOfType(enum name) and compares each edge's helper-owning file
-/// to the enum's own file.</summary>
+/// AStore.FindHelpersOfTypeSymbol(enum's own symbol id) and compares each edge's
+/// helper-owning file to the enum's own file.</summary>
 /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
 /// <returns>'enum-helper-separate-units' findings, one per enum with a cross-unit
 /// helper (same-unit helpers and enums with no helper produce nothing); empty if
 /// none. Deterministic: enums are visited in (file path, start line) order.</returns>
 /// <remarks>ON by default (explicit user decision, 2026-07-07) -- diverges from the
-/// OFF-by-default convention for most advisory rules in this codebase. Never raises.</remarks>
+/// OFF-by-default convention for most advisory rules in this codebase. Never raises.
+/// Task 9b (FP fix, 2026-07-07): matches by the enum's own SYMBOL ID
+/// (FindHelpersOfTypeSymbol), not its bare name (FindHelpersOfType) -- two
+/// unrelated same-named enums in different units (e.g. two distinct
+/// `TSymbolKind` types) were previously cross-linked by any helper edge
+/// sharing that name, producing false positives (5 of 6 findings on this
+/// repo's own self-index). A helper edge only counts as targeting THIS enum
+/// when type_helpers.target_symbol_id resolved to this exact symbol; an
+/// unresolved edge (NULL target_symbol_id) never matches, since it cannot be
+/// proven to target this enum rather than some other same-named one.</remarks>
 function CollectEnumHelperSeparateUnits(const AStore: ISymbolStore): TArray<TLintFinding>;
 var
   Findings: TList<TLintFinding>;
@@ -377,7 +386,7 @@ begin
       begin
         if Sym.Kind <> skEnum then Continue;
         if Sym.Name = '' then Continue;
-        Edges:= AStore.FindHelpersOfType(Sym.Name);
+        Edges:= AStore.FindHelpersOfTypeSymbol(Sym.Id);
         for Edge in Edges do
         begin
           HelperSym:= AStore.GetSymbolById(Edge.HelperSymbolId);

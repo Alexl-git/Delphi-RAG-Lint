@@ -72,8 +72,12 @@ type
     EnumEndLine: Integer;
     /// <summary>1-based column of the enum declaration's end.</summary>
     EnumEndCol: Integer;
-    /// <summary>True when FindHelpersOfType(EnumName) returned at least one
-    /// edge anywhere in the indexed codebase (whole-DB, not just this unit).</summary>
+    /// <summary>True when FindHelpersOfTypeSymbol(this enum's own symbol id)
+    /// returned at least one edge anywhere in the indexed codebase (whole-DB,
+    /// not just this unit). Task 9b (FP fix): matched by symbol identity, not
+    /// bare name -- an unrelated same-named enum in another unit with its own
+    /// helper does NOT set this True; only a helper edge that actually
+    /// resolved its target to THIS enum symbol counts.</summary>
     HasHelper: Boolean;
     /// <summary>True when the existing helper (HasHelper=True) is declared
     /// in the same file as the enum (EnumFileId). Undefined when HasHelper
@@ -356,8 +360,11 @@ begin
   SetLength(MemberList, MemberCount);
   Result.Members:= MemberList;
 
-  { Existing-helper guard: whole-DB, via the first-class type_helpers edge. }
-  Edges:= AStore.FindHelpersOfType(Result.EnumName);
+  { Existing-helper guard: whole-DB, via the first-class type_helpers edge.
+    Task 9b (FP fix): matched by THIS enum's own symbol id, not its bare
+    name -- an unrelated same-named enum elsewhere with its own helper must
+    not make this guard report HasHelper=True for EnumSym. }
+  Edges:= AStore.FindHelpersOfTypeSymbol(EnumSym.Id);
   if Length(Edges) > 0 then
   begin
     Result.HasHelper:= True;

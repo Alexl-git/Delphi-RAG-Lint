@@ -96,6 +96,41 @@ try {
   Check 'lint-project: same-unit fixture -> NO enum-helper-separate-units finding' ($sameProjHits.Count -eq 0)
 
   # ===================================================================
+  # Case C (Task 9b false-positive regression): two UNRELATED same-named
+  # TMode enums indexed together -- Mode.pas + ModeHelperUnit.pas (the
+  # genuine cross-unit pair from Case A, TModeHelper resolves its
+  # target_symbol_id to Mode.pas's TMode) PLUS ModeUnrelated.pas (a THIRD,
+  # unrelated TMode with no helper of its own, not `uses`d by
+  # ModeHelperUnit). Before the Task 9b fix, FindHelpersOfType('TMode') was
+  # name-only, so the rule paired TModeHelper's edge with BOTH TMode enums --
+  # a spurious finding on ModeUnrelated.pas's TMode. After the fix (symbol-id
+  # identity match), the rule must fire ONLY for Mode.pas's TMode (the
+  # genuine target) and produce NOTHING for ModeUnrelated.pas.
+  # ===================================================================
+  $fpDir = Join-Path $scratch 'fp'
+  New-Item -ItemType Directory -Path $fpDir | Out-Null
+  Copy-Item (Join-Path $enumHelperFixtures 'Mode.pas') $fpDir
+  Copy-Item (Join-Path $enumHelperFixtures 'ModeHelperUnit.pas') $fpDir
+  Copy-Item (Join-Path $enumHelperFixtures 'ModeUnrelated.pas') $fpDir
+  $fpDb = Join-Path $scratch 'fp.sqlite'
+  & $exePath index $fpDir --db $fpDb 2>$null | Out-Null
+
+  $fpAllOut = & $exePath lint-all --db $fpDb --json 2>$null
+  $fpAllFindings = Get-Findings $fpAllOut
+  $fpAllHits = @($fpAllFindings | Where-Object { $_.rule -eq 'enum-helper-separate-units' })
+  $fpGenuineHits   = @($fpAllHits | Where-Object { $_.message -match 'ModeUnrelated' })
+  Check 'lint-all: genuine TMode/TModeHelper pair still FIRES (identity match preserved)' (@($fpAllHits | Where-Object { $_.message -match '\bMode\.pas\b|\bMode\b' -and $_.message -match 'ModeHelperUnit' }).Count -ge 1)
+  Check 'lint-all: unrelated ModeUnrelated.pas TMode produces NO finding (symbol-id match kills the FP)' ($fpGenuineHits.Count -eq 0)
+  Check 'lint-all: exactly 1 finding total (genuine pair only, no FP duplicate)' ($fpAllHits.Count -eq 1)
+
+  $fpProjOut = & $exePath lint-project --db $fpDb --json 2>$null
+  $fpProjFindings = Get-Findings $fpProjOut
+  $fpProjHits = @($fpProjFindings | Where-Object { $_.rule -eq 'enum-helper-separate-units' })
+  $fpProjGenuineHits = @($fpProjHits | Where-Object { $_.message -match 'ModeUnrelated' })
+  Check 'lint-project: unrelated ModeUnrelated.pas TMode produces NO finding' ($fpProjGenuineHits.Count -eq 0)
+  Check 'lint-project: exactly 1 finding total (genuine pair only, no FP duplicate)' ($fpProjHits.Count -eq 1)
+
+  # ===================================================================
   # Catalog: rule is ON by default (rules --json).
   # ===================================================================
   $rulesOut = & $exePath rules --json 2>$null
