@@ -339,6 +339,69 @@ begin
   end;
 end; // function
 
+/// <summary>Deliverable C (enum-helper-generator milestone): flags an enum `TX` whose
+/// `record helper for TX` / `class helper for TX` (via the first-class type_helpers
+/// edge, v15) is declared in a DIFFERENT unit than TX itself -- a co-location
+/// advisory. Whole-DB pass: for every indexed `skEnum` symbol, queries
+/// AStore.FindHelpersOfType(enum name) and compares each edge's helper-owning file
+/// to the enum's own file.</summary>
+/// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
+/// <returns>'enum-helper-separate-units' findings, one per enum with a cross-unit
+/// helper (same-unit helpers and enums with no helper produce nothing); empty if
+/// none. Deterministic: enums are visited in (file path, start line) order.</returns>
+/// <remarks>ON by default (explicit user decision, 2026-07-07) -- diverges from the
+/// OFF-by-default convention for most advisory rules in this codebase. Never raises.</remarks>
+function CollectEnumHelperSeparateUnits(const AStore: ISymbolStore): TArray<TLintFinding>;
+var
+  Findings: TList<TLintFinding>;
+  FileIds : TArray<Int64>      ;
+  Fid     : Int64              ;
+  Path    : string             ;
+  Syms    : TArray<TSymbol>    ;
+  Sym     : TSymbol            ;
+  Edges   : TArray<THelperEdge>;
+  Edge    : THelperEdge        ;
+  HelperSym: TSymbol           ;
+  F       : TLintFinding       ;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  Findings:= TList<TLintFinding>.Create;
+  try
+    FileIds:= AStore.GetAllFileIds;
+    for Fid in FileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      Syms:= AStore.FindSymbolsByFile(Path);
+      for Sym in Syms do
+      begin
+        if Sym.Kind <> skEnum then Continue;
+        if Sym.Name = '' then Continue;
+        Edges:= AStore.FindHelpersOfType(Sym.Name);
+        for Edge in Edges do
+        begin
+          HelperSym:= AStore.GetSymbolById(Edge.HelperSymbolId);
+          if HelperSym.FileId = Sym.FileId then Continue; { co-located -- no finding }
+          F:= Default(TLintFinding);
+          F.RuleId  := 'enum-helper-separate-units';
+          F.Severity:= 'warning';
+          F.Message := Format('helper %s (unit %s) is separate from enum %s (unit %s); consider co-locating.',
+            [HelperSym.Name, AStore.GetFilePath(HelperSym.FileId), Sym.Name, Path]);
+          F.FilePath:= Path;
+          F.StartLine:= Sym.StartLine;
+          F.StartCol := Sym.StartCol;
+          F.EndLine  := Sym.StartLine;
+          F.EndCol   := Sym.StartCol + Length(Sym.Name);
+          Findings.Add(F);
+        end;
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Findings.Free;
+  end;
+end; // function
+
 type
   { One recorded 'case' occurrence whose selector text is shared across methods. }
   TSwitchSite = record
@@ -625,6 +688,14 @@ begin
     { circular-uses: whole-graph SCC pass (not per-file). }
     if WantRule('circular-uses') then
       for var Cf in CollectCircularUses(AStore) do Findings.Add(Cf);
+
+    { enum-helper-separate-units (Task 7, enum-helper-generator milestone):
+      whole-DB helper-edge pass (not per-file). ON by default -- do NOT add
+      this id to DoLintAll's inline disabled array or DoLintProject's
+      DefDisabled build-up (CLI.pas); this is the sole gate that keeps it
+      genuinely ON at runtime in both lint paths. }
+    if WantRule('enum-helper-separate-units') then
+      for var Ef in CollectEnumHelperSeparateUnits(AStore) do Findings.Add(Ef);
 
     { repeated-type-switch (v0.80 #14): cross-file case-selector grouping pass. }
     if WantRule('repeated-type-switch') then

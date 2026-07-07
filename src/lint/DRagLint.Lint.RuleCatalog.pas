@@ -210,6 +210,7 @@ begin
     B('layering-violation',    'project-wide', 'warning', 'Unit dependency crosses an architectural layer');
     B('interface-reference-cycle','project-wide','warning','Interface reference cycle (ARC leak)');
     B('circular-uses',         'project-wide', 'warning', 'Circular unit dependency (a uses-graph cycle among project units)');
+    B('enum-helper-separate-units', 'project-wide', 'warning', 'Enum helper (record/class helper) is declared in a different unit than its target enum -- consider co-locating'); { ON by default (explicit user decision, enum-helper-generator milestone 2026-07-07) -- diverges from the recent OFF-by-default convention for advisory rules; whole-DB helper edge (type_helpers, v15) via ISymbolStore.FindHelpersOfType, no heritage string-parsing }
 
     { --- documentation (ADF milestone) --- }
     B('missing-doc', 'documentation', 'warning', 'Public declaration has no DocInsight doc-comment', False); // OFF by default -- fires 1302x on drag-lint's own first-run wave; opt in via "enabled"

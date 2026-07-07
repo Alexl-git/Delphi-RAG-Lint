@@ -15,6 +15,13 @@
       the blanket batch. rules --json reports fixable=true so the IDE offers it.)
     * builtin rule count = 112  (= 110 pre-milestone + the 2 doc rules)
 
+  Total-count note (enum-helper-generator milestone, Task 7, 2026-07-07): the
+  builtin total below is 113 -- +1 on top of this suite's own 112 baseline --
+  because Task 7 added `enum-helper-separate-units` (category=project-wide, NOT
+  documentation, so it does not affect the documentation-category assertion
+  below). Bumped here deliberately, per this file's own stated purpose of
+  "accounting for" catalog additions rather than silently drifting.
+
   If someone flips a default, drops the fixable flag, or adds/removes a built-in
   without accounting for it, this suite fails -- the catalog is pinned.
 
@@ -52,9 +59,10 @@ if ($null -ne $dd) {
   Assert 'doc-drift fixable=true'                ($dd.fixable -eq $true)
 }
 
-# Built-in count grew by EXACTLY 2 (110 pre-milestone -> 112).
+# Built-in count grew by EXACTLY 2 (110 pre-milestone -> 112), then +1 more
+# (enum-helper-separate-units, Task 7, 2026-07-07) -> 113. See file header note.
 $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
-Assert ("built-in rule count = 112 (pre-milestone 110 + 2 doc rules); got {0}" -f $builtins.Count) ($builtins.Count -eq 112)
+Assert ("built-in rule count = 113 (pre-milestone 110 + 2 doc rules + enum-helper-separate-units); got {0}" -f $builtins.Count) ($builtins.Count -eq 113)
 
 # The +2 are precisely the two documentation-category built-ins.
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
