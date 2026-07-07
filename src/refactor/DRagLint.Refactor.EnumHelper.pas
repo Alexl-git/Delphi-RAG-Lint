@@ -62,6 +62,11 @@ type
     /// <summary>Enum member names in declaration order (e.g. ['clRed',
     /// 'clGreen', 'clBlue']). Only real named skEnumValue children.</summary>
     Members: TArray<string>;
+    /// <summary>1-based line of the enum declaration's start (the `T<Enum> =
+    /// (` line). Together with EnumEndLine this bounds the source span
+    /// HasExplicitOrdinal is detected from; not otherwise used for
+    /// insertion (EnumEndLine is the placement anchor).</summary>
+    EnumStartLine: Integer;
     /// <summary>1-based line of the enum declaration's end (closing ')' /
     /// ';'). Insertion anchor for the generated helper declaration.</summary>
     EnumEndLine: Integer;
@@ -80,6 +85,25 @@ type
     /// <summary>Name of a same-unit const array named '<EnumName>Descriptions'
     /// if one exists (e.g. 'TColorDescriptions'), else ''.</summary>
     DescArrayName: string;
+    /// <summary>True when the enum declaration's source text (the
+    /// EnumStartLine..EnumEndLine span) contains at least one member with an
+    /// explicit ordinal assignment, e.g. `sp_Upper = 5` or `Elem1 = -2`.
+    /// Delphi only emits automatic enum RTTI (GetEnumName/GetEnumValue) when
+    /// EVERY member uses the implicit sequential-from-0 default; an enum
+    /// whose resulting ordinal VALUES are non-sequential/non-0-based
+    /// genuinely has no RTTI (E2134 "Type has no type info" if requested).
+    /// This flag is a CONSERVATIVE over-approximation of that real
+    /// condition: it is set by ANY explicit `= N` on ANY member, even one
+    /// whose explicit values still happen to be 0,1,2,... (verified: such an
+    /// enum's RTTI actually still compiles and works) -- re-deriving
+    /// "sequential explicit values" from source text was judged not worth
+    /// the complexity, so this flag can be True in a few cases where RTTI
+    /// would have been fine. Build uses it to fall back from tsmRtti to
+    /// tsmCase, which is always a safe (if occasionally unnecessary) choice.
+    /// Detection is a text scan (ordinals are not indexed), scoped to the
+    /// `(...)` member list so the type-definition `T<Enum> = (` equals sign
+    /// is never mistaken for a member ordinal assignment.</summary>
+    HasExplicitOrdinal: Boolean;
   end;
 
   /// <summary>Result of the GENERATE stage: the synthesized Object Pascal
@@ -186,8 +210,16 @@ type
     /// of the enum type, e.g. 'Simple.TColor' or 'TColor'.</param>
     /// <param name="AMethods">Subset of the 6 convert methods to emit; see
     /// Generate.</param>
-    /// <param name="AToStringMode">ToString/FromString strategy; see
-    /// Generate.</param>
+    /// <param name="AToStringMode">Requested ToString/FromString strategy;
+    /// see Generate. tsmCase is always honored as-is. tsmRtti (the default)
+    /// is silently downgraded to tsmCase when Resolve detects an explicit
+    /// enum ordinal (Res.HasExplicitOrdinal) -- a conservative trigger that
+    /// guarantees the fallback fires whenever RTTI would genuinely fail to
+    /// compile (E2134), at the cost of occasionally also firing for an
+    /// explicit-but-still-sequential-from-0 enum where RTTI would actually
+    /// have worked (see HasExplicitOrdinal's doc comment). A fully implicit
+    /// (no explicit ordinal at all) enum still gets RTTI under the default,
+    /// unchanged.</param>
     /// <returns>Action=ehaNotFound when AEnumQName does not resolve;
     /// ehaExists when a helper already exists anywhere in the codebase (no
     /// edits -- never overwrites a hand-written helper); ehaNoImplSection
@@ -199,6 +231,72 @@ type
   end;
 
 implementation
+
+{ Reads the 1-based AStartLine..AEndLine (inclusive) span of AFilePath, joined
+  with a single space between lines, so a multi-line enum declaration (real
+  MSCTYPES-shaped enums routinely wrap one member per line) is scanned as one
+  string. '' on any error (missing file, out-of-range lines) -- same tolerant
+  pattern as ReadSourceLine/ReadDeclLine (DRagLint.Refactor.DocStub.pas /
+  DRagLint.Doc.Facts.pas), generalized here to a range because those helpers
+  only read a single line. Source is strict ANSI/CRLF per repo convention. }
+function ReadDeclSpan(const AFilePath: string; AStartLine, AEndLine: Integer): string;
+var
+  Lines : TArray<string>;
+  I     : Integer;
+  LLast : Integer;
+  SB    : TStringBuilder;
+begin
+  Result:= '';
+  if (AFilePath = '') or (AStartLine < 1) or (AEndLine < AStartLine) then Exit;
+  if not TFile.Exists(AFilePath) then Exit;
+  try
+    Lines:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+  except
+    Exit;
+  end;
+  if AStartLine > Length(Lines) then Exit;
+  LLast:= AEndLine;
+  if LLast > Length(Lines) then LLast:= Length(Lines);
+  SB:= TStringBuilder.Create;
+  try
+    for I:= AStartLine to LLast do
+    begin
+      if I > AStartLine then SB.Append(' ');
+      SB.Append(Lines[I - 1]);
+    end;
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+{ Detects an explicit ordinal assignment (e.g. `sp_Upper = 5`, `Elem1 = -2`)
+  anywhere in an enum member list, from the enum's own DECLARATION SOURCE TEXT
+  (ADeclSpan = the joined EnumStartLine..EnumEndLine span -- ordinals are not
+  indexed, see the design note on HasExplicitOrdinal). The declaration reads
+  `T<Enum> = (member1, member2 = N, ...);` -- the type-definition `=` sits
+  BEFORE the opening '(', so it must never be mistaken for a member ordinal
+  assignment. The fix: locate the FIRST '(' in ADeclSpan and scan only the
+  substring AFTER it for a member-list `=`. Any '=' found there means at
+  least one member has an explicit ordinal -- this is a deliberately
+  conservative signal (see HasExplicitOrdinal's doc comment: the real Delphi
+  RTTI cutoff is whether the resulting ordinal VALUES stay sequential-from-0,
+  which this text scan does not attempt to re-derive; "any explicit `=`"
+  triggers the case-mode fallback a little more often than strictly
+  necessary, but never incorrectly skips it). Returns False if ADeclSpan has
+  no '(' at all (malformed/unresolvable -- should not happen for a real
+  resolved enum). }
+function DetectExplicitOrdinal(const ADeclSpan: string): Boolean;
+var
+  ParenPos    : Integer;
+  MemberList  : string;
+begin
+  Result:= False;
+  ParenPos:= Pos('(', ADeclSpan);
+  if ParenPos = 0 then Exit;
+  MemberList:= Copy(ADeclSpan, ParenPos + 1, MaxInt);
+  Result:= Pos('=', MemberList) > 0;
+end;
 
 class function TEnumHelperRefactoring.Resolve(const AStore: ISymbolStore; const AEnumQName: string): TEnumHelperResolve;
 var
@@ -233,8 +331,15 @@ begin
   Result.EnumName    := EnumSym.Name;
   Result.EnumFileId  := EnumSym.FileId;
   Result.EnumFilePath:= AStore.GetFilePath(EnumSym.FileId);
+  Result.EnumStartLine:= EnumSym.StartLine;
   Result.EnumEndLine := EnumSym.EndLine;
   Result.EnumEndCol  := EnumSym.EndCol;
+
+  { Explicit-ordinal detection: read the enum's own decl source text
+    (multi-line span) and scan it -- see DetectExplicitOrdinal's doc comment
+    for the type-def-'=' vs member-ordinal-'=' distinction. }
+  Result.HasExplicitOrdinal:= DetectExplicitOrdinal(
+    ReadDeclSpan(Result.EnumFilePath, Result.EnumStartLine, Result.EnumEndLine));
 
   { Members in declaration order: FindAllChildSymbols orders by start_line,
     so a simple named-skEnumValue filter preserves that order. }
@@ -528,6 +633,7 @@ var
   LastImplUse: TUnitUse;
   HaveLastImplUse: Boolean;
   U          : TUnitUse;
+  EffectiveToStringMode: TToStringMode;
 begin
   Result:= Default(TEnumHelperResult);
 
@@ -576,7 +682,27 @@ begin
       Exit;
     end;
 
-    Gen:= Generate(Res, AMethods, AToStringMode);
+    { Effective ToString/FromString mode: an explicit --tostring case always
+      forces case mode; an explicit --tostring rtti (the default) falls back
+      to case mode whenever Res.HasExplicitOrdinal (the enum decl has at
+      least one member with an explicit `= N`). NOTE this is a deliberately
+      CONSERVATIVE trigger, not a precise one: Delphi only actually disables
+      automatic RTTI when the resulting ordinal VALUES stop being the
+      implicit sequential-from-0 default (verified: an enum whose explicit
+      ordinals happen to still be 0,1,2,... keeps working RTTI fine) -- but
+      re-deriving "are these explicit values sequential" from source text
+      is needless complexity for no real benefit, so ANY explicit ordinal
+      falls back, even on the rare case where RTTI would have compiled. This
+      never produces a wrong/non-compiling result, only an occasional
+      unnecessary case-mode fallback. A fully implicit (no `=` at all) enum
+      still gets RTTI under the default, unchanged from before this fallback
+      existed. This is the ONLY place the fallback decision is made; Generate
+      remains a pure function of whatever mode it is handed. }
+    EffectiveToStringMode:= AToStringMode;
+    if (AToStringMode = tsmRtti) and Res.HasExplicitOrdinal then
+      EffectiveToStringMode:= tsmCase;
+
+    Gen:= Generate(Res, AMethods, EffectiveToStringMode);
 
     { Indentation for the decl: match the enum's own declaration line (the
       standard 2-space `type` section indent in every fixture/real unit

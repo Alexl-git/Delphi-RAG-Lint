@@ -48,6 +48,15 @@ $dbNoImpl = Join-Path $WorkDir "no_impl.sqlite"
 $out5 = & $exe index (Join-Path $dir "no_impl_fragment.pas") --db $dbNoImpl 2>&1
 if ($LASTEXITCODE -ne 0) { Write-Host "FAIL: index no_impl_fragment.pas"; Write-Host $out5; exit 1 }
 
+# --- 6. (Task 6b) explicit_ordinals.pas: TSpec=(sp_Undefined=0, sp_Double=1,
+# sp_Upper=2) -- explicit (sequential-looking but EXPLICIT) ordinals disable
+# automatic enum RTTI; Resolve/Build must detect this and auto-fall-back to
+# case-mode ToString/FromString even under the default tsmRtti. Reused by the
+# unit-test harness below in addition to its Task-6 e2e use further down. ---
+$dbOrdinalsUnit = Join-Path $WorkDir "explicit_ordinals_unit.sqlite"
+$out6 = & $exe index (Join-Path $dir "explicit_ordinals.pas") --db $dbOrdinalsUnit 2>&1
+if ($LASTEXITCODE -ne 0) { Write-Host "FAIL: index explicit_ordinals.pas (unit-test db)"; Write-Host $out6; exit 1 }
+
 # --- build the DUnitX-style console test ---
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 $searchPath = "$repo\src\core;$repo\src\storage;$repo\src\query;$repo\src\index;$repo\src\preprocess;$repo\src\refactor"
@@ -55,7 +64,7 @@ $buildOut = cmd /c "call `"$rs`" && cd /d `"$PSScriptRoot`" && dcc64 -B -NSSyste
 $err = $buildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
 if ($err) { Write-Host "BUILD FAILED:"; $err | Select-Object -First 12; exit 1 }
 
-& "$PSScriptRoot\EnumHelperTests.exe" $dbSimple $dbAlready $dbSeparate $dbIfaceOnly $dbNoImpl
+& "$PSScriptRoot\EnumHelperTests.exe" $dbSimple $dbAlready $dbSeparate $dbIfaceOnly $dbNoImpl $dbOrdinalsUnit
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # =====================================================================
@@ -359,6 +368,54 @@ if (Test-Path $implUsesExePath) {
     Assert "has_impl_uses gate: round-trip asserter exits 0 (ALL asserts passed)" ($LASTEXITCODE -eq 0)
 } else {
     Assert "has_impl_uses gate: RoundTripImplUses.exe was produced" $false
+}
+
+# =====================================================================
+# Task 6b: THE AUTO-FALLBACK ACCEPTANCE GATE. explicit_ordinals.pas's TSpec
+# has every member on an explicit ordinal (sp_Undefined=0, sp_Double=1,
+# sp_Upper=2) -- Delphi therefore emits NO automatic RTTI for it. Apply
+# create-enum-helper WITH NO --tostring FLAG AT ALL (the real CLI default,
+# tsmRtti) -- before Task 6b this produced GetEnumName/GetEnumValue calls
+# that FAILED TO COMPILE (E2134 "Type has no type info"); the generator must
+# now silently fall back to case-mode and the result must compile + round-
+# trip, proven the same way as case8/has_impl_uses: actually dcc64-compile a
+# companion asserter program and RUN it (text-matching alone is not the
+# gate). Filename matches the `unit ExplicitOrdinals;` clause (dcc64
+# requires this to compile standalone -- E1038 otherwise).
+# =====================================================================
+$ordinalsDefaultDir = Join-Path $WorkDir "gate_ordinals_default"
+New-Item -ItemType Directory $ordinalsDefaultDir | Out-Null
+Copy-Item (Join-Path $dir "explicit_ordinals.pas") (Join-Path $ordinalsDefaultDir "ExplicitOrdinals.pas")
+Copy-Item (Join-Path $dir "RoundTripOrdinalsDefault.dpr") $ordinalsDefaultDir
+$ordinalsDefaultPas = Join-Path $ordinalsDefaultDir "ExplicitOrdinals.pas"
+$dbOrdinalsDefault  = Join-Path $WorkDir "gate_ordinals_default.sqlite"
+& $exe index $ordinalsDefaultPas --db $dbOrdinalsDefault 2>&1 | Out-Null
+# NOTE: no --tostring flag here at all -- this is the point of the gate.
+& $exe create-enum-helper --qname TSpec --db $dbOrdinalsDefault --apply --no-backup 2>$null | Out-Null
+Assert "ordinals-default gate: create-enum-helper apply exit 0" ($LASTEXITCODE -eq 0)
+$ordinalsDefaultApplied = Get-Content $ordinalsDefaultPas -Raw
+Assert "ordinals-default gate: auto-fell-back to case-mode (no GetEnumName in applied text)" `
+    (-not ($ordinalsDefaultApplied -match 'GetEnumName'))
+Assert "ordinals-default gate: no System.TypInfo uses clause added (NeedsTypInfo=False)" `
+    (-not ($ordinalsDefaultApplied -match 'System\.TypInfo'))
+Assert "ordinals-default gate: applied result compiles (dcc64)" (Test-Compiles $ordinalsDefaultPas)
+
+$ordinalsDefaultBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$ordinalsDefaultDir`" && dcc64 -B `"RoundTripOrdinalsDefault.dpr`"" 2>&1
+$ordinalsDefaultBuildErr = $ordinalsDefaultBuildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
+if ($ordinalsDefaultBuildErr) {
+    Write-Host "FAIL  ordinals-default gate: RoundTripOrdinalsDefault.dpr compiles" -ForegroundColor Red
+    $ordinalsDefaultBuildErr | Select-Object -First 12
+    $script:fail++
+} else {
+    Write-Host "PASS  ordinals-default gate: RoundTripOrdinalsDefault.dpr compiles"
+}
+$ordinalsDefaultExePath = Join-Path $ordinalsDefaultDir "RoundTripOrdinalsDefault.exe"
+if (Test-Path $ordinalsDefaultExePath) {
+    $ordinalsDefaultRunOut = & $ordinalsDefaultExePath 2>&1
+    Write-Host ($ordinalsDefaultRunOut -join "`n")
+    Assert "ordinals-default gate: round-trip asserter exits 0 (ALL asserts passed)" ($LASTEXITCODE -eq 0)
+} else {
+    Assert "ordinals-default gate: RoundTripOrdinalsDefault.exe was produced" $false
 }
 
 Write-Host ""

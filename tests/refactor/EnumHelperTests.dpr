@@ -76,6 +76,38 @@ begin
   Check('already-has-helper: DescArrayName'        , R.DescArrayName = 'TStatusDescriptions');
 end;
 
+{ Task 6b: explicit_ordinals.pas -- TSpec=(sp_Undefined=0, sp_Double=1,
+  sp_Upper=2). Every member has an explicit ordinal (even though they happen
+  to be sequential-from-0 in VALUE) -- Delphi's automatic-RTTI rule keys off
+  the SOURCE using an explicit `= N` at all, not whether the resulting values
+  are sequential, so HasExplicitOrdinal must be True here. }
+procedure TestResolveExplicitOrdinal(const ADbPath: string);
+var
+  Store: ISymbolStore;
+  R    : TEnumHelperResolve;
+begin
+  Store:= TSQLiteSymbolStore.Create(ADbPath);
+  Store.Migrate;
+  R:= TEnumHelperRefactoring.Resolve(Store, 'TSpec');
+  Check('explicit-ordinal: Found = True'             , R.Found);
+  Check('explicit-ordinal: EnumStartLine > 0'         , R.EnumStartLine > 0);
+  Check('explicit-ordinal: HasExplicitOrdinal = True' , R.HasExplicitOrdinal);
+end;
+
+{ simple.pas's TColor = (clRed, clGreen, clBlue) has NO explicit ordinals at
+  all -- HasExplicitOrdinal must be False, so Build keeps using RTTI under
+  the default (no behaviour change for the common case). }
+procedure TestResolveSequentialNoExplicitOrdinal(const ADbPath: string);
+var
+  Store: ISymbolStore;
+  R    : TEnumHelperResolve;
+begin
+  Store:= TSQLiteSymbolStore.Create(ADbPath);
+  Store.Migrate;
+  R:= TEnumHelperRefactoring.Resolve(Store, 'TColor');
+  Check('sequential: HasExplicitOrdinal = False', not R.HasExplicitOrdinal);
+end;
+
 { Step 5b: two-file case -- TMode declared in Mode.pas, TModeHelper declared
   in a SEPARATE unit ModeHelperUnit.pas. }
 procedure TestSeparateUnitHelper(const ADbPath: string);
@@ -272,6 +304,43 @@ begin
   Check('build-simple: bodies edit at/after implementation line', BodiesLine >= 5);
 end;
 
+{ Task 6b: Build's auto-fallback -- explicit_ordinals.pas's TSpec, called
+  with the DEFAULT tsmRtti (exactly what create-enum-helper does when the
+  caller passes no --tostring flag), must emit CASE-mode ToString/FromString
+  (no GetEnumName/GetEnumValue) and NOT add a System.TypInfo uses edit (no
+  RTTI needed once the fallback fires). Before this fallback existed, this
+  same call emitted GetEnumName/GetEnumValue -- which fails to compile
+  (E2134 "Type has no type info") for this enum shape; the round-trip gate
+  in run_enum_helper.ps1 proves the compile side, this proves the generated
+  text. }
+procedure TestBuildFallbackExplicitOrdinal(const ADbPath: string);
+var
+  Store: ISymbolStore;
+  Res  : TEnumHelperResult;
+  E    : TTextEdit;
+  AllText: string;
+  SawUsesTypInfo: Boolean;
+begin
+  Store:= TSQLiteSymbolStore.Create(ADbPath);
+  Store.Migrate;
+  Res:= TEnumHelperRefactoring.Build(Store, 'TSpec', ALL6, tsmRtti);
+
+  Check('build-fallback: Action = ehaBuilt', Res.Action = ehaBuilt);
+  AllText:= '';
+  SawUsesTypInfo:= False;
+  for E in Res.Edits do
+  begin
+    AllText:= AllText + E.Text;
+    if (Pos('System.TypInfo', E.Text) > 0) or (SameText(Trim(E.Text.Replace(#13#10,'')), 'uses System.TypInfo;')) then
+      SawUsesTypInfo:= True;
+  end;
+  Check('build-fallback: emits case-mode ToString (case Self of)', Pos('case Self of', AllText) > 0);
+  Check('build-fallback: emits case-mode FromString if-chain', Pos('if AValue = ''sp_Undefined'' then Result := sp_Undefined', AllText) > 0);
+  Check('build-fallback: no RTTI GetEnumName', Pos('GetEnumName', AllText) = 0);
+  Check('build-fallback: no RTTI GetEnumValue', Pos('GetEnumValue', AllText) = 0);
+  Check('build-fallback: no System.TypInfo uses edit (NeedsTypInfo=False after fallback)', not SawUsesTypInfo);
+end;
+
 { Step 5: interface-only-unit fixture -- empty implementation section must be
   POPULATED (bodies land there), not refused. }
 procedure TestBuildInterfaceOnly(const ADbPath: string);
@@ -347,12 +416,13 @@ end;
 var
   ArgDbSimple, ArgDbAlready, ArgDbSeparate: string;
   ArgDbIfaceOnly, ArgDbNoImpl: string;
+  ArgDbOrdinalsUnit: string;
 begin
   GPass:= 0; GFail:= 0;
   try
-    if ParamCount < 5 then
+    if ParamCount < 6 then
     begin
-      Writeln('usage: EnumHelperTests <simple.sqlite> <already_has_helper.sqlite> <separate_unit.sqlite> <interface_only.sqlite> <no_impl.sqlite>');
+      Writeln('usage: EnumHelperTests <simple.sqlite> <already_has_helper.sqlite> <separate_unit.sqlite> <interface_only.sqlite> <no_impl.sqlite> <explicit_ordinals_unit.sqlite>');
       Halt(2);
     end;
     ArgDbSimple   := ParamStr(1);
@@ -360,10 +430,13 @@ begin
     ArgDbSeparate := ParamStr(3);
     ArgDbIfaceOnly:= ParamStr(4);
     ArgDbNoImpl   := ParamStr(5);
+    ArgDbOrdinalsUnit:= ParamStr(6);
 
     TestSimpleResolve      (ArgDbSimple  );
     TestAlreadyHasHelper    (ArgDbAlready );
     TestSeparateUnitHelper  (ArgDbSeparate);
+    TestResolveExplicitOrdinal          (ArgDbOrdinalsUnit);
+    TestResolveSequentialNoExplicitOrdinal(ArgDbSimple    );
 
     TestGenerateAllRtti;
     TestGenerateSubset;
@@ -372,6 +445,7 @@ begin
     TestGenerateNoDescriptions;
 
     TestBuildSimple        (ArgDbSimple   );
+    TestBuildFallbackExplicitOrdinal(ArgDbOrdinalsUnit);
     TestBuildInterfaceOnly (ArgDbIfaceOnly);
     TestBuildRefuseExists  (ArgDbAlready  );
     TestBuildRefuseNoImpl  (ArgDbNoImpl   );
