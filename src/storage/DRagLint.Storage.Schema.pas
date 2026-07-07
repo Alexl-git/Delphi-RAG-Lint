@@ -3,7 +3,7 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 14;
+  SCHEMA_VERSION = 15;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
@@ -11,7 +11,9 @@ const
   // 47-49 (before the FTS5 block), so the FTS5-first index shifted from
   // 47 to 50 -- update this constant whenever entries are inserted before
   // the FTS5 block.
-  SCHEMA_DDL_FTS5_FIRST = 50;
+  // v15: type_helpers (base SQLite, no FTS5) adds 3 more statements,
+  // shifting the FTS5-first index from 50 to 53.
+  SCHEMA_DDL_FTS5_FIRST = 53;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
@@ -23,7 +25,7 @@ const
   // table's shape untouched -- so e.g. an index on such a column aborts the
   // whole migration with "no such column" on every pre-vN database. Indexes
   // on retrofitted columns belong in Migrate(), after their ALTER.
-  SCHEMA_DDL: array[0..54] of string = (
+  SCHEMA_DDL: array[0..57] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' + '  key   TEXT PRIMARY KEY,' + '  value TEXT NOT NULL' + ')',
 
     'CREATE TABLE IF NOT EXISTS files (' + '  id          INTEGER PRIMARY KEY,' + '  path        TEXT NOT NULL UNIQUE,' + '  mtime_unix  INTEGER NOT NULL,' +
@@ -183,7 +185,20 @@ const
     '  receiver_type_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL' +
     ')',
     'CREATE INDEX IF NOT EXISTS idx_call_edges_target ON call_edges(target_symbol_id)',
-    'CREATE INDEX IF NOT EXISTS idx_call_edges_ref    ON call_edges(ref_id)'
+    'CREATE INDEX IF NOT EXISTS idx_call_edges_ref    ON call_edges(ref_id)',
+
+    // v15: first-class helper-target edges. One row per record/class helper
+    // declaration linked to its target type (e.g. 'record helper for TColor').
+    // Captured at parse time via heritage (the target type in typeref children
+    // of a declClass node), resolved and linked at index time (like type_ancestors).
+    'CREATE TABLE IF NOT EXISTS type_helpers (' +
+      '  helper_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+      '  target_name      TEXT NOT NULL,' +
+      '  target_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+      '  target_file_id   INTEGER,' +
+      '  helper_kind      TEXT NOT NULL)',
+    'CREATE INDEX IF NOT EXISTS idx_type_helpers_helper ON type_helpers(helper_symbol_id)',
+    'CREATE INDEX IF NOT EXISTS idx_type_helpers_target ON type_helpers(target_name)'
 
     // v10: string-content index (text search) --------------------------------
     , 'CREATE TABLE IF NOT EXISTS string_literals (' + '  id         INTEGER PRIMARY KEY,' +

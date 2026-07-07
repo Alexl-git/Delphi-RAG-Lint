@@ -104,6 +104,11 @@ type
     // class/interface's `heritage` text, resolves each ancestor to a defining
     // symbol via the file's in-scope uses graph, and writes type_ancestors edges.
     procedure ResolveAncestry;
+    /// <summary>v15: whole-DB helper-resolution pass (run after ResolveAncestry).
+    /// Links each record/class helper's target type name to its defining symbol,
+    /// resolving cross-unit via the units-in-scope graph. Committed to
+    /// type_helpers table.</summary>
+    procedure ResolveHelpers;
     /// <summary>v14 (D5): whole-DB call-resolution pass (run after ResolveAncestry,
     /// which it depends on for the ancestor chain). Wipes call_edges, then types
     /// the receiver of every 'call' ref and writes a resolved edge (target symbol +
@@ -129,6 +134,9 @@ type
     /// AClassName -- its own virtuals plus those inherited from resolved ancestors
     /// (cross-unit). Backs cross-unit virtual-method-in-constructor.</summary>
     function GetVirtualMethodsIncludingAncestors(const AClassName: string; AFileId: Int64): TArray<string>;
+    /// <summary>v15: all helpers (record/class) whose target type name matches
+    /// ATargetName (whole-DB). Empty when no helper targets that type.</summary>
+    function FindHelpersOfType(const ATargetName: string): TArray<THelperEdge>;
     function FindByDocTag(const ATag: string): TArray<TSymbol>                           ;
     function FindUndocumented(const AKind: string; APublicOnly: Boolean): TArray<TSymbol>;
     function FindByDocContains(const ASubstring: string): TArray<TSymbol>                ;

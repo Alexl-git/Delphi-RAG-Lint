@@ -147,6 +147,10 @@ type
       procedure ResolveUnitUseTargets;
       // v11 (M1): type & hierarchy resolution (see ISymbolStore).
       procedure ResolveAncestry;
+      /// <summary>v15: populate the type_helpers table (record/class helper targets).
+      /// Analogous to ResolveAncestry (resolves each helper's target type name
+      /// cross-unit via the in-scope uses graph). Run after ResolveAncestry.</summary>
+      procedure ResolveHelpers;
       // v14 (D5): whole-DB call-resolution pass (see ISymbolStore).
       procedure ResolveCallTargets;
       function GetTransitiveAncestors(ASymbolId: Int64): TArray<TTypeAncestor>;
@@ -154,6 +158,9 @@ type
       function ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
       function ResolveTypeCategory(const ATypeName: string; AFileId: Int64): TTypeCategory;
       function GetVirtualMethodsIncludingAncestors(const AClassName: string; AFileId: Int64): TArray<string>;
+      /// <summary>v15: all helpers (record/class) whose target type name matches
+      /// ATargetName (whole-DB). Empty when no helper targets that type.</summary>
+      function FindHelpersOfType(const ATargetName: string): TArray<THelperEdge>;
 
       { v0.40.4: leaf accessor for utilities that need raw SQL access
       (uses-report walks the whole files + unit_uses tables). Not part
@@ -579,6 +586,18 @@ begin
           '  ancestor_file_id   INTEGER)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_ancestors_symbol ON type_ancestors(symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_ancestors_name   ON type_ancestors(ancestor_name)');
+  { v15: first-class helper-target edges. Similar to type_ancestors, one row
+    per helper declaration (record/class helper for T) linked to its target type.
+    Populated by the indexer during the resolve pass (like type_ancestors);
+    ON DELETE CASCADE clears edges when a helper's file is re-indexed. }
+  TryExec('CREATE TABLE IF NOT EXISTS type_helpers (' +
+          '  helper_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  target_name      TEXT NOT NULL,' +
+          '  target_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+          '  target_file_id   INTEGER,' +
+          '  helper_kind      TEXT NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_type_helpers_helper ON type_helpers(helper_symbol_id)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_type_helpers_target ON type_helpers(target_name)');
   PrepareStatements;
 end; // begin
 
@@ -3148,6 +3167,147 @@ begin
   end; // try
 end; // procedure
 
+procedure TSQLiteSymbolStore.ResolveHelpers;
+{ v15: whole-DB pass: for each record/class helper (marked by non-empty heritage
+  text), identify its target type and populate type_helpers edges. Mirrors
+  ResolveAncestry's structure: candidates indexed by name, per-file in-scope
+  resolution, batch write in one transaction. }
+var
+  Q          : TFDQuery                            ;
+  QIns       : TFDQuery                            ;
+  NameToCands: TObjectDictionary<string, TList<TSymbol>>;
+  FileScope  : TObjectDictionary<Int64,  TList<Int64>>  ;
+  Lc         : string                             ;
+  Sym        : TSymbol                            ;
+
+  function CandInScope(ADeclFile, ACandFile: Int64): Boolean;
+  var L: TList<Int64>;
+  begin
+    Result:= (ADeclFile = ACandFile);
+    if Result then Exit;
+    if FileScope.TryGetValue(ADeclFile, L) then Result:= L.IndexOf(ACandFile) >= 0;
+  end;
+
+begin
+  NameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
+  FileScope  := TObjectDictionary<Int64,  TList<Int64>>.Create([doOwnsValues]);
+  Q   := TFDQuery.Create(nil);
+  QIns:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { 1. candidate type symbols (all, any kind), indexed by lowercased simple name. }
+    Q.SQL.Text:= 'SELECT id, file_id, kind, name FROM symbols WHERE kind IS NOT NULL';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Sym:= Default(TSymbol);
+      Sym.Id    := Q.FieldByName('id'     ).AsLargeInt;
+      Sym.FileId:= Q.FieldByName('file_id').AsLargeInt;
+      Sym.Kind  := TSymbolKind.FromText(Q.FieldByName('kind').AsString);
+      Sym.Name  := Q.FieldByName('name'   ).AsString;
+      Lc:= LowerCase(Sym.Name);
+      if not NameToCands.ContainsKey(Lc) then NameToCands.Add(Lc, TList<TSymbol>.Create);
+      NameToCands[Lc].Add(Sym);
+      Q.Next;
+    end;
+    Q.Close;
+    { 2. per-file in-scope set: the resolved target_file_id of each used unit. }
+    Q.SQL.Text:= 'SELECT file_id, target_file_id FROM unit_uses WHERE target_file_id IS NOT NULL';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      var Fid:= Q.FieldByName('file_id'       ).AsLargeInt;
+      var Tid:= Q.FieldByName('target_file_id').AsLargeInt;
+      if not FileScope.ContainsKey(Fid) then FileScope.Add(Fid, TList<Int64>.Create);
+      FileScope[Fid].Add(Tid);
+      Q.Next;
+    end;
+    Q.Close;
+    { 3. rebuild helper edges from scratch. }
+    QIns.Connection:= FConn;
+    QIns.SQL.Text  := 'INSERT INTO type_helpers(helper_symbol_id, target_name, ' +
+                      '  target_symbol_id, target_file_id, helper_kind) ' +
+                      'VALUES (:hsid, :tn, :tsid, :tfid, :hk)';
+    QIns.Params.ParamByName('tsid').DataType:= ftLargeint;
+    QIns.Params.ParamByName('tfid').DataType:= ftLargeint;
+    Q.SQL.Text:= 'SELECT id, file_id, kind, heritage FROM symbols ' +
+                 'WHERE kind IN (''record'',''class'') AND heritage IS NOT NULL AND heritage <> ''''';
+    FConn.StartTransaction;
+    try
+      FConn.ExecSQL('DELETE FROM type_helpers');
+      Q.Open;
+      while not Q.Eof do
+      begin
+        var HelperId  := Q.FieldByName('id'      ).AsLargeInt;
+        var HelperFile:= Q.FieldByName('file_id' ).AsLargeInt;
+        var HelperKind:= Q.FieldByName('kind'    ).AsString;
+        var TargetName:= SplitHeritageList(Q.FieldByName('heritage').AsString);
+        { A helper has exactly one target (the single heritage entry).
+          We ignore multiple targets (malformed, but graceful degradation). }
+        if Length(TargetName) > 0 then
+        begin
+          var TName   := NormalizeAncestorName(TargetName[0]);
+          if TName <> '' then
+          begin
+            var TSymId : Int64  := 0;
+            var TFileId: Int64  := 0;
+            var Cands  : TList<TSymbol>;
+            if NameToCands.TryGetValue(LowerCase(TName), Cands) then
+            begin
+              var InScopeIdx  := -1;
+              var InScopeCount:= 0;
+              for var ci:= 0 to Cands.Count - 1 do
+                if CandInScope(HelperFile, Cands[ci].FileId) then
+                begin
+                  Inc(InScopeCount);
+                  if InScopeIdx < 0 then InScopeIdx:= ci;
+                end;
+              { Resolve when unambiguous: exactly one in-scope candidate, or
+                (none in scope) a single global definition. Otherwise leave
+                unresolved. }
+              if InScopeCount = 1 then
+              begin
+                TSymId := Cands[InScopeIdx].Id;
+                TFileId:= Cands[InScopeIdx].FileId;
+              end
+              else if (InScopeCount = 0) and (Cands.Count = 1) then
+              begin
+                TSymId := Cands[0].Id;
+                TFileId:= Cands[0].FileId;
+              end;
+            end;
+            QIns.ParamByName('hsid').AsLargeInt:= HelperId;
+            QIns.ParamByName('tn'  ).AsString  := TName;
+            QIns.ParamByName('hk'  ).AsString  := HelperKind;
+            if TSymId > 0 then
+            begin
+              QIns.ParamByName('tsid').AsLargeInt:= TSymId;
+              QIns.ParamByName('tfid').AsLargeInt:= TFileId;
+            end
+            else
+            begin
+              QIns.ParamByName('tsid').Clear;
+              QIns.ParamByName('tfid').Clear;
+            end;
+            QIns.ExecSQL;
+          end;
+        end;
+        Q.Next;
+      end;
+      Q.Close;
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
+    end;
+  finally
+    QIns.Free;
+    Q.Free;
+    NameToCands.Free;
+    FileScope.Free;
+  end; // try
+end; // procedure
+
 procedure TSQLiteSymbolStore.ResolveCallTargets;
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
@@ -3412,6 +3572,42 @@ begin
   finally
     Q.Free;
     Names.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindHelpersOfType(const ATargetName: string): TArray<THelperEdge>;
+var
+  Q   : TFDQuery           ;
+  List: TList<THelperEdge>;
+  Edge: THelperEdge        ;
+begin
+  List:= TList<THelperEdge>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT th.*, s.kind FROM type_helpers th ' +
+                 'JOIN symbols s ON s.id = th.helper_symbol_id ' +
+                 'WHERE th.target_name = :target_name';
+    Q.ParamByName('target_name').AsString:= ATargetName;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Edge:= Default(THelperEdge);
+      Edge.HelperSymbolId := Q.FieldByName('helper_symbol_id').AsLargeInt;
+      Edge.TargetName     := Q.FieldByName('target_name').AsString;
+      if not Q.FieldByName('target_symbol_id').IsNull then
+        Edge.TargetSymbolId:= Q.FieldByName('target_symbol_id').AsLargeInt;
+      if not Q.FieldByName('target_file_id').IsNull then
+        Edge.TargetFileId  := Q.FieldByName('target_file_id').AsLargeInt;
+      Edge.HelperKind     := Q.FieldByName('helper_kind').AsString;
+      List.Add(Edge);
+      Q.Next;
+    end;
+    Q.Close;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
   end;
 end;
 

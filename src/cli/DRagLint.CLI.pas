@@ -1087,6 +1087,7 @@ begin
 
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
+    Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
     Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
     Elapsed:= (Now - T0) * 86400;
 
@@ -1535,6 +1536,7 @@ begin
       needs to see every file the indexer has just written. }
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
+    Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
     Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
     Elapsed:= (Now - StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then Writeln(Format(
@@ -1580,6 +1582,7 @@ begin
   end;
   Store.ResolveUnitUseTargets;
   Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
+  Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
   Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
   AElapsedSec:= (Now - T0) * 86400;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));

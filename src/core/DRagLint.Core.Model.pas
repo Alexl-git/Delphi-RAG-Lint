@@ -84,6 +84,18 @@ type
     Ordinal : Integer; // position in the declaring type's heritage list (direct edges)
   end;
 
+  /// <summary>v15: one helper-target edge -- a `record helper for T` /
+  /// `class helper for T` declaration linked to its target type T. Captured
+  /// first-class so the enum-helper generator's create-only-if-missing guard
+  /// and the enum-helper-separate-units lint rule never string-parse heritage.</summary>
+  THelperEdge = record
+    HelperSymbolId: Int64 ;
+    TargetName    : string;
+    TargetSymbolId: Int64 ;
+    TargetFileId  : Int64 ;
+    HelperKind    : string; // 'record' | 'class'
+  end;
+
   TReference = record
     Id         : Int64  ;
     SymbolId   : Int64  ;
