@@ -32,6 +32,7 @@ uses
   , Vcl.ComCtrls
   , Winapi.Windows
   , Winapi.Messages
+  , Winapi.RichEdit
   , ToolsAPI
   , ToolsAPI.Editor
   ;
@@ -677,17 +678,26 @@ begin
 end;
 
 { v0.46.x: show a hand cursor over clickable lines so users see they are links.
-  EM_CHARFROMPOS maps the mouse point to a char index in the rich edit; on a
-  multiline control its HIWORD is the line index.
-  v0.94: for a structured (Help-Insight) popup the only clickable line is the
-  header (0) -- the signature that navigates to the definition. }
+  v0.94.1: FBody is a TRichEdit (MSFTEDIT), NOT a TMemo. Its EM_CHARFROMPOS
+  contract differs from the plain EDIT control: lParam is a POINTL* (pointer to
+  the client point) and the message RETURNS the zero-based CHARACTER index -- it
+  does NOT pack (char,line) into the result like a multiline EDIT does. The old
+  TMemo idiom `Perform(EM_CHARFROMPOS, 0, MakeLParam(X,Y))` passed the packed
+  coordinate where a POINTER was expected, so the rich edit dereferenced a bogus
+  address -> AV inside MSFTEDIT.DLL (IID_ITextHost). Fixed: pass @Pt and derive
+  the line via EM_EXLINEFROMCHAR on the returned char index. }
 procedure TDragLintHoverForm.HandleMemoMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
 var
-  Res    : Integer;
+  Pt     : TPoint ;
+  CharIdx: Integer;
   LineIdx: Integer;
 begin
-  Res:= FBody.Perform(EM_CHARFROMPOS, 0, MakeLParam(X, Y));
-  LineIdx:= HiWord(Cardinal(Res));
+  Pt.X:= X;
+  Pt.Y:= Y;
+  CharIdx:= SendMessage(FBody.Handle, EM_CHARFROMPOS, 0, LPARAM(@Pt));
+  if CharIdx < 0 then begin FBody.Cursor:= crDefault; Exit; end;
+  { EM_EXLINEFROMCHAR: char index -> zero-based line index (rich edit). }
+  LineIdx:= SendMessage(FBody.Handle, EM_EXLINEFROMCHAR, 0, CharIdx);
   if FStructured then
   begin
     if (LineIdx = 0) and (FModelQName <> '') then FBody.Cursor:= crHandPoint
