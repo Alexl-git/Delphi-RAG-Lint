@@ -6017,10 +6017,11 @@ begin
 end; // function
 
 /// <summary>drag-lint helpers-of &lt;T&gt; [--json] [--db PATH]. Prints every
-/// record/class helper edge targeting type T anywhere in the indexed
-/// codebase, via ISymbolStore.FindHelpersOfType. Read-only; used by the
-/// enum-helper generator's own existing-helper guard (Task 1/2) and by the
-/// IDE menu enablement predicate (Task 8).</summary>
+/// record/class helper edge targeting type T by NAME anywhere in the indexed
+/// codebase, via ISymbolStore.FindHelpersOfType. Read-only; used by the IDE
+/// menu enablement predicate (Task 8). Note: the enum-helper generator's own
+/// existing-helper guard uses the symbol-identity-scoped
+/// FindHelpersOfTypeSymbol (Task 9b), not this bare-name verb.</summary>
 /// <param name="AArgs">Consumes Name (positional &lt;T&gt; or --name), DbPath
 /// (--db), AsJson.</param>
 /// <returns>0 always (zero edges is a valid, non-error result -- "no helper
