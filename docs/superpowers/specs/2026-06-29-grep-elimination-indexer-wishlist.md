@@ -51,3 +51,88 @@
 
 ## Acceptance / done-when
 Grep usage in a typical session drops to only: binary/asset inspection and truly ad-hoc one-offs. Specifically, after P1+P2: (a) editing-then-searching this repo no longer needs Grep, (b) rule/config/doc searches use `query --text`, (c) code-idiom searches use `--regex` or the AST pattern query.
+
+---
+
+## Addendum 2026-07-07 -- STRUCTURAL / SEMANTIC facts the index should hold (grounded in a real session)
+
+**Context:** The original wish list above is *text/discovery*-oriented (stale index, non-Delphi
+files, regex, globs, SQL DDL). This addendum covers the OTHER half the user flagged: the
+*structural* facts an agent re-derives by hand-reading source because the index doesn't expose
+them. These are the ones that most reduce **context/memory load** -- an index query returns a
+digested fact; a Grep returns raw lines the agent must re-parse mentally. Eliminating them
+"makes the agent aware of the codebase" without spending context to become aware.
+
+**Why this matters beyond tokens (user's framing, verbatim intent):** grep-elimination isn't
+only a token/time saving. Each raw grep hit pollutes the working context with source lines that
+must be re-read and re-interpreted; a structured index answer is a *fact*, not evidence-to-parse.
+Fewer raw lines in context = less to hold in memory = simpler, more reliable reasoning. The index
+is pre-digested memory of the codebase; the more structure it holds, the less of the agent's
+finite context is burned re-discovering that structure.
+
+### How these were found (honest provenance)
+Enumerated from the enum-helper-generator brainstorm session (2026-07-07), where the agent had to
+hand-read source to learn things the index *could* have answered:
+- how a `record helper` is classified -> it's `skRecord` with the target buried in the `Heritage`
+  string; there is **no first-class "helper for T" edge**. (This is the trigger for this addendum.)
+- the source span of an enum type decl (to place a generated sibling decl after it).
+- the position of the `implementation` keyword (to place generated method bodies).
+- what `HeritageTextOf` actually captures (had to read the parser).
+
+### SEMANTIC wish list (prioritised) -- structural facts, not text
+
+#### S1 -- relationship edges the index almost has but doesn't expose cleanly
+1. **First-class HELPER edge.** `record helper for T` / `class helper for T` should store the
+   *target type* as a resolved edge (like `type_ancestors`), not as heritage text a consumer must
+   string-parse. Query: `helpers-of <T>` (does a helper exist? where?), `helper-target <THelper>`.
+   Directly enables the enum-helper generator's "create-only-if-missing" guard and the
+   `enum-helper-separate-units` lint rule **without heritage-string parsing**. *(Being delivered
+   with the enum-helper milestone -- 2026-07-07.)*
+2. **Section-anchor facts per unit.** Store the byte/line position of `interface`,
+   `implementation`, `initialization`, `finalization` keywords per file (the section markers exist
+   as `skInitialization`/`skFinalization` symbols but the plain `implementation` anchor isn't a
+   queryable position). Any code-gen/refactor that inserts into a section (enum helper, extract
+   method, add-uses) needs this; today it's a source scan. Query: `unit-anchors <file>`.
+3. **`uses`-clause membership as a query.** "Does unit X already use unit Y?" / "list X's interface
+   vs implementation uses." The uses graph exists for scope resolution (`TFileScopeEdge`) but isn't
+   exposed as a direct "is Y in X's uses list, and in which section" query -- needed by every
+   refactor that must add a unit to `uses`. Query: `uses-of <unit> [--section]`, `add-uses-target`.
+
+#### S2 -- declaration-shape facts (avoid re-reading a decl to learn its shape)
+4. **Enum member ORDINALS (explicit literals).** The index stores member name+order but NOT the
+   literal `= -2` / `= 65`. Storing the explicit ordinal (when present) would let a consumer reason
+   about signed/gap/out-of-range members without reading source. (The enum-helper feature dodged
+   this via the "one Byte template" decision, but a future signed-byte variant or a range-lint would
+   want it.)
+5. **Const/var VALUES for simple literals.** `const Foo = 'drag-lint.exe';` -> store the literal
+   value so "what is Foo" and "where is the value 'drag-lint.exe'" are index queries (ties to
+   wish-list item 6, literal-usage). Today reading the const decl is a source read.
+6. **Type-alias TARGET.** `TFoo = TBar;` / `TFoo = type Integer;` -> store the aliased target as an
+   edge so alias chains are walkable without reading the decl. (`skTypeAlias` exists but the target
+   isn't a resolved edge.)
+7. **Set / array-of / record-of element types.** e.g. `TFooSet = set of TFoo`. Enables "what sets
+   contain TFoo", relevant to enum work (`set of <enum>`).
+
+#### S3 -- "make me aware" overview queries (reduce the need to read many files)
+8. **Unit OUTLINE query.** `outline <unit>` = the ordered declaration skeleton (types, their
+   members' signatures, routines) WITHOUT bodies -- one query that replaces opening the file to
+   learn its shape. (`context` bundles do part of this for one symbol; an outline is whole-unit.)
+9. **"What's in this file" / file-symbol roster** by kind. `symbols-in <file> [--kind]` -- list all
+   enums, all classes, all forms in a file/dir, so "which units declare an enum with no helper" is a
+   query, not a scan. Directly powers a "generate helpers for all bare enums in this unit" batch mode.
+10. **Cross-reference DENSITY / fan-in-out already exist** (CBO/RFC/fan-in) -- surface them in a
+    plain `stats <symbol>` so "is this heavily used" is a query, not a find-callers count.
+
+### Non-goals for this addendum
+- Not proposing the agent NEVER reads source -- reading a routine body to understand its logic is
+  legitimate. The target is eliminating grep/read for STRUCTURAL FACTS the index can hold as data.
+- Schema churn is real: each item is a column/table + a migration + a reindex. Batch them into
+  deliberate schema bumps (as D5 did), not one-per-PR.
+
+### Suggested sequencing
+- **This milestone (enum-helper):** S1.1 (helper edge) -- required, being built.
+- **Fold in cheaply if the schema is already bumping:** S1.2 (section anchors) -- the enum-helper
+  placement needs the `implementation` anchor anyway; storing it as a queryable fact costs little
+  more than computing it inline.
+- **Next dedicated "indexer awareness" milestone:** brainstorm S1.3 + S2 + S3 as a set (one schema
+  bump, one reindex). This is the "more index functions" brainstorm the user asked to schedule.
