@@ -62,7 +62,19 @@ function CalledFrom(AEdges: TList<TFormEdge>; AClassToNode: TDictionary<string, 
 /// <returns>The full CSV text (RFC 4180 dialect, CRLF rows).</returns>
 /// <exception cref="Exception">If the index cannot be opened or no root can be
 /// resolved.</exception>
-function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): string;
+function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): string; overload;
+
+/// <summary>Generates the forms navigation-map CSV. ADbPaths[0] is the project
+/// index (drives which forms are enumerated + PAS-line counts); ADbPaths[1..] are
+/// additional indexes searched ONLY to resolve callers/landings whose call site
+/// lives in another DB (e.g. COMMON). A form with no caller in ANY store is DEAD.</summary>
+/// <param name="ADbPaths">1+ SQLite index paths; [0] authoritative, rest search-scope.</param>
+/// <param name="AProjectFile">Project (.dpr/.dproj) whose units scope the inventory.</param>
+/// <param name="ARootForm">Root form class (e.g. TfrmMAIN); '' = auto-detect.</param>
+/// <returns>ANSI CSV text incl. the FORMS_CSV_ALGORITHM provenance footer.</returns>
+/// <exception cref="Exception">If ADbPaths is empty, the index cannot be opened,
+/// or no root can be resolved.</exception>
+function GenerateFormsCsv(const ADbPaths: TArray<string>; const AProjectFile, ARootForm: string): string; overload;
 
 implementation
 
@@ -1285,9 +1297,12 @@ begin
   end; // try
 end; // function
 
-function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): string;
+/// <summary>Shared body of GenerateFormsCsv, operating on already-constructed
+/// stores. APrimary is project-scoped (form enumeration + PAS lines); AExtras
+/// are searched only when BuildEdges resolves callers. Caller owns lifetime of
+/// both APrimary and AExtras (this function never constructs/frees a store).</summary>
+function GenerateFormsCsvCore(APrimary: TSQLiteSymbolStore; const AExtras: TArray<TSQLiteSymbolStore>; const AProjectFile, ARootForm, APrimaryDbPath: string): string;
 var
-  Store      : TSQLiteSymbolStore            ;
   Nodes      : TList<TFormNode>              ;
   Sb         : TStringBuilder                ;
   N          : TFormNode                     ;
@@ -1298,17 +1313,16 @@ var
   Nav        : string                        ;
   ProjUnits  : TArray<string>                ;
 begin
-  Store:= TSQLiteSymbolStore.Create(ADbPath);
   Sb:= TStringBuilder.Create;
   try
-    Store.Migrate;
+    APrimary.Migrate;
     ProjUnits:= LoadProjectUnits(AProjectFile);
-    Nodes:= LoadInventory(Store, ProjUnits);
+    Nodes:= LoadInventory(APrimary, ProjUnits);
     try
       Nodes.Sort(TComparer<TFormNode>.Construct( function(const L, R: TFormNode): Integer begin Result:= CompareText(L.FormName, R.FormName); end));
       ClassToNode:= TDictionary<string, TFormNode>.Create;
       for N in Nodes do ClassToNode.AddOrSetValue(N.FormClass, N);
-      Edges:= BuildEdges(Store, Nodes, ClassToNode, []);
+      Edges:= BuildEdges(APrimary, Nodes, ClassToNode, AExtras);
       try
         RootClass:= DetectRoot(AProjectFile, ARootForm, ClassToNode, Edges);
         { Schema version lives in schema_meta (written at migrate), NOT in
@@ -1317,7 +1331,7 @@ begin
         var SchemaVer:= 0;
         var Qver:= TFDQuery.Create(nil);
         try
-          Qver.Connection:= Store.GetConnection;
+          Qver.Connection:= APrimary.GetConnection;
           Qver.SQL.Text  := 'SELECT value FROM schema_meta WHERE key = ''schema_version'' LIMIT 1';
           try
             Qver.Open;
@@ -1375,10 +1389,10 @@ begin
           top to the bottom so the column header is row 1 (spreadsheet-friendly).
           6 leading commas push the '#' cell into the 7th (Notes) column, out of
           the numbered-row column so it never looks like a data row. CsvField the
-          whole line since ADbPath may contain characters worth quoting. }
+          whole line since APrimaryDbPath may contain characters worth quoting. }
         Sb.Append(',,,,,,')
           .Append(CsvField('# forms-csv algorithm v' + FORMS_CSV_ALGORITHM +
-                  ' | db: ' + ADbPath +
+                  ' | db: ' + APrimaryDbPath +
                   ' | schema v' + IntToStr(SchemaVer) +
                   ' | ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Now)))
           .Append(#13#10);
@@ -1392,8 +1406,42 @@ begin
     end; // try
   finally
     Sb.Free;
-    Store.Free;
   end; // try
 end; // function
+
+/// <summary>Generates the forms navigation-map CSV. ADbPaths[0] is the project
+/// index (drives which forms are enumerated + PAS-line counts); ADbPaths[1..] are
+/// additional indexes searched ONLY to resolve callers/landings whose call site
+/// lives in another DB (e.g. COMMON). A form with no caller in ANY store is DEAD.</summary>
+/// <param name="ADbPaths">1+ SQLite index paths; [0] authoritative, rest search-scope.</param>
+/// <param name="AProjectFile">Project (.dpr/.dproj) whose units scope the inventory.</param>
+/// <param name="ARootForm">Root form class (e.g. TfrmMAIN); '' = auto-detect.</param>
+/// <returns>ANSI CSV text incl. the FORMS_CSV_ALGORITHM provenance footer.</returns>
+function GenerateFormsCsv(const ADbPaths: TArray<string>; const AProjectFile, ARootForm: string): string;
+var
+  Primary: TSQLiteSymbolStore;
+  Extras : TArray<TSQLiteSymbolStore>;
+  I      : Integer;
+begin
+  if Length(ADbPaths) = 0 then raise Exception.Create('forms-csv: no DB paths');
+  Primary:= TSQLiteSymbolStore.Create(ADbPaths[0]);
+  try
+    SetLength(Extras, 0);
+    for I:= 1 to High(ADbPaths) do
+      Extras:= Extras + [TSQLiteSymbolStore.Create(ADbPaths[I])];
+    try
+      Result:= GenerateFormsCsvCore(Primary, Extras, AProjectFile, ARootForm, ADbPaths[0]);
+    finally
+      for var St in Extras do St.Free;
+    end;
+  finally
+    Primary.Free;
+  end;
+end;
+
+function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): string;
+begin
+  Result:= GenerateFormsCsv([ADbPath], AProjectFile, ARootForm);
+end;
 
 end.
