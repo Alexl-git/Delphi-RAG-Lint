@@ -1,5 +1,57 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-08 (LATEST-30) -- **BATCH B IMPLEMENTED + FINAL-REVIEWED + merge-ready (awaiting live IDE smoke + user push). `main`=`330aabf`, 31 commits ahead of origin (`d816b23`), NOT pushed (user drives push).**
+>
+> **STATUS:** Batch B (IDE config consolidation) is DONE. All 9 plan tasks executed via
+> `superpowers:subagent-driven-development` (fresh implementer + spec/quality review per task); every task
+> reviewed clean. Final whole-branch opus review = **0 Critical / 1 Important (FIXED) / 4 Minor (deferred)**.
+> Full verification battery GREEN (run_docs_manifest_roundtrip + Batch A run_doc_returns + run_manifest all PASS
+> -> no regression). BPL rebuilt Win32 0 err, deployed to `third_party/dll-win32/`.
+>
+> **NEXT ACTIONS (user):**
+> 1. **PUSH:** `git push origin main` (31 commits: Batch A + Batch B). User drives the push.
+> 2. **LIVE IDE SMOKE:** run `.superpowers/sdd/batch-b-ide-smoke-checklist.md` (6 groups A-F: 4 pages nested,
+>    field persistence, max_return_cases dotted/undotted + no-project-beside-real-exe, Project Rules right-click,
+>    Settings->Options menu, **teardown = deactivate package -> no AV, no orphan node, re-check restores**).
+>    If issues surface -> follow-up fix + another release (per the user's directive; test-in-IDE-later was chosen).
+> 3. **YADF PORT:** write the OTA options-page porting instructions INTO the YADF repo (path from the user --
+>    was NOT supplied this session, so this step is PENDING; see the YADF handoff note below).
+>
+> **WHAT SHIPPED (Batch B, 13 commits 475333a..330aabf):**
+> - **4 nested Tools->Options sub-pages** (`drag-lint.General/Indexer/Linter/Editor`) via 4 `INTAAddInOptions`
+>   instances sharing the registry round-trip; all 26 `TDragLintSettings` fields mapped exhaustively (8/6/7/5),
+>   read-modify-write Save so no page clobbers another (`DragLint.Plugin.OptionsFrames.pas` + `.Options.pas`).
+> - **`max_return_cases`** on the Linter page, direct System.JSON, project-open -> DOTTED `.drag-lint.json`
+>   (the CLI's local override), no-project -> UNDOTTED `drag-lint.json` beside the REAL `drag-lint.exe` (via
+>   `DragLintExe` resolver -- the Important review fix; pre-fix it wrote a stray file in the IDE bin dir).
+> - **Project Manager "drag-lint: Project Rules..."** right-click (`IOTAProjectMenuItemCreatorNotifier`) ->
+>   activates the clicked project + opens the Lint Options dock tab (`DragLint.Plugin.ProjectMenu.pas` +
+>   `.DockForm.pas` GDockFrame/SelectLintOptionsTab).
+> - **Retired the duplicate Settings modal** (`SettingsForm.pas` deleted); "drag-lint Options..." opens
+>   Tools->Options via `IOTAEnvironmentOptions140.EditOptions('', 'drag-lint.General')`.
+> - **Teardown FIXED** (the user's explicit requirement + a real pre-existing leak): `UnregisterDragLintOptions`
+>   (was implemented but NEVER called) + `UnregisterProjectMenu` wired into `Wizard.Destroyed` + unit
+>   finalizations (primary + secondary net; idempotent).
+> - **1 headless autotest** `run_docs_manifest_roundtrip.ps1` (cap-effect teeth, dotted fixture).
+> - **8 docs refreshed** (README/INSTALL[+"Where to configure X" map]/USER-GUIDE/plugin+rules READMEs/
+>   SCAN-DATABASES + AI-USAGE/AI-INDEX-FIRST), all facts verified against shipped code.
+>
+> **KEY EXECUTION EVENTS (all resolved):** (1) Task 3 first wrote UNDOTTED per-project `drag-lint.json` -> CLI
+> reads the local override only from DOTTED `.drag-lint.json` -> per-project edit was INERT; FIXED (709aa9c).
+> (2) Task 7's wizard wiring pulled `ProjectMenu.pas` into the build graph for the FIRST TIME and it FAILED --
+> the unit was in `.dproj` DCCReference but NOT `.dpk contains` + unreferenced, so its missing `System.SysUtils`
+> uses (Supports/SameText) never compiled; FIXED (405f72c: uses + `.dpk contains` + empty initialization).
+> LESSON: a unit in DCCReference but absent from `.dpk contains` + unreferenced is NOT compiled -> a spurious
+> "clean build". (3) Final review Important: no-project manifest write used `ParamStr(0)` (= IDE bds.exe dir);
+> FIXED via `DragLintExe` (51f06c4).
+>
+> **DEFERRED FOLLOW-UPS (filed, non-blocking, post-push):** (a) delete orphaned `DragLint.Plugin.OptionsFrame.pas`
+> (singular, old single-page frame -- now dead, verified INERT) + fold its layout helpers into the plural unit;
+> (b) align the Linter frame's manifest write to `TEncoding.UTF8` to match the CLI's canonical `TManifestIO.Save`
+> (byte-identical today for 0-9999 ASCII values); (c) tidy the test's redundant check-9.
+>
+> **SDD LEDGER:** `.superpowers/sdd/progress.md` (BATCH B section at END) = full per-task record + the 3 fixes.
+
 > ## RESUME 2026-07-08 (LATEST-29) -- **BATCH A DONE (merge-ready). BATCH B PLANNED (spec+plan committed). NEXT = IMPLEMENT Batch B AUTONOMOUSLY, then PUBLISH. `main`=`eceaa16`, 17 commits ahead of origin, NOT pushed (user drives push).**
 >
 > **USER DIRECTIVE (this session):** planning is done; only implementation remains. Implement Batch B
