@@ -78,6 +78,19 @@ fixable rule = a branch in `BuildAutofixEdits` + a fixture proving RED->GREEN.
 Rules whose fix needs a decision or type info are **not** auto-applied -- they
 belong to the Settings gate (1.2) as "offer, don't auto-apply."
 
+**Naming-convention autofix via global rename** *(user request 2026-07-08)*: make
+the naming-convention findings fixable by driving the existing global-rename
+engine (`TRenameRefactoring.Build/Apply`, `src/refactor/DRagLint.Refactor.Rename.pas`).
+Do it in two phases by safety: **(phase 1, safest)** a **case-only** fix --
+`fclient -> FClient`, i.e. the identifier already matches the convention except
+capitalization; a pure re-casing rename is near-mechanical and collision-free
+(same symbol in a case-insensitive language), so it can be a registered fixable
+rule that lights up "Fix it". **(phase 2)** prefix-ADDING (`client -> FClient`,
+param `x -> pX`) -- changes the identifier, so it needs the store-backed collision
+check the rename engine already does; params are routine-local (use `BuildLocal`,
+safe scope) and must sync the interface/impl headers. See the auto-rename-params
++ naming-settings notes in auto-memory for the fuller design.
+
 ### 1.2 Settings page: which AutoFix to offer, which to ignore. *(original item 2)*
 The Settings surface (shared substrate). Per-rule tri-state: **auto-apply /
 offer-on-request / never**. This is the same Settings surface the naming-settings
