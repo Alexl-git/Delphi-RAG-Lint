@@ -20,7 +20,20 @@ unit DragLint.Plugin.DbResolver;
      4. The exe-relative drag-lint-library.sqlite, if Settings.IncludeLibraryDb.
 
    Duplicates across these sources are removed (case-insensitive). Missing
-   files are filtered out. Result is always non-nil but may be empty. *)
+   files are filtered out. Result is always non-nil but may be empty.
+
+   TODO (2026-07-08, Code-Elements-0 report): the primary DB is derived ONLY
+   from the settings template ('<projdir>\drag-lint.sqlite'). A project indexed
+   to the PROJECT-NAME file instead (e.g. DataCopy\DataCopy.sqlite, which the
+   `index --project` default and older workflows produce) is NOT found -> the
+   plugin falls back to the workspace/global DB -> `outline` returns 0 symbols ->
+   the Structure tree shows "Code Elements (0)" even though diagnostics (which
+   come from the LSP server, not `outline`) still populate. FIX: in
+   PrimaryDbForProject / the auto-discovery step, ALSO probe
+   '<projdir>\<projname>.sqlite' (ChangeFileExt of the .dproj) when the
+   template-named file is missing, and prefer whichever exists + is non-empty.
+   Workaround until then: copy/rename the index to '<projdir>\drag-lint.sqlite'
+   (matching the template), or add it to Settings.IndexDbs. *)
 
 interface
 
