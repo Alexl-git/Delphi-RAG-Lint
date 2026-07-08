@@ -3101,6 +3101,20 @@ begin
   DLRunReport(Format('wiring --qname "%s"%s --format text', [Q, DbArg]), 'drag-lint-wiring.txt');
 end;
 
+/// <summary>Reverse call tree for the symbol under the cursor: who calls X, and who
+/// calls them, N-deep, with call sites and cycle markers. Text into an editor buffer
+/// (graphical in-dock rendering is a filed TODO).</summary>
+procedure InvokeReverseCallTree(Sender: TObject);
+var
+  Q : string;
+  Db: string;
+begin
+  Db:= GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  if not DLAskQName(Q) then Exit;
+  DLRunReport(Format('reverse-calltree --qname "%s" --db "%s" --depth 3 --format text', [Q, Db]), 'drag-lint-reverse-calltree.txt');
+end;
+
 { Resolve the library index beside the plugin (where RTL/VCL/DevExpress units are
   indexed) -- needed to map an undeclared identifier to the unit that defines it. }
 function DLLibraryDb: string;
@@ -3832,6 +3846,7 @@ begin
   AddWrappedItem(SubUses, 'Add Missing Units to uses (whole unit)...'                  , InvokeSuggestUses     );
   AddWrappedItem(SubUses, 'Impact / Blast Radius (symbol)...'                          , InvokeImpact          );
   AddWrappedItem(SubUses, 'Show Wiring (Spring4D DI + DFM events)...'                  , InvokeWiring          );
+  AddWrappedItem(SubUses, 'Reverse Call Tree (who calls this, N-deep)...'              , InvokeReverseCallTree );
 
   { v0.46: Inspect Symbol submenu }
   var SubInspect: TMenuItem:= TMenuItem.Create(RootMenu);
