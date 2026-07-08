@@ -1,5 +1,33 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-08 (LATEST-32) -- **POST-v0.95 improvements PUSHED to main (5 commits, origin synced at `56e622f`, NOT yet tagged -- will ride the next version bump). NEXT SESSION = PLAN the next todo items (user asked to plan after clear).**
+>
+> **SHIPPED to main this session (post-v0.95, untagged):**
+> - `cycles --plan` for **implementation-only** cycles now emits real untangling guidance (previously a bare
+>   "skip, low impact" one-liner) AND pinpoints the **exact cross-unit symbols per edge** (name + line + kind,
+>   with `skLocalVar`/`skParam` false-positives filtered out). Verified on the real DataCopy cycle
+>   (`mainzeissconvert <-> setupfields` -> the real coupling is `frmZeissConvert`/`FindAnyZeissFile`/
+>   `ExtractAllTags`/`frmSetupFields`). Commits `bd624e4` + `e5572af`; interface-cycle path unchanged.
+> - `docs/examples/circular-uses-demo/` -- a compiling 2-unit cycle + `REPORT.md` (verbatim `--edges`/
+>   `--causes`/`--plan`), linked from the README to advertise the feature.
+> - Filed: a `DragLint.Plugin.DbResolver.pas` TODO (the "Code Elements 0" root cause -- the plugin only probes
+>   `<projdir>\drag-lint.sqlite`, not `<projdir>\<projname>.sqlite`, so a project-name-indexed DB isn't found;
+>   diagnostics still work via the LSP). And a naming-convention-autofix wishlist (roadmap Track 1.1 + memory).
+>
+> **NEXT TODO CANDIDATES (roadmap `docs/lint/drag-lint TODO plan.md`, to plan next session):**
+> - **Track 5.1** reverse call-tree report (text-first + optional mermaid/dot graph -- reuses `callgraph`).
+> - **Track 5.3** architectural charts (layering / butterfly / package maps -- graph-leaning + text summary).
+> - **Naming-convention autofix** via the existing `TRenameRefactoring` engine; phase 1 = case-only re-casing
+>   (`fclient -> FClient`, collision-free, safest); phase 2 = prefix-adding.
+> - **DbResolver fix** -- probe `<projdir>\<projname>.sqlite` so per-project indexes are found without a copy.
+> - Small deferred cleanups (orphaned `OptionsFrame.pas`; ANSI->UTF8 manifest write); Track 3 component conversion.
+> - **AST/MMX question CLOSED:** don't switch parsers (drag-lint already has the semantic index the review
+>   recommended; Tree-sitter's error-tolerance is an asset); borrow only complementary MMX features.
+>
+> **GOTCHA:** the deployed `third_party/dll-win64/drag-lint.exe` was rebuilt to **Release** this session (matches
+> the shipped binary). VERSION is still `0.95.0-alpha` (these post-v0.95 commits are untagged). The IDE plugin
+> BPL was NOT rebuilt this session (no plugin source changed after v0.95's BPL).
+>
 > ## RESUME 2026-07-08 (LATEST-31) -- **v0.95.0-alpha SHIPPED (Track 5.2 deps-report + index-schema docs; also folds in Batch B + the 2 lint-FP fixes + the hover restyle that were on main but never released). GH release cut. NEXT = whatever the user raises next.**
 >
 > **v0.95.0-alpha** cuts everything since v0.94 into a release: (1) NEW `deps-report` verb (third-party
