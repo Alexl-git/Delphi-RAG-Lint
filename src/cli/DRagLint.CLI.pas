@@ -352,6 +352,7 @@ begin
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
   Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]');
   Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
+  Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
@@ -5984,6 +5985,201 @@ begin
   end; // try
 end; // function
 
+/// <summary>drag-lint schema: dumps the LIVE index schema of --db -- schema_version,
+/// each table with its columns (PRAGMA table_info) + row count. --format json (or
+/// --json) emits a machine-readable structure so other tools can introspect the
+/// index. Strictly READ-ONLY: opens the store read-only and never calls Migrate
+/// or issues any DDL/INSERT/UPDATE -- the verb must never mutate the DB it
+/// inspects.</summary>
+/// <param name="AArgs">Parsed CLI args; DbPath/DbPaths[0] is the index to
+/// introspect (first --db wins when several are given), Format='json' or
+/// AsJson selects JSON, Output redirects to a file (else stdout).</param>
+/// <returns>0 on success; 2 (with a usage line on stderr) when --db is missing.</returns>
+function DoSchema(const AArgs: TArgs): Integer;
+var
+  DbPath      : string        ;
+  Store       : TSQLiteSymbolStore;
+  Conn        : TFDConnection ;
+  Q           : TFDQuery      ;
+  QCols       : TFDQuery      ;
+  QCount      : TFDQuery      ;
+  SchemaVer   : Integer       ;
+  TableNames  : TArray<string>;
+  T           : string        ;
+  UseJson     : Boolean       ;
+  SB          : TStringBuilder;
+  JRoot       : TJSONObject   ;
+  JTables     : TJSONArray    ;
+  JTable      : TJSONObject   ;
+  JCols       : TJSONArray    ;
+  JCol        : TJSONObject   ;
+  RowCount    : Int64         ;
+  OutStr      : string        ;
+
+  function IsSafeIdent(const AName: string): Boolean;
+  var
+    Ch: Char;
+    Idx: Integer;
+  begin
+    Result:= False;
+    if AName = '' then Exit;
+    Ch:= AName[1];
+    if not (CharInSet(Ch, ['A'..'Z', 'a'..'z', '_'])) then Exit;
+    for Idx:= 2 to Length(AName) do
+      if not (CharInSet(AName[Idx], ['A'..'Z', 'a'..'z', '0'..'9', '_'])) then Exit;
+    Result:= True;
+  end;
+
+begin
+  Result:= 0;
+  if Length(AArgs.DbPaths) > 0 then DbPath:= AArgs.DbPaths[0]
+  else DbPath:= AArgs.DbPath;
+  if DbPath = '' then
+  begin
+    Writeln(ErrOutput, 'Usage: drag-lint schema --db <file.sqlite> [--format text|json]');
+    Exit(2);
+  end;
+
+  UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+
+  { READ-ONLY open: no Migrate call anywhere in this verb. Reads only. }
+  Store:= TSQLiteSymbolStore.Create(DbPath, {AReadOnly=}True);
+  try
+    Conn:= Store.GetConnection;
+
+    { schema_version -- best-effort; 0/absent when schema_meta itself is missing
+      (mirrors IsSchemaCurrent's own guarded probe). }
+    SchemaVer:= 0;
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= Conn;
+      Q.SQL.Text:= 'SELECT value FROM schema_meta WHERE key = ''schema_version'' LIMIT 1';
+      try
+        Q.Open;
+        if not Q.IsEmpty then SchemaVer:= StrToIntDef(Q.Fields[0].AsString, 0);
+      except
+        SchemaVer:= 0;
+      end;
+    finally
+      Q.Free;
+    end;
+
+    { Table list -- trusted names from sqlite_master, but each is re-validated
+      against ^[A-Za-z_][A-Za-z0-9_]*$ before being inlined into SQL below. }
+    SetLength(TableNames, 0);
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= Conn;
+      Q.SQL.Text:= 'SELECT name FROM sqlite_master WHERE type=''table'' AND name NOT LIKE ''sqlite_%'' ORDER BY name';
+      Q.Open;
+      while not Q.Eof do
+      begin
+        TableNames:= TableNames + [Q.FieldByName('name').AsString];
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+
+    if UseJson then
+    begin
+      JRoot:= TJSONObject.Create;
+      try
+        JRoot.AddPair('schema_version', TJSONNumber.Create(SchemaVer));
+        JTables:= TJSONArray.Create;
+        for T in TableNames do
+        begin
+          if not IsSafeIdent(T) then Continue; // defensive: skip anything non-identifier-shaped
+
+          JTable:= TJSONObject.Create;
+          JTable.AddPair('name', T);
+
+          QCount:= TFDQuery.Create(nil);
+          try
+            QCount.Connection:= Conn;
+            QCount.SQL.Text:= 'SELECT COUNT(*) FROM "' + T + '"';
+            QCount.Open;
+            RowCount:= QCount.Fields[0].AsLargeInt;
+          finally
+            QCount.Free;
+          end;
+          JTable.AddPair('row_count', TJSONNumber.Create(RowCount));
+
+          JCols:= TJSONArray.Create;
+          QCols:= TFDQuery.Create(nil);
+          try
+            QCols.Connection:= Conn;
+            QCols.SQL.Text:= 'PRAGMA table_info(''' + T + ''')';
+            QCols.Open;
+            while not QCols.Eof do
+            begin
+              JCol:= TJSONObject.Create;
+              JCol.AddPair('name', QCols.FieldByName('name').AsString);
+              JCol.AddPair('type', QCols.FieldByName('type').AsString);
+              JCols.AddElement(JCol);
+              QCols.Next;
+            end;
+          finally
+            QCols.Free;
+          end;
+          JTable.AddPair('columns', JCols);
+
+          JTables.AddElement(JTable);
+        end; // for T
+        JRoot.AddPair('tables', JTables);
+
+        OutStr:= JRoot.Format(2);
+      finally
+        JRoot.Free;
+      end;
+    end
+    else
+    begin
+      SB:= TStringBuilder.Create;
+      try
+        SB.AppendLine(Format('schema_version: %d', [SchemaVer]));
+        for T in TableNames do
+        begin
+          if not IsSafeIdent(T) then Continue;
+
+          QCount:= TFDQuery.Create(nil);
+          try
+            QCount.Connection:= Conn;
+            QCount.SQL.Text:= 'SELECT COUNT(*) FROM "' + T + '"';
+            QCount.Open;
+            RowCount:= QCount.Fields[0].AsLargeInt;
+          finally
+            QCount.Free;
+          end;
+          SB.AppendLine(Format('%s (%d rows):', [T, RowCount]));
+
+          QCols:= TFDQuery.Create(nil);
+          try
+            QCols.Connection:= Conn;
+            QCols.SQL.Text:= 'PRAGMA table_info(''' + T + ''')';
+            QCols.Open;
+            while not QCols.Eof do
+            begin
+              SB.AppendLine(Format('  %s %s', [QCols.FieldByName('name').AsString, QCols.FieldByName('type').AsString]));
+              QCols.Next;
+            end;
+          finally
+            QCols.Free;
+          end;
+        end; // for T
+        OutStr:= SB.ToString;
+      finally
+        SB.Free;
+      end;
+    end; // else
+
+    if AArgs.Output <> '' then TFile.WriteAllText(AArgs.Output, OutStr, TEncoding.ANSI)
+    else Writeln(OutStr);
+  finally
+    Store.Free;
+  end; // try
+end; // function
+
 // v0.19: drag-lint typeat <file>:<line>:<col> [--db <path>] [--format text|json]
 // Resolves the identifier at the given position to a symbol in the index.
 // The position argument has the form: C:\path\to\File.pas:17:8
@@ -10953,6 +11149,7 @@ begin
     else if Args.Command = 'typeat'            then Result:= DoTypeAt          (Args)
     else if Args.Command = 'uses-report'       then Result:= DoUsesReport      (Args)
     else if Args.Command = 'deps-report'       then Result:= DoDepsReport      (Args)
+    else if Args.Command = 'schema'            then Result:= DoSchema          (Args)
     else if Args.Command = 'resolve-uses'      then Result:= DoResolveUses     (Args)
     else if Args.Command = 'fb-snapshot'       then Result:= DoFbSnapshot      (Args)
     else if Args.Command = 'link-orm'          then Result:= DoLinkOrm         (Args)
