@@ -1232,7 +1232,21 @@ end;
 
 { v0.42: embedded-in-a-tab factory. The form is created child-style (no border,
   fsNormal) and parented into AParent (a dock-panel TTabSheet), so the same
-  tree + refresh logic serves both the standalone window and the dock tab. }
+  tree + refresh logic serves both the standalone window and the dock tab.
+
+  Batch D / Task 9: the constructor wires OnActivate := FormActivate for the
+  STANDALONE window (so it self-refreshes when the user alt-tabs back to it).
+  That is still a real TForm registered with Screen/Application even once
+  embedded (TDragLintStructureForm = class(TForm), reparented rather than a
+  true TFrame), so it keeps receiving CM_ACTIVATE whenever the IDE app
+  activates -- e.g. on any tab switch, not just a Structure-tab switch. This
+  is the one code-level anomaly distinguishing Structure's embed from its
+  Search/Usages siblings (neither wires OnActivate), and the leading suspect
+  for the dock's host window self-selecting to the front on tab switches. The
+  dock's own timer (TDragLintDockFrame.HandleWatchTimer, 400ms) and
+  HandlePageChange already drive RefreshActive/RefreshForFile for the
+  embedded case, so FormActivate is redundant here -- drop it so the embedded
+  instance carries no activation wiring at all. }
 function CreateEmbeddedStructure(AOwner: TComponent; AParent: TWinControl): TForm;
 var
   F: TDragLintStructureForm;
@@ -1240,6 +1254,7 @@ begin
   F:= TDragLintStructureForm.Create(AOwner);
   F.BorderStyle:= bsNone;
   F.FormStyle  := fsNormal;
+  F.OnActivate := nil; { v0.96 Batch D Task 9: see comment above -- embedded tab must not react to app-level activation }
   F.Align      := alClient;
   F.Parent     := AParent;
   F.Visible    := True;
