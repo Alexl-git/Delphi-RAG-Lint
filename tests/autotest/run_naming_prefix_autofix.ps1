@@ -479,5 +479,81 @@ Check 'DETERMINISM: run A and run B produce byte-identical files' ($detAAfter -c
 Check 'DETERMINISM: both runs actually applied the fix (sanity, not a no-op match)' `
   ($detAAfter -cmatch 'FClient\s*:\s*TObject;') $detAAfter
 
+# =============================================================================
+# WARNING (review fix, Task 3 follow-up): --fix on field-name-prefix or
+# type-name-prefix can silently leave Self.-qualified / type-annotation
+# references unrenamed (the index does not capture those sites -- see the
+# CASE 1 / CASE 3 notes above). A CLI-visible stderr warning must fire once
+# per run whenever the fixed rule-set includes either of those two rules, but
+# must NOT fire for a param-name-prefix-only run (BuildLocal's pure-AST scope
+# walk is independent of the ref index, so it is safe and silent).
+# stdout and stderr are captured SEPARATELY here (unlike the combined
+# `2>&1` captures used elsewhere in this file) so the assertion can check
+# the warning landed on stderr specifically, not merely "somewhere in output".
+# =============================================================================
+Write-Host ''
+Write-Host 'WARNING: field/type-name-prefix --fix warns on stderr; param-name-prefix does not' -ForegroundColor Cyan
+$WarnNeedle = 'may leave Self-qualified or type-annotation references unrenamed'
+
+# --- sub-case A: field-name-prefix --fix (dry-run, no --apply) MUST warn. ---
+$warnDir = Join-Path $WorkDir 'warn-field'
+$warnSrc = Join-Path $warnDir 'src'
+New-Item -ItemType Directory $warnSrc | Out-Null
+$warnFile = Join-Path $warnSrc 'FieldPrefixAutofix.pas'
+$warnDb   = Join-Path $warnDir 'naming.sqlite'
+$warnCfg  = Join-Path $warnDir 'drag-lint-lint.json'
+Write-Ascii $warnFile $Case1Fixture
+'{ "autofix": ["field-name-prefix"], "naming": { "field_prefix": "F" } }' | Out-File -FilePath $warnCfg -Encoding ascii
+& $Exe index $warnSrc --db $warnDb 2>&1 | Out-Null
+Check 'WARN-A: index exits 0' ($LASTEXITCODE -eq 0)
+
+$warnStdout = Join-Path $warnDir 'stdout.txt'
+$warnStderr = Join-Path $warnDir 'stderr.txt'
+Start-Process -FilePath $Exe -ArgumentList @('lint-all','--db',$warnDb,'--config',$warnCfg,'--rule','field-name-prefix','--fix','--quiet') `
+  -NoNewWindow -Wait -RedirectStandardOutput $warnStdout -RedirectStandardError $warnStderr
+$warnErrText = if (Test-Path $warnStderr) { Get-Content -Raw $warnStderr } else { '' }
+Check 'WARN-A: field-name-prefix --fix emits the warning on stderr' `
+  ($warnErrText -match [regex]::Escape($WarnNeedle)) $warnErrText
+
+# --- sub-case B: type-name-prefix --fix --apply MUST also warn. ---
+$warnDir2 = Join-Path $WorkDir 'warn-type'
+$warnSrc2 = Join-Path $warnDir2 'src'
+New-Item -ItemType Directory $warnSrc2 | Out-Null
+$warnFile2 = Join-Path $warnSrc2 'TypePrefixAutofix.pas'
+$warnDb2   = Join-Path $warnDir2 'naming.sqlite'
+$warnCfg2  = Join-Path $warnDir2 'drag-lint-lint.json'
+Write-Ascii $warnFile2 $Case3Fixture
+'{ "autofix": ["type-name-prefix"], "naming": { "type_prefix": { "class": "T" } } }' | Out-File -FilePath $warnCfg2 -Encoding ascii
+& $Exe index $warnSrc2 --db $warnDb2 2>&1 | Out-Null
+Check 'WARN-B: index exits 0' ($LASTEXITCODE -eq 0)
+
+$warnStdout2 = Join-Path $warnDir2 'stdout.txt'
+$warnStderr2 = Join-Path $warnDir2 'stderr.txt'
+Start-Process -FilePath $Exe -ArgumentList @('lint-all','--db',$warnDb2,'--config',$warnCfg2,'--rule','type-name-prefix','--fix','--apply','--quiet') `
+  -NoNewWindow -Wait -RedirectStandardOutput $warnStdout2 -RedirectStandardError $warnStderr2
+$warnErrText2 = if (Test-Path $warnStderr2) { Get-Content -Raw $warnStderr2 } else { '' }
+Check 'WARN-B: type-name-prefix --fix --apply emits the warning on stderr' `
+  ($warnErrText2 -match [regex]::Escape($WarnNeedle)) $warnErrText2
+
+# --- sub-case C: param-name-prefix-only --fix must NOT warn (safe rule). ---
+$warnDir3 = Join-Path $WorkDir 'warn-param'
+$warnSrc3 = Join-Path $warnDir3 'src'
+New-Item -ItemType Directory $warnSrc3 | Out-Null
+$warnFile3 = Join-Path $warnSrc3 'ParamPrefixAutofix.pas'
+$warnDb3   = Join-Path $warnDir3 'naming.sqlite'
+$warnCfg3  = Join-Path $warnDir3 'drag-lint-lint.json'
+Write-Ascii $warnFile3 $Case2Fixture
+'{ "autofix": ["param-name-prefix"], "naming": { "param_prefix": "p" } }' | Out-File -FilePath $warnCfg3 -Encoding ascii
+& $Exe index $warnSrc3 --db $warnDb3 2>&1 | Out-Null
+Check 'WARN-C: index exits 0' ($LASTEXITCODE -eq 0)
+
+$warnStdout3 = Join-Path $warnDir3 'stdout.txt'
+$warnStderr3 = Join-Path $warnDir3 'stderr.txt'
+Start-Process -FilePath $Exe -ArgumentList @('lint-all','--db',$warnDb3,'--config',$warnCfg3,'--rule','param-name-prefix','--fix','--apply','--quiet') `
+  -NoNewWindow -Wait -RedirectStandardOutput $warnStdout3 -RedirectStandardError $warnStderr3
+$warnErrText3 = if (Test-Path $warnStderr3) { Get-Content -Raw $warnStderr3 } else { '' }
+Check 'WARN-C: param-name-prefix-only --fix does NOT emit the warning' `
+  ($warnErrText3 -notmatch [regex]::Escape($WarnNeedle)) $warnErrText3
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

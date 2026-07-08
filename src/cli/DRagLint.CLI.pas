@@ -4832,6 +4832,24 @@ begin
           NamingTargets:= NamingTargets + [F];
       if Length(NamingTargets) > 0 then
       begin
+        { Review fix (Batch D Task 3 follow-up): field-name-prefix and
+          type-name-prefix rewrite the declaration via the ref index, which does
+          NOT capture Self.-qualified field uses or type-annotation/impl-header
+          type-qualifier sites (see .superpowers/sdd/task-3-report.md). Left
+          behind, those old-name references no longer resolve -- the file can
+          fail to compile with exit code 0 and no other diagnostic. Warn once per
+          run (dry-run or --apply) when either risky rule is present in the
+          opted-in set; param-name-prefix uses BuildLocal's pure-AST scope walk
+          and needs no warning. }
+        for F in NamingTargets do
+          if SameText(F.RuleId, 'field-name-prefix') or SameText(F.RuleId, 'type-name-prefix') then
+          begin
+            Writeln(ErrOutput, 'drag-lint: warning: field-name-prefix/type-name-prefix autofix may leave '
+              + 'Self-qualified or type-annotation references unrenamed (the index does not capture those '
+              + 'sites) -- review the diff and recompile.');
+            Break;
+          end;
+
         var NFCount: Integer;
         var NFEdits: TArray<TTextEdit>:= DRagLint.Refactor.NamingFix.BuildNamingFixEdits(AStore, NamingTargets, Cfg.Naming, NFCount);
         if Length(NFEdits) > 0 then
