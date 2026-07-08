@@ -79,6 +79,7 @@ contains
   DragLint.Plugin.ExeResolver in 'DragLint.Plugin.ExeResolver.pas',
   DragLint.Plugin.Fonts in 'DragLint.Plugin.Fonts.pas',
   DRagLint.Hover.Contrast in '..\core\DRagLint.Hover.Contrast.pas',
-  DragLint.Plugin.ProjectMenu in 'DragLint.Plugin.ProjectMenu.pas';
+  DragLint.Plugin.ProjectMenu in 'DragLint.Plugin.ProjectMenu.pas',
+  DragLint.Plugin.OptionsFrames in 'DragLint.Plugin.OptionsFrames.pas';
 
 end.
