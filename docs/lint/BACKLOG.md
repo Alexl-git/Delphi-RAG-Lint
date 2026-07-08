@@ -1,5 +1,54 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-08 (LATEST-28) -- **BATCH A IMPLEMENTED, FINAL-REVIEWED, MERGE-READY. 14 commits on `main` (`d816b23`..`9fb29c8`). NOT pushed -- user drives the push.**
+>
+> **STATUS:** All 3 Batch-A items shipped via `superpowers:subagent-driven-development` (fresh implementer + two-stage
+> review per task, order 3->2->1). Every task reviewed clean; a final opus whole-branch review found 0 Critical +
+> 1 Important, which was FIXED + re-reviewed clean. `main` is 14 commits ahead of origin; tree clean (only the usual
+> LEAVE-THOSE untracked: `.superpowers/`, forms-csv v4 spec, `tests/autotest/results/*.json`).
+>
+> **NEXT ACTION: push.** `git push origin main` (per convention the user drives the push). After push, origin in sync.
+>
+> **WHAT SHIPPED (14 commits):**
+> - **Item 3 -- forms-csv multi-DB (Tasks 1-4).** Engine `AExtraStores` fan-out in `FindNearestFormCaller`/
+>   `FindFormViaHook`/`BuildEdges` (PAS-line caches re-keyed Int64->path for cross-DB collision safety);
+>   `GenerateFormsCsv(ADbPaths: TArray<string>)` overload; CLI `DoFormsCsv` passes all resolved DBs; IDE menu emits
+>   multi `--db` (project DB first) + a stale-exe footer guard (parses the REAL `# forms-csv algorithm v4` footer,
+>   NOT the plan's wrong `FORMS_CSV_ALGORITHM=` guess); Win32 BPL rebuilt (`build(plugin):` commit). Commits
+>   `8800780`,`a24f0fa`,`e998762`,`bc50a4a`,`cd64077`,`7039aed`. **A real bug surfaced by the multi-DB test + fixed
+>   (`cd64077`):** `BuildEdges` Pass1/Pass2 discovery queries only hit the primary store -> a form constructed
+>   solely in COMMON printed DEAD even with COMMON `--db`; now fanned across `[AStore]+AExtraStores`. Test
+>   `run_formsmap_multidb.ps1` proves client-only=DEAD -> client+common=resolved chain.
+> - **Item 2 -- AutoDoc facts multi-DB (Tasks 5-6).** `TDocFactsBuilder.Build` gained `AExtraStores`; cross-DB
+>   callers/used-in surface via NAME buckets only (resolved-caller Ids are per-DB); threaded through `BuildFor` +
+>   `TDocBatchOptions` + a shared `OpenExtraStores` helper wired into all 4 `document` verbs. Test
+>   `run_doc_multidb.ps1`. Commits `a563185`,`0e4c582`. (CLI quirk noted: `AArgs.DbPath` = the LAST `--db`.)
+> - **Item 1 -- returns enumeration + docs config (Tasks 7-10).** New `drag-lint.json` `docs.max_return_cases`
+>   (`TDocSettings`, default 20); `TDocFacts.ReturnCases` mined via the REUSED hover `MineReturnExpressions`;
+>   `<returns>` emits `TODO: describe. Observed: <cases>.` (XML-escaped, idempotent -- parser stores ReturnsText
+>   verbatim so the gate re-appends deterministically); cap threaded manifest->`Build`. Test `run_doc_returns.ps1`
+>   (enumeration+escape, cap=1 differs, byte-identical idempotency, + both-exist-merge). Commits `c014d82`,`2dfec67`,
+>   `71b6368`,`29ce202`. **Two manifest bugs found+fixed by tests:** (a) Task 10 -- `Load`'s no-config branch left
+>   `Docs.MaxReturnCases=0` (enumeration dead); (b) final review -- both-exist merge dropped a LOCAL cap override
+>   when a GLOBAL config exists (`037e400`: added `skMaxReturnCases` presence bit + carry `Result.Docs` in merge).
+>
+> **VERIFICATION (all against the fresh Win64 exe `src/cli/Win64/Debug/drag-lint.exe`):** `run_formsmap` 32/32,
+> `run_formsmap_multidb`, `run_doc_multidb`, `run_doc_returns` (4 scenarios A/B/C/D), `run_manifest`, and all 16
+> `tests/autodoc/*.ps1` -- ALL PASS.
+>
+> **KNOWN PRE-EXISTING (NOT Batch A, backlog candidates):** `run_formsmap.ps1`'s DEFAULT `-Exe` points at a STALE
+> `Win32\Debug` binary (Jul-5, pre-Batch-A) so a no-arg run shows 4 spurious FAILs; it's 100% GREEN on the current
+> Win64 exe. `run_smoke.ps1` has a hardcoded stale-version-string check (1/20 fail). BOTH are test-default hygiene,
+> not product bugs -> a future "make autotest -Exe defaults Win64 + version-agnostic" pass. Also deferred (from the
+> final review, all triaged KEEP-AS-IS): FormsMap `FileLines` dead `AFileId` param; store-list DRY between
+> `QueryNameCallerRows` + the hook loop; `Build` reads the source file up to 3x/call; `LoadDocMaxReturnCases`
+> reloads the manifest per verb.
+>
+> **AFTER PUSH:** Batch B = investigate -> plan -> handoff/clear -> implement -> publish for #4 (Tools->Options
+> pages spike) and #5 (Editor->Language tabs spike). Plus the deferred v0.94 IDE live-smoke of "Create helper class".
+>
+> ---
+>
 > ## RESUME 2026-07-08 (LATEST-27) -- **BATCH A PLANNED + PUSHED. NEXT = IMPLEMENT the 10-task plan. Hover work is DONE + pushed. `main`=`66719ee`, origin IN SYNC.**
 >
 > **READ FIRST to implement:** `docs/superpowers/plans/2026-07-08-batch-a-multidb-facts-and-returns.md`
