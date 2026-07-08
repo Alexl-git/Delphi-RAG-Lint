@@ -84,7 +84,8 @@ procedure UnregisterProjectMenu;
 implementation
 
 uses
-  DragLint.Plugin.DockForm
+  System.SysUtils
+  , DragLint.Plugin.DockForm
   ;
 
 const
@@ -296,6 +297,8 @@ begin
     try ProjMgr.RemoveMenuItemCreatorNotifier(GIndex); except end;
   GIndex:= -1;
 end;
+
+initialization
 
 finalization
   try UnregisterProjectMenu; except end;
