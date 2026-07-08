@@ -204,6 +204,66 @@ the same shared substrate (apply engine + CLI verb + IDE action) as Tracks 1-3.
 
 ---
 
+## Track 5. Analysis & Reporting  *(added 2026-07-08, user request)*
+
+**First-class analysis reports that package existing engine primitives into the
+kind of navigable output Peganza PAL / SciTools Understand / FixInsight ship.**
+These are *reporting/visualization* deliverables, NOT new analysis engines --
+the traversals already exist; the work is turning them into consumable reports
+(and, where useful, richer charts). Prompted by the indexer-landscape review
+(`docs/lint/REPORT-3-REVIEW-INDEXERS.txt`): the competitor survey there is a
+useful feature-gap checklist, orthogonal to the parser choice.
+
+### Already built (the substrate these reuse)
+- **Caller/callee traversal:** `callgraph --direction callers|callees --depth N`
+  (N-deep resolved call tree, cycle-guarded) + `find-callers --resolved` +
+  `impact` (transitive). The reverse-call-tree *traversal* is done.
+- **Uses graph:** `uses-report --include-external --depth N` (CSV) + the resolved
+  uses-graph + `circular-uses` (Tarjan SCC, v0.76). The dependency *data* is done.
+- **Graph emit + viewer:** `graph --format dot|mermaid [--name <root>]` +
+  the `drag_lint_graph` viewer. Basic chart emission is done.
+
+### 5.1 Reverse call-tree report
+A first-class report (not just the raw `callgraph` dump): "who calls X, and who
+calls them" as a navigable N-deep **reverse** tree, per-symbol, with call sites
+(unit:line) and cycle markers. Reuses `callgraph --direction callers`; adds a
+report format (text tree + `--format mermaid|dot` chart + `--json`) and, in the
+IDE, a right-click "Reverse call tree" on a symbol that renders it in the dock
+(the `drag_lint_graph` viewer is the render target). Compare: PAL's reverse call
+trees, Understand's call butterfly charts.
+
+### 5.2 Third-party dependency report
+A dependency report that **isolates external / third-party / library units**
+(RTL, DevExpress, Spring4D, Jedi, TMS, ...) from project units, and shows, per
+external dependency: which project units pull it in, the shortest uses-path to
+it, and a rollup ("project depends on N external libraries; here is the surface
+touched"). Reuses `uses-report --include-external` + the resolved uses-graph +
+the library-path resolution now surfaced on the Indexer Options page. Output:
+CSV/JSON + a grouped text report; optionally a chart. Compare: PAL's third-party
+dependency lists, Understand's dependency reports.
+
+### 5.3 Architectural charts
+Higher-level charts than the current raw uses-graph: **layering diagrams**
+(group units into layers/packages and show cross-layer edges + violations --
+builds on the `circular-uses` / layering analysis that already "leads the field"
+per MISSING-FEATURES sec 11), **butterfly / call-tree charts** (a symbol with its
+callers on one side and callees on the other), and **module/architecture
+overviews** (package-level dependency maps). Reuses the `graph` emitter + the
+`drag_lint_graph` viewer; the new work is the *aggregation* (unit -> layer/
+package grouping, edge rollup) and the chart layouts. Compare: SciTools
+Understand's architectural / butterfly charts, PAL's structure reports.
+
+> **Scoping note:** all three are report/output layers over shipped traversals,
+> so each is a bounded feature (a CLI report verb + format + optional IDE
+> dock/chart), not a milestone-sized engine build. Sequence within the track by
+> value: 5.2 (dependency report -- cleanest, pure data rollup) is likely the
+> easiest first; 5.1 (reverse call tree) reuses `callgraph` almost directly; 5.3
+> (architectural charts) is the largest (needs the layer/package aggregation +
+> chart layout work). Each should get its own brainstorm -> spec -> plan when
+> picked up.
+
+---
+
 ## First chunk chosen
 
 Track 1 (AutoFix) goes first. The very first slice is scoped in a separate spec +
