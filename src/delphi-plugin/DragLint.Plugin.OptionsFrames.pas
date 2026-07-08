@@ -747,7 +747,10 @@ begin
     OldPair.Free; { RemovePair returns nil if absent; TObject(nil).Free is a no-op }
     Docs.AddPair('max_return_cases', TJSONNumber.Create(AValue));
 
-    TFile.WriteAllText(Path, Root.ToJSON, TEncoding.ANSI);
+    { UTF-8 (with BOM, via TEncoding.UTF8) -- matches TManifestIO.Save
+      (DRagLint.Index.Manifest.pas) byte-for-byte so the IDE-written and
+      CLI-written manifest are encoding-consistent. }
+    TFile.WriteAllText(Path, Root.ToJSON, TEncoding.UTF8);
   finally
     Root.Free;
   end; // try
