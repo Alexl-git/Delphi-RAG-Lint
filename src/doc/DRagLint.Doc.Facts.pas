@@ -5,7 +5,8 @@ interface
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.Math,
   System.Generics.Collections, System.RegularExpressions,
-  DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Doc.GitSince;
+  DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Doc.GitSince,
+  DRagLint.Hover.Returns;
 
 const
   // Display cap for the <seealso> related-symbol list (ADF T4). At most this many
@@ -32,6 +33,14 @@ type
     UsedInUnits    : TArray<string>     ;
     Raises         : TArray<string>     ;
     ReturnType     : string             ;
+    // v(item1 T8): distinct return-expression RHS strings mined from the
+    // function's body via the hover MineReturnExpressions miner (DRagLint.
+    // Hover.Returns) -- the SAME pure miner the hover popup uses, so hover
+    // and autodoc's <returns> agree. RAW (XML-unescaped); Task 9's emit
+    // escapes at render time. Capped at Build's AMaxReturnCases (first-seen
+    // order, truncated). Empty for procedures (ReturnType = '') and whenever
+    // AMaxReturnCases <= 0 (enumeration disabled -> bare TODO at emit).
+    ReturnCases    : TArray<string>     ;
     CalledFromTotal: Integer            ;
     CallsTotal     : Integer            ;
     UsedInTotal    : Integer            ;
@@ -80,9 +89,14 @@ type
     /// <param name="ABaseDir">Repo root for the git &lt;since&gt; lookup; '' -&gt; the file's own directory. Default ''.</param>
     /// <param name="AExtraStores">Additional index stores searched ONLY for name-based
     /// callers/used-in units, so cross-DB callers surface; nil/empty = single-store. Default nil.</param>
+    /// <param name="AMaxReturnCases">Cap on Result.ReturnCases (v(item1 T8)): at most
+    /// this many distinct mined return expressions are kept (first-seen order,
+    /// truncated). 0 or negative disables enumeration entirely (ReturnCases stays
+    /// empty). Default 20.</param>
     class function Build(const AStore: ISymbolStore; const ASym: TSymbol;
       AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
-      const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil): TDocFacts;
+      const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
+      AMaxReturnCases: Integer = 20): TDocFacts;
   end;
 
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
@@ -323,7 +337,7 @@ end;
 
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
-  const AExtraStores: TArray<ISymbolStore>): TDocFacts;
+  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer): TDocFacts;
 var
   ResCallers: TArray<TResolvedCaller>;
   RC        : TResolvedCaller        ;
@@ -443,6 +457,33 @@ begin
 
   // Returns: type from the signature, else '' (procedures).
   Result.ReturnType:= ParseReturnType(ASym.Signature);
+
+  // ReturnCases: v(item1 T8) -- enumerate distinct return cases for a function's
+  // <returns> doc (Task 9 emits them). Reuses MineReturnExpressions (DRagLint.
+  // Hover.Returns) -- the SAME pure miner the hover popup already uses, so hover
+  // and autodoc agree on what a routine returns. Guarded so PROCEDURES (no
+  // return type) never get ReturnCases, AMaxReturnCases <= 0 disables mining
+  // entirely (bare TODO at emit), and only a valid impl-line span is scanned.
+  // The body is re-read here (tolerant ANSI read, same idiom as Calls/Raises
+  // below) rather than reusing their Src arrays, since this block runs before
+  // either of those reads and keeping it self-contained avoids coupling three
+  // unrelated Result fields to one shared local.
+  if (Result.ReturnType <> '') and (AMaxReturnCases > 0)
+     and (ASym.ImplStartLine > 0) and (ASym.ImplEndLine >= ASym.ImplStartLine) then
+  begin
+    var RSrc: TArray<string>;
+    try RSrc:= System.IOUtils.TFile.ReadAllLines(AStore.GetFilePath(ASym.FileId), TEncoding.ANSI);
+    except RSrc:= nil; end;
+    if Length(RSrc) > 0 then
+    begin
+      var BodyLines: TArray<string>; SetLength(BodyLines, 0);
+      for var Ln:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(RSrc)) do
+        BodyLines:= BodyLines + [RSrc[Ln - 1]];
+      var Mined: TArray<string>:= MineReturnExpressions(BodyLines);
+      if Length(Mined) > AMaxReturnCases then SetLength(Mined, AMaxReturnCases);
+      Result.ReturnCases:= Mined;
+    end;
+  end;
 
   // Calls (outgoing): v14 (D5 T10) -- PREFER RESOLVED callees, body-scan FALLBACK.
   // T3's original decision (t3-calls-spike-decision.md) still holds for sites
