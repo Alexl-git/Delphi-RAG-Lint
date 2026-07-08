@@ -27,6 +27,9 @@ First index the example (any folder works):
 drag-lint index path\to\circular-uses-demo --db demo.sqlite
 ```
 
+The full, verbatim output for all three report levels is in
+[REPORT.md](REPORT.md). The key excerpts:
+
 ### `cycles --edges` -- the cycle and its edges
 
 ```

@@ -153,9 +153,11 @@ contract*, or *invert the dependency* for layering inversions), numbered steps,
 and a verify command. Build after each cycle and re-run `cycles` to confirm.
 
 > **Worked example:** [docs/examples/circular-uses-demo/](docs/examples/circular-uses-demo/)
-> is a tiny compiling two-unit cycle plus the exact `--edges` / `--causes` /
-> `--plan` output drag-lint produces for it. (`circular-uses` is also a built-in
-> lint rule, **on by default**, so `lint-project` flags cycles automatically.)
+> is a tiny compiling two-unit cycle, with the exact `--edges` / `--causes` /
+> `--plan` output drag-lint produces for it captured verbatim in
+> [REPORT.md](docs/examples/circular-uses-demo/REPORT.md). (`circular-uses` is
+> also a built-in lint rule, **on by default**, so `lint-project` flags cycles
+> automatically.)
 
 Then propose and apply the
 cleanup, **verified by the compiler** so it never breaks the build:
