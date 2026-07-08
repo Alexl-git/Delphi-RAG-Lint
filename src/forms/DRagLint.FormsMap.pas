@@ -497,6 +497,62 @@ begin
   end;
 end; // function
 
+/// <summary>Runs the bare-name caller `refs` query for ARoutine against the
+/// primary store PLUS every store in AExtraStores, appending (file_id, start_line,
+/// path) rows from each. Multi-DB scope: a call site may live in a different index
+/// (e.g. COMMON) than the form being resolved. Rows are NOT deduped here -- the
+/// caller's AVisited set already prevents re-walking the same (owner.routine).</summary>
+/// <param name="APrimary">The project store (owns form enumeration); queried first.</param>
+/// <param name="AExtraStores">Additional caller-search-scope stores; may be empty.</param>
+/// <param name="ARoutine">Bare method name to match on refs.name_text.</param>
+/// <returns>All matching ref rows across the stores.</returns>
+type
+  TCallerRefRow = record FileId: Int64; StartLine: Integer; Path: string; Store: TSQLiteSymbolStore; end;
+
+function QueryNameCallerRows(APrimary: TSQLiteSymbolStore;
+  const AExtraStores: TArray<TSQLiteSymbolStore>; const ARoutine: string): TArray<TCallerRefRow>;
+var
+  Stores: TArray<TSQLiteSymbolStore>;
+  St    : TSQLiteSymbolStore;
+  Q     : TFDQuery;
+  Rows  : TList<TCallerRefRow>;
+  Row   : TCallerRefRow;
+begin
+  Rows:= TList<TCallerRefRow>.Create;
+  try
+    Stores:= [APrimary];
+    for St in AExtraStores do Stores:= Stores + [St];
+    for St in Stores do
+    begin
+      if St = nil then Continue;
+      Q:= TFDQuery.Create(nil);
+      try
+        Q.Connection:= St.GetConnection;
+        Q.SQL.Text:=
+          'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
+          'FROM refs r JOIN files f ON f.id = r.file_id ' +
+          'WHERE r.name_text = :rout AND f.language LIKE ''delphi%''';
+        Q.ParamByName('rout').AsString:= ARoutine;
+        Q.Open;
+        while not Q.Eof do
+        begin
+          Row.FileId   := Q.FieldByName('fid').AsLargeInt;
+          Row.StartLine:= Q.FieldByName('sl' ).AsInteger;
+          Row.Path     := Q.FieldByName('p'  ).AsString;
+          Row.Store    := St;
+          Rows.Add(Row);
+          Q.Next;
+        end;
+      finally
+        Q.Free;
+      end;
+    end;
+    Result:= Rows.ToArray;
+  finally
+    Rows.Free;
+  end;
+end;
+
 /// <summary>Recursively walks the call graph upward from (AOwnerClass, ARoutine)
 /// to find the nearest ancestor call site that lies within a navigable form.
 /// Cycle-safe via AVisited keyed as 'OwnerClass.Routine' -- no depth cap; the
@@ -518,20 +574,19 @@ function FindNearestFormCaller(
   AStore       : TSQLiteSymbolStore;
   const AOwnerClass, ARoutine: string;
   AClassToNode : TDictionary<string, TFormNode>;
-  APasLines    : TDictionary<Int64, TArray<string>>;
+  APasLines    : TDictionary<string, TArray<string>>;
   AVisited     : TDictionary<string, Boolean>;
+  const AExtraStores: TArray<TSQLiteSymbolStore>;
   out AFormClass  : string;
   out AFormRoutine: string
 ): Boolean;
 var
-  Key   : string        ;
-  Q     : TFDQuery      ;
-  FId   : Int64         ;
-  SL    : Integer       ;
-  Path  : string        ;
-  Arr   : TArray<string>;
-  COwner: string        ;
-  CRout : string        ;
+  Key : string             ;
+  Rows: TArray<TCallerRefRow>;
+  R   : TCallerRefRow      ;
+  Arr : TArray<string>     ;
+  COwner: string           ;
+  CRout : string           ;
 begin
   Result      := False;
   AFormClass  := '';
@@ -539,63 +594,50 @@ begin
   Key:= AOwnerClass + '.' + ARoutine;
   if AVisited.ContainsKey(Key) then Exit;
   AVisited.Add(Key, True);
-  Q:= TFDQuery.Create(nil);
-  try
-    Q.Connection:= AStore.GetConnection;
-    { Name-only caller query: match by bare method name_text, NOT by receiver
-      type or owner class. This is what makes the v4 Layer 1 interface-method
-      bridge work with no extra machinery: when the launch body lives in a
-      concrete C.M (e.g. TDirectPlan4.EditThing constructs the editor form) but
-      the call site dispatches through an interface reference (APlan.EditThing in
-      the calling form), the interface call site is indexed as a plain 'EditThing'
-      ref whose enclosing_symbol_id resolves to the calling form's method. Because
-      this query keys on name_text alone, that interface-dispatch call site is
-      already returned here -- no HeritageInterfaces / type_ancestors lookup is
-      needed (would be dead code; YAGNI). The same holds for the Layer 2 hook
-      continuation (Task 3): once the hook edge is synthesized, the fan-in lands
-      on THookPlan4.EditThing and this same name walk carries it up to the form.
-      (Trade-off: name-only matching can over-match a same-named method on an
-      unrelated class -- the accepted false-positive noted in <remarks> above;
-      a receiver-type index (spec D5.1) would tighten it if that ever bites.) }
-    Q.SQL.Text:=
-      'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
-      'FROM refs r JOIN files f ON f.id = r.file_id ' +
-      'WHERE r.name_text = :rout AND f.language LIKE ''delphi%''';
-    Q.ParamByName('rout').AsString:= ARoutine;
-    Q.Open;
-    while not Q.Eof do
+  { Name-only caller query: match by bare method name_text, NOT by receiver
+    type or owner class. This is what makes the v4 Layer 1 interface-method
+    bridge work with no extra machinery: when the launch body lives in a
+    concrete C.M (e.g. TDirectPlan4.EditThing constructs the editor form) but
+    the call site dispatches through an interface reference (APlan.EditThing in
+    the calling form), the interface call site is indexed as a plain 'EditThing'
+    ref whose enclosing_symbol_id resolves to the calling form's method. Because
+    this query keys on name_text alone, that interface-dispatch call site is
+    already returned here -- no HeritageInterfaces / type_ancestors lookup is
+    needed (would be dead code; YAGNI). The same holds for the Layer 2 hook
+    continuation (Task 3): once the hook edge is synthesized, the fan-in lands
+    on THookPlan4.EditThing and this same name walk carries it up to the form.
+    (Trade-off: name-only matching can over-match a same-named method on an
+    unrelated class -- the accepted false-positive noted in <remarks> above;
+    a receiver-type index (spec D5.1) would tighten it if that ever bites.)
+    Multi-DB: QueryNameCallerRows fans this same query out across AExtraStores
+    too, so a call site living in a different index (e.g. COMMON) is found. }
+  Rows:= QueryNameCallerRows(AStore, AExtraStores, ARoutine);
+  for R in Rows do
+  begin
+    if not APasLines.TryGetValue(R.Path, Arr) then
     begin
-      FId := Q.FieldByName('fid').AsLargeInt;
-      SL  := Q.FieldByName('sl' ).AsInteger;
-      Path:= Q.FieldByName('p'  ).AsString;
-      if not APasLines.TryGetValue(FId, Arr) then
+      if TFile.Exists(R.Path) then Arr:= TFile.ReadAllLines(R.Path, TEncoding.ANSI)
+      else Arr:= [];
+      APasLines.Add(R.Path, Arr);
+    end;
+    COwner:= '';
+    CRout := '';
+    if (R.StartLine >= 1) and (R.StartLine <= Length(Arr)) and
+       FindEnclosingImpl(Arr, R.StartLine, COwner, CRout) and
+       (COwner <> '') and (CRout <> '') then
+    begin
+      if AClassToNode.ContainsKey(COwner) then
       begin
-        if TFile.Exists(Path) then Arr:= TFile.ReadAllLines(Path, TEncoding.ANSI)
-        else Arr:= [];
-        APasLines.Add(FId, Arr);
-      end;
-      COwner:= '';
-      CRout := '';
-      if (SL >= 1) and (SL <= Length(Arr)) and
-         FindEnclosingImpl(Arr, SL, COwner, CRout) and
-         (COwner <> '') and (CRout <> '') then
-      begin
-        if AClassToNode.ContainsKey(COwner) then
-        begin
-          AFormClass  := COwner;
-          AFormRoutine:= CRout;
-          Exit(True);
-        end
-        else if FindNearestFormCaller(AStore, COwner, CRout, AClassToNode,
-                                      APasLines, AVisited,
-                                      AFormClass, AFormRoutine) then
-          Exit(True);
-      end;
-      Q.Next;
-    end; // while
-  finally
-    Q.Free;
-  end; // try
+        AFormClass  := COwner;
+        AFormRoutine:= CRout;
+        Exit(True);
+      end
+      else if FindNearestFormCaller(AStore, COwner, CRout, AClassToNode,
+                                    APasLines, AVisited, AExtraStores,
+                                    AFormClass, AFormRoutine) then
+        Exit(True);
+    end;
+  end; // for
 end; // function
 
 /// <summary>v4 Layer 2 hook continuation. When the fan-in dead-ends on a
@@ -615,14 +657,16 @@ function FindFormViaHook(
   AStore       : TSQLiteSymbolStore;
   const AHookField: string;
   AClassToNode : TDictionary<string, TFormNode>;
-  APasLines    : TDictionary<Int64, TArray<string>>;
+  APasLines    : TDictionary<string, TArray<string>>;
   AVisited     : TDictionary<string, Boolean>;
+  const AExtraStores: TArray<TSQLiteSymbolStore>;
   out AFormClass  : string;
   out AFormRoutine: string
 ): Boolean;
 var
+  Stores: TArray<TSQLiteSymbolStore>;
+  St    : TSQLiteSymbolStore;
   Q     : TFDQuery      ;
-  FId   : Int64         ;
   SL    : Integer       ;
   Path  : string        ;
   Arr   : TArray<string>;
@@ -637,53 +681,61 @@ begin
   HKey:= '(hook)' + AHookField; // distinct namespace from OwnerClass.Routine keys
   if AVisited.ContainsKey(HKey) then Exit;
   AVisited.Add(HKey, True);
-  Q:= TFDQuery.Create(nil);
-  try
-    Q.Connection:= AStore.GetConnection;
-    { Invocation sites of the hook field: the proc-variable is CALLED here
-      (ThingHook() inside THookPlan4.EditThing). Unlike the registration line,
-      the invocation IS indexed as a plain 'call' ref (verified via dump-refs:
-      name=ThingHook kind=call enc=THookPlan4.EditThing). Its enclosing routine
-      rejoins the Task-2 name-based interface walk back to the calling form. }
-    Q.SQL.Text:=
-      'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
-      'FROM refs r JOIN files f ON f.id = r.file_id ' +
-      'WHERE r.name_text = :h AND r.kind = ''call'' AND f.language LIKE ''delphi%''';
-    Q.ParamByName('h').AsString:= AHookField;
-    Q.Open;
-    while not Q.Eof do
-    begin
-      FId := Q.FieldByName('fid').AsLargeInt;
-      SL  := Q.FieldByName('sl' ).AsInteger;
-      Path:= Q.FieldByName('p'  ).AsString;
-      if not APasLines.TryGetValue(FId, Arr) then
+  { Invocation sites of the hook field: the proc-variable is CALLED here
+    (ThingHook() inside THookPlan4.EditThing). Unlike the registration line,
+    the invocation IS indexed as a plain 'call' ref (verified via dump-refs:
+    name=ThingHook kind=call enc=THookPlan4.EditThing). Its enclosing routine
+    rejoins the Task-2 name-based interface walk back to the calling form.
+    Multi-DB: this query (unlike QueryNameCallerRows) also filters on
+    r.kind = 'call', so it fans out across AStore + AExtraStores itself
+    rather than reusing the helper. }
+  Stores:= [AStore];
+  for St in AExtraStores do Stores:= Stores + [St];
+  for St in Stores do
+  begin
+    if St = nil then Continue;
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= St.GetConnection;
+      Q.SQL.Text:=
+        'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
+        'FROM refs r JOIN files f ON f.id = r.file_id ' +
+        'WHERE r.name_text = :h AND r.kind = ''call'' AND f.language LIKE ''delphi%''';
+      Q.ParamByName('h').AsString:= AHookField;
+      Q.Open;
+      while not Q.Eof do
       begin
-        if TFile.Exists(Path) then Arr:= TFile.ReadAllLines(Path, TEncoding.ANSI)
-        else Arr:= [];
-        APasLines.Add(FId, Arr);
-      end;
-      COwner:= '';
-      CRout := '';
-      if (SL >= 1) and (SL <= Length(Arr)) and
-         FindEnclosingImpl(Arr, SL, COwner, CRout) and
-         (COwner <> '') and (CRout <> '') then
-      begin
-        if AClassToNode.ContainsKey(COwner) then
+        SL  := Q.FieldByName('sl' ).AsInteger;
+        Path:= Q.FieldByName('p'  ).AsString;
+        if not APasLines.TryGetValue(Path, Arr) then
         begin
-          AFormClass  := COwner;
-          AFormRoutine:= CRout;
-          Exit(True);
-        end
-        else if FindNearestFormCaller(AStore, COwner, CRout, AClassToNode,
-                                      APasLines, AVisited,
-                                      AFormClass, AFormRoutine) then
-          Exit(True);
-      end;
-      Q.Next;
-    end; // while
-  finally
-    Q.Free;
-  end; // try
+          if TFile.Exists(Path) then Arr:= TFile.ReadAllLines(Path, TEncoding.ANSI)
+          else Arr:= [];
+          APasLines.Add(Path, Arr);
+        end;
+        COwner:= '';
+        CRout := '';
+        if (SL >= 1) and (SL <= Length(Arr)) and
+           FindEnclosingImpl(Arr, SL, COwner, CRout) and
+           (COwner <> '') and (CRout <> '') then
+        begin
+          if AClassToNode.ContainsKey(COwner) then
+          begin
+            AFormClass  := COwner;
+            AFormRoutine:= CRout;
+            Exit(True);
+          end
+          else if FindNearestFormCaller(AStore, COwner, CRout, AClassToNode,
+                                        APasLines, AVisited, AExtraStores,
+                                        AFormClass, AFormRoutine) then
+            Exit(True);
+        end;
+        Q.Next;
+      end; // while
+    finally
+      Q.Free;
+    end;
+  end; // for St
 end; // function
 
 /// <summary>Builds launch edges X -> Y across all forms using two passes:
@@ -693,12 +745,12 @@ end; // function
 /// call graph upward (unlimited depth, cycle-safe via visited set) until a
 /// navigable form ancestor is found. Duplicate (From, To, Caption) triples are
 /// suppressed.</summary>
-function BuildEdges(AStore: TSQLiteSymbolStore; ANodes: TList<TFormNode>; AClassToNode: TDictionary<string, TFormNode>): TList<TFormEdge>;
+function BuildEdges(AStore: TSQLiteSymbolStore; ANodes: TList<TFormNode>; AClassToNode: TDictionary<string, TFormNode>; const AExtraStores: TArray<TSQLiteSymbolStore>): TList<TFormEdge>;
 var
-  Y         : TFormNode                         ;
-  Q         : TFDQuery                          ;
-  PasLines  : TDictionary<Int64, TArray<string>>;
-  SeenEdges : TStringList                       ;
+  Y         : TFormNode                          ;
+  Q         : TFDQuery                           ;
+  PasLines  : TDictionary<string, TArray<string>>;
+  SeenEdges : TStringList                        ;
   { v4 Layer 2: routine-name-lowercased -> hook-field-name. Populated once by
     BuildHookMap from a text-scan (proc-var registrations are invisible to refs;
     see spec D2). Consulted only when a standalone launcher dead-ends. }
@@ -706,11 +758,11 @@ var
 
   function FileLines(AFileId: Int64; const APath: string): TArray<string>;
   begin
-    if not PasLines.TryGetValue(AFileId, Result) then
+    if not PasLines.TryGetValue(APath, Result) then
     begin
       if TFile.Exists(APath) then Result:= TFile.ReadAllLines(APath, TEncoding.ANSI)
       else Result:= [];
-      PasLines.Add(AFileId, Result);
+      PasLines.Add(APath, Result);
     end;
   end;
 
@@ -897,7 +949,7 @@ var
         var Hooked:= False;
         var HookField:= '';
         if not (FindNearestFormCaller(AStore, '', Rout, AClassToNode, PasLines, Vis2s,
-                                      FormCls, FormRout) and
+                                      AExtraStores, FormCls, FormRout) and
                 AClassToNode.TryGetValue(FormCls, XN)) then
           // v4 Layer 2: the direct fan-in dead-ended. If Rout is a hook handler
           // (registered as HookField := Rout, invisible to refs), resume from the
@@ -905,7 +957,7 @@ var
           // form. Reuse the SAME visited set so the fan-in cannot loop.
           if HandlerToHook.TryGetValue(LowerCase(Rout), HookField) then
             Hooked:= FindFormViaHook(AStore, HookField, AClassToNode, PasLines,
-                                     Vis2s, FormCls, FormRout) and
+                                     Vis2s, AExtraStores, FormCls, FormRout) and
                      AClassToNode.TryGetValue(FormCls, XN)
           else
             Hooked:= False
@@ -951,7 +1003,7 @@ var
       var Vis2:= TDictionary<string, Boolean>.Create;
       try
         if FindNearestFormCaller(AStore, OC, Rout, AClassToNode, PasLines, Vis2,
-                                 FormCls, FormRout) and
+                                 AExtraStores, FormCls, FormRout) and
            AClassToNode.TryGetValue(FormCls, XN) then
         begin
           var Vis3:= TDictionary<string, Boolean>.Create;
@@ -971,7 +1023,7 @@ var
 
 begin
   Result       := TList<TFormEdge>.Create;
-  PasLines     := TDictionary<Int64, TArray<string>>.Create;
+  PasLines     := TDictionary<string, TArray<string>>.Create;
   SeenEdges    := TStringList.Create;
   HandlerToHook:= TDictionary<string, string>.Create;
   SeenEdges.Sorted    := True;
@@ -1256,7 +1308,7 @@ begin
       Nodes.Sort(TComparer<TFormNode>.Construct( function(const L, R: TFormNode): Integer begin Result:= CompareText(L.FormName, R.FormName); end));
       ClassToNode:= TDictionary<string, TFormNode>.Create;
       for N in Nodes do ClassToNode.AddOrSetValue(N.FormClass, N);
-      Edges:= BuildEdges(Store, Nodes, ClassToNode);
+      Edges:= BuildEdges(Store, Nodes, ClassToNode, []);
       try
         RootClass:= DetectRoot(AProjectFile, ARootForm, ClassToNode, Edges);
         { Schema version lives in schema_meta (written at migrate), NOT in
