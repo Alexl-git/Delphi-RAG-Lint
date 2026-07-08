@@ -20,6 +20,10 @@ procedure ShowDragLintDock; { open / focus the dockable panel }
 procedure RegisterDragLintDockable; { register at startup so the IDE restores a saved docked instance }
 procedure UnregisterDragLintDock; { idempotent teardown }
 
+/// <summary>Shows the drag-lint dock and selects the Lint Options tab. Used by the
+/// Project Manager "Project Rules..." action so a right-click lands on rules.</summary>
+procedure ShowDragLintDockLintOptions;
+
 implementation
 
 uses
@@ -90,6 +94,11 @@ type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools:
       procedure BuildGraphTab(ATab: TTabSheet);
     public
       constructor Create(AOwner: TComponent); override;
+      destructor Destroy; override;
+      /// <summary>Selects the Lint Options tab, if the page control and tab exist.
+      /// Public so external callers (e.g. the Project Manager "Project Rules..."
+      /// action) can jump straight to it without touching private frame internals.</summary>
+      procedure SelectLintOptionsTab;
   end;
 
   TDragLintDockable = class(TInterfacedObject, INTACustomDockableForm)
@@ -125,6 +134,7 @@ var
   GForm      : TCustomForm            = nil           ;
   GRegistered: Boolean                = False             ;
   GWatch     : TFormWatch             = nil            ;
+  GDockFrame : TDragLintDockFrame     = nil            ; { v0.94: captured in FrameCreated so ShowDragLintDockLintOptions can reach FPages/FTabLintOptions without breaking the frame's encapsulation }
 
   { ---- frame (placeholder content) ---------------------------------------- }
 
@@ -235,6 +245,19 @@ begin
   FWatchTimer.Enabled := True;
 end; // constructor
 
+destructor TDragLintDockFrame.Destroy;
+begin
+  { v0.94: secondary net alongside TFormWatch.Notification -- guard with
+    identity check in case a second frame instance was created meanwhile. }
+  if GDockFrame = Self then GDockFrame:= nil;
+  inherited;
+end;
+
+procedure TDragLintDockFrame.SelectLintOptionsTab;
+begin
+  if (FPages <> nil) and (FTabLintOptions <> nil) then FPages.ActivePage:= FTabLintOptions;
+end;
+
 procedure TDragLintDockFrame.HandleWatchTimer(Sender: TObject);
 var
   ES     : IOTAEditorServices;
@@ -341,7 +364,11 @@ end;
 procedure TFormWatch.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited;
-  if (Operation = opRemove) and (AComponent = GForm) then GForm:= nil;
+  if (Operation = opRemove) and (AComponent = GForm) then
+  begin
+    GForm:= nil;
+    GDockFrame:= nil; { v0.94: the frame is owned by GForm and dies with it }
+  end;
 end;
 
 { ---- INTACustomDockableForm --------------------------------------------- }
@@ -363,6 +390,9 @@ end;
 
 procedure TDragLintDockable.FrameCreated(AFrame: TCustomFrame);
 begin
+  { v0.94: capture the frame instance so ShowDragLintDockLintOptions can select
+    its Lint Options tab later without a module-level ref to private fields. }
+  if AFrame is TDragLintDockFrame then GDockFrame:= TDragLintDockFrame(AFrame);
 end;
 
 function TDragLintDockable.GetMenuActionList: TCustomActionList;
@@ -449,6 +479,12 @@ begin
   end;
 end; // procedure
 
+procedure ShowDragLintDockLintOptions;
+begin
+  ShowDragLintDock;
+  if GDockFrame <> nil then GDockFrame.SelectLintOptionsTab;
+end;
+
 procedure UnregisterDragLintDock;
 var
   NTA: INTAServices;
@@ -461,8 +497,9 @@ begin
       GRegistered:= False;
     end;
   end;
-  GForm    := nil; { owned/freed by the IDE }
-  GDockable:= nil;
+  GForm     := nil; { owned/freed by the IDE }
+  GDockFrame:= nil; { owned by GForm, dies alongside it }
+  GDockable := nil;
   FreeAndNil(GWatch);
 end;
 
