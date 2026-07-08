@@ -72,6 +72,10 @@ function Check($n, $ok, $d = '') {
 }
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
+# Resolve $Exe to an ABSOLUTE path up front: scenarios B and D Push-Location into
+# a fixture dir, which breaks a RELATIVE -Exe (the relative path no longer resolves
+# from the new CWD). Absolutize once so every '& $Exe' works regardless of CWD.
+$Exe = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
 
