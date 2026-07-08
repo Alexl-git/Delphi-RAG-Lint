@@ -5,6 +5,35 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.96.0-alpha -- 2026-07-08
+
+- **Reverse call-tree report (`reverse-calltree`)** -- a new CLI verb: the N-deep
+  *upward* "who calls X, and who calls them" tree, per symbol, with call sites
+  (`unit:line`) and cycle markers. `--depth N` (default 3); `--format
+  text|json|dot|mermaid` (`json` schema `reverse-calltree/1`; `dot`/`mermaid`
+  render in the graph viewer); multi `--db` (the first index that resolves the
+  symbol wins). Exit 0 on success, 1 when the symbol resolves in no index, 2 on
+  usage/db error. Reuses the resolved caller traversal; the pure engine
+  `src/report/DRagLint.Report.RCallTree.pas` is designed so AutoDoc can later reuse
+  it at depth 1. CLI-only this release. Headless test `run_reverse_calltree.ps1`.
+- **Naming-convention autofix, phase 1 (re-casing)** -- the naming rules
+  `method-pascalcase`, `local-var-casing`, and `const-casing` are now *fixable*:
+  `lint --fix` (and the IDE "Fix it") re-cases the offending identifier and every
+  reference via the existing global-rename engine (routine-local vars use the
+  routine-scoped rename). Opt-in via the existing `autofix` id list in
+  `drag-lint-lint.json` -- **off by default**, dry-run unless `--apply`, and every
+  synthesized rename is collision-checked and skipped if unsafe. Prefix-adding
+  (e.g. `client -> FClient`) is deferred to phase 2. Synthesizer
+  `src/refactor/DRagLint.Refactor.NamingFix.pas`; tests `run_naming_synth.ps1` +
+  `run_naming_autofix.ps1`.
+- **IDE fix: Structure tree "Code Elements (0)"** -- the plugin's DB resolver now
+  also probes `<projdir>\<projname>.sqlite` (the project-name-indexed DB that
+  `index --project` and older workflows produce), preferring whichever of the
+  template-named or project-name file exists and is non-empty. Previously only
+  `<projdir>\drag-lint.sqlite` was tried, so a project-name-indexed workspace fell
+  back to an unrelated DB and the outline showed zero elements (diagnostics were
+  unaffected -- they come from the LSP, not `outline`).
+
 ## v0.95.0-alpha -- 2026-07-08
 
 - **Third-party dependency report (`deps-report`)** -- a new CLI verb that reports

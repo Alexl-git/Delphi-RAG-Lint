@@ -1,6 +1,6 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-08 (LATEST-33) -- **Batch C SHIPPED to main (DbResolver project-name-DB fix + `reverse-calltree` verb + naming autofix phase 1), full battery green, NOT pushed/tagged (user drives push/release).**
+> ## RESUME 2026-07-08 (LATEST-33) -- **Batch C RELEASED as v0.96.0-alpha (DbResolver project-name-DB fix + `reverse-calltree` verb + naming autofix phase 1). Full battery green on the Release exe; pushed to main + tagged v0.96.0-alpha; GH release cut. LIVE-IDE SMOKE still pending (user): F1 open a `<projname>.sqlite`-indexed project -> Structure tree Code Elements > 0; F3 opt a naming rule into the `autofix` list -> "Fix it" lights up.**
 >
 > **SHIPPED to main this session (Batch C, untagged, rides the next version bump):**
 > - **Feature 1 -- DbResolver project-name-DB probe.** `PickProjectDb` (new pure unit
