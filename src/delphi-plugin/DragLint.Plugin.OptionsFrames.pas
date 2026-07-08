@@ -136,7 +136,7 @@ type
     FGrpRules    : TGroupBox;
     FBtnEditRules: TButton;
     /// <summary>Opens the drag-lint dock focused on the "Lint Options" tab, where
-    /// the full 170+ rule catalog (enable/disable, severity, auto-fix) is edited
+    /// the full 165+ rule catalog (enable/disable, severity, auto-fix) is edited
     /// per project. The catalog is too large/dynamic for the Options dialog, so
     /// this button routes users to the dock surface (same target as the Project
     /// Manager "drag-lint: Project Rules..." right-click).</summary>
@@ -376,7 +376,7 @@ const
   CH = 22;
   EH = 24;
   MH = 90;  { IndexDbs memo height }
-  LH = 110; { library-paths memo height }
+  LH = 320; { library-paths memo height: ~20 lines at the default font (grows with the window via akBottom) }
 var
   Y : Integer;
   GY: Integer;
@@ -411,8 +411,13 @@ begin
   FMemoIndexDbs.Anchors   := [akLeft, akTop, akRight];
 
   { --- Library indexing (read-only folders + scope + time warning) --- }
-  Height:= Height + GH + EH + 16 + LH + 20 + GM;
-  FGrpLibIndex:= DLNewGroup(Self, 'Library indexing', Y, GH + EH + 16 + LH + 20 + 4);
+  Height:= Height + GH + EH + 16 + LH + 40 + GM;
+  FGrpLibIndex:= DLNewGroup(Self, 'Library indexing', Y, GH + EH + 16 + LH + 40 + 4);
+  { The IDE Options dialog hosts the frame with Align=alClient, so the frame
+    grows with the window. Anchor this LAST group to the frame's bottom edge and
+    give the folder memo akBottom so it stretches; the warning label pins to the
+    group bottom. Net effect: the resolved-folders list resizes with the window. }
+  FGrpLibIndex.Anchors:= [akLeft, akTop, akRight, akBottom];
   GY:= GH - 4;
 
   DLNewLabel(FGrpLibIndex, 'Scope:', LM, GY + 4);
@@ -440,7 +445,9 @@ begin
   FMemoLibPaths.ReadOnly  := True;
   FMemoLibPaths.ScrollBars:= ssBoth;
   FMemoLibPaths.WordWrap  := False;
-  FMemoLibPaths.Anchors   := [akLeft, akTop, akRight];
+  { akBottom makes the folder list stretch vertically as the group (and the
+    frame) grow with the Options window. }
+  FMemoLibPaths.Anchors   := [akLeft, akTop, akRight, akBottom];
   Inc(GY, LH + 4);
 
   FLblLibWarning:= DLNewLabel(FGrpLibIndex, 'Indexing the full library (RTL + DevExpress + browsing paths) can take several minutes.', LM, GY);
@@ -450,7 +457,9 @@ begin
   FLblLibWarning.WordWrap  := True;
   FLblLibWarning.Width     := FGrpLibIndex.Width - LM * 2;
   FLblLibWarning.Height    := 32;
-  FLblLibWarning.Anchors   := [akLeft, akTop, akRight];
+  { Pinned to the group bottom (no akTop) so it stays just below the memo as the
+    memo grows. }
+  FLblLibWarning.Anchors   := [akLeft, akRight, akBottom];
 end; // procedure
 
 procedure TDLIndexerOptionsFrame.LoadControls;
@@ -581,11 +590,11 @@ begin
   FEdMaxReturnCases.Value   := 20;
   FEdMaxReturnCases.Anchors := [akTop, akRight];
 
-  { --- Lint rules (routes to the dock; the 170+ catalog is per-project) --- }
+  { --- Lint rules (routes to the dock; the 165+ catalog is per-project) --- }
   FGrpRules:= DLNewGroup(Self, 'Lint rules', Y, GH + 34 + EH + 4);
   GY:= GH - 4;
   DLNewLabel(FGrpRules,
-    'The full list of 170+ lint rules -- enable/disable, severity, and auto-fix --', LM, GY); Inc(GY, 16);
+    'The full list of 165+ lint rules -- enable/disable, severity, and auto-fix --', LM, GY); Inc(GY, 16);
   DLNewLabel(FGrpRules,
     'is edited per project on the drag-lint dock''s Lint Options tab.', LM, GY); Inc(GY, 22);
   FBtnEditRules:= TButton.Create(FGrpRules);
@@ -594,7 +603,7 @@ begin
   FBtnEditRules.Top    := GY;
   FBtnEditRules.Width  := 180;
   FBtnEditRules.Height := EH;
-  FBtnEditRules.Caption:= 'Edit lint rules (170+)...';
+  FBtnEditRules.Caption:= 'Edit lint rules (165+)...';
   FBtnEditRules.OnClick:= BtnEditRulesClick;
 end; // procedure
 
@@ -758,7 +767,7 @@ end;
 
 procedure TDLLinterOptionsFrame.BtnEditRulesClick(Sender: TObject);
 begin
-  { The 170+ rule catalog is per-project and lives on the dock's Lint Options
+  { The 165+ rule catalog is per-project and lives on the dock's Lint Options
     tab -- open it there (same surface as the Project Rules right-click). }
   ShowDragLintDockLintOptions;
 end;
