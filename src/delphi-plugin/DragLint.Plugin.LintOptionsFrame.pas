@@ -35,6 +35,17 @@ unit DragLint.Plugin.LintOptionsFrame;
     naming bool param (TEdit "true"/"false"):
       short_identifier_check -> Naming.ShortIdentifierCheck
     any other int param -> thresholds block via SetThreshold (e.g. complexity rules)
+
+  Naming preset combo (Task 7): a "Naming preset" TComboBox sits at the top
+  of the "naming" category group box (Embarcadero (A...) / House (p...) /
+  Custom). Selecting Embarcadero or House bulk-sets the 8 prefix/casing
+  editors (param_prefix, field_prefix, class_prefix, exception_prefix,
+  interface_prefix, pointer_prefix, method_case, local_case) to that
+  bundle's values; the normal Save walk then persists them -- no separate
+  write path. Custom is a detection-only sentinel: selecting it is a no-op,
+  and it is shown automatically whenever the live values match neither
+  bundle (including right after any manual edit to one of the 8 fields).
+  See ApplyPreset / DetectAndSetPreset / NamingFieldChanged / PresetSelected.
 }
 
 interface
@@ -80,6 +91,18 @@ type
     FLblSearchIcon: TLabel;      { magnifier glyph (Segoe MDL2 Assets) }
     FLblSearch    : TLabel;      { the word "Search" }
     FEdtSearch    : TEdit;       { search box }
+    { naming-convention preset combo (top of the "naming" category group).
+      FNamingEditors maps naming param name -> its editor control (TEdit for
+      every bundle-relevant param; all are string params) so ApplyPreset can
+      bulk-set them and DetectAndSetPreset can read them back. Rebuilt (cleared)
+      at the start of each RenderCatalog, same lifetime as FAutoFixCBs. }
+    FLblPreset    : TLabel;
+    FCboPreset    : TComboBox;
+    FNamingEditors: TDictionary<string, TEdit>;
+    FApplyingPreset: Boolean;    { guard: True while ApplyPreset is bulk-setting
+                                    editors, so their OnChange handlers do not
+                                    fight back with DetectAndSetPreset (avoids
+                                    the apply/detect feedback loop) }
     procedure BuildControls;
     procedure BtnReloadClick  (Sender: TObject);
     procedure BtnSaveClick    (Sender: TObject);
@@ -90,6 +113,11 @@ type
     procedure ClearBody;
     procedure RenderCatalog(const AJSON: string);
     procedure UpdateCountsLabel;
+    { naming preset helpers }
+    procedure PresetSelected    (Sender: TObject);
+    procedure NamingFieldChanged(Sender: TObject);
+    procedure ApplyPreset       (AKind: Integer);
+    procedure DetectAndSetPreset;
     { helpers }
     function  CfgPath: string;
     procedure ReloadProfileList;
@@ -156,6 +184,46 @@ type
   end;
 
   TCatalogRules = TArray<TCatalogRule>;
+
+{ ============================================================
+  Naming-convention preset bundles (Task 7).
+
+  Each preset is a fixed set of values for the 8 naming.* scalar-string
+  params that carry prefixes/casing: param_prefix, field_prefix,
+  class_prefix, exception_prefix, interface_prefix, pointer_prefix,
+  method_case, local_case. Selecting a preset bulk-sets those 8 editor
+  controls; the existing Save walk then persists them exactly as if the
+  user had typed them by hand. "Custom" (index 2) is never applied -- it
+  is the sentinel shown when the live values match neither bundle.
+
+  Verified against TNamingConfig.Default (DRagLint.Lint.Config.pas:109):
+  ClassPrefix='T', ExceptionPrefix='E', InterfacePrefix='I',
+  PointerPrefix='P', FieldPrefix='F', MethodCase='PascalCase',
+  LocalCase='PascalCase'. Default.ParamPrefix is '' (prefix check off);
+  both presets below set it explicitly (Embarcadero 'A', House 'p') per
+  the brief, so neither preset equals Default verbatim -- that is
+  intentional, not a bug: picking a preset always turns ON param-prefix.
+  ============================================================ }
+
+const
+  PRESET_EMBARCADERO = 0;
+  PRESET_HOUSE        = 1;
+  PRESET_CUSTOM        = 2;
+
+  { Parallel to the 8-field bundle: param_prefix, field_prefix,
+    class_prefix, exception_prefix, interface_prefix, pointer_prefix,
+    method_case, local_case. Index by PRESET_EMBARCADERO / PRESET_HOUSE. }
+  NAMING_PRESET_BUNDLES: array[0..1] of array[0..7] of string = (
+    ( 'A', 'F', 'T', 'E', 'I', 'P', 'PascalCase', 'PascalCase' ), { Embarcadero (A...) }
+    ( 'p', 'F', 'T', 'E', 'I', 'P', 'PascalCase', 'PascalCase' )  { House (p...) }
+  );
+
+  { Param names in the same order as the bundle columns above; also the
+    keys used in FNamingEditors. }
+  NAMING_PRESET_PARAMS: array[0..7] of string = (
+    'param_prefix', 'field_prefix', 'class_prefix', 'exception_prefix',
+    'interface_prefix', 'pointer_prefix', 'method_case', 'local_case'
+  );
 
 { ============================================================
   TParamEditor: holds ONE param control (SpinEdit or TEdit)
@@ -555,13 +623,17 @@ begin
   FProfile    := '';
   FCfg        := TLintConfig.Load('', '');  { default no-op config }
   FAutoFixCBs := TDictionary<string, TCheckBox>.Create;
+  FNamingEditors := TDictionary<string, TEdit>.Create;
+  FApplyingPreset:= False;
   BuildControls;
 end;
 
 destructor TLintOptionsFrame.Destroy;
 begin
-  { Only holds references to VCL-owned checkboxes; free the map, not the boxes. }
+  { Only holds references to VCL-owned checkboxes/edits; free the maps, not
+    the controls themselves (owned by Self / their parent GroupBox). }
   FAutoFixCBs.Free;
+  FNamingEditors.Free;
   inherited;
 end;
 
@@ -805,6 +877,14 @@ begin
   else
     FAutoFixCBs.Clear;
 
+  { Same lifetime as FAutoFixCBs: ClearBody freed the old naming editors too. }
+  if FNamingEditors = nil then
+    FNamingEditors:= TDictionary<string, TEdit>.Create
+  else
+    FNamingEditors.Clear;
+  FLblPreset:= nil;
+  FCboPreset:= nil;
+
   Rules:= ParseCatalog(AJSON);
   if Length(Rules) = 0 then
   begin
@@ -853,6 +933,11 @@ begin
         end;
       end;
 
+      { Reserve one extra row in the "naming" category for the preset combo
+        (Task 7), placed above its rule rows. }
+      if CatHeights.ContainsKey('naming') then
+        CatHeights['naming']:= CatHeights['naming'] + CH;
+
       { Create group boxes in order, stacked vertically }
       var GrpTop: Integer:= GM;
       for CatName in CatNames do
@@ -886,7 +971,36 @@ begin
         CatCB.OnClick    := CatHeaderClick;
         CatCBMap.AddOrSetValue(CatName, CatCB);
 
-        CatYMap.AddOrSetValue(CatName, GHH + CH); { y for next rule row inside this grp }
+        var NextY: Integer:= GHH + CH; { y for next rule row inside this grp }
+
+        { Naming preset combo (Task 7): top of the "naming" group, above its
+          rule rows. Bulk-applies a bundle to the 8 naming.* editors below;
+          detection/selection is finished after the second pass builds them. }
+        if SameText(CatName, 'naming') then
+        begin
+          FLblPreset:= TLabel.Create(Self);
+          FLblPreset.Parent  := Grp;
+          FLblPreset.Left    := LM;
+          FLblPreset.Top     := NextY + 4;
+          FLblPreset.AutoSize:= True;
+          FLblPreset.Caption := 'Naming preset:';
+
+          FCboPreset:= TComboBox.Create(Self);
+          FCboPreset.Parent    := Grp;
+          FCboPreset.Style     := csDropDownList;
+          FCboPreset.Left      := LM + 96;
+          FCboPreset.Top       := NextY;
+          FCboPreset.Width     := Grp.Width - LM * 2 - 96;
+          FCboPreset.Height    := EH;
+          FCboPreset.Anchors   := [akLeft, akTop, akRight];
+          FCboPreset.Items.Add('Embarcadero (A...)'); { PRESET_EMBARCADERO }
+          FCboPreset.Items.Add('House (p...)');       { PRESET_HOUSE }
+          FCboPreset.Items.Add('Custom');              { PRESET_CUSTOM }
+          FCboPreset.OnSelect  := PresetSelected;
+          Inc(NextY, CH);
+        end;
+
+        CatYMap.AddOrSetValue(CatName, NextY);
       end;
     finally
       CatHeights.Free;
@@ -991,6 +1105,15 @@ begin
           StrEdt.Anchors := [akLeft, akTop, akRight];
           Inc(GrpY, PEH + 4);
 
+          { One of the 8 preset-bundle params (Task 7): register for
+            ApplyPreset/DetectAndSetPreset and wire the "manual edit flips
+            the combo to Custom" handler. }
+          if MatchStr(Param.Name, NAMING_PRESET_PARAMS) then
+          begin
+            FNamingEditors.AddOrSetValue(Param.Name, StrEdt);
+            StrEdt.OnChange:= NamingFieldChanged;
+          end;
+
           PE.Ctrl:= StrEdt;
         end;
 
@@ -1012,6 +1135,11 @@ begin
       { re-attach click handler after state set (RecomputeCatTriState detaches) }
       CatCB.OnClick:= CatHeaderClick;
     end;
+
+    { Initial preset detection -- runs after all 8 naming editors exist
+      (search filtering may hide the naming category entirely, in which
+      case FCboPreset is nil and DetectAndSetPreset is a no-op). }
+    DetectAndSetPreset;
 
     FHasData:= True;
     UpdateCountsLabel;
@@ -1306,6 +1434,104 @@ begin
   end
   else
     ReloadCatalogAndConfig;
+end;
+
+{ ============================================================
+  Naming-convention preset combo (Task 7)
+  ============================================================ }
+
+/// <summary>Bulk-sets the 8 naming.* editor controls in FNamingEditors to
+/// the bundle identified by AKind (PRESET_EMBARCADERO or PRESET_HOUSE).
+/// The existing Save button walk persists the new values exactly as if the
+/// user had typed them by hand -- no extra "dirty" flag is needed. Sets
+/// FApplyingPreset around the writes so the editors' own OnChange handler
+/// (NamingFieldChanged) does not immediately flip the combo back to
+/// Custom. PRESET_CUSTOM is intentionally not handled here (Custom is
+/// never applied; callers must not invoke ApplyPreset for it).</summary>
+procedure TLintOptionsFrame.ApplyPreset(AKind: Integer);
+var
+  i : Integer;
+  Ed: TEdit;
+begin
+  if (AKind <> PRESET_EMBARCADERO) and (AKind <> PRESET_HOUSE) then Exit;
+  if FNamingEditors = nil then Exit;
+
+  FApplyingPreset:= True;
+  try
+    for i:= 0 to High(NAMING_PRESET_PARAMS) do
+      if FNamingEditors.TryGetValue(NAMING_PRESET_PARAMS[i], Ed) then
+        Ed.Text:= NAMING_PRESET_BUNDLES[AKind][i];
+  finally
+    FApplyingPreset:= False;
+  end;
+end;
+
+/// <summary>Reads the 8 naming.* editor controls back and selects the combo
+/// item whose bundle matches exactly, or 'Custom' when none match. A missing
+/// editor (e.g. hidden by the search filter) counts as a mismatch, so a
+/// partially-rendered naming section safely falls back to Custom rather than
+/// mis-detecting a preset. No-op when the naming group was not rendered
+/// (FCboPreset = nil, e.g. filtered out entirely by search).</summary>
+procedure TLintOptionsFrame.DetectAndSetPreset;
+var
+  Kind : Integer;
+  i    : Integer;
+  Ed   : TEdit;
+  Matches: Boolean;
+  Found: Boolean;
+begin
+  if FCboPreset = nil then Exit;
+  if FNamingEditors = nil then Exit;
+
+  Found:= False;
+  for Kind:= PRESET_EMBARCADERO to PRESET_HOUSE do
+  begin
+    Matches:= True;
+    for i:= 0 to High(NAMING_PRESET_PARAMS) do
+    begin
+      if not FNamingEditors.TryGetValue(NAMING_PRESET_PARAMS[i], Ed) then
+      begin
+        Matches:= False;
+        Break;
+      end;
+      if Ed.Text <> NAMING_PRESET_BUNDLES[Kind][i] then
+      begin
+        Matches:= False;
+        Break;
+      end;
+    end;
+    if Matches then
+    begin
+      FCboPreset.ItemIndex:= Kind;
+      Found:= True;
+      Break;
+    end;
+  end;
+  if not Found then
+    FCboPreset.ItemIndex:= PRESET_CUSTOM;
+end;
+
+/// <summary>OnSelect handler for the naming preset combo. Applies the chosen
+/// bundle (Embarcadero/House); picking Custom leaves the current values
+/// untouched, matching the brief's "selecting it does nothing" contract.</summary>
+procedure TLintOptionsFrame.PresetSelected(Sender: TObject);
+begin
+  if FCboPreset = nil then Exit;
+  if FCboPreset.ItemIndex = PRESET_CUSTOM then Exit; { Custom: no-op by design }
+  ApplyPreset(FCboPreset.ItemIndex);
+end;
+
+/// <summary>OnChange handler wired to every naming.* editor. A manual edit
+/// flips the combo to Custom without reapplying a bundle. Guarded by
+/// FApplyingPreset so ApplyPreset's own bulk-set does not immediately
+/// re-detect and fight itself -- ApplyPreset already set the exact values
+/// for its bundle, so re-running detection there would be redundant, not
+/// wrong, but the guard keeps the two code paths cleanly separated and
+/// avoids the two firing recursively into each other.</summary>
+procedure TLintOptionsFrame.NamingFieldChanged(Sender: TObject);
+begin
+  if FApplyingPreset then Exit;
+  DetectAndSetPreset;
 end;
 
 { ============================================================
