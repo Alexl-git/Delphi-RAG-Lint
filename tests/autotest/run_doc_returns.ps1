@@ -35,9 +35,27 @@
   documented CRITICAL step), then apply again. Bytes must be identical and the
   second run must report action=unchanged / edits=0.
 
+  SCENARIO D -- both-exist merge (global + local): LoadDocMaxReturnCases always
+  calls TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir) -- i.e.
+  the GLOBAL config is read from beside the EXE ITSELF (not overridable via
+  --config for the document verb). To exercise the both-exist merge branch we
+  must run a COPY of the exe (+ its tree-sitter DLLs) from a throwaway dir that
+  has its own undotted drag-lint.json (global, cap=20) beside it, with CWD'd
+  into a subfolder carrying a dotted .drag-lint.json (local, cap=1). Regression
+  guard for the bug where ParseTextEx never set a presence bit for the 'docs'
+  block, so Load's both-exist branch (which starts Result:= GlobalManifest and
+  only overrides Settings.* scalars gated on skXxx-in-LocalKeys) never carried
+  Result.Docs from the local manifest -- a local max_return_cases override was
+  silently dropped whenever a global manifest ALSO existed (the normal
+  deployment, since a global drag-lint.json ships beside the real exe). Asserts
+  exactly ONE Observed case survives (cap=1 from local), proving local won.
+
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-doc-returns by default); Scenario
   B temporarily Push-Location's into its own cap subfolder to make the manifest
-  local-walk find its dotted config, then Pop-Location's back out.
+  local-walk find its dotted config, then Pop-Location's back out. Scenario D
+  does the same but additionally runs a COPIED exe so a GLOBAL config also
+  resolves (beside that copy), forcing HaveGlobal=True simultaneously with
+  HaveLocal=True.
 #>
 [CmdletBinding()]
 param(
@@ -160,6 +178,45 @@ Check 'run2: action=unchanged' ($r2 -match '"action":"unchanged"') $r2
 Check 'run2: edits=0'          ($r2 -match '"edits":0')            $r2
 Check 'apply is idempotent (byte-identical)' `
   ([System.Linq.Enumerable]::SequenceEqual([byte[]]$bytes1, [byte[]]$bytes2))
+
+Write-Host ''
+Write-Host 'Scenario D: both-exist merge -- local docs.max_return_cases must win over global' -ForegroundColor Cyan
+# Copy the exe + its tree-sitter DLLs into a throwaway "global" dir so
+# ExtractFilePath(ParamStr(0)) resolves to OUR copy (not the real build output),
+# then drop an undotted drag-lint.json (GLOBAL config, cap=20) beside it. A
+# subfolder gets a dotted .drag-lint.json (LOCAL override, cap=1); running with
+# CWD in that subfolder makes Load see BOTH configs at once.
+$dirD    = Join-Path $WorkDir 'd'
+$globalD = Join-Path $dirD 'globaldir'
+$projD   = Join-Path $globalD 'proj'
+New-Item -ItemType Directory $dirD, $globalD, $projD | Out-Null
+$exeDir = Split-Path -Parent $Exe
+foreach ($dll in @('tree-sitter.dll', 'tree-sitter-delphi13.dll', 'tree-sitter-dfm.dll')) {
+  $src = Join-Path $exeDir $dll
+  if (Test-Path $src) { Copy-Item $src (Join-Path $globalD $dll) -Force }
+}
+$exeCopy = Join-Path $globalD 'drag-lint.exe'
+Copy-Item $Exe $exeCopy -Force
+'{ "docs": { "max_return_cases": 20 } }' | Set-Content (Join-Path $globalD 'drag-lint.json') -Encoding ascii
+'{ "docs": { "max_return_cases": 1 } }'  | Set-Content (Join-Path $projD '.drag-lint.json') -Encoding ascii
+
+$fileD = Join-Path $projD 'uRet.pas'
+$dbD   = Join-Path $projD 'd.sqlite'
+Write-Fixture $fileD
+& $exeCopy index $projD --db $dbD 2>&1 | Out-Null
+Push-Location $projD
+try {
+  & $exeCopy document --qname uRet.Grab --db $dbD --apply --no-backup 2>&1 | Out-Null
+} finally {
+  Pop-Location
+}
+$textD = Get-Content $fileD -Raw
+$returnsLinesD = @([regex]::Matches($textD, '<returns>.*?</returns>') | ForEach-Object { $_.Value })
+Check 'both-exist: exactly one <returns> tag' ($returnsLinesD.Count -eq 1) "count=$($returnsLinesD.Count)"
+Check 'both-exist: local cap=1 wins (keeps first case, False)' `
+  ($returnsLinesD.Count -gt 0 -and $returnsLinesD[0] -match 'Observed: False') $returnsLinesD
+Check 'both-exist: local cap=1 wins (drops second case -- rlines absent)' `
+  ($returnsLinesD.Count -gt 0 -and -not ($returnsLinesD[0] -match 'rlines')) $returnsLinesD
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

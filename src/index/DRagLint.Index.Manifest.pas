@@ -60,7 +60,7 @@ type
 
   /// <summary>Which top-level settings keys were explicitly present in a parsed JSON block.
   /// Used by the merge logic to distinguish "absent" (keep global) from "present but default".</summary>
-  TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB );
+  TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB, skMaxReturnCases );
 
   /// <summary>Describes one named index section within the manifest.</summary>
   TIndexSection = record
@@ -382,7 +382,11 @@ begin
     if JDocs <> nil then
     begin
       var ND: TJSONNumber:= JDocs.GetValue('max_return_cases') as TJSONNumber;
-      if ND <> nil then Result.Docs.MaxReturnCases:= ND.AsInt;
+      if ND <> nil then
+      begin
+        Result.Docs.MaxReturnCases:= ND.AsInt;
+        Include(ASettingsKeys, skMaxReturnCases);
+      end;
     end;
 
     { -- indexes block -- }
@@ -527,6 +531,7 @@ begin
     if skMaxJobs                 in LocalKeys then Result.Settings.MaxJobs                := LocalManifest.Settings.MaxJobs;
     if skCurrentProjectsIndexing in LocalKeys then Result.Settings.CurrentProjectsIndexing:= LocalManifest.Settings.CurrentProjectsIndexing;
     if skMaxParseFileKB          in LocalKeys then Result.Settings.MaxParseFileKB         := LocalManifest.Settings.MaxParseFileKB;
+    if skMaxReturnCases          in LocalKeys then Result.Docs:= LocalManifest.Docs;
     Result.RootDir:= LocalManifest.RootDir;
     MergeSections(Result, LocalManifest);
   end // if
