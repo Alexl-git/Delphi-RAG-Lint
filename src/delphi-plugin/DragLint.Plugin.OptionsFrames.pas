@@ -24,6 +24,7 @@ uses
   , System.JSON
   , Vcl.Forms
   , Vcl.Controls
+  , Vcl.Graphics
   , Vcl.StdCtrls
   , Vcl.ExtCtrls
   , Vcl.Dialogs
@@ -92,6 +93,22 @@ type
     FCbAutoDiscover : TCheckBox;
     FCbIncludeLib   : TCheckBox;
     FMemoIndexDbs   : TMemo;
+    FGrpLibIndex    : TGroupBox;
+    FCbLibScope     : TComboBox;
+    FMemoLibPaths   : TMemo;
+    FLblLibWarning  : TLabel;
+    procedure CbLibScopeChange(Sender: TObject);
+    /// <summary>Resolves and displays the Library + Browsing folders for the
+    /// selected scope (Win32+Win64 vs all platforms), reusing
+    /// TProjectResolver.ResolveLibraryPaths against the live RAD Studio
+    /// registry (HKCU/HKLM BDS 37.0 Library keys). Display-only: the scope
+    /// choice is NOT persisted to TDragLintSettings in this task -- it only
+    /// drives which list is shown. Never raises into the Options UI; an
+    /// empty or missing registry result renders a single friendly placeholder
+    /// line instead of an empty memo.</summary>
+    /// <param name="AAllPlatforms">False = Win32+Win64 only (the IDE's native
+    /// targets); True = every platform subkey under BDS\37.0\Library.</param>
+    procedure PopulateLibPaths(AAllPlatforms: Boolean);
   protected
     procedure BuildControls; override;
     procedure LoadControls; override;
@@ -116,6 +133,14 @@ type
     FCbInfoInline: TCheckBox;
     FGrpDocs     : TGroupBox;
     FEdMaxReturnCases: TSpinEdit;
+    FGrpRules    : TGroupBox;
+    FBtnEditRules: TButton;
+    /// <summary>Opens the drag-lint dock focused on the "Lint Options" tab, where
+    /// the full 170+ rule catalog (enable/disable, severity, auto-fix) is edited
+    /// per project. The catalog is too large/dynamic for the Options dialog, so
+    /// this button routes users to the dock surface (same target as the Project
+    /// Manager "drag-lint: Project Rules..." right-click).</summary>
+    procedure BtnEditRulesClick(Sender: TObject);
     /// <summary>Resolves the manifest file to read/write for max_return_cases.
     /// The field is PROJECT-scoped: if a project is open, targets that
     /// project's directory + ".drag-lint.json" (DOTTED -- matching the LOCAL
@@ -165,6 +190,8 @@ implementation
 
 uses
   DragLint.Plugin.ExeResolver
+  , DRagLint.Project.Resolver
+  , DragLint.Plugin.DockForm
   ;
 
 { Minimal .dfm resource for the BASE frame class (TDLPageFrame). TCustomFrame.Create
@@ -347,7 +374,9 @@ const
   GM = 8;
   GH = 28;
   CH = 22;
-  MH = 90; { memo height }
+  EH = 24;
+  MH = 90;  { IndexDbs memo height }
+  LH = 110; { library-paths memo height }
 var
   Y : Integer;
   GY: Integer;
@@ -380,6 +409,48 @@ begin
   FMemoIndexDbs.ScrollBars:= ssVertical;
   FMemoIndexDbs.WordWrap  := False;
   FMemoIndexDbs.Anchors   := [akLeft, akTop, akRight];
+
+  { --- Library indexing (read-only folders + scope + time warning) --- }
+  Height:= Height + GH + EH + 16 + LH + 20 + GM;
+  FGrpLibIndex:= DLNewGroup(Self, 'Library indexing', Y, GH + EH + 16 + LH + 20 + 4);
+  GY:= GH - 4;
+
+  DLNewLabel(FGrpLibIndex, 'Scope:', LM, GY + 4);
+  FCbLibScope:= TComboBox.Create(FGrpLibIndex);
+  FCbLibScope.Parent    := FGrpLibIndex;
+  FCbLibScope.Left      := LM + 48;
+  FCbLibScope.Top       := GY;
+  FCbLibScope.Width     := FGrpLibIndex.Width - LM * 2 - 48;
+  FCbLibScope.Style     := csDropDownList;
+  FCbLibScope.Anchors   := [akLeft, akTop, akRight];
+  FCbLibScope.Items.Add('Win32 + Win64 (Library + Browsing)');
+  FCbLibScope.Items.Add('All platforms');
+  FCbLibScope.ItemIndex := 0; { default: Win only }
+  FCbLibScope.OnChange  := CbLibScopeChange;
+  Inc(GY, EH);
+
+  DLNewLabel(FGrpLibIndex, 'Resolved folders for the selected scope (read-only):', LM, GY);
+  Inc(GY, 16);
+  FMemoLibPaths:= TMemo.Create(FGrpLibIndex);
+  FMemoLibPaths.Parent    := FGrpLibIndex;
+  FMemoLibPaths.Left      := LM;
+  FMemoLibPaths.Top       := GY;
+  FMemoLibPaths.Width     := FGrpLibIndex.Width - LM * 2;
+  FMemoLibPaths.Height    := LH;
+  FMemoLibPaths.ReadOnly  := True;
+  FMemoLibPaths.ScrollBars:= ssBoth;
+  FMemoLibPaths.WordWrap  := False;
+  FMemoLibPaths.Anchors   := [akLeft, akTop, akRight];
+  Inc(GY, LH + 4);
+
+  FLblLibWarning:= DLNewLabel(FGrpLibIndex, 'Indexing the full library (RTL + DevExpress + browsing paths) can take several minutes.', LM, GY);
+  FLblLibWarning.AutoSize  := False; { must be off for WordWrap to honor the fixed Width below }
+  FLblLibWarning.Font.Style:= [fsBold];
+  FLblLibWarning.Font.Color:= clMaroon;
+  FLblLibWarning.WordWrap  := True;
+  FLblLibWarning.Width     := FGrpLibIndex.Width - LM * 2;
+  FLblLibWarning.Height    := 32;
+  FLblLibWarning.Anchors   := [akLeft, akTop, akRight];
 end; // procedure
 
 procedure TDLIndexerOptionsFrame.LoadControls;
@@ -398,6 +469,9 @@ begin
   finally
     FMemoIndexDbs.Lines.EndUpdate;
   end; // try
+
+  FCbLibScope.ItemIndex:= 0; { scope is display-only: always opens on the Win32+Win64 default }
+  PopulateLibPaths(False);
 end; // procedure
 
 procedure TDLIndexerOptionsFrame.SaveControls(var ASettings: TDragLintSettings);
@@ -423,6 +497,42 @@ begin
     Inc(N);
   end;
 end; // procedure
+
+procedure TDLIndexerOptionsFrame.CbLibScopeChange(Sender: TObject);
+begin
+  PopulateLibPaths(FCbLibScope.ItemIndex = 1); { index 1 = "All platforms" }
+end;
+
+procedure TDLIndexerOptionsFrame.PopulateLibPaths(AAllPlatforms: Boolean);
+var
+  Resolver: TProjectResolver;
+  Paths   : TArray<string>;
+  P       : string;
+begin
+  FMemoLibPaths.Lines.BeginUpdate;
+  try
+    FMemoLibPaths.Lines.Clear;
+    try
+      Resolver:= TProjectResolver.Create;
+      try
+        Paths:= Resolver.ResolveLibraryPaths(AAllPlatforms);
+      finally
+        Resolver.Free;
+      end; // try
+      if Length(Paths) = 0 then
+        FMemoLibPaths.Lines.Add('(no Library/Browsing paths found in the RAD Studio registry)')
+      else
+        for P in Paths do FMemoLibPaths.Lines.Add(P);
+    except
+      { Never raise into the Options UI: show a friendly placeholder instead
+        of letting a registry/read failure blank the page or crash the IDE. }
+      FMemoLibPaths.Lines.Clear;
+      FMemoLibPaths.Lines.Add('(unable to resolve Library/Browsing paths)');
+    end; // try
+  finally
+    FMemoLibPaths.Lines.EndUpdate;
+  end; // try
+end;
 
 { ==================== TDLLinterOptionsFrame ==================== }
 
@@ -470,6 +580,22 @@ begin
   FEdMaxReturnCases.MaxValue:= 9999;
   FEdMaxReturnCases.Value   := 20;
   FEdMaxReturnCases.Anchors := [akTop, akRight];
+
+  { --- Lint rules (routes to the dock; the 170+ catalog is per-project) --- }
+  FGrpRules:= DLNewGroup(Self, 'Lint rules', Y, GH + 34 + EH + 4);
+  GY:= GH - 4;
+  DLNewLabel(FGrpRules,
+    'The full list of 170+ lint rules -- enable/disable, severity, and auto-fix --', LM, GY); Inc(GY, 16);
+  DLNewLabel(FGrpRules,
+    'is edited per project on the drag-lint dock''s Lint Options tab.', LM, GY); Inc(GY, 22);
+  FBtnEditRules:= TButton.Create(FGrpRules);
+  FBtnEditRules.Parent := FGrpRules;
+  FBtnEditRules.Left   := LM;
+  FBtnEditRules.Top    := GY;
+  FBtnEditRules.Width  := 180;
+  FBtnEditRules.Height := EH;
+  FBtnEditRules.Caption:= 'Edit lint rules (170+)...';
+  FBtnEditRules.OnClick:= BtnEditRulesClick;
 end; // procedure
 
 procedure TDLLinterOptionsFrame.LoadControls;
@@ -628,6 +754,13 @@ procedure TDLLinterOptionsFrame.Save;
 begin
   inherited Save; { registry checkboxes via SaveControls }
   WriteMaxReturnCases(FEdMaxReturnCases.Value);
+end;
+
+procedure TDLLinterOptionsFrame.BtnEditRulesClick(Sender: TObject);
+begin
+  { The 170+ rule catalog is per-project and lives on the dock's Lint Options
+    tab -- open it there (same surface as the Project Rules right-click). }
+  ShowDragLintDockLintOptions;
 end;
 
 { ==================== TDLEditorOptionsFrame ==================== }

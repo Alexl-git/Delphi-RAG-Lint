@@ -33,7 +33,7 @@
         <DCC_DcuOutput>.\$(Platform)\$(Config)</DCC_DcuOutput>
         <DCC_BplOutput>..\..\third_party\dll-win32</DCC_BplOutput>
         <DCC_DcpOutput>..\..\third_party\dll-win32</DCC_DcpOutput>
-        <DCC_UnitSearchPath>..\core;..\lint;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>..\core;..\lint;..\project;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <DCC_UsePackage>rtl;vcl;vclsmp;designide;$(DCC_UsePackage)</DCC_UsePackage>
         <DCC_E>false</DCC_E>
         <DCC_N>false</DCC_N>
@@ -126,6 +126,7 @@
         <DCCReference Include="DragLint.Plugin.ExeResolver.pas"/>
         <DCCReference Include="DragLint.Plugin.Fonts.pas"/>
         <DCCReference Include="..\core\DRagLint.Hover.Contrast.pas"/>
+        <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
