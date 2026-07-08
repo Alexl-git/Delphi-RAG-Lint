@@ -1,5 +1,93 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-08 (LATEST-33) -- **Batch C SHIPPED to main (DbResolver project-name-DB fix + `reverse-calltree` verb + naming autofix phase 1), full battery green, NOT pushed/tagged (user drives push/release).**
+>
+> **SHIPPED to main this session (Batch C, untagged, rides the next version bump):**
+> - **Feature 1 -- DbResolver project-name-DB probe.** `PickProjectDb` (new pure unit
+>   `src/delphi-plugin/DRagLint.Plugin.DbProbe.pas`) now also probes `<projdir>\<projname>.sqlite`,
+>   not just the template `<projdir>\drag-lint.sqlite`: template-first if it exists and is
+>   non-empty, else the project-name file if it exists and is non-empty, else none. Fixes the
+>   IDE Structure tree "Code Elements (0)" case where a project was indexed to its
+>   project-name DB instead of the template name. BPL rebuilt Win32. Commit `8ee9ddf`.
+> - **Feature 2 -- `reverse-calltree` CLI verb.** N-deep **upward** "who calls X, and who calls
+>   them" tree with call sites (`unit:line`) and cycle markers. `drag-lint reverse-calltree
+>   --qname X [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH` (repeat `--db`
+>   for multi-index; first DB that resolves the qname wins). **Exit-code contract:** `0` = ok,
+>   `1` = qname not resolved in any given `--db`, `2` = usage error or no readable `--db`.
+>   `--format json` emits schema `reverse-calltree/1`. Engine `src/report/DRagLint.Report.RCallTree.pas`
+>   (pure, reusable at depth=1 for a future AutoDoc "called by" line). `TResolvedCaller` gained
+>   `CallSiteLine` (additive field, zero blast radius on existing consumers). **CLI-only by
+>   design -- IDE right-click "Reverse call tree" dock integration is DEFERRED** (roadmap Track 5.1,
+>   now marked SHIPPED for the CLI/report half). Commits `d42cdf2`/`f699741`/`8de26c1`.
+> - **Feature 3 -- naming autofix PHASE 1 (re-casing).** Case-only re-casing fixes for
+>   `method-pascalcase` / `local-var-casing` / `const-casing`, driven through the existing
+>   `TRenameRefactoring` engine. Synthesizer `src/refactor/DRagLint.Refactor.NamingFix.pas`
+>   (`SynthesizeCasedName` / `StyleFromConfigText`, pure). **Opt-in gate:** OFF by default; a
+>   rule only becomes fixable once its id is listed in `AutoFixIds` in `drag-lint-lint.json`
+>   (`TLintConfig.AutoFixIds`, `src/lint/DRagLint.Lint.Config.pas:89`). Dry-run by default like
+>   every other autofix (needs `--apply`). Skips (does not crash) on a rename-engine
+>   `ConflictReason` (e.g. a re-cased name collides with an existing sibling). The IDE
+>   Diagnostic-tree "Fix it" lights up automatically once opted in -- the plugin queries
+>   `rules --json`; **no BPL change was needed for this phase.** **PHASE 2 (prefix-adding,
+>   e.g. `client -> FClient`, param `x -> pX`) is still PENDING** -- needs the store-backed
+>   collision check + interface/impl header sync; see roadmap Track 1.1. Commits
+>   `da362f6`/`504b731`/`e00125e`.
+>
+> **Full battery run against the redeployed Win64 exe (`third_party/dll-win64/drag-lint.exe`,
+> rebuilt in this batch) -- ALL PASS, no regressions:** `run_reverse_calltree.ps1`,
+> `run_naming_autofix.ps1`, `run_naming_synth.ps1`, `run_dbresolver_probe.ps1`,
+> `run_deps_report.ps1`, `run_doc_returns.ps1`, `run_manifest.ps1`, `run_doc_drift_typedecl.ps1`.
+> (`run_fixable_catalog.ps1` does not exist in `tests/autotest/` -- not part of this batch's
+> deliverables; skipped, not a failure.) `run_naming_synth.ps1` initially FAILED to build its
+> Win64 harness (`DRagLint.Refactor.NamingFix.pas` unit not found, then transitively `TreeSitter`
+> "SysUtils not found", then a runtime DLL-load failure) -- this was a **test-harness bug**, not
+> a product defect: the harness's `-U` search path was missing `src/core`+`src/lint`+the tree-sitter
+> dir that `NamingFix`'s implementation-section `uses DRagLint.Refactor.Rename` transitively
+> needs, it was also missing the `-NS"System"` namespace flag that the real `.dproj` sets (needed
+> because `TreeSitter.pas` has a bare `uses SysUtils`, not `System.SysUtils`), and the built exe
+> needs `tree-sitter*.dll` beside it at runtime. Fixed by widening `run_naming_synth.ps1`'s
+> search path to match `src/cli/drag-lint.dproj`'s `DCC_UnitSearchPath`, adding `-NS"System"`,
+> and copying the three DLLs from `src/cli/Win64/Debug` after build. All 5 synth test cases then
+> PASS. This fix is in the harness script only; no product `.pas` file was touched.
+>
+> **PRE-EXISTING engine findings surfaced during this batch (NOT batch regressions -- filed
+> as backlog TODOs, not yet fixed):**
+> - **(A) `TRenameRefactoring.Build` does not rename a method's IMPLEMENTATION header** --
+>   only the interface declaration + call sites get renamed; the standalone `rename` CLI verb
+>   still has this gap for a bare global rename. (The naming autofix worked around it locally
+>   in `NamingFix.pas` by driving the rename differently / renaming the impl header itself in
+>   its own apply path -- confirmed by the CASE 1 battery result "implementation header renamed
+>   to TThing.DoSomething" -- but the underlying `TRenameRefactoring.Build` defect is still
+>   live for anyone calling the standalone `rename` verb directly.) Needs its own fix + regression
+>   fixture (rename a method with call sites in another unit; assert the impl header updates too).
+> - **(B) Bare RHS-identifier reads are never indexed as references, even with `--deep`** --
+>   e.g. `Result := maxItems;` (a const/var read that is the entire right-hand side of an
+>   assignment, not inside a larger expression) does not get a `refs` row, so const/var
+>   rename-at-use-site misses that shape. Needs investigation in the indexer's reference-walk
+>   for assignment RHS bare-identifier nodes.
+> - **(C) MINOR -- `TTextEditApplier`'s edit sort lacks a same-line column-DESC tiebreak.**
+>   When two edits land on the same line (e.g. two mis-cased locals declared on one line,
+>   `myFirst, mySecond: Integer;`), the applier currently gets away with it because re-casing
+>   edits are length-preserving (verified by the SAME-LINE STRESS case in
+>   `run_naming_autofix.ps1` -- both renamed correctly, no corruption). This is **latent, not
+>   yet a live bug**: a future feature with same-line edits of *differing* length (e.g.
+>   prefix-adding, phase 2) would need edits ordered by `(line, column DESC)` within a line to
+>   avoid a later edit's offset being invalidated by an earlier one on the same line. File
+>   before starting naming-autofix phase 2.
+>
+> **DEFERRED (not started, not blocking):**
+> - Track 5.3 architectural charts (layering/butterfly/package maps).
+> - Naming autofix phase 2 (prefix-adding).
+> - `reverse-calltree` IDE right-click / dock integration.
+> - The 3 pre-existing findings above (A/B/C).
+>
+> **Branch state:** all Batch C work committed to `main`; NOT pushed, NOT tagged, version still
+> `0.95.0-alpha` (untagged commits ride the next bump). User drives push + release cut.
+> **Live-IDE smoke items for the user to verify** (not headlessly testable): Feature 1 --
+> open a project whose index is at `<projdir>\<projname>.sqlite` (not the template name) and
+> confirm the Structure tree now shows Code Elements > 0. Feature 3 -- opt a naming rule into
+> `AutoFixIds`, confirm "Fix it" lights up on that finding in the Diagnostic tree.
+>
 > ## RESUME 2026-07-08 (LATEST-32) -- **POST-v0.95 improvements PUSHED to main (5 commits, origin synced at `56e622f`, NOT yet tagged -- will ride the next version bump). NEXT SESSION = PLAN the next todo items (user asked to plan after clear).**
 >
 > **SHIPPED to main this session (post-v0.95, untagged):**

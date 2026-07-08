@@ -28,9 +28,23 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 # --- Build NameSynthHarness.dpr (Win64 Debug) via rsvars + dcc64 wrapper bat ---
 # A bare .dpr (no .dproj) cannot be built by msbuild ("project file could not
 # be loaded"); use the dcc64 command-line compiler that rsvars.bat puts on
-# PATH, pointed at src/refactor so it finds DRagLint.Refactor.NamingFix.
-$rsvars     = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-$refactorDir = "$PSScriptRoot\..\..\src\refactor"
+# PATH. DRagLint.Refactor.NamingFix's implementation section uses
+# DRagLint.Refactor.Rename (for the rename engine), which in turn uses
+# TreeSitter -- so the full CLI dproj search path (incl. third_party
+# delphi-tree-sitter) IS genuinely needed here, not optional. TreeSitter.pas
+# has a bare `uses SysUtils` (not `System.SysUtils`); the real .dproj resolves
+# that via <DCC_Namespace>System;...</DCC_Namespace>, which the CLI compiler's
+# defaults don't include -- pass -NS"System" to match, or the bare `SysUtils`
+# reference fails to resolve even though the RTL itself is on the path.
+$rsvars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
+$srcDir  = "$PSScriptRoot\..\..\src"
+$searchDirs = @(
+    'preprocess','core','context','diagnostics','doc','forms','index','lint',
+    'lsp','mcp','output','parser','project','query','refactor','report',
+    'resolver','sql','storage','workspace','analysis'
+) | ForEach-Object { "$srcDir\$_" }
+$searchDirs += "$PSScriptRoot\..\..\third_party\delphi-tree-sitter"
+$uArgs   = "-U`"$($searchDirs -join ';')`" -NS`"System`""
 $outDir     = "$DprojDir\Win64\Debug"
 New-Item -ItemType Directory -Force $outDir | Out-Null
 $batPath = "$WorkDir\build_harness.bat"
@@ -39,7 +53,7 @@ $batLines = @(
     '@echo off'
     "call `"$rsvars`""
     "cd /d `"$DprojDir`""
-    "dcc64 -CC -U`"$refactorDir`" -E`"$outDir`" -N0`"$outDir`" NameSynthHarness.dpr"
+    "dcc64 -CC $uArgs -E`"$outDir`" -N0`"$outDir`" NameSynthHarness.dpr"
     'echo BUILD_EXITCODE=%ERRORLEVEL%'
 )
 $batBody = ($batLines -join "`r`n")
@@ -58,6 +72,18 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
     Write-Host ''
     Write-Host 'FAIL' -ForegroundColor Red
     exit 1
+}
+
+# DRagLint.Refactor.Rename (pulled in transitively via NamingFix's
+# implementation uses) links TreeSitterLib, which loads tree-sitter*.dll at
+# runtime -- copy the matching Win64 Debug DLLs next to the harness exe (same
+# ones the real CLI build produces in src/cli/Win64/Debug) or the harness
+# fails at process load with "cannot open shared object file", not a Pascal
+# error.
+$dllSrcDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug"
+foreach ($dll in @('tree-sitter.dll','tree-sitter-delphi13.dll','tree-sitter-dfm.dll')) {
+    $src = Join-Path $dllSrcDir $dll
+    if (Test-Path $src) { Copy-Item $src -Destination $outDir -Force }
 }
 
 function RunHarness([string]$OldName, [string]$ConfigCase) {

@@ -81,15 +81,22 @@ belong to the Settings gate (1.2) as "offer, don't auto-apply."
 **Naming-convention autofix via global rename** *(user request 2026-07-08)*: make
 the naming-convention findings fixable by driving the existing global-rename
 engine (`TRenameRefactoring.Build/Apply`, `src/refactor/DRagLint.Refactor.Rename.pas`).
-Do it in two phases by safety: **(phase 1, safest)** a **case-only** fix --
-`fclient -> FClient`, i.e. the identifier already matches the convention except
-capitalization; a pure re-casing rename is near-mechanical and collision-free
-(same symbol in a case-insensitive language), so it can be a registered fixable
-rule that lights up "Fix it". **(phase 2)** prefix-ADDING (`client -> FClient`,
-param `x -> pX`) -- changes the identifier, so it needs the store-backed collision
-check the rename engine already does; params are routine-local (use `BuildLocal`,
-safe scope) and must sync the interface/impl headers. See the auto-rename-params
-+ naming-settings notes in auto-memory for the fuller design.
+Two phases by safety: **(phase 1, safest) -- SHIPPED (Batch C, 2026-07-08).** A
+**case-only** re-casing fix for `method-pascalcase` / `local-var-casing` /
+`const-casing` -- `fclient -> FClient`, i.e. the identifier already matches the
+convention except capitalization; collision-free (same symbol in a
+case-insensitive language). **Opt-in** via the existing `AutoFixIds` in
+`drag-lint-lint.json` (ships OFF by default); dry-run by default like every
+other autofix; skips on a rename-engine `ConflictReason`. Synthesizer:
+`src/refactor/DRagLint.Refactor.NamingFix.pas` (`SynthesizeCasedName` /
+`StyleFromConfigText`, pure). The IDE Diagnostic-tree "Fix it" lights up
+automatically once opted in (the plugin queries `rules --json`; no BPL change
+needed for this phase). **(phase 2, still pending)** prefix-ADDING
+(`client -> FClient`, param `x -> pX`) -- changes the identifier, so it needs
+the store-backed collision check the rename engine already does; params are
+routine-local (use `BuildLocal`, safe scope) and must sync the interface/impl
+headers. See the auto-rename-params + naming-settings notes in auto-memory for
+the fuller design.
 
 ### 1.2 Settings page: which AutoFix to offer, which to ignore. *(original item 2)*
 The Settings surface (shared substrate). Per-rule tri-state: **auto-apply /
@@ -236,14 +243,17 @@ useful feature-gap checklist, orthogonal to the parser choice.
 - **Graph emit + viewer:** `graph --format dot|mermaid [--name <root>]` +
   the `drag_lint_graph` viewer. Basic chart emission is done.
 
-### 5.1 Reverse call-tree report
+### 5.1 Reverse call-tree report -- **SHIPPED (Batch C, 2026-07-08)**
 A first-class report (not just the raw `callgraph` dump): "who calls X, and who
 calls them" as a navigable N-deep **reverse** tree, per-symbol, with call sites
-(unit:line) and cycle markers. Reuses `callgraph --direction callers`; adds a
-report format (text tree + `--format mermaid|dot` chart + `--json`) and, in the
-IDE, a right-click "Reverse call tree" on a symbol that renders it in the dock
-(the `drag_lint_graph` viewer is the render target). Compare: PAL's reverse call
-trees, Understand's call butterfly charts.
+(unit:line) and cycle markers. Shipped as the `reverse-calltree` CLI verb --
+`--qname X [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH`
+(repeatable `--db`, first index that resolves the qname wins). Text tree +
+JSON (schema `reverse-calltree/1`) + `--format dot|mermaid` chart emission are
+all done; engine is `src/report/DRagLint.Report.RCallTree.pas` (pure, reusable
+at depth=1 for a future AutoDoc "called by" line). **CLI-only by design** --
+the IDE right-click "Reverse call tree" dock integration is **deferred**
+(compare: PAL's reverse call trees, Understand's call butterfly charts).
 
 ### 5.2 Third-party dependency report
 A dependency report that **isolates external / third-party / library units**

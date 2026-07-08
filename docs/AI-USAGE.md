@@ -62,6 +62,12 @@ You can drive it two ways, both backed by the same engine:
 >   the shortest uses-path, and a library grouping. `--edges` = the flat
 >   (project-unit -> external-unit) list. External = a used unit that is not
 >   indexed OR resolves to a library path.
+> - **Who calls X, and who calls them (upward tree):** `drag-lint reverse-calltree
+>   --qname <Unit.TClass.Member> [--depth N] [--format text|json|dot|mermaid] --db <DB>`
+>   N-deep reverse call tree with call sites (`unit:line`) and cycle markers.
+>   Repeat `--db` to search multiple indexes (first one that resolves the qname
+>   wins). Exit codes: `0` = ok, `1` = qname not resolved in any DB, `2` =
+>   usage error or bad `--db`. CLI-only (no IDE right-click yet).
 > - **Introspect the index (for other tools):** `drag-lint schema --db <DB> [--format json]`
 >   Dumps the live schema -- schema_version + every table with its columns + row
 >   counts (read-only). See [docs/INDEX-SCHEMA.md](INDEX-SCHEMA.md) for the full
