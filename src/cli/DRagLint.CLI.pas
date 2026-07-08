@@ -4223,16 +4223,18 @@ end;
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
   BuildAutofixEdits (kept in lockstep; a guard test asserts they agree).
   EXCEPTION: store-backed fixes (doc-drift, missing-doc, method-pascalcase,
-  local-var-casing, const-casing) are fixable but have NO BuildAutofixEdits
-  branch -- doc-drift/missing-doc edits come from TDocumenter.BuildFor and the
-  naming re-casing edits come from DRagLint.Refactor.NamingFix.BuildNamingFix-
-  Edits (the rename engine), both via a store-backed append in FinalizeAndOutput,
-  not from the pure-text edit builder. }
+  local-var-casing, const-casing, field-name-prefix, param-name-prefix,
+  type-name-prefix) are fixable but have NO BuildAutofixEdits branch --
+  doc-drift/missing-doc edits come from TDocumenter.BuildFor and the naming
+  re-casing/prefix-adding edits come from DRagLint.Refactor.NamingFix.Build-
+  NamingFixEdits (the rename engine), both via a store-backed append in
+  FinalizeAndOutput, not from the pure-text edit builder. }
 const
-  FIXABLE_RULE_IDS: array[0..13] of string = (
+  FIXABLE_RULE_IDS: array[0..16] of string = (
     'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
     'redundant-assigned-free', 'off-by-one-count', 'doc-drift', 'missing-doc',
-    'method-pascalcase', 'local-var-casing', 'const-casing');
+    'method-pascalcase', 'local-var-casing', 'const-casing',
+    'field-name-prefix', 'param-name-prefix', 'type-name-prefix');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var
@@ -4814,16 +4816,19 @@ begin
         end;
       end;
 
-      { Naming re-casing autofix (phase 1): store-backed like doc-drift. Only for
-        findings whose rule is BOTH registered-fixable AND opted-in via AutoFixIds
-        (config "autofix": [...], tested via Cfg.IsAutoFix -- naming re-casing
-        rewrites call sites project-wide, so it stays opt-in rather than joining
-        the always-on doc-drift append). The synthesizer + rename engine live in
-        DRagLint.Refactor.NamingFix. }
+      { Naming autofix: store-backed like doc-drift. Covers phase 1 (re-casing:
+        method-pascalcase, local-var-casing, const-casing) AND phase 2
+        (prefix-adding: field-name-prefix, param-name-prefix, type-name-prefix).
+        Only for findings whose rule is BOTH registered-fixable AND opted-in via
+        AutoFixIds (config "autofix": [...], tested via Cfg.IsAutoFix -- naming
+        fixes rewrite call sites project-wide, so they stay opt-in rather than
+        joining the always-on doc-drift append). The synthesizers + rename
+        engine live in DRagLint.Refactor.NamingFix. }
       var NamingTargets: TArray<TLintFinding>:= nil;
       for F in Targeted do
         if (SameText(F.RuleId, 'method-pascalcase') or SameText(F.RuleId, 'local-var-casing')
-            or SameText(F.RuleId, 'const-casing')) and Cfg.IsAutoFix(F.RuleId) then
+            or SameText(F.RuleId, 'const-casing') or SameText(F.RuleId, 'field-name-prefix')
+            or SameText(F.RuleId, 'param-name-prefix') or SameText(F.RuleId, 'type-name-prefix')) and Cfg.IsAutoFix(F.RuleId) then
           NamingTargets:= NamingTargets + [F];
       if Length(NamingTargets) > 0 then
       begin

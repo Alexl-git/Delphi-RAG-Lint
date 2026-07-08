@@ -25,9 +25,15 @@ try {
   Check 'method-pascalcase fixable=true'       ($byId['method-pascalcase'].fixable -eq $true)
   Check 'local-var-casing fixable=true'        ($byId['local-var-casing'].fixable -eq $true)
   Check 'const-casing fixable=true'            ($byId['const-casing'].fixable -eq $true)
+  # Batch D / Task 3: naming PREFIX-ADDING rules -- same store-backed pattern
+  # (BuildNamingFixEdits, extended with SynthesizePrefixedName), no
+  # BuildAutofixEdits branch of their own either.
+  Check 'field-name-prefix fixable=true'       ($byId['field-name-prefix'].fixable -eq $true)
+  Check 'param-name-prefix fixable=true'       ($byId['param-name-prefix'].fixable -eq $true)
+  Check 'type-name-prefix fixable=true'        ($byId['type-name-prefix'].fixable -eq $true)
   # a rule with no fix must be false (pick a stable always-present rule):
   Check 'cyclomatic-complexity fixable=false' ($byId['cyclomatic-complexity'].fixable -eq $false)
   $fixableCount = ($obj.rules | Where-Object { $_.fixable -eq $true }).Count
-  Check 'exactly 14 fixable rules' ($fixableCount -eq 14)
+  Check 'exactly 17 fixable rules' ($fixableCount -eq 17)
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
