@@ -67,7 +67,10 @@ You can drive it two ways, both backed by the same engine:
 >   N-deep reverse call tree with call sites (`unit:line`) and cycle markers.
 >   Repeat `--db` to search multiple indexes (first one that resolves the qname
 >   wins). Exit codes: `0` = ok, `1` = qname not resolved in any DB, `2` =
->   usage error or bad `--db`. CLI-only (no IDE right-click yet).
+>   usage error or bad `--db`. Also available in the IDE: right-click a symbol
+>   in the editor > **Uses & Dependencies > "Reverse Call Tree (who calls this,
+>   N-deep)..."** — opens the text tree as a new editor buffer (a richer
+>   in-dock tree/graph rendering is a filed TODO).
 > - **Introspect the index (for other tools):** `drag-lint schema --db <DB> [--format json]`
 >   Dumps the live schema -- schema_version + every table with its columns + row
 >   counts (read-only). See [docs/INDEX-SCHEMA.md](INDEX-SCHEMA.md) for the full
@@ -203,6 +206,9 @@ the same settings have a GUI companion:
   activates that project and opens the drag-lint dock's Lint Options tab,
   which edits that project's `drag-lint-lint.json` (the same file `lint`/
   `lint-all` read via `--config` or auto-discovery).
+- **Editor right-click a symbol > Uses & Dependencies > "Reverse Call Tree
+  (who calls this, N-deep)..."** -- runs `reverse-calltree` for the symbol
+  under the cursor and opens the text tree as a new editor buffer.
 
 These pages only matter for interactive/IDE use; a CLI-only agent workflow
 never needs them -- the CLI reads the same backing files directly.

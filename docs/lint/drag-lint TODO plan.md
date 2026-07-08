@@ -91,12 +91,31 @@ other autofix; skips on a rename-engine `ConflictReason`. Synthesizer:
 `src/refactor/DRagLint.Refactor.NamingFix.pas` (`SynthesizeCasedName` /
 `StyleFromConfigText`, pure). The IDE Diagnostic-tree "Fix it" lights up
 automatically once opted in (the plugin queries `rules --json`; no BPL change
-needed for this phase). **(phase 2, still pending)** prefix-ADDING
-(`client -> FClient`, param `x -> pX`) -- changes the identifier, so it needs
-the store-backed collision check the rename engine already does; params are
-routine-local (use `BuildLocal`, safe scope) and must sync the interface/impl
-headers. See the auto-rename-params + naming-settings notes in auto-memory for
-the fuller design.
+needed for this phase). **(phase 2, prefix-adding) -- SHIPPED (Batch D,
+2026-07-08).** Prefix-ADDING for `field-name-prefix` / `param-name-prefix` /
+`type-name-prefix` (`client -> FClient`, param `x -> pX`, `myclass ->
+TMyclass`), driven through `TRenameRefactoring.BuildLocal` (routine-local
+scope for params; store-backed rename for field/type) with a new collision
+guard (skips, does not crash, when a synthesized name collides with an
+existing sibling/local). Same opt-in gate via `AutoFixIds`, same dry-run-by-
+default contract. **Caveat:** `field-name-prefix` and `type-name-prefix` emit
+a stderr WARNING on `--fix` -- the ref-indexer does not yet capture
+`Self.`-qualified field reads/writes or type-annotation/impl-header type-
+qualifier references (see Track-1.1-adjacent backlog items D/E below), so a
+rename-at-use can leave those sites stale; review the diff and recompile.
+`param-name-prefix` is fully safe (no warning -- routine-local params have no
+`Self.`-qualifier or type-annotation exposure). Also shipped this batch: three
+pre-existing engine bugs surfaced while building phase 2 are now FIXED --
+**(A)** `TRenameRefactoring.Build` now renames a method's implementation
+header too (was interface-decl + call-sites only; broke the standalone
+`rename` verb for a bare global rename; `NamingFix.pas` had been working
+around it locally, that workaround is now removed). **(B)** bare RHS-identifier
+reads (e.g. `Result := MaxItems;`) are now indexed as `read` refs under
+`--deep`, gated precisely to the assignment-RHS shape (no over-capture on
+type names or declaration sites). **(C)** `TTextEditApplier` now sorts same-
+line edits by column DESC so two same-line edits of *differing* length (as
+prefix-adding produces) apply back-to-front without corrupting each other's
+stored columns.
 
 ### 1.2 Settings page: which AutoFix to offer, which to ignore. *(original item 2)*
 The Settings surface (shared substrate). Per-rule tri-state: **auto-apply /

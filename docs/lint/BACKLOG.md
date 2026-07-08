@@ -1,6 +1,109 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-08 (LATEST-33) -- **Batch C RELEASED as v0.96.0-alpha (DbResolver project-name-DB fix + `reverse-calltree` verb + naming autofix phase 1). Full battery green on the Release exe; pushed to main + tagged v0.96.0-alpha; GH release cut. LIVE-IDE SMOKE still pending (user): F1 open a `<projname>.sqlite`-indexed project -> Structure tree Code Elements > 0; F3 opt a naming rule into the `autofix` list -> "Fix it" lights up.**
+> ## RESUME 2026-07-08 (LATEST-35) -- **Batch D (10 tasks: 3 engine bugfixes A/B/C + naming autofix phase 2 (prefix-adding) + 5 IDE items) all committed to `main`, NOT yet released/pushed/version-bumped (user drives that). Win32 BPL rebuilt carrying Tasks 5-9 (`BUILD_EXITCODE=0`); Win64 CLI confirmed current (rebuilt to be safe). Full battery (10 scripts) ALL PASS, no regressions. LIVE-IDE SMOKE still pending (user) -- see checklist at the end of this block.**
+>
+> **SHIPPED to main this session (Batch D, untagged, rides the next version bump):**
+> - **(A) FIXED -- `TRenameRefactoring.Build` now renames a method's implementation
+>   header too.** Previously only the interface declaration + call sites were renamed by
+>   the standalone `rename` verb; `NamingFix.pas` had a local workaround (`BuildImplHeaderEdit`)
+>   that is now removed since the underlying engine fix makes it redundant. Commit `af5c813`.
+> - **(B) FIXED -- bare RHS-identifier reads are now indexed as `read` refs under `--deep`.**
+>   e.g. `Result := MaxItems;` now gets a `refs` row for `MaxItems`, gated precisely to the
+>   `assignment.rhs` shape (verified no over-capture on type names / declaration-site lines /
+>   unrelated local-var names). Commit `28adcfa`.
+> - **(C) FIXED (minor, was latent) -- `TTextEditApplier` now sorts same-line edits by
+>   column DESC.** Two edits landing on the same line now apply back-to-front so a
+>   later edit's stored columns are never invalidated by an earlier same-line edit --
+>   needed once prefix-adding produces same-line edits of *differing* length (re-casing
+>   was length-preserving and got away without this). Commit `2abe9d3`.
+> - **Naming autofix PHASE 2 (prefix-adding) -- SHIPPED.** `field-name-prefix` /
+>   `param-name-prefix` / `type-name-prefix` findings are now fixable via the rename
+>   engine (`client -> FClient`, param `x -> pX`, `myclass -> TMyclass`), same opt-in
+>   `AutoFixIds` gate + dry-run-by-default contract as phase 1. New `BuildLocal` collision
+>   guard skips (does not crash) when a synthesized name collides with an existing
+>   sibling/local. **Caveat (see backlog items D/E below): `field-name-prefix` and
+>   `type-name-prefix` --fix emit a stderr WARNING** -- the ref-indexer does not yet
+>   capture `Self.`-qualified field references or type-annotation/impl-header type-
+>   qualifier references, so a rename-at-use can leave those sites stale; review the
+>   diff and recompile. `param-name-prefix` is fully safe, no warning (routine-local
+>   params have no `Self.`/type-annotation exposure). Commits `7f85c0a` (feature) /
+>   `d3630ea` (warning).
+> - **IDE Task 5 -- cleanup.** Deleted the dead singular `OptionsFrame.pas` (superseded by
+>   the plural 4-frame unit; removed from `.dpk`/`.dproj`). Commit `da9a300`.
+> - **IDE Task 6 -- cleanup/fix.** `max_return_cases` manifest write now uses UTF-8 (was
+>   `TEncoding.ANSI`), matching `TManifestIO.Save` byte-for-byte (including BOM handling).
+>   Commit `5d2246f`.
+> - **IDE Task 7 -- naming-convention PRESET combo.** `LintOptionsFrame.pas` dock page
+>   gains an Embarcadero/House/Custom preset selector wired to `naming.*` editors; picking
+>   a preset fills the fields and writes the project JSON; editing any field after a preset
+>   is picked flips the combo to Custom. Commit `f131555`.
+> - **IDE Task 8 -- `reverse-calltree` right-click.** New "Reverse Call Tree (who calls
+>   this, N-deep)..." action in the editor's **Uses & Dependencies** right-click submenu
+>   (`DragLint.Plugin.Editor.pas`, `InvokeReverseCallTree`). Runs `reverse-calltree --qname
+>   <symbol under cursor> --db <project db> --depth 3 --format text` and opens the result as
+>   a **text report in a new editor buffer** (same `DLRunReport` pattern as Impact/Wiring --
+>   no graphical/tree-widget rendering; see the tree-renderer TODO below). Commit `0cce0bd`.
+> - **IDE Task 9 -- dock focus fix (PLAUSIBLE root cause, needs live-smoke).** The
+>   dock-embedded `TDragLintStructureForm` (a reparented full `TForm`, not a true `TFrame`)
+>   kept `OnActivate := FormActivate` wired from its constructor, so it received
+>   `CM_ACTIVATE` on essentially any IDE tab switch (not just a Structure-tab switch) --
+>   the dock would self-select/steal focus. `UsagesForm`/`SearchForm`'s embeds carry no such
+>   wiring, making Structure the outlier. Fix: clear `OnActivate` on the embedded instance;
+>   `HandleWatchTimer`'s 400ms poll + `HandlePageChange` already drive the same
+>   refresh-on-background-change behavior regardless of focus, so this costs nothing.
+>   Investigation + checklist: `.superpowers/sdd/task-9-report.md`. Commit `ccaeb41`.
+>
+> **Full battery run against the freshly rebuilt exes (Win32 BPL `third_party/dll-win32/`,
+> Win64 CLI `third_party/dll-win64/drag-lint.exe`) -- ALL PASS, no regressions:**
+> `run_textedit_sameline.ps1`, `run_rename_implheader.ps1`, `run_naming_prefix_autofix.ps1`,
+> `run_bare_rhs_refs.ps1`, `run_naming_autofix.ps1`, `run_naming_synth.ps1`,
+> `tests/autofix/run_fixable_catalog.ps1` (17 fixable rules, incl. the 3 new prefix-adding
+> ones), `run_reverse_calltree.ps1`, `run_deps_report.ps1`, `run_manifest.ps1`.
+>
+> **NEW follow-up items filed this session (pre-existing ref-indexer gaps, surfaced by
+> Task 3's phase-2 work -- NOT batch regressions, siblings of fixed bug B):**
+> - **(D) `Self.`-qualified field references are not indexed as refs.** `Self.FClient`
+>   (or any explicit `Self.<field>` read/write) does not get a `refs` row the way a bare
+>   `FClient` reference does. This is why `field-name-prefix --fix` needs its stderr
+>   warning -- a rename-at-use walk driven off the ref index silently misses
+>   `Self.`-qualified sites. Needs investigation in the indexer's reference-walk for the
+>   `Self.<member>` member-access shape (parallel to how bug B fixed the bare
+>   assignment-RHS shape).
+> - **(E) Type-annotation / impl-header type-qualifier references are not indexed.**
+>   A type name used in a var/param type annotation (`Obj: TMyClass`) or as the
+>   qualifier in a method's implementation header (`procedure TMyClass.DoIt`) does not
+>   get a `refs` row pointing at the type declaration. This is why `type-name-prefix
+>   --fix` needs its stderr warning. Needs investigation in the indexer's type-reference
+>   walk for these two shapes.
+>   **Fixing D+E lets `field-name-prefix`/`type-name-prefix` rename-at-use work fully --
+>   once both land, the Task-3 stderr warning can be removed.**
+>
+> **NEW TODO filed this session -- in-Delphi tree renderer / Graphviz-subset dock tab.**
+> The `reverse-calltree` IDE right-click (Task 8) currently opens a **text** report in an
+> editor buffer, same pattern as Impact/Wiring. A richer graphical rendering would consume
+> `TRCallTree` (`src/report/DRagLint.Report.RCallTree.pas`) directly and draw an in-IDE
+> tree/graph widget -- **no `.dot` file, no dependence on the separate `drag_lint_graph`
+> viewer repo** (which is DB-wired and lives outside this repo; the dock tab should be
+> self-contained). **Checked and confirmed FALSE this session:** the claimed Delphi
+> compiler `--graphviz` switch does **not** exist -- `dcc64.exe --help` on RAD Studio 37
+> shows no such option; do not rely on it. Roadmap slot: Track 5 (Analysis & Reporting),
+> adjacent to 5.1/5.3 in `docs/lint/drag-lint TODO plan.md`.
+>
+> **LIVE-IDE SMOKE checklist (NOT headless-testable, user to verify in a live RAD Studio
+> session with the rebuilt BPL loaded):**
+> 1. **Task 7 presets:** open the drag-lint dock's Lint Options tab -> pick a preset
+>    (Embarcadero/House/Custom) from the new combo -> naming fields update to match ->
+>    save -> re-open the project JSON and confirm it was written.
+> 2. **Task 8 reverse-calltree:** right-click a symbol in the editor -> Uses & Dependencies
+>    -> "Reverse Call Tree (who calls this, N-deep)..." -> confirm a new editor buffer opens
+>    with the text tree report (not an error/empty result) for a symbol with real callers.
+> 3. **Task 9 dock focus:** open the drag-lint dock (Structure tab active) -> switch to the
+>    Project Manager / other IDE panels/tabs repeatedly -> confirm the dock does NOT
+>    self-select/steal focus/re-show itself on unrelated tab switches, while its content
+>    still refreshes in the background (400ms poll) when the active file changes.
+> 4. **Task 6 read-back:** edit `max_return_cases` on the Linter Options page -> save ->
+>    close and reopen the page (or restart the IDE) -> confirm the value reads back
+>    correctly (UTF-8 round-trip, no mangling).
 >
 > **SHIPPED to main this session (Batch C, untagged, rides the next version bump):**
 > - **Feature 1 -- DbResolver project-name-DB probe.** `PickProjectDb` (new pure unit
