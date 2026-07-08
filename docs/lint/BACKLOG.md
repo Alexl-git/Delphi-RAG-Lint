@@ -12,7 +12,7 @@
 >    non-nil `AOwner` on a `TComponent` ctor now = ownership transfer. Test `run_object_leak_owned.ps1`.
 >    (Both FPs came from a YADF dogfooding run -- `docs/BACKLOG-lint-false-positives.md`, now marked FIXED.)
 > 4. **Indexer page: read-only Library/Browsing folders + scope + time warning; Linter page: "Edit lint rules
->    (170+)..." button -> dock Lint Options tab** (`5fda5e9`+BPL `7033827`). Reuses `TProjectResolver`
+>    (165+)..." button -> dock Lint Options tab** (`5fda5e9`+BPL `7033827`). Reuses `TProjectResolver`
 >    (RTL-only, links into the BPL) + the exported `ShowDragLintDockLintOptions`.
 >
 > Final battery GREEN (run_doc_drift_typedecl + run_object_leak_owned + run_drift + run_doc_returns +
