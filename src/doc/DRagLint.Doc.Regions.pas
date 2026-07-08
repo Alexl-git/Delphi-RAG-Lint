@@ -44,6 +44,32 @@ type
 
 implementation
 
+/// <summary>Builds the " Observed: a; b." suffix (XML-escaped) from mined return
+/// cases, or '' when none. Deterministic -> idempotent across runs.</summary>
+function ObservedSuffix(const ACases: TArray<string>): string;
+  function Esc(const S: string): string;
+  begin
+    Result:= StringReplace(S, '&', '&amp;', [rfReplaceAll]);
+    Result:= StringReplace(Result, '<', '&lt;', [rfReplaceAll]);
+    Result:= StringReplace(Result, '>', '&gt;', [rfReplaceAll]);
+  end;
+var i: Integer; Sb: TStringBuilder;
+begin
+  Result:= '';
+  if Length(ACases) = 0 then Exit;
+  Sb:= TStringBuilder.Create;
+  try
+    Sb.Append(' Observed: ');
+    for i:= 0 to High(ACases) do
+    begin
+      if i > 0 then Sb.Append('; ');
+      Sb.Append(Esc(ACases[i]));
+    end;
+    Sb.Append('.');
+    Result:= Sb.ToString;
+  finally Sb.Free; end;
+end;
+
 class function TDocRegions.StripManagedBlock(const S: string): string;
 var
   BeginPos: Integer;
@@ -166,7 +192,7 @@ begin
       for P in ASigParams do
         Sb.AppendLine(APrefix + '<param name="' + P + '">TODO: describe.</param>' + AUTO_PARAM);
       if AHasReturn then
-        Sb.AppendLine(APrefix + '<returns>TODO: describe.</returns>');
+        Sb.AppendLine(APrefix + '<returns>TODO: describe.' + ObservedSuffix(AFacts.ReturnCases) + '</returns>');
       if Facts <> '' then
       begin
         Sb.AppendLine(APrefix + '<remarks>');
@@ -228,7 +254,11 @@ begin
 
     if AHasReturn then
     begin
-      var Ret: string:= AExisting.ReturnsText; if Trim(Ret) = '' then Ret:= 'TODO: describe.';
+      var Ret: string:= AExisting.ReturnsText;
+      if Trim(Ret) = '' then Ret:= 'TODO: describe.';
+      // Author-edited returns (non-stub) win: do NOT inject Observed into hand text.
+      if SameText(Trim(Ret), 'TODO: describe.') then
+        Ret:= 'TODO: describe.' + ObservedSuffix(AFacts.ReturnCases);
       Sb.AppendLine(APrefix + '<returns>' + Ret + '</returns>');
     end;
 
