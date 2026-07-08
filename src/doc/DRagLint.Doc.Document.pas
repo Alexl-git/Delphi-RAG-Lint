@@ -37,10 +37,13 @@ type
     /// date, ABaseDir = repo root); no git spawn when AIncludeSince is False.
     /// AExtraStores threads additional open index stores (e.g. other resolved
     /// --db's) into the facts builder so name-based Called-from/Used-in facts
-    /// can span multiple DBs; nil/empty preserves single-store behavior.</remarks>
+    /// can span multiple DBs; nil/empty preserves single-store behavior.
+    /// AMaxReturnCases caps the mined &lt;returns&gt; enumeration (forwarded to
+    /// TDocFactsBuilder.Build as-is); default 20 matches the manifest default.</remarks>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string;
       AIncludeSeeAlso: Boolean; AIncludeSince: Boolean = False;
-      const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil): TDocumentResult; overload;
+      const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
+      AMaxReturnCases: Integer = 20): TDocumentResult; overload;
     /// <summary>Back-compat overload: BuildFor with no doc-source opt-ins
     /// (AIncludeSeeAlso = False, AIncludeSince = False).</summary>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult; overload;
@@ -186,7 +189,7 @@ end;
 
 class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
-  const AExtraStores: TArray<ISymbolStore>): TDocumentResult;
+  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer): TDocumentResult;
 var
   Syms     : TArray<TSymbol>                                   ;
   Sym      : TSymbol                                           ;
@@ -237,7 +240,7 @@ begin
   Sig      := Trim(Sym.Signature);
   SigParams:= ParseParamNames(ExtractParamList(Sig));
 
-  Facts := TDocFactsBuilder.Build(AStore, Sym, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores);
+  Facts := TDocFactsBuilder.Build(AStore, Sym, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores, AMaxReturnCases);
 
   // Has a return value? The indexed Signature holds only '(params): RetType'
   // (no leading 'function' keyword), so SignatureHasReturn misses it, and class

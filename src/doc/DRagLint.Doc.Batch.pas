@@ -37,6 +37,12 @@ type
     /// Called-from/Used-in facts, alongside the primary AStore. Nil/empty
     /// preserves single-store behavior.</summary>
     ExtraStores      : TArray<ISymbolStore>;
+    /// <summary>Cap on mined &lt;returns&gt; enumeration cases, forwarded to
+    /// BuildFor/TDocFactsBuilder.Build. NOTE: Default(TDocBatchOptions) zero-fills
+    /// this to 0 (enumeration disabled) -- every caller MUST set it explicitly
+    /// (from the manifest's Docs.MaxReturnCases, default 20) rather than relying
+    /// on the record default.</summary>
+    MaxReturnCases   : Integer;
   end;
 
   /// <summary>Aggregated batch result. Edits is the union of every kept
@@ -152,7 +158,7 @@ begin
       Inc(Result.DeclCount);
 
       Res := TDocumenter.BuildFor(AStore, Sym.QualifiedName, AOptions.IncludeSeeAlso,
-        AOptions.IncludeSince, AOptions.BaseDir, AOptions.ExtraStores);
+        AOptions.IncludeSince, AOptions.BaseDir, AOptions.ExtraStores, AOptions.MaxReturnCases);
       if Length(Res.Edits) = 0 then Continue; // daUnchanged / daNotFound: nothing to do
 
       // Facts-only filter (Stubs=False, the default): keep the edit when the

@@ -903,6 +903,27 @@ begin
     end;
 end;
 
+// Task 10 (Batch A item 1): reads the docs.max_return_cases cap for the doc
+// verbs (document / document --project / document-all). Loads the manifest
+// the same way ResolveConsumerDbs/size-guard do (TManifestIO.Load(engine dir
+// beside the exe, current working dir walking up for a local override)) and
+// returns Manifest.Docs.MaxReturnCases. Best-effort: any load failure (missing
+// files, malformed JSON) falls back to 20 (TDocSettings.Defaults), so a doc
+// verb never errors out over a manifest problem -- it just enumerates with the
+// default cap.
+function LoadDocMaxReturnCases: Integer;
+var
+  DocManifest: TIndexManifest;
+begin
+  Result:= 20;
+  try
+    DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    Result:= DocManifest.Docs.MaxReturnCases;
+  except
+    Result:= 20;
+  end;
+end;
+
 // v0.45: serialise a TIndexManifest to a TJSONObject for the dry-run JSON view.
 // Delegates to TManifestIO.ToJson for the canonical manifest structure, then
 // adds the extra 'indexes.rootDir' field (richer than the saved file). Caller owns + frees.
@@ -5812,6 +5833,7 @@ begin
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
+  Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
@@ -5897,6 +5919,7 @@ begin
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
+  Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
 end; // function
@@ -5922,6 +5945,7 @@ begin
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
+  Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
   Res:= TDocBatch.DocumentAll(Store, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
 end; // function
@@ -5947,7 +5971,7 @@ begin
   if not Ok then Exit(2);
 
   Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, AArgs.DocSeeAlso,
-    AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs)); // ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers.
+    AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases); // ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap.
 
   if Res.Action = DRagLint.Doc.Document.daNotFound then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 

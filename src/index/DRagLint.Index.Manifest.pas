@@ -534,8 +534,14 @@ begin
   else if HaveGlobal then Result:= GlobalManifest
   else
   begin
-    { Neither found: return defaults }
+    { Neither found: return defaults. Docs must be defaulted explicitly here too
+      (Task 10 bugfix) -- Result started as Default(TIndexManifest) above, which
+      zero-fills Docs.MaxReturnCases to 0 (enumeration disabled); every OTHER
+      branch (HaveLocal, HaveGlobal, both) gets Docs from a ParseText/ParseTextEx
+      call that already sets Result.Docs:= TDocSettings.Defaults, so only this
+      neither-found fallback was missing it. }
     Result.Settings:= TIndexSettings.Defaults;
+    Result.Docs:= TDocSettings.Defaults;
     Result.RootDir:= AStartDir;
   end;
 end; // begin
