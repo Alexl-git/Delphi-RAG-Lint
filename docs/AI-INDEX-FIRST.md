@@ -57,3 +57,9 @@ text-level matches, non-Delphi files, or code no index covers.
 - For a from-scratch rebuild: `drag-lint scan-all` (reads `.drag-lint.json`).
 - Deep DBs (projects) have `read`/`write` usage refs; shallow DBs (libraries)
   have calls/types only — so use `usages` against a **deep** project DB.
+- **GUI path (IDE plugin):** the **Indexer** page under **Tools > Options >
+  Third Party > drag-lint** configures/triggers the same behavior --
+  auto-index on project open, auto-reindex on file save, scan-libraries
+  on/off, extra index DB paths, auto-discover sibling DBs, include-library-DB
+  toggle. Useful alongside `scan-all` for anyone driving drag-lint
+  interactively rather than purely from a CLI-only agent loop.

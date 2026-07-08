@@ -215,7 +215,11 @@ and more (see [MCP tools](#mcp-tools-14) below).
    Or download `dclDragLintWizard.bpl` from the latest GitHub release.
 2. In RAD Studio: **Component > Install Packages > Add** -- browse to the BPL.
 3. Restart RAD Studio.
-4. The **Tools > drag-lint** menu now has 12+ entries.
+4. The **Tools > drag-lint** menu now has 12+ entries. Settings live under
+   **Tools > Options > Third Party > drag-lint** as four pages (General /
+   Indexer / Linter / Editor); per-project lint rules are reachable via a
+   **"drag-lint: Project Rules..."** right-click on the project node in the
+   Project Manager.
 
 ---
 
@@ -320,7 +324,9 @@ panels (Structure / Usages / Graph), Generate Test Helper CSV...,
 **Inspect Symbol** submenu (surface, slice, type-at-cursor), 
 **Code Quality** submenu (dead code, undocumented, TODOs, compiler hints, top symbols),
 **Generate & Export** submenu (docs, tests, enums, graph, Obsidian),
-**Index & Maintenance** submenu, plus diagnostics & test tools. Settings.
+**Index & Maintenance** submenu, plus diagnostics & test tools, and
+**drag-lint Options...** (opens Tools > Options focused on the drag-lint
+pages).
 
 **Keystroke bindings** (registered via `IOTAKeyBindingServices`):
 
@@ -361,7 +367,13 @@ callers grouped by file in a TTreeView; double-click jumps the editor.
 **Symbol Search form** (v0.33): `Ctrl+Alt+T` debounced live search over the
 indexed symbol table; Enter navigates the editor to the selected location.
 
-**Native Tools > Options page** (v0.30): all settings via `INTAAddInOptions`.
+**Native Tools > Options pages** (v0.30, split into four in Batch B): four
+pages -- General / Indexer / Linter / Editor -- under Tools > Options > Third
+Party > drag-lint, each backed by `INTAAddInOptions`. Reopen them anytime via
+**drag-lint > drag-lint Options...**. Per-project lint rules
+(`drag-lint-lint.json`) are edited from the drag-lint dock's Lint Options tab,
+reachable via **Project Manager right-click a project > "drag-lint: Project
+Rules..."**.
 
 ---
 
@@ -396,7 +408,8 @@ dclDragLintWizard.bpl  (Delphi IDE plugin)
   +-- DiagnosticCache -> in-editor markers + hover tooltip
   +-- CodeLensCache -> inline [N callers]
   +-- Structure / Refactor / Usages / SymbolSearch forms
-  +-- Options (INTAAddInOptions)
+  +-- Options (INTAAddInOptions, 4 pages: General/Indexer/Linter/Editor)
+  +-- Project Manager menu (per-project "Project Rules..." -> Lint Options dock)
 ```
 
 All three entry-points (CLI, LSP, MCP) call the same indexer, query, lint,

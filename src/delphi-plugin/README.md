@@ -39,11 +39,29 @@ submenus:
 - Hover at Cursor, Go to Definition, Show Completion, Show Signature Help
 - Grouped submenus such as **Uses & Dependencies**, **Inspect Symbol**,
   **Code Quality**, **Generate & Export**, and **Index & Maintenance**
-- Rename Symbol, Format with YADF, Settings
+- Rename Symbol, Format with YADF, **drag-lint Options...**
+
+Also check for two things that confirm the plugin registered correctly:
+
+- **Tools > Options > Third Party > drag-lint** now lists four sub-pages --
+  **General**, **Indexer**, **Linter**, **Editor** -- each holding a subset of
+  the settings (see the field map in `docs/INSTALL.md`). **drag-lint Options...**
+  on the plugin menu opens this dialog focused on the General page.
+- Right-click a project node in the **Project Manager**: a
+  **"drag-lint: Project Rules..."** item should appear. It activates that
+  project and opens the drag-lint dock's Lint Options tab, scoped to that
+  project's `drag-lint-lint.json`.
 
 Place the cursor on an identifier and pick **Hover at Cursor**; a popup shows
 the symbol's information from drag-lint. **Run Diagnostics** populates the
 Messages pane with lint findings.
+
+**Uninstalling / reinstalling:** use Component > Install Packages to remove
+the package before copying a new BPL over it (it locks the file while
+loaded). Teardown unregisters all four Options pages and the Project Manager
+menu item along with the rest of the plugin's IDE hooks, so uninstalling (or
+reinstalling with a rebuilt BPL) leaves no orphaned Options node and no stale
+menu entries behind.
 
 ## Troubleshooting
 

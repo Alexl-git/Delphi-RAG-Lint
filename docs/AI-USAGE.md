@@ -168,6 +168,28 @@ before trusting it in a batch apply — a deliberately-inclusive loop would brea
 
 ---
 
+## 5b. Configuring drag-lint (GUI)
+
+Everything above is driven by CLI flags, `drag-lint-lint.json`, or the
+manifest (`drag-lint.json` / `.drag-lint.json`). If you (or the human you're
+pairing with) are inside RAD Studio with the drag-lint IDE plugin installed,
+the same settings have a GUI companion:
+
+- **Tools > Options > Third Party > drag-lint** (or **drag-lint > drag-lint
+  Options...** from the plugin menu) -- four pages: **General** (exe path, DB
+  path template, workspace mode, auto-compile), **Indexer** (auto-index,
+  auto-reindex on save, scan-libraries, extra index DB paths, auto-discover
+  DBs, include library DB), **Linter** (diagnostics toggles + inline markers,
+  and **Max return cases** for AutoDoc's `<returns>` enumeration -- manifest-
+  backed), **Editor** (hover, completion, signature help, code lens).
+- **Project Manager right-click a project > "drag-lint: Project Rules..."** --
+  activates that project and opens the drag-lint dock's Lint Options tab,
+  which edits that project's `drag-lint-lint.json` (the same file `lint`/
+  `lint-all` read via `--config` or auto-discovery).
+
+These pages only matter for interactive/IDE use; a CLI-only agent workflow
+never needs them -- the CLI reads the same backing files directly.
+
 ## 6. Bonus: the graph viewer (optional, experimental)
 
 There is a companion **standalone VCL graph viewer** over the same index:

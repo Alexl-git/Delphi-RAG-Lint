@@ -30,11 +30,58 @@ uninstall.
 
 ## 2. Settings (Tools → Options → Third Party → drag-lint)
 
-- **Exe path** — leave blank to use the `drag-lint.exe` next to the BPL.
-- **DB path template** — how the plugin finds a project's DB. Default resolves a
-  `drag-lint.sqlite` next to (or above) the active `.dproj`.
-- **Include library DB** — also query `drag-lint-library.sqlite`.
-- **Auto reindex on save** / **Auto diagnostics on save** — default on.
+Open via **Tools -> Options -> Third Party -> drag-lint**, or from the plugin's
+own menu: **drag-lint -> drag-lint Options...** (both land on the same dialog,
+focused on the drag-lint pages). Settings are split across **four** nested
+sub-pages -- General / Indexer / Linter / Editor -- so each page only ever
+writes its own fields.
+
+- **General** -- `drag-lint.exe` path (leave blank to use the exe next to the
+  BPL), the DB path template (default resolves a `drag-lint.sqlite` next to
+  or above the active `.dproj`), workspace mode, and the auto-compile toggles
+  (compile on save, compile the unsaved buffer on idle, compile once on
+  project open, compile on switching to a `.pas` file, jump to Diagnostics
+  after a compile).
+- **Indexer** -- auto-index when a project opens, auto-reindex on save, scan
+  libraries (RTL/VCL/DevExpress) on index, extra index DB paths (one per
+  line), auto-discover sibling databases, and whether to include the
+  exe-relative library database.
+- **Linter** -- enable Run Diagnostics, run diagnostics automatically on save,
+  enable inline markers (gutter + underline) plus the per-severity
+  show-errors/warnings/hints/info toggles, and a **Doc generation** group with
+  **Max return cases** (`docs.max_return_cases`) -- see the table below; this
+  one field is NOT a registry setting.
+- **Editor** -- Hover at Cursor, the hover tooltip (caret-based, 600ms dwell),
+  Show Completion, Show Signature Help, and inline code lens (`[N callers]`).
+
+All of the above except **Max return cases** are stored per-user in the
+Windows registry (`HKEY_CURRENT_USER\Software\drag-lint\DelphiPlugin`).
+
+For **per-project lint rules** (enable/disable/severity in
+`drag-lint-lint.json`), right-click the project node in the **Project
+Manager** and choose **"drag-lint: Project Rules..."** -- this activates that
+project and opens the drag-lint dock's **Lint Options** tab scoped to it. You
+can also hand-edit `drag-lint-lint.json`; see `rules/README.md`.
+
+### Where to configure X
+
+| Setting | Where (page / menu) | Backing store |
+|---|---|---|
+| `drag-lint.exe` path, DB path template, workspace mode, auto-compile toggles | **General** page | Registry (per-user) |
+| Auto-index, auto-reindex on save, scan libraries, extra index DBs, auto-discover DBs, include library DB | **Indexer** page | Registry (per-user) |
+| Enable diagnostics, auto-diagnostics on save, inline markers + severity toggles | **Linter** page | Registry (per-user) |
+| **Max return cases** (`docs.max_return_cases`) | **Linter** page, "Doc generation" group | Manifest: project's `.drag-lint.json` (dotted, local override) if a project is open; otherwise the `drag-lint.json` (undotted) beside `drag-lint.exe` |
+| Hover, hover tooltip, completion, signature help, code lens | **Editor** page | Registry (per-user) |
+| Lint rule enable/disable/severity/thresholds | **Project Manager -> right-click project -> "drag-lint: Project Rules..."** (dock "Lint Options" tab) | Per-project `drag-lint-lint.json` |
+| Index sections / global manifest settings (`sizeGuardMB`, `maxJobs`, ...) | Hand-edit | Manifest `drag-lint.json` (global, beside the exe) or a local `.drag-lint.json` override |
+
+Note the naming: the **dotted** `.drag-lint.json` is always a **per-project
+local override** (the CLI/plugin walk up from the project directory to find
+it); the **undotted** `drag-lint.json` beside `drag-lint.exe` is the
+**global** manifest. The Linter page's Max return cases field targets
+whichever of the two applies to the current context (project open vs. no
+project open) -- never the merged, effective view `TManifestIO.Load` computes
+for indexing.
 
 ## 3. Create the index databases
 

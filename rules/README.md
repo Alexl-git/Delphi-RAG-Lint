@@ -278,6 +278,10 @@ Use that output to write your query.
   - `--enable id1,id2` and `--disable id1,id2` compose with the config.
   - `--profile <name>` merges a named profile's `disabled`/`enabled` over the top level.
   - A `.scm` rule whose sidecar `.json` has `"enabled": false` ships off-by-default; list its id under `enabled` (or `--enable`) to turn it on.
+  - **From the IDE:** right-click a project node in the Project Manager and choose
+    **"drag-lint: Project Rules..."** to open the drag-lint dock's Lint Options tab,
+    scoped to that project's `drag-lint-lint.json` -- an alternative to hand-editing
+    the file directly (both edit the same file; either way works).
 
 With no config, no baseline, and no `--fail-on`, every command behaves exactly as before.
 

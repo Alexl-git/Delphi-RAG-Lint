@@ -5,6 +5,14 @@ AST-exact symbols, references, uses-clauses, and docs for the code it covered.
 They are read **immutable / read-only** by the CLI, the IDE plugin, and the graph
 viewer (no `-wal`/`-shm` sidecars are created).
 
+> **Paths below are examples from one development machine** (`C:\Projects\...`).
+> Substitute your own project/library roots and DB locations -- there is
+> nothing special about that drive layout. The GUI alternative to running
+> `index`/`scan-all` by hand is the **Indexer** page under
+> **Tools > Options > Third Party > drag-lint** (auto-index on open,
+> auto-reindex on save, scan-libraries toggle, extra DB paths,
+> auto-discover/include-library-DB toggles) -- see `docs/INSTALL.md`.
+
 Schema: symbols (kind, name, qualified_name, signature, modifiers, **section**,
 line/col), refs (`call` / `type_use` / `event-binding`, by name), **unit_uses**
 (every uses-clause entry with section + resolved target file), symbol_docs.
@@ -30,16 +38,33 @@ cross-DB type resolution (clicking a library type jumps into the library store).
 
 ## Rebuilding
 
-Scanner exe: `C:\Projects\Delphi-RAG-lint\third_party\dll\drag-lint.exe` (Win32).
-One scope per command:
+Scanner exe: `drag-lint.exe` (this example machine keeps a Win64 build under
+`third_party\dll-win64\` -- prefer Win64 for large DBs; it handles the
+~1.4 GB whole-tree index without the Win32 build's OOM ceiling). One scope
+per command:
 
 ```
 drag-lint index C:\Projects\DB\ORM3 --db C:\Projects\DB\ORM3\drag-lint.sqlite
 drag-lint index C:\Projects\DB\SQL  --db C:\Projects\DB\SQL\drag-lint-sql.sqlite
 drag-lint index --scan-libraries-win --db C:\Projects\Delphi-RAG-lint\third_party\dll-win32\drag-lint-library.sqlite
 REM  ...use --scan-libraries-all instead to also pull in Posix/iOS/Android/OSX source trees.
+REM  (--scan-libraries is kept as a back-compat alias for --scan-libraries-win.)
 drag-lint index C:\Projects         --db C:\Projects\drag-lint-all.sqlite
 ```
+
+Or drive all of the above from a single **named-index manifest**
+(`drag-lint.json`, with `settings` + `indexes` sections) instead of one
+command per scope:
+
+```
+drag-lint index --all              # build every configured index
+drag-lint index --all --dry-run    # show the plan + timings only
+drag-lint index --all --only <Sec1,Sec2>   # rebuild just named indexes
+drag-lint index --all --jobs <n>           # parallelize
+drag-lint index --all --platform win32|win64   # pick the library set
+```
+
+See `docs/INSTALL.md` section 3c for the manifest format.
 
 Rebuild order matters for usability: ORM3 (~1 min) and SQL (~10 s) finish fast;
 the library (~1 h) and especially the whole-tree `drag-lint-all` (several hours)

@@ -48,7 +48,36 @@ A single dockable window (park it at the bottom like Grep Results) with tabs:
   leave the editor, and won't linger over other panes.
 - **Show Completion**, **Show Signature Help**.
 - **Rename Symbol…**, **Format with YADF**.
-- **Settings…**.
+- **drag-lint Options...** -- opens the IDE's native **Tools > Options** dialog
+  focused on the drag-lint pages (see "Settings" below). Replaces the old
+  standalone "Settings..." modal, which has been removed.
+
+## Settings
+
+**drag-lint > drag-lint Options...** (or **Tools > Options > Third Party >
+drag-lint** directly) opens four sub-pages:
+
+- **General** -- `drag-lint.exe` path, DB path template, workspace mode, and
+  the auto-compile toggles.
+- **Indexer** -- auto-index/auto-reindex, scan libraries, extra index DB
+  paths, auto-discover DBs, include library DB.
+- **Linter** -- diagnostics + inline-marker toggles, plus **Max return cases**
+  (how many distinct return cases AutoDoc's generated `<returns>` comment
+  enumerates; manifest-backed, not a registry setting).
+- **Editor** -- hover, hover tooltip, completion, signature help, code lens.
+
+All fields are per-user (Windows registry) except Max return cases, which is
+read from and written to the manifest (project-local `.drag-lint.json` when a
+project is open, otherwise the global `drag-lint.json` beside the exe). See
+`docs/INSTALL.md` for the full "Where to configure X" table.
+
+### Per-project lint rules
+
+Right-click a project node in the **Project Manager** and choose
+**"drag-lint: Project Rules..."** to activate that project and open the
+drag-lint dock's **Lint Options** tab, scoped to that project's
+`drag-lint-lint.json` (enable/disable rules, set severities, thresholds,
+profiles). You can also hand-edit the file directly -- see `rules/README.md`.
 
 ### Diagnostics on save
 On save (auto, debounced) drag-lint republishes **lint warnings/infos** for the
