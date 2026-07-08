@@ -12,7 +12,6 @@ uses
   , DragLint.Plugin.LspClient
   , DragLint.Plugin.ProjectNotifier
   , DragLint.Plugin.Settings
-  , DragLint.Plugin.SettingsForm
   , DragLint.Plugin.HoverForm
   , DragLint.Plugin.CompletionForm
   , DragLint.Plugin.SignatureForm
@@ -1987,9 +1986,21 @@ begin
       [ErrCount, WarnCount, HintCount]));
 end; // procedure
 
-procedure InvokeSettings(Sender: TObject);
+/// <summary>Opens the IDE Tools->Options dialog (drag-lint pages live under
+/// Third Party > drag-lint). Replaces the retired hand-coded settings modal.</summary>
+procedure InvokeOptionsDialog(Sender: TObject);
+var
+  EnvOptions: IOTAEnvironmentOptions140;
 begin
-  ShowSettingsDialog;
+  { IOTAEnvironmentOptions140.EditOptions is the OTA-native focused-open call:
+    Area='' resolves to the "Third Party" tree node; PageCaption matches the
+    dotted caption registered in DragLint.Plugin.Options (RegisterDragLintOptions),
+    e.g. 'drag-lint.General', which also nests the Indexer/Linter/Editor siblings
+    under the same 'drag-lint' node. }
+  if Supports(BorlandIDEServices, IOTAEnvironmentOptions140, EnvOptions) then
+    EnvOptions.EditOptions('', 'drag-lint.General')
+  else
+    ShowMessage('drag-lint settings are under Tools > Options > Third Party > drag-lint.');
 end;
 
 { v0.30: show structure form }
@@ -3805,7 +3816,7 @@ begin
   AddWrappedItem(RootMenu, 'Rename Symbol...'           , InvokeRename          );
   AddWrappedItem(RootMenu, 'Format with YADF'           , InvokeFormatYadf      );
   AddWrappedItem(RootMenu, 'Generate Test Helper CSV...', InvokeGenerateFormsCsv);
-  AddWrappedItem(RootMenu, 'Settings...'                , InvokeSettings        );
+  AddWrappedItem(RootMenu, 'drag-lint Options...'       , InvokeOptionsDialog   );
 
   { v0.46: Uses & Dependencies submenu }
   AddSeparator(RootMenu);

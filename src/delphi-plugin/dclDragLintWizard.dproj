@@ -78,7 +78,6 @@
         <DCCReference Include="DragLint.Plugin.ProjectNotifier.pas"/>
         <DCCReference Include="DragLint.Plugin.ProjectMenu.pas"/>
         <DCCReference Include="DragLint.Plugin.Settings.pas"/>
-        <DCCReference Include="DragLint.Plugin.SettingsForm.pas"/>
         <DCCReference Include="DragLint.Plugin.Keyboard.pas"/>
         <DCCReference Include="DragLint.Plugin.HoverForm.pas"/>
         <DCCReference Include="DragLint.Plugin.CompletionForm.pas"/>
