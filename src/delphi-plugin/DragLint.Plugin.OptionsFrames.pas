@@ -163,6 +163,10 @@ type
 
 implementation
 
+uses
+  DragLint.Plugin.ExeResolver
+  ;
+
 { ==================== TDLPageFrame ==================== }
 
 constructor TDLPageFrame.Create(AOwner: TComponent);
@@ -514,9 +518,12 @@ begin
 
   if ProjDir <> '' then Exit(ProjDir + '.drag-lint.json');
 
-  { No project open: fall back to the global manifest beside drag-lint.exe. }
+  { No project open: write the GLOBAL manifest beside the REAL drag-lint.exe --
+    resolved via DragLintExe (the same resolver every plugin spawn site uses),
+    NOT ParamStr(0) (which is the IDE's bds.exe dir and is not where the CLI
+    reads its global config). FSettings.ExePath is blank by default. }
   ExeDir:= ExtractFilePath(FSettings.ExePath);
-  if ExeDir = '' then ExeDir:= ExtractFilePath(ParamStr(0)); { last-resort default }
+  if ExeDir = '' then ExeDir:= ExtractFilePath(DragLintExe);
   Result:= ExeDir + 'drag-lint.json';
 end;
 
