@@ -31,6 +31,7 @@ uses
   Vcl.Dialogs
   , DragLint.Plugin.Editor
   , DragLint.Plugin.Options
+  , DragLint.Plugin.ProjectMenu
   , DragLint.Plugin.EditViewNotifier
   , DragLint.Plugin.ProjectNotifier
   , DragLint.Plugin.SaveNotifier
@@ -55,13 +56,15 @@ begin
     interface pointer into our soon-to-vanish vtable. Without this:
       - File > Exit AVs in TCodeIDocModule.AllowSave -> @IntfCopy
       - Editor paints AV in TOTAEditView.BeginPaint -> GetInterface
-    All four are idempotent; safe to call here in addition to the unit
+    All are idempotent; safe to call here in addition to the unit
     finalizations (which run later in the same shutdown). }
   try UnregisterAllSaveNotifiers; except end;
   try UnregisterDragLintEditViewNotifier; except end;
   try UnregisterProjectNotifier; except end;
   try StopOpenSourceServer; except end;
   try UnregisterDragLintDock; except end;
+  try UnregisterDragLintOptions; except end;
+  try UnregisterProjectMenu;     except end;
 end;
 
 procedure TDragLintWizard.Modified;
@@ -93,6 +96,7 @@ begin
   RegisterPackageWizard(TDragLintWizard.Create);
   RegisterDragLintMenu;
   RegisterDragLintOptions;
+  try RegisterProjectMenu; except end;
   StartOpenSourceServer;
   { Register the dockable forms at STARTUP so the IDE can restore them when it
     reloads a saved desktop that had them docked. Registering only on menu click
