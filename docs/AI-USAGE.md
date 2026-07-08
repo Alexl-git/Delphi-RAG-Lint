@@ -56,6 +56,17 @@ You can drive it two ways, both backed by the same engine:
 > - **Class shape / member signatures:** `drag-lint surface --qname <Unit.TClass> --db <DB>`
 > - **One symbol's source body:** `drag-lint slice --qname <Unit.TClass.Method> --db <DB>`
 > - **Blast radius before a refactor:** `drag-lint impact --qname <...> --db <DB>`
+> - **Third-party dependencies:** `drag-lint deps-report --db <DB> [--edges] [--format text|json|csv]`
+>   Rollup of the external/library units the project depends on (RTL, DevExpress,
+>   Spring4D, ...): per external unit, which project units import it, the count,
+>   the shortest uses-path, and a library grouping. `--edges` = the flat
+>   (project-unit -> external-unit) list. External = a used unit that is not
+>   indexed OR resolves to a library path.
+> - **Introspect the index (for other tools):** `drag-lint schema --db <DB> [--format json]`
+>   Dumps the live schema -- schema_version + every table with its columns + row
+>   counts (read-only). See [docs/INDEX-SCHEMA.md](INDEX-SCHEMA.md) for the full
+>   index reference and the project-vs-external boundary rule if you want to
+>   consume the SQLite index directly.
 > - **Framework wiring (Spring4D DI + DFM events):** `drag-lint wiring --qname <IIntf|TForm> --db <DB> [--format json]`
 >   Answers "who implements `IFoo` and where is it resolved" (DI: impl class +
 >   lifetime + resolve-sites) and "what handles this form's events" (DFM

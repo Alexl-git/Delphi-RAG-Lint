@@ -167,6 +167,32 @@ drag-lint uses-fix MyUnit.pas --project MyApp.dproj --db myapp.sqlite --apply   
 > `--apply` (revert from `.bak` if it fails). Reliable bulk cleanup needs
 > full-project-build verification, not per-unit compiles.
 
+### Third-party dependency report
+
+See which external/library units the project leans on — RTL, DevExpress,
+Spring4D, and anything not in your own tree:
+
+```
+drag-lint deps-report --db myapp.sqlite                 # rollup (text)
+drag-lint deps-report --db myapp.sqlite --edges --format csv
+```
+
+Per external unit it reports which project units import it, how many, the
+shortest uses-path, and a library grouping; `--edges` gives the flat
+project-unit → external-unit list. A unit is "external" when it isn't indexed
+or resolves to a library path (RTL / installed packages).
+
+### Consuming the index from another tool
+
+The SQLite index is documented for external consumers in
+[docs/INDEX-SCHEMA.md](docs/INDEX-SCHEMA.md) — every table, the
+project-vs-external boundary, and the stability contract. Introspect any index
+live with:
+
+```
+drag-lint schema --db myapp.sqlite --format json        # schema_version + tables + columns + row counts
+```
+
 ### Semantic errors without a full build
 
 `check-unit` compiles a single unit in its project's context, so you get real
