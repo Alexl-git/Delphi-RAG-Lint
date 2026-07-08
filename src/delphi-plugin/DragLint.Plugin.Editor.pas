@@ -2252,6 +2252,56 @@ end; // procedure
 
 { ---- forms-csv IDE menu action ---- }
 
+/// <summary>Warns (log + message box) when the just-generated forms CSV's
+/// provenance footer reports a "forms-csv algorithm v&lt;N&gt;" that differs from
+/// the version this plugin build expects, i.e. the deployed drag-lint.exe is
+/// stale relative to the plugin. Best-effort: any parse failure or missing
+/// footer is silently ignored and this never blocks opening the file.</summary>
+/// <param name="ACsvPath">Path to the forms CSV just written by drag-lint.exe.</param>
+/// <remarks>The footer line is emitted by DRagLint.FormsMap (FORMS_CSV_ALGORITHM)
+/// as `# forms-csv algorithm v<N> | db: <path> | schema v<n> | <timestamp>` in
+/// the 7th (Notes) CSV column of the last row -- there is no KEY=VALUE pair,
+/// so the version is parsed as the digit run right after the literal
+/// "algorithm v". Reads the file as ANSI to match the engine's output encoding.</remarks>
+const
+  EXPECTED_FORMS_CSV_ALGO = '4'; // keep in lockstep with FormsMap.FORMS_CSV_ALGORITHM
+procedure WarnIfStaleFormsCsv(const ACsvPath: string);
+var
+  Lines   : TArray<string>;
+  L       : string       ;
+  FoundVer: string       ;
+  Marker  : string       ;
+  P, I    : Integer      ;
+begin
+  FoundVer:= '';
+  try
+    if not TFile.Exists(ACsvPath) then Exit;
+    Lines:= TFile.ReadAllLines(ACsvPath, TEncoding.ANSI);
+    Marker:= 'forms-csv algorithm v';
+    for L in Lines do
+    begin
+      P:= Pos(Marker, L);
+      if P > 0 then
+      begin
+        I:= P + Length(Marker);
+        while (I <= Length(L)) and (L[I] >= '0') and (L[I] <= '9') do
+        begin
+          FoundVer:= FoundVer + L[I];
+          Inc(I);
+        end;
+        Break;
+      end;
+    end;
+  except
+    Exit; // best-effort only; never let a parse failure block opening the CSV
+  end;
+  if (FoundVer <> '') and (FoundVer <> EXPECTED_FORMS_CSV_ALGO) then
+  begin
+    DLT('menu', Format('forms-csv: STALE EXE? csv algo=v%s expected=v%s', [FoundVer, EXPECTED_FORMS_CSV_ALGO]));
+    ShowMessage(Format('drag-lint: the forms CSV was produced by a drag-lint.exe whose format (v%s) differs from this plugin''s expected v%s. The deployed exe may be stale.', [FoundVer, EXPECTED_FORMS_CSV_ALGO]));
+  end;
+end; // procedure
+
 procedure InvokeGenerateFormsCsv(Sender: TObject);
 { Saves all modified modules, resolves the active project .dproj + drag-lint
   index, prompts for a CSV output path, runs forms-csv, then opens the
@@ -2295,7 +2345,21 @@ begin
     Dlg.Free;
   end;
 
-  CmdLine:= Format('"%s" forms-csv --project "%s" --db "%s" --out "%s"', [ExePath, ProjFile, ProjDb, OutPath]);
+  { Multi-DB: project DB is FIRST (authoritative for form enumeration); any
+    other active-scope DBs (e.g. a shared/library index) widen the caller-
+    search scope so cross-DB launch chains are not misreported as dead. }
+  var DbList: TArray<string>;
+  try
+    DbList:= ResolveActiveIndexDbs(LoadSettings);
+  except
+    SetLength(DbList, 0);
+  end;
+  var DbArgs: string:= '';
+  if ProjDb <> '' then DbArgs:= Format(' --db "%s"', [ProjDb]);
+  for var D in DbList do
+    if not SameText(D, ProjDb) then DbArgs:= DbArgs + Format(' --db "%s"', [D]);
+
+  CmdLine:= Format('"%s" forms-csv --project "%s"%s --out "%s"', [ExePath, ProjFile, DbArgs, OutPath]);
   { v0.65.1: enqueue on the R2 job queue instead of RunAndCaptureStdout on the UI
     thread (which froze the IDE for up to 2 minutes). Serialized with reindex /
     lint-all so they cannot collide on the project DB. }
@@ -2315,6 +2379,7 @@ begin
         ShowMessage('drag-lint: forms-csv failed. See plugin log.');
         Exit;
       end;
+      WarnIfStaleFormsCsv(OutPath);
       if Supports(BorlandIDEServices, IOTAActionServices, AS2) then AS2.OpenFile(OutPath);
     end;
   JobQueue.Enqueue(FJob);

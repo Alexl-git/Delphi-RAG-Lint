@@ -9666,18 +9666,24 @@ begin
 end; // begin
 
 /// <summary>Implements the forms-csv CLI command: generates a navigation-map CSV
-/// for a project index and writes it to --out or stdout.</summary>
+/// for a project index and writes it to --out or stdout. Multi-DB: when the
+/// caller supplies no --db, falls back through ResolveConsumerDbs (manifest /
+/// platform resolution) so forms-csv sees the same DB set as query/lsp/serve;
+/// the first resolved path is primary (drives enumeration), the rest widen the
+/// caller-search scope so cross-DB launch chains (e.g. CLIENT -> COMMON) are
+/// not misreported as dead.</summary>
 function DoFormsCsv(const AArgs: TArgs): Integer;
 var
-  DbPath: string;
-  Csv   : string;
+  DbPaths: TArray<string>;
+  Csv    : string;
+  P      : string;
 begin
-  if Length(AArgs.DbPaths) > 0 then DbPath:= AArgs.DbPaths[0]
-  else DbPath:= AArgs.DbPath;
-  if DbPath = '' then begin Writeln(ErrOutput, 'forms-csv: need --db <index.sqlite>'); Exit(2); end;
-  if not TFile.Exists(DbPath) then begin Writeln(ErrOutput, 'forms-csv: db not found: ', DbPath); Exit(2); end;
+  DbPaths:= ResolveConsumerDbs(AArgs);
+  if Length(DbPaths) = 0 then begin Writeln(ErrOutput, 'forms-csv: need --db <index.sqlite>'); Exit(2); end;
+  for P in DbPaths do
+    if not TFile.Exists(P) then begin Writeln(ErrOutput, 'forms-csv: db not found: ', P); Exit(2); end;
   try
-    Csv:= DRagLint.FormsMap.GenerateFormsCsv(DbPath, AArgs.ProjectPath, AArgs.RootForm);
+    Csv:= DRagLint.FormsMap.GenerateFormsCsv(DbPaths, AArgs.ProjectPath, AArgs.RootForm);
   except
     on E: Exception do begin Writeln(ErrOutput, 'forms-csv: ', E.Message); Exit(1); end;
   end;
