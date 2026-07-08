@@ -162,6 +162,7 @@
         <DCCReference Include="..\analysis\DRagLint.Analysis.Liveness.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.ExtractMethod.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.EnumHelper.pas"/>
+        <DCCReference Include="..\refactor\DRagLint.Refactor.NamingFix.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.FlowChecks.pas"/>
         <DCCReference Include="..\output\DRagLint.Output.Sarif.pas"/>
         <DCCReference Include="..\output\DRagLint.Output.ExitCode.pas"/>
