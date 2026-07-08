@@ -878,6 +878,31 @@ begin
   else begin AOk:= False; Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
 end;
 
+// AutoDoc multi-DB (Task 6): resolves every --db the user passed (via
+// ResolveConsumerDbs) OTHER than the primary AArgs.DbPath, opens each
+// read-only, and returns the ones that opened cleanly. Used to populate
+// TDocBatchOptions.ExtraStores / BuildFor's AExtraStores so a symbol's
+// name-based callers/used-in facts can span multiple index DBs. A store
+// that fails to open (schema stale, file missing) is silently skipped --
+// this is a facts-enrichment path, not a hard dependency. Returns an empty
+// (non-nil) array when the user passed a single --db or none.
+function OpenExtraStores(const AArgs: TArgs): TArray<ISymbolStore>;
+var
+  DbList: TArray<string>;
+  D     : string        ;
+  EOk   : Boolean       ;
+  ES    : ISymbolStore  ;
+begin
+  SetLength(Result, 0);
+  DbList:= ResolveConsumerDbs(AArgs);
+  for D in DbList do
+    if not SameText(D, AArgs.DbPath) then
+    begin
+      ES:= OpenReadOnlyStore(D, EOk);
+      if EOk and (ES <> nil) then Result:= Result + [ES];
+    end;
+end;
+
 // v0.45: serialise a TIndexManifest to a TJSONObject for the dry-run JSON view.
 // Delegates to TManifestIO.ToJson for the canonical manifest structure, then
 // adds the extra 'indexes.rootDir' field (richer than the saved file). Caller owns + frees.
@@ -5786,6 +5811,7 @@ begin
   Opts.Stubs:= AArgs.DocStubs;
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
+  Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
@@ -5870,6 +5896,7 @@ begin
   Opts.Stubs:= AArgs.DocStubs;
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
+  Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
 end; // function
@@ -5894,6 +5921,7 @@ begin
   Opts.Stubs:= AArgs.DocStubs;
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
+  Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
   Res:= TDocBatch.DocumentAll(Store, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
 end; // function
@@ -5919,7 +5947,7 @@ begin
   if not Ok then Exit(2);
 
   Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, AArgs.DocSeeAlso,
-    AArgs.DocSince, AArgs.DocBaseDir); // ADF T5: --since (git <since> date) + --base-dir repo root.
+    AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs)); // ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers.
 
   if Res.Action = DRagLint.Doc.Document.daNotFound then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 

@@ -33,6 +33,10 @@ type
     IncludeDeprecated: Boolean;
     IncludeSince     : Boolean;
     BaseDir          : string ; // repo root for git <since>; '' = cwd
+    /// <summary>Additional open index stores searched (name-based only) for
+    /// Called-from/Used-in facts, alongside the primary AStore. Nil/empty
+    /// preserves single-store behavior.</summary>
+    ExtraStores      : TArray<ISymbolStore>;
   end;
 
   /// <summary>Aggregated batch result. Edits is the union of every kept
@@ -148,7 +152,7 @@ begin
       Inc(Result.DeclCount);
 
       Res := TDocumenter.BuildFor(AStore, Sym.QualifiedName, AOptions.IncludeSeeAlso,
-        AOptions.IncludeSince, AOptions.BaseDir);
+        AOptions.IncludeSince, AOptions.BaseDir, AOptions.ExtraStores);
       if Length(Res.Edits) = 0 then Continue; // daUnchanged / daNotFound: nothing to do
 
       // Facts-only filter (Stubs=False, the default): keep the edit when the

@@ -34,10 +34,13 @@ type
     /// AIncludeSeeAlso threads the --seealso opt-in into the facts builder; when
     /// False (the default overload) no &lt;seealso&gt; crefs are generated.
     /// AIncludeSince / ABaseDir thread the --since opt-in (git &lt;since&gt;
-    /// date, ABaseDir = repo root); no git spawn when AIncludeSince is False.</remarks>
+    /// date, ABaseDir = repo root); no git spawn when AIncludeSince is False.
+    /// AExtraStores threads additional open index stores (e.g. other resolved
+    /// --db's) into the facts builder so name-based Called-from/Used-in facts
+    /// can span multiple DBs; nil/empty preserves single-store behavior.</remarks>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string;
       AIncludeSeeAlso: Boolean; AIncludeSince: Boolean = False;
-      const ABaseDir: string = ''): TDocumentResult; overload;
+      const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil): TDocumentResult; overload;
     /// <summary>Back-compat overload: BuildFor with no doc-source opt-ins
     /// (AIncludeSeeAlso = False, AIncludeSince = False).</summary>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult; overload;
@@ -182,7 +185,8 @@ begin
 end;
 
 class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;
-  AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string): TDocumentResult;
+  AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
+  const AExtraStores: TArray<ISymbolStore>): TDocumentResult;
 var
   Syms     : TArray<TSymbol>                                   ;
   Sym      : TSymbol                                           ;
@@ -233,7 +237,7 @@ begin
   Sig      := Trim(Sym.Signature);
   SigParams:= ParseParamNames(ExtractParamList(Sig));
 
-  Facts := TDocFactsBuilder.Build(AStore, Sym, AIncludeSeeAlso, AIncludeSince, ABaseDir);
+  Facts := TDocFactsBuilder.Build(AStore, Sym, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores);
 
   // Has a return value? The indexed Signature holds only '(params): RetType'
   // (no leading 'function' keyword), so SignatureHasReturn misses it, and class
