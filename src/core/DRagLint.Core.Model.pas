@@ -149,7 +149,10 @@ type
   TResolvedCaller = record
     EnclosingSymbolId: Int64 ;
     EnclosingQName   : string;
-    Location         : string;
+    Location         : string; // filename only (unchanged; existing consumers rely on this)
+    /// <summary>1-based line of the call site in the caller's file; 0 when unknown.
+    /// Added for reverse-calltree; other consumers may ignore it.</summary>
+    CallSiteLine     : Integer;
     Confidence       : string;
   end;
 

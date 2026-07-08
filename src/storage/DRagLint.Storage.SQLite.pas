@@ -1044,6 +1044,8 @@ begin
       if Q.FieldByName('encl_qname').IsNull then R.EnclosingQName:= ''
       else R.EnclosingQName:= Q.FieldByName('encl_qname').AsString;
       R.Location  := ExtractFileName(Q.FieldByName('file_path').AsString);
+      if Q.FieldByName('start_line').IsNull then R.CallSiteLine := 0
+      else R.CallSiteLine := Q.FieldByName('start_line').AsInteger;
       R.Confidence:= Q.FieldByName('confidence').AsString;
       List.Add(R);
       Q.Next;
