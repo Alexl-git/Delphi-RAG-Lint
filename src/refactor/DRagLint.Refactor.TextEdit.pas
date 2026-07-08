@@ -105,7 +105,10 @@ begin
       { back-to-front: largest top-line first so indices stay valid }
       Cmp:= TComparer<TTextEdit>.Construct(
         function(const A, B: TTextEdit): Integer
-        begin Result:= EditTopLine(B) - EditTopLine(A); end);
+        begin
+          Result:= EditTopLine(B) - EditTopLine(A);
+          if Result = 0 then Result:= B.Col - A.Col; // same line: larger column first (back-to-front)
+        end);
       Group.Sort(Cmp);
 
       Lines:= TStringList.Create;
