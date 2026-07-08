@@ -1,5 +1,56 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-08 (LATEST-27) -- **BATCH A PLANNED + PUSHED. NEXT = IMPLEMENT the 10-task plan. Hover work is DONE + pushed. `main`=`66719ee`, origin IN SYNC.**
+>
+> **READ FIRST to implement:** `docs/superpowers/plans/2026-07-08-batch-a-multidb-facts-and-returns.md`
+> (10 tasks, order 3->2->1). Spec: `docs/superpowers/specs/2026-07-08-batch-a-multidb-facts-and-returns-design.md`.
+> **Execute via `superpowers:subagent-driven-development`** (fresh subagent per task + two-stage review).
+>
+> **WHAT BATCH A IS (3 user-queued items, reshaped by investigation):**
+> - **Item 3 -- forms-csv multi-DB (root-cause fix, highest value).** NOT a code regression + NOTHING
+>   lost: the polymorphic `CP2 -> imcPlanList -> plan-edit` chain AND button-caption navigation
+>   (`Root -> 'Plan' -> frmX`) both WORK and are tested (verified via subagents this session; see the
+>   design doc's Background section). The ONLY failure is a DB-SCOPE delivery gap: single-DB is baked in at
+>   3 layers -- IDE menu `DragLint.Plugin.Editor.pas:2298` (`GetActiveProjectDb`), CLI `DoFormsCsv`
+>   `CLI.pas:9675` (`DbPaths[0]`), engine `GenerateFormsCsv` (1 store). A CLIENT-only DB misses COMMON's
+>   `uPLANLIST.PAS` launch-bodies -> reachable forms print DEAD FORM. FIX = make forms-csv query the full
+>   manifest DB set (like `find-callers`/hover). User: **NO hedge cell** -- produce the real chain (see all
+>   DBs) or declare DEAD definitively. Fully HEADLESS-testable (new `run_formsmap_multidb.ps1`: dead vs
+>   CLIENT-only -> resolves with COMMON) + an exe-version footer guard on the IDE path. Tasks 1-4.
+> - **Item 2 -- AutoDoc facts multi-DB.** The original "called-from parity via SliceJsonBracket" premise is
+>   FALSE: AutoDoc uses IN-PROCESS `ISymbolStore` queries (no shell-out, no JSON parse), so the hover
+>   stderr/JSON bug CANNOT occur there. The REAL gap (user chose to fix): `TDocFactsBuilder.Build` takes ONE
+>   store -> callers in other DBs invisible. FIX = optional `AExtraStores` param; fan out only the 3
+>   caller-facing queries (`FindResolvedCallers`/`FindUnresolvedNameCallers`/`FindCallersByName`); primary
+>   store still owns symbol/body/calls-out. Tasks 5-6.
+> - **Item 1 -- AutoDoc `<returns>` enumeration + docs config.** Reuse `MineReturnExpressions` (hover's pure
+>   miner) in AutoDoc so `<returns>` shows `TODO: describe. Observed: <cases>` (XML-escaped, idempotent).
+>   Cap via a NEW `drag-lint.json` `"docs"` block `max_return_cases` (default 20) -- user picked the real
+>   config file over a const/CLI-flag. Tasks 7-10.
+>
+> **GIT:** `main`=`66719ee`, origin IN SYNC (0 ahead). Clean except the usual LEAVE-THOSE untracked
+> (`.superpowers/`, forms-csv v4 spec, `tests/autotest/results/*.json`). Hover restyle (LATEST-26) shipped:
+> source `be97e7c`, BPL `b807a79`, backlog `5d843ba` -- all pushed. This session also rewrote history to
+> drop 2 IDE-generated files (`drag-lint.delphilsp.json`/`.dsv`) from the source commit.
+>
+> **PLAN GOTCHAS (baked into the plan, but flagged here for a cold start):**
+> - Signature-growth: `Build` + `BuildFor` each gain `AExtraStores` (Tasks 5/6) THEN `AMaxReturnCases`
+>   (Tasks 8/10) -- trailing + defaulted, `AExtraStores` FIRST. Don't reorder.
+> - `APasLines` cache in FormsMap is keyed on per-DB FileId -> switch to PATH-keyed when multi-DB (FileIds
+>   collide across DBs). Plan Task 1 Step 2 covers this.
+> - Extra-store resolved-caller queries key on per-DB symbol Id (invalid cross-DB) -> use the NAME buckets
+>   only in extra stores. Plan Task 5 Step 2 NOTE covers this; don't invent `FindSymbolIdByQName`.
+> - `document --json` payload shape is uncertain -> inspect ONCE, then assert on `--apply`+grep if needed.
+> - Build: CLI Win64 exe = the test target (`src/cli/Win64/Debug/drag-lint.exe`); IDE BPL Win32 only for the
+>   item-3 plugin edit, RAD Studio CLOSED (`Get-Process bds`), via `_bpl_build.bat`; BPL/DCP in a SEPARATE
+>   `build(plugin):` commit.
+>
+> **AFTER BATCH A ships + pushes:** Batch B = investigate -> plan -> handoff/clear -> implement -> publish
+> for #4 (Tools->Options pages spike) and #5 (Editor->Language tabs spike). Plus the deferred v0.94 IDE
+> live-smoke of the "Create helper class" menu.
+>
+> ---
+>
 > ## RESUME 2026-07-07 (LATEST-26) -- **HOVER RESTYLE DONE, DEBUG-STRIPPED, BUILT CLEAN, COMMITTED. Ready to push. Next: 3 user threads (#3 forms-csv, #4 Tools->Options, #5 Editor->Language) + 2 AutoDoc TODOs.**
 >
 > **STATE:** Closed out the hover Help-Insight restyle. Stripped ALL this-session debug scaffolding
