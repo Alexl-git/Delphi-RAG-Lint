@@ -20,11 +20,15 @@ interface
 uses
   System.Classes
   , System.SysUtils
+  , System.IOUtils
+  , System.JSON
   , Vcl.Forms
   , Vcl.Controls
   , Vcl.StdCtrls
   , Vcl.ExtCtrls
   , Vcl.Dialogs
+  , Vcl.Samples.Spin
+  , ToolsAPI
   , DragLint.Plugin.Settings
   ;
 
@@ -44,9 +48,9 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     /// <summary>Read the registry into FSettings and populate this page.</summary>
-    procedure Load;
+    procedure Load; virtual;
     /// <summary>Re-read the registry, apply this page's controls, write back.</summary>
-    procedure Save;
+    procedure Save; virtual;
   end;
 
   /// <summary>Tools->Options "General" page: exe/db paths, workspace mode, and the
@@ -96,8 +100,9 @@ type
 
   /// <summary>Tools->Options "Linter" page: diagnostics + inline-marker toggles
   /// (7 fields: EnableDiagnostics, AutoDiagnosticsOnSave, EnableInlineMarkers,
-  /// ShowErrorsInline, ShowWarningsInline, ShowHintsInline, ShowInfoInline).
-  /// max_return_cases is added here in Task 3.</summary>
+  /// ShowErrorsInline, ShowWarningsInline, ShowHintsInline, ShowInfoInline),
+  /// plus one manifest-backed field: max_return_cases (docs.max_return_cases in
+  /// drag-lint.json -- NOT a registry setting; see ManifestPathForWrite).</summary>
   TDLLinterOptionsFrame = class(TDLPageFrame)
   private
     FGrpDiag     : TGroupBox;
@@ -109,10 +114,33 @@ type
     FCbWarnInline: TCheckBox;
     FCbHintInline: TCheckBox;
     FCbInfoInline: TCheckBox;
+    FGrpDocs     : TGroupBox;
+    FEdMaxReturnCases: TSpinEdit;
+    /// <summary>Resolves the drag-lint.json to read/write for max_return_cases.
+    /// The field is PROJECT-scoped: if a project is open, targets that
+    /// project's directory + drag-lint.json (matching where the CLI/AutoDoc
+    /// resolve the local manifest); otherwise falls back to the directory of
+    /// the configured drag-lint.exe (the global/exe-dir manifest). This is
+    /// deliberately NOT the merged-effective-manifest path used by
+    /// TManifestIO.Load -- writes here only ever touch ONE file in place.</summary>
+    function ManifestPathForWrite: string;
+    /// <summary>Reads docs.max_return_cases from ManifestPathForWrite via a
+    /// direct System.JSON parse (not TManifestIO, to avoid a merge-then-emit
+    /// round-trip clobbering unrelated keys). Returns 20 (the documented
+    /// default) if the file or key is absent.</summary>
+    function ReadMaxReturnCases: Integer;
+    /// <summary>Read-modify-writes ONLY docs.max_return_cases into
+    /// ManifestPathForWrite, preserving every other key already in the file
+    /// (including an existing "docs" object's other fields, and top-level
+    /// keys like "settings"). Never emits a fresh minimal manifest.</summary>
+    procedure WriteMaxReturnCases(AValue: Integer);
   protected
     procedure BuildControls; override;
     procedure LoadControls; override;
     procedure SaveControls(var ASettings: TDragLintSettings); override;
+  public
+    procedure Load; override;
+    procedure Save; override;
   end;
 
   /// <summary>Tools->Options "Editor" page: hover/completion/signature/code-lens
@@ -389,6 +417,7 @@ const
   GM = 8;
   GH = 28;
   CH = 22;
+  EH = 24;
 var
   Y : Integer;
   GY: Integer;
@@ -412,7 +441,20 @@ begin
   FCbHintInline:= DLNewCheck(FGrpMarkers, LM + 16, GY, 'Show hints inline'   , False); Inc(GY, CH);
   FCbInfoInline:= DLNewCheck(FGrpMarkers, LM + 16, GY, 'Show info inline'    , False);
 
-  // Task 3: max_return_cases here
+  { --- Doc generation (drag-lint.json) --- }
+  Height:= Height + GH + EH + GM;
+  FGrpDocs:= DLNewGroup(Self, 'Doc generation (drag-lint.json -- project/manifest-scoped, NOT a registry setting)', Y, GH + EH + 4);
+  GY:= GH - 4;
+  DLNewLabel(FGrpDocs, 'Max return cases (docs.max_return_cases):', LM, GY);
+  FEdMaxReturnCases:= TSpinEdit.Create(FGrpDocs);
+  FEdMaxReturnCases.Parent  := FGrpDocs;
+  FEdMaxReturnCases.Left    := FGrpDocs.Width - LM - 80;
+  FEdMaxReturnCases.Top     := GY - 2;
+  FEdMaxReturnCases.Width   := 80;
+  FEdMaxReturnCases.MinValue:= 0;
+  FEdMaxReturnCases.MaxValue:= 9999;
+  FEdMaxReturnCases.Value   := 20;
+  FEdMaxReturnCases.Anchors := [akTop, akRight];
 end; // procedure
 
 procedure TDLLinterOptionsFrame.LoadControls;
@@ -436,6 +478,135 @@ begin
   ASettings.ShowHintsInline      := FCbHintInline.Checked;
   ASettings.ShowInfoInline       := FCbInfoInline.Checked;
 end; // procedure
+
+{ ---- manifest-backed max_return_cases (docs.max_return_cases, NOT registry) ---- }
+
+function TDLLinterOptionsFrame.ManifestPathForWrite: string;
+var
+  MS        : IOTAModuleServices;
+  ProjGroup : IOTAProjectGroup  ;
+  ActiveProj: IOTAProject       ;
+  ProjDir   : string            ;
+  ExeDir    : string            ;
+begin
+  { Project-scoped first: if a project is open, the manifest we read/write
+    lives beside its .dproj -- this matches where the CLI/AutoDoc look for a
+    LOCAL drag-lint.json and keeps the edit scoped to that project. }
+  ProjDir:= '';
+  try
+    if Supports(BorlandIDEServices, IOTAModuleServices, MS) and (MS <> nil) then
+    begin
+      ProjGroup:= MS.MainProjectGroup;
+      if ProjGroup <> nil then
+      begin
+        ActiveProj:= ProjGroup.ActiveProject;
+        if ActiveProj <> nil then ProjDir:= ExtractFilePath(ActiveProj.FileName);
+      end;
+    end;
+  except
+    ProjDir:= '';
+  end; // try
+
+  if ProjDir <> '' then Exit(ProjDir + 'drag-lint.json');
+
+  { No project open: fall back to the global manifest beside drag-lint.exe. }
+  ExeDir:= ExtractFilePath(FSettings.ExePath);
+  if ExeDir = '' then ExeDir:= ExtractFilePath(ParamStr(0)); { last-resort default }
+  Result:= ExeDir + 'drag-lint.json';
+end;
+
+function TDLLinterOptionsFrame.ReadMaxReturnCases: Integer;
+const
+  DEFAULT_MAX_RETURN_CASES = 20;
+var
+  Path : string;
+  Root : TJSONValue ;
+  Docs : TJSONValue ;
+  Num  : TJSONValue ;
+begin
+  Result:= DEFAULT_MAX_RETURN_CASES;
+  Path:= ManifestPathForWrite;
+  if (Path = '') or not TFile.Exists(Path) then Exit;
+  Root:= nil;
+  try
+    try
+      Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path));
+    except
+      Exit; { malformed manifest: show the default rather than raising in Options UI }
+    end; // try
+    if not (Root is TJSONObject) then Exit;
+    Docs:= TJSONObject(Root).GetValue('docs');
+    if not (Docs is TJSONObject) then Exit;
+    Num:= TJSONObject(Docs).GetValue('max_return_cases');
+    if Num is TJSONNumber then Result:= TJSONNumber(Num).AsInt;
+  finally
+    Root.Free;
+  end; // try
+end;
+
+procedure TDLLinterOptionsFrame.WriteMaxReturnCases(AValue: Integer);
+var
+  Path    : string;
+  Parsed  : TJSONValue ;
+  Root    : TJSONObject;
+  DocsVal : TJSONValue ;
+  Docs    : TJSONObject;
+  OldPair : TJSONPair  ;
+begin
+  Path:= ManifestPathForWrite;
+  if Path = '' then Exit;
+
+  Root:= nil;
+  try
+    if TFile.Exists(Path) then
+    begin
+      Parsed:= nil;
+      try
+        Parsed:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path));
+      except
+        Parsed:= nil; { malformed manifest text: fall through to a fresh object }
+      end; // try
+      if Parsed is TJSONObject then
+        Root:= TJSONObject(Parsed)
+      else
+        Parsed.Free; { either nil (no-op) or a non-object JSON value we cannot use }
+    end; // if
+    if Root = nil then Root:= TJSONObject.Create; { no file yet, or unparsable: start fresh }
+
+    { Ensure a "docs" object exists, reusing it if present so every OTHER
+      docs.* key (and every other top-level key) survives untouched. }
+    DocsVal:= Root.GetValue('docs');
+    if DocsVal is TJSONObject then
+      Docs:= TJSONObject(DocsVal)
+    else
+    begin
+      Docs:= TJSONObject.Create;
+      Root.AddPair('docs', Docs);
+    end; // if
+
+    { TJSONObject has no in-place "set" -- remove any existing pair first so a
+      repeated Save never leaves two max_return_cases pairs behind. }
+    OldPair:= Docs.RemovePair('max_return_cases');
+    OldPair.Free; { RemovePair returns nil if absent; TObject(nil).Free is a no-op }
+    Docs.AddPair('max_return_cases', TJSONNumber.Create(AValue));
+
+    TFile.WriteAllText(Path, Root.ToJSON, TEncoding.ANSI);
+  finally
+    Root.Free;
+  end; // try
+end;
+
+procedure TDLLinterOptionsFrame.Load;
+begin
+  inherited Load; { registry checkboxes via LoadControls }
+  FEdMaxReturnCases.Value:= ReadMaxReturnCases;
+end;
+
+procedure TDLLinterOptionsFrame.Save;
+begin
+  inherited Save; { registry checkboxes via SaveControls }
+  WriteMaxReturnCases(FEdMaxReturnCases.Value);
+end;
 
 { ==================== TDLEditorOptionsFrame ==================== }
 
