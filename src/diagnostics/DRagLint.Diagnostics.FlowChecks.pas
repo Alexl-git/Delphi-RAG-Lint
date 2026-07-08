@@ -83,6 +83,60 @@ begin
   Result := (Length(T) >= 2) and (T[1] = 'I') and T[2].IsUpper;
 end;
 
+/// <summary>Tests whether AConstructorNode (an already-confirmed constructor
+/// call/dot-expr per ExprIsConstructor) transfers ownership of the created
+/// object to a VCL owner, per TComponent's owner-parenting contract: a
+/// TComponent descendant constructed with a non-nil AOwner argument is
+/// inserted into that owner's Components list and freed automatically when
+/// the owner is destroyed, so the local holding the reference is NOT a leak
+/// candidate even if never separately stored or freed. Requires a store
+/// (ancestry needs the indexed type hierarchy) -- on the bare no-store lint
+/// path this always returns False, leaving the current (conservative) leak
+/// check in effect. Also False for Create(nil) (explicit nil owner: no
+/// owner, so no transfer -- genuinely leak-checked) and for any type that
+/// does not resolve as a TComponent descendant (e.g. TStringList.Create,
+/// which has no AOwner parameter at all).</summary>
+/// <param name="AConstructorNode">The constructor RHS expr node (exprCall or
+/// exprDot), as passed to ExprIsConstructor.</param>
+/// <param name="ASrc">The routine's source bytes (for node-text extraction).</param>
+/// <param name="AStore">Optional symbol store; nil disables this check.</param>
+/// <param name="AFileId">File id within AStore (0 when no store).</param>
+/// <returns>True only when a store is present, the constructed type is a
+/// TComponent descendant, and the first constructor argument is present and
+/// is not the literal "nil".</returns>
+function ConstructorTransfersOwnership(const AConstructorNode: TTSNode; const ASrc: TBytes;
+  const AStore: ISymbolStore; AFileId: Int64): Boolean;
+var
+  Ent, TypeNode, ArgsN, FirstArg: TTSNode;
+  TypeName: string;
+begin
+  Result := False;
+  if (AStore = nil) or AConstructorNode.IsNull then Exit;
+  { Only the exprCall shape carries an args list (Create(Self) / Create(nil) /
+    Create()); the bare exprDot shape (parameterless `TFoo.Create`) has no
+    argument to inspect, so it can never be an owner-transfer. }
+  if AConstructorNode.NodeType <> 'exprCall' then Exit;
+  Ent := AConstructorNode.ChildByField('entity');
+  if Ent.IsNull or (Ent.NodeType <> 'exprDot') then Exit;
+  { The constructed type is the lhs of the `TType.Create` dot-expr; take the
+    rightmost identifier segment so a qualified `Unit.TType.Create` still
+    resolves the bare type name. Original-case text (NodeStr, NOT the
+    lowercasing NodeText): the symbol store's exact-name lookup underlying
+    IsDescendantOf is case-sensitive on the indexed declaration's casing. }
+  TypeNode := Ent.ChildByField('lhs');
+  if TypeNode.IsNull then Exit;
+  if TypeNode.NodeType = 'exprDot' then TypeNode := TypeNode.ChildByField('rhs');
+  TypeName := Trim(NodeStr(TypeNode, ASrc));
+  if (TypeName = '') or (not AStore.IsDescendantOf(TypeName, 'TComponent', AFileId)) then Exit;
+  ArgsN := AConstructorNode.ChildByField('args');
+  if ArgsN.IsNull or (ArgsN.NamedChildCount = 0) then Exit; { no AOwner arg at all }
+  FirstArg := ArgsN.NamedChild(0);
+  if FirstArg.IsNull then Exit;
+  { the nil-literal check IS case-insensitive (Pascal keyword) -- NodeText's
+    lowercasing is correct and safe here, unlike for the type name above. }
+  Result := NodeText(FirstArg, ASrc) <> 'nil';
+end;
+
 { A single interface dereference site: the routine-var index of the base
   identifier plus the position of the dereferencing node (the `exprDot` /
   `as`-exprBinary itself, so the finding points at the member access, not the
@@ -802,7 +856,11 @@ var
               if It.Node.NodeType <> 'assignment' then Continue;
               Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars);
               if (Tgt >= 0) and (Vars.Get(Tgt).Kind = vkLocal)
-                 and ExprIsConstructor(It.Node.ChildByField('rhs'), PF.Src) then
+                 and ExprIsConstructor(It.Node.ChildByField('rhs'), PF.Src)
+                 { a TComponent descendant constructed with a non-nil AOwner
+                   transfers ownership to that owner (freed on its teardown) --
+                   do NOT record it as a leak candidate. }
+                 and not ConstructorTransfersOwnership(It.Node.ChildByField('rhs'), PF.Src, AStore, AFileId) then
               begin
                 CreateRow[Tgt] := Integer(It.Node.StartPoint.Row) + 1;
                 CreateCol[Tgt] := Integer(It.Node.StartPoint.Column) + 1;
