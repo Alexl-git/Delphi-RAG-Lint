@@ -48,6 +48,16 @@ type
     class function Defaults: TIndexSettings; static;
   end; // record
 
+  /// <summary>Doc-generation settings, parsed from the manifest 'docs' object.</summary>
+  TDocSettings = record
+    /// <summary>Max distinct return cases enumerated in a generated &lt;returns&gt;
+    /// (the "Observed: ..." list). Default 20. 0 or negative disables enumeration
+    /// (bare TODO only).</summary>
+    MaxReturnCases: Integer;
+    /// <summary>Record with all fields at documented defaults (MaxReturnCases=20).</summary>
+    class function Defaults: TDocSettings; static;
+  end; // record
+
   /// <summary>Which top-level settings keys were explicitly present in a parsed JSON block.
   /// Used by the merge logic to distinguish "absent" (keep global) from "present but default".</summary>
   TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB );
@@ -90,6 +100,8 @@ type
     GlobalExclude: TArray<string>;
     /// <summary>Settings block parsed from the 'settings' key.</summary>
     Settings: TIndexSettings;
+    /// <summary>Doc-generation settings parsed from the 'docs' key.</summary>
+    Docs: TDocSettings;
     /// <summary>Ordered list of index sections.</summary>
     Sections: TArray<TIndexSection>;
     /// <summary>Returns True and populates ASection if a section named AName exists (case-insensitive).</summary>
@@ -263,6 +275,16 @@ begin
 end;
 
 { ---------------------------------------------------------------------- }
+{  TDocSettings                                                            }
+{ ---------------------------------------------------------------------- }
+
+class function TDocSettings.Defaults: TDocSettings;
+begin
+  Result:= Default(TDocSettings);
+  Result.MaxReturnCases:= 20;
+end;
+
+{ ---------------------------------------------------------------------- }
 {  TIndexManifest                                                          }
 { ---------------------------------------------------------------------- }
 
@@ -297,6 +319,7 @@ begin
   Result:= Default(TIndexManifest);
   Result.RootDir:= ARootDir;
   Result.Settings:= TIndexSettings.Defaults;
+  Result.Docs:= TDocSettings.Defaults;
   ASettingsKeys:= [];
 
   Root:= TJSONObject.ParseJSONValue(AJson) as TJSONObject;
@@ -353,6 +376,14 @@ begin
         Include(ASettingsKeys, skMaxParseFileKB);
       end;
     end; // if
+
+    { -- docs block -- }
+    var JDocs: TJSONObject:= Root.GetValue('docs') as TJSONObject;
+    if JDocs <> nil then
+    begin
+      var ND: TJSONNumber:= JDocs.GetValue('max_return_cases') as TJSONNumber;
+      if ND <> nil then Result.Docs.MaxReturnCases:= ND.AsInt;
+    end;
 
     { -- indexes block -- }
     JIndexes:= Root.GetValue('indexes') as TJSONObject;
@@ -523,6 +554,7 @@ var
   DSec : TIndexSection;
 begin
   Result:= '';
+  if AManifest.Docs.MaxReturnCases < 0 then Exit('docs.max_return_cases must be >= 0');
   Names:= TStringList.Create;
   Names.CaseSensitive:= False;
   try
@@ -603,6 +635,11 @@ begin
   JSettings.AddPair('enginePath', AManifest.Settings.EnginePath);
   JSettings.AddPair('maxJobs'       , TJSONNumber.Create(AManifest.Settings.MaxJobs       ));
   JSettings.AddPair('maxParseFileKB', TJSONNumber.Create(AManifest.Settings.MaxParseFileKB));
+
+  { docs }
+  var JDocs:= TJSONObject.Create;
+  Result.AddPair('docs', JDocs);
+  JDocs.AddPair('max_return_cases', TJSONNumber.Create(AManifest.Docs.MaxReturnCases));
 
   { indexes }
   JIndexes:= TJSONObject.Create;
