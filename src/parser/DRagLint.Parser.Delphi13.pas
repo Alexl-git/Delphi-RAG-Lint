@@ -1358,6 +1358,18 @@ begin
     begin
       var Lhs:= ANode.ChildByField('lhs');
       if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then AState.EmitRef('write', NodeText(Lhs, AState.Source), Lhs);
+      // Bug B fix: a bare-identifier RHS (`Result := maxItems;`) is a READ of
+      // that symbol, but a lone identifier that IS the whole RHS hits no case
+      // in the generic recurse below (it is neither exprDot/exprArgs/etc.), so
+      // it previously fell through with NO ref emitted. Handle it here, gated
+      // strictly to the assignment's own 'rhs' field (confirmed on this same
+      // grammar at line ~1114's `TryEmitSpringDI(ANode.ChildByField('rhs'),
+      // ...)` for NodeType='assignment') -- this does NOT touch declaration-
+      // name or type-name identifiers, which are never reached through this
+      // case (Walk visits them via declVar/declProc/declType/typeref cases,
+      // not via 'assignment'.rhs).
+      var Rhs:= ANode.ChildByField('rhs');
+      if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then AState.EmitRef('read', NodeText(Rhs, AState.Source), Rhs);
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;
     end;
