@@ -116,11 +116,12 @@ type
     FCbInfoInline: TCheckBox;
     FGrpDocs     : TGroupBox;
     FEdMaxReturnCases: TSpinEdit;
-    /// <summary>Resolves the drag-lint.json to read/write for max_return_cases.
+    /// <summary>Resolves the manifest file to read/write for max_return_cases.
     /// The field is PROJECT-scoped: if a project is open, targets that
-    /// project's directory + drag-lint.json (matching where the CLI/AutoDoc
-    /// resolve the local manifest); otherwise falls back to the directory of
-    /// the configured drag-lint.exe (the global/exe-dir manifest). This is
+    /// project's directory + ".drag-lint.json" (DOTTED -- matching the LOCAL
+    /// override the CLI/AutoDoc walk up from the start dir to find);
+    /// otherwise falls back to the directory of the configured drag-lint.exe
+    /// + "drag-lint.json" (UNDOTTED -- the global/exe-dir manifest). This is
     /// deliberately NOT the merged-effective-manifest path used by
     /// TManifestIO.Load -- writes here only ever touch ONE file in place.</summary>
     function ManifestPathForWrite: string;
@@ -490,8 +491,12 @@ var
   ExeDir    : string            ;
 begin
   { Project-scoped first: if a project is open, the manifest we read/write
-    lives beside its .dproj -- this matches where the CLI/AutoDoc look for a
-    LOCAL drag-lint.json and keeps the edit scoped to that project. }
+    lives beside its .dproj as the DOTTED ".drag-lint.json" -- this matches
+    the LOCAL override the CLI/AutoDoc walk up from the start dir to find
+    (see TManifestIO.Load), and keeps the edit scoped to that project. The
+    UNDOTTED "drag-lint.json" is read by the CLI ONLY as the global config
+    beside drag-lint.exe (see the no-project branch below), so it must never
+    be used for the per-project case. }
   ProjDir:= '';
   try
     if Supports(BorlandIDEServices, IOTAModuleServices, MS) and (MS <> nil) then
@@ -507,7 +512,7 @@ begin
     ProjDir:= '';
   end; // try
 
-  if ProjDir <> '' then Exit(ProjDir + 'drag-lint.json');
+  if ProjDir <> '' then Exit(ProjDir + '.drag-lint.json');
 
   { No project open: fall back to the global manifest beside drag-lint.exe. }
   ExeDir:= ExtractFilePath(FSettings.ExePath);
