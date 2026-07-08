@@ -52,7 +52,6 @@ contains
   DragLint.Plugin.EditViewNotifier in 'DragLint.Plugin.EditViewNotifier.pas',
   DragLint.Plugin.StructureCache in 'DragLint.Plugin.StructureCache.pas',
   DragLint.Plugin.StructureForm in 'DragLint.Plugin.StructureForm.pas',
-  DragLint.Plugin.OptionsFrame in 'DragLint.Plugin.OptionsFrame.pas',
   DragLint.Plugin.Options in 'DragLint.Plugin.Options.pas',
   DragLint.Plugin.ProcRun in 'DragLint.Plugin.ProcRun.pas',
   DragLint.Plugin.UsagesForm in 'DragLint.Plugin.UsagesForm.pas',

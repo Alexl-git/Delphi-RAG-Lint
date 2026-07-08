@@ -90,7 +90,6 @@
         <DCCReference Include="DragLint.Plugin.EditViewNotifier.pas"/>
         <DCCReference Include="DragLint.Plugin.StructureCache.pas"/>
         <DCCReference Include="DragLint.Plugin.StructureForm.pas"/>
-        <DCCReference Include="DragLint.Plugin.OptionsFrame.pas"/>
         <DCCReference Include="DragLint.Plugin.OptionsFrames.pas">
             <Form>DLPageFrame</Form>
             <FormType>dfm</FormType>
