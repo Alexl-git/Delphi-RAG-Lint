@@ -64,6 +64,7 @@ uses
   , DRagLint.Resolver   .TypeAt
   , DRagLint.Refactor   .Rename
   , DRagLint.Refactor   .TextEdit
+  , DRagLint.Refactor   .NamingFix
   , DRagLint.Refactor   .DocStub
   , DRagLint.Doc        .Facts
   , DRagLint.Doc        .Regions
@@ -4221,13 +4222,17 @@ end;
   quick-fix. Single source of truth for both the rules-catalog 'fixable' flag
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
   BuildAutofixEdits (kept in lockstep; a guard test asserts they agree).
-  EXCEPTION: store-backed fixes (doc-drift, missing-doc) are fixable but have NO
-  BuildAutofixEdits branch -- their edits come from TDocumenter.BuildFor via the
-  store-backed append in FinalizeAndOutput, not from the pure-text edit builder. }
+  EXCEPTION: store-backed fixes (doc-drift, missing-doc, method-pascalcase,
+  local-var-casing, const-casing) are fixable but have NO BuildAutofixEdits
+  branch -- doc-drift/missing-doc edits come from TDocumenter.BuildFor and the
+  naming re-casing edits come from DRagLint.Refactor.NamingFix.BuildNamingFix-
+  Edits (the rename engine), both via a store-backed append in FinalizeAndOutput,
+  not from the pure-text edit builder. }
 const
-  FIXABLE_RULE_IDS: array[0..10] of string = (
+  FIXABLE_RULE_IDS: array[0..13] of string = (
     'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
-    'redundant-assigned-free', 'off-by-one-count', 'doc-drift', 'missing-doc');
+    'redundant-assigned-free', 'off-by-one-count', 'doc-drift', 'missing-doc',
+    'method-pascalcase', 'local-var-casing', 'const-casing');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var
@@ -4806,6 +4811,28 @@ begin
             an insert). }
           for var MDE: TTextEdit in MDEdits do
             if MDE.Kind = tekInsertLines then Inc(FixCount);
+        end;
+      end;
+
+      { Naming re-casing autofix (phase 1): store-backed like doc-drift. Only for
+        findings whose rule is BOTH registered-fixable AND opted-in via AutoFixIds
+        (config "autofix": [...], tested via Cfg.IsAutoFix -- naming re-casing
+        rewrites call sites project-wide, so it stays opt-in rather than joining
+        the always-on doc-drift append). The synthesizer + rename engine live in
+        DRagLint.Refactor.NamingFix. }
+      var NamingTargets: TArray<TLintFinding>:= nil;
+      for F in Targeted do
+        if (SameText(F.RuleId, 'method-pascalcase') or SameText(F.RuleId, 'local-var-casing')
+            or SameText(F.RuleId, 'const-casing')) and Cfg.IsAutoFix(F.RuleId) then
+          NamingTargets:= NamingTargets + [F];
+      if Length(NamingTargets) > 0 then
+      begin
+        var NFCount: Integer;
+        var NFEdits: TArray<TTextEdit>:= DRagLint.Refactor.NamingFix.BuildNamingFixEdits(AStore, NamingTargets, Cfg.Naming, NFCount);
+        if Length(NFEdits) > 0 then
+        begin
+          Edits:= Edits + NFEdits;
+          Inc(FixCount, NFCount);
         end;
       end;
     end;
