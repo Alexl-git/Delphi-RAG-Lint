@@ -1,6 +1,16 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-08 (LATEST-30) -- **BATCH B IMPLEMENTED + FINAL-REVIEWED + merge-ready (awaiting live IDE smoke + user push). `main`=`330aabf`, 31 commits ahead of origin (`d816b23`), NOT pushed (user drives push).**
+> ## RESUME 2026-07-08 (LATEST-30) -- **BATCH B IMPLEMENTED + FINAL-REVIEWED + 1 LIVE-SMOKE BUG FIXED (EResNotFound on the Options page). Merge-ready, awaiting the rest of live IDE smoke + user push. `main`=`21c7393`, 34 commits ahead of origin (`d816b23`), NOT pushed (user drives push).**
+>
+> **LIVE-SMOKE FIX #1 (`c5e0933` source + `21c7393` BPL):** opening Tools->Options->Third Party->drag-lint->General
+> raised `EResNotFound: Resource TDLGeneralOptionsFrame not found`. Root cause (verified vs VCL/RTL source):
+> `TCustomFrame.Create` streams a per-class .dfm via `InitInheritedComponent` and RAISES when a code-built frame
+> has no .dfm; unlike `TForm` (which has `CreateNew` to skip streaming), `TCustomFrame` has none. FIX = a minimal
+> `DragLint.Plugin.OptionsFrames.dfm` for the BASE class `TDLPageFrame` + `{$R *.dfm}` (+ .dproj Form wiring + .dpk
+> suffix); the ancestor-walk OR means one base resource covers all four subclasses. Mirrors the working code-built
+> `TDragLintDockFrame`. Resource confirmed linked into the rebuilt BPL. **USER: re-open the four Options pages to
+> confirm they render, then continue the checklist.**
+>
 >
 > **STATUS:** Batch B (IDE config consolidation) is DONE. All 9 plan tasks executed via
 > `superpowers:subagent-driven-development` (fresh implementer + spec/quality review per task); every task
