@@ -91,7 +91,11 @@
         <DCCReference Include="DragLint.Plugin.StructureCache.pas"/>
         <DCCReference Include="DragLint.Plugin.StructureForm.pas"/>
         <DCCReference Include="DragLint.Plugin.OptionsFrame.pas"/>
-        <DCCReference Include="DragLint.Plugin.OptionsFrames.pas"/>
+        <DCCReference Include="DragLint.Plugin.OptionsFrames.pas">
+            <Form>DLPageFrame</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
         <DCCReference Include="DragLint.Plugin.Options.pas"/>
         <DCCReference Include="DragLint.Plugin.ProcRun.pas"/>
         <DCCReference Include="DragLint.Plugin.UsagesForm.pas"/>

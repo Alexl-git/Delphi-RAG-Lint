@@ -167,6 +167,16 @@ uses
   DragLint.Plugin.ExeResolver
   ;
 
+{ Minimal .dfm resource for the BASE frame class (TDLPageFrame). TCustomFrame.Create
+  streams a per-class resource via InitInheritedComponent(Self, TFrame) and raises
+  EResNotFound when none exists (frames, unlike forms, have no CreateNew to skip
+  streaming). The ancestor walk succeeds as soon as ANY class in the chain has a
+  resource, so a single TDLPageFrame resource covers all four concrete subclasses
+  (TDLGeneralOptionsFrame etc.). Mirrors the working code-built TDragLintDockFrame,
+  which ships the same minimal .dfm. The frame's real controls are still code-built
+  in BuildControls; the .dfm only supplies the streamable root object. }
+{$R *.dfm}
+
 { ==================== TDLPageFrame ==================== }
 
 constructor TDLPageFrame.Create(AOwner: TComponent);
