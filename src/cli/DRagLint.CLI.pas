@@ -8063,7 +8063,55 @@ begin
 
         Writeln(Format('## Cycle %d: %s', [i + 1, string.Join(' <-> ', Comp)]));
         Writeln('');
-        if not HasIntf then begin Writeln('Status: **implementation-only** (legal in Delphi, low impact). ' + 'Skip unless it hurts build times.'); Writeln(''); Continue; end;
+        if not HasIntf then
+        begin
+          { Implementation-only cycle: legal in Delphi and low-impact (no
+            interface-recompile blast radius), so it is OPTIONAL to fix -- but
+            still emit the how, in case the user wants a clean acyclic graph.
+            The interface-edge analysis below doesn't apply (there are none), so
+            report the implementation-section edges from Adj instead. }
+          Writeln('Status: **implementation-only** (legal in Delphi, low ' +
+            'impact -- no interface-recompile blast radius). Optional to fix; ' +
+            'the steps below are for when you want a fully acyclic uses-graph.');
+          Writeln('');
+          Writeln('Files:');
+          for var A in Comp do begin var P: string:= ''; UnitFile.TryGetValue(A, P); Writeln(Format('- `%s` -> `%s`', [A, P])); end;
+          Writeln('');
+          Writeln('### Why it cycles (implementation-section edges)');
+          for var A in Comp do
+          begin
+            var NbrL: TList<string>;
+            if not Adj.TryGetValue(A, NbrL) then Continue;
+            for var B in Comp do
+              if (A <> B) and NbrL.Contains(B) then
+              begin
+                var PA: string:= ''; UnitFile.TryGetValue(A, PA);
+                Writeln(Format('- `%s` uses `%s` in its **implementation** ' +
+                  'section (`%s`).', [A, B, ExtractFileName(PA)]));
+              end;
+          end;
+          Writeln('');
+          Writeln('### Recommended fix (optional)');
+          Writeln('An implementation-only cycle already compiles and does not ' +
+            'trigger cascading recompiles, so fixing it is a code-hygiene ' +
+            'choice, not a correctness one. To remove it:');
+          Writeln('');
+          Writeln('1. Pick the edge that is easiest to cut (the smaller / more ' +
+            'incidental dependency of the two above).');
+          Writeln('2. In that unit, see what it actually calls from its cycle ' +
+            'partner (open the `.pas`, look at the implementation-section uses).');
+          Writeln('3. Either **extract** the shared routine(s)/type(s) into a ' +
+            'new leaf unit both can use (it must use NEITHER unit in the cycle), ' +
+            'or **inline / relocate** the small piece so the `uses` line is no ' +
+            'longer needed.');
+          Writeln('4. Remove the now-unneeded unit from that implementation ' +
+            'uses clause.');
+          Writeln('5. Build.');
+          Writeln(Format('6. **Verify:** `drag-lint cycles --db <db>` -- cycle ' +
+            '%d should be gone.', [i + 1]));
+          Writeln('');
+          Continue;
+        end;
 
         Writeln('Files:');
         for var A in Comp do begin var P: string:= ''; UnitFile.TryGetValue(A, P); Writeln(Format('- `%s` -> `%s`', [A, P])); end;
