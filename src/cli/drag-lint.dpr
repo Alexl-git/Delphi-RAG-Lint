@@ -69,6 +69,7 @@ uses
   DRagLint.Index.Drift in '..\index\DRagLint.Index.Drift.pas',
   DRagLint.Index.Coverage in '..\index\DRagLint.Index.Coverage.pas',
   DRagLint.Report.Deps in '..\report\DRagLint.Report.Deps.pas',
+  DRagLint.Report.RCallTree in '..\report\DRagLint.Report.RCallTree.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin
