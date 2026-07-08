@@ -150,7 +150,14 @@ drag-lint cycles --db myapp.sqlite --plan > cycle-plan.md
 Per cycle it gives the files, the load-bearing symbols (use site **and**
 declaration site, with line numbers), an auto-classified fix (*extract the shared
 contract*, or *invert the dependency* for layering inversions), numbered steps,
-and a verify command. Build after each cycle and re-run `cycles` to confirm. Then propose and apply the
+and a verify command. Build after each cycle and re-run `cycles` to confirm.
+
+> **Worked example:** [docs/examples/circular-uses-demo/](docs/examples/circular-uses-demo/)
+> is a tiny compiling two-unit cycle plus the exact `--edges` / `--causes` /
+> `--plan` output drag-lint produces for it. (`circular-uses` is also a built-in
+> lint rule, **on by default**, so `lint-project` flags cycles automatically.)
+
+Then propose and apply the
 cleanup, **verified by the compiler** so it never breaks the build:
 
 ```
