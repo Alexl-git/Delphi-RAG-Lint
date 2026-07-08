@@ -22,18 +22,11 @@ unit DragLint.Plugin.DbResolver;
    Duplicates across these sources are removed (case-insensitive). Missing
    files are filtered out. Result is always non-nil but may be empty.
 
-   TODO (2026-07-08, Code-Elements-0 report): the primary DB is derived ONLY
-   from the settings template ('<projdir>\drag-lint.sqlite'). A project indexed
-   to the PROJECT-NAME file instead (e.g. DataCopy\DataCopy.sqlite, which the
-   `index --project` default and older workflows produce) is NOT found -> the
-   plugin falls back to the workspace/global DB -> `outline` returns 0 symbols ->
-   the Structure tree shows "Code Elements (0)" even though diagnostics (which
-   come from the LSP server, not `outline`) still populate. FIX: in
-   PrimaryDbForProject / the auto-discovery step, ALSO probe
-   '<projdir>\<projname>.sqlite' (ChangeFileExt of the .dproj) when the
-   template-named file is missing, and prefer whichever exists + is non-empty.
-   Workaround until then: copy/rename the index to '<projdir>\drag-lint.sqlite'
-   (matching the template), or add it to Settings.IndexDbs. *)
+   v0.95+ (Code-Elements-0 fix): the primary DB pick now also probes
+   '<projdir>\<projname>.sqlite' (ChangeFileExt of the .dproj) via
+   PickProjectDb (DRagLint.Plugin.DbProbe), so a project indexed to the
+   PROJECT-NAME file instead of the settings-template file is still found --
+   see that unit's DocInsight for the exact resolution order. *)
 
 interface
 
@@ -46,6 +39,7 @@ uses
   , DragLint.Plugin.Telemetry
   , { TEMP debug telemetry }
     DragLint.Plugin.Settings
+  , DRagLint.Plugin.DbProbe
   ;
 
 { v0.46: returns the manifest section DB whose include folder is an ancestor of
@@ -430,6 +424,13 @@ begin
     SetLength(Candidates, Length(Candidates) + 1);
     Candidates[High(Candidates)]:= ResolveDbPath(CANONICAL_TEMPLATE, Dir);
 
+    { v0.95+ Code-Elements-0 fix: also try the project-name file at this
+      level (<dirname>.sqlite), matching PickProjectDb's by-name candidate
+      so an ancestor DB named after its own directory is found on the walk-up. }
+    SetLength(Candidates, Length(Candidates) + 1);
+    Candidates[High(Candidates)]:= IncludeTrailingPathDelimiter(Dir)
+      + ExtractFileName(ExcludeTrailingPathDelimiter(Dir)) + '.sqlite';
+
     for C in Candidates do
       if (C <> '') and TFile.Exists(C) then Exit(C);
 
@@ -460,9 +461,9 @@ begin
       SB.AppendLine('GetActiveProjectFilePath fallback: "' + FallbackProj + '"');
       ProjPath:= FallbackProj;
     end;
-    PrimaryDb:= PrimaryDbForProject(ProjPath, ASettings);
+    PrimaryDb:= PickProjectDb(ProjPath, ASettings); // template-first, then <projname>.sqlite
     SB.AppendLine('PrimaryDb: "' + PrimaryDb + '" (exists=' + BoolToStr(TFile.Exists(PrimaryDb), True) + ')');
-    if (not TFile.Exists(PrimaryDb)) and (ProjPath <> '') then
+    if (PrimaryDb = '') and (ProjPath <> '') then
     begin
       AncestorDb:= FindAncestorDb(ExtractFilePath(ProjPath), ASettings);
       SB.AppendLine('FindAncestorDb walking up: "' + AncestorDb + '"');
@@ -518,16 +519,17 @@ begin
     Exit;
   end;
 
-  { Try the template-resolved primary DB next to the .dproj first.
-    v0.40.5: if the configured template doesn't yield an existing file,
-    walk up the directory tree from the .dproj's folder. FindAncestorDb
-    tries both the configured template AND the canonical default at
-    each level, so legacy '.drag-lint.sqlite' configs still find the
-    user's actual 'drag-lint.sqlite' wherever it lives. }
+  { Try the template-resolved primary DB next to the .dproj first, then the
+    project-name file (<projdir>\<projname>.sqlite) -- see PickProjectDb.
+    v0.40.5: if neither yields an existing file, walk up the directory tree
+    from the .dproj's folder. FindAncestorDb tries the configured template,
+    the canonical default, AND the project-name file at each level, so legacy
+    '.drag-lint.sqlite' configs still find the user's actual 'drag-lint.sqlite'
+    or '<dirname>.sqlite' wherever it lives. }
   if ProjPath <> '' then
   begin
-    PrimaryDb:= PrimaryDbForProject(ProjPath, ASettings);
-    if TFile.Exists(PrimaryDb) then AddUnique(Result, PrimaryDb)
+    PrimaryDb:= PickProjectDb(ProjPath, ASettings); // template-first, then <projname>.sqlite
+    if PrimaryDb <> '' then AddUnique(Result, PrimaryDb)
     else
     begin
       ProjDir:= ExtractFilePath(ProjPath);

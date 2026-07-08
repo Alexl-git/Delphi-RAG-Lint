@@ -105,6 +105,7 @@
         <DCCReference Include="DragLint.Plugin.AutoComplete.pas"/>
         <DCCReference Include="DragLint.Plugin.Telemetry.pas"/>
         <DCCReference Include="DragLint.Plugin.DbResolver.pas"/>
+        <DCCReference Include="DRagLint.Plugin.DbProbe.pas"/>
         <DCCReference Include="DragLint.Plugin.OpenSourceServer.pas"/>
         <DCCReference Include="DragLint.Plugin.DockForm.pas">
             <Form>DragLintDockFrame</Form>
