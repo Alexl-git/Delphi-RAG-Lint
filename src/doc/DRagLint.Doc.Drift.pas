@@ -396,71 +396,81 @@ begin
     // carries no position).
     if ADoc.StartLine > 0 then DocLine:= ADoc.StartLine else DocLine:= ASym.StartLine;
 
-    Sig       := EffectiveSignature(AStore, ASym);
-    ParamList := ExtractParamList(Sig);
-    SigNames  := ParseParamNames(ParamList);
-    Groups    := SplitParamGroups(ParamList);
-    RetType   := ParseReturnType(Sig);
-
     // Body facts (for the exception-raised check and the fresh facts-block).
     Facts:= TDocFactsBuilder.Build(AStore, ASym);
 
-    // HasReturn: index-grounded first (the indexed Signature has no leading
-    // 'function' keyword, so SignatureHasReturn misses it and class functions
-    // carry skMethod). Facts.ReturnType is the truth; keep the sig/kind checks as
-    // a fallback. Same policy as TDocumenter.BuildFor.
-    HasReturn:= (Facts.ReturnType <> '')
-                or (RetType <> '')
-                or SignatureHasReturn(Sig)
-                or (ASym.Kind in [skFunction, skConstructor]);
-
-    // --- 1. ddParamRenamedOrRemoved: a documented <param> not in the sig. ------
-    for DP in ADoc.Params do
-      if (Trim(DP.Name) <> '') and (not NameInArray(DP.Name, SigNames)) then
-        Findings.Add(MakeFinding(ddParamRenamedOrRemoved,
-          Format('documented param "%s" not in signature', [DP.Name]), False, DocLine));
-
-    // --- 2. ddParamMissing: a sig param with no <param> tag. FIXABLE. ----------
-    for N in SigNames do
+    // Findings 1-6 are param/return drift and make sense ONLY for a routine.
+    // On a class/interface/record/type-alias/const/var/property/field symbol,
+    // EffectiveSignature returns the ancestor/interface heading (e.g. '(TFrame)'
+    // or '(TInterfacedObject, ISomeIntf)'), which ExtractParamList/ParseParamNames
+    // would otherwise mis-parse as a parameter list -- spuriously firing
+    // ddParamMissing per ancestor/interface name. Gate the whole block (both the
+    // sig/param/return computation and the finding emission) on routine kinds.
+    if ASym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor] then
     begin
-      var Documented: Boolean:= False;
+      Sig       := EffectiveSignature(AStore, ASym);
+      ParamList := ExtractParamList(Sig);
+      SigNames  := ParseParamNames(ParamList);
+      Groups    := SplitParamGroups(ParamList);
+      RetType   := ParseReturnType(Sig);
+
+      // HasReturn: index-grounded first (the indexed Signature has no leading
+      // 'function' keyword, so SignatureHasReturn misses it and class functions
+      // carry skMethod). Facts.ReturnType is the truth; keep the sig/kind checks
+      // as a fallback. Same policy as TDocumenter.BuildFor.
+      HasReturn:= (Facts.ReturnType <> '')
+                  or (RetType <> '')
+                  or SignatureHasReturn(Sig)
+                  or (ASym.Kind in [skFunction, skConstructor]);
+
+      // --- 1. ddParamRenamedOrRemoved: a documented <param> not in the sig. ----
       for DP in ADoc.Params do
-        if SameText(DP.Name, N) then begin Documented:= True; Break; end;
-      if not Documented then
-        Findings.Add(MakeFinding(ddParamMissing,
-          Format('signature param "%s" has no <param> tag', [N]), True, DocLine));
+        if (Trim(DP.Name) <> '') and (not NameInArray(DP.Name, SigNames)) then
+          Findings.Add(MakeFinding(ddParamRenamedOrRemoved,
+            Format('documented param "%s" not in signature', [DP.Name]), False, DocLine));
+
+      // --- 2. ddParamMissing: a sig param with no <param> tag. FIXABLE. --------
+      for N in SigNames do
+      begin
+        var Documented: Boolean:= False;
+        for DP in ADoc.Params do
+          if SameText(DP.Name, N) then begin Documented:= True; Break; end;
+        if not Documented then
+          Findings.Add(MakeFinding(ddParamMissing,
+            Format('signature param "%s" has no <param> tag', [N]), True, DocLine));
+      end;
+
+      // --- 3. ddParamVolatileMode: var/out param documented as input-only. ----
+      // BOUNDED: fires ONLY when the param's ';'-group is var/out AND the <param>
+      // desc's FIRST word is 'input'/'in'. Any other desc leaves it silent.
+      for var GIdx:= 0 to High(Groups) do
+        if GroupIsVolatile(Groups[GIdx]) then
+          for var GN in GroupParamNames(Groups[GIdx]) do
+            for DP in ADoc.Params do
+              if SameText(DP.Name, GN) and DescReadsInputOnly(DP.Desc) then
+                Findings.Add(MakeFinding(ddParamVolatileMode,
+                  Format('var/out param "%s" documented as input-only', [GN]), False, DocLine));
+
+      // --- 4. ddReturnsButNoValue: <returns> on a procedure. -------------------
+      if (Trim(ADoc.ReturnsText) <> '') and (not HasReturn) then
+        Findings.Add(MakeFinding(ddReturnsButNoValue,
+          'documented <returns> but the routine returns no value', False, DocLine));
+
+      // --- 5. ddValueButNoReturns: a function with no <returns>. FIXABLE. ------
+      if HasReturn and (Trim(ADoc.ReturnsText) = '') then
+        Findings.Add(MakeFinding(ddValueButNoReturns,
+          'function returns a value but has no <returns> tag', True, DocLine));
+
+      // --- 6. ddReturnTypeChanged: a <c>Type</c> in <returns> != the sig type. -
+      // BOUNDED: only an EXACT <c>...</c> token that is NOT the actual return
+      // type fires. Free-text return prose (no <c> markup) never triggers this.
+      if HasReturn and (RetType <> '') and (Trim(ADoc.ReturnsText) <> '') then
+        for var CTok in ExtractCTokens(ADoc.ReturnsText) do
+          if not SameText(CTok, RetType) then
+            Findings.Add(MakeFinding(ddReturnTypeChanged,
+              Format('<returns> names type "%s" but the signature returns "%s"', [CTok, RetType]),
+              False, DocLine));
     end;
-
-    // --- 3. ddParamVolatileMode: var/out param documented as input-only. ------
-    // BOUNDED: fires ONLY when the param's ';'-group is var/out AND the <param>
-    // desc's FIRST word is 'input'/'in'. Any other desc leaves it silent.
-    for var GIdx:= 0 to High(Groups) do
-      if GroupIsVolatile(Groups[GIdx]) then
-        for var GN in GroupParamNames(Groups[GIdx]) do
-          for DP in ADoc.Params do
-            if SameText(DP.Name, GN) and DescReadsInputOnly(DP.Desc) then
-              Findings.Add(MakeFinding(ddParamVolatileMode,
-                Format('var/out param "%s" documented as input-only', [GN]), False, DocLine));
-
-    // --- 4. ddReturnsButNoValue: <returns> on a procedure. --------------------
-    if (Trim(ADoc.ReturnsText) <> '') and (not HasReturn) then
-      Findings.Add(MakeFinding(ddReturnsButNoValue,
-        'documented <returns> but the routine returns no value', False, DocLine));
-
-    // --- 5. ddValueButNoReturns: a function with no <returns>. FIXABLE. --------
-    if HasReturn and (Trim(ADoc.ReturnsText) = '') then
-      Findings.Add(MakeFinding(ddValueButNoReturns,
-        'function returns a value but has no <returns> tag', True, DocLine));
-
-    // --- 6. ddReturnTypeChanged: a <c>Type</c> in <returns> != the sig type. --
-    // BOUNDED: only an EXACT <c>...</c> token that is NOT the actual return type
-    // fires. Free-text return prose (no <c> markup) never triggers this.
-    if HasReturn and (RetType <> '') and (Trim(ADoc.ReturnsText) <> '') then
-      for var CTok in ExtractCTokens(ADoc.ReturnsText) do
-        if not SameText(CTok, RetType) then
-          Findings.Add(MakeFinding(ddReturnTypeChanged,
-            Format('<returns> names type "%s" but the signature returns "%s"', [CTok, RetType]),
-            False, DocLine));
 
     // --- 7. ddExceptionNotRaised: <exception cref> not in the body's Raises. ---
     for DE in ADoc.Exceptions do
