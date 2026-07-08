@@ -1,6 +1,6 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-08 (LATEST-35) -- **Batch D (10 tasks: 3 engine bugfixes A/B/C + naming autofix phase 2 (prefix-adding) + 5 IDE items) all committed to `main`, NOT yet released/pushed/version-bumped (user drives that). Win32 BPL rebuilt carrying Tasks 5-9 (`BUILD_EXITCODE=0`); Win64 CLI confirmed current (rebuilt to be safe). Full battery (10 scripts) ALL PASS, no regressions. LIVE-IDE SMOKE still pending (user) -- see checklist at the end of this block.**
+> ## RESUME 2026-07-08 (LATEST-35) -- **Batch D RELEASED as v0.97.0-alpha (10 tasks: 3 engine bugfixes A/B/C + naming autofix phase 2 (prefix-adding) + 5 IDE items). Full battery (10 scripts) GREEN on the Release exe; pushed to main + tagged v0.97.0-alpha; GH release cut w/ both CLI zips + the Win32 BPL. Also this release: README notes settings live in Tools->Options (+ presets combo + reverse-calltree menu); AI docs (AI-USAGE + AI-INDEX-FIRST) FULL-SWEPT to the real 60-verb set + the exact 15 MCP tools + a "MCP is a curated subset, newer report verbs are CLI-only" note + the naming-autofix opt-in workflow. LIVE-IDE SMOKE still pending (user): T7 presets, T8 reverse-calltree right-click, T9 dock focus (PLAUSIBLE root cause -- needs confirm), T6 max_return_cases read-back -- see checklist at the end of this block.**
 >
 > **SHIPPED to main this session (Batch D, untagged, rides the next version bump):**
 > - **(A) FIXED -- `TRenameRefactoring.Build` now renames a method's implementation

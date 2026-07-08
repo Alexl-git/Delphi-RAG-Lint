@@ -93,6 +93,118 @@ You can drive it two ways, both backed by the same engine:
 
 Add `--json` to most commands for machine-readable output.
 
+### 2a. Full verb reference (grouped)
+
+Every verb below is a real `drag-lint` subcommand. Most take `--db <file>`
+(repeatable) and `--json`; pass `--help` for the exact flags. This is the
+canonical list an AI should reach for; the pure-diagnostic verbs are broken out
+in 2b.
+
+**Query / search (find symbols, callers, text)**
+| Verb | What it does |
+|------|--------------|
+| `query --name X` / `query --qname U.T.M` | locate a symbol (kind, signature, section, `usable_from_other_units`); auto-fuzzy on a miss |
+| `query --text "<phrase>"` | full-text search over `.pas`/`.dfm`/`.sql` constants: messages, DFM captions, SQL exception text (`--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N`) |
+| `query find-callers --name X` | callers of a symbol (`--context N`; `--resolved` for precise call-edge callers) |
+| `query find` | doc-driven find (`--doc-tag`, `--doc-contains`, `--no-docs`, `--kind`, `--public`) |
+| `query ancestors --name T` | transitive class/interface hierarchy (`--of <ancestor>`) |
+| `query typecat --name T` | resolve a type's category (float/string/class/interface/...) |
+| `query hints` | stored lint hints (`--name <code>`, `--rule <severity>`) |
+| `resolve-uses --name X` | which unit to add to `uses` (won't suggest implementation-only symbols) |
+| `find-unit --name X --in F` | add the declaring unit to F's `uses` clause |
+| `usages --name X` | every read/write/use of X (`--width narrow\|wide\|very-wide`) |
+| `outline --file F.pas` | all symbols declared in one file |
+| `surface --qname U.T` | class surface / member signatures (`--include-impl`, `--all-visibility`) |
+| `slice --qname U.T.M` | one symbol's source body |
+| `typeat F:L:C` | resolve the identifier at a cursor position |
+| `hover --qname U.T.M` | hover card (`--format plain\|md\|json`) |
+| `helpers-of T` | record/class helper edges targeting type T |
+| `top` | most-depended-on symbols (`--by fanin`, `--limit N`) |
+
+**Analysis / reports (call graph, deps, cycles, impact)**
+| Verb | What it does |
+|------|--------------|
+| `context --task "verb qname"` | curated context bundle (doc + surface + body + callers); `--full-surface` only for form/DFM work |
+| `impact --qname U.T.M` | transitive caller blast radius (`--depth N`) |
+| `wiring --qname IIntf\|TForm` | Spring4D DI edges + DFM event handlers (`--coverage` for unresolved DI registrations) |
+| `find-callees --qname U.T.M` | resolved outgoing calls of a routine |
+| `call-path --from A --to B` | shortest resolved call path A -> ... -> B (`--max-depth N`; exit 1 = no path) |
+| `callgraph --qname X` | N-deep resolved call tree (`--direction callers\|callees`, `--depth N`; cycle-guarded) |
+| `reverse-calltree --qname X` | N-deep *upward* "who calls X" tree with call sites (`--depth N`, `--format text\|json\|dot\|mermaid`) |
+| `cycles` | circular unit deps (`--edges`, `--causes`, `--plan` for a refactoring playbook) |
+| `uses-report --output f.csv` | full uses-graph rollup to CSV (`--depth N`, `--include-external`, `--all-sources`) |
+| `deps-report` | third-party dependency rollup (`--edges`, `--format text\|json\|csv`) |
+| `graph --format dot\|mermaid` | export the symbol/uses graph for a viewer (`--name <root-substr>`) |
+| `schema` | live index schema: version + tables + columns + row counts (read-only) |
+| `find-deadcode` | unreferenced symbols (`--kind`, `--include-private`) |
+| `doc-drift --qname X` | doc-vs-code drift findings for one symbol |
+| `top` | fan-in ranking (also above) |
+| `diff --db old --db new` | symbol-level diff between two indexes |
+
+**Refactor / fix (write source; dry-run unless `--apply`)**
+| Verb | What it does |
+|------|--------------|
+| `rename --kind symbol --name QName --to New` | cross-unit rename (interface + impl header + call sites) |
+| `rename --kind param --file F --line L --col C --to New` | routine-local param/var rename |
+| `safe-delete --name QName` | delete a symbol iff it has zero references |
+| `extract-method --file F --from-line L1 --to-line L2 --name N` | pull a statement run into a new method |
+| `create-enum-helper --qname TEnum` | generate a Byte-family record helper for an enum (`--methods`, `--tostring rtti\|case`) |
+| `uses-audit <unit.pas>` | interface->impl `uses` moves + unused units (report only) |
+| `uses-fix <unit.pas> --project P` | compiler-verified `uses` cleanup (`--remove-unused`) |
+| `format <file>` | reformat via YADF (`--yadf-path`) |
+
+**Docs (DocInsight generation)**
+| Verb | What it does |
+|------|--------------|
+| `document --qname U.T.M` | generate/repair one managed DocInsight comment |
+| `document --unit F` / `--project P` | document every public decl in a unit/project (`--stubs`, `--seealso`, `--since`) |
+| `document-all` | document every public decl in every indexed unit |
+| `generate-docs --qname U.T.M` | emit a doc comment (`--format xmldoc\|pasdoc`) |
+| `generate-test --qname U.T.M` | scaffold a DUnitX/DUnit test (`--framework dunitx\|dunit`) |
+
+**Lint**
+| Verb | What it does |
+|------|--------------|
+| `rules` | list every lint rule (`--category`, `--json`; marks `fixable`) |
+| `lint <path>` | lint a file/dir (`--rule`, `--disable`, `--fix`; see 4b) |
+| `lint --project P.dproj` | project-level rules (e.g. `unit-not-in-dpr`) |
+| `lint-project --db DB` | index-wide rules (god-class, circular-uses, layering-violation, ...) |
+| `lint-all` | lint everything indexed (`--output report.txt`, `--quiet`) |
+| `check-unit <unit.pas>` | in-memory semantic check of one unit (`--project`, `--platform`, `--resolve-uses`) |
+| `compile-check <target>` | real compiler diagnostics for a `.dproj`/`.pas` |
+| `check-ast <file>` | syntax check without the compiler (`(line,col): error syntax-error`) |
+| `todos [path]` | scan TODO/FIXME/HACK/XXX/REVIEW/NOTE |
+
+**Index / DB management**
+| Verb | What it does |
+|------|--------------|
+| `index <path>` | build/refresh an index (`--project`, `--scan-libraries`, `--watch`, `--deep`) |
+| `index --all` | build every DB in the manifest (`--only`, `--platform`, `--jobs`, `--dry-run`) |
+| `resolve-dbs` | print the consumer DB list a query/lsp/serve would use (`--platform`) |
+| `reconcile-project <App.dproj>` | sync project member list; flag stale used units (`--apply`) |
+| `library-drift` | registry roots missing from the library index (exit 2 = drift) |
+| `workspace index\|status\|add` | multi-project workspace operations |
+| `forms-csv --project P --db DB` | test-helper form-navigation CSV, one row per form |
+| `import-log <logfile>` | ingest a dcc/msbuild log into the index |
+| `export enums\|obsidian` | export enums (firebird-sql/csv/json/delphi-const) or an Obsidian vault |
+| `top` / `schema` / `diff` | (also above) index introspection |
+
+**Servers**
+| Verb | What it does |
+|------|--------------|
+| `serve --db DB` | MCP stdio server (JSON-RPC 2.0) -- see section 3 |
+| `lsp --db DB` | LSP stdio server |
+
+### 2b. Advanced / diagnostic verbs
+
+These exist for debugging drag-lint itself or one-off resolver introspection.
+An AI rarely needs them; listed so the set is complete, not silently omitted:
+`contrast-selftest`, `selftest`, `bench-context`, `dump-refs`,
+`dump-call-edges`, `ambiguous-calls`, `purge-locals`, `preprocess-file`,
+`pp-profile`, `dump-pp-lex`, `dump-pp-eval`, `fb-snapshot`, `link-orm`,
+`ghost-check`, `ghost-recover`, `scan-all` (from-scratch rebuild driven by
+`.drag-lint.json`).
+
 ---
 
 ## 3. MCP mode (structured tools)
@@ -101,21 +213,34 @@ Start the server (one per index):
 ```
 drag-lint serve --db C:\path\to\project\drag-lint.sqlite
 ```
-It speaks **JSON-RPC 2.0 over stdio**. Tools exposed:
+It speaks **JSON-RPC 2.0 over stdio**. The MCP surface is a **curated subset**
+of the CLI -- exactly **15 tools**:
 
 | Tool | Purpose |
 |------|---------|
 | `find_symbol` | locate a symbol by name/qname |
 | `find_callers` | callers of a symbol |
-| `get_context_bundle` | curated minimal context for a symbol (`full_surface` optional) |
-| `get_surface` | class surface (signatures) |
-| `get_slice` | a symbol's source body |
+| `find_by_doc_tag` | symbols carrying a given doc tag |
+| `find_undocumented` | public symbols with no doc comment |
+| `get_symbol_doc` | doc comment for a symbol |
 | `get_impact` | transitive caller impact |
 | `get_wiring` | Spring4D DI edges (impl class + lifetime + resolve-sites) and DFM event handlers, by interface or form name |
-| `get_symbol_doc` | doc comment for a symbol |
+| `get_surface` | class surface (signatures) |
+| `get_slice` | a symbol's source body |
+| `get_context_bundle` | curated minimal context for a symbol (`full_surface` optional) |
 | `get_type_at_position` | resolve identifier at file:line:col |
-| `find_by_doc_tag` / `find_undocumented` | doc-driven queries |
+| `lint` | run lint over a file/dir/project |
 | `rename_symbol` | rename across the index (writes files) |
+| `run_ast_checks` | syntax check without the compiler |
+| `run_compile_check` | real compiler diagnostics |
+
+> **MCP is a subset -- shell out to the CLI for the rest.** The newer
+> analysis/report and docs verbs are **CLI-only**, *not* exposed as MCP tools:
+> `reverse-calltree`, `deps-report`, `schema`, `callgraph`, `find-callees`,
+> `call-path`, `cycles`, `uses-report`, `create-enum-helper`,
+> `document` / `document-all`, and everything in 2a/2b beyond the 15 above. An
+> MCP client that needs one of these should run `drag-lint <verb> ... --db <DB>`
+> directly and read stdout.
 
 Example MCP client config (Claude Desktop / Cursor style):
 ```json
@@ -167,6 +292,35 @@ assumes `for I := 0 to List.Count do` is a bug and rewrites the bound to
 `... - 1`. Its fix is still applied by `--fix`, but the `--json` output flags it
 `"risky": true` and the text preview prints a `[risky]` note. Review a risky fix
 before trusting it in a batch apply — a deliberately-inclusive loop would break.
+
+### Naming-convention autofixes (opt-in, off by default)
+
+The naming rules can also rewrite the offending identifier -- and every reference
+to it -- through the rename engine. These are **opt-in**: a naming rule
+participates in `--fix` only when its id is listed in the `autofix` array of
+`drag-lint-lint.json`. All are **off by default** and **dry-run unless
+`--apply`** (like every other fix). Two phases:
+
+- **Phase 1 -- case-only (safe).** `method-pascalcase`, `local-var-casing`,
+  `const-casing`. Re-cases the identifier only (`runjob` -> `RunJob`); no new
+  characters. Every synthesized rename is collision-checked and skipped if
+  unsafe. (Shipped v0.96 -- see the CHANGELOG.)
+- **Phase 2 -- prefix-adding.** `field-name-prefix`, `param-name-prefix`,
+  `type-name-prefix`. Adds the missing convention prefix (`client -> FClient`,
+  param `x -> pX`, `myclass -> TMyClass`). (Shipped v0.97.)
+  - `param-name-prefix` is **fully safe**: routine-local scope, pure-AST, with a
+    collision guard that skips if the prefixed name already exists in scope.
+  - **Caveat -- review the diff for `field-name-prefix` / `type-name-prefix`.**
+    These rely on the reference index, which does **not yet** capture
+    `Self.`-qualified field uses or type-annotation references, so those
+    occurrences may be left unrenamed. `--fix` on either rule emits a **stderr
+    warning** telling you to review the resulting diff before committing.
+
+Enable an autofix by adding its rule id, e.g. in `drag-lint-lint.json`:
+```json
+{ "autofix": ["method-pascalcase", "param-name-prefix"] }
+```
+See the **v0.96 / v0.97** CHANGELOG entries for the full behaviour notes.
 
 ---
 

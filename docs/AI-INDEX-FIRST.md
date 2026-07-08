@@ -32,10 +32,29 @@ text-level matches, non-Delphi files, or code no index covers.
 | Everywhere `X` is **used** (vars/props too) | `drag-lint usages --name X --width narrow --db <db>` |
 | Blast radius if `X` changes/deleted | `drag-lint usages --name X --width very-wide --db <db>` (or `impact --qname`) |
 | Understand/modify `X` (context bundle) | `drag-lint context --task "modify Unit.TType.Method" --db <db> --format markdown` |
+| What does `X` call (outgoing) | `drag-lint find-callees --qname Unit.TType.Method --db <db>` |
+| N-deep call tree from `X` | `drag-lint callgraph --qname X [--direction callers\|callees] [--depth N] --db <db>` |
+| Circular unit deps (+ fix plan) | `drag-lint cycles --db <db> [--edges] [--causes] [--plan]` |
+| Third-party dependency rollup | `drag-lint deps-report --db <db> [--edges] [--format text\|json\|csv]` |
+| Full-text: message / DFM caption / SQL text | `drag-lint query --text "<phrase>" [--source pas\|dfm\|sql] --db <db>` |
+| What's in the index (schema/tables) | `drag-lint schema --db <db> [--format json]` |
 | Fuzzy / forgot exact name | `drag-lint query --name <approx> --db <db>` (auto fuzzy on a miss) |
 
 `--format json` for machine parsing. A class qname is `Unit.TType`; a member is
 `Unit.TType.Member`.
+
+### Fixing, not just finding
+- **Rename / delete / extract** (writes source, dry-run unless `--apply`):
+  `drag-lint rename --kind symbol --name Unit.TType.Old --to New --db <db>`,
+  `drag-lint safe-delete --name Unit.TType.X --db <db>`.
+- **Lint + autofix**: `drag-lint lint <path> --fix [--apply]`. Naming autofixes
+  (re-casing + prefixing, e.g. `client -> FClient`) are **opt-in** via the
+  `autofix` id list in `drag-lint-lint.json` and **off by default** -- see
+  `docs/AI-USAGE.md` section 4b for the safe/caveat details.
+
+Analysis/report verbs above (`cycles`, `deps-report`, `schema`, `callgraph`,
+`reverse-calltree`, ...) are **CLI-only** -- not exposed as MCP tools; shell out
+to the CLI for them.
 
 ### Why
 - **Understand/modify a symbol → context bundle, not whole files.** `drag-lint

@@ -355,7 +355,7 @@ Drop custom `.scm` + `.json` pairs in the `rules/` directory; see
 Show Signature Help, Run Diagnostics, Rename Symbol, Compile & Diagnose, Import Build Log,
 Format with YADF, Show Structure, Run AST Checks, Find Usages, Symbol Search, dockable 
 panels (Structure / Usages / Graph), Generate Test Helper CSV..., 
-**Uses & Dependencies** submenu (cycles, uses-audit, uses-fix, reconcile, wiring, impact), 
+**Uses & Dependencies** submenu (cycles, uses-audit, uses-fix, reconcile, wiring, impact, reverse call tree), 
 **Inspect Symbol** submenu (surface, slice, type-at-cursor), 
 **Code Quality** submenu (dead code, undocumented, TODOs, compiler hints, top symbols),
 **Generate & Export** submenu (docs, tests, enums, graph, Obsidian),
@@ -404,11 +404,16 @@ indexed symbol table; Enter navigates the editor to the selected location.
 
 **Native Tools > Options pages** (v0.30, split into four in Batch B): four
 pages -- General / Indexer / Linter / Editor -- under Tools > Options > Third
-Party > drag-lint, each backed by `INTAAddInOptions`. Reopen them anytime via
-**drag-lint > drag-lint Options...**. Per-project lint rules
-(`drag-lint-lint.json`) are edited from the drag-lint dock's Lint Options tab,
-reachable via **Project Manager right-click a project > "drag-lint: Project
-Rules..."**.
+Party > drag-lint, each backed by `INTAAddInOptions`. **All plugin settings
+(exe path, DB template, indexer/linter/editor toggles) live here** -- edit a
+value, click OK, and the next hover / lint / index action picks it up (no IDE
+restart needed). Reopen them anytime via **drag-lint > drag-lint Options...**.
+Per-project lint rules (`drag-lint-lint.json`) are edited from the drag-lint
+dock's Lint Options tab, reachable via **Project Manager right-click a project >
+"drag-lint: Project Rules..."**. That tab now has a **naming-convention preset
+selector** (v0.97) -- pick *Embarcadero* (`AValue` params) or *House*
+(`pMyParam` / `FMyField` / `TMyClass`) to bulk-set the naming rules, or *Custom*
+to hand-tune them.
 
 ---
 

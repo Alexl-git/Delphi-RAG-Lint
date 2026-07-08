@@ -5,6 +5,42 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.97.0-alpha -- 2026-07-08
+
+Engine fixes, naming autofix phase 2, and IDE ergonomics (Batch D).
+
+- **Naming autofix phase 2 -- prefix-adding.** The naming rules `field-name-prefix`,
+  `param-name-prefix`, and `type-name-prefix` are now *fixable*: `lint --fix` (and the
+  IDE "Fix it") add the missing convention prefix to the identifier and every reference
+  via the rename engine (`client -> FClient`, param `x -> pX`, `myclass -> TMyClass`).
+  Opt-in via the `autofix` id list in `drag-lint-lint.json` (off by default), dry-run
+  unless `--apply`. `param-name-prefix` renames the routine-local scope safely with a
+  new collision guard (skips if the prefixed name already exists in scope).
+  **Caveat:** `field-name-prefix`/`type-name-prefix` currently rely on the reference
+  index, which does not yet capture `Self.`-qualified field uses or type-annotation
+  references, so `--fix` on those two emits a stderr warning to review the diff. (The
+  case-only phase 1 rules -- `method-pascalcase`/`local-var-casing`/`const-casing` --
+  are unchanged and fully safe.)
+- **`rename` verb now renames a method's implementation header.** A bare global rename
+  of `TFoo.Bar` previously updated the interface declaration and call sites but left the
+  `procedure TFoo.Bar;` implementation header stale. `TRenameRefactoring.Build` now
+  renames it too.
+- **Bare-identifier assignment reads are indexed.** Under `--deep`, a right-hand-side
+  bare identifier (`Result := maxItems;`) now produces a `read` reference, so
+  Find-Usages / impact / rename-at-use see const/var reads that were previously missed.
+- **Naming-convention presets in the IDE.** The drag-lint dock's Lint Options tab has a
+  preset selector -- *Embarcadero* (`AValue` params), *House* (`pMyParam` / `FMyField` /
+  `TMyClass`), or *Custom* -- that bulk-sets the naming rules for the project.
+- **Reverse call tree from the editor.** A new **Uses & Dependencies > "Reverse Call
+  Tree..."** right-click runs `reverse-calltree` for the symbol under the cursor and
+  opens the text report in the editor.
+- **Dock no longer steals focus.** The drag-lint dockable panel no longer re-selects
+  itself to the front when you switch to another IDE tab (Project Manager, etc.); it
+  surfaces once and then stays put, updating its content in the background.
+- Fixes: `TTextEditApplier` now orders same-line edits by column (correct back-to-front
+  application of differing-length edits); the IDE writes the `max_return_cases` manifest
+  as UTF-8 to match the CLI; removed a dead internal Options frame unit.
+
 ## v0.96.0-alpha -- 2026-07-08
 
 - **Reverse call-tree report (`reverse-calltree`)** -- a new CLI verb: the N-deep
