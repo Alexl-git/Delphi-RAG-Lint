@@ -102,6 +102,7 @@ uses
   , DRagLint.Preprocess.Expr
   , DRagLint.Preprocess
   , DRagLint.Preprocess.Profile
+  , DRagLint.Report    .Deps
   ;
 
 type
@@ -155,6 +156,8 @@ type
     // v0.40.4: uses-report flags
     IncludeExternal: Boolean; // --include-external
     AllSources     : Boolean; // --all-sources (default: only first DB's files)
+    // NOTE: deps-report's --edges reuses the existing Edges field (declared
+    // above near CheckPlatform, originally for 'cycles'); see its parse branch.
     // v0.40.5 Tier 2/3: Firebird snapshot + ORM linker
     FbConnection: string ; // --connection "Database=...;User=...;Password=...;DriverID=FB"
     OrmTtl      : Integer; // unused for now; reserved for cache-invalidation control
@@ -348,6 +351,7 @@ begin
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
   Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]');
+  Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
@@ -574,6 +578,8 @@ begin
     else if (A = '--output-dir') and (i < ParamCount) then begin Inc(i); Result.OutputDir:= ParamStr(i); end
     else if A = '--include-external' then Result.IncludeExternal:= True
     else if A = '--all-sources'      then Result.AllSources     := True
+    // NOTE: --edges is parsed once, near --resolve-uses/--causes (originally
+    // for 'cycles'); deps-report reuses that same Result.Edges field.
     else if A = '--all'              then Result.IndexAll       := True
     else if (A = '--only') and (i < ParamCount) then
     begin
@@ -5741,6 +5747,243 @@ begin
   end; // try
 end; // begin
 
+/// <summary>drag-lint deps-report: third-party dependency rollup over the index
+/// uses-graph. Rollup by default (per-external unit: used-by count, resolved
+/// state, shortest import path); --edges switches to the flat
+/// (project-unit -&gt; external-unit) list. Formats: text|json|csv. Opens each
+/// --db as a TSQLiteSymbolStore (multi-DB, first-store-wins for stems),
+/// borrows them into BuildDepsReport, and frees them afterward.</summary>
+function DoDepsReport(const AArgs: TArgs): Integer;
+var
+  Stores: TArray<ISymbolStore>;
+
+  procedure OpenStores;
+  var
+    DbList: TArray<string>;
+    i     : Integer       ;
+    Path  : string        ;
+  begin
+    if Length(AArgs.DbPaths) > 0 then DbList:= AArgs.DbPaths
+    else if AArgs.DbPath <> '' then DbList:= TArray<string>.Create(AArgs.DbPath)
+    else begin Writeln(ErrOutput, 'deps-report: need at least one --db'); Result:= 2; Exit; end;
+    SetLength(Stores, 0);
+    for i:= 0 to High(DbList) do
+    begin
+      Path:= DbList[i];
+      if not TFile.Exists(Path) then begin Writeln(ErrOutput, 'deps-report: db not found, skipping: ', Path); Continue; end;
+      SetLength(Stores, Length(Stores) + 1);
+      Stores[High(Stores)]:= TSQLiteSymbolStore.Create(Path);
+      Stores[High(Stores)].Migrate;
+    end;
+  end; // procedure
+
+  function CsvEscape(const S: string): string;
+  begin
+    if (Pos(',', S) > 0) or (Pos('"', S) > 0) or (Pos(#10, S) > 0) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
+    else Result:= S;
+  end;
+
+  function ResolvedStr(AResolved: Boolean): string;
+  begin
+    if AResolved then Result:= 'resolved' else Result:= 'not-indexed';
+  end;
+
+  function RenderText(const ARep: TDepsReport): string;
+  var
+    SB       : TStringBuilder;
+    G        : TDepsGroup    ;
+    Ext      : TDepsExternal ;
+    Edge     : TDepsEdge     ;
+    GC       : TDepsGroupCount;
+    UsedByStr: string        ;
+  begin
+    SB:= TStringBuilder.Create;
+    try
+      if AArgs.Edges then
+      begin
+        for Edge in ARep.Edges do
+          SB.AppendLine(Format('%s -> %s  [%s]  [%s]  [%s]',
+            [Edge.SourceUnit, Edge.ExternalUnit, DepsGroupStr(Edge.Group), Edge.Section, ResolvedStr(Edge.Resolved)]));
+      end
+      else
+      begin
+        for G:= Low(TDepsGroup) to High(TDepsGroup) do
+        begin
+          var AnyInGroup: Boolean:= False;
+          for Ext in ARep.Externals do if Ext.Group = G then begin AnyInGroup:= True; Break; end;
+          if not AnyInGroup then Continue;
+
+          SB.AppendLine(Format('== %s ==', [DepsGroupStr(G)]));
+          for Ext in ARep.Externals do
+          begin
+            if Ext.Group <> G then Continue;
+            SB.AppendLine(Format('%s  (used by %d)  [%s]', [Ext.UnitName, Ext.UsedByCount, ResolvedStr(Ext.Resolved)]));
+            if Ext.ShortestPath <> '' then SB.AppendLine(Format('  path: %s', [Ext.ShortestPath]));
+            if Length(Ext.UsedBy) > 0 then
+            begin
+              UsedByStr:= string.Join(', ', Ext.UsedBy);
+              if Ext.UsedByMore > 0 then UsedByStr:= UsedByStr + Format(' (+%d more)', [Ext.UsedByMore]);
+              SB.AppendLine(Format('  used by: %s', [UsedByStr]));
+            end;
+          end;
+        end;
+
+        SB.AppendLine(Format('%d external units, %d edges, %d not indexed',
+          [ARep.Summary.ExternalUnitCount, ARep.Summary.ExternalEdgeCount, ARep.Summary.UnresolvedCount]));
+        for GC in ARep.Summary.GroupCounts do
+          SB.AppendLine(Format('%s: %d units / %d project units', [DepsGroupStr(GC.Group), GC.UnitCount, GC.ProjectUnitCount]));
+      end;
+      Result:= SB.ToString;
+    finally
+      SB.Free;
+    end;
+  end; // function
+
+  function RenderJson(const ARep: TDepsReport): string;
+  var
+    JRoot    : TJSONObject   ;
+    JSummary : TJSONObject   ;
+    JGroups  : TJSONArray    ;
+    JGroup   : TJSONObject   ;
+    JExts    : TJSONArray    ;
+    JExt     : TJSONObject   ;
+    JUsedBy  : TJSONArray    ;
+    JSections: TJSONArray    ;
+    JEdges   : TJSONArray    ;
+    JEdge    : TJSONObject   ;
+    GC       : TDepsGroupCount;
+    Ext      : TDepsExternal ;
+    U        : string        ;
+    Sec      : string        ;
+    Edge     : TDepsEdge     ;
+  begin
+    JRoot:= TJSONObject.Create;
+    try
+      JRoot.AddPair('schema', 'deps-report/1');
+
+      JSummary:= TJSONObject.Create;
+      JSummary.AddPair('external_unit_count', TJSONNumber.Create(ARep.Summary.ExternalUnitCount));
+      JSummary.AddPair('external_edge_count', TJSONNumber.Create(ARep.Summary.ExternalEdgeCount));
+      JSummary.AddPair('unresolved_count'   , TJSONNumber.Create(ARep.Summary.UnresolvedCount));
+      JGroups:= TJSONArray.Create;
+      for GC in ARep.Summary.GroupCounts do
+      begin
+        JGroup:= TJSONObject.Create;
+        JGroup.AddPair('group'             , DepsGroupStr(GC.Group));
+        JGroup.AddPair('unit_count'        , TJSONNumber.Create(GC.UnitCount));
+        JGroup.AddPair('project_unit_count', TJSONNumber.Create(GC.ProjectUnitCount));
+        JGroups.AddElement(JGroup);
+      end;
+      JSummary.AddPair('groups', JGroups);
+      JRoot.AddPair('summary', JSummary);
+
+      JExts:= TJSONArray.Create;
+      for Ext in ARep.Externals do
+      begin
+        JExt:= TJSONObject.Create;
+        JExt.AddPair('unit'         , Ext.UnitName);
+        JExt.AddPair('group'        , DepsGroupStr(Ext.Group));
+        JExt.AddPair('resolved'     , TJSONBool.Create(Ext.Resolved));
+        JExt.AddPair('used_by_count', TJSONNumber.Create(Ext.UsedByCount));
+        JUsedBy:= TJSONArray.Create;
+        for U in Ext.UsedBy do JUsedBy.Add(U);
+        JExt.AddPair('used_by', JUsedBy);
+        JExt.AddPair('used_by_more', TJSONNumber.Create(Ext.UsedByMore));
+        JExt.AddPair('shortest_path', Ext.ShortestPath);
+        JSections:= TJSONArray.Create;
+        for Sec in Ext.Sections do JSections.Add(Sec);
+        JExt.AddPair('sections', JSections);
+        JExts.AddElement(JExt);
+      end;
+      JRoot.AddPair('externals', JExts);
+
+      if AArgs.Edges then
+      begin
+        JEdges:= TJSONArray.Create;
+        for Edge in ARep.Edges do
+        begin
+          JEdge:= TJSONObject.Create;
+          JEdge.AddPair('source_unit'  , Edge.SourceUnit);
+          JEdge.AddPair('external_unit', Edge.ExternalUnit);
+          JEdge.AddPair('group'        , DepsGroupStr(Edge.Group));
+          JEdge.AddPair('section'      , Edge.Section);
+          JEdge.AddPair('resolved'     , TJSONBool.Create(Edge.Resolved));
+          JEdges.AddElement(JEdge);
+        end;
+        JRoot.AddPair('edges', JEdges);
+      end;
+
+      Result:= JRoot.Format(2);
+    finally
+      JRoot.Free;
+    end;
+  end; // function
+
+  function RenderCsv(const ARep: TDepsReport): string;
+  var
+    SB  : TStringBuilder;
+    Ext : TDepsExternal ;
+    Edge: TDepsEdge      ;
+  begin
+    SB:= TStringBuilder.Create;
+    try
+      if AArgs.Edges then
+      begin
+        SB.AppendLine('source_unit,external_unit,group,section,resolved');
+        for Edge in ARep.Edges do
+          SB.AppendLine(CsvEscape(Edge.SourceUnit) + ',' + CsvEscape(Edge.ExternalUnit) + ',' +
+            CsvEscape(DepsGroupStr(Edge.Group)) + ',' + CsvEscape(Edge.Section) + ',' +
+            IfThen(Edge.Resolved, '1', '0'));
+      end
+      else
+      begin
+        SB.AppendLine('unit,group,resolved,used_by_count,shortest_path');
+        for Ext in ARep.Externals do
+          SB.AppendLine(CsvEscape(Ext.UnitName) + ',' + CsvEscape(DepsGroupStr(Ext.Group)) + ',' +
+            IfThen(Ext.Resolved, '1', '0') + ',' + IntToStr(Ext.UsedByCount) + ',' +
+            CsvEscape(Ext.ShortestPath));
+      end;
+      Result:= SB.ToString;
+    finally
+      SB.Free;
+    end;
+  end; // function
+
+var
+  Opts  : TDepsOptions;
+  Rep   : TDepsReport ;
+  Fmt   : string       ;
+  Output: string       ;
+  i     : Integer      ;
+begin
+  Result:= 0;
+  Stores:= nil;
+  try
+    OpenStores;
+    if Result <> 0 then Exit;
+    if Length(Stores) = 0 then begin Writeln(ErrOutput, 'deps-report: no usable DB'); Exit(2); end;
+
+    Opts.Depth      := AArgs.Depth;
+    Opts.AllSources := AArgs.AllSources;
+    Opts.NamePattern:= AArgs.Name;
+    Opts.MaxList    := 20;
+
+    Rep:= BuildDepsReport(Stores, Opts);
+
+    Fmt:= LowerCase(AArgs.Format);
+    if Fmt = '' then Fmt:= 'text';
+
+    if Fmt = 'json' then Output:= RenderJson(Rep)
+    else if Fmt = 'csv' then Output:= RenderCsv(Rep)
+    else Output:= RenderText(Rep);
+
+    if AArgs.Output <> '' then TFile.WriteAllText(AArgs.Output, Output, TEncoding.ANSI)
+    else Writeln(Output);
+  finally
+    for i:= 0 to High(Stores) do Stores[i]:= nil;
+  end; // try
+end; // function
+
 // v0.19: drag-lint typeat <file>:<line>:<col> [--db <path>] [--format text|json]
 // Resolves the identifier at the given position to a symbol in the index.
 // The position argument has the form: C:\path\to\File.pas:17:8
@@ -10709,6 +10952,7 @@ begin
     else if Args.Command = 'bench-context'     then Result:= DoBenchContext    (Args)
     else if Args.Command = 'typeat'            then Result:= DoTypeAt          (Args)
     else if Args.Command = 'uses-report'       then Result:= DoUsesReport      (Args)
+    else if Args.Command = 'deps-report'       then Result:= DoDepsReport      (Args)
     else if Args.Command = 'resolve-uses'      then Result:= DoResolveUses     (Args)
     else if Args.Command = 'fb-snapshot'       then Result:= DoFbSnapshot      (Args)
     else if Args.Command = 'link-orm'          then Result:= DoLinkOrm         (Args)
