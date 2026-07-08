@@ -103,6 +103,7 @@ uses
   , DRagLint.Preprocess
   , DRagLint.Preprocess.Profile
   , DRagLint.Report    .Deps
+  , DRagLint.Report    .RCallTree
   ;
 
 type
@@ -390,6 +391,7 @@ begin
   Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
+  Writeln('  drag-lint reverse-calltree --qname <X> [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep upward call tree: who calls X, with call sites; cycle-guarded)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
   Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)');
@@ -10002,6 +10004,189 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>drag-lint reverse-calltree --qname X [--depth N] [--format text|json|dot|mermaid]
+/// [--json] --db PATH ... -- the N-deep REVERSE call tree rooted at X: who calls X,
+/// who calls them, with call sites (unit:line) and cycle markers. Reuses the
+/// resolved caller traversal (FindResolvedCallers) via BuildReverseCallTree. Text
+/// is an indented tree (2 spaces/level); --format dot|mermaid emit a chart; --json /
+/// --format json emit schema reverse-calltree/1. With multiple --db, the first DB
+/// that resolves the qname is used (ids are per-DB).</summary>
+/// <param name="AArgs">QName=root, Depth=tree depth (default 3), Format/AsJson=output,
+/// DbPath/DbPaths=index(es).</param>
+/// <returns>0 ok; 1 qname unresolved in every DB; 2 usage error / no readable db.</returns>
+function DoReverseCallTree(const AArgs: TArgs): Integer;
+var
+  Dbs    : TArray<string>;
+  Db     : string        ;
+  Store  : ISymbolStore  ;
+  RootIds: TArray<Int64> ;
+  Depth  : Integer       ;
+  Fmt    : string        ;
+  Rid    : Int64         ;
+  Trees  : TList<TRCallTree>;
+  Opts   : TRCallOptions ;
+
+  function SanitizeId(const AName: string): string;
+  var
+    Ch: Char;
+  begin
+    Result:= '';
+    for Ch in AName do
+      if CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Result:= Result + Ch
+      else Result:= Result + '_';
+    if (Result = '') or CharInSet(Result[1], ['0'..'9']) then Result:= '_' + Result;
+  end;
+
+  procedure RenderNodeText(const ANode: TRCallNode; const AIndent: string; ALines: TStrings);
+  var
+    Line : string;
+    Kid  : TRCallNode;
+  begin
+    Line:= AIndent + ANode.QName;
+    if ANode.Site <> '' then Line:= Line + Format(' [%s]', [ANode.Site]);
+    if ANode.Cycle then Line:= Line + ' (cycle)';
+    ALines.Add(Line);
+    if ANode.Cycle then Exit; // already expanded elsewhere -- marker only, no recursion
+    for Kid in ANode.Callers do
+      RenderNodeText(Kid, AIndent + '  ', ALines);
+  end; // procedure
+
+  function BuildNodeJson(const ANode: TRCallNode): TJSONObject;
+  var
+    JKids: TJSONArray;
+    Kid  : TRCallNode ;
+  begin
+    Result:= TJSONObject.Create;
+    Result.AddPair('qname', ANode.QName);
+    Result.AddPair('site' , ANode.Site );
+    Result.AddPair('cycle', TJSONBool.Create(ANode.Cycle));
+    JKids:= TJSONArray.Create;
+    for Kid in ANode.Callers do JKids.AddElement(BuildNodeJson(Kid));
+    Result.AddPair('callers', JKids);
+  end; // function
+
+  function BuildSummaryJson(const ASummary: TRCallSummary): TJSONObject;
+  begin
+    Result:= TJSONObject.Create;
+    Result.AddPair('node_count'      , TJSONNumber.Create(ASummary.NodeCount      ));
+    Result.AddPair('max_depth_reached', TJSONNumber.Create(ASummary.MaxDepthReached));
+    Result.AddPair('cycle_count'     , TJSONNumber.Create(ASummary.CycleCount     ));
+    Result.AddPair('truncated'       , TJSONBool.Create(ASummary.Truncated        ));
+  end; // function
+
+  function BuildTreeJson(const ATree: TRCallTree): TJSONObject;
+  begin
+    Result:= TJSONObject.Create;
+    Result.AddPair('schema' , 'reverse-calltree/1'    );
+    Result.AddPair('root'   , BuildNodeJson(ATree.Root));
+    Result.AddPair('summary', BuildSummaryJson(ATree.Summary));
+  end; // function
+
+  procedure RenderNodeChart(const ANode: TRCallNode; ABuf: TStringBuilder; AIsDot: Boolean);
+  var
+    Kid: TRCallNode;
+  begin
+    for Kid in ANode.Callers do
+    begin
+      if AIsDot then ABuf.AppendLine(Format('  "%s" -> "%s";', [Kid.QName, ANode.QName]))
+      else ABuf.AppendLine(Format('  %s --> %s', [SanitizeId(Kid.QName), SanitizeId(ANode.QName)]));
+      if not Kid.Cycle then RenderNodeChart(Kid, ABuf, AIsDot);
+    end;
+  end; // procedure
+
+begin
+  if AArgs.QName = '' then
+  begin Writeln('Usage: drag-lint reverse-calltree --qname X [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH'); Exit(2); end;
+
+  Fmt:= LowerCase(Trim(AArgs.Format));
+
+  Depth:= AArgs.Depth;
+  if Depth < 0 then Depth:= 0;
+
+  Dbs:= ResolveConsumerDbs(AArgs);
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+
+  // Multi-db root resolution: use the FIRST db whose ResolveEndpointIds(qname)
+  // is non-empty (mirrors DoHover's multi-db precedent). Exit 1 only if NO db
+  // resolves the qname; exit 2 if no --db is even readable.
+  Store  := nil;
+  RootIds:= nil;
+  for Db in Dbs do
+  begin
+    if not TFile.Exists(Db) then Continue;
+    var RoOk: Boolean;
+    var CandidateStore: ISymbolStore:= OpenReadOnlyStore(Db, RoOk);
+    if not RoOk then Continue;
+    var CandidateIds: TArray<Int64>:= ResolveEndpointIds(CandidateStore, AArgs.QName);
+    if Length(CandidateIds) > 0 then
+    begin
+      Store  := CandidateStore;
+      RootIds:= CandidateIds;
+      Break;
+    end;
+  end;
+  if Store = nil then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+  if Length(RootIds) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+
+  Opts.Depth:= Depth;
+
+  Trees:= TList<TRCallTree>.Create;
+  try
+    for Rid in RootIds do
+      Trees.Add(BuildReverseCallTree(Store, Rid, Opts));
+
+    if (Fmt = 'dot') or (Fmt = 'mermaid') then
+    begin
+      var Buf: TStringBuilder:= TStringBuilder.Create;
+      try
+        if Fmt = 'dot' then
+        begin
+          Buf.AppendLine('// Generated by drag-lint reverse-calltree');
+          Buf.AppendLine('digraph DragLintReverseCallTree {');
+          Buf.AppendLine('  rankdir=LR;');
+          Buf.AppendLine('  node [shape=box, style=filled, fillcolor="#eef"];');
+          Buf.AppendLine('  edge [color="#888"];');
+        end
+        else
+        begin
+          Buf.AppendLine('%% Generated by drag-lint reverse-calltree');
+          Buf.AppendLine('graph LR');
+        end;
+        for var T in Trees do RenderNodeChart(T.Root, Buf, Fmt = 'dot');
+        if Fmt = 'dot' then Buf.AppendLine('}');
+        Writeln(Buf.ToString);
+      finally
+        Buf.Free;
+      end;
+    end
+    else if (Fmt = 'json') or ((Fmt = '') and AArgs.AsJson) then
+    begin
+      var JRoots: TJSONArray:= TJSONArray.Create;
+      try
+        for var T in Trees do JRoots.AddElement(BuildTreeJson(T));
+        // A single root prints the bare object; multiple (overloads) print an array.
+        if JRoots.Count = 1 then Writeln((JRoots.Items[0] as TJSONObject).Format(2))
+        else Writeln(JRoots.Format(2));
+      finally
+        JRoots.Free;
+      end;
+    end
+    else // text (default, or explicit --format text)
+    begin
+      var Lines: TStringList:= TStringList.Create;
+      try
+        for var T in Trees do RenderNodeText(T.Root, '', Lines);
+        Writeln(Lines.Text);
+      finally
+        Lines.Free;
+      end;
+    end;
+  finally
+    Trees.Free;
+  end; // try
+  Result:= 0;
+end; // function
+
 /// <summary>v14 (D5 T12): drag-lint purge-locals --db PATH [--json] -- the SIZE
 /// ESCAPE HATCH. Deletes every skLocalVar/skParam symbol (kind IN 'local_var',
 /// 'param'), then VACUUMs to reclaim the freed pages, and reports how many rows
@@ -11290,6 +11475,7 @@ begin
     else if Args.Command = 'ambiguous-calls'   then Result:= DoAmbiguousCalls  (Args)
     else if Args.Command = 'call-path'         then Result:= DoCallPath        (Args)
     else if Args.Command = 'callgraph'         then Result:= DoCallGraph       (Args)
+    else if Args.Command = 'reverse-calltree'  then Result:= DoReverseCallTree (Args)
     else if Args.Command = 'purge-locals'      then Result:= DoPurgeLocals     (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
     else if Args.Command = 'workspace'         then Result:= DoWorkspace       (Args)
