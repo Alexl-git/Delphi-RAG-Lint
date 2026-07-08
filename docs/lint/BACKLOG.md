@@ -1,6 +1,25 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-08 (LATEST-30) -- **BATCH B IMPLEMENTED + FINAL-REVIEWED + 1 LIVE-SMOKE BUG FIXED (EResNotFound on the Options page). Merge-ready, awaiting the rest of live IDE smoke + user push. `main`=`21c7393`, 34 commits ahead of origin (`d816b23`), NOT pushed (user drives push).**
+> ## RESUME 2026-07-08 (LATEST-30) -- **BATCH B + FOLLOW-UPS DONE (4 user items: EResNotFound fix, 2 lint-FP fixes, 2 Options-page enrichments). Merge-ready, awaiting the rest of live IDE smoke + user push. `main`=`5fda5e9`(+BPL `7033827`), ~40 commits ahead of origin (`d816b23`), NOT pushed (user drives push).**
+>
+> **FOLLOW-UPS (this session, after the first live smoke) -- all reviewed clean:**
+> 1. **EResNotFound on the Options page** (`c5e0933`+BPL `21c7393`): code-built TCustomFrame with no .dfm raised
+>    on open; fixed with a minimal base-class `.dfm` resource (`DragLint.Plugin.OptionsFrames.dfm`) -- see the
+>    detail block that was here before, now folded into this list.
+> 2. **doc-drift FP on class/interface decls** (`4ec233b`): ancestor/interface list mis-parsed as `<param>`s;
+>    gated the param/return findings on routine kinds. Test `run_doc_drift_typedecl.ps1`.
+> 3. **object-leak FP on owner-parented components** (`6e46a13`): `X := T.Create(Self)` flagged as a leak; a
+>    non-nil `AOwner` on a `TComponent` ctor now = ownership transfer. Test `run_object_leak_owned.ps1`.
+>    (Both FPs came from a YADF dogfooding run -- `docs/BACKLOG-lint-false-positives.md`, now marked FIXED.)
+> 4. **Indexer page: read-only Library/Browsing folders + scope + time warning; Linter page: "Edit lint rules
+>    (170+)..." button -> dock Lint Options tab** (`5fda5e9`+BPL `7033827`). Reuses `TProjectResolver`
+>    (RTL-only, links into the BPL) + the exported `ShowDragLintDockLintOptions`.
+>
+> Final battery GREEN (run_doc_drift_typedecl + run_object_leak_owned + run_drift + run_doc_returns +
+> run_docs_manifest_roundtrip all PASS). CLI Win64 redeployed to `third_party/dll-win64` (carries the 2 FP fixes).
+> Follow-up plan: `docs/superpowers/plans/2026-07-08-batch-b-followups.md`. **USER: continue the live-smoke
+> checklist (the 4 Options pages open now; check the new Indexer library list + Linter rules button), then push.**
+>
 >
 > **LIVE-SMOKE FIX #1 (`c5e0933` source + `21c7393` BPL):** opening Tools->Options->Third Party->drag-lint->General
 > raised `EResNotFound: Resource TDLGeneralOptionsFrame not found`. Root cause (verified vs VCL/RTL source):

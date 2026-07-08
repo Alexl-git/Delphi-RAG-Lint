@@ -1,6 +1,18 @@
 # BACKLOG: lint false positives -- doc-drift on type decls, object-leak on VCL-owned components
 
-Status: **reported, not yet fixed.** Captured 2026-07-08 from a real dogfooding run:
+Status: **BOTH FIXED 2026-07-08.**
+- FP #1 (doc-drift on class/interface type decls) fixed in commit `4ec233b`: `Analyze`'s
+  param/return findings (1-6) are now gated on `ASym.Kind in [skProcedure, skFunction,
+  skMethod, skConstructor, skDestructor]`, so a type/const/var symbol skips param drift
+  entirely. Regression test `tests/autotest/run_doc_drift_typedecl.ps1` (RED->GREEN).
+- FP #2 (object-leak on owner-parented components) fixed in commit `6e46a13`: a new
+  `ConstructorTransfersOwnership` guard treats `X := TSomething.Create(Owner)` as an
+  ownership transfer when the type is a `TComponent` descendant (`IsDescendantOf`) and the
+  first arg (`AOwner`) is non-nil; `Create(nil)`, non-TComponent, and the no-store path stay
+  leak-checked. Regression test `tests/autotest/run_object_leak_owned.ps1` (owner-parented
+  not flagged; genuine no-owner leak + `Create(nil)` still flagged).
+
+Original report below (captured 2026-07-08 from a real dogfooding run):
 drag-lint 0.94.0-alpha `lint-all` over the YADF repo, on a freshly-written unit
 (`C:\Projects\YADF\YADFOT.Options.pas`) whose code is correct and compiles clean
 (Win32 Debug BPL, `BUILD_EXITCODE=0`, 0 errors). Both findings below are false
