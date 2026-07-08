@@ -8087,7 +8087,59 @@ begin
               begin
                 var PA: string:= ''; UnitFile.TryGetValue(A, PA);
                 Writeln(Format('- `%s` uses `%s` in its **implementation** ' +
-                  'section (`%s`).', [A, B, ExtractFileName(PA)]));
+                  'section (`%s`) via:', [A, B, ExtractFileName(PA)]));
+
+                { Pinpoint exactly WHICH symbols A's implementation uses from B --
+                  the concrete things to move/extract/inline to cut this edge.
+                  Same resolution as the interface --causes path, but filtered to
+                  refs AT OR AFTER the `implementation` line. Best-effort: the
+                  index can miss refs (e.g. set types). }
+                var Afid: Int64;
+                if UnitFid.TryGetValue(A, Afid) then
+                begin
+                  var ImplL: Integer:= 0;   { 0 = show all refs if we can't find the keyword }
+                  if TFile.Exists(PA) then
+                  begin
+                    var LS:= TStringList.Create;
+                    try
+                      LS.LoadFromFile(PA);
+                      for var kk:= 0 to LS.Count - 1 do
+                        if SameText(Trim(LS[kk]), 'implementation') then
+                        begin ImplL:= kk + 1; Break; end;
+                    finally LS.Free; end;
+                  end;
+                  var Seen:= TDictionary<string, Boolean>.Create;
+                  var AnyHit:= False;
+                  try
+                    for var R in Store.GetReferencesFromFile(Afid) do
+                    begin
+                      if R.StartLine < ImplL then Continue;   { implementation only }
+                      if Seen.ContainsKey(LowerCase(R.NameText)) then Continue;
+                      for var Sym in Store.FindSymbolsByExactName(R.NameText) do
+                      begin
+                        { A local var / parameter is routine-scoped -- it can NEVER
+                          be a genuine cross-unit reference, so a name match here is
+                          a false positive (both units just happen to have a local
+                          `I`/`Sender`/etc.). Skip those kinds; only unit-level
+                          declarations (routines, types, forms, fields, consts) are
+                          real coupling to move/extract. }
+                        if Sym.Kind in [skLocalVar, skParam] then Continue;
+                        if SameText(UnitNameOfFile(Store.GetFilePath(Sym.FileId)), B) then
+                        begin
+                          Writeln(Format('    - line %d: `%s`  [%s]  -> declared in `%s`',
+                            [R.StartLine, R.NameText, Sym.Kind.ToText, B]));
+                          Seen.AddOrSetValue(LowerCase(R.NameText), True);
+                          AnyHit:= True;
+                          Break;
+                        end;
+                      end;
+                    end; // for
+                    if not AnyHit then
+                      Writeln(Format('    - (no specific symbol resolved -- index ' +
+                        'gap, e.g. a `set` type; open `%s` and scan its ' +
+                        'implementation uses of `%s` by hand)', [ExtractFileName(PA), B]));
+                  finally Seen.Free; end; // try
+                end;
               end;
           end;
           Writeln('');
@@ -8097,9 +8149,12 @@ begin
             'choice, not a correctness one. To remove it:');
           Writeln('');
           Writeln('1. Pick the edge that is easiest to cut (the smaller / more ' +
-            'incidental dependency of the two above).');
-          Writeln('2. In that unit, see what it actually calls from its cycle ' +
-            'partner (open the `.pas`, look at the implementation-section uses).');
+            'incidental dependency -- compare the symbol lists under "Why it ' +
+            'cycles" above; the edge with fewer / more incidental symbols is ' +
+            'usually easier).');
+          Writeln('2. Those symbols (listed above, with line + kind) are exactly ' +
+            'what that unit uses from its cycle partner -- they are what to ' +
+            'move, extract, or inline.');
           Writeln('3. Either **extract** the shared routine(s)/type(s) into a ' +
             'new leaf unit both can use (it must use NEITHER unit in the cycle), ' +
             'or **inline / relocate** the small piece so the `uses` line is no ' +
