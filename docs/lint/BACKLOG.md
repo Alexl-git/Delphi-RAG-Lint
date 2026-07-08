@@ -1,5 +1,21 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-08 (LATEST-31) -- **v0.95.0-alpha SHIPPED (Track 5.2 deps-report + index-schema docs; also folds in Batch B + the 2 lint-FP fixes + the hover restyle that were on main but never released). GH release cut. NEXT = whatever the user raises next.**
+>
+> **v0.95.0-alpha** cuts everything since v0.94 into a release: (1) NEW `deps-report` verb (third-party
+> dependency rollup over the uses-graph; external = unresolved OR library-path; rollup + `--edges`;
+> text/json/csv; engine `src/report/DRagLint.Report.Deps.pas`), (2) NEW read-only `schema` verb (live
+> schema_version + tables + columns + row counts; `--json`) + `docs/INDEX-SCHEMA.md` (published index
+> reference + project-vs-external boundary, so other tools can consume the SQLite index), (3) Batch B (4 nested
+> Tools->Options pages + Project Rules menu + teardown fix + max_return_cases + Indexer library folders + Linter
+> rules button), (4) the 2 YADF-dogfooding lint-FP fixes (doc-drift on class decls; object-leak on owner-parented
+> TComponents), (5) the hover Help-Insight restyle. Executed via subagent-driven-development (Track 5.2: 6 impl
+> tasks all reviewed clean + final opus whole-branch review 0-Crit/0-Imp/2-Minor-deferred). Full battery GREEN on
+> the Release exe (run_deps_report + run_schema + run_doc_returns + run_manifest). SPEC/PLAN:
+> docs/superpowers/specs|plans/2026-07-08-track5-2-*. SDD ledger .superpowers/sdd/progress.md (TRACK 5.2 section).
+> **NEXT candidates (unbuilt):** Track 5.1 (reverse call-tree report), 5.3 (architectural charts); the small
+> deferred cleanups (orphaned OptionsFrame.pas; ANSI->UTF8 manifest write); Track 3 component conversion.
+>
 > ## RESUME 2026-07-08 (LATEST-30) -- **BATCH B + FOLLOW-UPS DONE (4 user items: EResNotFound fix, 2 lint-FP fixes, 2 Options-page enrichments). Merge-ready, awaiting the rest of live IDE smoke + user push. `main`=`5fda5e9`(+BPL `7033827`), ~40 commits ahead of origin (`d816b23`), NOT pushed (user drives push).**
 >
 > **FOLLOW-UPS (this session, after the first live smoke) -- all reviewed clean:**

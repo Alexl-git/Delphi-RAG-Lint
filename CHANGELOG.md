@@ -5,6 +5,42 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.95.0-alpha -- 2026-07-08
+
+- **Third-party dependency report (`deps-report`)** -- a new CLI verb that reports
+  the external/library units a project depends on, over the index uses-graph.
+  Per external unit: which project units import it, the count, the shortest
+  uses-path, and a library grouping (RTL / DevExpress / Spring4D / FireDAC /
+  other / unknown). Rollup by default; `--edges` for the flat
+  project-unit -> external-unit list; `--format text|json|csv`; multi `--db`.
+  A unit is "external" when it is not indexed (`unit_uses.target_file_id`
+  unresolved) OR resolves to a library path. Pure engine in
+  `src/report/DRagLint.Report.Deps.pas`; headless test `run_deps_report.ps1`.
+- **Index schema introspection + documentation** -- a new read-only `schema`
+  verb dumps the live index schema (schema_version + every table with its
+  columns + row counts; `--format json`), and `docs/INDEX-SCHEMA.md` documents
+  the SQLite index for external consumers, including the project-vs-external
+  boundary rule. So other tools can consume the drag-lint index directly.
+  `run_schema.ps1`.
+- **IDE configuration consolidated into four Tools -> Options sub-pages**
+  (`Third Party > drag-lint > General | Indexer | Linter | Editor`) sharing the
+  registry round-trip, replacing the single page + the hand-coded settings modal
+  (now retired; "drag-lint Options..." opens Tools -> Options). Adds
+  `max_return_cases` on the Linter page (manifest-backed, per-project dotted
+  `.drag-lint.json` / global `drag-lint.json`), a read-only Library/Browsing
+  folder list + scope + time warning on the Indexer page, and an
+  "Edit lint rules (165+)..." button routing to the dock Lint Options tab.
+- **Project Manager "drag-lint: Project Rules..." right-click** -- activates the
+  clicked project and opens its Lint Options dock tab.
+- **Clean plugin teardown** -- the Options pages + the project-menu notifier now
+  unregister in `Wizard.Destroyed` + unit finalizations (fixes a pre-existing
+  leak where `UnregisterDragLintOptions` was never called; no orphan Options
+  node / AV on package unload).
+- **Two lint false-positive fixes** -- `doc-drift` no longer mis-parses a class's
+  ancestor/interface list as `<param>` tags (param/return drift is now gated to
+  routine symbols); `object-leak` no longer flags `X := TSomething.Create(Self)`
+  where a non-nil `AOwner` on a `TComponent` transfers ownership (`Create(nil)`
+  and non-owned constructions are still checked).
 - **Hover Help-Insight restyle** -- the IDE hover popup renders as a
   Delphi-Help-Insight-style tooltip instead of a plain-text dump: a one-line
   clickable signature header (`unit.pas Line N` right-aligned, click -> jump to
