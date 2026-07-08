@@ -52,11 +52,11 @@ function SynthesizeCasedName(const AOldName: string; AStyle: TNameStyle): string
 /// name is just a different casing of the same letters), but ConflictReason is
 /// still run as defense-in-depth against a same-named sibling -- and is
 /// load-bearing once phase 2 adds separator-inserting styles that could produce
-/// a name distinct from the original. For method-pascalcase, also patches the
-/// method's separate `implementation` section header (Type.OldName), which
-/// TRenameRefactoring.Build does not cover on its own (see
-/// BuildImplHeaderEdit) -- without this, --fix --apply would leave a stale,
-/// now-uncompilable header referencing the pre-rename name.</remarks>
+/// a name distinct from the original. For method-pascalcase, the method's
+/// separate `implementation` section header (Type.OldName) is renamed too --
+/// TRenameRefactoring.Build itself emits that edit (see its ImplStartLine
+/// handling), so --fix --apply never leaves a stale, now-uncompilable header
+/// referencing the pre-rename name.</remarks>
 function BuildNamingFixEdits(const AStore: ISymbolStore;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
   out AFixCount: Integer): TArray<TTextEdit>;
@@ -137,63 +137,6 @@ begin
     if Sym.StartLine = ALine then Exit(Sym);
 end;
 
-{ TRenameRefactoring.Build renames the declaration site (Sym.StartLine/StartCol)
-  and every FindCallersByName reference, but a method's separate `implementation`
-  section header (`procedure TType.Name;`) is registered as neither -- it is not
-  a "call" reference, and ImplStartLine is a distinct span from the decl's own
-  StartLine (see TSymbol.ImplStartLine in DRagLint.Core.Model). Left alone, a
-  global method rename leaves that header referring to the OLD (now undeclared)
-  name -- a compile error. This is a known engine gap, not something naming-fix
-  invents; work around it here (Task 6 is scoped to the CLI/NamingFix wiring, not
-  a change to TRenameRefactoring.Build) by scanning ASym.ImplStartLine's own text
-  for AOldName as a dotted member (Type.Name) and emitting one extra
-  tekReplaceInLine edit for it when found. No-op when ImplStartLine = 0 (no
-  separate body, e.g. an abstract/interface method) or already covered (same
-  line as the declaration, e.g. an inline method body). }
-function BuildImplHeaderEdit(const AFilePath: string; const ASym: TSymbol;
-  const AOldName, ANewName: string; out AFound: Boolean): TTextEdit;
-var
-  Lines : TStringList;
-  LnText: string;
-  DotPos: Integer;
-  ScanAt: Integer;
-begin
-  AFound:= False;
-  Result:= Default(TTextEdit);
-  if (ASym.ImplStartLine <= 0) or (ASym.ImplStartLine = ASym.StartLine) then Exit;
-  if not TFile.Exists(AFilePath) then Exit;
-  Lines:= TStringList.Create;
-  try
-    Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AFilePath));
-    if ASym.ImplStartLine > Lines.Count then Exit;
-    LnText:= Lines[ASym.ImplStartLine - 1];
-    { Find AOldName preceded by '.' (a qualified Type.Name member -- the
-      implementation header shape), case-insensitive, whole-token. }
-    ScanAt:= 1;
-    while ScanAt + Length(AOldName) - 1 <= Length(LnText) do
-    begin
-      if SameText(Copy(LnText, ScanAt, Length(AOldName)), AOldName) then
-      begin
-        DotPos:= ScanAt - 1;
-        if (DotPos >= 1) and (LnText[DotPos] = '.') then
-        begin
-          Result.FilePath:= AFilePath;
-          Result.Kind    := tekReplaceInLine;
-          Result.Line    := ASym.ImplStartLine;
-          Result.Col     := ScanAt;
-          Result.EndCol  := ScanAt + Length(AOldName);
-          Result.Text    := ANewName;
-          AFound:= True;
-          Exit;
-        end;
-      end;
-      Inc(ScanAt);
-    end;
-  finally
-    Lines.Free;
-  end;
-end;
-
 function BuildNamingFixEdits(const AStore: ISymbolStore;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
   out AFixCount: Integer): TArray<TTextEdit>;
@@ -248,8 +191,6 @@ var
   Style    : TNameStyle;
   NewName  : string;
   Sym      : TSymbol;
-  ImplEdit : TTextEdit;
-  ImplFound: Boolean;
   DedupKey : string;
 begin
   AFixCount:= 0;
@@ -291,20 +232,13 @@ begin
         else
         begin
           { method-pascalcase / unit-level const-casing: global rename, needs a
-            symbol resolved from the store (for its qualified name AND -- for
-            methods -- its ImplStartLine, see BuildImplHeaderEdit). }
+            symbol resolved from the store for its qualified name. Build now
+            also covers the method's separate implementation-section header
+            (Type.OldName) itself, so no local workaround is needed here. }
           Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol);
           if Sym.Id = 0 then Continue; // unresolved symbol -- report NEEDS_CONTEXT by skipping
           if TRenameRefactoring.ConflictReason(AStore, Sym.QualifiedName, NewName) <> '' then Continue; // conflict -- skip
           EmitRenameEdits(TRenameRefactoring.Build(AStore, Sym.QualifiedName, NewName), Sym.StartLine, F.StartCol, F.EndCol);
-          { TRenameRefactoring.Build misses a method's separate implementation-
-            section header (see BuildImplHeaderEdit's comment) -- patch it too so
-            --fix --apply never leaves a stale Type.OldName header behind. }
-          if SameText(F.RuleId, 'method-pascalcase') then
-          begin
-            ImplEdit:= BuildImplHeaderEdit(F.FilePath, Sym, OldName, NewName, ImplFound);
-            if ImplFound then Edits.Add(ImplEdit);
-          end;
         end;
       except
         { A single malformed finding must not abort the whole fix sweep. }

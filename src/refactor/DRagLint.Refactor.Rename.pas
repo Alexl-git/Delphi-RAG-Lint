@@ -123,6 +123,44 @@ begin
       List.Add(Edit);
     end;
 
+    // Implementation-section header (procedure TFoo.Bar;) -- NOT a decl symbol nor
+    // a refs row, so neither branch above catches it. Emit it explicitly when the
+    // symbol has a separate impl body (ImplStartLine > 0 and <> the decl line).
+    if (Sym.ImplStartLine > 0) and (Sym.ImplStartLine <> Sym.StartLine) then
+    begin
+      var ImplPath: string := AStore.GetFilePath(Sym.FileId);
+      if TFile.Exists(ImplPath) then
+      begin
+        var ILines := TStringList.Create;
+        try
+          ILines.Text := TEncoding.ANSI.GetString(TFile.ReadAllBytes(ImplPath));
+          if Sym.ImplStartLine <= ILines.Count then
+          begin
+            var LnText := ILines[Sym.ImplStartLine - 1];
+            // find ShortName preceded by '.' (the dotted Type.Name member shape)
+            var ScanAt := 1;
+            while ScanAt + Length(ShortName) - 1 <= Length(LnText) do
+            begin
+              if SameText(Copy(LnText, ScanAt, Length(ShortName)), ShortName)
+                 and (ScanAt >= 2) and (LnText[ScanAt - 1] = '.') then
+              begin
+                Edit.FilePath := ImplPath;
+                Edit.Line     := Sym.ImplStartLine;
+                Edit.Col      := ScanAt;
+                Edit.OldName  := ShortName;
+                Edit.NewName  := ANewName;
+                List.Add(Edit);
+                Break;
+              end;
+              Inc(ScanAt);
+            end;
+          end;
+        finally
+          ILines.Free;
+        end;
+      end;
+    end;
+
     // Sort: FilePath ASC, Line DESC, Col DESC
     Comparer:= TComparer<TRenameEdit>.Construct( function(const A, B: TRenameEdit): Integer begin Result:= CompareEdits(A, B); end);
     List.Sort(Comparer);
