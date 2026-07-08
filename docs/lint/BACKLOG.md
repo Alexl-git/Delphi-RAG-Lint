@@ -1,5 +1,61 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-08 (LATEST-29) -- **BATCH A DONE (merge-ready). BATCH B PLANNED (spec+plan committed). NEXT = IMPLEMENT Batch B AUTONOMOUSLY, then PUBLISH. `main`=`eceaa16`, 17 commits ahead of origin, NOT pushed (user drives push).**
+>
+> **USER DIRECTIVE (this session):** planning is done; only implementation remains. Implement Batch B
+> autonomously, publish (user pushes), then TEST in-IDE later; if the live smoke surfaces issues, do a
+> follow-up fix + another release.
+>
+> **READ FIRST to implement Batch B:** `docs/superpowers/plans/2026-07-08-batch-b-ide-config-consolidation.md`
+> (9 tasks, in order 1->9). Spec: `docs/superpowers/specs/2026-07-08-batch-b-ide-config-consolidation-design.md`.
+> **Execute via `superpowers:subagent-driven-development`** (fresh subagent per task + two-stage review).
+>
+> **WHAT BATCH B IS (reshaped by investigation -- both original premises were wrong):**
+> - **#4 "add a Tools->Options page" -- ALREADY EXISTS.** `DragLint.Plugin.Options.pas` (`TDragLintOptions`,
+>   `INTAAddInOptions`) already registers a native Tools->Options page. Work = CONSOLIDATE + ENRICH, not create.
+> - **#5 "Editor->Language tab" -- NOT OTA-FEASIBLE.** No interface adds a page under the built-in
+>   Editor->Language branch; `INTAAddInOptions.GetArea` only reliably lands under "Third Party". Reframed as
+>   dedicated Linter/Indexer sub-pages, NOT a literal Editor tab. Do NOT attempt GetArea string-guessing.
+> - **THE PLAN:** split the single Options frame into **4 nested sub-pages** (`drag-lint.General/Indexer/
+>   Linter/Editor`; all 26 `TDragLintSettings` registry fields mapped, each to exactly one page -- exhaustive
+>   table in the plan/spec) sharing the registry round-trip (read-modify-write so no page clobbers another);
+>   add **`max_return_cases`** to the Linter page (reads/writes manifest `drag-lint.json`, the one non-registry
+>   field); add a **Project Manager right-click "drag-lint: Project Rules..."** (`IOTAProjectMenuItemCreatorNotifier`)
+>   that activates the clicked project then opens the EXISTING Lint Options dock tab (reuse, no dup); **retire
+>   the duplicate `ShowSettingsDialog` modal** -> "drag-lint Options..." opens Tools->Options; **FIX a real
+>   pre-existing bug** -- `UnregisterDragLintOptions` is implemented but NEVER CALLED (leak/AV-on-uninstall) ->
+>   wire into `Wizard.Destroyed` + `finalization` (the user's explicit "detach on uninstall AND deactivation"
+>   requirement); **refresh docs** (user: README/INSTALL/USER-GUIDE/plugin+rules READMEs + a "Where to configure
+>   X" map + corrected indexer descriptions; AI: AI-USAGE/AI-INDEX-FIRST); **write YADF porting instructions
+>   INTO the YADF repo** at the very end (ask user for the YADF repo path then).
+>
+> **GIT:** `main`=`eceaa16`, 17 commits ahead of origin (Batch A's 15 + Batch B's spec `283bcac` + plan
+> `eceaa16`), NOT pushed. Clean except the usual LEAVE-THOSE untracked (`.superpowers/`, forms-csv v4 spec,
+> `tests/autotest/results/*.json`). Batch A is merge-ready code; Batch B is docs-only so far (code comes from
+> the autonomous implementation session).
+>
+> **BATCH B GOTCHAS (baked into the plan; flagged here for a cold start):**
+> - **IDE OTA UI is NOT headless-testable.** The ONLY automatable gates are: a clean Win32 BPL build (0 err,
+>   RAD Studio CLOSED via `Get-Process bds`) and Task 6's `run_docs_manifest_roundtrip.ps1` (the `max_return_cases`
+>   <-> `drag-lint.json` round-trip). The REAL verification is a **live IDE smoke checklist the USER runs** after
+>   (Task 9 writes it). "Publish autonomously" = build-clean + reviewed + committed, NOT proven-in-IDE.
+> - **BPL builds every task** (RAD Studio closed); BPL/DCP binary in a SEPARATE `build(plugin):` commit (Task 9).
+> - If `DRagLint.Index.Manifest` won't link into the Win32 plugin BPL, use direct `System.JSON` for
+>   `max_return_cases` (Task 3 NOTE) -- verify at build time.
+> - Task 3 manifest WRITE must preserve unrelated keys (read-modify-write the JSON, don't full-`ToJson`).
+> - Task 5 "open Tools->Options" has no guaranteed focused-open API in Studio 37 -> the plan has a fallback
+>   (execute the IDE Tools|Options action, or a ShowMessage hint). Pick the cleanest that reliably works.
+> - Project-menu action ACTIVATES the clicked project before opening the dock (the Lint Options frame is
+>   hardwired to the ACTIVE project; activate-then-open sidesteps threading a path override).
+> - **Do NOT edit out-of-repo `c:\Projects\CLAUDE.md` / global `~/.claude/CLAUDE.md`** -- flag to user only.
+>
+> **AFTER BATCH B ships + pushes + live-smoke:** if smoke surfaces issues -> follow-up fix + another release.
+> Then the deferred v0.94 IDE live-smoke of "Create helper class" remains. Also the PRE-EXISTING test-hygiene
+> backlog: `run_formsmap.ps1` DEFAULT `-Exe` points at a stale Win32 binary (green on Win64); `run_smoke.ps1`
+> hardcoded stale-version-string check -- a "make autotest `-Exe` defaults Win64 + version-agnostic" pass.
+>
+> ---
+>
 > ## RESUME 2026-07-08 (LATEST-28) -- **BATCH A IMPLEMENTED, FINAL-REVIEWED, MERGE-READY. 14 commits on `main` (`d816b23`..`9fb29c8`). NOT pushed -- user drives the push.**
 >
 > **STATUS:** All 3 Batch-A items shipped via `superpowers:subagent-driven-development` (fresh implementer + two-stage
