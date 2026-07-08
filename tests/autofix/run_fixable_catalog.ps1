@@ -18,9 +18,16 @@ try {
   Check 'off-by-one-count fixable=true'        ($byId['off-by-one-count'].fixable -eq $true)
   Check 'doc-drift fixable=true'               ($byId['doc-drift'].fixable -eq $true)
   Check 'missing-doc fixable=true'             ($byId['missing-doc'].fixable -eq $true)
+  # Batch C / Task 7: naming re-casing rules -- store-backed like doc-drift/
+  # missing-doc (no BuildAutofixEdits branch; edits come from BuildNamingFixEdits
+  # via the FinalizeAndOutput store-backed append), but still registered fixable
+  # in FIXABLE_RULE_IDS so `rules --json`.fixable and the IDE "Fix it" menu agree.
+  Check 'method-pascalcase fixable=true'       ($byId['method-pascalcase'].fixable -eq $true)
+  Check 'local-var-casing fixable=true'        ($byId['local-var-casing'].fixable -eq $true)
+  Check 'const-casing fixable=true'            ($byId['const-casing'].fixable -eq $true)
   # a rule with no fix must be false (pick a stable always-present rule):
   Check 'cyclomatic-complexity fixable=false' ($byId['cyclomatic-complexity'].fixable -eq $false)
   $fixableCount = ($obj.rules | Where-Object { $_.fixable -eq $true }).Count
-  Check 'exactly 11 fixable rules' ($fixableCount -eq 11)
+  Check 'exactly 14 fixable rules' ($fixableCount -eq 14)
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
