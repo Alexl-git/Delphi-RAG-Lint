@@ -78,9 +78,11 @@ type
     /// <param name="AIncludeSeeAlso">Opt-in: compute the &lt;seealso&gt; related set. Default False.</param>
     /// <param name="AIncludeSince">Opt-in: derive the git &lt;since&gt; date. Default False.</param>
     /// <param name="ABaseDir">Repo root for the git &lt;since&gt; lookup; '' -&gt; the file's own directory. Default ''.</param>
+    /// <param name="AExtraStores">Additional index stores searched ONLY for name-based
+    /// callers/used-in units, so cross-DB callers surface; nil/empty = single-store. Default nil.</param>
     class function Build(const AStore: ISymbolStore; const ASym: TSymbol;
       AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
-      const ABaseDir: string = ''): TDocFacts;
+      const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil): TDocFacts;
   end;
 
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
@@ -320,7 +322,8 @@ begin
 end;
 
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
-  AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string): TDocFacts;
+  AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
+  const AExtraStores: TArray<ISymbolStore>): TDocFacts;
 var
   ResCallers: TArray<TResolvedCaller>;
   RC        : TResolvedCaller        ;
@@ -407,6 +410,26 @@ begin
       FR:= ToFactRef(RC);
       FR.Confidence:= 'unverified'; // enforce the '?' marker regardless of store value
       AddDistinct(FR);
+    end;
+
+    // Extra stores (multi-DB fan-out): NAME-BASED bucket only. ASym.Id is a
+    // PRIMARY-store-only key -- in an extra store the same symbol has a
+    // different Id (or isn't defined there at all), so FindResolvedCallers
+    // would be meaningless there. FindUnresolvedNameCallers is Id-independent
+    // (keys on the qualified name's last segment), so it is exactly how a
+    // cross-DB caller (e.g. a COMMON reference) surfaces. Every extra-store hit
+    // is marked 'unverified' -- AddDistinct's Display|Location dedupe folds a
+    // caller seen in both the primary and an extra store into one entry.
+    for var ExStore in AExtraStores do
+    begin
+      if ExStore = nil then Continue;
+      ResCallers:= ExStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName));
+      for RC in ResCallers do
+      begin
+        FR:= ToFactRef(RC);
+        FR.Confidence:= 'unverified';
+        AddDistinct(FR);
+      end;
     end;
 
     Result.CalledFromTotal:= Distinct.Count;
@@ -531,6 +554,19 @@ begin
       UnitSet.CaseSensitive:= False;
       for var UR in URefs do
         UnitSet.Add(ChangeFileExt(ExtractFileName(AStore.GetFilePath(UR.FileId)), ''));
+      // Extra stores (multi-DB fan-out): same name-based query, but resolve
+      // each ref's file path via the EXTRA store's OWN FileId->path map
+      // (ExStore.GetFilePath) -- FileIds are per-DB, so using AStore.GetFilePath
+      // on an extra store's FileId would read the wrong (or a coincidentally
+      // valid but wrong) path. UnitSet is case-insensitive dupIgnore, so a unit
+      // name seen in both stores collapses to one entry.
+      for var ExStore in AExtraStores do
+      begin
+        if ExStore = nil then Continue;
+        var ExURefs: TArray<TReference>:= ExStore.FindCallersByName(LastSeg(ASym.QualifiedName));
+        for var EUR in ExURefs do
+          UnitSet.Add(ChangeFileExt(ExtractFileName(ExStore.GetFilePath(EUR.FileId)), ''));
+      end;
       Result.UsedInTotal:= UnitSet.Count;
       var ShownU: Integer:= DocDisplayCount(UnitSet.Count);
       SetLength(Result.UsedInUnits, ShownU);
