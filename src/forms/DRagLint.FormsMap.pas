@@ -763,6 +763,8 @@ var
   Q         : TFDQuery                           ;
   PasLines  : TDictionary<string, TArray<string>>;
   SeenEdges : TStringList                        ;
+  St        : TSQLiteSymbolStore                 ;
+  Stores    : TArray<TSQLiteSymbolStore>         ;
   { v4 Layer 2: routine-name-lowercased -> hook-field-name. Populated once by
     BuildHookMap from a text-scan (proc-var registrations are invisible to refs;
     see spec D2). Consulted only when a standalone launcher dead-ends. }
@@ -1047,41 +1049,52 @@ begin
     // so any launcher dead-end can consult HandlerToHook. Empty for hook-free
     // projects (the map stays empty and the branch below is a no-op).
     BuildHookMap;
+    // Fan Pass 1/2 across the primary store plus every extra store (mirrors the
+    // hook-invocation loop above): with AExtraStores empty this is exactly
+    // [AStore], one iteration, so single-DB behavior is unchanged.
+    Stores:= [AStore];
+    for St in AExtraStores do Stores:= Stores + [St];
     for Y in ANodes do
     begin
-      // Pass 1: construction sites -- refs by class name (TClass.Create / CreateForm)
-      Q.Close;
-      Q.SQL.Text:=
-        'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
-        'FROM refs r JOIN files f ON f.id = r.file_id ' +
-        'WHERE r.name_text = :cls AND f.language LIKE ''delphi%''';
-      Q.ParamByName('cls').AsString:= Y.FormClass;
-      Q.Open;
-      while not Q.Eof do
+      for St in Stores do
       begin
-        ProcessSite(Q.FieldByName('fid').AsLargeInt,
-                    Q.FieldByName('sl' ).AsInteger,
-                    Q.FieldByName('p'  ).AsString,
-                    Y.FormClass, Y.FormName, False);
-        Q.Next;
-      end; // while
+        if St = nil then Continue;
+        Q.Connection:= St.GetConnection;
 
-      // Pass 2: singleton show sites -- refs by instance name (.ShowModal / .Execute)
-      Q.Close;
-      Q.SQL.Text:=
-        'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
-        'FROM refs r JOIN files f ON f.id = r.file_id ' +
-        'WHERE r.name_text = :nm AND f.language LIKE ''delphi%''';
-      Q.ParamByName('nm').AsString:= Y.FormName;
-      Q.Open;
-      while not Q.Eof do
-      begin
-        ProcessSite(Q.FieldByName('fid').AsLargeInt,
-                    Q.FieldByName('sl' ).AsInteger,
-                    Q.FieldByName('p'  ).AsString,
-                    Y.FormClass, Y.FormName, True);
-        Q.Next;
-      end; // while
+        // Pass 1: construction sites -- refs by class name (TClass.Create / CreateForm)
+        Q.Close;
+        Q.SQL.Text:=
+          'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
+          'FROM refs r JOIN files f ON f.id = r.file_id ' +
+          'WHERE r.name_text = :cls AND f.language LIKE ''delphi%''';
+        Q.ParamByName('cls').AsString:= Y.FormClass;
+        Q.Open;
+        while not Q.Eof do
+        begin
+          ProcessSite(Q.FieldByName('fid').AsLargeInt,
+                      Q.FieldByName('sl' ).AsInteger,
+                      Q.FieldByName('p'  ).AsString,
+                      Y.FormClass, Y.FormName, False);
+          Q.Next;
+        end; // while
+
+        // Pass 2: singleton show sites -- refs by instance name (.ShowModal / .Execute)
+        Q.Close;
+        Q.SQL.Text:=
+          'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
+          'FROM refs r JOIN files f ON f.id = r.file_id ' +
+          'WHERE r.name_text = :nm AND f.language LIKE ''delphi%''';
+        Q.ParamByName('nm').AsString:= Y.FormName;
+        Q.Open;
+        while not Q.Eof do
+        begin
+          ProcessSite(Q.FieldByName('fid').AsLargeInt,
+                      Q.FieldByName('sl' ).AsInteger,
+                      Q.FieldByName('p'  ).AsString,
+                      Y.FormClass, Y.FormName, True);
+          Q.Next;
+        end; // while
+      end; // for St
     end; // for Y
   finally
     Q.Free;
