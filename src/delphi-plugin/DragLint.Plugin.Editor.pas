@@ -81,6 +81,13 @@ procedure InvokeQuickFixUses (Sender: TObject);
 procedure InvokeSignatureHelp(Sender: TObject);
 procedure InvokeDiagnostics  (Sender: TObject);
 procedure InvokeRename       (Sender: TObject);
+{ Batch E Task 3: reverse call tree (Messages window), exposed to the
+  keyboard binding unit (Ctrl+Alt+K) the same way InvokeRename etc. are --
+  must be forward-declared here in the interface section, since Keyboard.pas
+  can only see identifiers Editor.pas exports from its interface, not ones
+  declared only in its implementation section (mutual implementation-uses
+  does not itself grant visibility). }
+procedure InvokeReverseCallTreeMessages(Sender: TObject);
 { v0.26: compiler diagnostics }
 procedure InvokeCompileDiagnose(Sender: TObject);
 procedure InvokeGhostCheck     (Sender: TObject);

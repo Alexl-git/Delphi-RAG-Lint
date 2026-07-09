@@ -70,6 +70,7 @@ type
       procedure FindUsagesKey  (const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
       procedure SymbolSearchKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
       procedure QuickFixUsesKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
+      procedure ReverseCallTreeKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
   end;
 
   { IOTANotifier stubs }
@@ -104,6 +105,9 @@ begin
   BindingServices.AddKeyBinding( [ShortCut(Ord('F'), [ssCtrl, ssAlt])], FindUsagesKey  , nil);
   BindingServices.AddKeyBinding( [ShortCut(Ord('T'), [ssCtrl, ssAlt])], SymbolSearchKey, nil);
   BindingServices.AddKeyBinding( [ShortCut(Ord('U'), [ssCtrl, ssAlt])], QuickFixUsesKey, nil);
+  { Batch E Task 3a: fast access to the reverse call tree (Messages window),
+    without going through the top drag-lint menu. }
+  BindingServices.AddKeyBinding( [ShortCut(Ord('K'), [ssCtrl, ssAlt])], ReverseCallTreeKey, nil);
 end;
 
 function TDragLintKeyboardBinding.GetBindingType: TBindingType;
@@ -185,6 +189,15 @@ end;
 procedure TDragLintKeyboardBinding.QuickFixUsesKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
 begin
   InvokeQuickFixUses(nil);
+  BindingResult:= krHandled;
+end;
+
+{ Batch E Task 3a: Ctrl+Alt+K -- reverse call tree for the symbol under the
+  cursor, posted as clickable nodes into the IDE Messages window. Mirrors
+  RenameKey: no Enable* gate (there is no dedicated setting for this action). }
+procedure TDragLintKeyboardBinding.ReverseCallTreeKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
+begin
+  InvokeReverseCallTreeMessages(nil);
   BindingResult:= krHandled;
 end;
 
