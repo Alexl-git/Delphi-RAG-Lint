@@ -34,6 +34,7 @@ text-level matches, non-Delphi files, or code no index covers.
 | Understand/modify `X` (context bundle) | `drag-lint context --task "modify Unit.TType.Method" --db <db> --format markdown` |
 | What does `X` call (outgoing) | `drag-lint find-callees --qname Unit.TType.Method --db <db>` |
 | N-deep call tree from `X` | `drag-lint callgraph --qname X [--direction callers\|callees] [--depth N] --db <db>` |
+| Callers + callees of `X` in one chart | `drag-lint butterfly --qname X [--depth N] [--format dot\|mermaid\|text\|json] --db <db>` |
 | Circular unit deps (+ fix plan) | `drag-lint cycles --db <db> [--edges] [--causes] [--plan]` |
 | Third-party dependency rollup | `drag-lint deps-report --db <db> [--edges] [--format text\|json\|csv]` |
 | Full-text: message / DFM caption / SQL text | `drag-lint query --text "<phrase>" [--source pas\|dfm\|sql] --db <db>` |
@@ -54,8 +55,8 @@ text-level matches, non-Delphi files, or code no index covers.
   `docs/AI-USAGE.md` section 4b for the safe/caveat details.
 
 Analysis/report verbs above (`cycles`, `deps-report`, `schema`, `info`,
-`callgraph`, `reverse-calltree`, ...) are **CLI-only** -- not exposed as MCP
-tools; shell out to the CLI for them.
+`callgraph`, `reverse-calltree`, `butterfly`, ...) are **CLI-only** -- not
+exposed as MCP tools; shell out to the CLI for them.
 
 ### Why
 - **Understand/modify a symbol → context bundle, not whole files.** `drag-lint

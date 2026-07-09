@@ -138,6 +138,7 @@ in 2b.
 | `call-path --from A --to B` | shortest resolved call path A -> ... -> B (`--max-depth N`; exit 1 = no path) |
 | `callgraph --qname X` | N-deep resolved call tree (`--direction callers\|callees`, `--depth N`; cycle-guarded) |
 | `reverse-calltree --qname X` | N-deep call tree with call sites (`--direction callers\|callees`, default callers = *upward* "who calls X"; `--depth N`, `--format text\|json\|dot\|mermaid`) |
+| `butterfly --qname X` | composes callers (upward wing) + callees (downward wing) into one chart (`--depth N`, `--format dot\|mermaid\|text\|json`, default `dot`; static-export counterpart to the in-IDE butterfly tab) |
 | `cycles` | circular unit deps (`--edges`, `--causes`, `--plan` for a refactoring playbook) |
 | `uses-report --output f.csv` | full uses-graph rollup to CSV (`--depth N`, `--include-external`, `--all-sources`) |
 | `deps-report` | third-party dependency rollup (`--edges`, `--format text\|json\|csv`) |

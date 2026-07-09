@@ -364,6 +364,7 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `ghost-recover` | Restore any files left overlaid by a crash mid-ghost-check (`_D-RAG` journal) |
 | `bench-context <dir>` | Benchmark context bundle throughput |
 | `forms-csv --project <dproj> --db <db>` | Test-helper CSV: one row per form with the button/menu path from the main form (`Navigation`), the forms that open it (`Called From`), unit + line count (`--out <f.csv>`, `--root <TfrmMAIN>`) |
+| `butterfly --qname X [--depth N] [--format dot\|mermaid\|text\|json]` | Composes a symbol's callers (upward wing) + callees (downward wing) into one chart -- static-export counterpart to the in-IDE butterfly tab (`--output <f>`, default format `dot`) |
 | `lsp [--db <db>]` | Start the LSP server (stdio) |
 | `serve [--db <db>]` | Start the MCP server (stdio) |
 | `info [--json]` | Engine self-info: version, build date, tree-sitter versions, capabilities (FTS5, CLI verb count), exe path, platform -- read-only, no DB. What the IDE Help>About box calls |

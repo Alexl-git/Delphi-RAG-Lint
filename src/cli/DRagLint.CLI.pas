@@ -395,6 +395,7 @@ begin
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
+  Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
   Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)');
@@ -10392,6 +10393,235 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>drag-lint butterfly --qname X [--depth N] [--format dot|mermaid|text|json]
+/// [--output F] --db PATH [--db ...] -- Track 5.3 slice (Batch H2): composes a
+/// symbol's CALLERS (upward wing, via BuildReverseCallTree) and CALLEES (downward
+/// wing, via BuildForwardCallTree) into one "butterfly" chart, the static-export
+/// counterpart to the in-IDE butterfly tab (Batch F). No new engine -- both trees
+/// are the shipped TRCallTree/TRCallNode shape from DRagLint.Report.RCallTree;
+/// composition works because both trees share the same root qname, so a chart
+/// renderer that dedupes nodes by qname naturally attaches both wings to one
+/// center node. Multi-db root resolution mirrors DoReverseCallTree exactly: the
+/// first db whose ResolveEndpointIds(qname) is non-empty wins. --depth applies to
+/// BOTH wings. dot/mermaid: callers render `caller -> X` (existing reverse-tree
+/// orientation); callees render `X -> callee` (the REVERSED orientation, via the
+/// AReverseEdges parameter added to the local RenderNodeChart). Root node is
+/// styled distinctly in dot output (bold, `#ffd` fill) so the chart's center is
+/// obvious. text: two headed sections (CALLERS upward / CALLEES downward), each
+/// via RenderNodeText. json: schema "butterfly/1" wrapping the two full
+/// reverse-calltree/1 tree objects under "callers"/"callees". Read-only.</summary>
+/// <param name="AArgs">QName=root (required), Depth=tree depth for both wings
+/// (default 3, <0 clamped to 0), Format/AsJson=output (default dot),
+/// Output=optional file path (else stdout), DbPath/DbPaths=index(es).</param>
+/// <returns>0 ok (even with zero callers and/or zero callees -- still a valid
+/// 1-node chart); 1 qname unresolved in every DB; 2 usage error / no readable db.</returns>
+function DoButterfly(const AArgs: TArgs): Integer;
+var
+  Dbs      : TArray<string>;
+  Db       : string        ;
+  Store    : ISymbolStore  ;
+  RootIds  : TArray<Int64> ;
+  Depth    : Integer       ;
+  Fmt      : string        ;
+  Opts     : TRCallOptions ;
+  ReverseTree: TRCallTree  ;
+  ForwardTree: TRCallTree  ;
+
+  function SanitizeId(const AName: string): string;
+  var
+    Ch: Char;
+  begin
+    Result:= '';
+    for Ch in AName do
+      if CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Result:= Result + Ch
+      else Result:= Result + '_';
+    if (Result = '') or CharInSet(Result[1], ['0'..'9']) then Result:= '_' + Result;
+  end;
+
+  procedure RenderNodeText(const ANode: TRCallNode; const AIndent: string; ALines: TStrings);
+  var
+    Line : string;
+    Kid  : TRCallNode;
+  begin
+    Line:= AIndent + ANode.QName;
+    if ANode.Site <> '' then Line:= Line + Format(' [%s]', [ANode.Site]);
+    if ANode.Cycle then Line:= Line + ' (cycle)';
+    ALines.Add(Line);
+    if ANode.Cycle then Exit; // already expanded elsewhere -- marker only, no recursion
+    for Kid in ANode.Callers do
+      RenderNodeText(Kid, AIndent + '  ', ALines);
+  end; // procedure
+
+  function BuildNodeJson(const ANode: TRCallNode): TJSONObject;
+  var
+    JKids: TJSONArray;
+    Kid  : TRCallNode ;
+  begin
+    Result:= TJSONObject.Create;
+    Result.AddPair('qname', ANode.QName);
+    Result.AddPair('site' , ANode.Site );
+    Result.AddPair('file' , ANode.SiteFile);
+    Result.AddPair('line' , TJSONNumber.Create(ANode.SiteLine));
+    Result.AddPair('cycle', TJSONBool.Create(ANode.Cycle));
+    JKids:= TJSONArray.Create;
+    for Kid in ANode.Callers do JKids.AddElement(BuildNodeJson(Kid));
+    Result.AddPair('callers', JKids);
+  end; // function
+
+  function BuildSummaryJson(const ASummary: TRCallSummary): TJSONObject;
+  begin
+    Result:= TJSONObject.Create;
+    Result.AddPair('node_count'      , TJSONNumber.Create(ASummary.NodeCount      ));
+    Result.AddPair('max_depth_reached', TJSONNumber.Create(ASummary.MaxDepthReached));
+    Result.AddPair('cycle_count'     , TJSONNumber.Create(ASummary.CycleCount     ));
+    Result.AddPair('truncated'       , TJSONBool.Create(ASummary.Truncated        ));
+  end; // function
+
+  function BuildTreeJson(const ATree: TRCallTree): TJSONObject;
+  begin
+    Result:= TJSONObject.Create;
+    Result.AddPair('schema' , 'reverse-calltree/1'    );
+    Result.AddPair('root'   , BuildNodeJson(ATree.Root));
+    Result.AddPair('summary', BuildSummaryJson(ATree.Summary));
+  end; // function
+
+  // AReverseEdges=False: caller orientation (Kid -> ANode), the existing
+  // reverse-tree emit direction, used for the CALLERS wing. AReverseEdges=True:
+  // emits the OPPOSITE (ANode -> Kid), used for the CALLEES wing (ANode.Callers
+  // holds the callees for a forward tree; field name kept for record reuse --
+  // see TRCallNode doc comment).
+  procedure RenderNodeChart(const ANode: TRCallNode; ABuf: TStringBuilder; AIsDot: Boolean; AReverseEdges: Boolean);
+  var
+    Kid: TRCallNode;
+  begin
+    for Kid in ANode.Callers do
+    begin
+      if AIsDot then
+      begin
+        if AReverseEdges then ABuf.AppendLine(Format('  "%s" -> "%s";', [ANode.QName, Kid.QName]))
+        else ABuf.AppendLine(Format('  "%s" -> "%s";', [Kid.QName, ANode.QName]));
+      end
+      else
+      begin
+        if AReverseEdges then ABuf.AppendLine(Format('  %s --> %s', [SanitizeId(ANode.QName), SanitizeId(Kid.QName)]))
+        else ABuf.AppendLine(Format('  %s --> %s', [SanitizeId(Kid.QName), SanitizeId(ANode.QName)]));
+      end;
+      if not Kid.Cycle then RenderNodeChart(Kid, ABuf, AIsDot, AReverseEdges);
+    end;
+  end; // procedure
+
+begin
+  if AArgs.QName = '' then
+  begin Writeln('Usage: drag-lint butterfly --qname X [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH'); Exit(2); end;
+
+  Fmt:= LowerCase(Trim(AArgs.Format));
+  if Fmt = '' then Fmt:= 'dot'; // chart verb -- default dot (unlike reverse-calltree's text default)
+
+  Depth:= AArgs.Depth;
+  if Depth < 0 then Depth:= 0;
+
+  Dbs:= ResolveConsumerDbs(AArgs);
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+
+  // Multi-db root resolution: first db whose ResolveEndpointIds(qname) is
+  // non-empty wins. AnyDbOpened tracks whether at least one --db path opened
+  // read-only successfully, INDEPENDENT of whether the qname resolved in it --
+  // this distinguishes "no readable db at all" (exit 2) from "every db opened
+  // fine but none of them declares this qname" (exit 1). NOTE: DoReverseCallTree's
+  // equivalent loop lacks this distinction (Store only gets assigned on a qname
+  // match, so an all-readable-but-unresolved-qname run there falls through to
+  // the SAME "no readable index" exit-2 message instead of exit 1 -- a
+  // pre-existing bug, not fixed here since it is out of scope for this verb).
+  Store  := nil;
+  RootIds:= nil;
+  var AnyDbOpened: Boolean:= False;
+  for Db in Dbs do
+  begin
+    if not TFile.Exists(Db) then Continue;
+    var RoOk: Boolean;
+    var CandidateStore: ISymbolStore:= OpenReadOnlyStore(Db, RoOk);
+    if not RoOk then Continue;
+    AnyDbOpened:= True;
+    var CandidateIds: TArray<Int64>:= ResolveEndpointIds(CandidateStore, AArgs.QName);
+    if Length(CandidateIds) > 0 then
+    begin
+      Store  := CandidateStore;
+      RootIds:= CandidateIds;
+      Break;
+    end;
+  end;
+  if not AnyDbOpened then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+  if Store = nil then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+
+  Opts.Depth:= Depth;
+
+  // Overloads: butterfly composes a SINGLE center node, so use the first
+  // resolved root id (matches the common case; overload fan-out is out of
+  // scope for a v1 chart verb -- reverse-calltree's multi-root loop is not
+  // reused here because the composed chart has exactly one center).
+  ReverseTree:= BuildReverseCallTree(Store, RootIds[0], Opts);
+  ForwardTree:= BuildForwardCallTree(Store, RootIds[0], Opts);
+
+  if (Fmt = 'dot') or (Fmt = 'mermaid') then
+  begin
+    var Buf: TStringBuilder:= TStringBuilder.Create;
+    try
+      if Fmt = 'dot' then
+      begin
+        Buf.AppendLine('// Generated by drag-lint butterfly');
+        Buf.AppendLine('digraph DragLintButterfly {');
+        Buf.AppendLine('  rankdir=LR;');
+        Buf.AppendLine('  node [shape=box, style=filled, fillcolor="#eef"];');
+        Buf.AppendLine('  edge [color="#888"];');
+        Buf.AppendLine(Format('  "%s" [fillcolor="#ffd", style="filled,bold"];', [ReverseTree.Root.QName]));
+      end
+      else
+      begin
+        Buf.AppendLine('%% Generated by drag-lint butterfly');
+        Buf.AppendLine('graph LR');
+      end;
+      RenderNodeChart(ReverseTree.Root, Buf, Fmt = 'dot', False); // callers wing: caller -> X
+      RenderNodeChart(ForwardTree.Root, Buf, Fmt = 'dot', True);  // callees wing: X -> callee
+      if Fmt = 'dot' then Buf.AppendLine('}');
+
+      if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Buf.ToString, TEncoding.UTF8); Writeln('Wrote ', AArgs.Output); end
+      else Writeln(Buf.ToString);
+    finally
+      Buf.Free;
+    end;
+  end
+  else if (Fmt = 'json') or AArgs.AsJson then
+  begin
+    var JOut: TJSONObject:= TJSONObject.Create;
+    try
+      JOut.AddPair('schema' , 'butterfly/1'    );
+      JOut.AddPair('qname'  , ReverseTree.Root.QName);
+      JOut.AddPair('callers', BuildTreeJson(ReverseTree));
+      JOut.AddPair('callees', BuildTreeJson(ForwardTree));
+      var OutStr: string:= JOut.Format(2);
+      if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, OutStr, TEncoding.UTF8); Writeln('Wrote ', AArgs.Output); end
+      else Writeln(OutStr);
+    finally
+      JOut.Free;
+    end;
+  end
+  else // text (default explicit --format text)
+  begin
+    var Lines: TStringList:= TStringList.Create;
+    try
+      Lines.Add('CALLERS (upward):');
+      RenderNodeText(ReverseTree.Root, '  ', Lines);
+      Lines.Add('CALLEES (downward):');
+      RenderNodeText(ForwardTree.Root, '  ', Lines);
+      if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Lines.Text, TEncoding.UTF8); Writeln('Wrote ', AArgs.Output); end
+      else Writeln(Lines.Text);
+    finally
+      Lines.Free;
+    end;
+  end;
+  Result:= 0;
+end; // function
+
 /// <summary>v14 (D5 T12): drag-lint purge-locals --db PATH [--json] -- the SIZE
 /// ESCAPE HATCH. Deletes every skLocalVar/skParam symbol (kind IN 'local_var',
 /// 'param'), then VACUUMs to reclaim the freed pages, and reports how many rows
@@ -11682,6 +11912,7 @@ begin
     else if Args.Command = 'call-path'         then Result:= DoCallPath        (Args)
     else if Args.Command = 'callgraph'         then Result:= DoCallGraph       (Args)
     else if Args.Command = 'reverse-calltree'  then Result:= DoReverseCallTree (Args)
+    else if Args.Command = 'butterfly'         then Result:= DoButterfly       (Args)
     else if Args.Command = 'purge-locals'      then Result:= DoPurgeLocals     (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
     else if Args.Command = 'workspace'         then Result:= DoWorkspace       (Args)

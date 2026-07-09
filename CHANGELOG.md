@@ -5,6 +5,24 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+- **`butterfly` chart verb (Track 5.3 slice, Batch H2).** A new CLI verb:
+  `drag-lint butterfly --qname X [--depth N] [--format dot|mermaid|text|json]
+  [--output F] --db PATH [--db ...]` composes a symbol's **callers (upward
+  wing)** and **callees (downward wing)** into one chart -- the static-export
+  counterpart to the in-IDE butterfly renderer (Batch F). No new engine:
+  reuses the shipped `BuildReverseCallTree`/`BuildForwardCallTree`
+  (`DRagLint.Report.RCallTree`); the two trees share the same root qname, so
+  the composed chart attaches both wings to one center node. `--depth` applies
+  to both wings (default 3). Default format is `dot` (a chart verb, unlike
+  `reverse-calltree`'s `text` default). `dot`/`mermaid`: callers render
+  `caller -> X`, callees render the REVERSED `X -> callee`; the root node is
+  styled distinctly (`#ffd` fill, bold) so the chart's center is obvious.
+  `json`: schema `butterfly/1` wraps the two full `reverse-calltree/1` tree
+  objects under `callers`/`callees`. `text`: two headed sections (`CALLERS
+  (upward):` / `CALLEES (downward):`). Read-only, CLI-only (no BPL/IDE
+  change). Multi-db root resolution mirrors `reverse-calltree`: first db that
+  resolves the qname wins.
+
 ## v1.0.0-alpha -- 2026-07-09
 
 IDE startup splash, Help>About live self-info, and the new `info` verb (Batch G).
