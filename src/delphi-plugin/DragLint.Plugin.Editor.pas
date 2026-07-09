@@ -125,8 +125,6 @@ procedure InvokeRunAstChecks(Sender: TObject);
 { v0.33: find usages + symbol search }
 procedure InvokeFindUsages  (Sender: TObject);
 procedure InvokeSymbolSearch(Sender: TObject);
-{ v0.39: diagnostic menu -- shows path resolution, subprocess spawn, LSP handshake details }
-procedure InvokeTestConnection(Sender: TObject);
 procedure InvokeOpenLog       (Sender: TObject);
 
 { v0.40.3: lint the active editor BUFFER (unsaved changes included).
@@ -2519,48 +2517,6 @@ begin
   if Result = nil then Result:= ViewItem; { fall back to View itself }
 end;
 
-{ ---- v0.39 diagnostic helpers ---- }
-
-procedure InvokeTestConnection(Sender: TObject);
-{ v0.40.2: previously ran Start + Initialize + Stop on the UI thread.
-  Initialize blocks up to 10s; Stop could hang forever on a sticky
-  WaitFor; either freezes the IDE. Now we capture the up-front
-  resolution synchronously, then spin a background TThread for the
-  subprocess work and post the final ShowMessage back via TThread.Queue
-  so the UI remains responsive. }
-var
-  BplPath     : string ;
-  BplDir      : string ;
-  ExePathBpl  : string ;
-  ExePath     : string ;
-  HasNextToBpl: Boolean;
-  Header      : string ;
-begin
-  BplPath:= GetModuleName  (HInstance);
-  BplDir := ExtractFilePath(BplPath  );
-  ExePathBpl:= BplDir + 'drag-lint.exe';
-  HasNextToBpl:= FileExists(ExePathBpl);
-  if HasNextToBpl then ExePath:= ExePathBpl
-  else ExePath:= 'drag-lint.exe';
-
-  Header:= '=== drag-lint plugin self-test ===' + sLineBreak + PluginBuildTag + sLineBreak + sLineBreak + 'BPL path: ' + BplPath + sLineBreak + 'BPL dir:  ' + BplDir + sLineBreak +
-  Format('drag-lint.exe next to BPL: %s  (exists=%s)', [ExePathBpl, BoolToStr(HasNextToBpl, True)]) + sLineBreak;
-  if not HasNextToBpl then Header:= Header + 'Will fall back to PATH lookup of "drag-lint.exe"' + sLineBreak;
-  Header:= Header + sLineBreak + 'Spawning drag-lint.exe lsp ...' + sLineBreak;
-
-  { Show "running" immediately so the user knows the click registered.
-    The background thread then assembles and posts the full report. }
-  TThread.CreateAnonymousThread(
-    procedure var Client: TDragLintLspClient; Started,
-    InitOk: Boolean; Body: string; FinalText: string; begin Client:= TDragLintLspClient.Create; try Started:= Client.Start(ExePath); Body:= Format('Start result: %s',
-          [BoolToStr(Started, True)]) + sLineBreak; if Started then begin Body:= Body + 'Sending initialize request ...' + sLineBreak; InitOk:= Client.Initialize; Body:= Body
-      + Format('Initialize result: %s', [BoolToStr(InitOk, True)]) + sLineBreak; if InitOk then Body:= Body + 'SUCCESS: subprocess + handshake working'
-      + sLineBreak else Body:= Body + 'FAILED: initialize did not return within timeout' + sLineBreak; Client.Stop; end else Body:= Body
-      + 'FAILED: CreateProcessW failed (see log)' + sLineBreak; finally Client.Free; end; FinalText:= Header + Body + sLineBreak + 'Detailed log: '
-      + GetPluginLogPath; TThread.Queue(nil, procedure begin ShowMessage(FinalText); end); end
-  ).Start;
-end; // procedure
-
 { ---- v0.40.3: lint unsaved buffer -------------------------------------- }
 
 function ReadActiveBufferText(out AFileName: string): string;
@@ -4101,7 +4057,6 @@ begin
   AddWrappedItem(RootMenu, 'Compile Buffer (unsaved)'       , InvokeGhostCheck     );
   AddWrappedItem(RootMenu, 'Recover Buffer-Compile Files'   , InvokeGhostRecover   );
   AddWrappedItem(RootMenu, 'Import Build Log...'            , InvokeImportLog      );
-  AddWrappedItem(RootMenu, 'Test Connection...'             , InvokeTestConnection );
   AddWrappedItem(RootMenu, 'Open Plugin Log'                , InvokeOpenLog        );
 
   { v0.42: also surface the dockable panel under View > Tool Windows. This item
