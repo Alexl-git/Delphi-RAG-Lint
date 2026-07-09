@@ -418,6 +418,12 @@ begin
     give the folder memo akBottom so it stretches; the warning label pins to the
     group bottom. Net effect: the resolved-folders list resizes with the window. }
   FGrpLibIndex.Anchors:= [akLeft, akTop, akRight, akBottom];
+  { Regression fix (Batch E): without a floor, the IDE Options dialog (a short
+    ~450px client area) can shrink this LAST group below its design height,
+    crushing the akTop+akBottom folder memo inside it to ~0 height. Floor the
+    group at its own design height (GH + EH + 16 + LH + 40 + 4, same expression
+    used to size it above) so it can grow but never collapse. }
+  FGrpLibIndex.Constraints.MinHeight := GH + EH + 16 + LH + 40 + 4;
   GY:= GH - 4;
 
   DLNewLabel(FGrpLibIndex, 'Scope:', LM, GY + 4);
@@ -448,6 +454,11 @@ begin
   { akBottom makes the folder list stretch vertically as the group (and the
     frame) grow with the Options window. }
   FMemoLibPaths.Anchors   := [akLeft, akTop, akRight, akBottom];
+  { Regression fix (Batch E): the IDE hosts this frame Align=alClient and shrinks
+    it to the (short) Options client area; with akBottom and no floor the memo's
+    height collapsed to ~0 and the folder list rendered empty. A MinHeight floor
+    keeps >= ~20 lines visible while still growing when the Options window is taller. }
+  FMemoLibPaths.Constraints.MinHeight := LH;
   Inc(GY, LH + 4);
 
   FLblLibWarning:= DLNewLabel(FGrpLibIndex, 'Indexing the full library (RTL + DevExpress + browsing paths) can take several minutes.', LM, GY);
