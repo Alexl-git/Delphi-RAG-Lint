@@ -115,8 +115,21 @@ BLOCKED."** No subagent may autonomously close the IDE to clear a lock.
 
 ### 3.1 Storage / schema
 
-Saved presets live in the manifest under a new key **`naming.presets`**: an
-array of objects
+**File decision (revised during implementation, 2026-07-09):** presets live in
+**`drag-lint-lint.json`** (the LINT config), NOT `drag-lint.json` (the manifest).
+Rationale surfaced at Task 6: the dock naming Options frame
+(`LintOptionsFrame`) already round-trips `drag-lint-lint.json` via
+`TLintConfigWriter` (it has no `ManifestPathForWrite`), the naming rule values a
+preset captures already live in `drag-lint-lint.json`, and the CLI's naming
+reader `LoadLintConfig` reads that same file -- so storing presets there keeps
+all naming config in one coherent file and makes the "a future CLI could read
+presets" goal actually reachable. This honors the brainstorm INTENT (portable,
+travels with the repo, CLI-readable) over the literal earlier wording
+"drag-lint.json". The user confirmed this choice.
+
+Saved presets live under a new top-level key **`naming.presets`** in
+`drag-lint-lint.json` (a sibling of `rules`/`profiles`, which the RMW must
+preserve): an array of objects
 
 ```json
 {
