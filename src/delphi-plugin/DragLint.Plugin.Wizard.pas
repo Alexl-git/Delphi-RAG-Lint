@@ -38,6 +38,7 @@ uses
   , DragLint.Plugin.OpenSourceServer
   , DragLint.Plugin.DockForm
   , DragLint.Plugin.GraphWindow
+  , DragLint.Plugin.About
   ;
 
 {$R 'DragLintSplash.res'}
@@ -66,6 +67,7 @@ begin
   try StopOpenSourceServer; except end;
   try UnregisterDragLintDock; except end;
   try UnregisterDragLintOptions; except end;
+  try UnregisterDragLintAbout;   except end;
   try UnregisterProjectMenu;     except end;
 end;
 
@@ -96,6 +98,7 @@ end;
 procedure Register;
 begin
   RegisterPackageWizard(TDragLintWizard.Create);
+  try RegisterDragLintAbout; except end;
   RegisterDragLintMenu;
   RegisterDragLintOptions;
   try RegisterProjectMenu; except end;
