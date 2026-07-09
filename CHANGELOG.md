@@ -23,6 +23,31 @@ breaking changes** until v1.0.
   change). Multi-db root resolution mirrors `reverse-calltree`: first db that
   resolves the qname wins.
 
+- **Component-conversion FOUNDATION -- 3 read-only verbs + a reFind-superset
+  DSL (Track 3, Batch 1).** Index-driven planning for a component/type
+  migration (`TDBEdit` -> `TcxDBEdit`, or any `TPersistent`-rooted pair) from
+  the REAL, AST-exact property trees of both types. `drag-lint proptree --qname
+  X [--depth N] [--no-to-persistent] [--format text|json] --db PATH` is a
+  recursive deep-property enumerator: it walks a class's own + inherited
+  `property` symbols and recurses into class-typed property types (depth cap 6,
+  visited-type cycle guard), emitting flattened dotted paths (`Font.Color`,
+  `Sub.Color`) with type/declared_in/kind; JSON schema `proptree/1`. `drag-lint
+  convert-scaffold --from F --to T [--out FILE] --db PATH` auto-generates a
+  VALID rules file from BOTH trees -- a concrete `#link ToPath <- FromPath`
+  where exactly one source matches by leaf-name+type, `??? ` + a `candidates:`
+  note where ambiguous, `#default ToPath = ???` for target-only props, and
+  `DROPPED` notes for orphaned source props. `drag-lint convert-validate
+  --rules FILE [--from F] [--to T] [--print-parsed] --db PATH` parses the DSL
+  and validates its `#link`/`#default` paths against the real trees (exit 0
+  valid / 1 errors / 2 bad args). The DSL is a strict SUPERSET of Embarcadero
+  reFind (adopts `#unuse`/`#remove`/`#migrate` + the raw PCRE escape hatch; adds
+  `#convert`/`#link`/`#default`/`#note`). The thesis: reFind is blind PCRE and
+  GExperts converts only 1 level, so both miss the deep matches; drag-lint knows
+  the real trees down to `TPersistent` and generates correct, validated links.
+  Full reference: `docs/CONVERSION-RULES.md`. Read-only, CLI-only, headless. NOTE:
+  **apply** (rewriting `.pas` + `.dfm` from a validated rule set) is Batch 2 and
+  is NOT yet shipped -- Batch 1 is the read-only foundation.
+
 ## v1.0.0-alpha -- 2026-07-09
 
 IDE startup splash, Help>About live self-info, and the new `info` verb (Batch G).

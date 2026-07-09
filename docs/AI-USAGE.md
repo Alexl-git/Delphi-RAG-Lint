@@ -139,6 +139,9 @@ in 2b.
 | `callgraph --qname X` | N-deep resolved call tree (`--direction callers\|callees`, `--depth N`; cycle-guarded) |
 | `reverse-calltree --qname X` | N-deep call tree with call sites (`--direction callers\|callees`, default callers = *upward* "who calls X"; `--depth N`, `--format text\|json\|dot\|mermaid`) |
 | `butterfly --qname X` | composes callers (upward wing) + callees (downward wing) into one chart (`--depth N`, `--format dot\|mermaid\|text\|json`, default `dot`; static-export counterpart to the in-IDE butterfly tab) |
+| `proptree --qname X` | recursive deep-property enumerator: flattened dotted paths of a class's own + inherited properties, recursing into class-typed types down to `TPersistent` (`--depth N` cap 6, `--no-to-persistent`, `--format text\|json`; JSON schema `proptree/1`) |
+| `convert-scaffold --from F --to T` | auto-draft a VALID reFind-superset conversion-rules file from the real F/T property trees: concrete `#link` on 1 leaf-name+type match, `???` for ambiguities, `DROPPED` notes for orphaned source props (`--out <f>`) -- see `docs/CONVERSION-RULES.md` |
+| `convert-validate --rules F` | parse + validate a reFind-superset conversion-rules DSL; `--from`/`--to` check `#link`/`#default` paths against the real trees (`--print-parsed`; exit 0 valid / 1 errors / 2 bad args). NOTE: apply is Batch 2, not yet shipped |
 | `cycles` | circular unit deps (`--edges`, `--causes`, `--plan` for a refactoring playbook) |
 | `uses-report --output f.csv` | full uses-graph rollup to CSV (`--depth N`, `--include-external`, `--all-sources`) |
 | `deps-report` | third-party dependency rollup (`--edges`, `--format text\|json\|csv`) |

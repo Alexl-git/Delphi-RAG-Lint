@@ -35,6 +35,9 @@ text-level matches, non-Delphi files, or code no index covers.
 | What does `X` call (outgoing) | `drag-lint find-callees --qname Unit.TType.Method --db <db>` |
 | N-deep call tree from `X` | `drag-lint callgraph --qname X [--direction callers\|callees] [--depth N] --db <db>` |
 | Callers + callees of `X` in one chart | `drag-lint butterfly --qname X [--depth N] [--format dot\|mermaid\|text\|json] --db <db>` |
+| A type's DEEP property tree (dotted paths, into class-typed props) | `drag-lint proptree --qname Unit.TType [--depth N] [--no-to-persistent] [--format text\|json] --db <db>` |
+| Draft a component-conversion rules file from real F/T trees | `drag-lint convert-scaffold --from Unit.TFrom --to Unit.TTo [--out <f>] --db <db>` |
+| Validate a conversion-rules file's paths against real trees | `drag-lint convert-validate --rules <f> [--from F] [--to T] [--print-parsed] --db <db>` |
 | Circular unit deps (+ fix plan) | `drag-lint cycles --db <db> [--edges] [--causes] [--plan]` |
 | Third-party dependency rollup | `drag-lint deps-report --db <db> [--edges] [--format text\|json\|csv]` |
 | Full-text: message / DFM caption / SQL text | `drag-lint query --text "<phrase>" [--source pas\|dfm\|sql] --db <db>` |
@@ -55,8 +58,12 @@ text-level matches, non-Delphi files, or code no index covers.
   `docs/AI-USAGE.md` section 4b for the safe/caveat details.
 
 Analysis/report verbs above (`cycles`, `deps-report`, `schema`, `info`,
-`callgraph`, `reverse-calltree`, `butterfly`, ...) are **CLI-only** -- not
-exposed as MCP tools; shell out to the CLI for them.
+`callgraph`, `reverse-calltree`, `butterfly`, `proptree`, `convert-scaffold`,
+`convert-validate`, ...) are **CLI-only** -- not exposed as MCP tools; shell out
+to the CLI for them. Component-conversion planning (`proptree` /
+`convert-scaffold` / `convert-validate`) is documented in
+`docs/CONVERSION-RULES.md`; it is a read-only foundation -- **apply** is Batch 2,
+not yet shipped.
 
 ### Why
 - **Understand/modify a symbol → context bundle, not whole files.** `drag-lint
