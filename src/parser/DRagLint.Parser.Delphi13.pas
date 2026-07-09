@@ -1349,6 +1349,14 @@ begin
     begin
       var L:= ANode.ChildByField('lhs');
       if (not L.IsNull) and (L.NodeType = 'identifier') then AState.EmitRef('read', NodeText(L, AState.Source), L);
+      // Ref-gap D: capture the MEMBER of a Self.-qualified access (Self.field) as a
+      // read of the field. Gated to lhs = Self so we do NOT flood refs with every
+      // obj.Method / obj.Prop member access.
+      if (not L.IsNull) and (L.NodeType = 'identifier') and SameText(Trim(NodeText(L, AState.Source)), 'Self') then
+      begin
+        var R:= ANode.ChildByField('rhs');
+        if (not R.IsNull) and (R.NodeType = 'identifier') then AState.EmitRef('read', NodeText(R, AState.Source), R);
+      end;
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;
     end;
