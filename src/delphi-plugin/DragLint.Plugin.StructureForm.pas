@@ -51,6 +51,7 @@ uses
   , Vcl.ExtCtrls
   , Vcl.Menus
   , Vcl.Clipbrd
+  , Vcl.Dialogs { Task 5: ShowMessage for the no-index guard in ShowInButterflyClick }
   , Winapi.Windows
   , ToolsAPI
   , DragLint.Plugin.DiagnosticCache
@@ -117,6 +118,7 @@ type
       procedure GoToDeclarationClick   (Sender: TObject);
       procedure GoToImplementationClick(Sender: TObject);
       procedure FindUsagesClick        (Sender: TObject);
+      procedure ShowInButterflyClick   (Sender: TObject); { Task 5: 'Show in Call Graph' -> butterfly tab }
       procedure CopyDiagnosticsClick   (Sender: TObject);
       { v0.88 AutoFix handlers + helpers. }
       procedure EnsureFixableRules;
@@ -344,6 +346,7 @@ begin
   AddPopupItem(FPopup, 'Go to &Declaration'          , GoToDeclarationClick   );
   AddPopupItem(FPopup, 'Go to &Implementation (body)', GoToImplementationClick);
   AddPopupItem(FPopup, 'Find &Usages'                , FindUsagesClick        );
+  AddPopupItem(FPopup, 'Show in Call &Graph'         , ShowInButterflyClick   );
   { v0.90 AutoDocument: 'Document it' acts on a symbol node (like Find Usages),
     so it is grouped with the symbol nav items. Enablement is set per-popup. }
   AddPopupItem(FPopup, '&Document it'                , DocumentItClick        );
@@ -693,6 +696,25 @@ begin
   Db:= ResolveDbForFile;
   if Db <> '' then ShowFindUsages(ND.Name, ResolveExePath, [Db])
   else ShowFindUsages(ND.Name, ResolveExePath, TArray<string>.Create());
+end;
+
+procedure TDragLintStructureForm.ShowInButterflyClick(Sender: TObject);
+{ Task 5: right-click nav -- surfaces the selected symbol in the Call Graph
+  (butterfly) tab. User-initiated only (popup click); no auto-select on mere
+  tree navigation (Batch D T9 dock-self-focus lesson). }
+var
+  ND: TStructureNodeData;
+  Db: string            ;
+begin
+  ND:= SelectedNodeData;
+  if (ND = nil) or (ND.Name = '') then Exit;
+  Db:= ResolveDbForFile;
+  if Db = '' then
+  begin
+    ShowMessage('drag-lint: no project index for this symbol.');
+    Exit;
+  end;
+  ShowButterflyForQName(ND.Name, Db);
 end;
 
 procedure TDragLintStructureForm.CopyDiagnosticsClick(Sender: TObject);
