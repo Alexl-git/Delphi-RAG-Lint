@@ -107,11 +107,18 @@ type
       at the start of each RenderCatalog, same lifetime as FAutoFixCBs. }
     FLblPreset    : TLabel;
     FCboPreset    : TComboBox;
+    FBtnSavePreset  : TButton;   { "Save as..." -- writes the current 8 values
+                                    as a new/updated named preset (Task 7) }
+    FBtnDeletePreset: TButton;   { "Delete" -- removes the selected SAVED
+                                    preset; disabled for built-ins/Custom }
     FNamingEditors: TDictionary<string, TEdit>;
     FApplyingPreset: Boolean;    { guard: True while ApplyPreset is bulk-setting
                                     editors, so their OnChange handlers do not
                                     fight back with DetectAndSetPreset (avoids
                                     the apply/detect feedback loop) }
+    FSavedPresets : TArray<TNamingPreset>; { cache of user-saved presets, backing
+                                    the combo's saved-preset range [2..CustomIndex-1];
+                                    refreshed by RebuildPresetCombo }
     procedure BuildControls;
     procedure BtnReloadClick  (Sender: TObject);
     procedure BtnSaveClick    (Sender: TObject);
@@ -127,6 +134,11 @@ type
     procedure NamingFieldChanged(Sender: TObject);
     procedure ApplyPreset       (AKind: Integer);
     procedure DetectAndSetPreset;
+    procedure RebuildPresetCombo;
+    procedure UpdatePresetButtons;
+    procedure SavePresetClick  (Sender: TObject);
+    procedure DeletePresetClick(Sender: TObject);
+    function  CustomIndex: Integer;
     { helpers }
     function  CfgPath: string;
     procedure ReloadProfileList;
@@ -185,6 +197,7 @@ uses
   , Winapi.Windows
   , Vcl.ComCtrls
   , Vcl.Samples.Spin
+  , Vcl.Dialogs
   , ToolsAPI
   , DragLint.Plugin.ProcRun
   , DragLint.Plugin.Settings
@@ -226,8 +239,9 @@ type
   class_prefix, exception_prefix, interface_prefix, pointer_prefix,
   method_case, local_case. Selecting a preset bulk-sets those 8 editor
   controls; the existing Save walk then persists them exactly as if the
-  user had typed them by hand. "Custom" (index 2) is never applied -- it
-  is the sentinel shown when the live values match neither bundle.
+  user had typed them by hand. "Custom" is never applied -- it is the
+  sentinel shown when the live values match neither a built-in nor a
+  saved preset.
 
   Verified against TNamingConfig.Default (DRagLint.Lint.Config.pas:109):
   ClassPrefix='T', ExceptionPrefix='E', InterfacePrefix='I',
@@ -236,12 +250,18 @@ type
   both presets below set it explicitly (Embarcadero 'A', House 'p') per
   the brief, so neither preset equals Default verbatim -- that is
   intentional, not a bug: picking a preset always turns ON param-prefix.
+
+  Combo layout (Task 7): 0=Embarcadero, 1=House, [2..CustomIndex-1]=user-
+  saved presets (FSavedPresets, name-ordered as returned by
+  ReadNamingPresets), CustomIndex (= FCboPreset.Items.Count - 1, always the
+  LAST item) = Custom. The combo is rebuilt (RebuildPresetCombo) every time
+  RenderCatalog runs, so Custom's numeric index moves as saved presets are
+  added/removed -- callers must use CustomIndex, never a literal.
   ============================================================ }
 
 const
   PRESET_EMBARCADERO = 0;
   PRESET_HOUSE        = 1;
-  PRESET_CUSTOM        = 2;
 
   { Parallel to the 8-field bundle: param_prefix, field_prefix,
     class_prefix, exception_prefix, interface_prefix, pointer_prefix,
@@ -899,6 +919,8 @@ const
   PEH = 24;   { param editor height }
   PIH = 46;   { total height per int param row (label + editor) }
   PSH = 44;   { total height per string param row (label + editor) }
+  PBW = 84;   { preset Save-as/Delete button width (Task 7) }
+  PBG = 6 ;   { gap before each preset button }
 begin
   ClearBody;
   FCatalogJSON:= AJSON;
@@ -915,8 +937,10 @@ begin
     FNamingEditors:= TDictionary<string, TEdit>.Create
   else
     FNamingEditors.Clear;
-  FLblPreset:= nil;
-  FCboPreset:= nil;
+  FLblPreset      := nil;
+  FCboPreset      := nil;
+  FBtnSavePreset  := nil;
+  FBtnDeletePreset:= nil;
 
   Rules:= ParseCatalog(AJSON);
   if Length(Rules) = 0 then
@@ -1023,13 +1047,41 @@ begin
           FCboPreset.Style     := csDropDownList;
           FCboPreset.Left      := LM + 96;
           FCboPreset.Top       := NextY;
-          FCboPreset.Width     := Grp.Width - LM * 2 - 96;
+          { Width leaves room for the two buttons anchored to the right edge
+            (PBW each, PBG gap before each -- see below). }
+          FCboPreset.Width     := Grp.Width - LM * 2 - 96 - 2 * (PBW + PBG);
           FCboPreset.Height    := EH;
           FCboPreset.Anchors   := [akLeft, akTop, akRight];
-          FCboPreset.Items.Add('Embarcadero (A...)'); { PRESET_EMBARCADERO }
-          FCboPreset.Items.Add('House (p...)');       { PRESET_HOUSE }
-          FCboPreset.Items.Add('Custom');              { PRESET_CUSTOM }
           FCboPreset.OnSelect  := PresetSelected;
+
+          { "Save as..." / "Delete" (Task 7), right of the combo, anchored to
+            the group box's right edge so they track FCboPreset.Width as the
+            frame resizes (FCboPreset itself is anchored akLeft+akRight, so
+            its right edge tracks the same resize). }
+          FBtnSavePreset:= TButton.Create(Self);
+          FBtnSavePreset.Parent  := Grp;
+          FBtnSavePreset.Caption := 'Save as...';
+          FBtnSavePreset.Top     := NextY;
+          FBtnSavePreset.Width   := PBW;
+          FBtnSavePreset.Height  := EH;
+          FBtnSavePreset.Left    := Grp.Width - LM - 2 * PBW - PBG;
+          FBtnSavePreset.Anchors := [akTop, akRight];
+          FBtnSavePreset.OnClick := SavePresetClick;
+
+          FBtnDeletePreset:= TButton.Create(Self);
+          FBtnDeletePreset.Parent  := Grp;
+          FBtnDeletePreset.Caption := 'Delete';
+          FBtnDeletePreset.Top     := NextY;
+          FBtnDeletePreset.Width   := PBW;
+          FBtnDeletePreset.Height  := EH;
+          FBtnDeletePreset.Left    := Grp.Width - LM - PBW;
+          FBtnDeletePreset.Anchors := [akTop, akRight];
+          FBtnDeletePreset.OnClick := DeletePresetClick;
+
+          { Populate combo (built-ins + saved + Custom) now that FCboPreset
+            exists; then Custom's numeric index is known for button state. }
+          RebuildPresetCombo;
+          UpdatePresetButtons;
           Inc(NextY, CH);
         end;
 
@@ -1173,6 +1225,7 @@ begin
       (search filtering may hide the naming category entirely, in which
       case FCboPreset is nil and DetectAndSetPreset is a no-op). }
     DetectAndSetPreset;
+    UpdatePresetButtons;
 
     FHasData:= True;
     UpdateCountsLabel;
@@ -1715,45 +1768,115 @@ end;
   Naming-convention preset combo (Task 7)
   ============================================================ }
 
+/// <summary>Index of the 'Custom' sentinel item, always the LAST combo item.
+/// Custom's numeric index is NOT fixed -- it shifts as saved presets are
+/// added/removed by RebuildPresetCombo -- so every comparison against
+/// "is this Custom?" must call this function rather than use a literal.
+/// Returns -1 if FCboPreset is nil (naming group not rendered, e.g. filtered
+/// out by search) or has no items yet.</summary>
+function TLintOptionsFrame.CustomIndex: Integer;
+begin
+  if FCboPreset = nil then
+    Result:= -1
+  else
+    Result:= FCboPreset.Items.Count - 1;
+end;
+
+/// <summary>Clears and repopulates FCboPreset: built-in bundles first
+/// (Embarcadero, House), then every user-saved preset (name order as
+/// returned by ReadNamingPresets, cached into FSavedPresets), then 'Custom'
+/// last. Combo index 2+i maps to FSavedPresets[i]. Called once at combo
+/// creation (RenderCatalog) and again after every Save/Delete so the list
+/// stays in sync with disk. No-op if FCboPreset is nil.</summary>
+procedure TLintOptionsFrame.RebuildPresetCombo;
+var
+  i: Integer;
+begin
+  if FCboPreset = nil then Exit;
+
+  FSavedPresets:= ReadNamingPresets;
+  FCboPreset.Items.BeginUpdate;
+  try
+    FCboPreset.Items.Clear;
+    FCboPreset.Items.Add('Embarcadero (A...)'); { PRESET_EMBARCADERO = 0 }
+    FCboPreset.Items.Add('House (p...)');       { PRESET_HOUSE = 1 }
+    for i:= 0 to High(FSavedPresets) do
+      FCboPreset.Items.Add(FSavedPresets[i].Name); { saved presets start at 2 }
+    FCboPreset.Items.Add('Custom');              { always LAST -- see CustomIndex }
+  finally
+    FCboPreset.Items.EndUpdate;
+  end;
+end;
+
+/// <summary>Enables FBtnDeletePreset only when the combo's current selection
+/// is a SAVED preset (built-ins Embarcadero/House and the Custom sentinel
+/// are not deletable). No-op if the buttons/combo were not rendered (naming
+/// group filtered out by search).</summary>
+procedure TLintOptionsFrame.UpdatePresetButtons;
+begin
+  if (FBtnDeletePreset = nil) or (FCboPreset = nil) then Exit;
+  FBtnDeletePreset.Enabled:= (FCboPreset.ItemIndex > PRESET_HOUSE)
+    and (FCboPreset.ItemIndex <> CustomIndex);
+end;
+
 /// <summary>Bulk-sets the 8 naming.* editor controls in FNamingEditors to
-/// the bundle identified by AKind (PRESET_EMBARCADERO or PRESET_HOUSE).
-/// The existing Save button walk persists the new values exactly as if the
-/// user had typed them by hand -- no extra "dirty" flag is needed. Sets
-/// FApplyingPreset around the writes so the editors' own OnChange handler
-/// (NamingFieldChanged) does not immediately flip the combo back to
-/// Custom. PRESET_CUSTOM is intentionally not handled here (Custom is
-/// never applied; callers must not invoke ApplyPreset for it).</summary>
+/// the values for AKind: a built-in bundle (PRESET_EMBARCADERO/PRESET_HOUSE)
+/// or a saved preset (any combo index from 2 up to, but excluding,
+/// CustomIndex -- mapped to FSavedPresets[AKind - 2]). The existing Save
+/// button walk persists the new values exactly as if the user had typed
+/// them by hand -- no extra "dirty" flag is needed. Sets FApplyingPreset
+/// around the writes so the editors' own OnChange handler (NamingFieldChanged)
+/// does not immediately flip the combo back to Custom. CustomIndex is
+/// intentionally not handled here (Custom is never applied; callers must
+/// not invoke ApplyPreset for it).</summary>
 procedure TLintOptionsFrame.ApplyPreset(AKind: Integer);
 var
-  i : Integer;
-  Ed: TEdit;
+  i , si: Integer;
+  Ed    : TEdit;
+  Vals  : array[0..7] of string;
 begin
-  if (AKind <> PRESET_EMBARCADERO) and (AKind <> PRESET_HOUSE) then Exit;
+  if AKind = CustomIndex then Exit; { Custom: detection-only sentinel }
   if FNamingEditors = nil then Exit;
+
+  if AKind <= PRESET_HOUSE then
+  begin
+    if AKind < PRESET_EMBARCADERO then Exit;
+    for i:= 0 to High(NAMING_PRESET_PARAMS) do
+      Vals[i]:= NAMING_PRESET_BUNDLES[AKind][i];
+  end
+  else
+  begin
+    si:= AKind - 2; { saved-preset index, parallel to the combo's [2..CustomIndex-1] range }
+    if (si < 0) or (si > High(FSavedPresets)) then Exit;
+    for i:= 0 to High(NAMING_PRESET_PARAMS) do
+      Vals[i]:= FSavedPresets[si].Values[i];
+  end;
 
   FApplyingPreset:= True;
   try
     for i:= 0 to High(NAMING_PRESET_PARAMS) do
       if FNamingEditors.TryGetValue(NAMING_PRESET_PARAMS[i], Ed) then
-        Ed.Text:= NAMING_PRESET_BUNDLES[AKind][i];
+        Ed.Text:= Vals[i];
   finally
     FApplyingPreset:= False;
   end;
 end;
 
 /// <summary>Reads the 8 naming.* editor controls back and selects the combo
-/// item whose bundle matches exactly, or 'Custom' when none match. A missing
-/// editor (e.g. hidden by the search filter) counts as a mismatch, so a
-/// partially-rendered naming section safely falls back to Custom rather than
-/// mis-detecting a preset. No-op when the naming group was not rendered
-/// (FCboPreset = nil, e.g. filtered out entirely by search).</summary>
+/// item whose values match exactly -- a built-in bundle first, then every
+/// saved preset in FSavedPresets order -- or 'Custom' when none match. A
+/// missing editor (e.g. hidden by the search filter) counts as a mismatch,
+/// so a partially-rendered naming section safely falls back to Custom
+/// rather than mis-detecting a preset. No-op when the naming group was not
+/// rendered (FCboPreset = nil, e.g. filtered out entirely by search).</summary>
 procedure TLintOptionsFrame.DetectAndSetPreset;
 var
-  Kind : Integer;
-  i    : Integer;
-  Ed   : TEdit;
+  Kind   : Integer;
+  si     : Integer;
+  i      : Integer;
+  Ed     : TEdit;
   Matches: Boolean;
-  Found: Boolean;
+  Found  : Boolean;
 begin
   if FCboPreset = nil then Exit;
   if FNamingEditors = nil then Exit;
@@ -1782,31 +1905,127 @@ begin
       Break;
     end;
   end;
+
   if not Found then
-    FCboPreset.ItemIndex:= PRESET_CUSTOM;
+    for si:= 0 to High(FSavedPresets) do
+    begin
+      Matches:= True;
+      for i:= 0 to High(NAMING_PRESET_PARAMS) do
+      begin
+        if not FNamingEditors.TryGetValue(NAMING_PRESET_PARAMS[i], Ed) then
+        begin
+          Matches:= False;
+          Break;
+        end;
+        if Ed.Text <> FSavedPresets[si].Values[i] then
+        begin
+          Matches:= False;
+          Break;
+        end;
+      end;
+      if Matches then
+      begin
+        FCboPreset.ItemIndex:= 2 + si;
+        Found:= True;
+        Break;
+      end;
+    end;
+
+  if not Found then
+    FCboPreset.ItemIndex:= CustomIndex;
 end;
 
 /// <summary>OnSelect handler for the naming preset combo. Applies the chosen
-/// bundle (Embarcadero/House); picking Custom leaves the current values
-/// untouched, matching the brief's "selecting it does nothing" contract.</summary>
+/// bundle or saved preset; picking Custom leaves the current values
+/// untouched, matching the brief's "selecting it does nothing" contract.
+/// Also refreshes the Delete button's enabled state for the new selection.</summary>
 procedure TLintOptionsFrame.PresetSelected(Sender: TObject);
 begin
   if FCboPreset = nil then Exit;
-  if FCboPreset.ItemIndex = PRESET_CUSTOM then Exit; { Custom: no-op by design }
-  ApplyPreset(FCboPreset.ItemIndex);
+  if FCboPreset.ItemIndex <> CustomIndex then
+    ApplyPreset(FCboPreset.ItemIndex); { Custom: no-op by design }
+  UpdatePresetButtons;
 end;
 
 /// <summary>OnChange handler wired to every naming.* editor. A manual edit
-/// flips the combo to Custom without reapplying a bundle. Guarded by
-/// FApplyingPreset so ApplyPreset's own bulk-set does not immediately
-/// re-detect and fight itself -- ApplyPreset already set the exact values
-/// for its bundle, so re-running detection there would be redundant, not
-/// wrong, but the guard keeps the two code paths cleanly separated and
-/// avoids the two firing recursively into each other.</summary>
+/// flips the combo to Custom (or re-detects a saved-preset match) without
+/// reapplying a bundle. Guarded by FApplyingPreset so ApplyPreset's own
+/// bulk-set does not immediately re-detect and fight itself -- ApplyPreset
+/// already set the exact values for its bundle, so re-running detection
+/// there would be redundant, not wrong, but the guard keeps the two code
+/// paths cleanly separated and avoids the two firing recursively into each
+/// other.</summary>
 procedure TLintOptionsFrame.NamingFieldChanged(Sender: TObject);
 begin
   if FApplyingPreset then Exit;
   DetectAndSetPreset;
+  UpdatePresetButtons;
+end;
+
+/// <summary>OnClick handler for "Save as...". Prompts for a name, rejects an
+/// empty name or one colliding with a built-in/Custom label, then writes the
+/// current 8 editor values as a named preset (WriteNamingPreset), refreshes
+/// the combo (RebuildPresetCombo, which also re-reads FSavedPresets from
+/// disk), and selects the newly-saved entry.</summary>
+procedure TLintOptionsFrame.SavePresetClick(Sender: TObject);
+var
+  Nm: string;
+  P : TNamingPreset;
+  k : Integer;
+  Ed: TEdit;
+begin
+  if FCboPreset = nil then Exit;
+  if FNamingEditors = nil then Exit;
+
+  Nm:= '';
+  if not InputQuery('Save naming preset', 'Preset name:', Nm) then Exit;
+  Nm:= Trim(Nm);
+  if Nm = '' then Exit;
+
+  if SameText(Nm, 'Custom') or SameText(Nm, 'Embarcadero (A...)')
+    or SameText(Nm, 'House (p...)') then
+  begin
+    ShowMessage('That name is reserved for a built-in preset.');
+    Exit;
+  end;
+
+  P.Name:= Nm;
+  for k:= 0 to 7 do
+  begin
+    if FNamingEditors.TryGetValue(NAMING_PRESET_PARAMS[k], Ed) then
+      P.Values[k]:= Ed.Text
+    else
+      P.Values[k]:= '';
+  end;
+  WriteNamingPreset(P);
+
+  RebuildPresetCombo;
+  FCboPreset.ItemIndex:= FCboPreset.Items.IndexOf(Nm);
+  UpdatePresetButtons;
+end;
+
+/// <summary>OnClick handler for "Delete". A no-op unless the combo's current
+/// selection is a saved preset (built-ins and Custom are excluded, mirroring
+/// FBtnDeletePreset.Enabled). Confirms via MessageDlg, then deletes
+/// (DeleteNamingPreset), refreshes the combo, and falls back to Custom since
+/// the just-deleted selection no longer exists.</summary>
+procedure TLintOptionsFrame.DeletePresetClick(Sender: TObject);
+var
+  Nm: string;
+begin
+  if FCboPreset = nil then Exit;
+  if FCboPreset.ItemIndex < 0 then Exit;
+  if (FCboPreset.ItemIndex <= PRESET_HOUSE) or (FCboPreset.ItemIndex = CustomIndex) then
+    Exit; { built-ins + Custom are not deletable }
+
+  Nm:= FCboPreset.Items[FCboPreset.ItemIndex];
+  if MessageDlg(Format('Delete saved preset "%s"?', [Nm]), mtConfirmation,
+    [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  DeleteNamingPreset(Nm);
+  RebuildPresetCombo;
+  FCboPreset.ItemIndex:= CustomIndex;
+  UpdatePresetButtons;
 end;
 
 { ============================================================
