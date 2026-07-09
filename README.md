@@ -355,10 +355,15 @@ Drop custom `.scm` + `.json` pairs in the `rules/` directory; see
 Show Signature Help, Run Diagnostics, Rename Symbol, Compile & Diagnose, Import Build Log,
 Format with YADF, Show Structure, Run AST Checks, Find Usages, Symbol Search, dockable 
 panels (Structure / Usages / Graph), Generate Test Helper CSV..., 
-**Uses & Dependencies** submenu (cycles, uses-audit, uses-fix, reconcile, wiring, impact, reverse call tree), 
+**Uses & Dependencies** submenu (cycles, uses-audit, uses-fix, reconcile, wiring, impact, reverse call tree,
+**Call Graph (Butterfly)...**), 
 **Reverse Call Tree (clickable, Messages window)** -- posts the N-deep upward
 call tree for the symbol under the cursor as clickable rows in the IDE
 Messages window (double-click a row to jump to that call site), 
+**Call Graph dock tab** -- callers above and callees below the symbol as a
+navigable tree (double-click a node to jump to file:line); open it via
+Ctrl+Alt+B, the Uses & Dependencies menu item above, or right-click a symbol
+in the Structure tab -> "Show in Call Graph", 
 **Inspect Symbol** submenu (surface, slice, type-at-cursor), 
 **Code Quality** submenu (dead code, undocumented, TODOs, compiler hints, top symbols),
 **Generate & Export** submenu (docs, tests, enums, graph, Obsidian),
@@ -379,6 +384,7 @@ pages).
 | Ctrl+Alt+F | Find Usages |
 | Ctrl+Alt+T | Symbol Search |
 | Ctrl+Alt+K | Reverse Call Tree (clickable, Messages window) |
+| Ctrl+Alt+B | Call Graph (Butterfly) |
 
 **In-editor diagnostics**: gutter dot markers + wavy underlines via
 `IOTAEditViewNotifier.BeforeDrawLine`. Severity colours from the IDE colour
@@ -417,7 +423,12 @@ dock's Lint Options tab, reachable via **Project Manager right-click a project >
 "drag-lint: Project Rules..."**. That tab now has a **naming-convention preset
 selector** (v0.97) -- pick *Embarcadero* (`AValue` params) or *House*
 (`pMyParam` / `FMyField` / `TMyClass`) to bulk-set the naming rules, or *Custom*
-to hand-tune them.
+to hand-tune them. The combo also lists **your own saved presets** (v0.99):
+tune the 8 naming values, click **Save as...** and give it a name, and it's
+added to the combo alongside the built-ins; **Delete** removes a saved preset
+(built-ins and Custom cannot be deleted). Saved presets persist per-project in
+`drag-lint-lint.json` under a top-level `naming.presets` array -- IDE-written
+only; the CLI does not yet read this key.
 
 ---
 

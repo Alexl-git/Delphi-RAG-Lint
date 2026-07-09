@@ -5,6 +5,29 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.99.0-alpha -- 2026-07-09
+
+Butterfly Call Graph dock tab and saved naming presets (Batch F).
+
+- **Butterfly Call Graph dock tab.** A new **"Call Graph"** tab in the drag-lint
+  dock renders callers (who calls the symbol) above and callees (what the
+  symbol calls) below it, as a navigable `TTreeView` -- double-click a node to
+  jump to its file:line. Invoked via **Ctrl+Alt+B**, the **Uses & Dependencies
+  -> "Call Graph (Butterfly)..."** menu item, and right-clicking a symbol in
+  the Structure tab -> **"Show in Call Graph"**. IDE-only: it reuses the
+  `reverse-calltree` verb under the hood and adds no new CLI verb.
+- **`reverse-calltree --direction callers|callees`.** The reverse call tree
+  verb gained a `--direction` flag: `callers` (default, unchanged) walks
+  upward via the existing engine; `callees` walks downward via a new
+  `BuildForwardCallTree` engine (what X calls, and what those call). Both
+  directions emit the same `reverse-calltree/1` JSON schema.
+- **Save-your-own naming presets.** The dock's Lint Options page "Naming
+  preset" combo now lists built-ins (Embarcadero/House) plus user-saved
+  presets plus Custom, with **Save as...** and **Delete** buttons. Saved
+  presets persist to the project's `drag-lint-lint.json` under a top-level
+  `naming.presets` array (name + the 8 naming-convention values). IDE-only for
+  now -- the CLI does not yet read `naming.presets`.
+
 ## v0.98.0-alpha -- 2026-07-08
 
 Library-folders fix, clickable reverse call tree in the IDE, and ref-gap D (Batch E).

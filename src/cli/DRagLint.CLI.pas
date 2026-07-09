@@ -3,7 +3,7 @@ unit DRagLint.CLI;
 interface
 
 const
-  VERSION = '0.98.0-alpha';
+  VERSION = '0.99.0-alpha';
 
 /// <summary>TODO: describe.</summary>
 /// <returns>TODO: describe.</returns>
@@ -178,7 +178,7 @@ type
     // and rename never run together, so call-path reads its --to from RenameTo.
     MaxDepth : Integer; // --max-depth N (call-path BFS safety cap; default 20)
     // Depth (--depth, above, default 3) is reused as callgraph's tree depth.
-    Direction: string ; // --direction callers|callees (callgraph; default 'callees')
+    Direction: string ; // --direction callers|callees; '' default -> each verb applies own (reverse-calltree=callers, callgraph=callees)
     // v0.18: context bundle
     Task               : string ; // raw --task value
     Verb               : string ; // parsed verb (modify/inspect/refactor/delete/extend)

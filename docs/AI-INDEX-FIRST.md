@@ -28,7 +28,7 @@ text-level matches, non-Delphi files, or code no index covers.
 | All symbols in one file | `drag-lint outline --file F.pas --format json --db <db>` |
 | A type's members/API | `drag-lint surface --qname Unit.TType --db <db>` |
 | Who **calls** `X` | `drag-lint query find-callers --name X --db <db>` |
-| Who calls `X`, and who calls **them** (upward tree) | `drag-lint reverse-calltree --qname X [--depth N] --db <db>` |
+| Who calls `X`, and who calls **them** (upward tree) | `drag-lint reverse-calltree --qname X [--direction callers\|callees] [--depth N] --db <db>` |
 | Everywhere `X` is **used** (vars/props too) | `drag-lint usages --name X --width narrow --db <db>` |
 | Blast radius if `X` changes/deleted | `drag-lint usages --name X --width very-wide --db <db>` (or `impact --qname`) |
 | Understand/modify `X` (context bundle) | `drag-lint context --task "modify Unit.TType.Method" --db <db> --format markdown` |

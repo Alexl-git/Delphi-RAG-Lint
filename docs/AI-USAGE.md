@@ -133,7 +133,7 @@ in 2b.
 | `find-callees --qname U.T.M` | resolved outgoing calls of a routine |
 | `call-path --from A --to B` | shortest resolved call path A -> ... -> B (`--max-depth N`; exit 1 = no path) |
 | `callgraph --qname X` | N-deep resolved call tree (`--direction callers\|callees`, `--depth N`; cycle-guarded) |
-| `reverse-calltree --qname X` | N-deep *upward* "who calls X" tree with call sites (`--depth N`, `--format text\|json\|dot\|mermaid`) |
+| `reverse-calltree --qname X` | N-deep call tree with call sites (`--direction callers\|callees`, default callers = *upward* "who calls X"; `--depth N`, `--format text\|json\|dot\|mermaid`) |
 | `cycles` | circular unit deps (`--edges`, `--causes`, `--plan` for a refactoring playbook) |
 | `uses-report --output f.csv` | full uses-graph rollup to CSV (`--depth N`, `--include-external`, `--all-sources`) |
 | `deps-report` | third-party dependency rollup (`--edges`, `--format text\|json\|csv`) |
@@ -373,9 +373,19 @@ the same settings have a GUI companion:
   right-click submenu entry for this variant -- RAD Studio 37 exposes no
   supported OTA API for the editor's context menu, so the keybinding and top
   menu are the entry points.)
+- **drag-lint menu > "Call Graph (Butterfly)..."** (also bound to
+  **Ctrl+Alt+B**, and reachable by right-clicking a symbol in the Structure
+  tab > "Show in Call Graph") -- opens the dock's Call Graph tab and renders
+  callers above / callees below the symbol under the cursor as a navigable
+  tree; double-click a node to jump to file:line. IDE-only: it calls
+  `reverse-calltree` twice (once per direction) under the hood and adds no
+  new CLI verb of its own.
 
 These pages only matter for interactive/IDE use; a CLI-only agent workflow
-never needs them -- the CLI reads the same backing files directly.
+never needs them -- the CLI reads the same backing files directly. One
+exception to note: the dock's saved naming presets (`naming.presets` in
+`drag-lint-lint.json`, added v0.99) are IDE-written and IDE-read only -- the
+CLI does not yet consume that key.
 
 ## 6. Bonus: the graph viewer (optional, experimental)
 

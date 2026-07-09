@@ -136,10 +136,11 @@ type
       /// action) can jump straight to it without touching private frame internals.</summary>
       procedure SelectLintOptionsTab;
       /// <summary>Fills the Call Graph (butterfly) tab from two reverse-calltree/1
-      /// JSON documents -- ACallersJson (who calls AQName) under a "Callers (N)"
-      /// root and ACalleesJson (what AQName calls) under a "Callees (N)" root --
-      /// then selects the tab. Empty/failed JSON yields a "(0)" root, never an
-      /// error. Double-clicking a node with a file jumps to file:line.</summary>
+      /// JSON documents -- ACallersJson (who calls AQName) under a "Callers of
+      /// AQName (N)" root and ACalleesJson (what AQName calls) under a
+      /// "Callees of AQName (N)" root -- then selects the tab. Empty/failed
+      /// JSON yields a "(0)" root, never an error. Double-clicking a node with
+      /// a file jumps to file:line.</summary>
       procedure PopulateButterfly(const AQName, ACallersJson, ACalleesJson: string);
       /// <summary>Brings the Call Graph tab to the front.</summary>
       procedure SelectButterflyTab;
