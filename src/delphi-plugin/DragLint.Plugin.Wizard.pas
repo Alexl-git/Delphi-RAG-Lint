@@ -40,6 +40,8 @@ uses
   , DragLint.Plugin.GraphWindow
   ;
 
+{$R 'DragLintSplash.res'}
+
 procedure TDragLintWizard.AfterSave;
 begin
 end;
