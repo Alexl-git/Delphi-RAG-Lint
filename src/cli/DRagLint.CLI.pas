@@ -409,6 +409,7 @@ begin
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
+  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -10451,6 +10452,230 @@ begin
   Result:= 1;
 end; // function
 
+/// <summary>drag-lint convert-scaffold --from FromType --to ToType [--out FILE]
+/// --db PATH [--db ...] -- Track 3 Batch 1: auto-generate a VALID reFind-superset
+/// conversion-rules file from the REAL deep-property trees of the From and To
+/// types (Task 1's BuildPropTree over BOTH), pre-filling the assignments it can
+/// safely infer and leaving only genuine ambiguities as '???' for the user to
+/// resolve. --from (reuses CallFrom) and --to (reuses RenameTo) are BOTH required
+/// (missing -&gt; usage + exit 2). --out (reuses Output) writes an ASCII/CRLF file;
+/// omitted -&gt; stdout. Multiple --db are tried in order; the FIRST db that
+/// resolves BOTH types is used (ids are per-DB). If either type is unresolved the
+/// verb names it and exits 1.</summary>
+/// <param name="AArgs">CallFrom=--from (FromType qname), RenameTo=--to (ToType
+/// qname), Output=--out (file; empty=stdout), DbPath/DbPaths=index(es).</param>
+/// <returns>0 success; 1 either type unresolved in every db; 2 bad args (missing
+/// --from/--to) or no readable db.</returns>
+/// <remarks>Output is DETERMINISTIC (paths sorted case-insensitively) so the
+/// emitted text is stable across runs. Emission order: (1) a '#convert From -&gt;
+/// To' header with a best-guess ', unit' uses-add taken from the qname unit
+/// prefix(es) of From/To when discoverable (never fabricated); (2) for each To
+/// path (sorted) the F candidates whose LEAF name equals the To leaf
+/// (case-insensitive) AND whose declared TypeName is compatible (equal,
+/// case-insensitive) -- exactly ONE candidate -&gt; a concrete '#link ToPath &lt;-
+/// FromPath'; MULTIPLE -&gt; '#link ToPath &lt;- ???' immediately followed by
+/// '#note candidates: p1, p2, ...'; ZERO -&gt; '#default ToPath = ???'; (3) for
+/// each From path (sorted) with NO compatible To target (same leaf+type test,
+/// reversed) a '#note DROPPED FromPath (no T target)'. The matching rule is
+/// LEAF-NAME + COMPATIBLE-TYPE (documented, not exact-path), so a leaf name that
+/// appears at more than one From path is correctly flagged ambiguous. Every
+/// concrete path emitted is guaranteed to exist in the real trees and every '???'
+/// is tolerated by the validator, so the emitted file round-trips clean through
+/// convert-validate. Read-only.</remarks>
+function DoConvertScaffold(const AArgs: TArgs): Integer;
+var
+  Dbs      : TArray<string>  ;
+  LDb      : string          ;
+  FromTree : TPropTree       ;
+  ToTree   : TPropTree       ;
+  HaveStore: Boolean         ;
+  Opts     : TPropTreeOptions;
+  Depth    : Integer         ;
+  Sb       : TStringBuilder  ;
+  OutText  : string          ;
+
+  // Bare leaf (last dotted segment) of a path, lowercased for matching.
+  function LeafLower(const APath: string): string;
+  var
+    D: Integer;
+  begin
+    D:= LastDelimiter('.', APath);
+    if D > 0 then Result:= Copy(APath, D + 1, MaxInt) else Result:= APath;
+    Result:= LowerCase(Result);
+  end;
+
+  // Unit prefix of a qualified name ('ConvFix.TFrom' -> 'ConvFix'); '' if none.
+  function UnitOf(const AQName: string): string;
+  var
+    D: Integer;
+  begin
+    D:= LastDelimiter('.', AQName);
+    if D > 0 then Result:= Copy(AQName, 1, D - 1) else Result:= '';
+  end;
+
+  // Sorted copy of a tree's paths (case-insensitive). A Sorted TStringList with
+  // CaseSensitive=False orders by CompareText -- no custom callback needed.
+  function SortedPaths(const ATree: TPropTree): TArray<string>;
+  var
+    L: TStringList;
+    N: TPropNode;
+  begin
+    L:= TStringList.Create;
+    try
+      L.CaseSensitive := False;
+      L.Duplicates    := dupAccept;
+      L.Sorted        := True;
+      for N in ATree.Nodes do L.Add(N.Path);
+      Result:= L.ToStringArray;
+    finally
+      L.Free;
+    end;
+  end;
+
+  // The declared TypeName for a path in a tree ('' if not found).
+  function TypeOfPath(const ATree: TPropTree; const APath: string): string;
+  var
+    N: TPropNode;
+  begin
+    Result:= '';
+    for N in ATree.Nodes do
+      if SameText(N.Path, APath) then Exit(N.TypeName);
+  end;
+
+  // From-tree paths whose leaf name = ATLeaf (lowercased) AND whose declared
+  // type is compatible (equal, case-insensitive) with ATType. Sorted (a Sorted
+  // CaseSensitive=False TStringList orders by CompareText).
+  function FromCandidates(const ATLeaf, ATType: string): TArray<string>;
+  var
+    L: TStringList;
+    N: TPropNode;
+  begin
+    L:= TStringList.Create;
+    try
+      L.CaseSensitive := False;
+      L.Duplicates    := dupAccept;
+      L.Sorted        := True;
+      for N in FromTree.Nodes do
+        if (LeafLower(N.Path) = ATLeaf) and SameText(N.TypeName, ATType) then
+          L.Add(N.Path);
+      Result:= L.ToStringArray;
+    finally
+      L.Free;
+    end;
+  end;
+
+  // True when SOME To path has the leaf+compatible-type of the given F node
+  // (used to decide whether an F path is DROPPED).
+  function ToHasCounterpart(const AFLeaf, AFType: string): Boolean;
+  var
+    N: TPropNode;
+  begin
+    Result:= False;
+    for N in ToTree.Nodes do
+      if (LeafLower(N.Path) = AFLeaf) and SameText(N.TypeName, AFType) then
+        Exit(True);
+  end;
+
+var
+  TPath   : string        ;
+  TType   : string        ;
+  Cands   : TArray<string>;
+  FPath   : string        ;
+  FType   : string        ;
+  UFrom   : string        ;
+  UTo     : string        ;
+  Header  : string        ;
+begin
+  if (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
+  begin Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--out FILE] --db PATH [--db ...]'); Exit(2); end;
+
+  Depth:= AArgs.Depth;
+  if Depth <= 0 then Depth:= 6;
+  Opts.Depth       := Depth;
+  Opts.ToPersistent:= AArgs.ToPersistent;
+
+  Dbs:= ResolveConsumerDbs(AArgs);
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+
+  // Use the FIRST db that resolves BOTH types (ids are per-DB, so both trees
+  // must come from the same store). Exit 2 if no --db is readable.
+  HaveStore:= False;
+  FromTree := Default(TPropTree);
+  ToTree   := Default(TPropTree);
+  for LDb in Dbs do
+  begin
+    if not TFile.Exists(LDb) then Continue;
+    var RoOk: Boolean;
+    var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
+    if not RoOk then Continue;
+    HaveStore:= True;
+    var CF: TPropTree:= BuildPropTree(CandStore, AArgs.CallFrom, Opts);
+    var CT: TPropTree:= BuildPropTree(CandStore, AArgs.RenameTo, Opts);
+    if (CF.RootType <> '') and (CT.RootType <> '') then
+    begin FromTree:= CF; ToTree:= CT; Break; end;
+    // Keep the first db's partial trees so we can report which type failed.
+    if FromTree.RootType = '' then FromTree:= CF;
+    if ToTree.RootType   = '' then ToTree  := CT;
+  end;
+  if not HaveStore then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+  if FromTree.RootType = '' then begin Writeln(Format('class not found: %s', [AArgs.CallFrom])); Exit(1); end;
+  if ToTree.RootType   = '' then begin Writeln(Format('class not found: %s', [AArgs.RenameTo])); Exit(1); end;
+
+  Sb:= TStringBuilder.Create;
+  try
+    // (1) #convert header + best-guess uses-add (the qname unit prefixes).
+    UFrom:= UnitOf(AArgs.CallFrom);
+    UTo  := UnitOf(AArgs.RenameTo);
+    Header:= Format('#convert %s -> %s', [AArgs.CallFrom, AArgs.RenameTo]);
+    if (UTo <> '') and (not SameText(UTo, UFrom)) then
+      Header:= Header + ', ' + UTo
+    else if (UTo = '') and (UFrom <> '') then
+      Header:= Header + ', ' + UFrom;
+    Sb.AppendLine(Header);
+    Sb.AppendLine('#note scaffold: review every ??? -- concrete #link lines are inferred by leaf-name+type');
+
+    // (2) One rule per To path (sorted).
+    for TPath in SortedPaths(ToTree) do
+    begin
+      TType:= TypeOfPath(ToTree, TPath);
+      Cands:= FromCandidates(LeafLower(TPath), TType);
+      if Length(Cands) = 1 then
+        Sb.AppendLine(Format('#link %s <- %s', [TPath, Cands[0]]))
+      else if Length(Cands) > 1 then
+      begin
+        Sb.AppendLine(Format('#link %s <- ???', [TPath]));
+        Sb.AppendLine('#note candidates: ' + String.Join(', ', Cands));
+      end
+      else
+        Sb.AppendLine(Format('#default %s = ???', [TPath]));
+    end;
+
+    // (3) DROPPED note per From path with no compatible To target (sorted).
+    for FPath in SortedPaths(FromTree) do
+    begin
+      FType:= TypeOfPath(FromTree, FPath);
+      if not ToHasCounterpart(LeafLower(FPath), FType) then
+        Sb.AppendLine(Format('#note DROPPED %s (no T target)', [FPath]));
+    end;
+
+    OutText:= Sb.ToString;
+  finally
+    Sb.Free;
+  end;
+
+  if AArgs.Output <> '' then
+  begin
+    // ASCII / CRLF file (rules DSL is strict 7-bit ASCII). AppendLine already
+    // emitted platform CRLFs on Windows; ANSI keeps the bytes 1:1.
+    TFile.WriteAllText(AArgs.Output, OutText, TEncoding.ANSI);
+    Writeln('Wrote ', AArgs.Output);
+  end
+  else
+    Write(OutText); // already CRLF-terminated per line
+
+  Result:= 0;
+end; // function
+
 /// <summary>drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N]
 /// [--format text|json|dot|mermaid] [--json] --db PATH ... -- the N-deep call tree rooted
 /// at X, with call sites (unit:line) and cycle markers. --direction callers (default,
@@ -12177,6 +12402,7 @@ begin
     else if Args.Command = 'reverse-calltree'  then Result:= DoReverseCallTree (Args)
     else if Args.Command = 'proptree'          then Result:= DoPropTree        (Args)
     else if Args.Command = 'convert-validate'  then Result:= DoConvertValidate (Args)
+    else if Args.Command = 'convert-scaffold'  then Result:= DoConvertScaffold (Args)
     else if Args.Command = 'butterfly'         then Result:= DoButterfly       (Args)
     else if Args.Command = 'purge-locals'      then Result:= DoPurgeLocals     (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
