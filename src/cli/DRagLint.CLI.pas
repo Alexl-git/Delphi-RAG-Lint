@@ -392,7 +392,7 @@ begin
   Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
-  Writeln('  drag-lint reverse-calltree --qname <X> [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep upward call tree: who calls X, with call sites; cycle-guarded)');
+  Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
   Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)');
@@ -502,7 +502,7 @@ begin
   Result.ContextLines       := 3;
   Result.BenchN             := 20;
   Result.MaxDepth           := 20;        // v14 (D5 T11): call-path BFS safety cap
-  Result.Direction          := 'callees'; // v14 (D5 T11): callgraph default direction
+  Result.Direction          := '';        // per-verb default applied in DoCallGraph/DoReverseCallTree (empty = unset)
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
@@ -10054,15 +10054,22 @@ begin
   Result:= 0;
 end; // function
 
-/// <summary>drag-lint reverse-calltree --qname X [--depth N] [--format text|json|dot|mermaid]
-/// [--json] --db PATH ... -- the N-deep REVERSE call tree rooted at X: who calls X,
-/// who calls them, with call sites (unit:line) and cycle markers. Reuses the
-/// resolved caller traversal (FindResolvedCallers) via BuildReverseCallTree. Text
-/// is an indented tree (2 spaces/level); --format dot|mermaid emit a chart; --json /
-/// --format json emit schema reverse-calltree/1. With multiple --db, the first DB
-/// that resolves the qname is used (ids are per-DB).</summary>
-/// <param name="AArgs">QName=root, Depth=tree depth (default 3), Format/AsJson=output,
-/// DbPath/DbPaths=index(es).</param>
+/// <summary>drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N]
+/// [--format text|json|dot|mermaid] [--json] --db PATH ... -- the N-deep call tree rooted
+/// at X, with call sites (unit:line) and cycle markers. --direction callers (default,
+/// back-compat with the original REVERSE tree) walks UPWARD via BuildReverseCallTree
+/// (FindResolvedCallers): who calls X, who calls them. --direction callees walks
+/// DOWNWARD via BuildForwardCallTree (GetCallEdgesFromSymbol): what X calls, what those
+/// call. AArgs.Direction is shared with the callgraph verb, whose parser default is
+/// empty (per-verb default applied locally, NOT a shared literal -- see ParseArgs);
+/// an empty/absent/invalid --direction here resolves to 'callers', never callgraph's
+/// 'callees' default. Both directions emit the SAME schema reverse-calltree/1 (root/
+/// summary, per-node qname/site/file/line/cycle under the "callers" JSON key regardless
+/// of direction). Text is an indented tree (2 spaces/level); --format dot|mermaid emit
+/// a chart. With multiple --db, the first DB that resolves the qname is used (ids are
+/// per-DB).</summary>
+/// <param name="AArgs">QName=root, Direction=callers|callees (default callers),
+/// Depth=tree depth (default 3), Format/AsJson=output, DbPath/DbPaths=index(es).</param>
 /// <returns>0 ok; 1 qname unresolved in every DB; 2 usage error / no readable db.</returns>
 function DoReverseCallTree(const AArgs: TArgs): Integer;
 var
@@ -10072,6 +10079,7 @@ var
   RootIds: TArray<Int64> ;
   Depth  : Integer       ;
   Fmt    : string        ;
+  Dir    : string        ;
   Rid    : Int64         ;
   Trees  : TList<TRCallTree>;
   Opts   : TRCallOptions ;
@@ -10148,12 +10156,21 @@ var
 
 begin
   if AArgs.QName = '' then
-  begin Writeln('Usage: drag-lint reverse-calltree --qname X [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH'); Exit(2); end;
+  begin Writeln('Usage: drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH'); Exit(2); end;
 
   Fmt:= LowerCase(Trim(AArgs.Format));
 
   Depth:= AArgs.Depth;
   if Depth < 0 then Depth:= 0;
+
+  { --direction is SHARED with callgraph (TArgs.Direction), whose parser
+    default is empty (per-verb default applied here, not globally -- see
+    ParseArgs). reverse-calltree's historic behaviour is the UPWARD callers
+    tree, so empty/absent/invalid --direction must resolve to 'callers', NOT
+    callgraph's 'callees' default; only an explicit 'callees' switches this
+    verb to the DOWNWARD tree via BuildForwardCallTree. }
+  Dir:= LowerCase(Trim(AArgs.Direction));
+  if (Dir <> 'callers') and (Dir <> 'callees') then Dir:= 'callers';
 
   Dbs:= ResolveConsumerDbs(AArgs);
   if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
@@ -10185,7 +10202,10 @@ begin
   Trees:= TList<TRCallTree>.Create;
   try
     for Rid in RootIds do
-      Trees.Add(BuildReverseCallTree(Store, Rid, Opts));
+      if Dir = 'callees' then
+        Trees.Add(BuildForwardCallTree(Store, Rid, Opts))
+      else
+        Trees.Add(BuildReverseCallTree(Store, Rid, Opts));
 
     if (Fmt = 'dot') or (Fmt = 'mermaid') then
     begin
