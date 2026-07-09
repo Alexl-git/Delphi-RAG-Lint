@@ -107,6 +107,7 @@ uses
   , DRagLint.Report    .Deps
   , DRagLint.Report    .RCallTree
   , DRagLint.Convert   .PropTree
+  , DRagLint.Convert   .Rules
   ;
 
 type
@@ -313,6 +314,11 @@ type
     // Depth<=0). ToPersistent defaults ON (stop the ancestor climb at
     // TPersistent/TObject); --no-to-persistent turns it OFF.
     ToPersistent  : Boolean; // proptree: stop ancestor climb at TPersistent/TObject (default True)
+    // Track 3 Batch 1 (Task 2): convert-validate. RulesFile is the --rules path
+    // (the reFind-superset DSL file). PrintParsed dumps the parsed rules (parse-
+    // only diagnostics). --from/--to reuse CallFrom/RenameTo (the From/To types).
+    RulesFile     : string ; // --rules <file>  (conversion-rules DSL)
+    PrintParsed   : Boolean; // --print-parsed  (dump parsed rule count + lines)
   end; // record
 
 procedure PrintHelp;
@@ -402,6 +408,7 @@ begin
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types)');
+  Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -645,6 +652,8 @@ begin
     else if (A = '--max-depth') and (i < ParamCount) then begin Inc(i); Result.MaxDepth:= StrToIntDef(ParamStr(i), 20); end
     else if (A = '--direction') and (i < ParamCount) then begin Inc(i); Result.Direction:= ParamStr(i); end
     else if A = '--no-to-persistent' then Result.ToPersistent:= False // proptree: climb past TPersistent/TObject
+    else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
+    else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
     else if (A = '--task') and (i < ParamCount) then
     begin
       Inc(i);
@@ -10311,6 +10320,137 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>drag-lint convert-validate --rules FILE [--from FromType] [--to ToType]
+/// [--print-parsed] [--db PATH ...] -- Track 3 Batch 1: parse a reFind-superset
+/// conversion-rules DSL file and (when --from/--to types are supplied) validate its
+/// #link / #default target/source paths against the REAL property trees of those
+/// types (Task 1's BuildPropTree). --rules is required (missing -&gt; usage + exit 2;
+/// unreadable -&gt; exit 2). Without --from/--to it is parse-only: only unknown-
+/// directive parse errors are reported, path checks are skipped. --print-parsed
+/// dumps 'parsed N rule(s)' plus one 'line L: kind ...' summary per rule (so a test
+/// can assert the parse result with no trees). A literal '???' path is an explicit
+/// STUB marker (the scaffolder emits these) and is NOT a path error. Prints 'OK' on
+/// success or a list of 'line N: message' on errors.</summary>
+/// <param name="AArgs">RulesFile=--rules; CallFrom=--from (FromType qname),
+/// RenameTo=--to (ToType qname); PrintParsed=--print-parsed; DbPath/DbPaths=index(es)
+/// used to build the from/to trees.</param>
+/// <returns>0 valid / parse-ok; 1 errors found (parse or validation); 2 bad args
+/// (no --rules) or unreadable rules file.</returns>
+function DoConvertValidate(const AArgs: TArgs): Integer;
+var
+  RulesText: string             ;
+  RuleSet  : TConversionRuleSet ;
+  Errors   : TArray<TRuleError> ;
+  FromTree : TPropTree          ;
+  ToTree   : TPropTree          ;
+  Opts     : TPropTreeOptions   ;
+  Dbs      : TArray<string>     ;
+  E        : TRuleError         ;
+  R        : TConversionRule    ;
+  Depth    : Integer            ;
+
+  function KindStr(const AKind: TRuleKind): string;
+  begin
+    case AKind of
+      rkUnuse  : Result:= 'unuse';
+      rkRemove : Result:= 'remove';
+      rkMigrate: Result:= 'migrate';
+      rkConvert: Result:= 'convert';
+      rkLink   : Result:= 'link';
+      rkDefault: Result:= 'default';
+      rkNote   : Result:= 'note';
+      rkPcre   : Result:= 'pcre';
+    else        Result:= '?';
+    end;
+  end;
+
+  // One-line summary of a parsed rule's key fields (for --print-parsed).
+  function RuleSummary(const R: TConversionRule): string;
+  begin
+    case R.Kind of
+      rkUnuse  : Result:= Format('unuse %s', [R.UnitName]);
+      rkRemove : Result:= Format('remove %s%s', [R.PropName, IfThen(R.DfmOnly, ' (DFM-only)', '')]);
+      rkMigrate: Result:= Format('migrate %s%s -> %s%s', [R.Scope, R.Old, R.New,
+                            IfThen(Length(R.UnitsAdd) > 0, ' [+' + String.Join(',', R.UnitsAdd) + ']', '')]);
+      rkConvert: Result:= Format('convert %s -> %s%s', [R.FromType, R.ToType,
+                            IfThen(Length(R.UnitsAdd) > 0, ' [+' + String.Join(',', R.UnitsAdd) + ']', '')]);
+      rkLink   : Result:= Format('link %s <- %s', [R.ToPath, R.FromPath]);
+      rkDefault: Result:= Format('default %s = %s', [R.ToPath, R.Value]);
+      rkNote   : Result:= Format('note %s', [R.Text]);
+      rkPcre   : Result:= Format('pcre %s -> %s', [R.Search, R.Replace]);
+    else        Result:= KindStr(R.Kind);
+    end;
+  end;
+
+  // Build the property tree for a type qname across the resolved DBs (first DB
+  // that resolves it wins). Empty RootType if unresolved / no db.
+  function TreeFor(const AQName: string): TPropTree;
+  var
+    Cand: TPropTree;
+    LDb : string   ;
+  begin
+    Result:= Default(TPropTree);
+    if AQName = '' then Exit;
+    for LDb in Dbs do
+    begin
+      if not TFile.Exists(LDb) then Continue;
+      var RoOk: Boolean;
+      var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
+      if not RoOk then Continue;
+      Cand:= BuildPropTree(CandStore, AQName, Opts);
+      if Cand.RootType <> '' then Exit(Cand);
+    end;
+  end;
+
+begin
+  if AArgs.RulesFile = '' then
+  begin Writeln('Usage: drag-lint convert-validate --rules FILE [--from FromType] [--to ToType] [--print-parsed] [--db PATH ...]'); Exit(2); end;
+  if not TFile.Exists(AArgs.RulesFile) then
+  begin Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile])); Exit(2); end;
+
+  try
+    RulesText:= TFile.ReadAllText(AArgs.RulesFile);
+  except
+    on Ex: Exception do
+    begin Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message])); Exit(2); end;
+  end;
+
+  RuleSet:= ParseConversionRules(RulesText);
+
+  if AArgs.PrintParsed then
+  begin
+    Writeln(Format('parsed %d rule(s)', [Length(RuleSet.Rules)]));
+    for R in RuleSet.Rules do
+      Writeln(Format('line %d: %s', [R.LineNo, RuleSummary(R)]));
+    for E in RuleSet.ParseErrors do
+      Writeln(Format('line %d: parse error: %s', [E.LineNo, E.Message]));
+  end;
+
+  // Build the from/to property trees when the types are supplied. Ids are per-DB,
+  // so both trees come from the same resolved DB set. When neither is given this
+  // is parse-only: only parse errors surface (empty trees skip path checks).
+  Depth:= AArgs.Depth;
+  if Depth <= 0 then Depth:= 6;
+  Opts.Depth       := Depth;
+  Opts.ToPersistent:= AArgs.ToPersistent;
+
+  Dbs     := ResolveConsumerDbs(AArgs);
+  FromTree := TreeFor(AArgs.CallFrom); // --from reuses CallFrom
+  ToTree   := TreeFor(AArgs.RenameTo); // --to   reuses RenameTo
+
+  Errors:= ValidateConversionRules(RuleSet, FromTree, ToTree);
+
+  if Length(Errors) = 0 then
+  begin
+    if not AArgs.PrintParsed then Writeln('OK');
+    Exit(0);
+  end;
+
+  for E in Errors do
+    Writeln(Format('line %d: %s', [E.LineNo, E.Message]));
+  Result:= 1;
+end; // function
+
 /// <summary>drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N]
 /// [--format text|json|dot|mermaid] [--json] --db PATH ... -- the N-deep call tree rooted
 /// at X, with call sites (unit:line) and cycle markers. --direction callers (default,
@@ -12036,6 +12176,7 @@ begin
     else if Args.Command = 'callgraph'         then Result:= DoCallGraph       (Args)
     else if Args.Command = 'reverse-calltree'  then Result:= DoReverseCallTree (Args)
     else if Args.Command = 'proptree'          then Result:= DoPropTree        (Args)
+    else if Args.Command = 'convert-validate'  then Result:= DoConvertValidate (Args)
     else if Args.Command = 'butterfly'         then Result:= DoButterfly       (Args)
     else if Args.Command = 'purge-locals'      then Result:= DoPurgeLocals     (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
