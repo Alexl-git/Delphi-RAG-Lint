@@ -47,7 +47,7 @@ uses
 
 { v0.40.5: local copy of the BPL build-stamp helper to avoid circular use
   with DragLint.Plugin.Editor (which already imports this unit). Same
-  semantics as Editor.PluginBuildTag — reads the loaded BPL's file modtime. }
+  semantics as Editor.PluginBuildTag -- reads the loaded BPL's file modtime. }
 function LocalBuildTag: string;
 var
   ModName: string   ;

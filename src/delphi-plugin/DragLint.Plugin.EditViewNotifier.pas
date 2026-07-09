@@ -102,7 +102,7 @@ begin
       try
         if Reg.View <> nil then Reg.View.RemoveNotifier(Reg.Index);
       except
-        { Swallow — view may already be partially destroyed }
+        { Swallow -- view may already be partially destroyed }
       end;
     end;
     GViewRegistrations.Clear;

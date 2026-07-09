@@ -54,7 +54,7 @@ procedure RegisterSaveNotifierForModule(const AModule: IOTAModule);
 { v0.40: explicit teardown of every notifier we registered, so the
   IDE's module notifier lists don't end up holding interface pointers
   whose vtable lives in our BPL after the package unloads. Without this,
-  any later access — e.g., File > Exit > AllowSave — AVs in @IntfCopy. }
+  any later access -- e.g., File > Exit > AllowSave -- AVs in @IntfCopy. }
 procedure UnregisterAllSaveNotifiers;
 
 { v0.40: detach our notifier from a single module that the IDE is closing
@@ -217,7 +217,7 @@ begin
     if Cfg.AutoCompileOnSave and Assigned(GAfterSaveCompileHook) then
     try GAfterSaveCompileHook(SavedFile); except end;
   except
-    { Silent — never propagate into the IDE save path. }
+    { Silent -- never propagate into the IDE save path. }
   end; // try
 end; // procedure
 
@@ -225,7 +225,7 @@ procedure TDragLintSaveNotifier.BeforeSave;
 begin
 end;
 
-{ Destroyed defined further down — needs access to GRegistrations }
+{ Destroyed defined further down -- needs access to GRegistrations }
 
 procedure TDragLintSaveNotifier.Modified;
 begin
@@ -279,7 +279,7 @@ var
 begin
   if AModule = nil then Exit;
 
-  { v0.40: dedupe — if FileNotification fires twice for the same module
+  { v0.40: dedupe -- if FileNotification fires twice for the same module
     (project reload, etc.), don't accumulate duplicate notifiers. }
   if (GRegistrations <> nil) and (GRegLock <> nil) then
   begin
@@ -312,7 +312,7 @@ begin
       try
         if Reg.Module <> nil then Reg.Module.RemoveNotifier(Reg.Index);
       except
-        { Swallow — module may already be partially destroyed. The point
+        { Swallow -- module may already be partially destroyed. The point
           is to detach our entry before the BPL unloads. }
       end;
     end;
@@ -339,7 +339,7 @@ begin
         try
           AModule.RemoveNotifier(Reg.Index);
         except
-          { Swallow — module is already on the way out }
+          { Swallow -- module is already on the way out }
         end;
         GRegistrations.Delete(I);
       end;

@@ -139,6 +139,7 @@ type
     procedure SavePresetClick  (Sender: TObject);
     procedure DeletePresetClick(Sender: TObject);
     function  CustomIndex: Integer;
+    function  IsSavedPresetSelected: Boolean;
     { helpers }
     function  CfgPath: string;
     procedure ReloadProfileList;
@@ -262,6 +263,13 @@ type
 const
   PRESET_EMBARCADERO = 0;
   PRESET_HOUSE        = 1;
+
+  { Reserved built-in preset combo labels; also the collision-check names in
+    SavePresetClick. Single source of truth so the label text never drifts
+    between where the combo is populated and where new names are validated. }
+  PRESET_LABEL_EMBARCADERO = 'Embarcadero (A...)';
+  PRESET_LABEL_HOUSE       = 'House (p...)';
+  PRESET_LABEL_CUSTOM      = 'Custom';
 
   { Parallel to the 8-field bundle: param_prefix, field_prefix,
     class_prefix, exception_prefix, interface_prefix, pointer_prefix,
@@ -1782,6 +1790,18 @@ begin
     Result:= FCboPreset.Items.Count - 1;
 end;
 
+/// <summary>True when the combo's current selection is a SAVED preset --
+/// i.e. neither a built-in (Embarcadero/House, index &lt;= PRESET_HOUSE) nor
+/// the Custom sentinel. Shared predicate for UpdatePresetButtons (enables
+/// FBtnDeletePreset) and DeletePresetClick (guards the delete action), so
+/// the two stay in sync by construction. False if FCboPreset is nil or
+/// nothing is selected.</summary>
+function TLintOptionsFrame.IsSavedPresetSelected: Boolean;
+begin
+  if FCboPreset = nil then Exit(False);
+  Result:= (FCboPreset.ItemIndex > PRESET_HOUSE) and (FCboPreset.ItemIndex <> CustomIndex);
+end;
+
 /// <summary>Clears and repopulates FCboPreset: built-in bundles first
 /// (Embarcadero, House), then every user-saved preset (name order as
 /// returned by ReadNamingPresets, cached into FSavedPresets), then 'Custom'
@@ -1798,11 +1818,11 @@ begin
   FCboPreset.Items.BeginUpdate;
   try
     FCboPreset.Items.Clear;
-    FCboPreset.Items.Add('Embarcadero (A...)'); { PRESET_EMBARCADERO = 0 }
-    FCboPreset.Items.Add('House (p...)');       { PRESET_HOUSE = 1 }
+    FCboPreset.Items.Add(PRESET_LABEL_EMBARCADERO); { PRESET_EMBARCADERO = 0 }
+    FCboPreset.Items.Add(PRESET_LABEL_HOUSE);       { PRESET_HOUSE = 1 }
     for i:= 0 to High(FSavedPresets) do
       FCboPreset.Items.Add(FSavedPresets[i].Name); { saved presets start at 2 }
-    FCboPreset.Items.Add('Custom');              { always LAST -- see CustomIndex }
+    FCboPreset.Items.Add(PRESET_LABEL_CUSTOM);      { always LAST -- see CustomIndex }
   finally
     FCboPreset.Items.EndUpdate;
   end;
@@ -1815,8 +1835,7 @@ end;
 procedure TLintOptionsFrame.UpdatePresetButtons;
 begin
   if (FBtnDeletePreset = nil) or (FCboPreset = nil) then Exit;
-  FBtnDeletePreset.Enabled:= (FCboPreset.ItemIndex > PRESET_HOUSE)
-    and (FCboPreset.ItemIndex <> CustomIndex);
+  FBtnDeletePreset.Enabled:= IsSavedPresetSelected;
 end;
 
 /// <summary>Bulk-sets the 8 naming.* editor controls in FNamingEditors to
@@ -1847,7 +1866,7 @@ begin
   else
   begin
     si:= AKind - 2; { saved-preset index, parallel to the combo's [2..CustomIndex-1] range }
-    if (si < 0) or (si > High(FSavedPresets)) then Exit;
+    if si > High(FSavedPresets) then Exit; { si >= 0 guaranteed: AKind > PRESET_HOUSE here }
     for i:= 0 to High(NAMING_PRESET_PARAMS) do
       Vals[i]:= FSavedPresets[si].Values[i];
   end;
@@ -1982,8 +2001,8 @@ begin
   Nm:= Trim(Nm);
   if Nm = '' then Exit;
 
-  if SameText(Nm, 'Custom') or SameText(Nm, 'Embarcadero (A...)')
-    or SameText(Nm, 'House (p...)') then
+  if SameText(Nm, PRESET_LABEL_CUSTOM) or SameText(Nm, PRESET_LABEL_EMBARCADERO)
+    or SameText(Nm, PRESET_LABEL_HOUSE) then
   begin
     ShowMessage('That name is reserved for a built-in preset.');
     Exit;
@@ -2015,8 +2034,7 @@ var
 begin
   if FCboPreset = nil then Exit;
   if FCboPreset.ItemIndex < 0 then Exit;
-  if (FCboPreset.ItemIndex <= PRESET_HOUSE) or (FCboPreset.ItemIndex = CustomIndex) then
-    Exit; { built-ins + Custom are not deletable }
+  if not IsSavedPresetSelected then Exit; { built-ins + Custom are not deletable }
 
   Nm:= FCboPreset.Items[FCboPreset.ItemIndex];
   if MessageDlg(Format('Delete saved preset "%s"?', [Nm]), mtConfirmation,

@@ -213,7 +213,7 @@ begin
   if Cfg.AutoCompileOnStartup then
   try TriggerProjectCompile(FileName); except end;
 
-  { Honor AutoIndex setting — skip spawning when disabled }
+  { Honor AutoIndex setting -- skip spawning when disabled }
   if not Cfg.AutoIndex then Exit;
 
   ProjDir:= ExtractFilePath(FileName);

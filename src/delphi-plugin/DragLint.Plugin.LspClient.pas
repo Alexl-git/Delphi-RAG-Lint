@@ -59,7 +59,7 @@ var
 function GetPluginLogPath: string;
 { v0.40.1: resolve the same path DebugLog actually writes to. Previously
   EnsureLspClient / InvokeTestConnection printed GetEnvironmentVariable('TEMP')
-  while DebugLog wrote to TPath.GetTempPath — the two can disagree under
+  while DebugLog wrote to TPath.GetTempPath -- the two can disagree under
   Windows TMP/TEMP precedence, so users hunted for a log at the displayed
   path and couldn't find it. }
 var
@@ -339,7 +339,7 @@ procedure TDragLintLspClient.Stop;
 { v0.40.2: previous order was: Terminate -> CloseHandle(FStdOutRead) ->
   WaitFor. On Windows, CloseHandle of a pipe read end does NOT reliably
   unblock another thread's ReadFile when the child still holds the write
-  end open — the reader thread blocks indefinitely in ReadFile and
+  end open -- the reader thread blocks indefinitely in ReadFile and
   WaitFor hangs forever, freezing the IDE. (Confirmed root cause of the
   IDE freeze user reported after Test Connection in v0.40.1.)
 
@@ -358,7 +358,7 @@ begin
   if FProcessHandle <> 0 then
   begin
     TerminateProcess(FProcessHandle, 0);
-    { Don't WaitForSingleObject yet — let the reader thread observe the
+    { Don't WaitForSingleObject yet -- let the reader thread observe the
       pipe close first so it can exit cleanly. }
   end;
 
@@ -376,7 +376,7 @@ begin
   end;
 
   { Step 3: terminate and join the reader thread. Use Windows
-    WaitForSingleObject directly with a hard timeout — TThread.WaitFor
+    WaitForSingleObject directly with a hard timeout -- TThread.WaitFor
     has no timeout overload and pumping message would re-enter the IDE. }
   if FReaderThread <> nil then
   begin
@@ -385,7 +385,7 @@ begin
     if ReaderHandle <> 0 then
     begin
       WaitResult:= WaitForSingleObject(ReaderHandle, WAITFOR_MS);
-      if WaitResult <> WAIT_OBJECT_0 then DebugLog('Stop: reader thread did not exit within ' + IntToStr(WAITFOR_MS) + 'ms — leaking it to avoid IDE freeze');
+      if WaitResult <> WAIT_OBJECT_0 then DebugLog('Stop: reader thread did not exit within ' + IntToStr(WAITFOR_MS) + 'ms -- leaking it to avoid IDE freeze');
     end;
     if WaitForSingleObject(ReaderHandle, 0) = WAIT_OBJECT_0 then
     begin
@@ -394,7 +394,7 @@ begin
     end
     else
     begin
-      { Don't Free — Destructor calls WaitFor which would block again.
+      { Don't Free -- Destructor calls WaitFor which would block again.
         Leak the TThread instance; OS will reclaim when child fully exits. }
       FReaderThread:= nil;
     end;

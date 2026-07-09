@@ -128,7 +128,7 @@ begin
   Result:= 'DragLint.KeyboardBinding';
 end;
 
-{ Key handlers — check Enable* settings, then dispatch to Editor.Invoke* }
+{ Key handlers -- check Enable* settings, then dispatch to Editor.Invoke* }
 
 procedure TDragLintKeyboardBinding.HoverKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
 begin
