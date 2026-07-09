@@ -10207,8 +10207,8 @@ begin
   Result:= 0;
 end; // function
 
-/// <summary>drag-lint proptree --qname X [--depth N] [--to-persistent (default) |
-/// --no-to-persistent] [--format text|json] [--json] --db PATH [--db ...] -- Track 3
+/// <summary>drag-lint proptree --qname X [--depth N] [--no-to-persistent]
+/// [--format text|json] [--json] --db PATH [--db ...] -- Track 3
 /// Batch 1: the index-driven RECURSIVE deep-property enumerator. Resolves class X,
 /// walks its own + inherited kind='property' children, parses each property's type
 /// from its Signature, and recurses into class-typed property types (depth-capped +
