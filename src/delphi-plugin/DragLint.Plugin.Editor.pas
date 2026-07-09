@@ -88,6 +88,22 @@ procedure InvokeRename       (Sender: TObject);
   declared only in its implementation section (mutual implementation-uses
   does not itself grant visibility). }
 procedure InvokeReverseCallTreeMessages(Sender: TObject);
+/// <summary>Builds the butterfly call graph (callers + callees) for the symbol
+/// under the caret (prompts for a qname) and shows it in the dock's Call Graph
+/// tab. Shells drag-lint reverse-calltree --format json twice (callers, then
+/// --direction callees) on a background thread, then marshals both JSON docs to
+/// the dock via TThread.Queue. Bound to Ctrl+Alt+B and a Uses &amp; Dependencies
+/// menu item.</summary>
+procedure InvokeButterfly(Sender: TObject);
+/// <summary>Shells reverse-calltree --format json twice (callers, then --direction
+/// callees) for AQName against ADb on a background thread, slices each stdout to
+/// its JSON object, then marshals onto the main thread via TThread.Queue to show
+/// the dock and call GDockFrame.PopulateButterfly with both slices. Factored out
+/// of InvokeButterfly so other entry points (e.g. the Structure form's context
+/// menu) can jump straight to the butterfly view without re-prompting for a
+/// qname. Safe with a nil GDockFrame (no-op) or empty/failed CLI output
+/// (PopulateButterfly renders "(0)" roots rather than erroring).</summary>
+procedure ShowButterflyForQName(const AQName, ADb: string);
 { v0.26: compiler diagnostics }
 procedure InvokeCompileDiagnose(Sender: TObject);
 procedure InvokeGhostCheck     (Sender: TObject);
@@ -3247,6 +3263,61 @@ begin
     end).Start;
 end;
 
+/// <summary>Shells reverse-calltree --format json twice (callers, then --direction
+/// callees) for AQName against ADb on a background thread, slices each stdout to
+/// its JSON object, then marshals onto the main thread via TThread.Queue to show
+/// the dock and call GDockFrame.PopulateButterfly with both slices. Factored out
+/// of InvokeButterfly so other entry points (e.g. the Structure form's context
+/// menu) can jump straight to the butterfly view without re-prompting for a
+/// qname. Safe with a nil GDockFrame (no-op) or empty/failed CLI output
+/// (PopulateButterfly renders "(0)" roots rather than erroring).</summary>
+procedure ShowButterflyForQName(const AQName, ADb: string);
+var
+  CmdC, CmdF: string;
+begin
+  CmdC:= Format('"%s" reverse-calltree --qname "%s" --db "%s" --depth 3 --format json', [DLExe64, AQName, ADb]);
+  CmdF:= Format('"%s" reverse-calltree --qname "%s" --db "%s" --depth 3 --format json --direction callees', [DLExe64, AQName, ADb]);
+  DLT('menu', 'butterfly(async): ' + CmdC + ' | ' + CmdF);
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      CallersOut, CalleesOut: string;
+    begin
+      CallersOut:= ''; CalleesOut:= '';
+      try RunAndCaptureStdout(CmdC, CallersOut, 180000); except on E: Exception do CallersOut:= ''; end;
+      try RunAndCaptureStdout(CmdF, CalleesOut, 180000); except on E: Exception do CalleesOut:= ''; end;
+
+      var SC: string:= SliceJsonBracket(CallersOut, '{', '}');
+      var SF: string:= SliceJsonBracket(CalleesOut, '{', '}');
+      TThread.Queue(nil,
+        procedure
+        begin
+          { TDragLintDockFrame/GDockFrame live in DockForm.pas's implementation
+            section and are not visible here -- ShowDragLintDockButterfly is the
+            interface-exported wrapper (mirrors ShowDragLintDockLintOptions) that
+            shows the dock and calls GDockFrame.PopulateButterfly internally. }
+          ShowDragLintDockButterfly(AQName, SC, SF);
+        end);
+    end).Start;
+end;
+
+/// <summary>Builds the butterfly call graph (callers + callees) for the symbol
+/// under the caret (prompts for a qname) and shows it in the dock's Call Graph
+/// tab. Shells drag-lint reverse-calltree --format json twice (callers, then
+/// --direction callees) on a background thread, then marshals both JSON docs to
+/// the dock via TThread.Queue. Bound to Ctrl+Alt+B and a Uses &amp; Dependencies
+/// menu item.</summary>
+procedure InvokeButterfly(Sender: TObject);
+var
+  Q : string;
+  Db: string;
+begin
+  Db:= GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  if not DLAskQName(Q) then Exit;
+  ShowButterflyForQName(Q, Db);
+end;
+
 { Resolve the library index beside the plugin (where RTL/VCL/DevExpress units are
   indexed) -- needed to map an undeclared identifier to the unit that defines it. }
 function DLLibraryDb: string;
@@ -3980,6 +4051,7 @@ begin
   AddWrappedItem(SubUses, 'Show Wiring (Spring4D DI + DFM events)...'                  , InvokeWiring          );
   AddWrappedItem(SubUses, 'Reverse Call Tree (who calls this, N-deep)...'              , InvokeReverseCallTree );
   AddWrappedItem(SubUses, 'Reverse Call Tree (clickable, Messages window)...'          , InvokeReverseCallTreeMessages);
+  AddWrappedItem(SubUses, 'Call Graph (Butterfly)...'                                  , InvokeButterfly       );
 
   { v0.46: Inspect Symbol submenu }
   var SubInspect: TMenuItem:= TMenuItem.Create(RootMenu);

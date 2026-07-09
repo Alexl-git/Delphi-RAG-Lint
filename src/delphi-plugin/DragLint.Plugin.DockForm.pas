@@ -24,6 +24,14 @@ procedure UnregisterDragLintDock; { idempotent teardown }
 /// Project Manager "Project Rules..." action so a right-click lands on rules.</summary>
 procedure ShowDragLintDockLintOptions;
 
+/// <summary>Shows the drag-lint dock and fills the Call Graph (butterfly) tab from
+/// two reverse-calltree/1 JSON documents (see TDragLintDockFrame.PopulateButterfly).
+/// Editor.pas's InvokeButterfly/ShowButterflyForQName call this instead of touching
+/// GDockFrame directly, since TDragLintDockFrame is declared in this unit's
+/// implementation section and is not visible from Editor.pas. No-op if the dock
+/// frame is unavailable (mirrors ShowDragLintDockLintOptions's nil guard).</summary>
+procedure ShowDragLintDockButterfly(const AQName, ACallersJson, ACalleesJson: string);
+
 { Batch E Task 3: cross-file "open at file:line" nav for butterfly tree nodes.
   Editor.pas's DLNavigateToSource is what we need (opens ANY file's source
   view, not just the current module), but Editor.pas already uses DockForm
@@ -637,6 +645,12 @@ procedure ShowDragLintDockLintOptions;
 begin
   ShowDragLintDock;
   if GDockFrame <> nil then GDockFrame.SelectLintOptionsTab;
+end;
+
+procedure ShowDragLintDockButterfly(const AQName, ACallersJson, ACalleesJson: string);
+begin
+  ShowDragLintDock;
+  if GDockFrame <> nil then GDockFrame.PopulateButterfly(AQName, ACallersJson, ACalleesJson);
 end;
 
 procedure UnregisterDragLintDock;

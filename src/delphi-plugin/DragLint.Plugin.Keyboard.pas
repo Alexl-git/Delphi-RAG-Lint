@@ -71,6 +71,7 @@ type
       procedure SymbolSearchKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
       procedure QuickFixUsesKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
       procedure ReverseCallTreeKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
+      procedure ButterflyKey  (const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
   end;
 
   { IOTANotifier stubs }
@@ -108,6 +109,8 @@ begin
   { Batch E Task 3a: fast access to the reverse call tree (Messages window),
     without going through the top drag-lint menu. }
   BindingServices.AddKeyBinding( [ShortCut(Ord('K'), [ssCtrl, ssAlt])], ReverseCallTreeKey, nil);
+  { Batch F: fast access to the butterfly call graph (callers + callees). }
+  BindingServices.AddKeyBinding( [ShortCut(Ord('B'), [ssCtrl, ssAlt])], ButterflyKey, nil);
 end;
 
 function TDragLintKeyboardBinding.GetBindingType: TBindingType;
@@ -198,6 +201,14 @@ end;
 procedure TDragLintKeyboardBinding.ReverseCallTreeKey(const Context: IOTAKeyContext; KeyCode: TShortCut; var BindingResult: TKeyBindingResult);
 begin
   InvokeReverseCallTreeMessages(nil);
+  BindingResult:= krHandled;
+end;
+
+{ Batch F: Ctrl+Alt+B -- butterfly call graph for the symbol under the caret. }
+procedure TDragLintKeyboardBinding.ButterflyKey(const Context: IOTAKeyContext;
+  KeyCode: TShortcut; var BindingResult: TKeyBindingResult);
+begin
+  InvokeButterfly(nil);
   BindingResult:= krHandled;
 end;
 
