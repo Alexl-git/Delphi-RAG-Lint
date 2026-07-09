@@ -225,6 +225,24 @@ if ($null -ne $tree) {
     $aNode = $callersOfB | Where-Object { $_.qname -match '\.A$' -or $_.qname -eq 'A' } | Select-Object -First 1
     Check 'B.callers contains A (B is called by A) -- UPWARD direction' ($null -ne $aNode) ("callers=" + (($callersOfB | ForEach-Object { $_.qname }) -join ', '))
   }
+
+  # Task 2a: every NON-ROOT node must carry an absolute, existing 'file' path
+  # and a positive 'line' that matches the numeric suffix of that node's own
+  # 'site' (site = "<unit>:<line>"). Root has no call site (file/line may be
+  # empty/0) so it is excluded from the walk below.
+  function Assert-NodeFileLine($node) {
+    foreach ($kid in @($node.callers)) {
+      $expectedLine = [int]($kid.site -replace '^.*:', '')
+      Check "$($kid.qname) has an existing absolute 'file'" `
+        ((-not [string]::IsNullOrEmpty($kid.file)) -and (Test-Path $kid.file) -and [System.IO.Path]::IsPathRooted($kid.file)) `
+        "file=$($kid.file)"
+      Check "$($kid.qname) 'line' matches the :N suffix of its site" `
+        ($kid.line -eq $expectedLine) `
+        "line=$($kid.line) site=$($kid.site) expected=$expectedLine"
+      Assert-NodeFileLine $kid
+    }
+  }
+  Assert-NodeFileLine $root
 }
 
 Write-Host ''

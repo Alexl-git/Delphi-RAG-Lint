@@ -8,14 +8,17 @@ uses
 
 type
   /// <summary>One node of the reverse (upward) call tree: a symbol, its call
-  /// site into the child it calls (unit:line), a cycle marker, and its own
-  /// callers. Root.Site is ''. Callers is empty at the depth cap or when a
-  /// node is a cycle re-encounter.</summary>
+  /// site into the child it calls (unit:line), the absolute file + line of
+  /// that call site, a cycle marker, and its own callers. Root.Site is '';
+  /// Root.SiteFile/SiteLine are likewise empty/0 (no call site). Callers is
+  /// empty at the depth cap or when a node is a cycle re-encounter.</summary>
   TRCallNode = record
-    QName  : string;
-    Site   : string;            // unit:line of THIS node's call into its child; '' for root
-    Cycle  : Boolean;           // True: already expanded elsewhere; Callers left empty
-    Callers: TArray<TRCallNode>;
+    QName   : string;
+    Site    : string;            // unit:line of THIS node's call into its child; '' for root
+    SiteFile: string;            // absolute source path of this node's own file (the call-site file); '' for root
+    SiteLine: Integer;           // 1-based call-site line; 0 for root
+    Cycle   : Boolean;           // True: already expanded elsewhere; Callers left empty
+    Callers : TArray<TRCallNode>;
   end;
 
   /// <summary>Whole-tree totals.</summary>
@@ -62,10 +65,21 @@ var
     Callers: TArray<TResolvedCaller>;
     C      : TResolvedCaller;
     Kids   : TList<TRCallNode>;
+    Sym    : TSymbol;
+    CPos   : Integer;
   begin
     Result := Default(TRCallNode);
-    Result.QName := AStore.GetSymbolById(AId).QualifiedName;
+    Sym := AStore.GetSymbolById(AId);
+    Result.QName := Sym.QualifiedName;
     Result.Site  := ASite;
+    { The call site lives in THIS node's own file (it is the caller). SiteFile =
+      the symbol's declaring file (full path); SiteLine parsed from ASite's :N. }
+    Result.SiteFile := AStore.GetFilePath(Sym.FileId);
+    if ASite <> '' then
+    begin
+      CPos := LastDelimiter(':', ASite);
+      if CPos > 0 then Result.SiteLine := StrToIntDef(Copy(ASite, CPos + 1, MaxInt), 0);
+    end;
     Inc(Sum.NodeCount);
     if ALevel > Sum.MaxDepthReached then Sum.MaxDepthReached := ALevel;
     if Visited.ContainsKey(AId) then

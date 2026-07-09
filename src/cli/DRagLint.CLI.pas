@@ -10109,6 +10109,8 @@ var
     Result:= TJSONObject.Create;
     Result.AddPair('qname', ANode.QName);
     Result.AddPair('site' , ANode.Site );
+    Result.AddPair('file' , ANode.SiteFile);
+    Result.AddPair('line' , TJSONNumber.Create(ANode.SiteLine));
     Result.AddPair('cycle', TJSONBool.Create(ANode.Cycle));
     JKids:= TJSONArray.Create;
     for Kid in ANode.Callers do JKids.AddElement(BuildNodeJson(Kid));
