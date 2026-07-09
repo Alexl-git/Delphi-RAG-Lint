@@ -61,6 +61,15 @@ uses
   ;
 
 type
+  /// <summary>One saved naming-convention preset: a user-chosen Name plus
+  /// the 8 prefix/casing values, indexed in the same order as
+  /// NAMING_PRESET_PARAMS (param_prefix, field_prefix, class_prefix,
+  /// exception_prefix, interface_prefix, pointer_prefix, method_case,
+  /// local_case).</summary>
+  TNamingPreset = record
+    Name  : string;
+    Values: array[0..7] of string;
+  end;
   /// <summary>Dock tab frame that loads the drag-lint rule catalog and lets
   /// the user enable/disable rules and edit per-rule parameters, then saves
   /// the result back to the active project's drag-lint-lint.json.</summary>
@@ -136,6 +145,29 @@ type
     /// TLintConfig via TLintConfigWriter setters, and saves the result to
     /// the active project's drag-lint-lint.json.</summary>
     procedure Save;
+    /// <summary>Reads all saved naming presets from the top-level
+    /// "naming.presets" array in CfgPath (the active project's
+    /// drag-lint-lint.json). Returns an empty array when no project is
+    /// open, the file does not exist, or the key is absent/malformed.</summary>
+    /// <returns>One TNamingPreset per well-formed entry (a "name" string
+    /// plus a "values" object keyed by the 8 NAMING_PRESET_PARAMS names;
+    /// entries with an empty/missing name are skipped).</returns>
+    function  ReadNamingPresets: TArray<TNamingPreset>;
+    /// <summary>Read-modify-writes APreset into CfgPath's top-level
+    /// "naming.presets" array, replacing any existing entry with the same
+    /// Name (case-insensitive) or appending a new one. Preserves every
+    /// other top-level key (rules, profiles, etc.) and every other key
+    /// already under "naming". No-op when CfgPath is '' (no project
+    /// open).</summary>
+    /// <param name="APreset">The preset to save; Name must not be empty.</param>
+    procedure WriteNamingPreset(const APreset: TNamingPreset);
+    /// <summary>Read-modify-writes CfgPath's top-level "naming.presets"
+    /// array, removing the entry whose Name matches AName
+    /// (case-insensitive). Preserves every other top-level and "naming"
+    /// key. No-op when CfgPath is '' (no project open) or the preset is
+    /// not found.</summary>
+    /// <param name="AName">Name of the preset to remove.</param>
+    procedure DeleteNamingPreset(const AName: string);
   end;
 
 /// <summary>Creates a TLintOptionsFrame owned by AOwner and parented into
@@ -149,6 +181,7 @@ uses
   System.SysUtils
   , System.StrUtils
   , System.JSON
+  , System.IOUtils
   , Winapi.Windows
   , Vcl.ComCtrls
   , Vcl.Samples.Spin
@@ -1368,6 +1401,248 @@ begin
     Result:= ''
   else
     Result:= IncludeTrailingPathDelimiter(ProjDir) + 'drag-lint-lint.json';
+end;
+
+{ ============================================================
+  Naming-convention preset persistence (Task 6).
+
+  Presets live under a new top-level "naming" object in CfgPath
+  (drag-lint-lint.json), as a sibling of "rules"/"profiles". Shape (JSON,
+  not Pascal comment braces -- see the round-trip test for a literal
+  example): top-level "naming" object holding a "presets" array; each
+  entry has a "name" string and a "values" object keyed by the 8
+  NAMING_PRESET_PARAMS names (param_prefix, field_prefix, class_prefix,
+  exception_prefix, interface_prefix, pointer_prefix, method_case,
+  local_case).
+
+  Every RMW below re-parses the WHOLE file into a TJSONObject, mutates only
+  the "naming" sub-object in place (or creates it), and re-serializes the
+  full Root -- so "rules", "profiles", and any other top-level key survive
+  untouched. This mirrors WriteMaxReturnCases's RMW shape in
+  DragLint.Plugin.OptionsFrames.pas (reuse-or-create nested object,
+  RemovePair before re-adding, TFile.WriteAllText(..., TEncoding.UTF8)).
+  ============================================================ }
+
+function TLintOptionsFrame.ReadNamingPresets: TArray<TNamingPreset>;
+var
+  Path  : string;
+  Parsed: TJSONValue;
+  Root  : TJSONObject;
+  NamingVal, ObjVal, ValsVal: TJSONValue;
+  Naming: TJSONObject;
+  Arr   : TJSONArray;
+  i, k  : Integer;
+  Obj, Vals: TJSONObject;
+  P     : TNamingPreset;
+  Res   : TList<TNamingPreset>;
+  NameVal: TJSONValue;
+begin
+  SetLength(Result, 0);
+  Path:= CfgPath;
+  if (Path = '') or not TFile.Exists(Path) then Exit;
+
+  Parsed:= nil;
+  try
+    Parsed:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path));
+  except
+    Exit; { malformed config: no presets rather than raising in Options UI }
+  end; // try
+  if not (Parsed is TJSONObject) then
+  begin
+    Parsed.Free;
+    Exit;
+  end;
+  Root:= TJSONObject(Parsed);
+
+  Res:= TList<TNamingPreset>.Create;
+  try
+    NamingVal:= Root.GetValue('naming');
+    if NamingVal is TJSONObject then
+    begin
+      Naming:= TJSONObject(NamingVal);
+      ObjVal:= Naming.GetValue('presets');
+      if ObjVal is TJSONArray then
+      begin
+        Arr:= TJSONArray(ObjVal);
+        for i:= 0 to Arr.Count - 1 do
+          if Arr.Items[i] is TJSONObject then
+          begin
+            Obj:= TJSONObject(Arr.Items[i]);
+            NameVal:= Obj.GetValue('name');
+            if NameVal is TJSONString then
+              P.Name:= NameVal.Value
+            else
+              P.Name:= '';
+            for k:= 0 to 7 do P.Values[k]:= '';
+            ValsVal:= Obj.GetValue('values');
+            if ValsVal is TJSONObject then
+            begin
+              Vals:= TJSONObject(ValsVal);
+              for k:= 0 to 7 do
+              begin
+                NameVal:= Vals.GetValue(NAMING_PRESET_PARAMS[k]);
+                if NameVal is TJSONString then
+                  P.Values[k]:= NameVal.Value;
+              end;
+            end;
+            if P.Name <> '' then Res.Add(P);
+          end;
+      end;
+    end;
+    Result:= Res.ToArray;
+  finally
+    Res.Free;
+    Root.Free;
+  end; // try
+end;
+
+procedure TLintOptionsFrame.WriteNamingPreset(const APreset: TNamingPreset);
+var
+  Path      : string;
+  Parsed    : TJSONValue;
+  Root      : TJSONObject;
+  NamingVal : TJSONValue;
+  Naming    : TJSONObject;
+  PresetsVal: TJSONValue;
+  Arr, NewArr: TJSONArray;
+  i, k      : Integer;
+  ExistingObj, NewObj, ValsObj: TJSONObject;
+  Nm        : string;
+  NameVal   : TJSONValue;
+  OldPair   : TJSONPair;
+begin
+  if APreset.Name = '' then Exit;
+  Path:= CfgPath;
+  if Path = '' then Exit;
+
+  Root:= nil;
+  try
+    if TFile.Exists(Path) then
+    begin
+      Parsed:= nil;
+      try
+        Parsed:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path));
+      except
+        Parsed:= nil; { malformed config text: fall through to a fresh object }
+      end; // try
+      if Parsed is TJSONObject then
+        Root:= TJSONObject(Parsed)
+      else
+        Parsed.Free; { either nil (no-op) or a non-object JSON value we cannot use }
+    end; // if
+    if Root = nil then Root:= TJSONObject.Create; { no file yet, or unparsable: start fresh }
+
+    { Reuse or create the top-level "naming" object so every OTHER top-level
+      key (rules, profiles, ...) survives untouched. }
+    NamingVal:= Root.GetValue('naming');
+    if NamingVal is TJSONObject then
+      Naming:= TJSONObject(NamingVal)
+    else
+    begin
+      Naming:= TJSONObject.Create;
+      Root.AddPair('naming', Naming);
+    end; // if
+
+    { Rebuild "presets" minus any same-named entry (SameText), then append
+      the new/updated one. }
+    NewArr:= TJSONArray.Create;
+    PresetsVal:= Naming.GetValue('presets');
+    if PresetsVal is TJSONArray then
+    begin
+      Arr:= TJSONArray(PresetsVal);
+      for i:= 0 to Arr.Count - 1 do
+        if Arr.Items[i] is TJSONObject then
+        begin
+          ExistingObj:= TJSONObject(Arr.Items[i]);
+          NameVal:= ExistingObj.GetValue('name');
+          if NameVal is TJSONString then Nm:= NameVal.Value else Nm:= '';
+          if not SameText(Nm, APreset.Name) then
+            NewArr.AddElement(ExistingObj.Clone as TJSONObject);
+        end;
+    end;
+
+    ValsObj:= TJSONObject.Create;
+    for k:= 0 to 7 do ValsObj.AddPair(NAMING_PRESET_PARAMS[k], APreset.Values[k]);
+    NewObj:= TJSONObject.Create;
+    NewObj.AddPair('name', APreset.Name);
+    NewObj.AddPair('values', ValsObj);
+    NewArr.AddElement(NewObj);
+
+    { TJSONObject has no in-place "set" -- remove any existing pair first so
+      a repeated save never leaves two "presets" pairs behind. }
+    OldPair:= Naming.RemovePair('presets');
+    OldPair.Free; { RemovePair returns nil if absent; TObject(nil).Free is a no-op }
+    Naming.AddPair('presets', NewArr);
+
+    TFile.WriteAllText(Path, Root.ToJSON, TEncoding.UTF8);
+  finally
+    Root.Free;
+  end; // try
+end;
+
+procedure TLintOptionsFrame.DeleteNamingPreset(const AName: string);
+var
+  Path      : string;
+  Parsed    : TJSONValue;
+  Root      : TJSONObject;
+  NamingVal : TJSONValue;
+  Naming    : TJSONObject;
+  PresetsVal: TJSONValue;
+  Arr, NewArr: TJSONArray;
+  i         : Integer;
+  ExistingObj: TJSONObject;
+  Nm        : string;
+  NameVal   : TJSONValue;
+  OldPair   : TJSONPair;
+begin
+  if AName = '' then Exit;
+  Path:= CfgPath;
+  if Path = '' then Exit;
+  if not TFile.Exists(Path) then Exit; { nothing saved yet: nothing to delete }
+
+  Root:= nil;
+  try
+    Parsed:= nil;
+    try
+      Parsed:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path));
+    except
+      Exit; { malformed config: nothing safe to rewrite }
+    end; // try
+    if not (Parsed is TJSONObject) then
+    begin
+      Parsed.Free;
+      Exit;
+    end;
+    Root:= TJSONObject(Parsed);
+
+    NamingVal:= Root.GetValue('naming');
+    if not (NamingVal is TJSONObject) then Exit; { no "naming" object: nothing to delete }
+    Naming:= TJSONObject(NamingVal);
+
+    PresetsVal:= Naming.GetValue('presets');
+    if not (PresetsVal is TJSONArray) then Exit; { no presets array: nothing to delete }
+    Arr:= TJSONArray(PresetsVal);
+
+    { Rebuild "presets" minus the named entry; do NOT append. }
+    NewArr:= TJSONArray.Create;
+    for i:= 0 to Arr.Count - 1 do
+      if Arr.Items[i] is TJSONObject then
+      begin
+        ExistingObj:= TJSONObject(Arr.Items[i]);
+        NameVal:= ExistingObj.GetValue('name');
+        if NameVal is TJSONString then Nm:= NameVal.Value else Nm:= '';
+        if not SameText(Nm, AName) then
+          NewArr.AddElement(ExistingObj.Clone as TJSONObject);
+      end;
+
+    OldPair:= Naming.RemovePair('presets');
+    OldPair.Free; { RemovePair returns nil if absent; TObject(nil).Free is a no-op }
+    Naming.AddPair('presets', NewArr);
+
+    TFile.WriteAllText(Path, Root.ToJSON, TEncoding.UTF8);
+  finally
+    Root.Free;
+  end; // try
 end;
 
 { ============================================================
