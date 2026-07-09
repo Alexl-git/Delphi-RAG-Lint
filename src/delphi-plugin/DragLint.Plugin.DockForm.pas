@@ -24,6 +24,17 @@ procedure UnregisterDragLintDock; { idempotent teardown }
 /// Project Manager "Project Rules..." action so a right-click lands on rules.</summary>
 procedure ShowDragLintDockLintOptions;
 
+{ Batch E Task 3: cross-file "open at file:line" nav for butterfly tree nodes.
+  Editor.pas's DLNavigateToSource is what we need (opens ANY file's source
+  view, not just the current module), but Editor.pas already uses DockForm
+  in its implementation section, so DockForm cannot uses-import Editor back
+  (and DLNavigateToSource is implementation-private there anyway). Same hook
+  pattern as SaveNotifier.GAfterSaveDiagHook: Editor.RegisterDragLintMenu
+  assigns this to DLNavigateToSource during wizard init. Declared here in the
+  interface section so Editor.pas (which does uses DockForm) can assign it. }
+var
+  GButterflyNav: procedure(const AFile: string; ALine: Integer) = nil;
+
 implementation
 
 uses
@@ -31,6 +42,8 @@ uses
   , System.Classes
   , System.IniFiles
   , System.Actions
+  , System.JSON
+  , System.Generics.Collections
   , Winapi.Windows
   , Winapi.ShellAPI
   , Vcl.Controls
@@ -63,7 +76,18 @@ uses
 
 {$R *.dfm}
 
-type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools:
+type
+  { Batch E Task 3: attached via TTreeNode.Data (AddChildObject) so a
+    double-click can jump straight to the caller/callee's source location
+    without re-parsing the node caption. Owned by FNavList (OwnsObjects=True)
+    -- never freed individually. }
+  TNav = class
+    FFile: string;
+    FLine: Integer;
+    constructor Create(const AFile: string; ALine: Integer);
+  end;
+
+{ v0.42: the dock panel hosts a tabbed view of the drag-lint tools:
     Structure, Search (no grep), and Find Usages. The form-reparent embeds
     (Structure, Find Usages) are built in HandleInitTimer, one message turn
     after construction, because reparenting a TForm while the IDE is still
@@ -78,6 +102,9 @@ type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools:
       FTabUsages          : TTabSheet   ;
       FTabGraph           : TTabSheet   ;
       FTabLintOptions     : TTabSheet   ;
+      FTabButterfly  : TTabSheet   ; { Batch E Task 3: Call Graph (butterfly) tab }
+      FButterflyTree : TTreeView   ;
+      FNavList       : TObjectList<TNav>; { owns TNav nodes attached to FButterflyTree.Items[].Data }
       FInited        : Boolean     ;
       FInitTimer     : TTimer      ; { v0.42: defers the embed off the ctor }
       FWatchTimer    : TTimer      ; { v0.46: auto-refresh Structure on code-tab switch }
@@ -92,6 +119,7 @@ type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools:
       function ResolveExe   : string;
       function ResolveDbArgs: string;
       procedure BuildGraphTab(ATab: TTabSheet);
+      procedure ButterflyTreeDblClick(Sender: TObject);
     public
       constructor Create(AOwner: TComponent); override;
       destructor Destroy; override;
@@ -99,6 +127,14 @@ type { v0.42: the dock panel hosts a tabbed view of the drag-lint tools:
       /// Public so external callers (e.g. the Project Manager "Project Rules..."
       /// action) can jump straight to it without touching private frame internals.</summary>
       procedure SelectLintOptionsTab;
+      /// <summary>Fills the Call Graph (butterfly) tab from two reverse-calltree/1
+      /// JSON documents -- ACallersJson (who calls AQName) under a "Callers (N)"
+      /// root and ACalleesJson (what AQName calls) under a "Callees (N)" root --
+      /// then selects the tab. Empty/failed JSON yields a "(0)" root, never an
+      /// error. Double-clicking a node with a file jumps to file:line.</summary>
+      procedure PopulateButterfly(const AQName, ACallersJson, ACalleesJson: string);
+      /// <summary>Brings the Call Graph tab to the front.</summary>
+      procedure SelectButterflyTab;
   end;
 
   TDragLintDockable = class(TInterfacedObject, INTACustomDockableForm)
@@ -230,6 +266,18 @@ begin
     window (View > Tool Windows > drag-lint Graph), so the in-dock launcher tab
     was just stale clutter. }
 
+  { Batch E Task 3: butterfly Call Graph tab -- callers + callees TTreeView,
+    filled later via PopulateButterfly (Task 4 shells the CLI and calls it). }
+  FNavList:= TObjectList<TNav>.Create(True);
+  FTabButterfly := AddTab('Call Graph');
+  FButterflyTree := TTreeView.Create(Self);
+  FButterflyTree.Parent        := FTabButterfly;
+  FButterflyTree.Align         := alClient;
+  FButterflyTree.ReadOnly      := True;
+  FButterflyTree.ShowLines     := True;
+  FButterflyTree.HideSelection := False;
+  FButterflyTree.OnDblClick    := ButterflyTreeDblClick;
+
   FPages.ActivePage:= FTabStruct;
 
   FInitTimer:= TTimer.Create(Self);
@@ -250,12 +298,118 @@ begin
   { v0.94: secondary net alongside TFormWatch.Notification -- guard with
     identity check in case a second frame instance was created meanwhile. }
   if GDockFrame = Self then GDockFrame:= nil;
+  FNavList.Free; { Batch E Task 3: frees every TNav attached to FButterflyTree nodes }
   inherited;
 end;
 
 procedure TDragLintDockFrame.SelectLintOptionsTab;
 begin
   if (FPages <> nil) and (FTabLintOptions <> nil) then FPages.ActivePage:= FTabLintOptions;
+end;
+
+{ ---- TNav ----------------------------------------------------------------- }
+
+constructor TNav.Create(const AFile: string; ALine: Integer);
+begin
+  inherited Create;
+  FFile:= AFile;
+  FLine:= ALine;
+end;
+
+{ ---- butterfly Call Graph tab ---------------------------------------------
+  Batch E Task 3: renders two reverse-calltree/1 JSON documents (callers of
+  AQName, callees of AQName) into one TTreeView under "Callers (N)" / "Callees
+  (N)" roots. Task 4 shells the CLI and calls PopulateButterfly; this unit only
+  owns the tab, the tree, and the JSON walk. }
+
+procedure TDragLintDockFrame.PopulateButterfly(const AQName, ACallersJson, ACalleesJson: string);
+
+  procedure WalkArray(const AArr: TJSONArray; AParent: TTreeNode);
+  var
+    i    : Integer    ;
+    Obj  : TJSONObject;
+    QN, F: string      ;
+    Ln   : Integer     ;
+    Cyc  : Boolean     ;
+    Node : TTreeNode   ;
+    Nav  : TNav        ;
+    Kids : TJSONArray  ;
+  begin
+    if AArr = nil then Exit;
+    for i:= 0 to AArr.Count - 1 do
+    begin
+      if not (AArr.Items[i] is TJSONObject) then Continue;
+      Obj:= AArr.Items[i] as TJSONObject;
+      QN := Obj.GetValue<string>('qname', '');
+      F  := Obj.GetValue<string>('file', '');
+      Ln := Obj.GetValue<Integer>('line', 0);
+      Cyc:= False; Obj.TryGetValue<Boolean>('cycle', Cyc);
+      if Cyc then QN:= QN + ' (cycle)';
+      Nav := TNav.Create(F, Ln); FNavList.Add(Nav);
+      Node:= FButterflyTree.Items.AddChildObject(AParent, QN, Nav);
+      if (not Cyc) and Obj.TryGetValue<TJSONArray>('callers', Kids) then
+        WalkArray(Kids, Node);
+    end;
+  end;
+
+var
+  CallersV, CalleesV      : TJSONValue  ;
+  CallersRoot, CalleesRoot: TJSONObject ;
+  RootCallers, RootCallees: TTreeNode   ;
+  Arr                     : TJSONArray  ;
+  NC, NF                  : Integer     ;
+begin
+  FButterflyTree.Items.BeginUpdate;
+  try
+    FButterflyTree.Items.Clear;
+    FNavList.Clear; { frees prior TNav objects (OwnsObjects=True) }
+
+    CallersV:= nil; CalleesV:= nil;
+    try CallersV:= TJSONObject.ParseJSONValue(ACallersJson); except CallersV:= nil; end;
+    try CalleesV:= TJSONObject.ParseJSONValue(ACalleesJson); except CalleesV:= nil; end;
+    try
+      CallersRoot:= nil; CalleesRoot:= nil;
+      if CallersV is TJSONObject then TJSONObject(CallersV).TryGetValue<TJSONObject>('root', CallersRoot);
+      if CalleesV is TJSONObject then TJSONObject(CalleesV).TryGetValue<TJSONObject>('root', CalleesRoot);
+
+      NC:= 0;
+      if (CallersRoot <> nil) and CallersRoot.TryGetValue<TJSONArray>('callers', Arr) then NC:= Arr.Count;
+      RootCallers:= FButterflyTree.Items.Add(nil, Format('Callers of %s (%d)', [AQName, NC]));
+      if (CallersRoot <> nil) and CallersRoot.TryGetValue<TJSONArray>('callers', Arr) then WalkArray(Arr, RootCallers);
+
+      NF:= 0;
+      if (CalleesRoot <> nil) and CalleesRoot.TryGetValue<TJSONArray>('callers', Arr) then NF:= Arr.Count;
+      RootCallees:= FButterflyTree.Items.Add(nil, Format('Callees of %s (%d)', [AQName, NF]));
+      if (CalleesRoot <> nil) and CalleesRoot.TryGetValue<TJSONArray>('callers', Arr) then WalkArray(Arr, RootCallees);
+
+      RootCallers.Expand(True);
+      RootCallees.Expand(True);
+    finally
+      CallersV.Free;
+      CalleesV.Free;
+    end;
+  finally
+    FButterflyTree.Items.EndUpdate;
+  end;
+  SelectButterflyTab;
+end; // procedure
+
+procedure TDragLintDockFrame.SelectButterflyTab;
+begin
+  if (FPages <> nil) and (FTabButterfly <> nil) then FPages.ActivePage:= FTabButterfly;
+end;
+
+procedure TDragLintDockFrame.ButterflyTreeDblClick(Sender: TObject);
+var
+  N  : TTreeNode;
+  Nav: TNav     ;
+begin
+  N:= FButterflyTree.Selected;
+  if N = nil then Exit;
+  if not (TObject(N.Data) is TNav) then Exit;
+  Nav:= TNav(N.Data);
+  if (Nav.FFile <> '') and (Nav.FLine > 0) and Assigned(GButterflyNav) then
+    GButterflyNav(Nav.FFile, Nav.FLine);
 end;
 
 procedure TDragLintDockFrame.HandleWatchTimer(Sender: TObject);

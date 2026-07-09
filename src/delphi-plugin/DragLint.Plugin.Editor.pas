@@ -4074,6 +4074,11 @@ begin
   DragLint.Plugin.SaveNotifier.GAfterSaveDiagHook:= TriggerDiagnosticsOnSave;
   { v0.47: out-of-process compile-on-save -> surfaces compiler errors in the pane. }
   DragLint.Plugin.SaveNotifier.GAfterSaveCompileHook:= TriggerCompileOnSave;
+  { Batch E Task 3: butterfly Call Graph tab double-click nav -- DockForm cannot
+    uses-import Editor (Editor already uses DockForm) and DLNavigateToSource is
+    implementation-private here, so wire it through the same hook pattern as
+    the SaveNotifier hooks above. }
+  DragLint.Plugin.DockForm.GButterflyNav:= DLNavigateToSource;
   { v0.47: auto-compile the UNSAVED buffer when editing goes idle (AutoCompileBuffer),
     so compiler errors on unsaved code appear without saving or the menu. The runner
     calls this on the main thread; RunGhostCheckAsync is single-flight + restores. }
