@@ -3115,6 +3115,131 @@ begin
   DLRunReport(Format('reverse-calltree --qname "%s" --db "%s" --depth 3 --format text', [Q, Db]), 'drag-lint-reverse-calltree.txt');
 end;
 
+/// <summary>Reverse call tree for the symbol under the cursor, emitted to the IDE
+/// Messages window: each node is a clickable AddToolMessage (double-click jumps to
+/// the call site). Runs reverse-calltree --format json off-thread (mirrors
+/// DLRunReport's async discipline: background CreateProcess + capture, then
+/// TThread.Queue marshals the OTA IOTAMessageServices calls back onto the main
+/// thread, since OTA is not thread-safe), then posts the tree on the main thread.
+/// Complements InvokeReverseCallTree (which writes text to an editor buffer).
+/// Text convention: each row reads "<node.qname> calls <parent.qname>" (a node in
+/// "callers" is a caller of its parent), indented 2 spaces per tree depth; the
+/// clickable target (file/line) is the NODE's own call site -- where its call into
+/// the parent lives. Robust to a missing/empty file (still posts the row, just
+/// non-navigable), a nil parse (posts a friendly title message), and an empty
+/// callers list (root has no callers -- posts "no callers found").</summary>
+procedure InvokeReverseCallTreeMessages(Sender: TObject);
+var
+  Q : string;
+  Db: string;
+begin
+  Db:= GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  if not DLAskQName(Q) then Exit;
+
+  var Cmd: string:= Format('"%s" reverse-calltree --qname "%s" --db "%s" --depth 3 --format json', [DLExe64, Q, Db]);
+  DLT('menu', 'run(async): ' + Cmd);
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      Output: string;
+    begin
+      Output:= '';
+      try
+        RunAndCaptureStdout(Cmd, Output, 180000);
+      except
+        on E: Exception do Output:= '';
+      end;
+
+      var Slice: string:= SliceJsonBracket(Output, '{', '}');
+      var V: TJSONValue:= nil;
+      if Slice <> '' then
+        try V:= TJSONObject.ParseJSONValue(Slice); except V:= nil; end;
+
+      { v.b: capture the parsed value (or nil) and marshal the OTA Messages calls
+        onto the main thread. V is freed inside the queued procedure -- it must
+        stay alive until then (anonymous-method closure keeps the reference). }
+      TThread.Queue(nil,
+        procedure
+        var
+          MS: IOTAMessageServices;
+
+          { Recursively walk a "callers" array, posting one clickable row per
+            node. AParentQName is the caller's callee (the node it calls into);
+            ADepth drives the 2-space indent. }
+          procedure WalkCallers(const AArr: TJSONArray; const AParentQName: string; ADepth: Integer; var APosted: Integer);
+          var
+            i        : Integer;
+            NodeObj  : TJSONObject;
+            NodeQName: string;
+            NodeFile : string;
+            NodeLine : Integer;
+            NodeCycle: Boolean;
+            Indent   : string;
+            Text     : string;
+            Kids     : TJSONArray;
+          begin
+            if AArr = nil then Exit;
+            Indent:= StringOfChar(' ', ADepth * 2);
+            for i:= 0 to AArr.Count - 1 do
+            begin
+              if not (AArr.Items[i] is TJSONObject) then Continue;
+              NodeObj:= AArr.Items[i] as TJSONObject;
+              NodeQName:= NodeObj.GetValue<string> ('qname', '');
+              NodeFile := NodeObj.GetValue<string> ('file' , '');
+              NodeLine := NodeObj.GetValue<Integer>('line' , 0 );
+              NodeCycle:= False;
+              NodeObj.TryGetValue<Boolean>('cycle', NodeCycle);
+              Text:= Format('%s%s calls %s', [Indent, NodeQName, AParentQName]);
+              if NodeCycle then Text:= Text + ' (cycle)';
+              { Guard: an empty/missing file still gets a row (non-navigable)
+                rather than being silently dropped -- the tree stays complete. }
+              MS.AddToolMessage(NodeFile, Text, 'drag-lint', NodeLine, 0);
+              Inc(APosted);
+              if NodeCycle then Continue; // cycle marker only -- already expanded elsewhere
+              if NodeObj.TryGetValue<TJSONArray>('callers', Kids) then
+                WalkCallers(Kids, NodeQName, ADepth + 1, APosted);
+            end;
+          end;
+
+        begin
+          try
+            if not Supports(BorlandIDEServices, IOTAMessageServices, MS) then Exit;
+            try
+              if V = nil then
+              begin
+                MS.AddTitleMessage(Format('drag-lint: reverse call tree for %s -- no result (symbol not found or command failed).', [Q]));
+                Exit;
+              end;
+              if not (V is TJSONObject) then
+              begin
+                MS.AddTitleMessage(Format('drag-lint: reverse call tree for %s -- unexpected response.', [Q]));
+                Exit;
+              end;
+              var Root: TJSONObject;
+              if not (V as TJSONObject).TryGetValue<TJSONObject>('root', Root) then
+              begin
+                MS.AddTitleMessage(Format('drag-lint: reverse call tree for %s -- no result.', [Q]));
+                Exit;
+              end;
+              var RootQName: string:= Root.GetValue<string>('qname', Q);
+              MS.AddTitleMessage(Format('drag-lint: reverse call tree for %s -- double-click a row to jump to the call site.', [RootQName]));
+              var Posted: Integer:= 0;
+              var Callers: TJSONArray;
+              if Root.TryGetValue<TJSONArray>('callers', Callers) then
+                WalkCallers(Callers, RootQName, 1, Posted);
+              if Posted = 0 then
+                MS.AddTitleMessage(Format('drag-lint: no callers found for %s.', [RootQName]));
+            except
+              on E: Exception do MS.AddTitleMessage('drag-lint: reverse call tree failed: ' + E.ClassName + ': ' + E.Message);
+            end;
+          finally
+            V.Free;
+          end;
+        end);
+    end).Start;
+end;
+
 { Resolve the library index beside the plugin (where RTL/VCL/DevExpress units are
   indexed) -- needed to map an undeclared identifier to the unit that defines it. }
 function DLLibraryDb: string;
@@ -3847,6 +3972,7 @@ begin
   AddWrappedItem(SubUses, 'Impact / Blast Radius (symbol)...'                          , InvokeImpact          );
   AddWrappedItem(SubUses, 'Show Wiring (Spring4D DI + DFM events)...'                  , InvokeWiring          );
   AddWrappedItem(SubUses, 'Reverse Call Tree (who calls this, N-deep)...'              , InvokeReverseCallTree );
+  AddWrappedItem(SubUses, 'Reverse Call Tree (clickable, Messages window)...'          , InvokeReverseCallTreeMessages);
 
   { v0.46: Inspect Symbol submenu }
   var SubInspect: TMenuItem:= TMenuItem.Create(RootMenu);
