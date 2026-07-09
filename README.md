@@ -356,6 +356,9 @@ Show Signature Help, Run Diagnostics, Rename Symbol, Compile & Diagnose, Import 
 Format with YADF, Show Structure, Run AST Checks, Find Usages, Symbol Search, dockable 
 panels (Structure / Usages / Graph), Generate Test Helper CSV..., 
 **Uses & Dependencies** submenu (cycles, uses-audit, uses-fix, reconcile, wiring, impact, reverse call tree), 
+**Reverse Call Tree (clickable, Messages window)** -- posts the N-deep upward
+call tree for the symbol under the cursor as clickable rows in the IDE
+Messages window (double-click a row to jump to that call site), 
 **Inspect Symbol** submenu (surface, slice, type-at-cursor), 
 **Code Quality** submenu (dead code, undocumented, TODOs, compiler hints, top symbols),
 **Generate & Export** submenu (docs, tests, enums, graph, Obsidian),
@@ -375,6 +378,7 @@ pages).
 | Ctrl+Alt+R | Rename Symbol |
 | Ctrl+Alt+F | Find Usages |
 | Ctrl+Alt+T | Symbol Search |
+| Ctrl+Alt+K | Reverse Call Tree (clickable, Messages window) |
 
 **In-editor diagnostics**: gutter dot markers + wavy underlines via
 `IOTAEditViewNotifier.BeforeDrawLine`. Severity colours from the IDE colour

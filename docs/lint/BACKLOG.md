@@ -1,5 +1,87 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-08 (LATEST-36) -- **Batch E wrap-up PREP DONE (not yet released): v0.98.0-alpha version bump + docs, builds green, full battery GREEN. Final whole-branch review still to run before push/tag/GH-release/pack.**
+>
+> **SHIPPED to main this session (Batch E, all 6 tasks, untagged, rides the v0.98 release):**
+> - **T1 FIXED -- Library/Browsing folders list no longer collapses to empty.**
+>   `Constraints.MinHeight` floor (~20 rows) added to the Indexer Options page's
+>   list box (`OptionsFrames.pas`); still user-resizable. Commit `26f4908`.
+> - **T2a -- `reverse-calltree --format json` now emits `file` (absolute path) +
+>   `line` per node**, reusing the existing `GetSymbolById` call in `Expand`
+>   (`RCallTree.pas`) and `BuildNodeJson` (`CLI.pas`). Commit `b09da5b`.
+> - **T2b -- new IDE action "Reverse Call Tree (clickable, Messages window)".**
+>   `InvokeReverseCallTreeMessages` posts each node as a clickable
+>   `AddToolMessage` row (double-click jumps to the call site) instead of a flat
+>   text-report editor buffer. Commit `7f673cf`.
+> - **T3a -- Ctrl+Alt+K keybinding** -> reverse call tree (Messages), registered
+>   via `IOTAKeyBindingServices` alongside the existing H/C/S/D/I/R/F/T set.
+>   Commit `30a3117`.
+> - **T3b -- editor right-click submenu -- INVESTIGATED + SKIPPED (not a bug,
+>   a platform limit).** RAD Studio 37 exposes no supported OTA API for adding
+>   an entry to the editor's local/right-click context menu (checked against
+>   `TDragLintEditServicesNotifier` / `IOTAEditServices`). The keybinding
+>   (Ctrl+Alt+K) and the top `drag-lint` menu are the real entry points; no
+>   further action planned unless a supported API appears in a future RAD
+>   Studio release.
+> - **T4 FIXED -- ref-gap D: `Self.`-qualified field references now indexed.**
+>   Under `--deep`, `Self.client` (an `exprDot` node whose LHS base is `Self`)
+>   now also emits a `read` ref for the RHS member, gated strictly to LHS=`Self`
+>   (verified no over-capture on `other.Method`/`obj.Prop`). `field-name-prefix`
+>   rename-at-use now catches `Self.`-qualified field sites.
+>   **Ref-gap E (type-annotation / impl-header type-qualifier references)
+>   REMAINS DEFERRED** -- the `field-name-prefix`/`type-name-prefix` `--fix`
+>   stderr warning from v0.97 STAYS until E is fixed too (E covers different
+>   shapes than D; fixing D alone does not retire the warning). Commit `81a101c`.
+> - **T5 -- deleted the orphaned `T52_options.dpr` fixture** (dead since Batch D
+>   verification). Commit `dbda5fa`.
+>
+> **Wrap-up prep this session (Task 6, this commit):**
+> - **Final builds GREEN.** CLI Win64 Debug (`src/cli/drag-lint.dproj`, 0 errors,
+>   187047 lines, 8.52s) deployed to `src/cli/Win64/Debug/drag-lint.exe` +
+>   `third_party/dll-win64/drag-lint.exe`. Win32 BPL
+>   (`src/delphi-plugin/dclDragLintWizard.dproj`, RAD Studio was closed, 0 errors,
+>   22493 lines, 0.70s) deployed straight to `third_party/dll-win32/` via the
+>   project's own `DCC_BplOutput`/`DCC_DcpOutput`.
+> - **Full battery GREEN, no regressions:** `run_reverse_calltree.ps1`,
+>   `run_self_field_refs.ps1`, `run_bare_rhs_refs.ps1`,
+>   `run_naming_prefix_autofix.ps1`, `run_naming_autofix.ps1`,
+>   `run_deps_report.ps1`, `run_manifest.ps1`,
+>   `tests/autofix/run_fixable_catalog.ps1` (17 fixable rules) -- all exit 0,
+>   zero FAIL markers.
+> - **Version bumped** `src/cli/DRagLint.CLI.pas` `VERSION` `0.97.0-alpha` ->
+>   `0.98.0-alpha`. CHANGELOG/README/BACKLOG/AI-docs updated (this block).
+> - **NOT done yet (deliberate -- wrap-up prep only, release is a later step):**
+>   no push, no tag, no `pack-lint-release.ps1` run, no GH release. A final
+>   whole-branch review runs first.
+>
+> **LIVE-IDE SMOKE checklist (NOT headless-testable, user to verify in a live
+> RAD Studio session with the rebuilt BPL loaded):**
+> 1. **T1 folders:** open Tools > Options > drag-lint > Indexer -> the
+>    Library/Browsing folders list shows at least ~20 visible rows (not
+>    collapsed/empty) and is still resizable by dragging its splitter.
+> 2. **T2b Messages nav:** right-click a symbol (or use the top menu) ->
+>    "Reverse Call Tree (clickable, Messages window)" -> confirm the IDE
+>    Messages window fills with clickable rows -> double-click a row -> confirm
+>    the editor jumps to that exact call site (file + line).
+> 3. **T3a keybinding:** place the cursor on a symbol with known callers, press
+>    **Ctrl+Alt+K** -> confirm it fires the same clickable-Messages flow as T2b
+>    (no menu navigation needed).
+> 4. **T3b (informational, not a checklist item):** confirmed no editor
+>    right-click entry exists for reverse call tree -- this is expected per the
+>    OTA-API-limit finding above, not a regression to chase.
+>
+> **Deferred items (not in this release):**
+> - **Ref-gap E** (type-annotation / impl-header type-qualifier references not
+>   indexed) -- see v0.97 backlog entry below; still open, still gates the
+>   `field-name-prefix`/`type-name-prefix` `--fix` stderr warning.
+> - **Guaranteed editor right-click entry point** -- blocked on RAD Studio
+>   exposing a supported OTA API; re-investigate only if/when Embarcadero adds
+>   one (or a documented undocumented hook is found and judged safe).
+> - **In-Delphi tree renderer** for reverse-calltree (currently text report /
+>   clickable Messages list, no graphical tree widget) -- see the Track-5
+>   roadmap TODO in the LATEST-35 block below.
+> - **Architectural charts (Track 5.3)** -- unstarted, graph-leaning roadmap item.
+>
 > ## RESUME 2026-07-08 (LATEST-35) -- **Batch D RELEASED as v0.97.0-alpha (10 tasks: 3 engine bugfixes A/B/C + naming autofix phase 2 (prefix-adding) + 5 IDE items). Full battery (10 scripts) GREEN on the Release exe; pushed to main + tagged v0.97.0-alpha; GH release cut w/ both CLI zips + the Win32 BPL. Also this release: README notes settings live in Tools->Options (+ presets combo + reverse-calltree menu); AI docs (AI-USAGE + AI-INDEX-FIRST) FULL-SWEPT to the real 60-verb set + the exact 15 MCP tools + a "MCP is a curated subset, newer report verbs are CLI-only" note + the naming-autofix opt-in workflow. LIVE-IDE SMOKE still pending (user): T7 presets, T8 reverse-calltree right-click, T9 dock focus (PLAUSIBLE root cause -- needs confirm), T6 max_return_cases read-back -- see checklist at the end of this block.**
 >
 > **SHIPPED to main this session (Batch D, untagged, rides the next version bump):**

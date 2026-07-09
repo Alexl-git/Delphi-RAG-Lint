@@ -65,12 +65,15 @@ You can drive it two ways, both backed by the same engine:
 > - **Who calls X, and who calls them (upward tree):** `drag-lint reverse-calltree
 >   --qname <Unit.TClass.Member> [--depth N] [--format text|json|dot|mermaid] --db <DB>`
 >   N-deep reverse call tree with call sites (`unit:line`) and cycle markers.
->   Repeat `--db` to search multiple indexes (first one that resolves the qname
->   wins). Exit codes: `0` = ok, `1` = qname not resolved in any DB, `2` =
->   usage error or bad `--db`. Also available in the IDE: right-click a symbol
->   in the editor > **Uses & Dependencies > "Reverse Call Tree (who calls this,
->   N-deep)..."** — opens the text tree as a new editor buffer (a richer
->   in-dock tree/graph rendering is a filed TODO).
+>   `--format json` nodes also carry `file` (absolute path) + `line` per node
+>   (in addition to the `unit:line` `site` string), for tools that want direct
+>   navigation targets. Repeat `--db` to search multiple indexes (first one
+>   that resolves the qname wins). Exit codes: `0` = ok, `1` = qname not
+>   resolved in any DB, `2` = usage error or bad `--db`. Also available in the
+>   IDE: the top **drag-lint** menu (or **Ctrl+Alt+K**) runs **"Reverse Call
+>   Tree (clickable, Messages window)"**, which posts each node as a clickable
+>   row in the IDE Messages window — double-click a row to jump to that call
+>   site (a richer in-dock tree/graph rendering is still a filed TODO).
 > - **Introspect the index (for other tools):** `drag-lint schema --db <DB> [--format json]`
 >   Dumps the live schema -- schema_version + every table with its columns + row
 >   counts (read-only). See [docs/INDEX-SCHEMA.md](INDEX-SCHEMA.md) for the full
@@ -363,6 +366,13 @@ the same settings have a GUI companion:
 - **Editor right-click a symbol > Uses & Dependencies > "Reverse Call Tree
   (who calls this, N-deep)..."** -- runs `reverse-calltree` for the symbol
   under the cursor and opens the text tree as a new editor buffer.
+- **drag-lint menu > "Reverse Call Tree (clickable, Messages window)"**
+  (also bound to **Ctrl+Alt+K**) -- runs `reverse-calltree` for the symbol
+  under the cursor and posts each node as a clickable row in the IDE Messages
+  window; double-click a row to jump straight to that call site. (No editor
+  right-click submenu entry for this variant -- RAD Studio 37 exposes no
+  supported OTA API for the editor's context menu, so the keybinding and top
+  menu are the entry points.)
 
 These pages only matter for interactive/IDE use; a CLI-only agent workflow
 never needs them -- the CLI reads the same backing files directly.

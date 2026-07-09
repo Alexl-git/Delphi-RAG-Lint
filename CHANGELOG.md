@@ -5,6 +5,41 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v0.98.0-alpha -- 2026-07-08
+
+Library-folders fix, clickable reverse call tree in the IDE, and ref-gap D (Batch E).
+
+- **Library/Browsing folders list no longer collapses to empty.** The Indexer
+  Options page's Library/Browsing folder list box had no minimum height, so it
+  could render as an empty-looking 0-visible-row control depending on the
+  frame's layout pass. `Constraints.MinHeight` now floors it to show at least
+  ~20 rows; the list remains user-resizable.
+- **Reverse call tree, clickable, in the IDE Messages window.** A new action
+  **"Reverse Call Tree (clickable, Messages window)"** runs `reverse-calltree`
+  for the symbol under the cursor and posts each node as a clickable
+  `AddToolMessage` row in the IDE's Messages window -- double-click a row to
+  jump straight to that call site, instead of reading a flat text report.
+  Bound to **Ctrl+Alt+K** for fast access alongside the top menu entry. (An
+  editor right-click submenu entry was investigated and skipped: RAD Studio 37
+  exposes no supported OTA API for adding to the editor's local-menu/right-click
+  context menu, so the keybinding and top menu remain the entry points.)
+- **`reverse-calltree --format json` now emits `file` + `line` per node.** Each
+  node in the JSON tree carries the caller's absolute source file path and the
+  call-site line number (previously only the `site` string `unit:line`), which
+  is what the new Messages-window action uses to build clickable navigation
+  rows.
+- **Ref-gap D fixed: `Self.`-qualified field references are now indexed.**
+  Under `--deep`, `Self.client` (an `exprDot` node whose LHS base is the `Self`
+  identifier) now also emits a `read` reference for the RHS member (`client`),
+  gated strictly to an LHS base of `Self` so no other dotted member access
+  (`other.Method`, `obj.Prop`) gains a spurious ref. This means
+  `field-name-prefix` rename-at-use now catches `Self.`-qualified use sites of a
+  field that were previously missed. **Ref-gap E (type-annotation references)
+  remains deferred** -- the `field-name-prefix`/`type-name-prefix` `--fix`
+  stderr warning (see v0.97 notes) stays in place until that gap closes too.
+- Removed the orphaned `T52_options` test fixture (dead since Batch D
+  verification; no longer referenced by any script).
+
 ## v0.97.0-alpha -- 2026-07-08
 
 Engine fixes, naming autofix phase 2, and IDE ergonomics (Batch D).
