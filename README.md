@@ -125,6 +125,66 @@ Both probe HKCU + HKLM in both the 32- and 64-bit registry views and fold the
 results into a single deduplicated folder set. Add `--dry-run` to print the
 resolved folder list without indexing.
 
+### I installed new 3rd-party components. How to rebuild the library index
+
+When you install a new third-party package (DevExpress, TMS, Raize, Async
+Professional, ...), its component installer registers its source/DCU folders on
+the IDE's **Library** and **Browsing** search paths. The library index does
+**not** update itself - it is a snapshot of those paths from the last scan, so
+symbols from the new components stay unresolved until you rebuild it.
+
+**1. Confirm what's missing (optional but quick).** `library-drift` lists every
+registry root that is not yet in the index and exits non-zero if there's drift -
+run it right after installing to see the new folders:
+
+```
+drag-lint library-drift                       # active platform
+drag-lint library-drift --platform win64      # a specific platform
+```
+
+Any `MISSING: <path>` line is a component folder the current index doesn't cover.
+
+**2. Rebuild the library index.** Pick whichever matches how your indexes are
+managed:
+
+- **This repo's managed indexes (recommended here).** The `Library` section of
+  the named-DB manifest (`third_party/dll-win64/drag-lint.json`) has
+  `"source": "registry-libraries"` and rebuilds both platform DBs
+  (`C:\Projects\.drag-lint\library-Win32.sqlite` /
+  `library-Win64.sqlite`) straight from the registry. Rebuild **only** that
+  section - no need to touch the project indexes:
+
+  ```
+  drag-lint index --all --only Library            # both platforms, from the manifest
+  drag-lint index --all --only Library --dry-run  # preview: prints the two target DBs first
+  ```
+
+- **A standalone library DB (no manifest).** Re-run the same `--scan-libraries-*`
+  scan that first built it, pointing at the same `--db` file (it is rebuilt in
+  place):
+
+  ```
+  drag-lint index --scan-libraries-win --db Library.sqlite   # Win32 + Win64
+  drag-lint index --scan-libraries-all --db Library.sqlite   # every registered platform
+  ```
+
+**3. Verify.** Re-run `library-drift` - it should now report **0 missing** (exit
+0). If a folder still shows as `MISSING`, the component didn't register that path
+on the IDE search paths; add it under **Tools -> Options -> Language -> Delphi ->
+Library** (Library or Browsing path) for the right platform, then rebuild again.
+
+Notes:
+
+- **Close nothing / rebuild anytime** - this is a CLI (`.exe`) scan; RAD Studio
+  can stay open. If the target `.sqlite` is locked, an orphaned `drag-lint.exe`
+  is holding it - stop that process (not the IDE) and retry.
+- **After rebuilding, restart the IDE plugin's LSP** (or reopen the project) so
+  the running plugin picks up the refreshed `library-*.sqlite`. The CLI sees the
+  new DB immediately.
+- The scan reads the RTL/VCL/FMX and third-party **source** paths; components
+  shipped as DCU-only still resolve for uses/dependency purposes but won't have
+  browsable source bodies.
+
 ### Untangling unit dependencies (cycles + uses cleanup)
 
 Find circular unit dependencies and the exact `uses` lines that form them:
