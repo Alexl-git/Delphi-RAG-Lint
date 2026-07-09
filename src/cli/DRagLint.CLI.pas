@@ -36,6 +36,7 @@ uses
   , FireDAC.Stan.Param
   , { v0.42: lets TFDParam.SetAsX inline (was H2443) }
       FireDAC.DApt
+  , TreeSitter
   , DRagLint.Core   .Model
   , DRagLint.Core   .Interfaces
   , DRagLint.Core   .Indexer
@@ -355,6 +356,7 @@ begin
   Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]');
   Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
   Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
+  Writeln('  drag-lint info [--json]                              (engine self-info: version, build date, MIT, tree-sitter + capabilities; read-only)');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
@@ -6232,6 +6234,137 @@ begin
   end; // try
 end; // function
 
+{ Local re-declarations of the tree-sitter grammar entry points, mirroring the
+  pattern already used by DRagLint.Parser.Delphi13 (interface-visible, so not
+  re-declared here) and DRagLint.Lint.Linter (implementation-only, NOT visible
+  outside that unit -- so tree_sitter_dfm needs its own local decl here). Both
+  DLLs (tree-sitter-delphi13.dll / tree-sitter-dfm.dll) are already runtime
+  dependencies of this exe via the indexer/linter, so this adds no new deploy
+  requirement. }
+function tree_sitter_dfm: PTSLanguage; cdecl;
+external 'tree-sitter-dfm';
+
+const
+  CLI_VERB_COUNT = 60; // informational only, not load-bearing; approximate verb count
+
+/// <summary>Returns the tree-sitter ABI version for the given grammar, or
+/// 'unknown' if the grammar's entry point cannot be called (never fabricated).</summary>
+/// <param name="AGetLanguage">The grammar's cdecl entry-point function pointer
+/// (e.g. @tree_sitter_delphi13 or @tree_sitter_dfm).</param>
+/// <returns>The integer ABI version as a string, or 'unknown' on any failure.</returns>
+function TreeSitterGrammarVersion(AGetLanguage: TTSGetLanguageFunc): string;
+var
+  Lang: PTSLanguage;
+begin
+  try
+    Lang:= AGetLanguage();
+    if Lang = nil then Result:= 'unknown'
+    else Result:= IntToStr(Lang.Version);
+  except
+    Result:= 'unknown';
+  end;
+end;
+
+/// <summary>Best-effort probe for FTS5 + trigram tokenizer availability, using
+/// the same in-memory create-and-match check as DoSelfTestFts5 but returning a
+/// Boolean instead of printing.</summary>
+/// <returns>True if FTS5 with the trigram tokenizer works in this SQLite build;
+/// False on any exception.</returns>
+function ProbeFts5Available: Boolean;
+var
+  Conn: TFDConnection;
+  Q   : TFDQuery     ;
+begin
+  Conn:= TFDConnection.Create(nil);
+  try
+    try
+      Conn.DriverName:= 'SQLite';
+      Conn.Params.Values['Database']:= ':memory:';
+      Conn.Connected:= True;
+      Conn.ExecSQL('CREATE VIRTUAL TABLE t USING fts5(x, tokenize=''trigram'')');
+      Conn.ExecSQL('INSERT INTO t(rowid, x) VALUES (1, ''Folder not found'')'  );
+      Q:= TFDQuery.Create(nil);
+      try
+        Q.Connection:= Conn;
+        Q.Sql.Text:= 'SELECT rowid FROM t WHERE t MATCH ''older'''; // substring
+        Q.Open;
+        Result:= (not Q.Eof) and (Q.FieldByName('rowid').AsInteger = 1);
+      finally
+        Q.Free;
+      end;
+    except
+      Result:= False;
+    end; // try
+  finally
+    Conn.Free;
+  end; // try
+end; // function
+
+/// <summary>drag-lint info [--json] -- prints engine self-info: version, build
+/// date (from the exe's own file timestamp), MIT license, description,
+/// tree-sitter grammar versions, capabilities (FTS5, CLI verb count), the exe
+/// path, and the build platform. Read-only; no DB, no side effects. --json emits
+/// the stable schema "info/1"; without it, a human-readable block. Consumed by
+/// the IDE About box.</summary>
+/// <returns>0 always.</returns>
+function DoInfo(const AArgs: TArgs): Integer;
+var
+  UseJson  : Boolean;
+  BuildDate: string;
+  Age      : TDateTime;
+  ExePath  : string;
+  Plat     : string;
+  Fts5     : Boolean;
+  TsDelphi : string;
+  TsDfm    : string;
+  JRoot, JTs, JCap: TJSONObject;
+begin
+  Result:= 0;
+  UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  ExePath:= ParamStr(0);
+  if FileAge(ExePath, Age) then BuildDate:= FormatDateTime('yyyy-mm-dd hh:nn:ss', Age)
+  else BuildDate:= 'unknown';
+  {$IFDEF WIN64} Plat:= 'Win64'; {$ELSE} Plat:= 'Win32'; {$ENDIF}
+  Fts5:= ProbeFts5Available;                                    { small helper: try/except the FTS5 create, mirrors DoSelfTestFts5 }
+  TsDelphi:= TreeSitterGrammarVersion(tree_sitter_delphi13);     { returns 'N' or 'unknown' }
+  TsDfm:= TreeSitterGrammarVersion(tree_sitter_dfm);
+
+  if UseJson then
+  begin
+    JRoot:= TJSONObject.Create;
+    try
+      JRoot.AddPair('schema', 'info/1');
+      JRoot.AddPair('name', 'drag-lint');
+      JRoot.AddPair('version', VERSION);
+      JRoot.AddPair('build_date', BuildDate);
+      JRoot.AddPair('license', 'MIT');
+      JRoot.AddPair('description', 'symbol-aware index + RAG + lint for Delphi/Pascal');
+      JTs:= TJSONObject.Create;
+      JTs.AddPair('delphi13', TsDelphi);
+      JTs.AddPair('dfm', TsDfm);
+      JRoot.AddPair('tree_sitter', JTs);
+      JCap:= TJSONObject.Create;
+      JCap.AddPair('fts5', TJSONBool.Create(Fts5));
+      JCap.AddPair('cli_verbs', TJSONNumber.Create(CLI_VERB_COUNT));
+      JRoot.AddPair('capabilities', JCap);
+      JRoot.AddPair('exe_path', ExePath);
+      JRoot.AddPair('platform', Plat);
+      Writeln(JRoot.ToJSON);
+    finally
+      JRoot.Free;
+    end;
+  end
+  else
+  begin
+    Writeln('drag-lint ', VERSION, '  (built ', BuildDate, ')');
+    Writeln('License: MIT');
+    Writeln('symbol-aware index + RAG + lint for Delphi/Pascal');
+    Writeln('tree-sitter: delphi13 ', TsDelphi, ' / dfm ', TsDfm);
+    Writeln('capabilities: FTS5=', BoolToStr(Fts5, True), ', CLI verbs=', CLI_VERB_COUNT);
+    Writeln('exe: ', ExePath, '   platform: ', Plat);
+  end;
+end; // function
+
 // v0.19: drag-lint typeat <file>:<line>:<col> [--db <path>] [--format text|json]
 // Resolves the identifier at the given position to a symbol in the index.
 // The position argument has the form: C:\path\to\File.pas:17:8
@@ -11510,6 +11643,7 @@ begin
     else if Args.Command = 'uses-report'       then Result:= DoUsesReport      (Args)
     else if Args.Command = 'deps-report'       then Result:= DoDepsReport      (Args)
     else if Args.Command = 'schema'            then Result:= DoSchema          (Args)
+    else if Args.Command = 'info'              then Result:= DoInfo            (Args)
     else if Args.Command = 'resolve-uses'      then Result:= DoResolveUses     (Args)
     else if Args.Command = 'fb-snapshot'       then Result:= DoFbSnapshot      (Args)
     else if Args.Command = 'link-orm'          then Result:= DoLinkOrm         (Args)
