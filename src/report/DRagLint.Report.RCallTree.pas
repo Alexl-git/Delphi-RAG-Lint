@@ -52,7 +52,23 @@ type
 function BuildReverseCallTree(const AStore: ISymbolStore; ARootId: Int64;
   const AOpts: TRCallOptions): TRCallTree;
 
+/// <summary>Builds the N-deep FORWARD call tree rooted at ARootId: what the root
+/// calls, what those call, ... The mirror of BuildReverseCallTree over
+/// ISymbolStore.GetCallEdgesFromSymbol (outgoing edges). Same TRCallTree shape,
+/// same global-visited cycle policy, same depth cap. For a callee node, Site is
+/// '' , SiteFile is the callee's own declaring file (full path) and SiteLine is
+/// the callee's declaration line (TCallEdge carries no call-site line, so
+/// navigation targets the callee's definition). The record's Callers field holds
+/// the CALLEES here (field name kept for record reuse). Borrows AStore; no I/O.</summary>
+/// <param name="AStore">Open store (ids are per-DB).</param>
+/// <param name="ARootId">Symbol id of the tree root.</param>
+/// <param name="AOpts">Depth cap.</param>
+/// <returns>The tree + summary. Root.Site is ''.</returns>
+function BuildForwardCallTree(const AStore: ISymbolStore; ARootId: Int64;
+  const AOpts: TRCallOptions): TRCallTree;
+
 implementation
+
 
 function BuildReverseCallTree(const AStore: ISymbolStore; ARootId: Int64;
   const AOpts: TRCallOptions): TRCallTree;
@@ -115,6 +131,69 @@ begin
   Visited := TDictionary<Int64, Boolean>.Create;
   try
     Result.Root := Expand(ARootId, AOpts.Depth, 0, '');
+    Result.Summary := Sum;
+  finally
+    Visited.Free;
+  end;
+end;
+
+function BuildForwardCallTree(const AStore: ISymbolStore; ARootId: Int64;
+  const AOpts: TRCallOptions): TRCallTree;
+var
+  Visited: TDictionary<Int64, Boolean>;
+  Sum    : TRCallSummary;
+
+  function Expand(AId: Int64; ADepth, ALevel: Integer): TRCallNode;
+  var
+    Edges : TArray<TCallEdge>;
+    E     : TCallEdge;
+    Kids  : TList<TRCallNode>;
+    Sym    : TSymbol;
+    SeenChild: TDictionary<Int64, Boolean>;
+  begin
+    Result := Default(TRCallNode);
+    Sym := AStore.GetSymbolById(AId);
+    Result.QName    := Sym.QualifiedName;
+    Result.Site     := '';
+    { Callee node navigates to the callee's OWN declaration (no call-site line on
+      the edge). SiteFile = declaring file; SiteLine = decl line. }
+    Result.SiteFile := AStore.GetFilePath(Sym.FileId);
+    Result.SiteLine := Sym.StartLine;
+    Inc(Sum.NodeCount);
+    if ALevel > Sum.MaxDepthReached then Sum.MaxDepthReached := ALevel;
+    if Visited.ContainsKey(AId) then
+    begin
+      Result.Cycle := True;
+      Inc(Sum.CycleCount);
+      Exit;
+    end;
+    Visited.Add(AId, True);
+    if ADepth <= 0 then Exit;
+    Edges := AStore.GetCallEdgesFromSymbol(AId);
+    if Length(Edges) = 0 then Exit;
+    Kids := TList<TRCallNode>.Create;
+    SeenChild := TDictionary<Int64, Boolean>.Create;
+    try
+      if ADepth = 1 then Sum.Truncated := True;
+      for E in Edges do
+      begin
+        if E.TargetSymbolId <= 0 then Continue;
+        if SeenChild.ContainsKey(E.TargetSymbolId) then Continue; { dedup sibling edges }
+        SeenChild.Add(E.TargetSymbolId, True);
+        Kids.Add(Expand(E.TargetSymbolId, ADepth - 1, ALevel + 1));
+      end;
+      Result.Callers := Kids.ToArray;
+    finally
+      SeenChild.Free;
+      Kids.Free;
+    end;
+  end;
+
+begin
+  Sum := Default(TRCallSummary);
+  Visited := TDictionary<Int64, Boolean>.Create;
+  try
+    Result.Root := Expand(ARootId, AOpts.Depth, 0);
     Result.Summary := Sum;
   finally
     Visited.Free;
