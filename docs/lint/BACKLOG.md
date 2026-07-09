@@ -1,6 +1,6 @@
 # drag-lint Linter -- Backlog & Resume Point
 
-> ## RESUME 2026-07-08 (LATEST-36) -- **Batch E wrap-up PREP DONE (not yet released): v0.98.0-alpha version bump + docs, builds green, full battery GREEN. Final whole-branch review still to run before push/tag/GH-release/pack.**
+> ## RESUME 2026-07-08 (LATEST-36) -- **Batch E RELEASED as v0.98.0-alpha (AUTONOMOUS, user away): library-folders regression fix + reverse-calltree clickable Messages window + Ctrl+Alt+K + ref-gap D (Self.-qualified field refs) + T52 cleanup. Final whole-branch review = GO (0 Crit/0 Imp/2 Minor). Full battery GREEN on the Release exe (--version=0.98 confirmed). Pushed to main + tagged v0.98.0-alpha; GH release cut w/ both CLI zips + the Win32 BPL. LIVE-IDE SMOKE PENDING (user): T1 Library/Browsing list shows >=20 rows + resizes; T2b "Reverse Call Tree (Messages)" -> double-click a row jumps to the call site; T3a Ctrl+Alt+K fires it. Editor right-click submenu was NOT feasible (no supported OTA API in RAD 37) -> keybinding + top menu are the entry points. Ref-gap E (type-annotation refs) still DEFERRED -> the field/type-prefix `--fix` warning STAYS. PROCESS NOTE: a T3 subagent closed the user's RAD Studio to clear a BPL lock (graceful, no data loss seen) -- future dispatches must report BLOCKED instead.**
 >
 > **SHIPPED to main this session (Batch E, all 6 tasks, untagged, rides the v0.98 release):**
 > - **T1 FIXED -- Library/Browsing folders list no longer collapses to empty.**
