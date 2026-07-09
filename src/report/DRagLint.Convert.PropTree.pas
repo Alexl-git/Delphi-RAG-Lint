@@ -1,0 +1,346 @@
+unit DRagLint.Convert.PropTree;
+
+{
+  Track 3 (component conversion), Batch 1, Task 1 -- the index-driven RECURSIVE
+  deep-property enumerator that backs the CLI `proptree` verb and, later, the
+  convert-scaffold generator.
+
+  It walks a class's kind='property' child symbols, parses the property type from
+  each symbol's Signature, and RECURSES into class-typed property types (depth-
+  capped + a visited-TYPE-name set as the cycle guard), producing flattened
+  dotted paths like 'Font.Color' or 'Inner.Shade'. Inherited properties are
+  included by walking the resolved ancestor closure (GetTransitiveAncestors).
+
+  READ-ONLY: never writes to the store. All lookups are through ISymbolStore.
+}
+
+interface
+
+uses
+  System.SysUtils, System.Generics.Collections,
+  DRagLint.Core.Model, DRagLint.Core.Interfaces;
+
+type
+  /// <summary>One flattened property of the enumerated tree.</summary>
+  /// <remarks>Path is the dotted route from the root class down to this leaf
+  /// (e.g. 'Font.Color'); a top-level property is just its own name. TypeName is
+  /// the bare declared type ('TColor', 'Integer'), or 'unknown' when it could not
+  /// be parsed/resolved. DeclaredIn is the qualified name of the class in which
+  /// this property is FIRST declared (a redeclaration in a more-derived class
+  /// shadows the ancestor's -- the most-derived declaration wins). IsClassTyped
+  /// is True only when TypeName resolved to a class-kind symbol that the walker
+  /// recursed INTO. Kind is one of 'scalar' | 'class' | 'enum' | 'set' |
+  /// 'unknown'.</remarks>
+  TPropNode = record
+    Path        : string;   // dotted, e.g. 'Font.Color'
+    TypeName    : string;   // 'TColor'; 'unknown' if unresolvable
+    DeclaredIn  : string;   // class qname where this property is first declared
+    IsClassTyped: Boolean;  // True if TypeName resolved to a class we recursed into
+    Kind        : string;   // 'scalar' | 'class' | 'enum' | 'set' | 'unknown'
+  end;
+
+  /// <summary>Tuning knobs for BuildPropTree.</summary>
+  /// <remarks>Depth caps recursion into class-typed properties (the caller applies
+  /// its own default -- typically 6 -- before calling; a Depth &lt;= 0 yields only
+  /// the root class's own + inherited properties, no recursion). ToPersistent,
+  /// when True (the CLI default), stops the ancestor climb at a class named
+  /// 'TPersistent' or 'TObject' so the enumerator does not surface TObject's
+  /// non-published noise -- pragmatic, name-based, no RTTI.</remarks>
+  TPropTreeOptions = record
+    Depth       : Integer;
+    ToPersistent: Boolean;
+  end;
+
+  /// <summary>The flattened deep-property tree of a class.</summary>
+  /// <remarks>RootType is the bare class name ('TOuter'), or '' when the class
+  /// qname did not resolve (in which case Nodes is empty). Nodes are in
+  /// enumeration order (own properties before recursed children). Truncated is
+  /// True when the Depth cap stopped a class-typed expansion that would otherwise
+  /// have recursed further.</remarks>
+  TPropTree = record
+    RootType : string;
+    Nodes    : TArray<TPropNode>;
+    Truncated: Boolean;
+  end;
+
+/// <summary>Enumerates the deep (recursively flattened) property tree of a class,
+/// resolving each property's type from the index and recursing into class-typed
+/// property types.</summary>
+/// <param name="AStore">Open, read-only symbol store (ids are per-DB). Never
+/// written to.</param>
+/// <param name="AClassQName">Fully-qualified class name, e.g. 'Unit.TOuter'.
+/// Resolved via FindSymbolsByQualifiedName; the first class-kind match is the
+/// root.</param>
+/// <param name="AOpts">Depth cap and the ToPersistent ancestor-stop switch.</param>
+/// <returns>The flattened tree. RootType='' with empty Nodes when AClassQName
+/// resolves to no class-kind symbol.</returns>
+/// <remarks>Own properties come from FindAllChildSymbols(classId) filtered to
+/// property-kind; inherited properties are gathered by walking the resolved
+/// ancestor closure (GetTransitiveAncestors) and enumerating each ancestor
+/// class's property children. Leaf names are deduped -- a redeclared property
+/// shadows the ancestor's, and the most-derived declaration wins for DeclaredIn.
+/// The type is parsed from the property Signature (a leading ':' + whitespace is
+/// trimmed, then the first type token is taken up to whitespace / ';' / 'read' /
+/// 'write'); an EMPTY Signature (a bare 'property Color;' redeclaration) is
+/// resolved by finding the same-named property in an ancestor that carries a
+/// non-empty Signature. If still unresolved, TypeName='unknown', Kind='unknown',
+/// and there is NO recursion (a type is never fabricated). A type that resolves
+/// via FindSymbolByExactNameAnywhere to a class-kind symbol is recursed into
+/// (Kind='class', IsClassTyped=True, child paths prefixed with '&lt;prop&gt;.');
+/// otherwise Kind='scalar'. Recursion is bounded by BOTH AOpts.Depth AND a
+/// visited-TYPE-name set, so a back-reference (e.g. 'Parent: TWinControl') always
+/// terminates. When ToPersistent is True the ancestor climb stops at a class
+/// named 'TPersistent' or 'TObject'. Borrows AStore; performs no I/O of its own.
+/// Not thread-safe with respect to concurrent mutation of the store.</remarks>
+function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
+  const AOpts: TPropTreeOptions): TPropTree;
+
+implementation
+
+// Parse the bare type token out of a property Signature. Handles a leading
+// ": " (some rows carry it, some do not) and stops at the first whitespace,
+// ';', or a 'read'/'write' accessor keyword. Returns '' when nothing parseable
+// remains (an empty / accessor-only signature).
+function ParseTypeToken(const ASignature: string): string;
+var
+  S  : string;
+  P  : Integer;
+  Tok: string;
+  Low: string;
+begin
+  Result:= '';
+  S:= Trim(ASignature);
+  if S = '' then Exit;
+  // Trim a single leading ':' then re-trim whitespace.
+  if (S <> '') and (S[1] = ':') then S:= Trim(Copy(S, 2, MaxInt));
+  if S = '' then Exit;
+  // Take the first token up to whitespace / ';'.
+  Tok:= '';
+  for P:= 1 to Length(S) do
+  begin
+    if CharInSet(S[P], [' ', #9, #13, #10, ';']) then Break;
+    Tok:= Tok + S[P];
+  end;
+  Low:= LowerCase(Tok);
+  if (Low = 'read') or (Low = 'write') then Exit; // accessor-only; no type
+  Result:= Tok;
+end;
+
+// True when the type name is one we should stop the ancestor climb at (root of
+// the published-property surface) when ToPersistent is on.
+function IsStopClass(const AName: string): Boolean;
+var
+  Low: string;
+begin
+  Low:= LowerCase(Trim(AName));
+  Result:= (Low = 'tpersistent') or (Low = 'tobject');
+end;
+
+function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
+  const AOpts: TPropTreeOptions): TPropTree;
+var
+  Nodes    : TList<TPropNode>;
+  Truncated: Boolean         ;
+
+  // Resolve a class qname/name to its class-kind defining symbol; Id=0 if none.
+  function ResolveClassByQName(const AQName: string): TSymbol;
+  var
+    Cands: TArray<TSymbol>;
+    S    : TSymbol         ;
+  begin
+    Result:= Default(TSymbol);
+    Cands := AStore.FindSymbolsByQualifiedName(AQName);
+    for S in Cands do
+      if S.Kind = skClass then Exit(S);
+  end;
+
+  // Ordered list of the class + its resolved ancestor classes (most-derived
+  // first). Stops climbing at TPersistent/TObject when AOpts.ToPersistent.
+  function ClassChain(const ARoot: TSymbol): TArray<TSymbol>;
+  var
+    List: TList<TSymbol>       ;
+    Anc : TArray<TTypeAncestor>;
+    A   : TTypeAncestor        ;
+    Sym : TSymbol              ;
+  begin
+    List:= TList<TSymbol>.Create;
+    try
+      List.Add(ARoot);
+      Anc:= AStore.GetTransitiveAncestors(ARoot.Id);
+      for A in Anc do
+      begin
+        // When ToPersistent is on, do not enumerate the props of TPersistent /
+        // TObject themselves (and everything above is unreachable anyway).
+        if AOpts.ToPersistent and IsStopClass(A.Name) then Break;
+        if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
+        begin
+          Sym:= AStore.GetSymbolById(A.SymbolId);
+          if (Sym.Id > 0) and (Sym.Kind = skClass) then List.Add(Sym);
+        end;
+      end;
+      Result:= List.ToArray;
+    finally
+      List.Free;
+    end;
+  end;
+
+  // Resolve an empty-signature (redeclared) property's type by finding the
+  // same-named property that DOES carry a signature in an ancestor class.
+  function ResolveInheritedType(const AClass: TSymbol; const APropName: string): string;
+  var
+    Anc  : TArray<TTypeAncestor>;
+    A    : TTypeAncestor        ;
+    Child: TSymbol              ;
+    Tok  : string               ;
+  begin
+    Result:= '';
+    Anc:= AStore.GetTransitiveAncestors(AClass.Id);
+    for A in Anc do
+    begin
+      if not (A.Resolved and (A.SymbolId > 0)) then Continue;
+      Child:= AStore.FindChildSymbolByName(A.SymbolId, APropName);
+      if (Child.Id > 0) and (Child.Kind = skProperty) then
+      begin
+        Tok:= ParseTypeToken(Child.Signature);
+        if Tok <> '' then Exit(Tok);
+      end;
+    end;
+  end;
+
+  // The distinct property leaves visible on AClass (own + inherited), each
+  // paired with the most-derived class that declares it. Dedupe by leaf name.
+  procedure CollectProps(const AClass: TSymbol;
+    out AOrder: TArray<TSymbol>; out ADeclaredIn: TArray<string>);
+  var
+    Chain: TArray<TSymbol> ;
+    Cls  : TSymbol         ;
+    Kids : TArray<TSymbol> ;
+    Kid  : TSymbol         ;
+    Seen : TDictionary<string, Boolean>;
+    OL   : TList<TSymbol>  ;
+    DL   : TList<string>   ;
+    Key  : string          ;
+  begin
+    Seen:= TDictionary<string, Boolean>.Create;
+    OL  := TList<TSymbol>.Create;
+    DL  := TList<string >.Create;
+    try
+      Chain:= ClassChain(AClass); // most-derived first -> shadowing is automatic
+      for Cls in Chain do
+      begin
+        Kids:= AStore.FindAllChildSymbols(Cls.Id);
+        for Kid in Kids do
+        begin
+          if Kid.Kind <> skProperty then Continue;
+          Key:= LowerCase(Kid.Name);
+          if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
+          Seen.Add(Key, True);
+          OL.Add(Kid);
+          DL.Add(Cls.QualifiedName);
+        end;
+      end;
+      AOrder     := OL.ToArray;
+      ADeclaredIn:= DL.ToArray;
+    finally
+      Seen.Free;
+      OL.Free;
+      DL.Free;
+    end;
+  end;
+
+  // Recursive walk. APrefix is the dotted path down to (and including a trailing
+  // '.') the current class; AVisited holds lowercased TYPE names already expanded
+  // on this path (cycle guard). ADepthLeft is the remaining class-recursion budget.
+  procedure Walk(const AClass: TSymbol; const APrefix: string;
+    ADepthLeft: Integer; AVisited: TDictionary<string, Boolean>);
+  var
+    Order     : TArray<TSymbol>;
+    DeclaredIn: TArray<string> ;
+    idx       : Integer        ;
+    Prop      : TSymbol        ;
+    Node      : TPropNode      ;
+    Tok       : string         ;
+    TypeSym   : TSymbol        ;
+    LowType   : string         ;
+  begin
+    CollectProps(AClass, Order, DeclaredIn);
+    for idx:= 0 to High(Order) do
+    begin
+      Prop:= Order[idx];
+      Node:= Default(TPropNode);
+      Node.Path      := APrefix + Prop.Name;
+      Node.DeclaredIn:= DeclaredIn[idx];
+
+      // Parse the type from this property's own signature; if empty (a bare
+      // redeclaration) resolve it from an ancestor that carries a signature.
+      Tok:= ParseTypeToken(Prop.Signature);
+      if Tok = '' then Tok:= ResolveInheritedType(AClass, Prop.Name);
+
+      if Tok = '' then
+      begin
+        Node.TypeName    := 'unknown';
+        Node.Kind        := 'unknown';
+        Node.IsClassTyped:= False;
+        Nodes.Add(Node);
+        Continue; // no type -> no recursion
+      end;
+
+      Node.TypeName:= Tok;
+
+      // Classify: resolve the type name; a class-kind symbol -> recurse.
+      TypeSym:= AStore.FindSymbolByExactNameAnywhere(Tok);
+      if (TypeSym.Id > 0) and (TypeSym.Kind = skClass) then
+      begin
+        Node.Kind        := 'class';
+        Node.IsClassTyped:= True;
+        Nodes.Add(Node);
+
+        LowType:= LowerCase(Tok);
+        if ADepthLeft <= 0 then
+          Truncated:= True                 // depth cap stopped this expansion
+        else if AVisited.ContainsKey(LowType) then
+          // back-reference on this path -> terminate (already expanded above)
+        else
+        begin
+          AVisited.Add(LowType, True);
+          Walk(TypeSym, Node.Path + '.', ADepthLeft - 1, AVisited);
+          AVisited.Remove(LowType);
+        end;
+      end
+      else
+      begin
+        Node.Kind        := 'scalar';
+        Node.IsClassTyped:= False;
+        Nodes.Add(Node);
+      end;
+    end;
+  end;
+
+var
+  Root   : TSymbol                    ;
+  Visited: TDictionary<string, Boolean>;
+begin
+  Result          := Default(TPropTree);
+  Result.RootType := '';
+  Result.Truncated:= False;
+  SetLength(Result.Nodes, 0);
+
+  Root:= ResolveClassByQName(AClassQName);
+  if Root.Id = 0 then Exit; // unresolved class -> empty tree, RootType=''
+
+  Nodes    := TList<TPropNode>.Create;
+  Visited  := TDictionary<string, Boolean>.Create;
+  Truncated:= False;
+  try
+    Result.RootType:= Root.Name;
+    Visited.Add(LowerCase(Root.Name), True); // guard against direct self-reference
+    Walk(Root, '', AOpts.Depth, Visited);
+    Result.Nodes    := Nodes.ToArray;
+    Result.Truncated:= Truncated;
+  finally
+    Nodes.Free;
+    Visited.Free;
+  end;
+end;
+
+end.

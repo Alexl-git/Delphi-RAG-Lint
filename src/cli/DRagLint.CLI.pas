@@ -106,6 +106,7 @@ uses
   , DRagLint.Preprocess.Profile
   , DRagLint.Report    .Deps
   , DRagLint.Report    .RCallTree
+  , DRagLint.Convert   .PropTree
   ;
 
 type
@@ -307,6 +308,11 @@ type
     // the raw --tostring value ('' -> tsmRtti default, else 'rtti'|'case').
     EnumMethodsStr: string; // --methods tobyte,frombyte,...
     EnumToString  : string; // --tostring rtti|case
+    // Track 3 Batch 1 (Task 1): proptree deep-property enumerator. Depth reuses
+    // Depth (--depth; proptree applies its own default 6 inside DoPropTree when
+    // Depth<=0). ToPersistent defaults ON (stop the ancestor climb at
+    // TPersistent/TObject); --no-to-persistent turns it OFF.
+    ToPersistent  : Boolean; // proptree: stop ancestor climb at TPersistent/TObject (default True)
   end; // record
 
 procedure PrintHelp;
@@ -395,6 +401,7 @@ begin
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
+  Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -506,6 +513,7 @@ begin
   Result.BenchN             := 20;
   Result.MaxDepth           := 20;        // v14 (D5 T11): call-path BFS safety cap
   Result.Direction          := '';        // per-verb default applied in DoCallGraph/DoReverseCallTree (empty = unset)
+  Result.ToPersistent       := True;       // proptree: stop ancestor climb at TPersistent/TObject unless --no-to-persistent
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
@@ -636,6 +644,7 @@ begin
     else if (A = '--from') and (i < ParamCount) then begin Inc(i); Result.CallFrom:= ParamStr(i); end
     else if (A = '--max-depth') and (i < ParamCount) then begin Inc(i); Result.MaxDepth:= StrToIntDef(ParamStr(i), 20); end
     else if (A = '--direction') and (i < ParamCount) then begin Inc(i); Result.Direction:= ParamStr(i); end
+    else if A = '--no-to-persistent' then Result.ToPersistent:= False // proptree: climb past TPersistent/TObject
     else if (A = '--task') and (i < ParamCount) then
     begin
       Inc(i);
@@ -10188,6 +10197,120 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>drag-lint proptree --qname X [--depth N] [--to-persistent (default) |
+/// --no-to-persistent] [--format text|json] [--json] --db PATH [--db ...] -- Track 3
+/// Batch 1: the index-driven RECURSIVE deep-property enumerator. Resolves class X,
+/// walks its own + inherited kind='property' children, parses each property's type
+/// from its Signature, and recurses into class-typed property types (depth-capped +
+/// a visited-TYPE-name cycle guard) to produce flattened dotted paths (Font.Color,
+/// Inner.Shade). --depth defaults to 6 (applied here when Depth&lt;=0). ToPersistent
+/// (default ON) stops the ancestor climb at TPersistent/TObject; --no-to-persistent
+/// climbs past. text = an indented tree (indent = the path's dot-depth); json =
+/// schema proptree/1. With multiple --db, the first DB that resolves the qname to a
+/// class is used (ids are per-DB). READ-ONLY.</summary>
+/// <param name="AArgs">QName=class, Depth=recursion cap (default 6),
+/// ToPersistent=ancestor-stop, Format/AsJson=output, DbPath/DbPaths=index(es).</param>
+/// <returns>0 ok; 1 qname not resolved to a class in any DB; 2 usage error / no
+/// readable db.</returns>
+function DoPropTree(const AArgs: TArgs): Integer;
+var
+  Dbs  : TArray<string>  ;
+  Db   : string          ;
+  Store: ISymbolStore    ;
+  Tree : TPropTree       ;
+  Found: Boolean         ;
+  Depth: Integer         ;
+  Fmt  : string          ;
+  Opts : TPropTreeOptions;
+
+  function KindLabel(const ANode: TPropNode): string;
+  begin
+    Result:= ANode.Kind;
+  end;
+
+begin
+  if AArgs.QName = '' then
+  begin Writeln('Usage: drag-lint proptree --qname X [--depth N] [--no-to-persistent] [--format text|json] [--json] --db PATH [--db ...]'); Exit(2); end;
+
+  Fmt:= LowerCase(Trim(AArgs.Format));
+
+  // proptree's own default depth is 6 (deeper than the global --depth default of
+  // 3), applied here so the shared parse default is untouched.
+  Depth:= AArgs.Depth;
+  if Depth <= 0 then Depth:= 6;
+
+  Opts.Depth       := Depth;
+  Opts.ToPersistent:= AArgs.ToPersistent;
+
+  Dbs:= ResolveConsumerDbs(AArgs);
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+
+  // Multi-db resolution: use the FIRST db whose qname resolves to a class
+  // (RootType non-empty). Exit 2 if no --db is readable; exit 1 if none resolve.
+  Store:= nil;
+  Found:= False;
+  Tree := Default(TPropTree);
+  for Db in Dbs do
+  begin
+    if not TFile.Exists(Db) then Continue;
+    var RoOk: Boolean;
+    var CandidateStore: ISymbolStore:= OpenReadOnlyStore(Db, RoOk);
+    if not RoOk then Continue;
+    Store:= CandidateStore; // at least one readable db
+    var Candidate: TPropTree:= BuildPropTree(CandidateStore, AArgs.QName, Opts);
+    if Candidate.RootType <> '' then
+    begin
+      Tree := Candidate;
+      Found:= True;
+      Break;
+    end;
+  end;
+  if Store = nil then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+  if not Found then begin Writeln(Format('class not found: %s', [AArgs.QName])); Exit(1); end;
+
+  if (Fmt = 'json') or ((Fmt = '') and AArgs.AsJson) then
+  begin
+    var JRoot: TJSONObject:= TJSONObject.Create;
+    try
+      JRoot.AddPair('schema'   , 'proptree/1'    );
+      JRoot.AddPair('qname'    , AArgs.QName      );
+      JRoot.AddPair('root_type', Tree.RootType    );
+      JRoot.AddPair('truncated', TJSONBool.Create(Tree.Truncated));
+      var JProps: TJSONArray:= TJSONArray.Create;
+      for var N in Tree.Nodes do
+      begin
+        var JN: TJSONObject:= TJSONObject.Create;
+        JN.AddPair('path'          , N.Path      );
+        JN.AddPair('type'          , N.TypeName  );
+        JN.AddPair('declared_in'   , N.DeclaredIn);
+        JN.AddPair('kind'          , KindLabel(N));
+        JN.AddPair('is_class_typed', TJSONBool.Create(N.IsClassTyped));
+        JProps.AddElement(JN);
+      end;
+      JRoot.AddPair('properties', JProps);
+      Writeln(JRoot.Format(2));
+    finally
+      JRoot.Free;
+    end;
+  end
+  else // text (default, or explicit --format text)
+  begin
+    Writeln(Format('%s  (%d properties%s)', [Tree.RootType, Length(Tree.Nodes),
+      IfThen(Tree.Truncated, ', truncated', '')]));
+    for var N in Tree.Nodes do
+    begin
+      // Indent by the path's dot-depth (top-level = 0).
+      var DotDepth: Integer:= 0;
+      for var Ch in N.Path do if Ch = '.' then Inc(DotDepth);
+      var Leaf: string:= N.Path;
+      var LastDot: Integer:= LastDelimiter('.', N.Path);
+      if LastDot > 0 then Leaf:= Copy(N.Path, LastDot + 1, MaxInt);
+      Writeln(Format('%s%s: %s [%s]', [StringOfChar(' ', DotDepth * 2), Leaf, N.TypeName, KindLabel(N)]));
+    end;
+  end;
+  Result:= 0;
+end; // function
+
 /// <summary>drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N]
 /// [--format text|json|dot|mermaid] [--json] --db PATH ... -- the N-deep call tree rooted
 /// at X, with call sites (unit:line) and cycle markers. --direction callers (default,
@@ -11912,6 +12035,7 @@ begin
     else if Args.Command = 'call-path'         then Result:= DoCallPath        (Args)
     else if Args.Command = 'callgraph'         then Result:= DoCallGraph       (Args)
     else if Args.Command = 'reverse-calltree'  then Result:= DoReverseCallTree (Args)
+    else if Args.Command = 'proptree'          then Result:= DoPropTree        (Args)
     else if Args.Command = 'butterfly'         then Result:= DoButterfly       (Args)
     else if Args.Command = 'purge-locals'      then Result:= DoPurgeLocals     (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)

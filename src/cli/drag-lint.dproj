@@ -184,6 +184,7 @@
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Profile.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.Deps.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.RCallTree.pas"/>
+        <DCCReference Include="..\report\DRagLint.Convert.PropTree.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
