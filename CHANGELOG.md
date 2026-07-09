@@ -5,6 +5,31 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v1.0.0-alpha -- 2026-07-09
+
+IDE startup splash, Help>About live self-info, and the new `info` verb (Batch G).
+
+- **IDE startup splash.** The drag-lint logo (reused from TableTools) plus
+  `drag-lint (MIT) v1.0.0-alpha` now appears on the RAD Studio splash screen
+  while the IDE loads, registered via `SplashScreenServices.AddPluginBitmap`.
+  Startup-only and static -- no exe call, so it never delays IDE load.
+- **Help -> About -> drag-lint entry.** A new About box entry (icon + MIT +
+  version + description). When viewed, it shows **live engine self-info**
+  fetched from `drag-lint.exe` on a background thread (never blocks IDE
+  startup): engine version + build date, tree-sitter versions, capabilities
+  (FTS5, CLI verb count), exe path, platform, and the plugin log path. If the
+  exe call fails, it shows a structured diagnostic error block (resolved exe
+  path + failure reason) instead, so problems self-diagnose.
+- **New CLI verb `info [--json]`.** Read-only engine self-info -- no DB, no
+  side effects. `--json` emits schema `info/1` (name, version, build_date,
+  license=MIT, description, `tree_sitter` versions, `capabilities` (fts5,
+  cli_verbs), exe_path, platform); without `--json`, a human-readable block.
+  This is what the About box calls.
+- **Removed the `Test Connection...` debug menu item.** Its diagnostics
+  (exe-path resolution, spawn/handshake, build tag) are now covered by the
+  About box's live-info + error block. The `Tools > drag-lint` menu keeps
+  `Open Plugin Log` and everything else.
+
 ## v0.99.0-alpha -- 2026-07-09
 
 Butterfly Call Graph dock tab and saved naming presets (Batch F).

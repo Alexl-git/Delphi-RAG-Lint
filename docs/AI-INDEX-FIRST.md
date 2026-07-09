@@ -38,6 +38,7 @@ text-level matches, non-Delphi files, or code no index covers.
 | Third-party dependency rollup | `drag-lint deps-report --db <db> [--edges] [--format text\|json\|csv]` |
 | Full-text: message / DFM caption / SQL text | `drag-lint query --text "<phrase>" [--source pas\|dfm\|sql] --db <db>` |
 | What's in the index (schema/tables) | `drag-lint schema --db <db> [--format json]` |
+| Engine self-info (version/build/caps) | `drag-lint info [--json]` |
 | Fuzzy / forgot exact name | `drag-lint query --name <approx> --db <db>` (auto fuzzy on a miss) |
 
 `--format json` for machine parsing. A class qname is `Unit.TType`; a member is
@@ -52,9 +53,9 @@ text-level matches, non-Delphi files, or code no index covers.
   `autofix` id list in `drag-lint-lint.json` and **off by default** -- see
   `docs/AI-USAGE.md` section 4b for the safe/caveat details.
 
-Analysis/report verbs above (`cycles`, `deps-report`, `schema`, `callgraph`,
-`reverse-calltree`, ...) are **CLI-only** -- not exposed as MCP tools; shell out
-to the CLI for them.
+Analysis/report verbs above (`cycles`, `deps-report`, `schema`, `info`,
+`callgraph`, `reverse-calltree`, ...) are **CLI-only** -- not exposed as MCP
+tools; shell out to the CLI for them.
 
 ### Why
 - **Understand/modify a symbol → context bundle, not whole files.** `drag-lint

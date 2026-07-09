@@ -79,6 +79,10 @@ You can drive it two ways, both backed by the same engine:
 >   counts (read-only). See [docs/INDEX-SCHEMA.md](INDEX-SCHEMA.md) for the full
 >   index reference and the project-vs-external boundary rule if you want to
 >   consume the SQLite index directly.
+> - **Introspect the engine itself:** `drag-lint info [--json]` -- engine
+>   self-info: version, build date, tree-sitter versions, capabilities (FTS5,
+>   CLI verb count), exe path, platform. Read-only, no DB. This is what the IDE
+>   Help>About box calls.
 > - **Framework wiring (Spring4D DI + DFM events):** `drag-lint wiring --qname <IIntf|TForm> --db <DB> [--format json]`
 >   Answers "who implements `IFoo` and where is it resolved" (DI: impl class +
 >   lifetime + resolve-sites) and "what handles this form's events" (DFM
@@ -139,6 +143,7 @@ in 2b.
 | `deps-report` | third-party dependency rollup (`--edges`, `--format text\|json\|csv`) |
 | `graph --format dot\|mermaid` | export the symbol/uses graph for a viewer (`--name <root-substr>`) |
 | `schema` | live index schema: version + tables + columns + row counts (read-only) |
+| `info` | engine self-info: version, build date, tree-sitter versions, capabilities, exe path, platform (`--json`; read-only, no DB) |
 | `find-deadcode` | unreferenced symbols (`--kind`, `--include-private`) |
 | `doc-drift --qname X` | doc-vs-code drift findings for one symbol |
 | `top` | fan-in ranking (also above) |

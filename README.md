@@ -315,6 +315,12 @@ and more (see [MCP tools](#mcp-tools-14) below).
    Indexer / Linter / Editor); per-project lint rules are reachable via a
    **"drag-lint: Project Rules..."** right-click on the project node in the
    Project Manager.
+5. On IDE startup, the drag-lint logo + version appear on the RAD Studio
+   splash screen. **Help > About > drag-lint** shows an entry with live
+   engine self-info (version, build date, tree-sitter versions,
+   capabilities, exe path, plugin log location), fetched from `drag-lint.exe`
+   on a background thread so it never blocks IDE startup; if the exe call
+   fails, the entry shows a structured diagnostic error block instead.
 
 ---
 
@@ -360,6 +366,7 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `forms-csv --project <dproj> --db <db>` | Test-helper CSV: one row per form with the button/menu path from the main form (`Navigation`), the forms that open it (`Called From`), unit + line count (`--out <f.csv>`, `--root <TfrmMAIN>`) |
 | `lsp [--db <db>]` | Start the LSP server (stdio) |
 | `serve [--db <db>]` | Start the MCP server (stdio) |
+| `info [--json]` | Engine self-info: version, build date, tree-sitter versions, capabilities (FTS5, CLI verb count), exe path, platform -- read-only, no DB. What the IDE Help>About box calls |
 | `--version` | Print version |
 | `--help` | Print help |
 
