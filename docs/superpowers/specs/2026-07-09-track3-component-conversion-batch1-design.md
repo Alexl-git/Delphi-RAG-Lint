@@ -139,6 +139,16 @@ genuinely ambiguous.
 
 ---
 
+## FUTURE (user-flagged 2026-07-09, needs its own brainstorm)
+
+- **Convert SELECTED components on a live form (IDE-driven, interactive).** Beyond
+  the CLI batch/file conversion: let the user pick specific components on a form in
+  the IDE and convert just those, using the validated rule sets. This is an IDE
+  feature (component selection UI + apply) that builds on the Batch 1 foundation +
+  Batch 2 apply. **Needs a dedicated brainstorm** (selection model, which OTA
+  form-designer APIs expose the selected components, how apply targets one instance
+  vs the whole type). Deferred until the CLI foundation + apply are proven.
+
 ## Explicitly OUT of scope (Batch 2+)
 
 - **Apply** -- rewriting the `.pas` field type + `uses` and the `.dfm` component
