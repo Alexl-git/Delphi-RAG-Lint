@@ -81,6 +81,7 @@ contains
   DRagLint.Hover.Contrast in '..\core\DRagLint.Hover.Contrast.pas',
   DragLint.Plugin.ProjectMenu in 'DragLint.Plugin.ProjectMenu.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
-  DragLint.Plugin.OptionsFrames in 'DragLint.Plugin.OptionsFrames.pas' {DLPageFrame: TFrame};
+  DragLint.Plugin.OptionsFrames in 'DragLint.Plugin.OptionsFrames.pas' {DLPageFrame: TFrame},
+  DragLint.Plugin.About in 'DragLint.Plugin.About.pas';
 
 end.
