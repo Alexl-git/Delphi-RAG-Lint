@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.1.0-alpha
 
 - **Ref-gap E: type-reference indexing (H4).** The reference index now captures
   four type-USE shapes it previously missed, under `--deep`: (1) the class
