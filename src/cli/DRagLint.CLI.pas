@@ -10989,6 +10989,11 @@ begin
     Writeln('');
     Writeln(Format('convert-apply: %d instance(s) converted, %d edit(s) planned', [Length(PlanRes.Report.Converted), Length(PlanRes.Edits)]));
     for S in PlanRes.Report.Converted do Writeln('  ' + S);
+    if Length(PlanRes.Report.AccessSites) > 0 then
+    begin
+      Writeln('AccessSites:');
+      for S in PlanRes.Report.AccessSites do Writeln('  ' + S);
+    end;
     if Length(PlanRes.Report.Todos) > 0 then
     begin
       Writeln('Todos:');
@@ -11038,6 +11043,11 @@ begin
 
   Writeln(Format('convert-apply: %d instance(s) converted, %d edit(s) applied', [Length(PlanRes.Report.Converted), Length(PlanRes.Edits)]));
   for S in PlanRes.Report.Converted do Writeln('  ' + S);
+  if Length(PlanRes.Report.AccessSites) > 0 then
+  begin
+    Writeln('AccessSites:');
+    for S in PlanRes.Report.AccessSites do Writeln('  ' + S);
+  end;
   if Length(PlanRes.Report.Todos) > 0 then
   begin
     Writeln('Todos:');

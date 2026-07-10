@@ -3,11 +3,14 @@
   project B). Task 2 implemented instance location (FindConvertInstances) +
   surface #1 (.pas declaration retype) + surface #2 (.pas uses-add); Task 3
   added surface #3 (.dfm object-block re-emit via the 2a-i ReemitComponent
-  engine). Task 4 (this revision) adds the REAL --apply write path: a
-  freshness guard (CheckFreshness), the backup/recovery layer (DRagLint.
-  Convert.Backup: NextBackupName/BackupFiles/WriteRecoveryRecord/
-  PrependConvertComment), and wires them into `convert-apply --unit F.pas
-  --rules R --db D [--only ...] [--apply] [--no-backup]`.
+  engine). Task 4 added the REAL --apply write path: a freshness guard
+  (CheckFreshness), the backup/recovery layer (DRagLint.Convert.Backup:
+  NextBackupName/BackupFiles/WriteRecoveryRecord/PrependConvertComment), and
+  wires them into `convert-apply --unit F.pas --rules R --db D [--only ...]
+  [--apply] [--no-backup]`. Task 6 (this revision) adds surface #4:
+  instance-scoped property/event ACCESS rewrite at .pas use sites, via
+  ref-gap G's 'member-access' refs (Edit1.Caption -> Edit1.Text) -- the
+  differentiator that makes a renamed-property conversion actually COMPILE.
 
   FIXTURE (built by New-Fixture, so each phase gets a byte-identical FRESH
   copy in its own dir -- --apply mutates files, so the dry-run phase and each
@@ -19,10 +22,19 @@
                          so BuildPropTree / find-unit / the field-decl scan
                          can all resolve real symbols (per the brief: "must
                          be defined in indexable fixture units").
+    OtherUnit.pas    -- declares TSomethingElse (a plain, UNCONVERTED class
+                         with its own Caption field) so 'Other.Caption' is a
+                         real member-access on a receiver that is NOT a
+                         converted instance -- the surface #4 negative case.
     MyForm.pas       -- a tiny form unit with one published field
-                         'Edit1: TOldEdit' and a bare 'uses Classes,
-                         OldEditUnit;' (no NewEditUnit yet -- surface #2 must
-                         add it).
+                         'Edit1: TOldEdit', a field 'Other: TSomethingElse',
+                         and a bare 'uses Classes, OldEditUnit, OtherUnit;'
+                         (no NewEditUnit yet -- surface #2 must add it). The
+                         MakeEdit1 body also exercises surface #4:
+                         'Edit1.Caption := ''x'';' (write-side access),
+                         'y := Edit1.Caption;' (read-side access), and
+                         'Other.Caption := ''z'';' (NOT a converted instance
+                         -- must NOT be rewritten).
     MyForm.dfm       -- one component instance 'object Edit1: TOldEdit'
                          nested under 'object MyForm: TMyForm', carrying
                          'Caption = ''Hi''' (Task 3: the property surface #3's
@@ -30,10 +42,15 @@
     rules.txt        -- '#convert TOldEdit -> TNewEdit, NewEditUnit' +
                          '#link Text <- Caption'.
 
-  PHASE 1 ASSERTIONS (dry-run, NO --apply -- unchanged from Task 3):
+  PHASE 1 ASSERTIONS (dry-run, NO --apply -- unchanged from Task 3, PLUS
+  Task 6's surface #4 assertions):
     - exits 0.
     - dry-run output shows the declaration retype, the uses-add, and the .dfm
       re-emit preview (surfaces #1/#2/#3).
+    - both Edit1.Caption access sites (write in MakeEdit1's 'Edit1.Caption :=
+      ''x'';' and read in 'y := Edit1.Caption;') are rewritten to Edit1.Text;
+      Report.AccessSites lists both. 'Other.Caption := ''z'';' is UNCHANGED
+      (Other is not a converted instance) and does NOT appear in AccessSites.
     - MyForm.pas AND MyForm.dfm are BYTE-UNCHANGED on disk after the dry-run
       (no write -- dry-run only prints TTextEditApplier.RenderDryRun).
 
@@ -138,17 +155,39 @@ implementation
 end.
 '@
 
+$OtherBody = @'
+unit OtherUnit;
+
+interface
+
+uses
+  Classes;
+
+type
+  TSomethingElse = class(TComponent)
+  private
+    FCaption: string;
+  published
+    property Caption: string read FCaption write FCaption;
+  end;
+
+implementation
+
+end.
+'@
+
 $MyFormBody = @'
 unit MyForm;
 
 interface
 
 uses
-  Classes, OldEditUnit;
+  Classes, OldEditUnit, OtherUnit;
 
 type
   TMyForm = class(TForm)
     Edit1: TOldEdit;
+    Other: TSomethingElse;
     procedure MakeEdit1;
   end;
 
@@ -159,9 +198,13 @@ implementation
 procedure TMyForm.MakeEdit1;
 var
   s: string;
+  y: string;
 begin
   Edit1 := TOldEdit.Create(Self);
   s := TOldEdit.ClassName;
+  Edit1.Caption := 'x';
+  y := Edit1.Caption;
+  Other.Caption := 'z';
 end;
 
 end.
@@ -184,6 +227,7 @@ function New-Fixture([string]$dir) {
   New-Item -ItemType Directory $dir -Force | Out-Null
   Write-Ascii (Join-Path $dir 'OldEditUnit.pas') $OldEditBody
   Write-Ascii (Join-Path $dir 'NewEditUnit.pas') $NewEditBody
+  Write-Ascii (Join-Path $dir 'OtherUnit.pas') $OtherBody
   Write-Ascii (Join-Path $dir 'MyForm.pas') $MyFormBody
   Write-Ascii (Join-Path $dir 'MyForm.dfm') $MyFormDfm
 }
@@ -258,6 +302,27 @@ Check 'shows creator retype -> TNewEdit.Create' ($applyRaw -match 'TNewEdit') "r
 Check 'shows TODO marker for verify creator TNewEdit' ($applyRaw -match [regex]::Escape('TODO') + '.*verify creator for TNewEdit') "raw=$applyRaw"
 Check 'shows TODO marker names TOldEdit.Create as the original' ($applyRaw -match [regex]::Escape('TOldEdit.Create')) "raw=$applyRaw"
 
+# Surface #4: instance-scoped property/event ACCESS rewrite (Task 6, via
+# ref-gap G's 'member-access' refs). 'Edit1.Caption := ''x'';' (write) and
+# 'y := Edit1.Caption;' (read) both name a CONVERTED instance (Edit1) -- both
+# access sites must be rewritten to Edit1.Text, and both must be listed in
+# the AccessSites: block. 'Other.Caption := ''z'';' names Other, which is NOT
+# a converted instance (TSomethingElse has no #convert rule) -- it must NOT
+# be rewritten and must NOT appear in AccessSites.
+Check 'dry-run output has an AccessSites: block' ($applyRaw -match 'AccessSites:') "raw=$applyRaw"
+$accessBlockMatch = [regex]::Match($applyRaw, 'AccessSites:([\s\S]*?)(\r?\n\r?\n|\z)')
+$accessBlock = if ($accessBlockMatch.Success) { $accessBlockMatch.Groups[1].Value } else { '' }
+Check 'AccessSites block lists Edit1 Caption -> Text' ($accessBlock -match 'Edit1.*Caption.*Text') "block=$accessBlock"
+$edit1AccessCount = ([regex]::Matches($accessBlock, 'Edit1')).Count
+Check 'AccessSites block lists BOTH Edit1.Caption sites (write + read)' ($edit1AccessCount -ge 2) "count=$edit1AccessCount; block=$accessBlock"
+Check 'AccessSites block does NOT mention Other (not a converted instance)' (-not ($accessBlock -match 'Other')) "block=$accessBlock"
+
+# The edit plan itself: two tekReplaceInLine edits rewriting the Caption token
+# to Text on Edit1's lines, and the plan must show at least 2 "-> ""Text"""
+# replacements (write + read sites) while the Other.Caption line is untouched.
+$textReplaceCount = ([regex]::Matches($applyRaw, '->\s*"Text"')).Count
+Check 'at least 2 replace-to-Text edits in the plan (Edit1.Caption write+read)' ($textReplaceCount -ge 2) "count=$textReplaceCount; raw=$applyRaw"
+
 # Report.Todos surfaced in dry-run output (CLI must print the Todos block).
 Check 'dry-run output has a Todos: block' ($applyRaw -match 'Todos:') "raw=$applyRaw"
 Check 'Todos block lists the verify-creator marker' ($applyRaw -match 'Todos:[\s\S]*verify creator for TNewEdit') "raw=$applyRaw"
@@ -330,6 +395,14 @@ Check 'MyForm.dfm converted: object Edit1: TNewEdit' ($p2DfmText -match 'object 
 # comment survives the actual write (not just the dry-run preview).
 Check 'MyForm.pas converted: creator site TNewEdit.Create' ($p2PasText -match [regex]::Escape('TNewEdit.Create(Self)')) "text=$p2PasText"
 Check 'MyForm.pas converted: creator site carries TODO marker' ($p2PasText -match [regex]::Escape('TODO') + '.*verify creator for TNewEdit') "text=$p2PasText"
+
+# Surface #4 on disk: both Edit1.Caption access sites (write + read) are
+# rewritten to Edit1.Text; Other.Caption is untouched (Other is not a
+# converted instance).
+Check 'MyForm.pas converted: Edit1.Caption write -> Edit1.Text' ($p2PasText -match [regex]::Escape('Edit1.Text := ''x''')) "text=$p2PasText"
+Check 'MyForm.pas converted: Edit1.Caption read -> Edit1.Text' ($p2PasText -match [regex]::Escape('y := Edit1.Text;')) "text=$p2PasText"
+Check 'MyForm.pas converted: Other.Caption UNCHANGED (not a converted instance)' ($p2PasText -match [regex]::Escape('Other.Caption := ''z''')) "text=$p2PasText"
+Check 'MyForm.pas converted: no stray Other.Text (Other must not be rewritten)' (-not ($p2PasText -match [regex]::Escape('Other.Text'))) "text=$p2PasText"
 Check 'MyForm.dfm converted: Text = ''Hi''' ($p2DfmText -match "Text\s*=\s*'Hi'") "text=$p2DfmText"
 
 # I-1 regression on disk: the ClassName class-static reference line must NOT

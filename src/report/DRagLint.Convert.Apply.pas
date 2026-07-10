@@ -25,15 +25,27 @@ unit DRagLint.Convert.Apply;
   that preserves the block's original indentation. A ReemitComponent failure
   (Ok=False) skips the WHOLE instance -- no .pas retype/uses edits either --
   so a component is never left half-converted; see BuildApplyPlan's remarks.
-  Task 5 (this revision) adds surface #5: RUNTIME-CREATION sites. Every
-  explicit 'FromType.Xxx(...)' construction (e.g. 'Edit1 := TOldEdit.Create
-  (Self);') found in the .pas via FindConstructionSites gets its type token
-  rewritten to ToType PLUS an unconditional TODO end-of-line comment marker --
-  ToType's constructor/init may take a different shape, and this applier never
-  attempts to fix up constructor ARGUMENTS; the marker is the safety net.
-  TApplyReport.CreatorSites/Todos are populated from this surface. Surface #4
-  (property/event access-site rewrite) remains deferred; TApplyReport.
-  AccessSites stays empty until then.
+  Task 5 adds surface #5: RUNTIME-CREATION sites. Every explicit 'FromType.
+  Xxx(...)' construction (e.g. 'Edit1 := TOldEdit.Create(Self);') found in the
+  .pas via FindConstructionSites gets its type token rewritten to ToType PLUS
+  an unconditional TODO end-of-line comment marker -- ToType's constructor/
+  init may take a different shape, and this applier never attempts to fix up
+  constructor ARGUMENTS; the marker is the safety net. TApplyReport.
+  CreatorSites/Todos are populated from this surface. Task 6 (this revision)
+  adds surface #4: instance-scoped property/event ACCESS rewrite. For each
+  renaming '#link ToMember <- FromMember' rule (ToMember <> FromMember,
+  single-segment paths only), FindMemberAccessSites queries the .pas file's
+  own refs for ref-gap G's 'member-access' kind (NameText=FromMember, at the
+  member token's own span) and resolves each hit's RECEIVER by reading the
+  source line text immediately before the member token (ResolveMemberAccess
+  Receiver) -- the exprDot parser guarantees a plain identifier sits there.
+  A site is only rewritten (FromMember -> ToMember, a tekReplaceInLine on the
+  member token) when its receiver names one of THIS unit's converted
+  instances (tracked via ConvertedInstNames, populated only for instances
+  that survived the surface #3 re-emit checkpoint) -- an access on a
+  different, unconverted receiver (e.g. 'Other.Caption' when Other is not a
+  converted instance) is left untouched. TApplyReport.AccessSites is
+  populated from this surface.
 }
 
 interface
@@ -158,12 +170,18 @@ function CheckFreshness(const AStore: ISymbolStore; const ARules: TConversionRul
 /// ReemitComponent Ok=False (hard re-emit failure) SKIPS THE WHOLE INSTANCE --
 /// its .pas retype/uses edits (surfaces #1/#2) are also withheld, and
 /// Report.Warnings gets an entry -- rather than leave a component converted in
-/// its .pas declaration but not in its .dfm block (or vice versa). Surfaces
-/// #4-#5 (property/event access rewrite, creator-site rewrite -- Task 6)
-/// contribute no edits yet. Ok=False only on a hard failure (missing .pas/
-/// .dfm, or zero instances matched); Ok=True with per-instance problems noted
-/// in Report.Warnings otherwise (including every instance skipped by a
-/// re-emit failure).</returns>
+/// its .pas declaration but not in its .dfm block (or vice versa). Task 5
+/// implements surface #5 (runtime-creator retype + TODO marker). Task 6
+/// implements surface #4 (property/event access-site rewrite): for each
+/// renaming '#link ToMember &lt;- FromMember' rule, every 'member-access' ref
+/// (ref-gap G) in the unit whose receiver names a converted instance (one
+/// that survived the surface #3 re-emit checkpoint) contributes a
+/// tekReplaceInLine edit swapping FromMember for ToMember at that access
+/// site; Report.AccessSites lists each rewrite. An access on a receiver that
+/// is NOT a converted instance is left untouched -- see FindMemberAccessSites.
+/// Ok=False only on a hard failure (missing .pas/.dfm, or zero instances
+/// matched); Ok=True with per-instance problems noted in Report.Warnings
+/// otherwise (including every instance skipped by a re-emit failure).</returns>
 function BuildApplyPlan(const AStore: ISymbolStore; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
 
@@ -673,6 +691,113 @@ begin
   end;
 end;
 
+// One confirmed surface #4 access site: a 'member-access' ref (FromMember, at
+// [Line, Col..EndCol) -- the MEMBER token's own span, exactly as EmitRef
+// records it for the exprDot's rhs node) whose receiver (the exprDot's lhs
+// identifier, immediately before the '.') names a converted instance.
+type
+  TAccessSite = record
+    Line, Col, EndCol: Integer;
+    InstanceName: string; // the receiver, e.g. 'Edit1'
+  end;
+
+// Whole-word identifier-char test shared by the receiver scan below (mirrors
+// the boundary checks LocateFieldTypeToken already uses for the same purpose).
+function IsIdentChar(C: Char): Boolean; inline;
+begin
+  Result:= CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']);
+end;
+
+// Resolves the RECEIVER of a member-access ref at (ALine, AMemberCol) --
+// i.e. the base identifier immediately before the '.' that precedes the
+// member token -- by reading the source line text directly rather than a
+// second refs-table lookup: the member-access ref's own span gives us the
+// exact column the member token starts at (AMemberCol = the ref's StartCol,
+// 1-based), so walking backward from there past whitespace, the '.', more
+// whitespace, and then the identifier run is a simple, robust text scan (the
+// parser's exprDot handler guarantees a plain-identifier lhs is what emitted
+// this ref in the first place -- see ref-gap G in DRagLint.Parser.Delphi13.
+// Walk's exprDot case -- so there is always exactly one identifier token to
+// find here; this is not a general expression parse). Returns '' when the
+// line text does not have the expected 'ident.' shape immediately before
+// AMemberCol (defensive -- should not happen for a genuine member-access ref,
+// but a stale/mismatched line count must not crash the applier).
+function ResolveMemberAccessReceiver(const APasLines: TStringList; ALine, AMemberCol: Integer): string;
+var
+  S: string;
+  P: Integer;
+  NameEnd, NameStart: Integer;
+begin
+  Result:= '';
+  if (ALine < 1) or (ALine > APasLines.Count) then Exit;
+  S:= APasLines[ALine - 1];
+  P:= AMemberCol - 1; { last column BEFORE the member token, 1-based }
+  while (P >= 1) and (S[P] = ' ') do Dec(P);
+  if (P < 1) or (S[P] <> '.') then Exit; { not immediately preceded by '.': not a simple obj.Member site }
+  Dec(P);
+  while (P >= 1) and (S[P] = ' ') do Dec(P);
+  NameEnd:= P;
+  while (P >= 1) and IsIdentChar(S[P]) do Dec(P);
+  NameStart:= P + 1;
+  if NameStart > NameEnd then Exit; { '.' not preceded by an identifier }
+  Result:= Copy(S, NameStart, NameEnd - NameStart + 1);
+end;
+
+// Finds every surface #4 access site in AUnitPas for one renaming '#link
+// AToMember <- AFromMember' (AToMember and AFromMember already confirmed
+// distinct by the caller): every 'member-access' ref whose NameText =
+// AFromMember, whose receiver (ResolveMemberAccessReceiver, read off the
+// SAME line the ref itself was recorded at) matches one of AInstanceNames
+// (case-insensitively -- the .dfm/.pas instance-name spelling is preserved
+// verbatim by FindConvertInstances, so an exact SameText match is correct
+// here, not a substring/prefix match). A member-access whose receiver is
+// NOT in AInstanceNames (e.g. 'Other.Caption' when Other is a different,
+// unconverted object) is silently skipped -- this instance-scoping is the
+// whole point of joining through the receiver, not just matching on member
+// name alone (which would also rewrite unrelated types' same-named members).
+function FindMemberAccessSites(const AStore: ISymbolStore; AFileId: Int64;
+  const APasLines: TStringList; const AFromMember: string;
+  const AInstanceNames: TArray<string>): TArray<TAccessSite>;
+var
+  Refs: TArray<TReference>;
+  R   : TReference;
+  List: TList<TAccessSite>;
+  Site: TAccessSite;
+  Receiver: string;
+  IsConverted: Boolean;
+  N   : string;
+begin
+  Result:= nil;
+  if (AFileId <= 0) or (AFromMember = '') then Exit;
+  Refs:= AStore.GetReferencesFromFile(AFileId);
+  List:= TList<TAccessSite>.Create;
+  try
+    for R in Refs do
+    begin
+      if not SameText(R.Kind, 'member-access') then Continue;
+      if not SameText(R.NameText, AFromMember) then Continue;
+
+      Receiver:= ResolveMemberAccessReceiver(APasLines, R.StartLine, R.StartCol);
+      if Receiver = '' then Continue;
+
+      IsConverted:= False;
+      for N in AInstanceNames do
+        if SameText(N, Receiver) then begin IsConverted:= True; Break; end;
+      if not IsConverted then Continue; { e.g. Other.Caption -- Other is not a converted instance }
+
+      Site:= Default(TAccessSite);
+      Site.Line        := R.StartLine;
+      Site.Col         := R.StartCol;
+      Site.EndCol      := R.EndCol;
+      Site.InstanceName:= Receiver;
+      List.Add(Site);
+    end;
+    Result:= List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
 function BuildApplyPlan(const AStore: ISymbolStore; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
 var
@@ -686,6 +811,7 @@ var
   Warnings    : TList<string>;
   ReemitNotes : TList<string>;
   CreatorSites: TList<string>;
+  AccessSites : TList<string>;
   Todos       : TList<string>;
   PasLines    : TStringList;
   PasFileSyms : TArray<TSymbol>;
@@ -693,6 +819,7 @@ var
   Sym         : TSymbol;
   DoneUnits   : TDictionary<string, Boolean>; { ToType -> already handled (added or already-used) }
   ToTypesSeen : TList<string>;
+  ConvertedInstNames: TList<string>; { instances that survived the .dfm re-emit -- see surface #4 remarks below }
   E           : TTextEdit;
   TreeCache   : TDictionary<string, TPropTree>; { qname -> tree, built once per distinct type }
   Opts        : TPropTreeOptions;
@@ -757,9 +884,11 @@ begin
   Warnings := TList<string>.Create;
   ReemitNotes:= TList<string>.Create;
   CreatorSites:= TList<string>.Create;
+  AccessSites:= TList<string>.Create;
   Todos    := TList<string>.Create;
   DoneUnits:= TDictionary<string, Boolean>.Create;
   ToTypesSeen:= TList<string>.Create;
+  ConvertedInstNames:= TList<string>.Create;
   TreeCache:= TDictionary<string, TPropTree>.Create;
   try
     PasLines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
@@ -799,6 +928,13 @@ begin
         Warnings.Add(Format('%s: .dfm re-emit failed (%s) -- instance skipped', [Inst.InstanceName, ReemitRes.Error]));
         Continue;
       end;
+
+      { Instance has cleared the re-emit checkpoint -- it WILL get its #1/#2/#5
+        edits below, so it is eligible for surface #4's instance-scoping too.
+        Recorded here (not after the whole loop) so a skipped instance's name
+        never enters the converted-instance set an access-site rewrite is
+        scoped against. }
+      ConvertedInstNames.Add(Inst.InstanceName);
 
       var Indent: string:= LeadingIndent(DfmLines[BlockStart - 1]);
       E:= Default(TTextEdit);
@@ -910,6 +1046,46 @@ begin
       end;
     end;
 
+    { -- surface #4: instance-scoped property/event ACCESS rewrite, via
+      ref-gap G's 'member-access' refs. Runs ONCE over the whole unit per
+      renaming '#link ToMember <- FromMember' rule (not per-instance --
+      GetReferencesFromFile already returns every ref in the file, and
+      FindMemberAccessSites' own instance-name join is what scopes each hit
+      to a specific converted receiver), rather than inside the per-instance
+      loop above: a single access-rewrite pass naturally covers every
+      instance sharing the same rule in one query instead of N redundant
+      whole-file ref scans. Identity renames (ToPath = FromPath, e.g. a
+      #link that maps a property to itself) are skipped -- there is nothing
+      to rewrite. Dotted paths (ToPath/FromPath containing '.', e.g. '#link
+      Name <- Inner.Shade' -- a NESTED .dfm property path) are also skipped
+      here: they describe the .dfm property tree, not a single .pas
+      'obj.Member' token, so they are out of surface #4's scope (no crash,
+      just no rewrite -- the .dfm-side #link still applies via surface #3). }
+    for var LinkRule in ARules.Rules do
+    begin
+      if LinkRule.Kind <> rkLink then Continue;
+      if (LinkRule.ToPath = '') or (LinkRule.FromPath = '') then Continue;
+      if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue; { identity rename -- nothing to rewrite }
+      if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
+
+      var Sites: TArray<TAccessSite>:= FindMemberAccessSites(AStore, PasFileId, PasLines,
+        LinkRule.FromPath, ConvertedInstNames.ToArray);
+      for var Site in Sites do
+      begin
+        E:= Default(TTextEdit);
+        E.FilePath:= AUnitPas;
+        E.Kind    := tekReplaceInLine;
+        E.Line    := Site.Line;
+        E.Col     := Site.Col;
+        E.EndCol  := Site.EndCol;
+        E.Text    := LinkRule.ToPath;
+        Edits.Add(E);
+
+        AccessSites.Add(Format('%s.%s -> %s.%s (L%d)',
+          [Site.InstanceName, LinkRule.FromPath, Site.InstanceName, LinkRule.ToPath, Site.Line]));
+      end;
+    end;
+
     for var ToType_ in ToTypesSeen do
     begin
       var ResolvedUnit: string;
@@ -929,6 +1105,7 @@ begin
     Result.Report.Warnings := Warnings.ToArray;
     Result.Report.ReemitNotes:= ReemitNotes.ToArray;
     Result.Report.CreatorSites:= CreatorSites.ToArray;
+    Result.Report.AccessSites:= AccessSites.ToArray;
     Result.Report.Todos    := Todos.ToArray;
     Result.Ok:= True;
   finally
@@ -938,9 +1115,11 @@ begin
     Warnings.Free;
     ReemitNotes.Free;
     CreatorSites.Free;
+    AccessSites.Free;
     Todos.Free;
     DoneUnits.Free;
     ToTypesSeen.Free;
+    ConvertedInstNames.Free;
     TreeCache.Free;
   end;
 end;
