@@ -149,6 +149,23 @@ genuinely ambiguous.
   form-designer APIs expose the selected components, how apply targets one instance
   vs the whole type). Deferred until the CLI foundation + apply are proven.
 
+- **Value SPLIT / MERGE across F<->T properties, via a small expression interpreter
+  (user-flagged 2026-07-10).** A 1:1 `#link ToPath <- FromPath` is not always enough:
+  sometimes ONE source property packs SEVERAL values that must be BROKEN OUT into
+  several target properties (F.combined -> T.a, T.b, T.c), and sometimes SEVERAL
+  source properties must be ASSEMBLED into one target (F.a, F.b -> T.combined). To
+  express those, the conversion DSL needs a SMALL, SAFE EXPRESSION LANGUAGE on the
+  RHS of a link/default -- e.g. `#link T.Width <- Extract(F.Bounds, 'w')` (split) and
+  `#link T.Bounds <- Format('%d,%d', [F.Left, F.Top])` (merge), or a compact infix
+  form. **Needs its own brainstorm/spec** covering: the interpreter's grammar +
+  evaluator (a tiny pure expression engine -- string/number ops, a handful of
+  built-ins like substring/split/join/format, NO Turing-completeness), how it plugs
+  into `convert-validate` (validate that referenced F/T paths exist AND that the
+  expression parses/type-checks) and `convert-scaffold` (leave a `???`-expression
+  stub the user fills), and the APPLY side (Batch 2+) that actually evaluates it
+  against a component instance's real values. This is an ADDITION on top of the
+  1:1-link foundation shipped in Batch 1 -- the basics land first, then this.
+
 ## Explicitly OUT of scope (Batch 2+)
 
 - **Apply** -- rewriting the `.pas` field type + `uses` and the `.dfm` component
