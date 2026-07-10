@@ -384,6 +384,53 @@ begin
   Result:= Child;
 end;
 
+// Deep-copy a TDfmNode subtree (for verbatim copies of contained children /
+// unconverted owned parts / relocated collections).
+function CloneNode(const ASrc: TDfmNode): TDfmNode;
+var C: TDfmNode;
+begin
+  Result:= TDfmNode.Create;
+  Result.Name      := ASrc.Name;
+  Result.Kind      := ASrc.Kind;
+  Result.ValueText := ASrc.ValueText;
+  Result.ClassName_:= ASrc.ClassName_;
+  for C in ASrc.Children do
+    Result.Children.Add(CloneNode(C));
+end;
+
+// Look up a #convert rule for a specific From part-type. 2a-i recurses with the
+// SAME ARules (the nested #convert header for the part type is found by
+// ReemitComponent itself). Returns True if ANY #convert names AFromType as its
+// FromType.
+function HasConvertFor(const ARules: TConversionRuleSet; const AFromType: string): Boolean;
+var Q: TConversionRule;
+begin
+  Result:= False;
+  for Q in ARules.Rules do
+    if (Q.Kind = rkConvert) and SameText(Q.FromType, AFromType) then Exit(True);
+end;
+
+// Resolve a leaf's declared type from a property tree by its top-level name.
+function LeafTypeOf(const ATree: TPropTree; const AName: string): string;
+var N: TPropNode;
+begin
+  Result:= '';
+  for N in ATree.Nodes do
+    if SameText(N.Path, AName) then Exit(N.TypeName);
+end;
+
+// 2a-i deterministic owned-part signal: a `#note owned:<ClassName>` in the rules
+// declares a nested class as an OWNED part (a field/column) that needs its own
+// #convert. Without the full class graph, this is the explicit, testable marker;
+// 2a-ii wires the index-based Controls/Components container check that replaces it.
+function IsOwnedPartByRulesHint(const ARules: TConversionRuleSet; const AClass: string): Boolean;
+var Q: TConversionRule;
+begin
+  Result:= False;
+  for Q in ARules.Rules do
+    if (Q.Kind = rkNote) and SameText(Trim(Q.Text), 'owned:' + AClass) then Exit(True);
+end;
+
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
   const AFromTree, AToTree: TPropTree): TReemitResult;
 var
@@ -445,11 +492,72 @@ var
     begin
       if Trim(ToPath) = '???' then
       begin Result.Report.Notes:= Result.Report.Notes + [Format('unfilled ToPath (???) for %s', [ALeaf.Name])]; Exit; end;
+      if ALeaf.Kind = dnkCollection then
+      begin
+        // Collection relocate-keep-items: move the whole collection verbatim.
+        PlaceAtPath(TRoot, ToPath, ALeaf.ValueText, dnkCollection, Created);
+        Result.Report.Notes:= Result.Report.Notes +
+          [Format('collection %s relocated to %s, items unchanged', [ALeaf.Name, ToPath])];
+        Exit;
+      end;
+      if ALeaf.Kind = dnkBinary then
+      begin
+        // Copy a binary/complex value only when F and T leaf types resolve to the
+        // same type; else WARN and do not copy (cross-type conversion is the
+        // interpreter stage, deferred past 2a).
+        var FType: string; var TType: string;
+        FType:= LeafTypeOf(AFromTree, ALeaf.Name);
+        TType:= LeafTypeOf(AToTree, ToPath);
+        if (FType <> '') and (TType <> '') and (not SameText(FType, TType)) then
+        begin
+          Result.Report.Mismatched:= Result.Report.Mismatched +
+            [Format('%s: F type %s != T type %s (binary not copied)', [ALeaf.Name, FType, TType])];
+          Exit;
+        end;
+        PlaceAtPath(TRoot, ToPath, ALeaf.ValueText, dnkBinary, Created);
+        Exit;
+      end;
       PlaceAtPath(TRoot, ToPath, ALeaf.ValueText, ALeaf.Kind, Created);
       Exit;
     end;
     // UNMAPPED + present in the DFM == non-default -> genuine potential loss.
     Dropped:= Dropped + [ALeaf.Name];
+  end;
+
+  procedure HandleNested(const ASub: TDfmNode);
+  var
+    PartResult: TReemitResult;
+    Clone     : TDfmNode;
+  begin
+    if HasConvertFor(ARules, ASub.ClassName_) then
+    begin
+      // OWNED part with a rule -> recurse. Re-emit the part block by round-
+      // tripping it: emit the sub-object as its own block, re-run ReemitComponent.
+      PartResult:= ReemitComponent(EmitBlock(ASub, 0), ARules, AFromTree, AToTree);
+      if PartResult.Ok then
+      begin
+        // Re-parse the converted part text back into a node and graft it.
+        var PartRoot: TDfmNode;
+        if ParseDfmBlock(PartResult.DfmText, PartRoot) then
+        begin
+          TRoot.Children.Add(PartRoot); // TRoot owns it now
+          // fold the part's report notes up
+          Result.Report.Created := Result.Report.Created + PartResult.Report.Created;
+          Result.Report.Dropped := Result.Report.Dropped + PartResult.Report.Dropped;
+        end;
+      end;
+    end
+    else
+    begin
+      // No #convert for this nested class -> contained child OR unconverted owned
+      // part. 2a-i heuristic: copy verbatim; flag in OwnedParts only when a
+      // `#note owned:<Class>` marker explicitly declares it an owned part.
+      Clone:= CloneNode(ASub);
+      TRoot.Children.Add(Clone);
+      if IsOwnedPartByRulesHint(ARules, ASub.ClassName_) then
+        Result.Report.OwnedParts:= Result.Report.OwnedParts +
+          [Format('%s: %s -- owned part with no #convert rule (left unconverted)', [ASub.Name, ASub.ClassName_])];
+    end;
   end;
 
 var
@@ -487,11 +595,12 @@ begin
     TRoot.Name      := FRoot.Name;
     TRoot.ClassName_:= ToType;
 
-    // 4. Per top-level F leaf, remap. (Nested owned parts/children -> Task 6.)
+    // 4. Per top-level F leaf, remap. Nested sub-objects are classified as an
+    // owned part (recurse via #convert) or a contained child (copied verbatim).
     for i:= 0 to FRoot.Children.Count - 1 do
     begin
       Leaf:= FRoot.Children[i];
-      if Leaf.Kind = dnkSubObject then Continue // handled in Task 6
+      if Leaf.Kind = dnkSubObject then HandleNested(Leaf)
       else RemapLeaf(Leaf);
     end;
 
