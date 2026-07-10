@@ -994,6 +994,15 @@ begin
       if DeclVar.NodeType <> 'declVar' then Continue;
       // One shared type for every name in this declVar (grouped locals).
       TypeText:= TypeTextOf(DeclVar, AState.Source);
+      // Ref-gap E: emit a type_use for a local var's declared type
+      // (Local: Widget) so a type rename reaches it. EmitTypeUseReference
+      // takes the typeref node inside the declVar's 'type' field.
+      var LTypeField:= DeclVar.ChildByField('type');
+      if not LTypeField.IsNull then
+      begin
+        var LTyperef:= FindNamedChildOfType(LTypeField, 'typeref');
+        if not LTyperef.IsNull then EmitTypeUseReference(LTyperef, AState);
+      end;
       // Emit one skLocalVar per direct 'identifier' child (the var names). The
       // type lives under a 'type' child, so only the name identifiers match.
       for k:= 0 to DeclVar.NamedChildCount - 1 do
@@ -1252,6 +1261,29 @@ begin
         if not HdrNameNode.IsNull then
         begin
           var HdrName:= NodeText(HdrNameNode, AState.Source);
+          // Ref-gap E: emit type_use refs for the type sites on a METHOD-impl
+          // header (constructor/procedure/function Widget.Use(pParam: Widget): Widget).
+          // A method impl header (name is a genericDot, i.e. Class.Method) is
+          // NEVER routed through WalkDeclProc below -- that path is gated to free
+          // routines (Pos('.')=0) -- so its qualifier, param types, and return
+          // type would otherwise go unindexed, and a type-name-prefix rename
+          // would leave them on the old name. We handle three sub-sites here:
+          //   1. the class QUALIFIER (the 'Widget' before '.Use') -- genericDot lhs;
+          //   2. the PARAM types -- walk the 'args' subtree so its typerefs emit;
+          //   3. the RETURN type -- walk the 'type' field's typeref.
+          // Walk() already emits type_use for every typeref it reaches (and
+          // recurses into generics), so routing args/return through it is the
+          // DRY way to cover grouped/generic param types too.
+          if HdrNameNode.NodeType = 'genericDot' then
+          begin
+            var QualNode:= HdrNameNode.ChildByField('lhs');
+            if (not QualNode.IsNull) and (QualNode.NodeType = 'identifier') then
+              AState.EmitRef('type_use', NodeText(QualNode, AState.Source), QualNode);
+            var ArgsNode:= HdrNode.ChildByField('args');
+            if not ArgsNode.IsNull then Walk(ArgsNode, AState, AParentSymbolIdx, AParentQualifiedName);
+            var RetTypeNode:= HdrNode.ChildByField('type');
+            if not RetTypeNode.IsNull then Walk(RetTypeNode, AState, AParentSymbolIdx, AParentQualifiedName);
+          end;
           if (HdrName <> '') and (Pos('.', HdrName) = 0) and not FreeRoutineSymbolExists(AState, HdrName) then
             WalkDeclProc(HdrNode, AState, AParentSymbolIdx, AParentQualifiedName, False);
           { v9: record this routine's body span on its symbol (decl or the
@@ -1335,6 +1367,22 @@ begin
     EmitTypeUseReference(ANode, AState);
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
+  end;
+
+  // Ref-gap E: emit a type_use for the RHS type of an is/as test
+  // (X is Widget). Gated to operator kIs/kAs so it does NOT fire on
+  // arithmetic/comparison exprBinary nodes; RHS must be a bare identifier
+  // (a type name), not a nested expression. No Exit -- the default recursion
+  // below still walks lhs + children.
+  if NodeType = 'exprBinary' then
+  begin
+    var OpNode:= ANode.ChildByField('operator');
+    if (not OpNode.IsNull) and ((OpNode.NodeType = 'kIs') or (OpNode.NodeType = 'kAs')) then
+    begin
+      var RhsNode:= ANode.ChildByField('rhs');
+      if (not RhsNode.IsNull) and (RhsNode.NodeType = 'identifier') then
+        AState.EmitRef('type_use', NodeText(RhsNode, AState.Source), RhsNode);
+    end;
   end;
 
   // v0.42: identifier usage references (deep scan only). Captures variable /
