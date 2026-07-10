@@ -622,9 +622,10 @@ begin
         [Format('property defaults may diverge between %s and %s -- values not present in the F DFM adopt the T default (verify; full default fidelity pending Batch 2a-0)',
           [AFromTree.RootType, AToTree.RootType])];
 
-    Result.Report.Created:= Created;
-    Result.Report.Dropped:= Dropped;
-    Result.Report.Ignored:= Ignored;
+    // Fold the local accumulators into the report (do NOT clobber Task-6 appends).
+    Result.Report.Created:= Result.Report.Created + Created;
+    Result.Report.Dropped:= Result.Report.Dropped + Dropped;
+    Result.Report.Ignored:= Result.Report.Ignored + Ignored;
     Result.DfmText:= EmitBlock(TRoot, 0);
     Result.Ok:= True;
   finally
