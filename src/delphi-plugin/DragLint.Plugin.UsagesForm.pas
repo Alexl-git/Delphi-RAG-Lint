@@ -54,8 +54,8 @@ var
   Age    : TDateTime;
 begin
   ModName:= GetModuleName(HInstance);
-  if (ModName <> '') and FileAge(ModName, Age) then Result:= 'v1.0.0-alpha (BPL built ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
-  else Result:= 'v1.0.0-alpha';
+  if (ModName <> '') and FileAge(ModName, Age) then Result:= 'v1.1.0-alpha (BPL built ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
+  else Result:= 'v1.1.0-alpha';
 end;
 
 { ---- TUsageNodeData: stores file + line in tree node.Data ---- }
