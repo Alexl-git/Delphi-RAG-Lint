@@ -984,7 +984,13 @@ begin
         Break; { one matching field symbol is enough }
       end;
       if not Found then
-        Warnings.Add(Format('%s: could not locate field declaration "%s: %s" in %s',
+        { A multi-declarator field line (`Edit1, Edit2: TOldEdit;`) indexes only
+          the FIRST declarator as a field symbol, so a later name on the shared
+          line is not located here -- the .dfm/access/creator surfaces still
+          convert it, but this .pas decl line stays typed as the F type. Name the
+          limitation so the user fixes the shared line by hand. }
+        Warnings.Add(Format('%s: could not locate field declaration "%s: %s" in %s'
+          + ' (a shared multi-declarator line is not retyped -- fix the decl by hand)',
           [Inst.InstanceName, Inst.InstanceName, Inst.FromType, AUnitPas]));
 
       { -- surface #5: runtime-creator retype. Every explicit construction

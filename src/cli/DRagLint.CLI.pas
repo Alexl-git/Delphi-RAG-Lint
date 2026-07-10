@@ -10809,9 +10809,10 @@ end; // function
 
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
 /// [--only Name1,Name2,...] [--apply] [--no-backup] -- Track 3 sub-project B: locates the
-/// component instances to convert in the sibling .dfm and rewrites surfaces #1-#3 and #5
-/// (declaration retype, uses-add, .dfm re-emit, runtime-creator retype + TODO markers;
-/// surface #4 property/event access-site rewrite remains deferred). Without --apply this
+/// component instances to convert in the sibling .dfm and rewrites all five surfaces
+/// (#1 declaration retype, #2 uses-add, #3 .dfm re-emit, #4 property/event access-site
+/// rewrite via ref-gap G's member-access index, #5 runtime-creator retype + TODO markers).
+/// Without --apply this
 /// is DRY-RUN ONLY (RenderDryRun preview, writes nothing). With --apply (Task 4) it actually writes:
 /// a freshness guard runs first (CheckFreshness -- refuses on stale/unindexed F or T
 /// types), then each touched file is backed up to its next-free NAME.EXT.BCK&lt;n&gt;
