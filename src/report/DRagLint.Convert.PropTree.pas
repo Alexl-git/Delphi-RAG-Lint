@@ -142,16 +142,54 @@ var
   Nodes    : TList<TPropNode>;
   Truncated: Boolean         ;
 
+  // True when a class symbol is a mere forward declaration ('TFoo = class;')
+  // rather than the real body. A forward decl spans a single line and carries no
+  // heritage; the parser emits it as a separate skClass symbol with no property
+  // children. DevExpress forward-declares nearly every class, so resolving a
+  // qname to the stub yields 0 properties -- ResolveClassByQName must skip it.
+  function IsForwardDeclClass(const S: TSymbol): Boolean;
+  begin
+    Result:= (S.Heritage.Trim = '') and (S.EndLine <= S.StartLine);
+  end;
+
   // Resolve a class qname/name to its class-kind defining symbol; Id=0 if none.
+  // Prefers the real body over a forward-declaration stub (both are indexed as
+  // separate skClass symbols for a forward-declared class); falls back to the
+  // first skClass if only stubs exist.
   function ResolveClassByQName(const AQName: string): TSymbol;
   var
-    Cands: TArray<TSymbol>;
-    S    : TSymbol         ;
+    Cands   : TArray<TSymbol>;
+    S       : TSymbol         ;
+    FirstAny: TSymbol         ;
+    HaveAny : Boolean         ;
   begin
-    Result:= Default(TSymbol);
-    Cands := AStore.FindSymbolsByQualifiedName(AQName);
+    Result  := Default(TSymbol);
+    FirstAny:= Default(TSymbol);
+    HaveAny := False;
+    Cands   := AStore.FindSymbolsByQualifiedName(AQName);
     for S in Cands do
-      if S.Kind = skClass then Exit(S);
+      if S.Kind = skClass then
+      begin
+        if not HaveAny then begin FirstAny:= S; HaveAny:= True; end;
+        if not IsForwardDeclClass(S) then Exit(S); // the real body -- prefer it
+      end;
+    if HaveAny then Result:= FirstAny; // only forward stubs found -- best effort
+  end;
+
+  // If ASym is a forward-declaration stub, re-resolve to the defining body by
+  // qname (the body carries the property children); otherwise return ASym as-is.
+  // type_ancestors / GetSymbolById can hand back the stub for a forward-declared
+  // ancestor, so every place that reads an ancestor's children must go via this.
+  function BodyOf(const ASym: TSymbol): TSymbol;
+  var
+    Body: TSymbol;
+  begin
+    Result:= ASym;
+    if (ASym.Id > 0) and (ASym.Kind = skClass) and IsForwardDeclClass(ASym) then
+    begin
+      Body:= ResolveClassByQName(ASym.QualifiedName);
+      if (Body.Id > 0) and not IsForwardDeclClass(Body) then Result:= Body;
+    end;
   end;
 
   // Ordered list of the class + its resolved ancestor classes (most-derived
@@ -174,7 +212,7 @@ var
         if AOpts.ToPersistent and IsStopClass(A.Name) then Break;
         if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
         begin
-          Sym:= AStore.GetSymbolById(A.SymbolId);
+          Sym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
           if (Sym.Id > 0) and (Sym.Kind = skClass) then List.Add(Sym);
         end;
       end;
@@ -188,17 +226,21 @@ var
   // same-named property that DOES carry a signature in an ancestor class.
   function ResolveInheritedType(const AClass: TSymbol; const APropName: string): string;
   var
-    Anc  : TArray<TTypeAncestor>;
-    A    : TTypeAncestor        ;
-    Child: TSymbol              ;
-    Tok  : string               ;
+    Anc   : TArray<TTypeAncestor>;
+    A     : TTypeAncestor        ;
+    AncSym: TSymbol              ;
+    Child : TSymbol              ;
+    Tok   : string               ;
   begin
     Result:= '';
     Anc:= AStore.GetTransitiveAncestors(AClass.Id);
     for A in Anc do
     begin
       if not (A.Resolved and (A.SymbolId > 0)) then Continue;
-      Child:= AStore.FindChildSymbolByName(A.SymbolId, APropName);
+      // Re-resolve a forward-decl stub to its body before reading children.
+      AncSym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
+      if AncSym.Id <= 0 then Continue;
+      Child:= AStore.FindChildSymbolByName(AncSym.Id, APropName);
       if (Child.Id > 0) and (Child.Kind = skProperty) then
       begin
         Tok:= ParseTypeToken(Child.Signature);
@@ -261,6 +303,7 @@ var
     Node      : TPropNode      ;
     Tok       : string         ;
     TypeSym   : TSymbol        ;
+    Body      : TSymbol        ;
     LowType   : string         ;
   begin
     CollectProps(AClass, Order, DeclaredIn);
@@ -294,6 +337,15 @@ var
         Node.Kind        := 'class';
         Node.IsClassTyped:= True;
         Nodes.Add(Node);
+
+        // FindSymbolByExactNameAnywhere may return a forward-decl stub; re-resolve
+        // to the defining body (by qname) before recursing, else the nested class
+        // would enumerate 0 properties (the DevExpress forward-decl case).
+        if IsForwardDeclClass(TypeSym) then
+        begin
+          Body:= ResolveClassByQName(TypeSym.QualifiedName);
+          if Body.Id > 0 then TypeSym:= Body;
+        end;
 
         LowType:= LowerCase(Tok);
         if ADepthLeft <= 0 then

@@ -3108,21 +3108,47 @@ begin
   try
     Q.Connection:= FConn;
     { 1. candidate class/interface symbols, indexed by lowercased simple name. }
-    Q.SQL.Text:= 'SELECT id, file_id, kind, name FROM symbols WHERE kind IN (''class'',''interface'')';
+    Q.SQL.Text:= 'SELECT id, file_id, kind, name, heritage, start_line, end_line ' +
+                 'FROM symbols WHERE kind IN (''class'',''interface'')';
     Q.Open;
     while not Q.Eof do
     begin
       Sym:= Default(TSymbol);
-      Sym.Id    := Q.FieldByName('id'     ).AsLargeInt;
-      Sym.FileId:= Q.FieldByName('file_id').AsLargeInt;
-      Sym.Kind  := TSymbolKind.FromText(Q.FieldByName('kind').AsString);
-      Sym.Name  := Q.FieldByName('name'   ).AsString;
+      Sym.Id       := Q.FieldByName('id'        ).AsLargeInt;
+      Sym.FileId   := Q.FieldByName('file_id'   ).AsLargeInt;
+      Sym.Kind     := TSymbolKind.FromText(Q.FieldByName('kind').AsString);
+      Sym.Name     := Q.FieldByName('name'      ).AsString;
+      Sym.Heritage := Q.FieldByName('heritage'  ).AsString;
+      Sym.StartLine:= Q.FieldByName('start_line').AsInteger;
+      Sym.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
       Lc:= LowerCase(Sym.Name);
       if not NameToCands.ContainsKey(Lc) then NameToCands.Add(Lc, TList<TSymbol>.Create);
       NameToCands[Lc].Add(Sym);
       Q.Next;
     end;
     Q.Close;
+    { 1b. Drop forward-declaration stubs ('TFoo = class;' -- empty heritage,
+      single line, no body) from any name that ALSO has a real definition. The
+      parser emits a separate skClass symbol for a forward decl; leaving it in
+      makes a same-file ancestor look like TWO in-scope candidates, so the
+      unambiguous-resolution rule below bails and the ancestry edge is lost.
+      Keep a lone stub (no body indexed) so a purely-external class still has a
+      by-name row. }
+    for var Cl in NameToCands.Values do
+      if Cl.Count > 1 then
+      begin
+        var HasBody:= False;
+        for var CI:= 0 to Cl.Count - 1 do
+          if not ((Cl[CI].Heritage.Trim = '') and (Cl[CI].EndLine <= Cl[CI].StartLine)) then
+          begin
+            HasBody:= True;
+            Break;
+          end;
+        if HasBody then
+          for var CI:= Cl.Count - 1 downto 0 do
+            if (Cl[CI].Heritage.Trim = '') and (Cl[CI].EndLine <= Cl[CI].StartLine) then
+              Cl.Delete(CI);
+      end;
     { 2. per-file in-scope set: the resolved target_file_id of each used unit. }
     Q.SQL.Text:= 'SELECT file_id, target_file_id FROM unit_uses WHERE target_file_id IS NOT NULL';
     Q.Open;

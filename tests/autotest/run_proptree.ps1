@@ -74,6 +74,33 @@ type
     property Name: string read FName write FName;
   end;
 
+  // Forward declaration BEFORE the real body -- the DevExpress pattern. The
+  // parser emits TWO skClass symbols for TFwd (the stub 'class;' and the body).
+  // proptree must resolve TFwd to the BODY (which has the property), not the
+  // childless forward stub.
+  TFwd = class;
+
+  TFwdHolder = class(TPersistent)
+  end;
+
+  TFwd = class(TPersistent)
+  private
+    FTag: Integer;
+  published
+    property Tag: Integer read FTag write FTag;
+  end;
+
+  // A class that INHERITS from the forward-declared TFwd and REDECLARES its
+  // inherited property with an empty signature ('property Tag;'). Resolving
+  // TFwdChild.Tag's type requires the ancestry edge TFwdChild->TFwd to be
+  // RESOLVED at index time. The forward-decl stub made TFwd an ambiguous
+  // same-file candidate, so ResolveAncestry left the edge unresolved and the
+  // inherited type came back 'unknown'. This is the regression guard.
+  TFwdChild = class(TFwd)
+  published
+    property Tag;
+  end;
+
 implementation
 
 end.
@@ -133,6 +160,63 @@ if ($null -ne $tree) {
   } else {
     Check "'Inner' node present" $false ''
   }
+}
+
+# --- Forward-declaration resolution: proptree on a class with a 'class;' forward
+#     decl before its body must resolve to the BODY (with the property), not the
+#     childless forward stub. Regression guard for the DevExpress-cx case where
+#     every class is forward-declared and proptree returned 0 properties.
+Write-Host ''
+Write-Host 'proptree --qname PropFix.TFwd --format json (forward-decl case)' -ForegroundColor Cyan
+Push-Location $WorkDir
+try {
+  $fwdRaw = (& $Exe proptree --qname 'PropFix.TFwd' --format json --db $db) -join "`n"
+  $fwdExit = $LASTEXITCODE
+} finally {
+  Pop-Location
+}
+Check 'proptree TFwd exits 0' ($fwdExit -eq 0) "exit=$fwdExit"
+
+$fwdTree = $null
+try { $fwdTree = $fwdRaw | ConvertFrom-Json } catch { }
+if ($null -ne $fwdTree) {
+  $fwdPaths = @(@($fwdTree.properties) | ForEach-Object { $_.path })
+  Check "TFwd resolves to the BODY (has property 'Tag'), not the forward stub" `
+        ($fwdPaths -contains 'Tag') ("paths=" + ($fwdPaths -join ', '))
+  $tag = @($fwdTree.properties) | Where-Object { $_.path -eq 'Tag' } | Select-Object -First 1
+  if ($null -ne $tag) {
+    Check "'Tag' type matches Integer" ($tag.type -match 'Integer') "type=$($tag.type)"
+  } else {
+    Check "'Tag' node present" $false ''
+  }
+} else {
+  Check 'proptree TFwd --format json parses as JSON' $false "raw=$fwdRaw"
+}
+
+# --- Inherited-from-forward-declared: TFwdChild(TFwd) redeclares Tag with an
+#     empty signature. Its type resolves ONLY if the ancestry edge
+#     TFwdChild->TFwd was resolved at index time (ResolveAncestry must not treat
+#     the TFwd forward-decl stub as an ambiguous second candidate).
+Write-Host ''
+Write-Host 'proptree --qname PropFix.TFwdChild --format json (inherited-from-forward-decl)' -ForegroundColor Cyan
+Push-Location $WorkDir
+try {
+  $fcRaw = (& $Exe proptree --qname 'PropFix.TFwdChild' --format json --db $db) -join "`n"
+} finally {
+  Pop-Location
+}
+$fcTree = $null
+try { $fcTree = $fcRaw | ConvertFrom-Json } catch { }
+if ($null -ne $fcTree) {
+  $fcTag = @($fcTree.properties) | Where-Object { $_.path -eq 'Tag' } | Select-Object -First 1
+  if ($null -ne $fcTag) {
+    Check "TFwdChild.Tag inherited type resolves to Integer (ancestry edge resolved)" `
+          ($fcTag.type -match 'Integer') "type=$($fcTag.type)"
+  } else {
+    Check "TFwdChild has property 'Tag'" $false ("paths=" + (@(@($fcTree.properties) | ForEach-Object { $_.path }) -join ', '))
+  }
+} else {
+  Check 'proptree TFwdChild --format json parses as JSON' $false "raw=$fcRaw"
 }
 
 Write-Host ''
