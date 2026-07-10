@@ -10367,6 +10367,7 @@ var
       rkDefault: Result:= 'default';
       rkNote   : Result:= 'note';
       rkPcre   : Result:= 'pcre';
+      rkIgnore : Result:= 'ignore';
     else        Result:= '?';
     end;
   end;
@@ -10385,6 +10386,7 @@ var
       rkDefault: Result:= Format('default %s = %s', [R.ToPath, R.Value]);
       rkNote   : Result:= Format('note %s', [R.Text]);
       rkPcre   : Result:= Format('pcre %s -> %s', [R.Search, R.Replace]);
+      rkIgnore : Result:= Format('ignore FromPath=%s', [R.FromPath]);
     else        Result:= KindStr(R.Kind);
     end;
   end;

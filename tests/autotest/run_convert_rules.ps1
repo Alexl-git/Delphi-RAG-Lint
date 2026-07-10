@@ -63,6 +63,7 @@ $RulesAll = @'
 #link Name <- Inner.Shade
 #default Name = 'x'
 #note carry this human text
+#ignore TabOrder
 FindThis -> ReplaceThat
 '@
 $rulesAllFile = Join-Path $WorkDir 'rules-all.txt'
@@ -72,7 +73,7 @@ Write-Host 'convert-validate --rules rules-all.txt --print-parsed' -ForegroundCo
 $parsedRaw = (& $Exe convert-validate --rules $rulesAllFile --print-parsed) -join "`n"
 $parsedExit = $LASTEXITCODE
 Check 'parse-only exits 0' ($parsedExit -eq 0) "exit=$parsedExit"
-Check 'print-parsed reports 9 rules' ($parsedRaw -match 'parsed 9 rule') "raw=$parsedRaw"
+Check 'print-parsed reports 10 rules' ($parsedRaw -match 'parsed 10 rule') "raw=$parsedRaw"
 # reFind-adopted directives + field values
 Check 'unuse UnitName=BDE'     ($parsedRaw -match 'unuse.*BDE')                 "raw=$parsedRaw"
 Check 'remove PropName=SessionName' ($parsedRaw -match 'remove.*SessionName')  "raw=$parsedRaw"
@@ -82,6 +83,7 @@ Check 'convert present'        ($parsedRaw -match 'convert.*TTable.*TFDTable')  
 Check 'link present'           ($parsedRaw -match 'link.*Name.*Inner\.Shade')  "raw=$parsedRaw"
 Check 'default present'        ($parsedRaw -match 'default.*Name')             "raw=$parsedRaw"
 Check 'note present'           ($parsedRaw -match 'note')                      "raw=$parsedRaw"
+Check 'ignore present'         ($parsedRaw -match 'ignore.*TabOrder')          "raw=$parsedRaw"
 Check 'pcre escape-hatch present' ($parsedRaw -match 'pcre.*FindThis.*ReplaceThat') "raw=$parsedRaw"
 
 # ---------------------------------------------------------------------------

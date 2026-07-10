@@ -42,8 +42,9 @@ type
   /// arrow vs migrate); rkDefault=#default (set a target property to a value when
   /// no source maps); rkNote=#note (a human comment carried in the rule set);
   /// rkPcre=a raw non-'#' line containing ' -&gt; ' (the PCRE find/replace escape
-  /// hatch).</remarks>
-  TRuleKind = (rkUnuse, rkRemove, rkMigrate, rkConvert, rkLink, rkDefault, rkNote, rkPcre);
+  /// hatch); rkIgnore=#ignore (acknowledge an F property/event is intentionally
+  /// NOT mapped -- suppresses the unmapped-non-default WARN for that FromPath).</remarks>
+  TRuleKind = (rkUnuse, rkRemove, rkMigrate, rkConvert, rkLink, rkDefault, rkNote, rkPcre, rkIgnore);
 
   /// <summary>One parsed conversion rule. A flat record; only the fields relevant
   /// to <see cref="Kind"/> are populated (the rest stay '').</summary>
@@ -58,6 +59,7 @@ type
   /// rkDefault -&gt; ToPath, Value (RHS of '=').
   /// rkNote -&gt; Text.
   /// rkPcre -&gt; Search (LHS of ' -&gt; '), Replace (RHS).
+  /// rkIgnore -&gt; FromPath (the F property/event path to leave unmapped, no warn).
   /// LineNo is the 1-based source line the rule was parsed from.
   /// SCOPE-FOLD CHOICE for #migrate: reFind allows an optional '&lt;Class&gt; :'
   /// class-scope and/or an optional '&lt;obj&gt; .' object-scope before the old
@@ -111,7 +113,9 @@ type
 /// &lt;new&gt; [, &lt;unit&gt; ...]'; '#convert &lt;FromType&gt; -&gt;
 /// &lt;ToType&gt; [, &lt;unit&gt; ...]'; '#link &lt;ToPath&gt; &lt;- &lt;FromPath&gt;'
 /// (note the '&lt;-' arrow); '#default &lt;ToPath&gt; = &lt;value&gt;';
-/// '#note &lt;text&gt;'. A NON-'#' line containing ' -&gt; ' is a raw PCRE
+/// '#note &lt;text&gt;'; '#ignore &lt;FromPath&gt;' (acknowledge an F property is
+/// intentionally unmapped -- suppresses its unmapped-non-default warning).
+/// A NON-'#' line containing ' -&gt; ' is a raw PCRE
 /// rule (Search -&gt; Replace). Any other '#word' is an unknown directive
 /// recorded in ParseErrors. Pure; deterministic; no I/O.</remarks>
 function ParseConversionRules(const AText: string): TConversionRuleSet;
@@ -136,6 +140,8 @@ function ParseConversionRules(const AText: string): TConversionRuleSet;
 /// (parse-only / tree-less mode). rkConvert type pairs are informational and are
 /// NEVER hard-failed (a rename mismatch is not a path error). Other kinds
 /// (rkUnuse/rkRemove/rkMigrate/rkNote/rkPcre) are not path-checked in Batch 1.
+/// rkIgnore is not path-checked either -- a #ignore for a non-existent F path is
+/// tolerated (it simply matches nothing), never a hard error.
 /// Pure; deterministic; no I/O.</remarks>
 function ValidateConversionRules(const ARules: TConversionRuleSet;
   const AFromTree, AToTree: TPropTree): TArray<TRuleError>;
@@ -369,6 +375,12 @@ begin
           R.ToPath:= Trim(Arg);
           R.Value := '';
         end;
+        AddRule(R);
+      end
+      else if Directive('#ignore', Arg) then
+      begin
+        R.Kind    := rkIgnore;
+        R.FromPath:= Arg;
         AddRule(R);
       end
       else if Directive('#note', Arg) then
