@@ -149,11 +149,17 @@ uses
 type
   TMyForm = class(TForm)
     Edit1: TOldEdit;
+    procedure MakeEdit1;
   end;
 
 implementation
 
 {$R *.dfm}
+
+procedure TMyForm.MakeEdit1;
+begin
+  Edit1 := TOldEdit.Create(Self);
+end;
 
 end.
 '@
@@ -240,6 +246,19 @@ Check 'shows .dfm delete-lines preview for the old 3-line block' ($applyRaw -mat
 Check 'shows re-emitted .dfm header TNewEdit' ($applyRaw -match 'object Edit1: TNewEdit') "raw=$applyRaw"
 Check 'shows re-emitted Text = ''Hi''' ($applyRaw -match "Text\s*=\s*'Hi'") "raw=$applyRaw"
 
+# Surface #5: runtime-creator retype. The 'Edit1 := TOldEdit.Create(Self);'
+# construction site in TMyForm.MakeEdit1 must have its FromType token rewritten
+# to ToType (TNewEdit.Create(Self)) AND a TODO marker planted at the site
+# (creator/ctor shape can differ -- the marker is the safety net, args are
+# never auto-fixed). RenderDryRun previews both as edits against MyForm.pas.
+Check 'shows creator retype -> TNewEdit.Create' ($applyRaw -match 'TNewEdit') "raw=$applyRaw"
+Check 'shows TODO marker for verify creator TNewEdit' ($applyRaw -match [regex]::Escape('TODO') + '.*verify creator for TNewEdit') "raw=$applyRaw"
+Check 'shows TODO marker names TOldEdit.Create as the original' ($applyRaw -match [regex]::Escape('TOldEdit.Create')) "raw=$applyRaw"
+
+# Report.Todos surfaced in dry-run output (CLI must print the Todos block).
+Check 'dry-run output has a Todos: block' ($applyRaw -match 'Todos:') "raw=$applyRaw"
+Check 'Todos block lists the verify-creator marker' ($applyRaw -match 'Todos:[\s\S]*verify creator for TNewEdit') "raw=$applyRaw"
+
 # Report: per-instance conversion line.
 Check 'report mentions Edit1 instance' ($applyRaw -match 'Edit1') "raw=$applyRaw"
 
@@ -284,6 +303,12 @@ $p2DfmText = [System.IO.File]::ReadAllText($p2Dfm)
 Check 'MyForm.pas converted: Edit1: TNewEdit' ($p2PasText -match 'Edit1\s*:\s*TNewEdit') "text=$p2PasText"
 Check 'MyForm.pas converted: uses NewEditUnit' ($p2PasText -match 'NewEditUnit') "text=$p2PasText"
 Check 'MyForm.dfm converted: object Edit1: TNewEdit' ($p2DfmText -match 'object Edit1:\s*TNewEdit') "text=$p2DfmText"
+
+# Surface #5 on disk: the construction site is rewritten (TNewEdit.Create) and
+# carries the TODO marker -- the type is converted for real, and the safety-net
+# comment survives the actual write (not just the dry-run preview).
+Check 'MyForm.pas converted: creator site TNewEdit.Create' ($p2PasText -match [regex]::Escape('TNewEdit.Create(Self)')) "text=$p2PasText"
+Check 'MyForm.pas converted: creator site carries TODO marker' ($p2PasText -match [regex]::Escape('TODO') + '.*verify creator for TNewEdit') "text=$p2PasText"
 Check 'MyForm.dfm converted: Text = ''Hi''' ($p2DfmText -match "Text\s*=\s*'Hi'") "text=$p2DfmText"
 
 # .BCK1 exist and equal the ORIGINAL bytes.

@@ -25,9 +25,15 @@ unit DRagLint.Convert.Apply;
   that preserves the block's original indentation. A ReemitComponent failure
   (Ok=False) skips the WHOLE instance -- no .pas retype/uses edits either --
   so a component is never left half-converted; see BuildApplyPlan's remarks.
-  Surfaces #4-#5 (property/event access rewrite, creator-site rewrite) are
-  deferred to Task 6; TApplyReport.AccessSites/CreatorSites stay empty until
-  then.
+  Task 5 (this revision) adds surface #5: RUNTIME-CREATION sites. Every
+  explicit 'FromType.Xxx(...)' construction (e.g. 'Edit1 := TOldEdit.Create
+  (Self);') found in the .pas via FindConstructionSites gets its type token
+  rewritten to ToType PLUS an unconditional TODO end-of-line comment marker --
+  ToType's constructor/init may take a different shape, and this applier never
+  attempts to fix up constructor ARGUMENTS; the marker is the safety net.
+  TApplyReport.CreatorSites/Todos are populated from this surface. Surface #4
+  (property/event access-site rewrite) remains deferred; TApplyReport.
+  AccessSites stays empty until then.
 }
 
 interface
@@ -356,6 +362,120 @@ begin
     if S.Kind = skClass then Exit(S.QualifiedName);
 end;
 
+// One construction site: 'AFromType.<ctor>(' found as a whole-word AFromType
+// token immediately followed (ignoring intervening whitespace) by '.' and a
+// constructor-name identifier. Line/Col/EndCol locate the AFromType token
+// itself (1-based, EndCol exclusive) for a tekReplaceInLine edit -- mirrors
+// TReference.StartLine/StartCol/EndCol, the same span the indexer already
+// recorded for this ref (kind='read', name_text=AFromType).
+type
+  TCreatorSite = record
+    Line, Col, EndCol: Integer;
+    CtorName: string; // the identifier after '.', e.g. 'Create' -- '' if unparsable (still treated as a hit)
+  end;
+
+// Given the whole-word span ending at AEndCol of AFromType on 1-based line
+// ALine of APasLines, checks whether it is immediately (module whitespace)
+// followed by '.' + an identifier -- i.e. a construction 'AFromType.Xxx('
+// rather than a plain type reference. Returns True + the constructor
+// identifier on a match.
+function TryMatchConstructionShape(const APasLines: TStringList; ALine, AEndCol: Integer;
+  out ACtorName: string): Boolean;
+var
+  S: string;
+  P: Integer;
+  NameStart: Integer;
+begin
+  ACtorName:= '';
+  if (ALine < 1) or (ALine > APasLines.Count) then Exit(False);
+  S:= APasLines[ALine - 1];
+  P:= AEndCol;
+  while (P <= Length(S)) and (S[P] = ' ') do Inc(P);
+  if (P > Length(S)) or (S[P] <> '.') then Exit(False);
+  Inc(P);
+  while (P <= Length(S)) and (S[P] = ' ') do Inc(P);
+  NameStart:= P;
+  while (P <= Length(S)) and CharInSet(S[P], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(P);
+  if P = NameStart then Exit(False); { '.' not followed by an identifier }
+  ACtorName:= Copy(S, NameStart, P - NameStart);
+  Result:= True;
+end;
+
+// Finds every runtime-construction site of AFromType ('AFromType.Xxx(...)',
+// e.g. 'TOldEdit.Create(Self)') in AUnitPas, via the store's own reference
+// index rather than a fresh text scan: a construction site is recorded by the
+// indexer as a 'read' ref whose NameText is the bare class name, at the
+// type-name token position (see docs/superpowers/specs/2026-07-09-refgap-e-
+// type-references-design.md: "construction sites (TMyclass.Create) ->
+// kind='read'"). GetReferencesFromFile gives StartLine/StartCol/EndCol for
+// each candidate 'read' ref directly -- no separate token-column search is
+// needed (contrast LocateFieldTypeToken, which DOES need one because the field
+// symbol's span covers the whole declaration line, not just the type token).
+// A 'read' ref is confirmed as a CONSTRUCTION (vs. a plain type reference,
+// e.g. a type-test 'X is TOldEdit') by TryMatchConstructionShape: the token
+// immediately after AFromType (module whitespace) must be '.' + an identifier
+// (the constructor name) -- a bare type read has no trailing '.Xxx'.
+function FindConstructionSites(const AStore: ISymbolStore; AFileId: Int64;
+  const APasLines: TStringList; const AFromType: string): TArray<TCreatorSite>;
+var
+  Refs: TArray<TReference>;
+  R   : TReference;
+  List: TList<TCreatorSite>;
+  Site: TCreatorSite;
+  Ctor: string;
+begin
+  Result:= nil;
+  if AFileId <= 0 then Exit;
+  Refs:= AStore.GetReferencesFromFile(AFileId);
+  List:= TList<TCreatorSite>.Create;
+  try
+    for R in Refs do
+    begin
+      if not SameText(R.Kind, 'read') then Continue;
+      if not SameText(R.NameText, AFromType) then Continue;
+      if not TryMatchConstructionShape(APasLines, R.StartLine, R.EndCol, Ctor) then Continue;
+      Site:= Default(TCreatorSite);
+      Site.Line    := R.StartLine;
+      Site.Col     := R.StartCol;
+      Site.EndCol  := R.EndCol;
+      Site.CtorName:= Ctor;
+      List.Add(Site);
+    end;
+    Result:= List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+// True when AToType has at least one indexed skConstructor child whose
+// Signature looks like the generic VCL component shape 'Create(AOwner:
+// TComponent)' (parameter-list text loosely matched -- 'TComponent' anywhere
+// in the signature is enough; exact formatting varies). Used only to enrich
+// the TODO marker/ReemitNotes with a hint of whether a same-shape constructor
+// exists; per the brief, the rewrite + TODO marker happen regardless of this
+// result -- args are NEVER auto-fixed, so a False here does not block anything.
+function ToTypeHasGenericCreate(const AStore: ISymbolStore; const AToType: string): Boolean;
+var
+  Cands   : TArray<TSymbol>;
+  ClassSym: TSymbol;
+  Found   : Boolean;
+  Kids    : TArray<TSymbol>;
+  K       : TSymbol;
+begin
+  Result:= False;
+  Found:= False;
+  ClassSym:= Default(TSymbol);
+  Cands:= AStore.FindSymbolsByExactName(AToType);
+  for var S in Cands do
+    if S.Kind = skClass then begin ClassSym:= S; Found:= True; Break; end;
+  if not Found then Exit;
+
+  Kids:= AStore.FindAllChildSymbols(ClassSym.Id);
+  for K in Kids do
+    if (K.Kind = skConstructor) and SameText(K.Name, 'Create') and
+       (Pos('TComponent', K.Signature) > 0) then Exit(True);
+end;
+
 // Checks one class name's freshness: resolves it to an indexed skClass symbol
 // (via ResolveClassQName -> FindSymbolsByExactName, same lookup BuildApplyPlan's
 // TreeFor uses), then compares its declaring file's CURRENT on-disk mtime+sha256
@@ -505,8 +625,11 @@ var
   Converted   : TList<string>;
   Warnings    : TList<string>;
   ReemitNotes : TList<string>;
+  CreatorSites: TList<string>;
+  Todos       : TList<string>;
   PasLines    : TStringList;
   PasFileSyms : TArray<TSymbol>;
+  PasFileId   : Int64;
   Sym         : TSymbol;
   DoneUnits   : TDictionary<string, Boolean>; { ToType -> already handled (added or already-used) }
   ToTypesSeen : TList<string>;
@@ -556,6 +679,11 @@ begin
   if Length(PasFileSyms) = 0 then
     PasFileSyms:= AStore.FindSymbolsByFile(TPath.GetFullPath(AUnitPas));
 
+  { surface #5 needs the .pas file's own refs (GetReferencesFromFile is
+    keyed by file id, not path) to find construction sites. }
+  PasFileId:= AStore.FindFileIdByPath(AUnitPas);
+  if PasFileId <= 0 then PasFileId:= AStore.FindFileIdByPath(TPath.GetFullPath(AUnitPas));
+
   DfmFileSyms:= AStore.FindSymbolsByFile(ADfmPath);
   if Length(DfmFileSyms) = 0 then
     DfmFileSyms:= AStore.FindSymbolsByFile(TPath.GetFullPath(ADfmPath));
@@ -568,6 +696,8 @@ begin
   Converted:= TList<string>.Create;
   Warnings := TList<string>.Create;
   ReemitNotes:= TList<string>.Create;
+  CreatorSites:= TList<string>.Create;
+  Todos    := TList<string>.Create;
   DoneUnits:= TDictionary<string, Boolean>.Create;
   ToTypesSeen:= TList<string>.Create;
   TreeCache:= TDictionary<string, TPropTree>.Create;
@@ -661,6 +791,57 @@ begin
         Warnings.Add(Format('%s: could not locate field declaration "%s: %s" in %s',
           [Inst.InstanceName, Inst.InstanceName, Inst.FromType, AUnitPas]));
 
+      { -- surface #5: runtime-creator retype. Every explicit construction
+        site 'FromType.Xxx(...)' (e.g. 'Edit1 := TOldEdit.Create(Self);') in
+        this unit gets its type token rewritten to ToType, PLUS a TODO marker
+        comment -- ALWAYS, unconditionally: ToType's constructor/init may take
+        a different shape than FromType's (a different parameter list, extra
+        required setup), and this applier never attempts to fix up
+        constructor ARGUMENTS. The marker is the safety net the user checks
+        by hand. A design-time (DFM-only) instance has no .Create in code, so
+        it simply contributes zero sites here -- its #1/#2/#3 edits still
+        apply on their own. }
+      var Sites: TArray<TCreatorSite>:= FindConstructionSites(AStore, PasFileId, PasLines, Inst.FromType);
+      var HasGenericCreate: Boolean:= ToTypeHasGenericCreate(AStore, Inst.ToType);
+      for var Site in Sites do
+      begin
+        var CtorName: string:= Site.CtorName;
+        if CtorName = '' then CtorName:= 'Create';
+
+        E:= Default(TTextEdit);
+        E.FilePath:= AUnitPas;
+        E.Kind    := tekReplaceInLine;
+        E.Line    := Site.Line;
+        E.Col     := Site.Col;
+        E.EndCol  := Site.EndCol;
+        E.Text    := Inst.ToType;
+        Edits.Add(E);
+
+        var TodoText: string:= Format(
+          '{ TODO: drag-lint convert -- verify creator for %s (was %s.%s); %s''s ctor/init may differ }',
+          [Inst.ToType, Inst.FromType, CtorName, Inst.ToType]);
+
+        { end-of-line insert keeps line numbers stable for every OTHER edit on
+          this line/file (a tekInsertLines line-above would shift every
+          subsequent line number, which every other surface's edits are NOT
+          computed to account for). }
+        var LineLen: Integer:= 0;
+        if (Site.Line >= 1) and (Site.Line <= PasLines.Count) then
+          LineLen:= Length(PasLines[Site.Line - 1]);
+        E:= Default(TTextEdit);
+        E.FilePath:= AUnitPas;
+        E.Kind    := tekInsertInLine;
+        E.Line    := Site.Line;
+        E.Col     := LineLen + 1;
+        E.Text    := ' ' + TodoText;
+        Edits.Add(E);
+
+        CreatorSites.Add(Format('%s: %s.%s -> %s.%s', [Inst.InstanceName, Inst.FromType, CtorName, Inst.ToType, CtorName]));
+        if not HasGenericCreate then
+          ReemitNotes.Add(Format('%s: %s has no indexed generic Create(AOwner: TComponent) -- verify the creator manually', [Inst.InstanceName, Inst.ToType]));
+        Todos.Add(TodoText);
+      end;
+
       { -- surface #2: uses-add for each distinct ToType (once per type). }
       if not DoneUnits.ContainsKey(Inst.ToType) then
       begin
@@ -687,6 +868,8 @@ begin
     Result.Report.Converted:= Converted.ToArray;
     Result.Report.Warnings := Warnings.ToArray;
     Result.Report.ReemitNotes:= ReemitNotes.ToArray;
+    Result.Report.CreatorSites:= CreatorSites.ToArray;
+    Result.Report.Todos    := Todos.ToArray;
     Result.Ok:= True;
   finally
     PasLines.Free;
@@ -694,6 +877,8 @@ begin
     Converted.Free;
     Warnings.Free;
     ReemitNotes.Free;
+    CreatorSites.Free;
+    Todos.Free;
     DoneUnits.Free;
     ToTypesSeen.Free;
     TreeCache.Free;

@@ -421,7 +421,7 @@ begin
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props)');
-  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply]   (DRY-RUN ONLY for now: locates .dfm component instances matching a #convert rule and previews the .pas declaration retype + uses-add; --apply is accepted but not yet wired -- always dry-run, writes nothing)');
+  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--no-backup]   (locates .dfm component instances matching a #convert rule and rewrites declaration retype + uses-add + .dfm re-emit + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -10809,9 +10809,10 @@ end; // function
 
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
 /// [--only Name1,Name2,...] [--apply] [--no-backup] -- Track 3 sub-project B: locates the
-/// component instances to convert in the sibling .dfm and rewrites all five surfaces
-/// (Tasks 2-3, plus surfaces #4-#5 once Task 6 lands). Without --apply this is DRY-RUN
-/// ONLY (RenderDryRun preview, writes nothing). With --apply (Task 4) it actually writes:
+/// component instances to convert in the sibling .dfm and rewrites surfaces #1-#3 and #5
+/// (declaration retype, uses-add, .dfm re-emit, runtime-creator retype + TODO markers;
+/// surface #4 property/event access-site rewrite remains deferred). Without --apply this
+/// is DRY-RUN ONLY (RenderDryRun preview, writes nothing). With --apply (Task 4) it actually writes:
 /// a freshness guard runs first (CheckFreshness -- refuses on stale/unindexed F or T
 /// types), then each touched file is backed up to its next-free NAME.EXT.BCK&lt;n&gt;
 /// (DRagLint.Convert.Backup.BackupFiles) and a recovery.txt block is appended BEFORE the
@@ -10988,6 +10989,11 @@ begin
     Writeln('');
     Writeln(Format('convert-apply: %d instance(s) converted, %d edit(s) planned', [Length(PlanRes.Report.Converted), Length(PlanRes.Edits)]));
     for S in PlanRes.Report.Converted do Writeln('  ' + S);
+    if Length(PlanRes.Report.Todos) > 0 then
+    begin
+      Writeln('Todos:');
+      for S in PlanRes.Report.Todos do Writeln('  ' + S);
+    end;
     if Length(PlanRes.Report.Warnings) > 0 then
     begin
       Writeln('Warnings:');
@@ -11032,6 +11038,11 @@ begin
 
   Writeln(Format('convert-apply: %d instance(s) converted, %d edit(s) applied', [Length(PlanRes.Report.Converted), Length(PlanRes.Edits)]));
   for S in PlanRes.Report.Converted do Writeln('  ' + S);
+  if Length(PlanRes.Report.Todos) > 0 then
+  begin
+    Writeln('Todos:');
+    for S in PlanRes.Report.Todos do Writeln('  ' + S);
+  end;
   if Length(PlanRes.Report.Warnings) > 0 then
   begin
     Writeln('Warnings:');
