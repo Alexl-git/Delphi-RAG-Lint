@@ -109,6 +109,7 @@ uses
   , DRagLint.Convert   .PropTree
   , DRagLint.Convert   .Rules
   , DRagLint.Convert   .DfmReemit
+  , DRagLint.Convert   .Apply
   ;
 
 type
