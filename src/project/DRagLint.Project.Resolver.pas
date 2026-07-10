@@ -26,6 +26,10 @@ type
     strict private
       FBDS            : string                          ;
       FCurrentPlatform: string                          ; // what $(Platform) expands to right now
+      FEnvVars        : TDictionary<string, string>     ; // RAD Studio "Environment Variables" (e.g. DXVCL), loaded lazily
+      FEnvVarsLoaded  : Boolean                          ;
+      procedure EnsureEnvVarsLoaded                     ;
+      function ResolveNamedMacro(const AName: string; out AValue: string): Boolean;
       function ExpandMacros(const APath: string): string;
       procedure AddFolderIfReal(AList: TList<string>; const APath: string);
       procedure AddSemicolonList(AList: TList<string>; const ASemicolonList: string; const ABaseDir: string);
@@ -35,6 +39,7 @@ type
       procedure ReadDprUsesPaths(const ADprPath  : string; AList: TList<string>);
     public
       constructor Create;
+      destructor Destroy; override;
       function Resolve(const ADprojPath: string): TArray<string>;
       // Library/Browsing paths from registry only - no .dproj required.
       // Useful for "index everything Delphi knows about" without a project.
@@ -68,15 +73,113 @@ begin
   FBDS:= GetEnvironmentVariable('BDS');
   if FBDS = '' then FBDS:= 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
   FCurrentPlatform:= 'Win64';
+  FEnvVars:= TDictionary<string, string>.Create;
+  FEnvVarsLoaded:= False;
 end;
 
+destructor TProjectResolver.Destroy;
+begin
+  FEnvVars.Free;
+  inherited Destroy;
+end;
+
+/// <summary>Lazily loads the RAD Studio user-defined "Environment Variables"
+/// (Tools > Options > Environment Variables; e.g. DXVCL) from the BDS registry
+/// into FEnvVars, so that arbitrary $(NAME) path macros resolve. Idempotent:
+/// the registry is read at most once per resolver instance.</summary>
+/// <remarks>Names are stored upper-cased for case-insensitive lookup. Only the
+/// key names are captured here; VALUES may themselves contain macros (including
+/// nested $(NAME)), which ResolveNamedMacro leaves to a subsequent ExpandMacros
+/// pass on the returned path.</remarks>
+procedure TProjectResolver.EnsureEnvVarsLoaded;
+var
+  Reg  : TRegistry  ;
+  Names: TStringList;
+  Name : string     ;
+begin
+  if FEnvVarsLoaded then Exit;
+  FEnvVarsLoaded:= True; // set first: a failed read must not retry every path
+  Names:= TStringList.Create;
+  Reg:= TRegistry.Create(KEY_READ);
+  try
+    Reg.RootKey:= HKEY_CURRENT_USER;
+    if Reg.OpenKeyReadOnly(BDS_REG_PATH + '\Environment Variables') then
+    try
+      Reg.GetValueNames(Names);
+      for Name in Names do
+        if (Name.Trim <> '') and Reg.ValueExists(Name) then
+          FEnvVars.AddOrSetValue(UpperCase(Name.Trim), Reg.ReadString(Name));
+    finally
+      Reg.CloseKey;
+    end;
+  finally
+    Reg.Free;
+    Names.Free;
+  end;
+end;
+
+/// <summary>Resolves a single macro NAME (the text inside a $(...)), trying the
+/// RAD Studio user "Environment Variables" first, then the process environment.
+/// Returns True and the value on a hit; False if the name is unknown.</summary>
+function TProjectResolver.ResolveNamedMacro(const AName: string; out AValue: string): Boolean;
+begin
+  EnsureEnvVarsLoaded;
+  if FEnvVars.TryGetValue(UpperCase(AName.Trim), AValue) then Exit(True);
+  AValue:= GetEnvironmentVariable(AName.Trim);
+  Result:= AValue <> '';
+end;
+
+/// <summary>Expands RAD Studio path macros in APath. The four most common
+/// build macros ($(BDS), $(BDSCOMMONDIR), $(Platform), $(Config)) are handled
+/// directly; any REMAINING $(NAME) tokens are resolved against the user-defined
+/// "Environment Variables" registry key and the process environment (this is
+/// how $(DXVCL) and other vendor macros expand). Unresolvable macros are left
+/// verbatim, so a bad path is dropped by AddFolderIfReal rather than silently
+/// pointing at the wrong folder.</summary>
+/// <remarks>The named-macro sweep is bounded (max 8 iterations) so a macro whose
+/// value references itself cannot loop forever.</remarks>
 function TProjectResolver.ExpandMacros(const APath: string): string;
+const
+  MAX_PASSES = 8;
+var
+  Rx      : TRegEx      ;
+  Matches : TMatchCollection;
+  M       : TMatch      ;
+  Name    : string      ;
+  Val     : string      ;
+  Changed : Boolean     ;
+  Pass    : Integer     ;
 begin
   Result:= APath;
   Result:= StringReplace(Result, '$(BDS)', FBDS, [rfReplaceAll, rfIgnoreCase]);
   Result:= StringReplace(Result, '$(BDSCOMMONDIR)', TPath.Combine(FBDS, '..\Studio\Public\Documents'), [rfReplaceAll, rfIgnoreCase]);
   Result:= StringReplace(Result, '$(Platform)', FCurrentPlatform, [rfReplaceAll, rfIgnoreCase]);
   Result:= StringReplace(Result, '$(Config)'  , 'Debug'         , [rfReplaceAll, rfIgnoreCase]);
+
+  // Resolve any remaining $(NAME) via the RAD Studio user Environment Variables
+  // and the process environment (e.g. $(DXVCL) -> C:\...\DevExpress\VCL). A
+  // resolved value may itself contain macros, so loop until stable (bounded).
+  // TMatchEvaluator is 'of object' (not an anonymous method), so instead of
+  // TRegEx.Replace-with-evaluator we enumerate the distinct $(NAME) tokens and
+  // StringReplace each one.
+  Rx:= TRegEx.Create('\$\(([A-Za-z_][A-Za-z0-9_]*)\)');
+  Pass:= 0;
+  repeat
+    Changed:= False;
+    Inc(Pass);
+    if Pos('$(', Result) = 0 then Break;
+    Matches:= Rx.Matches(Result);
+    for M in Matches do
+    begin
+      Name:= M.Groups[1].Value;
+      if ResolveNamedMacro(Name, Val) then
+      begin
+        Result:= StringReplace(Result, M.Value, Val, [rfReplaceAll, rfIgnoreCase]);
+        Changed:= True;
+      end;
+      // unknown macro -> leave verbatim; AddFolderIfReal then drops the path
+    end;
+  until (not Changed) or (Pass >= MAX_PASSES);
 end;
 
 procedure TProjectResolver.AddFolderIfReal(AList: TList<string>; const APath: string);
