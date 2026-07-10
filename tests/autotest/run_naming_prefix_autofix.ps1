@@ -480,20 +480,23 @@ Check 'DETERMINISM: both runs actually applied the fix (sanity, not a no-op matc
   ($detAAfter -cmatch 'FClient\s*:\s*TObject;') $detAAfter
 
 # =============================================================================
-# WARNING (review fix, Task 3 follow-up): --fix on field-name-prefix or
-# type-name-prefix can silently leave Self.-qualified / type-annotation
-# references unrenamed (the index does not capture those sites -- see the
-# CASE 1 / CASE 3 notes above). A CLI-visible stderr warning must fire once
-# per run whenever the fixed rule-set includes either of those two rules, but
-# must NOT fire for a param-name-prefix-only run (BuildLocal's pure-AST scope
-# walk is independent of the ref index, so it is safe and silent).
+# WARNING coverage status (updated after ref-gap E):
+# - field-name-prefix --fix STILL warns: ref-gap D covers Self.-qualified field
+#   uses, but a BARE field read used as an expression operand (X := field + 1)
+#   is not yet indexed, so that one site can be left on the old name.
+# - type-name-prefix --fix NO LONGER warns: ref-gap E indexes the impl-header
+#   qualifier + param/return types, local-var type annotations, and is/as
+#   operands, so a type rename no longer strands references.
+# - param-name-prefix --fix never warns (BuildLocal's pure-AST scope walk is
+#   independent of the ref index -- safe and silent).
 # stdout and stderr are captured SEPARATELY here (unlike the combined
 # `2>&1` captures used elsewhere in this file) so the assertion can check
 # the warning landed on stderr specifically, not merely "somewhere in output".
 # =============================================================================
 Write-Host ''
-Write-Host 'WARNING: field/type-name-prefix --fix warns on stderr; param-name-prefix does not' -ForegroundColor Cyan
-$WarnNeedle = 'may leave Self-qualified or type-annotation references unrenamed'
+Write-Host 'WARNING: field-name-prefix --fix warns on stderr; type-name-prefix (ref-gap E) and param-name-prefix do not' -ForegroundColor Cyan
+$WarnNeedle    = 'bare field read used as an expression operand'
+$AnyWarnNeedle = 'drag-lint: warning:'
 
 # --- sub-case A: field-name-prefix --fix (dry-run, no --apply) MUST warn. ---
 $warnDir = Join-Path $WorkDir 'warn-field'
@@ -515,7 +518,7 @@ $warnErrText = if (Test-Path $warnStderr) { Get-Content -Raw $warnStderr } else 
 Check 'WARN-A: field-name-prefix --fix emits the warning on stderr' `
   ($warnErrText -match [regex]::Escape($WarnNeedle)) $warnErrText
 
-# --- sub-case B: type-name-prefix --fix --apply MUST also warn. ---
+# --- sub-case B: type-name-prefix --fix --apply must NOT warn (ref-gap E). ---
 $warnDir2 = Join-Path $WorkDir 'warn-type'
 $warnSrc2 = Join-Path $warnDir2 'src'
 New-Item -ItemType Directory $warnSrc2 | Out-Null
@@ -532,8 +535,8 @@ $warnStderr2 = Join-Path $warnDir2 'stderr.txt'
 Start-Process -FilePath $Exe -ArgumentList @('lint-all','--db',$warnDb2,'--config',$warnCfg2,'--rule','type-name-prefix','--fix','--apply','--quiet') `
   -NoNewWindow -Wait -RedirectStandardOutput $warnStdout2 -RedirectStandardError $warnStderr2
 $warnErrText2 = if (Test-Path $warnStderr2) { Get-Content -Raw $warnStderr2 } else { '' }
-Check 'WARN-B: type-name-prefix --fix --apply emits the warning on stderr' `
-  ($warnErrText2 -match [regex]::Escape($WarnNeedle)) $warnErrText2
+Check 'WARN-B: type-name-prefix --fix --apply does NOT emit the unrenamed-references warning (ref-gap E covers all type sites)' `
+  ($warnErrText2 -notmatch [regex]::Escape($AnyWarnNeedle)) $warnErrText2
 
 # --- sub-case C: param-name-prefix-only --fix must NOT warn (safe rule). ---
 $warnDir3 = Join-Path $WorkDir 'warn-param'
@@ -552,8 +555,8 @@ $warnStderr3 = Join-Path $warnDir3 'stderr.txt'
 Start-Process -FilePath $Exe -ArgumentList @('lint-all','--db',$warnDb3,'--config',$warnCfg3,'--rule','param-name-prefix','--fix','--apply','--quiet') `
   -NoNewWindow -Wait -RedirectStandardOutput $warnStdout3 -RedirectStandardError $warnStderr3
 $warnErrText3 = if (Test-Path $warnStderr3) { Get-Content -Raw $warnStderr3 } else { '' }
-Check 'WARN-C: param-name-prefix-only --fix does NOT emit the warning' `
-  ($warnErrText3 -notmatch [regex]::Escape($WarnNeedle)) $warnErrText3
+Check 'WARN-C: param-name-prefix-only --fix does NOT emit any unrenamed-references warning' `
+  ($warnErrText3 -notmatch [regex]::Escape($AnyWarnNeedle)) $warnErrText3
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

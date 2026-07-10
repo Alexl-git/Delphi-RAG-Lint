@@ -4854,21 +4854,27 @@ begin
           NamingTargets:= NamingTargets + [F];
       if Length(NamingTargets) > 0 then
       begin
-        { Review fix (Batch D Task 3 follow-up): field-name-prefix and
-          type-name-prefix rewrite the declaration via the ref index, which does
-          NOT capture Self.-qualified field uses or type-annotation/impl-header
-          type-qualifier sites (see .superpowers/sdd/task-3-report.md). Left
-          behind, those old-name references no longer resolve -- the file can
-          fail to compile with exit code 0 and no other diagnostic. Warn once per
-          run (dry-run or --apply) when either risky rule is present in the
-          opted-in set; param-name-prefix uses BuildLocal's pure-AST scope walk
-          and needs no warning. }
+        { Naming-prefix autofixes rewrite the declaration + every use the ref
+          index knows about. Coverage status per rule:
+          - type-name-prefix: FULLY covered as of ref-gap E (v-next). The index
+            now captures impl-header qualifier + param/return types, local-var
+            type annotations, and is/as operands (ref-gap E), on top of the
+            ordinary typeref sites; ref-gap D already covered Self.-qualified
+            uses. So a type rename no longer strands references -- NO warning.
+          - field-name-prefix: ref-gap D covers Self.-qualified field uses, but
+            a BARE field read used as an expression operand (e.g.
+            `Result := client + 1;`) is still NOT indexed as a ref, so that one
+            site can be left on the old name -- the file can fail to compile
+            with exit code 0 and no other diagnostic. So field-name-prefix STILL
+            warrants the warning, narrowed to that remaining shape.
+          param-name-prefix uses BuildLocal's pure-AST scope walk and needs no
+          warning. When ref-gaps close the bare-field-read shape, drop this too. }
         for F in NamingTargets do
-          if SameText(F.RuleId, 'field-name-prefix') or SameText(F.RuleId, 'type-name-prefix') then
+          if SameText(F.RuleId, 'field-name-prefix') then
           begin
-            Writeln(ErrOutput, 'drag-lint: warning: field-name-prefix/type-name-prefix autofix may leave '
-              + 'Self-qualified or type-annotation references unrenamed (the index does not capture those '
-              + 'sites) -- review the diff and recompile.');
+            Writeln(ErrOutput, 'drag-lint: warning: field-name-prefix autofix may leave a bare field '
+              + 'read used as an expression operand (e.g. `X := field + 1`) unrenamed (the index does '
+              + 'not yet capture that site) -- review the diff and recompile.');
             Break;
           end;
 

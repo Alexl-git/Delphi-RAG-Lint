@@ -17,13 +17,17 @@
   CONSEQUENCE (Phase 2): because these three shapes are invisible to the ref
   index, the `type-name-prefix` autofix (`lint-all --rule type-name-prefix
   --fix --apply`, which renames a non-prefixed class by adding the 'T'
-  prefix) mutates the file based on indexed ref sites only -- it renames the
-  decl + interface header + call-site occurrences to 'TWidget' but silently
-  leaves the impl-header / local-var / is-operand occurrences as STALE
-  OLD-NAME TEXT ('Widget') on disk. (The autofix itself already emits a
-  stderr warning to this effect: "field-name-prefix/type-name-prefix autofix
-  may leave Self-qualified or type-annotation references unrenamed" -- this
-  test proves the concrete damage that warning is guarding against.)
+  prefix) mutates the file based on indexed ref sites only. BEFORE ref-gap E
+  this left the impl-header / local-var / is-operand occurrences as STALE
+  OLD-NAME TEXT ('Widget') on disk (a silent broken-compile). AFTER ref-gap E
+  those sites are indexed as type_use refs, so the rename now rewrites them
+  too and the round-trip is clean -- which is exactly what this test asserts
+  (Phase 1: the sites ARE indexed; Phase 2: zero stale 'Widget' after the
+  rename). (Ref-gap E also RETIRED the type-name-prefix half of the old
+  "may leave ... type-annotation references unrenamed" --fix warning; the
+  warning now only fires for field-name-prefix's remaining bare-field-read
+  gap. This test does not assert on the warning text -- only on the concrete
+  round-trip result.)
 
   WHY 'Widget' (a non-T class name) and NOT 'TMyclass': the type-name-prefix
   detector (StartsWithPrefix in DRagLint.Diagnostics.NamingChecks.pas:106,
