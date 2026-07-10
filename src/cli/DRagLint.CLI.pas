@@ -108,6 +108,7 @@ uses
   , DRagLint.Report    .RCallTree
   , DRagLint.Convert   .PropTree
   , DRagLint.Convert   .Rules
+  , DRagLint.Convert   .DfmReemit
   ;
 
 type
