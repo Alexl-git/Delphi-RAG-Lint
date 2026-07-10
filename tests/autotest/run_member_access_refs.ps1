@@ -69,6 +69,18 @@
           `Y := Edit1;` -- there is no member here at all).
 
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-member-access-refs by default).
+
+  TASK 3 ADDITION (flood check + D/E regression, this task is TEST-ONLY --
+  the Task 2 parser change is already applied + committed, 9d7e641): after
+  the fixture positives/negatives above, a FLOOD CHECK section indexes a
+  real, sizable CLIENT unit (C:\Projects\DB\ORM3\CLIENT\ap.pas, standalone,
+  0 errors) and asserts (i) member-access > 0, (ii) member-access is LESS
+  than the sum of all other kinds combined (proportionate, not exploding),
+  and (iii) read/write/type_use/call are all still > 0 (existing kinds
+  unaffected by the new gate). D (run_self_field_refs.ps1) and E
+  (run_type_ref_gap_e.ps1) are re-run separately by the harness/CI, not
+  folded into this script, since they are independent standalone tests with
+  their own fixtures.
 #>
 [CmdletBinding()]
 param(
@@ -186,6 +198,100 @@ Write-Host 'NEGATIVE (over-capture guard): bare identifier read (Y := Edit1;) ga
 $edit1MemberAccess = @(Get-Refs 'Edit1' 'member-access')
 Check 'refs has ZERO member-access rows for Edit1 (bare identifier, no member)' ($edit1MemberAccess.Count -eq 0) `
   ("rows=" + ($edit1MemberAccess | ConvertTo-Json -Compress))
+
+# --------------------------------------------------------------------------
+# FLOOD CHECK (ref-gap G, Task 3): index a REAL sizable unit standalone and
+# confirm (a) member-access is emitted and proportionate to the source, not
+# an explosive multiple of the other kinds, and (b) the pre-existing kinds
+# (read/write/type_use/call) are still present and non-zero -- the new gate
+# is additive, not a regression of exprDot handling for the other kinds.
+#
+# UNIT: C:\Projects\DB\ORM3\CLIENT\ap.pas (a real CLIENT unit, ~600 lines,
+# complex-number + trig/vector helper routines -- many `Z.X` / `Z.Y` field
+# accesses on a plain 'Z: Complex' parameter, which is exactly the
+# plain-identifier-receiver shape the new gate targets). It indexes cleanly
+# standalone (0 errors) even though it cannot fully TYPE-RESOLVE outside the
+# full ORM3 tree -- that is fine, this check only reads ref COUNTS from the
+# file's own index, not cross-file resolution.
+#
+# The over-capture teeth: member-access must be LESS than the sum of the
+# other four kinds combined (it must not dominate the index).
+# --------------------------------------------------------------------------
+Write-Host ''
+Write-Host 'FLOOD CHECK: index a real sizable unit (ap.pas) and inspect per-kind ref counts' -ForegroundColor Cyan
+
+$floodSrc = 'C:\Projects\DB\ORM3\CLIENT\ap.pas'
+if (-not (Test-Path $floodSrc)) {
+  Write-Host "FLOOD CHECK SKIPPED: real fixture not found at $floodSrc" -ForegroundColor Yellow
+  Check 'flood-check source unit is available' $false "expected at $floodSrc"
+} else {
+  $floodWork = Join-Path $WorkDir 'flood'
+  $floodFixture = Join-Path $floodWork 'fixture'
+  New-Item -ItemType Directory $floodFixture -Force | Out-Null
+  Copy-Item $floodSrc (Join-Path $floodFixture 'ap.pas') -Force
+
+  $floodDb = Join-Path $floodWork 'apflood.sqlite'
+  Write-Host '  Indexing ap.pas standalone (deep usage refs on by default for a project index)' -ForegroundColor Cyan
+  $floodIndexOut = & $Exe index $floodFixture --db $floodDb 2>&1
+  $floodIndexExit = $LASTEXITCODE
+  Check 'flood-check index exits 0' ($floodIndexExit -eq 0) "exit=$floodIndexExit; $($floodIndexOut -join ' | ')"
+
+  $pyKind = Join-Path $WorkDir 'refkindcounts.py'
+  @'
+import sqlite3, sys, json
+c = sqlite3.connect(sys.argv[1])
+cur = c.execute("SELECT kind, COUNT(*) FROM refs GROUP BY kind ORDER BY COUNT(*) DESC")
+rows = [{"kind": r[0], "count": r[1]} for r in cur.fetchall()]
+print(json.dumps(rows))
+c.close()
+'@ | Set-Content $pyKind -Encoding ascii
+
+  $kindCountsRaw = (python $pyKind $floodDb) -join "`n"
+  $kindCounts = $kindCountsRaw | ConvertFrom-Json
+  $kindMap = @{}
+  foreach ($row in $kindCounts) { $kindMap[$row.kind] = $row.count }
+
+  $totalRefs = 0
+  foreach ($row in $kindCounts) { $totalRefs += $row.count }
+  $maCount = if ($kindMap.ContainsKey('member-access')) { $kindMap['member-access'] } else { 0 }
+  $readCount = if ($kindMap.ContainsKey('read')) { $kindMap['read'] } else { 0 }
+  $writeCount = if ($kindMap.ContainsKey('write')) { $kindMap['write'] } else { 0 }
+  $typeUseCount = if ($kindMap.ContainsKey('type_use')) { $kindMap['type_use'] } else { 0 }
+  $callCount = if ($kindMap.ContainsKey('call')) { $kindMap['call'] } else { 0 }
+  $othersCount = $totalRefs - $maCount
+  $ratio = if ($totalRefs -gt 0) { [math]::Round($maCount / $totalRefs, 4) } else { 0 }
+
+  Write-Host ("  per-kind counts: " + ($kindCounts | ConvertTo-Json -Compress)) -ForegroundColor Cyan
+  Write-Host ("  total refs={0}  member-access={1}  ratio(member-access:total)={2}" -f $totalRefs, $maCount, $ratio) -ForegroundColor Cyan
+
+  Check 'flood-check: total refs > 0' ($totalRefs -gt 0) "total=$totalRefs"
+  Check 'flood-check: member-access count > 0 (new kind emitted on a real unit)' ($maCount -gt 0) "member-access=$maCount"
+  Check 'flood-check: member-access is LESS than the sum of all other kinds (does not dominate)' ($maCount -lt $othersCount) `
+    "member-access=$maCount; others=$othersCount; ratio=$ratio"
+  Check 'flood-check: read count > 0 (existing kind intact)' ($readCount -gt 0) "read=$readCount"
+  Check 'flood-check: write count > 0 (existing kind intact)' ($writeCount -gt 0) "write=$writeCount"
+  Check 'flood-check: type_use count > 0 (existing kind intact)' ($typeUseCount -gt 0) "type_use=$typeUseCount"
+  Check 'flood-check: call count > 0 (existing kind intact)' ($callCount -gt 0) "call=$callCount"
+
+  # Spot-check: member-access rows should correspond 1:1 to concrete
+  # `ident.Member` sites in the source (e.g. Z.X / Z.Y complex-field access),
+  # not some multiplied/duplicated emission per site.
+  $pySample = Join-Path $WorkDir 'refmasample.py'
+  @'
+import sqlite3, sys, json
+c = sqlite3.connect(sys.argv[1])
+cur = c.execute("SELECT name_text, start_line, start_col FROM refs WHERE kind='member-access' ORDER BY start_line LIMIT 10")
+rows = [{"name_text": r[0], "start_line": r[1], "start_col": r[2]} for r in cur.fetchall()]
+print(json.dumps(rows))
+c.close()
+'@ | Set-Content $pySample -Encoding ascii
+  $maSampleRaw = (python $pySample $floodDb) -join "`n"
+  $maSample = $maSampleRaw | ConvertFrom-Json
+  Write-Host ("  member-access sample (first 10, for manual spot-check against ap.pas source): " + ($maSample | ConvertTo-Json -Compress)) -ForegroundColor Cyan
+  Check 'flood-check: member-access sample rows carry a non-empty member name_text' `
+    (@($maSample | Where-Object { [string]::IsNullOrEmpty($_.name_text) }).Count -eq 0) `
+    ("sample=" + ($maSample | ConvertTo-Json -Compress))
+}
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
