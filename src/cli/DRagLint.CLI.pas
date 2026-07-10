@@ -429,7 +429,7 @@ begin
   Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--out <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
   Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--json] [--config <path>]  - sync project member list; flag stale used units');
-  Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry roots missing from library index (exit 2 if drift)');
+  Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -12316,10 +12316,16 @@ begin
         Missing:= AnalyzeLibraryDrift(Item.DbPath, Roots);
         Inc(TotalMiss, Length(Missing));
         Writeln('platform: ', Item.Platform, ', db: ', Item.DbPath);
-        for R in Missing do Writeln('  MISSING: ', R);
+        { Reworded (was a bare "MISSING: <root>"): these roots have indexable
+          source files (.pas/.inc/.dfm) on disk but none are in the index --
+          i.e. source not yet indexed, NOT a phantom path. A compiled-output
+          library root (e.g. Lib\...\Win64) that ships only .dcu + orphan .dfm
+          with no companion .pas will show here too; its real .pas source
+          usually lives in a sibling Source\ folder -- index that folder. }
+        for R in Missing do Writeln('  SOURCE NOT INDEXED (.pas/.inc/.dfm on disk, none in index): ', R);
         if Length(Missing) = 0 then Writeln('  (clean)');
       end;
-      Writeln('library-drift: ', PlatCnt, ' platforms checked, ', TotalMiss, ' roots missing from index');
+      Writeln('library-drift: ', PlatCnt, ' platforms checked, ', TotalMiss, ' library root(s) with source not yet indexed');
     end; // else
   finally
     Resolver.Free;
