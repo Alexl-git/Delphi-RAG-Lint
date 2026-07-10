@@ -128,6 +128,12 @@ function ReemitComponent(const AFromBlock: string; const ARules: TConversionRule
 
 implementation
 
+uses
+  System.Classes,
+  TreeSitter,
+  TreeSitterLib,
+  DRagLint.Parser.DFM; // for tree_sitter_dfm (external decl lives there)
+
 { TDfmNode }
 
 constructor TDfmNode.Create;
@@ -142,10 +148,141 @@ begin
   inherited;
 end;
 
+// Verbatim UTF-8 slice of a node (mirrors DRagLint.Parser.DFM.NodeText).
+function NodeText(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  StartIdx, EndIdx, Len: Integer;
+begin
+  Result:= '';
+  if ANode.IsNull then Exit;
+  StartIdx:= Integer(ANode.StartByte);
+  EndIdx  := Integer(ANode.EndByte  );
+  Len:= EndIdx - StartIdx;
+  if (Len <= 0) or (StartIdx < 0) or (EndIdx > Length(ASource)) then Exit;
+  Result:= TEncoding.UTF8.GetString(ASource, StartIdx, Len);
+end;
+
+// Classify a property's value node into a TDfmNodeKind + capture verbatim text.
+// Event bindings are recognized structurally (name starts with "On" + value
+// node type identifier_value); collections/binary blobs are recognized by a
+// TEXT-SHAPE fallback (leading '<' / '{') because the tree-sitter-dfm grammar's
+// collection/binary node-type names are not documented -- DFM collection values
+// always begin with '<' and data blocks with '{', so this is robust.
+procedure ClassifyValue(const AName: string; const AValueNode: TTSNode;
+  const ASource: TBytes; out AKind: TDfmNodeKind; out AValueText: string);
+var
+  Raw: string;
+begin
+  AValueText:= NodeText(AValueNode, ASource);
+  Raw:= Trim(AValueText);
+  if (Copy(AName, 1, 2) = 'On') and (not AValueNode.IsNull) and
+     (AValueNode.NodeType = 'identifier_value') then
+    AKind:= dnkEvent
+  else if (Raw <> '') and (Raw[1] = '<') then
+    AKind:= dnkCollection
+  else if (Raw <> '') and (Raw[1] = '{') then
+    AKind:= dnkBinary
+  else
+    AKind:= dnkScalar;
+end;
+
+// Walks the named children of a tree-sitter object/source node, appending a
+// TDfmNode (owned by AParent) per nested `object` (recursed) or `property`.
+procedure WalkNodeInto(const ATsNode: TTSNode; const ASource: TBytes;
+  const AParent: TDfmNode);
+var
+  i        : Integer;
+  Child    : TTSNode;
+  NameNode : TTSNode;
+  ValueNode: TTSNode;
+  ClassNode: TTSNode;
+  Sub      : TDfmNode;
+  Prop     : TDfmNode;
+  K        : TDfmNodeKind;
+  VText    : string;
+begin
+  for i:= 0 to ATsNode.NamedChildCount - 1 do
+  begin
+    Child:= ATsNode.NamedChild(i);
+    if Child.NodeType = 'object' then
+    begin
+      Sub:= TDfmNode.Create;
+      Sub.Kind:= dnkSubObject;
+      NameNode := Child.ChildByField('name');
+      ClassNode:= Child.ChildByField('class');
+      if not NameNode.IsNull then Sub.Name:= NodeText(NameNode, ASource);
+      if not ClassNode.IsNull then Sub.ClassName_:= NodeText(ClassNode, ASource);
+      AParent.Children.Add(Sub);
+      WalkNodeInto(Child, ASource, Sub); // recurse into the nested object
+    end
+    else if Child.NodeType = 'property' then
+    begin
+      NameNode := Child.ChildByField('name');
+      ValueNode:= Child.ChildByField('value');
+      if NameNode.IsNull then Continue;
+      Prop:= TDfmNode.Create;
+      Prop.Name:= NodeText(NameNode, ASource);
+      ClassifyValue(Prop.Name, ValueNode, ASource, K, VText);
+      Prop.Kind     := K;
+      Prop.ValueText:= VText;
+      AParent.Children.Add(Prop);
+    end;
+  end;
+end;
+
 function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
+var
+  Src      : TBytes;
+  Parser   : TTSParser;
+  Tree     : TTSTree;
+  Root     : TTSNode;
+  ObjNode  : TTSNode;
+  NameNode : TTSNode;
+  ClassNode: TTSNode;
+  i        : Integer;
+  Found    : Boolean;
 begin
   ARoot := nil;
-  Result:= False; // implemented in Task 3
+  Result:= False;
+  if Trim(ABlockText) = '' then Exit;
+  Src:= TEncoding.UTF8.GetBytes(ABlockText);
+  if (Length(Src) > 0) and (Src[0] = $FF) then Exit; // binary DFM unsupported
+  Parser:= nil; Tree:= nil;
+  try
+    Parser:= TTSParser.Create;
+    Parser.Language:= tree_sitter_dfm;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var Remaining: Integer;
+      begin
+        Remaining:= Length(Src) - Integer(AByteIndex);
+        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        SetLength(Result, Remaining);
+        Move(Src[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    Root:= Tree.RootNode;
+    // source_file -> [object ...]. Take the FIRST top-level object as the root.
+    Found:= False;
+    ObjNode:= Root; // placeholder assignment; overwritten below when Found
+    for i:= 0 to Root.NamedChildCount - 1 do
+    begin
+      ObjNode:= Root.NamedChild(i);
+      if ObjNode.NodeType = 'object' then begin Found:= True; Break; end;
+    end;
+    if not Found then Exit;
+    ARoot:= TDfmNode.Create;
+    ARoot.Kind:= dnkSubObject;
+    NameNode := ObjNode.ChildByField('name');
+    ClassNode:= ObjNode.ChildByField('class');
+    if not NameNode.IsNull then ARoot.Name:= NodeText(NameNode, Src);
+    if not ClassNode.IsNull then ARoot.ClassName_:= NodeText(ClassNode, Src);
+    WalkNodeInto(ObjNode, Src, ARoot);
+    Result:= True;
+  finally
+    Tree.Free;
+    Parser.Free;
+  end;
 end;
 
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
