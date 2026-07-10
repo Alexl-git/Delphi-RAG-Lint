@@ -442,8 +442,10 @@ var
   Dropped     : TArray<string>;
   Ignored     : TArray<string>;
 
-  // Find a #link whose FromPath equals AFromPath (a top-level F property name in
-  // 2a-i; deep F paths supported for completeness).
+  // Find a #link whose FromPath equals AFromPath (the dotted lookup key -- a
+  // top-level F property name, OR a 'SubObj.Leaf' path when the leaf lives
+  // inside a nested F sub-object with no #convert of its own; see
+  // HandleNested's moved-depth-inside-a-sub-object branch below).
   function FindLinkFor(const AFromPath: string; out AToPath: string): Boolean;
   var Q: TConversionRule;
   begin
@@ -469,6 +471,28 @@ var
       if (Q.Kind = rkRemove) and SameText(Q.PropName, APropName) then Exit(True);
   end;
 
+  // True when ANY #link/#ignore/#remove rule's FromPath/PropName references a
+  // dotted path under APrefix + '.' (e.g. prefix 'Font' matches 'Font.Size').
+  // Used by HandleNested to recognize a nested F sub-object (no #convert of its
+  // own) whose CHILDREN are individually redirected by moved-depth #link rules,
+  // as opposed to an ordinary contained child that must be copied verbatim.
+  function HasDeepRuleUnder(const APrefix: string): Boolean;
+  var
+    Q     : TConversionRule;
+    DotPfx: string;
+  begin
+    Result:= False;
+    DotPfx:= APrefix + '.';
+    for Q in ARules.Rules do
+    begin
+      case Q.Kind of
+        rkLink  : if (Length(Q.FromPath) > Length(DotPfx)) and SameText(Copy(Q.FromPath, 1, Length(DotPfx)), DotPfx) then Exit(True);
+        rkIgnore: if (Length(Q.FromPath) > Length(DotPfx)) and SameText(Copy(Q.FromPath, 1, Length(DotPfx)), DotPfx) then Exit(True);
+        rkRemove: if (Length(Q.PropName) > Length(DotPfx)) and SameText(Copy(Q.PropName, 1, Length(DotPfx)), DotPfx) then Exit(True);
+      end;
+    end;
+  end;
+
   // NOTE (Controller decision 1): there is NO IsDefaultValued check. DFM only
   // serializes NON-default values, so every property PRESENT in the F block is a
   // developer-set value that MUST be carried. An unmapped present property with
@@ -482,22 +506,25 @@ var
   // them as synthetic leaves BEFORE this loop -- RemapLeaf needs NO change then.
   // 2a-i only sees what is in the DFM.
 
-  procedure RemapLeaf(const ALeaf: TDfmNode);
+  // AFromPath is the dotted RULE-LOOKUP key ('Caption' for a top-level leaf,
+  // 'Font.Size' for a leaf one level inside a moved-depth F sub-object); ALeaf
+  // supplies the actual DFM Kind/ValueText and its bare Name for report text.
+  procedure RemapLeaf(const ALeaf: TDfmNode; const AFromPath: string);
   var ToPath: string;
   begin
-    if IsRemoved(ALeaf.Name) then Exit; // #remove: ensure absent from T
-    if IsIgnored(ALeaf.Name) then
-    begin Ignored:= Ignored + [ALeaf.Name]; Exit; end;
-    if FindLinkFor(ALeaf.Name, ToPath) then
+    if IsRemoved(AFromPath) then Exit; // #remove: ensure absent from T
+    if IsIgnored(AFromPath) then
+    begin Ignored:= Ignored + [AFromPath]; Exit; end;
+    if FindLinkFor(AFromPath, ToPath) then
     begin
       if Trim(ToPath) = '???' then
-      begin Result.Report.Notes:= Result.Report.Notes + [Format('unfilled ToPath (???) for %s', [ALeaf.Name])]; Exit; end;
+      begin Result.Report.Notes:= Result.Report.Notes + [Format('unfilled ToPath (???) for %s', [AFromPath])]; Exit; end;
       if ALeaf.Kind = dnkCollection then
       begin
         // Collection relocate-keep-items: move the whole collection verbatim.
         PlaceAtPath(TRoot, ToPath, ALeaf.ValueText, dnkCollection, Created);
         Result.Report.Notes:= Result.Report.Notes +
-          [Format('collection %s relocated to %s, items unchanged', [ALeaf.Name, ToPath])];
+          [Format('collection %s relocated to %s, items unchanged', [AFromPath, ToPath])];
         Exit;
       end;
       if ALeaf.Kind = dnkBinary then
@@ -506,12 +533,12 @@ var
         // same type; else WARN and do not copy (cross-type conversion is the
         // interpreter stage, deferred past 2a).
         var FType: string; var TType: string;
-        FType:= LeafTypeOf(AFromTree, ALeaf.Name);
+        FType:= LeafTypeOf(AFromTree, AFromPath);
         TType:= LeafTypeOf(AToTree, ToPath);
         if (FType <> '') and (TType <> '') and (not SameText(FType, TType)) then
         begin
           Result.Report.Mismatched:= Result.Report.Mismatched +
-            [Format('%s: F type %s != T type %s (binary not copied)', [ALeaf.Name, FType, TType])];
+            [Format('%s: F type %s != T type %s (binary not copied)', [AFromPath, FType, TType])];
           Exit;
         end;
         PlaceAtPath(TRoot, ToPath, ALeaf.ValueText, dnkBinary, Created);
@@ -521,7 +548,23 @@ var
       Exit;
     end;
     // UNMAPPED + present in the DFM == non-default -> genuine potential loss.
-    Dropped:= Dropped + [ALeaf.Name];
+    Dropped:= Dropped + [AFromPath];
+  end;
+
+  // Recurse into a moved-depth F sub-object's children (see HandleNested),
+  // remapping each leaf by its dotted 'APrefix.LeafName' rule-lookup path. A
+  // further-nested dnkSubObject child recurses again (prefix extended one more
+  // level), so multi-level F nesting composes without a depth limit here (the
+  // #convert-guarded recursion in HandleNested has its own natural base case).
+  procedure RemapUnderPrefix(const ASub: TDfmNode; const APrefix: string);
+  var
+    Child: TDfmNode;
+  begin
+    for Child in ASub.Children do
+      if Child.Kind = dnkSubObject then
+        RemapUnderPrefix(Child, APrefix + '.' + Child.Name)
+      else
+        RemapLeaf(Child, APrefix + '.' + Child.Name);
   end;
 
   procedure HandleNested(const ASub: TDfmNode);
@@ -547,11 +590,21 @@ var
         end;
       end;
     end
+    else if HasDeepRuleUnder(ASub.Name) then
+    begin
+      // MOVED-DEPTH: this F sub-object has no #convert of its own, but one or
+      // more of its children are individually redirected by a dotted #link
+      // (e.g. 'Style.Active.Font.Size <- Font.Size'). The sub-object itself is
+      // NOT copied -- only its remapped children land in T, at whatever T paths
+      // their rules name (PlaceAtPath creates the intermediate T sub-objects).
+      RemapUnderPrefix(ASub, ASub.Name);
+    end
     else
     begin
-      // No #convert for this nested class -> contained child OR unconverted owned
-      // part. 2a-i heuristic: copy verbatim; flag in OwnedParts only when a
-      // `#note owned:<Class>` marker explicitly declares it an owned part.
+      // No #convert and no deep rule for this nested class -> ordinary contained
+      // child OR unconverted owned part. 2a-i heuristic: copy verbatim; flag in
+      // OwnedParts only when a `#note owned:<Class>` marker explicitly declares
+      // it an owned part.
       Clone:= CloneNode(ASub);
       TRoot.Children.Add(Clone);
       if IsOwnedPartByRulesHint(ARules, ASub.ClassName_) then
@@ -601,7 +654,7 @@ begin
     begin
       Leaf:= FRoot.Children[i];
       if Leaf.Kind = dnkSubObject then HandleNested(Leaf)
-      else RemapLeaf(Leaf);
+      else RemapLeaf(Leaf, Leaf.Name);
     end;
 
     // 5. Apply #default (T-only props).

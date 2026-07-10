@@ -320,6 +320,9 @@ type
     // only diagnostics). --from/--to reuse CallFrom/RenameTo (the From/To types).
     RulesFile     : string ; // --rules <file>  (conversion-rules DSL)
     PrintParsed   : Boolean; // --print-parsed  (dump parsed rule count + lines)
+    // Track 3 Batch 2a-i (Task 8): convert-reemit HIDDEN test verb. FromBlockFile
+    // is the --from-block path (one F DFM `object` block, verbatim text).
+    FromBlockFile : string ; // --from-block <file>  (F DFM object block file)
   end; // record
 
 procedure PrintHelp;
@@ -523,6 +526,7 @@ begin
   Result.MaxDepth           := 20;        // v14 (D5 T11): call-path BFS safety cap
   Result.Direction          := '';        // per-verb default applied in DoCallGraph/DoReverseCallTree (empty = unset)
   Result.ToPersistent       := True;       // proptree: stop ancestor climb at TPersistent/TObject unless --no-to-persistent
+  Result.FromBlockFile      := '';        // convert-reemit: --from-block <file>
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
@@ -655,6 +659,7 @@ begin
     else if (A = '--direction') and (i < ParamCount) then begin Inc(i); Result.Direction:= ParamStr(i); end
     else if A = '--no-to-persistent' then Result.ToPersistent:= False // proptree: climb past TPersistent/TObject
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
+    else if (A = '--from-block') and (i < ParamCount) then begin Inc(i); Result.FromBlockFile:= ParamStr(i); end // convert-reemit: F DFM object block file
     else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
     else if (A = '--task') and (i < ParamCount) then
     begin
@@ -10461,6 +10466,115 @@ begin
   Result:= 1;
 end; // function
 
+/// <summary>drag-lint convert-reemit --from-block FILE --rules FILE --from FromType
+/// --to ToType --db PATH -- HIDDEN test verb driving the pure ReemitComponent
+/// engine. Prints the emitted T DFM block + report as JSON. Not in help/README;
+/// superseded by convert-apply (2a-iii).</summary>
+/// <param name="AArgs">FromBlockFile=--from-block (one F DFM object block file);
+/// RulesFile=--rules; CallFrom=--from (FromType qname), RenameTo=--to (ToType
+/// qname); DbPath/DbPaths=index(es) used to build the from/to trees.</param>
+/// <returns>0 when Ok; 1 on a hard re-emit failure; 2 on bad args.</returns>
+/// <remarks>Builds the F/T property trees from the index (like convert-validate,
+/// same first-DB-that-resolves-wins loop), parses the rules DSL, calls
+/// ReemitComponent, and serializes the result. Read-only against the store.</remarks>
+function DoConvertReemit(const AArgs: TArgs): Integer;
+var
+  FromTree : TPropTree          ;
+  ToTree   : TPropTree          ;
+  Rules    : TConversionRuleSet ;
+  Res      : TReemitResult      ;
+  Opts     : TPropTreeOptions   ;
+  Depth    : Integer            ;
+  Dbs      : TArray<string>     ;
+  BlockText: string             ;
+  RulesText: string             ;
+  JRoot    : TJSONObject        ;
+  JReport  : TJSONObject        ;
+
+  function ArrJson(const A: TArray<string>): TJSONArray;
+  var S: string;
+  begin
+    Result:= TJSONArray.Create;
+    for S in A do Result.Add(S);
+  end;
+
+  // Build the property tree for a type qname across the resolved DBs (first DB
+  // that resolves it wins). Empty RootType if unresolved / no db. Mirrors
+  // DoConvertValidate's TreeFor exactly.
+  function TreeFor(const AQName: string): TPropTree;
+  var
+    Cand: TPropTree;
+    LDb : string   ;
+  begin
+    Result:= Default(TPropTree);
+    if AQName = '' then Exit;
+    for LDb in Dbs do
+    begin
+      if not TFile.Exists(LDb) then Continue;
+      var RoOk: Boolean;
+      var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
+      if not RoOk then Continue;
+      Cand:= BuildPropTree(CandStore, AQName, Opts);
+      if Cand.RootType <> '' then Exit(Cand);
+    end;
+  end;
+
+begin
+  if (AArgs.FromBlockFile = '') or (AArgs.RulesFile = '') or
+     (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
+  begin
+    Writeln('Usage: drag-lint convert-reemit --from-block FILE --rules FILE --from FromType --to ToType --db PATH');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.FromBlockFile) then
+  begin Writeln('from-block not found: ' + AArgs.FromBlockFile); Exit(2); end;
+  if not TFile.Exists(AArgs.RulesFile) then
+  begin Writeln('rules not found: ' + AArgs.RulesFile); Exit(2); end;
+
+  try
+    BlockText:= TFile.ReadAllText(AArgs.FromBlockFile);
+    RulesText:= TFile.ReadAllText(AArgs.RulesFile);
+  except
+    on Ex: Exception do
+    begin Writeln(Format('ERROR: cannot read input file (%s)', [Ex.Message])); Exit(2); end;
+  end;
+
+  Rules:= ParseConversionRules(RulesText);
+
+  // Build F/T trees from the first DB that resolves each qname (mirrors
+  // DoConvertValidate's store-open + multi-db loop verbatim).
+  Depth:= AArgs.Depth;
+  if Depth <= 0 then Depth:= 6;
+  Opts.Depth       := Depth;
+  Opts.ToPersistent:= AArgs.ToPersistent;
+
+  Dbs     := ResolveConsumerDbs(AArgs);
+  FromTree:= TreeFor(AArgs.CallFrom); // --from reuses CallFrom
+  ToTree  := TreeFor(AArgs.RenameTo); // --to   reuses RenameTo
+
+  Res:= ReemitComponent(BlockText, Rules, FromTree, ToTree);
+
+  JRoot:= TJSONObject.Create;
+  try
+    JRoot.AddPair('ok', TJSONBool.Create(Res.Ok));
+    JRoot.AddPair('error', Res.Error);
+    JRoot.AddPair('dfm', Res.DfmText);
+    JReport:= TJSONObject.Create;
+    JReport.AddPair('dropped',    ArrJson(Res.Report.Dropped));
+    JReport.AddPair('ignored',    ArrJson(Res.Report.Ignored));
+    JReport.AddPair('mismatched', ArrJson(Res.Report.Mismatched));
+    JReport.AddPair('created',    ArrJson(Res.Report.Created));
+    JReport.AddPair('ownedParts', ArrJson(Res.Report.OwnedParts));
+    JReport.AddPair('notes',      ArrJson(Res.Report.Notes));
+    JRoot.AddPair('report', JReport);
+    Writeln(JRoot.ToJSON);
+  finally
+    JRoot.Free;
+  end;
+
+  if Res.Ok then Exit(0) else Exit(1);
+end; // function
+
 /// <summary>drag-lint convert-scaffold --from FromType --to ToType [--out FILE]
 /// --db PATH [--db ...] -- Track 3 Batch 1: auto-generate a VALID reFind-superset
 /// conversion-rules file from the REAL deep-property trees of the From and To
@@ -12418,6 +12532,7 @@ begin
     else if Args.Command = 'proptree'          then Result:= DoPropTree        (Args)
     else if Args.Command = 'convert-validate'  then Result:= DoConvertValidate (Args)
     else if Args.Command = 'convert-scaffold'  then Result:= DoConvertScaffold (Args)
+    else if Args.Command = 'convert-reemit'    then Result:= DoConvertReemit   (Args)
     else if Args.Command = 'butterfly'         then Result:= DoButterfly       (Args)
     else if Args.Command = 'purge-locals'      then Result:= DoPurgeLocals     (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
