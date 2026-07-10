@@ -14,6 +14,12 @@ by default, `--apply` to write, with automatic backups). See
 conversion surfaces, and what is still deferred (split/merge, the expression
 interpreter, full default-value fidelity).
 
+> **Driving a conversion end-to-end (agents):** this file is the DSL + design
+> reference. For a task-oriented, step-by-step procedure -- ensuring both types
+> are indexed, scaffold -> validate -> dry-run -> apply -> verify-by-compile,
+> with the real freshness-guard messages and index-gap fixes -- follow
+> [`AI-CONVERT-RUNBOOK.md`](AI-CONVERT-RUNBOOK.md).
+
 ## Why this exists (the thesis)
 
 Two existing tools solve pieces of the "convert one component type to another"
