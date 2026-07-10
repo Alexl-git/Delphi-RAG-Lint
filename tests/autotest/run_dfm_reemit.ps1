@@ -35,6 +35,10 @@ $src = Join-Path $WorkDir 'fixture'; New-Item -ItemType Directory $src | Out-Nul
 # has Text and a Style(TStyle: Active(TActiveStyle: Font(TFont: Size))) deep path
 # plus Enabled. TFont is shared so Font.Size (F) and Style.Active.Font.Size (T)
 # both resolve. This lets proptree build both trees.
+# Also (Task 9): TFromC.Fields (a class-typed collection-ish stand-in) for the
+# collection-relocate case (o8, relocated to TToC.Data.Fields), TFromC.Layout /
+# TToC.Layout SAME type TLayout2 for the binary same-type-copy case (o9). TData2
+# is a plain TPersistent-derived holder so proptree can resolve Data.Fields.
 $fx = @'
 unit ReemitFix;
 
@@ -62,17 +66,42 @@ type
     property Active: TActiveStyle read FActive write FActive;
   end;
 
+  TColl2 = class(TPersistent)
+  private
+    FCount: Integer;
+  published
+    property Count: Integer read FCount write FCount;
+  end;
+
+  TLayout2 = class(TPersistent)
+  private
+    FCount: Integer;
+  published
+    property Count: Integer read FCount write FCount;
+  end;
+
+  TData2 = class(TPersistent)
+  private
+    FFields: TColl2;
+  published
+    property Fields: TColl2 read FFields write FFields;
+  end;
+
   TFromC = class(TPersistent)
   private
     FCaption: string;
     FFont: TFont2;
     FHint: string;
     FTabOrder: Integer;
+    FFields: TColl2;
+    FLayout: TLayout2;
   published
     property Caption: string read FCaption write FCaption;
     property Font: TFont2 read FFont write FFont;
     property Hint: string read FHint write FHint;
     property TabOrder: Integer read FTabOrder write FTabOrder;
+    property Fields: TColl2 read FFields write FFields;
+    property Layout: TLayout2 read FLayout write FLayout;
   end;
 
   TToC = class(TPersistent)
@@ -80,10 +109,14 @@ type
     FText: string;
     FStyle: TStyle2;
     FEnabled: Boolean;
+    FData: TData2;
+    FLayout: TLayout2;
   published
     property Text: string read FText write FText;
     property Style: TStyle2 read FStyle write FStyle;
     property Enabled: Boolean read FEnabled write FEnabled;
+    property Data: TData2 read FData write FData;
+    property Layout: TLayout2 read FLayout write FLayout;
   end;
 
 implementation
@@ -157,6 +190,33 @@ $o7 = Reemit $b7 $r7 'ReemitFix.TFromC' 'ReemitFix.TFromC'
 Check 'round-trip exit 0' ($script:LastExit -eq 0) "out=$o7"
 Check 'round-trip keeps Caption' ($o7 -match "Caption\s*=\s*'Hi'") "out=$o7"
 Check 'round-trip keeps nested Font/Size' ($o7 -match 'object Font' -and $o7 -match 'Size\s*=\s*9') "out=$o7"
+
+# --- Case 8: collection relocate Fields -> Data.Fields, items unchanged + Note ---
+$b8 = "object C1: TFromC`r`n  Fields = <`r`n    item`r`n      Name = 'A'`r`n    end>`r`nend`r`n"
+$r8 = "#convert TFromC -> TToC`r`n#link Data.Fields <- Fields`r`n"
+$o8 = Reemit $b8 $r8 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'collection relocate exit 0' ($script:LastExit -eq 0) "out=$o8"
+Check 'collection items unchanged (Name A)' ($o8 -match "Name\s*=\s*'A'") "out=$o8"
+Check 'collection relocate Note recorded' ($o8 -match '"notes"[^]]*relocated') "out=$o8"
+
+# --- Case 9: binary same-type copied verbatim ---
+$b9 = "object C1: TFromC`r`n  Layout = {0A0B0C}`r`nend`r`n"
+$r9 = "#convert TFromC -> TToC`r`n#link Layout <- Layout`r`n"
+$o9 = Reemit $b9 $r9 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'binary same-type copied' ($o9 -match 'Layout\s*=\s*\{0A0B0C\}') "out=$o9"
+
+# --- Case 10: owned part w/o rule -> in ownedParts (via #note owned: marker) ---
+$b10 = "object C1: TFromC`r`n  object Col1: TOldCol`r`n    Width = 5`r`n  end`r`nend`r`n"
+$r10 = "#convert TFromC -> TToC`r`n#note owned:TOldCol`r`n"
+$o10 = Reemit $b10 $r10 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'owned-part-no-rule in ownedParts' ($o10 -match '"ownedParts"[^]]*TOldCol') "out=$o10"
+
+# --- Case 11: contained child (no rule, no owned note) -> left alone, NOT flagged ---
+$b11 = "object C1: TFromC`r`n  object Btn1: TButton`r`n    Caption = 'OK'`r`n  end`r`nend`r`n"
+$r11 = "#convert TFromC -> TToC`r`n"
+$o11 = Reemit $b11 $r11 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'contained child kept' ($o11 -match 'object Btn1: TButton') "out=$o11"
+Check 'contained child NOT in ownedParts' (-not ($o11 -match '"ownedParts"[^]]*TButton')) "out=$o11"
 
 # --- Bad args ---
 $noOut = ((& $Exe convert-reemit 2>&1) -join "`n"); $noExit = $LASTEXITCODE
