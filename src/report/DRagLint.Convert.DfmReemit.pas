@@ -621,19 +621,10 @@ begin
   FRoot := nil; TRoot:= nil;
   Created:= nil; Dropped:= nil; Ignored:= nil;
 
-  // 1. Require a #convert header.
-  HaveConvert:= False; ToType:= '';
-  for R in ARules.Rules do
-    if R.Kind = rkConvert then
-    begin HaveConvert:= True; ToType:= R.ToType; Break; end;
-  if not HaveConvert then
-  begin
-    Result.Ok:= False;
-    Result.Error:= 'no #convert F -> T header in the rule set';
-    Exit;
-  end;
-
-  // 2. Parse the F block.
+  // 1. Parse the F block FIRST (moved ahead of the #convert gate below): the gate
+  // needs FRoot.ClassName_ to pick the RIGHT #convert when the rule set holds more
+  // than one (an owned-part recursion -- see HandleNested -- passes the FULL
+  // parent rule set back into this same function for the part's own block).
   if not ParseDfmBlock(AFromBlock, FRoot) then
   begin
     Result.Ok:= False;
@@ -642,6 +633,27 @@ begin
   end;
 
   try
+    // 2. Require a #convert header. Prefer the #convert whose FromType matches
+    // THIS block's root class (so an owned-part recursion with its own #convert
+    // picks its OWN target, not the first/parent one); fall back to the first
+    // #convert when none matches by name (single-pair rule sets, unchanged
+    // behavior). FRoot is freed by the `finally` below on every exit path from
+    // here on, including the no-#convert-after-parse early return.
+    HaveConvert:= False; ToType:= '';
+    for R in ARules.Rules do
+      if (R.Kind = rkConvert) and SameText(R.FromType, FRoot.ClassName_) then
+      begin HaveConvert:= True; ToType:= R.ToType; Break; end;
+    if not HaveConvert then
+      for R in ARules.Rules do
+        if R.Kind = rkConvert then
+        begin HaveConvert:= True; ToType:= R.ToType; Break; end;
+    if not HaveConvert then
+    begin
+      Result.Ok:= False;
+      Result.Error:= 'no #convert F -> T header in the rule set';
+      Exit;
+    end;
+
     // 3. Build the T root: same instance Name, swapped class.
     TRoot:= TDfmNode.Create;
     TRoot.Kind      := dnkSubObject;

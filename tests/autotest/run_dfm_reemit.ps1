@@ -87,6 +87,20 @@ type
     property Fields: TColl2 read FFields write FFields;
   end;
 
+  TOldCol2 = class(TPersistent)
+  private
+    FWidth: Integer;
+  published
+    property Width: Integer read FWidth write FWidth;
+  end;
+
+  TNewCol2 = class(TPersistent)
+  private
+    FWidth: Integer;
+  published
+    property Width: Integer read FWidth write FWidth;
+  end;
+
   TFromC = class(TPersistent)
   private
     FCaption: string;
@@ -217,6 +231,21 @@ $r11 = "#convert TFromC -> TToC`r`n"
 $o11 = Reemit $b11 $r11 'ReemitFix.TFromC' 'ReemitFix.TToC'
 Check 'contained child kept' ($o11 -match 'object Btn1: TButton') "out=$o11"
 Check 'contained child NOT in ownedParts' (-not ($o11 -match '"ownedParts"[^]]*TButton')) "out=$o11"
+
+# --- Case 12: owned part WITH its own #convert rule -> recurses and picks ITS
+# OWN target class, not the first/parent #convert's target (I-1 regression). Two
+# #convert rules are present: the parent TFromC -> TToC, and the owned part's OWN
+# TOldCol2 -> TNewCol2. Before the fix, HandleNested's recursive ReemitComponent
+# call resolved ToType via "first #convert rule" == TToC (the PARENT's target),
+# so the part was mis-emitted as TToC instead of TNewCol2. ---
+$b12 = "object C1: TFromC`r`n  object Col1: TOldCol2`r`n    Width = 5`r`n  end`r`nend`r`n"
+$r12 = "#convert TFromC -> TToC`r`n#convert TOldCol2 -> TNewCol2`r`n#link Width <- Width`r`n"
+$o12 = Reemit $b12 $r12 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'owned-part-with-rule exit 0' ($script:LastExit -eq 0) "out=$o12"
+Check 'owned-part-with-rule emits OWN target TNewCol2' ($o12 -match 'object Col1: TNewCol2') "out=$o12"
+Check 'owned-part-with-rule does NOT emit parent target TToC for the part' (-not ($o12 -match 'object Col1: TToC')) "out=$o12"
+Check 'owned-part-with-rule does NOT leave unconverted TOldCol2' (-not ($o12 -match 'object Col1: TOldCol2')) "out=$o12"
+Check 'owned-part-with-rule keeps Width = 5' ($o12 -match 'Width\s*=\s*5') "out=$o12"
 
 # --- Bad args ---
 $noOut = ((& $Exe convert-reemit 2>&1) -join "`n"); $noExit = $LASTEXITCODE
