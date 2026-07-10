@@ -166,6 +166,106 @@ genuinely ambiguous.
   against a component instance's real values. This is an ADDITION on top of the
   1:1-link foundation shipped in Batch 1 -- the basics land first, then this.
 
+## BATCH 2 (apply) -- scope decided in brainstorm 2026-07-10 (spec: separate 2a-i/ii/iii docs)
+
+The apply milestone. Decisions locked with the user; each sub-batch gets its own
+spec+plan+build (brainstormed one at a time). Engine is pure Object Pascal,
+deterministic, CLI-first, headless -- NO LLM (the "conversion model" is the DSL /
+rule text file, not an AI model). NO IDE until the engine is proven.
+
+**The value proposition (what GExperts CANNOT do):** GExperts converts a selected
+component on a form but rewrites the DFM ONLY (never the .pas), does 1-level type
+mapping, and cannot map events. drag-lint's apply rewrites FOUR surfaces and
+handles moved-depth properties AND events, using the AST/index:
+1. `.pas` DECLARATION type (Edit1: TOvcEdit -> TcxTextEdit).
+2. `.pas` USES clause (add T's unit via find-unit; optional #unuse F's unit).
+3. `.dfm` component block -- a FULL STRUCTURED RE-EMIT (not text replace): parse F's
+   object block into a property/event tree, remap each leaf to its T path (which may
+   be DEEPER or SHALLOWER -- e.g. F.Font.Size -> T.Style.Active.Font.Size), create
+   intermediate sub-objects as needed, re-serialize a well-formed T block. Same for
+   EVENTS (OnClick etc., which DevExpress nests 2-3 deep -- GExperts can't match).
+4. `.pas` PROPERTY/EVENT ACCESSES at every use site of a converted instance
+   (Edit1.Caption := x -> Edit1.Text := x) via the ref index -- the differentiator
+   that leans on ref-gaps D/E.
+
+**Selection model (core, not deferred):** convert ALL instances of a class (all
+TOvcEdit), ALL of a KIND (a named group like "BDE" = several FromTypes), or NAMED
+component(s) (just Edit1, DBGrid2). Each scoped to ONE unit (.pas+.dfm) OR the whole
+PROJECT. (Mirrors GExperts' "this one / these selected / these classes" choice but
+adds pas + project scope.)
+
+**T-tree shape source:** Batch 1's `proptree` (the index) gives T's DEEP property
+tree; the `#link ToPath <- FromPath` rule carries the full dotted T path. Apply
+places each mapped value at its ToPath, creating intermediate sub-objects, validated
+against proptree. **FRESHNESS GUARD REQUIRED:** verify the index is current for the
+F and T component types before relying on it (mtime/sha vs disk; warn/refuse on
+stale/unindexed type) -- a stale index would produce a wrong T-tree shape.
+
+**Property RENAME uses `#link`** (Text <- Caption): apply reads it as rename in DFM
++ rewrite `.Caption`->`.Text` in pas on converted instances. `#default` sets a
+T-only property's value. (No new directive; convert-scaffold already emits these.)
+Split/merge (one F -> several T, or several F -> one T) + the small expression
+interpreter are DEFERRED past 2a (see the FUTURE item below); 2a is 1:1 `#link` +
+`#default` only.
+
+**Safety = revert stack (not just per-file .bak):** before an apply action, back up
+each touched file AND record the touched paths in a stack/manifest, so the user can
+REVERT a whole conversion action as a unit later. Dry-run by default (unified diff,
+no writes); --apply writes; re-validate the rule set before applying.
+
+**Rules persistence + a growing conversion LIBRARY:** save every rule set so a
+re-run/redo starts from the last setting, not scratch. SEED a new conversion from a
+similar one (TOvcDBEdit -> TcxDBTextEdit populates from TOvcEdit -> TcxTextEdit's
+shared base, then DB-specific props are hand/assisted-edited). The library grows as
+users convert more.
+
+**2a decomposition (3 sub-specs, built in order -- each provable headless):**
+- **2a-i:** the structured DFM component RE-EMIT engine (pure unit): parse an F
+  object block -> in-memory property/event tree -> remap each leaf to its T path
+  (proptree-validated, intermediate sub-objects created) -> re-serialize a
+  well-formed T object block (indentation, nested sub-objects, events, binary/
+  collection/item values preserved or defaulted). Headless, no file I/O.
+  Foundation for ii+iii.
+- **2a-ii:** the `.pas` side (rewrite decl type + uses via find-unit + property/
+  event ACCESS rewrite via the ref index) + the SELECTION model (class / kind /
+  named x unit / project) + the index-freshness guard.
+- **2a-iii:** the `convert-apply` verb tying i+ii together + the REVERT STACK +
+  rules persistence / library seeding. Dry-run/--apply/--no-backup contract.
+
+**OWNED PART vs CONTAINED CHILD (decided 2026-07-10):** In a DFM, a contained child
+control (Edit1 on a TPanel) AND an owned composed part (a TTable's persistent TField,
+a TcxDBTreeList's TcxDBTreeListColumn) BOTH appear as a nested `object` node -- the DFM
+syntax does not distinguish them. The RECOGNITION RULE (index-derived): a nested object
+that is a member of the parent's `Controls`/`Components` container collections is a
+CONTAINED CHILD -> LEAVE ALONE (convert the container, not its independent children).
+Any OTHER nested object is a COMPOSED PART of the parent (a field/column/sub-object) ->
+it must be converted WITH the parent, which REQUIRES a #convert rule set for its element
+type. Match the nested object's class against the parent's collection/composition
+property element types via proptree (TDataSet.Fields -> TField; TcxDBTreeList.Columns ->
+TcxDBTreeListColumn). TField IS a TComponent (so "is a TComponent" does NOT distinguish
+it) but is NOT in Controls/Components -- it's in Fields -> owned part. (Verified against
+CompGroup2.dfm: RzPanel2/TRzPanel contains TcxButton children [leave]; cxDBTreeList1/
+TcxDBTreeList contains TcxDBTreeListColumn columns [owned -> convert].)
+- **REQUIRE rules but WARN, do not refuse:** when apply descends into an owned part and
+  no #convert rule exists for its type, emit a clear WARNING ("TTable converted but its
+  Fields need TField -> TXXField rules -- not converted") and leave those parts
+  unconverted. NEVER silently half-convert. Warn (not refuse) because a big component is
+  converted via lots of trial-and-error before committing -- refusing would block
+  iteration. convert-scaffold can pre-generate the per-owned-part-type rule stubs.
+- **COLLECTION relocate-keep-items:** sometimes F and T share the SAME element type
+  (TTable.Fields and TXXTable.Fields both hold TField) OR the collection just MOVES to a
+  different T path (TTable.Fields -> TXXTable.Data.Fields) without item-type change. The
+  DSL needs a COLLECTION-LEVEL #link that moves the whole collection and keeps its items
+  as-is (no per-item conversion) -- distinct from descending to convert each item.
+
+**Two eventual parts (the second is a later, separate milestone):**
+1. The ENGINE (above) -- CLI, deterministic, flat-text rule model.
+2. An IDE MODEL-EDITOR -- edits the rule model with assistance: flatten F's deep
+   tree to a flat list, auto-assign unambiguous F->T leaves, and a T-SIDE PROPERTY
+   NAVIGATOR WITH SEARCH (type "font" -> jump to T.Style.Default.Font instead of
+   walking each level). Presented as a GRID, stored as the DSL text. Its own
+   brainstorm AFTER the engine is proven.
+
 ## Explicitly OUT of scope (Batch 2+)
 
 - **Apply** -- rewriting the `.pas` field type + `uses` and the `.dfm` component
