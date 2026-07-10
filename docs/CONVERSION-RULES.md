@@ -304,12 +304,20 @@ headlessly through a **hidden** `convert-reemit` test verb. This is more than
 GExperts does: GExperts converts the DFM only, one level deep, and cannot map
 events or moved-depth properties.
 
-**Still NOT shipped:** the user-facing **`convert-apply`** verb (Batch 2a-iii) that
-rewrites real `.pas` (declaration type, uses, property/event accesses -- Batch
-2a-ii) and `.dfm` files on disk, plus the revert stack and rules library. Also
-deferred: split/merge (one F -> several T), the expression interpreter, and full
-default-value fidelity (see the note below). A validated rules file today is a
-checked, machine-readable plan; the on-disk applier that consumes it comes later.
+**Still NOT shipped:** the user-facing **`convert-apply`** verb that rewrites real
+`.pas` (declaration type, uses, property/event accesses) and `.dfm` files on disk,
+plus the backup/recovery safety and rules library. Also deferred: split/merge (one
+F -> several T), the expression interpreter, and full default-value fidelity (see
+the note below). A validated rules file today is a checked, machine-readable plan;
+the on-disk applier that consumes it comes later.
+
+**Enabling capability shipped -- ref-gap G (`member-access` indexing):** the
+applier's property/event-access rewrite (rename `Edit1.Caption` -> `Edit1.Text` at
+every use site of a converted instance) needs the index to know which MEMBER was
+accessed on which receiver. Ref-gap G adds a `kind='member-access'` reference for
+`obj.Member` on plain-identifier non-`Self` receivers (tightly gated to avoid
+flooding), which the applier queries -- scoped to the converted instance -- to find
+exactly those sites. This is surface #4 of the coming `convert-apply`.
 
 **Known gap -- property-default divergence:** a property ABSENT from the F DFM
 equals F's default (DFM omits defaults). If F's default differs from T's default,

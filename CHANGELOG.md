@@ -3,6 +3,22 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+- **Ref-gap G: member-access indexing.** The reference index now captures
+  property/field MEMBER access on typed receivers (`Edit1.Caption`) under a new
+  `kind='member-access'` ref, emitted (under `--deep`) when the receiver is a
+  plain identifier that is NOT `Self` (the complement of ref-gap D's `Self.`
+  gate) and the member is a plain identifier. Chained (`a.b.Caption`), call
+  (`f().Caption`), and indexed (`arr[i].Caption`) receivers are excluded, so the
+  index is not flooded -- verified on a real unit: `member-access` was ~12% of
+  refs, and existing `read`/`write`/`type_use`/`call` counts were untouched (the
+  distinct kind never pollutes them). This is a SUPERVISED core-parser change
+  (the exact diff was reviewed and approved before it was applied), mirroring the
+  discipline of ref-gaps D and E. **Effect:** the coming component-conversion
+  `convert-apply` verb can find instance-scoped property/event access sites to
+  rewrite (`Edit1.Caption` -> `Edit1.Text`) -- surface #4 of the applier.
+
 ## v1.1.0-alpha
 
 - **Ref-gap E: type-reference indexing (H4).** The reference index now captures
