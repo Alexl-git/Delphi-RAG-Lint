@@ -1,10 +1,12 @@
 <#
   run_convert_apply.ps1 -- convert-apply verb headless test (Track 3, sub-
-  project B, Task 2). DRY-RUN ONLY: this task implements instance location
+  project B). DRY-RUN ONLY: Task 2 implemented instance location
   (FindConvertInstances) + surface #1 (.pas declaration retype) + surface #2
-  (.pas uses-add), wired into the CLI as `convert-apply --unit F.pas --rules R
-  --db D [--only ...]`. There is NO --apply path yet (Task 4); this script
-  only exercises the dry-run preview and asserts NOTHING is written to disk.
+  (.pas uses-add); Task 3 (this revision) adds surface #3 (.dfm object-block
+  re-emit via the 2a-i ReemitComponent engine), wired into the CLI as
+  `convert-apply --unit F.pas --rules R --db D [--only ...]`. There is NO
+  --apply path yet (Task 4); this script only exercises the dry-run preview
+  and asserts NOTHING is written to disk.
 
   FIXTURE:
     OldEditUnit.pas  -- declares TOldEdit (published Caption: string), the F
@@ -19,7 +21,9 @@
                          OldEditUnit;' (no NewEditUnit yet -- surface #2 must
                          add it).
     MyForm.dfm       -- one component instance 'object Edit1: TOldEdit'
-                         nested under 'object MyForm: TMyForm'.
+                         nested under 'object MyForm: TMyForm', carrying
+                         'Caption = ''Hi''' (Task 3: the property surface #3's
+                         #link Text <- Caption converts).
     rules.txt        -- '#convert TOldEdit -> TNewEdit, NewEditUnit' +
                          '#link Text <- Caption'.
 
@@ -29,8 +33,13 @@
       'Edit1: TNewEdit' (rendered as a tekReplaceInLine preview line).
     - dry-run output shows a uses-add mentioning NewEditUnit (surface #2 via
       TFindUnitRefactoring.Build).
-    - MyForm.pas is BYTE-UNCHANGED on disk after the dry-run (no write --
-      this task's verb only prints TTextEditApplier.RenderDryRun).
+    - dry-run output shows the .dfm object block re-emitted (surface #3):
+      the OLD header 'object Edit1: TOldEdit' plus 'Caption = ''Hi''' as the
+      deleted lines, and the NEW header 'object Edit1: TNewEdit' plus
+      'Text = ''Hi''' as the inserted block (the #link Text <- Caption
+      applied by ReemitComponent).
+    - MyForm.pas AND MyForm.dfm are BYTE-UNCHANGED on disk after the dry-run
+      (no write -- this task's verb only prints TTextEditApplier.RenderDryRun).
 
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-convert-apply by default).
 #>
@@ -159,6 +168,8 @@ Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' |
 # ---------------------------------------------------------------------------
 $myFormPath = Join-Path $work 'MyForm.pas'
 $beforeBytes = [System.IO.File]::ReadAllBytes($myFormPath)
+$myFormDfmPath = Join-Path $work 'MyForm.dfm'
+$beforeDfmBytes = [System.IO.File]::ReadAllBytes($myFormDfmPath)
 
 # ---------------------------------------------------------------------------
 # convert-apply --unit MyForm.pas --rules rules.txt --db db  (DRY-RUN, no --apply)
@@ -183,19 +194,36 @@ Check 'shows MyForm.pas as the edited file' ($applyRaw -match [regex]::Escape('M
 # Surface #2: uses-add of NewEditUnit.
 Check 'shows uses-add of NewEditUnit' ($applyRaw -match 'NewEditUnit') "raw=$applyRaw"
 
+# Surface #3: .dfm object-block re-emit. RenderDryRun previews a delete-range
+# for the OLD block ('object Edit1: TOldEdit' + 'Caption = ''Hi''', 3 lines --
+# it does not echo deleted content, only the line range) followed by an
+# insert-after carrying the re-emitted T block text ('object Edit1: TNewEdit'
+# + 'Text = ''Hi''', per #link Text <- Caption), against MyForm.dfm.
+Check 'shows MyForm.dfm as an edited file' ($applyRaw -match [regex]::Escape('MyForm.dfm')) "raw=$applyRaw"
+Check 'shows .dfm delete-lines preview for the old 3-line block' ($applyRaw -match 'delete lines 2\.\.4') "raw=$applyRaw"
+Check 'shows re-emitted .dfm header TNewEdit' ($applyRaw -match 'object Edit1: TNewEdit') "raw=$applyRaw"
+Check 'shows re-emitted Text = ''Hi''' ($applyRaw -match "Text\s*=\s*'Hi'") "raw=$applyRaw"
+
 # Report: per-instance conversion line.
 Check 'report mentions Edit1 instance' ($applyRaw -match 'Edit1') "raw=$applyRaw"
 
 # ---------------------------------------------------------------------------
-# No-write assertion: MyForm.pas must be byte-identical after the dry-run.
+# No-write assertion: MyForm.pas and MyForm.dfm must be byte-identical after
+# the dry-run.
 # ---------------------------------------------------------------------------
 $afterBytes = [System.IO.File]::ReadAllBytes($myFormPath)
 $sameBytes = ($beforeBytes.Length -eq $afterBytes.Length) -and
              (-not (Compare-Object $beforeBytes $afterBytes -SyncWindow 0))
 Check 'MyForm.pas byte-unchanged after dry-run' $sameBytes "before=$($beforeBytes.Length)B after=$($afterBytes.Length)B"
 
+$afterDfmBytes = [System.IO.File]::ReadAllBytes($myFormDfmPath)
+$sameDfmBytes = ($beforeDfmBytes.Length -eq $afterDfmBytes.Length) -and
+             (-not (Compare-Object $beforeDfmBytes $afterDfmBytes -SyncWindow 0))
+Check 'MyForm.dfm byte-unchanged after dry-run' $sameDfmBytes "before=$($beforeDfmBytes.Length)B after=$($afterDfmBytes.Length)B"
+
 # No .bak file should have been written either (dry-run must not touch disk at all).
 Check 'no .bak written' (-not (Test-Path ($myFormPath + '.bak'))) ''
+Check 'no .dfm.bak written' (-not (Test-Path ($myFormDfmPath + '.bak'))) ''
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

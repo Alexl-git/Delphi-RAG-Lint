@@ -8,14 +8,26 @@ unit DRagLint.Convert.Apply;
   access sites, creator sites, TODO markers), and returns the combined edit set
   plus a human-readable report.
 
-  Task 1 (skeleton) landed the public types plus stub bodies. Task 2 (this
-  revision) implements instance LOCATION (FindConvertInstances, a scan of the
-  .dfm's 'object Name: Class' headers) plus surface #1 (.pas declaration
-  retype: 'Name: FromType;' -> 'Name: ToType;') and surface #2 (.pas uses-add
-  for each distinct ToType, via TFindUnitRefactoring.Build). Surfaces #3-#5
-  (DFM re-emit, property/event access rewrite, creator-site rewrite) are
-  deferred to Tasks 3/6; TApplyReport.ReemitNotes/AccessSites/CreatorSites stay
-  empty until those land.
+  Task 1 (skeleton) landed the public types plus stub bodies. Task 2 implements
+  instance LOCATION (FindConvertInstances, a scan of the .dfm's 'object Name:
+  Class' headers) plus surface #1 (.pas declaration retype: 'Name: FromType;'
+  -> 'Name: ToType;') and surface #2 (.pas uses-add for each distinct ToType,
+  via TFindUnitRefactoring.Build). Task 3 (this revision) adds surface #3: the
+  .dfm object-block RE-EMIT. For each located instance, its object block is
+  sliced out of the .dfm by LINE RANGE (the instance's skComponent/skForm
+  symbol in the index -- the same DFM tree-sitter parse the indexer already
+  ran, so StartLine/EndLine already span the whole 'object Name: Class ...
+  end' block, nesting and all; no separate text-based bracket-matching is
+  needed), re-emitted via the 2a-i engine (DRagLint.Convert.DfmReemit.
+  ReemitComponent) driven by the F/T property trees (BuildPropTree, same
+  Depth=6/ToPersistent=True convention as convert-validate/convert-reemit),
+  and replaces the original lines via a tekDeleteLines + tekInsertLines pair
+  that preserves the block's original indentation. A ReemitComponent failure
+  (Ok=False) skips the WHOLE instance -- no .pas retype/uses edits either --
+  so a component is never left half-converted; see BuildApplyPlan's remarks.
+  Surfaces #4-#5 (property/event access rewrite, creator-site rewrite) are
+  deferred to Task 6; TApplyReport.AccessSites/CreatorSites stay empty until
+  then.
 }
 
 interface
@@ -94,10 +106,19 @@ type
 /// retype) and surface #2 (.pas uses-add): each located instance contributes a
 /// tekReplaceInLine edit swapping its FromType token for ToType, plus (once
 /// per distinct ToType) the uses-add edit(s) from TFindUnitRefactoring.Build.
-/// Surfaces #3-#5 (DFM re-emit, property/event access rewrite, creator-site
-/// rewrite -- Tasks 3/6) contribute no edits yet. Ok=False only on a hard
-/// failure (missing .pas/.dfm, or zero instances matched); Ok=True with
-/// per-instance problems noted in Report.Warnings otherwise.</returns>
+/// Task 3 implements surface #3 (.dfm object-block re-emit): each located
+/// instance's .dfm object block is replaced (tekDeleteLines + tekInsertLines,
+/// same original indentation) with the T block from ReemitComponent, driven by
+/// the F/T property trees (BuildPropTree, Depth=6/ToPersistent=True). A
+/// ReemitComponent Ok=False (hard re-emit failure) SKIPS THE WHOLE INSTANCE --
+/// its .pas retype/uses edits (surfaces #1/#2) are also withheld, and
+/// Report.Warnings gets an entry -- rather than leave a component converted in
+/// its .pas declaration but not in its .dfm block (or vice versa). Surfaces
+/// #4-#5 (property/event access rewrite, creator-site rewrite -- Task 6)
+/// contribute no edits yet. Ok=False only on a hard failure (missing .pas/
+/// .dfm, or zero instances matched); Ok=True with per-instance problems noted
+/// in Report.Warnings otherwise (including every instance skipped by a
+/// re-emit failure).</returns>
 function BuildApplyPlan(const AStore: ISymbolStore; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
 
@@ -278,21 +299,117 @@ begin
   Result:= False;
 end;
 
+// Resolves a bare class name (as it appears in a #convert rule / .dfm object
+// header, e.g. 'TOldEdit') to its fully-qualified name (e.g. 'OldEditUnit.
+// TOldEdit') for BuildPropTree, which resolves AClassQName via an EXACT
+// qualified_name match. Filters FindSymbolsByExactName to skClass so an
+// unrelated same-named property/field never wins. '' when unresolved.
+function ResolveClassQName(const AStore: ISymbolStore; const AClassName: string): string;
+var
+  Cands: TArray<TSymbol>;
+  S    : TSymbol;
+begin
+  Result:= '';
+  Cands:= AStore.FindSymbolsByExactName(AClassName);
+  for S in Cands do
+    if S.Kind = skClass then Exit(S.QualifiedName);
+end;
+
+// Locates AInstanceName's DFM object-block symbol (skForm for the DFM's root
+// object, skComponent for every nested one -- see DRagLint.Parser.DFM.
+// WalkObject) among ADfmFileSyms, matching both Name and Signature (the DFM
+// class, e.g. 'TOldEdit') so a name collision with a differently-typed
+// instance is not mismatched. StartLine/EndLine on the returned symbol are the
+// tree-sitter 'object' node's full span (header through its matching 'end',
+// nesting already resolved by the grammar) -- exactly the line range to slice
+// out of the .dfm text. Id=0 when not found.
+function FindDfmInstanceSymbol(const ADfmFileSyms: TArray<TSymbol>;
+  const AInstanceName, AFromType: string): TSymbol;
+var
+  S: TSymbol;
+begin
+  Result:= Default(TSymbol);
+  for S in ADfmFileSyms do
+    if (S.Kind in [skForm, skComponent]) and SameText(S.Name, AInstanceName) and
+       SameText(S.Signature, AFromType) then Exit(S);
+end;
+
+// Leading-whitespace run of ALine, e.g. '  object Edit1: TOldEdit' -> '  '.
+// Used to re-apply the original block's indentation to the re-emitted T text,
+// which EmitBlock always renders starting at column 1 (AIndent=0).
+function LeadingIndent(const ALine: string): string;
+var
+  i: Integer;
+begin
+  i:= 1;
+  while (i <= Length(ALine)) and CharInSet(ALine[i], [' ', #9]) do Inc(i);
+  Result:= Copy(ALine, 1, i - 1);
+end;
+
+// Prefixes every line of AReemittedBlock (EmitBlock's CRLF-joined, column-1
+// output, trailing CRLF trimmed) with AIndent, so the replacement block lands
+// at the same indentation depth as the original.
+function ReindentBlock(const AReemittedBlock, AIndent: string): string;
+var
+  Text_: string;
+  Parts: TArray<string>;
+  i    : Integer;
+  SB   : TStringBuilder;
+begin
+  Text_:= AReemittedBlock;
+  while (Length(Text_) >= 2) and (Copy(Text_, Length(Text_) - 1, 2) = #13#10) do
+    Text_:= Copy(Text_, 1, Length(Text_) - 2);
+  Parts:= Text_.Replace(#13#10, #10).Split([#10]);
+  SB:= TStringBuilder.Create;
+  try
+    for i:= 0 to High(Parts) do
+    begin
+      if i > 0 then SB.Append(#13#10);
+      SB.Append(AIndent).Append(Parts[i]);
+    end;
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
 function BuildApplyPlan(const AStore: ISymbolStore; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
 var
   DfmText     : string;
+  DfmLines    : TArray<string>;
+  DfmFileSyms : TArray<TSymbol>;
   Instances   : TArray<TConvertInstance>;
   Inst        : TConvertInstance;
   Edits       : TList<TTextEdit>;
   Converted   : TList<string>;
   Warnings    : TList<string>;
+  ReemitNotes : TList<string>;
   PasLines    : TStringList;
   PasFileSyms : TArray<TSymbol>;
   Sym         : TSymbol;
   DoneUnits   : TDictionary<string, Boolean>; { ToType -> already handled (added or already-used) }
   ToTypesSeen : TList<string>;
   E           : TTextEdit;
+  TreeCache   : TDictionary<string, TPropTree>; { qname -> tree, built once per distinct type }
+  Opts        : TPropTreeOptions;
+
+  // F/T property trees are the same for every instance sharing a (FromType,
+  // ToType) rule pair -- cache by resolved qname so a form with N instances of
+  // the same F type only builds each tree once.
+  function TreeFor(const AClassName: string): TPropTree;
+  var
+    QName: string;
+    Cand : TPropTree;
+  begin
+    QName:= ResolveClassQName(AStore, AClassName);
+    if QName = '' then Exit(Default(TPropTree));
+    if TreeCache.TryGetValue(QName, Cand) then Exit(Cand);
+    Cand:= BuildPropTree(AStore, QName, Opts);
+    TreeCache.Add(QName, Cand);
+    Result:= Cand;
+  end;
+
 begin
   Result:= Default(TApplyResult);
   Result.Ok:= False;
@@ -310,21 +427,90 @@ begin
     Exit;
   end;
 
+  { split for line-indexed slicing (surface #3); tekDeleteLines/tekInsertLines
+    are 1-based against this same line count, matching TTextEditApplier.Apply's
+    own TStringList.Text split. }
+  DfmLines:= DfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]);
+
   PasFileSyms:= AStore.FindSymbolsByFile(AUnitPas);
   if Length(PasFileSyms) = 0 then
     PasFileSyms:= AStore.FindSymbolsByFile(TPath.GetFullPath(AUnitPas));
+
+  DfmFileSyms:= AStore.FindSymbolsByFile(ADfmPath);
+  if Length(DfmFileSyms) = 0 then
+    DfmFileSyms:= AStore.FindSymbolsByFile(TPath.GetFullPath(ADfmPath));
+
+  Opts.Depth       := 6;
+  Opts.ToPersistent:= True;
 
   PasLines:= TStringList.Create;
   Edits    := TList<TTextEdit>.Create;
   Converted:= TList<string>.Create;
   Warnings := TList<string>.Create;
+  ReemitNotes:= TList<string>.Create;
   DoneUnits:= TDictionary<string, Boolean>.Create;
   ToTypesSeen:= TList<string>.Create;
+  TreeCache:= TDictionary<string, TPropTree>.Create;
   try
     PasLines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
 
     for Inst in Instances do
     begin
+      { -- surface #3 FIRST: the .dfm object-block re-emit. A hard re-emit
+        failure skips the WHOLE instance (no .pas retype/uses edits either) --
+        see BuildApplyPlan's <returns> remarks: converting the .pas declaration
+        while leaving the .dfm block in its OLD (From) shape (or vice versa)
+        would hand back a component that neither compiles cleanly against the
+        new type nor matches its own .dfm, which is worse than leaving it
+        entirely unconverted + warned. }
+      var DfmSym: TSymbol:= FindDfmInstanceSymbol(DfmFileSyms, Inst.InstanceName, Inst.FromType);
+      if DfmSym.Id = 0 then
+      begin
+        Warnings.Add(Format('%s: could not locate .dfm object block for "%s: %s" in %s -- instance skipped',
+          [Inst.InstanceName, Inst.InstanceName, Inst.FromType, ADfmPath]));
+        Continue;
+      end;
+
+      var BlockStart: Integer:= DfmSym.StartLine;
+      var BlockEnd  : Integer:= DfmSym.EndLine;
+      if (BlockStart < 1) or (BlockEnd < BlockStart) or (BlockEnd > Length(DfmLines)) then
+      begin
+        Warnings.Add(Format('%s: .dfm object block line range [%d..%d] out of bounds in %s -- instance skipped',
+          [Inst.InstanceName, BlockStart, BlockEnd, ADfmPath]));
+        Continue;
+      end;
+
+      var BlockText: string:= String.Join(#13#10, DfmLines, BlockStart - 1, BlockEnd - BlockStart + 1);
+      var FromTree: TPropTree:= TreeFor(Inst.FromType);
+      var ToTree  : TPropTree:= TreeFor(Inst.ToType);
+      var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ARules, FromTree, ToTree);
+      if not ReemitRes.Ok then
+      begin
+        Warnings.Add(Format('%s: .dfm re-emit failed (%s) -- instance skipped', [Inst.InstanceName, ReemitRes.Error]));
+        Continue;
+      end;
+
+      var Indent: string:= LeadingIndent(DfmLines[BlockStart - 1]);
+      E:= Default(TTextEdit);
+      E.FilePath:= ADfmPath;
+      E.Kind    := tekDeleteLines;
+      E.Line    := BlockStart;
+      E.EndLine := BlockEnd;
+      Edits.Add(E);
+
+      E:= Default(TTextEdit);
+      E.FilePath:= ADfmPath;
+      E.Kind    := tekInsertLines;
+      E.Line    := BlockStart - 1; { insert AFTER line BlockStart-1 == at the deleted block's old position }
+      E.Text    := ReindentBlock(ReemitRes.DfmText, Indent);
+      Edits.Add(E);
+
+      for var N in ReemitRes.Report.Dropped    do ReemitNotes.Add(Format('%s: dropped %s', [Inst.InstanceName, N]));
+      for var N in ReemitRes.Report.Mismatched do ReemitNotes.Add(Format('%s: mismatched %s', [Inst.InstanceName, N]));
+      for var N in ReemitRes.Report.OwnedParts do ReemitNotes.Add(Format('%s: owned-part %s', [Inst.InstanceName, N]));
+      for var N in ReemitRes.Report.Created    do ReemitNotes.Add(Format('%s: created %s', [Inst.InstanceName, N]));
+      for var N in ReemitRes.Report.Notes      do ReemitNotes.Add(Format('%s: %s', [Inst.InstanceName, N]));
+
       { -- surface #1: locate the published field decl 'Name: FromType;' via
         the field symbol (gives us the line range to scope the text search),
         then find the exact FromType token span for a tekReplaceInLine edit. }
@@ -380,14 +566,17 @@ begin
     Result.Edits          := Edits.ToArray;
     Result.Report.Converted:= Converted.ToArray;
     Result.Report.Warnings := Warnings.ToArray;
+    Result.Report.ReemitNotes:= ReemitNotes.ToArray;
     Result.Ok:= True;
   finally
     PasLines.Free;
     Edits.Free;
     Converted.Free;
     Warnings.Free;
+    ReemitNotes.Free;
     DoneUnits.Free;
     ToTypesSeen.Free;
+    TreeCache.Free;
   end;
 end;
 
