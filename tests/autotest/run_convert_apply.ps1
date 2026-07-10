@@ -157,8 +157,11 @@ implementation
 {$R *.dfm}
 
 procedure TMyForm.MakeEdit1;
+var
+  s: string;
 begin
   Edit1 := TOldEdit.Create(Self);
+  s := TOldEdit.ClassName;
 end;
 
 end.
@@ -259,6 +262,24 @@ Check 'shows TODO marker names TOldEdit.Create as the original' ($applyRaw -matc
 Check 'dry-run output has a Todos: block' ($applyRaw -match 'Todos:') "raw=$applyRaw"
 Check 'Todos block lists the verify-creator marker' ($applyRaw -match 'Todos:[\s\S]*verify creator for TNewEdit') "raw=$applyRaw"
 
+# I-1 regression: 's := TOldEdit.ClassName;' is a class-STATIC reference, not
+# a construction -- ClassName is not a constructor of TOldEdit. It must NOT be
+# misdetected as surface #5 (no false 'verify creator ... ClassName' TODO, and
+# it must not appear in Report.Todos as a creator entry). The type token on
+# that line MAY still be rewritten TOldEdit -> TNewEdit (that is the harmless,
+# correct type-conversion side effect) -- only the false-creator flagging is
+# asserted against here. Exact-count assertion (exactly 1 marker inside the
+# canonical 'Todos:' summary block -- the real TOldEdit.Create site only) is
+# the strongest signal -- a substring absence check alone would not catch a
+# false marker with different wording. (The dry-run edit-plan preview ALSO
+# echoes each TODO's insert text once, so the count is taken from the Todos:
+# block specifically, not the whole raw output, to avoid double-counting.)
+Check 'no false creator TODO for ClassName' (-not ($applyRaw -match [regex]::Escape('verify creator for TNewEdit (was TOldEdit.ClassName)'))) "raw=$applyRaw"
+$todosBlockMatch = [regex]::Match($applyRaw, 'Todos:([\s\S]*?)(\r?\n\r?\n|\z)')
+$todosBlock = if ($todosBlockMatch.Success) { $todosBlockMatch.Groups[1].Value } else { '' }
+$todoMarkerCount = ([regex]::Matches($todosBlock, [regex]::Escape('TODO: drag-lint convert -- verify creator'))).Count
+Check 'exactly 1 verify-creator TODO marker in Todos: block (Create only, not ClassName)' ($todoMarkerCount -eq 1) "count=$todoMarkerCount; block=$todosBlock"
+
 # Report: per-instance conversion line.
 Check 'report mentions Edit1 instance' ($applyRaw -match 'Edit1') "raw=$applyRaw"
 
@@ -310,6 +331,11 @@ Check 'MyForm.dfm converted: object Edit1: TNewEdit' ($p2DfmText -match 'object 
 Check 'MyForm.pas converted: creator site TNewEdit.Create' ($p2PasText -match [regex]::Escape('TNewEdit.Create(Self)')) "text=$p2PasText"
 Check 'MyForm.pas converted: creator site carries TODO marker' ($p2PasText -match [regex]::Escape('TODO') + '.*verify creator for TNewEdit') "text=$p2PasText"
 Check 'MyForm.dfm converted: Text = ''Hi''' ($p2DfmText -match "Text\s*=\s*'Hi'") "text=$p2DfmText"
+
+# I-1 regression on disk: the ClassName class-static reference line must NOT
+# carry a false verify-creator TODO after the real --apply write.
+$classNameLine = ($p2PasText -split "`r`n") | Where-Object { $_ -match 'ClassName' }
+Check 'on-disk: ClassName line has no verify-creator TODO' (-not ($classNameLine -match 'TODO.*verify creator')) "line=$classNameLine"
 
 # .BCK1 exist and equal the ORIGINAL bytes.
 $p2PasBck1 = $p2Pas + '.BCK1'

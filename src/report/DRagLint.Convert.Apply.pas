@@ -371,20 +371,69 @@ end;
 type
   TCreatorSite = record
     Line, Col, EndCol: Integer;
-    CtorName: string; // the identifier after '.', e.g. 'Create' -- '' if unparsable (still treated as a hit)
+    CtorName: string; // the identifier after '.', e.g. 'Create' -- always one of AKnownCtorNames on a match
   end;
 
+// Enumerates AClassName's own constructor names (skConstructor children, via
+// FindAllChildSymbols -- same lookup/filter ToTypeHasGenericCreate uses for
+// its Create-shape probe) for the surface #5 construction-shape check below.
+// Inherited constructors are NOT walked (no cheap "walk the base-class chain"
+// available here without a second symbol resolve per ancestor; the class's
+// OWN constructors plus the fallback below cover the near-totality of real
+// component/class construction sites this applier will see). When AClassName
+// resolves to an indexed skClass with zero indexed skConstructor children (or
+// does not resolve to a class at all), FALLS BACK to ['Create'] -- the
+// near-universal VCL/RTL constructor name -- rather than accepting an
+// unbounded set of identifiers; this is deliberately conservative (a real but
+// unusually-named sole constructor on an unindexed/under-indexed type would be
+// missed) because the alternative (matching '.' + ANY identifier) is exactly
+// the false-positive bug this function exists to prevent (I-1: 'TOldEdit.
+// ClassName' / 'TOldEdit.InheritsFrom(x)' misdetected as constructions).
+function GetConstructorNames(const AStore: ISymbolStore; const AClassName: string): TArray<string>;
+var
+  Cands   : TArray<TSymbol>;
+  ClassSym: TSymbol;
+  Found   : Boolean;
+  Kids    : TArray<TSymbol>;
+  K       : TSymbol;
+  List    : TList<string>;
+begin
+  Found:= False;
+  ClassSym:= Default(TSymbol);
+  Cands:= AStore.FindSymbolsByExactName(AClassName);
+  for var S in Cands do
+    if S.Kind = skClass then begin ClassSym:= S; Found:= True; Break; end;
+
+  Result:= ['Create']; { fallback: applies whenever the loop below adds nothing }
+  if not Found then Exit;
+
+  Kids:= AStore.FindAllChildSymbols(ClassSym.Id);
+  List:= TList<string>.Create;
+  try
+    for K in Kids do
+      if K.Kind = skConstructor then List.Add(K.Name);
+    if List.Count > 0 then Result:= List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
 // Given the whole-word span ending at AEndCol of AFromType on 1-based line
-// ALine of APasLines, checks whether it is immediately (module whitespace)
-// followed by '.' + an identifier -- i.e. a construction 'AFromType.Xxx('
-// rather than a plain type reference. Returns True + the constructor
-// identifier on a match.
+// ALine of APasLines, checks whether it is immediately (modulo whitespace)
+// followed by '.' + an identifier that NAMES ONE OF AKnownCtorNames
+// (case-insensitively) -- i.e. a real construction 'AFromType.Create(' rather
+// than a plain type reference OR a class-static reference like 'AFromType.
+// ClassName' / 'AFromType.InheritsFrom(x)' (I-1 fix: matching '.' + ANY
+// identifier misdetected those class-static reads as constructions). Returns
+// True + the constructor identifier on a match.
 function TryMatchConstructionShape(const APasLines: TStringList; ALine, AEndCol: Integer;
-  out ACtorName: string): Boolean;
+  const AKnownCtorNames: TArray<string>; out ACtorName: string): Boolean;
 var
   S: string;
   P: Integer;
   NameStart: Integer;
+  Name: string;
+  IsKnownCtor: Boolean;
 begin
   ACtorName:= '';
   if (ALine < 1) or (ALine > APasLines.Count) then Exit(False);
@@ -397,7 +446,14 @@ begin
   NameStart:= P;
   while (P <= Length(S)) and CharInSet(S[P], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(P);
   if P = NameStart then Exit(False); { '.' not followed by an identifier }
-  ACtorName:= Copy(S, NameStart, P - NameStart);
+  Name:= Copy(S, NameStart, P - NameStart);
+
+  IsKnownCtor:= False;
+  for var Ctor in AKnownCtorNames do
+    if SameText(Name, Ctor) then begin IsKnownCtor:= True; Break; end;
+  if not IsKnownCtor then Exit(False); { e.g. '.ClassName' / '.InheritsFrom' -- not a constructor }
+
+  ACtorName:= Name;
   Result:= True;
 end;
 
@@ -412,9 +468,11 @@ end;
 // needed (contrast LocateFieldTypeToken, which DOES need one because the field
 // symbol's span covers the whole declaration line, not just the type token).
 // A 'read' ref is confirmed as a CONSTRUCTION (vs. a plain type reference,
-// e.g. a type-test 'X is TOldEdit') by TryMatchConstructionShape: the token
-// immediately after AFromType (module whitespace) must be '.' + an identifier
-// (the constructor name) -- a bare type read has no trailing '.Xxx'.
+// e.g. a type-test 'X is TOldEdit', or a class-static reference like 'X is
+// TOldEdit.ClassName') by TryMatchConstructionShape: the token immediately
+// after AFromType (modulo whitespace) must be '.' + an identifier that names
+// one of AFromType's own indexed constructors (or 'Create', if AFromType has
+// none indexed) -- see GetConstructorNames.
 function FindConstructionSites(const AStore: ISymbolStore; AFileId: Int64;
   const APasLines: TStringList; const AFromType: string): TArray<TCreatorSite>;
 var
@@ -423,9 +481,11 @@ var
   List: TList<TCreatorSite>;
   Site: TCreatorSite;
   Ctor: string;
+  KnownCtorNames: TArray<string>;
 begin
   Result:= nil;
   if AFileId <= 0 then Exit;
+  KnownCtorNames:= GetConstructorNames(AStore, AFromType);
   Refs:= AStore.GetReferencesFromFile(AFileId);
   List:= TList<TCreatorSite>.Create;
   try
@@ -433,7 +493,7 @@ begin
     begin
       if not SameText(R.Kind, 'read') then Continue;
       if not SameText(R.NameText, AFromType) then Continue;
-      if not TryMatchConstructionShape(APasLines, R.StartLine, R.EndCol, Ctor) then Continue;
+      if not TryMatchConstructionShape(APasLines, R.StartLine, R.EndCol, KnownCtorNames, Ctor) then Continue;
       Site:= Default(TCreatorSite);
       Site.Line    := R.StartLine;
       Site.Col     := R.StartCol;
