@@ -5,6 +5,25 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+- **Ref-gap E: type-reference indexing (H4).** The reference index now captures
+  four type-USE shapes it previously missed, under `--deep`: (1) the class
+  qualifier on a method-IMPLEMENTATION header (`Widget.Use` -> the `Widget`);
+  (2) the PARAM and RETURN types on that impl header (`procedure Widget.Use(p:
+  Widget): Widget`); (3) local-var type annotations inside a method body
+  (`Local: Widget`); and (4) `is`/`as` type-test operands (`X is Widget`). All
+  emit the existing `kind='type_use'` ref, so the naming autofix (which finds
+  sites by name via a kind-agnostic query) rewrites them with no consumer
+  change. Each emit is tightly AST-gated (mirrors ref-gap D) -- verified no
+  over-capture (a `type_use` never lands on a variable/param name, and the
+  `is`/`as` gate never fires on arithmetic/comparison operators). **Effect:** a
+  `type-name-prefix` `--fix` rename (e.g. `Widget` -> `TWidget`) now rewrites
+  EVERY use site, so it no longer silently strands old-name references.
+- **Naming `--fix` warning narrowed.** Because ref-gaps D+E now cover every
+  type-reference site, the `--fix` stderr warning is **retired for
+  `type-name-prefix`**. It is **retained for `field-name-prefix`**, narrowed to
+  name the one remaining uncovered shape -- a bare field read used as an
+  expression operand (`Result := client + 1`), which is not yet indexed
+  (tracked as ref-gap F). `param-name-prefix` remains warning-free.
 - **`butterfly` chart verb (Track 5.3 slice, Batch H2).** A new CLI verb:
   `drag-lint butterfly --qname X [--depth N] [--format dot|mermaid|text|json]
   [--output F] --db PATH [--db ...]` composes a symbol's **callers (upward
