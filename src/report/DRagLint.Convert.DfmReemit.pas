@@ -39,10 +39,12 @@ type
   /// name. ClassName_ is populated only for dnkSubObject nodes that are nested
   /// `object`s (the DFM class after the ':'). ValueText is the RAW property value
   /// text as it appears in the DFM (verbatim, for round-trip fidelity) and is ''
-  /// for dnkSubObject/dnkCollection nodes. Children are owned (freed with this
-  /// node). A scalar/event has no children; a sub-object's children are its
-  /// properties + nested objects; a collection's children are `item` pseudo-nodes
-  /// (each an unnamed dnkSubObject whose children are the item's properties).</remarks>
+  /// ONLY for dnkSubObject nodes; dnkScalar/dnkEvent/dnkCollection/dnkBinary all
+  /// carry their verbatim value in ValueText. Children are owned (freed with this
+  /// node). A scalar/event/collection/binary node is a LEAF (no children); a
+  /// dnkCollection's/dnkBinary's whole `&lt; ... &gt;` / `{ ... }` text is stored
+  /// verbatim in ValueText, not modelled as child nodes. Only a dnkSubObject has
+  /// children: its properties + nested objects.</remarks>
   TDfmNode = class
   strict private
     FChildren: TObjectList<TDfmNode>;
@@ -327,12 +329,199 @@ begin
   end;
 end;
 
+// Ensure the dotted ToPath exists under ARoot, creating intermediate dnkSubObject
+// nodes for every segment but the last (each new intermediate recorded in
+// ACreated by its dotted prefix). The final segment becomes/updates a leaf node
+// of AKind with AValueText. Returns the leaf node.
+function PlaceAtPath(const ARoot: TDfmNode; const ADottedPath, AValueText: string;
+  AKind: TDfmNodeKind; var ACreated: TArray<string>): TDfmNode;
+var
+  Segs   : TArray<string>;
+  Cur    : TDfmNode;
+  Child  : TDfmNode;
+  i, j   : Integer;
+  Prefix : string;
+  Found  : Boolean;
+begin
+  Segs:= ADottedPath.Split(['.']);
+  Cur := ARoot;
+  Prefix:= '';
+  for i:= 0 to High(Segs) - 1 do // every segment EXCEPT the last -> sub-objects
+  begin
+    if Prefix = '' then Prefix:= Segs[i] else Prefix:= Prefix + '.' + Segs[i];
+    Found:= False;
+    for j:= 0 to Cur.Children.Count - 1 do
+      if SameText(Cur.Children[j].Name, Segs[i]) and
+         (Cur.Children[j].Kind = dnkSubObject) then
+      begin Cur:= Cur.Children[j]; Found:= True; Break; end;
+    if not Found then
+    begin
+      Child:= TDfmNode.Create;
+      Child.Name:= Segs[i];
+      Child.Kind:= dnkSubObject;
+      // A synthesized intermediate has no DFM class of its own (it is a sub-property
+      // object like Font/Style); emit as `object Name` with no class, which the
+      // DFM streamer accepts for owned TPersistent sub-properties. If a class is
+      // required by the T shape, 2a-ii/iii supply it; 2a-i notes the creation.
+      Cur.Children.Add(Child);
+      ACreated:= ACreated + [Prefix];
+      Cur:= Child;
+    end;
+  end;
+  // Final segment -> the leaf.
+  Found:= False;
+  for j:= 0 to Cur.Children.Count - 1 do
+    if SameText(Cur.Children[j].Name, Segs[High(Segs)]) then
+    begin Child:= Cur.Children[j]; Found:= True; Break; end;
+  if not Found then
+  begin
+    Child:= TDfmNode.Create;
+    Child.Name:= Segs[High(Segs)];
+    Cur.Children.Add(Child);
+  end;
+  Child.Kind     := AKind;
+  Child.ValueText:= AValueText;
+  Result:= Child;
+end;
+
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
   const AFromTree, AToTree: TPropTree): TReemitResult;
+var
+  FRoot, TRoot: TDfmNode;
+  R           : TConversionRule;
+  HaveConvert : Boolean;
+  ToType      : string;
+  Created     : TArray<string>;
+  Dropped     : TArray<string>;
+  Ignored     : TArray<string>;
+
+  // Find a #link whose FromPath equals AFromPath (a top-level F property name in
+  // 2a-i; deep F paths supported for completeness).
+  function FindLinkFor(const AFromPath: string; out AToPath: string): Boolean;
+  var Q: TConversionRule;
+  begin
+    Result:= False; AToPath:= '';
+    for Q in ARules.Rules do
+      if (Q.Kind = rkLink) and SameText(Q.FromPath, AFromPath) then
+      begin AToPath:= Q.ToPath; Exit(True); end;
+  end;
+
+  function IsIgnored(const AFromPath: string): Boolean;
+  var Q: TConversionRule;
+  begin
+    Result:= False;
+    for Q in ARules.Rules do
+      if (Q.Kind = rkIgnore) and SameText(Q.FromPath, AFromPath) then Exit(True);
+  end;
+
+  function IsRemoved(const APropName: string): Boolean;
+  var Q: TConversionRule;
+  begin
+    Result:= False;
+    for Q in ARules.Rules do
+      if (Q.Kind = rkRemove) and SameText(Q.PropName, APropName) then Exit(True);
+  end;
+
+  // NOTE (Controller decision 1): there is NO IsDefaultValued check. DFM only
+  // serializes NON-default values, so every property PRESENT in the F block is a
+  // developer-set value that MUST be carried. An unmapped present property with
+  // no rule is therefore a genuine potential loss -> Dropped (WARN), never a
+  // silent default-drop.
+  //
+  // DEFAULT-OVERLAY SEAM (Controller decision 2, Batch 2a-0 plugs in here): the
+  // F-default-vs-T-default divergence for properties ABSENT from the DFM is a
+  // known gap. When 2a-0 lands (indexer captures `default` specifiers), the
+  // caller will materialize F's absent-but-non-T-default properties and inject
+  // them as synthetic leaves BEFORE this loop -- RemapLeaf needs NO change then.
+  // 2a-i only sees what is in the DFM.
+
+  procedure RemapLeaf(const ALeaf: TDfmNode);
+  var ToPath: string;
+  begin
+    if IsRemoved(ALeaf.Name) then Exit; // #remove: ensure absent from T
+    if IsIgnored(ALeaf.Name) then
+    begin Ignored:= Ignored + [ALeaf.Name]; Exit; end;
+    if FindLinkFor(ALeaf.Name, ToPath) then
+    begin
+      if Trim(ToPath) = '???' then
+      begin Result.Report.Notes:= Result.Report.Notes + [Format('unfilled ToPath (???) for %s', [ALeaf.Name])]; Exit; end;
+      PlaceAtPath(TRoot, ToPath, ALeaf.ValueText, ALeaf.Kind, Created);
+      Exit;
+    end;
+    // UNMAPPED + present in the DFM == non-default -> genuine potential loss.
+    Dropped:= Dropped + [ALeaf.Name];
+  end;
+
+var
+  i: Integer;
+  Leaf: TDfmNode;
 begin
   Result:= Default(TReemitResult);
-  Result.Ok   := False;
-  Result.Error:= 'not implemented'; // implemented in Tasks 4-7
+  FRoot := nil; TRoot:= nil;
+  Created:= nil; Dropped:= nil; Ignored:= nil;
+
+  // 1. Require a #convert header.
+  HaveConvert:= False; ToType:= '';
+  for R in ARules.Rules do
+    if R.Kind = rkConvert then
+    begin HaveConvert:= True; ToType:= R.ToType; Break; end;
+  if not HaveConvert then
+  begin
+    Result.Ok:= False;
+    Result.Error:= 'no #convert F -> T header in the rule set';
+    Exit;
+  end;
+
+  // 2. Parse the F block.
+  if not ParseDfmBlock(AFromBlock, FRoot) then
+  begin
+    Result.Ok:= False;
+    Result.Error:= 'could not parse the F DFM object block';
+    Exit;
+  end;
+
+  try
+    // 3. Build the T root: same instance Name, swapped class.
+    TRoot:= TDfmNode.Create;
+    TRoot.Kind      := dnkSubObject;
+    TRoot.Name      := FRoot.Name;
+    TRoot.ClassName_:= ToType;
+
+    // 4. Per top-level F leaf, remap. (Nested owned parts/children -> Task 6.)
+    for i:= 0 to FRoot.Children.Count - 1 do
+    begin
+      Leaf:= FRoot.Children[i];
+      if Leaf.Kind = dnkSubObject then Continue // handled in Task 6
+      else RemapLeaf(Leaf);
+    end;
+
+    // 5. Apply #default (T-only props).
+    for R in ARules.Rules do
+      if R.Kind = rkDefault then
+      begin
+        if Trim(R.ToPath) = '???' then Continue;
+        PlaceAtPath(TRoot, R.ToPath, R.Value, dnkScalar, Created);
+      end;
+
+    // 6. Divergence-risk Note (Controller decision 4): when F and T are different
+    // types, a property absent from the F DFM (== F default) may adopt a DIFFERENT
+    // T default when re-emitted absent. 2a-i cannot resolve this (indexer has no
+    // default values -- Batch 2a-0); warn the user it MAY happen.
+    if (AFromTree.RootType <> '') and (AToTree.RootType <> '') and
+       (not SameText(AFromTree.RootType, AToTree.RootType)) then
+      Result.Report.Notes:= Result.Report.Notes +
+        [Format('property defaults may diverge between %s and %s -- values not present in the F DFM adopt the T default (verify; full default fidelity pending Batch 2a-0)',
+          [AFromTree.RootType, AToTree.RootType])];
+
+    Result.Report.Created:= Created;
+    Result.Report.Dropped:= Dropped;
+    Result.Report.Ignored:= Ignored;
+    Result.DfmText:= EmitBlock(TRoot, 0);
+    Result.Ok:= True;
+  finally
+    FRoot.Free;
+    TRoot.Free;
+  end;
 end;
 
 end.
