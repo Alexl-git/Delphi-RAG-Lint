@@ -87,6 +87,45 @@ type
     Error : string;
   end;
 
+  /// <summary>Outcome of CheckFreshness: whether the F and T types' indexed
+  /// source is safe to trust for this convert-apply run.</summary>
+  /// <remarks>Fresh=True only when BOTH the From and To types are indexed
+  /// (ResolveClassQName resolves a qualified name) AND their declaring
+  /// source files are up to date on disk (ISymbolStore.FileIsUpToDate,
+  /// comparing the CURRENT on-disk mtime+sha256 against what was indexed).
+  /// Fresh=False covers two distinct causes, both surfaced as human-readable
+  /// entries in Reasons: (a) "stale" -- the type IS indexed but its source
+  /// file has changed on disk since the last index run, so BuildPropTree
+  /// would be working from an outdated property tree; (b) "not indexed" --
+  /// ResolveClassQName returned '' for the type, so BuildPropTree would
+  /// silently get an EMPTY tree (no properties, no events) rather than an
+  /// error. Both are guard failures for the same reason: the conversion plan
+  /// would be built from a property tree that does not reflect the type's
+  /// real current shape.</remarks>
+  TFreshnessResult = record
+    Fresh  : Boolean;
+    Reasons: TArray<string>;
+  end;
+
+/// <summary>Verifies the F and T component types named by ARules' first
+/// #convert rule are both indexed and current before BuildApplyPlan trusts
+/// their property trees.</summary>
+/// <param name="AStore">The symbol index to check against.</param>
+/// <param name="ARules">The conversion rule set; the FromType/ToType of its
+/// first rkConvert rule are the two types checked.</param>
+/// <returns>A TFreshnessResult. Fresh=True when both types resolve to an
+/// indexed class AND their declaring files are up to date on disk. Fresh=
+/// False with one or more human-readable Reasons entries otherwise (see
+/// TFreshnessResult's remarks for the two distinct failure causes).</returns>
+/// <remarks>Pure read-only: computes the on-disk mtime (unix seconds) and
+/// sha256 of each type's declaring source file (mirroring DRagLint.Core.
+/// Indexer's own incremental-skip basis: raw bytes, ANSI-decoded for the
+/// sha) and asks the store whether that exact (mtime, sha) pair is what is
+/// indexed. A type with no #convert rule in ARules at all is treated as
+/// vacuously fresh (nothing to check) -- callers should have already
+/// validated ARules has at least one #convert rule before reaching here.</remarks>
+function CheckFreshness(const AStore: ISymbolStore; const ARules: TConversionRuleSet): TFreshnessResult;
+
 /// <summary>Builds the full convert-apply plan for one unit: locates the
 /// component instances to convert in ADfmPath (via FindConvertInstances),
 /// rewrites all five surfaces per ARules, and returns the combined edit set
@@ -150,7 +189,9 @@ implementation
 uses
   System.StrUtils,
   System.IOUtils,
-  System.Classes;
+  System.Classes,
+  System.Hash,
+  System.DateUtils;
 
 // True when AName appears (case-insensitively) in AOnly. Empty AOnly means
 // "no filter" -- everything passes.
@@ -313,6 +354,85 @@ begin
   Cands:= AStore.FindSymbolsByExactName(AClassName);
   for S in Cands do
     if S.Kind = skClass then Exit(S.QualifiedName);
+end;
+
+// Checks one class name's freshness: resolves it to an indexed skClass symbol
+// (via ResolveClassQName -> FindSymbolsByExactName, same lookup BuildApplyPlan's
+// TreeFor uses), then compares its declaring file's CURRENT on-disk mtime+sha256
+// against what the store has indexed (ISymbolStore.FileIsUpToDate). Appends a
+// human-readable reason to AReasons and returns False on either failure mode:
+// unresolved (not indexed at all) or resolved-but-stale.
+function CheckTypeFreshness(const AStore: ISymbolStore; const AClassName: string;
+  AReasons: TList<string>): Boolean;
+var
+  Cands  : TArray<TSymbol>;
+  S      : TSymbol;
+  Found  : Boolean;
+  ClassSym: TSymbol;
+  FilePath: string;
+  RawBytes: TBytes;
+  Sha    : string;
+  MtimeUnix: Int64;
+begin
+  Found:= False;
+  ClassSym:= Default(TSymbol);
+  Cands:= AStore.FindSymbolsByExactName(AClassName);
+  for S in Cands do
+    if S.Kind = skClass then begin ClassSym:= S; Found:= True; Break; end;
+
+  if not Found then
+  begin
+    AReasons.Add(Format('%s: not indexed (no skClass symbol found) -- reindex the unit declaring this type', [AClassName]));
+    Exit(False);
+  end;
+
+  FilePath:= AStore.GetFilePath(ClassSym.FileId);
+  if (FilePath = '') or (not TFile.Exists(FilePath)) then
+  begin
+    AReasons.Add(Format('%s: indexed declaring file not found on disk (%s) -- reindex', [AClassName, FilePath]));
+    Exit(False);
+  end;
+
+  RawBytes := TFile.ReadAllBytes(FilePath);
+  // Sha/Mtime basis mirrors DRagLint.Core.Indexer.IndexFile exactly (raw bytes,
+  // ANSI-decoded for the sha) so this check compares apples to apples against
+  // what FileIsUpToDate was given when the file was last indexed.
+  Sha      := THashSHA2.GetHashString(TEncoding.ANSI.GetString(RawBytes));
+  MtimeUnix:= DateTimeToUnix(TFile.GetLastWriteTime(FilePath), False);
+
+  if not AStore.FileIsUpToDate(FilePath, MtimeUnix, Sha) then
+  begin
+    AReasons.Add(Format('%s: index is stale for %s (file changed on disk since last index) -- reindex before converting', [AClassName, FilePath]));
+    Exit(False);
+  end;
+
+  Result:= True;
+end;
+
+function CheckFreshness(const AStore: ISymbolStore; const ARules: TConversionRuleSet): TFreshnessResult;
+var
+  R       : TConversionRule;
+  FromType, ToType: string;
+  Reasons : TList<string>;
+  FromOk, ToOk: Boolean;
+begin
+  Result:= Default(TFreshnessResult);
+  Result.Fresh:= True;
+
+  FromType:= ''; ToType:= '';
+  for R in ARules.Rules do
+    if R.Kind = rkConvert then begin FromType:= R.FromType; ToType:= R.ToType; Break; end;
+  if (FromType = '') and (ToType = '') then Exit; { nothing to check -- vacuously fresh }
+
+  Reasons:= TList<string>.Create;
+  try
+    FromOk:= (FromType = '') or CheckTypeFreshness(AStore, FromType, Reasons);
+    ToOk  := (ToType   = '') or CheckTypeFreshness(AStore, ToType  , Reasons);
+    Result.Fresh  := FromOk and ToOk;
+    Result.Reasons:= Reasons.ToArray;
+  finally
+    Reasons.Free;
+  end;
 end;
 
 // Locates AInstanceName's DFM object-block symbol (skForm for the DFM's root

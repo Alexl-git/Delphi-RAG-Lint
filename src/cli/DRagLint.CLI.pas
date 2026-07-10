@@ -110,6 +110,7 @@ uses
   , DRagLint.Convert   .Rules
   , DRagLint.Convert   .DfmReemit
   , DRagLint.Convert   .Apply
+  , DRagLint.Convert   .Backup
   ;
 
 type
@@ -10807,28 +10808,37 @@ begin
 end; // function
 
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
-/// [--only Name1,Name2,...] [--apply] -- Track 3 sub-project B, Task 2: locates the
-/// component instances to convert in the sibling .dfm and rewrites surface #1 (.pas
-/// declaration retype) + surface #2 (.pas uses-add). DRY-RUN ONLY in this task -- even
-/// when --apply is passed, no file is written; a note explains --apply is not yet wired
-/// (Task 4 adds the real write path via TTextEditApplier.Apply). --unit reuses GhostUnit
-/// (same --unit -> non-document-command routing as ghost-check; see ParseArgs) and
-/// --only reuses OnlySections (same comma-split TArray&lt;string&gt; already used by
-/// `index --all`).</summary>
+/// [--only Name1,Name2,...] [--apply] [--no-backup] -- Track 3 sub-project B: locates the
+/// component instances to convert in the sibling .dfm and rewrites all five surfaces
+/// (Tasks 2-3, plus surfaces #4-#5 once Task 6 lands). Without --apply this is DRY-RUN
+/// ONLY (RenderDryRun preview, writes nothing). With --apply (Task 4) it actually writes:
+/// a freshness guard runs first (CheckFreshness -- refuses on stale/unindexed F or T
+/// types), then each touched file is backed up to its next-free NAME.EXT.BCK&lt;n&gt;
+/// (DRagLint.Convert.Backup.BackupFiles) and a recovery.txt block is appended BEFORE the
+/// conversion write (WriteRecoveryRecord), then the edits are written
+/// (TTextEditApplier.Apply(..., AWriteBackups:=False) -- our own backup layer already
+/// backed up, so the applier must NOT also write its own .bak), then the converted .pas
+/// is stamped with a provenance comment (PrependConvertComment). --no-backup skips the
+/// backup/recovery/comment steps entirely (still converts). --unit reuses GhostUnit (same
+/// --unit -> non-document-command routing as ghost-check; see ParseArgs) and --only reuses
+/// OnlySections (same comma-split TArray&lt;string&gt; already used by `index --all`).</summary>
 /// <param name="AArgs">GhostUnit=--unit (the .pas file to convert); RulesFile=--rules;
-/// OnlySections=--only (comma-split instance-name allow-list); Apply=--apply (accepted
-/// but INERT this task -- see remarks); DbPath/DbPaths=index(es).</param>
-/// <returns>0 on a successful dry-run (Ok=True, even if some instances warned); 1 on a
-/// hard error (missing .dfm when rules need it, invalid rules, or BuildApplyPlan
-/// Ok=False); 2 on bad args (missing --unit/--rules, file not found, no readable db).</returns>
+/// OnlySections=--only (comma-split instance-name allow-list); Apply=--apply; NoBackup=
+/// --no-backup; DbPath/DbPaths=index(es).</param>
+/// <returns>0 on success (dry-run preview shown, or --apply wrote successfully); 1 on a
+/// hard error (missing .dfm when rules need it, invalid rules, BuildApplyPlan Ok=False, or
+/// --apply refused by the freshness guard); 2 on bad args (missing --unit/--rules, file not
+/// found, no readable db).</returns>
 /// <remarks>Resolves the sibling .dfm as the same base name + '.dfm' next to --unit;
 /// missing .dfm is a hard error (exit 1) since every #convert rule needs DFM instances to
 /// locate. Rules are read + parsed + validated (ValidateConversionRules) against the
 /// From/To property trees BEFORE BuildApplyPlan runs -- a rules error refuses (exit 1)
 /// rather than attempting a plan from a broken rule set. From/To trees are built the same
 /// first-DB-that-resolves-wins way as convert-validate/convert-scaffold/convert-reemit
-/// (TreeFor local fn, copied verbatim). Read-only against the store; writes NOTHING to
-/// disk in this task (TTextEditApplier.RenderDryRun only).</remarks>
+/// (TreeFor local fn, copied verbatim). The freshness guard (CheckFreshness) runs against
+/// the SAME Store used for BuildApplyPlan; on dry-run a stale/unindexed type only WARNS
+/// (the preview still renders), on --apply it REFUSES (exit 1) before any write is
+/// attempted.</remarks>
 function DoConvertApply(const AArgs: TArgs): Integer;
 var
   UnitPas   : string            ;
@@ -10851,6 +10861,12 @@ var
   LDb       : string            ;
   PlanRes   : TApplyResult      ;
   S         : string            ;
+  Freshness   : TFreshnessResult;
+  TouchedFiles: TList<string>   ;
+  TouchedSet  : TDictionary<string, Boolean>;
+  Ed          : TTextEdit       ;
+  Timestamp   : string          ;
+  Mappings    : TArray<string>  ;
 
   // Build the property tree for a type qname across the resolved DBs (first DB
   // that resolves it wins). Empty RootType if unresolved / no db. Mirrors
@@ -10937,17 +10953,84 @@ begin
   end;
   if not HaveStore then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
 
+  // Freshness guard (Task 4): before trusting the index-derived property
+  // trees, verify the F and T types are BOTH indexed and current. Covers two
+  // failure modes -- "stale" (indexed but the source file changed on disk
+  // since) and "not indexed at all" (ResolveClassQName-equivalent lookup
+  // fails, which would otherwise silently hand BuildPropTree an empty tree).
+  // dry-run: WARN and continue (so a user can still preview a plan while
+  // reindexing). --apply: REFUSE outright -- writing a conversion built from
+  // a stale/empty property tree could silently drop or mis-map properties.
+  Freshness:= CheckFreshness(Store, Rules);
+  if not Freshness.Fresh then
+  begin
+    if AArgs.Apply then
+    begin
+      Writeln('ERROR: freshness guard failed -- refusing to --apply:');
+      for S in Freshness.Reasons do Writeln('  ' + S);
+      Exit(1);
+    end
+    else
+    begin
+      Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
+      for S in Freshness.Reasons do Writeln('  ' + S);
+    end;
+  end;
+
   PlanRes:= BuildApplyPlan(Store, UnitPas, DfmPath, Rules, AArgs.OnlySections);
   if not PlanRes.Ok then
   begin Writeln('ERROR: ' + PlanRes.Error); Exit(1); end;
 
-  if AArgs.Apply then
-    Writeln('note: --apply not yet wired (Task 4); showing dry-run');
+  if not AArgs.Apply then
+  begin
+    // DRY-RUN: writes nothing.
+    Writeln(TTextEditApplier.RenderDryRun(PlanRes.Edits));
+    Writeln('');
+    Writeln(Format('convert-apply: %d instance(s) converted, %d edit(s) planned', [Length(PlanRes.Report.Converted), Length(PlanRes.Edits)]));
+    for S in PlanRes.Report.Converted do Writeln('  ' + S);
+    if Length(PlanRes.Report.Warnings) > 0 then
+    begin
+      Writeln('Warnings:');
+      for S in PlanRes.Report.Warnings do Writeln('  ' + S);
+    end;
+    Exit(0);
+  end;
 
-  // DRY-RUN ONLY this task -- writes nothing regardless of --apply.
-  Writeln(TTextEditApplier.RenderDryRun(PlanRes.Edits));
-  Writeln('');
-  Writeln(Format('convert-apply: %d instance(s) converted, %d edit(s) planned', [Length(PlanRes.Report.Converted), Length(PlanRes.Edits)]));
+  // -- --apply: actually write. --------------------------------------------
+  // 1. Collect the distinct touched file paths from the edit set.
+  TouchedFiles:= TList<string>.Create;
+  TouchedSet  := TDictionary<string, Boolean>.Create;
+  try
+    for Ed in PlanRes.Edits do
+      if not TouchedSet.ContainsKey(Ed.FilePath) then
+      begin TouchedSet.Add(Ed.FilePath, True); TouchedFiles.Add(Ed.FilePath); end;
+
+    Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
+
+    // 2. Backup + recovery record BEFORE any conversion write. Writing the
+    // recovery record first means a crash between here and the actual write
+    // still leaves a complete recovery map alongside the untouched .BCK files.
+    if not AArgs.NoBackup then
+    begin
+      BackupFiles(TouchedFiles.ToArray, Mappings);
+      WriteRecoveryRecord(ExtractFileDir(UnitPas), Timestamp, AArgs.RulesFile, Mappings);
+    end;
+
+    // 3. Perform the conversion write. AWriteBackups=False: our backup layer
+    // (step 2) already backed up every touched file -- letting the applier
+    // ALSO write its own .bak would double-backup.
+    TTextEditApplier.Apply(PlanRes.Edits, False);
+
+    // 4. Stamp the converted .pas with a provenance comment (skipped along
+    // with backups under --no-backup, per the brief: keep --no-backup simple).
+    if not AArgs.NoBackup then
+      PrependConvertComment(UnitPas, Timestamp, AArgs.RulesFile, Mappings);
+  finally
+    TouchedFiles.Free;
+    TouchedSet.Free;
+  end;
+
+  Writeln(Format('convert-apply: %d instance(s) converted, %d edit(s) applied', [Length(PlanRes.Report.Converted), Length(PlanRes.Edits)]));
   for S in PlanRes.Report.Converted do Writeln('  ' + S);
   if Length(PlanRes.Report.Warnings) > 0 then
   begin

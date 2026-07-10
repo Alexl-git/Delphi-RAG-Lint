@@ -188,6 +188,7 @@
         <DCCReference Include="..\report\DRagLint.Convert.Rules.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.DfmReemit.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.Apply.pas"/>
+        <DCCReference Include="..\report\DRagLint.Convert.Backup.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
