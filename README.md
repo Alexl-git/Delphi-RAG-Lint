@@ -251,16 +251,19 @@ shortest uses-path, and a library grouping; `--edges` gives the flat
 project-unit → external-unit list. A unit is "external" when it isn't indexed
 or resolves to a library path (RTL / installed packages).
 
-### Component conversion (foundation)
+### Component conversion
 
-Plan a component/type migration (`TDBEdit` -> `TcxDBEdit`, or any
+Plan AND APPLY a component/type migration (`TDBEdit` -> `TcxDBEdit`, or any
 `TPersistent`-rooted pair) from the REAL, AST-exact property trees of both types.
 `proptree` enumerates a type's deep property tree; `convert-scaffold`
-auto-drafts a validated reFind-superset rules file from both trees; and
+auto-drafts a validated reFind-superset rules file from both trees;
 `convert-validate` checks a rules file's paths against those trees -- catching
-typos that reFind's blind PCRE cannot. Full DSL reference and workflow:
-**[docs/CONVERSION-RULES.md](docs/CONVERSION-RULES.md)**. (Read-only foundation;
-**apply** -- rewriting `.pas` + `.dfm` -- is Batch 2, not yet shipped.)
+typos that reFind's blind PCRE cannot; and `convert-apply` rewrites the real
+`.pas` + `.dfm` files (dry-run by default, `--apply` to write for real, with
+automatic `.BCK<n>` backups + a `recovery.txt` unless `--no-backup`). The usual
+workflow: `convert-scaffold` -> `convert-validate` -> `convert-apply` (dry-run,
+review the plan) -> `convert-apply --apply`. Full DSL reference, the 5
+conversion surfaces, and the safety scheme: **[docs/CONVERSION-RULES.md](docs/CONVERSION-RULES.md)**.
 
 ### Consuming the index from another tool
 
@@ -378,7 +381,8 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `butterfly --qname X [--depth N] [--format dot\|mermaid\|text\|json]` | Composes a symbol's callers (upward wing) + callees (downward wing) into one chart -- static-export counterpart to the in-IDE butterfly tab (`--output <f>`, default format `dot`) |
 | `proptree --qname X [--depth N] [--no-to-persistent] [--format text\|json]` | Recursive deep-property enumerator: flattened dotted paths of a class's own + inherited properties, recursing into class-typed types down to `TPersistent` (depth cap 6; JSON schema `proptree/1`). Foundation for component conversion -- see [docs/CONVERSION-RULES.md](docs/CONVERSION-RULES.md) |
 | `convert-scaffold --from F --to T [--out <f>]` | Auto-generate a VALID reFind-superset conversion-rules file from the real F/T property trees: concrete `#link` where one source matches by leaf-name+type, `???` for ambiguities, `DROPPED` notes for orphaned source props |
-| `convert-validate --rules <f> [--from F] [--to T] [--print-parsed]` | Parse + validate a reFind-superset conversion-rules DSL; checks `#link`/`#default` paths against the real property trees (exit 0 valid / 1 errors / 2 bad args). NOTE: **apply** is Batch 2, not yet shipped |
+| `convert-validate --rules <f> [--from F] [--to T] [--print-parsed]` | Parse + validate a reFind-superset conversion-rules DSL; checks `#link`/`#default` paths against the real property trees (exit 0 valid / 1 errors / 2 bad args) |
+| `convert-apply --unit F.pas --rules <f> --db <db> [--only Name1,Name2,...] [--apply] [--no-backup]` | Rewrites all 5 conversion surfaces for the `.dfm` component instances matching a `#convert` rule: `.pas` declaration retype, `.pas` uses-add, `.dfm` object-block re-emit, `.pas` property/event access-site rewrite, and runtime-creator retype + `{ TODO: verify creator }` marker. Dry-run (preview, no writes) by default; `--apply` writes for real with `.BCK<n>` backups + a `recovery.txt` unless `--no-backup` |
 | `lsp [--db <db>]` | Start the LSP server (stdio) |
 | `serve [--db <db>]` | Start the MCP server (stdio) |
 | `info [--json]` | Engine self-info: version, build date, tree-sitter versions, capabilities (FTS5, CLI verb count), exe path, platform -- read-only, no DB. What the IDE Help>About box calls |

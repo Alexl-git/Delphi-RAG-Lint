@@ -5,10 +5,14 @@ component/type migration (for example `TDBEdit` -> `TcxDBEdit`, or any
 `TPersistent`-rooted class to another) from the REAL, AST-exact property trees of
 both types, and a small **reFind-superset** rule language to record the plan.
 
-This is Batch 1 -- the **read-only foundation**. Three new CLI verbs let you
-inspect the property trees, auto-draft a conversion-rules file from them, and
-validate that file's paths against the trees. **Applying** a validated rule set
-(rewriting `.pas` + `.dfm`) is **Batch 2 and is NOT yet shipped.**
+Batch 1 is the **read-only foundation**: three CLI verbs let you inspect the
+property trees, auto-draft a conversion-rules file from them, and validate that
+file's paths against the trees. Batch 2 (`convert-apply`) is **shipped**: it
+applies a validated rule set for real, rewriting `.pas` + `.dfm` on disk (dry-run
+by default, `--apply` to write, with automatic backups). See
+[Batch 2 (apply)](#batch-2-apply-shipped) below for the full workflow, the 5
+conversion surfaces, and what is still deferred (split/merge, the expression
+interpreter, full default-value fidelity).
 
 ## Why this exists (the thesis)
 
@@ -287,10 +291,11 @@ must exist in the `--from` tree (unless it is the `???` stub). That is exactly w
    Fix any `line N: ...` path errors it reports; a clean run prints `OK` and
    exits 0.
 
-## Batch 2 (apply): the DFM re-emit ENGINE exists; the user-facing applier does not
+## Batch 2 (apply): shipped
 
-Batch 1 is the read-only foundation: **enumerate, scaffold, validate.** It does
-NOT rewrite any source.
+Batch 1 is the read-only foundation: **enumerate, scaffold, validate.** Batch 2
+adds the user-facing **`convert-apply`** verb that rewrites the real `.pas` +
+`.dfm` files on disk from a validated rule set.
 
 **Batch 2a-i (shipped, headless):** the pure DFM component **re-emit engine** --
 `ReemitComponent` in `src/report/DRagLint.Convert.DfmReemit.pas`. Given one F
@@ -302,22 +307,85 @@ block plus a structured report (dropped / ignored / mismatched / created /
 ownedParts / notes). It is **pure** (no file I/O, no CLI, no IDE) and is exercised
 headlessly through a **hidden** `convert-reemit` test verb. This is more than
 GExperts does: GExperts converts the DFM only, one level deep, and cannot map
-events or moved-depth properties.
+events or moved-depth properties. `convert-apply` drives this engine for real,
+per located instance, as surface #3 below.
 
-**Still NOT shipped:** the user-facing **`convert-apply`** verb that rewrites real
-`.pas` (declaration type, uses, property/event accesses) and `.dfm` files on disk,
-plus the backup/recovery safety and rules library. Also deferred: split/merge (one
-F -> several T), the expression interpreter, and full default-value fidelity (see
-the note below). A validated rules file today is a checked, machine-readable plan;
-the on-disk applier that consumes it comes later.
+**Shipped -- the `convert-apply` verb.** The full workflow:
 
-**Enabling capability shipped -- ref-gap G (`member-access` indexing):** the
-applier's property/event-access rewrite (rename `Edit1.Caption` -> `Edit1.Text` at
-every use site of a converted instance) needs the index to know which MEMBER was
-accessed on which receiver. Ref-gap G adds a `kind='member-access'` reference for
-`obj.Member` on plain-identifier non-`Self` receivers (tightly gated to avoid
-flooding), which the applier queries -- scoped to the converted instance -- to find
-exactly those sites. This is surface #4 of the coming `convert-apply`.
+```
+drag-lint proptree --qname Unit.TOldEdit --db myapp.sqlite         # inspect F's tree
+drag-lint proptree --qname Unit.TNewEdit --db myapp.sqlite         # inspect T's tree
+drag-lint convert-scaffold --from Unit.TOldEdit --to Unit.TNewEdit \
+  --out rules.txt --db myapp.sqlite                                # draft the rules
+drag-lint convert-validate --rules rules.txt \
+  --from Unit.TOldEdit --to Unit.TNewEdit --db myapp.sqlite         # check the paths
+drag-lint convert-apply --unit MyForm.pas --rules rules.txt \
+  --db myapp.sqlite                                                 # DRY-RUN: preview
+drag-lint convert-apply --unit MyForm.pas --rules rules.txt \
+  --db myapp.sqlite --apply                                         # write for real
+```
+
+Without `--apply`, `convert-apply` is dry-run only: it prints the planned edits
+(`TTextEditApplier.RenderDryRun`) and writes nothing. `--apply` writes the edits
+for real. `--only Name1,Name2,...` restricts the run to specific `.dfm` instance
+names; `--db` may repeat for a multi-DB index.
+
+`convert-apply` locates every `.dfm` component instance whose class matches a
+`#convert FromType` rule, then rewrites all **5 conversion surfaces** for each:
+
+1. **`.pas` declaration retype** -- `Name: FromType;` -> `Name: ToType;` on the
+   instance's published field declaration.
+2. **`.pas` uses-add** -- adds ToType's declaring unit to the `.pas` `uses`
+   clause (once per distinct ToType), via `TFindUnitRefactoring.Build`.
+3. **`.dfm` object-block re-emit** -- the instance's whole `object Name: Class
+   ... end` block is replaced with the re-emitted T block from `ReemitComponent`
+   (Batch 2a-i), including moved-depth properties and event renames. A hard
+   re-emit failure skips the WHOLE instance (no partial conversion: its `.pas`
+   retype/uses edits are withheld too).
+4. **`.pas` property/event access-site rewrite** -- for each renaming `#link
+   ToMember <- FromMember` rule (single-segment paths only -- a moved-depth
+   `#link` like `Style.Active.Font.Size <- Font.Size` is `.dfm`-only, surface #3
+   above), every `Instance.FromMember` use site in the `.pas` file is rewritten
+   to `Instance.ToMember`. This is what makes the conversion actually **compile**:
+   the `.dfm` and the `.pas` end up agreeing on the same member name. Powered by
+   ref-gap G's `kind='member-access'` reference (`obj.Member` on a plain-identifier,
+   non-`Self` receiver), scoped to receivers that are converted instances of THIS
+   unit -- an access on an unconverted receiver (e.g. `Other.Caption` when `Other`
+   has no `#convert` rule) is left untouched.
+5. **Runtime-creator retype + TODO marker** -- every explicit `FromType.Xxx(...)`
+   construction (e.g. `Edit1 := TOldEdit.Create(Self);`) gets its type token
+   rewritten to ToType, PLUS an unconditional `{ TODO: drag-lint convert --
+   verify creator for ToType (was FromType.Xxx); ToType's ctor/init may differ }`
+   end-of-line comment -- constructor ARGUMENTS are never auto-fixed, so the
+   marker is the safety net a human checks by hand.
+
+**Safety (the `--apply` write path):** before writing anything, a **freshness
+guard** (`CheckFreshness`) verifies both the F and T types are indexed AND their
+declaring source files are up to date on disk (mtime+sha256 against what was
+indexed) -- refusing to build a plan from a stale property tree. Then, unless
+`--no-backup`:
+- a `recovery.txt` block (`[timestamp] convert-apply --rules ...`, naming every
+  original-file -> backup-file mapping) is written **before** the conversion
+  writes land, so a crash mid-write still leaves a recoverable trail;
+- each touched file is copied to `<file>.BCK<n>` (next-free `n` -- re-running
+  `convert-apply` never clobbers an earlier backup, `.BCK1` stays `.BCK1`);
+- the converted `.pas` file gets a `// drag-lint convert-apply` comment block
+  prepended, naming the backup file and the rules file used.
+
+`--no-backup` still converts the files but skips all three (no `.BCK<n>`, no
+`recovery.txt`, no in-file comment) -- use only when you have your own VCS/backup
+discipline.
+
+**Still deferred:** split/merge (one F -> several T), the expression interpreter,
+and full default-value fidelity (see the known gap below) -- these remain out of
+scope for the shipped applier.
+
+**Enabling capability shipped -- ref-gap G (`member-access` indexing):**
+`convert-apply`'s property/event-access rewrite (surface #4) needs the index to
+know which MEMBER was accessed on which receiver. Ref-gap G adds a
+`kind='member-access'` reference for `obj.Member` on plain-identifier non-`Self`
+receivers (tightly gated to avoid flooding), which the applier queries -- scoped
+to the converted instance -- to find exactly those sites.
 
 **Known gap -- property-default divergence:** a property ABSENT from the F DFM
 equals F's default (DFM omits defaults). If F's default differs from T's default,
@@ -327,8 +395,8 @@ specifiers -- a future **Batch 2a-0** (a supervised core-parser change).
 
 ## Tests
 
-The conversion-rules and re-emit engine are covered by these headless autotests
-(run each individually; there is no aggregating runner):
+The conversion-rules, re-emit engine, and applier are covered by these headless
+autotests (run each individually; there is no aggregating runner):
 
 - `tests/autotest/run_proptree.ps1` -- the `proptree` deep-property enumerator.
 - `tests/autotest/run_convert_rules.ps1` -- the DSL parser + `convert-validate`
@@ -338,6 +406,15 @@ The conversion-rules and re-emit engine are covered by these headless autotests
   hidden `convert-reemit` verb): 1:1 rename, moved-depth, events, `#ignore`,
   unmapped-drop, `#default`, collection relocate, binary same-type/mismatch,
   owned-part vs contained-child, and an identity round-trip.
+- `tests/autotest/run_member_access_refs.ps1` -- ref-gap G's `member-access`
+  reference indexing that surface #4 depends on.
+- `tests/autotest/run_convert_apply.ps1` -- the `convert-apply` verb end-to-end:
+  instance location, all 5 conversion surfaces (including a consolidated case
+  exercising every surface -- decl retype, uses-add, `.dfm` re-emit with a
+  moved-depth property and an event rename, property-access rewrite, and
+  creator retype/TODO -- in ONE `--apply` run), the freshness guard, dry-run vs
+  `--apply`, the `.BCK<n>`/`recovery.txt`/in-file-comment backup scheme, and
+  `--no-backup`.
 
 ## See also
 

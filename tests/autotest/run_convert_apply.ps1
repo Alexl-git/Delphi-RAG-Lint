@@ -7,21 +7,35 @@
   (CheckFreshness), the backup/recovery layer (DRagLint.Convert.Backup:
   NextBackupName/BackupFiles/WriteRecoveryRecord/PrependConvertComment), and
   wires them into `convert-apply --unit F.pas --rules R --db D [--only ...]
-  [--apply] [--no-backup]`. Task 6 (this revision) adds surface #4:
-  instance-scoped property/event ACCESS rewrite at .pas use sites, via
-  ref-gap G's 'member-access' refs (Edit1.Caption -> Edit1.Text) -- the
-  differentiator that makes a renamed-property conversion actually COMPILE.
+  [--apply] [--no-backup]`. Task 6 added surface #4: instance-scoped
+  property/event ACCESS rewrite at .pas use sites, via ref-gap G's
+  'member-access' refs (Edit1.Caption -> Edit1.Text) -- the differentiator
+  that makes a renamed-property conversion actually COMPILE. Task 7 (this
+  revision) adds the CONSOLIDATED end-to-end case: ALL 5 surfaces exercised
+  in ONE --apply run, PLUS a moved-depth nested property (Font.Size ->
+  Style.Active.Font.Size, .dfm-only -- surface #4 is deliberately
+  single-segment-only per BuildApplyPlan's own doc comment, so a moved-depth
+  path is exactly the surface-#3-only case a real conversion needs to prove)
+  and an event rename (OnClick -> OnClick2, .dfm-only, the same dnkEvent leaf
+  path DfmReemit already re-emits). This is the "real-life-shaped smoke":
+  the .dfm and the .pas must agree on the SAME renamed name, or the result
+  would not compile.
 
   FIXTURE (built by New-Fixture, so each phase gets a byte-identical FRESH
   copy in its own dir -- --apply mutates files, so the dry-run phase and each
   --apply phase must not share a directory):
-    OldEditUnit.pas  -- declares TOldEdit (published Caption: string), the F
-                         (from) type being converted away from.
-    NewEditUnit.pas  -- declares TNewEdit (published Text: string), the T
-                         (to) type being converted to. Both units are indexed
-                         so BuildPropTree / find-unit / the field-decl scan
-                         can all resolve real symbols (per the brief: "must
-                         be defined in indexable fixture units").
+    OldEditUnit.pas  -- declares TOldEdit (published Caption: string; Font:
+                         TFont2 class-typed sub-object with Size: Integer;
+                         OnClick: TNotifyEvent), the F (from) type being
+                         converted away from.
+    NewEditUnit.pas  -- declares TNewEdit (published Text: string; Style:
+                         TStyle2 -> Active: TActiveStyle -> Font: TFont2 with
+                         Size: Integer, a 3-deep moved-depth chain; OnClick2:
+                         TNotifyEvent), the T (to) type being converted to.
+                         Both units are indexed so BuildPropTree / find-unit /
+                         the field-decl scan can all resolve real symbols
+                         (per the brief: "must be defined in indexable
+                         fixture units").
     OtherUnit.pas    -- declares TSomethingElse (a plain, UNCONVERTED class
                          with its own Caption field) so 'Other.Caption' is a
                          real member-access on a receiver that is NOT a
@@ -37,16 +51,24 @@
                          -- must NOT be rewritten).
     MyForm.dfm       -- one component instance 'object Edit1: TOldEdit'
                          nested under 'object MyForm: TMyForm', carrying
-                         'Caption = ''Hi''' (Task 3: the property surface #3's
-                         #link Text <- Caption converts).
+                         'Caption = ''Hi''' (surface #3's #link Text <-
+                         Caption converts), a nested 'object Font: TFont2 /
+                         Size = 12 / end' sub-object (surface #3's moved-depth
+                         #link Style.Active.Font.Size <- Font.Size converts,
+                         re-nesting Size 3 levels deep under Style/Active/
+                         Font), and 'OnClick = MyForm1Click' (surface #3's
+                         event #link OnClick2 <- OnClick converts).
     rules.txt        -- '#convert TOldEdit -> TNewEdit, NewEditUnit' +
-                         '#link Text <- Caption'.
+                         '#link Text <- Caption' +
+                         '#link Style.Active.Font.Size <- Font.Size' +
+                         '#link OnClick2 <- OnClick'.
 
-  PHASE 1 ASSERTIONS (dry-run, NO --apply -- unchanged from Task 3, PLUS
-  Task 6's surface #4 assertions):
+  PHASE 1 ASSERTIONS (dry-run, NO --apply -- unchanged from Task 3/6, PLUS
+  Task 7's moved-depth/event assertions):
     - exits 0.
     - dry-run output shows the declaration retype, the uses-add, and the .dfm
-      re-emit preview (surfaces #1/#2/#3).
+      re-emit preview (surfaces #1/#2/#3), including the moved-depth Style/
+      Active/Font nesting and the re-emitted OnClick2 event line.
     - both Edit1.Caption access sites (write in MakeEdit1's 'Edit1.Caption :=
       ''x'';' and read in 'y := Edit1.Caption;') are rewritten to Edit1.Text;
       Report.AccessSites lists both. 'Other.Caption := ''z'';' is UNCHANGED
@@ -54,10 +76,16 @@
     - MyForm.pas AND MyForm.dfm are BYTE-UNCHANGED on disk after the dry-run
       (no write -- dry-run only prints TTextEditApplier.RenderDryRun).
 
-  PHASE 2 ASSERTIONS (--apply, fresh dir):
+  PHASE 2 ASSERTIONS (--apply, fresh dir) -- THE CONSOLIDATED END-TO-END CASE,
+  all 5 surfaces + safety in ONE --apply run:
     - exits 0.
     - MyForm.pas + MyForm.dfm are CONVERTED on disk (retype + uses + re-emit
-      present in the actual file content, not just a preview).
+      present in the actual file content, not just a preview): surface #1
+      (Edit1: TNewEdit), #2 (uses NewEditUnit), #3 (object Edit1: TNewEdit,
+      Text = 'Hi', the moved-depth Style/Active/Font/Size = 12 nesting, and
+      OnClick2 = MyForm1Click), #4 (Edit1.Text at both access sites, Other.
+      Caption left untouched), #5 (TNewEdit.Create(Self) + the verify-creator
+      TODO marker).
     - MyForm.pas.BCK1 + MyForm.dfm.BCK1 exist and equal the ORIGINAL bytes.
     - recovery.txt exists with a '[...] convert-apply --rules ...' block
       naming both mappings (structure-only assertion -- timestamp unpredictable).
@@ -122,11 +150,24 @@ uses
   Classes;
 
 type
+  TNotifyEvent = procedure(Sender: TObject) of object;
+
+  TFont2 = class(TPersistent)
+  private
+    FSize: Integer;
+  published
+    property Size: Integer read FSize write FSize;
+  end;
+
   TOldEdit = class(TComponent)
   private
     FCaption: string;
+    FFont: TFont2;
+    FOnClick: TNotifyEvent;
   published
     property Caption: string read FCaption write FCaption;
+    property Font: TFont2 read FFont write FFont;
+    property OnClick: TNotifyEvent read FOnClick write FOnClick;
   end;
 
 implementation
@@ -143,11 +184,38 @@ uses
   Classes;
 
 type
+  TNotifyEvent = procedure(Sender: TObject) of object;
+
+  TFont2 = class(TPersistent)
+  private
+    FSize: Integer;
+  published
+    property Size: Integer read FSize write FSize;
+  end;
+
+  TActiveStyle = class(TPersistent)
+  private
+    FFont: TFont2;
+  published
+    property Font: TFont2 read FFont write FFont;
+  end;
+
+  TStyle2 = class(TPersistent)
+  private
+    FActive: TActiveStyle;
+  published
+    property Active: TActiveStyle read FActive write FActive;
+  end;
+
   TNewEdit = class(TComponent)
   private
     FText: string;
+    FStyle: TStyle2;
+    FOnClick2: TNotifyEvent;
   published
     property Text: string read FText write FText;
+    property Style: TStyle2 read FStyle write FStyle;
+    property OnClick2: TNotifyEvent read FOnClick2 write FOnClick2;
   end;
 
 implementation
@@ -214,6 +282,10 @@ $MyFormDfm = @'
 object MyForm: TMyForm
   object Edit1: TOldEdit
     Caption = 'Hi'
+    OnClick = MyForm1Click
+    object Font: TFont2
+      Size = 12
+    end
   end
 end
 '@
@@ -221,6 +293,8 @@ end
 $RulesBody = @'
 #convert TOldEdit -> TNewEdit, NewEditUnit
 #link Text <- Caption
+#link Style.Active.Font.Size <- Font.Size
+#link OnClick2 <- OnClick
 '@
 
 function New-Fixture([string]$dir) {
@@ -284,14 +358,32 @@ Check 'shows MyForm.pas as the edited file' ($applyRaw -match [regex]::Escape('M
 Check 'shows uses-add of NewEditUnit' ($applyRaw -match 'NewEditUnit') "raw=$applyRaw"
 
 # Surface #3: .dfm object-block re-emit. RenderDryRun previews a delete-range
-# for the OLD block ('object Edit1: TOldEdit' + 'Caption = ''Hi''', 3 lines --
+# for the OLD block ('object Edit1: TOldEdit' .. its matching 'end', 7 lines
+# (header + Caption + OnClick + nested Font sub-object's 3 lines + end) --
 # it does not echo deleted content, only the line range) followed by an
 # insert-after carrying the re-emitted T block text ('object Edit1: TNewEdit'
 # + 'Text = ''Hi''', per #link Text <- Caption), against MyForm.dfm.
 Check 'shows MyForm.dfm as an edited file' ($applyRaw -match [regex]::Escape('MyForm.dfm')) "raw=$applyRaw"
-Check 'shows .dfm delete-lines preview for the old 3-line block' ($applyRaw -match 'delete lines 2\.\.4') "raw=$applyRaw"
+Check 'shows .dfm delete-lines preview for the old 7-line block' ($applyRaw -match 'delete lines 2\.\.8') "raw=$applyRaw"
 Check 'shows re-emitted .dfm header TNewEdit' ($applyRaw -match 'object Edit1: TNewEdit') "raw=$applyRaw"
 Check 'shows re-emitted Text = ''Hi''' ($applyRaw -match "Text\s*=\s*'Hi'") "raw=$applyRaw"
+
+# Surface #3 (moved-depth): '#link Style.Active.Font.Size <- Font.Size' must
+# re-nest the F-side 'object Font: TFont2 / Size = 12' sub-object 3 levels
+# deep under a newly-created Style/Active/Font chain in the re-emitted T
+# block (this is a .dfm-only surface -- BuildApplyPlan's own doc comment
+# marks surface #4's .pas access rewrite as single-segment-paths-only, so a
+# dotted #link path like this one is correctly OUT of surface #4's scope and
+# must show up here, on the .dfm side, instead).
+Check 'shows moved-depth nesting object Style' ($applyRaw -match 'object Style') "raw=$applyRaw"
+Check 'shows moved-depth nesting object Active' ($applyRaw -match 'object Active') "raw=$applyRaw"
+Check 'shows moved-depth nesting object Font' ($applyRaw -match 'object Font') "raw=$applyRaw"
+Check 'shows moved-depth Size = 12 preserved' ($applyRaw -match 'Size\s*=\s*12') "raw=$applyRaw"
+
+# Surface #3 (event): '#link OnClick2 <- OnClick' re-emits the event binding
+# under its new name, value unchanged (DfmReemit classifies "On*" + an
+# identifier_value as a dnkEvent leaf and remaps the LEAF NAME only).
+Check 'shows re-emitted event OnClick2 = MyForm1Click' ($applyRaw -match 'OnClick2\s*=\s*MyForm1Click') "raw=$applyRaw"
 
 # Surface #5: runtime-creator retype. The 'Edit1 := TOldEdit.Create(Self);'
 # construction site in TMyForm.MakeEdit1 must have its FromType token rewritten
@@ -404,6 +496,20 @@ Check 'MyForm.pas converted: Edit1.Caption read -> Edit1.Text' ($p2PasText -matc
 Check 'MyForm.pas converted: Other.Caption UNCHANGED (not a converted instance)' ($p2PasText -match [regex]::Escape('Other.Caption := ''z''')) "text=$p2PasText"
 Check 'MyForm.pas converted: no stray Other.Text (Other must not be rewritten)' (-not ($p2PasText -match [regex]::Escape('Other.Text'))) "text=$p2PasText"
 Check 'MyForm.dfm converted: Text = ''Hi''' ($p2DfmText -match "Text\s*=\s*'Hi'") "text=$p2DfmText"
+
+# Surface #3 (moved-depth) on disk: Font.Size is re-nested 3 levels deep under
+# Style/Active/Font in the WRITTEN .dfm, and the .pas is untouched by it
+# (moved-depth is .dfm-only, surface #4's access rewrite is single-segment
+# paths only -- see BuildApplyPlan's own doc comment).
+Check 'MyForm.dfm converted: moved-depth object Style' ($p2DfmText -match 'object Style') "text=$p2DfmText"
+Check 'MyForm.dfm converted: moved-depth object Active' ($p2DfmText -match 'object Active') "text=$p2DfmText"
+Check 'MyForm.dfm converted: moved-depth object Font' ($p2DfmText -match 'object Font') "text=$p2DfmText"
+Check 'MyForm.dfm converted: moved-depth Size = 12 preserved' ($p2DfmText -match 'Size\s*=\s*12') "text=$p2DfmText"
+
+# Surface #3 (event) on disk: OnClick -> OnClick2, value (the handler method
+# name MyForm1Click) carried across unchanged.
+Check 'MyForm.dfm converted: event OnClick2 = MyForm1Click' ($p2DfmText -match 'OnClick2\s*=\s*MyForm1Click') "text=$p2DfmText"
+Check 'MyForm.dfm converted: old event name OnClick gone (only OnClick2 remains)' (-not ($p2DfmText -match '(?<!2)OnClick\s*=')) "text=$p2DfmText"
 
 # I-1 regression on disk: the ClassName class-static reference line must NOT
 # carry a false verify-creator TODO after the real --apply write.

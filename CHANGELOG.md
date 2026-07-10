@@ -5,6 +5,23 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+- **`convert-apply`: the component-conversion applier is shipped.** The new
+  `convert-apply --unit F.pas --rules <file> --db PATH [--only Name1,...]
+  [--apply] [--no-backup]` verb rewrites all 5 conversion surfaces for every
+  `.dfm` component instance matching a `#convert` rule: (1) `.pas` declaration
+  retype, (2) `.pas` uses-add, (3) `.dfm` object-block re-emit (via the Batch
+  2a-i `ReemitComponent` engine, including moved-depth properties and event
+  renames), (4) `.pas` property/event access-site rewrite at every use of a
+  converted instance (via ref-gap G's `member-access` refs -- the piece that
+  makes the result actually compile), and (5) runtime-creator retype plus an
+  unconditional `{ TODO: verify creator }` marker. Dry-run (preview, no writes)
+  by default; `--apply` writes for real, guarded by a freshness check
+  (refuses to build a plan from a stale/unindexed F or T type) and, unless
+  `--no-backup`, protected by a `.BCK<n>` backup of every touched file, a
+  `recovery.txt` written BEFORE the writes land, and a `// drag-lint
+  convert-apply` comment prepended to the converted `.pas`. Still deferred:
+  split/merge, the expression interpreter, and full property-default fidelity
+  (see `docs/CONVERSION-RULES.md`).
 - **Ref-gap G: member-access indexing.** The reference index now captures
   property/field MEMBER access on typed receivers (`Edit1.Caption`) under a new
   `kind='member-access'` ref, emitted (under `--deep`) when the receiver is a
@@ -15,9 +32,9 @@ breaking changes** until v1.0.
   refs, and existing `read`/`write`/`type_use`/`call` counts were untouched (the
   distinct kind never pollutes them). This is a SUPERVISED core-parser change
   (the exact diff was reviewed and approved before it was applied), mirroring the
-  discipline of ref-gaps D and E. **Effect:** the coming component-conversion
-  `convert-apply` verb can find instance-scoped property/event access sites to
-  rewrite (`Edit1.Caption` -> `Edit1.Text`) -- surface #4 of the applier.
+  discipline of ref-gaps D and E. **Effect:** powers the `convert-apply` verb's
+  instance-scoped property/event access-site rewrite (`Edit1.Caption` ->
+  `Edit1.Text`) -- surface #4 of the applier (see above).
 
 ## v1.1.0-alpha
 
