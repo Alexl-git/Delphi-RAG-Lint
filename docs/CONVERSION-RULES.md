@@ -240,6 +240,7 @@ Real reFind sample lines (from the BDE2FD sample):
 | `#convert <From> -> <To> [, <unit> ...]` | declares the type-pair this block converts (groups the links; optional target uses-add) |
 | `#link <ToPath> <- <FromPath>` | deep property assignment. **Note the `<-` arrow** -- reversed vs `#migrate`'s `->`. Read it "target gets source." |
 | `#default <ToPath> = <value>` | set a target property to a default when no source maps to it |
+| `#ignore <FromPath>` | acknowledge an F property/event is intentionally NOT mapped -- suppresses its unmapped-non-default warning (other unmapped props still warn). Added in Batch 2a-i for the re-emit engine. |
 | `#note <text>` | a human comment carried in the rule (the scaffolder emits `candidates:` and `DROPPED` notes) |
 
 Example superset block:
@@ -286,13 +287,49 @@ must exist in the `--from` tree (unless it is the `???` stub). That is exactly w
    Fix any `line N: ...` path errors it reports; a clean run prints `OK` and
    exits 0.
 
-## Batch 2 (apply) is NOT yet shipped
+## Batch 2 (apply): the DFM re-emit ENGINE exists; the user-facing applier does not
 
 Batch 1 is the read-only foundation: **enumerate, scaffold, validate.** It does
-NOT rewrite any source. Actually applying a validated rule set -- rewriting the
-`.pas` uses/property assignments and the `.dfm` component blocks -- is **Batch 2**
-and has not shipped. A validated rules file today is a checked, machine-readable
-plan; the applier that consumes it comes later.
+NOT rewrite any source.
+
+**Batch 2a-i (shipped, headless):** the pure DFM component **re-emit engine** --
+`ReemitComponent` in `src/report/DRagLint.Convert.DfmReemit.pas`. Given one F
+component's DFM `object` block, a validated rule set, and the F/T property trees,
+it parses the block into an in-memory tree, remaps each leaf to its T path
+(including **moved-depth** -- `Font.Size` -> `Style.Active.Font.Size`, creating the
+intermediate T sub-objects -- and **events**), and re-serializes a well-formed T
+block plus a structured report (dropped / ignored / mismatched / created /
+ownedParts / notes). It is **pure** (no file I/O, no CLI, no IDE) and is exercised
+headlessly through a **hidden** `convert-reemit` test verb. This is more than
+GExperts does: GExperts converts the DFM only, one level deep, and cannot map
+events or moved-depth properties.
+
+**Still NOT shipped:** the user-facing **`convert-apply`** verb (Batch 2a-iii) that
+rewrites real `.pas` (declaration type, uses, property/event accesses -- Batch
+2a-ii) and `.dfm` files on disk, plus the revert stack and rules library. Also
+deferred: split/merge (one F -> several T), the expression interpreter, and full
+default-value fidelity (see the note below). A validated rules file today is a
+checked, machine-readable plan; the on-disk applier that consumes it comes later.
+
+**Known gap -- property-default divergence:** a property ABSENT from the F DFM
+equals F's default (DFM omits defaults). If F's default differs from T's default,
+re-emitting it as also-absent silently adopts T's default. The engine warns when
+F and T types differ, but full fidelity needs the index to capture `default`
+specifiers -- a future **Batch 2a-0** (a supervised core-parser change).
+
+## Tests
+
+The conversion-rules and re-emit engine are covered by these headless autotests
+(run each individually; there is no aggregating runner):
+
+- `tests/autotest/run_proptree.ps1` -- the `proptree` deep-property enumerator.
+- `tests/autotest/run_convert_rules.ps1` -- the DSL parser + `convert-validate`
+  (including the Batch 2a-i `#ignore` directive).
+- `tests/autotest/run_convert_scaffold.ps1` -- the `convert-scaffold` generator.
+- `tests/autotest/run_dfm_reemit.ps1` -- the Batch 2a-i DFM re-emit engine (via the
+  hidden `convert-reemit` verb): 1:1 rename, moved-depth, events, `#ignore`,
+  unmapped-drop, `#default`, collection relocate, binary same-type/mismatch,
+  owned-part vs contained-child, and an identity round-trip.
 
 ## See also
 
