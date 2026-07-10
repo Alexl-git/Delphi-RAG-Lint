@@ -1405,6 +1405,22 @@ begin
         var R:= ANode.ChildByField('rhs');
         if (not R.IsNull) and (R.NodeType = 'identifier') then AState.EmitRef('read', NodeText(R, AState.Source), R);
       end;
+      // Ref-gap G: capture the MEMBER of a NON-Self dotted access (obj.Member) as a
+      // 'member-access' ref, so the component-conversion applier can find instance-
+      // scoped property/event access sites to rewrite. Complement of ref-gap D's
+      // Self. gate: lhs must be a plain identifier and NOT Self (Self is D's 'read'),
+      // and rhs must be a plain identifier. Chained (a.b.Member), call (f().Member),
+      // and indexed (arr[i].Member) receivers are excluded -- each exprDot LEVEL with
+      // a plain-identifier lhs emits its own member-access via the recursion below;
+      // complex receivers are the future expression stage's problem. A DISTINCT kind
+      // ('member-access') keeps existing read/write/type_use consumers untouched.
+      if (not L.IsNull) and (L.NodeType = 'identifier')
+         and (not SameText(Trim(NodeText(L, AState.Source)), 'Self')) then
+      begin
+        var RG:= ANode.ChildByField('rhs');
+        if (not RG.IsNull) and (RG.NodeType = 'identifier') then
+          AState.EmitRef('member-access', NodeText(RG, AState.Source), RG);
+      end;
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;
     end;
