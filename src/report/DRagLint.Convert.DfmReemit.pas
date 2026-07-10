@@ -285,6 +285,48 @@ begin
   end;
 end;
 
+// Render a 2-space indent prefix.
+function Ind(ALevel: Integer): string;
+begin
+  Result:= StringOfChar(' ', ALevel * 2);
+end;
+
+// Re-serialize a TDfmNode sub-object tree to well-formed DFM text. Scalars/events
+// emit `Name = Value`; nested objects emit `object Name: TClass ... end`;
+// collections/binary values emit their verbatim ValueText (which already carries
+// the `< ... >` / `{ ... }` structure). Indentation normalized to 2 spaces.
+function EmitBlock(const ANode: TDfmNode; AIndent: Integer): string;
+var
+  SB   : TStringBuilder;
+  Child: TDfmNode;
+  Head : string;
+begin
+  SB:= TStringBuilder.Create;
+  try
+    // Header line for a sub-object.
+    if ANode.ClassName_ <> '' then
+      Head:= Format('object %s: %s', [ANode.Name, ANode.ClassName_])
+    else
+      Head:= Format('object %s', [ANode.Name]);
+    SB.Append(Ind(AIndent)).Append(Head).Append(#13#10);
+    for Child in ANode.Children do
+    begin
+      case Child.Kind of
+        dnkSubObject:
+          SB.Append(EmitBlock(Child, AIndent + 1));
+        dnkScalar, dnkEvent, dnkBinary, dnkCollection:
+          SB.Append(Ind(AIndent + 1))
+            .Append(Child.Name).Append(' = ').Append(Child.ValueText)
+            .Append(#13#10);
+      end;
+    end;
+    SB.Append(Ind(AIndent)).Append('end').Append(#13#10);
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
   const AFromTree, AToTree: TPropTree): TReemitResult;
 begin
