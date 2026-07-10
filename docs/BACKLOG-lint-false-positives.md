@@ -1,4 +1,60 @@
-# BACKLOG: lint false positives -- doc-drift on type decls, object-leak on VCL-owned components
+# BACKLOG: lint false positives
+
+---
+
+## FP #3 -- `string-equality-comparison` fires on NON-string `=` comparisons (OPEN, 2026-07-10)
+
+### Symptom
+On a real ORM3 file (`C:\Projects\DB\ORM3\CLIENT\GAGETEST.PAS`), the rule fires
+on two `=` comparisons where NEITHER operand is a string:
+- `:270` `if GagePort[DChan].BoxType = BoxType_MidwestFlex then` -- `BoxType` is an
+  ENUM property; `BoxType_MidwestFlex` an enum const.
+- `:295` `if Key = VK_F10 then` -- `Key` is a `var Key: Word` PARAM; `VK_F10` a
+  Winapi.Windows integer const.
+
+### Root cause (INVESTIGATED + confirmed with a controlled experiment)
+There are TWO code paths for this rule:
+1. The **type-aware built-in** (`DRagLint.Diagnostics.AstChecks.pas:~1863`) fires
+   only when `AStore <> nil` AND BOTH operands resolve to a string category
+   (`OperandIsString(L) and OperandIsString(R)`). This path is CORRECT -- with a
+   store that includes the library, it emits NOTHING on these lines.
+2. The **crude `.scm` regex rule** (`rules/string-equality-comparison.scm`) runs on
+   the **NO-STORE `lint` path** (which the IDE plugin uses). It is TYPE-BLIND: its
+   `#not-match?` guards only suppress when an operand is a bare numeric/nil/bool
+   literal, a non-alpha char/string literal, or an `.AsXxx`/`.State` accessor.
+   Named constants (`VK_F10`, `BoxType_MidwestFlex`) and member/indexed accesses
+   (`GagePort[DChan].BoxType`) match NONE of the guards -> every guard passes ->
+   the rule fires. The `.scm` comment itself says "Full type-aware detection runs
+   on the store path... this guards the no-store path."
+
+Controlled experiment (fixture `Key = VK_F10` / `B = Kind_Flex`, `uses Winapi.Windows`):
+- no-store `lint` -> 2 findings (the FP);
+- store-backed `check-ast --db <proj> --db library-Win32.sqlite` -> 0 findings.
+So the FP is EXCLUSIVELY the no-store `.scm` path; the type-aware path is right.
+
+### Relevant fact (user-flagged): `VK_F10` IS in the library index
+`drag-lint query --name VK_F10 --db C:\Projects\.drag-lint\library-Win32.sqlite`
+-> `const Winapi.Windows.VK_F10` (both Win32 + Win64). So the type-aware path CAN
+resolve it -- provided the consumer passes a store that INCLUDES the library.
+
+### Fix direction (NOT yet applied -- pending decision)
+- **Preferred:** make the no-store `lint`/plugin path resolve against a discoverable
+  store (auto-open `<projdir>\<proj>.sqlite` / the manifest DBs incl. the library)
+  so the precise type-aware rule supersedes the `.scm` -- mirror the `lint-all`
+  suppression at `CLI.pas:~7072-7078` (it already drops the `.scm`
+  string-equality finding when a store is present) into `DoLint` (`CLI.pas:~5255`).
+  The IDE plugin already has a project DB in most cases; ensure it's threaded in.
+- **Cheaper stop-gap:** invert the `.scm` from "fire unless a numeric/nil guard
+  matches" to "fire only when STRING evidence is present" (an alphabetic quoted
+  literal, or a `.AsString`/`.Text`/`.Caption`/`.Value` accessor). Trades recall
+  for precision on the no-store path; keeps the type-aware path authoritative.
+- Either way: add a regression test (`run_string_equality_fp.ps1`) with the
+  `Key = VK_F10` / enum-const shapes, asserting no finding both with a
+  library-inclusive store AND (after the fix) on the no-store path.
+
+---
+
+# (older) FP #1 + #2 -- doc-drift on type decls, object-leak on VCL-owned components
 
 Status: **BOTH FIXED 2026-07-08.**
 - FP #1 (doc-drift on class/interface type decls) fixed in commit `4ec233b`: `Analyze`'s

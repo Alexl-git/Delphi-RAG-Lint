@@ -446,6 +446,28 @@ begin
   if Assigned(ALinter) then
   begin
     Findings:= ALinter.LintFile(AFile);
+    { When a store is present, the precise type-aware built-in supersedes the
+      type-BLIND .scm 'string-equality-comparison' rule for the SAME concern.
+      The .scm regex fires on any non-literal '=' -- including `Key = VK_F10`
+      (Word vs an integer const) and `X.BoxType = kFlex` (enum vs enum const) --
+      because it cannot resolve a named-constant/enum/Word operand. Drop those
+      .scm findings and replace them with ONLY the string-equality findings from
+      CheckTypeAware, which flags a '=' solely when BOTH operands resolve to a
+      string type. ResolveTypeCategory classifies intrinsics (Word -> integer,
+      string -> tcString) DB-free, so no library DB is required for the common
+      case. We take ONLY the string-equality-comparison finding from
+      CheckTypeAware (not its full suite) so the LSP diagnostic set is otherwise
+      unchanged -- this is a targeted FP fix, not a new-rule rollout. Without a
+      store we keep the .scm finding (best effort). }
+    if AStore <> nil then
+    begin
+      var Rebuilt: TArray<TLintFinding>;
+      for var LF in Findings do
+        if not SameText(LF.RuleId, 'string-equality-comparison') then Rebuilt:= Rebuilt + [LF];
+      for var TF in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(AFile, AStore, AStore.FindFileIdByPath(AFile)) do
+        if SameText(TF.RuleId, 'string-equality-comparison') then Rebuilt:= Rebuilt + [TF];
+      Findings:= Rebuilt;
+    end;
     for F in Findings do
     begin
       if not Cfg.ShouldKeep(F.RuleId, False) then Continue; { config-disabled rule }
