@@ -242,8 +242,11 @@ type
     IncludeOnlyGlobs: TArray<string>; // --include-only <glob> (repeatable)
     UseIgnore       : Boolean       ; // --use-ignore
     NoSqlMS         : Boolean       ; // --no-sql-ms
-    // v0.45: index manifest (Task 7)
-    OnlySections: TArray<string>; // --only <Sec1,Sec2,...>  restrict sections to build
+    // v0.45: index manifest (Task 7). Track 3 sub-project B Task 2: convert-
+    // apply's --only (instance-name allow-list) ALSO reuses this field -- same
+    // comma-split parsing, just a different meaning per-command (documented at
+    // the call site).
+    OnlySections: TArray<string>; // --only <Sec1,Sec2,...>  restrict sections to build | convert-apply instance allow-list
     // v0.45: index manifest (Task 8)
     Jobs: Integer; // --jobs <n>  parallel worker processes (0 = manifest/auto)
     // v0.45: index manifest (Task 9) -- DB selection + size guard
@@ -258,8 +261,10 @@ type
     // (belt-and-suspenders alongside the BPL's kill-on-close job object).
     ParentPid: Cardinal; // --parent-pid <n>  (0 = not set)
     // v0.47: ghost-check -- compile the project with one unit's content replaced
-    // by an unsaved buffer, with a guaranteed restore.
-    GhostUnit  : string; // --unit <real .pas to overlay>
+    // by an unsaved buffer, with a guaranteed restore. Track 3 sub-project B
+    // Task 2: convert-apply's --unit (the .pas being converted) ALSO reuses
+    // this field (same non-document-command routing as ghost-check).
+    GhostUnit  : string; // --unit <real .pas to overlay | convert-apply target .pas>
     GhostBuffer: string; // --buffer <temp file holding the buffer>
     // AutoDocument (whole-unit batch): --unit <file.pas> for the `document`
     // command means "document every public decl in this unit". It shares the
@@ -415,6 +420,7 @@ begin
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props)');
+  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply]   (DRY-RUN ONLY for now: locates .dfm component instances matching a #convert rule and previews the .pas declaration retype + uses-add; --apply is accepted but not yet wired -- always dry-run, writes nothing)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -10800,6 +10806,158 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
+/// [--only Name1,Name2,...] [--apply] -- Track 3 sub-project B, Task 2: locates the
+/// component instances to convert in the sibling .dfm and rewrites surface #1 (.pas
+/// declaration retype) + surface #2 (.pas uses-add). DRY-RUN ONLY in this task -- even
+/// when --apply is passed, no file is written; a note explains --apply is not yet wired
+/// (Task 4 adds the real write path via TTextEditApplier.Apply). --unit reuses GhostUnit
+/// (same --unit -> non-document-command routing as ghost-check; see ParseArgs) and
+/// --only reuses OnlySections (same comma-split TArray&lt;string&gt; already used by
+/// `index --all`).</summary>
+/// <param name="AArgs">GhostUnit=--unit (the .pas file to convert); RulesFile=--rules;
+/// OnlySections=--only (comma-split instance-name allow-list); Apply=--apply (accepted
+/// but INERT this task -- see remarks); DbPath/DbPaths=index(es).</param>
+/// <returns>0 on a successful dry-run (Ok=True, even if some instances warned); 1 on a
+/// hard error (missing .dfm when rules need it, invalid rules, or BuildApplyPlan
+/// Ok=False); 2 on bad args (missing --unit/--rules, file not found, no readable db).</returns>
+/// <remarks>Resolves the sibling .dfm as the same base name + '.dfm' next to --unit;
+/// missing .dfm is a hard error (exit 1) since every #convert rule needs DFM instances to
+/// locate. Rules are read + parsed + validated (ValidateConversionRules) against the
+/// From/To property trees BEFORE BuildApplyPlan runs -- a rules error refuses (exit 1)
+/// rather than attempting a plan from a broken rule set. From/To trees are built the same
+/// first-DB-that-resolves-wins way as convert-validate/convert-scaffold/convert-reemit
+/// (TreeFor local fn, copied verbatim). Read-only against the store; writes NOTHING to
+/// disk in this task (TTextEditApplier.RenderDryRun only).</remarks>
+function DoConvertApply(const AArgs: TArgs): Integer;
+var
+  UnitPas   : string            ;
+  DfmPath   : string            ;
+  RulesText : string            ;
+  Rules     : TConversionRuleSet;
+  RuleErrors: TArray<TRuleError>;
+  RE        : TRuleError        ;
+  FromType  : string            ;
+  ToType    : string            ;
+  R         : TConversionRule   ;
+  FromTree  : TPropTree         ;
+  ToTree    : TPropTree         ;
+  Opts      : TPropTreeOptions  ;
+  Depth     : Integer           ;
+  Dbs       : TArray<string>    ;
+  Store     : ISymbolStore      ;
+  HaveStore : Boolean           ;
+  RoOk      : Boolean           ;
+  LDb       : string            ;
+  PlanRes   : TApplyResult      ;
+  S         : string            ;
+
+  // Build the property tree for a type qname across the resolved DBs (first DB
+  // that resolves it wins). Empty RootType if unresolved / no db. Mirrors
+  // DoConvertValidate's TreeFor exactly.
+  function TreeFor(const AQName: string): TPropTree;
+  var
+    Cand: TPropTree;
+    LDb2: string   ;
+  begin
+    Result:= Default(TPropTree);
+    if AQName = '' then Exit;
+    for LDb2 in Dbs do
+    begin
+      if not TFile.Exists(LDb2) then Continue;
+      var RoOk2: Boolean;
+      var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb2, RoOk2);
+      if not RoOk2 then Continue;
+      Cand:= BuildPropTree(CandStore, AQName, Opts);
+      if Cand.RootType <> '' then Exit(Cand);
+    end;
+  end;
+
+begin
+  if (AArgs.GhostUnit = '') or (AArgs.RulesFile = '') then
+  begin
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply]');
+    Exit(2);
+  end;
+  UnitPas:= AArgs.GhostUnit;
+  if not TFile.Exists(UnitPas) then
+  begin Writeln(Format('ERROR: unit not found: %s', [UnitPas])); Exit(2); end;
+  if not TFile.Exists(AArgs.RulesFile) then
+  begin Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile])); Exit(2); end;
+
+  // Sibling .dfm: same base name + '.dfm', same folder as --unit.
+  DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
+  if not TFile.Exists(DfmPath) then
+  begin Writeln(Format('ERROR: sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath])); Exit(1); end;
+
+  try
+    RulesText:= TFile.ReadAllText(AArgs.RulesFile);
+  except
+    on Ex: Exception do
+    begin Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message])); Exit(2); end;
+  end;
+  Rules:= ParseConversionRules(RulesText);
+
+  Dbs:= ResolveConsumerDbs(AArgs);
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+
+  Depth:= AArgs.Depth;
+  if Depth <= 0 then Depth:= 6;
+  Opts.Depth       := Depth;
+  Opts.ToPersistent:= AArgs.ToPersistent;
+
+  // Every #convert rule's FromType/ToType gets its property tree built so
+  // ValidateConversionRules can check #link/#default paths -- same as
+  // convert-validate, just driven from the rules file's own #convert headers
+  // rather than --from/--to (convert-apply has neither).
+  FromType:= ''; ToType:= '';
+  for R in Rules.Rules do
+    if R.Kind = rkConvert then begin FromType:= R.FromType; ToType:= R.ToType; Break; end;
+  FromTree:= TreeFor(FromType);
+  ToTree  := TreeFor(ToType);
+
+  RuleErrors:= ValidateConversionRules(Rules, FromTree, ToTree);
+  if Length(RuleErrors) > 0 then
+  begin
+    Writeln('ERROR: conversion rules failed validation:');
+    for RE in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
+    Exit(1);
+  end;
+
+  // Open the store (first readable --db) for BuildApplyPlan's field-decl +
+  // find-unit lookups. Mirrors DoConvertReemit / DoConvertValidate's pattern.
+  HaveStore:= False;
+  for LDb in Dbs do
+  begin
+    if not TFile.Exists(LDb) then Continue;
+    Store:= OpenReadOnlyStore(LDb, RoOk);
+    if not RoOk then Continue;
+    HaveStore:= True;
+    Break;
+  end;
+  if not HaveStore then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+
+  PlanRes:= BuildApplyPlan(Store, UnitPas, DfmPath, Rules, AArgs.OnlySections);
+  if not PlanRes.Ok then
+  begin Writeln('ERROR: ' + PlanRes.Error); Exit(1); end;
+
+  if AArgs.Apply then
+    Writeln('note: --apply not yet wired (Task 4); showing dry-run');
+
+  // DRY-RUN ONLY this task -- writes nothing regardless of --apply.
+  Writeln(TTextEditApplier.RenderDryRun(PlanRes.Edits));
+  Writeln('');
+  Writeln(Format('convert-apply: %d instance(s) converted, %d edit(s) planned', [Length(PlanRes.Report.Converted), Length(PlanRes.Edits)]));
+  for S in PlanRes.Report.Converted do Writeln('  ' + S);
+  if Length(PlanRes.Report.Warnings) > 0 then
+  begin
+    Writeln('Warnings:');
+    for S in PlanRes.Report.Warnings do Writeln('  ' + S);
+  end;
+
+  Result:= 0;
+end; // function
+
 /// <summary>drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N]
 /// [--format text|json|dot|mermaid] [--json] --db PATH ... -- the N-deep call tree rooted
 /// at X, with call sites (unit:line) and cycle markers. --direction callers (default,
@@ -12534,6 +12692,7 @@ begin
     else if Args.Command = 'convert-validate'  then Result:= DoConvertValidate (Args)
     else if Args.Command = 'convert-scaffold'  then Result:= DoConvertScaffold (Args)
     else if Args.Command = 'convert-reemit'    then Result:= DoConvertReemit   (Args)
+    else if Args.Command = 'convert-apply'     then Result:= DoConvertApply    (Args)
     else if Args.Command = 'butterfly'         then Result:= DoButterfly       (Args)
     else if Args.Command = 'purge-locals'      then Result:= DoPurgeLocals     (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
