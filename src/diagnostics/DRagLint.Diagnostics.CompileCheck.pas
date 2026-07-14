@@ -34,14 +34,20 @@ type
     public
       /// <summary>Compiles ATarget and returns the parsed compiler findings.</summary>
       /// <param name="ATarget">A .dproj (compiled via msbuild) or a .pas/.dpr/.dpk (via dcc64).</param>
+      /// <param name="AFullBuild">When True, forces a full rebuild (msbuild /t:Build;
+      /// dcc64 with -B) instead of the default incremental compile, so DCC re-emits
+      /// hints/warnings for already-up-to-date units too. Defaults to False.</param>
       /// <param name="AMsbuildPath">Optional explicit msbuild path; '' uses PATH.</param>
       /// <param name="ARsvarsPath">Optional explicit rsvars.bat; '' uses the default.</param>
       /// <returns>Findings, raw stdout, and the compiler exit code.</returns>
-      /// <remarks>Runs an INCREMENTAL compile (msbuild /t:Make; dcc64 without -B):
-      /// only changed units and their dependents are recompiled, so it is fast on
-      /// large projects. Units that fail to compile lack a valid DCU and are always
-      /// re-checked, so current errors are never skipped. Not thread-safe.</remarks>
-      class function Run(const ATarget: string; const AMsbuildPath: string = ''; const ARsvarsPath: string = ''): TCompileCheckResult;
+      /// <remarks>By default runs an INCREMENTAL compile (msbuild /t:Make; dcc64
+      /// without -B): only changed units and their dependents are recompiled, so it
+      /// is fast on large projects. Units that fail to compile lack a valid DCU and
+      /// are always re-checked, so current errors are never skipped. Pass
+      /// AFullBuild=True to force msbuild /t:Build (or dcc64 -B), recompiling every
+      /// unit so findings are reported even for units DCC would otherwise skip as
+      /// already up to date. Not thread-safe.</remarks>
+      class function Run(const ATarget: string; const AFullBuild: Boolean = False; const AMsbuildPath: string = ''; const ARsvarsPath: string = ''): TCompileCheckResult;
       /// <summary>Runs an arbitrary, already-shell-wrapped compiler command line
       /// (a cmd.exe invocation that calls rsvars then dcc and merges stderr) and
       /// parses its findings.</summary>
@@ -200,7 +206,7 @@ begin
   end;
 end; // function
 
-class function TCompileChecker.Run(const ATarget: string; const AMsbuildPath: string = ''; const ARsvarsPath: string = ''): TCompileCheckResult;
+class function TCompileChecker.Run(const ATarget: string; const AFullBuild: Boolean = False; const AMsbuildPath: string = ''; const ARsvarsPath: string = ''): TCompileCheckResult;
 var
   RsVars   : string                 ;
   Cmd      : string                 ;
@@ -218,17 +224,38 @@ begin
   Ext:= LowerCase(ExtractFileExt(ATarget));
   if Ext = '.dproj' then
   begin
-    { Incremental Compile (/t:Make), NOT a full Build (/t:Build): Make only
-      recompiles changed units + their dependents, reusing existing DCUs --
-      seconds vs minutes on a large project. A unit that fails to compile has no
-      valid DCU, so Make always re-checks it; current errors are never missed. }
-    if AMsbuildPath <> '' then Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /nologo"', [RsVars, AMsbuildPath, ATarget])
-    else Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Make /nologo"', [RsVars, ATarget]);
+    if AFullBuild then
+    begin
+      { Full Build (/t:Build): recompiles EVERY unit regardless of DCU freshness,
+        so DCC re-emits hints/warnings for already-up-to-date units too. Slower
+        than Make on a large project; used by refresh-findings to keep
+        compiler_findings complete rather than just delta-updated. }
+      if AMsbuildPath <> '' then Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /nologo"', [RsVars, AMsbuildPath, ATarget])
+      else Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Build /nologo"', [RsVars, ATarget]);
+    end
+    else
+    begin
+      { Incremental Compile (/t:Make), NOT a full Build (/t:Build): Make only
+        recompiles changed units + their dependents, reusing existing DCUs --
+        seconds vs minutes on a large project. A unit that fails to compile has no
+        valid DCU, so Make always re-checks it; current errors are never missed. }
+      if AMsbuildPath <> '' then Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /nologo"', [RsVars, AMsbuildPath, ATarget])
+      else Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Make /nologo"', [RsVars, ATarget]);
+    end;
   end
   else
   begin
-    { -Q quiet, no -B: incremental compile (reuse DCUs), not build-all-units. }
-    Cmd:= Format('cmd.exe /c "call "%s" && dcc64 -Q "%s" 2>&1"', [RsVars, ATarget]);
+    if AFullBuild then
+    begin
+      { -B: full build, recompiling every unit so DCC re-emits hints even for
+        units it would otherwise treat as already up to date. }
+      Cmd:= Format('cmd.exe /c "call "%s" && dcc64 -B -Q "%s" 2>&1"', [RsVars, ATarget]);
+    end
+    else
+    begin
+      { -Q quiet, no -B: incremental compile (reuse DCUs), not build-all-units. }
+      Cmd:= Format('cmd.exe /c "call "%s" && dcc64 -Q "%s" 2>&1"', [RsVars, ATarget]);
+    end;
   end;
 
   Result.ExitCode:= SpawnAndCapture(Cmd, RawOutput);

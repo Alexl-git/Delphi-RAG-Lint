@@ -894,7 +894,7 @@ begin
       if Args.GetValue('msbuild_path') <> nil then CCMsbuild:= Args.GetValue('msbuild_path').Value;
 
       // Run the compiler / msbuild.
-      var CCResult:= TCompileChecker.Run(CCTarget, CCMsbuild);
+      var CCResult:= TCompileChecker.Run(CCTarget, {AFullBuild=}False, CCMsbuild);
 
       // If a db was specified, also persist the findings.
       var CCStore:= ResolveStore(Args);
