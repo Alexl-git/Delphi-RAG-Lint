@@ -143,6 +143,7 @@ implementation
 uses
   System.Generics.Collections
   , System.IOUtils
+  , System.StrUtils
   , System.UITypes
   , Vcl.Forms
   , Vcl.Clipbrd
@@ -1699,6 +1700,42 @@ begin
   RunCompileDiagnoseAsync(AProjFile, False);
 end;
 
+{ Task 6 (fresh compiler findings): fire-and-forget spawn of the
+  refresh-findings CLI verb, which recompiles STALE units (or ALL units when
+  AFull) and refreshes the persistent compiler_findings table in the project
+  DB (freshness-tracked via files.last_compiled_unix). This is a SEPARATE,
+  non-blocking spawn ADDED ALONGSIDE the existing compile-check path above --
+  it does not replace it. compile-check publishes findings to the live
+  Diagnostics pane for the CURRENT save; refresh-findings keeps the on-disk
+  DB fresh (including clean units) for any tool/query that reads
+  compiler_findings later. Uses the same detached CreateProcessW pattern as
+  InvokeLintBuffer (no wait, no captured output -- unlike RunAndCaptureStdout,
+  which blocks). Silently no-ops if no project/db is resolvable. }
+procedure SpawnRefreshFindings(const AProj, ADb: string; AFull: Boolean);
+var
+  ExePath : string             ;
+  CmdLine : string             ;
+  CmdLineW: array of WideChar  ;
+  SI      : TStartupInfoW      ;
+  PI      : TProcessInformation;
+begin
+  if (AProj = '') or (ADb = '') then Exit;
+  ExePath:= DLExe64;
+
+  FillChar(SI, SizeOf(SI), 0);
+  SI.cb:= SizeOf(SI);
+  FillChar(PI, SizeOf(PI), 0);
+  CmdLine:= Format('"%s" refresh-findings --project "%s" --db "%s"%s',
+    [ExePath, AProj, ADb, IfThen(AFull, ' --full', '')]);
+  SetLength(CmdLineW, Length(CmdLine) + 1);
+  Move(PChar(CmdLine)^, CmdLineW[0], (Length(CmdLine) + 1) * SizeOf(WideChar));
+  if CreateProcessW(nil, @CmdLineW[0], nil, nil, False, CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
+  begin
+    CloseHandle(PI.hProcess);
+    CloseHandle(PI.hThread );
+  end;
+end; // procedure
+
 { v0.47: assigned to the SaveNotifier's compile hook. After a .pas is saved and
   AutoCompileOnSave is on, run a SILENT async compile of the active project so
   compiler errors (E2003 etc.) appear in the pane a few seconds later -- without
@@ -1707,6 +1744,30 @@ procedure TriggerCompileOnSave(const AFile: string);
 begin
   if not SameText(ExtractFileExt(AFile), '.pas') then Exit;
   RunCompileDiagnoseAsync(GetActiveProjectFile, False);
+  { Task 6: ADD-alongside spawn -- keeps the persistent compiler_findings DB
+    fresh on every save, independent of (and in addition to) the pane-publish
+    compile-check above. Fire-and-forget; does not block the save. }
+  SpawnRefreshFindings(GetActiveProjectFile, GetActiveProjectDb, False);
+end;
+
+{ Task 6: menu handler for "Full Compile Sweep" -- forces a full rebuild of
+  ALL units (not just stale ones) so compiler_findings is refreshed even for
+  units nothing has touched. Mirrors InvokeCompileDiagnose's no-project guard. }
+procedure InvokeFullCompileSweep(Sender: TObject);
+var
+  ProjFile: string;
+  ProjDb  : string;
+begin
+  ProjFile:= GetActiveProjectFile;
+  ProjDb  := GetActiveProjectDb;
+  if (ProjFile = '') or (ProjDb = '') then
+  begin
+    ShowMessage('drag-lint Full Compile Sweep: no active project found.');
+    Exit;
+  end;
+  SpawnRefreshFindings(ProjFile, ProjDb, True);
+  ShowMessage('drag-lint: Full Compile Sweep started in the background -- '
+    + 'compiler_findings will refresh for all units once it completes.');
 end;
 
 { v0.47: read the active editor's UNSAVED buffer (in-memory text) + its file path
@@ -4056,6 +4117,9 @@ begin
   AddWrappedItem(RootMenu, 'Compile && Diagnose'            , InvokeCompileDiagnose);
   AddWrappedItem(RootMenu, 'Compile Buffer (unsaved)'       , InvokeGhostCheck     );
   AddWrappedItem(RootMenu, 'Recover Buffer-Compile Files'   , InvokeGhostRecover   );
+  { Task 6: on-demand full refresh of the persistent compiler_findings table --
+    recompiles ALL units (not just stale ones) via refresh-findings --full. }
+  AddWrappedItem(RootMenu, 'Full Compile Sweep'             , InvokeFullCompileSweep);
   AddWrappedItem(RootMenu, 'Import Build Log...'            , InvokeImportLog      );
   AddWrappedItem(RootMenu, 'Open Plugin Log'                , InvokeOpenLog        );
 
@@ -4114,6 +4178,13 @@ begin
     begin
       Result:= False;
       try Result:= RunGhostCheckAsync(False); except end;
+      { Task 6: ADD-alongside spawn on the SAME idle trigger (debounced by
+        GHOST_IDLE_MS in LiveDiagnostics.pas -- no new timer here) -- keeps
+        compiler_findings fresh as the user edits, not just on save. Detached
+        + fire-and-forget, so it cannot slow down or block the ghost-check
+        above. '' guards inside SpawnRefreshFindings make this a silent no-op
+        when no project is open. }
+      try SpawnRefreshFindings(GetActiveProjectFile, GetActiveProjectDb, False); except end;
     end;
     { v0.47: best-effort crash recovery on startup -- if a project is already open,
     restore any file left overlaid by a crashed ghost-check (no prompt; only posts
