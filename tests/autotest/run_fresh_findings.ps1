@@ -74,5 +74,16 @@ Check "H2219 stored for the unused private method" ($out -match 'H2219' -or $out
 $out2 = (& $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json 2>&1) -join "`n"
 Check "refresh-findings second run is a noop (nothing stale)" ($out2 -match '"mode"\s*:\s*"noop"') "out2=$out2"
 
+# Task 5: mode decision transitions. First run above was full (all stale).
+# Touch one unit -> exactly 1 stale -> incremental.
+Start-Sleep -Milliseconds 1100
+(Get-Item (Join-Path $proj 'UHint.pas')).LastWriteTime = Get-Date
+& $Exe index $proj --db $db2 | Out-Null   # refresh files.mtime_unix
+$m1 = ((& $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json) 2>&1) -join "`n"
+Check "1 stale -> incremental mode" ($m1 -match '"mode"\s*:\s*"incremental"') "out=$m1"
+# No changes -> noop.
+$m2 = ((& $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json) 2>&1) -join "`n"
+Check "0 stale after incremental -> noop mode" ($m2 -match '"mode"\s*:\s*"noop"') "out=$m2"
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
