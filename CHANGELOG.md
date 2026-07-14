@@ -12,7 +12,7 @@ breaking changes** until v1.0.
   unchanged unit never surfaced (its `.dcu` was up to date, so DCC did not
   re-emit it). A new per-file compile timestamp `files.last_compiled_unix`
   (schema **v16**) tracks the last successful compile of each unit; a new verb
-  `refresh-findings --project X --db D [--platform ...] [--full] [--json]`
+  `refresh-findings --project X --db D [--full] [--json]`
   recompiles only the STALE units (`last_compiled_unix IS NULL OR <
   mtime_unix`) and refreshes `compiler_findings` per file: `>= 2` stale runs a
   full build (`/t:Build`, `dcc -B`, catches every unit's hints), exactly 1

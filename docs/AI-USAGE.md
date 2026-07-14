@@ -185,7 +185,7 @@ in 2b.
 | `lint-all` | lint everything indexed (`--output report.txt`, `--quiet`) |
 | `check-unit <unit.pas>` | in-memory semantic check of one unit (`--project`, `--platform`, `--resolve-uses`) |
 | `compile-check <target>` | real compiler diagnostics for a `.dproj`/`.pas` |
-| `refresh-findings --project X --db D` | recompile stale units (mtime > `files.last_compiled_unix`) + refresh `compiler_findings` per file; `>=2` stale -> full build, 1 stale -> incremental, `--full` forces full; feeds the IDE compiler overlay (surfaces DCC hints even for clean unchanged units). `--json` emits `mode` (full\|incremental\|noop) + counts; exit 1 if an Error survived, 2 = usage / no db |
+| `refresh-findings --project X --db D` | recompile stale units (mtime > `files.last_compiled_unix`) + refresh `compiler_findings` per file; `>=2` stale -> full build, 1 stale -> incremental, `--full` forces full; feeds the IDE compiler overlay (surfaces DCC hints even for clean unchanged units). `--json` emits `mode` (full\|incremental\|noop) + counts; exit 1 if an Error survived, 2 = usage / no db. **Point `--db` at the project's OWN index, not a shared/library index** -- a full build clears + re-stamps `compiler_findings` for every indexed `.pas`/`.dpr`/`.dpk` file, so a shared index would lose findings for files outside this project |
 | `check-ast <file>` | syntax check without the compiler (`(line,col): error syntax-error`) |
 | `todos [path]` | scan TODO/FIXME/HACK/XXX/REVIEW/NOTE |
 

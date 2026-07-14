@@ -406,7 +406,7 @@ begin
   Writeln('  drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
-  Writeln('  drag-lint refresh-findings --project <X.dproj> --db <db> [--platform win32|win64] [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build)');
+  Writeln('  drag-lint refresh-findings --project <X.dproj> --db <db> [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build)');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
   Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--format json|text]   (circular unit deps; --plan = followable refactoring playbook)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
@@ -7536,7 +7536,7 @@ begin
   if (AArgs.ProjectPath = '') or (AArgs.DbPath = '') then
   begin
     Writeln('Usage: drag-lint refresh-findings --project <X.dproj|.dpr> --db <db> ' +
-      '[--platform win32|win64] [--full] [--json]');
+      '[--full] [--json]');
     Exit(2);
   end;
   if not TFile.Exists(AArgs.DbPath) then
