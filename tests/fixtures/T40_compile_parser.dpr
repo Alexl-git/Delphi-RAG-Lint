@@ -56,5 +56,24 @@ begin
     F),
     'non-matching line');
 
+  // Test 7: msbuild HINT format -- the RAD Studio msbuild dcc wrapper emits DCC
+  // hints as "Hint warning H2219: ..." (TWO severity words). This is the exact
+  // format H2219 "declared but never used" arrives in; it must parse as a Hint,
+  // not be dropped. (Regression: bare filename + trailing project tag too.)
+  Assert(TCompileChecker.ParseLine(
+    'uMain.pas(74): Hint warning H2219: Private symbol ''DoHandleException'' declared but never used [C:\proj\App.dproj]',
+    F),
+    'msbuild Hint-warning parse');
+  Assert(F.LineNo = 74, 'hint-warning line');
+  Assert(F.Code = 'H2219', 'hint-warning code');
+  Assert(SameText(F.Severity, 'Hint'), 'hint-warning severity is Hint');
+
+  // Test 8: the indented summary copy of a Hint-warning line also parses.
+  Assert(TCompileChecker.ParseLine(
+    '  uMain.pas(646): Hint warning H2443: Inline function not expanded [C:\proj\App.dproj]',
+    F),
+    'msbuild indented Hint-warning parse');
+  Assert(SameText(F.Severity, 'Hint'), 'indented hint-warning severity');
+
   WriteLn('OK');
 end.

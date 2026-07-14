@@ -7396,16 +7396,27 @@ var
   Rec : TCompilerFinding            ;
   Key : string                      ;
   P   : string                      ;
+var
+  BaseDir: string;
 begin
+  { The caller derives ABaseDir via ExtractFilePath(ProjectPath). Delphi's
+    ExtractFilePath treats ONLY '\' (and ':') as separators, NOT '/', so a
+    forward-slash project path (e.g. a CLI arg 'C:/proj/App.dproj') yields a
+    truncated base like 'C:/' -- and bare project-file findings (the RAD msbuild
+    wrapper emits 'uMain.pas' with no directory) then absolutize against the
+    wrong base (the process CWD), so FindFileIdByPath misses them and every
+    project-file hint is silently dropped. Normalize separators to '\' up front
+    so absolutization works regardless of how the project path was spelled. }
+  BaseDir:= StringReplace(ABaseDir, '/', '\', [rfReplaceAll]);
   Seen:= TDictionary<string, Boolean>.Create;
   Acc:= TList<TCompilerFinding>.Create;
   try
     for F in AFindings do
     begin
       Rec:= F; { F is the for-in loop var (read-only) -- mutate a copy }
-      P:= Rec.RawPath;
-      if (P <> '') and (ABaseDir <> '') and (not TPath.IsPathRooted(P)) then
-      try P:= TPath.GetFullPath(TPath.Combine(ABaseDir, P)); except end;
+      P:= StringReplace(Rec.RawPath, '/', '\', [rfReplaceAll]);
+      if (P <> '') and (BaseDir <> '') and (not TPath.IsPathRooted(P)) then
+      try P:= TPath.GetFullPath(TPath.Combine(BaseDir, P)); except end;
       Rec.RawPath:= P;
       { msbuild appends " [<full>\<project>.dproj]" to every message -- strip ONLY
         that trailing project-file reference, not a legitimate bracketed tail such
@@ -7440,8 +7451,11 @@ begin
 
   Writeln('Compiling: ', Target);
   Res:= TCompileChecker.Run(Target);
-  { v0.47: absolutize relative paths + drop msbuild's duplicate lines. }
-  Res.Findings:= NormalizeFindings(Res.Findings, ExtractFilePath(Target));
+  { v0.47: absolutize relative paths + drop msbuild's duplicate lines.
+    Normalize '/' -> '\' first so ExtractFilePath yields the real project dir for
+    a forward-slash target (else bare project findings absolutize to CWD). }
+  Res.Findings:= NormalizeFindings(Res.Findings,
+    ExtractFilePath(StringReplace(Target, '/', '\', [rfReplaceAll])));
 
   ErrCount:= 0; WarnCount:= 0; HintCount:= 0;
   for F in Res.Findings do
@@ -7565,9 +7579,13 @@ begin
   FullBuild:= AArgs.Full or (Length(Stale) >= 2);
 
   // Step 5: compile + normalize (absolutize paths, drop msbuild dupes).
+  // ExtractFilePath treats only '\' as a separator, so normalize '/' first --
+  // a forward-slash --project would otherwise yield a truncated base dir ('C:/'),
+  // dropping every bare-filename project finding (see NormalizeFindings).
   Writeln('Compiling: ', AArgs.ProjectPath, IfThen(FullBuild, ' (full build)', ' (incremental)'));
   Res:= TCompileChecker.Run(AArgs.ProjectPath, FullBuild);
-  Res.Findings:= NormalizeFindings(Res.Findings, ExtractFilePath(AArgs.ProjectPath));
+  Res.Findings:= NormalizeFindings(Res.Findings,
+    ExtractFilePath(StringReplace(AArgs.ProjectPath, '/', '\', [rfReplaceAll])));
 
   // Step 6: determine the covered file_id set.
   Covered:= TDictionary<Int64, Boolean>.Create;
@@ -7916,7 +7934,8 @@ begin
     try
       for E in Entries do GhostApplyOverlay(E);
       Res:= TCompileChecker.Run(Dproj);
-      Res.Findings:= NormalizeFindings(Res.Findings, ExtractFilePath(Dproj));
+      Res.Findings:= NormalizeFindings(Res.Findings,
+        ExtractFilePath(StringReplace(Dproj, '/', '\', [rfReplaceAll])));
     finally
       { ALWAYS restore EVERY overlaid file (each independently hardened). }
       for E in Entries do GhostRestoreOverlay(E);

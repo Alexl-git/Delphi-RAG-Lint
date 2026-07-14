@@ -75,6 +75,7 @@ type
       /// <summary>Canonicalizes a raw severity word (error/fatal/warning/hint/
       /// information) to 'Error'/'Warning'/'Hint'/'Information'.</summary>
       class function NormalizeSeverity(const ARaw: string): string;
+      class function SeverityFromCode(const ACode, AFallbackWord: string): string;
   end;
 
 implementation
@@ -94,6 +95,23 @@ begin
   else if L = 'hint'        then Result:= 'Hint'
   else if L = 'information' then Result:= 'Information'
   else Result:= ARaw;
+end;
+
+// Maps a DCC message code (e.g. 'H2219', 'W1000', 'E2003', 'F2613') to its
+// severity WORD via the leading letter -- H->hint, W->warning, E/F->error.
+// The code letter is authoritative for msbuild lines like "Hint warning H2219"
+// where the severity word ("warning") disagrees with the real severity (Hint).
+// Falls back to AFallbackWord when the code is empty/unrecognized.
+class function TCompileChecker.SeverityFromCode(const ACode, AFallbackWord: string): string;
+begin
+  if ACode = '' then Exit(AFallbackWord);
+  case UpCase(ACode[1]) of
+    'H': Result:= 'hint';
+    'W': Result:= 'warning';
+    'E', 'F': Result:= 'error';
+  else
+    Result:= AFallbackWord;
+  end;
 end;
 
 // Spawn ACmd via CreateProcessW with redirected stdout+stderr.
@@ -169,8 +187,16 @@ const
   //   Blueprint4.pas(1348): error E2003: Undeclared identifier: 'FOperNames'
   //     Blueprint4.pas(1348): error E2003: ...        (indented duplicate)
   //   C:\foo\Bar.pas(99,5): error E2003: ...          (column sometimes present)
-  // So: tolerate leading whitespace, make the column optional, lowercase severity.
-  MSB_PATTERN = '^\s*(.+?\.(?:pas|dpr|dpk))\((\d+)(?:,(\d+))?\):\s+' + '(error|warning|hint|fatal|information)\s+([HWEF]\d+):\s+(.*)$';
+  // CRITICAL: the wrapper emits DCC HINTS with TWO severity words --
+  //   uMain.pas(74): Hint warning H2219: Private symbol 'X' declared but never used
+  // The leading DCC severity ("Hint ") is optional and precedes the msbuild
+  // severity word. Without tolerating it, EVERY hint (H-code) is silently
+  // dropped -- so make that first word optional, then derive the true severity
+  // from the [HWEF] code letter (authoritative), not the possibly-misleading
+  // second word ("warning" in "Hint warning H2219").
+  // So: tolerate leading whitespace, an optional leading severity word, and an
+  // optional column.
+  MSB_PATTERN = '^\s*(.+?\.(?:pas|dpr|dpk))\((\d+)(?:,(\d+))?\):\s+' + '(?:(?:hint|warning|error|fatal|information)\s+)?(error|warning|hint|fatal|information)\s+([HWEF]\d+):\s+(.*)$';
 var
   M: TMatch;
 begin
@@ -184,8 +210,13 @@ begin
     AFinding.RawPath:= M.Groups[1].Value;
     AFinding.LineNo:= StrToIntDef(M.Groups[2].Value, 0);
     AFinding.ColNo := StrToIntDef(M.Groups[3].Value, 0);
-    AFinding.Severity:= NormalizeSeverity(M.Groups[4].Value);
     AFinding.Code:= M.Groups[5].Value;
+    { Derive severity from the [HWEF] code letter, NOT the severity word: the
+      msbuild wrapper writes hints as "Hint warning H2219", where the matched
+      word (Group 4) is "warning" but the finding is really a Hint. The code
+      letter (H/W/E/F) is authoritative. Fall back to the word if the code is
+      somehow empty. }
+    AFinding.Severity:= NormalizeSeverity(SeverityFromCode(AFinding.Code, M.Groups[4].Value));
     AFinding.Message:= Trim(M.Groups[6].Value);
     AFinding.FileId:= -1;
     Exit(True);
