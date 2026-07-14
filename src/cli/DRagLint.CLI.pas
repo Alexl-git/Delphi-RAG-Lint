@@ -217,6 +217,9 @@ type
     Shadow         : string ; // --shadow <dir> (unsaved-buffer overlay)
     ResolveUsesFlag: Boolean; // --resolve-uses (enrich undeclared errors)
     CheckPlatform  : string ; // --platform win32|win64 (matches project config)
+    // fresh compiler findings: refresh-findings --full (force a full build even
+    // when fewer than 2 files are stale)
+    Full           : Boolean;
     Edges          : Boolean; // --edges (cycles: show the actual uses edges)
     Causes         : Boolean; // --causes (cycles: pinpoint the symbols forcing each interface edge)
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
@@ -403,6 +406,7 @@ begin
   Writeln('  drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
+  Writeln('  drag-lint refresh-findings --project <X.dproj> --db <db> [--platform win32|win64] [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build)');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
   Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--format json|text]   (circular unit deps; --plan = followable refactoring playbook)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
@@ -584,6 +588,7 @@ begin
     else if (A = '--disable') and (i < ParamCount) then begin Inc(i); Result.Disable:= ParamStr(i); end
     else if (A = '--layers') and (i < ParamCount) then begin Inc(i); Result.LayersPath:= ParamStr(i); end
     else if A = '--json'    then Result.AsJson:= True
+    else if A = '--full'    then Result.Full  := True // refresh-findings: force a full build
     else if A = '--dry-run' then Result.DryRun:= True
     else if A = '--quiet'   then Result.Quiet := True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
@@ -7481,6 +7486,185 @@ begin
   else Result:= 0;
 end; // function
 
+// fresh compiler findings: drag-lint refresh-findings --project <X.dproj|.dpr>
+// --db <db> [--platform win32|win64] [--full] [--json]
+//
+// Recompiles only what is STALE (files.mtime_unix newer than
+// files.last_compiled_unix) and refreshes compiler_findings for exactly the
+// files the compile actually covered, so compiler_findings never drifts stale
+// after an edit and never requires a whole-project rescan on every call.
+//
+// Algorithm (see docs/superpowers/plans/2026-07-14-fresh-compiler-findings.md
+// Task 4 brief for the full spec this mirrors 1:1):
+//   1. Require --project + a readable --db.
+//   2. Open the store, Migrate.
+//   3. Stale := GetStaleFileIds. Nothing stale and no --full -> noop, exit 0.
+//   4. FullBuild := --full or (>= 2 files stale) -- a full build is not much
+//      slower than 2 incremental single-unit compiles and is authoritative.
+//   5. Compile (incremental Make, or full Build when FullBuild).
+//   6. Covered set: FullBuild -> every indexed .pas/.dpr/.dpk file id;
+//      incremental -> the one stale file id + every finding's resolved file id.
+//   7. If the compile failed with an Error/Fatal finding, still store the
+//      findings (so the error is visible) but do NOT stamp last_compiled_unix
+//      for the covered files -- leave them stale so the next call retries.
+//   8. Per covered file: clear its old findings, insert the fresh ones, and
+//      (only on the non-failure path) stamp last_compiled_unix = now.
+//   9. Print/emit a summary; exit 1 iff an Error-severity finding survived.
+function DoRefreshFindings(const AArgs: TArgs): Integer;
+var
+  Store        : ISymbolStore       ;
+  Res          : TCompileCheckResult;
+  Stale        : TArray<Int64>      ;
+  FullBuild    : Boolean            ;
+  Covered      : TDictionary<Int64, Boolean>;
+  AllFileIds   : TArray<Int64>      ;
+  FileId       : Int64              ;
+  FilePath     : string             ;
+  Ext          : string             ;
+  F            : TCompilerFinding   ;
+  Rec          : TCompilerFinding   ;
+  HasErrorFind : Boolean            ;
+  CompileFailed: Boolean            ;
+  NowUnix      : Int64              ;
+  FindingsByFid: TDictionary<Int64, TList<TCompilerFinding>>;
+  FidList      : TList<TCompilerFinding>;
+  StampedCount : Integer            ;
+  FindingCount : Integer            ;
+  ModeStr      : string             ;
+  Pair         : TPair<Int64, TList<TCompilerFinding>>;
+begin
+  if (AArgs.ProjectPath = '') or (AArgs.DbPath = '') then
+  begin
+    Writeln('Usage: drag-lint refresh-findings --project <X.dproj|.dpr> --db <db> ' +
+      '[--platform win32|win64] [--full] [--json]');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
+
+  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  // Step 3: nothing stale and no forced --full -> noop.
+  Stale:= Store.GetStaleFileIds;
+  if (Length(Stale) = 0) and (not AArgs.Full) then
+  begin
+    if (LowerCase(AArgs.Format) = 'json') or AArgs.AsJson then
+      Writeln('{"mode":"noop","compiled":0,"stale":0,"stamped":0,"findings":0}')
+    else
+      Writeln('0 stale, up to date');
+    Exit(0);
+  end;
+
+  // Step 4: >= 2 stale files makes a full build cheaper than N incremental
+  // single-unit recompiles, and guarantees every affected unit's hints are
+  // re-emitted (DCC skips hints for units it considers already up to date).
+  FullBuild:= AArgs.Full or (Length(Stale) >= 2);
+
+  // Step 5: compile + normalize (absolutize paths, drop msbuild dupes).
+  Writeln('Compiling: ', AArgs.ProjectPath, IfThen(FullBuild, ' (full build)', ' (incremental)'));
+  Res:= TCompileChecker.Run(AArgs.ProjectPath, FullBuild);
+  Res.Findings:= NormalizeFindings(Res.Findings, ExtractFilePath(AArgs.ProjectPath));
+
+  // Step 6: determine the covered file_id set.
+  Covered:= TDictionary<Int64, Boolean>.Create;
+  try
+    if FullBuild then
+    begin
+      AllFileIds:= Store.GetAllFileIds;
+      for FileId in AllFileIds do
+      begin
+        FilePath:= Store.GetFilePath(FileId);
+        Ext:= LowerCase(ExtractFileExt(FilePath));
+        if (Ext = '.pas') or (Ext = '.dpr') or (Ext = '.dpk') then
+          Covered.AddOrSetValue(FileId, True);
+      end;
+    end
+    else
+    begin
+      for FileId in Stale do Covered.AddOrSetValue(FileId, True);
+      for F in Res.Findings do
+      begin
+        FileId:= Store.FindFileIdByPath(F.RawPath);
+        if FileId > 0 then Covered.AddOrSetValue(FileId, True);
+      end;
+    end;
+
+    // Step 7: compile-failure gate -- detect whether an Error/Fatal finding
+    // survived. (NormalizeFindings/ParseLine already canonicalize severity to
+    // 'Error' for both raw 'error' and 'fatal' lines -- see
+    // TCompileChecker.NormalizeSeverity.)
+    HasErrorFind:= False;
+    for F in Res.Findings do
+      if SameText(F.Severity, 'Error') then begin HasErrorFind:= True; Break; end;
+    CompileFailed:= (Res.ExitCode <> 0) and HasErrorFind;
+
+    // Step 8: per covered file, clear + insert + (on success) stamp.
+    // Bucket findings by resolved file_id first (one pass) instead of
+    // rescanning Res.Findings once per covered file.
+    FindingsByFid:= TDictionary<Int64, TList<TCompilerFinding>>.Create;
+    try
+      for F in Res.Findings do
+      begin
+        FileId:= Store.FindFileIdByPath(F.RawPath);
+        if FileId <= 0 then Continue; // not indexed; nothing to bucket it under
+        if not FindingsByFid.TryGetValue(FileId, FidList) then
+        begin
+          FidList:= TList<TCompilerFinding>.Create;
+          FindingsByFid.Add(FileId, FidList);
+        end;
+        Rec:= F;
+        Rec.FileId:= FileId;
+        FidList.Add(Rec);
+      end;
+
+      NowUnix:= DateTimeToUnix(Now, False);
+      StampedCount:= 0;
+      FindingCount:= 0;
+      for FileId in Covered.Keys do
+      begin
+        Store.ClearCompilerFindingsForFile(FileId);
+        if FindingsByFid.TryGetValue(FileId, FidList) then
+          for Rec in FidList do
+          begin
+            Store.InsertCompilerFinding(Rec);
+            Inc(FindingCount);
+          end;
+        if not CompileFailed then
+        begin
+          Store.SetFileCompiledAt(FileId, NowUnix);
+          Inc(StampedCount);
+        end;
+      end;
+    finally
+      for Pair in FindingsByFid do Pair.Value.Free;
+      FindingsByFid.Free;
+    end; // try
+  finally
+    Covered.Free;
+  end; // try
+
+  // Step 9: summary.
+  if FullBuild then ModeStr:= 'full' else ModeStr:= 'incremental';
+  if (LowerCase(AArgs.Format) = 'json') or AArgs.AsJson then
+  begin
+    Writeln(Format('{"mode":"%s","compiled":%d,"stale":%d,"stamped":%d,"findings":%d,"exitCode":%d}',
+      [ModeStr, IfThen(CompileFailed, 0, 1), Length(Stale), StampedCount, FindingCount, Res.ExitCode]));
+  end
+  else
+  begin
+    Writeln(Format('refresh-findings: mode=%s stale=%d stamped=%d findings=%d exitCode=%d',
+      [ModeStr, Length(Stale), StampedCount, FindingCount, Res.ExitCode]));
+    if CompileFailed then Writeln('Compile FAILED -- files left stale for retry.');
+  end;
+
+  if HasErrorFind then Result:= 1
+  else Result:= 0;
+end; // function
+
 { Resolve <unit>.dcu inside the project's DCU output dir (DCC_DcuOutput in the
   .dproj, with $(Platform)/$(Config) expanded) so ghost-check can delete it and
   force a recompile. Best-effort; '' if it cannot be determined. }
@@ -12838,6 +13022,7 @@ begin
     else if Args.Command = 'extract-method'    then Result:= DoExtractMethod   (Args)
     else if Args.Command = 'find-deadcode'     then Result:= DoFindDeadCode    (Args)
     else if Args.Command = 'compile-check'     then Result:= DoCompileCheck    (Args)
+    else if Args.Command = 'refresh-findings'  then Result:= DoRefreshFindings (Args)
     else if Args.Command = 'ghost-check'       then Result:= DoGhostCheck      (Args)
     else if Args.Command = 'ghost-recover'     then Result:= DoGhostRecover    (Args)
     else if Args.Command = 'check-unit'        then Result:= DoCheckUnit       (Args)

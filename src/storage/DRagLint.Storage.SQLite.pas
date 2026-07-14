@@ -2486,9 +2486,16 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
+    { BUGFIX (fresh compiler findings Task 4): the indexer's Pascal parser
+      (TDelphi13Parser.LanguageName) records files.language = 'delphi13', never
+      'pascal' -- the original WHERE language = 'pascal' matched zero rows, so
+      GetStaleFileIds always returned empty. Match on file extension instead
+      (.pas/.dpr/.dpk), which is what "Pascal source files only" in this
+      method's doc-comment actually means and is independent of whichever
+      string a given parser reports as its language name. }
     Q.SQL.Text:=
       'SELECT id FROM files ' +
-      'WHERE language = ''pascal'' ' +
+      'WHERE (LOWER(path) LIKE ''%.pas'' OR LOWER(path) LIKE ''%.dpr'' OR LOWER(path) LIKE ''%.dpk'') ' +
       '  AND (last_compiled_unix IS NULL OR last_compiled_unix < mtime_unix)';
     Q.Open;
     while not Q.Eof do begin L.Add(Q.Fields[0].AsLargeInt); Q.Next; end;

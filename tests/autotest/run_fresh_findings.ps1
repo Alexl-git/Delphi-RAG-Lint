@@ -30,5 +30,49 @@ Check "files.last_compiled_unix column exists" ($schema -match 'last_compiled_un
 $storeTest = ((& $Exe test-store-freshness --db $db) 2>&1) -join "`n"
 Check "store-freshness self-test OK" ($LASTEXITCODE -eq 0) "out=$storeTest"
 
+# Task 4: end-to-end -- a unit with an unused private method must surface H2219.
+# Uses a BARE .dpr (not a .dproj): TCompileChecker.Run on a non-.dproj target
+# takes the "dcc64 -Q <target>" branch, which needs no msbuild/.dproj package
+# list -- rtl/vcl are on dcc64's default search path via rsvars.bat. This
+# avoids needing a generated .dproj fixture for this simple 1-unit program.
+$proj = Join-Path $WorkDir 'ffproj'; New-Item -ItemType Directory $proj | Out-Null
+$pas = @'
+unit UHint;
+interface
+type
+  TThing = class
+  private
+    procedure NeverCalled;
+  public
+    procedure DoIt;
+  end;
+implementation
+procedure TThing.NeverCalled; begin end;
+procedure TThing.DoIt; begin end;
+end.
+'@
+[System.IO.File]::WriteAllText((Join-Path $proj 'UHint.pas'), ($pas -replace "`r?`n","`r`n"), [System.Text.Encoding]::ASCII)
+$dpr = @'
+program FFProj;
+uses UHint in 'UHint.pas';
+begin
+end.
+'@
+[System.IO.File]::WriteAllText((Join-Path $proj 'FFProj.dpr'), ($dpr -replace "`r?`n","`r`n"), [System.Text.Encoding]::ASCII)
+$db2 = Join-Path $WorkDir 'ff2.sqlite'
+& $Exe index $proj --db $db2 | Out-Null
+$out = (& $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json 2>&1) -join "`n"
+Check "refresh-findings exits 0/1 (ran)" ($LASTEXITCODE -le 1) "exit=$LASTEXITCODE out=$out"
+Check "refresh-findings JSON has a mode field" ($out -match '"mode"\s*:\s*"(full|incremental|noop)"') "out=$out"
+# query the stored findings: `query hints` reads compiler_findings directly
+# (NOT `query --text`, which is the FTS5 index over .pas/.dfm/.sql SOURCE text,
+# not the compiler_findings table -- the wrong tool for this assertion).
+$dump = (& $Exe query hints --db $db2 2>&1) -join "`n"
+Check "H2219 stored for the unused private method" ($out -match 'H2219' -or $out -match 'never used' -or $dump -match 'NeverCalled' -or $dump -match 'H2219') "out=$out dump=$dump"
+
+# Re-running immediately afterward (files now freshly compiled) should be a noop.
+$out2 = (& $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json 2>&1) -join "`n"
+Check "refresh-findings second run is a noop (nothing stale)" ($out2 -match '"mode"\s*:\s*"noop"') "out2=$out2"
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
