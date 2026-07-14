@@ -186,6 +186,17 @@ type
     function FindCompilerFindingsForFile(AFileId: Int64): TArray<TCompilerFinding>;
     procedure ClearCompilerFindings;
     procedure InsertCompilerFinding(const AFinding: TCompilerFinding);
+    /// <summary>Deletes only the compiler_findings rows for one file, so a
+    /// single-unit recompile can replace that file's findings without touching
+    /// others. (Whole-DB ClearCompilerFindings is unchanged.)</summary>
+    procedure ClearCompilerFindingsForFile(AFileId: Int64);
+    /// <summary>Stamps files.last_compiled_unix for one file (Unix seconds).</summary>
+    procedure SetFileCompiledAt(AFileId: Int64; AUnix: Int64);
+    /// <summary>Returns files.last_compiled_unix for one file, or 0 when NULL.</summary>
+    function GetFileCompiledAt(AFileId: Int64): Int64;
+    /// <summary>Returns file_ids whose findings are STALE: last_compiled_unix is
+    /// NULL or older than mtime_unix. Pascal source files only.</summary>
+    function GetStaleFileIds: TArray<Int64>;
 
     // v8: Spring4D DI edges.
     procedure UpsertDiBinding(const AToken: TFileTxToken; const ABinding: TDiBindingRow);

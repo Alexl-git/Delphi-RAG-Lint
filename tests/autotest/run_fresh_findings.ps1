@@ -26,5 +26,9 @@ $src = Join-Path $WorkDir 'src'; New-Item -ItemType Directory $src | Out-Null
 $schema = (& $Exe schema --json --db $db) -join "`n"
 Check "files.last_compiled_unix column exists" ($schema -match 'last_compiled_unix') "schema had no such column"
 
+# Task 2: a hidden self-test verb exercises the new store methods on a temp db.
+$storeTest = ((& $Exe test-store-freshness --db $db) 2>&1) -join "`n"
+Check "store-freshness self-test OK" ($LASTEXITCODE -eq 0) "out=$storeTest"
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

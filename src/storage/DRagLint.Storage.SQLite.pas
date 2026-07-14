@@ -212,6 +212,10 @@ type
       function FindCompilerFindingsForFile(AFileId: Int64): TArray<TCompilerFinding>;
       procedure ClearCompilerFindings;
       procedure InsertCompilerFinding(const AFinding: TCompilerFinding);
+      procedure ClearCompilerFindingsForFile(AFileId: Int64);
+      procedure SetFileCompiledAt(AFileId: Int64; AUnix: Int64);
+      function GetFileCompiledAt(AFileId: Int64): Int64;
+      function GetStaleFileIds: TArray<Int64>;
 
       // v0.17: blast-radius pack
       function FindTransitiveCallers(const ASymbolName: string; ADepth: Integer): TArray<TImpactLevel>            ;
@@ -2446,6 +2450,53 @@ begin
   FQInsertCompilerFinding.ParamByName('msg' ).AsString := AFinding.Message;
   FQInsertCompilerFinding.ParamByName('iat').AsLargeInt:= System.DateUtils.DateTimeToUnix(Now, False);
   FQInsertCompilerFinding.ExecSQL;
+end;
+
+procedure TSQLiteSymbolStore.ClearCompilerFindingsForFile(AFileId: Int64);
+begin
+  FConn.ExecSQL('DELETE FROM compiler_findings WHERE file_id = ?', [AFileId]);
+end;
+
+procedure TSQLiteSymbolStore.SetFileCompiledAt(AFileId: Int64; AUnix: Int64);
+begin
+  FConn.ExecSQL('UPDATE files SET last_compiled_unix = ? WHERE id = ?', [AUnix, AFileId]);
+end;
+
+function TSQLiteSymbolStore.GetFileCompiledAt(AFileId: Int64): Int64;
+var Q: TFDQuery;
+begin
+  Result:= 0;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT last_compiled_unix FROM files WHERE id = ?';
+    Q.Params[0].AsLargeInt:= AFileId;
+    Q.Open;
+    if (not Q.Eof) and (not Q.Fields[0].IsNull) then Result:= Q.Fields[0].AsLargeInt;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetStaleFileIds: TArray<Int64>;
+var Q: TFDQuery; L: TList<Int64>;
+begin
+  L:= TList<Int64>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:=
+      'SELECT id FROM files ' +
+      'WHERE language = ''pascal'' ' +
+      '  AND (last_compiled_unix IS NULL OR last_compiled_unix < mtime_unix)';
+    Q.Open;
+    while not Q.Eof do begin L.Add(Q.Fields[0].AsLargeInt); Q.Next; end;
+    Q.Close;
+    Result:= L.ToArray;
+  finally
+    Q.Free; L.Free;
+  end;
 end;
 
 // v0.17: blast-radius pack

@@ -12448,6 +12448,75 @@ begin
   end; // try
 end; // function
 
+// Hidden self-test verb (not in help text): exercises the Task 2 store
+// methods (ClearCompilerFindingsForFile / SetFileCompiledAt /
+// GetFileCompiledAt / GetStaleFileIds) end-to-end against --db.
+// Exit 0 iff every assertion below passes; exit 1 on the first failure.
+function DoTestStoreFreshness(const AArgs: TArgs): Integer;
+var
+  Store  : ISymbolStore    ;
+  FileIds: TArray<Int64>   ;
+  FileId : Int64           ;
+  Finding: TCompilerFinding;
+  Stale  : TArray<Int64>   ;
+begin
+  Result:= 1;
+  if AArgs.DbPath = '' then begin Writeln('ERROR: test-store-freshness requires --db'); Exit(2); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
+
+  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  FileIds:= Store.GetAllFileIds;
+  if Length(FileIds) = 0 then
+  begin
+    Writeln('FAIL: test-store-freshness: no files in the index (expected the ' +
+      'fixture Empty.pas file to have been indexed already)');
+    Exit(1);
+  end;
+  FileId:= FileIds[0];
+
+  // SetFileCompiledAt / GetFileCompiledAt round-trip.
+  Store.SetFileCompiledAt(FileId, 1000);
+  if Store.GetFileCompiledAt(FileId) <> 1000 then
+  begin
+    Writeln('FAIL: GetFileCompiledAt did not return the value just set (1000)');
+    Exit(1);
+  end;
+
+  // ClearCompilerFindingsForFile: insert one finding, clear it, verify empty.
+  Finding.FileId  := FileId;
+  Finding.RawPath := Store.GetFilePath(FileId);
+  Finding.Code    := 'H0000';
+  Finding.Severity:= 'Hint';
+  Finding.LineNo  := 1;
+  Finding.ColNo   := 1;
+  Finding.Message := 'test-store-freshness probe finding';
+  Store.InsertCompilerFinding(Finding);
+  Store.ClearCompilerFindingsForFile(FileId);
+  if Length(Store.FindCompilerFindingsForFile(FileId)) <> 0 then
+  begin
+    Writeln('FAIL: ClearCompilerFindingsForFile did not clear the probe finding');
+    Exit(1);
+  end;
+
+  // GetStaleFileIds: must return without raising (contents not asserted --
+  // staleness depends on mtime_unix vs. the timestamp just written above).
+  try
+    Stale:= Store.GetStaleFileIds;
+  except
+    on E: Exception do
+    begin
+      Writeln('FAIL: GetStaleFileIds raised: ', E.Message);
+      Exit(1);
+    end;
+  end;
+  if Length(Stale) < 0 then ; // no-op: silences unused-variable warning, keeps Stale referenced
+
+  Writeln('PASS: test-store-freshness');
+  Result:= 0;
+end;
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -12803,6 +12872,7 @@ begin
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
     else if Args.Command = 'workspace'         then Result:= DoWorkspace       (Args)
     else if Args.Command = 'selftest'          then Result:= DoSelfTest        (Args)
+    else if Args.Command = 'test-store-freshness' then Result:= DoTestStoreFreshness(Args)
     else if Args.Command = 'reconcile-project' then Result:= DoReconcileProject(Args)
     else if Args.Command = 'library-drift'     then Result:= DoLibraryDrift    (Args)
     else if Args.Command = 'resolve-dbs' then
