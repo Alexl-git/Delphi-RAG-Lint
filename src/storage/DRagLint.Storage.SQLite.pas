@@ -594,6 +594,11 @@ begin
     migration on every pre-v13 DB with "no such column: enclosing_symbol_id". }
   TryExec('ALTER TABLE refs ADD COLUMN enclosing_symbol_id INTEGER');
   TryExec('CREATE INDEX IF NOT EXISTS idx_refs_enclosing ON refs(enclosing_symbol_id)');
+  { v16: per-file last-successful-compile timestamp (Unix seconds). NULL = never
+    compiled. Additive column; ALTER onto pre-v16 files tables for the same
+    reason as the symbols/refs columns above. Read by the freshness engine to
+    decide staleness (stale iff last_compiled_unix IS NULL OR < mtime_unix). }
+  TryExec('ALTER TABLE files ADD COLUMN last_compiled_unix INTEGER');
   { v11 (M1): direct ancestor edges (one row per heritage entry). Created here
     rather than in SCHEMA_DDL to avoid renumbering the FTS5 split index; it is
     plain DDL that must always exist (independent of FTS5 availability).
