@@ -124,3 +124,47 @@ VARINSP conversion compiles clean, and (b) the split/merge structural-rule
 foundation is designed. Belongs after the current milestone, with its own
 brainstorm -- and that brainstorm must treat the REPEATABLE PIPELINE (helper +
 procedure + run x20) as the primary requirement, not the single-table demo.
+
+## OPEN brainstorm questions (the tool was brainstormed but NOT spec'd)
+
+This tool ("transfer editor" / "component replacement package") was discussed
+across the 2026-07-14 session and PAUSED TWICE (first for the uMain crash, then
+to build the fresh-compiler-findings feature). The strategic decisions above are
+settled; the following DESIGN questions were raised but never answered -- resume
+the brainstorm here (superpowers:brainstorming):
+
+1. **Host (the most design-shaping question).** Where does the editor live?
+   - In-IDE dock (Delphi BPL, like the Lint Options / Butterfly tabs) -- native,
+     sees the live project, but OTA UI not headless-testable + BPL rebuilds.
+   - Standalone VCL app (a drag-lint GUI exe reading the index DBs, writing
+     .rules) -- full UI control, reuses the engine, launchable from the IDE menu.
+   - CLI-driven localhost web UI (CLI emits property trees as JSON, a browser UI
+     does the drag-map, posts back rules) -- cross-platform, fast to iterate, no
+     BPL, but a new delivery mechanism drag-lint lacks today.
+   - (TUI was considered + rejected as the weakest fit for a drag-heavy task.)
+   The AskUserQuestion for this was posed but the user pivoted before answering.
+
+2. **Interaction model.** Flatten the source's deep property tree to a flat list;
+   auto-assign unambiguous source->target leaves by name+type; present the
+   remainder as a GRID; a **T-side property navigator WITH SEARCH** (type "font"
+   -> jump to `Style.Default.Font` instead of walking each level -- the antidote
+   to the proptree explosion that made hand-authoring impractical).
+
+3. **Output.** Emits the same `conversion.rules` DSL that `convert-apply`
+   consumes (so the editor is a front-end to the existing engine, not a new
+   engine). Stored as DSL text; a growing rules LIBRARY seeds a new pair from a
+   similar one.
+
+## Why this jumped the queue (the trigger)
+
+The VARINSP button conversion (`TabcToggleBtn`->`TcxButton`) proved that even a
+SINGLE non-table component needs human judgment, not a mechanical remap:
+`Layout`/`Style` are Orpheus enums with no cx equivalent; `Picture.Data` maps to
+cx `Glyph`/`TdxSmartGlyph` (different property + type); `Images` ->
+`OptionsImage.Images`; and `convert-scaffold` explodes to thousands of nested
+paths (TcxButton reaches Automation/Colors/Parent/... trees). Hand-authoring
+those rules is exactly the tedium this tool removes -- so the user chose to build
+the editor BEFORE finishing the VARINSP conversion. The editor is therefore
+needed for BOTH the (deferred) table conversions AND the current non-table ones.
+Full session reasoning:
+`wiki/entities/DragLint_Linter-indexer-fixes-and-fresh-findings-reasoning-2026-07-14.md`.
