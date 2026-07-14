@@ -6,8 +6,9 @@ uses-clauses, type ancestry, DI bindings, and more). It is written for anyone
 building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
-Current schema version at time of writing: **15** (`SCHEMA_VERSION` in
-`src/storage/DRagLint.Storage.Schema.pas`).
+Current schema version at time of writing: **16** (`SCHEMA_VERSION` in
+`src/storage/DRagLint.Storage.Schema.pas`). v16 added the additive column
+`files.last_compiled_unix` (compiler-finding freshness; see 2.1).
 
 All facts in this document were verified against a live index
 (`C:\Projects\DB\ORM3\drag-lint.sqlite`, schema_version 15, 820 files /
@@ -97,7 +98,8 @@ One row per indexed source file (`.pas`, `.dfm`, `.sql`, or ingest-adjacent
 | `mtime_unix` | INTEGER | File's mtime at parse time (staleness check) |
 | `sha256` | TEXT | Content hash (staleness / dedupe) |
 | `parsed_at` | INTEGER | Unix timestamp of the parse that produced this row |
-| `language` | TEXT | `pas` \| `dfm` \| `sql` \| `json` \| `text` |
+| `language` | TEXT | Parser name for the file. Pascal source is `delphi13` (the `TDelphi13Parser.LanguageName`), NOT `pas`; DFM is `dfm`, SQL is `sql`, ingest sources are `json`/`text`. |
+| `last_compiled_unix` | INTEGER (nullable, v16+) | Unix time of the last successful compile that covered this file; `NULL` = never compiled. A file is compiler-finding-STALE iff `last_compiled_unix IS NULL OR last_compiled_unix < mtime_unix`. Written by the `refresh-findings` verb. |
 
 Join: every `file_id` foreign key elsewhere points here.
 
@@ -408,7 +410,7 @@ drag-lint schema --db <file.sqlite> --format json
 which returns:
 ```json
 {
-  "schema_version": 15,
+  "schema_version": 16,
   "tables": [
     { "name": "files", "row_count": 820, "columns": [
       { "name": "id", "type": "INTEGER" },

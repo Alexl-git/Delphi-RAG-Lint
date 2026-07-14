@@ -359,6 +359,7 @@ and more (see [MCP tools](#mcp-tools-14) below).
 | `generate-test --qname <q>` | Generate a test-method stub |
 | `find-deadcode` | List symbols with no callers outside their own unit |
 | `compile-check <dproj>` | Run msbuild and store diagnostics in the DB |
+| `refresh-findings --project <dproj> --db <db>` | Recompile only stale units (save-time newer than last compile) and refresh stored compiler findings per file, so DCC hints stay current even for clean unchanged units; `--full` forces a full build. Spawned by the IDE on save/idle and by the "Full Compile Sweep" menu |
 | `check-unit <unit.pas>` | Compile one unit in project context (semantic errors; `--shadow` for unsaved buffers, `--resolve-uses` to suggest the missing unit) |
 | `cycles` | Circular unit dependencies (`--edges` shows edges + move/layering candidates) |
 | `uses-audit <unit.pas>` | Propose interface→implementation moves + unused units |

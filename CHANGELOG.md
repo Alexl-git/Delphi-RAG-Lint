@@ -5,6 +5,25 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+- **Fresh compiler findings: `refresh-findings` keeps DCC hints/warnings/errors
+  current.** drag-lint replicates the Delphi compiler's diagnostics alongside
+  its own lint rules, but the incremental compile it ran skipped clean units --
+  so a hint like `H2219 Private symbol ... declared but never used` on an
+  unchanged unit never surfaced (its `.dcu` was up to date, so DCC did not
+  re-emit it). A new per-file compile timestamp `files.last_compiled_unix`
+  (schema **v16**) tracks the last successful compile of each unit; a new verb
+  `refresh-findings --project X --db D [--platform ...] [--full] [--json]`
+  recompiles only the STALE units (`last_compiled_unix IS NULL OR <
+  mtime_unix`) and refreshes `compiler_findings` per file: `>= 2` stale runs a
+  full build (`/t:Build`, `dcc -B`, catches every unit's hints), exactly 1
+  stale runs an incremental compile, 0 stale is a fast no-op, and `--full`
+  forces a full build. A failed compile stores its errors but leaves the file
+  stale (so it retries) rather than stamping a bad timestamp. The IDE plugin
+  spawns the verb fire-and-forget (Win64 child, so the compile never taxes the
+  32-bit IDE) on save and on idle, and adds a **"Full Compile Sweep"** menu item
+  (`--full`). (Also fixes a latent bug: the stale query filtered
+  `language = 'pascal'`, but the indexer records Pascal source as `'delphi13'`,
+  so the intended filter matched zero rows.)
 - **`convert-apply`: the component-conversion applier is shipped.** The new
   `convert-apply --unit F.pas --rules <file> --db PATH [--only Name1,...]
   [--apply] [--no-backup]` verb rewrites all 5 conversion surfaces for every
