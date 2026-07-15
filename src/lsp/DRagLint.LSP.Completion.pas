@@ -568,14 +568,22 @@ begin
       begin
         DiagObj:= TJSONObject.Create;
 
-        // LineNo/ColNo are 1-based; LSP range is 0-based.
+        // LineNo/ColNo are 1-based; LSP range is 0-based. BUT compiler HINTS
+        // (e.g. "Hint warning H2219") arrive with ColNo = 0 (no column), so a
+        // naive ColNo-1 yields character = -1 -- an INVALID LSP position that
+        // the IDE silently drops (the diagnostic is published but no gutter
+        // glyph renders). Clamp: when ColNo <= 0, span the whole line start
+        // (0..1) so the finding is always visible; otherwise use the 0-based
+        // column with a non-empty end.
         CStart:= TJSONObject.Create;
         CStart.AddPair('line'     , TJSONNumber.Create(CF.LineNo - 1));
-        CStart.AddPair('character', TJSONNumber.Create(CF.ColNo  - 1));
+        if CF.ColNo <= 0 then CStart.AddPair('character', TJSONNumber.Create(0))
+        else CStart.AddPair('character', TJSONNumber.Create(CF.ColNo - 1));
 
         CEnd:= TJSONObject.Create;
         CEnd.AddPair('line', TJSONNumber.Create(CF.LineNo - 1));
-        CEnd.AddPair('character', TJSONNumber.Create(CF.ColNo));
+        if CF.ColNo <= 0 then CEnd.AddPair('character', TJSONNumber.Create(1))
+        else CEnd.AddPair('character', TJSONNumber.Create(CF.ColNo));
 
         CRange:= TJSONObject.Create;
         CRange.AddPair('start', CStart);
