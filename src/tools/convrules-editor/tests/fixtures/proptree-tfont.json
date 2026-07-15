@@ -1,0 +1,120 @@
+{
+  "schema": "proptree/1",
+  "qname": "Vcl.Graphics.TFont",
+  "root_type": "TFont",
+  "truncated": false,
+  "properties": [
+    {
+      "path": "FontAdapter",
+      "type": "IChangeNotifier",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "Handle",
+      "type": "HFont",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "PixelsPerInch",
+      "type": "Integer",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "IsDPIRelated",
+      "type": "Boolean",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "IsScreenFont",
+      "type": "Boolean",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "Charset",
+      "type": "TFontCharset",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "Color",
+      "type": "TColor",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "Height",
+      "type": "Integer",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "Name",
+      "type": "TFontName",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "Orientation",
+      "type": "Integer",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "Pitch",
+      "type": "TFontPitch",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "Size",
+      "type": "Integer",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "Style",
+      "type": "TFontStyles",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "Quality",
+      "type": "TFontQuality",
+      "declared_in": "Vcl.Graphics.TFont",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "OwnerCriticalSection",
+      "type": "PRTLCriticalSection",
+      "declared_in": "Vcl.Graphics.TGraphicsObject",
+      "kind": "scalar",
+      "is_class_typed": false
+    },
+    {
+      "path": "OnChange",
+      "type": "TNotifyEvent",
+      "declared_in": "Vcl.Graphics.TGraphicsObject",
+      "kind": "scalar",
+      "is_class_typed": false
+    }
+  ]
+}

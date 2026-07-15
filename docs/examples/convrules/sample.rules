@@ -1,0 +1,18 @@
+#convert Vcl.Graphics.TFont -> Vcl.Graphics.TFont
+#note sample rule-book for ConvRulesEditor -- edit in the visual editor
+#link Color <- Color
+#link Height <- Height
+#link Name <- Name
+#link Size <- Size : Round
+#default Charset = 1
+#ignore Handle
+#note Handle is an OS resource -- intentionally not mapped
+// a hand comment survives round-trip
+; so does a semicolon comment
+
+#convert Vcl.StdCtrls.TEdit -> Vcl.StdCtrls.TMemo
+#note second rule -- alternative target for the same family of controls
+#link Text <- Text
+#link ReadOnly <- ReadOnly
+#unuse SomeLegacyUnit
+#remove DFM: DesignInfo
