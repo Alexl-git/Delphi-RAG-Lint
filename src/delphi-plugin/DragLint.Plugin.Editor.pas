@@ -1634,8 +1634,17 @@ begin
       JV.Free;
     end; // try
 
-    { Replace the whole compiler overlay (so fixed errors vanish), then push. }
-    Cache.ClearAllCompilerFindings;
+    { Per-file replace ONLY the files THIS compile reported on -- NOT a global
+      wipe. The old ClearAllCompilerFindings cleared every file's overlay, so an
+      INCREMENTAL compile (which recompiles only changed units and emits nothing
+      for clean/untouched units) erased the findings of units it never looked at
+      -- e.g. a full-sweep-populated H2219 on a clean uMain vanished on the next
+      unrelated save. refresh-findings owns the persistent per-unit DB (clear +
+      insert scoped to stale units); here we only refresh the overlay for the
+      units actually in this compile's output, leaving every other unit's overlay
+      intact. SetCompilerFindings replaces per file (empty -> remove), so a file
+      that recompiled clean and reported nothing is not in ByFile and keeps its
+      prior overlay until the DB-backed LSP path or the next sweep refreshes it. }
     for Pair in ByFile do Cache.SetCompilerFindings(Pair.Key, Pair.Value.ToArray);
     Result:= True;
   finally
