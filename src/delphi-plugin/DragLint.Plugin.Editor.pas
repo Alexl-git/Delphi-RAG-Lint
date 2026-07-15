@@ -1700,6 +1700,30 @@ begin
   RunCompileDiagnoseAsync(AProjFile, False);
 end;
 
+{ Task 6 fix: the DB refresh-findings must WRITE is the same PRIMARY DB the LSP
+  READS for its diagnostics overlay -- otherwise the sweep refreshes a DB the
+  IDE never displays from. The LSP resolves its active DBs via
+  ResolveActiveIndexDbs (manifest-first: an ORM3-root manifest DB shadows a
+  stale per-project <projname>.sqlite), and its Result[0] is the primary
+  writable DB. So resolve the refresh target the identical way; fall back to
+  GetActiveProjectDb only if the resolver yields nothing (no manifest, no
+  indexed DB). Using GetActiveProjectDb directly (the old behaviour) wrote
+  <projdir>\<projname>.sqlite, which for a manifest-covered file is exactly the
+  DB the LSP deliberately ignores -- so findings never appeared. }
+function ResolveRefreshFindingsDb: string;
+var
+  DbList: TArray<string>;
+begin
+  Result:= '';
+  try
+    DbList:= ResolveActiveIndexDbs(LoadSettings);
+    if Length(DbList) > 0 then Result:= DbList[0];
+  except
+    Result:= '';
+  end;
+  if Result = '' then Result:= GetActiveProjectDb;
+end;
+
 { Task 6 (fresh compiler findings): fire-and-forget spawn of the
   refresh-findings CLI verb, which recompiles STALE units (or ALL units when
   AFull) and refreshes the persistent compiler_findings table in the project
@@ -1719,7 +1743,11 @@ var
   SI      : TStartupInfoW      ;
   PI      : TProcessInformation;
 begin
-  if (AProj = '') or (ADb = '') then Exit;
+  if (AProj = '') or (ADb = '') then
+  begin
+    DebugLog(Format('SpawnRefreshFindings: SKIP (proj="%s" db="%s")', [AProj, ADb]));
+    Exit;
+  end;
   ExePath:= DLExe64;
 
   FillChar(SI, SizeOf(SI), 0);
@@ -1727,6 +1755,9 @@ begin
   FillChar(PI, SizeOf(PI), 0);
   CmdLine:= Format('"%s" refresh-findings --project "%s" --db "%s"%s',
     [ExePath, AProj, ADb, IfThen(AFull, ' --full', '')]);
+  { Task 6 fix: log the spawn so it is VISIBLE in the plugin log which DB the
+    sweep targets (previously invisible -- a wrong-DB sweep looked like no sweep). }
+  DebugLog('SpawnRefreshFindings: ' + CmdLine);
   SetLength(CmdLineW, Length(CmdLine) + 1);
   Move(PChar(CmdLine)^, CmdLineW[0], (Length(CmdLine) + 1) * SizeOf(WideChar));
   if CreateProcessW(nil, @CmdLineW[0], nil, nil, False, CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
@@ -1747,7 +1778,7 @@ begin
   { Task 6: ADD-alongside spawn -- keeps the persistent compiler_findings DB
     fresh on every save, independent of (and in addition to) the pane-publish
     compile-check above. Fire-and-forget; does not block the save. }
-  SpawnRefreshFindings(GetActiveProjectFile, GetActiveProjectDb, False);
+  SpawnRefreshFindings(GetActiveProjectFile, ResolveRefreshFindingsDb, False);
 end;
 
 { Task 6: menu handler for "Full Compile Sweep" -- forces a full rebuild of
@@ -1759,7 +1790,7 @@ var
   ProjDb  : string;
 begin
   ProjFile:= GetActiveProjectFile;
-  ProjDb  := GetActiveProjectDb;
+  ProjDb  := ResolveRefreshFindingsDb; { the DB the LSP displays from -- not <projname>.sqlite }
   if (ProjFile = '') or (ProjDb = '') then
   begin
     ShowMessage('drag-lint Full Compile Sweep: no active project found.');
@@ -4184,7 +4215,7 @@ begin
         + fire-and-forget, so it cannot slow down or block the ghost-check
         above. '' guards inside SpawnRefreshFindings make this a silent no-op
         when no project is open. }
-      try SpawnRefreshFindings(GetActiveProjectFile, GetActiveProjectDb, False); except end;
+      try SpawnRefreshFindings(GetActiveProjectFile, ResolveRefreshFindingsDb, False); except end;
     end;
     { v0.47: best-effort crash recovery on startup -- if a project is already open,
     restore any file left overlaid by a crashed ghost-check (no prompt; only posts
