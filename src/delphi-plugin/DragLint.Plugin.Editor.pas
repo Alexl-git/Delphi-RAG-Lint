@@ -78,6 +78,8 @@ procedure InvokeCompletionAuto;
 { v0.46: quick-fix -- add the unit for the undeclared identifier at the cursor
   (bound to Ctrl+Alt+U). }
 procedure InvokeQuickFixUses (Sender: TObject);
+procedure InvokeQuickFixInlineHintUses(Sender: TObject);
+procedure InvokeConvertFieldToProperty(Sender: TObject);
 procedure InvokeSignatureHelp(Sender: TObject);
 procedure InvokeDiagnostics  (Sender: TObject);
 procedure InvokeRename       (Sender: TObject);
@@ -142,6 +144,7 @@ implementation
 
 uses
   System.Generics.Collections
+  , System.Generics.Defaults
   , System.IOUtils
   , System.StrUtils
   , System.UITypes
@@ -1671,6 +1674,14 @@ var { v0.47: ONE guard shared by Compile&Diagnose, compile-on-save AND ghost-che
     overlay and mis-attribute its findings to the saved file. Mutually exclusive. }
   GProjectBuildBusy: Integer = 0;
 
+  { Task 6 auto-refresh: single-flight guard for the Full Compile Sweep. Separate
+    from GProjectBuildBusy -- the sweep spawns `drag-lint refresh-findings`, which
+    runs its OWN out-of-process msbuild (not the plugin's compile-check), so the
+    two guards protect different resources and a sweep may legitimately run while
+    a compile-check has already released GProjectBuildBusy. Prevents two full
+    sweeps from stomping the same project DB at once. }
+  GSweepBusy: Integer = 0;
+
   /// <summary>Compiles AProjFile OUT-OF-PROCESS on a background thread (the real
   /// msbuild incremental compile) and pushes compiler findings -- including
   /// semantic errors like E2003 that the tree-sitter lint cannot see -- into the
@@ -1802,9 +1813,100 @@ begin
   SpawnRefreshFindings(GetActiveProjectFile, ResolveRefreshFindingsDb, False);
 end;
 
+function DLActivePas(out APath: string): Boolean; forward;
+
+{ Task 6 auto-refresh: run the Full Compile Sweep on a background thread, WAIT
+  for the refresh-findings child to exit, then re-publish diagnostics for the
+  currently-open .pas so the freshly-swept findings appear WITHOUT the user
+  re-opening or re-saving the file.
+
+  Why a dedicated waiter instead of the fire-and-forget SpawnRefreshFindings:
+  auto-refresh needs to know WHEN the sweep is done. SpawnRefreshFindings
+  detaches and returns immediately (correct for the per-save spawn -- the save
+  itself already re-reads the DB). The sweep touches every unit, so nothing
+  re-reads the DB afterwards on its own; we must wait, then poke the LSP.
+
+  The poke is TriggerDiagnosticsOnSave(activePas): it sends textDocument/didSave
+  to the running LSP, which re-queries compiler_findings from the just-swept DB
+  and republishes -> HandleNotification -> cache -> gutter. This is the SAME
+  DB-reread path a real save uses, so the display ends up identical to what the
+  user would see after a manual save -- only now it is automatic.
+
+  Never blocks the IDE: the spawn+wait live on an anonymous thread; only the
+  final poke + repaint are queued to the main thread. Single-flight via
+  GSweepBusy so a second menu click while a sweep runs is a no-op. }
+procedure RunFullCompileSweepAsync(const AProjFile, ADb: string);
+var
+  ExePath: string;
+begin
+  if AtomicCmpExchange(GSweepBusy, 1, 0) <> 0 then
+  begin
+    ShowMessage('drag-lint: a Full Compile Sweep is already running -- please wait.');
+    Exit;
+  end;
+  ExePath:= DLExe64;
+
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      CmdLine : string             ;
+      CmdLineW: array of WideChar  ;
+      SI      : TStartupInfoW      ;
+      PI      : TProcessInformation;
+      ActPas  : string             ;
+    begin
+      try
+        CmdLine:= Format('"%s" refresh-findings --project "%s" --db "%s" --full',
+          [ExePath, AProjFile, ADb]);
+        DebugLog('FullCompileSweep(async): START ' + CmdLine);
+        FillChar(SI, SizeOf(SI), 0); SI.cb:= SizeOf(SI);
+        FillChar(PI, SizeOf(PI), 0);
+        SetLength(CmdLineW, Length(CmdLine) + 1);
+        Move(PChar(CmdLine)^, CmdLineW[0], (Length(CmdLine) + 1) * SizeOf(WideChar));
+        if CreateProcessW(nil, @CmdLineW[0], nil, nil, False,
+             CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
+        begin
+          { Wait for the sweep to finish (a full rebuild can take minutes on a
+            large project; INFINITE is fine -- we are on a worker thread). }
+          WaitForSingleObject(PI.hProcess, INFINITE);
+          CloseHandle(PI.hProcess);
+          CloseHandle(PI.hThread );
+          DebugLog('FullCompileSweep(async): DONE -- refreshing IDE display');
+          { Grab the active .pas on the worker thread (read-only OTA query is
+            fine), then poke the LSP + repaint on the MAIN thread. }
+          TThread.Queue(nil,
+            procedure
+            begin
+              try
+                if DLActivePas(ActPas) then
+                begin
+                  { re-read the just-swept DB into the pane for the open file }
+                  TriggerDiagnosticsOnSave(ActPas);
+                  DebugLog('FullCompileSweep(async): re-published diagnostics for ' + ActPas);
+                end;
+                RepaintActiveView;
+              except
+                on E: Exception do
+                  DebugLog('FullCompileSweep(async): refresh EXC ' + E.Message);
+              end;
+            end);
+        end
+        else
+          DebugLog('FullCompileSweep(async): CreateProcessW FAILED');
+      except
+        on E: Exception do
+          DebugLog('FullCompileSweep(async): EXC ' + E.Message);
+      end;
+      AtomicExchange(GSweepBusy, 0);
+    end
+  ).Start;
+end; // procedure
+
 { Task 6: menu handler for "Full Compile Sweep" -- forces a full rebuild of
   ALL units (not just stale ones) so compiler_findings is refreshed even for
-  units nothing has touched. Mirrors InvokeCompileDiagnose's no-project guard. }
+  units nothing has touched. Mirrors InvokeCompileDiagnose's no-project guard.
+  Task 6 auto-refresh: delegates to RunFullCompileSweepAsync, which waits for
+  the sweep and then repaints the open file -- no manual re-save needed. }
 procedure InvokeFullCompileSweep(Sender: TObject);
 var
   ProjFile: string;
@@ -1817,9 +1919,9 @@ begin
     ShowMessage('drag-lint Full Compile Sweep: no active project found.');
     Exit;
   end;
-  SpawnRefreshFindings(ProjFile, ProjDb, True);
+  RunFullCompileSweepAsync(ProjFile, ProjDb);
   ShowMessage('drag-lint: Full Compile Sweep started in the background -- '
-    + 'compiler_findings will refresh for all units once it completes.');
+    + 'the open file will refresh automatically once it completes.');
 end;
 
 { v0.47: read the active editor's UNSAVED buffer (in-memory text) + its file path
@@ -2742,46 +2844,61 @@ begin
   );
 end; // procedure
 
+type
+  { A single parsed finding, retained so the clipboard text can be sorted by
+    source position -- the raw `drag-lint lint` output is grouped by RULE, not by
+    line, so pasting it verbatim did not match the line-ordered Diagnostics pane. }
+  TCopyDiagRow = record
+    LineNo: Integer;
+    ColNo : Integer;
+    Text  : string ; { the pre-formatted "file(l,c): tag rule: msg" clipboard line }
+  end;
+
 procedure InvokeCopyDiagnostics(Sender: TObject);
 { v0.46: lint the active SAVED file ON DEMAND (synchronous), copy the findings to
   the clipboard (for pasting to an AI) AND publish them to the cache + repaint so
   the gutter/inline markers light up. This is independent of the background
-  live-diagnostics runner -- it always reflects the file on disk right now. }
+  live-diagnostics runner -- it always reflects the file on disk right now.
+  Clipboard rows are SORTED by (line, column) so the pasted list reads top-to-
+  bottom like the file / the Diagnostics pane (the engine emits them grouped by
+  rule). The gutter cache is keyed by range, so it needs no ordering. }
 var
-  ES      : IOTAEditorServices;
-  EV      : IOTAEditView      ;
-  FilePath: string            ;
-  Exe     : string            ;
-  CmdLine : string            ;
-  Output  : string            ;
-  Line    : string            ;
-  Loc     : string            ;
-  Loc2    : string            ;
-  ColStr  : string            ;
-  LineStr : string            ;
-  Tag     : string            ;
-  Rest    : string            ;
-  Rule    : string            ;
-  Msg     : string            ;
-  ClipText: string            ;
-  Lines   : TStringList       ;
-  SB      : TStringBuilder    ;
-  i       : Integer           ;
-  lb      : Integer           ;
-  rb      : Integer           ;
-  c1      : Integer           ;
-  c2      : Integer           ;
-  P       : Integer           ;
-  LineNo  : Integer           ;
-  ColNo   : Integer           ;
-  Count   : Integer           ;
-  SevInt  : Integer           ;
-  Params  : TJSONObject       ;
-  DObj    : TJSONObject       ;
-  RangeObj: TJSONObject       ;
-  StartObj: TJSONObject       ;
-  EndObj  : TJSONObject       ;
-  Arr     : TJSONArray        ;
+  ES      : IOTAEditorServices ;
+  EV      : IOTAEditView       ;
+  FilePath: string             ;
+  Exe     : string             ;
+  CmdLine : string             ;
+  Output  : string             ;
+  Line    : string             ;
+  Loc     : string             ;
+  Loc2    : string             ;
+  ColStr  : string             ;
+  LineStr : string             ;
+  Tag     : string             ;
+  Rest    : string             ;
+  Rule    : string             ;
+  Msg     : string             ;
+  ClipText: string             ;
+  Lines   : TStringList        ;
+  SB      : TStringBuilder     ;
+  Rows    : TList<TCopyDiagRow>;
+  Row     : TCopyDiagRow       ;
+  i       : Integer            ;
+  lb      : Integer            ;
+  rb      : Integer            ;
+  c1      : Integer            ;
+  c2      : Integer            ;
+  P       : Integer            ;
+  LineNo  : Integer            ;
+  ColNo   : Integer            ;
+  Count   : Integer            ;
+  SevInt  : Integer            ;
+  Params  : TJSONObject        ;
+  DObj    : TJSONObject        ;
+  RangeObj: TJSONObject        ;
+  StartObj: TJSONObject        ;
+  EndObj  : TJSONObject        ;
+  Arr     : TJSONArray         ;
 begin
   FilePath:= '';
   if Supports(BorlandIDEServices, IOTAEditorServices, ES) and (ES <> nil) then
@@ -2802,10 +2919,11 @@ begin
   Output:= '';
   RunAndCaptureStdout(CmdLine, Output, 20000);
 
-  Lines := TStringList   .Create;
-  SB    := TStringBuilder.Create;
-  Params:= TJSONObject   .Create;
-  Arr   := TJSONArray    .Create;
+  Lines := TStringList        .Create;
+  SB    := TStringBuilder     .Create;
+  Rows  := TList<TCopyDiagRow>.Create;
+  Params:= TJSONObject        .Create;
+  Arr   := TJSONArray         .Create;
   try
     Lines.Text:= Output;
     Count:= 0;
@@ -2830,7 +2948,12 @@ begin
       LineNo:= StrToIntDef(Trim(LineStr), 1);
       ColNo := StrToIntDef(Trim(ColStr ), 1);
 
-      SB.AppendLine(Format('%s(%d,%d): %s %s: %s', [FilePath, LineNo, ColNo, Tag, Rule, Msg]));
+      { Collect the clipboard row; sorted by (line, col) after the loop so the
+        pasted list is in file order, not the engine's rule-grouped order. }
+      Row.LineNo:= LineNo;
+      Row.ColNo := ColNo ;
+      Row.Text  := Format('%s(%d,%d): %s %s: %s', [FilePath, LineNo, ColNo, Tag, Rule, Msg]);
+      Rows.Add(Row);
       Inc(Count);
 
       { cache entry (LSP-style, 0-based) so EditViewNotifier paints it }
@@ -2856,6 +2979,17 @@ begin
       Arr.AddElement(DObj);
     end; // for
 
+    { Sort the clipboard rows by (line, column) -- stable enough for the pane to
+      match -- then emit them in file order. }
+    Rows.Sort(TComparer<TCopyDiagRow>.Construct(
+      function(const L, R: TCopyDiagRow): Integer
+      begin
+        Result:= L.LineNo - R.LineNo;
+        if Result = 0 then Result:= L.ColNo - R.ColNo;
+      end));
+    for i:= 0 to Rows.Count - 1 do
+      SB.AppendLine(Rows[i].Text);
+
     Params.AddPair('diagnostics', Arr   ); { Arr ownership -> Params }
     Cache .Update (FilePath     , Params);
     if (ES <> nil) and (ES.TopView <> nil) then
@@ -2870,6 +3004,7 @@ begin
     end;
   finally
     SB.Free;
+    Rows.Free;
     Lines.Free;
     Params.Free; { frees Arr + child objects }
   end; // try
@@ -3708,6 +3843,162 @@ begin
   else ShowMessage('drag-lint: could not locate the implementation uses clause. Add manually: ' + U);
 end;
 
+{ Pull the unit name out of a compiler H2443 message like
+  "Inline function 'MessageDlg' has not been expanded because unit 'System.UITypes'
+  is not specified in USES list" -- the unit is the SECOND single-quoted token. }
+function DLExtractInlineHintUnit(const AMsg: string): string;
+var
+  q1a, q1b, q2a, q2b: Integer;
+begin
+  Result:= '';
+  { only act on the H2443 shape to avoid mis-parsing unrelated quoted messages }
+  if (Pos('H2443', AMsg) = 0) and (Pos('not been expanded', LowerCase(AMsg)) = 0) then Exit;
+  q1a:= Pos('''', AMsg);                       if q1a = 0 then Exit;
+  q1b:= PosEx('''', AMsg, q1a + 1);            if q1b = 0 then Exit;
+  q2a:= PosEx('''', AMsg, q1b + 1);            if q2a = 0 then Exit;
+  q2b:= PosEx('''', AMsg, q2a + 1);            if q2b = 0 then Exit;
+  Result:= Trim(Copy(AMsg, q2a + 1, q2b - q2a - 1));
+end;
+
+{ Quick-fix for compiler hint H2443 ("inline function not expanded because unit U
+  not in USES"): find the H2443 diagnostic on the caret line, pull the unit U out
+  of its message, and add U to the implementation uses clause -- reusing the same
+  undoable insertion as the undeclared-identifier quick-fix. Requires the caret to
+  be on the flagged line and the H2443 finding to be cached (compile-check must
+  have run -- e.g. after a save or Compile & Diagnose). }
+procedure InvokeQuickFixInlineHintUses(Sender: TObject);
+var
+  ESS      : IOTAEditorServices         ;
+  EV       : IOTAEditView               ;
+  FileName : string                     ;
+  CaretRow0: Integer                    ;
+  Diags    : TArray<TDragLintDiagnostic>;
+  D        : TDragLintDiagnostic        ;
+  U        : string                     ;
+  Ins      : string                     ;
+begin
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  EV:= ESS.TopView;
+  if (EV = nil) or (EV.Buffer = nil) then begin ShowMessage('drag-lint: no active editor view.'); Exit; end;
+  FileName := EV.Buffer.FileName;
+  CaretRow0:= EV.Position.Row - 1; { cache is 0-based }
+  if CaretRow0 < 0 then CaretRow0:= 0;
+
+  U:= '';
+  Diags:= Cache.GetForLine(FileName, CaretRow0);
+  for D in Diags do
+  begin
+    U:= DLExtractInlineHintUnit(D.Message);
+    if U <> '' then Break;
+  end;
+
+  if U = '' then
+  begin
+    ShowMessage('drag-lint: no H2443 inline-hint on the line at the cursor.'#13#10 +
+      '(Put the caret on the flagged line; compile the unit first so the H2443 hint is cached.)');
+    Exit;
+  end;
+  DLT('uses', 'quickfix-H2443: ' + U);
+  if DLAddUnitsToImplUses([U], Ins) then ShowMessage('drag-lint: added inline-hint unit to the implementation uses clause: ' + Ins)
+  else ShowMessage('drag-lint: could not locate the implementation uses clause. Add manually: ' + U);
+end;
+
+{ Parse a single-field declaration line "  Name: TType;" into its parts. Returns
+  False for anything that is not exactly one field (e.g. "A, B: T" multi-name
+  lists, records with '=', or lines with trailing directives) -- those are left
+  for the user so we never mangle a declaration we do not fully understand. }
+function DLParseSingleFieldLine(const ALine: string; out AIndent, AName, AType: string): Boolean;
+var
+  S      : string ;
+  ColonP : Integer;
+  SemiP  : Integer;
+  i      : Integer;
+begin
+  Result:= False; AIndent:= ''; AName:= ''; AType:= '';
+  S:= ALine;
+  { capture leading whitespace verbatim so the rewrite keeps the indentation }
+  i:= 1;
+  while (i <= Length(S)) and CharInSet(S[i], [' ', #9]) do Inc(i);
+  AIndent:= Copy(S, 1, i - 1);
+  S:= Copy(S, i, MaxInt);
+  { reject comment lines and non-field shapes early }
+  if (S = '') or S.StartsWith('//') or S.StartsWith('{') then Exit;
+  ColonP:= Pos(':', S);
+  if ColonP = 0 then Exit;
+  AName:= Trim(Copy(S, 1, ColonP - 1));
+  { a multi-name list, an '=' const/typed-const, or a non-identifier name -> bail }
+  if (AName = '') or (Pos(',', AName) > 0) or (Pos('=', S) > 0) then Exit;
+  for i:= 1 to Length(AName) do
+    if not CharInSet(AName[i], ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Exit;
+  S:= Copy(S, ColonP + 1, MaxInt);
+  SemiP:= Pos(';', S);
+  if SemiP = 0 then Exit;
+  AType:= Trim(Copy(S, 1, SemiP - 1));
+  { reject array/record/anonymous inline types (would need a backing decl we
+    cannot safely synthesise) and anything after the ';' }
+  if (AType = '') or (Pos(' ', AType) > 0) then Exit;
+  Result:= True;
+end;
+
+/// <summary>Quick-fix for the 'public-field' lint: convert the single public data
+/// field on the caret line into a read/write property backed by a new private
+/// field. "Name: TType;" becomes "FName: TType;" + "property Name: TType read
+/// FName write FName;". Same-named property means NO call sites need editing --
+/// existing reads/writes transparently route through it. Undoable (single editor
+/// write). Conservative: only a lone "Name: TType;" is converted; multi-name
+/// lists, inline array/record types, or already-property lines are refused with a
+/// message. The backing FName stays in the current section -- move it to a
+/// 'private'/'strict private' block if you want the field hidden too.</summary>
+procedure InvokeConvertFieldToProperty(Sender: TObject);
+var
+  ESS   : IOTAEditorServices;
+  EV    : IOTAEditView      ;
+  EPos  : IOTAEditPosition  ;
+  Src   : string            ;
+  FileName: string          ;
+  Lines : TArray<string>    ;
+  Row0  : Integer           ;
+  RawLn : string            ;
+  Indent, Name, Typ: string ;
+  NewText: string           ;
+begin
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  EV:= ESS.TopView;
+  if (EV = nil) or (EV.Buffer = nil) then begin ShowMessage('drag-lint: no active editor view.'); Exit; end;
+  FileName:= EV.Buffer.FileName;
+  Row0:= EV.Position.Row - 1;
+  if Row0 < 0 then Row0:= 0;
+
+  Src:= ReadActiveBufferText(FileName);
+  Lines:= Src.Replace(#13, '').Split([#10]);
+  if (Row0 < 0) or (Row0 > High(Lines)) then begin ShowMessage('drag-lint: caret line out of range.'); Exit; end;
+  RawLn:= Lines[Row0];
+
+  if not DLParseSingleFieldLine(RawLn, Indent, Name, Typ) then
+  begin
+    ShowMessage('drag-lint: the caret line is not a simple "Name: TType;" field.'#13#10 +
+      '(Put the caret on the public field line. Multi-name lists and inline '#13#10 +
+      'array/record types are not auto-converted.)');
+    Exit;
+  end;
+  NewText:=
+    Format('%sF%s: %s;', [Indent, Name, Typ]) + sLineBreak +
+    Format('%sproperty %s: %s read F%s write F%s;', [Indent, Name, Typ, Name, Name]);
+
+  EPos:= EV.Position;
+  { replace the whole caret line: go to col 1, select to end of line, overwrite }
+  EPos.Move(Row0 + 1, 1);
+  EPos.MoveEOL;
+  { column count of the original line (may include trailing spaces) }
+  var EndCol: Integer:= EPos.Column;
+  EPos.Move(Row0 + 1, 1);
+  EPos.Delete(EndCol - 1);          { remove the old field text, keep the line }
+  EPos.InsertText(NewText);
+  DLT('field2prop', Format('%s: %s -> property (F%s)', [Name, Typ, Name]));
+  ShowMessage(Format('drag-lint: converted "%s" to a property backed by F%s.'#13#10 +
+    '(Move F%s into a private/strict-private section to fully hide it.)', [Name, Name, Name]));
+end;
+
 procedure InvokeGoToDefinition(Sender: TObject);
 var
   Uri    : string; Line, Col: Integer;
@@ -4115,6 +4406,8 @@ begin
   AddWrappedItem(SubUses, 'Reconcile Project Members (.dpr/.dproj)...'                 , InvokeReconcileProject);
   AddWrappedItem(SubUses, 'Uses Report (CSV)...'                                       , InvokeUsesReportCsv   );
   AddWrappedItem(SubUses, 'Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)'  , InvokeQuickFixUses    );
+  AddWrappedItem(SubUses, 'Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor'      , InvokeQuickFixInlineHintUses);
+  AddWrappedItem(SubUses, 'Quick-Fix: Convert Public Field to Property at Cursor'      , InvokeConvertFieldToProperty);
   AddWrappedItem(SubUses, 'Add Missing Units to uses (whole unit)...'                  , InvokeSuggestUses     );
   AddWrappedItem(SubUses, 'Impact / Blast Radius (symbol)...'                          , InvokeImpact          );
   AddWrappedItem(SubUses, 'Show Wiring (Spring4D DI + DFM events)...'                  , InvokeWiring          );
