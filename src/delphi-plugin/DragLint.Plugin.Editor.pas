@@ -1558,7 +1558,18 @@ end;
 { Parse compile-check --format json output and REPLACE the compiler overlay.
   Thread-safe (the DiagnosticCache has its own lock) -- safe to call from a
   background thread. Returns False if the output held no parseable JSON array. }
-function ParseAndPushCompileOutput(const AOutput: string; out nErr, nWarn, nHint: Integer): Boolean;
+{ APushOverlay: when True, the parsed compiler findings are pushed into the
+  DiagnosticCache compiler overlay (FCompilerByFile). Pass True ONLY for the
+  ghost-check / UNSAVED-buffer path, which has no LSP publishDiagnostics for the
+  in-memory content -- the overlay is its only way onto the gutter. Pass False
+  for SAVED-file compiles (compile-on-save, Compile & Diagnose): the LSP already
+  merges compiler_findings from the DB into its publishDiagnostics for saved
+  files (refresh-findings keeps that DB fresh), so also pushing the overlay
+  DOUBLE-COUNTS the same findings -- GetForFile concatenates FByFile + the
+  overlay without dedup, so the count briefly balloons (e.g. 197) then settles
+  as the overlay clears: the visible flicker. Counting still returns via
+  nErr/nWarn/nHint regardless of APushOverlay. }
+function ParseAndPushCompileOutput(const AOutput: string; out nErr, nWarn, nHint: Integer; APushOverlay: Boolean = True): Boolean;
 var
   JSON    : string                                         ;
   FilePath: string                                         ;
@@ -1645,7 +1656,8 @@ begin
       intact. SetCompilerFindings replaces per file (empty -> remove), so a file
       that recompiled clean and reported nothing is not in ByFile and keeps its
       prior overlay until the DB-backed LSP path or the next sweep refreshes it. }
-    for Pair in ByFile do Cache.SetCompilerFindings(Pair.Key, Pair.Value.ToArray);
+    if APushOverlay then
+      for Pair in ByFile do Cache.SetCompilerFindings(Pair.Key, Pair.Value.ToArray);
     Result:= True;
   finally
     for L in ByFile.Values do L.Free;
@@ -1687,7 +1699,7 @@ begin
     nHint: Integer; Parsed: Boolean; begin nErr:= 0; nWarn:= 0; nHint:= 0; Parsed:= False; try CmdLine:= Format('"%s" compile-check "%s" --format json', [ExePath,
             AProjFile]); DebugLog('CompileDiagnose(async): START '
       + CmdLine); ExitCode:= RunAndCaptureStdout(CmdLine, Output, 600000); DebugLog(Format('CompileDiagnose(async): exit=%d outLen=%d', [ExitCode,
-              Length(Output)])); if ExitCode <> 2 then Parsed:= ParseAndPushCompileOutput(Output, nErr, nWarn, nHint); DebugLog(Format('CompileDiagnose(async): parsed=%s E=%d W=%d H=%d', [BoolToStr(Parsed,
+              Length(Output)])); if ExitCode <> 2 then Parsed:= ParseAndPushCompileOutput(Output, nErr, nWarn, nHint, {APushOverlay=}False); DebugLog(Format('CompileDiagnose(async): parsed=%s E=%d W=%d H=%d', [BoolToStr(Parsed,
                 True), nErr, nWarn, nHint])); except on E: Exception do DebugLog('CompileDiagnose(async): EXC '
       + E.Message); end; TThread.Queue(nil, procedure begin try RepaintActiveView; except end; { v0.48: tell the dock watch timer to jump to the Diagnostics section. } if Parsed then DragLint.Plugin.StructureForm.GScrollStructureToDiagPending:= True; if AInteractive then begin if Parsed then ShowMessage(Format( 'drag-lint Compile & Diagnose complete.'#13#10
       + '%d error(s), %d warning(s), %d hint(s).'#13#10 + 'See the drag-lint Diagnostics pane.', [nErr, nWarn,
@@ -1982,7 +1994,7 @@ begin
           [ExePath, ProjFile, Manifest, Plat]) else { nothing unsaved -> a plain compile of the saved project (same errors,
             no overlay) so startup / tab-switch triggers still show diagnostics. } CmdLine:= Format('"%s" compile-check "%s" --format json', [ExePath,
             ProjFile]); DebugLog(Format('Compile(state): %d overlay(s) START %s', [nOverlays,
-              CmdLine])); ExitCode:= RunAndCaptureStdout(CmdLine, Output, 600000); DebugLog(Format('Compile(state): exit=%d outLen=%d', [ExitCode, Length(Output)])); if ExitCode <> 2 then Parsed:= ParseAndPushCompileOutput(Output, nErr, nWarn, nHint); except on E: Exception do DebugLog('Compile(state): EXC '
+              CmdLine])); ExitCode:= RunAndCaptureStdout(CmdLine, Output, 600000); DebugLog(Format('Compile(state): exit=%d outLen=%d', [ExitCode, Length(Output)])); if ExitCode <> 2 then Parsed:= ParseAndPushCompileOutput(Output, nErr, nWarn, nHint, {APushOverlay=}True); except on E: Exception do DebugLog('Compile(state): EXC '
       + E.Message); end; for var T in Temps do try TFile.Delete(T); except end; TThread.Queue(nil, procedure begin try RepaintActiveView; except end; { v0.48: tell the dock watch timer to jump to the Diagnostics section. } if Parsed then DragLint.Plugin.StructureForm.GScrollStructureToDiagPending:= True; if AInteractive then begin if Parsed then begin if nOverlays > 0 then ShowMessage(Format('drag-lint compile (%d unsaved unit(s)):'#13#10
       + '%d error(s), %d warning(s), %d hint(s).'#13#10 + 'Your files on disk were not changed.', [nOverlays, nErr, nWarn,
                     nHint])) else ShowMessage(Format('drag-lint compile (saved project):'#13#10 + '%d error(s), %d warning(s), %d hint(s).', [nErr, nWarn,
