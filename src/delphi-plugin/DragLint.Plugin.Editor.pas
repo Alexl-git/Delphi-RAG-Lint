@@ -4482,6 +4482,10 @@ begin
   else Services.AddActionMenu('ToolsMenu', nil, RootMenu, True, True);
   GMenuItems.Add(RootMenu);
 
+  { Full Compile Sweep pinned at the very top -- the most-used action (recompile
+    all units + refresh compiler_findings, then auto-refresh the open file). }
+  AddWrappedItem(RootMenu, 'Full Compile Sweep'         , InvokeFullCompileSweep);
+  AddSeparator(RootMenu);
   { v0.42: daily-use actions on top; diagnostics & test harness bunched below
     a separator so the everyday items aren't lost among them. }
   AddWrappedItem(RootMenu, 'drag-lint Panel (dockable)', InvokeDockPanel  );
@@ -4564,11 +4568,8 @@ begin
   AddWrappedItem(RootMenu, 'Lint Buffer (Unsaved)'          , InvokeLintBuffer     );
   AddWrappedItem(RootMenu, 'Copy Diagnostics (Current File)', InvokeCopyDiagnostics);
   AddWrappedItem(RootMenu, 'Compile && Diagnose'            , InvokeCompileDiagnose);
-  { Task 6: on-demand full refresh of the persistent compiler_findings table --
-    recompiles ALL units (not just stale ones) via refresh-findings --full.
-    Placed with its sibling full-project compile action (above the buffer/ghost
-    "debug" items), so the primary sweep is easy to reach. }
-  AddWrappedItem(RootMenu, 'Full Compile Sweep'             , InvokeFullCompileSweep);
+  { Full Compile Sweep lives at the very TOP of the menu now (pinned); not repeated
+    here to avoid a duplicate entry. }
   AddWrappedItem(RootMenu, 'Compile Buffer (unsaved)'       , InvokeGhostCheck     );
   AddWrappedItem(RootMenu, 'Recover Buffer-Compile Files'   , InvokeGhostRecover   );
   AddWrappedItem(RootMenu, 'Import Build Log...'            , InvokeImportLog      );
