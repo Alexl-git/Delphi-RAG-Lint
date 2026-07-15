@@ -149,6 +149,8 @@ uses
   , System.StrUtils
   , System.UITypes
   , Vcl.Forms
+  , Vcl.Controls
+  , Vcl.StdCtrls
   , Vcl.Clipbrd
   , Winapi.Windows
   , Winapi.ShellAPI
@@ -3999,6 +4001,86 @@ begin
     '(Move F%s into a private/strict-private section to fully hide it.)', [Name, Name, Name]));
 end;
 
+{ Modal single-choice picker built at runtime (no .dfm -- avoids the design-time
+  EResNotFound trap). Shows AItems in a listbox; returns the chosen 0-based index
+  or -1 if cancelled. Double-click or OK confirms. Used by Go-to-Definition when a
+  symbol has more than one definition (e.g. the string helper ToUpper vs the
+  System.Character overloads). }
+function DLPickFromList(const ACaption, APrompt: string; const AItems: array of string): Integer;
+var
+  Frm  : TForm    ;
+  Lbl  : TLabel   ;
+  Lst  : TListBox ;
+  BtnOK: TButton  ;
+  BtnNo: TButton  ;
+  i    : Integer  ;
+begin
+  Result:= -1;
+  Frm:= TForm.CreateNew(nil);
+  try
+    Frm.Caption   := ACaption;
+    Frm.Position  := poScreenCenter;
+    Frm.BorderStyle:= bsDialog;
+    Frm.ClientWidth := 640;
+    Frm.ClientHeight:= 320;
+
+    Lbl:= TLabel.Create(Frm);
+    Lbl.Parent  := Frm;
+    Lbl.Left    := 12;
+    Lbl.Top     := 10;
+    Lbl.Caption := APrompt;
+
+    Lst:= TListBox.Create(Frm);
+    Lst.Parent  := Frm;
+    Lst.Left    := 12;
+    Lst.Top     := 32;
+    Lst.Width   := Frm.ClientWidth  - 24;
+    Lst.Height  := Frm.ClientHeight - 32 - 48;
+    Lst.Anchors := [akLeft, akTop, akRight, akBottom];
+    for i:= 0 to High(AItems) do Lst.Items.Add(AItems[i]);
+    if Lst.Items.Count > 0 then Lst.ItemIndex:= 0;
+
+    BtnOK:= TButton.Create(Frm);
+    BtnOK.Parent  := Frm;
+    BtnOK.Caption := 'Go To';
+    BtnOK.Default := True;
+    BtnOK.ModalResult:= mrOk;
+    BtnOK.Width   := 90;
+    BtnOK.Top     := Frm.ClientHeight - 38;
+    BtnOK.Left    := Frm.ClientWidth  - 2 * 90 - 24;
+    BtnOK.Anchors := [akRight, akBottom];
+
+    BtnNo:= TButton.Create(Frm);
+    BtnNo.Parent  := Frm;
+    BtnNo.Caption := 'Cancel';
+    BtnNo.Cancel  := True;
+    BtnNo.ModalResult:= mrCancel;
+    BtnNo.Width   := 90;
+    BtnNo.Top     := Frm.ClientHeight - 38;
+    BtnNo.Left    := Frm.ClientWidth  - 90 - 12;
+    BtnNo.Anchors := [akRight, akBottom];
+
+    if (Frm.ShowModal = mrOk) and (Lst.ItemIndex >= 0) then Result:= Lst.ItemIndex;
+  finally
+    Frm.Free;
+  end;
+end;
+
+{ Navigate to one LSP Location (uri + range/start) from the definition array. }
+procedure DLGotoLocation(const ALoc: TJSONObject);
+var
+  Rng    : TJSONObject;
+  St     : TJSONObject;
+  DefPath: string     ;
+  DefLine: Integer    ;
+begin
+  DefPath:= ''; DefLine:= 1;
+  ALoc.TryGetValue<string>('uri', DefPath);
+  DefPath:= DLUriToPath(DefPath);
+  if ALoc.TryGetValue<TJSONObject>('range', Rng) and Rng.TryGetValue<TJSONObject>('start', St) then DefLine:= St.GetValue<Integer>('line') + 1;
+  DLNavigateToSource(DefPath, DefLine);
+end;
+
 procedure InvokeGoToDefinition(Sender: TObject);
 var
   Uri    : string; Line, Col: Integer;
@@ -4010,7 +4092,10 @@ var
   Loc    : TJSONObject               ;
   Rng    : TJSONObject               ;
   St     : TJSONObject               ;
-  DefPath: string; DefLine: Integer  ;
+  i      : Integer                   ;
+  DefPath: string; DefLn: Integer    ;
+  Labels : TArray<string>            ;
+  Chosen : Integer                   ;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then begin ShowMessage('drag-lint: no active editor view.'); Exit; end;
   Client:= EnsureLspClient;
@@ -4027,12 +4112,31 @@ begin
     if Resp is TJSONArray then Arr:= Resp as TJSONArray
     else if (Resp is TJSONObject) and (Resp as TJSONObject).TryGetValue<TJSONValue>('result', ResVal) and (ResVal is TJSONArray) then Arr:= ResVal as TJSONArray;
     if (Arr = nil) or (Arr.Count = 0) then begin ShowMessage('drag-lint: definition not found.'); Exit; end;
-    Loc:= Arr.Items[0] as TJSONObject;
-    DefPath:= ''; DefLine:= 1;
-    Loc.TryGetValue<string>('uri', DefPath);
-    DefPath:= DLUriToPath(DefPath);
-    if Loc.TryGetValue<TJSONObject>('range', Rng) and Rng.TryGetValue<TJSONObject>('start', St) then DefLine:= St.GetValue<Integer>('line') + 1;
-    DLNavigateToSource(DefPath, DefLine);
+
+    { One definition -> jump straight there (unchanged behaviour). More than one
+      (e.g. ToUpper: TStringHelper + TCharHelper + TCharacter + ...) -> let the
+      user pick which, instead of silently taking the first. The LSP Location only
+      carries uri+range, so each row is labelled "unit(line,col)". }
+    if Arr.Count = 1 then
+    begin
+      DLGotoLocation(Arr.Items[0] as TJSONObject);
+      Exit;
+    end;
+
+    SetLength(Labels, Arr.Count);
+    for i:= 0 to Arr.Count - 1 do
+    begin
+      Loc:= Arr.Items[i] as TJSONObject;
+      DefPath:= ''; DefLn:= 1;
+      Loc.TryGetValue<string>('uri', DefPath);
+      DefPath:= DLUriToPath(DefPath);
+      if Loc.TryGetValue<TJSONObject>('range', Rng) and Rng.TryGetValue<TJSONObject>('start', St) then DefLn:= St.GetValue<Integer>('line') + 1;
+      Labels[i]:= Format('%s  (line %d)', [ExtractFileName(DefPath), DefLn]);
+    end;
+
+    Chosen:= DLPickFromList('drag-lint: Go To Definition',
+      Format('%d definitions found -- choose one:', [Arr.Count]), Labels);
+    if Chosen >= 0 then DLGotoLocation(Arr.Items[Chosen] as TJSONObject);
   finally
     Resp.Free;
   end; // try
@@ -4460,11 +4564,13 @@ begin
   AddWrappedItem(RootMenu, 'Lint Buffer (Unsaved)'          , InvokeLintBuffer     );
   AddWrappedItem(RootMenu, 'Copy Diagnostics (Current File)', InvokeCopyDiagnostics);
   AddWrappedItem(RootMenu, 'Compile && Diagnose'            , InvokeCompileDiagnose);
+  { Task 6: on-demand full refresh of the persistent compiler_findings table --
+    recompiles ALL units (not just stale ones) via refresh-findings --full.
+    Placed with its sibling full-project compile action (above the buffer/ghost
+    "debug" items), so the primary sweep is easy to reach. }
+  AddWrappedItem(RootMenu, 'Full Compile Sweep'             , InvokeFullCompileSweep);
   AddWrappedItem(RootMenu, 'Compile Buffer (unsaved)'       , InvokeGhostCheck     );
   AddWrappedItem(RootMenu, 'Recover Buffer-Compile Files'   , InvokeGhostRecover   );
-  { Task 6: on-demand full refresh of the persistent compiler_findings table --
-    recompiles ALL units (not just stale ones) via refresh-findings --full. }
-  AddWrappedItem(RootMenu, 'Full Compile Sweep'             , InvokeFullCompileSweep);
   AddWrappedItem(RootMenu, 'Import Build Log...'            , InvokeImportLog      );
   AddWrappedItem(RootMenu, 'Open Plugin Log'                , InvokeOpenLog        );
 
