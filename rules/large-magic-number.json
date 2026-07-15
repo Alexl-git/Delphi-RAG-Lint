@@ -2,5 +2,6 @@
   "id": "large-magic-number",
   "severity": "info",
   "message": "Integer literal -- consider naming the constant",
-  "warn_capture": "magic"
+  "warn_capture": "magic",
+  "exclude_if_ancestor": ["declConst"]
 }

@@ -1,0 +1,6 @@
+# A literal that IS a const's value must NOT be flagged (it already names the constant).
+!large-magic-number 8
+!large-magic-number 9
+# The same literal in executable code MUST still fire.
+large-magic-number 18
+large-magic-number 19

@@ -20,14 +20,20 @@ type
   // Sister .json file (same basename) supplies metadata: id, severity, message.
   TQueryRule = class
     strict private
-      FQuery      : TTSQuery;
-      FId         : string  ;
-      FSeverity   : string  ;
-      FMessage    : string  ;
-      FSourcePath : string  ;
-      FWarnCapture: string  ;
-      FEnabled    : Boolean ;
-      FRuleId     : string  ;
+      FQuery          : TTSQuery       ;
+      FId             : string         ;
+      FSeverity       : string         ;
+      FMessage        : string         ;
+      FSourcePath     : string         ;
+      FWarnCapture    : string         ;
+      FEnabled        : Boolean        ;
+      FRuleId         : string         ;
+      FExcludeAncestors: TArray<string>;
+      { True if the picked node (or any ancestor up to the root) is one of the
+        node kinds in FExcludeAncestors -- used to suppress a match that sits in
+        a structural context the rule should not flag (e.g. an integer literal
+        that IS the value of a const definition, for large-magic-number). }
+      function InExcludedAncestor(const ANode: TTSNode): Boolean;
     public
       constructor Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
       destructor Destroy; override;
@@ -66,12 +72,30 @@ end;
 
 { TQueryRule }
 
+function TQueryRule.InExcludedAncestor(const ANode: TTSNode): Boolean;
+var
+  Cur: TTSNode;
+  Ex : string ;
+begin
+  Result:= False;
+  if Length(FExcludeAncestors) = 0 then Exit;
+  Cur:= ANode;
+  while not Cur.IsNull do
+  begin
+    for Ex in FExcludeAncestors do
+      if SameText(Cur.NodeType, Ex) then Exit(True);
+    Cur:= Cur.Parent;
+  end;
+end;
+
 constructor TQueryRule.Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
 var
   ErrOff : UInt32       ;
   ErrType: TTSQueryError;
   JSON   : TJSONObject  ;
   RawJson: string       ;
+  ExArr  : TJSONArray   ;
+  ExVal  : TJSONValue   ;
 begin
   inherited Create;
   FSourcePath:= AScmPath;
@@ -93,6 +117,14 @@ begin
       if JSON.GetValue('warn_capture') <> nil then FWarnCapture:= JSON.GetValue('warn_capture').Value;
       if JSON.GetValue('enabled'     ) <> nil then
         FEnabled:= not SameText(JSON.GetValue('enabled').Value, 'false');
+      { Optional structural exemption: node kinds whose subtree should NOT fire
+        this rule. A match is dropped when the picked node has an ancestor of any
+        listed kind. E.g. large-magic-number lists "declConst" so a literal that
+        IS a const's value is not told to "name the constant" -- it already is. }
+      ExArr:= JSON.GetValue('exclude_if_ancestor') as TJSONArray;
+      if Assigned(ExArr) then
+        for ExVal in ExArr do
+          FExcludeAncestors:= FExcludeAncestors + [ExVal.Value];
     finally
       JSON.Free;
     end;
@@ -297,6 +329,10 @@ begin
         end;
       end; // for
       if not (HasWarn or HasFirst) then Continue;
+
+      { Structural exemption (JSON "exclude_if_ancestor"): drop the match when the
+        picked node lives inside one of the excluded node kinds. }
+      if InExcludedAncestor(Picked) then Continue;
 
       Finding:= Default(TLintFinding);
       Finding.RuleId  := FId;
