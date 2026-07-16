@@ -87,6 +87,44 @@ uses
   {$IFDEF MSWINDOWS}, Winapi.Windows{$ENDIF}
   ;
 
+// Slice the first balanced brace-object out of AText, ignoring any preamble or
+// trailing lines the CLI may print around the JSON (e.g. a loaded-defaults note).
+// Returns empty if no object is found. A string-literal-aware brace scanner, so
+// braces inside JSON string values do not throw off the depth count.
+function SliceJsonObject(const AText: string): string;
+var
+  i, depth, startIdx: Integer;
+  inStr: Boolean;
+  esc  : Boolean;
+begin
+  Result := '';
+  startIdx := 0; depth := 0; inStr := False; esc := False;
+  for i := 1 to Length(AText) do
+  begin
+    if inStr then
+    begin
+      if esc then esc := False
+      else if AText[i] = '\' then esc := True
+      else if AText[i] = '"' then inStr := False;
+      Continue;
+    end;
+    case AText[i] of
+      '"': inStr := True;
+      '{':
+        begin
+          if depth = 0 then startIdx := i;
+          Inc(depth);
+        end;
+      '}':
+        begin
+          Dec(depth);
+          if depth = 0 then
+            Exit(Copy(AText, startIdx, i - startIdx + 1));
+        end;
+    end;
+  end;
+end;
+
 function ParseProptreeJson(const AJson: string): TProptree;
 var
   Root : TJSONObject;
@@ -96,9 +134,13 @@ var
   List : TList<TPropLeaf>;
   Leaf : TPropLeaf  ;
   BVal : Boolean    ;
+  Sliced: string    ;
 begin
   Result := Default(TProptree);
-  Root := TJSONObject.ParseJSONValue(AJson) as TJSONObject;
+  // Tolerate CLI preamble/trailing noise by extracting just the JSON object.
+  Sliced := SliceJsonObject(AJson);
+  if Sliced = '' then Sliced := AJson; // fall back to whole text
+  Root := TJSONObject.ParseJSONValue(Sliced) as TJSONObject;
   if Root = nil then
     raise Exception.Create('proptree: response is not a JSON object');
   try

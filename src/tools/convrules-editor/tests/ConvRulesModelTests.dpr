@@ -241,6 +241,30 @@ begin
   Check('proptree.leaf.pixelsperinch', Found);
 end;
 
+{ The real bug: drag-lint appends a "(loaded defaults ...)" line AFTER the JSON.
+  The parser must tolerate preamble/trailing noise by slicing the JSON object. }
+procedure TestProptreeNoise;
+const
+  NOISY =
+    '{'#13#10 +
+    '  "schema": "proptree/1",'#13#10 +
+    '  "root_type": "TFoo",'#13#10 +
+    '  "properties": ['#13#10 +
+    '    { "path": "Size", "type": "Integer", "declared_in": "U.TFoo",'#13#10 +
+    '      "kind": "scalar", "is_class_typed": false }'#13#10 +
+    '  ]'#13#10 +
+    '}'#13#10 +
+    '(loaded defaults from C:\Projects\.drag-lint.json)'#13#10;
+var
+  Tree: TProptree;
+begin
+  Tree := ParseProptreeJson(NOISY);
+  Check('proptree.noise.roottype', Tree.RootType = 'TFoo', Tree.RootType);
+  Check('proptree.noise.leafcount', Length(Tree.Leaves) = 1, IntToStr(Length(Tree.Leaves)));
+  if Length(Tree.Leaves) = 1 then
+    Check('proptree.noise.leafpath', Tree.Leaves[0].Path = 'Size', Tree.Leaves[0].Path);
+end;
+
 begin
   try
     TestRoundTrip;
@@ -250,6 +274,7 @@ begin
     TestEditReemit;
     TestCastClassifier;
     TestProptreeParse;
+    TestProptreeNoise;
 
     Writeln('');
     Writeln(Format('model-tests: %d pass / %d fail / %d total', [GPass, GFail, GPass + GFail]));

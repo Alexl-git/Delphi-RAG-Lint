@@ -272,8 +272,17 @@ begin
   FGrid.RowCount := 2;              // FixedRows(1) < RowCount; 2 = header + 1 blank
   FGrid.Cells[0, 1] := ''; FGrid.Cells[1, 1] := ''; FGrid.Cells[2, 1] := '';
   FPool.Clear;
-  SetStatus(Format('Loaded %d line(s), %d rule(s).',
+  SetStatus(Format('Loaded %d line(s), %d rule(s). Select a rule to edit its mapping.',
     [FBook.Nodes.Count, Length(FBook.ConvertHeaders)]));
+  // Auto-select the first rule so the grid shows content immediately (also makes
+  // the tool usable if a click ever fails to register). Selecting fires
+  // OnSelectItem -> LoadGridForBlock.
+  if FRules.Items.Count > 0 then
+  begin
+    FRules.ItemIndex := 0;
+    FRules.Items[0].Selected := True;
+    FRules.Items[0].Focused := True;
+  end;
 end;
 
 procedure TConvRulesForm.RefreshRulesList;
@@ -324,13 +333,10 @@ begin
 end;
 
 procedure TConvRulesForm.RulesSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
-var
-  H: Integer;
 begin
   if not Selected then Exit;
   if Item = nil then Exit;
-  H := Integer(Item.Data);
-  LoadGridForBlock(H);
+  LoadGridForBlock(Integer(Item.Data));
 end;
 
 function TConvRulesForm.ActiveLinks: TArray<TRuleNode>;
