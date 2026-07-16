@@ -2448,6 +2448,47 @@ begin
     Exit(1);
   end; // if
 
+  // Reverse of ancestors: list every class that descends from --of <ancestor>.
+  // Aggregates the distinct descendant names across all scanned DBs. One indexed
+  // lookup per DB (type_ancestors.ancestor_name). Backs the conversion editor's
+  // control-class pickers ("all TControl descendants").
+  if AArgs.SubCommand = 'descendants' then
+  begin
+    if AArgs.OfName = '' then begin Writeln('ERROR: query descendants requires --of <ancestor>'); Exit(2); end;
+    var Names: TStringList:= TStringList.Create;
+    try
+      Names.Sorted:= True; Names.Duplicates:= dupIgnore; Names.CaseSensitive:= False;
+      for DbPath in PathsToScan do
+      begin
+        var RoOk: Boolean;
+        Store:= OpenReadOnlyStore(DbPath, RoOk);
+        if not RoOk then Continue; { stale DB reported; skip, scan the rest }
+        for var Nm in Store.FindDescendantNames(AArgs.OfName) do
+          Names.Add(Nm);
+      end;
+      if AArgs.AsJson then
+      begin
+        var JO:= TJSONObject.Create;
+        try
+          JO.AddPair('of', AArgs.OfName);
+          var Arr:= TJSONArray.Create;
+          for var Nm in Names do Arr.Add(Nm);
+          JO.AddPair('descendants', Arr);
+          Writeln(JO.Format(2));
+        finally JO.Free; end;
+      end
+      else
+      begin
+        for var Nm in Names do Writeln(Nm);
+        if Names.Count = 0 then Writeln('(none)');
+      end;
+    finally
+      Names.Free;
+    end;
+    if Names.Count = 0 then Result:= 1 else Result:= 0;
+    Exit;
+  end; // if
+
   // v11 (M1): resolve a type name to its broad category (intrinsic / declared /
   // alias-chased). Useful standalone and as the test surface for the resolver.
   if AArgs.SubCommand = 'typecat' then

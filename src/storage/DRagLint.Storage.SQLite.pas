@@ -156,6 +156,7 @@ type
       procedure ResolveCallTargets;
       function GetTransitiveAncestors(ASymbolId: Int64): TArray<TTypeAncestor>;
       function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
+      function FindDescendantNames(const AAncestorName: string): TArray<string>;
       function ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
       function ResolveTypeCategory(const ATypeName: string; AFileId: Int64): TTypeCategory;
       function GetVirtualMethodsIncludingAncestors(const AClassName: string; AFileId: Int64): TArray<string>;
@@ -3643,6 +3644,51 @@ begin
   if StartId <= 0 then Exit;
   for A in GetTransitiveAncestors(StartId) do
     if SameText(A.Name, AInterfaceName) and SameText(A.Kind, 'interface') then Exit(True);
+end;
+
+function TSQLiteSymbolStore.FindDescendantNames(const AAncestorName: string): TArray<string>;
+{ Reverse of IsDescendantOf: every class whose TRANSITIVE ancestor closure includes
+  AAncestorName. type_ancestors stores DIRECT parent edges (child symbol_id ->
+  ancestor_name), so transitivity needs a recursive walk. A SQLite recursive CTE
+  seeds from classes directly deriving AAncestorName, then repeatedly finds classes
+  whose direct ancestor is any already-found class (matched by name). Bounded by
+  SQLite's cycle handling on the CTE + a UNION (not UNION ALL) to dedupe. Returns
+  distinct class names, sorted. Backs "list every TControl descendant" for the
+  conversion editor's class pickers. }
+var
+  Q   : TFDQuery   ;
+  List: TStringList;
+begin
+  List:= TStringList.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    List.Sorted:= True; List.Duplicates:= dupIgnore; List.CaseSensitive:= False;
+    Q.Connection:= FConn;
+    Q.SQL.Text  :=
+      'WITH RECURSIVE desc_names(name) AS ( ' +
+      '  SELECT DISTINCT s.name ' +
+      '    FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id ' +
+      '   WHERE ta.ancestor_name = :anc COLLATE NOCASE AND s.kind = ''class'' ' +
+      '  UNION ' +
+      '  SELECT DISTINCT s.name ' +
+      '    FROM type_ancestors ta ' +
+      '    JOIN symbols s   ON s.id = ta.symbol_id AND s.kind = ''class'' ' +
+      '    JOIN desc_names d ON ta.ancestor_name = d.name COLLATE NOCASE ' +
+      ') ' +
+      'SELECT name FROM desc_names ORDER BY name';
+    Q.ParamByName('anc').AsString:= AAncestorName;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      if Trim(Q.Fields[0].AsString) <> '' then List.Add(Q.Fields[0].AsString);
+      Q.Next;
+    end;
+    Q.Close;
+    Result:= List.ToStringArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
 end;
 
 function TSQLiteSymbolStore.ResolveTypeCategoryDepth(const ATypeName: string; AFileId: Int64; ADepth: Integer): TTypeCategory;

@@ -122,6 +122,10 @@ type
     /// <summary>True when class/interface AClassName (resolved in-scope of
     /// AFileId) has AAncestorName anywhere in its transitive ancestor closure.</summary>
     function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
+    /// <summary>Every class whose transitive ancestor set includes AAncestorName
+    /// (the reverse of IsDescendantOf). Distinct class names, sorted. Backed by a
+    /// single indexed lookup on type_ancestors.ancestor_name.</summary>
+    function FindDescendantNames(const AAncestorName: string): TArray<string>;
     /// <summary>True when AClassName's transitive closure reaches AInterfaceName
     /// via an interface-kind edge (i.e. AClassName implements that interface).</summary>
     function ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
