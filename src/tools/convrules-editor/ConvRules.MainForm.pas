@@ -30,7 +30,8 @@ type
     FFromTree : TProptree;            // active F property tree
     FToTree   : TProptree;            // active T property tree
 
-    FAllClasses: TArray<string>;      // all indexed component classes (for pickers)
+    FAllClasses: TArray<string>;      // all TControl descendants (for the pickers)
+    FUnitsLoaded: Boolean;            // project-unit picker populated?
 
     // toolbar
     FPanelTop : TPanel;
@@ -39,6 +40,7 @@ type
     // new-conversion row
     FCbFrom   : TComboBox;
     FCbTo     : TComboBox;
+    FCbUnit   : TComboBox;            // From Unit picker (project units)
     // rules library
     FRules    : TListView;
     // grid
@@ -71,6 +73,8 @@ type
     procedure SetError(const S: string);
     procedure LoadAllClasses;
     procedure CbLoadClasses(Sender: TObject);
+    procedure CbLoadUnits(Sender: TObject);
+    procedure DoLoadUnit(Sender: TObject);
     procedure AssignLink(const AFromPath, AToPath, AFromType, AToType: string);
     function  BlockPercent(AHdrIdx: Integer): Integer;
     function  ActiveLinks: TArray<TRuleNode>;
@@ -154,9 +158,9 @@ begin
   Width := 1100; Height := 720;
   Position := poScreenCenter;
 
-  // --- top toolbar (two rows: file actions, then new-conversion builder) ---
+  // --- top toolbar: file actions / class builder / project-unit helper / path ---
   FPanelTop := TPanel.Create(Self);
-  FPanelTop.Parent := Self; FPanelTop.Align := alTop; FPanelTop.Height := 92;
+  FPanelTop.Parent := Self; FPanelTop.Align := alTop; FPanelTop.Height := 122;
   FPanelTop.BevelOuter := bvNone;
 
   BtnLoad := TButton.Create(Self);
@@ -175,12 +179,13 @@ begin
   FLblStatus.Parent := FPanelTop; FLblStatus.SetBounds(300, 11, 780, 15);
 
   // --- new-conversion builder row: From [v]  ->  To [v]  [New Conversion] ---
+  // Both pickers hold ALL TControl descendants (visual controls) from the lib scan.
   var LblFrom: TLabel := TLabel.Create(Self);
   LblFrom.Parent := FPanelTop; LblFrom.SetBounds(8, 42, 34, 15); LblFrom.Caption := 'From:';
   FCbFrom := TComboBox.Create(Self);
   FCbFrom.Parent := FPanelTop; FCbFrom.SetBounds(44, 39, 300, 23);
-  FCbFrom.AutoComplete := True; FCbFrom.DropDownCount := 20;
-  FCbFrom.Hint := 'Type to search all known component classes';
+  FCbFrom.AutoComplete := True; FCbFrom.DropDownCount := 24;
+  FCbFrom.Hint := 'All TControl descendants -- type to filter (TEdit, TcxTextEdit, ...)';
   FCbFrom.ShowHint := True; FCbFrom.OnDropDown := CbLoadClasses;
 
   var LblArrow: TLabel := TLabel.Create(Self);
@@ -189,16 +194,29 @@ begin
   LblTo.Parent := FPanelTop; LblTo.SetBounds(374, 42, 22, 15); LblTo.Caption := 'To:';
   FCbTo := TComboBox.Create(Self);
   FCbTo.Parent := FPanelTop; FCbTo.SetBounds(398, 39, 300, 23);
-  FCbTo.AutoComplete := True; FCbTo.DropDownCount := 20;
-  FCbTo.Hint := 'Type to search all known component classes';
+  FCbTo.AutoComplete := True; FCbTo.DropDownCount := 24;
+  FCbTo.Hint := 'All TControl descendants -- type to filter (TcxTextEdit, TcxGrid, ...)';
   FCbTo.ShowHint := True; FCbTo.OnDropDown := CbLoadClasses;
 
   var BtnNew: TButton := TButton.Create(Self);
   BtnNew.Parent := FPanelTop; BtnNew.SetBounds(706, 38, 130, 25);
   BtnNew.Caption := '+ New Conversion'; BtnNew.OnClick := DoNewConversion;
 
+  // --- optional speed-up row: From Unit [v]  [Fill From column] ---
+  var LblUnit: TLabel := TLabel.Create(Self);
+  LblUnit.Parent := FPanelTop; LblUnit.SetBounds(8, 74, 58, 15); LblUnit.Caption := 'From Unit:';
+  FCbUnit := TComboBox.Create(Self);
+  FCbUnit.Parent := FPanelTop; FCbUnit.SetBounds(68, 71, 276, 23);
+  FCbUnit.AutoComplete := True; FCbUnit.DropDownCount := 24;
+  FCbUnit.Hint := 'Pick a project unit to pre-fill the grid''s From column with its control types (optional)';
+  FCbUnit.ShowHint := True; FCbUnit.OnDropDown := CbLoadUnits;
+
+  var BtnFillUnit: TButton := TButton.Create(Self);
+  BtnFillUnit.Parent := FPanelTop; BtnFillUnit.SetBounds(350, 70, 150, 25);
+  BtnFillUnit.Caption := 'Fill From-column'; BtnFillUnit.OnClick := DoLoadUnit;
+
   FLblFile := TLabel.Create(Self);
-  FLblFile.Parent := FPanelTop; FLblFile.SetBounds(8, 70, 1080, 15);
+  FLblFile.Parent := FPanelTop; FLblFile.SetBounds(8, 101, 1080, 15);
   FLblFile.Caption := '(no file)';
 
   // --- left: rules library + tabs ---
@@ -304,19 +322,21 @@ begin
     if SameText(L.Path, APath) then Exit(L.TypeName);
 end;
 
-{ Load every indexed component class name into the From/To pickers, once. Uses
-  the engine's workspace-symbols LSP-style query via drag-lint; falls back to a
-  small built-in list if the query yields nothing (so the pickers are never
-  empty and the New Conversion flow always works). }
+{ Load ALL TControl descendant classes (the visual controls: TEdit, TLabel,
+  TcxTextEdit, ...) into BOTH pickers, once. This is the real class picker the
+  user asked for -- every known control from the Library scan, not a hand list.
+  Falls back to a tiny built-in set if the query yields nothing so the New
+  Conversion flow always works. NOTE (TODO): non-TControl classes (e.g. Orpheus
+  queue -> Spring4D/Delphi generic queue) are a valid future case, but those
+  convert PAS code, not DFM -- see docs. v1 is TControl-only. }
 procedure TConvRulesForm.LoadAllClasses;
 var
   Names: TArray<string>;
   Err  : string;
 begin
   if Length(FAllClasses) > 0 then Exit; // already loaded
-  if not FEngine.ListComponentClasses(Names, Err) or (Length(Names) = 0) then
-    Names := ['Vcl.StdCtrls.TEdit', 'Vcl.StdCtrls.TMemo', 'Vcl.StdCtrls.TButton',
-              'Vcl.StdCtrls.TLabel', 'Vcl.StdCtrls.TCheckBox', 'Vcl.Graphics.TFont'];
+  if not FEngine.ListDescendantsOf('TControl', Names, Err) or (Length(Names) = 0) then
+    Names := ['TEdit', 'TMemo', 'TButton', 'TLabel', 'TCheckBox', 'TcxTextEdit'];
   FAllClasses := Names;
   FCbFrom.Items.BeginUpdate; FCbTo.Items.BeginUpdate;
   try
@@ -337,12 +357,94 @@ procedure TConvRulesForm.CbLoadClasses(Sender: TObject);
 begin
   if Length(FAllClasses) > 0 then Exit;
   Screen.Cursor := crHourGlass;
-  SetStatus('Loading component classes from the index (first time only)...');
+  SetStatus('Loading control classes from the Library scan (first time only)...');
   try
     Application.ProcessMessages;
     LoadAllClasses;
-    SetStatus(Format('%d component classes available. Type to filter.',
+    SetStatus(Format('%d control classes available. Type to filter.',
       [Length(FAllClasses)]));
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
+{ Lazy-load the project unit list the first time the From-Unit picker drops. }
+procedure TConvRulesForm.CbLoadUnits(Sender: TObject);
+var
+  Units: TArray<string>;
+  Err  : string;
+begin
+  if FUnitsLoaded then Exit;
+  Screen.Cursor := crHourGlass;
+  SetStatus('Loading project units (first time only)...');
+  try
+    Application.ProcessMessages;
+    if FEngine.ListProjectUnits(Units, Err) then
+    begin
+      FCbUnit.Items.BeginUpdate;
+      try
+        FCbUnit.Items.Clear;
+        for var U in Units do FCbUnit.Items.Add(U);
+      finally
+        FCbUnit.Items.EndUpdate;
+      end;
+      FUnitsLoaded := True;
+      SetStatus(Format('%d project units available.', [Length(Units)]));
+    end
+    else
+      SetError('Could not list project units: ' + Err);
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
+{ Optional speed-up: fill the grid's From column with the control types used in
+  the chosen project unit, WITHOUT any To assignments. From there the user picks a
+  To class per From (or ignores this and uses the From/To pickers directly). Best-
+  effort: if the unit's control types can't be resolved, says so and does nothing.
+  Requires an active rule (the grid belongs to a #convert block). }
+procedure TConvRulesForm.DoLoadUnit(Sender: TObject);
+var
+  UnitName: string;
+  Types   : TArray<string>;
+  Err     : string;
+  i       : Integer;
+begin
+  UnitName := Trim(FCbUnit.Text);
+  if UnitName = '' then begin SetError('Pick a project unit first.'); Exit; end;
+  if FActiveHdr < 0 then
+  begin
+    SetError('Select or create a rule first -- the From-column fill needs an active '
+      + 'conversion (its From class defines the property tree).');
+    Exit;
+  end;
+  if Length(FAllClasses) = 0 then LoadAllClasses; // need the control set
+  Screen.Cursor := crHourGlass;
+  try
+    Application.ProcessMessages;
+    if not FEngine.ListControlTypesInUnit(UnitName, FAllClasses, Types, Err) then
+    begin
+      SetError('Could not read unit ' + UnitName + ': ' + Err);
+      Exit;
+    end;
+    if Length(Types) = 0 then
+    begin
+      SetStatus(Format('No convertible control types found in %s (best-effort). '
+        + 'Use the From/To pickers instead.', [UnitName]));
+      Exit;
+    end;
+    // append these control types as extra From rows (no To). They are grid-only
+    // scratch until the user assigns a To -- nothing is written unless linked.
+    var startRow: Integer := FGrid.RowCount;
+    FGrid.RowCount := FGrid.RowCount + Length(Types);
+    for i := 0 to High(Types) do
+    begin
+      FGrid.Cells[0, startRow + i] := Types[i] + ' : (unit control -- pick a To class)';
+      FGrid.Cells[1, startRow + i] := '';
+      FGrid.Cells[2, startRow + i] := '';
+    end;
+    SetStatus(Format('Filled %d control type(s) from %s into the From column. '
+      + 'Assign a To class to each you want to convert.', [Length(Types), UnitName]));
   finally
     Screen.Cursor := crDefault;
   end;
@@ -834,8 +936,12 @@ begin
       begin SetStatus('Backup failed: ' + E.Message); Exit; end; end;
   end;
 
-  // 2) write canonical DSL (ASCII/CRLF)
-  TFile.WriteAllText(FFilePath, FBook.SaveToString, TEncoding.ASCII);
+  // 2) write canonical DSL (ASCII/CRLF) -- only COMPLETE rules (a #convert block
+  //    with at least one #link). A From/To pair with nothing mapped yet is scratch
+  //    and is not persisted.
+  var dropped: Integer;
+  var outText: string := FBook.SaveCompleteToString(dropped);
+  TFile.WriteAllText(FFilePath, outText, TEncoding.ASCII);
 
   // 3) validate the saved file
   fromT := ''; toT := '';
@@ -844,13 +950,16 @@ begin
     Node := FBook.Nodes[FActiveHdr];
     fromT := Node.FromType; toT := Node.ToType;
   end;
-  res := FEngine.ValidateText(FBook.SaveToString, fromT, toT);
+  res := FEngine.ValidateText(outText, fromT, toT);
+  var droppedMsg: string := '';
+  if dropped > 0 then
+    droppedMsg := Format(' (%d empty rule(s) not saved)', [dropped]);
   if res.OK then
-    SetStatus(Format('Saved %s (backup %s). Validate: OK',
-      [ExtractFileName(FFilePath), ExtractFileName(bak)]))
+    SetStatus(Format('Saved %s (backup %s)%s. Validate: OK',
+      [ExtractFileName(FFilePath), ExtractFileName(bak), droppedMsg]))
   else
-    SetStatus(Format('Saved %s (backup %s). Validate: %s',
-      [ExtractFileName(FFilePath), ExtractFileName(bak), res.FirstError]));
+    SetStatus(Format('Saved %s (backup %s)%s. Validate: %s',
+      [ExtractFileName(FFilePath), ExtractFileName(bak), droppedMsg, res.FirstError]));
 end;
 
 end.

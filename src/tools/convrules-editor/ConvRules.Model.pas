@@ -109,6 +109,13 @@ type
 
     /// <summary>Append a node; returns it.</summary>
     function Add(ANode: TRuleNode): TRuleNode;
+
+    /// <summary>Serialize like SaveToString, but DROP every #convert block that has
+    /// no #link (an incomplete rule -- a From/To pair with nothing mapped yet is
+    /// scratch, not a rule, so it is not persisted). Content OUTSIDE any #convert
+    /// block (leading comments/blanks) is preserved. Complete blocks round-trip
+    /// unchanged. Reports how many blocks were dropped via ADroppedCount.</summary>
+    function SaveCompleteToString(out ADroppedCount: Integer): string;
   end;
 
 const
@@ -379,6 +386,56 @@ begin
     begin
       SB.Append(N.Emit);
       SB.Append(#13#10); // canonical CRLF
+    end;
+    Result := SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+function TRuleBook.SaveCompleteToString(out ADroppedCount: Integer): string;
+var
+  SB : TStringBuilder;
+  i  : Integer       ;
+  j  : Integer       ;
+  hasLink: Boolean   ;
+begin
+  ADroppedCount := 0;
+  SB := TStringBuilder.Create;
+  try
+    i := 0;
+    while i < FNodes.Count do
+    begin
+      if FNodes[i].Kind = rnkConvert then
+      begin
+        // find the block extent [i .. j) up to the next header or EOF
+        j := i + 1;
+        hasLink := False;
+        while (j < FNodes.Count) and (FNodes[j].Kind <> rnkConvert) do
+        begin
+          if FNodes[j].Kind = rnkLink then hasLink := True;
+          Inc(j);
+        end;
+        if hasLink then
+        begin
+          // emit the whole block verbatim (header + its nodes)
+          for var k := i to j - 1 do
+          begin
+            SB.Append(FNodes[k].Emit);
+            SB.Append(#13#10);
+          end;
+        end
+        else
+          Inc(ADroppedCount); // incomplete rule (no #link) -> not persisted
+        i := j;
+      end
+      else
+      begin
+        // content outside any #convert block (leading comments/blanks) -> keep
+        SB.Append(FNodes[i].Emit);
+        SB.Append(#13#10);
+        Inc(i);
+      end;
     end;
     Result := SB.ToString;
   finally

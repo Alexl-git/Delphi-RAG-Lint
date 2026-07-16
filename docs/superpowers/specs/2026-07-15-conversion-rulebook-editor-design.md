@@ -137,6 +137,39 @@ Cast dropdown offers only casts valid for that pair. This is a **new DSL token**
 (`: CastFn` suffix). See the parallel engine workstream (section 9) for
 tolerate+apply support; the editor emits the syntax regardless.
 
+## 6b. Class pickers & the From-Unit helper (2026-07-16 feedback)
+
+The From/To pickers are a **real class picker**: they hold **every `TControl`
+descendant** from the Library scan (TEdit, TLabel, TcxTextEdit, ... -- 2,239 on
+the Win32 lib index), sourced via a new engine verb
+`drag-lint query descendants --of TControl` (reverse of `query ancestors --of`,
+backed by a recursive CTE over `type_ancestors`; `ISymbolStore.FindDescendantNames`).
+Both pickers are editable/searchable; any typed class that resolves via `proptree`
+works. Platform-aware: classes come from `library-Win32` or `library-Win64` per
+the project target.
+
+The **"From Unit"** picker (project units, `query find --kind unit`) is an
+**optional speed-up**: selecting a unit + "Fill From-column" pre-fills the grid's
+From column with that unit's control types (no To). Best-effort -- degrades to a
+message when a unit's control types can't be resolved. The user then assigns a To
+per From, or ignores this and uses the From/To pickers directly.
+
+**Save = complete rules only.** `TRuleBook.SaveCompleteToString` drops every
+`#convert` block with no `#link` (a From/To pair with nothing mapped is scratch,
+not a rule); leading comments/blanks and complete blocks are preserved. Reported
+as "(N empty rule(s) not saved)" in the status bar.
+
+### TODO (post-v1): non-TControl class conversion (PAS, not DFM)
+
+The picker is `TControl`-only for v1. A valid future case the user raised:
+replacing a **non-visual** class, e.g. an Orpheus queue with a Spring4D or Delphi
+generic `TQueue<T>`. Key distinction: **non-`TControl` classes have no DFM** --
+their conversion rewrites **PAS code only** (declarations, construction, method
+calls), not `.dfm` property blocks. The `descendants --of <T>` verb already
+generalises (pass any ancestor), so the engine side is ready; the editor would
+need a mode switch (control vs. code class) and the apply path would target only
+the PAS surfaces. Deferred until the TControl/DFM path is proven.
+
 ## 7. Deferred to v2 (designed, not built)
 
 - **DFM-usage tint**: parse one or several selected `.dfm` files, collect F

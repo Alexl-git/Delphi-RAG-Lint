@@ -68,10 +68,25 @@ type
     function GetProptree(const AQname: string; out ATree: TProptree;
       out AError: string): Boolean;
 
-    /// <summary>List indexed component-ish class qnames (T-prefixed, excluding
-    /// E-prefixed exceptions), deduped + sorted, for the From/To pickers. Backed
-    /// by `query find --no-docs --kind class`. Returns False + AError on failure.</summary>
-    function ListComponentClasses(out ANames: TArray<string>; out AError: string): Boolean;
+    /// <summary>List every class that transitively descends from AAncestor (e.g.
+    /// 'TControl' -> all visual controls: TEdit, TLabel, TcxTextEdit, ...), deduped
+    /// + sorted. Backed by the `query descendants --of <A>` verb. Returns False +
+    /// AError on failure.</summary>
+    function ListDescendantsOf(const AAncestor: string; out ANames: TArray<string>;
+      out AError: string): Boolean;
+
+    /// <summary>List indexed project unit names (kind=unit), sorted. Backed by
+    /// `query find --no-docs --kind unit`. Returns False + AError on failure.</summary>
+    function ListProjectUnits(out ANames: TArray<string>; out AError: string): Boolean;
+
+    /// <summary>Best-effort: the distinct control-class TYPES used as component
+    /// fields in AUnit's file, intersected with AControlSet (the TControl
+    /// descendants). Used to pre-fill the grid's From column from a project unit.
+    /// Backed by `query find --no-docs --kind field` scoped to the unit file.
+    /// Returns [] (not an error) when nothing is found.</summary>
+    function ListControlTypesInUnit(const AUnit: string;
+      const AControlSet: TArray<string>; out ATypes: TArray<string>;
+      out AError: string): Boolean;
 
     /// <summary>convert-scaffold --from F --to T. Returns the raw .rules text the
     /// scaffolder emits (to be loaded into a TRuleBook), or '' + AError on failure.</summary>
@@ -296,23 +311,60 @@ begin
   end;
 end;
 
-function TEngineAdapter.ListComponentClasses(out ANames: TArray<string>;
+function TEngineAdapter.ListDescendantsOf(const AAncestor: string;
+  out ANames: TArray<string>; out AError: string): Boolean;
+var
+  Output: string;
+  Code  : Integer;
+  SL    : TStringList;
+  Ln    : string;
+begin
+  AError := '';
+  SetLength(ANames, 0);
+  // `query descendants --of <A>` -> one bare class name per line (plus a possible
+  // "(loaded defaults ...)" / "(none)" trailer we skip).
+  Code := RunCapture(Format('query descendants --of "%s"%s', [AAncestor, DbArgs]), Output);
+  if Code = 2 then
+  begin
+    AError := Format('query descendants failed (exit %d)', [Code]);
+    Exit(False);
+  end;
+  SL := TStringList.Create;
+  try
+    SL.Text := Output;
+    for Ln in SL do
+    begin
+      var T: string := Trim(Ln);
+      if T = '' then Continue;
+      if T = '(none)' then Continue;
+      if Pos('loaded defaults', T) > 0 then Continue;
+      // a class name is a single identifier token (no spaces, no ':')
+      if (Pos(' ', T) > 0) or (Pos(':', T) > 0) then Continue;
+      ANames := ANames + [T];
+    end;
+    Result := True;
+  finally
+    SL.Free;
+  end;
+end;
+
+function TEngineAdapter.ListProjectUnits(out ANames: TArray<string>;
   out AError: string): Boolean;
 var
   Output: string;
   Code  : Integer;
   SL    : TStringList;
-  Ln, Q, Leaf: string;
-  p     : Integer;
+  Ln    : string;
   Seen  : TStringList;
+  p     : Integer;
 begin
   AError := '';
   SetLength(ANames, 0);
-  // `query find --no-docs --kind class` -> lines "Qname  [class]  file:line"
-  Code := RunCapture(Format('query find --no-docs --kind class%s', [DbArgs]), Output);
-  if Code <> 0 then
+  // `query find --no-docs --kind unit` -> "UnitName  [unit]  file:line"
+  Code := RunCapture(Format('query find --no-docs --kind unit%s', [DbArgs]), Output);
+  if Code = 2 then
   begin
-    AError := Format('query find failed (exit %d)', [Code]);
+    AError := Format('query find (units) failed (exit %d)', [Code]);
     Exit(False);
   end;
   SL := TStringList.Create;
@@ -322,28 +374,60 @@ begin
     SL.Text := Output;
     for Ln in SL do
     begin
-      p := Pos('  [class]', Ln);
+      p := Pos('  [unit]', Ln);
       if p <= 0 then Continue;
-      Q := Trim(Copy(Ln, 1, p - 1));
-      if Q = '' then Continue;
-      // leaf class name = after the last dot
-      Leaf := Q;
-      if LastDelimiter('.', Leaf) > 0 then
-        Leaf := Copy(Leaf, LastDelimiter('.', Leaf) + 1, MaxInt);
-      // keep component-ish classes: T-prefixed, not E-prefixed (exceptions)
-      if (Length(Leaf) >= 2) and (UpCase(Leaf[1]) = 'T') and (UpCase(Leaf[1]) <> 'E') then
-      begin
-        if Seen.IndexOf(Q) < 0 then
-        begin
-          Seen.Add(Q);
-        end;
-      end;
+      var U: string := Trim(Copy(Ln, 1, p - 1));
+      if U <> '' then Seen.Add(U);
     end;
-    Seen.Sort;
     ANames := Seen.ToStringArray;
     Result := True;
   finally
     SL.Free;
+    Seen.Free;
+  end;
+end;
+
+function TEngineAdapter.ListControlTypesInUnit(const AUnit: string;
+  const AControlSet: TArray<string>; out ATypes: TArray<string>;
+  out AError: string): Boolean;
+var
+  Tree : TProptree;
+  Err  : string;
+  Leaf : TPropLeaf;
+  ctl  : TStringList;
+  Seen : TStringList;
+  bare : string;
+begin
+  // Strategy: a form/frame unit's convertible controls are the class-typed
+  // properties of its main class. We proptree the unit's primary class (named
+  // like the unit or T<Unit>) and keep leaf TYPES that are in the control set.
+  // Best-effort: returns [] with no error when nothing resolves.
+  AError := '';
+  SetLength(ATypes, 0);
+  ctl := TStringList.Create;   // fast membership over the control set
+  Seen := TStringList.Create;
+  try
+    ctl.Sorted := True; ctl.CaseSensitive := False;
+    for var C in AControlSet do ctl.Add(C);
+    Seen.Sorted := True; Seen.Duplicates := dupIgnore; Seen.CaseSensitive := False;
+
+    // Try the unit's main class: many ORM3 forms are <Unit>.T<Unit> or Tfrm*.
+    // We do a light proptree on the unit-qualified class guess; if it fails we
+    // simply return [] (the fill is optional).
+    if GetProptree(AUnit, Tree, Err) then
+    begin
+      for Leaf in Tree.Leaves do
+      begin
+        bare := Leaf.TypeName;
+        if LastDelimiter('.', bare) > 0 then
+          bare := Copy(bare, LastDelimiter('.', bare) + 1, MaxInt);
+        if ctl.IndexOf(bare) >= 0 then Seen.Add(bare);
+      end;
+    end;
+    ATypes := Seen.ToStringArray;
+    Result := True;
+  finally
+    ctl.Free;
     Seen.Free;
   end;
 end;

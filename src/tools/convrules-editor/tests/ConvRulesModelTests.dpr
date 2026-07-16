@@ -271,6 +271,35 @@ begin
     Check('proptree.noise.leafpath', Tree.Leaves[0].Path = 'Size', Tree.Leaves[0].Path);
 end;
 
+{ Save must DROP #convert blocks with no #link (empty rules), keep complete ones
+  and any leading non-block content. }
+procedure TestSaveComplete;
+var
+  Book: TRuleBook;
+  dropped: Integer;
+  outp: string;
+begin
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(
+      '// header comment'#13#10 +
+      '#convert A.TFrom -> B.TTo'#13#10 +      // complete: has a link
+      '#link X <- Y'#13#10 +
+      '#convert C.TFoo -> D.TBar'#13#10 +      // EMPTY: no link -> dropped
+      '#note nothing mapped yet'#13#10 +
+      '#convert E.TA -> F.TB'#13#10 +          // complete
+      '#link P <- Q'#13#10);
+    outp := Book.SaveCompleteToString(dropped);
+    Check('savecomplete.dropcount', dropped = 1, IntToStr(dropped));
+    Check('savecomplete.keeps.comment', Pos('// header comment', outp) > 0);
+    Check('savecomplete.keeps.first', Pos('#convert A.TFrom -> B.TTo', outp) > 0);
+    Check('savecomplete.drops.empty', Pos('C.TFoo', outp) = 0, 'empty rule leaked');
+    Check('savecomplete.keeps.last', Pos('#convert E.TA -> F.TB', outp) > 0);
+  finally
+    Book.Free;
+  end;
+end;
+
 begin
   try
     TestRoundTrip;
@@ -281,6 +310,7 @@ begin
     TestCastClassifier;
     TestProptreeParse;
     TestProptreeNoise;
+    TestSaveComplete;
 
     Writeln('');
     Writeln(Format('model-tests: %d pass / %d fail / %d total', [GPass, GFail, GPass + GFail]));
