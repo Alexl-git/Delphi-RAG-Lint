@@ -156,6 +156,11 @@ end;
 
 function IsCastable(const AFromType, AToType: string): Boolean;
 begin
+  // Identical type names are ALWAYS an identity link (no cast) -- this covers
+  // every class/enum/record/interface pair the family classifier treats as
+  // tfUnknown (TFont<-TFont, TColor<-TColor, ...). Only genuinely DIFFERENT
+  // types that have no known cast are blocked.
+  if SameText(Trim(AFromType), Trim(AToType)) then Exit(True);
   Result := SameFamily(AFromType, AToType) or (ValidCasts(AFromType, AToType) <> []);
 end;
 

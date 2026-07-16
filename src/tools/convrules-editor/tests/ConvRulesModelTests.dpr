@@ -197,7 +197,13 @@ begin
   // bool -> string
   Check('cast.bool2str',   ValidCasts('Boolean', 'string') = [cfBoolToStr]);
 
-  // incompatible -> blocked
+  // SAME class/enum type is an identity link -> ALWAYS castable, no cast needed
+  Check('cast.sameclass.castable', IsCastable('TFont', 'TFont'));
+  Check('cast.sameclass.nocast',   ValidCasts('TFont', 'TFont') = []);
+  Check('cast.sameenum.castable',  IsCastable('TAlignment', 'TAlignment'));
+  Check('cast.sameclass.ci',       IsCastable('tfont', 'TFont')); // case-insensitive
+
+  // DIFFERENT incompatible types -> blocked
   Check('cast.enum.blocked', not IsCastable('TAlignment', 'TColor'));
   Check('cast.class.blocked', not IsCastable('TFont', 'TStrings'));
 

@@ -68,6 +68,11 @@ type
     function GetProptree(const AQname: string; out ATree: TProptree;
       out AError: string): Boolean;
 
+    /// <summary>List indexed component-ish class qnames (T-prefixed, excluding
+    /// E-prefixed exceptions), deduped + sorted, for the From/To pickers. Backed
+    /// by `query find --no-docs --kind class`. Returns False + AError on failure.</summary>
+    function ListComponentClasses(out ANames: TArray<string>; out AError: string): Boolean;
+
     /// <summary>convert-scaffold --from F --to T. Returns the raw .rules text the
     /// scaffolder emits (to be loaded into a TRuleBook), or '' + AError on failure.</summary>
     function Scaffold(const AFrom, ATo: string; out ARules: string;
@@ -288,6 +293,58 @@ begin
       AError := 'proptree JSON parse failed: ' + E.Message;
       Result := False;
     end;
+  end;
+end;
+
+function TEngineAdapter.ListComponentClasses(out ANames: TArray<string>;
+  out AError: string): Boolean;
+var
+  Output: string;
+  Code  : Integer;
+  SL    : TStringList;
+  Ln, Q, Leaf: string;
+  p     : Integer;
+  Seen  : TStringList;
+begin
+  AError := '';
+  SetLength(ANames, 0);
+  // `query find --no-docs --kind class` -> lines "Qname  [class]  file:line"
+  Code := RunCapture(Format('query find --no-docs --kind class%s', [DbArgs]), Output);
+  if Code <> 0 then
+  begin
+    AError := Format('query find failed (exit %d)', [Code]);
+    Exit(False);
+  end;
+  SL := TStringList.Create;
+  Seen := TStringList.Create;
+  try
+    Seen.Sorted := True; Seen.Duplicates := dupIgnore; Seen.CaseSensitive := False;
+    SL.Text := Output;
+    for Ln in SL do
+    begin
+      p := Pos('  [class]', Ln);
+      if p <= 0 then Continue;
+      Q := Trim(Copy(Ln, 1, p - 1));
+      if Q = '' then Continue;
+      // leaf class name = after the last dot
+      Leaf := Q;
+      if LastDelimiter('.', Leaf) > 0 then
+        Leaf := Copy(Leaf, LastDelimiter('.', Leaf) + 1, MaxInt);
+      // keep component-ish classes: T-prefixed, not E-prefixed (exceptions)
+      if (Length(Leaf) >= 2) and (UpCase(Leaf[1]) = 'T') and (UpCase(Leaf[1]) <> 'E') then
+      begin
+        if Seen.IndexOf(Q) < 0 then
+        begin
+          Seen.Add(Q);
+        end;
+      end;
+    end;
+    Seen.Sort;
+    ANames := Seen.ToStringArray;
+    Result := True;
+  finally
+    SL.Free;
+    Seen.Free;
   end;
 end;
 

@@ -17,7 +17,7 @@ interface
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.Generics.Collections,
   Winapi.Windows, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls,
-  Vcl.ExtCtrls, Vcl.Grids, Vcl.Dialogs, Vcl.Menus,
+  Vcl.ExtCtrls, Vcl.Grids, Vcl.Dialogs, Vcl.Menus, Vcl.Graphics,
   ConvRules.Model, ConvRules.Casts, ConvRules.Engine;
 
 type
@@ -30,10 +30,15 @@ type
     FFromTree : TProptree;            // active F property tree
     FToTree   : TProptree;            // active T property tree
 
+    FAllClasses: TArray<string>;      // all indexed component classes (for pickers)
+
     // toolbar
     FPanelTop : TPanel;
     FLblFile  : TLabel;
     FLblStatus: TLabel;
+    // new-conversion row
+    FCbFrom   : TComboBox;
+    FCbTo     : TComboBox;
     // rules library
     FRules    : TListView;
     // grid
@@ -42,6 +47,7 @@ type
     FPoolFind : TEdit;
     FBtnAssign: TButton;
     FBtnUnasgn: TButton;
+    FBtnAuto  : TButton;
     // directives / raw
     FTabs     : TPageControl;
     FRaw      : TMemo;
@@ -51,6 +57,8 @@ type
     procedure DoLoad(Sender: TObject);
     procedure DoSave(Sender: TObject);
     procedure DoValidate(Sender: TObject);
+    procedure DoNewConversion(Sender: TObject);
+    procedure DoAutoMatch(Sender: TObject);
     procedure RefreshRulesList;
     procedure RulesSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
     procedure LoadGridForBlock(AHdrIdx: Integer);
@@ -60,9 +68,14 @@ type
     procedure PoolFilter(Sender: TObject);
     procedure SyncRawFromModel;
     procedure SetStatus(const S: string);
+    procedure SetError(const S: string);
+    procedure LoadAllClasses;
+    procedure CbLoadClasses(Sender: TObject);
+    procedure AssignLink(const AFromPath, AToPath, AFromType, AToType: string);
     function  BlockPercent(AHdrIdx: Integer): Integer;
     function  ActiveLinks: TArray<TRuleNode>;
     function  FindLinkForFrom(const AFromPath: string): TRuleNode;
+    function  LeafType(const ATree: TProptree; const APath: string): string;
   public
     { Application.CreateForm calls this standard Create(AOwner); we route it to
       CreateNew (no .dfm) and build the UI in code. Being created via CreateForm
@@ -112,7 +125,8 @@ begin
   BuildUI;
   OnClose := FormCloseHandler;
   Visible := True;  // ensure the CreateNew form is shown by Run
-  SetStatus('Ready. Open a .rules file to begin.');
+  SetStatus('Ready. Open a .rules file, or pick From/To classes and press '
+    + '"+ New Conversion".');
 end;
 
 procedure TConvRulesForm.FormCloseHandler(Sender: TObject; var Action: TCloseAction);
@@ -140,9 +154,9 @@ begin
   Width := 1100; Height := 720;
   Position := poScreenCenter;
 
-  // --- top toolbar ---
+  // --- top toolbar (two rows: file actions, then new-conversion builder) ---
   FPanelTop := TPanel.Create(Self);
-  FPanelTop.Parent := Self; FPanelTop.Align := alTop; FPanelTop.Height := 56;
+  FPanelTop.Parent := Self; FPanelTop.Align := alTop; FPanelTop.Height := 92;
   FPanelTop.BevelOuter := bvNone;
 
   BtnLoad := TButton.Create(Self);
@@ -157,12 +171,35 @@ begin
   BtnValidate.Parent := FPanelTop; BtnValidate.SetBounds(200, 6, 90, 25);
   BtnValidate.Caption := 'Validate'; BtnValidate.OnClick := DoValidate;
 
-  FLblFile := TLabel.Create(Self);
-  FLblFile.Parent := FPanelTop; FLblFile.SetBounds(8, 36, 900, 15);
-  FLblFile.Caption := '(no file)';
-
   FLblStatus := TLabel.Create(Self);
-  FLblStatus.Parent := FPanelTop; FLblStatus.SetBounds(300, 10, 780, 15);
+  FLblStatus.Parent := FPanelTop; FLblStatus.SetBounds(300, 11, 780, 15);
+
+  // --- new-conversion builder row: From [v]  ->  To [v]  [New Conversion] ---
+  var LblFrom: TLabel := TLabel.Create(Self);
+  LblFrom.Parent := FPanelTop; LblFrom.SetBounds(8, 42, 34, 15); LblFrom.Caption := 'From:';
+  FCbFrom := TComboBox.Create(Self);
+  FCbFrom.Parent := FPanelTop; FCbFrom.SetBounds(44, 39, 300, 23);
+  FCbFrom.AutoComplete := True; FCbFrom.DropDownCount := 20;
+  FCbFrom.Hint := 'Type to search all known component classes';
+  FCbFrom.ShowHint := True; FCbFrom.OnDropDown := CbLoadClasses;
+
+  var LblArrow: TLabel := TLabel.Create(Self);
+  LblArrow.Parent := FPanelTop; LblArrow.SetBounds(350, 42, 20, 15); LblArrow.Caption := '->';
+  var LblTo: TLabel := TLabel.Create(Self);
+  LblTo.Parent := FPanelTop; LblTo.SetBounds(374, 42, 22, 15); LblTo.Caption := 'To:';
+  FCbTo := TComboBox.Create(Self);
+  FCbTo.Parent := FPanelTop; FCbTo.SetBounds(398, 39, 300, 23);
+  FCbTo.AutoComplete := True; FCbTo.DropDownCount := 20;
+  FCbTo.Hint := 'Type to search all known component classes';
+  FCbTo.ShowHint := True; FCbTo.OnDropDown := CbLoadClasses;
+
+  var BtnNew: TButton := TButton.Create(Self);
+  BtnNew.Parent := FPanelTop; BtnNew.SetBounds(706, 38, 130, 25);
+  BtnNew.Caption := '+ New Conversion'; BtnNew.OnClick := DoNewConversion;
+
+  FLblFile := TLabel.Create(Self);
+  FLblFile.Parent := FPanelTop; FLblFile.SetBounds(8, 70, 1080, 15);
+  FLblFile.Caption := '(no file)';
 
   // --- left: rules library + tabs ---
   LeftPanel := TPanel.Create(Self);
@@ -199,24 +236,29 @@ begin
   PoolPanel.Parent := Self; PoolPanel.Align := alRight; PoolPanel.Width := 280;
   PoolPanel.BevelOuter := bvNone;
 
+  FBtnAuto := TButton.Create(Self);
+  FBtnAuto.Parent := PoolPanel; FBtnAuto.SetBounds(6, 6, 268, 27);
+  FBtnAuto.Caption := 'Auto-Match unambiguous properties';
+  FBtnAuto.OnClick := DoAutoMatch;
+
   var LblPool: TLabel := TLabel.Create(Self);
-  LblPool.Parent := PoolPanel; LblPool.SetBounds(6, 6, 260, 15);
+  LblPool.Parent := PoolPanel; LblPool.SetBounds(6, 40, 260, 15);
   LblPool.Caption := 'To (unassigned pool) -- search:';
 
   FPoolFind := TEdit.Create(Self);
-  FPoolFind.Parent := PoolPanel; FPoolFind.SetBounds(6, 24, 260, 23);
+  FPoolFind.Parent := PoolPanel; FPoolFind.SetBounds(6, 58, 268, 23);
   FPoolFind.OnChange := PoolFilter;
 
   FBtnAssign := TButton.Create(Self);
-  FBtnAssign.Parent := PoolPanel; FBtnAssign.SetBounds(6, 52, 125, 25);
+  FBtnAssign.Parent := PoolPanel; FBtnAssign.SetBounds(6, 86, 130, 25);
   FBtnAssign.Caption := '<- Assign to From'; FBtnAssign.OnClick := DoAssign;
 
   FBtnUnasgn := TButton.Create(Self);
-  FBtnUnasgn.Parent := PoolPanel; FBtnUnasgn.SetBounds(140, 52, 125, 25);
+  FBtnUnasgn.Parent := PoolPanel; FBtnUnasgn.SetBounds(144, 86, 130, 25);
   FBtnUnasgn.Caption := 'Unassign ->'; FBtnUnasgn.OnClick := DoUnassign;
 
   FPool := TListBox.Create(Self);
-  FPool.Parent := PoolPanel; FPool.SetBounds(6, 82, 268, 560);
+  FPool.Parent := PoolPanel; FPool.SetBounds(6, 116, 268, 526);
   FPool.Anchors := [akLeft, akTop, akRight, akBottom];
 
   Split2 := TSplitter.Create(Self);
@@ -239,7 +281,71 @@ end;
 
 procedure TConvRulesForm.SetStatus(const S: string);
 begin
+  FLblStatus.Font.Color := clWindowText;
+  FLblStatus.Font.Style := [];
   FLblStatus.Caption := S;
+end;
+
+{ Show a message in RED bold -- for blocked assignments and errors. }
+procedure TConvRulesForm.SetError(const S: string);
+begin
+  FLblStatus.Font.Color := clRed;
+  FLblStatus.Font.Style := [fsBold];
+  FLblStatus.Caption := S;
+end;
+
+{ Resolve a leaf's declared type from a proptree ('' if not found). }
+function TConvRulesForm.LeafType(const ATree: TProptree; const APath: string): string;
+var
+  L: TPropLeaf;
+begin
+  Result := '';
+  for L in ATree.Leaves do
+    if SameText(L.Path, APath) then Exit(L.TypeName);
+end;
+
+{ Load every indexed component class name into the From/To pickers, once. Uses
+  the engine's workspace-symbols LSP-style query via drag-lint; falls back to a
+  small built-in list if the query yields nothing (so the pickers are never
+  empty and the New Conversion flow always works). }
+procedure TConvRulesForm.LoadAllClasses;
+var
+  Names: TArray<string>;
+  Err  : string;
+begin
+  if Length(FAllClasses) > 0 then Exit; // already loaded
+  if not FEngine.ListComponentClasses(Names, Err) or (Length(Names) = 0) then
+    Names := ['Vcl.StdCtrls.TEdit', 'Vcl.StdCtrls.TMemo', 'Vcl.StdCtrls.TButton',
+              'Vcl.StdCtrls.TLabel', 'Vcl.StdCtrls.TCheckBox', 'Vcl.Graphics.TFont'];
+  FAllClasses := Names;
+  FCbFrom.Items.BeginUpdate; FCbTo.Items.BeginUpdate;
+  try
+    FCbFrom.Items.Clear; FCbTo.Items.Clear;
+    for var N in FAllClasses do
+    begin
+      FCbFrom.Items.Add(N);
+      FCbTo.Items.Add(N);
+    end;
+  finally
+    FCbFrom.Items.EndUpdate; FCbTo.Items.EndUpdate;
+  end;
+end;
+
+{ Lazy-load the class list the first time a picker is dropped down (enumerating
+  every indexed class is slow, so we defer it until actually needed). }
+procedure TConvRulesForm.CbLoadClasses(Sender: TObject);
+begin
+  if Length(FAllClasses) > 0 then Exit;
+  Screen.Cursor := crHourGlass;
+  SetStatus('Loading component classes from the index (first time only)...');
+  try
+    Application.ProcessMessages;
+    LoadAllClasses;
+    SetStatus(Format('%d component classes available. Type to filter.',
+      [Length(FAllClasses)]));
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 procedure TConvRulesForm.DoLoad(Sender: TObject);
@@ -451,47 +557,26 @@ begin
   if p > 0 then Result := Copy(S, 1, p - 1) else Result := S;
 end;
 
-procedure TConvRulesForm.DoAssign(Sender: TObject);
+{ Create or update the #link mapping ToPath <- FromPath in the active block,
+  choosing a default cast from the leaf types (identity when same type). Shared by
+  the manual Assign and the Auto-Match pass. Does NOT touch the grid/UI -- callers
+  refresh. Assumes IsCastable(AFromType, AToType) was already checked. }
+procedure TConvRulesForm.AssignLink(const AFromPath, AToPath, AFromType, AToType: string);
 var
-  FromPath, ToPath: string;
-  fromLeaf: TPropLeaf;
-  toLeaf  : TPropLeaf;
   Link    : TRuleNode;
-  row     : Integer;
   i       : Integer;
-  fromType, toType: string;
+  insertAt: Integer;
+  casts   : TCastFnSet;
+  c       : TCastFn;
 begin
-  if FActiveHdr < 0 then Exit;
-  if FPool.ItemIndex < 0 then begin SetStatus('Pick a To property from the pool first.'); Exit; end;
-  row := FGrid.Row;
-  if row < 1 then begin SetStatus('Pick a From row in the grid first.'); Exit; end;
-
-  FromPath := PathOfGridCell(FGrid.Cells[0, row]);
-  ToPath   := PathOfGridCell(FPool.Items[FPool.ItemIndex]);
-  if (FromPath = '') or (ToPath = '') then Exit;
-
-  // resolve leaf types for cast classification
-  fromType := ''; toType := '';
-  for fromLeaf in FFromTree.Leaves do if fromLeaf.Path = FromPath then fromType := fromLeaf.TypeName;
-  for toLeaf in FToTree.Leaves do if toLeaf.Path = ToPath then toType := toLeaf.TypeName;
-
-  if not IsCastable(fromType, toType) then
-  begin
-    SetStatus(Format('Blocked: %s (%s) and %s (%s) are not castable.',
-      [FromPath, fromType, ToPath, toType]));
-    Exit;
-  end;
-
-  // create or update the #link for this From. Insert right after the header if new.
-  Link := FindLinkForFrom(FromPath);
+  Link := FindLinkForFrom(AFromPath);
   if Link = nil then
   begin
     Link := TRuleNode.Create;
     Link.Kind := rnkLink;
-    Link.LinkFrom := FromPath;
+    Link.LinkFrom := AFromPath;
     Link.Dirty := True;
-    // insert as the last node of the active block
-    var insertAt: Integer := FActiveHdr + 1;
+    insertAt := FActiveHdr + 1;
     for i := FActiveHdr + 1 to FBook.Nodes.Count - 1 do
     begin
       if FBook.Nodes[i].Kind = rnkConvert then Break;
@@ -499,27 +584,182 @@ begin
     end;
     FBook.Nodes.Insert(insertAt, Link);
   end;
-  Link.LinkTo := ToPath;
+  Link.LinkTo := AToPath;
   Link.Dirty := True;
 
-  // default cast: if same family, none; else first valid cast
-  if SameFamily(fromType, toType) then
+  // identity (same family or same type) -> no cast; else the first valid cast
+  if SameFamily(AFromType, AToType) or SameText(AFromType, AToType) then
     Link.Cast := ''
   else
   begin
-    var casts := ValidCasts(fromType, toType);
-    var c: TCastFn;
+    casts := ValidCasts(AFromType, AToType);
+    Link.Cast := '';
     for c := Low(TCastFn) to High(TCastFn) do
       if c in casts then begin Link.Cast := CastFnName(c); Break; end;
   end;
+end;
 
+procedure TConvRulesForm.DoAssign(Sender: TObject);
+var
+  FromPath, ToPath: string;
+  row     : Integer;
+  fromType, toType: string;
+begin
+  if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
+  if FPool.ItemIndex < 0 then begin SetStatus('Pick a To property from the pool (right) first.'); Exit; end;
+  row := FGrid.Row;
+  if row < 1 then begin SetStatus('Pick a From row in the grid (left) first.'); Exit; end;
+
+  FromPath := PathOfGridCell(FGrid.Cells[0, row]);
+  ToPath   := PathOfGridCell(FPool.Items[FPool.ItemIndex]);
+  if (FromPath = '') or (ToPath = '') then Exit;
+
+  fromType := LeafType(FFromTree, FromPath);
+  toType   := LeafType(FToTree, ToPath);
+
+  if not IsCastable(fromType, toType) then
+  begin
+    SetError(Format('Blocked: cannot map %s (%s) to %s (%s) -- no known cast.',
+      [FromPath, fromType, ToPath, toType]));
+    Exit;
+  end;
+
+  AssignLink(FromPath, ToPath, fromType, toType);
   FGrid.Cells[1, row] := ToPath;
-  FGrid.Cells[2, row] := Link.Cast;
+  FGrid.Cells[2, row] := FindLinkForFrom(FromPath).Cast;
   RefreshPool;
   SyncRawFromModel;
   RefreshRulesList;
   SetStatus(Format('Assigned %s <- %s%s', [ToPath, FromPath,
-    IfThen(Link.Cast <> '', ' : ' + Link.Cast, '')]));
+    IfThen(FindLinkForFrom(FromPath).Cast <> '', ' : ' + FindLinkForFrom(FromPath).Cast, '')]));
+end;
+
+{ Auto-Match: for every UNassigned From leaf, if exactly ONE unassigned To leaf
+  matches by leaf-name (case-insensitive) AND is castable, create the #link. Skips
+  ambiguous names (more than one candidate) so the user resolves those by hand. }
+procedure TConvRulesForm.DoAutoMatch(Sender: TObject);
+var
+  fromLeaf, toLeaf: TPropLeaf;
+  fromName, toName: string;
+  candidate: TPropLeaf;
+  nCand, nMatched: Integer;
+  assignedTo: TDictionary<string, Boolean>;
+  L: TRuleNode;
+  matchType: string;
+
+  function LeafName(const APath: string): string;
+  begin
+    Result := APath;
+    if LastDelimiter('.', Result) > 0 then
+      Result := Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
+  end;
+
+begin
+  if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
+  nMatched := 0;
+  assignedTo := TDictionary<string, Boolean>.Create;
+  try
+    for L in ActiveLinks do
+      if L.LinkTo <> '' then assignedTo.AddOrSetValue(LowerCase(L.LinkTo), True);
+
+    for fromLeaf in FFromTree.Leaves do
+    begin
+      // skip From leaves already mapped
+      if FindLinkForFrom(fromLeaf.Path) <> nil then Continue;
+      fromName := LowerCase(LeafName(fromLeaf.Path));
+
+      nCand := 0; candidate := Default(TPropLeaf); matchType := '';
+      for toLeaf in FToTree.Leaves do
+      begin
+        if assignedTo.ContainsKey(LowerCase(toLeaf.Path)) then Continue;
+        toName := LowerCase(LeafName(toLeaf.Path));
+        if (fromName = toName) and IsCastable(fromLeaf.TypeName, toLeaf.TypeName) then
+        begin
+          Inc(nCand);
+          candidate := toLeaf;
+        end;
+      end;
+
+      if nCand = 1 then
+      begin
+        AssignLink(fromLeaf.Path, candidate.Path, fromLeaf.TypeName, candidate.TypeName);
+        assignedTo.AddOrSetValue(LowerCase(candidate.Path), True);
+        Inc(nMatched);
+      end;
+    end;
+  finally
+    assignedTo.Free;
+  end;
+
+  // reload the grid to reflect the new assignments
+  LoadGridForBlock(FActiveHdr);
+  SyncRawFromModel;
+  RefreshRulesList;
+  SetStatus(Format('Auto-Match: %d unambiguous assignment(s) created.', [nMatched]));
+end;
+
+{ New Conversion: read From/To from the pickers, verify both resolve to indexed
+  classes, append a fresh #convert block, load it (populates the grid + To pool),
+  then run Auto-Match so the obvious mappings are pre-filled. }
+procedure TConvRulesForm.DoNewConversion(Sender: TObject);
+var
+  fromT, toT: string;
+  tree: TProptree;
+  err : string;
+  hdr : TRuleNode;
+  newHdrIdx: Integer;
+begin
+  fromT := Trim(FCbFrom.Text);
+  toT   := Trim(FCbTo.Text);
+  if (fromT = '') or (toT = '') then
+  begin
+    SetError('Pick (or type) both a From and a To class in the top pickers.');
+    Exit;
+  end;
+
+  SetStatus(Format('Resolving %s and %s ...', [fromT, toT]));
+  Application.ProcessMessages;
+  tree := Default(TProptree);
+  if not FEngine.GetProptree(fromT, tree, err) or (Length(tree.Leaves) = 0) then
+  begin
+    SetError(Format('From class "%s" is not indexed (no properties found). %s', [fromT, err]));
+    Exit;
+  end;
+  if not FEngine.GetProptree(toT, tree, err) or (Length(tree.Leaves) = 0) then
+  begin
+    SetError(Format('To class "%s" is not indexed (no properties found). %s', [toT, err]));
+    Exit;
+  end;
+
+  // append a blank line + a new #convert header at the end of the model
+  if FBook.Nodes.Count > 0 then
+  begin
+    var Blank: TRuleNode := TRuleNode.Create; Blank.Kind := rnkBlank; Blank.Raw := '';
+    FBook.Add(Blank);
+  end;
+  hdr := TRuleNode.Create;
+  hdr.Kind := rnkConvert;
+  hdr.FromType := fromT;
+  hdr.ToType := toT;
+  hdr.Dirty := True;
+  FBook.Add(hdr);
+  newHdrIdx := FBook.Nodes.Count - 1;
+
+  RefreshRulesList;
+  // select the new rule (also fires LoadGridForBlock)
+  if FRules.Items.Count > 0 then
+  begin
+    FRules.ItemIndex := FRules.Items.Count - 1;
+    FRules.Items[FRules.Items.Count - 1].Selected := True;
+  end
+  else
+    LoadGridForBlock(newHdrIdx);
+
+  // pre-fill the obvious matches
+  DoAutoMatch(nil);
+  SyncRawFromModel;
+  SetStatus(Format('New conversion %s -> %s created and auto-matched. '
+    + 'Review, then Save.', [fromT, toT]));
 end;
 
 procedure TConvRulesForm.DoUnassign(Sender: TObject);
