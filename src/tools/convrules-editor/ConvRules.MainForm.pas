@@ -30,13 +30,15 @@ type
     FFromTree : TProptree;            // active F property tree
     FToTree   : TProptree;            // active T property tree
 
-    FAllClasses: TArray<string>;      // all TControl descendants (for the pickers)
+    FFromClasses: TArray<string>;     // FROM picker: all TComponent descendants (Win32+Win64 union)
+    FToClasses  : TArray<string>;     // TO picker: TControl descendants (target platform)
     FUnitsLoaded: Boolean;            // project-unit picker populated?
 
     // toolbar
     FPanelTop : TPanel;
     FLblFile  : TLabel;
     FLblStatus: TLabel;
+    FStatusBar: TStatusBar;           // bottom-of-form status (mirrors FLblStatus)
     // new-conversion row
     FCbFrom   : TComboBox;
     FCbTo     : TComboBox;
@@ -93,7 +95,9 @@ type
 
 var
   GEditorExe: string = '';
-  GEditorDbs: TArray<string>;
+  GEditorDbs: TArray<string>;      // engine default (proptree/scaffold/validate): both platforms
+  GEditorFromDbs: TArray<string>;  // FROM class picker: Win32+Win64 library union + project
+  GEditorToDbs: TArray<string>;    // TO class picker: target-platform library + project
 
 implementation
 
@@ -158,6 +162,14 @@ begin
   Width := 1100; Height := 720;
   Position := poScreenCenter;
 
+  // --- bottom status bar (created first so it reserves the bottom edge; the top
+  //     status label stays too, but this makes the current message visible even
+  //     when the window is short and the top toolbar scrolls off) ---
+  FStatusBar := TStatusBar.Create(Self);
+  FStatusBar.Parent := Self;
+  FStatusBar.SimplePanel := True;
+  FStatusBar.SimpleText := 'Ready.';
+
   // --- top toolbar: file actions / class builder / project-unit helper / path ---
   FPanelTop := TPanel.Create(Self);
   FPanelTop.Parent := Self; FPanelTop.Align := alTop; FPanelTop.Height := 122;
@@ -178,42 +190,44 @@ begin
   FLblStatus := TLabel.Create(Self);
   FLblStatus.Parent := FPanelTop; FLblStatus.SetBounds(300, 11, 780, 15);
 
-  // --- new-conversion builder row: From [v]  ->  To [v]  [New Conversion] ---
-  // Both pickers hold ALL TControl descendants (visual controls) from the lib scan.
-  var LblFrom: TLabel := TLabel.Create(Self);
-  LblFrom.Parent := FPanelTop; LblFrom.SetBounds(8, 42, 34, 15); LblFrom.Caption := 'From:';
-  FCbFrom := TComboBox.Create(Self);
-  FCbFrom.Parent := FPanelTop; FCbFrom.SetBounds(44, 39, 300, 23);
-  FCbFrom.AutoComplete := True; FCbFrom.DropDownCount := 24;
-  FCbFrom.Hint := 'All TControl descendants -- type to filter (TEdit, TcxTextEdit, ...)';
-  FCbFrom.ShowHint := True; FCbFrom.OnDropDown := CbLoadClasses;
-
-  var LblArrow: TLabel := TLabel.Create(Self);
-  LblArrow.Parent := FPanelTop; LblArrow.SetBounds(350, 42, 20, 15); LblArrow.Caption := '->';
-  var LblTo: TLabel := TLabel.Create(Self);
-  LblTo.Parent := FPanelTop; LblTo.SetBounds(374, 42, 22, 15); LblTo.Caption := 'To:';
-  FCbTo := TComboBox.Create(Self);
-  FCbTo.Parent := FPanelTop; FCbTo.SetBounds(398, 39, 300, 23);
-  FCbTo.AutoComplete := True; FCbTo.DropDownCount := 24;
-  FCbTo.Hint := 'All TControl descendants -- type to filter (TcxTextEdit, TcxGrid, ...)';
-  FCbTo.ShowHint := True; FCbTo.OnDropDown := CbLoadClasses;
-
-  var BtnNew: TButton := TButton.Create(Self);
-  BtnNew.Parent := FPanelTop; BtnNew.SetBounds(706, 38, 130, 25);
-  BtnNew.Caption := '+ New Conversion'; BtnNew.OnClick := DoNewConversion;
-
-  // --- optional speed-up row: From Unit [v]  [Fill From column] ---
+  // --- row 1: From Unit [v]  [Fill From-classes] -- pick a unit first, then its
+  //     component classes drop into the rules library as From-only conversions ---
   var LblUnit: TLabel := TLabel.Create(Self);
-  LblUnit.Parent := FPanelTop; LblUnit.SetBounds(8, 74, 58, 15); LblUnit.Caption := 'From Unit:';
+  LblUnit.Parent := FPanelTop; LblUnit.SetBounds(8, 42, 58, 15); LblUnit.Caption := 'From Unit:';
   FCbUnit := TComboBox.Create(Self);
-  FCbUnit.Parent := FPanelTop; FCbUnit.SetBounds(68, 71, 276, 23);
+  FCbUnit.Parent := FPanelTop; FCbUnit.SetBounds(68, 39, 276, 23);
   FCbUnit.AutoComplete := True; FCbUnit.DropDownCount := 24;
-  FCbUnit.Hint := 'Pick a project unit to pre-fill the grid''s From column with its control types (optional)';
+  FCbUnit.Hint := 'Pick a project unit to add a From-only conversion per component class on its form (optional)';
   FCbUnit.ShowHint := True; FCbUnit.OnDropDown := CbLoadUnits;
 
   var BtnFillUnit: TButton := TButton.Create(Self);
-  BtnFillUnit.Parent := FPanelTop; BtnFillUnit.SetBounds(350, 70, 150, 25);
-  BtnFillUnit.Caption := 'Fill From-column'; BtnFillUnit.OnClick := DoLoadUnit;
+  BtnFillUnit.Parent := FPanelTop; BtnFillUnit.SetBounds(350, 38, 150, 25);
+  BtnFillUnit.Caption := 'Fill From-classes'; BtnFillUnit.OnClick := DoLoadUnit;
+
+  // --- row 2: From [v]  ->  To [v]  [New Conversion] ---
+  // FROM holds all source components (TComponent desc, Win32+Win64 union); TO holds
+  // target controls (TControl desc, target platform). See LoadAllClasses.
+  var LblFrom: TLabel := TLabel.Create(Self);
+  LblFrom.Parent := FPanelTop; LblFrom.SetBounds(8, 74, 34, 15); LblFrom.Caption := 'From:';
+  FCbFrom := TComboBox.Create(Self);
+  FCbFrom.Parent := FPanelTop; FCbFrom.SetBounds(44, 71, 300, 23);
+  FCbFrom.AutoComplete := True; FCbFrom.DropDownCount := 24;
+  FCbFrom.Hint := 'Source components (Win32+Win64) -- type to filter (TEdit, TOvcTable, TTable, ...)';
+  FCbFrom.ShowHint := True; FCbFrom.OnDropDown := CbLoadClasses;
+
+  var LblArrow: TLabel := TLabel.Create(Self);
+  LblArrow.Parent := FPanelTop; LblArrow.SetBounds(350, 74, 20, 15); LblArrow.Caption := '->';
+  var LblTo: TLabel := TLabel.Create(Self);
+  LblTo.Parent := FPanelTop; LblTo.SetBounds(374, 74, 22, 15); LblTo.Caption := 'To:';
+  FCbTo := TComboBox.Create(Self);
+  FCbTo.Parent := FPanelTop; FCbTo.SetBounds(398, 71, 300, 23);
+  FCbTo.AutoComplete := True; FCbTo.DropDownCount := 24;
+  FCbTo.Hint := 'Target controls (Win64) -- type to filter (TcxTextEdit, TcxGrid, ...)';
+  FCbTo.ShowHint := True; FCbTo.OnDropDown := CbLoadClasses;
+
+  var BtnNew: TButton := TButton.Create(Self);
+  BtnNew.Parent := FPanelTop; BtnNew.SetBounds(706, 70, 130, 25);
+  BtnNew.Caption := '+ New Conversion'; BtnNew.OnClick := DoNewConversion;
 
   FLblFile := TLabel.Create(Self);
   FLblFile.Parent := FPanelTop; FLblFile.SetBounds(8, 101, 1080, 15);
@@ -302,6 +316,7 @@ begin
   FLblStatus.Font.Color := clWindowText;
   FLblStatus.Font.Style := [];
   FLblStatus.Caption := S;
+  if FStatusBar <> nil then FStatusBar.SimpleText := S;
 end;
 
 { Show a message in RED bold -- for blocked assignments and errors. }
@@ -310,6 +325,9 @@ begin
   FLblStatus.Font.Color := clRed;
   FLblStatus.Font.Style := [fsBold];
   FLblStatus.Caption := S;
+  // The status bar has no per-message colour in SimplePanel mode; prefix so an
+  // error still reads as one at the bottom of the form.
+  if FStatusBar <> nil then FStatusBar.SimpleText := '[!] ' + S;
 end;
 
 { Resolve a leaf's declared type from a proptree ('' if not found). }
@@ -322,30 +340,46 @@ begin
     if SameText(L.Path, APath) then Exit(L.TypeName);
 end;
 
-{ Load ALL TControl descendant classes (the visual controls: TEdit, TLabel,
-  TcxTextEdit, ...) into BOTH pickers, once. This is the real class picker the
-  user asked for -- every known control from the Library scan, not a hand list.
-  Falls back to a tiny built-in set if the query yields nothing so the New
-  Conversion flow always works. NOTE (TODO): non-TControl classes (e.g. Orpheus
-  queue -> Spring4D/Delphi generic queue) are a valid future case, but those
-  convert PAS code, not DFM -- see docs. v1 is TControl-only. }
+{ Load the FROM and TO class pickers, once. They are deliberately DIFFERENT sets:
+
+    FROM = all TComponent descendants across BOTH platform libraries (Win32+Win64
+           union) -- the source app has visual controls AND non-visual components
+           (BDE TTable, datasets) plus legacy Orpheus TOvc* controls indexed under
+           Win64 only. A TControl-only, Win32-only filter (the v1 behaviour) hid
+           all three. TComponent is the right superset: every convertible source
+           component descends from it.
+
+    TO   = TControl descendants of the TARGET platform's library only (Win64) --
+           conversions target visual controls on the platform being migrated to.
+
+  Falls back to a tiny built-in set if either query yields nothing so the New
+  Conversion flow always works. }
 procedure TConvRulesForm.LoadAllClasses;
 var
-  Names: TArray<string>;
+  FromNames, ToNames: TArray<string>;
   Err  : string;
 begin
-  if Length(FAllClasses) > 0 then Exit; // already loaded
-  if not FEngine.ListDescendantsOf('TControl', Names, Err) or (Length(Names) = 0) then
-    Names := ['TEdit', 'TMemo', 'TButton', 'TLabel', 'TCheckBox', 'TcxTextEdit'];
-  FAllClasses := Names;
+  if (Length(FFromClasses) > 0) and (Length(FToClasses) > 0) then Exit; // already loaded
+
+  // FROM: TComponent descendants, union of Win32+Win64 libs (+ project).
+  if not FEngine.ListDescendantsOf('TComponent', GEditorFromDbs, FromNames, Err)
+     or (Length(FromNames) = 0) then
+    FromNames := ['TEdit', 'TMemo', 'TButton', 'TLabel', 'TCheckBox', 'TcxTextEdit',
+                  'TOvcTable', 'TTable'];
+  FFromClasses := FromNames;
+
+  // TO: TControl descendants, target-platform lib only.
+  if not FEngine.ListDescendantsOf('TControl', GEditorToDbs, ToNames, Err)
+     or (Length(ToNames) = 0) then
+    ToNames := ['TEdit', 'TMemo', 'TButton', 'TLabel', 'TCheckBox', 'TcxTextEdit',
+                'TcxGrid'];
+  FToClasses := ToNames;
+
   FCbFrom.Items.BeginUpdate; FCbTo.Items.BeginUpdate;
   try
     FCbFrom.Items.Clear; FCbTo.Items.Clear;
-    for var N in FAllClasses do
-    begin
-      FCbFrom.Items.Add(N);
-      FCbTo.Items.Add(N);
-    end;
+    for var N in FFromClasses do FCbFrom.Items.Add(N);
+    for var N in FToClasses do FCbTo.Items.Add(N);
   finally
     FCbFrom.Items.EndUpdate; FCbTo.Items.EndUpdate;
   end;
@@ -355,14 +389,14 @@ end;
   every indexed class is slow, so we defer it until actually needed). }
 procedure TConvRulesForm.CbLoadClasses(Sender: TObject);
 begin
-  if Length(FAllClasses) > 0 then Exit;
+  if (Length(FFromClasses) > 0) and (Length(FToClasses) > 0) then Exit;
   Screen.Cursor := crHourGlass;
-  SetStatus('Loading control classes from the Library scan (first time only)...');
+  SetStatus('Loading classes from the Library scan (first time only)...');
   try
     Application.ProcessMessages;
     LoadAllClasses;
-    SetStatus(Format('%d control classes available. Type to filter.',
-      [Length(FAllClasses)]));
+    SetStatus(Format('%d source (From) + %d target (To) classes available. Type to filter.',
+      [Length(FFromClasses), Length(FToClasses)]));
   finally
     Screen.Cursor := crDefault;
   end;
@@ -398,53 +432,93 @@ begin
   end;
 end;
 
-{ Optional speed-up: fill the grid's From column with the control types used in
-  the chosen project unit, WITHOUT any To assignments. From there the user picks a
-  To class per From (or ignores this and uses the From/To pickers directly). Best-
-  effort: if the unit's control types can't be resolved, says so and does nothing.
-  Requires an active rule (the grid belongs to a #convert block). }
+{ "Fill From-classes": read the chosen unit's .dfm components and add one FROM-ONLY
+  conversion row per distinct component CLASS to the rules library (To unassigned).
+  These are CLASSES, not properties, so they go in the rules list -- NOT the grid's
+  property column. Selecting a From-only row shows that class's flattened property
+  list; assigning a To class then auto-matches. A row with no To (and no links) is
+  scratch: SaveComplete drops it, so nothing is written until the user picks a To.
+  Existing From classes are skipped (no duplicates). Best-effort: a non-form unit
+  (no .dfm) adds nothing. }
 procedure TConvRulesForm.DoLoadUnit(Sender: TObject);
 var
   UnitName: string;
   Types   : TArray<string>;
   Err     : string;
-  i       : Integer;
+  existing: TStringList;
+  H       : Integer;
+  added   : Integer;
+  firstNew: Integer;
 begin
   UnitName := Trim(FCbUnit.Text);
   if UnitName = '' then begin SetError('Pick a project unit first.'); Exit; end;
-  if FActiveHdr < 0 then
-  begin
-    SetError('Select or create a rule first -- the From-column fill needs an active '
-      + 'conversion (its From class defines the property tree).');
-    Exit;
-  end;
-  if Length(FAllClasses) = 0 then LoadAllClasses; // need the control set
   Screen.Cursor := crHourGlass;
   try
     Application.ProcessMessages;
-    if not FEngine.ListControlTypesInUnit(UnitName, FAllClasses, Types, Err) then
+    // Reads the unit's .dfm and lists the components the designer placed on the
+    // form. Not filtered by the picker class set -- legacy components (Orpheus/
+    // Raize/DevExpress) are listed even when their ancestry is unresolved.
+    if not FEngine.ListControlTypesInUnit(UnitName, nil, Types, Err) then
     begin
       SetError('Could not read unit ' + UnitName + ': ' + Err);
       Exit;
     end;
     if Length(Types) = 0 then
     begin
-      SetStatus(Format('No convertible control types found in %s (best-effort). '
-        + 'Use the From/To pickers instead.', [UnitName]));
+      SetError(Format('No form components found in %s. It may be a non-form unit '
+        + '(no .dfm), or not indexed. Use the From/To pickers instead.', [UnitName]));
       Exit;
     end;
-    // append these control types as extra From rows (no To). They are grid-only
-    // scratch until the user assigns a To -- nothing is written unless linked.
-    var startRow: Integer := FGrid.RowCount;
-    FGrid.RowCount := FGrid.RowCount + Length(Types);
-    for i := 0 to High(Types) do
-    begin
-      FGrid.Cells[0, startRow + i] := Types[i] + ' : (unit control -- pick a To class)';
-      FGrid.Cells[1, startRow + i] := '';
-      FGrid.Cells[2, startRow + i] := '';
+
+    // Skip classes already present as a From in the rules library.
+    existing := TStringList.Create;
+    try
+      existing.CaseSensitive := False;
+      for H in FBook.ConvertHeaders do
+        existing.Add(FBook.Nodes[H].FromType);
+
+      added := 0; firstNew := -1;
+      for var C in Types do
+      begin
+        if existing.IndexOf(C) >= 0 then Continue;
+        if FBook.Nodes.Count > 0 then
+        begin
+          var Blank: TRuleNode := TRuleNode.Create;
+          Blank.Kind := rnkBlank; Blank.Raw := '';
+          FBook.Add(Blank);
+        end;
+        var Hdr: TRuleNode := TRuleNode.Create;
+        Hdr.Kind := rnkConvert;
+        Hdr.FromType := C;
+        Hdr.ToType := '';        // From-only -- user assigns a To next
+        Hdr.Dirty := True;
+        FBook.Add(Hdr);
+        if firstNew < 0 then firstNew := FBook.Nodes.Count - 1;
+        Inc(added);
+        existing.Add(C);
+      end;
+    finally
+      existing.Free;
     end;
-    SetStatus(Format('Filled %d control type(s) from %s into the From column. '
-      + 'Assign a To class to each you want to convert.', [Length(Types), UnitName]));
+
+    RefreshRulesList;
+    SyncRawFromModel;
+    // Select the first newly-added From-only rule so its property list loads.
+    if firstNew >= 0 then
+      for var k := 0 to FRules.Items.Count - 1 do
+        if Integer(FRules.Items[k].Data) = firstNew then
+        begin
+          FRules.ItemIndex := k;
+          FRules.Items[k].Selected := True;
+          Break;
+        end;
+
+    if added = 0 then
+      SetStatus(Format('All %d component class(es) from %s are already in the rules '
+        + 'library.', [Length(Types), UnitName]))
+    else
+      SetStatus(Format('Added %d From-only conversion(s) from %s. Pick a To class for '
+        + 'each you want to convert -- its properties auto-match.', [added, UnitName]));
   finally
     Screen.Cursor := crDefault;
   end;
@@ -572,16 +646,24 @@ var
 begin
   FActiveHdr := AHdrIdx;
   Node := FBook.Nodes[AHdrIdx];
+  // Mirror the rule's From/To into the top pickers, so a From-only rule can have a
+  // To assigned there (there is otherwise no way to set the To for a picked rule).
+  FCbFrom.Text := Node.FromType;
+  FCbTo.Text := Node.ToType;
   SetStatus(Format('Loading property trees for %s -> %s ...', [Node.FromType, Node.ToType]));
   Application.ProcessMessages;
 
-  // fetch F + T trees from the engine
+  // fetch F + T trees from the engine. The From tree always loads (a From-only
+  // rule still shows its flattened property list); the To tree loads only once a
+  // To class has been assigned.
   if not FEngine.GetProptree(Node.FromType, FFromTree, Err) then
   begin
     SetStatus('From tree: ' + Err);
     FFromTree := Default(TProptree);
   end;
-  if not FEngine.GetProptree(Node.ToType, FToTree, Err) then
+  if Trim(Node.ToType) = '' then
+    FToTree := Default(TProptree)   // From-only rule: no To tree yet
+  else if not FEngine.GetProptree(Node.ToType, FToTree, Err) then
   begin
     SetStatus('To tree: ' + Err);
     FToTree := Default(TProptree);
@@ -718,6 +800,9 @@ begin
 
   fromType := LeafType(FFromTree, FromPath);
   toType   := LeafType(FToTree, ToPath);
+  // If one side's type is unknown (inherited from an unresolved parent), infer it
+  // from the other side -- a same-named property is the same inherited member.
+  ResolveUnknownTypes(fromType, toType);
 
   if not IsCastable(fromType, toType) then
   begin
@@ -770,21 +855,50 @@ begin
       if FindLinkForFrom(fromLeaf.Path) <> nil then Continue;
       fromName := LowerCase(LeafName(fromLeaf.Path));
 
+      // PASS 1 -- an EXACT full-path match (From.path == To.path) is unambiguous
+      // even when the leaf NAME repeats in nested sub-objects. This is what makes
+      // top-level AllowAllUp/Down/ShowHint auto-pick: TcxButton has 14 leaves whose
+      // last segment is "AllowAllUp" (Colors.Button.AllowAllUp, ...), but only ONE
+      // whose full path is exactly "AllowAllUp".
       nCand := 0; candidate := Default(TPropLeaf); matchType := '';
       for toLeaf in FToTree.Leaves do
       begin
         if assignedTo.ContainsKey(LowerCase(toLeaf.Path)) then Continue;
-        toName := LowerCase(LeafName(toLeaf.Path));
-        if (fromName = toName) and IsCastable(fromLeaf.TypeName, toLeaf.TypeName) then
+        if not SameText(toLeaf.Path, fromLeaf.Path) then Continue;
+        var fT: string := fromLeaf.TypeName;
+        var tT: string := toLeaf.TypeName;
+        ResolveUnknownTypes(fT, tT);
+        if IsCastable(fT, tT) then
         begin
           Inc(nCand);
           candidate := toLeaf;
         end;
       end;
 
+      // PASS 2 -- only when no exact-path match exists, fall back to matching by the
+      // LAST path segment, still requiring a UNIQUE castable candidate.
+      if nCand = 0 then
+        for toLeaf in FToTree.Leaves do
+        begin
+          if assignedTo.ContainsKey(LowerCase(toLeaf.Path)) then Continue;
+          toName := LowerCase(LeafName(toLeaf.Path));
+          if fromName <> toName then Continue;
+          var fT: string := fromLeaf.TypeName;
+          var tT: string := toLeaf.TypeName;
+          ResolveUnknownTypes(fT, tT);
+          if IsCastable(fT, tT) then
+          begin
+            Inc(nCand);
+            candidate := toLeaf;
+          end;
+        end;
+
       if nCand = 1 then
       begin
-        AssignLink(fromLeaf.Path, candidate.Path, fromLeaf.TypeName, candidate.TypeName);
+        var fT: string := fromLeaf.TypeName;
+        var tT: string := candidate.TypeName;
+        ResolveUnknownTypes(fT, tT);
+        AssignLink(fromLeaf.Path, candidate.Path, fT, tT);
         assignedTo.AddOrSetValue(LowerCase(candidate.Path), True);
         Inc(nMatched);
       end;
@@ -833,26 +947,44 @@ begin
     Exit;
   end;
 
-  // append a blank line + a new #convert header at the end of the model
-  if FBook.Nodes.Count > 0 then
+  // If the SELECTED rule is a From-only stub whose From matches the picker, SET
+  // ITS To in place (the "assign a To to a Fill From-classes row" flow) instead of
+  // creating a duplicate. Otherwise append a fresh #convert block.
+  if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count)
+     and (FBook.Nodes[FActiveHdr].Kind = rnkConvert)
+     and (Trim(FBook.Nodes[FActiveHdr].ToType) = '')
+     and SameText(Trim(FBook.Nodes[FActiveHdr].FromType), fromT) then
   begin
-    var Blank: TRuleNode := TRuleNode.Create; Blank.Kind := rnkBlank; Blank.Raw := '';
-    FBook.Add(Blank);
+    FBook.Nodes[FActiveHdr].ToType := toT;
+    FBook.Nodes[FActiveHdr].Dirty := True;
+    newHdrIdx := FActiveHdr;
+  end
+  else
+  begin
+    // append a blank line + a new #convert header at the end of the model
+    if FBook.Nodes.Count > 0 then
+    begin
+      var Blank: TRuleNode := TRuleNode.Create; Blank.Kind := rnkBlank; Blank.Raw := '';
+      FBook.Add(Blank);
+    end;
+    hdr := TRuleNode.Create;
+    hdr.Kind := rnkConvert;
+    hdr.FromType := fromT;
+    hdr.ToType := toT;
+    hdr.Dirty := True;
+    FBook.Add(hdr);
+    newHdrIdx := FBook.Nodes.Count - 1;
   end;
-  hdr := TRuleNode.Create;
-  hdr.Kind := rnkConvert;
-  hdr.FromType := fromT;
-  hdr.ToType := toT;
-  hdr.Dirty := True;
-  FBook.Add(hdr);
-  newHdrIdx := FBook.Nodes.Count - 1;
 
   RefreshRulesList;
-  // select the new rule (also fires LoadGridForBlock)
-  if FRules.Items.Count > 0 then
+  // select the target rule (also fires LoadGridForBlock)
+  var sel: Integer := -1;
+  for var k := 0 to FRules.Items.Count - 1 do
+    if Integer(FRules.Items[k].Data) = newHdrIdx then begin sel := k; Break; end;
+  if sel >= 0 then
   begin
-    FRules.ItemIndex := FRules.Items.Count - 1;
-    FRules.Items[FRules.Items.Count - 1].Selected := True;
+    FRules.ItemIndex := sel;
+    FRules.Items[sel].Selected := True;
   end
   else
     LoadGridForBlock(newHdrIdx);
@@ -860,8 +992,8 @@ begin
   // pre-fill the obvious matches
   DoAutoMatch(nil);
   SyncRawFromModel;
-  SetStatus(Format('New conversion %s -> %s created and auto-matched. '
-    + 'Review, then Save.', [fromT, toT]));
+  SetStatus(Format('Conversion %s -> %s set and auto-matched. Review, then Save.',
+    [fromT, toT]));
 end;
 
 procedure TConvRulesForm.DoUnassign(Sender: TObject);

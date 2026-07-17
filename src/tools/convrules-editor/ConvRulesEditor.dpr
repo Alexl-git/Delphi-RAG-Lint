@@ -27,15 +27,38 @@ begin
   Result := 'drag-lint.exe'; // rely on PATH
 end;
 
-{ Default index DBs to resolve property trees from. Prefer the manifest via the
-  engine's own resolution when no --db given, but the editor passes an explicit
-  set so property trees resolve for library types too. }
+{ The per-platform library indexes and the project index. FROM lists the UNION of
+  Win32+Win64 libraries -- the user is converting a Win32 app to Win64, and some
+  legacy source components resolve in only ONE platform's library (e.g. Orpheus
+  TOvcTable is indexed under Win64 only). The project DB (ORM3) supplies project
+  units + any project-declared types. }
+const
+  LibWin32   = 'C:\Projects\.drag-lint\library-Win32.sqlite';
+  LibWin64   = 'C:\Projects\.drag-lint\library-Win64.sqlite';
+  ProjectDb  = 'C:\Projects\DB\ORM3\drag-lint.sqlite';
+
+{ DBs the FROM picker + property-tree/validate resolution query: BOTH libraries
+  (union) + the project DB, so every source type -- visual or not, Win32- or
+  Win64-only -- can be listed and its property tree resolved. }
+function FromDbs: TArray<string>;
+begin
+  Result := [LibWin32, LibWin64, ProjectDb];
+end;
+
+{ DBs the TO picker queries: only the TARGET platform's library + the project DB.
+  The target is Win64 (the app is being migrated to Win64), so conversions target
+  Win64 controls. }
+function ToDbs: TArray<string>;
+begin
+  Result := [LibWin64, ProjectDb];
+end;
+
+{ Combined set used by the engine adapter's default DbArgs -- proptree/scaffold/
+  validate need to resolve BOTH source (FROM) and target (TO) types, so it is the
+  union of both platform libs + the project DB. }
 function DefaultDbs: TArray<string>;
 begin
-  Result := [
-    'C:\Projects\.drag-lint\library-Win32.sqlite',
-    'C:\Projects\DB\ORM3\drag-lint.sqlite'
-  ];
+  Result := [LibWin32, LibWin64, ProjectDb];
 end;
 
 var
@@ -43,7 +66,9 @@ var
 begin
   // Config the globals BEFORE CreateForm (the form's constructor reads them).
   GEditorExe := ResolveDragLintExe;
-  GEditorDbs := DefaultDbs;
+  GEditorDbs := DefaultDbs;   // engine default: proptree/scaffold/validate (both platforms)
+  GEditorFromDbs := FromDbs;  // FROM picker: Win32+Win64 lib union + project
+  GEditorToDbs := ToDbs;      // TO picker: target-platform (Win64) lib + project
   Application.Initialize;
   Application.Title := 'ConvRulesEditor';
   Application.MainFormOnTaskbar := True;

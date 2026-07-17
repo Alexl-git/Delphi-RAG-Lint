@@ -16,6 +16,7 @@ uses
 var
   GPass: Integer = 0;
   GFail: Integer = 0;
+  GSkip: Integer = 0;
 
 procedure Check(const AName: string; ACond: Boolean; const ADetail: string = '');
 begin
@@ -29,6 +30,25 @@ begin
     Inc(GFail);
     Writeln('FAIL  ', AName, '  ', ADetail);
   end;
+end;
+
+{ A test that could not run because its environment precondition (a real index DB
+  or the exe) is absent -- recorded as SKIP, not FAIL, so the model-test suite
+  still passes on a machine without the big library indexes. }
+procedure Skip(const AName, AReason: string);
+begin
+  Inc(GSkip);
+  Writeln('SKIP  ', AName, '  (', AReason, ')');
+end;
+
+{ Case-insensitive membership over a bare-name array (what a picker's Items hold). }
+function Contains(const AArr: TArray<string>; const AName: string): Boolean;
+var
+  S: string;
+begin
+  for S in AArr do
+    if SameText(S, AName) then Exit(True);
+  Result := False;
 end;
 
 { Round-trip: an untouched file must re-emit byte-faithfully (modulo the canonical
@@ -213,6 +233,45 @@ begin
   Check('cast.name.unknown', CastFnFromName('Bogus') = cfNone);
 end;
 
+{ Unknown-type inference: a property inherited from an unresolved parent comes back
+  type='unknown' (e.g. TcxButton.Align). When the same-named From property HAS a
+  type, adopt it for both -> the pair becomes an identity link, not blocked. }
+procedure TestUnknownTypeInference;
+var
+  f, t: string;
+begin
+  Check('unknown.detect.word',  IsUnknownType('unknown'));
+  Check('unknown.detect.empty', IsUnknownType(''));
+  Check('unknown.detect.ci',    IsUnknownType('Unknown'));
+  Check('unknown.detect.real',  not IsUnknownType('TAlign'));
+
+  // To side unknown (the real TabcToggleBtn.Align -> TcxButton.Align case).
+  f := 'TAlign'; t := 'unknown';
+  ResolveUnknownTypes(f, t);
+  Check('unknown.infer.to', (f = 'TAlign') and (t = 'TAlign'), Format('[%s/%s]', [f, t]));
+  Check('unknown.infer.to.castable', IsCastable(f, t)); // identity now
+
+  // From side unknown (symmetric).
+  f := ''; t := 'TColor';
+  ResolveUnknownTypes(f, t);
+  Check('unknown.infer.from', (f = 'TColor') and (t = 'TColor'), Format('[%s/%s]', [f, t]));
+
+  // Both unknown -> ResolveUnknownTypes can't infer (leaves both as-is), but the
+  // pair is still same-named-same-unresolved-parent, so IsCastable's identical-name
+  // rule treats it as an identity link. That is the intended, useful outcome: two
+  // same-named properties both inherited from an unresolved parent are the same
+  // member (both Align from TControl), so the link is allowed.
+  f := 'unknown'; t := 'unknown';
+  ResolveUnknownTypes(f, t);
+  Check('unknown.both.unresolved', IsUnknownType(f) and IsUnknownType(t));
+  Check('unknown.both.identity', IsCastable('unknown', 'unknown'));
+
+  // Known-but-different types are NOT touched (no false identity).
+  f := 'TAlign'; t := 'TColor';
+  ResolveUnknownTypes(f, t);
+  Check('unknown.known.untouched', (f = 'TAlign') and (t = 'TColor'));
+end;
+
 { Parse a real captured proptree/1 JSON fixture (schema stability + leaf fields). }
 procedure TestProptreeParse;
 var
@@ -300,6 +359,197 @@ begin
   end;
 end;
 
+{ ---------------------------------------------------------------------------
+  IN-PROCESS PICKER DATASOURCE tests.
+
+  These do NOT poke the DB with a shell `query` -- they drive the SAME code path
+  the editor's combo boxes use: a real TEngineAdapter, its ListDescendantsOf /
+  ListProjectUnits methods (spawn drag-lint, parse, filter, dedupe). Whatever
+  these return is exactly what would populate FCbFrom / FCbTo / FCbUnit. So a
+  PASS proves the item survives the exe's own parsing/filtering, not merely that
+  the raw DB row exists -- if the code filtered TOvcTable/TTable/VARINSP out, the
+  Contains() assert fails here even though the DB has the row.
+
+  The DB sets below are copied from ConvRulesEditor.dpr (FromDbs / ToDbs / the
+  project DB the From-Unit picker uses). Skipped (not failed) when the exe or the
+  required DBs are absent, so the suite still passes on a lean machine. }
+const
+  LibWin32  = 'C:\Projects\.drag-lint\library-Win32.sqlite';
+  LibWin64  = 'C:\Projects\.drag-lint\library-Win64.sqlite';
+  ProjectDb = 'C:\Projects\DB\ORM3\drag-lint.sqlite';
+
+{ Resolve the real drag-lint.exe the editor would use (next to this runner, else
+  the deployed dll-win64 copy, else PATH). '' if none found. }
+function ResolveExe: string;
+begin
+  Result := TPath.Combine(ExtractFilePath(ParamStr(0)), 'drag-lint.exe');
+  if TFile.Exists(Result) then Exit;
+  Result := 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe';
+  if TFile.Exists(Result) then Exit;
+  Result := '';
+end;
+
+procedure TestPickerDatasource;
+var
+  Exe    : string;
+  Adapter: TEngineAdapter;
+  FromSet, ToSet, Units: TArray<string>;
+  Err    : string;
+  OK     : Boolean;
+begin
+  Exe := ResolveExe;
+  if Exe = '' then
+  begin
+    Skip('picker.datasource', 'drag-lint.exe not found');
+    Exit;
+  end;
+
+  // --- FROM picker: what FCbFrom would hold ---
+  // Editor: ListDescendantsOf('TComponent', GEditorFromDbs=[Win32,Win64,proj]).
+  if not (TFile.Exists(LibWin32) and TFile.Exists(LibWin64)) then
+    Skip('picker.from.datasource', 'library-Win32/Win64 db(s) absent')
+  else
+  begin
+    Adapter := TEngineAdapter.Create(Exe, [LibWin32, LibWin64, ProjectDb]);
+    try
+      OK := Adapter.ListDescendantsOf('TComponent', [LibWin32, LibWin64, ProjectDb],
+              FromSet, Err);
+      Check('picker.from.query.ok', OK, Err);
+      Check('picker.from.nonempty', Length(FromSet) > 100,
+        Format('only %d classes', [Length(FromSet)]));
+      // The three the user reported missing -- assert they SURVIVE the exe's
+      // parse+dedupe and reach the combo's Items.
+      Check('picker.from.has.TOvcTable', Contains(FromSet, 'TOvcTable'),
+        'Orpheus TOvcTable not in FROM datasource');
+      Check('picker.from.has.TTable', Contains(FromSet, 'TTable'),
+        'BDE TTable not in FROM datasource');
+      // Sanity anchors: a plain VCL control + a DevExpress control.
+      Check('picker.from.has.TEdit', Contains(FromSet, 'TEdit'));
+      Check('picker.from.has.TcxGrid', Contains(FromSet, 'TcxGrid'));
+    finally
+      Adapter.Free;
+    end;
+  end;
+
+  // --- TO picker: what FCbTo would hold ---
+  // Editor: ListDescendantsOf('TControl', GEditorToDbs=[Win64,proj]).
+  if not TFile.Exists(LibWin64) then
+    Skip('picker.to.datasource', 'library-Win64 db absent')
+  else
+  begin
+    Adapter := TEngineAdapter.Create(Exe, [LibWin64, ProjectDb]);
+    try
+      OK := Adapter.ListDescendantsOf('TControl', [LibWin64, ProjectDb], ToSet, Err);
+      Check('picker.to.query.ok', OK, Err);
+      Check('picker.to.has.TcxGrid', Contains(ToSet, 'TcxGrid'));
+      // TTable is non-visual (TComponent, not TControl) -> must NOT be a TO option.
+      Check('picker.to.excludes.TTable', not Contains(ToSet, 'TTable'),
+        'non-visual TTable leaked into the TO (target control) datasource');
+    finally
+      Adapter.Free;
+    end;
+  end;
+
+  // --- From-Unit picker: what FCbUnit would hold ---
+  // Editor: ListProjectUnits over the adapter's DBs (project DB carries units).
+  if not TFile.Exists(ProjectDb) then
+    Skip('picker.unit.datasource', 'ORM3 project db absent')
+  else
+  begin
+    Adapter := TEngineAdapter.Create(Exe, [ProjectDb]);
+    try
+      OK := Adapter.ListProjectUnits(Units, Err);
+      Check('picker.unit.query.ok', OK, Err);
+      Check('picker.unit.nonempty', Length(Units) > 100,
+        Format('only %d units', [Length(Units)]));
+      Check('picker.unit.has.VARINSP', Contains(Units, 'VARINSP'),
+        'VARINSP not in From-Unit datasource (reindex CLIENT\VARINSP.PAS)');
+    finally
+      Adapter.Free;
+    end;
+  end;
+end;
+
+{ ---------------------------------------------------------------------------
+  "Fill From-column" datasource -- ListControlTypesInUnit.
+
+  This is the code behind the editor's "Fill From-column" button: given a
+  project unit the user picked, it must return the component TYPES declared in
+  that unit's form so they can be pre-filled into the grid's From column. The
+  bug: for VARINSP it returned [] (nothing appeared). This drives the real
+  TEngineAdapter method and asserts the actual components come back. Skipped
+  (not failed) when the exe / ORM3 db / VARINSP.DFM are absent. }
+procedure TestFillFromUnit;
+var
+  Exe    : string;
+  Adapter: TEngineAdapter;
+  Types  : TArray<string>;
+  Err    : string;
+  OK     : Boolean;
+begin
+  Exe := ResolveExe;
+  if (Exe = '') or (not TFile.Exists(ProjectDb))
+     or (not TFile.Exists('C:\Projects\DB\ORM3\CLIENT\VARINSP.DFM')) then
+  begin
+    Skip('fill.from-unit.varinsp', 'exe / ORM3 db / VARINSP.DFM absent');
+    Exit;
+  end;
+  // The editor passes the FROM db set (both libs + project) as the control set
+  // source; ListControlTypesInUnit resolves the unit's file via the adapter DBs.
+  Adapter := TEngineAdapter.Create(Exe, [LibWin32, LibWin64, ProjectDb]);
+  try
+    OK := Adapter.ListControlTypesInUnit('VARINSP', [], Types, Err);
+    Check('fill.from-unit.ok', OK, Err);
+    // The button was silent because this came back empty. It must not.
+    Check('fill.from-unit.nonempty', Length(Types) > 10,
+      Format('VARINSP returned only %d types (expected its form components)',
+        [Length(Types)]));
+    // Concrete components the user can see in the VARINSP form / DFM.
+    Check('fill.from-unit.has.TOvcController', Contains(Types, 'TOvcController'));
+    Check('fill.from-unit.has.TPanel', Contains(Types, 'TPanel'));
+    Check('fill.from-unit.has.TOvcTable', Contains(Types, 'TOvcTable'));
+  finally
+    Adapter.Free;
+  end;
+end;
+
+{ ---------------------------------------------------------------------------
+  Bare class name -> proptree. The pickers hand GetProptree a BARE class name
+  (TabcToggleBtn, TcxButton), but `proptree --qname` needs a UNIT-QUALIFIED name
+  (Abcbtn.TabcToggleBtn). The bug: GetProptree passed the bare name straight
+  through -> "class not found" (which exits 0) -> empty tree -> the editor showed
+  "<Class> is not indexed (no properties found)". After the fix GetProptree
+  auto-qualifies a bare, unique class name. Skipped when the exe/libs are absent. }
+procedure TestProptreeBareClass;
+var
+  Exe    : string;
+  Adapter: TEngineAdapter;
+  Tree   : TProptree;
+  Err    : string;
+  OK     : Boolean;
+begin
+  Exe := ResolveExe;
+  if (Exe = '') or (not TFile.Exists(LibWin64)) then
+  begin
+    Skip('proptree.bareclass', 'exe / library-Win64 db absent');
+    Exit;
+  end;
+  Adapter := TEngineAdapter.Create(Exe, [LibWin32, LibWin64, ProjectDb]);
+  try
+    // TabcToggleBtn is Abcbtn.TabcToggleBtn -- the exact class the user picked.
+    OK := Adapter.GetProptree('TabcToggleBtn', Tree, Err);
+    Check('proptree.bareclass.ok', OK, Err);
+    Check('proptree.bareclass.nonempty', Length(Tree.Leaves) > 0,
+      Format('TabcToggleBtn resolved to %d leaves (bug: bare name not qualified)',
+        [Length(Tree.Leaves)]));
+    // An already-qualified name must still work (no double-qualify regression).
+    OK := Adapter.GetProptree('Abcbtn.TabcToggleBtn', Tree, Err);
+    Check('proptree.qualified.still.ok', OK and (Length(Tree.Leaves) > 0), Err);
+  finally
+    Adapter.Free;
+  end;
+end;
+
 begin
   try
     TestRoundTrip;
@@ -308,12 +558,17 @@ begin
     TestBlockHelpers;
     TestEditReemit;
     TestCastClassifier;
+    TestUnknownTypeInference;
     TestProptreeParse;
     TestProptreeNoise;
     TestSaveComplete;
+    TestPickerDatasource;
+    TestFillFromUnit;
+    TestProptreeBareClass;
 
     Writeln('');
-    Writeln(Format('model-tests: %d pass / %d fail / %d total', [GPass, GFail, GPass + GFail]));
+    Writeln(Format('model-tests: %d pass / %d fail / %d skip / %d total',
+      [GPass, GFail, GSkip, GPass + GFail + GSkip]));
     if GFail > 0 then
       Halt(1);
   except

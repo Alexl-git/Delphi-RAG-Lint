@@ -61,6 +61,20 @@ function SameFamily(const AFromType, AToType: string): Boolean;
 /// should BLOCK the link (e.g. enum -> class, or two unrelated class types).</summary>
 function IsCastable(const AFromType, AToType: string): Boolean;
 
+/// <summary>True when a proptree leaf type is not usable for cast reasoning --
+/// proptree emits 'unknown' (and occasionally '') when a property is inherited
+/// from a parent class the index could not resolve (e.g. TcxButton.Align: the cx
+/// ancestry breaks at the unresolved TcxBaseButton, so every VCL-inherited
+/// property loses its type).</summary>
+function IsUnknownType(const AType: string): Boolean;
+
+/// <summary>Cast-reasoning inference for a same-named From&lt;-&gt;To property pair.
+/// When exactly ONE side's type is unknown (inherited from an unresolved parent),
+/// adopt the other side's known type for both -- a property with the same name on
+/// both classes is the same inherited member (Align is TAlign on both), so the
+/// link is an identity. When both are unknown, leaves them as-is.</summary>
+procedure ResolveUnknownTypes(var AFromType, AToType: string);
+
 implementation
 
 function CastFnName(ACast: TCastFn): string;
@@ -162,6 +176,19 @@ begin
   // types that have no known cast are blocked.
   if SameText(Trim(AFromType), Trim(AToType)) then Exit(True);
   Result := SameFamily(AFromType, AToType) or (ValidCasts(AFromType, AToType) <> []);
+end;
+
+function IsUnknownType(const AType: string): Boolean;
+begin
+  Result := (Trim(AType) = '') or SameText(Trim(AType), 'unknown');
+end;
+
+procedure ResolveUnknownTypes(var AFromType, AToType: string);
+begin
+  if IsUnknownType(AFromType) and not IsUnknownType(AToType) then
+    AFromType := AToType
+  else if IsUnknownType(AToType) and not IsUnknownType(AFromType) then
+    AToType := AFromType;
 end;
 
 end.

@@ -59,7 +59,18 @@ type
     FExePath: string;
     FDbList : TArray<string>;
     function RunCapture(const AArgs: string; out AOutput: string): Integer;
-    function DbArgs: string;
+    function DbArgsFor(const ADbs: TArray<string>): string; overload;
+    function DbArgs: string; overload;
+    /// <summary>The .pas file that declares unit AUnit, via `query --name AUnit
+    /// --json` (the kind=unit row's "file"). '' if the unit is not indexed.</summary>
+    function ResolveUnitFile(const AUnit: string): string;
+    /// <summary>Qualify a bare class name to its unit-qualified form (TcxButton ->
+    /// cxButtons.TcxButton) via `query --name`, which is what `proptree --qname`
+    /// requires. If AName already contains a '.', or no class row is found, AName
+    /// is returned unchanged. When several units declare the name, the first class
+    /// row wins (best-effort; the caller may still pass a qualified name to be
+    /// exact).</summary>
+    function ResolveClassQName(const AName: string): string;
   public
     constructor Create(const AExePath: string; const ADbList: TArray<string>);
 
@@ -73,17 +84,27 @@ type
     /// + sorted. Backed by the `query descendants --of <A>` verb. Returns False +
     /// AError on failure.</summary>
     function ListDescendantsOf(const AAncestor: string; out ANames: TArray<string>;
-      out AError: string): Boolean;
+      out AError: string): Boolean; overload;
+
+    /// <summary>As ListDescendantsOf, but queries an EXPLICIT db set (ADbs) instead
+    /// of the adapter's default. Lets a caller union libraries per-query -- e.g. the
+    /// FROM picker unions Win32+Win64 so Win64-only Orpheus TOvc* classes appear
+    /// alongside Win32 controls. Names from all listed DBs are merged + deduped.</summary>
+    function ListDescendantsOf(const AAncestor: string; const ADbs: TArray<string>;
+      out ANames: TArray<string>; out AError: string): Boolean; overload;
 
     /// <summary>List indexed project unit names (kind=unit), sorted. Backed by
     /// `query find --no-docs --kind unit`. Returns False + AError on failure.</summary>
     function ListProjectUnits(out ANames: TArray<string>; out AError: string): Boolean;
 
-    /// <summary>Best-effort: the distinct control-class TYPES used as component
-    /// fields in AUnit's file, intersected with AControlSet (the TControl
-    /// descendants). Used to pre-fill the grid's From column from a project unit.
-    /// Backed by `query find --no-docs --kind field` scoped to the unit file.
-    /// Returns [] (not an error) when nothing is found.</summary>
+    /// <summary>The distinct component TYPES placed on AUnit's form, read from the
+    /// unit's companion .dfm (`object &lt;Name&gt;: &lt;TType&gt;` lines) -- the
+    /// authoritative list of what the designer actually dropped on the form. Used
+    /// to pre-fill the grid's From column from a project unit. AControlSet is
+    /// accepted for signature compatibility but NOT used to filter: a real DFM
+    /// component (Orpheus TOvc*, Raize TRz*, DevExpress Tcx*) is kept even when its
+    /// ancestry to TComponent is unresolved in the library index. Returns [] (not
+    /// an error) when the unit has no .dfm or is not indexed.</summary>
     function ListControlTypesInUnit(const AUnit: string;
       const AControlSet: TArray<string>; out ATypes: TArray<string>;
       out AError: string): Boolean;
@@ -203,14 +224,19 @@ begin
   FDbList  := ADbList;
 end;
 
-function TEngineAdapter.DbArgs: string;
+function TEngineAdapter.DbArgsFor(const ADbs: TArray<string>): string;
 var
   Db: string;
 begin
   Result := '';
-  for Db in FDbList do
+  for Db in ADbs do
     if Trim(Db) <> '' then
       Result := Result + Format(' --db "%s"', [Db]);
+end;
+
+function TEngineAdapter.DbArgs: string;
+begin
+  Result := DbArgsFor(FDbList);
 end;
 
 {$IFDEF MSWINDOWS}
@@ -289,10 +315,15 @@ function TEngineAdapter.GetProptree(const AQname: string; out ATree: TProptree;
 var
   Output: string;
   Code  : Integer;
+  QN    : string;
 begin
   AError := '';
   ATree := Default(TProptree);
-  Code := RunCapture(Format('proptree --qname "%s" --format json%s', [AQname, DbArgs]), Output);
+  // The pickers hand us a BARE class name (TcxButton); proptree --qname needs the
+  // unit-qualified form (cxButtons.TcxButton). Qualify it first (no-op if already
+  // qualified or not resolvable).
+  QN := ResolveClassQName(AQname);
+  Code := RunCapture(Format('proptree --qname "%s" --format json%s', [QN, DbArgs]), Output);
   if Code <> 0 then
   begin
     AError := Format('proptree failed (exit %d) for %s. The type may not be indexed, '
@@ -313,24 +344,35 @@ end;
 
 function TEngineAdapter.ListDescendantsOf(const AAncestor: string;
   out ANames: TArray<string>; out AError: string): Boolean;
+begin
+  Result := ListDescendantsOf(AAncestor, FDbList, ANames, AError);
+end;
+
+function TEngineAdapter.ListDescendantsOf(const AAncestor: string;
+  const ADbs: TArray<string>; out ANames: TArray<string>; out AError: string): Boolean;
 var
   Output: string;
   Code  : Integer;
   SL    : TStringList;
+  Seen  : TStringList;
   Ln    : string;
 begin
   AError := '';
   SetLength(ANames, 0);
   // `query descendants --of <A>` -> one bare class name per line (plus a possible
-  // "(loaded defaults ...)" / "(none)" trailer we skip).
-  Code := RunCapture(Format('query descendants --of "%s"%s', [AAncestor, DbArgs]), Output);
+  // "(loaded defaults ...)" / "(none)" trailer we skip). Passing several --db
+  // unions the results; we dedupe so a class in more than one DB appears once.
+  Code := RunCapture(Format('query descendants --of "%s"%s',
+    [AAncestor, DbArgsFor(ADbs)]), Output);
   if Code = 2 then
   begin
     AError := Format('query descendants failed (exit %d)', [Code]);
     Exit(False);
   end;
   SL := TStringList.Create;
+  Seen := TStringList.Create;
   try
+    Seen.Sorted := True; Seen.Duplicates := dupIgnore; Seen.CaseSensitive := False;
     SL.Text := Output;
     for Ln in SL do
     begin
@@ -340,10 +382,12 @@ begin
       if Pos('loaded defaults', T) > 0 then Continue;
       // a class name is a single identifier token (no spaces, no ':')
       if (Pos(' ', T) > 0) or (Pos(':', T) > 0) then Continue;
-      ANames := ANames + [T];
+      Seen.Add(T);
     end;
+    ANames := Seen.ToStringArray;
     Result := True;
   finally
+    Seen.Free;
     SL.Free;
   end;
 end;
@@ -387,47 +431,148 @@ begin
   end;
 end;
 
+function TEngineAdapter.ResolveUnitFile(const AUnit: string): string;
+var
+  Output: string;
+  Code  : Integer;
+  Root  : TJSONValue;
+  Arr   : TJSONArray;
+  V     : TJSONValue;
+  Obj   : TJSONObject;
+  Kind, FileP: string;
+begin
+  Result := '';
+  Code := RunCapture(Format('query --name "%s" --json%s', [AUnit, DbArgs]), Output);
+  if Code = 2 then Exit;
+  // `query --json` prints a JSON array; it may be followed by a "(loaded
+  // defaults ...)" trailer, so slice from the first '[' to its matching ']'.
+  var lb: Integer := Pos('[', Output);
+  var rb: Integer := 0;
+  for var i := Length(Output) downto 1 do
+    if Output[i] = ']' then begin rb := i; Break; end;
+  if (lb <= 0) or (rb <= lb) then Exit;
+  Root := TJSONObject.ParseJSONValue(Copy(Output, lb, rb - lb + 1));
+  if not (Root is TJSONArray) then begin Root.Free; Exit; end;
+  try
+    Arr := Root as TJSONArray;
+    // Prefer the kind=unit row; fall back to the first row that has a file.
+    for V in Arr do
+      if V is TJSONObject then
+      begin
+        Obj := V as TJSONObject;
+        Obj.TryGetValue<string>('kind', Kind);
+        if SameText(Kind, 'unit') and Obj.TryGetValue<string>('file', FileP) then
+          Exit(FileP);
+      end;
+    for V in Arr do
+      if (V is TJSONObject) and (V as TJSONObject).TryGetValue<string>('file', FileP) then
+        Exit(FileP);
+  finally
+    Root.Free;
+  end;
+end;
+
+function TEngineAdapter.ResolveClassQName(const AName: string): string;
+var
+  Output: string;
+  Code  : Integer;
+  Root  : TJSONValue;
+  Arr   : TJSONArray;
+  V     : TJSONValue;
+  Obj   : TJSONObject;
+  Kind, QN: string;
+begin
+  Result := AName;
+  // Already qualified (has a '.') or empty -> nothing to do.
+  if (AName = '') or (Pos('.', AName) > 0) then Exit;
+  Code := RunCapture(Format('query --name "%s" --json%s', [AName, DbArgs]), Output);
+  if Code = 2 then Exit;
+  var lb: Integer := Pos('[', Output);
+  var rb: Integer := 0;
+  for var i := Length(Output) downto 1 do
+    if Output[i] = ']' then begin rb := i; Break; end;
+  if (lb <= 0) or (rb <= lb) then Exit;
+  Root := TJSONObject.ParseJSONValue(Copy(Output, lb, rb - lb + 1));
+  if not (Root is TJSONArray) then begin Root.Free; Exit; end;
+  try
+    Arr := Root as TJSONArray;
+    // Prefer the first class row; that qualified_name is what proptree needs.
+    for V in Arr do
+      if V is TJSONObject then
+      begin
+        Obj := V as TJSONObject;
+        Obj.TryGetValue<string>('kind', Kind);
+        if SameText(Kind, 'class') and Obj.TryGetValue<string>('qualified_name', QN)
+           and (QN <> '') then
+          Exit(QN);
+      end;
+  finally
+    Root.Free;
+  end;
+end;
+
 function TEngineAdapter.ListControlTypesInUnit(const AUnit: string;
   const AControlSet: TArray<string>; out ATypes: TArray<string>;
   out AError: string): Boolean;
 var
-  Tree : TProptree;
-  Err  : string;
-  Leaf : TPropLeaf;
-  ctl  : TStringList;
-  Seen : TStringList;
-  bare : string;
+  PasFile, DfmFile: string;
+  SL  : TStringList;
+  Seen: TStringList;
+  Ln, T, TypeName: string;
+  p, q: Integer;
 begin
-  // Strategy: a form/frame unit's convertible controls are the class-typed
-  // properties of its main class. We proptree the unit's primary class (named
-  // like the unit or T<Unit>) and keep leaf TYPES that are in the control set.
-  // Best-effort: returns [] with no error when nothing resolves.
+  // The components on a form are exactly the top-level + nested DFM objects, each
+  // declared `object <Name>: <TType>` (or `inline <Name>: <TType>`). Read the
+  // unit's companion .dfm and collect the distinct <TType> tokens. This is the
+  // authoritative source -- it does not depend on class-ancestry resolution in
+  // the library index, so legacy components (Orpheus/Raize/DevExpress) whose
+  // ancestry is unresolved are still listed. Best-effort: [] when there is no dfm.
   AError := '';
   SetLength(ATypes, 0);
-  ctl := TStringList.Create;   // fast membership over the control set
+
+  PasFile := ResolveUnitFile(AUnit);
+  if PasFile = '' then Exit(True);              // unit not indexed -> nothing to fill
+  DfmFile := ChangeFileExt(PasFile, '.dfm');
+  if not TFile.Exists(DfmFile) then
+    DfmFile := ChangeFileExt(PasFile, '.DFM');  // some trees store upper-case ext
+  if not TFile.Exists(DfmFile) then Exit(True); // non-form unit -> [] (best-effort)
+
+  SL := TStringList.Create;
   Seen := TStringList.Create;
   try
-    ctl.Sorted := True; ctl.CaseSensitive := False;
-    for var C in AControlSet do ctl.Add(C);
     Seen.Sorted := True; Seen.Duplicates := dupIgnore; Seen.CaseSensitive := False;
-
-    // Try the unit's main class: many ORM3 forms are <Unit>.T<Unit> or Tfrm*.
-    // We do a light proptree on the unit-qualified class guess; if it fails we
-    // simply return [] (the fill is optional).
-    if GetProptree(AUnit, Tree, Err) then
-    begin
-      for Leaf in Tree.Leaves do
+    try
+      SL.LoadFromFile(DfmFile);
+    except
+      on E: Exception do
       begin
-        bare := Leaf.TypeName;
-        if LastDelimiter('.', bare) > 0 then
-          bare := Copy(bare, LastDelimiter('.', bare) + 1, MaxInt);
-        if ctl.IndexOf(bare) >= 0 then Seen.Add(bare);
+        AError := 'could not read ' + DfmFile + ': ' + E.Message;
+        Exit(False);
       end;
+    end;
+    for Ln in SL do
+    begin
+      T := TrimLeft(Ln);
+      // Match a DFM object header: 'object <Name>: <TType>' or 'inline <Name>: <TType>'.
+      if T.StartsWith('object ', True) then p := 8
+      else if T.StartsWith('inline ', True) then p := 8
+      else Continue;
+      q := Pos(':', T);
+      if q <= p then Continue;
+      TypeName := Trim(Copy(T, q + 1, MaxInt));
+      // The type token is a bare identifier; strip any trailing '[..]' index and
+      // whitespace/comment. Keep only a leading T-prefixed identifier.
+      var k: Integer := 1;
+      while (k <= Length(TypeName)) and
+            (CharInSet(TypeName[k], ['A'..'Z','a'..'z','0'..'9','_'])) do Inc(k);
+      TypeName := Copy(TypeName, 1, k - 1);
+      if (TypeName <> '') and CharInSet(TypeName[1], ['T','t']) then
+        Seen.Add(TypeName);
     end;
     ATypes := Seen.ToStringArray;
     Result := True;
   finally
-    ctl.Free;
+    SL.Free;
     Seen.Free;
   end;
 end;
