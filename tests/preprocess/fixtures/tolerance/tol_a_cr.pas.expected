@@ -1,0 +1,4 @@
+function R(const R1, R2: TdxGpRectF): Boolean; overload;
+
+// codecs
+procedure CheckImageCodecs;

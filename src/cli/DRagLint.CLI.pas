@@ -309,6 +309,7 @@ type
     // PP-Task-6: preprocess-file include handling
     PpIncludeMode: string     ; // --include-mode <off|defines-only>  ('' => default 'off')
     PpNoNearSearch: Boolean   ; // --no-near-search  (v1.2.1 #2) strict BaseDir-only include resolution
+    PpTolerances : Boolean    ; // --tolerances  (v1.2.1 #5) opt-in dcc-tolerance ';' replacement pass
     // PP-Task-7: pp-profile define-profile resolver diagnostic verb
     PpDproj      : string     ; // --dproj <file.dproj>  the project whose config defines to resolve
     // PP-Task-9: index-time preprocessing. Preprocessing is ON by default in the
@@ -429,7 +430,7 @@ begin
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--no-backup]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
-  Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
+  Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
   Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)');
   Writeln('');
   Writeln('  Output/CI (lint, lint-all, check-ast):');
@@ -791,6 +792,8 @@ begin
     else if (A = '--include-mode') and (i < ParamCount) then begin Inc(i); Result.PpIncludeMode:= ParamStr(i); end
     // v1.2.1 port change #2: opt out of nearest-first include resolution.
     else if A = '--no-near-search' then Result.PpNoNearSearch:= True
+    // v1.2.1 port change #5: opt into the dcc-tolerance pass.
+    else if A = '--tolerances' then Result.PpTolerances:= True
     // PP-Task-7: pp-profile define-profile resolver -- the project whose config
     // defines to resolve (--platform reuses CheckPlatform, --config reuses
     // WorkspaceConfig from the shared arg handlers above).
@@ -9863,7 +9866,9 @@ end; // function
 /// oracle (offset-identity invariant). Used by tests/preprocess/*.ps1.</summary>
 /// <param name="AArgs">Parsed CLI args; InFile (--file) is the source; PpDefines
 /// (--define) the symbols; PpNumeric (--numeric K=V) the numeric map;
-/// PpIncludeMode (--include-mode) the include strategy.</param>
+/// PpIncludeMode (--include-mode) the include strategy; PpTolerances
+/// (--tolerances, v1.2.1 #5) opts into the dcc-tolerance ';' replacement pass
+/// (offset-identity preserved -- replacement, never insertion).</param>
 /// <returns>0 on success, 2 on usage error / missing file.</returns>
 function DoPreprocessFile(const AArgs: TArgs): Integer;
 var
@@ -9878,7 +9883,7 @@ var
   StdOut  : THandle          ;
   Written : DWORD            ;
 begin
-  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only]'); Exit(2); end;
+  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]'); Exit(2); end;
   if not FileExists(AArgs.InFile) then begin Writeln(Format('File not found: %s', [AArgs.InFile])); Exit(2); end;
 
   InBytes:= TFile.ReadAllBytes(AArgs.InFile);
@@ -9914,6 +9919,10 @@ begin
   // (matching the JS oracle's options.nearSearch !== false); --no-near-search
   // restores strict BaseDir-only resolution.
   Options.NearSearch:= not AArgs.PpNoNearSearch;
+  // v1.2.1 port change #5: the dcc-tolerance pass is OPT-IN (--tolerances),
+  // matching the JS default. Explicit assignment -- Options is a local record,
+  // so an unset Boolean would be stack garbage, not False.
+  Options.Tolerances:= AArgs.PpTolerances;
 
   OutBytes:= Preprocess(InBytes, Options);
 

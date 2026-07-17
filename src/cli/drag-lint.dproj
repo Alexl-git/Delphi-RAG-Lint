@@ -181,6 +181,7 @@
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Lexer.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Expr.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.pas"/>
+        <DCCReference Include="..\preprocess\DRagLint.Preprocess.Tolerance.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Profile.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.Deps.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.RCallTree.pas"/>

@@ -108,7 +108,8 @@ uses
   System.IOUtils,
   System.Generics.Defaults,     // default comparer for TArray.Sort<string>
   DRagLint.Preprocess.Lexer,
-  DRagLint.Preprocess.Expr;
+  DRagLint.Preprocess.Expr,
+  DRagLint.Preprocess.Tolerance; // v1.2.1 #5: opt-in dcc-tolerance pass
 
 const
   // Cycle guard: matches preprocess.js maxIncludeDepth (option default 64).
@@ -500,6 +501,14 @@ begin
     Numeric.Free;
     Defines.Free;
   end;
+
+  // v1.2.1 port change #5: the OPT-IN dcc-tolerance pass runs over the fully
+  // resolved TOP-LEVEL buffer only (never inside include recursion -- includes
+  // contribute defines, not text). ApplyTolerances REPLACES one whitespace
+  // byte per fixed line with ';', so Length(Result) is untouched and the
+  // offset-identity invariant survives by construction.
+  if AOptions.Tolerances then
+    ApplyTolerances(Result);
 end;
 
 function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes; overload;

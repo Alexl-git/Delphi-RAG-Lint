@@ -1,0 +1,4 @@
+  TsgSHXStack = record
+    Index: Integer;
+    Value: array[0..4, 0..2] of Double;
+  end;

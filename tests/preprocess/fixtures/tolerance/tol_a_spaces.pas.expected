@@ -1,0 +1,2 @@
+function A(const V: Variant): string; deprecated 'use B instead'; 
+function B(const V: Variant): string;

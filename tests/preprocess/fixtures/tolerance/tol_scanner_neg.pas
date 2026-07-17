@@ -1,0 +1,2 @@
+  S := '; stdcall',  { function }
+end;

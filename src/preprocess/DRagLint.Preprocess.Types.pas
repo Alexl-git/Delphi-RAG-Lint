@@ -53,11 +53,18 @@ type
   /// BaseDir-only (the pre-#2 behavior). A default-initialized TPPOptions has
   /// NearSearch=False (Boolean zero), so callers that want the widened search
   /// must set it True -- use TPPOptionsDefault to get the JS-matching default.</summary>
+  /// Tolerances (v1.2.1 port change #5) opts into the dcc-tolerance pass
+  /// (DRagLint.Preprocess.Tolerance): after the chunk walk, constructs that
+  /// dcc32 accepts with a missing ';' (final routine-directive group;
+  /// array[..]-of-T last record field) get the ';' by REPLACING one adjacent
+  /// whitespace byte -- offset-identity preserved trivially. Default False
+  /// (opt-in, matching preprocess.js options.tolerances).
   TPPOptions = record
     Profile    : TDefineProfile;
     IncludeMode: string        ;
     BaseDir    : string        ;
     NearSearch : Boolean       ;
+    Tolerances : Boolean       ;
   end;
 
 /// <summary>Returns a TPPOptions initialized to the JS-oracle defaults:
@@ -74,6 +81,8 @@ begin
   Result := Default(TPPOptions);
   Result.IncludeMode := 'off';
   Result.NearSearch  := True;
+  // v1.2.1 #5: the dcc-tolerance pass is OPT-IN (JS default: tolerances off).
+  Result.Tolerances  := False;
 end;
 
 end.

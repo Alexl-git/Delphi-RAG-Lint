@@ -1,0 +1,3 @@
+function C(h: HCERTSTORE; dw: DWORD): BOOL; stdcall;
+{$EXTERNALSYM CertControlStore}
+function D(p: PCERT_CONTEXT): PCERT_CONTEXT; stdcall;
