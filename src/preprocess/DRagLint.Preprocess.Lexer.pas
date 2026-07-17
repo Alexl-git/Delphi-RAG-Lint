@@ -16,7 +16,8 @@ unit DRagLint.Preprocess.Lexer;
 // ENCODING NOTE: this feature is ABOUT braces, so this unit never writes a bare
 // brace inside a comment. Directive/brace/dollar literals in code are byte
 // constants: 123 = open-brace, 125 = close-brace, 36 = dollar, 39 = quote,
-// 47 = slash, 40 = open-paren, 42 = asterisk, 41 = close-paren, 10 = newline.
+// 34 = double-quote, 47 = slash, 40 = open-paren, 42 = asterisk,
+// 41 = close-paren, 10 = newline (LF).
 //
 // Directive forms recognized (known keyword set): define, undef, ifdef, ifndef,
 // if, ifopt, ifend, else, elseif, endif, i, include. Anything else under a
@@ -159,11 +160,15 @@ begin
         Continue;
       end;
 
-      // String literal -- skip without interpreting any brace inside (39 = quote).
+      // Single-quoted string literal -- skip without interpreting any brace
+      // inside (39 = quote). v1.2.1 port change #4: BOUNDED at end-of-line
+      // (10 = LF) -- Pascal strings cannot span lines, so a stray unpaired quote
+      // must NOT keep hiding directives on later lines (lexer.js:91-101).
       if Bytes[I] = 39 then
       begin
         Inc(I);
-        while (I < N) and not ((Bytes[I] = 39) and ((I + 1 >= N) or (Bytes[I + 1] <> 39))) do
+        while (I < N) and (Bytes[I] <> 10)
+              and not ((Bytes[I] = 39) and ((I + 1 >= N) or (Bytes[I + 1] <> 39))) do
         begin
           // Doubled quote = escaped quote: consume both bytes and continue.
           if (Bytes[I] = 39) and (I + 1 < N) and (Bytes[I + 1] = 39) then
@@ -173,7 +178,20 @@ begin
           end;
           Inc(I);
         end;
-        if I < N then Inc(I); // consume the closing quote
+        if (I < N) and (Bytes[I] = 39) then Inc(I); // consume the closing quote (not the LF)
+        Continue;
+      end;
+
+      // Double-quoted string -- dcc's built-in assembler accepts MASM-style
+      // operands like  CMP AL,"'"  (System.AnsiStrings X86ASM arms). v1.2.1 port
+      // change #4: without this skip the apostrophe INSIDE "..." opens a phantom
+      // '-string whose mis-pairing can swallow real directives ({$ENDIF}) far
+      // downstream. Same end-of-line bound as '-strings (lexer.js:108-113).
+      if Bytes[I] = 34 then
+      begin
+        Inc(I);
+        while (I < N) and (Bytes[I] <> 34) and (Bytes[I] <> 10) do Inc(I);
+        if (I < N) and (Bytes[I] = 34) then Inc(I); // consume the closing " (not the LF)
         Continue;
       end;
 
