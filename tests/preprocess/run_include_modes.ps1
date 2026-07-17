@@ -117,6 +117,27 @@ try {
   # off vs defines-only must differ (proves the mode actually changes behaviour).
   Check 'off vs defines-only: outputs DIFFER (mode selection is real)' (-not (BytesEqual $do $off))
 
+  # ============================================================
+  # v1.2.1 port change #1 (transitive): a {$DEFINE} in a NESTED include
+  # (main -> outer.inc -> inner.inc) must propagate all the way up to the top
+  # parent's later {$IFDEF}. The Delphi port has no 'expand' body-splice mode
+  # (that would break offset-identity), so #1's "propagate in expand mode" JS fix
+  # maps here to the defines-only recursion sharing the parent's define
+  # dictionary BY REFERENCE through every nesting level. inner.inc defines
+  # NESTED_OK; main's {$IFDEF NESTED_OK} must therefore take the THEN branch.
+  # ============================================================
+  $nmain = Join-Path $fixDir 'uses_inc_nested\main.pas'
+  $nIn   = [System.IO.File]::ReadAllBytes($nmain)
+  $nDo   = Run-Pascal $nmain @('--include-mode', 'defines-only')
+  $nText = AsciiOf $nDo
+
+  Check 'nested defines-only: Nested = True PRESENT (inner.inc NESTED_OK propagated 2 levels up)' ($nText.Contains('const Nested = True;'))
+  Check 'nested defines-only: Nested = False BLANKED (ELSE inactive)' (-not $nText.Contains('const Nested = False;'))
+  Check 'nested defines-only: Length(output) == Length(input) [offset-identity, no splice]' ($nDo.Length -eq $nIn.Length)
+
+  $nOrc = Run-Oracle $nmain @('--include-mode', 'defines-only')
+  Check 'nested defines-only: ORACLE-DIFF Pascal bytes === JS bytes (byte-for-byte)' (BytesEqual $nDo $nOrc)
+
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

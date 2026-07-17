@@ -37,6 +37,16 @@ unit DRagLint.Preprocess;
 // deliberately NOT ported -- splicing a body would violate the offset-identity
 // invariant. Length(output) == Length(input of the PARENT file) always holds.
 //
+// INCLUDE-DEFINE PROPAGATION (v1.2.1 port change #1): the JS v1.2.1 fix "include
+// defines propagate in expand mode" is ALREADY satisfied here without a code
+// change, because this port has no 'expand' mode -- and its 'defines-only'
+// recursion already shares the parent's define dictionaries BY REFERENCE through
+// every nesting level (see ApplyIncludeDefines below). So a {$DEFINE} in a
+// nested include (main -> outer.inc -> inner.inc) propagates transitively to the
+// top parent's later {$IFDEF}, byte-identically to the JS oracle. Regression-
+// locked by tests/preprocess/run_include_modes.ps1 (the 'nested defines-only'
+// block, oracle-diffed).
+//
 // BOM (v1.2.1 port change #3): a decoded UTF-8 BOM (the 3 bytes EF BB BF) at the
 // START of the input is blanked to 3 spaces at every recursion entry -- it is
 // encoding metadata, not source, and must not survive into the resolved text.
