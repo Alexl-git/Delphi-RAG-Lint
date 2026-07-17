@@ -37,6 +37,15 @@ unit DRagLint.Preprocess;
 // deliberately NOT ported -- splicing a body would violate the offset-identity
 // invariant. Length(output) == Length(input of the PARENT file) always holds.
 //
+// BOM (v1.2.1 port change #3): a decoded UTF-8 BOM (the 3 bytes EF BB BF) at the
+// START of the input is blanked to 3 spaces at every recursion entry -- it is
+// encoding metadata, not source, and must not survive into the resolved text.
+// The blanking is offset-preserving (3 bytes -> 3 space bytes), so the
+// offset-identity invariant still holds. (In the production indexer path the
+// top-level BOM is already removed by EnsureUtf8Bytes upstream; this keeps
+// Preprocess robust for raw-byte callers -- e.g. the preprocess-file verb -- and
+// oracle-parity with preprocess.js.)
+//
 // ENCODING NOTE: this feature is ABOUT braces, so this unit never writes a bare
 // brace inside a // comment. Brace/dollar/space/newline literals in code are
 // BYTE constants: 32 = space, 10 = newline (LF), 13 = CR.
@@ -164,6 +173,7 @@ procedure PreprocessInto(
   var AOut: TBytes;
   var AOutPos: Integer);
 var
+  Bytes : TBytes            ; // working copy of ABytes with a leading UTF-8 BOM blanked
   Src   : string           ;
   Chunks: TArray<TPPChunk>  ;
   C     : TPPChunk          ;
@@ -202,8 +212,10 @@ var
     Live:= EffectivelyActive;
     for K:= AStart to AEnd - 1 do
     begin
-      if Live then AOut[AOutPos]:= ABytes[K]
-      else if ABytes[K] = 10 then AOut[AOutPos]:= 10
+      // Copy from the BOM-blanked working buffer (Bytes), not ABytes, so a
+      // leading UTF-8 BOM that was replaced with spaces below does not survive.
+      if Live then AOut[AOutPos]:= Bytes[K]
+      else if Bytes[K] = 10 then AOut[AOutPos]:= 10
       else AOut[AOutPos]:= 32;
       Inc(AOutPos);
     end;
@@ -239,10 +251,31 @@ var
   end;
 
 begin
+  // v1.2.1 port change #3: a decoded UTF-8 BOM (the 3 bytes EF BB BF) at the
+  // START of the input is encoding metadata, not source -- blank it
+  // offset-preservingly so it never survives into the resolved text (mirrors
+  // preprocess.js:57 input.charCodeAt(0)===0xFEFF -> ' '+slice, adapted to the
+  // BYTE model: the JS blanks one decoded U+FEFF char to one space; the UTF-8
+  // BOM is three bytes, and the offset-identity invariant requires blanking all
+  // three to three spaces). Applies at EVERY recursion entry (so a defines-only
+  // include body's own BOM is neutralized before it is scanned), never shifts
+  // offsets, and leaves a BOM-less input untouched (identity copy). We make a
+  // WORKING COPY (Bytes) because ABytes is const; all copying/blanking below
+  // reads from Bytes, so the blanked BOM propagates through the lexer AND the
+  // byte-copy path.
+  Bytes:= ABytes;
+  if (Length(Bytes) >= 3) and (Bytes[0] = $EF) and (Bytes[1] = $BB) and (Bytes[2] = $BF) then
+  begin
+    Bytes:= Copy(ABytes); // detach from ABytes before mutating (avoid aliasing)
+    Bytes[0]:= 32;
+    Bytes[1]:= 32;
+    Bytes[2]:= 32;
+  end;
+
   // Rebuild a string for the lexer (it re-encodes to UTF-8 internally, so the
-  // byte offsets it returns index back into ABytes identically). We keep ABytes
+  // byte offsets it returns index back into Bytes identically). We keep Bytes
   // as the authoritative byte source for all copying/blanking below.
-  Src:= TEncoding.UTF8.GetString(ABytes);
+  Src:= TEncoding.UTF8.GetString(Bytes);
   Chunks:= LexDirectives(Src);
 
   // The base frame: active, branch taken, no outer-false (preprocess.js:50).
