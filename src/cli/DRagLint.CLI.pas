@@ -308,6 +308,7 @@ type
     PpNumeric : TArray<string>; // --numeric <K=V>     repeatable numeric defines (K=V, K lowercased on use)
     // PP-Task-6: preprocess-file include handling
     PpIncludeMode: string     ; // --include-mode <off|defines-only>  ('' => default 'off')
+    PpNoNearSearch: Boolean   ; // --no-near-search  (v1.2.1 #2) strict BaseDir-only include resolution
     // PP-Task-7: pp-profile define-profile resolver diagnostic verb
     PpDproj      : string     ; // --dproj <file.dproj>  the project whose config defines to resolve
     // PP-Task-9: index-time preprocessing. Preprocessing is ON by default in the
@@ -428,7 +429,7 @@ begin
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--no-backup]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
-  Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
+  Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
   Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)');
   Writeln('');
   Writeln('  Output/CI (lint, lint-all, check-ast):');
@@ -788,6 +789,8 @@ begin
     end
     // PP-Task-6: preprocess-file include handling mode (off | defines-only).
     else if (A = '--include-mode') and (i < ParamCount) then begin Inc(i); Result.PpIncludeMode:= ParamStr(i); end
+    // v1.2.1 port change #2: opt out of nearest-first include resolution.
+    else if A = '--no-near-search' then Result.PpNoNearSearch:= True
     // PP-Task-7: pp-profile define-profile resolver -- the project whose config
     // defines to resolve (--platform reuses CheckPlatform, --config reuses
     // WorkspaceConfig from the shared arg handlers above).
@@ -9907,6 +9910,10 @@ begin
   if AArgs.PpIncludeMode <> '' then Options.IncludeMode:= AArgs.PpIncludeMode
   else Options.IncludeMode:= 'off';
   Options.BaseDir:= TPath.GetDirectoryName(TPath.GetFullPath(AArgs.InFile));
+  // v1.2.1 port change #2: nearest-first include resolution is ON by default
+  // (matching the JS oracle's options.nearSearch !== false); --no-near-search
+  // restores strict BaseDir-only resolution.
+  Options.NearSearch:= not AArgs.PpNoNearSearch;
 
   OutBytes:= Preprocess(InBytes, Options);
 

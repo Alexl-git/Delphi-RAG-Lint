@@ -1,0 +1,1 @@
+{$DEFINE SHADOW_FAR}

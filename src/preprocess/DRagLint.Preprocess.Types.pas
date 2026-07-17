@@ -44,13 +44,36 @@ type
   /// directive (NO body splice -- offsets stay 1:1). The 'expand' body-splice
   /// mode of preprocess.js is deliberately NOT ported (it breaks the
   /// offset-identity invariant). BaseDir is the directory a relative include
-  /// name resolves against; '' disables resolution (every include blanks).</summary>
+  /// name resolves against; '' disables resolution (every include blanks).
+  /// NearSearch (v1.2.1 port change #2) widens {$I} resolution beyond BaseDir:
+  /// when True (the default via TPPOptionsDefault), the resolver also tries
+  /// BaseDir's immediate subdirs, then up to 3 parent levels each with their
+  /// immediate subdirs, nearest first (real layouts: EurekaLog Source\Common\,
+  /// AsyncPro PrnDrv\Win9xME\ -> source\). When False, resolution is strict
+  /// BaseDir-only (the pre-#2 behavior). A default-initialized TPPOptions has
+  /// NearSearch=False (Boolean zero), so callers that want the widened search
+  /// must set it True -- use TPPOptionsDefault to get the JS-matching default.</summary>
   TPPOptions = record
     Profile    : TDefineProfile;
     IncludeMode: string        ;
     BaseDir    : string        ;
+    NearSearch : Boolean       ;
   end;
 
+/// <summary>Returns a TPPOptions initialized to the JS-oracle defaults:
+/// IncludeMode 'off', empty BaseDir, and NearSearch True (matching
+/// preprocess.js's options.nearSearch !== false default). Use this instead of
+/// Default(TPPOptions) when constructing options so the widened include search
+/// is on unless a caller explicitly opts out.</summary>
+function TPPOptionsDefault: TPPOptions;
+
 implementation
+
+function TPPOptionsDefault: TPPOptions;
+begin
+  Result := Default(TPPOptions);
+  Result.IncludeMode := 'off';
+  Result.NearSearch  := True;
+end;
 
 end.

@@ -104,13 +104,27 @@ function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions): TBytes; ov
 implementation
 
 uses
+  System.Types,                 // TStringDynArray (TDirectory.GetDirectories)
   System.IOUtils,
+  System.Generics.Defaults,     // default comparer for TArray.Sort<string>
   DRagLint.Preprocess.Lexer,
   DRagLint.Preprocess.Expr;
 
 const
   // Cycle guard: matches preprocess.js maxIncludeDepth (option default 64).
   MAX_INCLUDE_DEPTH = 64;
+  // v1.2.1 port change #2: how many parent levels the nearest-first {$I} search
+  // climbs (preprocess.js options.searchLevels default 3).
+  SEARCH_LEVELS = 3;
+
+var
+  // v1.2.1 port change #2: process-lifetime cache of directory listings for the
+  // nearest-first include search (dir -> sorted absolute subdirectory paths).
+  // Mirrors preprocess.js's _subdirCache: corpus scans call the resolver once
+  // per file with heavily-repeated baseDirs, so caching the readdir keeps the
+  // widened search cheap. No invalidation -- acceptable for a preprocessor
+  // utility's process lifetime. Created lazily; freed in the unit finalization.
+  GSubdirCache: TDictionary<string, TArray<string>> = nil;
 
 type
   // One nested-IF state frame (preprocess.js stack entries):
@@ -150,20 +164,89 @@ begin
   Result:= Trim(S);
 end;
 
-// Resolve an include name against ABaseDir (JS path.resolve(baseDir, name)).
-// Returns the resolved absolute path if it exists, '' otherwise. An empty
-// ABaseDir (or a name that does not resolve to an existing file) yields '' so
-// the caller blanks the directive (offsets stay 1:1).
-function ResolveInclude(const AName, ABaseDir: string): string;
+// v1.2.1 port change #2: the sorted immediate subdirectories of ADir, cached for
+// the process lifetime (mirrors preprocess.js subdirsOf + _subdirCache). An
+// unreadable dir yields [] (treated as no subdirs). Absolute paths, ascending
+// sort -- deterministic nearest-first candidate order.
+function SubdirsOf(const ADir: string): TArray<string>;
+var
+  Entries: TArray<string>;
+  Cached : TArray<string>;
+begin
+  if GSubdirCache = nil then GSubdirCache:= TDictionary<string, TArray<string>>.Create;
+  if GSubdirCache.TryGetValue(ADir, Cached) then Exit(Cached);
+  try
+    Entries:= TDirectory.GetDirectories(ADir); // immediate subdirs only (no recurse)
+  except
+    Entries:= nil; // unreadable dir -> no subdirs
+  end;
+  TArray.Sort<string>(Entries);
+  GSubdirCache.AddOrSetValue(ADir, Entries);
+  Result:= Entries;
+end;
+
+// Try to resolve AName against ACandidateDir; return the existing full path or ''.
+function TryResolveIn(const AName, ACandidateDir: string): string;
 var
   P: string;
 begin
   Result:= '';
-  if (AName = '') or (ABaseDir = '') then Exit;
-  if TPath.IsPathRooted(AName) then P:= AName
-  else P:= TPath.Combine(ABaseDir, AName);
-  P:= TPath.GetFullPath(P);
+  P:= TPath.GetFullPath(TPath.Combine(ACandidateDir, AName));
   if TFile.Exists(P) then Result:= P;
+end;
+
+// Resolve an include name. First try ABaseDir directly (JS path.resolve). If
+// ANearSearch, widen nearest-first (preprocess.js:116-136): ABaseDir's immediate
+// subdirs, then up to SEARCH_LEVELS parent levels -- each parent dir itself plus
+// its immediate subdirs -- stopping when the filesystem root is reached. Returns
+// the resolved absolute path if it exists, '' otherwise (caller blanks the
+// directive; offsets stay 1:1). An empty ABaseDir or an unresolvable name yields
+// ''. A rooted AName is honored as-is.
+function ResolveInclude(const AName, ABaseDir: string; ANearSearch: Boolean): string;
+var
+  P    : string ;
+  Dir  : string ;
+  Sub  : string ;
+  Lvl  : Integer;
+  Parent: string;
+begin
+  Result:= '';
+  if (AName = '') or (ABaseDir = '') then Exit;
+
+  // Rooted name -- honored directly, no search.
+  if TPath.IsPathRooted(AName) then
+  begin
+    P:= TPath.GetFullPath(AName);
+    if TFile.Exists(P) then Result:= P;
+    Exit;
+  end;
+
+  // Pass 1: ABaseDir itself (the strict, pre-#2 behavior).
+  Result:= TryResolveIn(AName, ABaseDir);
+  if Result <> '' then Exit;
+  if not ANearSearch then Exit;
+
+  // Pass 2: nearest-first widened search. Level 0 = ABaseDir's immediate subdirs
+  // (ABaseDir itself was already tried above). Levels 1..SEARCH_LEVELS = the
+  // parent dir itself + its immediate subdirs. Stop when GetDirectoryName no
+  // longer changes (filesystem root).
+  Dir:= TPath.GetFullPath(ABaseDir);
+  for Lvl:= 0 to SEARCH_LEVELS do
+  begin
+    if Lvl > 0 then
+    begin
+      Result:= TryResolveIn(AName, Dir);
+      if Result <> '' then Exit;
+    end;
+    for Sub in SubdirsOf(Dir) do
+    begin
+      Result:= TryResolveIn(AName, Sub);
+      if Result <> '' then Exit;
+    end;
+    Parent:= TPath.GetDirectoryName(Dir);
+    if (Parent = '') or (Parent = Dir) then Break;
+    Dir:= Parent;
+  end;
 end;
 
 // The recursive worker (the faithful port of preprocess.js's preprocess()).
@@ -179,6 +262,7 @@ procedure PreprocessInto(
   ADefines: TDictionary<string, Boolean>;
   ANumeric: TDictionary<string, Integer>;
   const AIncludeMode, ABaseDir: string;
+  ANearSearch: Boolean;
   ADepth: Integer;
   var AOut: TBytes;
   var AOutPos: Integer);
@@ -248,16 +332,18 @@ var
     SubOut   : TBytes ;
     SubPos   : Integer;
   begin
-    Resolved:= ResolveInclude(AName, ABaseDir);
+    Resolved:= ResolveInclude(AName, ABaseDir, ANearSearch);
     if Resolved = '' then Exit; // unresolved -> nothing to apply (blank only)
     SubBytes:= TFile.ReadAllBytes(Resolved);
     SetLength(SubOut, Length(SubBytes)); // throwaway (child text is discarded)
     SubPos:= 0;
     // Recurse with the SAME ADefines/ANumeric instances (NOT copies) so the
-    // child's {$DEFINE}/{$UNDEF} are visible to the parent's later {$IFDEF}.
+    // child's {$DEFINE}/{$UNDEF} are visible to the parent's later {$IFDEF}. The
+    // child's BaseDir is the resolved include's own directory, and NearSearch is
+    // threaded through so a nested {$I} resolves nearest-first from there too.
     PreprocessInto(
       SubBytes, ADefines, ANumeric, AIncludeMode,
-      TPath.GetDirectoryName(Resolved), ADepth + 1, SubOut, SubPos);
+      TPath.GetDirectoryName(Resolved), ANearSearch, ADepth + 1, SubOut, SubPos);
   end;
 
 begin
@@ -409,7 +495,7 @@ begin
 
     PreprocessInto(
       AUtf8, Defines, Numeric, AOptions.IncludeMode, AOptions.BaseDir,
-      0, Result, OutPos);
+      AOptions.NearSearch, 0, Result, OutPos);
   finally
     Numeric.Free;
     Defines.Free;
@@ -422,11 +508,20 @@ var
 begin
   // Delegate to the include-aware overload with includes OFF and no base dir,
   // so the output is byte-identical to the pre-Task-6 behavior (includes were
-  // blanked, their defines ignored).
+  // blanked, their defines ignored). NearSearch is irrelevant in 'off' mode (no
+  // include is ever resolved), but set it explicitly rather than rely on the
+  // Boolean zero-init.
+  Opts:= TPPOptionsDefault;
   Opts.Profile    := AProfile;
   Opts.IncludeMode:= 'off';
   Opts.BaseDir    := '';
   Result:= Preprocess(AUtf8, Opts);
 end;
+
+initialization
+finalization
+  // Release the process-lifetime subdir cache (v1.2.1 port change #2). Lazily
+  // created in SubdirsOf; may be nil if the widened search was never used.
+  GSubdirCache.Free;
 
 end.
