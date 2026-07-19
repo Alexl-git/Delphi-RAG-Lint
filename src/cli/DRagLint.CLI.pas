@@ -54,6 +54,8 @@ uses
   , DRagLint.Lint   .ClassMetrics
   , DRagLint.Lint   .DocRules
   , DRagLint.Project.Resolver
+  , DRagLint.Project.Members
+  , DRagLint.Project.Coherence
   , DRagLint.FormsMap
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
@@ -453,7 +455,8 @@ begin
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--out <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
-  Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--json] [--config <path>]  - sync project member list; flag stale used units');
+  Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units');
+  Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
   Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
@@ -7578,6 +7581,153 @@ begin
   else Result:= 0;
 end; // function
 
+/// <summary>Compile-and-capture core shared by refresh-findings and
+/// reconcile-project's index/findings coherence phase -- steps 5-9 of the
+/// refresh-findings algorithm. Recompiles AProjectPath (full or incremental),
+/// normalizes the findings, resolves the covered file_id set (AFullBuild -> all
+/// indexed .pas/.dpr/.dpk; incremental -> AStale plus every finding's resolved
+/// file), then per covered file clears+reinserts its compiler_findings and --
+/// only when the compile did not fail with an Error -- stamps last_compiled_unix
+/// = now. Operates on the ALREADY-OPEN AStore (no second connection is opened on
+/// the same DB file). AJson selects the JSON vs text summary shape.
+/// AEmitSummary=False silences ALL stdout (the 'Compiling:' line and the
+/// summary) so a caller that owns its own output stream -- e.g.
+/// reconcile-project's single-JSON-object report -- is never corrupted.</summary>
+/// <param name="AStore">Open, migrated symbol store to read and update.</param>
+/// <param name="AProjectPath">.dproj/.dpr/.dpk target to compile.</param>
+/// <param name="AFullBuild">True forces a full rebuild covering every indexed unit.</param>
+/// <param name="AStale">Incremental-mode stale file ids; ignored when AFullBuild.</param>
+/// <param name="AJson">True emits the machine JSON summary; False the text summary.</param>
+/// <param name="AEmitSummary">False suppresses all stdout for a caller-owned stream.</param>
+/// <returns>1 iff an Error-severity finding survived, else 0.</returns>
+function RefreshProjectFindingsCore(const AStore: ISymbolStore;
+  const AProjectPath: string; AFullBuild: Boolean; const AStale: TArray<Int64>;
+  AJson: Boolean; AEmitSummary: Boolean): Integer;
+var
+  Res          : TCompileCheckResult;
+  Covered      : TDictionary<Int64, Boolean>;
+  AllFileIds   : TArray<Int64>      ;
+  FileId       : Int64              ;
+  FilePath     : string             ;
+  Ext          : string             ;
+  F            : TCompilerFinding   ;
+  Rec          : TCompilerFinding   ;
+  HasErrorFind : Boolean            ;
+  CompileFailed: Boolean            ;
+  NowUnix      : Int64              ;
+  FindingsByFid: TDictionary<Int64, TList<TCompilerFinding>>;
+  FidList      : TList<TCompilerFinding>;
+  StampedCount : Integer            ;
+  FindingCount : Integer            ;
+  ModeStr      : string             ;
+  Pair         : TPair<Int64, TList<TCompilerFinding>>;
+begin
+  // Step 5: compile + normalize (absolutize paths, drop msbuild dupes).
+  // ExtractFilePath treats only '\' as a separator, so normalize '/' first --
+  // a forward-slash --project would otherwise yield a truncated base dir ('C:/'),
+  // dropping every bare-filename project finding (see NormalizeFindings).
+  if AEmitSummary then
+    Writeln('Compiling: ', AProjectPath, IfThen(AFullBuild, ' (full build)', ' (incremental)'));
+  Res:= TCompileChecker.Run(AProjectPath, AFullBuild);
+  Res.Findings:= NormalizeFindings(Res.Findings,
+    ExtractFilePath(StringReplace(AProjectPath, '/', '\', [rfReplaceAll])));
+
+  // Step 6: determine the covered file_id set.
+  Covered:= TDictionary<Int64, Boolean>.Create;
+  try
+    if AFullBuild then
+    begin
+      AllFileIds:= AStore.GetAllFileIds;
+      for FileId in AllFileIds do
+      begin
+        FilePath:= AStore.GetFilePath(FileId);
+        Ext:= LowerCase(ExtractFileExt(FilePath));
+        if (Ext = '.pas') or (Ext = '.dpr') or (Ext = '.dpk') then
+          Covered.AddOrSetValue(FileId, True);
+      end;
+    end
+    else
+    begin
+      for FileId in AStale do Covered.AddOrSetValue(FileId, True);
+      for F in Res.Findings do
+      begin
+        FileId:= AStore.FindFileIdByPath(F.RawPath);
+        if FileId > 0 then Covered.AddOrSetValue(FileId, True);
+      end;
+    end;
+
+    // Step 7: compile-failure gate -- detect whether an Error/Fatal finding
+    // survived. (NormalizeFindings/ParseLine already canonicalize severity to
+    // 'Error' for both raw 'error' and 'fatal' lines -- see
+    // TCompileChecker.NormalizeSeverity.)
+    HasErrorFind:= False;
+    for F in Res.Findings do
+      if SameText(F.Severity, 'Error') then begin HasErrorFind:= True; Break; end;
+    CompileFailed:= (Res.ExitCode <> 0) and HasErrorFind;
+
+    // Step 8: per covered file, clear + insert + (on success) stamp.
+    // Bucket findings by resolved file_id first (one pass) instead of
+    // rescanning Res.Findings once per covered file.
+    FindingsByFid:= TDictionary<Int64, TList<TCompilerFinding>>.Create;
+    try
+      for F in Res.Findings do
+      begin
+        FileId:= AStore.FindFileIdByPath(F.RawPath);
+        if FileId <= 0 then Continue; // not indexed; nothing to bucket it under
+        if not FindingsByFid.TryGetValue(FileId, FidList) then
+        begin
+          FidList:= TList<TCompilerFinding>.Create;
+          FindingsByFid.Add(FileId, FidList);
+        end;
+        Rec:= F;
+        Rec.FileId:= FileId;
+        FidList.Add(Rec);
+      end;
+
+      NowUnix:= DateTimeToUnix(Now, False);
+      StampedCount:= 0;
+      FindingCount:= 0;
+      for FileId in Covered.Keys do
+      begin
+        AStore.ClearCompilerFindingsForFile(FileId);
+        if FindingsByFid.TryGetValue(FileId, FidList) then
+          for Rec in FidList do
+          begin
+            AStore.InsertCompilerFinding(Rec);
+            Inc(FindingCount);
+          end;
+        if not CompileFailed then
+        begin
+          AStore.SetFileCompiledAt(FileId, NowUnix);
+          Inc(StampedCount);
+        end;
+      end;
+    finally
+      for Pair in FindingsByFid do Pair.Value.Free;
+      FindingsByFid.Free;
+    end; // try
+  finally
+    Covered.Free;
+  end; // try
+
+  // Step 9: summary (suppressed when the caller owns the output stream).
+  if AEmitSummary then
+  begin
+    if AFullBuild then ModeStr:= 'full' else ModeStr:= 'incremental';
+    if AJson then
+      Writeln(Format('{"mode":"%s","compiled":%d,"stale":%d,"stamped":%d,"findings":%d,"exitCode":%d}',
+        [ModeStr, IfThen(CompileFailed, 0, 1), Length(AStale), StampedCount, FindingCount, Res.ExitCode]))
+    else
+    begin
+      Writeln(Format('refresh-findings: mode=%s stale=%d stamped=%d findings=%d exitCode=%d',
+        [ModeStr, Length(AStale), StampedCount, FindingCount, Res.ExitCode]));
+      if CompileFailed then Writeln('Compile FAILED -- files left stale for retry.');
+    end;
+  end;
+
+  if HasErrorFind then Result:= 1 else Result:= 0;
+end; // function
+
 // fresh compiler findings: drag-lint refresh-findings --project <X.dproj|.dpr>
 // --db <db> [--platform win32|win64] [--full] [--json]
 //
@@ -7604,26 +7754,10 @@ end; // function
 //   9. Print/emit a summary; exit 1 iff an Error-severity finding survived.
 function DoRefreshFindings(const AArgs: TArgs): Integer;
 var
-  Store        : ISymbolStore       ;
-  Res          : TCompileCheckResult;
-  Stale        : TArray<Int64>      ;
-  FullBuild    : Boolean            ;
-  Covered      : TDictionary<Int64, Boolean>;
-  AllFileIds   : TArray<Int64>      ;
-  FileId       : Int64              ;
-  FilePath     : string             ;
-  Ext          : string             ;
-  F            : TCompilerFinding   ;
-  Rec          : TCompilerFinding   ;
-  HasErrorFind : Boolean            ;
-  CompileFailed: Boolean            ;
-  NowUnix      : Int64              ;
-  FindingsByFid: TDictionary<Int64, TList<TCompilerFinding>>;
-  FidList      : TList<TCompilerFinding>;
-  StampedCount : Integer            ;
-  FindingCount : Integer            ;
-  ModeStr      : string             ;
-  Pair         : TPair<Int64, TList<TCompilerFinding>>;
+  Store    : ISymbolStore ;
+  Stale    : TArray<Int64>;
+  FullBuild: Boolean      ;
+  IsJson   : Boolean      ;
 begin
   if (AArgs.ProjectPath = '') or (AArgs.DbPath = '') then
   begin
@@ -7642,9 +7776,10 @@ begin
 
   // Step 3: nothing stale and no forced --full -> noop.
   Stale:= Store.GetStaleFileIds;
+  IsJson:= (LowerCase(AArgs.Format) = 'json') or AArgs.AsJson;
   if (Length(Stale) = 0) and (not AArgs.Full) then
   begin
-    if (LowerCase(AArgs.Format) = 'json') or AArgs.AsJson then
+    if IsJson then
       Writeln('{"mode":"noop","compiled":0,"stale":0,"stamped":0,"findings":0}')
     else
       Writeln('0 stale, up to date');
@@ -7656,109 +7791,9 @@ begin
   // re-emitted (DCC skips hints for units it considers already up to date).
   FullBuild:= AArgs.Full or (Length(Stale) >= 2);
 
-  // Step 5: compile + normalize (absolutize paths, drop msbuild dupes).
-  // ExtractFilePath treats only '\' as a separator, so normalize '/' first --
-  // a forward-slash --project would otherwise yield a truncated base dir ('C:/'),
-  // dropping every bare-filename project finding (see NormalizeFindings).
-  Writeln('Compiling: ', AArgs.ProjectPath, IfThen(FullBuild, ' (full build)', ' (incremental)'));
-  Res:= TCompileChecker.Run(AArgs.ProjectPath, FullBuild);
-  Res.Findings:= NormalizeFindings(Res.Findings,
-    ExtractFilePath(StringReplace(AArgs.ProjectPath, '/', '\', [rfReplaceAll])));
-
-  // Step 6: determine the covered file_id set.
-  Covered:= TDictionary<Int64, Boolean>.Create;
-  try
-    if FullBuild then
-    begin
-      AllFileIds:= Store.GetAllFileIds;
-      for FileId in AllFileIds do
-      begin
-        FilePath:= Store.GetFilePath(FileId);
-        Ext:= LowerCase(ExtractFileExt(FilePath));
-        if (Ext = '.pas') or (Ext = '.dpr') or (Ext = '.dpk') then
-          Covered.AddOrSetValue(FileId, True);
-      end;
-    end
-    else
-    begin
-      for FileId in Stale do Covered.AddOrSetValue(FileId, True);
-      for F in Res.Findings do
-      begin
-        FileId:= Store.FindFileIdByPath(F.RawPath);
-        if FileId > 0 then Covered.AddOrSetValue(FileId, True);
-      end;
-    end;
-
-    // Step 7: compile-failure gate -- detect whether an Error/Fatal finding
-    // survived. (NormalizeFindings/ParseLine already canonicalize severity to
-    // 'Error' for both raw 'error' and 'fatal' lines -- see
-    // TCompileChecker.NormalizeSeverity.)
-    HasErrorFind:= False;
-    for F in Res.Findings do
-      if SameText(F.Severity, 'Error') then begin HasErrorFind:= True; Break; end;
-    CompileFailed:= (Res.ExitCode <> 0) and HasErrorFind;
-
-    // Step 8: per covered file, clear + insert + (on success) stamp.
-    // Bucket findings by resolved file_id first (one pass) instead of
-    // rescanning Res.Findings once per covered file.
-    FindingsByFid:= TDictionary<Int64, TList<TCompilerFinding>>.Create;
-    try
-      for F in Res.Findings do
-      begin
-        FileId:= Store.FindFileIdByPath(F.RawPath);
-        if FileId <= 0 then Continue; // not indexed; nothing to bucket it under
-        if not FindingsByFid.TryGetValue(FileId, FidList) then
-        begin
-          FidList:= TList<TCompilerFinding>.Create;
-          FindingsByFid.Add(FileId, FidList);
-        end;
-        Rec:= F;
-        Rec.FileId:= FileId;
-        FidList.Add(Rec);
-      end;
-
-      NowUnix:= DateTimeToUnix(Now, False);
-      StampedCount:= 0;
-      FindingCount:= 0;
-      for FileId in Covered.Keys do
-      begin
-        Store.ClearCompilerFindingsForFile(FileId);
-        if FindingsByFid.TryGetValue(FileId, FidList) then
-          for Rec in FidList do
-          begin
-            Store.InsertCompilerFinding(Rec);
-            Inc(FindingCount);
-          end;
-        if not CompileFailed then
-        begin
-          Store.SetFileCompiledAt(FileId, NowUnix);
-          Inc(StampedCount);
-        end;
-      end;
-    finally
-      for Pair in FindingsByFid do Pair.Value.Free;
-      FindingsByFid.Free;
-    end; // try
-  finally
-    Covered.Free;
-  end; // try
-
-  // Step 9: summary.
-  if FullBuild then ModeStr:= 'full' else ModeStr:= 'incremental';
-  if (LowerCase(AArgs.Format) = 'json') or AArgs.AsJson then
-  begin
-    Writeln(Format('{"mode":"%s","compiled":%d,"stale":%d,"stamped":%d,"findings":%d,"exitCode":%d}',
-      [ModeStr, IfThen(CompileFailed, 0, 1), Length(Stale), StampedCount, FindingCount, Res.ExitCode]));
-  end
-  else
-  begin
-    Writeln(Format('refresh-findings: mode=%s stale=%d stamped=%d findings=%d exitCode=%d',
-      [ModeStr, Length(Stale), StampedCount, FindingCount, Res.ExitCode]));
-    if CompileFailed then Writeln('Compile FAILED -- files left stale for retry.');
-  end;
-
-  if HasErrorFind then Result:= 1
-  else Result:= 0;
+  // Steps 5-9: shared compile-and-capture core (also driven by the
+  // reconcile-project index/findings coherence phase). Emits the summary here.
+  Result:= RefreshProjectFindingsCore(Store, AArgs.ProjectPath, FullBuild, Stale, IsJson, True);
 end; // function
 
 { Resolve <unit>.dcu inside the project's DCU output dir (DCC_DcuOutput in the
@@ -12851,6 +12886,14 @@ end; // function
 // --json: emit a JSON object {missing,extra,stale} to stdout instead of text.
 //         When --apply is also given, apply still runs; apply messages go to
 //         ErrOutput so stdout remains valid JSON.
+// --db <db> [--full]: run the index/findings COHERENCE phase against <db>.
+//         For each project member (the compile closure + its sibling .dfm) that
+//         is not indexed, index-stale, or compile-stale, re-scan it (and its
+//         .dfm), then -- if anything was incoherent (or --full) -- full-recompile
+//         and refresh compiler_findings for the project. This self-heals the
+//         index WITHOUT editing the .dpr (independent of --apply). The recompile
+//         is best-effort: a non-buildable target does not fail reconcile. The
+//         report gains a `coherence:` line (text) / `"coherence"` object (JSON).
 function DoReconcileProject(const AArgs: TArgs): Integer;
 var
   ProjectFile : string                                    ;
@@ -12867,6 +12910,21 @@ var
   JMissing    : TJSONArray                                ;
   JExtra      : TJSONArray                                ;
   JStale      : TJSONArray                                ;
+  JCoh        : TJSONObject                               ;
+  Store       : ISymbolStore                              ;
+  DP2         : TDelphi13Parser                           ;
+  Indexer2    : TIndexer                                  ;
+  Members     : TArray<TProjectMember>                    ;
+  Coh         : TArray<TMemberCoherence>                  ;
+  MI          : Integer                                   ;
+  CohMembers  : Integer                                   ;
+  CohIncoher  : Integer                                   ;
+  CohScanned  : Integer                                   ;
+  CohRecomp   : Boolean                                   ;
+  HaveCoh     : Boolean                                   ;
+  DbParentDir : string                                    ;
+  ProfileTgt  : string                                    ;
+  SavedOut    : TTextRec                                  ;
 begin
   // Accept either positional arg (AArgs.Path) or explicit --project.
   ProjectFile:= AArgs.Path;
@@ -12907,6 +12965,102 @@ begin
   Reconciler:= TProjectReconciler.Create(LibRoots, StaleGlobs);
   try
     RR:= Reconciler.Analyze(ProjectFile);
+
+    // Index/findings coherence phase (only with --db): ensure every project
+    // member is indexed + compile-fresh in <db>, healing missing/stale entries
+    // WITHOUT editing the .dpr. Must run BEFORE the report is emitted so the
+    // coherence summary can be folded into the same text/JSON output.
+    HaveCoh   := False;
+    CohMembers:= 0;
+    CohIncoher:= 0;
+    CohScanned:= 0;
+    CohRecomp := False;
+    if AArgs.DbPath <> '' then
+    begin
+      DbParentDir:= ExtractFilePath(TPath.GetFullPath(AArgs.DbPath));
+      if (DbParentDir <> '') and (not TDirectory.Exists(DbParentDir)) then
+        // Error to stderr so a --json run's stdout stays one valid JSON object.
+        Writeln(ErrOutput, 'reconcile-project: --db parent directory missing, skipping coherence phase: ', DbParentDir)
+      else
+      begin
+        // Migrate bootstraps a missing DB file -- acceptable; reconcile's job is
+        // to ensure coherence. ONE connection is shared by the scan (TIndexer)
+        // and the recompile (RefreshProjectFindingsCore) -- no second store.
+        Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+        Store.Migrate;
+        HaveCoh:= True;
+
+        // Mirror the CLI index site: Delphi + DFM + Firebird parsers, usage refs
+        // on, per-config preprocess profile from the project.
+        DP2:= TDelphi13Parser.Create;
+        DP2.EmitUsageRefs:= True;
+        Indexer2:= TIndexer.Create(Store, [DP2, TDFMParser.Create, TFirebirdSqlParser.Create], AArgs.Docs);
+        // The shared TIndexer reports per-file progress ('... -> N symbols') on
+        // stdout; redirect stdout to the null device for the whole scan+recompile
+        // so reconcile owns its report stream (mandatory for the single-JSON-
+        // object --json contract). Restored in the finally, even on exception.
+        Move(TTextRec(Output), SavedOut, SizeOf(TTextRec));
+        AssignFile(Output, 'NUL');
+        Rewrite(Output);
+        try
+          ProfileTgt:= AArgs.ProjectPath;
+          if ProfileTgt = '' then ProfileTgt:= ProjectFile;
+          Indexer2.SetPreprocess(not AArgs.NoPreprocess,
+            ResolveIndexProfile(ProfileTgt, AArgs.CheckPlatform, ''));
+
+          Members:= PairDfmSiblings(RR.ClosureFiles);
+          Coh:= ComputeCoherence(Store, Members);
+          CohMembers:= Length(Coh);
+
+          // Re-scan each incoherent member's .pas (and sibling .dfm) so the
+          // index regains a fresh files row for it -- the motivating fix.
+          for MI:= 0 to High(Coh) do
+            if IsIncoherent(Coh[MI]) then
+            begin
+              Inc(CohIncoher);
+              Indexer2.IndexFile(Coh[MI].Member.UnitPath);
+              Inc(CohScanned);
+              if Coh[MI].Member.HasDfm then
+              begin
+                Indexer2.IndexFile(Coh[MI].Member.DfmPath);
+                Inc(CohScanned);
+              end;
+            end;
+
+          // Resolve cross-unit links for what we just scanned (mirror the
+          // index site's post-pass) so unit_uses / ancestry / calls resolve.
+          if CohScanned > 0 then
+          begin
+            Store.ResolveUnitUseTargets;
+            Store.ResolveAncestry;
+            Store.ResolveHelpers;
+            Store.ResolveCallTargets;
+          end;
+
+          // Recompile + refresh compiler_findings for the whole project when
+          // anything was incoherent (or --full forces it). Best-effort: the
+          // target may not be msbuild-buildable, so a compile failure/exception
+          // must NOT fail reconcile -- the scan above already healed the index.
+          // AEmitSummary=False keeps the core silent so our report stream stays
+          // clean (one JSON object in --json mode).
+          if (CohIncoher > 0) or AArgs.Full then
+          begin
+            try
+              RefreshProjectFindingsCore(Store, ProjectFile, True, nil, AArgs.AsJson, False);
+              CohRecomp:= True;
+            except
+              CohRecomp:= False;
+            end;
+          end;
+        finally
+          Flush(Output);
+          CloseFile(Output);
+          Move(SavedOut, TTextRec(Output), SizeOf(TTextRec)); // restore stdout
+          Indexer2.Free;
+          Store:= nil; // release the shared connection
+        end; // try
+      end;
+    end;
 
     if AArgs.AsJson then
     begin
@@ -12950,6 +13104,18 @@ begin
         end;
         JRoot.AddPair('stale', JStale);
 
+        // Coherence summary (only when --db ran the phase) -- same JRoot so
+        // stdout stays ONE valid JSON object.
+        if HaveCoh then
+        begin
+          JCoh:= TJSONObject.Create;
+          JCoh.AddPair('members'   , TJSONNumber.Create(CohMembers));
+          JCoh.AddPair('incoherent', TJSONNumber.Create(CohIncoher));
+          JCoh.AddPair('scanned'   , TJSONNumber.Create(CohScanned));
+          JCoh.AddPair('recompiled', TJSONBool.Create(CohRecomp));
+          JRoot.AddPair('coherence', JCoh);
+        end;
+
         Writeln(JRoot.Format(2));
       finally
         JRoot.Free;
@@ -12979,6 +13145,11 @@ begin
       end;
 
       Writeln('Run a full project build to verify after --apply.');
+
+      // Coherence summary line (only when --db ran the phase).
+      if HaveCoh then
+        Writeln(Format('coherence: members=%d incoherent=%d scanned=%d recompiled=%s',
+          [CohMembers, CohIncoher, CohScanned, IfThen(CohRecomp, 'true', 'false')]));
 
       // --apply: write changes to .dpr/.dproj (with .bak backups).
       if AArgs.Apply then begin Reconciler.Apply(ProjectFile, RR); Writeln('Applied: Missing units added to .dpr and .dproj (.bak backups written).'); end;
