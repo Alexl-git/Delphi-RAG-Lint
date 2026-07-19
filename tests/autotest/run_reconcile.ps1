@@ -143,5 +143,25 @@ else {
   Write-Host '  [SKIP] coherence DB-phase (Python not found at C:\Python314)' -ForegroundColor Yellow
 }
 
+# CRITICAL regression: reconcile-project with NO --db must NOT run the
+# coherence phase. AArgs.DbPath is NEVER '' (ParseArgs defaults it to
+# <cwd>\drag-lint.sqlite), so the guard must be Length(DbPaths)>0, not
+# DbPath<>''. Run in an ISOLATED temp cwd so a stray drag-lint.sqlite created
+# by the (pre-fix) bug can't land in the repo.
+$noDbCwd = "$env:TEMP\drag-lint-reconcile-nodb"
+if (Test-Path $noDbCwd) { Remove-Item -Recurse -Force $noDbCwd }
+New-Item -ItemType Directory -Force $noDbCwd | Out-Null
+Push-Location $noDbCwd
+try {
+  $repNoDb = & $Exe reconcile-project "$fx\App.dpr" 2>$null | Out-String
+  Check 'no-db: exits 0'                   ($LASTEXITCODE -eq 0)
+  Check 'no-db: no coherence line'         ($repNoDb -notmatch 'coherence:')
+  Check 'no-db: no stray drag-lint.sqlite' (-not (Test-Path '.\drag-lint.sqlite'))
+}
+finally {
+  Pop-Location
+  Remove-Item -Recurse -Force $noDbCwd -ErrorAction SilentlyContinue
+}
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

@@ -12925,6 +12925,7 @@ var
   DbParentDir : string                                    ;
   ProfileTgt  : string                                    ;
   SavedOut    : TTextRec                                  ;
+  CohDbPath   : string                                    ;
 begin
   // Accept either positional arg (AArgs.Path) or explicit --project.
   ProjectFile:= AArgs.Path;
@@ -12966,18 +12967,26 @@ begin
   try
     RR:= Reconciler.Analyze(ProjectFile);
 
-    // Index/findings coherence phase (only with --db): ensure every project
-    // member is indexed + compile-fresh in <db>, healing missing/stale entries
-    // WITHOUT editing the .dpr. Must run BEFORE the report is emitted so the
-    // coherence summary can be folded into the same text/JSON output.
+    // Index/findings coherence phase (only with an EXPLICIT --db): ensure every
+    // project member is indexed + compile-fresh in <db>, healing missing/stale
+    // entries WITHOUT editing the .dpr. Must run BEFORE the report is emitted
+    // so the coherence summary can be folded into the same text/JSON output.
+    // NOTE: AArgs.DbPath is NEVER '' -- ParseArgs defaults it to
+    // <cwd>/drag-lint.sqlite -- so the discriminator for "--db was actually
+    // passed" is AArgs.DbPaths (only populated by the --db switch itself; see
+    // ResolveIndexDb/:1525, DoFbSnapshot/:5566, DoSchema/:6215 for the same
+    // idiom). Guarding on DbPath instead made this phase fire on every plain
+    // `reconcile-project` call, silently creating a DB, indexing, and
+    // recompiling as an unrequested side effect.
     HaveCoh   := False;
     CohMembers:= 0;
     CohIncoher:= 0;
     CohScanned:= 0;
     CohRecomp := False;
-    if AArgs.DbPath <> '' then
+    if Length(AArgs.DbPaths) > 0 then
     begin
-      DbParentDir:= ExtractFilePath(TPath.GetFullPath(AArgs.DbPath));
+      CohDbPath:= AArgs.DbPaths[0];
+      DbParentDir:= ExtractFilePath(TPath.GetFullPath(CohDbPath));
       if (DbParentDir <> '') and (not TDirectory.Exists(DbParentDir)) then
         // Error to stderr so a --json run's stdout stays one valid JSON object.
         Writeln(ErrOutput, 'reconcile-project: --db parent directory missing, skipping coherence phase: ', DbParentDir)
@@ -12986,7 +12995,7 @@ begin
         // Migrate bootstraps a missing DB file -- acceptable; reconcile's job is
         // to ensure coherence. ONE connection is shared by the scan (TIndexer)
         // and the recompile (RefreshProjectFindingsCore) -- no second store.
-        Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+        Store:= TSQLiteSymbolStore.Create(CohDbPath);
         Store.Migrate;
         HaveCoh:= True;
 
@@ -12995,14 +13004,18 @@ begin
         DP2:= TDelphi13Parser.Create;
         DP2.EmitUsageRefs:= True;
         Indexer2:= TIndexer.Create(Store, [DP2, TDFMParser.Create, TFirebirdSqlParser.Create], AArgs.Docs);
-        // The shared TIndexer reports per-file progress ('... -> N symbols') on
-        // stdout; redirect stdout to the null device for the whole scan+recompile
-        // so reconcile owns its report stream (mandatory for the single-JSON-
-        // object --json contract). Restored in the finally, even on exception.
-        Move(TTextRec(Output), SavedOut, SizeOf(TTextRec));
-        AssignFile(Output, 'NUL');
-        Rewrite(Output);
         try
+          // The shared TIndexer reports per-file progress ('... -> N symbols') on
+          // stdout; redirect stdout to the null device for the whole scan+recompile
+          // so reconcile owns its report stream (mandatory for the single-JSON-
+          // object --json contract). Restored in the finally, even on exception.
+          // Kept as the FIRST statements inside this try (not before it) so a
+          // failed Rewrite still reaches the finally that restores stdout,
+          // instead of leaking the redirect on an exception.
+          Move(TTextRec(Output), SavedOut, SizeOf(TTextRec));
+          AssignFile(Output, 'NUL');
+          Rewrite(Output);
+
           ProfileTgt:= AArgs.ProjectPath;
           if ProfileTgt = '' then ProfileTgt:= ProjectFile;
           Indexer2.SetPreprocess(not AArgs.NoPreprocess,
@@ -13046,7 +13059,10 @@ begin
           if (CohIncoher > 0) or AArgs.Full then
           begin
             try
-              RefreshProjectFindingsCore(Store, ProjectFile, True, nil, AArgs.AsJson, False);
+              // AJson=False: dead when AEmitSummary=False (core emits no
+              // summary in either shape), so pass the literal for clarity
+              // rather than AArgs.AsJson.
+              RefreshProjectFindingsCore(Store, ProjectFile, True, nil, False, False);
               CohRecomp:= True;
             except
               CohRecomp:= False;
