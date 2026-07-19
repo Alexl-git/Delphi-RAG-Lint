@@ -596,10 +596,47 @@ begin
   end;
 end;
 
+{ Platform selection actually re-scopes the FROM picker: TOvcTable (Orpheus) is
+  indexed under Win64 only, so a Win64-only FROM DB set lists it and a Win32-only
+  set does not -- driven through the exact ListDescendantsOf path the pickers use.
+  Skipped (not failed) when the exe or the library DBs are absent. }
+procedure TestPlatformRescope;
+const
+  LibDir    = 'C:\Projects\.drag-lint\';
+  ProjectDb = 'C:\Projects\DB\ORM3\drag-lint.sqlite';
+var
+  Exe: string;
+  eng: TEngineAdapter;
+  win64Only, win32Only: TArray<string>;
+  err: string;
+  ok64, ok32: Boolean;
+begin
+  Exe := ResolveExe;
+  if (Exe = '') or (not TFile.Exists(LibDir + 'library-Win64.sqlite'))
+     or (not TFile.Exists(LibDir + 'library-Win32.sqlite')) then
+  begin
+    Skip('platform.rescope', 'exe or library DBs absent');
+    Exit;
+  end;
+  eng := TEngineAdapter.Create(Exe, LibDbsFor(cpBoth, LibDir) + [ProjectDb]);
+  try
+    ok64 := eng.ListDescendantsOf('TComponent', LibDbsFor(cpWin64, LibDir) + [ProjectDb], win64Only, err);
+    ok32 := eng.ListDescendantsOf('TComponent', LibDbsFor(cpWin32, LibDir) + [ProjectDb], win32Only, err);
+    Check('platform.rescope.win64.query.ok', ok64, err);
+    Check('platform.rescope.win32.query.ok', ok32, err);
+    Check('platform.rescope.win64.has.TOvcTable', Contains(win64Only, 'TOvcTable'));
+    Check('platform.rescope.win32.lacks.TOvcTable', not Contains(win32Only, 'TOvcTable'));
+    Check('platform.rescope.win32<>win64', Length(win32Only) <> Length(win64Only));
+  finally
+    eng.Free;
+  end;
+end;
+
 begin
   try
     TestPlatform;
     TestEngineSetDbs;
+    TestPlatformRescope;
     TestRoundTrip;
     TestParseKinds;
     TestCastGuard;
