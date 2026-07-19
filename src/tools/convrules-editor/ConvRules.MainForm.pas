@@ -18,7 +18,7 @@ uses
   System.SysUtils, System.Classes, System.IOUtils, System.Generics.Collections,
   Winapi.Windows, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls,
   Vcl.ExtCtrls, Vcl.Grids, Vcl.Dialogs, Vcl.Menus, Vcl.Graphics,
-  ConvRules.Model, ConvRules.Casts, ConvRules.Engine;
+  ConvRules.Model, ConvRules.Casts, ConvRules.Engine, ConvRules.Platform;
 
 type
   TConvRulesForm = class(TForm)
@@ -33,6 +33,9 @@ type
     FFromClasses: TArray<string>;     // FROM picker: all TComponent descendants (Win32+Win64 union)
     FToClasses  : TArray<string>;     // TO picker: TControl descendants (target platform)
     FUnitsLoaded: Boolean;            // project-unit picker populated?
+
+    FFromPlatform: TConvPlatform;     // FROM picker library platform
+    FToPlatform  : TConvPlatform;     // TO picker library platform
 
     // toolbar
     FPanelTop : TPanel;
@@ -74,6 +77,9 @@ type
     procedure SetStatus(const S: string);
     procedure SetError(const S: string);
     procedure LoadAllClasses;
+    function  FromDbSet: TArray<string>;
+    function  ToDbSet: TArray<string>;
+    function  EngineDbSet: TArray<string>;
     procedure CbLoadClasses(Sender: TObject);
     procedure CbLoadUnits(Sender: TObject);
     procedure DoLoadUnit(Sender: TObject);
@@ -95,9 +101,13 @@ type
 
 var
   GEditorExe: string = '';
-  GEditorDbs: TArray<string>;      // engine default (proptree/scaffold/validate): both platforms
-  GEditorFromDbs: TArray<string>;  // FROM class picker: Win32+Win64 library union + project
-  GEditorToDbs: TArray<string>;    // TO class picker: target-platform library + project
+  { Library index directory + shared project DB. Each side's picker DB set is
+    LibDbsFor(<side platform>, GEditorLibDir) + GEditorProjectDb -- the platform
+    selects the library, the project DB is always-on and additive. }
+  GEditorLibDir: string = '';
+  GEditorProjectDb: string = '';
+  GEditorFromPlatform: TConvPlatform = cpBoth;   // default: FROM union (today's behavior)
+  GEditorToPlatform: TConvPlatform = cpWin64;    // default: TO target Win64 (today's behavior)
 
 implementation
 
@@ -128,7 +138,9 @@ begin
   // Route the standard constructor to CreateNew (no DFM); GlobalNameSpace-free.
   inherited CreateNew(AOwner);
   FBook := TRuleBook.Create;
-  FEngine := TEngineAdapter.Create(GEditorExe, GEditorDbs);
+  FFromPlatform := GEditorFromPlatform;
+  FToPlatform   := GEditorToPlatform;
+  FEngine := TEngineAdapter.Create(GEditorExe, EngineDbSet);
   FActiveHdr := -1;
   BuildUI;
   OnClose := FormCloseHandler;
@@ -354,6 +366,44 @@ end;
 
   Falls back to a tiny built-in set if either query yields nothing so the New
   Conversion flow always works. }
+{ Each side's DB set = its platform's library index + the shared project DB
+  (additive, so project-declared component types still resolve). }
+function TConvRulesForm.FromDbSet: TArray<string>;
+begin
+  Result := LibDbsFor(FFromPlatform, GEditorLibDir) + [GEditorProjectDb];
+end;
+
+function TConvRulesForm.ToDbSet: TArray<string>;
+begin
+  Result := LibDbsFor(FToPlatform, GEditorLibDir) + [GEditorProjectDb];
+end;
+
+{ The engine's default DB set (proptree/scaffold/validate/qname-resolve) must
+  resolve BOTH sides' types + project units -- the deduped union of both sides. }
+function TConvRulesForm.EngineDbSet: TArray<string>;
+var
+  seen: TDictionary<string, Boolean>;
+  src, db: string;
+  arr: TArray<string>;
+begin
+  Result := [];
+  seen := TDictionary<string, Boolean>.Create;
+  try
+    for src in ['from', 'to'] do
+    begin
+      if src = 'from' then arr := FromDbSet else arr := ToDbSet;
+      for db in arr do
+        if not seen.ContainsKey(LowerCase(db)) then
+        begin
+          seen.Add(LowerCase(db), True);
+          Result := Result + [db];
+        end;
+    end;
+  finally
+    seen.Free;
+  end;
+end;
+
 procedure TConvRulesForm.LoadAllClasses;
 var
   FromNames, ToNames: TArray<string>;
@@ -361,15 +411,15 @@ var
 begin
   if (Length(FFromClasses) > 0) and (Length(FToClasses) > 0) then Exit; // already loaded
 
-  // FROM: TComponent descendants, union of Win32+Win64 libs (+ project).
-  if not FEngine.ListDescendantsOf('TComponent', GEditorFromDbs, FromNames, Err)
+  // FROM: TComponent descendants of the FROM platform's library (+ project).
+  if not FEngine.ListDescendantsOf('TComponent', FromDbSet, FromNames, Err)
      or (Length(FromNames) = 0) then
     FromNames := ['TEdit', 'TMemo', 'TButton', 'TLabel', 'TCheckBox', 'TcxTextEdit',
                   'TOvcTable', 'TTable'];
   FFromClasses := FromNames;
 
-  // TO: TControl descendants, target-platform lib only.
-  if not FEngine.ListDescendantsOf('TControl', GEditorToDbs, ToNames, Err)
+  // TO: TControl descendants of the TO platform's library (+ project).
+  if not FEngine.ListDescendantsOf('TControl', ToDbSet, ToNames, Err)
      or (Length(ToNames) = 0) then
     ToNames := ['TEdit', 'TMemo', 'TButton', 'TLabel', 'TCheckBox', 'TcxTextEdit',
                 'TcxGrid'];

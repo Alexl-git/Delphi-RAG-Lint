@@ -11,6 +11,7 @@ uses
   ConvRules.Model in 'ConvRules.Model.pas',
   ConvRules.Casts in 'ConvRules.Casts.pas',
   ConvRules.Engine in 'ConvRules.Engine.pas',
+  ConvRules.Platform in 'ConvRules.Platform.pas',
   ConvRules.MainForm in 'ConvRules.MainForm.pas';
 
 { Resolve the drag-lint exe: next to this editor (both deploy to dll-win64), else
@@ -27,57 +28,49 @@ begin
   Result := 'drag-lint.exe'; // rely on PATH
 end;
 
-{ The per-platform library indexes and the project index. FROM lists the UNION of
-  Win32+Win64 libraries -- the user is converting a Win32 app to Win64, and some
-  legacy source components resolve in only ONE platform's library (e.g. Orpheus
-  TOvcTable is indexed under Win64 only). The project DB (ORM3) supplies project
-  units + any project-declared types. }
+{ The library index directory and the project index. The FROM/TO platform (each
+  selectable via --from-platform / --to-platform, default FROM=Both, TO=Win64)
+  picks which library-Win32/Win64.sqlite each side draws types from; the project
+  DB (ORM3) is always-on and additive (project units + project-declared types). }
 const
-  LibWin32   = 'C:\Projects\.drag-lint\library-Win32.sqlite';
-  LibWin64   = 'C:\Projects\.drag-lint\library-Win64.sqlite';
-  ProjectDb  = 'C:\Projects\DB\ORM3\drag-lint.sqlite';
+  LibDir    = 'C:\Projects\.drag-lint\';
+  ProjectDb = 'C:\Projects\DB\ORM3\drag-lint.sqlite';
 
-{ DBs the FROM picker + property-tree/validate resolution query: BOTH libraries
-  (union) + the project DB, so every source type -- visual or not, Win32- or
-  Win64-only -- can be listed and its property tree resolved. }
-function FromDbs: TArray<string>;
+{ Parse --from-platform / --to-platform (case-insensitive win32|win64|both).
+  Absent -> ADefault, which the caller sets so the defaults reproduce today's
+  behavior (FROM=Both, TO=Win64). Scans flag/value pairs positionally. }
+function ArgPlatform(const AFlag: string; ADefault: TConvPlatform): TConvPlatform;
+var
+  i: Integer;
 begin
-  Result := [LibWin32, LibWin64, ProjectDb];
-end;
-
-{ DBs the TO picker queries: only the TARGET platform's library + the project DB.
-  The target is Win64 (the app is being migrated to Win64), so conversions target
-  Win64 controls. }
-function ToDbs: TArray<string>;
-begin
-  Result := [LibWin64, ProjectDb];
-end;
-
-{ Combined set used by the engine adapter's default DbArgs -- proptree/scaffold/
-  validate need to resolve BOTH source (FROM) and target (TO) types, so it is the
-  union of both platform libs + the project DB. }
-function DefaultDbs: TArray<string>;
-begin
-  Result := [LibWin32, LibWin64, ProjectDb];
+  Result := ADefault;
+  for i := 1 to ParamCount - 1 do
+    if SameText(ParamStr(i), AFlag) then
+      Exit(ParsePlatform(ParamStr(i + 1), ADefault));
 end;
 
 var
   Form: TConvRulesForm;
 begin
   // Config the globals BEFORE CreateForm (the form's constructor reads them).
-  GEditorExe := ResolveDragLintExe;
-  GEditorDbs := DefaultDbs;   // engine default: proptree/scaffold/validate (both platforms)
-  GEditorFromDbs := FromDbs;  // FROM picker: Win32+Win64 lib union + project
-  GEditorToDbs := ToDbs;      // TO picker: target-platform (Win64) lib + project
+  GEditorExe          := ResolveDragLintExe;
+  GEditorLibDir       := LibDir;
+  GEditorProjectDb    := ProjectDb;
+  GEditorFromPlatform := ArgPlatform('--from-platform', cpBoth);
+  GEditorToPlatform   := ArgPlatform('--to-platform', cpWin64);
   Application.Initialize;
   Application.Title := 'ConvRulesEditor';
   Application.MainFormOnTaskbar := True;
   // CreateForm makes this the MainForm -> Application.Run's loop stays alive
   // (a manually-shown CreateNew form does not, and Run returns immediately).
   Application.CreateForm(TConvRulesForm, Form);
-  // Open a file passed on the command line -- guarded so a load-time exception
-  // surfaces as a dialog rather than tearing down the app before Run.
-  if ParamCount >= 1 then
+  // Open a file passed on the command line -- but only when ParamStr(1) is a real
+  // path, not a '--flag' or a platform-flag value, so mixing a file with the
+  // platform flags does not misfire. (A file after the flags is not auto-opened;
+  // launch with the file first, or flags only.)
+  if (ParamCount >= 1) and (not ParamStr(1).StartsWith('--'))
+     and (not SameText(ParamStr(1), 'win32')) and (not SameText(ParamStr(1), 'win64'))
+     and (not SameText(ParamStr(1), 'both')) then
     try
       Form.LoadFile(ParamStr(1));
     except
