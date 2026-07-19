@@ -11,7 +11,13 @@ unit DRagLint.Convert.PropTree;
   dotted paths like 'Font.Color' or 'Inner.Shade'. Inherited properties are
   included by walking the resolved ancestor closure (GetTransitiveAncestors).
 
-  READ-ONLY: never writes to the store. All lookups are through ISymbolStore.
+  Mostly READ-ONLY. The one exception is a LAZY, best-effort write-back: when a
+  bare-redeclared property's type can only be recovered by bridging an unresolved
+  (type-alias) ancestor edge, the recovered type is memoized onto that property's
+  signature via ISymbolStore.MemoizePropertyType so the next query is a plain hit.
+  That write is a NO-OP on a read-only (query_only) store, so every read verb that
+  passes a read-only store still never mutates the index. All lookups are through
+  ISymbolStore.
 }
 
 interface
@@ -66,8 +72,9 @@ type
 /// <summary>Enumerates the deep (recursively flattened) property tree of a class,
 /// resolving each property's type from the index and recursing into class-typed
 /// property types.</summary>
-/// <param name="AStore">Open, read-only symbol store (ids are per-DB). Never
-/// written to.</param>
+/// <param name="AStore">Open symbol store (ids are per-DB). Read-only for every
+/// lookup; the sole write is the lazy MemoizePropertyType write-back described in
+/// the remarks, which is itself a no-op when the store was opened read-only.</param>
 /// <param name="AClassQName">Fully-qualified class name, e.g. 'Unit.TOuter'.
 /// Resolved via FindSymbolsByQualifiedName; the first class-kind match is the
 /// root.</param>
@@ -83,7 +90,12 @@ type
 /// trimmed, then the first type token is taken up to whitespace / ';' / 'read' /
 /// 'write'); an EMPTY Signature (a bare 'property Color;' redeclaration) is
 /// resolved by finding the same-named property in an ancestor that carries a
-/// non-empty Signature. If still unresolved, TypeName='unknown', Kind='unknown',
+/// non-empty Signature. As a LAST resort before 'unknown' the type is recovered by
+/// BRIDGING an unresolved ancestor edge (e.g. a type-alias ancestor the index left
+/// unlinked) up to the class that really declares the property (scope-aware,
+/// alias-following via ISymbolStore.ResolveTypeNameToClass); a type found that way
+/// is memoized back onto the property via MemoizePropertyType (no-op on a read-only
+/// store). If still unresolved, TypeName='unknown', Kind='unknown',
 /// and there is NO recursion (a type is never fabricated). A type that resolves
 /// via FindSymbolByExactNameAnywhere to a class-kind symbol is recursed into
 /// (Kind='class', IsClassTyped=True, child paths prefixed with '&lt;prop&gt;.');
@@ -249,6 +261,76 @@ var
     end;
   end;
 
+  // RESIDUAL resolver -- the lazy ancestry BRIDGE. Runs only when ParseTypeToken
+  // AND ResolveInheritedType both failed, i.e. proptree is about to emit 'unknown'
+  // for a bare-redeclared (empty-signature) property whose ancestry is broken by
+  // an UNRESOLVED edge. The classic case: a TYPE-ALIAS ancestor
+  // ('cxButtons.TcxBaseButton = Vcl.StdCtrls.TCustomButton') -- ResolveAncestry's
+  // candidate set is class/interface only, so it never links an alias ancestor and
+  // the whole VCL-inherited property surface (Align, Caption, Anchors, ...) loses
+  // its type. This walks UP the chain BRIDGING each unresolved ancestor NAME to its
+  // defining class via the scope-aware, alias-following AStore.ResolveTypeNameToClass
+  // (scope = the root class's own file, whose uses-clause disambiguates e.g. Vcl
+  // from FMX), and returns the first KNOWN type declared for APropName above the
+  // break. '' when the walk still finds nothing (never fabricates a type).
+  function ResolveViaBridgedAncestry(const AClass: TSymbol; const APropName: string): string;
+  var
+    Visited: TDictionary<string, Boolean>;
+
+    // Declared type of APropName directly on ASym (parseable signature), or ''.
+    function PropTypeOn(const ASym: TSymbol): string;
+    var Child: TSymbol;
+    begin
+      Result:= '';
+      if ASym.Id <= 0 then Exit;
+      Child:= AStore.FindChildSymbolByName(ASym.Id, APropName);
+      if (Child.Id > 0) and (Child.Kind = skProperty) then
+        Result:= ParseTypeToken(Child.Signature);
+    end;
+
+    function Climb(const ASym: TSymbol): string;
+    var
+      Anc: TArray<TTypeAncestor>;
+      A  : TTypeAncestor        ;
+      Nxt: TSymbol              ;
+      Tok: string               ;
+      Key: string               ;
+    begin
+      Result:= '';
+      Anc:= AStore.GetTransitiveAncestors(ASym.Id);
+      // (a) any already-RESOLVED ancestor that declares the property with a type.
+      for A in Anc do
+        if A.Resolved and (A.SymbolId > 0) then
+        begin
+          Tok:= PropTypeOn(BodyOf(AStore.GetSymbolById(A.SymbolId)));
+          if Tok <> '' then Exit(Tok);
+        end;
+      // (b) bridge each UNRESOLVED ancestor name, then keep climbing from it.
+      for A in Anc do
+      begin
+        if A.Resolved then Continue;
+        Key:= LowerCase(A.Name);
+        if (Key = '') or Visited.ContainsKey(Key) then Continue;
+        Visited.Add(Key, True);
+        Nxt:= BodyOf(AStore.ResolveTypeNameToClass(A.Name, AClass.FileId));
+        if Nxt.Id <= 0 then Continue;
+        Tok:= PropTypeOn(Nxt);   // declared directly on the bridged class?
+        if Tok <> '' then Exit(Tok);
+        Tok:= Climb(Nxt);        // else climb the bridged class's own chain
+        if Tok <> '' then Exit(Tok);
+      end;
+    end;
+
+  begin
+    Visited:= TDictionary<string, Boolean>.Create;
+    try
+      Visited.Add(LowerCase(AClass.Name), True);
+      Result:= Climb(AClass);
+    finally
+      Visited.Free;
+    end;
+  end;
+
   // The distinct property leaves visible on AClass (own + inherited), each
   // paired with the most-derived class that declares it. Dedupe by leaf name.
   procedure CollectProps(const AClass: TSymbol;
@@ -302,6 +384,8 @@ var
     Prop      : TSymbol        ;
     Node      : TPropNode      ;
     Tok       : string         ;
+    OwnTok    : string         ;
+    ViaBridge : Boolean        ;
     TypeSym   : TSymbol        ;
     Body      : TSymbol        ;
     LowType   : string         ;
@@ -315,9 +399,18 @@ var
       Node.DeclaredIn:= DeclaredIn[idx];
 
       // Parse the type from this property's own signature; if empty (a bare
-      // redeclaration) resolve it from an ancestor that carries a signature.
-      Tok:= ParseTypeToken(Prop.Signature);
+      // redeclaration) resolve it from an ancestor that carries a signature, and
+      // -- as a last resort before 'unknown' -- BRIDGE across an unresolved
+      // (typically type-alias) ancestor edge to the class that really declares it.
+      OwnTok   := ParseTypeToken(Prop.Signature);
+      Tok      := OwnTok;
+      ViaBridge:= False;
       if Tok = '' then Tok:= ResolveInheritedType(AClass, Prop.Name);
+      if Tok = '' then
+      begin
+        Tok:= ResolveViaBridgedAncestry(AClass, Prop.Name);
+        if Tok <> '' then ViaBridge:= True;
+      end;
 
       if Tok = '' then
       begin
@@ -327,6 +420,13 @@ var
         Nodes.Add(Node);
         Continue; // no type -> no recursion
       end;
+
+      // Memoize a BRIDGED resolution: write the recovered type back onto this
+      // (empty-signature) property row so the next query is a plain hit and never
+      // re-walks the ancestry. Best-effort + no-op on a read-only store; idempotent
+      // (once written, ParseTypeToken(OwnTok) succeeds above so this never re-fires).
+      if ViaBridge and (Prop.Id > 0) then
+        AStore.MemoizePropertyType(Prop.Id, Tok);
 
       Node.TypeName:= Tok;
 

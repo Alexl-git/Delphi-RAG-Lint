@@ -56,6 +56,7 @@ type
       FQInsertCompilerFinding: TFDQuery     ;
       FFts5Available         : Boolean     ; // set by Migrate; False when sqlite3.dll lacks fts5
       FReadOnly              : Boolean     ; // v0.86 Task 4: opened read-only (no DDL/writes)
+      FStatementsPrepared    : Boolean     ; // guard: PrepareStatements is idempotent (constructor may prepare a schema-current DB before Migrate)
       // v0.40.4: uses-clause persistence
       FQInsertUnitUse        : TFDQuery;
       FQDeleteFileUnitUses   : TFDQuery;
@@ -200,6 +201,10 @@ type
       function FindFileIdByPath             (const APath: string): Int64;
       function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
       function FindChildSymbolByName(AParentId: Int64; const AName: string): TSymbol;
+      // proptree lazy ancestry-bridge (scope-aware, alias-following resolver) +
+      // its write-back memoization. See interface DocInsight for the contract.
+      function ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64): TSymbol;
+      function MemoizePropertyType(ASymbolId: Int64; const ATypeName: string): Boolean;
       function FindEnclosingRoutineByImpl(AFileId: Int64; ALine: Integer): TSymbol;
 
       // v0.20: completion helpers
@@ -270,23 +275,23 @@ begin
     write path PrepareStatements is Migrate's last step; read verbs never call
     Migrate, so build the statements here. PrepareStatements executes no SQL
     (FireDAC auto-prepares on first use) -- safe on a read-only connection. }
-  if FReadOnly then
+  { Build the SELECT/UPSERT statements when the schema is current. Needed by any
+    open that will run queries WITHOUT first calling Migrate: every read-only verb,
+    AND a writable open that skips Migrate (proptree --write-back). On a pre-current
+    DB some referenced tables may be absent, so guard on IsSchemaCurrent -- a stale
+    read verb calls IsSchemaCurrent, sees False, prints the actionable message, and
+    exits; the index/write path (also pre-current on a fresh DB) skips here and lets
+    Migrate build the schema then prepare. PrepareStatements is idempotent
+    (FStatementsPrepared), so Migrate's later call is a safe no-op after this. }
+  var LFound, LExpected: Integer;
+  if IsSchemaCurrent(LFound, LExpected) then
   begin
-    { Only build the SELECT statements when the schema is current. On a pre-
-      current DB some tables the queries reference may be absent, and the read
-      verb will not run any query anyway -- it calls IsSchemaCurrent, sees False,
-      prints the actionable stale-schema message, and exits. Preparing against a
-      missing table would raise here (before the CLI can emit that message). }
-    var RoFound, RoExpected: Integer;
-    if IsSchemaCurrent(RoFound, RoExpected) then
-    begin
-      PrepareStatements;
-      { The write path sets FFts5Available via a temp-table probe (a write). On a
-        read-only open, detect FTS5 read-only: the string_fts virtual table
-        exists in sqlite_master iff the index was built by an FTS5-capable
-        engine. This lets SearchText (query --text) run; it never issues DDL. }
-      FFts5Available := Fts5TableExists;
-    end;
+    PrepareStatements;
+    { The write path sets FFts5Available via a temp-table probe (a write). Without
+      Migrate, detect FTS5 read-only: the string_fts virtual table exists in
+      sqlite_master iff the index was built by an FTS5-capable engine. This lets
+      SearchText (query --text) run; it never issues DDL. }
+    if FReadOnly then FFts5Available := Fts5TableExists;
   end;
 end;
 
@@ -672,6 +677,10 @@ procedure TSQLiteSymbolStore.PrepareStatements;
     // inferred from the first set of param values.
   end;
 begin
+  // Idempotent: the constructor may prepare a schema-current DB and Migrate then
+  // calls this again on the write path. Re-running would leak the first query set,
+  // so bail if already built.
+  if FStatementsPrepared then Exit;
   // v0.59.4: two-query upsert: UPDATE existing row, INSERT OR IGNORE for new files.
   // INSERT OR REPLACE deletes + re-inserts, which cascades to string_literals
   // and fires the FTS5 sync triggers even when FFts5Available=False. UPDATE
@@ -837,6 +846,7 @@ begin
     '        SUBSTR(f.path, 1 + LENGTH(f.path) - INSTR(' + '          REPLACE(REPLACE(f.path, ''\'', ''/''), ''/'', '''') || ''/'',' + '          ''/'')), 1)' +
     '      , ''.pas'', '''')' + '  ) = unit_uses.unit_name_norm ' + '  LIMIT 1) ' + 'WHERE target_file_id IS NULL');
   FQResolveUnitUseTargets.Prepare;
+  FStatementsPrepared:= True;
 end; // begin
 
 function TSQLiteSymbolStore.GetAllFileIds: TArray<Int64>;
@@ -2297,6 +2307,190 @@ begin
     if not FQFindChildByName.IsEmpty then Result:= ReadSymbolFromQuery(FQFindChildByName);
   finally
     FQFindChildByName.Close;
+  end;
+end;
+
+// Parse the first bare type token out of a symbol signature: strip a single
+// leading ':' + whitespace, then take up to the first whitespace / ';'. Mirrors
+// DRagLint.Convert.PropTree.ParseTypeToken (kept local -- that one is unit-private)
+// so a type-alias target ('TCustomButton') can be pulled from the alias Signature.
+function ParseFirstTypeToken(const ASignature: string): string;
+var
+  S  : string ;
+  P  : Integer;
+begin
+  Result:= '';
+  S:= Trim(ASignature);
+  if S = '' then Exit;
+  if S[1] = ':' then S:= Trim(Copy(S, 2, MaxInt));
+  for P:= 1 to Length(S) do
+  begin
+    if CharInSet(S[P], [' ', #9, #13, #10, ';', '=']) then Break;
+    Result:= Result + S[P];
+  end;
+end;
+
+function TSQLiteSymbolStore.ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64): TSymbol;
+var
+  UsesNames: TDictionary<string, Boolean>; // lowercased unit names in scope (own + used)
+  SeenAlias: TDictionary<string, Boolean>; // alias-chain cycle guard (lowercased names)
+
+  procedure LoadScopeNames(AFileId: Int64);
+  var
+    Q: TFDQuery;
+  begin
+    UsesNames.Clear;
+    if AFileId <= 0 then Exit;
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      // the file's own unit name(s) -- a same-file type is always in scope.
+      Q.SQL.Text:= 'SELECT name FROM symbols WHERE file_id = :fid AND kind = ''unit''';
+      Q.ParamByName('fid').AsLargeInt:= AFileId;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        UsesNames.AddOrSetValue(LowerCase(Q.Fields[0].AsString), True);
+        Q.Next;
+      end;
+      Q.Close;
+      // used unit names (textual; resolved target_file_id NOT required).
+      Q.SQL.Text:= 'SELECT unit_name FROM unit_uses WHERE file_id = :fid';
+      Q.ParamByName('fid').AsLargeInt:= AFileId;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        UsesNames.AddOrSetValue(LowerCase(Q.Fields[0].AsString), True);
+        Q.Next;
+      end;
+      Q.Close;
+    finally
+      Q.Free;
+    end;
+  end;
+
+  // Unit-qualified prefix of a qualified name ('Vcl.StdCtrls.TCustomButton' ->
+  // 'Vcl.StdCtrls'); '' when the name carries no dotted prefix.
+  function UnitPrefix(const AQName: string): string;
+  var P: Integer;
+  begin
+    Result:= '';
+    P:= LastDelimiter('.', AQName);
+    if P > 1 then Result:= Copy(AQName, 1, P - 1);
+  end;
+
+  // True when a class/interface candidate is a forward-declaration stub
+  // ('TFoo = class;' -- empty heritage, single line). Type aliases are never
+  // stubs (their target lives in Signature, heritage is legitimately empty).
+  function IsStub(const S: TSymbol): Boolean;
+  begin
+    Result:= (S.Kind in [skClass, skInterface]) and
+             (S.Heritage.Trim = '') and (S.EndLine <= S.StartLine);
+  end;
+
+  // Best type candidate for a bare name: unique in-scope (by uses-unit-name),
+  // else first in-scope, else the single global definition. Id=0 when none / an
+  // out-of-scope ambiguity that cannot be disambiguated.
+  function PickCandidate(const AName: string): TSymbol;
+  var
+    Raw    : TArray<TSymbol>;
+    Types  : TArray<TSymbol>;
+    InScope: TArray<TSymbol>;
+    HasBody: Boolean         ;
+    S      : TSymbol         ;
+  begin
+    Result:= Default(TSymbol);
+    Raw:= FindSymbolsByExactName(AName);
+    // keep only the type-declaring kinds we can resolve/chase.
+    SetLength(Types, 0);
+    for S in Raw do
+      if S.Kind in [skClass, skInterface, skRecord, skTypeAlias] then
+        Types:= Types + [S];
+    if Length(Types) = 0 then Exit;
+    // drop forward-decl stubs when a real class/interface body of the name exists.
+    HasBody:= False;
+    for S in Types do
+      if (S.Kind in [skClass, skInterface]) and not IsStub(S) then HasBody:= True;
+    if HasBody then
+    begin
+      var Kept: TArray<TSymbol>;
+      SetLength(Kept, 0);
+      for S in Types do
+        if not IsStub(S) then Kept:= Kept + [S];
+      Types:= Kept;
+    end;
+    if Length(Types) = 0 then Exit;
+    // prefer candidates whose declaring unit is in the reference file's scope.
+    SetLength(InScope, 0);
+    for S in Types do
+      if UsesNames.ContainsKey(LowerCase(UnitPrefix(S.QualifiedName))) then
+        InScope:= InScope + [S];
+    if Length(InScope) >= 1 then Exit(InScope[0]);   // in-scope wins (first if several)
+    if Length(Types) = 1 then Exit(Types[0]);        // single global definition
+    // ambiguous, none in scope -> refuse to guess (leaves the caller at 'unknown').
+  end;
+
+var
+  Name: string ;
+  Hops: Integer;
+  Cand: TSymbol;
+  Tgt : string ;
+begin
+  Result:= Default(TSymbol);
+  if Trim(ATypeName) = '' then Exit;
+  UsesNames:= TDictionary<string, Boolean>.Create;
+  SeenAlias:= TDictionary<string, Boolean>.Create;
+  try
+    LoadScopeNames(AScopeFileId);
+    Name:= Trim(ATypeName);
+    Hops:= 0;
+    while (Name <> '') and (Hops < 32) do
+    begin
+      Inc(Hops);
+      if SeenAlias.ContainsKey(LowerCase(Name)) then Break; // alias cycle
+      SeenAlias.Add(LowerCase(Name), True);
+      Cand:= PickCandidate(Name);
+      if Cand.Id <= 0 then Break;
+      if Cand.Kind in [skClass, skInterface, skRecord] then Exit(Cand);
+      if Cand.Kind = skTypeAlias then
+      begin
+        Tgt:= ParseFirstTypeToken(Cand.Signature);
+        if Tgt = '' then Break;
+        // resolve the alias TARGET in the alias's own unit scope (a nearest-first
+        // re-scope: the target is written in terms of what the alias file uses).
+        LoadScopeNames(Cand.FileId);
+        Name:= Tgt;
+        Continue;
+      end;
+      Break; // some other kind -- not chaseable
+    end;
+  finally
+    SeenAlias.Free;
+    UsesNames.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.MemoizePropertyType(ASymbolId: Int64; const ATypeName: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Result:= False;
+  // Never mutate a read-only (query_only) handle, and never write garbage.
+  if FReadOnly or (ASymbolId <= 0) or (Trim(ATypeName) = '') then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    try
+      Q.Connection:= FConn;
+      Q.SQL.Text  := 'UPDATE symbols SET signature = :sig WHERE id = :id AND kind = ''property''';
+      Q.ParamByName('sig').AsString  := ': ' + Trim(ATypeName);
+      Q.ParamByName('id' ).AsLargeInt:= ASymbolId;
+      Q.ExecSQL;
+      Result:= Q.RowsAffected > 0;
+    except
+      Result:= False; // best-effort memoization: a query must never fail on write error
+    end;
+  finally
+    Q.Free;
   end;
 end;
 

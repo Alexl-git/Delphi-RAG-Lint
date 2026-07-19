@@ -162,7 +162,7 @@ type
     function FindByDocContains(const ASubstring: string): TArray<TSymbol>                ;
     procedure DeleteFileDocs(AFileId: Int64);
 
-    // v0.18: bench-context — symbols that have at least one non-null summary
+    // v0.18: bench-context -- symbols that have at least one non-null summary
     function ListDocumentedSymbols(ALimit: Integer): TArray<TSymbol>;
 
     // v0.19: type-at-position helpers
@@ -171,6 +171,39 @@ type
     function FindFileIdByPath             (const APath: string): Int64;
     function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
     function FindChildSymbolByName(AParentId: Int64; const AName: string): TSymbol;
+    /// <summary>Resolve a type NAME to its defining class/interface/record symbol
+    /// AS SEEN FROM AScopeFileId, FOLLOWING type-alias chains (type X = Y) to the
+    /// underlying declared type. Mirrors ResolveAncestry's resolution policy -- a
+    /// unique in-scope candidate wins, else a single global definition -- but adds
+    /// two things ResolveAncestry cannot: (a) it accepts a type-alias candidate and
+    /// chases it to the real class (ResolveAncestry's candidate set is
+    /// class/interface only, so an alias ancestor such as
+    /// 'cxButtons.TcxBaseButton = Vcl.StdCtrls.TCustomButton' is left unresolved),
+    /// and (b) scope is matched by the reference file's uses-clause UNIT NAMES
+    /// (textual, resolved or not) against each candidate's unit-qualified prefix, so
+    /// two same-named types in different frameworks (e.g. Vcl.StdCtrls.TCustomButton
+    /// vs FMX.StdCtrls.TCustomButton) are disambiguated even when the uses target
+    /// file never resolved. Forward-declaration stubs are dropped when a real body
+    /// exists. Returns a class/interface/record symbol (Id&gt;0) or Default (Id=0)
+    /// when it cannot be resolved unambiguously (no worse than an unresolved edge).
+    /// Cross-unit safe; the alias chain is cycle-guarded and hop-capped.</summary>
+    /// <param name="ATypeName">Bare type name to resolve (e.g. 'TCustomButton').</param>
+    /// <param name="AScopeFileId">File whose uses-clause disambiguates same-named
+    /// candidates; 0 disables scope preference (single-global fallback only).</param>
+    function ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64): TSymbol;
+    /// <summary>Memoize a resolved property type by writing ': '+ATypeName as the
+    /// signature of property symbol ASymbolId (which previously carried an
+    /// empty/typeless signature -- a bare inherited redeclaration such as
+    /// 'property Align;'). Lets a later proptree/type query read the type as a plain
+    /// hit instead of re-walking (and re-bridging) the ancestry every time.
+    /// No-op returning False on a read-only (query_only) handle, when ASymbolId&lt;=0,
+    /// when ATypeName is blank, or when the row is not a property. Idempotent: once
+    /// written, ParseTypeToken(signature) yields a type so the resolver never
+    /// recomputes it. Best-effort: a write failure is swallowed (returns False) so a
+    /// query never fails merely because the index could not be updated.</summary>
+    /// <returns>True when exactly one property row was updated; False otherwise.</returns>
+    /// <remarks>Not thread-safe; call from the owning thread on a writable store.</remarks>
+    function MemoizePropertyType(ASymbolId: Int64; const ATypeName: string): Boolean;
     /// <summary>The innermost routine (procedure/function/method/constructor/
     /// destructor) whose IMPLEMENTATION BODY span (impl_start_line..impl_end_line)
     /// contains ALine in AFileId. Empty (Id=0) when the line is in no routine body.
