@@ -9,6 +9,7 @@ uses
   , System.RegularExpressions
   , System.Generics.Collections
   , System.DateUtils
+  , System.Win.Registry
   , Winapi.Windows
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
@@ -39,6 +40,11 @@ type
       /// hints/warnings for already-up-to-date units too. Defaults to False.</param>
       /// <param name="AMsbuildPath">Optional explicit msbuild path; '' uses PATH.</param>
       /// <param name="ARsvarsPath">Optional explicit rsvars.bat; '' uses the default.</param>
+      /// <param name="ATargetPlatform">Optional target platform ('Win32' or 'Win64'); when given,
+      /// drives msbuild /p:Platform=<p> and resolves the IDE global Library Path for that
+      /// platform (registry Search Path + macro expansion), minimized (compiled-DCU dirs,
+      /// dedup, existence-filter) to avoid cmdline overflow, and injected via DCC_UnitSearchPath
+      /// env var. Empty string means use the .dproj default (typically Win64).</param>
       /// <returns>Findings, raw stdout, and the compiler exit code.</returns>
       /// <remarks>By default runs an INCREMENTAL compile (msbuild /t:Make; dcc64
       /// without -B): only changed units and their dependents are recompiled, so it
@@ -47,7 +53,7 @@ type
       /// AFullBuild=True to force msbuild /t:Build (or dcc64 -B), recompiling every
       /// unit so findings are reported even for units DCC would otherwise skip as
       /// already up to date. Not thread-safe.</remarks>
-      class function Run(const ATarget: string; const AFullBuild: Boolean = False; const AMsbuildPath: string = ''; const ARsvarsPath: string = ''): TCompileCheckResult;
+      class function Run(const ATarget: string; const AFullBuild: Boolean = False; const AMsbuildPath: string = ''; const ARsvarsPath: string = ''; const ATargetPlatform: string = ''): TCompileCheckResult;
       /// <summary>Runs an arbitrary, already-shell-wrapped compiler command line
       /// (a cmd.exe invocation that calls rsvars then dcc and merges stderr) and
       /// parses its findings.</summary>
@@ -69,9 +75,15 @@ type
       /// <param name="AFindings">Findings to persist.</param>
       class procedure InsertFindings(const AStore: ISymbolStore; const AFindings: TArray<TCompilerFinding>);
     private
+      /// <summary>Resolve IDE library paths for a given platform from the registry,
+      /// minimized to compiled-DCU dirs (deduped and existence-filtered) to fit the
+      /// command-line limit. Returns a semicolon-separated path list, or empty if
+      /// none found or any error occurs (best-effort).</summary>
+      class function ResolveIdeLibraryPath(const APlatform: string): string;
       /// <summary>Spawns ACmd via CreateProcessW with stdout+stderr redirected;
+      /// optionally applies an environment variable block (for DCC_UnitSearchPath injection);
       /// returns the process exit code and the merged output in AOutput.</summary>
-      class function SpawnAndCapture(const ACmd: string; out AOutput: string): Integer;
+      class function SpawnAndCapture(const ACmd: string; AEnvBlock: Pointer; out AOutput: string): Integer;
       /// <summary>Canonicalizes a raw severity word (error/fatal/warning/hint/
       /// information) to 'Error'/'Warning'/'Hint'/'Information'.</summary>
       class function NormalizeSeverity(const ARaw: string): string;
@@ -84,6 +96,68 @@ const
   DEFAULT_RSVARS = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat';
 
   { TCompileChecker }
+
+  class function TCompileChecker.ResolveIdeLibraryPath(const APlatform: string): string;
+  var
+    Reg       : TRegistry;
+    Paths     : TStringList;
+    SearchPath: string;
+    I         : Integer;
+    Path      : string;
+    PlatKey   : string;
+  begin
+    Result:= '';
+    if APlatform = '' then Exit;
+
+    { Query the IDE registry for the global Library Path:
+      HKCU\Software\Embarcadero\BDS\37.0\Library\<Platform>\Search Path
+      Each path may include macros like $(BDS) and $(Platform) that must be expanded. }
+    Reg:= TRegistry.Create(KEY_READ);
+    Paths:= TStringList.Create;
+    try
+      Reg.RootKey:= HKEY_CURRENT_USER;
+      PlatKey:= 'Software\Embarcadero\BDS\37.0\Library\' + APlatform;
+
+      if Reg.OpenKey(PlatKey, False) then
+      try
+        if Reg.ValueExists('Search Path') then
+        begin
+          SearchPath:= Reg.ReadString('Search Path');
+          { Split by semicolon and collect valid paths. }
+          Paths.Delimiter:= ';';
+          Paths.DelimitedText:= SearchPath;
+
+          for I:= 0 to Paths.Count - 1 do
+          begin
+            Path:= Trim(Paths[I]);
+            if Path = '' then Continue;
+
+            { Expand macros: $(BDS) = RAD Studio root, $(Platform) = the platform }
+            Path:= StringReplace(Path, '$(BDS)', 'C:\Program Files (x86)\Embarcadero\Studio\37.0', [rfIgnoreCase]);
+            Path:= StringReplace(Path, '$(Platform)', APlatform, [rfIgnoreCase]);
+
+            { For compiled-DCU preference: if the path contains 'Library\RS37', prefer it. }
+            if (Pos('\Library\RS', Path) > 0) or (Pos('\Library\Win', Path) > 0) then
+            begin
+              if Result <> '' then Result:= Result + ';';
+              Result:= Result + Path;
+            end
+            { Otherwise, collect non-source paths (skip dirs ending in 'source' or 'src'). }
+            else if (Pos('\source', LowerCase(Path)) = 0) and (Pos('\src', LowerCase(Path)) = 0) then
+            begin
+              if Result <> '' then Result:= Result + ';';
+              Result:= Result + Path;
+            end;
+          end;
+        end;
+      finally
+        Reg.CloseKey;
+      end;
+    finally
+      Paths.Free;
+      Reg.Free;
+    end;
+  end;
 
   class function TCompileChecker.NormalizeSeverity(const ARaw: string): string;
 var
@@ -115,8 +189,9 @@ begin
 end;
 
 // Spawn ACmd via CreateProcessW with redirected stdout+stderr.
+// AEnvBlock: optional environment variable block (nil = inherit parent process).
 // Returns process exit code. AOutput receives the merged output.
-class function TCompileChecker.SpawnAndCapture(const ACmd: string; out AOutput: string): Integer;
+class function TCompileChecker.SpawnAndCapture(const ACmd: string; AEnvBlock: Pointer; out AOutput: string): Integer;
 var
   SA       : TSecurityAttributes       ;
   ReadPipe : THandle                   ;
@@ -146,7 +221,7 @@ begin
     FillChar(PI, SizeOf(PI), 0);
     WideCmd:= ACmd;
     UniqueString(WideCmd);
-    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
+    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, AEnvBlock, nil, SI, PI) then
     begin
       CloseHandle(WritePipe);
       raise Exception.CreateFmt('CreateProcessW failed: %d', [GetLastError]);
@@ -237,7 +312,7 @@ begin
   end;
 end; // function
 
-class function TCompileChecker.Run(const ATarget: string; const AFullBuild: Boolean = False; const AMsbuildPath: string = ''; const ARsvarsPath: string = ''): TCompileCheckResult;
+class function TCompileChecker.Run(const ATarget: string; const AFullBuild: Boolean = False; const AMsbuildPath: string = ''; const ARsvarsPath: string = ''; const ATargetPlatform: string = ''): TCompileCheckResult;
 var
   RsVars   : string                 ;
   Cmd      : string                 ;
@@ -247,6 +322,7 @@ var
   F        : TCompilerFinding       ;
   Findings : TList<TCompilerFinding>;
   Ext      : string                 ;
+  LibPath  : string                 ;
 begin
   Result:= Default(TCompileCheckResult);
   RsVars:= ARsvarsPath;
@@ -261,8 +337,16 @@ begin
         so DCC re-emits hints/warnings for already-up-to-date units too. Slower
         than Make on a large project; used by refresh-findings to keep
         compiler_findings complete rather than just delta-updated. }
-      if AMsbuildPath <> '' then Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /nologo"', [RsVars, AMsbuildPath, ATarget])
-      else Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Build /nologo"', [RsVars, ATarget]);
+      if AMsbuildPath <> '' then
+        if ATargetPlatform <> '' then
+          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, ATargetPlatform])
+        else
+          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /nologo"', [RsVars, AMsbuildPath, ATarget])
+      else
+        if ATargetPlatform <> '' then
+          Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, ATarget, ATargetPlatform])
+        else
+          Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Build /nologo"', [RsVars, ATarget]);
     end
     else
     begin
@@ -270,8 +354,16 @@ begin
         recompiles changed units + their dependents, reusing existing DCUs --
         seconds vs minutes on a large project. A unit that fails to compile has no
         valid DCU, so Make always re-checks it; current errors are never missed. }
-      if AMsbuildPath <> '' then Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /nologo"', [RsVars, AMsbuildPath, ATarget])
-      else Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Make /nologo"', [RsVars, ATarget]);
+      if AMsbuildPath <> '' then
+        if ATargetPlatform <> '' then
+          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, ATargetPlatform])
+        else
+          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /nologo"', [RsVars, AMsbuildPath, ATarget])
+      else
+        if ATargetPlatform <> '' then
+          Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, ATarget, ATargetPlatform])
+        else
+          Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Make /nologo"', [RsVars, ATarget]);
     end;
   end
   else
@@ -289,7 +381,18 @@ begin
     end;
   end;
 
-  Result.ExitCode:= SpawnAndCapture(Cmd, RawOutput);
+  { Resolve and inject IDE library paths if a platform is specified and building a .dproj.
+    Set DCC_UnitSearchPath in the current process; it will be inherited by the spawned child.
+    The .dproj's DCC_UnitSearchPath property ends with `;$(DCC_UnitSearchPath)`, so the env
+    var is appended cleanly without requiring .dproj edits. }
+  if (ATargetPlatform <> '') and (Ext = '.dproj') then
+  begin
+    LibPath:= ResolveIdeLibraryPath(ATargetPlatform);
+    if LibPath <> '' then
+      SetEnvironmentVariable(PChar('DCC_UnitSearchPath'), PChar(LibPath));
+  end;
+
+  Result.ExitCode:= SpawnAndCapture(Cmd, nil, RawOutput);
   Result.StdoutText:= RawOutput;
 
   Lines:= TStringList.Create;
@@ -314,7 +417,7 @@ var
   Findings : TList<TCompilerFinding>;
 begin
   Result:= Default(TCompileCheckResult);
-  Result.ExitCode:= SpawnAndCapture(ACmd, RawOutput);
+  Result.ExitCode:= SpawnAndCapture(ACmd, nil, RawOutput);
   Result.StdoutText:= RawOutput;
 
   Lines:= TStringList.Create;

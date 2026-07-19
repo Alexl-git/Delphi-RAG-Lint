@@ -7602,7 +7602,7 @@ end; // function
 /// <returns>1 iff an Error-severity finding survived, else 0.</returns>
 function RefreshProjectFindingsCore(const AStore: ISymbolStore;
   const AProjectPath: string; AFullBuild: Boolean; const AStale: TArray<Int64>;
-  AJson: Boolean; AEmitSummary: Boolean): Integer;
+  AJson: Boolean; AEmitSummary: Boolean; const ATargetPlatform: string = ''): Integer;
 var
   Res          : TCompileCheckResult;
   Covered      : TDictionary<Int64, Boolean>;
@@ -7628,7 +7628,7 @@ begin
   // dropping every bare-filename project finding (see NormalizeFindings).
   if AEmitSummary then
     Writeln('Compiling: ', AProjectPath, IfThen(AFullBuild, ' (full build)', ' (incremental)'));
-  Res:= TCompileChecker.Run(AProjectPath, AFullBuild);
+  Res:= TCompileChecker.Run(AProjectPath, AFullBuild, '', '', ATargetPlatform);
   Res.Findings:= NormalizeFindings(Res.Findings,
     ExtractFilePath(StringReplace(AProjectPath, '/', '\', [rfReplaceAll])));
 
@@ -7762,7 +7762,7 @@ begin
   if (AArgs.ProjectPath = '') or (AArgs.DbPath = '') then
   begin
     Writeln('Usage: drag-lint refresh-findings --project <X.dproj|.dpr> --db <db> ' +
-      '[--full] [--json]');
+      '[--platform win32|win64] [--full] [--json]');
     Exit(2);
   end;
   if not TFile.Exists(AArgs.DbPath) then
@@ -7793,7 +7793,7 @@ begin
 
   // Steps 5-9: shared compile-and-capture core (also driven by the
   // reconcile-project index/findings coherence phase). Emits the summary here.
-  Result:= RefreshProjectFindingsCore(Store, AArgs.ProjectPath, FullBuild, Stale, IsJson, True);
+  Result:= RefreshProjectFindingsCore(Store, AArgs.ProjectPath, FullBuild, Stale, IsJson, True, AArgs.CheckPlatform);
 end; // function
 
 { Resolve <unit>.dcu inside the project's DCU output dir (DCC_DcuOutput in the
@@ -13062,7 +13062,7 @@ begin
               // AJson=False: dead when AEmitSummary=False (core emits no
               // summary in either shape), so pass the literal for clarity
               // rather than AArgs.AsJson.
-              RefreshProjectFindingsCore(Store, ProjectFile, True, nil, False, False);
+              RefreshProjectFindingsCore(Store, ProjectFile, True, nil, False, False, AArgs.CheckPlatform);
               CohRecomp:= True;
             except
               CohRecomp:= False;
