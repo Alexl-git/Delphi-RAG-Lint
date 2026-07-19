@@ -231,6 +231,8 @@ type
     procedure SetFileCompiledAt(AFileId: Int64; AUnix: Int64);
     /// <summary>Returns files.last_compiled_unix for one file, or 0 when NULL.</summary>
     function GetFileCompiledAt(AFileId: Int64): Int64;
+    /// <summary>Returns files.mtime_unix for one file, or 0 when NULL/absent.</summary>
+    function GetFileMTime(AFileId: Int64): Int64;
     /// <summary>Returns file_ids whose findings are STALE: last_compiled_unix is
     /// NULL or older than mtime_unix. Pascal source files only.</summary>
     function GetStaleFileIds: TArray<Int64>;

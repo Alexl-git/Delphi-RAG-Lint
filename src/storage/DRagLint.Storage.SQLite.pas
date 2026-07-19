@@ -221,6 +221,7 @@ type
       procedure ClearCompilerFindingsForFile(AFileId: Int64);
       procedure SetFileCompiledAt(AFileId: Int64; AUnix: Int64);
       function GetFileCompiledAt(AFileId: Int64): Int64;
+      function GetFileMTime(AFileId: Int64): Int64;
       function GetStaleFileIds: TArray<Int64>;
 
       // v0.17: blast-radius pack
@@ -2665,6 +2666,23 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text:= 'SELECT last_compiled_unix FROM files WHERE id = ?';
+    Q.Params[0].AsLargeInt:= AFileId;
+    Q.Open;
+    if (not Q.Eof) and (not Q.Fields[0].IsNull) then Result:= Q.Fields[0].AsLargeInt;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetFileMTime(AFileId: Int64): Int64;
+var Q: TFDQuery;
+begin
+  Result:= 0;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT mtime_unix FROM files WHERE id = ?';
     Q.Params[0].AsLargeInt:= AFileId;
     Q.Open;
     if (not Q.Eof) and (not Q.Fields[0].IsNull) then Result:= Q.Fields[0].AsLargeInt;
