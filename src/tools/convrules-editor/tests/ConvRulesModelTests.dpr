@@ -11,7 +11,8 @@ uses
   System.IOUtils,
   ConvRules.Model in '..\ConvRules.Model.pas',
   ConvRules.Casts in '..\ConvRules.Casts.pas',
-  ConvRules.Engine in '..\ConvRules.Engine.pas';
+  ConvRules.Engine in '..\ConvRules.Engine.pas',
+  ConvRules.Platform in '..\ConvRules.Platform.pas';
 
 var
   GPass: Integer = 0;
@@ -550,8 +551,39 @@ begin
   end;
 end;
 
+procedure TestPlatform;
+const
+  LibDir = 'C:\Lib\';
+var
+  d32, d64, dboth: TArray<string>;
+begin
+  // ParsePlatform: case-insensitive, default fallback.
+  Check('platform.parse.win32', ParsePlatform('Win32', cpBoth) = cpWin32);
+  Check('platform.parse.win64', ParsePlatform('WIN64', cpBoth) = cpWin64);
+  Check('platform.parse.both',  ParsePlatform('both',  cpWin32) = cpBoth);
+  Check('platform.parse.empty->default',   ParsePlatform('',    cpWin64) = cpWin64);
+  Check('platform.parse.unknown->default', ParsePlatform('arm', cpWin32) = cpWin32);
+
+  // PlatformToStr round-trips the tokens.
+  Check('platform.tostr.win32', PlatformToStr(cpWin32) = 'win32');
+  Check('platform.tostr.win64', PlatformToStr(cpWin64) = 'win64');
+  Check('platform.tostr.both',  PlatformToStr(cpBoth)  = 'both');
+
+  // LibDbsFor: one lib for a single platform, both for cpBoth (Win32 first).
+  d32 := LibDbsFor(cpWin32, LibDir);
+  Check('platform.libdbs.win32.count', Length(d32) = 1);
+  Check('platform.libdbs.win32.path', d32[0] = 'C:\Lib\library-Win32.sqlite');
+  d64 := LibDbsFor(cpWin64, LibDir);
+  Check('platform.libdbs.win64.path', (Length(d64) = 1) and (d64[0] = 'C:\Lib\library-Win64.sqlite'));
+  dboth := LibDbsFor(cpBoth, LibDir);
+  Check('platform.libdbs.both.count', Length(dboth) = 2);
+  Check('platform.libdbs.both.order', (dboth[0] = 'C:\Lib\library-Win32.sqlite')
+                                  and (dboth[1] = 'C:\Lib\library-Win64.sqlite'));
+end;
+
 begin
   try
+    TestPlatform;
     TestRoundTrip;
     TestParseKinds;
     TestCastGuard;
