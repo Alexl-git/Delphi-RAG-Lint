@@ -74,6 +74,14 @@ type
   public
     constructor Create(const AExePath: string; const ADbList: TArray<string>);
 
+    /// <summary>Replace the adapter's default DB list (used by proptree /
+    /// scaffold / validate / class-name resolution). Called when the editor's
+    /// FROM or TO platform changes so type resolution targets the new
+    /// libraries.</summary>
+    procedure SetDbs(const ADbs: TArray<string>);
+    /// <summary>The adapter's current default DB list (read-only view).</summary>
+    function DbList: TArray<string>;
+
     /// <summary>proptree --qname X --format json. Returns False + empty tree if the
     /// type does not resolve (exit 1) or the exe/db is unusable (exit 2).</summary>
     function GetProptree(const AQname: string; out ATree: TProptree;
@@ -222,6 +230,16 @@ begin
   inherited Create;
   FExePath := AExePath;
   FDbList  := ADbList;
+end;
+
+procedure TEngineAdapter.SetDbs(const ADbs: TArray<string>);
+begin
+  FDbList := ADbs;
+end;
+
+function TEngineAdapter.DbList: TArray<string>;
+begin
+  Result := FDbList;
 end;
 
 function TEngineAdapter.DbArgsFor(const ADbs: TArray<string>): string;

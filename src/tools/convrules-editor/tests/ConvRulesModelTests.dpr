@@ -581,9 +581,25 @@ begin
                                   and (dboth[1] = 'C:\Lib\library-Win64.sqlite'));
 end;
 
+procedure TestEngineSetDbs;
+var
+  eng: TEngineAdapter;
+begin
+  eng := TEngineAdapter.Create('drag-lint.exe', ['a.sqlite']);
+  try
+    Check('engine.dblist.initial', (Length(eng.DbList) = 1) and (eng.DbList[0] = 'a.sqlite'));
+    eng.SetDbs(['x.sqlite', 'y.sqlite']);
+    Check('engine.setdbs.count', Length(eng.DbList) = 2);
+    Check('engine.setdbs.values', (eng.DbList[0] = 'x.sqlite') and (eng.DbList[1] = 'y.sqlite'));
+  finally
+    eng.Free;
+  end;
+end;
+
 begin
   try
     TestPlatform;
+    TestEngineSetDbs;
     TestRoundTrip;
     TestParseKinds;
     TestCastGuard;
