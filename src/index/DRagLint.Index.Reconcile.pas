@@ -51,6 +51,10 @@ type
     Extra: TArray<TReconcileItem>;
     /// <summary>Files in the closure whose base name matches a stale rule.</summary>
     Stale: TArray<TReconcileItem>;
+    /// <summary>Project-owned compile closure -- absolute .pas paths, library-excluded.
+    /// A snapshot of TClosureResult.Files as computed by Analyze; not filtered
+    /// or transformed further.</summary>
+    ClosureFiles: TArray<string>;
   end;
 
   /// <summary>Compares a Delphi project's stated member list against its actual
@@ -408,6 +412,7 @@ begin
         Result.Missing:= MissingList.ToArray;
         Result.Extra  := ExtraList  .ToArray;
         Result.Stale  := StaleList  .ToArray;
+        Result.ClosureFiles:= CR.Files;
       finally
         StaleList.Free;
         ExtraList.Free;

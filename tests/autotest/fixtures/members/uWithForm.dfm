@@ -1,0 +1,2 @@
+object FormWithForm: TFormWithForm
+end
