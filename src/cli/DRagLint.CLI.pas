@@ -327,11 +327,13 @@ type
     // Depth<=0). ToPersistent defaults ON (stop the ancestor climb at
     // TPersistent/TObject); --no-to-persistent turns it OFF.
     ToPersistent  : Boolean; // proptree: stop ancestor climb at TPersistent/TObject (default True)
-    // proptree --write-back: opt-in to open the resolving index WRITABLE so a type
-    // recovered by the lazy ancestry-bridge is memoized back onto the property row
-    // (next query is a plain hit). OFF by default -> read verbs stay query_only and
-    // never mutate a shared production index (v0.86 Task 4 safety).
-    WriteBack     : Boolean; // proptree: memoize bridged types back into the index (default False)
+    // proptree write-back is AUTOMATIC by default: the resolving index is opened
+    // WRITABLE so a type recovered by the lazy ancestry-bridge is memoized back
+    // onto the property row (next query is a plain hit; self-limiting -- once
+    // written it never re-fires). --no-write-back forces a read-only (query_only)
+    // open that never mutates the DB. A writable open that fails falls back to
+    // read-only automatically (resolution still works; memoization skipped).
+    NoWriteBack   : Boolean; // proptree: force read-only, no memoization (default False = auto write-back)
     // Track 3 Batch 1 (Task 2): convert-validate. RulesFile is the --rules path
     // (the reFind-superset DSL file). PrintParsed dumps the parsed rules (parse-
     // only diagnostics). --from/--to reuse CallFrom/RenameTo (the From/To types).
@@ -429,7 +431,7 @@ begin
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
-  Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--write-back] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --write-back memoizes types recovered by the ancestry-bridge back into the index)');
+  Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--no-write-back] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--no-backup]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup)');
@@ -545,7 +547,7 @@ begin
   Result.MaxDepth           := 20;        // v14 (D5 T11): call-path BFS safety cap
   Result.Direction          := '';        // per-verb default applied in DoCallGraph/DoReverseCallTree (empty = unset)
   Result.ToPersistent       := True;       // proptree: stop ancestor climb at TPersistent/TObject unless --no-to-persistent
-  Result.WriteBack          := False;      // proptree: memoize bridged types only when --write-back is given
+  Result.NoWriteBack        := False;      // proptree: auto write-back ON; --no-write-back forces read-only
   Result.FromBlockFile      := '';        // convert-reemit: --from-block <file>
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
@@ -679,7 +681,7 @@ begin
     else if (A = '--max-depth') and (i < ParamCount) then begin Inc(i); Result.MaxDepth:= StrToIntDef(ParamStr(i), 20); end
     else if (A = '--direction') and (i < ParamCount) then begin Inc(i); Result.Direction:= ParamStr(i); end
     else if A = '--no-to-persistent' then Result.ToPersistent:= False // proptree: climb past TPersistent/TObject
-    else if A = '--write-back' then Result.WriteBack:= True // proptree: memoize bridged types back into the index
+    else if A = '--no-write-back' then Result.NoWriteBack:= True // proptree: force read-only (no memoization)
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
     else if (A = '--from-block') and (i < ParamCount) then begin Inc(i); Result.FromBlockFile:= ParamStr(i); end // convert-reemit: F DFM object block file
     else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
@@ -942,16 +944,24 @@ begin
   else begin AOk:= False; Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
 end;
 
-// WRITABLE open (same schema-current guard as OpenReadOnlyStore). Used ONLY by
-// proptree --write-back so a type recovered by the lazy ancestry-bridge can be
-// memoized back into the index. Callers must own the DB (do not point --write-back
-// at a shared production index that another process is using).
+// WRITABLE open (same schema-current guard as OpenReadOnlyStore). Used by
+// proptree's default (automatic) write-back so a type recovered by the lazy
+// ancestry-bridge is memoized back into the index. Exception-safe: a writable
+// open that throws (read-only file, exclusive lock) returns AOk=False + nil so
+// the caller can fall back to a read-only open -- the ancestry RESOLUTION still
+// works, only the (best-effort) memoization is skipped. NOTE: a normal proptree
+// query now opens writable by default; --no-write-back forces read-only.
 function OpenWritableStore(const ADbPath: string; out AOk: Boolean): ISymbolStore;
 var
   Found   : Integer;
   Expected: Integer;
 begin
-  Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}False);
+  AOk:= False;
+  try
+    Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}False);
+  except
+    Result:= nil; Exit; // writable open failed (locked / read-only file) -> caller falls back
+  end;
   if Result.IsSchemaCurrent(Found, Expected) then AOk:= True
   else begin AOk:= False; Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
 end;
@@ -10518,12 +10528,14 @@ end; // function
 /// (default ON) stops the ancestor climb at TPersistent/TObject; --no-to-persistent
 /// climbs past. text = an indented tree (indent = the path's dot-depth); json =
 /// schema proptree/1. With multiple --db, the first DB that resolves the qname to a
-/// class is used (ids are per-DB). READ-ONLY by default. --write-back opens the
-/// resolving index WRITABLE so a property type recovered by the lazy ancestry-bridge
-/// (across an unresolved/type-alias ancestor edge) is memoized back onto the property
-/// row -- point it only at an index you own, never a shared production DB.</summary>
+/// class is used (ids are per-DB). Write-back is AUTOMATIC: the resolving index is
+/// opened WRITABLE so a property type recovered by the lazy ancestry-bridge (across
+/// an unresolved/type-alias ancestor edge) is memoized back onto the property row
+/// (next query is a plain hit; self-limiting). A writable open that fails falls
+/// back to read-only (resolution still works; memoization skipped). --no-write-back
+/// forces a read-only (query_only) open that never mutates the DB.</summary>
 /// <param name="AArgs">QName=class, Depth=recursion cap (default 6),
-/// ToPersistent=ancestor-stop, WriteBack=memoize bridged types (opens DB writable),
+/// ToPersistent=ancestor-stop, NoWriteBack=force read-only (no memoization),
 /// Format/AsJson=output, DbPath/DbPaths=index(es).</param>
 /// <returns>0 ok; 1 qname not resolved to a class in any DB; 2 usage error / no
 /// readable db.</returns>
@@ -10545,7 +10557,7 @@ var
 
 begin
   if AArgs.QName = '' then
-  begin Writeln('Usage: drag-lint proptree --qname X [--depth N] [--no-to-persistent] [--write-back] [--format text|json] [--json] --db PATH [--db ...]'); Exit(2); end;
+  begin Writeln('Usage: drag-lint proptree --qname X [--depth N] [--no-to-persistent] [--no-write-back] [--format text|json] [--json] --db PATH [--db ...]'); Exit(2); end;
 
   Fmt:= LowerCase(Trim(AArgs.Format));
 
@@ -10569,11 +10581,18 @@ begin
   begin
     if not TFile.Exists(Db) then Continue;
     var RoOk: Boolean;
-    // --write-back opens the index WRITABLE so a bridged type is memoized onto the
-    // property row; the default (read-only, query_only) open never mutates the DB.
+    // Write-back is AUTOMATIC: open the index WRITABLE by default so a bridged type
+    // is memoized onto the property row (next query is a plain hit). --no-write-back
+    // forces a read-only (query_only) open that never mutates the DB. A writable
+    // open that fails (locked / read-only file / stale schema) falls back to
+    // read-only so resolution still works -- memoization is best-effort.
     var CandidateStore: ISymbolStore;
-    if AArgs.WriteBack then CandidateStore:= OpenWritableStore(Db, RoOk)
-    else CandidateStore:= OpenReadOnlyStore(Db, RoOk);
+    if AArgs.NoWriteBack then CandidateStore:= OpenReadOnlyStore(Db, RoOk)
+    else
+    begin
+      CandidateStore:= OpenWritableStore(Db, RoOk);
+      if not RoOk then CandidateStore:= OpenReadOnlyStore(Db, RoOk); // graceful read-only fallback
+    end;
     if not RoOk then Continue;
     Store:= CandidateStore; // at least one readable db
     var Candidate: TPropTree:= BuildPropTree(CandidateStore, AArgs.QName, Opts);
