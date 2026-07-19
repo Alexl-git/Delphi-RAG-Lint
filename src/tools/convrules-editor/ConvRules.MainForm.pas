@@ -46,6 +46,8 @@ type
     FCbFrom   : TComboBox;
     FCbTo     : TComboBox;
     FCbUnit   : TComboBox;            // From Unit picker (project units)
+    FCbFromPlat: TComboBox;           // FROM platform (Win32/Win64/Both)
+    FCbToPlat  : TComboBox;           // TO platform
     // rules library
     FRules    : TListView;
     // grid
@@ -80,6 +82,7 @@ type
     function  FromDbSet: TArray<string>;
     function  ToDbSet: TArray<string>;
     function  EngineDbSet: TArray<string>;
+    procedure PlatformChanged(Sender: TObject);
     procedure CbLoadClasses(Sender: TObject);
     procedure CbLoadUnits(Sender: TObject);
     procedure DoLoadUnit(Sender: TObject);
@@ -241,6 +244,29 @@ begin
   BtnNew.Parent := FPanelTop; BtnNew.SetBounds(706, 70, 130, 25);
   BtnNew.Caption := '+ New Conversion'; BtnNew.OnClick := DoNewConversion;
 
+  // --- platform selectors: FROM platform / TO platform (re-scope the pickers) ---
+  // Combo item order (Win32,Win64,Both) matches TConvPlatform (cpWin32,cpWin64,
+  // cpBoth) by ordinal, so ItemIndex <-> Ord(platform) round-trips.
+  var LblFromPlat: TLabel := TLabel.Create(Self);
+  LblFromPlat.Parent := FPanelTop; LblFromPlat.SetBounds(844, 74, 34, 15); LblFromPlat.Caption := 'FROM';
+  FCbFromPlat := TComboBox.Create(Self);
+  FCbFromPlat.Parent := FPanelTop; FCbFromPlat.SetBounds(882, 71, 80, 23);
+  FCbFromPlat.Style := csDropDownList;
+  FCbFromPlat.Items.Add('Win32'); FCbFromPlat.Items.Add('Win64'); FCbFromPlat.Items.Add('Both');
+  FCbFromPlat.ItemIndex := Ord(FFromPlatform);
+  FCbFromPlat.Hint := 'Library platform the FROM types come from'; FCbFromPlat.ShowHint := True;
+  FCbFromPlat.OnChange := PlatformChanged;
+
+  var LblToPlat: TLabel := TLabel.Create(Self);
+  LblToPlat.Parent := FPanelTop; LblToPlat.SetBounds(968, 74, 22, 15); LblToPlat.Caption := 'TO';
+  FCbToPlat := TComboBox.Create(Self);
+  FCbToPlat.Parent := FPanelTop; FCbToPlat.SetBounds(994, 71, 80, 23);
+  FCbToPlat.Style := csDropDownList;
+  FCbToPlat.Items.Add('Win32'); FCbToPlat.Items.Add('Win64'); FCbToPlat.Items.Add('Both');
+  FCbToPlat.ItemIndex := Ord(FToPlatform);
+  FCbToPlat.Hint := 'Library platform the TO types come from'; FCbToPlat.ShowHint := True;
+  FCbToPlat.OnChange := PlatformChanged;
+
   FLblFile := TLabel.Create(Self);
   FLblFile.Parent := FPanelTop; FLblFile.SetBounds(8, 101, 1080, 15);
   FLblFile.Caption := '(no file)';
@@ -401,6 +427,30 @@ begin
     end;
   finally
     seen.Free;
+  end;
+end;
+
+{ A platform dropdown changed: recompute both sides' platforms from the combos,
+  update the engine's default DB set, clear the class caches, and reload the
+  pickers so they now list the newly-selected platforms' types. }
+procedure TConvRulesForm.PlatformChanged(Sender: TObject);
+begin
+  FFromPlatform := TConvPlatform(FCbFromPlat.ItemIndex);
+  FToPlatform   := TConvPlatform(FCbToPlat.ItemIndex);
+  FEngine.SetDbs(EngineDbSet);
+  // Force LoadAllClasses to re-query (its guard exits when both caches are set).
+  FFromClasses := [];
+  FToClasses := [];
+  FCbFrom.Items.Clear;
+  FCbTo.Items.Clear;
+  Screen.Cursor := crHourGlass;
+  try
+    LoadAllClasses;
+    SetStatus(Format('Platforms: FROM=%s TO=%s -- %d source + %d target classes.',
+      [PlatformToStr(FFromPlatform), PlatformToStr(FToPlatform),
+       Length(FFromClasses), Length(FToClasses)]));
+  finally
+    Screen.Cursor := crDefault;
   end;
 end;
 
