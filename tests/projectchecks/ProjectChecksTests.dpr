@@ -102,6 +102,60 @@ begin
     Pos(#10, StripPasCommentsKeepLayout('keep // gone'#10'next')) > 0);
 end;
 
+procedure TestUsedUnitResolvable;
+var
+  MemberSet: TArray<string>;
+  LibSet   : TArray<string>;
+  IsMember : TFunc<string, Boolean>;
+  IsLib    : TFunc<string, Boolean>;
+  function R(const AUnit: string): TUnitResolution;
+  begin Result := ResolveUsedUnit(AUnit, IsMember, IsLib); end;
+begin
+  MemberSet := ['takejob'];             // a sibling project unit already indexed
+  LibSet    := ['dbtables', 'sysutils'];// what the Win32 library fixture "knows"
+  // NOTE: IsMember/IsLib must be TFunc<string,Boolean>-typed local vars assigned
+  // via anonymous-method literals, NOT nested `function` declarations -- dcc64
+  // cannot implicitly convert a nested routine into a `reference to function`
+  // value (E2555 "Cannot capture symbol"). The literals call the unit-level
+  // HasName helper (defined above) since anonymous methods likewise cannot
+  // capture a sibling *nested* routine, only outer local variables.
+  IsMember := function(AN: string): Boolean begin Result := HasName(MemberSet, AN); end;
+  IsLib    := function(AN: string): Boolean begin Result := HasName(LibSet, AN);    end;
+
+  // Orpheus: not member, not lib, not alias, not RTL -> FLAG.
+  Check('ovctcmmn is unresolvable', not R('ovctcmmn').Resolvable);
+  Check('ovctcmmn via = none', R('ovctcmmn').Via = urvNone);
+
+  // BDE on Win32: library knows dbtables -> resolvable.
+  Check('Bde.DBTables resolvable via library (win32)', R('Bde.DBTables').Resolvable);
+  Check('Bde.DBTables via = library', R('Bde.DBTables').Via = urvLibrary);
+
+  // Standard alias: WinTypes -> resolvable via alias even if lib/member miss.
+  Check('WinTypes resolvable via alias', R('WinTypes').Resolvable);
+  Check('WinTypes via = alias', R('WinTypes').Via = urvAlias);
+
+  // RTL namespace safety net: System.SysUtils, Vcl.Forms resolvable.
+  Check('System.SysUtils resolvable via rtl-namespace or library',
+    R('System.SysUtils').Resolvable);
+  Check('Vcl.Forms resolvable via rtl-namespace', R('Vcl.Forms').Resolvable);
+  Check('Vcl.Forms via = rtl-namespace', R('Vcl.Forms').Via = urvRtlNamespace);
+
+  // Project member wins first.
+  Check('TakeJob resolvable via project member', R('TakeJob').Resolvable);
+  Check('TakeJob via = project-member', R('TakeJob').Via = urvProjectMember);
+
+  // Alias table direct predicate.
+  Check('IsStandardUnitAlias WinProcs', IsStandardUnitAlias('WinProcs'));
+  Check('IsStandardUnitAlias DbiTypes', IsStandardUnitAlias('DbiTypes'));
+  Check('IsStandardUnitAlias not-a-unit', not IsStandardUnitAlias('ovctcmmn'));
+
+  // RTL namespace predicate (dotted + bare classics).
+  Check('IsRtlNamespaceUnit System.Classes', IsRtlNamespaceUnit('System.Classes'));
+  Check('IsRtlNamespaceUnit Winapi.Windows', IsRtlNamespaceUnit('Winapi.Windows'));
+  Check('IsRtlNamespaceUnit bare Forms', IsRtlNamespaceUnit('Forms'));
+  Check('IsRtlNamespaceUnit not ovctcmmn', not IsRtlNamespaceUnit('ovctcmmn'));
+end;
+
 begin
   GPass:= 0;
   GFail:= 0;
@@ -109,6 +163,7 @@ begin
     TestNormUnit;
     TestUsesParse;
     TestStripComments;
+    TestUsedUnitResolvable;
   except
     on E: Exception do
     begin

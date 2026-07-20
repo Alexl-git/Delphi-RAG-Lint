@@ -14,7 +14,17 @@ uses
   , System.IOUtils
   , System.RegularExpressions
   , System.Generics.Collections
+  , System.StrUtils
   ;
+
+type
+  /// <summary>How a used unit was resolved (or urvNone when unresolvable).</summary>
+  TUnitResolveVia = (urvNone, urvProjectMember, urvLibrary, urvAlias, urvRtlNamespace);
+  /// <summary>Result of ResolveUsedUnit: whether the unit resolves, and via which source.</summary>
+  TUnitResolution = record
+    Resolvable: Boolean;
+    Via       : TUnitResolveVia;
+  end;
 
 /// <summary>Normalize a unit name or file path to a bare lower-case unit-name
 /// segment, used on BOTH sides of every membership comparison so they match.</summary>
@@ -43,6 +53,26 @@ function ReadDCCReferences(const ADprojPath: string): TArray<string>;
 
 /// <summary>Find the sibling .dpr or .dpk for a .dproj, or '' if none exists.</summary>
 function FindSiblingProgramFile(const ADprojPath: string): string;
+
+/// <summary>True if AUnitName is a classic Delphi unit alias (WinTypes, WinProcs,
+/// DbiTypes, DbiProcs, DbiErrs) -- the compiler maps these to a real unit, so a
+/// `uses` of one is always resolvable.</summary>
+function IsStandardUnitAlias(const AUnitName: string): Boolean;
+
+/// <summary>True if AUnitName is an RTL/framework unit by namespace (System.*,
+/// Vcl.*, Fmx.*, Winapi.*, Data.*, Datasnap.*, Soap.*, Web.*, FireDAC.*) or a
+/// classic bare RTL name (Forms, SysUtils, Classes, Windows, ...). Belt-and-
+/// suspenders so incomplete library-index coverage never false-flags core RTL.</summary>
+function IsRtlNamespaceUnit(const AUnitName: string): Boolean;
+
+/// <summary>Decide whether a used unit resolves to something known. Order:
+/// project member -> platform library -> standard alias -> RTL namespace.
+/// The two predicates receive the NORMALIZED name (NormUnit).</summary>
+/// <param name="AUnitName">Verbatim used unit name, e.g. 'Bde.DBTables'.</param>
+/// <param name="AIsProjectMember">Given a normalized stem, is it an indexed project unit?</param>
+/// <param name="AIsInLibrary">Given a normalized stem, is it in the platform library DB?</param>
+function ResolveUsedUnit(const AUnitName: string;
+  const AIsProjectMember, AIsInLibrary: TFunc<string, Boolean>): TUnitResolution;
 
 implementation
 
@@ -220,6 +250,56 @@ begin
   Candidate:= TPath.Combine(Dir, Base + '.dpk');
   if TFile.Exists(Candidate) then Exit(Candidate);
   Result:= '';
+end;
+
+function IsStandardUnitAlias(const AUnitName: string): Boolean;
+const
+  ALIASES: array[0..4] of string = ('wintypes', 'winprocs', 'dbitypes', 'dbiprocs', 'dbierrs');
+var
+  I      : Integer;
+  LowName: string;
+begin
+  LowName:= LowerCase(Trim(AUnitName));
+  Result:= False;
+  for I:= System.Low(ALIASES) to System.High(ALIASES) do
+    if LowName = ALIASES[I] then Exit(True);
+end;
+
+function IsRtlNamespaceUnit(const AUnitName: string): Boolean;
+const
+  NS: array[0..8] of string = ('system.', 'vcl.', 'fmx.', 'winapi.', 'data.', 'datasnap.', 'soap.', 'web.', 'firedac.');
+  BARE: array[0..14] of string = ('system', 'sysinit', 'forms', 'sysutils', 'classes',
+    'windows', 'messages', 'variants', 'graphics', 'controls', 'dialogs', 'menus',
+    'stdctrls', 'math', 'types');
+var
+  LowName: string;
+  I      : Integer;
+begin
+  LowName:= LowerCase(Trim(AUnitName));
+  Result:= False;
+  for I:= System.Low(NS) to System.High(NS) do
+    if StartsText(NS[I], LowName) then Exit(True);
+  for I:= System.Low(BARE) to System.High(BARE) do
+    if LowName = BARE[I] then Exit(True);
+end;
+
+function ResolveUsedUnit(const AUnitName: string;
+  const AIsProjectMember, AIsInLibrary: TFunc<string, Boolean>): TUnitResolution;
+var
+  Norm: string;
+begin
+  Result.Resolvable:= False;
+  Result.Via       := urvNone;
+  Norm:= NormUnit(AUnitName);
+  if Norm = '' then Exit;
+  if Assigned(AIsProjectMember) and AIsProjectMember(Norm) then
+    begin Result.Resolvable:= True; Result.Via:= urvProjectMember; Exit; end;
+  if Assigned(AIsInLibrary) and AIsInLibrary(Norm) then
+    begin Result.Resolvable:= True; Result.Via:= urvLibrary; Exit; end;
+  if IsStandardUnitAlias(AUnitName) then
+    begin Result.Resolvable:= True; Result.Via:= urvAlias; Exit; end;
+  if IsRtlNamespaceUnit(AUnitName) then
+    begin Result.Resolvable:= True; Result.Via:= urvRtlNamespace; Exit; end;
 end;
 
 end.
