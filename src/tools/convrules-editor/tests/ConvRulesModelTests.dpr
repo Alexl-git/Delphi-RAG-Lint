@@ -10,6 +10,7 @@ uses
   System.SysUtils,
   System.IOUtils,
   ConvRules.Model in '..\ConvRules.Model.pas',
+  ConvRules.Units in '..\ConvRules.Units.pas',
   ConvRules.Casts in '..\ConvRules.Casts.pas',
   ConvRules.Engine in '..\ConvRules.Engine.pas',
   ConvRules.Platform in '..\ConvRules.Platform.pas';
@@ -50,6 +51,16 @@ begin
   for S in AArr do
     if SameText(S, AName) then Exit(True);
   Result := False;
+end;
+
+{ Case-insensitive count of a name in a bare-name array. }
+function CountOf(const AArr: TArray<string>; const AName: string): Integer;
+var
+  S: string;
+begin
+  Result := 0;
+  for S in AArr do
+    if SameText(S, AName) then Inc(Result);
 end;
 
 { Round-trip: an untouched file must re-emit byte-faithfully (modulo the canonical
@@ -660,10 +671,48 @@ begin
   end;
 end;
 
+procedure TestUnitSets;
+var
+  Book : TRuleBook        ;
+  S    : TUnitSets        ;
+  Pairs: TArray<TConvPair> ;
+begin
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(
+      '#convert A.TFrom -> B.TTo, cxButtons'#13#10 +
+      '#use cxButtons'#13#10 +
+      '#useswap FOLDERDEF -> imcFOLDERS'#13#10 +
+      '#unuse cxButtons'#13#10);
+    S := NormalizeUnitSets(Book);
+    Check('norm.add.has.cxButtons',    Contains(S.Adds, 'cxButtons'));
+    Check('norm.add.has.imcFOLDERS',   Contains(S.Adds, 'imcFOLDERS'));
+    Check('norm.add.dedup',            CountOf(S.Adds, 'cxButtons') = 1, IntToStr(CountOf(S.Adds, 'cxButtons')));
+    Check('norm.remove.has.FOLDERDEF', Contains(S.Removes, 'FOLDERDEF'));
+    Check('norm.conflict.addwins',     Contains(S.Conflicts, 'cxButtons') and not Contains(S.Removes, 'cxButtons'));
+  finally
+    Book.Free;
+  end;
+
+  SetLength(Pairs, 1);
+  Pairs[0].FromType := 'Abcbtn.TabcToggleBtn';
+  Pairs[0].ToType   := 'cxButtons.TcxButton';
+  S := DeriveUnits(Pairs,
+    function(const ATypeName: string): string
+    begin
+      if ATypeName.StartsWith('cxButtons') then Exit('cxButtons');
+      if ATypeName.StartsWith('Abcbtn')    then Exit('Abcbtn');
+      Result := '';
+    end);
+  Check('derive.add',    Contains(S.Adds, 'cxButtons'));
+  Check('derive.remove', Contains(S.Removes, 'Abcbtn'));
+end;
+
 begin
   try
     TestPlatform;
     TestUnitDirectives;
+    TestUnitSets;
     TestEngineSetDbs;
     TestPlatformRescope;
     TestRoundTrip;
