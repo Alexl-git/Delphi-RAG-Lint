@@ -60,6 +60,9 @@ type
     // directives / raw
     FTabs     : TPageControl;
     FRaw      : TMemo;
+    // unit rules tab + rules-library filter
+    FUnitList   : TListView;
+    FRulesFilter: TEdit;
 
     procedure BuildUI;
     procedure FormCloseHandler(Sender: TObject; var Action: TCloseAction);
@@ -76,6 +79,15 @@ type
     procedure DoUnassign(Sender: TObject);
     procedure PoolFilter(Sender: TObject);
     procedure SyncRawFromModel;
+    procedure RefreshUnitList;
+    procedure InsertUnitNode(ANode: TRuleNode);
+    procedure DoAddSwap(Sender: TObject);
+    procedure DoAddUse(Sender: TObject);
+    procedure DoAddUnuse(Sender: TObject);
+    procedure DoDeleteUnit(Sender: TObject);
+    procedure DoDeriveUnits(Sender: TObject);
+    procedure DoCheckUnits(Sender: TObject);
+    procedure RulesFilterChange(Sender: TObject);
     procedure SetStatus(const S: string);
     procedure SetError(const S: string);
     procedure LoadAllClasses;
@@ -115,7 +127,7 @@ var
 implementation
 
 uses
-  System.StrUtils, System.Math;
+  System.StrUtils, System.Math, ConvRules.Units;
 
 { ---- helpers ---- }
 
@@ -170,7 +182,7 @@ var
   Split1: TSplitter;
   Split2: TSplitter;
   LeftPanel, GridPanel, PoolPanel: TPanel;
-  TabRules, TabRaw: TTabSheet;
+  TabRules, TabRaw, TabUnits: TTabSheet;
   BtnLoad, BtnSave, BtnValidate: TButton;
 begin
   Caption := 'ConvRulesEditor -- conversion rule-book editor';
@@ -281,6 +293,10 @@ begin
 
   TabRules := TTabSheet.Create(FTabs); TabRules.PageControl := FTabs;
   TabRules.Caption := 'Rules Library';
+  FRulesFilter := TEdit.Create(Self);
+  FRulesFilter.Parent := TabRules; FRulesFilter.Align := alTop;
+  FRulesFilter.TextHint := 'filter rules (From/To contains)...';
+  FRulesFilter.OnChange := RulesFilterChange;
   FRules := TListView.Create(Self);
   FRules.Parent := TabRules; FRules.Align := alClient;
   FRules.ViewStyle := vsReport; FRules.ReadOnly := True;
@@ -296,6 +312,42 @@ begin
   FRaw.Parent := TabRaw; FRaw.Align := alClient;
   FRaw.ScrollBars := ssBoth; FRaw.WordWrap := False;
   FRaw.Font.Name := 'Consolas'; FRaw.Font.Size := 9;
+
+  // --- Unit Rules tab: #use / #unuse / #useswap authoring + derive/check ---
+  TabUnits := TTabSheet.Create(FTabs); TabUnits.PageControl := FTabs;
+  TabUnits.Caption := 'Unit Rules';
+  var UPanel: TPanel := TPanel.Create(Self);
+  UPanel.Parent := TabUnits; UPanel.Align := alTop; UPanel.Height := 64;
+  UPanel.BevelOuter := bvNone;
+  var BSwap: TButton := TButton.Create(Self);
+  BSwap.Parent := UPanel; BSwap.SetBounds(6, 6, 104, 25);
+  BSwap.Caption := '+ Swap'; BSwap.OnClick := DoAddSwap;
+  BSwap.Hint := 'Add #useswap Old -> New1[, New2 ...]'; BSwap.ShowHint := True;
+  var BUse: TButton := TButton.Create(Self);
+  BUse.Parent := UPanel; BUse.SetBounds(114, 6, 104, 25);
+  BUse.Caption := '+ Add unit'; BUse.OnClick := DoAddUse;
+  var BUnuse: TButton := TButton.Create(Self);
+  BUnuse.Parent := UPanel; BUnuse.SetBounds(222, 6, 110, 25);
+  BUnuse.Caption := '+ Remove unit'; BUnuse.OnClick := DoAddUnuse;
+  var BDel: TButton := TButton.Create(Self);
+  BDel.Parent := UPanel; BDel.SetBounds(6, 34, 104, 25);
+  BDel.Caption := 'Delete'; BDel.OnClick := DoDeleteUnit;
+  var BDerive: TButton := TButton.Create(Self);
+  BDerive.Parent := UPanel; BDerive.SetBounds(114, 34, 104, 25);
+  BDerive.Caption := 'Derive units'; BDerive.OnClick := DoDeriveUnits;
+  BDerive.Hint := 'Add #use/#unuse from every #convert To/From type (deduped)';
+  BDerive.ShowHint := True;
+  var BCheck: TButton := TButton.Create(Self);
+  BCheck.Parent := UPanel; BCheck.SetBounds(222, 34, 110, 25);
+  BCheck.Caption := 'Check units'; BCheck.OnClick := DoCheckUnits;
+  FUnitList := TListView.Create(Self);
+  FUnitList.Parent := TabUnits; FUnitList.Align := alClient;
+  FUnitList.ViewStyle := vsReport; FUnitList.ReadOnly := True;
+  FUnitList.RowSelect := True; FUnitList.HideSelection := False;
+  FUnitList.Columns.Add.Caption := 'Kind';   FUnitList.Columns[0].Width := 70;
+  FUnitList.Columns.Add.Caption := 'Old';    FUnitList.Columns[1].Width := 110;
+  FUnitList.Columns.Add.Caption := 'New(s)'; FUnitList.Columns[2].Width := 150;
+  FUnitList.Columns.Add.Caption := 'Flag';   FUnitList.Columns[3].Width := 90;
 
   Split1 := TSplitter.Create(Self);
   Split1.Parent := Self; Split1.Align := alLeft; Split1.Left := LeftPanel.Width + 1;
@@ -649,6 +701,7 @@ begin
   FBook.LoadFromString(TFile.ReadAllText(APath));
   FLblFile.Caption := APath;
   RefreshRulesList;
+  RefreshUnitList;
   SyncRawFromModel;
   FActiveHdr := -1;
   FGrid.RowCount := 2;              // FixedRows(1) < RowCount; 2 = header + 1 blank
@@ -673,12 +726,17 @@ var
   H: Integer;
   Item: TListItem;
   Node: TRuleNode;
+  flt : string;
 begin
   FRules.Items.Clear;
+  flt := '';
+  if FRulesFilter <> nil then flt := LowerCase(Trim(FRulesFilter.Text));
   Heads := FBook.ConvertHeaders;
   for H in Heads do
   begin
     Node := FBook.Nodes[H];
+    if (flt <> '') and (Pos(flt, LowerCase(Node.FromType + ' ' + Node.ToType)) = 0) then
+      Continue;
     Item := FRules.Items.Add;
     Item.Caption := Node.FromType;
     Item.SubItems.Add(Node.ToType);
@@ -1192,6 +1250,246 @@ begin
   else
     SetStatus(Format('Saved %s (backup %s)%s. Validate: %s',
       [ExtractFileName(FFilePath), ExtractFileName(bak), droppedMsg, res.FirstError]));
+
+  // Surface unit-rule conflicts (ADD wins) after every save, non-blocking.
+  RefreshUnitList;
+  var us: TUnitSets := NormalizeUnitSets(FBook);
+  if Length(us.Conflicts) > 0 then
+    SetError(Format('Note: unit conflicts (ADD wins): %s',
+      [string.Join(', ', us.Conflicts)]));
+end;
+
+{ ---- Unit Rules tab ---- }
+
+procedure TConvRulesForm.InsertUnitNode(ANode: TRuleNode);
+var
+  Heads: TArray<Integer>;
+begin
+  // Unit directives live in the top file-level section (before the first #convert)
+  // so SaveCompleteToString always preserves them -- a trailing incomplete #convert
+  // block would otherwise swallow nodes appended at EOF.
+  Heads := FBook.ConvertHeaders;
+  if Length(Heads) = 0 then FBook.Add(ANode)
+  else FBook.Nodes.Insert(Heads[0], ANode);
+end;
+
+procedure TConvRulesForm.RefreshUnitList;
+var
+  N   : TRuleNode;
+  Item: TListItem;
+  S   : TUnitSets;
+
+  function InConflict(const AUnit: string): Boolean;
+  var c: string;
+  begin
+    Result := False;
+    if AUnit = '' then Exit;
+    for c in S.Conflicts do
+      if SameText(c, AUnit) then Exit(True);
+  end;
+
+begin
+  if FUnitList = nil then Exit;
+  S := NormalizeUnitSets(FBook);
+  FUnitList.Items.BeginUpdate;
+  try
+    FUnitList.Items.Clear;
+    for N in FBook.UnitNodes do
+    begin
+      Item := FUnitList.Items.Add;
+      case N.Kind of
+        rnkUse:
+          begin
+            Item.Caption := '#use';
+            Item.SubItems.Add('');
+            Item.SubItems.Add(N.UseUnit);
+            Item.SubItems.Add(IfThen(InConflict(N.UseUnit), '(!) ADD wins', ''));
+          end;
+        rnkUnuse:
+          begin
+            Item.Caption := '#unuse';
+            Item.SubItems.Add(N.UnuseUnit);
+            Item.SubItems.Add('');
+            Item.SubItems.Add(IfThen(InConflict(N.UnuseUnit), '(!) also added', ''));
+          end;
+        rnkUseSwap:
+          begin
+            Item.Caption := '#useswap';
+            Item.SubItems.Add(N.SwapOld);
+            Item.SubItems.Add(string.Join(', ', N.SwapNew));
+            Item.SubItems.Add(IfThen(InConflict(N.SwapOld), '(!) also added', ''));
+          end;
+      end;
+      Item.Data := Pointer(N);
+    end;
+  finally
+    FUnitList.Items.EndUpdate;
+  end;
+end;
+
+procedure TConvRulesForm.DoAddSwap(Sender: TObject);
+var
+  oldU, newU: string;
+  N    : TRuleNode;
+  parts: TArray<string>;
+  tmp  : TList<string>;
+  p    : string;
+begin
+  oldU := '';
+  if not InputQuery('Add unit swap', 'Old unit to replace:', oldU) then Exit;
+  oldU := Trim(oldU);
+  if oldU = '' then Exit;
+  newU := '';
+  if not InputQuery('Add unit swap', 'New unit(s), comma-separated:', newU) then Exit;
+  N := TRuleNode.Create;
+  N.Kind := rnkUseSwap;
+  N.SwapOld := oldU;
+  N.Dirty := True;
+  parts := newU.Split([',']);
+  tmp := TList<string>.Create;
+  try
+    for p in parts do
+      if Trim(p) <> '' then tmp.Add(Trim(p));
+    N.SwapNew := tmp.ToArray;
+  finally
+    tmp.Free;
+  end;
+  InsertUnitNode(N);
+  RefreshUnitList;
+  SyncRawFromModel;
+  SetStatus(Format('Added #useswap %s -> %s', [oldU, string.Join(', ', N.SwapNew)]));
+end;
+
+procedure TConvRulesForm.DoAddUse(Sender: TObject);
+var
+  u: string;
+  N: TRuleNode;
+begin
+  u := '';
+  if not InputQuery('Add unit', 'Unit to ADD to the uses clause:', u) then Exit;
+  u := Trim(u);
+  if u = '' then Exit;
+  N := TRuleNode.Create; N.Kind := rnkUse; N.UseUnit := u; N.Dirty := True;
+  InsertUnitNode(N);
+  RefreshUnitList;
+  SyncRawFromModel;
+  SetStatus('Added #use ' + u);
+end;
+
+procedure TConvRulesForm.DoAddUnuse(Sender: TObject);
+var
+  u: string;
+  N: TRuleNode;
+begin
+  u := '';
+  if not InputQuery('Remove unit', 'Unit to REMOVE from the uses clause:', u) then Exit;
+  u := Trim(u);
+  if u = '' then Exit;
+  N := TRuleNode.Create; N.Kind := rnkUnuse; N.UnuseUnit := u; N.Dirty := True;
+  InsertUnitNode(N);
+  RefreshUnitList;
+  SyncRawFromModel;
+  SetStatus('Added #unuse ' + u);
+end;
+
+procedure TConvRulesForm.DoDeleteUnit(Sender: TObject);
+var
+  N: TRuleNode;
+begin
+  if FUnitList.Selected = nil then
+  begin
+    SetStatus('Select a unit rule to delete.');
+    Exit;
+  end;
+  N := TRuleNode(FUnitList.Selected.Data);
+  if N = nil then Exit;
+  FBook.Nodes.Remove(N); // TObjectList owns its items -> frees N
+  RefreshUnitList;
+  SyncRawFromModel;
+  SetStatus('Deleted unit rule.');
+end;
+
+procedure TConvRulesForm.DoDeriveUnits(Sender: TObject);
+var
+  Pairs   : TArray<TConvPair>;
+  Heads   : TArray<Integer>;
+  S       : TUnitSets;
+  existing: TArray<TRuleNode>;
+  addUse, addUnuse, i: Integer;
+  u: string;
+  N: TRuleNode;
+
+  function HasUse(const uu: string): Boolean;
+  var n: TRuleNode;
+  begin
+    Result := False;
+    for n in existing do
+      if (n.Kind = rnkUse) and SameText(n.UseUnit, uu) then Exit(True);
+  end;
+
+  function HasUnuse(const uu: string): Boolean;
+  var n: TRuleNode;
+  begin
+    Result := False;
+    for n in existing do
+      if (n.Kind = rnkUnuse) and SameText(n.UnuseUnit, uu) then Exit(True);
+  end;
+
+begin
+  Heads := FBook.ConvertHeaders;
+  if Length(Heads) = 0 then
+  begin
+    SetStatus('No #convert rules to derive units from.');
+    Exit;
+  end;
+  SetLength(Pairs, Length(Heads));
+  for i := 0 to High(Heads) do
+  begin
+    Pairs[i].FromType := FBook.Nodes[Heads[i]].FromType;
+    Pairs[i].ToType   := FBook.Nodes[Heads[i]].ToType;
+  end;
+  SetStatus('Deriving units (resolving declaring units)...');
+  S := DeriveUnits(Pairs,
+    function(const t: string): string
+    begin
+      Result := FEngine.DeclaringUnitOf(t);
+    end);
+  existing := FBook.UnitNodes;
+  addUse := 0; addUnuse := 0;
+  for u in S.Adds do
+    if not HasUse(u) then
+    begin
+      N := TRuleNode.Create; N.Kind := rnkUse; N.UseUnit := u; N.Dirty := True;
+      InsertUnitNode(N); Inc(addUse);
+    end;
+  for u in S.Removes do
+    if not HasUnuse(u) then
+    begin
+      N := TRuleNode.Create; N.Kind := rnkUnuse; N.UnuseUnit := u; N.Dirty := True;
+      InsertUnitNode(N); Inc(addUnuse);
+    end;
+  RefreshUnitList;
+  SyncRawFromModel;
+  SetStatus(Format('Derived: +%d #use, +%d #unuse (deduped against existing).',
+    [addUse, addUnuse]));
+end;
+
+procedure TConvRulesForm.DoCheckUnits(Sender: TObject);
+var
+  S: TUnitSets;
+begin
+  S := NormalizeUnitSets(FBook);
+  RefreshUnitList;
+  if Length(S.Conflicts) > 0 then
+    SetError(Format('Unit conflicts (ADD wins): %s', [string.Join(', ', S.Conflicts)]))
+  else
+    SetStatus(Format('Units OK: %d add, %d remove, no doubles.',
+      [Length(S.Adds), Length(S.Removes)]));
+end;
+
+procedure TConvRulesForm.RulesFilterChange(Sender: TObject);
+begin
+  RefreshRulesList;
 end;
 
 end.

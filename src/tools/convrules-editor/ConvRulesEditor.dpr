@@ -9,6 +9,7 @@ uses
   System.IOUtils,
   Vcl.Forms,
   ConvRules.Model in 'ConvRules.Model.pas',
+  ConvRules.Units in 'ConvRules.Units.pas',
   ConvRules.Casts in 'ConvRules.Casts.pas',
   ConvRules.Engine in 'ConvRules.Engine.pas',
   ConvRules.Platform in 'ConvRules.Platform.pas',
