@@ -36,9 +36,18 @@ The two principled cures, pending user's re-test verdict:
   libraries; visibility is NOT stored today -- `GetClassSurface` derives it by
   re-parsing source sections) then proptree filters to published. Correct, big.
 
-## NEXT SESSION -- user's new requests (2026-07-20), in priority order
+## NEXT SESSION -- user's new requests (2026-07-20)
 
-### 1. Window / grid / pool sizing (UI, `ConvRules.MainForm.pas` BuildUI)
+**Session 2026-07-20b (this session):** items **1 + 3 DONE** (editor-only; built +
+staged `third_party/dll-win64/ConvRulesEditor.exe`, model suite still **125/0**).
+Item **2 is BLOCKED** at the index level (property accessors are not indexed -- see
+its note). Change is confined to `ConvRules.MainForm.pas` (UI only; `sample.rules`
+untouched). Await user re-test.
+
+### 1. Window / grid / pool sizing -- DONE 2026-07-20b (UI, `ConvRules.MainForm.pas` BuildUI)
+Shipped: window 1100->1600; grid gains `goColSizing` (drag-resizeable columns) +
+wider cols (From/To 330, cast 110); pool panel 280->400 with its controls anchored
+akRight so they stretch; two new pool buttons (item 3) fit above Assign/Unassign.
 - Widen the window (Width 1100 -> ~1550-1650).
 - **Grid columns RESIZEABLE**: add `goColSizing` to `FGrid.Options`.
 - Widen From/To grid columns; make the grid's client area WIDER THAN the sum of its
@@ -50,7 +59,20 @@ The two principled cures, pending user's re-test verdict:
 - Files: `ConvRules.MainForm.pas` BuildUI (`Width`, `LeftPanel.Width`,
   `PoolPanel.Width`, `FGrid.ColWidths[]`, `FGrid.Options + [goColSizing]`).
 
-### 2. Filter INVALID / impossible To (target) leaves
+### 2. Filter INVALID / impossible To (target) leaves -- BLOCKED (index has no accessors)
+> **BLOCKER found 2026-07-20b:** the index does NOT store property `read`/`write`
+> accessors. A property Symbol's `Signature` is TYPE-ONLY (`: HWND`, `: string`,
+> or empty) -- verified against `library-Win64.sqlite`: across 841 `Caption` rows
+> and every `Handle` row, ZERO signatures carry a `read`/`write` token. So
+> writability CANNOT be derived from the current index. The real fix needs the
+> tree-sitter property extractor to capture the accessor clause into the symbol
+> (schema/extract change) THEN a full RE-INDEX of the library DBs (Win64 lib is
+> ~1.8 GB) -- i.e. the same "big" bucket as the published-only option under OPEN
+> DECISION. Options: (a) do the indexer change + re-index (correct, big); (b) a
+> pragmatic editor-side denylist of well-known read-only names (Handle, ComObject,
+> ComponentCount, ...) -- quick but brittle, may hide a valid same-named target;
+> (c) defer until the indexer work lands. NOT implemented this session.
+
 - **Read-only leaves are not valid assignment targets** (e.g. `...Handle`). A To
   path is only usable if the FINAL segment is WRITABLE (and every intermediate
   segment READable). `cxButton.LookAndFeel.Painter.ClockGlass.Handle := x` won't
@@ -66,7 +88,14 @@ The two principled cures, pending user's re-test verdict:
   (`TPropLeaf` gains a flag, ParseProptreeJson reads it), `ConvRules.MainForm.pas`
   (`RefreshPool` filter + `DoAssign` guard).
 
-### 3. To-search helper buttons (UI + engine, `ConvRules.MainForm.pas`)
+### 3. To-search helper buttons -- DONE 2026-07-20b (UI, `ConvRules.MainForm.pas`)
+Shipped both: **"Find in From by name"** (`DoFindInFrom`) selects the From-grid row
+whose last-segment name matches the highlighted pool leaf; **"Only this type" /
+"Show all types"** (`DoOnlyType` + `FPoolTypeFilter`, applied in `RefreshPool`,
+auto-cleared on block load) toggles the pool to one type. Helper fns `TypeOfCell` /
+`LeafNameOf` added beside `PathOfGridCell`.
+
+Original spec (for reference):
 Next to the pool search box (`FPoolFind`), for the currently highlighted pool leaf:
 - **"Find in From by name"** button -- copy the highlighted To leaf's bare name into
   a From-side filter and select/scroll the matching From grid row (align From<->To by

@@ -57,6 +57,9 @@ type
     FBtnAssign: TButton;
     FBtnUnasgn: TButton;
     FBtnAuto  : TButton;
+    FBtnFindFrom: TButton;            // pool: select the From-grid row of the same name
+    FBtnOnlyType: TButton;            // pool: toggle filter to the highlighted leaf's type
+    FPoolTypeFilter: string;          // active pool type-narrowing ('' = off)
     // directives / raw
     FTabs     : TPageControl;
     FRaw      : TMemo;
@@ -78,6 +81,8 @@ type
     procedure DoAssign(Sender: TObject);
     procedure DoUnassign(Sender: TObject);
     procedure PoolFilter(Sender: TObject);
+    procedure DoFindInFrom(Sender: TObject);
+    procedure DoOnlyType(Sender: TObject);
     procedure SyncRawFromModel;
     procedure RefreshUnitList;
     procedure InsertUnitNode(ANode: TRuleNode);
@@ -216,7 +221,7 @@ var
   BtnLoad, BtnSave, BtnValidate: TButton;
 begin
   Caption := 'ConvRulesEditor -- conversion rule-book editor';
-  Width := 1100; Height := 720;
+  Width := 1600; Height := 720;
   Position := poScreenCenter;
 
   // --- bottom status bar (created first so it reserves the bottom edge; the top
@@ -385,32 +390,51 @@ begin
 
   // --- right: 3-column grid (From | To-assigned | cast) + pool ---
   PoolPanel := TPanel.Create(Self);
-  PoolPanel.Parent := Self; PoolPanel.Align := alRight; PoolPanel.Width := 280;
+  PoolPanel.Parent := Self; PoolPanel.Align := alRight; PoolPanel.Width := 400;
   PoolPanel.BevelOuter := bvNone;
 
   FBtnAuto := TButton.Create(Self);
-  FBtnAuto.Parent := PoolPanel; FBtnAuto.SetBounds(6, 6, 268, 27);
+  FBtnAuto.Parent := PoolPanel; FBtnAuto.SetBounds(6, 6, 388, 27);
   FBtnAuto.Caption := 'Auto-Match unambiguous properties';
+  FBtnAuto.Anchors := [akLeft, akTop, akRight];
   FBtnAuto.OnClick := DoAutoMatch;
 
   var LblPool: TLabel := TLabel.Create(Self);
-  LblPool.Parent := PoolPanel; LblPool.SetBounds(6, 40, 260, 15);
+  LblPool.Parent := PoolPanel; LblPool.SetBounds(6, 40, 388, 15);
   LblPool.Caption := 'To (unassigned pool) -- search:';
 
   FPoolFind := TEdit.Create(Self);
-  FPoolFind.Parent := PoolPanel; FPoolFind.SetBounds(6, 58, 268, 23);
+  FPoolFind.Parent := PoolPanel; FPoolFind.SetBounds(6, 58, 388, 23);
+  FPoolFind.Anchors := [akLeft, akTop, akRight];
   FPoolFind.OnChange := PoolFilter;
 
+  // Pool helpers, acting on the HIGHLIGHTED pool leaf: align it to its same-named
+  // From-grid row, or narrow the pool to a single type (a toggle).
+  FBtnFindFrom := TButton.Create(Self);
+  FBtnFindFrom.Parent := PoolPanel; FBtnFindFrom.SetBounds(6, 86, 190, 25);
+  FBtnFindFrom.Caption := 'Find in From by name';
+  FBtnFindFrom.Hint := 'Select the From-grid row whose property has the SAME name as the highlighted To leaf';
+  FBtnFindFrom.ShowHint := True; FBtnFindFrom.Anchors := [akLeft, akTop];
+  FBtnFindFrom.OnClick := DoFindInFrom;
+
+  FBtnOnlyType := TButton.Create(Self);
+  FBtnOnlyType.Parent := PoolPanel; FBtnOnlyType.SetBounds(202, 86, 192, 25);
+  FBtnOnlyType.Caption := 'Only this type';
+  FBtnOnlyType.Hint := 'Show only pool leaves whose TYPE matches the highlighted leaf (toggle)';
+  FBtnOnlyType.ShowHint := True; FBtnOnlyType.Anchors := [akLeft, akTop, akRight];
+  FBtnOnlyType.OnClick := DoOnlyType;
+
   FBtnAssign := TButton.Create(Self);
-  FBtnAssign.Parent := PoolPanel; FBtnAssign.SetBounds(6, 86, 130, 25);
+  FBtnAssign.Parent := PoolPanel; FBtnAssign.SetBounds(6, 116, 190, 25);
   FBtnAssign.Caption := '<- Assign to From'; FBtnAssign.OnClick := DoAssign;
 
   FBtnUnasgn := TButton.Create(Self);
-  FBtnUnasgn.Parent := PoolPanel; FBtnUnasgn.SetBounds(144, 86, 130, 25);
+  FBtnUnasgn.Parent := PoolPanel; FBtnUnasgn.SetBounds(202, 116, 192, 25);
   FBtnUnasgn.Caption := 'Unassign ->'; FBtnUnasgn.OnClick := DoUnassign;
+  FBtnUnasgn.Anchors := [akLeft, akTop, akRight];
 
   FPool := TListBox.Create(Self);
-  FPool.Parent := PoolPanel; FPool.SetBounds(6, 116, 268, 526);
+  FPool.Parent := PoolPanel; FPool.SetBounds(6, 146, 388, 496);
   FPool.Anchors := [akLeft, akTop, akRight, akBottom];
 
   Split2 := TSplitter.Create(Self);
@@ -423,12 +447,13 @@ begin
   FGrid.Parent := GridPanel; FGrid.Align := alClient;
   // RowCount must stay > FixedRows: start at 2 (header + one blank data row).
   FGrid.ColCount := 3; FGrid.RowCount := 2; FGrid.FixedRows := 1; FGrid.FixedCols := 0;
-  FGrid.Options := FGrid.Options + [goRowSelect, goVertLine, goHorzLine];
+  // goColSizing: the user can drag column borders to widen From/To to taste.
+  FGrid.Options := FGrid.Options + [goRowSelect, goVertLine, goHorzLine, goColSizing];
   FGrid.DefaultRowHeight := 20;
   FGrid.Cells[0, 0] := 'From property (: type)';
   FGrid.Cells[1, 0] := 'To (assigned)';
   FGrid.Cells[2, 0] := 'cast';
-  FGrid.ColWidths[0] := 250; FGrid.ColWidths[1] := 250; FGrid.ColWidths[2] := 90;
+  FGrid.ColWidths[0] := 330; FGrid.ColWidths[1] := 330; FGrid.ColWidths[2] := 110;
 end;
 
 procedure TConvRulesForm.SetStatus(const S: string);
@@ -834,6 +859,9 @@ var
 begin
   var LGuard: IInterface := HourGlass;
   FActiveHdr := AHdrIdx;
+  // A fresh block: drop any pool type-narrowing carried over from the last selection.
+  FPoolTypeFilter := '';
+  if FBtnOnlyType <> nil then FBtnOnlyType.Caption := 'Only this type';
   Node := FBook.Nodes[AHdrIdx];
   // Mirror the rule's From/To into the top pickers, so a From-only rule can have a
   // To assigned there (there is otherwise no way to set the To for a picked rule).
@@ -909,7 +937,8 @@ begin
       for Leaf in FToTree.Leaves do
         if not Assigned.ContainsKey(LowerCase(Leaf.Path)) then
           if (Filter = '') or (Pos(Filter, LowerCase(Leaf.Path)) > 0) then
-            FPool.Items.Add(Format('%s : %s', [Leaf.Path, Leaf.TypeName]));
+            if (FPoolTypeFilter = '') or SameText(Leaf.TypeName, FPoolTypeFilter) then
+              FPool.Items.Add(Format('%s : %s', [Leaf.Path, Leaf.TypeName]));
     finally
       FPool.Items.EndUpdate;
     end;
@@ -928,6 +957,71 @@ var p: Integer;
 begin
   p := Pos(' : ', S);
   if p > 0 then Result := Copy(S, 1, p - 1) else Result := S;
+end;
+
+{ The type token of a 'Path : Type' grid/pool cell ('' when there is no ' : '). }
+function TypeOfCell(const S: string): string;
+var p: Integer;
+begin
+  p := Pos(' : ', S);
+  if p > 0 then Result := Trim(Copy(S, p + 3, MaxInt)) else Result := '';
+end;
+
+{ The last dotted segment of a property path ('Font.Color' -> 'Color'). }
+function LeafNameOf(const APath: string): string;
+var d: Integer;
+begin
+  Result := APath;
+  d := LastDelimiter('.', Result);
+  if d > 0 then Result := Copy(Result, d + 1, MaxInt);
+end;
+
+{ Align the highlighted To leaf to the From side: select the From-grid row whose
+  property has the SAME last-segment name (case-insensitive), so the two sides can
+  be assigned by name. Reports when no From property carries that name. }
+procedure TConvRulesForm.DoFindInFrom(Sender: TObject);
+var
+  toName: string;
+  r     : Integer;
+begin
+  if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
+  if FPool.ItemIndex < 0 then
+  begin SetStatus('Highlight a To leaf in the pool (right) first.'); Exit; end;
+  toName := LeafNameOf(PathOfGridCell(FPool.Items[FPool.ItemIndex]));
+  for r := 1 to FGrid.RowCount - 1 do
+    if SameText(LeafNameOf(PathOfGridCell(FGrid.Cells[0, r])), toName) then
+    begin
+      FGrid.Row := r;   // the Row setter scrolls the cell into view
+      SetStatus(Format('From row matching "%s": %s', [toName, FGrid.Cells[0, r]]));
+      Exit;
+    end;
+  SetStatus(Format('No From property named "%s" in this rule.', [toName]));
+end;
+
+{ Toggle a pool type-narrowing: first press restricts the pool to leaves whose
+  TYPE matches the highlighted leaf (e.g. only Boolean targets); a second press
+  clears it. Cleared automatically when a different rule is loaded. }
+procedure TConvRulesForm.DoOnlyType(Sender: TObject);
+var
+  t: string;
+begin
+  if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
+  if FPoolTypeFilter <> '' then
+  begin
+    FPoolTypeFilter := '';
+    FBtnOnlyType.Caption := 'Only this type';
+    RefreshPool;
+    SetStatus('Pool type filter cleared.');
+    Exit;
+  end;
+  if FPool.ItemIndex < 0 then
+  begin SetStatus('Highlight a To leaf whose type to filter by.'); Exit; end;
+  t := TypeOfCell(FPool.Items[FPool.ItemIndex]);
+  if t = '' then begin SetStatus('That leaf has no resolved type to filter by.'); Exit; end;
+  FPoolTypeFilter := t;
+  FBtnOnlyType.Caption := 'Show all types';
+  RefreshPool;
+  SetStatus(Format('Pool narrowed to type "%s".', [t]));
 end;
 
 { Create or update the #link mapping ToPath <- FromPath in the active block,
