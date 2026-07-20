@@ -632,9 +632,38 @@ begin
   end;
 end;
 
+procedure TestUnitDirectives;
+const
+  SRC =
+    '#use imcFOLDERS'#13#10 +
+    '#useswap FOLDERDEF -> imcFOLDERS'#13#10 +
+    '#useswap ovcTable -> cxGrid, cxGridDBTableView'#13#10;
+var
+  Book : TRuleBook       ;
+  Units: TArray<TRuleNode>;
+begin
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(SRC);
+    Check('unit.use.kind',  Book.Nodes[0].Kind = rnkUse);
+    Check('unit.use.unit',  Book.Nodes[0].UseUnit = 'imcFOLDERS', Book.Nodes[0].UseUnit);
+    Check('unit.swap.kind', Book.Nodes[1].Kind = rnkUseSwap);
+    Check('unit.swap.old',  Book.Nodes[1].SwapOld = 'FOLDERDEF', Book.Nodes[1].SwapOld);
+    Check('unit.swap.new1', (Length(Book.Nodes[1].SwapNew) = 1) and (Book.Nodes[1].SwapNew[0] = 'imcFOLDERS'));
+    Check('unit.swap.multi',(Length(Book.Nodes[2].SwapNew) = 2) and (Book.Nodes[2].SwapNew[0] = 'cxGrid')
+                            and (Book.Nodes[2].SwapNew[1] = 'cxGridDBTableView'));
+    Check('unit.roundtrip', Book.SaveToString = SRC, Format('got %d want %d', [Length(Book.SaveToString), Length(SRC)]));
+    Units := Book.UnitNodes;
+    Check('unit.gather.count', Length(Units) = 3, IntToStr(Length(Units)));
+  finally
+    Book.Free;
+  end;
+end;
+
 begin
   try
     TestPlatform;
+    TestUnitDirectives;
     TestEngineSetDbs;
     TestPlatformRescope;
     TestRoundTrip;

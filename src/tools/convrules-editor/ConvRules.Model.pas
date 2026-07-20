@@ -30,6 +30,8 @@ type
     rnkIgnore,     // #ignore FromPath
     rnkRemove,     // #remove property   OR   #remove DFM: property
     rnkUnuse,      // #unuse unit
+    rnkUse,        // #use unit  (add a unit to the uses clause)
+    rnkUseSwap,    // #useswap Old -> New1[, New2 ...]  (replace a unit)
     rnkMigrate,    // #migrate [Class:][obj.]old -> new [, unit ...]
     rnkNote,       // #note text
     rnkPcre,       // raw <pcre> -> <pcre> escape-hatch line
@@ -70,6 +72,13 @@ type
     // rnkUnuse
     UnuseUnit: string;
 
+    // rnkUse
+    UseUnit: string;
+
+    // rnkUseSwap
+    SwapOld: string;         // the Old unit being replaced
+    SwapNew: TArray<string>; // one-or-more New units
+
     // rnkMigrate / rnkPcre / rnkNote / rnkComment keep their content in Raw only
     // (Migrate/PCRE are rarely grid-edited; the directive tabs edit Raw text).
     NoteText: string;      // rnkNote payload (after '#note ')
@@ -99,6 +108,9 @@ type
 
     /// <summary>Indexes of all rnkConvert header nodes, in order.</summary>
     function ConvertHeaders: TArray<Integer>;
+
+    /// <summary>All unit-directive nodes (#use / #unuse / #useswap) in file order.</summary>
+    function UnitNodes: TArray<TRuleNode>;
 
     /// <summary>The #link nodes that belong to the #convert block starting at
     /// AHeaderIdx (i.e. up to the next #convert or EOF).</summary>
@@ -159,6 +171,10 @@ begin
       else                  Result := Format('#remove %s', [RemoveProp]);
     rnkUnuse:
       Result := Format('#unuse %s', [UnuseUnit]);
+    rnkUse:
+      Result := Format('#use %s', [UseUnit]);
+    rnkUseSwap:
+      Result := Format('#useswap %s -> %s', [SwapOld, string.Join(', ', SwapNew)]);
     rnkNote:
       Result := Format('#note %s', [NoteText]);
   else
@@ -329,6 +345,32 @@ begin
       Exit(N);
     end;
 
+    if Dir = '#useswap' then
+    begin
+      // #useswap Old -> New1[, New2 ...]  -- SwapOld=Old, SwapNew=comma list.
+      N.Kind := rnkUseSwap;
+      if SplitArrow(Body, ARROW_MIGRATE, N.SwapOld, Rest) then
+      begin
+        var Parts: TArray<string> := Rest.Split([',']);
+        var Tmp: TList<string> := TList<string>.Create;
+        try
+          for var Pt in Parts do
+            if Trim(Pt) <> '' then Tmp.Add(Trim(Pt));
+          N.SwapNew := Tmp.ToArray;
+        finally
+          Tmp.Free;
+        end;
+      end;
+      Exit(N);
+    end;
+
+    if Dir = '#use' then
+    begin
+      N.Kind := rnkUse;
+      N.UseUnit := Body;
+      Exit(N);
+    end;
+
     if Dir = '#migrate' then
     begin
       N.Kind := rnkMigrate; // content edited via Raw
@@ -452,6 +494,21 @@ begin
   try
     for i := 0 to FNodes.Count - 1 do
       if FNodes[i].Kind = rnkConvert then L.Add(i);
+    Result := L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+function TRuleBook.UnitNodes: TArray<TRuleNode>;
+var
+  L: TList<TRuleNode>;
+  N: TRuleNode       ;
+begin
+  L := TList<TRuleNode>.Create;
+  try
+    for N in FNodes do
+      if N.Kind in [rnkUse, rnkUnuse, rnkUseSwap] then L.Add(N);
     Result := L.ToArray;
   finally
     L.Free;
