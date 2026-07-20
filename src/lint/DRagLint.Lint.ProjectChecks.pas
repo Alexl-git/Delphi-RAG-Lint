@@ -31,14 +31,15 @@ type
       // .dpr/.dpk's `uses` clause. Returns findings for every unit that is
       // present on one side but not the other.
       class function CheckUnitsInDpr( const ADprojPath: string): TArray<TLintFinding>;
-      /// <summary>Checks that every unit used by the indexed project is either in
-      /// the platform library DB or formally registered in the project (.dpr + .dproj).</summary>
-      /// <param name="AStore">Open project symbol store.</param>
-      /// <param name="ALibDbPath">Path to the platform library SQLite DB. Pass '' to skip.</param>
-      /// <param name="AProjectDprojPath">Path to the .dproj file. Pass '' to skip .dpr/.dproj cross-check.</param>
-      /// <returns>One warning per unit that is used but cannot be confirmed as a library or project member.</returns>
-      class function CheckUnitMembership(const AStore: ISymbolStore;
-        const ALibDbPath: string; const AProjectDprojPath: string): TArray<TLintFinding>;
+      /// <summary>Flags every `uses X` whose unit X resolves to no known unit
+      /// (project member / platform library / standard alias / RTL namespace).
+      /// Findings attach to the `uses` token line on the using file. No .dproj
+      /// required. Uses with an explicit `in '<path>'` locator are skipped.</summary>
+      /// <param name="AStore">Open project symbol store (the project scope).</param>
+      /// <param name="ALibDbPath">Platform library SQLite DB; '' skips the library source.</param>
+      /// <returns>One warning per unresolvable used unit.</returns>
+      class function CheckUsedUnitResolvable(const AStore: ISymbolStore;
+        const ALibDbPath: string): TArray<TLintFinding>;
   end;
 
 implementation
@@ -138,134 +139,107 @@ begin
   end; // try
 end; // function
 
-class function TProjectChecks.CheckUnitMembership(const AStore: ISymbolStore;
-  const ALibDbPath: string; const AProjectDprojPath: string): TArray<TLintFinding>;
+class function TProjectChecks.CheckUsedUnitResolvable(const AStore: ISymbolStore;
+  const ALibDbPath: string): TArray<TLintFinding>;
 var
-  AllFileIds: TArray<Int64>;
-  UsesArr   : TArray<TUnitUse>;
-  Seen      : TDictionary<string, string>; { norm -> original UnitName }
-  Findings  : TList<TLintFinding>;
-  FileId    : Int64;
-  U         : TUnitUse;
-  UnitNorm  : string;
-  UnitOrig  : string;
-  DprojDir  : string;
-  DprPath   : string;
-  DCCRefs   : TArray<string>;
-  DprUses   : TArray<string>;
-  DummyLine : Integer;
-  DCCSet    : TDictionary<string, Boolean>;
-  DprSet    : TDictionary<string, Boolean>;
-  Ref       : string;
-  OnDisk, InDpr, InDproj: Boolean;
-  F         : TLintFinding;
-  LibConn   : TFDConnection;
-  LibQ      : TFDQuery;
+  Findings   : TList<TLintFinding>;
+  Members    : TDictionary<string, Boolean>; { normalized stems of indexed units }
+  AllFileIds : TArray<Int64>;
+  FileId     : Int64;
+  UsesArr    : TArray<TUnitUse>;
+  U          : TUnitUse;
+  F          : TLintFinding;
+  LibConn    : TFDConnection;
+  LibQ       : TFDQuery;
+  SrcPath    : string;
+  UnitStem   : string;
+  IsMember   : TFunc<string, Boolean>;
+  IsLib      : TFunc<string, Boolean>;
 
-  function IsInLibDb(const ANorm: string): Boolean;
+  function UnitStemOfPath(const APath: string): string;
+  var Slash: Integer; S: string;
   begin
-    Result:= False;
-    if not Assigned(LibQ) then Exit;
-    LibQ.Close;
-    LibQ.Params[0].Value:= ANorm;
-    LibQ.Open;
-    Result:= not LibQ.IsEmpty;
+    S := StringReplace(APath, '/', '\', [rfReplaceAll]);
+    Slash := S.LastDelimiter('\');
+    if Slash >= 0 then S := Copy(S, Slash + 2, MaxInt);
+    Result := LowerCase(ChangeFileExt(S, ''));
   end;
 
 begin
-  Result:= nil;
-  Findings:= TList<TLintFinding>.Create;
-  Seen    := TDictionary<string, string>.Create;
-  DCCSet  := TDictionary<string, Boolean>.Create;
-  DprSet  := TDictionary<string, Boolean>.Create;
-  LibConn := nil;
-  LibQ    := nil;
+  Result   := nil;
+  Findings := TList<TLintFinding>.Create;
+  Members  := TDictionary<string, Boolean>.Create;
+  LibConn  := nil;
+  LibQ     := nil;
   try
-    { Open library DB read-only if provided }
     if (ALibDbPath <> '') and TFile.Exists(ALibDbPath) then
     begin
-      LibConn:= TFDConnection.Create(nil);
-      LibConn.DriverName:= 'SQLite';
-      LibConn.Params.Values['Database']:= ALibDbPath;
-      LibConn.Params.Values['OpenMode']:= 'ReadOnly';
-      LibConn.Connected:= True;
-      LibQ:= TFDQuery.Create(nil);
-      LibQ.Connection:= LibConn;
-      LibQ.SQL.Text:= 'SELECT 1 FROM symbols WHERE unit_name_norm=:N LIMIT 1';
+      LibConn := TFDConnection.Create(nil);
+      LibConn.DriverName := 'SQLite';
+      LibConn.Params.Values['Database'] := ALibDbPath;
+      LibConn.Params.Values['OpenMode'] := 'ReadOnly';
+      LibConn.Connected := True;
+      LibQ := TFDQuery.Create(nil);
+      LibQ.Connection := LibConn;
+      LibQ.SQL.Text := 'SELECT 1 FROM symbols WHERE unit_name_norm = :N LIMIT 1';
       LibQ.Prepare;
     end;
 
-    { Collect all unique used unit norms from the project DB }
-    AllFileIds:= AStore.GetAllFileIds;
+    AllFileIds := AStore.GetAllFileIds;
     for FileId in AllFileIds do
     begin
-      UsesArr:= AStore.GetUnitUsesForFile(FileId);
+      UnitStem := UnitStemOfPath(AStore.GetFilePath(FileId));
+      if UnitStem <> '' then Members.AddOrSetValue(UnitStem, True);
+    end;
+
+    { dcc64 37.0 cannot pass a nested function as a TFunc<> argument -- use
+      anonymous methods assigned to local TFunc<> variables instead, capturing
+      Members / LibQ by closure. }
+    IsMember := TFunc<string, Boolean>(
+      function(const AN: string): Boolean
+      begin
+        Result := Members.ContainsKey(AN);
+      end);
+    IsLib := TFunc<string, Boolean>(
+      function(const AN: string): Boolean
+      begin
+        Result := False;
+        if not Assigned(LibQ) then Exit;
+        LibQ.Close;
+        LibQ.Params[0].Value := AN;
+        LibQ.Open;
+        Result := not LibQ.IsEmpty;
+      end);
+
+    for FileId in AllFileIds do
+    begin
+      SrcPath := AStore.GetFilePath(FileId);
+      UsesArr := AStore.GetUnitUsesForFile(FileId);
       for U in UsesArr do
       begin
-        UnitNorm:= NormUnit(U.UnitName);
-        if (UnitNorm <> '') and not Seen.ContainsKey(UnitNorm) then
-          Seen.Add(UnitNorm, U.UnitName);
+        if U.InPath <> '' then Continue; { self-locating uses -- not a resolvability question }
+        if ResolveUsedUnit(U.UnitName, IsMember, IsLib).Resolvable then Continue;
+        F := Default(TLintFinding);
+        F.RuleId   := 'used-unit-not-resolvable';
+        F.Severity := 'warning';
+        F.Message  := Format(
+          'Unit ''%s'' is used but resolves to no known unit (not a project ' +
+          'member, not in the library, not a known alias). Convert it: comment ' +
+          'it out, replace it (e.g. Orpheus->DevExpress, BDE->FireDAC), or add ' +
+          'it to the project.', [U.UnitName]);
+        F.FilePath  := SrcPath;
+        F.StartLine := U.StartLine;
+        F.StartCol  := U.StartCol;
+        F.EndLine   := U.EndLine;
+        F.EndCol    := U.EndCol;
+        Findings.Add(F);
       end;
     end;
-
-    { Build project membership sets from .dproj + .dpr }
-    DprojDir:= '';
-    DprPath := '';
-    DCCRefs := nil;
-    DprUses := nil;
-    if (AProjectDprojPath <> '') and TFile.Exists(AProjectDprojPath) then
-    begin
-      DprojDir:= ExtractFilePath(AProjectDprojPath);
-      var DprFiles:= TDirectory.GetFiles(DprojDir, '*.dpr');
-      if Length(DprFiles) > 0 then DprPath:= DprFiles[0];
-      DCCRefs:= ReadDCCReferences(AProjectDprojPath);
-      if DprPath <> '' then
-        DprUses:= ExtractUsesNames(DprPath, DummyLine);
-      for Ref in DCCRefs do
-        DCCSet.AddOrSetValue(NormUnit(Ref), True);
-      for Ref in DprUses do
-        DprSet.AddOrSetValue(NormUnit(Ref), True);
-    end;
-
-    { Check each used unit }
-    for UnitNorm in Seen.Keys do
-    begin
-      UnitOrig:= Seen[UnitNorm];
-      { Skip known built-ins never present in any index }
-      if SameText(UnitNorm, 'system') or SameText(UnitNorm, 'sysinit') then Continue;
-      { FP-9: *_SERVER units belong to the sibling SERVER project, not this one;
-        flagging them against a CLIENT/COMMON project is a scope error. }
-      if EndsText('_server', UnitNorm) then Continue;
-      { 1. Library DB check }
-      if IsInLibDb(UnitNorm) then Continue;
-      { 2. Project membership check (.dpr + .dproj + disk) }
-      if DprojDir <> '' then
-      begin
-        OnDisk := TFile.Exists(TPath.Combine(DprojDir, UnitOrig + '.pas'));
-        InDpr  := DprSet.ContainsKey(UnitNorm);
-        InDproj:= DCCSet.ContainsKey(UnitNorm);
-        if OnDisk and InDpr and InDproj then Continue;
-      end;
-      F:= Default(TLintFinding);
-      F.RuleId  := 'unit-not-in-project';
-      F.Severity:= 'warning';
-      F.Message := Format(
-        'Unit ''%s'' is used but not in the platform library and not fully ' +
-        'registered in the project (.dpr + .dproj).', [UnitOrig]);
-      F.FilePath := AProjectDprojPath;
-      F.StartLine:= 0;
-      F.StartCol := 0;
-      F.EndLine  := 0;
-      F.EndCol   := 0;
-      Findings.Add(F);
-    end;
-    Result:= Findings.ToArray;
+    Result := Findings.ToArray;
   finally
     LibQ.Free;
     LibConn.Free;
-    DprSet.Free;
-    DCCSet.Free;
-    Seen.Free;
+    Members.Free;
     Findings.Free;
   end;
 end; // function
