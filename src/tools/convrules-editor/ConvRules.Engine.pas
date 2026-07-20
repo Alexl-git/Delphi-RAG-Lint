@@ -87,6 +87,13 @@ type
     function GetProptree(const AQname: string; out ATree: TProptree;
       out AError: string): Boolean;
 
+    /// <summary>The unit that declares ATypeName, derived by resolving it to its
+    /// unit-qualified form (ResolveClassQName) and taking the part before the LAST
+    /// dot (so 'Vcl.Graphics.TFont' -> 'Vcl.Graphics', 'cxButtons.TcxButton' ->
+    /// 'cxButtons'). '' when the type does not resolve (no dot in the qname). Used
+    /// by the editor's "derive units from conversions".</summary>
+    function DeclaringUnitOf(const ATypeName: string): string;
+
     /// <summary>List every class that transitively descends from AAncestor (e.g.
     /// 'TControl' -> all visual controls: TEdit, TLabel, TcxTextEdit, ...), deduped
     /// + sorted. Backed by the `query descendants --of <A>` verb. Returns False +
@@ -527,6 +534,17 @@ begin
   finally
     Root.Free;
   end;
+end;
+
+function TEngineAdapter.DeclaringUnitOf(const ATypeName: string): string;
+var
+  QN    : string ;
+  DotPos: Integer;
+begin
+  QN := ResolveClassQName(ATypeName);
+  DotPos := QN.LastIndexOf('.');
+  if DotPos > 0 then Result := QN.Substring(0, DotPos)
+  else Result := '';
 end;
 
 function TEngineAdapter.ListControlTypesInUnit(const AUnit: string;

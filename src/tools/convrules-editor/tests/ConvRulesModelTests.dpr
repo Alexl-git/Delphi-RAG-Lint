@@ -708,11 +708,39 @@ begin
   Check('derive.remove', Contains(S.Removes, 'Abcbtn'));
 end;
 
+{ DeclaringUnitOf hits the real drag-lint exe + library DB, so it Skips (not
+  fails) when the exe or the Win64 library index is absent. }
+procedure TestDeclaringUnit;
+const
+  LibWin64  = 'C:\Projects\.drag-lint\library-Win64.sqlite';
+  ProjectDb = 'C:\Projects\DB\ORM3\drag-lint.sqlite';
+var
+  Exe: string;
+  Eng: TEngineAdapter;
+  U  : string;
+begin
+  Exe := ResolveExe;
+  if (Exe = '') or not TFile.Exists(LibWin64) then
+  begin
+    Skip('engine.declaringunit', 'exe or library-Win64 db absent');
+    Exit;
+  end;
+  Eng := TEngineAdapter.Create(Exe, [LibWin64, ProjectDb]);
+  try
+    U := Eng.DeclaringUnitOf('TcxButton');
+    if U = '' then Skip('engine.declaringunit', 'TcxButton not indexed here')
+    else Check('engine.declaringunit', SameText(U, 'cxButtons'), U);
+  finally
+    Eng.Free;
+  end;
+end;
+
 begin
   try
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;
+    TestDeclaringUnit;
     TestEngineSetDbs;
     TestPlatformRescope;
     TestRoundTrip;
