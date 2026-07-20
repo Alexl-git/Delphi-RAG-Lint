@@ -331,6 +331,58 @@ var
     end;
   end;
 
+  // Class ids of AClass + its transitive (resolved) ancestors + transitive
+  // descendants -- the connected tree reachable via RESOLVED edges. Used to
+  // propagate a recovered property type onto every bare same-named occurrence.
+  // Computed once per walked class (cached by the caller).
+  function ClosureClassIds(const AClass: TSymbol): TArray<Int64>;
+  var
+    Ids : TList<Int64>;
+    Seen: TDictionary<Int64, Boolean>;
+    A   : TTypeAncestor;
+    Nm  : string;
+    Sym : TSymbol;
+    procedure AddId(AId: Int64);
+    begin
+      if (AId > 0) and not Seen.ContainsKey(AId) then begin Seen.Add(AId, True); Ids.Add(AId); end;
+    end;
+  begin
+    Ids  := TList<Int64>.Create;
+    Seen := TDictionary<Int64, Boolean>.Create;
+    try
+      AddId(AClass.Id);
+      for A in AStore.GetTransitiveAncestors(AClass.Id) do
+        if A.Resolved and (A.SymbolId > 0) then AddId(A.SymbolId);
+      for Nm in AStore.FindDescendantNames(AClass.Name) do
+      begin
+        Sym := BodyOf(AStore.FindSymbolByExactNameAnywhere(Nm));
+        if (Sym.Id > 0) and (Sym.Kind = skClass) then AddId(Sym.Id);
+      end;
+      Result := Ids.ToArray;
+    finally
+      Ids.Free;
+      Seen.Free;
+    end;
+  end;
+
+  // Stamp ATypeTok onto every class in AClassIds whose child property APropName
+  // exists AND is bare (empty signature). Best-effort; never overwrites an
+  // explicit type (the safety rule). Returns the number of rows updated.
+  function PropagateBareType(const AClassIds: TArray<Int64>;
+    const APropName, ATypeTok: string): Integer;
+  var
+    Cid  : Int64;
+    Child: TSymbol;
+  begin
+    Result := 0;
+    for Cid in AClassIds do
+    begin
+      Child := AStore.FindChildSymbolByName(Cid, APropName);
+      if (Child.Id > 0) and (Child.Kind = skProperty) and (ParseTypeToken(Child.Signature) = '') then
+        if AStore.MemoizePropertyType(Child.Id, ATypeTok) then Inc(Result);
+    end;
+  end;
+
   // The distinct property leaves visible on AClass (own + inherited), each
   // paired with the most-derived class that declares it. Dedupe by leaf name.
   procedure CollectProps(const AClass: TSymbol;
@@ -378,18 +430,21 @@ var
   procedure Walk(const AClass: TSymbol; const APrefix: string;
     ADepthLeft: Integer; AVisited: TDictionary<string, Boolean>);
   var
-    Order     : TArray<TSymbol>;
-    DeclaredIn: TArray<string> ;
-    idx       : Integer        ;
-    Prop      : TSymbol        ;
-    Node      : TPropNode      ;
-    Tok       : string         ;
-    OwnTok    : string         ;
-    ViaBridge : Boolean        ;
-    TypeSym   : TSymbol        ;
-    Body      : TSymbol        ;
-    LowType   : string         ;
+    Order      : TArray<TSymbol>;
+    DeclaredIn : TArray<string> ;
+    idx        : Integer        ;
+    Prop       : TSymbol        ;
+    Node       : TPropNode      ;
+    Tok        : string         ;
+    OwnTok     : string         ;
+    ViaBridge  : Boolean        ;
+    TypeSym    : TSymbol        ;
+    Body       : TSymbol        ;
+    LowType    : string         ;
+    ClosureIds : TArray<Int64>  ;
+    ClosureDone: Boolean        ;
   begin
+    ClosureDone:= False;
     CollectProps(AClass, Order, DeclaredIn);
     for idx:= 0 to High(Order) do
     begin
@@ -421,12 +476,17 @@ var
         Continue; // no type -> no recursion
       end;
 
-      // Memoize a BRIDGED resolution: write the recovered type back onto this
-      // (empty-signature) property row so the next query is a plain hit and never
-      // re-walks the ancestry. Best-effort + no-op on a read-only store; idempotent
-      // (once written, ParseTypeToken(OwnTok) succeeds above so this never re-fires).
-      if ViaBridge and (Prop.Id > 0) then
-        AStore.MemoizePropertyType(Prop.Id, Tok);
+      // Persist a RECOVERED type (own signature was empty, resolved up-tree) for
+      // BOTH recovery paths -- not just the bridge -- then propagate it DOWN/UP
+      // across the queried class's connected tree onto every bare occurrence.
+      if (OwnTok = '') and (Tok <> '') then
+      begin
+        if not ClosureDone then begin ClosureIds:= ClosureClassIds(AClass); ClosureDone:= True; end;
+        PropagateBareType(ClosureIds, Prop.Name, Tok);
+        // Ensure the queried row itself is stamped even if the closure walk
+        // somehow missed it (e.g. name-lookup ambiguity): direct memoize.
+        if Prop.Id > 0 then AStore.MemoizePropertyType(Prop.Id, Tok);
+      end;
 
       Node.TypeName:= Tok;
 
