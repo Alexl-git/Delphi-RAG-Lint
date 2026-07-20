@@ -331,6 +331,14 @@ var
     end;
   end;
 
+  // Known limitation: descendants are enumerated by NAME (FindDescendantNames ->
+  // FindSymbolByExactNameAnywhere returns one homonym) and the recovered type is
+  // derived from the querying class's file scope. A shared bare property reachable
+  // from two differently-scoped subtrees (e.g. VCL TAlign vs FMX TAlignLayout) can
+  // receive a scope-ambiguous type, last-writer-wins. Bounded by the bare-only
+  // safety rule: the worst case is unknown -> maybe-wrong, NEVER correct -> wrong.
+  // Follow-up: scope-aware descendant resolution.
+  //
   // Class ids of AClass + its transitive (resolved) ancestors + transitive
   // descendants -- the connected tree reachable via RESOLVED edges. Used to
   // propagate a recovered property type onto every bare same-named occurrence.
@@ -437,7 +445,6 @@ var
     Node       : TPropNode      ;
     Tok        : string         ;
     OwnTok     : string         ;
-    ViaBridge  : Boolean        ;
     TypeSym    : TSymbol        ;
     Body       : TSymbol        ;
     LowType    : string         ;
@@ -459,13 +466,9 @@ var
       // (typically type-alias) ancestor edge to the class that really declares it.
       OwnTok   := ParseTypeToken(Prop.Signature);
       Tok      := OwnTok;
-      ViaBridge:= False;
       if Tok = '' then Tok:= ResolveInheritedType(AClass, Prop.Name);
       if Tok = '' then
-      begin
         Tok:= ResolveViaBridgedAncestry(AClass, Prop.Name);
-        if Tok <> '' then ViaBridge:= True;
-      end;
 
       if Tok = '' then
       begin
