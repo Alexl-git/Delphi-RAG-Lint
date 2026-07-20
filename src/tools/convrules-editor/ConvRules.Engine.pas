@@ -348,7 +348,10 @@ begin
   // unit-qualified form (cxButtons.TcxButton). Qualify it first (no-op if already
   // qualified or not resolvable).
   QN := ResolveClassQName(AQname);
-  Code := RunCapture(Format('proptree --qname "%s" --format json%s', [QN, DbArgs]), Output);
+  // --refs-as-leaves: a referenced TComponent (PopupMenu, Action, a nested control)
+  // is a leaf, not expanded -- keeps the tree to the component's own convertible
+  // surface instead of flooding it with every referenced component's members.
+  Code := RunCapture(Format('proptree --qname "%s" --refs-as-leaves --format json%s', [QN, DbArgs]), Output);
   if Code <> 0 then
   begin
     AError := Format('proptree failed (exit %d) for %s. The type may not be indexed, '

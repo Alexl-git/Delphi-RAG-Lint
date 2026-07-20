@@ -329,6 +329,7 @@ type
     // Depth<=0). ToPersistent defaults ON (stop the ancestor climb at
     // TPersistent/TObject); --no-to-persistent turns it OFF.
     ToPersistent  : Boolean; // proptree: stop ancestor climb at TPersistent/TObject (default True)
+    RefsAsLeaves  : Boolean; // proptree: TComponent-typed props are reference leaves, not expanded (default False)
     // proptree write-back is AUTOMATIC by default: the resolving index is opened
     // WRITABLE so a type recovered by the lazy ancestry-bridge is memoized back
     // onto the property row (next query is a plain hit; self-limiting -- once
@@ -433,7 +434,7 @@ begin
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
-  Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--no-write-back] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query)');
+  Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--no-backup]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup)');
@@ -550,6 +551,7 @@ begin
   Result.MaxDepth           := 20;        // v14 (D5 T11): call-path BFS safety cap
   Result.Direction          := '';        // per-verb default applied in DoCallGraph/DoReverseCallTree (empty = unset)
   Result.ToPersistent       := True;       // proptree: stop ancestor climb at TPersistent/TObject unless --no-to-persistent
+  Result.RefsAsLeaves       := False;      // proptree: expand TComponent refs (legacy); --refs-as-leaves treats them as leaves
   Result.NoWriteBack        := False;      // proptree: auto write-back ON; --no-write-back forces read-only
   Result.FromBlockFile      := '';        // convert-reemit: --from-block <file>
   LoadConfigDefaults(Result);
@@ -684,6 +686,7 @@ begin
     else if (A = '--max-depth') and (i < ParamCount) then begin Inc(i); Result.MaxDepth:= StrToIntDef(ParamStr(i), 20); end
     else if (A = '--direction') and (i < ParamCount) then begin Inc(i); Result.Direction:= ParamStr(i); end
     else if A = '--no-to-persistent' then Result.ToPersistent:= False // proptree: climb past TPersistent/TObject
+    else if A = '--refs-as-leaves' then Result.RefsAsLeaves:= True // proptree: TComponent-typed props are reference leaves
     else if A = '--no-write-back' then Result.NoWriteBack:= True // proptree: force read-only (no memoization)
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
     else if (A = '--from-block') and (i < ParamCount) then begin Inc(i); Result.FromBlockFile:= ParamStr(i); end // convert-reemit: F DFM object block file
@@ -10601,8 +10604,9 @@ begin
   Depth:= AArgs.Depth;
   if Depth <= 0 then Depth:= 6;
 
-  Opts.Depth       := Depth;
-  Opts.ToPersistent:= AArgs.ToPersistent;
+  Opts.Depth            := Depth;
+  Opts.ToPersistent     := AArgs.ToPersistent;
+  Opts.TreatRefsAsLeaves:= AArgs.RefsAsLeaves;
 
   Dbs:= ResolveConsumerDbs(AArgs);
   if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
