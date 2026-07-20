@@ -394,8 +394,17 @@ const
   the deployed dll-win64 copy, else PATH). '' if none found. }
 function ResolveExe: string;
 begin
+  // 1) next to this runner (a co-deployed exe).
   Result := TPath.Combine(ExtractFilePath(ParamStr(0)), 'drag-lint.exe');
   if TFile.Exists(Result) then Exit;
+  // 2) THIS checkout's staged exe -- the runner lives at
+  //    <root>\src\tools\convrules-editor\tests\, so climb 4 to the root. Prefer this
+  //    over a hardcoded path so the tests exercise the exe built from THIS source
+  //    (e.g. a worktree), not a stale sibling checkout missing a just-added flag.
+  Result := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\third_party\dll-win64\drag-lint.exe'));
+  if TFile.Exists(Result) then Exit;
+  // 3) fallback: the canonical main-checkout deploy.
   Result := 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe';
   if TFile.Exists(Result) then Exit;
   Result := '';
