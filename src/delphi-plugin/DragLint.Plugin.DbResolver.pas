@@ -478,6 +478,8 @@ begin
 end; // function
 
 function ResolveActiveIndexDbs(const ASettings: TDragLintSettings): TArray<string>;
+const
+  M2022DbPath = 'C:\Projects\.drag-lint\M2022.sqlite';
 var
   EditorPath: string;
   ProjPath  : string;
@@ -508,6 +510,17 @@ begin
   if (ManifestDb <> '') and TFile.Exists(ManifestDb) then
   begin
     AddUnique(Result, ManifestDb);
+
+    { v0.95+: auto-include M2022.sqlite as reference DB when working on ORM3\CLIENT files.
+      Brought-in units from Micronite2022 need symbol resolution from the source project
+      for unknown symbols/types/uses. This enables "hover-to-find-definition" on 2022
+      symbols without explicit --db flag. }
+    if Pos('ORM3', ManifestDb) > 0 then
+    begin
+      if TFile.Exists(M2022DbPath) then
+        AddUnique(Result, M2022DbPath);
+    end;
+
     for P in ASettings.IndexDbs do
       if TFile.Exists(P) then AddUnique(Result, P);
     if ASettings.IncludeLibraryDb then
