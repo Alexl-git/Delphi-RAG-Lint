@@ -156,15 +156,6 @@ var
   IsMember   : TFunc<string, Boolean>;
   IsLib      : TFunc<string, Boolean>;
 
-  function UnitStemOfPath(const APath: string): string;
-  var Slash: Integer; S: string;
-  begin
-    S := StringReplace(APath, '/', '\', [rfReplaceAll]);
-    Slash := S.LastDelimiter('\');
-    if Slash >= 0 then S := Copy(S, Slash + 2, MaxInt);
-    Result := LowerCase(ChangeFileExt(S, ''));
-  end;
-
 begin
   Result   := nil;
   Findings := TList<TLintFinding>.Create;
@@ -188,7 +179,7 @@ begin
     AllFileIds := AStore.GetAllFileIds;
     for FileId in AllFileIds do
     begin
-      UnitStem := UnitStemOfPath(AStore.GetFilePath(FileId));
+      UnitStem := NormUnit(AStore.GetFilePath(FileId));
       if UnitStem <> '' then Members.AddOrSetValue(UnitStem, True);
     end;
 
@@ -218,15 +209,16 @@ begin
       for U in UsesArr do
       begin
         if U.InPath <> '' then Continue; { self-locating uses -- not a resolvability question }
+        if System.StrUtils.EndsText('_server', NormUnit(U.UnitName)) then Continue; { sibling SERVER project unit -- legitimately absent from this index (FP-9) }
         if ResolveUsedUnit(U.UnitName, IsMember, IsLib).Resolvable then Continue;
         F := Default(TLintFinding);
         F.RuleId   := 'used-unit-not-resolvable';
         F.Severity := 'warning';
         F.Message  := Format(
           'Unit ''%s'' is used but resolves to no known unit (not a project ' +
-          'member, not in the library, not a known alias). Convert it: comment ' +
-          'it out, replace it (e.g. Orpheus->DevExpress, BDE->FireDAC), or add ' +
-          'it to the project.', [U.UnitName]);
+          'member, not in the library, not a known alias or RTL unit). Convert ' +
+          'it: comment it out, replace it (e.g. Orpheus->DevExpress, BDE-' +
+          '>FireDAC), or add it to the project.', [U.UnitName]);
         F.FilePath  := SrcPath;
         F.StartLine := U.StartLine;
         F.StartCol  := U.StartCol;

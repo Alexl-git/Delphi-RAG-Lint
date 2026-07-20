@@ -1,7 +1,7 @@
 unit DRagLint.Lint.ProjectChecks.Parse;
 
 // v0.65: pure (DB-free, FireDAC-free) parsing & normalization helpers for the
-// project-membership lint rules (unit-not-in-dpr / unit-not-in-project).
+// project-membership lint rules (unit-not-in-dpr / used-unit-not-resolvable).
 // Split out of DRagLint.Lint.ProjectChecks so they can be unit-tested with a
 // trivial standalone dcc64 build (no SQLite/FireDAC/Core deps). The split also
 // isolates the brittle text-parsing from the DB-touching rule logic.

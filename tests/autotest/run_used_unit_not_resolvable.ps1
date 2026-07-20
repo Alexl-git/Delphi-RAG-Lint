@@ -26,13 +26,27 @@ implementation
 end.
 '@
 
-# The unit under test: uses a resolvable sibling + an unresolvable Orpheus unit.
+# A DOTTED-namespace project unit that IS indexed. Its Members key must be
+# normalized the SAME way as the uses-side lookup (trailing dot-segment,
+# lower-case) or it false-flags every dotted project unit (FIX 1).
+Write-Ascii (Join-Path $work 'App.Helpers.pas') @'
+unit App.Helpers;
+interface
+implementation
+end.
+'@
+
+# The unit under test: uses a resolvable sibling + an unresolvable Orpheus
+# unit + a dotted project member + a sibling SERVER-project unit (no file --
+# legitimately absent from this index; FIX 2).
 Write-Ascii (Join-Path $work 'VarInsp.pas') @'
 unit VarInsp;
 interface
 uses
   TakeJob,
   ovctcmmn,
+  App.Helpers,
+  Payroll_SERVER,
   System.SysUtils;
 type TDlg = class end;
 implementation
@@ -48,6 +62,8 @@ $out = (& $Exe lint-project --db $db --rule used-unit-not-resolvable 2>&1) -join
 Check 'flags ovctcmmn' ($out -match 'ovctcmmn')  "out=$out"
 Check 'does NOT flag TakeJob (project member)'   (-not ($out -match '\bTakeJob\b.*used-unit-not-resolvable')) "out=$out"
 Check 'does NOT flag System.SysUtils (RTL net)'  (-not ($out -match 'SysUtils')) "out=$out"
+Check 'does NOT flag App.Helpers (dotted project member)' (-not ($out -match 'App\.Helpers')) "out=$out"
+Check 'does NOT flag Payroll_SERVER (sibling server skip)' (-not ($out -match 'Payroll_SERVER')) "out=$out"
 Check 'finding is on VarInsp.pas (uses file)'    ($out -match 'VarInsp\.pas:\d+:\d+') "out=$out"
 # The ovctcmmn uses token is on line 5 of VarInsp.pas.
 Check 'ovctcmmn finding line is 5'               ($out -match 'VarInsp\.pas:5:') "out=$out"
