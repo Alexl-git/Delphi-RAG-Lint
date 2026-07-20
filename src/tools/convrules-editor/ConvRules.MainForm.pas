@@ -146,6 +146,36 @@ begin
   end;
 end;
 
+type
+  { Scoped hourglass. Sets Screen.Cursor on create; restores the previous cursor
+    when its last reference is released. Hold it in a local IInterface for the
+    duration of a slow handler: `var LGuard: IInterface := HourGlass;`. }
+  TCursorGuard = class(TInterfacedObject)
+  private
+    FPrev: TCursor;
+  public
+    constructor Create(ACursor: TCursor);
+    destructor Destroy; override;
+  end;
+
+constructor TCursorGuard.Create(ACursor: TCursor);
+begin
+  inherited Create;
+  FPrev := Screen.Cursor;
+  Screen.Cursor := ACursor;
+end;
+
+destructor TCursorGuard.Destroy;
+begin
+  Screen.Cursor := FPrev;
+  inherited;
+end;
+
+function HourGlass: IInterface;
+begin
+  Result := TCursorGuard.Create(crHourGlass);
+end;
+
 { TConvRulesForm }
 
 constructor TConvRulesForm.Create(AOwner: TComponent);
@@ -802,6 +832,7 @@ var
   Leaf: TPropLeaf;
   Link: TRuleNode;
 begin
+  var LGuard: IInterface := HourGlass;
   FActiveHdr := AHdrIdx;
   Node := FBook.Nodes[AHdrIdx];
   // Mirror the rule's From/To into the top pickers, so a From-only rule can have a
@@ -989,6 +1020,8 @@ var
   candidate: TPropLeaf;
   nCand, nMatched: Integer;
   assignedTo: TDictionary<string, Boolean>;
+  toNameCount: TDictionary<string, Integer>;
+  cnt: Integer;
   L: TRuleNode;
   matchType: string;
 
@@ -1000,12 +1033,24 @@ var
   end;
 
 begin
+  var LGuard: IInterface := HourGlass;
   if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
   nMatched := 0;
   assignedTo := TDictionary<string, Boolean>.Create;
+  toNameCount := TDictionary<string, Integer>.Create;
   try
     for L in ActiveLinks do
       if L.LinkTo <> '' then assignedTo.AddOrSetValue(LowerCase(L.LinkTo), True);
+    // Count each To leaf's LAST-SEGMENT name across the WHOLE tree (global
+    // uniqueness). A last-segment auto-match is only safe when the name is unique;
+    // otherwise the greedy assigned-pool depletion below pairs infrastructure-noise
+    // leaves (dozens of '.Components', '.Owner', ...) arbitrarily.
+    for toLeaf in FToTree.Leaves do
+    begin
+      toName := LowerCase(LeafName(toLeaf.Path));
+      if toNameCount.TryGetValue(toName, cnt) then toNameCount[toName] := cnt + 1
+      else toNameCount.Add(toName, 1);
+    end;
 
     for fromLeaf in FFromTree.Leaves do
     begin
@@ -1035,7 +1080,9 @@ begin
 
       // PASS 2 -- only when no exact-path match exists, fall back to matching by the
       // LAST path segment, still requiring a UNIQUE castable candidate.
-      if nCand = 0 then
+      // PASS 2 fires ONLY when the From name is GLOBALLY UNIQUE among To
+      // last-segments -- an ambiguous name (noise) is never auto-paired.
+      if (nCand = 0) and toNameCount.TryGetValue(fromName, cnt) and (cnt = 1) then
         for toLeaf in FToTree.Leaves do
         begin
           if assignedTo.ContainsKey(LowerCase(toLeaf.Path)) then Continue;
@@ -1063,6 +1110,7 @@ begin
     end;
   finally
     assignedTo.Free;
+    toNameCount.Free;
   end;
 
   // reload the grid to reflect the new assignments
@@ -1083,6 +1131,7 @@ var
   hdr : TRuleNode;
   newHdrIdx: Integer;
 begin
+  var LGuard: IInterface := HourGlass;
   fromT := Trim(FCbFrom.Text);
   toT   := Trim(FCbTo.Text);
   if (fromT = '') or (toT = '') then
@@ -1187,6 +1236,7 @@ var
   Node: TRuleNode;
   fromT, toT: string;
 begin
+  var LGuard: IInterface := HourGlass;
   if FFilePath = '' then begin SetStatus('Load a file first.'); Exit; end;
   fromT := ''; toT := '';
   if FActiveHdr >= 0 then
@@ -1206,6 +1256,7 @@ var
   Node: TRuleNode;
   fromT, toT: string;
 begin
+  var LGuard: IInterface := HourGlass;
   if FFilePath = '' then
   begin
     var Dlg: TSaveDialog := TSaveDialog.Create(Self);
@@ -1436,6 +1487,7 @@ var
   end;
 
 begin
+  var LGuard: IInterface := HourGlass;
   Heads := FBook.ConvertHeaders;
   if Length(Heads) = 0 then
   begin
