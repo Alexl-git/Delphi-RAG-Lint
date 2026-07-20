@@ -10725,6 +10725,8 @@ var
       rkNote   : Result:= 'note';
       rkPcre   : Result:= 'pcre';
       rkIgnore : Result:= 'ignore';
+      rkUse    : Result:= 'use';
+      rkUseSwap: Result:= 'useswap';
     else        Result:= '?';
     end;
   end;
@@ -10744,6 +10746,8 @@ var
       rkNote   : Result:= Format('note %s', [R.Text]);
       rkPcre   : Result:= Format('pcre %s -> %s', [R.Search, R.Replace]);
       rkIgnore : Result:= Format('ignore FromPath=%s', [R.FromPath]);
+      rkUse    : Result:= Format('use %s', [R.UnitName]);
+      rkUseSwap: Result:= Format('useswap %s -> %s', [R.UnitName, String.Join(', ', R.UnitsAdd)]);
     else        Result:= KindStr(R.Kind);
     end;
   end;
