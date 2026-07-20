@@ -7246,8 +7246,8 @@ begin
   if LayersCfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, LayersCfg);
   { DPR/dproj membership cross-check (unit-not-in-dpr) }
   if AArgs.ProjectPath <> '' then Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath);
-  { Unit membership against library DB (unit-not-in-project) }
-  Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership(Store, LibDb, AArgs.ProjectPath);
+  { Used-unit resolvability (used-unit-not-resolvable) }
+  Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDb);
 
   { Resolve output path: --output, or lint-report-YYYYMMDD.txt beside the DB }
   OutPath:= AArgs.Output;
@@ -7327,12 +7327,15 @@ begin
     if (Cfg = '') and FileExists('drag-lint-layers.json') then Cfg:= 'drag-lint-layers.json';
     if Cfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, Cfg);
   end;
-  { v0.61: unit-not-in-project -- cross-checks used units vs library DB and project .dpr/.dproj }
-  if (AArgs.Rule = '') or (AArgs.Rule = 'unit-not-in-project') then
+  { used-unit-not-resolvable -- flags used units resolving to no known unit }
+  if (AArgs.Rule = '') or (AArgs.Rule = 'used-unit-not-resolvable') then
   begin
-    var LibDbPath2: string:= '';
-    if Length(AArgs.DbPaths) > 1 then LibDbPath2:= AArgs.DbPaths[1];
-    Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitMembership( Store, LibDbPath2, AArgs.ProjectPath);
+    var LibDbPath2: string := '';
+    for var DbI := 0 to High(AArgs.DbPaths) do
+      if ContainsText(ExtractFileName(AArgs.DbPaths[DbI]), 'library-') then
+      begin LibDbPath2 := AArgs.DbPaths[DbI]; Break; end;
+    if (LibDbPath2 = '') and (Length(AArgs.DbPaths) > 1) then LibDbPath2 := AArgs.DbPaths[High(AArgs.DbPaths)];
+    Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDbPath2);
   end;
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join); ON by default. }
   if (AArgs.Rule = '') or (AArgs.Rule = 'missing-doc') then

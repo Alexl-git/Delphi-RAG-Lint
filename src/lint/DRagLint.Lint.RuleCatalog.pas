@@ -202,7 +202,7 @@ begin
 
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');
-    B('unit-not-in-project',   'project-wide', 'warning', 'Unit is not a member of the project');
+    B('used-unit-not-resolvable', 'project-wide', 'warning', 'Used unit resolves to no known unit (project/library/alias)');
     B('unused-unit-in-uses',   'project-wide', 'warning', 'Unit in uses is never referenced');
     B('god-class',             'project-wide', 'info',    'Class has too many members/responsibilities');
     B('unused-public-symbol',  'project-wide', 'info',    'Public symbol is never referenced');
