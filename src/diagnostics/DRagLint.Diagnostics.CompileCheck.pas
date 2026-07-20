@@ -104,16 +104,46 @@ const
     SearchPath: string;
     I         : Integer;
     Path      : string;
+    Low       : string;
     PlatKey   : string;
+    Seen      : TDictionary<string, Boolean>;
+    IsCompiled: Boolean;
+
+    { 8.3-shorten a dir; returns the input unchanged if no short name exists
+      (e.g. 8dot3 disabled on the volume). Roughly halves each entry's length. }
+    function ShortPathOf(const P: string): string;
+    var
+      Buf: array[0..1023] of WideChar;
+      N  : DWORD;
+    begin
+      N:= GetShortPathName(PWideChar(P), PWideChar(@Buf[0]), Length(Buf));
+      if (N > 0) and (N < Length(Buf)) then SetString(Result, PWideChar(@Buf[0]), N)
+      else Result:= P;
+    end;
+
   begin
     Result:= '';
     if APlatform = '' then Exit;
 
     { Query the IDE registry for the global Library Path:
-      HKCU\Software\Embarcadero\BDS\37.0\Library\<Platform>\Search Path
-      Each path may include macros like $(BDS) and $(Platform) that must be expanded. }
+        HKCU\Software\Embarcadero\BDS\37.0\Library\<Platform>\Search Path
+      The raw value is long (often 5k+ chars, 90+ entries). msbuild expands it into
+      several dcc flags (-U/-I/-R/...), so it is repeated ~4x on the dcc command
+      line; injecting it verbatim overflows the ~32k Windows command-line limit
+      (MSB6003 "filename or extension too long" -> dcc never runs). To fit, MINIMIZE:
+        - expand $(BDS)/$(Platform); blank any other $(NAME) so it drops below;
+        - existence-filter (dead dirs only bloat);
+        - drop dirs under \Embarcadero\Studio\37.0\ (RAD defaults already on dcc's
+          baseline path via rsvars -- re-injecting them is pure duplication);
+        - keep compiled library dirs, drop source dirs (their DCUs cover them, and
+          source trees -- esp. DevExpress's ~40 \Sources dirs -- dominate the size);
+        - 8.3-shorten each entry; dedup case-insensitively, preserving order.
+      NOTE: only the two common macros are expanded here; vendor macros like
+      $(DXVCL) are blanked (their dirs then drop). Adequate for Win32 (literal
+      paths); a fuller expansion would reuse TProjectResolver. }
     Reg:= TRegistry.Create(KEY_READ);
     Paths:= TStringList.Create;
+    Seen:= TDictionary<string, Boolean>.Create;
     try
       Reg.RootKey:= HKEY_CURRENT_USER;
       PlatKey:= 'Software\Embarcadero\BDS\37.0\Library\' + APlatform;
@@ -123,8 +153,10 @@ const
         if Reg.ValueExists('Search Path') then
         begin
           SearchPath:= Reg.ReadString('Search Path');
-          { Split by semicolon and collect valid paths. }
+          { Split ONLY on ';' -- StrictDelimiter stops DelimitedText from also
+            breaking on the spaces in paths like 'C:\Program Files (x86)\...'. }
           Paths.Delimiter:= ';';
+          Paths.StrictDelimiter:= True;
           Paths.DelimitedText:= SearchPath;
 
           for I:= 0 to Paths.Count - 1 do
@@ -132,28 +164,39 @@ const
             Path:= Trim(Paths[I]);
             if Path = '' then Continue;
 
-            { Expand macros: $(BDS) = RAD Studio root, $(Platform) = the platform }
-            Path:= StringReplace(Path, '$(BDS)', 'C:\Program Files (x86)\Embarcadero\Studio\37.0', [rfIgnoreCase]);
-            Path:= StringReplace(Path, '$(Platform)', APlatform, [rfIgnoreCase]);
+            { Expand the two common macros; blank any remaining $(NAME) so an
+              unresolved-macro path becomes invalid and is dropped by the
+              existence check below. }
+            Path:= StringReplace(Path, '$(BDS)', 'C:\Program Files (x86)\Embarcadero\Studio\37.0', [rfReplaceAll, rfIgnoreCase]);
+            Path:= StringReplace(Path, '$(Platform)', APlatform, [rfReplaceAll, rfIgnoreCase]);
+            Path:= TRegEx.Replace(Path, '\$\([A-Za-z0-9_]+\)', '');
 
-            { For compiled-DCU preference: if the path contains 'Library\RS37', prefer it. }
-            if (Pos('\Library\RS', Path) > 0) or (Pos('\Library\Win', Path) > 0) then
-            begin
-              if Result <> '' then Result:= Result + ';';
-              Result:= Result + Path;
-            end
-            { Otherwise, collect non-source paths (skip dirs ending in 'source' or 'src'). }
-            else if (Pos('\source', LowerCase(Path)) = 0) and (Pos('\src', LowerCase(Path)) = 0) then
-            begin
-              if Result <> '' then Result:= Result + ';';
-              Result:= Result + Path;
-            end;
+            if not TDirectory.Exists(Path) then Continue;
+
+            Low:= LowerCase(Path);
+            { Drop RAD-provided dirs -- already on dcc's baseline search path. }
+            if Pos('\embarcadero\studio\37.0\', Low) > 0 then Continue;
+            { Keep compiled-DCU library dirs; otherwise drop source trees. }
+            IsCompiled:= (Pos('\library\rs', Low) > 0) or (Pos('\library\win', Low) > 0);
+            if (not IsCompiled) and ((Pos('\source', Low) > 0) or (Pos('\src', Low) > 0)) then Continue;
+
+            Path:= ShortPathOf(Path);
+
+            { Dedup case-insensitively, preserving first-seen order (dcc uses the
+              first match, so order is significant). }
+            Low:= LowerCase(Path);
+            if Seen.ContainsKey(Low) then Continue;
+            Seen.Add(Low, True);
+
+            if Result <> '' then Result:= Result + ';';
+            Result:= Result + Path;
           end;
         end;
       finally
         Reg.CloseKey;
       end;
     finally
+      Seen.Free;
       Paths.Free;
       Reg.Free;
     end;
@@ -323,10 +366,19 @@ var
   Findings : TList<TCompilerFinding>;
   Ext      : string                 ;
   LibPath  : string                 ;
+  Plat     : string                 ;
 begin
   Result:= Default(TCompileCheckResult);
   RsVars:= ARsvarsPath;
   if RsVars = '' then RsVars:= DEFAULT_RSVARS;
+
+  { RAD Studio's DCC msbuild task rejects a lower-case platform ("Platform not
+    supported:win32", MSB4018) before dcc even runs -- it wants the exact-case
+    name. --platform typically arrives lower-cased, so normalize the two Windows
+    targets before building /p:Platform. }
+  Plat:= ATargetPlatform;
+  if SameText(Plat, 'Win32') then Plat:= 'Win32'
+  else if SameText(Plat, 'Win64') then Plat:= 'Win64';
 
   Ext:= LowerCase(ExtractFileExt(ATarget));
   if Ext = '.dproj' then
@@ -339,12 +391,12 @@ begin
         compiler_findings complete rather than just delta-updated. }
       if AMsbuildPath <> '' then
         if ATargetPlatform <> '' then
-          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, ATargetPlatform])
+          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, Plat])
         else
           Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /nologo"', [RsVars, AMsbuildPath, ATarget])
       else
         if ATargetPlatform <> '' then
-          Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, ATarget, ATargetPlatform])
+          Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, ATarget, Plat])
         else
           Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Build /nologo"', [RsVars, ATarget]);
     end
@@ -356,12 +408,12 @@ begin
         valid DCU, so Make always re-checks it; current errors are never missed. }
       if AMsbuildPath <> '' then
         if ATargetPlatform <> '' then
-          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, ATargetPlatform])
+          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, Plat])
         else
           Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /nologo"', [RsVars, AMsbuildPath, ATarget])
       else
         if ATargetPlatform <> '' then
-          Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, ATarget, ATargetPlatform])
+          Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, ATarget, Plat])
         else
           Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Make /nologo"', [RsVars, ATarget]);
     end;
@@ -387,7 +439,7 @@ begin
     var is appended cleanly without requiring .dproj edits. }
   if (ATargetPlatform <> '') and (Ext = '.dproj') then
   begin
-    LibPath:= ResolveIdeLibraryPath(ATargetPlatform);
+    LibPath:= ResolveIdeLibraryPath(Plat);
     if LibPath <> '' then
       SetEnvironmentVariable(PChar('DCC_UnitSearchPath'), PChar(LibPath));
   end;
