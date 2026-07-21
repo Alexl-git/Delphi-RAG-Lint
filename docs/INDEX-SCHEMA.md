@@ -12,18 +12,24 @@ Current schema version at time of writing: **17** (`SCHEMA_VERSION` in
 the additive column `symbols.prop_access` (property-leaf assignability
 engine; see 2.2).
 
-All facts in this document were verified against a live index
-(`C:\Projects\DB\ORM3\drag-lint.sqlite`, schema_version 15, 820 files /
+All facts in this document were originally verified against a live index
+(`C:\Projects\DB\ORM3\drag-lint.sqlite`) at schema_version 15 (820 files /
 64732 symbols / 231489 refs) via `drag-lint schema --db <path> --format json`,
 and cross-checked against the DDL in `src/storage/DRagLint.Storage.SQLite.pas`
-and `src/storage/DRagLint.Storage.Schema.pas`. The v17 `prop_access` column
-was verified against that DDL/migration code and the shipped engine's CLI
-usage output rather than a re-indexed sample DB -- as of this writing the
-ORM3 sample above has not been re-indexed past schema_version 16, so
-`prop_access` reads NULL there until its next index run. This is expected:
-new columns are migration-safe (`ALTER TABLE` runs on open; see the
-stability contract above), and `prop_access` only back-fills for symbols
-that get re-extracted.
+and `src/storage/DRagLint.Storage.Schema.pas`. That same sample DB was
+re-checked 2026-07-20 -- both via `drag-lint schema --db ... --format json`
+and via a direct read-only `SELECT value FROM schema_meta WHERE
+key='schema_version'` (the two agree) -- and is now at **schema_version 16**
+(it has been re-indexed at least once since the v15 pass; file/symbol/ref
+counts have grown accordingly and are not restated here). The v17
+`prop_access` column itself was verified against the DDL/migration code and
+the shipped engine's CLI usage output, not against a re-indexed sample DB:
+as of this writing the ORM3 sample has NOT been re-indexed with the v17
+engine, so its `symbols` table has no `prop_access` column yet (confirmed via
+`PRAGMA table_info(symbols)`) and will read NULL for every row once the
+column is migrated in. This is expected: new columns are migration-safe
+(`ALTER TABLE` runs on open; see the stability contract above), and
+`prop_access` only back-fills for symbols that get re-extracted.
 
 ## 1. Purpose and stability contract
 
