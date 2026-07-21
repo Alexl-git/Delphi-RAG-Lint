@@ -19,6 +19,16 @@
       external reference to TThing (enclosing routine UseThing has no
       parent type), proving the fix does not overreach and still keeps
       real callers.
+    - GThing: a UNIT-SCOPE 'var GThing: TThing;' declared in the
+      implementation section, OUTSIDE any routine body. This is the
+      CRITICAL-regression case a follow-up review caught: the ref this
+      line emits has enclosing_symbol_id = NULL (SQLite three-valued
+      logic: 'NULL IN (...)' is NULL, and 'NOT (NULL IN (...))' is
+      STILL NULL -- a WHERE predicate of NULL excludes the row, same as
+      FALSE). The original Bug C fix's 'AND NOT (s.parent_id IN (...))'
+      form silently dropped every such NULL-enclosing reference, not
+      just self-references. The corrected form short-circuits via an
+      explicit 's.parent_id IS NULL OR ...' branch so this row is KEPT.
 
   Asserts (after `document --qname uNoSelfCaller.TThing --apply --no-backup`,
   reading the written file):
@@ -29,6 +39,11 @@
        external caller is KEPT).
     4. The "Called from:" line does NOT name TThing.Add (the class's own
        method -- a self-reference, never a meaningful caller).
+    5. The "Called from:" line names the unit-scope GThing reference too
+       (rendered as the doc engine's NULL-enclosing fallback display,
+       '<TypeName> caller' -- see TDocFactsBuilder.Build.ToFactRef) --
+       i.e. a legitimate reference OUTSIDE any routine is NOT dropped.
+       CRITICAL: RED under the original (unfixed) WHERE clause.
 
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-doc-no-self-caller); a fresh
   copy + a TEMP db (never a real corpus db).
@@ -62,6 +77,8 @@ type
   end;
 procedure UseThing;
 implementation
+var
+  GThing: TThing;
 procedure TThing.Add;
 begin
 end;
@@ -118,6 +135,8 @@ Check 'TThing has a "Called from:" line' ($block -match 'Called from:') $block
 Check 'Called from: names UseThing (real external caller kept)' ($block -match 'Called from:.*UseThing') $block
 Check 'Called from: does NOT name TThing.Add (own method, self-reference excluded)' `
   (-not ($block -match 'Called from:[^\r\n]*TThing\.Add\b')) $block
+Check 'Called from: includes the unit-scope GThing reference (NULL-enclosing ref kept, not dropped)' `
+  ($block -match 'Called from:[^\r\n]*TThing caller\b') $block
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

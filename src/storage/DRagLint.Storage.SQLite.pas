@@ -1101,11 +1101,24 @@ end; // function
 /// name_text='TThing' whose enclosing_symbol_id is the METHOD ITSELF
 /// (TThing.Add) -- s.parent_id is then TThing's own id. When AName matches
 /// that SAME type's name (and kind is a type-like kind), the ref is a
-/// self-reference, not an external caller, and is dropped. A legitimate
-/// external ref (e.g. 'var X: TThing;' in a plain routine with no parent
-/// type) is unaffected: s.parent_id is NULL or a DIFFERENT type there, so
-/// 'NULL IN (...)' / a non-matching id never satisfies the NOT(...) exclusion
-/// and the ref is KEPT.</summary>
+/// self-reference, not an external caller, and is dropped.
+/// (ADP1 Bug C fix2, CRITICAL regression fix): the WHERE clause explicitly
+/// short-circuits on 's.parent_id IS NULL' before testing membership in the
+/// same-named-type subquery. This matters because of SQL three-valued logic:
+/// a ref whose enclosing routine is NULL (a unit-scope reference OUTSIDE any
+/// routine body, e.g. a top-level 'var G: TThing;', or the LEFT JOIN simply
+/// finding no symbols row) makes 's.parent_id' NULL, and 'NULL IN (...)' /
+/// 'NOT (NULL IN (...))' both evaluate to NULL rather than TRUE or FALSE --
+/// a WHERE predicate of NULL excludes the row just like FALSE does. An
+/// earlier form of this clause ('AND NOT (s.parent_id IN (...))') had no
+/// NULL short-circuit, so it silently dropped EVERY NULL-enclosing
+/// reference, not just self-references -- a real regression for unit-scope
+/// facts. The current form keeps such rows via the explicit
+/// 's.parent_id IS NULL' branch. A ref enclosed by a member of the SAME
+/// named type is still excluded (self-reference, both branches false). A
+/// ref enclosed by a routine belonging to a DIFFERENT type (or no type at
+/// all, e.g. a plain top-level routine) is kept: s.parent_id is either a
+/// non-matching id or NULL, either of which satisfies the OR.</summary>
 function TSQLiteSymbolStore.FindUnresolvedNameCallers(const AName: string): TArray<TResolvedCaller>;
 var
   Q   : TFDQuery              ;
@@ -1122,7 +1135,7 @@ begin
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
       'WHERE r.name_text = :n AND r.id NOT IN (SELECT ref_id FROM call_edges) ' +
-      '  AND NOT (s.parent_id IN (' +
+      '  AND (s.parent_id IS NULL OR s.parent_id NOT IN (' +
       '        SELECT id FROM symbols WHERE name = :n2 AND kind IN (''class'',''interface'',''record'',''type''))) ' +
       'ORDER BY f.path, r.start_line';
     Q.ParamByName('n').AsString:= AName;
