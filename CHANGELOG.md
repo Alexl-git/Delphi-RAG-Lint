@@ -5,6 +5,33 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+- **Whole-Project Auto-Document Phase 1: config-driven returns/callers, a
+  trivial-accessor skip, five cheap fact lines, and an IDE menu item.** A new
+  manifest `docs` section gains two more optional keys alongside the existing
+  `max_return_cases`: `max_callers` (production ships `5`) caps the generated
+  "Called from:" list at N entries, appending `(+N more)`; and
+  `accessor_trivial_max_lines` (default `2`, code-level -- stays ON even with
+  no `docs` section at all) sets the trivial-accessor threshold below.
+  Production also now sets `max_return_cases: 6`, so `<returns>` gets a real
+  "Observed: Result := ...; ..." suffix mined from the method body instead of
+  a bare `TODO: describe.`. Batch document modes (`document --unit`,
+  `document --project`, `document-all`) now skip a public `Get*`/`Set*`-named
+  method whose impl body is `<= accessor_trivial_max_lines` lines, cutting
+  noise from one-line property accessors; the run summary reports "N trivial
+  accessor(s) skipped" and a new `--include-accessors` flag opts back in.
+  `document --qname` (one explicit symbol) is never filtered, even when it
+  names a trivial accessor. The managed `<!-- drag-lint:auto -->` block also
+  gains five new omit-when-empty fact lines for method-like symbols:
+  `Overrides: TAncestor.M`, `Overridden by: A, B (+N more)`, `Implements:
+  IFoo.Bar` (a name-based heuristic against interface ancestors, not a
+  compiler-verified check), `Overload k of n`, and bare `virtual`/`abstract`
+  markers. (A per-symbol Platform/`{$IFDEF}` fact was designed but deferred
+  to Phase 2 -- the index has no per-symbol conditional-compilation guard
+  yet.) Finally, the IDE plugin's drag-lint menu gains **Generate && Export
+  -> "Auto-Document Whole Project..."**, which runs `document --project
+  <active.dproj> --apply` on the active project directly -- no preview
+  dialog; a `.bak` per modified file plus git are the safety net. See
+  `docs/AI-USAGE.md` (Docs section) for the full config/flag reference.
 - **Proptree assignability engine: `prop_access` (schema v17), `proptree/2`,
   `--min-visibility`, and `convert-scaffold --surface`.** The index now
   captures each property's real accessor shape: a new additive

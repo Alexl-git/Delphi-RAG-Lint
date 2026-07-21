@@ -169,11 +169,44 @@ in 2b.
 **Docs (DocInsight generation)**
 | Verb | What it does |
 |------|--------------|
-| `document --qname U.T.M` | generate/repair one managed DocInsight comment |
-| `document --unit F` / `--project P` | document every public decl in a unit/project (`--stubs`, `--seealso`, `--since`) |
-| `document-all` | document every public decl in every indexed unit |
+| `document --qname U.T.M` | generate/repair one managed DocInsight comment (never filtered -- see accessor note below) |
+| `document --unit F` / `--project P` | document every public decl in a unit/project (`--stubs`, `--seealso`, `--since`, `--include-accessors`) |
+| `document-all` | document every public decl in every indexed unit (`--include-accessors`) |
 | `generate-docs --qname U.T.M` | emit a doc comment (`--format xmldoc\|pasdoc`) |
 | `generate-test --qname U.T.M` | scaffold a DUnitX/DUnit test (`--framework dunitx\|dunit`) |
+
+> **Trivial accessor skip (batch modes only).** `document --unit`/`--project`
+> and `document-all` silently skip a public `Get*`/`Set*`-named method whose
+> recorded impl body is `<= docs.accessor_trivial_max_lines` lines (default
+> `2`, on by default) -- cuts noise from one-line property accessors. The run
+> summary reports "N trivial accessor(s) skipped"; pass `--include-accessors`
+> to document them anyway. `document --qname` (one explicit symbol) is never
+> filtered, even when it names a trivial accessor.
+>
+> **Docs config (manifest `docs` section, all keys optional).**
+> `docs.max_return_cases` (production ships `6`) caps the mined
+> `Result := ...` cases appended to `<returns>` as an "Observed: ..." suffix
+> -- `0` disables mining, leaving a bare `TODO: describe.`; absent defaults to
+> `20`. `docs.max_callers` (production ships `5`) caps the generated
+> "Called from:" list, appending `(+N more)` beyond the cap; absent defaults
+> to `5`. `docs.accessor_trivial_max_lines` (default `2`, code-level -- stays
+> ON even with no `docs` section at all) is the trivial-accessor threshold
+> above. Only **Max return cases** has a GUI field (Linter options page, see
+> `docs/INSTALL.md`); `max_callers` and `accessor_trivial_max_lines` are
+> manifest-only for now.
+>
+> **New managed-block fact lines.** The generated `<!-- drag-lint:auto -->`
+> block can also carry (each omitted when empty): `Overrides: TAncestor.M`,
+> `Overridden by: A, B (+N more)`, `Implements: IFoo.Bar` (a name-based
+> heuristic match against interface ancestors, not a compiler-verified
+> check), `Overload k of n`, and bare `virtual`/`abstract` markers. A
+> per-symbol Platform/`{$IFDEF}` fact was designed but **deferred to Phase
+> 2** -- the index has no per-symbol conditional-compilation guard yet.
+>
+> **IDE menu.** drag-lint menu -> **Generate && Export** -> **"Auto-Document
+> Whole Project..."** runs `document --project <active.dproj> --apply` on
+> the active project directly -- no preview dialog; a `.bak` per modified
+> file (plus git) is the safety net.
 
 **Lint**
 | Verb | What it does |
