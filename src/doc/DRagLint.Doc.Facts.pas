@@ -173,6 +173,35 @@ begin
   if P >= 0 then Result:= Copy(S, P + 2, MaxInt) else Result:= S;
 end;
 
+// v(ADP1 Bug D): True when ARef is a class's OWN self-reference -- a qualified
+// implementation header (e.g. 'function TThing.Add: Integer;') emits a
+// type_use ref of NameText='TThing' whose EnclosingSymbolId is the method
+// itself (TThing.Add). Such a ref is not a genuine "TThing is used here"
+// site; it is the class referencing its own name in its own member header.
+// Only the "Used in units" gather (below) calls this -- it is a LOCAL
+// post-filter, not a change to the shared FindCallersByName query (see that
+// block's comment for why FindCallersByName itself must keep matching
+// self-refs).
+//
+// CRITICAL (carried from the twin Bug C fix): a ref with EnclosingSymbolId
+// <= 0 is OUTSIDE any routine body (e.g. a unit-scope 'var GThing: TThing;')
+// and is NOT a self-reference -- it must be KEPT. Only a ref enclosed by a
+// MEMBER of a type SAME-NAMED as ATypeName is a self-reference. AStore.
+// GetSymbolById returns a zero/empty TSymbol (Id=0, ParentId=0) for a
+// not-found id, so the ParentId<=0 guard also fails safe (keeps the ref)
+// when a lookup can't find the enclosing symbol.
+function RefIsOwnMemberSelfRef(const AStore: ISymbolStore; const ARef: TReference;
+  const ATypeName: string): Boolean;
+var Encl, Parent: TSymbol;
+begin
+  Result:= False;
+  if ARef.EnclosingSymbolId <= 0 then Exit;
+  Encl:= AStore.GetSymbolById(ARef.EnclosingSymbolId);
+  if Encl.ParentId <= 0 then Exit;
+  Parent:= AStore.GetSymbolById(Encl.ParentId);
+  Result:= SameText(Parent.Name, ATypeName) and (Parent.Kind in [skClass, skInterface, skRecord]);
+end;
+
 // Parses the return type from a signature: the text after the LAST ':' that is
 // outside the parameter parentheses. '' when none (a procedure).
 function ParseReturnType(const ASig: string): string;
@@ -672,14 +701,31 @@ begin
   end;
 
   // Used in units: only for type-like kinds. Distinct owning units of refs to
-  // the type name (FindCallersByName over its last segment).
+  // the type name (FindCallersByName over its last segment), EXCLUDING each
+  // type's own self-references (see RefIsOwnMemberSelfRef, below the fix note).
   // v14 (D5) NOTE -- DELIBERATELY still name-based (NOT call_edges resolved). This
   // counts distinct units that reference a TYPE NAME; those are TYPE references,
   // not method call sites, so they are NOT in call_edges at all (call_edges only
   // holds resolved METHOD calls). The Called-from name-collision bug that D5 fixes
   // does not exist here in the same form -- a type-name collision is far rarer and
   // out of this milestone's scope -- so resolving UsedIn via call_edges does not
-  // apply and would break a working feature for zero bug-fix benefit. Left as-is.
+  // apply and would break a working feature for zero bug-fix benefit.
+  // v(ADP1 Bug D) NOTE -- SELF-REFERENCE FIX (twin of Bug C's Called-from fix,
+  // different fact + different function): FindCallersByName is SHARED by
+  // rename/refactor, dead-code/unused lint, the context bundler, LSP/MCP
+  // references, and `query find-callers` -- all of them STRUCTURALLY need it
+  // to keep matching a class's own qualified impl-header refs (e.g.
+  // 'function TThing.Add' must resolve as a TThing self-reference for rename
+  // to rewrite it to 'TRenamed.Add'), so self-refs must stay in
+  // FindCallersByName itself. Excluding them there would break those callers.
+  // Instead each ref returned here is screened LOCALLY via
+  // RefIsOwnMemberSelfRef before being added to UnitSet: previously every
+  // class with an implemented method acquired a spurious "Used in units:
+  // <own unit>" fact purely from its own method headers (the class always
+  // "uses itself"), so EVERY such class was wrongly "documented" under the
+  // facts-only gate. A ref with no enclosing symbol (a unit-scope 'var G: T;')
+  // is NOT a self-reference and is always kept -- see RefIsOwnMemberSelfRef's
+  // header comment for the NULL-enclosing lesson carried from Bug C.
   if ASym.Kind in [skClass, skInterface, skRecord] then
   begin
     var URefs: TArray<TReference>:= AStore.FindCallersByName(LastSeg(ASym.QualifiedName));
@@ -689,19 +735,23 @@ begin
       UnitSet.Duplicates:= dupIgnore;
       UnitSet.CaseSensitive:= False;
       for var UR in URefs do
-        UnitSet.Add(ChangeFileExt(ExtractFileName(AStore.GetFilePath(UR.FileId)), ''));
+        if not RefIsOwnMemberSelfRef(AStore, UR, LastSeg(ASym.QualifiedName)) then
+          UnitSet.Add(ChangeFileExt(ExtractFileName(AStore.GetFilePath(UR.FileId)), ''));
       // Extra stores (multi-DB fan-out): same name-based query, but resolve
-      // each ref's file path via the EXTRA store's OWN FileId->path map
-      // (ExStore.GetFilePath) -- FileIds are per-DB, so using AStore.GetFilePath
-      // on an extra store's FileId would read the wrong (or a coincidentally
-      // valid but wrong) path. UnitSet is case-insensitive dupIgnore, so a unit
-      // name seen in both stores collapses to one entry.
+      // each ref's file path -- and screen self-refs -- via the EXTRA store's
+      // OWN FileId/symbol-id maps (ExStore.GetFilePath / ExStore passed into
+      // RefIsOwnMemberSelfRef) -- FileIds AND symbol ids are per-DB, so using
+      // AStore for an extra store's ref would read the wrong (or a
+      // coincidentally valid but wrong) path/symbol. UnitSet is
+      // case-insensitive dupIgnore, so a unit name seen in both stores
+      // collapses to one entry.
       for var ExStore in AExtraStores do
       begin
         if ExStore = nil then Continue;
         var ExURefs: TArray<TReference>:= ExStore.FindCallersByName(LastSeg(ASym.QualifiedName));
         for var EUR in ExURefs do
-          UnitSet.Add(ChangeFileExt(ExtractFileName(ExStore.GetFilePath(EUR.FileId)), ''));
+          if not RefIsOwnMemberSelfRef(ExStore, EUR, LastSeg(ASym.QualifiedName)) then
+            UnitSet.Add(ChangeFileExt(ExtractFileName(ExStore.GetFilePath(EUR.FileId)), ''));
       end;
       Result.UsedInTotal:= UnitSet.Count;
       var ShownU: Integer:= DocDisplayCount(UnitSet.Count);

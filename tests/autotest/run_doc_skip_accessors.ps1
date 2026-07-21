@@ -34,20 +34,26 @@
       finalized (see the task report). Test-DocAbove below matches the
       bare interface-section signature only.
 
-  NOTE (pre-existing, unrelated to this task): TThing (the class) itself
-  picks up a "Called from:" facts block in EVERY scenario below, via an
-  ALREADY-EXISTING mechanism unrelated to ADP1 T2 -- each qualified impl
-  header (e.g. 'function TThing.GetA: Integer;') emits a type_use reference
-  to 'TThing', and FindUnresolvedNameCallers (DRagLint.Storage.SQLite.pas)
-  matches ANY ref by name_text with no call_edges row, so every implemented
-  method's own header qualifier counts as an "unverified caller" of the
-  class. This was independently reproduced against the pre-Task-2 exe on
-  tests\autodoc\run_document_unit.ps1's OWN twopublics.pas fixture (which
-  now also documents its TThing, a drift from that test's comment/assertion)
-  -- confirming it predates and is unrelated to this task. Consequently
-  DocCount below counts TThing as documented too (facts-only keeps it);
-  this test asserts only DeclCount/AccessorsSkipped/the per-accessor
-  skip-vs-keep decisions, which are the actual ADP1 T2 contract -- it does
+  NOTE (UPDATED post-Bug-C/Bug-D; was a pre-existing quirk when this test was
+  written): TThing (the class) itself does NOT pick up a facts block in any
+  scenario below. It USED TO -- each qualified impl header (e.g. 'function
+  TThing.GetA: Integer;') emits a type_use reference to 'TThing', and that
+  self-reference was, at the time, surfaced unfiltered as BOTH an "unverified
+  caller" via FindUnresolvedNameCallers ("Called from:") and a "using unit"
+  via FindCallersByName ("Used in units: uAccessorSkip", TThing's own
+  declaring unit) -- so every implemented method's own header qualifier made
+  the class look both called-from and used-in-its-own-unit, and facts-only
+  kept it. Both leaks are now fixed as LOCAL fixes, not touching either shared
+  store method: Called-from screens self-refs in the "Called from" gather
+  (DRagLint.Doc.Facts.pas, fixed alongside FindUnresolvedNameCallers's own
+  NULL-safe SQL fix); Used-in-units screens them via the local
+  RefIsOwnMemberSelfRef helper in the "Used in units" gather. TThing in this
+  fixture has NO other reference anywhere (no external caller, no other
+  unit uses it), so it now correctly has ZERO facts and is NOT documented --
+  DocCount below is 2 (GetB + DoWork) in scenario 1b and 4 (GetA + SetA +
+  GetB + DoWork) in scenario 3b, one less than DeclCount in each case. This
+  test still asserts only DeclCount/AccessorsSkipped/the per-accessor
+  skip-vs-keep decisions as its actual ADP1 T2 contract -- it does
   NOT assert anything about TThing's own comment content.
 
   Asserts:
@@ -55,16 +61,16 @@
        documents GetB + DoWork, does NOT document GetA/SetA. --json on a
        fresh copy: declCount=3 (TThing class + GetB + DoWork; GetA/SetA are
        excluded BEFORE DeclCount, like a private/non-documentable decl),
-       docCount=3 (TThing + GetB + DoWork -- see the NOTE above),
-       accessorsSkipped=2. Plain-text output reports "2 trivial
+       docCount=2 (GetB + DoWork only -- TThing has no facts, see the NOTE
+       above), accessorsSkipped=2. Plain-text output reports "2 trivial
        accessor(s) skipped".
     2. `document --qname <...TThing.GetA>` (single-symbol path) DOES
        document GetA -- proves the accessor filter is batch-mode-only.
     3. `document --unit <file> --include-accessors --apply` documents all
-       four (GetA, SetA, GetB, DoWork). --json: declCount=5, docCount=5
-       (TThing + all 4 methods -- see the NOTE above; --include-accessors
-       only disables the ADP1 T2 filter, not the pre-existing facts-only
-       gate or the pre-existing TThing behavior), accessorsSkipped=0.
+       four (GetA, SetA, GetB, DoWork). --json: declCount=5, docCount=4
+       (GetA + SetA + GetB + DoWork -- TThing has no facts, see the NOTE
+       above; --include-accessors only disables the ADP1 T2 filter, not the
+       facts-only gate), accessorsSkipped=0.
 
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-doc-skip-accessors); each
   scenario gets its own fresh copy + temp DB (never a real corpus DB).
@@ -181,8 +187,8 @@ $oj1b = $null; try { $oj1b = ($rj1b | ConvertFrom-Json) } catch { $oj1b = $null 
 Check 'json: exit 0' ($ecj1b -eq 0)
 Check 'json: declCount = 3 (TThing + GetB + DoWork; GetA/SetA excluded pre-count)' `
   ($null -ne $oj1b -and [int]$oj1b.declCount -eq 3) "declCount=$($oj1b.declCount)"
-Check 'json: docCount = 3 (TThing + GetB + DoWork; see the pre-existing-TThing NOTE above)' `
-  ($null -ne $oj1b -and [int]$oj1b.docCount -eq 3) "docCount=$($oj1b.docCount)"
+Check 'json: docCount = 2 (GetB + DoWork; TThing has no facts, see the NOTE above)' `
+  ($null -ne $oj1b -and [int]$oj1b.docCount -eq 2) "docCount=$($oj1b.docCount)"
 Check 'json: accessorsSkipped = 2 (GetA + SetA)' `
   ($null -ne $oj1b -and [int]$oj1b.accessorsSkipped -eq 2) "accessorsSkipped=$($oj1b.accessorsSkipped)"
 
@@ -232,8 +238,8 @@ $oj3b = $null; try { $oj3b = ($rj3b | ConvertFrom-Json) } catch { $oj3b = $null 
 Check 'json: exit 0' ($ecj3b -eq 0)
 Check 'json: declCount = 5 (TThing + GetA + SetA + GetB + DoWork)' `
   ($null -ne $oj3b -and [int]$oj3b.declCount -eq 5) "declCount=$($oj3b.declCount)"
-Check 'json: docCount = 5 (all 5; see the pre-existing-TThing NOTE above)' `
-  ($null -ne $oj3b -and [int]$oj3b.docCount -eq 5) "docCount=$($oj3b.docCount)"
+Check 'json: docCount = 4 (GetA + SetA + GetB + DoWork; TThing has no facts, see the NOTE above)' `
+  ($null -ne $oj3b -and [int]$oj3b.docCount -eq 4) "docCount=$($oj3b.docCount)"
 Check 'json: accessorsSkipped = 0 (filter disabled for this run)' `
   ($null -ne $oj3b -and [int]$oj3b.accessorsSkipped -eq 0) "accessorsSkipped=$($oj3b.accessorsSkipped)"
 
