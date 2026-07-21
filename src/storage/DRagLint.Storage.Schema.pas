@@ -46,12 +46,12 @@ const
     // Migrate() ALTERs these onto pre-v9 tables (CREATE TABLE IF NOT EXISTS
     // does not add columns to an existing table).
     '  impl_start_line INTEGER,' + '  impl_end_line   INTEGER,' +
-    // v17: property-leaf assignability engine (Task 1: DB plumbing only --
-    // extraction lands in a later task). NULL for every symbol until then.
-    // Free-form accessor descriptor for a property leaf (e.g. field-backed /
-    // getter-method / read-only / write-only); NULL for non-property symbols
-    // and for property symbols not yet analyzed. Migrate() ALTERs it onto
-    // pre-v17 tables.
+    // v17: property-leaf assignability engine. Accessor descriptor for a
+    // property leaf -- 'ro' (read-only) / 'rw' (read+write) / 'wo' (write-only),
+    // captured from the property's read/write clause during extraction (Task 6);
+    // drives proptree is_writable = (prop_access <> 'ro'). NULL for non-property
+    // symbols and for a bare redeclaration with no own accessor (resolved via
+    // inheritance at query time). Migrate() ALTERs it onto pre-v17 tables.
     '  prop_access     TEXT' + ')',
 
     'CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)', 'CREATE INDEX IF NOT EXISTS idx_symbols_qname ON symbols(qualified_name)',

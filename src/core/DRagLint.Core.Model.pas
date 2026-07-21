@@ -359,7 +359,7 @@ type
     Message : string ;
   end;
 
-  // v0.18: context bundle — minimum AI-ready slice for a symbol.
+  // v0.18: context bundle -- minimum AI-ready slice for a symbol.
   TContextBundle = record
     Task         : string               ;
     Verb         : string               ;
