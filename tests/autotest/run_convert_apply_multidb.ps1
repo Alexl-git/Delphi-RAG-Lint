@@ -246,6 +246,15 @@ function Run-ConvertApplyCheck([string]$Label, [string]$RulesPath) {
     (-not ($raw -match 'could not resolve a unit declaring')) "raw=$raw"
   Check "$Label`: no hard ERROR line" `
     (-not ($raw -match '(?m)^ERROR:')) "raw=$raw"
+  # Bug 1 (DfmReemit): a qualified #convert header ('LibA.TSrcBtn -> LibB.
+  # TDstBtn') must still emit a BARE .dfm object header ('object btn1:
+  # TDstBtn') -- a .dfm object header is never qualified, and ReemitComponent
+  # has its own independent FromType/ToType match (DRagLint.Convert.
+  # DfmReemit.pas) that must bare-tail exactly like FindConvertRuleFor.
+  Check "$Label`: re-emitted .dfm header is bare (object btn1: TDstBtn, not LibB.TDstBtn)" `
+    ($raw -match [regex]::Escape('object btn1: TDstBtn')) "raw=$raw"
+  Check "$Label`: re-emitted .dfm header is NOT qualified" `
+    (-not ($raw -match [regex]::Escape('object btn1: LibB.TDstBtn'))) "raw=$raw"
 }
 
 Write-Host ''

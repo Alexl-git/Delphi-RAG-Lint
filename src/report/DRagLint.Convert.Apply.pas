@@ -128,13 +128,17 @@ type
 /// <summary>Verifies the F and T component types named by ARules' first
 /// #convert rule are both indexed and current before BuildApplyPlan trusts
 /// their property trees.</summary>
-/// <param name="AStore">The symbol index to check against.</param>
+/// <param name="AStores">The symbol indexes to check against, in the order
+/// given (one per --db); the first store that resolves a given type wins
+/// (see CheckTypeFreshness's remarks) -- the From and To types, and the
+/// form's own instances, may live in DIFFERENT --db files.</param>
 /// <param name="ARules">The conversion rule set; the FromType/ToType of its
 /// first rkConvert rule are the two types checked.</param>
 /// <returns>A TFreshnessResult. Fresh=True when both types resolve to an
-/// indexed class AND their declaring files are up to date on disk. Fresh=
-/// False with one or more human-readable Reasons entries otherwise (see
-/// TFreshnessResult's remarks for the two distinct failure causes).</returns>
+/// indexed class in SOME store AND their declaring files are up to date on
+/// disk. Fresh=False with one or more human-readable Reasons entries
+/// otherwise (see TFreshnessResult's remarks for the two distinct failure
+/// causes).</returns>
 /// <remarks>Pure read-only: computes the on-disk mtime (unix seconds) and
 /// sha256 of each type's declaring source file (mirroring DRagLint.Core.
 /// Indexer's own incremental-skip basis: raw bytes, ANSI-decoded for the
@@ -142,14 +146,18 @@ type
 /// indexed. A type with no #convert rule in ARules at all is treated as
 /// vacuously fresh (nothing to check) -- callers should have already
 /// validated ARules has at least one #convert rule before reaching here.</remarks>
-function CheckFreshness(const AStore: ISymbolStore; const ARules: TConversionRuleSet): TFreshnessResult;
+function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
 
 /// <summary>Builds the full convert-apply plan for one unit: locates the
 /// component instances to convert in ADfmPath (via FindConvertInstances),
 /// rewrites all five surfaces per ARules, and returns the combined edit set
 /// plus report.</summary>
-/// <param name="AStore">The symbol index used to resolve declarations,
-/// property/event access sites, and creator sites.</param>
+/// <param name="AStores">The symbol indexes to resolve against, in the order
+/// given (one per --db). TYPE resolution (From/To property trees, ctor-name
+/// lookups) tries every store in order, first-that-resolves-wins -- the
+/// From/To types may live in a DIFFERENT --db than the unit/instance being
+/// converted (Bug 2). Unit-scoped lookups (the .pas/.dfm's own symbols and
+/// refs) use whichever store actually has AUnitPas/ADfmPath indexed.</param>
 /// <param name="AUnitPas">Path to the .pas file that declares/uses the
 /// instances being converted.</param>
 /// <param name="ADfmPath">Path to the .dfm file containing the instances'
@@ -182,7 +190,7 @@ function CheckFreshness(const AStore: ISymbolStore; const ARules: TConversionRul
 /// Ok=False only on a hard failure (missing .pas/.dfm, or zero instances
 /// matched); Ok=True with per-instance problems noted in Report.Warnings
 /// otherwise (including every instance skipped by a re-emit failure).</returns>
-function BuildApplyPlan(const AStore: ISymbolStore; const AUnitPas, ADfmPath: string;
+function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
 
 /// <summary>Scans a .dfm's component headers (top-level and nested) and
@@ -229,8 +237,32 @@ begin
   Result:= False;
 end;
 
-// Looks up the #convert rule whose FromType matches AClassName (SameText).
-// Returns True + the rule's ToType when found.
+// Strips a leading 'Unit.' qualifier from a type name, returning only the
+// bare tail (e.g. 'LibA.TSrcBtn' -> 'TSrcBtn'; 'TSrcBtn' unchanged). A #convert
+// rule's FromType/ToType header may name a type either bare ('TSrcBtn') or
+// fully qualified ('LibA.TSrcBtn') -- convert-scaffold and the rule editor
+// emit both forms -- but a .dfm object header is ALWAYS bare ('object btn1:
+// TSrcBtn', never 'object btn1: LibA.TSrcBtn') and FindSymbolsByExactName /
+// the .pas field-decl type token match against the bare name column too (see
+// ResolveClassQName's own remarks). Bug 1 fix: without this, a qualified
+// FromType header matched zero .dfm instances ("no convertible instances
+// found").
+function BareTypeTail(const AQName: string): string;
+var
+  DotAt: Integer;
+begin
+  DotAt:= LastDelimiter('.', AQName);
+  if DotAt > 0 then Result:= Copy(AQName, DotAt + 1, MaxInt)
+  else Result:= AQName;
+end;
+
+// Looks up the #convert rule whose FromType matches AClassName (SameText,
+// compared by BARE TAIL -- see BareTypeTail -- so a qualified rule header
+// still matches the .dfm's always-bare object-header class). Returns True +
+// the rule's ToType (also reduced to its bare tail, so every downstream
+// lookup that expects a bare class name -- ResolveClassQName, the field-decl
+// retype text, GetConstructorNames/ToTypeHasGenericCreate -- keeps working
+// whether the rule's header was bare or qualified) when found.
 function FindConvertRuleFor(const ARules: TConversionRuleSet; const AClassName: string;
   out AToType: string): Boolean;
 var
@@ -238,8 +270,8 @@ var
 begin
   AToType:= '';
   for R in ARules.Rules do
-    if (R.Kind = rkConvert) and SameText(R.FromType, AClassName) then
-    begin AToType:= R.ToType; Exit(True); end;
+    if (R.Kind = rkConvert) and SameText(BareTypeTail(R.FromType), AClassName) then
+    begin AToType:= BareTypeTail(R.ToType); Exit(True); end;
   Result:= False;
 end;
 
@@ -407,7 +439,13 @@ type
 // missed) because the alternative (matching '.' + ANY identifier) is exactly
 // the false-positive bug this function exists to prevent (I-1: 'TOldEdit.
 // ClassName' / 'TOldEdit.InheritsFrom(x)' misdetected as constructions).
-function GetConstructorNames(const AStore: ISymbolStore; const AClassName: string): TArray<string>;
+// Bug 2: AClassName may live in a DIFFERENT --db than the unit being
+// converted, so every candidate store in AStores is tried in order --
+// first store that resolves AClassName to an indexed skClass wins -- and
+// FindAllChildSymbols(ClassSym.Id) runs against that SAME store (an id is
+// only meaningful within the store that produced it), mirroring TreeFor's
+// own cross-db convention.
+function GetConstructorNames(const AStores: TArray<ISymbolStore>; const AClassName: string): TArray<string>;
 var
   Cands   : TArray<TSymbol>;
   ClassSym: TSymbol;
@@ -415,17 +453,24 @@ var
   Kids    : TArray<TSymbol>;
   K       : TSymbol;
   List    : TList<string>;
+  St      : ISymbolStore;
+  ResolvedStore: ISymbolStore;
 begin
   Found:= False;
   ClassSym:= Default(TSymbol);
-  Cands:= AStore.FindSymbolsByExactName(AClassName);
-  for var S in Cands do
-    if S.Kind = skClass then begin ClassSym:= S; Found:= True; Break; end;
+  ResolvedStore:= nil;
+  for St in AStores do
+  begin
+    Cands:= St.FindSymbolsByExactName(AClassName);
+    for var S in Cands do
+      if S.Kind = skClass then begin ClassSym:= S; Found:= True; ResolvedStore:= St; Break; end;
+    if Found then Break;
+  end;
 
   Result:= ['Create']; { fallback: applies whenever the loop below adds nothing }
   if not Found then Exit;
 
-  Kids:= AStore.FindAllChildSymbols(ClassSym.Id);
+  Kids:= ResolvedStore.FindAllChildSymbols(ClassSym.Id);
   List:= TList<string>.Create;
   try
     for K in Kids do
@@ -491,8 +536,12 @@ end;
 // after AFromType (modulo whitespace) must be '.' + an identifier that names
 // one of AFromType's own indexed constructors (or 'Create', if AFromType has
 // none indexed) -- see GetConstructorNames.
-function FindConstructionSites(const AStore: ISymbolStore; AFileId: Int64;
-  const APasLines: TStringList; const AFromType: string): TArray<TCreatorSite>;
+// AStores (Bug 2, cross-db): resolves AFromType's own constructor names, which
+// may live in a different --db than AUnitStore. AUnitStore (single, unit-
+// scoped): the store that actually has AFileId indexed -- GetReferencesFromFile
+// is an id-scoped lookup, so it must go to the SAME store that produced AFileId.
+function FindConstructionSites(const AStores: TArray<ISymbolStore>; const AUnitStore: ISymbolStore;
+  AFileId: Int64; const APasLines: TStringList; const AFromType: string): TArray<TCreatorSite>;
 var
   Refs: TArray<TReference>;
   R   : TReference;
@@ -503,8 +552,8 @@ var
 begin
   Result:= nil;
   if AFileId <= 0 then Exit;
-  KnownCtorNames:= GetConstructorNames(AStore, AFromType);
-  Refs:= AStore.GetReferencesFromFile(AFileId);
+  KnownCtorNames:= GetConstructorNames(AStores, AFromType);
+  Refs:= AUnitStore.GetReferencesFromFile(AFileId);
   List:= TList<TCreatorSite>.Create;
   try
     for R in Refs do
@@ -532,35 +581,51 @@ end;
 // the TODO marker/ReemitNotes with a hint of whether a same-shape constructor
 // exists; per the brief, the rewrite + TODO marker happen regardless of this
 // result -- args are NEVER auto-fixed, so a False here does not block anything.
-function ToTypeHasGenericCreate(const AStore: ISymbolStore; const AToType: string): Boolean;
+// Bug 2: AToType may live in a DIFFERENT --db than the unit being converted,
+// so every candidate store in AStores is tried in order (first-resolve-wins),
+// same convention as GetConstructorNames/TreeFor.
+function ToTypeHasGenericCreate(const AStores: TArray<ISymbolStore>; const AToType: string): Boolean;
 var
   Cands   : TArray<TSymbol>;
   ClassSym: TSymbol;
   Found   : Boolean;
   Kids    : TArray<TSymbol>;
   K       : TSymbol;
+  St      : ISymbolStore;
+  ResolvedStore: ISymbolStore;
 begin
   Result:= False;
   Found:= False;
   ClassSym:= Default(TSymbol);
-  Cands:= AStore.FindSymbolsByExactName(AToType);
-  for var S in Cands do
-    if S.Kind = skClass then begin ClassSym:= S; Found:= True; Break; end;
+  ResolvedStore:= nil;
+  for St in AStores do
+  begin
+    Cands:= St.FindSymbolsByExactName(AToType);
+    for var S in Cands do
+      if S.Kind = skClass then begin ClassSym:= S; Found:= True; ResolvedStore:= St; Break; end;
+    if Found then Break;
+  end;
   if not Found then Exit;
 
-  Kids:= AStore.FindAllChildSymbols(ClassSym.Id);
+  Kids:= ResolvedStore.FindAllChildSymbols(ClassSym.Id);
   for K in Kids do
     if (K.Kind = skConstructor) and SameText(K.Name, 'Create') and
        (Pos('TComponent', K.Signature) > 0) then Exit(True);
 end;
 
-// Checks one class name's freshness: resolves it to an indexed skClass symbol
-// (via ResolveClassQName -> FindSymbolsByExactName, same lookup BuildApplyPlan's
-// TreeFor uses), then compares its declaring file's CURRENT on-disk mtime+sha256
-// against what the store has indexed (ISymbolStore.FileIsUpToDate). Appends a
-// human-readable reason to AReasons and returns False on either failure mode:
-// unresolved (not indexed at all) or resolved-but-stale.
-function CheckTypeFreshness(const AStore: ISymbolStore; const AClassName: string;
+// Checks one class name's freshness across every candidate store, in order --
+// FIRST STORE THAT RESOLVES AClassName TO AN INDEXED skClass WINS, mirroring
+// the cross-db convention DoConvertApply's own TreeFor/BuildApplyPlan's TreeFor
+// already use (Bug 2 fix: the From/To type may live in a DIFFERENT --db than
+// the form's own instances, so a single store can't always resolve both).
+// Once a store resolves the class (via FindSymbolsByExactName, same lookup
+// ResolveClassQName uses), ALL of the remaining freshness work -- GetFilePath,
+// FileIsUpToDate -- runs against that SAME store (an id/path pair is only
+// meaningful within the store that produced it); other stores are not
+// consulted further for this class. Appends a human-readable reason to
+// AReasons and returns False on either failure mode: unresolved in ANY store
+// (not indexed at all) or resolved-but-stale in the store that resolved it.
+function CheckTypeFreshness(const AStores: TArray<ISymbolStore>; const AClassName: string;
   AReasons: TList<string>): Boolean;
 var
   Cands  : TArray<TSymbol>;
@@ -571,12 +636,19 @@ var
   RawBytes: TBytes;
   Sha    : string;
   MtimeUnix: Int64;
+  St     : ISymbolStore;
+  ResolvedStore: ISymbolStore;
 begin
   Found:= False;
   ClassSym:= Default(TSymbol);
-  Cands:= AStore.FindSymbolsByExactName(AClassName);
-  for S in Cands do
-    if S.Kind = skClass then begin ClassSym:= S; Found:= True; Break; end;
+  ResolvedStore:= nil;
+  for St in AStores do
+  begin
+    Cands:= St.FindSymbolsByExactName(AClassName);
+    for S in Cands do
+      if S.Kind = skClass then begin ClassSym:= S; Found:= True; ResolvedStore:= St; Break; end;
+    if Found then Break;
+  end;
 
   if not Found then
   begin
@@ -584,7 +656,7 @@ begin
     Exit(False);
   end;
 
-  FilePath:= AStore.GetFilePath(ClassSym.FileId);
+  FilePath:= ResolvedStore.GetFilePath(ClassSym.FileId);
   if (FilePath = '') or (not TFile.Exists(FilePath)) then
   begin
     AReasons.Add(Format('%s: indexed declaring file not found on disk (%s) -- reindex', [AClassName, FilePath]));
@@ -598,7 +670,7 @@ begin
   Sha      := THashSHA2.GetHashString(TEncoding.ANSI.GetString(RawBytes));
   MtimeUnix:= DateTimeToUnix(TFile.GetLastWriteTime(FilePath), False);
 
-  if not AStore.FileIsUpToDate(FilePath, MtimeUnix, Sha) then
+  if not ResolvedStore.FileIsUpToDate(FilePath, MtimeUnix, Sha) then
   begin
     AReasons.Add(Format('%s: index is stale for %s (file changed on disk since last index) -- reindex before converting', [AClassName, FilePath]));
     Exit(False);
@@ -607,7 +679,7 @@ begin
   Result:= True;
 end;
 
-function CheckFreshness(const AStore: ISymbolStore; const ARules: TConversionRuleSet): TFreshnessResult;
+function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
 var
   R       : TConversionRule;
   FromType, ToType: string;
@@ -617,15 +689,20 @@ begin
   Result:= Default(TFreshnessResult);
   Result.Fresh:= True;
 
+  // BareTypeTail: a rule's #convert header may name either type qualified
+  // ('LibA.TSrcBtn') -- FindSymbolsByExactName (inside CheckTypeFreshness)
+  // matches the bare name column only, same as every other lookup in this
+  // unit (see BareTypeTail's own remarks, Bug 1).
   FromType:= ''; ToType:= '';
   for R in ARules.Rules do
-    if R.Kind = rkConvert then begin FromType:= R.FromType; ToType:= R.ToType; Break; end;
+    if R.Kind = rkConvert then
+    begin FromType:= BareTypeTail(R.FromType); ToType:= BareTypeTail(R.ToType); Break; end;
   if (FromType = '') and (ToType = '') then Exit; { nothing to check -- vacuously fresh }
 
   Reasons:= TList<string>.Create;
   try
-    FromOk:= (FromType = '') or CheckTypeFreshness(AStore, FromType, Reasons);
-    ToOk  := (ToType   = '') or CheckTypeFreshness(AStore, ToType  , Reasons);
+    FromOk:= (FromType = '') or CheckTypeFreshness(AStores, FromType, Reasons);
+    ToOk  := (ToType   = '') or CheckTypeFreshness(AStores, ToType  , Reasons);
     Result.Fresh  := FromOk and ToOk;
     Result.Reasons:= Reasons.ToArray;
   finally
@@ -798,7 +875,7 @@ begin
   end;
 end;
 
-function BuildApplyPlan(const AStore: ISymbolStore; const AUnitPas, ADfmPath: string;
+function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
 var
   DfmText     : string;
@@ -816,6 +893,7 @@ var
   PasLines    : TStringList;
   PasFileSyms : TArray<TSymbol>;
   PasFileId   : Int64;
+  PasStore    : ISymbolStore; { the store that actually has AUnitPas indexed -- see StoreForFile }
   Sym         : TSymbol;
   DoneUnits   : TDictionary<string, Boolean>; { ToType -> already handled (added or already-used) }
   ToTypesSeen : TList<string>;
@@ -824,20 +902,50 @@ var
   TreeCache   : TDictionary<string, TPropTree>; { qname -> tree, built once per distinct type }
   Opts        : TPropTreeOptions;
 
+  // Resolves the store (from AStores, in order) that actually has APath
+  // indexed (FindSymbolsByFile non-empty, trying both the given and the
+  // fully-qualified path) -- the .pas/.dfm pair being converted may live in a
+  // DIFFERENT --db than the From/To types (Bug 2). Falls back to AStores[0]
+  // when no store has APath indexed, preserving the prior single-db error
+  // paths (a subsequent Length(...)=0 still produces the existing "could not
+  // locate" warnings rather than a new failure mode).
+  function StoreForFile(const APath: string): ISymbolStore;
+  var
+    St  : ISymbolStore;
+    Syms: TArray<TSymbol>;
+  begin
+    for St in AStores do
+    begin
+      Syms:= St.FindSymbolsByFile(APath);
+      if Length(Syms) = 0 then Syms:= St.FindSymbolsByFile(TPath.GetFullPath(APath));
+      if Length(Syms) > 0 then Exit(St);
+    end;
+    if Length(AStores) > 0 then Exit(AStores[0]);
+    Result:= nil;
+  end;
+
   // F/T property trees are the same for every instance sharing a (FromType,
   // ToType) rule pair -- cache by resolved qname so a form with N instances of
-  // the same F type only builds each tree once.
+  // the same F type only builds each tree once. Bug 2: tries every store in
+  // AStores, in order (first-that-resolves-wins) -- the From/To type may live
+  // in a DIFFERENT --db than the unit/instance being converted, mirroring
+  // DoConvertApply's own cross-db TreeFor (used earlier for rule validation).
   function TreeFor(const AClassName: string): TPropTree;
   var
     QName: string;
     Cand : TPropTree;
+    St   : ISymbolStore;
   begin
-    QName:= ResolveClassQName(AStore, AClassName);
-    if QName = '' then Exit(Default(TPropTree));
-    if TreeCache.TryGetValue(QName, Cand) then Exit(Cand);
-    Cand:= BuildPropTree(AStore, QName, Opts);
-    TreeCache.Add(QName, Cand);
-    Result:= Cand;
+    Result:= Default(TPropTree);
+    for St in AStores do
+    begin
+      QName:= ResolveClassQName(St, AClassName);
+      if QName = '' then Continue;
+      if TreeCache.TryGetValue(QName, Cand) then Exit(Cand);
+      Cand:= BuildPropTree(St, QName, Opts);
+      TreeCache.Add(QName, Cand);
+      Exit(Cand);
+    end;
   end;
 
 begin
@@ -848,6 +956,8 @@ begin
   begin Result.Error:= Format('unit .pas not found: %s', [AUnitPas]); Exit; end;
   if not TFile.Exists(ADfmPath) then
   begin Result.Error:= Format('.dfm not found: %s', [ADfmPath]); Exit; end;
+  if Length(AStores) = 0 then
+  begin Result.Error:= 'no symbol store available (empty AStores)'; Exit; end;
 
   DfmText:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
   Instances:= FindConvertInstances(DfmText, ARules, AOnly);
@@ -862,18 +972,24 @@ begin
     own TStringList.Text split. }
   DfmLines:= DfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]);
 
-  PasFileSyms:= AStore.FindSymbolsByFile(AUnitPas);
+  { PasStore: whichever --db actually has AUnitPas indexed -- every unit-scoped
+    lookup below (PasFileSyms, PasFileId, and everything keyed off PasFileId)
+    goes through THIS SAME store, since an id is only meaningful within the
+    store that produced it. }
+  PasStore:= StoreForFile(AUnitPas);
+  PasFileSyms:= PasStore.FindSymbolsByFile(AUnitPas);
   if Length(PasFileSyms) = 0 then
-    PasFileSyms:= AStore.FindSymbolsByFile(TPath.GetFullPath(AUnitPas));
+    PasFileSyms:= PasStore.FindSymbolsByFile(TPath.GetFullPath(AUnitPas));
 
   { surface #5 needs the .pas file's own refs (GetReferencesFromFile is
     keyed by file id, not path) to find construction sites. }
-  PasFileId:= AStore.FindFileIdByPath(AUnitPas);
-  if PasFileId <= 0 then PasFileId:= AStore.FindFileIdByPath(TPath.GetFullPath(AUnitPas));
+  PasFileId:= PasStore.FindFileIdByPath(AUnitPas);
+  if PasFileId <= 0 then PasFileId:= PasStore.FindFileIdByPath(TPath.GetFullPath(AUnitPas));
 
-  DfmFileSyms:= AStore.FindSymbolsByFile(ADfmPath);
+  var DfmStore: ISymbolStore:= StoreForFile(ADfmPath);
+  DfmFileSyms:= DfmStore.FindSymbolsByFile(ADfmPath);
   if Length(DfmFileSyms) = 0 then
-    DfmFileSyms:= AStore.FindSymbolsByFile(TPath.GetFullPath(ADfmPath));
+    DfmFileSyms:= DfmStore.FindSymbolsByFile(TPath.GetFullPath(ADfmPath));
 
   Opts.Depth       := 6;
   Opts.ToPersistent:= True;
@@ -1003,8 +1119,8 @@ begin
         by hand. A design-time (DFM-only) instance has no .Create in code, so
         it simply contributes zero sites here -- its #1/#2/#3 edits still
         apply on their own. }
-      var Sites: TArray<TCreatorSite>:= FindConstructionSites(AStore, PasFileId, PasLines, Inst.FromType);
-      var HasGenericCreate: Boolean:= ToTypeHasGenericCreate(AStore, Inst.ToType);
+      var Sites: TArray<TCreatorSite>:= FindConstructionSites(AStores, PasStore, PasFileId, PasLines, Inst.FromType);
+      var HasGenericCreate: Boolean:= ToTypeHasGenericCreate(AStores, Inst.ToType);
       for var Site in Sites do
       begin
         var CtorName: string:= Site.CtorName;
@@ -1074,7 +1190,7 @@ begin
       if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue; { identity rename -- nothing to rewrite }
       if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
 
-      var Sites: TArray<TAccessSite>:= FindMemberAccessSites(AStore, PasFileId, PasLines,
+      var Sites: TArray<TAccessSite>:= FindMemberAccessSites(PasStore, PasFileId, PasLines,
         LinkRule.FromPath, ConvertedInstNames.ToArray);
       for var Site in Sites do
       begin
@@ -1096,7 +1212,17 @@ begin
     begin
       var ResolvedUnit: string;
       var AlreadyUsed : Boolean;
-      var UseEdits: TArray<TTextEdit>:= TFindUnitRefactoring.Build(AStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed);
+      var UseEdits: TArray<TTextEdit>;
+      { Bug 2: the To type's declaring unit may live in a DIFFERENT --db than
+        the unit being converted (PasStore) -- try every store as the NAME
+        store, in order, keeping PasStore fixed as the UNIT store (whose uses
+        clause is what actually gets edited), first store that resolves
+        (AlreadyUsed or a non-empty edit set) wins. }
+      for var St in AStores do
+      begin
+        UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed);
+        if AlreadyUsed or (Length(UseEdits) > 0) then Break;
+      end;
       if AlreadyUsed then Continue;
       if Length(UseEdits) = 0 then
       begin

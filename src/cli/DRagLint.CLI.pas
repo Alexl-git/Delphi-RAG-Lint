@@ -11183,10 +11183,13 @@ end; // function
 /// From/To property trees BEFORE BuildApplyPlan runs -- a rules error refuses (exit 1)
 /// rather than attempting a plan from a broken rule set. From/To trees are built the same
 /// first-DB-that-resolves-wins way as convert-validate/convert-scaffold/convert-reemit
-/// (TreeFor local fn, copied verbatim). The freshness guard (CheckFreshness) runs against
-/// the SAME Store used for BuildApplyPlan; on dry-run a stale/unindexed type only WARNS
-/// (the preview still renders), on --apply it REFUSES (exit 1) before any write is
-/// attempted.</remarks>
+/// (TreeFor local fn, copied verbatim). Every readable --db is opened up front into Stores
+/// (not just the first); the freshness guard (CheckFreshness) and BuildApplyPlan both
+/// resolve From/To TYPES across ALL of Stores (first-that-resolves-wins), while unit/
+/// instance-scoped lookups use whichever store actually has --unit/the .dfm indexed -- the
+/// From type, To type, and the form's own instances may each live in a DIFFERENT --db. On
+/// dry-run a stale/unindexed type only WARNS (the preview still renders), on --apply it
+/// REFUSES (exit 1) before any write is attempted.</remarks>
 function DoConvertApply(const AArgs: TArgs): Integer;
 var
   UnitPas   : string            ;
@@ -11203,8 +11206,7 @@ var
   Opts      : TPropTreeOptions  ;
   Depth     : Integer           ;
   Dbs       : TArray<string>    ;
-  Store     : ISymbolStore      ;
-  HaveStore : Boolean           ;
+  Stores    : TArray<ISymbolStore>;
   RoOk      : Boolean           ;
   LDb       : string            ;
   PlanRes   : TApplyResult      ;
@@ -11288,18 +11290,26 @@ begin
     Exit(1);
   end;
 
-  // Open the store (first readable --db) for BuildApplyPlan's field-decl +
-  // find-unit lookups. Mirrors DoConvertReemit / DoConvertValidate's pattern.
-  HaveStore:= False;
-  for LDb in Dbs do
-  begin
-    if not TFile.Exists(LDb) then Continue;
-    Store:= OpenReadOnlyStore(LDb, RoOk);
-    if not RoOk then Continue;
-    HaveStore:= True;
-    Break;
+  // Open EVERY readable --db up front (not just the first) -- Bug 2: the
+  // From type, To type, and the form's own instances may each live in a
+  // DIFFERENT --db, so both the freshness guard and BuildApplyPlan need
+  // cross-db type resolution (first-db-that-resolves-wins, same convention
+  // as the rule-validation TreeFor above), while unit/instance-scoped
+  // lookups use whichever store actually has --unit/the .dfm indexed.
+  var StoresList: TList<ISymbolStore>:= TList<ISymbolStore>.Create;
+  try
+    for LDb in Dbs do
+    begin
+      if not TFile.Exists(LDb) then Continue;
+      var St: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
+      if not RoOk then Continue;
+      StoresList.Add(St);
+    end;
+    Stores:= StoresList.ToArray;
+  finally
+    StoresList.Free;
   end;
-  if not HaveStore then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+  if Length(Stores) = 0 then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
 
   // Freshness guard (Task 4): before trusting the index-derived property
   // trees, verify the F and T types are BOTH indexed and current. Covers two
@@ -11309,7 +11319,7 @@ begin
   // dry-run: WARN and continue (so a user can still preview a plan while
   // reindexing). --apply: REFUSE outright -- writing a conversion built from
   // a stale/empty property tree could silently drop or mis-map properties.
-  Freshness:= CheckFreshness(Store, Rules);
+  Freshness:= CheckFreshness(Stores, Rules);
   if not Freshness.Fresh then
   begin
     if AArgs.Apply then
@@ -11325,7 +11335,7 @@ begin
     end;
   end;
 
-  PlanRes:= BuildApplyPlan(Store, UnitPas, DfmPath, Rules, AArgs.OnlySections);
+  PlanRes:= BuildApplyPlan(Stores, UnitPas, DfmPath, Rules, AArgs.OnlySections);
   if not PlanRes.Ok then
   begin Writeln('ERROR: ' + PlanRes.Error); Exit(1); end;
 

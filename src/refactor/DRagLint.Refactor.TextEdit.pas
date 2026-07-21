@@ -48,7 +48,16 @@ type
     /// unresolvable. Inserts into the implementation uses if present, else the
     /// interface uses, else a fresh implementation uses block.</summary>
     class function Build(const AStore: ISymbolStore; const AName, AInFile: string;
-      out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>;
+      out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>; overload;
+    /// <summary>Same as the single-store overload, but resolves AName's
+    /// declaring unit (FindSymbolsByExactName/GetFilePath) against ANameStore
+    /// while AInFile's own uses-clause/insertion-point lookups (FindFileIdByPath/
+    /// GetUnitUsesForFile) go against AUnitStore -- for callers whose target
+    /// TYPE and target FILE are indexed in different --db stores (e.g.
+    /// drag-lint convert-apply, where the To type may live in a different
+    /// index than the form being converted).</summary>
+    class function Build(const ANameStore, AUnitStore: ISymbolStore; const AName, AInFile: string;
+      out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>; overload;
   end;
 
   TSafeDeleteRefactoring = class
@@ -208,6 +217,12 @@ end;
 
 class function TFindUnitRefactoring.Build(const AStore: ISymbolStore;
   const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>;
+begin
+  Result:= Build(AStore, AStore, AName, AInFile, AResolvedUnit, AAlreadyUsed);
+end;
+
+class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;
+  const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>;
 var
   Syms : TArray<TSymbol>;
   S    : TSymbol;
@@ -224,14 +239,16 @@ var
 begin
   Result:= nil; AResolvedUnit:= ''; AAlreadyUsed:= False;
 
-  { 1. resolve the best declaring unit }
-  Syms:= AStore.FindSymbolsByExactName(AName);
+  { 1. resolve the best declaring unit -- against ANameStore, which may be a
+    DIFFERENT store than AUnitStore (the type being added to the uses clause
+    may be indexed in a different --db than the file it's being added to). }
+  Syms:= ANameStore.FindSymbolsByExactName(AName);
   if Length(Syms) = 0 then Exit;
   Cands:= TDictionary<string, Integer>.Create;
   try
     for S in Syms do
     begin
-      UnitName:= ChangeFileExt(ExtractFileName(AStore.GetFilePath(S.FileId)), '');
+      UnitName:= ChangeFileExt(ExtractFileName(ANameStore.GetFilePath(S.FileId)), '');
       if UnitName = '' then Continue;
       var Sc: Integer:= 1;
       if not SameText(S.Section, 'implementation') then Inc(Sc, 10); { interface-visible }
@@ -251,12 +268,13 @@ begin
   { do not add a unit to itself }
   if SameText(ChangeFileExt(ExtractFileName(AInFile), ''), Best) then Exit;
 
-  { 2. load the target file's existing uses }
+  { 2. load the target file's existing uses -- against AUnitStore, which
+    actually has AInFile indexed. }
   FullPath:= TPath.GetFullPath(AInFile);
-  InFileId:= AStore.FindFileIdByPath(FullPath);
-  if InFileId <= 0 then InFileId:= AStore.FindFileIdByPath(AInFile);
+  InFileId:= AUnitStore.FindFileIdByPath(FullPath);
+  if InFileId <= 0 then InFileId:= AUnitStore.FindFileIdByPath(AInFile);
   Uses_:= nil;
-  if InFileId > 0 then Uses_:= AStore.GetUnitUsesForFile(InFileId);
+  if InFileId > 0 then Uses_:= AUnitStore.GetUnitUsesForFile(InFileId);
 
   UsedSet:= TDictionary<string, Boolean>.Create;
   try

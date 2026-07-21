@@ -398,16 +398,33 @@ begin
     Result.Children.Add(CloneNode(C));
 end;
 
+// Strips a leading 'Unit.' qualifier from a type name (e.g. 'LibA.TSrcBtn' ->
+// 'TSrcBtn'; 'TSrcBtn' unchanged). Mirrors DRagLint.Convert.Apply's
+// BareTypeTail (duplicated here rather than imported -- DRagLint.Convert.Apply
+// already `uses` this unit, so importing back would be circular): a
+// #convert rule's FromType/ToType may be written qualified, but a .dfm
+// object's ClassName_ is always the bare tail, so every match/emit against it
+// must compare/emit bare too (Bug 1 -- see DRagLint.Convert.Apply.
+// BareTypeTail's own remarks).
+function BareTypeTail(const AQName: string): string;
+var
+  DotAt: Integer;
+begin
+  DotAt:= LastDelimiter('.', AQName);
+  if DotAt > 0 then Result:= Copy(AQName, DotAt + 1, MaxInt)
+  else Result:= AQName;
+end;
+
 // Look up a #convert rule for a specific From part-type. 2a-i recurses with the
 // SAME ARules (the nested #convert header for the part type is found by
 // ReemitComponent itself). Returns True if ANY #convert names AFromType as its
-// FromType.
+// FromType (bare-tail compared -- see BareTypeTail).
 function HasConvertFor(const ARules: TConversionRuleSet; const AFromType: string): Boolean;
 var Q: TConversionRule;
 begin
   Result:= False;
   for Q in ARules.Rules do
-    if (Q.Kind = rkConvert) and SameText(Q.FromType, AFromType) then Exit(True);
+    if (Q.Kind = rkConvert) and SameText(BareTypeTail(Q.FromType), AFromType) then Exit(True);
 end;
 
 // Resolve a leaf's declared type from a property tree by its top-level name.
@@ -639,9 +656,14 @@ begin
     // #convert when none matches by name (single-pair rule sets, unchanged
     // behavior). FRoot is freed by the `finally` below on every exit path from
     // here on, including the no-#convert-after-parse early return.
+    // Bug 1: R.FromType may be qualified ('LibA.TSrcBtn') while FRoot.ClassName_
+    // (the .dfm's own class token) is always bare -- compare by bare tail (see
+    // BareTypeTail) so a qualified #convert header still matches THIS block's
+    // root class instead of silently falling through to the "first #convert"
+    // fallback below.
     HaveConvert:= False; ToType:= '';
     for R in ARules.Rules do
-      if (R.Kind = rkConvert) and SameText(R.FromType, FRoot.ClassName_) then
+      if (R.Kind = rkConvert) and SameText(BareTypeTail(R.FromType), FRoot.ClassName_) then
       begin HaveConvert:= True; ToType:= R.ToType; Break; end;
     if not HaveConvert then
       for R in ARules.Rules do
@@ -654,11 +676,15 @@ begin
       Exit;
     end;
 
-    // 3. Build the T root: same instance Name, swapped class.
+    // 3. Build the T root: same instance Name, swapped class. ToType may be
+    // qualified (R.ToType written as 'LibB.TDstBtn') but a .dfm object header
+    // is always bare -- BareTypeTail so the emitted 'object Name: Class' line
+    // stays well-formed/consistent regardless of the rule header's spelling
+    // (Bug 1).
     TRoot:= TDfmNode.Create;
     TRoot.Kind      := dnkSubObject;
     TRoot.Name      := FRoot.Name;
-    TRoot.ClassName_:= ToType;
+    TRoot.ClassName_:= BareTypeTail(ToType);
 
     // 4. Per top-level F leaf, remap. Nested sub-objects are classified as an
     // owned part (recurse via #convert) or a contained child (copied verbatim).
