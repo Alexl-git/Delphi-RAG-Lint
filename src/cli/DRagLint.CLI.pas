@@ -299,6 +299,11 @@ type
     // document --qname is never filtered). Off by default (filter ON).
     // Consumed via TDocBatchOptions.IncludeAccessors.
     DocIncludeAccessors: Boolean; // document [...] --include-accessors
+    // ADP1: --reindex (CLI equivalent of IDE menu self-freshening) self-brackets
+    // document --project --apply with index: index -> document --apply -> index.
+    // INCREMENTAL index auto-detects stale/absent, reindex after document fixes
+    // the stale-index-after-document trap (line-shift after --apply).
+    DocReindex: Boolean; // document [...] --reindex
     // v0.48: multi-overlay -- a manifest with one 'realpath<TAB>bufferpath' per
     // line, so ALL unsaved units are overlaid for a single compile.
     GhostOverlays: string; // --overlays <manifest>
@@ -415,7 +420,7 @@ begin
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup] [--db PATH]   - generate/repair a managed DocInsight comment');
   Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors] [--db PATH]         - document every public decl in the unit (facts-only)');
-  Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]  - document every public decl in the project''s compile closure');
+  Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex] [--db PATH]  - document every public decl in the project''s compile closure (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
   Writeln('  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
   Writeln('     batch modes (--unit/--project/document-all) default facts-only (summary/param left as TODO); add --stubs to also create all-TODO stub comments');
   Writeln('     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too');
@@ -787,6 +792,8 @@ begin
     // ADP1 T2: --include-accessors disables the batch modes' trivial-
     // property-accessor skip filter for this run (see TDocBatchOptions.IncludeAccessors).
     else if A = '--include-accessors' then Result.DocIncludeAccessors:= True
+    // ADP1: --reindex (CLI self-freshening for document --project --apply).
+    else if A = '--reindex' then Result.DocReindex:= True
     // AutoDocument (ADF T4): --seealso opts in the <seealso> doc-source.
     else if A = '--seealso' then Result.DocSeeAlso:= True
     // AutoDocument (ADF T5): --since opts in the git <since> doc-source; --base-dir
@@ -6728,12 +6735,16 @@ begin
 end; // function
 
 // AutoDocument (project-wide batch): drag-lint document --project <p.dpr/.dproj>
-//   [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]
+//   [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex] [--db PATH]
 // Documents every public decl across the project's compile closure via
 // TDocBatch.DocumentProject. Facts-only default; --stubs opts in the all-TODO
 // creates. ADP1 T2: trivial Get*/Set* accessors are skipped by default
 // (--include-accessors opts back in; see DoDocumentUnit). Dry-run unless
 // --apply. Exit 0 on ok, 2 on usage/db error.
+// ADP1: --reindex brackets document with index: index (INCREMENTAL: mtime/sha)
+// -> document --apply (shifts lines) -> index (re-freshen) to fix the stale-
+// index-after-document trap (hover/refs correct immediately after). Only active
+// when --apply and --reindex are both given (dry-run --reindex is a no-op).
 function DoDocumentProject(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore    ;
@@ -6743,6 +6754,22 @@ var
 begin
   if not TFile.Exists(AArgs.ProjectPath) then begin Writeln(Format('Project file not found: %s', [AArgs.ProjectPath])); Exit(2); end;
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+
+  // ADP1: Step 1 (if --reindex + --apply): reindex BEFORE document to ensure
+  // --apply works on current line numbers. INCREMENTAL index auto-detects
+  // stale/absent files, skips up-to-date, re-parses only those changed.
+  if AArgs.DocReindex and AArgs.Apply then
+  begin
+    Writeln('Reindexing (INCREMENTAL): detecting stale/absent files...');
+    // Use a copy of AArgs for the index call. ProjectPath is preserved so
+    // DoIndex can resolve the project's compilation closure folders.
+    var IndexArgs: TArgs := AArgs;
+    IndexArgs.IndexAll := False;  // incremental (default)
+    IndexArgs.Path := '';  // clear Path; let ProjectPath drive the resolution
+    var IndexResult := DoIndex(IndexArgs);
+    if IndexResult <> 0 then begin Writeln('Reindex before document failed.'); Exit(IndexResult); end;
+  end;
+
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
 
@@ -6755,8 +6782,23 @@ begin
   Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
   Opts.AccessorTrivialMaxLines:= LoadDocAccessorMaxLines; // ADP1 T2: manifest docs.accessor_trivial_max_lines threshold (default 2, filter ON, on any load failure).
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
+
+  // Step 2: document --apply (shifts lines, which makes index stale)
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
+
+  // ADP1: Step 3 (if --reindex + --apply): reindex AFTER document to re-freshen
+  // the index after the line-shifting edits. The index is now consistent with the
+  // source files, so hover/lint/LSP work correctly immediately after.
+  if AArgs.DocReindex and AArgs.Apply and (Result = 0) then
+  begin
+    Writeln('Reindexing (INCREMENTAL): refreshing after line-shift edits...');
+    var IndexArgs: TArgs := AArgs;
+    IndexArgs.IndexAll := False;  // incremental
+    IndexArgs.Path := '';  // clear Path; let ProjectPath drive the resolution
+    var IndexResult := DoIndex(IndexArgs);
+    if IndexResult <> 0 then begin Writeln('Reindex after document failed.'); Exit(IndexResult); end;
+  end;
 end; // function
 
 // AutoDocument (whole-index batch): drag-lint document-all
