@@ -39,9 +39,13 @@ type
     /// <summary>Produces the full merged DocInsight comment text (///-prefixed
     /// lines joined by CRLF): preserved hand-written prose + a regenerated
     /// managed facts block (fenced inside remarks) + managed param tags.
-    /// Fresh comments are all-TODO; repair preserves Summary/Remarks prose and
-    /// hand-typed param descriptions, adds/removes managed param tags, and flags
-    /// hand-typed params no longer present in the signature.</summary>
+    /// Fresh comments emit EMPTY managed placeholders (summary/param empty;
+    /// returns carries only the mined 'Observed: ...' facts, if any) -- never
+    /// "TODO" text, so generated docs never trip drag-lint's own TODO rule.
+    /// Repair preserves Summary/Remarks prose and hand-typed param
+    /// descriptions, adds/removes managed param tags, and flags hand-typed
+    /// params no longer present in the signature. See IsManagedDesc for how
+    /// managed (regenerable) content is told apart from hand-typed prose.</summary>
     class function MergeComment(const AExisting: TParsedDoc;
       const ASigParams: TArray<string>; const AFacts: TDocFacts;
       AHasReturn: Boolean; const APrefix: string): string;
@@ -73,6 +77,18 @@ begin
     Sb.Append('.');
     Result:= Sb.ToString;
   finally Sb.Free; end;
+end;
+
+/// <summary>True when S is MANAGED (auto-generated/regenerable) content, as
+/// opposed to hand-typed prose. Managed content is either empty (the current
+/// emitted placeholder) or exactly the legacy 'TODO: describe.' sentinel that
+/// older drag-lint builds used to emit -- recognizing the legacy string here
+/// is what makes an old TODO-carrying doc self-heal (regenerate to empty/
+/// Observed) the next time `document` runs over it. Any other text is
+/// hand-typed and preserved verbatim by the merge logic.</summary>
+function IsManagedDesc(const S: string): Boolean;
+begin
+  Result:= (Trim(S) = '') or SameText(Trim(S), 'TODO: describe.');
 end;
 
 class function TDocRegions.StripManagedBlock(const S: string): string;
@@ -216,11 +232,11 @@ begin
     Facts:= RenderFactsBlock(AFacts, APrefix);
     if not AExisting.HasContent then
     begin
-      Sb.AppendLine(APrefix + '<summary>TODO: describe.</summary>');
+      Sb.AppendLine(APrefix + '<summary></summary>');
       for P in ASigParams do
-        Sb.AppendLine(APrefix + '<param name="' + P + '">TODO: describe.</param>' + AUTO_PARAM);
+        Sb.AppendLine(APrefix + '<param name="' + P + '"></param>' + AUTO_PARAM);
       if AHasReturn then
-        Sb.AppendLine(APrefix + '<returns>TODO: describe.' + ObservedSuffix(AFacts.ReturnCases) + '</returns>');
+        Sb.AppendLine(APrefix + '<returns>' + Trim(ObservedSuffix(AFacts.ReturnCases)) + '</returns>');
       if Facts <> '' then
       begin
         Sb.AppendLine(APrefix + '<remarks>');
@@ -234,12 +250,13 @@ begin
     end;
 
     // Existing comment: preserve prose, regenerate managed regions. Rebuild from
-    // the parsed model: keep Summary (or TODO), keep hand-typed params + descs,
-    // add AUTO_PARAM tags for missing sig params, drop AUTO_PARAM tags for params
-    // no longer in the signature, flag hand-typed stale params, then the returns
-    // tag, then a fresh <remarks> managed block.
+    // the parsed model: keep Summary (or blank it if managed -- see
+    // IsManagedDesc), keep hand-typed params + descs, add AUTO_PARAM tags for
+    // missing sig params, drop AUTO_PARAM tags for params no longer in the
+    // signature, flag hand-typed stale params, then the returns tag, then a
+    // fresh <remarks> managed block.
     var SummaryText: string:= AExisting.Summary;
-    if Trim(SummaryText) = '' then SummaryText:= 'TODO: describe.';
+    if IsManagedDesc(SummaryText) then SummaryText:= '';
     Sb.AppendLine(APrefix + '<summary>' + SummaryText + '</summary>');
 
     // MANAGED-vs-HAND-TYPED param detection is CONTENT-BASED, not sentinel-based.
@@ -247,8 +264,9 @@ begin
     // diff visibility, but the doc parser STRIPS trailing sentinels (and the ///
     // prefix) before AExisting.Params is populated, so the marker does not survive
     // a round-trip. On regeneration we therefore RE-DERIVE "managed" from the desc
-    // CONTENT: an empty desc or exactly 'TODO: describe.' => managed/regenerable
-    // (re-emit with the AUTO_PARAM marker); any OTHER desc => hand-typed (preserve
+    // CONTENT via IsManagedDesc: empty, or exactly the legacy 'TODO: describe.'
+    // sentinel => managed/regenerable (re-emit EMPTY with the AUTO_PARAM marker,
+    // cleaning up any legacy TODO text); any OTHER desc => hand-typed (preserve
     // as-is, no marker; flag if the param is stale). Edge case: a genuine hand-typed
     // desc that is literally 'TODO: describe.' is treated as managed. Acceptable for
     // Chunk 1. This content-based scheme is idempotency-safe: run N and run N+1 see
@@ -260,33 +278,32 @@ begin
       for var EP in AExisting.Params do
         if SameText(EP.Name, P) then
         begin
-          var Desc: string:= EP.Desc; if Trim(Desc) = '' then Desc:= 'TODO: describe.';
-          // hand-typed (had a non-TODO desc) => no AUTO_PARAM marker; else marker
-          if SameText(Trim(EP.Desc), '') or SameText(Trim(EP.Desc), 'TODO: describe.') then
-            Sb.AppendLine(APrefix + '<param name="' + P + '">' + Desc + '</param>' + AUTO_PARAM)
+          if IsManagedDesc(EP.Desc) then
+            Sb.AppendLine(APrefix + '<param name="' + P + '"></param>' + AUTO_PARAM)
           else
-            Sb.AppendLine(APrefix + '<param name="' + P + '">' + Desc + '</param>');
+            Sb.AppendLine(APrefix + '<param name="' + P + '">' + EP.Desc + '</param>');
           Found:= True; Break;
         end;
       if not Found then
-        Sb.AppendLine(APrefix + '<param name="' + P + '">TODO: describe.</param>' + AUTO_PARAM);
+        Sb.AppendLine(APrefix + '<param name="' + P + '"></param>' + AUTO_PARAM);
     end;
     // stale hand-typed params: in the comment but not the signature -> flag, keep
     for var EP in AExisting.Params do
     begin
       var StillThere: Boolean:= False;
       for P in ASigParams do if SameText(EP.Name, P) then begin StillThere:= True; Break; end;
-      if (not StillThere) and (Trim(EP.Desc) <> '') and (not SameText(Trim(EP.Desc), 'TODO: describe.')) then
+      if (not StillThere) and (not IsManagedDesc(EP.Desc)) then
         Sb.AppendLine(APrefix + '<param name="' + EP.Name + '">' + EP.Desc + '</param> <!-- drag-lint: param no longer exists -->');
     end;
 
     if AHasReturn then
     begin
       var Ret: string:= AExisting.ReturnsText;
-      if Trim(Ret) = '' then Ret:= 'TODO: describe.';
-      // Author-edited returns (non-stub) win: do NOT inject Observed into hand text.
-      if SameText(Trim(Ret), 'TODO: describe.') then
-        Ret:= 'TODO: describe.' + ObservedSuffix(AFacts.ReturnCases);
+      // Managed (empty, or the legacy TODO sentinel) -> regenerate from the
+      // mined facts only (empty when there are no cases). Author-edited
+      // returns (non-managed) win: do NOT inject Observed into hand text.
+      if IsManagedDesc(Ret) then
+        Ret:= Trim(ObservedSuffix(AFacts.ReturnCases));
       Sb.AppendLine(APrefix + '<returns>' + Ret + '</returns>');
     end;
 

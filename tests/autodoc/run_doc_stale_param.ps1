@@ -51,6 +51,12 @@ try {
     ($txt.Contains('/// <param name="X">The kept param.</param>'))
   Check 'facts block inserted (Called from: doc_stale_param.UseHandle)' `
     ($txt.Contains('<!-- drag-lint:auto BEGIN -->') -and ($txt -match 'Called from:.*doc_stale_param\.UseHandle'))
+  # ADP1: the dropped "Old" param carried the legacy managed 'TODO: describe.'
+  # sentinel in the INPUT fixture (still a valid IsManagedDesc input -- see
+  # fixtures\doc_stale_param.pas); since it is simply dropped (not in the
+  # signature), no "TODO" text of any kind should survive in the OUTPUT.
+  Check 'no "TODO" text anywhere in the output (legacy sentinel on "Old" was dropped, not re-emitted)' `
+    ($txt -cnotmatch 'TODO')
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

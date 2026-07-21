@@ -39,9 +39,10 @@
 
   Asserts (after --apply --no-backup, reading the written file):
     1. Exactly one <returns> tag; it carries 'Observed:' (mined enumeration,
-       NOT a bare '<returns>TODO: describe.</returns>' with no Observed
-       clause at all -- mining is genuinely ON) with BOTH mined cases (False;
-       the XML-escaped rlines &lt;&gt; 0).
+       NOT a bare '<returns></returns>' with no Observed clause at all --
+       mining is genuinely ON) with BOTH mined cases (False; the
+       XML-escaped rlines &lt;&gt; 0), and NO "TODO" placeholder text (ADP1:
+       the engine emits empty/Observed-only placeholders, never "TODO").
     2. Exactly one "Called from:" line; it lists EXACTLY 5 distinct
        "uRetCap.CallerNN" names (Caller01..Caller05, first-seen/file order)
        and ends with the "(+2 more)" suffix (7 distinct callers - 5 shown).
@@ -131,8 +132,8 @@ Write-Host 'Returns: max_return_cases=6 enumerates the mined cases' -ForegroundC
 $returnsLines = @([regex]::Matches($text, '<returns>.*?</returns>') | ForEach-Object { $_.Value })
 Check 'exactly one <returns> tag' ($returnsLines.Count -eq 1) "count=$($returnsLines.Count)"
 $returnsTag = if ($returnsLines.Count -gt 0) { $returnsLines[0] } else { '' }
-Check 'returns carries Observed: (mining is ON, not a bare TODO-only tag)' `
-  ($returnsTag -match '<returns>TODO: describe\. Observed:') $returnsTag
+Check 'returns carries Observed: (mining is ON, not a bare empty tag) with no TODO text' `
+  ($returnsTag -match '^<returns>Observed:') $returnsTag
 Check 'returns lists False'                       ($returnsTag -match 'Observed: False') $returnsTag
 Check 'returns lists escaped rlines &lt;&gt; 0'    ($returnsTag -match 'rlines &lt;&gt; 0') $returnsTag
 Check 'returns has NO raw unescaped < or >'        (-not ($returnsTag -match 'rlines <> 0')) $returnsTag

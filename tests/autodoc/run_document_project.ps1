@@ -12,8 +12,8 @@
       project-wide scope resolved via the compile closure.
     * facts-only default: the bare Noop (no facts) is NOT documented (no TODO
       flood) -- no /// comment directly above 'procedure Noop;'.
-    * `--stubs`: the same Noop NOW gets a 'TODO: describe.' summary (opt-in
-      differs from the facts-only default).
+    * `--stubs`: the same Noop NOW gets a managed (empty, no "TODO" text --
+      ADP1) summary tag (opt-in differs from the facts-only default).
     * IDEMPOTENCY: a second `--project --apply` leaves every file BYTE-IDENTICAL.
     * `document-all --apply` (no --project) documents every indexed unit's public
       facts-backed decls.
@@ -78,7 +78,7 @@ try {
   Check 'idempotent: unitA byte-identical on 2nd run' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$beforeA,[byte[]]$afterA))
   Check 'idempotent: unitB byte-identical on 2nd run' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$beforeB,[byte[]]$afterB))
 
-  # --- --stubs opt-in: on a FRESH scratch, Noop NOW gets a TODO summary ---
+  # --- --stubs opt-in: on a FRESH scratch, Noop NOW gets a managed summary ---
   $sStub = Join-Path C:\TEMP 'draglint_docproj_stubs'
   if (Test-Path $sStub) { Remove-Item $sStub -Recurse -Force }
   New-Item -ItemType Directory -Path $sStub | Out-Null
@@ -91,7 +91,9 @@ try {
   Check 'stubs project apply: exit 0' ($LASTEXITCODE -eq 0)
   $srcAS = [IO.File]::ReadAllText($uAS)
   Check 'stubs opt-in: Noop NOW documented' (NoopHasDoc $uAS)
-  Check 'stubs opt-in: Noop has a TODO summary' ($srcAS -match '(?s)TODO:[^\r\n]*describe.*?procedure\s+Noop;')
+  Check 'stubs opt-in: Noop has an empty managed <summary> (no TODO text -- ADP1)' `
+    ($srcAS -match '(?s)<summary></summary>.*?procedure\s+Noop;')
+  Check 'stubs opt-in: no "TODO" text anywhere in unitA output' ($srcAS -cnotmatch 'TODO')
 
   # --- document-all (no --project) documents every indexed unit ---
   $sAll = Join-Path C:\TEMP 'draglint_docproj_all'

@@ -12,7 +12,8 @@ function Beta(A: Integer): Integer;
 
 // Bare public procedure: no params, no returns, no callers, no callees.
 // It has NO derivable summary AND no facts, so the facts-only default SKIPS it;
-// --stubs opts in and documents it with a TODO summary.
+// --stubs opts in and documents it with an empty managed summary (ADP1: no
+// placeholder stub text is ever emitted).
 procedure Noop;
 
 implementation

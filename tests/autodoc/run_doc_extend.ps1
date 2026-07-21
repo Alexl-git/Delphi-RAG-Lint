@@ -50,8 +50,8 @@ try {
   Check 'preserved: hand param "Real param desc." verbatim (no AUTO_PARAM marker)' `
     ($txt.Contains('/// <param name="X">Real param desc.</param>') -and `
      ($txt -notmatch '///\s*<param name="X">Real param desc\.</param><!-- drag-lint:auto param -->'))
-  Check 'added: managed <param name="Y"> with AUTO_PARAM sentinel' `
-    ($txt -match '///\s*<param name="Y">TODO: describe\.</param><!-- drag-lint:auto param -->')
+  Check 'added: managed <param name="Y"> (empty, no TODO) with AUTO_PARAM sentinel' `
+    ($txt -match '///\s*<param name="Y"></param><!-- drag-lint:auto param -->')
 
   # Both hand remark lines survive, EACH with a /// prefix (Task 4 fix #1).
   $hasLine1 = ($lines | Where-Object { $_.Trim() -eq '/// First remark line.' }).Count -eq 1

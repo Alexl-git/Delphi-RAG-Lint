@@ -4,10 +4,12 @@
 
   Hand-verified real output (document --qname uRet.Grab --apply --no-backup on
   the fixture below, cap=20 default):
-    <returns>TODO: describe. Observed: False; rlines &lt;&gt; 0.</returns>
+    <returns>Observed: False; rlines &lt;&gt; 0.</returns>
   -- both '<' and '>' are XML-escaped (to &lt; and &gt;), two distinct mined
-  return cases in first-seen order. A procedure (DoNothing) gets a comment with
-  NO Observed: text (HasRet is False for procedures).
+  return cases in first-seen order, and NO "TODO" placeholder text (ADP1: the
+  engine emits empty/Observed-only placeholders, never "TODO"). A procedure
+  (DoNothing) gets a comment with NO Observed: text (HasRet is False for
+  procedures).
 
   document --json is a THIN summary (qname/file/line/action/edits/applied --
   no <returns> text), so every scenario applies to a FRESH copy and asserts on
@@ -121,7 +123,7 @@ $returnsLinesA = @([regex]::Matches($textA, '<returns>.*?</returns>') | ForEach-
 
 Check 'exactly one <returns> tag in the file (Grab only; DoNothing has none)' `
   ($returnsLinesA.Count -eq 1) "count=$($returnsLinesA.Count)"
-Check 'Grab <returns> carries Observed:' ($returnsLinesA[0] -match '<returns>TODO: describe\. Observed:') $returnsLinesA[0]
+Check 'Grab <returns> carries Observed: (no TODO placeholder)' ($returnsLinesA[0] -match '^<returns>Observed:') $returnsLinesA[0]
 Check 'Grab <returns> lists False'       ($returnsLinesA[0] -match 'Observed: False') $returnsLinesA[0]
 Check 'Grab <returns> lists escaped rlines &lt;&gt; 0' ($returnsLinesA[0] -match 'rlines &lt;&gt; 0') $returnsLinesA[0]
 Check 'Grab <returns> does NOT contain a raw unescaped < or >' `
