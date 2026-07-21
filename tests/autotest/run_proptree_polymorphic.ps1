@@ -44,6 +44,37 @@
                         must resolve to TBaseProps (the class chain), NEVER
                         TWeirdProps (the interface).
 
+  Scenario 3 -- REVIEW FOLLOW-UP: the SAME (A.Kind = 'class') guard is applied
+  at TWO independent call sites -- ResolveInheritedType, AND separately inside
+  ResolveViaBridgedAncestry's local Climb function (part a: already-resolved
+  ancestors). Scenario 2 only ever exercises the FIRST site: TPassThrough is a
+  RESOLVED class ancestor, so ResolveInheritedType's own scan is what rejects
+  IPropsIntf and it always returns a (correct, empty) result before Climb is
+  ever reached -- Climb's OWN guard is never exercised, so a revert of ONLY
+  Climb's copy of the guard would go undetected. This scenario forces the
+  ResolveInheritedType call to return '' for an UNRELATED reason (an
+  unresolved ancestor edge, the classic alias-ancestor case -- see
+  ResolveViaBridgedAncestry's own header comment), so Walk falls through to
+  ResolveViaBridgedAncestry regardless of interface handling, and Climb's part
+  (a) loop becomes the ONLY thing standing between the interposing interface's
+  type and the real class-chain type:
+    TBridgeAlias = TCheckBox;   -- a type-ALIAS ('TBridgeAlias' as a heritage
+                        name is UNRESOLVED as a class ancestor edge, same
+                        pattern as the doc comment's own
+                        'TcxBaseButton = Vcl.StdCtrls.TCustomButton' example)
+    TBridgeInterfaceDerived = class(TBridgeAlias, IPropsIntf) -- property
+                        Props;  (BARE) -- must resolve, via the BRIDGE, to
+                        TCheckProps (TCheckBox's concrete declaration reached
+                        by following the alias), NEVER TWeirdProps (the
+                        interposing interface). Confirmed this scenario truly
+                        drives Climb and not ResolveInheritedType by
+                        temporarily reverting ONLY Climb's (A.Kind = 'class')
+                        guard and rebuilding: this scenario's 3 assertions
+                        went RED (resolved to 'TWeirdProps') while every other
+                        scenario, including Scenario 2's TInterfaceDerived,
+                        stayed GREEN -- proof the two guards are independently
+                        load-bearing and this scenario isolates the second one.
+
   Load-bearing assertions (proptree --qname PolyFix.<Class> --format json):
     - PolyFix.TCheckBox:        Props.type == 'TCheckProps'; has 'Props.CheckOnly';
                                  does NOT have 'Props.BtnOnly'
@@ -52,6 +83,9 @@
                                  has 'Props.CheckOnly'
     - PolyFix.TInterfaceDerived: Props.type == 'TBaseProps' (NOT 'TWeirdProps');
                                  has 'Props.Common'; does NOT have 'Props.WeirdOnly'
+    - PolyFix.TBridgeInterfaceDerived: Props.type == 'TCheckProps' (NOT
+                                 'TWeirdProps', via the Climb/bridge path);
+                                 has 'Props.CheckOnly'; does NOT have 'Props.WeirdOnly'
 
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-proptree-polymorphic by default).
 #>
@@ -162,6 +196,23 @@ type
     property Props;   // bare -- must resolve to TBaseProps, NEVER TWeirdProps
   end;
 
+  // --- Scenario 3: interface-interposition regression guard, BRIDGE path. --
+  // TBridgeAlias is a type ALIAS (not a 'class(TCheckBox)' declaration) --
+  // referencing it as a heritage name leaves the ancestor edge UNRESOLVED, so
+  // ResolveInheritedType's scan finds nothing and Walk falls through to
+  // ResolveViaBridgedAncestry's Climb, whose OWN (A.Kind = 'class') guard is
+  // exercised by IPropsIntf being a second, RESOLVED (but non-class) direct
+  // ancestor sitting right alongside the unresolved one.
+  TBridgeAlias = TCheckBox;
+
+  TBridgeInterfaceDerived = class(TBridgeAlias, IPropsIntf)
+  private
+    function GetProps: TWeirdProps;
+  published
+    property Props;   // bare -- must resolve via the bridge to TCheckProps,
+                       // NEVER TWeirdProps (the interposing interface)
+  end;
+
 implementation
 
 end.
@@ -255,6 +306,29 @@ if ($null -ne $r4.Tree) {
   Check "TInterfaceDerived: excludes 'Props.WeirdOnly' (wrong-class leaf from the interface must NEVER appear)" (-not $bp4.ContainsKey('Props.WeirdOnly'))
 } else {
   Check 'TInterfaceDerived: --format json parses' $false "raw=$($r4.Raw)"
+}
+
+# --- 5. PolyFix.TBridgeInterfaceDerived (bare redecl behind an UNRESOLVED   ---
+#        alias ancestor edge, forcing the ResolveViaBridgedAncestry/Climb    ---
+#        path; class ALSO implements the same interposing interface as      ---
+#        Scenario 4) -> Props.type == TCheckProps (via the bridge), NEVER    ---
+#        TWeirdProps. REGRESSION GUARD for Climb's OWN (A.Kind = 'class')    ---
+#        guard specifically (Scenario 4 only exercises the guard inside      ---
+#        ResolveInheritedType; this scenario is the one that actually        ---
+#        reaches Climb). ---------------------------------------------------
+Write-Host ''
+Write-Host 'proptree PolyFix.TBridgeInterfaceDerived (interface-interposition regression guard, BRIDGE path)' -ForegroundColor Cyan
+$r5 = Get-Tree $db 'PolyFix.TBridgeInterfaceDerived'
+Check 'TBridgeInterfaceDerived: exits 0' ($r5.Exit -eq 0) "exit=$($r5.Exit)"
+if ($null -ne $r5.Tree) {
+  $bp5 = ByPath $r5.Tree
+  if ($bp5.ContainsKey('Props')) {
+    Check "TBridgeInterfaceDerived: Props.type == 'TCheckProps' (via the bridge, NOT the interface's 'TWeirdProps')" ($bp5['Props'].type -eq 'TCheckProps') "type=$($bp5['Props'].type)"
+  } else { Check 'TBridgeInterfaceDerived: Props node present' $false '' }
+  Check "TBridgeInterfaceDerived: has 'Props.CheckOnly'" ($bp5.ContainsKey('Props.CheckOnly'))
+  Check "TBridgeInterfaceDerived: excludes 'Props.WeirdOnly' (wrong-class leaf from the interface must NEVER appear)" (-not $bp5.ContainsKey('Props.WeirdOnly'))
+} else {
+  Check 'TBridgeInterfaceDerived: --format json parses' $false "raw=$($r5.Raw)"
 }
 
 Write-Host ''
