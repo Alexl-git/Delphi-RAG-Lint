@@ -42,7 +42,12 @@ type
     /// TDocFactsBuilder.Build as-is); default 20 matches the manifest default.
     /// AMaxCallers caps the "Called from:" list (forwarded to
     /// TDocFactsBuilder.Build as-is); default 5 matches the manifest
-    /// default (v(ADP1 T1)).</remarks>
+    /// default (v(ADP1 T1)). Resolves AQName to Syms[0] and delegates to
+    /// BuildForSymbol; when AQName is ambiguous (an overloaded method, all
+    /// sharing one qualified_name) this still documents only the
+    /// first-declared overload -- unchanged, existing behavior. Callers
+    /// iterating actual resolved rows (e.g. one per overload) should call
+    /// BuildForSymbol directly instead (see its remarks).</remarks>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string;
       AIncludeSeeAlso: Boolean; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
@@ -50,6 +55,27 @@ type
     /// <summary>Back-compat overload: BuildFor with no doc-source opt-ins
     /// (AIncludeSeeAlso = False, AIncludeSince = False).</summary>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult; overload;
+    /// <summary>Computes the DocInsight comment edits for an ALREADY-RESOLVED
+    /// symbol ASym: builds index-grounded facts, scans the existing doc-comment
+    /// above ASym's OWN declaration line, and merges into a managed-region
+    /// comment -- the same logic BuildFor(AQName) runs after it resolves a
+    /// qualified name to Syms[0]. Public so a caller iterating actual TSymbol
+    /// ROWS (e.g. TDocBatch.DocumentUnit, once per overload) can document each
+    /// row's own declaration; calling BuildFor(Sym.QualifiedName) instead would
+    /// re-resolve every overload back onto the SAME first-declared symbol
+    /// (they all share one qualified_name), stacking duplicate blocks above it
+    /// and documenting the others never -- see adp1-bugA-brief.md.</summary>
+    /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
+    /// <param name="ASym">The already-resolved symbol to document (its own file/line).</param>
+    /// <returns>The classified action plus file/line and the computed edits.</returns>
+    /// <remarks>Does not write files; TTextEditApplier.Apply performs any I/O.
+    /// AIncludeSeeAlso / AIncludeSince / ABaseDir / AExtraStores /
+    /// AMaxReturnCases / AMaxCallers have the same meaning as on BuildFor's
+    /// full overload (see its remarks). Result.QName is ASym.QualifiedName.</remarks>
+    class function BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
+      AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
+      const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
+      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TDocumentResult;
     /// <summary>Resolves AQName and returns the DocInsight comment CURRENTLY on
     /// its declaration (scanned live from the source file, ANSI), plus the
     /// resolved symbol. AFound is False (and the outputs are Default) when the
@@ -194,8 +220,23 @@ class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: st
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer): TDocumentResult;
 var
-  Syms     : TArray<TSymbol>                                   ;
-  Sym      : TSymbol                                           ;
+  Syms: TArray<TSymbol>;
+begin
+  Result:= Default(TDocumentResult);
+  Result.QName := AQName;
+  Result.Action:= daNotFound;
+
+  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+  if Length(Syms) = 0 then Exit;
+
+  Result:= BuildForSymbol(AStore, Syms[0], AIncludeSeeAlso, AIncludeSince, ABaseDir,
+    AExtraStores, AMaxReturnCases, AMaxCallers);
+end;
+
+class function TDocumenter.BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
+  AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
+  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer): TDocumentResult;
+var
   Path     : string                                            ;
   Src      : string                                            ;
   Regions  : System.Generics.Collections.TList<TDocCommentRegion>;
@@ -213,16 +254,12 @@ var
   E        : TTextEdit                                         ;
 begin
   Result:= Default(TDocumentResult);
-  Result.QName := AQName;
+  Result.QName := ASym.QualifiedName;
   Result.Action:= daNotFound;
 
-  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
-  if Length(Syms) = 0 then Exit;
-  Sym:= Syms[0];
-
-  Path:= AStore.GetFilePath(Sym.FileId);
+  Path:= AStore.GetFilePath(ASym.FileId);
   Result.FilePath:= Path;
-  Result.Line    := Sym.StartLine;
+  Result.Line    := ASym.StartLine;
   if (Path = '') or (not TFile.Exists(Path)) then Exit;
 
   Src:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(Path));
@@ -232,7 +269,7 @@ begin
   Existing:= Default(TParsedDoc);
   Regions := TDocCommentScanner.Scan(Src);
   try
-    Region:= FindDocRegionAbove(Regions, Sym.StartLine, 1, False);
+    Region:= FindDocRegionAbove(Regions, ASym.StartLine, 1, False);
     if Region.Kind <> TDocCommentKind(-1) then
       Existing:= TDocCommentParser.Dispatch(Region);
   finally
@@ -240,10 +277,10 @@ begin
   end;
 
   // Signature-derived params.
-  Sig      := Trim(Sym.Signature);
+  Sig      := Trim(ASym.Signature);
   SigParams:= ParseParamNames(ExtractParamList(Sig));
 
-  Facts := TDocFactsBuilder.Build(AStore, Sym, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores, AMaxReturnCases, AMaxCallers);
+  Facts := TDocFactsBuilder.Build(AStore, ASym, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores, AMaxReturnCases, AMaxCallers);
 
   // Has a return value? The indexed Signature holds only '(params): RetType'
   // (no leading 'function' keyword), so SignatureHasReturn misses it, and class
@@ -252,7 +289,7 @@ begin
   // procedure -- so use it first; keep the signature/kind checks as a fallback.
   HasRet := (Facts.ReturnType <> '')
             or SignatureHasReturn(Sig)
-            or (Sym.Kind in [skFunction, skConstructor]);
+            or (ASym.Kind in [skFunction, skConstructor]);
 
   Prefix:= '/// ';
   Merged:= TDocRegions.MergeComment(Existing, SigParams, Facts, HasRet, Prefix);
@@ -312,7 +349,7 @@ begin
     E:= Default(TTextEdit);
     E.FilePath:= Path;
     E.Kind    := tekInsertLines;
-    E.Line    := Sym.StartLine - 1; // insert AFTER (StartLine-1) => at StartLine
+    E.Line    := ASym.StartLine - 1; // insert AFTER (StartLine-1) => at StartLine
     E.Text    := Merged;
     Result.Edits:= Result.Edits + [E];
 

@@ -226,7 +226,12 @@ begin
 
       Inc(Result.DeclCount);
 
-      Res := TDocumenter.BuildFor(AStore, Sym.QualifiedName, AOptions.IncludeSeeAlso,
+      // Pass the ROW's own resolved Sym (not just its qualified_name) so an
+      // overloaded method -- multiple TSymbol rows sharing one qualified_name
+      // -- documents each row's OWN declaration. BuildFor(Sym.QualifiedName)
+      // would re-resolve every call to Syms[0], stacking duplicate blocks
+      // above the first overload and never documenting the others (Bug A).
+      Res := TDocumenter.BuildForSymbol(AStore, Sym, AOptions.IncludeSeeAlso,
         AOptions.IncludeSince, AOptions.BaseDir, AOptions.ExtraStores, AOptions.MaxReturnCases,
         AOptions.MaxCallers);
       if Length(Res.Edits) = 0 then Continue; // daUnchanged / daNotFound: nothing to do
