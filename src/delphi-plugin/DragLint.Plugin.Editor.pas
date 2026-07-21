@@ -4227,10 +4227,13 @@ end;
 procedure InvokeAutoDocumentProject(Sender: TObject);
 var
   Proj: string;
+  Db  : string;
 begin
   Proj:= GetActiveProjectFile;
   if Proj = '' then begin ShowMessage('drag-lint: no active project.'); Exit; end;
-  DLRunReport(Format('document --project "%s" --apply', [Proj]), 'drag-lint-autodocument.txt');
+  Db:= GetActiveProjectDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  DLRunReport(Format('document --project "%s" --apply --db "%s"', [Proj, Db]), 'drag-lint-autodocument.txt');
 end;
 
 procedure InvokeGenerateTest(Sender: TObject);

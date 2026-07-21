@@ -163,8 +163,11 @@ begin
     // documented name-based heuristic per TDocFacts.Implements' comment, not an
     // uncertain/ambiguous match in the CalledFrom sense). Overridden by mirrors
     // CalledFrom's cap-plus-'(+N more)' pattern. Overload is a single 'k of n'
-    // line, only when n > 1. abstract/virtual are bare one-word marker lines;
-    // never both, and never virtual alongside Overrides (see TDocFacts.IsVirtual).
+    // line, only when n > 1. abstract/virtual are bare one-word marker lines
+    // and are INDEPENDENT facts -- a virtual; abstract method correctly
+    // renders BOTH (abstract implies virtual). The mutual exclusion that IS
+    // enforced is virtual-vs-Overrides: an override suppresses the virtual
+    // marker, emitting Overrides instead (see TDocFacts.IsVirtual).
     if AFacts.Overrides <> '' then
       Sb.AppendLine(APrefix + 'Overrides: ' + AFacts.Overrides);
     if Length(AFacts.OverriddenBy) > 0 then
