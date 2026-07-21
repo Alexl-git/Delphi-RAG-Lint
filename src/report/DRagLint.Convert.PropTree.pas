@@ -257,6 +257,19 @@ var
 
   // Resolve an empty-signature (redeclared) property's type by finding the
   // same-named property that DOES carry a signature in an ancestor class.
+  // CLASS-ONLY (R3, Task 3): the ancestor closure returned by
+  // GetTransitiveAncestors is unfiltered -- it also contains any INTERFACE
+  // ancestors a class implements, in BFS (nearest-first) order alongside the
+  // real class ancestors. An implemented interface can independently declare
+  // a same-named property (Delphi interfaces support `property X: T read
+  // GetX;`) with a COMPLETELY UNRELATED type. Without the (A.Kind = 'class')
+  // guard, such an interface property can be found and returned BEFORE the
+  // walk reaches the queried class's real base -- a wrong-CLASS type leaking
+  // in from outside the class hierarchy entirely (worse than the covariance
+  // "collapse to base" case: this is collapse to an unrelated type). Mirrors
+  // ClassChain's own (A.Kind = 'class') filter, which is why CollectProps'
+  // shadowing/DeclaredIn never suffers this -- only this ancestor-only-typed
+  // fallback walk did.
   function ResolveInheritedType(const AClass: TSymbol; const APropName: string): string;
   var
     Anc   : TArray<TTypeAncestor>;
@@ -269,7 +282,7 @@ var
     Anc:= AStore.GetTransitiveAncestors(AClass.Id);
     for A in Anc do
     begin
-      if not (A.Resolved and (A.SymbolId > 0)) then Continue;
+      if not (A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class')) then Continue;
       // Re-resolve a forward-decl stub to its body before reading children.
       AncSym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
       if AncSym.Id <= 0 then Continue;
@@ -351,9 +364,13 @@ var
     begin
       Result:= '';
       Anc:= AStore.GetTransitiveAncestors(ASym.Id);
-      // (a) any already-RESOLVED ancestor that declares the property with a type.
+      // (a) any already-RESOLVED CLASS ancestor that declares the property with
+      // a type. CLASS-ONLY (R3, Task 3, mirrors ResolveInheritedType's guard
+      // above): an implemented interface can appear in this same closure and
+      // independently redeclare a same-named property with an unrelated type --
+      // excluded so the bridge never resolves to a wrong-class type either.
       for A in Anc do
-        if A.Resolved and (A.SymbolId > 0) then
+        if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
         begin
           Tok:= PropTypeOn(BodyOf(AStore.GetSymbolById(A.SymbolId)));
           if Tok <> '' then Exit(Tok);
