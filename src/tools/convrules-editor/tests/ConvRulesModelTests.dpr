@@ -12,6 +12,7 @@ uses
   ConvRules.Model in '..\ConvRules.Model.pas',
   ConvRules.Units in '..\ConvRules.Units.pas',
   ConvRules.Casts in '..\ConvRules.Casts.pas',
+  ConvRules.CastLib in '..\ConvRules.CastLib.pas',
   ConvRules.Engine in '..\ConvRules.Engine.pas',
   ConvRules.Platform in '..\ConvRules.Platform.pas';
 
@@ -862,6 +863,76 @@ begin
   end;
 end;
 
+{ .castlib parse: a well-formed block yields one cast with multi-type accepts, the
+  single yield, and the unquoted pas/todo templates. }
+procedure TestCastLibParse;
+const
+  SRC =
+    '# a comment'#13#10 +
+    'cast AssignGraphic'#13#10 +
+    '  accepts TPicture, TBitmap, TGraphic'#13#10 +
+    '  yields  TdxSmartGlyph'#13#10 +
+    '  dfm     keep-bytes-if-compatible'#13#10 +
+    '  pas     ''{dst}.Assign({src});'''#13#10 +
+    '  todo    ''do it by hand'''#13#10 +
+    'end'#13#10;
+var
+  D: TArray<TCastDef>;
+begin
+  D := LoadCastLibText(SRC);
+  Check('castlib.count', Length(D) = 1, IntToStr(Length(D)));
+  if Length(D) = 0 then Exit;
+  Check('castlib.name',   D[0].Name = 'AssignGraphic', D[0].Name);
+  Check('castlib.accepts.count', Length(D[0].Accepts) = 3, IntToStr(Length(D[0].Accepts)));
+  Check('castlib.accepts.bitmap', Contains(D[0].Accepts, 'TBitmap'));
+  Check('castlib.yields',  (Length(D[0].Yields) = 1) and (D[0].Yields[0] = 'TdxSmartGlyph'));
+  Check('castlib.dfm',     D[0].Dfm = 'keep-bytes-if-compatible', D[0].Dfm);
+  Check('castlib.pas',     D[0].PasTemplate = '{dst}.Assign({src});', D[0].PasTemplate);
+  Check('castlib.todo',    D[0].Todo = 'do it by hand', D[0].Todo);
+end;
+
+{ Tolerance: blank lines, comments, unknown keys, and a malformed (unclosed) block
+  must not stop the good block from parsing. }
+procedure TestCastLibTolerant;
+const
+  SRC =
+    'cast Broken'#13#10 +          // no 'end' -> discarded when the next 'cast' starts
+    '  accepts TFoo'#13#10 +
+    'cast Good'#13#10 +
+    ''#13#10 +
+    '  # inline comment line'#13#10 +
+    '  accepts TA, TB'#13#10 +
+    '  yields  TC'#13#10 +
+    '  boguskey whatever here'#13#10 +   // unknown key tolerated
+    'end'#13#10;
+var
+  D: TArray<TCastDef>;
+begin
+  D := LoadCastLibText(SRC);
+  Check('castlib.tolerant.count', Length(D) = 1, IntToStr(Length(D)));
+  if Length(D) = 0 then Exit;
+  Check('castlib.tolerant.name', D[0].Name = 'Good', D[0].Name);
+  Check('castlib.tolerant.yields', (Length(D[0].Yields) = 1) and (D[0].Yields[0] = 'TC'));
+end;
+
+{ ClassCastFor: matches a pair whose From is accepted AND To is yielded, case-
+  insensitively; returns '' for an unbridged pair. }
+procedure TestClassCastFor;
+var
+  D: TArray<TCastDef>;
+begin
+  D := LoadCastLibText(
+    'cast AssignGraphic'#13#10 +
+    '  accepts TPicture, TBitmap, TGraphic'#13#10 +
+    '  yields  TdxSmartGlyph'#13#10 +
+    'end'#13#10);
+  Check('castfor.picture',   ClassCastFor(D, 'TPicture', 'TdxSmartGlyph') = 'AssignGraphic');
+  Check('castfor.bitmap',    ClassCastFor(D, 'TBitmap',  'TdxSmartGlyph') = 'AssignGraphic');
+  Check('castfor.ci',        ClassCastFor(D, 'tpicture', 'tdxsmartglyph') = 'AssignGraphic');
+  Check('castfor.wrongto',   ClassCastFor(D, 'TPicture', 'TStrings') = '', 'should be blocked');
+  Check('castfor.wrongfrom', ClassCastFor(D, 'TFont',    'TdxSmartGlyph') = '', 'should be blocked');
+end;
+
 begin
   try
     TestPlatform;
@@ -876,6 +947,9 @@ begin
     TestBlockHelpers;
     TestEditReemit;
     TestCastClassifier;
+    TestCastLibParse;
+    TestCastLibTolerant;
+    TestClassCastFor;
     TestUnknownTypeInference;
     TestProptreeParse;
     TestProptreeNoise;
