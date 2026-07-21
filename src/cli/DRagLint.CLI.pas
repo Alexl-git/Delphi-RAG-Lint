@@ -11141,7 +11141,17 @@ var
   begin
     if not ANode.IsWritable then Exit(False); // read-only -- never a valid target, any surface
     Vis:= LowerCase(Trim(ANode.Visibility));
-    if Vis = '' then Exit(True); // unresolvable -- graceful degrade, do not filter (see remarks)
+    // GRACEFUL-DEGRADE SAFETY NET, not dead code: Visibility='' means the
+    // effective visibility could not be resolved at all (own Modifiers empty
+    // AND the ancestor walk in DRagLint.Convert.PropTree also came up empty).
+    // Unreachable via TODAY's indexer/parser (Modifiers is always stamped
+    // non-empty; see ResolveInheritedVisibility's own remark there) -- this
+    // branch exists for an old/foreign DB row a FUTURE producer could still
+    // emit, so it degrades to "do not filter" (pass) rather than silently
+    // dropping a target more aggressively than pre-Task-5 behavior (which had
+    // no filter at all). Do not delete as unreachable; it is a documented,
+    // intentional back-compat contract, not leftover debris.
+    if Vis = '' then Exit(True);
     if ASurface = 'dfm' then
     begin
       if LowerCase(Trim(ANode.MemberKind)) = 'field' then Exit(False); // DFM streams properties only

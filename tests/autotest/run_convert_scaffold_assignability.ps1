@@ -55,6 +55,36 @@
                                               INCLUDED (concrete #link,
                                               unambiguous match against
                                               TFrom.Caption).
+      public    FThing: Integer;          -- (d) WRITABLE PUBLIC FIELD
+                                              (member_kind='field',
+                                              is_writable=true, visibility=
+                                              'public') -- a DIFFERENT case
+                                              from KMax (b): KMax short-
+                                              circuits at the is_writable gate
+                                              (IsValidTarget's FIRST check)
+                                              before the surface/member_kind
+                                              branch is ever reached, so a
+                                              read-only fixture alone can
+                                              never exercise the dfm surface's
+                                              "member_kind='field' -> Exit(False)"
+                                              line (CLI.pas:11147) -- the exact
+                                              bug class Task 4 had to
+                                              review-fix in the sibling
+                                              PassesMinVisibility (a
+                                              published-section FIELD still
+                                              had to be barred from the
+                                              'published' TIER despite its own
+                                              Modifiers visibility). FThing is
+                                              WRITABLE, so it reaches that
+                                              branch: on the dfm surface it
+                                              gets NO TO-side line (field
+                                              excluded, same DROPPED-note
+                                              pattern as Caption); on the pas
+                                              surface it IS INCLUDED (concrete
+                                              #link, unambiguous match against
+                                              TFrom.FThing, which mirrors the
+                                              To-side field so the ONLY thing
+                                              gating the link is the surface).
 
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-convert-scaffold-assignability
   by default).
@@ -99,6 +129,8 @@ type
   private
     FColor: Integer;
     FCaption: string;
+  public
+    FThing: Integer;
   published
     property Color: Integer read FColor write FColor;
     property Caption: string read FCaption write FCaption;
@@ -109,6 +141,7 @@ type
     FColor: Integer;
     FCaption: string;
   public
+    FThing: Integer;
     const KMax: Integer = 5;
     property Caption: string read FCaption write FCaption;
   published
@@ -151,6 +184,15 @@ Check 'default: Caption gets NO #link line' ($dfmRaw -notmatch '#link\s+Caption'
 Check 'default: Caption gets NO #default line' ($dfmRaw -notmatch '#default\s+Caption') "raw=$dfmRaw"
 Check 'default: Caption (FROM side) correctly reported DROPPED' ($dfmRaw -match '#note\s+DROPPED\s+Caption\s+\(no T target\)') "raw=$dfmRaw"
 
+# FThing (WRITABLE public field) -- the load-bearing case for the dfm
+# surface's member_kind='field' exclusion (CLI.pas:11147). Unlike KMax,
+# FThing is_writable=true, so it actually REACHES that branch instead of
+# short-circuiting at the is_writable gate. Same TO-side exclusion + FROM-side
+# DROPPED-note pattern as Caption.
+Check 'default: FThing (writable field) gets NO #link line' ($dfmRaw -notmatch '#link\s+FThing') "raw=$dfmRaw"
+Check 'default: FThing (writable field) gets NO #default line' ($dfmRaw -notmatch '#default\s+FThing') "raw=$dfmRaw"
+Check 'default: FThing (FROM side) correctly reported DROPPED' ($dfmRaw -match '#note\s+DROPPED\s+FThing\s+\(no T target\)') "raw=$dfmRaw"
+
 # ---------------------------------------------------------------------------
 # (2) Explicit --surface dfm: same as default (sanity: default really IS dfm).
 # ---------------------------------------------------------------------------
@@ -176,6 +218,11 @@ Write-Host $pasRaw -ForegroundColor DarkGray
 Check 'pas: Color still gets a concrete #link' ($pasRaw -match '#link\s+Color\s+<-\s+Color') "raw=$pasRaw"
 Check 'pas: Caption (public-only) NOW INCLUDED with a concrete #link' ($pasRaw -match '#link\s+Caption\s+<-\s+Caption') "raw=$pasRaw"
 Check 'pas: KMax (read-only) STILL NOT mentioned at all' ($pasRaw -notmatch 'KMax') "raw=$pasRaw"
+# FThing (writable public field): on pas surface member_kind='field' is
+# allowed, so the writable-field target IS auto-linked -- the counterpart
+# assertion to the dfm-surface exclusion above; together these two prove
+# CLI.pas:11147 gates on SURFACE, not on some other accidental property.
+Check 'pas: FThing (writable field) NOW INCLUDED with a concrete #link' ($pasRaw -match '#link\s+FThing\s+<-\s+FThing') "raw=$pasRaw"
 
 # ---------------------------------------------------------------------------
 # (4) Round-trip: the pas-surface emitted file must still validate clean
