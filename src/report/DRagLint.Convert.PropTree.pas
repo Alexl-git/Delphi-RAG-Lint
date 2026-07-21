@@ -58,10 +58,14 @@ type
   /// case; the current parser always stamps a non-empty value), the same
   /// ancestor walk used for TypeName resolves the nearest ancestor's
   /// visibility instead of leaving it blank.
-  /// IsWritable (proptree/2) is HARD-CODED True for every PROPERTY leaf as of
-  /// this task (a later task -- R1 -- fills real property writability from the
-  /// read/write accessor split via prop_access; that work is independent of,
-  /// and does not touch, the FIELD writability below).
+  /// IsWritable (proptree/2) is REAL property writability (R1, Task 6): the
+  /// most-derived declaration's resolved prop_access accessor shape -- 'ro' ->
+  /// False, 'rw'/'wo' -> True (write-only is a valid assignment TARGET). A bare
+  /// redeclaration inherits the nearest CLASS ancestor's accessor clause (same
+  /// resolution as TypeName, interface-filtered); an empty/NULL prop_access (no
+  /// clause up-tree, or a pre-v17 / un-re-indexed DB) defaults True -- today's
+  /// back-compat behaviour. This is independent of, and does not touch, the
+  /// FIELD writability below (Task 4).
   /// MemberKind (proptree/2) is 'property' for property leaves.
   /// R4 (Task 4) adds FIELD leaves: MemberKind='field' for both a plain class
   /// field (`public FThing: Integer;`) and a class-scoped constant
@@ -84,7 +88,7 @@ type
     IsClassTyped: Boolean;  // True if TypeName resolved to a class we recursed into
     Kind        : string;   // 'scalar' | 'class' | 'enum' | 'set' | 'unknown'
     Visibility  : string;   // proptree/2: effective (most-derived) visibility; '' if unresolvable
-    IsWritable  : Boolean;  // proptree/2: hard-coded True for property leaves (R1 fills real property writability later); REAL for field leaves (R4: false only for a class const)
+    IsWritable  : Boolean;  // proptree/2: REAL writability -- property leaves from resolved prop_access (R1/Task 6: ro=>false, rw/wo=>true, ''/NULL=>true back-compat); field leaves from R4 (false only for a class const)
     MemberKind  : string;   // proptree/2: 'property' or 'field' (R4: field/const leaves)
   end;
 
@@ -355,6 +359,44 @@ var
       begin
         Vis:= Trim(Child.Modifiers);
         if Vis <> '' then Exit(Vis);
+      end;
+    end;
+  end;
+
+  // R1 (Task 6): resolve a property's EFFECTIVE read/write accessor shape
+  // (prop_access) for the case where its OWN declaration carries NO accessor
+  // clause -- a bare 'property Color;' redeclaration whose stored prop_access is
+  // '' (NULL). Finds the same-named property that DOES carry a non-empty
+  // prop_access in the nearest ancestor. Mirrors ResolveInheritedType EXACTLY
+  // (same class-only ancestor walk, nearest-first) but over PropAccess instead
+  // of Signature -- so a bare redeclaration inherits the ancestor's ro/rw/wo.
+  // CLASS-ONLY (R3, Task 3): the (A.Kind = 'class') guard excludes any
+  // implemented INTERFACE that independently redeclares a same-named property
+  // (Delphi interfaces support `property X: T read GetX;`) with an UNRELATED
+  // accessor shape from interposing before the real class base -- identical to
+  // the interface-filter rationale documented on ResolveInheritedType. Returns
+  // '' when nothing up-tree carries an accessor clause either (the caller then
+  // treats '' as writable -- the back-compat default).
+  function ResolveInheritedPropAccess(const AClass: TSymbol; const APropName: string): string;
+  var
+    Anc   : TArray<TTypeAncestor>;
+    A     : TTypeAncestor        ;
+    AncSym: TSymbol              ;
+    Child : TSymbol              ;
+    PA    : string               ;
+  begin
+    Result:= '';
+    Anc:= AStore.GetTransitiveAncestors(AClass.Id);
+    for A in Anc do
+    begin
+      if not (A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class')) then Continue;
+      AncSym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
+      if AncSym.Id <= 0 then Continue;
+      Child:= AStore.FindChildSymbolByName(AncSym.Id, APropName);
+      if (Child.Id > 0) and (Child.Kind = skProperty) then
+      begin
+        PA:= Trim(Child.PropAccess);
+        if PA <> '' then Exit(PA);
       end;
     end;
   end;
@@ -693,10 +735,21 @@ var
       if Node.Visibility = 'strict private'   then Node.Visibility:= 'private'
       else if Node.Visibility = 'strict protected' then Node.Visibility:= 'protected';
 
-      // proptree/2 (Task 2): staged fields -- IsWritable is hard-coded True
-      // and MemberKind defaults 'property' this task; a later task (R1
-      // writability extraction) fills real values.
-      Node.IsWritable:= True;
+      // R1 (Task 6): REAL property writability from the resolved read/write
+      // accessor shape (prop_access). Prop is already the most-derived
+      // declaration (CollectProps shadowing), so Prop.PropAccess is its OWN
+      // accessor clause; when empty (a bare 'property Color;' redeclaration)
+      // resolve it up-tree from the nearest CLASS ancestor with a non-empty
+      // clause -- MIRRORS the Signature/type resolution above (own decl else
+      // nearest class ancestor, interface-filtered). is_writable is then
+      // (resolved <> 'ro'): 'rw'/'wo' -> writable, 'ro' -> not. An empty
+      // resolved value (no accessor clause anywhere up-tree, or a pre-v17 /
+      // un-re-indexed DB whose prop_access is NULL) defaults TRUE -- today's
+      // back-compat behaviour. 'wo' (write-only) is writable: a valid assignment
+      // TARGET (the editor handles source-vs-target direction separately).
+      var PropAcc: string:= Trim(Prop.PropAccess);
+      if PropAcc = '' then PropAcc:= ResolveInheritedPropAccess(AClass, Prop.Name);
+      Node.IsWritable:= (PropAcc = '') or (PropAcc <> 'ro');
       Node.MemberKind:= 'property';
 
       // Parse the type from this property's own signature; if empty (a bare

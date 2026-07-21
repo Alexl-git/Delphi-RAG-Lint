@@ -93,7 +93,7 @@ type
     destructor Destroy; override;
     function Emit(
       AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature: string = ''; const AModifiers: string = '';
-      const AHeritage: string = ''; AIsVirtual: Boolean = False; AIsHelper: Boolean = False
+      const AHeritage: string = ''; AIsVirtual: Boolean = False; AIsHelper: Boolean = False; const APropAccess: string = ''
     ): Integer;
     procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
     procedure EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
@@ -157,7 +157,7 @@ begin
 end;
 
 function TWalkState.Emit(AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature,
-  AModifiers, AHeritage: string; AIsVirtual: Boolean; AIsHelper: Boolean): Integer;
+  AModifiers, AHeritage: string; AIsVirtual: Boolean; AIsHelper: Boolean; const APropAccess: string): Integer;
 var
   Sym: TSymbol;
 begin
@@ -168,6 +168,7 @@ begin
   Sym.Signature    := ASignature;
   Sym.Modifiers    := AModifiers;
   Sym.Section      := CurrentSection;
+  Sym.PropAccess   := APropAccess; { v17 (Task 6/R1): ro/rw/wo for a property; '' otherwise }
   Sym.Heritage     := AHeritage; { v11 (M1): class/interface ancestor list text; v15: helper target when IsHelper }
   Sym.IsVirtual    := AIsVirtual; { v12 (M1): method virtual dispatch flag }
   Sym.IsHelper     := AIsHelper;  { v15: record/class helper declaration flag }
@@ -1202,7 +1203,22 @@ begin
         var PQName: string;
         if AParentQualifiedName <> '' then PQName:= AParentQualifiedName + '.' + PName
         else PQName:= PName;
-        AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode, TypeTextOf(ANode, AState.Source), AState.CurrentVisibility);
+        { v17 (Task 6/R1): derive the read/write accessor shape from the declProp
+          grammar's 'getter' (read) / 'setter' (write) fields
+          (tree-sitter-delphi13 grammar.js: seq($.kRead, field('getter', $._ref)) /
+          seq($.kWrite, field('setter', $._ref))). read only -> 'ro';
+          read+write -> 'rw'; write only -> 'wo'; NEITHER (a bare
+          'property Color;' redeclaration) -> '' so it inherits the ancestor's
+          accessors at proptree time. Presence alone matters here -- the accessor
+          identifier itself is irrelevant to writability. }
+        var PHasGet:= not ANode.ChildByField('getter').IsNull;
+        var PHasSet:= not ANode.ChildByField('setter').IsNull;
+        var PAccess: string;
+        if PHasGet and PHasSet then PAccess:= 'rw'
+        else if PHasGet then PAccess:= 'ro'
+        else if PHasSet then PAccess:= 'wo'
+        else PAccess:= ''; // bare redeclaration -> NULL -> inherits ancestor's accessors
+        AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode, TypeTextOf(ANode, AState.Source), AState.CurrentVisibility, '', False, False, PAccess);
       end;
     end;
     // Walk children so the property's type emits a type_use ref.

@@ -700,7 +700,7 @@ begin
   FQInsertFile:= NewQuery( 'INSERT OR IGNORE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol:= NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, is_virtual, is_helper, start_line, start_col, end_line, end_col, ' +
-    '  impl_start_line, impl_end_line) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel)');
+    '  impl_start_line, impl_end_line, prop_access) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel, :pa)');
   FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
   FQInsertRef:= NewQuery(
     'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id) ' +
@@ -984,6 +984,14 @@ begin
   FQInsertSymbol.ParamByName('ec'   ).AsInteger:= ASymbol.EndCol;
   FQInsertSymbol.ParamByName('isl'  ).AsInteger:= ASymbol.ImplStartLine; { v9 }
   FQInsertSymbol.ParamByName('iel'  ).AsInteger:= ASymbol.ImplEndLine; { v9 }
+  { v17 (Task 6/R1): a property's read/write accessor shape (ro/rw/wo). Stored
+    NULL when '' -- both for every non-property symbol AND for a bare
+    property redeclaration -- so an un-re-indexed pre-v17 row and a bare
+    redeclaration both read back NULL, which proptree treats as writable/
+    inherit-up-tree. Mirrors the heritage NULL-when-empty pattern above. }
+  FQInsertSymbol.ParamByName('pa'   ).DataType := ftString;
+  if ASymbol.PropAccess <> '' then FQInsertSymbol.ParamByName('pa').AsString:= ASymbol.PropAccess
+  else FQInsertSymbol.ParamByName('pa').Clear;
   FQInsertSymbol.ExecSQL;
   Result:= FConn.GetLastAutoGenValue('');
   // Populate trigram index alongside each symbol insert so fuzzy queries
@@ -1663,6 +1671,8 @@ begin
     Result.IsVirtual := AQ.FieldByName('is_virtual').AsInteger <> 0;
   if AQ.FindField('is_helper') <> nil then { v15: tolerate pre-v15 databases }
     Result.IsHelper := AQ.FieldByName('is_helper').AsInteger <> 0;
+  if AQ.FindField('prop_access') <> nil then { v17 (Task 6/R1): tolerate pre-v17 databases }
+    Result.PropAccess := AQ.FieldByName('prop_access').AsString; { NULL -> '' -> writable/inherit }
   Result  .StartLine:= AQ.FieldByName('start_line').AsInteger;
   Result  .StartCol := AQ.FieldByName('start_col' ).AsInteger;
   Result  .EndLine  := AQ.FieldByName('end_line'  ).AsInteger;

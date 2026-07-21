@@ -50,6 +50,15 @@ type
     Signature    : string     ;
     Modifiers    : string     ;
     Section      : string     ; // 'interface' | 'implementation' | '' (usable-from-other-units)
+    // v17 (proptree assignability engine, Task 6/R1): a PROPERTY's read/write
+    // accessor shape, derived from the declProp getter/setter grammar fields --
+    // 'ro' (read only), 'rw' (read+write), 'wo' (write only), or '' for a bare
+    // redeclaration (`property Color;`) that inherits the ancestor's accessors.
+    // ALWAYS '' for non-property symbols (fields/consts/methods/types). proptree
+    // wires is_writable = (prop_access <> 'ro'); an empty value defaults writable
+    // (back-compat + inheritance-resolved up-tree). Stored NULL when '' (see
+    // UpsertSymbol) so an un-re-indexed pre-v17 DB reads back '' unchanged.
+    PropAccess   : string     ;
     // v11 (M1): raw ancestor list text for class/interface symbols, e.g.
     // 'TBar, IBaz'. Empty for non-class/interface or no ancestors. The
     // resolve pass normalizes names + links them cross-unit (type_ancestors).
