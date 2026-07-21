@@ -37,15 +37,20 @@ type
   /// is True only when TypeName resolved to a class-kind symbol that the walker
   /// recursed INTO. Kind is one of 'scalar' | 'class' | 'enum' | 'set' |
   /// 'unknown'.
-  /// Visibility (proptree/2) is the EFFECTIVE, most-derived member visibility:
-  /// 'published' | 'public' | 'protected' | 'private' | 'strict private' |
-  /// 'strict protected' | '' (unresolvable). A published bare redeclaration of a
-  /// protected/public ancestor property RAISES the effective visibility to
-  /// published -- the ancestor's (lower) visibility is never used when the
-  /// most-derived declaration's own modifiers are known. When the most-derived
-  /// declaration's own modifiers are empty (a defensive case; the current parser
-  /// always stamps a non-empty value), the same ancestor walk used for TypeName
-  /// resolves the nearest ancestor's visibility instead of leaving it blank.
+  /// Visibility (proptree/2) is the EFFECTIVE, most-derived member visibility,
+  /// normalized to the 5-value domain 'published' | 'public' | 'protected' |
+  /// 'private' | '' (unresolvable) -- the parser's 'strict private'/'strict
+  /// protected' (Delphi's `strict` keyword, unit-scoped access) are collapsed
+  /// to 'private'/'protected' respectively, since the strict/non-strict
+  /// distinction is same-unit-only and irrelevant to the cross-unit
+  /// assignability question proptree exists to answer. A published bare
+  /// redeclaration of a protected/public ancestor property RAISES the
+  /// effective visibility to published -- the ancestor's (lower) visibility is
+  /// never used when the most-derived declaration's own modifiers are known.
+  /// When the most-derived declaration's own modifiers are empty (a defensive
+  /// case; the current parser always stamps a non-empty value), the same
+  /// ancestor walk used for TypeName resolves the nearest ancestor's
+  /// visibility instead of leaving it blank.
   /// IsWritable (proptree/2) is HARD-CODED True for every leaf as of this task
   /// (a later task fills real writability from the read/write accessor split).
   /// MemberKind (proptree/2) defaults 'property' for every leaf as of this task
@@ -518,6 +523,18 @@ var
       Node.Visibility:= Trim(Prop.Modifiers);
       if Node.Visibility = '' then
         Node.Visibility:= ResolveInheritedVisibility(AClass, Prop.Name);
+
+      // Normalize at the single point where the effective value is finalized
+      // (covers BOTH the own-declaration and the ancestor-walk paths above):
+      // the parser's Modifiers carries a 'strict ' prefix for 'strict private'/
+      // 'strict protected' sections (unit-scoped access, Delphi's `strict`
+      // keyword), but the documented proptree/2 consumer contract is the
+      // 5-value domain 'published'|'public'|'protected'|'private'|''. The
+      // strict/non-strict distinction is same-unit-only and irrelevant to
+      // cross-unit assignability (what proptree exists to answer), so
+      // collapsing it is semantically lossless.
+      if Node.Visibility = 'strict private'   then Node.Visibility:= 'private'
+      else if Node.Visibility = 'strict protected' then Node.Visibility:= 'protected';
 
       // proptree/2 (Task 2): staged fields -- IsWritable is hard-coded True
       // and MemberKind defaults 'property' this task; a later task (R1

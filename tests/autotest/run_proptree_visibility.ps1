@@ -27,6 +27,14 @@
                 TDerived's OWN declSection (published), not TBase's
                 (protected), even though the type must still be resolved by
                 walking up to TBase (empty signature).
+    TStrictFix -- a 'strict private' property (StrictPrivVal) and a 'strict
+                protected' property (StrictProtVal). VisibilityOfSection (the
+                parser) returns 'strict private'/'strict protected' verbatim
+                for these sections; proptree must NORMALIZE them to plain
+                'private'/'protected' in the emitted JSON -- the strict/
+                non-strict distinction is same-unit-only and out of scope for
+                the 5-value published|public|protected|private|'' consumer
+                contract.
 
   Load-bearing assertions (proptree --qname VisFix.TDerived --format json):
     - schema == 'proptree/2' (was 'proptree/1')
@@ -46,6 +54,8 @@
     - --min-visibility public -> exactly {ProtValue, PubName, PubFlag}
       (3 leaves; adds PubFlag, still excludes PrivName), every emitted leaf's
       visibility is 'published' or 'public'
+    - StrictPrivVal.visibility == 'private'   (NOT 'strict private')
+    - StrictProtVal.visibility == 'protected' (NOT 'strict protected')
 
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-proptree-visibility by default).
 #>
@@ -103,6 +113,22 @@ type
   TDerived = class(TMid)
   published
     property ProtValue;   // bare redeclaration RAISING visibility: protected -> published
+  end;
+
+  // Regression guard: 'strict private'/'strict protected' (Delphi's `strict`
+  // keyword, unit-scoped access) must NORMALIZE to plain 'private'/'protected'
+  // in the emitted visibility -- the documented proptree/2 consumer contract is
+  // the 5-value domain published|public|protected|private|''; the strict
+  // variants must never leak through unnormalized.
+  TStrictFix = class(TPersistent)
+  strict private
+    FStrictPriv: Currency;
+  strict protected
+    FStrictProt: Double;
+  strict private
+    property StrictPrivVal: Currency read FStrictPriv write FStrictPriv;
+  strict protected
+    property StrictProtVal: Double read FStrictProt write FStrictProt;
   end;
 
 implementation
@@ -212,6 +238,35 @@ if ($null -ne $rpub.Tree) {
   Check '--min-visibility public: every leaf visibility is published or public' $allPubOrPublished ("values=" + (($pubprops | ForEach-Object { $_.visibility }) -join ', '))
 } else {
   Check '--min-visibility public: --format json parses as JSON' $false "raw=$($rpub.Raw)"
+}
+
+# --- 4. 'strict private'/'strict protected' NORMALIZE to plain 'private'/
+#        'protected' -- must NOT leak the strict form into the emitted JSON
+#        (the documented proptree/2 domain is the 5-value
+#        published|public|protected|private|'' set). -----------------------
+Write-Host ''
+Write-Host 'proptree VisFix.TStrictFix (strict private/protected normalization)' -ForegroundColor Cyan
+$rs = Get-Tree $db 'VisFix.TStrictFix'
+Check 'strict-fix: exits 0' ($rs.Exit -eq 0) "exit=$($rs.Exit)"
+if ($null -ne $rs.Tree) {
+  $sprops = @($rs.Tree.properties)
+  $sByPath = @{}
+  foreach ($p in $sprops) { $sByPath[$p.path] = $p }
+  $spaths = @($sprops | ForEach-Object { $_.path })
+
+  Check "strict-fix: has 'StrictPrivVal'" ($sByPath.ContainsKey('StrictPrivVal')) ("paths=" + ($spaths -join ', '))
+  Check "strict-fix: has 'StrictProtVal'" ($sByPath.ContainsKey('StrictProtVal')) ("paths=" + ($spaths -join ', '))
+
+  if ($sByPath.ContainsKey('StrictPrivVal')) {
+    $v = $sByPath['StrictPrivVal'].visibility
+    Check "StrictPrivVal.visibility == 'private' (NOT 'strict private')" ($v -eq 'private') "visibility=$v"
+  }
+  if ($sByPath.ContainsKey('StrictProtVal')) {
+    $v = $sByPath['StrictProtVal'].visibility
+    Check "StrictProtVal.visibility == 'protected' (NOT 'strict protected')" ($v -eq 'protected') "visibility=$v"
+  }
+} else {
+  Check 'strict-fix: --format json parses as JSON' $false "raw=$($rs.Raw)"
 }
 
 Write-Host ''
