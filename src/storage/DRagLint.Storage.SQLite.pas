@@ -1095,7 +1095,17 @@ end; // function
 /// call_edges row (untypable receiver). Ordered by file path then start line to
 /// mirror FindCallersByName's first-seen ordering. Each row -> a TResolvedCaller
 /// with Confidence 'unverified'; Location is file-name-only; EnclosingQName is ''
-/// when the ref has no enclosing routine.</summary>
+/// when the ref has no enclosing routine.
+/// (ADP1 Bug C fix): EXCLUDES a class's own method-header self-reference. A
+/// qualified impl header ('function TThing.Add(...)') emits a type_use ref of
+/// name_text='TThing' whose enclosing_symbol_id is the METHOD ITSELF
+/// (TThing.Add) -- s.parent_id is then TThing's own id. When AName matches
+/// that SAME type's name (and kind is a type-like kind), the ref is a
+/// self-reference, not an external caller, and is dropped. A legitimate
+/// external ref (e.g. 'var X: TThing;' in a plain routine with no parent
+/// type) is unaffected: s.parent_id is NULL or a DIFFERENT type there, so
+/// 'NULL IN (...)' / a non-matching id never satisfies the NOT(...) exclusion
+/// and the ref is KEPT.</summary>
 function TSQLiteSymbolStore.FindUnresolvedNameCallers(const AName: string): TArray<TResolvedCaller>;
 var
   Q   : TFDQuery              ;
@@ -1112,8 +1122,11 @@ begin
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
       'WHERE r.name_text = :n AND r.id NOT IN (SELECT ref_id FROM call_edges) ' +
+      '  AND NOT (s.parent_id IN (' +
+      '        SELECT id FROM symbols WHERE name = :n2 AND kind IN (''class'',''interface'',''record'',''type''))) ' +
       'ORDER BY f.path, r.start_line';
     Q.ParamByName('n').AsString:= AName;
+    Q.ParamByName('n2').AsString:= AName;
     Q.Open;
     while not Q.Eof do
     begin
