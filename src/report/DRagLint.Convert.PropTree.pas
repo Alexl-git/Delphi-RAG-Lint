@@ -36,13 +36,29 @@ type
   /// shadows the ancestor's -- the most-derived declaration wins). IsClassTyped
   /// is True only when TypeName resolved to a class-kind symbol that the walker
   /// recursed INTO. Kind is one of 'scalar' | 'class' | 'enum' | 'set' |
-  /// 'unknown'.</remarks>
+  /// 'unknown'.
+  /// Visibility (proptree/2) is the EFFECTIVE, most-derived member visibility:
+  /// 'published' | 'public' | 'protected' | 'private' | 'strict private' |
+  /// 'strict protected' | '' (unresolvable). A published bare redeclaration of a
+  /// protected/public ancestor property RAISES the effective visibility to
+  /// published -- the ancestor's (lower) visibility is never used when the
+  /// most-derived declaration's own modifiers are known. When the most-derived
+  /// declaration's own modifiers are empty (a defensive case; the current parser
+  /// always stamps a non-empty value), the same ancestor walk used for TypeName
+  /// resolves the nearest ancestor's visibility instead of leaving it blank.
+  /// IsWritable (proptree/2) is HARD-CODED True for every leaf as of this task
+  /// (a later task fills real writability from the read/write accessor split).
+  /// MemberKind (proptree/2) defaults 'property' for every leaf as of this task
+  /// (a later task distinguishes fields once field membership is surfaced).</remarks>
   TPropNode = record
     Path        : string;   // dotted, e.g. 'Font.Color'
     TypeName    : string;   // 'TColor'; 'unknown' if unresolvable
     DeclaredIn  : string;   // class qname where this property is first declared
     IsClassTyped: Boolean;  // True if TypeName resolved to a class we recursed into
     Kind        : string;   // 'scalar' | 'class' | 'enum' | 'set' | 'unknown'
+    Visibility  : string;   // proptree/2: effective (most-derived) visibility; '' if unresolvable
+    IsWritable  : Boolean;  // proptree/2: hard-coded True this task (R1 fills real writability later)
+    MemberKind  : string;   // proptree/2: defaults 'property' this task
   end;
 
   /// <summary>Tuning knobs for BuildPropTree.</summary>
@@ -261,6 +277,38 @@ var
     end;
   end;
 
+  // Resolve an empty-modifiers property's EFFECTIVE visibility by finding the
+  // same-named property that DOES carry a non-empty Modifiers in an ancestor
+  // class. Mirrors ResolveInheritedType exactly, but over Modifiers instead of
+  // Signature. Defensive: the current parser always stamps a non-empty
+  // Modifiers (VisibilityOfSection defaults to 'public'), so this path is not
+  // reachable via today's indexer output -- kept so a future/foreign producer
+  // of blank Modifiers rows still resolves a visibility instead of the row
+  // being dropped from a --min-visibility filter.
+  function ResolveInheritedVisibility(const AClass: TSymbol; const APropName: string): string;
+  var
+    Anc   : TArray<TTypeAncestor>;
+    A     : TTypeAncestor        ;
+    AncSym: TSymbol              ;
+    Child : TSymbol              ;
+    Vis   : string               ;
+  begin
+    Result:= '';
+    Anc:= AStore.GetTransitiveAncestors(AClass.Id);
+    for A in Anc do
+    begin
+      if not (A.Resolved and (A.SymbolId > 0)) then Continue;
+      AncSym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
+      if AncSym.Id <= 0 then Continue;
+      Child:= AStore.FindChildSymbolByName(AncSym.Id, APropName);
+      if (Child.Id > 0) and (Child.Kind = skProperty) then
+      begin
+        Vis:= Trim(Child.Modifiers);
+        if Vis <> '' then Exit(Vis);
+      end;
+    end;
+  end;
+
   // RESIDUAL resolver -- the lazy ancestry BRIDGE. Runs only when ParseTypeToken
   // AND ResolveInheritedType both failed, i.e. proptree is about to emit 'unknown'
   // for a bare-redeclared (empty-signature) property whose ancestry is broken by
@@ -459,6 +507,23 @@ var
       Node:= Default(TPropNode);
       Node.Path      := APrefix + Prop.Name;
       Node.DeclaredIn:= DeclaredIn[idx];
+
+      // proptree/2 (Task 2, R2): EFFECTIVE visibility -- the most-derived
+      // declaration's own Modifiers (Prop is already the most-derived symbol
+      // per CollectProps' shadowing), so a published redeclaration of a
+      // protected/public ancestor property RAISES the effective visibility to
+      // published without any extra logic. Only when the own Modifiers is
+      // empty (defensive; not reachable via the current parser) do we fall
+      // back to the ancestor walk instead of leaving it blank.
+      Node.Visibility:= Trim(Prop.Modifiers);
+      if Node.Visibility = '' then
+        Node.Visibility:= ResolveInheritedVisibility(AClass, Prop.Name);
+
+      // proptree/2 (Task 2): staged fields -- IsWritable is hard-coded True
+      // and MemberKind defaults 'property' this task; a later task (R1
+      // writability extraction) fills real values.
+      Node.IsWritable:= True;
+      Node.MemberKind:= 'property';
 
       // Parse the type from this property's own signature; if empty (a bare
       // redeclaration) resolve it from an ancestor that carries a signature, and

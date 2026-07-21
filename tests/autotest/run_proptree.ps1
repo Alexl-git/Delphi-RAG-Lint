@@ -136,7 +136,11 @@ try {
 if ($null -ne $tree) {
   Check 'proptree --format json parses as JSON' $true
 
-  Check 'schema is proptree/1' ($tree.schema -eq 'proptree/1') "schema=$($tree.schema)"
+  # proptree/2 (Task 2, R2): schema bumped proptree/1 -> proptree/2 (additive;
+  # this file's own assertions below are unaffected -- same paths/types/
+  # structure -- confirming the bump is back-compat for everything but the
+  # literal schema string).
+  Check 'schema is proptree/2' ($tree.schema -eq 'proptree/2') "schema=$($tree.schema)"
   Check 'root_type matches TOuter' ($tree.root_type -match 'TOuter') "root_type=$($tree.root_type)"
 
   $props = @($tree.properties)

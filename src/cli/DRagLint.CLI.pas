@@ -336,6 +336,10 @@ type
     // open that never mutates the DB. A writable open that fails falls back to
     // read-only automatically (resolution still works; memoization skipped).
     NoWriteBack   : Boolean; // proptree: force read-only, no memoization (default False = auto write-back)
+    // proptree/2 (Task 2, R2): --min-visibility published|public filters emitted
+    // leaves by EFFECTIVE (most-derived) visibility. '' (default/unset) = emit
+    // ALL leaves, exactly as proptree/1 did (back-compat).
+    MinVisibility : string ; // proptree: --min-visibility published|public ('' = all, back-compat)
     // Track 3 Batch 1 (Task 2): convert-validate. RulesFile is the --rules path
     // (the reFind-superset DSL file). PrintParsed dumps the parsed rules (parse-
     // only diagnostics). --from/--to reuse CallFrom/RenameTo (the From/To types).
@@ -433,7 +437,7 @@ begin
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
-  Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--no-write-back] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query)');
+  Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--no-backup]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup)');
@@ -551,6 +555,7 @@ begin
   Result.Direction          := '';        // per-verb default applied in DoCallGraph/DoReverseCallTree (empty = unset)
   Result.ToPersistent       := True;       // proptree: stop ancestor climb at TPersistent/TObject unless --no-to-persistent
   Result.NoWriteBack        := False;      // proptree: auto write-back ON; --no-write-back forces read-only
+  Result.MinVisibility      := '';        // proptree: --min-visibility unset = emit ALL leaves (back-compat)
   Result.FromBlockFile      := '';        // convert-reemit: --from-block <file>
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
@@ -685,6 +690,7 @@ begin
     else if (A = '--direction') and (i < ParamCount) then begin Inc(i); Result.Direction:= ParamStr(i); end
     else if A = '--no-to-persistent' then Result.ToPersistent:= False // proptree: climb past TPersistent/TObject
     else if A = '--no-write-back' then Result.NoWriteBack:= True // proptree: force read-only (no memoization)
+    else if (A = '--min-visibility') and (i < ParamCount) then begin Inc(i); Result.MinVisibility:= ParamStr(i); end // proptree/2: --min-visibility published|public
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
     else if (A = '--from-block') and (i < ParamCount) then begin Inc(i); Result.FromBlockFile:= ParamStr(i); end // convert-reemit: F DFM object block file
     else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
@@ -10557,47 +10563,74 @@ begin
 end; // function
 
 /// <summary>drag-lint proptree --qname X [--depth N] [--no-to-persistent]
-/// [--format text|json] [--json] --db PATH [--db ...] -- Track 3
-/// Batch 1: the index-driven RECURSIVE deep-property enumerator. Resolves class X,
-/// walks its own + inherited kind='property' children, parses each property's type
-/// from its Signature, and recurses into class-typed property types (depth-capped +
-/// a visited-TYPE-name cycle guard) to produce flattened dotted paths (Font.Color,
-/// Inner.Shade). --depth defaults to 6 (applied here when Depth&lt;=0). ToPersistent
-/// (default ON) stops the ancestor climb at TPersistent/TObject; --no-to-persistent
-/// climbs past. text = an indented tree (indent = the path's dot-depth); json =
-/// schema proptree/1. With multiple --db, the first DB that resolves the qname to a
-/// class is used (ids are per-DB). Write-back is AUTOMATIC: the resolving index is
-/// opened WRITABLE so a property type recovered by the lazy ancestry-bridge (across
-/// an unresolved/type-alias ancestor edge) is memoized back onto the property row
+/// [--min-visibility published|public] [--format text|json] [--json] --db PATH
+/// [--db ...] -- Track 3 Batch 1: the index-driven RECURSIVE deep-property
+/// enumerator. Resolves class X, walks its own + inherited kind='property'
+/// children, parses each property's type from its Signature, and recurses into
+/// class-typed property types (depth-capped + a visited-TYPE-name cycle guard) to
+/// produce flattened dotted paths (Font.Color, Inner.Shade). --depth defaults to 6
+/// (applied here when Depth&lt;=0). ToPersistent (default ON) stops the ancestor
+/// climb at TPersistent/TObject; --no-to-persistent climbs past. text = an
+/// indented tree (indent = the path's dot-depth); json = schema proptree/2 (v2:
+/// adds per-leaf visibility/is_writable/member_kind; additive over proptree/1).
+/// --min-visibility published|public filters the EMITTED leaves by EFFECTIVE
+/// (most-derived) visibility: unset (default) emits ALL leaves exactly as
+/// proptree/1 did (back-compat); 'published' emits only published leaves;
+/// 'public' emits published+public leaves. Applies to both text and json output.
+/// With multiple --db, the first DB that resolves the qname to a class is used
+/// (ids are per-DB). Write-back is AUTOMATIC: the resolving index is opened
+/// WRITABLE so a property type recovered by the lazy ancestry-bridge (across an
+/// unresolved/type-alias ancestor edge) is memoized back onto the property row
 /// (next query is a plain hit; self-limiting). A writable open that fails falls
 /// back to read-only (resolution still works; memoization skipped). --no-write-back
 /// forces a read-only (query_only) open that never mutates the DB.</summary>
 /// <param name="AArgs">QName=class, Depth=recursion cap (default 6),
 /// ToPersistent=ancestor-stop, NoWriteBack=force read-only (no memoization),
-/// Format/AsJson=output, DbPath/DbPaths=index(es).</param>
+/// MinVisibility=--min-visibility filter ('' = all), Format/AsJson=output,
+/// DbPath/DbPaths=index(es).</param>
 /// <returns>0 ok; 1 qname not resolved to a class in any DB; 2 usage error / no
-/// readable db.</returns>
+/// readable db / invalid --min-visibility value.</returns>
 function DoPropTree(const AArgs: TArgs): Integer;
 var
-  Dbs  : TArray<string>  ;
-  Db   : string          ;
-  Store: ISymbolStore    ;
-  Tree : TPropTree       ;
-  Found: Boolean         ;
-  Depth: Integer         ;
-  Fmt  : string          ;
-  Opts : TPropTreeOptions;
+  Dbs   : TArray<string>  ;
+  Db    : string          ;
+  Store : ISymbolStore    ;
+  Tree  : TPropTree       ;
+  Found : Boolean         ;
+  Depth : Integer         ;
+  Fmt   : string          ;
+  Opts  : TPropTreeOptions;
+  MinVis: string          ;
 
   function KindLabel(const ANode: TPropNode): string;
   begin
     Result:= ANode.Kind;
   end;
 
+  // proptree/2 (Task 2, R2): does ANode's effective visibility pass the
+  // --min-visibility threshold? AMinVis is already lower-cased/trimmed/
+  // validated by the caller ('' | 'published' | 'public').
+  function PassesMinVisibility(const ANode: TPropNode; const AMinVis: string): Boolean;
+  var
+    Vis: string;
+  begin
+    if AMinVis = '' then Exit(True); // unset = emit ALL leaves (back-compat)
+    Vis:= LowerCase(Trim(ANode.Visibility));
+    if AMinVis = 'published' then Exit(Vis = 'published');
+    Result:= (Vis = 'published') or (Vis = 'public'); // AMinVis = 'public'
+  end;
+
 begin
   if AArgs.QName = '' then
-  begin Writeln('Usage: drag-lint proptree --qname X [--depth N] [--no-to-persistent] [--no-write-back] [--format text|json] [--json] --db PATH [--db ...]'); Exit(2); end;
+  begin Writeln('Usage: drag-lint proptree --qname X [--depth N] [--no-to-persistent] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]'); Exit(2); end;
 
   Fmt:= LowerCase(Trim(AArgs.Format));
+
+  // proptree/2 (Task 2, R2): validate --min-visibility up front (usage error,
+  // not a silent fall-through) so a typo does not silently emit ALL leaves.
+  MinVis:= LowerCase(Trim(AArgs.MinVisibility));
+  if (MinVis <> '') and (MinVis <> 'published') and (MinVis <> 'public') then
+  begin Writeln(Format('ERROR: --min-visibility must be published|public (got "%s")', [AArgs.MinVisibility])); Exit(2); end;
 
   // proptree's own default depth is 6 (deeper than the global --depth default of
   // 3), applied here so the shared parse default is untouched.
@@ -10648,19 +10681,23 @@ begin
   begin
     var JRoot: TJSONObject:= TJSONObject.Create;
     try
-      JRoot.AddPair('schema'   , 'proptree/1'    );
+      JRoot.AddPair('schema'   , 'proptree/2'    );
       JRoot.AddPair('qname'    , AArgs.QName      );
       JRoot.AddPair('root_type', Tree.RootType    );
       JRoot.AddPair('truncated', TJSONBool.Create(Tree.Truncated));
       var JProps: TJSONArray:= TJSONArray.Create;
       for var N in Tree.Nodes do
       begin
+        if not PassesMinVisibility(N, MinVis) then Continue;
         var JN: TJSONObject:= TJSONObject.Create;
         JN.AddPair('path'          , N.Path      );
         JN.AddPair('type'          , N.TypeName  );
         JN.AddPair('declared_in'   , N.DeclaredIn);
         JN.AddPair('kind'          , KindLabel(N));
         JN.AddPair('is_class_typed', TJSONBool.Create(N.IsClassTyped));
+        JN.AddPair('visibility'    , N.Visibility);
+        JN.AddPair('is_writable'   , TJSONBool.Create(N.IsWritable));
+        JN.AddPair('member_kind'   , N.MemberKind);
         JProps.AddElement(JN);
       end;
       JRoot.AddPair('properties', JProps);
@@ -10671,10 +10708,14 @@ begin
   end
   else // text (default, or explicit --format text)
   begin
-    Writeln(Format('%s  (%d properties%s)', [Tree.RootType, Length(Tree.Nodes),
+    var ShownCount: Integer:= 0;
+    for var N in Tree.Nodes do
+      if PassesMinVisibility(N, MinVis) then Inc(ShownCount);
+    Writeln(Format('%s  (%d properties%s)', [Tree.RootType, ShownCount,
       IfThen(Tree.Truncated, ', truncated', '')]));
     for var N in Tree.Nodes do
     begin
+      if not PassesMinVisibility(N, MinVis) then Continue;
       // Indent by the path's dot-depth (top-level = 0).
       var DotDepth: Integer:= 0;
       for var Ch in N.Path do if Ch = '.' then Inc(DotDepth);
