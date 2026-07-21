@@ -26,20 +26,47 @@
   recovered from its nearest visibility-bearing sibling.
 
   FIXTURE (FieldFix.pas, single class TFieldFix(TPersistent)):
-    private FPrivate: Integer;        -- must be ABSENT from every leaf list
-    public  FThing:   Integer;        -- must appear as member_kind='field',
-                                          is_writable=true
-    public  const KMax: Integer = 5;  -- must appear, is_writable=false
+    private   FPrivate: Integer;        -- must be ABSENT from every leaf list
+    public    FThing:   Integer;        -- must appear as member_kind='field',
+                                            is_writable=true
+    public    const KMax: Integer = 5;  -- must appear, is_writable=false,
+                                            member_kind='field'. NOTE: KMax.type
+                                            resolves to 'unknown', NOT 'Integer'
+                                            -- the parser's declConst branch
+                                            never captures a Signature (see
+                                            PropTree.pas/ResolveConstVisibility-
+                                            ByProximity's comment), so this is a
+                                            known, documented data gap, not an
+                                            oversight in this test.
+    published FBtn: TObject;            -- REVIEW FIX (spec-compliance): a
+                                            published FIELD is legal Delphi
+                                            (`published FBtn: TButton;`) and
+                                            gets Modifiers='published' stamped
+                                            by the same declField path a
+                                            published PROPERTY gets. It must
+                                            still be ABSENT under
+                                            --min-visibility published (fields
+                                            are never DFM-streamable proptree
+                                            targets, regardless of their own
+                                            declared visibility) while its
+                                            EMITTED visibility stays the real,
+                                            unclamped 'published' string under
+                                            --min-visibility public.
 
   Load-bearing assertions (proptree --qname FieldFix.TFieldFix --format json):
     --min-visibility public:
       - FThing leaf present, member_kind == 'field', is_writable == true
-      - KMax   leaf present, is_writable == false
+      - KMax   leaf present, is_writable == false, member_kind == 'field'
+      - FBtn   leaf present, member_kind == 'field', visibility == 'published'
+        (REAL value, NOT clamped to 'public' -- the filter excludes it from
+        the published TIER without altering what it reports)
       - FPrivate leaf ABSENT
     --min-visibility published:
-      - NO field/const leaves at all (FThing, KMax both excluded -- neither
-        is published; a plain/const-default 'public' visibility never clears
-        the strict 'published' bar)
+      - NO field/const leaves at all -- FThing, KMax, AND FBtn are ALL
+        excluded. FBtn is the load-bearing case: despite its own Modifiers
+        being 'published', member_kind='field' categorically bars it from
+        the 'published' tier (PassesMinVisibility in DRagLint.CLI.pas checks
+        member_kind before the visibility string).
 
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-proptree-fields by default).
 #>
@@ -81,6 +108,8 @@ type
   public
     FThing: Integer;
     const KMax: Integer = 5;
+  published
+    FBtn: TObject;
   end;
 
 implementation
@@ -110,7 +139,8 @@ function Get-Tree([string]$Database, [string]$QName, [string]$MinVis = '') {
 }
 
 # --- 1. --min-visibility public: FThing (field, writable) + KMax (const, read-only)
-#        present; FPrivate absent. -------------------------------------------------
+#        + FBtn (published-section field, REAL visibility preserved) present;
+#        FPrivate absent. ----------------------------------------------------------
 Write-Host ''
 Write-Host 'proptree FieldFix.TFieldFix --min-visibility public' -ForegroundColor Cyan
 $rpub = Get-Tree $db 'FieldFix.TFieldFix' 'public'
@@ -125,6 +155,7 @@ if ($null -ne $rpub.Tree) {
 
   Check "has 'FThing'" ($byPath.ContainsKey('FThing')) ("paths=" + ($paths -join ', '))
   Check "has 'KMax'"   ($byPath.ContainsKey('KMax'))   ("paths=" + ($paths -join ', '))
+  Check "has 'FBtn'"   ($byPath.ContainsKey('FBtn'))   ("paths=" + ($paths -join ', '))
   Check "excludes 'FPrivate'" (-not ($paths -contains 'FPrivate')) ("paths=" + ($paths -join ', '))
 
   if ($byPath.ContainsKey('FThing')) {
@@ -134,14 +165,31 @@ if ($null -ne $rpub.Tree) {
   }
   if ($byPath.ContainsKey('KMax')) {
     $km = $byPath['KMax']
-    Check "KMax.is_writable == false" ($km.is_writable -eq $false) "is_writable=$($km.is_writable)"
+    Check "KMax.is_writable == false"   ($km.is_writable -eq $false) "is_writable=$($km.is_writable)"
+    Check "KMax.member_kind == 'field'" ($km.member_kind -eq 'field') "member_kind=$($km.member_kind)"
+  }
+  if ($byPath.ContainsKey('FBtn')) {
+    $fb = $byPath['FBtn']
+    # REVIEW FIX load-bearing case: under --min-visibility public, a
+    # published-section field is PRESENT (public tier includes published-
+    # or-more-visible), member_kind='field', and its REAL declared
+    # visibility ('published') must be reported UNCLAMPED -- the filter
+    # excludes it from the 'published' TIER (checked below), it never
+    # rewrites the emitted value.
+    Check "FBtn.member_kind == 'field'"        ($fb.member_kind -eq 'field')     "member_kind=$($fb.member_kind)"
+    Check "FBtn.visibility == 'published' (real, unclamped)" ($fb.visibility -eq 'published') "visibility=$($fb.visibility)"
   }
 } else {
   Check '--min-visibility public: FThing present' $false ''
   Check '--min-visibility public: KMax present'   $false ''
+  Check '--min-visibility public: FBtn present'   $false ''
 }
 
-# --- 2. --min-visibility published: NO field/const leaves at all. -----------------
+# --- 2. --min-visibility published: NO field/const leaves at all -- INCLUDING
+#        FBtn, whose own declared visibility IS 'published'. This is the
+#        load-bearing regression guard for the review fix: member_kind='field'
+#        must categorically bar a leaf from the 'published' tier regardless of
+#        its own Visibility string. ------------------------------------------
 Write-Host ''
 Write-Host 'proptree FieldFix.TFieldFix --min-visibility published' -ForegroundColor Cyan
 $rp = Get-Tree $db 'FieldFix.TFieldFix' 'published'
@@ -153,6 +201,7 @@ if ($null -ne $rp.Tree) {
   Check '--min-visibility published: no member_kind=field leaves' ($fieldLeaves.Count -eq 0) ("paths=" + ($ppaths -join ', '))
   Check '--min-visibility published: excludes FThing' (-not ($ppaths -contains 'FThing')) ("paths=" + ($ppaths -join ', '))
   Check '--min-visibility published: excludes KMax'   (-not ($ppaths -contains 'KMax'))   ("paths=" + ($ppaths -join ', '))
+  Check "--min-visibility published: excludes FBtn (published-section FIELD still barred)" (-not ($ppaths -contains 'FBtn')) ("paths=" + ($ppaths -join ', '))
 } else {
   Check '--min-visibility published: --format json parses as JSON' $false "raw=$($rp.Raw)"
 }

@@ -10610,11 +10610,22 @@ var
   // proptree/2 (Task 2, R2): does ANode's effective visibility pass the
   // --min-visibility threshold? AMinVis is already lower-cased/trimmed/
   // validated by the caller ('' | 'published' | 'public').
+  // R4 (Task 4 review fix): a FIELD is never a DFM-streamable target,
+  // regardless of its own declared visibility -- a `published FBtn:
+  // TButton;` field is legal Delphi and DOES get Modifiers='published'
+  // stamped by the same declField/CurrentVisibility path a published
+  // PROPERTY gets, but proptree's 'published' tier specifically means "the
+  // Object Inspector / DFM-streamed property surface", which fields (even
+  // published ones) are not part of. This is a member_kind-based FILTER
+  // exclusion only -- the node's own Visibility value is NEVER altered
+  // (KindLabel/JSON emit still reports the field's real, e.g. 'published',
+  // visibility); only whether it PASSES the 'published' bar changes.
   function PassesMinVisibility(const ANode: TPropNode; const AMinVis: string): Boolean;
   var
     Vis: string;
   begin
     if AMinVis = '' then Exit(True); // unset = emit ALL leaves (back-compat)
+    if (AMinVis = 'published') and (LowerCase(Trim(ANode.MemberKind)) = 'field') then Exit(False);
     Vis:= LowerCase(Trim(ANode.Visibility));
     if AMinVis = 'published' then Exit(Vis = 'published');
     Result:= (Vis = 'published') or (Vis = 'public'); // AMinVis = 'public'
