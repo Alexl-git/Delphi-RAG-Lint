@@ -38,9 +38,15 @@
 
   Load-bearing assertions (proptree --qname VisFix.TDerived --format json):
     - schema == 'proptree/2' (was 'proptree/1')
-    - no --min-visibility: ALL 4 leaves present (back-compat: default = show
-      everything), each leaf carries its raw 'visibility' string, every leaf
-      has is_writable == true and member_kind == 'property'
+    - no --min-visibility: ALL 4 PROPERTY leaves present (back-compat: default
+      = show everything), each carries its raw 'visibility' string, every
+      PROPERTY leaf has is_writable == true and member_kind == 'property'.
+      Task 4 (R4) ADDITIVELY emits TBase's 4 private fields (FPrivName,
+      FProtValue, FPubFlag, FPubName) alongside the 4 properties in this same
+      unfiltered list -- expected, not a regression: field leaves are
+      unconditionally in BuildPropTree's Nodes (same as properties always
+      were) and --min-visibility is the only gate, so the true unfiltered
+      total is 8 (4 property + 4 field), not 4.
     - PrivName.visibility   == 'private'
     - PubFlag.visibility    == 'public'
     - PubName.visibility    == 'published'
@@ -173,7 +179,13 @@ if ($null -ne $r.Tree) {
   foreach ($p in $props) { $byPath[$p.path] = $p }
   $paths = @($props | ForEach-Object { $_.path })
 
-  Check 'no flag: all 4 leaves present' ($props.Count -eq 4) ("paths=" + ($paths -join ', '))
+  $propLeaves  = @($props | Where-Object { $_.member_kind -eq 'property' })
+  $fieldLeaves = @($props | Where-Object { $_.member_kind -eq 'field' })
+  Check 'no flag: all 4 PROPERTY leaves present' ($propLeaves.Count -eq 4) ("paths=" + ($paths -join ', '))
+  # Task 4 (R4): TBase's 4 private fields (FPrivName/FProtValue/FPubFlag/
+  # FPubName) are ADDITIVELY present too -- unfiltered = ALL leaves, field or
+  # property, per the existing --min-visibility back-compat contract.
+  Check 'no flag: R4 also emits the 4 field leaves' ($fieldLeaves.Count -eq 4) ("paths=" + ($paths -join ', '))
   Check "has 'PrivName'"  ($byPath.ContainsKey('PrivName'))
   Check "has 'ProtValue'" ($byPath.ContainsKey('ProtValue'))
   Check "has 'PubFlag'"   ($byPath.ContainsKey('PubFlag'))
@@ -196,10 +208,14 @@ if ($null -ne $r.Tree) {
     Check "ProtValue node present" $false ''
   }
 
-  $allWritableTrue  = -not ($props | Where-Object { $_.is_writable -ne $true })
-  $allMemberKindProp = -not ($props | Where-Object { $_.member_kind -ne 'property' })
-  Check 'every leaf has is_writable == true'        $allWritableTrue  ("values=" + (($props | ForEach-Object { $_.is_writable }) -join ', '))
-  Check "every leaf has member_kind == 'property'"  $allMemberKindProp ("values=" + (($props | ForEach-Object { $_.member_kind }) -join ', '))
+  # is_writable==true holds for every leaf here regardless of kind: property
+  # is_writable is still hard-coded true (staged, R1 fills it later) and
+  # every field in this fixture is a plain field (no consts) so R4's real
+  # field writability is also true throughout.
+  $allWritableTrue   = -not ($props | Where-Object { $_.is_writable -ne $true })
+  $allPropMemberKind = -not ($propLeaves | Where-Object { $_.member_kind -ne 'property' })
+  Check 'every leaf has is_writable == true'                 $allWritableTrue   ("values=" + (($props | ForEach-Object { $_.is_writable }) -join ', '))
+  Check "every PROPERTY leaf has member_kind == 'property'"  $allPropMemberKind ("values=" + (($propLeaves | ForEach-Object { $_.member_kind }) -join ', '))
 }
 
 # --- 2. --min-visibility published -> only published leaves. ----------------------

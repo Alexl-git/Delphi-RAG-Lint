@@ -11,6 +11,13 @@ unit DRagLint.Convert.PropTree;
   dotted paths like 'Font.Color' or 'Inner.Shade'. Inherited properties are
   included by walking the resolved ancestor closure (GetTransitiveAncestors).
 
+  R4 (Task 4): ALSO walks each class's own kind='field' AND kind='const'
+  (class-scoped `const X: T = v;`) child symbols, emitted as FLAT leaves
+  (member_kind='field', no recursion into class-typed fields -- out of
+  scope). This is what lets a PAS-surface conversion target a public field,
+  not just a published property. See TPropNode.MemberKind/IsWritable and
+  Walk's field loop for the writability + effective-visibility rules.
+
   Mostly READ-ONLY. The one exception is a LAZY, best-effort write-back: when a
   bare-redeclared property's type can only be recovered by bridging an unresolved
   (type-alias) ancestor edge, the recovered type is memoized onto that property's
@@ -51,10 +58,25 @@ type
   /// case; the current parser always stamps a non-empty value), the same
   /// ancestor walk used for TypeName resolves the nearest ancestor's
   /// visibility instead of leaving it blank.
-  /// IsWritable (proptree/2) is HARD-CODED True for every leaf as of this task
-  /// (a later task fills real writability from the read/write accessor split).
-  /// MemberKind (proptree/2) defaults 'property' for every leaf as of this task
-  /// (a later task distinguishes fields once field membership is surfaced).</remarks>
+  /// IsWritable (proptree/2) is HARD-CODED True for every PROPERTY leaf as of
+  /// this task (a later task -- R1 -- fills real property writability from the
+  /// read/write accessor split via prop_access; that work is independent of,
+  /// and does not touch, the FIELD writability below).
+  /// MemberKind (proptree/2) is 'property' for property leaves.
+  /// R4 (Task 4) adds FIELD leaves: MemberKind='field' for both a plain class
+  /// field (`public FThing: Integer;`) and a class-scoped constant
+  /// (`const KMax: Integer = v;` inside a class -- the index stores it as a
+  /// DIFFERENT SymbolKind, skConstDecl, distinguishable from skField by kind
+  /// alone). IsWritable for a field leaf is field-scoped and real (not
+  /// staged): True for a plain field, False for a class constant (Object
+  /// Pascal constants -- typed or not -- are never assignable). A class
+  /// constant's declared visibility is NOT captured by the current indexer
+  /// (verified empirically: its Modifiers column is always '', unlike
+  /// skField/skProperty which the parser DOES stamp with the enclosing
+  /// section's visibility) -- see Walk's field loop and
+  /// ResolveConstVisibilityByProximity for how the effective visibility is
+  /// recovered from the nearest visibility-bearing sibling instead of being
+  /// fabricated.</remarks>
   TPropNode = record
     Path        : string;   // dotted, e.g. 'Font.Color'
     TypeName    : string;   // 'TColor'; 'unknown' if unresolvable
@@ -62,8 +84,8 @@ type
     IsClassTyped: Boolean;  // True if TypeName resolved to a class we recursed into
     Kind        : string;   // 'scalar' | 'class' | 'enum' | 'set' | 'unknown'
     Visibility  : string;   // proptree/2: effective (most-derived) visibility; '' if unresolvable
-    IsWritable  : Boolean;  // proptree/2: hard-coded True this task (R1 fills real writability later)
-    MemberKind  : string;   // proptree/2: defaults 'property' this task
+    IsWritable  : Boolean;  // proptree/2: hard-coded True for property leaves (R1 fills real property writability later); REAL for field leaves (R4: false only for a class const)
+    MemberKind  : string;   // proptree/2: 'property' or 'field' (R4: field/const leaves)
   end;
 
   /// <summary>Tuning knobs for BuildPropTree.</summary>
@@ -123,7 +145,17 @@ type
 /// otherwise Kind='scalar'. Recursion is bounded by BOTH AOpts.Depth AND a
 /// visited-TYPE-name set, so a back-reference (e.g. 'Parent: TWinControl') always
 /// terminates. When ToPersistent is True the ancestor climb stops at a class
-/// named 'TPersistent' or 'TObject'. Borrows AStore; performs no I/O of its own.
+/// named 'TPersistent' or 'TObject'.
+/// R4 (Task 4): each visited class's OWN kind='field' and kind='const'
+/// (class-scoped constant) children are ALSO emitted, as FLAT leaves
+/// (member_kind='field', never recursed into even when class-typed -- out of
+/// scope for this task). IsWritable is True for a field, False for a class
+/// const. A field's Modifiers (visibility) is read directly (the parser
+/// always stamps it); a const's Modifiers is never stamped by the parser, so
+/// its effective visibility is recovered from the nearest visibility-bearing
+/// sibling (see ResolveConstVisibilityByProximity) rather than left blank or
+/// guessed outright.
+/// Borrows AStore; performs no I/O of its own.
 /// Not thread-safe with respect to concurrent mutation of the store.</remarks>
 function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
   const AOpts: TPropTreeOptions): TPropTree;
@@ -327,6 +359,55 @@ var
     end;
   end;
 
+  // R4 (Task 4): a class CONST's (skConstDecl) effective visibility, for the
+  // (common) case where its OWN Modifiers is blank. INVESTIGATED empirically
+  // (indexed a throwaway fixture, inspected the `symbols` rows directly): the
+  // parser's 'declConst' branch (DRagLint.Parser.Delphi13.pas, inside the
+  // recursive Walk dispatcher, ~line 1238) calls Emit WITHOUT the
+  // ASignature/AModifiers arguments at all -- unlike the 'declField'/
+  // 'declProp' branches, which both pass AState.CurrentVisibility -- so a
+  // class const's Modifiers column is '' UNCONDITIONALLY, regardless
+  // of which visibility section it was actually declared under. Fixing the
+  // parser is out of scope here (Task 4 is PropTree.pas-only, no re-index),
+  // so the effective visibility is instead recovered from data already IN the
+  // index: Delphi visibility sections are purely textual/linear -- every
+  // member between one visibility keyword and the next shares that keyword's
+  // Modifiers -- so the nearest PRECEDING sibling (by StartLine, among ALL
+  // child kinds; fields/properties/methods all DO carry accurate Modifiers)
+  // shares the const's real section. Falls back to 'public' -- Delphi's own
+  // default for an unspecified/first class section -- only when no earlier
+  // sibling carries any visibility info at all (the const is the class's
+  // very first member). This is a best-effort reconstruction from real
+  // sibling data, not a blind guess; it is NOT expected to be 100% correct on
+  // every real corpus (e.g. a const that is the sole member of its own
+  // section, preceded only by an EARLIER section's members, could inherit
+  // the wrong section) -- documented as a known limitation.
+  function ResolveConstVisibilityByProximity(const AClass: TSymbol; const AConst: TSymbol): string;
+  var
+    Kids     : TArray<TSymbol>;
+    Kid      : TSymbol        ;
+    Best     : TSymbol        ;
+    HaveBest : Boolean        ;
+  begin
+    HaveBest:= False;
+    Best    := Default(TSymbol);
+    Kids    := AStore.FindAllChildSymbols(AClass.Id);
+    for Kid in Kids do
+    begin
+      if Kid.Id = AConst.Id then Continue;
+      if Trim(Kid.Modifiers) = '' then Continue;         // no visibility signal on this sibling
+      if Kid.StartLine > AConst.StartLine then Continue; // must precede the const textually
+      if (not HaveBest) or (Kid.StartLine > Best.StartLine) or
+         ((Kid.StartLine = Best.StartLine) and (Kid.StartCol > Best.StartCol)) then
+      begin
+        Best    := Kid;
+        HaveBest:= True;
+      end;
+    end;
+    if HaveBest then Result:= Trim(Best.Modifiers)
+    else Result:= 'public'; // no earlier sibling at all -- Delphi's own implicit-section default
+  end;
+
   // RESIDUAL resolver -- the lazy ancestry BRIDGE. Runs only when ParseTypeToken
   // AND ResolveInheritedType both failed, i.e. proptree is about to emit 'unknown'
   // for a bare-redeclared (empty-signature) property whose ancestry is broken by
@@ -502,6 +583,55 @@ var
     end;
   end;
 
+  // R4 (Task 4): the distinct FIELD/CONST leaves visible on AClass (own +
+  // inherited), each paired with the most-derived class that declares it.
+  // Dedupe by leaf name. Mirrors CollectProps exactly (same ClassChain,
+  // most-derived-first shadowing) but filters skField/skConstDecl instead of
+  // skProperty, and is kept as a SEPARATE walk with its OWN Seen set --
+  // deliberately NOT folded into CollectProps -- so the property engine's
+  // already class-accurate (Task 3) behavior is never disturbed by this
+  // addition. skConstDecl (a class-scoped `const X: T = v;`) is included
+  // alongside skField because a typed class const is a required PAS-surface
+  // leaf too (read-only; see Walk's field loop).
+  procedure CollectFields(const AClass: TSymbol;
+    out AOrder: TArray<TSymbol>; out ADeclaredIn: TArray<string>);
+  var
+    Chain: TArray<TSymbol> ;
+    Cls  : TSymbol         ;
+    Kids : TArray<TSymbol> ;
+    Kid  : TSymbol         ;
+    Seen : TDictionary<string, Boolean>;
+    OL   : TList<TSymbol>  ;
+    DL   : TList<string>   ;
+    Key  : string          ;
+  begin
+    Seen:= TDictionary<string, Boolean>.Create;
+    OL  := TList<TSymbol>.Create;
+    DL  := TList<string >.Create;
+    try
+      Chain:= ClassChain(AClass); // most-derived first -> shadowing is automatic
+      for Cls in Chain do
+      begin
+        Kids:= AStore.FindAllChildSymbols(Cls.Id);
+        for Kid in Kids do
+        begin
+          if not (Kid.Kind in [skField, skConstDecl]) then Continue;
+          Key:= LowerCase(Kid.Name);
+          if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
+          Seen.Add(Key, True);
+          OL.Add(Kid);
+          DL.Add(Cls.QualifiedName);
+        end;
+      end;
+      AOrder     := OL.ToArray;
+      ADeclaredIn:= DL.ToArray;
+    finally
+      Seen.Free;
+      OL.Free;
+      DL.Free;
+    end;
+  end;
+
   // Recursive walk. APrefix is the dotted path down to (and including a trailing
   // '.') the current class; AVisited holds lowercased TYPE names already expanded
   // on this path (cycle guard). ADepthLeft is the remaining class-recursion budget.
@@ -520,6 +650,16 @@ var
     LowType    : string         ;
     ClosureIds : TArray<Int64>  ;
     ClosureDone: Boolean        ;
+    // R4 (Task 4): field/const leaves -- separate variable set, mirrors the
+    // property loop's shape but is a flat (non-recursive) emission.
+    FieldOrder     : TArray<TSymbol>;
+    FieldDeclaredIn: TArray<string> ;
+    FIdx           : Integer        ;
+    Fld            : TSymbol        ;
+    FNode          : TPropNode      ;
+    FVis           : string         ;
+    FTok           : string         ;
+    FTypeSym       : TSymbol        ;
   begin
     ClosureDone:= False;
     CollectProps(AClass, Order, DeclaredIn);
@@ -627,6 +767,62 @@ var
         Node.IsClassTyped:= False;
         Nodes.Add(Node);
       end;
+    end;
+
+    // R4 (Task 4): own field/const leaves for THIS class, at the SAME prefix
+    // depth. Flat leaves only -- unlike class-typed PROPERTIES, a class-typed
+    // FIELD is never recursed into (out of scope for this task; the field
+    // itself is the assignment target).
+    CollectFields(AClass, FieldOrder, FieldDeclaredIn);
+    for FIdx:= 0 to High(FieldOrder) do
+    begin
+      Fld  := FieldOrder[FIdx];
+      FNode:= Default(TPropNode);
+      FNode.Path      := APrefix + Fld.Name;
+      FNode.DeclaredIn:= FieldDeclaredIn[FIdx];
+      FNode.MemberKind:= 'field';
+
+      // Effective visibility. A plain field's Modifiers is always populated
+      // by the parser (declField stamps AState.CurrentVisibility, same as
+      // declProp) -- read directly. A class CONST's Modifiers is NEVER
+      // populated (verified empirically -- see ResolveConstVisibilityByProximity's
+      // comment) -- recovered from the nearest visibility-bearing sibling.
+      FVis:= Trim(Fld.Modifiers);
+      if (FVis = '') and (Fld.Kind = skConstDecl) then
+        FVis:= ResolveConstVisibilityByProximity(AClass, Fld);
+      if FVis = 'strict private'        then FVis:= 'private'
+      else if FVis = 'strict protected' then FVis:= 'protected';
+      FNode.Visibility:= FVis;
+
+      // Field-scoped writability (Task 4) -- independent of, and does not
+      // touch, the staged property IsWritable path above. A plain field is
+      // writable; a class CONST is a compile-time constant (typed or not) --
+      // never assignable.
+      FNode.IsWritable:= Fld.Kind <> skConstDecl;
+
+      FTok:= ParseTypeToken(Fld.Signature);
+      if FTok = '' then
+      begin
+        FNode.TypeName    := 'unknown';
+        FNode.Kind        := 'unknown';
+        FNode.IsClassTyped:= False;
+      end
+      else
+      begin
+        FNode.TypeName:= FTok;
+        FTypeSym:= AStore.FindSymbolByExactNameAnywhere(FTok);
+        if (FTypeSym.Id > 0) and (FTypeSym.Kind = skClass) then
+        begin
+          FNode.Kind        := 'class';
+          FNode.IsClassTyped:= True; // NOT recursed into -- flat leaf (R4 scope)
+        end
+        else
+        begin
+          FNode.Kind        := 'scalar';
+          FNode.IsClassTyped:= False;
+        end;
+      end;
+      Nodes.Add(FNode);
     end;
   end;
 
