@@ -32,6 +32,10 @@ type
     DeclaredIn : string;   // owning unit.class, e.g. 'Vcl.Graphics.TFont'
     Kind       : string;   // 'scalar' | 'class' | 'unknown'
     IsClassType: Boolean;  // recursion descended into it
+    // proptree/2 (engine schema v17): assignability of this leaf as a TARGET.
+    IsWritable : Boolean;  // False = read-only (ro prop / typed const): not a valid target
+    Visibility : string;   // 'published' | 'public' | ... ('' when absent)
+    MemberKind : string;   // 'property' | 'field'  ('property' when absent)
   end;
 
   TProptree = record
@@ -82,10 +86,12 @@ type
     /// <summary>The adapter's current default DB list (read-only view).</summary>
     function DbList: TArray<string>;
 
-    /// <summary>proptree --qname X --format json. Returns False + empty tree if the
-    /// type does not resolve (exit 1) or the exe/db is unusable (exit 2).</summary>
+    /// <summary>proptree --qname X [--min-visibility V] --format json. AMinVisibility
+    /// ('published'|'public'|'') selects the target surface (engine schema v17); ''
+    /// emits every leaf. Returns False + empty tree if the type does not resolve
+    /// (exit 1) or the exe/db is unusable (exit 2).</summary>
     function GetProptree(const AQname: string; out ATree: TProptree;
-      out AError: string): Boolean;
+      out AError: string; const AMinVisibility: string = ''): Boolean;
 
     /// <summary>The unit that declares ATypeName, derived by resolving it to its
     /// unit-qualified form (ResolveClassQName) and taking the part before the LAST
@@ -213,12 +219,24 @@ begin
           begin
             Obj := V as TJSONObject;
             Leaf := Default(TPropLeaf);
+            // proptree/1 back-compat defaults: an OLD exe omits these fields, and the
+            // editor must then degrade to "show everything" (writable), never hide all.
+            // NB: TryGetValue's 2nd arg is `out` -- it CLEARS the target even when the
+            // key is absent, so a non-empty default (member_kind) must be applied ONLY
+            // when the read returns False; is_writable is read via BVal so its default
+            // survives.
+            Leaf.IsWritable := True;
             Obj.TryGetValue<string>('path', Leaf.Path);
             Obj.TryGetValue<string>('type', Leaf.TypeName);
             Obj.TryGetValue<string>('declared_in', Leaf.DeclaredIn);
             Obj.TryGetValue<string>('kind', Leaf.Kind);
             if Obj.TryGetValue<Boolean>('is_class_typed', BVal) then
               Leaf.IsClassType := BVal;
+            if Obj.TryGetValue<Boolean>('is_writable', BVal) then
+              Leaf.IsWritable := BVal;
+            Obj.TryGetValue<string>('visibility', Leaf.Visibility);
+            if not Obj.TryGetValue<string>('member_kind', Leaf.MemberKind) then
+              Leaf.MemberKind := 'property';
             List.Add(Leaf);
           end;
       Result.Leaves := List.ToArray;
@@ -304,21 +322,56 @@ begin
     CloseHandle(WritePipe);
     WritePipe := 0;
 
+    // Bounded, non-blocking drain: poll the pipe so a pathological engine call (an
+    // unbounded proptree expansion on some DevExpress controls -- see the v17
+    // --refs-as-leaves follow-up) times out gracefully instead of freezing the
+    // editor's main thread on an INFINITE wait.
+    const TIMEOUT_MS = 30000;
+    var TimedOut: Boolean := False;
     SB := TStringBuilder.Create;
     try
+      var Deadline: UInt64 := GetTickCount64 + TIMEOUT_MS;
+      var Avail: DWORD := 0;
       repeat
-        BytesRead := 0;
-        if not ReadFile(ReadPipe, Buf, SizeOf(Buf), BytesRead, nil) then Break;
-        if BytesRead = 0 then Break;
-        SB.Append(string(AnsiString(Copy(Buf, 0, BytesRead))));
+        if PeekNamedPipe(ReadPipe, nil, 0, nil, @Avail, nil) and (Avail > 0) then
+        begin
+          BytesRead := 0;
+          if not ReadFile(ReadPipe, Buf, SizeOf(Buf), BytesRead, nil) or (BytesRead = 0) then Break;
+          SB.Append(string(AnsiString(Copy(Buf, 0, BytesRead))));
+          Continue;                                // keep draining while bytes are ready
+        end;
+        if WaitForSingleObject(PI.hProcess, 40) = WAIT_OBJECT_0 then
+        begin
+          // process exited: drain any final buffered bytes, then stop
+          while PeekNamedPipe(ReadPipe, nil, 0, nil, @Avail, nil) and (Avail > 0) do
+          begin
+            BytesRead := 0;
+            if not ReadFile(ReadPipe, Buf, SizeOf(Buf), BytesRead, nil) or (BytesRead = 0) then Break;
+            SB.Append(string(AnsiString(Copy(Buf, 0, BytesRead))));
+          end;
+          Break;
+        end;
+        if GetTickCount64 >= Deadline then
+        begin
+          TerminateProcess(PI.hProcess, DWORD(-1));
+          WaitForSingleObject(PI.hProcess, 2000);
+          TimedOut := True;
+          Break;
+        end;
       until False;
       AOutput := SB.ToString;
     finally
       SB.Free;
     end;
 
-    WaitForSingleObject(PI.hProcess, INFINITE);
-    if GetExitCodeProcess(PI.hProcess, ExitCode) then Result := Integer(ExitCode);
+    if TimedOut then
+    begin
+      AOutput := AOutput + sLineBreak +
+        Format('[timeout: engine call exceeded %d s]', [TIMEOUT_MS div 1000]);
+      Result := 3;                                 // distinct code: timed out (not 0/1/2)
+    end
+    else if GetExitCodeProcess(PI.hProcess, ExitCode) then
+      Result := Integer(ExitCode);
     CloseHandle(PI.hProcess);
     CloseHandle(PI.hThread);
   finally
@@ -336,11 +389,12 @@ end;
 {$ENDIF}
 
 function TEngineAdapter.GetProptree(const AQname: string; out ATree: TProptree;
-  out AError: string): Boolean;
+  out AError: string; const AMinVisibility: string): Boolean;
 var
   Output: string;
   Code  : Integer;
   QN    : string;
+  VisArg: string;
 begin
   AError := '';
   ATree := Default(TProptree);
@@ -348,10 +402,23 @@ begin
   // unit-qualified form (cxButtons.TcxButton). Qualify it first (no-op if already
   // qualified or not resolvable).
   QN := ResolveClassQName(AQname);
-  // --refs-as-leaves: a referenced TComponent (PopupMenu, Action, a nested control)
-  // is a leaf, not expanded -- keeps the tree to the component's own convertible
-  // surface instead of flooding it with every referenced component's members.
-  Code := RunCapture(Format('proptree --qname "%s" --refs-as-leaves --format json%s', [QN, DbArgs]), Output);
+  // Target surface (engine schema v17): --min-visibility published (DFM-streamable
+  // props only) or public (adds public props + public fields); '' emits all leaves.
+  // NOTE: the old --refs-as-leaves flag is NOT in the shipped v17 engine (it lives
+  // only on the converter branch's proptree) -- passing it makes v17 FATAL, so it is
+  // dropped here. Follow-up: ask the engine team to add it to main so referenced
+  // components (Action.Owner.Name, DropDownMenu.Tag) stop expanding into the surface.
+  VisArg := '';
+  if AMinVisibility <> '' then VisArg := ' --min-visibility ' + AMinVisibility;
+  Code := RunCapture(Format('proptree --qname "%s"%s --format json%s', [QN, VisArg, DbArgs]), Output);
+  if Code = 3 then
+  begin
+    AError := Format('proptree TIMED OUT for %s -- the property tree is too large to '
+      + 'enumerate. The shipped v17 engine dropped --refs-as-leaves, so referenced '
+      + 'components expand without bound on some controls. Awaiting the engine fix; '
+      + 'try a different class meanwhile.', [AQname]);
+    Exit(False);
+  end;
   if Code <> 0 then
   begin
     AError := Format('proptree failed (exit %d) for %s. The type may not be indexed, '

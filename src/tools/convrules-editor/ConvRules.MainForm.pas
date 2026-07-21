@@ -48,6 +48,8 @@ type
     FCbUnit   : TComboBox;            // From Unit picker (project units)
     FCbFromPlat: TComboBox;           // FROM platform (Win32/Win64/Both)
     FCbToPlat  : TComboBox;           // TO platform
+    FCbSurface : TComboBox;           // target surface: DFM (published) | PAS (public + fields)
+    FSurfaceMinVis: string;           // '' | 'published' | 'public' -- proptree --min-visibility
     // rules library
     FRules    : TListView;
     // grid
@@ -100,6 +102,7 @@ type
     function  ToDbSet: TArray<string>;
     function  EngineDbSet: TArray<string>;
     procedure PlatformChanged(Sender: TObject);
+    procedure SurfaceChanged(Sender: TObject);
     procedure CbLoadClasses(Sender: TObject);
     procedure CbLoadUnits(Sender: TObject);
     procedure DoLoadUnit(Sender: TObject);
@@ -108,6 +111,7 @@ type
     function  ActiveLinks: TArray<TRuleNode>;
     function  FindLinkForFrom(const AFromPath: string): TRuleNode;
     function  LeafType(const ATree: TProptree; const APath: string): string;
+    function  LeafWritable(const ATree: TProptree; const APath: string): Boolean;
   public
     { Application.CreateForm calls this standard Create(AOwner); we route it to
       CreateNew (no .dfm) and build the UI in code. Being created via CreateForm
@@ -192,6 +196,7 @@ begin
   FToPlatform   := GEditorToPlatform;
   FEngine := TEngineAdapter.Create(GEditorExe, EngineDbSet);
   FActiveHdr := -1;
+  FSurfaceMinVis := 'published';   // default target surface = DFM-streamable
   BuildUI;
   OnClose := FormCloseHandler;
   Visible := True;  // ensure the CreateNew form is shown by Run
@@ -265,6 +270,21 @@ begin
   var BtnFillUnit: TButton := TButton.Create(Self);
   BtnFillUnit.Parent := FPanelTop; BtnFillUnit.SetBounds(350, 38, 150, 25);
   BtnFillUnit.Caption := 'Fill From-classes'; BtnFillUnit.OnClick := DoLoadUnit;
+
+  // Target surface: DFM = published props only; PAS = public props + public fields.
+  // Selects proptree --min-visibility for the From/To trees (engine schema v17).
+  var LblSurf: TLabel := TLabel.Create(Self);
+  LblSurf.Parent := FPanelTop; LblSurf.SetBounds(520, 42, 58, 15); LblSurf.Caption := 'Surface:';
+  FCbSurface := TComboBox.Create(Self);
+  FCbSurface.Parent := FPanelTop; FCbSurface.SetBounds(580, 39, 190, 23);
+  FCbSurface.Style := csDropDownList;
+  FCbSurface.Items.Add('DFM (published props)');
+  FCbSurface.Items.Add('PAS (public props + fields)');
+  FCbSurface.ItemIndex := 0;
+  FCbSurface.Hint := 'Target surface: DFM = published (DFM-streamable) only; '
+    + 'PAS = public props + public fields. Read-only leaves are always hidden.';
+  FCbSurface.ShowHint := True;
+  FCbSurface.OnChange := SurfaceChanged;
 
   // --- row 2: From [v]  ->  To [v]  [New Conversion] ---
   // FROM holds all source components (TComponent desc, Win32+Win64 union); TO holds
@@ -483,6 +503,18 @@ begin
   Result := '';
   for L in ATree.Leaves do
     if SameText(L.Path, APath) then Exit(L.TypeName);
+end;
+
+{ Whether a leaf is a writable assignment target. Defaults True when the leaf is not
+  found or the engine is proptree/1 (IsWritable defaults True) -- never block on
+  missing data. }
+function TConvRulesForm.LeafWritable(const ATree: TProptree; const APath: string): Boolean;
+var
+  L: TPropLeaf;
+begin
+  Result := True;
+  for L in ATree.Leaves do
+    if SameText(L.Path, APath) then Exit(L.IsWritable);
 end;
 
 { Load the FROM and TO class pickers, once. They are deliberately DIFFERENT sets:
@@ -873,14 +905,14 @@ begin
   // fetch F + T trees from the engine. The From tree always loads (a From-only
   // rule still shows its flattened property list); the To tree loads only once a
   // To class has been assigned.
-  if not FEngine.GetProptree(Node.FromType, FFromTree, Err) then
+  if not FEngine.GetProptree(Node.FromType, FFromTree, Err, FSurfaceMinVis) then
   begin
     SetStatus('From tree: ' + Err);
     FFromTree := Default(TProptree);
   end;
   if Trim(Node.ToType) = '' then
     FToTree := Default(TProptree)   // From-only rule: no To tree yet
-  else if not FEngine.GetProptree(Node.ToType, FToTree, Err) then
+  else if not FEngine.GetProptree(Node.ToType, FToTree, Err, FSurfaceMinVis) then
   begin
     SetStatus('To tree: ' + Err);
     FToTree := Default(TProptree);
@@ -935,10 +967,17 @@ begin
     try
       FPool.Items.Clear;
       for Leaf in FToTree.Leaves do
+        if Leaf.IsWritable then                        // hide read-only (invalid) targets
         if not Assigned.ContainsKey(LowerCase(Leaf.Path)) then
           if (Filter = '') or (Pos(Filter, LowerCase(Leaf.Path)) > 0) then
             if (FPoolTypeFilter = '') or SameText(Leaf.TypeName, FPoolTypeFilter) then
-              FPool.Items.Add(Format('%s : %s', [Leaf.Path, Leaf.TypeName]));
+            begin
+              var disp: string := Format('%s : %s', [Leaf.Path, Leaf.TypeName]);
+              // public members are code-only -- tag so a DFM rule sees they won't
+              // stream to a .dfm (published targets carry no tag).
+              if SameText(Leaf.Visibility, 'public') then disp := disp + '   (PAS-only)';
+              FPool.Items.Add(disp);
+            end;
     finally
       FPool.Items.EndUpdate;
     end;
@@ -959,12 +998,18 @@ begin
   if p > 0 then Result := Copy(S, 1, p - 1) else Result := S;
 end;
 
-{ The type token of a 'Path : Type' grid/pool cell ('' when there is no ' : '). }
+{ The type token of a 'Path : Type [tag]' grid/pool cell ('' when there is no ' : ').
+  Takes only the first token after ' : ' so a trailing display tag (e.g. the
+  '(PAS-only)' pool marker) does not corrupt a type comparison. }
 function TypeOfCell(const S: string): string;
-var p: Integer;
+var p, sp: Integer;
 begin
+  Result := '';
   p := Pos(' : ', S);
-  if p > 0 then Result := Trim(Copy(S, p + 3, MaxInt)) else Result := '';
+  if p <= 0 then Exit;
+  Result := Trim(Copy(S, p + 3, MaxInt));
+  sp := Pos(' ', Result);
+  if sp > 0 then Result := Copy(Result, 1, sp - 1);
 end;
 
 { The last dotted segment of a property path ('Font.Color' -> 'Color'). }
@@ -1022,6 +1067,19 @@ begin
   FBtnOnlyType.Caption := 'Show all types';
   RefreshPool;
   SetStatus(Format('Pool narrowed to type "%s".', [t]));
+end;
+
+{ Target surface changed (DFM published <-> PAS public+fields): remember the new
+  --min-visibility and re-fetch the active rule's From/To trees at that surface. }
+procedure TConvRulesForm.SurfaceChanged(Sender: TObject);
+begin
+  if FCbSurface.ItemIndex = 1 then FSurfaceMinVis := 'public'
+  else FSurfaceMinVis := 'published';
+  if FActiveHdr >= 0 then LoadGridForBlock(FActiveHdr);
+  if FSurfaceMinVis = 'public' then
+    SetStatus('Surface: PAS -- public props + public fields (public targets tagged PAS-only).')
+  else
+    SetStatus('Surface: DFM -- published (DFM-streamable) props only.');
 end;
 
 { Create or update the #link mapping ToPath <- FromPath in the active block,
@@ -1087,6 +1145,12 @@ begin
   // from the other side -- a same-named property is the same inherited member.
   ResolveUnknownTypes(fromType, toType);
 
+  if not LeafWritable(FToTree, ToPath) then
+  begin
+    SetError(Format('Blocked: %s is read-only -- not a valid assignment target.', [ToPath]));
+    Exit;
+  end;
+
   if not IsCastable(fromType, toType) then
   begin
     SetError(Format('Blocked: cannot map %s (%s) to %s (%s) -- no known cast.',
@@ -1141,6 +1205,7 @@ begin
     // leaves (dozens of '.Components', '.Owner', ...) arbitrarily.
     for toLeaf in FToTree.Leaves do
     begin
+      if not toLeaf.IsWritable then Continue;   // read-only leaves are never targets
       toName := LowerCase(LeafName(toLeaf.Path));
       if toNameCount.TryGetValue(toName, cnt) then toNameCount[toName] := cnt + 1
       else toNameCount.Add(toName, 1);
@@ -1160,6 +1225,7 @@ begin
       nCand := 0; candidate := Default(TPropLeaf); matchType := '';
       for toLeaf in FToTree.Leaves do
       begin
+        if not toLeaf.IsWritable then Continue;
         if assignedTo.ContainsKey(LowerCase(toLeaf.Path)) then Continue;
         if not SameText(toLeaf.Path, fromLeaf.Path) then Continue;
         var fT: string := fromLeaf.TypeName;
@@ -1179,6 +1245,7 @@ begin
       if (nCand = 0) and toNameCount.TryGetValue(fromName, cnt) and (cnt = 1) then
         for toLeaf in FToTree.Leaves do
         begin
+          if not toLeaf.IsWritable then Continue;
           if assignedTo.ContainsKey(LowerCase(toLeaf.Path)) then Continue;
           toName := LowerCase(LeafName(toLeaf.Path));
           if fromName <> toName then Continue;

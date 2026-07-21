@@ -80,6 +80,15 @@ akRight so they stretch; two new pool buttons (item 3) fit above Assign/Unassign
 > published/public) and **concrete polymorphic type** (`TcxCheckBox.Properties` ->
 > `TcxCheckBoxProperties` already captured) are proptree/CLI plumbing, NO re-index.
 > Contract = proptree/2 JSON (`is_writable`, `visibility`), back-compat defaults.
+>
+> **2026-07-21: ENGINE SHIPPED proptree/2 (v17) + editor WIRED.** TPropLeaf gains
+> IsWritable/Visibility/MemberKind; GetProptree passes `--min-visibility`; RefreshPool
+> hides read-only + tags PAS-only; DFM/PAS surface combo; Auto-Match/DoAssign skip
+> read-only; 30 s watchdog in RunCapture. Model suite 126/0/3-skip. BUT two engine
+> blockers remain (see `docs/converter/2026-07-21-proptree-v17-integration-blockers.md`):
+> (1) v17 dropped `--refs-as-leaves` -> some controls' proptree explodes/times out
+> (TcxCheckBox); (2) v17 exe HARD-refuses pre-v17 project DBs -> ORM3 needs a v17
+> re-index for the unit-picker/fill features. Editor works today for library targets.
 
 - **Read-only leaves are not valid assignment targets** (e.g. `...Handle`). A To
   path is only usable if the FINAL segment is WRITABLE (and every intermediate
