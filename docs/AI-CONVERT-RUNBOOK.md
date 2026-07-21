@@ -41,9 +41,23 @@ Three DBs matter (paths on this machine):
 | Library Win32 | 3rd-party libraries incl. **DevExpress `cx`** types | `C:\Projects\.drag-lint\library-Win32.sqlite` |
 | Library Win64 | 3rd-party libraries (fewer -- `cx` NOT present as of this writing) | `C:\Projects\.drag-lint\library-Win64.sqlite` |
 
-You can pass **multiple** `--db`; the first DB that resolves a given qname wins
-(symbol ids are per-DB). A typical conversion needs the **app DB** (for the form
-being edited) plus the **library DB that declares both component types**.
+You can pass **multiple** `--db`; each type is resolved against **all** of them,
+first-DB-that-resolves-wins (symbol ids are per-DB). **The From and To types may
+live in DIFFERENT DBs.** As of 2026-07-20 `convert-apply` resolves each type
+independently across every `--db` for BOTH the freshness guard and the apply plan
+(before that fix only the first `--db` was consulted, so a cross-DB pair silently
+failed the guard with "not indexed (no skClass symbol found)" and matched no
+instances). A typical conversion therefore needs the **app DB** (the form being
+edited -- it holds the instances) plus **whichever library DB(s) declare the From
+and To types** -- and those can be two different platform libraries.
+
+Real example: an Orpheus source `Abcbtn.TabcToggleBtn` (only in `library-Win64`)
+converting to a DevExpress target `cxButtons.TcxButton` (only in `library-Win32`,
+since `cx` is Win32-only) needs all three:
+`--db <appDB> --db library-Win64 --db library-Win32`. The `#convert` header may use
+either bare (`TabcToggleBtn -> TcxButton`) or qualified (`Abcbtn.TabcToggleBtn ->
+cxButtons.TcxButton`) type names -- instances are matched by the bare type tail
+either way.
 
 ### If a type is NOT indexed -- reindex the folder that declares it
 
