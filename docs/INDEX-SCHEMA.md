@@ -6,15 +6,24 @@ uses-clauses, type ancestry, DI bindings, and more). It is written for anyone
 building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
-Current schema version at time of writing: **16** (`SCHEMA_VERSION` in
+Current schema version at time of writing: **17** (`SCHEMA_VERSION` in
 `src/storage/DRagLint.Storage.Schema.pas`). v16 added the additive column
-`files.last_compiled_unix` (compiler-finding freshness; see 2.1).
+`files.last_compiled_unix` (compiler-finding freshness; see 2.1). v17 added
+the additive column `symbols.prop_access` (property-leaf assignability
+engine; see 2.2).
 
 All facts in this document were verified against a live index
 (`C:\Projects\DB\ORM3\drag-lint.sqlite`, schema_version 15, 820 files /
 64732 symbols / 231489 refs) via `drag-lint schema --db <path> --format json`,
 and cross-checked against the DDL in `src/storage/DRagLint.Storage.SQLite.pas`
-and `src/storage/DRagLint.Storage.Schema.pas`.
+and `src/storage/DRagLint.Storage.Schema.pas`. The v17 `prop_access` column
+was verified against that DDL/migration code and the shipped engine's CLI
+usage output rather than a re-indexed sample DB -- as of this writing the
+ORM3 sample above has not been re-indexed past schema_version 16, so
+`prop_access` reads NULL there until its next index run. This is expected:
+new columns are migration-safe (`ALTER TABLE` runs on open; see the
+stability contract above), and `prop_access` only back-fills for symbols
+that get re-extracted.
 
 ## 1. Purpose and stability contract
 
@@ -127,6 +136,7 @@ markers, and -- since v14 -- typed local variables and parameters.
 | `start_line`/`start_col`/`end_line`/`end_col` | INTEGER | Declaration span |
 | `impl_start_line`/`impl_end_line` | INTEGER (v9+) | Implementation body span (header..final `end`); 0/NULL when there is no body |
 | `is_helper` | INTEGER (v15+) | 1 when this symbol is a record/class helper declaration (`... helper for T`) |
+| `prop_access` | TEXT (v17+, nullable) | For a `property` symbol: `'ro'` (read-only accessor), `'rw'` (read+write), or `'wo'` (write-only) -- captured from that property's own `read`/`write` accessor clause at parse time. NULL for every non-property symbol, and for a property symbol whose OWN declaration carries no accessor clause (a bare redeclaration, e.g. `property Color;`) -- a consumer resolves that case via the nearest class ancestor's `prop_access` at query time (this is what the `proptree` verb's `is_writable` field does; the raw column is never denormalized/copied down). Also NULL on a `.sqlite` that has not been re-indexed since v17. |
 
 **`kind` value domain** (exact strings written by the indexer; there is no
 separate `kind_text` column -- `kind` IS the text form):

@@ -35,8 +35,8 @@ text-level matches, non-Delphi files, or code no index covers.
 | What does `X` call (outgoing) | `drag-lint find-callees --qname Unit.TType.Method --db <db>` |
 | N-deep call tree from `X` | `drag-lint callgraph --qname X [--direction callers\|callees] [--depth N] --db <db>` |
 | Callers + callees of `X` in one chart | `drag-lint butterfly --qname X [--depth N] [--format dot\|mermaid\|text\|json] --db <db>` |
-| A type's DEEP property tree (dotted paths, into class-typed props) | `drag-lint proptree --qname Unit.TType [--depth N] [--no-to-persistent] [--format text\|json] --db <db>` |
-| Draft a component-conversion rules file from real F/T trees | `drag-lint convert-scaffold --from Unit.TFrom --to Unit.TTo [--out <f>] --db <db>` |
+| A type's DEEP property tree (dotted paths, into class-typed props) | `drag-lint proptree --qname Unit.TType [--depth N] [--no-to-persistent] [--min-visibility published\|public] [--format text\|json] --db <db>` |
+| Draft a component-conversion rules file from real F/T trees | `drag-lint convert-scaffold --from Unit.TFrom --to Unit.TTo [--out <f>] [--surface dfm\|pas] --db <db>` |
 | Validate a conversion-rules file's paths against real trees | `drag-lint convert-validate --rules <f> [--from F] [--to T] [--print-parsed] --db <db>` |
 | Circular unit deps (+ fix plan) | `drag-lint cycles --db <db> [--edges] [--causes] [--plan]` |
 | Third-party dependency rollup | `drag-lint deps-report --db <db> [--edges] [--format text\|json\|csv]` |

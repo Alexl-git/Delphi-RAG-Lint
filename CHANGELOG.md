@@ -5,6 +5,39 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+- **Proptree assignability engine: `prop_access` (schema v17), `proptree/2`,
+  `--min-visibility`, and `convert-scaffold --surface`.** The index now
+  captures each property's real accessor shape: a new additive
+  `symbols.prop_access` column (`'ro'` read-only / `'rw'` read+write / `'wo'`
+  write-only), stamped from the property's own `read`/`write` accessor
+  clause at parse time. NULL for non-properties and for a bare property
+  redeclaration with no own accessor (resolved from the nearest class
+  ancestor at query time); migration-safe like every prior bump (`ALTER
+  TABLE` on next open, `NULL` until re-indexed). `proptree`'s JSON output
+  moves to schema **`proptree/2`** (additive over `proptree/1` -- every
+  existing field kept): each leaf now also carries `is_writable` (true
+  unless the resolved `prop_access = 'ro'`, or a typed class constant for a
+  field leaf; **defaults to `true`** when absent, so an un-re-indexed DB
+  behaves exactly like `proptree/1`), `visibility` (`published`/`public`/
+  `protected`/`private`/`''`, with `strict private`/`strict protected`
+  collapsed to their base; defaults to `''`), and `member_kind`
+  (`property`/`field`; defaults to `property`). `type` is now the
+  class-accurate CONCRETE per-class type (e.g. on `TcxCheckBox`,
+  `Properties` resolves to `TcxCheckBoxProperties`, never a same-named
+  sibling class's type). A new `proptree --min-visibility published|public`
+  flag filters emitted leaves by effective visibility (unset = all leaves,
+  back-compat; `published` = the DFM-streamable surface, fields never
+  included; `public` = published+public, including public fields).
+  `convert-scaffold` consumes the same fields to restrict auto-`#link`
+  TARGETS to genuinely valid assignment targets: a new `--surface dfm|pas`
+  flag (default `dfm`) picks the bar -- `dfm` requires
+  `member_kind='property'` and `visibility='published'` (the DFM-streamable
+  surface); `pas` relaxes to `visibility` in (`published`,`public`) and any
+  `member_kind` (so a public field can be a target too). On either surface
+  `is_writable=false` is never a valid target, and on a `proptree/1`-shaped
+  (pre-v17 / un-re-indexed) DB the filter degrades to prior (unfiltered)
+  behavior via the documented defaults. See `docs/CONVERSION-RULES.md` and
+  `docs/INDEX-SCHEMA.md` (symbols table, section 2.2).
 - **Fresh compiler findings: `refresh-findings` keeps DCC hints/warnings/errors
   current.** drag-lint replicates the Delphi compiler's diagnostics alongside
   its own lint rules, but the incremental compile it ran skipped clean units --

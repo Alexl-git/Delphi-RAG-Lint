@@ -1,15 +1,19 @@
 # drag-lint indexing & database architecture
 
-**Applies to:** drag-lint **1.1.0-alpha** · index **schema_version 16** ·
+**Applies to:** drag-lint **1.1.0-alpha** · index **schema_version 17** ·
 tree-sitter grammars delphi13 **14** / dfm **14**.
 Verified 2026-07-15 against the live ORM3 index (`C:\Projects\DB\ORM3\drag-lint.sqlite`,
 schema 16, 29 tables) and the engine at
-`third_party\dll-win64\drag-lint.exe`.
+`third_party\dll-win64\drag-lint.exe`; schema **v17** (`symbols.prop_access`,
+see §6) verified 2026-07-20 against `SCHEMA_VERSION` in
+`src/storage/DRagLint.Storage.Schema.pas` and the shipped exe's CLI usage
+output -- the ORM3 sample DB above has not yet been re-indexed past v16, so
+it still reads `prop_access = NULL`.
 
 > **Version note.** This document explains *how indexing works and how the DBs
 > fit together*. The per-table column reference lives in
 > [INDEX-SCHEMA.md](INDEX-SCHEMA.md). If `drag-lint info` reports a **schema
-> version above 16** or a **grammar version above 14**, treat the details below
+> version above 17** or a **grammar version above 14**, treat the details below
 > as possibly stale and re-verify with `drag-lint schema --db <file> --format json`
 > and `drag-lint info --json` before trusting them -- then refresh this doc's
 > header stamp. The stability contract (additive columns, `schema_meta` first) is
@@ -30,7 +34,7 @@ The write path is owned exclusively by `drag-lint index`.
         v   tree-sitter parse (delphi13 / dfm grammars)  +  resolve passes
         |
   ┌─────────────────────┐        ┌──────────────────────────────────────┐
-  │  drag-lint index     │  ───►  │  <name>.sqlite  (schema_version 16)  │
+  │  drag-lint index     │  ───►  │  <name>.sqlite  (schema_version 17)  │
   │  (the ONLY writer)   │        │  symbols·refs·call_edges·unit_uses·  │
   └─────────────────────┘        │  type_ancestors·di_bindings·FTS·...  │
                                   └──────────────────────────────────────┘
@@ -60,7 +64,9 @@ Key properties:
    grammar (`.dfm`). SQL (`.sql`) has its own lighter path.
 2. **Extract symbols** -- every declared/defined element: units, types,
    methods, properties, fields, consts, enum values, and (schema v14+) params
-   and locals. Stored in `symbols`.
+   and locals. Stored in `symbols`. Since schema v17, a `property` symbol also
+   stamps `prop_access` (`ro`/`rw`/`wo`) captured from its own `read`/`write`
+   accessor clause -- see §6.
 3. **Extract references** -- every read/write/call/type-use of a symbol, into
    `refs`. Call sites that resolve to a target become `call_edges`.
 4. **Extract structure** -- `unit_uses` (every uses-clause entry),
@@ -178,7 +184,36 @@ in schema v16).
 
 ---
 
-## 6. Reading the DB directly (don't reinvent the reader)
+## 6. Property-leaf assignability (schema v17)
+
+`symbols.prop_access` (`'ro'` \| `'rw'` \| `'wo'`; NULL for non-properties and
+for a bare property redeclaration that carries no own accessor clause)
+records each property's real accessor shape, captured from its `read`/`write`
+clause at parse time. Additive + migration-safe like every prior bump: an
+existing `.sqlite` gets the column via `ALTER TABLE` on its next open and
+reads `prop_access = NULL` until the file is actually re-indexed. Full column
+reference: [INDEX-SCHEMA.md](INDEX-SCHEMA.md) section 2.2.
+
+This is what powers the **proptree assignability engine**:
+
+- `proptree`'s JSON output is now schema `proptree/2` -- additive over
+  `proptree/1` -- with per-leaf `is_writable`, `visibility`, and
+  `member_kind` (all default to today's back-compat values when absent, e.g.
+  reading an un-re-indexed DB), plus a class-accurate concrete `type`. A new
+  `proptree --min-visibility published|public` flag filters the emitted
+  leaves by effective visibility (unset = all leaves, matching `proptree/1`).
+- `convert-scaffold --surface dfm|pas` (default `dfm`) uses those same
+  per-leaf fields to restrict auto-`#link` TARGETS to leaves that are
+  genuinely assignable on that surface (read-only never auto-linked; `dfm`
+  additionally requires the DFM-streamable published-property bar, `pas`
+  relaxes to published+public including fields).
+
+Field-by-field semantics, defaults, and worked examples:
+[CONVERSION-RULES.md](CONVERSION-RULES.md).
+
+---
+
+## 7. Reading the DB directly (don't reinvent the reader)
 
 - **Always check the version first:**
   `SELECT value FROM schema_meta WHERE key='schema_version';`
@@ -192,7 +227,7 @@ in schema v16).
 
 ---
 
-## 7. Operational quick reference
+## 8. Operational quick reference
 
 | I want to... | Do this |
 |---|---|

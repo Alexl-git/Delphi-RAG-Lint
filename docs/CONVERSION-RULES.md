@@ -76,6 +76,7 @@ FIRST db that resolves the qname (symbol ids are per-DB) wins.
 
 ```
 drag-lint proptree --qname <TClass> [--depth N] [--no-to-persistent]
+                    [--min-visibility published|public]
                     [--format text|json] --db PATH [--db ...]
 ```
 
@@ -83,7 +84,10 @@ Walks a class's `property` symbols (own **and** inherited), parses each property
 type from its indexed signature, and recurses into class-typed property types --
 producing flattened dotted paths (`Font.Color`, `Sub.Color`). By default it stops
 the ancestor climb at `TPersistent`/`TObject`; `--no-to-persistent` climbs past.
-Recursion is depth-capped (default **6**) with a visited-type cycle guard.
+Recursion is depth-capped (default **6**) with a visited-type cycle guard. Each
+visited class's own **fields** and class-scoped **consts** are also walked and
+emitted as flat leaves (`member_kind: "field"` -- see below; never recursed into,
+even when class-typed).
 
 A re-declared / inherited property (for example `property Color;`, which the index
 stores with an empty signature) resolves its type from the first ancestor
@@ -107,12 +111,16 @@ The indent is the path's dot-depth, so the nested `Sub.Color` leaf reads under
 thesis is about: its class-typed `Font` property expands into `Font.Family`,
 `Font.Style`, ... rather than stopping at `Font`.
 
-JSON output uses schema **`proptree/1`**:
+JSON output uses schema **`proptree/2`** (additive over the earlier
+`proptree/1`: adds `visibility`, `is_writable`, `member_kind` per leaf plus a
+class-accurate concrete `type` -- every `proptree/1` field is kept, so a
+consumer written against `proptree/1` still parses this fine, it just
+doesn't look at the new keys):
 
 ```
 $ drag-lint proptree --qname Vcl.Graphics.TFont --format json --db library-Win64.sqlite
 {
-  "schema": "proptree/1",
+  "schema": "proptree/2",
   "qname": "Vcl.Graphics.TFont",
   "root_type": "TFont",
   "truncated": false,
@@ -122,29 +130,83 @@ $ drag-lint proptree --qname Vcl.Graphics.TFont --format json --db library-Win64
       "type": "TColor",
       "declared_in": "Vcl.Graphics.TFont",
       "kind": "scalar",
-      "is_class_typed": false
+      "is_class_typed": false,
+      "visibility": "published",
+      "is_writable": true,
+      "member_kind": "property"
     }
   ]
 }
 ```
 
 `truncated` is `true` when the depth cap stopped an expansion. `is_class_typed`
-marks the paths that recursion descended into.
+marks the paths that recursion descended into. `type` is the class-accurate
+CONCRETE per-class type -- e.g. on `TcxCheckBox`, `Properties` resolves to
+`TcxCheckBoxProperties`, never a same-named sibling class's type.
+
+The three `proptree/2` leaf fields:
+
+- **`is_writable`** (bool) -- would assigning to this leaf be valid? For a
+  property, `true` unless the resolved accessor is read-only (`prop_access =
+  'ro'`; a write-only `'wo'` accessor IS still a valid assignment target).
+  For a field leaf, `true` except a typed class constant (Object Pascal
+  constants are never assignable). **Defaults to `true` when absent** --
+  reading a pre-v17 / un-re-indexed DB behaves exactly like `proptree/1`
+  (today's "everything is a candidate target" default).
+- **`visibility`** (string) -- the EFFECTIVE, most-derived member visibility:
+  `"published"` \| `"public"` \| `"protected"` \| `"private"` \| `""`
+  (unresolvable). Delphi's `strict private`/`strict protected` are collapsed
+  to `"private"`/`"protected"` (the strict/non-strict distinction is
+  same-unit-only, irrelevant to cross-unit assignability). **Defaults to
+  `""` when absent.**
+- **`member_kind`** (string) -- `"property"` for a property leaf, `"field"`
+  for a flat field/class-const leaf (see above). **Defaults to `"property"`
+  when absent.**
+
+A new **`proptree --min-visibility published|public`** flag filters the
+EMITTED leaves by effective visibility (applies to both `text` and `json`
+output): unset (default) emits ALL leaves, exactly as `proptree/1` did
+(back-compat); `published` emits only published leaves AND never emits a
+field (fields, even published ones, are never DFM-streamable -- this is a
+member_kind-based exclusion, the node's own reported `visibility` is
+untouched); `public` emits published+public leaves, including public fields.
 
 Exit codes: **0** ok; **1** qname does not resolve to a class in any db; **2**
-usage error / no readable db.
+usage error / no readable db / invalid `--min-visibility` value.
 
 ### 2. `convert-scaffold` -- auto-draft a rules file
 
 ```
 drag-lint convert-scaffold --from <FromType> --to <ToType>
-                           [--out <file>] --db PATH [--db ...]
+                           [--out <file>] [--surface dfm|pas] --db PATH [--db ...]
 ```
 
 Enumerates BOTH deep property trees (via `proptree`'s engine) and emits a VALID,
-pre-filled reFind-superset rules file. Output is deterministic (paths sorted). For
-each target (`To`) path it looks for source (`From`) paths whose **leaf name**
-matches (case-insensitive) AND whose declared **type** is compatible:
+pre-filled reFind-superset rules file. Output is deterministic (paths sorted).
+Auto-`#link`/`#default` TARGETS (the `To` side only -- `From` remains an
+unrestricted candidate source pool) are restricted to leaves that are actually
+**valid assignment targets**, using the `is_writable`/`visibility`/
+`member_kind` fields `proptree/2` stamps onto every leaf (see above --
+convert-scaffold's `To` tree comes from the same `BuildPropTree` call, so no
+extra flags are needed to get the data, only `--surface` to pick the bar):
+
+- **`--surface dfm`** (the default) requires `member_kind='property'` AND
+  effective `visibility='published'` -- the DFM-streamable surface, matching
+  today's dominant component-conversion use case.
+- **`--surface pas`** relaxes the bar to `visibility` in
+  (`published`,`public`) and ANY `member_kind`, so a public FIELD can be a
+  target too.
+- On EITHER surface, `is_writable=false` (a read-only property, or a typed
+  class constant) is NEVER a valid target.
+- A `To` path that fails the bar is fully excluded -- no `#link`, no
+  `#default`, no `#note` -- mirroring how `proptree --min-visibility` silently
+  drops a tier-failing leaf. On a `proptree/1`-shaped (pre-v17 / un-re-indexed)
+  DB every leaf reads as writable/unresolvable-visibility, so the filter
+  degrades to prior (unfiltered) behavior via the documented defaults.
+
+For each target (`To`) path that passes the surface bar, it looks for source
+(`From`) paths whose **leaf name** matches (case-insensitive) AND whose
+declared **type** is compatible:
 
 - **exactly one** compatible source -> a concrete `#link ToPath <- FromPath`;
 - **more than one** -> `#link ToPath <- ???` followed by `#note candidates: ...`
@@ -176,7 +238,8 @@ emitted is guaranteed to exist in the real trees and every `???` is tolerated by
 the validator, so the draft round-trips clean through `convert-validate`.
 
 Exit codes: **0** success; **1** either type is unresolved in every db (the verb
-names it); **2** missing `--from`/`--to` or no readable db.
+names it); **2** missing `--from`/`--to`, invalid `--surface` value (must be
+`dfm`\|`pas`), or no readable db.
 
 ### 3. `convert-validate` -- check a rules file
 

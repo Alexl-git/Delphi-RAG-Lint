@@ -92,9 +92,11 @@ drag-lint proptree --qname OvcEdClc.TOvcNumberEdit --db <libdb>
 
 Use the **qualified** name (`Unit.TType`) when the bare name is ambiguous. The
 output is flattened dotted paths (`Font.Color`, `Sub.X`) with the depth shown by
-indentation. `--format json` gives schema `proptree/1` if you need to parse it.
-`--depth N` (default 6) caps recursion; `truncated:true` means the cap stopped an
-expansion.
+indentation. `--format json` gives schema `proptree/2` if you need to parse it
+(additive over the earlier `proptree/1`; adds per-leaf `is_writable`/
+`visibility`/`member_kind` and a class-accurate concrete `type` -- see
+`docs/CONVERSION-RULES.md`). `--depth N` (default 6) caps recursion;
+`truncated:true` means the cap stopped an expansion.
 
 Do the same for the target if you want to see what you're converting TO. This
 step is diagnostic -- it does not write anything.
@@ -125,6 +127,13 @@ What the draft contains and what you must do with each line:
 The header `, unit` is a **best guess** from the qname prefix -- it is never
 fabricated, but confirm it names the unit that truly declares the target type
 (the one you'd add to `uses`).
+
+By default (`--surface dfm`, no flag needed) auto-`#link` TARGETS are limited
+to the target type's DFM-streamable published properties -- the right bar for
+a component conversion. If you're mapping to a public **field** (or a
+non-published public property) on the target, pass `--surface pas` to widen
+the bar to published+public, including fields; either way a read-only target
+is never auto-linked. See `docs/CONVERSION-RULES.md` for the exact rule.
 
 Every `???` is tolerated by the validator; the draft round-trips clean even
 unfilled. But an unfilled `???` means that property will NOT be carried -- fill
