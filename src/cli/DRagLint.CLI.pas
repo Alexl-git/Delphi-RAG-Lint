@@ -348,6 +348,10 @@ type
     // Track 3 Batch 2a-i (Task 8): convert-reemit HIDDEN test verb. FromBlockFile
     // is the --from-block path (one F DFM `object` block, verbatim text).
     FromBlockFile : string ; // --from-block <file>  (F DFM object block file)
+    // proptree assignability engine (Task 5): convert-scaffold --surface
+    // dfm|pas picks the TARGET (To-side) visibility bar for auto-'#link'
+    // matching. '' (default/unset) -> DoConvertScaffold applies 'dfm'.
+    Surface       : string ; // convert-scaffold: --surface dfm|pas ('' = default 'dfm')
   end; // record
 
 procedure PrintHelp;
@@ -439,7 +443,7 @@ begin
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
-  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props)');
+  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--no-backup]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
@@ -691,6 +695,7 @@ begin
     else if A = '--no-to-persistent' then Result.ToPersistent:= False // proptree: climb past TPersistent/TObject
     else if A = '--no-write-back' then Result.NoWriteBack:= True // proptree: force read-only (no memoization)
     else if (A = '--min-visibility') and (i < ParamCount) then begin Inc(i); Result.MinVisibility:= ParamStr(i); end // proptree/2: --min-visibility published|public
+    else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
     else if (A = '--from-block') and (i < ParamCount) then begin Inc(i); Result.FromBlockFile:= ParamStr(i); end // convert-reemit: F DFM object block file
     else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
@@ -10982,34 +10987,64 @@ begin
 end; // function
 
 /// <summary>drag-lint convert-scaffold --from FromType --to ToType [--out FILE]
-/// --db PATH [--db ...] -- Track 3 Batch 1: auto-generate a VALID reFind-superset
-/// conversion-rules file from the REAL deep-property trees of the From and To
-/// types (Task 1's BuildPropTree over BOTH), pre-filling the assignments it can
-/// safely infer and leaving only genuine ambiguities as '???' for the user to
-/// resolve. --from (reuses CallFrom) and --to (reuses RenameTo) are BOTH required
-/// (missing -&gt; usage + exit 2). --out (reuses Output) writes an ASCII/CRLF file;
-/// omitted -&gt; stdout. Multiple --db are tried in order; the FIRST db that
-/// resolves BOTH types is used (ids are per-DB). If either type is unresolved the
-/// verb names it and exits 1.</summary>
+/// [--surface dfm|pas] --db PATH [--db ...] -- Track 3 Batch 1: auto-generate a
+/// VALID reFind-superset conversion-rules file from the REAL deep-property trees
+/// of the From and To types (Task 1's BuildPropTree over BOTH), pre-filling the
+/// assignments it can safely infer and leaving only genuine ambiguities as '???'
+/// for the user to resolve. --from (reuses CallFrom) and --to (reuses RenameTo)
+/// are BOTH required (missing -&gt; usage + exit 2). --out (reuses Output) writes
+/// an ASCII/CRLF file; omitted -&gt; stdout. Multiple --db are tried in order; the
+/// FIRST db that resolves BOTH types is used (ids are per-DB). If either type is
+/// unresolved the verb names it and exits 1.
+/// proptree assignability engine (Task 5): auto-'#link' TARGETS (the To side
+/// only -- From remains an unrestricted candidate SOURCE pool) are restricted to
+/// leaves that are actually valid assignment targets, using the is_writable/
+/// visibility/member_kind fields BuildPropTree already stamps onto every
+/// TPropNode (Tasks 2-4; no extra wiring needed since convert-scaffold's To tree
+/// comes from the SAME BuildPropTree call as `proptree`). --surface dfm (the
+/// default) requires member_kind='property' AND the effective visibility=
+/// 'published' -- the DFM-streamable surface, matching today's dominant
+/// component-conversion use case; --surface pas relaxes the bar to visibility in
+/// ('published','public'), ANY member_kind (so a public FIELD can be a target
+/// too). On EITHER surface a leaf with is_writable=false (a typed class CONST
+/// today; a read-only PROPERTY once a later task extracts real property
+/// writability) is NEVER a valid target. A To path that fails either bar is
+/// fully excluded from the per-To-path loop -- no '#link', no '#default', no
+/// '#note' -- mirroring how `proptree --min-visibility` silently drops a
+/// tier-failing leaf with no extra annotation (the existing convention for "not
+/// part of this surface"; the DSL's own '#ignore' directive was considered and
+/// rejected -- it acknowledges an unmapped FROM path, a different direction,
+/// not a filtered TO target). A To path's own Visibility='' (defensive-only in
+/// practice -- the current parser always stamps a non-empty value; see
+/// DRagLint.Convert.PropTree's ResolveInheritedVisibility remark) is treated as
+/// PASSING the bar on both surfaces -- graceful degrade so an old/foreign DB
+/// row whose visibility could not be resolved is never MORE aggressively
+/// filtered than today's "show everything", matching a proptree/1-style
+/// consumer's back-compat default. The FROM-side DROPPED-note loop (3) uses the
+/// SAME valid-target test, so a From path whose only leaf-name+type counterpart
+/// is a filtered-out To leaf is correctly reported DROPPED rather than silently
+/// neither linked nor noted.</summary>
 /// <param name="AArgs">CallFrom=--from (FromType qname), RenameTo=--to (ToType
-/// qname), Output=--out (file; empty=stdout), DbPath/DbPaths=index(es).</param>
+/// qname), Output=--out (file; empty=stdout), Surface=--surface dfm|pas ('' =
+/// default 'dfm'), DbPath/DbPaths=index(es).</param>
 /// <returns>0 success; 1 either type unresolved in every db; 2 bad args (missing
-/// --from/--to) or no readable db.</returns>
+/// --from/--to, invalid --surface value) or no readable db.</returns>
 /// <remarks>Output is DETERMINISTIC (paths sorted case-insensitively) so the
 /// emitted text is stable across runs. Emission order: (1) a '#convert From -&gt;
 /// To' header with a best-guess ', unit' uses-add taken from the qname unit
-/// prefix(es) of From/To when discoverable (never fabricated); (2) for each To
-/// path (sorted) the F candidates whose LEAF name equals the To leaf
-/// (case-insensitive) AND whose declared TypeName is compatible (equal,
-/// case-insensitive) -- exactly ONE candidate -&gt; a concrete '#link ToPath &lt;-
-/// FromPath'; MULTIPLE -&gt; '#link ToPath &lt;- ???' immediately followed by
-/// '#note candidates: p1, p2, ...'; ZERO -&gt; '#default ToPath = ???'; (3) for
-/// each From path (sorted) with NO compatible To target (same leaf+type test,
-/// reversed) a '#note DROPPED FromPath (no T target)'. The matching rule is
-/// LEAF-NAME + COMPATIBLE-TYPE (documented, not exact-path), so a leaf name that
-/// appears at more than one From path is correctly flagged ambiguous. Every
-/// concrete path emitted is guaranteed to exist in the real trees and every '???'
-/// is tolerated by the validator, so the emitted file round-trips clean through
+/// prefix(es) of From/To when discoverable (never fabricated); (2) for each
+/// VALID-TARGET To path (sorted; see the surface/writability filter above) the F
+/// candidates whose LEAF name equals the To leaf (case-insensitive) AND whose
+/// declared TypeName is compatible (equal, case-insensitive) -- exactly ONE
+/// candidate -&gt; a concrete '#link ToPath &lt;- FromPath'; MULTIPLE -&gt; '#link
+/// ToPath &lt;- ???' immediately followed by '#note candidates: p1, p2, ...';
+/// ZERO -&gt; '#default ToPath = ???'; (3) for each From path (sorted) with NO
+/// compatible VALID-TARGET To counterpart (same leaf+type test, reversed) a
+/// '#note DROPPED FromPath (no T target)'. The matching rule is LEAF-NAME +
+/// COMPATIBLE-TYPE (documented, not exact-path), so a leaf name that appears at
+/// more than one From path is correctly flagged ambiguous. Every concrete path
+/// emitted is guaranteed to exist in the real trees and every '???' is tolerated
+/// by the validator, so the emitted file round-trips clean through
 /// convert-validate. Read-only.</remarks>
 function DoConvertScaffold(const AArgs: TArgs): Integer;
 var
@@ -11022,6 +11057,7 @@ var
   Depth    : Integer         ;
   Sb       : TStringBuilder  ;
   OutText  : string          ;
+  Surface  : string          ;
 
   // Bare leaf (last dotted segment) of a path, lowercased for matching.
   function LeafLower(const APath: string): string;
@@ -11071,6 +11107,49 @@ var
       if SameText(N.Path, APath) then Exit(N.TypeName);
   end;
 
+  // The full TPropNode for a path in a tree (Path='' -- not present -- if
+  // not found; every real leaf has a non-empty Path, so this is a safe
+  // not-found sentinel).
+  function NodeOfPath(const ATree: TPropTree; const APath: string): TPropNode;
+  var
+    N: TPropNode;
+  begin
+    Result:= Default(TPropNode);
+    for N in ATree.Nodes do
+      if SameText(N.Path, APath) then Exit(N);
+  end;
+
+  // proptree assignability engine (Task 5): does ANode qualify as a valid
+  // auto-'#link'/'#default' TARGET under ASurface ('dfm' or 'pas', already
+  // lower-cased/validated by the caller)? is_writable=false (a typed class
+  // CONST today) is NEVER a valid target on EITHER surface. 'dfm' additionally
+  // requires member_kind='property' (DFM streaming is properties only -- a
+  // FIELD, even a published one, is never DFM-streamable, mirroring
+  // DoPropTree's PassesMinVisibility 'published' tier) AND the effective
+  // visibility='published'; 'pas' allows visibility in ('published','public')
+  // and ANY member_kind (so a public FIELD is a valid PAS-surface target).
+  // Graceful degrade: an UNRESOLVABLE effective visibility (Visibility='') is
+  // treated as PASSING the bar on BOTH surfaces rather than being silently
+  // dropped -- defensive-only in practice (the current parser always stamps a
+  // non-empty Modifiers value; see DRagLint.Convert.PropTree's
+  // ResolveInheritedVisibility remark), but this keeps an old/foreign DB row
+  // whose visibility could not be resolved exactly as visible as it is today
+  // (no filter existed before this task) instead of quietly vanishing it.
+  function IsValidTarget(const ANode: TPropNode; const ASurface: string): Boolean;
+  var
+    Vis: string;
+  begin
+    if not ANode.IsWritable then Exit(False); // read-only -- never a valid target, any surface
+    Vis:= LowerCase(Trim(ANode.Visibility));
+    if Vis = '' then Exit(True); // unresolvable -- graceful degrade, do not filter (see remarks)
+    if ASurface = 'dfm' then
+    begin
+      if LowerCase(Trim(ANode.MemberKind)) = 'field' then Exit(False); // DFM streams properties only
+      Exit(Vis = 'published');
+    end;
+    Result:= (Vis = 'published') or (Vis = 'public'); // ASurface = 'pas'
+  end;
+
   // From-tree paths whose leaf name = ATLeaf (lowercased) AND whose declared
   // type is compatible (equal, case-insensitive) with ATType. Sorted (a Sorted
   // CaseSensitive=False TStringList orders by CompareText).
@@ -11093,15 +11172,19 @@ var
     end;
   end;
 
-  // True when SOME To path has the leaf+compatible-type of the given F node
-  // (used to decide whether an F path is DROPPED).
+  // True when SOME VALID-TARGET To path has the leaf+compatible-type of the
+  // given F node (used to decide whether an F path is DROPPED). Uses the same
+  // IsValidTarget test as the #link loop, so a From path whose only
+  // leaf+type counterpart is a filtered-out (read-only / wrong-surface) To
+  // leaf is correctly reported DROPPED rather than silently neither linked
+  // nor noted.
   function ToHasCounterpart(const AFLeaf, AFType: string): Boolean;
   var
     N: TPropNode;
   begin
     Result:= False;
     for N in ToTree.Nodes do
-      if (LeafLower(N.Path) = AFLeaf) and SameText(N.TypeName, AFType) then
+      if (LeafLower(N.Path) = AFLeaf) and SameText(N.TypeName, AFType) and IsValidTarget(N, Surface) then
         Exit(True);
   end;
 
@@ -11116,7 +11199,20 @@ var
   Header  : string        ;
 begin
   if (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
-  begin Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--out FILE] --db PATH [--db ...]'); Exit(2); end;
+  begin Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--out FILE] [--surface dfm|pas] --db PATH [--db ...]'); Exit(2); end;
+
+  // proptree assignability engine (Task 5): --surface dfm|pas picks the
+  // TARGET-side visibility bar (see IsValidTarget above); unset defaults to
+  // 'dfm' -- component conversion (DFM-streamable published surface) is
+  // convert-scaffold's dominant use case today (the existing
+  // run_convert_scaffold.ps1 fixture is all-published, so this default does
+  // not change its output). A typo'd value is a usage error (exit 2), not a
+  // silent fall-through, matching --min-visibility's own validation pattern
+  // in DoPropTree.
+  Surface:= LowerCase(Trim(AArgs.Surface));
+  if Surface = '' then Surface:= 'dfm';
+  if (Surface <> 'dfm') and (Surface <> 'pas') then
+  begin Writeln(Format('ERROR: --surface must be dfm|pas (got "%s")', [AArgs.Surface])); Exit(2); end;
 
   Depth:= AArgs.Depth;
   if Depth <= 0 then Depth:= 6;
@@ -11163,9 +11259,14 @@ begin
     Sb.AppendLine(Header);
     Sb.AppendLine('#note scaffold: review every ??? -- concrete #link lines are inferred by leaf-name+type');
 
-    // (2) One rule per To path (sorted).
+    // (2) One rule per VALID-TARGET To path (sorted). A To path that fails
+    // IsValidTarget (read-only on either surface; wrong member_kind/visibility
+    // for the DFM surface) is skipped entirely -- no '#link', no '#default',
+    // no '#note' -- it is simply not part of this surface's assignable target
+    // set (Task 5).
     for TPath in SortedPaths(ToTree) do
     begin
+      if not IsValidTarget(NodeOfPath(ToTree, TPath), Surface) then Continue;
       TType:= TypeOfPath(ToTree, TPath);
       Cands:= FromCandidates(LeafLower(TPath), TType);
       if Length(Cands) = 1 then
