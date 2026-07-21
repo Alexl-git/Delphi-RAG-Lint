@@ -161,6 +161,33 @@ begin
       end;
     end;
 
+    // Dedup by exact (FilePath, Line, Col). Multiple sources above can legitimately
+    // point at the SAME source position: e.g. a bare paren-less method call like
+    // `t.DoIt;` is walked by both the statement-level bare-call handler ('call'
+    // kind ref) and the generic exprDot usage-ref handler ('member-access' kind
+    // ref, ref-gap G), so FindCallersByName returns TWO ref rows at the identical
+    // (file, line, col) for that one call site. Apply() replaces OldName with
+    // NewName in place; since OldName is a PREFIX of NewName in the common case
+    // (DoIt -> DoItNow), a second replace at the same position re-matches the
+    // just-written text's OldName prefix and appends NewName's suffix a second
+    // time (DoIt -> DoItNow -> DoItNowNow). A rename at a given position must
+    // fire exactly once no matter how many rows independently reference it, so
+    // collapse same-position edits here, keeping the first (decl site, then refs,
+    // then the explicit impl-header edit -- order is immaterial since duplicates
+    // share the same OldName/NewName).
+    var SeenPos:= TDictionary<string, Boolean>.Create;
+    try
+      var Idx:= 0;
+      while Idx < List.Count do
+      begin
+        var PosKey:= UpperCase(List[Idx].FilePath) + '|' + IntToStr(List[Idx].Line) + '|' + IntToStr(List[Idx].Col);
+        if SeenPos.ContainsKey(PosKey) then List.Delete(Idx)
+        else begin SeenPos.Add(PosKey, True); Inc(Idx); end;
+      end;
+    finally
+      SeenPos.Free;
+    end;
+
     // Sort: FilePath ASC, Line DESC, Col DESC
     Comparer:= TComparer<TRenameEdit>.Construct( function(const A, B: TRenameEdit): Integer begin Result:= CompareEdits(A, B); end);
     List.Sort(Comparer);
