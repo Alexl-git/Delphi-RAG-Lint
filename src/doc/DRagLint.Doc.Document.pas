@@ -39,11 +39,14 @@ type
     /// --db's) into the facts builder so name-based Called-from/Used-in facts
     /// can span multiple DBs; nil/empty preserves single-store behavior.
     /// AMaxReturnCases caps the mined &lt;returns&gt; enumeration (forwarded to
-    /// TDocFactsBuilder.Build as-is); default 20 matches the manifest default.</remarks>
+    /// TDocFactsBuilder.Build as-is); default 20 matches the manifest default.
+    /// AMaxCallers caps the "Called from:" list (forwarded to
+    /// TDocFactsBuilder.Build as-is); default 5 matches the manifest
+    /// default (v(ADP1 T1)).</remarks>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string;
       AIncludeSeeAlso: Boolean; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
-      AMaxReturnCases: Integer = 20): TDocumentResult; overload;
+      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TDocumentResult; overload;
     /// <summary>Back-compat overload: BuildFor with no doc-source opt-ins
     /// (AIncludeSeeAlso = False, AIncludeSince = False).</summary>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult; overload;
@@ -189,7 +192,7 @@ end;
 
 class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
-  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer): TDocumentResult;
+  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer): TDocumentResult;
 var
   Syms     : TArray<TSymbol>                                   ;
   Sym      : TSymbol                                           ;
@@ -240,7 +243,7 @@ begin
   Sig      := Trim(Sym.Signature);
   SigParams:= ParseParamNames(ExtractParamList(Sig));
 
-  Facts := TDocFactsBuilder.Build(AStore, Sym, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores, AMaxReturnCases);
+  Facts := TDocFactsBuilder.Build(AStore, Sym, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores, AMaxReturnCases, AMaxCallers);
 
   // Has a return value? The indexed Signature holds only '(params): RetType'
   // (no leading 'function' keyword), so SignatureHasReturn misses it, and class

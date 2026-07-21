@@ -1026,6 +1026,31 @@ begin
   end;
 end;
 
+// Whole-Project Auto-Document Phase 1 Task 1: reads the docs.max_callers cap
+// for the doc verbs (document / document --project / document-all), mirroring
+// LoadDocMaxReturnCases exactly (same manifest discovery: engine dir beside the
+// exe + current working dir walking up for a local override). Best-effort: any
+// load failure (missing files, malformed JSON) falls back to 5
+// (TDocSettings.Defaults.MaxCallers), so a doc verb never errors out over a
+// manifest problem -- it just caps "Called from:" at the default 5. Unlike
+// LoadDocMaxReturnCases's absent-docs-section default (which must stay 20 for
+// back-compat), MaxCallers is a brand-new knob: ParseTextEx already seeds
+// Docs.MaxCallers to 5 (TDocSettings.Defaults) whenever a 'docs' block is
+// absent, on EVERY load path (global-only/local-only/both/neither) -- so this
+// loader's default and the manifest's absent-section default agree.
+function LoadDocMaxCallers: Integer;
+var
+  DocManifest: TIndexManifest;
+begin
+  Result:= 5;
+  try
+    DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    Result:= DocManifest.Docs.MaxCallers;
+  except
+    Result:= 5;
+  end;
+end;
+
 // v0.45: serialise a TIndexManifest to a TJSONObject for the dry-run JSON view.
 // Delegates to TManifestIO.ToJson for the canonical manifest structure, then
 // adds the extra 'indexes.rootDir' field (richer than the saved file). Caller owns + frees.
@@ -6595,6 +6620,7 @@ begin
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
   Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
+  Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
@@ -6681,6 +6707,7 @@ begin
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
   Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
+  Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
 end; // function
@@ -6707,6 +6734,7 @@ begin
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
   Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
+  Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
   Res:= TDocBatch.DocumentAll(Store, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
 end; // function
@@ -6732,7 +6760,7 @@ begin
   if not Ok then Exit(2);
 
   Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, AArgs.DocSeeAlso,
-    AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases); // ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap.
+    AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers); // ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap; ADP1 T1: manifest docs.max_callers cap.
 
   if Res.Action = DRagLint.Doc.Document.daNotFound then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 

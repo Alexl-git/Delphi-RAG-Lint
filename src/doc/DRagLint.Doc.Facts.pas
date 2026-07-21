@@ -93,10 +93,16 @@ type
     /// this many distinct mined return expressions are kept (first-seen order,
     /// truncated). 0 or negative disables enumeration entirely (ReturnCases stays
     /// empty). Default 20.</param>
+    /// <param name="AMaxCallers">Cap on Result.CalledFrom (v(ADP1 T1)): at most
+    /// this many distinct resolved/unverified callers are kept (same first-seen
+    /// order as the underlying dedupe), truncated; Result.CalledFromTotal always
+    /// carries the true distinct count so the renderer can add '(+N more)'. 0 or
+    /// negative shows no callers (CalledFrom stays empty, total unaffected).
+    /// Default 5.</param>
     class function Build(const AStore: ISymbolStore; const ASym: TSymbol;
       AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
-      AMaxReturnCases: Integer = 20): TDocFacts;
+      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TDocFacts;
   end;
 
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
@@ -337,7 +343,7 @@ end;
 
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
-  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer): TDocFacts;
+  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer): TDocFacts;
 var
   ResCallers: TArray<TResolvedCaller>;
   RC        : TResolvedCaller        ;
@@ -446,8 +452,15 @@ begin
       end;
     end;
 
+    // v(ADP1 T1): CalledFrom's display cap is the CONFIG-DRIVEN AMaxCallers
+    // (manifest docs.max_callers, default 5 -- see LoadDocMaxCallers), NOT the
+    // shared DocDisplayCount helper (that >15-total-\>10-shown rule still
+    // governs Calls:/Used in units: below, unchanged). Simple threshold: show
+    // AMaxCallers when the distinct count exceeds it, else show all; the
+    // renderer's MoreSuffix appends '(+N more)' from CalledFromTotal.
     Result.CalledFromTotal:= Distinct.Count;
-    Shown:= DocDisplayCount(Distinct.Count);
+    if Distinct.Count > AMaxCallers then Shown:= AMaxCallers else Shown:= Distinct.Count;
+    if Shown < 0 then Shown:= 0;
     SetLength(Result.CalledFrom, Shown);
     for I:= 0 to Shown - 1 do Result.CalledFrom[I]:= Distinct[I];
   finally

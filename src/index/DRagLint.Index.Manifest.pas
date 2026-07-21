@@ -54,13 +54,18 @@ type
     /// (the "Observed: ..." list). Default 20. 0 or negative disables enumeration
     /// (bare TODO only).</summary>
     MaxReturnCases: Integer;
-    /// <summary>Record with all fields at documented defaults (MaxReturnCases=20).</summary>
+    /// <summary>Max distinct callers listed on the generated "Called from:" line
+    /// (v(ADP1 T1)). Default 5. Callers beyond the cap are summarised as a
+    /// trailing "(+N more)" (RenderFactsBlock); the true count is unaffected.
+    /// 0 or negative shows no callers (still counted in the "(+N more)" total).</summary>
+    MaxCallers: Integer;
+    /// <summary>Record with all fields at documented defaults (MaxReturnCases=20, MaxCallers=5).</summary>
     class function Defaults: TDocSettings; static;
   end; // record
 
   /// <summary>Which top-level settings keys were explicitly present in a parsed JSON block.
   /// Used by the merge logic to distinguish "absent" (keep global) from "present but default".</summary>
-  TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB, skMaxReturnCases );
+  TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB, skMaxReturnCases, skMaxCallers );
 
   /// <summary>Describes one named index section within the manifest.</summary>
   TIndexSection = record
@@ -282,6 +287,7 @@ class function TDocSettings.Defaults: TDocSettings;
 begin
   Result:= Default(TDocSettings);
   Result.MaxReturnCases:= 20;
+  Result.MaxCallers    := 5;
 end;
 
 { ---------------------------------------------------------------------- }
@@ -386,6 +392,13 @@ begin
       begin
         Result.Docs.MaxReturnCases:= ND.AsInt;
         Include(ASettingsKeys, skMaxReturnCases);
+      end;
+
+      var NC: TJSONNumber:= JDocs.GetValue('max_callers') as TJSONNumber;
+      if NC <> nil then
+      begin
+        Result.Docs.MaxCallers:= NC.AsInt;
+        Include(ASettingsKeys, skMaxCallers);
       end;
     end;
 
@@ -531,7 +544,12 @@ begin
     if skMaxJobs                 in LocalKeys then Result.Settings.MaxJobs                := LocalManifest.Settings.MaxJobs;
     if skCurrentProjectsIndexing in LocalKeys then Result.Settings.CurrentProjectsIndexing:= LocalManifest.Settings.CurrentProjectsIndexing;
     if skMaxParseFileKB          in LocalKeys then Result.Settings.MaxParseFileKB         := LocalManifest.Settings.MaxParseFileKB;
-    if skMaxReturnCases          in LocalKeys then Result.Docs:= LocalManifest.Docs;
+    // Docs.* merges PER FIELD (like every Settings.* line above), not as one
+    // whole-record copy: a local .drag-lint.json that overrides ONLY
+    // max_callers (say) must not silently reset max_return_cases back to
+    // LocalManifest's own default -- each key overrides independently.
+    if skMaxReturnCases          in LocalKeys then Result.Docs.MaxReturnCases            := LocalManifest.Docs.MaxReturnCases;
+    if skMaxCallers              in LocalKeys then Result.Docs.MaxCallers                := LocalManifest.Docs.MaxCallers;
     Result.RootDir:= LocalManifest.RootDir;
     MergeSections(Result, LocalManifest);
   end // if
@@ -566,6 +584,7 @@ var
 begin
   Result:= '';
   if AManifest.Docs.MaxReturnCases < 0 then Exit('docs.max_return_cases must be >= 0');
+  if AManifest.Docs.MaxCallers < 0 then Exit('docs.max_callers must be >= 0');
   Names:= TStringList.Create;
   Names.CaseSensitive:= False;
   try
@@ -651,6 +670,7 @@ begin
   var JDocs:= TJSONObject.Create;
   Result.AddPair('docs', JDocs);
   JDocs.AddPair('max_return_cases', TJSONNumber.Create(AManifest.Docs.MaxReturnCases));
+  JDocs.AddPair('max_callers', TJSONNumber.Create(AManifest.Docs.MaxCallers));
 
   { indexes }
   JIndexes:= TJSONObject.Create;

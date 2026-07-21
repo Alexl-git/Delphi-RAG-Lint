@@ -6,6 +6,10 @@
     "enginePath": "auto",
     "maxJobs": 0
   },
+  "docs": {
+    "max_return_cases": 6,
+    "max_callers": 5
+  },
   "indexes": {
     "outDir": "C:\\Projects\\.drag-lint",
     "exclude": ["*BACKUP*", "*_OLD*.pas", "* - Copy.pas", "*- Copy.PAS", "*-Copy.PAS", "Win64"],
