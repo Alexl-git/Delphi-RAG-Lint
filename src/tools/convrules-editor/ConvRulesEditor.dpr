@@ -11,6 +11,7 @@ uses
   ConvRules.Model in 'ConvRules.Model.pas',
   ConvRules.Units in 'ConvRules.Units.pas',
   ConvRules.Casts in 'ConvRules.Casts.pas',
+  ConvRules.CastLib in 'ConvRules.CastLib.pas',
   ConvRules.Engine in 'ConvRules.Engine.pas',
   ConvRules.Platform in 'ConvRules.Platform.pas',
   ConvRules.MainForm in 'ConvRules.MainForm.pas';
@@ -27,6 +28,21 @@ begin
   Result := 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe';
   if TFile.Exists(Result) then Exit;
   Result := 'drag-lint.exe'; // rely on PATH
+end;
+
+{ Resolve the shipped .castlib: next to this editor (co-deployed), else the repo
+  default under docs\examples\convrules, else '' (class casts unavailable). }
+function ResolveCastLib: string;
+var
+  Dir: string;
+begin
+  Dir := ExtractFilePath(ParamStr(0));
+  Result := TPath.Combine(Dir, 'casts.castlib');                         // (1) beside exe
+  if TFile.Exists(Result) then Exit;
+  Result := TPath.GetFullPath(TPath.Combine(Dir,                         // (2) repo docs
+    '..\..\docs\examples\convrules\casts.castlib'));
+  if TFile.Exists(Result) then Exit;
+  Result := '';                                                          // (3) none
 end;
 
 { The library index directory and the project index. The FROM/TO platform (each
@@ -57,6 +73,7 @@ begin
   GEditorExe          := ResolveDragLintExe;
   GEditorLibDir       := LibDir;
   GEditorProjectDb    := ProjectDb;
+  GEditorCastLib      := ResolveCastLib;
   GEditorFromPlatform := ArgPlatform('--from-platform', cpBoth);
   GEditorToPlatform   := ArgPlatform('--to-platform', cpWin64);
   Application.Initialize;

@@ -18,7 +18,7 @@ uses
   System.SysUtils, System.Classes, System.IOUtils, System.Generics.Collections,
   Winapi.Windows, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls,
   Vcl.ExtCtrls, Vcl.Grids, Vcl.Dialogs, Vcl.Menus, Vcl.Graphics,
-  ConvRules.Model, ConvRules.Casts, ConvRules.Engine, ConvRules.Platform;
+  ConvRules.Model, ConvRules.Casts, ConvRules.Engine, ConvRules.Platform, ConvRules.CastLib;
 
 type
   TConvRulesForm = class(TForm)
@@ -50,6 +50,7 @@ type
     FCbToPlat  : TComboBox;           // TO platform
     FCbSurface : TComboBox;           // target surface: DFM (published) | PAS (public + fields)
     FSurfaceMinVis: string;           // '' | 'published' | 'public' -- proptree --min-visibility
+    FCastDefs : TArray<TCastDef>;     // shipped class-cast library (.castlib)
     // rules library
     FRules    : TListView;
     // grid
@@ -130,6 +131,9 @@ var
     selects the library, the project DB is always-on and additive. }
   GEditorLibDir: string = '';
   GEditorProjectDb: string = '';
+  { Path to the shipped class-cast library (.castlib); '' = class casts unavailable
+    (scalar-only, today's behavior). Resolved + set by the .dpr before CreateForm. }
+  GEditorCastLib: string = '';
   GEditorFromPlatform: TConvPlatform = cpBoth;   // default: FROM union (today's behavior)
   GEditorToPlatform: TConvPlatform = cpWin64;    // default: TO target Win64 (today's behavior)
 
@@ -197,6 +201,7 @@ begin
   FEngine := TEngineAdapter.Create(GEditorExe, EngineDbSet);
   FActiveHdr := -1;
   FSurfaceMinVis := 'published';   // default target surface = DFM-streamable
+  FCastDefs := LoadCastLib(GEditorCastLib);   // [] when no .castlib is found
   BuildUI;
   OnClose := FormCloseHandler;
   Visible := True;  // ensure the CreateNew form is shown by Run

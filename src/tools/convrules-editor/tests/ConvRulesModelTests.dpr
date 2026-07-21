@@ -933,6 +933,28 @@ begin
   Check('castfor.wrongfrom', ClassCastFor(D, 'TFont',    'TdxSmartGlyph') = '', 'should be blocked');
 end;
 
+{ The shipped casts.castlib parses and provides AssignGraphic. Skipped (not failed)
+  when the file is not found from the test exe (lean checkout). }
+procedure TestCastLibFile;
+var
+  P: string;
+  D: TArray<TCastDef>;
+begin
+  // test exe lives at <root>\src\tools\convrules-editor\tests\ -> climb 4 to root.
+  P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\docs\examples\convrules\casts.castlib'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('castlib.file', 'casts.castlib not found: ' + P);
+    Exit;
+  end;
+  D := LoadCastLib(P);
+  Check('castlib.file.nonempty', Length(D) > 0, IntToStr(Length(D)));
+  Check('castlib.file.assigngraphic',
+    ClassCastFor(D, 'TPicture', 'TdxSmartGlyph') = 'AssignGraphic',
+    'AssignGraphic (TPicture->TdxSmartGlyph) not resolved from the shipped file');
+end;
+
 begin
   try
     TestPlatform;
@@ -950,6 +972,7 @@ begin
     TestCastLibParse;
     TestCastLibTolerant;
     TestClassCastFor;
+    TestCastLibFile;
     TestUnknownTypeInference;
     TestProptreeParse;
     TestProptreeNoise;
