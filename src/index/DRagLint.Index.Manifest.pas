@@ -59,13 +59,24 @@ type
     /// trailing "(+N more)" (RenderFactsBlock); the true count is unaffected.
     /// 0 or negative shows no callers (still counted in the "(+N more)" total).</summary>
     MaxCallers: Integer;
-    /// <summary>Record with all fields at documented defaults (MaxReturnCases=20, MaxCallers=5).</summary>
+    /// <summary>ADP1 T2: threshold (impl body line count, ImplEndLine -
+    /// ImplStartLine) at or under which a Get*/Set* method is treated as a
+    /// TRIVIAL property accessor and SKIPPED by the batch document verbs
+    /// (document --unit/--project, document-all). Default 2. UNLIKE
+    /// MaxReturnCases/MaxCallers, this filter is ON BY DEFAULT -- the default
+    /// lives in code (TDocSettings.Defaults), and an absent
+    /// docs.accessor_trivial_max_lines key does NOT disable the filter, it
+    /// just leaves the threshold at 2. --include-accessors (CLI) disables the
+    /// filter outright for one run, independent of this threshold. document
+    /// --qname (single-symbol) is never filtered by this setting.</summary>
+    AccessorTrivialMaxLines: Integer;
+    /// <summary>Record with all fields at documented defaults (MaxReturnCases=20, MaxCallers=5, AccessorTrivialMaxLines=2).</summary>
     class function Defaults: TDocSettings; static;
   end; // record
 
   /// <summary>Which top-level settings keys were explicitly present in a parsed JSON block.
   /// Used by the merge logic to distinguish "absent" (keep global) from "present but default".</summary>
-  TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB, skMaxReturnCases, skMaxCallers );
+  TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB, skMaxReturnCases, skMaxCallers, skAccessorTrivialMaxLines );
 
   /// <summary>Describes one named index section within the manifest.</summary>
   TIndexSection = record
@@ -286,8 +297,9 @@ end;
 class function TDocSettings.Defaults: TDocSettings;
 begin
   Result:= Default(TDocSettings);
-  Result.MaxReturnCases:= 20;
-  Result.MaxCallers    := 5;
+  Result.MaxReturnCases          := 20;
+  Result.MaxCallers              := 5;
+  Result.AccessorTrivialMaxLines := 2; // ADP1 T2: ON by default (see field comment).
 end;
 
 { ---------------------------------------------------------------------- }
@@ -399,6 +411,16 @@ begin
       begin
         Result.Docs.MaxCallers:= NC.AsInt;
         Include(ASettingsKeys, skMaxCallers);
+      end;
+
+      // ADP1 T2: docs.accessor_trivial_max_lines -- OVERRIDES the code
+      // default of 2 when present; absent leaves Result.Docs.AccessorTrivialMaxLines
+      // at the Defaults() value already seeded above (the filter stays ON).
+      var NA: TJSONNumber:= JDocs.GetValue('accessor_trivial_max_lines') as TJSONNumber;
+      if NA <> nil then
+      begin
+        Result.Docs.AccessorTrivialMaxLines:= NA.AsInt;
+        Include(ASettingsKeys, skAccessorTrivialMaxLines);
       end;
     end;
 
@@ -550,6 +572,7 @@ begin
     // LocalManifest's own default -- each key overrides independently.
     if skMaxReturnCases          in LocalKeys then Result.Docs.MaxReturnCases            := LocalManifest.Docs.MaxReturnCases;
     if skMaxCallers              in LocalKeys then Result.Docs.MaxCallers                := LocalManifest.Docs.MaxCallers;
+    if skAccessorTrivialMaxLines in LocalKeys then Result.Docs.AccessorTrivialMaxLines   := LocalManifest.Docs.AccessorTrivialMaxLines;
     Result.RootDir:= LocalManifest.RootDir;
     MergeSections(Result, LocalManifest);
   end // if
@@ -585,6 +608,7 @@ begin
   Result:= '';
   if AManifest.Docs.MaxReturnCases < 0 then Exit('docs.max_return_cases must be >= 0');
   if AManifest.Docs.MaxCallers < 0 then Exit('docs.max_callers must be >= 0');
+  if AManifest.Docs.AccessorTrivialMaxLines < 0 then Exit('docs.accessor_trivial_max_lines must be >= 0');
   Names:= TStringList.Create;
   Names.CaseSensitive:= False;
   try
@@ -671,6 +695,7 @@ begin
   Result.AddPair('docs', JDocs);
   JDocs.AddPair('max_return_cases', TJSONNumber.Create(AManifest.Docs.MaxReturnCases));
   JDocs.AddPair('max_callers', TJSONNumber.Create(AManifest.Docs.MaxCallers));
+  JDocs.AddPair('accessor_trivial_max_lines', TJSONNumber.Create(AManifest.Docs.AccessorTrivialMaxLines));
 
   { indexes }
   JIndexes:= TJSONObject.Create;

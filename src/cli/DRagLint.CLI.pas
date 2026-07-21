@@ -294,6 +294,11 @@ type
     // TDocBatchOptions.IncludeSince / BaseDir (and BuildFor's AIncludeSince / ABaseDir).
     DocSince   : Boolean; // document [...] --since
     DocBaseDir : string ; // document [...] --base-dir <repoRoot>
+    // ADP1 T2: --include-accessors disables the batch modes' trivial-property-
+    // accessor skip filter for this run (document --unit/--project/-all only;
+    // document --qname is never filtered). Off by default (filter ON).
+    // Consumed via TDocBatchOptions.IncludeAccessors.
+    DocIncludeAccessors: Boolean; // document [...] --include-accessors
     // v0.48: multi-overlay -- a manifest with one 'realpath<TAB>bufferpath' per
     // line, so ALL unsaved units are overlaid for a single compile.
     GhostOverlays: string; // --overlays <manifest>
@@ -409,10 +414,11 @@ begin
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup] [--db PATH]   - generate/repair a managed DocInsight comment');
-  Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup] [--db PATH]         - document every public decl in the unit (facts-only)');
-  Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup] [--db PATH]  - document every public decl in the project''s compile closure');
-  Writeln('  drag-lint document-all [--stubs|--apply|--json|--no-backup] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
+  Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors] [--db PATH]         - document every public decl in the unit (facts-only)');
+  Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]  - document every public decl in the project''s compile closure');
+  Writeln('  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
   Writeln('     batch modes (--unit/--project/document-all) default facts-only (summary/param left as TODO); add --stubs to also create all-TODO stub comments');
+  Writeln('     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too');
   Writeln('     add --seealso to any document mode to emit <seealso cref> links to related symbols (callees + siblings)');
   Writeln('     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent');
   Writeln('     @deprecated is auto-detected from the Pascal ''deprecated'' directive on the decl -- no flag needed');
@@ -778,6 +784,9 @@ begin
     // AutoDocument batch: --stubs opt-in (flips the facts-only default for
     // document / document --project / document-all).
     else if A = '--stubs' then Result.DocStubs:= True
+    // ADP1 T2: --include-accessors disables the batch modes' trivial-
+    // property-accessor skip filter for this run (see TDocBatchOptions.IncludeAccessors).
+    else if A = '--include-accessors' then Result.DocIncludeAccessors:= True
     // AutoDocument (ADF T4): --seealso opts in the <seealso> doc-source.
     else if A = '--seealso' then Result.DocSeeAlso:= True
     // AutoDocument (ADF T5): --since opts in the git <since> doc-source; --base-dir
@@ -1048,6 +1057,27 @@ begin
     Result:= DocManifest.Docs.MaxCallers;
   except
     Result:= 5;
+  end;
+end;
+
+// ADP1 T2: reads the docs.accessor_trivial_max_lines threshold for the batch
+// doc verbs (document --unit / --project, document-all), mirroring
+// LoadDocMaxReturnCases/LoadDocMaxCallers exactly (same manifest discovery).
+// UNLIKE those two knobs, this filter is ON BY DEFAULT: the fallback here AND
+// TDocSettings.Defaults both resolve an absent/unloadable manifest to 2 (NOT
+// a disabled state), so a Get*/Set* method with a <=2-line impl body is
+// skipped in batch modes even with no manifest at all. Best-effort: any load
+// failure (missing files, malformed JSON) falls back to 2.
+function LoadDocAccessorMaxLines: Integer;
+var
+  DocManifest: TIndexManifest;
+begin
+  Result:= 2;
+  try
+    DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    Result:= DocManifest.Docs.AccessorTrivialMaxLines;
+  except
+    Result:= 2;
   end;
 end;
 
@@ -6595,11 +6625,15 @@ begin
   Result:= 0;
 end; // function
 
-// AutoDocument (whole-unit batch): drag-lint document --unit <file.pas> [--apply|--json|--no-backup] [--db PATH]
+// AutoDocument (whole-unit batch): drag-lint document --unit <file.pas>
+//   [--apply|--json|--no-backup|--include-accessors] [--db PATH]
 // Documents every PUBLIC (interface-section) decl in the unit via TDocBatch.
 // Facts-only default: decls that would produce only an all-TODO comment (no
-// facts, no prior doc) are skipped. Dry-run (edit preview) unless --apply.
-// Exit 0 on ok (even when 0 decls changed), 2 on usage/db error.
+// facts, no prior doc) are skipped. ADP1 T2: TRIVIAL Get*/Set* property
+// accessors (impl body <= docs.accessor_trivial_max_lines, default 2) are
+// also skipped by default; --include-accessors opts back in. Dry-run (edit
+// preview) unless --apply. Exit 0 on ok (even when 0 decls changed), 2 on
+// usage/db error.
 function DoDocumentUnit(const AArgs: TArgs): Integer;
 var
   Store  : ISymbolStore     ;
@@ -6621,6 +6655,8 @@ begin
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
   Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
   Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
+  Opts.AccessorTrivialMaxLines:= LoadDocAccessorMaxLines; // ADP1 T2: manifest docs.accessor_trivial_max_lines threshold (default 2, filter ON, on any load failure).
+  Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
@@ -6635,6 +6671,7 @@ begin
       O.AddPair('docCount' , TJSONNumber.Create(Res.DocCount ));
       O.AddPair('edits'    , TJSONNumber.Create(Length(Res.Edits)));
       O.AddPair('applied'  , TJSONBool.Create(Applied));
+      O.AddPair('accessorsSkipped', TJSONNumber.Create(Res.AccessorsSkipped)); // ADP1 T2
       Writeln(O.ToJson);
     finally
       O.Free;
@@ -6645,6 +6682,9 @@ begin
   if Length(Res.Edits) = 0 then Writeln(Format('doc: %d public decl(s), nothing to document', [Res.DeclCount]))
   else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Res.Edits)); Writeln(Format('doc: %d/%d decl(s), %d edit(s) -- pass --apply to write', [Res.DocCount, Res.DeclCount, Length(Res.Edits)])); end
   else Writeln(Format('doc: %d/%d decl(s) documented, %d edit(s) applied%s', [Res.DocCount, Res.DeclCount, Length(Res.Edits), IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+  // ADP1 T2: report the trivial-accessor skip count (0 = filter found nothing to
+  // skip, or --include-accessors disabled it -- either way, nothing to print).
+  if Res.AccessorsSkipped > 0 then Writeln(Format('doc: %d trivial accessor(s) skipped (pass --include-accessors to include)', [Res.AccessorsSkipped]));
   Result:= 0;
 end; // function
 
@@ -6671,6 +6711,7 @@ begin
       O.AddPair('docCount' , TJSONNumber.Create(ARes.DocCount ));
       O.AddPair('edits'    , TJSONNumber.Create(Length(ARes.Edits)));
       O.AddPair('applied'  , TJSONBool.Create(Applied));
+      O.AddPair('accessorsSkipped', TJSONNumber.Create(ARes.AccessorsSkipped)); // ADP1 T2
       Writeln(O.ToJson);
     finally
       O.Free;
@@ -6681,14 +6722,18 @@ begin
   if Length(ARes.Edits) = 0 then Writeln(Format('doc: %d public decl(s), nothing to document', [ARes.DeclCount]))
   else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(ARes.Edits)); Writeln(Format('doc: %d/%d decl(s), %d edit(s) -- pass --apply to write', [ARes.DocCount, ARes.DeclCount, Length(ARes.Edits)])); end
   else Writeln(Format('doc: %d/%d decl(s) documented, %d edit(s) applied%s', [ARes.DocCount, ARes.DeclCount, Length(ARes.Edits), IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+  // ADP1 T2: report the trivial-accessor skip count (shared by document --project / document-all).
+  if ARes.AccessorsSkipped > 0 then Writeln(Format('doc: %d trivial accessor(s) skipped (pass --include-accessors to include)', [ARes.AccessorsSkipped]));
   Result:= 0;
 end; // function
 
 // AutoDocument (project-wide batch): drag-lint document --project <p.dpr/.dproj>
-//   [--stubs|--apply|--json|--no-backup] [--db PATH]
+//   [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]
 // Documents every public decl across the project's compile closure via
 // TDocBatch.DocumentProject. Facts-only default; --stubs opts in the all-TODO
-// creates. Dry-run unless --apply. Exit 0 on ok, 2 on usage/db error.
+// creates. ADP1 T2: trivial Get*/Set* accessors are skipped by default
+// (--include-accessors opts back in; see DoDocumentUnit). Dry-run unless
+// --apply. Exit 0 on ok, 2 on usage/db error.
 function DoDocumentProject(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore    ;
@@ -6708,15 +6753,19 @@ begin
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
   Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
   Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
+  Opts.AccessorTrivialMaxLines:= LoadDocAccessorMaxLines; // ADP1 T2: manifest docs.accessor_trivial_max_lines threshold (default 2, filter ON, on any load failure).
+  Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
 end; // function
 
 // AutoDocument (whole-index batch): drag-lint document-all
-//   [--stubs|--apply|--json|--no-backup] [--db PATH]
+//   [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]
 // Documents every public decl in EVERY indexed unit (no project scope) via
 // TDocBatch.DocumentAll. Facts-only default; --stubs opts in the all-TODO
-// creates. Dry-run unless --apply. Exit 0 on ok, 2 on usage/db error.
+// creates. ADP1 T2: trivial Get*/Set* accessors are skipped by default
+// (--include-accessors opts back in; see DoDocumentUnit). Dry-run unless
+// --apply. Exit 0 on ok, 2 on usage/db error.
 function DoDocumentAll(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore    ;
@@ -6735,6 +6784,8 @@ begin
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
   Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
   Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
+  Opts.AccessorTrivialMaxLines:= LoadDocAccessorMaxLines; // ADP1 T2: manifest docs.accessor_trivial_max_lines threshold (default 2, filter ON, on any load failure).
+  Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   Res:= TDocBatch.DocumentAll(Store, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
 end; // function

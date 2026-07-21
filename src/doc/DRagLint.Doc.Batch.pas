@@ -14,7 +14,16 @@ unit DRagLint.Doc.Batch;
   here). IncludeSeeAlso (ADF T4) and IncludeSince / BaseDir (ADF T5) are threaded
   into TDocumenter.BuildFor so the --seealso and --since opt-ins reach the facts
   builder (BaseDir is the git repo root for the <since> lookup). IncludeDeprecated
-  is threaded for forward compatibility and is a no-op here. }
+  is threaded for forward compatibility and is a no-op here.
+
+  Trivial-accessor filter (ADP1 T2, ON BY DEFAULT): a Get*/Set* method whose
+  impl body spans <= AOptions.AccessorTrivialMaxLines lines (default 2, from
+  the manifest's docs.accessor_trivial_max_lines) is skipped entirely -- see
+  IsTrivialAccessor -- so a one-line getter/setter does not clutter the unit
+  with a doc comment. AOptions.IncludeAccessors (CLI --include-accessors)
+  disables this for one run. This filter applies ONLY to the batch engine
+  here; the single-symbol document --qname path (TDocumenter.BuildFor called
+  directly by the CLI) never runs through this unit and is never filtered. }
 
 interface
 
@@ -49,6 +58,18 @@ type
     /// explicitly (from the manifest's Docs.MaxCallers, default 5) rather than
     /// relying on the record default.</summary>
     MaxCallers       : Integer;
+    /// <summary>ADP1 T2: threshold (impl body line count) at or under which a
+    /// Get*/Set* method is skipped as a trivial property accessor (see
+    /// IsTrivialAccessor). NOTE: Default(TDocBatchOptions) zero-fills this to
+    /// 0 -- every caller MUST set it explicitly (from the manifest's
+    /// Docs.AccessorTrivialMaxLines, default 2 -- the filter is ON BY
+    /// DEFAULT, unlike MaxReturnCases/MaxCallers) rather than relying on the
+    /// record default.</summary>
+    AccessorTrivialMaxLines: Integer;
+    /// <summary>ADP1 T2: --include-accessors. True disables the trivial-
+    /// accessor skip for this run (every accessor is documented like any
+    /// other public method, regardless of AccessorTrivialMaxLines).</summary>
+    IncludeAccessors: Boolean;
   end;
 
   /// <summary>Aggregated batch result. Edits is the union of every kept
@@ -60,22 +81,30 @@ type
     Edits    : TArray<TTextEdit>;
     DeclCount: Integer;
     DocCount : Integer;
+    /// <summary>ADP1 T2: count of public Get*/Set* methods skipped as trivial
+    /// property accessors (not counted in DeclCount -- see IsTrivialAccessor).
+    /// Always 0 when AOptions.IncludeAccessors was True for the run.</summary>
+    AccessorsSkipped: Integer;
   end;
 
   TDocBatch = class
   public
     /// <summary>Documents every public (interface-section) declaration in
     /// AUnitFile: routines, methods, ctors/dtors and type declarations (private
-    /// fields/consts are skipped). For each, computes the DocInsight edits via
-    /// TDocumenter.BuildFor and, under the facts-only default
-    /// (AOptions.Stubs=False), keeps the edit only when the merged comment
-    /// carries a managed facts block or the declaration already had a
+    /// fields/consts are skipped). ADP1 T2: a Get*/Set* method whose impl body
+    /// spans &lt;= AOptions.AccessorTrivialMaxLines lines is also skipped as a
+    /// trivial property accessor (see IsTrivialAccessor), unless
+    /// AOptions.IncludeAccessors is True. For each remaining decl, computes
+    /// the DocInsight edits via TDocumenter.BuildFor and, under the facts-only
+    /// default (AOptions.Stubs=False), keeps the edit only when the merged
+    /// comment carries a managed facts block or the declaration already had a
     /// doc-comment. Returns the aggregated, line-descending edit set plus the
-    /// decl/doc counts. Does not write files; the caller applies the edits.</summary>
+    /// decl/doc/accessors-skipped counts. Does not write files; the caller
+    /// applies the edits.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="AUnitFile">Path (relative or absolute) to the unit's source file, as stored/resolvable in the index.</param>
-    /// <param name="AOptions">Batch options; Stubs gates the facts-only filter.</param>
-    /// <returns>Aggregated edits + DeclCount (public decls seen) + DocCount (decls contributing an edit).</returns>
+    /// <param name="AOptions">Batch options; Stubs gates the facts-only filter, AccessorTrivialMaxLines/IncludeAccessors gate the trivial-accessor filter.</param>
+    /// <returns>Aggregated edits + DeclCount (public decls seen, after the accessor filter) + DocCount (decls contributing an edit) + AccessorsSkipped.</returns>
     /// <remarks>Not thread-safe; call from the owning thread only.</remarks>
     class function DocumentUnit(const AStore: ISymbolStore; const AUnitFile: string;
       const AOptions: TDocBatchOptions): TDocBatchResult;
@@ -111,7 +140,7 @@ type
 implementation
 
 uses
-  System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
+  System.SysUtils, System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
   DRagLint.Doc.Document, DRagLint.Doc.Regions,
   DRagLint.Index.Closure, DRagLint.Project.Resolver;
 
@@ -137,6 +166,26 @@ begin
   Result := False;
 end;
 
+// ADP1 T2: is ASym a TRIVIAL property accessor? The index does not store a
+// method<->property linkage (a property's stored PropAccess is its ro/rw/wo
+// MODE, not the read/write accessor's method id -- see the task report for
+// the schema check), so this is a deliberate, spec-sanctioned FALLBACK
+// heuristic: a class method (Kind = skMethod; free skProcedure/skFunction
+// routines are never accessors) whose Name starts with 'Get' or 'Set' AND
+// whose recorded impl body span (ImplEndLine - ImplStartLine) is <=
+// AMaxLines. KNOWN LIMITATION: a trivial non-accessor method that happens to
+// be named Get*/Set* (e.g. a one-line 'procedure SetupDefaults;' -- 'Set'
+// prefix) is also skipped in batch modes; --include-accessors and
+// document --qname both bypass this filter entirely.
+function IsTrivialAccessor(const ASym: TSymbol; AMaxLines: Integer): Boolean;
+begin
+  Result := False;
+  if ASym.Kind <> skMethod then Exit;
+  if not (StartsText('Get', ASym.Name) or StartsText('Set', ASym.Name)) then Exit;
+  if ASym.ImplStartLine <= 0 then Exit; // no recorded body span (abstract/interface method) -- never trivial
+  Result := (ASym.ImplEndLine - ASym.ImplStartLine) <= AMaxLines;
+end;
+
 class function TDocBatch.DocumentUnit(const AStore: ISymbolStore;
   const AUnitFile: string; const AOptions: TDocBatchOptions): TDocBatchResult;
 var
@@ -160,6 +209,20 @@ begin
       // non-routine/type kinds are excluded from both DeclCount and the edits.
       if not SameText(Sym.Section, 'interface') then Continue;
       if not IsDocumentableKind(Sym.Kind) then Continue;
+
+      // ADP1 T2: batch modes (document --unit/--project, document-all) skip
+      // TRIVIAL property accessors -- see IsTrivialAccessor. Not counted in
+      // DeclCount (treated as never a candidate, like a private field or a
+      // non-documentable kind above), counted separately in AccessorsSkipped
+      // for the run summary. --include-accessors (AOptions.IncludeAccessors)
+      // disables this for the whole run. document --qname (BuildFor, called
+      // directly by the CLI) never goes through this loop, so it is
+      // unaffected by this filter.
+      if (not AOptions.IncludeAccessors) and IsTrivialAccessor(Sym, AOptions.AccessorTrivialMaxLines) then
+      begin
+        Inc(Result.AccessorsSkipped);
+        Continue;
+      end;
 
       Inc(Result.DeclCount);
 
@@ -226,6 +289,7 @@ begin
       Sub := TDocBatch.DocumentUnit(AStore, F, AOptions);
       Inc(Result.DeclCount, Sub.DeclCount);
       Inc(Result.DocCount , Sub.DocCount );
+      Inc(Result.AccessorsSkipped, Sub.AccessorsSkipped); // ADP1 T2
       for E in Sub.Edits do Collected.Add(E);
     end;
     Result.Edits := Collected.ToArray;

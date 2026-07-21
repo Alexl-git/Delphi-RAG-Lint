@@ -8,7 +8,8 @@
   },
   "docs": {
     "max_return_cases": 6,
-    "max_callers": 5
+    "max_callers": 5,
+    "accessor_trivial_max_lines": 2
   },
   "indexes": {
     "outDir": "C:\\Projects\\.drag-lint",
