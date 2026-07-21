@@ -4221,19 +4221,63 @@ begin
 end;
 
 { v1.2: whole-project auto-document -- writes managed DocInsight into every
-  public decl of the active project's compile closure (facts-only, --apply
-  with a .bak per modified file). No preview/confirm dialog: apply-directly-
-  with-backup is the deliberate design (git + .bak are the safety net). }
+  public decl of the active project's compile closure (facts-only, --apply with a
+  .bak per modified file). No preview/confirm dialog: apply-directly-with-backup is
+  the deliberate design (git + .bak are the safety net).
+  SELF-FRESHENING + LSP-SAFE: runs THROUGH THE JOB QUEUE (LSP stopped in OnPreRun so
+  the reindex can take the DB's WAL lock -- a live LSP connection would silently
+  corrupt it) a 3-step batch: (1) index the project INCREMENTALLY -- index is
+  mtime/sha-based, so it auto-detects stale/absent files, re-parses only those, and
+  CREATES the DB if missing (no prompts) -> document then applies on CURRENT line
+  numbers; (2) document --apply, which writes the comments and SHIFTS lines; (3)
+  index AGAIN -- the apply modified the files, so the index is now stale, and
+  re-freshening it keeps hover / lint / LSP correct afterward. A temp .bat sequences
+  the three (avoids inline cmd-quoting hazards); '|| exit /b 1' stops on failure. }
 procedure InvokeAutoDocumentProject(Sender: TObject);
 var
-  Proj: string;
-  Db  : string;
+  Proj, Db, ProjDir, Plat, Bat, BatPath, OutPath: string;
+  MS: IOTAModuleServices;
 begin
   Proj:= GetActiveProjectFile;
   if Proj = '' then begin ShowMessage('drag-lint: no active project.'); Exit; end;
   Db:= GetActiveProjectDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
-  DLRunReport(Format('document --project "%s" --apply --db "%s"', [Proj, Db]), 'drag-lint-autodocument.txt');
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+  ProjDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
+  Plat   := GetActiveProjectPlatform; // Win32/Win64 -> correct conditional-define resolution
+
+  Bat:=
+    '@echo off'#13#10 +
+    Format('"%s" index "%s" --db "%s" --platform %s || exit /b 1'#13#10, [DLExe64, ProjDir, Db, Plat]) +
+    Format('"%s" document --project "%s" --apply --db "%s" || exit /b 1'#13#10, [DLExe64, Proj, Db]) +
+    Format('"%s" index "%s" --db "%s" --platform %s'#13#10, [DLExe64, ProjDir, Db, Plat]);
+  BatPath:= TPath.Combine(TPath.GetTempPath, 'drag-lint-autodocument.bat');
+  try TFile.WriteAllText(BatPath, Bat, TEncoding.ANSI); except end;
+  OutPath:= TPath.Combine(TPath.GetTempPath, 'drag-lint-autodocument.txt');
+
+  DLT('menu', 'enqueue(autodoc: reindex->document->reindex): ' + BatPath);
+  var Job: TDragLintJob:= TDragLintJob.Create;
+  Job.Kind       := jkReindex;
+  Job.Title      := 'Auto-Document ' + ChangeFileExt(ExtractFileName(Proj), '');
+  Job.CoalesceKey:= 'autodoc:' + LowerCase(Db);
+  Job.CmdLine    := Format('cmd.exe /c "%s"', [BatPath]);
+  Job.TimeoutMs  := 600000;
+  Job.OnPreRun   :=
+    procedure
+    begin
+      if GLspClient <> nil then begin GLspClient.Stop; FreeAndNil(GLspClient); end;
+    end;
+  Job.OnDone     :=
+    procedure(AExit: Integer; AOut: string)
+    var S: string;
+    begin
+      S:= AOut;
+      if Trim(S) = '' then S:= '(no output)';
+      if AExit <> 0 then S:= Format('[auto-document exited %d]'#13#10, [AExit]) + S;
+      try TFile.WriteAllText(OutPath, S); except end;
+      DLOpenInEditor(OutPath);
+    end;
+  JobQueue.Enqueue(Job);
 end;
 
 procedure InvokeGenerateTest(Sender: TObject);
