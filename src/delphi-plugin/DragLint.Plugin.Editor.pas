@@ -4220,6 +4220,19 @@ begin
   DLRunReport(Format('generate-docs --qname "%s" --format xmldoc --db "%s"', [Q, Db]), 'drag-lint-docstub.txt');
 end;
 
+{ v1.2: whole-project auto-document -- writes managed DocInsight into every
+  public decl of the active project's compile closure (facts-only, --apply
+  with a .bak per modified file). No preview/confirm dialog: apply-directly-
+  with-backup is the deliberate design (git + .bak are the safety net). }
+procedure InvokeAutoDocumentProject(Sender: TObject);
+var
+  Proj: string;
+begin
+  Proj:= GetActiveProjectFile;
+  if Proj = '' then begin ShowMessage('drag-lint: no active project.'); Exit; end;
+  DLRunReport(Format('document --project "%s" --apply', [Proj]), 'drag-lint-autodocument.txt');
+end;
+
 procedure InvokeGenerateTest(Sender: TObject);
 var
   Q : string;
@@ -4547,6 +4560,7 @@ begin
   SubGen.Caption:= 'Generate && Export';
   RootMenu.Add(SubGen);
   AddWrappedItem(SubGen, 'Doc Comment Stub (symbol)...'  , InvokeGenerateDocs  );
+  AddWrappedItem(SubGen, 'Auto-Document Whole Project...', InvokeAutoDocumentProject);
   AddWrappedItem(SubGen, 'Unit Test Stub (symbol)...'    , InvokeGenerateTest  );
   AddWrappedItem(SubGen, 'Export Enums (Delphi const)...', InvokeExportEnums   );
   AddWrappedItem(SubGen, 'Export Graph (DOT)...'         , InvokeExportGraphDot);
