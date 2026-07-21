@@ -164,4 +164,9 @@ key's loader default. `document --qname` is unaffected by all of the above.
 3. Trivial-accessor scope → batch modes only, default ≤2 lines, `--include-accessors` opt-out,
    `document --qname` never filtered.
 4. Platform fact → best-effort; defer if not cheaply index-derivable.
+   **[RESOLVED 2026-07-21 — ADP1 Phase 1 implementation: DEFERRED to Phase 2.** No per-symbol
+   `{$IFDEF}` guard is persisted in the index, and deriving it at document time needs a nesting-aware
+   upward source scan (`{$IFDEF}`/`{$ELSE}`/`{$ENDIF}`), not a bounded decl-line read like the
+   `Deprecated`/`abstract` probes — i.e. the decision gate's defer condition. Phase 2's index-time
+   facts layer (the preprocessor already holds the guard during indexing) is the cheap, correct home.]
 5. Analysis facts + hover enrichment → Phase 2 (separate spec).
