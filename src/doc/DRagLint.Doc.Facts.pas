@@ -12,6 +12,10 @@ const
   // Display cap for the <seealso> related-symbol list (ADF T4). At most this many
   // <seealso cref> lines are emitted, keeping the managed block terse.
   SEEALSO_CAP = 5;
+  // v(ADP1 T3): display cap for the 'Overridden by:' descendant-method list --
+  // at most this many are shown; OverriddenByTotal carries the true count so the
+  // renderer can add '(+N more)', mirroring CalledFrom's cap discipline.
+  OVERRIDDENBY_CAP = 6;
 
 type
   TDocFactRef = record
@@ -70,6 +74,47 @@ type
     // -- absence over a wrong fact. Empty by default, so RenderFactsBlock emits no
     // <since> line unless --since was passed and git succeeded.
     Since          : string             ;
+    // v(ADP1 T3): cheap fact group -- overrides / overridden-by / implements /
+    // overload / virtual+abstract markers. Gathered UNCONDITIONALLY (no opt-in
+    // flag, like Deprecated) whenever ASym is method-like (skMethod/
+    // skConstructor/skDestructor) with a parent (ASym.ParentId > 0); empty/False
+    // for everything else (free routines, types, fields, ...).
+    //
+    // Overrides: the QUALIFIED NAME of the same-named method on the NEAREST
+    // resolved CLASS ancestor (via GetTransitiveAncestors + FindChildSymbolByName
+    // -- the same helpers PropTree's ResolveInheritedType uses), or '' when ASym
+    // does not override an ancestor method.
+    Overrides        : string           ;
+    // Overridden by: QUALIFIED NAMES of same-named methods on TRANSITIVE
+    // DESCENDANT classes (via FindDescendantNames), capped at OVERRIDDENBY_CAP;
+    // OverriddenByTotal carries the true distinct count for the renderer's
+    // '(+N more)' suffix (mirrors CalledFrom/CalledFromTotal). Empty when no
+    // descendant redeclares the method.
+    OverriddenBy     : TArray<string>   ;
+    OverriddenByTotal: Integer          ;
+    // Implements: the QUALIFIED NAME of a same-named member on a resolved
+    // INTERFACE ancestor (NAME-BASED ONLY -- no signature-match helper exists in
+    // the index, so this is a heuristic, not a verified interface-method proof;
+    // see DetectMethodDirectives'/the gather block's header comment). '' when
+    // ASym's class implements no interface declaring the same member name.
+    Implements       : string           ;
+    // Overload k of n: ASym's 1-based position (by declaration StartLine order)
+    // among its same-named siblings under the same parent (via
+    // FindAllChildSymbols -- the same helper SeeAlso's sibling walk already
+    // uses), and the sibling-set size. OverloadCount stays 0/1 (never rendered,
+    // RenderFactsBlock requires > 1) when ASym has no same-named sibling.
+    OverloadOrdinal  : Integer          ;
+    OverloadCount    : Integer          ;
+    // virtual / abstract directive markers: GROUND-TRUTH from a bounded SOURCE
+    // PROBE (see DetectMethodDirectives) -- the index has NO abstract signal at
+    // all, and TSymbol.IsVirtual (Model.pas) COLLAPSES virtual/dynamic/override
+    // into one flag, so neither can be read back from stored symbol data. IsVirtual
+    // here is True only for a ROOT virtual/dynamic declaration (the override
+    // directive is ALSO present -> Overrides is populated instead, so the two
+    // lines are never both emitted for the same decl). IsAbstract is True
+    // whenever the 'abstract' directive is present, independent of override.
+    IsAbstract       : Boolean          ;
+    IsVirtual        : Boolean          ;
   end;
 
   TDocFactsBuilder = class
@@ -81,7 +126,11 @@ type
     /// (the --since opt-in), populates Result.Since with the git commit date of
     /// the declaration line (via TGitSince, using ABaseDir as the repo root);
     /// '' when git is absent / the line can't be attributed. NO git subprocess
-    /// runs unless AIncludeSince is True.</summary>
+    /// runs unless AIncludeSince is True. Also UNCONDITIONALLY populates the
+    /// cheap Overrides/OverriddenBy/Implements/Overload/IsAbstract/IsVirtual
+    /// fact group (v(ADP1 T3)) whenever ASym is method-like (skMethod/
+    /// skConstructor/skDestructor) with a parent; see each TDocFacts field's own
+    /// comment for how it is derived.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="ASym">The symbol to document.</param>
     /// <param name="AIncludeSeeAlso">Opt-in: compute the &lt;seealso&gt; related set. Default False.</param>
@@ -339,6 +388,39 @@ begin
   if M.Groups.Count > 1 then
     if M.Groups[1].Success then
       AMsg:= StringReplace(M.Groups[1].Value, '''''', '''', [rfReplaceAll]);
+end;
+
+// v(ADP1 T3): detects the virtual / abstract / override / dynamic DIRECTIVES on
+// ASym's declaration line. SOURCE PROBE, mirroring DetectDeprecated above --
+// the index has NO abstract signal at all (never persisted anywhere), and
+// TSymbol.IsVirtual (Model.pas) COLLAPSES virtual/dynamic/override into a
+// single flag (cannot tell WHICH directive is present), so the declaration
+// TEXT is the only ground truth for these three. Reuses ReadDeclLine (the same
+// tolerant ANSI-read idiom DetectDeprecated already uses).
+//
+// KNOWN BOUND (same as DetectDeprecated): reads ONLY ASym.StartLine. A
+// directive written on a LATER line of a WRAPPED multi-line signature (e.g. a
+// long param list with 'virtual;' on the line after the closing paren) is
+// MISSED -- Phase 1 does not expand to multi-line scanning; single-line
+// declarations (as produced by this repo's formatting conventions and the
+// task's test fixtures) are the supported case.
+//
+// Matches whole-word, case-insensitive; a bare declaration with none of these
+// words yields all three False (never fabricated).
+procedure DetectMethodDirectives(const AStore: ISymbolStore; const ASym: TSymbol;
+  out AVirtual, AAbstract, AOverride: Boolean);
+var
+  Line: string;
+begin
+  AVirtual := False;
+  AAbstract:= False;
+  AOverride:= False;
+  if ASym.StartLine <= 0 then Exit;
+  Line:= ReadDeclLine(AStore.GetFilePath(ASym.FileId), ASym.StartLine);
+  if Line = '' then Exit;
+  AVirtual := TRegEx.IsMatch(Line, '\b(virtual|dynamic)\b', [roIgnoreCase]);
+  AAbstract:= TRegEx.IsMatch(Line, '\babstract\b', [roIgnoreCase]);
+  AOverride:= TRegEx.IsMatch(Line, '\boverride\b', [roIgnoreCase]);
 end;
 
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
@@ -657,6 +739,127 @@ begin
   var DepMsg: string;
   Result.Deprecated:= DetectDeprecated(AStore, ASym, DepMsg);
   Result.DeprecatedMsg:= DepMsg;
+
+  // v(ADP1 T3): cheap fact group -- overrides / overridden-by / implements /
+  // overload / virtual+abstract markers. GROUND-TRUTH via the SAME mapped
+  // ancestry/descendant/sibling helpers already used elsewhere in this unit and
+  // in PropTree (GetTransitiveAncestors, FindDescendantNames,
+  // FindChildSymbolByName, FindAllChildSymbols) -- not reinvented. virtual/
+  // abstract have no index signal at all, so they come from the bounded source
+  // probe DetectMethodDirectives (see its header comment for the rationale and
+  // the known StartLine-only bound).
+  //
+  // CHEAP EARLY-OUT: only method-like symbols (skMethod/skConstructor/
+  // skDestructor) with a parent (ASym.ParentId > 0) can have any of these five
+  // facts -- a free routine, a type, a field, etc. has none of them, so the
+  // whole block is skipped for every other kind/parentless symbol.
+  if (ASym.Kind in [skMethod, skConstructor, skDestructor]) and (ASym.ParentId > 0) then
+  begin
+    var ParentSym: TSymbol:= AStore.GetSymbolById(ASym.ParentId);
+    if ParentSym.Id > 0 then
+    begin
+      // Overrides / Implements: walk the parent's TRANSITIVE ancestor closure
+      // (GetTransitiveAncestors -- BFS, nearest-first, resolved edges only).
+      // A 'class' ancestor declaring the SAME method name -> Overrides (first/
+      // nearest match wins, mirrors PropTree's ResolveInheritedType). An
+      // 'interface' ancestor declaring the same member name -> Implements
+      // (NAME-BASED ONLY: no signature-match helper exists in the index, so an
+      // unrelated same-named method that happens to sit under an implemented
+      // interface would also match here -- accepted as a documented heuristic
+      // for this cheap fact group, not a verified interface-implementation
+      // proof).
+      var Ancestors: TArray<TTypeAncestor>:= AStore.GetTransitiveAncestors(ParentSym.Id);
+      for var Anc in Ancestors do
+      begin
+        if not (Anc.Resolved and (Anc.SymbolId > 0)) then Continue;
+        if SameText(Anc.Kind, 'class') and (Result.Overrides = '') then
+        begin
+          var BaseMethod: TSymbol:= AStore.FindChildSymbolByName(Anc.SymbolId, ASym.Name);
+          if (BaseMethod.Id > 0) and (BaseMethod.Kind in [skMethod, skConstructor, skDestructor]) then
+            Result.Overrides:= BaseMethod.QualifiedName;
+        end
+        else if SameText(Anc.Kind, 'interface') and (Result.Implements = '') then
+        begin
+          var IfaceMember: TSymbol:= AStore.FindChildSymbolByName(Anc.SymbolId, ASym.Name);
+          if IfaceMember.Id > 0 then
+            Result.Implements:= IfaceMember.QualifiedName;
+        end;
+      end;
+
+      // Overridden by: every TRANSITIVE DESCENDANT class of the parent
+      // (FindDescendantNames -- distinct, sorted class NAMES only) that
+      // redeclares the same method name. Each name is re-resolved to a symbol
+      // via FindSymbolsByExactName, trying candidates in order and keeping the
+      // FIRST one that actually owns a same-named method-like child -- guards
+      // against an unrelated same-named class in a different unit shadowing the
+      // real descendant. Capped at OVERRIDDENBY_CAP; OverriddenByTotal carries
+      // the true distinct count (mirrors CalledFrom's cap discipline).
+      if ParentSym.Kind = skClass then
+      begin
+        var DescNames: TArray<string>:= AStore.FindDescendantNames(ParentSym.Name);
+        var OB: TStringList:= TStringList.Create;
+        try
+          for var DName in DescNames do
+          begin
+            var Cands: TArray<TSymbol>:= AStore.FindSymbolsByExactName(DName);
+            for var Cand in Cands do
+            begin
+              if Cand.Kind <> skClass then Continue;
+              var DescMethod: TSymbol:= AStore.FindChildSymbolByName(Cand.Id, ASym.Name);
+              if (DescMethod.Id > 0) and (DescMethod.Kind in [skMethod, skConstructor, skDestructor]) then
+              begin
+                OB.Add(DescMethod.QualifiedName);
+                Break; // first candidate that owns the method wins; stop scanning this name
+              end;
+            end;
+          end;
+          Result.OverriddenByTotal:= OB.Count;
+          var ShownOB: Integer:= OB.Count;
+          if ShownOB > OVERRIDDENBY_CAP then ShownOB:= OVERRIDDENBY_CAP;
+          SetLength(Result.OverriddenBy, ShownOB);
+          for var K:= 0 to ShownOB - 1 do Result.OverriddenBy[K]:= OB[K];
+        finally
+          OB.Free;
+        end;
+      end;
+    end;
+
+    // Overload k of n: siblings under the SAME parent (FindAllChildSymbols --
+    // the same helper SeeAlso's sibling walk above already uses) sharing
+    // ASym's Name, in the query's start_line order. ASym's own 1-based
+    // position within that same-named subset is its ordinal; the subset size
+    // is the count. A lone (non-overloaded) method yields Count <= 1 (never
+    // rendered -- RenderFactsBlock requires > 1).
+    var Siblings: TArray<TSymbol>:= AStore.FindAllChildSymbols(ASym.ParentId);
+    var SameName: TList<TSymbol>:= TList<TSymbol>.Create;
+    try
+      for var Sib in Siblings do
+        if (Sib.Kind in [skMethod, skConstructor, skDestructor]) and SameText(Sib.Name, ASym.Name) then
+          SameName.Add(Sib);
+      if SameName.Count > 1 then
+      begin
+        Result.OverloadCount:= SameName.Count;
+        for var OI:= 0 to SameName.Count - 1 do
+          if SameName[OI].Id = ASym.Id then
+          begin
+            Result.OverloadOrdinal:= OI + 1;
+            Break;
+          end;
+      end;
+    finally
+      SameName.Free;
+    end;
+
+    // virtual / abstract / override directive markers (source probe). IsVirtual
+    // is suppressed when AOverride is also present -- an override is already
+    // (implicitly) virtual, and Overrides is the more informative line, so the
+    // two are never both rendered for the same decl (per the task's design
+    // decision).
+    var DVirtual, DAbstract, DOverride: Boolean;
+    DetectMethodDirectives(AStore, ASym, DVirtual, DAbstract, DOverride);
+    Result.IsAbstract:= DAbstract;
+    Result.IsVirtual := DVirtual and not DOverride;
+  end;
 
   // SeeAlso (opt-in): related-symbol crefs for the <seealso> doc-source. Only
   // computed when AIncludeSeeAlso (the --seealso flag) -- otherwise SeeAlso stays

@@ -22,14 +22,19 @@ type
   public
     /// <summary>Renders the fenced facts-block body lines (each prefixed
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
-    /// Raises / Deprecated / Since / SeeAlso. Empty sections omitted; '' when there are
-    /// no facts. Displayed counts below the true *Total get a ' (+N more)'
-    /// suffix. Deprecated is ground-truth from the Pascal 'deprecated'
-    /// directive (not the unrelated &lt;deprecated/&gt; doc-comment tag) --
-    /// emitted only when the directive was found on the declaration. SeeAlso
-    /// emits one &lt;seealso cref&gt; line per entry; it is populated only when
-    /// the facts were built with the --seealso opt-in, so by default no
-    /// &lt;seealso&gt; line appears.</summary>
+    /// Raises / Deprecated / Overrides / Overridden by / Implements / Overload
+    /// k of n / abstract / virtual / Since / SeeAlso. Empty sections omitted;
+    /// '' when there are no facts. Displayed counts below the true *Total get a
+    /// ' (+N more)' suffix. Deprecated is ground-truth from the Pascal
+    /// 'deprecated' directive (not the unrelated &lt;deprecated/&gt; doc-comment
+    /// tag) -- emitted only when the directive was found on the declaration.
+    /// The cheap fact group (v(ADP1 T3): Overrides/Overridden by/Implements/
+    /// Overload/abstract/virtual) is gathered unconditionally for method-like
+    /// symbols -- see TDocFacts' field comments for how each is derived and
+    /// DRagLint.Doc.Facts.DetectMethodDirectives for the virtual/abstract
+    /// source probe. SeeAlso emits one &lt;seealso cref&gt; line per entry; it is
+    /// populated only when the facts were built with the --seealso opt-in, so
+    /// by default no &lt;seealso&gt; line appears.</summary>
     class function RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string): string;
     /// <summary>Produces the full merged DocInsight comment text (///-prefixed
     /// lines joined by CRLF): preserved hand-written prose + a regenerated
@@ -152,6 +157,26 @@ begin
       else
         Sb.AppendLine(APrefix + 'Deprecated.');
     end;
+    // v(ADP1 T3): cheap fact group -- each line omit-when-empty, same discipline
+    // as the sections above. Overrides/Implements are plain qualified names
+    // (never '?'-tagged -- Overrides is ancestry-grounded, Implements is a
+    // documented name-based heuristic per TDocFacts.Implements' comment, not an
+    // uncertain/ambiguous match in the CalledFrom sense). Overridden by mirrors
+    // CalledFrom's cap-plus-'(+N more)' pattern. Overload is a single 'k of n'
+    // line, only when n > 1. abstract/virtual are bare one-word marker lines;
+    // never both, and never virtual alongside Overrides (see TDocFacts.IsVirtual).
+    if AFacts.Overrides <> '' then
+      Sb.AppendLine(APrefix + 'Overrides: ' + AFacts.Overrides);
+    if Length(AFacts.OverriddenBy) > 0 then
+      Sb.AppendLine(APrefix + 'Overridden by: ' + string.Join(', ', AFacts.OverriddenBy) + MoreSuffix(Length(AFacts.OverriddenBy), AFacts.OverriddenByTotal));
+    if AFacts.Implements <> '' then
+      Sb.AppendLine(APrefix + 'Implements: ' + AFacts.Implements);
+    if AFacts.OverloadCount > 1 then
+      Sb.AppendLine(APrefix + Format('Overload %d of %d', [AFacts.OverloadOrdinal, AFacts.OverloadCount]));
+    if AFacts.IsAbstract then
+      Sb.AppendLine(APrefix + 'abstract');
+    if AFacts.IsVirtual then
+      Sb.AppendLine(APrefix + 'virtual');
     // v(ADF T5): OPT-IN git <since> line. AFacts.Since is '' unless the caller
     // built the facts with --since (TDocFactsBuilder.Build's AIncludeSince) AND
     // git confidently attributed the declaration line, so this renders NOTHING by
