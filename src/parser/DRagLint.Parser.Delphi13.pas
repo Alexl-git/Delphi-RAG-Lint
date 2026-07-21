@@ -908,27 +908,52 @@ end;
   contains line N" / context bundles don't need a text-scan. The defProc name is
   'TClass.Method' or 'Foo'; the decl symbol is unit-qualified ('Unit.TClass.Method'),
   so match on the leaf name + a qualified-name suffix. Sets the first not-yet-
-  stamped match (overloads in source order). }
-procedure SetRoutineImplRange(const AState: TWalkState; const AName: string; AStartLine, AEndLine: Integer);
+  stamped match (overloads in source order).
+  v(ADP1 Bug B): name-only matching mis-attaches OVERLOADED methods when the impl
+  bodies are ordered differently than the decls -- the scan just grabs whichever
+  unstamped same-name candidate it meets first, with no regard for which impl
+  actually belongs to which decl, so a wrong body (and its mined <returns>) can
+  land on the wrong overload. ASignature (built by the SAME ProcSignatureOf that
+  produced the decl's stored Signature) disambiguates: PREFER an unstamped
+  candidate whose Name AND Signature both match; FALL BACK to today's exact
+  name-only "first unstamped, downto 0" behavior when no signature match exists
+  (ASignature = '', a signature-extraction edge case, or a non-overloaded /
+  impl-only free routine) -- so the fix is never worse than before. There cannot
+  be two unstamped decls sharing both name and signature (that would be a
+  duplicate-overload compile error), so a signature match is always unique. }
+procedure SetRoutineImplRange(const AState: TWalkState; const AName: string; AStartLine, AEndLine: Integer; const ASignature: string);
 var
-  i      : Integer;
-  Sym    : TSymbol;
-  LastSeg: string ;
+  i          : Integer;
+  Sym        : TSymbol;
+  LastSeg    : string ;
+  FallbackIdx: Integer;
 begin
   if AName = '' then Exit;
   LastSeg:= AName;
   if Pos('.', LastSeg) > 0 then LastSeg:= Copy(LastSeg, LastDelimiter('.', LastSeg) + 1, MaxInt);
+  FallbackIdx:= -1;
   for i:= AState.Symbols.Count - 1 downto 0 do
   begin
     Sym:= AState.Symbols[i];
     if (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and (Sym.ImplStartLine = 0) and SameText(Sym.Name, LastSeg)
        and (SameText(Sym.QualifiedName, AName) or Sym.QualifiedName.EndsWith('.' + AName, True)) then
     begin
-      Sym.ImplStartLine:= AStartLine;
-      Sym.ImplEndLine  := AEndLine;
-      AState.Symbols[i]:= Sym;
-      Exit;
+      if (ASignature <> '') and SameText(Sym.Signature, ASignature) then
+      begin
+        Sym.ImplStartLine:= AStartLine;
+        Sym.ImplEndLine  := AEndLine;
+        AState.Symbols[i]:= Sym;
+        Exit;
+      end;
+      if FallbackIdx < 0 then FallbackIdx:= i;
     end;
+  end;
+  if FallbackIdx >= 0 then
+  begin
+    Sym:= AState.Symbols[FallbackIdx];
+    Sym.ImplStartLine:= AStartLine;
+    Sym.ImplEndLine  := AEndLine;
+    AState.Symbols[FallbackIdx]:= Sym;
   end;
 end; // procedure
 
@@ -1303,8 +1328,11 @@ begin
           if (HdrName <> '') and (Pos('.', HdrName) = 0) and not FreeRoutineSymbolExists(AState, HdrName) then
             WalkDeclProc(HdrNode, AState, AParentSymbolIdx, AParentQualifiedName, False);
           { v9: record this routine's body span on its symbol (decl or the
-            impl-only one just emitted above). }
-          if HdrName <> '' then SetRoutineImplRange(AState, HdrName, Integer(ANode.StartPoint.row) + 1, Integer(ANode.EndPoint.row) + 1);
+            impl-only one just emitted above). v(ADP1 Bug B): pass the impl
+            header's own signature (built by the same ProcSignatureOf that
+            produced the decl's stored Signature) so overloads disambiguate
+            by signature, not just name -- see SetRoutineImplRange. }
+          if HdrName <> '' then SetRoutineImplRange(AState, HdrName, Integer(ANode.StartPoint.row) + 1, Integer(ANode.EndPoint.row) + 1, ProcSignatureOf(HdrNode, AState.Source));
           { v14 (D5, Task 3): emit this routine's local `var` entries as skLocalVar
             symbols, parented to its (already-emitted) routine symbol. Only at
             RoutineDepth = 0 -- a nested proc is never walked here, so its locals
