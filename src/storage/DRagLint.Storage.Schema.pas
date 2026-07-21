@@ -3,7 +3,7 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 16;
+  SCHEMA_VERSION = 17;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
@@ -45,7 +45,14 @@ const
     // v9: implementation body span (header..final 'end'); 0 when no body.
     // Migrate() ALTERs these onto pre-v9 tables (CREATE TABLE IF NOT EXISTS
     // does not add columns to an existing table).
-    '  impl_start_line INTEGER,' + '  impl_end_line   INTEGER' + ')',
+    '  impl_start_line INTEGER,' + '  impl_end_line   INTEGER,' +
+    // v17: property-leaf assignability engine (Task 1: DB plumbing only --
+    // extraction lands in a later task). NULL for every symbol until then.
+    // Free-form accessor descriptor for a property leaf (e.g. field-backed /
+    // getter-method / read-only / write-only); NULL for non-property symbols
+    // and for property symbols not yet analyzed. Migrate() ALTERs it onto
+    // pre-v17 tables.
+    '  prop_access     TEXT' + ')',
 
     'CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)', 'CREATE INDEX IF NOT EXISTS idx_symbols_qname ON symbols(qualified_name)',
     'CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id)', 'CREATE INDEX IF NOT EXISTS idx_symbols_parent ON symbols(parent_id)',
