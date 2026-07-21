@@ -72,6 +72,14 @@ akRight so they stretch; two new pool buttons (item 3) fit above Assign/Unassign
 > pragmatic editor-side denylist of well-known read-only names (Handle, ComObject,
 > ComponentCount, ...) -- quick but brittle, may hide a valid same-named target;
 > (c) defer until the indexer work lands. NOT implemented this session.
+>
+> **HANDED OFF to the engine team (2026-07-20b):** thorough evidence-based design in
+> `docs/converter/2026-07-20-proptree-assignability-engine-handoff.md` (copy dropped
+> in the engine checkout `C:\Projects\Delphi-RAG-lint\docs\lint\`). Refined finding:
+> only **writability** needs a re-index; **visibility** (in `modifiers`:
+> published/public) and **concrete polymorphic type** (`TcxCheckBox.Properties` ->
+> `TcxCheckBoxProperties` already captured) are proptree/CLI plumbing, NO re-index.
+> Contract = proptree/2 JSON (`is_writable`, `visibility`), back-compat defaults.
 
 - **Read-only leaves are not valid assignment targets** (e.g. `...Handle`). A To
   path is only usable if the FINAL segment is WRITABLE (and every intermediate
