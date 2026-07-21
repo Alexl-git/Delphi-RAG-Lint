@@ -113,6 +113,8 @@ type
     function  FindLinkForFrom(const AFromPath: string): TRuleNode;
     function  LeafType(const ATree: TProptree; const APath: string): string;
     function  LeafWritable(const ATree: TProptree; const APath: string): Boolean;
+    function  ClassCastName(const AFromType, AToType: string): string;
+    function  CanCast(const AFromType, AToType: string): Boolean;
   public
     { Application.CreateForm calls this standard Create(AOwner); we route it to
       CreateNew (no .dfm) and build the UI in code. Being created via CreateForm
@@ -520,6 +522,18 @@ begin
   Result := True;
   for L in ATree.Leaves do
     if SameText(L.Path, APath) then Exit(L.IsWritable);
+end;
+
+{ The library class-cast name bridging AFromType -> AToType, or '' if none. }
+function TConvRulesForm.ClassCastName(const AFromType, AToType: string): string;
+begin
+  Result := ClassCastFor(FCastDefs, AFromType, AToType);
+end;
+
+{ Castable when the scalar classifier allows it OR a library class cast bridges it. }
+function TConvRulesForm.CanCast(const AFromType, AToType: string): Boolean;
+begin
+  Result := IsCastable(AFromType, AToType) or (ClassCastName(AFromType, AToType) <> '');
 end;
 
 { Load the FROM and TO class pickers, once. They are deliberately DIFFERENT sets:
@@ -1090,7 +1104,7 @@ end;
 { Create or update the #link mapping ToPath <- FromPath in the active block,
   choosing a default cast from the leaf types (identity when same type). Shared by
   the manual Assign and the Auto-Match pass. Does NOT touch the grid/UI -- callers
-  refresh. Assumes IsCastable(AFromType, AToType) was already checked. }
+  refresh. Assumes CanCast(AFromType, AToType) was already checked. }
 procedure TConvRulesForm.AssignLink(const AFromPath, AToPath, AFromType, AToType: string);
 var
   Link    : TRuleNode;
@@ -1126,6 +1140,8 @@ begin
     Link.Cast := '';
     for c := Low(TCastFn) to High(TCastFn) do
       if c in casts then begin Link.Cast := CastFnName(c); Break; end;
+    if Link.Cast = '' then
+      Link.Cast := ClassCastName(AFromType, AToType);   // library class cast (e.g. AssignGraphic)
   end;
 end;
 
@@ -1156,7 +1172,7 @@ begin
     Exit;
   end;
 
-  if not IsCastable(fromType, toType) then
+  if not CanCast(fromType, toType) then
   begin
     SetError(Format('Blocked: cannot map %s (%s) to %s (%s) -- no known cast.',
       [FromPath, fromType, ToPath, toType]));
@@ -1236,7 +1252,7 @@ begin
         var fT: string := fromLeaf.TypeName;
         var tT: string := toLeaf.TypeName;
         ResolveUnknownTypes(fT, tT);
-        if IsCastable(fT, tT) then
+        if CanCast(fT, tT) then
         begin
           Inc(nCand);
           candidate := toLeaf;
@@ -1257,7 +1273,7 @@ begin
           var fT: string := fromLeaf.TypeName;
           var tT: string := toLeaf.TypeName;
           ResolveUnknownTypes(fT, tT);
-          if IsCastable(fT, tT) then
+          if CanCast(fT, tT) then
           begin
             Inc(nCand);
             candidate := toLeaf;

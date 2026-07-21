@@ -955,6 +955,25 @@ begin
     'AssignGraphic (TPicture->TdxSmartGlyph) not resolved from the shipped file');
 end;
 
+{ A #link with a class-cast NAME suffix (a single identifier) parses into Cast and
+  re-emits byte-faithfully -- the existing DSL slot carries library cast names with no
+  grammar change. }
+procedure TestClassCastLinkRoundTrip;
+var
+  Book: TRuleBook;
+begin
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString('#link Glyph <- Glyph : AssignGraphic'#13#10);
+    Check('classcast.link.cast', Book.Nodes[0].Cast = 'AssignGraphic', Book.Nodes[0].Cast);
+    Check('classcast.link.from', Book.Nodes[0].LinkFrom = 'Glyph', Book.Nodes[0].LinkFrom);
+    Check('classcast.link.reemit',
+      Book.Nodes[0].Emit = '#link Glyph <- Glyph : AssignGraphic', Book.Nodes[0].Emit);
+  finally
+    Book.Free;
+  end;
+end;
+
 begin
   try
     TestPlatform;
@@ -973,6 +992,7 @@ begin
     TestCastLibTolerant;
     TestClassCastFor;
     TestCastLibFile;
+    TestClassCastLinkRoundTrip;
     TestUnknownTypeInference;
     TestProptreeParse;
     TestProptreeNoise;
