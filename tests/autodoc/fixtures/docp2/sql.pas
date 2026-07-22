@@ -19,6 +19,13 @@ unit sql;
 //     body; the INSERT literal also carries an embedded escaped quote
 //     (Pascal '''''' -> ''), proving the literal decode step. Expected
 //     writes: SCAN_LOG, TEMP_ROWS (sorted); no reads.
+//   * SelectWithExtractFunction -- FIX WAVE adversarial case #1 (proven
+//     WRONG against the real built exe before this fix wave): Firebird's
+//     EXTRACT(YEAR FROM ORDER_DATE) puts a FROM INSIDE a function call's
+//     argument list -- that FROM names an EXPRESSION (ORDER_DATE), never a
+//     table. BEFORE the paren-depth fix this rendered 'SQL: reads
+//     ORDER_DATE, ORDERS'; CORRECT is 'SQL: reads ORDERS' only -- ORDER_DATE
+//     must NEVER appear (see ParenDepthAt/ExtractSqlTables' SELECT branch).
 //   * DynamicQuery -- 'SELECT * FROM ' concatenated with FTableName (a
 //     FIELD reference, not a literal) -- the whole run must be classified
 //     DYNAMIC and dropped entirely (never a guessed table). This method
@@ -26,20 +33,33 @@ unit sql;
 //     must carry NO 'SQL:' line at all.
 //   * NoSql -- plain arithmetic, no string literals, no field touch --
 //     expected: NO managed block at all (no fact of any kind).
+//   * EnglishSentenceNotSql -- FIX WAVE adversarial case #2 (proven WRONG
+//     against the real built exe before this fix wave): an ordinary English
+//     UI prompt that merely HAPPENS to start with the word 'SELECT'
+//     ('SELECT AN ITEM FROM THE CATALOG BEFORE CONTINUING'). BEFORE the
+//     prose-gate fix this rendered 'SQL: reads THE' (a fabricated table);
+//     CORRECT is NO 'SQL:' line at all, and -- like NoSql -- NO managed
+//     block whatsoever (Msg is a local var, not a field; nothing else in
+//     this body mines any other fact either; see ClassifySqlText/
+//     SelectFromIsSqlShaped).
 //
-// ORDERING NOTE: NoSql is declared/implemented FIRST, not last. This works
-// around a PRE-EXISTING, unrelated 'document --apply' merge-engine bug
-// (confirmed via a from-scratch repro using ONLY Task 4's Reads/Writes
-// fields fact -- no SQL involved at all, so it predates this task and is
-// out of this task's scope to fix): a declaration's managed block
-// regenerates fine on a 2nd apply when the NEXT declaration ALSO carries a
-// block (fact->fact) or when nothing follows it at all (fact->end), but
-// COLLAPSES to a bare empty '<summary></summary>' stub on a 2nd apply when
-// the declaration immediately AFTER it has NO block of its own (fact->no-
-// fact). Every method here except NoSql carries a fact once Task 7 is
-// implemented, so placing the one fact-LESS method first (no-fact->fact,
-// fact->fact, ..., fact->end) avoids the one adjacency shape that triggers
-// it, keeping this test's own idempotency check meaningful.
+// ORDERING NOTE: NoSql and EnglishSentenceNotSql are declared/implemented
+// FIRST (in that order), NOT last, and SelectWithExtractFunction is placed
+// among the other fact-carrying methods, never last. This works around a
+// PRE-EXISTING, unrelated 'document --apply' merge-engine bug (confirmed via
+// a from-scratch repro using ONLY Task 4's Reads/Writes fields fact -- no
+// SQL involved at all, so it predates this task and is out of this task's
+// scope to fix): a declaration's managed block regenerates fine on a 2nd
+// apply when the NEXT declaration ALSO carries a block (fact->fact) or when
+// nothing follows it at all (fact->end), but COLLAPSES to a bare empty
+// '<summary></summary>' stub on a 2nd apply when the declaration
+// immediately AFTER it has NO block of its own (fact->no-fact). Every
+// method here carries a fact EXCEPT NoSql and EnglishSentenceNotSql (both
+// truly fact-less -- see each one's own bullet above), so clustering BOTH
+// fact-less methods at the very front (no-fact -> no-fact -> fact -> fact ->
+// ... -> fact->end) means no fact-carrying method is EVER immediately
+// followed by a fact-less one -- the one adjacency shape that triggers the
+// bug -- keeping this test's own idempotency check meaningful.
 
 interface
 
@@ -49,10 +69,12 @@ type
     FTableName: string;
   public
     procedure NoSql;
+    procedure EnglishSentenceNotSql;
     procedure SyncOne;
     procedure RunJoinConcat;
     procedure MultiFromList;
     procedure InsertAndDelete;
+    procedure SelectWithExtractFunction;
     procedure DynamicQuery;
   end;
 
@@ -63,6 +85,13 @@ var
   X: Integer;
 begin
   X := 1 + 2;
+end;
+
+procedure TSqlRunner.EnglishSentenceNotSql;
+var
+  Msg: string;
+begin
+  Msg := 'SELECT AN ITEM FROM THE CATALOG BEFORE CONTINUING';
 end;
 
 procedure TSqlRunner.SyncOne;
@@ -95,6 +124,13 @@ var
 begin
   Sql1 := 'INSERT INTO SCAN_LOG (ID, MSG) VALUES (1, ''x'')';
   Sql2 := 'DELETE FROM TEMP_ROWS WHERE ID = 1';
+end;
+
+procedure TSqlRunner.SelectWithExtractFunction;
+var
+  Sql: string;
+begin
+  Sql := 'SELECT EXTRACT(YEAR FROM ORDER_DATE) AS YR FROM ORDERS';
 end;
 
 procedure TSqlRunner.DynamicQuery;

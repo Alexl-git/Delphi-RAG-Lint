@@ -13,6 +13,12 @@
     * MultiFromList     -- 'FROM A, B' comma-list -> reads CLIENT, VENDOR.
     * InsertAndDelete   -- INSERT INTO + DELETE FROM -> writes SCAN_LOG,
                            TEMP_ROWS; no reads side at all.
+    * SelectWithExtractFunction -- FIX WAVE adversarial case #1: Firebird's
+                           EXTRACT(YEAR FROM ORDER_DATE) puts a FROM INSIDE a
+                           function call's argument list -- that FROM names
+                           an EXPRESSION, never a table. Proven WRONG against
+                           the real exe before this fix ('SQL: reads
+                           ORDER_DATE, ORDERS'); correct is reads ORDERS only.
     * DynamicQuery      -- 'SELECT * FROM ' + FTableName (a field, not a
                            literal) -> the whole run is DYNAMIC and must be
                            dropped entirely; this method DOES get a managed
@@ -20,6 +26,12 @@
                            but must carry NO 'SQL:' line.
     * NoSql             -- no literals, no field touch -> NO managed block
                            at all (no fact of any kind fires).
+    * EnglishSentenceNotSql -- FIX WAVE adversarial case #2: an ordinary
+                           English UI prompt that merely starts with the word
+                           'SELECT' ('SELECT AN ITEM FROM THE CATALOG BEFORE
+                           CONTINUING'). Proven WRONG against the real exe
+                           before this fix ('SQL: reads THE', a fabricated
+                           table); correct is NO 'SQL:' line at all.
 
   Drives `index` -> `document --unit --apply` (Stubs=False default: a decl
   with NO prior doc-comment and NO facts is skipped entirely, so a method
@@ -135,6 +147,18 @@ try {
   Check 'InsertAndDelete SQL writes is exactly {SCAN_LOG, TEMP_ROWS}' (Test-SetEqual $insDelSql.writes @('SCAN_LOG','TEMP_ROWS'))
   Check 'InsertAndDelete SQL has NO reads side' ($null -eq $insDelSql.reads)
 
+  # --- SelectWithExtractFunction: FIX WAVE adversarial case #1 --------------
+  # Firebird's EXTRACT(YEAR FROM ORDER_DATE) puts a FROM INSIDE a function
+  # call's argument list -- that FROM names an EXPRESSION (ORDER_DATE), never
+  # a table. Proven WRONG against the real built exe before this fix wave
+  # ('SQL: reads ORDER_DATE, ORDERS'); the exact-set check below fails if
+  # ORDER_DATE leaks back in, not just if ORDERS is missing.
+  $extractBlock = Get-DocBlockAbove $lines '^\s*procedure SelectWithExtractFunction;\s*$'
+  Check 'SelectWithExtractFunction has a managed block (AUTO_BEGIN)' (($null -ne $extractBlock) -and ($extractBlock -match '<!-- drag-lint:auto BEGIN -->'))
+  $extractSql = Parse-SqlLine (Get-SqlLine $extractBlock)
+  Check 'SelectWithExtractFunction SQL reads is exactly {ORDERS} (EXTRACT(...FROM...) inner FROM excluded; ORDER_DATE never appears)' (Test-SetEqual $extractSql.reads @('ORDERS'))
+  Check 'SelectWithExtractFunction SQL has NO writes side' ($null -eq $extractSql.writes)
+
   # --- DynamicQuery: dynamic concat (a field, not a literal) -> dropped ----
   # This method DOES get a managed block (Reads: FTableName, an unrelated
   # fact), but must carry NO 'SQL:' line at all -- proves the dynamic-skip
@@ -152,6 +176,17 @@ try {
   $noSqlBlock = Get-DocBlockAbove $lines '^\s*procedure NoSql;\s*$'
   Check 'NoSql has NO managed block at all (no fact fires)' (($null -eq $noSqlBlock) -or ($noSqlBlock -eq ''))
   Check 'NoSql has NO SQL: line (redundant with the no-block check above, kept explicit per the task brief)' ($null -eq (Get-SqlLine $noSqlBlock))
+
+  # --- EnglishSentenceNotSql: FIX WAVE adversarial case #2 ------------------
+  # An ordinary English UI prompt that merely starts with the word 'SELECT'.
+  # Proven WRONG against the real built exe before this fix wave ('SQL: reads
+  # THE', a fabricated table). Msg is a local var (not a field), so once the
+  # prose gate rejects the literal, nothing else in this body mines any fact
+  # either -- same "no managed block at all" shape as NoSql, asserted the
+  # same explicit two-part way.
+  $proseBlock = Get-DocBlockAbove $lines '^\s*procedure EnglishSentenceNotSql;\s*$'
+  Check 'EnglishSentenceNotSql has NO managed block at all (prose rejected before extraction; no other fact fires)' (($null -eq $proseBlock) -or ($proseBlock -eq ''))
+  Check 'EnglishSentenceNotSql has NO SQL: line (must never fabricate reads THE)' ($null -eq (Get-SqlLine $proseBlock))
 
   # --- Idempotency: reindex (facts are index-time) + re-apply -> no change ---
   $before = [IO.File]::ReadAllBytes($target)

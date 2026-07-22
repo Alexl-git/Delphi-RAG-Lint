@@ -818,20 +818,96 @@ begin
   end;
 end;
 
+// FIX (Phase 2 T7 review): returns the parenthesis nesting depth at 1-based
+// position APos in AText -- the count of '(' not yet closed by a ')'
+// anywhere in AText[1..APos-1]. Used by ExtractSqlTables' SELECT branch and
+// SelectFromIsSqlShaped (below) to tell a TOP-LEVEL FROM/JOIN (a real table
+// source) apart from one nested inside a function call's argument list --
+// Firebird's EXTRACT(part FROM value), SUBSTRING(value FROM start [FOR
+// len]), TRIM([...] FROM value) all take a FROM keyword that names an
+// EXPRESSION, never a table -- or inside a subquery/derived table. A plain
+// left-to-right count, not string-literal-aware: well-formed SQL is always
+// paren-balanced, so this is exact for every real query; a malformed/
+// unbalanced input is out of scope for this bounded heuristic (best-effort,
+// same "absence over a wrong table" discipline as the rest of this unit).
+function ParenDepthAt(const AText: string; APos: Integer): Integer;
+var I: Integer;
+begin
+  Result:= 0;
+  for I:= 1 to APos - 1 do
+  begin
+    if AText[I] = '(' then Inc(Result)
+    else if AText[I] = ')' then Dec(Result);
+  end;
+end;
+
+// FIX (Phase 2 T7 review): True when, at 1-based position APos in the
+// already-uppercased AText, the remainder is a genuine SQL CLAUSE BOUNDARY:
+// end of string, a statement terminator (';'), a closing paren (')' -- a
+// derived table/subquery/function-call argument list ending), a list
+// separator (','), or a recognized clause keyword (IsSqlClauseStopword) --
+// NOT more ordinary words. Used by SelectFromIsSqlShaped's prose gate
+// (below) to tell a genuine table reference's tail apart from a sentence
+// that merely happens to look SQL-shaped up to that point.
+function AtSqlClauseBoundary(const AText: string; APos: Integer): Boolean;
+var N, P: Integer; Word: string;
+begin
+  N:= Length(AText);
+  P:= APos;
+  while (P <= N) and (AText[P] = ' ') do Inc(P);
+  if P > N then Exit(True);
+  if (AText[P] = ';') or (AText[P] = ')') or (AText[P] = ',') then Exit(True);
+  Word:= ScanSqlIdent(AText, P);
+  Result:= (Word <> '') and IsSqlClauseStopword(Word);
+end;
+
+// FIX (Phase 2 T7 review): SELECT-only prose gate for ClassifySqlText (see
+// its own header comment for why a leading verb alone is too loose a
+// signal). AUpper is an already Trim+UpperCase'd candidate ALREADY confirmed
+// to start with SELECT. True when AUpper has NO top-level (paren-depth 0,
+// see ParenDepthAt) FROM at all -- inconclusive, absence of a FROM is not
+// evidence of prose, so this lets it through unchanged -- OR its first
+// top-level FROM's own table-ref-list (the SAME ScanTableRefList scan
+// ExtractSqlTables' SELECT branch performs) is immediately followed by a
+// genuine SQL clause boundary (AtSqlClauseBoundary). False -- REJECT the
+// whole literal as SQL, no fact ever recorded for it -- only when a
+// top-level FROM IS found but what follows its target is more prose: e.g.
+// 'SELECT AN ITEM FROM THE CATALOG BEFORE CONTINUING' scans 'THE' as the
+// table (bare alias 'CATALOG' absorbed, exactly as real SQL's own 'FROM
+// OPTRLIST o' would be), and the NEXT word is 'BEFORE' -- neither a clause
+// keyword nor end-of-string/punctuation -- so the whole literal is
+// rejected. Applies "absence over a wrong table" to the CLASSIFICATION step
+// itself, not just to extraction.
+function SelectFromIsSqlShaped(const AUpper: string): Boolean;
+var KwPos, Pos: Integer;
+begin
+  KwPos:= FindSqlKeyword(AUpper, 'FROM', 1);
+  while (KwPos <> 0) and (ParenDepthAt(AUpper, KwPos) <> 0) do
+    KwPos:= FindSqlKeyword(AUpper, 'FROM', KwPos + Length('FROM'));
+  if KwPos = 0 then Exit(True); // no top-level FROM at all -- inconclusive, let it through
+  Pos:= KwPos + Length('FROM');
+  ScanTableRefList(AUpper, Pos, True); // advance Pos past the FROM-target(s) -- the names themselves are unused here
+  Result:= AtSqlClauseBoundary(AUpper, Pos);
+end;
+
 // True when, after trimming, AText (case-insensitively) begins with one of
-// the five recognized SQL statement keywords -- the ONLY signal used to
-// decide "this concatenated literal run is SQL" (task brief item 2). Never
-// inspects anything else about AText's shape; a non-SQL string that happens
-// to start with one of these words is an accepted, documented false-
-// positive bound (these are four/five/six-letter SQL verbs, not common
-// English sentence openers).
+// the five recognized SQL statement keywords -- the PRIMARY signal used to
+// decide "this concatenated literal run is SQL" (task brief item 2). FIX
+// (Phase 2 T7 review): a leading SELECT is no longer sufficient on its own
+// -- it must additionally pass SelectFromIsSqlShaped's prose gate (above),
+// since 'SELECT' also opens an ordinary English sentence (e.g. 'SELECT AN
+// ITEM FROM THE CATALOG BEFORE CONTINUING', a UI prompt, not SQL) in a way
+// none of the other four verbs realistically do. INSERT/UPDATE/DELETE/WITH
+// keep the original, looser start-of-string check unchanged -- four/five/
+// six-letter SQL verbs that are not common English sentence openers, an
+// accepted, documented false-positive bound.
 function ClassifySqlText(const AText: string): Boolean;
 var T: string;
 begin
   T:= Trim(AText);
-  Result:= StartsText('SELECT', T) or StartsText('INSERT', T) or
-           StartsText('UPDATE', T) or StartsText('DELETE', T) or
-           StartsText('WITH', T);
+  Result:= (StartsText('SELECT', T) and SelectFromIsSqlShaped(UpperCase(T))) or
+           StartsText('INSERT', T) or StartsText('UPDATE', T) or
+           StartsText('DELETE', T) or StartsText('WITH', T);
 end;
 
 // ADP2 T7: extracts table references from ASql (an ALREADY-CONFIRMED-SQL
@@ -841,8 +917,13 @@ end;
 // -- anything else (a subquery, a CTE body, an identifier this cannot
 // resolve) contributes nothing, never a guessed table:
 //   FROM <table>[, <table>...] / JOIN <table> -> AReads (a SELECT-like
-//     statement). A comma-list after FROM is supported (ScanTableRefList's
-//     AAllowList); JOIN never takes one (real SQL doesn't allow it there).
+//     statement), but ONLY at parenthesis depth 0 (FIX, Phase 2 T7 review --
+//     see ParenDepthAt's header comment): a FROM/JOIN nested inside a
+//     function call's argument list (Firebird's EXTRACT(part FROM value),
+//     SUBSTRING(value FROM start [FOR len]), TRIM([...] FROM value)) or
+//     inside a subquery/derived table is never treated as a table source.
+//     A comma-list after FROM is supported (ScanTableRefList's AAllowList);
+//     JOIN never takes one (real SQL doesn't allow it there).
 //   INSERT INTO <table> -> AWrites.
 //   Firebird 'UPDATE OR INSERT INTO <table>' (the UPSERT statement this
 //     Firebird 4.0 codebase's own stack uses -- see C:\Projects\CLAUDE.md)
@@ -853,6 +934,15 @@ end;
 //     WHERE/SET values happen to mention the word 'insert').
 //   UPDATE <table> -> AWrites.
 //   DELETE FROM <table> -> AWrites.
+//   (UPDATE/INSERT/DELETE, unlike SELECT's FROM/JOIN loop above, are NOT
+//     vulnerable to the same nesting issue -- sanity-checked, Phase 2 T7
+//     review, not just assumed: each anchors on the FIRST occurrence of its
+//     own target keyword, found starting AT/right after the routine's own
+//     leading verb -- itself at position 1, i.e. already depth 0 -- then
+//     Exits immediately. None of the three ever loops to find EVERY
+//     occurrence the way the SELECT branch's FROM/JOIN scan does, so a
+//     deeper-nested FROM/INTO elsewhere in the same string, e.g. inside a
+//     WHERE/SET clause's own subquery, is never reached.)
 // A leading 'WITH' (a CTE) is recognized as SQL by ClassifySqlText but
 // deliberately SKIPPED here entirely: a CTE's own named subqueries are not
 // real tables, and telling a CTE alias apart from a genuine table reference
@@ -872,6 +962,7 @@ var
   Tbl   : string;
   P     : Integer;
   Next1 : string;
+  Refs  : TArray<string>;
 begin
   Upper:= UpperCase(Trim(ASql));
   if Upper = '' then Exit;
@@ -928,7 +1019,14 @@ begin
       KwPos:= FindSqlKeyword(Upper, 'FROM', KwPos);
       if KwPos = 0 then Break;
       Pos:= KwPos + Length('FROM');
-      for Tbl in ScanTableRefList(Upper, Pos, True) do AReads.Add(Tbl);
+      Refs:= ScanTableRefList(Upper, Pos, True);
+      // FIX (Phase 2 T7 review): only a TOP-LEVEL (paren-depth 0) FROM is a
+      // real table source -- see ParenDepthAt's header comment. A nested one
+      // (EXTRACT/SUBSTRING/TRIM's own FROM argument, or a subquery's FROM)
+      // still advances Pos (above) so the outer search resumes past it, but
+      // never contributes a table.
+      if ParenDepthAt(Upper, KwPos) = 0 then
+        for Tbl in Refs do AReads.Add(Tbl);
       KwPos:= Pos; // resume the keyword search right after this FROM's own list
     until False;
 
@@ -937,7 +1035,9 @@ begin
       KwPos:= FindSqlKeyword(Upper, 'JOIN', KwPos);
       if KwPos = 0 then Break;
       Pos:= KwPos + Length('JOIN');
-      for Tbl in ScanTableRefList(Upper, Pos, False) do AReads.Add(Tbl);
+      Refs:= ScanTableRefList(Upper, Pos, False);
+      if ParenDepthAt(Upper, KwPos) = 0 then // FIX: same top-level guard as FROM, above
+        for Tbl in Refs do AReads.Add(Tbl);
       KwPos:= Pos;
     until False;
   end;
