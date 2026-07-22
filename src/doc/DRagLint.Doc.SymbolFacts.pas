@@ -70,10 +70,14 @@ type
       /// remaining groups one at a time. Never returns Present=False (the
       /// indexer only calls this for a symbol it is about to write a row
       /// for).</summary>
-      /// <param name="ASym">The routine symbol being analyzed. Result.SymbolId
-      /// is seeded from ASym.Id, but the caller (the indexer) always
-      /// overwrites it with the just-inserted DB id afterward -- ASym.Id may
-      /// still be a pre-insert placeholder at the point Analyze runs.</param>
+      /// <param name="ASym">The routine symbol being analyzed. ADP2 T4 fix
+      /// wave: the caller (the indexer's facts loop) now resolves ASym's real
+      /// identity BEFORE calling Analyze -- Id/FileId are the just-inserted DB
+      /// values and ParentId is already translated to the real owning
+      /// symbol's id (or -1 for a free routine / unresolved parent), never a
+      /// pre-insert in-array index or placeholder. Result.SymbolId is seeded
+      /// from ASym.Id and the caller still overwrites it with the same
+      /// just-inserted DB id afterward, defensively.</param>
       /// <param name="AFilePath">Path to ASym's source file (ADP2 T3) -- the
       /// indexer's own IndexFile parameter, passed through unchanged. Needed
       /// because the indexer's TParseResult carries no tree-sitter tree (only
@@ -311,26 +315,26 @@ end;
 // routine. AProc/ABody are the SAME defProc/body nodes Analyze already
 // matched for Cyclomatic -- no second AST scan.
 //
-// FINDING THE OWNING CLASS -- ASym.ParentId is NOT usable here. At the point
-// Analyze runs, ASym is the caller's PRE-INSERT ParseRes.Symbols[I] (see this
-// unit's Analyze <param name="ASym"> comment: "ASym.Id may still be a
-// pre-insert placeholder"). The SAME caveat applies, less obviously, to
-// ASym.ParentId: DRagLint.Core.Indexer.IndexFile's symbols loop stamps
-// parent_id as an IN-ARRAY INDEX into ParseRes.Symbols at parse time and only
-// TRANSLATES it to the real symbols.id via its local IdxToId map ("Translate
-// in-array parent index to actual DB id") immediately before THAT loop's own
-// FStore.UpsertSymbol call -- the facts loop (which calls Analyze) re-reads
-// the SAME ParseRes.Symbols[I] afterwards, so the ASym it hands Analyze still
-// carries the UNTRANSLATED, meaningless index. (Confirmed empirically: an
-// earlier version of this function used ASym.ParentId directly and
-// FindAllChildSymbols always came back empty/wrong -- ADP2 T4's own RED/GREEN
-// cycle caught it.) Fix: re-resolve THIS SAME routine's ALREADY-INSERTED row
-// via AStore.FindEnclosingRoutineByImpl(FileId, ASym.ImplStartLine) --
-// symbols are fully committed by the time the facts loop runs (it is a
-// separate, later pass over the same file), so this query returns the real
-// row, correctly parent-linked. FileId itself is resolved fresh via
-// AStore.FindFileIdByPath(AFilePath) rather than trusting ASym.FileId, for
-// the same pre-insert-placeholder reason.
+// FINDING THE OWNING CLASS -- ASym.ParentId IS usable here (ADP2 T4 fix wave:
+// root-cause identity resolution). It used to NOT be: ASym was the caller's
+// PRE-INSERT ParseRes.Symbols[I], so ASym.Id/.FileId were not yet assigned and
+// ASym.ParentId was still an untranslated IN-ARRAY INDEX (DRagLint.Core.
+// Indexer.IndexFile's symbols loop only translated parent_id to the real
+// symbols.id on its OWN local copy, immediately before that loop's own
+// FStore.UpsertSymbol call -- the facts loop, which calls Analyze, used to
+// re-read the SAME untranslated ParseRes.Symbols[I] afterwards). This
+// function used to work around that by re-resolving the routine's ALREADY-
+// INSERTED row via AStore.FindFileIdByPath(AFilePath) + AStore.
+// FindEnclosingRoutineByImpl(FileId, ASym.ImplStartLine) -- three SQL
+// round-trips per routine, always-on, corpus-wide. The indexer's facts loop
+// now resolves identity BEFORE calling Analyze instead (Id := the
+// just-inserted DB id, FileId := the open file-tx's FileId, ParentId :=
+// translated from its in-array index via the same IdxToId map the symbols
+// loop uses) -- a pure in-memory fixup, no DB round-trip -- so ASym.ParentId
+// (and .Id/.FileId) can be trusted directly here, and by every later fact
+// group (T5-T8) that needs the owning symbol's identity: just read
+// ASym.ParentId, do not re-resolve it via FindFileIdByPath/
+// FindEnclosingRoutineByImpl.
 //
 // Fields considered are the resolved owning class's DIRECT children
 // (AStore.FindAllChildSymbols) filtered to Kind = skField: OWN-CLASS fields
@@ -339,14 +343,12 @@ end;
 // OPTIONAL/bounded; own-class fields are the high-signal core) -- an
 // identifier that does not resolve to a DIRECT field of the owning class is
 // simply never reported (absence over noise), even if it happens to be an
-// inherited field. A free routine (no enclosing type), an unresolvable
-// file/routine lookup, or an owning type with no field children all yield ''
-// for both -- the renderer then omits the whole Reads/Writes line.
+// inherited field. A free routine (ASym.ParentId <= 0) or an owning class
+// with no field children both yield '' for both -- the renderer then omits
+// the whole Reads/Writes line.
 procedure AnalyzeReadsWrites(const AProc, ABody: TTSNode; const ASrc: TBytes;
   const ASym: TSymbol; const AFilePath: string; const AStore: ISymbolStore; out AReadsCsv, AWritesCsv: string);
 var
-  FileId       : Int64;
-  SelfSym      : TSymbol;
   Fields       : TDictionary<string, string>;
   Kids         : TArray<TSymbol>;
   Kid          : TSymbol;
@@ -357,18 +359,20 @@ begin
   AReadsCsv := '';
   AWritesCsv:= '';
   if ABody.IsNull then Exit;
-
-  FileId:= AStore.FindFileIdByPath(AFilePath);
-  if FileId <= 0 then Exit;
-  SelfSym:= AStore.FindEnclosingRoutineByImpl(FileId, ASym.ImplStartLine);
-  if (SelfSym.Id <= 0) or (SelfSym.ParentId <= 0) then Exit; // free routine, or lookup failed
+  // ADP2 T4 fix wave: ASym's identity is resolved by the caller (the
+  // indexer's facts loop) before Analyze is called -- see this function's
+  // header comment above -- so ASym.ParentId is read directly here, no
+  // FindFileIdByPath/FindEnclosingRoutineByImpl re-resolution needed.
+  // AFilePath is now unused by this function; left in the signature
+  // unchanged (mechanical plumbing fix, not a signature change).
+  if ASym.ParentId <= 0 then Exit; // free routine (no owning class) -- nothing to classify
 
   Fields:= TDictionary<string, string>.Create;
   Reads := TList<string>.Create;
   Writes:= TList<string>.Create;
   Vars  := nil;
   try
-    Kids:= AStore.FindAllChildSymbols(SelfSym.ParentId);
+    Kids:= AStore.FindAllChildSymbols(ASym.ParentId);
     for Kid in Kids do
       if Kid.Kind = skField then
       begin

@@ -435,8 +435,13 @@ begin
         // ImplStartLine/ImplEndLine index it correctly) and reused for every
         // symbol -- no per-symbol re-parse, no per-symbol disk re-read.
         // Task 2 writes an EMPTY-but-Present row; Tasks 3-8 fill in each fact
-        // field inside TSymbolFactsAnalyzer.Analyze without ever touching this
-        // call site. Invalidation is automatic: OpenFileTx (above) already
+        // field inside TSymbolFactsAnalyzer.Analyze. (ADP2 T4 fix wave: the
+        // facts loop below is the one exception to "never touching this call
+        // site" -- it now resolves each Sym's real Id/FileId/ParentId in
+        // place, just before calling Analyze, so Analyze/AnalyzeReadsWrites no
+        // longer re-resolve identity via 3 DB round-trips per routine; no
+        // fact-computation logic changed -- see the comment at the mutation
+        // site below.) Invalidation is automatic: OpenFileTx (above) already
         // DELETEd this file's OLD symbol rows, and symbol_facts.symbol_id
         // REFERENCES symbols(id) ON DELETE CASCADE with FK enforcement ON
         // (see TSQLiteSymbolStore.Create), so a stale facts row can never
@@ -448,6 +453,24 @@ begin
           if not (Sym.Kind in [skFunction, skProcedure, skMethod, skConstructor, skDestructor]) then Continue;
           if Sym.ImplStartLine <= 0 then Continue;
           if not IdxToId.TryGetValue(I, NewSymId) then Continue;
+          // v(ADP2 T4 fix wave): resolve Sym's real identity BEFORE handing it
+          // to Analyze, root-causing the 3-DB-round-trip workaround
+          // AnalyzeReadsWrites used to need (see its header comment, unit
+          // DRagLint.Doc.SymbolFacts.pas). Sym is a RECORD (value type)
+          // freshly reloaded from ParseRes.Symbols[I] two lines up, so
+          // mutating it here only affects this local copy passed to Analyze --
+          // it never writes back into ParseRes.Symbols and cannot corrupt any
+          // other pass (the ref-resolution loop above already finished with
+          // ParseRes.Symbols by this point). ParentId is translated from its
+          // in-array index using the SAME pattern the symbols loop above uses
+          // (IdxToId is fully populated by now, so this is a pure in-memory
+          // lookup, never a DB round-trip) -- Tasks 5-8 can trust
+          // Sym.Id/.FileId/.ParentId directly, the same way this fix lets T4
+          // trust them.
+          Sym.Id:= NewSymId;
+          Sym.FileId:= Token.FileId;
+          if (Sym.ParentId >= 0) and IdxToId.TryGetValue(Integer(Sym.ParentId), ResolvedParent) then Sym.ParentId:= ResolvedParent
+          else Sym.ParentId:= -1;
           FactsBody:= SliceBodyLines(SourceLines, Sym.ImplStartLine, Sym.ImplEndLine);
           Facts:= TSymbolFactsAnalyzer.Analyze(Sym, AFilePath, FactsBody, FStore);
           Facts.SymbolId:= NewSymId;
