@@ -6,8 +6,8 @@ unit DRagLint.Hover.Returns;
 
 interface
 
-/// <summary>Distinct right-hand sides of `Result := <rhs>` and value-form
-/// `Exit(<rhs>)` in ABodyLines, in first-seen source order.</summary>
+/// <summary>Distinct right-hand sides of `Result := &lt;rhs>` and value-form
+/// `Exit(&lt;rhs>)` in ABodyLines, in first-seen source order.</summary>
 /// <param name="ABodyLines">The routine's implementation body lines
 ///   (impl_start_line..impl_end_line), one string per source line.</param>
 /// <returns>Distinct RHS strings, trimmed, dedup'd. Empty when none found.</returns>

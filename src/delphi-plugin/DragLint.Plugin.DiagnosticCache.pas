@@ -39,7 +39,7 @@ type
       /// publishDiagnostics params object. Thread-safe.</summary>
       procedure Update(const AFilePath: string; AParams: TJSONValue);
       /// <summary>Replaces the compiler-findings overlay for AFilePath (from
-      /// "Compile && Diagnose"). These persist across live-lint ticks until the
+      /// "Compile &amp;&amp; Diagnose"). These persist across live-lint ticks until the
       /// next compile. Thread-safe.</summary>
       procedure SetCompilerFindings(const AFilePath: string; const ADiags: TArray<TDragLintDiagnostic>);
       /// <summary>Clears the entire compiler-findings overlay (every file). Call

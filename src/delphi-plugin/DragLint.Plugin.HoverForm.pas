@@ -252,8 +252,8 @@ begin
   end;
 end;
 
-/// <summary>How many caller rows to display: all when total <= 15, else 10.</summary>
-/// <returns>Row count to render; caller adds a "NN more" trailer when it is < total.</returns>
+/// <summary>How many caller rows to display: all when total &lt;= 15, else 10.</summary>
+/// <returns>Row count to render; caller adds a "NN more" trailer when it is &lt; total.</returns>
 function DisplayedCallerCount(ATotal: Integer): Integer;
 begin
   if ATotal <= 15 then Result:= ATotal else Result:= 10;

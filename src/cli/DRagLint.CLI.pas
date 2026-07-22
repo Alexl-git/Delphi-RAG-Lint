@@ -11926,7 +11926,7 @@ end; // function
 /// via RenderNodeText. json: schema "butterfly/1" wrapping the two full
 /// reverse-calltree/1 tree objects under "callers"/"callees". Read-only.</summary>
 /// <param name="AArgs">QName=root (required), Depth=tree depth for both wings
-/// (default 3, <0 clamped to 0), Format/AsJson=output (default dot),
+/// (default 3, &lt;0 clamped to 0), Format/AsJson=output (default dot),
 /// Output=optional file path (else stdout), DbPath/DbPaths=index(es).</param>
 /// <returns>0 ok (even with zero callers and/or zero callees -- still a valid
 /// 1-node chart); 1 qname unresolved in every DB; 2 usage error / no readable db.</returns>

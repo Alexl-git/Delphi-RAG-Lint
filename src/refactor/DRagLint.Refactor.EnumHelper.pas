@@ -41,7 +41,7 @@ type
   /// <summary>Strategy for the generated ToString method: tsmRtti defers to
   /// System.TypInfo.GetEnumName (no per-member code, always in sync with the
   /// enum type but yields the raw identifier text, e.g. 'clRed'); tsmCase
-  /// emits an explicit case statement over a `<Enum>Descriptions`-style
+  /// emits an explicit case statement over a `&lt;Enum>Descriptions`-style
   /// literal per member (readable display text, but must be kept in sync by
   /// hand if members are added).</summary>
   TToStringMode = (tsmRtti, tsmCase);
@@ -62,7 +62,7 @@ type
     /// <summary>Enum member names in declaration order (e.g. ['clRed',
     /// 'clGreen', 'clBlue']). Only real named skEnumValue children.</summary>
     Members: TArray<string>;
-    /// <summary>1-based line of the enum declaration's start (the `T<Enum> =
+    /// <summary>1-based line of the enum declaration's start (the `T&lt;Enum> =
     /// (` line). Together with EnumEndLine this bounds the source span
     /// HasExplicitOrdinal is detected from; not otherwise used for
     /// insertion (EnumEndLine is the placement anchor).</summary>
@@ -86,7 +86,7 @@ type
     /// <summary>Filesystem path of the existing helper's declaring unit;
     /// '' when HasHelper is False.</summary>
     HelperUnitPath: string;
-    /// <summary>Name of a same-unit const array named '<EnumName>Descriptions'
+    /// <summary>Name of a same-unit const array named '&lt;EnumName>Descriptions'
     /// if one exists (e.g. 'TColorDescriptions'), else ''.</summary>
     DescArrayName: string;
     /// <summary>True when the enum declaration's source text (the
@@ -105,7 +105,7 @@ type
     /// would have been fine. Build uses it to fall back from tsmRtti to
     /// tsmCase, which is always a safe (if occasionally unnecessary) choice.
     /// Detection is a text scan (ordinals are not indexed), scoped to the
-    /// `(...)` member list so the type-definition `T<Enum> = (` equals sign
+    /// `(...)` member list so the type-definition `T&lt;Enum> = (` equals sign
     /// is never mistaken for a member ordinal assignment.</summary>
     HasExplicitOrdinal: Boolean;
   end;
@@ -115,11 +115,11 @@ type
   /// splice into the target unit. Pure text -- no file positions here (those
   /// live on TEnumHelperResolve).</summary>
   TEnumHelperGen = record
-    /// <summary>The `T<Enum>Helper = record helper for T<Enum> ... end;`
+    /// <summary>The `T&lt;Enum>Helper = record helper for T&lt;Enum> ... end;`
     /// type declaration block (CRLF-joined, no trailing line break).</summary>
     DeclText: string;
     /// <summary>The implementation-section method bodies, preceded by the
-    /// `{ T<Enum>Helper }` convention comment (CRLF-joined, no trailing line
+    /// `{ T&lt;Enum>Helper }` convention comment (CRLF-joined, no trailing line
     /// break).</summary>
     BodiesText: string;
     /// <summary>True when RTTI-based ToString/FromString were emitted
@@ -154,10 +154,10 @@ type
     /// ehaNotFound. '' when Action=ehaBuilt.</summary>
     Message: string;
     /// <summary>Short (unqualified) enum type name, e.g. 'TColor'. Set
-    /// whenever the qname resolved (i.e. Action <> ehaNotFound).</summary>
+    /// whenever the qname resolved (i.e. Action &lt;> ehaNotFound).</summary>
     EnumName: string;
     /// <summary>Filesystem path of the enum's declaring unit. Set whenever
-    /// the qname resolved (i.e. Action <> ehaNotFound).</summary>
+    /// the qname resolved (i.e. Action &lt;> ehaNotFound).</summary>
     FilePath: string;
   end;
 
@@ -169,7 +169,7 @@ type
   public
     /// <summary>Resolves AEnumQName to its declaring enum symbol, its members
     /// in declaration order, whether a helper for it already exists anywhere
-    /// in AStore, and whether a same-unit '<Enum>Descriptions' const array is
+    /// in AStore, and whether a same-unit '&lt;Enum>Descriptions' const array is
     /// present. Does not read or write any file.</summary>
     /// <param name="AStore">Open symbol store to query (whole-DB visibility
     /// for the existing-helper guard).</param>
@@ -185,7 +185,7 @@ type
     /// named members only, declaration order). Pure function of its inputs:
     /// no store/index/file access. `To*` methods return Ord(Self); `From*`
     /// methods use a `case Ord(member)` idiom with `else` mapping to the
-    /// FIRST declared member (= low(T<Enum>)). ToDescription is NOT one of
+    /// FIRST declared member (= low(T&lt;Enum>)). ToDescription is NOT one of
     /// AMethods -- it is emitted automatically, decl+body, whenever
     /// AResolve.DescArrayName is non-empty.</summary>
     /// <param name="AResolve">A resolved enum (Found must be True; EnumName

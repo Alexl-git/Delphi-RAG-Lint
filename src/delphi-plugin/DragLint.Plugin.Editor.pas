@@ -2508,7 +2508,7 @@ end; // procedure
 /// footer is silently ignored and this never blocks opening the file.</summary>
 /// <param name="ACsvPath">Path to the forms CSV just written by drag-lint.exe.</param>
 /// <remarks>The footer line is emitted by DRagLint.FormsMap (FORMS_CSV_ALGORITHM)
-/// as `# forms-csv algorithm v<N> | db: <path> | schema v<n> | <timestamp>` in
+/// as `# forms-csv algorithm v&lt;N> | db: &lt;path> | schema v&lt;n> | &lt;timestamp>` in
 /// the 7th (Notes) CSV column of the last row -- there is no KEY=VALUE pair,
 /// so the version is parsed as the digit run right after the literal
 /// "algorithm v". Reads the file as ANSI to match the engine's output encoding.</remarks>
@@ -3351,7 +3351,7 @@ end;
 /// TThread.Queue marshals the OTA IOTAMessageServices calls back onto the main
 /// thread, since OTA is not thread-safe), then posts the tree on the main thread.
 /// Complements InvokeReverseCallTree (which writes text to an editor buffer).
-/// Text convention: each row reads "<node.qname> calls <parent.qname>" (a node in
+/// Text convention: each row reads "&lt;node.qname> calls &lt;parent.qname>" (a node in
 /// "callers" is a caller of its parent), indented 2 spaces per tree depth; the
 /// clickable target (file/line) is the NODE's own call site -- where its call into
 /// the parent lives. Robust to a missing/empty file (still posts the row, just

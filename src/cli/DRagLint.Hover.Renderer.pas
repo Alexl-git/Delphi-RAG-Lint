@@ -36,7 +36,7 @@ type
     TypeText: string;
   end;
 
-/// <summary>One mined `Result:= <Expr>` / `Exit(<Expr>)` return expression,
+/// <summary>One mined `Result:= &lt;Expr>` / `Exit(&lt;Expr>)` return expression,
 /// as produced by the Task 2 returns-miner.</summary>
 type
   TReturnFact = record

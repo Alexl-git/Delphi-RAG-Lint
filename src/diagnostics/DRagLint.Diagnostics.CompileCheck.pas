@@ -41,7 +41,7 @@ type
       /// <param name="AMsbuildPath">Optional explicit msbuild path; '' uses PATH.</param>
       /// <param name="ARsvarsPath">Optional explicit rsvars.bat; '' uses the default.</param>
       /// <param name="ATargetPlatform">Optional target platform ('Win32' or 'Win64'); when given,
-      /// drives msbuild /p:Platform=<p> and resolves the IDE global Library Path for that
+      /// drives msbuild /p:Platform=&lt;p> and resolves the IDE global Library Path for that
       /// platform (registry Search Path + macro expansion), minimized (compiled-DCU dirs,
       /// dedup, existence-filter) to avoid cmdline overflow, and injected via DCC_UnitSearchPath
       /// env var. Empty string means use the .dproj default (typically Win64).</param>

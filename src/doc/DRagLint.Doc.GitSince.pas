@@ -3,7 +3,7 @@ unit DRagLint.Doc.GitSince;
 { AutoDocument (ADF T5) -- the <since> doc-source's ISOLATED git helper.
 
   Derives a YYYY-MM-DD date for a declaration line from git, for the OPT-IN
-  /// <since> tag. This is the milestone's ONE external dependency (git), so it
+  <since> tag. This is the milestone's ONE external dependency (git), so it
   is quarantined here behind a single class function whose contract is:
 
     * Returns 'YYYY-MM-DD' ONLY when git CONFIDENTLY attributes the line.

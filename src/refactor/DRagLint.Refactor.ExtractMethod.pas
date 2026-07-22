@@ -69,7 +69,7 @@ type
   /// only) or an Input/Output's declared type is unknown (empty TypeText,
   /// e.g. an inline `var x := ...` local with no recorded type text) -- a
   /// new method parameter or return type cannot be synthesized without it.
-  /// All fields are undefined when Refuse <> ''.</remarks>
+  /// All fields are undefined when Refuse &lt;> ''.</remarks>
   TExtractVars = record
     /// <summary>Var-table indices that become value parameters of the new
     /// method, in the order each was first used (read) within the run.</summary>

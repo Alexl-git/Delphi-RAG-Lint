@@ -34,7 +34,7 @@ type
       /// <summary>Flags every `uses X` whose unit X resolves to no known unit
       /// (project member / platform library / standard alias / RTL namespace).
       /// Findings attach to the `uses` token line on the using file. No .dproj
-      /// required. Uses with an explicit `in '<path>'` locator are skipped.</summary>
+      /// required. Uses with an explicit `in '&lt;path>'` locator are skipped.</summary>
       /// <param name="AStore">Open project symbol store (the project scope).</param>
       /// <param name="ALibDbPath">Platform library SQLite DB; '' skips the library source.</param>
       /// <returns>One warning per unresolvable used unit.</returns>

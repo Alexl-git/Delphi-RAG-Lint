@@ -89,7 +89,7 @@ type
 
     /// <summary>List every class that transitively descends from AAncestor (e.g.
     /// 'TControl' -> all visual controls: TEdit, TLabel, TcxTextEdit, ...), deduped
-    /// + sorted. Backed by the `query descendants --of <A>` verb. Returns False +
+    /// + sorted. Backed by the `query descendants --of &lt;A>` verb. Returns False +
     /// AError on failure.</summary>
     function ListDescendantsOf(const AAncestor: string; out ANames: TArray<string>;
       out AError: string): Boolean; overload;
