@@ -234,6 +234,20 @@ type
       /// <returns>One finding per routine over the threshold, at its header.</returns>
       /// <remarks>Severity info. Pure AST; no DB. Never raises.</remarks>
       class function CheckCyclomaticComplexity(const AFile: string; AMaxComplexity: Integer): TArray<TLintFinding>; overload;
+      /// <summary>v(ADP2 T3): the McCabe cyclomatic complexity of one routine body --
+      /// 1 + the count of decision-point nodes (if/ifElse/while/for/repeat/kAnd/kOr/
+      /// caseCase) anywhere under ABody, not recursing into a nested defProc (a
+      /// local routine is counted separately, on its own). Extracted from
+      /// CheckCyclomaticComplexity so the cyclomatic-complexity LINT RULE and the
+      /// Auto-Document 'Complexity:' fact (DRagLint.Doc.SymbolFacts) share the exact
+      /// same formula and can never diverge on what one routine's complexity is.</summary>
+      /// <param name="ABody">A routine's body node (defProc.ChildByField('body')).
+      /// A null node (no body) yields 1 (base complexity, zero decisions).</param>
+      /// <returns>The routine's cyclomatic complexity, always &gt;= 1.</returns>
+      /// <remarks>Pure AST; no DB; never raises. Node kinds verified against the
+      /// grammar by CheckCyclomaticComplexity's own tests (tests\lint\cyclomatic-
+      /// complexity.pas/.expected).</remarks>
+      class function CyclomaticOf(const ABody: TTSNode): Integer;
       /// <summary>v0.75 (#6): flags routines whose SonarSource-style cognitive complexity exceeds
       /// the threshold -- each control-flow structure adds 1 + its nesting depth, each and/or/xor
       /// adds 1. Rewards flat code, penalises deep nesting (unlike flat cyclomatic count).</summary>
@@ -4487,6 +4501,35 @@ begin
   end;
 end; // function
 
+// v(ADP2 T3): shared cyclomatic decision-count, extracted from
+// CheckCyclomaticComplexity's former local CountDecisions so BOTH the lint
+// rule (via TAstChecker.CyclomaticOf below) and the Auto-Document Complexity
+// fact (DRagLint.Doc.SymbolFacts) use the exact same formula and can never
+// diverge on what one routine's complexity is. Recursively counts
+// decision-point nodes -- if/ifElse/while/for/repeat/kAnd/kOr/caseCase --
+// under N, stopping at (not descending into) a nested defProc: a local
+// routine is counted separately, the next time it is visited on its own.
+// Node kinds verified against the grammar by
+// tests\lint\cyclomatic-complexity.pas/.expected.
+function CyclomaticCountDecisions(const N: TTSNode): Integer;
+var
+  I: Integer;
+  K: string ;
+begin
+  Result:= 0;
+  if N.IsNull then Exit;
+  if N.NodeType = 'defProc' then Exit; { nested routine counted separately }
+  K:= N.NodeType;
+  if (K = 'if') or (K = 'ifElse') or (K = 'while') or (K = 'for') or (K = 'repeat')
+     or (K = 'kAnd') or (K = 'kOr') or (K = 'caseCase') then Inc(Result);
+  for I:= 0 to N.ChildCount - 1 do Result:= Result + CyclomaticCountDecisions(N.Child(I));
+end;
+
+class function TAstChecker.CyclomaticOf(const ABody: TTSNode): Integer;
+begin
+  Result:= 1 + CyclomaticCountDecisions(ABody);
+end;
+
 class function TAstChecker.CheckCyclomaticComplexity(const AFile: string): TArray<TLintFinding>;
 begin
   Result:= CheckCyclomaticComplexity(AFile, 15);   // historic default
@@ -4509,20 +4552,6 @@ var
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
 
-  function CountDecisions(const N: TTSNode): Integer;
-  var
-    I: Integer;
-    K: string ;
-  begin
-    Result:= 0;
-    if N.IsNull then Exit;
-    if N.NodeType = 'defProc' then Exit; { nested routine counted separately }
-    K:= N.NodeType;
-    if (K = 'if') or (K = 'ifElse') or (K = 'while') or (K = 'for') or (K = 'repeat')
-       or (K = 'kAnd') or (K = 'kOr') or (K = 'caseCase') then Inc(Result);
-    for I:= 0 to N.ChildCount - 1 do Result:= Result + CountDecisions(N.Child(I));
-  end;
-
   procedure Visit(const N: TTSNode);
   var
     I, CC     : Integer ;
@@ -4534,7 +4563,7 @@ var
     if N.NodeType = 'defProc' then
     begin
       Body:= N.ChildByField('body');
-      CC:= 1 + CountDecisions(Body);
+      CC:= CyclomaticOf(Body); // v(ADP2 T3): shared formula (was: 1 + CountDecisions(Body))
       if CC > AMaxComplexity then
       begin
         Hdr:= N.ChildByField('header');

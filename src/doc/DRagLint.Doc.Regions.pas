@@ -23,19 +23,29 @@ type
     /// <summary>Renders the fenced facts-block body lines (each prefixed
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
     /// Raises / Deprecated / Overrides / Overridden by / Implements / Overload
-    /// k of n / abstract / virtual / Since / SeeAlso. Empty sections omitted;
-    /// '' when there are no facts. Displayed counts below the true *Total get a
-    /// ' (+N more)' suffix. Deprecated is ground-truth from the Pascal
-    /// 'deprecated' directive (not the unrelated &lt;deprecated/&gt; doc-comment
-    /// tag) -- emitted only when the directive was found on the declaration.
-    /// The cheap fact group (v(ADP1 T3): Overrides/Overridden by/Implements/
-    /// Overload/abstract/virtual) is gathered unconditionally for method-like
-    /// symbols -- see TDocFacts' field comments for how each is derived and
+    /// k of n / abstract / virtual / Complexity / Since / SeeAlso. Empty
+    /// sections omitted; '' when there are no facts. Displayed counts below
+    /// the true *Total get a ' (+N more)' suffix. Deprecated is ground-truth
+    /// from the Pascal 'deprecated' directive (not the unrelated
+    /// &lt;deprecated/&gt; doc-comment tag) -- emitted only when the directive
+    /// was found on the declaration. The cheap fact group (v(ADP1 T3):
+    /// Overrides/Overridden by/Implements/Overload/abstract/virtual) is
+    /// gathered unconditionally for method-like symbols -- see TDocFacts'
+    /// field comments for how each is derived and
     /// DRagLint.Doc.Facts.DetectMethodDirectives for the virtual/abstract
     /// source probe. SeeAlso emits one &lt;seealso cref&gt; line per entry; it is
     /// populated only when the facts were built with the --seealso opt-in, so
     /// by default no &lt;seealso&gt; line appears.</summary>
-    class function RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string; AIncludeReturns: Boolean = False): string;
+    /// <param name="AComplexityMin">v(ADP2 T3): the docs.complexity_min
+    /// threshold (manifest-configured; default 10). 'Complexity: N
+    /// (cyclomatic), M lines' is emitted ONLY when AFacts.Cyclomatic &gt;=
+    /// AComplexityMin -- so a trivial routine's block stays lean. Applied HERE
+    /// (at render time), not when AFacts was built, so changing
+    /// docs.complexity_min takes effect on the next `document` run with NO
+    /// reindex (the raw Cyclomatic/BodyLoc values are already in the index;
+    /// only the display gate changes).</param>
+    class function RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string;
+      AIncludeReturns: Boolean = False; AComplexityMin: Integer = 10): string;
     /// <summary>Produces the full merged DocInsight comment text (///-prefixed
     /// lines joined by CRLF): preserved hand-written prose + a regenerated
     /// managed facts block (fenced inside remarks) + managed param tags.
@@ -46,9 +56,12 @@ type
     /// descriptions, adds/removes managed param tags, and flags hand-typed
     /// params no longer present in the signature. See IsManagedDesc for how
     /// managed (regenerable) content is told apart from hand-typed prose.</summary>
+    /// <param name="AComplexityMin">v(ADP2 T3): forwarded to RenderFactsBlock
+    /// as-is; see its own param comment. Default 10 matches the manifest
+    /// default (docs.complexity_min).</param>
     class function MergeComment(const AExisting: TParsedDoc;
       const ASigParams: TArray<string>; const AFacts: TDocFacts;
-      AHasReturn: Boolean; const APrefix: string): string;
+      AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer = 10): string;
   end;
 
 implementation
@@ -149,7 +162,8 @@ begin
     Result:= Head + Tail;
 end;
 
-class function TDocRegions.RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string; AIncludeReturns: Boolean = False): string;
+class function TDocRegions.RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string;
+  AIncludeReturns: Boolean = False; AComplexityMin: Integer = 10): string;
 var
   Sb: TStringBuilder;
   function MoreSuffix(AShown, ATotal: Integer): string;
@@ -247,6 +261,24 @@ begin
       Sb.AppendLine(APrefix + 'abstract');
     if AFacts.IsVirtual then
       Sb.AppendLine(APrefix + 'virtual');
+    // v(ADP2 T3): Complexity fact -- THRESHOLD APPLIED HERE (render time), not
+    // when AFacts was built: AFacts.Cyclomatic/BodyLoc are the RAW index-time
+    // values (TDocFactsBuilder.Build never zeroes/caps them), so a routine at
+    // or above AComplexityMin (docs.complexity_min, default 10) gets the line
+    // and everything else stays lean -- and changing the threshold takes
+    // effect on the very next `document` run with NO reindex (the fact
+    // values in the index do not change, only this display gate does).
+    // 'Cyclomatic > 0' guards the AComplexityMin <= 0 edge case: a REAL
+    // analyzed routine's cyclomatic complexity is architecturally always >= 1
+    // (TAstChecker.CyclomaticOf = 1 + a non-negative decision count), so 0 is
+    // an UNAMBIGUOUS "not computed" sentinel (no symbol_facts row, or no
+    // matching defProc at index time) -- without this guard, a manifest
+    // setting docs.complexity_min to 0 (or negative) would render a
+    // fabricated-looking 'Complexity: 0 (cyclomatic), 0 lines' on every
+    // symbol that was never analyzed at all (e.g. a type/field/const, which
+    // never gets a symbol_facts row).
+    if (AFacts.Cyclomatic > 0) and (AFacts.Cyclomatic >= AComplexityMin) then
+      Sb.AppendLine(APrefix + Format('Complexity: %d (cyclomatic), %d lines', [AFacts.Cyclomatic, AFacts.BodyLoc]));
     // v(ADF T5): OPT-IN git <since> line. AFacts.Since is '' unless the caller
     // built the facts with --since (TDocFactsBuilder.Build's AIncludeSince) AND
     // git confidently attributed the declaration line, so this renders NOTHING by
@@ -272,7 +304,7 @@ end;
 
 class function TDocRegions.MergeComment(const AExisting: TParsedDoc;
   const ASigParams: TArray<string>; const AFacts: TDocFacts;
-  AHasReturn: Boolean; const APrefix: string): string;
+  AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer = 10): string;
 var
   Sb   : TStringBuilder;
   P    : string        ;
@@ -314,7 +346,7 @@ begin
       and (not IsManagedDesc(AExisting.ReturnsText))
       and (not StartsText('Observed:', Trim(AExisting.ReturnsText)))
       and (Length(AFacts.ReturnCases) > 0);
-    Facts:= RenderFactsBlock(AFacts, APrefix, IncludeReturns);
+    Facts:= RenderFactsBlock(AFacts, APrefix, IncludeReturns, AComplexityMin);
     if not AExisting.HasContent then
     begin
       Sb.AppendLine(APrefix + '<summary></summary>');

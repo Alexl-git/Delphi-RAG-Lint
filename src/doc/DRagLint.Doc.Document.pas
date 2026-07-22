@@ -42,16 +42,20 @@ type
     /// TDocFactsBuilder.Build as-is); default 20 matches the manifest default.
     /// AMaxCallers caps the "Called from:" list (forwarded to
     /// TDocFactsBuilder.Build as-is); default 5 matches the manifest
-    /// default (v(ADP1 T1)). Resolves AQName to Syms[0] and delegates to
-    /// BuildForSymbol; when AQName is ambiguous (an overloaded method, all
-    /// sharing one qualified_name) this still documents only the
+    /// default (v(ADP1 T1)). AComplexityMin (v(ADP2 T3)) gates the
+    /// 'Complexity:' render line (forwarded to TDocRegions.MergeComment
+    /// as-is, NOT to Build -- see RenderFactsBlock's remarks for why the
+    /// threshold is applied at render, not compute); default 10 matches the
+    /// manifest default (docs.complexity_min). Resolves AQName to Syms[0] and
+    /// delegates to BuildForSymbol; when AQName is ambiguous (an overloaded
+    /// method, all sharing one qualified_name) this still documents only the
     /// first-declared overload -- unchanged, existing behavior. Callers
     /// iterating actual resolved rows (e.g. one per overload) should call
     /// BuildForSymbol directly instead (see its remarks).</remarks>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string;
       AIncludeSeeAlso: Boolean; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
-      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TDocumentResult; overload;
+      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5; AComplexityMin: Integer = 10): TDocumentResult; overload;
     /// <summary>Back-compat overload: BuildFor with no doc-source opt-ins
     /// (AIncludeSeeAlso = False, AIncludeSince = False).</summary>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult; overload;
@@ -70,12 +74,13 @@ type
     /// <returns>The classified action plus file/line and the computed edits.</returns>
     /// <remarks>Does not write files; TTextEditApplier.Apply performs any I/O.
     /// AIncludeSeeAlso / AIncludeSince / ABaseDir / AExtraStores /
-    /// AMaxReturnCases / AMaxCallers have the same meaning as on BuildFor's
-    /// full overload (see its remarks). Result.QName is ASym.QualifiedName.</remarks>
+    /// AMaxReturnCases / AMaxCallers / AComplexityMin have the same meaning as
+    /// on BuildFor's full overload (see its remarks). Result.QName is
+    /// ASym.QualifiedName.</remarks>
     class function BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
       AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
-      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TDocumentResult;
+      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5; AComplexityMin: Integer = 10): TDocumentResult;
     /// <summary>Resolves AQName and returns the DocInsight comment CURRENTLY on
     /// its declaration (scanned live from the source file, ANSI), plus the
     /// resolved symbol. AFound is False (and the outputs are Default) when the
@@ -218,7 +223,8 @@ end;
 
 class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
-  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer): TDocumentResult;
+  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
+  AComplexityMin: Integer): TDocumentResult;
 var
   Syms: TArray<TSymbol>;
 begin
@@ -230,12 +236,13 @@ begin
   if Length(Syms) = 0 then Exit;
 
   Result:= BuildForSymbol(AStore, Syms[0], AIncludeSeeAlso, AIncludeSince, ABaseDir,
-    AExtraStores, AMaxReturnCases, AMaxCallers);
+    AExtraStores, AMaxReturnCases, AMaxCallers, AComplexityMin);
 end;
 
 class function TDocumenter.BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
-  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer): TDocumentResult;
+  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
+  AComplexityMin: Integer): TDocumentResult;
 var
   Path     : string                                            ;
   Src      : string                                            ;
@@ -292,7 +299,7 @@ begin
             or (ASym.Kind in [skFunction, skConstructor]);
 
   Prefix:= '/// ';
-  Merged:= TDocRegions.MergeComment(Existing, SigParams, Facts, HasRet, Prefix);
+  Merged:= TDocRegions.MergeComment(Existing, SigParams, Facts, HasRet, Prefix, AComplexityMin);
 
   if Existing.HasContent then
   begin

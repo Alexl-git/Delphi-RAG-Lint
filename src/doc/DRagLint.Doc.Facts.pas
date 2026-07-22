@@ -115,6 +115,19 @@ type
     // whenever the 'abstract' directive is present, independent of override.
     IsAbstract       : Boolean          ;
     IsVirtual        : Boolean          ;
+    // v(ADP2 T3): the routine's McCabe cyclomatic complexity and implementation
+    // body line count, read back verbatim from the index-time symbol_facts row
+    // (ISymbolStore.GetSymbolFacts -- see DRagLint.Doc.SymbolFacts.
+    // TSymbolFactsAnalyzer.Analyze for how they were computed at index time).
+    // RAW values, UNTHRESHOLDED here: Build never drops/zeroes Cyclomatic based
+    // on docs.complexity_min -- RenderFactsBlock applies that threshold at
+    // RENDER time (see its own comment), so changing complexity_min needs no
+    // reindex. Cyclomatic = 0 when the symbol has no symbol_facts row (older
+    // index, pre-Phase-2) or the analyzer found no matching defProc; either
+    // way RenderFactsBlock's >= threshold naturally omits the line (0 is never
+    // >= a positive complexity_min) -- absence over a wrong number.
+    Cyclomatic       : Integer          ;
+    BodyLoc          : Integer          ;
   end;
 
   TDocFactsBuilder = class
@@ -997,6 +1010,18 @@ begin
       ABaseDir, AStore.GetFilePath(ASym.FileId), ASym.StartLine);
     if SinceDate <> '' then Result.Since:= SinceDate;
   end;
+
+  // v(ADP2 T3): Complexity fact -- the RAW index-time symbol_facts values,
+  // read back verbatim (no threshold applied here: RenderFactsBlock gates the
+  // 'Complexity:' line on docs.complexity_min at RENDER time -- see
+  // TDocFacts.Cyclomatic's field comment for why). Unconditional, like
+  // Deprecated above: a symbol with no symbol_facts row (a non-routine kind,
+  // or an index built before Phase 2) reads back Present=False with both
+  // fields already zeroed by Default(TSymbolFacts) -- exactly the "no fact"
+  // state, never fabricated.
+  var SFacts: TSymbolFacts:= AStore.GetSymbolFacts(ASym.Id);
+  Result.Cyclomatic:= SFacts.Cyclomatic;
+  Result.BodyLoc   := SFacts.BodyLoc;
 end;
 
 end.

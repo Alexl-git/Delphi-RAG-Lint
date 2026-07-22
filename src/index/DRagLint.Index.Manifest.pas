@@ -70,13 +70,21 @@ type
     /// filter outright for one run, independent of this threshold. document
     /// --qname (single-symbol) is never filtered by this setting.</summary>
     AccessorTrivialMaxLines: Integer;
-    /// <summary>Record with all fields at documented defaults (MaxReturnCases=20, MaxCallers=5, AccessorTrivialMaxLines=2).</summary>
+    /// <summary>v(ADP2 T3): the McCabe cyclomatic complexity at or above which
+    /// a generated DocInsight comment's managed block gets a 'Complexity: N
+    /// (cyclomatic), M lines' line (RenderFactsBlock). Default 10. Applied at
+    /// RENDER time (see RenderFactsBlock's remarks), NOT at index time -- the
+    /// raw Cyclomatic/BodyLoc values are always computed and stored for every
+    /// analyzed routine, so changing this threshold takes effect on the very
+    /// next `document` run with no reindex required.</summary>
+    ComplexityMin: Integer;
+    /// <summary>Record with all fields at documented defaults (MaxReturnCases=20, MaxCallers=5, AccessorTrivialMaxLines=2, ComplexityMin=10).</summary>
     class function Defaults: TDocSettings; static;
   end; // record
 
   /// <summary>Which top-level settings keys were explicitly present in a parsed JSON block.
   /// Used by the merge logic to distinguish "absent" (keep global) from "present but default".</summary>
-  TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB, skMaxReturnCases, skMaxCallers, skAccessorTrivialMaxLines );
+  TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB, skMaxReturnCases, skMaxCallers, skAccessorTrivialMaxLines, skComplexityMin );
 
   /// <summary>Describes one named index section within the manifest.</summary>
   TIndexSection = record
@@ -299,7 +307,8 @@ begin
   Result:= Default(TDocSettings);
   Result.MaxReturnCases          := 20;
   Result.MaxCallers              := 5;
-  Result.AccessorTrivialMaxLines := 2; // ADP1 T2: ON by default (see field comment).
+  Result.AccessorTrivialMaxLines := 2;  // ADP1 T2: ON by default (see field comment).
+  Result.ComplexityMin           := 10; // ADP2 T3: see field comment.
 end;
 
 { ---------------------------------------------------------------------- }
@@ -421,6 +430,16 @@ begin
       begin
         Result.Docs.AccessorTrivialMaxLines:= NA.AsInt;
         Include(ASettingsKeys, skAccessorTrivialMaxLines);
+      end;
+
+      // ADP2 T3: docs.complexity_min -- OVERRIDES the code default of 10 when
+      // present; absent leaves Result.Docs.ComplexityMin at the Defaults()
+      // value already seeded above.
+      var NCx: TJSONNumber:= JDocs.GetValue('complexity_min') as TJSONNumber;
+      if NCx <> nil then
+      begin
+        Result.Docs.ComplexityMin:= NCx.AsInt;
+        Include(ASettingsKeys, skComplexityMin);
       end;
     end;
 
@@ -573,6 +592,7 @@ begin
     if skMaxReturnCases          in LocalKeys then Result.Docs.MaxReturnCases            := LocalManifest.Docs.MaxReturnCases;
     if skMaxCallers              in LocalKeys then Result.Docs.MaxCallers                := LocalManifest.Docs.MaxCallers;
     if skAccessorTrivialMaxLines in LocalKeys then Result.Docs.AccessorTrivialMaxLines   := LocalManifest.Docs.AccessorTrivialMaxLines;
+    if skComplexityMin           in LocalKeys then Result.Docs.ComplexityMin             := LocalManifest.Docs.ComplexityMin;
     Result.RootDir:= LocalManifest.RootDir;
     MergeSections(Result, LocalManifest);
   end // if
@@ -609,6 +629,7 @@ begin
   if AManifest.Docs.MaxReturnCases < 0 then Exit('docs.max_return_cases must be >= 0');
   if AManifest.Docs.MaxCallers < 0 then Exit('docs.max_callers must be >= 0');
   if AManifest.Docs.AccessorTrivialMaxLines < 0 then Exit('docs.accessor_trivial_max_lines must be >= 0');
+  if AManifest.Docs.ComplexityMin < 0 then Exit('docs.complexity_min must be >= 0');
   Names:= TStringList.Create;
   Names.CaseSensitive:= False;
   try
@@ -696,6 +717,7 @@ begin
   JDocs.AddPair('max_return_cases', TJSONNumber.Create(AManifest.Docs.MaxReturnCases));
   JDocs.AddPair('max_callers', TJSONNumber.Create(AManifest.Docs.MaxCallers));
   JDocs.AddPair('accessor_trivial_max_lines', TJSONNumber.Create(AManifest.Docs.AccessorTrivialMaxLines));
+  JDocs.AddPair('complexity_min', TJSONNumber.Create(AManifest.Docs.ComplexityMin));
 
   { indexes }
   JIndexes:= TJSONObject.Create;

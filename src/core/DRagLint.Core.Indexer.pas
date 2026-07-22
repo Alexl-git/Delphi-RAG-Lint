@@ -83,7 +83,8 @@ type
 implementation
 
 uses
-  DRagLint.Doc.SymbolFacts { v(ADP2 T2): TSymbolFactsAnalyzer -- index-time symbol_facts pass }
+  DRagLint.Doc.SymbolFacts        { v(ADP2 T2): TSymbolFactsAnalyzer -- index-time symbol_facts pass }
+  , DRagLint.Diagnostics.ParseCache { v(ADP2 T3): TAstParseCache.Clear -- bound the per-file tree cache }
   ;
 
 constructor TIndexer.Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig);
@@ -448,7 +449,7 @@ begin
           if Sym.ImplStartLine <= 0 then Continue;
           if not IdxToId.TryGetValue(I, NewSymId) then Continue;
           FactsBody:= SliceBodyLines(SourceLines, Sym.ImplStartLine, Sym.ImplEndLine);
-          Facts:= TSymbolFactsAnalyzer.Analyze(Sym, FactsBody, FStore);
+          Facts:= TSymbolFactsAnalyzer.Analyze(Sym, AFilePath, FactsBody, FStore);
           Facts.SymbolId:= NewSymId;
           FStore.PutSymbolFacts(Facts);
         end;
@@ -464,6 +465,17 @@ begin
         end;
       end; // try
     finally
+      // v(ADP2 T3): bound the AST-parse-cache's memory across a large corpus.
+      // TSymbolFactsAnalyzer.Analyze (called once per routine, above) reads
+      // AFilePath's tree via TAstParseCache.Get, which memoizes per file --
+      // the FIRST routine in this file parses it, every later routine in the
+      // SAME file reuses the cached tree (one parse per FILE, not per
+      // routine). Clearing here, AFTER the facts loop has finished with every
+      // routine in ParseRes.Symbols (success or rollback), releases that
+      // tree before the walk moves to the next file, so a whole-tree index
+      // run never accumulates one tree per file. Safe even on the exception
+      // path above: Clear only frees cached trees, it does not touch FStore.
+      TAstParseCache.Clear;
       IdxToId.Free;
     end; // try
   finally

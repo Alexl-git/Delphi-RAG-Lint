@@ -70,6 +70,18 @@ type
     /// accessor skip for this run (every accessor is documented like any
     /// other public method, regardless of AccessorTrivialMaxLines).</summary>
     IncludeAccessors: Boolean;
+    /// <summary>v(ADP2 T3): threshold for the 'Complexity:' render line,
+    /// forwarded to BuildForSymbol/TDocRegions.RenderFactsBlock as-is (docs.
+    /// complexity_min, default 10). NOTE: Default(TDocBatchOptions) zero-fills
+    /// this to 0 -- every caller MUST set it explicitly (from the manifest's
+    /// Docs.ComplexityMin) rather than relying on the record default, same
+    /// discipline as MaxReturnCases/MaxCallers above. UNLIKE those two, a
+    /// stray 0 here is still SAFE (RenderFactsBlock's own Cyclomatic &gt; 0
+    /// guard means threshold 0 shows every real routine's complexity rather
+    /// than mis-rendering an absent fact -- see its remarks), but callers
+    /// should still set the real configured value for the intended default
+    /// (10, not "show everything").</summary>
+    ComplexityMin: Integer;
   end;
 
   /// <summary>Aggregated batch result. Edits is the union of every kept
@@ -233,7 +245,7 @@ begin
       // above the first overload and never documenting the others (Bug A).
       Res := TDocumenter.BuildForSymbol(AStore, Sym, AOptions.IncludeSeeAlso,
         AOptions.IncludeSince, AOptions.BaseDir, AOptions.ExtraStores, AOptions.MaxReturnCases,
-        AOptions.MaxCallers);
+        AOptions.MaxCallers, AOptions.ComplexityMin);
       if Length(Res.Edits) = 0 then Continue; // daUnchanged / daNotFound: nothing to do
 
       // Facts-only filter (Stubs=False, the default): keep the edit when the

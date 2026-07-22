@@ -1089,6 +1089,27 @@ begin
   end;
 end;
 
+// ADP2 T3: reads the docs.complexity_min threshold for the doc verbs
+// (document --qname/--unit/--project, document-all), mirroring
+// LoadDocMaxReturnCases/LoadDocMaxCallers exactly (same manifest discovery:
+// engine dir beside the exe + current working dir walking up for a local
+// override). Gates RenderFactsBlock's 'Complexity:' line at RENDER time (see
+// its remarks) -- changing this value never needs a reindex. Best-effort: any
+// load failure (missing files, malformed JSON) falls back to 10
+// (TDocSettings.Defaults.ComplexityMin).
+function LoadDocComplexityMin: Integer;
+var
+  DocManifest: TIndexManifest;
+begin
+  Result:= 10;
+  try
+    DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    Result:= DocManifest.Docs.ComplexityMin;
+  except
+    Result:= 10;
+  end;
+end;
+
 // v0.45: serialise a TIndexManifest to a TJSONObject for the dry-run JSON view.
 // Delegates to TManifestIO.ToJson for the canonical manifest structure, then
 // adds the extra 'indexes.rootDir' field (richer than the saved file). Caller owns + frees.
@@ -6664,6 +6685,7 @@ begin
   Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
   Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
   Opts.AccessorTrivialMaxLines:= LoadDocAccessorMaxLines; // ADP1 T2: manifest docs.accessor_trivial_max_lines threshold (default 2, filter ON, on any load failure).
+  Opts.ComplexityMin:= LoadDocComplexityMin; // ADP2 T3: manifest docs.complexity_min threshold for the 'Complexity:' line (default 10 on any load failure).
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
 
@@ -6782,6 +6804,7 @@ begin
   Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
   Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
   Opts.AccessorTrivialMaxLines:= LoadDocAccessorMaxLines; // ADP1 T2: manifest docs.accessor_trivial_max_lines threshold (default 2, filter ON, on any load failure).
+  Opts.ComplexityMin:= LoadDocComplexityMin; // ADP2 T3: manifest docs.complexity_min threshold for the 'Complexity:' line (default 10 on any load failure).
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
 
   // Step 2: document --apply (shifts lines, which makes index stale)
@@ -6828,6 +6851,7 @@ begin
   Opts.MaxReturnCases:= LoadDocMaxReturnCases; // Task 10: manifest docs.max_return_cases cap (default 20 on any load failure).
   Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
   Opts.AccessorTrivialMaxLines:= LoadDocAccessorMaxLines; // ADP1 T2: manifest docs.accessor_trivial_max_lines threshold (default 2, filter ON, on any load failure).
+  Opts.ComplexityMin:= LoadDocComplexityMin; // ADP2 T3: manifest docs.complexity_min threshold for the 'Complexity:' line (default 10 on any load failure).
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   Res:= TDocBatch.DocumentAll(Store, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
@@ -6854,7 +6878,8 @@ begin
   if not Ok then Exit(2);
 
   Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, AArgs.DocSeeAlso,
-    AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers); // ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap; ADP1 T1: manifest docs.max_callers cap.
+    AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,
+    LoadDocComplexityMin); // ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap; ADP1 T1: manifest docs.max_callers cap; ADP2 T3: manifest docs.complexity_min threshold.
 
   if Res.Action = DRagLint.Doc.Document.daNotFound then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 

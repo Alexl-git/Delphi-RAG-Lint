@@ -48,22 +48,34 @@ type
   TSymbolFactsAnalyzer = class
     public
       /// <summary>Analyzes ASym's body and returns the TSymbolFacts row to
-      /// persist for it. Task 2: returns an EMPTY-but-Present record -- every
-      /// fact field stays at its zero value; Tasks 3-8 populate them one
-      /// group at a time. Never returns Present=False (the indexer only calls
-      /// this for a symbol it is about to write a row for).</summary>
+      /// persist for it. Task 2 returned an EMPTY-but-Present record; Task 3
+      /// (ADP2) fills in Cyclomatic/BodyLoc (see below); Tasks 4-8 populate
+      /// the remaining groups one at a time. Never returns Present=False (the
+      /// indexer only calls this for a symbol it is about to write a row
+      /// for).</summary>
       /// <param name="ASym">The routine symbol being analyzed. Result.SymbolId
       /// is seeded from ASym.Id, but the caller (the indexer) always
       /// overwrites it with the just-inserted DB id afterward -- ASym.Id may
       /// still be a pre-insert placeholder at the point Analyze runs.</param>
+      /// <param name="AFilePath">Path to ASym's source file (ADP2 T3) -- the
+      /// indexer's own IndexFile parameter, passed through unchanged. Needed
+      /// because the indexer's TParseResult carries no tree-sitter tree (only
+      /// extracted symbols/refs); this is how Analyze reaches the AST (via
+      /// TAstParseCache.Get, memoized per file) for Cyclomatic.</param>
       /// <param name="ABody">The routine's implementation body, one source
       /// line per array entry (ASym.ImplStartLine..ImplEndLine, 1-based),
-      /// already bounds-clipped by the caller. Unused by Task 2.</param>
+      /// already bounds-clipped by the caller. Unused by Task 3 (BodyLoc is
+      /// pure symbol-range arithmetic, not a text scan); a later fact group
+      /// may use it.</param>
       /// <param name="AStore">Read-only access to the rest of the index, for
       /// facts that need a cross-symbol lookup (e.g. DFM event bindings, SQL
-      /// table references). Unused by Task 2.</param>
+      /// table references). Unused by Task 3.</param>
       /// <returns>A TSymbolFacts record with Present=True.</returns>
-      class function Analyze(const ASym: TSymbol; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts; static;
+      /// <remarks>ADP2 T3: Cyclomatic is 0 when no defProc in AFilePath's tree
+      /// starts at ASym.ImplStartLine (e.g. AFilePath unreadable/unparseable) --
+      /// absence over a wrong number, never fabricated. BodyLoc is always
+      /// ImplEndLine - ImplStartLine (clamped to >= 0), independent of the AST.</remarks>
+      class function Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts; static;
   end;
 
 implementation
@@ -71,6 +83,10 @@ implementation
 uses
   System.SysUtils
   , System.StrUtils
+  , TreeSitter                        { ADP2 T3: TTSNode for the AST-derived Cyclomatic fact }
+  , DRagLint.Diagnostics.ParseCache    { ADP2 T3: TAstParseCache -- memoized per-file tree, owned by the cache }
+  , DRagLint.Analysis.Cfg              { ADP2 T3: CfgFindProcs -- collect every defProc in the file's tree }
+  , DRagLint.Diagnostics.AstChecks     { ADP2 T3: TAstChecker.CyclomaticOf -- ONE shared formula with the lint rule }
   ;
 
 function SymbolFactsCsvJoin(const AItems: TArray<string>): string;
@@ -85,15 +101,57 @@ begin
   Result:= SplitString(ACsv, ',');
 end;
 
-class function TSymbolFactsAnalyzer.Analyze(const ASym: TSymbol; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts;
+class function TSymbolFactsAnalyzer.Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts;
+var
+  PF   : TParsedFile     ;
+  Procs: TArray<TTSNode> ;
+  Proc : TTSNode         ;
+  Body : TTSNode         ;
 begin
-  // Task 2: EMPTY-but-Present. Every fact field stays at Default(TSymbolFacts)'s
-  // zero value; Tasks 3-8 populate ReadsFields/WritesFields/ReturnsOwner/
-  // Cyclomatic/BodyLoc/DfmEvent/SqlReads/SqlWrites/CoveredBy in turn, each
-  // inside this same function body -- ABody/AStore are unused until then.
+  // Every fact field starts at Default(TSymbolFacts)'s zero value; Task 3
+  // (ADP2) fills in Cyclomatic/BodyLoc below. Tasks 4-8 populate
+  // ReadsFields/WritesFields/ReturnsOwner/DfmEvent/SqlReads/SqlWrites/
+  // CoveredBy in turn, each inside this same function body -- ABody/AStore
+  // stay unused until then.
   Result:= Default(TSymbolFacts);
   Result.SymbolId:= ASym.Id;
   Result.Present := True;
+
+  // BodyLoc: pure symbol-range arithmetic, no AST needed. Clamped to >= 0 as
+  // a defensive guard (mirrors TIndexer.SliceBodyLines' Lo/Hi clip) though
+  // ImplEndLine >= ImplStartLine always holds for a real routine body.
+  Result.BodyLoc:= ASym.ImplEndLine - ASym.ImplStartLine;
+  if Result.BodyLoc < 0 then Result.BodyLoc:= 0;
+
+  // Cyclomatic: find the defProc node whose OWN StartPoint matches
+  // ASym.ImplStartLine -- the EXACT provenance the parser used to stamp
+  // ImplStartLine in the first place (DRagLint.Parser.Delphi13's defProc walk
+  // calls SetRoutineImplRange(..., Integer(ANode.StartPoint.row) + 1, ...)
+  // where ANode IS the defProc), so this lookup is guaranteed to find the
+  // right routine whenever the same source parses the same way twice.
+  // TAstParseCache.Get is memoized per file (see this unit's banner comment
+  // and the indexer's facts-pass comment): the FIRST Analyze call for a file
+  // parses it; every other routine in the SAME file reuses the cached tree --
+  // one extra parse PER FILE (on top of the indexer's own parse), not per
+  // routine. CfgFindProcs (DRagLint.Analysis.Cfg) collects every defProc in
+  // the tree; an O(routines-in-file) linear scan then matches by line -- no
+  // positional (point-based) node lookup is exposed by the TTSNode API, and
+  // this walk is accepted as index-time cost (see the Phase 2 design).
+  PF:= TAstParseCache.Get(AFilePath);
+  if PF.Tree <> nil then
+  begin
+    Procs:= CfgFindProcs(PF.Tree.RootNode);
+    for Proc in Procs do
+      if Integer(Proc.StartPoint.Row) + 1 = ASym.ImplStartLine then
+      begin
+        Body:= Proc.ChildByField('body');
+        Result.Cyclomatic:= TAstChecker.CyclomaticOf(Body);
+        Break;
+      end;
+    // No matching defProc: Cyclomatic stays 0 (absence over a wrong number --
+    // e.g. a stale/mismatched parse, or ASym's file changed between the
+    // indexer's own parse and this cache lookup).
+  end;
 end;
 
 end.
