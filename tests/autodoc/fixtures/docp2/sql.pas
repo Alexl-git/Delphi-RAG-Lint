@@ -42,10 +42,34 @@ unit sql;
 //     block whatsoever (Msg is a local var, not a field; nothing else in
 //     this body mines any other fact either; see ClassifySqlText/
 //     SelectFromIsSqlShaped).
+//   * UpdateProseNotSql -- FINAL REVIEW FIX WAVE adversarial case (reviewer-
+//     identified, proven WRONG against the real built exe before this fix
+//     wave): an ordinary English status message that merely starts with the
+//     word 'Update' ('Update complete for your profile') -- no SET/INTO
+//     anywhere. BEFORE the companion-keyword gate this rendered 'SQL: writes
+//     COMPLETE' (COMPLETE scanned as if it were the UPDATE target); CORRECT
+//     is NO 'SQL:' line at all and -- like NoSql/EnglishSentenceNotSql -- NO
+//     managed block whatsoever (see UpdateIsSqlShaped).
+//   * SelectProseNotSql -- FINAL REVIEW FIX WAVE adversarial case (reviewer-
+//     identified, proven WRONG against the real built exe before this fix
+//     wave): an ordinary English UI prompt ('Select a file from the list')
+//     that DOES have a genuine top-level FROM (unlike EnglishSentenceNotSql,
+//     so SelectFromIsSqlShaped's boundary check alone does not reject it --
+//     'THE LIST' scans as table 'THE' + bare alias 'LIST', with nothing left
+//     over, i.e. a clean clause boundary). BEFORE the stopword-drop fix this
+//     rendered 'SQL: reads THE' (an English article fabricated as a table);
+//     CORRECT is NO 'SQL:' line at all and NO managed block whatsoever (see
+//     IsEnglishStopwordTable).
+//   * DeleteProseNotSql -- FINAL REVIEW FIX WAVE adversarial case (reviewer-
+//     identified): an ordinary English confirmation prompt that merely
+//     starts with the word 'Delete' ('Delete the old record') -- no FROM
+//     anywhere. CORRECT is NO 'SQL:' line at all and NO managed block
+//     whatsoever (see DeleteFromIsSqlShaped).
 //
-// ORDERING NOTE: NoSql and EnglishSentenceNotSql are declared/implemented
-// FIRST (in that order), NOT last, and SelectWithExtractFunction is placed
-// among the other fact-carrying methods, never last. This works around a
+// ORDERING NOTE: NoSql, EnglishSentenceNotSql, UpdateProseNotSql,
+// SelectProseNotSql and DeleteProseNotSql are declared/implemented FIRST (in
+// that order), NOT last, and SelectWithExtractFunction is placed among the
+// other fact-carrying methods, never last. This works around a
 // PRE-EXISTING, unrelated 'document --apply' merge-engine bug (confirmed via
 // a from-scratch repro using ONLY Task 4's Reads/Writes fields fact -- no
 // SQL involved at all, so it predates this task and is out of this task's
@@ -53,13 +77,13 @@ unit sql;
 // apply when the NEXT declaration ALSO carries a block (fact->fact) or when
 // nothing follows it at all (fact->end), but COLLAPSES to a bare empty
 // '<summary></summary>' stub on a 2nd apply when the declaration
-// immediately AFTER it has NO block of its own (fact->no-fact). Every
-// method here carries a fact EXCEPT NoSql and EnglishSentenceNotSql (both
-// truly fact-less -- see each one's own bullet above), so clustering BOTH
-// fact-less methods at the very front (no-fact -> no-fact -> fact -> fact ->
-// ... -> fact->end) means no fact-carrying method is EVER immediately
-// followed by a fact-less one -- the one adjacency shape that triggers the
-// bug -- keeping this test's own idempotency check meaningful.
+// immediately AFTER it has NO block of its own (fact->no-fact). Every method
+// here carries a fact EXCEPT these five (all truly fact-less -- see each
+// one's own bullet above), so clustering all FIVE fact-less methods at the
+// very front (no-fact -> no-fact -> no-fact -> no-fact -> no-fact -> fact ->
+// fact -> ... -> fact->end) means no fact-carrying method is EVER
+// immediately followed by a fact-less one -- the one adjacency shape that
+// triggers the bug -- keeping this test's own idempotency check meaningful.
 
 interface
 
@@ -70,6 +94,9 @@ type
   public
     procedure NoSql;
     procedure EnglishSentenceNotSql;
+    procedure UpdateProseNotSql;
+    procedure SelectProseNotSql;
+    procedure DeleteProseNotSql;
     procedure SyncOne;
     procedure RunJoinConcat;
     procedure MultiFromList;
@@ -92,6 +119,27 @@ var
   Msg: string;
 begin
   Msg := 'SELECT AN ITEM FROM THE CATALOG BEFORE CONTINUING';
+end;
+
+procedure TSqlRunner.UpdateProseNotSql;
+var
+  Msg: string;
+begin
+  Msg := 'Update complete for your profile';
+end;
+
+procedure TSqlRunner.SelectProseNotSql;
+var
+  Msg: string;
+begin
+  Msg := 'Select a file from the list';
+end;
+
+procedure TSqlRunner.DeleteProseNotSql;
+var
+  Msg: string;
+begin
+  Msg := 'Delete the old record';
 end;
 
 procedure TSqlRunner.SyncOne;

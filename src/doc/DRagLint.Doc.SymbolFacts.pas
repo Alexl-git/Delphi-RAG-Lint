@@ -741,13 +741,23 @@ end;
 //      whole feature.
 //   3. ClassifySqlText -- a run is only even CONSIDERED as SQL when its
 //      trimmed text starts (case-insensitively) with SELECT/INSERT/UPDATE/
-//      DELETE/WITH; anything else (a caption, a log message, an unrelated
-//      literal) is silently ignored.
+//      DELETE/WITH AND -- FINAL REVIEW FIX WAVE -- (SELECT/INSERT/UPDATE/
+//      DELETE only) passes its own statement type's companion-keyword gate
+//      (a top-level FROM for SELECT/DELETE, SET/INTO for UPDATE, INTO for
+//      INSERT; see SelectFromIsSqlShaped's banner comment); anything else
+//      (a caption, a log message, an unrelated literal -- including an
+//      English sentence that merely starts with one of these five words)
+//      is silently ignored.
 //   4. ExtractSqlTables -- a conservative, keyword-anchored scan for
 //      EXACTLY the four clause shapes the task brief specifies (see its own
 //      header comment) -- deliberately NOT a SQL grammar/parser: a
 //      subquery, a derived table, or a WITH's own CTE body contribute
-//      nothing, ever (skip rather than guess).
+//      nothing, ever (skip rather than guess). FINAL REVIEW FIX WAVE: every
+//      extracted name, reads AND writes, is also dropped when it is a
+//      common English stopword/article (IsEnglishStopwordTable) -- catches
+//      the residual case where prose happens to be shaped just enough to
+//      reach a table token (e.g. 'Select a file from the list' passes the
+//      FROM gate above, but the word right after FROM is 'THE').
 // AnalyzeSqlTables (below) is the entry point that ties the pipeline
 // together and produces the final capped/deduped/sorted display CSVs,
 // exactly like JoinCappedDisplay already does for ReadsFields/WritesFields/
@@ -958,33 +968,122 @@ begin
   Result:= (Word <> '') and IsSqlClauseStopword(Word);
 end;
 
-// FIX (Phase 2 T7 review): SELECT-only prose gate for ClassifySqlText (see
-// its own header comment for why a leading verb alone is too loose a
-// signal). AUpper is an already Trim+UpperCase'd candidate ALREADY confirmed
-// to start with SELECT. True when AUpper has NO top-level (paren-depth 0,
-// see ParenDepthAt) FROM at all -- inconclusive, absence of a FROM is not
-// evidence of prose, so this lets it through unchanged -- OR its first
-// top-level FROM's own table-ref-list (the SAME ScanTableRefList scan
-// ExtractSqlTables' SELECT branch performs) is immediately followed by a
-// genuine SQL clause boundary (AtSqlClauseBoundary). False -- REJECT the
-// whole literal as SQL, no fact ever recorded for it -- only when a
+// FINAL REVIEW FIX WAVE banner (both gaps EMPIRICALLY reproduced against the
+// built exe -- reviewer's own repro strings quoted throughout below): the
+// companion-keyword gates SelectFromIsSqlShaped/UpdateIsSqlShaped/
+// InsertIntoIsSqlShaped/DeleteFromIsSqlShaped (this function and the three
+// immediately after it) are the CLASSIFICATION-time half of a two-part fix;
+// IsEnglishStopwordTable (see ExtractSqlTables' own header comment, below)
+// is the EXTRACTION-time other half. Symmetric, conservative, per-statement
+// -type requirement: a literal is only ever classified as SQL when it ALSO
+// contains its statement type's own mandatory companion clause keyword --
+// SELECT needs a top-level FROM, UPDATE needs a top-level SET (or, for the
+// Firebird 'UPDATE OR INSERT' UPSERT form, a top-level INTO), INSERT needs
+// a top-level INTO, DELETE needs a top-level FROM -- exactly the clause
+// every REAL Firebird statement of that shape always has. An ordinary
+// English sentence that merely starts with one of these five verbs (a UI
+// status message/prompt -- e.g. 'Update complete for your profile', 'Delete
+// the old record') essentially never also happens to contain its own verb's
+// companion keyword, so requiring it rejects the whole literal outright --
+// the SAME "absence over a wrong fact" discipline this whole extractor
+// already follows, now applied to the CLASSIFICATION step, not just
+// extraction. WITH (a CTE) is deliberately UNCHANGED (still a bare leading-
+// verb check, see ClassifySqlText below) -- out of scope for this fix wave.
+//
+// FIX (Phase 2 final review): SELECT's own gate, tightened from the
+// original Phase 2 T7 review version -- a MISSING top-level FROM used to be
+// treated as "inconclusive, let it through" (see the removed Exit(True) this
+// replaces, below). Per the companion-keyword rule above, a SELECT with no
+// top-level FROM at all is now a hard REJECT (Firebird's own SELECT syntax
+// always requires FROM) -- e.g. an English sentence that starts with
+// 'Select' but never contains the word 'from' at all is rejected right
+// here, before the table-boundary check even runs. When a top-level FROM
+// DOES exist, the ORIGINAL T7-review boundary check still applies
+// unchanged: AUpper is an already Trim+UpperCase'd candidate ALREADY
+// confirmed to start with SELECT; True when the first top-level FROM's own
+// table-ref-list (the SAME ScanTableRefList scan ExtractSqlTables' SELECT
+// branch performs) is immediately followed by a genuine SQL clause boundary
+// (AtSqlClauseBoundary). False -- REJECT the whole literal as SQL -- when a
 // top-level FROM IS found but what follows its target is more prose: e.g.
 // 'SELECT AN ITEM FROM THE CATALOG BEFORE CONTINUING' scans 'THE' as the
 // table (bare alias 'CATALOG' absorbed, exactly as real SQL's own 'FROM
 // OPTRLIST o' would be), and the NEXT word is 'BEFORE' -- neither a clause
 // keyword nor end-of-string/punctuation -- so the whole literal is
-// rejected. Applies "absence over a wrong table" to the CLASSIFICATION step
-// itself, not just to extraction.
+// rejected.
 function SelectFromIsSqlShaped(const AUpper: string): Boolean;
 var KwPos, Pos: Integer;
 begin
   KwPos:= FindSqlKeyword(AUpper, 'FROM', 1);
   while (KwPos <> 0) and (ParenDepthAt(AUpper, KwPos) <> 0) do
     KwPos:= FindSqlKeyword(AUpper, 'FROM', KwPos + Length('FROM'));
-  if KwPos = 0 then Exit(True); // no top-level FROM at all -- inconclusive, let it through
+  // FIX (Phase 2 final review): no top-level FROM at all -- SELECT REQUIRES
+  // one (see the companion-keyword banner above) -- REJECT. Was Exit(True)
+  // ("inconclusive, let it through") under the original T7 review version.
+  if KwPos = 0 then Exit(False);
   Pos:= KwPos + Length('FROM');
   ScanTableRefList(AUpper, Pos, True); // advance Pos past the FROM-target(s) -- the names themselves are unused here
   Result:= AtSqlClauseBoundary(AUpper, Pos);
+end;
+
+// FIX (Phase 2 final review): UPDATE's own companion-keyword gate -- see the
+// banner comment above SelectFromIsSqlShaped for the shared rule. Mirrors
+// ExtractSqlTables' own UPDATE branch's UPSERT sniff exactly (the word
+// immediately after 'UPDATE'): when it is 'OR' (the Firebird 'UPDATE OR
+// INSERT INTO <table> ...' UPSERT form), the companion keyword is a
+// top-level INTO instead of SET; otherwise a plain UPDATE requires a
+// top-level SET. Unlike SELECT's FROM gate, no further "what follows the
+// table" boundary check is layered on top: the companion keyword's mere
+// PRESENCE at top level is already a strong enough signal on its own here
+// -- a genuine English sentence essentially never contains the bare word
+// 'SET' or 'INTO' immediately after an update-shaped opener the way 'FROM'
+// can appear in casual prose ('an item FROM the catalog'). Reproduced
+// against the real built exe: 'Update complete for your profile' has
+// neither SET nor INTO anywhere -- rejected.
+function UpdateIsSqlShaped(const AUpper: string): Boolean;
+var P, KwPos: Integer; Next1: string;
+begin
+  P:= 1 + Length('UPDATE');
+  Next1:= ScanSqlIdent(AUpper, P); // SAME UPSERT sniff as ExtractSqlTables' UPDATE branch
+  if Next1 = 'OR' then
+  begin
+    KwPos:= FindSqlKeyword(AUpper, 'INTO', 1);
+    while (KwPos <> 0) and (ParenDepthAt(AUpper, KwPos) <> 0) do
+      KwPos:= FindSqlKeyword(AUpper, 'INTO', KwPos + Length('INTO'));
+    Exit(KwPos <> 0);
+  end;
+  KwPos:= FindSqlKeyword(AUpper, 'SET', 1);
+  while (KwPos <> 0) and (ParenDepthAt(AUpper, KwPos) <> 0) do
+    KwPos:= FindSqlKeyword(AUpper, 'SET', KwPos + Length('SET'));
+  Result:= KwPos <> 0;
+end;
+
+// FIX (Phase 2 final review): INSERT's own companion-keyword gate, mirroring
+// UpdateIsSqlShaped/SelectFromIsSqlShaped above -- see the shared banner
+// comment. A real Firebird INSERT statement always has a top-level INTO
+// (there is no bare 'INSERT VALUES (...)' form); its absence rejects the
+// literal outright.
+function InsertIntoIsSqlShaped(const AUpper: string): Boolean;
+var KwPos: Integer;
+begin
+  KwPos:= FindSqlKeyword(AUpper, 'INTO', 1);
+  while (KwPos <> 0) and (ParenDepthAt(AUpper, KwPos) <> 0) do
+    KwPos:= FindSqlKeyword(AUpper, 'INTO', KwPos + Length('INTO'));
+  Result:= KwPos <> 0;
+end;
+
+// FIX (Phase 2 final review): DELETE's own companion-keyword gate, mirroring
+// the three gates above -- see the shared banner comment. A real Firebird
+// DELETE statement always has a top-level FROM (there is no bare 'DELETE
+// <table>' form); its absence rejects the literal outright. Reproduced
+// against the real built exe: 'Delete the old record', a UI confirmation
+// prompt, has no FROM anywhere.
+function DeleteFromIsSqlShaped(const AUpper: string): Boolean;
+var KwPos: Integer;
+begin
+  KwPos:= FindSqlKeyword(AUpper, 'FROM', 1);
+  while (KwPos <> 0) and (ParenDepthAt(AUpper, KwPos) <> 0) do
+    KwPos:= FindSqlKeyword(AUpper, 'FROM', KwPos + Length('FROM'));
+  Result:= KwPos <> 0;
 end;
 
 // True when, after trimming, AText (case-insensitively) begins with one of
@@ -994,17 +1093,66 @@ end;
 // -- it must additionally pass SelectFromIsSqlShaped's prose gate (above),
 // since 'SELECT' also opens an ordinary English sentence (e.g. 'SELECT AN
 // ITEM FROM THE CATALOG BEFORE CONTINUING', a UI prompt, not SQL) in a way
-// none of the other four verbs realistically do. INSERT/UPDATE/DELETE/WITH
-// keep the original, looser start-of-string check unchanged -- four/five/
-// six-letter SQL verbs that are not common English sentence openers, an
-// accepted, documented false-positive bound.
+// none of the other four verbs realistically do. FIX (Phase 2 final
+// review): INSERT/UPDATE/DELETE are NO LONGER a bare start-of-string check
+// either -- each now additionally passes its OWN companion-keyword gate
+// (InsertIntoIsSqlShaped/UpdateIsSqlShaped/DeleteFromIsSqlShaped, above; see
+// their shared banner comment above SelectFromIsSqlShaped) for the SAME
+// reason SELECT needed one: an ordinary English sentence can start with
+// 'Update'/'Insert'/'Delete' too (e.g. 'Update complete for your profile',
+// 'Delete the old record' -- both proven WRONG against the real built exe
+// before this fix wave). WITH (a CTE) is the only one of the five still a
+// bare start-of-string check -- out of scope for this fix wave (see
+// ExtractSqlTables' header comment for why a CTE's own body is skipped
+// entirely at the extraction step regardless).
 function ClassifySqlText(const AText: string): Boolean;
-var T: string;
+var T, U: string;
 begin
   T:= Trim(AText);
-  Result:= (StartsText('SELECT', T) and SelectFromIsSqlShaped(UpperCase(T))) or
-           StartsText('INSERT', T) or StartsText('UPDATE', T) or
-           StartsText('DELETE', T) or StartsText('WITH', T);
+  U:= UpperCase(T);
+  Result:= (StartsText('SELECT', T) and SelectFromIsSqlShaped(U)) or
+           (StartsText('INSERT', T) and InsertIntoIsSqlShaped(U)) or
+           (StartsText('UPDATE', T) and UpdateIsSqlShaped(U)) or
+           (StartsText('DELETE', T) and DeleteFromIsSqlShaped(U)) or
+           StartsText('WITH', T);
+end;
+
+// FIX (Phase 2 final review): the EXTRACTION-time half of the two-part fix
+// (see SelectFromIsSqlShaped's banner comment, above, for the CLASSIFICATION
+// -time half) -- common English stopwords/articles/prepositions that must
+// NEVER be treated as a real table name, even though ScanSqlIdent happily
+// returns them as syntactically-valid identifiers (plain A-Z tokens). No
+// genuine Firebird table in this codebase is ever named THE, A, IS, etc.
+// Reproduced against the real built exe: 'Select a file from the list' has
+// a genuine top-level FROM (so SelectFromIsSqlShaped's gate lets it
+// through), but the word right after FROM is 'THE' -- an article, not a
+// table -- which used to render 'SQL: reads THE'. AWord must already be
+// uppercase, matching every other helper in this pipeline. Deliberately a
+// small, fixed, deterministic list (no attempt at exhaustive English
+// coverage) -- mirrors IsSqlClauseStopword's own local-const pattern above.
+function IsEnglishStopwordTable(const AWord: string): Boolean;
+const
+  STOP: array[0..24] of string = (
+    'THE', 'A', 'AN', 'AND', 'OR', 'ALL', 'ANY', 'SOME', 'EACH', 'EVERY',
+    'YOUR', 'MY', 'OUR', 'THIS', 'THAT', 'THESE', 'THOSE', 'IT', 'IS',
+    'ARE', 'TO', 'OF', 'IN', 'ON', 'FOR');
+begin
+  Result:= False;
+  for var W in STOP do
+    if AWord = W then Exit(True);
+end;
+
+// FIX (Phase 2 final review): the single choke point every Add call in
+// ExtractSqlTables (below) routes through, on BOTH the reads and writes
+// side, for EVERY statement type -- drops ATbl instead of adding it to
+// AList when IsEnglishStopwordTable (above) says it is a common English
+// word, never a real table. Centralizing the check here (rather than
+// repeating an 'if not IsEnglishStopwordTable(...) then' six times inline)
+// means the drop rule cannot accidentally be applied to some call sites and
+// missed on others.
+procedure AddSqlTable(AList: TStringList; const ATbl: string);
+begin
+  if not IsEnglishStopwordTable(ATbl) then AList.Add(ATbl);
 end;
 
 // ADP2 T7: extracts table references from ASql (an ALREADY-CONFIRMED-SQL
@@ -1050,7 +1198,10 @@ end;
 // "pick one, be consistent" choice) and normalized upper-case (this
 // extractor works entirely on an upper-cased copy of ASql throughout, so
 // every captured substring is already upper-case with no separate
-// normalization step needed).
+// normalization step needed). FIX (Phase 2 final review): every captured
+// name, reads AND writes, additionally passes through AddSqlTable (above),
+// which silently drops it instead when it is a common English stopword/
+// article (IsEnglishStopwordTable) -- see AddSqlTable's own header comment.
 procedure ExtractSqlTables(const ASql: string; AReads, AWrites: TStringList);
 var
   Upper : string;
@@ -1076,13 +1227,13 @@ begin
       if KwPos > 0 then
       begin
         Pos:= KwPos + Length('INTO');
-        for Tbl in ScanTableRefList(Upper, Pos, False) do AWrites.Add(Tbl);
+        for Tbl in ScanTableRefList(Upper, Pos, False) do AddSqlTable(AWrites, Tbl);
       end;
     end
     else
     begin
       Pos:= 1 + Length('UPDATE');
-      for Tbl in ScanTableRefList(Upper, Pos, False) do AWrites.Add(Tbl);
+      for Tbl in ScanTableRefList(Upper, Pos, False) do AddSqlTable(AWrites, Tbl);
     end;
     Exit;
   end;
@@ -1093,7 +1244,7 @@ begin
     if KwPos > 0 then
     begin
       Pos:= KwPos + Length('INTO');
-      for Tbl in ScanTableRefList(Upper, Pos, False) do AWrites.Add(Tbl);
+      for Tbl in ScanTableRefList(Upper, Pos, False) do AddSqlTable(AWrites, Tbl);
     end;
     Exit;
   end;
@@ -1104,7 +1255,7 @@ begin
     if KwPos > 0 then
     begin
       Pos:= KwPos + Length('FROM');
-      for Tbl in ScanTableRefList(Upper, Pos, False) do AWrites.Add(Tbl);
+      for Tbl in ScanTableRefList(Upper, Pos, False) do AddSqlTable(AWrites, Tbl);
     end;
     Exit;
   end;
@@ -1123,7 +1274,7 @@ begin
       // still advances Pos (above) so the outer search resumes past it, but
       // never contributes a table.
       if ParenDepthAt(Upper, KwPos) = 0 then
-        for Tbl in Refs do AReads.Add(Tbl);
+        for Tbl in Refs do AddSqlTable(AReads, Tbl);
       KwPos:= Pos; // resume the keyword search right after this FROM's own list
     until False;
 
@@ -1134,7 +1285,7 @@ begin
       Pos:= KwPos + Length('JOIN');
       Refs:= ScanTableRefList(Upper, Pos, False);
       if ParenDepthAt(Upper, KwPos) = 0 then // FIX: same top-level guard as FROM, above
-        for Tbl in Refs do AReads.Add(Tbl);
+        for Tbl in Refs do AddSqlTable(AReads, Tbl);
       KwPos:= Pos;
     until False;
   end;
@@ -1378,6 +1529,25 @@ end;
 //      this list and happens to start with T/I would still be (wrongly)
 //      accepted here, an accepted residual imprecision of a "cheap fallback"
 //      that only even runs when the store has NOTHING to say about the type.
+//      FIX (Phase 2 final review, empirically reproduced against the built
+//      exe): the exclusion list originally named only PRIMITIVE value types
+//      (Integer/string/TDateTime/...), omitting common RTL VALUE-RECORD
+//      names (System.Types/System.UITypes: TRect, TPoint, TSize, TRectF,
+//      TPointF, TSizeF, TSmallPoint; System.Rtti: TValue; TColor/
+//      TGraphicsColor: device/device-independent color values) -- every one
+//      copy-by-value, never a class/interface, yet all start with 'T'. When
+//      the unit declaring one of these is NOT itself present in the index
+//      (System.Types is RTL, commonly not re-indexed as part of an
+//      application corpus), tier 1 finds nothing and falls through to tier
+//      2, which used to accept the bare 'T'-prefix and wrongly render e.g.
+//      'function TWidget.GetBounds: TRect; begin Result := FBounds; end;'
+//      as 'Owns returned: borrowed' -- nonsense for a value type no caller
+//      could legitimately Free. Now added to the SAME exclusion list,
+//      checked the SAME way (MatchText, before the T/I-prefix fallback) --
+//      safe-direction only: this can only ever SUPPRESS a fact (Exit(False)
+//      drops 'Owns returned:' entirely, the SAME omission tier 1's
+//      skRecord/skEnum ground-truth negative above already produces when
+//      the type IS indexed), never fabricate one.
 function IsReferenceTypeName(const AStore: ISymbolStore; const ATypeName: string): Boolean;
 var
   Bare : string         ;
@@ -1412,7 +1582,11 @@ begin
     'Char', 'AnsiChar', 'WideChar',
     'Double', 'Single', 'Extended', 'Currency', 'Comp', 'Real', 'Real48',
     'TDateTime', 'TDate', 'TTime', 'TGUID', 'Variant', 'OleVariant',
-    'Pointer', 'TBytes']) then Exit(False);
+    'Pointer', 'TBytes',
+    // FIX (Phase 2 final review): common RTL VALUE-RECORD names -- see the
+    // header comment above for the full rationale.
+    'TRect', 'TPoint', 'TSize', 'TRectF', 'TPointF', 'TSizeF', 'TSmallPoint',
+    'TValue', 'TColor', 'TGraphicsColor']) then Exit(False);
 
   Result:= (Length(Bare) >= 2) and CharInSet(Bare[1], ['T', 'I']);
 end;

@@ -32,6 +32,26 @@
                            CONTINUING'). Proven WRONG against the real exe
                            before this fix ('SQL: reads THE', a fabricated
                            table); correct is NO 'SQL:' line at all.
+    * UpdateProseNotSql -- FINAL REVIEW FIX WAVE adversarial case: an
+                           ordinary English status message that merely starts
+                           with 'Update' ('Update complete for your
+                           profile'), no SET/INTO anywhere. Proven WRONG
+                           against the real exe before this fix ('SQL: writes
+                           COMPLETE'); correct is NO 'SQL:' line at all
+                           (UpdateIsSqlShaped's companion-keyword gate).
+    * SelectProseNotSql -- FINAL REVIEW FIX WAVE adversarial case: an
+                           ordinary English UI prompt ('Select a file from
+                           the list') that DOES have a genuine top-level
+                           FROM, so the companion-keyword gate alone lets it
+                           through. Proven WRONG against the real exe before
+                           this fix ('SQL: reads THE'); correct is NO 'SQL:'
+                           line at all (IsEnglishStopwordTable drops the
+                           English-article "table").
+    * DeleteProseNotSql -- FINAL REVIEW FIX WAVE adversarial case: an
+                           ordinary English confirmation prompt that merely
+                           starts with 'Delete' ('Delete the old record'), no
+                           FROM anywhere. Correct is NO 'SQL:' line at all
+                           (DeleteFromIsSqlShaped's companion-keyword gate).
 
   Drives `index` -> `document --unit --apply` (Stubs=False default: a decl
   with NO prior doc-comment and NO facts is skipped entirely, so a method
@@ -187,6 +207,39 @@ try {
   $proseBlock = Get-DocBlockAbove $lines '^\s*procedure EnglishSentenceNotSql;\s*$'
   Check 'EnglishSentenceNotSql has NO managed block at all (prose rejected before extraction; no other fact fires)' (($null -eq $proseBlock) -or ($proseBlock -eq ''))
   Check 'EnglishSentenceNotSql has NO SQL: line (must never fabricate reads THE)' ($null -eq (Get-SqlLine $proseBlock))
+
+  # --- UpdateProseNotSql: FINAL REVIEW FIX WAVE adversarial case ------------
+  # 'Update complete for your profile' -- an ordinary English status message,
+  # no SET/INTO anywhere. Proven WRONG against the real built exe before this
+  # fix wave ('SQL: writes COMPLETE', COMPLETE scanned as if it were the
+  # UPDATE target). Msg is a local var, so once UpdateIsSqlShaped's
+  # companion-keyword gate rejects the literal, nothing else in this body
+  # mines any fact either -- same "no managed block at all" shape as NoSql.
+  $updProseBlock = Get-DocBlockAbove $lines '^\s*procedure UpdateProseNotSql;\s*$'
+  Check 'UpdateProseNotSql has NO managed block at all (no SET/INTO -- companion-keyword gate rejects; no other fact fires)' (($null -eq $updProseBlock) -or ($updProseBlock -eq ''))
+  Check 'UpdateProseNotSql has NO SQL: line (must never fabricate writes COMPLETE)' ($null -eq (Get-SqlLine $updProseBlock))
+
+  # --- SelectProseNotSql: FINAL REVIEW FIX WAVE adversarial case ------------
+  # 'Select a file from the list' -- an ordinary English UI prompt that DOES
+  # have a genuine top-level FROM (unlike EnglishSentenceNotSql), so the
+  # companion-keyword gate alone is not enough here: 'THE LIST' scans as
+  # table 'THE' + bare alias 'LIST', a clean clause boundary. Proven WRONG
+  # against the real built exe before this fix wave ('SQL: reads THE', an
+  # English article fabricated as a table). IsEnglishStopwordTable drops
+  # 'THE' from the extracted reads, leaving both sides empty -- same "no
+  # managed block at all" shape as NoSql/EnglishSentenceNotSql.
+  $selProseBlock = Get-DocBlockAbove $lines '^\s*procedure SelectProseNotSql;\s*$'
+  Check 'SelectProseNotSql has NO managed block at all (FROM present but table token is the stopword THE; no other fact fires)' (($null -eq $selProseBlock) -or ($selProseBlock -eq ''))
+  Check 'SelectProseNotSql has NO SQL: line (must never fabricate reads THE)' ($null -eq (Get-SqlLine $selProseBlock))
+
+  # --- DeleteProseNotSql: FINAL REVIEW FIX WAVE adversarial case ------------
+  # 'Delete the old record' -- an ordinary English confirmation prompt, no
+  # FROM anywhere. DeleteFromIsSqlShaped's companion-keyword gate rejects the
+  # literal outright; Msg is a local var, so nothing else in this body mines
+  # any fact either -- same "no managed block at all" shape as NoSql.
+  $delProseBlock = Get-DocBlockAbove $lines '^\s*procedure DeleteProseNotSql;\s*$'
+  Check 'DeleteProseNotSql has NO managed block at all (no FROM -- companion-keyword gate rejects; no other fact fires)' (($null -eq $delProseBlock) -or ($delProseBlock -eq ''))
+  Check 'DeleteProseNotSql has NO SQL: line (must never fabricate a writes side)' ($null -eq (Get-SqlLine $delProseBlock))
 
   # --- Idempotency: reindex (facts are index-time) + re-apply -> no change ---
   $before = [IO.File]::ReadAllBytes($target)

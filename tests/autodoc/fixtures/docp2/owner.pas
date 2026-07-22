@@ -79,6 +79,29 @@ unit owner;
 //                             proving the OMISSION, not just absence of any
 //                             block, exactly like Count/FCount above).
 //
+// FINAL REVIEW FIX WAVE -- one adversarial addition locking in the
+// reviewer-identified RTL-value-record fix (see DRagLint.Doc.SymbolFacts'
+// IsReferenceTypeName header comment, "FIX (Phase 2 final review)"
+// paragraph, for the full rationale):
+//   * TWidget.GetBounds    -- Result := FBounds, FBounds an own-class field
+//                             of type TRect. UNLIKE GetRec's TMyRec (a
+//                             store-resolved skRecord, tier 1), TRect is
+//                             deliberately NOT declared anywhere in this
+//                             fixture -- no System.Types unit is indexed by
+//                             this isolated test -- so it is UNRESOLVED,
+//                             exercising IsReferenceTypeName's TIER-2 T/I-
+//                             prefix FALLBACK path instead. The site
+//                             classifies 'borrowed' (FBounds is a real own-
+//                             class field), but WITHOUT TRect in the
+//                             fallback's exclusion list, the bare 'T'-prefix
+//                             heuristic wrongly accepted it as a reference
+//                             type ('Owns returned: borrowed' for a copy-by-
+//                             value record). Expected: NO 'Owns returned:'
+//                             line (still gets a managed block via the SAME
+//                             statement's own unrelated Reads: FBounds fact
+//                             -- proving the OMISSION, not just absence of
+//                             any block, exactly like GetRec above).
+//
 // ORDERING/BLOCK-INVARIANT NOTE: every method above ends up with SOME
 // managed block once Task 8 ships (either the Owns-returned fact itself, or
 // the pre-existing Reads/Writes-fields fact for Amb/Count/DisposedResult) --
@@ -113,6 +136,10 @@ type
   end;
 
   TWidget = class
+  private
+    FBounds: TRect;
+  public
+    function GetBounds: TRect;
   end;
 
   TWidgetPool = class
@@ -184,6 +211,11 @@ begin
   Result := TFoo.Create;
   Result.Free;
   FCount := FCount + 1;
+end;
+
+function TWidget.GetBounds: TRect;
+begin
+  Result := FBounds;
 end;
 
 function TWidgetPool.Create: TWidget;

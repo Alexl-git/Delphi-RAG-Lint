@@ -53,6 +53,24 @@
                         the unrelated Reads: FRec fact, from the SAME
                         statement).
 
+  FINAL REVIEW FIX WAVE -- one adversarial regression, locking in the
+  reviewer-identified RTL-value-record fix:
+    * GetBounds (TWidget.GetBounds) -- Result := FBounds, FBounds an own-class
+                        field of type TRect. TRect is deliberately NOT
+                        declared anywhere in this fixture (no System.Types
+                        unit is indexed by this isolated test), so unlike
+                        GetRec's TMyRec (a store-resolved skRecord, tier 1),
+                        this exercises IsReferenceTypeName's TIER-2 T/I-prefix
+                        FALLBACK path. The site classifies 'borrowed' (FBounds
+                        is a real field), but WITHOUT TRect in the fallback's
+                        exclusion list, the bare 'T'-prefix heuristic wrongly
+                        accepted it as a reference type. Proven WRONG against
+                        the real built exe before this fix wave ('Owns
+                        returned: borrowed' for a copy-by-value record).
+                        Expected: NO 'Owns returned:' line (still has a
+                        managed block via the unrelated Reads: FBounds fact,
+                        from the SAME statement).
+
   Drives `index` -> `document --unit --apply` (Stubs=False default: a decl
   with NO prior doc-comment and NO facts is skipped entirely -- not
   exercised here, since every method in this fixture carries SOME fact, by
@@ -183,6 +201,19 @@ try {
   Check 'GetRec has a managed block (AUTO_BEGIN, via the unrelated Reads: FRec fact)' (($null -ne $getRecBlock) -and ($getRecBlock -match '<!-- drag-lint:auto BEGIN -->'))
   Check 'GetRec has NO Owns returned: line (TMyRec is a record, not a reference type -- FIX 2)' ($null -eq (Get-OwnsLine $getRecBlock))
 
+  # --- FINAL REVIEW FIX WAVE regression: GetBounds returns TRect, a common
+  # RTL value-record deliberately NOT declared anywhere in this fixture (so
+  # it is UNRESOLVED -- exercises IsReferenceTypeName's tier-2 T/I-prefix
+  # fallback, unlike GetRec's tier-1 store-resolved skRecord path). The site
+  # classifies 'borrowed' (FBounds is a real own-class field), but WITHOUT
+  # TRect in the fallback's exclusion list the bare 'T'-prefix heuristic
+  # would wrongly accept it as a reference type. Still gets a managed block
+  # via the unrelated Reads: FBounds fact (the SAME statement), so this
+  # proves the OMISSION specifically, not merely "no block at all".
+  $getBoundsBlock = Get-DocBlockAbove $lines '^\s*function GetBounds: TRect;\s*$'
+  Check 'GetBounds has a managed block (AUTO_BEGIN, via the unrelated Reads: FBounds fact)' (($null -ne $getBoundsBlock) -and ($getBoundsBlock -match '<!-- drag-lint:auto BEGIN -->'))
+  Check 'GetBounds has NO Owns returned: line (TRect is an unresolved RTL value-record, not a reference type -- FINAL REVIEW FIX)' ($null -eq (Get-OwnsLine $getBoundsBlock))
+
   # --- Idempotency: reindex (facts are index-time) + re-apply --------------
   # Scoped to each method's OWN 'Owns returned:' segment (not a whole-file
   # byte comparison) -- see this file's own header comment for why.
@@ -196,6 +227,7 @@ try {
     DisposedResult = Get-OwnsLine $disposedBlock
     Borrow         = Get-OwnsLine $borrowBlock
     GetRec         = Get-OwnsLine $getRecBlock
+    GetBounds      = Get-OwnsLine $getBoundsBlock
   }
   & $exePath index $scratch --db $db 2>$null | Out-Null
   & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
@@ -210,6 +242,7 @@ try {
     DisposedResult = Get-OwnsLine (Get-DocBlockAbove $lines2 '^\s*function DisposedResult: TFoo;\s*$')
     Borrow         = Get-OwnsLine (Get-DocBlockAbove $lines2 '^\s*function Borrow\(APool: TWidgetPool\): TWidget;\s*$')
     GetRec         = Get-OwnsLine (Get-DocBlockAbove $lines2 '^\s*function GetRec: TMyRec;\s*$')
+    GetBounds      = Get-OwnsLine (Get-DocBlockAbove $lines2 '^\s*function GetBounds: TRect;\s*$')
   }
   foreach ($k in $before.Keys) {
     Check "idempotent: $k Owns-returned unchanged after reindex + 2nd apply" ($before[$k] -eq $after[$k])
