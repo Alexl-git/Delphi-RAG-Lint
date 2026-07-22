@@ -3865,7 +3865,7 @@ begin
   if Fmt = '' then Fmt:= 'plain';
 
   if Fmt      = 'json' then Write(DRagLint.Hover.Renderer.RenderHoverJson(Model))
-  else if Fmt = 'md' then Write(RenderHoverMarkdown(Syms[0], Doc))
+  else if Fmt = 'md' then Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs))
   else Write(RenderHoverPlain(Syms[0], Doc));
   Result:= 0;
 end; // function

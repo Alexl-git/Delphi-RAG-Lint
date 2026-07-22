@@ -17,7 +17,7 @@ uses
 
 function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 
-function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc): string;
+function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil): string;
 
 function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string; overload;
 
@@ -310,7 +310,7 @@ begin
   end; // try
 end; // function
 
-function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc): string;
+function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil): string;
 var
   SB: TStringBuilder;
   Re: TRegEx        ;
@@ -348,6 +348,20 @@ begin
     begin
       SB.AppendLine('');
       SB.AppendLine('**Returns:** ' + ADoc.ReturnsText);
+    end;
+    // Live-mined Result:=/Exit() return cases, shown even when the doc has a
+    // hand-written <returns> (unifies the popup with the managed doc's
+    // 'Returns:' fact line). Empty for procedures / when nothing was mined.
+    if Length(AReturnRhs) > 0 then
+    begin
+      var RObs: string:= '';
+      for var ri:= 0 to High(AReturnRhs) do
+      begin
+        if ri > 0 then RObs:= RObs + '; ';
+        RObs:= RObs + AReturnRhs[ri];
+      end;
+      SB.AppendLine('');
+      SB.AppendLine('**Returns (observed):** ' + RObs);
     end;
     if ADoc.Remarks <> '' then
     begin

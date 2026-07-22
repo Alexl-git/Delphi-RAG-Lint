@@ -76,5 +76,12 @@ $looperJson = (& $Exe hover --qname RetFixture.Looper --db $db --format json 2>&
 Check 'ExitLoop(AVal) call not mined as a return' ($looperJson -notmatch '"returns":\["AVal"\]') $looperJson
 Check 'Looper: Result := ERROR_OK is mined (not AVal)' ($looperJson -match '"returns":\["ERROR_OK"\]') $looperJson
 
+# markdown format (the IDE popup) must ALSO surface the mined cases as a
+# "Returns (observed):" line -- not just the JSON.
+$boolMd = (& $Exe hover --qname RetFixture.IsPos --db $db --format md 2>&1) -join "`n"
+Check 'md: Returns (observed) line shows the mined case' ($boolMd -match '\*\*Returns \(observed\):\*\*.*S2\.Length > 0') $boolMd
+$procMd = (& $Exe hover --qname RetFixture.DoStuff --db $db --format md 2>&1) -join "`n"
+Check 'md: procedure has NO Returns (observed) line' ($procMd -notmatch 'Returns \(observed\)') $procMd
+
 Write-Host ''
 if($script:Failed){Write-Host 'FAIL' -ForegroundColor Red; exit 1}else{Write-Host 'PASS' -ForegroundColor Green; exit 0}

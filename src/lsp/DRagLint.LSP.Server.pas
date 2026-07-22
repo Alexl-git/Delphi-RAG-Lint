@@ -17,6 +17,7 @@ uses
   , DRagLint.Storage .SQLite
   , DRagLint.Parser  .Delphi13
   , DRagLint.Hover   .Renderer
+  , DRagLint.Hover   .Returns
   , DRagLint.Resolver.TypeAt
   , DRagLint.Lint    .Linter
   , DRagLint.LSP     .Completion
@@ -927,11 +928,54 @@ begin
       SendMessage(Reply);
       Exit;
     end;
+    // Overload disambiguation: FindSymbolsByExactName returns ALL same-named
+    // symbols; pick the one whose declaration line or implementation span (in
+    // THIS file) contains the cursor, so hovering the 2nd overload shows the 2nd
+    // -- not always [0]. A hover on a call site (no decl/impl match) keeps [0].
+    var Chosen: Integer:= 0;
+    if Length(Symbols) > 1 then
+    begin
+      var CurLine1: Integer:= Line + 1;
+      for var si:= 0 to High(Symbols) do
+        if SameText(HitStore.GetFilePath(Symbols[si].FileId), Path)
+          and ((Symbols[si].StartLine = CurLine1)
+               or ((Symbols[si].ImplStartLine > 0) and (CurLine1 >= Symbols[si].ImplStartLine) and (CurLine1 <= Symbols[si].ImplEndLine))) then
+        begin
+          Chosen:= si; Break;
+        end;
+    end;
+    var Sel: TSymbol:= Symbols[Chosen];
+
+    // Live-mine the CHOSEN overload's Result:=/Exit() return cases for the popup,
+    // so the hover shows the actual returned values (unifies the popup with the
+    // managed doc's 'Returns:' fact line). Empty for a procedure / no body.
+    var HovRhs: TArray<string>;
+    SetLength(HovRhs, 0);
+    if (Sel.ImplStartLine > 0) and (Sel.ImplEndLine >= Sel.ImplStartLine) then
+    begin
+      var HovPath: string:= HitStore.GetFilePath(Sel.FileId);
+      if (HovPath <> '') and TFile.Exists(HovPath) then
+      begin
+        var HovAll: TArray<string>:= TFile.ReadAllLines(HovPath, TEncoding.ANSI);
+        var HLo: Integer:= Sel.ImplStartLine - 1;
+        var HHi: Integer:= Sel.ImplEndLine - 1;
+        if HLo < 0 then HLo:= 0;
+        if HHi > High(HovAll) then HHi:= High(HovAll);
+        if HHi >= HLo then
+        begin
+          var HBody: TArray<string>;
+          SetLength(HBody, HHi - HLo + 1);
+          for var hk:= HLo to HHi do HBody[hk - HLo]:= HovAll[hk];
+          HovRhs:= MineReturnExpressions(HBody);
+        end;
+      end;
+    end;
+
     // v0.16: try to enrich the hover with doc-comment content.
     // GetSymbolDoc returns a zeroed TParsedDoc with HasContent=False when
     // no row exists; in that case fall back to the legacy signature listing.
-    Doc:= HitStore.GetSymbolDoc(Symbols[0].Id);
-    if Doc.HasContent then MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Symbols[0], Doc)
+    Doc:= HitStore.GetSymbolDoc(Sel.Id);
+    if Doc.HasContent then MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs)
     else
     begin
       Sb:= TStringBuilder.Create;
