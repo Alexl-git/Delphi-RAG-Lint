@@ -5,6 +5,46 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+- **Auto-Document Phase 2: six analysis facts in `document` and `hover`.**
+  Beyond Phase 1's cheap index lookups, the managed `<!-- drag-lint:auto -->`
+  block -- and the `hover --format md` popup, rendered from the same shared
+  formatter so the two surfaces can never disagree -- now also carries up
+  to six *analysis* facts per routine: a bounded dataflow/CFG/escape-
+  analysis pass over the body, computed once at index time and persisted in
+  a new `symbol_facts` table (schema **v18**). `Complexity: N (cyclomatic),
+  M lines` (cyclomatic complexity + body LOC, shown only when `N >=` the
+  new `docs.complexity_min` config key, default `10`; applied at RENDER
+  time, so changing it needs no reindex). `Reads: a, b   Writes: c`
+  (own-class instance fields read vs. written; a field passed to an
+  ordinary call's `var`/`out` parameter is conservatively counted as a
+  read, not a write -- absence over a wrong write). `Owns returned: new
+  (caller owns)` / `borrowed` / `self` (conservative escape analysis on
+  `Result`, emitted only when every return site in the routine unanimously
+  agrees -- absence over a wrong verdict, since a wrong `new` invites a
+  double-free). `Handles: Button1.OnClick` (the paired `.dfm`'s event
+  wiring for a published method). `SQL: reads A, B; writes C` (table names
+  mined from SQL-shaped string literals in the body; best-effort --
+  dynamically-concatenated SQL, subqueries, and CTE bodies are skipped, not
+  guessed at). `Covered by: A, B (+N more)` (test callers -- a `*Test`/
+  `Test*`-named unit or a `TTestCase`-descended class -- reachable within 3
+  reverse call-graph hops). Five of the six facts are index-time snapshots
+  and go stale, like the rest of the index, after a `document --apply`
+  (which shifts line numbers) or any source edit -- reindex to refresh
+  them. `Covered by` is the one exception: computed LAZILY at
+  `document`/`hover` render time straight from the live call graph, so it
+  is always current and adds zero index-time cost. See `docs/AI-USAGE.md`
+  (Docs section) for the full per-fact reference, limitations, and the
+  `docs.complexity_min` config note.
+- **Benchmark: the always-on facts add ~1.5x to index time.** Indexing this
+  repo's own `src/` tree (154 files, 14,324 symbols, 103,752 refs -- a
+  bounded, routine-dense corpus, not the giant Library corpora) with the
+  Phase 2 facts analyzer always on took **43.2s** (avg of 2 runs, fresh DB
+  each time), vs. **29.4s** for the pre-Phase-2 build (`main` at
+  `2556cc3`, same corpus, same machine) -- a **1.47x** ratio. Well under
+  the 2x threshold the design flagged as worth an opt-in gate, so no
+  follow-up was filed; the always-on decision (every `index` run computes
+  all six facts, no flag) stands as designed.
+
 ## v1.2.1-alpha -- 2026-07-22
 
 - **Fix a source-corrupting bug in `document --apply`.** When a hand-written

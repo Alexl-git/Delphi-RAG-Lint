@@ -191,17 +191,79 @@ in 2b.
 > "Called from:" list, appending `(+N more)` beyond the cap; absent defaults
 > to `5`. `docs.accessor_trivial_max_lines` (default `2`, code-level -- stays
 > ON even with no `docs` section at all) is the trivial-accessor threshold
-> above. Only **Max return cases** has a GUI field (Linter options page, see
-> `docs/INSTALL.md`); `max_callers` and `accessor_trivial_max_lines` are
-> manifest-only for now.
+> above. `docs.complexity_min` (default `10`) is the cyclomatic-complexity
+> threshold at/above which the Phase 2 `Complexity:` fact line renders (see
+> "Phase 2 analysis facts" below) -- applied at RENDER time, not when the
+> fact was computed, so changing it takes effect on the very next
+> `document`/`hover` call with **no reindex needed**. All four numeric keys
+> must be `>= 0`. Only **Max return cases** has a GUI field (Linter options
+> page, see `docs/INSTALL.md`); `max_callers`, `accessor_trivial_max_lines`,
+> and `complexity_min` are manifest-only for now.
 >
 > **New managed-block fact lines.** The generated `<!-- drag-lint:auto -->`
 > block can also carry (each omitted when empty): `Overrides: TAncestor.M`,
 > `Overridden by: A, B (+N more)`, `Implements: IFoo.Bar` (a name-based
 > heuristic match against interface ancestors, not a compiler-verified
 > check), `Overload k of n`, and bare `virtual`/`abstract` markers. A
-> per-symbol Platform/`{$IFDEF}` fact was designed but **deferred to Phase
-> 2** -- the index has no per-symbol conditional-compilation guard yet.
+> per-symbol Platform/`{$IFDEF}` fact was designed but remains **not yet
+> shipped** -- distinct from the six Phase 2 *analysis* facts below (which
+> did ship this release); the index still has no per-symbol
+> conditional-compilation guard.
+>
+> **Phase 2 analysis facts (index-time, always-on).** Six deeper *analysis*
+> facts -- a bounded dataflow/CFG/escape-analysis pass over the routine
+> body, not a simple index lookup -- round out the managed block, persisted
+> per routine in a new `symbol_facts` table (schema **v18**). They are
+> computed for **every** `index` run, including a full library reindex --
+> there is no opt-in flag (see the benchmark note in the CHANGELOG). Each
+> line below is independently omit-when-empty; `document` and `hover
+> --format md` render all six from the same `symbol_facts` row via one
+> shared formatter, so the two surfaces can never disagree:
+> - `Complexity: N (cyclomatic), M lines` -- cyclomatic complexity + body
+>   LOC, shown only when `N >= docs.complexity_min` (default `10`; see
+>   above).
+> - `Reads: a, b   Writes: c` -- own-class instance fields the routine
+>   reads vs. writes (an `:=` LHS or an `Inc`/`Dec` first argument = write;
+>   everything else = read). **Limitations:** a field passed to an ordinary
+>   call's `var`/`out` parameter is not resolved as a write -- it is
+>   counted as a read (absence over a wrong write); only the owning
+>   class's OWN fields are considered, never inherited ones. Each side
+>   capped at 8, with `(+N more)`.
+> - `Owns returned: new (caller owns)` / `borrowed` / `self` -- conservative
+>   escape analysis on `Result`, emitted ONLY when every return site in the
+>   routine unanimously agrees: `T.Create` on a bare/qualified TYPE
+>   reference (not a var/param/field/`Self` already held) = `new`; a
+>   parameter (any mode) or an own-class field = `borrowed` (a same-named
+>   LOCAL variable is never `borrowed` -- Pascal scoping shadows the
+>   field); bare `Self`/`Self as T` = `self`. `borrowed`/`self` additionally
+>   require the function's own return type to actually be a reference
+>   (class/interface) type, so a plain `Integer`/record-returning getter
+>   never renders one. Any disagreement between sites, or any
+>   `Result.Free`/`DisposeOf`/`FreeAndNil(Result)` in the body, omits the
+>   line entirely -- absence over a wrong verdict (a wrong `new` invites a
+>   double-free).
+> - `Handles: Button1.OnClick` -- the `.dfm` event a published method is
+>   wired to, from the unit's own paired `.dfm` sibling.
+> - `SQL: reads A, B; writes C` -- table names mined from SQL-shaped string
+>   literals in the body (`FROM`/`JOIN` = reads; `INSERT INTO`/`UPDATE`/
+>   `DELETE FROM` = writes). Best-effort and deliberately not a SQL
+>   grammar: dynamically-concatenated SQL (any non-literal operand in the
+>   `+` run), subqueries, derived tables, and CTE bodies contribute nothing
+>   -- absence over a wrong table. Each side capped at 8, with
+>   `(+N more)`.
+> - `Covered by: A, B (+N more)` -- test methods that transitively call the
+>   routine, direct or up to 3 reverse-call hops, capped at 5. A caller
+>   counts as a test when its file is named `*Test.pas`/`Test*.pas` OR its
+>   enclosing class transitively descends from `TTestCase`.
+>
+> **Index-time, except one.** The first five facts above are computed **at
+> index time** and persisted -- like the rest of the index, a `document
+> --apply` (which shifts line numbers) or any source edit leaves them
+> stale until the next `index`/reindex (the recurring stale-index trap --
+> see Warnings below). **Covered by is the one exception:** it is computed
+> LAZILY at `document`/`hover` render time straight from the live call
+> graph, so it never needs a reindex to reflect a newly-added test, and
+> adds zero index-time cost.
 >
 > **IDE menu.** drag-lint menu -> **Generate && Export** -> **"Auto-Document
 > Whole Project..."** runs `document --project <active.dproj> --apply` on
