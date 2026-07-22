@@ -23,8 +23,9 @@ type
     /// <summary>Renders the fenced facts-block body lines (each prefixed
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
     /// Raises / Deprecated / Overrides / Overridden by / Implements / Overload
-    /// k of n / abstract / virtual / Complexity / Since / SeeAlso. Empty
-    /// sections omitted; '' when there are no facts. Displayed counts below
+    /// k of n / abstract / virtual / Complexity / Reads/Writes fields / Since
+    /// / SeeAlso. Empty sections omitted; '' when there are no facts. Displayed
+    /// counts below
     /// the true *Total get a ' (+N more)' suffix. Deprecated is ground-truth
     /// from the Pascal 'deprecated' directive (not the unrelated
     /// &lt;deprecated/&gt; doc-comment tag) -- emitted only when the directive
@@ -33,7 +34,12 @@ type
     /// gathered unconditionally for method-like symbols -- see TDocFacts'
     /// field comments for how each is derived and
     /// DRagLint.Doc.Facts.DetectMethodDirectives for the virtual/abstract
-    /// source probe. SeeAlso emits one &lt;seealso cref&gt; line per entry; it is
+    /// source probe. Reads/Writes fields (v(ADP2 T4)) is ONE line, 'Reads: a,
+    /// b   Writes: c' (three spaces between the two sides) -- either side is
+    /// omitted when empty, and the WHOLE line is omitted when both are empty;
+    /// AFacts.ReadsFields/WritesFields are already display-ready (capped,
+    /// formatted) so this is a plain passthrough, like Complexity's raw
+    /// values. SeeAlso emits one &lt;seealso cref&gt; line per entry; it is
     /// populated only when the facts were built with the --seealso opt-in, so
     /// by default no &lt;seealso&gt; line appears.</summary>
     /// <param name="AComplexityMin">v(ADP2 T3): the docs.complexity_min
@@ -279,6 +285,29 @@ begin
     // never gets a symbol_facts row).
     if (AFacts.Cyclomatic > 0) and (AFacts.Cyclomatic >= AComplexityMin) then
       Sb.AppendLine(APrefix + Format('Complexity: %d (cyclomatic), %d lines', [AFacts.Cyclomatic, AFacts.BodyLoc]));
+    // v(ADP2 T4): Reads/Writes fields fact -- ONE line, each side omitted when
+    // empty, the WHOLE line omitted when both are empty (never an empty
+    // 'Reads: ' / 'Writes: ' label with nothing after it). AFacts.ReadsFields/
+    // WritesFields are ALREADY display-ready (capped at 8, ', '-joined, a
+    // ' (+N more)' suffix appended when truncated -- see DRagLint.Doc.
+    // SymbolFacts' JoinCappedDisplay for why the cap can't be deferred to
+    // render time here, unlike Calls/CalledFrom/etc.), so -- like Cyclomatic/
+    // BodyLoc -- this is a passthrough. EscXml is still applied for the same
+    // defense-in-depth reason every other emitted value in this block gets
+    // it, even though a Pascal field name never actually needs escaping.
+    // Three literal spaces separate the two sides, per the design spec's
+    // rendering example.
+    if (AFacts.ReadsFields <> '') or (AFacts.WritesFields <> '') then
+    begin
+      var RWLine: string:= '';
+      if AFacts.ReadsFields <> '' then RWLine:= 'Reads: ' + EscXml(AFacts.ReadsFields);
+      if AFacts.WritesFields <> '' then
+      begin
+        if RWLine <> '' then RWLine:= RWLine + '   ';
+        RWLine:= RWLine + 'Writes: ' + EscXml(AFacts.WritesFields);
+      end;
+      Sb.AppendLine(APrefix + RWLine);
+    end;
     // v(ADF T5): OPT-IN git <since> line. AFacts.Since is '' unless the caller
     // built the facts with --since (TDocFactsBuilder.Build's AIncludeSince) AND
     // git confidently attributed the declaration line, so this renders NOTHING by

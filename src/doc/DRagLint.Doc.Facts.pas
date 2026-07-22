@@ -128,6 +128,21 @@ type
     // >= a positive complexity_min) -- absence over a wrong number.
     Cyclomatic       : Integer          ;
     BodyLoc          : Integer          ;
+    // v(ADP2 T4): which of the owning class's OWN (non-inherited) instance
+    // fields this routine reads vs. writes, read back verbatim from the
+    // index-time symbol_facts row (ISymbolStore.GetSymbolFacts -- see
+    // DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze /
+    // AnalyzeReadsWrites for the classification rules). RAW PASSTHROUGH, like
+    // Cyclomatic/BodyLoc above: the value is ALREADY display-ready (', '-
+    // joined, capped at 8 entries, a ' (+N more)' suffix appended when
+    // truncated -- see JoinCappedDisplay) because these two columns carry no
+    // companion *Total field to defer the cap decision to render time. '' for
+    // a free routine (no owning class), an owning class/record with no field
+    // children, or an older index with no symbol_facts row -- RenderFactsBlock
+    // omits the corresponding side (or the whole line) exactly as it does for
+    // every other absent fact.
+    ReadsFields      : string           ;
+    WritesFields     : string           ;
   end;
 
   TDocFactsBuilder = class
@@ -1022,6 +1037,10 @@ begin
   var SFacts: TSymbolFacts:= AStore.GetSymbolFacts(ASym.Id);
   Result.Cyclomatic:= SFacts.Cyclomatic;
   Result.BodyLoc   := SFacts.BodyLoc;
+  // v(ADP2 T4): Reads/Writes fields -- same raw-passthrough contract as
+  // Cyclomatic/BodyLoc above (already capped/formatted at analysis time).
+  Result.ReadsFields := SFacts.ReadsFields;
+  Result.WritesFields:= SFacts.WritesFields;
 end;
 
 end.
