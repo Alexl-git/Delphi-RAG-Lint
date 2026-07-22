@@ -260,6 +260,26 @@ var
   Sb   : TStringBuilder;
   P    : string        ;
   Facts: string        ;
+  // Emits APrefix + AOpen + AValue + AClose as one or more ///-prefixed lines.
+  // A hand-written summary/param/returns description may span several source
+  // lines -- the parser preserves the interior #10 line breaks -- so each
+  // continuation line MUST be re-prefixed (like the remarks-prose path below).
+  // Emitting a multi-line value on a single AppendLine would leave the interior
+  // lines WITHOUT a /// prefix: that both corrupts the source and breaks the
+  // ///-comment block, so a later run mis-parses the fragment and injects/
+  // duplicates managed blocks. Single-line values are emitted unchanged.
+  function EmitTagged(const AOpen, AValue, AClose: string): string;
+  var Norm: string; Parts: TArray<string>; i: Integer;
+  begin
+    Norm:= StringReplace(AValue, #13#10, #10, [rfReplaceAll]);
+    Norm:= StringReplace(Norm, #13, #10, [rfReplaceAll]);
+    Parts:= Norm.Split([#10]);
+    Result:= APrefix + AOpen;
+    for i:= 0 to High(Parts) do
+      if i = 0 then Result:= Result + Parts[i]
+      else Result:= Result + sLineBreak + APrefix + Trim(Parts[i]);
+    Result:= Result + AClose;
+  end;
 begin
   Sb:= TStringBuilder.Create;
   try
@@ -291,7 +311,7 @@ begin
     // fresh <remarks> managed block.
     var SummaryText: string:= AExisting.Summary;
     if IsManagedDesc(SummaryText) then SummaryText:= '';
-    Sb.AppendLine(APrefix + '<summary>' + SummaryText + '</summary>');
+    Sb.AppendLine(EmitTagged('<summary>', SummaryText, '</summary>'));
 
     // MANAGED-vs-HAND-TYPED param detection is CONTENT-BASED, not sentinel-based.
     // We APPEND the AUTO_PARAM sentinel after a managed <param> line for human /
@@ -315,7 +335,7 @@ begin
           if IsManagedDesc(EP.Desc) then
             Sb.AppendLine(APrefix + '<param name="' + P + '"></param>' + AUTO_PARAM)
           else
-            Sb.AppendLine(APrefix + '<param name="' + P + '">' + EP.Desc + '</param>');
+            Sb.AppendLine(EmitTagged('<param name="' + P + '">', EP.Desc, '</param>'));
           Found:= True; Break;
         end;
       if not Found then
@@ -327,7 +347,7 @@ begin
       var StillThere: Boolean:= False;
       for P in ASigParams do if SameText(EP.Name, P) then begin StillThere:= True; Break; end;
       if (not StillThere) and (not IsManagedDesc(EP.Desc)) then
-        Sb.AppendLine(APrefix + '<param name="' + EP.Name + '">' + EP.Desc + '</param> <!-- drag-lint: param no longer exists -->');
+        Sb.AppendLine(EmitTagged('<param name="' + EP.Name + '">', EP.Desc, '</param> <!-- drag-lint: param no longer exists -->'));
     end;
 
     if AHasReturn then
@@ -338,7 +358,7 @@ begin
       // returns (non-managed) win: do NOT inject Observed into hand text.
       if IsManagedDesc(Ret) then
         Ret:= Trim(ObservedSuffix(AFacts.ReturnCases));
-      Sb.AppendLine(APrefix + '<returns>' + Ret + '</returns>');
+      Sb.AppendLine(EmitTagged('<returns>', Ret, '</returns>'));
     end;
 
     // remarks: keep hand prose (AExisting.Remarks) OUTSIDE the fence, then a fresh
