@@ -1,8 +1,23 @@
 # Design: Auto-Document Phase 2 -- Analysis Facts (index-time facts layer)
 
 - Date: 2026-07-22
-- Status: Draft (design; needs a brainstorm/refinement pass before an implementation plan)
+- Status: **Approved (2026-07-22)** -- ready for an implementation plan.
 - Repo: `C:\Projects\Delphi-RAG-lint` (main)
+
+## Decisions (resolved 2026-07-22 brainstorm)
+
+1. **Scope:** ALL SIX facts in this Phase 2 increment, implemented cheap->hard
+   (complexity, reads/writes, covered-by-tests, DFM wiring, SQL tables, then
+   returned-object ownership LAST). Each fact is independently shippable, so the
+   plan is a plumbing task + one task per fact.
+2. **Index gating:** ALWAYS-ON for every index run, including the library corpora
+   (no opt-in flag). Simplest mental model -- the facts are always present. The
+   analyses MUST therefore be bounded/single-pass and reuse the existing CFG /
+   dataflow / SQL / reverse-call engines; if a full library reindex later proves
+   too slow, an opt-in gate can be added then (NOT this increment).
+3. **Ownership policy:** conservative -- ABSENCE over a wrong verdict. A wrong
+   "caller owns" could imply a real leak/double-free, so emit only
+   high-confidence `new`/`borrowed`/`self`; otherwise omit the line.
 - Depends on: Phase 1 (shipped v1.2.0-alpha) -- the managed `<!-- drag-lint:auto -->`
   block, `TDocFacts` / `TDocFactsBuilder`, `RenderFactsBlock`, and the return-case miner.
 - Supersedes the "Phase 2 (deferred)" stub in
@@ -115,8 +130,10 @@ under the manifest `docs` section, defaults chosen to stay lean.
 
 ## Risks / open questions (resolve in the brainstorm before planning)
 
-- **Index cost** -- materializing these adds work to every `index` run. Measure; gate the most
-  expensive (escape, SQL) behind a `docs.analysis` opt-in if they slow indexing materially.
+- **Index cost** -- materializing these adds work to every `index` run (always-on, per the
+  decision above). Keep each analysis bounded/single-pass and reuse the existing engines; add a
+  benchmark task to the plan measuring a full library reindex before/after. If it regresses
+  materially, an opt-in gate is the fallback (a later increment, not this one).
 - **Ownership analysis precision** -- escape analysis is easy to get wrong; prefer ABSENCE over a
   wrong "caller owns" (a wrong ownership fact could cause a real leak/double-free if trusted).
 - **Staleness** -- `symbol_facts` must be invalidated with the symbol on reindex (same
