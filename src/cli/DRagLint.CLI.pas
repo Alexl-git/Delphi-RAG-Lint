@@ -74,6 +74,7 @@ uses
   , DRagLint.Doc        .Document
   , DRagLint.Doc        .Drift
   , DRagLint.Doc        .Batch
+  , DRagLint.Doc        .SymbolFacts
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
   , DRagLint.Refactor   .ExtractMethod
@@ -13577,6 +13578,61 @@ begin
   else Result:= 0;
 end; // function
 
+// Hidden self-test verb for Auto-Document Phase 2 Task 1 (symbol_facts
+// storage plumbing). Assumes --db already has fixtures\docp2store\p2store.pas
+// indexed (tests/autodoc/run_doc_p2_store.ps1's job) so ComputeTotal has a
+// real symbol_id to round-trip a TSymbolFacts row against -- proves
+// PutSymbolFacts/GetSymbolFacts end to end, including the CSV join/split
+// helpers and the Present=False absent-row case. Not listed in PrintHelp.
+function DoDocFactsSelfTest(const AArgs: TArgs): Integer;
+const
+  TARGET_NAME = 'ComputeTotal';
+var
+  Store : ISymbolStore     ;
+  Syms  : TArray<TSymbol>  ;
+  Facts : TSymbolFacts     ;
+  Got   : TSymbolFacts     ;
+  Absent: TSymbolFacts     ;
+begin
+  if AArgs.DbPath = '' then begin Writeln('ERROR: doc-facts-selftest requires --db'); Exit(2); end;
+  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
+
+  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
+
+  Syms:= Store.FindSymbolsByExactName(TARGET_NAME);
+  if Length(Syms) = 0 then
+  begin
+    Writeln('FAIL: doc-facts-selftest: symbol not found: ', TARGET_NAME,
+      ' (expected fixtures\docp2store\p2store.pas to have been indexed already)');
+    Exit(1);
+  end;
+
+  Facts.SymbolId    := Syms[0].Id;
+  Facts.ReadsFields := SymbolFactsCsvJoin(['FName', 'FAge']);
+  Facts.WritesFields:= SymbolFactsCsvJoin(['FBalance']);
+  Facts.ReturnsOwner:= 'new';
+  Facts.Cyclomatic  := 14;
+  Facts.BodyLoc     := 7;
+  Facts.DfmEvent    := '';
+  Facts.SqlReads    := '';
+  Facts.SqlWrites   := '';
+  Facts.CoveredBy   := '';
+  Store.PutSymbolFacts(Facts);
+
+  Got:= Store.GetSymbolFacts(Facts.SymbolId);
+  Writeln(Format('RT=%s CYC=%d', [Got.ReturnsOwner, Got.Cyclomatic]));
+  Writeln('READS='  , Got.ReadsFields );
+  Writeln('WRITES=' , Got.WritesFields);
+  Writeln(Format('PRESENT=%d', [Ord(Got.Present)]));
+
+  // Present=False probe: a symbol_id with no symbol_facts row.
+  Absent:= Store.GetSymbolFacts(-1);
+  Writeln(Format('ABSENT_PRESENT=%d', [Ord(Absent.Present)]));
+
+  Result:= 0;
+end; // function
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -13666,6 +13722,7 @@ begin
     else if Args.Command = 'workspace'         then Result:= DoWorkspace       (Args)
     else if Args.Command = 'selftest'          then Result:= DoSelfTest        (Args)
     else if Args.Command = 'test-store-freshness' then Result:= DoTestStoreFreshness(Args)
+    else if Args.Command = 'doc-facts-selftest' then Result:= DoDocFactsSelfTest(Args)
     else if Args.Command = 'reconcile-project' then Result:= DoReconcileProject(Args)
     else if Args.Command = 'library-drift'     then Result:= DoLibraryDrift    (Args)
     else if Args.Command = 'resolve-dbs' then

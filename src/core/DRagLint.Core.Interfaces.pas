@@ -332,6 +332,17 @@ type
     /// '' for the whole-DB coverage view. Location is file-name-only;
     /// EnclosingQName is '' when the ref has no enclosing routine.</summary>
     function GetAmbiguousCalls(const AQName, AFilePath: string): TArray<TResolvedCaller>;
+
+    // v(ADP2 T1): index-time analysis facts (symbol_facts table).
+    /// <summary>Reads back the analysis-facts row for ASymbolId. Present=False
+    /// (all other fields zeroed) when no symbol_facts row exists for
+    /// ASymbolId -- the renderer's cue to omit every derived doc-comment
+    /// line.</summary>
+    function GetSymbolFacts(ASymbolId: Int64): TSymbolFacts;
+    /// <summary>Inserts or replaces the analysis-facts row for
+    /// AFacts.SymbolId (UPSERT keyed on symbol_id -- at most one row per
+    /// symbol).</summary>
+    procedure PutSymbolFacts(const AFacts: TSymbolFacts);
   end;
 
   TParseResult = record

@@ -3,7 +3,7 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 17;
+  SCHEMA_VERSION = 18;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
@@ -13,7 +13,10 @@ const
   // the FTS5 block.
   // v15: type_helpers (base SQLite, no FTS5) adds 3 more statements,
   // shifting the FTS5-first index from 50 to 53.
-  SCHEMA_DDL_FTS5_FIRST = 53;
+  // v18 (ADP2 T1): symbol_facts (base SQLite, no FTS5) inserted at index 53
+  // (right after the string_literals indexes, before the FTS5 block), so the
+  // FTS5-first index shifted from 53 to 54.
+  SCHEMA_DDL_FTS5_FIRST = 54;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
@@ -25,7 +28,7 @@ const
   // table's shape untouched -- so e.g. an index on such a column aborts the
   // whole migration with "no such column" on every pre-vN database. Indexes
   // on retrofitted columns belong in Migrate(), after their ALTER.
-  SCHEMA_DDL: array[0..57] of string = (
+  SCHEMA_DDL: array[0..58] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' + '  key   TEXT PRIMARY KEY,' + '  value TEXT NOT NULL' + ')',
 
     'CREATE TABLE IF NOT EXISTS files (' + '  id          INTEGER PRIMARY KEY,' + '  path        TEXT NOT NULL UNIQUE,' + '  mtime_unix  INTEGER NOT NULL,' +
@@ -219,6 +222,30 @@ const
     , 'CREATE INDEX IF NOT EXISTS idx_string_literals_file   ON string_literals(file_id)'
     , 'CREATE INDEX IF NOT EXISTS idx_string_literals_symbol ON string_literals(symbol_id)'
     , 'CREATE INDEX IF NOT EXISTS idx_string_literals_source ON string_literals(source)'
+
+    // v18 (ADP2 T1): index-time ANALYSIS facts, one row per documented-worthy
+    // symbol (read/write field sets, return ownership, cyclomatic complexity,
+    // body size, DFM event wiring, SQL tables touched, covering tests). Base
+    // SQLite only (no FTS5) -- placed HERE (before SCHEMA_DDL_FTS5_FIRST) so it
+    // is created unconditionally on both FTS5 and non-FTS5 builds, same as
+    // call_edges/type_helpers. References only symbols(id), a base PRIMARY KEY
+    // column (not a Migrate()-retrofitted one), so it is safe at this position
+    // -- see the INVARIANT comment atop this array. symbol_id is the PK: at
+    // most one facts row per symbol; ON DELETE CASCADE drops it when the
+    // symbol is removed (per-file reindex). No facts are computed by Task 1 --
+    // every column stays NULL until a later Phase 2 analyzer writes it.
+    , 'CREATE TABLE IF NOT EXISTS symbol_facts (' +
+      '  symbol_id     INTEGER PRIMARY KEY REFERENCES symbols(id) ON DELETE CASCADE,' +
+      '  reads_fields  TEXT,' +
+      '  writes_fields TEXT,' +
+      '  returns_owner TEXT,' +
+      '  cyclomatic    INTEGER,' +
+      '  body_loc      INTEGER,' +
+      '  dfm_event     TEXT,' +
+      '  sql_reads     TEXT,' +
+      '  sql_writes    TEXT,' +
+      '  covered_by    TEXT)'
+
     , 'CREATE VIRTUAL TABLE IF NOT EXISTS string_fts USING fts5(' +
     '  text, content=''string_literals'', content_rowid=''id'', tokenize=''unicode61'')'
     , 'CREATE VIRTUAL TABLE IF NOT EXISTS string_fts_tri USING fts5(' +

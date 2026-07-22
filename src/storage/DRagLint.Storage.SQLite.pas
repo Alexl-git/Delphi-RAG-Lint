@@ -41,6 +41,9 @@ type
       FQUpsertSymbolDoc      : TFDQuery     ;
       FQDeleteFileDocs       : TFDQuery     ;
       FQGetSymbolDoc         : TFDQuery     ;
+      // v(ADP2 T1): symbol_facts (index-time analysis facts) storage.
+      FQPutSymbolFacts       : TFDQuery     ;
+      FQGetSymbolFacts       : TFDQuery     ;
       FQFindByDocTag         : TFDQuery     ;
       FQFindUndocumented     : TFDQuery     ;
       FQFindByDocContains    : TFDQuery     ;
@@ -140,6 +143,10 @@ type
 
       procedure UpsertSymbolDoc(const AToken: TFileTxToken; ASymbolId: Int64; const ADoc: TParsedDoc);
       function GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
+
+      // v(ADP2 T1): symbol_facts (index-time analysis facts) -- see ISymbolStore.
+      function GetSymbolFacts(ASymbolId: Int64): TSymbolFacts;
+      procedure PutSymbolFacts(const AFacts: TSymbolFacts);
 
       // v0.40.4: uses-clause persistence + queries
       procedure UpsertUnitUse(const AToken: TFileTxToken; const AUse: TUnitUse);
@@ -338,6 +345,8 @@ begin
   FQUpsertSymbolDoc.Free;
   FQDeleteFileDocs.Free;
   FQGetSymbolDoc.Free;
+  FQPutSymbolFacts.Free;
+  FQGetSymbolFacts.Free;
   FQFindByDocTag.Free;
   FQFindUndocumented.Free;
   FQFindByDocContains.Free;
@@ -752,6 +761,27 @@ begin
   FQGetSymbolDoc:= NewQuery(
     'SELECT format, raw_block, summary, remarks, returns_text, ' + ' params_json, exceptions_json, example_text, seealso_json, since_text, ' +
     ' deprecated, start_line, end_line ' + 'FROM symbol_docs WHERE symbol_id = :sid');
+
+  // v(ADP2 T1): symbol_facts UPSERT (keyed on symbol_id) + read-back.
+  FQPutSymbolFacts:= NewQuery(
+    'INSERT OR REPLACE INTO symbol_facts ' + '(symbol_id, reads_fields, writes_fields, returns_owner, cyclomatic, ' +
+    ' body_loc, dfm_event, sql_reads, sql_writes, covered_by) ' +
+    'VALUES (:sid, :reads, :writes, :ret, :cyc, :loc, :dfm, :sqlr, :sqlw, :cov)');
+  FQPutSymbolFacts.Params.ParamByName('sid'  ).DataType:= ftLargeint;
+  FQPutSymbolFacts.Params.ParamByName('reads' ).DataType:= ftWideMemo;
+  FQPutSymbolFacts.Params.ParamByName('writes').DataType:= ftWideMemo;
+  FQPutSymbolFacts.Params.ParamByName('ret'   ).DataType:= ftWideMemo;
+  FQPutSymbolFacts.Params.ParamByName('cyc'   ).DataType:= ftInteger;
+  FQPutSymbolFacts.Params.ParamByName('loc'   ).DataType:= ftInteger;
+  FQPutSymbolFacts.Params.ParamByName('dfm'   ).DataType:= ftWideMemo;
+  FQPutSymbolFacts.Params.ParamByName('sqlr'  ).DataType:= ftWideMemo;
+  FQPutSymbolFacts.Params.ParamByName('sqlw'  ).DataType:= ftWideMemo;
+  FQPutSymbolFacts.Params.ParamByName('cov'   ).DataType:= ftWideMemo;
+  FQPutSymbolFacts.Prepare;
+
+  FQGetSymbolFacts:= NewQuery(
+    'SELECT reads_fields, writes_fields, returns_owner, cyclomatic, body_loc, ' +
+    ' dfm_event, sql_reads, sql_writes, covered_by ' + 'FROM symbol_facts WHERE symbol_id = :sid');
 
   FQFindByDocTag:= NewQuery(
     'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE (:tag = ''deprecated'' AND d.deprecated = 1) ' +
@@ -2159,6 +2189,54 @@ begin
     Result.HasContent:= True;
   finally
     FQGetSymbolDoc.Close;
+  end; // try
+end; // function
+
+procedure TSQLiteSymbolStore.PutSymbolFacts(const AFacts: TSymbolFacts);
+// Helper: assign a nullable text param without changing its pre-declared
+// DataType (mirrors UpsertSymbolDoc.SetNullableText -- AsString would
+// silently flip DataType to ftString and break the next call with
+// [SQLite]-338 "Param type changed").
+  procedure SetNullableText(const AParamName: string; const AValue: string);
+  begin
+    with FQPutSymbolFacts.ParamByName(AParamName) do
+      if AValue = '' then Clear else Value:= AValue;
+  end;
+begin
+  FQPutSymbolFacts.ParamByName('sid').AsLargeInt:= AFacts.SymbolId;
+  SetNullableText('reads' , AFacts.ReadsFields );
+  SetNullableText('writes', AFacts.WritesFields);
+  SetNullableText('ret'   , AFacts.ReturnsOwner);
+  FQPutSymbolFacts.ParamByName('cyc').AsInteger:= AFacts.Cyclomatic;
+  FQPutSymbolFacts.ParamByName('loc').AsInteger:= AFacts.BodyLoc;
+  SetNullableText('dfm' , AFacts.DfmEvent );
+  SetNullableText('sqlr', AFacts.SqlReads );
+  SetNullableText('sqlw', AFacts.SqlWrites);
+  SetNullableText('cov' , AFacts.CoveredBy);
+  FQPutSymbolFacts.ExecSQL;
+end; // procedure
+
+function TSQLiteSymbolStore.GetSymbolFacts(ASymbolId: Int64): TSymbolFacts;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.SymbolId:= ASymbolId;
+  if FQGetSymbolFacts.Active then FQGetSymbolFacts.Close;
+  FQGetSymbolFacts.ParamByName('sid').AsLargeInt:= ASymbolId;
+  FQGetSymbolFacts.Open;
+  try
+    if FQGetSymbolFacts.IsEmpty then Exit; // Present stays False (FillChar zeroed it)
+    Result.ReadsFields := FQGetSymbolFacts.FieldByName('reads_fields' ).AsString;
+    Result.WritesFields:= FQGetSymbolFacts.FieldByName('writes_fields').AsString;
+    Result.ReturnsOwner:= FQGetSymbolFacts.FieldByName('returns_owner').AsString;
+    Result.Cyclomatic  := FQGetSymbolFacts.FieldByName('cyclomatic'   ).AsInteger;
+    Result.BodyLoc     := FQGetSymbolFacts.FieldByName('body_loc'     ).AsInteger;
+    Result.DfmEvent    := FQGetSymbolFacts.FieldByName('dfm_event'    ).AsString;
+    Result.SqlReads    := FQGetSymbolFacts.FieldByName('sql_reads'    ).AsString;
+    Result.SqlWrites   := FQGetSymbolFacts.FieldByName('sql_writes'   ).AsString;
+    Result.CoveredBy   := FQGetSymbolFacts.FieldByName('covered_by'   ).AsString;
+    Result.Present     := True;
+  finally
+    FQGetSymbolFacts.Close;
   end; // try
 end; // function
 

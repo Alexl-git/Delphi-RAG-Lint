@@ -85,6 +85,32 @@ type
     ImplEndLine  : Integer;
   end; // record
 
+  /// <summary>v(ADP2 T1): index-time ANALYSIS facts about one symbol -- as
+  /// opposed to symbol_docs' hand/generated DOC-COMMENT text, these are
+  /// derived purely from static analysis: field read/write sets, return
+  /// ownership, cyclomatic complexity, body size, the DFM event handler it is
+  /// wired to, SQL tables it touches, and covering test qnames. Persisted 1:1
+  /// in the symbol_facts table (symbol_id is the PRIMARY KEY / FK to
+  /// symbols(id) ON DELETE CASCADE). Task 1 only plumbs storage -- every
+  /// analyzer that POPULATES these fields lands in a later Phase 2 task.
+  /// CSV-typed fields (ReadsFields/WritesFields/SqlReads/SqlWrites/CoveredBy)
+  /// use DRagLint.Doc.SymbolFacts' SymbolFactsCsvJoin/Split helpers.</summary>
+  TSymbolFacts = record
+    SymbolId    : Int64  ;
+    ReadsFields : string ;   // CSV of field names read
+    WritesFields: string ;   // CSV of field names written
+    ReturnsOwner: string ;   // '', 'new', 'borrowed', 'self'
+    Cyclomatic  : Integer;   // 0 = not computed
+    BodyLoc     : Integer;
+    DfmEvent    : string ;   // 'Button1.OnClick' or ''
+    SqlReads    : string ;   // CSV of tables read
+    SqlWrites   : string ;   // CSV of tables written
+    CoveredBy   : string ;   // CSV of test qnames (capped)
+    /// <summary>False when no symbol_facts row exists for SymbolId -- the
+    /// renderer's cue to omit every derived doc-comment line entirely.</summary>
+    Present     : Boolean;
+  end; // record
+
   /// <summary>v11 (M1): one resolved ancestor edge of a class/interface --
   /// either a direct heritage entry (type_ancestors row) or, in a transitive
   /// closure, a reachable ancestor. Name is the normalized ancestor type name;
