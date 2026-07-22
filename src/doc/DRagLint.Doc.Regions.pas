@@ -23,8 +23,9 @@ type
     /// <summary>Renders the fenced facts-block body lines (each prefixed
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
     /// Raises / Deprecated / Overrides / Overridden by / Implements / Overload
-    /// k of n / abstract / virtual / Complexity / Reads/Writes fields /
-    /// Handles / SQL tables touched / Covered by / Since / SeeAlso. Empty sections omitted; '' when there are no facts. Displayed
+    /// k of n / abstract / virtual / Complexity / Reads/Writes fields / Owns
+    /// returned / Handles / SQL tables touched / Covered by / Since / SeeAlso.
+    /// Empty sections omitted; '' when there are no facts. Displayed
     /// counts below
     /// the true *Total get a ' (+N more)' suffix. Deprecated is ground-truth
     /// from the Pascal 'deprecated' directive (not the unrelated
@@ -39,7 +40,17 @@ type
     /// omitted when empty, and the WHOLE line is omitted when both are empty;
     /// AFacts.ReadsFields/WritesFields are already display-ready (capped,
     /// formatted) so this is a plain passthrough, like Complexity's raw
-    /// values. Handles (v(ADP2 T6), 'Handles: Button1.OnClick') is ONE line,
+    /// values. Owns returned (v(ADP2 T8), 'Owns returned: new (caller owns)'
+    /// / 'Owns returned: borrowed' / 'Owns returned: self') is ONE line,
+    /// emitted only when AFacts.ReturnsOwner is non-empty -- deliberately a
+    /// DISTINCT label from the Phase 1.x mined return-cases 'Returns:' line
+    /// above (a different concept: who owns the returned reference, not what
+    /// expression computed it) so the two can never collide. ABSENCE OVER A
+    /// WRONG VERDICT is this fact's own governing principle (a wrong 'new'
+    /// invites a double-free), so '' -- the line omitted -- is the routine
+    /// default whenever the analysis has any doubt at all; see
+    /// TDocFacts.ReturnsOwner's own field comment for the full list of
+    /// absence conditions. Handles (v(ADP2 T6), 'Handles: Button1.OnClick') is ONE line,
     /// emitted only when AFacts.DfmEvent is non-empty -- the routine is a
     /// published method wired as an event handler in its own paired .dfm;
     /// AFacts.DfmEvent is already the final display string (computed at
@@ -323,6 +334,25 @@ begin
         RWLine:= RWLine + 'Writes: ' + EscXml(AFacts.WritesFields);
       end;
       Sb.AppendLine(APrefix + RWLine);
+    end;
+    // v(ADP2 T8): Returned-object ownership fact -- ONE line, omitted
+    // entirely when AFacts.ReturnsOwner = '' (no unanimous, high-confidence
+    // verdict -- see TDocFacts.ReturnsOwner's own field comment for the full
+    // list of ABSENCE conditions; this fact's OWN governing principle is
+    // absence over a wrong verdict, since a wrong 'new' invites a
+    // double-free). Deliberately labeled 'Owns returned:' -- NOT 'Returns:'
+    // -- so it can never collide with the Phase 1.x mined return-cases fact
+    // line above (Result:=/Exit() RHS expressions, an entirely different
+    // concept: what a function's body computes vs. who owns what it
+    // hands back). 'new' expands to the fuller 'new (caller owns)' display
+    // text here (at render time); 'borrowed'/'self' are already the final
+    // display word, stored verbatim.
+    if AFacts.ReturnsOwner <> '' then
+    begin
+      var OwnsWord: string;
+      if AFacts.ReturnsOwner = 'new' then OwnsWord:= 'new (caller owns)'
+      else OwnsWord:= AFacts.ReturnsOwner;
+      Sb.AppendLine(APrefix + 'Owns returned: ' + EscXml(OwnsWord));
     end;
     // v(ADP2 T6): DFM event-wiring fact -- ONE line, 'Handles:
     // Button1.OnClick', omitted entirely when AFacts.DfmEvent = '' (most

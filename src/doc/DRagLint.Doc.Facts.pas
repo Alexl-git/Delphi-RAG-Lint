@@ -194,6 +194,21 @@ type
     // the index predates Phase 2 Task 7 -- absence over a guessed table.
     SqlReads         : string           ;
     SqlWrites        : string           ;
+    // v(ADP2 T8): returned-object ownership -- 'new' (a freshly-constructed
+    // object the caller must free), 'borrowed' (a reference the routine does
+    // NOT own -- an own-class field or a parameter), 'self', or '' (ABSENCE
+    // OVER A WRONG VERDICT: no return site, a disposed Result, ANY
+    // unresolved/'unknown' site, a mix of categories across sites, or a
+    // 'borrowed'/'self' verdict on a non-reference return type all yield '')
+    // -- read back verbatim from the index-time symbol_facts row
+    // (ISymbolStore.GetSymbolFacts -- see DRagLint.Doc.SymbolFacts.
+    // TSymbolFactsAnalyzer.Analyze/AnalyzeReturnsOwner for the full
+    // site-collection + unanimity + object-type-gate ruleset). RAW
+    // PASSTHROUGH, like Cyclomatic/BodyLoc/ReadsFields/WritesFields/
+    // DfmEvent/SqlReads/SqlWrites above -- already the final stored word, no
+    // cap/threshold logic needed; RenderFactsBlock maps 'new' to the fuller
+    // 'new (caller owns)' display text at render time.
+    ReturnsOwner     : string           ;
   end;
 
   TDocFactsBuilder = class
@@ -1107,6 +1122,12 @@ begin
   // TSymbolFactsAnalyzer.Analyze/AnalyzeSqlTables).
   Result.SqlReads := SFacts.SqlReads;
   Result.SqlWrites:= SFacts.SqlWrites;
+  // v(ADP2 T8): returned-object ownership -- same raw-passthrough contract
+  // as Cyclomatic/BodyLoc/ReadsFields/WritesFields/DfmEvent/SqlReads/
+  // SqlWrites above (already the final stored word, computed at index time
+  // by DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze/
+  // AnalyzeReturnsOwner).
+  Result.ReturnsOwner:= SFacts.ReturnsOwner;
 
   // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE: computed LAZILY
   // here (NOT read back from SFacts.CoveredBy, which stays unwritten/

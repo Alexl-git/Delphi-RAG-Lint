@@ -120,6 +120,65 @@ unit DRagLint.Doc.SymbolFacts;
 // AnalyzeSqlTables' header comment (this unit's implementation section, just
 // above TSymbolFactsAnalyzer.Analyze) for the full pipeline and how the
 // final CSVs are capped/deduped/sorted.
+//
+// Task 8 (ADP2) implements the ReturnsOwner group: does a function return a
+// freshly-constructed object the caller must free ('new'), a borrowed
+// reference ('borrowed'), or Self ('self') -- '' (never guessed) whenever
+// there is ANY doubt. THE GOVERNING PRINCIPLE (per the task brief, the
+// highest-stakes fact this phase adds): ABSENCE OVER A WRONG VERDICT -- a
+// wrong 'new' tells a reader to Free the result; if it was actually
+// borrowed, that is a double-free / freeing-what-you-do-not-own, a crash.
+// So AnalyzeReturnsOwner (this unit's implementation section, just above
+// TSymbolFactsAnalyzer.Analyze) emits a verdict ONLY when EVERY 'Result :='
+// / 'Exit(<rhs>)' return site in the routine's OWN body -- collected by
+// WalkReturnsOwnerSites, a single-pass walk over the SAME matched Proc/Body
+// node Cyclomatic/AnalyzeReadsWrites/AnalyzeSqlTables already found, no 2nd
+// AST scan -- unanimously classifies (ClassifyReturnSite) into the SAME one
+// of {new, borrowed, self}; a single 'unknown' site (a call to another
+// function, a local var, an index/deref expression, a with-block var, a
+// ternary, ...) or ANY mix of categories omits the fact entirely, and so
+// does a body that disposes of Result anywhere (Result.Free/DisposeOf/
+// FreeAndNil(Result), detected by reusing DRagLint.Analysis.Flow.Lattices'
+// DetectFreedVar -- the SAME '.Free'/'.DisposeOf'/'FreeAndNil' shape-matcher
+// the double-free lattice (TFreedState) already relies on). 'new' is
+// detected via that SAME unit's ExprIsConstructor (a 'T.Create'/'T.Create()'
+// member-access call, reused as-is from the object-leak escape analysis
+// (TEscape) this codebase already ships -- NOT reinvented here; it already
+// handles BOTH the paren-less and parenthesized constructor-call shapes).
+// 'borrowed' is a bare identifier resolving to a routine PARAMETER (any
+// mode) or an OWN-CLASS field (the SAME FindAllChildSymbols(ASym.ParentId)
+// field-name resolver AnalyzeReadsWrites, above, already builds) -- a LOCAL
+// variable of the same name is explicitly NOT borrowed (Pascal scoping
+// shadows the field, and the task brief names a local var as an 'unknown'
+// example directly). 'self' is a bare 'Self' or 'Self as <Type>'. A
+// 'borrowed'/'self' verdict is ADDITIONALLY gated (IsReferenceTypeName) on
+// the function's OWN return type actually being a reference (class/
+// interface) type -- else 'function Count: Integer; begin Result := FCount;
+// end;' would nonsensically render 'borrowed' for a plain Integer; 'new'
+// needs no such gate ('T.Create' already guarantees an object).
+//
+// GATE (function-shaped only): unlike every fact group above, this one is
+// Kind-SENSITIVE (a procedure has nothing to return) -- but ASym.Kind ALONE
+// cannot tell a function-method from a procedure-method: a CLASS method
+// always carries Kind=skMethod regardless of the function/procedure keyword
+// (confirmed by DRagLint.Doc.Document's own "class functions carry kind
+// skMethod, not skFunction" comment, and by DRagLint.Parser.Delphi13.
+// WalkDeclProc's unconditional 'if AAsMethod then Kind:= skMethod') -- so a
+// literal 'ASym.Kind = skFunction' gate (the task brief's own literal
+// wording) would silently exclude EVERY function declared as a class
+// method, i.e. almost every real-world case, including this task's own
+// fixture. AnalyzeReturnsOwner instead mirrors TDocFactsBuilder.Build's OWN
+// Kind-agnostic approach: parse the return type straight from
+// ASym.Signature (ParseReturnType, duplicated locally in this unit's
+// implementation section -- Doc.Facts already `uses` THIS unit for
+// ComputeCoveredBy, so the reverse direction would be a real circular unit
+// dependency, the SAME reason FieldNodeStr/LastSegment above are duplicated
+// rather than shared) -- '' for a procedure (whether Kind=skProcedure or a
+// procedure declared as a method, Kind=skMethod) or a constructor/destructor
+// (neither ever carries a ': Type' suffix in its signature), so the
+// Kind-agnostic empty-check alone already excludes every non-function
+// routine correctly; ASym.Kind in [skFunction, skMethod] is still checked
+// FIRST as a cheap defensive pre-filter.
 
 interface
 
@@ -225,7 +284,19 @@ type
       /// ExtractSqlTables (this unit's implementation section) for the full
       /// extraction pipeline; DRagLint.Parser.Sql is deliberately NOT reused
       /// (Firebird DDL over *.sql files only -- it never parses a routine
-      /// body).</remarks>
+      /// body). ADP2 T8: ReturnsOwner is '' under the SAME no-defProc
+      /// condition, plus whenever ASym is not function-shaped (a procedure,
+      /// constructor, or destructor -- see AnalyzeReturnsOwner's own header
+      /// comment for why this is decided from the parsed return type, not
+      /// ASym.Kind alone), the body has no 'Result :='/'Exit(&lt;rhs&gt;)'
+      /// site at all, Result is disposed anywhere in the body (Result.Free/
+      /// DisposeOf/FreeAndNil(Result)), any site's RHS is not confidently
+      /// one of {new, borrowed, self}, or the sites disagree with each other
+      /// -- ABSENCE OVER A WRONG VERDICT, this fact's own governing
+      /// principle (a wrong 'new' invites a double-free) -- see
+      /// AnalyzeReturnsOwner/WalkReturnsOwnerSites/ClassifyReturnSite (this
+      /// unit's implementation section) for the full site-collection +
+      /// unanimity + object-type-gate ruleset.</remarks>
       class function Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts; static;
   end;
 
@@ -1226,6 +1297,327 @@ begin
   end;
 end;
 
+// ADP2 T8: returned-object ownership -- see this unit's banner comment
+// (Task 8 paragraph) for the full ruleset/rationale. Duplicated locally
+// (NOT reused from DRagLint.Doc.Facts' own private ParseReturnType, which
+// is the IDENTICAL algorithm): Doc.Facts already `uses` THIS unit (for
+// ComputeCoveredBy), so the reverse direction would be a real circular unit
+// dependency -- the same "keep this unit standalone" precedent FieldNodeStr/
+// LastSegment (above) already follow for the identical reason. Parses the
+// return type from a signature of the form '(args): RetType' or ': RetType'
+// (ProcSignatureOf's own format, DRagLint.Parser.Delphi13) -- the text after
+// the LAST ':' that is outside the parameter parentheses. '' for a
+// procedure/constructor/destructor signature (no such trailing ': Type').
+function ParseReturnType(const ASig: string): string;
+var CloseP, Colon: Integer;
+begin
+  Result:= '';
+  CloseP:= ASig.LastDelimiter(')');
+  Colon := ASig.LastDelimiter(':');
+  if (Colon > CloseP) and (Colon >= 0) then
+    Result:= Trim(Copy(ASig, Colon + 2, MaxInt)).TrimRight([';']);
+end;
+
+// ADP2 T8: object-type gate for the 'borrowed'/'self' verdicts (task brief
+// step 5) -- a wrong 'borrowed'/'self' on a VALUE-returning function (e.g.
+// 'function Count: Integer; begin Result := FCount; end;') is nonsense, so
+// those two verdicts additionally require the function's OWN return type
+// (ATypeName, already parsed via ParseReturnType) to be a REFERENCE type.
+// 'new' needs no such gate -- 'T.Create' already guarantees an object.
+// TWO-TIER check, per the task brief's own documented conservative
+// heuristic:
+//   1. STORE-RESOLVED (preferred): ATypeName's bare, unqualified segment
+//      names a class or interface symbol somewhere in the index -- ground
+//      truth, no guessing. (skRecord is deliberately EXCLUDED: a Pascal
+//      record is a value type, so 'borrowed'/'self' would be just as
+//      nonsensical for it as for Integer.)
+//   2. CHEAP FALLBACK (only when (1) finds nothing at all -- e.g. a
+//      built-in/un-indexed system type like TObject/TStream, never declared
+//      anywhere in THIS corpus): the Delphi class/interface NAMING
+//      CONVENTION (starts with 'T' or 'I') -- EXCLUDING a fixed, documented
+//      set of well-known VALUE types that also happen to start with one of
+//      those letters (Integer, TDateTime, TGUID, ...), checked FIRST via
+//      MatchText so e.g. 'Integer' is never misread as an object merely
+//      because it starts with 'I'. Not exhaustive (a conservative, bounded
+//      heuristic, exactly per the task brief's own example list) -- just the
+//      common cases; an obscure un-indexed value-type name that is not on
+//      this list and happens to start with T/I would still be (wrongly)
+//      accepted here, an accepted residual imprecision of a "cheap fallback"
+//      that only even runs when the store has NOTHING to say about the type.
+function IsReferenceTypeName(const AStore: ISymbolStore; const ATypeName: string): Boolean;
+var
+  Bare : string         ;
+  P    : Integer        ;
+  Cands: TArray<TSymbol>;
+  Cand : TSymbol        ;
+begin
+  Result:= False;
+  Bare:= Trim(ATypeName);
+  if Bare = '' then Exit;
+  P:= Bare.LastDelimiter('.'); // strip a unit qualifier if present (Unit.TFoo -> TFoo)
+  if P >= 0 then Bare:= Trim(Copy(Bare, P + 2, MaxInt));
+  if Bare = '' then Exit;
+
+  Cands:= AStore.FindSymbolsByExactName(Bare);
+  for Cand in Cands do
+    if Cand.Kind in [skClass, skInterface] then Exit(True);
+
+  if MatchText(Bare, [
+    'Integer', 'Int64', 'UInt64', 'Cardinal', 'Byte', 'Word',
+    'SmallInt', 'ShortInt', 'LongInt', 'LongWord', 'NativeInt', 'NativeUInt',
+    'Boolean', 'ByteBool', 'WordBool', 'LongBool',
+    'string', 'AnsiString', 'WideString', 'UnicodeString', 'ShortString',
+    'Char', 'AnsiChar', 'WideChar',
+    'Double', 'Single', 'Extended', 'Currency', 'Comp', 'Real', 'Real48',
+    'TDateTime', 'TDate', 'TTime', 'TGUID', 'Variant', 'OleVariant',
+    'Pointer', 'TBytes']) then Exit(False);
+
+  Result:= (Length(Bare) >= 2) and CharInSet(Bare[1], ['T', 'I']);
+end;
+
+// ADP2 T8: classifies ONE return-site's RHS node N into exactly one of
+// {new, borrowed, self, unknown} -- see this unit's banner comment (Task 8
+// paragraph) for the full ruleset. AVars/AFields are the SAME per-routine
+// var table and own-class field-name set AnalyzeReadsWrites (above)
+// already builds (params/locals/Result; own-class field DISPLAY names,
+// keyed lowercase) -- reused here for the 'borrowed' classification (a
+// parameter or an own-class field), and to correctly EXCLUDE a LOCAL
+// variable of the same name (explicitly 'unknown' per the task brief, even
+// though it also resolves in AVars) from ever being misread as a field/
+// param handle -- Pascal scoping: a local/Result SHADOWS a same-named
+// field, the exact same precedence AnalyzeReadsWrites' own ResolveField
+// already enforces.
+function ClassifyReturnSite(const N: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable; AFields: TDictionary<string, string>): string;
+var
+  Op    : TTSNode;
+  Lhs   : TTSNode;
+  Key   : string ;
+  VarIdx: Integer;
+  V     : TRoutineVar;
+begin
+  Result:= 'unknown';
+  if N.IsNull then Exit;
+
+  // new: 'T.Create' (paren-less) / 'T.Create(...)' -- reuses DRagLint.
+  // Analysis.Flow.Lattices' ExprIsConstructor AS-IS: the SAME 'exprDot' /
+  // 'exprCall'-wrapping-'exprDot' rhs='create' shape-matcher the object-leak
+  // escape analysis (TEscape) already relies on -- handles BOTH the
+  // paren-less and parenthesized constructor-call shapes identically, so
+  // this fact and the leak-detection lattice can never disagree about what
+  // "looks like a constructor call".
+  if ExprIsConstructor(N, ASrc) then Exit('new');
+
+  // self: bare 'Self', or 'Self as <Type>' (an 'exprBinary' whose operator
+  // node-type is literally 'kAs' -- the SAME shape DRagLint.Parser.
+  // Delphi13's own is/as ref-gap E check already keys on).
+  if (N.NodeType = 'identifier') and (NodeText(N, ASrc) = 'self') then Exit('self');
+  if N.NodeType = 'exprBinary' then
+  begin
+    Op:= N.ChildByField('operator');
+    if (not Op.IsNull) and (Op.NodeType = 'kAs') then
+    begin
+      Lhs:= N.ChildByField('lhs');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and (NodeText(Lhs, ASrc) = 'self') then
+        Exit('self');
+    end;
+  end;
+
+  // borrowed: a BARE identifier resolving to a routine PARAMETER (any mode)
+  // or an own-class FIELD. A var-table hit that is NOT a parameter kind
+  // (vkLocal, or vkResult -- e.g. a degenerate 'Result := Result') is
+  // 'unknown', full stop -- it is NEVER also looked up in AFields, since a
+  // local/Result of the same name as a field SHADOWS the field.
+  if N.NodeType = 'identifier' then
+  begin
+    Key:= NodeText(N, ASrc);
+    VarIdx:= AVars.IndexOf(Key);
+    if VarIdx >= 0 then
+    begin
+      V:= AVars.Get(VarIdx);
+      if V.Kind in [vkParamVar, vkParamOut, vkParamConst, vkParamValue] then Exit('borrowed');
+      Exit('unknown'); // vkLocal / vkResult -- shadows any same-named field
+    end;
+    if AFields.ContainsKey(Key) then Exit('borrowed');
+  end;
+
+  // anything else (a call to another function, a local var that fell
+  // through above, an index/deref expression, a with-block var, a ternary,
+  // ...) -- never guessed.
+  Result:= 'unknown';
+end;
+
+// ADP2 T8: single-pass walk collecting every 'Result :=' / 'Exit(<rhs>)'
+// return-value site under N into ASites (each entry the site's OWN RHS
+// node, for ClassifyReturnSite to inspect later) and detecting whether
+// Result is EVER disposed (Result.Free / Result.DisposeOf / FreeAndNil
+// (Result)) anywhere in the body (ADisposed) -- reuses DRagLint.Analysis.
+// Flow.Lattices' DetectFreedVar (the SAME '.Free'/'.DisposeOf'/'FreeAndNil'
+// shape-matcher the double-free lattice (TFreedState) already relies on),
+// checked at every node, exactly like TEscape.Transfer's own per-CFG-item
+// call. Mirrors WalkFieldRW's traversal shape (assignment/exprCall
+// special-cased, everything else a generic named-child recursion) but for a
+// DIFFERENT purpose (collecting return sites + a disposal flag, not field
+// reads/writes). Skips a NESTED 'defProc' entirely (a local/nested
+// routine's own Result belongs to IT, never the enclosing routine being
+// analyzed here -- same guard WalkSqlLiterals already applies, for the
+// identical reason -- see its own header comment). Stops recursing the
+// moment ADisposed becomes True: once Result is known to be disposed
+// somewhere, the overall verdict is OMIT regardless of what else is found,
+// so there is nothing left worth collecting.
+//
+// AResultIdx MUST be >= 0 (the caller only calls this after confirming
+// AVars.IndexOf('result') resolved) -- an assignment's lhs identifier is
+// matched against AResultIdx via AVars.IndexOf too, so if Result were ever
+// NOT found in AVars (AResultIdx = -1), an untranslatable/unrelated
+// identifier that ALSO fails to resolve (-1) would wrongly compare equal;
+// gating AResultIdx >= 0 at the call site avoids that entirely.
+procedure WalkReturnsOwnerSites(const N: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable; AResultIdx: Integer; ASites: TList<TTSNode>; var ADisposed: Boolean);
+var
+  Lhs, Rhs, Ent, ArgsN: TTSNode;
+  I: Integer;
+begin
+  if N.IsNull or ADisposed then Exit;
+  if N.NodeType = 'defProc' then Exit; // nested routine -- its own Result, not this one's
+
+  if DetectFreedVar(N, ASrc, AVars) = AResultIdx then
+  begin
+    ADisposed:= True;
+    Exit;
+  end;
+
+  if N.NodeType = 'assignment' then
+  begin
+    Lhs:= N.ChildByField('lhs');
+    Rhs:= N.ChildByField('rhs');
+    if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and (AVars.IndexOf(NodeText(Lhs, ASrc)) = AResultIdx) then
+      ASites.Add(Rhs) // a 'Result :=' (or aliased '<FunctionName> :=') site -- record the RHS
+    else
+      WalkReturnsOwnerSites(Lhs, ASrc, AVars, AResultIdx, ASites, ADisposed);
+    WalkReturnsOwnerSites(Rhs, ASrc, AVars, AResultIdx, ASites, ADisposed);
+    Exit;
+  end;
+
+  if N.NodeType = 'exprCall' then
+  begin
+    Ent  := N.ChildByField('entity');
+    ArgsN:= N.ChildByField('args');
+    if (not Ent.IsNull) and (Ent.NodeType = 'identifier') and (NodeText(Ent, ASrc) = 'exit')
+       and (not ArgsN.IsNull) and (ArgsN.NamedChildCount = 1) then
+    begin
+      ASites.Add(ArgsN.NamedChild(0)); // value-form 'Exit(<rhs>)' -- record the sole argument
+      Exit;
+    end;
+    WalkReturnsOwnerSites(Ent, ASrc, AVars, AResultIdx, ASites, ADisposed);
+    if not ArgsN.IsNull then
+      for I:= 0 to ArgsN.NamedChildCount - 1 do
+        WalkReturnsOwnerSites(ArgsN.NamedChild(I), ASrc, AVars, AResultIdx, ASites, ADisposed);
+    Exit;
+  end;
+
+  for I:= 0 to N.NamedChildCount - 1 do
+    WalkReturnsOwnerSites(N.NamedChild(I), ASrc, AVars, AResultIdx, ASites, ADisposed);
+end;
+
+// ADP2 T8: the ReturnsOwner fact for ASym -- '' (absence over a wrong
+// verdict, this fact's own governing principle) unless EVERY return site
+// unanimously classifies as the SAME high-confidence category. See this
+// unit's banner comment (Task 8 paragraph) for the full rationale; see
+// ClassifyReturnSite/WalkReturnsOwnerSites/IsReferenceTypeName (above) for
+// each step's own rules. AProc/ABody are the SAME defProc/body nodes
+// Analyze already matched for Cyclomatic/AnalyzeReadsWrites/
+// AnalyzeSqlTables -- no second AST scan.
+function AnalyzeReturnsOwner(const AProc, ABody: TTSNode; const ASrc: TBytes;
+  const ASym: TSymbol; const AStore: ISymbolStore): string;
+var
+  RetTypeName: string             ;
+  Vars       : TRoutineVarTable    ;
+  ResultIdx  : Integer             ;
+  Sites      : TList<TTSNode>      ;
+  Disposed   : Boolean             ;
+  Fields     : TDictionary<string, string>;
+  Kids       : TArray<TSymbol>     ;
+  Kid        : TSymbol             ;
+  LKey       : string              ;
+  Verdict    : string              ;
+  Cat        : string              ;
+  I          : Integer             ;
+begin
+  Result:= '';
+  if ABody.IsNull then Exit;
+
+  // GATE (function-shaped only) -- see this unit's banner comment (Task 8
+  // paragraph, "GATE") for why this is Kind-agnostic (ASym.Kind in
+  // [skFunction, skMethod] is a cheap defensive pre-filter only; the REAL
+  // signal is the parsed return type, exactly like TDocFactsBuilder.Build's
+  // OWN Result.ReturnType). '' here means a procedure (incl. a procedure
+  // declared as a method) or a constructor/destructor -- none of them ever
+  // carry a ': Type' suffix in their signature.
+  if not (ASym.Kind in [skFunction, skMethod]) then Exit;
+  RetTypeName:= ParseReturnType(ASym.Signature);
+  if RetTypeName = '' then Exit;
+
+  Vars  := TRoutineVarTable.Build(AProc, ASrc);
+  Fields:= TDictionary<string, string>.Create;
+  Sites := TList<TTSNode>.Create;
+  try
+    ResultIdx:= Vars.IndexOf('result');
+    if ResultIdx < 0 then Exit; // cannot reliably identify Result-sites at all -- abstain
+
+    Disposed:= False;
+    WalkReturnsOwnerSites(ABody, ASrc, Vars, ResultIdx, Sites, Disposed);
+
+    if Disposed then Exit;        // Result.Free/DisposeOf/FreeAndNil(Result) seen -- does not cleanly escape
+    if Sites.Count = 0 then Exit; // no 'Result :='/'Exit(<rhs>)' site found at all
+
+    // Own-class fields (for the 'borrowed' classification) -- the SAME
+    // FindAllChildSymbols(ASym.ParentId) own-class-only field resolver
+    // AnalyzeReadsWrites (above) already uses. A free routine (ASym.ParentId
+    // <= 0) simply has no fields to borrow from -- every bare-identifier
+    // site then classifies 'unknown' (not a field, and if also not a
+    // parameter) and the unanimity check below naturally omits.
+    if ASym.ParentId > 0 then
+    begin
+      Kids:= AStore.FindAllChildSymbols(ASym.ParentId);
+      for Kid in Kids do
+        if Kid.Kind = skField then
+        begin
+          LKey:= LowerCase(Kid.Name);
+          if not Fields.ContainsKey(LKey) then Fields.Add(LKey, Kid.Name);
+        end;
+    end;
+
+    // Unanimity: every site must classify to the SAME non-'unknown'
+    // category. A single 'unknown' site, or ANY disagreement between two
+    // otherwise-confident sites (the task brief's own 'Amb' fixture: one
+    // 'new' site + one 'borrowed' site), omits the fact entirely -- never
+    // guessed.
+    Verdict:= '';
+    for I:= 0 to Sites.Count - 1 do
+    begin
+      Cat:= ClassifyReturnSite(Sites[I], ASrc, Vars, Fields);
+      if Cat = 'unknown' then Exit;
+      if Verdict = '' then Verdict:= Cat
+      else if Verdict <> Cat then Exit;
+    end;
+
+    // Object-type gate (task brief step 5): 'new' is already
+    // object-guaranteed ('T.Create'), no gate needed. 'borrowed'/'self'
+    // additionally require the FUNCTION'S OWN return type to be a reference
+    // type -- else a value-returning function (e.g. Count: Integer above)
+    // would wrongly render 'borrowed'/'self' for a plain value type.
+    if (Verdict = 'borrowed') or (Verdict = 'self') then
+      if not IsReferenceTypeName(AStore, RetTypeName) then Exit;
+
+    Result:= Verdict;
+  finally
+    Sites.Free;
+    Fields.Free;
+    Vars.Free;
+  end;
+end;
+
 class function TSymbolFactsAnalyzer.Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts;
 var
   PF   : TParsedFile     ;
@@ -1288,6 +1680,11 @@ begin
         // conservative FROM/JOIN/INSERT/UPDATE/DELETE table-name extraction
         // pipeline.
         AnalyzeSqlTables(Body, PF.Src, Result.SqlReads, Result.SqlWrites);
+        // ADP2 T8: returned-object ownership -- same matched Proc/Body, no
+        // 2nd AST scan. See AnalyzeReturnsOwner's header comment (above,
+        // this unit's implementation section) for the full site-collection
+        // + unanimity + object-type-gate ruleset.
+        Result.ReturnsOwner:= AnalyzeReturnsOwner(Proc, Body, PF.Src, ASym, AStore);
         Break;
       end;
     // No matching defProc: Cyclomatic stays 0 and Reads/WritesFields/
