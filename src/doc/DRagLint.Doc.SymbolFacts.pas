@@ -19,6 +19,42 @@ unit DRagLint.Doc.SymbolFacts;
 // does NOT uses DRagLint.Core.Indexer: the Indexer uses THIS unit, so a
 // back-reference would be a circular unit dependency.
 //
+// TASK 5 OVERRIDE (CoveredBy): unlike every other fact group listed above,
+// CoveredBy is NOT filled by Analyze/the indexer -- Analyze never touches
+// Result.CoveredBy, so symbol_facts.covered_by stays RESERVED/UNWRITTEN
+// ('' as read back from storage, always). Covered-by is a REVERSE edge (a
+// TEST calls the target), so index-time population would be ORDER-DEPENDENT/
+// non-deterministic: if Foo.pas is indexed before FooTests.pas (the usual
+// alphabetical order), the test->code call edge is not yet in call_edges
+// when Foo's row is written, so CoveredBy comes out empty; index the other
+// order and it is populated -- a real determinism violation the design's
+// "same DB -> same facts" mandate cannot tolerate. Instead ComputeCoveredBy
+// (below) computes it LAZILY at doc/hover RENDER time, exactly how Phase 1's
+// 'Called from:' fact already works (DRagLint.Doc.Facts.TDocFactsBuilder.
+// Build calls it directly, not through symbol_facts), which is always
+// correct because it queries the full CURRENT call graph.
+//
+// IMPLEMENTATION NOTE -- NOT DRagLint.Report.RCallTree: the design brief
+// suggested reusing TRCallTree's BuildReverseCallTree for the bounded reverse
+// closure, but that walks ONLY AStore.FindResolvedCallers (certain call_edges
+// rows). EMPIRICALLY CONFIRMED (a live RED/GREEN cycle against this Task's
+// own fixtures) that this is NOT sufficient: DRagLint.Index.CallResolver's
+// TCallResolver.TypeReceiver types every BARE (non-dotted) call site to the
+// CALLING routine's OWN enclosing class/unit (kind 1: 'bare M / Self.M ->
+// the enclosing routine's owning class') -- it never considers a target in a
+// DIFFERENT unit. A DUnitX '[Test]'-style method calling a free-function (or
+// another class's method) under test is exactly this bare-call shape, so
+// that call NEVER gets a call_edges row, resolved or not -- it only ever
+// surfaces via the NAME-based FindUnresolvedNameCallers bucket. A reverse
+// walk built purely on FindResolvedCallers would therefore see the target's
+// SAME-UNIT/SAME-CLASS callers only and silently miss essentially every real
+// test caller. ComputeCoveredBy instead hand-rolls a bounded BFS that unions
+// FindResolvedCallers + FindUnresolvedNameCallers at EVERY hop -- the exact
+// two-bucket union DRagLint.Doc.Facts' own 'Called from:' gather already
+// uses for the SAME reason -- per the task brief's own documented fallback
+// ("if TRCallTree doesn't expose a bounded reverse walk cleanly, fall back
+// to direct callers ... plus one or two manual reverse hops").
+//
 // Task 4 (ADP2) implements the ReadsFields/WritesFields group: a focused,
 // single-pass AST walk (WalkFieldRW, implementation section) over the
 // routine's OWN body -- deliberately NOT the shared TDataFlowSolver/
@@ -56,6 +92,30 @@ function SymbolFactsCsvJoin(const AItems: TArray<string>): string;
 /// <param name="ACsv">A raw symbol_facts TEXT column value, e.g. as returned
 /// by ISymbolStore.GetSymbolFacts.</param>
 function SymbolFactsCsvSplit(const ACsv: string): TArray<string>;
+
+/// <summary>LAZILY computes the 'Covered by:' fact for ASym at DOC/HOVER
+/// RENDER time -- Phase 2 Task 5's CONTROLLER OVERRIDE to the index-time
+/// brief (see this unit's banner comment, "TASK 5 OVERRIDE", for why a
+/// reverse test-&gt;target edge cannot be filled deterministically at index
+/// time). NEVER called from TSymbolFactsAnalyzer.Analyze; symbol_facts.
+/// covered_by stays unwritten/reserved. Shared by DRagLint.Doc.Facts'
+/// TDocFactsBuilder.Build and (Phase 2 Task 9) the hover renderer, so both
+/// surfaces agree on the same fact.</summary>
+/// <param name="AStore">Open symbol store to query; not owned.</param>
+/// <param name="ASym">The routine whose test coverage is being reported.
+/// Non-routine kinds (types/fields/consts/units/...) always yield ''.</param>
+/// <returns>Already DISPLAY-READY (', '-joined, capped at COVERED_BY_CAP
+/// entries, a ' (+N more)' suffix when truncated -- the SAME passthrough
+/// contract as ReadsFields/WritesFields, see JoinCappedDisplay) CSV of
+/// qualified TEST-method names that call ASym, directly or transitively
+/// within COVERED_BY_DEPTH reverse call-graph hops. Walked via a bounded,
+/// hand-rolled BFS over ISymbolStore.FindResolvedCallers +
+/// FindUnresolvedNameCallers (NOT DRagLint.Report.RCallTree -- see this
+/// unit's banner "IMPLEMENTATION NOTE" for the empirically-confirmed reason
+/// a resolved-only reverse tree misses the realistic DUnitX case). '' when
+/// ASym.Id &lt;= 0, ASym is not routine-like, or no caller (at any hop) is
+/// detected as a test -- see IsTestRoutine for the two detection rules.</returns>
+function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): string;
 
 type
   /// <summary>Index-time analyzer that derives a TSymbolFacts row for one
@@ -109,6 +169,7 @@ implementation
 uses
   System.SysUtils
   , System.StrUtils
+  , System.Classes                    { ADP2 T5: TStringList for the sorted/deduped test-name set }
   , System.Generics.Collections       { ADP2 T4: TDictionary/TList for the field-name set + ordered read/write lists }
   , TreeSitter                        { ADP2 T3: TTSNode for the AST-derived Cyclomatic fact }
   , DRagLint.Diagnostics.ParseCache    { ADP2 T3: TAstParseCache -- memoized per-file tree, owned by the cache }
@@ -450,6 +511,182 @@ begin
     // (absence over a wrong number/fact -- e.g. a stale/mismatched parse, or
     // ASym's file changed between the indexer's own parse and this cache
     // lookup).
+  end;
+end;
+
+// ADP2 T5: display cap + bounded reverse-hop depth/walk-size for the
+// Covered-by-tests fact -- see ComputeCoveredBy's own header comment
+// (interface section) and this unit's banner "TASK 5 OVERRIDE" +
+// "IMPLEMENTATION NOTE" for the full rationale. COVERED_BY_CAP mirrors
+// FIELD_RW_CAP's convention (a dedicated const per fact, not shared) but is
+// deliberately smaller (5, not 8): CalledFrom's own display cap (DRagLint.
+// Doc.Facts, docs.max_callers) already defaults to 5, and Covered-by is
+// conceptually a FILTERED view of the same caller set, so matching that
+// default keeps the two lines visually consistent.
+const
+  COVERED_BY_CAP     = 5;   // display cap + '(+N more)' threshold
+  COVERED_BY_DEPTH   = 3;   // reverse hops walked (brief's suggested "<= 3")
+  COVERED_BY_MAXWALK = 200; // hard cap on distinct caller routines expanded per render (see ComputeCoveredBy's remarks)
+
+// LastSegment: "Unit.TClass.Method" -> "Method"; "Unit.Method" -> "Method";
+// a bare name -> itself. Duplicated locally (mirrors DRagLint.Refactor.
+// TestStub's own TSG_LastSegment, whose header comment states the same
+// "keep this unit standalone" reasoning) rather than reaching into
+// DRagLint.Doc.Facts' private, non-exported LastSeg -- which would also
+// require Doc.Facts to export it, and Doc.Facts already `uses` THIS unit
+// (for ComputeCoveredBy), so pulling the other way would be a real circular
+// unit dependency.
+function LastSegment(const S: string): string;
+var P: Integer;
+begin
+  P:= S.LastDelimiter('.');
+  if P >= 0 then Result:= Copy(S, P + 2, MaxInt) else Result:= S;
+end;
+
+// True when the caller routine identified by (ASymbolId, AQName, ALocation)
+// -- one row of a FindResolvedCallers/FindUnresolvedNameCallers result -- is
+// a TEST routine, by either of two GROUND-TRUTH rules (checked in this
+// order, (a) first since it is a plain string comparison with NO extra store
+// query, while (b) costs one):
+//   (a) its DECLARING FILE's basename matches the '*Test'/'Test*' naming
+//       convention, case-insensitive (the DUnitX corpus-wide convention --
+//       e.g. 'UWidgetTests.pas' or 'TestWidget.pas'). ALocation is already
+//       the bare caller filename (TResolvedCaller.Location's own contract:
+//       "filename only"), so this is a query-free string check.
+//   (b) ONLY when (a) does not match: its ENCLOSING CLASS transitively
+//       descends from a class literally named 'TTestCase' (a legacy-DUnit-
+//       style fixture) -- AStore.GetTransitiveAncestors, the SAME ancestry
+//       walk DRagLint.Doc.Facts' Overrides/Implements gather already uses.
+//       ASymbolId is the caller ROUTINE's own id (TResolvedCaller.
+//       EnclosingSymbolId, already resolved by the caller), so no further
+//       name-based re-resolution is needed here. GetTransitiveAncestors
+//       returns UNRESOLVED heritage edges too (name-only leaves -- see its
+//       own header comment), so this fires even when TTestCase itself (e.g.
+//       DUnit's TestFramework.pas) is outside the indexed corpus, which is
+//       the realistic case.
+//
+// A [Test]/[TestCase] CUSTOM ATTRIBUTE is deliberately NOT checked as a
+// third rule (route (c) in the task brief): CONFIRMED by reading
+// TIndexer.ResolveEnclosingSymbolId (DRagLint.Core.Indexer) that a
+// reference's EnclosingSymbolId is resolved ONLY by testing the reference's
+// line against a ROUTINE'S IMPLEMENTATION range (ImplStartLine..
+// ImplEndLine). A custom attribute like '[Test]' decorates the BARE
+// INTERFACE-SECTION declaration one or more lines above the routine's own
+// body -- outside any routine's impl range -- so the 'attribute' reference
+// the parser DOES emit (DRagLint.Parser.Delphi13's Walk, NodeType =
+// 'attribute') always comes back with EnclosingSymbolId = 0 (unenclosed).
+// No store primitive answers "does method M carry attribute X" any other
+// way, so route (c) is skipped per the task's own documented contingency
+// (route (a)/(b) are the "high-signal core"; attributes would be a bonus
+// this index cannot currently support).
+function IsTestRoutine(const AStore: ISymbolStore; ASymbolId: Int64; const ALocation: string): Boolean;
+var
+  BaseName : string;
+  Sym      : TSymbol;
+  ParentSym: TSymbol;
+  Anc      : TTypeAncestor;
+begin
+  Result:= False;
+
+  // (a) file-name convention -- query-free.
+  BaseName:= ChangeFileExt(ALocation, '');
+  if StartsText('Test', BaseName) or EndsText('Test', BaseName) then Exit(True);
+
+  // (b) TTestCase ancestry -- only reached when (a) did not already match.
+  if ASymbolId <= 0 then Exit;
+  Sym:= AStore.GetSymbolById(ASymbolId);
+  if Sym.ParentId <= 0 then Exit;
+  ParentSym:= AStore.GetSymbolById(Sym.ParentId);
+  if ParentSym.Kind <> skClass then Exit;
+  for Anc in AStore.GetTransitiveAncestors(ParentSym.Id) do
+    if SameText(Anc.Name, 'TTestCase') then Exit(True);
+end;
+
+function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): string;
+var
+  Names  : TStringList;
+  Visited: TDictionary<Int64, Boolean>; // caller-routine ids already expanded, across the WHOLE walk (cycle guard + the render-size cap)
+
+  // Finds every caller of (ASymbolId as a resolved call_edges target) UNION
+  // (AQName's last segment as a NAME match with no call_edges row) -- the
+  // SAME two-bucket union DRagLint.Doc.Facts' 'Called from:' gather uses,
+  // required here for the identical reason (see this unit's banner
+  // "IMPLEMENTATION NOTE"): TCallResolver never resolves a bare call from a
+  // method to a DIFFERENT unit's routine, so the DUnitX test->target edge
+  // only ever shows up in the unresolved/name-based bucket. Recurses one
+  // hop per call, up to ADepth, expanding EVERY newly-discovered caller
+  // exactly once (Visited, shared across the whole walk) and stopping once
+  // COVERED_BY_MAXWALK distinct callers have been expanded (a render-time
+  // safety net against a pathologically hot symbol).
+  procedure Walk(ASymbolId: Int64; const AQName: string; ADepth: Integer);
+  var
+    RC       : TResolvedCaller;
+    Combined : TArray<TResolvedCaller>;
+    HopSeen  : TDictionary<Int64, Boolean>; // dedupes a caller seen in BOTH buckets at THIS hop
+  begin
+    if ADepth <= 0 then Exit;
+    Combined:= nil;
+    if ASymbolId > 0 then
+      Combined:= Combined + AStore.FindResolvedCallers(ASymbolId);
+    if AQName <> '' then
+      Combined:= Combined + AStore.FindUnresolvedNameCallers(LastSegment(AQName));
+    if Length(Combined) = 0 then Exit;
+
+    HopSeen:= TDictionary<Int64, Boolean>.Create;
+    try
+      for RC in Combined do
+      begin
+        if RC.EnclosingSymbolId <= 0 then Continue; // no enclosing routine -- nothing to attribute the call to
+        if HopSeen.ContainsKey(RC.EnclosingSymbolId) then Continue;
+        HopSeen.Add(RC.EnclosingSymbolId, True);
+        if Visited.ContainsKey(RC.EnclosingSymbolId) then Continue; // already expanded (earlier hop, or another branch) -- cycle guard
+        if Visited.Count >= COVERED_BY_MAXWALK then Exit; // hard walk-size cap reached
+        Visited.Add(RC.EnclosingSymbolId, True);
+        if IsTestRoutine(AStore, RC.EnclosingSymbolId, RC.Location) then
+          Names.Add(RC.EnclosingQName);
+        Walk(RC.EnclosingSymbolId, RC.EnclosingQName, ADepth - 1);
+      end;
+    finally
+      HopSeen.Free;
+    end;
+  end;
+
+begin
+  Result:= '';
+  if ASym.Id <= 0 then Exit;
+  // Only routine-like symbols can be "covered by tests" -- a type/field/
+  // const/unit can never be a call target, so FindResolvedCallers et al.
+  // would trivially return nothing for them anyway; this early-out just
+  // skips the (otherwise harmless but wasted) walk for `document --project`'s
+  // many non-routine symbols. Mirrors DRagLint.Doc.Facts' "cheap fact group"
+  // kind-gate.
+  if not (ASym.Kind in [skMethod, skConstructor, skDestructor, skFunction, skProcedure]) then Exit;
+
+  Names  := TStringList.Create;
+  Visited:= TDictionary<Int64, Boolean>.Create;
+  try
+    Names.Sorted      := True;      // DETERMINISTIC order regardless of walk/encounter order
+    Names.Duplicates  := dupIgnore; // the SAME test can be reached via >1 reverse path/hop
+    Names.CaseSensitive:= False;
+    Visited.Add(ASym.Id, True); // seed with the root itself -- a (mutually) recursive target must never be re-attributed as its own "covered by" caller
+    Walk(ASym.Id, ASym.QualifiedName, COVERED_BY_DEPTH);
+
+    if Names.Count = 0 then Exit;
+
+    // JoinCappedDisplay (above, this unit) applies the SAME cap+'(+N more)'
+    // convention ReadsFields/WritesFields already use -- reused rather than
+    // re-implemented. It wants a TList<string>; Names is a sorted/deduped
+    // TStringList, so its (already-ordered) contents are copied across.
+    var Capped: TList<string>:= TList<string>.Create;
+    try
+      Capped.AddRange(Names.ToStringArray);
+      Result:= JoinCappedDisplay(Capped, COVERED_BY_CAP);
+    finally
+      Capped.Free;
+    end;
+  finally
+    Visited.Free;
+    Names.Free;
   end;
 end;
 

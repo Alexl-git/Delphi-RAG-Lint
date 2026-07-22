@@ -143,6 +143,24 @@ type
     // every other absent fact.
     ReadsFields      : string           ;
     WritesFields     : string           ;
+    // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE, computed LAZILY
+    // here in Build (NOT read back from symbol_facts.covered_by, which stays
+    // unwritten/reserved -- see DRagLint.Doc.SymbolFacts' unit banner "TASK 5
+    // OVERRIDE" comment for why a reverse test->target edge cannot be filled
+    // deterministically at index time). Via DRagLint.Doc.SymbolFacts.
+    // ComputeCoveredBy: a bounded reverse call-graph closure -- a hand-rolled
+    // BFS over FindResolvedCallers+FindUnresolvedNameCallers, NOT DRagLint.
+    // Report.RCallTree (see that unit's banner "IMPLEMENTATION NOTE" for the
+    // empirically-confirmed reason a resolved-only reverse tree misses the
+    // realistic DUnitX case) -- filtered to routines detected as TESTS (unit/
+    // file '*Test' naming convention, or TTestCase ancestry -- see
+    // ComputeCoveredBy/IsTestRoutine for the full ruleset and the confirmed
+    // reason a [Test] attribute cannot be used as a third rule). Already
+    // DISPLAY-READY (', '-joined, capped, a ' (+N more)' suffix when
+    // truncated) -- the SAME raw-passthrough contract as ReadsFields/
+    // WritesFields above. '' when ASym is not routine-like or no caller, at
+    // any bounded hop, is detected as a test.
+    CoveredBy        : string           ;
   end;
 
   TDocFactsBuilder = class
@@ -188,6 +206,9 @@ type
   function DocDisplayCount(ATotal: Integer): Integer;
 
 implementation
+
+uses
+  DRagLint.Doc.SymbolFacts; // v(ADP2 T5): ComputeCoveredBy -- see TDocFacts.CoveredBy's comment
 
 function DocDisplayCount(ATotal: Integer): Integer;
 begin
@@ -1041,6 +1062,15 @@ begin
   // Cyclomatic/BodyLoc above (already capped/formatted at analysis time).
   Result.ReadsFields := SFacts.ReadsFields;
   Result.WritesFields:= SFacts.WritesFields;
+
+  // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE: computed LAZILY
+  // here (NOT read back from SFacts.CoveredBy, which stays unwritten/
+  // reserved) via a bounded reverse call-graph closure -- see TDocFacts.
+  // CoveredBy's own field comment and DRagLint.Doc.SymbolFacts'
+  // ComputeCoveredBy for the full rationale/ruleset. Unconditional call,
+  // like Cyclomatic/ReadsFields above: ComputeCoveredBy itself early-outs
+  // to '' for a non-routine ASym, so no kind-guard is duplicated here.
+  Result.CoveredBy:= ComputeCoveredBy(AStore, ASym);
 end;
 
 end.

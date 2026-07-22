@@ -23,8 +23,8 @@ type
     /// <summary>Renders the fenced facts-block body lines (each prefixed
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
     /// Raises / Deprecated / Overrides / Overridden by / Implements / Overload
-    /// k of n / abstract / virtual / Complexity / Reads/Writes fields / Since
-    /// / SeeAlso. Empty sections omitted; '' when there are no facts. Displayed
+    /// k of n / abstract / virtual / Complexity / Reads/Writes fields /
+    /// Covered by / Since / SeeAlso. Empty sections omitted; '' when there are no facts. Displayed
     /// counts below
     /// the true *Total get a ' (+N more)' suffix. Deprecated is ground-truth
     /// from the Pascal 'deprecated' directive (not the unrelated
@@ -39,7 +39,12 @@ type
     /// omitted when empty, and the WHOLE line is omitted when both are empty;
     /// AFacts.ReadsFields/WritesFields are already display-ready (capped,
     /// formatted) so this is a plain passthrough, like Complexity's raw
-    /// values. SeeAlso emits one &lt;seealso cref&gt; line per entry; it is
+    /// values. Covered by (v(ADP2 T5), 'Covered by: A, B (+N more)') is the
+    /// SAME kind of already-display-ready passthrough -- AFacts.CoveredBy is
+    /// computed LAZILY by DRagLint.Doc.SymbolFacts.ComputeCoveredBy (a
+    /// bounded reverse call-graph closure filtered to test callers), never
+    /// read back from the index; omitted when empty (no detected test
+    /// caller). SeeAlso emits one &lt;seealso cref&gt; line per entry; it is
     /// populated only when the facts were built with the --seealso opt-in, so
     /// by default no &lt;seealso&gt; line appears.</summary>
     /// <param name="AComplexityMin">v(ADP2 T3): the docs.complexity_min
@@ -308,6 +313,17 @@ begin
       end;
       Sb.AppendLine(APrefix + RWLine);
     end;
+    // v(ADP2 T5): Covered-by-tests fact -- CONTROLLER OVERRIDE: AFacts.
+    // CoveredBy is computed LAZILY (DRagLint.Doc.SymbolFacts.
+    // ComputeCoveredBy, a bounded reverse call-graph closure filtered to
+    // test callers), never read back from the index -- see TDocFacts.
+    // CoveredBy's own field comment for the full rationale. Already
+    // DISPLAY-READY (', '-joined, capped, a ' (+N more)' suffix when
+    // truncated) -- the SAME plain-passthrough contract as Reads/Writes
+    // fields just above, so this is a one-line omit-when-empty emit,
+    // nothing more.
+    if AFacts.CoveredBy <> '' then
+      Sb.AppendLine(APrefix + 'Covered by: ' + EscXml(AFacts.CoveredBy));
     // v(ADF T5): OPT-IN git <since> line. AFacts.Since is '' unless the caller
     // built the facts with --since (TDocFactsBuilder.Build's AIncludeSince) AND
     // git confidently attributed the declaration line, so this renders NOTHING by
