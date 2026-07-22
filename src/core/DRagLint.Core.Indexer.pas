@@ -56,6 +56,17 @@ type
       /// <returns>The enclosing routine's DB id, or 0 when the line is in no routine body.</returns>
       function ResolveEnclosingSymbolId(const ASymbols: TArray<TSymbol>;
         const AIdxToId: TDictionary<Integer, Int64>; ALine: Integer): Int64;
+      /// <summary>v(ADP2 T2): 1-based, inclusive line-range slice of ALines
+      /// (the file's SourceText, already split once per IndexFile call),
+      /// clipped to ALines' actual bounds. Feeds a routine symbol's impl body
+      /// to TSymbolFactsAnalyzer.Analyze without a per-symbol re-read/re-split
+      /// of the file.</summary>
+      /// <param name="ALines">The file's source lines (index 0 == line 1).</param>
+      /// <param name="AFromLine">First body line, 1-based (Sym.ImplStartLine).</param>
+      /// <param name="AToLine">Last body line, 1-based (Sym.ImplEndLine).</param>
+      /// <returns>ALines[AFromLine..AToLine] clipped to bounds; nil when the
+      /// clipped range is empty (e.g. ALines is empty).</returns>
+      function SliceBodyLines(const ALines: TArray<string>; AFromLine, AToLine: Integer): TArray<string>;
       procedure WalkAndIndex(const ADir: string; ARecursive: Boolean);
     public
       constructor Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig); overload;
@@ -70,6 +81,10 @@ type
   end;
 
 implementation
+
+uses
+  DRagLint.Doc.SymbolFacts { v(ADP2 T2): TSymbolFactsAnalyzer -- index-time symbol_facts pass }
+  ;
 
 constructor TIndexer.Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig);
 var
@@ -245,6 +260,21 @@ begin
   if (BestIdx >= 0) and AIdxToId.TryGetValue(BestIdx, DbId) then Result:= DbId;
 end; // function
 
+function TIndexer.SliceBodyLines(const ALines: TArray<string>; AFromLine, AToLine: Integer): TArray<string>;
+var
+  Lo, Hi, J: Integer;
+begin
+  Result:= nil;
+  if Length(ALines) = 0 then Exit;
+  Lo:= AFromLine;
+  Hi:= AToLine;
+  if Lo < 1 then Lo:= 1;
+  if Hi > Length(ALines) then Hi:= Length(ALines);
+  if Hi < Lo then Exit; // empty (or inverted) range after clipping
+  SetLength(Result, Hi - Lo + 1);
+  for J:= Lo to Hi do Result[J - Lo]:= ALines[J - 1];
+end; // function
+
 procedure TIndexer.IndexFile(const AFilePath: string);
 var
   Parser        : IParser                    ;
@@ -266,6 +296,9 @@ var
   ParsedDoc     : TParsedDoc                 ;
   Lit           : TStringLiteral             ;
   Encl          : TSymbol                    ;
+  SourceLines   : TArray<string>             ; { v(ADP2 T2): SourceText split once, reused per routine's facts pass }
+  Facts         : TSymbolFacts               ; { v(ADP2 T2) }
+  FactsBody     : TArray<string>             ; { v(ADP2 T2) }
 begin
   Parser:= ParserFor(ExtractFileExt(AFilePath));
   if Parser = nil then Exit;
@@ -390,6 +423,34 @@ begin
           Encl:= FStore.FindContainingSymbol(Token.FileId, Lit.StartLine);
           if Encl.Id > 0 then Lit.SymbolId:= Encl.Id;
           FStore.UpsertStringLiteral(Token, Lit);
+        end;
+        // v(ADP2 T2): index-time analysis facts -- one symbol_facts row per
+        // routine-kind symbol that HAS a body (ImplStartLine > 0). Runs last
+        // (after refs/di-bindings/uses/literals) but still inside the open
+        // file transaction, so a facts-pass failure rolls back atomically
+        // with the rest of the file instead of leaving a half-written row.
+        // SourceLines is split ONCE per file (on #10 only, matching
+        // TDocCommentScanner's own line-counting convention, so 1-based
+        // ImplStartLine/ImplEndLine index it correctly) and reused for every
+        // symbol -- no per-symbol re-parse, no per-symbol disk re-read.
+        // Task 2 writes an EMPTY-but-Present row; Tasks 3-8 fill in each fact
+        // field inside TSymbolFactsAnalyzer.Analyze without ever touching this
+        // call site. Invalidation is automatic: OpenFileTx (above) already
+        // DELETEd this file's OLD symbol rows, and symbol_facts.symbol_id
+        // REFERENCES symbols(id) ON DELETE CASCADE with FK enforcement ON
+        // (see TSQLiteSymbolStore.Create), so a stale facts row can never
+        // outlive its symbol.
+        SourceLines:= SourceText.Split([#10]);
+        for I:= 0 to High(ParseRes.Symbols) do
+        begin
+          Sym:= ParseRes.Symbols[I];
+          if not (Sym.Kind in [skFunction, skProcedure, skMethod, skConstructor, skDestructor]) then Continue;
+          if Sym.ImplStartLine <= 0 then Continue;
+          if not IdxToId.TryGetValue(I, NewSymId) then Continue;
+          FactsBody:= SliceBodyLines(SourceLines, Sym.ImplStartLine, Sym.ImplEndLine);
+          Facts:= TSymbolFactsAnalyzer.Analyze(Sym, FactsBody, FStore);
+          Facts.SymbolId:= NewSymId;
+          FStore.PutSymbolFacts(Facts);
         end;
         FStore.CommitFileTx(Token);
         ReportProgress(AFilePath, Length(ParseRes.Symbols), Length(ParseRes.References), Length(ParseRes.Diagnostics));
