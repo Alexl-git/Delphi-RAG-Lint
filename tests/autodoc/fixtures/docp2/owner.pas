@@ -41,6 +41,44 @@ unit owner;
 //                       managed block -- proving the OMISSION, not just
 //                       absence of any block).
 //
+// FIX WAVE (Phase 2 T8 review) -- two adversarial additions locking in the
+// reviewer-identified false-'new'-receiver and skRecord-rejection fixes (see
+// DRagLint.Doc.SymbolFacts' own "FIX WAVE" banner paragraph for the full
+// rationale):
+//   * TWidgetPool.Create   -- a PLAIN (non-constructor) method that merely
+//                             returns a shared field, NOT a fresh object --
+//                             deliberately named 'Create' to exploit
+//                             ExprIsConstructor's own member-name-only match.
+//                             Gets 'Owns returned: borrowed' itself (FShared
+//                             is TWidgetPool's own field; TWidget is a real
+//                             class, so the object-type gate passes) -- not
+//                             asserted on directly, just self-consistent.
+//   * TUser.Borrow         -- calls 'Result := APool.Create;' where APool is
+//                             an EXISTING INSTANCE (a parameter), not a bare
+//                             type reference -- FIX 1's exact regression.
+//                             WITHOUT the receiver gate this reads back as a
+//                             false 'new' (APool.Create's own body merely
+//                             returns FShared, never allocates -- a caller
+//                             told to Free the result would double-free/
+//                             free-what-it-does-not-own). Expected: NO 'Owns
+//                             returned:' line. An unrelated 'FLastPool :=
+//                             APool;' statement gives this method its own
+//                             Writes: FLastPool fact (so it still gets a
+//                             managed block -- proving the OMISSION, not
+//                             just absence of any block).
+//   * TRecHolder.GetRec    -- Result := FRec, FRec an own-class field of type
+//                             TMyRec (a RECORD, i.e. value type) -- FIX 2's
+//                             exact regression. The site classifies
+//                             'borrowed' (FRec is a real field), but WITHOUT
+//                             the skRecord rejection the object-type gate's
+//                             T/I-prefix heuristic wrongly accepts 'TMyRec'
+//                             (starts with 'T') as if it were a reference
+//                             type. Expected: NO 'Owns returned:' line
+//                             (still gets a managed block via the SAME
+//                             statement's own unrelated Reads: FRec fact --
+//                             proving the OMISSION, not just absence of any
+//                             block, exactly like Count/FCount above).
+//
 // ORDERING/BLOCK-INVARIANT NOTE: every method above ends up with SOME
 // managed block once Task 8 ships (either the Owns-returned fact itself, or
 // the pre-existing Reads/Writes-fields fact for Amb/Count/DisposedResult) --
@@ -72,6 +110,34 @@ type
     function Count: Integer;
     function MakeViaExit: TFoo;
     function DisposedResult: TFoo;
+  end;
+
+  TWidget = class
+  end;
+
+  TWidgetPool = class
+  private
+    FShared: TWidget;
+  public
+    function Create: TWidget;
+  end;
+
+  TUser = class
+  private
+    FLastPool: TWidgetPool;
+  public
+    function Borrow(APool: TWidgetPool): TWidget;
+  end;
+
+  TMyRec = record
+    X, Y: Integer;
+  end;
+
+  TRecHolder = class
+  private
+    FRec: TMyRec;
+  public
+    function GetRec: TMyRec;
   end;
 
 implementation
@@ -118,6 +184,22 @@ begin
   Result := TFoo.Create;
   Result.Free;
   FCount := FCount + 1;
+end;
+
+function TWidgetPool.Create: TWidget;
+begin
+  Result := FShared;
+end;
+
+function TUser.Borrow(APool: TWidgetPool): TWidget;
+begin
+  Result := APool.Create;
+  FLastPool := APool;
+end;
+
+function TRecHolder.GetRec: TMyRec;
+begin
+  Result := FRec;
 end;
 
 end.

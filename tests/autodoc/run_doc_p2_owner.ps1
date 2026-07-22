@@ -32,6 +32,27 @@
                         NO 'Owns returned:' line (still has a managed block
                         via the unrelated Reads/Writes: FCount fact).
 
+  FIX WAVE (Phase 2 T8 review) -- two adversarial regressions, locking in the
+  reviewer-identified fixes:
+    * Borrow (TUser.Borrow) -- Result := APool.Create, where APool: TWidgetPool
+                        is a PARAMETER (an existing instance), and
+                        TWidgetPool.Create is a PLAIN method (not a real
+                        constructor) that just returns a shared field.
+                        WITHOUT Fix 1's receiver gate, ExprIsConstructor
+                        matches on the member name 'create' alone and this
+                        reads back as a false 'new'. Expected: NO 'Owns
+                        returned:' line (still has a managed block via the
+                        unrelated Writes: FLastPool fact).
+    * GetRec (TRecHolder.GetRec) -- Result := FRec, FRec an own-class field
+                        of type TMyRec, a RECORD (value type). The site
+                        classifies 'borrowed' (FRec is a real field), but
+                        WITHOUT Fix 2's skRecord rejection, IsReferenceTypeName's
+                        T/I-prefix fallback heuristic wrongly accepts 'TMyRec'
+                        (starts with 'T') as a reference type. Expected: NO
+                        'Owns returned:' line (still has a managed block via
+                        the unrelated Reads: FRec fact, from the SAME
+                        statement).
+
   Drives `index` -> `document --unit --apply` (Stubs=False default: a decl
   with NO prior doc-comment and NO facts is skipped entirely -- not
   exercised here, since every method in this fixture carries SOME fact, by
@@ -141,6 +162,27 @@ try {
   Check 'DisposedResult has a managed block (AUTO_BEGIN, via the unrelated Reads/Writes: FCount fact)' (($null -ne $disposedBlock) -and ($disposedBlock -match '<!-- drag-lint:auto BEGIN -->'))
   Check 'DisposedResult has NO Owns returned: line (Result.Free seen -- does not cleanly escape)' ($null -eq (Get-OwnsLine $disposedBlock))
 
+  # --- FIX 1 regression: Borrow calls APool.Create where APool (a parameter)
+  # is an EXISTING INSTANCE, not a bare type reference; TWidgetPool.Create is
+  # a plain method (not a real constructor) that just returns a shared field.
+  # WITHOUT the receiver gate, ExprIsConstructor's member-name-only match
+  # ('create') would read this back as a false 'new'. Still gets a managed
+  # block via the unrelated Writes: FLastPool fact, so this proves the
+  # OMISSION specifically, not merely "no block at all".
+  $borrowBlock = Get-DocBlockAbove $lines '^\s*function Borrow\(APool: TWidgetPool\): TWidget;\s*$'
+  Check 'Borrow has a managed block (AUTO_BEGIN, via the unrelated Writes: FLastPool fact)' (($null -ne $borrowBlock) -and ($borrowBlock -match '<!-- drag-lint:auto BEGIN -->'))
+  Check 'Borrow has NO Owns returned: line (APool.Create receiver is an existing instance, not a type -- FIX 1)' ($null -eq (Get-OwnsLine $borrowBlock))
+
+  # --- FIX 2 regression: GetRec returns TMyRec, a RECORD (value type). The
+  # site classifies 'borrowed' (FRec is a real own-class field), but WITHOUT
+  # the skRecord rejection, IsReferenceTypeName's T/I-prefix fallback would
+  # wrongly accept 'TMyRec' (starts with 'T') as a reference type. Still gets
+  # a managed block via the unrelated Reads: FRec fact (the SAME statement),
+  # so this proves the OMISSION specifically, not merely "no block at all".
+  $getRecBlock = Get-DocBlockAbove $lines '^\s*function GetRec: TMyRec;\s*$'
+  Check 'GetRec has a managed block (AUTO_BEGIN, via the unrelated Reads: FRec fact)' (($null -ne $getRecBlock) -and ($getRecBlock -match '<!-- drag-lint:auto BEGIN -->'))
+  Check 'GetRec has NO Owns returned: line (TMyRec is a record, not a reference type -- FIX 2)' ($null -eq (Get-OwnsLine $getRecBlock))
+
   # --- Idempotency: reindex (facts are index-time) + re-apply --------------
   # Scoped to each method's OWN 'Owns returned:' segment (not a whole-file
   # byte comparison) -- see this file's own header comment for why.
@@ -152,6 +194,8 @@ try {
     Count          = Get-OwnsLine $countBlock
     MakeViaExit    = Get-OwnsLine $exitBlock
     DisposedResult = Get-OwnsLine $disposedBlock
+    Borrow         = Get-OwnsLine $borrowBlock
+    GetRec         = Get-OwnsLine $getRecBlock
   }
   & $exePath index $scratch --db $db 2>$null | Out-Null
   & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
@@ -164,6 +208,8 @@ try {
     Count          = Get-OwnsLine (Get-DocBlockAbove $lines2 '^\s*function Count: Integer;\s*$')
     MakeViaExit    = Get-OwnsLine (Get-DocBlockAbove $lines2 '^\s*function MakeViaExit: TFoo;\s*$')
     DisposedResult = Get-OwnsLine (Get-DocBlockAbove $lines2 '^\s*function DisposedResult: TFoo;\s*$')
+    Borrow         = Get-OwnsLine (Get-DocBlockAbove $lines2 '^\s*function Borrow\(APool: TWidgetPool\): TWidget;\s*$')
+    GetRec         = Get-OwnsLine (Get-DocBlockAbove $lines2 '^\s*function GetRec: TMyRec;\s*$')
   }
   foreach ($k in $before.Keys) {
     Check "idempotent: $k Owns-returned unchanged after reindex + 2nd apply" ($before[$k] -eq $after[$k])

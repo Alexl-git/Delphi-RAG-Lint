@@ -179,6 +179,32 @@ unit DRagLint.Doc.SymbolFacts;
 // Kind-agnostic empty-check alone already excludes every non-function
 // routine correctly; ASym.Kind in [skFunction, skMethod] is still checked
 // FIRST as a cheap defensive pre-filter.
+//
+// FIX WAVE (Phase 2 T8 review, both EMPIRICALLY reproduced against the built
+// exe): two gaps in the classification ruleset above, both tightening in the
+// SAME safe direction this fact's own governing principle already demands
+// (absence over a wrong verdict) -- neither touches the unanimity/site-
+// collection machinery, only two of the per-site/per-type CLASSIFICATION
+// checks:
+//   Fix 1 -- 'new' no longer accepts ExprIsConstructor's verdict blindly.
+//     ExprIsConstructor (DRagLint.Analysis.Flow.Lattices) matches PURELY on
+//     the member-access text 'create', never the RECEIVER it is called ON,
+//     so a plain instance method merely NAMED Create (e.g. a pool object's
+//     own non-allocating 'function Create: TWidget' that just returns a
+//     shared field) used to read back as 'new' from any caller doing
+//     'Result := APool.Create;'. ClassifyReturnSite now additionally
+//     requires the call's own receiver (ConstructorReceiverNode, below) to
+//     pass ConstructorReceiverIsTypeName -- confidently a bare/qualified
+//     TYPE reference, never a var/param/field/Self the routine already
+//     holds an instance of -- see that function's own header comment for
+//     the full rule and its accepted recall-narrowing tradeoff.
+//   Fix 2 -- IsReferenceTypeName's tier-1 store-resolved loop now rejects a
+//     resolved skRecord/skEnum OUTRIGHT (Exit(False)) instead of silently
+//     falling through to the tier-2 T/I-prefix heuristic, which would
+//     otherwise wrongly accept an indexed value-type record/enum whose name
+//     happens to start with 'T'/'I' (e.g. 'TMyRec = record ... end;') as a
+//     reference type, letting a record-returning getter render a nonsense
+//     'borrowed'/'self' line.
 
 interface
 
@@ -1328,9 +1354,17 @@ end;
 // heuristic:
 //   1. STORE-RESOLVED (preferred): ATypeName's bare, unqualified segment
 //      names a class or interface symbol somewhere in the index -- ground
-//      truth, no guessing. (skRecord is deliberately EXCLUDED: a Pascal
-//      record is a value type, so 'borrowed'/'self' would be just as
-//      nonsensical for it as for Integer.)
+//      truth, no guessing. FIX (Phase 2 T8 review, Fix 2): a store-resolved
+//      skRecord/skEnum is likewise ground truth, but a NEGATIVE -- a Pascal
+//      record/enum is a value type, so 'borrowed'/'self' would be just as
+//      nonsensical for it as for Integer. The ORIGINAL loop only ever
+//      short-circuited on the POSITIVE match (skClass/skInterface), so a
+//      resolved skRecord fell through unnoticed to tier 2's T/I-prefix
+//      heuristic below and could be wrongly accepted there (e.g. 'TMyRec =
+//      record ... end;' starts with 'T'); the loop now Exits(False)
+//      immediately on skRecord/skEnum too, so tier 2 is reached ONLY when
+//      the store did not resolve the name to any of these four kinds at all
+//      (a genuinely un-indexed type, e.g. a built-in TObject/TStream).
 //   2. CHEAP FALLBACK (only when (1) finds nothing at all -- e.g. a
 //      built-in/un-indexed system type like TObject/TStream, never declared
 //      anywhere in THIS corpus): the Delphi class/interface NAMING
@@ -1360,7 +1394,15 @@ begin
 
   Cands:= AStore.FindSymbolsByExactName(Bare);
   for Cand in Cands do
+  begin
     if Cand.Kind in [skClass, skInterface] then Exit(True);
+    // FIX (Phase 2 T8 review, Fix 2): ground-truth NEGATIVE -- see this
+    // function's header comment, tier 1, for why the ORIGINAL code's
+    // silence here (no negative check at all) let a resolved value-typed
+    // record/enum fall through to the T/I-prefix heuristic below and be
+    // wrongly accepted as a reference type.
+    if Cand.Kind in [skRecord, skEnum] then Exit(False);
+  end;
 
   if MatchText(Bare, [
     'Integer', 'Int64', 'UInt64', 'Cardinal', 'Byte', 'Word',
@@ -1373,6 +1415,89 @@ begin
     'Pointer', 'TBytes']) then Exit(False);
 
   Result:= (Length(Bare) >= 2) and CharInSet(Bare[1], ['T', 'I']);
+end;
+
+// FIX (Phase 2 T8 review, Fix 1): the constructor-call's own RECEIVER node --
+// the exprDot's 'lhs', i.e. what 'T.Create'/'APool.Create' is CALLED ON. N is
+// whichever shape ExprIsConstructor (DRagLint.Analysis.Flow.Lattices) itself
+// already matched: a bare 'exprDot' ('T.Create'), or an 'exprCall' whose
+// 'entity' is that same 'exprDot' ('T.Create()'). IsNull (Default(TTSNode))
+// when N matches neither shape -- defensive only; every real call site is
+// guarded by ExprIsConstructor(N, ASrc) having already returned True first
+// (see ClassifyReturnSite's 'new' check, below).
+function ConstructorReceiverNode(const N: TTSNode): TTSNode;
+var DotN: TTSNode;
+begin
+  Result:= Default(TTSNode);
+  DotN  := Default(TTSNode);
+  if N.NodeType = 'exprDot' then DotN:= N
+  else if N.NodeType = 'exprCall' then DotN:= N.ChildByField('entity');
+  if DotN.IsNull or (DotN.NodeType <> 'exprDot') then Exit;
+  Result:= DotN.ChildByField('lhs');
+end;
+
+// FIX (Phase 2 T8 review, Fix 1): True only when ARecv (a constructor-call's
+// receiver expression, from ConstructorReceiverNode) is confidently a
+// bare/qualified TYPE reference -- e.g. 'TFoo' in 'TFoo.Create' -- and NOT an
+// existing instance. Guards the false 'new' ClassifyReturnSite used to
+// accept unconditionally from ExprIsConstructor, which matches PURELY on the
+// member-access text 'create' and never inspects the receiver at all -- so a
+// plain instance method merely NAMED Create (e.g. 'function TWidgetPool.
+// Create: TWidget' that just returns a shared field, never allocating) used
+// to read back as 'new' from ANY call site, e.g. 'Result := APool.Create;'.
+//
+// Walks ARecv's own leftmost/base identifier via the SAME lhs/entity/first-
+// named-child descent DRagLint.Analysis.Flow.Lattices' LeftmostBaseVar
+// already performs for the identical "find the base var of x / x.f / x.f.g"
+// need (the descent shape is reused; LeftmostBaseVar itself is not, since it
+// returns an AVars-only index and this needs the identifier's TEXT to
+// additionally test against AFields) -- bounded to 32 hops against a
+// malformed/cyclic tree, matching LeftmostBaseVar's own guard. The head
+// identifier is rejected (Result:=False, i.e. NOT a type reference) when:
+//   - no identifier is found at all within the hop bound (a receiver
+//     bottoming out in a call result, an index expression, ... -- "cannot be
+//     determined to be a type name" -- absence over a wrong verdict);
+//   - it is literally 'self' (Self.Create is ambiguous: on a class method
+//     Self is a metaclass and .Create allocates fresh, but on an ordinary
+//     instance method Self IS the current instance and .Create reinitializes
+//     it in place -- indistinguishable here, so never accepted as 'new');
+//   - it resolves in AVars (ANY kind: a parameter, a local, Result itself)
+//     -- an existing instance the routine already holds a reference to, e.g.
+//     'APool.Create' where APool: TWidgetPool is a parameter;
+//   - it resolves in AFields (an own-class field) -- e.g. 'FFactory.Create'.
+// AVars/AFields are the SAME per-routine var table and own-class field-name
+// set ClassifyReturnSite's OTHER branches (borrowed/self) already use.
+//
+// This narrows RECALL, never precision: a real class-reference-typed
+// variable's '.Create' (e.g. 'AFactoryClass: TWidgetPoolClass; ... Result :=
+// AFactoryClass.Create;' -- a genuine fresh allocation via a metaclass
+// variable) is indistinguishable from an existing-instance receiver here, so
+// it is rejected too (falls to 'unknown') -- an accepted, documented SAFE-
+// direction imprecision: ABSENCE OVER A WRONG VERDICT, this fact's own
+// governing principle, values a missed 'new' far below a wrong one (a wrong
+// 'new' invites a double-free; a missed 'new' just omits a line).
+function ConstructorReceiverIsTypeName(const ARecv: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable; AFields: TDictionary<string, string>): Boolean;
+var Cur, Nxt: TTSNode; Guard: Integer; Head: string;
+begin
+  Result:= False;
+  Head:= '';
+  Cur:= ARecv; Guard:= 0;
+  while (not Cur.IsNull) and (Guard < 32) do
+  begin
+    Inc(Guard);
+    if Cur.NodeType = 'identifier' then begin Head:= NodeText(Cur, ASrc); Break; end;
+    Nxt:= Cur.ChildByField('lhs');
+    if Nxt.IsNull then Nxt:= Cur.ChildByField('entity');
+    if Nxt.IsNull and (Cur.NamedChildCount > 0) then Nxt:= Cur.NamedChild(0);
+    if Nxt.IsNull then Exit; // bottomed out on something other than an identifier -- undetermined, reject
+    Cur:= Nxt;
+  end;
+  if Head = '' then Exit;                 // not found within the hop bound either -- undetermined, reject
+  if Head = 'self' then Exit;             // Self.Create -- ambiguous instance receiver, reject
+  if AVars.IndexOf(Head) >= 0 then Exit;  // a param/local/Result -- existing instance
+  if AFields.ContainsKey(Head) then Exit; // an own-class field -- existing instance
+  Result:= True;
 end;
 
 // ADP2 T8: classifies ONE return-site's RHS node N into exactly one of
@@ -1405,8 +1530,20 @@ begin
   // escape analysis (TEscape) already relies on -- handles BOTH the
   // paren-less and parenthesized constructor-call shapes identically, so
   // this fact and the leak-detection lattice can never disagree about what
-  // "looks like a constructor call".
-  if ExprIsConstructor(N, ASrc) then Exit('new');
+  // "looks like a constructor call". FIX (Phase 2 T8 review, Fix 1):
+  // ExprIsConstructor matches PURELY on the member-access text 'create' and
+  // NEVER inspects what it is called ON, so a plain instance method simply
+  // NAMED Create (e.g. 'function TWidgetPool.Create: TWidget' that just
+  // returns a shared field, never allocating) used to read back as 'new'
+  // from ANY call site, e.g. 'Result := APool.Create;' where APool is an
+  // existing instance. 'new' is now additionally gated on the call's own
+  // RECEIVER (ConstructorReceiverNode) confidently being a bare/qualified
+  // TYPE reference, not an existing instance -- see
+  // ConstructorReceiverIsTypeName's own header comment for the full rule and
+  // its accepted recall-narrowing tradeoff.
+  if ExprIsConstructor(N, ASrc)
+     and ConstructorReceiverIsTypeName(ConstructorReceiverNode(N), ASrc, AVars, AFields) then
+    Exit('new');
 
   // self: bare 'Self', or 'Self as <Type>' (an 'exprBinary' whose operator
   // node-type is literally 'kAs' -- the SAME shape DRagLint.Parser.
