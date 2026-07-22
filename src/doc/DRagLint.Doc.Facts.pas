@@ -683,8 +683,12 @@ begin
 
         // 3. Add a bare name only when its leaf is NOT already covered by a
         // resolved qualified callee (suppress the duplicate, keep the unresolved).
+        // Also drop the symbol's OWN name: the impl span includes the routine
+        // header line (`Name(...)`), whose `Name(` reads as a call to itself --
+        // a spurious self-`Calls:` (seen on free-function overloads). Genuine
+        // self-recursion renders nothing useful as "Calls: self" either.
         for var K:= 0 to CallSet.Count - 1 do
-          if ResolvedLeaves.IndexOf(CallSet[K]) < 0 then
+          if (ResolvedLeaves.IndexOf(CallSet[K]) < 0) and (not SameText(CallSet[K], ASym.Name)) then
             FinalSet.Add(CallSet[K]);
       finally
         CallSet.Free;
@@ -799,11 +803,16 @@ begin
   // probe DetectMethodDirectives (see its header comment for the rationale and
   // the known StartLine-only bound).
   //
-  // CHEAP EARLY-OUT: only method-like symbols (skMethod/skConstructor/
-  // skDestructor) with a parent (ASym.ParentId > 0) can have any of these five
-  // facts -- a free routine, a type, a field, etc. has none of them, so the
-  // whole block is skipped for every other kind/parentless symbol.
-  if (ASym.Kind in [skMethod, skConstructor, skDestructor]) and (ASym.ParentId > 0) then
+  // CHEAP EARLY-OUT: only routine-like symbols with a parent (ASym.ParentId > 0)
+  // can carry any of these facts -- a type, a field, a const, etc. has none, so
+  // the whole block is skipped for every other kind/parentless symbol. Free
+  // (unit-level) functions/procedures ARE included because they can be OVERLOADED
+  // (the Overload k of n line below); the method-only facts (Overrides /
+  // Implements / Overridden by / virtual+abstract) naturally resolve to EMPTY for
+  // them -- a unit parent has no class ancestry/descendants and a free routine
+  // carries no virtual/abstract directive -- so including them is correct, not
+  // just harmless.
+  if (ASym.Kind in [skMethod, skConstructor, skDestructor, skFunction, skProcedure]) and (ASym.ParentId > 0) then
   begin
     var ParentSym: TSymbol:= AStore.GetSymbolById(ASym.ParentId);
     if ParentSym.Id > 0 then
@@ -884,7 +893,12 @@ begin
     var SameName: TList<TSymbol>:= TList<TSymbol>.Create;
     try
       for var Sib in Siblings do
-        if (Sib.Kind in [skMethod, skConstructor, skDestructor]) and SameText(Sib.Name, ASym.Name) then
+        // Include free (unit-level) functions/procedures, not just methods:
+        // FindAllChildSymbols(ParentId) already scopes to the right container
+        // (a class for methods, the unit symbol for free routines), so an
+        // overloaded free function -- e.g. two `Combine`s at unit scope -- gets
+        // its "Overload k of n" line too.
+        if (Sib.Kind in [skMethod, skConstructor, skDestructor, skFunction, skProcedure]) and SameText(Sib.Name, ASym.Name) then
           SameName.Add(Sib);
       if SameName.Count > 1 then
       begin

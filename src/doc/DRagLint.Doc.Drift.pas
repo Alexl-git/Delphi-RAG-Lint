@@ -529,7 +529,16 @@ begin
     if Pos(AUTO_BEGIN, ADoc.Remarks) > 0 then
     begin
       var CurBlock: string:= ExtractManagedBlockBody(ADoc.Remarks, AUTO_BEGIN, AUTO_END);
-      var Fresh   : string:= TDocRegions.RenderFactsBlock(Facts, '');
+      // Match MergeComment: a symbol whose <returns> is HAND-WRITTEN (not empty,
+      // not the TODO sentinel, not a generated 'Observed:' tag) AND that has mined
+      // return cases carries a 'Returns:' fact line in its managed block. Render
+      // Fresh the same way, else the block would read as perpetually stale.
+      var RetTrim: string:= Trim(ADoc.ReturnsText);
+      var IncludeRet: Boolean:= HasReturn and (RetTrim <> '')
+        and (not SameText(RetTrim, 'TODO: describe.'))
+        and (Copy(RetTrim, 1, 9) <> 'Observed:')
+        and (Length(Facts.ReturnCases) > 0);
+      var Fresh   : string:= TDocRegions.RenderFactsBlock(Facts, '', IncludeRet);
       // Whitespace-normalized compare: the parser flattens the stored remarks to
       // single spaces, so both sides are collapsed the same way before diffing.
       if CollapseAllWhitespace(CurBlock) <> CollapseAllWhitespace(Fresh) then

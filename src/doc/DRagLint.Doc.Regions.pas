@@ -35,7 +35,7 @@ type
     /// source probe. SeeAlso emits one &lt;seealso cref&gt; line per entry; it is
     /// populated only when the facts were built with the --seealso opt-in, so
     /// by default no &lt;seealso&gt; line appears.</summary>
-    class function RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string): string;
+    class function RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string; AIncludeReturns: Boolean = False): string;
     /// <summary>Produces the full merged DocInsight comment text (///-prefixed
     /// lines joined by CRLF): preserved hand-written prose + a regenerated
     /// managed facts block (fenced inside remarks) + managed param tags.
@@ -82,7 +82,7 @@ begin
 end;
 
 /// <summary>Builds the " Observed: a; b." suffix (XML-escaped) from mined return
-/// cases, or '' when none. Deterministic -> idempotent across runs.</summary>
+/// cases, or '' when none. Used to fill a managed/empty &lt;returns&gt; tag.</summary>
 function ObservedSuffix(const ACases: TArray<string>): string;
 var i: Integer; Sb: TStringBuilder;
 begin
@@ -149,7 +149,7 @@ begin
     Result:= Head + Tail;
 end;
 
-class function TDocRegions.RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string): string;
+class function TDocRegions.RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string; AIncludeReturns: Boolean = False): string;
 var
   Sb: TStringBuilder;
   function MoreSuffix(AShown, ATotal: Integer): string;
@@ -192,6 +192,23 @@ begin
       Sb.AppendLine(APrefix + 'Called from: ' + JoinRefs(AFacts.CalledFrom) + MoreSuffix(Length(AFacts.CalledFrom), AFacts.CalledFromTotal));
     if Length(AFacts.Calls) > 0 then
       Sb.AppendLine(APrefix + 'Calls: ' + JoinEsc(AFacts.Calls) + MoreSuffix(Length(AFacts.Calls), AFacts.CallsTotal));
+    // Mined Result:=/Exit() return cases as a FACT line -- emitted ONLY when the
+    // caller asks (AIncludeReturns), which MergeComment sets solely for a symbol
+    // that ALREADY has a HAND-WRITTEN <returns>. For a managed/empty <returns>
+    // the observed cases go in the tag itself (ObservedSuffix), so the two never
+    // duplicate. Off by default so the drift engine's Fresh render is unchanged.
+    // Same mined set the hover popup surfaces, unifying the two views. Semicolon-
+    // joined + XML-escaped (a return expression can carry < > &).
+    if AIncludeReturns and (Length(AFacts.ReturnCases) > 0) then
+    begin
+      var Rc: string:= '';
+      for var Ri:= 0 to High(AFacts.ReturnCases) do
+      begin
+        if Ri > 0 then Rc:= Rc + '; ';
+        Rc:= Rc + EscXml(AFacts.ReturnCases[Ri]);
+      end;
+      Sb.AppendLine(APrefix + 'Returns: ' + Rc);
+    end;
     if Length(AFacts.UsedInUnits) > 0 then
       Sb.AppendLine(APrefix + 'Used in units: ' + JoinEsc(AFacts.UsedInUnits) + MoreSuffix(Length(AFacts.UsedInUnits), AFacts.UsedInTotal));
     if Length(AFacts.Raises) > 0 then
@@ -283,7 +300,21 @@ var
 begin
   Sb:= TStringBuilder.Create;
   try
-    Facts:= RenderFactsBlock(AFacts, APrefix);
+    // The mined return cases surface in exactly ONE place. For a symbol whose
+    // existing <returns> is HAND-WRITTEN they go in a managed 'Returns:' fact
+    // line (so they show alongside the author's prose); for a managed/empty
+    // <returns> they fill the tag itself (ObservedSuffix, below). Never both.
+    // A previously-generated tag reads back as ' Observed: ...' -- recognize that
+    // (StartsText 'Observed:') as MANAGED too, else a re-run would mistake it for
+    // hand-written text and both regenerate the tag AND add a fact line (a
+    // non-idempotent double). Genuine hand-written returns is neither empty, the
+    // legacy TODO sentinel, nor 'Observed:'-prefixed.
+    var IncludeReturns: Boolean:=
+      AExisting.HasContent and AHasReturn
+      and (not IsManagedDesc(AExisting.ReturnsText))
+      and (not StartsText('Observed:', Trim(AExisting.ReturnsText)))
+      and (Length(AFacts.ReturnCases) > 0);
+    Facts:= RenderFactsBlock(AFacts, APrefix, IncludeReturns);
     if not AExisting.HasContent then
     begin
       Sb.AppendLine(APrefix + '<summary></summary>');
@@ -353,10 +384,11 @@ begin
     if AHasReturn then
     begin
       var Ret: string:= AExisting.ReturnsText;
-      // Managed (empty, or the legacy TODO sentinel) -> regenerate from the
-      // mined facts only (empty when there are no cases). Author-edited
-      // returns (non-managed) win: do NOT inject Observed into hand text.
-      if IsManagedDesc(Ret) then
+      // Managed/empty <returns> -> fill the tag with the mined Observed cases
+      // (as before). A HAND-WRITTEN <returns> is preserved verbatim, and its
+      // mined cases instead appear in the 'Returns:' fact line (IncludeReturns
+      // above) so they are shown without disturbing the author's text.
+      if IsManagedDesc(Ret) or StartsText('Observed:', Trim(Ret)) then
         Ret:= Trim(ObservedSuffix(AFacts.ReturnCases));
       Sb.AppendLine(EmitTagged('<returns>', Ret, '</returns>'));
     end;
