@@ -1089,26 +1089,14 @@ begin
   end;
 end;
 
-// ADP2 T3: reads the docs.complexity_min threshold for the doc verbs
-// (document --qname/--unit/--project, document-all), mirroring
-// LoadDocMaxReturnCases/LoadDocMaxCallers exactly (same manifest discovery:
-// engine dir beside the exe + current working dir walking up for a local
-// override). Gates RenderFactsBlock's 'Complexity:' line at RENDER time (see
-// its remarks) -- changing this value never needs a reindex. Best-effort: any
-// load failure (missing files, malformed JSON) falls back to 10
-// (TDocSettings.Defaults.ComplexityMin).
-function LoadDocComplexityMin: Integer;
-var
-  DocManifest: TIndexManifest;
-begin
-  Result:= 10;
-  try
-    DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
-    Result:= DocManifest.Docs.ComplexityMin;
-  except
-    Result:= 10;
-  end;
-end;
+// ADP2 T3 / v(ADP2 T9): LoadDocComplexityMin moved to DRagLint.Index.Manifest
+// (still reachable here unqualified via the existing `uses DRagLint.Index
+// .Manifest` below) so DRagLint.LSP.Server.HandleHover can call the SAME
+// loader `document`/DoHover use without depending on this CLI unit -- see
+// that function's DocInsight comment in DRagLint.Index.Manifest.pas for the
+// full rationale. Every call site in this file (DoDocumentQName/Unit/
+// Project/DoHover below) is unchanged: the identifier still resolves, now
+// via the import instead of a local declaration.
 
 // v0.45: serialise a TIndexManifest to a TJSONObject for the dry-run JSON view.
 // Delegates to TManifestIO.ToJson for the canonical manifest structure, then
@@ -3887,7 +3875,21 @@ begin
   if Fmt = '' then Fmt:= 'plain';
 
   if Fmt      = 'json' then Write(DRagLint.Hover.Renderer.RenderHoverJson(Model))
-  else if Fmt = 'md' then Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs))
+  else if Fmt = 'md' then
+  begin
+    // v(ADP2 T9): thread the SAME Phase-2 analysis facts `document` renders
+    // into the hover markdown -- via TDocFactsBuilder.Build (the identical
+    // facts assembly `document` uses) and TDocRegions.FormatPhase2FactLines
+    // (the SHARED formatter both surfaces call), so hover and the managed
+    // doc block can never show different facts for the same symbol (the
+    // doc/hover consistency lock). LoadDocComplexityMin loads the SAME
+    // docs.complexity_min threshold `document` uses, so the 'Complexity:'
+    // gate matches too. AIncludeSeeAlso/AIncludeSince stay False (hover has
+    // no --seealso/--since opt-in), mirroring a default `document` run.
+    var Facts: TDocFacts:= TDocFactsBuilder.Build(Store, Syms[0]);
+    var FactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(Facts, LoadDocComplexityMin);
+    Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, FactLines));
+  end
   else Write(RenderHoverPlain(Syms[0], Doc));
   Result:= 0;
 end; // function

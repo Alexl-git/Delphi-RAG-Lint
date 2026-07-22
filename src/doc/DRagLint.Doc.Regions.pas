@@ -79,6 +79,31 @@ type
     /// only the display gate changes).</param>
     class function RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string;
       AIncludeReturns: Boolean = False; AComplexityMin: Integer = 10): string;
+    /// <summary>Formats the SIX Phase-2 index-time analysis facts (v(ADP2
+    /// T3/T4/T5/T6/T7/T8)) as bare, omit-when-empty display lines, in the
+    /// SAME fixed order RenderFactsBlock emits them in the managed doc
+    /// block: Complexity / Reads-Writes fields / Owns returned / Handles /
+    /// SQL tables touched / Covered by. Each returned line is UNPREFIXED (no
+    /// '/// ', no leading indentation) -- RenderFactsBlock prepends its own
+    /// APrefix per line when it calls this helper; a hover renderer appends
+    /// the lines as-is. This is the v(ADP2 T9) DOC/HOVER CONSISTENCY LOCK:
+    /// the ONE place either surface computes what a Phase-2 fact line says,
+    /// so `document`'s managed block and `hover`'s markdown -- both built
+    /// from the SAME TDocFactsBuilder.Build(AStore, ASym) result -- can
+    /// never drift apart on the same symbol. Every OTHER fact
+    /// RenderFactsBlock renders (Called from / Calls / Used in units /
+    /// Raises / Deprecated / the ADP1 T3 cheap group / Since / SeeAlso) is
+    /// Phase 1.x or opt-in doc-only content, deliberately out of scope for
+    /// this helper and for hover.</summary>
+    /// <param name="AComplexityMin">Same threshold/semantics as
+    /// RenderFactsBlock's own AComplexityMin param (see its comment): the
+    /// 'Complexity:' line is emitted only when AFacts.Cyclomatic &gt;=
+    /// AComplexityMin (and Cyclomatic &gt; 0, ruling out the "never
+    /// analyzed" sentinel).</param>
+    /// <returns>Zero or more display lines, in Complexity / Reads-Writes /
+    /// Owns returned / Handles / SQL / Covered-by order; empty when AFacts
+    /// carries none of the six.</returns>
+    class function FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10): TArray<string>;
     /// <summary>Produces the full merged DocInsight comment text (///-prefixed
     /// lines joined by CRLF): preserved hand-written prose + a regenerated
     /// managed facts block (fenced inside remarks) + managed param tags.
@@ -195,6 +220,94 @@ begin
     Result:= Head + Tail;
 end;
 
+// v(ADP2 T9): the DOC/HOVER CONSISTENCY LOCK -- see this function's own
+// DocInsight comment (interface section) for the full rationale. Logic here
+// is a byte-for-byte lift of the six Phase-2 blocks RenderFactsBlock used to
+// inline directly: same guards, same EscXml calls, same separators (three
+// literal spaces for Reads/Writes, semicolon-space for SQL), same order.
+// Lines are UNPREFIXED -- callers (RenderFactsBlock, hover) each apply
+// whatever leading text their own surface needs.
+class function TDocRegions.FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10): TArray<string>;
+var
+  Lines: TStringList;
+begin
+  Lines:= TStringList.Create;
+  try
+    // v(ADP2 T3): Complexity -- THRESHOLD APPLIED HERE (render time), not when
+    // AFacts was built: AFacts.Cyclomatic/BodyLoc are the RAW index-time
+    // values, so a routine at or above AComplexityMin (docs.complexity_min,
+    // default 10) gets the line and everything else stays lean -- changing
+    // the threshold takes effect on the very next `document`/`hover` call
+    // with NO reindex. 'Cyclomatic > 0' guards the AComplexityMin <= 0 edge
+    // case: a REAL analyzed routine's cyclomatic complexity is
+    // architecturally always >= 1, so 0 is an UNAMBIGUOUS "not computed"
+    // sentinel (no symbol_facts row, or no matching defProc at index time).
+    if (AFacts.Cyclomatic > 0) and (AFacts.Cyclomatic >= AComplexityMin) then
+      Lines.Add(Format('Complexity: %d (cyclomatic), %d lines', [AFacts.Cyclomatic, AFacts.BodyLoc]));
+    // v(ADP2 T4): Reads/Writes fields -- ONE line, each side omitted when
+    // empty, the WHOLE line omitted when both are empty. AFacts.ReadsFields/
+    // WritesFields are ALREADY display-ready (capped, ', '-joined, a
+    // ' (+N more)' suffix when truncated), so this is a passthrough. Three
+    // literal spaces separate the two sides, per the design spec's own
+    // rendering example.
+    if (AFacts.ReadsFields <> '') or (AFacts.WritesFields <> '') then
+    begin
+      var RWLine: string:= '';
+      if AFacts.ReadsFields <> '' then RWLine:= 'Reads: ' + EscXml(AFacts.ReadsFields);
+      if AFacts.WritesFields <> '' then
+      begin
+        if RWLine <> '' then RWLine:= RWLine + '   ';
+        RWLine:= RWLine + 'Writes: ' + EscXml(AFacts.WritesFields);
+      end;
+      Lines.Add(RWLine);
+    end;
+    // v(ADP2 T8): Returned-object ownership -- ONE line, omitted entirely
+    // when AFacts.ReturnsOwner = '' (no unanimous, high-confidence verdict --
+    // absence over a wrong verdict, since a wrong 'new' invites a
+    // double-free). 'new' expands to the fuller 'new (caller owns)' display
+    // text here (at render time); 'borrowed'/'self' are already the final
+    // display word.
+    if AFacts.ReturnsOwner <> '' then
+    begin
+      var OwnsWord: string;
+      if AFacts.ReturnsOwner = 'new' then OwnsWord:= 'new (caller owns)'
+      else OwnsWord:= AFacts.ReturnsOwner;
+      Lines.Add('Owns returned: ' + EscXml(OwnsWord));
+    end;
+    // v(ADP2 T6): DFM event-wiring -- ONE line, 'Handles: Button1.OnClick',
+    // omitted entirely when AFacts.DfmEvent = ''. Already the final display
+    // string (index-time), so no cap/threshold logic is needed here.
+    if AFacts.DfmEvent <> '' then
+      Lines.Add('Handles: ' + EscXml(AFacts.DfmEvent));
+    // v(ADP2 T7): SQL tables touched -- ONE line, 'SQL: reads A, B; writes
+    // C', either side omitted when empty, the WHOLE line omitted when both
+    // sides are empty. Semicolon-SPACE separates the two sides here (NOT the
+    // three-literal-space separator Reads/Writes fields uses above -- this
+    // line's own format per the design spec's rendering example).
+    if (AFacts.SqlReads <> '') or (AFacts.SqlWrites <> '') then
+    begin
+      var SqlLine: string:= '';
+      if AFacts.SqlReads <> '' then SqlLine:= 'reads ' + EscXml(AFacts.SqlReads);
+      if AFacts.SqlWrites <> '' then
+      begin
+        if SqlLine <> '' then SqlLine:= SqlLine + '; ';
+        SqlLine:= SqlLine + 'writes ' + EscXml(AFacts.SqlWrites);
+      end;
+      Lines.Add('SQL: ' + SqlLine);
+    end;
+    // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE: AFacts.CoveredBy
+    // is computed LAZILY by the caller (DRagLint.Doc.SymbolFacts.
+    // ComputeCoveredBy), never read back from the index -- see TDocFacts.
+    // CoveredBy's own field comment for the full rationale. Already
+    // DISPLAY-READY, so this is a one-line omit-when-empty emit.
+    if AFacts.CoveredBy <> '' then
+      Lines.Add('Covered by: ' + EscXml(AFacts.CoveredBy));
+    Result:= Lines.ToStringArray;
+  finally
+    Lines.Free;
+  end;
+end;
+
 class function TDocRegions.RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string;
   AIncludeReturns: Boolean = False; AComplexityMin: Integer = 10): string;
 var
@@ -294,108 +407,19 @@ begin
       Sb.AppendLine(APrefix + 'abstract');
     if AFacts.IsVirtual then
       Sb.AppendLine(APrefix + 'virtual');
-    // v(ADP2 T3): Complexity fact -- THRESHOLD APPLIED HERE (render time), not
-    // when AFacts was built: AFacts.Cyclomatic/BodyLoc are the RAW index-time
-    // values (TDocFactsBuilder.Build never zeroes/caps them), so a routine at
-    // or above AComplexityMin (docs.complexity_min, default 10) gets the line
-    // and everything else stays lean -- and changing the threshold takes
-    // effect on the very next `document` run with NO reindex (the fact
-    // values in the index do not change, only this display gate does).
-    // 'Cyclomatic > 0' guards the AComplexityMin <= 0 edge case: a REAL
-    // analyzed routine's cyclomatic complexity is architecturally always >= 1
-    // (TAstChecker.CyclomaticOf = 1 + a non-negative decision count), so 0 is
-    // an UNAMBIGUOUS "not computed" sentinel (no symbol_facts row, or no
-    // matching defProc at index time) -- without this guard, a manifest
-    // setting docs.complexity_min to 0 (or negative) would render a
-    // fabricated-looking 'Complexity: 0 (cyclomatic), 0 lines' on every
-    // symbol that was never analyzed at all (e.g. a type/field/const, which
-    // never gets a symbol_facts row).
-    if (AFacts.Cyclomatic > 0) and (AFacts.Cyclomatic >= AComplexityMin) then
-      Sb.AppendLine(APrefix + Format('Complexity: %d (cyclomatic), %d lines', [AFacts.Cyclomatic, AFacts.BodyLoc]));
-    // v(ADP2 T4): Reads/Writes fields fact -- ONE line, each side omitted when
-    // empty, the WHOLE line omitted when both are empty (never an empty
-    // 'Reads: ' / 'Writes: ' label with nothing after it). AFacts.ReadsFields/
-    // WritesFields are ALREADY display-ready (capped at 8, ', '-joined, a
-    // ' (+N more)' suffix appended when truncated -- see DRagLint.Doc.
-    // SymbolFacts' JoinCappedDisplay for why the cap can't be deferred to
-    // render time here, unlike Calls/CalledFrom/etc.), so -- like Cyclomatic/
-    // BodyLoc -- this is a passthrough. EscXml is still applied for the same
-    // defense-in-depth reason every other emitted value in this block gets
-    // it, even though a Pascal field name never actually needs escaping.
-    // Three literal spaces separate the two sides, per the design spec's
-    // rendering example.
-    if (AFacts.ReadsFields <> '') or (AFacts.WritesFields <> '') then
-    begin
-      var RWLine: string:= '';
-      if AFacts.ReadsFields <> '' then RWLine:= 'Reads: ' + EscXml(AFacts.ReadsFields);
-      if AFacts.WritesFields <> '' then
-      begin
-        if RWLine <> '' then RWLine:= RWLine + '   ';
-        RWLine:= RWLine + 'Writes: ' + EscXml(AFacts.WritesFields);
-      end;
-      Sb.AppendLine(APrefix + RWLine);
-    end;
-    // v(ADP2 T8): Returned-object ownership fact -- ONE line, omitted
-    // entirely when AFacts.ReturnsOwner = '' (no unanimous, high-confidence
-    // verdict -- see TDocFacts.ReturnsOwner's own field comment for the full
-    // list of ABSENCE conditions; this fact's OWN governing principle is
-    // absence over a wrong verdict, since a wrong 'new' invites a
-    // double-free). Deliberately labeled 'Owns returned:' -- NOT 'Returns:'
-    // -- so it can never collide with the Phase 1.x mined return-cases fact
-    // line above (Result:=/Exit() RHS expressions, an entirely different
-    // concept: what a function's body computes vs. who owns what it
-    // hands back). 'new' expands to the fuller 'new (caller owns)' display
-    // text here (at render time); 'borrowed'/'self' are already the final
-    // display word, stored verbatim.
-    if AFacts.ReturnsOwner <> '' then
-    begin
-      var OwnsWord: string;
-      if AFacts.ReturnsOwner = 'new' then OwnsWord:= 'new (caller owns)'
-      else OwnsWord:= AFacts.ReturnsOwner;
-      Sb.AppendLine(APrefix + 'Owns returned: ' + EscXml(OwnsWord));
-    end;
-    // v(ADP2 T6): DFM event-wiring fact -- ONE line, 'Handles:
-    // Button1.OnClick', omitted entirely when AFacts.DfmEvent = '' (most
-    // routines are not a DFM event handler). AFacts.DfmEvent is READ-ONLY
-    // PASSTHROUGH from the index-time symbol_facts.dfm_event column
-    // (DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze/
-    // AnalyzeDfmEvent) -- already the final display string, so -- like
-    // Cyclomatic/BodyLoc and Reads/WritesFields above -- no cap/threshold
-    // logic is needed here.
-    if AFacts.DfmEvent <> '' then
-      Sb.AppendLine(APrefix + 'Handles: ' + EscXml(AFacts.DfmEvent));
-    // v(ADP2 T7): SQL tables touched fact -- ONE line, 'SQL: reads A, B;
-    // writes C', either side omitted when empty (never an empty 'reads'/
-    // 'writes' label with nothing after it), the WHOLE line omitted when
-    // both sides are empty. Semicolon-SPACE separates the two sides here
-    // (NOT the three-literal-space separator Reads/Writes fields uses
-    // above -- this line's own format per the design spec's rendering
-    // example, 'SQL: reads OPTRLIST, PDF_SCAN; writes PDF_SCAN').
-    // AFacts.SqlReads/SqlWrites are ALREADY display-ready (capped, ', '-
-    // joined, a ' (+N more)' suffix when truncated), so -- like every other
-    // Phase 2 fact above -- this is a plain passthrough.
-    if (AFacts.SqlReads <> '') or (AFacts.SqlWrites <> '') then
-    begin
-      var SqlLine: string:= '';
-      if AFacts.SqlReads <> '' then SqlLine:= 'reads ' + EscXml(AFacts.SqlReads);
-      if AFacts.SqlWrites <> '' then
-      begin
-        if SqlLine <> '' then SqlLine:= SqlLine + '; ';
-        SqlLine:= SqlLine + 'writes ' + EscXml(AFacts.SqlWrites);
-      end;
-      Sb.AppendLine(APrefix + 'SQL: ' + SqlLine);
-    end;
-    // v(ADP2 T5): Covered-by-tests fact -- CONTROLLER OVERRIDE: AFacts.
-    // CoveredBy is computed LAZILY (DRagLint.Doc.SymbolFacts.
-    // ComputeCoveredBy, a bounded reverse call-graph closure filtered to
-    // test callers), never read back from the index -- see TDocFacts.
-    // CoveredBy's own field comment for the full rationale. Already
-    // DISPLAY-READY (', '-joined, capped, a ' (+N more)' suffix when
-    // truncated) -- the SAME plain-passthrough contract as Reads/Writes
-    // fields just above, so this is a one-line omit-when-empty emit,
-    // nothing more.
-    if AFacts.CoveredBy <> '' then
-      Sb.AppendLine(APrefix + 'Covered by: ' + EscXml(AFacts.CoveredBy));
+    // v(ADP2 T9): the six Phase-2 fact lines (Complexity / Reads-Writes
+    // fields / Owns returned / Handles / SQL tables touched / Covered by)
+    // are rendered by the SHARED FormatPhase2FactLines helper -- the SAME
+    // helper `hover` calls (DRagLint.Hover.Renderer.RenderHoverMarkdown's
+    // AFactLines param, threaded in from DoHover/HandleHover) -- so the
+    // managed doc block and the hover popup can NEVER show different facts
+    // for the same AFacts value (the doc/hover consistency lock). See
+    // FormatPhase2FactLines' own comment for what each line means, where its
+    // value comes from, and the per-line omit-when-empty/threshold rules --
+    // this call site only adds APrefix per line, byte-identical to the
+    // pre-extraction output.
+    for var P2Line in FormatPhase2FactLines(AFacts, AComplexityMin) do
+      Sb.AppendLine(APrefix + P2Line);
     // v(ADF T5): OPT-IN git <since> line. AFacts.Since is '' unless the caller
     // built the facts with --since (TDocFactsBuilder.Build's AIncludeSince) AND
     // git confidently attributed the declaration line, so this renders NOTHING by

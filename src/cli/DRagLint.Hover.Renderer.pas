@@ -17,7 +17,28 @@ uses
 
 function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 
-function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil): string;
+/// <summary>Renders a symbol's hover popup as markdown: qualified-name
+/// heading, deprecated/since badges, summary, parameters (from doc-comment
+/// tags, else an IDE-style block derived from the signature), returns text,
+/// mined Result:=/Exit() return cases, remarks, example, and -- v(ADP2 T9)
+/// -- the Phase-2 analysis facts under an 'Analysis facts' section when
+/// AFactLines is non-empty.</summary>
+/// <param name="ASym">The symbol being hovered over.</param>
+/// <param name="ADoc">The symbol's parsed doc-comment (may be empty).</param>
+/// <param name="AReturnRhs">Mined `Result:=`/`Exit()` return expressions;
+/// shown even when ADoc already has a hand-written &lt;returns&gt;.</param>
+/// <param name="AFactLines">v(ADP2 T9): the Phase-2 fact lines (Complexity /
+/// Reads-Writes / Owns returned / Handles / SQL / Covered by), pre-formatted
+/// by DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines -- the SAME
+/// helper the managed doc block's RenderFactsBlock calls, so hover and
+/// `document` can never show different facts for the same symbol (the
+/// doc/hover consistency lock). Nil/empty (the default) renders no facts
+/// section at all -- this renderer never computes facts itself, it only
+/// lays out lines the caller already built (mirrors the AReturnRhs
+/// caller-computes pattern; keeps this unit decoupled from
+/// DRagLint.Doc.Facts/DRagLint.Storage, which DoHover/HandleHover already
+/// have open).</param>
+function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil; const AFactLines: TArray<string> = nil): string;
 
 function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string; overload;
 
@@ -310,7 +331,7 @@ begin
   end; // try
 end; // function
 
-function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil): string;
+function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil; const AFactLines: TArray<string> = nil): string;
 var
   SB: TStringBuilder;
   Re: TRegEx        ;
@@ -362,6 +383,25 @@ begin
       end;
       SB.AppendLine('');
       SB.AppendLine('**Returns (observed):** ' + RObs);
+    end;
+    // v(ADP2 T9): Phase-2 analysis facts (Complexity / Reads-Writes fields /
+    // Owns returned / Handles / SQL tables touched / Covered by), already
+    // formatted by the SAME DRagLint.Doc.Regions.TDocRegions.
+    // FormatPhase2FactLines helper the managed doc block's RenderFactsBlock
+    // calls -- see this function's own AFactLines param comment for the
+    // doc/hover consistency-lock rationale. This renderer does not compute
+    // or reorder anything: AFactLines is emitted verbatim, one bullet per
+    // line, in whatever order the caller supplied (FormatPhase2FactLines'
+    // own fixed Complexity/Reads-Writes/Owns-returned/Handles/SQL/Covered-by
+    // order). Omitted entirely -- no empty '**Analysis facts:**' heading --
+    // when AFactLines is nil/empty (the default; e.g. a caller with no
+    // store open, or a symbol with none of the six facts).
+    if Length(AFactLines) > 0 then
+    begin
+      SB.AppendLine('');
+      SB.AppendLine('**Analysis facts:**');
+      for var FactLine in AFactLines do
+        SB.AppendLine('- ' + FactLine);
     end;
     if ADoc.Remarks <> '' then
     begin

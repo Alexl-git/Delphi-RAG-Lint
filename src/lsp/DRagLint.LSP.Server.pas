@@ -21,6 +21,9 @@ uses
   , DRagLint.Resolver.TypeAt
   , DRagLint.Lint    .Linter
   , DRagLint.LSP     .Completion
+  , DRagLint.Doc     .Facts     { v(ADP2 T9): TDocFactsBuilder.Build -- hover's Phase-2 facts }
+  , DRagLint.Doc     .Regions   { v(ADP2 T9): TDocRegions.FormatPhase2FactLines -- the shared formatter }
+  , DRagLint.Index   .Manifest  { v(ADP2 T9): LoadDocComplexityMin -- same threshold `document` uses }
   ;
 
 type
@@ -975,7 +978,22 @@ begin
     // GetSymbolDoc returns a zeroed TParsedDoc with HasContent=False when
     // no row exists; in that case fall back to the legacy signature listing.
     Doc:= HitStore.GetSymbolDoc(Sel.Id);
-    if Doc.HasContent then MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs)
+    if Doc.HasContent then
+    begin
+      // v(ADP2 T9): thread the SAME Phase-2 analysis facts `document` and
+      // the CLI's `hover` render into the IDE's hover popup -- via
+      // TDocFactsBuilder.Build (the identical facts assembly `document`
+      // uses) and TDocRegions.FormatPhase2FactLines (the SHARED formatter
+      // every surface calls), so this popup can never show different facts
+      // than the managed doc block for the same symbol (the doc/hover
+      // consistency lock). LoadDocComplexityMin loads the SAME
+      // docs.complexity_min threshold `document` uses. AIncludeSeeAlso/
+      // AIncludeSince stay False (no --seealso/--since opt-in here),
+      // mirroring a default `document` run.
+      var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel);
+      var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
+      MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines);
+    end
     else
     begin
       Sb:= TStringBuilder.Create;

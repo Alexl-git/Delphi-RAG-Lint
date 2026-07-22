@@ -181,6 +181,25 @@ type
       class function Validate(const AManifest: TIndexManifest): string; static;
   end;
 
+/// <summary>Reads the docs.complexity_min threshold used by the doc/hover
+/// verbs (`document --qname/--unit/--project`, `document-all`, and
+/// `hover`). Gates the 'Complexity:' line at RENDER time (v(ADP2 T3) in
+/// DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock/FormatPhase2FactLines --
+/// v(ADP2 T9) for hover's call) -- changing this value never needs a
+/// reindex, since the raw Cyclomatic/BodyLoc values already live in the
+/// index and only this display gate changes. Loads the manifest the same
+/// way every other doc-verb loader does (engine dir beside the exe, current
+/// working dir walking up for a local .drag-lint.json override). Lives here
+/// (not in DRagLint.CLI, where earlier Phase 2 tasks first added it) so
+/// BOTH DRagLint.CLI.DoHover and DRagLint.LSP.Server.HandleHover can load
+/// the identical threshold `document` uses -- the LSP server does not (and
+/// must not, to avoid a unit cycle) depend on the CLI unit.</summary>
+/// <returns>The configured docs.complexity_min value. Best-effort: any load
+/// failure (missing files, malformed JSON) falls back to 10
+/// (TDocSettings.Defaults.ComplexityMin), so a doc/hover verb never errors
+/// out over a manifest problem.</returns>
+function LoadDocComplexityMin: Integer;
+
 implementation
 
 { ---------------------------------------------------------------------- }
@@ -803,6 +822,33 @@ begin
     Root.Free;
   end;
   TFile.WriteAllText(APath, JsonText, TEncoding.UTF8);
+end;
+
+{ ---------------------------------------------------------------------- }
+{  LoadDocComplexityMin                                                    }
+{ ---------------------------------------------------------------------- }
+
+// v(ADP2 T3): reads the docs.complexity_min threshold for the doc/hover
+// verbs (see the interface declaration's DocInsight comment for the full
+// rationale). v(ADP2 T9): RELOCATED here from DRagLint.CLI (where it was a
+// private implementation-only function) so BOTH DRagLint.CLI.DoHover and
+// DRagLint.LSP.Server.HandleHover can call the SAME loader -- LSP.Server
+// must not depend on the CLI unit (CLI already depends on LSP.Server), and
+// this unit (DRagLint.Index.Manifest) sits below both in the dependency
+// graph. Behavior is unchanged from the original CLI.pas copy: same
+// manifest discovery (engine dir beside the exe + current working dir
+// walking up for a local override), same 10 fallback on any load failure.
+function LoadDocComplexityMin: Integer;
+var
+  DocManifest: TIndexManifest;
+begin
+  Result:= 10;
+  try
+    DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    Result:= DocManifest.Docs.ComplexityMin;
+  except
+    Result:= 10;
+  end;
 end;
 
 end.
