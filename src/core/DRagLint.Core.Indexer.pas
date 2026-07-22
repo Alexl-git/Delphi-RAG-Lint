@@ -197,15 +197,31 @@ begin
 end;
 
 // Returns the TDocCommentRegion immediately preceding ASymStartLine
-// (EndLine in [SymStartLine - 1 - AllowGap, SymStartLine - 1]).
+// (EndLine in [SymStartLine - 1 - AllowGap, SymStartLine - 1]), REJECTING that
+// candidate when another declaration's StartLine sits strictly BETWEEN the
+// region and ASymStartLine (Best.EndLine < L < ASymStartLine for some L in
+// ASymStartLines) -- such a region belongs to the INTERVENING declaration,
+// not this one. Without this check, two back-to-back declarations with no
+// blank line between them (A documented, B immediately after) both matched
+// A's doc-comment against the line-distance window alone, so `document
+// --apply` treated A's block as B's *existing* doc and rewrote/duplicated it
+// -- corrupting A's comment and stamping A's prose onto B (see
+// adp2-docregion-fix-report.md). ASymStartLines must be sorted ascending
+// (every symbol's StartLine in the file, including ASymStartLine's own); the
+// scan below early-exits once L >= ASymStartLine, keeping the cost bounded
+// even on files with many symbols. A region separated from ASymStartLine by
+// only blank lines (no intervening declaration) is unaffected -- blank lines
+// are never symbol start-lines.
 // When ACaptureLoose is False, regions with Kind in [dckLooseLine, dckLooseBlock]
 // are skipped entirely.
 // Sentinel: Result.Kind = TDocCommentKind(-1) means no region found.
-function FindDocRegionAbove(ADocRegions: TList<TDocCommentRegion>; ASymStartLine: Integer; AAllowGap: Integer; ACaptureLoose: Boolean): TDocCommentRegion;
+function FindDocRegionAbove(ADocRegions: TList<TDocCommentRegion>; ASymStartLine: Integer;
+  AAllowGap: Integer; ACaptureLoose: Boolean; const ASymStartLines: TArray<Integer>): TDocCommentRegion;
 var
   I      : Integer          ;
   Best   : TDocCommentRegion;
   HasBest: Boolean          ;
+  L      : Integer          ;
 begin
   HasBest:= False;
   // ADocRegions is sorted by StartLine ascending.
@@ -220,6 +236,18 @@ begin
     end;
     if ADocRegions[I].StartLine > ASymStartLine then Break;
   end;
+  // Intervening-declaration check: reject Best when some OTHER symbol starts
+  // strictly between Best.EndLine and ASymStartLine.
+  if HasBest then
+    for L in ASymStartLines do
+    begin
+      if L >= ASymStartLine then Break; // sorted ascending -- nothing further can qualify
+      if L > Best.EndLine then
+      begin
+        HasBest:= False;
+        Break;
+      end;
+    end;
   if HasBest then Result:= Best
   else
   begin
@@ -300,6 +328,7 @@ var
   SourceLines   : TArray<string>             ; { v(ADP2 T2): SourceText split once, reused per routine's facts pass }
   Facts         : TSymbolFacts               ; { v(ADP2 T2) }
   FactsBody     : TArray<string>             ; { v(ADP2 T2) }
+  SymStartLines : TArray<Integer>            ; { adp2-docregion-fix: every symbol's StartLine, sorted ascending -- lets FindDocRegionAbove reject a region separated from its symbol by an intervening declaration }
 begin
   Parser:= ParserFor(ExtractFileExt(AFilePath));
   if Parser = nil then Exit;
@@ -380,6 +409,14 @@ begin
     IdxToId:= TDictionary<Integer, Int64>.Create;
     try
       try
+        // adp2-docregion-fix: every symbol's StartLine in this file, sorted
+        // ascending, so FindDocRegionAbove can reject a doc region that
+        // actually belongs to an INTERVENING declaration (see its header
+        // comment). Built once per file, not once per symbol.
+        SetLength(SymStartLines, Length(ParseRes.Symbols));
+        for I:= 0 to High(ParseRes.Symbols) do
+          SymStartLines[I]:= ParseRes.Symbols[I].StartLine;
+        TArray.Sort<Integer>(SymStartLines);
         for I:= 0 to High(ParseRes.Symbols) do
         begin
           Sym:= ParseRes.Symbols[I];
@@ -391,7 +428,7 @@ begin
           // v0.16: associate doc comment region to this symbol.
           // Task 13: AllowBlankLineGap and CaptureLooseComments come from
           // .drag-lint.json "docs" section via FDocConfig.
-          DocRegion:= FindDocRegionAbove(DocRegions, Sym.StartLine, FDocConfig.AllowBlankLineGap, FDocConfig.CaptureLooseComments);
+          DocRegion:= FindDocRegionAbove(DocRegions, Sym.StartLine, FDocConfig.AllowBlankLineGap, FDocConfig.CaptureLooseComments, SymStartLines);
           if DocRegion.Kind <> TDocCommentKind(-1) then
           begin
             ParsedDoc:= TDocCommentParser.Dispatch(DocRegion);

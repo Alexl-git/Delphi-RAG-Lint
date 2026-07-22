@@ -145,16 +145,32 @@ begin
 end;
 
 // Returns the TDocCommentRegion immediately preceding ASymStartLine (EndLine in
-// [SymStartLine - 1 - AllowGap, SymStartLine - 1]). When ACaptureLoose is False,
-// loose regions are skipped. Sentinel: Result.Kind = TDocCommentKind(-1) means
-// none found. Mirrors DRagLint.Core.Indexer.FindDocRegionAbove (which is
-// implementation-only there); kept local so this unit does not pull in Indexer.
+// [SymStartLine - 1 - AllowGap, SymStartLine - 1]), REJECTING that candidate
+// when another declaration's StartLine sits strictly BETWEEN the region and
+// ASymStartLine (Best.EndLine < L < ASymStartLine for some L in
+// ASymStartLines) -- such a region belongs to the INTERVENING declaration,
+// not this one. Without this check, two back-to-back declarations with no
+// blank line between them (A documented, B immediately after) both matched
+// A's doc-comment against the line-distance window alone, so `document
+// --apply` treated A's block as B's *existing* doc and rewrote/duplicated it
+// -- corrupting A's comment and stamping A's prose onto B (see
+// adp2-docregion-fix-report.md). ASymStartLines must be sorted ascending
+// (every symbol's StartLine in the file, including ASymStartLine's own); the
+// scan below early-exits once L >= ASymStartLine, keeping the cost bounded
+// even on files with many symbols. A region separated from ASymStartLine by
+// only blank lines (no intervening declaration) is unaffected -- blank lines
+// are never symbol start-lines. When ACaptureLoose is False, loose regions
+// are skipped. Sentinel: Result.Kind = TDocCommentKind(-1) means none found.
+// Mirrors DRagLint.Core.Indexer.FindDocRegionAbove (which is implementation-
+// only there); kept local so this unit does not pull in Indexer.
 function FindDocRegionAbove(ADocRegions: System.Generics.Collections.TList<TDocCommentRegion>;
-  ASymStartLine: Integer; AAllowGap: Integer; ACaptureLoose: Boolean): TDocCommentRegion;
+  ASymStartLine: Integer; AAllowGap: Integer; ACaptureLoose: Boolean;
+  const ASymStartLines: TArray<Integer>): TDocCommentRegion;
 var
   I      : Integer          ;
   Best   : TDocCommentRegion;
   HasBest: Boolean          ;
+  L      : Integer          ;
 begin
   HasBest:= False;
   // ADocRegions is sorted by StartLine ascending.
@@ -168,6 +184,18 @@ begin
     end;
     if ADocRegions[I].StartLine > ASymStartLine then Break;
   end;
+  // Intervening-declaration check: reject Best when some OTHER symbol starts
+  // strictly between Best.EndLine and ASymStartLine.
+  if HasBest then
+    for L in ASymStartLines do
+    begin
+      if L >= ASymStartLine then Break; // sorted ascending -- nothing further can qualify
+      if L > Best.EndLine then
+      begin
+        HasBest:= False;
+        Break;
+      end;
+    end;
   if HasBest then Result:= Best
   else
   begin
@@ -185,11 +213,14 @@ end;
 class function TDocumenter.ExistingDocFor(const AStore: ISymbolStore; const AQName: string;
   out ASym: TSymbol; out AFound: Boolean; out AHasDoc: Boolean): TParsedDoc;
 var
-  Syms   : TArray<TSymbol>                                       ;
-  Path   : string                                               ;
-  Src    : string                                               ;
-  Regions: System.Generics.Collections.TList<TDocCommentRegion> ;
-  Region : TDocCommentRegion                                    ;
+  Syms         : TArray<TSymbol>                                       ;
+  Path         : string                                               ;
+  Src          : string                                               ;
+  Regions      : System.Generics.Collections.TList<TDocCommentRegion> ;
+  Region       : TDocCommentRegion                                    ;
+  FileSyms     : TArray<TSymbol>                                      ;
+  SymStartLines: TArray<Integer>                                      ;
+  I            : Integer                                              ;
 begin
   Result := Default(TParsedDoc);
   ASym   := Default(TSymbol);
@@ -206,11 +237,19 @@ begin
 
   Src:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(Path));
 
+  // adp2-docregion-fix: every symbol's StartLine in this file, sorted
+  // ascending, so FindDocRegionAbove can reject a region separated from ASym
+  // by an intervening declaration (see its header comment).
+  FileSyms:= AStore.FindSymbolsByFile(Path);
+  SetLength(SymStartLines, Length(FileSyms));
+  for I:= 0 to High(FileSyms) do SymStartLines[I]:= FileSyms[I].StartLine;
+  TArray.Sort<Integer>(SymStartLines);
+
   // Same live-scan the Documenter uses: nearest doc-comment above the decl,
   // allow a 1-line gap, skip loose regions. Kind = TDocCommentKind(-1) = none.
   Regions:= TDocCommentScanner.Scan(Src);
   try
-    Region:= FindDocRegionAbove(Regions, ASym.StartLine, 1, False);
+    Region:= FindDocRegionAbove(Regions, ASym.StartLine, 1, False, SymStartLines);
     if Region.Kind <> TDocCommentKind(-1) then
     begin
       Result := TDocCommentParser.Dispatch(Region);
@@ -244,21 +283,24 @@ class function TDocumenter.BuildForSymbol(const AStore: ISymbolStore; const ASym
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
   AComplexityMin: Integer): TDocumentResult;
 var
-  Path     : string                                            ;
-  Src      : string                                            ;
-  Regions  : System.Generics.Collections.TList<TDocCommentRegion>;
-  Region   : TDocCommentRegion                                 ;
-  Existing : TParsedDoc                                        ;
-  SigParams: TArray<string>                                    ;
-  HasRet   : Boolean                                           ;
-  Facts    : TDocFacts                                         ;
-  Merged   : string                                            ;
-  Prefix   : string                                            ;
-  Sig      : string                                            ;
-  SrcLines : TArray<string>                                    ;
-  CurBlock : string                                            ;
-  LineIx   : Integer                                           ;
-  E        : TTextEdit                                         ;
+  Path         : string                                            ;
+  Src          : string                                            ;
+  Regions      : System.Generics.Collections.TList<TDocCommentRegion>;
+  Region       : TDocCommentRegion                                 ;
+  Existing     : TParsedDoc                                        ;
+  SigParams    : TArray<string>                                    ;
+  HasRet       : Boolean                                           ;
+  Facts        : TDocFacts                                         ;
+  Merged       : string                                            ;
+  Prefix       : string                                            ;
+  Sig          : string                                            ;
+  SrcLines     : TArray<string>                                    ;
+  CurBlock     : string                                            ;
+  LineIx       : Integer                                           ;
+  E            : TTextEdit                                         ;
+  FileSyms     : TArray<TSymbol>                                   ;
+  SymStartLines: TArray<Integer>                                   ;
+  I            : Integer                                           ;
 begin
   Result:= Default(TDocumentResult);
   Result.QName := ASym.QualifiedName;
@@ -271,12 +313,22 @@ begin
 
   Src:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(Path));
 
+  // adp2-docregion-fix: every symbol's StartLine in this file, sorted
+  // ascending, so FindDocRegionAbove can reject a region separated from ASym
+  // by an intervening declaration (see its header comment) -- prevents
+  // stacking/duplicating a doc block onto the very next back-to-back
+  // declaration when there is no blank line between them.
+  FileSyms:= AStore.FindSymbolsByFile(Path);
+  SetLength(SymStartLines, Length(FileSyms));
+  for I:= 0 to High(FileSyms) do SymStartLines[I]:= FileSyms[I].StartLine;
+  TArray.Sort<Integer>(SymStartLines);
+
   // Existing doc-comment above the declaration (allow a 1-line gap; skip loose).
   // FindDocRegionAbove signals "not found" with Kind = TDocCommentKind(-1).
   Existing:= Default(TParsedDoc);
   Regions := TDocCommentScanner.Scan(Src);
   try
-    Region:= FindDocRegionAbove(Regions, ASym.StartLine, 1, False);
+    Region:= FindDocRegionAbove(Regions, ASym.StartLine, 1, False, SymStartLines);
     if Region.Kind <> TDocCommentKind(-1) then
       Existing:= TDocCommentParser.Dispatch(Region);
   finally
