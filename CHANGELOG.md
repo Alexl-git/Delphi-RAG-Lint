@@ -5,6 +5,33 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v1.2.1-alpha -- 2026-07-22
+
+- **Fix a source-corrupting bug in `document --apply`.** When a hand-written
+  `<summary>` / `<param>` / `<returns>` description spanned several source lines,
+  the merge step emitted it on a single line with the interior newlines intact --
+  leaving the continuation lines with NO `///` prefix. That corrupted the source
+  AND broke the `///`-comment block, so a second run mis-parsed the fragment and
+  injected/duplicated managed blocks (comments split into parts, un-prefixed
+  lines, duplicated `<summary>`/`<remarks>`). Multi-line descriptions are now
+  re-prefixed line-by-line (as the remarks-prose path already was). Regression
+  lock `tests/autodoc/run_doc_multiline.ps1`.
+- **`Overload k of n` now covers free (unit-level) function/procedure overloads,**
+  not just methods (the cheap-fact guard excluded `skFunction`/`skProcedure`).
+  Also drops the spurious self-`Calls:` a free routine picked up from its own
+  `Name(` header line.
+- **Mined `Result:=` return cases are shown even alongside a hand-written
+  `<returns>`** -- as a managed `Returns: ...` fact line (the author's tag is
+  preserved). A managed/empty `<returns>` still carries them in the tag itself,
+  so they live in exactly one place and stay idempotent.
+- **Hover popup: show observed return cases + resolve the overload under the
+  cursor.** The markdown hover now renders a `Returns (observed): ...` line from
+  the live-mined cases (previously only the JSON format had them), and
+  `textDocument/hover` disambiguates an overloaded name by cursor position
+  instead of always showing the first overload.
+- Design doc for the deferred Phase 2 analysis facts (index-time facts layer):
+  `docs/superpowers/specs/2026-07-22-autodocument-phase2-analysis-facts-design.md`.
+
 ## v1.2.0-alpha -- 2026-07-21
 
 - **DocInsight XML-escaping: generated doc comments are always well-formed.**
