@@ -5,6 +5,22 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v1.2.0-alpha -- 2026-07-21
+
+- **DocInsight XML-escaping: generated doc comments are always well-formed.**
+  `document` / `document --project` now XML-escape *every* mined value written
+  into the managed `<!-- drag-lint:auto -->` block -- deprecated messages,
+  caller/callee names, `Overrides` / `Overridden by` / `Implements` / `Raises`
+  types, and `<seealso cref>` -- not just the `<returns>` "Observed:" cases that
+  were already escaped. Previously a generic type (`TList<T>`), an operator
+  method, or a `deprecated '...'` message containing `<`, `>` or `&` produced
+  ill-formed XML ("Bad XML documentation comment") during DocInsight
+  generation; and a fact containing a literal `</remarks>` additionally broke
+  idempotent regeneration (the non-greedy re-parse stopped at the injected close
+  tag, so the managed fence failed to strip on a second run and hand-written
+  prose after it was dropped). Hand-written summary / param / remarks prose is
+  still preserved verbatim -- only generated/mined content is escaped. Covered
+  by `tests/autodoc/run_doc_xml_escape.ps1`.
 - **Whole-Project Auto-Document Phase 1: config-driven returns/callers, a
   trivial-accessor skip, five cheap fact lines, and an IDE menu item.** A new
   manifest `docs` section gains two more optional keys alongside the existing
