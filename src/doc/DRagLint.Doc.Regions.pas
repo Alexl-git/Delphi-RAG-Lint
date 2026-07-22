@@ -24,7 +24,7 @@ type
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
     /// Raises / Deprecated / Overrides / Overridden by / Implements / Overload
     /// k of n / abstract / virtual / Complexity / Reads/Writes fields /
-    /// Covered by / Since / SeeAlso. Empty sections omitted; '' when there are no facts. Displayed
+    /// Handles / Covered by / Since / SeeAlso. Empty sections omitted; '' when there are no facts. Displayed
     /// counts below
     /// the true *Total get a ' (+N more)' suffix. Deprecated is ground-truth
     /// from the Pascal 'deprecated' directive (not the unrelated
@@ -39,7 +39,11 @@ type
     /// omitted when empty, and the WHOLE line is omitted when both are empty;
     /// AFacts.ReadsFields/WritesFields are already display-ready (capped,
     /// formatted) so this is a plain passthrough, like Complexity's raw
-    /// values. Covered by (v(ADP2 T5), 'Covered by: A, B (+N more)') is the
+    /// values. Handles (v(ADP2 T6), 'Handles: Button1.OnClick') is ONE line,
+    /// emitted only when AFacts.DfmEvent is non-empty -- the routine is a
+    /// published method wired as an event handler in its own paired .dfm;
+    /// AFacts.DfmEvent is already the final display string (computed at
+    /// index time), so this too is a plain passthrough. Covered by (v(ADP2 T5), 'Covered by: A, B (+N more)') is the
     /// SAME kind of already-display-ready passthrough -- AFacts.CoveredBy is
     /// computed LAZILY by DRagLint.Doc.SymbolFacts.ComputeCoveredBy (a
     /// bounded reverse call-graph closure filtered to test callers), never
@@ -313,6 +317,16 @@ begin
       end;
       Sb.AppendLine(APrefix + RWLine);
     end;
+    // v(ADP2 T6): DFM event-wiring fact -- ONE line, 'Handles:
+    // Button1.OnClick', omitted entirely when AFacts.DfmEvent = '' (most
+    // routines are not a DFM event handler). AFacts.DfmEvent is READ-ONLY
+    // PASSTHROUGH from the index-time symbol_facts.dfm_event column
+    // (DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze/
+    // AnalyzeDfmEvent) -- already the final display string, so -- like
+    // Cyclomatic/BodyLoc and Reads/WritesFields above -- no cap/threshold
+    // logic is needed here.
+    if AFacts.DfmEvent <> '' then
+      Sb.AppendLine(APrefix + 'Handles: ' + EscXml(AFacts.DfmEvent));
     // v(ADP2 T5): Covered-by-tests fact -- CONTROLLER OVERRIDE: AFacts.
     // CoveredBy is computed LAZILY (DRagLint.Doc.SymbolFacts.
     // ComputeCoveredBy, a bounded reverse call-graph closure filtered to

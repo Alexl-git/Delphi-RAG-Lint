@@ -161,6 +161,21 @@ type
     // WritesFields above. '' when ASym is not routine-like or no caller, at
     // any bounded hop, is detected as a test.
     CoveredBy        : string           ;
+    // v(ADP2 T6): DFM event-wiring -- 'ObjectName.EventProp' (e.g.
+    // 'Button1.OnClick') when ASym is a published method wired as an event
+    // handler in its OWN .pas file's paired .dfm sibling, read back verbatim
+    // from the index-time symbol_facts row (ISymbolStore.GetSymbolFacts --
+    // see DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze /
+    // AnalyzeDfmEvent for how it was computed at index time: a focused
+    // extractor, DRagLint.Parser.DFM.ExtractDfmEventBindings, parses the
+    // paired .dfm and matches ASym.Name against its (object, event-property,
+    // handler) triples). RAW PASSTHROUGH, like Cyclomatic/BodyLoc/
+    // ReadsFields/WritesFields above -- already the final display string, no
+    // cap/threshold logic needed. '' when ASym has no owning class, has no
+    // paired .dfm on disk, is not wired to any On*-property in it, or the
+    // index predates Phase 2 Task 6 (no symbol_facts row / older column) --
+    // absence over a guessed fact.
+    DfmEvent         : string           ;
   end;
 
   TDocFactsBuilder = class
@@ -1062,6 +1077,12 @@ begin
   // Cyclomatic/BodyLoc above (already capped/formatted at analysis time).
   Result.ReadsFields := SFacts.ReadsFields;
   Result.WritesFields:= SFacts.WritesFields;
+  // v(ADP2 T6): DFM event-wiring -- same raw-passthrough contract as
+  // Cyclomatic/BodyLoc/ReadsFields/WritesFields above (already the final
+  // display string, computed at index time by DRagLint.Doc.SymbolFacts.
+  // TSymbolFactsAnalyzer.Analyze/AnalyzeDfmEvent -- see TDocFacts.DfmEvent's
+  // own field comment).
+  Result.DfmEvent:= SFacts.DfmEvent;
 
   // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE: computed LAZILY
   // here (NOT read back from SFacts.CoveredBy, which stays unwritten/

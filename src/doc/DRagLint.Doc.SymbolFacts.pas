@@ -70,6 +70,30 @@ unit DRagLint.Doc.SymbolFacts;
 // storage format -- already display-ready (', '-joined, capped at 8, a
 // ' (+N more)' suffix when truncated), since these two columns have no
 // companion *Total field to defer the cap decision to render time.
+//
+// Task 6 (ADP2) implements the DfmEvent group: which control/event a
+// published method is wired to as a handler (e.g. 'Button1.OnClick'),
+// mined from the .pas file's OWN paired .dfm sibling (ChangeFileExt(
+// AFilePath, '.dfm')). Unlike ReturnsOwner/SqlReads/SqlWrites (still
+// unimplemented placeholders as of this task) and UNLIKE Task 5's CoveredBy
+// override above, DfmEvent IS filled by Analyze/stored in symbol_facts --
+// the .dfm is a deterministic, same-file-pair sibling (no reverse-edge
+// ordering problem the way a test->target call is), so index-time
+// computation is safe and matches Cyclomatic/ReadsFields/WritesFields'
+// discipline exactly (see the TASK 5 OVERRIDE comment above for the
+// contrast). The existing 'event-binding' Reference DRagLint.Parser.DFM's
+// WalkProperty already emits (consumed by DRagLint.Wiring's
+// FindEventHandlersForForm) carries ONLY the handler's bare name -- it
+// cannot answer "which object/property is THIS handler wired to" -- so this
+// task adds a second, focused extractor (DRagLint.Parser.DFM.
+// ExtractDfmEventBindings) that reuses the SAME WalkObject/WalkProperty tree
+// walk but also threads the enclosing object's own name down to the
+// property scan, yielding the full (ObjectName, EventProp, HandlerName)
+// triple. See DfmEventMapFor's header comment (implementation section) for
+// the per-.dfm memoization (mirrors TAstParseCache's per-file memoization,
+// but deliberately a SINGLE-entry cache, not a growing dictionary -- see
+// its own comment for why that is both sufficient and safe) and
+// AnalyzeDfmEvent for how a routine's own Name is looked up against it.
 
 interface
 
@@ -126,10 +150,10 @@ type
       /// <summary>Analyzes ASym's body and returns the TSymbolFacts row to
       /// persist for it. Task 2 returned an EMPTY-but-Present record; Task 3
       /// (ADP2) filled in Cyclomatic/BodyLoc; Task 4 (ADP2) fills in
-      /// ReadsFields/WritesFields (see below); Tasks 5-8 populate the
-      /// remaining groups one at a time. Never returns Present=False (the
-      /// indexer only calls this for a symbol it is about to write a row
-      /// for).</summary>
+      /// ReadsFields/WritesFields (see below); Task 6 (ADP2) fills in
+      /// DfmEvent (see below); Tasks 7-8 populate the remaining groups one
+      /// at a time. Never returns Present=False (the indexer only calls
+      /// this for a symbol it is about to write a row for).</summary>
       /// <param name="ASym">The routine symbol being analyzed. ADP2 T4 fix
       /// wave: the caller (the indexer's facts loop) now resolves ASym's real
       /// identity BEFORE calling Analyze -- Id/FileId are the just-inserted DB
@@ -160,7 +184,14 @@ type
       /// condition, plus whenever ASym has no owning class or that owning
       /// class has no field children -- see AnalyzeReadsWrites' header
       /// comment (this unit's implementation section) for the full field-set
-      /// + read/write classification rules.</remarks>
+      /// + read/write classification rules. ADP2 T6: DfmEvent is '' whenever
+      /// ASym has no owning class (a free routine can never be a DFM event
+      /// handler), the paired .dfm (ChangeFileExt(AFilePath, '.dfm')) does
+      /// not exist on disk (most units are not forms), or no On*-property in
+      /// that .dfm is wired to ASym.Name -- see AnalyzeDfmEvent/
+      /// DfmEventMapFor (this unit's implementation section) for the
+      /// memoized per-.dfm parse and the first-wiring-wins tie-break
+      /// rule.</remarks>
       class function Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts; static;
   end;
 
@@ -169,6 +200,7 @@ implementation
 uses
   System.SysUtils
   , System.StrUtils
+  , System.IOUtils                    { ADP2 T6: TFile.Exists/ReadAllBytes -- the paired .dfm sibling read }
   , System.Classes                    { ADP2 T5: TStringList for the sorted/deduped test-name set }
   , System.Generics.Collections       { ADP2 T4: TDictionary/TList for the field-name set + ordered read/write lists }
   , TreeSitter                        { ADP2 T3: TTSNode for the AST-derived Cyclomatic fact }
@@ -176,6 +208,7 @@ uses
   , DRagLint.Analysis.Cfg              { ADP2 T3: CfgFindProcs -- collect every defProc in the file's tree }
   , DRagLint.Analysis.Flow.Lattices    { ADP2 T4: TRoutineVarTable -- a same-named local/param/Result shadows a field, never misclassified as one }
   , DRagLint.Diagnostics.AstChecks     { ADP2 T3: TAstChecker.CyclomaticOf -- ONE shared formula with the lint rule }
+  , DRagLint.Parser.DFM                { ADP2 T6: TDfmEventBinding/ExtractDfmEventBindings -- the paired-.dfm event-wiring extractor }
   ;
 
 function SymbolFactsCsvJoin(const AItems: TArray<string>): string;
@@ -455,6 +488,98 @@ begin
   end;
 end;
 
+// ADP2 T6: process-wide, SINGLE-ENTRY memoized cache of one .dfm's parsed
+// event-binding map: HandlerName (lowercased key) -> display 'ObjectName.
+// EventProp'. Re-parses ONLY when GDfmCachePath differs from the requested
+// ADfmPath -- deliberately NOT a per-path TDictionary (unlike TAstParseCache,
+// DRagLint.Diagnostics.ParseCache, which keeps one entry PER FILE until its
+// own Clear is called): a routine's own .dfm sibling never changes mid-file,
+// and the indexer's facts loop (DRagLint.Core.Indexer.IndexFile) processes
+// one file's routines CONSECUTIVELY before moving to the next file's ('--jobs'
+// parallelizes across whole SECTIONS/DBs, never within one file's own
+// sequential symbol loop -- the SAME sequential-processing assumption
+// TAstParseCache's per-process cache already relies on, see its own header
+// comment), so in practice this parses each distinct .dfm exactly ONCE per
+// index run: every OTHER routine in the SAME unit reuses the cached map: the
+// analyzer moves on to a DIFFERENT file's .dfm only after the current file's
+// last routine, at which point the single entry is simply overwritten (never
+// grows, so no per-file Clear is needed to bound memory -- unlike
+// TAstParseCache, which DOES accumulate one tree per file until the indexer
+// calls Clear after each file's facts pass).
+//
+// Reads the .dfm's bytes directly (TFile.ReadAllBytes, UNTRANSCODED) rather
+// than via EnsureUtf8Bytes (DRagLint.Core.Encoding, what the indexer's OWN
+// generic IndexFile pipeline applies before handing bytes to ANY IParser,
+// including TDFMParser): EnsureUtf8Bytes' UTF-16-BOM sniff treats a leading
+// $FF as a (possible) UTF-16LE BOM marker, which would risk mis-transcoding
+// -- and so defeating -- a REAL binary DFM's own leading-$FF signature before
+// ExtractDfmEventBindings ever gets to check it. This analyzer's .dfm read is
+// independent of that pipeline (the .dfm may not even be a walked/indexed
+// file in this run at all -- it is read purely as ASym's sibling), so
+// reading raw bytes and letting ExtractDfmEventBindings apply its own
+// binary-DFM guard on the UNMODIFIED first byte is the safer choice; event-
+// binding identifiers are always plain ASCII regardless, so no real-world
+// text DFM loses fidelity here.
+var
+  GDfmCachePath: string                    ;
+  GDfmCacheMap : TDictionary<string,string>;
+
+function DfmEventMapFor(const ADfmPath: string): TDictionary<string,string>;
+var
+  Bindings: TArray<TDfmEventBinding>;
+  EB      : TDfmEventBinding        ;
+  Key     : string                  ;
+begin
+  if (GDfmCacheMap <> nil) and SameText(GDfmCachePath, ADfmPath) then Exit(GDfmCacheMap);
+
+  FreeAndNil(GDfmCacheMap);
+  GDfmCachePath:= ADfmPath;
+  GDfmCacheMap := TDictionary<string,string>.Create;
+
+  Bindings:= nil;
+  try
+    Bindings:= ExtractDfmEventBindings(TFile.ReadAllBytes(ADfmPath));
+  except
+    Bindings:= nil; // unreadable/unparseable .dfm -- absence over a wrong fact
+  end;
+  for EB in Bindings do
+  begin
+    Key:= LowerCase(EB.HandlerName);
+    // First wiring wins: deterministic (ExtractDfmEventBindings returns
+    // bindings in DOCUMENT order), matches this task's documented tie-break
+    // for the rare case of one handler shared by multiple controls/events.
+    if not GDfmCacheMap.ContainsKey(Key) then
+      GDfmCacheMap.Add(Key, EB.ObjectName + '.' + EB.EventProp);
+  end;
+  Result:= GDfmCacheMap;
+end;
+
+// ADP2 T6: the DfmEvent fact for ASym -- '' when ASym has no owning class (a
+// free routine can never be a DFM event handler: the .dfm always wires a
+// handler to a METHOD of the form/frame class), the paired .dfm does not
+// exist on disk (most units are not forms), or no On*-property in that .dfm
+// happens to be wired to a method named ASym.Name. NAME-BASED (like
+// DRagLint.Wiring's FindEventHandlersForForm/the underlying 'event-binding'
+// reference): the owning class is not cross-checked against the .dfm's own
+// root object's declared type, so two DIFFERENT classes in the same unit
+// sharing a same-named method would both read back the same wiring -- an
+// accepted, documented heuristic limitation (real forms declare each event
+// handler once; this mirrors the existing event-binding mechanism's own
+// scope, not a NEW gap this task introduces).
+function AnalyzeDfmEvent(const ASym: TSymbol; const AFilePath: string): string;
+var
+  DfmPath: string;
+  Map    : TDictionary<string,string>;
+begin
+  Result:= '';
+  if ASym.ParentId <= 0 then Exit;
+  DfmPath:= ChangeFileExt(AFilePath, '.dfm');
+  if not TFile.Exists(DfmPath) then Exit;
+  Map:= DfmEventMapFor(DfmPath);
+  if Map = nil then Exit;
+  Map.TryGetValue(LowerCase(ASym.Name), Result);
+end;
+
 class function TSymbolFactsAnalyzer.Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts;
 var
   PF   : TParsedFile     ;
@@ -463,10 +588,9 @@ var
   Body : TTSNode         ;
 begin
   // Every fact field starts at Default(TSymbolFacts)'s zero value; Task 3
-  // (ADP2) fills in Cyclomatic/BodyLoc below. Tasks 4-8 populate
-  // ReadsFields/WritesFields/ReturnsOwner/DfmEvent/SqlReads/SqlWrites/
-  // CoveredBy in turn, each inside this same function body -- ABody/AStore
-  // stay unused until then.
+  // (ADP2) fills in Cyclomatic/BodyLoc below. Tasks 4/6 (ADP2) fill in
+  // ReadsFields/WritesFields/DfmEvent (see below); Tasks 7-8 populate the
+  // remaining groups -- ABody stays unused until then.
   Result:= Default(TSymbolFacts);
   Result.SymbolId:= ASym.Id;
   Result.Present := True;
@@ -476,6 +600,13 @@ begin
   // ImplEndLine >= ImplStartLine always holds for a real routine body.
   Result.BodyLoc:= ASym.ImplEndLine - ASym.ImplStartLine;
   if Result.BodyLoc < 0 then Result.BodyLoc:= 0;
+
+  // ADP2 T6: DfmEvent -- deliberately computed HERE, independent of the
+  // Cyclomatic/ReadsWrites block below: unlike those two, this fact does not
+  // need ASym's OWN .pas file AST at all (it needs the SIBLING .dfm's own
+  // tree, via AnalyzeDfmEvent/DfmEventMapFor), so it must not be skipped
+  // just because AFilePath's OWN parse happens to fail (PF.Tree = nil).
+  Result.DfmEvent:= AnalyzeDfmEvent(ASym, AFilePath);
 
   // Cyclomatic: find the defProc node whose OWN StartPoint matches
   // ASym.ImplStartLine -- the EXACT provenance the parser used to stamp

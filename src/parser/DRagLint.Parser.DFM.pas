@@ -23,8 +23,40 @@ type
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
   end;
 
+  /// <summary>One DFM event-handler wiring: the object named ObjectName has
+  /// its EventProp event property (e.g. 'OnClick') bound to the method named
+  /// HandlerName -- e.g. `object Button1: TButton ... OnClick = Button1Click`
+  /// yields (ObjectName='Button1', EventProp='OnClick',
+  /// HandlerName='Button1Click'). Produced by ExtractDfmEventBindings.</summary>
+  TDfmEventBinding = record
+    ObjectName : string;
+    EventProp  : string;
+    HandlerName: string;
+  end;
+
 function tree_sitter_dfm: PTSLanguage; cdecl;
 external 'tree-sitter-dfm';
+
+/// <summary>Extracts every (object, event-property, handler) triple from a
+/// text DFM source -- e.g. `object Button1: TButton ... OnClick =
+/// Button1Click end` yields (ObjectName='Button1', EventProp='OnClick',
+/// HandlerName='Button1Click'). Reuses the SAME tree-sitter-dfm grammar walk
+/// TDFMParser.Parse uses (WalkObject/WalkProperty), which now also threads
+/// the enclosing object's own name down to the property scan; TDFMParser.
+/// Parse itself is UNCHANGED (its TParseResult never surfaced this triple,
+/// only the bare handler name via the 'event-binding' reference kind, which
+/// is not enough to render 'Button1.OnClick' -- see DRagLint.Doc.SymbolFacts'
+/// DFM event-wiring fact for why a second, focused extractor is needed).</summary>
+/// <param name="ASource">Raw DFM file bytes, as read from disk. Callers that
+/// need ANSI/UTF-16 transcoding (e.g. a caption with non-ASCII text) must do
+/// it themselves before calling, exactly as TDFMParser.Parse's own callers
+/// do -- this function does not transcode, and always checks the FIRST BYTE
+/// of exactly what it is given for the binary-DFM guard below.</param>
+/// <returns>One TDfmEventBinding per On*-property bound to a bare
+/// method-name identifier, in document order. Empty for a binary DFM (first
+/// byte $FF -- the text-DFM grammar cannot parse it; mirrors TDFMParser.
+/// Parse's own guard) or a DFM with no event bindings at all.</returns>
+function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding>;
 
 implementation
 
@@ -45,10 +77,18 @@ end;
 
 type
   TDfmState = class
-    Source    : TBytes                ;
-    Symbols   : TList<TSymbol>        ;
-    References: TList<TReference>     ;
-    Literals  : TList<TStringLiteral> ;
+    Source       : TBytes                    ;
+    Symbols      : TList<TSymbol>            ;
+    References   : TList<TReference>         ;
+    Literals     : TList<TStringLiteral>     ;
+    // ADP2 T6: (object, event-property, handler) triples collected by
+    // WalkProperty's existing event-binding detection, alongside (not
+    // instead of) the 'event-binding' Reference it already emits -- see
+    // ExtractDfmEventBindings' header comment. Always collected (even by
+    // the ordinary TDFMParser.Parse path, which does not read this field) --
+    // mirrors Literals' own always-collect discipline; the cost of a few
+    // TList.Add calls per DFM is negligible.
+    EventBindings: TList<TDfmEventBinding>   ;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     function Emit(AKind: TSymbolKind; const AName, AQualifiedName, ASignature: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode): Integer;
@@ -59,9 +99,10 @@ constructor TDfmState.Create(const ASource: TBytes);
 begin
   inherited Create;
   Source:= ASource;
-  Symbols   := TList<TSymbol         >.Create;
-  References:= TList<TReference      >.Create;
-  Literals  := TList<TStringLiteral  >.Create;
+  Symbols      := TList<TSymbol         >.Create;
+  References   := TList<TReference      >.Create;
+  Literals     := TList<TStringLiteral  >.Create;
+  EventBindings:= TList<TDfmEventBinding>.Create;
 end;
 
 destructor TDfmState.Destroy;
@@ -69,6 +110,7 @@ begin
   Symbols.Free;
   References.Free;
   Literals.Free;
+  EventBindings.Free;
   inherited;
 end;
 
@@ -137,7 +179,7 @@ begin
   end;
 end;
 
-procedure WalkProperty(const ANode: TTSNode; const AState: TDfmState);
+procedure WalkProperty(const ANode: TTSNode; const AState: TDfmState; const AObjectName: string);
 var
   NameNode   : TTSNode;
   ValueNode  : TTSNode;
@@ -166,7 +208,21 @@ begin
         Break;
       end;
     end;
-    if HandlerName <> '' then AState.EmitRef('event-binding', HandlerName, ValueNode);
+    if HandlerName <> '' then
+    begin
+      AState.EmitRef('event-binding', HandlerName, ValueNode);
+      // ADP2 T6: also record the full (object, event-property, handler)
+      // triple -- the EmitRef call above stores ONLY the handler name (the
+      // pre-existing 'event-binding' reference, kept as-is for its existing
+      // consumers, e.g. FindEventHandlersForForm/DRagLint.Wiring), which
+      // cannot answer "which control/property is THIS handler wired to".
+      // See ExtractDfmEventBindings' header comment.
+      var EB: TDfmEventBinding;
+      EB.ObjectName := AObjectName;
+      EB.EventProp  := PropName;
+      EB.HandlerName:= HandlerName;
+      AState.EventBindings.Add(EB);
+    end;
   end;
   // v10: harvest string property text for the text index.
   if (not ValueNode.IsNull) and (ValueNode.NodeType = 'string') then
@@ -217,9 +273,64 @@ begin
   begin
     ChildNode:= ANode.NamedChild(i);
     if ChildNode.NodeType      = 'object' then WalkObject(ChildNode, AState, Idx, QName, False)
-    else if ChildNode.NodeType = 'property' then WalkProperty(ChildNode, AState);
+    else if ChildNode.NodeType = 'property' then WalkProperty(ChildNode, AState, ObjName);
   end;
 end; // procedure
+
+function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding>;
+var
+  Parser: TTSParser;
+  Tree  : TTSTree  ;
+  State : TDfmState;
+  Root  : TTSNode  ;
+  Child : TTSNode  ;
+  i     : Integer  ;
+begin
+  Result:= nil;
+  { Binary DFM files start with $FF; the text-DFM grammar cannot handle them --
+    mirrors TDFMParser.Parse's own guard (see that function's comment). Checked
+    on ASource exactly as given (no transcoding here -- see this function's
+    <param> comment), so a genuine binary DFM is never misread as text. }
+  if (Length(ASource) > 0) and (ASource[0] = $FF) then Exit;
+
+  Parser:= TTSParser.Create;
+  try
+    Parser.Language:= tree_sitter_dfm;
+    Tree:= Parser.Parse(
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var Remaining: Integer;
+      begin
+        Remaining:= Length(ASource) - Integer(AByteIndex);
+        if Remaining <= 0 then
+        begin
+          ABytesRead:= 0;
+          SetLength(Result, 0);
+          Exit;
+        end;
+        SetLength(Result, Remaining);
+        Move(ASource[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
+    try
+      State:= TDfmState.Create(ASource);
+      try
+        Root:= Tree.RootNode;
+        for i:= 0 to Root.NamedChildCount - 1 do
+        begin
+          Child:= Root.NamedChild(i);
+          if Child.NodeType = 'object' then WalkObject(Child, State, -1, '', True);
+        end;
+        Result:= State.EventBindings.ToArray;
+      finally
+        State.Free;
+      end;
+    finally
+      Tree.Free;
+    end;
+  finally
+    Parser.Free;
+  end;
+end; // function
 
 /// <summary>Walks the parse tree collecting ERROR/MISSING node positions into ADiags (max AMaxErrors).</summary>
 /// <remarks>Only recurses into subtrees where HasError is set; exits early once the cap is reached.</remarks>
