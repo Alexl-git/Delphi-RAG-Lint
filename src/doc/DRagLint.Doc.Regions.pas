@@ -53,15 +53,37 @@ type
 
 implementation
 
+/// <summary>XML-escapes S for use as ELEMENT TEXT content: ampersand, less-than
+/// and greater-than become their XML entity references. The ampersand pass runs
+/// first so the ampersand it introduces for a later entity is not re-escaped.</summary>
+/// <remarks>Applied to EVERY mined value emitted into the managed facts block
+/// (caller/callee names, unit names, raised/overridden/implemented types,
+/// deprecated messages, return cases). Mined content is NOT guaranteed to be a
+/// bare identifier -- a generic type, an operator method, or an arbitrary
+/// deprecated message can carry angle brackets or an ampersand. Without this the
+/// generated DocInsight XML is ill-formed ("Bad XML documentation comment"), and
+/// a literal remarks close tag inside a fact additionally breaks the regex-based
+/// re-parse (the non-greedy match stops at the injected close tag) on which the
+/// idempotent strip-and-regenerate depends.</remarks>
+function EscXml(const S: string): string;
+begin
+  Result:= StringReplace(S, '&', '&amp;', [rfReplaceAll]);
+  Result:= StringReplace(Result, '<', '&lt;', [rfReplaceAll]);
+  Result:= StringReplace(Result, '>', '&gt;', [rfReplaceAll]);
+end;
+
+/// <summary>XML-escapes S for use inside a double-quoted ATTRIBUTE value: as
+/// EscXml, plus the double-quote character becomes its XML entity, so a mined
+/// cref containing a quote (or a generic type's angle brackets) can never
+/// terminate the cref attribute early.</summary>
+function EscXmlAttr(const S: string): string;
+begin
+  Result:= StringReplace(EscXml(S), '"', '&quot;', [rfReplaceAll]);
+end;
+
 /// <summary>Builds the " Observed: a; b." suffix (XML-escaped) from mined return
 /// cases, or '' when none. Deterministic -> idempotent across runs.</summary>
 function ObservedSuffix(const ACases: TArray<string>): string;
-  function Esc(const S: string): string;
-  begin
-    Result:= StringReplace(S, '&', '&amp;', [rfReplaceAll]);
-    Result:= StringReplace(Result, '<', '&lt;', [rfReplaceAll]);
-    Result:= StringReplace(Result, '>', '&gt;', [rfReplaceAll]);
-  end;
 var i: Integer; Sb: TStringBuilder;
 begin
   Result:= '';
@@ -72,7 +94,7 @@ begin
     for i:= 0 to High(ACases) do
     begin
       if i > 0 then Sb.Append('; ');
-      Sb.Append(Esc(ACases[i]));
+      Sb.Append(EscXml(ACases[i]));
     end;
     Sb.Append('.');
     Result:= Sb.ToString;
@@ -134,6 +156,18 @@ var
   begin
     if ATotal > AShown then Result:= Format(' (+%d more)', [ATotal - AShown]) else Result:= '';
   end;
+  // Escapes each element then joins with ', '. Used for every mined name list
+  // emitted as element text (Calls / Used in units / Raises / Overridden by).
+  function JoinEsc(const A: TArray<string>): string;
+  var i: Integer;
+  begin
+    Result:= '';
+    for i:= 0 to High(A) do
+    begin
+      if i > 0 then Result:= Result + ', ';
+      Result:= Result + EscXml(A[i]);
+    end;
+  end;
   function JoinRefs(const A: TArray<TDocFactRef>): string;
   var i: Integer;
   begin
@@ -141,7 +175,7 @@ var
     for i:= 0 to High(A) do
     begin
       if i > 0 then Result:= Result + ', ';
-      Result:= Result + A[i].Display + ' (' + A[i].Location + ')';
+      Result:= Result + EscXml(A[i].Display) + ' (' + EscXml(A[i].Location) + ')';
       // v14 (D5): mark honest uncertainty. A caller whose Confidence is anything
       // OTHER than 'certain'/'' ('ambiguous' = >1 candidate on the type chain;
       // 'unverified' = a name-match with no resolved call_edge) gets a trailing
@@ -157,11 +191,11 @@ begin
     if Length(AFacts.CalledFrom) > 0 then
       Sb.AppendLine(APrefix + 'Called from: ' + JoinRefs(AFacts.CalledFrom) + MoreSuffix(Length(AFacts.CalledFrom), AFacts.CalledFromTotal));
     if Length(AFacts.Calls) > 0 then
-      Sb.AppendLine(APrefix + 'Calls: ' + string.Join(', ', AFacts.Calls) + MoreSuffix(Length(AFacts.Calls), AFacts.CallsTotal));
+      Sb.AppendLine(APrefix + 'Calls: ' + JoinEsc(AFacts.Calls) + MoreSuffix(Length(AFacts.Calls), AFacts.CallsTotal));
     if Length(AFacts.UsedInUnits) > 0 then
-      Sb.AppendLine(APrefix + 'Used in units: ' + string.Join(', ', AFacts.UsedInUnits) + MoreSuffix(Length(AFacts.UsedInUnits), AFacts.UsedInTotal));
+      Sb.AppendLine(APrefix + 'Used in units: ' + JoinEsc(AFacts.UsedInUnits) + MoreSuffix(Length(AFacts.UsedInUnits), AFacts.UsedInTotal));
     if Length(AFacts.Raises) > 0 then
-      Sb.AppendLine(APrefix + 'Raises: ' + string.Join(', ', AFacts.Raises));
+      Sb.AppendLine(APrefix + 'Raises: ' + JoinEsc(AFacts.Raises));
     // v(ADF T3): ground-truth 'deprecated' directive line. Emitted only when
     // AFacts.Deprecated (the directive was actually found on the decl -- see
     // TDocFactsBuilder.DetectDeprecated). A message renders 'Deprecated: <msg>';
@@ -169,7 +203,7 @@ begin
     if AFacts.Deprecated then
     begin
       if AFacts.DeprecatedMsg <> '' then
-        Sb.AppendLine(APrefix + 'Deprecated: ' + AFacts.DeprecatedMsg)
+        Sb.AppendLine(APrefix + 'Deprecated: ' + EscXml(AFacts.DeprecatedMsg))
       else
         Sb.AppendLine(APrefix + 'Deprecated.');
     end;
@@ -185,11 +219,11 @@ begin
     // enforced is virtual-vs-Overrides: an override suppresses the virtual
     // marker, emitting Overrides instead (see TDocFacts.IsVirtual).
     if AFacts.Overrides <> '' then
-      Sb.AppendLine(APrefix + 'Overrides: ' + AFacts.Overrides);
+      Sb.AppendLine(APrefix + 'Overrides: ' + EscXml(AFacts.Overrides));
     if Length(AFacts.OverriddenBy) > 0 then
-      Sb.AppendLine(APrefix + 'Overridden by: ' + string.Join(', ', AFacts.OverriddenBy) + MoreSuffix(Length(AFacts.OverriddenBy), AFacts.OverriddenByTotal));
+      Sb.AppendLine(APrefix + 'Overridden by: ' + JoinEsc(AFacts.OverriddenBy) + MoreSuffix(Length(AFacts.OverriddenBy), AFacts.OverriddenByTotal));
     if AFacts.Implements <> '' then
-      Sb.AppendLine(APrefix + 'Implements: ' + AFacts.Implements);
+      Sb.AppendLine(APrefix + 'Implements: ' + EscXml(AFacts.Implements));
     if AFacts.OverloadCount > 1 then
       Sb.AppendLine(APrefix + Format('Overload %d of %d', [AFacts.OverloadOrdinal, AFacts.OverloadCount]));
     if AFacts.IsAbstract then
@@ -203,7 +237,7 @@ begin
     // non-since managed block is unchanged. The date is a real git commit date
     // (YYYY-MM-DD), never a guess; one line so the block regenerates idempotently.
     if AFacts.Since <> '' then
-      Sb.AppendLine(APrefix + '<since>' + AFacts.Since + '</since>');
+      Sb.AppendLine(APrefix + '<since>' + EscXml(AFacts.Since) + '</since>');
     // v(ADF T4): OPT-IN <seealso> cref lines. AFacts.SeeAlso is EMPTY unless the
     // caller built the facts with --seealso (TDocFactsBuilder.Build's
     // AIncludeSeeAlso), so this section renders NOTHING by default -- the
@@ -212,7 +246,7 @@ begin
     // ever emitted. The list is pre-sorted+capped by Build; one cref per line so
     // the block regenerates idempotently.
     for var SeeI:= 0 to High(AFacts.SeeAlso) do
-      Sb.AppendLine(APrefix + '<seealso cref="' + AFacts.SeeAlso[SeeI] + '"/>');
+      Sb.AppendLine(APrefix + '<seealso cref="' + EscXmlAttr(AFacts.SeeAlso[SeeI]) + '"/>');
     Result:= Sb.ToString.TrimRight([#13, #10]);
   finally
     Sb.Free;
