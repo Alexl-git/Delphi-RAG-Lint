@@ -94,6 +94,32 @@ unit DRagLint.Doc.SymbolFacts;
 // but deliberately a SINGLE-entry cache, not a growing dictionary -- see
 // its own comment for why that is both sufficient and safe) and
 // AnalyzeDfmEvent for how a routine's own Name is looked up against it.
+//
+// Task 7 (ADP2) implements the SqlReads/SqlWrites group: for a routine that
+// builds a SQL statement via string literals (a common FireDAC/BDE pattern),
+// which tables it READS (FROM/JOIN) vs. WRITES (INSERT INTO/UPDATE/DELETE
+// FROM), mined purely from those literals. CONTROLLER CORRECTION to the
+// original task brief: DRagLint.Parser.Sql is NOT reused here -- it is
+// TFirebirdSqlParser, a DDL parser for *.sql SCHEMA-MIGRATION files (CREATE
+// TABLE/PROCEDURE/TRIGGER/...); its own header comment states plainly that a
+// trigger/procedure BODY is never parsed for INSERT/UPDATE/SELECT references
+// in this repo's current version, so it has nothing a .pas routine's DML
+// string could reuse. This task instead adds a small, NET-NEW, deliberately-
+// NOT-a-SQL-parser extractor, entirely local to this unit: WalkSqlLiterals
+// walks the SAME matched defProc/body node Cyclomatic/AnalyzeReadsWrites
+// already found (no 2nd AST scan), finding each maximal string-literal
+// CONCATENATION RUN exactly once; CollectConcatRun best-effort folds a run of
+// adjacent '...' + '...' literals into one string, marking the WHOLE run
+// DYNAMIC (dropped, never guessed at) the moment any operand is not itself a
+// literal/'+'/parens; ClassifySqlText keeps only a run whose trimmed text
+// starts with SELECT/INSERT/UPDATE/DELETE/WITH; ExtractSqlTables then runs a
+// small, bounded, keyword-anchored scan for exactly the four clause shapes
+// the task brief specifies (see its own header comment) -- deliberately NOT
+// a SQL grammar: a subquery, a derived table, or a WITH's own CTE body
+// contribute nothing, ever (absence over a wrong table). See
+// AnalyzeSqlTables' header comment (this unit's implementation section, just
+// above TSymbolFactsAnalyzer.Analyze) for the full pipeline and how the
+// final CSVs are capped/deduped/sorted.
 
 interface
 
@@ -191,7 +217,15 @@ type
       /// that .dfm is wired to ASym.Name -- see AnalyzeDfmEvent/
       /// DfmEventMapFor (this unit's implementation section) for the
       /// memoized per-.dfm parse and the first-wiring-wins tie-break
-      /// rule.</remarks>
+      /// rule. ADP2 T7: SqlReads/SqlWrites are '' under the SAME no-defProc
+      /// condition, plus whenever the routine builds no string that looks
+      /// like SQL, or every SQL-shaped literal run it builds turns out to be
+      /// dynamically assembled (a non-literal operand inside a '+'
+      /// concatenation) -- see AnalyzeSqlTables/WalkSqlLiterals/
+      /// ExtractSqlTables (this unit's implementation section) for the full
+      /// extraction pipeline; DRagLint.Parser.Sql is deliberately NOT reused
+      /// (Firebird DDL over *.sql files only -- it never parses a routine
+      /// body).</remarks>
       class function Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts; static;
   end;
 
@@ -580,6 +614,518 @@ begin
   Map.TryGetValue(LowerCase(ASym.Name), Result);
 end;
 
+// ADP2 T7: SQL tables touched -- for a routine whose body builds a SQL
+// statement via string literals (a common FireDAC/BDE pattern: 'SqlText :=
+// ''SELECT * FROM OPTRLIST WHERE ...'';' or 'Query.SQL.Add(''UPDATE
+// PDF_SCAN SET ...'');'), which tables it READS (FROM/JOIN) vs. WRITES
+// (INSERT INTO/UPDATE/DELETE FROM), mined purely from those literals -- no
+// SQL index cross-reference, no DRagLint.Parser.Sql (see this unit's
+// banner comment's Task 7 paragraph for why that parser cannot be reused:
+// it is Firebird DDL over *.sql SCHEMA-MIGRATION files, and its own header
+// states plainly that a trigger/procedure BODY is never parsed for INSERT/
+// UPDATE/SELECT references). This is instead a small, NET-NEW, entirely
+// local extractor -- deliberately NOT a SQL grammar/parser.
+//
+// PIPELINE (see each function's own header comment for the full rules):
+//   1. WalkSqlLiterals -- walks ONE routine's body (the SAME matched
+//      defProc/body node Cyclomatic/AnalyzeReadsWrites already found, no
+//      2nd AST scan), finding each maximal string-literal CONCATENATION RUN
+//      exactly once (IsTopOfConcatRun avoids re-visiting an already-
+//      consumed run's own literal children as spurious separate
+//      candidates) and folding it into one string via CollectConcatRun.
+//   2. CollectConcatRun best-effort concatenates a run of adjacent
+//      '...' + '...' + ... string literals (left-to-right, matching '+'
+//      itself being left-associative) into one candidate SQL string. ANY
+//      non-literal operand anywhere in the run (a variable, a function
+//      call, a typecast -- dynamically-built SQL) marks the WHOLE run
+//      dynamic; WalkSqlLiterals then discards it entirely rather than
+//      guessing at a partial table list -- "absence over a wrong fact" per
+//      the task brief, and the single most important discipline of this
+//      whole feature.
+//   3. ClassifySqlText -- a run is only even CONSIDERED as SQL when its
+//      trimmed text starts (case-insensitively) with SELECT/INSERT/UPDATE/
+//      DELETE/WITH; anything else (a caption, a log message, an unrelated
+//      literal) is silently ignored.
+//   4. ExtractSqlTables -- a conservative, keyword-anchored scan for
+//      EXACTLY the four clause shapes the task brief specifies (see its own
+//      header comment) -- deliberately NOT a SQL grammar/parser: a
+//      subquery, a derived table, or a WITH's own CTE body contribute
+//      nothing, ever (skip rather than guess).
+// AnalyzeSqlTables (below) is the entry point that ties the pipeline
+// together and produces the final capped/deduped/sorted display CSVs,
+// exactly like JoinCappedDisplay already does for ReadsFields/WritesFields/
+// CoveredBy.
+
+// SQL_TABLE_CAP: display cap for the SQL reads/writes fact -- mirrors
+// FIELD_RW_CAP's convention (a dedicated const per fact group, not shared)
+// at the SAME value (8): the task brief's own "(e.g. 8)" suggestion.
+const
+  SQL_TABLE_CAP = 8;
+
+// Whole-word SQL clause keywords that can legitimately follow a table
+// reference in a FROM/JOIN/UPDATE/INSERT-INTO clause -- used by
+// ScanTableRef to tell a genuine bare alias ('FROM OPTRLIST o') apart from
+// the START OF THE NEXT CLAUSE ('FROM OPTRLIST WHERE ...', where 'WHERE' is
+// never an alias). AWord must already be uppercase (every function in this
+// pipeline works on an upper-cased copy of the SQL text throughout -- see
+// ExtractSqlTables). Deliberately a small, fixed, deterministic list (no
+// attempt at full SQL-keyword coverage) -- mirrors DRagLint.Doc.Facts.
+// IsCallSkipWord's own local-const keyword-list pattern: this extractor is
+// a bounded heuristic, not a grammar.
+function IsSqlClauseStopword(const AWord: string): Boolean;
+const
+  STOP: array[0..18] of string = (
+    'WHERE', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'OUTER', 'FULL', 'CROSS',
+    'ON', 'GROUP', 'ORDER', 'HAVING', 'UNION', 'SET', 'VALUES',
+    'RETURNING', 'INTO', 'FOR', 'WITH');
+begin
+  Result:= False;
+  for var W in STOP do
+    if AWord = W then Exit(True);
+end;
+
+// True when C can continue a SQL identifier token on the ALREADY-UPPERCASED
+// text this whole extractor works on (see ExtractSqlTables): letters/
+// digits/underscore. '.' (a schema-qualified name's separator) is handled
+// separately by ScanSqlIdent, not here, since it is valid mid-token but
+// never as the first character.
+function IsSqlIdentChar(C: Char): Boolean;
+begin
+  Result:= (C = '_') or ((C >= 'A') and (C <= 'Z')) or ((C >= '0') and (C <= '9'));
+end;
+
+// Reads one identifier token -- letters/digits/underscore, '.' allowed
+// MID-token for a 'schema.table' reference (kept whole; see ExtractSqlTables'
+// header comment for why the whole dotted name is the chosen convention) --
+// starting at S[APos] after skipping leading spaces; advances APos past it.
+// Returns '' (APos left just past any skipped spaces, at the first non-
+// identifier-start character) when nothing identifier-shaped is there -- a
+// subquery's '(', end of string, a stray comma -- the caller's cue to stop
+// rather than guess (absence over a wrong table).
+function ScanSqlIdent(const S: string; var APos: Integer): string;
+var Start, N: Integer;
+begin
+  N:= Length(S);
+  while (APos <= N) and (S[APos] = ' ') do Inc(APos);
+  Result:= '';
+  if (APos > N) or not ((S[APos] = '_') or ((S[APos] >= 'A') and (S[APos] <= 'Z'))) then Exit;
+  Start:= APos;
+  while (APos <= N) and (IsSqlIdentChar(S[APos]) or (S[APos] = '.')) do Inc(APos);
+  Result:= Copy(S, Start, APos - Start);
+end;
+
+// Reads ONE table reference at APos (already positioned right after a
+// FROM/JOIN/INTO/UPDATE keyword + whitespace): the identifier itself, plus
+// an optional single trailing alias word -- bare ('FROM OPTRLIST o') or
+// 'AS'-prefixed ('FROM OPTRLIST AS o') -- consumed and discarded UNLESS
+// that word is itself a recognized SQL clause keyword (IsSqlClauseStopword),
+// in which case APos is rolled back to just past the table identifier so
+// the caller's own clause-boundary scan sees it untouched (it is the START
+// of the NEXT clause, e.g. 'WHERE', not an alias). Returns '' (APos
+// unchanged from entry, aside from a leading-space skip) when no identifier
+// follows at all -- e.g. a derived table '(SELECT ...)' -- the caller
+// simply skips this occurrence; never guesses.
+function ScanTableRef(const S: string; var APos: Integer): string;
+var Saved: Integer; Word1: string;
+begin
+  Result:= ScanSqlIdent(S, APos);
+  if Result = '' then
+  begin
+    Exit;
+  end;
+  Saved:= APos;
+  Word1:= ScanSqlIdent(S, APos);
+  if Word1 = '' then
+  begin
+    APos:= Saved;
+    Exit;
+  end;
+  if Word1 = 'AS' then
+  begin
+    Saved:= APos;
+    if ScanSqlIdent(S, APos) = '' then
+    begin
+      APos:= Saved; // bare 'AS' with nothing after -- harmless no-op
+    end;
+  end
+  else
+  begin
+    if IsSqlClauseStopword(Word1) then
+    begin
+      APos:= Saved; // Word1 starts the NEXT clause -- not an alias, leave it unconsumed
+    end;
+    // else: a bare alias -- ScanSqlIdent already advanced APos past it, nothing more to do
+  end;
+end;
+
+// Reads a comma-separated list of table refs starting at APos (right after
+// a FROM keyword's own whitespace): each entry is ScanTableRef (identifier +
+// optional alias). Stops -- keeping whatever was already collected -- at the
+// first position that is not a valid table ref, or once no further comma
+// follows. AAllowList=False reads AT MOST one entry: a JOIN/INSERT-INTO/
+// UPDATE/DELETE-FROM target is always singular; only a FROM clause's
+// comma-list shorthand ('FROM A, B') needs more than one.
+function ScanTableRefList(const S: string; var APos: Integer; AAllowList: Boolean): TArray<string>;
+var Acc: TStringList; Tbl: string; Saved, N: Integer;
+begin
+  Acc:= TStringList.Create;
+  try
+    Tbl:= ScanTableRef(S, APos);
+    if Tbl <> '' then Acc.Add(Tbl);
+    N:= Length(S);
+    while AAllowList and (Tbl <> '') do
+    begin
+      Saved:= APos;
+      while (APos <= N) and (S[APos] = ' ') do Inc(APos);
+      if (APos <= N) and (S[APos] = ',') then
+      begin
+        Inc(APos);
+        Tbl:= ScanTableRef(S, APos);
+        if Tbl <> '' then Acc.Add(Tbl) else begin APos:= Saved; Break; end;
+      end
+      else begin APos:= Saved; Break; end;
+    end;
+    Result:= Acc.ToStringArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
+// Finds the next WHOLE-WORD occurrence of AWord (both AText and AWord
+// assumed already uppercased by the caller -- see ExtractSqlTables -- so
+// this is a plain ordinal search, no case-folding/regex engine involved) in
+// AText at or after AFrom (1-based). A match's immediate neighbor
+// characters (if any) must NOT themselves be identifier characters, so
+// 'FROM' does not match inside 'XFROM' or 'FROMAGE'. Returns 0 when not
+// found.
+function FindSqlKeyword(const AText, AWord: string; AFrom: Integer): Integer;
+var P, L, TL: Integer; Before, After: Char;
+begin
+  Result:= 0;
+  L:= Length(AWord);
+  TL:= Length(AText);
+  P:= AFrom;
+  if P < 1 then P:= 1;
+  while P <= TL - L + 1 do
+  begin
+    if Copy(AText, P, L) = AWord then
+    begin
+      if P = 1 then Before:= #0 else Before:= AText[P - 1];
+      if P + L > TL then After:= #0 else After:= AText[P + L];
+      if (not IsSqlIdentChar(Before)) and (not IsSqlIdentChar(After)) then Exit(P);
+    end;
+    Inc(P);
+  end;
+end;
+
+// True when, after trimming, AText (case-insensitively) begins with one of
+// the five recognized SQL statement keywords -- the ONLY signal used to
+// decide "this concatenated literal run is SQL" (task brief item 2). Never
+// inspects anything else about AText's shape; a non-SQL string that happens
+// to start with one of these words is an accepted, documented false-
+// positive bound (these are four/five/six-letter SQL verbs, not common
+// English sentence openers).
+function ClassifySqlText(const AText: string): Boolean;
+var T: string;
+begin
+  T:= Trim(AText);
+  Result:= StartsText('SELECT', T) or StartsText('INSERT', T) or
+           StartsText('UPDATE', T) or StartsText('DELETE', T) or
+           StartsText('WITH', T);
+end;
+
+// ADP2 T7: extracts table references from ASql (an ALREADY-CONFIRMED-SQL
+// string, per ClassifySqlText) into AReads/AWrites (UPPERCASED; caller
+// dedupes/sorts/caps). Deliberately NOT a SQL grammar: exactly the four
+// clause shapes the task brief lists, each a bounded keyword-anchored scan
+// -- anything else (a subquery, a CTE body, an identifier this cannot
+// resolve) contributes nothing, never a guessed table:
+//   FROM <table>[, <table>...] / JOIN <table> -> AReads (a SELECT-like
+//     statement). A comma-list after FROM is supported (ScanTableRefList's
+//     AAllowList); JOIN never takes one (real SQL doesn't allow it there).
+//   INSERT INTO <table> -> AWrites.
+//   Firebird 'UPDATE OR INSERT INTO <table>' (the UPSERT statement this
+//     Firebird 4.0 codebase's own stack uses -- see C:\Projects\CLAUDE.md)
+//     -> AWrites, via the SAME INTO-anchored scan as plain INSERT. Detected
+//     by checking whether the WORD IMMEDIATELY after 'UPDATE' is literally
+//     'OR' (a precise, adjacent check -- NOT "does the string contain
+//     INSERT anywhere", which would misfire on an ordinary UPDATE whose
+//     WHERE/SET values happen to mention the word 'insert').
+//   UPDATE <table> -> AWrites.
+//   DELETE FROM <table> -> AWrites.
+// A leading 'WITH' (a CTE) is recognized as SQL by ClassifySqlText but
+// deliberately SKIPPED here entirely: a CTE's own named subqueries are not
+// real tables, and telling a CTE alias apart from a genuine table reference
+// in the statement's trailing body would need real parsing -- out of scope
+// for a "simple, conservative" extractor; absence over a wrong table.
+// EVERY captured name is kept as the WHOLE matched token (schema.table
+// stays dotted, never truncated to its final segment -- the task brief's
+// "pick one, be consistent" choice) and normalized upper-case (this
+// extractor works entirely on an upper-cased copy of ASql throughout, so
+// every captured substring is already upper-case with no separate
+// normalization step needed).
+procedure ExtractSqlTables(const ASql: string; AReads, AWrites: TStringList);
+var
+  Upper : string;
+  Pos   : Integer;
+  KwPos : Integer;
+  Tbl   : string;
+  P     : Integer;
+  Next1 : string;
+begin
+  Upper:= UpperCase(Trim(ASql));
+  if Upper = '' then Exit;
+
+  if FindSqlKeyword(Upper, 'WITH', 1) = 1 then Exit; // CTE -- conservative skip, see header comment
+
+  if FindSqlKeyword(Upper, 'UPDATE', 1) = 1 then
+  begin
+    P:= 1 + Length('UPDATE');
+    Next1:= ScanSqlIdent(Upper, P); // may be 'OR' (Firebird UPSERT) or the plain UPDATE target
+    if Next1 = 'OR' then
+    begin
+      KwPos:= FindSqlKeyword(Upper, 'INTO', P);
+      if KwPos > 0 then
+      begin
+        Pos:= KwPos + Length('INTO');
+        for Tbl in ScanTableRefList(Upper, Pos, False) do AWrites.Add(Tbl);
+      end;
+    end
+    else
+    begin
+      Pos:= 1 + Length('UPDATE');
+      for Tbl in ScanTableRefList(Upper, Pos, False) do AWrites.Add(Tbl);
+    end;
+    Exit;
+  end;
+
+  if FindSqlKeyword(Upper, 'INSERT', 1) = 1 then
+  begin
+    KwPos:= FindSqlKeyword(Upper, 'INTO', 1);
+    if KwPos > 0 then
+    begin
+      Pos:= KwPos + Length('INTO');
+      for Tbl in ScanTableRefList(Upper, Pos, False) do AWrites.Add(Tbl);
+    end;
+    Exit;
+  end;
+
+  if FindSqlKeyword(Upper, 'DELETE', 1) = 1 then
+  begin
+    KwPos:= FindSqlKeyword(Upper, 'FROM', 1);
+    if KwPos > 0 then
+    begin
+      Pos:= KwPos + Length('FROM');
+      for Tbl in ScanTableRefList(Upper, Pos, False) do AWrites.Add(Tbl);
+    end;
+    Exit;
+  end;
+
+  if FindSqlKeyword(Upper, 'SELECT', 1) = 1 then
+  begin
+    KwPos:= 1;
+    repeat
+      KwPos:= FindSqlKeyword(Upper, 'FROM', KwPos);
+      if KwPos = 0 then Break;
+      Pos:= KwPos + Length('FROM');
+      for Tbl in ScanTableRefList(Upper, Pos, True) do AReads.Add(Tbl);
+      KwPos:= Pos; // resume the keyword search right after this FROM's own list
+    until False;
+
+    KwPos:= 1;
+    repeat
+      KwPos:= FindSqlKeyword(Upper, 'JOIN', KwPos);
+      if KwPos = 0 then Break;
+      Pos:= KwPos + Length('JOIN');
+      for Tbl in ScanTableRefList(Upper, Pos, False) do AReads.Add(Tbl);
+      KwPos:= Pos;
+    until False;
+  end;
+end;
+
+// Unescapes a literalString's raw source text (outer quotes stripped,
+// doubled '''' unescaped to '). Duplicated from DRagLint.Parser.Delphi13's
+// own private HarvestStringLiterals.DecodeLiteral (not exported -- this
+// unit already keeps its own small AST-text helpers rather than reaching
+// into another unit for a three-line function; see FieldNodeStr's header
+// comment for the same "keep this unit standalone" precedent). #nn escapes
+// and string continuations are OUT OF SCOPE, exactly like the parser's own
+// decoder -- a SQL literal built with either is rare and this fact is
+// best-effort.
+function DecodeSqlLiteral(const ARaw: string): string;
+begin
+  Result:= ARaw;
+  if (Length(Result) >= 2) and (Result[1] = '''') and (Result[Length(Result)] = '''') then
+    Result:= Copy(Result, 2, Length(Result) - 2);
+  Result:= StringReplace(Result, '''''', '''', [rfReplaceAll]);
+end;
+
+// True when N is an 'exprBinary' node whose operator TEXT is literally '+'
+// (string/set/number concatenation-or-addition -- this extractor only ever
+// keeps the result when it turns out to be pure string literals, via
+// CollectConcatRun, so a numeric '+' simply yields ADynamic=True there and
+// is harmlessly discarded).
+function IsPlusBinary(const N: TTSNode; const ASrc: TBytes): Boolean;
+var Op: TTSNode;
+begin
+  Result:= False;
+  if N.IsNull or (N.NodeType <> 'exprBinary') then Exit;
+  Op:= N.ChildByField('operator');
+  if Op.IsNull then Exit;
+  Result:= Trim(FieldNodeStr(Op, ASrc)) = '+';
+end;
+
+// True when N is the TOP of a string-literal concatenation run -- the one
+// point in the tree WalkSqlLiterals should process it from (see that
+// procedure's header comment for why the run's own descendants must not be
+// separately re-visited): either a bare 'literalString' whose parent is NOT
+// a '+' exprBinary (a standalone literal argument/assignment RHS, e.g.
+// Query.SQL.Add('SELECT ...')), or an exprBinary('+') whose parent is NOT
+// ALSO a '+' exprBinary (the head of an 'a' + 'b' + 'c' chain -- a NESTED
+// '+' node, reached only from inside that same chain, answers False here:
+// it is consumed when CollectConcatRun walks down from its parent instead).
+function IsTopOfConcatRun(const N: TTSNode; const ASrc: TBytes): Boolean;
+var Par: TTSNode;
+begin
+  Result:= False;
+  if N.NodeType = 'literalString' then
+  begin
+    Par:= N.Parent;
+    Result:= Par.IsNull or not IsPlusBinary(Par, ASrc);
+    Exit;
+  end;
+  if IsPlusBinary(N, ASrc) then
+  begin
+    Par:= N.Parent;
+    Result:= Par.IsNull or not IsPlusBinary(Par, ASrc);
+  end;
+end;
+
+// Recursively collects a string-literal CONCATENATION RUN under N (a
+// 'literalString' leaf, an exprBinary('+') chain, or an exprParens wrapping
+// either) into AText, IN LEFT-TO-RIGHT ORDER (lhs visited before rhs,
+// matching '+''s own left-associative grammar). Sets ADynamic:=True the
+// moment ANY operand anywhere in the run is not itself a plain string
+// literal, a further '+' node, or a parenthesized wrapper of one -- a
+// variable, a function call, a typecast, a number, any other operator --
+// "a non-literal operand -> DYNAMIC sql, skip the run, do not guess" per
+// the task brief. Recursion does not short-circuit the instant a dynamic
+// operand is found (harmless extra work bounded by one routine body's own
+// size) -- simpler than plumbing an early-exit through the two-sided
+// recursive descent, and AText is only ever consulted by the caller
+// (WalkSqlLiterals) once ADynamic comes back False.
+procedure CollectConcatRun(const N: TTSNode; const ASrc: TBytes; var AText: string; var ADynamic: Boolean);
+begin
+  if N.IsNull then begin ADynamic:= True; Exit; end;
+  if N.NodeType = 'literalString' then
+  begin
+    AText:= AText + DecodeSqlLiteral(FieldNodeStr(N, ASrc));
+    Exit;
+  end;
+  if N.NodeType = 'exprParens' then
+  begin
+    if N.NamedChildCount >= 1 then
+      CollectConcatRun(N.NamedChild(0), ASrc, AText, ADynamic)
+    else
+      ADynamic:= True;
+    Exit;
+  end;
+  if IsPlusBinary(N, ASrc) then
+  begin
+    CollectConcatRun(N.ChildByField('lhs'), ASrc, AText, ADynamic);
+    CollectConcatRun(N.ChildByField('rhs'), ASrc, AText, ADynamic);
+    Exit;
+  end;
+  ADynamic:= True; // an identifier, exprCall, exprDot, a number, a non-'+' exprBinary, ...
+end;
+
+// Walks ABody top-down, finding each maximal string-literal-concatenation
+// RUN (IsTopOfConcatRun) exactly once and -- when its assembled text
+// (CollectConcatRun) is not dynamic and looks like SQL (ClassifySqlText) --
+// extracting its table references (ExtractSqlTables) into AReads/AWrites.
+// Never re-descends into an already-processed run's own children (a run is
+// handled in full, then this procedure Exits for that subtree) -- so a
+// nested literal fragment (e.g. just ' FROM ' on its own, part of a bigger
+// run) is never independently mis-treated as a second, unrelated
+// candidate. Mirrors DRagLint.Diagnostics.AstChecks.CyclomaticCountDecisions'
+// own 'defProc' guard: a NESTED local routine's own body is analyzed
+// separately (when IT is indexed as its own symbol), never folded into the
+// ENCLOSING routine's SQL facts. Uses ChildCount/Child (ALL children, not
+// just named), matching HarvestStringLiterals' (DRagLint.Parser.Delphi13)
+// own proven-safe traversal for finding every literalString regardless of
+// its ancestor node shape (assignment/exprCall/args/...).
+procedure WalkSqlLiterals(const N: TTSNode; const ASrc: TBytes; AReads, AWrites: TStringList);
+var
+  Text   : string ;
+  Dynamic: Boolean;
+  I      : Integer;
+begin
+  if N.IsNull then Exit;
+  if N.NodeType = 'defProc' then Exit; // nested routine -- analyzed separately, on its own
+  if IsTopOfConcatRun(N, ASrc) then
+  begin
+    Text:= '';
+    Dynamic:= False;
+    CollectConcatRun(N, ASrc, Text, Dynamic);
+    if (not Dynamic) and ClassifySqlText(Text) then
+      ExtractSqlTables(Text, AReads, AWrites);
+    Exit; // never re-descend into an already-consumed run
+  end;
+  for I:= 0 to N.ChildCount - 1 do
+    WalkSqlLiterals(N.Child(I), ASrc, AReads, AWrites);
+end;
+
+// ADP2 T7: fills ASqlReadsCsv/ASqlWritesCsv (capped, display-ready CSV
+// strings -- the SAME JoinCappedDisplay format ReadsFields/WritesFields/
+// CoveredBy already use) for one routine: table names mined from SQL
+// string literals built in its OWN body. ABody is the SAME defProc.body
+// node Analyze already matched for Cyclomatic/AnalyzeReadsWrites -- no
+// second AST scan; ASrc is the file's own byte buffer from TAstParseCache
+// (UTF-8, matching every other AST-text helper in this unit).
+//
+// Deduped + SORTED (TStringList Sorted/CaseInsensitive/dupIgnore, mirroring
+// ComputeCoveredBy's Names list) for deterministic output regardless of
+// literal encounter order or which run found a table first, then capped at
+// SQL_TABLE_CAP via JoinCappedDisplay. '' for both when ABody is null (no
+// matching defProc -- same "absence over a wrong fact" contract Cyclomatic/
+// ReadsFields already follow) or the routine simply builds no recognizable
+// SQL at all.
+procedure AnalyzeSqlTables(const ABody: TTSNode; const ASrc: TBytes; out ASqlReadsCsv, ASqlWritesCsv: string);
+var
+  ReadSet, WriteSet    : TStringList  ;
+  ReadsList, WritesList: TList<string>;
+begin
+  ASqlReadsCsv := '';
+  ASqlWritesCsv:= '';
+  if ABody.IsNull then Exit;
+
+  ReadSet := TStringList.Create;
+  WriteSet:= TStringList.Create;
+  try
+    ReadSet.Sorted := True; ReadSet.Duplicates := dupIgnore; ReadSet.CaseSensitive := False;
+    WriteSet.Sorted:= True; WriteSet.Duplicates:= dupIgnore; WriteSet.CaseSensitive:= False;
+
+    WalkSqlLiterals(ABody, ASrc, ReadSet, WriteSet);
+
+    if (ReadSet.Count = 0) and (WriteSet.Count = 0) then Exit;
+
+    ReadsList := TList<string>.Create;
+    WritesList:= TList<string>.Create;
+    try
+      ReadsList.AddRange(ReadSet.ToStringArray);
+      WritesList.AddRange(WriteSet.ToStringArray);
+      ASqlReadsCsv := JoinCappedDisplay(ReadsList, SQL_TABLE_CAP);
+      ASqlWritesCsv:= JoinCappedDisplay(WritesList, SQL_TABLE_CAP);
+    finally
+      WritesList.Free;
+      ReadsList.Free;
+    end;
+  finally
+    WriteSet.Free;
+    ReadSet.Free;
+  end;
+end;
+
 class function TSymbolFactsAnalyzer.Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts;
 var
   PF   : TParsedFile     ;
@@ -636,12 +1182,18 @@ begin
         // unit's implementation section) for the field-set + classification
         // rules.
         AnalyzeReadsWrites(Proc, Body, PF.Src, ASym, AFilePath, AStore, Result.ReadsFields, Result.WritesFields);
+        // ADP2 T7: SQL tables touched -- same matched Body node, no 2nd AST
+        // scan. See AnalyzeSqlTables' header comment (above, this unit's
+        // implementation section) for the full literal-concatenation +
+        // conservative FROM/JOIN/INSERT/UPDATE/DELETE table-name extraction
+        // pipeline.
+        AnalyzeSqlTables(Body, PF.Src, Result.SqlReads, Result.SqlWrites);
         Break;
       end;
-    // No matching defProc: Cyclomatic stays 0 and Reads/WritesFields stay ''
-    // (absence over a wrong number/fact -- e.g. a stale/mismatched parse, or
-    // ASym's file changed between the indexer's own parse and this cache
-    // lookup).
+    // No matching defProc: Cyclomatic stays 0 and Reads/WritesFields/
+    // SqlReads/SqlWrites stay '' (absence over a wrong number/fact -- e.g. a
+    // stale/mismatched parse, or ASym's file changed between the indexer's
+    // own parse and this cache lookup).
   end;
 end;
 

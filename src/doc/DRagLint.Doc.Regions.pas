@@ -24,7 +24,7 @@ type
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
     /// Raises / Deprecated / Overrides / Overridden by / Implements / Overload
     /// k of n / abstract / virtual / Complexity / Reads/Writes fields /
-    /// Handles / Covered by / Since / SeeAlso. Empty sections omitted; '' when there are no facts. Displayed
+    /// Handles / SQL tables touched / Covered by / Since / SeeAlso. Empty sections omitted; '' when there are no facts. Displayed
     /// counts below
     /// the true *Total get a ' (+N more)' suffix. Deprecated is ground-truth
     /// from the Pascal 'deprecated' directive (not the unrelated
@@ -43,7 +43,14 @@ type
     /// emitted only when AFacts.DfmEvent is non-empty -- the routine is a
     /// published method wired as an event handler in its own paired .dfm;
     /// AFacts.DfmEvent is already the final display string (computed at
-    /// index time), so this too is a plain passthrough. Covered by (v(ADP2 T5), 'Covered by: A, B (+N more)') is the
+    /// index time), so this too is a plain passthrough. SQL tables touched
+    /// (v(ADP2 T7), 'SQL: reads A, B; writes C') is ONE line -- unlike
+    /// Reads/Writes fields above, the two sides here are joined with
+    /// '; ' (semicolon-space), not three literal spaces, matching the
+    /// design spec's own rendering example -- either side omitted when
+    /// empty, and the WHOLE line omitted when both are empty;
+    /// AFacts.SqlReads/SqlWrites are already display-ready, so this too is a
+    /// plain passthrough. Covered by (v(ADP2 T5), 'Covered by: A, B (+N more)') is the
     /// SAME kind of already-display-ready passthrough -- AFacts.CoveredBy is
     /// computed LAZILY by DRagLint.Doc.SymbolFacts.ComputeCoveredBy (a
     /// bounded reverse call-graph closure filtered to test callers), never
@@ -327,6 +334,27 @@ begin
     // logic is needed here.
     if AFacts.DfmEvent <> '' then
       Sb.AppendLine(APrefix + 'Handles: ' + EscXml(AFacts.DfmEvent));
+    // v(ADP2 T7): SQL tables touched fact -- ONE line, 'SQL: reads A, B;
+    // writes C', either side omitted when empty (never an empty 'reads'/
+    // 'writes' label with nothing after it), the WHOLE line omitted when
+    // both sides are empty. Semicolon-SPACE separates the two sides here
+    // (NOT the three-literal-space separator Reads/Writes fields uses
+    // above -- this line's own format per the design spec's rendering
+    // example, 'SQL: reads OPTRLIST, PDF_SCAN; writes PDF_SCAN').
+    // AFacts.SqlReads/SqlWrites are ALREADY display-ready (capped, ', '-
+    // joined, a ' (+N more)' suffix when truncated), so -- like every other
+    // Phase 2 fact above -- this is a plain passthrough.
+    if (AFacts.SqlReads <> '') or (AFacts.SqlWrites <> '') then
+    begin
+      var SqlLine: string:= '';
+      if AFacts.SqlReads <> '' then SqlLine:= 'reads ' + EscXml(AFacts.SqlReads);
+      if AFacts.SqlWrites <> '' then
+      begin
+        if SqlLine <> '' then SqlLine:= SqlLine + '; ';
+        SqlLine:= SqlLine + 'writes ' + EscXml(AFacts.SqlWrites);
+      end;
+      Sb.AppendLine(APrefix + 'SQL: ' + SqlLine);
+    end;
     // v(ADP2 T5): Covered-by-tests fact -- CONTROLLER OVERRIDE: AFacts.
     // CoveredBy is computed LAZILY (DRagLint.Doc.SymbolFacts.
     // ComputeCoveredBy, a bounded reverse call-graph closure filtered to

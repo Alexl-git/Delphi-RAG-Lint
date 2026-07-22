@@ -176,6 +176,24 @@ type
     // index predates Phase 2 Task 6 (no symbol_facts row / older column) --
     // absence over a guessed fact.
     DfmEvent         : string           ;
+    // v(ADP2 T7): SQL tables touched -- which tables a routine that builds
+    // SQL (string literals) reads (FROM/JOIN) vs. writes (INSERT INTO/
+    // UPDATE/'UPDATE OR INSERT INTO'/DELETE FROM), read back verbatim from
+    // the index-time symbol_facts row (ISymbolStore.GetSymbolFacts -- see
+    // DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze/
+    // AnalyzeSqlTables for the extraction pipeline: a NET-NEW, deliberately-
+    // not-a-parser literal-concatenation + keyword-anchored table scan --
+    // NOT DRagLint.Parser.Sql, which is Firebird DDL over *.sql schema-
+    // migration files only and never parses a trigger/procedure body for
+    // DML references). RAW PASSTHROUGH, like Cyclomatic/BodyLoc/
+    // ReadsFields/WritesFields/DfmEvent above -- already the final display
+    // CSVs (', '-joined, capped at 8, a ' (+N more)' suffix when
+    // truncated), no cap/threshold logic needed here. '' for either/both
+    // when the routine builds no recognizable SQL, its SQL is dynamically
+    // assembled (a non-literal operand anywhere in a '+' concatenation), or
+    // the index predates Phase 2 Task 7 -- absence over a guessed table.
+    SqlReads         : string           ;
+    SqlWrites        : string           ;
   end;
 
   TDocFactsBuilder = class
@@ -1083,6 +1101,12 @@ begin
   // TSymbolFactsAnalyzer.Analyze/AnalyzeDfmEvent -- see TDocFacts.DfmEvent's
   // own field comment).
   Result.DfmEvent:= SFacts.DfmEvent;
+  // v(ADP2 T7): SQL tables touched -- same raw-passthrough contract as
+  // Cyclomatic/BodyLoc/ReadsFields/WritesFields/DfmEvent above (already the
+  // final display CSVs, computed at index time by DRagLint.Doc.SymbolFacts.
+  // TSymbolFactsAnalyzer.Analyze/AnalyzeSqlTables).
+  Result.SqlReads := SFacts.SqlReads;
+  Result.SqlWrites:= SFacts.SqlWrites;
 
   // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE: computed LAZILY
   // here (NOT read back from SFacts.CoveredBy, which stays unwritten/
