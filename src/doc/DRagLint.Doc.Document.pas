@@ -144,6 +144,42 @@ begin
   Result:= True;
 end;
 
+// v(ADP3 T3 review round 2, Finding 3): true when EVERY line of ARawText (the
+// EXISTING doc region's raw content -- one entry per source /// line, /// prefix
+// already stripped by TDocCommentScanner) is engine-owned: it carries AUTO_MARK,
+// or it lies within an AUTO_BEGIN..AUTO_END fence (inclusive of the fence lines
+// themselves); a blank interior line carries no content either way and is
+// skipped. Gates BuildForSymbol's empty-merge delete branch over the RAW
+// region instead of a field-by-field TParsedDoc whitelist (Exceptions/
+// ExampleText/SeeAlso/SinceText/Deprecated): a whitelist is correct only by
+// ENUMERATION -- any tag type the PARSER does not even model (<value>,
+// <typeparam>, <para>, <code>, <list>, <permission>, <inheritdoc/>, ...) would
+// still be silently destroyed. Testing the raw text directly needs no such list
+// and no future maintenance as new tag types appear: an unrecognized, unmarked,
+// non-fence line is by definition NOT engine-owned, so it correctly blocks the
+// delete, regardless of whether the parser has ever heard of the tag it came
+// from.
+function RegionFullyEngineOwned(const ARawText: string): Boolean;
+var
+  Lines : TArray<string>;
+  L     : string        ;
+  InFence: Boolean       ;
+  I     : Integer        ;
+begin
+  Lines:= ARawText.Split([sLineBreak, #10, #13]);
+  InFence:= False;
+  for I:= 0 to High(Lines) do
+  begin
+    L:= Lines[I];
+    if Trim(L) = '' then Continue;
+    if Pos(AUTO_BEGIN, L) > 0 then begin InFence:= True; Continue; end;
+    if Pos(AUTO_END, L) > 0 then begin InFence:= False; Continue; end;
+    if InFence then Continue;
+    if Pos(AUTO_MARK, L) = 0 then Exit(False);
+  end;
+  Result:= True;
+end;
+
 // Returns the TDocCommentRegion immediately preceding ASymStartLine (EndLine in
 // [SymStartLine - 1 - AllowGap, SymStartLine - 1]), REJECTING that candidate
 // when another declaration's StartLine sits strictly BETWEEN the region and
@@ -351,7 +387,20 @@ begin
             or (ASym.Kind in [skFunction, skConstructor]);
 
   Prefix:= '/// ';
-  Merged:= TDocRegions.MergeComment(Existing, SigParams, Facts, HasRet, Prefix, AComplexityMin);
+  // v(ADP3 T3 review round 2, Finding 4): a SEPARATE, LOCAL signal for the
+  // repair-vs-fresh decision only -- NOT a widening of TParsedDoc.HasContent
+  // itself (that stays narrower, exactly as before v(ADP3 T3): the indexer's
+  // symbol_docs write, context bundling, TypeAt, MCP, and LSP hover all read
+  // HasContent directly and correctly treat a blank-slot-only comment as
+  // "not documented"). A comment consisting ONLY of a human's blank
+  // <summary></summary>/<returns></returns> slot (no <param>, so
+  // Existing.HasContent itself stays False) must still route MergeComment
+  // through its REPAIR path, not the fresh-insert path, or it stacks a
+  // second, separate comment block below the human's untouched line.
+  var ExistingHasAnyTag: Boolean:=
+    Existing.HasSummaryTag or Existing.HasReturnsTag or (Length(Existing.Params) > 0)
+    or Existing.HasContent or (Trim(Region.RawText) <> '');
+  Merged:= TDocRegions.MergeComment(Existing, SigParams, Facts, HasRet, Prefix, AComplexityMin, ExistingHasAnyTag);
 
   // v(ADP3 T3): MergeComment returns '' when omit-when-empty suppression
   // leaves NOTHING to say (no summary/param/returns content and no facts to
@@ -364,25 +413,13 @@ begin
   // '', so this is a stable fixed point (daUnchanged), not a re-triggering edit.
   if Trim(Merged) = '' then
   begin
-    // v(ADP3 T3 review fix, Finding 2): CONSERVATIVE guard -- only delete
-    // when MergeComment could not possibly be discarding content it simply
-    // doesn't know how to re-emit. MergeComment round-trips ONLY Summary/
-    // Params/ReturnsText/Remarks; it has never read back Exceptions/
-    // ExampleText/SeeAlso/SinceText/the doc's own Deprecated tag (a
-    // separate, already-flagged, pre-existing defect predating this task).
-    // If Existing carries real content in any of THOSE fields, Merged = ''
-    // reflects that gap, not genuine "nothing to say" -- deleting the whole
-    // region would destroy hand-written source lines this delete branch has
-    // no business touching. Kept even after a future task makes these tags
-    // round-trip: defence-in-depth for any tag type MergeComment does not
-    // yet handle, correct by construction rather than by coincidence.
-    var HasUnhandledTagContent: Boolean:=
-      (Length(Existing.Exceptions) > 0)
-      or (Trim(Existing.ExampleText) <> '')
-      or (Length(Existing.SeeAlso) > 0)
-      or (Trim(Existing.SinceText) <> '')
-      or Existing.Deprecated;
-    if Existing.HasContent and (not HasUnhandledTagContent) then
+    // v(ADP3 T3 review round 2, Finding 3): CONSERVATIVE guard over the RAW
+    // existing region, not a field-by-field TParsedDoc whitelist -- see
+    // RegionFullyEngineOwned's own comment for why a whitelist is only
+    // correct by enumeration (an unmodeled tag type like <value> would still
+    // be silently destroyed) where the raw-region check needs no future
+    // maintenance as new tag types appear.
+    if Existing.HasContent and RegionFullyEngineOwned(Region.RawText) then
     begin
       E:= Default(TTextEdit);
       E.FilePath:= Path;
@@ -397,7 +434,16 @@ begin
     Exit;
   end;
 
-  if Existing.HasContent then
+  // v(ADP3 T3 review round 2, Finding 4): ExistingHasAnyTag (not just
+  // Existing.HasContent) decides repair-vs-fresh here too -- a comment
+  // consisting ONLY of a human's blank <summary></summary> slot must be
+  // REPLACED (delete old span + insert the new Merged text that preserves
+  // it) via the repair branch below, not left untouched while a SECOND,
+  // separate block is inserted above the declaration by the fresh branch's
+  // plain insert (which does not touch the existing lines at all).
+  // ExistingHasAnyTag already subsumes Existing.HasContent (see its own
+  // computation above), so testing it alone suffices.
+  if ExistingHasAnyTag then
   begin
     // Idempotency: a re-run on an already-current comment makes no edit.
     // Compare the MERGED comment (the /// -prefixed lines drag-lint WOULD write)

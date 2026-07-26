@@ -1,46 +1,60 @@
 <#
   run_doc_p3_markededit.ps1 -- Auto-Document Phase 3, Task 3 (review follow-up,
-  Finding 1): a MARKED tag carrying real post-marker content is preserved
-  (marker stripped), never dropped along with its text.
+  Finding 1 -- REVISED after the coordinator's own reversal, round 2):
+  a marked tag carrying real post-marker content is preserved (marker
+  stripped) for <param> ONLY. <summary>/<returns> revert to the ORIGINAL
+  Task 3 rule: marked means engine-owned, full stop, regardless of what
+  follows the marker.
 
-  Live scenario this protects against: a prior rollout left N
-  <summary><!-- drag-lint:auto --></summary> stubs on disk. A developer sees a
-  blank tooltip, types a description INSIDE the existing tag without deleting
-  the HTML comment, and commits. The next `document --apply` must NOT delete
-  the tag and the sentence -- pre-fix, ClassifyTagAction keyed purely on the
-  marker being PRESENT (regardless of what followed it), so a marked
-  <summary>/<param> fell to the always-empty-today harvest arm and was
-  dropped with its text; a marked <returns> was treated the same way even
-  though the engine's OWN live Observed-suffix refill is *also* marked+
-  content, which (if not corrected) makes the fix indistinguishable from the
-  bug it just fixed on the very next run.
+  History: an earlier round of this fix tried to preserve marked+content for
+  ALL THREE tags via an exact-string compare against freshly generated text
+  (AFreshFill). The coordinator reversed that ruling on further review: the
+  PLAN had already adjudicated <summary>/<returns> deliberately -- a human
+  edit inside the markers is NOT separable from "the source comment
+  changed" by the plan's own string comparison, so BOTH refresh, and a
+  human takes ownership only by REMOVING the marker (Task 9's drift report
+  is the documented, future safeguard). The exact-string compare was ALSO
+  independently wrong: it is content-keyed ownership by the back door, more
+  brittle than the StartsText('Observed:') sniff Task 1 deleted (whitespace
+  normalization and legitimate code drift both defeat exact equality, where
+  a prefix match would have survived both) -- reproduced and regression-
+  tested separately in run_doc_p3_idempotent_edgecases.ps1.
+
+  <param> remains the ONE exception: harvesting is explicitly out of scope
+  for it forever, so "engine-owned, dropped" there is PERMANENT,
+  unrecoverable loss with no refresh mechanism and no drift report ever able
+  to surface it -- a decision the plan never made for summary/returns.
 
   Fixture fixtures\docp3\markededit.pas:
     * Foo(AValue: Integer): Integer -- ALREADY carries a marked <summary>,
       <param name="AValue">, and <returns>, each with REAL text typed after
-      the marker (simulating exactly the developer scenario above).
+      the marker (simulating a developer typing into an existing stub
+      without removing the HTML comment).
     * Bar(AValue: Integer): Integer -- UNDOCUMENTED. Used to prove the
       DISTINCT nuance: the engine's own fresh <returns> refill (marker +
       mined 'Observed: ...' suffix) must NOT be misclassified as "a human
       edited this" on the very NEXT run just because it is marked+content --
-      it must stay recognized as engine-owned (matches a fresh computation)
-      so idempotency holds and the marker survives across repair passes.
+      it must stay recognized as engine-owned so the marker survives across
+      a fresh-to-repair transition, and idempotency holds.
 
   Drives `index` -> `document --unit --apply` and asserts:
-    1. Foo's <summary> survives with its typed sentence, UNMARKED (marker
-       stripped) -- not dropped.
-    2. Foo's <param name="AValue"> survives with its typed sentence,
-       UNMARKED -- not dropped.
-    3. Foo's <returns> survives with its typed sentence, UNMARKED -- not
-       dropped; the mined return case surfaces separately as a 'Returns:'
-       fact line (not lost, not duplicated into the tag itself).
+    1. Foo's <summary> is GONE entirely -- marked, engine-owned, nothing
+       harvested to refill it (v(ADP3 T3) omit-when-empty); the human's
+       typed sentence is NOT preserved (this is the plan's own recorded,
+       deliberate deviation, not a bug).
+    2. Foo's <param name="AValue"> SURVIVES with its typed sentence,
+       UNMARKED (marker stripped) -- the one narrow exception.
+    3. Foo's <returns> is REGENERATED to the engine's own mined Observed
+       case, marked -- the human's typed sentence is discarded (same
+       deliberate deviation as summary); no separate 'Returns:' fact line
+       (the tag itself carries the mined content, same as any other
+       engine-owned/refilled returns).
     4. Bar gains a FRESH, MARKED <returns> (engine's own mined-Observed
        refill) -- the normal, unaffected omit-when-empty/refill behavior.
     5. Idempotency: reindex + a second --apply is byte-identical for BOTH
        symbols. In particular, Bar's <returns> marker MUST SURVIVE (not be
-       stripped) -- proving the engine's own current output is recognized
-       as engine-owned across the fresh-to-repair transition, not
-       misclassified as a human edit.
+       stripped) -- proving the engine's own current output stays
+       recognized as engine-owned across the fresh-to-repair transition.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -91,16 +105,20 @@ try {
   $fooBlock = Get-DocBlockAbove $lines '^function Foo\(AValue: Integer\): Integer;'
   Check 'Foo decl found' ($null -ne $fooBlock)
 
-  Check '1. Foo <summary> survives with its typed text, unmarked' `
-    (($lines | Where-Object { $_.Trim() -eq '/// <summary>A developer typed this after the marker.</summary>' }).Count -eq 1)
-  Check '2. Foo <param name="AValue"> survives with its typed text, unmarked' `
+  Check '1. Foo <summary> is GONE (marked = engine-owned regardless of content; nothing harvested)' `
+    ($null -eq $fooBlock -or (-not ($fooBlock -match '<summary>')))
+  Check "1. Foo's typed summary sentence does NOT survive anywhere (deliberate, plan-sanctioned loss)" `
+    (-not ($lines -join "`n").Contains('A developer typed this after the marker.'))
+
+  Check '2. Foo <param name="AValue"> SURVIVES with its typed text, unmarked (the one exception)' `
     (($lines | Where-Object { $_.Trim() -eq '/// <param name="AValue">Also typed after the marker.</param>' }).Count -eq 1)
-  Check '3. Foo <returns> survives with its typed text, unmarked' `
-    (($lines | Where-Object { $_.Trim() -eq '/// <returns>Also typed here after the marker.</returns>' }).Count -eq 1)
-  Check '3. Foo <returns> mined case surfaces as a separate Returns: fact line' `
-    ($null -ne $fooBlock -and $fooBlock -match 'Returns:\s*AValue\b')
-  Check 'Foo doc block carries NO marker anywhere (fully de-owned by the edit)' `
-    ($null -eq $fooBlock -or (-not ($fooBlock -match [regex]::Escape($MARK))))
+
+  Check '3. Foo <returns> is REGENERATED to the mined Observed case, marked' `
+    ($null -ne $fooBlock -and $fooBlock -match [regex]::Escape('<returns>' + $MARK) + 'Observed:\s*AValue\.')
+  Check "3. Foo's typed returns sentence does NOT survive (deliberate, plan-sanctioned loss)" `
+    (-not ($lines -join "`n").Contains('Also typed here after the marker.'))
+  Check '3. no separate Returns: fact line for Foo (mined content is IN the regenerated tag, not duplicated)' `
+    ($null -eq $fooBlock -or (-not ($fooBlock -match 'Returns:\s*AValue\b')))
 
   $barBlock = Get-DocBlockAbove $lines '^function Bar\(AValue: Integer\): Integer;'
   Check 'Bar decl found' ($null -ne $barBlock)
