@@ -601,7 +601,19 @@ begin
     dckTripleSlash:
     begin
       HasXmlTags:= (Pos('<summary>', ARegion.RawText) > 0) or (Pos('<param', ARegion.RawText) > 0) or (Pos('<returns>', ARegion.RawText) > 0) or
-      (Pos('<remarks>', ARegion.RawText) > 0) or (Pos('<exception', ARegion.RawText) > 0) or (Pos('<example>', ARegion.RawText) > 0);
+      (Pos('<remarks>', ARegion.RawText) > 0) or (Pos('<exception', ARegion.RawText) > 0) or (Pos('<example>', ARegion.RawText) > 0) or
+      // v(ADP3 T3b): <since>/<seealso>/<see>/<deprecated/> were missing from
+      // this sniff, so a comment whose ONLY tags were these mis-dispatched to
+      // ParseOneline -- the whole raw tag text read back as literal prose,
+      // never parsed as XML at all (Task 3's implementer hit this while
+      // building an unrelated regression test and worked around it in a
+      // fixture; fixing the sniff itself was out of that task's scope but is
+      // explicitly in scope here). '<see' (prefix only, no closing '>')
+      // matches BOTH '<see cref="X"/>' and '<seealso cref="X"/>', mirroring
+      // RxSee's own '(?:see|seealso)' alternation in ParseXmlDoc; '<deprecated'
+      // (prefix only) matches '<deprecated>', '<deprecated/>' and
+      // '<deprecated />', mirroring RxDeprecatedTag's '\s*/?' tolerance.
+      (Pos('<since>', ARegion.RawText) > 0) or (Pos('<see', ARegion.RawText) > 0) or (Pos('<deprecated', ARegion.RawText) > 0);
       if HasXmlTags then Result:= ParseXmlDoc(ARegion.RawText)
       else Result:= ParseOneline(ARegion.RawText, ARegion.Kind);
     end;

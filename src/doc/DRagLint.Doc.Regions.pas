@@ -210,6 +210,14 @@ type
 
 implementation
 
+uses
+  // v(ADP3 T3b): MergeComment's <seealso>/<since> preserve logic re-parses a
+  // fence-stripped copy of the existing raw comment block via the SAME
+  // TDocCommentParser.ParseXmlDoc already used to parse it the first time --
+  // reused as-is (no duplicated regex, no parser change), never a new
+  // heuristic. No circularity: this unit does not depend on DRagLint.Doc.Regions.
+  DRagLint.Parser.DocComments;
+
 /// <summary>XML-escapes S for use as ELEMENT TEXT content: ampersand, less-than
 /// and greater-than become their XML entity references. The ampersand pass runs
 /// first so the ampersand it introduces for a later entity is not re-escaped.</summary>
@@ -763,6 +771,26 @@ begin
     // else: engine-owned-and-empty, or genuinely absent, and nothing
     // harvested -- omit the tag entirely (v(ADP3 T3)).
 
+    // <deprecated/>: v(ADP3 T3b). Fixed order (see this function's own
+    // header remarks): <summary> -> <deprecated/> -> <param>s -> <returns>
+    // -> <exception>s -> <example> -> <seealso>s -> <since> -> <remarks>.
+    // This is a bare, content-free marker with NO engine-owned/marked
+    // variant anywhere -- MergeComment has never generated this XML tag (the
+    // ground-truth 'Deprecated: msg'/'Deprecated.' PLAIN-TEXT fact line
+    // inside the AUTO_BEGIN..AUTO_END fence is a DIFFERENT thing: the Pascal
+    // `deprecated` directive, not this doc-comment tag -- see
+    // RenderFactsBlock's own comment), so there is nothing to classify:
+    // whenever a human wrote it, it is preserved; nothing ever refills it,
+    // same as <param>. TParsedDoc records only a Boolean (Result.Deprecated),
+    // so the self-closing spelling emitted here is canonical output, not a
+    // verbatim echo of whatever the author actually typed ('<deprecated>' /
+    // '<deprecated/>' / '<deprecated />' all parse the same, per
+    // RxDeprecatedTag) -- the only one of the five tags in this task where
+    // exact original spelling cannot be preserved, because there is no
+    // spelling left to preserve once it collapses to a Boolean.
+    if AExisting.Deprecated then
+      Sb.AppendLine(APrefix + '<deprecated/>');
+
     // <param>: v(ADP3 T3 review round 2, Finding 1 -- the ONE tag where
     // marked+content is preserved rather than treated as engine-owned; see
     // ClassifyParamAction's own comment for why params differ from
@@ -815,6 +843,78 @@ begin
           Sb.AppendLine(APrefix + '<returns>' + AUTO_MARK + Obs + '</returns>');
       end;
     end;
+
+    // <exception>: v(ADP3 T3b). Never engine-owned -- MergeComment has never
+    // generated this tag, so, like <param> and <deprecated/>, there is
+    // nothing to classify: every <exception> the parser found is hand-
+    // written, preserved verbatim (mirrors the <param> loop's shape above).
+    // TypeName (the cref) and Desc are re-emitted EXACTLY as parsed, with NO
+    // re-escaping: they were captured raw out of already-valid XML text (the
+    // author's own source), so they are opaque strings to round-trip, not
+    // fresh content to escape -- exactly like Desc in the <param> loop above
+    // and SummaryRaw/AExisting.ReturnsText below. Escaping them again here
+    // would double-escape any entity the author's text already carries
+    // (e.g. a hand-written '&amp;' would become '&amp;amp;') and would not
+    // be idempotent -- EscXml/EscXmlAttr are reserved in this function for
+    // MINED content only (RenderFactsBlock/ObservedSuffix), never for a
+    // verbatim hand-written passthrough. Multiple <exception> tags keep
+    // their relative SOURCE order (Excs is populated in regex-match order
+    // by the parser; the parser does not track cross-TYPE tag order, hence
+    // this function's fixed emission order -- see its own header remarks).
+    for var Exc in AExisting.Exceptions do
+      Sb.AppendLine(EmitTagged('<exception cref="' + Exc.TypeName + '">', Exc.Desc, '</exception>'));
+
+    // <example>: v(ADP3 T3b). Same reasoning as <exception> -- never engine-
+    // owned, always hand-written when present, preserved verbatim (no
+    // re-escaping, see above).
+    if AExisting.ExampleText <> '' then
+      Sb.AppendLine(EmitTagged('<example>', AExisting.ExampleText, '</example>'));
+
+    // <seealso>/<since>: v(ADP3 T3b) -- UNLIKE exception/example/deprecated,
+    // these two DO have an engine-generated counterpart: RenderFactsBlock
+    // emits an opt-in auto '<seealso cref=.../>' per related symbol and an
+    // opt-in auto '<since>date</since>' fact, both INSIDE the AUTO_BEGIN..
+    // AUTO_END fence (see its own comment) when the caller opted in via
+    // --seealso/--since. The parser's RxSee/RxSinceTag regexes match
+    // ANYWHERE in the raw block -- they do not know the fence exists -- so
+    // AExisting.SeeAlso/.SinceText, read directly, would ALSO capture
+    // whatever the fence carries from the LAST run, misattributing engine
+    // output as hand-written. Re-emitting THAT verbatim here would duplicate
+    // it a second time outside the fence, and since RenderFactsBlock
+    // regenerates the SAME auto lines inside the fence every run regardless,
+    // the duplicate would grow without bound on every subsequent --apply
+    // (the Task 3b brief's own "Trap 1", confirmed empirically against this
+    // exact scenario before this fix). The fence can only ever exist inside
+    // an XML-DocInsight-format (dfXmlDoc) comment -- MergeComment only ever
+    // WRITES the fence inside XML tags, so a dfPasDoc/dfOneline/dfLoose
+    // existing read is, by construction, a comment this engine has never
+    // touched: no fence, no conflation risk, and AExisting.SeeAlso/
+    // .SinceText (as already parsed by ParsePasDoc's own @see/@since
+    // handling) is exactly the hand-written value. Only dfXmlDoc needs the
+    // fence-stripped re-parse below -- StripManagedBlock (already used for
+    // Remarks prose, above) removes exactly the fenced span, and
+    // TDocCommentParser.ParseXmlDoc is the SAME, already-correct XML-doc
+    // parser reused as-is (no duplicated regex, no parser change, no
+    // content-based heuristic guessing what "looks" auto-generated) --
+    // HandOnly.SeeAlso/.SinceText then reflect ONLY what sits outside the
+    // fence, i.e. genuinely hand-written.
+    var HandSeeAlso : TArray<string>;
+    var HandSinceText: string;
+    if AExisting.Format = dfXmlDoc then
+    begin
+      var HandOnly: TParsedDoc:= TDocCommentParser.ParseXmlDoc(StripManagedBlock(AExisting.RawBlock));
+      HandSeeAlso  := HandOnly.SeeAlso;
+      HandSinceText:= HandOnly.SinceText;
+    end
+    else
+    begin
+      HandSeeAlso  := AExisting.SeeAlso;
+      HandSinceText:= AExisting.SinceText;
+    end;
+    for var HSee in HandSeeAlso do
+      Sb.AppendLine(APrefix + '<seealso cref="' + HSee + '"/>');
+    if HandSinceText <> '' then
+      Sb.AppendLine(EmitTagged('<since>', HandSinceText, '</since>'));
 
     // remarks: keep hand prose (AExisting.Remarks) OUTSIDE the fence, then a fresh
     // managed block. Strip any old fenced block from the prose before re-emitting
