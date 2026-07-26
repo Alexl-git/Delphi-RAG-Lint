@@ -13,7 +13,8 @@
   After document --apply, asserts:
     * "Real prose." preserved verbatim (summary untouched)
     * "Real param desc." preserved verbatim (X param untouched)
-    * a <param name="Y"> managed tag (AUTO_PARAM sentinel) was ADDED
+    * a <param name="Y"> managed tag (AUTO_MARK provenance marker, v(ADP3 T1))
+      was ADDED
     * BOTH hand <remarks> lines survive, each with a /// prefix (Task 4 fix #1:
       multi-line prose is re-emitted line-by-line, never one bare-LF line)
     * a managed facts block (Called from:) was inserted inside <remarks>
@@ -47,11 +48,11 @@ try {
   $lines = [IO.File]::ReadAllLines($target)
 
   Check 'preserved: hand summary "Real prose." verbatim' ($txt.Contains('/// <summary>Real prose.</summary>'))
-  Check 'preserved: hand param "Real param desc." verbatim (no AUTO_PARAM marker)' `
+  Check 'preserved: hand param "Real param desc." verbatim (no AUTO_MARK)' `
     ($txt.Contains('/// <param name="X">Real param desc.</param>') -and `
-     ($txt -notmatch '///\s*<param name="X">Real param desc\.</param><!-- drag-lint:auto param -->'))
-  Check 'added: managed <param name="Y"> (empty, no TODO) with AUTO_PARAM sentinel' `
-    ($txt -match '///\s*<param name="Y"></param><!-- drag-lint:auto param -->')
+     ($txt -notmatch [regex]::Escape('<param name="X">') + '.*' + [regex]::Escape('<!-- drag-lint:auto -->')))
+  Check 'added: managed <param name="Y"> carries AUTO_MARK (empty content, no TODO)' `
+    ($txt -match '///\s*<param name="Y"><!-- drag-lint:auto --></param>')
 
   # Both hand remark lines survive, EACH with a /// prefix (Task 4 fix #1).
   $hasLine1 = ($lines | Where-Object { $_.Trim() -eq '/// First remark line.' }).Count -eq 1

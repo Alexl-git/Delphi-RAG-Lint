@@ -9,6 +9,17 @@ uses
 const
   AUTO_BEGIN = '<!-- drag-lint:auto BEGIN -->';
   AUTO_END   = '<!-- drag-lint:auto END -->';
+  /// Uniform provenance marker (v(ADP3 T1)). Emitted immediately after the
+  /// OPENING tag of every <summary>/<param>/<returns> the engine writes, so the
+  /// marker becomes the first characters of the tag's text content and survives
+  /// the doc parser's round-trip (unlike the legacy trailing AUTO_PARAM, which
+  /// the parser stripped). It is an HTML comment, so DocInsight tooltips do not
+  /// render it. A tag WITHOUT this marker is hand-written, full stop -- there is
+  /// no content-based fallback (the pre-v(ADP3) StartsText('Observed:') sniff is
+  /// deleted, see MergeComment).
+  AUTO_MARK  = '<!-- drag-lint:auto -->';
+  /// Legacy trailing param marker. Still RECOGNIZED when reading an old
+  /// comment so a pre-v(ADP3) file self-heals on the next run; never EMITTED.
   AUTO_PARAM = '<!-- drag-lint:auto param -->';
 
 type
@@ -106,20 +117,39 @@ type
     class function FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10): TArray<string>;
     /// <summary>Produces the full merged DocInsight comment text (///-prefixed
     /// lines joined by CRLF): preserved hand-written prose + a regenerated
-    /// managed facts block (fenced inside remarks) + managed param tags.
-    /// Fresh comments emit EMPTY managed placeholders (summary/param empty;
-    /// returns carries only the mined 'Observed: ...' facts, if any) -- never
-    /// "TODO" text, so generated docs never trip drag-lint's own TODO rule.
-    /// Repair preserves Summary/Remarks prose and hand-typed param
-    /// descriptions, adds/removes managed param tags, and flags hand-typed
-    /// params no longer present in the signature. See IsManagedDesc for how
-    /// managed (regenerable) content is told apart from hand-typed prose.</summary>
+    /// managed facts block (fenced inside remarks) + managed param/summary/
+    /// returns tags. v(ADP3 T1): every managed tag this function emits carries
+    /// AUTO_MARK as the FIRST characters of its text content, immediately
+    /// after the opening tag -- summary/param(s) get the bare marker; a
+    /// managed/empty returns gets the marker followed by the mined 'Observed:
+    /// ...' suffix, if any. Ownership is marker-keyed ONLY: a tag without
+    /// AUTO_MARK is hand-written, full stop. The pre-v(ADP3)
+    /// StartsText('Observed:', ...) content sniff that used to misclassify a
+    /// hand-written returns starting with that word as managed is DELETED --
+    /// see IsManagedDesc / TDocRegions.IsManagedText for the marker-keyed test
+    /// that replaces it. Fresh comments emit marker-only managed placeholders
+    /// (summary/param carry just AUTO_MARK; returns carries AUTO_MARK plus the
+    /// mined 'Observed: ...' facts, if any) -- never "TODO" text, so generated
+    /// docs never trip drag-lint's own TODO rule. Repair preserves Summary/
+    /// Remarks prose and hand-typed param descriptions verbatim (no marker),
+    /// adds/removes managed param tags, and flags hand-typed params no longer
+    /// present in the signature.</summary>
     /// <param name="AComplexityMin">v(ADP2 T3): forwarded to RenderFactsBlock
     /// as-is; see its own param comment. Default 10 matches the manifest
     /// default (docs.complexity_min).</param>
     class function MergeComment(const AExisting: TParsedDoc;
       const ASigParams: TArray<string>; const AFacts: TDocFacts;
       AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer = 10): string;
+    /// <summary>True when S is engine-emitted (managed) tag content: its text
+    /// begins with AUTO_MARK. This is the ONLY managed test as of v(ADP3 T1) --
+    /// ownership is marker-keyed, never content-keyed, so a human whose prose
+    /// happens to start with 'Observed:' or read 'TODO: describe.' is no longer
+    /// silently adopted.</summary>
+    class function IsManagedText(const S: string): Boolean;
+    /// <summary>Returns S with a leading AUTO_MARK (and any whitespace before
+    /// it) removed; S unchanged when it carries no marker. Used to recover the
+    /// previously-emitted text for a drift comparison.</summary>
+    class function StripMark(const S: string): string;
   end;
 
 implementation
@@ -173,15 +203,17 @@ begin
 end;
 
 /// <summary>True when S is MANAGED (auto-generated/regenerable) content, as
-/// opposed to hand-typed prose. Managed content is either empty (the current
-/// emitted placeholder) or exactly the legacy 'TODO: describe.' sentinel that
-/// older drag-lint builds used to emit -- recognizing the legacy string here
-/// is what makes an old TODO-carrying doc self-heal (regenerate to empty/
-/// Observed) the next time `document` runs over it. Any other text is
-/// hand-typed and preserved verbatim by the merge logic.</summary>
+/// opposed to hand-typed prose. v(ADP3 T1): marker-keyed. The two legacy arms
+/// (empty text, and the 'TODO: describe.' sentinel older builds emitted) are
+/// retained ONLY so a file written by a pre-v(ADP3) build self-heals on its
+/// next run; new output always carries AUTO_MARK. A whitespace-only tag with
+/// NO marker is treated as managed here for backward compatibility, but Task
+/// 3 keeps it in the file rather than deleting it -- see the empty-tag rules
+/// there.</summary>
 function IsManagedDesc(const S: string): Boolean;
 begin
-  Result:= (Trim(S) = '') or SameText(Trim(S), 'TODO: describe.');
+  Result:= TDocRegions.IsManagedText(S) or (Trim(S) = '')
+        or SameText(Trim(S), 'TODO: describe.');
 end;
 
 class function TDocRegions.StripManagedBlock(const S: string): string;
@@ -218,6 +250,18 @@ begin
     Result:= Head + sLineBreak + Tail
   else
     Result:= Head + Tail;
+end;
+
+class function TDocRegions.IsManagedText(const S: string): Boolean;
+begin
+  Result:= StartsStr(AUTO_MARK, TrimLeft(S));
+end;
+
+class function TDocRegions.StripMark(const S: string): string;
+begin
+  Result:= TrimLeft(S);
+  if StartsStr(AUTO_MARK, Result) then
+    Result:= Copy(Result, Length(AUTO_MARK) + 1, MaxInt);
 end;
 
 // v(ADP2 T9): the DOC/HOVER CONSISTENCY LOCK -- see this function's own
@@ -476,25 +520,30 @@ begin
     // The mined return cases surface in exactly ONE place. For a symbol whose
     // existing <returns> is HAND-WRITTEN they go in a managed 'Returns:' fact
     // line (so they show alongside the author's prose); for a managed/empty
-    // <returns> they fill the tag itself (ObservedSuffix, below). Never both.
-    // A previously-generated tag reads back as ' Observed: ...' -- recognize that
-    // (StartsText 'Observed:') as MANAGED too, else a re-run would mistake it for
-    // hand-written text and both regenerate the tag AND add a fact line (a
-    // non-idempotent double). Genuine hand-written returns is neither empty, the
-    // legacy TODO sentinel, nor 'Observed:'-prefixed.
+    // <returns> they fill the tag itself (ObservedSuffix, below). Never both --
+    // a MANAGED <returns> (IsManagedDesc True: carries AUTO_MARK, is empty, or
+    // is the legacy TODO sentinel) is excluded here so it is not ALSO added as
+    // a fact line. v(ADP3 T1): ownership is marker-keyed ONLY. The pre-v(ADP3)
+    // StartsText('Observed:', ...) exclusion that used to ALSO treat a
+    // hand-written returns starting with that word as managed is DELETED --
+    // that content sniff misclassified genuine hand-written prose (e.g. a
+    // returns description that happens to start "Observed: ...") as engine
+    // output, silently overwriting it on every apply. A returns tag with no
+    // AUTO_MARK is hand-written, full stop, and now correctly gets its own
+    // 'Returns:' fact line alongside its preserved prose, same as any other
+    // hand-written <returns>.
     var IncludeReturns: Boolean:=
       AExisting.HasContent and AHasReturn
       and (not IsManagedDesc(AExisting.ReturnsText))
-      and (not StartsText('Observed:', Trim(AExisting.ReturnsText)))
       and (Length(AFacts.ReturnCases) > 0);
     Facts:= RenderFactsBlock(AFacts, APrefix, IncludeReturns, AComplexityMin);
     if not AExisting.HasContent then
     begin
-      Sb.AppendLine(APrefix + '<summary></summary>');
+      Sb.AppendLine(APrefix + '<summary>' + AUTO_MARK + '</summary>');
       for P in ASigParams do
-        Sb.AppendLine(APrefix + '<param name="' + P + '"></param>' + AUTO_PARAM);
+        Sb.AppendLine(APrefix + '<param name="' + P + '">' + AUTO_MARK + '</param>');
       if AHasReturn then
-        Sb.AppendLine(APrefix + '<returns>' + Trim(ObservedSuffix(AFacts.ReturnCases)) + '</returns>');
+        Sb.AppendLine(APrefix + '<returns>' + AUTO_MARK + Trim(ObservedSuffix(AFacts.ReturnCases)) + '</returns>');
       if Facts <> '' then
       begin
         Sb.AppendLine(APrefix + '<remarks>');
@@ -508,27 +557,30 @@ begin
     end;
 
     // Existing comment: preserve prose, regenerate managed regions. Rebuild from
-    // the parsed model: keep Summary (or blank it if managed -- see
-    // IsManagedDesc), keep hand-typed params + descs, add AUTO_PARAM tags for
-    // missing sig params, drop AUTO_PARAM tags for params no longer in the
-    // signature, flag hand-typed stale params, then the returns tag, then a
-    // fresh <remarks> managed block.
+    // the parsed model: keep Summary (or replace it with the bare marker if
+    // managed -- see IsManagedDesc), keep hand-typed params + descs, add
+    // marker-only <param> tags for missing sig params, drop managed <param>
+    // tags for params no longer in the signature, flag hand-typed stale
+    // params, then the returns tag, then a fresh <remarks> managed block.
     var SummaryText: string:= AExisting.Summary;
-    if IsManagedDesc(SummaryText) then SummaryText:= '';
+    var SummaryManaged: Boolean:= IsManagedDesc(SummaryText);
+    if SummaryManaged then SummaryText:= AUTO_MARK;
     Sb.AppendLine(EmitTagged('<summary>', SummaryText, '</summary>'));
 
-    // MANAGED-vs-HAND-TYPED param detection is CONTENT-BASED, not sentinel-based.
-    // We APPEND the AUTO_PARAM sentinel after a managed <param> line for human /
-    // diff visibility, but the doc parser STRIPS trailing sentinels (and the ///
-    // prefix) before AExisting.Params is populated, so the marker does not survive
-    // a round-trip. On regeneration we therefore RE-DERIVE "managed" from the desc
-    // CONTENT via IsManagedDesc: empty, or exactly the legacy 'TODO: describe.'
-    // sentinel => managed/regenerable (re-emit EMPTY with the AUTO_PARAM marker,
-    // cleaning up any legacy TODO text); any OTHER desc => hand-typed (preserve
-    // as-is, no marker; flag if the param is stale). Edge case: a genuine hand-typed
-    // desc that is literally 'TODO: describe.' is treated as managed. Acceptable for
-    // Chunk 1. This content-based scheme is idempotency-safe: run N and run N+1 see
-    // the same desc content and classify identically.
+    // MANAGED-vs-HAND-TYPED param detection is marker-keyed (v(ADP3 T1)): a
+    // managed <param> carries AUTO_MARK as the FIRST characters of its text
+    // content, immediately after the opening tag -- unlike the legacy
+    // *trailing* AUTO_PARAM sentinel this replaces, AUTO_MARK lives INSIDE the
+    // tag's own text, so the doc parser's <param name="...">TEXT</param>
+    // capture preserves it across the round-trip and IsManagedDesc can read it
+    // straight back off EP.Desc on the next run. The two legacy IsManagedDesc
+    // arms (empty desc, or the 'TODO: describe.' sentinel) still classify a
+    // pre-v(ADP3) param as managed too, so an old file self-heals: its
+    // trailing AUTO_PARAM is simply dropped (never re-emitted) and the tag
+    // gets AUTO_MARK moved inside where it belongs. Any OTHER desc is
+    // hand-typed: preserved as-is, no marker; flagged if the param is stale.
+    // This scheme is idempotency-safe: run N and run N+1 see the same desc
+    // content (AUTO_MARK survives the round-trip) and classify identically.
     // existing params first, in signature order where possible
     for P in ASigParams do
     begin
@@ -537,13 +589,13 @@ begin
         if SameText(EP.Name, P) then
         begin
           if IsManagedDesc(EP.Desc) then
-            Sb.AppendLine(APrefix + '<param name="' + P + '"></param>' + AUTO_PARAM)
+            Sb.AppendLine(APrefix + '<param name="' + P + '">' + AUTO_MARK + '</param>')
           else
             Sb.AppendLine(EmitTagged('<param name="' + P + '">', EP.Desc, '</param>'));
           Found:= True; Break;
         end;
       if not Found then
-        Sb.AppendLine(APrefix + '<param name="' + P + '"></param>' + AUTO_PARAM);
+        Sb.AppendLine(APrefix + '<param name="' + P + '">' + AUTO_MARK + '</param>');
     end;
     // stale hand-typed params: in the comment but not the signature -> flag, keep
     for var EP in AExisting.Params do
@@ -557,12 +609,16 @@ begin
     if AHasReturn then
     begin
       var Ret: string:= AExisting.ReturnsText;
-      // Managed/empty <returns> -> fill the tag with the mined Observed cases
-      // (as before). A HAND-WRITTEN <returns> is preserved verbatim, and its
+      // Managed/empty <returns> -> refill the tag with AUTO_MARK plus the
+      // mined Observed cases. A HAND-WRITTEN <returns> (no AUTO_MARK, not
+      // empty, not the legacy TODO sentinel) is preserved verbatim, and its
       // mined cases instead appear in the 'Returns:' fact line (IncludeReturns
       // above) so they are shown without disturbing the author's text.
-      if IsManagedDesc(Ret) or StartsText('Observed:', Trim(Ret)) then
-        Ret:= Trim(ObservedSuffix(AFacts.ReturnCases));
+      // v(ADP3 T1): the pre-v(ADP3) `or StartsText('Observed:', Trim(Ret))`
+      // arm is DELETED here too -- it used to also treat hand-written prose
+      // starting with that word as managed, rewriting it away.
+      if IsManagedDesc(Ret) then
+        Ret:= AUTO_MARK + Trim(ObservedSuffix(AFacts.ReturnCases));
       Sb.AppendLine(EmitTagged('<returns>', Ret, '</returns>'));
     end;
 

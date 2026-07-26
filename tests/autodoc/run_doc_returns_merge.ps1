@@ -63,7 +63,7 @@ try {
 
   # Flag: mined cases in the <returns> tag, NO fact line
   $flag = (DocBlockAbove $lines '^function Flag\(') -join "`n"
-  Check 'Flag has Observed cases in the <returns> tag' ($flag -match '<returns>Observed:.*</returns>')
+  Check 'Flag has Observed cases in the <returns> tag' ($flag -match [regex]::Escape('<returns><!-- drag-lint:auto -->') + 'Observed:.*</returns>')
   Check 'Flag has NO separate Returns: fact line'       (-not ($flag -match '///\s*Returns:'))
 
   # idempotency

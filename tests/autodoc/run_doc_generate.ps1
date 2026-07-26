@@ -7,9 +7,10 @@
   scratch dir under C:\TEMP, indexes it to a scratch db, then runs
     document --qname doc_generate.Add --apply
   and asserts the inserted managed DocInsight comment contains:
-    <summary></summary> (empty, no "TODO" placeholder -- ADP1), <param
-    name="A">, <param name="B">, <returns>, and a <remarks> fenced block
-    with "Called from:".
+    <summary> carrying only the AUTO_MARK provenance marker (no "TODO"
+    placeholder -- ADP1; v(ADP3 T1): marker-keyed, not empty-string-keyed),
+    <param name="A">, <param name="B">, <returns>, and a <remarks> fenced
+    block with "Called from:".
 
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
@@ -49,7 +50,7 @@ try {
   Check 'apply: .bak written' (Test-Path "$target.bak")
 
   $txt = [IO.File]::ReadAllText($target)
-  Check 'comment: <summary></summary> present (empty, no TODO placeholder)' ($txt.Contains('/// <summary></summary>'))
+  Check 'comment: <summary> carries AUTO_MARK (empty content, no TODO placeholder)' ($txt.Contains('/// <summary><!-- drag-lint:auto --></summary>'))
   Check 'comment: no "TODO" text anywhere in the file' ($txt -cnotmatch 'TODO')
   Check 'comment: <param name="A"> present' ($txt -match '///\s*<param name="A">')
   Check 'comment: <param name="B"> present' ($txt -match '///\s*<param name="B">')
