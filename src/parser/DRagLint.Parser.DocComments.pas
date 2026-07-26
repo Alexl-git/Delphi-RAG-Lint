@@ -351,8 +351,16 @@ begin
     if Result.Summary <> '' then Result.HasSummaryTag:= True;
   end;
 
+  // v(ADP3 T3 review fix, Finding 3): a comment consisting ONLY of a human's
+  // blank slot (<summary></summary> and/or <returns></returns>, no other
+  // content) parses every string/array field above to '' / empty -- without
+  // HasSummaryTag/HasReturnsTag here too, HasContent would read False, so
+  // BuildForSymbol would wrongly take the FRESH path (insert a brand-new
+  // comment) instead of the repair path that actually preserves the blank
+  // slot, producing a SECOND, separate comment block stacked below the
+  // human's line whenever facts/a mined return exist to insert.
   Result.HasContent:= (Result.Summary <> '') or (Result.Remarks <> '') or (Result.ReturnsText <> '') or (Length(Result.Params) > 0) or
-  (Length(Result.Exceptions) > 0) or Result.Deprecated;
+  (Length(Result.Exceptions) > 0) or Result.Deprecated or Result.HasSummaryTag or Result.HasReturnsTag;
 end; // function
 
 class function TDocCommentParser.ParsePasDoc(const ARaw: string): TParsedDoc;
