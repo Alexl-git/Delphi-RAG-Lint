@@ -353,6 +353,32 @@ begin
   Prefix:= '/// ';
   Merged:= TDocRegions.MergeComment(Existing, SigParams, Facts, HasRet, Prefix, AComplexityMin);
 
+  // v(ADP3 T3): MergeComment returns '' when omit-when-empty suppression
+  // leaves NOTHING to say (no summary/param/returns content and no facts to
+  // render) -- see its own comment. A fresh symbol then gets NO edit at all
+  // (never an insert of an empty comment); an existing comment that has
+  // decayed to nothing (every tag was engine-owned and the harvest/facts that
+  // fed it are now empty too) is deleted outright rather than left as -- or
+  // replaced by -- a blank stub, so the file ends up with no comment there
+  // either way. A second run then sees the same absence and Merged is still
+  // '', so this is a stable fixed point (daUnchanged), not a re-triggering edit.
+  if Trim(Merged) = '' then
+  begin
+    if Existing.HasContent then
+    begin
+      E:= Default(TTextEdit);
+      E.FilePath:= Path;
+      E.Kind    := tekDeleteLines;
+      E.Line    := Existing.StartLine;
+      E.EndLine := Existing.EndLine;
+      Result.Edits:= Result.Edits + [E];
+      Result.Action:= daExtended;
+    end
+    else
+      Result.Action:= daUnchanged;
+    Exit;
+  end;
+
   if Existing.HasContent then
   begin
     // Idempotency: a re-run on an already-current comment makes no edit.

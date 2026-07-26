@@ -580,36 +580,56 @@ var
       else Result:= Result + sLineBreak + APrefix + Trim(Parts[i]);
     Result:= Result + AClose;
   end;
+  // v(ADP3 T3): True when S is engine-owned WITHOUT regard to emptiness --
+  // carries AUTO_MARK, or is the legacy 'TODO: describe.' sentinel (the
+  // pre-v(ADP3) format; still self-heals here). Deliberately excludes
+  // IsManagedDesc's "Trim(S) = ''" arm: an EMPTY, unmarked, non-legacy tag is
+  // a HUMAN's deliberately blank slot under omit-when-empty (see the
+  // Summary/Param/Returns three-way guards below) and must be preserved
+  // verbatim, not treated as regenerable content.
+  function IsEngineOwnedRegardlessOfContent(const S: string): Boolean;
+  begin
+    Result:= IsManagedText(S) or SameText(Trim(S), 'TODO: describe.');
+  end;
 begin
   Sb:= TStringBuilder.Create;
   try
     // The mined return cases surface in exactly ONE place. For a symbol whose
-    // existing <returns> is HAND-WRITTEN they go in a managed 'Returns:' fact
-    // line (so they show alongside the author's prose); for a managed/empty
-    // <returns> they fill the tag itself (ObservedSuffix, below). Never both --
-    // a MANAGED <returns> (IsManagedDesc True: carries AUTO_MARK, is empty, or
-    // is the legacy TODO sentinel) is excluded here so it is not ALSO added as
-    // a fact line. v(ADP3 T1): ownership is marker-keyed ONLY. The pre-v(ADP3)
-    // StartsText('Observed:', ...) exclusion that used to ALSO treat a
-    // hand-written returns starting with that word as managed is DELETED --
-    // that content sniff misclassified genuine hand-written prose (e.g. a
-    // returns description that happens to start "Observed: ...") as engine
-    // output, silently overwriting it on every apply. A returns tag with no
-    // AUTO_MARK is hand-written, full stop, and now correctly gets its own
-    // 'Returns:' fact line alongside its preserved prose, same as any other
-    // hand-written <returns>.
+    // existing <returns> is HAND-WRITTEN (a real tag, not engine-owned) they go
+    // in a managed 'Returns:' fact line (so they show alongside the author's
+    // prose); for an engine-owned <returns> they fill the tag itself
+    // (ObservedSuffix, below). Never both. v(ADP3 T3): "hand-written" now
+    // requires AExisting.HasReturnsTag (the tag literally exists) as well as
+    // not-engine-owned -- so a human's deliberately EMPTY <returns></returns>
+    // is ALSO hand-written (gets a Returns: fact line, exactly like non-empty
+    // prose), whereas NO tag at all (HasReturnsTag False) is never
+    // "hand-written": its mined cases go straight into the (possibly
+    // newly-added) tag instead of ALSO duplicating into a fact line. v(ADP3
+    // T1): ownership is otherwise marker-keyed; the pre-v(ADP3)
+    // StartsText('Observed:', ...) content sniff stays deleted.
+    var ReturnsHandWritten: Boolean:=
+      AExisting.HasContent and AExisting.HasReturnsTag
+      and (not IsEngineOwnedRegardlessOfContent(AExisting.ReturnsText));
     var IncludeReturns: Boolean:=
-      AExisting.HasContent and AHasReturn
-      and (not IsManagedDesc(AExisting.ReturnsText))
-      and (Length(AFacts.ReturnCases) > 0);
+      ReturnsHandWritten and AHasReturn and (Length(AFacts.ReturnCases) > 0);
     Facts:= RenderFactsBlock(AFacts, APrefix, IncludeReturns, AComplexityMin);
     if not AExisting.HasContent then
     begin
-      Sb.AppendLine(APrefix + '<summary>' + AUTO_MARK + '</summary>');
-      for P in ASigParams do
-        Sb.AppendLine(APrefix + '<param name="' + P + '">' + AUTO_MARK + '</param>');
+      // v(ADP3 T3): omit-when-empty. A tag with nothing to say is not written
+      // at all -- an empty <summary> renders as a BLANK DocInsight tooltip,
+      // which is strictly worse than no tooltip. The FRESH path has no
+      // hand-written content by definition, so <summary> is emitted only when
+      // the harvester (v(ADP3 T7)) supplied text, and <param> never (see the
+      // spec's out-of-scope note on <param> harvesting -- a fresh comment
+      // never carries a <param> skeleton at all).
+      if AFacts.HarvestedSummary <> '' then
+        Sb.AppendLine(EmitTagged('<summary>' + AUTO_MARK, AFacts.HarvestedSummary, '</summary>'));
       if AHasReturn then
-        Sb.AppendLine(APrefix + '<returns>' + AUTO_MARK + Trim(ObservedSuffix(AFacts.ReturnCases)) + '</returns>');
+      begin
+        var Obs: string:= Trim(ObservedSuffix(AFacts.ReturnCases));
+        if Obs <> '' then
+          Sb.AppendLine(APrefix + '<returns>' + AUTO_MARK + Obs + '</returns>');
+      end;
       if Facts <> '' then
       begin
         Sb.AppendLine(APrefix + '<remarks>');
@@ -623,46 +643,50 @@ begin
     end;
 
     // Existing comment: preserve prose, regenerate managed regions. Rebuild from
-    // the parsed model: keep Summary (or replace it with the bare marker if
-    // managed -- see IsManagedDesc), keep hand-typed params + descs, add
-    // marker-only <param> tags for missing sig params, drop managed <param>
-    // tags for params no longer in the signature, flag hand-typed stale
-    // params, then the returns tag, then a fresh <remarks> managed block.
-    var SummaryText: string:= AExisting.Summary;
-    var SummaryManaged: Boolean:= IsManagedDesc(SummaryText);
-    if SummaryManaged then SummaryText:= AUTO_MARK;
-    Sb.AppendLine(EmitTagged('<summary>', SummaryText, '</summary>'));
+    // the parsed model: keep Summary (or drop it when it is engine-owned and
+    // the harvest has nothing to say -- see the three-way rule below), keep
+    // hand-typed params + descs (including a deliberately blank one), never
+    // add a <param> skeleton for a sig param with nothing hand-written, flag
+    // hand-typed stale params, then the returns tag, then a fresh <remarks>
+    // managed block.
+    //
+    // v(ADP3 T3): three-way classification, applied identically to
+    // Summary/Param/Returns below --
+    //   marked (or legacy self-heal) + nothing to refill -> ENGINE's own
+    //     stub: drop it entirely, no blank tag left behind.
+    //   unmarked + the tag is LITERALLY PRESENT (empty or not) -> a HUMAN
+    //     wrote it: preserve verbatim, whatever it says.
+    //   no tag at all -> nothing to preserve; fill from the harvest/mined
+    //     facts if there is any, else stay absent.
+    var SummaryRaw: string:= AExisting.Summary;
+    if AExisting.HasSummaryTag and (not IsEngineOwnedRegardlessOfContent(SummaryRaw)) then
+      Sb.AppendLine(EmitTagged('<summary>', SummaryRaw, '</summary>'))
+    else if AFacts.HarvestedSummary <> '' then
+      Sb.AppendLine(EmitTagged('<summary>' + AUTO_MARK, AFacts.HarvestedSummary, '</summary>'));
+    // else: engine-owned-and-empty, or genuinely absent, and nothing
+    // harvested -- omit the tag entirely (v(ADP3 T3)).
 
-    // MANAGED-vs-HAND-TYPED param detection is marker-keyed (v(ADP3 T1)): a
-    // managed <param> carries AUTO_MARK as the FIRST characters of its text
-    // content, immediately after the opening tag -- unlike the legacy
-    // *trailing* AUTO_PARAM sentinel this replaces, AUTO_MARK lives INSIDE the
-    // tag's own text, so the doc parser's <param name="...">TEXT</param>
-    // capture preserves it across the round-trip and IsManagedDesc can read it
-    // straight back off EP.Desc on the next run. The two legacy IsManagedDesc
-    // arms (empty desc, or the 'TODO: describe.' sentinel) still classify a
-    // pre-v(ADP3) param as managed too, so an old file self-heals: its
-    // trailing AUTO_PARAM is simply dropped (never re-emitted) and the tag
-    // gets AUTO_MARK moved inside where it belongs. Any OTHER desc is
-    // hand-typed: preserved as-is, no marker; flagged if the param is stale.
-    // This scheme is idempotency-safe: run N and run N+1 see the same desc
-    // content (AUTO_MARK survives the round-trip) and classify identically.
+    // Apply the SAME three-way logic to <param>: a hand-typed tag (any desc,
+    // even '') is preserved verbatim; an engine-owned one (AUTO_MARK, or the
+    // legacy TODO/AUTO_PARAM self-heal shape) is dropped outright -- v(ADP3
+    // T3) never refills a <param> (no harvester exists for params -- the
+    // spec's own out-of-scope note), so there is no "regenerate" arm here,
+    // only "preserve" or "drop"; a sig param with NO existing tag at all gets
+    // nothing, ever (the old marker-only skeleton is gone). Presence for a
+    // param needs no separate flag: the EP entry existing in AExisting.Params
+    // (Found below) already IS that signal, empty Desc or not.
     // existing params first, in signature order where possible
     for P in ASigParams do
-    begin
-      var Found: Boolean:= False;
       for var EP in AExisting.Params do
         if SameText(EP.Name, P) then
         begin
-          if IsManagedDesc(EP.Desc) then
-            Sb.AppendLine(APrefix + '<param name="' + P + '">' + AUTO_MARK + '</param>')
-          else
+          if not IsEngineOwnedRegardlessOfContent(EP.Desc) then
             Sb.AppendLine(EmitTagged('<param name="' + P + '">', EP.Desc, '</param>'));
-          Found:= True; Break;
+          Break;
+          // no match at all: no <param> tag for this sig param -- nothing
+          // hand-written to preserve and no harvester to fill it, so emit
+          // nothing (v(ADP3 T3): fresh/missing params never get a skeleton).
         end;
-      if not Found then
-        Sb.AppendLine(APrefix + '<param name="' + P + '">' + AUTO_MARK + '</param>');
-    end;
     // stale hand-typed params: in the comment but not the signature -> flag, keep
     for var EP in AExisting.Params do
     begin
@@ -674,18 +698,21 @@ begin
 
     if AHasReturn then
     begin
-      var Ret: string:= AExisting.ReturnsText;
-      // Managed/empty <returns> -> refill the tag with AUTO_MARK plus the
-      // mined Observed cases. A HAND-WRITTEN <returns> (no AUTO_MARK, not
-      // empty, not the legacy TODO sentinel) is preserved verbatim, and its
-      // mined cases instead appear in the 'Returns:' fact line (IncludeReturns
-      // above) so they are shown without disturbing the author's text.
-      // v(ADP3 T1): the pre-v(ADP3) `or StartsText('Observed:', Trim(Ret))`
-      // arm is DELETED here too -- it used to also treat hand-written prose
-      // starting with that word as managed, rewriting it away.
-      if IsManagedDesc(Ret) then
-        Ret:= AUTO_MARK + Trim(ObservedSuffix(AFacts.ReturnCases));
-      Sb.AppendLine(EmitTagged('<returns>', Ret, '</returns>'));
+      if ReturnsHandWritten then
+        // hand-written, including a deliberate blank slot -- preserved
+        // verbatim; its mined cases (if any) went into the 'Returns:' fact
+        // line above (IncludeReturns) instead of disturbing this text.
+        Sb.AppendLine(EmitTagged('<returns>', AExisting.ReturnsText, '</returns>'))
+      else
+      begin
+        // engine-owned (marked, or the legacy TODO self-heal) or no tag at
+        // all: refill from the mined cases, or omit entirely when there is
+        // nothing mined to say (v(ADP3 T3): a managed/empty <returns> is
+        // never written).
+        var Obs: string:= Trim(ObservedSuffix(AFacts.ReturnCases));
+        if Obs <> '' then
+          Sb.AppendLine(APrefix + '<returns>' + AUTO_MARK + Obs + '</returns>');
+      end;
     end;
 
     // remarks: keep hand prose (AExisting.Remarks) OUTSIDE the fence, then a fresh

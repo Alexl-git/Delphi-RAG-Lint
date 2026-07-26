@@ -36,6 +36,16 @@
   the ONLY drag-lint:auto text that could appear comes from the tags this
   fix targets, keeping the "never appears" assertion airtight.
 
+  v(ADP3 T3) update: omit-when-empty means Echo's generated comment now
+  carries ONLY a managed <returns> (AValue has no hand-written description,
+  so <param name="AValue"> is never emitted; there is no harvested summary
+  either, so <summary> is never emitted). The param-row assertions below are
+  rewritten accordingly: plain hover has NO param-row fallback (nothing to
+  render at all), while markdown falls back to a SIGNATURE-derived row
+  (name + type, e.g. "- `AValue` : const Integer") when there is no <param>
+  tag to read -- still carrying no marker, just a different shape than the
+  pre-T3 "empty after stripping" case.
+
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
@@ -163,11 +173,18 @@ try {
   Check 'T1: hover plain shows the cleaned Returns line' ($echoPlain -match 'Returns: Observed: AValue\.') $echoPlain
   Check 'T1: hover md shows the cleaned Returns line'    ($echoMd    -match '\*\*Returns:\*\* Observed: AValue\.') $echoMd
   Check 'T1: hover json summary is empty after stripping (was ONLY the marker)' ($echoJson -match '"summary":""') $echoJson
-  # Echo has no facts (by design), so its managed <param>/<returns> desc/text
-  # is JUST the marker -- after stripping, plain's "AValue --" row and md's
-  # "- `AValue`" row have a properly EMPTY description, not the raw marker.
-  Check 'T1: hover plain param row has no leftover marker text' ($echoPlain -match '(?m)^\s*AValue -- \s*$') $echoPlain
-  Check 'T1: hover md param row has no leftover marker text'    ($echoMd    -match '(?m)^- `AValue` \s*$') $echoMd
+  # v(ADP3 T3) update: AValue has no hand-written description, so Echo's
+  # generated comment carries NO <param name="AValue"> tag at all anymore
+  # (omit-when-empty -- a fresh comment never carries a <param> skeleton).
+  # Plain hover has no signature fallback for params (ADoc.ParamsJsonRaw = ''
+  # -> nothing rendered), so there is no "AValue --" row at all. Markdown DOES
+  # fall back to a signature-derived row when there is no <param> tag
+  # (RenderSignatureParamsMarkdown), so it shows the param's NAME AND TYPE
+  # instead -- still no marker leak (covered by the broad no-leak check above).
+  Check 'T3: hover plain has NO param row at all (no <param> tag, no signature fallback)' `
+    ($echoPlain -notmatch 'AValue --') $echoPlain
+  Check 'T3: hover md falls back to the signature-derived param row (name + type, no marker)' `
+    ($echoMd -match '(?m)^- `AValue` : const Integer\s*$') $echoMd
 
   # --- Idempotency-adjacent: reindex (facts are index-time) + re-hover -----
   # --- shows the SAME facts (no drift across a reindex with no source      --

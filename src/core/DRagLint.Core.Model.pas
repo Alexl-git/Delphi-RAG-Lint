@@ -324,6 +324,19 @@ type
     StartLine  : Integer              ;
     EndLine    : Integer              ;
     HasContent : Boolean              ;
+    // v(ADP3 T3): per-tag PRESENCE, independent of content. Summary/ReturnsText
+    // parse to '' BOTH when the tag is genuinely absent AND when a human wrote
+    // an explicitly empty tag (<summary></summary> / <returns></returns>) --
+    // MergeComment's omit-when-empty repair logic needs to tell those two
+    // apart (a human's deliberate blank slot is preserved verbatim; a truly
+    // absent tag is filled from the harvest/mined facts, or left absent).
+    // True whenever the parser matched the tag literally (dfXmlDoc), or found
+    // any non-empty content for it (dfPasDoc/dfOneline, which have no
+    // "explicitly empty tag" concept of their own). Params need no such flag:
+    // a param's PRESENCE is already the fact that its TDocParam entry exists
+    // in Params (by name), empty Desc or not.
+    HasSummaryTag: Boolean;
+    HasReturnsTag: Boolean;
     // Raw JSON strings from storage (populated by GetSymbolDoc for renderers).
     // FillChar zeroes these; empty means not stored or not retrieved.
     ParamsJsonRaw    : string;

@@ -6,11 +6,13 @@
   plus a caller (UseAdd) so Called-from is non-empty. Copies the fixture to a
   scratch dir under C:\TEMP, indexes it to a scratch db, then runs
     document --qname doc_generate.Add --apply
-  and asserts the inserted managed DocInsight comment contains:
-    <summary> carrying only the AUTO_MARK provenance marker (no "TODO"
-    placeholder -- ADP1; v(ADP3 T1): marker-keyed, not empty-string-keyed),
-    <param name="A">, <param name="B">, <returns>, and a <remarks> fenced
-    block with "Called from:".
+  and asserts the inserted managed DocInsight comment:
+    v(ADP3 T3) omit-when-empty -- Add has no hand-written/harvested summary
+    and neither param has a hand-written description, so NEITHER <summary>
+    NOR <param name="A">/<param name="B"> is emitted at all (no blank-tooltip
+    stub, no skeleton -- see MergeComment's own comment). It DOES get
+    <returns> (a mined `Result := A + B` case survives with content) and a
+    <remarks> fenced block with "Called from:".
 
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
@@ -50,11 +52,14 @@ try {
   Check 'apply: .bak written' (Test-Path "$target.bak")
 
   $txt = [IO.File]::ReadAllText($target)
-  Check 'comment: <summary> carries AUTO_MARK (empty content, no TODO placeholder)' ($txt.Contains('/// <summary><!-- drag-lint:auto --></summary>'))
+  # v(ADP3 T3): omit-when-empty -- Add has nothing hand-written/harvested for
+  # <summary> or either <param>, so NEITHER is emitted (a fresh comment never
+  # carries a <param> skeleton, and an empty <summary> is worse than none).
+  Check 'comment: NO <summary> tag (nothing to say)' ($txt -notmatch '<summary>')
   Check 'comment: no "TODO" text anywhere in the file' ($txt -cnotmatch 'TODO')
-  Check 'comment: <param name="A"> present' ($txt -match '///\s*<param name="A">')
-  Check 'comment: <param name="B"> present' ($txt -match '///\s*<param name="B">')
-  Check 'comment: <returns> present'         ($txt -match '///\s*<returns>')
+  Check 'comment: NO <param name="A"> tag (no hand-written description)' ($txt -notmatch '<param name="A">')
+  Check 'comment: NO <param name="B"> tag (no hand-written description)' ($txt -notmatch '<param name="B">')
+  Check 'comment: <returns> present (mined A + B case survives)' ($txt -match '///\s*<returns>')
   Check 'comment: <remarks> fenced block present' ($txt.Contains('/// <remarks>') -and $txt.Contains('<!-- drag-lint:auto BEGIN -->') -and $txt.Contains('<!-- drag-lint:auto END -->'))
   Check 'comment: Called from: doc_generate.UseAdd present' ($txt -match 'Called from:.*doc_generate\.UseAdd')
 } finally { Pop-Location }

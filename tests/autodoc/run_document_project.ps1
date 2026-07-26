@@ -12,8 +12,15 @@
       project-wide scope resolved via the compile closure.
     * facts-only default: the bare Noop (no facts) is NOT documented (no TODO
       flood) -- no /// comment directly above 'procedure Noop;'.
-    * `--stubs`: the same Noop NOW gets a managed (empty, no "TODO" text --
-      ADP1) summary tag (opt-in differs from the facts-only default).
+    * `--stubs`: v(ADP3 T3) omit-when-empty means Noop STILL gets nothing --
+      Noop has no params, no return, no facts and no hand-written/harvested
+      summary, so MergeComment returns '' regardless of --stubs (which only
+      controls whether BATCH KEEPS an edit BuildForSymbol already produced; it
+      is never consulted when there is no edit to keep -- see
+      TDocumenter.BuildForSymbol's own comment). --stubs still matters for a
+      fresh decl that DOES produce SOME content with no facts (e.g. a mined
+      <returns> with no facts fence -- see run_doc_p3_strip.ps1's Plain); it
+      just cannot manufacture a comment out of nothing.
     * IDEMPOTENCY: a second `--project --apply` leaves every file BYTE-IDENTICAL.
     * `document-all --apply` (no --project) documents every indexed unit's public
       facts-backed decls.
@@ -90,9 +97,14 @@ try {
   & $exePath document --project $dprS --db $dbS --stubs --apply 2>$null | Out-Null
   Check 'stubs project apply: exit 0' ($LASTEXITCODE -eq 0)
   $srcAS = [IO.File]::ReadAllText($uAS)
-  Check 'stubs opt-in: Noop NOW documented' (NoopHasDoc $uAS)
-  Check 'stubs opt-in: Noop has a managed <summary> carrying AUTO_MARK (no TODO text -- ADP1)' `
-    ($srcAS -match '(?s)' + [regex]::Escape('<summary><!-- drag-lint:auto --></summary>') + '.*?procedure\s+Noop;')
+  # v(ADP3 T3): Noop has NOTHING to say (no params, no return, no facts, no
+  # hand-written/harvested summary), so MergeComment returns '' and
+  # BuildForSymbol makes NO edit at all -- Batch's Length(Res.Edits) = 0 gate
+  # fires before the --stubs Keep-check is even consulted (see
+  # TDocumenter.BuildForSymbol). --stubs can no longer manufacture a comment
+  # out of nothing; it was NEVER "documented with an empty summary" that
+  # survives this change, since a blank stub is exactly what T3 forbids.
+  Check 'v(ADP3 T3): stubs opt-in still does NOT document Noop (genuinely nothing to say)' (-not (NoopHasDoc $uAS))
   Check 'stubs opt-in: no "TODO" text anywhere in unitA output' ($srcAS -cnotmatch 'TODO')
 
   # --- document-all (no --project) documents every indexed unit ---

@@ -19,15 +19,21 @@
   'Observed: ...' suffix. The zero-TODO guarantee this scenario tests is
   unchanged; only the exact managed-tag SHAPE below reflects the marker.
 
+  v(ADP3 T3) update: "empty-OF-PROSE but carries the marker" is no longer
+  true for <summary>/<param> either -- omit-when-empty means a tag with
+  NOTHING to say (no hand-written/harvested content) is not written AT ALL,
+  not written as a marker-only stub. Grab has no hand-written/harvested
+  summary and AWidth has no hand-written description, so BOTH tags are now
+  entirely ABSENT from the fresh comment. <returns> is UNCHANGED (Grab has a
+  real mined return case, so it survives with content, same shape as before).
+
   SCENARIO A -- fresh emit, zero TODO, facts survive: index a fixture with a
   function (Grab: params + a single mined `Result := ...` case) and a caller
   (UseGrab, for the Called-from fact), `document --apply --no-backup`, then
   assert the written file contains ZERO occurrences of the substring 'TODO'
   ANYWHERE, while the facts are genuinely present:
-    - <summary><!-- drag-lint:auto --></summary> (marker only, no fabricated
-      prose)
-    - <param name="AWidth"><!-- drag-lint:auto --></param> for the one param
-      (marker-only body, so it round-trips as managed)
+    - NO <summary> tag at all (nothing hand-written/harvested to say)
+    - NO <param name="AWidth"> tag at all (no hand-written description)
     - <returns><!-- drag-lint:auto -->Observed: ...</returns> (marker, then
       the mined case, no TODO prefix)
     - the drag-lint:auto BEGIN/END facts fence with "Called from:"
@@ -108,15 +114,14 @@ $textA = Get-Content $fileA -Raw
 Check 'ZERO "TODO" occurrences anywhere in the file' `
   ($textA -cnotmatch 'TODO') $textA
 
+# v(ADP3 T3): omit-when-empty -- Grab has no hand-written/harvested summary
+# and AWidth has no hand-written description, so NEITHER tag is emitted at
+# all anymore (a marker-only stub is no longer written; see the header note).
 $summaryLinesA = @([regex]::Matches($textA, '<summary>.*?</summary>') | ForEach-Object { $_.Value })
-Check 'exactly one <summary> tag' ($summaryLinesA.Count -eq 1) "count=$($summaryLinesA.Count)"
-Check '<summary> carries only the AUTO_MARK provenance marker (no fabricated prose)' `
-  ($summaryLinesA.Count -gt 0 -and $summaryLinesA[0] -eq '<summary><!-- drag-lint:auto --></summary>') $summaryLinesA
+Check 'T3: NO <summary> tag at all (nothing to say)' ($summaryLinesA.Count -eq 0) "count=$($summaryLinesA.Count)"
 
 $paramLinesA = @([regex]::Matches($textA, '<param name="AWidth">.*?</param>') | ForEach-Object { $_.Value })
-Check 'AWidth <param> tag present' ($paramLinesA.Count -eq 1) "count=$($paramLinesA.Count)"
-Check 'AWidth <param> body carries only the AUTO_MARK provenance marker (managed)' `
-  ($paramLinesA.Count -gt 0 -and $paramLinesA[0] -eq '<param name="AWidth"><!-- drag-lint:auto --></param>') $paramLinesA
+Check 'T3: NO <param name="AWidth"> tag at all (no hand-written description)' ($paramLinesA.Count -eq 0) "count=$($paramLinesA.Count)"
 
 $returnsLinesA = @([regex]::Matches($textA, '<returns>.*?</returns>') | ForEach-Object { $_.Value })
 Check 'exactly one <returns> tag' ($returnsLinesA.Count -eq 1) "count=$($returnsLinesA.Count)"
@@ -196,9 +201,14 @@ $textC = Get-Content $fileC -Raw
 
 Check 'legacy cleanup: ZERO "TODO" occurrences after re-run' `
   ($textC -cnotmatch 'TODO') $textC
+# v(ADP3 T3): the legacy 'TODO: describe.' summary sentinel still self-heals
+# (IsEngineOwnedRegardlessOfContent recognizes it, same as the marker), but
+# omit-when-empty now means it is regenerated to NOTHING rather than to a
+# marker-only stub -- Grab has no hand-written/harvested summary, so the tag
+# is dropped entirely.
 $summaryLinesC = @([regex]::Matches($textC, '<summary>.*?</summary>') | ForEach-Object { $_.Value })
-Check 'legacy cleanup: <summary> regenerated to carry only the AUTO_MARK marker' `
-  ($summaryLinesC.Count -gt 0 -and $summaryLinesC[0] -eq '<summary><!-- drag-lint:auto --></summary>') $summaryLinesC
+Check 'T3: legacy cleanup -- <summary> self-heals to NO tag at all (nothing to say)' `
+  ($summaryLinesC.Count -eq 0) $summaryLinesC
 $returnsLinesC = @([regex]::Matches($textC, '<returns>.*?</returns>') | ForEach-Object { $_.Value })
 Check 'legacy cleanup: <returns> regenerated to marker + fresh Observed (stale text dropped)' `
   ($returnsLinesC.Count -gt 0 -and $returnsLinesC[0] -eq '<returns><!-- drag-lint:auto -->Observed: rlines &lt;&gt; 0.</returns>') $returnsLinesC

@@ -209,6 +209,13 @@ type
     // cap/threshold logic needed; RenderFactsBlock maps 'new' to the fuller
     // 'new (caller owns)' display text at render time.
     ReturnsOwner     : string           ;
+    // v(ADP3 T3): the harvested summary text (Task 7 fills this in by mining
+    // an adjacent hand-written // comment; until then it is ALWAYS ''). Added
+    // in T3 so MergeComment's omit-when-empty guards are real and compile
+    // against a genuine field rather than a placeholder -- a fresh/managed
+    // <summary> is emitted ONLY when this is non-empty; '' means "nothing to
+    // say", so the tag is omitted entirely rather than emitted blank.
+    HarvestedSummary : string           ;
   end;
 
   TDocFactsBuilder = class

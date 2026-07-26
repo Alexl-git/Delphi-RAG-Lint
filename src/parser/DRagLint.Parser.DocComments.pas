@@ -284,13 +284,18 @@ begin
   RxSinceTag     := TRegEx.Create('<since>([\s\S]*?)</since>'                         , [roIgnoreCase]);
   RxDeprecatedTag:= TRegEx.Create('<deprecated\s*/?>'                                 , [roIgnoreCase]);
 
+  // v(ADP3 T3): HasSummaryTag/HasReturnsTag record the tag's LITERAL presence
+  // (Match.Success), independent of whether its captured group is empty -- see
+  // TParsedDoc's own field comment for why MergeComment needs this.
   Match:= RxSummary.Match(Cleaned);
+  Result.HasSummaryTag:= Match.Success;
   if Match.Success then Result.Summary:= CollapseWhitespace(Match.Groups[1].Value);
 
   Match:= RxRemarks.Match(Cleaned);
   if Match.Success then Result.Remarks:= CollapseWhitespace(Match.Groups[1].Value);
 
   Match:= RxReturns.Match(Cleaned);
+  Result.HasReturnsTag:= Match.Success;
   if Match.Success then Result.ReturnsText:= CollapseWhitespace(Match.Groups[1].Value);
 
   Match:= RxExample.Match(Cleaned);
@@ -332,13 +337,18 @@ begin
     SeeList.Free;
   end; // try
 
-  // Fallback: untagged text before first tag becomes summary.
+  // Fallback: untagged text before first tag becomes summary. This is
+  // hand-written prose with no <summary> tag at all -- if it yields real
+  // text, HasSummaryTag must also flip True (v(ADP3 T3)): otherwise
+  // MergeComment's repair path would mistake real prose here for "no summary
+  // written" and silently drop it instead of preserving it verbatim.
   if Result.Summary = '' then
   begin
     M:= Cleaned;
     I:= Pos('<', M);
     if I > 0 then M:= Copy(M, 1, I - 1);
     Result.Summary:= CollapseWhitespace(M);
+    if Result.Summary <> '' then Result.HasSummaryTag:= True;
   end;
 
   Result.HasContent:= (Result.Summary <> '') or (Result.Remarks <> '') or (Result.ReturnsText <> '') or (Length(Result.Params) > 0) or
@@ -484,6 +494,13 @@ begin
     Result.Exceptions:= Excs   .ToArray;
     Result.SeeAlso   := SeeList.ToArray;
 
+    // v(ADP3 T3): PasDoc has no "explicitly empty tag" concept of its own (an
+    // empty @returns/no summary prose reads identically either way), so
+    // presence collapses to plain non-empty-content here -- unlike dfXmlDoc's
+    // Match.Success, which can distinguish an empty <tag></tag> from no tag.
+    Result.HasSummaryTag:= Result.Summary     <> '';
+    Result.HasReturnsTag:= Result.ReturnsText <> '';
+
     Result.HasContent:= (Result.Summary <> '') or (Length(Result.Params) > 0) or (Result.ReturnsText <> '') or Result.Deprecated;
   finally
     Params.Free;
@@ -514,6 +531,10 @@ begin
     Acc.Free;
   end;
   Result.HasContent:= Result.Summary <> '';
+  // v(ADP3 T3): a oneline/loose comment has no tags at all -- the whole
+  // comment IS the summary, so presence collapses to non-empty content, same
+  // as ParsePasDoc's own HasSummaryTag (see its comment).
+  Result.HasSummaryTag:= Result.Summary <> '';
 end; // function
 
 class function TDocCommentParser.ParseLoose(const ARaw: string): TParsedDoc;

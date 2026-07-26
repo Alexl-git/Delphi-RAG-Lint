@@ -19,11 +19,20 @@
   the renamed-param + spurious-returns + not-raised-exception signals.
 
   Part B -- fix the safe subset: `lint-all --db <db> --fix --apply` refreshes the
-  managed facts block AND adds the missing <param name="New"> stub, but does NOT
-  delete/rewrite the renamed <param name="Old"> prose (report-only -- preserved).
+  managed facts block, but does NOT delete/rewrite the renamed <param name="Old">
+  prose (report-only -- preserved). v(ADP3 T3) update: it also does NOT add a
+  <param name="New"> stub anymore -- omit-when-empty forbids ever emitting an
+  empty <param>, and no harvester exists to fill one with real content, so
+  ddParamMissing's "fix" is now a no-op for this shape (see Part C).
 
-  Part C -- idempotency: a second `--fix --apply` is byte-identical AND a
-  re-analysis (the doc-drift engine verb) reports no FIXABLE drift left.
+  Part C -- idempotency: a second `--fix --apply` is byte-identical. v(ADP3 T3)
+  update: a re-analysis now shows Lookup's fixable drift fully resolved (its
+  mined return filled <returns>), but F's ddParamMissing SURVIVES the fix --
+  permanently, by design, since no auto-fix can ever satisfy it once params are
+  never harvested. This is a known, reported design tension (ddParamMissing's
+  Fixable=true classification in DRagLint.Doc.Drift.pas predates T3 and is now
+  stale for a param with no hand-written description anywhere); left unchanged
+  here as out of this task's scope -- see the T3 report.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -82,7 +91,15 @@ try {
   & $exePath lint-all --db $db --fix --apply --no-backup 2>$null | Out-Null
   $afterFix = Get-Content -Raw $target
 
-  Check 'fix ADDED a managed <param name="New"> stub' ($afterFix -match '<param name="New">')
+  # v(ADP3 T3): omit-when-empty means the fix can no longer add a <param>
+  # skeleton -- "New" has no hand-written description anywhere, and no
+  # harvester for params exists (or ever will -- see the T3 report), so a
+  # managed <param> could never gain content. The ddParamMissing FIXABLE
+  # classification (DRagLint.Doc.Drift.pas) predates T3 and is now stale for
+  # this shape -- see the T3 report's flagged design tension. This assertion
+  # documents the actual (new) behavior rather than papering over it.
+  Check 'v(ADP3 T3): fix does NOT add a <param name="New"> stub (nothing to say)' `
+    ($afterFix -notmatch '<param name="New">')
   Check 'fix refreshed a managed facts block'          ($afterFix -match 'drag-lint:auto BEGIN')
   # The renamed <param name="Old"> prose must be PRESERVED, not stripped/rewritten
   # (report-only signal -- a human decides whether to drop it). MergeComment keeps
@@ -97,12 +114,29 @@ try {
   $after2 = Get-Content -Raw $target
   Check '2nd --fix is byte-identical (idempotent)' ($before2 -eq $after2)
 
-  # Re-index the now-repaired file, then re-analyse: NO fixable drift remains.
+  # Re-index the now-repaired file, then re-analyse.
   & $exePath index $scratch --db $db 2>$null | Out-Null
   $fReanalyse = Get-Drift 'drift.F'
   $lReanalyse = Get-Drift 'drift.Lookup'
-  $fixableLeft = @(($fReanalyse + $lReanalyse) | Where-Object { [bool]$_.fixable -eq $true })
-  Check 'no FIXABLE drift remains after the fix (F + Lookup)' ($fixableLeft.Count -eq 0)
+
+  # v(ADP3 T3) update: Lookup's ddValueButNoReturns WAS resolved -- it has a
+  # real mined return case (IntToStr(Key)), so the fix filled its <returns>
+  # tag with content, same as before T3. F's ddParamMissing ("New" has no
+  # hand-written description anywhere) is now STRUCTURALLY UNFIXABLE: T3
+  # forbids ever emitting an empty <param> skeleton, and per the spec params
+  # are never harvested, so no auto-fix can ever satisfy this finding again
+  # -- it correctly SURVIVES as a standing signal for a human. This was
+  # anticipated by neither the drift engine nor this test before T3; see the
+  # T3 report's flagged design tension (ddParamMissing's Fixable=true
+  # classification in DRagLint.Doc.Drift.pas is now stale for this shape,
+  # left unchanged as an out-of-scope follow-up).
+  $lFixableAfter = @($lReanalyse | Where-Object { [bool]$_.fixable -eq $true })
+  Check 'Lookup: no fixable drift remains (ddValueButNoReturns was resolved by the mined-return fix)' `
+    ($lFixableAfter.Count -eq 0)
+  $fFixableAfter = @($fReanalyse | Where-Object { [bool]$_.fixable -eq $true })
+  Check 'v(ADP3 T3): F''s ddParamMissing SURVIVES the fix -- exactly one, permanently unfixable' `
+    ($fFixableAfter.Count -eq 1 -and $fFixableAfter[0].kind -eq 'ddParamMissing')
+
   # The renamed-param signal is report-only, so it correctly SURVIVES the fix.
   $renamedLeft = @($fReanalyse | Where-Object { $_.kind -eq 'ddParamRenamedOrRemoved' })
   Check 'renamed-param report-only signal survives (not auto-fixed)' ($renamedLeft.Count -ge 1)

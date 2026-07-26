@@ -20,15 +20,19 @@ unit p2hover;
 //
 // Echo (v(ADP3 T1)): a deliberately FACTS-FREE free function -- no calls, no
 // callers, cyclomatic complexity 1 (well under docs.complexity_min) -- so
-// `document --apply` gives it a managed <summary>/<param>/<returns> carrying
-// ONLY the AUTO_MARK provenance marker (plus the mined 'Observed: AValue.'
-// suffix on <returns>) and NO <remarks> facts block at all (RenderFactsBlock
-// is '' when there are no facts, so MergeComment never emits <remarks>/
-// AUTO_BEGIN for it). That makes Echo the clean host for the T1 hover
-// marker-leak regression test: unlike TBusy.Complex, its hover output has no
-// AUTO_BEGIN/AUTO_END facts-fence to muddy a "the marker never reaches a
-// human" assertion -- the ONLY drag-lint:auto text that could possibly leak
-// here comes from the summary/param/returns tags this test targets.
+// `document --apply` gives it a managed <returns> carrying the AUTO_MARK
+// provenance marker plus the mined 'Observed: AValue.' suffix, and NO
+// <remarks> facts block at all (RenderFactsBlock is '' when there are no
+// facts, so MergeComment never emits <remarks>/AUTO_BEGIN for it). v(ADP3
+// T3) update: <summary> and <param name="AValue"> are NOT emitted at all --
+// omit-when-empty means a tag with nothing hand-written/harvested to say is
+// dropped entirely, not written as a marker-only stub (that used to be the
+// case pre-T3; see run_doc_p2_hover.ps1's own T3 update note). That still
+// makes Echo the clean host for the T1 hover marker-leak regression test:
+// unlike TBusy.Complex, its hover output has no AUTO_BEGIN/AUTO_END
+// facts-fence to muddy a "the marker never reaches a human" assertion -- the
+// ONLY drag-lint:auto text that could possibly leak here comes from the one
+// tag (<returns>) this symbol still carries.
 
 interface
 

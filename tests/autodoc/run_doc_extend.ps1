@@ -13,8 +13,11 @@
   After document --apply, asserts:
     * "Real prose." preserved verbatim (summary untouched)
     * "Real param desc." preserved verbatim (X param untouched)
-    * a <param name="Y"> managed tag (AUTO_MARK provenance marker, v(ADP3 T1))
-      was ADDED
+    * v(ADP3 T3) omit-when-empty: Y has NO hand-written description anywhere,
+      so NO <param name="Y"> tag is added at all -- a fresh/missing param
+      never gets a marker-only skeleton (Rule 2's consequence applies to a
+      REPAIR-path missing param exactly as it does to a fresh comment: there
+      is no harvester for params, so an empty tag could never gain content).
     * BOTH hand <remarks> lines survive, each with a /// prefix (Task 4 fix #1:
       multi-line prose is re-emitted line-by-line, never one bare-LF line)
     * a managed facts block (Called from:) was inserted inside <remarks>
@@ -51,8 +54,8 @@ try {
   Check 'preserved: hand param "Real param desc." verbatim (no AUTO_MARK)' `
     ($txt.Contains('/// <param name="X">Real param desc.</param>') -and `
      ($txt -notmatch [regex]::Escape('<param name="X">') + '.*' + [regex]::Escape('<!-- drag-lint:auto -->')))
-  Check 'added: managed <param name="Y"> carries AUTO_MARK (empty content, no TODO)' `
-    ($txt -match '///\s*<param name="Y"><!-- drag-lint:auto --></param>')
+  Check 'v(ADP3 T3): NOT added -- <param name="Y"> has no hand-written description, so no tag at all' `
+    ($txt -notmatch '<param name="Y">')
 
   # Both hand remark lines survive, EACH with a /// prefix (Task 4 fix #1).
   $hasLine1 = ($lines | Where-Object { $_.Trim() -eq '/// First remark line.' }).Count -eq 1

@@ -27,8 +27,11 @@
       exit 2 are covered by the sibling run_doc_p3_strip_static.ps1, which
       strips a fixture with every marker baked in by hand -- no `document`
       run at all.
-    * Plain gains a brand-new, fully-managed comment (<summary>/<param>/
-      <returns>, all AUTO_MARK-only, no facts).
+    * Plain gains a brand-new managed comment -- but v(ADP3 T3) omit-when-empty
+      means that comment is JUST a managed <returns> (Plain has a mined return
+      case), NOT a <summary>/<param>/<returns> trio: Plain has no hand-written/
+      harvested summary and no hand-written param description, so neither tag
+      is emitted at all (a fresh comment never carries either skeleton).
 
   After `--strip --apply`:
     * Mixed's added <returns> tag is gone (rule 1); its hand-written
@@ -60,6 +63,21 @@ $script:Failed = $false
 $exePath = (Resolve-Path $Exe).Path
 $fixture = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\docp3\strip.pas')).Path
 
+# Returns the contiguous run of ///-prefixed lines immediately above the FIRST
+# line matching $declPattern. $null if the declaration is not found. Same
+# scan-upward idiom run_doc_p3_provenance.ps1/run_doc_p3_emptytags.ps1 use --
+# scoped to ONE declaration's own block so a check cannot cross into a
+# DIFFERENT decl's doc comment earlier in the same file.
+function Get-DocBlockAbove([string[]]$lines, [string]$declPattern) {
+  $idx = -1
+  for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match $declPattern) { $idx = $i; break } }
+  if ($idx -lt 0) { return $null }
+  $blockLines = @()
+  $j = $idx - 1
+  while ($j -ge 0 -and $lines[$j].TrimStart() -match '^///') { $blockLines = ,($lines[$j]) + $blockLines; $j-- }
+  return ($blockLines -join "`n")
+}
+
 $scratch = Join-Path C:\TEMP 'draglint_docp3strip'
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch | Out-Null
@@ -84,8 +102,21 @@ try {
   $afterApplyText = [IO.File]::ReadAllText($target)
   Check 'Mixed gained a managed <returns> tag' `
     ($afterApplyText -match [regex]::Escape('<returns><!-- drag-lint:auto -->'))
-  Check 'Plain gained a fresh managed comment' `
-    ($afterApplyText -match '(?s)<summary><!-- drag-lint:auto --></summary>\s*\r?\n\s*///\s*<param name="AValue"><!-- drag-lint:auto --></param>\s*\r?\n\s*///\s*<returns><!-- drag-lint:auto -->.*?</returns>\s*\r?\n\s*function Plain')
+
+  # v(ADP3 T3): Plain has no hand-written/harvested summary and no
+  # hand-written param description, so its fresh comment is JUST the managed
+  # <returns> (a mined return case) -- no <summary>/<param> skeleton at all.
+  # Scoped to Plain's OWN doc block (Get-DocBlockAbove) so this cannot be
+  # satisfied by Mixed's separate, EARLIER hand-written <summary>/<param>.
+  $plainLinesAfterApply = [IO.File]::ReadAllLines($target)
+  $plainBlock = Get-DocBlockAbove $plainLinesAfterApply '^function Plain\(AValue: Integer\): Integer;'
+  Check 'Plain gained a fresh managed comment' ($null -ne $plainBlock) $plainBlock
+  Check 'Plain gained a managed <returns> tag' `
+    ($null -ne $plainBlock -and $plainBlock -match [regex]::Escape('<returns><!-- drag-lint:auto -->')) $plainBlock
+  Check 'Plain gained NO <summary> tag (nothing to say)' `
+    ($null -eq $plainBlock -or (-not ($plainBlock -match '<summary>'))) $plainBlock
+  Check 'Plain gained NO <param name="AValue"> tag (no hand-written description)' `
+    ($null -eq $plainBlock -or (-not ($plainBlock -match '<param'))) $plainBlock
 
   # --- dry-run --strip (no --apply), run against the STILL-documented file --
   # (before the real strip below) so there is engine content to report on.
@@ -98,11 +129,13 @@ try {
   # Review fix (Finding 3): assert the EXACT counts, not just "some digits" --
   # the generic \d+ regex would also match the 'stripped: 0 tags, 0 blocks'
   # nothing-to-strip branch, so a regression that always reported zero would
-  # still pass. Mixed's one managed <returns> + Plain's three managed tags
-  # (<summary>/<param>/<returns>) = 4 tags, 0 blocks (neither routine has a
-  # facts fence -- see the header).
+  # still pass. v(ADP3 T3): Mixed's one managed <returns> + Plain's ONE
+  # managed <returns> (its <summary>/<param> are never emitted -- omit-when-
+  # empty, see the header) = 2 tags, 0 blocks (neither routine has a facts
+  # fence -- see the header). This was 4 tags before T3 (Plain used to also
+  # carry a marked-empty <summary> and <param>).
   Check 'dry-run --strip reports the exact tag/block counts on stdout' `
-    ($dryRunOut -match 'stripped:\s*4\s*tags,\s*0\s*blocks') $dryRunOut
+    ($dryRunOut -match 'stripped:\s*2\s*tags,\s*0\s*blocks') $dryRunOut
 
   # --- real strip --apply: round-trip back to the pre-apply snapshot ---
   & $exePath document --unit $target --db $db --strip --apply 2>&1 | Out-Null

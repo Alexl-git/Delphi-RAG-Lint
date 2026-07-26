@@ -4,9 +4,9 @@
 
   Fixture fixtures\docp3\provenance.pas:
     * Marked(const AText: string): Integer -- UNDOCUMENTED. A fresh managed
-      comment is generated; its <param name="AText"> and <returns> tags must
-      each carry the marker as the FIRST characters of their text content
-      (immediately after the opening tag), exactly once.
+      comment is generated; its <returns> tag must carry the marker as the
+      FIRST characters of its text content (immediately after the opening
+      tag), exactly once.
     * HandWritten: Integer -- ALREADY carries a hand-written comment whose
       <returns> text happens to start with the word "Observed:" (prose, not
       engine output). Pre-T1, StartsText('Observed:', ...) misclassified this
@@ -14,9 +14,19 @@
       Post-T1, ownership is marker-keyed only: this tag carries no AUTO_MARK,
       so it must survive byte-identical.
 
+  v(ADP3 T3) update -- marker-on-<param> can no longer be demonstrated here,
+  by design: a fresh comment never carries a <param> skeleton at all (Rule 2:
+  AText has no hand-written description, and no harvester for params exists
+  or ever will -- see the T3 report), so a MARKED, CONTENT-BEARING <param> is
+  now categorically impossible, in this fixture or any other. Marker coverage
+  for a tag that DOES legitimately survive with content moves entirely to
+  <returns> (assertion 2 below, unaffected by T3 since Marked has a real
+  mined return case). Assertion 1 is rewritten to assert the T3 consequence
+  directly: Marked gets NO <param name="AText"> tag at all.
+
   Drives `index` -> `document --unit --apply` and asserts:
-    1. Marked's <param name="AText"> line carries exactly one
-       <!-- drag-lint:auto --> immediately after the opening tag.
+    1. v(ADP3 T3): Marked has NO <param name="AText"> tag at all (nothing
+       hand-written to carry -- see the update note above).
     2. Marked's <returns> line carries exactly one <!-- drag-lint:auto -->
        immediately after the opening tag.
     3. HandWritten's <summary> and <returns> lines are byte-identical to the
@@ -83,18 +93,15 @@ try {
 
   $lines = [IO.File]::ReadAllLines($target)
 
-  # --- Marked: fresh managed comment; param + returns each carry ONE marker ---
+  # --- Marked: fresh managed comment; returns carries the marker ---
   $markedBlock = Get-DocBlockAbove $lines '^function Marked\(const AText: string\): Integer;'
   Check 'Marked decl found' ($null -ne $markedBlock)
 
+  # v(ADP3 T3): AText has no hand-written description and no harvester exists
+  # for params, so the fresh comment carries NO <param name="AText"> tag at
+  # all -- see this file's own update note above.
   $paramLine = $lines | Where-Object { $_ -match [regex]::Escape('<param name="AText">') } | Select-Object -First 1
-  Check 'Marked <param name="AText"> line found' ($null -ne $paramLine)
-  if ($null -ne $paramLine) {
-    $paramMarkCount = ([regex]::Matches($paramLine, [regex]::Escape($MARK))).Count
-    Check 'Marked <param name="AText"> carries exactly one marker' ($paramMarkCount -eq 1)
-    Check 'Marked <param name="AText"> marker sits immediately after the opening tag' `
-      ($paramLine -match [regex]::Escape('<param name="AText">' + $MARK))
-  }
+  Check 'T3: Marked has NO <param name="AText"> tag (nothing hand-written to carry)' ($null -eq $paramLine)
 
   $returnsLineMarked = $null
   if ($null -ne $markedBlock) {

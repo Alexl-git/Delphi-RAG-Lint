@@ -117,6 +117,20 @@ $dbA   = Join-Path $dirA 'a.sqlite'
 Write-Fixture $fileA
 & $Exe index $dirA --db $dbA 2>&1 | Out-Null
 & $Exe document --qname uRet.Grab --db $dbA --apply --no-backup 2>&1 | Out-Null
+# v(ADP3 T3) fix: REINDEX before documenting the SECOND symbol in the SAME
+# file -- same requirement this suite documents extensively elsewhere (see
+# Scenario C below, run_doc_idempotent.ps1, run_doc_no_todo.ps1 Scenario B):
+# a stale index still holds DoNothing's PRE-INSERT line number after Grab's
+# apply shifted it down, so FindDocRegionAbove can misattribute or corrupt a
+# NEIGHBORING symbol's just-written comment. This was previously masked by
+# coincidence -- Grab's old-shape fresh comment (<summary>+<param>+<returns>,
+# 3 lines) always spanned past the 1-line stale window, so the mismatch was
+# never actually hit; v(ADP3 T3) omit-when-empty shrinks Grab's comment here
+# to ONE line (<returns> only -- no hand-written summary/param), which fits
+# inside that window and exposed the missing reindex. Fixing the test, not
+# the engine: every OTHER back-to-back apply in this suite already reindexes
+# for exactly this reason.
+& $Exe index $dirA --db $dbA 2>&1 | Out-Null
 & $Exe document --qname uRet.DoNothing --db $dbA --apply --no-backup 2>&1 | Out-Null
 $textA = Get-Content $fileA -Raw
 
