@@ -91,8 +91,8 @@ try {
   Check 'stubs project apply: exit 0' ($LASTEXITCODE -eq 0)
   $srcAS = [IO.File]::ReadAllText($uAS)
   Check 'stubs opt-in: Noop NOW documented' (NoopHasDoc $uAS)
-  Check 'stubs opt-in: Noop has an empty managed <summary> (no TODO text -- ADP1)' `
-    ($srcAS -match '(?s)<summary></summary>.*?procedure\s+Noop;')
+  Check 'stubs opt-in: Noop has a managed <summary> carrying AUTO_MARK (no TODO text -- ADP1)' `
+    ($srcAS -match '(?s)' + [regex]::Escape('<summary><!-- drag-lint:auto --></summary>') + '.*?procedure\s+Noop;')
   Check 'stubs opt-in: no "TODO" text anywhere in unitA output' ($srcAS -cnotmatch 'TODO')
 
   # --- document-all (no --project) documents every indexed unit ---
