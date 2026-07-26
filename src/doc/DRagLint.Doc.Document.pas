@@ -364,7 +364,25 @@ begin
   // '', so this is a stable fixed point (daUnchanged), not a re-triggering edit.
   if Trim(Merged) = '' then
   begin
-    if Existing.HasContent then
+    // v(ADP3 T3 review fix, Finding 2): CONSERVATIVE guard -- only delete
+    // when MergeComment could not possibly be discarding content it simply
+    // doesn't know how to re-emit. MergeComment round-trips ONLY Summary/
+    // Params/ReturnsText/Remarks; it has never read back Exceptions/
+    // ExampleText/SeeAlso/SinceText/the doc's own Deprecated tag (a
+    // separate, already-flagged, pre-existing defect predating this task).
+    // If Existing carries real content in any of THOSE fields, Merged = ''
+    // reflects that gap, not genuine "nothing to say" -- deleting the whole
+    // region would destroy hand-written source lines this delete branch has
+    // no business touching. Kept even after a future task makes these tags
+    // round-trip: defence-in-depth for any tag type MergeComment does not
+    // yet handle, correct by construction rather than by coincidence.
+    var HasUnhandledTagContent: Boolean:=
+      (Length(Existing.Exceptions) > 0)
+      or (Trim(Existing.ExampleText) <> '')
+      or (Length(Existing.SeeAlso) > 0)
+      or (Trim(Existing.SinceText) <> '')
+      or Existing.Deprecated;
+    if Existing.HasContent and (not HasUnhandledTagContent) then
     begin
       E:= Default(TTextEdit);
       E.FilePath:= Path;
