@@ -529,22 +529,21 @@ begin
     if Pos(AUTO_BEGIN, ADoc.Remarks) > 0 then
     begin
       var CurBlock: string:= ExtractManagedBlockBody(ADoc.Remarks, AUTO_BEGIN, AUTO_END);
-      // Match MergeComment: a symbol whose <returns> is HAND-WRITTEN (not empty,
-      // not the TODO sentinel, not AUTO_MARK-carrying) AND that has mined return
-      // cases carries a 'Returns:' fact line in its managed block. Render Fresh
-      // the same way, else the block would read as perpetually stale. v(ADP3 T1):
-      // the third arm used to be the deleted content sniff
-      // (Copy(RetTrim, 1, 9) <> 'Observed:'); it is now marker-keyed
-      // (TDocRegions.IsManagedText), matching MergeComment's IncludeReturns
-      // exactly -- a managed <returns> now carries AUTO_MARK as its first
-      // characters, immediately followed by the mined 'Observed: ...' text, so
-      // the old literal-prefix sniff no longer matches and would otherwise
-      // misclassify every managed/non-empty <returns> as hand-written here,
-      // producing a spurious ddFactsBlockStale finding.
-      var RetTrim: string:= Trim(ADoc.ReturnsText);
-      var IncludeRet: Boolean:= HasReturn and (RetTrim <> '')
-        and (not SameText(RetTrim, 'TODO: describe.'))
-        and (not TDocRegions.IsManagedText(ADoc.ReturnsText))
+      // Match MergeComment's OWN IncludeReturns condition EXACTLY -- v(ADP3
+      // T1) review fix (finding 2): this used to hand-expand IsManagedDesc's
+      // three arms in-line (empty / the TODO sentinel / marker-keyed), which
+      // is exactly the duplication that caused THIS unit to silently drift out
+      // of sync with MergeComment the first time (the deleted content sniff
+      // had a mirrored copy here too -- see this task's earlier fix commit).
+      // Call the shared TDocRegions.IsManagedDesc instead of re-deriving the
+      // same predicate a second time, so 'TODO: describe.' (and the marker
+      // test) has exactly ONE executable home and the two conditions can never
+      // diverge again. A symbol whose <returns> is HAND-WRITTEN (IsManagedDesc
+      // False) AND that has mined return cases carries a 'Returns:' fact line
+      // in its managed block; Render Fresh the same way, else the block would
+      // read as perpetually stale.
+      var IncludeRet: Boolean:= HasReturn
+        and (not TDocRegions.IsManagedDesc(ADoc.ReturnsText))
         and (Length(Facts.ReturnCases) > 0);
       var Fresh   : string:= TDocRegions.RenderFactsBlock(Facts, '', IncludeRet);
       // Whitespace-normalized compare: the parser flattens the stored remarks to

@@ -126,23 +126,13 @@ uses
   , DRagLint.Doc.Regions
   ;
 
-// v(ADP3 T1): AUTO_MARK (DRagLint.Doc.Regions.TDocRegions) is an OWNERSHIP
-// token, not display text -- MergeComment, IsManagedDesc, and the Task 9
-// doc-drift comparison all need it to survive PARSING so they can tell what
-// the engine wrote. It is therefore intentionally NEVER stripped in the read
-// path (DRagLint.Parser.DocComments); every hover surface strips it here
-// instead, at the last point before the text reaches a human. Delegates
-// entirely to the ONE exported stripper (TDocRegions.StripMark) -- callers
-// must not re-implement a second Replace('<!-- drag-lint:auto -->', '').
-// Trims afterward and returns '' when nothing but the marker (and
-// whitespace) remains, so an existing `if X <> '' then` guard keeps
-// suppressing an all-marker field exactly as it suppressed an all-EMPTY
-// field before the marker existed (the pre-T1 "empty string omits the
-// line" contract is preserved, not changed).
-function StripForDisplay(const S: string): string;
-begin
-  Result:= Trim(TDocRegions.StripMark(S));
-end;
+// v(ADP3 T1) review fix: StripForDisplay is now DRagLint.Doc.Regions'
+// TDocRegions.StripForDisplay -- a single exported presentation-layer
+// stripper shared by every consumer (hover here, the context bundle, MCP's
+// doc JSON, LSP completion/signature-help, TypeAt's plain render), so the
+// marker-hiding behaviour cannot drift between them. See its own comment in
+// DRagLint.Doc.Regions.pas for the full contract; every call site in this
+// unit below just qualifies it as TDocRegions.StripForDisplay.
 
 { ---- v0.43 signature -> Parameters block helpers ---- }
 
@@ -341,7 +331,7 @@ begin
     // v(ADP3 T1): strip the ownership marker before a human sees it -- see
     // StripForDisplay's own comment; the read path (ADoc.Summary itself)
     // must keep carrying it.
-    var CleanSummary: string:= StripForDisplay(ADoc.Summary);
+    var CleanSummary: string:= TDocRegions.StripForDisplay(ADoc.Summary);
     if CleanSummary <> '' then SB.AppendLine('Summary: ' + CleanSummary);
     if ADoc.ParamsJsonRaw <> '' then
     begin
@@ -349,12 +339,16 @@ begin
       for M in Re.Matches(ADoc.ParamsJsonRaw) do
         // v(ADP3 T1): a managed <param> desc is just AUTO_MARK -- strip it so
         // the row reads "Name -- " rather than leaking the marker.
-        SB.AppendLine('  ' + M.Groups[1].Value + ' -- ' + StripForDisplay(M.Groups[2].Value));
+        SB.AppendLine('  ' + M.Groups[1].Value + ' -- ' + TDocRegions.StripForDisplay(M.Groups[2].Value));
     end;
     // v(ADP3 T1): strip the ownership marker before a human sees it.
-    var CleanReturns: string:= StripForDisplay(ADoc.ReturnsText);
+    var CleanReturns: string:= TDocRegions.StripForDisplay(ADoc.ReturnsText);
     if CleanReturns <> '' then SB.AppendLine('Returns: ' + CleanReturns);
-    if ADoc.Remarks     <> '' then SB.AppendLine('Remarks: ' + ADoc.Remarks    );
+    // v(ADP3 T1) review fix (finding 1b): a Remarks facts block still carries
+    // the raw AUTO_BEGIN/AUTO_END fence around its facts lines -- strip just
+    // the fence markers, keep the facts text between them.
+    var CleanRemarks: string:= TDocRegions.StripForDisplay(ADoc.Remarks);
+    if CleanRemarks <> '' then SB.AppendLine('Remarks: ' + CleanRemarks);
     if ADoc.ExampleText <> '' then
     begin
       SB.AppendLine('Example:');
@@ -380,7 +374,7 @@ begin
     // v(ADP3 T1): strip the ownership marker before a human sees it -- see
     // StripForDisplay's own comment; the read path (ADoc.Summary itself)
     // must keep carrying it.
-    var CleanSummary: string:= StripForDisplay(ADoc.Summary);
+    var CleanSummary: string:= TDocRegions.StripForDisplay(ADoc.Summary);
     if CleanSummary <> '' then
     begin
       SB.AppendLine('');
@@ -393,7 +387,7 @@ begin
       Re:= TRegEx.Create('"name":"([^"]+)","desc":"([^"]*)"');
       for M in Re.Matches(ADoc.ParamsJsonRaw) do
         // v(ADP3 T1): a managed <param> desc is just AUTO_MARK -- strip it.
-        SB.AppendLine('- `' + M.Groups[1].Value + '` ' + StripForDisplay(M.Groups[2].Value));
+        SB.AppendLine('- `' + M.Groups[1].Value + '` ' + TDocRegions.StripForDisplay(M.Groups[2].Value));
     end
     else
     begin
@@ -407,7 +401,7 @@ begin
       end;
     end;
     // v(ADP3 T1): strip the ownership marker before a human sees it.
-    var CleanReturns: string:= StripForDisplay(ADoc.ReturnsText);
+    var CleanReturns: string:= TDocRegions.StripForDisplay(ADoc.ReturnsText);
     if CleanReturns <> '' then
     begin
       SB.AppendLine('');
@@ -446,11 +440,14 @@ begin
       for var FactLine in AFactLines do
         SB.AppendLine('- ' + FactLine);
     end;
-    if ADoc.Remarks <> '' then
+    // v(ADP3 T1) review fix (finding 1b): strip just the AUTO_BEGIN/AUTO_END
+    // fence markers, keep the facts lines between them.
+    var CleanMdRemarks: string:= TDocRegions.StripForDisplay(ADoc.Remarks);
+    if CleanMdRemarks <> '' then
     begin
       SB.AppendLine(''          );
       SB.AppendLine('## Remarks');
-      SB.AppendLine(ADoc.Remarks);
+      SB.AppendLine(CleanMdRemarks);
     end;
     if ADoc.ExampleText <> '' then
     begin
@@ -473,7 +470,7 @@ begin
   // must keep carrying it for the read path (MergeComment/drift).
   Result:= System.SysUtils.Format(
     '{"qname":"%s","format":"%s","summary":"%s","returns":"%s",' + '"since":"%s","deprecated":%s}', [
-      JsonEscape(ASym.QualifiedName), DocFormatToStr(ADoc.Format), JsonEscape(StripForDisplay(ADoc.Summary)), JsonEscape(StripForDisplay(ADoc.ReturnsText)), JsonEscape(ADoc.SinceText),
+      JsonEscape(ASym.QualifiedName), DocFormatToStr(ADoc.Format), JsonEscape(TDocRegions.StripForDisplay(ADoc.Summary)), JsonEscape(TDocRegions.StripForDisplay(ADoc.ReturnsText)), JsonEscape(ADoc.SinceText),
       IfThen(ADoc.Deprecated, 'true', 'false')]);
 end;
 
@@ -532,7 +529,7 @@ begin
     // carrying it for the read path (MergeComment/drift). This is the JSON
     // shape `drag-lint hover --format json` actually renders (DoHover calls
     // this THoverModel overload, not the plain-TParsedDoc one above).
-    SB.Append(Format('"summary":"%s"}', [JsonEscape(StripForDisplay(AModel.Doc.Summary))]));
+    SB.Append(Format('"summary":"%s"}', [JsonEscape(TDocRegions.StripForDisplay(AModel.Doc.Summary))]));
     Result:= SB.ToString;
   finally
     SB.Free;

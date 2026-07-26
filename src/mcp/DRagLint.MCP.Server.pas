@@ -55,6 +55,10 @@ type
 
 implementation
 
+uses
+  DRagLint.Doc.Regions
+  ;
+
 constructor TMCPServer.Create(const ADbPaths: TArray<string>);
 begin
   inherited Create;
@@ -360,9 +364,18 @@ var
   DepStr: string;
 begin
   if ADoc.Deprecated then DepStr:= 'true' else DepStr:= 'false';
-  Result:= '{"qname":"' + JsonEscape(AQName) + '"' + ',"format":"' + JsonEscape(DocFormatToStr(ADoc.Format)) + '"' + ',"summary":"' + JsonEscape(ADoc.Summary) + '"' +
-  ',"returns":"' + JsonEscape(ADoc.ReturnsText) + '"' + ',"since":"' + JsonEscape(ADoc.SinceText) + '"' + ',"deprecated":' + DepStr +
-  ',"params_json":"' + JsonEscape(ADoc.ParamsJsonRaw) + '"' + ',"exceptions_json":"' + JsonEscape(ADoc.ExceptionsJsonRaw) + '"' +
+  // v(ADP3 T1) review fix (finding 1): strip the ownership marker before it
+  // reaches this MCP-facing JSON -- see TDocRegions.StripForDisplay's own
+  // comment; ADoc.Summary/ReturnsText/ParamsJsonRaw themselves must keep
+  // carrying it for the read path (MergeComment/drift). ParamsJsonRaw is a
+  // raw JSON-array-shaped blob (one {"name":...,"desc":...} per param), so
+  // the marker can sit MID-STRING, not just at position 1 -- StripForDisplay
+  // removes every embedded occurrence, not only a leading one, so this is
+  // safe to call on the whole raw blob. "raw_block" is deliberately NOT
+  // cleaned: it is the verbatim source comment, not a rendered field.
+  Result:= '{"qname":"' + JsonEscape(AQName) + '"' + ',"format":"' + JsonEscape(DocFormatToStr(ADoc.Format)) + '"' + ',"summary":"' + JsonEscape(TDocRegions.StripForDisplay(ADoc.Summary)) + '"' +
+  ',"returns":"' + JsonEscape(TDocRegions.StripForDisplay(ADoc.ReturnsText)) + '"' + ',"since":"' + JsonEscape(ADoc.SinceText) + '"' + ',"deprecated":' + DepStr +
+  ',"params_json":"' + JsonEscape(TDocRegions.StripForDisplay(ADoc.ParamsJsonRaw)) + '"' + ',"exceptions_json":"' + JsonEscape(ADoc.ExceptionsJsonRaw) + '"' +
   ',"seealso_json":"' + JsonEscape(ADoc.SeeAlsoJsonRaw) + '"' + ',"raw_block":"' + JsonEscape(ADoc.RawBlock) + '"' + '}';
 end;
 

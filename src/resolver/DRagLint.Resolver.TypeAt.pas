@@ -51,6 +51,10 @@ type
 
 implementation
 
+uses
+  DRagLint.Doc.Regions
+  ;
+
 class function TTypeAtResolver.ExtractTokenAt(const ALine: string; ACol: Integer; out APrecedingDot: Boolean; out ALhs: string): string;
 var
   I     : Integer;
@@ -510,7 +514,12 @@ begin
       if AResult.Resolved.Signature <> '' then SB.AppendLine('Signature:    ' + AResult.Resolved.Signature);
     end
     else if AResult.Note <> '' then SB.AppendLine('Resolved:     ' + AResult.Note);
-    if AResult.HasDoc and (AResult.Doc.Summary <> '') then SB.AppendLine('Doc:          ' + AResult.Doc.Summary);
+    // v(ADP3 T1) review fix (finding 1): strip the ownership marker before it
+    // reaches this plain-text render -- see TDocRegions.StripForDisplay's own
+    // comment; the read path (AResult.Doc.Summary itself) must keep it. Test
+    // the CLEANED summary for emptiness, not the raw one.
+    var CleanTypeAtSummary: string:= TDocRegions.StripForDisplay(AResult.Doc.Summary);
+    if AResult.HasDoc and (CleanTypeAtSummary <> '') then SB.AppendLine('Doc:          ' + CleanTypeAtSummary);
     Result:= SB.ToString;
   finally
     SB.Free;

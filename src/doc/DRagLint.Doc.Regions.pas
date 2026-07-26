@@ -10,16 +10,26 @@ const
   AUTO_BEGIN = '<!-- drag-lint:auto BEGIN -->';
   AUTO_END   = '<!-- drag-lint:auto END -->';
   /// Uniform provenance marker (v(ADP3 T1)). Emitted immediately after the
-  /// OPENING tag of every <summary>/<param>/<returns> the engine writes, so the
-  /// marker becomes the first characters of the tag's text content and survives
-  /// the doc parser's round-trip (unlike the legacy trailing AUTO_PARAM, which
-  /// the parser stripped). It is an HTML comment, so DocInsight tooltips do not
-  /// render it. A tag WITHOUT this marker is hand-written, full stop -- there is
-  /// no content-based fallback (the pre-v(ADP3) StartsText('Observed:') sniff is
-  /// deleted, see MergeComment).
+  /// OPENING tag of every &lt;summary&gt;/&lt;param&gt;/&lt;returns&gt; the engine writes, so
+  /// the marker becomes the first characters of the tag's text content and
+  /// survives the doc parser's round-trip (unlike the legacy trailing
+  /// AUTO_PARAM, which the parser stripped). It is an HTML comment, so
+  /// DocInsight tooltips do not render it. A tag WITHOUT this marker is
+  /// hand-written, full stop -- there is no content-based fallback (the
+  /// pre-v(ADP3) StartsText('Observed:') sniff is deleted, see MergeComment).
+  /// READ PATH ONLY: MergeComment/IsManagedDesc/the doc-drift comparison need
+  /// to see this marker to know what the engine owns, so it is never stripped
+  /// on read. Human-facing surfaces call StripForDisplay, never this constant
+  /// directly, to hide it (see that function's own comment).
   AUTO_MARK  = '<!-- drag-lint:auto -->';
-  /// Legacy trailing param marker. Still RECOGNIZED when reading an old
-  /// comment so a pre-v(ADP3) file self-heals on the next run; never EMITTED.
+  /// Legacy trailing param marker TEXT. DECLARATION-ONLY as of v(ADP3 T1): no
+  /// code reads or writes this constant anymore (the engine never emits it;
+  /// IsManagedText/IsManagedDesc never test for it). A pre-v(ADP3) file still
+  /// self-heals, but not by recognizing this literal string -- the doc parser
+  /// strips a trailing sentinel like this one (plus the /// prefix) BEFORE
+  /// TParsedDoc.Params is populated, so the desc MergeComment actually sees is
+  /// already EMPTY; it is IsManagedDesc's empty-desc arm that then classifies
+  /// the param as managed. Retained only as a record of the legacy format.
   AUTO_PARAM = '<!-- drag-lint:auto param -->';
 
 type
@@ -146,10 +156,42 @@ type
     /// happens to start with 'Observed:' or read 'TODO: describe.' is no longer
     /// silently adopted.</summary>
     class function IsManagedText(const S: string): Boolean;
-    /// <summary>Returns S with a leading AUTO_MARK (and any whitespace before
-    /// it) removed; S unchanged when it carries no marker. Used to recover the
-    /// previously-emitted text for a drift comparison.</summary>
+    /// <summary>Removes a leading AUTO_MARK, if present, from S -- and, either
+    /// way, also removes any leading whitespace: the TrimLeft this performs is
+    /// UNCONDITIONAL, not gated on the marker being found, so S is NOT
+    /// returned byte-for-byte unchanged when it carries no marker (only its
+    /// leading whitespace changes). Used to recover the previously-emitted
+    /// text for a drift comparison.</summary>
     class function StripMark(const S: string): string;
+    /// <summary>True when S is MANAGED (auto-generated/regenerable) content,
+    /// as opposed to hand-typed prose: S begins with AUTO_MARK (IsManagedText),
+    /// or S is empty, or S is exactly the legacy 'TODO: describe.' sentinel.
+    /// The two legacy arms exist ONLY so a file written by a pre-v(ADP3) build
+    /// self-heals on its next run; new output always carries AUTO_MARK. This
+    /// is the SAME three-way test MergeComment's own IncludeReturns condition
+    /// uses -- exposed publicly (v(ADP3 T1) review fix) so every OTHER
+    /// consumer that needs this exact test (the doc-drift ddFactsBlockStale
+    /// comparison today; the Task 9 drift compare next) calls this ONE
+    /// implementation instead of hand-expanding the three arms again, which is
+    /// how 'TODO: describe.' ends up with two homes and drifts out of
+    /// sync.</summary>
+    class function IsManagedDesc(const S: string): Boolean;
+    /// <summary>Strips human-invisible engine bookkeeping from S for DISPLAY
+    /// ONLY: a leading AUTO_MARK (via StripMark) plus any AUTO_BEGIN/AUTO_END
+    /// facts-fence marker text found anywhere in S -- the facts LINES between
+    /// a fence pair are left untouched, only the two fence marker strings
+    /// themselves are removed. Trims the result, so a field that was ONLY the
+    /// marker (or the fence with no facts) becomes '', letting a caller's
+    /// existing `if X &lt;&gt; '' then` guard keep suppressing the line exactly as
+    /// it did before the marker existed. v(ADP3 T1) review fix: every surface
+    /// that renders Summary/ReturnsText/a &lt;param&gt; desc/Remarks to a HUMAN
+    /// (hover's CLI/LSP/JSON renderers, the context bundle, MCP's doc JSON, LSP
+    /// completion/signature-help, TypeAt's plain-text render) must call THIS,
+    /// and only this, to clean the text -- never open-code a second
+    /// Replace('&lt;!-- drag-lint:auto --&gt;', ''). The READ path (MergeComment,
+    /// IsManagedDesc, the doc-drift comparison) must NEVER call this: it needs
+    /// the raw marker to know what the engine owns.</summary>
+    class function StripForDisplay(const S: string): string;
   end;
 
 implementation
@@ -202,18 +244,14 @@ begin
   finally Sb.Free; end;
 end;
 
-/// <summary>True when S is MANAGED (auto-generated/regenerable) content, as
-/// opposed to hand-typed prose. v(ADP3 T1): marker-keyed. The two legacy arms
-/// (empty text, and the 'TODO: describe.' sentinel older builds emitted) are
-/// retained ONLY so a file written by a pre-v(ADP3) build self-heals on its
-/// next run; new output always carries AUTO_MARK. A whitespace-only tag with
-/// NO marker is treated as managed here for backward compatibility, but Task
-/// 3 keeps it in the file rather than deleting it -- see the empty-tag rules
-/// there.</summary>
+// Module-level forwarder (v(ADP3 T1) review fix): the real implementation is
+// now the public TDocRegions.IsManagedDesc, exposed so consumers OUTSIDE this
+// unit (Doc.Drift's ddFactsBlockStale check today) share the exact same
+// three-way test instead of hand-expanding it again. Kept as a bare function
+// so every EXISTING call site inside this unit (MergeComment) needs no edit.
 function IsManagedDesc(const S: string): Boolean;
 begin
-  Result:= TDocRegions.IsManagedText(S) or (Trim(S) = '')
-        or SameText(Trim(S), 'TODO: describe.');
+  Result:= TDocRegions.IsManagedDesc(S);
 end;
 
 class function TDocRegions.StripManagedBlock(const S: string): string;
@@ -262,6 +300,34 @@ begin
   Result:= TrimLeft(S);
   if StartsStr(AUTO_MARK, Result) then
     Result:= Copy(Result, Length(AUTO_MARK) + 1, MaxInt);
+end;
+
+class function TDocRegions.IsManagedDesc(const S: string): Boolean;
+begin
+  Result:= IsManagedText(S) or (Trim(S) = '')
+        or SameText(Trim(S), 'TODO: describe.');
+end;
+
+// v(ADP3 T1) review fix: the ONE presentation-layer stripper. StripMark (the
+// primitive) handles the LEADING marker + the unconditional TrimLeft; this
+// layers on top of it a global removal of any EMBEDDED AUTO_MARK occurrence
+// (needed for a compound raw blob like MCP's params_json, where the marker
+// sits mid-string inside a per-param "desc" value, not at string position 1)
+// plus the AUTO_BEGIN/AUTO_END fence marker TEXT wherever it appears in S --
+// the facts LINES a fence wraps are left completely untouched, only the two
+// marker strings themselves are removed. Swept for fence-PARSING consumers
+// before writing this: every consumer that locates content BY the fence
+// (StripManagedBlock, Doc.Drift's ExtractManagedBlockBody, Doc.Batch's
+// HasManagedBlock) operates on the RAW read-path value, never on this
+// function's output, so stripping the fence here for display cannot break
+// any of them.
+class function TDocRegions.StripForDisplay(const S: string): string;
+begin
+  Result:= StripMark(S);
+  Result:= StringReplace(Result, AUTO_MARK,  '', [rfReplaceAll]);
+  Result:= StringReplace(Result, AUTO_BEGIN, '', [rfReplaceAll]);
+  Result:= StringReplace(Result, AUTO_END,   '', [rfReplaceAll]);
+  Result:= Trim(Result);
 end;
 
 // v(ADP2 T9): the DOC/HOVER CONSISTENCY LOCK -- see this function's own

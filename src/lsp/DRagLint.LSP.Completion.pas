@@ -44,6 +44,10 @@ type
 
 implementation
 
+uses
+  DRagLint.Doc.Regions
+  ;
+
 { TLspCompletion }
 
 class function TLspCompletion.EmptySigHelp: TJSONObject;
@@ -125,10 +129,19 @@ begin
   if Assigned(AStore) then
   begin
     Doc:= AStore.GetSymbolDoc(ASym.Id);
-    if Doc.HasContent and (Doc.Summary <> '') then
+    // v(ADP3 T1) review fix (finding 1): strip the ownership marker before it
+    // reaches the IDE completion popup -- see TDocRegions.StripForDisplay's
+    // own comment; Doc.Summary/Doc.ReturnsText themselves must keep carrying
+    // it for the read path (MergeComment/drift). Test the CLEANED summary for
+    // emptiness (not the raw one), else a managed summary that is ONLY the
+    // marker would still pass the old raw `<> ''` gate and add a
+    // 'documentation' entry containing just the (now-stripped) marker.
+    var CleanSummary: string:= TDocRegions.StripForDisplay(Doc.Summary);
+    if Doc.HasContent and (CleanSummary <> '') then
     begin
-      DocStr:= Doc.Summary;
-      if Doc.ReturnsText <> '' then DocStr:= DocStr + #10 + 'Returns: ' + Doc.ReturnsText;
+      DocStr:= CleanSummary;
+      var CleanReturns: string:= TDocRegions.StripForDisplay(Doc.ReturnsText);
+      if CleanReturns <> '' then DocStr:= DocStr + #10 + 'Returns: ' + CleanReturns;
       Result.AddPair('documentation', DocStr);
     end;
   end;
@@ -367,10 +380,17 @@ begin
     SigInfoObj:= TJSONObject.Create;
     SigInfoObj.AddPair('label', SigStr);
 
-    if TypeResult.HasDoc and (TypeResult.Doc.Summary <> '') then
+    // v(ADP3 T1) review fix (finding 1): strip the ownership marker before it
+    // reaches the IDE signature-help popup -- see the sibling MakeCompletionItem
+    // fix above and TDocRegions.StripForDisplay's own comment; the read path
+    // (TypeResult.Doc.* itself) must keep carrying it. Test the CLEANED
+    // summary for emptiness, not the raw one.
+    var CleanSigSummary: string:= TDocRegions.StripForDisplay(TypeResult.Doc.Summary);
+    if TypeResult.HasDoc and (CleanSigSummary <> '') then
     begin
-      DocStr:= TypeResult.Doc.Summary;
-      if TypeResult.Doc.ReturnsText <> '' then DocStr:= DocStr + #10 + 'Returns: ' + TypeResult.Doc.ReturnsText;
+      DocStr:= CleanSigSummary;
+      var CleanSigReturns: string:= TDocRegions.StripForDisplay(TypeResult.Doc.ReturnsText);
+      if CleanSigReturns <> '' then DocStr:= DocStr + #10 + 'Returns: ' + CleanSigReturns;
       SigInfoObj.AddPair('documentation', DocStr);
     end;
 

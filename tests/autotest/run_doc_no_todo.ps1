@@ -11,15 +11,25 @@
   hand-typed prose is still preserved and old TODO docs get cleaned up on
   re-run.
 
+  v(ADP3 T1) update: "EMPTY placeholders" is no longer literally true --
+  ownership is now marker-keyed (AUTO_MARK, '<!-- drag-lint:auto -->'),
+  emitted as the FIRST characters of a managed tag's text content, so a
+  managed <summary>/<param> is empty-OF-PROSE but carries the marker, and a
+  managed <returns> carries the marker immediately followed by the mined
+  'Observed: ...' suffix. The zero-TODO guarantee this scenario tests is
+  unchanged; only the exact managed-tag SHAPE below reflects the marker.
+
   SCENARIO A -- fresh emit, zero TODO, facts survive: index a fixture with a
   function (Grab: params + a single mined `Result := ...` case) and a caller
   (UseGrab, for the Called-from fact), `document --apply --no-backup`, then
   assert the written file contains ZERO occurrences of the substring 'TODO'
   ANYWHERE, while the facts are genuinely present:
-    - <summary></summary> (empty, not fabricated prose)
-    - <param name="AWidth"></param> for the one param (empty, AUTO_PARAM
-      sentinel present so it round-trips as managed)
-    - <returns>Observed: ...</returns> (the mined case, no TODO prefix)
+    - <summary><!-- drag-lint:auto --></summary> (marker only, no fabricated
+      prose)
+    - <param name="AWidth"><!-- drag-lint:auto --></param> for the one param
+      (marker-only body, so it round-trips as managed)
+    - <returns><!-- drag-lint:auto -->Observed: ...</returns> (marker, then
+      the mined case, no TODO prefix)
     - the drag-lint:auto BEGIN/END facts fence with "Called from:"
 
   SCENARIO B -- idempotency: RE-INDEX (mirrors run_doc_returns.ps1 Scenario
@@ -100,20 +110,18 @@ Check 'ZERO "TODO" occurrences anywhere in the file' `
 
 $summaryLinesA = @([regex]::Matches($textA, '<summary>.*?</summary>') | ForEach-Object { $_.Value })
 Check 'exactly one <summary> tag' ($summaryLinesA.Count -eq 1) "count=$($summaryLinesA.Count)"
-Check '<summary> is empty (no fabricated prose)' `
-  ($summaryLinesA.Count -gt 0 -and $summaryLinesA[0] -eq '<summary></summary>') $summaryLinesA
+Check '<summary> carries only the AUTO_MARK provenance marker (no fabricated prose)' `
+  ($summaryLinesA.Count -gt 0 -and $summaryLinesA[0] -eq '<summary><!-- drag-lint:auto --></summary>') $summaryLinesA
 
 $paramLinesA = @([regex]::Matches($textA, '<param name="AWidth">.*?</param>') | ForEach-Object { $_.Value })
 Check 'AWidth <param> tag present' ($paramLinesA.Count -eq 1) "count=$($paramLinesA.Count)"
-Check 'AWidth <param> body is empty' `
-  ($paramLinesA.Count -gt 0 -and $paramLinesA[0] -eq '<param name="AWidth"></param>') $paramLinesA
-Check 'AWidth <param> carries the AUTO_PARAM sentinel (managed)' `
-  ($textA -match [regex]::Escape('<param name="AWidth"></param><!-- drag-lint:auto param -->')) $textA
+Check 'AWidth <param> body carries only the AUTO_MARK provenance marker (managed)' `
+  ($paramLinesA.Count -gt 0 -and $paramLinesA[0] -eq '<param name="AWidth"><!-- drag-lint:auto --></param>') $paramLinesA
 
 $returnsLinesA = @([regex]::Matches($textA, '<returns>.*?</returns>') | ForEach-Object { $_.Value })
 Check 'exactly one <returns> tag' ($returnsLinesA.Count -eq 1) "count=$($returnsLinesA.Count)"
-Check '<returns> carries the mined Observed fact, no TODO prefix' `
-  ($returnsLinesA.Count -gt 0 -and $returnsLinesA[0] -eq '<returns>Observed: rlines &lt;&gt; 0.</returns>') $returnsLinesA
+Check '<returns> carries the marker then the mined Observed fact, no TODO prefix' `
+  ($returnsLinesA.Count -gt 0 -and $returnsLinesA[0] -eq '<returns><!-- drag-lint:auto -->Observed: rlines &lt;&gt; 0.</returns>') $returnsLinesA
 
 Check 'managed facts fence present' ($textA.Contains('<!-- drag-lint:auto BEGIN -->') -and $textA.Contains('<!-- drag-lint:auto END -->'))
 Check 'facts: Called from: uNoTodo.UseGrab present' ($textA -match 'Called from:.*uNoTodo\.UseGrab')
@@ -189,11 +197,11 @@ $textC = Get-Content $fileC -Raw
 Check 'legacy cleanup: ZERO "TODO" occurrences after re-run' `
   ($textC -cnotmatch 'TODO') $textC
 $summaryLinesC = @([regex]::Matches($textC, '<summary>.*?</summary>') | ForEach-Object { $_.Value })
-Check 'legacy cleanup: <summary> regenerated empty' `
-  ($summaryLinesC.Count -gt 0 -and $summaryLinesC[0] -eq '<summary></summary>') $summaryLinesC
+Check 'legacy cleanup: <summary> regenerated to carry only the AUTO_MARK marker' `
+  ($summaryLinesC.Count -gt 0 -and $summaryLinesC[0] -eq '<summary><!-- drag-lint:auto --></summary>') $summaryLinesC
 $returnsLinesC = @([regex]::Matches($textC, '<returns>.*?</returns>') | ForEach-Object { $_.Value })
-Check 'legacy cleanup: <returns> regenerated to fresh Observed (stale text dropped)' `
-  ($returnsLinesC.Count -gt 0 -and $returnsLinesC[0] -eq '<returns>Observed: rlines &lt;&gt; 0.</returns>') $returnsLinesC
+Check 'legacy cleanup: <returns> regenerated to marker + fresh Observed (stale text dropped)' `
+  ($returnsLinesC.Count -gt 0 -and $returnsLinesC[0] -eq '<returns><!-- drag-lint:auto -->Observed: rlines &lt;&gt; 0.</returns>') $returnsLinesC
 Check 'legacy cleanup: facts fence refreshed with real Called from:' `
   ($textC -match 'Called from:.*uNoTodo\.UseGrab')
 

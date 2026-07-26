@@ -30,6 +30,10 @@ type
 
 implementation
 
+uses
+  DRagLint.Doc.Regions
+  ;
+
 class function TContextBundler.EstimateTokens(const AText: string): Integer;
 begin
   Result:= Round(Length(AText) / 3.7);
@@ -215,9 +219,16 @@ begin
     if ABundle.HasDoc then
     begin
       SB.AppendLine('## Doc');
-      if ABundle.Doc.Summary     <> '' then SB.AppendLine('**Summary:** ' + ABundle.Doc.Summary    );
-      if ABundle.Doc.ReturnsText <> '' then SB.AppendLine('**Returns:** ' + ABundle.Doc.ReturnsText);
-      if ABundle.Doc.Remarks     <> '' then SB.AppendLine('**Remarks:** ' + ABundle.Doc.Remarks    );
+      // v(ADP3 T1) review fix: strip the AUTO_MARK ownership token (and, for
+      // Remarks, the AUTO_BEGIN/AUTO_END facts-fence) before it reaches this
+      // agent-facing bundle -- see TDocRegions.StripForDisplay's own comment.
+      // The read path (ABundle.Doc.* themselves) must keep carrying it.
+      var CleanSummary: string:= TDocRegions.StripForDisplay(ABundle.Doc.Summary    );
+      var CleanReturns: string:= TDocRegions.StripForDisplay(ABundle.Doc.ReturnsText);
+      var CleanRemarks: string:= TDocRegions.StripForDisplay(ABundle.Doc.Remarks    );
+      if CleanSummary <> '' then SB.AppendLine('**Summary:** ' + CleanSummary);
+      if CleanReturns <> '' then SB.AppendLine('**Returns:** ' + CleanReturns);
+      if CleanRemarks <> '' then SB.AppendLine('**Remarks:** ' + CleanRemarks);
       SB.AppendLine;
     end;
 
