@@ -4,12 +4,16 @@
 
   Hand-verified real output (document --qname uRet.Grab --apply --no-backup on
   the fixture below, cap=20 default):
-    <returns>Observed: False; rlines &lt;&gt; 0.</returns>
+    <returns><!-- drag-lint:auto -->Observed: False; rlines &lt;&gt; 0.</returns>
   -- both '<' and '>' are XML-escaped (to &lt; and &gt;), two distinct mined
   return cases in first-seen order, and NO "TODO" placeholder text (ADP1: the
   engine emits empty/Observed-only placeholders, never "TODO"). A procedure
   (DoNothing) gets a comment with NO Observed: text (HasRet is False for
-  procedures).
+  procedures). [Late Phase 3 T1 churn: the '<!-- drag-lint:auto -->' provenance
+  marker (T1, commit 317d192) sits immediately after the opening <returns> tag
+  on every managed/mined-only returns tag -- this file's Scenario A anchor
+  check was missed by T1's own regression sweep; updated here, expectations
+  only, no engine change.]
 
   document --json is a THIN summary (qname/file/line/action/edits/applied --
   no <returns> text), so every scenario applies to a FRESH copy and asserts on
@@ -123,7 +127,9 @@ $returnsLinesA = @([regex]::Matches($textA, '<returns>.*?</returns>') | ForEach-
 
 Check 'exactly one <returns> tag in the file (Grab only; DoNothing has none)' `
   ($returnsLinesA.Count -eq 1) "count=$($returnsLinesA.Count)"
-Check 'Grab <returns> carries Observed: (no TODO placeholder)' ($returnsLinesA[0] -match '^<returns>Observed:') $returnsLinesA[0]
+# v(ADP3 T1) late churn: the returns tag now carries the '<!-- drag-lint:auto -->'
+# provenance marker immediately after the opening tag (see this file's header).
+Check 'Grab <returns> carries Observed: (no TODO placeholder)' ($returnsLinesA[0] -match '^<returns><!-- drag-lint:auto -->Observed:') $returnsLinesA[0]
 Check 'Grab <returns> lists False'       ($returnsLinesA[0] -match 'Observed: False') $returnsLinesA[0]
 Check 'Grab <returns> lists escaped rlines &lt;&gt; 0' ($returnsLinesA[0] -match 'rlines &lt;&gt; 0') $returnsLinesA[0]
 Check 'Grab <returns> does NOT contain a raw unescaped < or >' `
