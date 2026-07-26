@@ -275,7 +275,12 @@ begin
           S.Line:= Obj.GetValue<Integer>('line', 0);
           S.Signature:= Obj.GetValue<string>('signature', '');
           if S.Name = '' then S.Name:= S.QName;
-          if S.QName <> '' then List.Add(S);
+          { v(outline-polish): the D5 index now emits a 'local_var'/'param' symbol
+            for every routine local and parameter (added for call-site type
+            resolution). They are NOISE in a code outline -- and the plugin's kind
+            parser has no case for them, so they rendered with a '[?]' prefix.
+            Exclude them from Code Elements entirely. }
+          if (S.QName <> '') and (S.KindStr <> 'local_var') and (S.KindStr <> 'param') then List.Add(S);
         end;
       end; // if
     finally

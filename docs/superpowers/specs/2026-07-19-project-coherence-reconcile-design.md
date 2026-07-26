@@ -2,8 +2,19 @@
 
 **Date:** 2026-07-19
 **Status:** approved (brainstorm) -- ready for implementation plan
-**Components:** `src/cli/` (new `reconcile` verb), `src/delphi-plugin/` (triggers + buffer-change stamp)
+**Components:** `src/cli/` (extend the existing `reconcile-project` verb -- see revision), `src/delphi-plugin/` (triggers + buffer-change stamp)
 **Motivating bug:** VARINSPCODE.pas (edited today) was absent from the ORM3-root index the LSP reads, so its DCC diagnostics never rendered. Root cause: an edited/new project member is not reindexed into the LSP's DB until a whole-project rescan.
+
+> **DESIGN REVISION (2026-07-19, user):** the capability below is delivered by
+> EXTENDING the existing `reconcile-project` verb with an opt-in `--db [--full]`
+> phase, NOT by adding a separate `reconcile` verb. `reconcile-project` already
+> reconciles the `.dpr` member list vs the compile closure (edits the `.dpr` with
+> `--apply`); the new `--db` phase heals the drag-lint DB (index + findings) to match
+> those members (never edits the `.dpr`). Both phases are independently opt-in. The
+> member set reuses the project-owned compile closure `reconcile-project` already
+> computes. Everywhere below that says "new `reconcile` verb", read "`--db` phase of
+> `reconcile-project`" -- the behavior is identical, only the surface changes. See the
+> implementation plan for the task breakdown.
 
 ## Invariant (the goal)
 

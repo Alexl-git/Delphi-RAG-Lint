@@ -4,6 +4,7 @@ interface
 
 uses
   System.SysUtils
+  , System.StrUtils
   , System.IOUtils
   , System.Classes
   , DRagLint.Core.Model
@@ -23,11 +24,26 @@ type
     Doc        : TParsedDoc;
     HasDoc     : Boolean   ;
     Note       : string    ;
+    OwnerTypeFallback : Boolean;   // True only when the LHS type resolved but the member was NOT found on it or any base
+    ResolvedStoreIndex: Integer;   // index into the AStores array the Resolved symbol came from; -1 if none
   end;
 
   TTypeAtResolver = class
     public
-      class function Resolve(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer)                  : TTypeAtResult;
+      /// <summary>Resolves the symbol referenced at a file position, searching
+      /// every supplied store so a type or member declared in a different DB
+      /// (e.g. a generic base in a platform-library index) can be resolved.</summary>
+      /// <param name="AStores">All open stores. The store that OWNS AFile is the
+      /// primary (file-scoped lookups use it); the rest are searched only for
+      /// type / member resolution. Must not be empty.</param>
+      /// <param name="AFile">Absolute path of the hovered source file.</param>
+      /// <param name="ALine">1-based line.</param>
+      /// <param name="ACol">1-based column.</param>
+      /// <returns>The resolution result. OwnerTypeFallback is True when the LHS
+      /// type resolved but the member could not be found on it or any base;
+      /// ResolvedStoreIndex names the store the resolved symbol came from.</returns>
+      class function Resolve(const AStores: TArray<ISymbolStore>; const AFile: string; ALine, ACol: Integer)         : TTypeAtResult; overload;
+      class function Resolve(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer)                  : TTypeAtResult; overload;
       class function ExtractTokenAt(const ALine: string; ACol: Integer; out APrecedingDot: Boolean; out ALhs: string): string       ;
       class function RenderText(const AResult: TTypeAtResult)                                                        : string       ;
       class function RenderJson(const AResult: TTypeAtResult)                                                        : string       ;
@@ -142,7 +158,148 @@ begin
   end;
 end; // function
 
+function StoreIndexOf(const AStores: TArray<ISymbolStore>; const AStore: ISymbolStore): Integer;
+{ Index of AStore within AStores by reference; -1 if not present or nil. }
+var
+  I: Integer;
+begin
+  Result:= -1;
+  if AStore = nil then Exit;
+  for I:= 0 to High(AStores) do
+    if AStores[I] = AStore then Exit(I);
+end;
+
+function TypeIdentOfSignature(const ASig: string): string;
+{ The leading type identifier of a VALUE symbol's signature (a var/param/field's
+  declared type). Strips a leading ':', trims, then takes the run of identifier
+  chars (keeps dots so 'System.TObject' stays whole; stops at space, ';', '<').
+  'TThingList' -> 'TThingList'; ': TFoo;' -> 'TFoo'; 'TMyList<TThing>' -> 'TMyList'. }
+var
+  S: string ;
+  I: Integer;
+begin
+  Result:= '';
+  S:= Trim(ASig);
+  if (S <> '') and (S[1] = ':') then S:= TrimLeft(Copy(S, 2, MaxInt));
+  I:= 1;
+  while (I <= Length(S)) and CharInSet(S[I], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) do Inc(I);
+  if I > 1 then Result:= Copy(S, 1, I - 1);
+end;
+
+function FindTypeAnywhere(const AStores: TArray<ISymbolStore>; const AName: string; out AStore: ISymbolStore): TSymbol;
+{ First store (in order) whose flat name lookup finds AName; returns that store
+  in AStore so subsequent child/ancestor lookups use the right DB. Id=0 if none. }
+var
+  I  : Integer;
+  Sym: TSymbol;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  AStore:= nil;
+  for I:= 0 to High(AStores) do
+  begin
+    Sym:= AStores[I].FindSymbolByExactNameAnywhere(AName);
+    if Sym.Id > 0 then
+    begin
+      AStore:= AStores[I];
+      Exit(Sym);
+    end;
+  end;
+end;
+
+function ResolveMemberOnType(const AStore: ISymbolStore; ATypeId: Int64; const AMember: string): TSymbol;
+{ The member AMember on the type ATypeId: a direct child first, then each
+  transitive ancestor (same store -- ids are per-DB). Id=0 if not found. }
+var
+  Anc: TArray<TTypeAncestor>;
+  I  : Integer;
+begin
+  Result:= AStore.FindChildSymbolByName(ATypeId, AMember);
+  if Result.Id > 0 then Exit;
+  Anc:= AStore.GetTransitiveAncestors(ATypeId);
+  for I:= 0 to High(Anc) do
+  begin
+    if Anc[I].SymbolId <= 0 then Continue;   // unresolved ancestor edge (e.g. an unindexed alias)
+    Result:= AStore.FindChildSymbolByName(Anc[I].SymbolId, AMember);
+    if Result.Id > 0 then Exit;
+  end;
+  FillChar(Result, SizeOf(Result), 0);
+end;
+
+function ParseGenericBase(const ASig: string; out ABaseName: string; out AArity: Integer): Boolean;
+{ 'TList<TToken>' -> ('TList', 1); 'TDictionary<TKey, TList<T>>' -> ('TDictionary', 2).
+  AArity = 1 + count of TOP-LEVEL commas inside the OUTERMOST <...>. False when no '<'. }
+var
+  I, Depth, Lt: Integer;
+begin
+  Result:= False;
+  ABaseName:= '';
+  AArity:= 0;
+  Lt:= System.Pos('<', ASig);
+  if Lt <= 1 then Exit;
+  ABaseName:= Trim(Copy(ASig, 1, Lt - 1));
+  if ABaseName = '' then Exit;
+  AArity:= 1;
+  Depth:= 0;
+  for I:= Lt to Length(ASig) do
+  begin
+    case ASig[I] of
+      '<': Inc(Depth);
+      '>': begin Dec(Depth); if Depth = 0 then Break; end;
+      ',': if Depth = 1 then Inc(AArity);
+    end;
+  end;
+  Result:= True;
+end;
+
+function GenericArityOfName(const AName: string): Integer;
+{ Arity of a symbol NAME like 'TList<T>' or 'TDictionary<TKey, TValue>'; 0 if non-generic. }
+var
+  Dummy: string;
+begin
+  if not ParseGenericBase(AName, Dummy, Result) then Result:= 0;
+end;
+
+function FindGenericBaseAnywhere(const AStores: TArray<ISymbolStore>; const ABaseName: string; AArity: Integer; out AStore: ISymbolStore): TSymbol;
+{ A class/interface named ABaseName + '<...>' with matching generic arity, searched
+  across all stores. Prefer a System.* (RTL) qname on ambiguity, else first in store
+  order. Id=0 if none. }
+var
+  I, J     : Integer            ;
+  Cands    : TArray<TSymbol>    ;
+  HaveBest : Boolean            ;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  AStore:= nil;
+  HaveBest:= False;
+  for I:= 0 to High(AStores) do
+  begin
+    Cands:= AStores[I].FindSymbolsByPrefix(ABaseName + '<', 200);
+    for J:= 0 to High(Cands) do
+    begin
+      if not (Cands[J].Kind in [skClass, skInterface]) then Continue;
+      if GenericArityOfName(Cands[J].Name) <> AArity then Continue;
+      if not HaveBest then
+      begin
+        Result:= Cands[J];
+        AStore:= AStores[I];
+        HaveBest:= True;
+      end
+      else if (not StartsText('System.', Result.QualifiedName)) and StartsText('System.', Cands[J].QualifiedName) then
+      begin
+        { RTL-preferred disambiguation (best-effort; exact uses-based = D5). }
+        Result:= Cands[J];
+        AStore:= AStores[I];
+      end;
+    end;
+  end;
+end;
+
 class function TTypeAtResolver.Resolve(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer): TTypeAtResult;
+begin
+  Result:= Resolve(TArray<ISymbolStore>.Create(AStore), AFile, ALine, ACol);
+end;
+
+class function TTypeAtResolver.Resolve(const AStores: TArray<ISymbolStore>; const AFile: string; ALine, ACol: Integer): TTypeAtResult;
 var
   Lines       : TArray<string>;
   LineText    : string        ;
@@ -151,12 +308,22 @@ var
   FileId      : Int64         ;
   LhsSym      : TSymbol       ;
   ResolvedSym : TSymbol       ;
+  Primary     : ISymbolStore  ;
+  LhsStore    : ISymbolStore  ;
 begin
   FillChar(Result, SizeOf(Result), 0);
-  Result.FileName:= AFile;
-  Result.Line    := ALine;
-  Result.Col     := ACol;
-  Result.Note    := '';
+  Result.FileName        := AFile;
+  Result.Line            := ALine;
+  Result.Col             := ACol;
+  Result.Note            := '';
+  Result.ResolvedStoreIndex:= -1;
+
+  if Length(AStores) = 0 then begin Result.Note:= 'no store.'; Exit; end;
+  { Primary = the store that OWNS the hovered file (its file-scoped lookups --
+    containing symbol, local-var inference -- must use that DB); default AStores[0]. }
+  Primary:= AStores[0];
+  for var si:= 0 to High(AStores) do
+    if AStores[si].FindFileIdByPath(AFile) > 0 then begin Primary:= AStores[si]; Break; end;
 
   if not TFile.Exists(AFile) then
   begin
@@ -172,10 +339,10 @@ begin
   LineText:= Lines[ALine - 1];
   Result.Token:= ExtractTokenAt(LineText, ACol, PrecedingDot, LhsText);
 
-  FileId:= AStore.FindFileIdByPath(AFile);
+  FileId:= Primary.FindFileIdByPath(AFile);
   if FileId > 0 then
   begin
-    Result.Containing:= AStore.FindContainingSymbol(FileId, ALine);
+    Result.Containing:= Primary.FindContainingSymbol(FileId, ALine);
     Result.HasContain:= Result.Containing.Id > 0;
   end;
 
@@ -187,7 +354,20 @@ begin
 
   if PrecedingDot and (LhsText <> '') then
   begin
-    LhsSym:= AStore.FindSymbolByExactNameAnywhere(LhsText);
+    LhsSym:= FindTypeAnywhere(AStores, LhsText, LhsStore);
+    { The member-access LHS is a VALUE (local/param/field/var), not a type: e.g.
+      `ATokens.Count` where ATokens: TThingList. Replace the value symbol with its
+      declared TYPE (from its signature) so the member lookup runs against the type.
+      If the type name does not resolve, LhsSym becomes empty and the source-scan
+      inference below takes over. A direct type LHS (`TFoo.Bar`) skips this. }
+    if (LhsSym.Id > 0) and not (LhsSym.Kind in [skClass, skRecord, skInterface, skTypeAlias]) then
+    begin
+      var VT: string:= TypeIdentOfSignature(LhsSym.Signature);
+      var TS: TSymbol;
+      FillChar(TS, SizeOf(TS), 0);
+      if VT <> '' then TS:= FindTypeAnywhere(AStores, VT, LhsStore);
+      LhsSym:= TS;
+    end;
     { v0.46: LHS not a global symbol -> infer it as a local var/param and
       resolve its declared TYPE, so member access on a local narrows. }
     if LhsSym.Id <= 0 then
@@ -195,26 +375,55 @@ begin
       var InferredType: string:= InferLocalVarType(Lines, ALine - 1, LhsText);
       if InferredType <> '' then
       begin
-        LhsSym:= AStore.FindSymbolByExactNameAnywhere(InferredType);
+        LhsSym:= FindTypeAnywhere(AStores, InferredType, LhsStore);
         if LhsSym.Id <= 0 then Result.Note:= Format('inferred %s: %s (type not indexed)', [LhsText, InferredType]);
       end;
     end;
     if LhsSym.Id > 0 then
     begin
-      ResolvedSym:= AStore.FindChildSymbolByName(LhsSym.Id, Result.Token);
+      { Direct child, else a member inherited from a same-store ancestor. }
+      ResolvedSym:= ResolveMemberOnType(LhsStore, LhsSym.Id, Result.Token);
       if ResolvedSym.Id > 0 then
       begin
-        Result.Resolved   := ResolvedSym;
-        Result.HasResolved:= True;
+        Result.Resolved          := ResolvedSym;
+        Result.HasResolved       := True;
+        Result.ResolvedStoreIndex:= StoreIndexOf(AStores, LhsStore);
       end
       else if LhsSym.Kind in [skClass, skRecord, skInterface, skTypeAlias] then
       begin
-        { member not a direct child -> likely inherited. Resolve to the OWNER
-          TYPE so the hover can narrow by the type (and, failing that, by its
-          unit). }
-        Result.Resolved   := LhsSym;
-        Result.HasResolved:= True;
-        Result.Note:= Format('owner type %s (member may be inherited)', [LhsSym.QualifiedName]);
+        { Not on the type or any same-store ancestor. If the LHS is an alias to a
+          generic instantiation (TThingList = TMyList<TThing>), unwrap it: match
+          the generic base by (name, arity) across ALL stores and resolve the
+          member there (incl. that base's own ancestry). This is the cross-DB path
+          -- the generic base typically lives in a separate library index. }
+        var GBase : string      ;
+        var GArity: Integer     ;
+        var GenStore: ISymbolStore;
+        if (LhsSym.Kind = skTypeAlias) and ParseGenericBase(LhsSym.Signature, GBase, GArity) then
+        begin
+          var BaseSym: TSymbol:= FindGenericBaseAnywhere(AStores, GBase, GArity, GenStore);
+          if BaseSym.Id > 0 then
+          begin
+            var Mem: TSymbol:= ResolveMemberOnType(GenStore, BaseSym.Id, Result.Token);
+            if Mem.Id > 0 then
+            begin
+              Result.Resolved          := Mem;
+              Result.HasResolved       := True;
+              Result.OwnerTypeFallback := False;
+              Result.ResolvedStoreIndex:= StoreIndexOf(AStores, GenStore);
+              Result.Note:= Format('resolved via generic base %s', [BaseSym.QualifiedName]);
+            end;
+          end;
+        end;
+        { Owner-type floor -- only if the generic step did not resolve. }
+        if not Result.HasResolved then
+        begin
+          Result.Resolved          := LhsSym;
+          Result.HasResolved       := True;
+          Result.OwnerTypeFallback := True;
+          Result.ResolvedStoreIndex:= StoreIndexOf(AStores, LhsStore);
+          Result.Note:= Format('owner type %s (member may be inherited)', [LhsSym.QualifiedName]);
+        end;
       end
       else Result.Note:= 'Member ' + Result.Token + ' not found on ' + LhsSym.QualifiedName + '.';
     end // if
@@ -230,25 +439,28 @@ begin
       whole-DB name lookup when no such scoped match exists. }
     if FileId > 0 then
     begin
-      var EnclRoutine: TSymbol:= AStore.FindEnclosingRoutineByImpl(FileId, ALine);
+      var EnclRoutine: TSymbol:= Primary.FindEnclosingRoutineByImpl(FileId, ALine);
       if EnclRoutine.Id > 0 then
       begin
-        var Local: TSymbol:= AStore.FindChildSymbolByName(EnclRoutine.Id, Result.Token);
+        var Local: TSymbol:= Primary.FindChildSymbolByName(EnclRoutine.Id, Result.Token);
         if (Local.Id > 0) and (Local.Kind in [skParam, skLocalVar]) then
         begin
-          Result.Resolved   := Local;
-          Result.HasResolved:= True;
+          Result.Resolved          := Local;
+          Result.HasResolved       := True;
+          Result.ResolvedStoreIndex:= StoreIndexOf(AStores, Primary);
         end;
       end;
     end;
 
     if not Result.HasResolved then
     begin
-      ResolvedSym:= AStore.FindSymbolByExactNameAnywhere(Result.Token);
+      var BareStore: ISymbolStore;
+      ResolvedSym:= FindTypeAnywhere(AStores, Result.Token, BareStore);
       if ResolvedSym.Id > 0 then
       begin
-        Result.Resolved   := ResolvedSym;
-        Result.HasResolved:= True;
+        Result.Resolved          := ResolvedSym;
+        Result.HasResolved       := True;
+        Result.ResolvedStoreIndex:= StoreIndexOf(AStores, BareStore);
       end
       else
       begin
@@ -256,11 +468,12 @@ begin
         var InferredType: string:= InferLocalVarType(Lines, ALine - 1, Result.Token);
         if InferredType <> '' then
         begin
-          ResolvedSym:= AStore.FindSymbolByExactNameAnywhere(InferredType);
+          ResolvedSym:= FindTypeAnywhere(AStores, InferredType, BareStore);
           if ResolvedSym.Id > 0 then
           begin
-            Result.Resolved   := ResolvedSym;
-            Result.HasResolved:= True;
+            Result.Resolved          := ResolvedSym;
+            Result.HasResolved       := True;
+            Result.ResolvedStoreIndex:= StoreIndexOf(AStores, BareStore);
             Result.Note:= Format('%s: %s', [Result.Token, InferredType]);
           end
           else Result.Note:= Format('%s: %s (type not indexed)', [Result.Token, InferredType]);
@@ -272,7 +485,11 @@ begin
 
   if Result.HasResolved then
   begin
-    Result.Doc:= AStore.GetSymbolDoc(Result.Resolved.Id);
+    { Doc lives in the SAME store the symbol came from (ids are per-DB). }
+    var DocStore: ISymbolStore:= Primary;
+    if (Result.ResolvedStoreIndex >= 0) and (Result.ResolvedStoreIndex <= High(AStores)) then
+      DocStore:= AStores[Result.ResolvedStoreIndex];
+    Result.Doc:= DocStore.GetSymbolDoc(Result.Resolved.Id);
     Result.HasDoc:= Result.Doc.HasContent;
   end;
 end; // function
@@ -301,11 +518,14 @@ begin
 end; // function
 
 class function TTypeAtResolver.RenderJson( const AResult: TTypeAtResult): string;
+var
+  Fb: string;
 begin
+  if AResult.OwnerTypeFallback then Fb:= 'true' else Fb:= 'false';
   Result:= Format(
-    '{"file":"%s","line":%d,"col":%d,"token":"%s",' + '"containing":"%s","resolved":"%s","signature":"%s","note":"%s"}', [
+    '{"file":"%s","line":%d,"col":%d,"token":"%s",' + '"containing":"%s","resolved":"%s","signature":"%s","note":"%s",' + '"owner_type_fallback":%s}', [
       StringReplace(AResult.FileName, '\', '/', [rfReplaceAll]), AResult.Line, AResult.Col, AResult.Token, AResult.Containing.QualifiedName, AResult.Resolved.QualifiedName,
-      AResult.Resolved.Signature, AResult.Note]);
+      AResult.Resolved.Signature, AResult.Note, Fb]);
 end;
 
 end.

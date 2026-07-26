@@ -6,30 +6,31 @@ uses-clauses, type ancestry, DI bindings, and more). It is written for anyone
 building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
-Current schema version at time of writing: **17** (`SCHEMA_VERSION` in
-`src/storage/DRagLint.Storage.Schema.pas`). v16 added the additive column
-`files.last_compiled_unix` (compiler-finding freshness; see 2.1). v17 added
-the additive column `symbols.prop_access` (property-leaf assignability
-engine; see 2.2).
+Current schema version at time of writing: **18** (`SCHEMA_VERSION` in
+`src/storage/DRagLint.Storage.Schema.pas`). Recent additive changes:
+v16 added the column `files.last_compiled_unix` (compiler-finding freshness;
+see 2.1); v17 added `symbols.prop_access` (property-leaf assignability engine;
+see 2.2); **v18 added the new `symbol_facts` table** -- per-routine analysis
+facts (cyclomatic complexity + body LOC, own-field reads/writes, SQL tables
+touched, paired-`.dfm` event wiring, returned-object ownership) surfaced by the
+`document` managed block and `hover`; see 2.15.
 
-All facts in this document were originally verified against a live index
-(`C:\Projects\DB\ORM3\drag-lint.sqlite`) at schema_version 15 (820 files /
-64732 symbols / 231489 refs) via `drag-lint schema --db <path> --format json`,
-and cross-checked against the DDL in `src/storage/DRagLint.Storage.SQLite.pas`
-and `src/storage/DRagLint.Storage.Schema.pas`. That same sample DB was
-re-checked 2026-07-20 -- both via `drag-lint schema --db ... --format json`
-and via a direct read-only `SELECT value FROM schema_meta WHERE
-key='schema_version'` (the two agree) -- and is now at **schema_version 16**
-(it has been re-indexed at least once since the v15 pass; file/symbol/ref
-counts have grown accordingly and are not restated here). The v17
-`prop_access` column itself was verified against the DDL/migration code and
-the shipped engine's CLI usage output, not against a re-indexed sample DB:
-as of this writing the ORM3 sample has NOT been re-indexed with the v17
-engine, so its `symbols` table has no `prop_access` column yet (confirmed via
-`PRAGMA table_info(symbols)`) and will read NULL for every row once the
-column is migrated in. This is expected: new columns are migration-safe
-(`ALTER TABLE` runs on open; see the stability contract above), and
-`prop_access` only back-fills for symbols that get re-extracted.
+All facts in this document were cross-checked against the DDL in
+`src/storage/DRagLint.Storage.SQLite.pas` and
+`src/storage/DRagLint.Storage.Schema.pas`, and against a live index
+(`C:\Projects\DB\ORM3\drag-lint.sqlite`) **re-indexed with the v18 engine on
+2026-07-23** (`schema_version = 18`, verified both via `drag-lint schema --db
+<path> --format text` and a direct read-only `SELECT value FROM schema_meta
+WHERE key='schema_version'` -- the two agree). The row counts in the "Table of
+tables" below are from that 2026-07-23 v18 sample (836 files / 74151 symbols /
+382358 refs). Counts drift as the codebase grows and every project/library DB
+was re-indexed to v18 in the same pass -- always introspect a specific
+`.sqlite` live (see below) rather than trusting these numbers.
+
+New columns/tables are migration-safe: `CREATE TABLE IF NOT EXISTS` +
+`ALTER TABLE ... ADD COLUMN` run on open, and the version gate is a `>=` check,
+so a DB indexed by an OLDER engine simply lacks the newer table/columns (facts
+read as absent, never wrong) until it is re-indexed with the v18 engine.
 
 ## 1. Purpose and stability contract
 
@@ -65,20 +66,21 @@ column is migrated in. This is expected: new columns are migration-safe
 
 ### Table of tables
 
-| Table | Rows (ORM3 sample) | What it holds |
+| Table | Rows (ORM3, v18 2026-07-23) | What it holds |
 |---|---:|---|
 | `schema_meta` | 1 | Schema version marker (key/value) |
-| `files` | 820 | One row per indexed source file |
-| `symbols` | 64732 | Every declared/defined code element (incl. params/locals at v14+) |
-| `refs` | 231489 | Every reference (read/write/call/type-use/...) to a symbol |
-| `call_edges` | 17911 | Resolved call-site -> target-symbol edges (subset of `refs`) |
-| `unit_uses` | 13777 | Every `uses`-clause entry, resolved or not |
-| `type_ancestors` | 1433 | Class/interface inheritance edges |
+| `files` | 836 | One row per indexed source file |
+| `symbols` | 74151 | Every declared/defined code element (incl. params/locals at v14+) |
+| `refs` | 382358 | Every reference (read/write/call/type-use/...) to a symbol |
+| `call_edges` | 18801 | Resolved call-site -> target-symbol edges (subset of `refs`) |
+| `unit_uses` | 14223 | Every `uses`-clause entry, resolved or not |
+| `type_ancestors` | 1443 | Class/interface inheritance edges |
 | `type_helpers` | 22 | Record/class helper -> target-type edges |
-| `symbol_docs` | 4838 | Parsed XMLDoc/PasDoc/oneline doc comments per symbol |
+| `symbol_docs` | 4789 | Parsed XMLDoc/PasDoc/oneline doc comments per symbol |
+| `symbol_facts` | 13267 | Per-routine analysis facts (complexity, reads/writes, SQL tables, DFM event, ownership) -- v18+; see 2.15 |
 | `di_bindings` | 540 | Spring4D `RegisterType<T>.Implements<I>` DI registrations |
-| `string_literals` | 33899 | Every string literal, with owning symbol/file |
-| `symbol_trigrams` | 535520 | Trigram inverted index for fuzzy symbol search |
+| `string_literals` | 40276 | Every string literal, with owning symbol/file |
+| `symbol_trigrams` | 649557 | Trigram inverted index for fuzzy symbol search |
 | `string_fts*` (9 tables) | varies | SQLite FTS5 shadow tables backing `query --text` |
 | `compiler_findings` | 0 (ORM3) | Ingested dcc32/dcc64/msbuild log findings |
 | `fb_relations` | 0 (ORM3) | Live Firebird schema snapshot: tables |
@@ -413,6 +415,40 @@ Single-row-per-key metadata table.
 | `value` | TEXT | Its value (schema_version is stored as a stringified integer) |
 
 This is the table to check first (see section 1).
+
+---
+
+### 2.15 `symbol_facts`
+
+Per-routine **analysis facts** (schema v18+), one row per documentable routine
+symbol, keyed by `symbol_id`. Materialized at INDEX time by the facts analyzer
+for routine kinds that have a body (`function` / `procedure` / `method` /
+`constructor` / `destructor`); other symbol kinds get no row. Each fact is a
+pure function of the routine's own identity + body (+ its paired `.dfm` for
+`dfm_event`), so it is deterministic and reproducible. Rows are invalidated
+automatically by `ON DELETE CASCADE` -- a routine's fact row dies when its
+`symbols` row is replaced on the next per-file reindex. These facts back the
+managed `<!-- drag-lint:auto -->` block emitted by `document` and the `hover`
+popup (a single shared formatter renders both, so they cannot drift).
+
+| Column | Type | Meaning |
+|---|---|---|
+| `symbol_id` | INTEGER PK, FK -> `symbols(id)` ON DELETE CASCADE | The routine this fact row describes. |
+| `reads_fields` | TEXT (nullable) | CSV of the routine's OWN-CLASS instance fields it READS (first-occurrence order, capped at 8 with a trailing ` (+N more)`). NULL when none. Own-class only -- inherited fields are not tracked. |
+| `writes_fields` | TEXT (nullable) | CSV of own-class instance fields it WRITES (assignment LHS + `Inc`/`Dec` targets), same cap/format. NULL when none. `var`/`out`-parameter writes are NOT detected (a field passed to a var param counts as a read). |
+| `returns_owner` | TEXT (nullable) | Conservative returned-object ownership verdict: `new` (constructor result -- caller owns), `borrowed` (returns an own-field/param it does not own), or `self`. Emitted ONLY when every return site agrees unanimously; any mixed/unknown case -> NULL (absence over a wrong fact). NULL for non-object returns. |
+| `cyclomatic` | INTEGER (nullable) | Cyclomatic complexity = 1 + count of decision points (`if` / `while` / `for` / `repeat` / `case` arms / `and` / `or`). Shared with the complexity lint rule. |
+| `body_loc` | INTEGER (nullable) | Implementation body line count (`impl_end_line - impl_start_line`, clamped >= 0). |
+| `dfm_event` | TEXT (nullable) | For a published method wired to a component event in the routine's PAIRED `.dfm`: `'ObjectName.EventProp'` (e.g. `Button1.OnClick`). NULL when not wired / no sibling `.dfm`. |
+| `sql_reads` | TEXT (nullable) | CSV of SQL tables the routine READS (`FROM`/`JOIN`), best-effort from concatenated SQL string literals in the body; capped at 8. Dynamic / sub-query / CTE SQL is skipped (absence over a wrong table). NULL when none. |
+| `sql_writes` | TEXT (nullable) | CSV of SQL tables WRITTEN (`INSERT INTO` / `UPDATE` / `DELETE FROM`), same best-effort/format. NULL when none. |
+| `covered_by` | TEXT (nullable) | **RESERVED / currently unpopulated.** The "Covered by (tests)" fact is computed LAZILY at `document`/`hover` time from the live reverse-call graph (a test->routine edge is non-deterministic to persist per-file at index time), so the current engine leaves this column NULL. Do not rely on it being filled. |
+
+Consumers: this table is purely additive -- pre-v18 tools that do not read it
+are unaffected. A `.sqlite` produced by a pre-v18 engine has NO `symbol_facts`
+table at all (the `>=` version gate + `CREATE TABLE IF NOT EXISTS` mean it
+appears, empty, on the first v18 reindex). Treat a missing table or a NULL
+column as "fact not available", never as a negative assertion.
 
 ---
 

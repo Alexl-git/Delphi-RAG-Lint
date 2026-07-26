@@ -61,13 +61,20 @@ type
   /// (Task 8); the form never re-parses a flat string.</summary>
   TDragLintHoverModel = record
     QualifiedName: string                    ;
+    Kind         : string                    ;   // FB #3: friendly qualifier (function/local var/property/...) shown before the name
+    RawSignature : string                    ;   // enum-value ordinal etc. straight from the CLI (Signature below is the RECONSTRUCTED display line)
     Signature    : string                    ;
     UnitFile     : string                    ;
     DefLine      : Integer                   ;
     Params       : TArray<TDragLintHoverParam>;
     ReturnType   : string                    ;
     Returns      : TArray<string>            ;
+    ReturnLines  : TArray<Integer>           ;   // FB3: parallel to Returns -- abs source line of each (0 = unknown), for click-to-jump
     ReturnsMore  : Integer                   ;
+    { v(hover facts fix): the Phase-2 analysis fact lines (Complexity / Reads /
+      Writes / SQL / Handles / Owns returned / Covered by) from `hover --json`'s
+      new "facts" array. Rendered as a FACTS section by RenderModel. }
+    Facts        : TArray<string>            ;
   end;
 
   /// <summary>Logical syntax roles the hover body colors. Each maps to a real
@@ -94,6 +101,10 @@ type
       FModelDefLine: Integer               ;
       FSynOpts     : INTACodeEditorOptions ;
       FStructured  : Boolean               ;
+      { FB3: parallel to the model's Returns/ReturnLines, kept so a click on a
+        "Result := <expr>" body line can jump to that return's source line. }
+      FReturnExprs : TArray<string>        ;
+      FReturnLines : TArray<Integer>       ;
       { v0.42: dwell popups dismiss tightly -- the moment the cursor leaves a
       small box around the ORIGINAL dwell point (where the user was pointing),
       not the whole 900 px popup rect. This stops the popup lingering over the
@@ -111,6 +122,9 @@ type
       procedure HandleMemoClick(Sender: TObject);
       procedure HandleMemoMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
       function LineIsClickable(const ALineText: string): Boolean;
+      { FB3: if ALineText is a rendered "Result := <expr>" return line whose expr
+        matches a mined return, its absolute source line; 0 otherwise. }
+      function ReturnLineForBodyLine(const ALineText: string): Integer;
       { v0.94: colored + selectable Help-Insight body (TRichEdit). }
       procedure Emit(const AText: string; AColor: TColor; ABold: Boolean);
       function  GetSyntaxColor(ARole: TDLSynRole): TColor;
@@ -168,6 +182,7 @@ implementation
 uses
   System.StrUtils           // IsWordChar-style checks in the header tokenizer
   , System.Math             // Max
+  , Vcl.Themes              // StyleServices / TStyleManager (themed bg for opted-out controls)
   , DRagLint.Hover.Contrast // EnsureReadable (T1)
   , DragLint.Plugin.Fonts   // GetIdeEditorFont (T5)
   ;
@@ -287,6 +302,35 @@ begin
   end;
 end;
 
+function ThemedColor(ASystemColor: TColor): TColor;
+{ v(theme fix v2): return the IDE's ACTIVE theme mapping of a system color (e.g.
+  clWindow / clWindowText). FBody (TRichEdit) and FCallers (TListView) set
+  StyleElements:=[] so our per-token syntax colors survive style-hooking -- but
+  that also opts them out of the themed BACKGROUND, so they would paint on a
+  hardcoded clWindow (white) even under a DARK IDE theme (ApplyTheme themes the
+  form frame, not these opted-out children, and Self.Color stays clWindow).
+  IMPORTANT: the RAD Studio IDE themes itself through IOTAIDEThemingServices, NOT
+  the process-global VCL TStyleManager -- so `TStyleManager.IsCustomStyleActive`
+  reads False and the global `StyleServices` is the light default even when the
+  IDE is dark (this is why the first attempt did nothing). Pull the IDE's OWN
+  active StyleServices (GetIDEStyleServices) and map through THAT. Falls back to
+  the raw system color when theming is disabled or the service is unavailable. }
+var
+  Theming: IOTAIDEThemingServices;
+  SS     : TCustomStyleServices  ;
+begin
+  Result:= ASystemColor;
+  try
+    if Supports(BorlandIDEServices, IOTAIDEThemingServices, Theming) and Theming.IDEThemingEnabled then
+    begin
+      SS:= Theming.StyleServices; { the IDE's active StyleServices, not the global one }
+      if (SS <> nil) and SS.Enabled then Result:= SS.GetSystemColor(ASystemColor);
+    end;
+  except
+    { defensive: never let theming break the popup }
+  end;
+end;
+
 { ---- TDragLintHoverForm ---- }
 
 constructor TDragLintHoverForm.Create(AOwner: TComponent);
@@ -398,10 +442,19 @@ begin
 
   { v0.46: follow the IDE light/dark theme (guarded; no-op on older IDEs). }
   ApplyIdeTheme(Self);
-  { v0.94: after theming settled the form Color, sync the body background to it
-    so the contrast guard (Emit -> EnsureReadable) computes against the color
-    the text actually sits on. }
-  FBody.Color:= Self.Color;
+  { v(theme fix): FBody + FCallers opt OUT of VCL style-hooking (StyleElements:=[])
+    so our per-token syntax colors survive -- but that also means they never pick
+    up the themed BACKGROUND and would paint on hardcoded clWindow (white) even
+    under a DARK IDE theme (ApplyTheme themes the form frame; Self.Color stays
+    clWindow). Pull the ACTIVE style's real window bg + text and apply them by hand
+    to the form and the two opted-out children, so the popup matches the IDE theme.
+    The contrast guard (Emit -> EnsureReadable) then adapts every syntax color to
+    this background; the callers grid (no per-run colors) needs its Font.Color set
+    explicitly so its text stays readable on a dark surface. }
+  Color              := ThemedColor(clWindow);
+  FBody.Color        := Color;
+  FCallers.Color     := Color;
+  FCallers.Font.Color:= ThemedColor(clWindowText);
 end; // constructor
 
 procedure TDragLintHoverForm.DoClose(var Action: TCloseAction);
@@ -612,6 +665,25 @@ begin
   else Result:= Copy(Result, 1, Pos('.', Result) - 1);
 end; // function
 
+function TDragLintHoverForm.ReturnLineForBodyLine(const ALineText: string): Integer;
+{ FB3: a rendered return line reads "...Result := <expr>" (inline for a single
+  mined value, or one per line for several). Extract <expr> after the LAST
+  'Result := ' and match it against the mined returns (deduped -> unique), giving
+  that value's absolute source line. 0 when the line is not a return. }
+var
+  P, I: Integer;
+  Expr: string ;
+begin
+  Result:= 0;
+  P:= Pos('Result := ', ALineText);
+  if P <= 0 then Exit;
+  Expr:= Trim(Copy(ALineText, P + Length('Result := '), MaxInt));
+  if Expr = '' then Exit;
+  for I:= 0 to High(FReturnExprs) do
+    if (FReturnExprs[I] = Expr) and (I <= High(FReturnLines)) and (FReturnLines[I] > 0) then
+      Exit(FReturnLines[I]);
+end;
+
 procedure TDragLintHoverForm.HandleMemoClick(Sender: TObject);
 { v0.40.8g: single-click navigation. We don't navigate on every click in the
   memo (the user has to be able to scroll / position the caret to read) -- we
@@ -645,10 +717,32 @@ begin
     The Parameters/Returns lines below are plain, selectable text (no nav). }
   if FStructured then
   begin
-    if (LineIdx = 0) and (FModelQName <> '') and Assigned(GOnNavigateToQname) then
+    { Pick the navigation target: the header line (0) -> the symbol's definition;
+      a "Result := <expr>" body line -> that return's source line (FB3). }
+    var NavQName: string := FModelQName;
+    var NavLine : Integer:= -1;   // -1 = this line is not a navigation target
+    if LineIdx = 0 then NavLine:= FModelDefLine
+    else
     begin
-      Close;
-      GOnNavigateToQname(FModelQName, FModelDefLine);
+      var RetLine: Integer:= ReturnLineForBodyLine(LineText);
+      if RetLine > 0 then NavLine:= RetLine;
+    end;
+    if (NavQName <> '') and (NavLine >= 0) and Assigned(GOnNavigateToQname) then
+    begin
+      { CRITICAL (AV fix): do NOT Close + navigate INSIDE this mouse-up handler.
+        Navigation opens an IDE editor and re-enters the message loop while the VCL
+        and DevExpress GLOBAL message hooks (cxContainerGetMessageHook) are still
+        dispatching this WM_LBUTTONUP on the popup's controls -- closing frees those
+        controls mid-dispatch, and the hook then calls a message handler on freed
+        memory (access violation in System.GetDynaMethod). Queue the close+navigate
+        to run AFTER this mouse message has fully unwound. NavQName/NavLine are
+        captured by value so the deferred block does not touch the form's fields. }
+      TThread.ForceQueue(nil,
+        procedure
+        begin
+          Close;
+          if Assigned(GOnNavigateToQname) then GOnNavigateToQname(NavQName, NavLine);
+        end);
     end;
     Exit;
   end;
@@ -666,8 +760,11 @@ begin
       AddUnit:= Copy(Tail, 1, Q - 1);
       if AddUnit <> '' then
       begin
-        Close;
-        GOnAddUnit(AddUnit);
+        { AV fix (see the structured branch): defer close+action out of the mouse
+          handler so the popup is not freed mid message-dispatch. }
+        var LUnit: string:= AddUnit;
+        TThread.ForceQueue(nil,
+          procedure begin Close; if Assigned(GOnAddUnit) then GOnAddUnit(LUnit); end);
         Exit;
       end;
     end;
@@ -689,12 +786,21 @@ begin
 
   UnitName:= UnitNameFromQname(Qname);
   if UnitName = '' then Exit;
-  Close;
-  { Prefer the Editor hook: it resolves the unit to its ABSOLUTE source path via
-    the open project and forces the code view. The fallback OpenSourceAt is now
-    guarded against the bare path (it no-ops rather than erroring). }
-  if Assigned(GOnNavigateToQname) then GOnNavigateToQname(Qname, LineN)
-  else OpenSourceAt(UnitName + '.pas', LineN);
+  { AV fix (see the structured branch): defer close+navigate out of the mouse-up
+    handler -- the Editor hook opens a code view and re-enters the message loop,
+    and closing frees controls the VCL/DevExpress hooks are still dispatching on.
+    Prefer the Editor hook (resolves the unit to its ABSOLUTE path + forces the
+    code view); OpenSourceAt is the guarded fallback. }
+  var LQname   : string := Qname;
+  var LUnitName: string := UnitName;
+  var LLineN   : Integer:= LineN;
+  TThread.ForceQueue(nil,
+    procedure
+    begin
+      Close;
+      if Assigned(GOnNavigateToQname) then GOnNavigateToQname(LQname, LLineN)
+      else OpenSourceAt(LUnitName + '.pas', LLineN);
+    end);
 end; // procedure
 
 { Is a memo line clickable? -- an "add unit X" lightbulb line, or a definition
@@ -706,6 +812,9 @@ var
 begin
   Result:= False;
   if Pos('add unit ', LowerCase(ALineText)) > 0 then Exit(True);
+  { FB3: a structured popup's "Result := <expr>" return line is clickable (jumps
+    to that value's source line) -> show the hand cursor over it. }
+  if FStructured and (ReturnLineForBodyLine(ALineText) > 0) then Exit(True);
   Body:= ALineText.TrimLeft;
   if not Body.StartsWith('- ') then Exit;
   Body:= Copy(Body, 3, MaxInt);
@@ -906,6 +1015,8 @@ begin
   FStructured   := True;
   FModelQName   := AModel.QualifiedName;
   FModelDefLine := AModel.DefLine;
+  FReturnExprs  := AModel.Returns;      { FB3: remember for click-to-jump on a "Result := <expr>" line }
+  FReturnLines  := AModel.ReturnLines;
 
   { Resolve the IDE editor-color interface once for this render (guarded, like
     Task 5's font read). On any failure FSynOpts stays nil and GetSyntaxColor
@@ -983,6 +1094,22 @@ begin
           Emit(sLineBreak + '  ', GetSyntaxColor(srMuted), False);
           Emit('... and ' + IntToStr(AModel.ReturnsMore) + ' more', GetSyntaxColor(srMuted), False);
         end;
+      end;
+    end;
+
+    { (3.5) DETAILS -- the Phase-2 analysis facts (Complexity / Reads / Writes /
+      SQL / Handles / Owns returned / Covered by), one line each in the muted
+      color (prose facts, not code). These arrive in AModel.Facts from `hover
+      --json`'s new "facts" array; before this fix the structured popup omitted
+      them entirely. Omitted when the symbol has no facts. }
+    if Length(AModel.Facts) > 0 then
+    begin
+      Emit(sLineBreak + sLineBreak, GetSyntaxColor(srMuted), False);
+      Emit('DETAILS', GetSyntaxColor(srSection), True);
+      for var FI: Integer:= 0 to High(AModel.Facts) do
+      begin
+        Emit(sLineBreak + '  ', GetSyntaxColor(srMuted), False);
+        Emit(AModel.Facts[FI], GetSyntaxColor(srMuted), False);
       end;
     end;
 
@@ -1219,7 +1346,7 @@ const
     running off it. We size to the ACTUAL content (below) so no scrollbar is
     needed when there is room; only when content genuinely exceeds the screen
     does the scrollbar appear. }
-  MAX_H = 1000;
+  MAX_H = 1200;
   PAD   = 8;
 var
   I       : Integer  ;
@@ -1282,19 +1409,52 @@ begin
     returns), callers grid same rule as the string path. Structured hovers keep
     the full width so long signatures + the callers grid fit.
     v0.94 Task 7: callers height uses the DISPLAYED (capped) count + trailer. }
-  BodyLines:= FBody.Lines.Count;
-  if BodyLines < 3 then BodyLines:= 3;
-  { v0.94.1: size the body to its rendered lines so no scrollbar is needed when
-    the screen has room. PlaceAndShow clamps the whole popup to the monitor work
-    area afterward, so an over-tall value just means "as tall as the screen
-    allows"; only genuinely huge content (capped at MAX_H) scrolls.
-    The last body line is the "CALLED FROM (N)" label; the alBottom callers grid
-    docks against the body's bottom edge, so we trim ~1 line-height off the body
-    height to pull the grid up snug under that label (no dead gap) while the label
-    line itself is still fully drawn. }
-  BodyH:= BodyLines * 18 - 24;
-  if BodyH < 64  then BodyH:= 64;
-  if BodyH > 920 then BodyH:= 920;
+  { v(hover-polish): WIDTH first, from the widest logical MODEL line (not
+    FBody.Lines, which is already wrapped at the current narrow width). The
+    signature header (+ its "   unit.pas (line)" locator) is almost always the
+    widest line; also consider the widest param line. ~7.6 px/char + padding. }
+  var LongestChars: Integer:= Length(AModel.Signature) + Length(AModel.UnitFile) + 12;
+  for I:= 0 to High(AModel.Params) do
+    LongestChars:= Max(LongestChars, Length(AModel.Params[I].Modifier) + Length(AModel.Params[I].Name) + Length(AModel.Params[I].TypeText) + 8);
+  W:= 70 + Round(LongestChars * 7.6);
+  if W < 480   then W:= 480;
+  { #4: when the callers grid is shown, floor the width to fit ALL of its columns
+    (+ a possible vertical scrollbar + borders) so there is NO horizontal
+    scrollbar. Sum the actual column widths rather than hard-coding them. }
+  var ColsW: Integer:= 0;
+  for I:= 0 to FCallers.Columns.Count - 1 do ColsW:= ColsW + FCallers.Columns[I].Width;
+  if (Length(ACallers) > 0) then
+  begin
+    var NeedW: Integer:= ColsW + GetSystemMetrics(SM_CXVSCROLL) + 8;
+    if W < NeedW then W:= NeedW;
+  end;
+  if W > MAX_W then W:= MAX_W;
+
+  { v(hover-polish): CONTENT-FIT sizing. Re-flow the body at the FINAL width so its
+    wrapped line count is accurate (alClient FBody follows ClientWidth), then size
+    to the EXACT content height. We deliberately do NOT clamp H to a fixed maximum:
+    PlaceAndShow grows the popup into the available screen space and only turns on
+    the scrollbar when the content exceeds the whole work area. }
+  ClientWidth:= W;   // lay FBody out at the final width -> re-wrap before measuring
+
+  { #1: measure the true line height from the font, and the WRAPPED line count via
+    EM_GETLINECOUNT, so the body is exactly as tall as its text -- no dead empty
+    space between the last body line ("CALLED FROM (N)") and the callers grid. }
+  var LineH: Integer;
+  { Fully qualified: Winapi.Windows (used later for EM_* / GetSystemMetrics) also
+    declares a TBitmap RECORD that would shadow the VCL bitmap class here. }
+  var Bmp: Vcl.Graphics.TBitmap:= Vcl.Graphics.TBitmap.Create;
+  try
+    Bmp.Canvas.Font.Assign(FBody.Font);
+    LineH:= Bmp.Canvas.TextHeight('Wg');
+  finally
+    Bmp.Free;
+  end;
+  if LineH < 12 then LineH:= Abs(FBody.Font.Height) + 3;
+  var VisualLines: Integer:= FBody.Perform(EM_GETLINECOUNT, 0, 0);
+  if VisualLines < 1 then VisualLines:= FBody.Lines.Count;
+  if VisualLines < 3 then VisualLines:= 3;
+  BodyH:= VisualLines * LineH + 12;   // a few px of bottom margin so the last line ("Used in/Called from") never triggers the vertical scrollbar
 
   if Length(ACallers) = 0 then
   begin
@@ -1304,33 +1464,23 @@ begin
   else
   begin
     FCallers.Visible:= True;
-    { v0.94.1: no header row anymore (ShowColumnHeaders=False) -- drop the ~28px
-      header allowance to a small pad so the grid is exactly its rows tall and
-      docks tight under the "CALLED FROM (N)" body label. }
-    CallersH:= 6 + (ShownCount + IfThen(HasTrailer, 1, 0)) * 18;
-    if CallersH < 24  then CallersH:= 24;
-    if CallersH > 200 then CallersH:= 200;
+    { Size the grid to EXACTLY fit its rows (+ a little chrome) so even a single
+      caller is fully painted. }
+    var RowH: Integer:= Abs(FCallers.Font.Height) + 8;
+    if RowH < 18 then RowH:= 18;
+    var Rows: Integer:= ShownCount + IfThen(HasTrailer, 1, 0);
+    if Rows < 1 then Rows:= 1;
+    CallersH:= Rows * RowH + 8;
+    { #2: if a horizontal scrollbar will still appear (columns wider than the
+      client area -- e.g. when MAX_W capped the width below ColsW), reserve its
+      height so it does not cover the last caller row. }
+    if ColsW > (W - GetSystemMetrics(SM_CXVSCROLL) - 6) then
+      CallersH:= CallersH + GetSystemMetrics(SM_CYHSCROLL);
+    if CallersH > 360 then CallersH:= 360;
     FCallers.Height:= CallersH;
   end;
 
-  { v0.94.1: width sized to the widest rendered line so long signatures don't
-    wrap, with a roomier floor + a higher ceiling. PlaceAndShow clamps to the
-    monitor, so an over-wide value just fills to the screen edge. ~7.3 px/char
-    at the IDE editor font + padding. }
-  { v0.94.1: measure the LONGEST logical line from the MODEL, not FBody.Lines --
-    the rich edit has already word-wrapped its Lines[] at the current (narrow)
-    width, so measuring those undercounts and the signature stays wrapped. The
-    signature header (+ its "   unit.pas (line)" locator) is almost always the
-    widest line; also consider the widest param line. }
-  var LongestChars: Integer:= Length(AModel.Signature) + Length(AModel.UnitFile) + 12;
-  for I:= 0 to High(AModel.Params) do
-    LongestChars:= Max(LongestChars, Length(AModel.Params[I].Modifier) + Length(AModel.Params[I].Name) + Length(AModel.Params[I].TypeText) + 8);
-  W:= 70 + Round(LongestChars * 7.6);
-  if W < 480   then W:= 480;
-  if W > MAX_W then W:= MAX_W;
-
-  H:= BodyH + CallersH + PAD * 2;
-  if H > MAX_H then H:= MAX_H;
+  H:= BodyH + CallersH + 2;   // exact stack: body + grid + minimal border (removes the ~2-line gap)
   if H < 120 then H:= 120;
 
   PlaceAndShow(X, Y, W, H);

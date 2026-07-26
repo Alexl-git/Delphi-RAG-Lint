@@ -637,7 +637,13 @@ begin
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
   EnumIdx:= AState.Emit(skEnum, TypeName, QName, AParentSymbolIdx, ADeclTypeNode);
-  // Emit each enum value as a child symbol
+  // Emit each enum value as a child symbol, carrying its ORDINAL VALUE in the
+  // signature (like the IDE's "= 128"). The ordinal runs by declaration position
+  // (0-based) and is RESET by an explicit `name = N` initializer, matching Pascal
+  // enum semantics. A non-integer initializer (rare: `= SomeConst`) leaves the
+  // running counter (best-effort; absence-over-wrong is not possible for a bare
+  // number, so we keep the positional value).
+  var EnumOrd: Integer:= 0;
   for i:= 0 to EnumNode.NamedChildCount - 1 do
   begin
     ValNode:= EnumNode.NamedChild(i);
@@ -647,7 +653,18 @@ begin
       if not ValNameNode.IsNull then
       begin
         ValName:= NodeText(ValNameNode, AState.Source);
-        if ValName <> '' then AState.Emit(skEnumValue, ValName, QName + '.' + ValName, EnumIdx, ValNode);
+        if ValName <> '' then
+        begin
+          var ValText: string:= NodeText(ValNode, AState.Source); // 'ptObject' or 'foo = 5'
+          var EqP: Integer:= Pos('=', ValText);
+          if EqP > 0 then
+          begin
+            var ExplicitVal: Integer;
+            if TryStrToInt(Trim(Copy(ValText, EqP + 1, MaxInt)), ExplicitVal) then EnumOrd:= ExplicitVal;
+          end;
+          AState.Emit(skEnumValue, ValName, QName + '.' + ValName, EnumIdx, ValNode, IntToStr(EnumOrd));
+          Inc(EnumOrd);
+        end;
       end;
     end;
   end;

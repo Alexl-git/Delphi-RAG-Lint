@@ -55,6 +55,8 @@ Check 'db created' (Test-Path $db)
 $boolJson = (& $Exe hover --qname RetFixture.IsPos --db $db --format json 2>&1) -join "`n"
 Check 'bool: mined Result := S2.Length > 0' ($boolJson -match '"returns":\["S2\.Length > 0"\]') $boolJson
 Check 'bool: return_type boolean' ($boolJson -match '(?i)"return_type":"boolean"') $boolJson
+# FB3: the mined return carries its absolute source line (Result:= is on file line 12).
+Check 'bool: returns_lines carries the Result:= source line (12)' ($boolJson -match '"returns_lines":\[12\]') $boolJson
 
 $intJson = (& $Exe hover --qname RetFixture.Authy --db $db --format json 2>&1) -join "`n"
 Check 'int: ERROR_OK present' ($intJson -match 'ERROR_OK') $intJson
@@ -63,6 +65,8 @@ Check 'int: ERROR_BAD present' ($intJson -match 'ERROR_BAD') $intJson
 # dedup: ERROR_OK appears once in the returns array
 $okCount = ([regex]::Matches($intJson, 'ERROR_OK')).Count
 Check 'int: ERROR_OK dedup (1 occurrence)' ($okCount -eq 1) "count=$okCount"
+# FB3: the three distinct returns are mined at their FIRST-seen lines 16/17/18.
+Check 'int: returns_lines are the first-seen source lines [16,17,18]' ($intJson -match '"returns_lines":\[16,17,18\]') $intJson
 
 $procJson = (& $Exe hover --qname RetFixture.DoStuff --db $db --format json 2>&1) -join "`n"
 Check 'proc: empty returns' ($procJson -match '"returns":\[\]') $procJson

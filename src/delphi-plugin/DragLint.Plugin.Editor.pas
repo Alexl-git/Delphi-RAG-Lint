@@ -515,41 +515,88 @@ begin
   end;
 end;
 
-function FetchHoverCallers(const AExe, ASymName: string; const ADbList: TArray<string>): TArray<TDragLintCallerInfo>;
+function FetchHoverCallers(const AExe, AQName: string; const ADbList: TArray<string>): TArray<TDragLintCallerInfo>;
+// v(hover-callers fix v2): show the real USE SITES of the SPECIFIC symbol, fast.
+// The old `find-callers --name <bare>` had two problems: (1) it name-matched
+// EVERY same-named routine (every `Create`) -> 200+ callers of UNRELATED symbols;
+// (2) it scanned the huge library index by name -> ~20 s freeze on the main
+// thread. The resolved call_edges (reverse-calltree) are too lossy here -- they
+// miss qualified-constructor call sites and mis-resolve generic
+// `TFoo<T>.Create` -- so we stay on the NAME index but:
+//   * DROP the library DBs from the search (callers of project code live in the
+//     project; this is what makes it fast -- ~0.5 s vs ~20 s);
+//   * keep only rows whose source line is qualified by the target's OWN class
+//     ("TGroup.Create"), which drops the other-class Creates AND the mis-resolved
+//     TObjectList<TGroup>.Create;
+//   * de-duplicate by (file,line) -- a call site emits 2 refs (call + member).
+// Falls back to the unfiltered project rows when the class-qualified filter finds
+// nothing (a free function, or instance-variable calls), so it never hides all.
 var
-  CmdLine   : string             ;
-  Output    : string             ;
-  DbArgs    : string             ;
-  ExitCode  : Integer            ;
-  i         : Integer            ;
-  JV        : TJSONValue         ;
-  JArr      : TJSONArray         ;
-  JItem     : TJSONObject        ;
-  Info      : TDragLintCallerInfo;
-  Ctx       : string             ;
-  CtxLines  : TArray<string>     ;
-  L         : string             ;
-  LineNumStr: string             ;
-  Trimmed   : string             ;
-  CapAt     : Integer            ;
+  CmdLine  : string             ;
+  Output   : string             ;
+  DbArgs   : string             ;
+  ExitCode : Integer            ;
+  i        : Integer            ;
+  JV       : TJSONValue         ;
+  JArr     : TJSONArray         ;
+  JItem    : TJSONObject        ;
+  Info     : TDragLintCallerInfo;
+  Ctx      : string             ;
+  CtxLines : TArray<string>     ;
+  L        : string             ;
+  LineNumStr: string            ;
+  Trimmed  : string             ;
+  BareName : string             ;
+  ClassQual: string             ;
+  Head     : string             ;
+  DotP     : Integer            ;
+  ProjDbs  : TArray<string>     ;
+  Raw      : TArray<TDragLintCallerInfo>;
+  Filtered : TArray<TDragLintCallerInfo>;
+  function AlreadyHave(const AArr: TArray<TDragLintCallerInfo>; const AItem: TDragLintCallerInfo): Boolean;
+  var k: Integer;
+  begin
+    Result:= False;
+    for k:= 0 to High(AArr) do
+      if (AArr[k].Line = AItem.Line) and SameText(AArr[k].FilePath, AItem.FilePath) then Exit(True);
+  end;
 begin
   SetLength(Result, 0);
   if (AExe = '') or not FileExists(AExe) then Exit;
-  if Trim(ASymName) = '' then Exit;
+  if Trim(AQName) = '' then Exit;
+
+  // bare last segment for --name; "Class.Method" (last two segments) for the
+  // qualified-context filter.
+  BareName:= AQName;
+  DotP:= LastDelimiter('.', BareName);
+  if DotP > 0 then BareName:= Copy(BareName, DotP + 1, MaxInt);
+  ClassQual:= AQName;
+  if DotP > 1 then
+  begin
+    Head:= Copy(AQName, 1, DotP - 1);
+    var Dot2: Integer:= LastDelimiter('.', Head);
+    if Dot2 > 0 then ClassQual:= Copy(AQName, Dot2 + 1, MaxInt);
+  end;
+
+  // project-only DB list (exclude library-*): the library scan is the freeze,
+  // and project symbols are not called from the library. Keep the library DBs
+  // only if there is nothing else (a pure-library hover).
+  SetLength(ProjDbs, 0);
+  for i:= 0 to High(ADbList) do
+    if Pos('library-', LowerCase(ExtractFileName(ADbList[i]))) = 0 then
+    begin SetLength(ProjDbs, Length(ProjDbs) + 1); ProjDbs[High(ProjDbs)]:= ADbList[i]; end;
+  if Length(ProjDbs) = 0 then ProjDbs:= ADbList;
 
   DbArgs:= '';
-  for i:= 0 to High(ADbList) do DbArgs:= DbArgs + Format(' --db "%s"', [ADbList[i]]);
+  for i:= 0 to High(ProjDbs) do DbArgs:= DbArgs + Format(' --db "%s"', [ProjDbs[i]]);
 
-  CmdLine:= Format('"%s" query find-callers --name "%s"%s --json --context 1', [AExe, ASymName, DbArgs]);
+  CmdLine:= Format('"%s" query find-callers --name "%s"%s --json --context 1', [AExe, BareName, DbArgs]);
 
-  ExitCode:= RunAndCaptureStdout(CmdLine, Output, 5000);
+  ExitCode:= RunAndCaptureStdout(CmdLine, Output, 8000);
   if (ExitCode <> 0) or (Trim(Output) = '') then Exit;
 
-  // v0.94.1 BUGFIX (same as FetchHoverModel): RunAndCaptureStdout merges the
-  // CLI's stderr banners ("(loaded defaults...)", "  FTS5 probe: ...") into
-  // Output AFTER the JSON array. TJSONObject.ParseJSONValue is strict, so that
-  // trailing text made it return nil -> 0 callers -> the Called-from grid was
-  // always empty on the dwell path. Slice the balanced [...] array first.
+  // Slice the balanced [...] array first (RunAndCaptureStdout appends stderr
+  // banners after the JSON, which would break the strict parser).
   Output:= SliceJsonBracket(Output, '[', ']');
   if Output = '' then Exit;
 
@@ -567,16 +614,13 @@ begin
 
   try
     JArr:= JV as TJSONArray;
-    { Cap to 200 rows so the popup can never explode on hot symbols. }
-    CapAt:= JArr.Count;
-    if CapAt > 200 then CapAt:= 200;
-    SetLength(Result, CapAt);
-    for i:= 0 to CapAt - 1 do
+    SetLength(Raw, 0);
+    for i:= 0 to JArr.Count - 1 do
     begin
       if not (JArr.Items[i] is TJSONObject) then Continue;
       JItem:= JArr.Items[i] as TJSONObject;
-      Info.FilePath:= JItem.GetValue<string>('file_path', '');
-      Info.Line:= JItem.GetValue<Integer>('start_line', 0);
+      Info.FilePath:= JItem.GetValue<string> ('file_path' , '');
+      Info.Line    := JItem.GetValue<Integer>('start_line', 0 );
       Ctx:= JItem.GetValue<string>('context', '');
       Info.CodeText:= '';
       LineNumStr:= IntToStr(Info.Line) + ':';
@@ -590,11 +634,28 @@ begin
           Break;
         end;
       end;
-      Result[i]:= Info;
+      if Info.FilePath = '' then Continue;
+      SetLength(Raw, Length(Raw) + 1);
+      Raw[High(Raw)]:= Info;
     end; // for
   finally
     JV.Free;
   end; // try
+
+  // Keep only rows whose source line is qualified by the target's own class
+  // (e.g. "TGroup.Create"), de-duplicated by (file,line). Fall back to the
+  // unfiltered rows if that finds nothing (free function / instance-var calls).
+  SetLength(Filtered, 0);
+  for i:= 0 to High(Raw) do
+    if (Pos(ClassQual, Raw[i].CodeText) > 0) and not AlreadyHave(Filtered, Raw[i]) then
+    begin SetLength(Filtered, Length(Filtered) + 1); Filtered[High(Filtered)]:= Raw[i]; end;
+  if Length(Filtered) = 0 then
+    for i:= 0 to High(Raw) do
+      if not AlreadyHave(Filtered, Raw[i]) then
+      begin SetLength(Filtered, Length(Filtered) + 1); Filtered[High(Filtered)]:= Raw[i]; end;
+
+  if Length(Filtered) > 200 then SetLength(Filtered, 200);
+  Result:= Filtered;
 end; // function
 
 function ExtractHoverHeader(const AMarkdown: string): string;
@@ -801,6 +862,10 @@ var
 begin
   SB:= TStringBuilder.Create;
   try
+    { FB #3: lead with the friendly kind qualifier (function/local var/property/
+      ...) so the header reads e.g. "function Unit.Foo(...)". EmitSignatureHeader
+      colors the keyword automatically. Omitted when the CLI supplied no kind. }
+    if AModel.Kind <> '' then SB.Append(AModel.Kind).Append(' ');
     SB.Append(AModel.QualifiedName);
     if Length(AModel.Params) > 0 then
     begin
@@ -816,6 +881,9 @@ begin
       SB.Append(')');
     end;
     if AModel.ReturnType <> '' then SB.Append(': ').Append(AModel.ReturnType);
+    { v(enum-value): show the ordinal like the IDE ("... ptObject = 128"). The
+      CLI puts the value in the raw signature for enum-value symbols. }
+    if (AModel.Kind = 'enum value') and (AModel.RawSignature <> '') then SB.Append(' = ').Append(AModel.RawSignature);
     Result:= SB.ToString;
   finally
     SB.Free;
@@ -850,6 +918,7 @@ var
   JObj    : TJSONObject      ;
   JParams : TJSONArray       ;
   JReturns: TJSONArray       ;
+  JFacts  : TJSONArray       ;
   PItem   : TJSONObject      ;
   Param   : TDragLintHoverParam;
   RetStr  : string           ;
@@ -892,6 +961,8 @@ begin
   try
     JObj:= JV as TJSONObject;
     AModel.QualifiedName:= JObj.GetValue<string> ('qname'      , '');
+    AModel.Kind         := JObj.GetValue<string> ('kind'       , '');   // FB #3
+    AModel.RawSignature := JObj.GetValue<string> ('signature'  , '');   // enum-value ordinal etc.
     AModel.UnitFile     := JObj.GetValue<string> ('unit'       , '');
     AModel.DefLine      := JObj.GetValue<Integer>('def_line'   , 0 );
     AModel.ReturnType   := JObj.GetValue<string> ('return_type', '');
@@ -932,6 +1003,32 @@ begin
       end;
     end;
 
+    { FB3: returns_lines -- parallel array of absolute source lines (0 = unknown),
+      so the popup can jump to each return value's line. Zipped by index with
+      Returns; entries beyond its length default to 0. }
+    SetLength(AModel.ReturnLines, Length(AModel.Returns));
+    var JReturnLines: TJSONArray;
+    if JObj.TryGetValue<TJSONArray>('returns_lines', JReturnLines) then
+      for i:= 0 to High(AModel.Returns) do
+        if i < JReturnLines.Count then
+          AModel.ReturnLines[i]:= StrToIntDef(JReturnLines.Items[i].Value, 0);
+
+    { v(hover facts fix): the Phase-2 analysis fact lines (Complexity / Reads /
+      Writes / SQL / Handles / Owns returned / Covered by) -- one string each,
+      rendered as a FACTS section by RenderModel. Absent/empty on symbols with no
+      facts (or an older exe whose json omits the key), which just hides the
+      section. }
+    SetLength(AModel.Facts, 0);
+    if JObj.TryGetValue<TJSONArray>('facts', JFacts) then
+    begin
+      SetLength(AModel.Facts, JFacts.Count);
+      for i:= 0 to JFacts.Count - 1 do
+      begin
+        if JFacts.Items[i] is TJSONString then AModel.Facts[i]:= (JFacts.Items[i] as TJSONString).Value
+        else AModel.Facts[i]:= JFacts.Items[i].Value;
+      end;
+    end;
+
     { The json omits a flat signature; RenderModel/EmitSignatureHeader render
       AModel.Signature, so build it from the parts (else the header is blank). }
     AModel.Signature:= BuildHoverSignature(AModel);
@@ -950,8 +1047,6 @@ var
   QName  : string          ;
   ExePath: string          ;
   DbList : TArray<string>  ;
-  BareName: string         ;
-  DotP   : Integer         ;
 begin
   Result:= False;
   AModel:= Default(TDragLintHoverModel);
@@ -967,12 +1062,11 @@ begin
   Result:= FetchHoverModel(ExePath, QName, DbList, AModel);
   if not Result then Exit;
 
-  { Called-from: find-callers wants the BARE routine name (last dotted segment).
-    Guarded inside FetchHoverCallers; empty on any miss so the grid just hides. }
-  BareName:= QName;
-  DotP:= LastDelimiter('.', BareName);
-  if DotP > 0 then BareName:= Copy(BareName, DotP + 1, MaxInt);
-  ACallers:= FetchHoverCallers(ExePath, BareName, DbList);
+  { Called-from: resolved callers of THIS specific symbol, by its FULL qualified
+    name (not the bare last segment -- that matched every same-named routine and
+    scanned the library index by name). Guarded inside FetchHoverCallers; empty
+    on any miss so the grid just hides. }
+  ACallers:= FetchHoverCallers(ExePath, QName, DbList);
 end;
 
 procedure InvokeHover(Sender: TObject);
@@ -4359,7 +4453,21 @@ begin
   if (Proj = '') or (Db = '') then begin ShowMessage('drag-lint: no project/index found.'); Exit; end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
   ProjDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
-  Cmd    := Format('"%s" index "%s" --db "%s"', [DLExe64, ProjDir, Db]);
+  { v(dep-coverage): reindex BOTH (a) the project FOLDER -- so ALL local files,
+    including loose Demo/Test units that are NOT part of the compile closure, keep
+    being indexed exactly as before -- AND (b) the .dproj COMPILE CLOSURE, so
+    search-path dependencies in other folders (DelphiAST, Spring4D, ...) also
+    resolve on hover/refs. Both passes are incremental (mtime/sha skip) + additive,
+    so a file is parsed at most once and nothing already indexed is dropped. A temp
+    .bat sequences them; '|| exit /b 1' stops on the first failure. }
+  var Plat: string:= GetActiveProjectPlatform;
+  var Bat: string:=
+    '@echo off'#13#10 +
+    Format('"%s" index "%s" --db "%s" --platform %s || exit /b 1'#13#10, [DLExe64, ProjDir, Db, Plat]) +
+    Format('"%s" index --project "%s" --db "%s" --platform %s'#13#10, [DLExe64, Proj, Db, Plat]);
+  var BatPath: string:= TPath.Combine(TPath.GetTempPath, 'drag-lint-reindex.bat');
+  try TFile.WriteAllText(BatPath, Bat, TEncoding.ANSI); except end;
+  Cmd    := Format('cmd.exe /c "%s"', [BatPath]);
   OutPath:= TPath.Combine(TPath.GetTempPath, 'drag-lint-reindex.txt');
   DLT('menu', 'enqueue(reindex+lsp-restart): ' + Cmd);
   { v0.65.1: run through the R2 job queue so a reindex never collides with a
@@ -4374,7 +4482,7 @@ begin
   RJob.Title      := 'Reindex ' + ChangeFileExt(ExtractFileName(Proj), '');
   RJob.CoalesceKey:= 'reindex:' + LowerCase(Db);
   RJob.CmdLine    := Cmd;
-  RJob.TimeoutMs  := 180000;
+  RJob.TimeoutMs  := 600000;   { closure pass can be large on the first run (deps) }
   RJob.OnPreRun   :=
     procedure
     begin

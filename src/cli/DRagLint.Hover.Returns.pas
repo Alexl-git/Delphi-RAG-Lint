@@ -16,6 +16,22 @@ interface
 ///   passes only this routine's span). Not authoritative -- a display aid.</remarks>
 function MineReturnExpressions(const ABodyLines: TArray<string>): TArray<string>;
 
+type
+  /// <summary>A mined return expression plus the 0-based index (within
+  /// ABodyLines) of the line it was FIRST seen on -- so the caller can turn it
+  /// into an absolute source line (ImplStartLine + LineOffset) for navigation.</summary>
+  TReturnMined = record
+    Expr      : string ;
+    LineOffset: Integer;
+  end;
+
+/// <summary>Same mining as MineReturnExpressions, but also records where each
+/// distinct RHS was first seen (0-based offset into ABodyLines), so the hover
+/// popup can make each return value clickable and jump to its source line.</summary>
+/// <param name="ABodyLines">The routine's implementation body lines.</param>
+/// <returns>Distinct mined returns with their first-seen line offset.</returns>
+function MineReturnExpressionsEx(const ABodyLines: TArray<string>): TArray<TReturnMined>;
+
 implementation
 
 uses
@@ -98,23 +114,27 @@ begin
   end;
 end;
 
-function MineReturnExpressions(const ABodyLines: TArray<string>): TArray<string>;
+function MineReturnExpressionsEx(const ABodyLines: TArray<string>): TArray<TReturnMined>;
 var
-  Seen: TDictionary<string, Boolean>;
-  Ordered: TList<string>;
-  Line, Rhs: string;
+  Seen   : TDictionary<string, Boolean>;
+  Ordered: TList<TReturnMined>          ;
+  Rhs    : string                       ;
+  M      : TReturnMined                 ;
+  i      : Integer                      ;
 begin
   Seen:= TDictionary<string, Boolean>.Create;
-  Ordered:= TList<string>.Create;
+  Ordered:= TList<TReturnMined>.Create;
   try
-    for Line in ABodyLines do
+    for i:= 0 to High(ABodyLines) do
     begin
-      Rhs:= ResultRhs(Line);
-      if Rhs = '' then Rhs:= ExitRhs(Line);
+      Rhs:= ResultRhs(ABodyLines[i]);
+      if Rhs = '' then Rhs:= ExitRhs(ABodyLines[i]);
       if (Rhs <> '') and not Seen.ContainsKey(Rhs) then
       begin
         Seen.Add(Rhs, True);
-        Ordered.Add(Rhs);
+        M.Expr:= Rhs;
+        M.LineOffset:= i;
+        Ordered.Add(M);
       end;
     end;
     Result:= Ordered.ToArray;
@@ -122,6 +142,18 @@ begin
     Ordered.Free;
     Seen.Free;
   end;
+end;
+
+function MineReturnExpressions(const ABodyLines: TArray<string>): TArray<string>;
+var
+  Mined: TArray<TReturnMined>;
+  i    : Integer             ;
+begin
+  { Thin wrapper over the line-aware miner -- callers that only need the RHS text
+    (e.g. the auto-document facts builder) stay on this signature. }
+  Mined:= MineReturnExpressionsEx(ABodyLines);
+  SetLength(Result, Length(Mined));
+  for i:= 0 to High(Mined) do Result[i]:= Mined[i].Expr;
 end;
 
 end.

@@ -3846,6 +3846,8 @@ begin
   // v0.95: mine Result:= / Exit() RHS from the routine body span (if any).
   var Rhs: TArray<string>;
   SetLength(Rhs, 0);
+  var RhsLines: TArray<Integer>;   // FB3: absolute 1-based source line of each mined return (for click-to-navigate)
+  SetLength(RhsLines, 0);
   if (Syms[0].ImplStartLine > 0) and (Syms[0].ImplEndLine >= Syms[0].ImplStartLine) then
   begin
     var Path: string:= Store.GetFilePath(Syms[0].FileId);
@@ -3864,31 +3866,43 @@ begin
         SetLength(Body, Hi - Lo + 1);
         for var k:= Lo to Hi do Body[k - Lo]:= AllLines[k];
       end;
-      Rhs:= MineReturnExpressions(Body);
+      { FB3: mine WITH first-seen line offsets so the popup can jump to each
+        return's source line. Body[0] is source line ImplStartLine, so the
+        absolute 1-based line is ImplStartLine + offset. Rhs (strings) is still
+        used by the markdown path below. }
+      var Mined: TArray<TReturnMined>:= MineReturnExpressionsEx(Body);
+      SetLength(Rhs, Length(Mined));
+      SetLength(RhsLines, Length(Mined));
+      for var mi:= 0 to High(Mined) do
+      begin
+        Rhs[mi]     := Mined[mi].Expr;
+        RhsLines[mi]:= Syms[0].ImplStartLine + Mined[mi].LineOffset;
+      end;
     end;
   end;
 
   var UnitFile: string:= ExtractFileName(Store.GetFilePath(Syms[0].FileId));
-  var Model: THoverModel:= BuildHoverModel(Syms[0], Doc, UnitFile, Rhs);
+  var Model: THoverModel:= BuildHoverModel(Syms[0], Doc, UnitFile, Rhs, RhsLines);
 
   Fmt:= LowerCase(AArgs.Format);
   if Fmt = '' then Fmt:= 'plain';
 
-  if Fmt      = 'json' then Write(DRagLint.Hover.Renderer.RenderHoverJson(Model))
-  else if Fmt = 'md' then
+  // v(ADP2 T9 + hover facts fix): thread the SAME Phase-2 analysis facts
+  // `document` renders into BOTH the hover markdown AND the structured json --
+  // via TDocFactsBuilder.Build (the identical facts assembly `document` uses)
+  // and TDocRegions.FormatPhase2FactLines (the SHARED formatter every surface
+  // calls), so hover-json / hover-md / the managed doc block can never show
+  // different facts for the same symbol (the doc/hover consistency lock).
+  // Previously ONLY the md path built these, so `hover --format json` -- which
+  // is exactly what the IDE's colored popup consumes -- omitted facts entirely
+  // (the user's "we were supposed to show more info; where is it?"). Computed
+  // only for the two formats that render facts (plain skips the covered-by BFS).
+  if (Fmt = 'json') or (Fmt = 'md') then
   begin
-    // v(ADP2 T9): thread the SAME Phase-2 analysis facts `document` renders
-    // into the hover markdown -- via TDocFactsBuilder.Build (the identical
-    // facts assembly `document` uses) and TDocRegions.FormatPhase2FactLines
-    // (the SHARED formatter both surfaces call), so hover and the managed
-    // doc block can never show different facts for the same symbol (the
-    // doc/hover consistency lock). LoadDocComplexityMin loads the SAME
-    // docs.complexity_min threshold `document` uses, so the 'Complexity:'
-    // gate matches too. AIncludeSeeAlso/AIncludeSince stay False (hover has
-    // no --seealso/--since opt-in), mirroring a default `document` run.
     var Facts: TDocFacts:= TDocFactsBuilder.Build(Store, Syms[0]);
     var FactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(Facts, LoadDocComplexityMin);
-    Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, FactLines));
+    if Fmt = 'json' then Write(DRagLint.Hover.Renderer.RenderHoverJson(Model, FactLines))
+    else Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, FactLines));
   end
   else Write(RenderHoverPlain(Syms[0], Doc));
   Result:= 0;
@@ -6595,17 +6609,18 @@ end; // function
 // two colon-delimited segments as line and column.)
 function DoTypeAt(const AArgs: TArgs): Integer;
 var
-  Pos     : string        ;
-  FilePart: string        ;
-  Parts   : TArray<string>;
-  Line    : Integer       ;
-  Col     : Integer       ;
-  Store   : ISymbolStore  ;
-  TAResult: TTypeAtResult ;
-  Fmt     : string        ;
+  Pos     : string                ;
+  FilePart: string                ;
+  Parts   : TArray<string>        ;
+  Line    : Integer               ;
+  Col     : Integer               ;
+  Stores  : TArray<ISymbolStore>  ;
+  TAResult: TTypeAtResult         ;
+  Fmt     : string                ;
+  Dbs     : TArray<string>        ;
 begin
   Pos:= AArgs.Position;
-  if Pos = '' then begin Writeln('Usage: drag-lint typeat <file>:<line>:<col> [--db <path>] ' + '[--format text|json]'); Exit(2); end;
+  if Pos = '' then begin Writeln('Usage: drag-lint typeat <file>:<line>:<col> [--db <path> ...] ' + '[--format text|json]'); Exit(2); end;
 
   // Parse last two colon segments as line:col.
   // e.g. "C:\foo\bar.pas:17:8" -> Parts=[..,"17","8"]
@@ -6620,12 +6635,23 @@ begin
 
   if (Line <= 0) or (Col <= 0) then begin Writeln('ERROR: line and col must be positive integers'); Exit (2 ); end;
 
-  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
+  // Multi-store: a member may live in a different DB than the hovered file (e.g. a
+  // generic base in a platform-library index). Open EVERY resolved --db so the
+  // resolver can search cross-DB; the store owning the file becomes primary.
+  Dbs:= ResolveConsumerDbs(AArgs);
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+  SetLength(Stores, 0);
+  for var D in Dbs do
+  begin
+    if not TFile.Exists(D) then Continue;
+    var S: ISymbolStore:= TSQLiteSymbolStore.Create(D);
+    S.Migrate;
+    SetLength(Stores, Length(Stores) + 1);
+    Stores[High(Stores)]:= S;
+  end;
+  if Length(Stores) = 0 then begin Writeln('ERROR: no usable database (checked ', Length(Dbs), ' path(s)).'); Exit(2); end;
 
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
-
-  TAResult:= TTypeAtResolver.Resolve(Store, FilePart, Line, Col);
+  TAResult:= TTypeAtResolver.Resolve(Stores, FilePart, Line, Col);
 
   Fmt:= LowerCase(AArgs.Format);
   if Fmt = 'json' then Write(TTypeAtResolver.RenderJson(TAResult))

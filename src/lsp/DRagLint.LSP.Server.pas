@@ -864,7 +864,10 @@ var
   Sym     : TSymbol        ;
   Doc     : TParsedDoc     ;
   Sb      : TStringBuilder ;
+  OwnerFloorType: TSymbol  ;   // when set, the resolver found the LHS type but not the member -> render an honest inherited-member note
+  HaveOwnerFloor: Boolean  ;
 begin
+  HaveOwnerFloor:= False;
   Reply:= TJSONObject.Create;
   try
     Reply.AddPair('jsonrpc', '2.0');
@@ -934,8 +937,9 @@ begin
     // Overload disambiguation: FindSymbolsByExactName returns ALL same-named
     // symbols; pick the one whose declaration line or implementation span (in
     // THIS file) contains the cursor, so hovering the 2nd overload shows the 2nd
-    // -- not always [0]. A hover on a call site (no decl/impl match) keeps [0].
+    // -- not always [0].
     var Chosen: Integer:= 0;
+    var FoundDeclImpl: Boolean:= False;
     if Length(Symbols) > 1 then
     begin
       var CurLine1: Integer:= Line + 1;
@@ -944,10 +948,49 @@ begin
           and ((Symbols[si].StartLine = CurLine1)
                or ((Symbols[si].ImplStartLine > 0) and (CurLine1 >= Symbols[si].ImplStartLine) and (CurLine1 <= Symbols[si].ImplEndLine))) then
         begin
-          Chosen:= si; Break;
+          Chosen:= si; FoundDeclImpl:= True; Break;
         end;
     end;
     var Sel: TSymbol:= Symbols[Chosen];
+
+    { v(hover call-site fix): the loop above only matches when the cursor sits ON a
+      candidate's own DECLARATION or IMPLEMENTATION. At a CALL SITE like
+      `TGroup.Create(...)` nothing matches, so Sel stayed Symbols[0] = an ARBITRARY
+      same-named symbol -- and because FindSymbolsByExactName stops at the FIRST
+      store holding the name, that can be a library hit that merely sorts first
+      alphabetically (e.g. Abccompf.*.Create). Resolve the symbol ACTUALLY
+      referenced at the cursor: anchor to the store that OWNS the hovered file, and
+      follow the qualifier (`TGroup.` -> the Create member of TGroup) via
+      TTypeAtResolver. Only override when it lands on the SAME identifier we hovered
+      (not the owner-type fallback it returns for inherited members), so
+      `TGroup.Create` shows TGroup.Create instead of some unrelated Create. Refresh
+      HitStore/Symbols to the home store so the no-doc branch below stays consistent. }
+    { The multi-store resolver anchors to the store owning the hovered file
+      internally and resolves cross-DB (a generic/inherited member can live in a
+      library index). The guard is only `not FoundDeclImpl` -- even a SINGLE
+      same-named symbol may be the wrong one (an unrelated project `Count` vs the
+      real TList<T>.Count), so let the resolver override whenever the cursor is not
+      on a decl/impl. Override only when it lands on the SAME identifier hovered;
+      on the owner-type floor (member not found on the type or any base) render an
+      honest note instead of the arbitrary Symbols[0]. }
+    if not FoundDeclImpl then
+    begin
+      var TAR:= TTypeAtResolver.Resolve(FStores, Path, Line + 1, Col + 1);
+      if TAR.HasResolved and (TAR.Resolved.Id > 0) and SameText(TAR.Resolved.Name, Ident) then
+      begin
+        Sel:= TAR.Resolved;
+        if (TAR.ResolvedStoreIndex >= 0) and (TAR.ResolvedStoreIndex <= High(FStores)) then
+        begin
+          HitStore:= FStores[TAR.ResolvedStoreIndex];
+          Symbols := HitStore.FindSymbolsByExactName(Ident);
+        end;
+      end
+      else if TAR.HasResolved and TAR.OwnerTypeFallback and (TAR.Resolved.Id > 0) then
+      begin
+        OwnerFloorType:= TAR.Resolved;
+        HaveOwnerFloor:= True;
+      end;
+    end;
 
     // Live-mine the CHOSEN overload's Result:=/Exit() return cases for the popup,
     // so the hover shows the actual returned values (unifies the popup with the
@@ -974,6 +1017,13 @@ begin
       end;
     end;
 
+    // Honest owner-type floor: the resolver found the LHS type but the member is
+    // not on it or any base (incl. cross-DB generic bases). Show "Type.Member --
+    // inherited member; owner type QName" rather than the arbitrary Symbols[0].
+    if HaveOwnerFloor then
+      MdValue:= Format('**%s.%s**'#10#10 + '_inherited member; owner type_ `%s`', [OwnerFloorType.Name, Ident, OwnerFloorType.QualifiedName])
+    else
+    begin
     // v0.16: try to enrich the hover with doc-comment content.
     // GetSymbolDoc returns a zeroed TParsedDoc with HasContent=False when
     // no row exists; in that case fall back to the legacy signature listing.
@@ -1001,7 +1051,7 @@ begin
         { v0.40.8f: try to resolve the actual type at cursor first. If we
           can, narrow the candidate list to symbols on THAT type (else a
           common member like DataBinding lists every class that has one). }
-        var TAResult:= TTypeAtResolver.Resolve( HitStore, Path, Line + 1, Col + 1);
+        var TAResult:= TTypeAtResolver.Resolve( FStores, Path, Line + 1, Col + 1);
 
         var Filtered: TArray<TSymbol>;
         SetLength(Filtered, 0);
@@ -1100,7 +1150,8 @@ begin
       finally
         Sb.Free;
       end; // try
-    end; // else
+    end; // else Doc.HasContent
+    end; // else HaveOwnerFloor
     HoverObj:= TJSONObject.Create;
     Contents:= TJSONObject.Create;
     Contents.AddPair('kind'    , 'markdown');

@@ -61,7 +61,8 @@ type
 /// as produced by the Task 2 returns-miner.</summary>
 type
   TReturnFact = record
-    Expr: string;
+    Expr: string ;
+    Line: Integer;   // absolute 1-based source line the RHS was mined from; 0 if unknown
   end;
 
 /// <summary>Structured hover model: the parsed pieces of a symbol's
@@ -98,16 +99,22 @@ function ParseSignatureParams(const ASignature: string): TArray<TParamPart>;
 /// <param name="ADoc">The symbol's parsed doc-comment (may be empty).</param>
 /// <param name="AUnitFile">Resolved path of the unit declaring ASym.</param>
 /// <param name="AReturnRhs">Mined `Result:=`/`Exit()` return expressions.</param>
+/// <param name="AReturnLines">Parallel to AReturnRhs: the absolute 1-based source
+/// line each RHS was mined from (for click-to-navigate). Pass nil/[] for none;
+/// entries default to 0 (unknown) when shorter than AReturnRhs.</param>
 /// <returns>A populated THoverModel.</returns>
-function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUnitFile: string; const AReturnRhs: TArray<string>): THoverModel;
+function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUnitFile: string; const AReturnRhs: TArray<string>; const AReturnLines: TArray<Integer> = nil): THoverModel;
 
 /// <summary>Serializes a structured THoverModel to the hover JSON shape:
 /// qname/unit/def_line/return_type/params (modifier/name/type each)/returns
 /// (mined RHS expressions)/returns_more (overflow count beyond the 10-entry
 /// cap)/summary. Used by `drag-lint hover --format json`.</summary>
 /// <param name="AModel">The hover model built by BuildHoverModel.</param>
+/// <param name="AFactLines">v(hover facts fix): the Phase-2 analysis fact lines
+/// (as FormatPhase2FactLines produced them) emitted as a `"facts":[...]` array
+/// so the structured IDE popup can render them; pass nil/[] for none.</param>
 /// <returns>A single-line JSON object string.</returns>
-function RenderHoverJson(const AModel: THoverModel): string; overload;
+function RenderHoverJson(const AModel: THoverModel; const AFactLines: TArray<string>): string; overload;
 
 implementation
 
@@ -431,7 +438,7 @@ begin
       IfThen(ADoc.Deprecated, 'true', 'false')]);
 end;
 
-function RenderHoverJson(const AModel: THoverModel): string;
+function RenderHoverJson(const AModel: THoverModel; const AFactLines: TArray<string>): string;
 var
   SB: TStringBuilder;
   i: Integer;
@@ -440,6 +447,8 @@ begin
   try
     SB.Append('{');
     SB.Append(Format('"qname":"%s",', [JsonEscape(AModel.QualifiedName)]));
+    SB.Append(Format('"kind":"%s",', [JsonEscape(AModel.Kind)]));   // v(FB #3): friendly qualifier for the header
+    SB.Append(Format('"signature":"%s",', [JsonEscape(AModel.Signature)]));   // raw sig -- for enum values this carries the ordinal (= N)
     SB.Append(Format('"unit":"%s","def_line":%d,', [JsonEscape(AModel.UnitFile), AModel.DefLine]));
     SB.Append(Format('"return_type":"%s",', [JsonEscape(AModel.ReturnType)]));
     SB.Append('"params":[');
@@ -455,7 +464,30 @@ begin
       if i > 0 then SB.Append(',');
       SB.Append(Format('"%s"', [JsonEscape(AModel.Returns[i].Expr)]));
     end;
+    { v(FB3): a PARALLEL array of the absolute 1-based source line each return RHS
+      was mined from (0 = unknown). The plugin zips it with "returns" to make each
+      return value clickable and jump to that line. Kept parallel (not nested in
+      "returns") so existing string-array consumers of "returns" are unaffected. }
+    SB.Append('],"returns_lines":[');
+    for i:= 0 to High(AModel.Returns) do
+    begin
+      if i > 0 then SB.Append(',');
+      SB.Append(IntToStr(AModel.Returns[i].Line));
+    end;
     SB.Append(Format('],"returns_more":%d,', [AModel.ReturnsMore]));
+    { v(hover facts fix): the Phase-2 analysis fact lines (Complexity / Reads /
+      Writes / SQL / Handles / Owns returned / Covered by), one string each,
+      exactly as FormatPhase2FactLines produced them. The structured IDE popup
+      reads this array and renders a FACTS section -- previously the JSON omitted
+      facts entirely, so the plugin's colored popup never showed them (only the
+      `--format md` path did). Empty array when the symbol has no facts. }
+    SB.Append('"facts":[');
+    for i:= 0 to High(AFactLines) do
+    begin
+      if i > 0 then SB.Append(',');
+      SB.Append(Format('"%s"', [JsonEscape(AFactLines[i])]));
+    end;
+    SB.Append('],');
     SB.Append(Format('"summary":"%s"}', [JsonEscape(AModel.Doc.Summary)]));
     Result:= SB.ToString;
   finally
@@ -483,8 +515,38 @@ begin
   Result:= Trim(Tail);
 end;
 
+function KindQualifier(AKind: TSymbolKind): string;
+{ A human-friendly qualifier shown before the symbol name in the hover header
+  (e.g. "function", "local var", "parameter", "property"). '' for kinds that read
+  fine without one. }
+begin
+  case AKind of
+    skUnit        : Result:= 'unit'        ;
+    skProgram     : Result:= 'program'     ;
+    skPackage     : Result:= 'package'     ;
+    skClass       : Result:= 'class'       ;
+    skInterface   : Result:= 'interface'   ;
+    skRecord      : Result:= 'record'      ;
+    skEnum        : Result:= 'enum'        ;
+    skEnumValue   : Result:= 'enum value'  ;
+    skProcedure   : Result:= 'procedure'   ;
+    skFunction    : Result:= 'function'    ;
+    skMethod      : Result:= 'method'      ;
+    skConstructor : Result:= 'constructor' ;
+    skDestructor  : Result:= 'destructor'  ;
+    skProperty    : Result:= 'property'    ;
+    skField       : Result:= 'field'       ;
+    skVarDecl     : Result:= 'var'         ;
+    skConstDecl   : Result:= 'const'       ;
+    skTypeAlias   : Result:= 'type'        ;
+    skLocalVar    : Result:= 'local var'   ;
+    skParam       : Result:= 'parameter'   ;
+    else            Result:= ''            ;
+  end;
+end;
+
 function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc;
-  const AUnitFile: string; const AReturnRhs: TArray<string>): THoverModel;
+  const AUnitFile: string; const AReturnRhs: TArray<string>; const AReturnLines: TArray<Integer> = nil): THoverModel;
 var
   i: Integer;
   Cap: Integer;
@@ -496,12 +558,17 @@ begin
   Result.Params       := ParseSignatureParams(ASym.Signature);
   Result.ReturnType   := ReturnTypeFromSig(ASym.Signature);
   Result.Doc          := ADoc;
-  Result.Kind         := ''; // filled by caller from ASym.Kind if desired
+  Result.Kind         := KindQualifier(ASym.Kind); // v(FB #3): friendly qualifier for the header
   Cap:= Length(AReturnRhs);
   if Cap > 10 then begin Result.ReturnsMore:= Cap - 10; Cap:= 10; end
   else Result.ReturnsMore:= 0;
   SetLength(Result.Returns, Cap);
-  for i:= 0 to Cap - 1 do Result.Returns[i].Expr:= AReturnRhs[i];
+  for i:= 0 to Cap - 1 do
+  begin
+    Result.Returns[i].Expr:= AReturnRhs[i];
+    if i <= High(AReturnLines) then Result.Returns[i].Line:= AReturnLines[i]
+    else Result.Returns[i].Line:= 0;
+  end;
 end;
 
 end.
