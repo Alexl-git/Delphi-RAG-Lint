@@ -53,9 +53,14 @@ type
     /// 3. Legacy: a line whose trimmed form ends with AUTO_PARAM -- drop it
     ///    (pre-v(ADP3) managed param; declaration-only elsewhere, this rule is
     ///    its only remaining consumer, kept so an old file self-heals).
-    /// 4. If rules 1-3 leave a &lt;remarks&gt;/&lt;/remarks&gt; pair with
-    ///    nothing (no surviving non-blank content) between them, drop that
-    ///    pair too.
+    /// 4. If rules 1-3 ACTUALLY DELETED SOMETHING inside a
+    ///    &lt;remarks&gt;/&lt;/remarks&gt; pair, and nothing non-blank
+    ///    survives between them afterward, drop that pair too. Both halves
+    ///    of the test matter: a pair rules 1-3 never touched at all -- e.g. a
+    ///    hand-written empty pair, or one whose only interior line is a bare
+    ///    '///' -- is left completely alone, tags and any interior content
+    ///    together, rather than deleting the tags around content that was
+    ///    never engine-owned in the first place.
     /// 5. If the above leaves a doc region with no /// lines at all, the
     ///    region is already fully covered by the ranges above -- no
     ///    additional edit is needed, and no stray blank line is introduced
@@ -146,12 +151,13 @@ end;
 procedure StripRegion(ALines: TStrings; ALo, AHi: Integer;
   var ADeleted: TArray<Boolean>; var ATagsRemoved, ABlocksRemoved: Integer);
 var
-  I, J, K   : Integer;
-  Line      : string;
-  MarkPos   : Integer;
-  Closer    : string;
+  I, J, K    : Integer;
+  Line       : string;
+  MarkPos    : Integer;
+  Closer     : string;
   RemarksOpen: Integer;
-  Empty     : Boolean;
+  Empty      : Boolean;
+  AnyDeleted : Boolean;
 begin
   I:= ALo;
   while I <= AHi do
@@ -216,7 +222,21 @@ begin
 
   // Rule 4: an emptied <remarks>/</remarks> pair (open+close tags each alone
   // on their own line, matching TDocRegions.MergeComment's own rendering) --
-  // drop the pair too when nothing NON-BLANK survives between them.
+  // drop the pair too, but ONLY when rules 1-3 ABOVE actually deleted
+  // something inside it (AnyDeleted) AND nothing non-blank survives (Empty).
+  // Review fix: the ORIGINAL code dropped the pair whenever nothing NON-BLANK
+  // remained, with no check that anything was ever deleted there at all --
+  // so a file the engine had NEVER touched, carrying a hand-written
+  // '<remarks>'/'</remarks>' pair with nothing (or only a bare '///' line)
+  // between them, lost BOTH tag lines on --strip: the engine deleting
+  // hand-written source, exactly what this unit's own contract forbids. The
+  // AnyDeleted gate restores the brief's own conditional wording -- "IF
+  // DROPPING leaves a pair with nothing between them" presupposes something
+  // was dropped -- and its absence is also what let a bare interior '///'
+  // line end up ORPHANED (tags removed around it, the harmless-looking bare
+  // line never marked deleted itself): with nothing genuinely AUTO-owned
+  // inside, AnyDeleted stays False, the whole pair (tags AND any interior
+  // content, bare or not) is left completely alone.
   RemarksOpen:= -1;
   for I:= ALo to AHi do
   begin
@@ -226,13 +246,17 @@ begin
     else if (RemarksOpen <> -1) and ContainsText(DocLineContent(ALines[I]), '</remarks>') then
     begin
       Empty:= True;
+      AnyDeleted:= False;
       for J:= RemarksOpen + 1 to I - 1 do
+      begin
+        AnyDeleted:= AnyDeleted or ADeleted[J];
         if (not ADeleted[J]) and (DocLineContent(ALines[J]) <> '') then
         begin
           Empty:= False;
           Break;
         end;
-      if Empty then
+      end;
+      if Empty and AnyDeleted then
       begin
         ADeleted[RemarksOpen]:= True;
         ADeleted[I]:= True;

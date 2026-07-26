@@ -21,8 +21,12 @@
       function with no prior <returns>). Facts stay empty for both routines
       (trivial single-file arithmetic, no callers, no complexity) so NEITHER
       gets a <remarks> facts fence -- this fixture exercises rules 1 + 5, not
-      2/3/4 (those need a facts-bearing symbol elsewhere; see the task
-      report for why this exact fixture can't reach them).
+      2/3/4 (those need a facts-bearing symbol, which this fixture's trivial,
+      caller-free routines never produce). Rules 2/3/4, the multi-line branch
+      of rule 1, --qname --strip's region-scoping, and --strip + --stubs's
+      exit 2 are covered by the sibling run_doc_p3_strip_static.ps1, which
+      strips a fixture with every marker baked in by hand -- no `document`
+      run at all.
     * Plain gains a brand-new, fully-managed comment (<summary>/<param>/
       <returns>, all AUTO_MARK-only, no facts).
 
@@ -46,7 +50,11 @@
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
 
 $ErrorActionPreference = 'Continue'
-function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:Failed=$true} }
+# Review fix (Finding 4): a 3rd $d(etail) param, matching sibling runners
+# (e.g. run_doc_returns.ps1) -- without it, a call site passing a 3rd arg
+# (a diagnostic string) silently drops it into PowerShell's automatic $args,
+# so a failing Check prints only the label and no diagnostic.
+function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:Failed=$true} }
 $script:Failed = $false
 
 $exePath = (Resolve-Path $Exe).Path
@@ -63,11 +71,11 @@ Push-Location C:\TEMP
 try {
   $before = [IO.File]::ReadAllBytes($target)
 
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & $exePath index $scratch --db $db 2>&1 | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # --stubs is required so Plain (no facts) is documented too -- see header.
-  & $exePath document --unit $target --db $db --stubs --apply 2>$null | Out-Null
+  & $exePath document --unit $target --db $db --stubs --apply 2>&1 | Out-Null
   Check 'document --stubs --apply exits 0' ($LASTEXITCODE -eq 0)
 
   $afterApply = [IO.File]::ReadAllBytes($target)
@@ -87,11 +95,17 @@ try {
   $afterDryRun = [IO.File]::ReadAllBytes($target)
   Check 'dry-run --strip writes nothing (file unchanged)' `
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$afterApply,[byte[]]$afterDryRun))
-  Check 'dry-run --strip reports tag/block counts on stdout' `
-    ($dryRunOut -match 'stripped:\s*\d+\s*tags?,\s*\d+\s*blocks?') $dryRunOut
+  # Review fix (Finding 3): assert the EXACT counts, not just "some digits" --
+  # the generic \d+ regex would also match the 'stripped: 0 tags, 0 blocks'
+  # nothing-to-strip branch, so a regression that always reported zero would
+  # still pass. Mixed's one managed <returns> + Plain's three managed tags
+  # (<summary>/<param>/<returns>) = 4 tags, 0 blocks (neither routine has a
+  # facts fence -- see the header).
+  Check 'dry-run --strip reports the exact tag/block counts on stdout' `
+    ($dryRunOut -match 'stripped:\s*4\s*tags,\s*0\s*blocks') $dryRunOut
 
   # --- real strip --apply: round-trip back to the pre-apply snapshot ---
-  & $exePath document --unit $target --db $db --strip --apply 2>$null | Out-Null
+  & $exePath document --unit $target --db $db --strip --apply 2>&1 | Out-Null
   Check 'strip --apply exits 0' ($LASTEXITCODE -eq 0)
 
   $afterStrip = [IO.File]::ReadAllBytes($target)
@@ -99,7 +113,7 @@ try {
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$afterStrip))
 
   # --- second strip --apply is a no-op ---
-  & $exePath document --unit $target --db $db --strip --apply 2>$null | Out-Null
+  & $exePath document --unit $target --db $db --strip --apply 2>&1 | Out-Null
   Check 'second strip --apply exits 0' ($LASTEXITCODE -eq 0)
   $afterStrip2 = [IO.File]::ReadAllBytes($target)
   Check 'second strip --apply is a no-op (byte-identical)' `
