@@ -74,6 +74,7 @@ uses
   , DRagLint.Doc        .Document
   , DRagLint.Doc        .Drift
   , DRagLint.Doc        .Batch
+  , DRagLint.Doc        .Strip
   , DRagLint.Doc        .SymbolFacts
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
@@ -283,6 +284,13 @@ type
     // the pure all-TODO create too (opt-in TODO stubs). Consumed by document /
     // document --project / document-all via TDocBatchOptions.Stubs.
     DocStubs   : Boolean; // document [...] --stubs
+    // AutoDocument Phase 3 T2: --strip removes engine-owned doc output
+    // (AUTO_MARK tags + AUTO_BEGIN..AUTO_END regions) instead of generating
+    // it. Mutually exclusive with --stubs (rejected, exit 2). Consumed by
+    // document / document --unit / --project / document-all via
+    // TDocBatchOptions.Strip, and by document --qname directly via
+    // TDocStripper.StripSymbolRegion.
+    DocStrip   : Boolean; // document [...] --strip
     // AutoDocument (ADF T4): --seealso opts in the <seealso> doc-source (related
     // symbols from the call graph + siblings). Off by default. Consumed by
     // document --qname / --unit / --project / document-all via
@@ -425,6 +433,8 @@ begin
   Writeln('  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
   Writeln('     batch modes (--unit/--project/document-all) default facts-only (summary/param left as TODO); add --stubs to also create all-TODO stub comments');
   Writeln('     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too');
+  Writeln('  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)');
+  Writeln('     --strip is also accepted on --qname/--project/document-all (strips just that symbol''s doc region, or every file in scope); mutually exclusive with --stubs');
   Writeln('     add --seealso to any document mode to emit <seealso cref> links to related symbols (callees + siblings)');
   Writeln('     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent');
   Writeln('     @deprecated is auto-detected from the Pascal ''deprecated'' directive on the decl -- no flag needed');
@@ -790,6 +800,9 @@ begin
     // AutoDocument batch: --stubs opt-in (flips the facts-only default for
     // document / document --project / document-all).
     else if A = '--stubs' then Result.DocStubs:= True
+    // AutoDocument Phase 3 T2: --strip removes engine output instead of
+    // generating it (see TArgs.DocStrip's own comment).
+    else if A = '--strip' then Result.DocStrip:= True
     // ADP1 T2: --include-accessors disables the batch modes' trivial-
     // property-accessor skip filter for this run (see TDocBatchOptions.IncludeAccessors).
     else if A = '--include-accessors' then Result.DocIncludeAccessors:= True
@@ -6691,6 +6704,20 @@ end; // function
 // also skipped by default; --include-accessors opts back in. Dry-run (edit
 // preview) unless --apply. Exit 0 on ok (even when 0 decls changed), 2 on
 // usage/db error.
+// v(ADP3 T2): --strip and --stubs are mutually exclusive -- opposite intents
+// (one REMOVES engine-generated doc output, the other ADDS more of it).
+// Returns 0 when there is no conflict; else prints a usage message and
+// returns 2 (every call site should Exit with a non-zero result).
+function CheckDocStripStubsConflict(const AArgs: TArgs): Integer;
+begin
+  Result:= 0;
+  if AArgs.DocStrip and AArgs.DocStubs then
+  begin
+    Writeln('ERROR: --strip and --stubs are mutually exclusive (--strip removes drag-lint-generated doc output; --stubs adds more of it).');
+    Result:= 2;
+  end;
+end;
+
 function DoDocumentUnit(const AArgs: TArgs): Integer;
 var
   Store  : ISymbolStore     ;
@@ -6700,6 +6727,9 @@ var
   O      : TJSONObject      ;
   Applied: Boolean          ;
 begin
+  Result:= CheckDocStripStubsConflict(AArgs);
+  if Result <> 0 then Exit;
+
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
@@ -6707,6 +6737,7 @@ begin
   Opts:= Default(TDocBatchOptions);
   // --stubs flips the facts-only default: on = keep pure all-TODO creates too.
   Opts.Stubs:= AArgs.DocStubs;
+  Opts.Strip:= AArgs.DocStrip; // v(ADP3 T2): --strip removes engine output instead.
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
@@ -6719,6 +6750,32 @@ begin
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
   if Applied then TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
+
+  // v(ADP3 T2): --strip has its own reporting shape (tags/blocks REMOVED, not
+  // decl/doc counts generated) -- branch before the facts-only messaging below.
+  if AArgs.DocStrip then
+  begin
+    if AArgs.AsJson then
+    begin
+      O:= TJSONObject.Create;
+      try
+        O.AddPair('unit', AArgs.DocUnit);
+        O.AddPair('tagsRemoved', TJSONNumber.Create(Res.TagsRemoved));
+        O.AddPair('blocksRemoved', TJSONNumber.Create(Res.BlocksRemoved));
+        O.AddPair('edits', TJSONNumber.Create(Length(Res.Edits)));
+        O.AddPair('applied', TJSONBool.Create(Applied));
+        Writeln(O.ToJson);
+      finally
+        O.Free;
+      end;
+      Exit(0);
+    end;
+
+    if Length(Res.Edits) = 0 then Writeln(Format('stripped: 0 tags, 0 blocks in %s (nothing to strip)', [AArgs.DocUnit]))
+    else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Res.Edits)); Writeln(Format('stripped: %d tags, %d blocks in %s -- pass --apply to write', [Res.TagsRemoved, Res.BlocksRemoved, AArgs.DocUnit])); end
+    else Writeln(Format('stripped: %d tags, %d blocks in %s%s', [Res.TagsRemoved, Res.BlocksRemoved, AArgs.DocUnit, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+    Exit(0);
+  end;
 
   if AArgs.AsJson then
   begin
@@ -6759,6 +6816,32 @@ var
 begin
   Applied:= AArgs.Apply and (Length(ARes.Edits) > 0);
   if Applied then TTextEditApplier.Apply(ARes.Edits, not AArgs.NoBackup);
+
+  // v(ADP3 T2): --strip has its own reporting shape (tags/blocks REMOVED),
+  // shared by document --project and document-all.
+  if AArgs.DocStrip then
+  begin
+    if AArgs.AsJson then
+    begin
+      O:= TJSONObject.Create;
+      try
+        O.AddPair(AScope, AScopeVal);
+        O.AddPair('tagsRemoved', TJSONNumber.Create(ARes.TagsRemoved));
+        O.AddPair('blocksRemoved', TJSONNumber.Create(ARes.BlocksRemoved));
+        O.AddPair('edits', TJSONNumber.Create(Length(ARes.Edits)));
+        O.AddPair('applied', TJSONBool.Create(Applied));
+        Writeln(O.ToJson);
+      finally
+        O.Free;
+      end;
+      Exit(0);
+    end;
+
+    if Length(ARes.Edits) = 0 then Writeln('stripped: 0 tags, 0 blocks (nothing to strip)')
+    else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(ARes.Edits)); Writeln(Format('stripped: %d tags, %d blocks -- pass --apply to write', [ARes.TagsRemoved, ARes.BlocksRemoved])); end
+    else Writeln(Format('stripped: %d tags, %d blocks%s', [ARes.TagsRemoved, ARes.BlocksRemoved, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+    Exit(0);
+  end;
 
   if AArgs.AsJson then
   begin
@@ -6826,6 +6909,7 @@ begin
 
   Opts:= Default(TDocBatchOptions);
   Opts.Stubs:= AArgs.DocStubs;
+  Opts.Strip:= AArgs.DocStrip; // v(ADP3 T2): --strip removes engine output instead.
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
@@ -6867,12 +6951,16 @@ var
   Opts : TDocBatchOptions;
   Res  : TDocBatchResult ;
 begin
+  Result:= CheckDocStripStubsConflict(AArgs); // v(ADP3 T2)
+  if Result <> 0 then Exit;
+
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
 
   Opts:= Default(TDocBatchOptions);
   Opts.Stubs:= AArgs.DocStubs;
+  Opts.Strip:= AArgs.DocStrip; // v(ADP3 T2): --strip removes engine output instead.
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
@@ -6885,11 +6973,62 @@ begin
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
 end; // function
 
+// v(ADP3 T2): `document --qname X --strip` -- strips only the ONE doc region
+// immediately above X's own declaration line (TDocStripper.StripSymbolRegion),
+// leaving every other declaration's doc region in the same file untouched.
+// Mirrors the reporting shape of the batch-mode strip branches (DoDocumentUnit
+// / ReportDocBatch): 'stripped: N tags, M blocks in <file>'.
+function DoDocumentStripQName(const AArgs: TArgs; const AStore: ISymbolStore): Integer;
+var
+  Syms   : TArray<TSymbol>;
+  Path   : string         ;
+  StripRes: TStripResult  ;
+  O      : TJSONObject    ;
+  Applied: Boolean        ;
+begin
+  Syms:= AStore.FindSymbolsByQualifiedName(AArgs.QName);
+  if Length(Syms) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+
+  Path:= AStore.GetFilePath(Syms[0].FileId);
+  if (Path = '') or (not TFile.Exists(Path)) then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+
+  StripRes:= TDocStripper.StripSymbolRegion(Path, Syms[0].StartLine);
+
+  Applied:= AArgs.Apply and (Length(StripRes.Edits) > 0);
+  if Applied then TTextEditApplier.Apply(StripRes.Edits, not AArgs.NoBackup);
+
+  if AArgs.AsJson then
+  begin
+    O:= TJSONObject.Create;
+    try
+      O.AddPair('qname', AArgs.QName);
+      O.AddPair('file' , Path       );
+      O.AddPair('tagsRemoved', TJSONNumber.Create(StripRes.TagsRemoved));
+      O.AddPair('blocksRemoved', TJSONNumber.Create(StripRes.BlocksRemoved));
+      O.AddPair('edits', TJSONNumber.Create(Length(StripRes.Edits)));
+      O.AddPair('applied', TJSONBool.Create(Applied));
+      Writeln(O.ToJson);
+    finally
+      O.Free;
+    end;
+    Exit(0);
+  end;
+
+  if Length(StripRes.Edits) = 0 then Writeln(Format('stripped: 0 tags, 0 blocks in %s (nothing to strip)', [Path]))
+  else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(StripRes.Edits)); Writeln(Format('stripped: %d tags, %d blocks in %s -- pass --apply to write', [StripRes.TagsRemoved, StripRes.BlocksRemoved, Path])); end
+  else Writeln(Format('stripped: %d tags, %d blocks in %s%s', [StripRes.TagsRemoved, StripRes.BlocksRemoved, Path, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+  Result:= 0;
+end; // function
+
 // AutoDocument Chunk 1: drag-lint document --qname X [--apply|--json|--no-backup] [--db PATH]
 // Generates or repairs a managed-region DocInsight comment for the symbol. Dry-run
 // (prints the edit preview) unless --apply. Exit 0 on ok/unchanged, 1 not found,
 // 2 usage/db error. Read-only DB access (writes source files, not the index).
 // When --unit is given (instead of --qname), delegates to the whole-unit batch.
+// v(ADP3 T2): --strip is checked ONCE here (covers the --project/--unit routes
+// below plus the --qname strip path at the bottom) via
+// CheckDocStripStubsConflict; document-all has its own call (separate dispatch
+// entry, never routed through this function).
 function DoDocument(const AArgs: TArgs): Integer;
 var
   Store  : ISymbolStore                         ;
@@ -6898,12 +7037,17 @@ var
   O      : TJSONObject                          ;
   Applied: Boolean                              ;
 begin
+  Result:= CheckDocStripStubsConflict(AArgs);
+  if Result <> 0 then Exit;
+
   if AArgs.ProjectPath <> '' then Exit(DoDocumentProject(AArgs));
   if AArgs.DocUnit <> '' then Exit(DoDocumentUnit(AArgs));
-  if AArgs.QName = '' then begin Writeln('Usage: drag-lint document (--qname X | --unit F | --project P) [--stubs|--apply|--json|--no-backup] [--db PATH]'); Exit (2 ); end;
+  if AArgs.QName = '' then begin Writeln('Usage: drag-lint document (--qname X | --unit F | --project P) [--stubs|--strip|--apply|--json|--no-backup] [--db PATH]'); Exit (2 ); end;
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
+
+  if AArgs.DocStrip then Exit(DoDocumentStripQName(AArgs, Store)); // v(ADP3 T2)
 
   Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, AArgs.DocSeeAlso,
     AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,

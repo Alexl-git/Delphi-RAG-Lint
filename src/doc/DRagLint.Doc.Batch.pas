@@ -38,6 +38,11 @@ type
   /// doc-source tasks and are inert here.</summary>
   TDocBatchOptions = record
     Stubs            : Boolean; // opt-in TODO summaries; default False = facts-only
+    /// <summary>v(ADP3 T2): --strip. When True the batch REMOVES engine output
+    /// (every AUTO_MARK-carrying tag and every AUTO_BEGIN..AUTO_END region)
+    /// instead of generating it. Hand-written tags, code and ordinary comments
+    /// are untouched. Mutually exclusive with Stubs.</summary>
+    Strip: Boolean;
     IncludeSeeAlso   : Boolean;
     IncludeDeprecated: Boolean;
     IncludeSince     : Boolean;
@@ -97,6 +102,15 @@ type
     /// property accessors (not counted in DeclCount -- see IsTrivialAccessor).
     /// Always 0 when AOptions.IncludeAccessors was True for the run.</summary>
     AccessorsSkipped: Integer;
+    /// <summary>v(ADP3 T2): --strip. Count of marked tags dropped
+    /// (TDocStripper.TagsRemoved, summed across every file the batch
+    /// touched). 0 unless AOptions.Strip was True for this run.</summary>
+    TagsRemoved: Integer;
+    /// <summary>v(ADP3 T2): --strip. Count of AUTO_BEGIN..AUTO_END facts
+    /// regions dropped (TDocStripper.BlocksRemoved, summed across every file
+    /// the batch touched). 0 unless AOptions.Strip was True for this
+    /// run.</summary>
+    BlocksRemoved: Integer;
   end;
 
   TDocBatch = class
@@ -153,7 +167,7 @@ implementation
 
 uses
   System.SysUtils, System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
-  DRagLint.Doc.Document, DRagLint.Doc.Regions,
+  DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Strip,
   DRagLint.Index.Closure, DRagLint.Project.Resolver;
 
 // A declaration whose doc-comment we generate: routines/methods/ctors/dtors and
@@ -210,6 +224,22 @@ var
   E      : TTextEdit         ;
 begin
   Result := Default(TDocBatchResult);
+
+  // v(ADP3 T2): --strip bypasses the whole per-symbol facts pipeline below --
+  // it never queries AStore at all, just scans AUnitFile's raw lines for
+  // engine-owned markers and computes their removal (TDocStripper.StripFile
+  // works on raw source, not the parsed doc model, and does not depend on
+  // the file being indexed). Mutually exclusive with Stubs; the CLI rejects
+  // that combination before either reaches here.
+  if AOptions.Strip then
+  begin
+    var StripRes: TStripResult := TDocStripper.StripFile(AUnitFile);
+    Result.Edits        := StripRes.Edits;
+    Result.TagsRemoved  := StripRes.TagsRemoved;
+    Result.BlocksRemoved:= StripRes.BlocksRemoved;
+    Exit;
+  end;
+
   Syms := AStore.FindSymbolsByFile(AUnitFile);
 
   Collected := TList<TTextEdit>.Create;
@@ -307,6 +337,8 @@ begin
       Inc(Result.DeclCount, Sub.DeclCount);
       Inc(Result.DocCount , Sub.DocCount );
       Inc(Result.AccessorsSkipped, Sub.AccessorsSkipped); // ADP1 T2
+      Inc(Result.TagsRemoved  , Sub.TagsRemoved  ); // v(ADP3 T2): --strip
+      Inc(Result.BlocksRemoved, Sub.BlocksRemoved); // v(ADP3 T2): --strip
       for E in Sub.Edits do Collected.Add(E);
     end;
     Result.Edits := Collected.ToArray;
