@@ -144,38 +144,133 @@ begin
   Result:= True;
 end;
 
-// v(ADP3 T3 review round 2, Finding 3): true when EVERY line of ARawText (the
-// EXISTING doc region's raw content -- one entry per source /// line, /// prefix
-// already stripped by TDocCommentScanner) is engine-owned: it carries AUTO_MARK,
-// or it lies within an AUTO_BEGIN..AUTO_END fence (inclusive of the fence lines
-// themselves); a blank interior line carries no content either way and is
-// skipped. Gates BuildForSymbol's empty-merge delete branch over the RAW
-// region instead of a field-by-field TParsedDoc whitelist (Exceptions/
-// ExampleText/SeeAlso/SinceText/Deprecated): a whitelist is correct only by
-// ENUMERATION -- any tag type the PARSER does not even model (<value>,
-// <typeparam>, <para>, <code>, <list>, <permission>, <inheritdoc/>, ...) would
-// still be silently destroyed. Testing the raw text directly needs no such list
-// and no future maintenance as new tag types appear: an unrecognized, unmarked,
-// non-fence line is by definition NOT engine-owned, so it correctly blocks the
-// delete, regardless of whether the parser has ever heard of the tag it came
-// from.
+// v(ADP3 T3 review round 3, Regression 2): looks ahead from AOpenIx (which
+// Lines[AOpenIx] trims to exactly '<remarks>') for a matching '</remarks>'
+// line. Returns True (with ACloseIx set to that line's index) only when the
+// span strictly between them contains nothing but blank lines plus exactly
+// one well-formed AUTO_BEGIN..AUTO_END fence -- the EXACT shape
+// TDocRegions.MergeComment emits for a facts-only remarks (no hand prose;
+// see its own remarks-emission comment). Returns False (ACloseIx = -1) for
+// anything else: no closing tag found in the region at all, no fence found,
+// OR any other non-blank content alongside the fence -- a <remarks> that
+// mixes hand-written prose in with the facts fence must NOT be swept up by
+// this exemption (that prose line still has to earn ownership on its own
+// merits via RegionFullyEngineOwned's ordinary per-line AUTO_MARK check). A
+// bare hand-written empty '<remarks></remarks>' (no fence at all) also
+// correctly returns False here: SawFence never becomes True, so there is
+// nothing engine-authored to justify exempting the wrapper -- fail CLOSED
+// when there is nothing to prove ownership, the same principle Regression 3
+// applies to a malformed fence below.
+function IsFenceOnlyRemarksSpan(const Lines: TArray<string>; AOpenIx: Integer;
+  out ACloseIx: Integer): Boolean;
+var
+  J       : Integer;
+  SawFence: Boolean;
+  SawOther: Boolean;
+  InFence : Boolean;
+begin
+  SawFence:= False;
+  SawOther:= False;
+  InFence := False;
+  J:= AOpenIx + 1;
+  while J <= High(Lines) do
+  begin
+    if Trim(Lines[J]) = '</remarks>' then
+    begin
+      ACloseIx:= J;
+      Exit((not InFence) and SawFence and (not SawOther));
+    end;
+    if Trim(Lines[J]) = '' then begin Inc(J); Continue; end;
+    if Pos(AUTO_BEGIN, Lines[J]) > 0 then
+    begin
+      if InFence then SawOther:= True; // nested/duplicate BEGIN -- ambiguous, do not exempt
+      InFence := True;
+      SawFence:= True;
+      Inc(J);
+      Continue;
+    end;
+    if Pos(AUTO_END, Lines[J]) > 0 then begin InFence:= False; Inc(J); Continue; end;
+    if not InFence then SawOther:= True; // hand-written prose alongside the fence
+    Inc(J);
+  end;
+  ACloseIx:= -1;
+  Result:= False; // no closing '</remarks>' found anywhere in the region
+end;
+
+// v(ADP3 T3 review round 2, Finding 3; round 3, Regressions 2 and 3): true
+// when EVERY line of ARawText (the EXISTING doc region's raw content -- one
+// entry per source /// line, /// prefix already stripped by
+// TDocCommentScanner) is engine-owned: it carries AUTO_MARK, it lies within a
+// well-formed AUTO_BEGIN..AUTO_END fence (inclusive of the fence lines
+// themselves), or it is one half of a fence-only '<remarks>'/'</remarks>'
+// wrapper (IsFenceOnlyRemarksSpan); a blank interior line carries no content
+// either way and is skipped. Gates BuildForSymbol's empty-merge delete branch
+// over the RAW region instead of a field-by-field TParsedDoc whitelist
+// (Exceptions/ExampleText/SeeAlso/SinceText/Deprecated): a whitelist is
+// correct only by ENUMERATION -- any tag type the PARSER does not even model
+// (<value>, <typeparam>, <para>, <code>, <list>, <permission>,
+// <inheritdoc/>, ...) would still be silently destroyed. Testing the raw
+// text directly needs no such list and no future maintenance as new tag
+// types appear: an unrecognized, unmarked, non-fence line is by definition
+// NOT engine-owned, so it correctly blocks the delete, regardless of whether
+// the parser has ever heard of the tag it came from.
+//
+// Round 3, Regression 2: the engine's own '<remarks>'/'</remarks>' wrapper
+// line (TDocRegions.MergeComment's remarks emission -- see its comment)
+// carries no AUTO_MARK of its own and is NOT inside the fence it encloses
+// (the fence starts on the line AFTER '<remarks>' and ends on the line
+// BEFORE '</remarks>'), so the pre-round-3 per-line loop below always
+// rejected a WHOLLY engine-authored, facts-only remarks region on its own
+// wrapper tags -- meaning such a region could never satisfy this guard, so a
+// DECAYED one (source changed, the fact it asserts is now false) was never
+// refreshed or deleted and sat on disk asserting a stale fact permanently.
+// IsFenceOnlyRemarksSpan resolves this narrowly: only a '<remarks>' whose
+// span encloses NOTHING but one well-formed fence is exempted (both wrapper
+// lines skipped as a unit); a '<remarks>' sharing its span with hand-written
+// prose is NOT exempted, and that prose line still fails the ordinary
+// AUTO_MARK check on its own, so the overall verdict is unaffected there --
+// this exemption only changes the answer for the fence-only case.
+//
+// Round 3, Regression 3: an AUTO_BEGIN that never reaches a matching
+// AUTO_END within the region now FAILS CLOSED (Exit(False) immediately)
+// instead of the old fail-OPEN behaviour, where a bare InFence flag was set
+// and never reset, silently treating every remaining line through EOF --
+// including real hand-written prose -- as "fenced" and therefore engine-
+// owned. Mirrors DRagLint.Doc.Strip.pas's StripRegion, which already treats
+// this exact malformed shape (BEGIN with no END in the searched range) as
+// "leave alone" rather than guessing; a stray AUTO_END with no opening
+// AUTO_BEGIN is symmetrically ambiguous and also fails closed. A guard whose
+// entire purpose is protecting hand-written source must fail closed on
+// anything ambiguous, not open.
 function RegionFullyEngineOwned(const ARawText: string): Boolean;
 var
-  Lines : TArray<string>;
-  L     : string        ;
-  InFence: Boolean       ;
-  I     : Integer        ;
+  Lines  : TArray<string>;
+  L      : string        ;
+  I, J   : Integer        ;
+  CloseIx: Integer        ;
 begin
   Lines:= ARawText.Split([sLineBreak, #10, #13]);
-  InFence:= False;
-  for I:= 0 to High(Lines) do
+  I:= 0;
+  while I <= High(Lines) do
   begin
     L:= Lines[I];
-    if Trim(L) = '' then Continue;
-    if Pos(AUTO_BEGIN, L) > 0 then begin InFence:= True; Continue; end;
-    if Pos(AUTO_END, L) > 0 then begin InFence:= False; Continue; end;
-    if InFence then Continue;
+    if Trim(L) = '' then begin Inc(I); Continue; end;
+    if (Trim(L) = '<remarks>') and IsFenceOnlyRemarksSpan(Lines, I, CloseIx) then
+    begin
+      I:= CloseIx + 1; // fence-only remarks wrapper, consumed as a unit
+      Continue;
+    end;
+    if Pos(AUTO_BEGIN, L) > 0 then
+    begin
+      J:= I;
+      while (J <= High(Lines)) and (Pos(AUTO_END, Lines[J]) = 0) do Inc(J);
+      if J > High(Lines) then Exit(False); // unterminated fence -- fail closed, see header comment
+      I:= J + 1; // whole fence, inclusive
+      Continue;
+    end;
+    if Pos(AUTO_END, L) > 0 then Exit(False); // stray END with no opening BEGIN -- ambiguous, fail closed
     if Pos(AUTO_MARK, L) = 0 then Exit(False);
+    Inc(I);
   end;
   Result:= True;
 end;
@@ -397,9 +492,36 @@ begin
   // Existing.HasContent itself stays False) must still route MergeComment
   // through its REPAIR path, not the fresh-insert path, or it stacks a
   // second, separate comment block below the human's untouched line.
+  //
+  // v(ADP3 T3 review round 3, Regression 1): the OR-term this round-2 comment
+  // originally added here -- (Trim(Region.RawText) <> '') -- is DELETED. It
+  // routed ANY existing region with non-blank raw text into the repair
+  // branch below, which deletes [Existing.StartLine..EndLine] and inserts
+  // Merged -- but Merged, by construction, can only carry Summary/Params/
+  // Returns/Remarks-prose (see MergeComment). A region holding a tag type
+  // Merged cannot represent at all (<value>, <example>, ...) was therefore
+  // deleted outright with NO gate protecting it (RegionFullyEngineOwned only
+  // guards the Merged='' branch above, not this one). No committed test
+  // requires the term: run_doc_p3_summaryonly is covered by HasSummaryTag,
+  // the HasValueTag case by HasReturnsTag (its <returns> tag is marked and
+  // empty), the other two unhandledtags cases by HasContent. Dropping it
+  // restores the additive (non-destructive) behaviour those untracked tags
+  // relied on before this round: when none of the OTHER disjuncts fire, the
+  // region is treated as "no prior comment" and Merged is inserted as a
+  // PLAIN ADDITIONAL block above the declaration (fresh-insert branch,
+  // below) -- the existing lines are left completely alone, merely
+  // shadowed by a second block, rather than being destroyed. Gating the
+  // repair-branch delete itself the way the Merged='' branch is gated
+  // (RegionFullyEngineOwned) was considered and rejected: a region with a
+  // genuine hand-written <summary> PLUS facts is legitimately not fully
+  // engine-owned yet still must be repairable, so that gate would block real
+  // repairs, not just unsafe ones. Additive-insert stacking is the correct
+  // INTERIM behaviour for a region Merged cannot model; Task 3b (tag round-
+  // tripping) is where Merged learns to carry these tags, at which point the
+  // repair path can handle them precisely instead of stacking.
   var ExistingHasAnyTag: Boolean:=
     Existing.HasSummaryTag or Existing.HasReturnsTag or (Length(Existing.Params) > 0)
-    or Existing.HasContent or (Trim(Region.RawText) <> '');
+    or Existing.HasContent;
   Merged:= TDocRegions.MergeComment(Existing, SigParams, Facts, HasRet, Prefix, AComplexityMin, ExistingHasAnyTag);
 
   // v(ADP3 T3): MergeComment returns '' when omit-when-empty suppression
