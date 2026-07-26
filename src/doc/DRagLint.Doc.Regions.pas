@@ -556,6 +556,12 @@ end;
 class function TDocRegions.MergeComment(const AExisting: TParsedDoc;
   const ASigParams: TArray<string>; const AFacts: TDocFacts;
   AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer = 10): string;
+type
+  // v(ADP3 T3 review fix, Finding 1): the action the repair path takes for
+  // ONE existing tag (Summary/a given Param/Returns), given its raw parsed
+  // text and whether the tag is literally present at all -- see
+  // ClassifyTagAction's own comment (below) for the full per-arm rationale.
+  TTagAction = (taEngineOwned, taPreserveStripped, taPreserveVerbatim);
 var
   Sb   : TStringBuilder;
   P    : string        ;
@@ -580,24 +586,71 @@ var
       else Result:= Result + sLineBreak + APrefix + Trim(Parts[i]);
     Result:= Result + AClose;
   end;
-  // v(ADP3 T3): True when S is engine-owned WITHOUT regard to emptiness --
-  // carries AUTO_MARK, or is the legacy 'TODO: describe.' sentinel (the
-  // pre-v(ADP3) format; still self-heals here). Deliberately excludes
-  // IsManagedDesc's "Trim(S) = ''" arm: an EMPTY, unmarked, non-legacy tag is
-  // a HUMAN's deliberately blank slot under omit-when-empty (see the
-  // Summary/Param/Returns three-way guards below) and must be preserved
-  // verbatim, not treated as regenerable content.
-  function IsEngineOwnedRegardlessOfContent(const S: string): Boolean;
+  // v(ADP3 T3 review fix, Finding 1): classifies ownership of ONE existing
+  // tag's raw parsed text (S) for the repair path, given whether the tag is
+  // literally present at all (AHasTag) and, when the engine has a LIVE
+  // regeneration source for this tag today, what that source would
+  // currently produce (AFreshFill; '' when none exists -- <param> never has
+  // one, and neither does <summary> before Task 7's harvester lands) --
+  //   - marked (AUTO_MARK) + EMPTY post-marker body -> taEngineOwned: refill
+  //     from AFreshFill, or DROP entirely when AFreshFill is ALSO '' (v(ADP3
+  //     T3)'s omit-when-empty rule).
+  //   - marked + a post-marker body that EXACTLY matches AFreshFill ->
+  //     ALSO taEngineOwned: this is the engine's OWN current, unmodified
+  //     output (e.g. a <returns> tag's live mined-Observed-suffix refill,
+  //     which -- unlike <summary>/<param> -- is already an ACTIVE
+  //     regeneration mechanism today, not a future task) -- refreshing it
+  //     is a byte-for-byte no-op, so classifying it as engine-owned loses
+  //     nothing and keeps idempotency; a human never touched this.
+  //   - marked + a NON-EMPTY post-marker body that does NOT match
+  //     AFreshFill (this is the ONLY possible outcome whenever AFreshFill
+  //     is '' -- <param>'s permanent case, and <summary>'s pre-Task-7 case)
+  //     -> taPreserveStripped (Finding 1): a human added real text INSIDE
+  //     the tag WITHOUT removing the marker, OR the engine's live source has
+  //     drifted since the last write. Either way the marker no longer means
+  //     "nothing to lose" once real, non-matching text follows it, so the
+  //     text is preserved, with the marker stripped -- the human (or, for a
+  //     drifted-but-untouched tag, "whoever reads it next") is now the de
+  //     facto owner (the natural reading of "took ownership by editing it";
+  //     matches the brief's own "a tag with content is never removed,
+  //     whatever its origin"). A future drift-reporting task is the right
+  //     place to distinguish "human edited" from "source drifted" instead of
+  //     silently guessing -- see the plan's own drift-table design, which
+  //     requires exactly this kind of removal/overwrite to REPORT drift.
+  //   - the legacy pre-v(ADP3) 'TODO: describe.' sentinel -> taEngineOwned
+  //     UNCONDITIONALLY, regardless of its own non-empty text: the sentinel
+  //     string itself carries no real information (it is a placeholder, not
+  //     prose), so it always self-heals away exactly as before this fix --
+  //     the finding above is about a MARKED tag carrying real content, not
+  //     this legacy, markerless shape, so this arm is deliberately NOT
+  //     gated on emptiness the way the marked arm is.
+  //   - unmarked, tag literally present (AHasTag), not the legacy sentinel
+  //     -> taPreserveVerbatim: hand-written, preserved exactly as parsed,
+  //     including a deliberately blank slot.
+  //   - unmarked, no tag at all -> taEngineOwned (nothing to preserve; same
+  //     refill-or-nothing action as the empty-marked case).
+  function ClassifyTagAction(const S: string; AHasTag: Boolean; const AFreshFill: string = ''): TTagAction;
+  var Body: string;
   begin
-    Result:= IsManagedText(S) or SameText(Trim(S), 'TODO: describe.');
+    if IsManagedText(S) then
+    begin
+      Body:= Trim(StripMark(S));
+      if Body = '' then Result:= taEngineOwned
+      else if (AFreshFill <> '') and (Body = AFreshFill) then Result:= taEngineOwned
+      else Result:= taPreserveStripped;
+    end
+    else if SameText(Trim(S), 'TODO: describe.') then Result:= taEngineOwned
+    else if AHasTag then Result:= taPreserveVerbatim
+    else Result:= taEngineOwned;
   end;
 begin
   Sb:= TStringBuilder.Create;
   try
     // The mined return cases surface in exactly ONE place. For a symbol whose
-    // existing <returns> is HAND-WRITTEN (a real tag, not engine-owned) they go
-    // in a managed 'Returns:' fact line (so they show alongside the author's
-    // prose); for an engine-owned <returns> they fill the tag itself
+    // existing <returns> PRESERVES prose (hand-written verbatim, OR marked but
+    // carrying real post-marker text -- Finding 1's taPreserveStripped) they go
+    // in a managed 'Returns:' fact line (so they show alongside the preserved
+    // text); for an engine-owned-and-empty <returns> they fill the tag itself
     // (ObservedSuffix, below). Never both. v(ADP3 T3): "hand-written" now
     // requires AExisting.HasReturnsTag (the tag literally exists) as well as
     // not-engine-owned -- so a human's deliberately EMPTY <returns></returns>
@@ -607,9 +660,15 @@ begin
     // newly-added) tag instead of ALSO duplicating into a fact line. v(ADP3
     // T1): ownership is otherwise marker-keyed; the pre-v(ADP3)
     // StartsText('Observed:', ...) content sniff stays deleted.
+    // v(ADP3 T3 review fix, Finding 1): the LIVE fresh-fill value for
+    // <returns> -- ObservedSuffix already actively regenerates this tag
+    // today (unlike <summary>'s dormant pre-Task-7 harvest), so a marked
+    // body that still EXACTLY matches this value is the engine's own
+    // current output, not a human edit -- see ClassifyTagAction's comment.
+    var FreshReturnsObserved: string:= Trim(ObservedSuffix(AFacts.ReturnCases));
+    var ReturnsAction: TTagAction:= ClassifyTagAction(AExisting.ReturnsText, AExisting.HasReturnsTag, FreshReturnsObserved);
     var ReturnsHandWritten: Boolean:=
-      AExisting.HasContent and AExisting.HasReturnsTag
-      and (not IsEngineOwnedRegardlessOfContent(AExisting.ReturnsText));
+      AExisting.HasContent and (ReturnsAction in [taPreserveVerbatim, taPreserveStripped]);
     var IncludeReturns: Boolean:=
       ReturnsHandWritten and AHasReturn and (Length(AFacts.ReturnCases) > 0);
     Facts:= RenderFactsBlock(AFacts, APrefix, IncludeReturns, AComplexityMin);
@@ -644,49 +703,59 @@ begin
 
     // Existing comment: preserve prose, regenerate managed regions. Rebuild from
     // the parsed model: keep Summary (or drop it when it is engine-owned and
-    // the harvest has nothing to say -- see the three-way rule below), keep
-    // hand-typed params + descs (including a deliberately blank one), never
-    // add a <param> skeleton for a sig param with nothing hand-written, flag
-    // hand-typed stale params, then the returns tag, then a fresh <remarks>
-    // managed block.
-    //
-    // v(ADP3 T3): three-way classification, applied identically to
-    // Summary/Param/Returns below --
-    //   marked (or legacy self-heal) + nothing to refill -> ENGINE's own
-    //     stub: drop it entirely, no blank tag left behind.
-    //   unmarked + the tag is LITERALLY PRESENT (empty or not) -> a HUMAN
-    //     wrote it: preserve verbatim, whatever it says.
-    //   no tag at all -> nothing to preserve; fill from the harvest/mined
-    //     facts if there is any, else stay absent.
+    // EMPTY and the harvest has nothing to say -- see ClassifyTagAction's own
+    // comment above), keep hand-typed params + descs (including a
+    // deliberately blank one), never add a <param> skeleton for a sig param
+    // with nothing hand-written, flag hand-typed stale params, then the
+    // returns tag, then a fresh <remarks> managed block.
     var SummaryRaw: string:= AExisting.Summary;
-    if AExisting.HasSummaryTag and (not IsEngineOwnedRegardlessOfContent(SummaryRaw)) then
-      Sb.AppendLine(EmitTagged('<summary>', SummaryRaw, '</summary>'))
-    else if AFacts.HarvestedSummary <> '' then
-      Sb.AppendLine(EmitTagged('<summary>' + AUTO_MARK, AFacts.HarvestedSummary, '</summary>'));
-    // else: engine-owned-and-empty, or genuinely absent, and nothing
-    // harvested -- omit the tag entirely (v(ADP3 T3)).
+    case ClassifyTagAction(SummaryRaw, AExisting.HasSummaryTag, AFacts.HarvestedSummary) of
+      taPreserveStripped:
+        // v(ADP3 T3 review fix, Finding 1): marked, but real text follows the
+        // marker -- a human edited inside the tag without removing it.
+        // Preserve the text, marker stripped; the human is now the owner.
+        Sb.AppendLine(EmitTagged('<summary>', StripMark(SummaryRaw), '</summary>'));
+      taPreserveVerbatim:
+        // hand-written (no marker, not the legacy sentinel), including a
+        // deliberately blank slot -- preserve exactly as parsed.
+        Sb.AppendLine(EmitTagged('<summary>', SummaryRaw, '</summary>'));
+      taEngineOwned:
+        // engine-owned and EMPTY (or genuinely absent, or the legacy TODO
+        // sentinel) -- refill from the harvest, or omit entirely when there
+        // is nothing to refill with (v(ADP3 T3)'s omit-when-empty rule).
+        if AFacts.HarvestedSummary <> '' then
+          Sb.AppendLine(EmitTagged('<summary>' + AUTO_MARK, AFacts.HarvestedSummary, '</summary>'));
+    end;
 
-    // Apply the SAME three-way logic to <param>: a hand-typed tag (any desc,
-    // even '') is preserved verbatim; an engine-owned one (AUTO_MARK, or the
-    // legacy TODO/AUTO_PARAM self-heal shape) is dropped outright -- v(ADP3
-    // T3) never refills a <param> (no harvester exists for params -- the
-    // spec's own out-of-scope note), so there is no "regenerate" arm here,
-    // only "preserve" or "drop"; a sig param with NO existing tag at all gets
-    // nothing, ever (the old marker-only skeleton is gone). Presence for a
-    // param needs no separate flag: the EP entry existing in AExisting.Params
-    // (Found below) already IS that signal, empty Desc or not.
+    // Apply the SAME classification to <param>: a hand-typed tag (any desc,
+    // even '') is preserved verbatim; a MARKED tag carrying real post-marker
+    // text is ALSO preserved, marker stripped (Finding 1); an engine-owned-
+    // and-EMPTY tag (marked, or the legacy TODO/AUTO_PARAM self-heal shape)
+    // is dropped outright -- v(ADP3 T3) never refills a <param> (no
+    // harvester exists for params -- the spec's own out-of-scope note), so
+    // taEngineOwned here is ALWAYS a drop, never a regenerate; a sig param
+    // with NO existing tag at all gets nothing, ever (the old marker-only
+    // skeleton is gone). Presence for a param needs no separate flag: the EP
+    // entry existing in AExisting.Params already IS that signal (AHasTag is
+    // True whenever a matching EP is found below).
     // existing params first, in signature order where possible
     for P in ASigParams do
+    begin
       for var EP in AExisting.Params do
         if SameText(EP.Name, P) then
         begin
-          if not IsEngineOwnedRegardlessOfContent(EP.Desc) then
-            Sb.AppendLine(EmitTagged('<param name="' + P + '">', EP.Desc, '</param>'));
+          case ClassifyTagAction(EP.Desc, True) of
+            taPreserveStripped: Sb.AppendLine(EmitTagged('<param name="' + P + '">', StripMark(EP.Desc), '</param>'));
+            taPreserveVerbatim: Sb.AppendLine(EmitTagged('<param name="' + P + '">', EP.Desc, '</param>'));
+            taEngineOwned: ; // no harvester for params -- always drop, never regenerate
+          end;
           Break;
-          // no match at all: no <param> tag for this sig param -- nothing
-          // hand-written to preserve and no harvester to fill it, so emit
-          // nothing (v(ADP3 T3): fresh/missing params never get a skeleton).
         end;
+      // If no EP matched P at all (the inner loop found nothing): no <param>
+      // tag exists for this sig param -- nothing hand-written to preserve
+      // and no harvester to fill it, so nothing is emitted for it either
+      // (v(ADP3 T3): fresh/missing params never get a skeleton).
+    end;
     // stale hand-typed params: in the comment but not the signature -> flag, keep
     for var EP in AExisting.Params do
     begin
@@ -697,23 +766,28 @@ begin
     end;
 
     if AHasReturn then
-    begin
-      if ReturnsHandWritten then
-        // hand-written, including a deliberate blank slot -- preserved
-        // verbatim; its mined cases (if any) went into the 'Returns:' fact
-        // line above (IncludeReturns) instead of disturbing this text.
-        Sb.AppendLine(EmitTagged('<returns>', AExisting.ReturnsText, '</returns>'))
-      else
-      begin
-        // engine-owned (marked, or the legacy TODO self-heal) or no tag at
-        // all: refill from the mined cases, or omit entirely when there is
-        // nothing mined to say (v(ADP3 T3): a managed/empty <returns> is
-        // never written).
-        var Obs: string:= Trim(ObservedSuffix(AFacts.ReturnCases));
-        if Obs <> '' then
-          Sb.AppendLine(APrefix + '<returns>' + AUTO_MARK + Obs + '</returns>');
+      case ReturnsAction of
+        taPreserveStripped:
+          // Finding 1: marked, but real text follows the marker -- preserve
+          // it, marker stripped; its mined cases (if any) went into the
+          // 'Returns:' fact line above (IncludeReturns) instead of
+          // disturbing this text.
+          Sb.AppendLine(EmitTagged('<returns>', StripMark(AExisting.ReturnsText), '</returns>'));
+        taPreserveVerbatim:
+          // hand-written, including a deliberate blank slot -- preserved
+          // verbatim; same fact-line treatment as above.
+          Sb.AppendLine(EmitTagged('<returns>', AExisting.ReturnsText, '</returns>'));
+        taEngineOwned:
+          // engine-owned: either EMPTY (or absent, or the legacy TODO
+          // self-heal) -- refill from the mined cases, or omit entirely when
+          // there is nothing mined to say (v(ADP3 T3): a managed/empty
+          // <returns> is never written) -- or ALREADY EXACTLY the engine's
+          // own current output (FreshReturnsObserved), which is what this
+          // same refill produces anyway, so re-emitting it is a no-op that
+          // keeps idempotency.
+          if FreshReturnsObserved <> '' then
+            Sb.AppendLine(APrefix + '<returns>' + AUTO_MARK + FreshReturnsObserved + '</returns>');
       end;
-    end;
 
     // remarks: keep hand prose (AExisting.Remarks) OUTSIDE the fence, then a fresh
     // managed block. Strip any old fenced block from the prose before re-emitting
