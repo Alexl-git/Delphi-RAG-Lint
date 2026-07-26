@@ -24,6 +24,18 @@
   TDocRegions.FormatPhase2FactLines helper from the SAME TDocFactsBuilder.
   Build result, so they can never show different facts for one symbol.
 
+  Phase 3 T1 regression (hover marker leak): also documents p2hover.Echo (a
+  deliberately FACTS-FREE free function -- see its own header comment in the
+  fixture) via a targeted `document --qname` call, then hovers it in all 3
+  formats (plain/md/json) and asserts the literal AUTO_MARK ownership token
+  ('drag-lint:auto') never appears in any of them -- before the T1 hover fix,
+  a managed <summary>/<param>/<returns> carrying ONLY the marker rendered the
+  raw HTML comment to a human instead of the pre-marker empty string. Echo is
+  used (not TBusy.Complex) specifically because it has no facts, so its hover
+  output carries no <!-- drag-lint:auto BEGIN/END --> facts-fence either --
+  the ONLY drag-lint:auto text that could appear comes from the tags this
+  fix targets, keeping the "never appears" assertion airtight.
+
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
@@ -117,6 +129,45 @@ try {
   # --- THE CONSISTENCY LOCK: doc block and hover md agree, byte-for-byte ---
   Check 'CONSISTENCY LOCK: Complexity line identical in doc block and hover md' (($null -ne $docComplexity) -and ($docComplexity -eq $hoverComplexity2)) "doc=[$docComplexity] hover=[$hoverComplexity2]"
   Check 'CONSISTENCY LOCK: Reads/Writes line identical in doc block and hover md' (($null -ne $docRW) -and ($docRW -eq $hoverRW2)) "doc=[$docRW] hover=[$hoverRW2]"
+
+  # --- Phase 3 T1 regression: the AUTO_MARK ownership token must never reach --
+  # --- a human via hover. Echo is deliberately FACTS-FREE (see its own      --
+  # --- header comment in the fixture), so the --unit facts-only default     --
+  # --- (Doc.Batch's HasManagedBlock filter) would SKIP creating a comment   --
+  # --- for it -- document it with a TARGETED --qname call instead, which is --
+  # --- not gated by that filter. Reindex FIRST: the --unit --apply above    --
+  # --- already inserted Complex's managed comment (shifting every line      --
+  # --- below it, including Echo's) without an intervening reindex, so the   --
+  # --- store's symbol position for Echo is stale -- a --qname document call --
+  # --- against a stale position is exactly the bug run_doc_idempotent.ps1's --
+  # --- own header comment warns about. Reindex AGAIN afterward so hover     --
+  # --- picks up Echo's own just-inserted comment at ITS new position.       --
+  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & $exePath document --qname p2hover.Echo --db $db --apply 2>$null | Out-Null
+  & $exePath index $scratch --db $db 2>$null | Out-Null
+  $echoPlain = (& $exePath hover --qname p2hover.Echo --db $db 2>&1) -join "`n"
+  Check 'Echo hover (plain) exits 0' ($LASTEXITCODE -eq 0)
+  $echoMd   = (& $exePath hover --qname p2hover.Echo --db $db --format md   2>&1) -join "`n"
+  Check 'Echo hover (md) exits 0' ($LASTEXITCODE -eq 0)
+  $echoJson = (& $exePath hover --qname p2hover.Echo --db $db --format json 2>&1) -join "`n"
+  Check 'Echo hover (json) exits 0' ($LASTEXITCODE -eq 0)
+
+  # The literal ownership token must never leak into any of the 3 formats.
+  Check 'T1: hover plain never leaks the AUTO_MARK ownership token' ($echoPlain -notmatch 'drag-lint:auto') $echoPlain
+  Check 'T1: hover md never leaks the AUTO_MARK ownership token'    ($echoMd    -notmatch 'drag-lint:auto') $echoMd
+  Check 'T1: hover json never leaks the AUTO_MARK ownership token'  ($echoJson  -notmatch 'drag-lint:auto') $echoJson
+
+  # Positive checks: this must be a REAL assertion against real hover output
+  # on a symbol with an engine-emitted marked tag -- not just an absence
+  # check -- so also confirm the CLEANED (marker-stripped) content is there.
+  Check 'T1: hover plain shows the cleaned Returns line' ($echoPlain -match 'Returns: Observed: AValue\.') $echoPlain
+  Check 'T1: hover md shows the cleaned Returns line'    ($echoMd    -match '\*\*Returns:\*\* Observed: AValue\.') $echoMd
+  Check 'T1: hover json summary is empty after stripping (was ONLY the marker)' ($echoJson -match '"summary":""') $echoJson
+  # Echo has no facts (by design), so its managed <param>/<returns> desc/text
+  # is JUST the marker -- after stripping, plain's "AValue --" row and md's
+  # "- `AValue`" row have a properly EMPTY description, not the raw marker.
+  Check 'T1: hover plain param row has no leftover marker text' ($echoPlain -match '(?m)^\s*AValue -- \s*$') $echoPlain
+  Check 'T1: hover md param row has no leftover marker text'    ($echoMd    -match '(?m)^- `AValue` \s*$') $echoMd
 
   # --- Idempotency-adjacent: reindex (facts are index-time) + re-hover -----
   # --- shows the SAME facts (no drift across a reindex with no source      --

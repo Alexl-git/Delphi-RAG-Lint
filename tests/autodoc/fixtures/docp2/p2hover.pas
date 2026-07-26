@@ -17,6 +17,18 @@ unit p2hover;
 // BYTE-IDENTICAL to the same two lines in the managed doc block for the
 // SAME symbol -- proving hover and `document` flow through the identical
 // shared FormatPhase2FactLines helper and can never drift apart.
+//
+// Echo (v(ADP3 T1)): a deliberately FACTS-FREE free function -- no calls, no
+// callers, cyclomatic complexity 1 (well under docs.complexity_min) -- so
+// `document --apply` gives it a managed <summary>/<param>/<returns> carrying
+// ONLY the AUTO_MARK provenance marker (plus the mined 'Observed: AValue.'
+// suffix on <returns>) and NO <remarks> facts block at all (RenderFactsBlock
+// is '' when there are no facts, so MergeComment never emits <remarks>/
+// AUTO_BEGIN for it). That makes Echo the clean host for the T1 hover
+// marker-leak regression test: unlike TBusy.Complex, its hover output has no
+// AUTO_BEGIN/AUTO_END facts-fence to muddy a "the marker never reaches a
+// human" assertion -- the ONLY drag-lint:auto text that could possibly leak
+// here comes from the summary/param/returns tags this test targets.
 
 interface
 
@@ -28,7 +40,14 @@ type
     function Complex(A, B, C: Integer): Integer;
   end;
 
+function Echo(const AValue: Integer): Integer;
+
 implementation
+
+function Echo(const AValue: Integer): Integer;
+begin
+  Result := AValue;
+end;
 
 function TBusy.Complex(A, B, C: Integer): Integer;
 var
