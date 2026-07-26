@@ -692,7 +692,25 @@ begin
     // managed block. Strip any old fenced block from the prose before re-emitting
     // so a second run does not nest blocks.
     var Prose: string:= StripManagedBlock(AExisting.Remarks);
-    if (Trim(Prose) <> '') or (Facts <> '') then
+    var NormProse: string:= StringReplace(Trim(Prose), #13#10, #10, [rfReplaceAll]);
+    NormProse:= StringReplace(NormProse, #13, #10, [rfReplaceAll]);
+    // v(ADP3 T2 adjacent fix): a SINGLE-LINE hand-written remarks with NO
+    // facts to add is re-emitted on ONE line -- '<remarks>prose</remarks>' --
+    // exactly like EmitTagged already does for a single-line summary/param/
+    // returns value, instead of the unconditional open-tag-alone / prose-
+    // alone / close-tag-alone split below. Without this, merely touching a
+    // comment that has an UNTOUCHED single-line <remarks> (e.g. adding a
+    // managed <returns> tag elsewhere in the SAME comment) forces that
+    // remarks tag to expand into three lines even though nothing about it
+    // needed to change -- churn a marker-keyed `document --strip` can never
+    // undo, since there is no marker distinguishing "the engine reformatted
+    // this" from "a human genuinely wrote three lines" (see TDocStripper's
+    // own marker-only ownership rule). Multi-line prose, or any Facts to
+    // fence, still take the multi-line path below unchanged -- a fence
+    // always needs its own lines.
+    if (Trim(Prose) <> '') and (Facts = '') and (not NormProse.Contains(#10)) then
+      Sb.AppendLine(APrefix + '<remarks>' + Trim(Prose) + '</remarks>')
+    else if (Trim(Prose) <> '') or (Facts <> '') then
     begin
       Sb.AppendLine(APrefix + '<remarks>');
       if Trim(Prose) <> '' then
@@ -700,9 +718,7 @@ begin
         // Hand-written remarks prose may contain multiple lines (the parser joins
         // them with bare #10). Emit EACH line APrefix-prefixed so every output line
         // carries /// and the final CRLF join stays valid -- never one line with an
-        // embedded bare LF. Normalize CRLF/CR to LF, split, drop empty lines.
-        var NormProse: string:= StringReplace(Trim(Prose), #13#10, #10, [rfReplaceAll]);
-        NormProse:= StringReplace(NormProse, #13, #10, [rfReplaceAll]);
+        // embedded bare LF.
         for var ProseLine in NormProse.Split([#10]) do
           if Trim(ProseLine) <> '' then
             Sb.AppendLine(APrefix + Trim(ProseLine));
