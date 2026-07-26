@@ -48,6 +48,13 @@ type
     ///    ...&gt;/&lt;returns&gt; tag: drop it, and any following ///
     ///    continuation lines up to and including the one carrying the
     ///    matching close tag (a marked tag can span lines via EmitTagged).
+    ///    EXCEPTION (v(ADP3 T3) review round 2, Finding 1 -- param-only): a
+    ///    marked &lt;param&gt; whose post-marker body is NON-EMPTY is left
+    ///    completely untouched instead -- `document --apply` now preserves
+    ///    that exact shape (a human edited inside the tag without removing
+    ///    the marker), so strip must agree and never destroy it. A marked
+    ///    &lt;summary&gt;/&lt;returns&gt; is always dropped regardless of
+    ///    content -- marked means engine-owned for those two, full stop.
     /// 2. A line carrying AUTO_BEGIN: drop it through the line carrying
     ///    AUTO_END, inclusive.
     /// 3. Legacy: a line whose trimmed form ends with AUTO_PARAM -- drop it
@@ -139,6 +146,29 @@ begin
   else Result:= '';
 end;
 
+// v(ADP3 T3 review round 2, point 2): true when the tag body between the
+// marker (ending at column AFrom on line ALines[ALo]) and the FIRST
+// occurrence of ACloser (searched across ALo..AHi, each line after ALo
+// normalized via DocLineContent -- /// prefix stripped, trimmed) is empty or
+// whitespace-only. A single-line tag reduces to this same check (ALo = AHi
+// collapses the loop to a no-op, so the "self-contained" and "multi-line"
+// shapes share one implementation). Used only by Rule 1's <param> exception
+// below -- <summary>/<returns> are stripped unconditionally regardless of
+// what this returns, matching `document --apply`'s own marked-always-means-
+// engine-owned rule for those two tags.
+function TagBodyIsEmpty(ALines: TStrings; ALo, AHi, AFrom: Integer; const ACloser: string): Boolean;
+var
+  Combined : string;
+  K, ClosePos: Integer;
+begin
+  Combined:= Copy(ALines[ALo], AFrom, MaxInt);
+  for K:= ALo + 1 to AHi do
+    Combined:= Combined + ' ' + DocLineContent(ALines[K]);
+  ClosePos:= Pos(ACloser, Combined);
+  if ClosePos > 0 then Combined:= Copy(Combined, 1, ClosePos - 1);
+  Result:= Trim(Combined) = '';
+end;
+
 // Applies removal rules 1-4 to the doc region ALines[ALo..AHi] (0-based,
 // inclusive), setting ADeleted[i] := True for every line the region loses.
 // ADeleted must already be sized to ALines.Count. Mutates ATagsRemoved /
@@ -195,24 +225,33 @@ begin
       Closer:= ManagedTagCloser(Line, MarkPos);
       if Closer <> '' then
       begin
-        if Pos(Closer, Line) > 0 then // self-contained on this one line
+        // Unified single-line/multi-line search: J = I already satisfies
+        // "self-contained on this line" (Pos(Closer, ALines[I]) > 0), so one
+        // forward search from I handles both shapes identically.
+        J:= I;
+        while (J <= AHi) and (Pos(Closer, ALines[J]) = 0) do Inc(J);
+        if J <= AHi then
         begin
-          ADeleted[I]:= True;
-          Inc(ATagsRemoved);
-          Inc(I);
-        end
-        else
-        begin
-          J:= I + 1;
-          while (J <= AHi) and (Pos(Closer, ALines[J]) = 0) do Inc(J);
-          if J <= AHi then
+          // v(ADP3 T3 review round 2, point 2): --strip must agree with
+          // `document --apply`'s param-only exception (Finding 1) -- a
+          // marked <param> whose post-marker body is non-empty is now
+          // PRESERVED (marker stripped) by the write path, not owned by the
+          // engine; strip must leave it COMPLETELY alone (marker included)
+          // too, or the two verbs diverge (apply keeps the text, strip
+          // deletes the whole tag). <summary>/<returns> are UNCHANGED:
+          // marked always means engine-owned there, stripped
+          // unconditionally regardless of content.
+          if SameText(Closer, '</param>')
+             and (not TagBodyIsEmpty(ALines, I, J, MarkPos + Length(AUTO_MARK), Closer)) then
           begin
-            for K:= I to J do ADeleted[K]:= True;
-            Inc(ATagsRemoved);
             I:= J + 1;
-          end
-          else Inc(I); // malformed: no matching close tag in this region -- leave alone
-        end;
+            Continue;
+          end;
+          for K:= I to J do ADeleted[K]:= True;
+          Inc(ATagsRemoved);
+          I:= J + 1;
+        end
+        else Inc(I); // malformed: no matching close tag in this region -- leave alone
         Continue;
       end;
     end;
