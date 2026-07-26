@@ -14,7 +14,8 @@ type
   /// the per-kind detection rule and which kinds are Fixable.</summary>
   // Per-kind detection rule (deterministic; see TDocDrift.Analyze):
   //   ddParamRenamedOrRemoved - a documented <param> whose name is not a sig param
-  //   ddParamMissing          - a sig param with no <param> tag (FIXABLE: add stub)
+  //   ddParamMissing          - a sig param with no <param> tag (report-only as of
+  //                             v(ADP3 T3) -- see that field's own comment below)
   //   ddParamVolatileMode     - a var/out param whose <param> desc reads input-only (bounded)
   //   ddReturnsButNoValue     - a <returns> on a procedure (no return value)
   //   ddValueButNoReturns     - a function with no <returns> (FIXABLE: add stub)
@@ -35,9 +36,10 @@ type
   );
 
   /// <summary>One drift finding: its kind, a human-readable detail string, the
-  /// Fixable flag (True ONLY for ddParamMissing / ddValueButNoReturns /
-  /// ddFactsBlockStale -- a mechanical, prose-free fix), and the doc/decl line it
-  /// anchors to.</summary>
+  /// Fixable flag (True ONLY for ddValueButNoReturns / ddFactsBlockStale -- a
+  /// mechanical, prose-free fix; v(ADP3 T3) update: ddParamMissing is now
+  /// report-only too -- see MakeFinding's own call site for why), and the
+  /// doc/decl line it anchors to.</summary>
   TDocDriftFinding = record
     Kind   : TDocDriftKind;
     Detail : string       ;
@@ -429,7 +431,19 @@ begin
           Findings.Add(MakeFinding(ddParamRenamedOrRemoved,
             Format('documented param "%s" not in signature', [DP.Name]), False, DocLine));
 
-      // --- 2. ddParamMissing: a sig param with no <param> tag. FIXABLE. --------
+      // --- 2. ddParamMissing: a sig param with no <param> tag. ----------------
+      // v(ADP3 T3): REPORT-ONLY, not Fixable, as of this task -- the auto-fix
+      // used to add a marker-only <param> STUB (empty of prose); MergeComment's
+      // omit-when-empty rule now forbids that categorically (Rule 2: a fresh or
+      // missing <param> is NEVER given a skeleton, since no harvester for
+      // param descriptions exists, or ever will -- see DRagLint.Doc.Regions'
+      // own MergeComment comment). So this finding can no longer be
+      // auto-satisfied by ANY fix pass: only a human typing a real
+      // description resolves it. Fixable=True here would be a false promise
+      // -- a person acting on it via `lint-all --fix` would see the finding
+      // survive forever and reasonably conclude the tool is broken. The
+      // finding itself stays useful (a real, permanent "this param has no
+      // docs" signal for a human), just no longer claims a mechanical fix.
       for N in SigNames do
       begin
         var Documented: Boolean:= False;
@@ -437,7 +451,7 @@ begin
           if SameText(DP.Name, N) then begin Documented:= True; Break; end;
         if not Documented then
           Findings.Add(MakeFinding(ddParamMissing,
-            Format('signature param "%s" has no <param> tag', [N]), True, DocLine));
+            Format('signature param "%s" has no <param> tag', [N]), False, DocLine));
       end;
 
       // --- 3. ddParamVolatileMode: var/out param documented as input-only. ----

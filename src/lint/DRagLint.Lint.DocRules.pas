@@ -13,12 +13,18 @@ unit DRagLint.Lint.DocRules;
   diffs that existing doc against the live signature/body facts.
 
   doc-drift is ALSO --fix-capable, but only for its mechanically-safe subset
-  (the FIXABLE signals of TDocDrift.Analyze: ddParamMissing / ddValueButNoReturns
-  / ddFactsBlockStale). The fix is produced by TDocumenter.BuildFor, whose merge
-  refreshes the managed facts block AND adds missing <param>/<returns> stubs while
-  PRESERVING all hand-written prose (a renamed <param> is kept + flagged, never
-  deleted). Report-only signals (renamed/removed param, spurious <returns>,
-  never-raised <exception>, ...) emit NO edit -- a human decides. }
+  (the FIXABLE signals of TDocDrift.Analyze: ddValueButNoReturns /
+  ddFactsBlockStale). The fix is produced by TDocumenter.BuildFor, whose merge
+  refreshes the managed facts block AND adds a missing <returns> stub (when a
+  mined return case exists) while PRESERVING all hand-written prose (a renamed
+  <param> is kept + flagged, never deleted). Report-only signals (renamed/
+  removed param, spurious <returns>, never-raised <exception>, ...) emit NO
+  edit -- a human decides. v(ADP3 T3): ddParamMissing moved from Fixable to
+  report-only here too -- MergeComment's omit-when-empty rule forbids ever
+  adding a marker-only <param> stub (no harvester for param descriptions
+  exists), so the old "adds missing <param> stub" fix action for this signal
+  no longer exists; see DRagLint.Doc.Drift's own MakeFinding call site
+  comment for the full rationale. }
 
 interface
 
@@ -69,9 +75,12 @@ type
     /// <summary>Builds the MergeComment-based text edits that repair the
     /// mechanically-safe subset of doc-drift on AStore's documented public decls.
     /// For each such decl that carries at least one FIXABLE drift signal, delegates
-    /// to TDocumenter.BuildFor to regenerate the managed facts block and add any
-    /// missing &lt;param&gt;/&lt;returns&gt; stubs -- ONCE per declaration, no
-    /// matter how many fixable signals it has.</summary>
+    /// to TDocumenter.BuildFor to regenerate the managed facts block and add a
+    /// missing &lt;returns&gt; stub when one is minable -- ONCE per declaration, no
+    /// matter how many fixable signals it has. v(ADP3 T3): ddParamMissing is no
+    /// longer one of the FIXABLE signals (see DRagLint.Doc.Drift), so a decl whose
+    /// ONLY drift is a missing &lt;param&gt; now contributes no edit here at
+    /// all -- report-only, same as a renamed/removed param.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no edits.</param>
     /// <returns>The repair edits (a delete+insert pair per repaired doc span);
     /// empty when nothing fixable drifted.</returns>

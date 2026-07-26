@@ -7,7 +7,11 @@
 
     * function F(New: Integer): string;
         doc has <param name="Old"> (renamed away)  -> ddParamRenamedOrRemoved (report-only)
-        doc has NO <param> for the real sig param New -> ddParamMissing (FIXABLE)
+        doc has NO <param> for the real sig param New -> ddParamMissing (report-only --
+          v(ADP3 T3): was FIXABLE before this task; MergeComment's omit-when-empty
+          rule now forbids ever adding a marker-only <param> stub, so the old fix
+          action for this signal no longer exists -- see DRagLint.Doc.Drift's own
+          MakeFinding call-site comment)
         doc has a <returns> and F IS a function       -> OK, no returns drift
     * procedure P;
         doc has a spurious <returns> but P is a proc  -> ddReturnsButNoValue (report-only)
@@ -16,8 +20,8 @@
         (Key IS documented; function HAS a <returns>? no -> also a ddValueButNoReturns FIXABLE)
 
   Asserts the findings array per symbol contains the expected kinds AND that each
-  finding's `fixable` flag matches the rules (ddParamMissing / ddValueButNoReturns /
-  ddFactsBlockStale = True; all others False).
+  finding's `fixable` flag matches the rules (ddValueButNoReturns / ddFactsBlockStale
+  = True; all others False, including ddParamMissing as of v(ADP3 T3)).
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -67,7 +71,7 @@ try {
   $f = Get-Drift 'drift.F'
   Check 'F: emits at least one finding' ($f.Count -ge 1)
   Check 'F: ddParamRenamedOrRemoved present, NOT fixable' (HasKind $f 'ddParamRenamedOrRemoved' $false)
-  Check 'F: ddParamMissing present, FIXABLE' (HasKind $f 'ddParamMissing' $true)
+  Check 'v(ADP3 T3): F: ddParamMissing present, report-only (no longer FIXABLE)' (HasKind $f 'ddParamMissing' $false)
   Check 'F: no ddReturnsButNoValue (function has a real <returns>)' (LacksKind $f 'ddReturnsButNoValue')
   Check 'F: no ddValueButNoReturns (function HAS a <returns>)' (LacksKind $f 'ddValueButNoReturns')
 
