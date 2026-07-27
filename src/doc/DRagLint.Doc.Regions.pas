@@ -823,7 +823,29 @@ begin
     // ParseXmlDoc calls on every single one of them -- it still does not,
     // here, since HasAnySignal stays False for exactly that shape, same as
     // before this round.
+    //
+    // v(ADP3 T3b review round 4, MINOR): AExistingHasAnyTag is now the FIRST
+    // conjunct. Round 3 moved this block to the top of the function (it has
+    // to be here: ReturnsHandWritten, just below, needs StandaloneReturns) --
+    // which also moved it ABOVE the fresh path's own Exit, so nine
+    // BuildStandaloneFor calls (nine ParseXmlDoc parses plus their ~63
+    // StripElement regex constructions) ran on every FRESH comment and were
+    // then discarded unread. Verified behaviour-neutral by reading every
+    // Standalone* use in this function: the ONLY one textually before the
+    // fresh path's Exit is ReturnsHandWritten's own
+    // "AExistingHasAnyTag and StandaloneReturns.HasReturnsTag", whose value is
+    // already False whenever AExistingHasAnyTag is False regardless of what
+    // StandaloneReturns holds (and IncludeReturns/RenderFactsBlock derive from
+    // it, so they are unaffected too); every other read -- <summary>,
+    // <deprecated>, both <param> loops, <exception>, <example>,
+    // <seealso>/<see>, <since>, <remarks> -- sits AFTER that Exit, on the
+    // repair path, where AExistingHasAnyTag is True by construction and this
+    // conjunct is therefore always satisfied. A revert-to-RED check is
+    // impossible for this one BY CONSTRUCTION (a behaviour-neutral change has
+    // no failing state to revert to); it is evidenced instead by the whole
+    // idempotency sweep producing byte-identical md5s before and after.
     var HasAnySignal: Boolean:=
+      AExistingHasAnyTag and
       (AExisting.Format = dfXmlDoc) and
       ((Length(AExisting.Exceptions) > 0) or AExisting.HasExampleTag or
        (Length(AExisting.SeeAlso) > 0) or AExisting.HasSinceTag or AExisting.Deprecated);

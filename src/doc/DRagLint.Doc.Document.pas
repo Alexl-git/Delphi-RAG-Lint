@@ -144,6 +144,68 @@ begin
   Result:= True;
 end;
 
+// v(ADP3 T3b review round 4, CRITICAL): True when AInner's line sequence
+// occurs as a CONTIGUOUS run anywhere inside AOuter's. Deliberately
+// CONTAINMENT rather than CommentLinesEqual's whole-sequence equality -- the
+// shape this answers for is a comment region that holds the author's OWN
+// line(s) PLUS an already-written, verbatim copy of exactly what the engine is
+// about to insert below them, so the two sequences can NEVER be equal, only
+// nested. Both sides come from NormalizeCommentLines, so both are per-line
+// Trimmed /// source lines and the compare is exact (never SameText -- see
+// CommentLinesEqual's own comment for why). An empty AInner answers False
+// (fail OPEN: "not already present", so the caller inserts) -- unreachable in
+// practice, since an empty Merged exits BuildForSymbol long before either
+// branch, but the safe default is to preserve the pre-guard behaviour rather
+// than to suppress an edit on a degenerate input.
+function CommentLinesContain(const AOuter, AInner: TArray<string>): Boolean;
+var
+  I: Integer;
+  J: Integer;
+begin
+  if Length(AInner) = 0 then Exit(False);
+  if Length(AInner) > Length(AOuter) then Exit(False);
+  for I:= 0 to Length(AOuter) - Length(AInner) do
+  begin
+    Result:= True;
+    for J:= 0 to High(AInner) do
+      if AOuter[I + J] <> AInner[J] then
+      begin
+        Result:= False;
+        Break;
+      end;
+    if Result then Exit;
+  end;
+  Result:= False;
+end;
+
+// v(ADP3 T3b review round 4, CRITICAL): the source lines of the 1-based,
+// inclusive span [AStartLine..AEndLine] of ASrc, joined with #10, clamped so
+// an EndLine past EOF cannot index out of range. Lifted verbatim out of the
+// repair branch's own inline loop so BOTH idempotency guards -- the repair
+// path's long-standing CommentLinesEqual compare and round 4's new
+// fresh-path CommentLinesContain compare -- read the current on-disk comment
+// through the SAME extraction. Two independent copies of this could drift and
+// leave one of the two guards silently wrong about what is already on disk,
+// which is precisely the "agrees only by convention" class of defect this
+// task's earlier rounds were pulled up on. Semantics preserved exactly,
+// including the leading-blank-line quirk: the #10 separator is only prepended
+// once Result is non-empty, so a span whose FIRST line is blank drops that
+// blank rather than emitting a leading separator.
+function ExtractSourceSpan(const ASrc: string; AStartLine, AEndLine: Integer): string;
+var
+  Lines: TArray<string>;
+  Ix   : Integer       ;
+begin
+  Result:= '';
+  Lines := ASrc.Replace(#13#10, #10, [rfReplaceAll]).Replace(#13, #10, [rfReplaceAll]).Split([#10]);
+  for Ix:= AStartLine to AEndLine do
+    if (Ix >= 1) and (Ix <= Length(Lines)) then
+    begin
+      if Result <> '' then Result:= Result + #10;
+      Result:= Result + Lines[Ix - 1];
+    end;
+end;
+
 // v(ADP3 T3 review round 3, Regression 2): looks ahead from AOpenIx (which
 // Lines[AOpenIx] trims to exactly '<remarks>') for a matching '</remarks>'
 // line. Returns True (with ACloseIx set to that line's index) only when the
@@ -425,9 +487,7 @@ var
   Merged       : string                                            ;
   Prefix       : string                                            ;
   Sig          : string                                            ;
-  SrcLines     : TArray<string>                                    ;
   CurBlock     : string                                            ;
-  LineIx       : Integer                                           ;
   E            : TTextEdit                                         ;
   FileSyms     : TArray<TSymbol>                                   ;
   SymStartLines: TArray<Integer>                                   ;
@@ -578,16 +638,13 @@ begin
     // (The old SameText(Trim(RawBlock), Trim(Merged)) could NEVER match: RawBlock
     // has the /// stripped and Merged does not, and outer Trim never aligns
     // per-line indentation -- so document always re-wrote the file.)
-    SrcLines:= Src.Replace(#13#10, #10, [rfReplaceAll]).Replace(#13, #10, [rfReplaceAll]).Split([#10]);
-    // Extract the current comment's source lines [StartLine..EndLine] (1-based ->
+    // The current comment's source lines [StartLine..EndLine] (1-based ->
     // 0-based), clamped so an EndLine past EOF cannot index out of range.
-    CurBlock:= '';
-    for LineIx:= Existing.StartLine to Existing.EndLine do
-      if (LineIx >= 1) and (LineIx <= Length(SrcLines)) then
-      begin
-        if CurBlock <> '' then CurBlock:= CurBlock + #10;
-        CurBlock:= CurBlock + SrcLines[LineIx - 1];
-      end;
+    // v(ADP3 T3b review round 4): the inline loop that used to live here is
+    // now ExtractSourceSpan, shared with the fresh path's own guard below --
+    // see its comment for why both guards must read the on-disk comment
+    // through one extraction. Behaviour identical.
+    CurBlock:= ExtractSourceSpan(Src, Existing.StartLine, Existing.EndLine);
     if CommentLinesEqual(NormalizeCommentLines(CurBlock), NormalizeCommentLines(Merged)) then
     begin
       Result.Action:= daUnchanged;
@@ -616,6 +673,58 @@ begin
   end
   else
   begin
+    // v(ADP3 T3b review round 4, CRITICAL -- unbounded per-run growth): this
+    // branch is reached when ExistingHasAnyTag is False, which is NOT the same
+    // thing as "there is no comment here". A comment CAN exist above the
+    // declaration and still leave every disjunct of ExistingHasAnyTag False --
+    // the measured case is one whose only HasContent-bearing tag is an EMPTY or
+    // WHITESPACE-ONLY <remarks>: HasSummaryTag/HasReturnsTag/Params are all
+    // empty, and HasContent tests Remarks <> '' while RxRemarks.Match is
+    // SINGULAR and takes the FIRST match -- which is the author's own empty tag,
+    // forever, however many facts blocks accumulate below it. So control landed
+    // here and inserted UNCONDITIONALLY: `document --apply` appended another
+    // identical facts block on EVERY run, never reaching a fixed point
+    // (measured over four applies with a reindex before each: 364 -> 517 -> 670
+    // -> 823 bytes, "action":"created","edits":1 every cycle). Three
+    // pre-existing siblings grew the same way for the same reason -- a
+    // hand-written <since>/<example>/<seealso> (none of them in
+    // ExistingHasAnyTag's OR-chain) alongside an empty <remarks> -- as does an
+    // UNMODELED tag such as <value> in that company. This violates the binding
+    // acceptance criterion (a second --apply must be a zero-byte diff) and
+    // silently corrupts files under `document --project` or the IDE's
+    // whole-project action.
+    //
+    // The guard: never insert a block whose lines are ALREADY sitting above
+    // this declaration, verbatim. The repair branch above has had a
+    // CommentLinesEqual idempotency compare since it was written; this branch
+    // had none at all. Equality is the wrong test HERE, though -- the existing
+    // region holds the author's own line(s) PLUS the previously-inserted copy,
+    // so the two sequences are never equal, only nested (verified: a plain
+    // equality guard leaves the growth completely unfixed). Hence
+    // CommentLinesContain.
+    //
+    // Why a guard and NOT the other candidate fix (widening ExistingHasAnyTag
+    // so these shapes route to the repair branch instead): the repair branch
+    // DELETES [StartLine..EndLine] and re-inserts Merged, and Merged cannot
+    // represent a tag type it has no field for. Widening the routing term would
+    // therefore have "converged" the <value> + empty-<remarks> shape by
+    // DESTROYING the author's <value> -- exactly the regression the comment on
+    // ExistingHasAnyTag's own computation records being reverted once already.
+    // Suppressing a duplicate INSERT deletes nothing, so every shape above
+    // converges non-destructively and the hand-written tag survives intact.
+    //
+    // Existing.StartLine is 0 when FindDocRegionAbove found nothing at all
+    // (Existing stays Default(TParsedDoc)), so the genuinely-fresh symbol skips
+    // the compare entirely and inserts exactly as before.
+    if (Existing.StartLine >= 1) and (Existing.EndLine >= Existing.StartLine)
+       and CommentLinesContain(
+             NormalizeCommentLines(ExtractSourceSpan(Src, Existing.StartLine, Existing.EndLine)),
+             NormalizeCommentLines(Merged)) then
+    begin
+      Result.Action:= daUnchanged;
+      Exit;
+    end;
+
     // No prior comment: one insert above the declaration.
     E:= Default(TTextEdit);
     E.FilePath:= Path;
