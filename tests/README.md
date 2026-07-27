@@ -18,29 +18,38 @@ The driver prints the denominator it enumerated **before** it runs anything, plu
 per-suite breakdown, so a shrinking battery is visible instead of silent. It exits 0
 only when every enumerated runner passed.
 
-As of 2026-07-27 that is **180 runners**:
+### The count is not written down here, on purpose
 
-| Suite | Runners | | Suite | Runners |
-| --- | --: | --- | --- | --: |
-| `autodoc` | 45 | | `lint-store` | 1 |
-| `autofix` | 10 | | `lintconfig` | 1 |
-| `autotest` | 67 | | `preprocess` | 13 |
-| `baseline` | 1 | | `projectchecks` | 1 |
-| `callresolve` | 12 | | `refactor` | 9 |
-| `ergonomics` | 3 | | `rules-catalog` | 2 |
-| `flowengine` | 1 | | `sarif` | 1 |
-| `heritage` | 6 | | `searchparse` | 1 |
-| `lint` | 1 | | `textindex` | 1 |
-| `lint-project` | 4 | | | |
+**Run `pwsh -File tests\run_battery.ps1 -List` when you want the number.** The driver's
+printed denominator is the only statement of the count that cannot go stale, and this
+file deliberately does not compete with it. The constraint this document replaced failed
+*because* it hardcoded "31 tests"; a different hardcoded number is the same defect
+wearing a new value.
+
+If you are tempted to quote one anyway, note that the honest answer depends on the
+working tree. A clean checkout of this branch enumerates **178** runners; a tree that also
+has the two deliberately-untracked prior-session regression runners
+(`tests/autotest/run_hover_callsite.ps1`, `run_typeat_generic_member.ps1`) enumerates
+**180**. Both are correct. That is exactly why the driver reports what it found rather
+than checking against a literal.
 
 Full run: roughly **10 minutes** wall clock on the build box.
+
+### Which failures are tolerated
+
+**None, with one time-boxed exception.** Until task **T3i** lands, the two
+`tests/callresolve` runners (`run_ambiguous_calls`, `run_calledfrom_resolved`) are
+expected to fail: they are deferred-defect **E1**, `member-access` refs counted as
+unresolved call sites, pre-existing since `9d7e641` (2026-07-10). Any other non-pass
+blocks the commit. **After T3i, the whole battery must pass** -- delete this paragraph
+then.
 
 ## Why this file exists
 
 Through six consecutive tasks of Auto-Document Phase 3, every "full battery green"
-report covered only `tests/autodoc` (45) + `tests/autotest` (67) = **112** of the 180.
-The other 68 were never run. Nine runners were red when the whole set was finally
-executed on 2026-07-27, and only ONE of them was caused by that phase. The rest had been
+report covered only `tests/autodoc` + `tests/autotest` -- roughly **two thirds** of the
+runners that existed. The rest were never run. Nine runners were red when the whole set
+was finally executed on 2026-07-27, and only ONE of them was caused by that phase. The rest had been
 red since **2026-07-01** (`lintconfig`, a deliberate config-semantics change the test
 never followed), **2026-07-06** (three `refactor` runners, a `uses` clause the `-U` lists
 never followed), **2026-07-08** (`ergonomics`, a new rule firing on an old fixture) and
@@ -49,12 +58,20 @@ simply had no written definition, so an unstated one quietly became the definiti
 
 Two rules follow, and they are the point of this document:
 
-1. **The default is everything.** `-Include` exists for a fast inner loop while you are
-   iterating; a task does not get to *report* on a subset. If you ran a subset, say so
-   -- the driver prints `SUBSET RUN -- this is NOT the full battery` for you.
+1. **The default is everything.** `-Include` and `-Exclude` exist for a fast inner loop
+   while you are iterating; a task does not get to *report* on a narrowed run. Both raise
+   a banner -- `SUBSET RUN` / `EXCLUSIONS APPLIED` in the header, and
+   `*** NARROWED RUN -- this is NOT the full battery ***` in the summary, because a
+   report usually quotes the summary. If you see either, say so.
+   `-Exclude` is the more dangerous of the two: `-Include` collapses the denominator to
+   something obviously small, while `-Exclude` drops a handful from an otherwise-full run
+   and leaves a count that still *looks* right.
 2. **Exclusions are documented or they do not exist.** The only default exclusion is
    `tests/run_battery.ps1` itself (it matches `run_*.ps1` and would recurse forever).
-   Anything else added to `$DefaultExclusions` needs a one-line reason next to it.
+   Anything else added to `$DefaultExclusions` needs a one-line reason next to it, and a
+   caller-supplied `-Exclude` needs its reason in whatever report quotes the run.
+3. **Never quote a runner count as a contract.** Read the driver's printed denominator.
+   See "The count is not written down here, on purpose" above.
 
 ## What is *not* a runner
 

@@ -19,7 +19,9 @@
 - The built exe deploys to `third_party/dll-win64/drag-lint.exe`; every test runner takes `-Exe` defaulting to that path.
 - **Index-time facts require a reindex.** Any test asserting a `symbol_facts`-derived line must rebuild the exe *and* re-run `index` on its fixture.
 - No `sqlite3` on PATH -- inspect DBs with `C:\Python314\python` (stdlib `sqlite3`, open with `?mode=ro`).
-- **The battery is EVERY `run_*.ps1` under `tests/`, recursively -- 180 runners, not the 112 in `autodoc` + `autotest`.** Run it with `pwsh -File tests\run_battery.ps1` (it enumerates dynamically and prints its own denominator); see `tests/README.md`. This line used to read "autodoc + hover, 31 tests", and that understatement is exactly how six tasks in a row reported green while eight runners outside those two suites were red -- one of them broken by this phase's own Task 3. It must stay green at every commit.
+- **The battery is EVERY `run_*.ps1` under `tests/`, recursively -- NOT just `autodoc` + `autotest`.** Run it with `pwsh -File tests\run_battery.ps1`; it enumerates dynamically and **prints its own denominator**, which is the only statement of the count that cannot go stale -- do not quote a number here. See `tests/README.md`. This line used to read "autodoc + hover, 31 tests", and that understatement is exactly how six tasks in a row reported green while eight runners outside those two suites were red -- one of them broken by this phase's own Task 3.
+  - **Green bar, from T3e until T3i lands:** the two `tests/callresolve` runners (`run_ambiguous_calls`, `run_calledfrom_resolved`) are the **only** tolerated failures. They are register item **E1** -- `member-access` refs counted as unresolved call sites, pre-existing since `9d7e641` (2026-07-10) and owned by the inserted task **T3i**. **Any other non-pass blocks the commit.**
+  - **After T3i lands: the whole battery must pass, with no exceptions.** T3i fixes caller RESOLUTION; T4 then fixes caller RENDERING. Delete this sub-bullet when T3i is done.
 - Uncertainty convention: ` ?` suffix; lists capped with ` (+N more)`.
 - The tree-sitter self-lint PostToolUse hook reports FALSE errors on generic-heavy `.pas` -- trust `dcc64`, not the hook.
 
@@ -1779,7 +1781,9 @@ Kill orphan `drag-lint.exe` / `bds.exe` first. Build `build/build_draglint_win64
 
 - [ ] **Step 2: Full regression battery.**
 
-Run `pwsh -File tests\run_battery.ps1` -- the WHOLE battery, all 180 runners, not `tests/autodoc` + `tests/autotest`. Expected: 180/180. **Record the actual pass/fail/timeout counts and the denominator the driver printed** -- if anything fails, fix it before proceeding; do not reindex on a red battery.
+Run `pwsh -File tests\run_battery.ps1` -- the WHOLE battery, not `tests/autodoc` + `tests/autotest`. **Record the actual pass/fail/timeout counts AND the denominator the driver printed** (do not compare against a number written here -- the driver's printed denominator is the contract; a literal in this document would be wrong the moment a runner is added, and a hardcoded count is the exact defect this line used to carry).
+
+Expected by the time T17 runs: **every enumerated runner passes.** T3i is scheduled before T4 precisely so the `tests/callresolve` pair (register item E1) is green well before this rollout -- if it is not, T17 does not start. If anything else fails, fix it before proceeding; do not reindex on a red battery.
 
 - [ ] **Step 3: Reindex all 9 manifest DBs to v19.**
 

@@ -578,11 +578,12 @@ msbuild src/delphi-plugin/dclDragLintWizard.dproj /p:Config=Debug /p:Platform=Wi
 ```
 
 Run the test battery — **every** `run_*.ps1` under `tests/`, enumerated recursively
-(180 runners, ~10 min). See [tests/README.md](tests/README.md) for the definition and
-the rules that go with it:
+(~10 min). The driver prints the number it found; that printed denominator is the
+count, not any figure written in a document. See [tests/README.md](tests/README.md) for
+the definition and the rules that go with it:
 ```
 pwsh -File tests\run_battery.ps1                    # the battery (default: everything)
-pwsh -File tests\run_battery.ps1 -List              # enumerate only
+pwsh -File tests\run_battery.ps1 -List              # enumerate only, print the denominator
 pwsh -File tests\run_battery.ps1 -Include autodoc   # a subset, for a fast inner loop
 ```
 
