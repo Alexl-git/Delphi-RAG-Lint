@@ -92,10 +92,23 @@ type
     /// <param name="AFilePath">Path to the .pas file to scan; must exist.</param>
     /// <param name="ADeclLine">1-based source line of the target symbol's
     /// declaration (e.g. TSymbol.StartLine).</param>
+    /// <param name="ARegionStartLine">v(ADP3 T3d2 D8 review, Critical 1):
+    /// 1-based first line of the matched /// region, or 0 if none was found.
+    /// The gap window this function tolerates ([ADeclLine-2, ADeclLine-1])
+    /// does not verify the intervening line is actually blank, so for two
+    /// declarations on CONSECUTIVE lines (an ordinary back-to-back overload
+    /// pair) a single doc block above the FIRST can satisfy both of their
+    /// windows -- exposed so a caller resolving MULTIPLE declarations that
+    /// share one qualified name can detect when two different ADeclLine
+    /// values resolved to the SAME physical region and de-duplicate before
+    /// applying, instead of queuing the identical delete twice.</param>
+    /// <param name="ARegionEndLine">1-based last line of the matched region,
+    /// or 0 if none was found.</param>
     /// <returns>Same shape as StripFile, but Edits (and the Tags/Blocks
     /// counts) cover only the single doc region above ADeclLine; empty when
     /// no such region is found.</returns>
-    class function StripSymbolRegion(const AFilePath: string; ADeclLine: Integer): TStripResult;
+    class function StripSymbolRegion(const AFilePath: string; ADeclLine: Integer;
+      out ARegionStartLine, ARegionEndLine: Integer): TStripResult;
   end;
 
 implementation
@@ -380,7 +393,8 @@ begin
   end;
 end;
 
-class function TDocStripper.StripSymbolRegion(const AFilePath: string; ADeclLine: Integer): TStripResult;
+class function TDocStripper.StripSymbolRegion(const AFilePath: string; ADeclLine: Integer;
+  out ARegionStartLine, ARegionEndLine: Integer): TStripResult;
 var
   Lines  : TStringList;
   Deleted: TArray<Boolean>;
@@ -389,6 +403,13 @@ var
 begin
   Result:= Default(TStripResult);
   Result.FilePath:= AFilePath;
+  // v(ADP3 T3d2 D8 review, Critical 1): explicit zero, not relying on `out`
+  // parameter default-initialization -- Integer is an unmanaged type, so an
+  // `out Integer` parameter is NOT implicitly zeroed the way a managed local
+  // (string/interface) would be. 0 means "no region matched", agreeing with
+  // every early-exit path below.
+  ARegionStartLine:= 0;
+  ARegionEndLine  := 0;
 
   Lines:= TStringList.Create;
   try
@@ -416,6 +437,11 @@ begin
       else Inc(I);
     end;
     if not Found then Exit;
+
+    // v(ADP3 T3d2 D8 review, Critical 1): 0-based array indices -> 1-based
+    // line numbers, matching every other line number this unit exposes.
+    ARegionStartLine:= RegionLo + 1;
+    ARegionEndLine  := RegionHi + 1;
 
     SetLength(Deleted, Lines.Count);
     StripRegion(Lines, RegionLo, RegionHi, Deleted, Result.TagsRemoved, Result.BlocksRemoved);

@@ -6903,7 +6903,20 @@ var
   Res  : TDocBatchResult ;
 begin
   if not TFile.Exists(AArgs.ProjectPath) then begin Writeln(Format('Project file not found: %s', [AArgs.ProjectPath])); Exit(2); end;
-  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+
+  // v(ADP3 T3d2 D7, folded-in minor 4): --strip's engine path never queries
+  // the store here either -- TDocBatch.DocumentProject resolves its file
+  // list via TClosureResolver.Resolve (takes no AStore at all) and then
+  // routes every file through TDocBatch.DocumentUnit's own Store-free Strip
+  // branch (see DoDocumentUnit's short-circuit above for the traced proof).
+  // The --reindex pre/post steps below are independent of this check --
+  // DoIndex takes AArgs, never the Store variable -- so they stay fully
+  // active either way; skipping just the DB-exists check and the store open
+  // does not require touching them. (The first review round declined this
+  // specific extension, citing a --reindex interaction as the obstacle;
+  // re-examined and that interaction does not exist -- the two are
+  // independent, so the extension is safe and is applied here.)
+  if (not AArgs.DocStrip) and (not FileExists(AArgs.DbPath)) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
 
   // ADP1: Step 1 (if --reindex + --apply): reindex BEFORE document to ensure
   // --apply works on current line numbers. INCREMENTAL index auto-detects
@@ -6920,8 +6933,11 @@ begin
     if IndexResult <> 0 then begin Writeln('Reindex before document failed.'); Exit(IndexResult); end;
   end;
 
-  Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
-  if not Ok then Exit(2);
+  if not AArgs.DocStrip then
+  begin
+    Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+    if not Ok then Exit(2);
+  end;
 
   Opts:= Default(TDocBatchOptions);
   Opts.Stubs:= AArgs.DocStubs;
@@ -7000,25 +7016,58 @@ end; // function
 // Syms[0] alone used to strip only the FIRST overload's region, silently
 // leaving every other overload's markers on disk (`--apply` writes N blocks,
 // `--strip` removed one -- a broken round-trip invariant). Fixed by stripping
-// EVERY matching declaration's own region: each is independently located by
-// ITS OWN StartLine (StripSymbolRegion scans only the one region immediately
-// above that line), so there is no ambiguity about which lines belong to
-// which overload -- only about how many declarations QName names, and the
-// fix is to act on all of them rather than an arbitrary one. (Refusing on
-// ambiguity was the other acceptable fix the register offered; declined
-// because the per-overload region is never in doubt, and a refusal would
-// leave the user with no way to strip an overloaded routine via --qname at
-// all, only the coarser --unit.)
+// EVERY matching declaration's own region -- each is independently located by
+// ITS OWN StartLine -- rather than refusing on ambiguity, the other
+// acceptable fix the register offered: refusing would have left the user
+// with no way to strip an overloaded routine via --qname at all, only the
+// coarser --unit, and is unnecessary here -- confirmed against the real
+// ORM3 index that FindSymbolsByQualifiedName never splits one declaration's
+// interface half and implementation half into separate rows (both live on
+// one row, in StartLine/EndLine and ImplStartLine/ImplEndLine), so
+// Length(Syms) > 1 reliably means genuinely distinct declarations, never an
+// artifact of how one declaration is stored.
+// v(ADP3 T3d2 D8 review round 1, CRITICAL 1): the naive version of "strip
+// every match" UNIONED every symbol's edits with no de-duplication. Two
+// DIFFERENT declaration lines can resolve to the exact SAME physical doc
+// region: StripSymbolRegion's gap window ([ADeclLine-2, ADeclLine-1]) does
+// not verify the intervening line is blank, so for two overloads on
+// CONSECUTIVE lines (the ordinary back-to-back overload idiom -- 311 such
+// pairs measured in the real ORM3 index) an engine-owned block above the
+// FIRST of the pair is claimed by BOTH rows, producing two IDENTICAL
+// tekDeleteLines edits. TTextEditApplier.Apply has no overlap detection --
+// applying the same delete twice removes whatever shifted up into the freed
+// range on the second pass, i.e. the declaration itself. Fixed by
+// de-duplicating on the RESOLVED REGION (StripSymbolRegion's new
+// ARegionStartLine out param), not on the symbol or its StartLine: only the
+// first symbol to reach a given region contributes its edits and counts:
+// every later symbol resolving to the SAME region is skipped outright, so
+// the same physical lines can never be queued for deletion twice.
+// v(ADP3 T3d2 D8 review round 1, IMPORTANT 2): a qname can also resolve
+// across MULTIPLE FILES (34 real cases in the ORM3 index, e.g. a shared unit
+// name duplicated per project tree/platform target) -- a materially
+// different, more dangerous ambiguity than same-file overloads, since
+// nothing about "strip this one qname" says which project the user meant.
+// Restricted to Syms[0]'s OWN file: a symbol whose FileId differs is
+// skipped, so Path (used for both the TFile.Exists guard and the report) is
+// always the complete, accurate set of files this run can touch -- never a
+// silent write to a file the report does not name. --unit remains the tool
+// for a specific file the user names explicitly.
 function DoDocumentStripQName(const AArgs: TArgs; const AStore: ISymbolStore): Integer;
 var
-  Syms     : TArray<TSymbol>  ;
-  Sym      : TSymbol          ;
-  Path     : string           ;
-  OneRes   : TStripResult     ;
-  TagsSum  : Integer          ;
-  BlocksSum: Integer          ;
-  AllEdits : TArray<TTextEdit>;
-  Applied  : Boolean          ;
+  Syms       : TArray<TSymbol>  ;
+  Sym        : TSymbol          ;
+  Path       : string           ;
+  OneRes     : TStripResult     ;
+  RegionLo   : Integer          ;
+  RegionHi   : Integer          ;
+  SeenLo     : TArray<Integer>  ; // v(ADP3 T3d2 D8 review, Critical 1): every region already accumulated, this file only
+  SeenHi     : TArray<Integer>  ;
+  AlreadySeen: Boolean          ;
+  K          : Integer          ;
+  TagsSum    : Integer          ;
+  BlocksSum  : Integer          ;
+  AllEdits   : TArray<TTextEdit>;
+  Applied    : Boolean          ;
 begin
   Syms:= AStore.FindSymbolsByQualifiedName(AArgs.QName);
   if Length(Syms) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
@@ -7029,9 +7078,27 @@ begin
   TagsSum  := 0;
   BlocksSum:= 0;
   AllEdits := nil;
+  SeenLo   := nil;
+  SeenHi   := nil;
   for Sym in Syms do
   begin
-    OneRes:= TDocStripper.StripSymbolRegion(AStore.GetFilePath(Sym.FileId), Sym.StartLine);
+    if Sym.FileId <> Syms[0].FileId then Continue; // IMPORTANT 2: this file only
+
+    OneRes:= TDocStripper.StripSymbolRegion(Path, Sym.StartLine, RegionLo, RegionHi);
+    if RegionLo = 0 then Continue; // no doc region found above this decl at all
+
+    // CRITICAL 1: skip a symbol whose (RegionLo, RegionHi) was already
+    // processed by an earlier symbol in this same loop -- two different
+    // StartLines resolving to the identical physical region is exactly the
+    // consecutive-overload collision the review round found, and applying
+    // its edits twice is what corrupted live source.
+    AlreadySeen:= False;
+    for K:= 0 to High(SeenLo) do
+      if (SeenLo[K] = RegionLo) and (SeenHi[K] = RegionHi) then begin AlreadySeen:= True; Break; end;
+    if AlreadySeen then Continue;
+    SeenLo:= SeenLo + [RegionLo];
+    SeenHi:= SeenHi + [RegionHi];
+
     Inc(TagsSum  , OneRes.TagsRemoved  );
     Inc(BlocksSum, OneRes.BlocksRemoved);
     AllEdits:= AllEdits + OneRes.Edits;

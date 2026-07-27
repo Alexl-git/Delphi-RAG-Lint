@@ -400,11 +400,14 @@ end;
 // DECAYED one (source changed, the fact it asserts is now false) was never
 // refreshed or deleted and sat on disk asserting a stale fact permanently.
 // IsFenceOnlyRemarksSpan resolves this narrowly: only a '<remarks>' whose
-// span encloses NOTHING but one well-formed fence is exempted (both wrapper
-// lines skipped as a unit); a '<remarks>' sharing its span with hand-written
-// prose is NOT exempted, and that prose line still fails the ordinary
-// AUTO_MARK check on its own, so the overall verdict is unaffected there --
-// this exemption only changes the answer for the fence-only case.
+// span encloses NOTHING but one or more well-formed, sequential fences is
+// exempted (both wrapper lines skipped as a unit); a '<remarks>' sharing its
+// span with hand-written prose is NOT exempted, and that prose line still
+// fails the ordinary AUTO_MARK check on its own, so the overall verdict is
+// unaffected there -- this exemption only changes the answer for the
+// fence-only case. (v(ADP3 T3d2 D10): "one" corrected to "one or more,
+// sequential" here to match the same fix at IsFenceOnlyRemarksSpan's own
+// header above -- see that comment for the full trace of why.)
 //
 // Round 3, Regression 3: an AUTO_BEGIN that never reaches a matching
 // AUTO_END within the region now FAILS CLOSED (Exit(False) immediately)
