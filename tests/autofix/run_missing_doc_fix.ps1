@@ -76,13 +76,16 @@ try {
   # --fix-rule NARROWS the surviving set; it does not re-enable a disabled rule.
   & $exePath lint-all --db $db --config $cfg --fix --fix-line $L --fix-rule missing-doc --apply --no-backup 2>$null | Out-Null
   $txt = [IO.File]::ReadAllText($target)
-  # The /// comment must PRECEDE the Undocumented decl (its function line moved
-  # down). Locate the decl, then take the contiguous run of ///-prefixed lines
+  # A1 = something was inserted AT ALL (safe whole-file: the fixture's own
+  # header uses '//', it carries no '///' line of its own).
+  Check 'A1 inserted a /// DocInsight comment'          ($txt -match '(?m)^\s*///\s')
+  # A7 = ...and it landed ABOVE the decl (whose function line moved down).
+  # Locate the decl, then take the contiguous run of ///-prefixed lines
   # immediately above it -- the same scan-upward idiom
-  # tests\autodoc\run_doc_p3_emptytags.ps1 uses. EVERY content assertion below
-  # runs against that block, NOT the whole file: the fixture's own // header
-  # quotes '<param name="Value">' as prose, so a whole-file regex would match
-  # the fixture instead of the engine's output (it silently did).
+  # tests\autodoc\run_doc_p3_emptytags.ps1 uses. Every CONTENT assertion runs
+  # against that block, NOT the whole file: the fixture's own // header quotes
+  # '<param name="Value">' as prose, so a whole-file regex would match the
+  # fixture instead of the engine's output (it silently did).
   $lines = [IO.File]::ReadAllLines($target)
   $declIx = -1
   for ($i=0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match 'function Undocumented\(Value: Integer\): Integer;' -and $lines[$i] -notmatch '///') { $declIx = $i; break } }
@@ -93,15 +96,13 @@ try {
     while ($j -ge 0 -and $lines[$j].TrimStart() -match '^///') { $bl = ,($lines[$j]) + $bl; $j-- }
     $block = ($bl -join "`n")
   }
-  # A7 is the positional check: a /// block exists directly above the decl.
   Check 'A7 a /// comment precedes the Undocumented decl' ($block -match '(?m)^\s*///\s')
   # v(ADP3 T3) omit-when-empty: Undocumented has no hand-written or harvested
   # summary and no hand-written description for `Value`, so the inserted comment
   # carries NEITHER <summary> NOR <param name="Value"> -- see
   # tests\autodoc\run_doc_p3_emptytags.ps1, which locks that behaviour on the
   # `document` side. The fix-it path emits the same text `document --qname` does,
-  # so A1/A3 assert the surviving shape, not the pre-T3 one.
-  Check 'A1 inserted a /// DocInsight comment'          ($block -match '(?m)^\s*///\s')
+  # so A3 asserts the surviving shape, not the pre-T3 one.
   Check 'A2 inserted a managed drag-lint:auto block'   ($block.Contains('<!-- drag-lint:auto BEGIN -->') -and $block.Contains('<!-- drag-lint:auto END -->'))
   Check 'A3 NO <summary> and NO <param> tag (v(ADP3 T3): nothing to say -> omitted, never a blank stub)' `
     ((-not ($block -match '<summary>')) -and (-not ($block -match '<param')))
