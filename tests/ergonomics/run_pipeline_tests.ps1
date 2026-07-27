@@ -27,11 +27,25 @@ $cfg = Join-Path $PSScriptRoot 'pipeline_sev.json'
 & $exe lint $fx --config $cfg --fail-on error 2>$null | Out-Null; $ecSev = $LASTEXITCODE
 Ok "severity bump => fail-on error trips" ($ecSev -eq 1)
 
-# 4. disable via --config drops the finding entirely (text shows 0 findings).
+# 4. disable via --config drops THAT rule's finding.
+# This used to assert the whole run reports '0 finding'. That was only ever true
+# while used-before-assignment was the ONLY rule firing on the fixture; once
+# local-var-casing shipped it also fires on `var n: Integer`, the total became
+# 1, and the check went red without the disable ever having broken. Assert the
+# rule-specific effect plus "exactly one fewer finding than the un-configured
+# run" -- both stay true no matter how many unrelated rules land later.
 $cfgD = Join-Path $PSScriptRoot 'pipeline_dis.json'
 '{ "disabled": ["used-before-assignment"] }' | Set-Content -Encoding ASCII $cfgD
+$all = & $exe lint $fx 2>$null | Out-String
 $dis = & $exe lint $fx --config $cfgD 2>$null | Out-String
-Ok "disabled rule drops finding" ($dis -match '0 finding')
+function FindingCount([string]$text) {
+  $m = [regex]::Match($text, '(\d+)\s+finding')
+  if ($m.Success) { return [int]$m.Groups[1].Value } else { return -1 }
+}
+Ok "disabled rule drops finding"  (-not ($dis -match 'used-before-assignment'))
+Ok "un-disabled run still has it" ($all -match 'used-before-assignment')
+Ok "disable removes exactly one finding" `
+  ((FindingCount $all) -ge 1 -and (FindingCount $dis) -eq ((FindingCount $all) - 1))
 
 # 5. baseline round-trip: write, then re-run reports nothing new.
 $base = Join-Path $PSScriptRoot 'pipeline.baseline.json'

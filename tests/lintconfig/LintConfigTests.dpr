@@ -109,12 +109,26 @@ begin
     Check('threshold default when unset',
       Cfg.ThresholdFor('too-many-locals', 25) = 25);
 
-    // profile merge
+    // Profile merge. The semantics are ASYMMETRIC, and deliberately so --
+    // e2fcc49 (2026-07-01, "profiles override full config") made LIST fields
+    // (disabled, enabled) replace the top-level list WHOLESALE, while MAP
+    // fields (severity, thresholds, naming) update per key so base entries the
+    // profile omits are inherited. 09e7fd2 walked severity back into the
+    // per-key group. See TLintConfig.Load's own doc comment, which states this.
+    // This block asserted the pre-e2fcc49 "lists merge" behaviour and had been
+    // red ever since, unnoticed because nothing ran tests\lintconfig.
     Cfg:= TLintConfig.Load(Path, 'ci');
     Check('profile ci adds deep-nesting to disabled',
       not Cfg.ShouldKeep('deep-nesting', False));
-    Check('profile keeps top-level disabled too',
-      not Cfg.ShouldKeep('magic-number', False));
+    // LIST field: 'ci' lists only deep-nesting, so the top-level
+    // disabled ["magic-number"] is gone and magic-number is kept again.
+    Check('profile REPLACES top-level disabled list wholesale',
+      Cfg.ShouldKeep('magic-number', False));
+    // MAP fields: 'ci' mentions neither, so both base entries survive.
+    Check('profile INHERITS top-level severity (map field, per-key)',
+      Cfg.ApplySeverity('object-leak', 'info') = 'error');
+    Check('profile INHERITS top-level thresholds (map field, per-key)',
+      Cfg.ThresholdFor('too-many-parameters', 7) = 3);
 
     // --enable composition
     Cfg:= TLintConfig.Load(Path, '');
