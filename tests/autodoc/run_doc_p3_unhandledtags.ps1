@@ -145,8 +145,10 @@ try {
   # (Merged is no longer '' for it), so it is genuinely repaired -- ONE
   # delete+insert pair (edits=2). HasException/HasValueTag each contribute
   # zero edits (see assertions 2/3 below), so 2 is the total for the unit.
+  # Review round 1 (Minor): '"edits":2' would ALSO match '"edits":20' etc. --
+  # anchor on the terminating ',' or '}' so only the exact value 2 passes.
   Check '1. apply reports edits=2 for the whole unit (ONLY HasSinceSeeAlsoExampleDeprecated is repaired)' `
-    ($applyJson -match '"edits":2') $applyJson
+    ($applyJson -match '"edits":2[,}]') $applyJson
 
   $lines = [IO.File]::ReadAllLines($target)
 

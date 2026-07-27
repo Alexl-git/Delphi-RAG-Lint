@@ -94,6 +94,43 @@
   count would double on the second cycle. This is the acceptance test for
   the whole task, per the brief.
 
+  PART 3 (scratch1, continued -- coordinator review round 1 findings):
+    * NestedTagsInSummary (Critical 1): an inline <see cref>/<exception cref>
+      NESTED inside <summary> prose must survive as part of the summary's
+      own verbatim text, WITHOUT ALSO being extracted and re-emitted as a
+      standalone <seealso>/<exception> sibling. THREE apply cycles (with a
+      reindex between each), asserting byte-identity from cycle 2 on --
+      growth, not disappearance, was this defect's failure mode, so a
+      single- or double-apply test proves nothing here (a naive
+      implementation is byte-IDENTICAL to a correct one after cycle 1; only
+      cycle 2 onward diverges). Reproduces the shape found on this repo's
+      own src/report/DRagLint.Convert.Rules.pas (TConversionRule's <summary>
+      carries an inline <see cref="Kind"/>) -- separately verified directly
+      against that real file (not asserted here; a test fixture should not
+      depend on unrelated production source staying byte-identical forever).
+    * GappedDeprecatedMessage (Important 2 + gapped shape): the MESSAGE on a
+      hand-written <deprecated>message</deprecated> must survive, not
+      collapse to a bare <deprecated/>; comment is separated from its
+      declaration by a blank line (every other symbol in this fixture abuts
+      its declaration).
+    * BareSeeOnly (Critical 1, second symptom): a bare, standalone
+      <see cref="X"/> must round-trip as <see>, never silently rewritten to
+      <seealso> (RxSee's own alternation conflates both spellings into one
+      array; blindly re-emitting every entry as <seealso> would destroy the
+      author's <see> and fabricate a <seealso> they never wrote).
+    * ProseMentionsSeeAlso / ProseMentionsSeed / ProseMentionsDeprecatedSoon
+      (Important 3): plain prose merely resembling a tag (a bare <seealso>
+      with no cref, "<seed>", "<deprecatedSoon>") must dispatch as plain
+      prose and survive UNTRUNCATED -- pre-fix-round-1, Dispatch's bare
+      '<see'/'<deprecated' prefixes over-matched all three, mis-routing to
+      ParseXmlDoc, whose untagged-prefix-becomes-summary fallback truncated
+      each at its first '<'.
+    * EmptyExampleSurvives (Minor 1): a deliberately empty
+      <example></example> (a human's blank slot) must survive, not be
+      dropped -- the old gate (ExampleText <> '') could not tell "absent"
+      apart from "present but empty"; HasExampleTag (mirroring
+      HasSummaryTag) does.
+
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
@@ -110,13 +147,21 @@ $fixture = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\docp3\preserve_tags.
 # line matching $declPattern. $null if the declaration is not found. Same
 # scan-upward idiom run_doc_seealso.ps1/run_doc_since.ps1 use -- scoped to ONE
 # declaration's own block so a check cannot bleed into a DIFFERENT decl's doc
-# comment elsewhere in the file.
+# comment elsewhere in the file. Review round 1 (gapped-shape coverage):
+# tolerates ONE leading blank line before the scan starts, matching
+# FindDocRegionAbove's own AllowGap=1 default, so a GAPPED comment (blank
+# line between it and the declaration -- GappedDeprecatedMessage) is found
+# the same way an abutting one is; a no-op for every abutting case (the line
+# immediately above the decl is already a /// line there, so the blank-skip
+# never triggers).
 function Get-DocBlockAbove([string[]]$lines, [string]$declPattern) {
   $idx = -1
   for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match $declPattern) { $idx = $i; break } }
   if ($idx -lt 0) { return $null }
+  $i = $idx - 1
+  if (($i -ge 0) -and ($lines[$i].Trim() -eq '')) { $i-- }
   $blockLines = New-Object System.Collections.Generic.List[string]
-  for ($i = $idx - 1; $i -ge 0; $i--) {
+  for (; $i -ge 0; $i--) {
     if ($lines[$i] -notmatch '^\s*///') { break }
     $blockLines.Insert(0, $lines[$i])
   }
@@ -373,6 +418,149 @@ try {
   Check 'TRAP 1: hand-written <seealso> still appears exactly once (cycle 2, did not double)' ($handSeeAlsoCount2 -eq 1)
   Check 'TRAP 1: auto <since> still appears exactly once (cycle 2, did not double)' ($autoSinceCount2 -eq 1)
   Check 'TRAP 1: auto <seealso cref=...DoB"/> still appears exactly once (cycle 2, did not double)' ($autoSeeAlsoDoBCount2 -eq 1)
+
+  # =====================================================================
+  # PART 3: coordinator review round 1 findings (Critical 1, Important 2/3)
+  # Continues on scratch1/$target -- PART 1's strip round-trip already
+  # proved the file is back to $before (pristine) bytes, so these NEW
+  # symbols (never targeted by PART 1's --qname calls) are still untouched.
+  # Reindex first: the strip operations above changed the file without
+  # reindexing, so the DB's line numbers are stale relative to the
+  # now-pristine file.
+  # =====================================================================
+  & $exePath index $scratch --db $db 2>$null | Out-Null
+  Check 'PART 3: re-index exits 0' ($LASTEXITCODE -eq 0)
+
+  # --- NestedTagsInSummary: Critical 1, THREE apply cycles ---
+  $jNest1 = Apply-One 'preserve_tags.NestedTagsInSummary'
+  Check 'NestedTagsInSummary apply #1 exits 0' ($LASTEXITCODE -eq 0) $jNest1
+
+  $nestLines1 = [IO.File]::ReadAllLines($target)
+  $nestBlock1 = Get-DocBlockAbove $nestLines1 '^procedure NestedTagsInSummary;'
+  Check 'NestedTagsInSummary decl + doc-comment found (cycle 1)' ($null -ne $nestBlock1 -and $nestBlock1 -ne '')
+  Check 'NestedTagsInSummary: <summary> line 1 (with its inline <see>) survives verbatim (cycle 1)' `
+    ($nestBlock1 -match [regex]::Escape('<summary>Uses <see cref="Other.RelatedThing"/> for related lookups and'))
+  Check 'NestedTagsInSummary: <summary> line 2 (with its inline <exception>) survives verbatim (cycle 1)' `
+    ($nestBlock1 -match [regex]::Escape('can raise <exception cref="ENested">a nested, inline description</exception>'))
+  Check 'CRITICAL 1: NO standalone <seealso> fabricated from the inline <see> (cycle 1)' `
+    (-not ($nestBlock1 -match '<seealso'))
+  $nestExcCount1 = ([regex]::Matches($nestBlock1, [regex]::Escape('<exception cref="ENested">'))).Count
+  Check 'CRITICAL 1: <exception cref="ENested"> appears exactly once -- inside the summary only, no standalone duplicate (cycle 1)' `
+    ($nestExcCount1 -eq 1)
+
+  $afterNest1 = [IO.File]::ReadAllBytes($target)
+
+  & $exePath index $scratch --db $db 2>$null | Out-Null
+  $jNest2 = Apply-One 'preserve_tags.NestedTagsInSummary'
+  Check 'NestedTagsInSummary apply #2 exits 0' ($LASTEXITCODE -eq 0) $jNest2
+  $afterNest2 = [IO.File]::ReadAllBytes($target)
+  Check 'CRITICAL 1: NestedTagsInSummary byte-identical after a 2nd apply cycle' `
+    ([System.Linq.Enumerable]::SequenceEqual([byte[]]$afterNest1,[byte[]]$afterNest2))
+
+  & $exePath index $scratch --db $db 2>$null | Out-Null
+  $jNest3 = Apply-One 'preserve_tags.NestedTagsInSummary'
+  Check 'NestedTagsInSummary apply #3 exits 0' ($LASTEXITCODE -eq 0) $jNest3
+  $afterNest3 = [IO.File]::ReadAllBytes($target)
+  Check 'CRITICAL 1: NestedTagsInSummary byte-identical after a 3rd apply cycle (growth -- not disappearance -- was the failure mode here, so idempotency across 3 cycles IS the regression test)' `
+    ([System.Linq.Enumerable]::SequenceEqual([byte[]]$afterNest2,[byte[]]$afterNest3))
+
+  $nestLines3 = [IO.File]::ReadAllLines($target)
+  $nestBlock3 = Get-DocBlockAbove $nestLines3 '^procedure NestedTagsInSummary;'
+  $nestExcCount3 = ([regex]::Matches($nestBlock3, [regex]::Escape('<exception cref="ENested">'))).Count
+  Check 'CRITICAL 1: <exception cref="ENested"> STILL appears exactly once after 3 cycles (did not grow to 2 or 3)' ($nestExcCount3 -eq 1)
+  Check 'CRITICAL 1: still no standalone <seealso> fabricated after 3 cycles' (-not ($nestBlock3 -match '<seealso'))
+
+  # --- GappedDeprecatedMessage: Important 2 (message preserved) + gapped shape ---
+  $jGap1 = Apply-One 'preserve_tags.GappedDeprecatedMessage'
+  Check 'GappedDeprecatedMessage apply #1 exits 0' ($LASTEXITCODE -eq 0) $jGap1
+  $gapLines1 = [IO.File]::ReadAllLines($target)
+  $gapBlock1 = Get-DocBlockAbove $gapLines1 '^procedure GappedDeprecatedMessage;'
+  Check 'GappedDeprecatedMessage decl + gapped doc-comment found' ($null -ne $gapBlock1 -and $gapBlock1 -ne '')
+  Check 'IMPORTANT 2: <deprecated>message</deprecated> survives with its MESSAGE intact (not collapsed to a bare tag)' `
+    ($gapBlock1 -match [regex]::Escape('<deprecated>Use Rev instead; this will be removed in 2.0.</deprecated>'))
+
+  $afterGap1 = [IO.File]::ReadAllBytes($target)
+  & $exePath index $scratch --db $db 2>$null | Out-Null
+  $jGap2 = Apply-One 'preserve_tags.GappedDeprecatedMessage'
+  Check 'GappedDeprecatedMessage apply #2: action=unchanged (stable fixed point)' ($jGap2 -match '"action":"unchanged"') $jGap2
+  $afterGap2 = [IO.File]::ReadAllBytes($target)
+  Check 'GappedDeprecatedMessage byte-identical after a 2nd apply cycle' `
+    ([System.Linq.Enumerable]::SequenceEqual([byte[]]$afterGap1,[byte[]]$afterGap2))
+
+  # --- BareSeeOnly: Critical 1, second symptom (<see> must not become <seealso>) ---
+  # NOTE: cycle 1 alone does NOT exercise the fix -- BareSeeOnly's ONLY tag is
+  # a bare <see> (SeeAlso is not in HasContent's OR-chain), so
+  # ExistingHasAnyTag is False and apply #1 takes the FRESH/additive-insert
+  # path (daCreated): the ORIGINAL <see> line is never touched, so asserting
+  # against it here would be vacuous (true whether or not this fix exists).
+  # The additive block lands adjacent to it (no blank line), so the NEXT
+  # scan's MergeAdjacentSameKind merges them into one region -- apply #2 is
+  # where the repair path (and this fix) is actually exercised; assertions
+  # are made against ITS output.
+  $jSee1 = Apply-One 'preserve_tags.BareSeeOnly'
+  Check 'BareSeeOnly apply #1 exits 0' ($LASTEXITCODE -eq 0) $jSee1
+
+  $afterSee1 = [IO.File]::ReadAllBytes($target)
+  & $exePath index $scratch --db $db 2>$null | Out-Null
+  $jSee2 = Apply-One 'preserve_tags.BareSeeOnly'
+  Check 'BareSeeOnly apply #2: action=unchanged (stable fixed point -- WOULD be "extended" if <see> had been rewritten to <seealso>)' `
+    ($jSee2 -match '"action":"unchanged"') $jSee2
+  $afterSee2 = [IO.File]::ReadAllBytes($target)
+  Check 'BareSeeOnly byte-identical after a 2nd apply cycle' `
+    ([System.Linq.Enumerable]::SequenceEqual([byte[]]$afterSee1,[byte[]]$afterSee2))
+
+  $seeLines2 = [IO.File]::ReadAllLines($target)
+  $seeBlock2 = Get-DocBlockAbove $seeLines2 '^procedure BareSeeOnly;'
+  Check 'BareSeeOnly decl + doc-comment found (cycle 2, repair path)' ($null -ne $seeBlock2 -and $seeBlock2 -ne '')
+  Check 'CRITICAL 1 (2nd symptom): bare <see cref> round-trips as <see>, verbatim, once the repair path actually runs (cycle 2)' `
+    ($seeBlock2 -match [regex]::Escape('<see cref="Other.RelatedThing"/>'))
+  Check 'CRITICAL 1 (2nd symptom): <see> is NOT silently rewritten to <seealso> (cycle 2)' `
+    (-not ($seeBlock2 -match '<seealso'))
+
+  # --- Prose-control cases: Important 3 (Dispatch sniff must not over-match) ---
+  $jProseSeeAlso = Apply-One 'preserve_tags.ProseMentionsSeeAlso'
+  Check 'ProseMentionsSeeAlso apply #1 exits 0' ($LASTEXITCODE -eq 0) $jProseSeeAlso
+  $proseSeeAlsoLines = [IO.File]::ReadAllLines($target)
+  $proseSeeAlsoBlock = Get-DocBlockAbove $proseSeeAlsoLines '^procedure ProseMentionsSeeAlso;'
+  Check 'IMPORTANT 3: "...mentions <seealso> without any cref..." survives UNTRUNCATED' `
+    ($proseSeeAlsoBlock -match [regex]::Escape('Plain prose that mentions <seealso> without any cref, plus trailing words.')) $proseSeeAlsoBlock
+
+  $jProseSeed = Apply-One 'preserve_tags.ProseMentionsSeed'
+  Check 'ProseMentionsSeed apply #1 exits 0' ($LASTEXITCODE -eq 0) $jProseSeed
+  $proseSeedLines = [IO.File]::ReadAllLines($target)
+  $proseSeedBlock = Get-DocBlockAbove $proseSeedLines '^procedure ProseMentionsSeed;'
+  Check 'IMPORTANT 3: "Grows the <seed> lookup table..." survives UNTRUNCATED' `
+    ($proseSeedBlock -match [regex]::Escape('Grows the <seed> lookup table by one bucket.')) $proseSeedBlock
+
+  $jProseDep = Apply-One 'preserve_tags.ProseMentionsDeprecatedSoon'
+  Check 'ProseMentionsDeprecatedSoon apply #1 exits 0' ($LASTEXITCODE -eq 0) $jProseDep
+  $proseDepLines = [IO.File]::ReadAllLines($target)
+  $proseDepBlock = Get-DocBlockAbove $proseDepLines '^procedure ProseMentionsDeprecatedSoon;'
+  Check 'IMPORTANT 3: "Marks the routine <deprecatedSoon>..." survives UNTRUNCATED' `
+    ($proseDepBlock -match [regex]::Escape('Marks the routine <deprecatedSoon> but not really.')) $proseDepBlock
+
+  # --- EmptyExampleSurvives: Minor 1 (a deliberate blank <example></example> slot survives) ---
+  $jEmptyEx1 = Apply-One 'preserve_tags.EmptyExampleSurvives'
+  Check 'EmptyExampleSurvives apply #1 exits 0' ($LASTEXITCODE -eq 0) $jEmptyEx1
+  $emptyExLines1 = [IO.File]::ReadAllLines($target)
+  $emptyExBlock1 = Get-DocBlockAbove $emptyExLines1 '^procedure EmptyExampleSurvives;'
+  Check 'EmptyExampleSurvives decl + doc-comment found' ($null -ne $emptyExBlock1 -and $emptyExBlock1 -ne '')
+  Check 'MINOR 1: deliberately empty <example></example> survives (not dropped)' `
+    ($emptyExBlock1 -match [regex]::Escape('<example></example>')) $emptyExBlock1
+
+  $afterEmptyEx1 = [IO.File]::ReadAllBytes($target)
+  & $exePath index $scratch --db $db 2>$null | Out-Null
+  $jEmptyEx2 = Apply-One 'preserve_tags.EmptyExampleSurvives'
+  Check 'EmptyExampleSurvives apply #2: action=unchanged (stable fixed point)' ($jEmptyEx2 -match '"action":"unchanged"') $jEmptyEx2
+  $afterEmptyEx2 = [IO.File]::ReadAllBytes($target)
+  Check 'EmptyExampleSurvives byte-identical after a 2nd apply cycle' `
+    ([System.Linq.Enumerable]::SequenceEqual([byte[]]$afterEmptyEx1,[byte[]]$afterEmptyEx2))
+
+  # Every emitted /// line across PART 3 is 7-bit ASCII too.
+  $linesPart3 = [IO.File]::ReadAllLines($target)
+  $docLinesPart3 = $linesPart3 | Where-Object { $_.TrimStart() -match '^///' }
+  $nonAsciiPart3 = $docLinesPart3 | Where-Object { $_ -match '[^\x00-\x7F]' }
+  Check 'every /// line is 7-bit ASCII (PART 3)' ($nonAsciiPart3.Count -eq 0)
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

@@ -337,6 +337,36 @@ type
     // in Params (by name), empty Desc or not.
     HasSummaryTag: Boolean;
     HasReturnsTag: Boolean;
+    // v(ADP3 T3b review, Important/Minor 1): same PRESENCE-vs-content distinction
+    // as HasSummaryTag/HasReturnsTag, for <example> -- ExampleText <> '' cannot
+    // tell "no <example> tag" apart from a human's deliberate, empty
+    // <example></example>, so MergeComment's omit-when-empty repair logic
+    // needs this flag to preserve the latter instead of silently dropping it.
+    HasExampleTag: Boolean;
+    // v(ADP3 T3b review, Important 2): the message text from a hand-written
+    // <deprecated>message</deprecated> tag; '' for a bare <deprecated/> (or
+    // <deprecated />), and '' when the tag is absent (test Deprecated itself
+    // for presence, same as before -- this field only ever HOLDS a payload,
+    // it does not replace the presence signal). Populated by ParseXmlDoc only
+    // (dfXmlDoc); ParsePasDoc's own @deprecated has never captured a trailing
+    // message either, before or after this change -- that is a separate,
+    // pre-existing PasDoc gap, out of this task's scope.
+    DeprecatedText: string;
+    // v(ADP3 T3b review, Critical 1 fix): parallel to SeeAlso (same length,
+    // same index correspondence) -- True when that entry's SOURCE tag was
+    // bare '<see cref="X"/>', False when it was '<seealso cref="X"/>'. RxSee's
+    // own (?:see|seealso) alternation conflates both spellings into ONE
+    // SeeAlso array (correct for every OTHER consumer -- hover, the index --
+    // which legitimately wants every related-symbol mention regardless of
+    // which spelling the author used); MergeComment's repair path is the ONE
+    // consumer that must round-trip the author's ORIGINAL tag spelling
+    // verbatim (a <see> is an inline cross-reference, a <seealso> is a
+    // separate top-level entry -- they render differently, so silently
+    // rewriting one as the other is a fabrication as well as a destruction).
+    // ParsePasDoc's own @see has no bare-<see>-vs-<seealso> distinction to
+    // make (PasDoc has one @see tag, not two), so it always reports False
+    // (rendered as <seealso>, matching this field's pre-existing behaviour).
+    SeeAlsoIsInline: TArray<Boolean>;
     // Raw JSON strings from storage (populated by GetSymbolDoc for renderers).
     // FillChar zeroes these; empty means not stored or not retrieved.
     ParamsJsonRaw    : string;

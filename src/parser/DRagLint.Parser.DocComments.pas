@@ -254,6 +254,7 @@ var
   RxSee          : TRegEx              ;
   RxSinceTag     : TRegEx              ;
   RxDeprecatedTag: TRegEx              ;
+  RxDeprecatedBare: TRegEx             ;
   Match          : TMatch              ;
   Matches        : TMatchCollection    ;
   Params         : TList<TDocParam>    ;
@@ -282,7 +283,22 @@ begin
   RxException    := TRegEx.Create('<exception\s+cref="([^"]+)">([\s\S]*?)</exception>', [roIgnoreCase]);
   RxSee          := TRegEx.Create('<(?:see|seealso)\s+cref="([^"]+)"\s*/?>'           , [roIgnoreCase]);
   RxSinceTag     := TRegEx.Create('<since>([\s\S]*?)</since>'                         , [roIgnoreCase]);
-  RxDeprecatedTag:= TRegEx.Create('<deprecated\s*/?>'                                 , [roIgnoreCase]);
+  // v(ADP3 T3b review, Important 2): captures the message from a hand-written
+  // '<deprecated>message</deprecated>' so it round-trips instead of
+  // collapsing to a bare Boolean. Two SEPARATE regexes rather than one
+  // alternation ('<deprecated\s*(?:/>|>(...)</deprecated>)') -- the
+  // alternation was tried first and reproducibly crashed ("Index out of
+  // bounds") the moment the bare '/>' branch matched: group 1 sits inside
+  // the OTHER alternative, so it never participates in that match, and
+  // Delphi's TRegEx/TGroupCollection does not tolerate indexing an
+  // unparticipated group the way accessing Match.Groups[1].Success first
+  // would (confirmed by bisection: a fixture with ONLY a bare
+  // '<deprecated/>' reproduced the crash in isolation; reading a captured
+  // group only ever from a regex that is GUARANTEED to have that group
+  // participate, as done here, sidesteps the problem entirely rather than
+  // guarding around it).
+  RxDeprecatedTag    := TRegEx.Create('<deprecated>([\s\S]*?)</deprecated>'           , [roIgnoreCase]);
+  RxDeprecatedBare   := TRegEx.Create('<deprecated\s*/>'                              , [roIgnoreCase]);
 
   // v(ADP3 T3): HasSummaryTag/HasReturnsTag record the tag's LITERAL presence
   // (Match.Success), independent of whether its captured group is empty -- see
@@ -298,13 +314,30 @@ begin
   Result.HasReturnsTag:= Match.Success;
   if Match.Success then Result.ReturnsText:= CollapseWhitespace(Match.Groups[1].Value);
 
+  // v(ADP3 T3b review, Important/Minor 1): HasExampleTag mirrors HasSummaryTag/
+  // HasReturnsTag's own presence-vs-content distinction -- see TParsedDoc's
+  // field comment.
   Match:= RxExample.Match(Cleaned);
+  Result.HasExampleTag:= Match.Success;
   if Match.Success then Result.ExampleText:= Trim(Match.Groups[1].Value);
 
   Match:= RxSinceTag.Match(Cleaned);
   if Match.Success then Result.SinceText:= CollapseWhitespace(Match.Groups[1].Value);
 
-  Result.Deprecated:= RxDeprecatedTag.IsMatch(Cleaned);
+  // v(ADP3 T3b review, Important 2): try the message-bearing form first
+  // (group 1 always participates when THIS regex matches at all, so
+  // reading it is always safe); only fall back to the bare-tag regex
+  // (no group to read) when the message form did not match -- see
+  // RxDeprecatedTag's own comment for why this is two regexes, not one
+  // alternation.
+  Match:= RxDeprecatedTag.Match(Cleaned);
+  if Match.Success then
+  begin
+    Result.Deprecated:= True;
+    Result.DeprecatedText:= CollapseWhitespace(Match.Groups[1].Value);
+  end
+  else
+    Result.Deprecated:= RxDeprecatedBare.IsMatch(Cleaned);
 
   Params:= TList<TDocParam    >.Create;
   Excs  := TList<TDocException>.Create;
@@ -331,6 +364,17 @@ begin
     Matches:= RxSee.Matches(Cleaned);
     for I:= 0 to Matches.Count - 1 do SeeList.Add(Matches[I].Groups[1].Value);
     Result.SeeAlso:= SeeList.ToArray;
+    // v(ADP3 T3b review, Critical 1 fix): SeeAlsoIsInline, parallel to SeeAlso
+    // (built in the SAME loop so the index correspondence holds by
+    // construction) -- RxSee's own (?:see|seealso) alternation is NOT a
+    // capturing group (deliberately, so this loop's existing Groups[1]
+    // (the cref) is unaffected), so which alternative fired is read back
+    // from the matched text itself: Matches[I].Value is the FULL match
+    // (e.g. '<see cref="X"/>' or '<seealso cref="X"/>'), and only the
+    // latter starts with the 8-char literal '<seealso'.
+    SetLength(Result.SeeAlsoIsInline, Matches.Count);
+    for I:= 0 to Matches.Count - 1 do
+      Result.SeeAlsoIsInline[I]:= not StartsText('<seealso', Matches[I].Value);
   finally
     Params.Free;
     Excs.Free;
@@ -507,6 +551,13 @@ begin
     Result.Params    := Params .ToArray;
     Result.Exceptions:= Excs   .ToArray;
     Result.SeeAlso   := SeeList.ToArray;
+    // v(ADP3 T3b review, Critical 1 fix): PasDoc's single @see tag has no
+    // bare-<see>-vs-<seealso> distinction to make (that is an XML-DocInsight-
+    // only spelling choice), so every entry reports False (rendered as
+    // <seealso> on re-emit, matching this field's behaviour before this
+    // change). Sized to match SeeAlso so MergeComment's parallel-array
+    // indexing never runs out of bounds regardless of source format.
+    SetLength(Result.SeeAlsoIsInline, Length(Result.SeeAlso));
 
     // v(ADP3 T3): PasDoc has no "explicitly empty tag" concept of its own (an
     // empty @returns/no summary prose reads identically either way), so
@@ -514,6 +565,9 @@ begin
     // Match.Success, which can distinguish an empty <tag></tag> from no tag.
     Result.HasSummaryTag:= Result.Summary     <> '';
     Result.HasReturnsTag:= Result.ReturnsText <> '';
+    // v(ADP3 T3b review, Important/Minor 1): same non-empty-content collapse
+    // as HasSummaryTag/HasReturnsTag just above.
+    Result.HasExampleTag:= Result.ExampleText <> '';
 
     Result.HasContent:= (Result.Summary <> '') or (Length(Result.Params) > 0) or (Result.ReturnsText <> '') or Result.Deprecated;
   finally
@@ -608,12 +662,24 @@ begin
       // never parsed as XML at all (Task 3's implementer hit this while
       // building an unrelated regression test and worked around it in a
       // fixture; fixing the sniff itself was out of that task's scope but is
-      // explicitly in scope here). '<see' (prefix only, no closing '>')
-      // matches BOTH '<see cref="X"/>' and '<seealso cref="X"/>', mirroring
-      // RxSee's own '(?:see|seealso)' alternation in ParseXmlDoc; '<deprecated'
-      // (prefix only) matches '<deprecated>', '<deprecated/>' and
-      // '<deprecated />', mirroring RxDeprecatedTag's '\s*/?' tolerance.
-      (Pos('<since>', ARegion.RawText) > 0) or (Pos('<see', ARegion.RawText) > 0) or (Pos('<deprecated', ARegion.RawText) > 0);
+      // explicitly in scope here).
+      // v(ADP3 T3b review, Important 3): tightened from bare '<see'/
+      // '<deprecated' prefixes (which over-matched prose merely MENTIONING a
+      // tag-like word, e.g. '<seed>', '<deprecatedSoon>', or a bare
+      // '<seealso>' with no cref -- ParseXmlDoc's untagged-prefix fallback
+      // then truncated the author's whole summary at that first '<', a
+      // NEW loss reachable on prose alone, not present before this task) to
+      // the tightest literal-substring checks that still catch every REAL
+      // tag: RxSee requires '\s+cref=' after 'see'/'seealso', so '<see ' /
+      // '<seealso ' (both WITH the trailing space RxSee itself requires)
+      // are exact; RxDeprecatedTag (message form) requires a literal '>'
+      // right after 'deprecated', and RxDeprecatedBare requires '\s*/>', so
+      // '<deprecated>' (message-bearing open tag), '<deprecated/' (self-
+      // closing, no space), and '<deprecated ' (self-closing with a space,
+      // or any other whitespace-then-content shape) together cover every
+      // real shape either regex matches.
+      (Pos('<since>', ARegion.RawText) > 0) or (Pos('<see ', ARegion.RawText) > 0) or (Pos('<seealso ', ARegion.RawText) > 0) or
+      (Pos('<deprecated>', ARegion.RawText) > 0) or (Pos('<deprecated/', ARegion.RawText) > 0) or (Pos('<deprecated ', ARegion.RawText) > 0);
       if HasXmlTags then Result:= ParseXmlDoc(ARegion.RawText)
       else Result:= ParseOneline(ARegion.RawText, ARegion.Kind);
     end;

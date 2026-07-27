@@ -66,6 +66,75 @@ procedure BareDeprecatedOnly;
 
 procedure CallsBareDeprecatedOnly;
 
+// Review round 1, Critical 1: an inline <see cref="X"/> AND an inline
+// <exception cref="Y">desc</exception>, BOTH nested inside <summary> prose
+// (not top-level siblings) -- reproduces the defect found on this repo's
+// own src/report/DRagLint.Convert.Rules.pas (TConversionRule's <summary>
+// carries an inline <see cref="Kind"/>). MergeComment preserves <summary>
+// verbatim (including these inline mentions, exactly as authored); neither
+// inline tag may ALSO be re-emitted as a standalone <seealso>/<exception>
+// sibling, and the count must not grow across a THIRD apply cycle (see the
+// runner's PART 3 for the byte-identity check from cycle 2 on -- unlike
+// every other symbol above, this is the ONE case where growth, not
+// disappearance, was the failure mode, so idempotency itself is the
+// regression test here). WITH a caller so the repair path genuinely runs.
+/// <summary>Uses <see cref="Other.RelatedThing"/> for related lookups and
+/// can raise <exception cref="ENested">a nested, inline description</exception>
+/// in edge cases.</summary>
+procedure NestedTagsInSummary;
+
+procedure CallsNestedTagsInSummary;
+
+// Review round 1, Important 2: the MESSAGE on a hand-written
+// <deprecated>message</deprecated> must survive, not collapse to a bare
+// <deprecated/>. Also exercises the GAPPED comment shape (a blank line
+// between the comment and the declaration) -- every OTHER symbol in this
+// fixture abuts its declaration, and the brief's own table names both
+// shapes.
+/// <deprecated>Use Rev instead; this will be removed in 2.0.</deprecated>
+
+procedure GappedDeprecatedMessage;
+
+procedure CallsGappedDeprecatedMessage;
+
+// Review round 1, Critical 1 (second symptom): a BARE, standalone
+// <see cref="X"/> (NOT nested inside anything, NOT <seealso>) must
+// round-trip as <see>, never silently rewritten to <seealso> -- RxSee's
+// own (?:see|seealso) alternation conflates both spellings into one
+// SeeAlso array; re-emitting every entry as <seealso> would destroy the
+// author's <see> and fabricate a <seealso> they never wrote (a destruction
+// AND a fabrication, since the two tags render differently).
+/// <see cref="Other.RelatedThing"/>
+procedure BareSeeOnly;
+
+procedure CallsBareSeeOnly;
+
+// Review round 1, Important 3: Dispatch's tightened sniff must not
+// over-match plain prose that merely resembles a tag -- these three mirror
+// the review's own near-miss table exactly. NO caller: HasSummaryTag alone
+// (from the oneline/prose parse) already forces the repair path when the
+// sniff correctly leaves these as plain prose; a caller would only add an
+// unrelated facts block and dilute what the assertion is checking (whether
+// the FULL original text survives, untruncated).
+/// Plain prose that mentions <seealso> without any cref, plus trailing words.
+procedure ProseMentionsSeeAlso;
+/// Grows the <seed> lookup table by one bucket.
+procedure ProseMentionsSeed;
+/// Marks the routine <deprecatedSoon> but not really.
+procedure ProseMentionsDeprecatedSoon;
+
+// Review round 1, Minor 1: a deliberately EMPTY <example></example> (a
+// human's blank slot, the same concept <summary></summary> already
+// preserves) must survive, not be dropped -- the old gate (ExampleText <>
+// '') could not distinguish "the tag is absent" from "present but empty";
+// HasExampleTag (mirroring HasSummaryTag) makes that distinction. WITH a
+// caller so the repair path genuinely runs.
+/// <summary>Has a deliberately blank example slot.</summary>
+/// <example></example>
+procedure EmptyExampleSurvives;
+
+procedure CallsEmptyExampleSurvives;
+
 type
   // Hand-written <since>/<seealso> COEXISTING with the opt-in auto-generated
   // <since>/<seealso> RenderFactsBlock emits INSIDE the AUTO_BEGIN..AUTO_END
@@ -119,6 +188,54 @@ end;
 procedure CallsBareDeprecatedOnly;
 begin
   BareDeprecatedOnly;
+end;
+
+procedure NestedTagsInSummary;
+begin
+end;
+
+procedure CallsNestedTagsInSummary;
+begin
+  NestedTagsInSummary;
+end;
+
+procedure GappedDeprecatedMessage;
+begin
+end;
+
+procedure CallsGappedDeprecatedMessage;
+begin
+  GappedDeprecatedMessage;
+end;
+
+procedure BareSeeOnly;
+begin
+end;
+
+procedure CallsBareSeeOnly;
+begin
+  BareSeeOnly;
+end;
+
+procedure ProseMentionsSeeAlso;
+begin
+end;
+
+procedure ProseMentionsSeed;
+begin
+end;
+
+procedure ProseMentionsDeprecatedSoon;
+begin
+end;
+
+procedure EmptyExampleSurvives;
+begin
+end;
+
+procedure CallsEmptyExampleSurvives;
+begin
+  EmptyExampleSurvives;
 end;
 
 procedure TSeeAlsoHost.DoA;
