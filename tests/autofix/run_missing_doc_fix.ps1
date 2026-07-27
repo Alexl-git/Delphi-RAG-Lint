@@ -10,8 +10,11 @@
   Fixture: fixtures\missingdocfix\missfix.pas
     Undocumented(Value: Integer): Integer  -- line 16, public, NO doc, has a
         param + a caller (CallsIt) -> the missing-doc finding whose Fix-it
-        inserts a document-qname comment (<param name="Value">, <returns>,
-        Called-from facts).
+        inserts a document-qname comment (<returns> from the mined
+        `Result := Value + 1` case, plus the Called-from facts block).
+        v(ADP3 T3) omit-when-empty: NO <summary> and NO <param name="Value">
+        are emitted -- there is no hand-written or harvested description for
+        either, and a blank tag is worse than none.
     CallsIt: Integer                       -- public, NO doc, calls Undocumented
         (Called-from source). Also a missing-doc finding, never targeted.
   No documented decl -> nothing for doc-drift to touch, so the blanket-batch
@@ -22,7 +25,8 @@
 
   Part A -- single-fix WORKS: lint-all --fix --fix-line 16 --fix-rule missing-doc
     --apply INSERTS a /// DocInsight comment with a managed block on the
-    Undocumented decl (matching document --qname output).
+    Undocumented decl (matching document --qname output -- post-T3 that is
+    <returns> + the facts block, and deliberately no <summary>/<param>).
   Part B -- IDEMPOTENT: re-index + a 2nd single-fix finds no missing-doc (the
     decl now has a doc) -> no-op.
   Part C -- batch EXCLUDES it: on a fresh copy, lint-all --fix --apply (blanket
@@ -72,20 +76,37 @@ try {
   # --fix-rule NARROWS the surviving set; it does not re-enable a disabled rule.
   & $exePath lint-all --db $db --config $cfg --fix --fix-line $L --fix-rule missing-doc --apply --no-backup 2>$null | Out-Null
   $txt = [IO.File]::ReadAllText($target)
-  Check 'A1 inserted a /// DocInsight comment'          ($txt -match '///\s*<summary>')
-  Check 'A2 inserted a managed drag-lint:auto block'   ($txt.Contains('<!-- drag-lint:auto BEGIN -->') -and $txt.Contains('<!-- drag-lint:auto END -->'))
-  Check 'A3 comment carries <param name="Value">'      ($txt -match '///\s*<param name="Value">')
-  Check 'A4 comment carries <returns>'                 ($txt -match '///\s*<returns>')
-  Check 'A5 comment carries a Called-from fact (CallsIt)' ($txt -match 'Called from:.*missfix\.CallsIt')
-  # the /// comment must PRECEDE the Undocumented decl (its function line moved down).
+  # The /// comment must PRECEDE the Undocumented decl (its function line moved
+  # down). Locate the decl, then take the contiguous run of ///-prefixed lines
+  # immediately above it -- the same scan-upward idiom
+  # tests\autodoc\run_doc_p3_emptytags.ps1 uses. EVERY content assertion below
+  # runs against that block, NOT the whole file: the fixture's own // header
+  # quotes '<param name="Value">' as prose, so a whole-file regex would match
+  # the fixture instead of the engine's output (it silently did).
   $lines = [IO.File]::ReadAllLines($target)
   $declIx = -1
   for ($i=0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match 'function Undocumented\(Value: Integer\): Integer;' -and $lines[$i] -notmatch '///') { $declIx = $i; break } }
   Check 'A6 the Undocumented decl still exists after the fix' ($declIx -ge 1)
+  $block = ''
   if ($declIx -ge 1) {
-    $above = ($lines[0..($declIx-1)] -join "`n")
-    Check 'A7 a /// comment precedes the Undocumented decl' ($above -match '///\s*<summary>')
+    $bl = @(); $j = $declIx - 1
+    while ($j -ge 0 -and $lines[$j].TrimStart() -match '^///') { $bl = ,($lines[$j]) + $bl; $j-- }
+    $block = ($bl -join "`n")
   }
+  # A7 is the positional check: a /// block exists directly above the decl.
+  Check 'A7 a /// comment precedes the Undocumented decl' ($block -match '(?m)^\s*///\s')
+  # v(ADP3 T3) omit-when-empty: Undocumented has no hand-written or harvested
+  # summary and no hand-written description for `Value`, so the inserted comment
+  # carries NEITHER <summary> NOR <param name="Value"> -- see
+  # tests\autodoc\run_doc_p3_emptytags.ps1, which locks that behaviour on the
+  # `document` side. The fix-it path emits the same text `document --qname` does,
+  # so A1/A3 assert the surviving shape, not the pre-T3 one.
+  Check 'A1 inserted a /// DocInsight comment'          ($block -match '(?m)^\s*///\s')
+  Check 'A2 inserted a managed drag-lint:auto block'   ($block.Contains('<!-- drag-lint:auto BEGIN -->') -and $block.Contains('<!-- drag-lint:auto END -->'))
+  Check 'A3 NO <summary> and NO <param> tag (v(ADP3 T3): nothing to say -> omitted, never a blank stub)' `
+    ((-not ($block -match '<summary>')) -and (-not ($block -match '<param')))
+  Check 'A4 comment carries <returns>'                 ($block -match '///\s*<returns>')
+  Check 'A5 comment carries a Called-from fact (CallsIt)' ($block -match 'Called from:.*missfix\.CallsIt')
 
   # --- Part B: IDEMPOTENT -- re-index, 2nd single-fix is a no-op (decl now documented) ---
   & $exePath index $scratch --db $db 2>$null | Out-Null
@@ -118,7 +139,11 @@ try {
   # blanket batch: --fix with NO --fix-line / --fix-rule narrowing.
   & $exePath lint-all --db $dbB --config $cfgB --fix --apply --no-backup 2>$null | Out-Null
   $afterBatch = [IO.File]::ReadAllText($targetB)
-  Check 'C1 blanket batch did NOT insert a doc-comment for missing-doc' (-not ($afterBatch -match '///\s*<param name="Value">'))
+  # v(ADP3 T3): this used to probe for '<param name="Value">', which the engine
+  # no longer emits for ANY input -- the check had gone vacuous (it would pass
+  # even if the batch HAD inserted a full comment). Probe the managed-block
+  # marker instead: that is what an inserted comment always carries.
+  Check 'C1 blanket batch did NOT insert a doc-comment for missing-doc' (-not $afterBatch.Contains('<!-- drag-lint:auto BEGIN -->'))
   Check 'C2 Undocumented decl unchanged by the blanket batch (single-fix-only excluded)' ($beforeBatch -eq $afterBatch)
 
   # ---- Part D: rules --json fixable ---------------------------------------

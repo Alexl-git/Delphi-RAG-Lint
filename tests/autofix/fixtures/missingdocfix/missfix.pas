@@ -4,9 +4,9 @@ interface
 
 // Fixture for the missing-doc "Fix it" single-fix test (ADF Task 11c).
 //   Undocumented -- public, NO doc comment, HAS a param + a caller -> the
-//                   missing-doc finding (line 8) whose Fix-it inserts a
-//                   document-qname DocInsight comment (managed block with
-//                   <param name="Value">/<returns>/Called-from facts).
+//                   missing-doc finding (line 16) whose Fix-it inserts a
+//                   document-qname DocInsight comment: a returns tag mined
+//                   from Result, plus the managed Called-from facts block.
 //   CallsIt      -- public, NO doc, calls Undocumented (so Called-from is
 //                   non-empty). Also a missing-doc finding, but never targeted.
 // No documented decl here on purpose: nothing for doc-drift to touch, so the
