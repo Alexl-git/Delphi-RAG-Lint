@@ -36,6 +36,71 @@ uses
   , System.StrUtils
   ;
 
+var
+  // v(ADP3 T3b review round 2, NEW IMPORTANT): Dispatch's HasXmlTags sniff for
+  // <since>/<see>/<seealso>/<deprecated> used to re-derive its OWN informal
+  // Pos()-based approximation of what RxSee/RxSinceTag/RxDeprecatedTag/
+  // RxDeprecatedBare (declared fresh, per-call, inside ParseXmlDoc below)
+  // actually match -- the two drifted apart on shapes neither hand-written
+  // check anticipated (a stray space before a tag's closing '>', a tab
+  // instead of a space before an attribute, ALL-CAPS '<DEPRECATED>' since
+  // Pos() is case-sensitive but every one of these regexes carries
+  // roIgnoreCase). The fix is to sniff with the ACTUAL regexes the parser
+  // matches against (IsMatch), not a parallel hand-maintained approximation,
+  // so the two literally cannot drift apart again. These four are file-scope
+  // (not local to Dispatch, not a class var -- TRegEx needs no interface
+  // exposure for that) and built ONCE, lazily, on first use: Dispatch runs
+  // once per doc comment scanned, so constructing four TRegEx objects on
+  // EVERY call (the naive fix) would add real, measured cost to indexing;
+  // see the task report for the whole-unit timing this was checked against.
+  // Not thread-guarded: TDocCommentScanner/TDocCommentParser are only ever
+  // driven from a single-threaded per-file scan in this codebase
+  // (DRagLint.Core.Indexer.pas has no TParallel/TThread around doc parsing
+  // at the time of writing) -- if that ever changes, this cache needs a
+  // guard too.
+  SniffRegexesReady  : Boolean = False;
+  SniffSee           : TRegEx;
+  SniffSinceTag      : TRegEx;
+  SniffDeprecatedTag : TRegEx;
+  SniffDeprecatedBare: TRegEx;
+
+procedure EnsureSniffRegexes;
+begin
+  if SniffRegexesReady then Exit;
+  // Pattern strings copied VERBATIM from ParseXmlDoc's own RxSee/RxSinceTag/
+  // RxDeprecatedTag/RxDeprecatedBare locals further down this file -- if
+  // those ever change, these must change with them, which is exactly the
+  // class of drift this fix closes. Duplicated as literal strings (rather
+  // than sharing the compiled TRegEx objects themselves across two call
+  // sites with very different lifetimes -- a per-call local in ParseXmlDoc
+  // vs. this file-scope cache) keeps the change small and mechanical.
+  SniffSee           := TRegEx.Create('<(?:see|seealso)\s+cref="([^"]+)"\s*/?>'           , [roIgnoreCase]);
+  SniffSinceTag      := TRegEx.Create('<since>([\s\S]*?)</since>'                         , [roIgnoreCase]);
+  SniffDeprecatedTag := TRegEx.Create('<deprecated>([\s\S]*?)</deprecated>'               , [roIgnoreCase]);
+  SniffDeprecatedBare:= TRegEx.Create('<deprecated\s*/>'                                  , [roIgnoreCase]);
+  SniffRegexesReady:= True;
+end;
+
+function HasAnyRecognizedTag(const ADoc: TParsedDoc): Boolean;
+begin
+  // v(ADP3 T3b review round 2, NEW IMPORTANT): the general form of "did
+  // ParseXmlDoc actually recognize ANY tag at all" -- deliberately NOT
+  // ADoc.HasContent, which is its own, separately-documented and
+  // DELIBERATELY narrow OR-chain for a different purpose (see HasContent's
+  // own comment in ParseXmlDoc) and does not cover HasExampleTag/SeeAlso/
+  // SinceText. Remarks <> '' is included here even though there is no
+  // HasRemarksTag presence flag to distinguish "tag absent" from "tag
+  // present but empty" the way HasSummaryTag/HasReturnsTag/HasExampleTag do
+  // for their own tags -- treating a same-named literal accident as
+  // "recognized" is the conservative direction (never causes a deletion; at
+  // worst skips a redundant ParseOneline fallback for an already-degenerate
+  // input).
+  Result:=
+    ADoc.HasSummaryTag or ADoc.HasReturnsTag or ADoc.HasExampleTag or ADoc.Deprecated or
+    (Length(ADoc.Params) > 0) or (Length(ADoc.Exceptions) > 0) or (Length(ADoc.SeeAlso) > 0) or
+    (ADoc.SinceText <> '') or (ADoc.Remarks <> '');
+end;
+
 type
   TScanState = (ssCode, ssInString, ssInLineComment, ssInBraceComment, ssInParenComment);
 
@@ -654,6 +719,7 @@ begin
   case ARegion.Kind of
     dckTripleSlash:
     begin
+      EnsureSniffRegexes;
       HasXmlTags:= (Pos('<summary>', ARegion.RawText) > 0) or (Pos('<param', ARegion.RawText) > 0) or (Pos('<returns>', ARegion.RawText) > 0) or
       (Pos('<remarks>', ARegion.RawText) > 0) or (Pos('<exception', ARegion.RawText) > 0) or (Pos('<example>', ARegion.RawText) > 0) or
       // v(ADP3 T3b): <since>/<seealso>/<see>/<deprecated/> were missing from
@@ -670,17 +736,51 @@ begin
       // then truncated the author's whole summary at that first '<', a
       // NEW loss reachable on prose alone, not present before this task) to
       // the tightest literal-substring checks that still catch every REAL
-      // tag: RxSee requires '\s+cref=' after 'see'/'seealso', so '<see ' /
-      // '<seealso ' (both WITH the trailing space RxSee itself requires)
-      // are exact; RxDeprecatedTag (message form) requires a literal '>'
-      // right after 'deprecated', and RxDeprecatedBare requires '\s*/>', so
-      // '<deprecated>' (message-bearing open tag), '<deprecated/' (self-
-      // closing, no space), and '<deprecated ' (self-closing with a space,
-      // or any other whitespace-then-content shape) together cover every
-      // real shape either regex matches.
-      (Pos('<since>', ARegion.RawText) > 0) or (Pos('<see ', ARegion.RawText) > 0) or (Pos('<seealso ', ARegion.RawText) > 0) or
-      (Pos('<deprecated>', ARegion.RawText) > 0) or (Pos('<deprecated/', ARegion.RawText) > 0) or (Pos('<deprecated ', ARegion.RawText) > 0);
-      if HasXmlTags then Result:= ParseXmlDoc(ARegion.RawText)
+      // tag.
+      // v(ADP3 T3b review round 2, NEW IMPORTANT): those "tightest literal-
+      // substring" checks were STILL a hand-maintained approximation of
+      // RxSee/RxSinceTag/RxDeprecatedTag/RxDeprecatedBare, and drifted from
+      // them on shapes none of us anticipated: '<deprecated >msg</deprecated>'
+      // (a space before the closing '>' -- neither '<deprecated>' nor
+      // '<deprecated ' as a PREFIX check requires the '>' to come right
+      // after, so this one slipped through undetected as a false NEGATIVE
+      // relative to what a literal Pos() table can express); '<DEPRECATED>'
+      // (Pos is case-sensitive, the regexes all carry roIgnoreCase); and a
+      // tab before an attribute ('<seealso\tcref="X"/>', which '<seealso '
+      // -- literal space -- does not match but \s+ does). Sniffing with the
+      // ACTUAL regex objects (IsMatch) retires all three at once, and the
+      // sniff can never again be broader or narrower than the parse for
+      // these four tags, because there is only one definition of "matches"
+      // now, not two.
+      SniffSinceTag.IsMatch(ARegion.RawText) or SniffSee.IsMatch(ARegion.RawText) or
+      SniffDeprecatedTag.IsMatch(ARegion.RawText) or SniffDeprecatedBare.IsMatch(ARegion.RawText);
+      if HasXmlTags then
+      begin
+        Result:= ParseXmlDoc(ARegion.RawText);
+        // v(ADP3 T3b review round 2, NEW IMPORTANT): the sniff above is a
+        // superset test (any of these SUBSTRINGS/shapes present) -- it can
+        // still fire for a malformed tag that the sniff correctly IDENTIFIES
+        // as tag-shaped but that ParseXmlDoc's underlying regex still does
+        // not fully match (e.g. '<exception>' with no required cref="..." at
+        // all: the bare '<exception' prefix check above has ALWAYS matched
+        // that, pre-dating this task, but RxException itself never captures
+        // it). When NOTHING recognizable came back at all, ParseXmlDoc's own
+        // untagged-prefix fallback reads '' for Summary too (nothing
+        // precedes a malformed tag that opens the comment), so HasContent is
+        // False and MergeComment/BuildForSymbol would emit NOTHING for this
+        // comment -- silently deleting the entire hand-written /// line the
+        // moment a facts block is later merged adjacent to it (confirmed
+        // empirically: this needs a SECOND apply cycle to surface, since
+        // MergeAdjacentSameKind is what first folds the freshly-inserted
+        // facts block into the same scanned region, which is what flips
+        // HasContent to True and routes the comment into the unconditional
+        // repair-delete-insert branch). Falling back to ParseOneline keeps
+        // the raw text as prose instead -- not a correct parse, but never a
+        // silent delete, and no worse than every OTHER unrecognized-tag
+        // shape (e.g. a stray '<value>') already gets today.
+        if not HasAnyRecognizedTag(Result) then
+          Result:= ParseOneline(ARegion.RawText, ARegion.Kind);
+      end
       else Result:= ParseOneline(ARegion.RawText, ARegion.Kind);
     end;
     dckDoubleSlashOne, dckTripleSlashOne: Result:= ParseOneline(ARegion.RawText, ARegion.Kind);

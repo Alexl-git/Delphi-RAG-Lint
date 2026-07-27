@@ -85,6 +85,36 @@ procedure NestedTagsInSummary;
 
 procedure CallsNestedTagsInSummary;
 
+// Review round 2, Critical 1 STILL OPEN: round 1 only protected nesting
+// inside <summary>/<param>/<returns>/<remarks> -- <exception>/<example>/
+// <deprecated> ALSO preserve their own content verbatim and were left
+// unprotected, so a tag nested inside ANY of THOSE was still captured
+// twice (confirmed: 4 apply cycles growing unbounded on this repo's own
+// review-supplied repro). These three cover exception/example/deprecated
+// as the OUTER container (the review's own minimum ask); <since> nested
+// inside <exception> (the ONE ".Match-backed", stabilizes-at-2-not-N
+// signature, rather than unbounded growth) is ALSO covered here since it
+// behaves differently from the others. <seealso> nested inside <example>
+// and inside <deprecated> were ALSO verified fixed, empirically, against a
+// throwaway scratch fixture (not enshrined as separate rows here since the
+// underlying mechanism -- BuildStandaloneFor's canonical container list --
+// is the same one already exercised by the three rows below; see the task
+// report for that verification).
+/// <deprecated>Use <see cref="Other.RelatedThing"/> instead of this old thing.</deprecated>
+procedure NestedInDeprecated;
+
+procedure CallsNestedInDeprecated;
+
+/// <exception cref="EOuter">Added in <since>2.0</since> and still raised today.</exception>
+procedure NestedSinceInException;
+
+procedure CallsNestedSinceInException;
+
+/// <example>Sample usage. <exception cref="EInExample">boom</exception> can happen.</example>
+procedure NestedExceptionInExample;
+
+procedure CallsNestedExceptionInExample;
+
 // Review round 1, Important 2: the MESSAGE on a hand-written
 // <deprecated>message</deprecated> must survive, not collapse to a bare
 // <deprecated/>. Also exercises the GAPPED comment shape (a blank line
@@ -134,6 +164,81 @@ procedure ProseMentionsDeprecatedSoon;
 procedure EmptyExampleSurvives;
 
 procedure CallsEmptyExampleSurvives;
+
+// Review round 2, NEW IMPORTANT: a comment Dispatch routes to XML parsing
+// (because it LOOKS tag-shaped) can still resolve to NO recognized tag at
+// all, when the shape is malformed in a way neither the sniff nor the
+// underlying regex tolerates. Before this fix, ParseXmlDoc's own untagged-
+// prefix-becomes-summary fallback then read '' for Summary too (nothing
+// precedes a malformed tag that opens the comment), HasContent came back
+// False, and MergeComment/BuildForSymbol emitted NOTHING -- silently
+// DELETING the entire hand-written /// line the moment a facts block later
+// merged adjacent to it (confirmed empirically: this needs a SECOND apply
+// cycle to surface, since MergeAdjacentSameKind is what first folds the
+// freshly-inserted facts block into the same scanned region, which is what
+// flips HasContent to True and routes the comment into the unconditional
+// repair-delete-insert branch -- worse than Task 3's OWN known growth-only
+// trap, since here cycle 1 looks completely safe). Each row below is WITH a
+// caller, matching every other load-bearing case in this fixture.
+/// <deprecated >Space before the closing angle bracket.</deprecated>
+procedure SpaceBeforeCloseDeprecated;
+
+procedure CallsSpaceBeforeCloseDeprecated;
+
+/// <deprecated>No closing tag at all, just trailing words
+procedure UnclosedDeprecated;
+
+procedure CallsUnclosedDeprecated;
+
+// Pos() is case-sensitive; every regex in this unit carries roIgnoreCase --
+// the OLD hand-maintained sniff mismatched on this axis too. Correctly
+// recognized, this round-trips as a genuine <deprecated/> (canonical
+// lowercase spelling, NOT wrapped in a fabricated <summary>).
+/// <DEPRECATED>Recognized case-insensitively.</DEPRECATED>
+procedure AllCapsDeprecatedTag;
+
+procedure CallsAllCapsDeprecatedTag;
+
+// RxException requires cref="..."; the bare '<exception' prefix sniff (pre-
+// dating this task) does not, so this was ALREADY a sniff/parse mismatch
+// before round 2 -- the general "no recognized tag at all" fallback closes
+// it as a side effect, without needing an exception-specific sniff change.
+/// <exception>Missing the required cref attribute.</exception>
+procedure ExceptionNoCrefAttr;
+
+procedure CallsExceptionNoCrefAttr;
+
+// A malformed <seealso> with no cref, SITTING ALONGSIDE a real, well-formed
+// <summary> -- the summary (and the whole comment) is NOT deleted; the
+// malformed seealso fragment itself does not separately round-trip (it is
+// captured by nothing -- RxSee requires cref="..." too), which is the
+// "unmodeled tag" territory the review left explicitly out of scope, NOT a
+// new gap this task introduces (a plain <seealso> with no cref was already
+// unrepresentable before this task; the fix here is that it no longer takes
+// the REST of the comment down with it).
+/// <summary>Has a real, well-formed summary.</summary>
+/// <seealso>Missing the required cref, sitting alongside a real tag.</seealso>
+procedure SeeAlsoNoCrefWithSummary;
+
+procedure CallsSeeAlsoNoCrefWithSummary;
+
+/// <example>Unclosed example body, no closing tag
+procedure UnclosedExampleTag;
+
+procedure CallsUnclosedExampleTag;
+
+// A TAB (not a space) between the tag name and its cref attribute -- RxSee's
+// own '\s+' already tolerates this (a real regex-vs-sniff mismatch: the OLD
+// sniff's literal '<seealso '  -- one literal space -- did not). SeeAlso
+// presence alone does not satisfy Document.pas' ExistingHasAnyTag (same
+// narrow OR-chain BareSeeOnly above already exercises), so cycle 1 takes the
+// fresh/additive path and leaves this line untouched; cycle 2 is where
+// MergeAdjacentSameKind folds the facts block in and the repair path
+// actually normalizes the tab to a canonical single space.
+/// <seealso	cref="Other.RelatedThing"/>
+procedure TabSeparatedSeeAlso;
+
+procedure CallsTabSeparatedSeeAlso;
 
 type
   // Hand-written <since>/<seealso> COEXISTING with the opt-in auto-generated
@@ -199,6 +304,33 @@ begin
   NestedTagsInSummary;
 end;
 
+procedure NestedInDeprecated;
+begin
+end;
+
+procedure CallsNestedInDeprecated;
+begin
+  NestedInDeprecated;
+end;
+
+procedure NestedSinceInException;
+begin
+end;
+
+procedure CallsNestedSinceInException;
+begin
+  NestedSinceInException;
+end;
+
+procedure NestedExceptionInExample;
+begin
+end;
+
+procedure CallsNestedExceptionInExample;
+begin
+  NestedExceptionInExample;
+end;
+
 procedure GappedDeprecatedMessage;
 begin
 end;
@@ -236,6 +368,69 @@ end;
 procedure CallsEmptyExampleSurvives;
 begin
   EmptyExampleSurvives;
+end;
+
+procedure SpaceBeforeCloseDeprecated;
+begin
+end;
+
+procedure CallsSpaceBeforeCloseDeprecated;
+begin
+  SpaceBeforeCloseDeprecated;
+end;
+
+procedure UnclosedDeprecated;
+begin
+end;
+
+procedure CallsUnclosedDeprecated;
+begin
+  UnclosedDeprecated;
+end;
+
+procedure AllCapsDeprecatedTag;
+begin
+end;
+
+procedure CallsAllCapsDeprecatedTag;
+begin
+  AllCapsDeprecatedTag;
+end;
+
+procedure ExceptionNoCrefAttr;
+begin
+end;
+
+procedure CallsExceptionNoCrefAttr;
+begin
+  ExceptionNoCrefAttr;
+end;
+
+procedure SeeAlsoNoCrefWithSummary;
+begin
+end;
+
+procedure CallsSeeAlsoNoCrefWithSummary;
+begin
+  SeeAlsoNoCrefWithSummary;
+end;
+
+procedure UnclosedExampleTag;
+begin
+end;
+
+procedure CallsUnclosedExampleTag;
+begin
+  UnclosedExampleTag;
+end;
+
+procedure TabSeparatedSeeAlso;
+begin
+end;
+
+procedure CallsTabSeparatedSeeAlso;
+begin
+  TabSeparatedSeeAlso;
 end;
 
 procedure TSeeAlsoHost.DoA;

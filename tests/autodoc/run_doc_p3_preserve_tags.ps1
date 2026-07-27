@@ -131,6 +131,49 @@
       apart from "present but empty"; HasExampleTag (mirroring
       HasSummaryTag) does.
 
+  PART 4 (scratch1, continued -- coordinator review round 2, NEW IMPORTANT):
+  a comment Dispatch routes to XML parsing (it LOOKS tag-shaped) can still
+  resolve to NO recognized tag at all when the shape is malformed in a way
+  neither the sniff nor the underlying regex tolerates -- pre-fix, this made
+  MergeComment emit NOTHING, silently DELETING the entire hand-written ///
+  line the moment a facts block later merged adjacent to it (needs a SECOND
+  apply cycle to surface: MergeAdjacentSameKind is what first folds the
+  freshly-inserted facts block into the same scanned region). Two further
+  cases here (AllCapsDeprecatedTag, TabSeparatedSeeAlso) are genuinely
+  RECOGNIZED once the sniff itself is derived from the same regex objects
+  the parser matches against (IsMatch, not a hand-maintained Pos()
+  approximation) -- see DRagLint.Parser.DocComments.pas' EnsureSniffRegexes.
+    * SpaceBeforeCloseDeprecated / UnclosedDeprecated / ExceptionNoCrefAttr /
+      UnclosedExampleTag: each is a lone malformed tag with nothing else in
+      the comment -- NO tag is recognized at all, so the general fallback
+      (treat the raw text as prose instead of an empty summary) takes over;
+      each survives, wrapped in a fabricated <summary> holding the ORIGINAL
+      literal (malformed) text, stable from cycle 1.
+    * AllCapsDeprecatedTag: Pos() is case-sensitive, every regex in this unit
+      carries roIgnoreCase -- the old sniff mismatched on this axis. Now
+      genuinely recognized: round-trips as a real <deprecated>...</deprecated>
+      (canonical lowercase spelling), NOT wrapped in a fabricated <summary>.
+    * SeeAlsoNoCrefWithSummary: the malformed <seealso> sits ALONGSIDE a
+      real, well-formed <summary> -- the summary (and the comment as a
+      whole) is NOT deleted. The malformed seealso fragment itself does not
+      separately round-trip (captured by nothing -- RxSee requires cref=
+      too); this is the "unmodeled tag" territory the review left explicitly
+      out of scope, not a new gap -- the fix is that it no longer takes the
+      REST of the comment down with it.
+    * TabSeparatedSeeAlso: a TAB (not a space) before cref= -- RxSee's own
+      '\s+' already tolerated this; the OLD sniff's literal single-space
+      '<seealso ' did not. SeeAlso presence alone does not satisfy
+      Document.pas' ExistingHasAnyTag (same narrow OR-chain BareSeeOnly
+      already exercises), so cycle 1 takes the fresh/additive path and
+      leaves the original (tab-bearing) line untouched; cycle 2 is where
+      MergeAdjacentSameKind folds the facts block in and the repair path
+      normalizes the tab to a canonical single space -- proven safe (never
+      DELETED) across the exact two-cycle mechanism the defect itself needs.
+    Each row applies 3 cycles (reindex between each): cycle 1 proves no
+    IMMEDIATE full deletion; cycle 2 proves the case survives the
+    additive-then-merge mechanism (where the pre-fix defect actually fired);
+    cycle 3 proves a stable fixed point (byte-identical to cycle 2).
+
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
@@ -431,6 +474,37 @@ try {
   & $exePath index $scratch --db $db 2>$null | Out-Null
   Check 'PART 3: re-index exits 0' ($LASTEXITCODE -eq 0)
 
+  # Review round 2: applies $QName three times (Apply-One reindexes before
+  # each), asserting the full nested content survives verbatim after cycle 1
+  # AND is still there, unmangled, with no standalone duplicate fabricated,
+  # after cycles 2 and 3 -- the round-2 defect (nesting inside <exception>/
+  # <example>/<deprecated>, not just <summary>) needed a 3rd cycle to show
+  # unbounded growth for some shapes, so a 1- or 2-cycle check alone would
+  # not have caught it (same reasoning as NestedTagsInSummary's own 3-cycle
+  # check above).
+  function Test-ThreeCycleNesting([string]$QName, [string]$DeclPattern, [string]$ExpectedLine, [string]$Label) {
+    $j1 = Apply-One $QName
+    Check "$Label apply #1 exits 0" ($LASTEXITCODE -eq 0) $j1
+    $b1 = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) $DeclPattern
+    Check "$Label`: full nested content survives verbatim, unmangled (cycle 1)" `
+      ($b1 -match [regex]::Escape($ExpectedLine)) $b1
+    $after1 = [IO.File]::ReadAllBytes($target)
+
+    $j2 = Apply-One $QName
+    $after2 = [IO.File]::ReadAllBytes($target)
+    Check "$Label`: byte-identical after a 2nd apply cycle" `
+      ([System.Linq.Enumerable]::SequenceEqual([byte[]]$after1,[byte[]]$after2)) $j2
+
+    $j3 = Apply-One $QName
+    $after3 = [IO.File]::ReadAllBytes($target)
+    Check "$Label`: byte-identical after a 3rd apply cycle (unbounded growth needed 3+ cycles to surface for some nesting shapes)" `
+      ([System.Linq.Enumerable]::SequenceEqual([byte[]]$after2,[byte[]]$after3)) $j3
+
+    $b3 = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) $DeclPattern
+    Check "$Label`: full nested content STILL survives verbatim, unmangled, after 3 cycles" `
+      ($b3 -match [regex]::Escape($ExpectedLine)) $b3
+  }
+
   # --- NestedTagsInSummary: Critical 1, THREE apply cycles ---
   $jNest1 = Apply-One 'preserve_tags.NestedTagsInSummary'
   Check 'NestedTagsInSummary apply #1 exits 0' ($LASTEXITCODE -eq 0) $jNest1
@@ -469,6 +543,19 @@ try {
   $nestExcCount3 = ([regex]::Matches($nestBlock3, [regex]::Escape('<exception cref="ENested">'))).Count
   Check 'CRITICAL 1: <exception cref="ENested"> STILL appears exactly once after 3 cycles (did not grow to 2 or 3)' ($nestExcCount3 -eq 1)
   Check 'CRITICAL 1: still no standalone <seealso> fabricated after 3 cycles' (-not ($nestBlock3 -match '<seealso'))
+
+  # --- Review round 2: nesting inside <deprecated>/<exception>/<example> themselves (Critical 1 STILL-OPEN gap) ---
+  Test-ThreeCycleNesting 'preserve_tags.NestedInDeprecated' '^procedure NestedInDeprecated;' `
+    '<deprecated>Use <see cref="Other.RelatedThing"/> instead of this old thing.</deprecated>' `
+    'CRITICAL 1 (round 2): <see> nested inside <deprecated>'
+
+  Test-ThreeCycleNesting 'preserve_tags.NestedSinceInException' '^procedure NestedSinceInException;' `
+    '<exception cref="EOuter">Added in <since>2.0</since> and still raised today.</exception>' `
+    'CRITICAL 1 (round 2): <since> nested inside <exception>'
+
+  Test-ThreeCycleNesting 'preserve_tags.NestedExceptionInExample' '^procedure NestedExceptionInExample;' `
+    '<example>Sample usage. <exception cref="EInExample">boom</exception> can happen.</example>' `
+    'CRITICAL 1 (round 2): <exception> nested inside <example>'
 
   # --- GappedDeprecatedMessage: Important 2 (message preserved) + gapped shape ---
   $jGap1 = Apply-One 'preserve_tags.GappedDeprecatedMessage'
@@ -561,6 +648,117 @@ try {
   $docLinesPart3 = $linesPart3 | Where-Object { $_.TrimStart() -match '^///' }
   $nonAsciiPart3 = $docLinesPart3 | Where-Object { $_ -match '[^\x00-\x7F]' }
   Check 'every /// line is 7-bit ASCII (PART 3)' ($nonAsciiPart3.Count -eq 0)
+
+  # =====================================================================
+  # PART 4: coordinator review round 2, NEW IMPORTANT (line-deletion on a
+  # malformed-but-tag-shaped comment; see this file's own header comment).
+  # Continues on scratch1/$target.
+  # =====================================================================
+
+  # $Survives1 is checked after cycle 1 (proves no IMMEDIATE full deletion).
+  # $SurvivesFinal is checked after cycles 2 AND 3 -- most rows below settle
+  # into their final form from cycle 1 already (so $Survives1 usually equals
+  # $SurvivesFinal), but TabSeparatedSeeAlso's ONLY tag is a <seealso/>,
+  # whose presence alone does not satisfy Document.pas' ExistingHasAnyTag
+  # (same reasoning as BareSeeOnly, PART 3): cycle 1 takes the fresh/
+  # additive path (original tab-bearing line untouched), and only cycle 2 --
+  # once MergeAdjacentSameKind folds the additive facts block into the same
+  # region -- runs the repair path that normalizes the tab to a canonical
+  # single space. That is the EXACT two-cycle mechanism the line-deletion
+  # defect itself depended on, now exercised and proven safe instead of
+  # destructive. Cycle 3 additionally proves a stable fixed point
+  # (byte-identical to cycle 2, no further mutation or growth).
+  function Test-NeverDeletedAcrossCycles([string]$QName, [string]$DeclPattern, [string]$Survives1, [string]$SurvivesFinal, [string]$Label) {
+    $j1 = Apply-One $QName
+    Check "$Label apply #1 exits 0" ($LASTEXITCODE -eq 0) $j1
+    $b1 = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) $DeclPattern
+    Check "$Label`: decl + doc-comment found (cycle 1, not fully deleted)" ($null -ne $b1 -and $b1 -ne '') $b1
+    Check "$Label`: expected content survives (cycle 1)" ($b1 -match [regex]::Escape($Survives1)) $b1
+
+    & $exePath index $scratch --db $db 2>$null | Out-Null
+    $j2 = Apply-One $QName
+    Check "$Label apply #2 exits 0" ($LASTEXITCODE -eq 0) $j2
+    $b2 = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) $DeclPattern
+    Check "$Label`: decl + doc-comment found (cycle 2 -- the additive-then-merge mechanism the defect itself relied on)" `
+      ($null -ne $b2 -and $b2 -ne '') $b2
+    Check "$Label`: final/canonical content present (cycle 2)" ($b2 -match [regex]::Escape($SurvivesFinal)) $b2
+    $after2 = [IO.File]::ReadAllBytes($target)
+
+    & $exePath index $scratch --db $db 2>$null | Out-Null
+    $j3 = Apply-One $QName
+    $after3 = [IO.File]::ReadAllBytes($target)
+    Check "$Label`: byte-identical after a 3rd apply cycle (stable fixed point)" `
+      ([System.Linq.Enumerable]::SequenceEqual([byte[]]$after2,[byte[]]$after3)) $j3
+    $b3 = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) $DeclPattern
+    Check "$Label`: final/canonical content STILL present after 3 cycles" `
+      ($b3 -match [regex]::Escape($SurvivesFinal)) $b3
+  }
+
+  Test-NeverDeletedAcrossCycles 'preserve_tags.SpaceBeforeCloseDeprecated' '^procedure SpaceBeforeCloseDeprecated;' `
+    '<summary><deprecated >Space before the closing angle bracket.</deprecated></summary>' `
+    '<summary><deprecated >Space before the closing angle bracket.</deprecated></summary>' `
+    'NEW IMPORTANT: space before deprecated''s closing >'
+
+  Test-NeverDeletedAcrossCycles 'preserve_tags.UnclosedDeprecated' '^procedure UnclosedDeprecated;' `
+    '<summary><deprecated>No closing tag at all, just trailing words</summary>' `
+    '<summary><deprecated>No closing tag at all, just trailing words</summary>' `
+    'NEW IMPORTANT: unclosed <deprecated>'
+
+  Test-NeverDeletedAcrossCycles 'preserve_tags.AllCapsDeprecatedTag' '^procedure AllCapsDeprecatedTag;' `
+    '<deprecated>Recognized case-insensitively.</deprecated>' `
+    '<deprecated>Recognized case-insensitively.</deprecated>' `
+    'NEW IMPORTANT: <DEPRECATED> all-caps (case-insensitive sniff)'
+  $allCapsBlock = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) '^procedure AllCapsDeprecatedTag;'
+  Check 'NEW IMPORTANT: <DEPRECATED> genuinely recognized, NOT wrapped in a fabricated <summary>' `
+    (-not ($allCapsBlock -match '<summary>')) $allCapsBlock
+
+  Test-NeverDeletedAcrossCycles 'preserve_tags.ExceptionNoCrefAttr' '^procedure ExceptionNoCrefAttr;' `
+    '<summary><exception>Missing the required cref attribute.</exception></summary>' `
+    '<summary><exception>Missing the required cref attribute.</exception></summary>' `
+    'NEW IMPORTANT: <exception> with no cref attribute'
+
+  Test-NeverDeletedAcrossCycles 'preserve_tags.SeeAlsoNoCrefWithSummary' '^procedure SeeAlsoNoCrefWithSummary;' `
+    '<summary>Has a real, well-formed summary.</summary>' `
+    '<summary>Has a real, well-formed summary.</summary>' `
+    'NEW IMPORTANT: <seealso> with no cref, alongside a real <summary>'
+  $seeNoCrefBlock = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) '^procedure SeeAlsoNoCrefWithSummary;'
+  Check 'NEW IMPORTANT: whole comment NOT reduced to just a facts block (the real <summary> is genuinely there)' `
+    ($seeNoCrefBlock -match '<!-- drag-lint:auto BEGIN -->' -and $seeNoCrefBlock -match '<summary>') $seeNoCrefBlock
+  # Documented, ACCEPTED limitation (matches the review's own "unmodeled
+  # tags" out-of-scope item): the malformed seealso fragment itself is
+  # captured by nothing (RxSee requires cref= too) and does not separately
+  # round-trip -- pinning this here so the gap stays a conscious, explained
+  # choice rather than a silent regression if behavior ever changes.
+  Check 'NEW IMPORTANT: malformed seealso fragment text does not itself round-trip (known "unmodeled tag" gap, not a full-comment deletion)' `
+    (-not ($seeNoCrefBlock -match 'Missing the required cref, sitting alongside')) $seeNoCrefBlock
+
+  Test-NeverDeletedAcrossCycles 'preserve_tags.UnclosedExampleTag' '^procedure UnclosedExampleTag;' `
+    '<summary><example>Unclosed example body, no closing tag</summary>' `
+    '<summary><example>Unclosed example body, no closing tag</summary>' `
+    'NEW IMPORTANT: unclosed <example>'
+
+  Test-NeverDeletedAcrossCycles 'preserve_tags.TabSeparatedSeeAlso' '^procedure TabSeparatedSeeAlso;' `
+    'cref="Other.RelatedThing"' `
+    '<seealso cref="Other.RelatedThing"/>' `
+    'NEW IMPORTANT: TAB before <seealso>''s cref (case-insensitive/whitespace-tolerant sniff)'
+  $tabSeeBlock = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) '^procedure TabSeparatedSeeAlso;'
+  # CollapseWhitespace ('[ \t]+' -> ' ') fires on EITHER path (a genuinely
+  # recognized <seealso>'s cref, or ParseOneline's literal-prose fallback),
+  # so the space-normalized substring check above alone cannot tell "sniff
+  # genuinely recognized this as a tag" apart from "sniff missed it, prose
+  # fallback coincidentally collapsed to the same-looking text" -- this
+  # extra check is the one that actually distinguishes them (empirically
+  # confirmed: reverting layer 1 to the old Pos()-based sniff during this
+  # task's own revert-to-RED verification left the substring check above
+  # GREEN by accident, and only this assertion caught the regression).
+  Check 'NEW IMPORTANT: tab-separated <seealso> genuinely recognized, NOT wrapped in a fabricated <summary>' `
+    (-not ($tabSeeBlock -match '<summary>')) $tabSeeBlock
+
+  # Every emitted /// line across PART 4 is 7-bit ASCII too.
+  $linesPart4 = [IO.File]::ReadAllLines($target)
+  $docLinesPart4 = $linesPart4 | Where-Object { $_.TrimStart() -match '^///' }
+  $nonAsciiPart4 = $docLinesPart4 | Where-Object { $_ -match '[^\x00-\x7F]' }
+  Check 'every /// line is 7-bit ASCII (PART 4)' ($nonAsciiPart4.Count -eq 0)
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

@@ -46,12 +46,37 @@ type
     /// just the first).</summary>
     /// <remarks>v(ADP3 T3b review, Critical 1 fix): used to determine which raw
     /// content sits OUTSIDE the containers MergeComment already preserves
-    /// verbatim (&lt;summary&gt;/&lt;param&gt;/&lt;returns&gt;/&lt;remarks&gt;), so an inline
-    /// tag NESTED inside one of them (e.g. a hand-written &lt;see cref="X"/&gt;
-    /// that is part of a human's &lt;summary&gt; prose) is not ALSO captured as if
-    /// it were a standalone sibling tag and duplicated on re-emit -- see
-    /// MergeComment's own remarks for the full defect this closes.</remarks>
+    /// verbatim (&lt;summary&gt;/&lt;param&gt;/&lt;returns&gt;/&lt;remarks&gt;/&lt;exception&gt;/
+    /// &lt;example&gt;/&lt;deprecated&gt;/&lt;since&gt;), so an inline tag NESTED inside one
+    /// of them (e.g. a hand-written &lt;see cref="X"/&gt; that is part of a
+    /// human's &lt;summary&gt; prose) is not ALSO captured as if it were a
+    /// standalone sibling tag and duplicated on re-emit -- see MergeComment's
+    /// own remarks for the full defect this closes.</remarks>
     class function StripElement(const S, ATagName: string): string;
+    /// <summary>Reparses ARawBlock with every container in
+    /// PRESERVED_VERBATIM_CONTAINERS stripped EXCEPT AOwnTagName (pass '' to
+    /// strip all of them), then returns TDocCommentParser.ParseXmlDoc's
+    /// result on that stripped copy.</summary>
+    /// <param name="AOwnTagName">The ONE container type NOT to strip -- the
+    /// caller is about to read that field from the result. Must be excluded
+    /// from its own strip pass: stripping '<exception>' before reading
+    /// Result.Exceptions would remove every exception, including genuinely
+    /// standalone ones, which is the exact content this call is trying to
+    /// recover -- see MergeComment's own remarks for why "strip everything"
+    /// is wrong and "strip everything else" is required instead.</param>
+    /// <remarks>v(ADP3 T3b review round 2, Critical 1 still-open fix): a tag
+    /// from ANY of the five preserved-verbatim fields (exception/example/
+    /// deprecated/since -- seealso/see are never stripped by StripElement at
+    /// all, since RxSee never captures a body, so they need no self-exclusion)
+    /// can nest inside ANY OTHER one of them, not only inside &lt;summary&gt;
+    /// (confirmed empirically: &lt;since&gt; inside &lt;exception&gt;, &lt;seealso&gt; inside
+    /// &lt;example&gt;/&lt;deprecated&gt;/&lt;exception&gt;, &lt;exception&gt; inside &lt;example&gt;) --
+    /// a single shared "Standalone" that strips a FIXED list can never be
+    /// correct for more than one of the five fields at once, because
+    /// whichever field's own tag type is in that fixed list is thereby
+    /// erased before it can be read back. MergeComment therefore calls this
+    /// once per field, each time excluding that field's own container.</remarks>
+    class function BuildStandaloneFor(const ARawBlock, AOwnTagName: string): TParsedDoc;
   public
     /// <summary>Renders the fenced facts-block body lines (each prefixed
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
@@ -340,6 +365,41 @@ begin
   // param loop, so each must also be excluded here).
   Re:= TRegEx.Create('<' + ATagName + '(?:\s[^>]*)?>[\s\S]*?</' + ATagName + '>', [roIgnoreCase]);
   Result:= Re.Replace(S, '');
+end;
+
+// v(ADP3 T3b review round 2, Critical 1 still-open fix): the SINGLE canonical
+// enumeration of every tag MergeComment re-emits verbatim (the author's own
+// raw captured text, unparsed) -- BOTH the emitter (each tag's own emission
+// in MergeComment, below) and BuildStandaloneFor (which strips this exact
+// list, minus the one field being computed) must agree on this set, so it
+// cannot silently drift the way the round-1 fix's hand-written 4-item list
+// did (it named only summary/param/returns/remarks and silently missed
+// exception/example/deprecated/since, all four of which are ALSO preserved
+// verbatim and can ALSO contain further nested tags -- confirmed
+// empirically: <since> inside <exception>, <seealso> inside <example>/
+// <deprecated>/<exception>, <exception> inside <example>). 'seealso'/'see'
+// are DELIBERATELY excluded from this list: they are always self-closing
+// (RxSee never captures a body -- its own pattern ends at the opening tag,
+// '\s*/?>'), so StripElement (which requires an explicit closing tag) can
+// never match them regardless of what list it is given -- including them
+// would be a guaranteed no-op, not a needed protection, and they never need
+// "exclude self" treatment in BuildStandaloneFor for the same reason.
+const
+  PRESERVED_VERBATIM_CONTAINERS: array[0..7] of string = (
+    'summary', 'param', 'returns', 'remarks',
+    'exception', 'example', 'deprecated', 'since'
+  );
+
+class function TDocRegions.BuildStandaloneFor(const ARawBlock, AOwnTagName: string): TParsedDoc;
+var
+  Text: string;
+  Tag : string;
+begin
+  Text:= ARawBlock;
+  for Tag in PRESERVED_VERBATIM_CONTAINERS do
+    if not SameText(Tag, AOwnTagName) then
+      Text:= StripElement(Text, Tag);
+  Result:= TDocCommentParser.ParseXmlDoc(Text);
 end;
 
 class function TDocRegions.IsManagedText(const S: string): Boolean;
@@ -801,57 +861,75 @@ begin
     // else: engine-owned-and-empty, or genuinely absent, and nothing
     // harvested -- omit the tag entirely (v(ADP3 T3)).
 
-    // v(ADP3 T3b review, Critical 1 fix): Exceptions/ExampleText/SeeAlso/
-    // SinceText/Deprecated, as parsed directly onto AExisting, come from
-    // regexes that match ANYWHERE in the raw block -- including INSIDE
-    // <summary>/<param>/<returns>/<remarks>, all FOUR of which this function
-    // ALSO preserves verbatim (their own raw text, unparsed). A hand-written
-    // inline tag sitting inside one of those four (e.g. an author's own
-    // "<summary>...see <see cref="X"/> for details.</summary>") is therefore
-    // ALREADY preserved, byte-for-byte, as part of that container's own
-    // text -- pulling the SAME occurrence back out and re-emitting it AGAIN
-    // as a standalone sibling tag would duplicate it, and since the
-    // duplicate itself becomes a NEW match on the NEXT parse (nothing
-    // strips the containers before re-matching), the duplication is
-    // UNBOUNDED: one more copy every subsequent --apply, un-fixable by
-    // --strip (the fabricated copies carry no AUTO_MARK and sit outside any
-    // AUTO_BEGIN..AUTO_END fence, so strip reads them as hand-written and
-    // leaves every one). Reproduced empirically against this repo's own
-    // src/report/DRagLint.Convert.Rules.pas (an inline <see cref="Kind"/>
-    // inside a <summary>): 3 cycles, growing by one <seealso> line each time.
+    // v(ADP3 T3b review, Critical 1 fix; round 2 -- STILL-OPEN GAP CLOSED):
+    // Exceptions/ExampleText/SeeAlso/SinceText/Deprecated, as parsed directly
+    // onto AExisting, come from regexes that match ANYWHERE in the raw block
+    // -- including INSIDE any of the EIGHT tags in PRESERVED_VERBATIM_
+    // CONTAINERS (<summary>/<param>/<returns>/<remarks>/<exception>/
+    // <example>/<deprecated>/<since>), every one of which this function ALSO
+    // preserves verbatim (its own raw text, unparsed). Round 1 of this fix
+    // stripped only FOUR of those eight (summary/param/returns/remarks)
+    // before reparsing -- correct for nesting inside prose, but it left
+    // exception/example/deprecated/since themselves unprotected, so a tag
+    // nested inside ANY of those four was STILL captured twice. Confirmed
+    // empirically, all four still-open combinations: <since> inside
+    // <exception>, <seealso> inside <deprecated>/<exception>/<example>,
+    // <exception> inside <example> -- 4 apply cycles, 3109 -> 3203 -> 3371
+    // -> 3539 bytes (the `.Matches`-backed fields grow unbounded; the
+    // `.Match`-backed <since> duplicates once then holds at 2, same
+    // signature as the round-1 defect). Also reproduced pre-existing on this
+    // repo's own src/report/DRagLint.Convert.Rules.pas and
+    // src/analysis/DRagLint.Analysis.Cfg.pas (both carry an inline <see
+    // cref=.../> inside a <summary>, the ONE combination round 1 already
+    // covers -- both now stable across 3 cycles).
     //
-    // Fix: build a "Standalone" reparse from a copy of RawBlock with those
-    // four containers physically removed (StripElement, reused for all
-    // four -- the SAME already-correct TDocCommentParser.ParseXmlDoc parses
-    // the remainder, no duplicated regex, no parser change, no content
-    // heuristic), and read Exceptions/ExampleText/SeeAlso/SinceText/
-    // Deprecated from THAT result instead of AExisting directly -- genuinely
-    // standalone occurrences survive the strip untouched; nested ones do
-    // not exist in the stripped text at all, so they can never be
-    // (re-)captured. Gated on AExisting.Format = dfXmlDoc: the four
-    // containers are XML-DocInsight syntax, and a dfPasDoc/dfOneline/
-    // dfLoose existing read has no such containers to strip in the first
-    // place (PasDoc's own @tag recognition is anchored to the START of a
-    // trimmed line -- RxTag's own '(?m)^\s*@(\w+)' -- so free-floating
-    // prose mentioning e.g. "@see" mid-sentence is never picked up as a tag
-    // there either; the nesting bug is specific to XML's match-anywhere
-    // regexes). Further gated on the ORIGINAL (unfiltered) parse having
-    // found ANY of the five signals at all -- stripping content can only
-    // REMOVE matches, never add new ones, so if AExisting already shows
-    // zero, the stripped reparse would too, and building the four
-    // TRegEx-backed strips plus a full second ParseXmlDoc call is not worth
-    // paying for on every comment in a whole-project run.
-    var Standalone: TParsedDoc:= AExisting;
-    if (AExisting.Format = dfXmlDoc) and
-       ((Length(AExisting.Exceptions) > 0) or AExisting.HasExampleTag or
-        (Length(AExisting.SeeAlso) > 0) or (AExisting.SinceText <> '') or AExisting.Deprecated) then
+    // A SINGLE shared "Standalone" cannot be correct for more than one of
+    // the five fields at once: stripping <exception> before reading
+    // Standalone.Exceptions would erase every exception, genuinely
+    // standalone ones included -- exactly the content this is trying to
+    // recover. BuildStandaloneFor (see its own remarks) is called ONCE PER
+    // FIELD, each time excluding that field's own container from the strip
+    // list -- so a tag nested inside any OTHER preserved container never
+    // survives to be (re-)captured, while a field's own genuinely
+    // top-level occurrences always do (their container was never stripped
+    // for their own computation). Gated on AExisting.Format = dfXmlDoc (the
+    // eight containers are XML-DocInsight syntax; PasDoc's own @tag
+    // recognition is anchored to the START of a trimmed line -- RxTag's own
+    // '(?m)^\s*@(\w+)' -- so it has no equivalent match-anywhere nesting
+    // risk) and on the ORIGINAL (unfiltered) parse already showing at least
+    // one of the five signals (stripping can only REMOVE matches, never add
+    // them, so an unfiltered zero guarantees every stripped reparse would
+    // also be zero) -- five extra TDocCommentParser.ParseXmlDoc calls (each
+    // building its own 9 TRegEx objects) is not worth paying on every
+    // comment in a whole-project run; measured cost when the gate DOES
+    // fire is reported in this task's test report.
+    var HasAnySignal: Boolean:=
+      (AExisting.Format = dfXmlDoc) and
+      ((Length(AExisting.Exceptions) > 0) or AExisting.HasExampleTag or
+       (Length(AExisting.SeeAlso) > 0) or (AExisting.SinceText <> '') or AExisting.Deprecated);
+    var StandaloneExc     : TParsedDoc;
+    var StandaloneExample : TParsedDoc;
+    var StandaloneDep     : TParsedDoc;
+    var StandaloneSee     : TParsedDoc;
+    var StandaloneSince   : TParsedDoc;
+    if HasAnySignal then
     begin
-      var StandaloneText: string:= AExisting.RawBlock;
-      StandaloneText:= StripElement(StandaloneText, 'summary');
-      StandaloneText:= StripElement(StandaloneText, 'param');
-      StandaloneText:= StripElement(StandaloneText, 'returns');
-      StandaloneText:= StripElement(StandaloneText, 'remarks');
-      Standalone:= TDocCommentParser.ParseXmlDoc(StandaloneText);
+      StandaloneExc     := BuildStandaloneFor(AExisting.RawBlock, 'exception');
+      StandaloneExample := BuildStandaloneFor(AExisting.RawBlock, 'example');
+      StandaloneDep     := BuildStandaloneFor(AExisting.RawBlock, 'deprecated');
+      // seealso/see never need self-exclusion (StripElement can never match
+      // their always-self-closing form -- see PRESERVED_VERBATIM_CONTAINERS'
+      // own comment), so '' (strip everything) is correct and simplest.
+      StandaloneSee     := BuildStandaloneFor(AExisting.RawBlock, '');
+      StandaloneSince   := BuildStandaloneFor(AExisting.RawBlock, 'since');
+    end
+    else
+    begin
+      StandaloneExc     := AExisting;
+      StandaloneExample := AExisting;
+      StandaloneDep     := AExisting;
+      StandaloneSee     := AExisting;
+      StandaloneSince   := AExisting;
     end;
 
     // <deprecated/>: v(ADP3 T3b; review Important 2 -- message preserved).
@@ -869,10 +947,24 @@ begin
     // message-text spelling to preserve regardless (self-closing vs. an
     // explicit close tag with empty content both collapse to '', so the
     // canonical bare '<deprecated/>' is emitted either way).
-    if Standalone.Deprecated then
+    //
+    // v(ADP3 T3b review round 2, Critical 1 -- SECOND bug found while fixing
+    // the first): StandaloneDep is used ONLY to decide WHETHER a <deprecated>
+    // is genuinely standalone (not nested inside something else) -- its OWN
+    // DeprecatedText must NEVER be read for the actual message, because
+    // BuildStandaloneFor('deprecated') strips example/exception/since FROM
+    // THE WHOLE RAW BLOCK, including from WITHIN this <deprecated>'s own
+    // body -- a message that legitimately contains e.g. "<see cref=.../>...
+    // <since>2.0</since>" would have that '<since>' silently deleted, not
+    // merely excluded from double-counting (reproduced empirically: without
+    // this fix, "Added in <since>2.0</since> and still valid." mangled down
+    // to "Added in  and still valid."). AExisting.DeprecatedText -- the
+    // ORIGINAL, entirely unstripped parse -- is always the correct source
+    // for the message text; only presence/absence needs the filtered view.
+    if StandaloneDep.Deprecated then
     begin
-      if Standalone.DeprecatedText <> '' then
-        Sb.AppendLine(EmitTagged('<deprecated>', Standalone.DeprecatedText, '</deprecated>'))
+      if AExisting.DeprecatedText <> '' then
+        Sb.AppendLine(EmitTagged('<deprecated>', AExisting.DeprecatedText, '</deprecated>'))
       else
         Sb.AppendLine(APrefix + '<deprecated/>');
     end;
@@ -932,9 +1024,9 @@ begin
 
     // <exception>: v(ADP3 T3b). Never engine-owned -- MergeComment has never
     // generated this tag, so, like <param> and <deprecated/>, there is
-    // nothing to classify: every <exception> Standalone found is hand-
-    // written, preserved verbatim (mirrors the <param> loop's shape above).
-    // TypeName (the cref) and Desc are re-emitted EXACTLY as parsed, with NO
+    // nothing to classify: every <exception> found is hand-written,
+    // preserved verbatim (mirrors the <param> loop's shape above). TypeName
+    // (the cref) and Desc are re-emitted EXACTLY as parsed, with NO
     // re-escaping: they were captured raw out of already-valid XML text (the
     // author's own source), so they are opaque strings to round-trip, not
     // fresh content to escape -- exactly like Desc in the <param> loop above
@@ -947,8 +1039,29 @@ begin
     // their relative SOURCE order (Excs is populated in regex-match order
     // by the parser; the parser does not track cross-TYPE tag order, hence
     // this function's fixed emission order -- see its own header remarks).
-    for var Exc in Standalone.Exceptions do
-      Sb.AppendLine(EmitTagged('<exception cref="' + Exc.TypeName + '">', Exc.Desc, '</exception>'));
+    //
+    // v(ADP3 T3b review round 2, Critical 1 -- SECOND bug, same class as
+    // <deprecated>'s own fix just above): StandaloneExc.Exceptions is used
+    // ONLY to determine WHICH cref values are genuinely standalone (not
+    // nested inside example/deprecated/summary/etc.) -- its OWN Desc text
+    // must NOT be re-emitted directly, because BuildStandaloneFor
+    // ('exception') strips example/deprecated/since from the WHOLE raw
+    // block, including from WITHIN this exception's own desc (reproduced:
+    // "Added in <since>2.0</since> and still valid." mangled down to
+    // "Added in  and still valid." before this fix). For each standalone
+    // cref, look up the MATCHING entry in AExisting.Exceptions (the
+    // ORIGINAL, entirely unstripped parse) by TypeName, and re-emit ITS
+    // Desc -- unmangled, whatever it contains. (Two <exception> tags
+    // sharing the identical cref is the one case this cannot disambiguate;
+    // out of scope, same as the pre-existing "keeps only the first
+    // <deprecated>/<since>" limitation.)
+    for var StandaloneExcItem in StandaloneExc.Exceptions do
+      for var OrigExc in AExisting.Exceptions do
+        if SameText(OrigExc.TypeName, StandaloneExcItem.TypeName) then
+        begin
+          Sb.AppendLine(EmitTagged('<exception cref="' + OrigExc.TypeName + '">', OrigExc.Desc, '</exception>'));
+          Break;
+        end;
 
     // <example>: v(ADP3 T3b; review Minor 1 -- gated on HasExampleTag, not
     // ExampleText <> '', so a deliberate, empty <example></example> is
@@ -957,19 +1070,29 @@ begin
     // byte-exact on that shape). Same reasoning as <exception> -- never
     // engine-owned, always hand-written when present, preserved verbatim
     // (no re-escaping, see above).
-    if Standalone.HasExampleTag then
-      Sb.AppendLine(EmitTagged('<example>', Standalone.ExampleText, '</example>'));
+    //
+    // v(ADP3 T3b review round 2, Critical 1 -- same "presence vs. content"
+    // split as <deprecated>/<exception> above): StandaloneExample.
+    // HasExampleTag decides WHETHER this is genuinely standalone; the TEXT
+    // always comes from AExisting.ExampleText (the original, unmangled
+    // parse), never from StandaloneExample.ExampleText, which could have a
+    // legitimately-nested tag (e.g. a nested <exception>) stripped out from
+    // within it by BuildStandaloneFor('example')'s own exception/deprecated/
+    // since strip.
+    if StandaloneExample.HasExampleTag then
+      Sb.AppendLine(EmitTagged('<example>', AExisting.ExampleText, '</example>'));
 
     // <seealso>/<since>: v(ADP3 T3b) -- UNLIKE exception/example/deprecated,
     // these two DO have an engine-generated counterpart: RenderFactsBlock
     // emits an opt-in auto '<seealso cref=.../>' per related symbol and an
     // opt-in auto '<since>date</since>' fact, both INSIDE the AUTO_BEGIN..
     // AUTO_END fence (see its own comment) when the caller opted in via
-    // --seealso/--since. Standalone's own strip (above) removes the
-    // <remarks> element wholesale, which is where the fence always lives,
-    // so an auto-generated line from a PRIOR run is excluded the same way
-    // any other remarks-nested content is (the Task 3b brief's own
-    // "Trap 1", confirmed empirically before this fix).
+    // --seealso/--since. StandaloneSee's/StandaloneSince's own strip
+    // (BuildStandaloneFor, above) removes the <remarks> element wholesale,
+    // which is where the fence always lives, so an auto-generated line from
+    // a PRIOR run is excluded the same way any other remarks-nested content
+    // is (the Task 3b brief's own "Trap 1", confirmed empirically before
+    // this fix).
     //
     // v(ADP3 T3b review, Critical 1 fix, second symptom): RxSee's own
     // '(?:see|seealso)' alternation means SeeAlso conflates a hand-written
@@ -983,15 +1106,30 @@ begin
     // SeeAlso, same index correspondence, set by the parser -- see
     // TParsedDoc's own field comment) records which spelling the author
     // actually used, so the ORIGINAL tag name is what gets re-emitted.
-    for var SeeIx:= 0 to High(Standalone.SeeAlso) do
+    //
+    // v(ADP3 T3b review round 2, Minor): FAIL LOUDLY on a length mismatch
+    // rather than silently defaulting every out-of-range entry to
+    // '<seealso>' (a silent default is exactly how the very rewrite this
+    // field exists to prevent could reappear unnoticed -- e.g. a future
+    // producer that fills SeeAlso without ALSO filling SeeAlsoIsInline, such
+    // as a rehydrate from SeeAlsoJsonRaw). Both current producers
+    // (ParseXmlDoc, ParsePasDoc) always size them equal, so this can only
+    // fire if a THIRD producer is added later without updating this
+    // invariant -- exactly the case worth a loud, immediate failure over a
+    // silently-wrong tag name.
+    if Length(StandaloneSee.SeeAlso) <> Length(StandaloneSee.SeeAlsoIsInline) then
+      raise Exception.CreateFmt(
+        'TDocRegions.MergeComment: SeeAlso/SeeAlsoIsInline length mismatch (%d vs %d) -- ' +
+        'every TParsedDoc producer must size SeeAlsoIsInline to match SeeAlso.',
+        [Length(StandaloneSee.SeeAlso), Length(StandaloneSee.SeeAlsoIsInline)]);
+    for var SeeIx:= 0 to High(StandaloneSee.SeeAlso) do
     begin
       var SeeTag: string:= 'seealso';
-      if (SeeIx <= High(Standalone.SeeAlsoIsInline)) and Standalone.SeeAlsoIsInline[SeeIx] then
-        SeeTag:= 'see';
-      Sb.AppendLine(APrefix + '<' + SeeTag + ' cref="' + Standalone.SeeAlso[SeeIx] + '"/>');
+      if StandaloneSee.SeeAlsoIsInline[SeeIx] then SeeTag:= 'see';
+      Sb.AppendLine(APrefix + '<' + SeeTag + ' cref="' + StandaloneSee.SeeAlso[SeeIx] + '"/>');
     end;
-    if Standalone.SinceText <> '' then
-      Sb.AppendLine(EmitTagged('<since>', Standalone.SinceText, '</since>'));
+    if StandaloneSince.SinceText <> '' then
+      Sb.AppendLine(EmitTagged('<since>', StandaloneSince.SinceText, '</since>'));
 
     // remarks: keep hand prose (AExisting.Remarks) OUTSIDE the fence, then a fresh
     // managed block. Strip any old fenced block from the prose before re-emitting
