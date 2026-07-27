@@ -130,6 +130,46 @@ begin
   for I:= 0 to Last do Result[I]:= Parts[I];
 end;
 
+// v(ADP3 T3g): the SAME line splitting and trailing-blank drop as
+// NormalizeCommentLines, but every retained line is returned RAW (untrimmed),
+// so leading whitespace is readable. Pairs with NormalizeCommentLines INDEX
+// FOR INDEX -- same input gives the same count, because the drop rule is
+// character-identical (a whitespace-only trailing line is dropped by BOTH; it
+// is Trim(...) = '' either way). That pairing is what lets the indentation
+// compare below be read as a refinement of the body compare rather than as a
+// second, differently-shaped notion of "the lines" that could disagree about
+// which line is which.
+function RawCommentLines(const S: string): TArray<string>;
+var
+  Norm : string        ;
+  Parts: TArray<string>;
+  Last : Integer       ;
+  I    : Integer       ;
+begin
+  Norm := StringReplace(S, #13#10, #10, [rfReplaceAll]);
+  Norm := StringReplace(Norm, #13, #10, [rfReplaceAll]);
+  Parts:= Norm.Split([#10]);
+  Last := High(Parts);
+  while (Last >= 0) and (Trim(Parts[Last]) = '') do Dec(Last);
+  SetLength(Result, Last + 1);
+  for I:= 0 to Last do Result[I]:= Parts[I];
+end;
+
+// v(ADP3 T3g): the leading whitespace run of S -- spaces and TABS only, in
+// the order they appear, copied verbatim. Not Length(S) - Length(TrimLeft(S)):
+// that would count any whitespace character, and it answers with a LENGTH,
+// which cannot tell one tab from one space. A project indented with tabs must
+// still be indented with tabs after `document --apply` touches it, so the
+// characters themselves are the answer, never a width.
+function LeadingWhitespace(const S: string): string;
+var
+  I: Integer;
+begin
+  I:= 1;
+  while (I <= Length(S)) and ((S[I] = ' ') or (S[I] = #9)) do Inc(I);
+  Result:= Copy(S, 1, I - 1);
+end;
+
 // True when the normalized line sequences are identical (same count, each line
 // exactly equal). Exact '=' (not SameText): Merged is deterministic and both
 // sides come from /// -prefixed source, so casing never varies -- exact compare
@@ -141,6 +181,33 @@ begin
   if Length(A) <> Length(B) then Exit(False);
   for I:= 0 to High(A) do
     if A[I] <> B[I] then Exit(False);
+  Result:= True;
+end;
+
+// v(ADP3 T3g): True when A and B agree, line for line, on the LEADING
+// WHITESPACE run alone -- the exact characters, so one tab and one space are
+// DIFFERENT indentation, never interchangeable. Deliberately narrower than a
+// raw string compare: it is called only once CommentLinesEqual has already
+// established that the trimmed bodies match, and at that point the only
+// difference a raw compare could still find is per-line leading OR TRAILING
+// whitespace. Trailing whitespace is not this task's business -- rewriting a
+// file to strip a stray trailing space is churn `document --strip` can never
+// undo (there is no marker saying the engine did it), and the same argument
+// the single-line-remarks fix already makes applies here. So the compare is
+// scoped to exactly the thing that is wrong: the indentation.
+//
+// A length mismatch answers False, which routes the caller to the replace.
+// Unreachable in practice -- CommentLinesEqual has already matched the counts
+// and RawCommentLines drops the same trailing lines NormalizeCommentLines does
+// -- but the safe direction for an impossible input is to re-emit the block
+// the engine can prove correct, not to declare an unexamined one already fine.
+function CommentLinesIndentEqual(const A, B: TArray<string>): Boolean;
+var
+  I: Integer;
+begin
+  if Length(A) <> Length(B) then Exit(False);
+  for I:= 0 to High(A) do
+    if LeadingWhitespace(A[I]) <> LeadingWhitespace(B[I]) then Exit(False);
   Result:= True;
 end;
 
@@ -204,6 +271,27 @@ begin
       if Result <> '' then Result:= Result + #10;
       Result:= Result + Lines[Ix - 1];
     end;
+end;
+
+// v(ADP3 T3g): the leading whitespace of the 1-based line ALine of ASrc --
+// the indentation every emitted /// line for that declaration is built from.
+// Reads the line through ExtractSourceSpan rather than splitting ASrc a second
+// time, so this unit keeps ONE line extraction (the same argument
+// ExtractSourceSpan's own comment makes for the two idempotency guards) and
+// inherits its EOF clamp for free.
+//
+// A missing or whitespace-only line answers '' -- a degenerate input can then
+// only ever reproduce the pre-v(ADP3 T3g) behaviour (a comment at column 0),
+// never a comment made of nothing but indentation. Note ExtractSourceSpan's
+// own leading-blank quirk collapses a blank line to '' before Trim even sees
+// it, which lands on the same answer by a second route.
+function DeclIndent(const ASrc: string; ALine: Integer): string;
+var
+  L: string;
+begin
+  L:= ExtractSourceSpan(ASrc, ALine, ALine);
+  if Trim(L) = '' then Exit('');
+  Result:= LeadingWhitespace(L);
 end;
 
 // v(ADP3 T3 review round 3, Regression 2): looks ahead from AOpenIx (which
@@ -541,7 +629,28 @@ begin
             or SignatureHasReturn(Sig)
             or (ASym.Kind in [skFunction, skConstructor]);
 
-  Prefix:= '/// ';
+  // v(ADP3 T3g): the prefix carries the DECLARATION's own indentation, copied
+  // verbatim. It was the hardcoded literal '/// ' from 26b986c (one of the
+  // first commits of the whole `document` feature) until now, so every emitted
+  // line landed at column 0 -- invisible for a unit-level routine, but for a
+  // class member it silently de-indented the author's documentation on the
+  // first --apply, and BOTH idempotency compares run through
+  // NormalizeCommentLines, which Trims per line, so nothing could see it.
+  //
+  // The DECLARATION's indentation, not the existing comment's: the comment
+  // documents the declaration, so the declaration is the anchor, and that is
+  // the only choice that answers the gapped shape (a doc region separated from
+  // its decl by a blank line, which FindDocRegionAbove tolerates via
+  // AAllowGap = 1) without asking which of two lines wins.
+  //
+  // TDocRegions.MergeComment derives its residual LinePrefix as
+  // TrimRight(APrefix) (see its own comment), so the v(ADP3 T3f) verbatim
+  // carry-through picks the indentation up from here too, with no second
+  // notion of "the indent" to keep in sync: an author line comes back as
+  // <indent> + '///' + <everything the scanner left after the slashes>, so its
+  // INTERIOR whitespace is still byte-exact while the line as a whole sits
+  // where its indented siblings do.
+  Prefix:= DeclIndent(Src, ASym.StartLine) + '/// ';
   // v(ADP3 T3 review round 2, Finding 4): a SEPARATE, LOCAL signal for the
   // repair-vs-fresh decision only -- NOT a widening of TParsedDoc.HasContent
   // itself (that stays narrower, exactly as before v(ADP3 T3): the indexer's
@@ -644,8 +753,32 @@ begin
     // now ExtractSourceSpan, shared with the fresh path's own guard below --
     // see its comment for why both guards must read the on-disk comment
     // through one extraction. Behaviour identical.
+    //
+    // v(ADP3 T3g): the compare above is indentation-BLIND (NormalizeCommentLines
+    // Trims every line -- deliberately, see its own comment), so on its own it
+    // would answer daUnchanged for a block whose body is already right but
+    // whose lines sit at column 0 because an earlier build put them there. That
+    // is every class member in every file any pre-v(ADP3 T3g) `--apply` ever
+    // touched, the 2026-07-24 YADF run included: indenting on write alone
+    // repairs nothing already damaged, because nothing ever reaches the replace.
+    //
+    // So the guard is now BODY-equal AND INDENT-equal. When the bodies agree
+    // and the indentation does not, the replace below is emitted deliberately:
+    // a one-time re-indent that leaves the file's doc content byte-identical.
+    // It still CONVERGES, and provably so rather than by hope -- the replace
+    // writes exactly Merged's lines, so the next run's CurBlock IS Merged, both
+    // compares hold, and the run after that makes no edit. The 3-cycle sweep in
+    // tests\autodoc\run_doc_p3_indent.ps1 pins that, including for a block the
+    // runner flattens by hand between cycles.
+    //
+    // Scope note: this touches ONLY the repair branch's own guard. The
+    // fresh-insert branch's CommentLinesContain guard below stays exactly as it
+    // is -- indentation-blind, which is CORRECT there: it exists to stop an
+    // already-present block being inserted a second time, and an indentation
+    // difference is no reason at all to let that unbounded growth back in.
     CurBlock:= ExtractSourceSpan(Src, Existing.StartLine, Existing.EndLine);
-    if CommentLinesEqual(NormalizeCommentLines(CurBlock), NormalizeCommentLines(Merged)) then
+    if CommentLinesEqual(NormalizeCommentLines(CurBlock), NormalizeCommentLines(Merged))
+       and CommentLinesIndentEqual(RawCommentLines(CurBlock), RawCommentLines(Merged)) then
     begin
       Result.Action:= daUnchanged;
       Exit;
