@@ -104,8 +104,14 @@ try {
   # `document` side. The fix-it path emits the same text `document --qname` does,
   # so A3 asserts the surviving shape, not the pre-T3 one.
   Check 'A2 inserted a managed drag-lint:auto block'   ($block.Contains('<!-- drag-lint:auto BEGIN -->') -and $block.Contains('<!-- drag-lint:auto END -->'))
-  Check 'A3 NO <summary> and NO <param> tag (v(ADP3 T3): nothing to say -> omitted, never a blank stub)' `
-    ((-not ($block -match '<summary>')) -and (-not ($block -match '<param')))
+  # A3 carries its own positive precondition. As a pure negative it would pass
+  # vacuously on an EMPTY $block -- '' has no <summary> either -- so a comment
+  # inserted in the wrong place, or not inserted at all, would satisfy a check
+  # whose label claims to prove the emitted shape. A7 and A2 already catch that,
+  # but a check must not depend on a sibling to be non-vacuous: read on its own,
+  # A3 now says "a block exists AND it omits both tags".
+  Check 'A3 block exists AND has NO <summary> and NO <param> tag (v(ADP3 T3): nothing to say -> omitted, never a blank stub)' `
+    (($block -match '(?m)^\s*///\s') -and (-not ($block -match '<summary>')) -and (-not ($block -match '<param')))
   Check 'A4 comment carries <returns>'                 ($block -match '///\s*<returns>')
   Check 'A5 comment carries a Called-from fact (CallsIt)' ($block -match 'Called from:.*missfix\.CallsIt')
 

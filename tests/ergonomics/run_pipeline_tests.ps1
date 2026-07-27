@@ -39,9 +39,22 @@ $cfgD = Join-Path $PSScriptRoot 'pipeline_dis.json'
 $all = & $exe lint $fx 2>$null | Out-String
 $dis = & $exe lint $fx --config $cfgD 2>$null | Out-String
 function FindingCount([string]$text) {
-  $m = [regex]::Match($text, '(\d+)\s+finding')
-  if ($m.Success) { return [int]$m.Groups[1].Value } else { return -1 }
+  # ANCHORED to the summary line -- a whole line that is nothing but
+  # "<N> finding(s)". The first version matched '(\d+)\s+finding' ANYWHERE, so
+  # the moment the text renderer gained any other count line ahead of the
+  # summary (per-file totals, suppressed counts, a baseline line) the
+  # differential below would have silently measured the wrong number -- the same
+  # unanchored-scan fragility this check was written to remove. Take the LAST
+  # match, so a summary still wins if such a line is ever added above it.
+  $ms = [regex]::Matches($text, '(?m)^\s*(\d+)\s+finding\(s\)\s*$')
+  if ($ms.Count -gt 0) { return [int]$ms[$ms.Count - 1].Groups[1].Value }
+  return -1
 }
+# -1 means "no summary line found". Say so out loud: without this, a renderer
+# change that drops or reshapes the summary would surface as a confusing
+# off-by-one in the differential instead of as "we could not read the count".
+Ok "summary line parses in both runs" `
+  ((FindingCount $all) -ge 0 -and (FindingCount $dis) -ge 0)
 Ok "disabled rule drops finding"  (-not ($dis -match 'used-before-assignment'))
 Ok "un-disabled run still has it" ($all -match 'used-before-assignment')
 Ok "disable removes exactly one finding" `
