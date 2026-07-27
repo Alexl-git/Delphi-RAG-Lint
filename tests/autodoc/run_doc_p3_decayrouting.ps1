@@ -57,6 +57,9 @@ function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[
 $exePath = (Resolve-Path $Exe).Path
 $fixture = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\docp3\decayrouting.pas')).Path
 
+# $null when the decl is not found OR when it has no doc lines above it at all.
+# Deliberately NOT '' for the second case: a "block was located" check reads
+# $null -ne, and a doc block deleted outright would satisfy that against ''.
 function Get-DocBlock([string[]]$lines, [string]$declPattern) {
   $idx = -1
   for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match $declPattern) { $idx = $i; break } }
@@ -66,6 +69,7 @@ function Get-DocBlock([string[]]$lines, [string]$declPattern) {
     if ($lines[$i] -notmatch '^\s*///') { break }
     $acc.Insert(0, $lines[$i])
   }
+  if ($acc.Count -eq 0) { return $null }
   return [string]::Join("`n", $acc.ToArray())
 }
 function Get-Md5([string]$p) { (Get-FileHash -Algorithm MD5 -Path $p).Hash.Substring(0,8) }
@@ -136,6 +140,15 @@ try {
   # inserted, so derive both lengths and assert it, rather than asserting the
   # outcome and hoping. The engine's own block length is read off the N6 shape,
   # whose whole doc block is the author's ONE line plus exactly that block.
+  #
+  # LIMIT OF THIS DISCRIMINATION, stated rather than implied: it rules out the
+  # ONE early-out that exists today, and the fixture guarantees the mismatch is
+  # a single character on the FOURTH line of the inner sequence -- but nothing
+  # here observes that the comparison actually advanced past offset 0 to reach
+  # it. If CommentLinesContain later gained a DIFFERENT early-out, these checks
+  # would keep passing while the deep-scan path went untested again. Proving
+  # depth needs instrumentation inside the binary, which this suite has no way
+  # to do from outside; this is the strongest available black-box statement.
   $engineBlockLines = ($sibAfter -split "`n").Count - 1
   $nearBeforeLines  = ($nearBefore -split "`n").Count
   Check 'N7 DISCRIMINATION: the existing region is at least as long as the block to insert, so the early-out CANNOT be what answers' `
@@ -155,8 +168,10 @@ try {
   # THE CONSEQUENCE, which the existing element-count pin does not record: the
   # author's element comes FIRST, so a spec-conforming consumer renders it and
   # silently ignores the facts block below.
-  $attrIdx  = $attrAfter.IndexOf('<remarks xml:lang="en">')
-  $factsIdx = $attrAfter.IndexOf('drag-lint:auto BEGIN')
+  # -1 rather than a null-reference exception when the block is missing, so a
+  # missing block reads as a readable FAIL on the check below.
+  $attrIdx  = if ($null -ne $attrAfter) { $attrAfter.IndexOf('<remarks xml:lang="en">') } else { -1 }
+  $factsIdx = if ($null -ne $attrAfter) { $attrAfter.IndexOf('drag-lint:auto BEGIN')    } else { -1 }
   Check 'T3f minor 4 KNOWN GAP, pinned: the AUTHOR''s <remarks> is emitted BEFORE the facts block, so Help Insight never shows the facts' `
     ($attrIdx -ge 0 -and $factsIdx -gt $attrIdx) "authorAt=$attrIdx factsAt=$factsIdx"
 

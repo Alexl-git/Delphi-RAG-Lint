@@ -64,7 +64,11 @@ $db     = Join-Path $scratch 'q.sqlite'
 Copy-Item $fixture $target -Force
 
 # The contiguous run of ///-prefixed lines immediately above the FIRST line
-# matching $declPattern, RAW (never trimmed). $null when the decl is not found.
+# matching $declPattern, RAW (never trimmed). $null when the decl is not found
+# OR when it has no doc lines above it at all -- the two failures a caller
+# needs to tell apart from "found a block" are "no decl" and "no block", and
+# an EMPTY array is neither: returning one would let a "block was located"
+# check pass for a doc block that had been deleted outright.
 function Get-DocBlockLines([string[]]$lines, [string]$declPattern) {
   $idx = -1
   for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match $declPattern) { $idx = $i; break } }
@@ -74,6 +78,7 @@ function Get-DocBlockLines([string[]]$lines, [string]$declPattern) {
     if ($lines[$i] -notmatch '^\s*///') { break }
     $acc.Insert(0, $lines[$i])
   }
+  if ($acc.Count -eq 0) { return $null }
   return $acc.ToArray()
 }
 function Get-DocBlock([string[]]$lines, [string]$declPattern) {
@@ -106,11 +111,16 @@ try {
   $strayBefore  = Get-DocBlockLines $before $patStray
   Check 'FIXTURE: both D5 doc blocks were located' ($null -ne $untermBefore -and $null -ne $strayBefore)
 
-  $untermJoin = [string]::Join("`n", $untermBefore)
+  # Now that the two helpers answer $null for "no block", every dereference
+  # below is written so a $null cannot raise a .NET null-argument exception --
+  # an exception here would replace a readable FAIL with a stack trace about
+  # the wrong thing.
+  $untermJoin = if ($null -ne $untermBefore) { [string]::Join("`n", $untermBefore) } else { '' }
+  $strayJoin  = if ($null -ne $strayBefore ) { [string]::Join("`n", $strayBefore ) } else { '' }
   Check 'FIXTURE D5/unterminated: the block has an AUTO_BEGIN and NO AUTO_END' `
     ($untermJoin.Contains($AUTO_BEGIN) -and -not $untermJoin.Contains($AUTO_END))
-  $bIdx = [array]::FindIndex($untermBefore, [Predicate[string]]{ param($s) $s.Contains($AUTO_BEGIN) })
-  $vIdx = [array]::FindIndex($untermBefore, [Predicate[string]]{ param($s) $s.Contains('<value>') })
+  $bIdx = if ($null -ne $untermBefore) { [array]::FindIndex($untermBefore, [Predicate[string]]{ param($s) $s.Contains($AUTO_BEGIN) }) } else { -1 }
+  $vIdx = if ($null -ne $untermBefore) { [array]::FindIndex($untermBefore, [Predicate[string]]{ param($s) $s.Contains('<value>') })   } else { -1 }
   Check 'FIXTURE D5/unterminated: the hand-written line sits AFTER the AUTO_BEGIN (fail-OPEN would swallow it)' `
     ($bIdx -ge 0 -and $vIdx -gt $bIdx) "beginIdx=$bIdx valueIdx=$vIdx"
 
@@ -119,7 +129,7 @@ try {
   Check 'FIXTURE D5/stray-END: that line carries BOTH an AUTO_END and an AUTO_MARK -- so only the stray-END arm can reject it' `
     ($strayValueLine.Count -eq 1 -and $strayValueLine[0].Contains($AUTO_END) -and $strayValueLine[0].Contains($AUTO_MARK))
   Check 'FIXTURE D5/stray-END: the block has NO AUTO_BEGIN, so the END really is stray' `
-    (-not ([string]::Join("`n", $strayBefore)).Contains($AUTO_BEGIN))
+    (-not $strayJoin.Contains($AUTO_BEGIN))
 
   $decayedBefore = Get-DocBlock $before $patDecayed
   $unfenceBefore = Get-DocBlock $before $patUnfence
@@ -153,7 +163,7 @@ try {
   Check 'D5 stray-END arm: the hand-written <value> SURVIVES' `
     ($null -ne $strayAfter -and $strayAfter.Contains('<value>Hand-written beside a stray END; must survive.</value>'))
   Check 'D5 stray-END arm: the whole doc block is byte-identical' `
-    ($strayAfter -ceq ([string]::Join("`n", $strayBefore)))
+    ($strayAfter -ceq $strayJoin)
 
   # --- T3f minor 1 ----------------------------------------------------------
   $unfenceAfter = Get-DocBlock $after $patUnfence

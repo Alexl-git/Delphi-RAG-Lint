@@ -514,8 +514,13 @@ begin
       // MergeComment's StandaloneReturns view says False, so this
       // under-promises there (reports not-fixable when a fix might exist).
       // Under-promising is the safe direction for a flag whose whole defect
-      // was over-promising -- and that shape cannot reach this line anyway,
-      // since the nested tag's own text makes Trim(ReturnsText) non-empty.
+      // was over-promising. That shape cannot reach this line with NON-EMPTY
+      // nested text -- the text itself makes Trim(ReturnsText) non-empty -- but
+      // an EMPTY nested tag ('<deprecated>dep <returns></returns> tail
+      // </deprecated>') DOES reach it, and is exactly the under-promising
+      // case: HasReturnsTag is True here, while MergeComment finds no
+      // standalone <returns> and would emit one from the mined cases. Reported
+      // report-only rather than fixable; a human still sees the finding.
       //
       // D3 -- the deliberate ruling on when this rule fires at all. Since
       // v(ADP3 T1) every engine-written <returns> carries AUTO_MARK
