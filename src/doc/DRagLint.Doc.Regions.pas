@@ -87,6 +87,15 @@ type
     /// TDocCommentScanner.Scan produced it: one entry per source line, the
     /// leading /// already removed by the scanner, every other character --
     /// INCLUDING the interior indentation of a code sample -- intact.</param>
+    /// <param name="AEngineEmitsOwnRemarks">v(ADP3 T3d, T3f minor 1): True
+    /// when the caller will emit its OWN &lt;remarks&gt; element for this symbol
+    /// (RenderFactsBlock produces something). Only then is an author
+    /// &lt;remarks&gt; span non-retractable on that ground alone -- retracting it
+    /// would leave the author's element sitting verbatim beside the engine's.
+    /// When the engine will emit none, an unmarked, unfenced author
+    /// &lt;remarks&gt; is retractable like any other round-tripped container, so a
+    /// tail beside it is preserved instead of dropped. A &lt;remarks&gt; that
+    /// carries a fence or a marker stays non-retractable regardless.</param>
     /// <param name="AAccountedRaw">The accounted lines, joined with sLineBreak.
     /// Parse THIS, not ARawBlock, to drive the repair path: a tag sitting on a
     /// residual line is thereby invisible to the emitter, so it can never be
@@ -128,16 +137,11 @@ type
     /// content the engine REGENERATES no longer aborts the region. That line
     /// alone loses its carry-through (it is forced back to accounted, so its
     /// spans are still emitted exactly once); every OTHER residual line in the
-    /// same region still comes back verbatim.</remarks>
-    /// <param name="AEngineEmitsOwnRemarks">v(ADP3 T3d, T3f minor 1): True
-    /// when the caller will emit its OWN &lt;remarks&gt; element for this symbol
-    /// (RenderFactsBlock produces something). Only then is an author
-    /// &lt;remarks&gt; span non-retractable on that ground alone -- retracting it
-    /// would leave the author's element sitting verbatim beside the engine's.
-    /// When the engine will emit none, an unmarked, unfenced author
-    /// &lt;remarks&gt; is retractable like any other round-tripped container, so a
-    /// tail beside it is preserved instead of dropped. A &lt;remarks&gt; that
-    /// carries a fence or a marker stays non-retractable regardless.</param>
+    /// same region still comes back verbatim. A span retracted earlier in the
+    /// closure, whose only residual line is then BLOCKED, is not a loss: the
+    /// Dropped flag governs the residual partition alone, and AAccountedRaw is
+    /// built from the residual flags, so a blocked line is still handed to the
+    /// parser and its tag is still emitted.</remarks>
     class function SplitResidualLines(const ARawBlock: string;
       AEngineEmitsOwnRemarks: Boolean;
       out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
@@ -1272,8 +1276,14 @@ begin
       // ONLY fact is the mined 'Returns:' line AND whose <returns> is not
       // hand-written; that shape keeps the old, conservative outcome.
       //
-      // Rendered inside this branch, so a symbol with nothing residual (the
-      // common case) still pays nothing for it.
+      // COST, stated honestly rather than waved away: this renders ONCE PER
+      // REPAIRED XML doc comment, residual lines or not -- it cannot be made
+      // lazy, because SplitResidualLines takes it as an argument and needs it
+      // inside AddSpan. It is a string build over facts this call site has
+      // already computed, on a path that may also run nine BuildStandaloneFor
+      // re-parses, and Facts is rendered again a few hundred lines below
+      // anyway; so the added work is one more render on a path that already
+      // does far more than that, not a new order of cost.
       var EngineEmitsOwnRemarks: Boolean:=
         RenderFactsBlock(AFacts, APrefix, True, AComplexityMin) <> '';
       if SplitResidualLines(AExisting.RawBlock, EngineEmitsOwnRemarks, AccountedRaw, Residual) then

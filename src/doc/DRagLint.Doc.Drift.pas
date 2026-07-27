@@ -38,10 +38,11 @@ type
   );
 
   /// <summary>One drift finding: its kind, a human-readable detail string, the
-  /// Fixable flag (True ONLY for ddValueButNoReturns / ddFactsBlockStale -- a
-  /// mechanical, prose-free fix; v(ADP3 T3) update: ddParamMissing is now
-  /// report-only too -- see MakeFinding's own call site for why), and the
-  /// doc/decl line it anchors to.</summary>
+  /// Fixable flag (True only for ddFactsBlockStale and for the
+  /// ddValueButNoReturns instances a fix can actually satisfy -- a mechanical,
+  /// prose-free fix; v(ADP3 T3) update: ddParamMissing is report-only, see
+  /// MakeFinding's own call site for why), and the doc/decl line it anchors
+  /// to.</summary>
   /// <remarks>v(ADP3 T3d): Fixable is a PER-FINDING answer, not a per-kind
   /// constant. ddValueButNoReturns reports it True only when the engine can
   /// actually satisfy that instance (a return case is minable and no
