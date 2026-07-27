@@ -58,12 +58,26 @@ end;
   end;
 
   // v(ADP3 T3f) interaction: the residual carry-through re-emits an author
-  // line the engine models nothing on. Its interior text must survive
-  // verbatim AND it must land at the member's indent like every other line --
+  // line the engine models nothing on. Its INTERIOR text must survive verbatim
+  // AND the line must land at the member's indent like every other line --
   // never doubled, never left at column 0 beside indented siblings.
+  //
+  // v(ADP3 T3g review round 1): the <value> line is deliberately mis-indented
+  // to SIX spaces above a FOUR-space declaration -- the same trick TGapped
+  // uses, and for the same reason. At four it sat at exactly the declaration's
+  // indent, so "keep the author's original indentation" and "re-indent to the
+  // declaration" gave the SAME answer and the assertion could not fail for the
+  // reason it claims to test. At six they differ, and only the
+  // declaration-anchored answer passes.
+  //
+  // Declaration-anchored is the only coherent option here, not merely the one
+  // chosen: TDocCommentScanner keeps only what follows the three slashes (see
+  // Doc.Regions.pas:1188-1192), so a residual line's ORIGINAL leading
+  // whitespace is not recoverable at emission time at all. Pre-v(ADP3 T3g)
+  // every residual line was therefore emitted at column 0 whatever its origin.
   TResidual = class
   public
-    /// <value>Hand-written value tag; unmodeled, must survive verbatim.</value>
+      /// <value>Hand-written value tag; unmodeled, must survive verbatim.</value>
     /// <summary>Carries an unmodeled tag beside a real summary.</summary>
     procedure ResidualMember;
   end;

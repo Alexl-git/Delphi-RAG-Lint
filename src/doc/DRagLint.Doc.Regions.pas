@@ -1693,8 +1693,13 @@ begin
 
     // v(ADP3 T3f): the carried-through residual -- every line of the original
     // region this function could not fully account for, verbatim, in source
-    // order, re-prefixed with the bare comment marker so its own indentation
-    // survives byte-exact (see LinePrefix, above).
+    // order, re-prefixed with LinePrefix -- the comment marker WITHOUT
+    // APrefix's trailing space, so the INTERIOR indentation the scanner left
+    // after the slashes survives byte-exact (see LinePrefix, above).
+    // v(ADP3 T3g): APrefix now carries the declaration's own indentation, so
+    // LinePrefix is that indentation plus the marker, not a bare marker; the
+    // line therefore lands where its indented siblings do while everything the
+    // scanner handed back is still reproduced character for character.
     //
     // Position: AFTER every modeled tag, BEFORE the <remarks> facts block.
     // The engine's own fixed emission order already reorders modeled tags

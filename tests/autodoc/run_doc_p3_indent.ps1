@@ -170,6 +170,32 @@ foreach ($nm in $shapes.Keys) {
     ("declared=[" + (Show-Ws (Get-Indent $declLine)) + "] asserted=[" + (Show-Ws $shapes[$nm].Indent) + "]")
 }
 
+# v(ADP3 T3g review round 1): the two DISCRIMINATING shapes must stay
+# discriminating. Both the gapped comment and the residual <value> line are
+# authored at SIX spaces above a FOUR-space declaration precisely so that
+# "leave the author's indentation alone" and "re-indent to the declaration"
+# give DIFFERENT answers -- and the assertions further down, which demand
+# four, can therefore only pass for the second.
+#
+# The residual line originally sat at four, which made its assertion unable to
+# fail for the reason it claims: both candidate behaviours produced the same
+# bytes. This check exists so that degenerate state cannot come back silently
+# through an innocent-looking fixture re-indent. It asserts the PRISTINE
+# source, not the engine's output, so it is a statement about the experiment
+# rather than about the result.
+foreach ($pair in @(
+  @{ n = 'the residual <value> line'; pat = '<value>Hand-written value tag'  ; want = '      '; decl = '    ' },
+  @{ n = 'the gapped <summary> line'; pat = 'Separated from its declaration' ; want = '      '; decl = '    ' })) {
+  # Restricted to /// lines, and CASE-SENSITIVE: PowerShell's -match is
+  # case-insensitive, and each fixture shape is also described in a nearby //
+  # prose comment at a different indent, which an unrestricted match picks up
+  # first and silently measures instead.
+  $srcLine = @($pristineLines | Where-Object { ($_ -cmatch '^\s*///') -and ($_ -cmatch [regex]::Escape($pair.pat)) })[0]
+  Check ("FIXTURE DISCRIMINATION: " + $pair.n + " is authored at SIX spaces, NOT at the declaration's four") `
+    ((($null -ne $srcLine)) -and ((Get-Indent $srcLine) -ceq $pair.want) -and ((Get-Indent $srcLine) -cne $pair.decl)) `
+    ("authored=[" + (Show-Ws (Get-Indent $srcLine)) + "] must differ from the declaration's [" + (Show-Ws $pair.decl) + "]")
+}
+
 $res  = @{}
 $slug = 0
 foreach ($nm in $shapes.Keys) {
@@ -245,8 +271,17 @@ $blk = $res['GappedMember'].Block
 Check 'GAPPED GappedMember : re-indented to the declaration s four spaces (not left at the comment s six)' `
   ((@($blk | Where-Object { (Get-Indent $_) -cne '    ' })).Count -eq 0) `
   (($blk | ForEach-Object { '[' + (Show-Ws (Get-Indent $_)) + ']' + $_.Trim() }) -join ' | ')
+# Located by line index rather than by a multi-line regex over the whole file,
+# so the failure detail can NAME the offending line instead of just reporting
+# that a pattern did not match somewhere.
+$gapAll  = [IO.File]::ReadAllLines($res['GappedMember'].Target)
+$gapIx   = -1
+for ($i = 0; $i -lt $gapAll.Count; $i++) { if ($gapAll[$i] -cmatch $shapes['GappedMember'].Decl) { $gapIx = $i; break } }
+$gapAbove = '<declaration not found>'
+if ($gapIx -ge 1) { $gapAbove = $gapAll[$gapIx - 1] }
 Check 'GAPPED GappedMember : the blank line between comment and declaration survives' `
-  (($res['GappedMember'].Target | ForEach-Object { [IO.File]::ReadAllText($_) }) -cmatch '(?m)^\r?\n    procedure GappedMember;') ''
+  (($gapIx -ge 1) -and ($gapAbove.Trim() -eq '')) `
+  ("decl at line " + ($gapIx + 1) + "; the line above it is [" + (Show-Ws $gapAbove) + "] (expected an EMPTY line)")
 
 Write-Host ''
 Write-Host '--- FRESH: the fresh-insert branch indents too ---------------------------------'
