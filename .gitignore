@@ -72,3 +72,11 @@ scratchpad/
 
 # YADF / tree-sitter test artifacts (user working copies, not tracked)
 .yadf-artifacts/
+
+# Auto-Document Phase 3 T3d2 item 2: accumulating per-run test output.
+# tests/autotest/results/*.json (~50 files and growing) and
+# tests/autotest/logs/ are untracked today -- harmless until `git add -A`
+# sweeps them into a commit. Checked: no other tests/ subdirectory
+# accumulates output the same way (only tests/autotest does).
+tests/autotest/results/*.json
+tests/autotest/logs/
