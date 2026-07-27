@@ -19,7 +19,7 @@
 - The built exe deploys to `third_party/dll-win64/drag-lint.exe`; every test runner takes `-Exe` defaulting to that path.
 - **Index-time facts require a reindex.** Any test asserting a `symbol_facts`-derived line must rebuild the exe *and* re-run `index` on its fixture.
 - No `sqlite3` on PATH -- inspect DBs with `C:\Python314\python` (stdlib `sqlite3`, open with `?mode=ro`).
-- Existing regression battery (autodoc + hover, 31 tests) must stay green at every commit.
+- **The battery is EVERY `run_*.ps1` under `tests/`, recursively -- 180 runners, not the 112 in `autodoc` + `autotest`.** Run it with `pwsh -File tests\run_battery.ps1` (it enumerates dynamically and prints its own denominator); see `tests/README.md`. This line used to read "autodoc + hover, 31 tests", and that understatement is exactly how six tasks in a row reported green while eight runners outside those two suites were red -- one of them broken by this phase's own Task 3. It must stay green at every commit.
 - Uncertainty convention: ` ?` suffix; lists capped with ` (+N more)`.
 - The tree-sitter self-lint PostToolUse hook reports FALSE errors on generic-heavy `.pas` -- trust `dcc64`, not the hook.
 
@@ -1779,7 +1779,7 @@ Kill orphan `drag-lint.exe` / `bds.exe` first. Build `build/build_draglint_win64
 
 - [ ] **Step 2: Full regression battery.**
 
-Run every `tests/autodoc/run_doc_*.ps1` and the hover runners under `tests/autotest/`. Expected: the 31-test battery green plus the new Phase 3 runners. **Record the actual pass/fail counts** -- if anything fails, fix it before proceeding; do not reindex on a red battery.
+Run `pwsh -File tests\run_battery.ps1` -- the WHOLE battery, all 180 runners, not `tests/autodoc` + `tests/autotest`. Expected: 180/180. **Record the actual pass/fail/timeout counts and the denominator the driver printed** -- if anything fails, fix it before proceeding; do not reindex on a red battery.
 
 - [ ] **Step 3: Reindex all 9 manifest DBs to v19.**
 

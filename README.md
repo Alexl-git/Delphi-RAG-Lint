@@ -577,19 +577,23 @@ Build the IDE plugin:
 msbuild src/delphi-plugin/dclDragLintWizard.dproj /p:Config=Debug /p:Platform=Win64
 ```
 
-Run the test suite (batch files in `tests/fixtures/`):
+Run the test battery — **every** `run_*.ps1` under `tests/`, enumerated recursively
+(180 runners, ~10 min). See [tests/README.md](tests/README.md) for the definition and
+the rules that go with it:
 ```
-tests\fixtures\T61_hovertracker.bat
-tests\fixtures\T62_lint_rules_v035.bat
-tests\fixtures\T56_lint_rules_v032.bat
-:: ... etc.
+pwsh -File tests\run_battery.ps1                    # the battery (default: everything)
+pwsh -File tests\run_battery.ps1 -List              # enumerate only
+pwsh -File tests\run_battery.ps1 -Include autodoc   # a subset, for a fast inner loop
 ```
 
-PowerShell smoke scripts in `tests/autotest/` exercise the built exe end to end:
+Individual runners can be invoked directly, e.g.:
 ```
 pwsh -File tests/autotest/run_smoke.ps1       # CLI + LSP server smoke
 pwsh -File tests/autotest/run_formsmap.ps1    # forms-csv navigation-map smoke (fixture project)
 ```
+
+Older batch harnesses in `tests/fixtures/` (`T61_hovertracker.bat`, …) are not part of
+the PowerShell battery.
 
 ---
 
