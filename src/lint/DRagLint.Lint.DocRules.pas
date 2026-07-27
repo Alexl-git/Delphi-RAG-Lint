@@ -13,8 +13,13 @@ unit DRagLint.Lint.DocRules;
   diffs that existing doc against the live signature/body facts.
 
   doc-drift is ALSO --fix-capable, but only for its mechanically-safe subset
-  (the FIXABLE signals of TDocDrift.Analyze: ddValueButNoReturns /
-  ddFactsBlockStale). The fix is produced by TDocumenter.BuildFor, whose merge
+  (the findings TDocDrift.Analyze marks Fixable: ddFactsBlockStale, and
+  ddValueButNoReturns ONLY on the instances a fix can actually satisfy --
+  v(ADP3 T3d) made that flag per-finding rather than per-kind, so a function
+  with no minable return case now reports ddValueButNoReturns as report-only;
+  see DRagLint.Doc.Drift's own call-site comment for D2/D3). The FIXABLE
+  subset is read from the flag, never inferred from the kind.
+  The fix is produced by TDocumenter.BuildFor, whose merge
   refreshes the managed facts block AND adds a missing <returns> stub (when a
   mined return case exists) while PRESERVING all hand-written prose (a renamed
   <param> is kept + flagged, never deleted). Report-only signals (renamed/
@@ -187,9 +192,17 @@ begin
 end;
 
 { The documented public documentable decls doc-drift operates on: every symbol
-  the index has a doc for (symbol_docs.summary), narrowed to the public API
-  surface and the CDD-documentable kinds. Shared by RunDocDrift (report) and
-  FixEditsForDocDrift (repair) so both iterate exactly the same population. }
+  the index has a doc for, narrowed to the public API surface and the
+  CDD-documentable kinds. Shared by RunDocDrift (report) and
+  FixEditsForDocDrift (repair) so both iterate exactly the same population.
+
+  v(ADP3 T3d, register D4): "has a doc" is now "has a symbol_docs row" -- the
+  exact complement of the FindUndocumented predicate missing-doc uses. It used
+  to be "has a NON-NULL symbol_docs.summary", which silently excluded a doc
+  made only of <remarks>/<param>/<returns>/<example>/<seealso>/<since>: such a
+  decl was reported by NEITHER rule, and `lint-all --fix --apply` could not
+  clean a stale facts block on it even though `document --apply` could, so the
+  two routes diverged. See DRagLint.Storage.SQLite's FQListDocumentedSymbols. }
 function DocumentedPublicDecls(const AStore: ISymbolStore): TArray<TSymbol>;
 var
   Acc: TList<TSymbol>;

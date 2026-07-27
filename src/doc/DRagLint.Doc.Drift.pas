@@ -18,7 +18,9 @@ type
   //                             v(ADP3 T3) -- see that field's own comment below)
   //   ddParamVolatileMode     - a var/out param whose <param> desc reads input-only (bounded)
   //   ddReturnsButNoValue     - a <returns> on a procedure (no return value)
-  //   ddValueButNoReturns     - a function with no <returns> (FIXABLE: add stub)
+  //   ddValueButNoReturns     - a function with no <returns> (FIXABLE only when a
+  //                             return case is minable -- v(ADP3 T3d); see that
+  //                             signal's own call site below for D2/D3)
   //   ddReturnTypeChanged     - a <c>type</c> token in <returns> != the sig return type (bounded)
   //   ddExceptionNotRaised    - an <exception cref> not in the body's actual Raises facts
   //   ddIdentifierGone        - a <c>/<paramref> code identifier no longer present (bounded)
@@ -40,6 +42,12 @@ type
   /// mechanical, prose-free fix; v(ADP3 T3) update: ddParamMissing is now
   /// report-only too -- see MakeFinding's own call site for why), and the
   /// doc/decl line it anchors to.</summary>
+  /// <remarks>v(ADP3 T3d): Fixable is a PER-FINDING answer, not a per-kind
+  /// constant. ddValueButNoReturns reports it True only when the engine can
+  /// actually satisfy that instance (a return case is minable and no
+  /// hand-written blank &lt;returns&gt; slot is in the way); the same kind on a
+  /// function with nothing minable is report-only. Consumers must read this
+  /// field, never infer fixability from Kind.</remarks>
   TDocDriftFinding = record
     Kind   : TDocDriftKind;
     Detail : string       ;
@@ -470,10 +478,60 @@ begin
         Findings.Add(MakeFinding(ddReturnsButNoValue,
           'documented <returns> but the routine returns no value', False, DocLine));
 
-      // --- 5. ddValueButNoReturns: a function with no <returns>. FIXABLE. ------
+      // --- 5. ddValueButNoReturns: a function with no <returns>. -------------
+      // v(ADP3 T3d, register D2 + D3): Fixable is now CONDITIONAL, not the
+      // unconditional True it carried since the rule was written.
+      //
+      // D2 -- the false promise. `--fix` satisfies this finding through
+      // TDocumenter.BuildFor -> MergeComment, whose engine-owned <returns>
+      // arm emits the tag ONLY when there is a mined return case to put in
+      // it (v(ADP3 T3)'s omit-when-empty rule: a <returns> with nothing to
+      // say is never written). A function with no minable return site
+      // therefore keeps this finding FOREVER, and Fixable=True told a person
+      // running `lint-all --fix --apply` otherwise -- the same false promise
+      // ddParamMissing was flipped for in v(ADP3 T3). Flipping this one to a
+      // flat False was rejected: unlike <param> (which has no harvester and
+      // never will), this finding IS mechanically satisfiable whenever a
+      // return case is minable, and that path is proven end-to-end by
+      // tests\autodoc\run_doc_drift_rule.ps1's 'Lookup: no fixable drift
+      // remains' assertion. Deleting a working auto-fix to silence a
+      // false promise would be the wrong trade; reporting the promise
+      // ACCURATELY is the fix.
+      //
+      // The two conjuncts mirror the two things MergeComment needs, in the
+      // narrow context where this finding fires at all (Trim(ReturnsText) is
+      // '', so the tag is either absent or a literally-present empty one):
+      //   * not ADoc.HasReturnsTag -- a literally-present, UNMARKED, empty
+      //     '<returns></returns>' is a HUMAN's blank slot, which MergeComment
+      //     preserves verbatim (ReturnsHandWritten). It re-emits the same
+      //     empty tag forever, so no fix exists for that shape. (A MARKED
+      //     empty one cannot reach here at all -- see D3 below.)
+      //   * Length(Facts.ReturnCases) > 0 -- exactly the emptiness test
+      //     MergeComment's own ObservedSuffix applies, which returns '' if
+      //     and only if there are no cases.
+      // A <returns> nested inside another tag makes HasReturnsTag True while
+      // MergeComment's StandaloneReturns view says False, so this
+      // under-promises there (reports not-fixable when a fix might exist).
+      // Under-promising is the safe direction for a flag whose whole defect
+      // was over-promising -- and that shape cannot reach this line anyway,
+      // since the nested tag's own text makes Trim(ReturnsText) non-empty.
+      //
+      // D3 -- the deliberate ruling on when this rule fires at all. Since
+      // v(ADP3 T1) every engine-written <returns> carries AUTO_MARK
+      // immediately after its opening tag, and the parser does NOT strip it
+      // (ReturnsText keeps the marker text), so Trim(ADoc.ReturnsText) is
+      // never '' for a managed tag and this rule silently stopped firing on
+      // engine-written returns. That change was unintended but is CORRECT
+      // and is hereby kept deliberately: the finding's own claim is "has no
+      // <returns> tag", and for a marked tag that claim is factually false --
+      // the tag is right there in the source. Firing on it would be a pure
+      // false positive on a tag that demonstrably exists, and no fix could
+      // clear it either (the marker keeps ReturnsText non-empty on every
+      // subsequent run). Pinned by tests\autodoc\run_doc_p3_drift_fixable.ps1.
       if HasReturn and (Trim(ADoc.ReturnsText) = '') then
         Findings.Add(MakeFinding(ddValueButNoReturns,
-          'function returns a value but has no <returns> tag', True, DocLine));
+          'function returns a value but has no <returns> tag',
+          (not ADoc.HasReturnsTag) and (Length(Facts.ReturnCases) > 0), DocLine));
 
       // --- 6. ddReturnTypeChanged: a <c>Type</c> in <returns> != the sig type. -
       // BOUNDED: only an EXACT <c>...</c> token that is NOT the actual return

@@ -199,7 +199,7 @@ type
       function FindByDocContains(const ASubstring: string): TArray<TSymbol>                ;
       procedure DeleteFileDocs(AFileId: Int64);
 
-      // v0.18: bench-context
+      // v0.18: bench-context. v(ADP3 T3d, register D4): see the query text.
       function ListDocumentedSymbols(ALimit: Integer): TArray<TSymbol>;
 
       // v0.19: type-at-position helpers
@@ -794,7 +794,22 @@ begin
   FQFindByDocContains:= NewQuery(
     'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE d.summary LIKE :pat OR d.remarks LIKE :pat OR d.example_text LIKE :pat');
 
-  FQListDocumentedSymbols:= NewQuery( 'SELECT s.* FROM symbols s ' + 'INNER JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE d.summary IS NOT NULL ' + 'LIMIT :lim');
+  // v(ADP3 T3d, register D4): the 'WHERE d.summary IS NOT NULL' filter this
+  // query used to carry is GONE. A symbol_docs row exists at all ONLY when
+  // TParsedDoc.HasContent was True (UpsertSymbolDoc's own first line exits
+  // otherwise), and UpsertSymbolDoc writes NULL -- not '' -- for every empty
+  // text column (SetNullableText's Clear), so a comment carrying only
+  // <remarks>/<param>/<returns>/<example>/<seealso>/<since>/<deprecated>
+  // produced a row whose summary is NULL and was therefore reported by this
+  // query as NOT documented. That contradicted FQFindUndocumented, three
+  // queries above, which defines "undocumented" as 'd.symbol_id IS NULL' --
+  // no row at all. The two together left a hole: a remarks-only doc was
+  // invisible to missing-doc (it HAS a row) AND invisible to doc-drift (its
+  // summary is NULL), so `lint-all --fix --apply` could never clean a stale
+  // facts block on such a decl even though `document --apply` cleans it
+  // correctly -- the two routes diverged. The INNER JOIN alone is now the
+  // whole predicate, which is the exact complement of FQFindUndocumented's.
+  FQListDocumentedSymbols:= NewQuery( 'SELECT s.* FROM symbols s ' + 'INNER JOIN symbol_docs d ON d.symbol_id = s.id ' + 'LIMIT :lim');
 
   FQFindContaining:= NewQuery( 'SELECT * FROM symbols ' + 'WHERE file_id = :fid AND start_line <= :line AND end_line >= :line ' + 'ORDER BY start_line DESC LIMIT 1');
 

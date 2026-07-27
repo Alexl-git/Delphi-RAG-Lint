@@ -162,7 +162,11 @@ type
     function FindByDocContains(const ASubstring: string): TArray<TSymbol>                ;
     procedure DeleteFileDocs(AFileId: Int64);
 
-    // v0.18: bench-context -- symbols that have at least one non-null summary
+    // v0.18: bench-context. v(ADP3 T3d, register D4): "documented" here means
+    // "has a symbol_docs row", the exact complement of FindUndocumented -- NOT
+    // the old "has a non-null summary", which silently excluded a comment made
+    // only of <remarks>/<param>/<returns>/<example>/<seealso>/<since> and left
+    // it reported by NEITHER missing-doc nor doc-drift.
     function ListDocumentedSymbols(ALimit: Integer): TArray<TSymbol>;
 
     // v0.19: type-at-position helpers
