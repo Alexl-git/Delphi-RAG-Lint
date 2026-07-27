@@ -39,10 +39,13 @@ Full run: roughly **10 minutes** wall clock on the build box.
 
 Through six consecutive tasks of Auto-Document Phase 3, every "full battery green"
 report covered only `tests/autodoc` (45) + `tests/autotest` (67) = **112** of the 180.
-The other 68 were never run. One of them, `tests/autofix/run_missing_doc_fix.ps1`, had
-been red since the day the doc emitter changed; three more had been red for weeks; one
-had been red since 2026-07-01. Nobody was cutting corners -- the battery simply had no
-written definition, so an unstated one quietly became the definition.
+The other 68 were never run. Nine runners were red when the whole set was finally
+executed on 2026-07-27, and only ONE of them was caused by that phase. The rest had been
+red since **2026-07-01** (`lintconfig`, a deliberate config-semantics change the test
+never followed), **2026-07-06** (three `refactor` runners, a `uses` clause the `-U` lists
+never followed), **2026-07-08** (`ergonomics`, a new rule firing on an old fixture) and
+**2026-07-10** (two `callresolve` runners). Nobody was cutting corners -- the battery
+simply had no written definition, so an unstated one quietly became the definition.
 
 Two rules follow, and they are the point of this document:
 
