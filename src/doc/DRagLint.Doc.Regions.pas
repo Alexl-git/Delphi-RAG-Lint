@@ -77,6 +77,45 @@ type
     /// erased before it can be read back. MergeComment therefore calls this
     /// once per field, each time excluding that field's own container.</remarks>
     class function BuildStandaloneFor(const ARawBlock, AOwnTagName: string): TParsedDoc;
+    /// <summary>Partitions ARawBlock's LINES into the ones the engine can
+    /// fully account for (returned, joined, in AAccountedRaw) and the ones it
+    /// cannot (returned verbatim, in AResidualLines). True when at least one
+    /// residual line was found; when False, AAccountedRaw is ARawBlock
+    /// unchanged and AResidualLines is empty, so the caller can skip the whole
+    /// mechanism and behave exactly as it did before v(ADP3 T3f).</summary>
+    /// <param name="ARawBlock">The region's raw text, as
+    /// TDocCommentScanner.Scan produced it: one entry per source line, the
+    /// leading /// already removed by the scanner, every other character --
+    /// INCLUDING the interior indentation of a code sample -- intact.</param>
+    /// <param name="AAccountedRaw">The accounted lines, joined with sLineBreak.
+    /// Parse THIS, not ARawBlock, to drive the repair path: a tag sitting on a
+    /// residual line is thereby invisible to the emitter, so it can never be
+    /// re-emitted a second time alongside the verbatim line that already
+    /// carries it.</param>
+    /// <param name="AResidualLines">The residual lines, in source order, right-
+    /// trimmed, still without their /// prefix. The caller re-prefixes and
+    /// emits them verbatim.</param>
+    /// <remarks>The rule is LINE-LEVEL OWNERSHIP: the engine owns a line only
+    /// when it can represent EVERYTHING on it. A line carrying any non-
+    /// whitespace the engine cannot re-emit is handed back to the author whole,
+    /// and every span that touches such a line is retracted (transitively, to a
+    /// fixed point) so the emitter forgets about it. Splitting a mixed line
+    /// into "the bits the engine knows" plus "the bits it does not" was
+    /// rejected: re-emitting only the unaccounted CHARACTERS mangles the
+    /// author's prose exactly the way reading &lt;deprecated&gt;'s message from a
+    /// stripped view once did ("Added in  and still valid."), and emitting the
+    /// whole line WITHOUT retracting its spans duplicates every tag on it --
+    /// unboundedly for &lt;see&gt;/&lt;seealso&gt;, whose parser regex is a plural
+    /// .Matches. A multi-line &lt;example&gt; that is not nested inside another
+    /// container is deliberately treated as unaccounted: it IS modeled, but the
+    /// engine cannot re-serialize a code sample without destroying its interior
+    /// indentation, so handing it back verbatim is the only faithful option.
+    /// Accounted spans are the eight PRESERVED_VERBATIM_CONTAINERS, the self-
+    /// closing &lt;see&gt;/&lt;seealso&gt;/&lt;deprecated/&gt; forms, the engine's own
+    /// drag-lint HTML markers, and the untagged leading run that
+    /// ParseXmlDoc's own fallback turns into the summary.</remarks>
+    class function SplitResidualLines(const ARawBlock: string;
+      out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
   public
     /// <summary>Renders the fenced facts-block body lines (each prefixed
     /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
@@ -180,7 +219,17 @@ type
     /// docs never trip drag-lint's own TODO rule. Repair preserves Summary/
     /// Remarks prose and hand-typed param descriptions verbatim (no marker),
     /// adds/removes managed param tags, and flags hand-typed params no longer
-    /// present in the signature.</summary>
+    /// present in the signature. v(ADP3 T3f): repair also CARRIES THROUGH,
+    /// verbatim, every line of the existing region it cannot fully account
+    /// for -- an unmodeled tag (&lt;value&gt;/&lt;para&gt;/&lt;list&gt;/...), author prose
+    /// sitting beside a modeled tag on the same line, and a multi-line
+    /// &lt;example&gt; whose interior indentation the emitter cannot reproduce.
+    /// Those lines are re-emitted with their original indentation, in source
+    /// order, after every modeled tag and before the facts &lt;remarks&gt; block,
+    /// and nothing on such a line is ALSO re-emitted from the model (see
+    /// SplitResidualLines). When the carried-through lines are the ONLY thing
+    /// there would be to write, this returns '' instead and the region is
+    /// left untouched.</summary>
     /// <param name="AComplexityMin">v(ADP2 T3): forwarded to RenderFactsBlock
     /// as-is; see its own param comment. Default 10 matches the manifest
     /// default (docs.complexity_min).</param>
@@ -400,6 +449,242 @@ begin
     if not SameText(Tag, AOwnTagName) then
       Text:= StripElement(Text, Tag);
   Result:= TDocCommentParser.ParseXmlDoc(Text);
+end;
+
+// v(ADP3 T3f): SplitResidualLines' regex set, hoisted to file scope and built
+// once, lazily -- the same idiom, for the same reason, as
+// DRagLint.Parser.DocComments' EnsureParserRegexes: SplitResidualLines runs on
+// EVERY repaired comment, and constructing a dozen TRegEx per symbol on a
+// whole-project run is exactly the per-call cost that unit already removed
+// from ParseXmlDoc. Not thread-guarded, same as that cache and for the same
+// reason (doc parsing is single-threaded in this codebase).
+//
+// RxResContainer mirrors StripElement's pattern EXACTLY (attributes optional
+// on the opening tag), not the parser's stricter per-tag regex: this is the
+// set BuildStandaloneFor strips, so the two must agree on what a container
+// occupies. Using the parser's stricter form instead would reclassify a
+// malformed-but-tag-shaped span (a '<exception>' with no cref, a '<seealso>'
+// with no cref) as residual and silently change behaviour for shapes that
+// have nothing to do with this fix.
+var
+  ResidualRegexesReady: Boolean = False;
+  RxResContainer      : array[0..7] of TRegEx;
+  RxResSummaryBody    : TRegEx;
+  RxResSee            : TRegEx;
+  RxResDeprecatedBare : TRegEx;
+  RxResEngineMarker   : TRegEx;
+
+procedure EnsureResidualRegexes;
+var
+  I: Integer;
+begin
+  if ResidualRegexesReady then Exit;
+  for I:= Low(PRESERVED_VERBATIM_CONTAINERS) to High(PRESERVED_VERBATIM_CONTAINERS) do
+    RxResContainer[I]:= TRegEx.Create(
+      '<' + PRESERVED_VERBATIM_CONTAINERS[I] + '(?:\s[^>]*)?>[\s\S]*?</' +
+      PRESERVED_VERBATIM_CONTAINERS[I] + '>', [roIgnoreCase]);
+  // Deliberately the PARSER's own <summary> pattern, character for character
+  // (no attribute tolerance): this one is used only to decide whether
+  // ParseXmlDoc's untagged-prefix fallback would fire, so it has to answer
+  // that question the way ParseXmlDoc itself answers it -- the fallback runs
+  // whenever Result.Summary is still '', which is exactly "RxSummary did not
+  // match, or matched a body that Trim()s away to nothing".
+  RxResSummaryBody   := TRegEx.Create('<summary>([\s\S]*?)</summary>', [roIgnoreCase]);
+  RxResSee           := TRegEx.Create('<(?:see|seealso)\s+cref="[^"]+"\s*/?>', [roIgnoreCase]);
+  RxResDeprecatedBare:= TRegEx.Create('<deprecated\s*/>', [roIgnoreCase]);
+  // Every HTML comment the engine itself writes: AUTO_MARK, AUTO_BEGIN,
+  // AUTO_END, the legacy AUTO_PARAM sentinel, and the stale-param note
+  // MergeComment appends after a no-longer-existing '<param>'. Without this,
+  // that stale-param note would be unaccounted text on an otherwise accounted
+  // line, which would reclassify the whole line as residual and quietly move
+  // it out of the param slot.
+  RxResEngineMarker  := TRegEx.Create('<!--\s*drag-lint\b[\s\S]*?-->', [roIgnoreCase]);
+  ResidualRegexesReady:= True;
+end;
+
+class function TDocRegions.SplitResidualLines(const ARawBlock: string;
+  out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
+type
+  // One span of ARawBlock the engine can re-emit on its own. Dropped spans are
+  // retracted: the emitter must NOT see them, because the line carrying them
+  // is being handed back to the author verbatim instead.
+  TResSpan = record
+    Lo, Hi   : Integer;
+    IsExample: Boolean;
+    Dropped  : Boolean;
+  end;
+var
+  RawLines : TArray<string> ;
+  Joined   : string         ;
+  LineLo   : TArray<Integer>;
+  LineHi   : TArray<Integer>;
+  Accounted: TArray<Boolean>;
+  Residual : TArray<Boolean>;
+  Spans    : TArray<TResSpan>;
+  Sb       : TStringBuilder ;
+  I, J, K  : Integer        ;
+  Changed  : Boolean        ;
+  First    : Boolean        ;
+  ResCount : Integer        ;
+
+  procedure AddSpan(APos, ALen: Integer; AIsExample: Boolean);
+  begin
+    if ALen <= 0 then Exit;
+    SetLength(Spans, Length(Spans) + 1);
+    Spans[High(Spans)].Lo       := APos;
+    Spans[High(Spans)].Hi       := APos + ALen - 1;
+    Spans[High(Spans)].IsExample:= AIsExample;
+    Spans[High(Spans)].Dropped  := False;
+  end;
+
+  procedure AddMatches(const ARe: TRegEx; AIsExample: Boolean);
+  var
+    MC: TMatchCollection;
+    M : Integer         ;
+  begin
+    MC:= ARe.Matches(Joined);
+    for M:= 0 to MC.Count - 1 do
+      AddSpan(MC[M].Index, MC[M].Length, AIsExample);
+  end;
+
+begin
+  AAccountedRaw := ARawBlock;
+  AResidualLines:= nil;
+  Result        := False;
+  Spans         := nil;
+
+  RawLines:= ARawBlock.Split([sLineBreak, #10, #13]);
+  if Length(RawLines) = 0 then Exit;
+
+  // An LF-joined copy of the same lines: identical to ARawBlock as far as tag
+  // matching is concerned (a line break is a line break to every pattern
+  // here), but with trivially computable 1-based per-line offsets -- exactly
+  // one separator character per break. Line I occupies [LineLo[I]..LineHi[I]];
+  // an EMPTY line yields Hi = Lo - 1, an empty range, which every loop below
+  // simply skips.
+  SetLength(LineLo, Length(RawLines));
+  SetLength(LineHi, Length(RawLines));
+  Sb:= TStringBuilder.Create;
+  try
+    for I:= 0 to High(RawLines) do
+    begin
+      if I > 0 then Sb.Append(#10);
+      LineLo[I]:= Sb.Length + 1;
+      Sb.Append(RawLines[I]);
+      LineHi[I]:= Sb.Length;
+    end;
+    Joined:= Sb.ToString;
+  finally
+    Sb.Free;
+  end;
+  if Joined = '' then Exit;
+
+  EnsureResidualRegexes;
+
+  for I:= Low(PRESERVED_VERBATIM_CONTAINERS) to High(PRESERVED_VERBATIM_CONTAINERS) do
+    AddMatches(RxResContainer[I], SameText(PRESERVED_VERBATIM_CONTAINERS[I], 'example'));
+  AddMatches(RxResSee           , False);
+  AddMatches(RxResDeprecatedBare, False);
+  AddMatches(RxResEngineMarker  , False);
+
+  // ParseXmlDoc's untagged-prefix fallback: when no <summary> body survives,
+  // the run before the first '<' (or the WHOLE text, when there is no '<' at
+  // all) becomes the summary -- so the engine does re-emit it, and it is
+  // accounted for. When a real <summary> body IS present the fallback never
+  // fires, so leading prose there is genuinely unrepresented and must stay
+  // residual.
+  var SumM: TMatch:= RxResSummaryBody.Match(Joined);
+  if (not SumM.Success) or (Trim(SumM.Groups[1].Value) = '') then
+  begin
+    var LtPos: Integer:= Pos('<', Joined);
+    if LtPos = 0 then AddSpan(1, Length(Joined), False)
+    else if LtPos > 1 then AddSpan(1, LtPos - 1, False);
+  end;
+
+  // A multi-line <example> that is not nested inside another container is
+  // retracted up front: see this function's interface remarks for why the
+  // engine cannot faithfully re-serialize a code sample. Nested ones are left
+  // accounted, so shapes where <example> sits inside <remarks>/<since>/... keep
+  // behaving exactly as they did before.
+  for I:= 0 to High(Spans) do
+    if Spans[I].IsExample
+       and (Pos(#10, Copy(Joined, Spans[I].Lo, Spans[I].Hi - Spans[I].Lo + 1)) > 0) then
+    begin
+      var Nested: Boolean:= False;
+      for J:= 0 to High(Spans) do
+        if (J <> I) and (Spans[J].Lo <= Spans[I].Lo) and (Spans[I].Hi <= Spans[J].Hi) then
+        begin
+          Nested:= True;
+          Break;
+        end;
+      if not Nested then Spans[I].Dropped:= True;
+    end;
+
+  // Fixed-point closure. Retracting a span can leave a line that was accounted
+  // only BECAUSE of it newly residual, which can in turn retract further
+  // spans; the loop is monotone (spans are only ever dropped, residual lines
+  // only ever added), so it terminates in at most Length(Spans) rounds.
+  SetLength(Accounted, Length(Joined) + 1);
+  SetLength(Residual , Length(RawLines));
+  repeat
+    for J:= 1 to Length(Joined) do Accounted[J]:= False;
+    for I:= 0 to High(Spans) do
+      if not Spans[I].Dropped then
+        for J:= Spans[I].Lo to Spans[I].Hi do Accounted[J]:= True;
+
+    for I:= 0 to High(RawLines) do
+    begin
+      Residual[I]:= False;
+      for J:= LineLo[I] to LineHi[I] do
+        if (not Accounted[J]) and (Joined[J] > ' ') then
+        begin
+          Residual[I]:= True;
+          Break;
+        end;
+    end;
+
+    Changed:= False;
+    for I:= 0 to High(Spans) do
+      if not Spans[I].Dropped then
+        for K:= 0 to High(RawLines) do
+          if Residual[K] and (Spans[I].Lo <= LineHi[K]) and (LineLo[K] <= Spans[I].Hi) then
+          begin
+            Spans[I].Dropped:= True;
+            Changed:= True;
+            Break;
+          end;
+  until not Changed;
+
+  ResCount:= 0;
+  for I:= 0 to High(RawLines) do if Residual[I] then Inc(ResCount);
+  if ResCount = 0 then Exit; // nothing unrepresented: caller stays on the pre-v(ADP3 T3f) path
+
+  SetLength(AResidualLines, ResCount);
+  K    := 0;
+  First:= True;
+  Sb   := TStringBuilder.Create;
+  try
+    for I:= 0 to High(RawLines) do
+      if Residual[I] then
+      begin
+        // Right-trimmed only: leading whitespace IS the indentation this
+        // whole mechanism exists to preserve. Trailing whitespace would
+        // otherwise be written back into the source, and (being idempotent
+        // to remove) costs nothing to drop.
+        AResidualLines[K]:= TrimRight(RawLines[I]);
+        Inc(K);
+      end
+      else
+      begin
+        if not First then Sb.Append(sLineBreak);
+        Sb.Append(RawLines[I]);
+        First:= False;
+      end;
+    AAccountedRaw:= Sb.ToString;
+  finally
+    Sb.Free;
+  end;
+  Result:= True;
 end;
 
 class function TDocRegions.IsManagedText(const S: string): Boolean;
@@ -764,6 +1049,51 @@ var
 begin
   Sb:= TStringBuilder.Create;
   try
+    // v(ADP3 T3f): FIRST, split the region into the lines this function can
+    // fully account for and the ones it cannot (SplitResidualLines -- see its
+    // own remarks for the line-level-ownership rule and why splitting a MIXED
+    // line by characters instead was rejected). Everything downstream then
+    // reads Eff, the unstripped parse of the ACCOUNTED lines, in place of
+    // AExisting.
+    //
+    // This does NOT disturb the presence/content split; it re-bases it. The
+    // rule was, and remains: PRESENCE from a filtered view (BuildStandaloneFor,
+    // which answers "is this tag genuinely standalone, or merely nested inside
+    // another container"), CONTENT from the unstripped parse of the same text.
+    // Eff IS that unstripped parse -- of the region the engine owns. Reading
+    // content from AExisting instead, while gating presence off Eff, would
+    // reintroduce the very class of bug this file has been fixing since round
+    // 2: with two <since> tags, one on a residual line and one accounted,
+    // AExisting.SinceText is the RESIDUAL one's text (RxSinceTag is a singular
+    // .Match, first occurrence wins), so the emitter would write out the
+    // residual tag's text at the <since> slot AND emit the residual line
+    // carrying it verbatim -- a duplication, from exactly the sort of
+    // mismatched pair of views that deleted whole comments before.
+    //
+    // INERT BY CONSTRUCTION when there is nothing residual: SplitResidualLines
+    // returns False, Eff stays AExisting byte-for-byte (never a re-parse), and
+    // every line below runs on precisely the value it ran on before this
+    // change. Gated on AExistingHasAnyTag so the fresh path pays nothing, and
+    // on dfXmlDoc because Eff is rebuilt with ParseXmlDoc specifically --
+    // TDocCommentParser.Dispatch routes a malformed or tagless /// region to
+    // ParseOneline/ParseLoose instead, and re-parsing one of those as XML
+    // would change its meaning wholesale.
+    var Eff: TParsedDoc:= AExisting;
+    var Residual: TArray<string>:= nil;
+    if AExistingHasAnyTag and (AExisting.Format = dfXmlDoc) then
+    begin
+      var AccountedRaw: string;
+      if SplitResidualLines(AExisting.RawBlock, AccountedRaw, Residual) then
+        Eff:= TDocCommentParser.ParseXmlDoc(AccountedRaw);
+    end;
+    // Residual lines are re-emitted with the comment marker ONLY -- never
+    // APrefix's trailing space -- because the scanner strips exactly the three
+    // slashes and leaves everything after them, the leading space included. So
+    // '///' + ' <example>' reproduces '/// <example>' and '///' + '   Foo;'
+    // reproduces '///   Foo;', both byte-exact, which is what makes the
+    // carry-through a fixed point instead of a slow re-indent on every run.
+    var LinePrefix: string:= TrimRight(APrefix);
+
     // v(ADP3 T3b review, Critical 1 fix; round 2 -- STILL-OPEN GAP CLOSED;
     // round 3 -- STRUCTURAL 1, moved to the TOP of the function and expanded
     // to all eight containers): every container in PRESERVED_VERBATIM_
@@ -846,9 +1176,9 @@ begin
     // idempotency sweep producing byte-identical md5s before and after.
     var HasAnySignal: Boolean:=
       AExistingHasAnyTag and
-      (AExisting.Format = dfXmlDoc) and
-      ((Length(AExisting.Exceptions) > 0) or AExisting.HasExampleTag or
-       (Length(AExisting.SeeAlso) > 0) or AExisting.HasSinceTag or AExisting.Deprecated);
+      (Eff.Format = dfXmlDoc) and
+      ((Length(Eff.Exceptions) > 0) or Eff.HasExampleTag or
+       (Length(Eff.SeeAlso) > 0) or Eff.HasSinceTag or Eff.Deprecated);
     var StandaloneExc     : TParsedDoc;
     var StandaloneExample : TParsedDoc;
     var StandaloneDep     : TParsedDoc;
@@ -863,30 +1193,36 @@ begin
     var StandaloneRemarks : TParsedDoc;
     if HasAnySignal then
     begin
-      StandaloneExc     := BuildStandaloneFor(AExisting.RawBlock, 'exception');
-      StandaloneExample := BuildStandaloneFor(AExisting.RawBlock, 'example');
-      StandaloneDep     := BuildStandaloneFor(AExisting.RawBlock, 'deprecated');
+      // v(ADP3 T3f): every one of these nine reads Eff.RawBlock, the ACCOUNTED
+      // lines -- not AExisting.RawBlock. A tag sitting on a residual line is
+      // therefore invisible to the presence views too, which is what keeps the
+      // verbatim line the sole emitter of that tag (see the Eff computation at
+      // the top of this function). Eff.RawBlock IS AExisting.RawBlock whenever
+      // nothing is residual.
+      StandaloneExc     := BuildStandaloneFor(Eff.RawBlock, 'exception');
+      StandaloneExample := BuildStandaloneFor(Eff.RawBlock, 'example');
+      StandaloneDep     := BuildStandaloneFor(Eff.RawBlock, 'deprecated');
       // seealso/see never need self-exclusion (StripElement can never match
       // their always-self-closing form -- see PRESERVED_VERBATIM_CONTAINERS'
       // own comment), so '' (strip everything) is correct and simplest.
-      StandaloneSee     := BuildStandaloneFor(AExisting.RawBlock, '');
-      StandaloneSince   := BuildStandaloneFor(AExisting.RawBlock, 'since');
-      StandaloneSummary := BuildStandaloneFor(AExisting.RawBlock, 'summary');
-      StandaloneParam   := BuildStandaloneFor(AExisting.RawBlock, 'param');
-      StandaloneReturns := BuildStandaloneFor(AExisting.RawBlock, 'returns');
-      StandaloneRemarks := BuildStandaloneFor(AExisting.RawBlock, 'remarks');
+      StandaloneSee     := BuildStandaloneFor(Eff.RawBlock, '');
+      StandaloneSince   := BuildStandaloneFor(Eff.RawBlock, 'since');
+      StandaloneSummary := BuildStandaloneFor(Eff.RawBlock, 'summary');
+      StandaloneParam   := BuildStandaloneFor(Eff.RawBlock, 'param');
+      StandaloneReturns := BuildStandaloneFor(Eff.RawBlock, 'returns');
+      StandaloneRemarks := BuildStandaloneFor(Eff.RawBlock, 'remarks');
     end
     else
     begin
-      StandaloneExc     := AExisting;
-      StandaloneExample := AExisting;
-      StandaloneDep     := AExisting;
-      StandaloneSee     := AExisting;
-      StandaloneSince   := AExisting;
-      StandaloneSummary := AExisting;
-      StandaloneParam   := AExisting;
-      StandaloneReturns := AExisting;
-      StandaloneRemarks := AExisting;
+      StandaloneExc     := Eff;
+      StandaloneExample := Eff;
+      StandaloneDep     := Eff;
+      StandaloneSee     := Eff;
+      StandaloneSince   := Eff;
+      StandaloneSummary := Eff;
+      StandaloneParam   := Eff;
+      StandaloneReturns := Eff;
+      StandaloneRemarks := Eff;
     end;
 
     // The mined return cases surface in exactly ONE place. For a symbol whose
@@ -922,7 +1258,7 @@ begin
     // not ALSO be treated as this symbol's own hand-written returns tag.
     var ReturnsHandWritten: Boolean:=
       AExistingHasAnyTag and StandaloneReturns.HasReturnsTag
-      and (not IsEngineOwnedRegardlessOfContent(AExisting.ReturnsText));
+      and (not IsEngineOwnedRegardlessOfContent(Eff.ReturnsText));
     var IncludeReturns: Boolean:=
       ReturnsHandWritten and AHasReturn and (Length(AFacts.ReturnCases) > 0);
     Facts:= RenderFactsBlock(AFacts, APrefix, IncludeReturns, AComplexityMin);
@@ -996,7 +1332,7 @@ begin
     // <exception cref> -- see that fixture's own comment) -- HasSummaryTag
     // only needs to answer "is there a genuine, standalone summary at all",
     // never "what does it say".
-    var SummaryRaw: string:= AExisting.Summary;
+    var SummaryRaw: string:= Eff.Summary;
     if StandaloneSummary.HasSummaryTag and (not IsEngineOwnedRegardlessOfContent(SummaryRaw)) then
       Sb.AppendLine(EmitTagged('<summary>', SummaryRaw, '</summary>'))
     else if AFacts.HarvestedSummary <> '' then
@@ -1035,8 +1371,8 @@ begin
     // for the message text; only presence/absence needs the filtered view.
     if StandaloneDep.Deprecated then
     begin
-      if AExisting.DeprecatedText <> '' then
-        Sb.AppendLine(EmitTagged('<deprecated>', AExisting.DeprecatedText, '</deprecated>'))
+      if Eff.DeprecatedText <> '' then
+        Sb.AppendLine(EmitTagged('<deprecated>', Eff.DeprecatedText, '</deprecated>'))
       else
         Sb.AppendLine(APrefix + '<deprecated/>');
     end;
@@ -1063,7 +1399,7 @@ begin
     // existing params first, in signature order where possible
     for P in ASigParams do
     begin
-      for var EP in AExisting.Params do
+      for var EP in Eff.Params do
         if SameText(EP.Name, P) then
         begin
           var IsStandaloneParam: Boolean:= False;
@@ -1091,7 +1427,7 @@ begin
     // does not even match a current signature parameter must not be flagged
     // as a "stale" leftover either (same fabrication risk, for a name with
     // no real sig-param counterpart at all).
-    for var EP in AExisting.Params do
+    for var EP in Eff.Params do
     begin
       var StillThere: Boolean:= False;
       for P in ASigParams do if SameText(EP.Name, P) then begin StillThere:= True; Break; end;
@@ -1108,7 +1444,7 @@ begin
         // hand-written, including a deliberate blank slot -- preserved
         // verbatim; its mined cases (if any) went into the 'Returns:' fact
         // line above (IncludeReturns) instead of disturbing this text.
-        Sb.AppendLine(EmitTagged('<returns>', AExisting.ReturnsText, '</returns>'))
+        Sb.AppendLine(EmitTagged('<returns>', Eff.ReturnsText, '</returns>'))
       else
       begin
         // engine-owned (marked -- ALWAYS, regardless of post-marker content,
@@ -1156,7 +1492,7 @@ begin
     // out of scope, same as the pre-existing "keeps only the first
     // <deprecated>/<since>" limitation.)
     for var StandaloneExcItem in StandaloneExc.Exceptions do
-      for var OrigExc in AExisting.Exceptions do
+      for var OrigExc in Eff.Exceptions do
         if SameText(OrigExc.TypeName, StandaloneExcItem.TypeName) then
         begin
           Sb.AppendLine(EmitTagged('<exception cref="' + OrigExc.TypeName + '">', OrigExc.Desc, '</exception>'));
@@ -1180,7 +1516,7 @@ begin
     // within it by BuildStandaloneFor('example')'s own exception/deprecated/
     // since strip.
     if StandaloneExample.HasExampleTag then
-      Sb.AppendLine(EmitTagged('<example>', AExisting.ExampleText, '</example>'));
+      Sb.AppendLine(EmitTagged('<example>', Eff.ExampleText, '</example>'));
 
     // <seealso>/<since>: v(ADP3 T3b) -- UNLIKE exception/example/deprecated,
     // these two DO have an engine-generated counterpart: RenderFactsBlock
@@ -1255,7 +1591,29 @@ begin
     // exactly like DeprecatedText/exception Desc/ExampleText above; only
     // presence/absence needed the filtered view.
     if StandaloneSince.HasSinceTag then
-      Sb.AppendLine(EmitTagged('<since>', AExisting.SinceText, '</since>'));
+      Sb.AppendLine(EmitTagged('<since>', Eff.SinceText, '</since>'));
+
+    // v(ADP3 T3f): the carried-through residual -- every line of the original
+    // region this function could not fully account for, verbatim, in source
+    // order, re-prefixed with the bare comment marker so its own indentation
+    // survives byte-exact (see LinePrefix, above).
+    //
+    // Position: AFTER every modeled tag, BEFORE the <remarks> facts block.
+    // The engine's own fixed emission order already reorders modeled tags
+    // relative to the source, so "the author's original relative position"
+    // is not on offer for anything here -- what IS load-bearing is that the
+    // position be DERIVED (so it is the same on every run, hence a fixed
+    // point) and that it not be FIRST. Emitting residual prose ahead of every
+    // tag would put it before the first '<' in the region, where ParseXmlDoc's
+    // untagged-prefix fallback would adopt it as the summary on the NEXT run
+    // and re-emit it inside a <summary> the author never wrote -- a
+    // fabrication AND a non-idempotent one. Keeping the facts block last also
+    // preserves the convention every other shape in this codebase already
+    // follows.
+    var LenBeforeResidual: Integer:= Sb.Length;
+    for var ResidualLine in Residual do
+      Sb.AppendLine(LinePrefix + ResidualLine);
+    var LenAfterResidual: Integer:= Sb.Length;
 
     // remarks: keep hand prose (AExisting.Remarks) OUTSIDE the fence, then a fresh
     // managed block. Strip any old fenced block from the prose before re-emitting
@@ -1273,7 +1631,7 @@ begin
     // real remarks prose to begin with.
     var Prose: string:= '';
     if StandaloneRemarks.HasRemarksTag then
-      Prose:= StripManagedBlock(AExisting.Remarks);
+      Prose:= StripManagedBlock(Eff.Remarks);
     var NormProse: string:= StringReplace(Trim(Prose), #13#10, #10, [rfReplaceAll]);
     NormProse:= StringReplace(NormProse, #13, #10, [rfReplaceAll]);
     // v(ADP3 T2 adjacent fix): a SINGLE-LINE hand-written remarks with NO
@@ -1313,7 +1671,22 @@ begin
       end;
       Sb.AppendLine(APrefix + '</remarks>');
     end;
-    Result:= Sb.ToString.TrimRight([#13, #10]);
+    // v(ADP3 T3f): carried-through residual ALONE is not output. When the
+    // engine modeled nothing and generated nothing, the only thing it could
+    // write is a copy of lines that are already sitting in the file -- so it
+    // writes NOTHING instead, reports Merged='' to BuildForSymbol, and the
+    // region is left exactly as the author has it. That is strictly more
+    // conservative than rewriting it (no reordering, no dropped engine-owned
+    // empty tag, no delete+insert at all), and it keeps the Merged='' branch's
+    // own RegionFullyEngineOwned guard reachable and exercised by the fixture
+    // that covers it (unhandledtags.HasValueTag) instead of quietly bypassing
+    // it. Identical to the pre-v(ADP3 T3f) expression whenever Residual is
+    // empty: both conditions then reduce to "Sb is empty", which TrimRight
+    // would have returned as '' anyway.
+    if (LenBeforeResidual = 0) and (Sb.Length = LenAfterResidual) then
+      Result:= ''
+    else
+      Result:= Sb.ToString.TrimRight([#13, #10]);
   finally
     Sb.Free;
   end;

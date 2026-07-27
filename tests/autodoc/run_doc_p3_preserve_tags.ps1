@@ -155,11 +155,12 @@
       (canonical lowercase spelling), NOT wrapped in a fabricated <summary>.
     * SeeAlsoNoCrefWithSummary: the malformed <seealso> sits ALONGSIDE a
       real, well-formed <summary> -- the summary (and the comment as a
-      whole) is NOT deleted. The malformed seealso fragment itself does not
-      separately round-trip (captured by nothing -- RxSee requires cref=
-      too); this is the "unmodeled tag" territory the review left explicitly
-      out of scope, not a new gap -- the fix is that it no longer takes the
-      REST of the comment down with it.
+      whole) is NOT deleted. v(ADP3 T3f): the malformed seealso fragment is
+      captured by nothing (RxSee requires cref= too), so the emitter accounts
+      for nothing on that line and Task 3f's residual carry-through now hands
+      the WHOLE line back verbatim. This used to be a pinned, accepted
+      "unmodeled tag" gap (loss class L1); the pin below is flipped and now
+      asserts the round-trip.
     * TabSeparatedSeeAlso: a TAB (not a space) before cref= -- RxSee's own
       '\s+' already tolerated this; the OLD sniff's literal single-space
       '<seealso ' did not. SeeAlso presence alone does not satisfy
@@ -786,13 +787,16 @@ try {
   $seeNoCrefBlock = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) '^procedure SeeAlsoNoCrefWithSummary;'
   Check 'NEW IMPORTANT: whole comment NOT reduced to just a facts block (the real <summary> is genuinely there)' `
     ($seeNoCrefBlock -match '<!-- drag-lint:auto BEGIN -->' -and $seeNoCrefBlock -match '<summary>') $seeNoCrefBlock
-  # Documented, ACCEPTED limitation (matches the review's own "unmodeled
-  # tags" out-of-scope item): the malformed seealso fragment itself is
-  # captured by nothing (RxSee requires cref= too) and does not separately
-  # round-trip -- pinning this here so the gap stays a conscious, explained
-  # choice rather than a silent regression if behavior ever changes.
-  Check 'NEW IMPORTANT: malformed seealso fragment text does not itself round-trip (known "unmodeled tag" gap, not a full-comment deletion)' `
-    (-not ($seeNoCrefBlock -match 'Missing the required cref, sitting alongside')) $seeNoCrefBlock
+  # v(ADP3 T3f): FLIPPED. This used to pin the ACCEPTED limitation that the
+  # malformed seealso fragment is captured by nothing (RxSee requires cref=
+  # too) and therefore did not round-trip -- the same "unmodeled tag" loss
+  # class (L1) run_doc_p3_valuetag_caller.ps1 pinned for <value>. Task 3f's
+  # verbatim residual-line carry-through closes it: nothing on that line is
+  # accounted for by the emitter, so the WHOLE line is handed back untouched.
+  Check 'v(ADP3 T3f): the malformed seealso fragment now round-trips VERBATIM (was a pinned "unmodeled tag" gap before Task 3f)' `
+    ($seeNoCrefBlock -match [regex]::Escape('/// <seealso>Missing the required cref, sitting alongside a real tag.</seealso>')) $seeNoCrefBlock
+  Check 'v(ADP3 T3f): ...and exactly once (carried through, never duplicated)' `
+    ((([regex]::Matches($seeNoCrefBlock, [regex]::Escape('Missing the required cref, sitting alongside'))).Count) -eq 1) $seeNoCrefBlock
 
   Test-NeverDeletedAcrossCycles 'preserve_tags.UnclosedExampleTag' '^procedure UnclosedExampleTag;' `
     '<summary><example>Unclosed example body, no closing tag</summary>' `

@@ -209,13 +209,13 @@ procedure ExceptionNoCrefAttr;
 procedure CallsExceptionNoCrefAttr;
 
 // A malformed <seealso> with no cref, SITTING ALONGSIDE a real, well-formed
-// <summary> -- the summary (and the whole comment) is NOT deleted; the
-// malformed seealso fragment itself does not separately round-trip (it is
-// captured by nothing -- RxSee requires cref="..." too), which is the
-// "unmodeled tag" territory the review left explicitly out of scope, NOT a
-// new gap this task introduces (a plain <seealso> with no cref was already
-// unrepresentable before this task; the fix here is that it no longer takes
-// the REST of the comment down with it).
+// <summary> -- the summary (and the whole comment) is NOT deleted. The
+// malformed seealso fragment is captured by nothing (RxSee requires
+// cref="..." too), so it is "unmodeled tag" territory -- Task 3b left it out
+// of scope and its non-round-trip was pinned as an accepted gap.
+// v(ADP3 T3f): closed. The emitter accounts for nothing on that line, so the
+// residual carry-through hands the whole line back verbatim, exactly as it
+// does for <value>.
 /// <summary>Has a real, well-formed summary.</summary>
 /// <seealso>Missing the required cref, sitting alongside a real tag.</seealso>
 procedure SeeAlsoNoCrefWithSummary;

@@ -2,10 +2,11 @@
 
 **Found:** 2026-07-26, during Auto-Document Phase 3 (branch `feat/autodoc-phase3`).
 **Status:** Gap 1 (this doc's main subject) CLOSED by Task 3c (2026-07-27, commit -- see
-git log). Gap 2 (`HasXmlTags` sniff) was already closed by T3b. **Closing gap 1 exposed a
+git log). Gap 2 (`HasXmlTags` sniff) was already closed by T3b. Closing gap 1 exposed a
 pre-existing repair-path defect through FOUR triggers and THREE distinct content-loss classes
-(not just "unmodeled tags" -- read "New finding" below in full before scoping any follow-up from
-this doc). Status: OPEN, not fixed in Task 3c, tracked as a pinned known-defect test.**
+(not just "unmodeled tags"). **All three loss classes CLOSED by Task 3f (2026-07-27) --
+see "Task 3f: all three loss classes closed", below. The two known-defect pins this doc
+created have been flipped to assert the fix.**
 
 ## The problem
 
@@ -262,7 +263,10 @@ prose beside a lone `<since>`/`<seealso>`/`<example>`, narrows the risk further 
 repo today; none of it was checked against ORM3/YADF/other consumer repos, whose comments this
 task's C3 query has never been run over.
 
-**Not fixed here; correctly scoped follow-up.** All three loss classes need the repair path itself
+**Not fixed in Task 3c; FIXED in Task 3f -- see "Task 3f: all three loss classes closed", below.**
+The analysis in the rest of this paragraph is what scoped that task, and it held up: all three did
+need the repair path itself to change, and the fix landed entirely inside `Doc.Regions.pas`.
+All three loss classes need the repair path itself
 (`Doc.Regions.pas`'s `MergeComment`, plus probably `BuildStandaloneFor`'s stripped-reparse
 interaction with the untagged-prefix fallback for #3, and `EmitTagged`'s re-serialization for #2)
 to change -- not an `HasContent` OR-chain edit, and touches the exact machinery (`Doc.Document.pas`
@@ -271,15 +275,18 @@ follow-up task must be scoped to **all three loss classes**, not "unmodeled tags
 (indentation) and #3 (trailing prose / phantom summary) need fixing even if #1 (unmodeled tags)
 is deferred further, since they destroy content in tags this task explicitly exists to support.
 
-**Test posture:** `tests/autodoc/run_doc_p3_valuetag_caller.ps1` was converted (2026-07-27) to the
-same known-defect idiom `run_doc_p3_idempotency_sweep.ps1`'s SWEEP D already uses for a different
-pre-existing residual -- a loud banner naming the defect and this doc, PASSING assertions that pin
-the CURRENT (bad) behaviour explicitly (action=extended, `<value>` gone, `<example>` still
-survives, stable after a second apply), so a future fix or future regression both show up as an
-intentional, visible pin change rather than a silent flip either direction. No committed test yet
-covers loss classes #2/#3 (the multi-line-example and trailing-prose cases) -- the probe fixture
-used to find them (`t3c_lossprobe2.pas`) was scratch-only, not committed; a follow-up task should
-start by committing fixtures for these two shapes.
+**Test posture (superseded by Task 3f -- kept for the record):**
+`tests/autodoc/run_doc_p3_valuetag_caller.ps1` was converted (2026-07-27) to the same known-defect
+idiom `run_doc_p3_idempotency_sweep.ps1`'s SWEEP D already uses -- a loud banner naming the defect
+and this doc, PASSING assertions that pinned the CURRENT (bad) behaviour explicitly. **Task 3f
+flipped that pin: it now asserts that `<value>` survives verbatim, exactly once, and the banner is
+gone.** The same flip was applied to `run_doc_p3_preserve_tags.ps1`'s pinned "malformed seealso
+fragment does not round-trip" assertion, which was the same loss class under a different name.
+Loss classes #2/#3 had no committed coverage at all; Task 3f added
+`tests/autodoc/fixtures/docp3/residual_lines.pas` + `tests/autodoc/run_doc_p3_residual_lines.ps1`,
+which cover all three classes (two shapes for #1, including the mixed-line case), a control shape
+that must NOT change, a 3-cycle fixed point per shape with the cycle-1 branch action pinned, and a
+`--strip` round-trip in both directions.
 
 **Idempotency-sweep gap, also fixed 2026-07-27:** the sweep pins md5 fixed points and `edits:0` on
 later cycles, but (before this fix) pinned a cycle-1 **action string** only for `NoCommentAtAll`.
@@ -292,6 +299,67 @@ original Task 3c report noticing -- confirmed safe (same non-destructive mechani
 multi-line content, trailing prose, or an unmodeled tag), but genuinely unpinned. SWEEP C now pins
 the cycle-1 action for all eight `*PlusEmptyRemarks`-family shapes (six "CRITICAL" + two
 "CONTROL"), so a future branch flip is visible instead of silent.
+
+### Task 3f: all three loss classes closed (2026-07-27)
+
+**All three are fixed.** `TDocRegions.MergeComment`'s repair path now carries through, verbatim,
+every line of the existing region it cannot fully account for. The mechanism is one new private
+helper, `TDocRegions.SplitResidualLines`, plus ~20 lines of wiring in `MergeComment`; nothing in
+`Doc.Document.pas` changed at all, and `RegionFullyEngineOwned` / `IsFenceOnlyRemarksSpan` /
+`CommentLinesContain` / the delete-branch gating were **not touched**.
+
+**The rule is LINE-LEVEL OWNERSHIP: the engine owns a line only when it can represent everything
+on it.** `SplitResidualLines` marks the character spans the emitter re-emits (the eight
+`PRESERVED_VERBATIM_CONTAINERS`, the self-closing `<see>`/`<seealso>`/`<deprecated/>` forms, the
+engine's own `<!-- drag-lint ... -->` markers, and the untagged leading run `ParseXmlDoc`'s own
+fallback turns into the summary), then calls any line with unaccounted non-whitespace *residual*.
+Every span that touches a residual line is **retracted**, transitively to a fixed point, so nothing
+on a residual line is ALSO re-emitted from the model. `MergeComment` then re-parses only the
+accounted lines (`Eff`) and drives every existing gate off that; the residual lines are re-emitted
+verbatim, in source order, after every modeled tag and before the facts `<remarks>` block.
+
+Why the two rejected alternatives are wrong, both reproduced:
+* re-emitting only the *unaccounted characters* of a mixed line mangles the author's prose exactly
+  the way reading `<deprecated>`'s message from a stripped view once did ("Added in  and still
+  valid.") -- `<para>Body with an inline <see cref="X"/> reference.</para>` would come back as
+  `<para>Body with an inline  reference.</para>`;
+* emitting the whole line but NOT retracting its spans duplicates every tag on it -- **unboundedly**
+  for `<see>`/`<seealso>`, whose parser regex is a plural `.Matches`.
+
+Per loss class:
+1. **Unmodeled tag** -- nothing on the line is accounted for, so the whole line is carried through.
+   Covered by the flipped pins in `run_doc_p3_valuetag_caller.ps1` (`<value>`) and
+   `run_doc_p3_preserve_tags.ps1` (the malformed cref-less `<seealso>`), and by
+   `ValueBesideSummary` / `ParaWithInlineSee` in the new `residual_lines.pas` fixture.
+2. **Multi-line `<example>` indentation** -- a multi-line `<example>` that is not nested inside
+   another container is deliberately treated as unaccounted and handed back verbatim. It IS modeled,
+   but the engine cannot re-serialize a code sample without destroying its indentation
+   (`StripXmlDocPrefix` TrimLefts every line before `ExampleText` is even captured, and `EmitTagged`
+   Trims every continuation line), so verbatim is the only faithful option. A NESTED multi-line
+   `<example>` stays accounted, so shapes like `SinceWithNestedExample` are untouched.
+3. **Trailing prose / phantom `<summary>`** -- the prose shares its line with the modeled tag, so
+   the line is residual, the `<since>` span is retracted, and the line is emitted verbatim. The
+   phantom summary disappears as a consequence, not as a separate fix: the line that produced the
+   orphaned trailing text is no longer part of the text `BuildStandaloneFor` reparses at all.
+
+**Deliberate conservatism:** when the carried-through lines are the ONLY thing there would be to
+write, `MergeComment` returns `''` and the region is left completely untouched. That keeps the
+`Merged=''` branch's own `RegionFullyEngineOwned` guard reachable and exercised by the fixture that
+covers it (`unhandledtags.HasValueTag`, still byte-identical after an apply) instead of quietly
+bypassing it.
+
+**Known residuals, deliberately NOT closed by Task 3f:**
+* Tag ORDER is not preserved. The emitter has always written tags in one fixed order regardless of
+  the order the author used, and the carried-through block sits at one derived position. Content
+  round-trips through `--strip` exactly; relative order does not, for shapes whose source order
+  already differed from the emitter's.
+* SWEEP D's two shapes (`preserve_tags.DeprecatedWithNestedReturns` /
+  `ExampleWithNestedRemarks`) are a DIFFERENT defect class -- the unkeyed singular-match residual,
+  which needs parser position-tracking. Their lines are fully accounted for, so Task 3f is inert on
+  them and their pins are unchanged and still assert the defect.
+* Unmodeled tags are still not PARSED or STORED (no `TParsedDoc` field, no `symbol_docs` column), so
+  they remain invisible to the index, `context`, MCP and hover. Task 3f makes `document --apply`
+  stop destroying them; it does not make them queryable.
 
 ### Methodological caveat for the C3 query and any reuse of it
 
@@ -316,6 +384,14 @@ agreeing):
 | Tracked (`git ls-files`) | 44 | 65 | **109** |
 | On-disk | 44 | 67 | **111** |
 | Untracked | 0 | 2 | **2** |
+
+**Correction (Task 3f, 2026-07-27, direct recount at HEAD `f668031` before any Task 3f file was
+added):** the `autotest` figures above are each one LOW. `git ls-files tests/autotest/*.ps1`
+returns **66**, not 65, and `Get-ChildItem` returns **68**, not 67. The untracked count of 2 is
+right, and both named files are right; only the totals were off. Correct baseline:
+**tracked 110 = 44 + 66; on-disk 112 = 44 + 68.** Task 3f adds one runner
+(`tests/autodoc/run_doc_p3_residual_lines.ps1`), taking on-disk to **113** and tracked to **111**
+once committed.
 
 The 2 untracked runners are both in `tests/autotest/`: `run_hover_callsite.ps1` and
 `run_typeat_generic_member.ps1`. Both are real, substantial (133 and 198 lines), self-hermetic
@@ -359,18 +435,10 @@ currently passes. Against the 111 ON-DISK runners, add the 2 untracked, both cur
   default. The Phase 3 T17 rollout already has "reindex both YADF DBs" as a step.
 - **Unmodeled tags are not parsed or stored at all**: `<value>`, `<typeparam>`, `<para>`, `<code>`,
   `<list>`, `<permission>`, `<inheritdoc/>`. These have no `TParsedDoc` field and no `symbol_docs`
-  column, so they are invisible to the index *and* destroyed by `document --apply`'s repair path
-  (pre-existing, not a Phase 3 regression). **This is only ONE of three loss classes the repair
-  path has** -- see "New finding" above (added 2026-07-27) for the full picture: multi-line
-  `<example>` indentation flattening and trailing-prose-beside-a-modeled-tag deletion are TWO
-  MORE, neither involving an unmodeled tag at all, and a follow-up scoped to "unmodeled tags" alone
-  would leave both of those in place. Closing all three needs parser/repair-path work in
-  `Doc.Regions.pas` (verbatim raw-line preservation for the unmodeled case; fixing
-  `EmitTagged`'s re-serialization for the indentation case; fixing the
-  `BuildStandaloneFor`-stripped-reparse/untagged-prefix-fallback interaction for the trailing-prose
-  case) -- its own scope decision, deliberately left out of Phase 3, and now reachable through
-  FOUR triggers (Task 3c's `<example>`/`<seealso>`/`<since>`, plus an inline `<see cref>`
-  undisclosed in the original Task 3c report) instead of the pre-existing Summary/Remarks/Returns/
-  Params/Exceptions/Deprecated set alone -- one apply cycle sooner than before in every case. See
-  "New finding" for the confirmed repros (`run_doc_p3_valuetag_caller.ps1`, converted to a pinned
-  known-defect runner rather than left bare-red) and why none of the three were fixed in Task 3c.
+  column, so they remain invisible to the index, `context` bundles, MCP and hover. **Task 3f
+  (2026-07-27) fixed the DESTRUCTION half of this** -- `document --apply`'s repair path now carries
+  such a tag through verbatim (see "Task 3f: all three loss classes closed", above), along with the
+  other two loss classes ("New finding"). What is still open is only the QUERYABILITY half: giving
+  these tags a parsed field and an index column so they can be searched. That is a separate,
+  additive change (new columns, schema bump, indexer + renderers) with no destruction risk behind
+  it any more, so it is no longer urgent.

@@ -32,56 +32,46 @@
   Remarks<>'' disjunct (untouched by Task 3c), and the SECOND apply took the
   repair branch, destroying <value>/<example> one cycle later.
 
-  === Task 3c (2026-07-27) update: the SAME destruction now happens on the
-  === FIRST apply, not the second, and IS asserted (as a known, pinned
-  === defect, not a silent pass) below.
+  === Task 3c (2026-07-27) made the SAME destruction happen on the FIRST
+  === apply rather than the second, and this runner was converted to a
+  === pinned-known-defect test that asserted the loss explicitly.
+  === Task 3f (2026-07-27) FIXED it. The pin below is flipped: it now
+  === asserts the FIX, and the known-defect banner is gone.
 
   Task 3c widened TParsedDoc.HasContent to also recognize HasExampleTag (see
   docs\lint\URGENT-TODO-2026-07-26-index-doc-tag-coverage.md and
   .superpowers\sdd\2026-07-24-autodocument-phase3-harvest-and-facts\
-  task-3c-report.md). HasValueAndExample's <example> tag now makes
+  task-3c-report.md). HasValueAndExample's <example> tag makes
   Existing.HasContent -- and therefore ExistingHasAnyTag -- True from the
-  ORIGINAL parse alone, before any additive-insert-then-merge dance. The
-  FIRST apply now takes the repair branch directly: Merged preserves
-  <example> (Task 3b/3c gave it a field and repair-path emission) but has NO
-  representation for <value> at all, so <value> is destroyed one cycle
-  earlier than round 3's own known, deferred residual already described.
+  ORIGINAL parse alone, before any additive-insert-then-merge dance, so the
+  FIRST apply takes the repair branch directly. That is still true and is
+  still pinned below; what changed in Task 3f is that the repair branch no
+  longer destroys what it cannot model.
 
-  No new destruction CLASS was introduced by Task 3c -- this is the exact
-  same "an unmodeled tag co-occurring with content that flips HasContent True
-  is destroyed by the repair path" gap round 3 already knew about and
-  deferred (see docs\lint\...'s own pre-existing "Related, lower priority"
-  section, predating Task 3c). What changed is the WINDOW: a single-shot
-  `document --apply` -- exactly what the IDE's "Auto-Document Whole Project"
-  menu action runs -- now destroys content that used to survive that one run.
+  Task 3f (loss class L1) added verbatim residual-line carry-through to
+  TDocRegions.MergeComment: SplitResidualLines partitions the existing region
+  into the lines the engine can fully account for and the ones it cannot, the
+  accounted ones drive the emitter as before, and the rest are re-emitted
+  verbatim -- original indentation intact -- after every modeled tag and
+  before the facts <remarks> block. <value> has no TParsedDoc field, nothing
+  else on its line is modeled either, so its whole line is carried through
+  untouched.
 
-  Per superpowers:receiving-code-review discipline (verify before silently
-  adjusting, do not hide a regression by relaxing an assertion without
-  saying so): this test now follows the SAME idiom
-  run_doc_p3_idempotency_sweep.ps1's SWEEP D already established for a
-  different known-broken shape -- assert the CURRENT (bad) behaviour
-  explicitly, behind a loud banner naming the defect and where it is
-  tracked, rather than either (a) silently editing the old assertions with
-  no trace of what changed, or (b) leaving a bare, unexplained red runner
-  that the next task cannot distinguish from a break IT caused.
-
-  Drives `index` -> `document --qname --apply` and asserts, pinned as KNOWN,
-  CURRENT (not desired) behaviour:
+  Drives `index` -> `document --qname --apply` and asserts:
     1. action = extended, edits = 2 (the repair branch runs on the FIRST
-       apply -- pinned so a regression that makes this WORSE, e.g. more
-       edits or a different action, is caught; a value that DISAPPEARS this
-       destruction, e.g. action reverting to "created", is an IMPROVEMENT --
-       update the pin, same rule as the idempotency sweep's own pins).
-    2. <value> is GONE (the actual data loss -- asserted as present-today
-       fact, not endorsed).
+       apply -- pinned so a branch flip in either direction is visible, same
+       rule as the idempotency sweep's own pins. This is now the CORRECT
+       branch: repair no longer implies destruction).
+    2. <value> SURVIVES verbatim, on its own line, exactly once -- the Task 3f
+       fix. Was pinned as "is GONE" between Task 3c and Task 3f.
     3. <example> SURVIVES (Task 3b/3c's repair-path support for <example>
-       still works even in this broken shape -- proves the loss is scoped to
-       the genuinely unmodeled tag, not a wider collapse).
+       still works -- proves the carry-through did not take over emission of
+       a tag the engine genuinely models).
     4. The facts block ("Called from:") is still present -- proves Merged
        was genuinely computed, not an early-exit no-op.
-    5. A second apply cycle is a stable fixed point (the destruction happens
-       ONCE, then the file stops changing) -- proves this is not ALSO an
-       unbounded-growth defect stacked on top of the data-loss one.
+    5. A second apply cycle is a stable fixed point -- the carry-through is
+       re-derived identically every run, so it converges rather than
+       re-appending.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -102,13 +92,6 @@ $target = Join-Path $scratch 'valuetag_caller.pas'
 $db     = Join-Path $scratch 'valuetagcaller.sqlite'
 Copy-Item $fixture $target -Force
 
-Write-Host ''
-Write-Host '=== KNOWN DEFECT: valuetag_caller.HasValueAndExample loses its unmodeled <value> tag ===' -ForegroundColor Yellow
-Write-Host '    on the FIRST document --apply (was the SECOND, pre-Task-3c). STABILITY OF THE' -ForegroundColor Yellow
-Write-Host '    <value> TAG IS NOT CLAIMED. See docs\lint\URGENT-TODO-2026-07-26-index-doc-tag-' -ForegroundColor Yellow
-Write-Host '    coverage.md ("New finding") and task-3c-report.md for the full writeup and the' -ForegroundColor Yellow
-Write-Host '    recommended follow-up (repair path must verbatim-preserve unmodeled tags).' -ForegroundColor Yellow
-
 Push-Location C:\TEMP
 try {
   & $exePath index $scratch --db $db 2>$null | Out-Null
@@ -116,28 +99,33 @@ try {
 
   $applyJson = (& $exePath document --qname valuetag_caller.HasValueAndExample --db $db --apply --json 2>$null) -join "`n"
   Check 'apply exits 0' ($LASTEXITCODE -eq 0)
-  Check 'PINNED KNOWN DEFECT 1: action = extended (repair branch runs on the FIRST apply -- was "created" pre-Task-3c; a flip back to "created" is an IMPROVEMENT, update the pin)' `
+  Check '1. action = extended (the repair branch runs on the FIRST apply -- pinned so a branch flip in EITHER direction is visible)' `
     ($applyJson -match '"action":"extended"') $applyJson
-  Check 'PINNED KNOWN DEFECT 1: edits = 2 (delete+insert pair -- was 1, a single additive insert, pre-Task-3c)' `
+  Check '1. edits = 2 (delete+insert pair -- was 1, a single additive insert, pre-Task-3c)' `
     ($applyJson -match '"edits":2') $applyJson
 
   $text = [IO.File]::ReadAllText($target)
-  Check 'PINNED KNOWN DEFECT 2: hand-written <value> is GONE (the actual data loss -- was "survives" pre-Task-3c; its REAPPEARANCE is an improvement, not a break)' `
-    (-not $text.Contains('<value>Hand-written; must survive.</value>'))
+  # v(ADP3 T3f): FLIPPED. Between Task 3c and Task 3f this asserted that the
+  # <value> tag was GONE, behind a known-defect banner. Task 3f's verbatim
+  # residual-line carry-through preserves it, so the pin now asserts the fix.
+  Check '2. hand-written <value> survives VERBATIM on its own line (v(ADP3 T3f) residual carry-through; was pinned as "is GONE" between Task 3c and Task 3f)' `
+    ($text.Contains("`n/// <value>Hand-written; must survive.</value>"))
+  Check '2. ...and EXACTLY once (carried through, never duplicated -- the failure mode a naive verbatim re-emit has)' `
+    (([regex]::Matches($text, [regex]::Escape('<value>Hand-written; must survive.</value>'))).Count -eq 1)
   Check '3. hand-written <example> still survives verbatim (Task 3b/3c repair-path support for <example> unaffected)' `
     ($text.Contains('/// <example>Example text.</example>'))
   Check '4. a NEW facts block with Called from: is present (Merged was genuinely computed, not an early-exit no-op)' `
     ($text -match '<!-- drag-lint:auto BEGIN -->' -and $text -match 'Called from:.*valuetag_caller\.CallsHasValueAndExample')
 
-  # 5. Stability: the destruction happens ONCE (first apply), not repeatedly --
-  # this is NOT also an unbounded-growth defect stacked on the data-loss one.
+  # 5. Stability: the carry-through is re-derived from the region on every run,
+  # so cycle 2 reproduces cycle 1's output exactly instead of re-appending.
   $afterApply1 = [IO.File]::ReadAllBytes($target)
   & $exePath index $scratch --db $db 2>$null | Out-Null
   $applyJson2 = (& $exePath document --qname valuetag_caller.HasValueAndExample --db $db --apply --json 2>$null) -join "`n"
   $afterApply2 = [IO.File]::ReadAllBytes($target)
-  Check '5. second apply cycle: action = unchanged (the post-destruction state is a stable fixed point)' `
+  Check '5. second apply cycle: action = unchanged (a stable fixed point)' `
     ($applyJson2 -match '"action":"unchanged"') $applyJson2
-  Check '5. second apply cycle: file byte-identical (no further growth beyond the one-time loss)' `
+  Check '5. second apply cycle: file byte-identical (the carried-through line is not re-appended)' `
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$afterApply1,[byte[]]$afterApply2))
 } finally { Pop-Location }
 
