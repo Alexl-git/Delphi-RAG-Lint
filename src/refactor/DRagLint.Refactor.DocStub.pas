@@ -173,16 +173,27 @@ begin
     case AFormat of
       dsfXmlDoc:
       begin
-        Sb.AppendLine('/// <summary>TODO: describe</summary>');
-        for N in ParamNames do Sb.AppendLine('/// <param name="' + N + '">TODO: describe</param>');
-        if HasReturn then Sb.Append('/// <returns>TODO: describe</returns>');
+        // v(ADP3 T3d2 D9): the trailing period matches the legacy sentinel
+        // IsManagedDesc/TDocRegions still recognize ('TODO: describe.') for
+        // self-healing a pre-v(ADP3) file -- see that function's own comment.
+        // This generator's output goes to Writeln only today (never a .pas),
+        // so the mismatch was never live, but a bare 'TODO: describe' here
+        // would silently NOT be recognized as managed the day this stub is
+        // wired into a write path.
+        Sb.AppendLine('/// <summary>TODO: describe.</summary>');
+        for N in ParamNames do Sb.AppendLine('/// <param name="' + N + '">TODO: describe.</param>');
+        if HasReturn then Sb.Append('/// <returns>TODO: describe.</returns>');
       end;
       dsfPasDoc:
       begin
-        Sb.AppendLine('{**'              );
-        Sb.AppendLine(' * TODO: describe');
-        for N in ParamNames do Sb.AppendLine(' * @param ' + N + ' TODO: describe');
-        if HasReturn then Sb.AppendLine(' * @returns TODO: describe');
+        // v(ADP3 T3d2 D9): period added for consistency with the XmlDoc arm
+        // above -- one generator, one sentinel word, same punctuation. PasDoc
+        // output has no IsManagedDesc-style recognizer of its own (a
+        // different comment syntax entirely), so this half is cosmetic only.
+        Sb.AppendLine('{**'               );
+        Sb.AppendLine(' * TODO: describe.');
+        for N in ParamNames do Sb.AppendLine(' * @param ' + N + ' TODO: describe.');
+        if HasReturn then Sb.AppendLine(' * @returns TODO: describe.');
         Sb.Append(' *}');
       end;
     end; // case

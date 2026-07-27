@@ -520,7 +520,7 @@ begin
       // </deprecated>') DOES reach it, and is exactly the under-promising
       // case: HasReturnsTag is True here, while MergeComment finds no
       // standalone <returns> and would emit one from the mined cases. Reported
-      // report-only rather than fixable; a human still sees the finding.
+      // as report-only rather than as fixable; a human still sees the finding.
       //
       // D3 -- the deliberate ruling on when this rule fires at all. Since
       // v(ADP3 T1) every engine-written <returns> carries AUTO_MARK

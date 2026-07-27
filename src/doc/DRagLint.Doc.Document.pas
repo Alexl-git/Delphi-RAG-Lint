@@ -297,11 +297,15 @@ end;
 // v(ADP3 T3 review round 3, Regression 2): looks ahead from AOpenIx (which
 // Lines[AOpenIx] trims to exactly '<remarks>') for a matching '</remarks>'
 // line. Returns True (with ACloseIx set to that line's index) only when the
-// span strictly between them contains nothing but blank lines plus exactly
-// one well-formed AUTO_BEGIN..AUTO_END fence -- the EXACT shape
-// TDocRegions.MergeComment emits for a facts-only remarks (no hand prose;
-// see its own remarks-emission comment). Returns False (ACloseIx = -1) for
-// anything else: no closing tag found in the region at all, no fence found,
+// span strictly between them contains nothing but blank lines plus one or
+// more well-formed, SEQUENTIAL AUTO_BEGIN..AUTO_END fences (each fully
+// closed before the next opens) -- v(ADP3 T3d2 D10): this paragraph used to
+// say "exactly one" fence, which underclaimed what the loop below actually
+// accepts; the code was already correct, only the header was not -- the
+// shape(s) TDocRegions.MergeComment emits for a facts-only remarks (no hand
+// prose; see its own remarks-emission comment). Returns False (ACloseIx = -1)
+// for anything else: no closing tag found in the region at all, no fence
+// found, a nested/overlapping BEGIN (a second BEGIN before the first's END),
 // OR any other non-blank content alongside the fence -- a <remarks> that
 // mixes hand-written prose in with the facts fence must NOT be swept up by
 // this exemption (that prose line still has to earn ownership on its own
