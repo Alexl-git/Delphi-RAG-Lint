@@ -1,6 +1,15 @@
 $Exe = . "$PSScriptRoot\_manifest_common.ps1"
 $fx  = "$PSScriptRoot\..\fixtures\manifest"
-$plan = & $Exe index --all --dry-run --json --config "$fx\global.drag-lint.json" 2>&1 | Out-String
+# STDOUT ONLY for every JSON-SHAPE assertion below (the ones that look at the
+# FIRST character). The engine writes '(loaded defaults from ...)' and the FTS5
+# probe line to *stderr*; folding them in with 2>&1 leaves the interleaving
+# order up to how PowerShell drains the two OS pipes, and it does not always
+# come out stdout-first. Measured from a repo-root CWD (where the walk-up finds
+# C:\Projects\.drag-lint.json and the preamble line is emitted at all):
+# 4 of 40 merged captures started with the stderr line, so StartsWith('[')
+# failed roughly 1 run in 10. Checks that assert stderr CONTENT (WARN/SKIP/size
+# guard) deliberately keep 2>&1 -- those are -match, order-insensitive.
+$plan = & $Exe index --all --dry-run --json --config "$fx\global.drag-lint.json" 2>$null | Out-String
 Check 'dry-run exits 0' ($LASTEXITCODE -eq 0)
 Check 'plan is json'    ($plan.TrimStart().StartsWith('{') -or $plan.TrimStart().StartsWith('['))
 Check 'section Proj'     ($plan -match '"name"\s*:\s*"Proj"')
@@ -65,7 +74,7 @@ Check 'closure has inc'                ($cl -match 'uAlpha\.inc')
 Check 'closure has uStale (referenced)' ($cl -match 'uStale\.pas')
 Check 'orphan excluded'                (-not ($cl -match 'uOrphan\.pas'))
 Check 'stale match warned'             ($cl -match 'WARN.*uStale\.pas')
-$plan2 = & $Exe index --all --dry-run --json --config "$fx\global.drag-lint.json" 2>&1 | Out-String
+$plan2 = & $Exe index --all --dry-run --json --config "$fx\global.drag-lint.json" 2>$null | Out-String
 Check 'plan lib expands Win32'     ($plan2 -match 'library-Win32\.sqlite')
 Check 'plan lib expands Win64'     ($plan2 -match 'library-Win64\.sqlite')
 Check 'plan Proj mode folderTree'  ($plan2 -match '"name"\s*:\s*"Proj"[\s\S]*?"mode"\s*:\s*"folderTree"')
@@ -114,7 +123,7 @@ Write-Host ''
 Write-Host 'Task 10: resolve-dbs command...'
 $rd = & $Exe resolve-dbs --platform Win64 --config "$fx\global.drag-lint.json" 2>&1 | Out-String
 Check 'resolve-dbs lists Proj' ($rd -match 'Proj\.sqlite')
-$rdj = & $Exe resolve-dbs --platform Win64 --config "$fx\global.drag-lint.json" --json 2>&1 | Out-String
+$rdj = & $Exe resolve-dbs --platform Win64 --config "$fx\global.drag-lint.json" --json 2>$null | Out-String
 Check 'resolve-dbs --json is array' ($rdj.TrimStart().StartsWith('['))
 # v0.46: file-size guard regression.
 # Huge.inc is ~8 KB; --max-file-kb 1 sets the limit to 1 KB so the guard
