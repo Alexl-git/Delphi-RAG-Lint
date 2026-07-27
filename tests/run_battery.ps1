@@ -4,21 +4,25 @@
   Why this exists
   ---------------
   "Full battery" was folklore for the whole of Auto-Document Phase 3: six tasks
-  in a row reported green against tests\autodoc (45) + tests\autotest (67) = 112
-  runners, while tests\ actually held 180. The other 68 had never been run by any
-  task in the phase, and one of them (autofix\run_missing_doc_fix.ps1) had been
-  red since Task 3 changed the emitter. An unstated definition silently became
-  the definition. This script IS the definition, and it prints its own
-  denominator before running anything so a shrinking battery is visible instead
-  of silent.
+  in a row reported green against tests\autodoc + tests\autotest only, while
+  tests\ held substantially more. The rest had never been run by any task in the
+  phase, and one of them (autofix\run_missing_doc_fix.ps1) had been red since
+  Task 3 changed the emitter. An unstated definition silently became the
+  definition. This script IS the definition, and it prints its own denominator
+  before running anything so a shrinking battery is visible instead of silent.
+
+  Deliberately no counts in this comment. The old constraint failed BECAUSE it
+  hardcoded a number ("31 tests"); a different hardcoded number is the same
+  defect wearing a new value. The printed denominator is the only statement of
+  the count that cannot go stale -- read it from the run, not from prose.
 
   What a runner is
   ----------------
   A runner is a file named run_*.ps1 anywhere under tests\ (RECURSIVE -- a
-  non-recursive scan misses tests\lint-project's 4 runners, which live one level
-  down in per-case subdirectories; that is how "68" and "64" could both look
-  right). Enumeration is dynamic. There is deliberately no hardcoded list: a
-  literal list is exactly what drifted for six tasks.
+  non-recursive scan misses tests\lint-project's runners, which live one level
+  down in per-case subdirectories; that discrepancy is how two different counts
+  could both look right). Enumeration is dynamic. There is deliberately no
+  hardcoded list: a literal list is exactly what drifted for six tasks.
 
   Exclusions
   ----------
@@ -39,8 +43,15 @@
   -Include / -Exclude match against the repo-relative path with forward slashes
   (e.g. 'tests/autodoc/run_doc_p3_marker.ps1'), so a bare suite name like
   'autodoc' selects the whole suite and a runner name selects one runner.
+  Comma-separated lists work (they are split here rather than relying on
+  PowerShell array binding, which `pwsh -File` does not do). Both switches print
+  a "this is NOT the full battery" banner, in the header AND in the summary.
 
-  Exit code: 0 only when every runner in the enumerated set passed.
+  Exit codes
+  ----------
+    0  every runner in the enumerated set passed
+    1  at least one FAIL or TIMEOUT
+    2  the filters selected ZERO runners -- never reported as green
 #>
 [CmdletBinding()]
 param(
@@ -49,7 +60,11 @@ param(
 
   # Substring/wildcard filters removed from the enumerated set. Every entry here
   # MUST carry a reason in the table below -- an undocumented exclusion is the
-  # bug this script exists to kill.
+  # bug this script exists to kill. Passing this ALWAYS raises the same
+  # "NOT the full battery" banner -Include raises: -Include visibly collapses the
+  # denominator to something obviously small, whereas -Exclude removes a handful
+  # from an otherwise-full run and leaves a count that still LOOKS right. That is
+  # the more dangerous of the two, so it gets the louder warning, not the quieter.
   [string[]]$Exclude = @(),
 
   # Per-runner wall-clock budget. 180 s is the value the 2026-07-27 sweep used.
@@ -80,6 +95,27 @@ function RelPath([string]$full) {
   $full.Substring($repoRoot.Length + 1).Replace('\', '/')
 }
 
+# Flatten a filter list into individual patterns.
+#
+# Load-bearing under `pwsh -File`, which is how every caller invokes this script:
+# -File does NOT parse PowerShell array syntax, so `-Include autodoc,autotest`
+# arrives as the SINGLE string 'autodoc,autotest' (and quoting it makes the quote
+# characters part of the value). That matched no runner at all, so this script's
+# own documented usage example selected ZERO runners and still exited 0 -- a green
+# report from an empty battery, which is the precise failure this script exists to
+# prevent. Split on commas, and strip stray quotes, so the documented form works.
+function SplitPatterns([string[]]$pats) {
+  $out = New-Object System.Collections.Generic.List[string]
+  foreach ($p in $pats) {
+    if ($null -eq $p) { continue }
+    foreach ($piece in ($p -split ',')) {
+      $t = $piece.Trim().Trim("'", '"')
+      if (-not [string]::IsNullOrWhiteSpace($t)) { $out.Add($t) }
+    }
+  }
+  return $out.ToArray()
+}
+
 function MatchesAny([string]$rel, [string[]]$pats) {
   foreach ($p in $pats) {
     if ([string]::IsNullOrWhiteSpace($p)) { continue }
@@ -93,6 +129,9 @@ function MatchesAny([string]$rel, [string[]]$pats) {
 $allRunners = Get-ChildItem -LiteralPath $testsRoot -Recurse -Filter 'run_*.ps1' -File |
               Sort-Object FullName
 $totalFound = $allRunners.Count
+
+$Include = SplitPatterns $Include
+$Exclude = SplitPatterns $Exclude
 
 $excludePats = @($DefaultExclusions.Keys) + $Exclude
 $excluded    = @($allRunners | Where-Object { MatchesAny (RelPath $_.FullName) $excludePats })
@@ -110,14 +149,37 @@ foreach ($k in $DefaultExclusions.Keys) {
   Write-Host ("      {0}  -- {1}" -f $k, $DefaultExclusions[$k]) -ForegroundColor DarkGray
 }
 foreach ($k in $Exclude) {
-  Write-Host ("      {0}  -- (caller-supplied -Exclude)" -f $k) -ForegroundColor DarkGray
+  Write-Host ("      {0}  -- (caller-supplied -Exclude)" -f $k) -ForegroundColor Yellow
+}
+# BOTH narrowing switches raise the SAME banner. -Exclude is the more dangerous
+# of the two -- it drops a handful from an otherwise-full run and leaves a count
+# that still looks right, which is the silent-coverage-loss shape this whole
+# script exists to kill -- so it must never be the quieter of the two.
+if ($Exclude.Count -gt 0) {
+  Write-Host ("  -Exclude filter                                  : {0}" -f ($Exclude -join ', ')) -ForegroundColor Yellow
+  Write-Host ('  EXCLUSIONS APPLIED -- this is NOT the full battery.') -ForegroundColor Yellow
+  Write-Host ('  Every -Exclude entry needs a stated reason in the report that quotes this run.') -ForegroundColor Yellow
 }
 if ($Include.Count -gt 0) {
   Write-Host ("  -Include filter                                  : {0}" -f ($Include -join ', ')) -ForegroundColor Yellow
-  Write-Host ("  SUBSET RUN -- this is NOT the full battery." ) -ForegroundColor Yellow
+  Write-Host ('  SUBSET RUN -- this is NOT the full battery.') -ForegroundColor Yellow
 }
 Write-Host ("  runners to execute                               : {0}" -f $kept.Count) -ForegroundColor Cyan
 Write-Host ("  per-runner timeout                               : {0}s" -f $TimeoutSec)
+
+# An empty selection is ALWAYS an error, never a pass. A battery that runs
+# nothing and exits 0 reports green while testing nothing -- the exact failure
+# this script exists to prevent, so it must not be reachable from this script.
+# (It WAS reachable: a mistyped or unparsed -Include silently selected zero.)
+if ($kept.Count -eq 0) {
+  Write-Host ''
+  Write-Host '  ERROR: the filters selected ZERO runners. Refusing to report a green empty battery.' -ForegroundColor Red
+  if ($Include.Count -gt 0) { Write-Host ("         -Include: {0}" -f ($Include -join ' | ')) -ForegroundColor Red }
+  if ($Exclude.Count -gt 0) { Write-Host ("         -Exclude: {0}" -f ($Exclude -join ' | ')) -ForegroundColor Red }
+  Write-Host ('         Patterns match the repo-relative path, e.g. tests/autodoc/run_doc_cap.ps1') -ForegroundColor Red
+  Write-Host ''
+  exit 2
+}
 
 # Per-suite breakdown, so a suite vanishing is visible.
 $bySuite = $kept | Group-Object { (RelPath $_.FullName).Split('/')[1] } | Sort-Object Name
@@ -150,7 +212,21 @@ foreach ($r in $kept) {
 
   $rsw = [System.Diagnostics.Stopwatch]::StartNew()
   # Each runner gets its own pwsh process so a crash/exit cannot take the
-  # battery with it, and its CWD is the repo root (the sweep's convention).
+  # battery with it.
+  #
+  # CWD = the repo root, and that is the DELIBERATE WORST CASE, not just the
+  # prior sweep's convention. From inside C:\Projects the engine's config walk-up
+  # finds C:\Projects\.drag-lint.json and emits a '(loaded defaults from ...)'
+  # line on stderr -- which is precisely what made run_manifest flake (~4 runs in
+  # 40) until its captures were separated. Running from a neutral CWD would hide
+  # that entire class of defect from the battery while leaving it live for every
+  # developer and every IDE-side invocation, which run from inside the tree.
+  #
+  # This does NOT contradict tests\README.md's advice to Push-Location C:\TEMP
+  # inside a runner: a runner pushes to a neutral CWD so that ITS OWN fixture
+  # work is not perturbed by a stray drag-lint-lint.json, and it does so from a
+  # known-hostile starting point. The driver supplies the hostility on purpose.
+  # DO NOT "fix" this to C:\TEMP -- that would make the flake class invisible.
   $proc = Start-Process -FilePath 'pwsh' `
             -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $r.FullName) `
             -WorkingDirectory $repoRoot -PassThru `
@@ -190,6 +266,15 @@ Write-Host '=== battery summary ===' -ForegroundColor Cyan
 Write-Host ("  {0} pass / {1} fail / {2} timeout out of {3} executed  (of {4} found)" -f `
             $pass, $fail.Count, $timeout.Count, $results.Count, $totalFound)
 Write-Host ("  wall clock: {0:N1} min" -f $sw.Elapsed.TotalMinutes)
+# Repeat the narrowing banner in the SUMMARY. A report usually quotes the tail,
+# not the header, so a banner that only appears at the top is a banner a narrowed
+# run can be reported without.
+if ($Exclude.Count -gt 0 -or $Include.Count -gt 0) {
+  Write-Host ''
+  Write-Host '  *** NARROWED RUN -- this is NOT the full battery. Do not report it as one. ***' -ForegroundColor Yellow
+  if ($Exclude.Count -gt 0) { Write-Host ("      -Exclude: {0}" -f ($Exclude -join ', ')) -ForegroundColor Yellow }
+  if ($Include.Count -gt 0) { Write-Host ("      -Include: {0}" -f ($Include -join ', ')) -ForegroundColor Yellow }
+}
 
 if ($fail.Count -gt 0) {
   Write-Host ''
