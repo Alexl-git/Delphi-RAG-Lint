@@ -476,8 +476,40 @@ begin
   // (ExistingHasAnyTag, from HasSummaryTag/HasReturnsTag/Params/an
   // unmodeled-tag check) and passes it to MergeComment explicitly, instead
   // of this field being widened for everyone.
+  //
+  // v(ADP3 T3c): the three ORed in below -- HasExampleTag, Length(SeeAlso),
+  // HasSinceTag -- are a DIFFERENT widening from the one reverted just
+  // above, not a repeat of it. The reverted widening treated <summary>/
+  // <returns>'s MERE PRESENCE as "documented", which is wrong for those two
+  // tags specifically because the engine itself actively refills/replaces
+  // them from harvested facts / mined return cases (an empty <returns> is
+  // the ENGINE's normal, common resting state for an undocumented routine,
+  // not a human's deliberate statement) -- treating presence alone as
+  // "documented" would have flooded HasContent=True onto huge numbers of
+  // otherwise-undocumented symbols. <example>/<seealso>/<since> have no such
+  // engine-refill behaviour: nothing in this codebase auto-inserts a
+  // standalone, empty <example></example> or <since></since> tag, and a
+  // <seealso cref="..."/> the parser recognizes at all always carries a
+  // non-empty cref (RxSee requires cref="([^"]+)", one or more characters,
+  // so an empty-cref seealso never matches in the first place) -- so this
+  // widening cannot resurrect the reverted bug's failure mode at any scale
+  // resembling <summary>/<returns>'s. Before this fix, Core.Indexer.pas
+  // wrote NO symbol_docs row at all for a comment whose only tag was one of
+  // these three -- not merely a row with three populated columns and
+  // everything else blank -- making it invisible to the index, `context`
+  // bundles, MCP, and LSP hover/completion alike (docs\lint\URGENT-TODO-
+  // 2026-07-26-index-doc-tag-coverage.md). HasExampleTag/HasSinceTag are
+  // PRESENCE flags (Match.Success, set above from the UNSTRIPPED Cleaned
+  // text), preferred here over re-deriving from ExampleText/SinceText
+  // content -- a content test on a STRIPPED view is exactly what caused
+  // <since> to silently delete nested content in an earlier round (see
+  // TDocRegions.MergeComment's own StandaloneSince remarks); reading the
+  // already-correct presence flag sidesteps that class of bug entirely.
+  // SeeAlso has no HasXxxTag of its own (it is an array, not a single tag),
+  // so Length(Result.SeeAlso) > 0 is its presence test -- the same test
+  // HasAnyRecognizedTag, just above, already uses for the identical purpose.
   Result.HasContent:= (Result.Summary <> '') or (Result.Remarks <> '') or (Result.ReturnsText <> '') or (Length(Result.Params) > 0) or
-  (Length(Result.Exceptions) > 0) or Result.Deprecated;
+  (Length(Result.Exceptions) > 0) or Result.Deprecated or Result.HasExampleTag or (Length(Result.SeeAlso) > 0) or Result.HasSinceTag;
 end; // function
 
 class function TDocCommentParser.ParsePasDoc(const ARaw: string): TParsedDoc;
@@ -640,7 +672,18 @@ begin
     Result.HasSinceTag  := Result.SinceText   <> '';
     Result.HasRemarksTag:= Result.Remarks     <> '';
 
-    Result.HasContent:= (Result.Summary <> '') or (Length(Result.Params) > 0) or (Result.ReturnsText <> '') or Result.Deprecated;
+    // v(ADP3 T3c): widen the SAME three terms as ParseXmlDoc's own HasContent
+    // (see its comment for the full rationale) -- a PasDoc comment whose only
+    // tag is @example/@see/@since is documentation too, and was previously
+    // invisible to the index the same way an XML-DocInsight one was. Here
+    // HasExampleTag/HasSinceTag ARE plain non-empty-content tests (see this
+    // function's own header comment just above -- PasDoc collapses presence
+    // to content since it has no "explicitly empty tag" concept to
+    // distinguish), so using the flag or re-testing the content directly
+    // would be equivalent; the flag is used for textual consistency with
+    // ParseXmlDoc's OR-chain and with HasAnyRecognizedTag's.
+    Result.HasContent:= (Result.Summary <> '') or (Length(Result.Params) > 0) or (Result.ReturnsText <> '') or Result.Deprecated or
+      Result.HasExampleTag or (Length(Result.SeeAlso) > 0) or Result.HasSinceTag;
   finally
     Params.Free;
     Excs.Free;
@@ -669,6 +712,15 @@ begin
   finally
     Acc.Free;
   end;
+  // v(ADP3 T3c): checked as one of this task's three HasContent assignment
+  // sites -- deliberately NOT widened. A oneline/double-slash comment is
+  // never tag-shaped (Dispatch never routes anything else here for
+  // dckDoubleSlashOne/dckTripleSlashOne, and ParseLoose's own fallback to
+  // this function carries no tags either); ExampleText/SeeAlso/SinceText
+  // stay at their FillChar-zero defaults for every call, so ORing in
+  // HasExampleTag/Length(SeeAlso)/HasSinceTag here would always evaluate
+  // False and change nothing -- confirmed by reading every field this
+  // function sets (Format/RawBlock/Summary/HasSummaryTag/HasContent only).
   Result.HasContent:= Result.Summary <> '';
   // v(ADP3 T3): a oneline/loose comment has no tags at all -- the whole
   // comment IS the summary, so presence collapses to non-empty content, same

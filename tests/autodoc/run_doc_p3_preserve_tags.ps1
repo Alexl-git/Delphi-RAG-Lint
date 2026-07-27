@@ -706,16 +706,30 @@ try {
   # $Survives1 is checked after cycle 1 (proves no IMMEDIATE full deletion).
   # $SurvivesFinal is checked after cycles 2 AND 3 -- most rows below settle
   # into their final form from cycle 1 already (so $Survives1 usually equals
-  # $SurvivesFinal), but TabSeparatedSeeAlso's ONLY tag is a <seealso/>,
-  # whose presence alone does not satisfy Document.pas' ExistingHasAnyTag
-  # (same reasoning as BareSeeOnly, PART 3): cycle 1 takes the fresh/
-  # additive path (original tab-bearing line untouched), and only cycle 2 --
-  # once MergeAdjacentSameKind folds the additive facts block into the same
-  # region -- runs the repair path that normalizes the tab to a canonical
-  # single space. That is the EXACT two-cycle mechanism the line-deletion
-  # defect itself depended on, now exercised and proven safe instead of
-  # destructive. Cycle 3 additionally proves a stable fixed point
-  # (byte-identical to cycle 2, no further mutation or growth).
+  # $SurvivesFinal).
+  #
+  # v(ADP3 T3c): TabSeparatedSeeAlso used to be the one exception here, pre-
+  # Task-3c -- its ONLY tag is a <seealso/>, whose presence alone did NOT
+  # satisfy Document.pas' ExistingHasAnyTag before this task (same reasoning
+  # as BareSeeOnly, PART 3, which is STILL pre-3c behaviour -- see its own
+  # comment): cycle 1 took the fresh/additive path (original tab-bearing line
+  # untouched), and only cycle 2 -- once MergeAdjacentSameKind folded the
+  # additive facts block into the same region, which flipped HasContent True
+  # via the pre-existing Remarks<>'' disjunct -- ran the repair path that
+  # normalized the tab to a canonical single space. Task 3c widened HasContent
+  # to include Length(SeeAlso) > 0 (DRagLint.Parser.DocComments.pas), so
+  # ExistingHasAnyTag is now True from the ORIGINAL parse alone -- cycle 1
+  # runs the repair path immediately (confirmed: cycle 1 now reports
+  # "action":"extended", tab already normalized to a space, where it used to
+  # report "action":"created" with the tab still present until cycle 2).
+  # $Survives1's loose substring ('cref="Other.RelatedThing"', matching
+  # either the tab or space form) still holds either way, so this assertion
+  # needed no change -- only this comment did. Cycle 2/3 are now stable
+  # no-op confirmations rather than the cycle that does the actual work; they
+  # still prove the fixed point either way. This is the EXACT two-cycle
+  # mechanism the line-deletion defect itself depended on -- now not merely
+  # "exercised and proven safe" but not exercised as a two-cycle path AT ALL
+  # for this decl, since a genuinely one-cycle repair is safer still.
   function Test-NeverDeletedAcrossCycles([string]$QName, [string]$DeclPattern, [string]$Survives1, [string]$SurvivesFinal, [string]$Label) {
     $j1 = Apply-One $QName
     Check "$Label apply #1 exits 0" ($LASTEXITCODE -eq 0) $j1
@@ -814,11 +828,31 @@ try {
   # =====================================================================
 
   # --- NEW IMPORTANT: <since> reads presence from a stripped view, content
-  # from AExisting -- all three reproductions stable from cycle 1 (each also
-  # independently forces the repair path immediately: the nested tag makes
-  # Deprecated/Exceptions.Length>0/HasExampleTag true, all already part of
-  # Document.pas' ExistingHasAnyTag via HasContent, unlike TabSeparatedSeeAlso
-  # above).
+  # from AExisting -- all three reproductions are stable from cycle 1
+  # (Test-ThreeCycleNesting's own cycle-1-vs-cycle-2 byte-identical check
+  # passes for all three either way -- see its own comment for why that
+  # holds regardless of which cycle does the work). SinceWithNestedException/
+  # SinceWithNestedDeprecated each independently force the repair path
+  # immediately even before Task 3c: the nested tag makes Exceptions.
+  # Length>0/Deprecated true, both already part of Document.pas'
+  # ExistingHasAnyTag via HasContent pre-3c.
+  #
+  # v(ADP3 T3c): SinceWithNestedExample used NOT to belong in that "forces
+  # repair immediately" group -- HasExampleTag (from the nested <example>)
+  # was NOT part of HasContent pre-3c, so cycle 1 took the FRESH/additive
+  # path (confirmed: cycle 1 reported "action":"created", the original
+  # <since> line left untouched, a facts remarks block inserted beside it);
+  # it converged to the same-looking content by cycle 2 only because that
+  # cycle's repair-path output happened to be BYTE-IDENTICAL to what cycle 1
+  # already wrote (no whitespace irregularity to normalize, unlike
+  # TabSeparatedSeeAlso's tab), so the JSON read "unchanged"/0 edits even
+  # though a repair computation genuinely ran -- same TWO-STEP mechanism as
+  # TabSeparatedSeeAlso's OWN pre-3c behaviour (documented in PART 4 above),
+  # not an exception to it. Task 3c widened HasContent to include
+  # HasExampleTag, so SinceWithNestedExample NOW also forces the repair path
+  # immediately from cycle 1 (confirmed: cycle 1 now reports "action":
+  # "extended") -- it no longer differs from TabSeparatedSeeAlso in this
+  # respect; both converge in one cycle now, not two.
   Test-ThreeCycleNesting 'preserve_tags.SinceWithNestedException' '^procedure SinceWithNestedException;' `
     '<since>1.0 <exception cref="EInSince">x</exception></since>' `
     'NEW IMPORTANT (round 3): <exception> nested inside <since>'

@@ -208,7 +208,7 @@ foreach ($s in $a.Symbols) {
 Check 'SWEEP A: EVERY symbol block is a fixed point from cycle 2' ($aUnstable.Count -eq 0) `
   ("unstable=" + ($aUnstable -join ','))
 
-# PINNED ACTUAL BEHAVIOUR -- three symbols in preserve_tags.pas settle at
+# PINNED ACTUAL BEHAVIOUR -- two symbols in preserve_tags.pas settle at
 # CYCLE 2, not cycle 1. This is the PRE-EXISTING "additive-then-merge"
 # mechanism, disclosed in rounds 2 and 3 and NOT closed by round 4's guard:
 # cycle 1 takes the FRESH path and inserts a facts block ADJACENT to the
@@ -221,7 +221,22 @@ Check 'SWEEP A: EVERY symbol block is a fixed point from cycle 2' ($aUnstable.Co
 # inserted is ALREADY present verbatim, which is not the case here.
 # Pinned as an EXACT set so it can only shrink deliberately, never grow
 # silently -- a new symbol appearing here is a new non-idempotent shape.
-$aExpectedSettleAt2 = @('DeprecatedWithNestedReturns','ExampleWithNestedRemarks','TabSeparatedSeeAlso')
+#
+# v(ADP3 T3c): TabSeparatedSeeAlso DROPPED from this pin -- exactly the
+# "name DISAPPEARING is an improvement" case this comment's own Check message
+# anticipates. Task 3c widened TParsedDoc.HasContent to include
+# Length(SeeAlso) > 0 (a bare <seealso/> is documentation too, not just a
+# blank human slot -- see DRagLint.Parser.DocComments.pas' HasContent
+# comment), so Existing.HasContent is now True for this decl from cycle 1
+# (ExistingHasAnyTag ORs it in directly, unchanged code, in
+# DRagLint.Doc.Document.pas), which routes it through the REPAIR path
+# immediately instead of needing the two-cycle additive-then-merge dance
+# TabSeparatedSeeAlso's own fixture comment used to describe. Confirmed via
+# this sweep both ways: before the fix TabSeparatedSeeAlso appeared in
+# $aSettleAt2 (matching the three-name pin below); after, it does not, and
+# every OTHER assertion in this file (fixed points, non-destructiveness, the
+# guard-not-over-broad checks) is unaffected -- see task-3c-report.md.
+$aExpectedSettleAt2 = @('DeprecatedWithNestedReturns','ExampleWithNestedRemarks')
 $aSettleSorted = @($aSettleAt2 | Sort-Object)
 Write-Host ("  settles at cycle 2 (not cycle 1): " + ($aSettleSorted -join ', '))
 Check 'SWEEP A: the set of symbols that settle at cycle 2 is EXACTLY the pinned set' `
