@@ -6731,12 +6731,35 @@ end;
 // the resulting AApplied flag in; this function only reports, it never
 // writes. Byte-identical to the three blocks it replaces -- the exact-count
 // assertions in tests\autodoc cover it.
+// v(ADP3 T3d2 D8 review round 3): ASkippedCount/ASkippedFiles are OPTIONAL
+// and apply to exactly one caller -- DoDocumentStripQName, the only strip
+// mode that resolves a qname across possibly-ambiguous rows. --unit /
+// --project / document-all strip a fully specified scope with no resolution
+// step, so they have nothing to skip; both leave these params at their
+// default (-1 / nil) and their own JSON is unchanged -- checked: no runner
+// asserts an exact key set for any --strip JSON path (every existing
+// --strip --json assertion in tests\autodoc is a regex substring against
+// the raw text, e.g. run_doc_p3_strip_collision.ps1's anchored
+// '"tagsRemoved":1[,}]', never a parsed, exhaustive key list), so adding a
+// field only one caller ever passes is safe for the other two. When
+// ASkippedCount >= 0, both fields are ALWAYS emitted, including when
+// ASkippedCount is 0 -- the same shape DoDocumentUnit's own accessorsSkipped
+// field already uses (CLI.pas ~6823/~6871: unconditional; only the
+// human-readable sentence at ~6836/~6883 is text-mode-gated), so a --json
+// consumer can distinguish "nothing skipped" from "this binary predates the
+// field", the same way accessorsSkipped: 0 already distinguishes "nothing
+// trivial" from "old binary". ASkippedFiles is a flat array of the same
+// distinct paths the text-mode note already counts -- not a nested
+// structure.
 function ReportStrip(const AArgs: TArgs; const AIdKeys, AIdVals: TArray<string>;
   ATagsRemoved, ABlocksRemoved: Integer; const AEdits: TArray<TTextEdit>;
-  AApplied: Boolean; const ALocSuffix: string): Integer;
+  AApplied: Boolean; const ALocSuffix: string;
+  ASkippedCount: Integer = -1; const ASkippedFiles: TArray<string> = nil): Integer;
 var
-  O: TJSONObject;
-  I: Integer;
+  O         : TJSONObject;
+  I         : Integer;
+  SkippedArr: TJSONArray ;
+  S         : string     ;
 begin
   if AArgs.AsJson then
   begin
@@ -6747,6 +6770,13 @@ begin
       O.AddPair('blocksRemoved', TJSONNumber.Create(ABlocksRemoved));
       O.AddPair('edits', TJSONNumber.Create(Length(AEdits)));
       O.AddPair('applied', TJSONBool.Create(AApplied));
+      if ASkippedCount >= 0 then
+      begin
+        O.AddPair('skippedCount', TJSONNumber.Create(ASkippedCount));
+        SkippedArr:= TJSONArray.Create;
+        for S in ASkippedFiles do SkippedArr.Add(S);
+        O.AddPair('skippedFiles', SkippedArr);
+      end;
       Writeln(O.ToJson);
     finally
       O.Free;
@@ -7070,7 +7100,9 @@ var
   Applied       : Boolean          ;
   SkippedCount  : Integer          ; // v(ADP3 T3d2 D8 review round 2, IMPORTANT): matches in other files, not touched
   SkippedFileIds: TArray<Int64>    ; // the distinct other FileIds those skipped matches live in
-  FileAlreadySeen: Boolean         ;
+  SkippedFiles  : TArray<string>   ; // v(ADP3 T3d2 D8 review round 3): SkippedFileIds resolved to paths -- JSON skippedFiles array only
+  FileSeen      : Boolean          ; // v(ADP3 T3d2 D8 review round 3, minor): renamed from FileAlreadySeen, which at
+                                     // 15 chars broke this block's 14-char name-field alignment by one column
 begin
   Syms:= AStore.FindSymbolsByQualifiedName(AArgs.QName);
   if Length(Syms) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
@@ -7094,15 +7126,27 @@ begin
       // never names is the defect it fixed -- but SKIPPING must not itself
       // be silent: that is the exact same "broken round-trip invariant"
       // class D8 was raised to close, only relocated from same-file
-      // overloads to cross-file matches. Counted here; reported below,
-      // text mode only (same convention DoDocumentUnit's own
-      // AccessorsSkipped notice uses -- a supplementary human-readable
-      // line, never mixed into --json).
+      // overloads to cross-file matches. Counted here; reported below.
+      // v(ADP3 T3d2 D8 review round 3, IMPORTANT): this comment used to claim
+      // text-mode-only matched "the same convention DoDocumentUnit's own
+      // AccessorsSkipped notice uses ... never mixed into --json". That was
+      // FACTUALLY WRONG: DoDocumentUnit (:6823) and ReportDocBatch (:6871)
+      // both add accessorsSkipped to their JSON object UNCONDITIONALLY,
+      // present even when zero -- only the human SENTENCE (:6836/:6883) is
+      // gated on text mode. The real precedent is an ALWAYS-PRESENT JSON
+      // field, the opposite of what this comment claimed. Fixed:
+      // SkippedCount and the paths resolved from SkippedFileIds (see
+      // SkippedFiles, built right after this loop) are now ALSO passed into
+      // ReportStrip and always appear in --json output, including when
+      // SkippedCount is 0, mirroring accessorsSkipped's own shape exactly.
+      // Only the human-readable `note:` sentence below stays text-mode-only
+      // -- that half of the original claim was right, just for the wrong
+      // reason.
       Inc(SkippedCount);
-      FileAlreadySeen:= False;
+      FileSeen:= False;
       for K:= 0 to High(SkippedFileIds) do
-        if SkippedFileIds[K] = Sym.FileId then begin FileAlreadySeen:= True; Break; end;
-      if not FileAlreadySeen then SkippedFileIds:= SkippedFileIds + [Sym.FileId];
+        if SkippedFileIds[K] = Sym.FileId then begin FileSeen:= True; Break; end;
+      if not FileSeen then SkippedFileIds:= SkippedFileIds + [Sym.FileId];
       Continue;
     end;
 
@@ -7126,11 +7170,20 @@ begin
     AllEdits:= AllEdits + OneRes.Edits;
   end;
 
+  // v(ADP3 T3d2 D8 review round 3): resolve the skipped FileIds to paths for
+  // the JSON skippedFiles array below only -- SkippedFileIds itself, and its
+  // Length used by the text-mode note further down, are untouched, so this
+  // cannot perturb the dedup loop above. AStore.GetFilePath is the same
+  // lookup Path itself (Syms[0].FileId) already used near the top.
+  SkippedFiles:= nil;
+  for K:= 0 to High(SkippedFileIds) do
+    SkippedFiles:= SkippedFiles + [AStore.GetFilePath(SkippedFileIds[K])];
+
   Applied:= AArgs.Apply and (Length(AllEdits) > 0);
   if Applied then TTextEditApplier.Apply(AllEdits, not AArgs.NoBackup);
 
   Result:= ReportStrip(AArgs, ['qname', 'file'], [AArgs.QName, Path], TagsSum, BlocksSum,
-    AllEdits, Applied, ' in ' + Path);
+    AllEdits, Applied, ' in ' + Path, SkippedCount, SkippedFiles);
 
   if (not AArgs.AsJson) and (SkippedCount > 0) then
     Writeln(Format('note: %d other match(es) for %s in %d other file(s) were NOT touched -- rerun with --unit <file> to strip those.',

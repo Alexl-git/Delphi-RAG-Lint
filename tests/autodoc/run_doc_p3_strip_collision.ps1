@@ -1,8 +1,10 @@
 <#
   run_doc_p3_strip_collision.ps1 -- Auto-Document Phase 3 T3d2, D8 review:
   pins the fixes for CRITICAL 1 (region-collision corruption) and IMPORTANT 2
-  (writes to files the report never names), plus review round 2's IMPORTANT
-  (the cross-file skip must be reported, not silent).
+  (writes to files the report never names), review round 2's IMPORTANT (the
+  cross-file skip must be reported, not silent), and review round 3's
+  IMPORTANT (the skip must be reported in --json too, always present,
+  including when zero -- not just in the human-readable text-mode note).
 
   PART A -- CRITICAL 1: two declarations sharing one qualified name (Delphi
   `overload;`) on CONSECUTIVE source lines, with an engine-owned doc comment
@@ -123,6 +125,14 @@ Check 'A: document --qname --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 Check 'A CRITICAL: reports the NON-DOUBLED counts (tagsRemoved:1, blocksRemoved:1, edits:1)' `
   ($stripOut -match '"tagsRemoved":1[,}]' -and $stripOut -match '"blocksRemoved":1[,}]' -and $stripOut -match '"edits":1[,}]') $stripOut
 
+# v(ADP3 T3d2 D8 review round 3, IMPORTANT): skippedCount/skippedFiles are now
+# ALWAYS in --json output (see ReportStrip), including when nothing was
+# skipped -- PART A has no cross-file match at all, so this is the "zero"
+# half of that proof (PART B below proves the "populated" half). Anchored the
+# same way as the tagsRemoved/blocksRemoved/edits check immediately above.
+Check 'A: skippedCount/skippedFiles are ALWAYS present in --json, even when 0/empty' `
+  ($stripOut -match '"skippedCount":0[,}]' -and $stripOut -match '"skippedFiles":\[\]') $stripOut
+
 $afterStripText = [IO.File]::ReadAllText($targetA)
 Check 'A CRITICAL: the FIRST overload declaration SURVIVES intact' `
   ($afterStripText.Contains('function Combine(A: Integer): Integer; overload;'))
@@ -215,18 +225,33 @@ Check 'B FIXTURE: BOTH files independently gained an engine marker' `
 & $exePath index $scratchB --db $dbB 2>$null | Out-Null
 Check 'B: re-index before strip exits 0' ($LASTEXITCODE -eq 0)
 
-$whichFirst = (& $exePath query --name Widget --db $dbB --json 2>$null) -join "`n" | ConvertFrom-Json
+# v(ADP3 T3d2 D8 review round 3, FOLDED A): this query decides which branch
+# of the final X/Y pristine-state assertions runs below -- it had NO
+# exit-code or content check at all, unlike the sibling query two lines above
+# (:199-201), so a crash or empty result would silently route this runner
+# into asserting the wrong file. Checked the same way now.
+$whichFirstOut = (& $exePath query --name Widget --db $dbB --json 2>$null) -join "`n"
+Check 'B: query --name Widget (pre-strip ordering probe) exits 0' ($LASTEXITCODE -eq 0)
+$whichFirst = @($whichFirstOut | ConvertFrom-Json)
+Check 'B FIXTURE: the ordering probe returned at least one row with a non-empty file property' `
+  (($whichFirst.Count -ge 1) -and (-not [string]::IsNullOrEmpty($whichFirst[0].file))) $whichFirstOut
 $firstFile = $whichFirst[0].file
 $strippedIsX = $firstFile -like '*projX*'
 
-# v(ADP3 T3d2 D8 review round 2, IMPORTANT): TEXT mode, not --json -- the skip
-# note is deliberately text-only (same convention as DoDocumentUnit's own
-# AccessorsSkipped notice: a supplementary human-readable line, never mixed
-# into --json output for a script consumer to trip over). This is the ONE
-# invocation that must both report the strip correctly AND surface the note;
-# splitting it into a separate JSON call for file-content checks and a
-# separate text call for the note would test two different runs instead of
-# proving THIS run does both.
+# v(ADP3 T3d2 D8 review round 2, IMPORTANT): TEXT mode, not --json -- needed
+# to observe the human-readable `note:` sentence, which stays text-only (see
+# CLI.pas's DoDocumentStripQName). This is the ONE invocation that must both
+# report the strip correctly AND surface the note; splitting it into a
+# separate JSON call for file-content checks and a separate text call for the
+# note would test two different runs instead of proving THIS run does both.
+# v(ADP3 T3d2 D8 review round 3): this comment used to justify text-only by
+# citing DoDocumentUnit's AccessorsSkipped as "never mixed into --json" --
+# that citation was FACTUALLY WRONG (see CLI.pas's ReportStrip and
+# DoDocumentStripQName comments for the full correction); only the human
+# SENTENCE is text-mode-only, the underlying skip DATA is now always in JSON
+# too. The extra JSON-mode call below (after the pristine-state checks)
+# proves --json also carries skippedCount/skippedFiles for this same
+# cross-file case.
 $stripOutB = (& $exePath document --qname dup.Widget --db $dbB --strip --apply 2>$null) -join "`n"
 Check 'B: document --qname --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 Check 'B: the summary line names exactly ONE file path (Syms[0]''s own)' `
@@ -251,6 +276,27 @@ if ($strippedIsX) {
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$pristineY, [byte[]]$yAfterStrip))
   Check 'B IMPORTANT 2: the OTHER file (X) was NOT touched -- still carries its own marker, byte-identical to right after its own --apply' `
     ([System.Linq.Enumerable]::SequenceEqual([Text.Encoding]::ASCII.GetBytes($xAfterApply), [byte[]]$xAfterStrip))
+}
+
+# v(ADP3 T3d2 D8 review round 3, IMPORTANT): the skip DATA (as opposed to the
+# human `note:` sentence proven above) is now ALSO always in --json output
+# (see ReportStrip) -- this proves the "populated" half of that (PART A above
+# already proved the "zero" half). Safe to call again here: Syms[0]'s own
+# file is already stripped by the text-mode call above, so this --apply finds
+# nothing left to apply (Applied:false, no file write) -- it cannot perturb
+# the $xAfterStrip/$yAfterStrip byte snapshots already checked above; the
+# cross-file skip is independent of whether Syms[0] itself had anything left
+# to strip, so SkippedCount/SkippedFiles are computed the same either way.
+$stripOutBJson = (& $exePath document --qname dup.Widget --db $dbB --strip --apply --json 2>$null) -join "`n"
+Check 'B: the JSON-mode re-check of the same strip exits 0' ($LASTEXITCODE -eq 0)
+$stripJsonB = $stripOutBJson | ConvertFrom-Json
+Check 'B IMPORTANT: --json also reports skippedCount:1' ($stripJsonB.skippedCount -eq 1) $stripOutBJson
+if ($strippedIsX) {
+  Check 'B IMPORTANT: --json skippedFiles names the OTHER file (Y)' `
+    (@($stripJsonB.skippedFiles).Count -eq 1 -and (@($stripJsonB.skippedFiles)[0] -like '*projY*')) $stripOutBJson
+} else {
+  Check 'B IMPORTANT: --json skippedFiles names the OTHER file (X)' `
+    (@($stripJsonB.skippedFiles).Count -eq 1 -and (@($stripJsonB.skippedFiles)[0] -like '*projX*')) $stripOutBJson
 }
 
 }
