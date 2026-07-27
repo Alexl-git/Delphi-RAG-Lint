@@ -117,14 +117,29 @@ type
     /// residual instead of being accounted and then silently dropped -- plus
     /// the self-closing &lt;see&gt;/&lt;seealso&gt;/&lt;deprecated/&gt; forms, the engine's own
     /// drag-lint HTML markers, and the untagged leading run that
-    /// ParseXmlDoc's own fallback turns into the summary. Two shapes FAIL
-    /// CLOSED and abort the whole mechanism for the region (this returns False,
-    /// so the caller behaves exactly as it did before v(ADP3 T3f)): a residual
-    /// line overlapping a span whose content the engine REGENERATES rather than
-    /// round-trips (any &lt;remarks&gt;, or any span carrying an engine marker), and
-    /// an AUTO_BEGIN with no matching AUTO_END. Lines inside a well-formed
-    /// fence are never residual at all -- they are re-derived every run.</remarks>
+    /// ParseXmlDoc's own fallback turns into the summary. An AUTO_BEGIN with
+    /// no matching AUTO_END FAILS CLOSED and aborts the whole mechanism for
+    /// the region (this returns False, so the caller behaves exactly as it did
+    /// before v(ADP3 T3f)) -- a region whose engine/author boundary cannot be
+    /// established is a statement about the region, not about one line. Lines
+    /// inside a well-formed fence are never residual at all: they are
+    /// re-derived every run.
+    /// v(ADP3 T3d, T3f minor 3): a residual line overlapping a span whose
+    /// content the engine REGENERATES no longer aborts the region. That line
+    /// alone loses its carry-through (it is forced back to accounted, so its
+    /// spans are still emitted exactly once); every OTHER residual line in the
+    /// same region still comes back verbatim.</remarks>
+    /// <param name="AEngineEmitsOwnRemarks">v(ADP3 T3d, T3f minor 1): True
+    /// when the caller will emit its OWN &lt;remarks&gt; element for this symbol
+    /// (RenderFactsBlock produces something). Only then is an author
+    /// &lt;remarks&gt; span non-retractable on that ground alone -- retracting it
+    /// would leave the author's element sitting verbatim beside the engine's.
+    /// When the engine will emit none, an unmarked, unfenced author
+    /// &lt;remarks&gt; is retractable like any other round-tripped container, so a
+    /// tail beside it is preserved instead of dropped. A &lt;remarks&gt; that
+    /// carries a fence or a marker stays non-retractable regardless.</param>
     class function SplitResidualLines(const ARawBlock: string;
+      AEngineEmitsOwnRemarks: Boolean;
       out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
   public
     /// <summary>Renders the fenced facts-block body lines (each prefixed
@@ -540,6 +555,7 @@ begin
 end;
 
 class function TDocRegions.SplitResidualLines(const ARawBlock: string;
+  AEngineEmitsOwnRemarks: Boolean;
   out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
 type
   // One span of ARawBlock the engine can re-emit on its own. Dropped spans are
@@ -567,6 +583,10 @@ var
   LineHi   : TArray<Integer>;
   Accounted: TArray<Boolean>;
   Residual : TArray<Boolean>;
+  // v(ADP3 T3d, T3f minor 3): a line that overlaps a NON-RETRACTABLE span.
+  // It can never be carried through (that would duplicate the tag), so it is
+  // forced back to accounted -- but ONLY it, not the rest of the region.
+  Blocked  : TArray<Boolean>;
   InFence  : TArray<Boolean>;
   Spans    : TArray<TResSpan>;
   Sb       : TStringBuilder ;
@@ -576,8 +596,11 @@ var
   ResCount : Integer        ;
 
   procedure AddSpan(APos, ALen: Integer; AIsExample, AIsRemarks: Boolean);
+  var
+    Body: string;
   begin
     if ALen <= 0 then Exit;
+    Body:= Copy(Joined, APos, ALen);
     SetLength(Spans, Length(Spans) + 1);
     Spans[High(Spans)].Lo            := APos;
     Spans[High(Spans)].Hi            := APos + ALen - 1;
@@ -585,8 +608,30 @@ var
     // Tested with RxResEngineMarker itself rather than a second, literal
     // spelling of the marker text -- one definition of "an engine marker",
     // so this test can never drift from what the mask accounts for.
-    Spans[High(Spans)].NonRetractable:= AIsRemarks or
-      RxResEngineMarker.IsMatch(Copy(Joined, APos, ALen));
+    //
+    // v(ADP3 T3d, T3f minor 1): the <remarks> arm is now CONDITIONAL. It used
+    // to be an unconditional AIsRemarks, which is broader than its own
+    // justification: the rule exists to stop the engine freezing its OWN
+    // regenerated text and to stop it emitting a SECOND <remarks> beside a
+    // frozen copy, and NEITHER hazard exists for a <remarks> that carries no
+    // fence and no marker when the engine is going to emit no <remarks> at
+    // all. On that shape the unconditional rule aborted the carry-through and
+    // dropped the tail with no duplicate to avoid and no stale fact to trade
+    // against -- a strict regression against the first cut of this mechanism,
+    // which preserved it. The two real hazards are tested directly instead:
+    //   * AEngineEmitsOwnRemarks -- the caller has already established that
+    //     RenderFactsBlock produces something, so a retracted author
+    //     <remarks> would sit verbatim beside the engine's own. Computed by
+    //     the caller because only it holds AFacts (see MergeComment's call).
+    //   * a fence inside the span -- its lines are engine-generated and
+    //     re-derived every run. The marker test below would ALSO catch this
+    //     (AUTO_BEGIN is itself a drag-lint HTML marker), but relying on that
+    //     coincidence would make the fence's protection depend on the fence's
+    //     spelling continuing to match a generic pattern, so it is asserted
+    //     here in its own right.
+    Spans[High(Spans)].NonRetractable:=
+      (AIsRemarks and (AEngineEmitsOwnRemarks or (Pos(AUTO_BEGIN, Body) > 0)))
+      or RxResEngineMarker.IsMatch(Body);
     Spans[High(Spans)].Dropped       := False;
   end;
 
@@ -709,9 +754,11 @@ begin
   // Fixed-point closure. Retracting a span can leave a line that was accounted
   // only BECAUSE of it newly residual, which can in turn retract further
   // spans; the loop is monotone (spans are only ever dropped, residual lines
-  // only ever added), so it terminates in at most Length(Spans) rounds.
+  // only ever added, lines only ever blocked), so it terminates in at most
+  // Length(Spans) + Length(RawLines) rounds.
   SetLength(Accounted, Length(Joined) + 1);
   SetLength(Residual , Length(RawLines));
+  SetLength(Blocked  , Length(RawLines));
   repeat
     for J:= 1 to Length(Joined) do Accounted[J]:= False;
     for I:= 0 to High(Spans) do
@@ -722,6 +769,7 @@ begin
     begin
       Residual[I]:= False;
       if InFence[I] then Continue; // engine-generated, re-derived: never author content
+      if Blocked[I] then Continue; // see the NonRetractable arm below
       for J:= LineLo[I] to LineHi[I] do
         if (not Accounted[J]) and (Joined[J] > ' ') then
         begin
@@ -738,15 +786,42 @@ begin
           begin
             // v(ADP3 T3f review, IMPORTANT 2 and 3): a span whose content the
             // engine regenerates cannot be handed back. There is no third
-            // option here -- emitting the line verbatim WITHOUT retracting the
-            // span duplicates the tag (measured: two <returns>, one
-            // permanently stale), and retracting it freezes engine content.
-            // So the whole carry-through aborts and the region falls back to
+            // option for THAT LINE -- emitting it verbatim WITHOUT retracting
+            // the span duplicates the tag (measured: two <returns>, one
+            // permanently stale), and retracting the span freezes engine
+            // content. So the line loses its carry-through and falls back to
             // the pre-v(ADP3 T3f) behaviour, which drops the unmodeled text on
-            // that line. That is a real, disclosed non-improvement for this
-            // shape, chosen deliberately over a malformed comment carrying a
-            // fact the engine has silently stopped maintaining.
-            if Spans[I].NonRetractable then Exit;
+            // it. That is a real, disclosed non-improvement for this shape,
+            // chosen deliberately over a malformed comment carrying a fact the
+            // engine has silently stopped maintaining.
+            //
+            // v(ADP3 T3d, T3f minor 3): the blast radius is now THE OFFENDING
+            // LINE, not the whole region. This used to Exit outright, which
+            // aborted the mechanism for every OTHER line too -- so an innocent
+            // <value> sitting on its own line, overlapping nothing
+            // non-retractable, was deleted because a DIFFERENT line elsewhere
+            // in the same comment happened to mix author text into an
+            // engine-marked tag. Nothing about that innocent line is
+            // ambiguous, and the fail-closed argument above says nothing about
+            // it. Blocking just this line keeps the argument exactly as narrow
+            // as its own justification: the line stays accounted (so its spans
+            // are still emitted, unduplicated) and every other residual line
+            // still carries through.
+            //
+            // Note the two OTHER fail-closed exits in this function still
+            // abort the WHOLE region, and correctly so: an unterminated fence
+            // means the region's engine/author boundary cannot be established
+            // at all, which is a statement about the region, not a line.
+            if Spans[I].NonRetractable then
+            begin
+              if not Blocked[K] then
+              begin
+                Blocked[K] := True;
+                Residual[K]:= False;
+                Changed    := True;
+              end;
+              Continue;
+            end;
             Spans[I].Dropped:= True;
             Changed:= True;
             Break;
@@ -1181,7 +1256,27 @@ begin
     if AExistingHasAnyTag and (AExisting.Format = dfXmlDoc) then
     begin
       var AccountedRaw: string;
-      if SplitResidualLines(AExisting.RawBlock, AccountedRaw, Residual) then
+      // v(ADP3 T3d, T3f minor 1): "will the engine emit a <remarks> of its
+      // own?", answered by RENDERING rather than by guessing at AFacts'
+      // fields -- RenderFactsBlock applies its own gating (the complexity
+      // threshold, per-section emptiness), so rendering is the only test that
+      // cannot disagree with what actually gets emitted below.
+      //
+      // AIncludeReturns is passed True, the MAXIMAL render, because the real
+      // IncludeReturns is not computable yet: it derives from Eff, which is
+      // what this call produces. Maximal is the SAFE direction -- it can only
+      // say "the engine may emit a <remarks>" when the truth is "it will not",
+      // which keeps an author <remarks> non-retractable, which is exactly the
+      // pre-v(ADP3 T3d) behaviour. It can never say "no remarks" when one is
+      // coming. The one shape where the two answers differ is a symbol whose
+      // ONLY fact is the mined 'Returns:' line AND whose <returns> is not
+      // hand-written; that shape keeps the old, conservative outcome.
+      //
+      // Rendered inside this branch, so a symbol with nothing residual (the
+      // common case) still pays nothing for it.
+      var EngineEmitsOwnRemarks: Boolean:=
+        RenderFactsBlock(AFacts, APrefix, True, AComplexityMin) <> '';
+      if SplitResidualLines(AExisting.RawBlock, EngineEmitsOwnRemarks, AccountedRaw, Residual) then
         Eff:= TDocCommentParser.ParseXmlDoc(AccountedRaw);
     end;
     // Residual lines are re-emitted with the comment marker ONLY -- never
