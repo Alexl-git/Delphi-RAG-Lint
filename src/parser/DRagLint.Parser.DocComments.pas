@@ -26,6 +26,22 @@ type
       class function StripXmlDocPrefix(const ALine: string): string; static;
       class function CollapseWhitespace(const S: string)   : string; static;
 
+      /// <summary>The text ParseXmlDoc actually matches its tag regexes
+      /// against: ARaw split into lines, each line's comment prefix removed by
+      /// StripXmlDocPrefix, re-joined with a single #10.</summary>
+      /// <param name="ARaw">A doc region's raw text as TDocCommentScanner.Scan
+      /// produced it (the leading /// already gone, interior spacing intact).</param>
+      /// <returns>The cleaned text. Character offsets into it are the offsets
+      /// every TMatch this unit produces reports.</returns>
+      /// <remarks>v(ADP3 T3h): extracted from ParseXmlDoc's own body (no
+      /// behaviour change) so a CALLER that needs to locate a tag occurrence by
+      /// offset can build the identical text instead of approximating it --
+      /// TDocRegions.StandaloneBodyOf reads a located occurrence's body back out
+      /// of this, and an offset computed against a differently-normalized copy
+      /// would silently read the wrong characters. ONE definition, matching the
+      /// same reasoning as EnsureParserRegexes' single set of patterns.</remarks>
+      class function BuildCleaned(const ARaw: string): string; static;
+
       class function Dispatch(const ARegion: TDocCommentRegion): TParsedDoc; static;
   end;
 
@@ -326,9 +342,22 @@ begin
   Result:= Re.Replace(Trim(S), ' ');
 end;
 
+class function TDocCommentParser.BuildCleaned(const ARaw: string): string;
+var
+  Lines: TArray<string>;
+  I    : Integer       ;
+begin
+  Lines:= ARaw.Split([sLineBreak, #10, #13]);
+  Result:= '';
+  for I:= 0 to High(Lines) do
+  begin
+    if I > 0 then Result:= Result + #10;
+    Result:= Result + StripXmlDocPrefix(Lines[I]);
+  end;
+end;
+
 class function TDocCommentParser.ParseXmlDoc(const ARaw: string): TParsedDoc;
 var
-  Lines          : TArray<string>      ;
   Cleaned        : string              ;
   M              : string              ;
   I              : Integer             ;
@@ -344,13 +373,10 @@ begin
   Result.Format  := dfXmlDoc;
   Result.RawBlock:= ARaw;
 
-  Lines:= ARaw.Split([sLineBreak, #10, #13]);
-  Cleaned:= '';
-  for I:= 0 to High(Lines) do
-  begin
-    if I > 0 then Cleaned:= Cleaned + #10;
-    Cleaned:= Cleaned + StripXmlDocPrefix(Lines[I]);
-  end;
+  // v(ADP3 T3h): the per-line prefix strip and #10 re-join moved to
+  // BuildCleaned, unchanged -- see its own remarks for why a caller needs to be
+  // able to reproduce this text byte for byte.
+  Cleaned:= BuildCleaned(ARaw);
 
   // v(ADP3 T3b review round 3, STRUCTURAL 2): these ten regexes used to be
   // built fresh, right here, on EVERY call -- see EnsureParserRegexes' own
