@@ -32,8 +32,9 @@
 # Exe target (v0.86 policy, user ruling 2026-07-05 -- see
 # src\delphi-plugin\DragLint.Plugin.ExeResolver.pas): the IDE BPL is the only
 # 32-bit artifact; every process the plugin spawns defaults to the **Win64**
-# CLI, and the Win32 sibling is a "just in case" fallback that is no longer
-# built (third_party\dll-win32\drag-lint.exe has been frozen since 2026-07-05).
+# CLI, and the Win32 sibling is a "just in case" fallback. It has not been
+# rebuilt since 2026-07-05 (still 0.86.0-alpha, while the CLI is at 1.2.1-alpha);
+# build\build_draglint_win32.bat is still there if it is ever wanted again.
 # This runner used to default to that frozen Win32 exe, which is why it went
 # red and stayed red: it was smoke-testing a binary the product does not use.
 # Pass -Exe explicitly to smoke a Win32 build on purpose.
