@@ -139,6 +139,27 @@ end;
 // compare below be read as a refinement of the body compare rather than as a
 // second, differently-shaped notion of "the lines" that could disagree about
 // which line is which.
+//
+// v(ADP3 T3d2, item 6 -- EVALUATED, DECLINED): this body provably equals
+// NormalizeCommentLines(S) = Map(Trim, RawCommentLines(S)) -- same #13#10/#13
+// normalization, same Split, same Trim(line)='' trailing-blank predicate,
+// differing only in whether the KEPT lines come back trimmed or raw. A
+// collapse is intentionally NOT done here: the only way to share the split +
+// trailing-blank-index logic is to change NormalizeCommentLines's own body
+// (e.g. split it into "compute Parts/Last" + "trim and return"), and this
+// file regressed three consecutive review rounds on exactly this kind of
+// shared-helper change. The T3g reviewer who first flagged the duplication
+// called touching NormalizeCommentLines here "a defensible thing to
+// decline" -- the blast radius of leaving it duplicated is bounded, because
+// every comparator call site below feeds BOTH its arguments through the SAME
+// one of these two functions, never a mix: CommentLinesEqual and
+// CommentLinesContain always get a NormalizeCommentLines(...) pair,
+// CommentLinesIndentEqual always gets a RawCommentLines(...) pair. A drift
+// between the two helpers would show an equality check silently agreeing
+// with itself on both sides, never a cross-function mismatch that could
+// point a repair or fresh-insert guard at the wrong verdict. If a future
+// change needs to touch NormalizeCommentLines anyway, collapsing this one
+// into it then is fine -- just don't do it FOR this reason alone.
 function RawCommentLines(const S: string): TArray<string>;
 var
   Norm : string        ;
