@@ -106,7 +106,9 @@ try {
   $md5s = @()
   for ($cycle = 1; $cycle -le 3; $cycle++) {
     & $exePath index $scratch --db $db 2>$null | Out-Null
+    Check "cycle $cycle : index exits 0" ($LASTEXITCODE -eq 0)
     & $exePath document --unit $target --db $db --stubs --apply --json 2>$null | Out-Null
+    Check "cycle $cycle : document --unit --apply exits 0" ($LASTEXITCODE -eq 0)
     $md5s += (Get-Md5 $target)
   }
   Check 'converges: md5 identical across all 3 apply cycles' `
@@ -182,7 +184,9 @@ try {
 
   # (a) one caller
   & $exePath index $s2 --db $d2 2>$null | Out-Null
+  Check 'N4 (a) index exits 0' ($LASTEXITCODE -eq 0)
   & $exePath document --unit $t2 --db $d2 --stubs --apply --json 2>$null | Out-Null
+  Check 'N4 (a) document --unit --apply exits 0' ($LASTEXITCODE -eq 0)
   $decayA = Get-DocBlock ([IO.File]::ReadAllLines($t2)) $patDecay
   Check 'N4 (a) one caller: a facts block is written naming it' `
     ($null -ne $decayA -and $decayA.Contains('Called from: decayrouting.CallsDecayAddThenRemove'))
@@ -197,7 +201,9 @@ try {
   $txt = $txt.Replace('// N4-EXTRA-CALLER-IMPL', "procedure ExtraCallerOfDecay;`r`nbegin`r`n  DecayAddThenRemove;`r`nend;")
   [IO.File]::WriteAllText($t2, $txt)
   & $exePath index $s2 --db $d2 2>$null | Out-Null
+  Check 'N4 (b) index exits 0' ($LASTEXITCODE -eq 0)
   & $exePath document --unit $t2 --db $d2 --stubs --apply --json 2>$null | Out-Null
+  Check 'N4 (b) document --unit --apply exits 0' ($LASTEXITCODE -eq 0)
   $decayB = Get-DocBlock ([IO.File]::ReadAllLines($t2)) $patDecay
   Check 'N4 (b) second caller added: a SECOND block appears, naming both' `
     ($null -ne $decayB -and $decayB.Contains('ExtraCallerOfDecay') -and
@@ -220,7 +226,9 @@ try {
   Check 'N4 (c) FIXTURE: the extra caller is really gone from the source' `
     (-not ([IO.File]::ReadAllText($t2)).Contains('procedure ExtraCallerOfDecay'))
   & $exePath index $s2 --db $d2 2>$null | Out-Null
+  Check 'N4 (c) index exits 0' ($LASTEXITCODE -eq 0)
   $j = (& $exePath document --qname 'decayrouting.DecayAddThenRemove' --db $d2 --json 2>$null) -join ' '
+  Check 'N4 (c) document --qname exits 0' ($LASTEXITCODE -eq 0) $j
   Check 'N4 KNOWN GAP, pinned: the engine reports the symbol UP TO DATE after the caller is removed' `
     ($j -match '"action":"unchanged"' -and $j -match '"edits":0[,}]') $j
   $decayC = Get-DocBlock ([IO.File]::ReadAllLines($t2)) $patDecay
@@ -229,6 +237,7 @@ try {
 
   # (d) the documented recovery
   & $exePath document --unit $t2 --db $d2 --strip --apply 2>$null | Out-Null
+  Check 'N4 (d) document --unit --strip --apply exits 0' ($LASTEXITCODE -eq 0)
   $decayD = Get-DocBlock ([IO.File]::ReadAllLines($t2)) $patDecay
   Check 'N4 recovery: --strip --apply removes the stale fact' `
     ($null -ne $decayD -and -not $decayD.Contains('ExtraCallerOfDecay'))

@@ -118,7 +118,9 @@ function Invoke-ShapeSweep([string]$root, [string]$qname, [string]$slug) {
   $acts = @()
   for ($cycle = 1; $cycle -le 3; $cycle++) {
     & $exePath index $scratch --db $db 2>$null | Out-Null
+    Check "$qname cycle $cycle : index exits 0" ($LASTEXITCODE -eq 0)
     $j = (& $exePath document --qname $qname --db $db --apply --json 2>$null) -join ' '
+    Check "$qname cycle $cycle : document --apply exits 0" ($LASTEXITCODE -eq 0) $j
     if ($j -match '"action":"(\w+)"') { $a = $Matches[1] } else { $a = '?' }
     if ($j -match '"edits":(\d+)')    { $a = "$a/$($Matches[1])" }
     $acts += $a
@@ -333,7 +335,9 @@ Check 'DAMAGE SETUP: the block was flattened to column 0 (simulating a pre-fix b
 [IO.File]::WriteAllLines($dr.Target, $all, (New-Object Text.UTF8Encoding $false))
 
 & $exePath index $dr.Scratch --db $dr.Db 2>$null | Out-Null
+Check 'DAMAGE REPAIR SETUP: index exits 0' ($LASTEXITCODE -eq 0)
 $j = (& $exePath document --qname $shapes['DamagedMember'].QName --db $dr.Db --apply --json 2>$null) -join ' '
+Check 'DAMAGE REPAIR: document --apply exits 0' ($LASTEXITCODE -eq 0) $j
 Check 'DAMAGE REPAIR: the engine EMITS an edit for a body-identical but de-indented block' `
   ($j -match '"action":"extended"' -and $j -notmatch '"edits":0') $j
 $after = Get-DocBlockLines ([IO.File]::ReadAllLines($dr.Target)) $shapes['DamagedMember'].Decl
@@ -346,7 +350,9 @@ Check 'DAMAGE REPAIR: the restored block is BYTE-IDENTICAL to the correctly-inde
 # rewriting the same block on every single run forever.
 $md5AfterRepair = Get-FileMd5 $dr.Target
 & $exePath index $dr.Scratch --db $dr.Db 2>$null | Out-Null
+Check 'DAMAGE CONVERGES SETUP: index exits 0' ($LASTEXITCODE -eq 0)
 $j2 = (& $exePath document --qname $shapes['DamagedMember'].QName --db $dr.Db --apply --json 2>$null) -join ' '
+Check 'DAMAGE CONVERGES: document --apply exits 0' ($LASTEXITCODE -eq 0) $j2
 Check 'DAMAGE CONVERGES: the very next apply makes NO edit' ($j2 -match '"edits":0') $j2
 Check 'DAMAGE CONVERGES: ...and the file is byte-unchanged by it' `
   ((Get-FileMd5 $dr.Target) -eq $md5AfterRepair) "before=$md5AfterRepair after=$(Get-FileMd5 $dr.Target)"
@@ -358,7 +364,9 @@ foreach ($nm in $shapes.Keys) {
   if ($nm -eq 'DamagedMember') { continue }   # its scratch was hand-edited above
   $r = $res[$nm]
   & $exePath index $r.Scratch --db $r.Db 2>$null | Out-Null
+  Check "STRIP $nm : index exits 0" ($LASTEXITCODE -eq 0)
   & $exePath document --qname $shapes[$nm].QName --db $r.Db --strip --apply 2>$null | Out-Null
+  Check "STRIP $nm : document --strip --apply exits 0" ($LASTEXITCODE -eq 0)
   $after = Get-DocBlockLines ([IO.File]::ReadAllLines($r.Target)) $shapes[$nm].Decl
   Check "STRIP $nm : no engine residue survives the strip (an indented block is still fully strippable)" `
     (-not (($after -join "`n") -match 'drag-lint:auto')) ($after -join ' | ')

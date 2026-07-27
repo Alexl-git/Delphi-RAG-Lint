@@ -181,8 +181,16 @@ if ($kept.Count -eq 0) {
   exit 2
 }
 
-# Per-suite breakdown, so a suite vanishing is visible.
-$bySuite = $kept | Group-Object { (RelPath $_.FullName).Split('/')[1] } | Sort-Object Name
+# Per-suite breakdown, so a suite vanishing is visible. v(ADP3 T3d2): a
+# runner placed DIRECTLY under tests\ has only 2 path segments
+# ('tests/run_x.ps1'), so Split('/')[1] would return the FILENAME itself and
+# report it as its own one-off "suite" -- exactly the kind of shape-change
+# this breakdown exists to make visible, so it must degrade to a clearly
+# labelled bucket instead of masquerading as a normal suite name.
+$bySuite = $kept | Group-Object {
+  $parts = (RelPath $_.FullName).Split('/')
+  if ($parts.Count -gt 2) { $parts[1] } else { '(tests root)' }
+} | Sort-Object Name
 Write-Host '  by suite:'
 foreach ($g in $bySuite) { Write-Host ("      {0,-16} {1}" -f $g.Name, $g.Count) }
 Write-Host ''

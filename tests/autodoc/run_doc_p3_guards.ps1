@@ -144,7 +144,9 @@ try {
   $md5s = @()
   for ($cycle = 1; $cycle -le 3; $cycle++) {
     & $exePath index $scratch --db $db 2>$null | Out-Null
+    Check "cycle $cycle : index exits 0" ($LASTEXITCODE -eq 0)
     & $exePath document --unit $target --db $db --stubs --apply --json 2>$null | Out-Null
+    Check "cycle $cycle : document --unit --apply exits 0" ($LASTEXITCODE -eq 0)
     $md5s += (Get-Md5 $target)
   }
   Check 'converges: md5 identical across all 3 apply cycles' `
@@ -205,9 +207,11 @@ try {
 
   # --- per-decl settled action ---------------------------------------------
   & $exePath index $scratch --db $db 2>$null | Out-Null
+  Check 're-index before settled-action check exits 0' ($LASTEXITCODE -eq 0)
   foreach ($q in @('guards.UnterminatedFenceHandProse','guards.StrayFenceEndHandProse','guards.ValueBesideDecayedFence',
                    'guards.UnfencedRemarksTail','guards.AbortBlastRadius','guards.TwoSinceTags')) {
     $j = (& $exePath document --qname $q --db $db --json 2>$null) -join ' '
+    Check "$q : document --qname exits 0" ($LASTEXITCODE -eq 0) $j
     Check "settled: $q reports unchanged with 0 edits" `
       ($j -match '"action":"unchanged"' -and $j -match '"edits":0[,}]') $j
   }

@@ -146,12 +146,16 @@ try {
   # blanket batch: --fix with NO --fix-line / --fix-rule narrowing.
   & $exePath lint-all --db $dbB --config $cfgB --fix --apply --no-backup 2>$null | Out-Null
   $afterBatch = [IO.File]::ReadAllText($targetB)
-  # v(ADP3 T3): this used to probe for '<param name="Value">', which the engine
-  # no longer emits for ANY input -- the check had gone vacuous (it would pass
-  # even if the batch HAD inserted a full comment). Probe the managed-block
-  # marker instead: that is what an inserted comment always carries.
-  Check 'C1 blanket batch did NOT insert a doc-comment for missing-doc' (-not $afterBatch.Contains('<!-- drag-lint:auto BEGIN -->'))
-  Check 'C2 Undocumented decl unchanged by the blanket batch (single-fix-only excluded)' ($beforeBatch -eq $afterBatch)
+  # v(ADP3 T3d2): C1 used to be its own check probing for the managed-block
+  # marker (a v(ADP3 T3) fix -- the ORIGINAL probe, '<param name="Value">', had
+  # gone vacuous once the engine stopped emitting that tag for ANY input, so it
+  # would have passed even if the batch HAD inserted a full comment). But over
+  # $beforeBatch (this fixture's ORIGINAL, undocumented text -- no drag-lint
+  # marker anywhere in it) byte-identical STRICTLY IMPLIES "no marker was
+  # inserted": C1 could never fail while C2 passed, so it contributed a second
+  # failure LABEL, not second coverage. Folded into C2, which now carries both
+  # meanings.
+  Check 'C2 Undocumented decl unchanged by the blanket batch, INCLUDING no doc-comment marker inserted (single-fix-only excluded)' ($beforeBatch -eq $afterBatch)
 
   # ---- Part D: rules --json fixable ---------------------------------------
   $rj = & $exePath rules --json 2>$null | Out-String

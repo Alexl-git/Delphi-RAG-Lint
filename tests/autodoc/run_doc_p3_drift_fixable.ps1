@@ -80,6 +80,7 @@ function Get-DocBlockAbove([string[]]$lines, [string]$declPattern) {
 # doc-drift --qname rows (one JSON object per line): .kind/.detail/.fixable/.line
 function Get-Drift($qname) {
   $out = & $exePath doc-drift --qname $qname --db $db --json 2>$null
+  Check "doc-drift --qname $qname exits 0" ($LASTEXITCODE -eq 0)
   $rows = @()
   foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) } }
   return ,$rows
@@ -188,6 +189,14 @@ try {
   $remarksOnlyDocLine = Get-DocStartLine ([IO.File]::ReadAllLines($target)) '^procedure RemarksOnlyStaleFacts;'
   Check 'D4 FIXTURE: the remarks-only doc block was located' ($remarksOnlyDocLine -gt 0) "line=$remarksOnlyDocLine"
   $rawBefore = (& $exePath lint-all --db $db --json 2>$null) -join "`n"
+  # v(ADP3 T3d2): NOT "exits 0" -- bare `lint-all` (no --fix, no --fail-on)
+  # returns ExitCodeFor(Survivors, '', IfThen(Survivors.Count>0, 1, 0))
+  # (DRagLint.Output.ExitCode.pas), i.e. 1 whenever findings survive, which
+  # this fixture always has at this point (that is what D4 exists to check,
+  # asserted immediately below). 1 is therefore the correct expectation, not
+  # a failure -- checking for it still catches a genuine engine crash, which
+  # would not reliably land on exactly 1 either.
+  Check 'D4 lint-all --json (before --fix) exits 1 (findings present, no --fail-on override)' ($LASTEXITCODE -eq 1)
   $driftBefore = @((Get-Findings $rawBefore) | Where-Object { $_.rule -eq 'doc-drift' })
   Check 'D4 lint-all reports the stale facts block on the REMARKS-ONLY decl (summary is NULL there)' `
     (@($driftBefore | Where-Object { $_.message -like '*managed facts block is out of date*' }).Count -ge 1) `
@@ -205,6 +214,7 @@ try {
     ($null -ne $noMinBefore -and $null -ne $blankBefore -and $null -ne $markedBefore)
 
   & $exePath lint-all --db $db --fix --apply --no-backup 2>$null | Out-Null
+  Check 'lint-all --fix --apply (fixable subset) exits 0' ($LASTEXITCODE -eq 0)
   $after = [IO.File]::ReadAllLines($target)
 
   # The promise that WAS made is kept.
@@ -233,6 +243,7 @@ try {
   # --- Re-analyse: the promise is measurably discharged, and the honest
   # --- report-only finding measurably survives -------------------------------
   & $exePath index $scratch --db $db 2>$null | Out-Null
+  Check 're-index after --fix exits 0' ($LASTEXITCODE -eq 0)
   $minable2 = Get-Drift 'driftfixable.MinableReturn'
   Check 'D2 after --fix: MinableReturn has NO ddValueButNoReturns left (the fix discharged it)' `
     (LacksKind $minable2 'ddValueButNoReturns')
@@ -247,6 +258,7 @@ try {
   # --- Idempotency ----------------------------------------------------------
   $bytes1 = [IO.File]::ReadAllBytes($target)
   & $exePath lint-all --db $db --fix --apply --no-backup 2>$null | Out-Null
+  Check 'idempotency: 2nd lint-all --fix --apply exits 0' ($LASTEXITCODE -eq 0)
   $bytes2 = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: a 2nd lint-all --fix --apply is byte-identical' `
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$bytes1,[byte[]]$bytes2))

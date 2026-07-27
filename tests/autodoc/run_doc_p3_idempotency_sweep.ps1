@@ -69,6 +69,12 @@ if (-not (Test-Path $Py)) {
 # its own copies rather than dot-sourcing a shared module).
 # ---------------------------------------------------------------------------
 
+# v(ADP3 T3d2 N8): 8 hex chars = 32 bits -- deliberately short, and fine for
+# this runner's purpose. Every comparison here is a handful of md5s checked
+# against EACH OTHER within one run (cycle-to-cycle, symbol-to-symbol), never
+# against an external/adversarial corpus, so a 32-bit space is far more than
+# enough to catch a genuine content change; nothing here relies on it as a
+# security or global-uniqueness guarantee.
 function Get-FileMd5([string]$p) { (Get-FileHash -Algorithm MD5 -Path $p).Hash.Substring(0,8) }
 
 function Get-StrMd5([string]$s) {
@@ -109,7 +115,14 @@ sql = ("select s.qualified_name, min(s.start_line) as sl from symbols s "
 for qn, sl in c.execute(sql, ('%' + suffix,)):
     print('%s\t%d' % (qn, sl))
 '@
-$pyEnumPath = Join-Path ([IO.Path]::GetTempPath()) 'draglint_sweep_enum.py'
+# v(ADP3 T3d2 N8): PID-qualified filename -- a fixed shared path here would
+# race if two runners (or two invocations of this one) executed concurrently,
+# each overwriting the file the other is about to read. The battery driver
+# runs runners sequentially today, so this was latent, not live; the PID
+# suffix makes it non-racing unconditionally instead of resting on that
+# convention. Content and every downstream reference are unchanged -- only
+# the filename gained a suffix.
+$pyEnumPath = Join-Path ([IO.Path]::GetTempPath()) ('draglint_sweep_enum_' + $PID + '.py')
 [IO.File]::WriteAllText($pyEnumPath, $pyEnum)
 
 function Get-Symbols([string]$db, [string]$suffix) {
@@ -215,10 +228,21 @@ Check 'SWEEP A: EVERY symbol block is a fixed point from cycle 2' ($aUnstable.Co
 # hand-written comment without touching it; on the next scan
 # MergeAdjacentSameKind folds the two into one region, whose <remarks> now has
 # real content, which flips ExistingHasAnyTag and routes cycle 2 through the
-# REPAIR path -- a genuine, one-off, CONVERGENT improvement (it merges the two
-# stacked blocks into one well-formed comment), not growth. Round 4's guard
-# does NOT and MUST NOT suppress it: the guard only fires when the block being
-# inserted is ALREADY present verbatim, which is not the case here.
+# REPAIR path. Round 4's guard does NOT and MUST NOT suppress it: the guard
+# only fires when the block being inserted is ALREADY present verbatim, which
+# is not the case here.
+#
+# v(ADP3 T3d2 N9): this paragraph used to characterise the WHOLE pinned set
+# as "a genuine, one-off, CONVERGENT improvement" (merging two stacked
+# blocks into one well-formed comment, not growth). That was accurate for
+# the THIRD member this pin held before T3c -- TabSeparatedSeeAlso (see the
+# T3c note below) -- now removed because it settles at cycle 1 instead. It
+# was NEVER accurate for the two members still pinned here.
+# DeprecatedWithNestedReturns and ExampleWithNestedRemarks are SWEEP D's
+# known-unstable shapes (the unkeyed-singular-match residual): their
+# settle-at-cycle-2 delta FABRICATES an unmarked tag that `--strip` cannot
+# remove, not a clean merge. SWEEP D below already discloses this correctly;
+# this paragraph did not match it until now.
 # Pinned as an EXACT set so it can only shrink deliberately, never grow
 # silently -- a new symbol appearing here is a new non-idempotent shape.
 #

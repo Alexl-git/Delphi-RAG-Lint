@@ -64,7 +64,11 @@ Ok "disable removes exactly one finding" `
 $base = Join-Path $PSScriptRoot 'pipeline.baseline.json'
 & $exe lint $fx --write-baseline $base 2>$null | Out-Null
 $new = & $exe lint $fx --baseline $base 2>$null | Out-String
-Ok "baseline suppresses known finding" ($new -match '0 finding')
+# v(ADP3 T3d2): was ($new -match '0 finding') -- the same unanchored-substring
+# fragility the :49-51 FindingCount fix already removed two checks above:
+# "10 finding(s)" contains the literal substring "0 finding" and would have
+# false-passed. Anchored to the summary line the same way.
+Ok "baseline suppresses known finding" ((FindingCount $new) -eq 0)
 
 Remove-Item $cfg,$cfgD,$base -ErrorAction SilentlyContinue
 Write-Host ""
