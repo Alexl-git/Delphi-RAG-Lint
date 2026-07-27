@@ -201,14 +201,16 @@
       no natural key, so they read AExisting for content -- see
       MergeComment's own remarks for why, and for a DISCLOSED residual this
       surfaced: DeprecatedWithNestedReturns/ExampleWithNestedRemarks below
-      are correct and stable on cycle 1, but a DEEPER, cycle-2+ issue
-      remains for these unkeyed fields specifically when
+      were correct and stable on cycle 1, but a DEEPER, cycle-2+ issue
+      remained for these unkeyed fields specifically when
       MergeAdjacentSameKind causes a genuine auto-inserted tag to fold into
-      the same region as a nested-elsewhere look-alike -- not fixed, see the
-      task report). ExceptionWithNestedSummary/ExampleWithNestedParam are
-      stable byte-for-byte from cycle 1 through (at least) cycle 3;
-      DeprecatedWithNestedReturns/ExampleWithNestedRemarks assert ONLY the
-      cycle-1 property this task guarantees (no fabrication).
+      the same region as a nested-elsewhere look-alike.
+      v(ADP3 T3h) CLOSED that residual (register N2): content for the unkeyed
+      singular tags now comes from the occurrence its own presence gate is
+      True ABOUT, located through a length-preserving mask. All four rows are
+      therefore stable byte-for-byte from cycle 1 through cycle 3 now, and
+      the two formerly-residual ones additionally assert the strip
+      round-trip -- the property the defect actually broke.
     * STRUCTURAL 2: the sniff regexes were duplicated string literals (a
       SEPARATE, sniff-only cache with pattern strings copied from
       ParseXmlDoc's own locals), and only 4 of the parser's 10 tag regexes
@@ -894,32 +896,57 @@ try {
   Check 'STRUCTURAL 1: no standalone <param name="AV"> fabricated from the nested one (exactly one substring, inside the example)' `
     ($paramTagCount -eq 1) $exampleNestParamBlock
 
-  # --- STRUCTURAL 1, DISCLOSED RESIDUAL: DeprecatedWithNestedReturns /
-  # ExampleWithNestedRemarks. Cycle 1 is fixed and asserted here (no
-  # fabrication, no data loss -- the property this task guarantees). A
-  # SEPARATE, deeper cycle-2+ issue for these two specific rows is
-  # deliberately NOT asserted stable here -- see this fixture's own comment
-  # above DeprecatedWithNestedReturns, and the task report, for the full
-  # reasoning (unkeyed <returns>/<remarks> cannot disambiguate two same-
-  # shaped spans once MergeAdjacentSameKind folds a genuine auto-inserted
-  # tag into the same region as a nested-elsewhere look-alike, without
-  # position-tracking through the parser -- a materially larger change than
-  # this task's scope, per STRUCTURAL 1's own review-invited escape hatch).
-  $jDepRet1 = Apply-One 'preserve_tags.DeprecatedWithNestedReturns'
-  Check 'DeprecatedWithNestedReturns apply #1 exits 0' ($LASTEXITCODE -eq 0) $jDepRet1
+  # --- STRUCTURAL 1, formerly a DISCLOSED RESIDUAL: DeprecatedWithNestedReturns
+  # / ExampleWithNestedRemarks. PINS FLIPPED by v(ADP3 T3h).
+  #
+  # These two used to assert CYCLE-1 correctness ONLY, deliberately: T3b fixed
+  # the fabrication on the first apply, but from cycle 2 on the unkeyed singular
+  # CONTENT read still picked the wrong occurrence once MergeAdjacentSameKind
+  # folded the engine's own freshly-inserted tag into the same region as the
+  # nested look-alike (register N2). That gap was left visible in the suite
+  # rather than silent -- and this is what "visible" was for: T3h closed it, so
+  # both rows now go through Test-ThreeCycleNesting like every other nesting row
+  # here, and each is additionally strip-round-tripped back to its pristine block.
+  #
+  # The cycle-1-only pins are NOT merely upgraded to 3 cycles: the "exactly once"
+  # counts below are what actually caught the defect (a fabricated duplicate does
+  # not remove the original, so a substring check alone passes either way), and
+  # the strip round-trip is what made it matter (the fabricated tag carried no
+  # marker, so `document --strip` could never remove it).
+  Test-ThreeCycleNesting 'preserve_tags.DeprecatedWithNestedReturns' '^function DeprecatedWithNestedReturns: Integer;' `
+    '<deprecated>dep <returns>nested returns text</returns> tail</deprecated>' `
+    'STRUCTURAL 1 (round 3) / N2 (T3h): <returns> nested inside <deprecated>'
   $depRetBlock1 = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) '^function DeprecatedWithNestedReturns: Integer;'
-  Check 'STRUCTURAL 1 (round 3, cycle 1): <returns> nested inside <deprecated> survives verbatim, unmangled' `
-    ($depRetBlock1 -match [regex]::Escape('<deprecated>dep <returns>nested returns text</returns> tail</deprecated>')) $depRetBlock1
-  Check 'STRUCTURAL 1 (round 3, cycle 1): no standalone <returns>nested returns text</returns> fabricated as a SEPARATE sibling' `
+  Check 'N2 (T3h): "nested returns text" appears exactly ONCE after 3 cycles -- never lifted out as a standalone sibling' `
     (([regex]::Matches($depRetBlock1, [regex]::Escape('nested returns text'))).Count -eq 1) $depRetBlock1
+  Check 'N2 (T3h): the standalone <returns> is the ENGINE''s, marked and refilled from the mined case' `
+    ($depRetBlock1 -match [regex]::Escape('<returns><!-- drag-lint:auto -->Observed: 1.</returns>')) $depRetBlock1
 
-  $jExRem1 = Apply-One 'preserve_tags.ExampleWithNestedRemarks'
-  Check 'ExampleWithNestedRemarks apply #1 exits 0' ($LASTEXITCODE -eq 0) $jExRem1
+  Test-ThreeCycleNesting 'preserve_tags.ExampleWithNestedRemarks' '^procedure ExampleWithNestedRemarks;' `
+    '<example>ex <remarks>nested remarks</remarks> tail</example>' `
+    'STRUCTURAL 1 (round 3) / N2 (T3h): <remarks> nested inside <example>'
   $exRemBlock1 = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) '^procedure ExampleWithNestedRemarks;'
-  Check 'STRUCTURAL 1 (round 3, cycle 1): <remarks> nested inside <example> survives verbatim, unmangled' `
-    ($exRemBlock1 -match [regex]::Escape('<example>ex <remarks>nested remarks</remarks> tail</example>')) $exRemBlock1
-  Check 'STRUCTURAL 1 (round 3, cycle 1): "nested remarks" is NOT also duplicated into the real, separate <remarks> prose' `
+  Check 'N2 (T3h): "nested remarks" appears exactly ONCE after 3 cycles -- never duplicated into the engine''s own remarks prose' `
     (([regex]::Matches($exRemBlock1, [regex]::Escape('nested remarks'))).Count -eq 1) $exRemBlock1
+  Check 'N2 (T3h): the engine''s <remarks> opens straight onto the fence (no author prose adopted)' `
+    ($exRemBlock1 -match '(?m)^///\s*<remarks>\r?\n///\s*<!-- drag-lint:auto BEGIN -->') $exRemBlock1
+
+  # --- N2 (T3h): and the round-trip, which is the point. The residue these two
+  # used to accumulate was UNMARKED, so `document --strip` could not remove it and
+  # the file kept a <returns>/<remarks> the author never wrote, permanently. Each
+  # block must now come back to exactly what the fixture holds.
+  $pristineFixtureLines = [IO.File]::ReadAllLines($fixture)
+  foreach ($rt in @(
+      @{ q = 'preserve_tags.DeprecatedWithNestedReturns'; p = '^function DeprecatedWithNestedReturns: Integer;' },
+      @{ q = 'preserve_tags.ExampleWithNestedRemarks'   ; p = '^procedure ExampleWithNestedRemarks;'           })) {
+    & $exePath index $scratch --db $db 2>$null | Out-Null
+    & $exePath document --qname $rt.q --db $db --strip --apply 2>$null | Out-Null
+    Check "N2 (T3h) ROUND-TRIP: $($rt.q) --strip exits 0" ($LASTEXITCODE -eq 0)
+    $rtNow      = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) $rt.p
+    $rtPristine = Get-DocBlockAbove $pristineFixtureLines               $rt.p
+    Check "N2 (T3h) ROUND-TRIP: $($rt.q) returns to EXACTLY the author's own block" `
+      ($rtNow -ceq $rtPristine) ("pristine=[$rtPristine] now=[$rtNow]")
+  }
 
   # Every emitted /// line across PART 5 is 7-bit ASCII too.
   $linesPart5 = [IO.File]::ReadAllLines($target)

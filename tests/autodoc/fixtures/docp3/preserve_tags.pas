@@ -292,49 +292,47 @@ procedure ExampleWithNestedParam(AV: Integer);
 
 procedure CallsExampleWithNestedParam;
 
-// v(ADP3 T3b review round 3, STRUCTURAL 1 -- DISCLOSED RESIDUAL): the
-// PRIMARY reproduction (this row) is fixed and stable on the FIRST apply
-// cycle -- the nested <returns> text survives verbatim inside <deprecated>,
-// unmangled, and no standalone <returns> is fabricated from it. A SEPARATE,
-// deeper issue surfaces from the SECOND apply cycle on: this function's
-// AHasReturn=True means the "engine-owned, refill from mined cases" branch
-// ALSO adds a genuine, standalone, auto-marked <returns> tag on cycle 1 (a
-// real, separate signal, correctly independent of the deprecated tag).
-// MergeAdjacentSameKind then folds that freshly-inserted tag into the SAME
-// scanned region on cycle 2's scan, so the comment now contains TWO
-// <returns>-shaped spans (the original nested one, textually FIRST, and the
-// new standalone one, textually SECOND) -- and RxReturns' own '.Match()' has
-// no way to prefer one over the other by position; it takes the first.
-// <returns>/<summary>/<remarks> have no natural key the way <param>'s name
-// or <exception>'s cref do, so there is no way to correlate "this specific
-// text belongs to the standalone occurrence" without tracking SOURCE
-// POSITIONS through the parse -- ParseXmlDoc/BuildStandaloneFor currently
-// return only parsed VALUES, not character offsets, so disambiguating this
-// correctly would mean teaching the parser to track and propagate match
-// positions, a materially different (and larger) architecture change than
-// this task's scope. This is the same class of judgment call STRUCTURAL 1's
-// own review invited ("if the list genuinely cannot be made load-bearing
-// without restructuring MergeComment beyond this task's scope, say so
-// explicitly and stop") -- disclosed in the task report with the exact
-// reproduction, not fixed here. This fixture row therefore asserts ONLY the
-// cycle-1 property this task DOES guarantee (no fabrication, no data loss);
-// it does not claim 3-cycle stability the way the rows above do.
+// v(ADP3 T3b review round 3, STRUCTURAL 1 -- was a DISCLOSED RESIDUAL, FIXED
+// by v(ADP3 T3h) / register N2). T3b fixed the FIRST apply cycle -- the nested
+// <returns> text survives verbatim inside <deprecated>, unmangled, and no
+// standalone <returns> is fabricated from it -- but a deeper issue surfaced from
+// the SECOND cycle on: this function's AHasReturn=True means the "engine-owned,
+// refill from mined cases" branch ALSO adds a genuine, standalone, auto-marked
+// <returns> tag on cycle 1 (a real, separate signal, correctly independent of
+// the deprecated tag). MergeAdjacentSameKind then folds that freshly-inserted
+// tag into the SAME scanned region on cycle 2's scan, so the comment holds TWO
+// <returns>-shaped spans (the nested one textually FIRST, the new standalone one
+// SECOND) -- and RxReturns' '.Match()' takes the first. The presence gate
+// correctly described the standalone occurrence while the content read described
+// the nested one, so the nested text was emitted at the standalone slot,
+// UNMARKED, where `document --strip` could never remove it.
+//
+// T3h did NOT teach the parser to return offsets (TParsedDoc is index-facing;
+// its consumers are the indexer, LSP/MCP hover, the context bundler and drift).
+// Instead MergeComment locates the occurrence its OWN presence gate is True
+// about, by masking the other containers LENGTH-PRESERVINGLY -- the same spans
+// BuildStandaloneFor already strips, so "nested look-alike" keeps exactly the
+// definition every presence gate here already uses -- and reads the body back
+// out of the ORIGINAL text at that occurrence's offsets, so a tag legitimately
+// nested inside a genuinely standalone one still survives verbatim. See
+// TDocRegions.StandaloneBodyOf. This row now asserts 3-cycle stability AND the
+// strip round-trip, like every other nesting row.
 /// <deprecated>dep <returns>nested returns text</returns> tail</deprecated>
 function DeprecatedWithNestedReturns: Integer;
 
 procedure CallsDeprecatedWithNestedReturns;
 
-// v(ADP3 T3b review round 3, STRUCTURAL 1 -- DISCLOSED RESIDUAL, same class
-// as DeprecatedWithNestedReturns above): cycle 1 is fixed and stable (no
-// fabrication -- "nested remarks" stays inside <example>, and a SEPARATE,
-// genuine <remarks> facts block is added, not conflated with it). From
-// cycle 2 on, the same MergeAdjacentSameKind-induced compounding applies:
+// v(ADP3 T3b review round 3, STRUCTURAL 1 -- was a DISCLOSED RESIDUAL, same
+// class as DeprecatedWithNestedReturns above, FIXED by v(ADP3 T3h)): cycle 1 was
+// already stable (no fabrication -- "nested remarks" stays inside <example>, and
+// a SEPARATE, genuine <remarks> facts block is added, not conflated with it).
+// From cycle 2 on, the same MergeAdjacentSameKind-induced compounding applied:
 // the freshly-inserted facts <remarks> block folds into the same region,
-// <remarks> has no natural key either, and RxRemarks' '.Match()' picks the
-// textually-first <remarks> span (the one nested inside <example>) as
-// AExisting.Remarks, so "nested remarks" gets duplicated into the real
-// remarks prose. See DeprecatedWithNestedReturns' own comment for the full
-// reasoning; not fixed here, disclosed in the task report.
+// <remarks> has no natural key either, and RxRemarks' '.Match()' picked the
+// textually-first <remarks> span (the one nested inside <example>) as the prose,
+// so "nested remarks" got duplicated above the fence -- unmarked, so a strip left
+// a <remarks> element the author never wrote. See DeprecatedWithNestedReturns'
+// own comment for how T3h closed it.
 /// <example>ex <remarks>nested remarks</remarks> tail</example>
 procedure ExampleWithNestedRemarks;
 

@@ -77,6 +77,42 @@ type
     /// erased before it can be read back. MergeComment therefore calls this
     /// once per field, each time excluding that field's own container.</remarks>
     class function BuildStandaloneFor(const ARawBlock, AOwnTagName: string): TParsedDoc;
+    /// <summary>Body text of the FIRST GENUINELY STANDALONE occurrence of
+    /// ATagName in ARawBlock -- read verbatim out of the original text at that
+    /// occurrence's own offsets, then normalized exactly as
+    /// TDocCommentParser.ParseXmlDoc normalizes that tag. AFallback when there
+    /// is no standalone occurrence, or when the one found has an empty
+    /// body.</summary>
+    /// <param name="ATagName">One of PRESERVED_VERBATIM_CONTAINERS; raises if
+    /// not.</param>
+    /// <param name="AFallback">What to return when this function cannot improve
+    /// on the caller's own value -- always the caller's corresponding
+    /// TParsedDoc field, so the result is byte-identical to the pre-v(ADP3 T3h)
+    /// behaviour on every shape with at most one occurrence.</param>
+    /// <returns>The chosen occurrence's normalized body, or AFallback.</returns>
+    /// <remarks>v(ADP3 T3h, register N2). The COMPANION to BuildStandaloneFor:
+    /// that one answers PRESENCE ("is there a genuine, standalone tag of this
+    /// kind at all"), this one answers CONTENT ("and what does THAT occurrence
+    /// say"). MergeComment took presence from the filtered view and content from
+    /// the unfiltered singular field, so the two could describe DIFFERENT
+    /// occurrences -- and a nested look-alike's text was then written out at the
+    /// genuine tag's slot, unmarked, where `document --strip` could not remove
+    /// it.
+    /// A tag OCCURRENCE is identified by its character span in the cleaned text
+    /// (TDocCommentParser.BuildCleaned), obtained by masking every OTHER
+    /// container LENGTH-PRESERVINGLY instead of deleting it -- see MaskMatches.
+    /// "Nested look-alike" versus "genuine sibling" is therefore NOT a new
+    /// judgment: it is BuildStandaloneFor's existing one (the same
+    /// ContainerLoosePattern spans), now able to report WHERE as well as
+    /// WHETHER. Getting that distinction wrong in the permissive direction
+    /// destroys author content and in the conservative direction leaves the
+    /// defect, so it is deliberately not re-derived here.
+    /// NOT a fix for a tag nested inside ANOTHER unkeyed tag (a &lt;returns&gt;
+    /// inside a &lt;summary&gt;): MergeComment's HasAnySignal gate leaves the
+    /// filtered views switched off for that shape, which is the bounded residual
+    /// T3b round 3 disclosed and deliberately did not widen (it would put nine
+    /// extra parses on every plainly-documented symbol).</remarks>
+    class function StandaloneBodyOf(const ARawBlock, ATagName, AFallback: string): string;
     /// <summary>Partitions ARawBlock's LINES into the ones the engine can
     /// fully account for (returned, joined, in AAccountedRaw) and the ones it
     /// cannot (returned verbatim, in AResidualLines). True when at least one
@@ -430,18 +466,33 @@ begin
     Result:= Head + Tail;
 end;
 
+// The ONE spelling of the attribute-tolerant container pattern: non-greedy
+// content ([\s\S]*?), an optional attribute list on the opening tag
+// ((?:\s[^>]*)?, e.g. ' name="X"' for <param>). v(ADP3 T3h): factored out
+// because MaskMatches (see StandaloneBodyOf) must remove EXACTLY the spans
+// StripElement removes -- BuildStandaloneFor's strip is what defines "nested
+// inside another preserved container" for every presence gate in MergeComment,
+// and a mask built from a second, independently-maintained pattern string could
+// answer that question differently for content than the presence gate answered
+// it, which is the very class of presence/content disagreement this task fixes.
+// DELIBERATELY NOT the parser's stricter PRESERVED_CONTAINER_PATTERNS: those
+// answer "what can the emitter represent" (T3f's residual mask), a different
+// question -- see PRESERVED_CONTAINER_PATTERNS' own comment.
+function ContainerLoosePattern(const ATagName: string): string;
+begin
+  Result:= '<' + ATagName + '(?:\s[^>]*)?>[\s\S]*?</' + ATagName + '>';
+end;
+
 class function TDocRegions.StripElement(const S, ATagName: string): string;
 var
   Re: TRegEx;
 begin
-  // Non-greedy content match ([\s\S]*?), an optional attribute list on the
-  // opening tag ((?:\s[^>]*)?, e.g. ' name="X"' for <param>), ALL occurrences
-  // removed (TRegEx.Replace with no count limit replaces every match) -- see
-  // this function's own interface remarks for why "every occurrence, not
-  // just the first" matters (a hand-typed <param> repeats once per
-  // parameter; each is ALREADY preserved individually by MergeComment's own
+  // ALL occurrences removed (TRegEx.Replace with no count limit replaces every
+  // match) -- see this function's own interface remarks for why "every
+  // occurrence, not just the first" matters (a hand-typed <param> repeats once
+  // per parameter; each is ALREADY preserved individually by MergeComment's own
   // param loop, so each must also be excluded here).
-  Re:= TRegEx.Create('<' + ATagName + '(?:\s[^>]*)?>[\s\S]*?</' + ATagName + '>', [roIgnoreCase]);
+  Re:= TRegEx.Create(ContainerLoosePattern(ATagName), [roIgnoreCase]);
   Result:= Re.Replace(S, '');
 end;
 
@@ -527,6 +578,11 @@ const
 var
   ResidualRegexesReady: Boolean = False;
   RxResContainer      : array[0..7] of TRegEx;
+  // v(ADP3 T3h): the attribute-tolerant twin of RxResContainer, index-aligned
+  // with it and with PRESERVED_VERBATIM_CONTAINERS. Built from
+  // ContainerLoosePattern, the same function StripElement uses, so a mask and a
+  // strip can never disagree about what a container occupies.
+  RxLooseContainer    : array[0..7] of TRegEx;
   RxResSummaryBody    : TRegEx;
   RxResSee            : TRegEx;
   RxResDeprecatedBare : TRegEx;
@@ -539,6 +595,8 @@ begin
   if ResidualRegexesReady then Exit;
   for I:= Low(PRESERVED_CONTAINER_PATTERNS) to High(PRESERVED_CONTAINER_PATTERNS) do
     RxResContainer[I]:= TRegEx.Create(PRESERVED_CONTAINER_PATTERNS[I], [roIgnoreCase]);
+  for I:= Low(PRESERVED_VERBATIM_CONTAINERS) to High(PRESERVED_VERBATIM_CONTAINERS) do
+    RxLooseContainer[I]:= TRegEx.Create(ContainerLoosePattern(PRESERVED_VERBATIM_CONTAINERS[I]), [roIgnoreCase]);
   // Deliberately the PARSER's own <summary> pattern, character for character
   // (no attribute tolerance): this one is used only to decide whether
   // ParseXmlDoc's untagged-prefix fallback would fire, so it has to answer
@@ -558,6 +616,155 @@ begin
   ResidualRegexesReady:= True;
 end;
 
+// v(ADP3 T3h): position of ATagName within the two index-aligned container
+// arrays. Raises rather than returning -1: every caller passes a literal from
+// PRESERVED_VERBATIM_CONTAINERS, so a miss can only mean the arrays and a call
+// site have drifted apart, and a silent -1 would degrade into "no filtering at
+// all" -- exactly the pre-T3b behaviour these arrays exist to replace.
+function ContainerIndexOf(const ATagName: string): Integer;
+var
+  I: Integer;
+begin
+  for I:= Low(PRESERVED_VERBATIM_CONTAINERS) to High(PRESERVED_VERBATIM_CONTAINERS) do
+    if SameText(PRESERVED_VERBATIM_CONTAINERS[I], ATagName) then Exit(I);
+  raise Exception.CreateFmt(
+    'TDocRegions: "%s" is not one of PRESERVED_VERBATIM_CONTAINERS -- the ' +
+    'container arrays and a call site have drifted apart.', [ATagName]);
+end;
+
+// v(ADP3 T3h): True for the containers TDocCommentParser.ParseXmlDoc reads with
+// a SINGULAR .Match, so TParsedDoc holds exactly ONE body for them however many
+// the author wrote. MIRRORS that unit's own .Match-vs-.Matches choice, tag for
+// tag: summary/remarks/returns/example/since/deprecated are singular; <param>
+// (correlated by name) and <exception> (by cref) are plural .Matches and are
+// therefore NOT listed -- each of their occurrences gets its own emission and
+// none of them is ever surplus.
+//
+// Expressed as one function rather than a third array index-aligned with the
+// other two: the register already warns that the two parallel arrays are a
+// drift surface, and this predicate has to be READ next to the parser's
+// behaviour to be checked at all, which a bare column of Booleans would not be.
+function IsSingularMatchContainer(const ATagName: string): Boolean;
+begin
+  Result:=
+    SameText(ATagName, 'summary' ) or SameText(ATagName, 'remarks') or
+    SameText(ATagName, 'returns' ) or SameText(ATagName, 'example') or
+    SameText(ATagName, 'since'   ) or SameText(ATagName, 'deprecated');
+end;
+
+// v(ADP3 T3h): may a SURPLUS occurrence of this container be RETRACTED (handed
+// back to the author verbatim by SplitResidualLines)? Every singular-match
+// container EXCEPT <remarks>.
+//
+// <remarks> is excluded for a STRUCTURAL reason, not a cautionary one: it is the
+// only modeled tag MergeComment emits AFTER the carried-through residual block.
+// (Read that function's emission order: summary, deprecated, param, returns,
+// exception, example, seealso, since, THEN the residual lines, THEN <remarks>.)
+// So retracting a surplus <remarks> moves it AHEAD of the occurrence that keeps
+// the slot; the next scan therefore reads the OTHER one as occurrence 1, and the
+// two swap places on every run -- a period-2 permutation that never reaches a
+// fixed point. MEASURED, not hypothesized: a two-<remarks> shape oscillated
+// md5 A/B/A across three cycles when this predicate was still
+// IsSingularMatchContainer, which is a hard violation of the branch's binding
+// zero-byte-diff criterion.
+//
+// So while the residual block sits where T3f deliberately put it, the engine
+// simply cannot represent "a second <remarks> after the first"; a surplus
+// <remarks> stays accounted and its text is still lost -- exactly as before this
+// task, no better and no worse. Both tagoccurrence.TwoRemarks* shapes pin that,
+// so the outcome is uniform and visible instead of depending on whether the
+// symbol happens to have facts.
+function IsRetractableSurplusContainer(const ATagName: string): Boolean;
+begin
+  Result:= IsSingularMatchContainer(ATagName) and (not SameText(ATagName, 'remarks'));
+end;
+
+// v(ADP3 T3h): ParseXmlDoc's own per-tag normalization of a captured body, in
+// ONE place so a located body is normalized EXACTLY as the parsed one was --
+// <example> is Trim (a code sample's interior spacing is content), every other
+// container is CollapseWhitespace. Reading these apart would make the fix
+// visible as whitespace churn on shapes it is supposed to leave alone.
+function NormalizeContainerBody(const ATagName, ABody: string): string;
+begin
+  if SameText(ATagName, 'example') then Result:= Trim(ABody)
+  else Result:= TDocCommentParser.CollapseWhitespace(ABody);
+end;
+
+// v(ADP3 T3h): every match of ARe replaced by an EQUAL-LENGTH run of spaces
+// (line breaks kept as they are, so the masked copy has the same line structure
+// as well as the same length). That is the whole trick this task turns on: a
+// DELETING strip -- StripElement, hence BuildStandaloneFor -- destroys offsets,
+// so a match found in a stripped copy cannot be read back out of the original;
+// a length-preserving mask keeps every offset valid in BOTH, which makes "which
+// occurrence is genuinely standalone" and "what does that occurrence say" the
+// same question, answered once, instead of two answers that can disagree.
+function MaskMatches(const S: string; const ARe: TRegEx): string;
+var
+  MC: TMatchCollection;
+  I : Integer         ;
+  J : Integer         ;
+begin
+  Result:= S;
+  MC:= ARe.Matches(S);
+  for I:= 0 to MC.Count - 1 do
+    for J:= MC[I].Index to MC[I].Index + MC[I].Length - 1 do
+      if (Result[J] <> #13) and (Result[J] <> #10) then Result[J]:= ' ';
+end;
+
+class function TDocRegions.StandaloneBodyOf(const ARawBlock, ATagName, AFallback: string): string;
+var
+  Cleaned : string ;
+  Masked  : string ;
+  Own     : Integer;
+  I       : Integer;
+  M       : TMatch ;
+  OpenLen : Integer;
+  CloseLen: Integer;
+  BodyLen : Integer;
+  Body    : string ;
+begin
+  Result:= AFallback;
+  Own:= ContainerIndexOf(ATagName);
+  // The SAME text ParseXmlDoc matches against, so an offset means the same
+  // thing here as it does there (see BuildCleaned's own remarks).
+  Cleaned:= TDocCommentParser.BuildCleaned(ARawBlock);
+  if Cleaned = '' then Exit;
+  EnsureResidualRegexes;
+  Masked:= Cleaned;
+  for I:= Low(PRESERVED_VERBATIM_CONTAINERS) to High(PRESERVED_VERBATIM_CONTAINERS) do
+    if I <> Own then Masked:= MaskMatches(Masked, RxLooseContainer[I]);
+  // The parser's OWN strict pattern for this tag, on the masked copy: the
+  // occurrence found is therefore both (a) genuinely standalone, by
+  // BuildStandaloneFor's definition, and (b) exactly the span ParseXmlDoc would
+  // have captured, so the arithmetic below lands on the parser's own body.
+  M:= RxResContainer[Own].Match(Masked);
+  if not M.Success then Exit;
+  // Every one of the six singular containers has a FIXED-LENGTH opening tag
+  // (no attributes in the strict pattern), and roIgnoreCase cannot change a
+  // length -- so the body is the match minus '<tag>' and '</tag>', with no
+  // capture group needed.
+  OpenLen := Length(ATagName) + 2;
+  CloseLen:= Length(ATagName) + 3;
+  BodyLen := M.Length - OpenLen - CloseLen;
+  if BodyLen <= 0 then Exit;
+  // Read out of the UNMASKED text: anything legitimately nested inside this
+  // genuinely-standalone occurrence comes back verbatim. Reading the masked (or
+  // stripped) copy instead is what mangled '<deprecated>Added in <since>2.0
+  // </since> and still valid.' down to 'Added in  and still valid.' in an
+  // earlier round -- the reason every content read in MergeComment was moved off
+  // the filtered views in the first place.
+  Body:= NormalizeContainerBody(ATagName, Copy(Cleaned, M.Index + OpenLen, BodyLen));
+  // An EMPTY located body defers to AFallback rather than overriding it, which
+  // reproduces ParseXmlDoc's own 'if Result.Summary = '' then <untagged-prefix
+  // fallback>' semantics: for <summary> specifically, a present-but-empty tag is
+  // exactly when the parser adopts the region's leading prose, and returning ''
+  // here would blank a summary the parser had legitimately filled. For every
+  // other container the fallback is that container's own parsed value, which is
+  // '' too on this shape, so deferring changes nothing.
+  if Body = '' then Exit;
+  Result:= Body;
+end;
+
 class function TDocRegions.SplitResidualLines(const ARawBlock: string;
   AEngineEmitsOwnRemarks: Boolean;
   out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
@@ -567,6 +774,12 @@ type
   // is being handed back to the author verbatim instead.
   TResSpan = record
     Lo, Hi        : Integer;
+    // v(ADP3 T3h): index into PRESERVED_VERBATIM_CONTAINERS, or -1 for a span
+    // that is not a container at all (a <see>/<seealso>, a bare <deprecated/>,
+    // an engine marker, the untagged summary prefix). Needed to count a
+    // container's occurrences separately per tag, and to tell "nested inside
+    // ANOTHER container" from "nested inside itself".
+    TagIx         : Integer;
     IsExample     : Boolean;
     // v(ADP3 T3f review, IMPORTANT 2 and 3): True when the engine REGENERATES
     // this span's content rather than round-tripping it -- any <remarks> (the
@@ -598,8 +811,15 @@ var
   Changed  : Boolean        ;
   First    : Boolean        ;
   ResCount : Integer        ;
+  // v(ADP3 T3h): occurrence counter for the surplus pass. Declared HERE, and
+  // reset explicitly per tag, rather than as an inline `var Ordinal: Integer:= 0`
+  // inside the loop body -- an inline declaration in a loop is a footgun worth
+  // avoiding in a function this delicate, and "reset once per tag" is the whole
+  // correctness condition when a region carries surplus occurrences of TWO
+  // different tags (covered by tagoccurrence.TwoSinceAndTwoSummary).
+  Ordinal  : Integer        ;
 
-  procedure AddSpan(APos, ALen: Integer; AIsExample, AIsRemarks: Boolean);
+  procedure AddSpan(APos, ALen, ATagIx: Integer; AIsExample, AIsRemarks: Boolean);
   var
     Body: string;
   begin
@@ -608,6 +828,7 @@ var
     SetLength(Spans, Length(Spans) + 1);
     Spans[High(Spans)].Lo            := APos;
     Spans[High(Spans)].Hi            := APos + ALen - 1;
+    Spans[High(Spans)].TagIx         := ATagIx;
     Spans[High(Spans)].IsExample     := AIsExample;
     // Tested with RxResEngineMarker itself rather than a second, literal
     // spelling of the marker text -- one definition of "an engine marker",
@@ -639,14 +860,32 @@ var
     Spans[High(Spans)].Dropped       := False;
   end;
 
-  procedure AddMatches(const ARe: TRegEx; AIsExample, AIsRemarks: Boolean);
+  procedure AddMatches(const ARe: TRegEx; ATagIx: Integer; AIsExample, AIsRemarks: Boolean);
   var
     MC: TMatchCollection;
     M : Integer         ;
   begin
     MC:= ARe.Matches(Joined);
     for M:= 0 to MC.Count - 1 do
-      AddSpan(MC[M].Index, MC[M].Length, AIsExample, AIsRemarks);
+      AddSpan(MC[M].Index, MC[M].Length, ATagIx, AIsExample, AIsRemarks);
+  end;
+
+  // v(ADP3 T3h): True when span AIx sits entirely inside the span of a
+  // DIFFERENT container -- i.e. it is a nested look-alike, whose line the OUTER
+  // container already accounts for, so it never needs a slot of its own and can
+  // never be "surplus". Same containment shape as the multi-line-<example>
+  // nesting test below; TagIx is what makes "a different container" expressible
+  // (a span can only ever be compared against another CONTAINER, never against
+  // a marker or a <see>, and never against itself).
+  function NestedInOtherContainer(AIx: Integer): Boolean;
+  var
+    K2: Integer;
+  begin
+    Result:= False;
+    for K2:= 0 to High(Spans) do
+      if (Spans[K2].TagIx >= 0) and (Spans[K2].TagIx <> Spans[AIx].TagIx)
+         and (Spans[K2].Lo <= Spans[AIx].Lo) and (Spans[AIx].Hi <= Spans[K2].Hi) then
+        Exit(True);
   end;
 
 begin
@@ -684,19 +923,19 @@ begin
   EnsureResidualRegexes;
 
   for I:= Low(PRESERVED_VERBATIM_CONTAINERS) to High(PRESERVED_VERBATIM_CONTAINERS) do
-    AddMatches(RxResContainer[I],
+    AddMatches(RxResContainer[I], I,
       SameText(PRESERVED_VERBATIM_CONTAINERS[I], 'example'),
       SameText(PRESERVED_VERBATIM_CONTAINERS[I], 'remarks'));
   // <see>/<seealso>/<deprecated/> are round-tripped verbatim, so they ARE
   // retractable -- that is what lets an inline <see cref> inside an unmodeled
   // <para> stay on the author's own line instead of being hoisted out.
-  AddMatches(RxResSee           , False, False);
-  AddMatches(RxResDeprecatedBare, False, False);
+  AddMatches(RxResSee           , -1, False, False);
+  AddMatches(RxResDeprecatedBare, -1, False, False);
   // Engine markers carry AUTO_MARKER_LEAD by construction, so AddSpan marks
   // every one of them non-retractable: a line mixing the engine's own
   // bookkeeping with author content is ambiguous, and this whole mechanism
   // fails closed on ambiguity.
-  AddMatches(RxResEngineMarker  , False, False);
+  AddMatches(RxResEngineMarker  , -1, False, False);
 
   // ParseXmlDoc's untagged-prefix fallback: when no <summary> body survives,
   // the run before the first '<' (or the WHOLE text, when there is no '<' at
@@ -708,8 +947,8 @@ begin
   if (not SumM.Success) or (Trim(SumM.Groups[1].Value) = '') then
   begin
     var LtPos: Integer:= Pos('<', Joined);
-    if LtPos = 0 then AddSpan(1, Length(Joined), False, False)
-    else if LtPos > 1 then AddSpan(1, LtPos - 1, False, False);
+    if LtPos = 0 then AddSpan(1, Length(Joined), -1, False, False)
+    else if LtPos > 1 then AddSpan(1, LtPos - 1, -1, False, False);
   end;
 
   // v(ADP3 T3f review, IMPORTANT 2): lines inside an AUTO_BEGIN..AUTO_END fence
@@ -754,6 +993,47 @@ begin
         end;
       if not Nested then Spans[I].Dropped:= True;
     end;
+
+  // v(ADP3 T3h, register N2/D11): SURPLUS occurrences of a SINGULAR-MATCH
+  // container are retracted, so their lines come back verbatim.
+  //
+  // This is THIS FUNCTION's own rule -- "the engine owns a line only when it can
+  // represent EVERYTHING on it" -- applied to a capacity the mask was not
+  // testing. The mask accounted for every MATCH of a container pattern, while
+  // TParsedDoc holds exactly ONE body for these six tags (ParseXmlDoc reads them
+  // with .Match, not .Matches); so an author who wrote two <since> tags had the
+  // second one accounted -- hence NOT carried through -- and then never emitted,
+  // i.e. silently deleted. Counting occurrences here is what makes the mask
+  // agree with the parser's actual capacity rather than with its patterns.
+  //
+  // Ordinal 1 is the occurrence the emitter will use, and it is chosen by the
+  // SAME rule StandaloneBodyOf uses: the first one that is not nested inside
+  // another container. (A nested look-alike is skipped, not counted: its line is
+  // accounted by the OUTER container regardless, and it competes for no slot.)
+  // Spans for one tag are appended in match order, so ordinal order is source
+  // order.
+  //
+  // A NonRetractable surplus is deliberately LEFT ACCOUNTED -- the conservative
+  // direction. Retracting it would freeze engine-regenerated text (a marked
+  // <summary>/<returns>, say, which only a corrupted or hand-duplicated file can
+  // carry twice) as un-maintained, un-strippable author content, which this
+  // function already argues is the worse failure; the surplus text is then still
+  // lost, exactly as before this task, rather than newly damaged.
+  //
+  // <remarks> is excluded from the whole pass for a separate, structural reason
+  // -- see IsRetractableSurplusContainer, and the TwoRemarks* fixture shapes
+  // that pin the outcome.
+  for I:= Low(PRESERVED_VERBATIM_CONTAINERS) to High(PRESERVED_VERBATIM_CONTAINERS) do
+  begin
+    if not IsRetractableSurplusContainer(PRESERVED_VERBATIM_CONTAINERS[I]) then Continue;
+    Ordinal:= 0;
+    for J:= 0 to High(Spans) do
+      if (Spans[J].TagIx = I) and (not Spans[J].Dropped) and (not NestedInOtherContainer(J)) then
+      begin
+        Inc(Ordinal);
+        if (Ordinal > 1) and (not Spans[J].NonRetractable) then Spans[J].Dropped:= True;
+      end;
+  end;
 
   // Fixed-point closure. Retracting a span can leave a line that was accounted
   // only BECAUSE of it newly residual, which can in turn retract further
@@ -1394,6 +1674,25 @@ begin
     var StandaloneParam   : TParsedDoc;
     var StandaloneReturns : TParsedDoc;
     var StandaloneRemarks : TParsedDoc;
+    // v(ADP3 T3h, register N2): the CONTENT half of the presence/content split
+    // for the six SINGULAR-MATCH containers -- the body of the occurrence the
+    // matching Standalone* view found PRESENT, rather than of whichever
+    // occurrence happened to come first in the region. <param> and <exception>
+    // need no equivalent: they are plural .Matches and correlate by name/cref,
+    // so they already read the right occurrence's text (see their own loops).
+    //
+    // Computed in THIS block, on THIS gate, deliberately: presence and content
+    // must describe the SAME occurrence, so wherever presence falls back to the
+    // unfiltered Eff (HasAnySignal False -- no exotic container present to hide
+    // anything behind) content must fall back with it. Each call's fallback is
+    // the very field it replaces, so this is a byte-for-byte no-op on every
+    // shape with at most one occurrence of the tag -- see StandaloneBodyOf.
+    var BodySummary : string;
+    var BodyReturns : string;
+    var BodyRemarks : string;
+    var BodySince   : string;
+    var BodyDep     : string;
+    var BodyExample : string;
     if HasAnySignal then
     begin
       // v(ADP3 T3f): every one of these nine reads Eff.RawBlock, the ACCOUNTED
@@ -1414,6 +1713,12 @@ begin
       StandaloneParam   := BuildStandaloneFor(Eff.RawBlock, 'param');
       StandaloneReturns := BuildStandaloneFor(Eff.RawBlock, 'returns');
       StandaloneRemarks := BuildStandaloneFor(Eff.RawBlock, 'remarks');
+      BodySummary       := StandaloneBodyOf(Eff.RawBlock, 'summary'   , Eff.Summary       );
+      BodyReturns       := StandaloneBodyOf(Eff.RawBlock, 'returns'   , Eff.ReturnsText   );
+      BodyRemarks       := StandaloneBodyOf(Eff.RawBlock, 'remarks'   , Eff.Remarks       );
+      BodySince         := StandaloneBodyOf(Eff.RawBlock, 'since'     , Eff.SinceText     );
+      BodyDep           := StandaloneBodyOf(Eff.RawBlock, 'deprecated', Eff.DeprecatedText);
+      BodyExample       := StandaloneBodyOf(Eff.RawBlock, 'example'   , Eff.ExampleText   );
     end
     else
     begin
@@ -1426,6 +1731,12 @@ begin
       StandaloneParam   := Eff;
       StandaloneReturns := Eff;
       StandaloneRemarks := Eff;
+      BodySummary       := Eff.Summary       ;
+      BodyReturns       := Eff.ReturnsText   ;
+      BodyRemarks       := Eff.Remarks       ;
+      BodySince         := Eff.SinceText     ;
+      BodyDep           := Eff.DeprecatedText;
+      BodyExample       := Eff.ExampleText   ;
     end;
 
     // The mined return cases surface in exactly ONE place. For a symbol whose
@@ -1459,9 +1770,17 @@ begin
     // nested inside e.g. <deprecated>'s own text (reproduced: '<deprecated>
     // dep <returns>nested returns text</returns> tail</deprecated>') must
     // not ALSO be treated as this symbol's own hand-written returns tag.
+    // v(ADP3 T3h): the ownership test reads BodyReturns -- the body of the
+    // occurrence StandaloneReturns.HasReturnsTag is True ABOUT -- not Eff's
+    // first-occurrence-anywhere body. With a <returns> nested inside
+    // <deprecated> and the engine's OWN marked <returns> beside it, Eff's body
+    // is the nested (unmarked) one, so this read said "hand-written" about a tag
+    // that is engine-owned: the engine then re-emitted the nested text at its own
+    // slot, unmarked -- an unstrippable fabrication -- AND duplicated the mined
+    // case into a 'Returns:' fact line, breaking "never both".
     var ReturnsHandWritten: Boolean:=
       AExistingHasAnyTag and StandaloneReturns.HasReturnsTag
-      and (not IsEngineOwnedRegardlessOfContent(Eff.ReturnsText));
+      and (not IsEngineOwnedRegardlessOfContent(BodyReturns));
     var IncludeReturns: Boolean:=
       ReturnsHandWritten and AHasReturn and (Length(AFacts.ReturnCases) > 0);
     Facts:= RenderFactsBlock(AFacts, APrefix, IncludeReturns, AComplexityMin);
@@ -1535,7 +1854,13 @@ begin
     // <exception cref> -- see that fixture's own comment) -- HasSummaryTag
     // only needs to answer "is there a genuine, standalone summary at all",
     // never "what does it say".
-    var SummaryRaw: string:= Eff.Summary;
+    // v(ADP3 T3h): BodySummary, not Eff.Summary -- the body of the occurrence
+    // StandaloneSummary.HasSummaryTag is True ABOUT. The reasoning above still
+    // holds in full (a STRIPPED view's Summary would lose anything nested inside
+    // a genuinely standalone summary's own prose); StandaloneBodyOf reads the
+    // located occurrence out of the UNSTRIPPED text precisely so both properties
+    // hold at once.
+    var SummaryRaw: string:= BodySummary;
     if StandaloneSummary.HasSummaryTag and (not IsEngineOwnedRegardlessOfContent(SummaryRaw)) then
       Sb.AppendLine(EmitTagged('<summary>', SummaryRaw, '</summary>'))
     else if AFacts.HarvestedSummary <> '' then
@@ -1572,10 +1897,14 @@ begin
     // to "Added in  and still valid."). AExisting.DeprecatedText -- the
     // ORIGINAL, entirely unstripped parse -- is always the correct source
     // for the message text; only presence/absence needs the filtered view.
+    // v(ADP3 T3h): BodyDep, the located standalone occurrence's own message --
+    // still the UNSTRIPPED text, so the '"Added in <since>2.0</since> and still
+    // valid." -> "Added in  and still valid."' mangling this comment describes
+    // stays fixed; what changes is only WHICH <deprecated> supplies it.
     if StandaloneDep.Deprecated then
     begin
-      if Eff.DeprecatedText <> '' then
-        Sb.AppendLine(EmitTagged('<deprecated>', Eff.DeprecatedText, '</deprecated>'))
+      if BodyDep <> '' then
+        Sb.AppendLine(EmitTagged('<deprecated>', BodyDep, '</deprecated>'))
       else
         Sb.AppendLine(APrefix + '<deprecated/>');
     end;
@@ -1647,7 +1976,7 @@ begin
         // hand-written, including a deliberate blank slot -- preserved
         // verbatim; its mined cases (if any) went into the 'Returns:' fact
         // line above (IncludeReturns) instead of disturbing this text.
-        Sb.AppendLine(EmitTagged('<returns>', Eff.ReturnsText, '</returns>'))
+        Sb.AppendLine(EmitTagged('<returns>', BodyReturns, '</returns>'))
       else
       begin
         // engine-owned (marked -- ALWAYS, regardless of post-marker content,
@@ -1718,8 +2047,10 @@ begin
     // legitimately-nested tag (e.g. a nested <exception>) stripped out from
     // within it by BuildStandaloneFor('example')'s own exception/deprecated/
     // since strip.
+    // v(ADP3 T3h): BodyExample, the located standalone occurrence's own text
+    // (still unstripped, for the reason just above).
     if StandaloneExample.HasExampleTag then
-      Sb.AppendLine(EmitTagged('<example>', Eff.ExampleText, '</example>'));
+      Sb.AppendLine(EmitTagged('<example>', BodyExample, '</example>'));
 
     // <seealso>/<since>: v(ADP3 T3b) -- UNLIKE exception/example/deprecated,
     // these two DO have an engine-generated counterpart: RenderFactsBlock
@@ -1793,8 +2124,12 @@ begin
     // entirely unstripped parse) is always the correct source for the text,
     // exactly like DeprecatedText/exception Desc/ExampleText above; only
     // presence/absence needed the filtered view.
+    // v(ADP3 T3h): BodySince, the located standalone occurrence's own text. Note
+    // this is also where register D11 stops being a loss: a SECOND <since> is now
+    // a surplus occurrence, retracted by SplitResidualLines and carried through
+    // verbatim below, instead of being accounted for and then never emitted.
     if StandaloneSince.HasSinceTag then
-      Sb.AppendLine(EmitTagged('<since>', Eff.SinceText, '</since>'));
+      Sb.AppendLine(EmitTagged('<since>', BodySince, '</since>'));
 
     // v(ADP3 T3f): the carried-through residual -- every line of the original
     // region this function could not fully account for, verbatim, in source
@@ -1837,9 +2172,16 @@ begin
     // returns/since/param above) there is no unstripped content to read
     // instead; the whole point is that this text was never the author's
     // real remarks prose to begin with.
+    // v(ADP3 T3h): BodyRemarks, the located standalone occurrence's own prose.
+    // The gate alone was not enough: on the SECOND apply cycle the region holds
+    // BOTH the nested <remarks> and the engine's own (folded in by
+    // MergeAdjacentSameKind), so the gate correctly said "a standalone <remarks>
+    // exists" while Eff.Remarks still returned the NESTED one's text -- and
+    // 'nested remarks' was duplicated into the engine's prose slot, above the
+    // fence, unmarked, where --strip left it forever.
     var Prose: string:= '';
     if StandaloneRemarks.HasRemarksTag then
-      Prose:= StripManagedBlock(Eff.Remarks);
+      Prose:= StripManagedBlock(BodyRemarks);
     var NormProse: string:= StringReplace(Trim(Prose), #13#10, #10, [rfReplaceAll]);
     NormProse:= StringReplace(NormProse, #13, #10, [rfReplaceAll]);
     // v(ADP3 T2 adjacent fix): a SINGLE-LINE hand-written remarks with NO

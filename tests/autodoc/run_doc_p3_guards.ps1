@@ -1,8 +1,9 @@
 <#
   run_doc_p3_guards.ps1 -- Auto-Document Phase 3, Task 3d, GROUP B: the
   fail-closed guard that protects hand-written source (register D5), the two
-  T3f carry-through minors, and two shapes that STILL LOSE content and are
-  pinned here so the loss is visible in the suite instead of silent (D12, D11).
+  T3f carry-through minors, one shape that STILL LOSES content and is pinned here
+  so the gap is visible in the suite instead of silent (D12), and one that used
+  to and no longer does (D11 -- pin FLIPPED by T3h, see below).
 
   Fixture: fixtures\docp3\guards.pas -- see its own header for why each shape
   is contrived the way it is.
@@ -39,10 +40,13 @@
     the stale fact is never cleaned. Nothing is destroyed -- the guard is
     doing its job -- but the decay is not repaired either.
 
-  D11 -- TwoSinceTags: STILL REPRODUCES, pinned as a known loss. The parser
-    reads <since> with a singular .Match, so the second tag is dropped by the
-    parse and then deleted from the file by the repair. Same unkeyed-singular
-    class as register N2 (<summary>/<returns>/<remarks>), which task T3h owns.
+  D11 -- TwoSinceTags: FIXED by T3h, and this pin is FLIPPED to assert the fix.
+    It used to assert the loss (the parser reads <since> with a singular .Match,
+    so the second tag was dropped by the parse and then deleted from the file by
+    the repair). T3h closed it as one instance of the unkeyed-singular-match
+    class (register N2): the parse still models one <since>, but a SURPLUS
+    occurrence of a singular-match container is no longer accounted for by T3f's
+    residual mask, so its line is handed back verbatim.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -199,11 +203,24 @@ try {
   Check 'D12 the whole block is byte-identical (no edit is produced for this shape at all)' `
     ($decayedAfter -ceq $decayedBefore)
 
-  # --- D11: STILL REPRODUCES ------------------------------------------------
+  # --- D11: FIXED by T3h ----------------------------------------------------
+  # This pin used to assert the LOSS. Task 3h closed it as one instance of the
+  # unkeyed-singular-match class: the parser still models one <since>, but the
+  # SURPLUS occurrence is no longer accounted for by T3f's residual mask, so the
+  # line carrying it is handed back verbatim instead of being accounted and then
+  # never emitted. Order note: the engine's fixed emission order puts <summary>
+  # first and the carried-through residual after every modeled tag, so the two
+  # <since> tags come back adjacent, in source order, below the summary.
   $sinceAfter = Get-DocBlock $after $patSince
   Check 'D11 the FIRST <since> survives' ($null -ne $sinceAfter -and $sinceAfter.Contains('<since>1.0</since>'))
-  Check 'D11 KNOWN LOSS, pinned: the SECOND <since> is deleted (singular .Match parse; register N2 class, owned by T3h)' `
-    ($null -ne $sinceAfter -and -not $sinceAfter.Contains('<since>2.0</since>'))
+  Check 'D11 FIXED (T3h): the SECOND <since> survives too -- carried through verbatim, not deleted' `
+    ($null -ne $sinceAfter -and $sinceAfter.Contains('<since>2.0</since>')) $sinceAfter
+  Check 'D11 FIXED (T3h): each <since> appears exactly once -- carried through, not duplicated' `
+    ($null -ne $sinceAfter -and
+     (([regex]::Matches($sinceAfter, [regex]::Escape('<since>1.0</since>'))).Count -eq 1) -and
+     (([regex]::Matches($sinceAfter, [regex]::Escape('<since>2.0</since>'))).Count -eq 1)) $sinceAfter
+  Check 'D11 FIXED (T3h): the hand-written <summary> is untouched beside them' `
+    ($null -ne $sinceAfter -and $sinceAfter.Contains('<summary>Two since tags; the parser models only one.</summary>')) $sinceAfter
 
   # --- per-decl settled action ---------------------------------------------
   & $exePath index $scratch --db $db 2>$null | Out-Null

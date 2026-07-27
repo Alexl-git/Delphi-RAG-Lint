@@ -20,10 +20,12 @@
     SWEEP C  fixtures\docp3\idempotency_shapes.pas  --qname-scoped apply,
              one isolated scratch copy per symbol (the round-4 review's own
              measurement methodology, reproduced as a committed test)
-    SWEEP D  the KNOWN-UNSTABLE shapes: stability of CONTENT is explicitly
-             NOT claimed for these; their ACTUAL behaviour is pinned instead,
-             so a future fix breaks the pin loudly rather than silently
-             changing behaviour nothing covers.
+    SWEEP D  the two shapes that were KNOWN-UNSTABLE until T3h. Their ACTUAL
+             behaviour was pinned here (converges, but cycle 2 differs from
+             cycle 1 and --strip cannot undo it) so a future fix would break
+             the pin loudly rather than silently change behaviour nothing
+             covered. v(ADP3 T3h) did fix it, and the pin is FLIPPED: both now
+             settle on cycle 1 and round-trip through --strip byte-exactly.
 
   METHOD (all sweeps): apply -> reindex -> apply -> reindex -> apply, and
   assert an md5 FIXED POINT from cycle 2 onward (md5 of cycle 2 == md5 of
@@ -209,6 +211,13 @@ Check 'SWEEP A: symbols enumerated from the index' ($a.Symbols.Count -gt 0) "cou
 Write-Host ("  whole-file md5 by cycle: pristine={0} c1={1} c2={2} c3={3}" -f $a.FileMd5[0], $a.FileMd5[1], $a.FileMd5[2], $a.FileMd5[3])
 Check 'SWEEP A: whole-file md5 is a FIXED POINT from cycle 2 (c2 == c3)' ($a.FileMd5[2] -eq $a.FileMd5[3]) `
   "c2=$($a.FileMd5[2]) c3=$($a.FileMd5[3])"
+# v(ADP3 T3h): and now from cycle ONE -- the last two settle-at-cycle-2 shapes
+# were the N2 defect, so the whole 61-symbol file is a fixed point after the
+# first apply. Asserted separately from the c2==c3 check above so a regression
+# that reintroduces a late-settling shape is distinguishable from one that never
+# settles at all.
+Check 'SWEEP A: whole-file md5 is a fixed point from cycle ONE (c1 == c2)' ($a.FileMd5[1] -eq $a.FileMd5[2]) `
+  "c1=$($a.FileMd5[1]) c2=$($a.FileMd5[2])"
 Check 'SWEEP A: cycle-3 apply reports no edits' ($a.Actions[2] -match '"edits":0') $a.Actions[2]
 
 $aUnstable = @()
@@ -221,46 +230,31 @@ foreach ($s in $a.Symbols) {
 Check 'SWEEP A: EVERY symbol block is a fixed point from cycle 2' ($aUnstable.Count -eq 0) `
   ("unstable=" + ($aUnstable -join ','))
 
-# PINNED ACTUAL BEHAVIOUR -- two symbols in preserve_tags.pas settle at
-# CYCLE 2, not cycle 1. This is the PRE-EXISTING "additive-then-merge"
-# mechanism, disclosed in rounds 2 and 3 and NOT closed by round 4's guard:
-# cycle 1 takes the FRESH path and inserts a facts block ADJACENT to the
-# hand-written comment without touching it; on the next scan
-# MergeAdjacentSameKind folds the two into one region, whose <remarks> now has
-# real content, which flips ExistingHasAnyTag and routes cycle 2 through the
-# REPAIR path. Round 4's guard does NOT and MUST NOT suppress it: the guard
-# only fires when the block being inserted is ALREADY present verbatim, which
-# is not the case here.
+# PINNED ACTUAL BEHAVIOUR -- the set of symbols in preserve_tags.pas that settle
+# at CYCLE 2 rather than cycle 1. It is now EMPTY: every one of the 61 symbols
+# reaches its fixed point on the FIRST apply, so the whole-file md5 above is a
+# fixed point from cycle 1 too.
 #
-# v(ADP3 T3d2 N9): this paragraph used to characterise the WHOLE pinned set
-# as "a genuine, one-off, CONVERGENT improvement" (merging two stacked
-# blocks into one well-formed comment, not growth). That was accurate for
-# the THIRD member this pin held before T3c -- TabSeparatedSeeAlso (see the
-# T3c note below) -- now removed because it settles at cycle 1 instead. It
-# was NEVER accurate for the two members still pinned here.
-# DeprecatedWithNestedReturns and ExampleWithNestedRemarks are SWEEP D's
-# known-unstable shapes (the unkeyed-singular-match residual): their
-# settle-at-cycle-2 delta FABRICATES an unmarked tag that `--strip` cannot
-# remove, not a clean merge. SWEEP D below already discloses this correctly;
-# this paragraph did not match it until now.
-# Pinned as an EXACT set so it can only shrink deliberately, never grow
-# silently -- a new symbol appearing here is a new non-idempotent shape.
+# HISTORY, because an empty pin explains nothing on its own:
+#   * It held THREE names until T3c. TabSeparatedSeeAlso left then -- T3c widened
+#     TParsedDoc.HasContent to include Length(SeeAlso) > 0, which routes that decl
+#     through the REPAIR path from cycle 1 instead of needing the two-cycle
+#     additive-then-merge dance (cycle 1 takes the FRESH path and inserts a facts
+#     block ADJACENT to the hand-written comment; the next scan's
+#     MergeAdjacentSameKind folds the two into one region, whose <remarks> now has
+#     real content, which flips ExistingHasAnyTag).
+#   * v(ADP3 T3h): the last two, DeprecatedWithNestedReturns and
+#     ExampleWithNestedRemarks, left now. Their settle-at-cycle-2 delta was NOT a
+#     clean merge -- it FABRICATED an unmarked tag that `--strip` could not remove
+#     (register N2, the unkeyed-singular-match defect: content read from the
+#     first occurrence ANYWHERE while presence came from a filtered view that had
+#     removed the nested look-alike). T3h reads content from the located
+#     standalone occurrence instead, so cycle 2 has nothing left to change. SWEEP
+#     D below now asserts the fix, including the strip round-trip.
 #
-# v(ADP3 T3c): TabSeparatedSeeAlso DROPPED from this pin -- exactly the
-# "name DISAPPEARING is an improvement" case this comment's own Check message
-# anticipates. Task 3c widened TParsedDoc.HasContent to include
-# Length(SeeAlso) > 0 (a bare <seealso/> is documentation too, not just a
-# blank human slot -- see DRagLint.Parser.DocComments.pas' HasContent
-# comment), so Existing.HasContent is now True for this decl from cycle 1
-# (ExistingHasAnyTag ORs it in directly, unchanged code, in
-# DRagLint.Doc.Document.pas), which routes it through the REPAIR path
-# immediately instead of needing the two-cycle additive-then-merge dance
-# TabSeparatedSeeAlso's own fixture comment used to describe. Confirmed via
-# this sweep both ways: before the fix TabSeparatedSeeAlso appeared in
-# $aSettleAt2 (matching the three-name pin below); after, it does not, and
-# every OTHER assertion in this file (fixed points, non-destructiveness, the
-# guard-not-over-broad checks) is unaffected -- see task-3c-report.md.
-$aExpectedSettleAt2 = @('DeprecatedWithNestedReturns','ExampleWithNestedRemarks')
+# Kept as an EXACT set, empty or not: a NEW name appearing here is a new
+# non-idempotent shape and must be understood, never accommodated.
+$aExpectedSettleAt2 = @()
 $aSettleSorted = @($aSettleAt2 | Sort-Object)
 Write-Host ("  settles at cycle 2 (not cycle 1): " + ($aSettleSorted -join ', '))
 Check 'SWEEP A: the set of symbols that settle at cycle 2 is EXACTLY the pinned set' `
@@ -452,31 +446,33 @@ foreach ($pair in @(@{n='SWEEP A'; p=$a.Target}, @{n='SWEEP B'; p=$b.Target})) {
 }
 
 # ===========================================================================
-# SWEEP D -- KNOWN-UNSTABLE shapes: stability of CONTENT is NOT claimed.
+# SWEEP D -- the two formerly KNOWN-UNSTABLE shapes. PIN FLIPPED by T3h: these
+# now assert the FIX, including the strip round-trip.
 #
-# <returns>/<summary>/<remarks> have no natural key (RxReturns/RxSummary/
-# RxRemarks are singular .Match, not .Matches), so when MergeAdjacentSameKind
-# folds a separately-inserted auto tag into a region that ALSO contains a
-# nested look-alike, the singular read can pick the wrong occurrence from
-# cycle 2 on. Fixing that needs parser position-tracking -- out of scope,
-# scheduled as its own task (see task-3b-report.md, round 3 "disclosed
-# residual"). It DOES converge, so it passes the md5 fixed-point assertions
-# above; what is NOT true of it is that the content is what the author wrote.
+# What used to be true. <returns>/<summary>/<remarks> have no natural key
+# (RxReturns/RxSummary/RxRemarks are singular .Match, not .Matches), so when
+# MergeAdjacentSameKind folded a separately-inserted auto tag into a region that
+# ALSO contained a nested look-alike, the singular CONTENT read picked the wrong
+# occurrence from cycle 2 on while the PRESENCE gate correctly described the
+# other one. These shapes still converged, so they passed the md5 fixed-point
+# assertions above; what was not true was that the content was what the author
+# wrote -- and the residue was UNMARKED, so `document --strip` could not remove
+# it. This block pinned all three of those facts (converges / cycle 2 differs
+# from cycle 1 / strip does not restore) so a fix would break the pin loudly.
 #
-# Pinned below as ACTUAL behaviour so a future fix breaks the pin loudly:
-#   1. it converges (md5 c2 == c3) -- already asserted in SWEEP A;
-#   2. cycle 2 differs from cycle 1 (that difference IS the residue);
-#   3. the residue is UNMARKED, so `document --strip` cannot remove it --
-#      a broken strip round-trip, leaving a <returns>/<remarks> block the
-#      author never wrote.
+# It did. v(ADP3 T3h) reads the content of the occurrence the presence gate is
+# True ABOUT, located through a length-preserving mask, so:
+#   1. cycle 2 is now byte-identical to cycle 1 -- there is no residue to carry;
+#   2. `--strip` restores the pristine bytes EXACTLY, which is this task's
+#      acceptance criterion and the reason it existed at all.
+# Kept in its own sweep rather than folded into SWEEP A: the strip round-trip is
+# measured per symbol here, on an isolated scratch copy, which SWEEP A does not do.
 # ===========================================================================
 Write-Host ''
-Write-Host '=== SWEEP D: KNOWN-UNSTABLE shapes -- CONTENT stability is NOT claimed ===' -ForegroundColor Yellow
+Write-Host '=== SWEEP D: the two formerly-unstable shapes -- now asserting the FIX ===' -ForegroundColor Cyan
 Write-Host '    DeprecatedWithNestedReturns / ExampleWithNestedRemarks: the unkeyed-singular-match'
-Write-Host '    residual (parser position-tracking, out of scope). These CONVERGE, so they satisfy'
-Write-Host '    the md5 fixed-point criterion -- but their cycle-2+ content contains residue the'
-Write-Host '    author never wrote, and that residue is UNMARKED so --strip cannot remove it.'
-Write-Host '    Their ACTUAL behaviour is pinned below; stability of CONTENT is NOT claimed.'
+Write-Host '    defect (register N2), closed by T3h. Each must now settle on cycle 1 and round-trip'
+Write-Host '    through --strip back to the pristine bytes.'
 
 $dRoot = Join-Path C:\TEMP 'draglint_docp3sweep_known'
 if (Test-Path $dRoot) { Remove-Item $dRoot -Recurse -Force }
@@ -485,16 +481,18 @@ New-Item -ItemType Directory -Path $dRoot | Out-Null
 foreach ($nm in @('DeprecatedWithNestedReturns','ExampleWithNestedRemarks')) {
   $r = Invoke-QNameSweep $fxPreserve $dRoot "preserve_tags.$nm" ('known_' + $nm)
   Write-Host ('  {0,-30} sizes={1}  actions={2}' -f $nm, ($r.Sizes -join '->'), ($r.Actions -join ' '))
-  Check "SWEEP D: $nm CONVERGES (md5 c2 == c3) -- the fixed-point criterion IS met" `
+  Check "SWEEP D: $nm CONVERGES (md5 c2 == c3)" `
     ($r.Md5s[2] -eq $r.Md5s[3]) ("md5=" + ($r.Md5s -join ' '))
-  Check "SWEEP D: $nm cycle 2 DIFFERS from cycle 1 -- pinned: this delta IS the disclosed residue" `
-    ($r.Md5s[1] -ne $r.Md5s[2]) ("md5=" + ($r.Md5s -join ' '))
-  # --strip cannot recover the pristine bytes: the residue carries no marker.
+  Check "SWEEP D FIXED (T3h): $nm cycle 2 is IDENTICAL to cycle 1 -- the disclosed residue is gone" `
+    ($r.Md5s[1] -eq $r.Md5s[2]) ("md5=" + ($r.Md5s -join ' '))
+  Check "SWEEP D FIXED (T3h): $nm cycle-2 apply makes NO edit" `
+    ($r.Actions[1] -match '/0$') ($r.Actions -join ' ')
+  # THE acceptance criterion: --strip recovers the pristine bytes.
   & $exePath index $r.Scratch --db $r.Db 2>$null | Out-Null
   & $exePath document --qname "preserve_tags.$nm" --db $r.Db --strip --apply 2>$null | Out-Null
   $afterStrip = Get-FileMd5 $r.Target
-  Check "SWEEP D: $nm --strip does NOT restore the pristine bytes -- pinned BROKEN round-trip" `
-    ($afterStrip -ne $r.Md5s[0]) ("pristine=$($r.Md5s[0]) afterStrip=$afterStrip")
+  Check "SWEEP D FIXED (T3h): $nm --strip RESTORES the pristine bytes -- the round-trip holds" `
+    ($afterStrip -eq $r.Md5s[0]) ("pristine=$($r.Md5s[0]) afterStrip=$afterStrip")
 }
 
 Write-Host ''
@@ -502,9 +500,9 @@ Write-Host '--- SWEEP SUMMARY --------------------------------------------------
 Write-Host ("  SWEEP A  preserve_tags.pas      (unit)   symbols={0}  unstable={1}" -f $a.Symbols.Count, (@($aUnstable).Count))
 Write-Host ("  SWEEP B  idempotency_shapes.pas (unit)   symbols={0}  unstable={1}" -f $b.Symbols.Count, (@($bUnstable).Count))
 Write-Host ("  SWEEP C  idempotency_shapes.pas (qname)  symbols={0}  unstable={1}" -f $shapeSyms.Count, (@($cUnstable).Count))
-Write-Host  '  SWEEP D  STABILITY OF CONTENT IS NOT CLAIMED FOR: preserve_tags.DeprecatedWithNestedReturns,'
-Write-Host  '           preserve_tags.ExampleWithNestedRemarks (unkeyed singular-match residual; converges,'
-Write-Host  '           but carries unmarked residue --strip cannot remove -- see task-3b-report.md).'
+Write-Host  '  SWEEP D  preserve_tags.DeprecatedWithNestedReturns, preserve_tags.ExampleWithNestedRemarks:'
+Write-Host  '           the unkeyed singular-match defect (register N2), FIXED by T3h -- both now settle on'
+Write-Host  '           cycle 1 and --strip restores the pristine bytes (see task-3h-report.md).'
 Write-Host '-----------------------------------------------------------------------------'
 
 }
