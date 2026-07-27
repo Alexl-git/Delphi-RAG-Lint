@@ -134,10 +134,11 @@ $alphaLine = Get-LineNo $fx '^function Alpha\(AValue: Integer\): Integer;'
 $betaLine  = Get-LineNo $fx '^function Beta\(AValue: Integer\): Integer;'
 $gammaLine = Get-LineNo $fx '^function Gamma\(AValue: Integer\): Integer;'
 $epsLine   = Get-LineNo $fx '^function Epsilon\(AValue: Integer\): Integer;'
+$zetaLine  = Get-LineNo $fx '^function Zeta\(AValue: Integer\): Integer;'
 
-Check 'PREMISE: all four interface declarations are found' `
-  ($alphaLine -gt 0 -and $betaLine -gt 0 -and $gammaLine -gt 0 -and $epsLine -gt 0) `
-  "alpha=$alphaLine beta=$betaLine gamma=$gammaLine epsilon=$epsLine"
+Check 'PREMISE: all five interface declarations are found' `
+  ($alphaLine -gt 0 -and $betaLine -gt 0 -and $gammaLine -gt 0 -and $epsLine -gt 0 -and $zetaLine -gt 0) `
+  "alpha=$alphaLine beta=$betaLine gamma=$gammaLine epsilon=$epsLine zeta=$zetaLine"
 # SHAPE 1's whole point: Beta is on the line DIRECTLY after Alpha, so the line
 # intervening between Alpha's block and Beta is Alpha's own declaration.
 Check 'PREMISE SHAPE 1: Beta is declared on the line DIRECTLY after Alpha' `
@@ -161,6 +162,21 @@ Check 'PREMISE SHAPE 2: exactly ONE blank line sits between Gamma''s /// block a
 Check 'PREMISE SHAPE 3: TWO blank lines sit between Epsilon''s /// block and its declaration' `
   (($fx[$epsLine - 2].Trim() -eq '') -and ($fx[$epsLine - 3].Trim() -eq '') -and ($fx[$epsLine - 4].TrimStart().StartsWith('///'))) `
   "line$($epsLine-1)='$($fx[$epsLine-2])' line$($epsLine-2)='$($fx[$epsLine-3])' line$($epsLine-3)='$($fx[$epsLine-4])'"
+
+# SHAPE 4: exactly ONE intervening line that is NEITHER blank NOR a declaration.
+# Both halves matter and both are asserted: non-blank is what makes the blank
+# test refuse it (SCENARIO E), and "not a declaration" is what makes it the ONE
+# shape where this unit's blank test and FindDocRegionAbove's declaration test
+# disagree. Without these, SCENARIO E could silently degenerate into a duplicate
+# of SHAPE 1 (non-blank, but a declaration) and stop testing the narrowing.
+Check 'PREMISE SHAPE 4: exactly ONE intervening line sits between Zeta''s /// block and its declaration' `
+  (($zetaLine -ge 3) -and ($fx[$zetaLine - 3].TrimStart().StartsWith('///'))) `
+  "line$($zetaLine-2)='$($fx[$zetaLine-3])'"
+Check 'PREMISE SHAPE 4: that intervening line is NOT blank' `
+  ($fx[$zetaLine - 2].Trim() -ne '') "line$($zetaLine-1)='$($fx[$zetaLine-2])'"
+Check 'PREMISE SHAPE 4: that intervening line is NOT a declaration -- it is an ordinary // comment' `
+  ($fx[$zetaLine - 2].TrimStart().StartsWith('//') -and (-not $fx[$zetaLine - 2].TrimStart().StartsWith('///'))) `
+  "line$($zetaLine-1)='$($fx[$zetaLine-2])'"
 
 # ===========================================================================
 # SCENARIO A -- SHAPE 1: the defect, plus the anti-vacuity control.
