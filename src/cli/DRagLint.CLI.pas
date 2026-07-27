@@ -7054,20 +7054,23 @@ end; // function
 // for a specific file the user names explicitly.
 function DoDocumentStripQName(const AArgs: TArgs; const AStore: ISymbolStore): Integer;
 var
-  Syms       : TArray<TSymbol>  ;
-  Sym        : TSymbol          ;
-  Path       : string           ;
-  OneRes     : TStripResult     ;
-  RegionLo   : Integer          ;
-  RegionHi   : Integer          ;
-  SeenLo     : TArray<Integer>  ; // v(ADP3 T3d2 D8 review, Critical 1): every region already accumulated, this file only
-  SeenHi     : TArray<Integer>  ;
-  AlreadySeen: Boolean          ;
-  K          : Integer          ;
-  TagsSum    : Integer          ;
-  BlocksSum  : Integer          ;
-  AllEdits   : TArray<TTextEdit>;
-  Applied    : Boolean          ;
+  Syms          : TArray<TSymbol>  ;
+  Sym           : TSymbol          ;
+  Path          : string           ;
+  OneRes        : TStripResult     ;
+  RegionLo      : Integer          ;
+  RegionHi      : Integer          ;
+  SeenLo        : TArray<Integer>  ; // v(ADP3 T3d2 D8 review, Critical 1): every region already accumulated, this file only
+  SeenHi        : TArray<Integer>  ;
+  AlreadySeen   : Boolean          ;
+  K             : Integer          ;
+  TagsSum       : Integer          ;
+  BlocksSum     : Integer          ;
+  AllEdits      : TArray<TTextEdit>;
+  Applied       : Boolean          ;
+  SkippedCount  : Integer          ; // v(ADP3 T3d2 D8 review round 2, IMPORTANT): matches in other files, not touched
+  SkippedFileIds: TArray<Int64>    ; // the distinct other FileIds those skipped matches live in
+  FileAlreadySeen: Boolean         ;
 begin
   Syms:= AStore.FindSymbolsByQualifiedName(AArgs.QName);
   if Length(Syms) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
@@ -7075,14 +7078,33 @@ begin
   Path:= AStore.GetFilePath(Syms[0].FileId);
   if (Path = '') or (not TFile.Exists(Path)) then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
-  TagsSum  := 0;
-  BlocksSum:= 0;
-  AllEdits := nil;
-  SeenLo   := nil;
-  SeenHi   := nil;
+  TagsSum       := 0;
+  BlocksSum     := 0;
+  AllEdits      := nil;
+  SeenLo        := nil;
+  SeenHi        := nil;
+  SkippedCount  := 0;
+  SkippedFileIds:= nil;
   for Sym in Syms do
   begin
-    if Sym.FileId <> Syms[0].FileId then Continue; // IMPORTANT 2: this file only
+    if Sym.FileId <> Syms[0].FileId then
+    begin
+      // v(ADP3 T3d2 D8 review round 2, IMPORTANT): IMPORTANT 2's restriction
+      // to Syms[0]'s own file stands -- silently touching a file the report
+      // never names is the defect it fixed -- but SKIPPING must not itself
+      // be silent: that is the exact same "broken round-trip invariant"
+      // class D8 was raised to close, only relocated from same-file
+      // overloads to cross-file matches. Counted here; reported below,
+      // text mode only (same convention DoDocumentUnit's own
+      // AccessorsSkipped notice uses -- a supplementary human-readable
+      // line, never mixed into --json).
+      Inc(SkippedCount);
+      FileAlreadySeen:= False;
+      for K:= 0 to High(SkippedFileIds) do
+        if SkippedFileIds[K] = Sym.FileId then begin FileAlreadySeen:= True; Break; end;
+      if not FileAlreadySeen then SkippedFileIds:= SkippedFileIds + [Sym.FileId];
+      Continue;
+    end;
 
     OneRes:= TDocStripper.StripSymbolRegion(Path, Sym.StartLine, RegionLo, RegionHi);
     if RegionLo = 0 then Continue; // no doc region found above this decl at all
@@ -7109,6 +7131,10 @@ begin
 
   Result:= ReportStrip(AArgs, ['qname', 'file'], [AArgs.QName, Path], TagsSum, BlocksSum,
     AllEdits, Applied, ' in ' + Path);
+
+  if (not AArgs.AsJson) and (SkippedCount > 0) then
+    Writeln(Format('note: %d other match(es) for %s in %d other file(s) were NOT touched -- rerun with --unit <file> to strip those.',
+      [SkippedCount, AArgs.QName, Length(SkippedFileIds)]));
 end; // function
 
 // AutoDocument Chunk 1: drag-lint document --qname X [--apply|--json|--no-backup] [--db PATH]

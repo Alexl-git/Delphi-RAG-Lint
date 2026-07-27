@@ -336,7 +336,7 @@ end;
 // applies to a malformed fence below.
 //
 // v(ADP3 T3d2 D10): this header used to say the span must hold "exactly
-// one" fence, which underclaimed what the loop above actually accepts; the
+// one" fence, which underclaimed what the loop below actually accepts; the
 // code was already correct; only the header was not.
 function IsFenceOnlyRemarksSpan(const Lines: TArray<string>; AOpenIx: Integer;
   out ACloseIx: Integer): Boolean;

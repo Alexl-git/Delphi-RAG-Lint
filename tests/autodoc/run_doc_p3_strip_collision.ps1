@@ -1,7 +1,8 @@
 <#
-  run_doc_p3_strip_collision.ps1 -- Auto-Document Phase 3 T3d2, D8 review round 1:
+  run_doc_p3_strip_collision.ps1 -- Auto-Document Phase 3 T3d2, D8 review:
   pins the fixes for CRITICAL 1 (region-collision corruption) and IMPORTANT 2
-  (writes to files the report never names).
+  (writes to files the report never names), plus review round 2's IMPORTANT
+  (the cross-file skip must be reported, not silent).
 
   PART A -- CRITICAL 1: two declarations sharing one qualified name (Delphi
   `overload;`) on CONSECUTIVE source lines, with an engine-owned doc comment
@@ -21,11 +22,14 @@
   the correct, non-doubled counts and leaves both declarations intact, with a
   byte-identical round-trip back to the pre-apply source.
 
-  PART B -- IMPORTANT 2: a qualified name that resolves across TWO DIFFERENT
-  FILES (two units sharing a name, e.g. the same unit duplicated per project
-  tree -- 34 such cases measured in the real ORM3 index). Proves --qname
-  --strip touches ONLY Syms[0]'s own file and reports exactly that file --
-  never a silent edit to a file the report does not name.
+  PART B -- IMPORTANT 2 + review round 2's IMPORTANT: a qualified name that
+  resolves across TWO DIFFERENT FILES (two units sharing a name, e.g. the same
+  unit duplicated per project tree -- 34 such cases measured in the real ORM3
+  index). Proves --qname --strip touches ONLY Syms[0]'s own file and reports
+  exactly that file in its summary, AND that the file it does NOT touch is
+  named in a note -- silently leaving a match unstripped is exactly the
+  broken-round-trip class D8 was raised to close, only relocated from
+  same-file overloads to cross-file matches.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -59,6 +63,17 @@ $pristineBytes = [IO.File]::ReadAllBytes($targetA)
 & $exePath index $scratchA --db $dbA 2>$null | Out-Null
 Check 'A: index exits 0' ($LASTEXITCODE -eq 0)
 
+# v(ADP3 T3d2 D8 review round 2, minor 3): the collision this runner exists to
+# exercise depends on strip_collision.Combine resolving to exactly TWO rows.
+# If an indexer change ever collapsed the two overloads into one row, every
+# check below would still pass while no longer testing the collision at all
+# -- assert the premise the same way PART B already asserts its own
+# ("dup.Widget resolves across exactly TWO files").
+$combineRowsOut = (& $exePath query --name Combine --db $dbA --json 2>$null) -join "`n"
+Check 'A: query --name Combine exits 0' ($LASTEXITCODE -eq 0)
+Check 'A FIXTURE: strip_collision.Combine resolves to exactly TWO rows' `
+  ((([regex]::Matches($combineRowsOut, '"qualified_name"\s*:\s*"strip_collision\.Combine"')).Count) -eq 2) $combineRowsOut
+
 # document --qname always targets Syms[0] only (TDocumenter.BuildFor takes a
 # bare qualified name, not a resolved row -- see TDocBatch.DocumentUnit's own
 # "Bug A" comment for why the BATCH path had to change this). For an
@@ -85,6 +100,14 @@ Check 'A FIXTURE: an engine-owned comment sits directly above the FIRST overload
 Check 'A FIXTURE: the SECOND overload has NO comment line directly above it (its own declaration line is what sits there)' `
   ($declBIx -ge 1 -and (-not $afterApplyLines[$declBIx - 1].TrimStart().StartsWith('///')))
 
+# v(ADP3 T3d2 D8 review round 2, minor 4): this must run NOW, while the file
+# actually carries the engine-written /// lines -- run after the round-trip
+# restore below, it inspects a file with no /// lines left at all and can
+# never fire regardless of what the engine emits.
+foreach ($l in $afterApplyLines) {
+  if ($l -match '^\s*///') { foreach ($ch in $l.ToCharArray()) { if ([int]$ch -gt 126) { Check 'A: every emitted /// line is 7-bit ASCII' $false $l; break } } }
+}
+
 # --- The fix under test: --qname --strip --apply must not corrupt either decl ---
 & $exePath index $scratchA --db $dbA 2>$null | Out-Null
 Check 'A: re-index before strip exits 0' ($LASTEXITCODE -eq 0)
@@ -94,8 +117,11 @@ Check 'A: document --qname --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 
 # CRITICAL: the exact counts must be 1/1/1 -- NOT doubled. A regression back
 # to the union-with-no-dedup shape would report tagsRemoved:2, blocksRemoved:2.
+# v(ADP3 T3d2 D8 review round 2, minor 5): anchored with [,}] -- the same
+# unanchored-substring shape removed from run_pipeline_tests.ps1:67 earlier in
+# this task would let "tagsRemoved":12 etc. false-pass a 1-vs-doubled check.
 Check 'A CRITICAL: reports the NON-DOUBLED counts (tagsRemoved:1, blocksRemoved:1, edits:1)' `
-  ($stripOut -match '"tagsRemoved":1' -and $stripOut -match '"blocksRemoved":1' -and $stripOut -match '"edits":1') $stripOut
+  ($stripOut -match '"tagsRemoved":1[,}]' -and $stripOut -match '"blocksRemoved":1[,}]' -and $stripOut -match '"edits":1[,}]') $stripOut
 
 $afterStripText = [IO.File]::ReadAllText($targetA)
 Check 'A CRITICAL: the FIRST overload declaration SURVIVES intact' `
@@ -114,18 +140,22 @@ Check 'A ROUND-TRIP: file is BYTE-IDENTICAL to the pre-apply pristine fixture' `
   ([System.Linq.Enumerable]::SequenceEqual([byte[]]$pristineBytes, [byte[]]$afterStripBytes))
 
 # --- Idempotency: a second strip --apply is a no-op ---
+# v(ADP3 T3d2 D8 review round 2, minor 2): both calls now checked. Before this
+# fix, an engine crash on EITHER line would leave the file untouched, and the
+# "byte-identical" check right below would pass regardless -- a crash and a
+# genuine no-op look identical to a check that only compares file bytes. The
+# exact pattern this same task's item 5 removed from four other runners.
 & $exePath index $scratchA --db $dbA 2>$null | Out-Null
+Check 'A IDEMPOTENT: re-index before the second strip exits 0' ($LASTEXITCODE -eq 0)
 & $exePath document --qname strip_collision.Combine --db $dbA --strip --apply --json 2>$null | Out-Null
+Check 'A IDEMPOTENT: the second strip --apply itself exits 0' ($LASTEXITCODE -eq 0)
 $afterStrip2Bytes = [IO.File]::ReadAllBytes($targetA)
 Check 'A IDEMPOTENT: a second strip --apply is byte-identical (no further change)' `
   ([System.Linq.Enumerable]::SequenceEqual([byte[]]$afterStripBytes, [byte[]]$afterStrip2Bytes))
 
-foreach ($l in [IO.File]::ReadAllLines($targetA)) {
-  if ($l -match '^\s*///') { foreach ($ch in $l.ToCharArray()) { if ([int]$ch -gt 126) { Check 'A: every /// line is 7-bit ASCII' $false $l; break } } }
-}
-
 # ===========================================================================
-# PART B -- IMPORTANT 2: a qname spanning two DIFFERENT files
+# PART B -- IMPORTANT 2 + review round 2's IMPORTANT: a qname spanning two
+# DIFFERENT files, and the skip must be reported, not silent.
 # ===========================================================================
 Write-Host ''
 Write-Host '=== PART B: IMPORTANT 2 -- a qname that resolves across two files ===' -ForegroundColor Cyan
@@ -189,10 +219,25 @@ $whichFirst = (& $exePath query --name Widget --db $dbB --json 2>$null) -join "`
 $firstFile = $whichFirst[0].file
 $strippedIsX = $firstFile -like '*projX*'
 
-$stripOutB = (& $exePath document --qname dup.Widget --db $dbB --strip --apply --json 2>$null) -join ' '
+# v(ADP3 T3d2 D8 review round 2, IMPORTANT): TEXT mode, not --json -- the skip
+# note is deliberately text-only (same convention as DoDocumentUnit's own
+# AccessorsSkipped notice: a supplementary human-readable line, never mixed
+# into --json output for a script consumer to trip over). This is the ONE
+# invocation that must both report the strip correctly AND surface the note;
+# splitting it into a separate JSON call for file-content checks and a
+# separate text call for the note would test two different runs instead of
+# proving THIS run does both.
+$stripOutB = (& $exePath document --qname dup.Widget --db $dbB --strip --apply 2>$null) -join "`n"
 Check 'B: document --qname --strip --apply exits 0' ($LASTEXITCODE -eq 0)
-Check 'B: the report names exactly ONE file (Syms[0]''s own)' `
-  ($stripOutB -match '"file":"[^"]*dup\.pas"' -and (([regex]::Matches($stripOutB, 'dup\.pas')).Count -eq 1)) $stripOutB
+Check 'B: the summary line names exactly ONE file path (Syms[0]''s own)' `
+  ((([regex]::Matches($stripOutB, [regex]::Escape('dup.pas')))).Count -eq 1) $stripOutB
+# v(ADP3 T3d2 D8 review round 2, IMPORTANT): this is the check that used to be
+# missing -- PART B previously asserted only that the other file was silently
+# untouched, which PINNED the silence as correct rather than proving it was
+# reported. Restricting to Syms[0]'s file (IMPORTANT 2) still stands; the
+# silence about the one skipped elsewhere does not.
+Check 'B IMPORTANT: a note names how many OTHER matches in how many OTHER files were skipped' `
+  ($stripOutB -match 'note:\s*1\s*other match\(es\)\s*for\s*dup\.Widget\s*in\s*1\s*other file\(s\)\s*were NOT touched') $stripOutB
 
 $xAfterStrip = [IO.File]::ReadAllBytes((Join-Path $dirX 'dup.pas'))
 $yAfterStrip = [IO.File]::ReadAllBytes((Join-Path $dirY 'dup.pas'))
