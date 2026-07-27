@@ -11,7 +11,8 @@
 #   pwsh -File tests/autotest/run_smoke.ps1 -Exe path\to\drag-lint.exe
 #
 # Coverage:
-#   1. drag-lint.exe --version reports the expected version string
+#   1. drag-lint.exe --version matches src\cli\DRagLint.CLI.pas's VERSION const
+#      (i.e. the deployed exe was built from this source tree -- a staleness guard)
 #   2. drag-lint.exe index <fixture> --db <tmp.sqlite> succeeds + finds known symbols
 #   3. drag-lint.exe query --name KnownMethod returns the indexed symbol
 #   4. drag-lint.exe query find-callers --name KnownMethod returns >= 1 ref
@@ -28,10 +29,22 @@
 #   - v0.40.1 log path mismatch  : N/A here, only fires in IDE dialogs
 #   - v0.40.2 Stop hangs forever : LSP shutdown timing check
 
+# Exe target (v0.86 policy, user ruling 2026-07-05 -- see
+# src\delphi-plugin\DragLint.Plugin.ExeResolver.pas): the IDE BPL is the only
+# 32-bit artifact; every process the plugin spawns defaults to the **Win64**
+# CLI, and the Win32 sibling is a "just in case" fallback that is no longer
+# built (third_party\dll-win32\drag-lint.exe has been frozen since 2026-07-05).
+# This runner used to default to that frozen Win32 exe, which is why it went
+# red and stayed red: it was smoke-testing a binary the product does not use.
+# Pass -Exe explicitly to smoke a Win32 build on purpose.
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win32\drag-lint.exe",
-    [string] $ExpectedVersion = '0.46.0-alpha',
+    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    # Empty = read the expected version from the single source of truth,
+    # src\cli\DRagLint.CLI.pas's VERSION const. A hardcoded literal here went
+    # stale twice over (it pinned 0.46.0-alpha while the CLI reached
+    # 1.2.1-alpha), so the check reported a release bump as a smoke failure.
+    [string] $ExpectedVersion = '',
     [string] $FixtureDir = "$PSScriptRoot\fixtures",
     [string] $WorkDir = "$env:TEMP\drag-lint-autotest",
     [int]    $InitTimeoutMs = 3000,
@@ -41,6 +54,19 @@ param(
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $script:Results = @()
+
+if ($ExpectedVersion -eq '') {
+    $cliUnit = Join-Path $PSScriptRoot '..\..\src\cli\DRagLint.CLI.pas'
+    if (Test-Path $cliUnit) {
+        $head = (Get-Content $cliUnit -TotalCount 20) -join "`n"
+        $m = [regex]::Match($head, "VERSION\s*=\s*'([^']+)'")
+        if ($m.Success) { $ExpectedVersion = $m.Groups[1].Value }
+    }
+    if ($ExpectedVersion -eq '') {
+        Write-Host "FATAL: could not read VERSION from $cliUnit -- pass -ExpectedVersion" -ForegroundColor Red
+        exit 2
+    }
+}
 
 function Write-Check {
     param([string] $Name, [bool] $Ok, [string] $Detail = '', [double] $Ms = 0)
@@ -91,20 +117,27 @@ Write-Host ""
 Run-Stage 'CLI smoke' {
 
     $t0 = [Diagnostics.Stopwatch]::StartNew()
-    $verOut = & $Exe --version 2>&1
+    # STDOUT ONLY. The engine writes a '(loaded defaults from ...)' preamble and
+    # the 'FTS5 probe: ...' line to *stderr*; `2>&1` merged them into the same
+    # pipeline, where the interleaving order is not deterministic. Every check
+    # below scans stdout, so stderr must not be folded into it.
+    $verOut = & $Exe --version 2>$null
     $t0.Stop()
-    # v0.48: join to a scalar -- the engine prints a 2nd '(loaded defaults ...)'
-    # line, and `$array -match` returns the matching ELEMENTS (an array), which
-    # broke the [bool] $Ok param. Join first so -match yields a scalar bool.
+    # v0.48: join to a scalar -- `$array -match` returns the matching ELEMENTS
+    # (an array), which broke the [bool] $Ok param. Join first.
     $verStr = ($verOut | Out-String)
     Write-Check '--version exits 0'        ($LASTEXITCODE -eq 0) $verStr $t0.Elapsed.TotalMilliseconds
-    Write-Check '--version matches expected' ([bool]($verStr -match [Regex]::Escape($ExpectedVersion))) $verStr
+    Write-Check "--version matches expected ($ExpectedVersion)" ([bool]($verStr -match [Regex]::Escape($ExpectedVersion))) $verStr
 
     $t1 = [Diagnostics.Stopwatch]::StartNew()
-    $indexOut = & $Exe index $FixtureDir --db $db 2>&1 | Select-Object -Last 1
+    # STDOUT ONLY, and scan the WHOLE output: 'Symbols: N' is not guaranteed to
+    # be the last stdout line, and taking -Last 1 of a stderr-merged stream is
+    # how this check used to read the FTS5 probe line instead of the summary.
+    $indexOut = (& $Exe index $FixtureDir --db $db 2>$null | Out-String)
     $t1.Stop()
-    Write-Check 'index fixture exits 0' ($LASTEXITCODE -eq 0) $indexOut $t1.Elapsed.TotalMilliseconds
-    Write-Check 'index reports >= 1 symbol' ($indexOut -match 'Symbols:\s*[1-9]\d*') $indexOut
+    $indexTail = (($indexOut -split "`r?`n" | Where-Object { $_.Trim() -ne '' } | Select-Object -Last 1))
+    Write-Check 'index fixture exits 0' ($LASTEXITCODE -eq 0) $indexTail $t1.Elapsed.TotalMilliseconds
+    Write-Check 'index reports >= 1 symbol' ([bool]($indexOut -match 'Symbols:\s*[1-9]\d*')) $indexTail
 
     $t2 = [Diagnostics.Stopwatch]::StartNew()
     $qOut = & $Exe query --name KnownMethod --db $db 2>&1
