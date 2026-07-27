@@ -110,10 +110,20 @@ type
     /// container is deliberately treated as unaccounted: it IS modeled, but the
     /// engine cannot re-serialize a code sample without destroying its interior
     /// indentation, so handing it back verbatim is the only faithful option.
-    /// Accounted spans are the eight PRESERVED_VERBATIM_CONTAINERS, the self-
-    /// closing &lt;see&gt;/&lt;seealso&gt;/&lt;deprecated/&gt; forms, the engine's own
+    /// Accounted spans are the eight PRESERVED_VERBATIM_CONTAINERS -- matched
+    /// with THE PARSER's own strict patterns, never StripElement's
+    /// attribute-tolerant ones, so a tag the parser cannot represent (an
+    /// attributed &lt;remarks xml:lang="en"&gt;, a cref-less &lt;exception&gt;) falls to
+    /// residual instead of being accounted and then silently dropped -- plus
+    /// the self-closing &lt;see&gt;/&lt;seealso&gt;/&lt;deprecated/&gt; forms, the engine's own
     /// drag-lint HTML markers, and the untagged leading run that
-    /// ParseXmlDoc's own fallback turns into the summary.</remarks>
+    /// ParseXmlDoc's own fallback turns into the summary. Two shapes FAIL
+    /// CLOSED and abort the whole mechanism for the region (this returns False,
+    /// so the caller behaves exactly as it did before v(ADP3 T3f)): a residual
+    /// line overlapping a span whose content the engine REGENERATES rather than
+    /// round-trips (any &lt;remarks&gt;, or any span carrying an engine marker), and
+    /// an AUTO_BEGIN with no matching AUTO_END. Lines inside a well-formed
+    /// fence are never residual at all -- they are re-derived every run.</remarks>
     class function SplitResidualLines(const ARawBlock: string;
       out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
   public
@@ -459,13 +469,42 @@ end;
 // from ParseXmlDoc. Not thread-guarded, same as that cache and for the same
 // reason (doc parsing is single-threaded in this codebase).
 //
-// RxResContainer mirrors StripElement's pattern EXACTLY (attributes optional
-// on the opening tag), not the parser's stricter per-tag regex: this is the
-// set BuildStandaloneFor strips, so the two must agree on what a container
-// occupies. Using the parser's stricter form instead would reclassify a
-// malformed-but-tag-shaped span (a '<exception>' with no cref, a '<seealso>'
-// with no cref) as residual and silently change behaviour for shapes that
-// have nothing to do with this fix.
+// v(ADP3 T3f review, IMPORTANT 1): RxResContainer mirrors THE PARSER's own
+// per-tag patterns, character for character, NOT StripElement's
+// attribute-tolerant form. The mask decides what the emitter will re-emit, and
+// the emitter can only re-emit what the parser REPRESENTED -- so the two must
+// agree or the gap between them is silently deleted.
+//
+// The first cut of this used StripElement's '<TAG(?:\s[^>]*)?>...</TAG>' on the
+// reasoning that BuildStandaloneFor strips with that pattern, so the two "must
+// agree on what a container occupies". That reasoning was wrong: the strip set
+// and the REPRESENTATION set are different questions, and four shapes fell in
+// the gap and were destroyed by a single `document --apply` -- '<exception>'
+// with no cref, '<param>' with no name, and the perfectly VALID attributed
+// forms '<remarks xml:lang="en">' and '<example lang="pascal">'. None of them
+// is captured by the parser, so none is ever re-emitted; accounting for them
+// meant they were not carried through either. With the strict patterns they
+// fall to residual and survive verbatim.
+//
+// There is no interaction with BuildStandaloneFor's looser strip: a line the
+// mask does not account for is REMOVED from the accounted text before
+// BuildStandaloneFor ever sees it, so StripElement is never handed the shape
+// the two patterns disagree about.
+//
+// INDEX-ALIGNED with PRESERVED_VERBATIM_CONTAINERS, entry for entry. Adding a
+// container name there requires adding its pattern here at the same index.
+const
+  PRESERVED_CONTAINER_PATTERNS: array[0..7] of string = (
+    '<summary>[\s\S]*?</summary>',
+    '<param\s+name="[^"]+">[\s\S]*?</param>',
+    '<returns>[\s\S]*?</returns>',
+    '<remarks>[\s\S]*?</remarks>',
+    '<exception\s+cref="[^"]+">[\s\S]*?</exception>',
+    '<example>[\s\S]*?</example>',
+    '<deprecated>[\s\S]*?</deprecated>',
+    '<since>[\s\S]*?</since>'
+  );
+
 var
   ResidualRegexesReady: Boolean = False;
   RxResContainer      : array[0..7] of TRegEx;
@@ -479,10 +518,8 @@ var
   I: Integer;
 begin
   if ResidualRegexesReady then Exit;
-  for I:= Low(PRESERVED_VERBATIM_CONTAINERS) to High(PRESERVED_VERBATIM_CONTAINERS) do
-    RxResContainer[I]:= TRegEx.Create(
-      '<' + PRESERVED_VERBATIM_CONTAINERS[I] + '(?:\s[^>]*)?>[\s\S]*?</' +
-      PRESERVED_VERBATIM_CONTAINERS[I] + '>', [roIgnoreCase]);
+  for I:= Low(PRESERVED_CONTAINER_PATTERNS) to High(PRESERVED_CONTAINER_PATTERNS) do
+    RxResContainer[I]:= TRegEx.Create(PRESERVED_CONTAINER_PATTERNS[I], [roIgnoreCase]);
   // Deliberately the PARSER's own <summary> pattern, character for character
   // (no attribute tolerance): this one is used only to decide whether
   // ParseXmlDoc's untagged-prefix fallback would fire, so it has to answer
@@ -509,9 +546,19 @@ type
   // retracted: the emitter must NOT see them, because the line carrying them
   // is being handed back to the author verbatim instead.
   TResSpan = record
-    Lo, Hi   : Integer;
-    IsExample: Boolean;
-    Dropped  : Boolean;
+    Lo, Hi        : Integer;
+    IsExample     : Boolean;
+    // v(ADP3 T3f review, IMPORTANT 2 and 3): True when the engine REGENERATES
+    // this span's content rather than round-tripping it -- any <remarks> (the
+    // facts fence is rebuilt every run), and any span carrying an engine
+    // marker (a marked <summary>/<param>/<returns>, whose content is refilled
+    // from the harvest or the mined return cases). Such a span must never be
+    // retracted: handing it back verbatim would freeze engine-generated text
+    // as un-maintained, un-strippable author content AND leave the engine to
+    // emit a SECOND <remarks>/<returns> beside the frozen copy -- a one-way
+    // ratchet from engine content to author content.
+    NonRetractable: Boolean;
+    Dropped       : Boolean;
   end;
 var
   RawLines : TArray<string> ;
@@ -520,6 +567,7 @@ var
   LineHi   : TArray<Integer>;
   Accounted: TArray<Boolean>;
   Residual : TArray<Boolean>;
+  InFence  : TArray<Boolean>;
   Spans    : TArray<TResSpan>;
   Sb       : TStringBuilder ;
   I, J, K  : Integer        ;
@@ -527,24 +575,29 @@ var
   First    : Boolean        ;
   ResCount : Integer        ;
 
-  procedure AddSpan(APos, ALen: Integer; AIsExample: Boolean);
+  procedure AddSpan(APos, ALen: Integer; AIsExample, AIsRemarks: Boolean);
   begin
     if ALen <= 0 then Exit;
     SetLength(Spans, Length(Spans) + 1);
-    Spans[High(Spans)].Lo       := APos;
-    Spans[High(Spans)].Hi       := APos + ALen - 1;
-    Spans[High(Spans)].IsExample:= AIsExample;
-    Spans[High(Spans)].Dropped  := False;
+    Spans[High(Spans)].Lo            := APos;
+    Spans[High(Spans)].Hi            := APos + ALen - 1;
+    Spans[High(Spans)].IsExample     := AIsExample;
+    // Tested with RxResEngineMarker itself rather than a second, literal
+    // spelling of the marker text -- one definition of "an engine marker",
+    // so this test can never drift from what the mask accounts for.
+    Spans[High(Spans)].NonRetractable:= AIsRemarks or
+      RxResEngineMarker.IsMatch(Copy(Joined, APos, ALen));
+    Spans[High(Spans)].Dropped       := False;
   end;
 
-  procedure AddMatches(const ARe: TRegEx; AIsExample: Boolean);
+  procedure AddMatches(const ARe: TRegEx; AIsExample, AIsRemarks: Boolean);
   var
     MC: TMatchCollection;
     M : Integer         ;
   begin
     MC:= ARe.Matches(Joined);
     for M:= 0 to MC.Count - 1 do
-      AddSpan(MC[M].Index, MC[M].Length, AIsExample);
+      AddSpan(MC[M].Index, MC[M].Length, AIsExample, AIsRemarks);
   end;
 
 begin
@@ -582,10 +635,19 @@ begin
   EnsureResidualRegexes;
 
   for I:= Low(PRESERVED_VERBATIM_CONTAINERS) to High(PRESERVED_VERBATIM_CONTAINERS) do
-    AddMatches(RxResContainer[I], SameText(PRESERVED_VERBATIM_CONTAINERS[I], 'example'));
-  AddMatches(RxResSee           , False);
-  AddMatches(RxResDeprecatedBare, False);
-  AddMatches(RxResEngineMarker  , False);
+    AddMatches(RxResContainer[I],
+      SameText(PRESERVED_VERBATIM_CONTAINERS[I], 'example'),
+      SameText(PRESERVED_VERBATIM_CONTAINERS[I], 'remarks'));
+  // <see>/<seealso>/<deprecated/> are round-tripped verbatim, so they ARE
+  // retractable -- that is what lets an inline <see cref> inside an unmodeled
+  // <para> stay on the author's own line instead of being hoisted out.
+  AddMatches(RxResSee           , False, False);
+  AddMatches(RxResDeprecatedBare, False, False);
+  // Engine markers carry AUTO_MARKER_LEAD by construction, so AddSpan marks
+  // every one of them non-retractable: a line mixing the engine's own
+  // bookkeeping with author content is ambiguous, and this whole mechanism
+  // fails closed on ambiguity.
+  AddMatches(RxResEngineMarker  , False, False);
 
   // ParseXmlDoc's untagged-prefix fallback: when no <summary> body survives,
   // the run before the first '<' (or the WHOLE text, when there is no '<' at
@@ -597,9 +659,33 @@ begin
   if (not SumM.Success) or (Trim(SumM.Groups[1].Value) = '') then
   begin
     var LtPos: Integer:= Pos('<', Joined);
-    if LtPos = 0 then AddSpan(1, Length(Joined), False)
-    else if LtPos > 1 then AddSpan(1, LtPos - 1, False);
+    if LtPos = 0 then AddSpan(1, Length(Joined), False, False)
+    else if LtPos > 1 then AddSpan(1, LtPos - 1, False, False);
   end;
+
+  // v(ADP3 T3f review, IMPORTANT 2): lines inside an AUTO_BEGIN..AUTO_END fence
+  // are ENGINE-GENERATED and re-derived on every run, so they can never be
+  // author content and must never be carried through -- not even when the
+  // <remarks> element around them has been retracted, and not when the fence is
+  // orphaned outside any <remarks> at all. Carrying them through freezes a fact
+  // the engine should keep maintaining, and strips its markers off so
+  // `document --strip` can no longer remove it.
+  //
+  // An AUTO_BEGIN with no matching AUTO_END is ambiguous corruption: abort the
+  // whole mechanism and leave the region exactly as it is, the same way
+  // RegionFullyEngineOwned and StripRegion both already fail closed on it.
+  SetLength(InFence, Length(RawLines));
+  I:= 0;
+  while I <= High(RawLines) do
+    if Pos(AUTO_BEGIN, RawLines[I]) > 0 then
+    begin
+      J:= I;
+      while (J <= High(RawLines)) and (Pos(AUTO_END, RawLines[J]) = 0) do Inc(J);
+      if J > High(RawLines) then Exit; // unterminated fence -- fail closed
+      for K:= I to J do InFence[K]:= True;
+      I:= J + 1;
+    end
+    else Inc(I);
 
   // A multi-line <example> that is not nested inside another container is
   // retracted up front: see this function's interface remarks for why the
@@ -635,6 +721,7 @@ begin
     for I:= 0 to High(RawLines) do
     begin
       Residual[I]:= False;
+      if InFence[I] then Continue; // engine-generated, re-derived: never author content
       for J:= LineLo[I] to LineHi[I] do
         if (not Accounted[J]) and (Joined[J] > ' ') then
         begin
@@ -649,6 +736,17 @@ begin
         for K:= 0 to High(RawLines) do
           if Residual[K] and (Spans[I].Lo <= LineHi[K]) and (LineLo[K] <= Spans[I].Hi) then
           begin
+            // v(ADP3 T3f review, IMPORTANT 2 and 3): a span whose content the
+            // engine regenerates cannot be handed back. There is no third
+            // option here -- emitting the line verbatim WITHOUT retracting the
+            // span duplicates the tag (measured: two <returns>, one
+            // permanently stale), and retracting it freezes engine content.
+            // So the whole carry-through aborts and the region falls back to
+            // the pre-v(ADP3 T3f) behaviour, which drops the unmodeled text on
+            // that line. That is a real, disclosed non-improvement for this
+            // shape, chosen deliberately over a malformed comment carrying a
+            // fact the engine has silently stopped maintaining.
+            if Spans[I].NonRetractable then Exit;
             Spans[I].Dropped:= True;
             Changed:= True;
             Break;

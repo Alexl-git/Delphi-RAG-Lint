@@ -65,6 +65,73 @@ function FullyModeledControl(AValue: Integer): Integer;
 
 procedure CallsFullyModeledControl;
 
+// v(ADP3 T3f review, IMPORTANT 1): the ACCOUNTED-SPAN MASK must agree with the
+// REPRESENTATION MODEL. The first cut of SplitResidualLines matched containers
+// with StripElement's attribute-TOLERANT pattern while the parser's own regexes
+// are STRICT -- bare <summary>/<remarks>/<returns>/<example>/<since>/
+// <deprecated>, and a MANDATORY name=/cref= on <param>/<exception>. Everything
+// in that gap was accounted (so never carried through) yet unrepresented (so
+// never re-emitted): deleted outright, exactly the L1 class this task exists to
+// close. Two of the four shapes below are perfectly VALID XML doc comments.
+//
+// Each pairs the offending tag with a real <summary>, which is what makes the
+// region dispatch as dfXmlDoc -- the isolated form of some of these routes to
+// ParseOneline instead and never reaches the repair path at all, which is why
+// the isolated fixtures already in preserve_tags.pas did not catch this.
+
+/// <exception>Missing the required cref attribute.</exception>
+/// <summary>Real summary, so the region dispatches as XML doc.</summary>
+procedure ExceptionNoCrefBesideSummary;
+
+procedure CallsExceptionNoCrefBesideSummary;
+
+/// <param>Missing the required name attribute.</param>
+/// <summary>Real summary, so the region dispatches as XML doc.</summary>
+procedure ParamNoNameBesideSummary(AValue: Integer);
+
+procedure CallsParamNoNameBesideSummary;
+
+/// <remarks xml:lang="en">Attributed remarks prose must survive.</remarks>
+/// <summary>Real summary beside a VALID but attributed remarks element.</summary>
+procedure AttributedRemarks;
+
+procedure CallsAttributedRemarks;
+
+/// <example lang="pascal">Attributed example body must survive.</example>
+/// <summary>Real summary beside a VALID but attributed example element.</summary>
+procedure AttributedExample;
+
+procedure CallsAttributedExample;
+
+// v(ADP3 T3f review, IMPORTANT 2 and 3): retracting a span whose content the
+// engine REGENERATES is a one-way ratchet from engine content to author
+// content. Below, the tail sits on a line of a LIVE facts fence's own
+// </remarks>, and on an engine-MARKED <returns>. Retracting those spans froze
+// the fact text as un-maintained, un-strippable author prose and emitted a
+// SECOND <remarks>/<returns> beside it.
+//
+// The fix is to fail closed: such a span is NON-RETRACTABLE, and a residual
+// line overlapping one aborts the carry-through for the whole region, which
+// falls back to the pre-v(ADP3 T3f) behaviour. That behaviour DOES still drop
+// the tail -- pinned below as a disclosed, deliberate non-improvement, chosen
+// over a duplicate element plus a permanently stale fact.
+
+/// <summary>Has a LIVE facts fence with an unmodeled tail on its close line.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: residual_lines.STALE_GHOST (ghost.pas)
+/// <!-- drag-lint:auto END -->
+/// </remarks> <value>tail value</value>
+procedure FencedRemarksTailValue;
+
+procedure CallsFencedRemarksTailValue;
+
+/// <summary>Has an engine-marked returns with a hand-written tail outside it.</summary>
+/// <returns><!-- drag-lint:auto -->Observed: STALE cases</returns> hand tail
+function MarkedReturnsTail: Integer;
+
+procedure CallsMarkedReturnsTail;
+
 implementation
 
 procedure ValueBesideSummary;
@@ -111,6 +178,61 @@ end;
 procedure CallsFullyModeledControl;
 begin
   FullyModeledControl(21);
+end;
+
+procedure ExceptionNoCrefBesideSummary;
+begin
+end;
+
+procedure CallsExceptionNoCrefBesideSummary;
+begin
+  ExceptionNoCrefBesideSummary;
+end;
+
+procedure ParamNoNameBesideSummary(AValue: Integer);
+begin
+end;
+
+procedure CallsParamNoNameBesideSummary;
+begin
+  ParamNoNameBesideSummary(1);
+end;
+
+procedure AttributedRemarks;
+begin
+end;
+
+procedure CallsAttributedRemarks;
+begin
+  AttributedRemarks;
+end;
+
+procedure AttributedExample;
+begin
+end;
+
+procedure CallsAttributedExample;
+begin
+  AttributedExample;
+end;
+
+procedure FencedRemarksTailValue;
+begin
+end;
+
+procedure CallsFencedRemarksTailValue;
+begin
+  FencedRemarksTailValue;
+end;
+
+function MarkedReturnsTail: Integer;
+begin
+  Result:= 42;
+end;
+
+procedure CallsMarkedReturnsTail;
+begin
+  MarkedReturnsTail;
 end;
 
 end.

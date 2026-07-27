@@ -385,13 +385,14 @@ agreeing):
 | On-disk | 44 | 67 | **111** |
 | Untracked | 0 | 2 | **2** |
 
-**Correction (Task 3f, 2026-07-27, direct recount at HEAD `f668031` before any Task 3f file was
-added):** the `autotest` figures above are each one LOW. `git ls-files tests/autotest/*.ps1`
-returns **66**, not 65, and `Get-ChildItem` returns **68**, not 67. The untracked count of 2 is
-right, and both named files are right; only the totals were off. Correct baseline:
-**tracked 110 = 44 + 66; on-disk 112 = 44 + 68.** Task 3f adds one runner
-(`tests/autodoc/run_doc_p3_residual_lines.ps1`), taking on-disk to **113** and tracked to **111**
-once committed.
+**A RUNNER IS `run_*.ps1` -- this definition is canonical (settled 2026-07-27, Task 3f review).**
+Task 3f first "corrected" the `autotest` column to 66/68 by counting every `.ps1`; that was itself
+the miscount this table was settled to eliminate. `tests/autotest` holds 68 `.ps1` files but only
+**67 runners** -- the 68th, `_manifest_common.ps1`, is a dot-sourced helper (`run_coverage.ps1`,
+`run_drift.ps1`, `run_manifest.ps1` all source it for `$Exe` + `Check`). The table above is
+correct as written. Task 3f adds one runner
+(`tests/autodoc/run_doc_p3_residual_lines.ps1`), taking on-disk runners to **112** and tracked to
+**110** once committed.
 
 The 2 untracked runners are both in `tests/autotest/`: `run_hover_callsite.ps1` and
 `run_typeat_generic_member.ps1`. Both are real, substantial (133 and 198 lines), self-hermetic

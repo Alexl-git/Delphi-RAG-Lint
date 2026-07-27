@@ -107,6 +107,12 @@ $decl = @{
   TrailingProseBesideSince = '^procedure TrailingProseBesideSince;'
   FullyModeledControl      = '^function FullyModeledControl\(AValue: Integer\): Integer;'
 }
+$decl['ExceptionNoCrefBesideSummary'] = '^procedure ExceptionNoCrefBesideSummary;'
+$decl['ParamNoNameBesideSummary']     = '^procedure ParamNoNameBesideSummary\(AValue: Integer\);'
+$decl['AttributedRemarks']            = '^procedure AttributedRemarks;'
+$decl['AttributedExample']            = '^procedure AttributedExample;'
+$decl['FencedRemarksTailValue']       = '^procedure FencedRemarksTailValue;'
+$decl['MarkedReturnsTail']            = '^function MarkedReturnsTail: Integer;'
 $pristine = @{}
 foreach ($k in $decl.Keys) { $pristine[$k] = Get-DocBlockLines $pristineLines $decl[$k] }
 
@@ -117,11 +123,17 @@ foreach ($k in $decl.Keys) { $pristine[$k] = Get-DocBlockLines $pristineLines $d
 # here that DIFFERS from the pin is a branch flip -- understand it before
 # updating the pin, same rule as the idempotency sweep's own pins.
 $expectedCycle1 = @{
-  ValueBesideSummary       = 'extended'
-  ParaWithInlineSee        = 'extended'
-  MultiLineExample         = 'extended'
-  TrailingProseBesideSince = 'extended'
-  FullyModeledControl      = 'extended'
+  ValueBesideSummary          = 'extended'
+  ParaWithInlineSee           = 'extended'
+  MultiLineExample            = 'extended'
+  TrailingProseBesideSince    = 'extended'
+  FullyModeledControl         = 'extended'
+  ExceptionNoCrefBesideSummary= 'extended'
+  ParamNoNameBesideSummary    = 'extended'
+  AttributedRemarks           = 'extended'
+  AttributedExample           = 'extended'
+  FencedRemarksTailValue      = 'extended'
+  MarkedReturnsTail           = 'extended'
 }
 
 $root = Join-Path C:\TEMP 'draglint_docp3residual'
@@ -131,9 +143,12 @@ New-Item -ItemType Directory -Path $root | Out-Null
 Push-Location C:\TEMP
 try {
 
+$shapes = @('ValueBesideSummary','ParaWithInlineSee','MultiLineExample','TrailingProseBesideSince','FullyModeledControl',
+            'ExceptionNoCrefBesideSummary','ParamNoNameBesideSummary','AttributedRemarks','AttributedExample',
+            'FencedRemarksTailValue','MarkedReturnsTail')
 $res = @{}
 $slug = 0
-foreach ($nm in @('ValueBesideSummary','ParaWithInlineSee','MultiLineExample','TrailingProseBesideSince','FullyModeledControl')) {
+foreach ($nm in $shapes) {
   $slug++
   $r = Invoke-ShapeSweep $root "residual_lines.$nm" ('s{0:d2}' -f $slug)
   $res[$nm] = $r
@@ -227,9 +242,78 @@ Check 'CONTROL FullyModeledControl: exactly the pristine tag lines plus ONE fact
   ((@($b | Where-Object { $_ -notmatch '<remarks>|</remarks>|drag-lint:auto|Called from:|Returns:|Used in units:|Calls:' })).Count -eq $pristine['FullyModeledControl'].Count) ($b -join ' | ')
 
 Write-Host ''
+Write-Host '--- IMPORTANT 1: the accounted-span mask must agree with the MODEL -------------'
+
+# The mask used to match containers with StripElement's attribute-TOLERANT
+# pattern while the parser is STRICT. Anything in that gap was accounted (never
+# carried through) but unrepresented (never re-emitted) -> DELETED. Two of these
+# four are perfectly valid XML doc comments.
+$maskCases = @{
+  ExceptionNoCrefBesideSummary = '/// <exception>Missing the required cref attribute.</exception>'
+  ParamNoNameBesideSummary     = '/// <param>Missing the required name attribute.</param>'
+  AttributedRemarks            = '/// <remarks xml:lang="en">Attributed remarks prose must survive.</remarks>'
+  AttributedExample            = '/// <example lang="pascal">Attributed example body must survive.</example>'
+}
+foreach ($nm in $maskCases.Keys | Sort-Object) {
+  $b = $res[$nm].Block
+  Check "MASK $nm : the unrepresentable-by-the-parser tag survives VERBATIM" `
+    ($b -ccontains $maskCases[$nm]) ($b -join ' | ')
+  Check "MASK $nm : ...and EXACTLY once" `
+    ((@($b | Where-Object { $_ -ceq $maskCases[$nm] })).Count -eq 1) ($b -join ' | ')
+  Check "MASK $nm : the real <summary> beside it survives too" `
+    ((($b -join "`n") -match '<summary>Real summary')) ($b -join ' | ')
+}
+# The attributed <remarks> necessarily coexists with the engine's own facts
+# <remarks> -- the author's element is unrepresentable, so preserving it means
+# two <remarks> in one comment. Pinned so the consequence is explicit and a
+# future change to it is visible.
+$b = $res['AttributedRemarks'].Block
+Check 'MASK AttributedRemarks: the engine still writes its OWN facts <remarks> beside the attributed one (pinned consequence)' `
+  ((([regex]::Matches(($b -join "`n"), '<remarks')).Count) -eq 2) ($b -join ' | ')
+
+Write-Host ''
+Write-Host '--- IMPORTANT 2 + 3: a span the engine REGENERATES is never retracted ----------'
+
+# Retracting such a span froze the engine's own fact text as un-maintained,
+# un-strippable author prose AND emitted a second <remarks>/<returns>. The fix
+# fails closed: the whole carry-through aborts for the region and it falls back
+# to pre-v(ADP3 T3f) behaviour, which drops the tail. That drop is PINNED below
+# as a deliberate, disclosed non-improvement -- chosen over a duplicate element
+# plus a permanently stale fact.
+$b = $res['FencedRemarksTailValue'].Block
+Check 'FENCE FencedRemarksTailValue: EXACTLY ONE <remarks> element (no duplicate beside a frozen copy)' `
+  ((([regex]::Matches(($b -join "`n"), '<remarks>')).Count) -eq 1) ($b -join ' | ')
+Check 'FENCE FencedRemarksTailValue: the stale ghost fact is GONE (facts are still maintained, not frozen)' `
+  (-not (($b -join "`n") -match 'STALE_GHOST')) ($b -join ' | ')
+Check 'FENCE FencedRemarksTailValue: the regenerated fence names the REAL caller' `
+  ((($b -join "`n") -match 'Called from:.*residual_lines\.CallsFencedRemarksTailValue')) ($b -join ' | ')
+Check 'FENCE FencedRemarksTailValue: exactly ONE facts fence' `
+  ((([regex]::Matches(($b -join "`n"), [regex]::Escape('<!-- drag-lint:auto BEGIN -->'))).Count) -eq 1) ($b -join ' | ')
+Check 'FENCE FencedRemarksTailValue: the hand-written <summary> is untouched' `
+  ($b -ccontains '/// <summary>Has a LIVE facts fence with an unmodeled tail on its close line.</summary>') ($b -join ' | ')
+Check 'FENCE FencedRemarksTailValue: PINNED FALLBACK -- the unmodeled tail is NOT preserved (pre-T3f behaviour; see the task report)' `
+  (-not (($b -join "`n") -match 'tail value')) ($b -join ' | ')
+
+$b = $res['MarkedReturnsTail'].Block
+Check 'MARKED MarkedReturnsTail: EXACTLY ONE <returns> element (no duplicate beside a frozen copy)' `
+  ((([regex]::Matches(($b -join "`n"), '<returns>')).Count) -eq 1) ($b -join ' | ')
+Check 'MARKED MarkedReturnsTail: the stale marked text is GONE (the engine still regenerates it)' `
+  (-not (($b -join "`n") -match 'STALE cases')) ($b -join ' | ')
+Check 'MARKED MarkedReturnsTail: the regenerated <returns> carries the freshly mined case' `
+  ((($b -join "`n") -match [regex]::Escape('<returns><!-- drag-lint:auto -->Observed: 42.</returns>'))) ($b -join ' | ')
+Check 'MARKED MarkedReturnsTail: PINNED FALLBACK -- the hand tail is NOT preserved (pre-T3f behaviour; see the task report)' `
+  (-not (($b -join "`n") -match 'hand tail')) ($b -join ' | ')
+Check 'MARKED MarkedReturnsTail: the hand-written <summary> is untouched' `
+  ($b -ccontains '/// <summary>Has an engine-marked returns with a hand-written tail outside it.</summary>') ($b -join ' | ')
+
+Write-Host ''
 Write-Host '--- STRIP ROUND-TRIP: what is preserved must also come back out ----------------'
 
-foreach ($nm in @('ValueBesideSummary','ParaWithInlineSee','MultiLineExample','TrailingProseBesideSince','FullyModeledControl')) {
+# The two fail-closed shapes are excluded: nothing on their tail line is
+# preserved in the first place (pinned above), so a "pristine lines come back"
+# assertion would be asserting the fallback, not the round-trip.
+$preservedShapes = $shapes | Where-Object { $_ -notin @('FencedRemarksTailValue','MarkedReturnsTail') }
+foreach ($nm in $preservedShapes) {
   $r = $res[$nm]
   & $exePath index $r.Scratch --db $r.Db 2>$null | Out-Null
   & $exePath document --qname "residual_lines.$nm" --db $r.Db --strip --apply 2>$null | Out-Null
@@ -258,7 +342,7 @@ foreach ($nm in @('MultiLineExample','TrailingProseBesideSince','FullyModeledCon
 }
 
 # Everything emitted stays 7-bit ASCII.
-foreach ($nm in @('ValueBesideSummary','ParaWithInlineSee','MultiLineExample','TrailingProseBesideSince','FullyModeledControl')) {
+foreach ($nm in $shapes) {
   $bad = @()
   foreach ($l in [IO.File]::ReadAllLines($res[$nm].Target)) {
     if ($l -match '^\s*///') { foreach ($ch in $l.ToCharArray()) { if ([int]$ch -gt 126) { $bad += $l; break } } }
