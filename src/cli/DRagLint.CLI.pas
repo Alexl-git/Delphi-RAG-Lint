@@ -6718,6 +6718,48 @@ begin
   end;
 end;
 
+// v(ADP3 T3d2 D6): shared strip-reporting path for the three call sites that
+// each independently built the same '--strip' JSON object / 'stripped: N
+// tags, M blocks...' text (DoDocumentUnit, ReportDocBatch,
+// DoDocumentStripQName -- T2 added the third copy). AIdKeys/AIdVals supply
+// the JSON object's leading identifying pair(s), in order (['unit'] +
+// [AArgs.DocUnit] for a single file; [AScope] + [AScopeVal] for a batch;
+// ['qname','file'] + [QName,Path] for a --qname strip). ALocSuffix is the
+// text-mode ' in <path>' clause, already carrying its own leading space --
+// pass '' for a batch report, which names no single file. Callers apply the
+// edits themselves (via TTextEditApplier.Apply) BEFORE calling this and pass
+// the resulting AApplied flag in; this function only reports, it never
+// writes. Byte-identical to the three blocks it replaces -- the exact-count
+// assertions in tests\autodoc cover it.
+function ReportStrip(const AArgs: TArgs; const AIdKeys, AIdVals: TArray<string>;
+  ATagsRemoved, ABlocksRemoved: Integer; const AEdits: TArray<TTextEdit>;
+  AApplied: Boolean; const ALocSuffix: string): Integer;
+var
+  O: TJSONObject;
+  I: Integer;
+begin
+  if AArgs.AsJson then
+  begin
+    O:= TJSONObject.Create;
+    try
+      for I:= 0 to High(AIdKeys) do O.AddPair(AIdKeys[I], AIdVals[I]);
+      O.AddPair('tagsRemoved', TJSONNumber.Create(ATagsRemoved));
+      O.AddPair('blocksRemoved', TJSONNumber.Create(ABlocksRemoved));
+      O.AddPair('edits', TJSONNumber.Create(Length(AEdits)));
+      O.AddPair('applied', TJSONBool.Create(AApplied));
+      Writeln(O.ToJson);
+    finally
+      O.Free;
+    end;
+    Exit(0);
+  end;
+
+  if Length(AEdits) = 0 then Writeln(Format('stripped: 0 tags, 0 blocks%s (nothing to strip)', [ALocSuffix]))
+  else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(AEdits)); Writeln(Format('stripped: %d tags, %d blocks%s -- pass --apply to write', [ATagsRemoved, ABlocksRemoved, ALocSuffix])); end
+  else Writeln(Format('stripped: %d tags, %d blocks%s%s', [ATagsRemoved, ABlocksRemoved, ALocSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+  Result:= 0;
+end;
+
 function DoDocumentUnit(const AArgs: TArgs): Integer;
 var
   Store  : ISymbolStore     ;
@@ -6730,6 +6772,25 @@ begin
   Result:= CheckDocStripStubsConflict(AArgs);
   if Result <> 0 then Exit;
 
+  // v(ADP3 T3d2 D7): --strip's engine path (TDocBatch.DocumentUnit's own
+  // Strip branch, which routes straight to TDocStripper.StripFile) never
+  // queries the store -- it is a raw line scan over AArgs.DocUnit, independent
+  // of the index. Requiring a valid --db before reaching it blunted the
+  // feature's own raw-line motivation (a unit need not even be indexed to be
+  // stripped). Short-circuit here, before the DB-exists check and the store
+  // open below -- Store is passed through unopened (nil), exactly as unused
+  // as it always was on this branch.
+  if AArgs.DocStrip then
+  begin
+    Opts:= Default(TDocBatchOptions);
+    Opts.Strip:= True;
+    Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
+    Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
+    if Applied then TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
+    Exit(ReportStrip(AArgs, ['unit'], [AArgs.DocUnit], Res.TagsRemoved, Res.BlocksRemoved,
+      Res.Edits, Applied, ' in ' + AArgs.DocUnit));
+  end;
+
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
@@ -6737,7 +6798,6 @@ begin
   Opts:= Default(TDocBatchOptions);
   // --stubs flips the facts-only default: on = keep pure all-TODO creates too.
   Opts.Stubs:= AArgs.DocStubs;
-  Opts.Strip:= AArgs.DocStrip; // v(ADP3 T2): --strip removes engine output instead.
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
   Opts.IncludeSince:= AArgs.DocSince; Opts.BaseDir:= AArgs.DocBaseDir; // ADF T5: --since opts in the git <since> date.
   Opts.ExtraStores:= OpenExtraStores(AArgs); // multi-db: other resolved --db's searched for callers.
@@ -6750,32 +6810,6 @@ begin
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
   if Applied then TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
-
-  // v(ADP3 T2): --strip has its own reporting shape (tags/blocks REMOVED, not
-  // decl/doc counts generated) -- branch before the facts-only messaging below.
-  if AArgs.DocStrip then
-  begin
-    if AArgs.AsJson then
-    begin
-      O:= TJSONObject.Create;
-      try
-        O.AddPair('unit', AArgs.DocUnit);
-        O.AddPair('tagsRemoved', TJSONNumber.Create(Res.TagsRemoved));
-        O.AddPair('blocksRemoved', TJSONNumber.Create(Res.BlocksRemoved));
-        O.AddPair('edits', TJSONNumber.Create(Length(Res.Edits)));
-        O.AddPair('applied', TJSONBool.Create(Applied));
-        Writeln(O.ToJson);
-      finally
-        O.Free;
-      end;
-      Exit(0);
-    end;
-
-    if Length(Res.Edits) = 0 then Writeln(Format('stripped: 0 tags, 0 blocks in %s (nothing to strip)', [AArgs.DocUnit]))
-    else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Res.Edits)); Writeln(Format('stripped: %d tags, %d blocks in %s -- pass --apply to write', [Res.TagsRemoved, Res.BlocksRemoved, AArgs.DocUnit])); end
-    else Writeln(Format('stripped: %d tags, %d blocks in %s%s', [Res.TagsRemoved, Res.BlocksRemoved, AArgs.DocUnit, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
-    Exit(0);
-  end;
 
   if AArgs.AsJson then
   begin
@@ -6818,30 +6852,12 @@ begin
   if Applied then TTextEditApplier.Apply(ARes.Edits, not AArgs.NoBackup);
 
   // v(ADP3 T2): --strip has its own reporting shape (tags/blocks REMOVED),
-  // shared by document --project and document-all.
+  // shared by document --project and document-all. v(ADP3 T3d2 D6): routed
+  // through the shared ReportStrip -- no location suffix (AScope/AScopeVal
+  // name the batch, not a single file).
   if AArgs.DocStrip then
-  begin
-    if AArgs.AsJson then
-    begin
-      O:= TJSONObject.Create;
-      try
-        O.AddPair(AScope, AScopeVal);
-        O.AddPair('tagsRemoved', TJSONNumber.Create(ARes.TagsRemoved));
-        O.AddPair('blocksRemoved', TJSONNumber.Create(ARes.BlocksRemoved));
-        O.AddPair('edits', TJSONNumber.Create(Length(ARes.Edits)));
-        O.AddPair('applied', TJSONBool.Create(Applied));
-        Writeln(O.ToJson);
-      finally
-        O.Free;
-      end;
-      Exit(0);
-    end;
-
-    if Length(ARes.Edits) = 0 then Writeln('stripped: 0 tags, 0 blocks (nothing to strip)')
-    else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(ARes.Edits)); Writeln(Format('stripped: %d tags, %d blocks -- pass --apply to write', [ARes.TagsRemoved, ARes.BlocksRemoved])); end
-    else Writeln(Format('stripped: %d tags, %d blocks%s', [ARes.TagsRemoved, ARes.BlocksRemoved, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
-    Exit(0);
-  end;
+    Exit(ReportStrip(AArgs, [AScope], [AScopeVal], ARes.TagsRemoved, ARes.BlocksRemoved,
+      ARes.Edits, Applied, ''));
 
   if AArgs.AsJson then
   begin
@@ -6973,18 +6989,36 @@ begin
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
 end; // function
 
-// v(ADP3 T2): `document --qname X --strip` -- strips only the ONE doc region
-// immediately above X's own declaration line (TDocStripper.StripSymbolRegion),
-// leaving every other declaration's doc region in the same file untouched.
-// Mirrors the reporting shape of the batch-mode strip branches (DoDocumentUnit
-// / ReportDocBatch): 'stripped: N tags, M blocks in <file>'.
+// v(ADP3 T2): `document --qname X --strip` -- strips the doc region(s)
+// immediately above X's own declaration line(s) (TDocStripper.
+// StripSymbolRegion), leaving every other declaration's doc region in the
+// same file untouched. v(ADP3 T3d2 D6): reports through the shared
+// ReportStrip -- same shape as the batch-mode strip branches: 'stripped: N
+// tags, M blocks in <file>'.
+// v(ADP3 T3d2 D8): AArgs.QName can resolve to MORE than one TSymbol row -- an
+// overloaded routine shares one qualified name across every overload. Using
+// Syms[0] alone used to strip only the FIRST overload's region, silently
+// leaving every other overload's markers on disk (`--apply` writes N blocks,
+// `--strip` removed one -- a broken round-trip invariant). Fixed by stripping
+// EVERY matching declaration's own region: each is independently located by
+// ITS OWN StartLine (StripSymbolRegion scans only the one region immediately
+// above that line), so there is no ambiguity about which lines belong to
+// which overload -- only about how many declarations QName names, and the
+// fix is to act on all of them rather than an arbitrary one. (Refusing on
+// ambiguity was the other acceptable fix the register offered; declined
+// because the per-overload region is never in doubt, and a refusal would
+// leave the user with no way to strip an overloaded routine via --qname at
+// all, only the coarser --unit.)
 function DoDocumentStripQName(const AArgs: TArgs; const AStore: ISymbolStore): Integer;
 var
-  Syms   : TArray<TSymbol>;
-  Path   : string         ;
-  StripRes: TStripResult  ;
-  O      : TJSONObject    ;
-  Applied: Boolean        ;
+  Syms     : TArray<TSymbol>  ;
+  Sym      : TSymbol          ;
+  Path     : string           ;
+  OneRes   : TStripResult     ;
+  TagsSum  : Integer          ;
+  BlocksSum: Integer          ;
+  AllEdits : TArray<TTextEdit>;
+  Applied  : Boolean          ;
 begin
   Syms:= AStore.FindSymbolsByQualifiedName(AArgs.QName);
   if Length(Syms) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
@@ -6992,32 +7026,22 @@ begin
   Path:= AStore.GetFilePath(Syms[0].FileId);
   if (Path = '') or (not TFile.Exists(Path)) then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
-  StripRes:= TDocStripper.StripSymbolRegion(Path, Syms[0].StartLine);
-
-  Applied:= AArgs.Apply and (Length(StripRes.Edits) > 0);
-  if Applied then TTextEditApplier.Apply(StripRes.Edits, not AArgs.NoBackup);
-
-  if AArgs.AsJson then
+  TagsSum  := 0;
+  BlocksSum:= 0;
+  AllEdits := nil;
+  for Sym in Syms do
   begin
-    O:= TJSONObject.Create;
-    try
-      O.AddPair('qname', AArgs.QName);
-      O.AddPair('file' , Path       );
-      O.AddPair('tagsRemoved', TJSONNumber.Create(StripRes.TagsRemoved));
-      O.AddPair('blocksRemoved', TJSONNumber.Create(StripRes.BlocksRemoved));
-      O.AddPair('edits', TJSONNumber.Create(Length(StripRes.Edits)));
-      O.AddPair('applied', TJSONBool.Create(Applied));
-      Writeln(O.ToJson);
-    finally
-      O.Free;
-    end;
-    Exit(0);
+    OneRes:= TDocStripper.StripSymbolRegion(AStore.GetFilePath(Sym.FileId), Sym.StartLine);
+    Inc(TagsSum  , OneRes.TagsRemoved  );
+    Inc(BlocksSum, OneRes.BlocksRemoved);
+    AllEdits:= AllEdits + OneRes.Edits;
   end;
 
-  if Length(StripRes.Edits) = 0 then Writeln(Format('stripped: 0 tags, 0 blocks in %s (nothing to strip)', [Path]))
-  else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(StripRes.Edits)); Writeln(Format('stripped: %d tags, %d blocks in %s -- pass --apply to write', [StripRes.TagsRemoved, StripRes.BlocksRemoved, Path])); end
-  else Writeln(Format('stripped: %d tags, %d blocks in %s%s', [StripRes.TagsRemoved, StripRes.BlocksRemoved, Path, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
-  Result:= 0;
+  Applied:= AArgs.Apply and (Length(AllEdits) > 0);
+  if Applied then TTextEditApplier.Apply(AllEdits, not AArgs.NoBackup);
+
+  Result:= ReportStrip(AArgs, ['qname', 'file'], [AArgs.QName, Path], TagsSum, BlocksSum,
+    AllEdits, Applied, ' in ' + Path);
 end; // function
 
 // AutoDocument Chunk 1: drag-lint document --qname X [--apply|--json|--no-backup] [--db PATH]
