@@ -143,6 +143,13 @@ try {
   & $exePath index $scratchB --db $dbB 2>$null | Out-Null
 
   $beforeBatch = [IO.File]::ReadAllText($targetB)
+  # v(ADP3 T3d2 review round 1, minor 6): the C1/C2 fold below rests on this
+  # precondition -- $beforeBatch -eq $afterBatch means "no marker was
+  # inserted" ONLY because $beforeBatch itself carries no marker to begin
+  # with. Previously asserted only in a comment; assert it for real, so a
+  # future fixture edit that accidentally bakes in a marker cannot silently
+  # make the fold's own reasoning false.
+  Check 'FIXTURE: the pristine fixture carries no drag-lint marker' (-not $beforeBatch.Contains('<!-- drag-lint:auto BEGIN -->'))
   # blanket batch: --fix with NO --fix-line / --fix-rule narrowing.
   & $exePath lint-all --db $dbB --config $cfgB --fix --apply --no-backup 2>$null | Out-Null
   $afterBatch = [IO.File]::ReadAllText($targetB)
@@ -151,10 +158,10 @@ try {
   # gone vacuous once the engine stopped emitting that tag for ANY input, so it
   # would have passed even if the batch HAD inserted a full comment). But over
   # $beforeBatch (this fixture's ORIGINAL, undocumented text -- no drag-lint
-  # marker anywhere in it) byte-identical STRICTLY IMPLIES "no marker was
-  # inserted": C1 could never fail while C2 passed, so it contributed a second
-  # failure LABEL, not second coverage. Folded into C2, which now carries both
-  # meanings.
+  # marker anywhere in it, now asserted above rather than merely stated) byte-
+  # identical STRICTLY IMPLIES "no marker was inserted": C1 could never fail
+  # while C2 passed, so it contributed a second failure LABEL, not second
+  # coverage. Folded into C2, which now carries both meanings.
   Check 'C2 Undocumented decl unchanged by the blanket batch, INCLUDING no doc-comment marker inserted (single-fix-only excluded)' ($beforeBatch -eq $afterBatch)
 
   # ---- Part D: rules --json fixable ---------------------------------------
