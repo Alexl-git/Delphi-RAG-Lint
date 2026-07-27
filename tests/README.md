@@ -61,10 +61,10 @@ are never executed by the driver:
 | File | What it is |
 | --- | --- |
 | `tests/autotest/_manifest_common.ps1` | dot-sourced prologue (`Check`, exe path) for the manifest runners |
-| `tests/lint-store/enclosing-attribution/verify.ps1` | one-off verification helper |
-| `tests/preprocess/lib/oracle.ps1` | oracle-corpus helper library |
-| `tests/textindex/fts5_spike.ps1` | design spike |
-| `tests/textindex/schema_v10.ps1` | design spike |
+| `tests/lint-store/enclosing-attribution/verify.ps1` | standalone probe for `refs.enclosing_symbol_id` attribution (v0.82 T1) |
+| `tests/preprocess/lib/oracle.ps1` | helper that shells out to the Node preprocessor oracle; dot-sourced by the preprocess runners (Node is a **test-only** dependency -- the shipped exe never calls it) |
+| `tests/textindex/fts5_spike.ps1` | design spike -- probes `--selftest-fts5` |
+| `tests/textindex/schema_v10.ps1` | design spike -- probes `--selftest-schema` for the v10 string tables |
 
 Miscounting `_manifest_common.ps1` as a runner is what produced three separate
 runner-count disagreements during Phase 3. It is a helper.
