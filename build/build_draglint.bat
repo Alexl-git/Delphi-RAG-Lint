@@ -27,10 +27,22 @@ if errorlevel 1 (
 
 REM Stage built exe next to the DLLs so it can find them
 if exist "%ROOT%\src\cli\Win64\Debug\drag-lint.exe" (
-  copy /Y "%ROOT%\src\cli\Win64\Debug\drag-lint.exe" "%OUT%\drag-lint.exe" >NUL
+  copy /Y "%ROOT%\src\cli\Win64\Debug\drag-lint.exe" "%OUT%\drag-lint.exe"
+  REM `goto`, not a nested `if errorlevel 1 ( ... exit /b 1 )`: cmd.exe does
+  REM not reliably propagate an `exit /b` two parenthesized blocks deep (the
+  REM outer `if exist ( )` plus an inner `if errorlevel 1 ( )`) -- verified:
+  REM the ERROR text prints but the process exit code comes back 0 anyway.
+  REM `goto` out of the block first, then `exit /b` at the top level, does
+  REM not have that failure mode.
+  if errorlevel 1 goto :stage_failed
   echo OK: staged %OUT%\drag-lint.exe
 ) else (
   echo ERROR: drag-lint.exe not produced
   exit /b 1
 )
 endlocal
+exit /b 0
+
+:stage_failed
+echo ERROR: failed to stage %OUT%\drag-lint.exe
+exit /b 1

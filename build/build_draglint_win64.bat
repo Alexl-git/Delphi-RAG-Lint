@@ -12,6 +12,10 @@ cd /D "%ROOT%\src\cli"
 msbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal drag-lint.dproj
 if errorlevel 1 exit /b 1
 
-copy /Y "%ROOT%\src\cli\Win64\Debug\drag-lint.exe" "%ROOT%\third_party\dll-win64\drag-lint.exe" >NUL
+copy /Y "%ROOT%\src\cli\Win64\Debug\drag-lint.exe" "%ROOT%\third_party\dll-win64\drag-lint.exe"
+if errorlevel 1 (
+  echo ERROR: failed to stage %ROOT%\third_party\dll-win64\drag-lint.exe
+  exit /b 1
+)
 echo OK: staged Win64 drag-lint.exe
 endlocal
