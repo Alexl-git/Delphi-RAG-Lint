@@ -84,24 +84,32 @@ type
     class function StripFile(const AFilePath: string): TStripResult;
 
     /// <summary>Same removal rules as StripFile, scoped to the ONE doc region
-    /// immediately above source line ADeclLine (a 1-line gap is tolerated,
-    /// matching TDocumenter's own FindDocRegionAbove convention) -- every
-    /// OTHER doc region in the file is left untouched. Used by `document
-    /// --qname X --strip`, so stripping one symbol's comment never disturbs
-    /// another declaration's doc region in the same file.</summary>
+    /// immediately above source line ADeclLine -- every OTHER doc region in
+    /// the file is left untouched. Used by `document --qname X --strip`, so
+    /// stripping one symbol's comment never disturbs another declaration's doc
+    /// region in the same file. The region qualifies when it ends on the line
+    /// directly above ADeclLine, or when exactly one intervening line separates
+    /// them AND that line is BLANK. v(ADP3 T3j, register S1): the blank test
+    /// is load-bearing -- without it a doc block above a DOCUMENTED declaration
+    /// X was claimed by an UNDOCUMENTED declaration Y on the very next line,
+    /// and `--qname Y --strip` deleted X's block. A non-blank intervening line
+    /// means the region belongs to whatever is on that line.</summary>
     /// <param name="AFilePath">Path to the .pas file to scan; must exist.</param>
     /// <param name="ADeclLine">1-based source line of the target symbol's
     /// declaration (e.g. TSymbol.StartLine).</param>
     /// <param name="ARegionStartLine">v(ADP3 T3d2 D8 review, Critical 1):
     /// 1-based first line of the matched /// region, or 0 if none was found.
-    /// The gap window this function tolerates ([ADeclLine-2, ADeclLine-1])
-    /// does not verify the intervening line is actually blank, so for two
-    /// declarations on CONSECUTIVE lines (an ordinary back-to-back overload
-    /// pair) a single doc block above the FIRST can satisfy both of their
-    /// windows -- exposed so a caller resolving MULTIPLE declarations that
-    /// share one qualified name can detect when two different ADeclLine
-    /// values resolved to the SAME physical region and de-duplicate before
-    /// applying, instead of queuing the identical delete twice.</param>
+    /// Exposed so a caller resolving MULTIPLE declarations that share one
+    /// qualified name can detect when two different ADeclLine values resolved
+    /// to the SAME physical region and de-duplicate before applying, instead
+    /// of queuing the identical delete twice -- the applier has no overlap
+    /// detection, so the same delete applied twice removes whatever shifted up
+    /// into the freed range. v(ADP3 T3j): the consecutive-declaration shape
+    /// that originally motivated this is now REFUSED outright by the blank
+    /// test above, so that particular collision can no longer arise -- but the
+    /// out param and the caller's de-duplication remain the only protection
+    /// against a duplicate delete from any other source (e.g. two index rows
+    /// sharing one StartLine), so neither is redundant.</param>
     /// <param name="ARegionEndLine">1-based last line of the matched region,
     /// or 0 if none was found.</param>
     /// <returns>Same shape as StripFile, but Edits (and the Tags/Blocks
@@ -124,6 +132,18 @@ uses
 function IsDocLine(const S: string): Boolean;
 begin
   Result:= StartsStr('///', TrimLeft(S));
+end;
+
+// v(ADP3 T3j, register S1): True when 1-based source line ALine1Based exists in
+// ALines and holds nothing but whitespace. Bounds-checked deliberately:
+// StripSymbolRegion's only caller derives ALine1Based from a caller-supplied
+// ADeclLine (a TSymbol.StartLine), so an out-of-range value must read as
+// NOT blank -- absence over a wrong removal, the same rule this unit's
+// malformed-marker handling already follows.
+function IsBlankSourceLine(ALines: TStrings; ALine1Based: Integer): Boolean;
+begin
+  Result:= (ALine1Based >= 1) and (ALine1Based <= ALines.Count)
+           and (Trim(ALines[ALine1Based - 1]) = '');
 end;
 
 // Content of a /// line with the leading '///' marker (and any following
@@ -416,9 +436,41 @@ begin
     if not TryLoadLines(AFilePath, Lines) then Exit;
 
     // Find the contiguous /// region immediately above ADeclLine, allowing a
-    // single blank-line gap (0-based Hi in [ADeclLine-3, ADeclLine-2], i.e.
-    // 1-based EndLine in [ADeclLine-2, ADeclLine-1]) -- the same gap
-    // TDocumenter's own FindDocRegionAbove tolerates.
+    // single BLANK-line gap. Hi + 1 is the region's 1-based end line, so the
+    // two accepted cases are exhaustive over the integer window
+    // [ADeclLine-2, ADeclLine-1]:
+    //   * Hi + 1 = ADeclLine - 1 -- the region ends directly above the
+    //     declaration. Always correct, and unchanged here.
+    //   * Hi + 1 = ADeclLine - 2 -- exactly ONE line intervenes, at 1-based
+    //     line ADeclLine - 1, and it MUST be blank.
+    //
+    // v(ADP3 T3j, register S1): the blank test is the fix. The window alone
+    // used to accept the gap case without ever looking at the intervening
+    // line, so for a DOCUMENTED declaration X immediately followed by an
+    // UNDOCUMENTED declaration Y, evaluating Y gave the window
+    // [XLine-1, XLine] and X's region ends at XLine-1: it matched, and
+    // `document --qname Y --strip` deleted X's block. The "gap" it tolerated
+    // was declaration X itself. Adjacent declarations are the ordinary Delphi
+    // idiom (311 same-qualified-name pairs within one line measured in the real
+    // ORM3 index), and "documented X, undocumented Y below it" is just the
+    // normal state of a partially-documented class, so this needed no
+    // contrivance to reach. Pinned by tests\autodoc\run_doc_p3_strip_wrongsymbol.ps1.
+    //
+    // This is the same defect class TDocumenter's own FindDocRegionAbove was
+    // fixed for (adp2-docregion-fix), and it is the reason THIS comment no
+    // longer claims to share that function's tolerance: FindDocRegionAbove
+    // guards the window with an INTERVENING-DECLARATION check driven by every
+    // symbol's StartLine from the index (see its header in
+    // DRagLint.Core.Indexer / DRagLint.Doc.Document). That guard is strictly
+    // stronger, but it is unavailable here by design -- this unit is a raw-line
+    // scan with no index (see the unit header), and StripSymbolRegion receives
+    // one ADeclLine, not the file's symbol table. The blank test is the
+    // index-free equivalent: a non-blank intervening line means the region
+    // belongs to whatever is ON that line, not to ADeclLine. It is narrower
+    // than the declaration check only for a non-blank intervening line that is
+    // NOT a declaration (e.g. an ordinary '//' comment), where this refuses a
+    // region FindDocRegionAbove would allow -- refusing to delete is the safe
+    // direction for a function that removes lines from a user's source.
     Found:= False;
     RegionLo:= 0; RegionHi:= 0;
     I:= 0;
@@ -428,7 +480,8 @@ begin
       begin
         Lo:= I; Hi:= I;
         while (Hi + 1 < Lines.Count) and IsDocLine(Lines[Hi + 1]) do Inc(Hi);
-        if (Hi + 1 >= ADeclLine - 2) and (Hi + 1 <= ADeclLine - 1) then
+        if (Hi + 1 = ADeclLine - 1)
+           or ((Hi + 1 = ADeclLine - 2) and IsBlankSourceLine(Lines, ADeclLine - 1)) then
         begin
           RegionLo:= Lo; RegionHi:= Hi; Found:= True;
         end;

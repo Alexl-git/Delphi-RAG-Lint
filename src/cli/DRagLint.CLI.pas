@@ -7058,12 +7058,12 @@ end; // function
 // artifact of how one declaration is stored.
 // v(ADP3 T3d2 D8 review round 1, CRITICAL 1): the naive version of "strip
 // every match" UNIONED every symbol's edits with no de-duplication. Two
-// DIFFERENT declaration lines can resolve to the exact SAME physical doc
-// region: StripSymbolRegion's gap window ([ADeclLine-2, ADeclLine-1]) does
-// not verify the intervening line is blank, so for two overloads on
+// DIFFERENT declaration lines could resolve to the exact SAME physical doc
+// region: StripSymbolRegion's gap window ([ADeclLine-2, ADeclLine-1]) did
+// not verify the intervening line was blank, so for two overloads on
 // CONSECUTIVE lines (the ordinary back-to-back overload idiom -- 311 such
 // pairs measured in the real ORM3 index) an engine-owned block above the
-// FIRST of the pair is claimed by BOTH rows, producing two IDENTICAL
+// FIRST of the pair was claimed by BOTH rows, producing two IDENTICAL
 // tekDeleteLines edits. TTextEditApplier.Apply has no overlap detection --
 // applying the same delete twice removes whatever shifted up into the freed
 // range on the second pass, i.e. the declaration itself. Fixed by
@@ -7072,6 +7072,20 @@ end; // function
 // first symbol to reach a given region contributes its edits and counts:
 // every later symbol resolving to the SAME region is skipped outright, so
 // the same physical lines can never be queued for deletion twice.
+// v(ADP3 T3j, register S1): the past tense above is deliberate. The gap window
+// NOW requires the intervening line to be blank (see StripSymbolRegion), which
+// closes the SIBLING defect -- a doc block above a documented declaration X
+// being claimed by an UNDOCUMENTED declaration Y on the next line, and deleted
+// as if it were Y's -- and, as a side effect, makes the consecutive-overload
+// collision described above unreachable: the second overload's window is
+// refused outright, so it returns RegionLo = 0 and is skipped by the
+// no-region-found Continue below rather than by the de-duplication. The
+// de-duplication is KEPT: it is the applier's only protection against a
+// duplicate delete, StripSymbolRegion is not its only conceivable source (two
+// index rows sharing one StartLine would still collide), and on a code path
+// that deletes lines from a user's source, belt AND braces is the right call.
+// Both remain pinned -- run_doc_p3_strip_collision.ps1 for the collision,
+// run_doc_p3_strip_wrongsymbol.ps1 for the wrong-symbol claim.
 // v(ADP3 T3d2 D8 review round 1, IMPORTANT 2): a qname can also resolve
 // across MULTIPLE FILES (34 real cases in the ORM3 index, e.g. a shared unit
 // name duplicated per project tree/platform target) -- a materially
