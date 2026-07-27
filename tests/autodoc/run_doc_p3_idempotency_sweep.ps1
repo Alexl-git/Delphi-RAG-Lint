@@ -320,6 +320,32 @@ Check 'SWEEP C: EVERY symbol reaches a fixed point from cycle 2 under --qname-sc
 
 # The six shapes the round-4 review measured as growing without bound, named
 # explicitly so a regression names itself instead of hiding in a count.
+#
+# v(ADP3 T3c review): cycle-1 ACTION is now ALSO pinned per shape below, not
+# just the later-cycle fixed point. Task 3c's own HasContent widening (adding
+# Length(SeeAlso) > 0 / HasExampleTag / HasSinceTag) silently flipped
+# SincePlusEmptyRemarks/ExamplePlusEmptyRemarks/SeeAlsoPlusEmptyRemarks from a
+# cycle-1 "created" (fresh/additive-insert -- HasContent was False from the
+# ORIGINAL parse pre-3c, since none of them had any OTHER content and their
+# <remarks></remarks> is empty) to a cycle-1 "extended" (repair -- HasContent
+# is now True immediately). This is the SAME safe, non-destructive,
+# faster-convergence mechanism already documented for
+# preserve_tags.TabSeparatedSeeAlso (see that fixture and
+# docs/lint/URGENT-TODO-2026-07-26-index-doc-tag-coverage.md), confirmed by
+# direct probe both ways -- but neither this sweep nor the original Task 3c
+# report had actually PINNED it: every other assertion in this file is
+# deliberately agnostic to which cycle does the work (so it would not have
+# gone red), which is exactly why a genuine three-symbol branch flip went
+# unnoticed. Pinning the cycle-1 action here makes a FUTURE flip of this kind
+# visible instead of silent, for both directions (created<->extended).
+$expectedCycle1Action = @{
+  'EmptyRemarksOnly'        = 'created'   # unaffected by Task 3c: no since/example/seealso involved
+  'WhitespaceRemarksOnly'   = 'created'   # unaffected by Task 3c
+  'TwoLineRemarksOnly'      = 'created'   # unaffected by Task 3c
+  'SincePlusEmptyRemarks'   = 'extended'  # v(ADP3 T3c): was 'created' pre-3c -- see comment above
+  'ExamplePlusEmptyRemarks' = 'extended'  # v(ADP3 T3c): was 'created' pre-3c
+  'SeeAlsoPlusEmptyRemarks' = 'extended'  # v(ADP3 T3c): was 'created' pre-3c
+}
 foreach ($nm in @('EmptyRemarksOnly','WhitespaceRemarksOnly','TwoLineRemarksOnly',
                   'SincePlusEmptyRemarks','ExamplePlusEmptyRemarks','SeeAlsoPlusEmptyRemarks')) {
   $qn = "idempotency_shapes.$nm"
@@ -328,16 +354,25 @@ foreach ($nm in @('EmptyRemarksOnly','WhitespaceRemarksOnly','TwoLineRemarksOnly
   Check "SWEEP C CRITICAL: $nm reaches a fixed point (c2 == c3, no unbounded growth)" `
     ($r.Md5s[2] -eq $r.Md5s[3]) ("sizes=" + ($r.Sizes -join '->') + " actions=" + ($r.Actions -join ' '))
   Check "SWEEP C CRITICAL: $nm cycle-2 apply makes NO edit" ($r.Actions[1] -match '/0$') ($r.Actions -join ' ')
+  Check "SWEEP C BRANCH: $nm cycle-1 action is pinned ($($expectedCycle1Action[$nm]))" `
+    ($r.Actions[0] -match ('^' + [regex]::Escape($expectedCycle1Action[$nm]) + '/')) `
+    ("actual=" + $r.Actions[0] + "  (a value here that DIFFERS from the pin is a branch flip -- update the pin only after understanding why, same rule as `$aExpectedSettleAt2 above)")
 }
 
 # The two convergent controls: already stable BEFORE the round-4 guard. If the
-# guard perturbed a shape that was already fine, these go red.
+# guard perturbed a shape that was already fine, these go red. Also pins their
+# cycle-1 action (both were ALREADY 'extended' pre-3c via Summary/Exception,
+# which Task 3c's widening does not touch -- these must stay 'extended' and
+# never flip to 'created', or the guard/routing has regressed for content that
+# was already correctly routed before this task).
 foreach ($nm in @('SummaryPlusEmptyRemarks','ExceptionPlusEmptyRemarks')) {
   $qn = "idempotency_shapes.$nm"
   $r  = $cResults[$qn]
   if ($null -eq $r) { Check "SWEEP C: $nm present in the sweep" $false; continue }
   Check "SWEEP C CONTROL: $nm still converges at cycle 1 (repair branch, unperturbed)" `
     (($r.Md5s[1] -eq $r.Md5s[2]) -and ($r.Md5s[2] -eq $r.Md5s[3])) ("sizes=" + ($r.Sizes -join '->'))
+  Check "SWEEP C BRANCH: $nm cycle-1 action is pinned (extended)" `
+    ($r.Actions[0] -match '^extended/') ("actual=" + $r.Actions[0])
 }
 
 # Non-destructiveness: the guard must suppress a duplicate INSERT, never

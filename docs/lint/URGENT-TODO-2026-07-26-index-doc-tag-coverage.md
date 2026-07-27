@@ -2,8 +2,10 @@
 
 **Found:** 2026-07-26, during Auto-Document Phase 3 (branch `feat/autodoc-phase3`).
 **Status:** Gap 1 (this doc's main subject) CLOSED by Task 3c (2026-07-27, commit -- see
-git log). Gap 2 (`HasXmlTags` sniff) was already closed by T3b. **A new, narrower gap was
-exposed by closing gap 1 -- see "Task 3c: what shipped" below, and its own status is OPEN.**
+git log). Gap 2 (`HasXmlTags` sniff) was already closed by T3b. **Closing gap 1 exposed a
+pre-existing repair-path defect through FOUR triggers and THREE distinct content-loss classes
+(not just "unmodeled tags" -- read "New finding" below in full before scoping any follow-up from
+this doc). Status: OPEN, not fixed in Task 3c, tracked as a pinned known-defect test.**
 
 ## The problem
 
@@ -109,8 +111,20 @@ All six named consumers verified deliberately:
 
 A seventh site was found and checked: `Storage.SQLite.pas:2136`'s `UpsertSymbolDoc` has its own
 internal `if not ADoc.HasContent then Exit;` guard. It reads the SAME already-widened field passed
-through from the indexer's call (its only caller), so it inherits the fix automatically -- no code
-change needed there.
+through from its caller, so it inherits the fix automatically -- no code change needed there.
+
+**Two corrections to the Task 3c report's own exhaustiveness claims** (caught in review,
+2026-07-27): `UpsertSymbolDoc` has **two** callers, not one as the report said --
+`Core.Indexer.pas:435` and `tests/fixtures/T7_storage.dpr:37` (a DUnit-less standalone `.dpr`
+storage round-trip check; harmless, it sets `Doc.HasContent := True` itself before calling, so it
+never relied on the parser-computed value at all). And `Storage.SQLite.pas:2189`'s
+`Result.HasContent := True` inside `GetSymbolDoc` is a **fifth** `HasContent` *assignment* site,
+not counted in the report's "all four sites" self-review -- that review's "four" meant the four
+**parser-side** sites that decide, from a raw comment, whether it counts as documented
+(`ParseXmlDoc`/`ParsePasDoc` widened, `ParseOneline`/`ParseLoose` checked and correctly left
+alone); `GetSymbolDoc`'s assignment is the READ-side reconstruction (unconditionally True whenever
+a row exists, by construction correct for the widened shapes too) and should have been named
+explicitly as the fifth, not folded silently into "four."
 
 **Routing ripple** (`ExistingHasAnyTag` in `Doc.Document.pas`, which ORs in `Existing.HasContent`
 directly): confirmed via the idempotency sweep and `run_doc_p3_preserve_tags.ps1`, both re-run
@@ -145,44 +159,196 @@ production `src/`**. The structural gap was real and is now closed; its practica
 repo today is genuinely small (three of the nine are the new `indexcoverage.pas` fixture written
 for this task's own TDD test).
 
-### New finding: a narrower, pre-existing gap is now reachable through more doors
+### New finding: FOUR triggers now route to the repair path, and THREE loss classes result
 
-This doc's own "Related, lower priority" section (below) already documented, before this task,
-that an **unmodeled tag** (`<value>`, `<typeparam>`, `<para>`, `<code>`, `<list>`,
-`<permission>`, `<inheritdoc/>` -- no `TParsedDoc` field at all) is destroyed by `document
---apply`'s repair path when routed there, as a pre-existing, out-of-Phase-3-scope gap. Widening
-`HasContent`/`ExistingHasAnyTag` adds three MORE conditions that route a comment into that same
-repair path, so an unmodeled tag co-occurring with an `<example>`/`<seealso>`/`<since>`-only
-comment (nothing else) now reaches the SAME pre-existing destruction one step earlier than before.
+**Correction (2026-07-27 review):** the first version of this section framed the whole finding as
+"unmodeled tags are destroyed," and scoped the recommended follow-up to "verbatim raw-line
+preservation of unmodeled tags." **That framing is incomplete and would leave two of the three
+loss classes below unfixed even after that follow-up shipped.** Only ONE of the three losses
+involves an unmodeled tag at all; the other two destroy content in tags this task exists to
+support. A reviewer built seven probe shapes; **all seven** flip from a cycle-1 `"action":
+"created"` (safe) to `"action":"extended"` (repair) on the very first `document --apply`. Three
+of them lose content. Read this section in full before scoping any follow-up task from it.
 
-**Confirmed, reproduced, not fixed** (`tests/autodoc/run_doc_p3_valuetag_caller.ps1`,
-`fixtures/docp3/valuetag_caller.pas`, symbol `HasValueAndExample`: `<value>Hand-written; must
-survive.</value>` + `<example>Example text.</example>`, with a caller so the additive `Merged`
-is non-empty): before Task 3c, `HasValueAndExample`'s only tag `HasContent` recognized was
-`<example>` becoming `HasExampleTag` -- excluded, so `ExistingHasAnyTag` stayed False and the
-FIRST apply took the safe fresh/additive-insert path (`"action":"created"`), leaving `<value>` and
-`<example>` both untouched (this is exactly what this test asserts and was passing). After Task
-3c, `HasExampleTag` is now part of `HasContent`, so `ExistingHasAnyTag` is True from the very
-first parse -- the FIRST apply now takes the repair path (`"action":"extended"`), which deletes
-`[Existing.StartLine..EndLine]` and re-inserts `Merged`; `Merged` preserves `<example>` (T3b/T3c
-gave it a field and repair-path emission) but has **no representation for `<value>` at all**, so
-`<value>` is silently deleted on the very first apply -- one cycle earlier than the same class of
-destruction could already happen via any OTHER pre-existing `HasContent` trigger (a real summary,
-a `<deprecated/>`, etc., all of which already routed to repair before this task).
+**The four triggers** (any one of these now makes `Existing.HasContent` -- and therefore
+`ExistingHasAnyTag` -- True from the ORIGINAL parse alone, no longer needing a second apply cycle
+to reach the repair path via an intermediate additive-then-merge step):
 
-**Blast radius, measured from the index, not assumed:** the C3 query above already shows 0
-production-`src/` symbols carry only example/seealso/since with nothing else; cross-referencing
-for an ADDITIONALLY co-occurring unmodeled tag narrows the risk further still. Today this
-reproduces in exactly one place: the dedicated test fixture built to probe this exact boundary.
+1. `HasExampleTag` (any `<example>`, Task 3c).
+2. A standalone `<seealso cref="X"/>` (`Length(SeeAlso) > 0`, Task 3c).
+3. `HasSinceTag` (any `<since>`, Task 3c).
+4. **An INLINE `<see cref="X"/>` reference, undisclosed in the original Task 3c report.**
+   `DRagLint.Parser.DocComments.pas` (`EnsureParserRegexes`): `RxSee` is
+   `'<(?:see|seealso)\s+cref="([^"]+)"\s*/?>'` -- it matches `<see .../>` and `<seealso .../>`
+   identically and matches ANYWHERE in the cleaned text, not just at the top level. So
+   `Length(Result.SeeAlso) > 0` fires just as much on an inline `<see cref="X"/>` sitting inside
+   prose or inside ANOTHER tag's body as it does on a standalone top-level `<seealso>`. The repo
+   already maintains a SEPARATE field, `SeeAlsoIsInline` (parallel array, same index
+   correspondence), specifically because `<see>` and `<seealso>` are different author-facing tags
+   that render differently -- so the conflation for ROUTING purposes was a known distinction the
+   Task 3c widening did not carry through to `ExistingHasAnyTag`.
 
-**Why this was not fixed in Task 3c:** a real fix needs the repair path itself to detect and
-verbatim-preserve a tag type it has no field for (this doc's own pre-existing "Related, lower
-priority" item, below) -- that is parser/`Doc.Regions.pas` work, not an `HasContent` OR-chain
-edit, and touches the exact machinery (`Doc.Document.pas`'s repair-vs-fresh routing and the
-delete-branch mechanics) Task 3c's own brief flagged as off-limits ("the single most
-defect-prone area of this phase"). `run_doc_p3_valuetag_caller.ps1` was deliberately left
-**failing** (not adjusted to expect the new destruction) so the regression stays visible rather
-than silently accepted. Recommended as its own follow-up task.
+**The three loss classes**, each independently reproduced (`t3c_lossprobe2.pas`, a throwaway
+fixture: three procedures with a caller each, applied once with `document --qname --apply`):
+
+1. **Unmodeled tag destroyed** (the originally-reported class). `<para>Body with an inline
+   <see cref="Other.Thing"/> reference.</para>` -- reaches the repair path via trigger 4 above,
+   and `<para>` has no `TParsedDoc` field at all, so the entire tag AND its body text are deleted;
+   only the bare `<see cref="Other.Thing"/>` survives (re-emitted as if it were a standalone
+   entry). Reproduced in the repo's own suite as
+   `tests/autodoc/fixtures/docp3/valuetag_caller.pas`'s `HasValueAndExample`
+   (`<value>` + `<example>`, trigger 1) -- see `tests/autodoc/run_doc_p3_valuetag_caller.ps1`,
+   converted to a pinned-known-defect runner (below).
+   ```
+   BEFORE: /// <para>Body with an inline <see cref="Other.Thing"/> reference.</para>
+   AFTER:  /// <see cref="Other.Thing"/>
+   ```
+2. **Multi-line `<example>` indentation flattened.** `<example>` IS one of the three tags this
+   task exists to support, and code samples -- its normal content -- are routinely multi-line and
+   indented. `EmitTagged`'s re-serialization does not preserve interior indentation:
+   ```
+   BEFORE: /// <example>
+           ///   Foo := TBar.Create;
+           ///     Foo.Run;
+           /// </example>
+   AFTER:  /// <example>Foo := TBar.Create;
+           /// Foo.Run;</example>
+   ```
+   No unmodeled tag involved -- pure formatting loss in a tag T3b/3c already model, newly exposed
+   because reaching the repair path at all now requires only ONE apply instead of two.
+3. **Trailing author prose beside a modeled tag deleted, and a FABRICATED empty
+   `<summary></summary>` appears in its place.**
+   ```
+   BEFORE: /// <since>1.0</since> Trailing prose the author wrote.
+   AFTER:  /// <summary></summary>
+           /// <since>1.0</since>
+   ```
+   Root cause, traced (not just observed): `MergeComment`'s per-tag "is this genuinely standalone"
+   check calls `TDocRegions.BuildStandaloneFor(RawBlock, 'summary')`, which strips every OTHER
+   preserved container (here, `<since>...</since>`) out of the raw block and then feeds the
+   STRIPPED text back through a fresh `ParseXmlDoc` call to get `StandaloneSummary`. Stripping the
+   `<since>` tag leaves the trailing prose ("Trailing prose the author wrote.") as the only text
+   remaining, with NO tag left before it -- so `ParseXmlDoc`'s own "untagged text before the first
+   tag becomes the summary" fallback (designed for genuine leading prose) fires on this orphaned
+   trailing text and sets `StandaloneSummary.HasSummaryTag := True`. Back in the emission code,
+   `if StandaloneSummary.HasSummaryTag and not IsEngineOwnedRegardlessOfContent(SummaryRaw) then
+   EmitTagged('<summary>', SummaryRaw, ...)` fires -- but `SummaryRaw` (`AExisting.Summary`, read
+   from the UNSTRIPPED original parse, by design, to avoid exactly the nested-content-deletion bug
+   `<since>` had in an earlier round) is `''`, because in the unstripped text the `<since>` tag
+   genuinely precedes that prose. The presence flag says "hand-written summary, empty" (so it is
+   preserved as a blank slot, per the T3-round-2 rule); the content read says "nothing." Neither
+   half is wrong on its own -- the interaction between "strip for presence, read unstripped for
+   content" and "untagged trailing text becomes a phantom summary" is the gap. No unmodeled tag
+   involved either.
+
+**The mitigating fact, verified both ways (not assumed):** all three loss classes are **NOT a new
+destruction class**. Rebuilt the pre-Task-3c exe (`git checkout 551c078 --
+src/parser/DRagLint.Parser.DocComments.pas`) and re-ran the identical caller-bearing probe shapes
+across two apply cycles: pre-Task-3c, cycle 1 = `"action":"created"` (safe, additive, original
+comment completely untouched) and cycle 2 = `"action":"extended"` -- the SAME three losses already
+happened, just one cycle later, via the pre-existing "additive-then-merge" mechanism (the inserted
+facts `<remarks>` fence gets folded into the same scanned region on the next scan, which flips
+`Remarks<>''` -- always part of `HasContent`, untouched by Task 3c -- and routes to repair). Task
+3c did not create a new way to lose this content; it removed the ONE extra apply cycle of safety
+margin these particular shapes used to have. Practically: `document --apply`, run once, is exactly
+what the IDE's "Auto-Document Whole Project" menu action does -- that single run now destroys
+content it used to leave alone.
+
+**Blast radius, measured from the index, not assumed:** the C3 query above shows 0 production-
+`src/` symbols carry the isolated three-tag shape at all (see the methodological caveat below for
+why that query needs a post-fix-built index to mean anything). Cross-referencing for an
+ADDITIONALLY co-occurring unmodeled tag, or for multi-line `<example>` content, or for trailing
+prose beside a lone `<since>`/`<seealso>`/`<example>`, narrows the risk further still within THIS
+repo today; none of it was checked against ORM3/YADF/other consumer repos, whose comments this
+task's C3 query has never been run over.
+
+**Not fixed here; correctly scoped follow-up.** All three loss classes need the repair path itself
+(`Doc.Regions.pas`'s `MergeComment`, plus probably `BuildStandaloneFor`'s stripped-reparse
+interaction with the untagged-prefix fallback for #3, and `EmitTagged`'s re-serialization for #2)
+to change -- not an `HasContent` OR-chain edit, and touches the exact machinery (`Doc.Document.pas`
+repair-vs-fresh routing, delete-branch mechanics) Task 3c's own brief flagged off-limits. A
+follow-up task must be scoped to **all three loss classes**, not "unmodeled tags" alone -- #2
+(indentation) and #3 (trailing prose / phantom summary) need fixing even if #1 (unmodeled tags)
+is deferred further, since they destroy content in tags this task explicitly exists to support.
+
+**Test posture:** `tests/autodoc/run_doc_p3_valuetag_caller.ps1` was converted (2026-07-27) to the
+same known-defect idiom `run_doc_p3_idempotency_sweep.ps1`'s SWEEP D already uses for a different
+pre-existing residual -- a loud banner naming the defect and this doc, PASSING assertions that pin
+the CURRENT (bad) behaviour explicitly (action=extended, `<value>` gone, `<example>` still
+survives, stable after a second apply), so a future fix or future regression both show up as an
+intentional, visible pin change rather than a silent flip either direction. No committed test yet
+covers loss classes #2/#3 (the multi-line-example and trailing-prose cases) -- the probe fixture
+used to find them (`t3c_lossprobe2.pas`) was scratch-only, not committed; a follow-up task should
+start by committing fixtures for these two shapes.
+
+**Idempotency-sweep gap, also fixed 2026-07-27:** the sweep pins md5 fixed points and `edits:0` on
+later cycles, but (before this fix) pinned a cycle-1 **action string** only for `NoCommentAtAll`.
+A fresh-to-repair branch flip that still converges to the same final content by cycle 2 was
+therefore invisible to it. Three `idempotency_shapes.pas` symbols
+(`SincePlusEmptyRemarks`/`ExamplePlusEmptyRemarks`/`SeeAlsoPlusEmptyRemarks`) silently changed
+branch under the Task 3c widening (cycle 1: `created` -> `extended`) without the sweep or the
+original Task 3c report noticing -- confirmed safe (same non-destructive mechanism as
+`TabSeparatedSeeAlso`, not one of the three loss classes above, since none of these three carry
+multi-line content, trailing prose, or an unmodeled tag), but genuinely unpinned. SWEEP C now pins
+the cycle-1 action for all eight `*PlusEmptyRemarks`-family shapes (six "CRITICAL" + two
+"CONTROL"), so a future branch flip is visible instead of silent.
+
+### Methodological caveat for the C3 query and any reuse of it
+
+The C3 query (above) only returns a meaningful count against an index built by a **post-fix**
+exe. Against a **pre-fix** index the affected `symbol_docs` rows do not exist at all (that is the
+entire bug this task closes), so the identical query returns a false **0** -- indistinguishable
+from "genuinely no such symbols exist." Confirmed directly: the query was run against this
+session's pre-fix baseline snapshot and it also returned 0, for the wrong reason (no rows, not "no
+matching shape among existing rows"). **Do not reuse this query against the ORM3/library DBs
+until they are reindexed with a post-fix exe** -- per the user's 2026-07-26 decision those DBs stay
+on the old schema/exe until the structure is final, so the query would currently read as "0
+affected symbols" there regardless of the true count.
+
+### Corrected baseline figures (2026-07-27 review)
+
+The original Task 3c report's battery figures did not reconcile and have been re-established here
+by direct, repeated measurement (`git ls-files` / `Glob` / `find`, three independent methods, all
+agreeing):
+
+| | autodoc | autotest | total |
+|---|---|---|---|
+| Tracked (`git ls-files`) | 44 | 65 | **109** |
+| On-disk | 44 | 67 | **111** |
+| Untracked | 0 | 2 | **2** |
+
+The 2 untracked runners are both in `tests/autotest/`: `run_hover_callsite.ps1` and
+`run_typeat_generic_member.ps1`. Both are real, substantial (133 and 198 lines), self-hermetic
+regression tests for a PRIOR, unrelated session's work (LSP hover call-site resolution and
+generic/inherited member resolution -- matches the "LATEST-63" hover session in the project's own
+memory notes), not scratch. Both currently **PASS**. Left uncommitted here, deliberately -- not
+this task's work, and the established pattern in this repo/phase is that the user holds
+commit/push for prior-session work; committing them as a side effect of an unrelated task would be
+its own scope creep. Flagged here so they are not mistaken for abandoned or broken.
+
+**The true red set, re-verified 2026-07-27** (on-disk total = 111):
+
+- `tests/autotest/run_smoke.ps1` -- **pre-existing, unrelated to this task.** Uses the **Win32**
+  exe (`third_party/dll-win32/drag-lint.exe`), which this task never builds or touches (only Win64
+  is built/deployed here). Current concrete symptoms: a `--version` string mismatch (test expects
+  `0.46.0-alpha`, the stale Win32 binary reports `0.86.0-alpha` -- many versions behind) and an LSP
+  `initialize` timeout (`result=TIMEOUT_INIT`), which then cascades into 3 more LSP-smoke failures
+  downstream of it. 5 of 20 checks fail. Needs a Win32 rebuild to investigate further; out of this
+  task's scope.
+- `tests/autotest/run_fresh_findings.ps1` -- **flaky, not attributable to this task.** A reviewer's
+  run showed `[FAIL] H2219 stored for the unused private method`. Re-run 4 times in this session
+  (1 as part of the full battery, 3 standalone reruns), all 4 **PASS**, including that exact check.
+  Classified as flaky in the same family as `run_manifest.ps1` (already documented as such) --
+  plausibly timing-sensitive around its own `dcc64` subprocess spawn/compile step. Not
+  root-caused here; re-run before trusting either a red or a green result from a single pass.
+- `tests/autodoc/run_doc_p3_valuetag_caller.ps1` -- this task's regression, now converted to the
+  pinned-known-defect idiom (PASSES again, loudly, as of 2026-07-27 -- see "New finding" above).
+
+So, against the 109 TRACKED runners: 106 reliably pass, 1 reliably fails
+(`run_smoke.ps1`, pre-existing/unrelated), 1 is flaky (`run_fresh_findings.ps1`,
+pre-existing/unrelated), 1 (`run_doc_p3_valuetag_caller.ps1`) is a pinned known-defect that
+currently passes. Against the 111 ON-DISK runners, add the 2 untracked, both currently passing:
+108 reliably pass, 1 reliably fails, 1 flaky, 1 pinned-known-defect-passing.
 
 ## Related, lower priority
 
@@ -194,9 +360,17 @@ than silently accepted. Recommended as its own follow-up task.
 - **Unmodeled tags are not parsed or stored at all**: `<value>`, `<typeparam>`, `<para>`, `<code>`,
   `<list>`, `<permission>`, `<inheritdoc/>`. These have no `TParsedDoc` field and no `symbol_docs`
   column, so they are invisible to the index *and* destroyed by `document --apply`'s repair path
-  (pre-existing, not a Phase 3 regression). Closing that needs either parser work or verbatim
-  raw-line preservation -- its own scope decision, deliberately left out of Phase 3. **Task 3c
-  (2026-07-27) made this reachable through three more doors** (an unmodeled tag co-occurring with
-  an example/seealso/since-only comment now also triggers it, one apply cycle sooner than before)
-  -- see "New finding" above for the confirmed repro (`run_doc_p3_valuetag_caller.ps1`, left
-  failing on purpose) and why it was not fixed here.
+  (pre-existing, not a Phase 3 regression). **This is only ONE of three loss classes the repair
+  path has** -- see "New finding" above (added 2026-07-27) for the full picture: multi-line
+  `<example>` indentation flattening and trailing-prose-beside-a-modeled-tag deletion are TWO
+  MORE, neither involving an unmodeled tag at all, and a follow-up scoped to "unmodeled tags" alone
+  would leave both of those in place. Closing all three needs parser/repair-path work in
+  `Doc.Regions.pas` (verbatim raw-line preservation for the unmodeled case; fixing
+  `EmitTagged`'s re-serialization for the indentation case; fixing the
+  `BuildStandaloneFor`-stripped-reparse/untagged-prefix-fallback interaction for the trailing-prose
+  case) -- its own scope decision, deliberately left out of Phase 3, and now reachable through
+  FOUR triggers (Task 3c's `<example>`/`<seealso>`/`<since>`, plus an inline `<see cref>`
+  undisclosed in the original Task 3c report) instead of the pre-existing Summary/Remarks/Returns/
+  Params/Exceptions/Deprecated set alone -- one apply cycle sooner than before in every case. See
+  "New finding" for the confirmed repros (`run_doc_p3_valuetag_caller.ps1`, converted to a pinned
+  known-defect runner rather than left bare-red) and why none of the three were fixed in Task 3c.
