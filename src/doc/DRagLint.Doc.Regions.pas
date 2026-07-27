@@ -83,8 +83,11 @@ type
     /// TDocCommentParser.ParseXmlDoc normalizes that tag. AFallback when there
     /// is no standalone occurrence, or when the one found has an empty
     /// body.</summary>
-    /// <param name="ATagName">One of PRESERVED_VERBATIM_CONTAINERS; raises if
-    /// not.</param>
+    /// <param name="ATagName">One of PRESERVED_VERBATIM_CONTAINERS, and one of
+    /// the SINGULAR-MATCH ones (a bare &lt;tag&gt; opening form); raises
+    /// otherwise. &lt;param&gt;/&lt;exception&gt; are refused deliberately -- their
+    /// opening tag carries the attribute holding their natural key, so it is not
+    /// fixed-length and the body arithmetic here would read past it.</param>
     /// <param name="AFallback">What to return when this function cannot improve
     /// on the caller's own value -- always the caller's corresponding
     /// TParsedDoc field, so the result is byte-identical to the pre-v(ADP3 T3h)
@@ -725,6 +728,20 @@ var
 begin
   Result:= AFallback;
   Own:= ContainerIndexOf(ATagName);
+  // The body arithmetic below assumes a FIXED-LENGTH, attribute-free opening tag
+  // ('<tag>'), which is true of exactly the singular-match containers -- and not
+  // by coincidence: <param>/<exception> are plural PRECISELY because they have a
+  // natural key, the key lives in an attribute, and the attribute is what makes
+  // their opening tag variable-length. Passing one of those would silently read
+  // the wrong characters (off by the length of ' name="..."'), so it is refused
+  // loudly instead. They need nothing from this function anyway: their emitters
+  // correlate occurrences by name/cref and already read the right body.
+  if not IsSingularMatchContainer(ATagName) then
+    raise Exception.CreateFmt(
+      'TDocRegions.StandaloneBodyOf: "%s" is not a singular-match container. ' +
+      'Only tags whose opening form is a bare <tag> can have their body located ' +
+      'by offset here; <param>/<exception> carry an attribute and are correlated ' +
+      'by key at their own emission sites instead.', [ATagName]);
   // The SAME text ParseXmlDoc matches against, so an offset means the same
   // thing here as it does there (see BuildCleaned's own remarks).
   Cleaned:= TDocCommentParser.BuildCleaned(ARawBlock);
