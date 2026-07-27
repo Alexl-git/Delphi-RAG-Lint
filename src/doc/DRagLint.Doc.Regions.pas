@@ -764,6 +764,109 @@ var
 begin
   Sb:= TStringBuilder.Create;
   try
+    // v(ADP3 T3b review, Critical 1 fix; round 2 -- STILL-OPEN GAP CLOSED;
+    // round 3 -- STRUCTURAL 1, moved to the TOP of the function and expanded
+    // to all eight containers): every container in PRESERVED_VERBATIM_
+    // CONTAINERS (<summary>/<param>/<returns>/<remarks>/<exception>/
+    // <example>/<deprecated>/<since>) is preserved verbatim below (its own
+    // raw text, unparsed) -- but AExisting's fields for ALL of them come from
+    // regexes that match ANYWHERE in the raw block, so a tag genuinely
+    // nested inside ONE of the eight can ALSO be captured as if it were a
+    // second, separate, standalone sibling and re-emitted a second time.
+    // Round 2 wired this protection into only FOUR of the eight emission
+    // sites (exception/example/deprecated/since); STRUCTURAL 1 (round 3)
+    // found the other four (summary/param/returns/remarks) still read
+    // AExisting directly, unconditionally, so e.g. a <summary> nested inside
+    // <exception>'s own desc still fabricated a standalone sibling
+    // (reproduced: '<exception cref="E1">exc text <summary>nested summary
+    // </summary> tail</exception>' emitted a standalone '<summary>nested
+    // summary</summary>' in addition to the exception's own, unmangled,
+    // verbatim desc). Moved here (was previously computed just before the
+    // <deprecated/> emission, deep in this function) because
+    // ReturnsHandWritten, just below, now needs StandaloneReturns before it
+    // is computed -- Object Pascal has no forward-reference problem with
+    // this (it is one flat function body), but the OLD position textually
+    // preceded ReturnsHandWritten's own USE two hundred lines apart, which
+    // made the dependency easy to miss; now they are adjacent.
+    //
+    // A SINGLE shared "Standalone" cannot be correct for more than one field
+    // at once: stripping <exception> before reading Standalone.Exceptions
+    // would erase every exception, genuinely standalone ones included --
+    // exactly the content this is trying to recover. BuildStandaloneFor (see
+    // its own remarks) is called ONCE PER FIELD, each time excluding that
+    // field's own container from the strip list -- so a tag nested inside
+    // any OTHER preserved container never survives to be (re-)captured,
+    // while a field's own genuinely top-level occurrences always do (their
+    // container was never stripped for their own computation). Gated on
+    // AExisting.Format = dfXmlDoc (the eight containers are XML-DocInsight
+    // syntax; PasDoc's own @tag recognition is anchored to the START of a
+    // trimmed line -- RxTag's own '(?m)^\s*@(\w+)' -- so it has no
+    // equivalent match-anywhere nesting risk).
+    //
+    // v(ADP3 T3b review round 3, STRUCTURAL 1): HasAnySignal's OR-chain is
+    // UNCHANGED from round 2 -- it still tests only the four "rich-body"
+    // containers (exception/example/deprecated/since) plus seealso, NOT
+    // summary/param/returns/remarks themselves. This is deliberate, not an
+    // oversight: nesting REQUIRES an outer container and a distinct inner
+    // one, so a <summary>/<param>/<returns>/<remarks> can only be
+    // fabricated from something nested INSIDE one of these five -- if NONE
+    // of them are present, there is nothing for any of the four "plain"
+    // fields to be nested inside (short of nesting inside EACH OTHER --
+    // <summary> inside <param>, say -- which every one of the review's own
+    // reproductions leaves untested, and which this fix does NOT protect
+    // against; disclosed as a bounded residual in this task's report).
+    // Reusing this same narrow gate for the four NEW fields keeps the
+    // expensive path exactly as rare as round 2 left it: a plain,
+    // thoroughly-documented function (<summary>+<param>s+<returns>+a
+    // <remarks> facts block, no exotic tag at all) is the overwhelming
+    // common case in any real codebase, and must NOT pay for nine extra
+    // ParseXmlDoc calls on every single one of them -- it still does not,
+    // here, since HasAnySignal stays False for exactly that shape, same as
+    // before this round.
+    var HasAnySignal: Boolean:=
+      (AExisting.Format = dfXmlDoc) and
+      ((Length(AExisting.Exceptions) > 0) or AExisting.HasExampleTag or
+       (Length(AExisting.SeeAlso) > 0) or AExisting.HasSinceTag or AExisting.Deprecated);
+    var StandaloneExc     : TParsedDoc;
+    var StandaloneExample : TParsedDoc;
+    var StandaloneDep     : TParsedDoc;
+    var StandaloneSee     : TParsedDoc;
+    var StandaloneSince   : TParsedDoc;
+    // v(ADP3 T3b review round 3, STRUCTURAL 1): the four fields round 2 left
+    // unprotected -- see each one's own emission site, below, for how its
+    // presence gate now reads from these instead of from AExisting directly.
+    var StandaloneSummary : TParsedDoc;
+    var StandaloneParam   : TParsedDoc;
+    var StandaloneReturns : TParsedDoc;
+    var StandaloneRemarks : TParsedDoc;
+    if HasAnySignal then
+    begin
+      StandaloneExc     := BuildStandaloneFor(AExisting.RawBlock, 'exception');
+      StandaloneExample := BuildStandaloneFor(AExisting.RawBlock, 'example');
+      StandaloneDep     := BuildStandaloneFor(AExisting.RawBlock, 'deprecated');
+      // seealso/see never need self-exclusion (StripElement can never match
+      // their always-self-closing form -- see PRESERVED_VERBATIM_CONTAINERS'
+      // own comment), so '' (strip everything) is correct and simplest.
+      StandaloneSee     := BuildStandaloneFor(AExisting.RawBlock, '');
+      StandaloneSince   := BuildStandaloneFor(AExisting.RawBlock, 'since');
+      StandaloneSummary := BuildStandaloneFor(AExisting.RawBlock, 'summary');
+      StandaloneParam   := BuildStandaloneFor(AExisting.RawBlock, 'param');
+      StandaloneReturns := BuildStandaloneFor(AExisting.RawBlock, 'returns');
+      StandaloneRemarks := BuildStandaloneFor(AExisting.RawBlock, 'remarks');
+    end
+    else
+    begin
+      StandaloneExc     := AExisting;
+      StandaloneExample := AExisting;
+      StandaloneDep     := AExisting;
+      StandaloneSee     := AExisting;
+      StandaloneSince   := AExisting;
+      StandaloneSummary := AExisting;
+      StandaloneParam   := AExisting;
+      StandaloneReturns := AExisting;
+      StandaloneRemarks := AExisting;
+    end;
+
     // The mined return cases surface in exactly ONE place. For a symbol whose
     // existing <returns> is HAND-WRITTEN (a real tag, not engine-owned) they go
     // in a managed 'Returns:' fact line (so they show alongside the author's
@@ -790,8 +893,13 @@ begin
     // must ALSO be recognized as hand-written there (preserved verbatim) --
     // not silently regenerated because a narrower, pre-Finding-4 gate never
     // anticipated reaching this code with HasContent still False.
+    // v(ADP3 T3b review round 3, STRUCTURAL 1): reads StandaloneReturns.
+    // HasReturnsTag, not AExisting.HasReturnsTag -- a <returns> genuinely
+    // nested inside e.g. <deprecated>'s own text (reproduced: '<deprecated>
+    // dep <returns>nested returns text</returns> tail</deprecated>') must
+    // not ALSO be treated as this symbol's own hand-written returns tag.
     var ReturnsHandWritten: Boolean:=
-      AExistingHasAnyTag and AExisting.HasReturnsTag
+      AExistingHasAnyTag and StandaloneReturns.HasReturnsTag
       and (not IsEngineOwnedRegardlessOfContent(AExisting.ReturnsText));
     var IncludeReturns: Boolean:=
       ReturnsHandWritten and AHasReturn and (Length(AFacts.ReturnCases) > 0);
@@ -853,84 +961,26 @@ begin
     //     review round 2): marked ALWAYS means engine-owned here regardless
     //     of post-marker content, same as <returns> -- see
     //     IsEngineOwnedRegardlessOfContent's own comment.
+    // v(ADP3 T3b review round 3, STRUCTURAL 1): reads StandaloneSummary.
+    // HasSummaryTag, not AExisting.HasSummaryTag -- a <summary> genuinely
+    // nested inside e.g. <exception>'s own desc (reproduced: '<exception
+    // cref="E1">exc text <summary>nested summary</summary> tail</exception>')
+    // must not ALSO be treated as this symbol's own hand-written summary.
+    // Content (SummaryRaw) still reads AExisting.Summary, not
+    // StandaloneSummary.Summary: computing StandaloneSummary strips
+    // <exception>/<example>/<deprecated>/<since> from the WHOLE block, which
+    // would ALSO strip anything legitimately nested INSIDE a genuinely
+    // standalone summary's own prose (e.g. NestedTagsInSummary's inline
+    // <exception cref> -- see that fixture's own comment) -- HasSummaryTag
+    // only needs to answer "is there a genuine, standalone summary at all",
+    // never "what does it say".
     var SummaryRaw: string:= AExisting.Summary;
-    if AExisting.HasSummaryTag and (not IsEngineOwnedRegardlessOfContent(SummaryRaw)) then
+    if StandaloneSummary.HasSummaryTag and (not IsEngineOwnedRegardlessOfContent(SummaryRaw)) then
       Sb.AppendLine(EmitTagged('<summary>', SummaryRaw, '</summary>'))
     else if AFacts.HarvestedSummary <> '' then
       Sb.AppendLine(EmitTagged('<summary>' + AUTO_MARK, AFacts.HarvestedSummary, '</summary>'));
     // else: engine-owned-and-empty, or genuinely absent, and nothing
     // harvested -- omit the tag entirely (v(ADP3 T3)).
-
-    // v(ADP3 T3b review, Critical 1 fix; round 2 -- STILL-OPEN GAP CLOSED):
-    // Exceptions/ExampleText/SeeAlso/SinceText/Deprecated, as parsed directly
-    // onto AExisting, come from regexes that match ANYWHERE in the raw block
-    // -- including INSIDE any of the EIGHT tags in PRESERVED_VERBATIM_
-    // CONTAINERS (<summary>/<param>/<returns>/<remarks>/<exception>/
-    // <example>/<deprecated>/<since>), every one of which this function ALSO
-    // preserves verbatim (its own raw text, unparsed). Round 1 of this fix
-    // stripped only FOUR of those eight (summary/param/returns/remarks)
-    // before reparsing -- correct for nesting inside prose, but it left
-    // exception/example/deprecated/since themselves unprotected, so a tag
-    // nested inside ANY of those four was STILL captured twice. Confirmed
-    // empirically, all four still-open combinations: <since> inside
-    // <exception>, <seealso> inside <deprecated>/<exception>/<example>,
-    // <exception> inside <example> -- 4 apply cycles, 3109 -> 3203 -> 3371
-    // -> 3539 bytes (the `.Matches`-backed fields grow unbounded; the
-    // `.Match`-backed <since> duplicates once then holds at 2, same
-    // signature as the round-1 defect). Also reproduced pre-existing on this
-    // repo's own src/report/DRagLint.Convert.Rules.pas and
-    // src/analysis/DRagLint.Analysis.Cfg.pas (both carry an inline <see
-    // cref=.../> inside a <summary>, the ONE combination round 1 already
-    // covers -- both now stable across 3 cycles).
-    //
-    // A SINGLE shared "Standalone" cannot be correct for more than one of
-    // the five fields at once: stripping <exception> before reading
-    // Standalone.Exceptions would erase every exception, genuinely
-    // standalone ones included -- exactly the content this is trying to
-    // recover. BuildStandaloneFor (see its own remarks) is called ONCE PER
-    // FIELD, each time excluding that field's own container from the strip
-    // list -- so a tag nested inside any OTHER preserved container never
-    // survives to be (re-)captured, while a field's own genuinely
-    // top-level occurrences always do (their container was never stripped
-    // for their own computation). Gated on AExisting.Format = dfXmlDoc (the
-    // eight containers are XML-DocInsight syntax; PasDoc's own @tag
-    // recognition is anchored to the START of a trimmed line -- RxTag's own
-    // '(?m)^\s*@(\w+)' -- so it has no equivalent match-anywhere nesting
-    // risk) and on the ORIGINAL (unfiltered) parse already showing at least
-    // one of the five signals (stripping can only REMOVE matches, never add
-    // them, so an unfiltered zero guarantees every stripped reparse would
-    // also be zero) -- five extra TDocCommentParser.ParseXmlDoc calls (each
-    // building its own 9 TRegEx objects) is not worth paying on every
-    // comment in a whole-project run; measured cost when the gate DOES
-    // fire is reported in this task's test report.
-    var HasAnySignal: Boolean:=
-      (AExisting.Format = dfXmlDoc) and
-      ((Length(AExisting.Exceptions) > 0) or AExisting.HasExampleTag or
-       (Length(AExisting.SeeAlso) > 0) or (AExisting.SinceText <> '') or AExisting.Deprecated);
-    var StandaloneExc     : TParsedDoc;
-    var StandaloneExample : TParsedDoc;
-    var StandaloneDep     : TParsedDoc;
-    var StandaloneSee     : TParsedDoc;
-    var StandaloneSince   : TParsedDoc;
-    if HasAnySignal then
-    begin
-      StandaloneExc     := BuildStandaloneFor(AExisting.RawBlock, 'exception');
-      StandaloneExample := BuildStandaloneFor(AExisting.RawBlock, 'example');
-      StandaloneDep     := BuildStandaloneFor(AExisting.RawBlock, 'deprecated');
-      // seealso/see never need self-exclusion (StripElement can never match
-      // their always-self-closing form -- see PRESERVED_VERBATIM_CONTAINERS'
-      // own comment), so '' (strip everything) is correct and simplest.
-      StandaloneSee     := BuildStandaloneFor(AExisting.RawBlock, '');
-      StandaloneSince   := BuildStandaloneFor(AExisting.RawBlock, 'since');
-    end
-    else
-    begin
-      StandaloneExc     := AExisting;
-      StandaloneExample := AExisting;
-      StandaloneDep     := AExisting;
-      StandaloneSee     := AExisting;
-      StandaloneSince   := AExisting;
-    end;
 
     // <deprecated/>: v(ADP3 T3b; review Important 2 -- message preserved).
     // Fixed order (see this function's own header remarks): <summary> ->
@@ -972,33 +1022,61 @@ begin
     // <param>: v(ADP3 T3 review round 2, Finding 1 -- the ONE tag where
     // marked+content is preserved rather than treated as engine-owned; see
     // ClassifyParamAction's own comment for why params differ from
-    // summary/returns. Presence for a param needs no separate flag: the EP
-    // entry existing in AExisting.Params already IS that signal (AHasTag is
-    // True whenever a matching EP is found below).
+    // summary/returns.
+    // v(ADP3 T3b review round 3, STRUCTURAL 1): presence now DOES need a
+    // separate check -- a matching EP existing in AExisting.Params is no
+    // longer sufficient proof of standalone presence, since AExisting.Params
+    // also captures a <param name="X"> genuinely nested inside e.g.
+    // <example>'s own body (reproduced: '<example>Ex <param name="AV">
+    // nested param desc</param> body.</example>' fabricated a standalone
+    // '<param name="AV">nested param desc</param>' for a signature parameter
+    // named AV, even though the author never wrote a top-level <param> for
+    // it at all). A matching entry must ALSO exist in StandaloneParam.Params
+    // (built by stripping every OTHER preserved container first) before this
+    // is treated as hand-written. Content (EP.Desc) still comes from
+    // AExisting -- the correlation is by NAME (params have a natural key,
+    // same pattern as <exception>'s cref-based correlation below), so there
+    // is no risk of reading the wrong occurrence's text the way an unkeyed,
+    // single-match field would have.
     // existing params first, in signature order where possible
     for P in ASigParams do
     begin
       for var EP in AExisting.Params do
         if SameText(EP.Name, P) then
         begin
-          case ClassifyParamAction(EP.Desc, True) of
-            taPreserveStripped: Sb.AppendLine(EmitTagged('<param name="' + P + '">', StripMark(EP.Desc), '</param>'));
-            taPreserveVerbatim: Sb.AppendLine(EmitTagged('<param name="' + P + '">', EP.Desc, '</param>'));
-            taEngineOwned: ; // no harvester for params -- always drop, never regenerate
+          var IsStandaloneParam: Boolean:= False;
+          for var SP in StandaloneParam.Params do
+            if SameText(SP.Name, P) then begin IsStandaloneParam:= True; Break; end;
+          if IsStandaloneParam then
+          begin
+            case ClassifyParamAction(EP.Desc, True) of
+              taPreserveStripped: Sb.AppendLine(EmitTagged('<param name="' + P + '">', StripMark(EP.Desc), '</param>'));
+              taPreserveVerbatim: Sb.AppendLine(EmitTagged('<param name="' + P + '">', EP.Desc, '</param>'));
+              taEngineOwned: ; // no harvester for params -- always drop, never regenerate
+            end;
           end;
           Break;
         end;
-      // If no EP matched P at all (the inner loop found nothing): no <param>
-      // tag exists for this sig param -- nothing hand-written to preserve
-      // and no harvester to fill it, so nothing is emitted for it either
-      // (v(ADP3 T3): fresh/missing params never get a skeleton).
+      // If no EP matched P at all (the inner loop found nothing), or the
+      // match was not genuinely standalone: no <param> tag exists for this
+      // sig param -- nothing hand-written to preserve and no harvester to
+      // fill it, so nothing is emitted for it either (v(ADP3 T3): fresh/
+      // missing params never get a skeleton).
     end;
-    // stale hand-typed params: in the comment but not the signature -> flag, keep
+    // stale hand-typed params: in the comment but not the signature -> flag, keep.
+    // v(ADP3 T3b review round 3, STRUCTURAL 1): same standalone-presence
+    // check as the loop above -- a nested-elsewhere <param> for a name that
+    // does not even match a current signature parameter must not be flagged
+    // as a "stale" leftover either (same fabrication risk, for a name with
+    // no real sig-param counterpart at all).
     for var EP in AExisting.Params do
     begin
       var StillThere: Boolean:= False;
       for P in ASigParams do if SameText(EP.Name, P) then begin StillThere:= True; Break; end;
-      if (not StillThere) and (not IsManagedDesc(EP.Desc)) then
+      var IsStandaloneParam: Boolean:= False;
+      for var SP in StandaloneParam.Params do
+        if SameText(SP.Name, EP.Name) then begin IsStandaloneParam:= True; Break; end;
+      if (not StillThere) and (not IsManagedDesc(EP.Desc)) and IsStandaloneParam then
         Sb.AppendLine(EmitTagged('<param name="' + EP.Name + '">', EP.Desc, '</param> <!-- drag-lint: param no longer exists -->'));
     end;
 
@@ -1128,13 +1206,52 @@ begin
       if StandaloneSee.SeeAlsoIsInline[SeeIx] then SeeTag:= 'see';
       Sb.AppendLine(APrefix + '<' + SeeTag + ' cref="' + StandaloneSee.SeeAlso[SeeIx] + '"/>');
     end;
-    if StandaloneSince.SinceText <> '' then
-      Sb.AppendLine(EmitTagged('<since>', StandaloneSince.SinceText, '</since>'));
+    // v(ADP3 T3b review round 3, NEW IMPORTANT): reads StandaloneSince.
+    // HasSinceTag for PRESENCE (not the old SinceText <> '' content test,
+    // and NOT StandaloneSince.SinceText for the actual text). The old
+    // content-test gate was doubly wrong: (1) SinceText <> '' cannot tell
+    // "no <since> at all" apart from a human's deliberate, empty
+    // <since></since> -- the same presence-vs-content gap HasSummaryTag/
+    // HasReturnsTag/HasExampleTag/HasRemarksTag already closed for their own
+    // tags; (2) far worse, reading the CONTENT from StandaloneSince (built by
+    // stripping <exception>/<example>/<deprecated>/<summary>/etc. from the
+    // WHOLE block) silently deleted anything legitimately nested inside a
+    // genuinely standalone <since>'s own body -- reproduced: '<since>1.0
+    // <exception cref="EInSince">x</exception></since>' emitted only
+    // '<since>1.0</since>', and '<since>2.0 <example>see the sample below
+    // </example> onwards</since>' emitted '<since>2.0 onwards</since>' (the
+    // nested tag's own text silently gone, not merely excluded from
+    // double-counting). The WORST shape combined this with <deprecated>'s
+    // OWN self-exclusion: '<since><deprecated>2.0-beta</deprecated></since>'
+    // deleted the ENTIRE hand-written comment, because StandaloneSince
+    // strips 'deprecated' (so SinceText became '', failing the old gate) AND
+    // StandaloneDep strips 'since' (so Deprecated became False, failing
+    // ITS gate) -- both tags vanished simultaneously, worse than round 1's
+    // duplication and round 2's line-deletion defect, both of which at
+    // least left something behind. AExisting.SinceText (the ORIGINAL,
+    // entirely unstripped parse) is always the correct source for the text,
+    // exactly like DeprecatedText/exception Desc/ExampleText above; only
+    // presence/absence needed the filtered view.
+    if StandaloneSince.HasSinceTag then
+      Sb.AppendLine(EmitTagged('<since>', AExisting.SinceText, '</since>'));
 
     // remarks: keep hand prose (AExisting.Remarks) OUTSIDE the fence, then a fresh
     // managed block. Strip any old fenced block from the prose before re-emitting
     // so a second run does not nest blocks.
-    var Prose: string:= StripManagedBlock(AExisting.Remarks);
+    // v(ADP3 T3b review round 3, STRUCTURAL 1): only reads AExisting.Remarks
+    // when StandaloneRemarks.HasRemarksTag confirms a genuinely standalone
+    // <remarks> exists -- a <remarks> nested inside e.g. <example>'s own
+    // body (reproduced: '<example>ex <remarks>nested remarks</remarks> tail
+    // </example>') used to become the engine's real remarks prose, with the
+    // facts fence wrongly attaching to it. When not standalone, Prose stays
+    // '' regardless of what AExisting.Remarks captured -- there is nothing
+    // genuine to preserve from a fabricated match, so (unlike summary/
+    // returns/since/param above) there is no unstripped content to read
+    // instead; the whole point is that this text was never the author's
+    // real remarks prose to begin with.
+    var Prose: string:= '';
+    if StandaloneRemarks.HasRemarksTag then
+      Prose:= StripManagedBlock(AExisting.Remarks);
     var NormProse: string:= StringReplace(Trim(Prose), #13#10, #10, [rfReplaceAll]);
     NormProse:= StringReplace(NormProse, #13, #10, [rfReplaceAll]);
     // v(ADP3 T2 adjacent fix): a SINGLE-LINE hand-written remarks with NO

@@ -343,6 +343,31 @@ type
     // <example></example>, so MergeComment's omit-when-empty repair logic
     // needs this flag to preserve the latter instead of silently dropping it.
     HasExampleTag: Boolean;
+    // v(ADP3 T3b review round 3, NEW IMPORTANT): same PRESENCE-vs-content
+    // distinction as HasSummaryTag/HasReturnsTag/HasExampleTag, for <since>.
+    // SinceText <> '' could not tell "no <since> tag" apart from a human's
+    // deliberate, empty <since></since>, AND (the actual reported bug) it
+    // meant MergeComment's repair path had no way to gate <since>'s PRESENCE
+    // from a stripped ("is this genuinely standalone, not nested inside
+    // <exception>/<example>/<deprecated>") view without ALSO reading its
+    // CONTENT from that same stripped view -- which silently deleted
+    // legitimately-nested content, and in one shape (<since><deprecated>...
+    // </deprecated></since>) deleted the ENTIRE hand-written comment, because
+    // both <since> and <deprecated> independently stripped each other out of
+    // existence. See TDocRegions.MergeComment's own remarks for the fix.
+    HasSinceTag: Boolean;
+    // v(ADP3 T3b review round 3, STRUCTURAL 1): same PRESENCE-vs-content
+    // distinction, for <remarks> -- added so MergeComment's remarks-prose
+    // emission can also gate on a stripped ("genuinely standalone") view
+    // instead of reading AExisting.Remarks unconditionally, which is exactly
+    // what let a <remarks> nested inside <example>/<exception>/<deprecated>
+    // become the engine's real remarks prose (with the facts fence wrongly
+    // attaching to it) -- reported reproduction, see MergeComment's own
+    // remarks. Remarks <> '' was ALREADY relied upon elsewhere (e.g.
+    // HasAnyRecognizedTag in DRagLint.Parser.DocComments.pas) as a stand-in
+    // for this exact flag, in the absence of one -- this field replaces that
+    // stand-in with a real presence signal wherever it matters.
+    HasRemarksTag: Boolean;
     // v(ADP3 T3b review, Important 2): the message text from a hand-written
     // <deprecated>message</deprecated> tag; '' for a bare <deprecated/> (or
     // <deprecated />), and '' when the tag is absent (test Deprecated itself

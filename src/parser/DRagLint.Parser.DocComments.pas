@@ -37,48 +37,73 @@ uses
   ;
 
 var
-  // v(ADP3 T3b review round 2, NEW IMPORTANT): Dispatch's HasXmlTags sniff for
-  // <since>/<see>/<seealso>/<deprecated> used to re-derive its OWN informal
-  // Pos()-based approximation of what RxSee/RxSinceTag/RxDeprecatedTag/
-  // RxDeprecatedBare (declared fresh, per-call, inside ParseXmlDoc below)
-  // actually match -- the two drifted apart on shapes neither hand-written
-  // check anticipated (a stray space before a tag's closing '>', a tab
-  // instead of a space before an attribute, ALL-CAPS '<DEPRECATED>' since
-  // Pos() is case-sensitive but every one of these regexes carries
-  // roIgnoreCase). The fix is to sniff with the ACTUAL regexes the parser
-  // matches against (IsMatch), not a parallel hand-maintained approximation,
-  // so the two literally cannot drift apart again. These four are file-scope
-  // (not local to Dispatch, not a class var -- TRegEx needs no interface
-  // exposure for that) and built ONCE, lazily, on first use: Dispatch runs
-  // once per doc comment scanned, so constructing four TRegEx objects on
-  // EVERY call (the naive fix) would add real, measured cost to indexing;
-  // see the task report for the whole-unit timing this was checked against.
+  // v(ADP3 T3b review round 3, STRUCTURAL 2): hoisted from ParseXmlDoc's own
+  // per-call locals -- ALL TEN of the tag regexes it matches against, not
+  // just the four round 2 additionally cached for Dispatch's sniff. Round 2
+  // built a SEPARATE, sniff-only cache (SniffSee/SniffSinceTag/
+  // SniffDeprecatedTag/SniffDeprecatedBare) with pattern strings COPIED from
+  // ParseXmlDoc's locals of the same shape -- its own comment already
+  // conceded "if those ever change, these must change with them, which is
+  // exactly the class of drift this fix closes", which is self-contradicting
+  // for a copy: a second, independently-maintained copy of the same pattern
+  // strings is exactly the mechanism by which that drift would happen (and
+  // it left six of ParseXmlDoc's ten patterns -- summary/param/returns/
+  // remarks/exception/example -- entirely un-hoisted, sniffed via a
+  // case-sensitive Pos() prefix that could still diverge from what the
+  // regex requires, e.g. an unclosed tag or a missing required attribute).
+  // ONE declaration of each pattern now, used by BOTH ParseXmlDoc's actual
+  // matching and Dispatch's sniff, built ONCE, lazily, on first use by
+  // EITHER call site (ParseXmlDoc is also called directly by
+  // TDocRegions.BuildStandaloneFor, bypassing Dispatch entirely, so both
+  // ParseXmlDoc and Dispatch call EnsureParserRegexes themselves rather than
+  // relying on the other to have done so first). This also removes the
+  // NINE-TRegEx-per-call construction cost ParseXmlDoc used to pay on every
+  // single doc comment routed to it, sniffed or not.
   // Not thread-guarded: TDocCommentScanner/TDocCommentParser are only ever
   // driven from a single-threaded per-file scan in this codebase
   // (DRagLint.Core.Indexer.pas has no TParallel/TThread around doc parsing
   // at the time of writing) -- if that ever changes, this cache needs a
   // guard too.
-  SniffRegexesReady  : Boolean = False;
-  SniffSee           : TRegEx;
-  SniffSinceTag      : TRegEx;
-  SniffDeprecatedTag : TRegEx;
-  SniffDeprecatedBare: TRegEx;
+  ParserRegexesReady: Boolean = False;
+  RxSummary       : TRegEx;
+  RxParam         : TRegEx;
+  RxReturns       : TRegEx;
+  RxRemarks       : TRegEx;
+  RxException     : TRegEx;
+  RxExample       : TRegEx;
+  RxSee           : TRegEx;
+  RxSinceTag      : TRegEx;
+  RxDeprecatedTag : TRegEx;
+  RxDeprecatedBare: TRegEx;
 
-procedure EnsureSniffRegexes;
+procedure EnsureParserRegexes;
 begin
-  if SniffRegexesReady then Exit;
-  // Pattern strings copied VERBATIM from ParseXmlDoc's own RxSee/RxSinceTag/
-  // RxDeprecatedTag/RxDeprecatedBare locals further down this file -- if
-  // those ever change, these must change with them, which is exactly the
-  // class of drift this fix closes. Duplicated as literal strings (rather
-  // than sharing the compiled TRegEx objects themselves across two call
-  // sites with very different lifetimes -- a per-call local in ParseXmlDoc
-  // vs. this file-scope cache) keeps the change small and mechanical.
-  SniffSee           := TRegEx.Create('<(?:see|seealso)\s+cref="([^"]+)"\s*/?>'           , [roIgnoreCase]);
-  SniffSinceTag      := TRegEx.Create('<since>([\s\S]*?)</since>'                         , [roIgnoreCase]);
-  SniffDeprecatedTag := TRegEx.Create('<deprecated>([\s\S]*?)</deprecated>'               , [roIgnoreCase]);
-  SniffDeprecatedBare:= TRegEx.Create('<deprecated\s*/>'                                  , [roIgnoreCase]);
-  SniffRegexesReady:= True;
+  if ParserRegexesReady then Exit;
+  RxSummary       := TRegEx.Create('<summary>([\s\S]*?)</summary>'                     , [roIgnoreCase]);
+  RxRemarks       := TRegEx.Create('<remarks>([\s\S]*?)</remarks>'                     , [roIgnoreCase]);
+  RxReturns       := TRegEx.Create('<returns>([\s\S]*?)</returns>'                     , [roIgnoreCase]);
+  RxExample       := TRegEx.Create('<example>([\s\S]*?)</example>'                     , [roIgnoreCase]);
+  RxParam         := TRegEx.Create('<param\s+name="([^"]+)">([\s\S]*?)</param>'        , [roIgnoreCase]);
+  RxException     := TRegEx.Create('<exception\s+cref="([^"]+)">([\s\S]*?)</exception>', [roIgnoreCase]);
+  RxSee           := TRegEx.Create('<(?:see|seealso)\s+cref="([^"]+)"\s*/?>'           , [roIgnoreCase]);
+  RxSinceTag      := TRegEx.Create('<since>([\s\S]*?)</since>'                         , [roIgnoreCase]);
+  // v(ADP3 T3b review, Important 2): captures the message from a hand-written
+  // '<deprecated>message</deprecated>' so it round-trips instead of
+  // collapsing to a bare Boolean. Two SEPARATE regexes rather than one
+  // alternation ('<deprecated\s*(?:/>|>(...)</deprecated>)') -- the
+  // alternation was tried first and reproducibly crashed ("Index out of
+  // bounds") the moment the bare '/>' branch matched: group 1 sits inside
+  // the OTHER alternative, so it never participates in that match, and
+  // Delphi's TRegEx/TGroupCollection does not tolerate indexing an
+  // unparticipated group the way accessing Match.Groups[1].Success first
+  // would (confirmed by bisection: a fixture with ONLY a bare
+  // '<deprecated/>' reproduced the crash in isolation; reading a captured
+  // group only ever from a regex that is GUARANTEED to have that group
+  // participate, as done here, sidesteps the problem entirely rather than
+  // guarding around it).
+  RxDeprecatedTag := TRegEx.Create('<deprecated>([\s\S]*?)</deprecated>'               , [roIgnoreCase]);
+  RxDeprecatedBare:= TRegEx.Create('<deprecated\s*/>'                                  , [roIgnoreCase]);
+  ParserRegexesReady:= True;
 end;
 
 function HasAnyRecognizedTag(const ADoc: TParsedDoc): Boolean;
@@ -87,18 +112,15 @@ begin
   // ParseXmlDoc actually recognize ANY tag at all" -- deliberately NOT
   // ADoc.HasContent, which is its own, separately-documented and
   // DELIBERATELY narrow OR-chain for a different purpose (see HasContent's
-  // own comment in ParseXmlDoc) and does not cover HasExampleTag/SeeAlso/
-  // SinceText. Remarks <> '' is included here even though there is no
-  // HasRemarksTag presence flag to distinguish "tag absent" from "tag
-  // present but empty" the way HasSummaryTag/HasReturnsTag/HasExampleTag do
-  // for their own tags -- treating a same-named literal accident as
-  // "recognized" is the conservative direction (never causes a deletion; at
-  // worst skips a redundant ParseOneline fallback for an already-degenerate
-  // input).
+  // own comment in ParseXmlDoc). v(ADP3 T3b review round 3, STRUCTURAL 1):
+  // now reads the REAL HasSinceTag/HasRemarksTag presence flags -- round 2
+  // stood in with SinceText <> ''/Remarks <> '' here because neither flag
+  // existed yet; both do now (see TParsedDoc's own field comments), so the
+  // stand-ins are retired in favour of the real signal.
   Result:=
     ADoc.HasSummaryTag or ADoc.HasReturnsTag or ADoc.HasExampleTag or ADoc.Deprecated or
     (Length(ADoc.Params) > 0) or (Length(ADoc.Exceptions) > 0) or (Length(ADoc.SeeAlso) > 0) or
-    (ADoc.SinceText <> '') or (ADoc.Remarks <> '');
+    ADoc.HasSinceTag or ADoc.HasRemarksTag;
 end;
 
 type
@@ -310,16 +332,6 @@ var
   Cleaned        : string              ;
   M              : string              ;
   I              : Integer             ;
-  RxSummary      : TRegEx              ;
-  RxParam        : TRegEx              ;
-  RxReturns      : TRegEx              ;
-  RxRemarks      : TRegEx              ;
-  RxException    : TRegEx              ;
-  RxExample      : TRegEx              ;
-  RxSee          : TRegEx              ;
-  RxSinceTag     : TRegEx              ;
-  RxDeprecatedTag: TRegEx              ;
-  RxDeprecatedBare: TRegEx             ;
   Match          : TMatch              ;
   Matches        : TMatchCollection    ;
   Params         : TList<TDocParam>    ;
@@ -340,30 +352,11 @@ begin
     Cleaned:= Cleaned + StripXmlDocPrefix(Lines[I]);
   end;
 
-  RxSummary      := TRegEx.Create('<summary>([\s\S]*?)</summary>'                     , [roIgnoreCase]);
-  RxRemarks      := TRegEx.Create('<remarks>([\s\S]*?)</remarks>'                     , [roIgnoreCase]);
-  RxReturns      := TRegEx.Create('<returns>([\s\S]*?)</returns>'                     , [roIgnoreCase]);
-  RxExample      := TRegEx.Create('<example>([\s\S]*?)</example>'                     , [roIgnoreCase]);
-  RxParam        := TRegEx.Create('<param\s+name="([^"]+)">([\s\S]*?)</param>'        , [roIgnoreCase]);
-  RxException    := TRegEx.Create('<exception\s+cref="([^"]+)">([\s\S]*?)</exception>', [roIgnoreCase]);
-  RxSee          := TRegEx.Create('<(?:see|seealso)\s+cref="([^"]+)"\s*/?>'           , [roIgnoreCase]);
-  RxSinceTag     := TRegEx.Create('<since>([\s\S]*?)</since>'                         , [roIgnoreCase]);
-  // v(ADP3 T3b review, Important 2): captures the message from a hand-written
-  // '<deprecated>message</deprecated>' so it round-trips instead of
-  // collapsing to a bare Boolean. Two SEPARATE regexes rather than one
-  // alternation ('<deprecated\s*(?:/>|>(...)</deprecated>)') -- the
-  // alternation was tried first and reproducibly crashed ("Index out of
-  // bounds") the moment the bare '/>' branch matched: group 1 sits inside
-  // the OTHER alternative, so it never participates in that match, and
-  // Delphi's TRegEx/TGroupCollection does not tolerate indexing an
-  // unparticipated group the way accessing Match.Groups[1].Success first
-  // would (confirmed by bisection: a fixture with ONLY a bare
-  // '<deprecated/>' reproduced the crash in isolation; reading a captured
-  // group only ever from a regex that is GUARANTEED to have that group
-  // participate, as done here, sidesteps the problem entirely rather than
-  // guarding around it).
-  RxDeprecatedTag    := TRegEx.Create('<deprecated>([\s\S]*?)</deprecated>'           , [roIgnoreCase]);
-  RxDeprecatedBare   := TRegEx.Create('<deprecated\s*/>'                              , [roIgnoreCase]);
+  // v(ADP3 T3b review round 3, STRUCTURAL 2): these ten regexes used to be
+  // built fresh, right here, on EVERY call -- see EnsureParserRegexes' own
+  // comment for why they are now a single file-scope, lazily-built set
+  // shared with Dispatch's sniff instead.
+  EnsureParserRegexes;
 
   // v(ADP3 T3): HasSummaryTag/HasReturnsTag record the tag's LITERAL presence
   // (Match.Success), independent of whether its captured group is empty -- see
@@ -372,7 +365,11 @@ begin
   Result.HasSummaryTag:= Match.Success;
   if Match.Success then Result.Summary:= CollapseWhitespace(Match.Groups[1].Value);
 
+  // v(ADP3 T3b review round 3, STRUCTURAL 1): HasRemarksTag mirrors
+  // HasSummaryTag/HasReturnsTag/HasExampleTag/HasSinceTag's own presence-vs-
+  // content distinction -- see TParsedDoc's field comment.
   Match:= RxRemarks.Match(Cleaned);
+  Result.HasRemarksTag:= Match.Success;
   if Match.Success then Result.Remarks:= CollapseWhitespace(Match.Groups[1].Value);
 
   Match:= RxReturns.Match(Cleaned);
@@ -386,7 +383,12 @@ begin
   Result.HasExampleTag:= Match.Success;
   if Match.Success then Result.ExampleText:= Trim(Match.Groups[1].Value);
 
+  // v(ADP3 T3b review round 3, NEW IMPORTANT): HasSinceTag mirrors
+  // HasSummaryTag/HasReturnsTag/HasExampleTag's own presence-vs-content
+  // distinction -- see TParsedDoc's field comment for why this one in
+  // particular closes a real bug, not just a style gap.
   Match:= RxSinceTag.Match(Cleaned);
+  Result.HasSinceTag:= Match.Success;
   if Match.Success then Result.SinceText:= CollapseWhitespace(Match.Groups[1].Value);
 
   // v(ADP3 T3b review, Important 2): try the message-bearing form first
@@ -633,6 +635,10 @@ begin
     // v(ADP3 T3b review, Important/Minor 1): same non-empty-content collapse
     // as HasSummaryTag/HasReturnsTag just above.
     Result.HasExampleTag:= Result.ExampleText <> '';
+    // v(ADP3 T3b review round 3, NEW IMPORTANT / STRUCTURAL 1): same
+    // non-empty-content collapse, for the two flags added this round.
+    Result.HasSinceTag  := Result.SinceText   <> '';
+    Result.HasRemarksTag:= Result.Remarks     <> '';
 
     Result.HasContent:= (Result.Summary <> '') or (Length(Result.Params) > 0) or (Result.ReturnsText <> '') or Result.Deprecated;
   finally
@@ -719,9 +725,7 @@ begin
   case ARegion.Kind of
     dckTripleSlash:
     begin
-      EnsureSniffRegexes;
-      HasXmlTags:= (Pos('<summary>', ARegion.RawText) > 0) or (Pos('<param', ARegion.RawText) > 0) or (Pos('<returns>', ARegion.RawText) > 0) or
-      (Pos('<remarks>', ARegion.RawText) > 0) or (Pos('<exception', ARegion.RawText) > 0) or (Pos('<example>', ARegion.RawText) > 0) or
+      EnsureParserRegexes;
       // v(ADP3 T3b): <since>/<seealso>/<see>/<deprecated/> were missing from
       // this sniff, so a comment whose ONLY tags were these mis-dispatched to
       // ParseOneline -- the whole raw tag text read back as literal prose,
@@ -748,12 +752,33 @@ begin
       // (Pos is case-sensitive, the regexes all carry roIgnoreCase); and a
       // tab before an attribute ('<seealso\tcref="X"/>', which '<seealso '
       // -- literal space -- does not match but \s+ does). Sniffing with the
-      // ACTUAL regex objects (IsMatch) retires all three at once, and the
-      // sniff can never again be broader or narrower than the parse for
-      // these four tags, because there is only one definition of "matches"
-      // now, not two.
-      SniffSinceTag.IsMatch(ARegion.RawText) or SniffSee.IsMatch(ARegion.RawText) or
-      SniffDeprecatedTag.IsMatch(ARegion.RawText) or SniffDeprecatedBare.IsMatch(ARegion.RawText);
+      // ACTUAL regex objects (IsMatch) retired all three for these four tags.
+      // v(ADP3 T3b review round 3, STRUCTURAL 2): the OTHER six tags
+      // (summary/param/returns/remarks/exception/example) were STILL sniffed
+      // via the original case-sensitive Pos() prefix checks -- '<ALLCAPS
+      // SUMMARY>' (case), a missing required attribute ('<param>'/
+      // '<exception>' with no name=/cref=), or an unclosed tag could all
+      // still drift between what the sniff allowed through and what the
+      // regex actually captures. Every one of the ten now sniffs with
+      // IsMatch against the SAME shared regex object ParseXmlDoc itself
+      // matches against (see EnsureParserRegexes), so the sniff cannot be
+      // broader OR narrower than the parse for any of the ten, structurally,
+      // not by convention. A narrower sniff here (e.g. an unclosed
+      // '<summary>text' no longer counts as "XML-shaped") is always SAFE:
+      // either the sniff correctly routes it straight to ParseOneline (prose,
+      // never deleted), or -- if some OTHER tag in the same comment still
+      // trips HasXmlTags -- HasAnyRecognizedTag's fallback below catches it
+      // just the same. Never narrower than what genuinely-formed real tags
+      // need: every regex here requires only what a WELL-FORMED tag already
+      // has (a closing tag for the six body-bearing ones, an attribute for
+      // param/exception/see), so no correctly-written comment sniffs
+      // differently than before.
+      HasXmlTags:=
+        RxSummary.IsMatch(ARegion.RawText) or RxParam.IsMatch(ARegion.RawText) or
+        RxReturns.IsMatch(ARegion.RawText) or RxRemarks.IsMatch(ARegion.RawText) or
+        RxException.IsMatch(ARegion.RawText) or RxExample.IsMatch(ARegion.RawText) or
+        RxSinceTag.IsMatch(ARegion.RawText) or RxSee.IsMatch(ARegion.RawText) or
+        RxDeprecatedTag.IsMatch(ARegion.RawText) or RxDeprecatedBare.IsMatch(ARegion.RawText);
       if HasXmlTags then
       begin
         Result:= ParseXmlDoc(ARegion.RawText);

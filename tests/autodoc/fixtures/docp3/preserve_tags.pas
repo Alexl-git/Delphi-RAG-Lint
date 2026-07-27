@@ -240,6 +240,106 @@ procedure TabSeparatedSeeAlso;
 
 procedure CallsTabSeparatedSeeAlso;
 
+// Review round 3, NEW IMPORTANT: <since> read its body from a STRIPPED
+// parse, so nested content was silently deleted -- and one shape deleted the
+// ENTIRE hand-written comment (<since> strips 'deprecated' so SinceText
+// became '' and failed the old content-based gate; <deprecated> strips
+// 'since' so Deprecated became False and failed ITS gate -- both tags
+// vanished simultaneously). Each row below reads back correctly and never
+// loses content: SinceWithNestedException/SinceWithNestedDeprecated ALSO
+// force the repair path immediately (the nested tag makes Exceptions.
+// Length>0/Deprecated true, both already part of Document.pas'
+// ExistingHasAnyTag via HasContent), so they are stable byte-for-byte from
+// cycle 1. SinceWithNestedExample is the one exception: HasExampleTag is
+// NOT part of HasContent's OR-chain (same narrow-by-design exclusion
+// TabSeparatedSeeAlso's own bare <seealso/> hits above), so cycle 1 takes
+// the fresh/additive path (the original line untouched, a facts block
+// merely added beside it) -- Test-ThreeCycleNesting's "cycle 1" assertion
+// still holds (the untouched original trivially contains the expected
+// text), and cycles 2/3 confirm the SAME content survives once
+// MergeAdjacentSameKind folds the two into one region and the repair path
+// genuinely runs on it.
+/// <since>1.0 <exception cref="EInSince">x</exception></since>
+procedure SinceWithNestedException;
+
+procedure CallsSinceWithNestedException;
+
+/// <since>2.0 <example>see the sample below</example> onwards</since>
+procedure SinceWithNestedExample;
+
+procedure CallsSinceWithNestedExample;
+
+/// <since><deprecated>2.0-beta</deprecated></since>
+procedure SinceWithNestedDeprecated;
+
+procedure CallsSinceWithNestedDeprecated;
+
+// Review round 3, STRUCTURAL 1: round 2 wired the "presence from a stripped
+// view, content from AExisting" protection into only FOUR of the eight
+// preserved containers (exception/example/deprecated/since) -- the emitters
+// for the other four (summary/param/returns/remarks) still read AExisting
+// directly, unconditionally, so a nested occurrence of ONE of those four
+// inside one of the rich-body four still fabricated a standalone sibling
+// tag the author never wrote. Each row below is stable, byte-identical, from
+// the FIRST apply cycle.
+/// <exception cref="E1">exc text <summary>nested summary</summary> tail</exception>
+procedure ExceptionWithNestedSummary;
+
+procedure CallsExceptionWithNestedSummary;
+
+/// <example>Ex <param name="AV">nested param desc</param> body.</example>
+procedure ExampleWithNestedParam(AV: Integer);
+
+procedure CallsExampleWithNestedParam;
+
+// v(ADP3 T3b review round 3, STRUCTURAL 1 -- DISCLOSED RESIDUAL): the
+// PRIMARY reproduction (this row) is fixed and stable on the FIRST apply
+// cycle -- the nested <returns> text survives verbatim inside <deprecated>,
+// unmangled, and no standalone <returns> is fabricated from it. A SEPARATE,
+// deeper issue surfaces from the SECOND apply cycle on: this function's
+// AHasReturn=True means the "engine-owned, refill from mined cases" branch
+// ALSO adds a genuine, standalone, auto-marked <returns> tag on cycle 1 (a
+// real, separate signal, correctly independent of the deprecated tag).
+// MergeAdjacentSameKind then folds that freshly-inserted tag into the SAME
+// scanned region on cycle 2's scan, so the comment now contains TWO
+// <returns>-shaped spans (the original nested one, textually FIRST, and the
+// new standalone one, textually SECOND) -- and RxReturns' own '.Match()' has
+// no way to prefer one over the other by position; it takes the first.
+// <returns>/<summary>/<remarks> have no natural key the way <param>'s name
+// or <exception>'s cref do, so there is no way to correlate "this specific
+// text belongs to the standalone occurrence" without tracking SOURCE
+// POSITIONS through the parse -- ParseXmlDoc/BuildStandaloneFor currently
+// return only parsed VALUES, not character offsets, so disambiguating this
+// correctly would mean teaching the parser to track and propagate match
+// positions, a materially different (and larger) architecture change than
+// this task's scope. This is the same class of judgment call STRUCTURAL 1's
+// own review invited ("if the list genuinely cannot be made load-bearing
+// without restructuring MergeComment beyond this task's scope, say so
+// explicitly and stop") -- disclosed in the task report with the exact
+// reproduction, not fixed here. This fixture row therefore asserts ONLY the
+// cycle-1 property this task DOES guarantee (no fabrication, no data loss);
+// it does not claim 3-cycle stability the way the rows above do.
+/// <deprecated>dep <returns>nested returns text</returns> tail</deprecated>
+function DeprecatedWithNestedReturns: Integer;
+
+procedure CallsDeprecatedWithNestedReturns;
+
+// v(ADP3 T3b review round 3, STRUCTURAL 1 -- DISCLOSED RESIDUAL, same class
+// as DeprecatedWithNestedReturns above): cycle 1 is fixed and stable (no
+// fabrication -- "nested remarks" stays inside <example>, and a SEPARATE,
+// genuine <remarks> facts block is added, not conflated with it). From
+// cycle 2 on, the same MergeAdjacentSameKind-induced compounding applies:
+// the freshly-inserted facts <remarks> block folds into the same region,
+// <remarks> has no natural key either, and RxRemarks' '.Match()' picks the
+// textually-first <remarks> span (the one nested inside <example>) as
+// AExisting.Remarks, so "nested remarks" gets duplicated into the real
+// remarks prose. See DeprecatedWithNestedReturns' own comment for the full
+// reasoning; not fixed here, disclosed in the task report.
+/// <example>ex <remarks>nested remarks</remarks> tail</example>
+procedure ExampleWithNestedRemarks;
+
+procedure CallsExampleWithNestedRemarks;
+
 type
   // Hand-written <since>/<seealso> COEXISTING with the opt-in auto-generated
   // <since>/<seealso> RenderFactsBlock emits INSIDE the AUTO_BEGIN..AUTO_END
@@ -431,6 +531,70 @@ end;
 procedure CallsTabSeparatedSeeAlso;
 begin
   TabSeparatedSeeAlso;
+end;
+
+procedure SinceWithNestedException;
+begin
+end;
+
+procedure CallsSinceWithNestedException;
+begin
+  SinceWithNestedException;
+end;
+
+procedure SinceWithNestedExample;
+begin
+end;
+
+procedure CallsSinceWithNestedExample;
+begin
+  SinceWithNestedExample;
+end;
+
+procedure SinceWithNestedDeprecated;
+begin
+end;
+
+procedure CallsSinceWithNestedDeprecated;
+begin
+  SinceWithNestedDeprecated;
+end;
+
+procedure ExceptionWithNestedSummary;
+begin
+end;
+
+procedure CallsExceptionWithNestedSummary;
+begin
+  ExceptionWithNestedSummary;
+end;
+
+procedure ExampleWithNestedParam(AV: Integer);
+begin
+end;
+
+procedure CallsExampleWithNestedParam;
+begin
+  ExampleWithNestedParam(1);
+end;
+
+function DeprecatedWithNestedReturns: Integer;
+begin
+  Result:= 1;
+end;
+
+procedure CallsDeprecatedWithNestedReturns;
+begin
+  DeprecatedWithNestedReturns;
+end;
+
+procedure ExampleWithNestedRemarks;
+begin
+end;
+
+procedure CallsExampleWithNestedRemarks;
+begin
+  ExampleWithNestedRemarks;
 end;
 
 procedure TSeeAlsoHost.DoA;

@@ -174,6 +174,54 @@
     additive-then-merge mechanism (where the pre-fix defect actually fired);
     cycle 3 proves a stable fixed point (byte-identical to cycle 2).
 
+  PART 5 (scratch1, continued -- coordinator review round 3): Critical 1's
+  duplication is confirmed genuinely closed (4 cycles, 11 nesting
+  combinations plus three real repo files, md5-identical from cycle 2 --
+  verified separately, not re-asserted here). Three findings remained:
+    * NEW IMPORTANT: <since> read its body from a STRIPPED parse
+      (StandaloneSince.SinceText), so nested content was silently deleted,
+      and '<since><deprecated>2.0-beta</deprecated></since>' deleted the
+      ENTIRE comment (both tags' own stripped-self-exclusion erased the
+      OTHER, so both failed their presence gate simultaneously). Fixed with
+      a real HasSinceTag presence flag (mirroring HasSummaryTag/
+      HasReturnsTag/HasExampleTag): gate on StandaloneSince.HasSinceTag,
+      emit AExisting.SinceText. SinceWithNestedException/
+      SinceWithNestedExample/SinceWithNestedDeprecated cover the reviewer's
+      own three reproductions, each stable byte-for-byte from cycle 1.
+    * STRUCTURAL 1: PRESERVED_VERBATIM_CONTAINERS was read at exactly ONE
+      site (BuildStandaloneFor) -- no emitter for summary/param/returns/
+      remarks consulted a filtered view at all, so a tag nested inside one
+      of the four "rich-body" containers (exception/example/deprecated)
+      still fabricated a standalone summary/param/returns/remarks sibling
+      the author never wrote. Fixed by giving all four emission sites the
+      same "presence from a Standalone view, content from AExisting" split
+      the four round-2 fields already had (param correlates by NAME, same
+      pattern as exception's cref correlation; summary/returns/remarks have
+      no natural key, so they read AExisting for content -- see
+      MergeComment's own remarks for why, and for a DISCLOSED residual this
+      surfaced: DeprecatedWithNestedReturns/ExampleWithNestedRemarks below
+      are correct and stable on cycle 1, but a DEEPER, cycle-2+ issue
+      remains for these unkeyed fields specifically when
+      MergeAdjacentSameKind causes a genuine auto-inserted tag to fold into
+      the same region as a nested-elsewhere look-alike -- not fixed, see the
+      task report). ExceptionWithNestedSummary/ExampleWithNestedParam are
+      stable byte-for-byte from cycle 1 through (at least) cycle 3;
+      DeprecatedWithNestedReturns/ExampleWithNestedRemarks assert ONLY the
+      cycle-1 property this task guarantees (no fabrication).
+    * STRUCTURAL 2: the sniff regexes were duplicated string literals (a
+      SEPARATE, sniff-only cache with pattern strings copied from
+      ParseXmlDoc's own locals), and only 4 of the parser's 10 tag regexes
+      had been converted to shared/hoisted objects at all -- the other six
+      (summary/param/returns/remarks/exception/example) still sniffed via a
+      case-sensitive Pos() prefix. Fixed by hoisting ALL TEN of ParseXmlDoc's
+      own regex locals into ONE file-scope, lazily-built set that BOTH
+      ParseXmlDoc's actual matching and Dispatch's sniff read from -- one
+      declaration of each pattern, not two, and it also removes the
+      nine-TRegEx-per-call construction cost ParseXmlDoc used to pay on
+      every doc comment routed to it. No new fixture rows of its own (this
+      is exercised implicitly by every OTHER row in this file parsing
+      correctly); verified by revert-to-RED (see the task report).
+
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
@@ -759,6 +807,87 @@ try {
   $docLinesPart4 = $linesPart4 | Where-Object { $_.TrimStart() -match '^///' }
   $nonAsciiPart4 = $docLinesPart4 | Where-Object { $_ -match '[^\x00-\x7F]' }
   Check 'every /// line is 7-bit ASCII (PART 4)' ($nonAsciiPart4.Count -eq 0)
+
+  # =====================================================================
+  # PART 5: coordinator review round 3 (NEW IMPORTANT <since>; STRUCTURAL 1
+  # summary/param/returns/remarks). Continues on scratch1/$target.
+  # =====================================================================
+
+  # --- NEW IMPORTANT: <since> reads presence from a stripped view, content
+  # from AExisting -- all three reproductions stable from cycle 1 (each also
+  # independently forces the repair path immediately: the nested tag makes
+  # Deprecated/Exceptions.Length>0/HasExampleTag true, all already part of
+  # Document.pas' ExistingHasAnyTag via HasContent, unlike TabSeparatedSeeAlso
+  # above).
+  Test-ThreeCycleNesting 'preserve_tags.SinceWithNestedException' '^procedure SinceWithNestedException;' `
+    '<since>1.0 <exception cref="EInSince">x</exception></since>' `
+    'NEW IMPORTANT (round 3): <exception> nested inside <since>'
+
+  Test-ThreeCycleNesting 'preserve_tags.SinceWithNestedExample' '^procedure SinceWithNestedExample;' `
+    '<since>2.0 <example>see the sample below</example> onwards</since>' `
+    'NEW IMPORTANT (round 3): <example> nested inside <since>'
+
+  # The worst shape in the whole task: BOTH tags' own self-exclusion erased
+  # the OTHER, so both failed their presence gate and the ENTIRE comment was
+  # deleted, pre-fix. This is the load-bearing case for the fix.
+  Test-ThreeCycleNesting 'preserve_tags.SinceWithNestedDeprecated' '^procedure SinceWithNestedDeprecated;' `
+    '<since><deprecated>2.0-beta</deprecated></since>' `
+    'NEW IMPORTANT (round 3): <deprecated> nested inside <since> (previously deleted the WHOLE comment)'
+
+  # --- STRUCTURAL 1: summary/param now also read presence from a Standalone
+  # view -- stable from cycle 1, PLUS an explicit "no standalone sibling
+  # fabricated" check (the actual reported defect), which Test-
+  # ThreeCycleNesting's own substring check alone would not catch (a
+  # fabricated duplicate does not remove the original -- both would be
+  # present, and the substring check only confirms the original survives).
+  Test-ThreeCycleNesting 'preserve_tags.ExceptionWithNestedSummary' '^procedure ExceptionWithNestedSummary;' `
+    '<exception cref="E1">exc text <summary>nested summary</summary> tail</exception>' `
+    'STRUCTURAL 1 (round 3): <summary> nested inside <exception>'
+  $excNestSummaryBlock = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) '^procedure ExceptionWithNestedSummary;'
+  $summaryTagCount = ([regex]::Matches($excNestSummaryBlock, '<summary>')).Count
+  Check 'STRUCTURAL 1: no standalone <summary> fabricated from the nested one (exactly one <summary> substring, inside the exception)' `
+    ($summaryTagCount -eq 1) $excNestSummaryBlock
+
+  Test-ThreeCycleNesting 'preserve_tags.ExampleWithNestedParam' '^procedure ExampleWithNestedParam\(AV: Integer\);' `
+    '<example>Ex <param name="AV">nested param desc</param> body.</example>' `
+    'STRUCTURAL 1 (round 3): <param> nested inside <example>'
+  $exampleNestParamBlock = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) '^procedure ExampleWithNestedParam\(AV: Integer\);'
+  $paramTagCount = ([regex]::Matches($exampleNestParamBlock, '<param name="AV">')).Count
+  Check 'STRUCTURAL 1: no standalone <param name="AV"> fabricated from the nested one (exactly one substring, inside the example)' `
+    ($paramTagCount -eq 1) $exampleNestParamBlock
+
+  # --- STRUCTURAL 1, DISCLOSED RESIDUAL: DeprecatedWithNestedReturns /
+  # ExampleWithNestedRemarks. Cycle 1 is fixed and asserted here (no
+  # fabrication, no data loss -- the property this task guarantees). A
+  # SEPARATE, deeper cycle-2+ issue for these two specific rows is
+  # deliberately NOT asserted stable here -- see this fixture's own comment
+  # above DeprecatedWithNestedReturns, and the task report, for the full
+  # reasoning (unkeyed <returns>/<remarks> cannot disambiguate two same-
+  # shaped spans once MergeAdjacentSameKind folds a genuine auto-inserted
+  # tag into the same region as a nested-elsewhere look-alike, without
+  # position-tracking through the parser -- a materially larger change than
+  # this task's scope, per STRUCTURAL 1's own review-invited escape hatch).
+  $jDepRet1 = Apply-One 'preserve_tags.DeprecatedWithNestedReturns'
+  Check 'DeprecatedWithNestedReturns apply #1 exits 0' ($LASTEXITCODE -eq 0) $jDepRet1
+  $depRetBlock1 = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) '^function DeprecatedWithNestedReturns: Integer;'
+  Check 'STRUCTURAL 1 (round 3, cycle 1): <returns> nested inside <deprecated> survives verbatim, unmangled' `
+    ($depRetBlock1 -match [regex]::Escape('<deprecated>dep <returns>nested returns text</returns> tail</deprecated>')) $depRetBlock1
+  Check 'STRUCTURAL 1 (round 3, cycle 1): no standalone <returns>nested returns text</returns> fabricated as a SEPARATE sibling' `
+    (([regex]::Matches($depRetBlock1, [regex]::Escape('nested returns text'))).Count -eq 1) $depRetBlock1
+
+  $jExRem1 = Apply-One 'preserve_tags.ExampleWithNestedRemarks'
+  Check 'ExampleWithNestedRemarks apply #1 exits 0' ($LASTEXITCODE -eq 0) $jExRem1
+  $exRemBlock1 = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) '^procedure ExampleWithNestedRemarks;'
+  Check 'STRUCTURAL 1 (round 3, cycle 1): <remarks> nested inside <example> survives verbatim, unmangled' `
+    ($exRemBlock1 -match [regex]::Escape('<example>ex <remarks>nested remarks</remarks> tail</example>')) $exRemBlock1
+  Check 'STRUCTURAL 1 (round 3, cycle 1): "nested remarks" is NOT also duplicated into the real, separate <remarks> prose' `
+    (([regex]::Matches($exRemBlock1, [regex]::Escape('nested remarks'))).Count -eq 1) $exRemBlock1
+
+  # Every emitted /// line across PART 5 is 7-bit ASCII too.
+  $linesPart5 = [IO.File]::ReadAllLines($target)
+  $docLinesPart5 = $linesPart5 | Where-Object { $_.TrimStart() -match '^///' }
+  $nonAsciiPart5 = $docLinesPart5 | Where-Object { $_ -match '[^\x00-\x7F]' }
+  Check 'every /// line is 7-bit ASCII (PART 5)' ($nonAsciiPart5.Count -eq 0)
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
