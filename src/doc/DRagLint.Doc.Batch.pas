@@ -280,12 +280,23 @@ begin
 
       // Facts-only filter (Stubs=False, the default): keep the edit when the
       // merged comment has a managed facts block, OR the decl already had a
-      // doc-comment (daExtended). Drop a pure fresh all-TODO-no-facts create.
+      // doc-comment (daExtended / daRemoved). Drop a pure fresh
+      // all-TODO-no-facts create.
       // Stubs=True keeps every create too (wired fully in a later task).
+      //
+      // v(ADP3 T3k, register D1): daRemoved MUST be admitted here and it is not
+      // cosmetic. It is the pure-deletion action, which used to be reported as
+      // daExtended -- so before D1 this test caught it by accident. A deletion
+      // edit carries NO text, hence no AUTO_BEGIN fence, so HasManagedBlock is
+      // False for it; had daRemoved been added without touching this line, a
+      // project-wide `document --project --apply` would have silently STOPPED
+      // removing decayed engine blocks while --qname kept doing it. Splitting an
+      // enum value is only safe when every site that tested the old value is
+      // re-decided, and this was the site where "no change needed" was wrong.
       if AOptions.Stubs then
         Keep := True
       else
-        Keep := HasManagedBlock(Res) or (Res.Action = daExtended);
+        Keep := HasManagedBlock(Res) or (Res.Action in [daExtended, daRemoved]);
 
       if not Keep then Continue;
 

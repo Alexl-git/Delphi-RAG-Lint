@@ -8,7 +8,40 @@ uses
   DRagLint.Refactor.TextEdit;
 
 type
-  TDocumentAction = (daCreated, daExtended, daUnchanged, daNotFound);
+  /// <summary>How BuildFor/BuildForSymbol classified what it wants to do to the
+  /// declaration's doc comment. daCreated = there was none, write one.
+  /// daExtended = there was one and it needs repairing (delete + reinsert).
+  /// daUnchanged = there is one and it is already correct (no edits).
+  /// daNotFound = the symbol or its file could not be resolved.
+  /// daRemoved = there was one, it was entirely engine-owned, and everything
+  /// that fed it is now gone, so the right edit is a pure DELETE with nothing
+  /// reinserted.</summary>
+  /// <remarks>v(ADP3 T3k, register D1): daRemoved is new. A pure deletion used
+  /// to report daExtended, so `document --apply` printed "extended -- 1 edit(s)"
+  /// and --json said "action":"extended" for an operation that REMOVES a
+  /// comment. A consumer could not tell a repair from a removal -- the two have
+  /// opposite meanings for anyone deciding whether to review the diff.
+  ///
+  /// APPENDED, not inserted: every existing member keeps its ordinal, so
+  /// nothing that persisted or compared an ordinal can shift underneath. This
+  /// follows the convention T3d2 set for --strip's JSON -- additive, and stated
+  /// in the contract note at the emitting site.
+  ///
+  /// CONTRACT CHANGE, and it is the sanctioned one for this task: the emitted
+  /// action string for a deletion changes from "extended" to "removed" on both
+  /// the --json and the text path. Exactly one runner pinned the old value for a
+  /// genuine deletion (tests\autodoc\run_doc_p3_factsdecay.ps1, whose own header
+  /// already called it "a single delete"); that expectation moved as part of
+  /// this fix. Every other "extended" pin in the suite is a real repair and is
+  /// untouched.
+  ///
+  /// EVERY consumer that tests for daExtended must decide about daRemoved
+  /// explicitly. There are three, all updated: the two report sites in
+  /// DRagLint.CLI.pas, and DRagLint.Doc.Batch.pas's Keep filter -- which had to
+  /// admit daRemoved, because a deletion edit carries no text and therefore no
+  /// managed fence, so HasManagedBlock is False for it and a batch run would
+  /// otherwise have silently STOPPED removing decayed blocks.</remarks>
+  TDocumentAction = (daCreated, daExtended, daUnchanged, daNotFound, daRemoved);
 
   TDocumentResult = record
     Action  : TDocumentAction   ;
@@ -25,8 +58,10 @@ type
     /// existing doc-comment above the decl, derives params + return from the
     /// signature, builds index-grounded facts, and merges into a managed-region
     /// comment. Action is daCreated (no prior comment), daExtended (prior
-    /// comment changed), daUnchanged (identical -- no edits), or daNotFound
-    /// (symbol/file missing). Edits are dry-run data; the caller applies them.</summary>
+    /// comment changed), daRemoved (prior comment was entirely engine-owned and
+    /// has decayed to nothing -- a pure delete), daUnchanged (identical -- no
+    /// edits), or daNotFound (symbol/file missing). Edits are dry-run data; the
+    /// caller applies them.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="AQName">Fully qualified symbol name, e.g. Unit.TType.Method.</param>
     /// <returns>The classified action plus file/line and the computed edits.</returns>
@@ -763,7 +798,11 @@ begin
       E.Line    := Existing.StartLine;
       E.EndLine := Existing.EndLine;
       Result.Edits:= Result.Edits + [E];
-      Result.Action:= daExtended;
+      // v(ADP3 T3k, register D1): this is the ONE place the engine emits a pure
+      // deletion -- a tekDeleteLines with no matching insert. It reported
+      // daExtended, which made a removal indistinguishable from a repair in both
+      // the CLI text output and --json. See TDocumentAction's own remarks.
+      Result.Action:= daRemoved;
     end
     else
       Result.Action:= daUnchanged;

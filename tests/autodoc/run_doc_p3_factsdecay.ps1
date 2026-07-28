@@ -32,9 +32,17 @@
     1. First apply: action=created, the facts-only remarks block is written.
     2. After removing the call + reindexing, `doc-drift` reports
        ddFactsBlockStale, fixable=true (corroborates the bug's own framing).
-    3. Second apply: action=extended, edits=1 (a single delete -- the stale
+    3. Second apply: action=removed, edits=1 (a single delete -- the stale
        block is REMOVED, not left in place, and nothing survives to be
        reinserted since there is no longer anything to say).
+
+       v(ADP3 T3k, register D1): this used to assert action=extended. It was
+       the ONE runner in the suite pinning "extended" for a case its own text
+       calls "a single delete", which is exactly the confusion D1 names --
+       a consumer could not tell a repair from a removal. The expectation
+       changed here as PART of that fix, deliberately and not silently; every
+       other "extended" pin in tests\autodoc is a genuine repair and is
+       untouched. See the enum's own comment in DRagLint.Doc.Document.pas.
     4. The stale "Called from:" text and the fence markers are GONE from the
        file; no comment remains above Target at all.
     5. Idempotent at the new (comment-less) fixed point: a further reindex +
@@ -62,7 +70,9 @@ New-Item -ItemType Directory -Path $scratch | Out-Null
 $target = Join-Path $scratch 'factsdecay.pas'
 $db     = Join-Path $scratch 'factsdecay.sqlite'
 
-Write-Ansi $target @'
+# v(ADP3 T3k): hoisted into a variable so step 6 can replay the same fixture on
+# its own scratch dir without a second literal copy drifting from this one.
+$FixtureSrc = @'
 unit factsdecay;
 
 interface
@@ -84,6 +94,8 @@ end;
 
 end.
 '@
+
+Write-Ansi $target $FixtureSrc
 
 Push-Location C:\TEMP
 try {
@@ -112,7 +124,9 @@ try {
 
   $json2 = (& $exePath document --qname factsdecay.Target --db $db --apply --json 2>$null) -join "`n"
   Check 'apply #2 exits 0' ($LASTEXITCODE -eq 0)
-  Check '3. apply #2: action=extended' ($json2 -match '"action":"extended"') $json2
+  Check '3. apply #2: action=removed (D1 -- a pure deletion is not a repair)' ($json2 -match '"action":"removed"') $json2
+  Check '3. apply #2: action is NOT extended (D1 -- the two are now distinguishable)' `
+    (-not ($json2 -match '"action":"extended"')) $json2
   Check '3. apply #2: edits=1 (a single delete, nothing reinserted)' ($json2 -match '"edits":1') $json2
 
   $textAfter = [IO.File]::ReadAllText($target)
@@ -134,6 +148,35 @@ try {
   $after = [IO.File]::ReadAllBytes($target)
   Check '5. byte-identical after reindex + apply #3' `
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
+
+  # --- 6. The TEXT path reports the removal too (v(ADP3 T3k), register D1) ---
+  # The JSON action and the human sentence are built by two separate pieces of
+  # code (CLI.pas's `case Res.Action of` and its IfThen a few lines below), so
+  # asserting one proves nothing about the other -- D1 named BOTH. Replayed on a
+  # fresh scratch dir so it cannot perturb steps 1-5, which have already reached
+  # their comment-less fixed point above.
+  $scratch6 = Join-Path C:\TEMP 'draglint_docp3factsdecay_text'
+  if (Test-Path $scratch6) { Remove-Item $scratch6 -Recurse -Force }
+  New-Item -ItemType Directory -Path $scratch6 | Out-Null
+  $target6 = Join-Path $scratch6 'factsdecay.pas'
+  $db6     = Join-Path $scratch6 'factsdecay.sqlite'
+  Write-Ansi $target6 $FixtureSrc
+
+  & $exePath index $scratch6 --db $db6 2>$null | Out-Null
+  Check '6. text: index exits 0' ($LASTEXITCODE -eq 0)
+  $t1 = (& $exePath document --qname factsdecay.Target --db $db6 --apply 2>$null) -join "`n"
+  Check '6. text: apply #1 reports created' ($t1 -match 'doc: created -- \d+ edit\(s\) applied') $t1
+
+  $drifted6 = (Get-Content -Raw $target6) -replace `
+    "begin\r\n  Target;\r\nend;", `
+    "begin`r`n  // no longer calls Target -- the fact above is now stale`r`nend;"
+  [System.IO.File]::WriteAllText($target6, $drifted6, [System.Text.Encoding]::ASCII)
+  & $exePath index $scratch6 --db $db6 2>$null | Out-Null
+
+  $t2 = (& $exePath document --qname factsdecay.Target --db $db6 --apply 2>$null) -join "`n"
+  Check '6. text: apply #2 reports removed, not extended (D1)' `
+    ($t2 -match 'doc: removed -- 1 edit\(s\) applied') $t2
+  Check '6. text: apply #2 does NOT say extended (D1)' (-not ($t2 -match 'doc: extended')) $t2
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

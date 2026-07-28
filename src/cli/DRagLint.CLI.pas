@@ -6744,8 +6744,11 @@ end;
 // field only one caller ever passes is safe for the other two. When
 // ASkippedCount >= 0, both fields are ALWAYS emitted, including when
 // ASkippedCount is 0 -- the same shape DoDocumentUnit's own accessorsSkipped
-// field already uses (CLI.pas ~6823/~6871: unconditional; only the
-// human-readable sentence at ~6836/~6883 is text-mode-gated), so a --json
+// field already uses (DoDocumentUnit and ReportDocBatch both AddPair it
+// unconditionally; only each one's own `if ...AccessorsSkipped > 0 then
+// Writeln` sentence is text-mode-gated -- v(ADP3 T3k, Group 3): the four
+// approximate line numbers this cited had drifted, so it names the symbols
+// now), so a --json
 // consumer can distinguish "nothing skipped" from "this binary predates the
 // field", the same way accessorsSkipped: 0 already distinguishes "nothing
 // trivial" from "old binary". ASkippedFiles is a flat array of the same
@@ -6757,7 +6760,7 @@ function ReportStrip(const AArgs: TArgs; const AIdKeys, AIdVals: TArray<string>;
   ASkippedCount: Integer = -1; const ASkippedFiles: TArray<string> = nil): Integer;
 var
   O         : TJSONObject;
-  I         : Integer;
+  I         : Integer    ;
   SkippedArr: TJSONArray ;
   S         : string     ;
 begin
@@ -7191,10 +7194,15 @@ begin
       // v(ADP3 T3d2 D8 review round 3, IMPORTANT): this comment used to claim
       // text-mode-only matched "the same convention DoDocumentUnit's own
       // AccessorsSkipped notice uses ... never mixed into --json". That was
-      // FACTUALLY WRONG: DoDocumentUnit (:6823) and ReportDocBatch (:6871)
-      // both add accessorsSkipped to their JSON object UNCONDITIONALLY,
-      // present even when zero -- only the human SENTENCE (:6836/:6883) is
-      // gated on text mode. The real precedent is an ALWAYS-PRESENT JSON
+      // FACTUALLY WRONG: DoDocumentUnit and ReportDocBatch both add
+      // accessorsSkipped to their JSON object UNCONDITIONALLY, present even
+      // when zero -- only the human SENTENCE (each function's own
+      // `if ...AccessorsSkipped > 0 then Writeln` line) is gated on text mode.
+      // v(ADP3 T3k, Group 3): the four absolute line numbers this paragraph
+      // used to cite were correct only for the diff that wrote them and had
+      // already rotted; cite the SYMBOL and the distinctive line instead, so
+      // the reference cannot go stale again. The real precedent is an
+      // ALWAYS-PRESENT JSON
       // field, the opposite of what this comment claimed. Fixed:
       // SkippedCount and the paths resolved from SkippedFileIds (see
       // SkippedFiles, built right after this loop) are now ALSO passed into
@@ -7252,6 +7260,24 @@ begin
 end; // function
 
 // AutoDocument Chunk 1: drag-lint document --qname X [--apply|--json|--no-backup] [--db PATH]
+// v(ADP3 T3k, register D1): the word `document --apply` prints for a completed
+// action, in TEXT mode. Kept beside the --json 'action' mapping it mirrors so
+// the two cannot drift into disagreeing about the same enum -- the JSON side is
+// the case expression in DoDocument, and its contract note explains the value
+// set. daUnchanged and daNotFound never reach here (both are returned to the
+// caller earlier, with their own messages), so they map to the same defensive
+// fallback the JSON path uses rather than to a word that would read as a lie.
+function DocActionWord(AAction: DRagLint.Doc.Document.TDocumentAction): string;
+begin
+  case AAction of
+    DRagLint.Doc.Document.daCreated : Result:= 'created' ;
+    DRagLint.Doc.Document.daExtended: Result:= 'extended';
+    DRagLint.Doc.Document.daRemoved : Result:= 'removed' ;
+  else
+    Result:= 'unknown';
+  end;
+end;
+
 // Generates or repairs a managed-region DocInsight comment for the symbol. Dry-run
 // (prints the edit preview) unless --apply. Exit 0 on ok/unchanged, 1 not found,
 // 2 usage/db error. Read-only DB access (writes source files, not the index).
@@ -7299,9 +7325,22 @@ begin
       // daNotFound already returned above (text + exit 1) before this --json
       // block, so it can never reach here; the else is a defensive fallback for
       // an unexpected action value, NOT a reachable 'not_found' result.
+      // v(ADP3 T3k, register D1) -- JSON CONTRACT NOTE for `document --json`.
+      // 'action' gained a fifth value, "removed", for the case where the engine
+      // DELETES a doc comment outright (an entirely engine-owned block whose
+      // facts have all decayed) and reinserts nothing. That case previously
+      // reported "extended", so a consumer reading --json could not tell a
+      // repair from a removal, which are opposite outcomes for anyone deciding
+      // whether a diff needs review. This is ADDITIVE in the same sense the
+      // --strip fields are (see ReportStrip's contract note ~6734): no key is
+      // removed or renamed and no other value changes meaning, but a consumer
+      // that switches on 'action' and treats an unrecognized value as an error
+      // WILL see the new one, so it is a contract change and is called that.
+      // "edits":1 with "action":"removed" is the deletion shape.
       case Res.Action of
         DRagLint.Doc.Document.daCreated  : O.AddPair('action', 'created'  );
         DRagLint.Doc.Document.daExtended : O.AddPair('action', 'extended' );
+        DRagLint.Doc.Document.daRemoved  : O.AddPair('action', 'removed'  );
         DRagLint.Doc.Document.daUnchanged: O.AddPair('action', 'unchanged');
         else O.AddPair('action', 'unknown' );
       end;
@@ -7318,7 +7357,14 @@ begin
   else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Res.Edits)); Writeln(Format('doc: %d edit(s) -- pass --apply to write', [Length(Res.Edits)])); end
   else Writeln(Format(
       'doc: %s -- %d edit(s) applied%s',
-      [IfThen(Res.Action = DRagLint.Doc.Document.daCreated, 'created', 'extended'), Length(Res.Edits), IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+      // v(ADP3 T3k, register D1): the human sentence is built HERE, separately
+      // from the --json 'action' a few lines above, so both had to learn the new
+      // value -- asserting one proves nothing about the other, and the runner
+      // pins both. The old two-way IfThen said 'extended' for everything that
+      // was not 'created', which is precisely how a REMOVAL came to be announced
+      // as a repair. A case expression, so a future member cannot silently
+      // inherit 'extended' the way daRemoved did.
+      [DocActionWord(Res.Action), Length(Res.Edits), IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
   Result:= 0;
 end; // function
 
