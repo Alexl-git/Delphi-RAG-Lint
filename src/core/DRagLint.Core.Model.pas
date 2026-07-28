@@ -478,6 +478,78 @@ function SeeAlsoToJson(const ASeeAlso: TArray<string>): string             ;
 
 function DefaultDocConfig: TDocConfig;
 
+{ v(ADP3 T3j review round 1): THE doc-region/declaration attribution predicate.
+  ONE declaration, read by all THREE places that decide whether a doc comment
+  belongs to a given declaration:
+
+    * DRagLint.Core.Indexer.FindDocRegionAbove   (index-time capture)
+    * DRagLint.Doc.Document.FindDocRegionAbove   (the `document --apply` write path)
+    * DRagLint.Doc.Strip.StripSymbolRegion       (the `document --strip` remove path)
+
+  It lives HERE, in the lowest layer (this unit's own uses clause is
+  System.SysUtils alone), because all three already depend on Core.Model and
+  none of them can depend on each other -- Doc.Strip is deliberately
+  index-free, and Doc.Document keeps its own copy of the region scan
+  specifically so it does not pull in Indexer.
+
+  WHY A SHARED PREDICATE AND NOT THREE CAREFUL COPIES. The Phase 3 T3j defect
+  (register S1) was exactly this drift: Doc.Strip copied FindDocRegionAbove's
+  WINDOW, claimed in a comment to tolerate "the same gap", and silently omitted
+  its GUARD -- so `--strip` deleted a doc block belonging to a different
+  symbol. Three copies with a comment asserting they agree is what failed; a
+  single declaration both sides read makes that drift structurally impossible. }
+
+const
+  /// <summary>Intervening lines tolerated between a doc region's end and its
+  /// declaration. 1 everywhere: TDocumenter's two FindDocRegionAbove call sites
+  /// pass it, TDocStripper.StripSymbolRegion passes it, and
+  /// DefaultDocConfig.AllowBlankLineGap defaults to it. Named so the three
+  /// attribution sites cannot disagree by way of a stray literal.</summary>
+  DOC_ALLOW_GAP = 1;
+
+/// <summary>True when a doc-comment region ending at 1-based line AEndLine is
+/// close enough to a declaration at 1-based ADeclLine to be attributed to it:
+/// the region must end within AAllowGap lines above the declaration.</summary>
+/// <param name="AEndLine">1-based last line of the candidate doc region.</param>
+/// <param name="ADeclLine">1-based declaration line the region might belong to.</param>
+/// <param name="AAllowGap">Tolerated intervening lines; 1 everywhere today.</param>
+/// <returns>True when AEndLine is in [ADeclLine - 1 - AAllowGap, ADeclLine - 1].</returns>
+/// <remarks>Proximity only. It says nothing about WHAT occupies the gap -- pair
+/// it with NoDeclarationInGap (or use DocRegionFitsDecl, which is both).</remarks>
+function DocRegionInGapWindow(AEndLine, ADeclLine, AAllowGap: Integer): Boolean;
+
+/// <summary>True when NO other declaration starts strictly between a doc
+/// region's end line and ADeclLine -- i.e. the region is not separated from
+/// ADeclLine by some other declaration that owns it instead.</summary>
+/// <param name="AEndLine">1-based last line of the candidate doc region.</param>
+/// <param name="ADeclLine">1-based declaration line the region might belong to.</param>
+/// <param name="ASymStartLines">Every symbol's 1-based StartLine in the same
+/// file, INCLUDING ADeclLine's own, sorted ASCENDING. The ascending order is
+/// load-bearing: the scan stops at the first entry >= ADeclLine, which both
+/// bounds the cost on symbol-heavy files and is what excludes ADeclLine's own
+/// entry from consideration. An EMPTY array means "no symbol table available"
+/// and the check is vacuously True -- a caller without one must add its own
+/// safeguard (see DRagLint.Doc.Strip.StripSymbolRegion's blank-line fallback).</param>
+/// <returns>True when the gap contains no other declaration.</returns>
+/// <remarks>Blank lines are never symbol start lines, so a region separated
+/// from its declaration by blank lines alone always passes. This is the guard
+/// added by adp2-docregion-fix, and it is deliberately about DECLARATIONS
+/// rather than blankness: an ordinary comment in the gap is tolerated on
+/// purpose, because the doc comment above it still belongs to ADeclLine.</remarks>
+function NoDeclarationInGap(AEndLine, ADeclLine: Integer;
+  const ASymStartLines: TArray<Integer>): Boolean;
+
+/// <summary>The full attribution test: DocRegionInGapWindow AND
+/// NoDeclarationInGap. Use this unless you need the two halves apart.</summary>
+/// <param name="AEndLine">1-based last line of the candidate doc region.</param>
+/// <param name="ADeclLine">1-based declaration line the region might belong to.</param>
+/// <param name="AAllowGap">Tolerated intervening lines; 1 everywhere today.</param>
+/// <param name="ASymStartLines">See NoDeclarationInGap -- sorted ascending, and
+/// an empty array makes the declaration half vacuous.</param>
+/// <returns>True when the region should be attributed to ADeclLine.</returns>
+function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
+  const ASymStartLines: TArray<Integer>): Boolean;
+
 implementation
 
 uses
@@ -613,6 +685,36 @@ begin
   Result.CaptureLooseComments:= False;
   Result.ImplPrecedence      := 'interface';
   Result.AllowBlankLineGap   := 1;
+end;
+
+// v(ADP3 T3j review round 1): see the block comment on these three in the
+// interface section for why they live here rather than in any of the three
+// units that call them.
+function DocRegionInGapWindow(AEndLine, ADeclLine, AAllowGap: Integer): Boolean;
+begin
+  Result:= (AEndLine >= ADeclLine - 1 - AAllowGap) and (AEndLine <= ADeclLine - 1);
+end;
+
+function NoDeclarationInGap(AEndLine, ADeclLine: Integer;
+  const ASymStartLines: TArray<Integer>): Boolean;
+var
+  L: Integer;
+begin
+  Result:= True;
+  for L in ASymStartLines do
+  begin
+    // Sorted ascending, so nothing further can qualify -- and this is also what
+    // excludes ADeclLine's OWN entry, which the array includes.
+    if L >= ADeclLine then Break;
+    if L > AEndLine then Exit(False);
+  end;
+end;
+
+function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
+  const ASymStartLines: TArray<Integer>): Boolean;
+begin
+  Result:= DocRegionInGapWindow(AEndLine, ADeclLine, AAllowGap)
+           and NoDeclarationInGap(AEndLine, ADeclLine, ASymStartLines);
 end;
 
 end.

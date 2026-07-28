@@ -215,13 +215,18 @@ end;
 // When ACaptureLoose is False, regions with Kind in [dckLooseLine, dckLooseBlock]
 // are skipped entirely.
 // Sentinel: Result.Kind = TDocCommentKind(-1) means no region found.
+// v(ADP3 T3j review round 1): the window and the guard described above are no
+// longer implemented here -- both delegate to DRagLint.Core.Model's
+// DocRegionInGapWindow + NoDeclarationInGap, shared with the twin copy in
+// DRagLint.Doc.Document and with DRagLint.Doc.Strip's `--strip` path, so the
+// three attribution sites cannot drift. See the block comment on those
+// functions for why that mattered (register S1).
 function FindDocRegionAbove(ADocRegions: TList<TDocCommentRegion>; ASymStartLine: Integer;
   AAllowGap: Integer; ACaptureLoose: Boolean; const ASymStartLines: TArray<Integer>): TDocCommentRegion;
 var
   I      : Integer          ;
   Best   : TDocCommentRegion;
   HasBest: Boolean          ;
-  L      : Integer          ;
 begin
   HasBest:= False;
   // ADocRegions is sorted by StartLine ascending.
@@ -229,7 +234,11 @@ begin
   begin
     // Skip loose regions when captureLooseComments is disabled.
     if (not ACaptureLoose) and (ADocRegions[I].Kind in [dckLooseLine, dckLooseBlock]) then Continue;
-    if (ADocRegions[I].EndLine >= ASymStartLine - 1 - AAllowGap) and (ADocRegions[I].EndLine <= ASymStartLine - 1) then
+    // v(ADP3 T3j review round 1): the window is now the SHARED
+    // DocRegionInGapWindow (DRagLint.Core.Model) -- same arithmetic, one
+    // declaration. Control flow deliberately unchanged: pick the last region
+    // satisfying the window, THEN apply the declaration guard to it below.
+    if DocRegionInGapWindow(ADocRegions[I].EndLine, ASymStartLine, AAllowGap) then
     begin
       Best:= ADocRegions[I];
       HasBest:= True;
@@ -237,17 +246,11 @@ begin
     if ADocRegions[I].StartLine > ASymStartLine then Break;
   end;
   // Intervening-declaration check: reject Best when some OTHER symbol starts
-  // strictly between Best.EndLine and ASymStartLine.
-  if HasBest then
-    for L in ASymStartLines do
-    begin
-      if L >= ASymStartLine then Break; // sorted ascending -- nothing further can qualify
-      if L > Best.EndLine then
-      begin
-        HasBest:= False;
-        Break;
-      end;
-    end;
+  // strictly between Best.EndLine and ASymStartLine. v(ADP3 T3j review round 1):
+  // now the SHARED NoDeclarationInGap, which `document --strip` reads too -- the
+  // T3j defect was Doc.Strip copying the window above without this guard.
+  if HasBest and (not NoDeclarationInGap(Best.EndLine, ASymStartLine, ASymStartLines)) then
+    HasBest:= False;
   if HasBest then Result:= Best
   else
   begin
