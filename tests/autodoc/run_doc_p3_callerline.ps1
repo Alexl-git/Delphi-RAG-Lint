@@ -193,8 +193,10 @@ Copy-Item $fxA $tgtA -Force
 # become cross-unit with no call_edges row, both control lists turn uniformly
 # UNCERTAIN, and all 27 of A's checks still passed, including the one named
 # "uniformly-CERTAIN list still renders plain". The control had silently become
-# a second copy of the uncertain case. So assert the certain arm IS certain,
-# from the index, BEFORE asserting how it renders.
+# a second copy of the uncertain case. So assert -- from the index, BEFORE
+# asserting how anything renders -- that the certain arm IS certain and the
+# uncertain arm IS uncertain. Neither arm's kind is observable in the output
+# these checks read, so neither may be inherited from fixture prose.
 $edgesA = (& $exePath dump-call-edges --db $dbA 2>$null) -join "`n"
 foreach ($nm in @('MakePoint','SumPoint')) {
   $eA = @([regex]::Matches($edgesA, "(?m)^\s*\d+\|callerline\.$nm\|certain\s*$"))
@@ -205,6 +207,16 @@ $ambA = (& $exePath ambiguous-calls --db $dbA 2>$null) -join "`n"
 Check 'A PRECONDITION: A''s index holds NO unresolved call site (the control lists are uniformly CERTAIN, not merely unmarked)' `
   (($ambA -match '(?m)^0 ambiguous call\(s\)') -and (-not ($ambA -match '\[unverified\]'))) `
   ($ambA -replace "`n",' / ')
+# The UNCERTAIN arm needs the mirror-image precondition, for the same reason:
+# 'no marker' is equally true of a CERTAIN list, so without this the TPoint2
+# check below would read its uncertainty off fixture prose rather than off the
+# index -- the identical hole review round 1 found on the certain arm. A record
+# is never a call target (CanBeCallTarget False, so Doc.Facts hardcodes
+# 'unverified'), which is why this holds by construction today and is cheap to
+# assert -- and why it is worth asserting against the day that stops being true.
+$tpEdgesA = @([regex]::Matches($edgesA, "(?m)^\s*\d+\|callerline\.TPoint2\|"))
+Check 'A PRECONDITION: the index holds NO call edge into TPoint2 (its list is uniformly UNCERTAIN, not merely unmarked)' `
+  ($tpEdgesA.Count -eq 0) ("edges=" + ($edgesA -replace "`n",' / '))
 
 & $exePath document --unit $tgtA --db $dbA --apply 2>$null | Out-Null
 $md5Cycle1 = Get-FileMd5 $tgtA
