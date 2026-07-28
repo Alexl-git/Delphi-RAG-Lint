@@ -51,7 +51,10 @@ type
     function  WriteBlocksTo(const APath: string; const ABlocks: TRuleBlocks;
       out ABackup: string): Boolean;
   public
+    /// <summary>Creates the form and its (initially empty) working set. Prefer
+    /// Execute over calling this directly.</summary>
     constructor Create(AOwner: TComponent); override;
+    /// <summary>Frees the working set and the touched-paths tracker.</summary>
     destructor Destroy; override;
     /// <summary>Show the modal curation window seeded with AInitialPath (may be '').</summary>
     /// <returns>AInitialPath when that file was modified and the caller must reload
@@ -327,15 +330,20 @@ begin
   try
     FBlocks.Items.Clear;
     fi := FFiles.ItemIndex;
-    if (fi < 0) or (fi >= FSet.Count) then Exit;
-    F := FSet.Item(fi);
-    for i := 0 to High(F.Blocks) do
+    // Out-of-range (e.g. the working set just emptied) leaves the grid blank --
+    // fall through to UpdateEnabled below either way, not an early Exit, so
+    // enablement always tracks the CURRENT selection.
+    if (fi >= 0) and (fi < FSet.Count) then
     begin
-      It := FBlocks.Items.Add;
-      It.Caption := ExtractFileName(F.Path);
-      It.SubItems.Add(KIND_NAME[F.Blocks[i].Kind]);
-      It.SubItems.Add(BlockLabel(F.Blocks[i]));
-      It.SubItems.Add(Format('%d-%d', [F.Blocks[i].StartLine, F.Blocks[i].EndLine]));
+      F := FSet.Item(fi);
+      for i := 0 to High(F.Blocks) do
+      begin
+        It := FBlocks.Items.Add;
+        It.Caption := ExtractFileName(F.Path);
+        It.SubItems.Add(KIND_NAME[F.Blocks[i].Kind]);
+        It.SubItems.Add(BlockLabel(F.Blocks[i]));
+        It.SubItems.Add(Format('%d-%d', [F.Blocks[i].StartLine, F.Blocks[i].EndLine]));
+      end;
     end;
   finally
     FBlocks.Items.EndUpdate;
@@ -504,8 +512,10 @@ procedure TCurationForm.DoSplit(Sender: TObject);
 var
   fi      : Integer;
   Sel     : TArray<Integer>;
+  Orig    : TRuleBlocks;
   Rem, Mvd: TRuleBlocks;
   Target, Bak: string;
+  ErrMsg  : string;
 begin
   Sel := CheckedIndexes(fi);
   if not CanOperateOn(Sel) or (fi < 0) then Exit;
@@ -517,13 +527,31 @@ begin
     FStatus.SimpleText := 'Split target must be a different file.';
     Exit;
   end;
-  SplitOut(FSet.Item(fi).Blocks, Sel, Rem, Mvd);
+  Orig := FSet.Item(fi).Blocks;   // pre-split content, restored below if the source save fails
+  SplitOut(Orig, Sel, Rem, Mvd);
   if not WriteBlocksTo(Target, Mvd, Bak) then Exit;    // source untouched on failure
   FSet.SetBlocks(fi, Rem);
-  SaveSet(fi);
-  RefreshBlocks;
-  FStatus.SimpleText := Format('Moved %d block(s) to %s',
-    [Length(Mvd), ExtractFileName(Target)]);
+  if SaveSet(fi) then
+  begin
+    RefreshBlocks;
+    FStatus.SimpleText := Format('Moved %d block(s) to %s',
+      [Length(Mvd), ExtractFileName(Target)]);
+  end
+  else
+  begin
+    // The target above already got the moved blocks written -- a source save
+    // failure here means they now exist in BOTH files, not that "nothing
+    // changed". Put the in-memory model back in sync with what disk still
+    // holds (the pure layer guarantees the source file itself was left
+    // untouched by the failed save) rather than showing a split the source
+    // never actually persisted. Preserve SaveSet's own error text too.
+    ErrMsg := FStatus.SimpleText;
+    FSet.SetBlocks(fi, Orig);
+    RefreshBlocks;
+    FStatus.SimpleText := Format('Wrote %d block(s) to %s, but %s could not be '
+      + 'saved -- they now exist in BOTH files. %s',
+      [Length(Mvd), ExtractFileName(Target), ExtractFileName(FSet.Item(fi).Path), ErrMsg]);
+  end;
 end;
 
 procedure TCurationForm.DoCopy(Sender: TObject);
@@ -567,6 +595,7 @@ var
   Plan : TMergePlan;
   Res  : TArray<TMergeResolution>;
   InPath: string;
+  Saved: Boolean;
 begin
   fi := FFiles.ItemIndex;
   if fi < 0 then Exit;
@@ -594,8 +623,9 @@ begin
     end;
 
   FSet.SetBlocks(fi, ApplyMerge(Plan, Res));
-  SaveSet(fi);
+  Saved := SaveSet(fi);
   RefreshBlocks;
+  if not Saved then Exit;   // SaveSet's own error is already on the status bar
   ShowReport(Self, 'Merge report -- ' + ExtractFileName(InPath),
     MergeReportLines(Plan, Res, ExtractFileName(InPath)));
 end;
