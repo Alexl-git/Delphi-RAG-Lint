@@ -2,9 +2,20 @@
 # runs forms-csv, and asserts the navigation CSV content.
 #
 # Usage: pwsh -File tests/autotest/run_formsmap.ps1 [-Exe <path>]
+#
+# Exe target -- register item E8, fixed by T3k. This runner defaulted to
+# src\cli\Win32\Debug\drag-lint.exe, which build\build_draglint_win64.bat (the
+# canonical build for this work) never refreshes. It was therefore GREEN against
+# a hand-built Win32 exe that predated weeks of Win64-built change: not failing,
+# NOT MEASURING. That manufactured a false finding -- T3i mutated FormsMap,
+# rebuilt Win64, watched this runner stay green, and concluded the check was
+# toothless (register E6, later disproved by data-level reproduction).
+# Same ruling as run_smoke.ps1 (v0.86 policy, user 2026-07-05): the Win64 CLI is
+# the artifact the product ships, so that is what the battery must test. Pass
+# -Exe explicitly to run against a Win32 build on purpose.
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\src\cli\Win32\Debug\drag-lint.exe",
+    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
     [string] $FixtureDir = "$PSScriptRoot\..\fixtures\formsmap",
     [string] $WorkDir = "$env:TEMP\drag-lint-formsmap"
 )

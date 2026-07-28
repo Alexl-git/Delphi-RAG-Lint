@@ -11,10 +11,17 @@
 #
 # Banner-robust: the global C:\Projects\.drag-lint.json prints a
 # "(loaded defaults from ...)" line that we strip before asserting.
+#
+# Exe target -- register item E8, fixed by T3k. This runner defaulted to
+# src\cli\Win32\Debug\drag-lint.exe, which build\build_draglint_win64.bat (the
+# canonical build for this work) never refreshes, so it was green against a
+# stale hand-built binary rather than against the code that ships. Same ruling
+# as run_smoke.ps1 (v0.86 policy, user 2026-07-05): the Win64 CLI is the
+# artifact the product spawns. Pass -Exe to target a Win32 build on purpose.
 
 [CmdletBinding()]
 param(
-  [string] $Exe = "$PSScriptRoot\..\..\src\cli\Win32\Debug\drag-lint.exe",
+  [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string] $FixtureDir = "$PSScriptRoot\..\fixtures"
 )
 
