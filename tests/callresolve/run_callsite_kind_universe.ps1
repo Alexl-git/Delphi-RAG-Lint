@@ -116,9 +116,16 @@ try {
       (($exit -eq 0) -and ($out -match 'File:.*callsitekind\.pas')) $out
     return $out
   }
+  # v(ADP3 T4): matches EITHER label. The three qnames this is called with are
+  # all routines, so all three still render "Called from:" -- but two of the
+  # calls below assert the line is ABSENT, and a helper that only knew the old
+  # label would report absence for a symbol that merely got relabelled to
+  # "Used by:". That is the same vacuity trap the boundary checks above just
+  # walked out of, so it is closed here rather than left to depend on the
+  # callers' kinds never changing.
   function CalledFromLine([string]$QName) {
     $out = Doc-Out $QName
-    $ln  = ($out -split "`r?`n" | Where-Object { $_ -match 'Called from:' } | Select-Object -First 1)
+    $ln  = ($out -split "`r?`n" | Where-Object { $_ -match '(Called from:|Used by:)' } | Select-Object -First 1)
     if ($null -eq $ln) { return '' } else { return $ln }
   }
 
@@ -143,26 +150,39 @@ try {
 
   # 2: THE SCOPE BOUNDARY, pinned deliberately, for EVERY non-routine kind.
   # A class, record, enum or alias can never be a call target, so for those this
-  # bucket has never held call sites -- it holds plain type_use REFERENCES, which
-  # the renderer labels "Called from:". The label is the defect; relabelling it
-  # (the planned "Used by:" for types) is owned by the render workstream and
-  # tests/autotest/run_doc_no_self_caller.ps1 pins the present content. So the
-  # call-sites-only restriction is NOT applied to them.
+  # bucket has never held call sites -- it holds plain type_use REFERENCES. So
+  # the call-sites-only restriction is NOT applied to them, and the fact must
+  # still be emitted.
+  #
+  # v(ADP3 T4): THE PIN HAS FLIPPED, AND THAT WAS ALWAYS THE PLAN. These checks
+  # previously required the label to read "Called from:", with their own name
+  # recording that the wrong verb was a known defect "owned by the Used by:
+  # relabel". T4 is that relabel: RenderFactsBlock now selects the verb from
+  # TDocFacts.SymbolKind via DRagLint.Core.Model.CanBeCallTarget -- the SAME
+  # declaration DRagLint.Doc.Facts reads to decide what goes into the list -- so
+  # a non-routine kind reads "Used by:". Expectation updated, engine untouched.
+  #
+  # The PROPERTY these checks defend is unchanged and is not the label: each of
+  # the three kinds must still get a reference line AT ALL. Both halves are now
+  # asserted (the line is "Used by:", and it is NOT "Called from:") so neither a
+  # revert to the old verb nor a silent loss of the whole line can pass.
   #
   # T3i REVIEW ROUND 2 -- WHY THE ENUM AND ALIAS ARE PINNED SEPARATELY. Round 1
   # gated on a literal [skClass, skInterface, skRecord], which is the set the
   # OTHER runner happens to pin, so skEnum and skTypeAlias silently LOST their
   # only reference fact -- and, unlike a class, nothing else carries it for them
   # ("Used in units:" is deliberately class/interface/record only). The boundary
-  # had been drawn by test coverage rather than by the semantics. These four
-  # checks are what make that impossible to reintroduce unnoticed.
+  # had been drawn by test coverage rather than by the semantics. These checks
+  # are what make that impossible to reintroduce unnoticed.
   foreach ($kindCase in @(
       @{ QName = 'callsitekind.TProbe'     ; What = 'CLASS' },
       @{ QName = 'callsitekind.TProbeKind' ; What = 'ENUM'  },
       @{ QName = 'callsitekind.TProbeAlias'; What = 'ALIAS' })) {
     $kOut = Doc-Out $kindCase.QName
-    Check ("BOUNDARY: a {0} still lists references under Called from: (never a call target -- owned by the Used by: relabel)" -f $kindCase.What) `
-      ($kOut -match 'Called from:') $kOut
+    Check ("BOUNDARY: a {0} still lists its references (never a call target, but the fact must not be lost)" -f $kindCase.What) `
+      ($kOut -match 'Used by:') $kOut
+    Check ("BOUNDARY: a {0} does NOT say Called from: (v(ADP3 T4) relabel)" -f $kindCase.What) `
+      (-not ($kOut -match 'Called from:')) $kOut
   }
   # The class ALSO keeps its own units fact; the enum deliberately does NOT get
   # one (that gate is class/interface/record and must not widen -- see Doc.Facts).

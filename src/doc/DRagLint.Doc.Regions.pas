@@ -186,13 +186,31 @@ type
       out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
   public
     /// <summary>Renders the fenced facts-block body lines (each prefixed
-    /// APrefix), from AFacts. Sections: Called from / Calls / Used in units /
+    /// APrefix), from AFacts. Sections: Called from (or Used by, see below) /
+    /// Calls / Used in units /
     /// Raises / Deprecated / Overrides / Overridden by / Implements / Overload
     /// k of n / abstract / virtual / Complexity / Reads/Writes fields / Owns
     /// returned / Handles / SQL tables touched / Covered by / Since / SeeAlso.
     /// Empty sections omitted; '' when there are no facts. Displayed
     /// counts below
-    /// the true *Total get a ' (+N more)' suffix. Deprecated is ground-truth
+    /// the true *Total get a ' (+N more)' suffix.
+    /// <para>v(ADP3 T4) -- TWO RULES GOVERN THE REFERENCE LINE
+    /// (AFacts.CalledFrom), and both are about honesty rather than content.
+    /// (1) THE VERB IS KIND-SELECTED, from AFacts.SymbolKind via
+    /// DRagLint.Core.Model.CanBeCallTarget: a callable renders 'Called from:',
+    /// every other kind renders 'Used by:', because a record/class/interface/
+    /// constant is USED, not called -- its entries are type mentions that reach
+    /// the list through DRagLint.Doc.Facts' non-routine path. No kind list is
+    /// written here; CanBeCallTarget owns that question. (2) THE ' ?'
+    /// UNCERTAINTY MARKER IS EMITTED ONLY ON A MIXED LIST. An entry whose
+    /// Confidence is neither '' nor 'certain' gets a trailing ' ?' iff the list
+    /// ALSO holds at least one certain entry; a uniformly uncertain list renders
+    /// plain, exactly as a uniformly certain one does. A marker on every entry
+    /// distinguishes nothing, and most lists are uniform (measured: 70.7% of
+    /// YADF's caller entries and 85.4% of drag-lint's own carried it). List
+    /// CONTENTS, the certain-before-uncertain ordering, the display cap and the
+    /// '(+N more)' suffix are unchanged by both rules.</para>
+    /// Deprecated is ground-truth
     /// from the Pascal 'deprecated' directive (not the unrelated
     /// &lt;deprecated/&gt; doc-comment tag) -- emitted only when the directive
     /// was found on the declaration. The cheap fact group (v(ADP1 T3):
@@ -1340,20 +1358,53 @@ var
       Result:= Result + EscXml(A[i]);
     end;
   end;
+  // Is this entry a CERTAIN one? '' and 'certain' are the two certain spellings
+  // (the store leaves Confidence empty on a path that never had a doubt);
+  // 'ambiguous' and 'unverified' are the uncertain ones. ONE declaration, read
+  // by both the survey pass and the emit pass below -- the two must agree about
+  // every entry or the survey could report "mixed" while the emit marks all or
+  // none, which is a shape no test would obviously name.
+  function IsCertain(const R: TDocFactRef): Boolean;
+  begin
+    Result:= (R.Confidence = '') or SameText(R.Confidence, 'certain');
+  end;
+  // v(ADP3 T4): the ' ?' uncertainty marker is emitted ONLY when the list is
+  // MIXED. A marker on EVERY entry distinguishes nothing, and that is the state
+  // most lists are actually in: measured on the pre-T4 tree at 6bcc0a3 (whose
+  // last engine-affecting commit is f5fc66e -- the three after it are test-only,
+  // so the binary measured IS f5fc66e's), 65 of
+  // YADF's 99 reference lines and 832 of drag-lint's own 1126 are uniformly
+  // uncertain (70.7% and 85.4% of all ENTRIES carry the marker). So a uniformly
+  // uncertain list now renders plain, exactly as a uniformly certain one always
+  // has, and what survives is the COMPARATIVE information: within one list,
+  // which entries are the weaker ones. Mixed lists are not rare enough for that
+  // to be an empty promise -- the same measurement found 6 and 83 of them.
+  //
+  // This is a RENDERING change and nothing more. The root cause -- weak
+  // call_edges resolution in project DBs, which is why so many lists are
+  // uniformly uncertain in the first place -- is the D5 follow-up; Confidence
+  // itself, the Facts builder's certain-before-uncertain ORDERING, the display
+  // cap and the '(+N more)' suffix are all untouched.
+  //
+  // NOTE the plan's own justification for this rule ("it fired 49 times out of
+  // 49") is STALE and was re-measured rather than inherited: it predates T3i,
+  // which stopped counting 'member-access' refs as unresolved call sites and so
+  // removed one of the causes of the saturation. The rule survives the
+  // correction; the numbers above are the current ones.
   function JoinRefs(const A: TArray<TDocFactRef>): string;
-  var i: Integer;
+  var i: Integer; AnyCertain, AnyUncertain, Mixed: Boolean;
   begin
     Result:= '';
+    AnyCertain  := False;
+    AnyUncertain:= False;
+    for i:= 0 to High(A) do
+      if IsCertain(A[i]) then AnyCertain:= True else AnyUncertain:= True;
+    Mixed:= AnyCertain and AnyUncertain;
     for i:= 0 to High(A) do
     begin
       if i > 0 then Result:= Result + ', ';
       Result:= Result + EscXml(A[i].Display) + ' (' + EscXml(A[i].Location) + ')';
-      // v14 (D5): mark honest uncertainty. A caller whose Confidence is anything
-      // OTHER than 'certain'/'' ('ambiguous' = >1 candidate on the type chain;
-      // 'unverified' = a name-match with no resolved call_edge) gets a trailing
-      // ' ?'. The Facts builder already orders plain (certain) callers before the
-      // '?' ones, so the rendered line reads plain-first.
-      if not ((A[i].Confidence = '') or SameText(A[i].Confidence, 'certain')) then
+      if Mixed and not IsCertain(A[i]) then
         Result:= Result + ' ?';
     end;
   end;
@@ -1361,7 +1412,26 @@ begin
   Sb:= TStringBuilder.Create;
   try
     if Length(AFacts.CalledFrom) > 0 then
-      Sb.AppendLine(APrefix + 'Called from: ' + JoinRefs(AFacts.CalledFrom) + MoreSuffix(Length(AFacts.CalledFrom), AFacts.CalledFromTotal));
+    begin
+      // v(ADP3 T4): 'Called from:' is a claim that the symbol is CALLED, and it
+      // is only true of a callable. A record/class/interface/constant is USED --
+      // its entries reach this list through the non-routine path in
+      // DRagLint.Doc.Facts (CanBeCallTarget is False, so the name-match bucket
+      // is not restricted to call sites) and are type mentions, not call sites.
+      // The YADF rollout rendered 'Called from:' over exactly those. Same list,
+      // same cap, same '(+N more)', same marker rule -- only the verb is
+      // kind-selected.
+      //
+      // CanBeCallTarget is THE declaration for this question (Core.Model); the
+      // kind set is deliberately not restated here. DRagLint.Doc.Facts' gather
+      // reads the same one to decide what goes INTO this list, so the label and
+      // the contents cannot drift apart into disagreeing about what a callable
+      // is -- which is the whole reason T3i/T3k collapsed the copies.
+      var RefVerb: string;
+      if CanBeCallTarget(AFacts.SymbolKind) then RefVerb:= 'Called from: '
+      else RefVerb:= 'Used by: ';
+      Sb.AppendLine(APrefix + RefVerb + JoinRefs(AFacts.CalledFrom) + MoreSuffix(Length(AFacts.CalledFrom), AFacts.CalledFromTotal));
+    end;
     if Length(AFacts.Calls) > 0 then
       Sb.AppendLine(APrefix + 'Calls: ' + JoinEsc(AFacts.Calls) + MoreSuffix(Length(AFacts.Calls), AFacts.CallsTotal));
     // Mined Result:=/Exit() return cases as a FACT line -- emitted ONLY when the

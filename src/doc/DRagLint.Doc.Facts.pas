@@ -219,6 +219,19 @@ type
     // <summary> is emitted ONLY when this is non-empty; '' means "nothing to
     // say", so the tag is omitted entirely rather than emitted blank.
     HarvestedSummary : string           ;
+    // v(ADP3 T4): the documented symbol's OWN kind, copied verbatim from
+    // ASym.Kind by Build. Exactly ONE consumer: RenderFactsBlock selects the
+    // reference line's VERB from it, via DRagLint.Core.Model.CanBeCallTarget --
+    // a callable reads 'Called from:', everything else reads 'Used by:',
+    // because a record/class/interface/constant is USED, not called. Nothing
+    // else keys off this field, and nothing here restates the kind set: which
+    // kinds are callable is owned by CanBeCallTarget's header, the same
+    // declaration the CalledFrom gather below already reads.
+    //
+    // It has to travel on TDocFacts because the renderer is handed AFacts and
+    // nothing else -- RenderFactsBlock has no TSymbol, and giving it one would
+    // widen a signature four call sites deep for a single enum.
+    SymbolKind       : TSymbolKind      ;
   end;
 
   TDocFactsBuilder = class
@@ -649,6 +662,13 @@ var
 
 begin
   Result:= Default(TDocFacts);
+
+  // v(ADP3 T4): carry the symbol's OWN kind to the renderer, which selects the
+  // reference line's verb from it (see TDocFacts.SymbolKind). Set FIRST, before
+  // any early-exit path can be added below it -- Default(TDocFacts) leaves this
+  // at Ord 0, and a wrong kind renders a wrong CLAIM ('Called from:' about a
+  // record) rather than an absent one, so it must never be reached by accident.
+  Result.SymbolKind:= ASym.Kind;
 
   // Called from: RESOLVED caller refs -> display 'EnclosingQName (file)'.
   // v14 (D5) -- THE BUG FIX. Previously this was name-based

@@ -30,20 +30,37 @@
       just self-references. The corrected form short-circuits via an
       explicit 's.parent_id IS NULL OR ...' branch so this row is KEPT.
 
+  v(ADP3 T4) -- THE LABEL CHANGED; THE PROPERTY UNDER TEST DID NOT.
+  TThing is a CLASS, and a class is never a call target, so its reference line
+  is now labelled "Used by:" rather than "Called from:" (DRagLint.Doc.Regions.
+  RenderFactsBlock selects the verb from TDocFacts.SymbolKind via
+  DRagLint.Core.Model.CanBeCallTarget). Nothing about WHICH references reach
+  that line moved -- Bug C is about the CONTENTS, and every content assertion
+  below is unchanged apart from the label it anchors on. The expectation was
+  updated, never the engine.
+
+  The negative assertions are ALSO anchored on the new label, deliberately. An
+  assertion of the form 'the "Called from:" line does not name X' would go
+  green the moment no "Called from:" line existed at all -- which is exactly
+  what T4 made true here -- and Bug C's regression guard would have silently
+  stopped guarding anything while still reporting PASS.
+
   Asserts (after `document --qname uNoSelfCaller.TThing --apply --no-backup`,
   reading the written file):
     1. exit 0.
-    2. TThing acquires a managed block (it has a genuine 'Called from:'
-       fact via UseThing, so facts-only does not skip it).
-    3. The "Called from:" line is present and names UseThing (the real,
+    2. TThing acquires a managed block (it has a genuine reference fact via
+       UseThing, so facts-only does not skip it).
+    3. The "Used by:" line is present and names UseThing (the real,
        external caller is KEPT).
-    4. The "Called from:" line does NOT name TThing.Add (the class's own
+    4. That line does NOT name TThing.Add (the class's own
        method -- a self-reference, never a meaningful caller).
-    5. The "Called from:" line names the unit-scope GThing reference too
+    5. That line names the unit-scope GThing reference too
        (rendered as the doc engine's NULL-enclosing fallback display,
        '<TypeName> caller' -- see TDocFactsBuilder.Build.ToFactRef) --
        i.e. a legitimate reference OUTSIDE any routine is NOT dropped.
        CRITICAL: RED under the original (unfixed) WHERE clause.
+    6. No "Called from:" line is emitted for the class at all (the T4 relabel,
+       pinned here so a silent revert to the wrong verb is visible).
 
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-doc-no-self-caller); a fresh
   copy + a TEMP db (never a real corpus db).
@@ -131,12 +148,19 @@ if ($clsIdx -ge 1) {
 
 Write-Host 'TThing class block: genuine caller kept, self-reference excluded' -ForegroundColor Cyan
 Check 'TThing has a managed block (AUTO_BEGIN)' ($block -match '<!-- drag-lint:auto BEGIN -->') $block
-Check 'TThing has a "Called from:" line' ($block -match 'Called from:') $block
-Check 'Called from: names UseThing (real external caller kept)' ($block -match 'Called from:.*UseThing') $block
-Check 'Called from: does NOT name TThing.Add (own method, self-reference excluded)' `
-  (-not ($block -match 'Called from:[^\r\n]*TThing\.Add\b')) $block
-Check 'Called from: includes the unit-scope GThing reference (NULL-enclosing ref kept, not dropped)' `
-  ($block -match 'Called from:[^\r\n]*TThing caller\b') $block
+# v(ADP3 T4): TThing is a CLASS, so its reference line reads "Used by:", not
+# "Called from:". Bug C's subject -- WHICH references reach the line -- is
+# untouched; only the verb moved. The two negative checks below are anchored on
+# 'Used by:' for the reason the header states: anchored on the retired label
+# they would pass vacuously over a line that no longer exists.
+Check 'TThing has a "Used by:" line (a class is USED, not called -- v(ADP3 T4))' ($block -match 'Used by:') $block
+Check 'Used by: names UseThing (real external caller kept)' ($block -match 'Used by:.*UseThing') $block
+Check 'Used by: does NOT name TThing.Add (own method, self-reference excluded)' `
+  (-not ($block -match 'Used by:[^\r\n]*TThing\.Add\b')) $block
+Check 'Used by: includes the unit-scope GThing reference (NULL-enclosing ref kept, not dropped)' `
+  ($block -match 'Used by:[^\r\n]*TThing caller\b') $block
+Check 'TThing has NO "Called from:" line (v(ADP3 T4) relabel -- a class is never a call target)' `
+  (-not ($block -match 'Called from:')) $block
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
