@@ -144,11 +144,22 @@ try {
   # --- three whole-unit apply cycles --------------------------------------
   $fileMd5 = @()
   $blocks  = @()   # $blocks[cycle-1][shape]
+  $applyJson = @()
   for ($cycle = 1; $cycle -le 3; $cycle++) {
     & $exePath index $scratch --db $db 2>$null | Out-Null
     Check "cycle $cycle : index exits 0" ($LASTEXITCODE -eq 0)
-    & $exePath document --unit $target --db $db --apply --json 2>$null | Out-Null
+    # v(ADP3 T3k, Group 2b item 6): the --json payload used to be piped straight
+    # to Out-Null. Exit codes were checked and the bytes asserted byte-exactly,
+    # so practical coverage was strong -- but an `edits` regression across the
+    # three cycles was structurally UNOBSERVABLE here: a build that made cycle 2
+    # rewrite the file with the identical bytes would report the same md5 and
+    # the same exit code while doing work it must not do. Captured and asserted
+    # below, the same treatment the other runners in this suite got.
+    $j = (& $exePath document --unit $target --db $db --apply --json 2>$null) -join "`n"
     Check "cycle $cycle : document --unit --apply exits 0" ($LASTEXITCODE -eq 0)
+    $applyJson += $j
+    Check "cycle $cycle : --json payload is non-empty and carries an edits count" `
+      ($j -match '"edits"\s*:\s*\d+') $j
     $fileMd5 += (Get-Md5 $target)
     $ls = [IO.File]::ReadAllLines($target)
     $snap = @{}
@@ -163,6 +174,15 @@ try {
   Check 'IDEMPOTENT: whole-file md5 is a fixed point from cycle 1 (c1 == c2 == c3)' `
     (($fileMd5[0] -eq $fileMd5[1]) -and ($fileMd5[1] -eq $fileMd5[2])) `
     ("md5=" + ($fileMd5 -join ' '))
+  # v(ADP3 T3k, Group 2b item 6): the md5 fixed point says the RESULT stopped
+  # changing; this says the engine stopped WORKING. They are different claims --
+  # a rewrite that reproduces the identical bytes satisfies the first and not the
+  # second -- and only the second would catch an edit path that re-emits on every
+  # run. Cycles 2 and 3 must report zero edits.
+  Check 'IDEMPOTENT: cycle 2 reports ZERO edits (not merely identical bytes)' `
+    ($applyJson[1] -match '"edits"\s*:\s*0\b') $applyJson[1]
+  Check 'IDEMPOTENT: cycle 3 reports ZERO edits' `
+    ($applyJson[2] -match '"edits"\s*:\s*0\b') $applyJson[2]
   foreach ($k in $pat.Keys) {
     Check "IDEMPOTENT: $k block is byte-identical across all 3 cycles" `
       (($blocks[0][$k] -ceq $blocks[1][$k]) -and ($blocks[1][$k] -ceq $blocks[2][$k])) `

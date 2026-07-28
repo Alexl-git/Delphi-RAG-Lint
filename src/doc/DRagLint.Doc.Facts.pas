@@ -350,17 +350,15 @@ end;
 // NULL-enclosing unit-scope reference a Bug C regression once dropped) and
 // tests/callresolve/run_callsite_kind_universe.ps1 (a class AND an enum).
 //
-// NOT EXPORTED -- it lives in this unit's implementation section, so a
-// cross-unit reader is pointed at it by name rather than calling it. Noted
-// because DRagLint.Doc.SymbolFacts' ComputeCoveredBy asks this exact question
-// with its own literal copy of the same five kinds at the routine's tail;
-// collapsing that duplicate would mean exporting this function, which is a CODE
-// change and out of scope for a comments-only round (recorded in
-// task-3i-report.md round 4 rather than done).
-function CanBeCallTarget(AKind: TSymbolKind): Boolean;
-begin
-  Result:= AKind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor];
-end;
+// v(ADP3 T3k, Group 2c item 1): THE DECLARATION MOVED. It now lives in
+// DRagLint.Core.Model, exported, and its full rationale lives on its DocInsight
+// header there -- do not restate it here or anywhere else. T3i left this open on
+// purpose: DRagLint.Doc.SymbolFacts' ComputeCoveredBy held a literal copy of the
+// same five kinds asking the same question, and collapsing it needed a code
+// change that a comments-only round could not make. Both sites now read the one
+// declaration. Core.Model rather than this unit because this unit already uses
+// Doc.SymbolFacts in its implementation section, so exporting from here would
+// have made the dependency mutual.
 
 // Parses the return type from a signature: the text after the LAST ':' that is
 // outside the parameter parentheses. '' when none (a procedure).

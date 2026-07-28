@@ -1061,6 +1061,16 @@ begin
   // <remarks> is excluded from the whole pass for a separate, structural reason
   // -- see IsRetractableSurplusContainer, and the TwoRemarks* fixture shapes
   // that pin the outcome.
+  //
+  // v(ADP3 T3k, Group 2b item 5): ON PURPOSE, this pass cannot see the BARE
+  // self-closing '<deprecated/>' form. That span is added with TagIx = -1 (it is
+  // not one of the paired containers this loop indexes by), so `Spans[J].TagIx =
+  // I` never selects it and a SURPLUS bare <deprecated/> is still silently
+  // dropped rather than retracted to its line. Harmless -- the form carries no
+  // text, so nothing an author wrote is lost, which is the only reason it is
+  // acceptable to leave. But it IS an uncovered instance of the class this pass
+  // exists to handle, and stating that here is the difference between a
+  // deliberate exclusion and an oversight nobody rediscovers.
   for I:= Low(PRESERVED_VERBATIM_CONTAINERS) to High(PRESERVED_VERBATIM_CONTAINERS) do
   begin
     if not IsRetractableSurplusContainer(PRESERVED_VERBATIM_CONTAINERS[I]) then Continue;

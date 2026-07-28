@@ -2162,9 +2162,14 @@ begin
   // const/unit can never be a call target, so FindResolvedCallers et al.
   // would trivially return nothing for them anyway; this early-out just
   // skips the (otherwise harmless but wasted) walk for `document --project`'s
-  // many non-routine symbols. Mirrors DRagLint.Doc.Facts' "cheap fact group"
-  // kind-gate.
-  if not (ASym.Kind in [skMethod, skConstructor, skDestructor, skFunction, skProcedure]) then Exit;
+  // many non-routine symbols.
+  //
+  // v(ADP3 T3k, Group 2c item 1): this used to be a LITERAL COPY of the same
+  // five kinds -- the one real remaining duplicate after T3i's single-source
+  // sweep, left open there because collapsing it needed a code change. It now
+  // reads DRagLint.Core.Model.CanBeCallTarget, the single declaration the doc
+  // facts gate reads too. See that function's header; do not restate the set.
+  if not CanBeCallTarget(ASym.Kind) then Exit;
 
   Names  := TStringList.Create;
   Visited:= TDictionary<Int64, Boolean>.Create;

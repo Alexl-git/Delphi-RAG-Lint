@@ -663,6 +663,45 @@ const
 /// the caller controls where it is spliced.</remarks>
 function CallSiteRefKindSql(const ARefAlias: string): string;
 
+/// <summary>Can a symbol of this kind ever be the TARGET of a call? True for
+/// exactly the five ROUTINE kinds.</summary>
+/// <param name="AKind">The symbol's kind.</param>
+/// <returns>True for skProcedure/skFunction/skMethod/skConstructor/skDestructor.</returns>
+/// <remarks>THE SINGLE SOURCE for this question. Do not write the five kinds out
+/// again anywhere, and do not describe the complement by listing kinds -- the
+/// exempt set is the WHOLE complement, and a comment that enumerates it is
+/// wrong the moment a kind is added. That is not hypothetical: T3i's review
+/// found two comments describing the complement as "class, interface, record,
+/// enum or type alias", a boundary drawn from one caller's coverage rather than
+/// from the semantics, which is the same mistake that had already silently
+/// deleted the Called-from fact for skEnum and skTypeAlias.
+///
+/// It holds because TCallResolver only ever writes a routine into
+/// call_edges.target_symbol_id, so for any other kind "names a known routine but
+/// has no certain call edge" is not evidence of an unresolved call -- it is
+/// evidence the question does not apply.
+///
+/// v(ADP3 T3k, Group 2c item 1): MOVED HERE from DRagLint.Doc.Facts'
+/// implementation section, where it could not be shared. T3i left this open
+/// deliberately -- collapsing the duplicate needed a code change and that round
+/// was comments-only -- and named DRagLint.Doc.SymbolFacts' ComputeCoveredBy as
+/// the one remaining literal copy of the same five kinds asking the same
+/// question. Core.Model rather than Doc.Facts because Doc.Facts already uses
+/// Doc.SymbolFacts (in its implementation section), so exporting from there
+/// would have made the dependency mutual and pointed the lower-level unit at
+/// the higher one. Core.Model owns TSymbolKind, has no uses clause of its own,
+/// and is already where this phase put its other shared declarations
+/// (REF_KIND_CALL, DocRegionFitsDecl, DOC_ALLOW_GAP) for the same reason: a
+/// single declaration read by both sides makes the drift structurally
+/// impossible.
+///
+/// NOT to be confused with the type-like gate that gives a class/interface/
+/// record its "Used in units:" line. Those are two questions and two
+/// declarations on purpose -- sharing one set would ADD a brand-new
+/// "Used in units:" line to every enum and alias. See Doc.Facts' own comment at
+/// that gate.</remarks>
+function CanBeCallTarget(AKind: TSymbolKind): Boolean;
+
 implementation
 
 uses
@@ -844,6 +883,11 @@ begin
   if Trim(ARefAlias) = '' then
     raise EArgumentException.Create('CallSiteRefKindSql: ARefAlias must name a table or alias');
   Result:= ARefAlias + '.kind = ' + QuotedStr(REF_KIND_CALL);
+end;
+
+function CanBeCallTarget(AKind: TSymbolKind): Boolean;
+begin
+  Result:= AKind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor];
 end;
 
 end.

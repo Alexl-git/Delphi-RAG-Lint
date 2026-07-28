@@ -196,7 +196,19 @@ end;
 
 end.
 '@
-$dupUnitCrlf = $dupUnit -replace "`n", "`r`n"
+# v(ADP3 T3k, register K1): NORMALIZE TO LF FIRST. This was a bare
+# `-replace "`n", "`r`n"`, which is correct only if $dupUnit's here-string is
+# already LF. It was, in one working tree -- and .gitattributes says `*.ps1 text
+# eol=crlf`, so A FRESH CLONE GIVES THIS FILE CRLF, the replace then produces
+# `\r\r\n`, and the doubled CR breaks the parser: declCount 1, docCount 0, no
+# engine marker, and 'B FIXTURE: BOTH files independently gained an engine
+# marker' goes RED. So this runner has been passing on an accident of one
+# checkout and would have failed for anyone else. Surfaced by T3k's
+# renormalization; the fix makes it correct in both worlds.
+# A repo-wide sweep found 42 sites doing this conversion and this was the ONLY
+# one missing the normalize step -- the safe idiom below is already the
+# convention everywhere else.
+$dupUnitCrlf = ($dupUnit -replace "`r`n", "`n") -replace "`n", "`r`n"
 [IO.File]::WriteAllText((Join-Path $dirX 'dup.pas'), $dupUnitCrlf, (New-Object Text.ASCIIEncoding))
 [IO.File]::WriteAllText((Join-Path $dirY 'dup.pas'), $dupUnitCrlf, (New-Object Text.ASCIIEncoding))
 $pristineX = [IO.File]::ReadAllBytes((Join-Path $dirX 'dup.pas'))
@@ -227,9 +239,14 @@ Check 'B: re-index before strip exits 0' ($LASTEXITCODE -eq 0)
 
 # v(ADP3 T3d2 D8 review round 3, FOLDED A): this query decides which branch
 # of the final X/Y pristine-state assertions runs below -- it had NO
-# exit-code or content check at all, unlike the sibling query two lines above
-# (:199-201), so a crash or empty result would silently route this runner
-# into asserting the wrong file. Checked the same way now.
+# exit-code or content check at all, unlike the sibling `query --name Widget`
+# whose result feeds the 'B FIXTURE: dup.Widget resolves across exactly TWO
+# files' check earlier in this scenario, so a crash or empty result would
+# silently route this runner into asserting the wrong file. Checked the same way
+# now. (v(ADP3 T3k, Group 3): that sibling used to be cited as ':199-201'. The
+# same diff that added this comment inserted ten lines above it, so the citation
+# was already off by ten when it was written. Cite the assertion by its own text
+# instead -- it cannot rot.)
 $whichFirstOut = (& $exePath query --name Widget --db $dbB --json 2>$null) -join "`n"
 Check 'B: query --name Widget (pre-strip ordering probe) exits 0' ($LASTEXITCODE -eq 0)
 $whichFirst = @($whichFirstOut | ConvertFrom-Json)
