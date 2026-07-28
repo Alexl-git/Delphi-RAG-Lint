@@ -1,0 +1,131 @@
+<#
+  run_callsite_kind_universe.ps1 -- T3i / register item E1.
+
+  THE INVARIANT. Every consumer that reports an UNRESOLVED call site takes the
+  COMPLEMENT of the resolved call_edges, and ResolveCallTargets only ever walks
+  kind='call' refs. So the complement is only meaningful inside that same
+  universe, and all three sites read ONE declaration for it
+  (DRagLint.Core.Model.REF_KIND_CALL / CallSiteRefKindSql):
+
+    writer  TSQLiteSymbolStore.ResolveCallTargets
+    reader  TSQLiteSymbolStore.GetAmbiguousCalls          -> `ambiguous-calls`
+    reader  TSQLiteSymbolStore.FindUnresolvedNameCallers  -> `document` Called-from
+
+  run_ambiguous_calls.ps1 and run_calledfrom_resolved.ps1 already pin the
+  headline symptom (a call resolved CERTAIN to a DIFFERENT same-named method was
+  reported as unverified as well). THIS runner pins the rest of the class, which
+  neither of them reaches, plus the one shape the fix deliberately gives up:
+
+    1  a PROPERTY read whose name collides with a routine name is not an
+       unresolved call site -- for either consumer
+    2  a TYPE mention (type_use) is not a caller: a class no longer collects a
+       "Called from:" line built from type references, a fact "Used in units:"
+       already carries properly
+    3  ONE row per unresolved call SITE -- the co-located 'member-access' ref
+       every dotted call also emits must not double-count it
+    4  AGREEMENT: both consumers classify the SAME site set. Structural sharing
+       proves the declarations agree; only behaviour proves the call sites do
+    5  DISCLOSED GAP, pinned so it stays visible rather than silent: a
+       paren-less dotted invocation in EXPRESSION position (`N:= FProbe.Make;`)
+       emits NO 'call' ref, so it is outside the universe and both consumers
+       miss it. It was already invisible to every other call-graph surface
+       (Calls:, find-callers --resolved, call-path, call-tree) because the
+       resolver never walked it either; it leaked into exactly one bucket by
+       accident. Kind-blind name discovery still finds it -- asserted here, so
+       the loss is bounded to the resolution-quality buckets. Closing it means
+       EMITTING a call ref for the shape, i.e. changing what is indexed.
+
+  Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
+#>
+[CmdletBinding()]
+param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+
+$ErrorActionPreference = 'Stop'; $fail = $false
+function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
+
+$exePath = (Resolve-Path $Exe).Path
+$fixture = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\callsitekind.pas')).Path
+
+# Fresh scratch dir; keep the unit name so unit-name-matches-file stays quiet.
+$scratch = Join-Path C:\TEMP 'draglint_callsite_kind'
+if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
+New-Item -ItemType Directory -Path $scratch | Out-Null
+$target  = Join-Path $scratch 'callsitekind.pas'
+$db      = Join-Path $scratch 'ck.sqlite'
+Copy-Item $fixture $target -Force
+
+Push-Location C:\TEMP
+try {
+  & $exePath index $scratch --db $db 2>$null | Out-Null
+  Check 'index exits 0' ($LASTEXITCODE -eq 0)
+
+  # ---------------------------------------------------------------- consumer 1
+  # `ambiguous-calls` -- the resolver-coverage diagnostic.
+  $rows = @((& $exePath ambiguous-calls --file $target --json --db $db 2>$null | Out-String) | ConvertFrom-Json)
+  $encl = @($rows | ForEach-Object { $_.enclosing_qname })
+
+  # 3: exactly ONE row, for the ONE genuinely unresolved site. Pre-fix this
+  # fixture returned FIVE: the property read, both halves of the untypable call,
+  # and the member-access halves of the resolved call and the paren-less call.
+  Check 'ambiguous-calls: exactly 1 row for the file (one row per unresolved SITE)' (@($rows).Count -eq 1)
+  Check 'ambiguous-calls: the row is CallsUnknown (untypable receiver)' `
+    ($encl -contains 'callsitekind.TDriver.CallsUnknown')
+  Check 'ambiguous-calls: CallsUnknown counted ONCE, not once per ref kind' `
+    (@($encl | Where-Object { $_ -eq 'callsitekind.TDriver.CallsUnknown' }).Count -eq 1)
+
+  # 1: a property read is not a call site, even when its name collides with a
+  # routine's (TProbe.Count the property vs callsitekind.Count the function).
+  Check 'ambiguous-calls: EXCLUDES ReadsProperty (property read, name collides with a routine)' `
+    (-not ($encl -contains 'callsitekind.TDriver.ReadsProperty'))
+  Check 'ambiguous-calls: EXCLUDES CallsFire (resolved certain -- no phantom second row)' `
+    (-not ($encl -contains 'callsitekind.TDriver.CallsFire'))
+
+  # 5: the disclosed gap, at this consumer.
+  Check 'ambiguous-calls: EXCLUDES ParenlessExpr (DISCLOSED: no call ref is emitted for the shape)' `
+    (-not ($encl -contains 'callsitekind.TDriver.ParenlessExpr'))
+
+  # ---------------------------------------------------------------- consumer 2
+  # `document`'s Called-from. Dry-run: the emitted block is printed, so nothing
+  # on disk changes and each qname is inspected independently.
+  function CalledFromLine([string]$QName) {
+    $out = & $exePath document --qname $QName --db $db 2>$null | Out-String
+    $ln  = ($out -split "`r?`n" | Where-Object { $_ -match 'Called from:' } | Select-Object -First 1)
+    if ($null -eq $ln) { return '' } else { return $ln }
+  }
+
+  # 4: AGREEMENT -- the site ambiguous-calls reported is exactly the ' ?' entry
+  # here, and the site it excluded as resolved is exactly the plain entry.
+  $fireLine = CalledFromLine 'callsitekind.TProbe.Fire'
+  Check 'Called-from(TProbe.Fire): line present' ($fireLine -ne '')
+  Check 'Called-from(TProbe.Fire): CallsFire present and PLAIN (resolved certain)' `
+    ($fireLine -match 'callsitekind\.TDriver\.CallsFire \(callsitekind\.pas\)(?! \?)')
+  Check 'Called-from(TProbe.Fire): CallsUnknown present WITH trailing ? (untypable receiver)' `
+    ($fireLine -match 'callsitekind\.TDriver\.CallsUnknown \(callsitekind\.pas\) \?')
+  Check 'AGREEMENT: CallsFire appears ONCE -- not also as an unverified twin' `
+    (@([regex]::Matches($fireLine, 'CallsFire')).Count -eq 1)
+  Check 'AGREEMENT: CallsUnknown appears ONCE -- not once per ref kind' `
+    (@([regex]::Matches($fireLine, 'CallsUnknown')).Count -eq 1)
+
+  # 1: the property read must not become a phantom caller of the like-named
+  # unit-level function.
+  $countLine = CalledFromLine 'callsitekind.Count'
+  Check 'Called-from(Count): no Called-from line at all (its only name-match is a PROPERTY read)' `
+    ($countLine -eq '')
+
+  # 2: a class is not "called from" the places that merely name its type.
+  $probeOut  = & $exePath document --qname 'callsitekind.TProbe' --db $db 2>$null | Out-String
+  Check 'Called-from(TProbe): a CLASS gets NO Called-from line from type_use refs' `
+    (-not ($probeOut -match 'Called from:'))
+  Check 'Called-from(TProbe): the run still produced facts (Used in units: is the right fact for a type)' `
+    ($probeOut -match 'Used in units:')
+
+  # 5: the disclosed gap, at this consumer -- and the bound on it.
+  $makeLine = CalledFromLine 'callsitekind.TProbe.Make'
+  Check 'Called-from(TProbe.Make): EXCLUDES ParenlessExpr (DISCLOSED: no call ref for the shape)' `
+    ($makeLine -eq '')
+  $callers = & $exePath query find-callers --name Make --db $db 2>$null | Out-String
+  Check 'BOUND on the disclosed gap: kind-blind `query find-callers --name Make` STILL finds ParenlessExpr' `
+    ($callers -match 'callsitekind\.pas:87')
+} finally { Pop-Location }
+
+if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

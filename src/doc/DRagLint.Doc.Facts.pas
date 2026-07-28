@@ -24,7 +24,10 @@ type
     // v14 (D5): 'certain' | 'ambiguous' | 'unverified' | ''. The renderer marks
     // any value OTHER than 'certain'/'' with a trailing ' ?' (honest uncertainty):
     // 'ambiguous' = resolved to this symbol but >1 candidate on the type chain;
-    // 'unverified' = a name-match with NO call_edges row (receiver untypable).
+    // 'unverified' = a CALL SITE whose name matches but which has NO call_edges
+    // row (receiver untypable). v(ADP3 T3i): "call site" is load-bearing -- a
+    // usage ref (read/write/type_use/member-access) is not one, see
+    // REF_KIND_CALL in DRagLint.Core.Model.
     Confidence: string;
   end;
 
@@ -637,8 +640,13 @@ begin
       FR:= ToFactRef(RC);
       AddDistinct(FR);
     end;
-    // Unverified name-match bucket: refs whose name matches but that have no
-    // call_edges row (untypable receiver).
+    // Unverified name-match bucket: CALL-SITE refs whose name matches but that
+    // have no call_edges row (untypable receiver). v(ADP3 T3i, register E1):
+    // until this bucket was restricted to call-site refs it also collected the
+    // co-located 'member-access' ref every dotted call emits since 9d7e641 --
+    // so a caller that resolved CERTAIN to a DIFFERENT same-named method still
+    // appeared here with a ' ?' -- and, for a type, one entry per type_use
+    // mention (a fact "Used in units:" below already carries properly).
     ResCallers:= AStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName));
     for RC in ResCallers do
     begin

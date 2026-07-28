@@ -276,14 +276,25 @@ type
     /// <summary>The Called-from query: every resolved caller of ATargetSymbolId,
     /// most-confident first. Backs the AutoDocument Called-from facts block.</summary>
     function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
-    /// <summary>v14 (D5): the AutoDocument '?' bucket -- every ref whose
-    /// name_text = AName AND that has NO call_edges row (its receiver could not be
-    /// typed, so the resolver emitted no edge). Each returned TResolvedCaller
-    /// carries Confidence = 'unverified' so the renderer marks it ' ?' (honest:
-    /// might or might not be the documented symbol). Ordered by file path then
-    /// start line to mirror FindCallersByName's first-seen ordering. Location is
-    /// file-name-only (idempotency: no volatile ':line'); EnclosingQName is '' when
-    /// the ref has no enclosing routine.</summary>
+    /// <summary>v14 (D5): the AutoDocument '?' bucket -- every CALL-SITE ref
+    /// (kind = REF_KIND_CALL) whose name_text = AName AND that has NO call_edges
+    /// row (its receiver could not be typed, so the resolver emitted no edge).
+    /// Each returned TResolvedCaller carries Confidence = 'unverified' so the
+    /// renderer marks it ' ?' (honest: might or might not be the documented
+    /// symbol). Ordered by file path then start line to mirror
+    /// FindCallersByName's first-seen ordering. Location is file-name-only
+    /// (idempotency: no volatile ':line'); EnclosingQName is '' when the ref has
+    /// no enclosing routine.</summary>
+    /// <remarks>v(ADP3 T3i, register E1): the kind restriction is part of the
+    /// CONTRACT, not an optimisation -- this bucket is the complement of
+    /// FindResolvedCallers within the universe ResolveCallTargets walks, and that
+    /// universe is call-site refs alone. A usage ref (read/write/type_use/
+    /// member-access) can never own a call_edges row, so counting one here would
+    /// report it as an unresolved call forever. Consequently a paren-less dotted
+    /// invocation in EXPRESSION position, which today emits no call ref at all,
+    /// is not reached; see the block comment above REF_KIND_CALL in
+    /// DRagLint.Core.Model. Name-based discovery (FindCallersByName) is
+    /// kind-blind and still finds it.</remarks>
     function FindUnresolvedNameCallers(const AName: string): TArray<TResolvedCaller>;
     /// <summary>Find-callees: every call edge whose ref is enclosed by
     /// AEnclosingSymbolId (i.e. every resolved call made from inside that
@@ -326,7 +337,9 @@ type
     /// FindResolvedCallers / GetCallEdgesFromSymbol for those).</summary>
     function DumpAllCallEdges: TArray<TCallEdge>;
     /// <summary>v14 (D5 T9): the ambiguous-calls resolver-coverage diagnostic --
-    /// every ref that NAMES a known routine/method symbol (kind IN procedure,
+    /// every CALL-SITE ref (kind = REF_KIND_CALL, i.e. exactly what
+    /// ResolveCallTargets walks -- v(ADP3 T3i), register E1) that NAMES a known
+    /// routine/method symbol (kind IN procedure,
     /// function, method, constructor, destructor) AND that the resolver did NOT
     /// pin to a single certain target: either it has a call_edges row with
     /// confidence='ambiguous', or it has NO call_edges row at all (untypable

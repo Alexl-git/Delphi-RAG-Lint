@@ -564,6 +564,69 @@ function NoDeclarationInGap(AEndLine, ADeclLine: Integer;
 function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
   const ASymStartLines: TArray<Integer>): Boolean;
 
+{ v(ADP3 T3i): THE CALL-SITE REF-KIND UNIVERSE. ONE declaration, read by the
+  pass that WRITES resolved call edges and by both queries that read the
+  UNRESOLVED complement of those edges:
+
+    * DRagLint.Parser.Delphi13                        (emits the kind)
+    * TSQLiteSymbolStore.ResolveCallTargets           (writes call_edges)
+    * TSQLiteSymbolStore.FindUnresolvedNameCallers    (reads the complement)
+    * TSQLiteSymbolStore.GetAmbiguousCalls            (reads the complement)
+
+  WHY IT HAS TO BE ONE DECLARATION -- register item E1, the defect this fixes.
+  ResolveCallTargets resolves ONLY kind='call' refs, so a ref of any other kind
+  can never own a call_edges row. Both readers defined "unresolved" as "names a
+  known routine AND has no certain call_edges row" WITHOUT restating the kind
+  restriction, so their complement was taken against a WIDER universe than the
+  writer's: every non-call ref that happens to carry a routine's name fell into
+  the unresolved bucket. After 9d7e641 (member-access on typed receivers) that
+  became systematic -- a dotted call emits BOTH a 'call' ref and a co-located
+  'member-access' ref at the identical span, so EVERY resolved call was also
+  reported as unverified. Symptoms: `ambiguous-calls` listed resolved sites and
+  returned 4 rows for 3 sites; `document`'s Called-from listed a caller that
+  provably calls a DIFFERENT same-named method. type_use refs leaked the same
+  way, which is why a CLASS acquired a "Called from:" line built from mere type
+  mentions -- a fact "Used in units:" already carries properly.
+
+  The complement is only meaningful against the writer's own universe, so the
+  universe is declared once here and every side reads it. This is the T3j/S1
+  lesson applied: a single declaration both sides read makes the drift
+  structurally impossible.
+
+  DISCLOSED CONSEQUENCE (a writer-side gap, deliberately NOT fixed here). A
+  paren-less dotted invocation in EXPRESSION position -- `N:= Obj.Func;`,
+  `T:= TThing.Create;` -- emits no 'call' ref at all, only 'member-access'.
+  Such a site is therefore outside this universe, and it was already invisible
+  to every other call-graph surface (Calls:, find-callers --resolved,
+  call-path, call-tree) because ResolveCallTargets never walked it either. It
+  leaked into exactly one bucket by accident, and unreliably: the same kind
+  covers ordinary property and event access, so the leak carried far more
+  noise than signal. Making those sites first-class means EMITTING a call ref
+  for them, which changes what is INDEXED and fixes every surface at once.
+  Name-based discovery (`query find-callers`, FindCallersByName) is kind-blind
+  and still finds them. Pinned by tests/callresolve/run_callsite_kind_universe.ps1. }
+
+const
+  /// <summary>The refs.kind value that denotes a CALL SITE, and thereby the
+  /// universe ResolveCallTargets resolves and both unresolved-call queries take
+  /// their complement against. Read it instead of writing the literal, so the
+  /// writer and the readers can never disagree about what a call site is.
+  /// <para>Other kinds ('read', 'write', 'type_use', 'member-access',
+  /// 'event-binding', ...) are usage references. They are never resolved to a
+  /// call target, so they must never be counted as unresolved calls either --
+  /// see the block comment above.</para></summary>
+  REF_KIND_CALL = 'call';
+
+/// <summary>The SQL predicate selecting call-site refs, for the queries that
+/// build their WHERE clause as text.</summary>
+/// <param name="ARefAlias">Table alias (or table name) the predicate should
+/// qualify, e.g. 'r' for 'FROM refs r'. Must not be empty.</param>
+/// <returns>A fragment of the form '&lt;alias&gt;.kind = ''call'''.</returns>
+/// <remarks>Emits the value of REF_KIND_CALL, so the SQL sites and the Pascal
+/// sites share one declaration. Returns a bare predicate with no AND/WHERE, so
+/// the caller controls where it is spliced.</remarks>
+function CallSiteRefKindSql(const ARefAlias: string): string;
+
 implementation
 
 uses
@@ -732,6 +795,13 @@ function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
 begin
   Result:= DocRegionInGapWindow(AEndLine, ADeclLine, AAllowGap)
            and NoDeclarationInGap(AEndLine, ADeclLine, ASymStartLines);
+end;
+
+function CallSiteRefKindSql(const ARefAlias: string): string;
+{ QuotedStr doubles any embedded apostrophe, so the emitted fragment stays
+  well-formed no matter what REF_KIND_CALL is set to. }
+begin
+  Result:= ARefAlias + '.kind = ' + QuotedStr(REF_KIND_CALL);
 end;
 
 end.

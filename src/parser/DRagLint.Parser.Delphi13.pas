@@ -233,7 +233,11 @@ begin
   else Exit;
   CalleeName:= NodeText(NameNode, AState.Source);
   if CalleeName = '' then Exit;
-  AState.EmitRef('call', CalleeName, NameNode);
+  // v(ADP3 T3i): REF_KIND_CALL, not a literal. This kind IS the universe the
+  // call resolver walks and the two unresolved-call queries take their
+  // complement against, so producer and consumers read one declaration -- see
+  // the block comment above REF_KIND_CALL in DRagLint.Core.Model (register E1).
+  AState.EmitRef(REF_KIND_CALL, CalleeName, NameNode);
 end; // procedure
 
 // v0.40.4: extract the literal string body from a `kIn literalString` pair
@@ -1410,11 +1414,12 @@ begin
     begin
       var ExprChild:= ANode.NamedChild(0);
       var ChildKind:= ExprChild.NodeType;
-      if ChildKind      = 'identifier' then AState.EmitRef('call', NodeText(ExprChild, AState.Source), ExprChild)
+      // REF_KIND_CALL (T3i): see EmitCallReference's note -- one declaration.
+      if ChildKind      = 'identifier' then AState.EmitRef(REF_KIND_CALL, NodeText(ExprChild, AState.Source), ExprChild)
       else if ChildKind = 'exprDot' then
       begin
         var RhsNode:= ExprChild.ChildByField('rhs');
-        if not RhsNode.IsNull then AState.EmitRef('call', NodeText(RhsNode, AState.Source), RhsNode);
+        if not RhsNode.IsNull then AState.EmitRef(REF_KIND_CALL, NodeText(RhsNode, AState.Source), RhsNode);
       end;
     end;
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);

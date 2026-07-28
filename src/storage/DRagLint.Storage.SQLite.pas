@@ -1136,11 +1136,20 @@ begin
   end; // try
 end; // function
 
-/// <summary>v14 (D5): the AutoDocument '?' bucket -- name-matching refs with NO
-/// call_edges row (untypable receiver). Ordered by file path then start line to
-/// mirror FindCallersByName's first-seen ordering. Each row -> a TResolvedCaller
-/// with Confidence 'unverified'; Location is file-name-only; EnclosingQName is ''
-/// when the ref has no enclosing routine.
+/// <summary>v14 (D5): the AutoDocument '?' bucket -- name-matching CALL-SITE
+/// refs with NO call_edges row (untypable receiver). Ordered by file path then
+/// start line to mirror FindCallersByName's first-seen ordering. Each row -> a
+/// TResolvedCaller with Confidence 'unverified'; Location is file-name-only;
+/// EnclosingQName is '' when the ref has no enclosing routine.
+/// <para>v(ADP3 T3i, register item E1): the kind restriction
+/// (CallSiteRefKindSql) is LOAD-BEARING and was missing. This bucket is the
+/// COMPLEMENT of the resolved bucket, and the resolver only ever walks
+/// call-site refs -- so without it every usage ref carrying the same name fell
+/// in here. After 9d7e641 a dotted call emits a co-located 'member-access' ref
+/// too, so EVERY resolved call was also reported unverified; and a CLASS
+/// collected a "Called from:" entry per type_use mention. See the block comment
+/// above REF_KIND_CALL in DRagLint.Core.Model for the full account, including
+/// the one shape this deliberately no longer reaches.</para></summary>
 /// (ADP1 Bug C fix): EXCLUDES a class's own method-header self-reference. A
 /// qualified impl header ('function TThing.Add(...)') emits a type_use ref of
 /// name_text='TThing' whose enclosing_symbol_id is the METHOD ITSELF
@@ -1179,7 +1188,8 @@ begin
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
-      'WHERE r.name_text = :n AND r.id NOT IN (SELECT ref_id FROM call_edges) ' +
+      'WHERE r.name_text = :n AND ' + CallSiteRefKindSql('r') +
+      '  AND r.id NOT IN (SELECT ref_id FROM call_edges) ' +
       '  AND (s.parent_id IS NULL OR s.parent_id NOT IN (' +
       '        SELECT id FROM symbols WHERE name = :n2 AND kind IN (''class'',''interface'',''record'',''type''))) ' +
       'ORDER BY f.path, r.start_line';
@@ -1388,9 +1398,20 @@ end; // function
 
 function TSQLiteSymbolStore.GetAmbiguousCalls(const AQName, AFilePath: string): TArray<TResolvedCaller>;
 { v14 (D5 T9): resolver-coverage diagnostic. A ref counts as a "call" only when
-  its name_text matches a KNOWN routine/method symbol name (the IN subquery on
-  symbols.kind) -- without that filter every unresolved bare identifier would
-  flood the output, not just call sites. Of those name-matching refs, a row
+  it IS a call-site ref (CallSiteRefKindSql -- the same universe
+  ResolveCallTargets walks) AND its name_text matches a KNOWN routine/method
+  symbol name (the IN subquery on symbols.kind) -- without those filters every
+  unresolved bare identifier would flood the output, not just call sites.
+  v(ADP3 T3i, register item E1): the KIND half was missing, and the name half
+  alone does not substitute for it. Since 9d7e641 a dotted call emits a
+  co-located 'member-access' ref as well as its 'call' ref, and only the 'call'
+  ref can ever own a call_edges row -- so a fully RESOLVED site still produced
+  an "unverified" row, and the genuinely unresolved site produced TWO (4 rows
+  for the 3-site fixture). Measured on the drag-lint self-index the kind filter
+  drops 32155 rows to 12020, i.e. roughly two thirds of the output was refs the
+  resolver never even looked at. See the block comment above REF_KIND_CALL in
+  DRagLint.Core.Model, which also records the one call shape this therefore no
+  longer reaches. Of those name-matching call refs, a row
   qualifies when it is either NOT resolved at all (no call_edges row -- the
   FindUnresolvedNameCallers case, receiver untypable) or resolved but flagged
   'ambiguous' (multiple candidate targets, none certain). Confidence in the
@@ -1416,7 +1437,8 @@ begin
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
       'LEFT JOIN call_edges ce ON ce.ref_id = r.id ' +
-      'WHERE r.name_text IN (SELECT name FROM symbols WHERE kind IN (''procedure'',''function'',''method'',''constructor'',''destructor'')) ' +
+      'WHERE ' + CallSiteRefKindSql('r') +
+      '  AND r.name_text IN (SELECT name FROM symbols WHERE kind IN (''procedure'',''function'',''method'',''constructor'',''destructor'')) ' +
       '  AND (ce.ref_id IS NULL OR ce.confidence = ''ambiguous'') ';
     if AQName <> '' then SqlTxt:= SqlTxt + '  AND s.qualified_name = :qn ';
     if AFilePath <> '' then SqlTxt:= SqlTxt + '  AND f.path LIKE :fp ';
@@ -3828,12 +3850,16 @@ begin
   Q       := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    { Only 'call'-kind refs are call sites (the parser emits kind='call' for every
-      invocation, dotted or bare). Filtering here is faster + cleaner than letting
-      ResolveOne return Target=0 for every non-call ref. }
+    { Only call-site refs are resolved here. Filtering is faster + cleaner than
+      letting ResolveOne return Target=0 for every non-call ref -- but note it
+      also DEFINES the universe: a ref of any other kind can never own a
+      call_edges row, so the two queries that report UNRESOLVED call sites must
+      take their complement against this same universe. That is why the kind
+      comes from the shared CallSiteRefKindSql and not from a local literal
+      (register item E1 -- see the block comment in DRagLint.Core.Model). }
     Q.SQL.Text:=
       'SELECT id, symbol_id, file_id, kind, name_text, start_line, start_col, ' +
-      '  end_line, end_col, enclosing_symbol_id FROM refs WHERE kind = ''call''';
+      '  end_line, end_col, enclosing_symbol_id FROM refs WHERE ' + CallSiteRefKindSql('refs');
     FConn.StartTransaction;
     try
       Q.Open;
