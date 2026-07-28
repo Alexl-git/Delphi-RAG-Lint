@@ -14,6 +14,7 @@ uses
   ConvRules.Casts in '..\ConvRules.Casts.pas',
   ConvRules.CastLib in '..\ConvRules.CastLib.pas',
   ConvRules.BlockFile in '..\ConvRules.BlockFile.pas',
+  ConvRules.BlockOps in '..\ConvRules.BlockOps.pas',
   ConvRules.Engine in '..\ConvRules.Engine.pas',
   ConvRules.Platform in '..\ConvRules.Platform.pas';
 
@@ -1109,11 +1110,76 @@ begin
     JoinBlocks(Only) = '// just a header'#13#10 + '; nothing else'#13#10, 'must round-trip');
 end;
 
+{ Criteria 3 + 4 + 2: split-out REMOVES the selected blocks from the source and
+  writes them to the target in their original relative order; copy-out writes them
+  and leaves the source unchanged; a moved block keeps its comments, blank lines
+  and unrecognised directives verbatim. }
+procedure TestBlockOpsSplitAndCopy;
+const
+  SRC =
+    '// file header'#13#10 +
+    '#convert A.T1 -> B.T1'#13#10 +
+    '#link P <- P'#13#10 +
+    '#convert A.T2 -> B.T2'#13#10 +
+    '// hand comment inside the moved block'#13#10 +
+    '; semicolon comment'#13#10 +
+    ''#13#10 +
+    '#weird unrecognised directive'#13#10 +
+    '#link Q <- Q'#13#10 +
+    '#convert A.T3 -> B.T3'#13#10 +
+    '#link R <- R'#13#10;
+var
+  Blocks, Rem, Moved, Copied: TRuleBlocks;
+begin
+  Blocks := SplitRulesBlocks(SRC);          // [preamble, T1, T2, T3]
+  Check('blockops.setup', Length(Blocks) = 4, IntToStr(Length(Blocks)));
+
+  // criterion 3 -- split out blocks 2 and 3 (T2, T3)
+  SplitOut(Blocks, [2, 3], Rem, Moved);
+  Check('blockops.split.remaining', Length(Rem) = 2, IntToStr(Length(Rem)));
+  Check('blockops.split.moved', Length(Moved) = 2, IntToStr(Length(Moved)));
+  Check('blockops.split.order',
+    (Moved[0].Header = '#convert A.T2 -> B.T2') and
+    (Moved[1].Header = '#convert A.T3 -> B.T3'), 'original relative order');
+  Check('blockops.split.source.lost.t2',
+    Pos('A.T2', JoinBlocks(Rem)) = 0, 'T2 must be gone from the source');
+  Check('blockops.split.source.kept.t1',
+    Pos('A.T1', JoinBlocks(Rem)) > 0, 'T1 must survive in the source');
+
+  // criterion 2 -- everything inside the moved block survives verbatim
+  Check('blockops.split.keeps.slashcomment',
+    Pos('// hand comment inside the moved block', Moved[0].RawText) > 0, 'lost //');
+  Check('blockops.split.keeps.semicomment',
+    Pos('; semicolon comment', Moved[0].RawText) > 0, 'lost ;');
+  Check('blockops.split.keeps.blankline',
+    Pos(#13#10 + #13#10, Moved[0].RawText) > 0, 'lost blank line');
+  Check('blockops.split.keeps.unknown',
+    Pos('#weird unrecognised directive', Moved[0].RawText) > 0, 'lost unknown directive');
+
+  // criterion 4 -- copy leaves the source alone
+  Copied := CopyOut(Blocks, [1]);
+  Check('blockops.copy.count', Length(Copied) = 1, IntToStr(Length(Copied)));
+  Check('blockops.copy.header', Copied[0].Header = '#convert A.T1 -> B.T1', Copied[0].Header);
+  Check('blockops.copy.source.unchanged', JoinBlocks(Blocks) = SRC,
+    'CopyOut must not mutate the source blocks');
+end;
+
+{ Criterion 12: WHILE no blocks are selected the Split, Copy and Delete commands
+  are disabled. CanOperateOn is the single rule the form's enablement uses. }
+procedure TestBlockOpsEnablement;
+begin
+  Check('blockops.enable.none', not CanOperateOn([]), 'empty selection must disable');
+  Check('blockops.enable.one', CanOperateOn([0]), 'one selected block must enable');
+  Check('blockops.enable.many', CanOperateOn([1, 4]), 'several selected must enable');
+end;
+
 begin
   try
     TestBlockSplitRulesRoundTrip;
     TestBlockSplitCastLibRoundTrip;
     TestBlockLabel;
+    TestBlockOpsSplitAndCopy;
+    TestBlockOpsEnablement;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;
