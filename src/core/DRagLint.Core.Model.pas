@@ -601,12 +601,24 @@ function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
   parser, the writer, both complement readers and BOTH ClassMetrics filters are
   demonstrated to move in lockstep (run_store_tests was independently shown to
   cover those filters: pointing them at a different literal reddens feature-envy
-  and high-response). FormsMap.FindFormViaHook is wired to the same declaration
-  but is NOT covered by that proof -- disabling its query entirely leaves the
-  whole battery green, including run_formsmap's own check whose NAME mentions
-  the hook. So its lockstep is structural, not demonstrated. Round 1 claimed
-  "structurally impossible" on the strength of four green runners while three
-  literals were still out there; the claim now states its evidence.
+  and high-response).
+
+  FormsMap.FindFormViaHook is covered too (T3i review round 3 -- an earlier
+  revision of this comment claimed the opposite and was WRONG). Killing the hook
+  route at the DATA level -- re-kinding the single 'call' ref to ThingHook that
+  the query depends on -- turns run_formsmap's v4 navigation cell from
+  "frmRoot4 -> 'Plan' -> frmHooked4" into "(no path from MAIN)", which its
+  regex at :88 does not match, so the runner goes RED. The query is that route's
+  only data source and the direct fan-in is designed to dead-end, so the check
+  discriminates exactly as its name says.
+
+  Why the earlier claim was wrong is worth keeping: the mutation that "proved"
+  it was applied to a Win64 build, while run_formsmap.ps1 (and run_wiring.ps1)
+  default to src\cli\Win32\Debug\drag-lint.exe, which no Win64 build refreshes.
+  The mutated code was never executed. An under-claim is safer than an
+  over-claim but it is not free -- as written it would have sent a later
+  implementer to build a fixture for a non-problem. Verify a negative result
+  reached the binary under test before recording it.
 
   DISCLOSED CONSEQUENCE (a writer-side gap, deliberately NOT fixed here). A
   paren-less dotted invocation in EXPRESSION position -- `N:= Obj.Func;`,

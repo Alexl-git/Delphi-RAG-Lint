@@ -894,6 +894,13 @@ begin
   // alias -- a behaviour change nobody asked for, in the opposite direction to
   // the one being fixed. Sharing is only safe when two sites answer the SAME
   // question; here they do not, so they get one declaration each.
+  //
+  // The identical set also appears in RefIsOwnMemberSelfRef above, and is
+  // deliberately NOT folded in with this one either: that one asks "is the
+  // ENCLOSING symbol's parent a named type, so this ref is a self-reference",
+  // which is a property of the ref's neighbourhood rather than of the symbol
+  // being documented. Three coincident literals would be worth collapsing; two
+  // sites answering two different questions is the same trap in miniature.
   if ASym.Kind in [skClass, skInterface, skRecord] then
   begin
     var URefs: TArray<TReference>:= AStore.FindCallersByName(LastSeg(ASym.QualifiedName));

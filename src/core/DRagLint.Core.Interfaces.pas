@@ -298,13 +298,25 @@ type
     /// which today emits no call ref at all, is not reached; see the block
     /// comment above REF_KIND_CALL in DRagLint.Core.Model. Name-based discovery
     /// (FindCallersByName) is kind-blind and still finds it.
-    /// <para>ACallSitesOnly=False exists for ONE caller and is NOT a general
-    /// escape hatch: DRagLint.Doc.Facts builds a TYPE's "Called from:" fact from
-    /// plain type references, which are not calls at all. That fact is
-    /// mislabelled rather than wrong, and relabelling it (the planned
-    /// "Used by:" for types) is owned elsewhere -- so this parameter preserves
-    /// its input byte-for-byte instead of silently emptying a shipped fact as a
-    /// side effect of fixing the call-site question. Do not add callers.</para></remarks>
+    /// <para>ACallSitesOnly=False is NOT a general escape hatch. It has exactly
+    /// TWO call sites, both in DRagLint.Doc.Facts' CalledFrom gather -- the
+    /// primary store and the extra-store fan-out -- and both pass it under the
+    /// SAME condition: <c>CanBeCallTarget(ASym.Kind)</c> is False, i.e. the
+    /// documented symbol is a NON-ROUTINE kind (class, interface, record, enum
+    /// or type alias). The two must stay in step, or a symbol's fact would
+    /// depend on which DB a reference happened to live in.</para>
+    /// <para>Why those kinds are exempt: only a routine can ever BE a call
+    /// target, so for a non-routine this bucket has never held call sites -- it
+    /// holds plain references to the name, which the renderer then labels
+    /// "Called from:". The label is mislabelled rather than wrong, and
+    /// relabelling it (the planned "Used by:" for types) is owned elsewhere, so
+    /// this parameter preserves its input byte-for-byte instead of silently
+    /// emptying a shipped fact as a side effect of fixing the call-site
+    /// question. v(ADP3 T3i review round 2): the exemption is keyed on
+    /// CanBeCallTarget, NOT on a hand-written list of "type-like" kinds -- a
+    /// literal [skClass, skInterface, skRecord] silently dropped skEnum and
+    /// skTypeAlias, which have no other fact carrying their references at all.
+    /// Do not add callers.</para></remarks>
     function FindUnresolvedNameCallers(const AName: string;
       ACallSitesOnly: Boolean = True): TArray<TResolvedCaller>;
     /// <summary>Find-callees: every call edge whose ref is enclosed by
