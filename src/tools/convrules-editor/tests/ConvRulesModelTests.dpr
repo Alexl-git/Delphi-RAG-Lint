@@ -1879,6 +1879,60 @@ begin
     'no block of the From class yields an empty set');
 end;
 
+{ Criteria 7-10: loose '.PropName' matching in a .pas, candidate derivation from the
+  From tree, the row test, and case-insensitive de-duplication across files. }
+procedure TestScanPasAndMatch;
+const
+  PAS =
+    'procedure TForm1.Go;'#13#10 +
+    'begin'#13#10 +
+    '  btnA.Caption := ''x'';'#13#10 +
+    '  with btnA do Layout := ablGlyphLeft;'#13#10 +   // no dot: NOT matched, by design
+    '  Self.CaptionExtra := 1;'#13#10 +                // must not mark Caption used
+    '  lbl.Font.Size := 9;'#13#10 +
+    'end;'#13#10;
+
+  function Has(const A: TArray<string>; const S: string): Boolean;
+  var X: string;
+  begin
+    for X in A do
+      if SameText(X, S) then Exit(True);
+    Result := False;
+  end;
+
+var
+  Cand, U, M: TArray<string>;
+begin
+  Cand := CandidatesFor(['Caption', 'Layout', 'Font.Size', 'Hint']);
+  Check('usage.cand.leaf',   Has(Cand, 'Size'), 'last segment of a dotted path is a candidate');
+  Check('usage.cand.full',   Has(Cand, 'Font.Size'), 'the full dotted path is a candidate');
+  Check('usage.cand.plain',  Has(Cand, 'Caption'), 'plain names are candidates');
+
+  U := ScanPasText(PAS, Cand);
+  Check('usage.pas.hit',      Has(U, 'Caption'), '.Caption is used');
+  Check('usage.pas.boundary', not Has(U, 'Hint'), 'Hint never appears');
+  Check('usage.pas.suffix',   Has(U, 'Caption'), 'CaptionExtra must not be the only reason');
+  Check('usage.pas.nested',   Has(U, 'Size'), '.Size matches through lbl.Font.Size');
+  Check('usage.pas.nodot',    not Has(U, 'Layout'),
+    'a with-block assignment has no dot, so the loose match cannot see it');
+
+  // criterion 8 in isolation: a longer identifier must not mark the shorter one used
+  Check('usage.pas.notprefix',
+    not Has(ScanPasText('  x.CaptionExtra := 1;'#13#10, ['Caption']), 'Caption'),
+    '.CaptionExtra must not mark Caption used');
+
+  // criterion 9: the row test
+  Check('usage.row.exact',  IsRowUsed('Caption', ['caption']), 'case-insensitive exact path');
+  Check('usage.row.leaf',   IsRowUsed('Font.Size', ['Size']), 'last segment matches');
+  Check('usage.row.full',   IsRowUsed('Font.Size', ['Font.Size']), 'full path matches');
+  Check('usage.row.miss',   not IsRowUsed('Font.Size', ['Color']), 'unrelated name does not match');
+
+  // criterion 10: merge de-duplicates case-insensitively
+  M := MergeUsage([TArray<string>.Create('Caption', 'Left'),
+                   TArray<string>.Create('caption', 'Top')]);
+  Check('usage.merge.count', Length(M) = 3, IntToStr(Length(M)));
+end;
+
 begin
   try
     TestBlockSplitRulesRoundTrip;
@@ -1903,6 +1957,7 @@ begin
     TestCastLibMergeRefused;
     TestDuplicateHeaders;
     TestScanDfm;
+    TestScanPasAndMatch;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;
