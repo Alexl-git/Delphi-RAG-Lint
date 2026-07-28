@@ -1760,6 +1760,39 @@ begin
   end;
 end;
 
+{ The cross-grammar guard above cannot catch a .castlib merged into a .castlib --
+  both sides are the SAME grammar -- yet that is exactly the corruption: a cast/enum
+  block's RawText INCLUDES its closing 'end' line, and AppendLinesToBlock appends at
+  the very end of RawText, so an incoming body line lands AFTER 'end'. The second
+  half of this test PINS that broken behaviour, so the guard cannot later be dropped
+  as unnecessary; the first half is the guard itself. }
+procedure TestCastLibMergeRefused;
+var
+  T, I  : TRuleBlocks;
+  Plan  : TMergePlan;
+  Merged: string;
+  pEnd, pNew: Integer;
+begin
+  Check('grammar.merge.rules', GrammarAcceptsMerge(rgRules),
+    'a #convert block has no terminator line, so the merger can append into it');
+  Check('grammar.merge.castlib', not GrammarAcceptsMerge(rgCastLib),
+    'a cast/enum block carries its own ''end'' line, so an append lands outside the body');
+
+  T := SplitCastLibBlocks('cast Foo'#13#10 + '  accepts TBitmap'#13#10 + 'end'#13#10);
+  I := SplitCastLibBlocks('cast Foo'#13#10 + '  accepts TIcon'#13#10   + 'end'#13#10);
+  Plan := PlanMerge(T, I);
+  Check('castlib.merge.plans.silently', Plan.ConflictCount = 0,
+    'nothing warns the user: the incoming body line is planned as ordinary content');
+
+  Merged := JoinBlocks(ApplyMerge(Plan, nil));
+  pEnd := Pos('end'#13#10, Merged);
+  pNew := Pos('accepts TIcon', Merged);
+  Check('castlib.merge.corrupts', (pEnd > 0) and (pNew > pEnd),
+    'the incoming body line lands AFTER ''end'', outside the cast block -- this is '
+    + 'why a catalog TARGET is refused outright rather than merged: '
+    + StringReplace(Merged, #13#10, '\n', [rfReplaceAll]));
+end;
+
 { The split/copy target dialog deliberately has NO overwrite prompt (a backup is
   written instead of clobbering), so an append into an existing book gives the user
   no other signal. The status line says "appended", and appending a #convert header
@@ -1809,6 +1842,7 @@ begin
     TestWorkingSetOps;
     TestWorkingSetSyncFromText;
     TestGrammarGuard;
+    TestCastLibMergeRefused;
     TestDuplicateHeaders;
     TestPlatform;
     TestUnitDirectives;

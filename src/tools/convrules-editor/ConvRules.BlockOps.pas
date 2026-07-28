@@ -433,7 +433,17 @@ begin
 end;
 
 { Append whole lines to the end of a block, using the block's own terminator and
-  first making sure the block ends with one. }
+  first making sure the block ends with one.
+
+  CALLER BEWARE -- "the end of the block" is literally the end of RawText. That is
+  right for an rbkConvert/rbkPreamble block, which has no closing line, and WRONG for
+  an rbkCast/rbkEnum block, whose RawText INCLUDES its 'end' line and any trailing
+  blanks (see SplitCastLibBlocks): the appended line lands AFTER 'end', outside the
+  block body, and nothing here can tell. That is why the curation form refuses a
+  merge or a compose whose TARGET is a catalog -- see ConvRules.BlockFile's
+  GrammarAcceptsMerge. Do not "fix" it by teaching this function to insert before
+  'end': that is a feature with its own design questions (where among the body lines,
+  what about trailing comments) and needs deciding, not guessing. }
 function AppendLinesToBlock(const ABlock: TRuleBlock;
   const ALines: TArray<string>): TRuleBlock;
 var

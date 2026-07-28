@@ -669,11 +669,28 @@ begin
     Dlg.Free;
   end;
 
-  // The merger only implements the .rules grammar: it matches blocks by header and
-  // APPENDS lines to the end of a block's raw text, which for a 'cast X ... end'
-  // block lands AFTER the 'end' line, outside the body -- and it would append every
-  // line of a reFind .txt into a .rules preamble. Until it is catalog-aware a
-  // cross-grammar merge is refused, not silently mis-applied.
+  // Guard 1 -- can this TARGET be merged into at all? The reason is not grammar
+  // detection, it is what a catalog block's RawText holds: SplitCastLibBlocks
+  // attaches the closing 'end' line to its block, and AppendLinesToBlock appends at
+  // the very END of RawText, so an incoming 'accepts TIcon' lands AFTER 'end',
+  // outside the body -- and the merge report says it succeeded. This is invisible to
+  // guard 2 below, because castlib -> castlib is the SAME grammar on both sides.
+  // See GrammarAcceptsMerge; teaching the appender to insert before 'end' is a
+  // feature, not this guard's job.
+  if not GrammarAcceptsMerge(GrammarOf(FSet.Item(fi).Path)) then
+  begin
+    FStatus.SimpleText := Format('Merge refused: %s is a %s. Merging appends lines at'
+      + ' the END of a block, which for a cast/enum block is AFTER its ''end'' line'
+      + ' -- outside the body. Appending into a cast/enum block is not supported.',
+      [ExtractFileName(FSet.Item(fi).Path),
+       GrammarName(GrammarOf(FSet.Item(fi).Path))]);
+    Exit;
+  end;
+
+  // Guard 2 -- the merger only implements the .rules grammar: it matches blocks by
+  // header, so it would append every line of a reFind .txt into a .rules preamble
+  // and would treat a catalog's blocks as unmatched .rules blocks. A cross-grammar
+  // merge is refused, not silently mis-applied.
   if GrammarOf(InPath) <> GrammarOf(FSet.Item(fi).Path) then
   begin
     FStatus.SimpleText := Format('Merge refused: %s is a %s file but %s is a %s file'
@@ -730,6 +747,18 @@ begin
     FStatus.SimpleText := 'Compose refused: the working set mixes conversion rules '
       + 'and cast catalogs. Compose writes ONE .rules file and only speaks the rules '
       + 'grammar -- remove the catalog file(s) from the set first.';
+    Exit;
+  end;
+  // An ALL-catalog set is not "mixed", so the check above does not reach it, yet
+  // Compose folds every later file INTO Item(0) with the same appending merge -- a
+  // line landing after a cast block's 'end' -- and would then write the result to a
+  // .rules file for --rules. Refuse on the accumulating file's grammar.
+  if not GrammarAcceptsMerge(GrammarOf(FSet.Item(0).Path)) then
+  begin
+    FStatus.SimpleText := Format('Compose refused: %s is a %s. Compose folds the set '
+      + 'into ONE .rules file by appending into the FIRST file''s blocks, which for a '
+      + 'cast/enum block would land after its ''end'' line.',
+      [ExtractFileName(FSet.Item(0).Path), GrammarName(GrammarOf(FSet.Item(0).Path))]);
     Exit;
   end;
   Text   := FSet.ComposeAll(Rep);

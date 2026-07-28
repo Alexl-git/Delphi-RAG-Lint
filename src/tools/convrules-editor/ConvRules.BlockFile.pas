@@ -95,6 +95,22 @@ function GrammarOf(const APath: string): TRuleGrammar;
 /// <summary>PURE: a short human name for AGrammar, for a refusal message.</summary>
 function GrammarName(AGrammar: TRuleGrammar): string;
 
+/// <summary>PURE: True when a file of AGrammar may be a merge or compose TARGET --
+/// i.e. the merger can append a line INTO one of its blocks without corrupting it.
+/// False for rgCastLib.</summary>
+/// <remarks>The reason is NOT grammar detection, it is what a catalog block's
+/// RawText contains. SplitCastLibBlocks attaches the closing 'end' line and any
+/// trailing blank lines to the PRECEDING block, so a 'cast Foo ... end' block's
+/// RawText ends with 'end'. ConvRules.BlockOps.AppendLinesToBlock appends at the
+/// very END of RawText -- so merging an incoming 'accepts TIcon' into that block
+/// puts it AFTER 'end', outside the block body, while the merge report cheerfully
+/// says it succeeded. A '.castlib' target is therefore refused outright. Note this
+/// is invisible to the cross-grammar test: castlib -> castlib is the SAME grammar
+/// on both sides. Making the appender insert before 'end' is a FEATURE with its own
+/// design questions (where among the body lines, what about trailing comments) and
+/// is deliberately out of scope -- this is a guard, not a workaround.</remarks>
+function GrammarAcceptsMerge(AGrammar: TRuleGrammar): Boolean;
+
 /// <summary>PURE: pick the grammar from APath's extension -- '.castlib' uses the
 /// catalog grammar, anything else (.rules and reFind files) uses the DSL grammar.</summary>
 function SplitBlocksFor(const APath, AText: string): TRuleBlocks;
@@ -266,6 +282,11 @@ begin
     Result := 'cast catalog'
   else
     Result := 'conversion rules';
+end;
+
+function GrammarAcceptsMerge(AGrammar: TRuleGrammar): Boolean;
+begin
+  Result := AGrammar <> rgCastLib;
 end;
 
 function SplitBlocksFor(const APath, AText: string): TRuleBlocks;
