@@ -13,6 +13,7 @@ uses
   ConvRules.Units in '..\ConvRules.Units.pas',
   ConvRules.Casts in '..\ConvRules.Casts.pas',
   ConvRules.CastLib in '..\ConvRules.CastLib.pas',
+  ConvRules.BlockFile in '..\ConvRules.BlockFile.pas',
   ConvRules.Engine in '..\ConvRules.Engine.pas',
   ConvRules.Platform in '..\ConvRules.Platform.pas';
 
@@ -974,8 +975,65 @@ begin
   end;
 end;
 
+{ Criterion 1a: splitting a .rules text into blocks and rejoining them in order
+  reproduces the original byte-for-byte -- including its exact line terminators,
+  its blank lines, and a missing final EOL. Tested on synthetic input AND on the
+  real shipped sample.rules. }
+procedure TestBlockSplitRulesRoundTrip;
+const
+  SRC =
+    '// preamble comment'#13#10 +
+    ''#13#10 +
+    '#convert A.TFrom -> B.TTo'#13#10 +
+    '#link Text <- Text'#13#10 +
+    '; semicolon comment'#13#10 +
+    ''#13#10 +
+    '#convert C.TX -> D.TY, D'#13#10 +
+    '#link Color <- Color';            // NOTE: no trailing EOL on purpose
+var
+  Blocks: TRuleBlocks;
+  P     : string;
+  Text  : string;
+begin
+  Blocks := SplitRulesBlocks(SRC);
+  Check('blockfile.rules.count', Length(Blocks) = 3, IntToStr(Length(Blocks)));
+  Check('blockfile.rules.kind0', Blocks[0].Kind = rbkPreamble, 'block 0 must be the preamble');
+  Check('blockfile.rules.kind1', Blocks[1].Kind = rbkConvert, 'block 1 must be a #convert');
+  Check('blockfile.rules.header1',
+    Blocks[1].Header = '#convert A.TFrom -> B.TTo', Blocks[1].Header);
+  Check('blockfile.rules.startline1', Blocks[1].StartLine = 3, IntToStr(Blocks[1].StartLine));
+  Check('blockfile.rules.roundtrip', JoinBlocks(Blocks) = SRC,
+    Format('got %d bytes, want %d', [Length(JoinBlocks(Blocks)), Length(SRC)]));
+
+  // Edge cases: LF-only input keeps LF (terminators are carried, never detected or
+  // rewritten), and empty input yields no blocks rather than one empty one.
+  Blocks := SplitRulesBlocks('#convert A.T -> B.T'#10 + '#link P <- Q'#10);
+  Check('blockfile.rules.lf.roundtrip',
+    JoinBlocks(Blocks) = '#convert A.T -> B.T'#10 + '#link P <- Q'#10,
+    'an LF-only file must come back LF-only');
+  Check('blockfile.rules.lf.eol', BlockEol(Blocks[0]) = #10, 'BlockEol must report LF');
+  Check('blockfile.rules.empty', Length(SplitRulesBlocks('')) = 0, 'empty text = no blocks');
+  Check('blockfile.rules.empty.join', JoinBlocks(nil) = '', 'joining nothing yields ''''');
+
+  // ...and against the real file (spec section 11: not only synthetic input).
+  P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\docs\examples\convrules\sample.rules'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('blockfile.rules.roundtrip.file', 'sample.rules not found: ' + P);
+    Exit;
+  end;
+  Text := TFile.ReadAllText(P, TEncoding.ASCII);
+  Blocks := SplitRulesBlocks(Text);
+  Check('blockfile.rules.roundtrip.file', JoinBlocks(Blocks) = Text,
+    Format('got %d bytes, want %d', [Length(JoinBlocks(Blocks)), Length(Text)]));
+  Check('blockfile.rules.roundtrip.file.blocks', Length(Blocks) >= 3,
+    'sample.rules has 3 #convert blocks + preamble');
+end;
+
 begin
   try
+    TestBlockSplitRulesRoundTrip;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;
