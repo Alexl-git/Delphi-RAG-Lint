@@ -1502,6 +1502,292 @@ begin
     'only the identical #link should appear; the header must never become a maMergeOther item');
 end;
 
+{ ConcatBlocks is documented PURE, so it must not write through to the array it was
+  handed. Delphi dynamic arrays are REFERENCES and an element write does NOT
+  copy-on-write -- only SetLength uniquifies -- so 'Result := AFirst' followed by
+  'Result[High(Result)] := ...' edits the caller's array too. TWorkingSet.Item hands
+  out a record whose Blocks field shares the list's array, so the mutation would land
+  on the loaded file itself. }
+procedure TestConcatBlocksPure;
+var
+  A, B  : TRuleBlocks;
+  Before: string;
+  WS    : TWorkingSet;
+begin
+  // A's last block is deliberately UNTERMINATED -- that is what ConcatBlocks fixes up
+  A := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Q');
+  B := SplitRulesBlocks('#convert X.T -> Y.T'#13#10 + '#link M <- N'#13#10);
+  Before := JoinBlocks(A);
+
+  Check('concat.joins',
+    JoinBlocks(ConcatBlocks(A, B)) =
+      '#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10 +
+      '#convert X.T -> Y.T'#13#10 + '#link M <- N'#13#10,
+    StringReplace(JoinBlocks(ConcatBlocks(A, B)), #13#10, '\n', [rfReplaceAll]));
+  Check('concat.input.unmutated', JoinBlocks(A) = Before,
+    'ConcatBlocks must not terminate the CALLER''s last block: '
+    + StringReplace(JoinBlocks(A), #13#10, '\n', [rfReplaceAll]));
+
+  // and through a working set: the stored blocks must survive a concat unchanged
+  WS := TWorkingSet.Create;
+  try
+    WS.AddText('book.rules', '#convert A.T -> B.T'#13#10 + '#link P <- Q');
+    ConcatBlocks(WS.Item(0).Blocks, B);
+    Check('concat.workingset.unmutated',
+      JoinBlocks(WS.Item(0).Blocks) = '#convert A.T -> B.T'#13#10 + '#link P <- Q',
+      'ConcatBlocks must not edit the working set''s stored blocks: '
+      + StringReplace(JoinBlocks(WS.Item(0).Blocks), #13#10, '\n', [rfReplaceAll]));
+  finally
+    WS.Free;
+  end;
+end;
+
+{ Three counters must agree that "row i of the resolution dialog is the i-th
+  maConflict item in PLAN ORDER": ApplyMerge's conflict ordinal, MergeReportLines'
+  conflict ordinal, and the dialog's row order. A mismatch would apply the user's
+  choice to a DIFFERENT conflict and report a third -- silently wrong data, no
+  exception. Every other merge test has at most ONE conflict, where any mismatch is
+  invisible; TWO conflicts with DIFFERENT resolutions pin the mapping down. }
+procedure TestMergeConflictOrdinals;
+var
+  T, I  : TRuleBlocks;
+  Plan  : TMergePlan;
+  Merged: string;
+  Rep   : TArray<string>;
+  Ords  : TArray<string>;
+  k, n  : Integer;
+  SawKept, SawTook: Boolean;
+begin
+  T := SplitRulesBlocks(
+    '#convert A.T -> B.T'#13#10 +
+    '#link P <- Q'#13#10 +
+    '#link R <- S'#13#10);
+  I := SplitRulesBlocks(
+    '#convert A.T -> B.T'#13#10 +
+    '#link P <- Q2'#13#10 +          // conflict ordinal 0
+    '#link R <- S2'#13#10);          // conflict ordinal 1
+  Plan := PlanMerge(T, I);
+  Check('merge.ord.count', Plan.ConflictCount = 2, IntToStr(Plan.ConflictCount));
+
+  // the dialog builds one row per maConflict item in plan order, so a row's
+  // position IS its ordinal -- that order is asserted here
+  SetLength(Ords, Plan.ConflictCount);
+  n := 0;
+  for k := 0 to High(Plan.Items) do
+    if Plan.Items[k].Action = maConflict then
+    begin
+      Ords[n] := Plan.Items[k].ToPath;
+      Inc(n);
+    end;
+  Check('merge.ord.order', (Length(Ords) = 2) and (Ords[0] = 'P') and (Ords[1] = 'R'),
+    'conflict 0 must be P and conflict 1 must be R');
+
+  // ordinal 0 -> keep existing, ordinal 1 -> take incoming
+  Merged := JoinBlocks(ApplyMerge(Plan, [mrKeepExisting, mrTakeIncoming]));
+  Check('merge.ord.0.kept',
+    (Pos('#link P <- Q'#13#10, Merged) > 0) and (Pos('#link P <- Q2', Merged) = 0),
+    'conflict 0 was mrKeepExisting, so P must still come from Q: '
+    + StringReplace(Merged, #13#10, '\n', [rfReplaceAll]));
+  Check('merge.ord.1.took',
+    (Pos('#link R <- S2', Merged) > 0) and (Pos('#link R <- S'#13#10, Merged) = 0),
+    'conflict 1 was mrTakeIncoming, so R must now come from S2: '
+    + StringReplace(Merged, #13#10, '\n', [rfReplaceAll]));
+
+  // the report must describe the SAME two decisions, not a third pairing
+  Rep := MergeReportLines(Plan, [mrKeepExisting, mrTakeIncoming], 'inc.rules');
+  SawKept := False;
+  SawTook := False;
+  for k := 0 to High(Rep) do
+  begin
+    if (Pos('conflict on P', Rep[k]) > 0) and (Pos('kept earlier', Rep[k]) > 0) then
+      SawKept := True;
+    if (Pos('conflict on R', Rep[k]) > 0) and (Pos('took incoming', Rep[k]) > 0) then
+      SawTook := True;
+  end;
+  Check('merge.ord.report.0', SawKept,
+    'the report must say conflict 0 (P) kept the existing link');
+  Check('merge.ord.report.1', SawTook,
+    'the report must say conflict 1 (R) took the incoming link');
+end;
+
+{ TWorkingSet's header justifies being VCL-free with "so the ordering and composition
+  logic is unit-tested headlessly", but only the free file helpers were covered. This
+  exercises the class: add/count/item, IndexOfPath (including two SPELLINGS of one
+  file), the ordering commands as COMPOSITION PRECEDENCE (criterion 9's user control
+  -- moving a file must change which link wins), SetBlocks actually persisting through
+  the TList<record> read-modify-write, and Remove. }
+procedure TestWorkingSetOps;
+var
+  WS  : TWorkingSet;
+  Rep : TComposeReport;
+  Text: string;
+begin
+  WS := TWorkingSet.Create;
+  try
+    WS.AddText('C:\books\first.rules',
+      '#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+    WS.AddText('C:\books\second.rules',
+      '#convert A.T -> B.T'#13#10 + '#link P <- Z'#13#10);
+
+    Check('ws.count', WS.Count = 2, IntToStr(WS.Count));
+    Check('ws.item.path', WS.Item(1).Path = 'C:\books\second.rules', WS.Item(1).Path);
+    Check('ws.item.blocks', Length(WS.Item(0).Blocks) = 1,
+      IntToStr(Length(WS.Item(0).Blocks)));
+
+    Check('ws.indexof', WS.IndexOfPath('C:\books\second.rules') = 1,
+      IntToStr(WS.IndexOfPath('C:\books\second.rules')));
+    Check('ws.indexof.case', WS.IndexOfPath('c:\BOOKS\SECOND.RULES') = 1,
+      'path comparison is case-insensitive on Windows');
+    Check('ws.indexof.spelling', WS.IndexOfPath('C:\books\sub\..\second.rules') = 1,
+      'two spellings of ONE file must resolve to the same entry, or the duplicate-add '
+      + 'check, the split-target guard and the write-back sync all miss it');
+    Check('ws.indexof.missing', WS.IndexOfPath('C:\books\other.rules') = -1,
+      'an unloaded path is not in the set');
+
+    // order IS precedence: the EARLIER file wins the P collision
+    Text := WS.ComposeAll(Rep);
+    Check('ws.compose.precedence',
+      (Pos('#link P <- Q', Text) > 0) and (Pos('#link P <- Z', Text) = 0),
+      'the file nearest the top must win: ' + StringReplace(Text, #13#10, '\n', [rfReplaceAll]));
+
+    WS.MoveUp(1);
+    Check('ws.moveup.order', WS.Item(0).Path = 'C:\books\second.rules', WS.Item(0).Path);
+    Text := WS.ComposeAll(Rep);
+    Check('ws.compose.after.moveup',
+      (Pos('#link P <- Z', Text) > 0) and (Pos('#link P <- Q', Text) = 0),
+      'moving a file up must promote ITS choices -- that is what the button is for: '
+      + StringReplace(Text, #13#10, '\n', [rfReplaceAll]));
+
+    WS.MoveDown(0);
+    Check('ws.movedown.order', WS.Item(0).Path = 'C:\books\first.rules', WS.Item(0).Path);
+    WS.MoveUp(0);                 // already at the top
+    WS.MoveDown(WS.Count - 1);    // already at the bottom
+    Check('ws.move.edges.noop',
+      (WS.Count = 2) and (WS.Item(0).Path = 'C:\books\first.rules'),
+      'moving past either end must be a no-op, not a swap or a crash');
+
+    // SetBlocks must really persist: TList<record> hands out a COPY, so editing
+    // Item(i).Blocks in place would be silently lost
+    WS.SetBlocks(0, DeleteBlocks(WS.Item(0).Blocks, [0]));
+    Check('ws.setblocks.persists', Length(WS.Item(0).Blocks) = 0,
+      IntToStr(Length(WS.Item(0).Blocks)));
+
+    WS.Remove(0);
+    Check('ws.remove.count', WS.Count = 1, IntToStr(WS.Count));
+    Check('ws.remove.kept', WS.Item(0).Path = 'C:\books\second.rules', WS.Item(0).Path);
+    WS.Remove(99);
+    Check('ws.remove.oob.noop', WS.Count = 1, 'an out-of-range Remove is a no-op');
+  finally
+    WS.Free;
+  end;
+end;
+
+{ A split/copy/compose that writes to a file which is ALSO in the working set used to
+  leave that file's in-memory blocks STALE: the grid hid the moved block, Compose
+  folded the stale model (so the file handed to --rules silently omitted the moved
+  rule), and the next Delete/Merge on that member saved the stale model back over it.
+  SyncFromText is the write-back -- after a successful write the owning entry
+  re-splits the EXACT text written, so model and disk agree. }
+procedure TestWorkingSetSyncFromText;
+var
+  WS  : TWorkingSet;
+  Rem, Moved: TRuleBlocks;
+  NewText: string;
+  Rep : TComposeReport;
+begin
+  WS := TWorkingSet.Create;
+  try
+    WS.AddText('C:\books\book1.rules',
+      '#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10 +
+      '#convert X.T -> Y.T'#13#10 + '#link M <- N'#13#10);
+    WS.AddText('C:\books\book2.rules',
+      '#convert C.T -> D.T'#13#10 + '#link R <- S'#13#10);
+
+    // split block 1 of book1 OUT into book2 -- both are in the set
+    SplitOut(WS.Item(0).Blocks, [1], Rem, Moved);
+    NewText := JoinBlocks(ConcatBlocks(WS.Item(1).Blocks, Moved));  // what gets written
+
+    Check('ws.sync.notinset',
+      WS.SyncFromText('C:\books\elsewhere.rules', NewText) = -1,
+      'a path outside the set must not be synced onto any entry');
+    Check('ws.sync.index', WS.SyncFromText('C:\books\SUB\..\book2.rules', NewText) = 1,
+      'the write-back must find the entry whatever the path was spelled like');
+    WS.SetBlocks(0, Rem);
+
+    Check('ws.sync.blocks', Length(WS.Item(1).Blocks) = 2,
+      IntToStr(Length(WS.Item(1).Blocks)));
+    Check('ws.sync.model.matches.disk', JoinBlocks(WS.Item(1).Blocks) = NewText,
+      'the in-memory model must equal the text that was written');
+    Check('ws.sync.compose.has.moved',
+      Pos('#convert X.T -> Y.T', WS.ComposeAll(Rep)) > 0,
+      'the moved block must survive composition -- a stale model dropped it silently');
+  finally
+    WS.Free;
+  end;
+end;
+
+{ A .castlib and a .rules file are BOTH accepted into the working set (criterion 13
+  needs the catalog there so the grid can show cast/enum names), but the merger and
+  the composer only speak the .rules grammar. Until they are catalog-aware, a
+  cross-grammar merge and a mixed-grammar compose are REFUSED, so the guard is what
+  is under test here. }
+procedure TestGrammarGuard;
+var
+  WS: TWorkingSet;
+begin
+  Check('grammar.rules', GrammarOf('C:\x\book.rules') = rgRules, 'the DSL grammar');
+  Check('grammar.castlib', GrammarOf('C:\x\casts.castlib') = rgCastLib, 'the catalog grammar');
+  Check('grammar.castlib.case', GrammarOf('C:\x\CASTS.CASTLIB') = rgCastLib,
+    'the extension test is case-insensitive, exactly as SplitBlocksFor does it');
+  Check('grammar.refind', GrammarOf('C:\x\refind.txt') = rgRules,
+    'SplitBlocksFor reads everything that is not .castlib with the DSL grammar');
+  Check('grammar.name.differ', GrammarName(rgRules) <> GrammarName(rgCastLib),
+    'a refusal message has to be able to name both sides');
+
+  WS := TWorkingSet.Create;
+  try
+    Check('ws.mixed.empty', not WS.MixedGrammars, 'an empty set is not mixed');
+    WS.AddText('a.rules', '#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+    Check('ws.mixed.single', not WS.MixedGrammars, 'one file is never mixed');
+    WS.AddText('b.rules', '#convert C.T -> D.T'#13#10 + '#link R <- S'#13#10);
+    Check('ws.mixed.homogeneous', not WS.MixedGrammars, 'two .rules files compose fine');
+    WS.AddText('c.castlib', 'cast Foo'#13#10 + '  accepts TIcon'#13#10 + 'end'#13#10);
+    Check('ws.mixed.detected', WS.MixedGrammars,
+      'a catalog among .rules files must block Compose, not be emitted as '
+      + '''cast ... end'' into a file meant for --rules');
+  finally
+    WS.Free;
+  end;
+end;
+
+{ The split/copy target dialog deliberately has NO overwrite prompt (a backup is
+  written instead of clobbering), so an append into an existing book gives the user
+  no other signal. The status line says "appended", and appending a #convert header
+  the target ALREADY has leaves two blocks for one rule -- dead weight worth warning
+  about. DuplicateHeaders is what that warning is built from. }
+procedure TestDuplicateHeaders;
+var
+  Existing: TRuleBlocks;
+begin
+  Existing := SplitRulesBlocks(
+    '// file header'#13#10 +
+    '#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+
+  var Dup: TArray<string> := DuplicateHeaders(Existing, SplitRulesBlocks(
+    '#convert a.t -> b.t'#13#10 + '#link P <- Z'#13#10 +
+    '#convert X.T -> Y.T'#13#10 + '#link M <- N'#13#10));
+  Check('dup.count', Length(Dup) = 1, IntToStr(Length(Dup)));
+  Check('dup.header.reported', (Length(Dup) = 1) and (Pos('a.t -> b.t', Dup[0]) > 0),
+    'the duplicated header is named so the warning is actionable');
+
+  Check('dup.none', Length(DuplicateHeaders(Existing,
+    SplitRulesBlocks('#convert Z.T -> W.T'#13#10 + '#link P <- Q'#13#10))) = 0,
+    'a genuinely new header is not a duplicate');
+  Check('dup.preamble.ignored', Length(DuplicateHeaders(Existing,
+    SplitRulesBlocks('// file header'#13#10))) = 0,
+    'a preamble has no header, so it can never be a duplicate');
+end;
+
 begin
   try
     TestBlockSplitRulesRoundTrip;
@@ -1518,6 +1804,12 @@ begin
     TestBackupFailureAborts;
     TestComposedFileValidates;
     TestMergeOtherLines;
+    TestConcatBlocksPure;
+    TestMergeConflictOrdinals;
+    TestWorkingSetOps;
+    TestWorkingSetSyncFromText;
+    TestGrammarGuard;
+    TestDuplicateHeaders;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;

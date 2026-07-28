@@ -49,7 +49,7 @@ type
     function  SaveSet(AIndex: Integer): Boolean;
     function  AskTargetFile(const ADefault: string): string;
     function  WriteBlocksTo(const APath: string; const ABlocks: TRuleBlocks;
-      out ABackup: string): Boolean;
+      out ABackup, ANote: string): Boolean;
   public
     /// <summary>Creates the form and its (initially empty) working set. Prefer
     /// Execute over calling this directly.</summary>
@@ -63,6 +63,14 @@ type
   end;
 
 implementation
+
+{ The key FTouched stores a written path under: ONE canonical, case-folded spelling
+  per file, so 'C:\b\x.rules' and 'C:\b\sub\..\x.rules' are the same entry and the
+  main form's "reload me" signal cannot be missed by a second spelling. }
+function TouchKey(const APath: string): string;
+begin
+  Result := LowerCase(NormalizedPath(APath));
+end;
 
 { A simple modal report window: a read-only, non-wrapping memo listing ALines, plus
   a Close button. Unit-level (not a class) -- nothing else needs to create or
@@ -208,7 +216,7 @@ begin
     end;
     F.UpdateEnabled;
     F.ShowModal;
-    if (AInitialPath <> '') and F.FTouched.ContainsKey(LowerCase(AInitialPath)) then
+    if (AInitialPath <> '') and F.FTouched.ContainsKey(TouchKey(AInitialPath)) then
       Result := AInitialPath;
   finally
     F.Free;
@@ -467,22 +475,56 @@ begin
   end;
 end;
 
-{ Write ABlocks into APath, appending when the file already exists. A split/copy is a
-  MOVE of verbatim text, not a merge -- no link reconciliation happens here. }
+{ Write ABlocks into APath, APPENDING when the file already exists. A split/copy is a
+  MOVE of verbatim text, not a merge -- no link reconciliation happens here.
+
+  ANote is what the caller must tell the user about the TARGET, because the target
+  dialog deliberately has no overwrite prompt (we back up instead of clobbering) and
+  so an append into an existing book has no other signal: whether the file was new or
+  appended to, and whether the append duplicated a header the target already had.
+
+  When APath is ALSO in the working set its entry is re-synced from the exact text
+  written -- otherwise that entry keeps its pre-write blocks, the grid hides the
+  change, Compose folds the stale model, and the next save of that entry writes the
+  stale model back over what was just moved in. }
 function TCurationForm.WriteBlocksTo(const APath: string;
-  const ABlocks: TRuleBlocks; out ABackup: string): Boolean;
+  const ABlocks: TRuleBlocks; out ABackup, ANote: string): Boolean;
 var
   Existing: TRuleBlocks;
+  NewText : string;
+  Dups    : TArray<string>;
+  Existed : Boolean;
 begin
-  Result := False;
+  Result  := False;
   ABackup := '';
+  ANote   := '';
   try
-    if TFile.Exists(APath) then
+    Existed := TFile.Exists(APath);
+    if Existed then
       Existing := SplitBlocksFor(APath, TFile.ReadAllText(APath, TEncoding.ASCII))
     else
       Existing := nil;
-    WriteTextWithBackup(APath, JoinBlocks(ConcatBlocks(Existing, ABlocks)), ABackup);
-    FTouched.AddOrSetValue(LowerCase(APath), True);
+    NewText := JoinBlocks(ConcatBlocks(Existing, ABlocks));
+    WriteTextWithBackup(APath, NewText, ABackup);
+    FTouched.AddOrSetValue(TouchKey(APath), True);
+
+    if FSet.SyncFromText(APath, NewText) >= 0 then
+    begin
+      RefreshFiles;
+      RefreshBlocks;
+    end;
+
+    if Existed then
+    begin
+      ANote := 'appended to the existing file';
+      Dups  := DuplicateHeaders(Existing, ABlocks);
+      if Length(Dups) > 0 then
+        ANote := ANote + Format('; WARNING it already had %d of these header(s) (%s)'
+          + ' -- it now holds two blocks for them',
+          [Length(Dups), string.Join(', ', Dups)]);
+    end
+    else
+      ANote := 'new file';
     Result := True;
   except
     on E: Exception do
@@ -497,7 +539,7 @@ begin
   Result := False;
   try
     Bak := FSet.SaveFile(AIndex);
-    FTouched.AddOrSetValue(LowerCase(FSet.Item(AIndex).Path), True);
+    FTouched.AddOrSetValue(TouchKey(FSet.Item(AIndex).Path), True);
     FStatus.SimpleText := Format('Saved %s (backup %s)',
       [ExtractFileName(FSet.Item(AIndex).Path), ExtractFileName(Bak)]);
     Result := True;
@@ -514,7 +556,7 @@ var
   Sel     : TArray<Integer>;
   Orig    : TRuleBlocks;
   Rem, Mvd: TRuleBlocks;
-  Target, Bak: string;
+  Target, Bak, Note: string;
   ErrMsg  : string;
 begin
   Sel := CheckedIndexes(fi);
@@ -522,20 +564,22 @@ begin
   Target := AskTargetFile(ChangeFileExt(FSet.Item(fi).Path, '') + '-split'
     + ExtractFileExt(FSet.Item(fi).Path));
   if Target = '' then Exit;
-  if SameText(Target, FSet.Item(fi).Path) then
+  // Compare CANONICAL paths -- a second spelling of this same file would otherwise
+  // slip past the guard and the source would be written twice, losing the blocks.
+  if SameText(NormalizedPath(Target), NormalizedPath(FSet.Item(fi).Path)) then
   begin
     FStatus.SimpleText := 'Split target must be a different file.';
     Exit;
   end;
   Orig := FSet.Item(fi).Blocks;   // pre-split content, restored below if the source save fails
   SplitOut(Orig, Sel, Rem, Mvd);
-  if not WriteBlocksTo(Target, Mvd, Bak) then Exit;    // source untouched on failure
+  if not WriteBlocksTo(Target, Mvd, Bak, Note) then Exit;   // source untouched on failure
   FSet.SetBlocks(fi, Rem);
   if SaveSet(fi) then
   begin
     RefreshBlocks;
-    FStatus.SimpleText := Format('Moved %d block(s) to %s',
-      [Length(Mvd), ExtractFileName(Target)]);
+    FStatus.SimpleText := Format('Moved %d block(s) to %s (%s)',
+      [Length(Mvd), ExtractFileName(Target), Note]);
   end
   else
   begin
@@ -559,7 +603,7 @@ var
   fi  : Integer;
   Sel : TArray<Integer>;
   Cpy : TRuleBlocks;
-  Target, Bak: string;
+  Target, Bak, Note: string;
 begin
   Sel := CheckedIndexes(fi);
   if not CanOperateOn(Sel) or (fi < 0) then Exit;
@@ -567,25 +611,39 @@ begin
     + ExtractFileExt(FSet.Item(fi).Path));
   if Target = '' then Exit;
   Cpy := CopyOut(FSet.Item(fi).Blocks, Sel);
-  if not WriteBlocksTo(Target, Cpy, Bak) then Exit;
+  if not WriteBlocksTo(Target, Cpy, Bak, Note) then Exit;
   // criterion 4: the source file is NOT written
-  FStatus.SimpleText := Format('Copied %d block(s) to %s (source unchanged)',
-    [Length(Cpy), ExtractFileName(Target)]);
+  FStatus.SimpleText := Format('Copied %d block(s) to %s (%s; source unchanged)',
+    [Length(Cpy), ExtractFileName(Target), Note]);
 end;
 
 procedure TCurationForm.DoDelete(Sender: TObject);
 var
   fi : Integer;
   Sel: TArray<Integer>;
+  Orig: TRuleBlocks;
+  ErrMsg: string;
 begin
   Sel := CheckedIndexes(fi);
   if not CanOperateOn(Sel) or (fi < 0) then Exit;
   if MessageDlg(Format('Delete %d block(s) from %s?'#13#10
     + 'A backup is written first.', [Length(Sel), ExtractFileName(FSet.Item(fi).Path)]),
     mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
-  FSet.SetBlocks(fi, DeleteBlocks(FSet.Item(fi).Blocks, Sel));
-  SaveSet(fi);
-  RefreshBlocks;
+  Orig := FSet.Item(fi).Blocks;   // restored below if the save fails
+  FSet.SetBlocks(fi, DeleteBlocks(Orig, Sel));
+  if SaveSet(fi) then
+    RefreshBlocks
+  else
+  begin
+    // The pure layer guarantees the file on disk was left untouched, so the model
+    // must go back to matching it. Otherwise the grid shows the deletion as done
+    // and a LATER successful save silently persists a deletion that was reported
+    // as failed. Preserve SaveSet's own error text.
+    ErrMsg := FStatus.SimpleText;
+    FSet.SetBlocks(fi, Orig);
+    RefreshBlocks;
+    FStatus.SimpleText := ErrMsg;
+  end;
 end;
 
 procedure TCurationForm.DoMerge(Sender: TObject);
@@ -595,7 +653,8 @@ var
   Plan : TMergePlan;
   Res  : TArray<TMergeResolution>;
   InPath: string;
-  Saved: Boolean;
+  Orig : TRuleBlocks;
+  ErrMsg: string;
 begin
   fi := FFiles.ItemIndex;
   if fi < 0 then Exit;
@@ -610,6 +669,20 @@ begin
     Dlg.Free;
   end;
 
+  // The merger only implements the .rules grammar: it matches blocks by header and
+  // APPENDS lines to the end of a block's raw text, which for a 'cast X ... end'
+  // block lands AFTER the 'end' line, outside the body -- and it would append every
+  // line of a reFind .txt into a .rules preamble. Until it is catalog-aware a
+  // cross-grammar merge is refused, not silently mis-applied.
+  if GrammarOf(InPath) <> GrammarOf(FSet.Item(fi).Path) then
+  begin
+    FStatus.SimpleText := Format('Merge refused: %s is a %s file but %s is a %s file'
+      + ' -- merging across grammars would corrupt the target.',
+      [ExtractFileName(InPath), GrammarName(GrammarOf(InPath)),
+       ExtractFileName(FSet.Item(fi).Path), GrammarName(GrammarOf(FSet.Item(fi).Path))]);
+    Exit;
+  end;
+
   Plan := PlanMerge(FSet.Item(fi).Blocks,
     SplitBlocksFor(InPath, TFile.ReadAllText(InPath, TEncoding.ASCII)));
 
@@ -622,10 +695,20 @@ begin
       Exit;
     end;
 
+  Orig := FSet.Item(fi).Blocks;   // restored below if the save fails
   FSet.SetBlocks(fi, ApplyMerge(Plan, Res));
-  Saved := SaveSet(fi);
+  if not SaveSet(fi) then
+  begin
+    // Nothing reached disk, so the model must not keep the merged content: leaving
+    // it would let a LATER successful save persist a merge the user was told had
+    // failed and never saw a report for. Preserve SaveSet's own error text.
+    ErrMsg := FStatus.SimpleText;
+    FSet.SetBlocks(fi, Orig);
+    RefreshBlocks;
+    FStatus.SimpleText := ErrMsg;
+    Exit;
+  end;
   RefreshBlocks;
-  if not Saved then Exit;   // SaveSet's own error is already on the status bar
   ShowReport(Self, 'Merge report -- ' + ExtractFileName(InPath),
     MergeReportLines(Plan, Res, ExtractFileName(InPath)));
 end;
@@ -638,12 +721,31 @@ var
   Head: TArray<string>;
 begin
   if FSet.Count = 0 then Exit;
+  // Compose folds the whole set with the .rules merge semantics and writes ONE
+  // .rules file. A catalog in the set would have its 'cast ... end' blocks appended
+  // whole (a block of another Kind never matches a #convert header), producing
+  // invalid DSL for --rules. Refuse rather than emit it.
+  if FSet.MixedGrammars then
+  begin
+    FStatus.SimpleText := 'Compose refused: the working set mixes conversion rules '
+      + 'and cast catalogs. Compose writes ONE .rules file and only speaks the rules '
+      + 'grammar -- remove the catalog file(s) from the set first.';
+    Exit;
+  end;
   Text   := FSet.ComposeAll(Rep);
   Target := AskTargetFile(ChangeFileExt(FSet.Item(0).Path, '') + '.composed.rules');
   if Target = '' then Exit;
   try
     WriteTextWithBackup(Target, Text, Bak);
-    FTouched.AddOrSetValue(LowerCase(Target), True);
+    FTouched.AddOrSetValue(TouchKey(Target), True);
+    // The compose target may itself be a member of the set -- re-sync it from the
+    // exact text written, or that entry keeps its pre-compose blocks and the next
+    // save of it writes them back over the composed file.
+    if FSet.SyncFromText(Target, Text) >= 0 then
+    begin
+      RefreshFiles;
+      RefreshBlocks;
+    end;
   except
     on E: Exception do
     begin

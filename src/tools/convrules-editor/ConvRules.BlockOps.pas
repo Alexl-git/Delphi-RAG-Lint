@@ -95,6 +95,11 @@ function BlockLinks(const ABlock: TRuleBlock): TArray<TBlockLink>;
 /// SENSITIVE -- non-link content is never deduped just because it differs only in
 /// case). An incoming block with no counterpart is appended whole.</summary>
 /// <returns>A plan; ATarget and AIncoming are copied into it unmodified.</returns>
+/// <remarks>The case-SENSITIVE dedup of non-link lines is deliberate but it does
+/// sit oddly in a DSL that is otherwise case-insensitive: '#Default X = 1' and
+/// '#default X = 1' are not "identical", so a merge keeps BOTH and the engine then
+/// sees the directive twice. The trade is intentional -- dropping a line the user
+/// wrote is worse than keeping a near-duplicate they can see and delete.</remarks>
 function PlanMerge(const ATarget, AIncoming: TRuleBlocks): TMergePlan;
 
 type
@@ -144,7 +149,19 @@ function EnsureTrailingEol(const ABlock: TRuleBlock): TRuleBlock;
 /// <summary>PURE: AFirst followed by ASecond, with AFirst's last block terminated so
 /// the two never run together. Used when appending split-out blocks to an existing
 /// file (a move, not a merge).</summary>
+/// <remarks>AFirst is COPIED, not aliased: a dynamic array is a reference and an
+/// element write does not copy-on-write, so returning AFirst itself would terminate
+/// the caller's last block -- and callers hand in TWorkingSet.Item(i).Blocks, which
+/// shares the working set's stored array.</remarks>
 function ConcatBlocks(const AFirst, ASecond: TRuleBlocks): TRuleBlocks;
+
+/// <summary>PURE: the headers of AIncoming that AExisting ALREADY has, matched the
+/// way PlanMerge matches them (same Kind, trimmed header, case-insensitively).</summary>
+/// <remarks>A split/copy APPENDS verbatim without merging, and its target dialog has
+/// no overwrite prompt, so a duplicated header silently leaves the target holding two
+/// blocks for one rule -- this is what the form warns from. Preamble blocks have no
+/// header and are never reported.</remarks>
+function DuplicateHeaders(const AExisting, AIncoming: TRuleBlocks): TArray<string>;
 
 implementation
 
@@ -296,6 +313,23 @@ begin
   Result := -1;
 end;
 
+function DuplicateHeaders(const AExisting, AIncoming: TRuleBlocks): TArray<string>;
+var
+  List: TList<string>;
+  i   : Integer;
+begin
+  List := TList<string>.Create;
+  try
+    for i := 0 to High(AIncoming) do
+      if (AIncoming[i].Kind <> rbkPreamble)
+         and (IndexOfHeader(AExisting, AIncoming[i].Header, AIncoming[i].Kind) >= 0) then
+        List.Add(Trim(AIncoming[i].Header));
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
 function PlanMerge(const ATarget, AIncoming: TRuleBlocks): TMergePlan;
 var
   Items : TList<TMergeItem>;
@@ -322,7 +356,11 @@ var
 
   { EXACT match after trimming -- case-SENSITIVE. Non-#link content (comments,
     #default/#ignore/#note, unknown directives) is never silently deduped just
-    because it differs only in case; only a truly identical line is skipped. }
+    because it differs only in case; only a truly identical line is skipped.
+    CONSEQUENCE, in a DSL that is otherwise case-insensitive: '#Default X = 1' and
+    '#default X = 1' both survive a merge and the engine sees the directive twice.
+    Accepted -- see the <remarks> on PlanMerge; losing a line the user wrote would
+    be the worse failure. }
   function TargetHasLine(const ALine: string): Boolean;
   var
     k: Integer;
@@ -451,7 +489,9 @@ function ConcatBlocks(const AFirst, ASecond: TRuleBlocks): TRuleBlocks;
 var
   i: Integer;
 begin
-  Result := AFirst;
+  // Copy, never alias: the element write below would otherwise reach through into
+  // AFirst itself (a dynamic array is a reference; only SetLength uniquifies).
+  Result := Copy(AFirst);
   if Length(Result) > 0 then
     Result[High(Result)] := EnsureTrailingEol(Result[High(Result)]);
   for i := 0 to High(ASecond) do

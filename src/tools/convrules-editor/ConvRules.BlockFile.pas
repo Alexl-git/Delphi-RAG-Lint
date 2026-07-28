@@ -34,6 +34,12 @@ type
     Eol : string;
   end;
 
+  /// <summary>Which grammar a file is split, merged and composed with.</summary>
+  /// <remarks>Chosen from the file's extension alone -- see GrammarOf. The merge
+  /// and compose paths only implement rgRules, so a cross-grammar operation is
+  /// refused rather than silently corrupting a catalog.</remarks>
+  TRuleGrammar = (rgRules, rgCastLib);
+
   /// <summary>What a block is.</summary>
   TRuleBlockKind = (
     rbkPreamble,   // content before the first real block (file header comments)
@@ -77,6 +83,17 @@ function SplitRulesBlocks(const AText: string): TRuleBlocks;
 /// rbkPreamble block; content between blocks (including the 'end' line and any
 /// trailing blanks) attaches to the PRECEDING block, so nothing is orphaned.</summary>
 function SplitCastLibBlocks(const AText: string): TRuleBlocks;
+
+/// <summary>PURE: the grammar APath's extension selects -- rgCastLib for
+/// '.castlib' (case-insensitively), rgRules for everything else (.rules and reFind
+/// files).</summary>
+/// <remarks>SplitBlocksFor dispatches on exactly this, so two paths with the same
+/// GrammarOf are split, merged and composed identically -- which is what makes it
+/// the right test for refusing a cross-grammar merge or compose.</remarks>
+function GrammarOf(const APath: string): TRuleGrammar;
+
+/// <summary>PURE: a short human name for AGrammar, for a refusal message.</summary>
+function GrammarName(AGrammar: TRuleGrammar): string;
 
 /// <summary>PURE: pick the grammar from APath's extension -- '.castlib' uses the
 /// catalog grammar, anything else (.rules and reFind files) uses the DSL grammar.</summary>
@@ -235,9 +252,25 @@ begin
   Result := SplitOnHeaders(AText, CastLibHeaderTest);
 end;
 
-function SplitBlocksFor(const APath, AText: string): TRuleBlocks;
+function GrammarOf(const APath: string): TRuleGrammar;
 begin
   if SameText(ExtractFileExt(APath), '.castlib') then
+    Result := rgCastLib
+  else
+    Result := rgRules;
+end;
+
+function GrammarName(AGrammar: TRuleGrammar): string;
+begin
+  if AGrammar = rgCastLib then
+    Result := 'cast catalog'
+  else
+    Result := 'conversion rules';
+end;
+
+function SplitBlocksFor(const APath, AText: string): TRuleBlocks;
+begin
+  if GrammarOf(APath) = rgCastLib then
     Result := SplitCastLibBlocks(AText)
   else
     Result := SplitRulesBlocks(AText);

@@ -73,7 +73,17 @@ type
     procedure BuildUI;
     procedure FormCloseHandler(Sender: TObject; var Action: TCloseAction);
     procedure DoLoad(Sender: TObject);
-    procedure DoSave(Sender: TObject);
+    /// <summary>Back the file up, write the canonical DSL, validate it and report.</summary>
+    /// <returns>True when the file was written; False when nothing reached disk --
+    /// the backup failed, or no target file was chosen. The status bar always
+    /// carries the reason.</returns>
+    /// <remarks>A Boolean, not a procedure, because DoCurate must NOT open the
+    /// curation window (which reads the file from DISK and can later force a reload
+    /// over the editor's buffer) after a save the user asked for and did not get.</remarks>
+    function  DoSave(Sender: TObject): Boolean;
+    /// <summary>OnClick shim for the Save button -- an event handler must be a
+    /// procedure, so the result is dropped here and nowhere else.</summary>
+    procedure DoSaveClick(Sender: TObject);
     procedure DoValidate(Sender: TObject);
     procedure DoCurate(Sender: TObject);
     procedure DoNewConversion(Sender: TObject);
@@ -242,7 +252,7 @@ begin
 
   BtnSave := TButton.Create(Self);
   BtnSave.Parent := FPanelTop; BtnSave.SetBounds(104, 6, 90, 25);
-  BtnSave.Caption := 'Save'; BtnSave.OnClick := DoSave;
+  BtnSave.Caption := 'Save'; BtnSave.OnClick := DoSaveClick;
 
   BtnValidate := TButton.Create(Self);
   BtnValidate.Parent := FPanelTop; BtnValidate.SetBounds(200, 6, 90, 25);
@@ -1439,7 +1449,17 @@ begin
     case MessageDlg('Curation works on the file on disk. Save your edits first?',
            mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
       mrCancel: Exit;
-      mrYes   : DoSave(nil);
+      mrYes   :
+        // The user asked to save FIRST. If that failed, opening curation anyway
+        // would curate the STALE disk file and the reload afterwards would throw
+        // the unsaved edits away -- so stop here instead. DoSave has already put
+        // the reason on the status bar; do not overwrite it.
+        if not DoSave(nil) then
+        begin
+          SetError('Curation not opened: the save failed, so your edits are still '
+            + 'only in this editor and nothing on disk changed.');
+          Exit;
+        end;
     end;
 
   Reload := TCurationForm.Execute(Self, FFilePath);
@@ -1450,13 +1470,19 @@ begin
   end;
 end;
 
-procedure TConvRulesForm.DoSave(Sender: TObject);
+procedure TConvRulesForm.DoSaveClick(Sender: TObject);
+begin
+  DoSave(Sender);
+end;
+
+function TConvRulesForm.DoSave(Sender: TObject): Boolean;
 var
   bak: string;
   res: TValidateResult;
   Node: TRuleNode;
   fromT, toT: string;
 begin
+  Result := False;   // every early Exit below means nothing reached disk
   var LGuard: IInterface := HourGlass;
   if FFilePath = '' then
   begin
@@ -1509,6 +1535,8 @@ begin
   if Length(us.Conflicts) > 0 then
     SetError(Format('Note: unit conflicts (ADD wins): %s',
       [string.Join(', ', us.Conflicts)]));
+
+  Result := True;   // the file IS on disk; a failed validation is a report, not a failure
 end;
 
 { ---- Unit Rules tab ---- }
