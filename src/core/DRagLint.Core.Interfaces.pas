@@ -288,7 +288,17 @@ type
     /// <param name="ACallSitesOnly">True (the default, and what every
     /// call-graph consumer wants) restricts the scan to CALL-SITE refs. False
     /// restores the historic kind-blind scan -- see the remarks.</param>
-    /// <remarks>v(ADP3 T3i, register E1): with ACallSitesOnly the kind
+    /// <remarks>v(ADP3 T3i review round 4): THIS DECLARATION IS THE SINGLE
+    /// SOURCE for what ACallSitesOnly means and for who may pass it. The
+    /// implementation's own header and block comment in
+    /// DRagLint.Storage.SQLite, and the two call sites in DRagLint.Doc.Facts,
+    /// POINT HERE and state no version of the contract themselves -- because
+    /// three consecutive T3i review rounds each corrected one copy of this text
+    /// and left another asserting the retired wording. A comment that defers to
+    /// another comment while also paraphrasing it is worse than either being
+    /// stale alone. If the contract changes it changes HERE, and the pointers
+    /// stay pointers.
+    /// <para>v(ADP3 T3i, register E1): with ACallSitesOnly the kind
     /// restriction is part of the CONTRACT, not an optimisation -- this bucket
     /// is the complement of FindResolvedCallers within the universe
     /// ResolveCallTargets walks, and that universe is call-site refs alone. A
@@ -297,26 +307,24 @@ type
     /// Consequently a paren-less dotted invocation in EXPRESSION position,
     /// which today emits no call ref at all, is not reached; see the block
     /// comment above REF_KIND_CALL in DRagLint.Core.Model. Name-based discovery
-    /// (FindCallersByName) is kind-blind and still finds it.
-    /// <para>ACallSitesOnly=False is NOT a general escape hatch. It has exactly
-    /// TWO call sites, both in DRagLint.Doc.Facts' CalledFrom gather -- the
-    /// primary store and the extra-store fan-out -- and both pass it under the
-    /// SAME condition: <c>CanBeCallTarget(ASym.Kind)</c> is False, i.e. the
-    /// documented symbol is a NON-ROUTINE kind (class, interface, record, enum
-    /// or type alias). The two must stay in step, or a symbol's fact would
-    /// depend on which DB a reference happened to live in.</para>
-    /// <para>Why those kinds are exempt: only a routine can ever BE a call
-    /// target, so for a non-routine this bucket has never held call sites -- it
-    /// holds plain references to the name, which the renderer then labels
-    /// "Called from:". The label is mislabelled rather than wrong, and
-    /// relabelling it (the planned "Used by:" for types) is owned elsewhere, so
-    /// this parameter preserves its input byte-for-byte instead of silently
-    /// emptying a shipped fact as a side effect of fixing the call-site
-    /// question. v(ADP3 T3i review round 2): the exemption is keyed on
-    /// CanBeCallTarget, NOT on a hand-written list of "type-like" kinds -- a
-    /// literal [skClass, skInterface, skRecord] silently dropped skEnum and
-    /// skTypeAlias, which have no other fact carrying their references at all.
-    /// Do not add callers.</para></remarks>
+    /// (FindCallersByName) is kind-blind and still finds it.</para>
+    /// <para>ACallSitesOnly=False is NOT a general escape hatch. The parameter
+    /// is passed EXPLICITLY at exactly TWO call sites, both in
+    /// DRagLint.Doc.Facts' CalledFrom gather -- the primary store and the
+    /// extra-store fan-out -- and both pass the SAME expression,
+    /// <c>CanBeCallTarget(ASym.Kind)</c>, so False is reached exactly when the
+    /// documented symbol is of a NON-ROUTINE kind. Every OTHER caller takes the
+    /// default, including DRagLint.Doc.SymbolFacts' ComputeCoveredBy, which
+    /// records that it does so deliberately. The two explicit sites must stay in
+    /// step, or a symbol's fact would depend on which DB a reference happened to
+    /// live in. Do not add callers.</para>
+    /// <para>No kind list appears here ON PURPOSE. "Which kinds are exempt, and
+    /// why" is owned by CanBeCallTarget's own header in DRagLint.Doc.Facts;
+    /// every enumeration of that set written anywhere else has so far been
+    /// wrong -- as a code literal in T3i review round 1, and as a five-kind
+    /// paraphrase in this very block until round 4, which was narrower than the
+    /// predicate because hover resolves properties, fields, locals and SQL
+    /// symbols into the same branch.</para></remarks>
     function FindUnresolvedNameCallers(const AName: string;
       ACallSitesOnly: Boolean = True): TArray<TResolvedCaller>;
     /// <summary>Find-callees: every call edge whose ref is enclosed by

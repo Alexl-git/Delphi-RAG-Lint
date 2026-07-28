@@ -1157,11 +1157,15 @@ end; // function
 /// collected a "Called from:" entry per type_use mention. See the block comment
 /// above REF_KIND_CALL in DRagLint.Core.Model for the full account, including
 /// the one shape this deliberately no longer reaches.</para>
-/// <para>ACallSitesOnly=False reinstates the kind-blind scan for the one caller
-/// whose question is NOT about calls: DRagLint.Doc.Facts passes it for a symbol
-/// that can never BE a call target (every non-routine kind), where this bucket
-/// is a reference list rather than a caller list. Documented in full on the
-/// interface declaration; do not add callers.</para>
+/// <para>ACallSitesOnly=False reinstates the historic kind-blind scan. Its
+/// contract -- what False means, which callers may pass it, and which kinds
+/// reach it -- is documented IN FULL AND ONLY on the ISymbolStore declaration in
+/// DRagLint.Core.Interfaces. v(ADP3 T3i review round 4): deliberately NOT
+/// paraphrased here. Through three review rounds this paragraph and that one
+/// disagreed about how many callers exist and which kinds are covered, while
+/// this same header told the reader to go there for the full account -- an
+/// authoritative-and-deferring pair that disagree is worse than either being
+/// stale alone.</para>
 /// <para>(ADP1 Bug C fix): EXCLUDES a class's own method-header self-reference. A
 /// qualified impl header ('function TThing.Add(...)') emits a type_use ref of
 /// name_text='TThing' whose enclosing_symbol_id is the METHOD ITSELF
@@ -1193,10 +1197,9 @@ var
   R    : TResolvedCaller       ;
   KindP: string                ;
 begin
-  { ACallSitesOnly=False is the historic kind-blind scan, kept for the ONE
-    caller that asks a different question -- a TYPE's reference list, see this
-    routine's DocInsight in DRagLint.Core.Interfaces. Every call-graph consumer
-    takes the default. }
+  { ACallSitesOnly=False is the historic kind-blind scan. Its contract lives on
+    the ISymbolStore declaration in DRagLint.Core.Interfaces and nowhere else --
+    see the note in this routine's own header for why it is not restated here. }
   if ACallSitesOnly then KindP:= 'AND ' + CallSiteRefKindSql('r') + ' ' else KindP:= '';
   List:= TList<TResolvedCaller>.Create;
   Q:= TFDQuery.Create(nil);

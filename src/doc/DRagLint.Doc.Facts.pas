@@ -314,6 +314,23 @@ end;
 // call_edges.target_symbol_id is always a routine and FindResolvedCallers can
 // never return a row for anything else.
 //
+// v(ADP3 T3i review round 4): THIS HEADER IS THE SINGLE SOURCE for "which kinds
+// are exempt from the call-site restriction, and why". The two CalledFrom call
+// sites below, the ISymbolStore declaration in DRagLint.Core.Interfaces and the
+// store implementation in DRagLint.Storage.SQLite all POINT HERE and write no
+// kind list of their own -- because every hand-written enumeration of this set
+// has so far been WRONG: once as a code literal (round 1, below) and twice as a
+// five-kind paraphrase in comments, retired by round 4.
+//
+// THE EXEMPT SET IS THE WHOLE COMPLEMENT, NOT A SHORTLIST OF TYPE KINDS. Do not
+// write the complement out. Build (this unit) has four callers -- the `document`
+// path, doc drift, the CLI `hover` verb and the LSP hover -- and the CalledFrom
+// gather has no kind gate of its own, so the two hover callers reach the exempt
+// branch with whatever kind the cursor resolved to: skProperty, skField,
+// skVarDecl, skConstDecl, skEnumValue, skForm, skUnit, the skSql* kinds and even
+// skLocalVar / skParam, not merely the five documentable type kinds
+// Doc.Batch.IsDocumentableKind admits.
+//
 // This -- not a list of "type-like" kinds -- is the correct gate for the
 // CalledFrom gather's call-sites-only restriction. For a NON-routine symbol the
 // unresolved bucket has never held call sites at all: it holds plain references
@@ -329,6 +346,17 @@ end;
 // run_doc_no_self_caller.ps1 happens to pin -- the boundary was drawn by what a
 // test covered rather than by the semantics. skEnum and skTypeAlias are equally
 // documentable (see Doc.Batch.IsDocumentableKind) and silently lost their line.
+// PINNED BY tests/autotest/run_doc_no_self_caller.ps1 (a class, including the
+// NULL-enclosing unit-scope reference a Bug C regression once dropped) and
+// tests/callresolve/run_callsite_kind_universe.ps1 (a class AND an enum).
+//
+// NOT EXPORTED -- it lives in this unit's implementation section, so a
+// cross-unit reader is pointed at it by name rather than calling it. Noted
+// because DRagLint.Doc.SymbolFacts' ComputeCoveredBy asks this exact question
+// with its own literal copy of the same five kinds at the routine's tail;
+// collapsing that duplicate would mean exporting this function, which is a CODE
+// change and out of scope for a comments-only round (recorded in
+// task-3i-report.md round 4 rather than done).
 function CanBeCallTarget(AKind: TSymbolKind): Boolean;
 begin
   Result:= AKind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor];
@@ -673,18 +701,12 @@ begin
     // appeared here with a ' ?'.
     //
     // NON-ROUTINE KINDS ARE DELIBERATELY EXEMPT, and this is a scope boundary,
-    // not an oversight. A class, interface, record, enum or type alias can never
-    // be a call target (see CanBeCallTarget), so for those this bucket has never
-    // held call sites at all -- it holds plain type_use REFERENCES to the name,
-    // which the renderer then labels "Called from:". That label is the defect,
-    // not the content, and relabelling it (the planned "Used by:" for types) is
-    // owned by the render workstream; `tests/autotest/run_doc_no_self_caller.ps1`
-    // pins the present content, including the NULL-enclosing unit-scope reference
-    // that a Bug C regression once dropped. Restricting a non-routine to call
-    // sites would have emptied a shipped fact as a side effect of fixing the CALL
-    // question and deleted the very input the relabel is meant to display -- so
-    // the gate keeps that path byte-identical and leaves the decision to its
-    // owner. run_callsite_kind_universe.ps1 pins a class AND an enum here.
+    // not an oversight. WHICH kinds and WHY are stated once, on
+    // CanBeCallTarget's own header above; the parameter's contract is stated
+    // once, on the ISymbolStore declaration in DRagLint.Core.Interfaces.
+    // v(ADP3 T3i review round 4): neither is paraphrased here, and no kind list
+    // is written here -- the paraphrase that used to sit at this spot named five
+    // type kinds and was narrower than the predicate it described.
     ResCallers:= AStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
                                                  CanBeCallTarget(ASym.Kind));
     for RC in ResCallers do
@@ -706,7 +728,9 @@ begin
     begin
       if ExStore = nil then Continue;
       // Same kind gate as the primary store above -- the two must agree, or a
-      // type's fact would depend on which DB a reference happened to live in.
+      // symbol's fact would depend on which DB a reference happened to live in.
+      // The expression is repeated because it is CODE; the reasoning is not, and
+      // lives on CanBeCallTarget's header.
       ResCallers:= ExStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
                                                     CanBeCallTarget(ASym.Kind));
       for RC in ResCallers do

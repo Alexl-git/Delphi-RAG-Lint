@@ -698,9 +698,11 @@ begin
     the invocation IS indexed as a plain 'call' ref (verified via dump-refs:
     name=ThingHook kind=call enc=THookPlan4.EditThing). Its enclosing routine
     rejoins the Task-2 name-based interface walk back to the calling form.
-    Multi-DB: this query (unlike QueryNameCallerRows) also filters on
-    r.kind = 'call', so it fans out across AStore + AExtraStores itself
-    rather than reusing the helper. }
+    Multi-DB: this query (unlike QueryNameCallerRows) also filters on the
+    call-site ref kind, so it fans out across AStore + AExtraStores itself
+    rather than reusing the helper. v(ADP3 T3i review round 4): the kind is NOT
+    named as a literal here -- it is whatever CallSiteRefKindSql emits, see
+    REF_KIND_CALL in DRagLint.Core.Model. }
   Stores:= [AStore];
   for St in AExtraStores do Stores:= Stores + [St];
   for St in Stores do

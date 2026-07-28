@@ -566,9 +566,15 @@ function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
 
 { v(ADP3 T3i): THE CALL-SITE REF-KIND UNIVERSE. ONE declaration, read by the
   pass that WRITES resolved call edges and by both queries that read the
-  UNRESOLVED complement of those edges:
+  UNRESOLVED complement of those edges.
 
-    * DRagLint.Parser.Delphi13                        (emits the kind)
+  THIS LIST IS THE SINGLE SOURCE FOR WHO READS THE DECLARATION (round 4). Any
+  other comment or test header that needs the readership points HERE and states
+  no count of its own -- the count grew from three sites to six during review
+  round 2, and a copy elsewhere would have been left asserting three.
+  SIX SITES, NINE READ POINTS:
+
+    * DRagLint.Parser.Delphi13                        (emits the kind; x3)
     * TSQLiteSymbolStore.ResolveCallTargets           (writes call_edges)
     * TSQLiteSymbolStore.FindUnresolvedNameCallers    (reads the complement)
     * TSQLiteSymbolStore.GetAmbiguousCalls            (reads the complement)

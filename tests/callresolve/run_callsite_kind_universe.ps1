@@ -3,9 +3,14 @@
 
   THE INVARIANT. Every consumer that reports an UNRESOLVED call site takes the
   COMPLEMENT of the resolved call_edges, and ResolveCallTargets only ever walks
-  kind='call' refs. So the complement is only meaningful inside that same
-  universe, and all three sites read ONE declaration for it
-  (DRagLint.Core.Model.REF_KIND_CALL / CallSiteRefKindSql):
+  call-site refs. So the complement is only meaningful inside that same
+  universe, and every site that decides what a call site is reads ONE
+  declaration for it (DRagLint.Core.Model.REF_KIND_CALL / CallSiteRefKindSql).
+
+  THE FULL LIST OF THOSE SITES, AND HOW MANY, IS THE BLOCK COMMENT ABOVE
+  REF_KIND_CALL -- not this header (T3i review round 4; this header used to say
+  "all three sites" and was left behind when review round 2 wired three more).
+  THIS RUNNER exercises three of them:
 
     writer  TSQLiteSymbolStore.ResolveCallTargets
     reader  TSQLiteSymbolStore.GetAmbiguousCalls          -> `ambiguous-calls`
