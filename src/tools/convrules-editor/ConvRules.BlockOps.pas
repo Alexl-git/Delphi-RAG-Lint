@@ -89,8 +89,10 @@ function BlockLinks(const ABlock: TRuleBlock): TArray<TBlockLink>;
 /// by trimmed header, case-insensitively. Within a matched pair: an identical link
 /// is skipped; a target already linked from a different source (or with a different
 /// cast) is a CONFLICT; a new target -- including one fed by an already-used source
-/// -- is merged; non-link lines not already present are merged. An incoming block
-/// with no counterpart is appended whole.</summary>
+/// -- is merged; non-link lines not already present in the target are merged
+/// verbatim, where "already present" is an EXACT match after trimming (case-
+/// SENSITIVE -- non-link content is never deduped just because it differs only in
+/// case). An incoming block with no counterpart is appended whole.</summary>
 /// <returns>A plan; ATarget and AIncoming are copied into it unmodified.</returns>
 function PlanMerge(const ATarget, AIncoming: TRuleBlocks): TMergePlan;
 
@@ -268,12 +270,15 @@ var
     Result := False;
   end;
 
+  { EXACT match after trimming -- case-SENSITIVE. Non-#link content (comments,
+    #default/#ignore/#note, unknown directives) is never silently deduped just
+    because it differs only in case; only a truly identical line is skipped. }
   function TargetHasLine(const ALine: string): Boolean;
   var
     k: Integer;
   begin
     for k := 0 to High(TgtOther) do
-      if SameText(Trim(TgtOther[k]), Trim(ALine)) then Exit(True);
+      if Trim(TgtOther[k]) = Trim(ALine) then Exit(True);
     Result := False;
   end;
 

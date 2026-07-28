@@ -1269,6 +1269,68 @@ begin
     'a differing units list is a different rule, so it is appended not merged');
 end;
 
+{ Criterion 5 (the maMergeOther half, previously untested): within a matched block,
+  a non-#link incoming line new to the target is merged verbatim (maMergeOther); one
+  already present -- an EXACT match after trimming -- is not re-added; the header
+  line itself is never treated as "other" content; and the dedup is case-SENSITIVE,
+  so a duplicate that differs only in case is genuinely new content and must be
+  kept, not silently dropped (design decision: "identical" means exact, not
+  case-folded -- non-#link content is never dropped). }
+procedure TestMergeOtherLines;
+var
+  Plan: TMergePlan;
+  T, I: TRuleBlocks;
+  k, OtherCount: Integer;
+  SawKeepMeCase, SawDefault, SawExactDup: Boolean;
+begin
+  T := SplitRulesBlocks(
+    '#convert A.T -> B.T'#13#10 +
+    '#link P <- Q'#13#10 +
+    '// Keep me'#13#10);
+  I := SplitRulesBlocks(
+    '#convert A.T -> B.T'#13#10 +
+    '#link P <- Q'#13#10 +
+    '// Keep me'#13#10 +
+    '// KEEP ME'#13#10 +
+    '#default X = 1'#13#10);
+  Plan := PlanMerge(T, I);
+
+  Check('merge.other.itemcount', Length(Plan.Items) = 3, IntToStr(Length(Plan.Items)));
+
+  OtherCount    := 0;
+  SawKeepMeCase := False;
+  SawDefault    := False;
+  SawExactDup   := False;
+  for k := 0 to High(Plan.Items) do
+    if Plan.Items[k].Action = maMergeOther then
+    begin
+      Inc(OtherCount);
+      if Plan.Items[k].Line = '// KEEP ME' then SawKeepMeCase := True;
+      if Plan.Items[k].Line = '#default X = 1' then SawDefault := True;
+      if Plan.Items[k].Line = '// Keep me' then SawExactDup := True;
+    end;
+
+  Check('merge.other.count', OtherCount = 2, IntToStr(OtherCount));
+  Check('merge.other.default.verbatim', SawDefault,
+    'a #default line new to the target must merge verbatim');
+  Check('merge.other.casediff.kept', SawKeepMeCase,
+    'a duplicate differing only in case is not identical -- it must be kept, not deduped');
+  Check('merge.other.exactdup.skipped', not SawExactDup,
+    'an exact (post-trim) duplicate already in the target must not be re-added');
+
+  // The incoming block's header line must never itself be treated as "other"
+  // content. Proven with a header differing only by case from the target's, so a
+  // regression that stopped skipping the header line (the i0 index in
+  // BlockOtherLines) would surface as a spurious extra item, not silently pass by
+  // matching case-insensitively.
+  T := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+  I := SplitRulesBlocks('#CONVERT A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+  Plan := PlanMerge(T, I);
+  Check('merge.other.header.excluded', Length(Plan.Items) = 1, IntToStr(Length(Plan.Items)));
+  Check('merge.other.header.excluded.action', Plan.Items[0].Action = maSkipDuplicate,
+    'only the identical #link should appear; the header must never become a maMergeOther item');
+end;
+
 begin
   try
     TestBlockSplitRulesRoundTrip;
@@ -1280,6 +1342,7 @@ begin
     TestMergeReportsConflict;
     TestMergeAllowsFanOut;
     TestMergeAppendsUnmatchedBlock;
+    TestMergeOtherLines;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;
