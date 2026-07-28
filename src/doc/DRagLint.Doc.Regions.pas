@@ -762,6 +762,27 @@ begin
   // capture group needed.
   OpenLen := Length(ATagName) + 2;
   CloseLen:= Length(ATagName) + 3;
+  // v(ADP3 T3k, T3h minor 1): FAIL-CLOSED CHECK ON THE PATTERN, not just on the
+  // caller. The refusal above guards the tag NAME; this guards the thing the
+  // arithmetic actually depends on -- that the matched opening really is the
+  // bare literal '<tag>'. Both facts hold today, but they are held by DIFFERENT
+  // declarations: IsSingularMatchContainer names the tags, while the opening
+  // form lives in PRESERVED_CONTAINER_PATTERNS, and only the second one makes
+  // OpenLen correct.
+  //
+  // Those pattern arrays get edited whenever tag handling changes, and the
+  // harvester tasks that change tag handling run next. If a pattern ever gains
+  // attribute tolerance, Copy() below starts at the wrong offset, the body is
+  // read past the attribute, and the emitter writes CORRUPTED TEXT -- silently,
+  // because nothing downstream can tell a mis-offset body from a real one.
+  // T3h's own self-review raised exactly this hazard for the caller dimension
+  // and left the pattern dimension open; the pattern dimension is the door far
+  // more likely to be opened.
+  //
+  // Degrading to AFallback is strictly safe: it is the value the parser already
+  // produced for this tag, i.e. the behaviour of every build before
+  // StandaloneBodyOf existed.
+  if not SameText(Copy(Masked, M.Index, OpenLen), '<' + ATagName + '>') then Exit;
   BodyLen := M.Length - OpenLen - CloseLen;
   if BodyLen <= 0 then Exit;
   // Read out of the UNMASKED text: anything legitimately nested inside this
