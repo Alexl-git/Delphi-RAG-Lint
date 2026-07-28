@@ -30,7 +30,10 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-proptree"
 )
-$ErrorActionPreference = 'Stop'
+# 'Continue' not 'Stop': the native drag-lint exe prints a '(loaded defaults)' note
+# to stderr, which under 'Stop' PowerShell turns into a terminating error mid-run.
+# Pass/fail here is driven by explicit Check() calls + the final exit code.
+$ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }
@@ -99,6 +102,27 @@ type
   TFwdChild = class(TFwd)
   published
     property Tag;
+  end;
+
+  // --refs-as-leaves fixture: a referenced TComponent must be a LEAF (not expanded),
+  // while an OWNED TPersistent sub-object still expands. TComp descends from
+  // TComponent and carries a Caption property that would otherwise surface as
+  // Ref.Caption; TRefHost has an owned TInner (expands to Owned.Shade) plus a
+  // referenced TComp (Ref -- a leaf under --refs-as-leaves).
+  TComp = class(TComponent)
+  private
+    FCaption: string;
+  published
+    property Caption: string read FCaption write FCaption;
+  end;
+
+  TRefHost = class(TComponent)
+  private
+    FOwned: TInner;
+    FRef: TComp;
+  published
+    property Owned: TInner read FOwned write FOwned;
+    property Ref: TComp read FRef write FRef;
   end;
 
 implementation
@@ -221,6 +245,37 @@ if ($null -ne $fcTree) {
   }
 } else {
   Check 'proptree TFwdChild --format json parses as JSON' $false "raw=$fcRaw"
+}
+
+# --- --refs-as-leaves: a referenced TComponent property is a LEAF (not expanded);
+#     an owned TPersistent sub-object still expands. Default (no flag) expands both.
+Write-Host ''
+Write-Host 'proptree PropFix.TRefHost (default = expand refs)' -ForegroundColor Cyan
+Push-Location $WorkDir
+try { $defRaw = (& $Exe proptree --qname 'PropFix.TRefHost' --format json --db $db) -join "`n" } finally { Pop-Location }
+Write-Host 'proptree PropFix.TRefHost --refs-as-leaves (= reference leaves)' -ForegroundColor Cyan
+Push-Location $WorkDir
+try { $refRaw = (& $Exe proptree --qname 'PropFix.TRefHost' --refs-as-leaves --format json --db $db) -join "`n" } finally { Pop-Location }
+$defTree = $null; try { $defTree = $defRaw | ConvertFrom-Json } catch { }
+$refTree = $null; try { $refTree = $refRaw | ConvertFrom-Json } catch { }
+if (($null -ne $defTree) -and ($null -ne $refTree)) {
+  $defPaths = @(@($defTree.properties) | ForEach-Object { $_.path })
+  $refPaths = @(@($refTree.properties) | ForEach-Object { $_.path })
+  Check "default: referenced TComp EXPANDS (Ref.Caption present)" `
+        ($defPaths -contains 'Ref.Caption') ("paths=" + ($defPaths -join ', '))
+  Check "--refs-as-leaves: Ref present as a leaf" `
+        ($refPaths -contains 'Ref') ("paths=" + ($refPaths -join ', '))
+  Check "--refs-as-leaves: NO Ref.* children (reference not expanded)" `
+        (-not @($refPaths | Where-Object { $_ -like 'Ref.*' })) ("paths=" + ($refPaths -join ', '))
+  Check "--refs-as-leaves: owned TPersistent still expands (Owned.Shade present)" `
+        ($refPaths -contains 'Owned.Shade') ("paths=" + ($refPaths -join ', '))
+  $refNode = @($refTree.properties) | Where-Object { $_.path -eq 'Ref' } | Select-Object -First 1
+  if ($null -ne $refNode) {
+    Check "--refs-as-leaves: Ref node is_class_typed == false (a reference)" `
+          ($refNode.is_class_typed -eq $false) "is_class_typed=$($refNode.is_class_typed)"
+  }
+} else {
+  Check 'proptree TRefHost (both modes) parse as JSON' $false "def=$defRaw`nref=$refRaw"
 }
 
 Write-Host ''

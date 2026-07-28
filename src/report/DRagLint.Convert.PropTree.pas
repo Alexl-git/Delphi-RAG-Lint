@@ -102,6 +102,12 @@ type
   TPropTreeOptions = record
     Depth       : Integer;
     ToPersistent: Boolean;
+    /// <summary>When True, a property whose type is a TComponent descendant is a
+    /// REFERENCE leaf (emitted, NOT recursed into) -- a referenced component is not
+    /// an owned sub-object. Owned TPersistent sub-objects (TFont, TStrings, ...)
+    /// still expand. Default False (unchanged legacy behavior); the proptree verb
+    /// sets it from --refs-as-leaves.</summary>
+    TreatRefsAsLeaves: Boolean;
   end;
 
   /// <summary>The flattened deep-property tree of a class.</summary>
@@ -674,6 +680,18 @@ var
     end;
   end;
 
+  // True when ASym is (or descends from) TComponent -- a REFERENCE type, not an
+  // owned sub-object. Name-based over the ancestor closure (no RTTI), same
+  // pragmatic style as IsStopClass. Used to leave referenced components unexpanded.
+  function IsComponentType(const ASym: TSymbol): Boolean;
+  var A: TTypeAncestor;
+  begin
+    Result := SameText(ASym.Name, 'TComponent');
+    if Result then Exit;
+    for A in AStore.GetTransitiveAncestors(ASym.Id) do
+      if SameText(A.Name, 'TComponent') then Exit(True);
+  end;
+
   // Recursive walk. APrefix is the dotted path down to (and including a trailing
   // '.') the current class; AVisited holds lowercased TYPE names already expanded
   // on this path (cycle guard). ADepthLeft is the remaining class-recursion budget.
@@ -789,18 +807,31 @@ var
       TypeSym:= AStore.FindSymbolByExactNameAnywhere(Tok);
       if (TypeSym.Id > 0) and (TypeSym.Kind = skClass) then
       begin
-        Node.Kind        := 'class';
-        Node.IsClassTyped:= True;
-        Nodes.Add(Node);
-
         // FindSymbolByExactNameAnywhere may return a forward-decl stub; re-resolve
-        // to the defining body (by qname) before recursing, else the nested class
-        // would enumerate 0 properties (the DevExpress forward-decl case).
+        // to the defining body (by qname) BEFORE inspecting/recursing, else the
+        // nested class would enumerate 0 properties (the DevExpress forward-decl case).
         if IsForwardDeclClass(TypeSym) then
         begin
           Body:= ResolveClassByQName(TypeSym.QualifiedName);
           if Body.Id > 0 then TypeSym:= Body;
         end;
+
+        // A referenced TComponent (PopupMenu, Action, a nested control) is NOT an
+        // owned sub-object. With TreatRefsAsLeaves it is a REFERENCE LEAF -- emitted
+        // but not recursed into -- so the tree is not flooded by TComponent's whole
+        // surface (.Components/.Owner/.Observers/...). Owned TPersistent sub-objects
+        // (TFont, ...) are unaffected and still expand.
+        if AOpts.TreatRefsAsLeaves and IsComponentType(TypeSym) then
+        begin
+          Node.Kind        := 'class';
+          Node.IsClassTyped:= False;   // a reference; not recursed into
+          Nodes.Add(Node);
+          Continue;
+        end;
+
+        Node.Kind        := 'class';
+        Node.IsClassTyped:= True;
+        Nodes.Add(Node);
 
         LowType:= LowerCase(Tok);
         if ADepthLeft <= 0 then

@@ -1,0 +1,14 @@
+# Shipped class-cast library for the conversion editor.
+# Each 'cast <Name> ... end' block defines a class-to-class cast the DSL names as the
+# '#link To <- From : <Name>' suffix. Realization hints (dfm/compat/pas/todo) are
+# consumed by the engine convert-apply; the editor uses name/accepts/yields.
+# Strict 7-bit ASCII, CRLF.
+
+cast AssignGraphic
+  accepts TPicture, TBitmap, TGraphic, TPngImage, TIcon
+  yields  TdxSmartGlyph
+  dfm     keep-bytes-if-compatible
+  compat  png, bmp
+  pas     '{dst}.Assign({src});'
+  todo    'transfer image from {src} by hand (TBitmap/TPicture -> TdxSmartGlyph)'
+end
