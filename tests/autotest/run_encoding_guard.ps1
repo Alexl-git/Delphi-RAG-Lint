@@ -77,23 +77,35 @@
 
   Fixed two ways. The three Delphi extensions are now scanned and those five
   files renormalized (same three-way content-invariance proof), AND the gap is
-  now structural rather than a promise: DECLARED_EXTS below is checked against
-  .gitattributes, and every extension declared `text eol=crlf` that this runner
-  does NOT scan is PRINTED with its reason. A new extension added to
-  .gitattributes shows up immediately as unscanned instead of silently widening
-  a claim nobody re-reads.
+  now structural rather than a promise: the $roots table below is checked
+  against .gitattributes, and every extension declared `text eol=crlf` that
+  $roots does not cover must appear in $DeclaredNotScanned with a reason -- or
+  the guard FAILS. A new extension added to .gitattributes is in neither, so it
+  surfaces immediately instead of silently widening a claim nobody re-reads.
+
+  The DIRECTORY bound works the same way, and it had to be fixed the same way.
+  Round 2 listed unscanned directories in $UnscannedRoots and merely PRINTED
+  them, while the header claimed the bound was "stated where it is enforced".
+  It was not enforced -- nothing enumerated directories, so unlike the extension
+  bound it could not fail -- and the list was incomplete: third_party\ (11
+  scannable files, 6 of them violating), tools\ and scratchpad\ were all absent.
+  Every top-level directory holding a scannable file is now enumerated and must
+  be scanned or excluded with a printed reason.
 
   Checks
   ------
-    .ps1                      under src\ tests\ build\ stats\
-    .pas .dpr .dpk .dfm .inc  under src\ tests\ build\
+    .ps1                      under src\ tests\ build\ stats\ tools\
+    .pas .dpr .dpk .dfm .inc  under src\ tests\ build\ tools\
         -> zero lone LF, no BOM, zero bytes >127
     every extension .gitattributes declares `text eol=crlf` is either scanned or
-    listed below with a reason (and every unscanned DIRECTORY likewise)
+    listed in $DeclaredNotScanned with a reason
+    every top-level directory holding a scannable file is either scanned or
+    listed in $UnscannedRoots with a reason
     .gitattributes still declares the rule this runner asserts
 
-  The bound is EXTENSION and ROOT, both stated where they are enforced. Nothing
-  here claims coverage of the whole repo.
+  Both bounds -- EXTENSION and DIRECTORY -- are ASSERTED, not described. Nothing
+  here claims coverage of the whole repo, and the parts it does not cover are
+  named where they are enforced rather than in prose.
 
   SCOPE DECISION, flagged rather than left implicit: CLAUDE.md writes the
   7-bit-ASCII / no-BOM rule for .pas and .dfm. This runner applies it to .ps1
@@ -142,12 +154,12 @@ foreach ($k in $DeliberateFixtures.Keys) {
 # One pass over the bytes per file: this has to stay fast enough that nobody is
 # tempted to skip it. Measured well under 10 s for the whole tree.
 $roots = [ordered]@{
-  '.ps1' = @('src', 'tests', 'build', 'stats')
-  '.pas' = @('src', 'tests', 'build')
-  '.dpr' = @('src', 'tests', 'build')
-  '.dpk' = @('src', 'tests', 'build')
-  '.dfm' = @('src', 'tests', 'build')
-  '.inc' = @('src', 'tests', 'build')
+  '.ps1' = @('src', 'tests', 'build', 'stats', 'tools')
+  '.pas' = @('src', 'tests', 'build', 'tools')
+  '.dpr' = @('src', 'tests', 'build', 'tools')
+  '.dpk' = @('src', 'tests', 'build', 'tools')
+  '.dfm' = @('src', 'tests', 'build', 'tools')
+  '.inc' = @('src', 'tests', 'build', 'tools')
 }
 
 # Extensions .gitattributes declares `text eol=crlf` that this runner does NOT
@@ -155,20 +167,19 @@ $roots = [ordered]@{
 # cannot quietly fall out of date and the header cannot claim more than the scan
 # delivers. To scan one, delete its entry and add it to $roots.
 $DeclaredNotScanned = [ordered]@{
-  '.bat' = 'MEASURED, deliberately deferred (register K8): 15 .bat are drifted, 3 of them MIXED, spread across build\, the repo root, third_party\ and tools\. cmd.exe is not merely tolerant of line endings the way dcc is -- label and goto handling can differ -- so "does anything depend on these bytes" needs its own measurement before a bulk rewrite. That measurement is exactly what the deleted baseline skipped; not repeating the mistake in the other direction.'
-  '.cmd' = 'Same family as .bat and the same open measurement.'
+  '.bat' = 'MEASURED, deliberately deferred (register K8). Tracked: 19 drifted of 88 (16 pure LF + 3 MIXED) -- build\ 9, tests\ 8, src\ 1, repo root 1. Whole working tree incl. untracked: 26 drifted of 95, 5 MIXED (build\ 9, tests\ 8, repo root 5, scratchpad\ 3, src\ 1). Commands: `git ls-files --eol -- "*.bat" "*.cmd"` and a byte scan of every .bat/.cmd in the tree. cmd.exe is not merely tolerant of line endings the way dcc is -- label and goto handling can differ -- so "does anything depend on these bytes" needs its own measurement before a bulk rewrite. That measurement is exactly what the deleted baseline skipped; not repeating the mistake in the other direction.'
+  '.cmd' = 'Same family as .bat and the same open measurement. Note there are ZERO tracked .cmd files in the repo, so this entry is forward-looking rather than covering anything that exists today.'
 }
 
 # Directories holding scannable extensions that are deliberately OUT of $roots.
-# Same reasoning as $DeclaredNotScanned and printed the same way: the scan's
-# bound is stated where it is enforced, so the header cannot over-claim on ROOTS
-# either. (The extension bound was over-claimed once already -- see the header.)
+# ASSERTED below, not merely printed: the extension bound was over-claimed once
+# (see the header) and a bound that cannot fail is not a bound. Every top-level
+# directory containing a scannable extension must be either scanned or listed
+# here with a reason, or the guard FAILS.
 $UnscannedRoots = [ordered]@{
-  'docs' = 'docs\examples\ holds third-party reproduction material, some of it UNTRACKED (the DevExpress printer-crash repro), whose bytes are part of the reproduction and are not this repo''s to normalize. The two TRACKED example units under docs\examples\circular-uses-demo\ were renormalized by T3k anyway, since they are ordinary repo content; nothing checks them, which is why this exclusion is stated rather than assumed.'
-}
-foreach ($k in $UnscannedRoots.Keys) {
-  Write-Host ("  [NOTE] directory NOT scanned: {0}\" -f $k) -ForegroundColor DarkGray
-  Write-Host ("         {0}" -f $UnscannedRoots[$k]) -ForegroundColor DarkGray
+  'docs'        = 'docs\examples\ holds third-party reproduction material, some of it UNTRACKED (the DevExpress printer-crash repro, whose PrinterCrashRepro.dpr is lone-LF), whose bytes are part of the reproduction and are not this repo''s to normalize. The two TRACKED units under docs\examples\circular-uses-demo\ were renormalized by T3k anyway, since they are ordinary repo content.'
+  'third_party' = 'VENDORED UPSTREAM CODE (delphi-tree-sitter, 16 tracked files). Normalizing it would diverge this copy from upstream and make every future sync a conflict. Named rather than silently omitted, because 6 of its 11 scannable files DO violate the rule: ConsoleReadPasFile.dpr, VCLDemo\DelphiTreeSitterVCLDemo.dpr, VCLDemo\frmDTSLanguage.pas, VCLDemo\frmDTSMain.pas and VCLDemo\frmDTSQuery.pas each carry a UTF-8 BOM, and TreeSitterLib.pas carries one high byte. That is upstream''s encoding choice, not drift in this repo.'
+  'scratchpad'  = 'GITIGNORED working scratch (.gitignore:71). Nothing in it is tracked, so there is no repo state to protect; dumptree.dpr and test-ast.pas are both lone-LF and that is harmless.'
 }
 $badLf  = New-Object System.Collections.Generic.List[string]
 $badBom = New-Object System.Collections.Generic.List[string]
@@ -257,6 +268,38 @@ if ($unaccounted.Count -gt 0) {
 foreach ($k in $DeclaredNotScanned.Keys) {
   Write-Host ("  [NOTE] declared but NOT scanned: *{0}" -f $k) -ForegroundColor DarkGray
   Write-Host ("         {0}" -f $DeclaredNotScanned[$k]) -ForegroundColor DarkGray
+}
+
+# --- the ROOT bound, asserted the same way the extension bound is -----------
+# This used to be a printed list and a sentence in the header claiming the bound
+# was "stated where it is enforced". It was not enforced at all: nothing
+# enumerated directories, so unlike the extension bound it could not fail, and
+# the list was incomplete -- third_party\ (11 scannable files, 6 of them
+# violating), tools\ and scratchpad\ were all missing while the header implied
+# full coverage. A bound that cannot fail is not a bound.
+$scannedDirs = @($roots.Values | ForEach-Object { $_ } | Sort-Object -Unique)
+$dirsWithScannable = New-Object System.Collections.Generic.List[string]
+foreach ($d in (Get-ChildItem -LiteralPath $Repo -Directory -ErrorAction SilentlyContinue)) {
+  if ($d.Name.StartsWith('.')) { continue }   # .git, .superpowers -- no build inputs
+  $hit = Get-ChildItem -LiteralPath $d.FullName -Recurse -File -Include $($roots.Keys | ForEach-Object { "*$_" }) `
+           -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($null -ne $hit) { $dirsWithScannable.Add($d.Name) }
+}
+Check 'top-level directories holding scannable files enumerated' ($dirsWithScannable.Count -gt 0) `
+  "($($dirsWithScannable -join ' '))"
+
+$unaccountedDirs = @($dirsWithScannable | Where-Object { ($scannedDirs -notcontains $_) -and (-not $UnscannedRoots.Contains($_)) })
+Check 'every directory holding scannable files is scanned or excluded with a reason' ($unaccountedDirs.Count -eq 0) `
+  $(if ($unaccountedDirs.Count -gt 0) { "unaccounted: $($unaccountedDirs -join ' ')" } else { '' })
+if ($unaccountedDirs.Count -gt 0) {
+  Write-Host '        ^ a directory holds .pas/.dpr/.dfm/.inc/.dpk/.ps1 files that this' -ForegroundColor Yellow
+  Write-Host '          guard never looks at. Add it to $roots, or to $UnscannedRoots with' -ForegroundColor Yellow
+  Write-Host '          the reason. Do NOT leave it merely unmentioned -- that is how' -ForegroundColor Yellow
+  Write-Host '          third_party''s 6 violating files stayed invisible.' -ForegroundColor Yellow
+}
+foreach ($k in $UnscannedRoots.Keys) {
+  Write-Host ("  [NOTE] directory NOT scanned: {0}\" -f $k) -ForegroundColor DarkGray
+  Write-Host ("         {0}" -f $UnscannedRoots[$k]) -ForegroundColor DarkGray
 }
 
 Write-Host ''
