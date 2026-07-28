@@ -7072,20 +7072,29 @@ end; // function
 // first symbol to reach a given region contributes its edits and counts:
 // every later symbol resolving to the SAME region is skipped outright, so
 // the same physical lines can never be queued for deletion twice.
-// v(ADP3 T3j, register S1): the past tense above is deliberate. The gap window
-// NOW requires the intervening line to be blank (see StripSymbolRegion), which
-// closes the SIBLING defect -- a doc block above a documented declaration X
-// being claimed by an UNDOCUMENTED declaration Y on the next line, and deleted
-// as if it were Y's -- and, as a side effect, makes the consecutive-overload
-// collision described above unreachable: the second overload's window is
-// refused outright, so it returns RegionLo = 0 and is skipped by the
-// no-region-found Continue below rather than by the de-duplication. The
-// de-duplication is KEPT: it is the applier's only protection against a
+// v(ADP3 T3j, register S1 + its review round 1): the past tense above is
+// deliberate. StripSymbolRegion no longer carries its own copy of the window --
+// it reads the SHARED DocRegionFitsDecl (DRagLint.Core.Model), the same
+// predicate `document --apply`'s FindDocRegionAbove reads, and this function now
+// supplies the file's symbol StartLines so that predicate's
+// intervening-declaration guard is live rather than vacuous.
+//
+// That closes the SIBLING defect -- a doc block above a documented declaration X
+// claimed by an UNDOCUMENTED declaration Y on the next line and deleted as if it
+// were Y's -- and, as a side effect, makes the consecutive-overload collision
+// described above unreachable too: for two overloads on consecutive lines N and
+// N+1, evaluating the second finds the FIRST overload's own declaration line N
+// inside the gap, so the region is refused, RegionLo comes back 0, and the
+// symbol is skipped by the no-region-found Continue below rather than by the
+// de-duplication.
+//
+// The de-duplication is KEPT: it is the applier's only protection against a
 // duplicate delete, StripSymbolRegion is not its only conceivable source (two
 // index rows sharing one StartLine would still collide), and on a code path
 // that deletes lines from a user's source, belt AND braces is the right call.
 // Both remain pinned -- run_doc_p3_strip_collision.ps1 for the collision,
-// run_doc_p3_strip_wrongsymbol.ps1 for the wrong-symbol claim.
+// run_doc_p3_strip_wrongsymbol.ps1 for the wrong-symbol claim and for the
+// apply/strip agreement table.
 // v(ADP3 T3d2 D8 review round 1, IMPORTANT 2): a qname can also resolve
 // across MULTIPLE FILES (34 real cases in the ORM3 index, e.g. a shared unit
 // name duplicated per project tree/platform target) -- a materially
@@ -7117,12 +7126,31 @@ var
   SkippedFiles  : TArray<string>   ; // v(ADP3 T3d2 D8 review round 3): SkippedFileIds resolved to paths -- JSON skippedFiles array only
   FileSeen      : Boolean          ; // v(ADP3 T3d2 D8 review round 3, minor): renamed from FileAlreadySeen, which at
                                      // 15 chars broke this block's 14-char name-field alignment by one column
+  FileSyms      : TArray<TSymbol>  ; // v(ADP3 T3j review round 1): EVERY symbol in Path, for the shared attribution predicate
+  SymStartLines : TArray<Integer>  ;
 begin
   Syms:= AStore.FindSymbolsByQualifiedName(AArgs.QName);
   if Length(Syms) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
   Path:= AStore.GetFilePath(Syms[0].FileId);
   if (Path = '') or (not TFile.Exists(Path)) then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+
+  // v(ADP3 T3j review round 1): every symbol's StartLine in Path, sorted
+  // ascending -- byte-for-byte the same preparation TDocumenter.ExistingDocFor
+  // does before calling FindDocRegionAbove, so `--strip` attributes a doc region
+  // to a declaration by exactly the rule `--apply` used to claim it.
+  //
+  // It MUST be FindSymbolsByFile, not the Syms above. Syms holds only the
+  // symbols sharing AArgs.QName, and the defect this closes is a doc block
+  // above a DIFFERENTLY-NAMED neighbour (documented Alpha, undocumented Beta on
+  // the next line). Alpha's StartLine is absent from Syms, so passing Syms would
+  // leave the intervening-declaration test vacuous and reintroduce the very
+  // defect -- while looking correct. The predicate needs EVERY declaration in
+  // the file, which is what makes it agree with the write path.
+  FileSyms:= AStore.FindSymbolsByFile(Path);
+  SetLength(SymStartLines, Length(FileSyms));
+  for K:= 0 to High(FileSyms) do SymStartLines[K]:= FileSyms[K].StartLine;
+  TArray.Sort<Integer>(SymStartLines);
 
   TagsSum       := 0;
   BlocksSum     := 0;
@@ -7164,7 +7192,7 @@ begin
       Continue;
     end;
 
-    OneRes:= TDocStripper.StripSymbolRegion(Path, Sym.StartLine, RegionLo, RegionHi);
+    OneRes:= TDocStripper.StripSymbolRegion(Path, Sym.StartLine, RegionLo, RegionHi, SymStartLines);
     if RegionLo = 0 then Continue; // no doc region found above this decl at all
 
     // CRITICAL 1: skip a symbol whose (RegionLo, RegionHi) was already

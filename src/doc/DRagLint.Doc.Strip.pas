@@ -87,13 +87,10 @@ type
     /// immediately above source line ADeclLine -- every OTHER doc region in
     /// the file is left untouched. Used by `document --qname X --strip`, so
     /// stripping one symbol's comment never disturbs another declaration's doc
-    /// region in the same file. The region qualifies when it ends on the line
-    /// directly above ADeclLine, or when exactly one intervening line separates
-    /// them AND that line is BLANK. v(ADP3 T3j, register S1): the blank test
-    /// is load-bearing -- without it a doc block above a DOCUMENTED declaration
-    /// X was claimed by an UNDOCUMENTED declaration Y on the very next line,
-    /// and `--qname Y --strip` deleted X's block. A non-blank intervening line
-    /// means the region belongs to whatever is on that line.</summary>
+    /// region in the same file. Attribution uses the SHARED predicate
+    /// DRagLint.Core.Model.DocRegionFitsDecl, the same one
+    /// `document --apply`'s TDocumenter.FindDocRegionAbove reads, so what the
+    /// write path claims is exactly what this removes.</summary>
     /// <param name="AFilePath">Path to the .pas file to scan; must exist.</param>
     /// <param name="ADeclLine">1-based source line of the target symbol's
     /// declaration (e.g. TSymbol.StartLine).</param>
@@ -112,18 +109,42 @@ type
     /// sharing one StartLine), so neither is redundant.</param>
     /// <param name="ARegionEndLine">1-based last line of the matched region,
     /// or 0 if none was found.</param>
+    /// <param name="ASymStartLines">v(ADP3 T3j review round 1): every symbol's
+    /// 1-based StartLine in AFilePath, INCLUDING ADeclLine's own, sorted
+    /// ASCENDING -- exactly what `document --apply` passes its own
+    /// FindDocRegionAbove. Supplying it makes this function's attribution
+    /// IDENTICAL to the write path's, which is the invariant that matters: a
+    /// region the write path claims must be a region this can remove, or
+    /// `--apply` writes a block `--strip` can never take back.
+    /// <para>OPTIONAL, defaulting to nil, for a caller with no symbol table --
+    /// this unit is deliberately index-free (see the unit header) and must stay
+    /// usable without one. When it is empty the declaration test is vacuous, so
+    /// a FALLBACK applies instead: a one-line gap is accepted only when that
+    /// line is BLANK. That is deliberately NARROWER than the write path (it
+    /// refuses an ordinary comment in the gap, which the write path tolerates),
+    /// because with no symbol table there is no way to tell a comment from a
+    /// declaration, and on a code path that DELETES lines from a user's source
+    /// the safe direction is to refuse. Prefer passing the lines.</para></param>
     /// <returns>Same shape as StripFile, but Edits (and the Tags/Blocks
     /// counts) cover only the single doc region above ADeclLine; empty when
     /// no such region is found.</returns>
     class function StripSymbolRegion(const AFilePath: string; ADeclLine: Integer;
-      out ARegionStartLine, ARegionEndLine: Integer): TStripResult;
+      out ARegionStartLine, ARegionEndLine: Integer;
+      const ASymStartLines: TArray<Integer> = nil): TStripResult;
   end;
 
 implementation
 
 uses
   System.IOUtils, System.StrUtils,
-  DRagLint.Doc.Regions; // AUTO_MARK / AUTO_BEGIN / AUTO_END / AUTO_PARAM (Task 1)
+  DRagLint.Doc.Regions, // AUTO_MARK / AUTO_BEGIN / AUTO_END / AUTO_PARAM (Task 1)
+  // v(ADP3 T3j review round 1): DOC_ALLOW_GAP + the SHARED attribution
+  // predicate (DocRegionFitsDecl / DocRegionInGapWindow) that the
+  // `document --apply` write path reads too. Core.Model is types-and-pure-
+  // functions only (its own uses clause is System.SysUtils alone), so this does
+  // NOT give the unit an index dependency -- the property the unit header calls
+  // out is preserved.
+  DRagLint.Core.Model;
 
 // True when S is a doc-comment line: its trimmed form starts with '///'.
 // Matches every other line-oriented /// scan in this codebase (e.g. the
@@ -414,12 +435,14 @@ begin
 end;
 
 class function TDocStripper.StripSymbolRegion(const AFilePath: string; ADeclLine: Integer;
-  out ARegionStartLine, ARegionEndLine: Integer): TStripResult;
+  out ARegionStartLine, ARegionEndLine: Integer;
+  const ASymStartLines: TArray<Integer>): TStripResult;
 var
   Lines  : TStringList;
   Deleted: TArray<Boolean>;
   I, Lo, Hi, RegionLo, RegionHi: Integer;
   Found  : Boolean;
+  Fits   : Boolean;
 begin
   Result:= Default(TStripResult);
   Result.FilePath:= AFilePath;
@@ -435,42 +458,42 @@ begin
   try
     if not TryLoadLines(AFilePath, Lines) then Exit;
 
-    // Find the contiguous /// region immediately above ADeclLine, allowing a
-    // single BLANK-line gap. Hi + 1 is the region's 1-based end line, so the
-    // two accepted cases are exhaustive over the integer window
-    // [ADeclLine-2, ADeclLine-1]:
-    //   * Hi + 1 = ADeclLine - 1 -- the region ends directly above the
-    //     declaration. Always correct, and unchanged here.
-    //   * Hi + 1 = ADeclLine - 2 -- exactly ONE line intervenes, at 1-based
-    //     line ADeclLine - 1, and it MUST be blank.
+    // Find the contiguous /// region immediately above ADeclLine. Hi is a
+    // 0-based array index, so Hi + 1 is the region's 1-based END line.
     //
-    // v(ADP3 T3j, register S1): the blank test is the fix. The window alone
-    // used to accept the gap case without ever looking at the intervening
-    // line, so for a DOCUMENTED declaration X immediately followed by an
-    // UNDOCUMENTED declaration Y, evaluating Y gave the window
-    // [XLine-1, XLine] and X's region ends at XLine-1: it matched, and
-    // `document --qname Y --strip` deleted X's block. The "gap" it tolerated
+    // v(ADP3 T3j, register S1 -- and its review round 1, which CHANGED the
+    // predicate): attribution is the SHARED DocRegionFitsDecl from
+    // DRagLint.Core.Model, which is the very same predicate
+    // `document --apply`'s TDocumenter.FindDocRegionAbove reads.
+    //
+    // The original defect: this code carried its own inline copy of
+    // FindDocRegionAbove's WINDOW and omitted its GUARD, while a comment here
+    // claimed it tolerated "the same gap". So for a DOCUMENTED declaration X
+    // immediately followed by an UNDOCUMENTED declaration Y, evaluating Y gave
+    // the window [XLine-1, XLine], X's region ends at XLine-1, it matched, and
+    // `document --qname Y --strip` DELETED X's block -- the "gap" it tolerated
     // was declaration X itself. Adjacent declarations are the ordinary Delphi
-    // idiom (311 same-qualified-name pairs within one line measured in the real
-    // ORM3 index), and "documented X, undocumented Y below it" is just the
-    // normal state of a partially-documented class, so this needed no
-    // contrivance to reach. Pinned by tests\autodoc\run_doc_p3_strip_wrongsymbol.ps1.
+    // idiom (311 same-qualified-name pairs within one line in the real ORM3
+    // index), and "documented X, undocumented Y below it" is just the normal
+    // state of a partially-documented class.
     //
-    // This is the same defect class TDocumenter's own FindDocRegionAbove was
-    // fixed for (adp2-docregion-fix), and it is the reason THIS comment no
-    // longer claims to share that function's tolerance: FindDocRegionAbove
-    // guards the window with an INTERVENING-DECLARATION check driven by every
-    // symbol's StartLine from the index (see its header in
-    // DRagLint.Core.Indexer / DRagLint.Doc.Document). That guard is strictly
-    // stronger, but it is unavailable here by design -- this unit is a raw-line
-    // scan with no index (see the unit header), and StripSymbolRegion receives
-    // one ADeclLine, not the file's symbol table. The blank test is the
-    // index-free equivalent: a non-blank intervening line means the region
-    // belongs to whatever is ON that line, not to ADeclLine. It is narrower
-    // than the declaration check only for a non-blank intervening line that is
-    // NOT a declaration (e.g. an ordinary '//' comment), where this refuses a
-    // region FindDocRegionAbove would allow -- refusing to delete is the safe
-    // direction for a function that removes lines from a user's source.
+    // The FIRST fix required the gap line to be BLANK. That closed the defect
+    // but introduced a worse one: the write path's real predicate is "no OTHER
+    // DECLARATION in the gap", not "the gap is blank", so it deliberately
+    // tolerates an ordinary comment there. Requiring blankness made --strip
+    // NARROWER than --apply, which means `--apply` could write a block
+    // `--strip` would then refuse to remove -- an apply/strip asymmetry, i.e. a
+    // permanently unremovable engine block. Reading the same predicate as the
+    // write path is what actually preserves the round-trip, and sharing one
+    // declaration is what stops the two from drifting again.
+    //
+    // FALLBACK, when ASymStartLines is empty (a caller with no symbol table --
+    // this unit is deliberately index-free): the declaration test would be
+    // vacuous, so require the one-line gap to be BLANK instead. Narrower than
+    // the write path on purpose -- with no symbol table a comment and a
+    // declaration are indistinguishable, and refusing is the safe direction for
+    // code that deletes lines from a user's source. Both branches are pinned by
+    // tests\autodoc\run_doc_p3_strip_wrongsymbol.ps1.
     Found:= False;
     RegionLo:= 0; RegionHi:= 0;
     I:= 0;
@@ -480,8 +503,12 @@ begin
       begin
         Lo:= I; Hi:= I;
         while (Hi + 1 < Lines.Count) and IsDocLine(Lines[Hi + 1]) do Inc(Hi);
-        if (Hi + 1 = ADeclLine - 1)
-           or ((Hi + 1 = ADeclLine - 2) and IsBlankSourceLine(Lines, ADeclLine - 1)) then
+        if Length(ASymStartLines) > 0 then
+          Fits:= DocRegionFitsDecl(Hi + 1, ADeclLine, DOC_ALLOW_GAP, ASymStartLines)
+        else
+          Fits:= DocRegionInGapWindow(Hi + 1, ADeclLine, DOC_ALLOW_GAP)
+                 and ((Hi + 1 = ADeclLine - 1) or IsBlankSourceLine(Lines, ADeclLine - 1));
+        if Fits then
         begin
           RegionLo:= Lo; RegionHi:= Hi; Found:= True;
         end;

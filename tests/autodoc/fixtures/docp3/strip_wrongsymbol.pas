@@ -18,9 +18,12 @@ unit strip_wrongsymbol;
   SHAPE 3 (Epsilon) -- a TWO-blank-line gap, already outside the window and
   required to stay outside.
 
-  SHAPE 4 (Zeta) -- the disclosed NARROWING: one intervening line that is
-  neither blank nor a declaration. The blank test refuses it; the whole-file
-  path still removes it. See the runner's SCENARIO E. }
+  SHAPE 4 (Zeta) -- one intervening line that is neither blank NOR a
+  declaration (an ordinary comment). The apply path tolerates this on purpose,
+  so the strip path must too, or an engine block could be written and never
+  removed. This is the shape that distinguishes "the gap is blank" from "no
+  other declaration is in the gap" -- see the runner's SCENARIO E and the
+  apply/strip agreement table in SCENARIO F. }
 
 interface
 

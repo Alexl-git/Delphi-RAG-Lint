@@ -41,8 +41,9 @@
                         outside.
     Zeta   (line 47) -- SHAPE 4: its block is on line 45 with ONE intervening
                         line (46) that is an ordinary '//' comment -- non-blank,
-                        but not a declaration either. The disclosed narrowing;
-                        see SCENARIO E.
+                        but not a declaration either. The shape that separates
+                        "the gap is blank" from "no other DECLARATION is in the
+                        gap"; see SCENARIO E.
 
   SCENARIO A -- SHAPE 1 + the anti-vacuity control. `--qname Beta --strip
   --apply` must report ZERO and leave the file byte-identical. Then, on that
@@ -63,11 +64,21 @@
   engine-owned, so the zeros in A, C and E cannot be an artifact of a fixture
   nothing could strip.
 
-  SCENARIO E -- SHAPE 4: the NARROWING this fix introduces, pinned rather than
-  merely described. The blank test refuses a non-blank NON-declaration gap that
-  `document --apply` still claims; the whole-file path remains the escape hatch,
-  so the round-trip is narrowed for --qname, not lost. See the block comment at
-  that scenario for why this was accepted rather than widened.
+  SCENARIO E -- SHAPE 4: an ordinary-comment gap IS stripped, because
+  `document --apply` claims it. The author's comment line itself must survive.
+
+  SCENARIO F -- THE APPLY/STRIP AGREEMENT TABLE, and the reason this runner
+  exists in its current form. For all FIVE gap shapes it dry-runs BOTH paths and
+  asserts they reach the same verdict, plus what that verdict must be. This is
+  the invariant stated directly: a region `--apply` claims must be one `--strip`
+  removes, or the engine can write a block the user cannot take back.
+
+  HISTORY, because it explains the shape of this file. T3j's first fix required
+  the gap line to be BLANK. That closed the wrong-symbol defect but made --strip
+  NARROWER than --apply, which is a worse defect of the same family. The shipped
+  fix instead has all three attribution sites -- index capture, apply, strip --
+  read ONE shared predicate (DRagLint.Core.Model.DocRegionFitsDecl), so they
+  cannot disagree, and SCENARIO F is what proves it at the behaviour level.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -251,7 +262,6 @@ Write-Host ''
 Write-Host '=== SCENARIO B: SHAPE 2 -- the one-blank-line gap the window exists for ===' -ForegroundColor Cyan
 
 $B = New-Case 'b'
-$pristineB = [IO.File]::ReadAllBytes($B.Target)
 
 $outGamma = (& $exePath document --qname strip_wrongsymbol.Gamma --db $B.Db --strip --apply --json 2>$null) -join ' '
 Check 'B: document --qname Gamma --strip --apply exits 0' ($LASTEXITCODE -eq 0)
@@ -345,51 +355,112 @@ Check 'D PREMISE: all five declarations survive the whole-file strip' `
    $afterD.Contains('function Zeta(AValue: Integer): Integer;'))
 
 # ===========================================================================
-# SCENARIO E -- SHAPE 4: the DISCLOSED NARROWING this fix introduces, pinned
-# rather than described.
+# SCENARIO E -- SHAPE 4: a non-blank, NON-declaration gap must be STRIPPED,
+# because the apply path claims it.
 #
-# The blank test asks "is the intervening line blank?". FindDocRegionAbove --
-# the write path's equivalent, which has index access -- instead asks "does
-# another DECLARATION start in the gap?". Those two questions differ for exactly
-# one shape: a single intervening line that is non-blank but is NOT a
-# declaration, e.g. an ordinary '//' comment. There, `--qname X --strip` now
-# REFUSES a region that `document --apply` still claims and repairs.
+# This is the shape that distinguishes the two candidate predicates. "Is the gap
+# blank?" refuses it; "is there another DECLARATION in the gap?" -- which is what
+# FindDocRegionAbove actually asks, and therefore what `document --apply` does --
+# tolerates it. An ordinary comment between a doc block and its declaration does
+# not transfer ownership of that block to anything.
 #
-# Recorded honestly as a NARROWING relative to the pre-fix behaviour, not as an
-# improvement: before this fix `--qname Zeta --strip` did remove Zeta's block.
-# Accepted deliberately -- the brief for this task rules out adding new
-# tolerances, the declaration-based test is unavailable in this index-free unit,
-# and refusing to delete is the safe direction on a path that removes lines from
-# a user's source. It is NOT a lost round-trip: the whole-file path (Scenario D,
-# and again below) still removes the block, so the marker is always recoverable.
-# Pinned so a future widening (or a decision to accept comment lines) is a
-# deliberate, visible change rather than a silent one.
+# T3j's FIRST attempt required blankness. It closed the wrong-symbol defect but
+# created a worse one: `--apply` would claim and rewrite this block while
+# `--strip` refused to remove it, so the engine could write a block the user
+# could never take back through the same verb -- an apply/strip asymmetry, which
+# is the invariant --strip exists to uphold. Fixed by reading the SAME shared
+# predicate the apply path reads (DRagLint.Core.Model.DocRegionFitsDecl) and
+# supplying the file's symbol StartLines so its declaration guard is live.
+# SCENARIO F below asserts the resulting symmetry across every gap shape.
 # ===========================================================================
 Write-Host ''
-Write-Host '=== SCENARIO E: SHAPE 4 -- disclosed narrowing: a non-blank, NON-declaration gap ===' -ForegroundColor Cyan
+Write-Host '=== SCENARIO E: SHAPE 4 -- a non-blank, NON-declaration gap is stripped (apply claims it) ===' -ForegroundColor Cyan
 
 $E = New-Case 'e'
-$pristineE = [IO.File]::ReadAllBytes($E.Target)
 
 $outZeta = (& $exePath document --qname strip_wrongsymbol.Zeta --db $E.Db --strip --apply --json 2>$null) -join ' '
 Check 'E: document --qname Zeta --strip --apply exits 0' ($LASTEXITCODE -eq 0)
-Check 'E (disclosed narrowing): a non-blank NON-declaration intervening line is REFUSED by the blank test -- zero removals' `
-  ($outZeta -match '"tagsRemoved":0[,}]' -and $outZeta -match '"blocksRemoved":0[,}]' -and $outZeta -match '"edits":0[,}]') $outZeta
-$afterZetaBytes = [IO.File]::ReadAllBytes($E.Target)
-Check 'E: the file is BYTE-IDENTICAL to pristine (refusing to delete is the safe direction)' `
-  ([System.Linq.Enumerable]::SequenceEqual([byte[]]$pristineE, [byte[]]$afterZetaBytes))
-Check 'E: Zeta''s block is still present, marker and all' `
-  ([IO.File]::ReadAllText($E.Target).Contains('Engine summary for Zeta.'))
+Check 'E CRITICAL: an ordinary-comment gap IS stripped (1 tag, 0 blocks, 1 edit) -- matching what --apply claims' `
+  ($outZeta -match '"tagsRemoved":1[,}]' -and $outZeta -match '"blocksRemoved":0[,}]' -and $outZeta -match '"edits":1[,}]') $outZeta
+Check 'E CRITICAL: applied:true' ($outZeta -match '"applied":true[,}]') $outZeta
 
-# The ESCAPE HATCH, proven on the same file: the windowless whole-file path
-# still removes Zeta's block, so the round-trip is narrowed for --qname, never
-# lost outright.
-$outZetaUnit = (& $exePath document --unit $E.Target --db $E.Db --strip --apply --json 2>$null) -join ' '
-Check 'E: document --unit --strip --apply exits 0' ($LASTEXITCODE -eq 0)
-Check 'E ESCAPE HATCH: the whole-file path DOES remove Zeta''s block -- the marker is always recoverable' `
-  ($outZetaUnit -match '"tagsRemoved":4[,}]') $outZetaUnit
-Check 'E ESCAPE HATCH: no drag-lint:auto marker survives after the whole-file strip' `
-  (-not ([IO.File]::ReadAllText($E.Target) -match 'drag-lint:auto'))
+$afterE = [IO.File]::ReadAllText($E.Target)
+Check 'E CRITICAL: Zeta''s marked <summary> is GONE' (-not $afterE.Contains('Engine summary for Zeta.'))
+Check 'E: Zeta''s declaration survives' ($afterE.Contains('function Zeta(AValue: Integer): Integer;'))
+# The gap line is NOT part of the doc region -- it is hand-written source and
+# must survive untouched. A strip that swallowed it would be destroying author
+# content, which is the one thing this verb must never do.
+Check 'E CRITICAL: the ordinary // comment in the gap SURVIVES untouched (it is author content, not part of the region)' `
+  ($afterE.Contains('// an ordinary comment line -- not blank, and not a declaration'))
+# Scoping: the neighbours keep their blocks.
+Check 'E: Alpha''s block is UNTOUCHED' `
+  ($afterE.Contains('Engine summary for Alpha.') -and $afterE.Contains('drag-lint:auto BEGIN'))
+Check 'E: Gamma''s and Epsilon''s blocks are UNTOUCHED' `
+  ($afterE.Contains('Engine summary for Gamma.') -and $afterE.Contains('Engine summary for Epsilon.'))
+
+# ===========================================================================
+# SCENARIO F -- THE APPLY/STRIP AGREEMENT TABLE.
+#
+# The invariant, stated directly instead of inferred: for EVERY gap shape, the
+# write path and the remove path must reach the SAME verdict about whether a doc
+# region belongs to a declaration. If apply claims a region strip will not
+# remove, the engine can write a block the user cannot take back; if strip
+# removes a region apply never claimed, it is deleting somebody else's comment --
+# which is exactly the T3j defect.
+#
+# Both probes are DRY RUNS (no --apply), so all ten run against one pristine
+# copy and cannot perturb each other.
+#
+# Discriminator, established by measurement rather than assumption (see
+# task-3j-report.md): on the apply path `action:"extended"` means it FOUND and
+# repaired an existing region, `action:"created"` means it found none and wrote a
+# fresh block. No shape in this fixture reports `unchanged`, and the assertions
+# below require one of exactly those two values, so a future `unchanged` would
+# fail loudly rather than being silently bucketed.
+#
+# Each row asserts BOTH the agreement AND the expected direction -- agreement
+# alone would be satisfied by both paths being uniformly wrong (e.g. refusing
+# everything).
+# ===========================================================================
+Write-Host ''
+Write-Host '=== SCENARIO F: apply/strip agreement across every gap shape ===' -ForegroundColor Cyan
+
+$F = New-Case 'f'
+
+# symbol, human description of the gap, expected verdict (claimed = both act)
+$shapes = @(
+  @{ Sym = 'Alpha';   Gap = 'no gap (block ends directly above the decl)'; Claimed = $true  },
+  @{ Sym = 'Beta';    Gap = 'another DECLARATION in the gap';              Claimed = $false },
+  @{ Sym = 'Gamma';   Gap = 'ONE BLANK line in the gap';                   Claimed = $true  },
+  @{ Sym = 'Epsilon'; Gap = 'TWO blank lines (outside the window)';        Claimed = $false },
+  @{ Sym = 'Zeta';    Gap = 'an ordinary // COMMENT in the gap';           Claimed = $true  }
+)
+
+foreach ($sh in $shapes) {
+  $applyOut = (& $exePath document --qname "strip_wrongsymbol.$($sh.Sym)" --db $F.Db --json 2>$null) -join ' '
+  $applyOk  = $LASTEXITCODE -eq 0
+  $stripOut = (& $exePath document --qname "strip_wrongsymbol.$($sh.Sym)" --db $F.Db --strip --json 2>$null) -join ' '
+  $stripOk  = $LASTEXITCODE -eq 0
+  Check "F: both dry runs for $($sh.Sym) exit 0" ($applyOk -and $stripOk)
+
+  $isExtended = $applyOut -match '"action":"extended"'
+  $isCreated  = $applyOut -match '"action":"created"'
+  Check "F: $($sh.Sym) -- apply reports either extended or created (not a third state)" `
+    ($isExtended -xor $isCreated) $applyOut
+
+  $applyClaims  = $isExtended
+  $stripRemoves = -not ($stripOut -match '"tagsRemoved":0[,}]')
+
+  Check "F AGREEMENT [$($sh.Sym), $($sh.Gap)]: apply and strip reach the SAME verdict" `
+    ($applyClaims -eq $stripRemoves) "applyClaims=$applyClaims stripRemoves=$stripRemoves apply=$applyOut strip=$stripOut"
+  Check "F DIRECTION [$($sh.Sym), $($sh.Gap)]: that shared verdict is '$(if($sh.Claimed){'attributed'}else{'NOT attributed'})'" `
+    ($applyClaims -eq $sh.Claimed) "applyClaims=$applyClaims expected=$($sh.Claimed) apply=$applyOut"
+}
+
+# Nothing above passed --apply, so the file must be untouched -- proof the whole
+# table was a dry run and no row's write leaked into a later row's probe.
+Check 'F: all ten probes were dry runs -- the fixture copy is byte-identical to the original' `
+  ([System.Linq.Enumerable]::SequenceEqual([byte[]][IO.File]::ReadAllBytes($fixture), [byte[]][IO.File]::ReadAllBytes($F.Target)))
 
 # ===========================================================================
 # ENCODING -- every file this runner wrote must still be strict 7-bit ASCII
@@ -398,7 +469,7 @@ Check 'E ESCAPE HATCH: no drag-lint:auto marker survives after the whole-file st
 # ===========================================================================
 Write-Host ''
 Write-Host '=== ENCODING ===' -ForegroundColor Cyan
-foreach ($case in @($A, $B, $C, $D, $E)) {
+foreach ($case in @($A, $B, $C, $D, $E, $F)) {
   $bytes  = [IO.File]::ReadAllBytes($case.Target)
   $nonAsc = 0; $loneLf = 0
   for ($i = 0; $i -lt $bytes.Count; $i++) {
