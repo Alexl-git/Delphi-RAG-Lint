@@ -1031,9 +1031,89 @@ begin
     'sample.rules has 3 #convert blocks + preamble');
 end;
 
+{ Criterion 1b: the same byte-faithful round-trip for .castlib, whose blocks are
+  'cast <Name> ... end' / 'enum <Name> ... end'. Content before the first block is
+  a preamble; content BETWEEN blocks attaches to the preceding block so nothing is
+  orphaned. }
+procedure TestBlockSplitCastLibRoundTrip;
+const
+  SRC =
+    '# file header'#13#10 +
+    ''#13#10 +
+    'cast AssignGraphic'#13#10 +
+    '  accepts TPicture, TBitmap'#13#10 +
+    '  yields  TdxSmartGlyph'#13#10 +
+    'end'#13#10 +
+    ''#13#10 +
+    'enum ButtonLayout'#13#10 +
+    '  ablGlyphLeft -> blGlyphLeft'#13#10 +
+    'end'#13#10;
+var
+  Blocks: TRuleBlocks;
+  P, Txt: string;
+begin
+  Blocks := SplitCastLibBlocks(SRC);
+  Check('blockfile.castlib.count', Length(Blocks) = 3, IntToStr(Length(Blocks)));
+  Check('blockfile.castlib.kind0', Blocks[0].Kind = rbkPreamble, 'block 0 preamble');
+  Check('blockfile.castlib.kind1', Blocks[1].Kind = rbkCast, 'block 1 cast');
+  Check('blockfile.castlib.kind2', Blocks[2].Kind = rbkEnum, 'block 2 enum');
+  Check('blockfile.castlib.trailing',
+    Blocks[1].RawText.EndsWith('end'#13#10 + ''#13#10),
+    'the blank line after "end" must attach to the preceding block');
+  Check('blockfile.castlib.roundtrip', JoinBlocks(Blocks) = SRC,
+    Format('got %d bytes, want %d', [Length(JoinBlocks(Blocks)), Length(SRC)]));
+
+  P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\docs\examples\convrules\casts.castlib'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('blockfile.castlib.roundtrip.file', 'casts.castlib not found: ' + P);
+    Exit;
+  end;
+  Txt := TFile.ReadAllText(P, TEncoding.ASCII);
+  Check('blockfile.castlib.roundtrip.file',
+    JoinBlocks(SplitCastLibBlocks(Txt)) = Txt, 'shipped casts.castlib must round-trip');
+end;
+
+{ Criterion 13: WHERE the open file is a .castlib the grid shows cast/enum block
+  NAMES in place of #convert type pairs. BlockLabel is what the grid displays. }
+procedure TestBlockLabel;
+const
+  RULES = '#convert Vcl.Graphics.TFont -> Vcl.Graphics.TFont, Vcl.Graphics'#13#10 +
+          '#link Color <- Color'#13#10;
+  LIB   = '# header'#13#10 +
+          'cast AssignGraphic'#13#10 + 'end'#13#10 +
+          'enum ButtonLayout'#13#10 + 'end'#13#10;
+var
+  R, L: TRuleBlocks;
+begin
+  R := SplitRulesBlocks(RULES);
+  L := SplitCastLibBlocks(LIB);
+  Check('blocklabel.convert',
+    BlockLabel(R[0]) = 'Vcl.Graphics.TFont -> Vcl.Graphics.TFont, Vcl.Graphics',
+    BlockLabel(R[0]));
+  Check('blocklabel.cast', BlockLabel(L[1]) = 'AssignGraphic', BlockLabel(L[1]));
+  Check('blocklabel.enum', BlockLabel(L[2]) = 'ButtonLayout', BlockLabel(L[2]));
+  Check('blocklabel.preamble', BlockLabel(L[0]) = '(file header)', BlockLabel(L[0]));
+  // extension chosen by file extension, not by sniffing content
+  Check('blockfile.byext.castlib',
+    Length(SplitBlocksFor('x.castlib', LIB)) = 3, 'castlib grammar by extension');
+  Check('blockfile.byext.rules',
+    Length(SplitBlocksFor('x.rules', RULES)) = 1, 'rules grammar by extension');
+  // Edge case: a file with nothing but a preamble is one preamble block, not zero
+  // and not a malformed convert block.
+  var Only: TRuleBlocks := SplitRulesBlocks('// just a header'#13#10 + '; nothing else'#13#10);
+  Check('blockfile.preamble.only', Length(Only) = 1, IntToStr(Length(Only)));
+  Check('blockfile.preamble.only.kind', Only[0].Kind = rbkPreamble, 'must be a preamble');
+  Check('blockfile.preamble.only.roundtrip',
+    JoinBlocks(Only) = '// just a header'#13#10 + '; nothing else'#13#10, 'must round-trip');
+end;
+
 begin
   try
     TestBlockSplitRulesRoundTrip;
+    TestBlockSplitCastLibRoundTrip;
+    TestBlockLabel;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;

@@ -72,6 +72,20 @@ function SecondToken(const ALine: string): string;
 /// to end of file. Anything before the first '#convert' is one rbkPreamble block.</summary>
 function SplitRulesBlocks(const AText: string): TRuleBlocks;
 
+/// <summary>PURE: split a .castlib text into blocks. A block starts at a line whose
+/// first token is 'cast' or 'enum'. Content before the first block becomes an
+/// rbkPreamble block; content between blocks (including the 'end' line and any
+/// trailing blanks) attaches to the PRECEDING block, so nothing is orphaned.</summary>
+function SplitCastLibBlocks(const AText: string): TRuleBlocks;
+
+/// <summary>PURE: pick the grammar from APath's extension -- '.castlib' uses the
+/// catalog grammar, anything else (.rules and reFind files) uses the DSL grammar.</summary>
+function SplitBlocksFor(const APath, AText: string): TRuleBlocks;
+
+/// <summary>PURE: what the curation grid shows for a block: the type pair for a
+/// #convert, the bare NAME for a cast/enum, '(file header)' for a preamble.</summary>
+function BlockLabel(const ABlock: TRuleBlock): string;
+
 /// <summary>PURE: rejoin blocks in order. JoinBlocks(SplitRulesBlocks(T)) = T.</summary>
 function JoinBlocks(const ABlocks: TRuleBlocks): string;
 
@@ -144,13 +158,38 @@ begin
   Result := FirstToken(S);
 end;
 
-function SplitRulesBlocks(const AText: string): TRuleBlocks;
+type
+  { Decides whether a line starts a new block, and of what kind. A plain function
+    pointer (not "of object") so the two grammars stay unit-level and closure-free. }
+  THeaderTest = function(const ALine: string; out AKind: TRuleBlockKind): Boolean;
+
+function RulesHeaderTest(const ALine: string; out AKind: TRuleBlockKind): Boolean;
+begin
+  AKind := rbkConvert;
+  Result := SameText(FirstToken(ALine), '#convert');
+end;
+
+function CastLibHeaderTest(const ALine: string; out AKind: TRuleBlockKind): Boolean;
+var
+  Tok: string;
+begin
+  Tok := FirstToken(ALine);
+  if SameText(Tok, 'cast') then      begin AKind := rbkCast; Exit(True); end;
+  if SameText(Tok, 'enum') then      begin AKind := rbkEnum; Exit(True); end;
+  AKind := rbkPreamble;
+  Result := False;
+end;
+
+{ The one splitting loop. Lines that do not start a block accumulate into the
+  current block; before the first header they accumulate into a preamble block. }
+function SplitOnHeaders(const AText: string; ATest: THeaderTest): TRuleBlocks;
 var
   Lines : TArray<TRawLine>;
   Blocks: TList<TRuleBlock>;
   Cur   : TRuleBlock;
   Have  : Boolean;
   i     : Integer;
+  Kind  : TRuleBlockKind;
 begin
   Lines  := SplitRawLines(AText);
   Blocks := TList<TRuleBlock>.Create;
@@ -159,11 +198,11 @@ begin
     Cur  := Default(TRuleBlock);
     for i := 0 to High(Lines) do
     begin
-      if SameText(FirstToken(Lines[i].Text), '#convert') then
+      if ATest(Lines[i].Text, Kind) then
       begin
         if Have then Blocks.Add(Cur);
         Cur := Default(TRuleBlock);
-        Cur.Kind      := rbkConvert;
+        Cur.Kind      := Kind;
         Cur.Header    := Lines[i].Text;
         Cur.StartLine := i + 1;
         Have := True;
@@ -183,6 +222,36 @@ begin
     Result := Blocks.ToArray;
   finally
     Blocks.Free;
+  end;
+end;
+
+function SplitRulesBlocks(const AText: string): TRuleBlocks;
+begin
+  Result := SplitOnHeaders(AText, RulesHeaderTest);
+end;
+
+function SplitCastLibBlocks(const AText: string): TRuleBlocks;
+begin
+  Result := SplitOnHeaders(AText, CastLibHeaderTest);
+end;
+
+function SplitBlocksFor(const APath, AText: string): TRuleBlocks;
+begin
+  if SameText(ExtractFileExt(APath), '.castlib') then
+    Result := SplitCastLibBlocks(AText)
+  else
+    Result := SplitRulesBlocks(AText);
+end;
+
+function BlockLabel(const ABlock: TRuleBlock): string;
+begin
+  case ABlock.Kind of
+    rbkConvert:
+      Result := Trim(Copy(TrimLeft(ABlock.Header), Length('#convert') + 1, MaxInt));
+    rbkCast, rbkEnum:
+      Result := SecondToken(ABlock.Header);
+  else
+    Result := '(file header)';
   end;
 end;
 
