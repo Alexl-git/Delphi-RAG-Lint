@@ -101,12 +101,16 @@ type
     /// to the SAME physical region and de-duplicate before applying, instead
     /// of queuing the identical delete twice -- the applier has no overlap
     /// detection, so the same delete applied twice removes whatever shifted up
-    /// into the freed range. v(ADP3 T3j): the consecutive-declaration shape
-    /// that originally motivated this is now REFUSED outright by the blank
-    /// test above, so that particular collision can no longer arise -- but the
-    /// out param and the caller's de-duplication remain the only protection
-    /// against a duplicate delete from any other source (e.g. two index rows
-    /// sharing one StartLine), so neither is redundant.</param>
+    /// into the freed range. v(ADP3 T3j, corrected in review round 2): the
+    /// consecutive-declaration shape that originally motivated this is now
+    /// refused by the SHARED INTERVENING-DECLARATION GUARD (the second overload
+    /// finds the first's own declaration line inside its gap), and, for a caller
+    /// with no symbol table, by the blank-line fallback described under
+    /// ASymStartLines below -- so that particular collision can no longer arise
+    /// on either branch. But the out param and the caller's de-duplication
+    /// remain the only protection against a duplicate delete from any other
+    /// source (e.g. two index rows sharing one StartLine), so neither is
+    /// redundant.</param>
     /// <param name="ARegionEndLine">1-based last line of the matched region,
     /// or 0 if none was found.</param>
     /// <param name="ASymStartLines">v(ADP3 T3j review round 1): every symbol's
@@ -116,9 +120,16 @@ type
     /// IDENTICAL to the write path's, which is the invariant that matters: a
     /// region the write path claims must be a region this can remove, or
     /// `--apply` writes a block `--strip` can never take back.
-    /// <para>OPTIONAL, defaulting to nil, for a caller with no symbol table --
-    /// this unit is deliberately index-free (see the unit header) and must stay
-    /// usable without one. When it is empty the declaration test is vacuous, so
+    /// <para>MAY be empty, for a caller with no symbol table -- this unit is
+    /// deliberately index-free (see the unit header) and must stay usable
+    /// without one. v(ADP3 T3j review round 2, folded 4): passing it is
+    /// REQUIRED, with no `= nil` default, deliberately. A default would have
+    /// made the NARROWER fallback the silent choice for any future caller that
+    /// simply did not think about it, on a code path that deletes lines from a
+    /// user's source and with no committed test on that branch. Being forced to
+    /// write the argument is the compile-time nudge to consider which
+    /// attribution rule you want. When it IS empty the declaration test is
+    /// vacuous, so
     /// a FALLBACK applies instead: a one-line gap is accepted only when that
     /// line is BLANK. That is deliberately NARROWER than the write path (it
     /// refuses an ordinary comment in the gap, which the write path tolerates),
@@ -130,7 +141,7 @@ type
     /// no such region is found.</returns>
     class function StripSymbolRegion(const AFilePath: string; ADeclLine: Integer;
       out ARegionStartLine, ARegionEndLine: Integer;
-      const ASymStartLines: TArray<Integer> = nil): TStripResult;
+      const ASymStartLines: TArray<Integer>): TStripResult;
   end;
 
 implementation

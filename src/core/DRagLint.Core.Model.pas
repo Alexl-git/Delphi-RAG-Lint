@@ -501,10 +501,24 @@ function DefaultDocConfig: TDocConfig;
 
 const
   /// <summary>Intervening lines tolerated between a doc region's end and its
-  /// declaration. 1 everywhere: TDocumenter's two FindDocRegionAbove call sites
-  /// pass it, TDocStripper.StripSymbolRegion passes it, and
-  /// DefaultDocConfig.AllowBlankLineGap defaults to it. Named so the three
-  /// attribution sites cannot disagree by way of a stray literal.</summary>
+  /// declaration. Read by TDocumenter's two FindDocRegionAbove call sites and by
+  /// TDocStripper.StripSymbolRegion (both branches), and DefaultDocConfig.
+  /// AllowBlankLineGap defaults to it -- so the APPLY and STRIP paths cannot
+  /// drift apart by way of a stray literal. Changing it moves both together.
+  /// <para>ONE DELIBERATE EXCEPTION: index-time capture
+  /// (DRagLint.Core.Indexer) passes FDocConfig.AllowBlankLineGap instead, which
+  /// is user-settable from JSON, so that path honours the user's configured
+  /// value rather than this constant. It merely DEFAULTS to it, via
+  /// DefaultDocConfig.</para></summary>
+  /// <remarks>v(ADP3 T3j review round 2, Important 2): this DocInsight
+  /// previously asserted the no-drift invariant while three of the four sites
+  /// still passed a literal 1 -- only StripSymbolRegion actually read the
+  /// constant, so raising it to 2 would have widened `--strip` alone and
+  /// silently reintroduced the apply/strip asymmetry the comment claimed to
+  /// prevent. Fixed by changing the CODE to match the claim, not the claim to
+  /// match the code: a comment describing a guard the code does not perform is
+  /// the documented root cause of register S1 (see the block comment on
+  /// DocRegionFitsDecl below).</remarks>
   DOC_ALLOW_GAP = 1;
 
 /// <summary>True when a doc-comment region ending at 1-based line AEndLine is
@@ -684,7 +698,10 @@ function DefaultDocConfig: TDocConfig;
 begin
   Result.CaptureLooseComments:= False;
   Result.ImplPrecedence      := 'interface';
-  Result.AllowBlankLineGap   := 1;
+  // v(ADP3 T3j review round 2, Important 2): DOC_ALLOW_GAP, not a literal --
+  // this is the default the index-time path uses when no JSON override is set,
+  // so a literal here is one more way the sites could drift apart.
+  Result.AllowBlankLineGap   := DOC_ALLOW_GAP;
 end;
 
 // v(ADP3 T3j review round 1): see the block comment on these three in the

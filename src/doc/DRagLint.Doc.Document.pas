@@ -565,7 +565,12 @@ begin
   // allow a 1-line gap, skip loose regions. Kind = TDocCommentKind(-1) = none.
   Regions:= TDocCommentScanner.Scan(Src);
   try
-    Region:= FindDocRegionAbove(Regions, ASym.StartLine, 1, False, SymStartLines);
+    // v(ADP3 T3j review round 2, Important 2): DOC_ALLOW_GAP, not a literal 1.
+    // The constant existed to close the literal-drift channel between the apply
+    // and strip paths, but only Doc.Strip actually read it -- so setting it to 2
+    // would have widened `--strip` alone, silently recreating the very
+    // apply/strip asymmetry this task exists to prevent.
+    Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines);
     if Region.Kind <> TDocCommentKind(-1) then
     begin
       Result := TDocCommentParser.Dispatch(Region);
@@ -642,7 +647,12 @@ begin
   Existing:= Default(TParsedDoc);
   Regions := TDocCommentScanner.Scan(Src);
   try
-    Region:= FindDocRegionAbove(Regions, ASym.StartLine, 1, False, SymStartLines);
+    // v(ADP3 T3j review round 2, Important 2): DOC_ALLOW_GAP, not a literal 1.
+    // The constant existed to close the literal-drift channel between the apply
+    // and strip paths, but only Doc.Strip actually read it -- so setting it to 2
+    // would have widened `--strip` alone, silently recreating the very
+    // apply/strip asymmetry this task exists to prevent.
+    Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines);
     if Region.Kind <> TDocCommentKind(-1) then
       Existing:= TDocCommentParser.Dispatch(Region);
   finally

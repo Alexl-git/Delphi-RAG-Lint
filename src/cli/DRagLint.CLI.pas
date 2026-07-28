@@ -7152,6 +7152,25 @@ begin
   for K:= 0 to High(FileSyms) do SymStartLines[K]:= FileSyms[K].StartLine;
   TArray.Sort<Integer>(SymStartLines);
 
+  // v(ADP3 T3j review round 2, folded 5): an EMPTY result here is not possible
+  // by construction -- Syms is non-empty and every symbol in it lives in Path,
+  // so Path must contain at least those declarations. If it ever IS empty, the
+  // only plausible cause is a path-normalization or casing mismatch between
+  // GetFilePath's spelling and FindSymbolsByFile's lookup, and the consequence
+  // is that StripSymbolRegion silently falls back to its NARROWER blank-line
+  // rule -- it still fails closed (it never deletes more), but a user would see
+  // `--strip` quietly decline a block `--apply` had just written, with nothing
+  // explaining why. Say so instead of degrading in silence.
+  // Gated on text mode, matching this function's own `note:` line below and
+  // DoDocumentUnit's AccessorsSkipped notice: a bare Writeln here would emit a
+  // non-JSON line BEFORE ReportStrip's JSON object under --json, breaking every
+  // consumer that pipes the whole stream through a parser -- including
+  // run_doc_p3_strip_collision.ps1, which does exactly that. Caught in
+  // self-review; the human sentence is text-mode-only, the same convention the
+  // rest of this function follows.
+  if (not AArgs.AsJson) and (Length(SymStartLines) = 0) then
+    Writeln(Format('warning: no indexed symbols found for %s -- strip will use its narrower blank-line gap rule; reindex if a doc block is unexpectedly left in place.', [Path]));
+
   TagsSum       := 0;
   BlocksSum     := 0;
   AllEdits      := nil;

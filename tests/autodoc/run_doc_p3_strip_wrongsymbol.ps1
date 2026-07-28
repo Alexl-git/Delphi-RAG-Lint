@@ -22,28 +22,31 @@
   does it), so no `document --apply` run is needed and no assertion here depends
   on what the miner happens to produce for these trivial routines:
 
-  every line number below is also asserted by the runner itself (see FIXTURE
-  PREMISES), so editing the fixture cannot silently retarget a check:
+  the RELATIVE geometry of each shape is asserted by the runner itself (see
+  FIXTURE PREMISES), so editing the fixture cannot silently retarget a check.
+  v(ADP3 T3j review round 2, folded 3): the absolute line numbers below are
+  ORIENTATION ONLY and are NOT asserted -- every check resolves its declaration
+  through Get-LineNo at run time. They were 3 low for one commit after the
+  fixture's header comment grew, which is exactly why they must not be presented
+  as though something verifies them. Trust the premises, not these:
 
-    Alpha  (line 33) -- documented: a marked <summary> plus an
-                        AUTO_BEGIN..AUTO_END facts fence inside <remarks>
-                        (lines 27-32).
-    Beta   (line 34) -- UNdocumented, on the line directly after Alpha.
-                        SHAPE 1, the defect: window [32, 33], Alpha's block
-                        ends at 32, intervening line 33 is Alpha's own
-                        DECLARATION.
-    Gamma  (line 38) -- SHAPE 2, the legitimate gap: its marked <summary> is on
-                        line 36 with exactly ONE BLANK line (37) between. Must
-                        STILL be stripped -- a fix that rejects this is worse
-                        than the defect it closes.
-    Epsilon(line 43) -- SHAPE 3: its block is on line 40, TWO blank lines above
-                        the declaration. Already outside the window; must stay
-                        outside.
-    Zeta   (line 47) -- SHAPE 4: its block is on line 45 with ONE intervening
-                        line (46) that is an ordinary '//' comment -- non-blank,
-                        but not a declaration either. The shape that separates
-                        "the gap is blank" from "no other DECLARATION is in the
-                        gap"; see SCENARIO E.
+    Alpha  (~line 36) -- documented: a marked <summary> plus an
+                         AUTO_BEGIN..AUTO_END facts fence inside <remarks>
+                         (~lines 30-35).
+    Beta   (~line 37) -- UNdocumented, on the line DIRECTLY AFTER Alpha.
+                         SHAPE 1, the defect: Alpha's block ends at
+                         BetaLine-2, so the intervening line is Alpha's own
+                         DECLARATION.
+    Gamma  (~line 41) -- SHAPE 2, the legitimate gap: its marked <summary> sits
+                         with exactly ONE BLANK line between it and the
+                         declaration. Must STILL be stripped -- a fix that
+                         rejects this is worse than the defect it closes.
+    Epsilon(~line 46) -- SHAPE 3: TWO blank lines above the declaration.
+                         Already outside the window; must stay outside.
+    Zeta   (~line 50) -- SHAPE 4: ONE intervening line that is an ordinary '//'
+                         comment -- non-blank, but not a declaration either. The
+                         shape that separates "the gap is blank" from "no other
+                         DECLARATION is in the gap"; see SCENARIO E.
 
   SCENARIO A -- SHAPE 1 + the anti-vacuity control. `--qname Beta --strip
   --apply` must report ZERO and leave the file byte-identical. Then, on that
@@ -448,8 +451,18 @@ foreach ($sh in $shapes) {
   Check "F: $($sh.Sym) -- apply reports either extended or created (not a third state)" `
     ($isExtended -xor $isCreated) $applyOut
 
-  $applyClaims  = $isExtended
-  $stripRemoves = -not ($stripOut -match '"tagsRemoved":0[,}]')
+  $applyClaims = $isExtended
+  # v(ADP3 T3j review round 2, folded 6): the field must be PRESENT and its value
+  # read positively. The previous form was `-not ($stripOut -match
+  # '"tagsRemoved":0[,}]')`, which treats any output MISSING the field -- a
+  # rename, a crash, an empty string -- as "strip removed something", i.e. it
+  # fails OPEN into the success direction. Assert presence first, then compare
+  # the captured number.
+  $hasTags = $stripOut -match '"tagsRemoved":(\d+)[,}]'
+  $tagsVal = if ($hasTags) { [int]$Matches[1] } else { -1 }
+  Check "F: $($sh.Sym) -- strip output actually CARRIES a tagsRemoved field (not read by absence)" `
+    $hasTags $stripOut
+  $stripRemoves = $hasTags -and ($tagsVal -gt 0)
 
   Check "F AGREEMENT [$($sh.Sym), $($sh.Gap)]: apply and strip reach the SAME verdict" `
     ($applyClaims -eq $stripRemoves) "applyClaims=$applyClaims stripRemoves=$stripRemoves apply=$applyOut strip=$stripOut"
