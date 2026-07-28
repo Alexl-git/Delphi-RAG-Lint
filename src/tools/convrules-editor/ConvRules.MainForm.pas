@@ -58,6 +58,11 @@ type
     FGridFindFrom: TEdit;             // grid filter: From column substring
     FGridFindTo  : TEdit;             // grid filter: To column substring
     FLblGridMatch: TLabel;            // "N of M" count shown while a grid filter is active
+    FBtnExamine: TButton;             // pick .dfm/.pas files and mark used From properties
+    FBtnClearExamine: TButton;        // drop the current examination
+    FUsedProps  : TArray<string>;     // Examine result; empty = no examination active
+    FUsedFiles  : TArray<string>;     // the examined file set, retained for the session
+    FExamineInfo: string;             // status summary, re-shown when blocks change
     FPool     : TListBox;             // unassigned T pool
     FPoolFind : TEdit;
     FBtnAssign: TButton;
@@ -98,6 +103,22 @@ type
     procedure GridFilterChange(Sender: TObject);
     procedure DoClearGridFindFrom(Sender: TObject);
     procedure DoClearGridFindTo(Sender: TObject);
+    /// <summary>Prompts for one or more .dfm/.pas files, scans them via
+    /// ConvRules.Usage.ComputeUsage for the active rule's From class, and marks the
+    /// used From properties green in the grid. No-op with a status message when no
+    /// conversion is selected.</summary>
+    procedure DoExamine(Sender: TObject);
+    /// <summary>Drops the current examination (FUsedProps/FUsedFiles/FExamineInfo)
+    /// and repaints the grid with no rows marked.</summary>
+    procedure DoClearExamine(Sender: TObject);
+    /// <summary>Shows a small read-only report window listing used property names
+    /// that matched no From-tree leaf (ConvRules.Usage TUsageSet.Missing).</summary>
+    procedure ShowUsageReport(const AMissing: TArray<string>);
+    /// <summary>FGrid.OnDrawCell: paints a row pale green when its From path is used
+    /// per the active examination (FUsedProps), else the normal fixed/selected/
+    /// window colours. Requires FGrid.DefaultDrawing = False to own painting.</summary>
+    procedure GridDrawCell(Sender: TObject; ACol, ARow: Integer; Rect: TRect;
+      State: TGridDrawState);
     procedure RefreshPool;
     procedure DoAssign(Sender: TObject);
     procedure DoUnassign(Sender: TObject);
@@ -161,7 +182,7 @@ implementation
 
 uses
   System.StrUtils, System.Math, ConvRules.Units, ConvRules.WorkingSet,
-  ConvRules.CurationForm;
+  ConvRules.CurationForm, ConvRules.Usage;
 
 { ---- helpers ---- }
 
@@ -492,7 +513,7 @@ begin
   //     alClient beneath it. See RefreshGrid / GridRowMatchesFilter. ---
   var GridFilterPanel: TPanel := TPanel.Create(Self);
   GridFilterPanel.Parent := GridPanel; GridFilterPanel.Align := alTop;
-  GridFilterPanel.Height := 34; GridFilterPanel.BevelOuter := bvNone;
+  GridFilterPanel.Height := 64; GridFilterPanel.BevelOuter := bvNone;
 
   var LblGridFrom: TLabel := TLabel.Create(Self);
   LblGridFrom.Parent := GridFilterPanel; LblGridFrom.SetBounds(6, 9, 66, 15);
@@ -528,6 +549,23 @@ begin
   FLblGridMatch.Parent := GridFilterPanel; FLblGridMatch.SetBounds(626, 9, 160, 15);
   FLblGridMatch.Caption := '';
 
+  // Examine: pick .dfm/.pas files and mark which From properties they actually use
+  // (ConvRules.Usage.ComputeUsage), so the grid's ~thousands of leaves can be
+  // triaged down to the handful a real form touches. See DoExamine/GridDrawCell.
+  FBtnExamine := TButton.Create(Self);
+  FBtnExamine.Parent := GridFilterPanel; FBtnExamine.SetBounds(6, 34, 110, 25);
+  FBtnExamine.Caption := 'Examine...';
+  FBtnExamine.Hint := 'Pick .dfm/.pas files and mark the From properties they actually use (green)';
+  FBtnExamine.ShowHint := True;
+  FBtnExamine.OnClick := DoExamine;
+
+  FBtnClearExamine := TButton.Create(Self);
+  FBtnClearExamine.Parent := GridFilterPanel; FBtnClearExamine.SetBounds(122, 34, 110, 25);
+  FBtnClearExamine.Caption := 'Clear marks';
+  FBtnClearExamine.Hint := 'Drop the current examination and unmark all rows';
+  FBtnClearExamine.ShowHint := True;
+  FBtnClearExamine.OnClick := DoClearExamine;
+
   FGrid := TStringGrid.Create(Self);
   FGrid.Parent := GridPanel; FGrid.Align := alClient;
   // RowCount must stay > FixedRows: start at 2 (header + one blank data row).
@@ -539,6 +577,10 @@ begin
   FGrid.Cells[1, 0] := 'To (assigned)';
   FGrid.Cells[2, 0] := 'cast';
   FGrid.ColWidths[0] := 330; FGrid.ColWidths[1] := 330; FGrid.ColWidths[2] := 110;
+  // Hand painting entirely to GridDrawCell (header, selection and Examine's green
+  // marking all go through it) -- required for OnDrawCell to own the cell colour.
+  FGrid.DefaultDrawing := False;
+  FGrid.OnDrawCell := GridDrawCell;
 end;
 
 procedure TConvRulesForm.SetStatus(const S: string);
@@ -1000,8 +1042,16 @@ begin
   RefreshGrid;
 
   RefreshPool;
-  SetStatus(Format('%s -> %s : %d From leaves, %d To leaves.',
-    [Node.FromType, Node.ToType, Length(FFromTree.Leaves), Length(FToTree.Leaves)]));
+  // The examined file set is session state, not rule state (Task 4 brief): a block
+  // switch must NOT clear FUsedProps, and GridDrawCell re-applies the marking to
+  // the freshly-loaded rows on its own (it reads FUsedProps live at paint time).
+  // Only the status line needs an explicit hand here, since the plain leaf-count
+  // message below would otherwise silently replace the examination summary.
+  if FExamineInfo <> '' then
+    SetStatus(FExamineInfo)
+  else
+    SetStatus(Format('%s -> %s : %d From leaves, %d To leaves.',
+      [Node.FromType, Node.ToType, Length(FFromTree.Leaves), Length(FToTree.Leaves)]));
 end;
 
 { Refill the grid from FFromTree.Leaves, keeping only rows that pass the active
@@ -1175,6 +1225,158 @@ function GridRowMatchesFilter(const AFromCell, AToCell, AFromFilter, AToFilter: 
 begin
   Result := ((AFromFilter = '') or (Pos(LowerCase(AFromFilter), LowerCase(AFromCell)) > 0))
         and ((AToFilter = '') or (Pos(LowerCase(AToFilter), LowerCase(AToCell)) > 0));
+end;
+
+{ Examine: pick .dfm/.pas files and ask ConvRules.Usage.ComputeUsage which of the active
+  rule's From properties they actually assign or reference, so the grid can be triaged
+  down from thousands of leaves to the handful a real form touches. Read-only -- only
+  TFile.ReadAllText is called on the chosen files, nothing is ever written. Requires a
+  selected #convert rule (FActiveHdr >= 0); the From class comes from FBook, not the
+  picker text, so it is always in sync with the grid currently on screen. }
+procedure TConvRulesForm.DoExamine(Sender: TObject);
+var
+  Dlg  : TOpenDialog;
+  Dfms, Pass: TArray<string>;
+  Bad  : TArray<string>;
+  Paths: TArray<string>;
+  U    : TUsageSet;
+  L    : TPropLeaf;
+  F    : string;
+  FromBare: string;
+  DotPos  : Integer;
+begin
+  if FActiveHdr < 0 then
+  begin
+    SetStatus('Select a conversion first -- Examine marks the From properties of the active rule.');
+    Exit;
+  end;
+  Dlg := TOpenDialog.Create(Self);
+  try
+    Dlg.Filter := 'Delphi form and source (*.dfm;*.pas)|*.dfm;*.pas|'
+      + 'Form files (*.dfm)|*.dfm|Source (*.pas)|*.pas|All files (*.*)|*.*';
+    Dlg.Options := Dlg.Options + [ofAllowMultiSelect, ofFileMustExist];
+    if not Dlg.Execute then Exit;
+    FUsedFiles := Dlg.Files.ToStringArray;
+  finally
+    Dlg.Free;
+  end;
+
+  var LGuard: IInterface := HourGlass;
+  Dfms := nil; Pass := nil; Bad := nil;
+  for F in FUsedFiles do
+    try
+      if SameText(ExtractFileExt(F), '.dfm') then
+        Dfms := Dfms + [TFile.ReadAllText(F)]
+      else
+        Pass := Pass + [TFile.ReadAllText(F)];
+    except
+      on E: Exception do Bad := Bad + [ExtractFileName(F)];
+    end;
+
+  Paths := nil;
+  for L in FFromTree.Leaves do
+    Paths := Paths + [L.Path];
+
+  // A DFM always writes the BARE class name ('object X: TabcToggleBtn'), never a
+  // unit-qualified one, but FBook's FromType may be qualified -- strip any prefix
+  // up to and including the last '.' before handing it to ComputeUsage.
+  FromBare := FBook.Nodes[FActiveHdr].FromType;
+  DotPos := LastDelimiter('.', FromBare);
+  if DotPos > 0 then FromBare := Copy(FromBare, DotPos + 1, MaxInt);
+
+  U := ComputeUsage(Dfms, Pass, FromBare, Paths);
+  FUsedProps := U.Names;
+  FExamineInfo := Format('Examined %d file(s): %d of %d From properties used.',
+    [U.DfmCount + U.PasCount, Length(U.Names), Length(Paths)]);
+  if Length(Bad) > 0 then
+    FExamineInfo := FExamineInfo + ' Unreadable: ' + string.Join(', ', Bad);
+  SetStatus(FExamineInfo);
+  FGrid.Invalidate;
+
+  if Length(U.Missing) > 0 then
+    ShowUsageReport(U.Missing);
+end;
+
+{ Drop the current examination -- the session-state fields only; the rule model
+  itself is untouched. }
+procedure TConvRulesForm.DoClearExamine(Sender: TObject);
+begin
+  FUsedProps := nil;
+  FExamineInfo := '';
+  FGrid.Invalidate;
+  SetStatus('Examination cleared.');
+end;
+
+{ Small read-only report window: used names the examined files reference that match
+  no leaf of the active From tree -- expected to be rare, and worth surfacing since
+  it usually means the indexer's proptree is missing something real. }
+procedure TConvRulesForm.ShowUsageReport(const AMissing: TArray<string>);
+var
+  F   : TForm;
+  Memo: TMemo;
+  Btn : TButton;
+  N   : string;
+begin
+  F := TForm.CreateNew(Self);
+  try
+    F.Caption     := 'Examine -- used names with no grid row';
+    F.Width       := 520;
+    F.Height      := 420;
+    F.Position    := poOwnerFormCenter;
+    F.BorderStyle := bsSizeable;
+
+    Btn := TButton.Create(F);
+    Btn.Parent := F; Btn.Align := alBottom;
+    Btn.Caption := 'Close'; Btn.ModalResult := mrOk;
+
+    Memo := TMemo.Create(F);
+    Memo.Parent     := F;
+    Memo.Align      := alClient;
+    Memo.ReadOnly   := True;
+    Memo.ScrollBars := ssBoth;
+    Memo.WordWrap   := False;
+    Memo.Font.Name  := 'Consolas';
+    Memo.Font.Size  := 9;
+    Memo.Lines.Add(Format('%d name(s) used in the examined files have no row in this grid:',
+      [Length(AMissing)]));
+    Memo.Lines.Add('');
+    for N in AMissing do
+      Memo.Lines.Add(N);
+
+    F.ShowModal;
+  finally
+    F.Free;
+  end;
+end;
+
+{ FGrid.OnDrawCell -- owns ALL cell painting once FGrid.DefaultDrawing is False.
+  A data row (ARow > 0) whose From path is in FUsedProps paints pale green, EXCEPT
+  when it is the selected cell/row: selection must stay visible on a green row, so
+  gdSelected always wins and paints the normal highlight colour instead. }
+procedure TConvRulesForm.GridDrawCell(Sender: TObject; ACol, ARow: Integer;
+  Rect: TRect; State: TGridDrawState);
+var
+  Cv: TCanvas;
+begin
+  Cv := FGrid.Canvas;
+  // Default painting for the header and for any row we are not marking, and always for
+  // the selected cell so the selection stays visible on a green row.
+  if (ARow > 0) and (gdSelected not in State)
+     and (Length(FUsedProps) > 0)
+     and IsRowUsed(PathOfGridCell(FGrid.Cells[0, ARow]), FUsedProps) then
+    Cv.Brush.Color := $00D8F5D8   // pale green, readable behind black text
+  else if gdSelected in State then
+    Cv.Brush.Color := clHighlight
+  else if gdFixed in State then
+    Cv.Brush.Color := clBtnFace
+  else
+    Cv.Brush.Color := clWindow;
+
+  if gdSelected in State then Cv.Font.Color := clHighlightText
+  else Cv.Font.Color := clWindowText;
+
+  Cv.FillRect(Rect);
+  Cv.TextRect(Rect, Rect.Left + 2, Rect.Top + 2, FGrid.Cells[ACol, ARow]);
 end;
 
 { Align the highlighted To leaf to the From side: select the From-grid row whose

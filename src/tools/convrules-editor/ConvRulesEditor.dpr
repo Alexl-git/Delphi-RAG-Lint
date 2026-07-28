@@ -18,6 +18,7 @@ uses
   ConvRules.BlockOps in 'ConvRules.BlockOps.pas',
   ConvRules.WorkingSet in 'ConvRules.WorkingSet.pas',
   ConvRules.CurationForm in 'ConvRules.CurationForm.pas',
+  ConvRules.Usage in 'ConvRules.Usage.pas',
   ConvRules.MainForm in 'ConvRules.MainForm.pas';
 
 { Resolve the drag-lint exe: next to this editor (both deploy to dll-win64), else
