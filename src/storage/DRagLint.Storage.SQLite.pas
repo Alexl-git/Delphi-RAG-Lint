@@ -66,6 +66,17 @@ type
       FQGetFileUnitUses      : TFDQuery;
       FQFindUsersOfUnit      : TFDQuery;
       FQResolveUnitUseTargets: TFDQuery;
+      { Task 4d: memo for the ancestor climb's late name resolution, keyed
+        '<scopeFileId>|<lowercased type name>'. Without it the climb re-runs a
+        full scope load + a name lookup for the SAME (file, name) pair on every
+        GetTransitiveAncestors call, and proptree makes one per class it visits --
+        measured 39s for cxButtons.TcxButton against the 1.87 GB library index.
+        Safe to hold for the store's lifetime: nothing a query does (the only
+        write on a read path is MemoizePropertyType, which touches property
+        signatures) can change which class a type name resolves to. An indexing
+        run rebuilds ancestry through ResolveAncestry on a store that has not
+        served climbs, so no stale entry can survive into one. }
+      FLateAncCache: TDictionary<string, TSymbol>;
       procedure Connect(const ADbPath: string; AReadOnly: Boolean);
       procedure PrepareStatements;
       procedure EnsureTrigramTablePopulated;
@@ -73,6 +84,15 @@ type
       // table exist? (a SELECT on sqlite_master; issues no DDL). Used only on a
       // read-only open, where the write-path temp-table probe cannot run.
       function Fts5TableExists: Boolean;
+      // Task 4d: the shared body behind ResolveTypeNameToClass. AStrict picks the
+      // ambiguity policy when SEVERAL candidates are in the reference file's
+      // uses-scope: False keeps the historical "first in scope wins" (the proptree
+      // ancestry-BRIDGE, whose worst case is a property typed from the wrong
+      // same-named class), True REFUSES and returns Id=0. The ancestor CLIMB uses
+      // True, because grafting FMX.Controls.Win.TWinControl's whole property
+      // surface onto a VCL class is far worse than the surface being absent.
+      function ResolveTypeNameToClassEx(const ATypeName: string; AScopeFileId: Int64;
+        AStrict: Boolean): TSymbol;
     public
       /// <summary>Opens (or creates) the SQLite index at ADbPath.</summary>
       /// <param name="ADbPath">Full path to the .sqlite index file.</param>
@@ -285,6 +305,7 @@ constructor TSQLiteSymbolStore.Create(const ADbPath: string; AReadOnly: Boolean 
 begin
   inherited Create;
   FReadOnly := AReadOnly;
+  FLateAncCache:= TDictionary<string, TSymbol>.Create;
   Connect(ADbPath, AReadOnly);
   { v0.86 Task 4: a read-only open still needs its SELECT queries built. In the
     write path PrepareStatements is Migrate's last step; read verbs never call
@@ -333,6 +354,7 @@ end;
 
 destructor TSQLiteSymbolStore.Destroy;
 begin
+  FLateAncCache.Free;
   FQInsertFile.Free;
   FQUpsertFile.Free;
   FQInsertSymbol.Free;
@@ -2510,6 +2532,13 @@ begin
 end;
 
 function TSQLiteSymbolStore.ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64): TSymbol;
+begin
+  // Historical (non-strict) policy -- see ResolveTypeNameToClassEx.
+  Result:= ResolveTypeNameToClassEx(ATypeName, AScopeFileId, False);
+end;
+
+function TSQLiteSymbolStore.ResolveTypeNameToClassEx(const ATypeName: string;
+  AScopeFileId: Int64; AStrict: Boolean): TSymbol;
 var
   UsesNames: TDictionary<string, Boolean>; // lowercased unit names in scope (own + used)
   SeenAlias: TDictionary<string, Boolean>; // alias-chain cycle guard (lowercased names)
@@ -2604,7 +2633,15 @@ var
     for S in Types do
       if UsesNames.ContainsKey(LowerCase(UnitPrefix(S.QualifiedName))) then
         InScope:= InScope + [S];
-    if Length(InScope) >= 1 then Exit(InScope[0]);   // in-scope wins (first if several)
+    if Length(InScope) = 1 then Exit(InScope[0]);    // exactly one in scope -- certain
+    if Length(InScope) > 1 then
+    begin
+      // SEVERAL in scope. Non-strict keeps the historical first-wins pick; strict
+      // (the ancestor climb) refuses, because there is nothing in the index that
+      // distinguishes them and a wrong ancestor grafts a whole foreign surface.
+      if not AStrict then Exit(InScope[0]);
+      Exit;
+    end;
     if Length(Types) = 1 then Exit(Types[0]);        // single global definition
     // ambiguous, none in scope -> refuse to guess (leaves the caller at 'unknown').
   end;
@@ -3419,16 +3456,50 @@ procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
 { Drives target_file_id resolution in Pascal rather than SQL because the
   basename-extract is fiddly across sqlite dialects (Win32 FireDAC's
   bundled sqlite lacks some 3.24+ functions). We pull every (file_id, path),
-  compute the lowercase stem, build a dictionary, then UPDATE per group. }
+  compute the lowercase stem, build a dictionary, then UPDATE per group.
+
+  Task 4d -- THE DOTTED-UNIT DEFECT THIS FIXES. The single UPDATE used to key on
+  unit_uses.unit_name_norm, which UnitNameNorm defines as the dotted TAIL of the
+  used unit's name ('Vcl.Controls' -> 'controls'), against the FULL basename stem
+  of files.path ('Vcl.Controls.pas' -> 'vcl.controls'). Those two can never be
+  equal for a dotted unit, so target_file_id stayed NULL for every dotted `uses`
+  in the index -- 49527 of 85157 rows (58%) in library-Win64.sqlite. The tail-only
+  key dates from when a unit's file really was named after its last segment
+  (SysUtils.pas); the RTL has shipped fully-dotted filenames since Delphi 2009.
+  Everything keyed off that scope silently degraded -- most visibly
+  ResolveAncestry, whose uses-scope disambiguation collapsed to same-file-only and
+  so abandoned every cross-unit ancestor hop onto an ambiguous name.
+
+  Two passes, most-specific first:
+    1. the used unit's FULL name against the full file stem. Exact, and the only
+       pass that can match a dotted unit to its dotted file. First-wins on a
+       duplicate stem: a repeated full stem is the SAME unit indexed twice (two
+       search paths / a stale copy), never two different units, so either row is
+       an equally correct answer to "which file declares this unit".
+    2. the tail (unit_name_norm) against the tail of the file stem, for the
+       legacy shapes pass 1 cannot reach -- `uses SysUtils` resolving to
+       System.SysUtils.pas, or `uses Vcl.Controls` to a pre-namespace
+       Controls.pas. Here a repeated tail DOES mean genuinely different units
+       (Vcl.Controls.pas and FMX.Controls.pas both tail to 'controls'), so an
+       ambiguous tail resolves NOTHING rather than guessing a unit that was never
+       used. Only rows still NULL after pass 1 can be touched. }
 var
-  QFiles      : TFDQuery                  ;
-  QUpdate     : TFDQuery                  ;
-  StemToFileId: TDictionary<string, Int64>;
-  Path        : string                    ;
-  Stem        : string                    ;
-  Slash       : Integer                   ;
+  QFiles     : TFDQuery                  ;
+  QUpdate    : TFDQuery                  ;
+  FullToFile : TDictionary<string, Int64>; // full lowercase stem -> file id
+  TailToFile : TDictionary<string, Int64>; // tail of that stem   -> file id
+  TailAmbig  : TDictionary<string, Boolean>; // tails claimed by >1 DIFFERENT stem
+  StemOfTail : TDictionary<string, string>;  // tail -> the stem that claimed it
+  Path       : string                    ;
+  Stem       : string                    ;
+  Tail       : string                    ;
+  Slash      : Integer                   ;
+  Dot        : Integer                   ;
 begin
-  StemToFileId:= TDictionary<string, Int64>.Create;
+  FullToFile:= TDictionary<string, Int64>  .Create;
+  TailToFile:= TDictionary<string, Int64>  .Create;
+  TailAmbig := TDictionary<string, Boolean>.Create;
+  StemOfTail:= TDictionary<string, string> .Create;
   QFiles := TFDQuery.Create(nil);
   QUpdate:= TFDQuery.Create(nil);
   try
@@ -3442,18 +3513,57 @@ begin
       if Slash >= 0 then Stem:= Copy(Path, Slash + 2, MaxInt)
       else Stem:= Path;
       Stem:= LowerCase(ChangeFileExt(Stem, ''));
-      if Stem <> '' then StemToFileId.AddOrSetValue(Stem, QFiles.FieldByName('id').AsLargeInt);
+      if Stem <> '' then
+      begin
+        if not FullToFile.ContainsKey(Stem) then
+          FullToFile.Add(Stem, QFiles.FieldByName('id').AsLargeInt);
+        Dot:= LastDelimiter('.', Stem);
+        if Dot > 0 then Tail:= Copy(Stem, Dot + 1, MaxInt) else Tail:= Stem;
+        if Tail <> '' then
+        begin
+          var PrevStem: string;
+          if StemOfTail.TryGetValue(Tail, PrevStem) then
+          begin
+            // Same tail from a DIFFERENT unit -> genuinely ambiguous, refuse it.
+            if PrevStem <> Stem then TailAmbig.AddOrSetValue(Tail, True);
+          end
+          else
+          begin
+            StemOfTail.Add(Tail, Stem);
+            TailToFile.Add(Tail, QFiles.FieldByName('id').AsLargeInt);
+          end;
+        end;
+      end;
       QFiles.Next;
     end;
     QFiles.Close;
 
     QUpdate.Connection:= FConn;
-    QUpdate.SQL.Text:= 'UPDATE unit_uses SET target_file_id = :tid ' + 'WHERE unit_name_norm = :un AND target_file_id IS NULL';
+
+    // Pass 1 -- exact, on the used unit's FULL name. (SQL.Text FIRST: Params is
+    // populated by parsing the statement, so ParamByName before it raises
+    // 'Parameter not found' and takes the whole post-index resolve pass with it.)
+    QUpdate.SQL.Text:= 'UPDATE unit_uses SET target_file_id = :tid ' +
+                       'WHERE LOWER(unit_name) = :un AND target_file_id IS NULL';
     QUpdate.Params.ParamByName('tid').DataType:= ftLargeint;
     QUpdate.Params.ParamByName('un' ).DataType:= ftString;
     QUpdate.Prepare;
-    for var Kvp in StemToFileId do
+    for var Kvp in FullToFile do
     begin
+      QUpdate.ParamByName('tid').AsLargeInt:= Kvp.Value;
+      QUpdate.ParamByName('un' ).AsString  := Kvp.Key;
+      QUpdate.ExecSQL;
+    end;
+
+    // Pass 2 -- legacy tail-to-tail, unambiguous tails only.
+    QUpdate.SQL.Text:= 'UPDATE unit_uses SET target_file_id = :tid ' +
+                       'WHERE unit_name_norm = :un AND target_file_id IS NULL';
+    QUpdate.Params.ParamByName('tid').DataType:= ftLargeint;
+    QUpdate.Params.ParamByName('un' ).DataType:= ftString;
+    QUpdate.Prepare;
+    for var Kvp in TailToFile do
+    begin
+      if TailAmbig.ContainsKey(Kvp.Key) then Continue; // two real units share it
       QUpdate.ParamByName('tid').AsLargeInt:= Kvp.Value;
       QUpdate.ParamByName('un' ).AsString  := Kvp.Key;
       QUpdate.ExecSQL;
@@ -3461,7 +3571,10 @@ begin
   finally
     QUpdate.Free;
     QFiles.Free;
-    StemToFileId.Free;
+    StemOfTail.Free;
+    TailAmbig .Free;
+    TailToFile.Free;
+    FullToFile.Free;
   end; // try
 end; // procedure
 
@@ -3923,12 +4036,17 @@ end; // procedure
 
 function TSQLiteSymbolStore.GetTransitiveAncestors(ASymbolId: Int64): TArray<TTypeAncestor>;
 { BFS over type_ancestors. Resolved edges are expanded (recurse into the
-  ancestor's own edges); unresolved edges are name-only leaves. A per-name Seen
-  set dedups + breaks cycles; a per-symbol expand set + hop cap bound the walk. }
+  ancestor's own edges). An edge the INDEX left unresolved is no longer an
+  automatic dead end: it gets one STRICT, scope-aware, alias-following
+  late-resolution attempt (task 4d, see the block comment below), and only stays
+  a name-only leaf when that attempt cannot name a single certain candidate.
+  A per-name Seen set dedups + breaks cycles; a per-symbol expand set + hop cap
+  bound the walk. }
 var
   Acc      : TList<TTypeAncestor>      ;
   Seen     : TDictionary<string, Boolean>;
   Expanded : TDictionary<Int64, Boolean> ;
+  CurFileId: TDictionary<Int64, Int64>  ; // symbol id -> declaring file (late-resolution scope), memoized per walk
   Queue    : TQueue<Int64>             ;
   Q        : TFDQuery                  ;
   Hops     : Integer                   ;
@@ -3936,6 +4054,7 @@ begin
   Acc     := TList<TTypeAncestor>.Create;
   Seen    := TDictionary<string, Boolean>.Create;
   Expanded:= TDictionary<Int64, Boolean>.Create;
+  CurFileId:= TDictionary<Int64, Int64>.Create;
   Queue   := TQueue<Int64>.Create;
   Q       := TFDQuery.Create(nil);
   try
@@ -3974,12 +4093,54 @@ begin
         Q.Next;
       end;
       Q.Close;
-      for var A in Direct do
+      for var Ix:= 0 to High(Direct) do
       begin
-        var Key:= LowerCase(A.Name);
+        var A  : TTypeAncestor:= Direct[Ix];
+        var Key: string       := LowerCase(A.Name);
         if not Seen.ContainsKey(Key) then
         begin
           Seen.Add(Key, True);
+          { Task 4d: LATE (query-time) resolution of an edge the INDEX left
+            unresolved. Two index-time causes make that common on real code -- an
+            ambiguous cross-unit ancestor name that ResolveAncestry could not
+            disambiguate (because unit_uses.target_file_id was NULL for every
+            dotted unit), and a TYPE ALIAS ancestor, which ResolveAncestry never
+            considers at all. Both used to end the climb here, silently dropping
+            the entire inherited surface above the break.
+
+            Doing it HERE rather than only at index time is deliberate: this path
+            needs no rebuild, so it fixes indexes that already exist. It leans on
+            ResolveTypeNameToClassEx, which scopes by the TEXTUAL unit names in
+            unit_uses.unit_name (never target_file_id, so the index-time defect
+            cannot affect it) and follows alias chains.
+
+            STRICT: resolve only when exactly one candidate survives. When two
+            same-named classes are both in scope, this resolves NOTHING and the
+            edge stays a name-only leaf -- the caller sees the ancestor's NAME and
+            none of its members, which is what it saw before. Absence over wrong. }
+          if (not A.Resolved) and (Trim(A.Name) <> '') then
+          begin
+            var ScopeFile: Int64;
+            if not CurFileId.TryGetValue(Cur, ScopeFile) then
+            begin
+              ScopeFile:= GetSymbolById(Cur).FileId;
+              CurFileId.AddOrSetValue(Cur, ScopeFile);
+            end;
+            var CacheKey: string:= IntToStr(ScopeFile) + '|' + Key;
+            var Late    : TSymbol;
+            if not FLateAncCache.TryGetValue(CacheKey, Late) then
+            begin
+              Late:= ResolveTypeNameToClassEx(A.Name, ScopeFile, True);
+              FLateAncCache.AddOrSetValue(CacheKey, Late); // a REFUSAL (Id=0) is cached too
+            end;
+            if (Late.Id > 0) and (Late.Kind in [skClass, skInterface]) then
+            begin
+              A.Resolved:= True;
+              A.SymbolId:= Late.Id;
+              A.FileId  := Late.FileId;
+              A.Kind    := Late.Kind.ToText;
+            end;
+          end;
           Acc.Add(A);
         end;
         if A.Resolved and (A.SymbolId > 0) and not Expanded.ContainsKey(A.SymbolId) then
@@ -3993,6 +4154,7 @@ begin
   finally
     Q.Free;
     Queue.Free;
+    CurFileId.Free;
     Expanded.Free;
     Seen.Free;
     Acc.Free;
