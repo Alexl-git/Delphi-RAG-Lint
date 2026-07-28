@@ -1,7 +1,8 @@
 unit ConvRules.BlockOps;
 
 { Pure curation operations over block lists: select, delete, split out, copy out,
-  and (from the next task) link-level merge and compose.
+  and link-level merge PLANNING (PlanMerge). Applying a plan and composing files
+  from it (ApplyMerge / Compose) is the next task.
 
   Every operation moves the blocks' RAW TEXT, so a block that was merely moved is
   byte-identical to what it was in its old file -- comments, blank lines and
