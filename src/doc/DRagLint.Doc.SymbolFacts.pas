@@ -2119,6 +2119,13 @@ var
     Combined:= nil;
     if ASymbolId > 0 then
       Combined:= Combined + AStore.FindResolvedCallers(ASymbolId);
+    // v(ADP3 T3i, register E1): takes FindUnresolvedNameCallers' DEFAULT
+    // (call sites only) deliberately, and it is the third consumer of that
+    // notion. It matters more here than for a rendered caller list: a phantom
+    // name-match inside a *Test.pas file would make IsTestRoutine below assert
+    // "Covered by: <that test>" for a symbol the test never calls. ComputeCoveredBy
+    // is gated to routine-like kinds (see its tail), so the type exemption
+    // DRagLint.Doc.Facts needs cannot arise here.
     if AQName <> '' then
       Combined:= Combined + AStore.FindUnresolvedNameCallers(LastSegment(AQName));
     if Length(Combined) = 0 then Exit;

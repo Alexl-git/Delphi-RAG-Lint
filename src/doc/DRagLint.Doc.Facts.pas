@@ -309,6 +309,18 @@ begin
   Result:= SameText(Parent.Name, ATypeName) and (Parent.Kind in [skClass, skInterface, skRecord]);
 end;
 
+// v(ADP3 T3i): the kinds whose "Called from:" fact is NOT a call list at all --
+// for these it holds plain references to the TYPE NAME, awaiting the planned
+// "Used by:" relabel. ONE declaration, read by both the CalledFrom gather's
+// call-sites-only gate and the "Used in units:" gather below, because those two
+// are the same question asked twice: this is the set for which references, not
+// calls, are the meaningful fact. Keeping them in step means a kind added to one
+// can never be forgotten in the other.
+function IsTypeLikeKind(AKind: TSymbolKind): Boolean;
+begin
+  Result:= AKind in [skClass, skInterface, skRecord];
+end;
+
 // Parses the return type from a signature: the text after the LAST ':' that is
 // outside the parameter parentheses. '' when none (a procedure).
 function ParseReturnType(const ASig: string): string;
@@ -645,9 +657,21 @@ begin
     // until this bucket was restricted to call-site refs it also collected the
     // co-located 'member-access' ref every dotted call emits since 9d7e641 --
     // so a caller that resolved CERTAIN to a DIFFERENT same-named method still
-    // appeared here with a ' ?' -- and, for a type, one entry per type_use
-    // mention (a fact "Used in units:" below already carries properly).
-    ResCallers:= AStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName));
+    // appeared here with a ' ?'.
+    //
+    // TYPE-LIKE KINDS ARE DELIBERATELY EXEMPT, and this is a scope boundary, not
+    // an oversight. For a class/interface/record this bucket has never held call
+    // sites at all -- it holds plain type_use REFERENCES to the type name, which
+    // the renderer then labels "Called from:". That label is the defect, not the
+    // content, and relabelling it (the planned "Used by:" for types) is owned by
+    // the render workstream; `tests/autotest/run_doc_no_self_caller.ps1` pins the
+    // present content, including the NULL-enclosing unit-scope reference that a
+    // Bug C regression once dropped. Passing CallSitesOnly for a type would have
+    // emptied a shipped fact as a side effect of fixing the CALL question and
+    // deleted the very input the relabel is meant to display -- so the kind gate
+    // keeps that path byte-identical and leaves the decision with its owner.
+    ResCallers:= AStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
+                                                 not IsTypeLikeKind(ASym.Kind));
     for RC in ResCallers do
     begin
       FR:= ToFactRef(RC);
@@ -666,7 +690,10 @@ begin
     for var ExStore in AExtraStores do
     begin
       if ExStore = nil then Continue;
-      ResCallers:= ExStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName));
+      // Same kind gate as the primary store above -- the two must agree, or a
+      // type's fact would depend on which DB a reference happened to live in.
+      ResCallers:= ExStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
+                                                    not IsTypeLikeKind(ASym.Kind));
       for RC in ResCallers do
       begin
         FR:= ToFactRef(RC);
@@ -842,7 +869,7 @@ begin
   // facts-only gate. A ref with no enclosing symbol (a unit-scope 'var G: T;')
   // is NOT a self-reference and is always kept -- see RefIsOwnMemberSelfRef's
   // header comment for the NULL-enclosing lesson carried from Bug C.
-  if ASym.Kind in [skClass, skInterface, skRecord] then
+  if IsTypeLikeKind(ASym.Kind) then // v(ADP3 T3i): shared with the CalledFrom gate
   begin
     var URefs: TArray<TReference>:= AStore.FindCallersByName(LastSeg(ASym.QualifiedName));
     var UnitSet: TStringList:= TStringList.Create;

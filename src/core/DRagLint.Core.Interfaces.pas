@@ -285,17 +285,28 @@ type
     /// FindCallersByName's first-seen ordering. Location is file-name-only
     /// (idempotency: no volatile ':line'); EnclosingQName is '' when the ref has
     /// no enclosing routine.</summary>
-    /// <remarks>v(ADP3 T3i, register E1): the kind restriction is part of the
-    /// CONTRACT, not an optimisation -- this bucket is the complement of
-    /// FindResolvedCallers within the universe ResolveCallTargets walks, and that
-    /// universe is call-site refs alone. A usage ref (read/write/type_use/
-    /// member-access) can never own a call_edges row, so counting one here would
-    /// report it as an unresolved call forever. Consequently a paren-less dotted
-    /// invocation in EXPRESSION position, which today emits no call ref at all,
-    /// is not reached; see the block comment above REF_KIND_CALL in
-    /// DRagLint.Core.Model. Name-based discovery (FindCallersByName) is
-    /// kind-blind and still finds it.</remarks>
-    function FindUnresolvedNameCallers(const AName: string): TArray<TResolvedCaller>;
+    /// <param name="ACallSitesOnly">True (the default, and what every
+    /// call-graph consumer wants) restricts the scan to CALL-SITE refs. False
+    /// restores the historic kind-blind scan -- see the remarks.</param>
+    /// <remarks>v(ADP3 T3i, register E1): with ACallSitesOnly the kind
+    /// restriction is part of the CONTRACT, not an optimisation -- this bucket
+    /// is the complement of FindResolvedCallers within the universe
+    /// ResolveCallTargets walks, and that universe is call-site refs alone. A
+    /// usage ref (read/write/type_use/member-access) can never own a call_edges
+    /// row, so counting one here would report it as an unresolved call forever.
+    /// Consequently a paren-less dotted invocation in EXPRESSION position,
+    /// which today emits no call ref at all, is not reached; see the block
+    /// comment above REF_KIND_CALL in DRagLint.Core.Model. Name-based discovery
+    /// (FindCallersByName) is kind-blind and still finds it.
+    /// <para>ACallSitesOnly=False exists for ONE caller and is NOT a general
+    /// escape hatch: DRagLint.Doc.Facts builds a TYPE's "Called from:" fact from
+    /// plain type references, which are not calls at all. That fact is
+    /// mislabelled rather than wrong, and relabelling it (the planned
+    /// "Used by:" for types) is owned elsewhere -- so this parameter preserves
+    /// its input byte-for-byte instead of silently emptying a shipped fact as a
+    /// side effect of fixing the call-site question. Do not add callers.</para></remarks>
+    function FindUnresolvedNameCallers(const AName: string;
+      ACallSitesOnly: Boolean = True): TArray<TResolvedCaller>;
     /// <summary>Find-callees: every call edge whose ref is enclosed by
     /// AEnclosingSymbolId (i.e. every resolved call made from inside that
     /// routine's body).</summary>

@@ -112,7 +112,8 @@ type
       procedure UpsertCallEdge(const AToken: TFileTxToken; const AEdge: TCallEdge);
       procedure ClearCallEdges;
       function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
-      function FindUnresolvedNameCallers(const AName: string): TArray<TResolvedCaller>;
+      function FindUnresolvedNameCallers(const AName: string;
+        ACallSitesOnly: Boolean = True): TArray<TResolvedCaller>;
       function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
       function CountCallEdges: Int64;
       function PurgeLocals: Int64;
@@ -1149,7 +1150,10 @@ end; // function
 /// too, so EVERY resolved call was also reported unverified; and a CLASS
 /// collected a "Called from:" entry per type_use mention. See the block comment
 /// above REF_KIND_CALL in DRagLint.Core.Model for the full account, including
-/// the one shape this deliberately no longer reaches.</para></summary>
+/// the one shape this deliberately no longer reaches.
+/// <para>ACallSitesOnly=False reinstates the kind-blind scan for the single
+/// caller whose question is NOT about calls -- a type's reference list. It is
+/// documented on the interface declaration; do not add callers.</para></summary>
 /// (ADP1 Bug C fix): EXCLUDES a class's own method-header self-reference. A
 /// qualified impl header ('function TThing.Add(...)') emits a type_use ref of
 /// name_text='TThing' whose enclosing_symbol_id is the METHOD ITSELF
@@ -1173,12 +1177,19 @@ end; // function
 /// ref enclosed by a routine belonging to a DIFFERENT type (or no type at
 /// all, e.g. a plain top-level routine) is kept: s.parent_id is either a
 /// non-matching id or NULL, either of which satisfies the OR.</summary>
-function TSQLiteSymbolStore.FindUnresolvedNameCallers(const AName: string): TArray<TResolvedCaller>;
+function TSQLiteSymbolStore.FindUnresolvedNameCallers(const AName: string;
+  ACallSitesOnly: Boolean): TArray<TResolvedCaller>;
 var
-  Q   : TFDQuery              ;
-  List: TList<TResolvedCaller>;
-  R   : TResolvedCaller       ;
+  Q    : TFDQuery              ;
+  List : TList<TResolvedCaller>;
+  R    : TResolvedCaller       ;
+  KindP: string                ;
 begin
+  { ACallSitesOnly=False is the historic kind-blind scan, kept for the ONE
+    caller that asks a different question -- a TYPE's reference list, see this
+    routine's DocInsight in DRagLint.Core.Interfaces. Every call-graph consumer
+    takes the default. }
+  if ACallSitesOnly then KindP:= 'AND ' + CallSiteRefKindSql('r') + ' ' else KindP:= '';
   List:= TList<TResolvedCaller>.Create;
   Q:= TFDQuery.Create(nil);
   try
@@ -1188,7 +1199,7 @@ begin
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
-      'WHERE r.name_text = :n AND ' + CallSiteRefKindSql('r') +
+      'WHERE r.name_text = :n ' + KindP +
       '  AND r.id NOT IN (SELECT ref_id FROM call_edges) ' +
       '  AND (s.parent_id IS NULL OR s.parent_id NOT IN (' +
       '        SELECT id FROM symbols WHERE name = :n2 AND kind IN (''class'',''interface'',''record'',''type''))) ' +

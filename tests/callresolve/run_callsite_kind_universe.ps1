@@ -112,11 +112,18 @@ try {
   Check 'Called-from(Count): no Called-from line at all (its only name-match is a PROPERTY read)' `
     ($countLine -eq '')
 
-  # 2: a class is not "called from" the places that merely name its type.
+  # 2: THE SCOPE BOUNDARY, pinned deliberately. For a class/interface/record this
+  # bucket holds plain type_use REFERENCES, not call sites, and the renderer
+  # labels them "Called from:". The label is the defect; relabelling it (the
+  # planned "Used by:" for types) is owned by the render workstream and
+  # tests/autotest/run_doc_no_self_caller.ps1 pins the present content. So the
+  # call-sites-only restriction is NOT applied to type-like kinds, and that
+  # exemption is asserted here rather than left to be rediscovered: a future
+  # reader who removes the kind gate breaks this check and finds out why.
   $probeOut  = & $exePath document --qname 'callsitekind.TProbe' --db $db 2>$null | Out-String
-  Check 'Called-from(TProbe): a CLASS gets NO Called-from line from type_use refs' `
-    (-not ($probeOut -match 'Called from:'))
-  Check 'Called-from(TProbe): the run still produced facts (Used in units: is the right fact for a type)' `
+  Check 'BOUNDARY: a CLASS still lists type references under Called from: (exempt -- owned by the Used by: relabel)' `
+    ($probeOut -match 'Called from:')
+  Check 'BOUNDARY: the class also still gets its proper Used in units: fact' `
     ($probeOut -match 'Used in units:')
 
   # 5: the disclosed gap, at this consumer -- and the bound on it.
