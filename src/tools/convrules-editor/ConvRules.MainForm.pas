@@ -142,24 +142,9 @@ var
 implementation
 
 uses
-  System.StrUtils, System.Math, ConvRules.Units;
+  System.StrUtils, System.Math, ConvRules.Units, ConvRules.WorkingSet;
 
 { ---- helpers ---- }
-
-function BackupPath(const APath: string): string;
-var
-  n: Integer;
-begin
-  // <file>.rules.bak, then .bak.2, .bak.3 ... so a short history is kept.
-  Result := APath + '.bak';
-  n := 2;
-  while TFile.Exists(Result) do
-  begin
-    Result := APath + '.bak.' + IntToStr(n);
-    Inc(n);
-    if n > 99 then Break; // cap
-  end;
-end;
 
 type
   { Scoped hourglass. Sets Screen.Cursor on create; restores the previous cursor

@@ -9,12 +9,15 @@ program ConvRulesModelTests;
 uses
   System.SysUtils,
   System.IOUtils,
+  System.Classes,
+  Winapi.Windows,
   ConvRules.Model in '..\ConvRules.Model.pas',
   ConvRules.Units in '..\ConvRules.Units.pas',
   ConvRules.Casts in '..\ConvRules.Casts.pas',
   ConvRules.CastLib in '..\ConvRules.CastLib.pas',
   ConvRules.BlockFile in '..\ConvRules.BlockFile.pas',
   ConvRules.BlockOps in '..\ConvRules.BlockOps.pas',
+  ConvRules.WorkingSet in '..\ConvRules.WorkingSet.pas',
   ConvRules.Engine in '..\ConvRules.Engine.pas',
   ConvRules.Platform in '..\ConvRules.Platform.pas';
 
@@ -1329,6 +1332,68 @@ begin
   Check('compose.single.noreport', Length(Empty.Lines) = 0, 'a single file reports nothing');
 end;
 
+{ Criterion 11: a write makes a rotating backup first and never overwrites one. }
+procedure TestBackupRotation;
+var
+  Dir, P, B1, B2: string;
+begin
+  Dir := TPath.Combine(TPath.GetTempPath, 'convrules-curation-' + IntToStr(GetCurrentProcessId));
+  TDirectory.CreateDirectory(Dir);
+  try
+    P := TPath.Combine(Dir, 'book.rules');
+    TFile.WriteAllText(P, 'v1'#13#10, TEncoding.ASCII);
+
+    WriteTextWithBackup(P, 'v2'#13#10, B1);
+    Check('backup.first.name', B1 = P + '.bak', B1);
+    Check('backup.first.content', TFile.ReadAllText(B1) = 'v1'#13#10, 'backup must hold v1');
+    Check('backup.first.written', TFile.ReadAllText(P) = 'v2'#13#10, 'file must hold v2');
+
+    WriteTextWithBackup(P, 'v3'#13#10, B2);
+    Check('backup.second.name', B2 = P + '.bak.2', B2);
+    Check('backup.second.content', TFile.ReadAllText(B2) = 'v2'#13#10, 'second backup holds v2');
+    Check('backup.first.preserved', TFile.ReadAllText(B1) = 'v1'#13#10,
+      'the first backup must NOT be overwritten');
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
+{ Criterion 14: IF the backup cannot be written THEN the operation aborts and every
+  file is left unmodified. An exclusive read lock on the source makes TFile.Copy
+  fail deterministically. }
+procedure TestBackupFailureAborts;
+var
+  Dir, P: string;
+  Lock  : TFileStream;
+  Bak   : string;
+  Raised: Boolean;
+begin
+  Dir := TPath.Combine(TPath.GetTempPath, 'convrules-curation-fail-' + IntToStr(GetCurrentProcessId));
+  TDirectory.CreateDirectory(Dir);
+  try
+    P := TPath.Combine(Dir, 'book.rules');
+    TFile.WriteAllText(P, 'original'#13#10, TEncoding.ASCII);
+    Raised := False;
+    Lock := TFileStream.Create(P, fmOpenRead or fmShareExclusive);
+    try
+      try
+        WriteTextWithBackup(P, 'replacement'#13#10, Bak);
+      except
+        on E: Exception do Raised := True;
+      end;
+    finally
+      Lock.Free;
+    end;
+    Check('backup.fail.raises', Raised, 'a failed backup must raise, not write');
+    Check('backup.fail.file.unmodified', TFile.ReadAllText(P) = 'original'#13#10,
+      'the target file must be untouched');
+    Check('backup.fail.no.backup', not TFile.Exists(P + '.bak'),
+      'no backup file may be left behind');
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
 { Criterion 5 (the maMergeOther half, previously untested): within a matched block,
   a non-#link incoming line new to the target is merged verbatim (maMergeOther); one
   already present -- an EXACT match after trimming -- is not re-added; the header
@@ -1403,6 +1468,8 @@ begin
     TestMergeAllowsFanOut;
     TestMergeAppendsUnmatchedBlock;
     TestComposePrecedence;
+    TestBackupRotation;
+    TestBackupFailureAborts;
     TestMergeOtherLines;
     TestPlatform;
     TestUnitDirectives;

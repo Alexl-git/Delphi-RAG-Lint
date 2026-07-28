@@ -14,6 +14,9 @@ uses
   ConvRules.CastLib in 'ConvRules.CastLib.pas',
   ConvRules.Engine in 'ConvRules.Engine.pas',
   ConvRules.Platform in 'ConvRules.Platform.pas',
+  ConvRules.BlockFile in 'ConvRules.BlockFile.pas',
+  ConvRules.BlockOps in 'ConvRules.BlockOps.pas',
+  ConvRules.WorkingSet in 'ConvRules.WorkingSet.pas',
   ConvRules.MainForm in 'ConvRules.MainForm.pas';
 
 { Resolve the drag-lint exe: next to this editor (both deploy to dll-win64), else
