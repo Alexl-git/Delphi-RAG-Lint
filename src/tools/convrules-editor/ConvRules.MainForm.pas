@@ -75,6 +75,7 @@ type
     procedure DoLoad(Sender: TObject);
     procedure DoSave(Sender: TObject);
     procedure DoValidate(Sender: TObject);
+    procedure DoCurate(Sender: TObject);
     procedure DoNewConversion(Sender: TObject);
     procedure DoAutoMatch(Sender: TObject);
     procedure RefreshRulesList;
@@ -142,7 +143,8 @@ var
 implementation
 
 uses
-  System.StrUtils, System.Math, ConvRules.Units, ConvRules.WorkingSet;
+  System.StrUtils, System.Math, ConvRules.Units, ConvRules.WorkingSet,
+  ConvRules.CurationForm;
 
 { ---- helpers ---- }
 
@@ -246,8 +248,16 @@ begin
   BtnValidate.Parent := FPanelTop; BtnValidate.SetBounds(200, 6, 90, 25);
   BtnValidate.Caption := 'Validate'; BtnValidate.OnClick := DoValidate;
 
+  var BtnCurate: TButton := TButton.Create(Self);
+  BtnCurate.Parent := FPanelTop; BtnCurate.SetBounds(296, 6, 90, 25);
+  BtnCurate.Caption := 'Curate...';
+  BtnCurate.Hint := 'Split / copy / delete / merge blocks across several rule-books, '
+    + 'or compose them into one file for the engine';
+  BtnCurate.ShowHint := True;
+  BtnCurate.OnClick := DoCurate;
+
   FLblStatus := TLabel.Create(Self);
-  FLblStatus.Parent := FPanelTop; FLblStatus.SetBounds(300, 11, 780, 15);
+  FLblStatus.Parent := FPanelTop; FLblStatus.SetBounds(392, 11, 688, 15);
 
   // --- row 1: From Unit [v]  [Fill From-classes] -- pick a unit first, then its
   //     component classes drop into the rules library as From-only conversions ---
@@ -1414,6 +1424,30 @@ begin
   res := FEngine.ValidateText(FBook.SaveToString, fromT, toT);
   if res.OK then SetStatus('Validate: OK')
   else SetStatus('Validate: ' + res.FirstError);
+end;
+
+{ Open the curation window on the file currently loaded here. Curation moves
+  VERBATIM block text and deliberately does NOT go through this form's canonical
+  re-emitter, so a block that was merely moved stays byte-identical. It works on
+  the file ON DISK, so unsaved edits here are invisible to it: Yes = save first,
+  No = curate the on-disk version anyway, Cancel = out. }
+procedure TConvRulesForm.DoCurate(Sender: TObject);
+var
+  Reload: string;
+begin
+  if (FFilePath <> '') and (FBook.Nodes.Count > 0) then
+    case MessageDlg('Curation works on the file on disk. Save your edits first?',
+           mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
+      mrCancel: Exit;
+      mrYes   : DoSave(nil);
+    end;
+
+  Reload := TCurationForm.Execute(Self, FFilePath);
+  if Reload <> '' then
+  begin
+    LoadFile(Reload);
+    SetStatus('Reloaded ' + ExtractFileName(Reload) + ' after curation.');
+  end;
 end;
 
 procedure TConvRulesForm.DoSave(Sender: TObject);
