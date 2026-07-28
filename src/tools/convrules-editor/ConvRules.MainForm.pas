@@ -55,6 +55,9 @@ type
     FRules    : TListView;
     // grid
     FGrid     : TStringGrid;          // col0 From, col1 To-assigned, col2 cast
+    FGridFindFrom: TEdit;             // grid filter: From column substring
+    FGridFindTo  : TEdit;             // grid filter: To column substring
+    FLblGridMatch: TLabel;            // "N of M" count shown while a grid filter is active
     FPool     : TListBox;             // unassigned T pool
     FPoolFind : TEdit;
     FBtnAssign: TButton;
@@ -91,6 +94,10 @@ type
     procedure RefreshRulesList;
     procedure RulesSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
     procedure LoadGridForBlock(AHdrIdx: Integer);
+    procedure RefreshGrid;
+    procedure GridFilterChange(Sender: TObject);
+    procedure DoClearGridFindFrom(Sender: TObject);
+    procedure DoClearGridFindTo(Sender: TObject);
     procedure RefreshPool;
     procedure DoAssign(Sender: TObject);
     procedure DoUnassign(Sender: TObject);
@@ -187,6 +194,11 @@ function HourGlass: IInterface;
 begin
   Result := TCursorGuard.Create(crHourGlass);
 end;
+
+{ Forward-declared so RefreshGrid (below, well before the grid-cell helpers it
+  shares this section with) can call it; implemented alongside PathOfGridCell /
+  TypeOfCell / LeafNameOf. }
+function GridRowMatchesFilter(const AFromCell, AToCell, AFromFilter, AToFilter: string): Boolean; forward;
 
 { TConvRulesForm }
 
@@ -474,6 +486,47 @@ begin
 
   GridPanel := TPanel.Create(Self);
   GridPanel.Parent := Self; GridPanel.Align := alClient; GridPanel.BevelOuter := bvNone;
+
+  // --- grid filter bar: narrow the mapping grid to rows matching a From and/or a
+  //     To substring (AND when both are set). Sits above the grid, which stays
+  //     alClient beneath it. See RefreshGrid / GridRowMatchesFilter. ---
+  var GridFilterPanel: TPanel := TPanel.Create(Self);
+  GridFilterPanel.Parent := GridPanel; GridFilterPanel.Align := alTop;
+  GridFilterPanel.Height := 34; GridFilterPanel.BevelOuter := bvNone;
+
+  var LblGridFrom: TLabel := TLabel.Create(Self);
+  LblGridFrom.Parent := GridFilterPanel; LblGridFrom.SetBounds(6, 9, 66, 15);
+  LblGridFrom.Caption := 'Find in From:';
+
+  FGridFindFrom := TEdit.Create(Self);
+  FGridFindFrom.Parent := GridFilterPanel; FGridFindFrom.SetBounds(76, 6, 180, 23);
+  FGridFindFrom.TextHint := 'filter From column...';
+  FGridFindFrom.Hint := 'Show only grid rows whose From property contains this text (case-insensitive)';
+  FGridFindFrom.ShowHint := True;
+  FGridFindFrom.OnChange := GridFilterChange;
+
+  var BtnClearGridFrom: TButton := TButton.Create(Self);
+  BtnClearGridFrom.Parent := GridFilterPanel; BtnClearGridFrom.SetBounds(260, 5, 50, 25);
+  BtnClearGridFrom.Caption := 'Clear'; BtnClearGridFrom.OnClick := DoClearGridFindFrom;
+
+  var LblGridTo: TLabel := TLabel.Create(Self);
+  LblGridTo.Parent := GridFilterPanel; LblGridTo.SetBounds(324, 9, 54, 15);
+  LblGridTo.Caption := 'Find in To:';
+
+  FGridFindTo := TEdit.Create(Self);
+  FGridFindTo.Parent := GridFilterPanel; FGridFindTo.SetBounds(382, 6, 180, 23);
+  FGridFindTo.TextHint := 'filter To column...';
+  FGridFindTo.Hint := 'Show only grid rows whose assigned To property contains this text (case-insensitive)';
+  FGridFindTo.ShowHint := True;
+  FGridFindTo.OnChange := GridFilterChange;
+
+  var BtnClearGridTo: TButton := TButton.Create(Self);
+  BtnClearGridTo.Parent := GridFilterPanel; BtnClearGridTo.SetBounds(566, 5, 50, 25);
+  BtnClearGridTo.Caption := 'Clear'; BtnClearGridTo.OnClick := DoClearGridFindTo;
+
+  FLblGridMatch := TLabel.Create(Self);
+  FLblGridMatch.Parent := GridFilterPanel; FLblGridMatch.SetBounds(626, 9, 160, 15);
+  FLblGridMatch.Caption := '';
 
   FGrid := TStringGrid.Create(Self);
   FGrid.Parent := GridPanel; FGrid.Align := alClient;
@@ -909,9 +962,6 @@ procedure TConvRulesForm.LoadGridForBlock(AHdrIdx: Integer);
 var
   Node: TRuleNode;
   Err : string;
-  i   : Integer;
-  Leaf: TPropLeaf;
-  Link: TRuleNode;
 begin
   var LGuard: IInterface := HourGlass;
   FActiveHdr := AHdrIdx;
@@ -942,35 +992,106 @@ begin
     FToTree := Default(TProptree);
   end;
 
-  // column 1 = F leaves; column 2 = the To assigned to that F (from #link);
-  // column 3 (cast) shows any cast on that link. RowCount must stay > FixedRows
-  // (1), so a 0-leaf tree still needs at least 2 rows (header + one blank).
-  FGrid.RowCount := Max(2, Length(FFromTree.Leaves) + 1);
-  // clear any stale trailing cells from a previous, larger selection
-  for i := 1 to FGrid.RowCount - 1 do
-  begin
-    FGrid.Cells[0, i] := ''; FGrid.Cells[1, i] := ''; FGrid.Cells[2, i] := '';
-  end;
-  for i := 0 to High(FFromTree.Leaves) do
-  begin
-    Leaf := FFromTree.Leaves[i];
-    FGrid.Cells[0, i + 1] := Format('%s : %s', [Leaf.Path, Leaf.TypeName]);
-    Link := FindLinkForFrom(Leaf.Path);
-    if Link <> nil then
-    begin
-      FGrid.Cells[1, i + 1] := Link.LinkTo;
-      FGrid.Cells[2, i + 1] := Link.Cast;
-    end
-    else
-    begin
-      FGrid.Cells[1, i + 1] := '';
-      FGrid.Cells[2, i + 1] := '';
-    end;
-  end;
+  // Loading a different rule: a filter left over from the last selection would
+  // silently narrow (or empty) the new grid and look like missing data, so clear
+  // both grid filters the same way FPoolTypeFilter is auto-cleared above.
+  FGridFindFrom.Text := '';
+  FGridFindTo.Text := '';
+  RefreshGrid;
 
   RefreshPool;
   SetStatus(Format('%s -> %s : %d From leaves, %d To leaves.',
     [Node.FromType, Node.ToType, Length(FFromTree.Leaves), Length(FToTree.Leaves)]));
+end;
+
+{ Refill the grid from FFromTree.Leaves, keeping only rows that pass the active
+  From/To filter boxes (GridRowMatchesFilter; AND, case-insensitive substring,
+  '' = no constraint on that side). Column 1 = the To assigned to that From leaf
+  (from #link), column 2 = its cast, exactly as LoadGridForBlock used to fill
+  them directly. Hiding rows only changes what is DISPLAYED -- DoAssign /
+  DoUnassign / DoFindInFrom all read the SELECTED ROW'S CELL TEXT rather than
+  indexing into FFromTree.Leaves by row number, so a filtered grid does not break
+  them. Called once from LoadGridForBlock after the trees are (re)loaded, and
+  again on every keystroke in either filter box via GridFilterChange. }
+procedure TConvRulesForm.RefreshGrid;
+var
+  i, r, matched: Integer;
+  Leaf: TPropLeaf;
+  Link: TRuleNode;
+  fromCell, toCell: string;
+  fromFilter, toFilter: string;
+begin
+  fromFilter := Trim(FGridFindFrom.Text);
+  toFilter   := Trim(FGridFindTo.Text);
+
+  matched := 0;
+  for i := 0 to High(FFromTree.Leaves) do
+  begin
+    Leaf := FFromTree.Leaves[i];
+    fromCell := Format('%s : %s', [Leaf.Path, Leaf.TypeName]);
+    Link := FindLinkForFrom(Leaf.Path);
+    if Link <> nil then toCell := Link.LinkTo else toCell := '';
+    if GridRowMatchesFilter(fromCell, toCell, fromFilter, toFilter) then
+      Inc(matched);
+  end;
+
+  // RowCount must stay > FixedRows (1); a filter matching nothing still needs at
+  // least one blank data row.
+  FGrid.RowCount := Max(2, matched + 1);
+  for r := 1 to FGrid.RowCount - 1 do
+  begin
+    FGrid.Cells[0, r] := ''; FGrid.Cells[1, r] := ''; FGrid.Cells[2, r] := '';
+  end;
+
+  r := 1;
+  for i := 0 to High(FFromTree.Leaves) do
+  begin
+    Leaf := FFromTree.Leaves[i];
+    fromCell := Format('%s : %s', [Leaf.Path, Leaf.TypeName]);
+    Link := FindLinkForFrom(Leaf.Path);
+    if Link <> nil then toCell := Link.LinkTo else toCell := '';
+    if not GridRowMatchesFilter(fromCell, toCell, fromFilter, toFilter) then Continue;
+    FGrid.Cells[0, r] := fromCell;
+    if Link <> nil then
+    begin
+      FGrid.Cells[1, r] := Link.LinkTo;
+      FGrid.Cells[2, r] := Link.Cast;
+    end
+    else
+    begin
+      FGrid.Cells[1, r] := '';
+      FGrid.Cells[2, r] := '';
+    end;
+    Inc(r);
+  end;
+
+  if FLblGridMatch <> nil then
+    if (fromFilter <> '') or (toFilter <> '') then
+      FLblGridMatch.Caption := Format('Showing %d of %d', [matched, Length(FFromTree.Leaves)])
+    else
+      FLblGridMatch.Caption := Format('%d row(s)', [Length(FFromTree.Leaves)]);
+end;
+
+{ Shared OnChange for both grid filter boxes -- narrows the grid to the current
+  From/To substrings on every keystroke. Guarded like PoolFilter: no active block
+  means no trees to filter yet. }
+procedure TConvRulesForm.GridFilterChange(Sender: TObject);
+begin
+  if FActiveHdr >= 0 then RefreshGrid;
+end;
+
+{ Clear button for the From grid filter: empties only its own box and refreshes. }
+procedure TConvRulesForm.DoClearGridFindFrom(Sender: TObject);
+begin
+  FGridFindFrom.Text := '';
+  if FActiveHdr >= 0 then RefreshGrid;
+end;
+
+{ Clear button for the To grid filter: empties only its own box and refreshes. }
+procedure TConvRulesForm.DoClearGridFindTo(Sender: TObject);
+begin
+  FGridFindTo.Text := '';
+  if FActiveHdr >= 0 then RefreshGrid;
 end;
 
 procedure TConvRulesForm.RefreshPool;
@@ -1043,6 +1164,17 @@ begin
   Result := APath;
   d := LastDelimiter('.', Result);
   if d > 0 then Result := Copy(Result, d + 1, MaxInt);
+end;
+
+{ Whether one grid row passes the grid's two filter boxes. AND semantics: with
+  both filters set, BOTH must match; an empty filter imposes no constraint on
+  its side. Case-insensitive substring, consistent with the pool search
+  (PoolFilter). The one place this comparison is defined -- RefreshGrid just
+  calls it per row. }
+function GridRowMatchesFilter(const AFromCell, AToCell, AFromFilter, AToFilter: string): Boolean;
+begin
+  Result := ((AFromFilter = '') or (Pos(LowerCase(AFromFilter), LowerCase(AFromCell)) > 0))
+        and ((AToFilter = '') or (Pos(LowerCase(AToFilter), LowerCase(AToCell)) > 0));
 end;
 
 { Align the highlighted To leaf to the From side: select the From-grid row whose
