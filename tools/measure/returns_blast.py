@@ -308,11 +308,24 @@ def is_qualified_tail(chain, qname):
     the last component alone matches and the routines are different. A tail
     rather than a fixed component count, because the unit prefix is itself
     dotted and of unknown length. Port of Delphi IsQualifiedTail.
+
+    The `len(q) - len(c) < 2` guard is that Delphi's `if L < 2 then Exit`, and
+    it is the ONLY input on which a bare endswith('.' + c) diverges from the
+    engine: q == '.' + c exactly -- ('same', '.same') -- which Python accepted
+    and Delphi rejects for want of a component before the dot. Unreachable on
+    every corpus this script is run over (SELECT COUNT(*) FROM symbols WHERE
+    qualified_name LIKE '.%' is 0 on YADF, the self-index and ORM3), but this
+    file's contract is a FAITHFUL port, and an unreachable divergence is still
+    a divergence.
     """
     if not chain or not qname:
         return False
     c, q = chain.lower(), qname.lower()
-    return c == q or q.endswith('.' + c)
+    if c == q:
+        return True
+    if len(q) - len(c) < 2:
+        return False
+    return q.endswith('.' + c)
 
 
 def mask_nested(lines, accept, lead_test=is_lead_keyword, mask_ch='\x01'):
@@ -562,8 +575,21 @@ def raw_header_names(src_line, qname):
     The measurement's second INDEPENDENT criterion, and the one that always
     speaks. It shares no code with header_chain_at, is_lead_keyword or
     is_qualified_tail: a regex over the source text, then a component-by-
-    component comparison against the qualified name. A blind spot in the
-    mechanism therefore cannot hide inside the test of the mechanism.
+    component comparison against the qualified name.
+
+    THE LIMIT OF THAT, STATED RATHER THAN IMPLIED. Sharing no code is not
+    sharing no assumptions. This function RE-IMPLEMENTS the same definition of
+    a dotted tail, so what it independently validates is the chain
+    EXTRACTION -- did the walk read the header the anchor landed on correctly
+    -- and NOT the tail RULE itself. And it inherits one blind spot by
+    construction: RAW_HDR's capture, exactly like the token walk, ends at the
+    first character that is not part of a dotted identifier, so a header whose
+    dotted name is cut short by something else (`TList<T>.Add`, `TFoo . Bar`)
+    yields the SAME truncated chain in both. A generic header the anchor
+    DECLINES can therefore never be reported as a loss by EITHER criterion.
+    Unexercised on the corpora measured -- 0 of the 103 eligible spans over
+    YADF, a fresh drag-lint src\\ and ORM3 sits on a generic header -- but that
+    is a property of those corpora, not a guarantee this test provides.
 
     The LOCATION still comes from the anchor -- it has to, since the question
     is "the header IT landed on" -- but the verdict does not.

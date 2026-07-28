@@ -67,10 +67,11 @@
 
   (7) ... BUT ONLY IF IT IS THIS ROUTINE'S HEADER.  Rule (6)'s lead-token
       anchor originally accepted whatever routine the span happened to start
-      at. Measured on the same YADF index, that clause is eligible on 96 spans
-      and 81 of them (84%) head some OTHER routine -- so it did not recover a
-      lost <returns>, it published a foreign routine's return values under
-      this routine's name, which is the exact defect this task exists to
+      at. Measured on the same YADF index, that clause is eligible on 100 spans
+      -- one per SYMBOL ROW, not per qualified name -- and 85 of them (85%)
+      head some OTHER routine, so it did not recover a lost <returns>: it
+      published a foreign routine's return values under this routine's name,
+      which is the exact defect this task exists to
       remove. The lead token is now accepted only when the header it heads is
       the documented routine's own; otherwise the body is masked and the answer
       is absence. Callers with no name to give get the body-line-0 rule alone.
@@ -84,8 +85,10 @@
       `class function TAlpha.Same` then answers with TAlpha's value while the
       check reports a match. Census over the three live indexes -- (file,
       simple-name) groups holding more than one distinct impl_start_line --
-      YADF 73 groups / 158 symbol rows, drag-lint's own index 83 / 198, ORM3
-      98 / 414. The whole dotted chain the header declares must therefore be a
+      YADF 73 groups / 158 symbol rows, drag-lint's own index 84 / 200 (one of
+      those groups being THIS FILE's own fixture pair, so a self-index built
+      before it reads 83 / 198), ORM3 98 / 414. The whole dotted chain the
+      header declares must therefore be a
       COMPONENT-WISE TAIL of the symbol's qualified name
       (talpha.same vs returns.TBeta.Same -> declined).
 
@@ -119,8 +122,10 @@
 
   Every ABSENCE is paired with the enumerated set of routines that must still
   render. A rule that simply stopped emitting <returns> would satisfy every
-  absence check in this file; the eight-strong control list and the exact
-  expected texts are what tell those two apart.
+  absence check in this file; the NINETEEN-strong control list and the exact
+  expected texts are what tell those two apart. Nineteen is what the file
+  asserts -- 'CONTROL: exactly NINETEEN ///-prefixed "Observed:" lines' -- and
+  it is the length of the CONTROL name list that follows it.
 
   LOAD-BEARING PROOFS (transcripts in the task 4b report and its fix-round-1
   report). Each mutation leaves the mechanism reachable and changes only its
@@ -442,8 +447,9 @@ foreach ($p in @(
 # --- NON-VACUITY CONTROL, asserted BEFORE any absence check. ----------------
 # 'no Observed: here' is trivially true over a file with no <returns> at all,
 # and a rule that stopped emitting <returns> entirely would satisfy every
-# absence check below. Pin the exact population instead: EIGHT ///-prefixed
-# Observed: lines, one for each routine that must still render.
+# absence check below. Pin the exact population instead: NINETEEN ///-prefixed
+# Observed: lines, one for each routine that must still render -- the same
+# nineteen the foreach below names, one by one.
 #
 # The '^\s*///' half of the filter is load-bearing, not decoration: this
 # fixture's own header comment DISCUSSES the word Observed: in '//' prose, and
@@ -727,10 +733,10 @@ foreach ($p in @(
 #
 # This is the shape rule (6)'s lead-token anchor could not tell apart from its
 # own header, and it is the MAJORITY shape: on C:\Projects\YADF\YADF.sqlite,
-# 81 of the 96 spans eligible for that anchor head some other routine
-# (tools\measure\returns_blast.py anchor). A "recovery" there is not a
-# recovery -- it publishes one routine's return values under another's name,
-# which is precisely the defect this task exists to remove.
+# 85 of the 100 spans eligible for that anchor -- one per SYMBOL ROW -- head
+# some other routine (tools\measure\returns_blast.py anchor). A "recovery"
+# there is not a recovery -- it publishes one routine's return values under
+# another's name, which is precisely the defect this task exists to remove.
 #
 # ForeignB's impl_start_line is moved onto the blank line above ForeignA's
 # header, so its span begins one line above ANOTHER routine's header and
@@ -836,7 +842,9 @@ Check 'FOREIGN: exactly ONE ///-prefixed "Observed:" line in the file names "A *
 # implementation section, which is where a stale span lands. Census over the
 # three live indexes -- (file, simple-name) groups holding more than one
 # distinct impl_start_line -- YADF 73 groups / 158 symbol rows, drag-lint's
-# own index 83 / 198, ORM3 98 / 414.
+# own index 84 / 200, ORM3 98 / 414. One of the self-index groups is the pair
+# THIS SCENARIO adds (docp3\returns.pas, 'same'), so a self-index built before
+# this fixture reads 83 / 198.
 #
 # Engine-verified RED at 75a4be6: "returns":["A * 11"], TAlpha's value.
 #

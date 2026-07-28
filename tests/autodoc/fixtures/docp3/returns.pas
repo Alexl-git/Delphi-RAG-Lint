@@ -30,7 +30,8 @@ interface
 //     against a copy of the index whose impl_start_line was moved onto the
 //     blank line above ForeignA's header. Measured on the shipping
 //     C:\Projects\YADF\YADF.sqlite, that is what the majority of stale spans
-//     look like: 81 of the 96 spans eligible for the first-token rule head
+//     look like: 85 of the 100 spans eligible for the first-token rule -- one
+//     per SYMBOL ROW, tools\measure\returns_blast.py anchor <db> -- head
 //     some OTHER routine, several of them tens of lines away. The required
 //     answer is ABSENCE. Emitting ForeignA's return value under ForeignB's
 //     name is the exact defect this whole task exists to remove, and a
@@ -45,7 +46,9 @@ interface
 //     implementation section, which is precisely where a stale span lands.
 //     Census over the three live indexes -- (file, simple-name) groups holding
 //     more than one distinct impl_start_line -- YADF 73 groups / 158 symbol
-//     rows, drag-lint's own index 83 / 198, ORM3 98 / 414. The anchor is
+//     rows, drag-lint's own index 84 / 200, ORM3 98 / 414. One of the
+//     self-index groups is THIS FILE's own TAlpha.Same / TBeta.Same pair, so a
+//     self-index built before this fixture reads 83 / 198. The anchor is
 //     therefore checked against the symbol's QUALIFIED-NAME TAIL, not its
 //     simple name.
 //

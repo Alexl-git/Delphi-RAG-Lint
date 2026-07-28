@@ -307,17 +307,26 @@ end;
 // The chain, not its last component. The last component alone cannot tell
 // `TAlpha.Same` from `TBeta.Same`, and same-named methods on sibling classes --
 // or two overloads -- sit ADJACENT in the implementation section, which is
-// exactly where a stale span lands. Census, (file, simple-name) groups holding
-// more than one distinct impl_start_line: YADF 73 groups over 158 symbol rows,
-// drag-lint's own index 83 / 198, ORM3 98 / 414.
+// exactly where a stale span lands. Census -- (file, simple-name) groups holding
+// more than one distinct impl_start_line, counted as GROUPS / SYMBOL ROWS
+// (FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.impl_start_line > 0
+// GROUP BY LOWER(f.path), LOWER(s.name) HAVING COUNT(DISTINCT
+// s.impl_start_line) > 1): YADF 73 / 158, drag-lint's own index 84 / 200,
+// ORM3 98 / 414. The self-index figure COUNTS THIS RULE'S OWN FIXTURE PAIR --
+// (tests\autodoc\fixtures\docp3\returns.pas, 'same') -- so an index built
+// before that fixture existed reads 83 / 198 instead.
 //
 // Components must be joined by a literal '.' on the SAME line, so the walk stops
 // at the first token that is not part of the qualified name. A GENERIC header
 // (`function TList<T>.Add`) therefore yields the TYPE name alone -- '<' is not
 // '.' -- and IsQualifiedTail then declines the anchor. That is the safe
-// direction (absence over wrong), and it costs nothing measurable: over YADF,
-// drag-lint's own src\ and ORM3 the anchor is eligible on 111 spans and none of
-// them has a generic header (tools/measure/returns_blast.py anchor).
+// direction (absence over wrong), and it costs nothing measurable: NOT ONE of
+// the spans the anchor is eligible for carries a generic header, on any of the
+// three corpora. That population is 103 spans, ONE PER SYMBOL ROW -- YADF 100,
+// a freshly reindexed drag-lint src\ 0, ORM3 3 (tools/measure/returns_blast.py
+// anchor <db> [<prefix>], which prints the count per corpus). The generic
+// reading is taken off the RAW SOURCE line the anchor landed on, not off this
+// function's chain, which cannot see a '<' at all.
 function HeaderChainAt(AToks: TList<TMaskTok>; AKw: Integer;
   const ALines: TArray<string>): string;
 var
@@ -416,7 +425,8 @@ end;
 //     sibling's return value. That adjacency is the normal one for overloads
 //     and for same-named methods on sibling classes: YADF holds 73 (file,
 //     simple-name) groups with more than one distinct impl_start_line over 158
-//     symbol rows, drag-lint's own index 83 / 198, ORM3 98 / 414.
+//     symbol rows, drag-lint's own index 84 / 200 -- one of those groups being
+//     this rule's own fixture pair -- and ORM3 98 / 414.
 //
 //     What is deliberately NOT done is accepting the first routine keyword
 //     ANYWHERE: over the same corpora that re-reads spans starting deep inside
