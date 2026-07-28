@@ -1173,6 +1173,102 @@ begin
   Check('blockops.enable.many', CanOperateOn([1, 4]), 'several selected must enable');
 end;
 
+{ Criterion 5: an incoming #link whose target is already linked FROM THE SAME
+  source is a duplicate and is skipped. }
+procedure TestMergeSkipsDuplicate;
+var
+  Plan: TMergePlan;
+  T, I: TRuleBlocks;
+begin
+  T := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+  I := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+  Plan := PlanMerge(T, I);
+  Check('merge.dup.count', Length(Plan.Items) = 1, IntToStr(Length(Plan.Items)));
+  Check('merge.dup.action', Plan.Items[0].Action = maSkipDuplicate, 'must be a skip');
+  Check('merge.dup.noconflict', Plan.ConflictCount = 0, 'a duplicate is not a conflict');
+end;
+
+{ Criterion 6: an incoming #link whose target is already linked from a DIFFERENT
+  source is a conflict; planning reports it and writes nothing -- neither link is
+  merged until a resolution is supplied. }
+procedure TestMergeReportsConflict;
+var
+  Plan: TMergePlan;
+  T, I: TRuleBlocks;
+  k   : Integer;
+  Merged: Boolean;
+begin
+  T := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+  I := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Z'#13#10);
+  Plan := PlanMerge(T, I);
+  Check('merge.conflict.count', Plan.ConflictCount = 1, IntToStr(Plan.ConflictCount));
+  Check('merge.conflict.to', Plan.Items[0].ToPath = 'P', Plan.Items[0].ToPath);
+  Check('merge.conflict.existingfrom', Plan.Items[0].ExistingFrom = 'Q',
+    Plan.Items[0].ExistingFrom);
+  Check('merge.conflict.incomingfrom', Plan.Items[0].IncomingFrom = 'Z',
+    Plan.Items[0].IncomingFrom);
+  Merged := False;
+  for k := 0 to High(Plan.Items) do
+    if Plan.Items[k].Action in [maMergeLink, maMergeOther] then Merged := True;
+  Check('merge.conflict.nothing.written', not Merged,
+    'planning a conflict must not queue either link for writing');
+  Check('merge.conflict.target.untouched',
+    JoinBlocks(Plan.Target) = '#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10,
+    'planning must not mutate the target');
+
+  // same target, same source, DIFFERENT cast -> also a conflict (design decision 2)
+  T := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+  I := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Q : Round'#13#10);
+  Plan := PlanMerge(T, I);
+  Check('merge.conflict.cast', Plan.ConflictCount = 1,
+    'a differing cast changes the generated assignment, so it is a conflict');
+end;
+
+{ Criterion 7: an already-used SOURCE feeding a NEW target is legal fan-out and is
+  merged, not flagged. }
+procedure TestMergeAllowsFanOut;
+var
+  Plan: TMergePlan;
+  T, I: TRuleBlocks;
+begin
+  T := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+  I := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link R <- Q'#13#10);
+  Plan := PlanMerge(T, I);
+  Check('merge.fanout.noconflict', Plan.ConflictCount = 0, 'fan-out is never a conflict');
+  Check('merge.fanout.count', Length(Plan.Items) = 1, IntToStr(Length(Plan.Items)));
+  Check('merge.fanout.action', Plan.Items[0].Action = maMergeLink, 'must be merged');
+  Check('merge.fanout.line', Plan.Items[0].Line = '#link R <- Q', Plan.Items[0].Line);
+end;
+
+{ Criterion 8: an incoming block whose header has no counterpart in the target is
+  appended WHOLE and verbatim. }
+procedure TestMergeAppendsUnmatchedBlock;
+var
+  Plan: TMergePlan;
+  T, I: TRuleBlocks;
+begin
+  T := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+  I := SplitRulesBlocks(
+    '#convert X.T -> Y.T'#13#10 +
+    '// keep me'#13#10 +
+    '#link M <- N'#13#10);
+  Plan := PlanMerge(T, I);
+  Check('merge.append.count', Length(Plan.Items) = 1, IntToStr(Length(Plan.Items)));
+  Check('merge.append.action', Plan.Items[0].Action = maAppendBlock, 'must append whole');
+  Check('merge.append.idx', Plan.Items[0].IncomingBlockIdx = 0,
+    IntToStr(Plan.Items[0].IncomingBlockIdx));
+  Check('merge.append.verbatim',
+    Plan.Incoming[Plan.Items[0].IncomingBlockIdx].RawText =
+      '#convert X.T -> Y.T'#13#10 + '// keep me'#13#10 + '#link M <- N'#13#10,
+    'the appended block keeps its comment');
+  // a header that differs only by its units list does NOT match
+  T := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+  I := SplitRulesBlocks('#convert A.T -> B.T, SomeUnit'#13#10 + '#link P <- Q'#13#10);
+  Plan := PlanMerge(T, I);
+  Check('merge.append.unitsdiffer', Plan.Items[0].Action = maAppendBlock,
+    'a differing units list is a different rule, so it is appended not merged');
+end;
+
 begin
   try
     TestBlockSplitRulesRoundTrip;
@@ -1180,6 +1276,10 @@ begin
     TestBlockLabel;
     TestBlockOpsSplitAndCopy;
     TestBlockOpsEnablement;
+    TestMergeSkipsDuplicate;
+    TestMergeReportsConflict;
+    TestMergeAllowsFanOut;
+    TestMergeAppendsUnmatchedBlock;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;
