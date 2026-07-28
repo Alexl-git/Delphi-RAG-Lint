@@ -311,11 +311,15 @@ end;
 
 // v(ADP3 T3i): the kinds whose "Called from:" fact is NOT a call list at all --
 // for these it holds plain references to the TYPE NAME, awaiting the planned
-// "Used by:" relabel. ONE declaration, read by both the CalledFrom gather's
-// call-sites-only gate and the "Used in units:" gather below, because those two
-// are the same question asked twice: this is the set for which references, not
-// calls, are the meaningful fact. Keeping them in step means a kind added to one
-// can never be forgotten in the other.
+// "Used by:" relabel.
+//
+// ONE declaration, read by the CalledFrom gather's call-sites-only gate and by
+// the "Used in units:" gather below. Those are two DIFFERENT decisions -- "is
+// this kind exempt from the call-site restriction" and "does this kind get a
+// units fact" -- that coincide on the same SET, and for one reason: these are
+// exactly the kinds a reference names without calling. Sharing the set means a
+// kind added for one decision cannot be forgotten in the other; it does NOT
+// claim the two decisions are the same.
 function IsTypeLikeKind(AKind: TSymbolKind): Boolean;
 begin
   Result:= AKind in [skClass, skInterface, skRecord];

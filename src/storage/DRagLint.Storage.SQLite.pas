@@ -1150,7 +1150,7 @@ end; // function
 /// too, so EVERY resolved call was also reported unverified; and a CLASS
 /// collected a "Called from:" entry per type_use mention. See the block comment
 /// above REF_KIND_CALL in DRagLint.Core.Model for the full account, including
-/// the one shape this deliberately no longer reaches.
+/// the one shape this deliberately no longer reaches.</para>
 /// <para>ACallSitesOnly=False reinstates the kind-blind scan for the single
 /// caller whose question is NOT about calls -- a type's reference list. It is
 /// documented on the interface declaration; do not add callers.</para></summary>
