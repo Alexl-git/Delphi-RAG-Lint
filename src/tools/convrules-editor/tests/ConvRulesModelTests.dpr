@@ -19,7 +19,8 @@ uses
   ConvRules.BlockOps in '..\ConvRules.BlockOps.pas',
   ConvRules.WorkingSet in '..\ConvRules.WorkingSet.pas',
   ConvRules.Engine in '..\ConvRules.Engine.pas',
-  ConvRules.Platform in '..\ConvRules.Platform.pas';
+  ConvRules.Platform in '..\ConvRules.Platform.pas',
+  ConvRules.Usage in '..\ConvRules.Usage.pas';
 
 var
   GPass: Integer = 0;
@@ -1821,6 +1822,63 @@ begin
     'a preamble has no header, so it can never be a duplicate');
 end;
 
+{ Criteria 1-6: the DFM scanner records the assignments of blocks whose class is the
+  From class, at that block's immediate level only, skipping binary blobs and nested
+  components -- but descending into nested blocks to find further instances. }
+procedure TestScanDfm;
+const
+  SRC =
+    'object Form1: TForm1'#13#10 +
+    '  Caption = ''ignored -- wrong class'''#13#10 +
+    '  object btnA: TabcToggleBtn'#13#10 +
+    '    Left = 4'#13#10 +
+    '    Top = 175'#13#10 +
+    '    Caption = ''Ac'''#13#10 +
+    '    Layout = ablGlyphCenter'#13#10 +
+    '    Picture.Data = {'#13#10 +
+    '      07544269746D617076080000424D7606'#13#10 +
+    '      Width = 999'#13#10 +          // inside the blob: must NOT be recorded
+    '      0000200000000100040000000000}'#13#10 +
+    '    Columns = <'#13#10 +
+    '      item'#13#10 +
+    '        Height = 888'#13#10 +       // inside the item list: must NOT be recorded
+    '      end>'#13#10 +
+    '    object lblChild: TLabel'#13#10 +
+    '      Alignment = taLeftJustify'#13#10 +   // child component: NOT the From class
+    '    end'#13#10 +
+    '  end'#13#10 +
+    '  object btnB: TabcToggleBtn'#13#10 +
+    '    Hint = ''second instance'''#13#10 +
+    '  end'#13#10 +
+    'end'#13#10;
+
+  function Has(const A: TArray<string>; const S: string): Boolean;
+  var
+    X: string;
+  begin
+    for X in A do
+      if SameText(X, S) then Exit(True);
+    Result := False;
+  end;
+
+var
+  U: TArray<string>;
+begin
+  U := ScanDfmText(SRC, 'TabcToggleBtn');
+  Check('usage.dfm.left',      Has(U, 'Left'), 'plain assignment');
+  Check('usage.dfm.caption',   Has(U, 'Caption'), 'plain assignment');
+  Check('usage.dfm.layout',    Has(U, 'Layout'), 'plain assignment');
+  Check('usage.dfm.dotted',    Has(U, 'Picture.Data'), 'dotted path recorded whole');
+  Check('usage.dfm.dotroot',   Has(U, 'Picture'), 'dotted path also records its root');
+  Check('usage.dfm.blob',      not Has(U, 'Width'), 'a line inside a { } blob is not an assignment');
+  Check('usage.dfm.itemlist',  not Has(U, 'Height'), 'a line inside a < > item list is not an assignment');
+  Check('usage.dfm.child',     not Has(U, 'Alignment'), 'a nested component is not the From class');
+  Check('usage.dfm.sibling',   Has(U, 'Hint'), 'a second instance of the From class is scanned');
+  Check('usage.dfm.wrongclass', not Has(U, 'ignored'), 'the outer TForm1 block is not scanned');
+  Check('usage.dfm.none', Length(ScanDfmText(SRC, 'TNotPresent')) = 0,
+    'no block of the From class yields an empty set');
+end;
+
 begin
   try
     TestBlockSplitRulesRoundTrip;
@@ -1844,6 +1902,7 @@ begin
     TestGrammarGuard;
     TestCastLibMergeRefused;
     TestDuplicateHeaders;
+    TestScanDfm;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;
