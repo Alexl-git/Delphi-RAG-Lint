@@ -21,6 +21,7 @@ engine itself before believing a number:
 USAGE (python 3.8+, stdlib only):
 
     python returns_blast.py blast   <db.sqlite> [<path-prefix-filter>]
+    python returns_blast.py anchor  <db.sqlite> [<path-prefix-filter>]
     python returns_blast.py argpass <db.sqlite> [<path-prefix-filter>]
     python returns_blast.py braces  <db.sqlite> [<path-prefix-filter>]
 
@@ -35,6 +36,17 @@ USAGE (python 3.8+, stdlib only):
              reply doc then repeated. On YADF the MAJORITY of the suppression
              was the multi-line-RHS rule, so the label was wrong about most of
              what it described.
+  anchor  -- spans eligible for the LEAD-TOKEN header anchor (impl_start_line
+             is not the header line, but the routine keyword is the body's
+             first token, or the second after `class`), split by whether the
+             header it finds actually HEADS THE SYMBOL IT IS ATTRIBUTED TO.
+
+             This mode exists because the gain/loss table that shipped the
+             lead-token anchor structurally could not see its own failure: a
+             span that lands inside a DIFFERENT routine and starts emitting
+             that routine's return values registers as a GAIN. It is not a
+             gain. A row whose anchored header name is not the symbol's name
+             is a REGRESSION and is counted as one here.
   argpass -- the callees that receive a bare `Result` as an argument, ranked.
              This is the evidence for DECLINING INBOX form 1b: the naive text
              test for "Result passed to a var/out parameter" cannot tell a
@@ -234,15 +246,56 @@ def tokens_of(lines):
     return scan_body(lines)[0]
 
 
-def mask_nested(lines, mask_ch='\x01'):
+def is_lead_keyword(toks, ti):
+    """Token ti is the body's LEAD routine keyword: the first token, or the
+    keyword of a `class function`, whose `class` token comes first."""
+    return ti == 0 or (ti == 1 and toks[0][3] == 'word' and toks[0][2] == 'class')
+
+
+def header_name_at(toks, ti, lines):
+    """The routine name the header at token ti declares -- the last dotted
+    component of what follows the keyword, lowercased, '' if none.
+
+    Components must be joined by a literal '.' on the same line, so a generic
+    header (`function TList<T>.Add`) yields the TYPE name and the caller's name
+    check then declines the anchor. Port of Delphi HeaderNameAt.
+    """
+    name = ''
+    prev_line = -1
+    prev_end = 0
+    j = ti + 1
+    while j < len(toks):
+        li, col, tk, kind, end = toks[j]
+        if kind != 'word':
+            break
+        if name:
+            if li != prev_line or col != prev_end + 2:
+                break
+            if prev_end + 1 >= len(lines[li]) or lines[li][prev_end + 1] != '.':
+                break
+        name, prev_line, prev_end = tk, li, end
+        j += 1
+    return name
+
+
+def mask_nested(lines, sym_name='', mask_ch='\x01'):
     """(masked_source, masked_code_only) -- nested scopes blanked in both.
 
-    The routine's OWN header is accepted on body line 0 OR as the body's first
-    token. Both halves are load-bearing: without "line 0" every `class
-    function` body is masked (the `class` token comes first); without "first
-    token" a span that lags the tree by one line turns the whole routine into a
-    nested one. Accepting the first routine keyword ANYWHERE is deliberately
-    NOT done -- it also re-reads spans that start inside the previous routine.
+    The routine's OWN header is accepted on body line 0, OR as the body's LEAD
+    token (token 0, or the routine keyword of a `class function`) WHEN THE NAME
+    IT DECLARES IS sym_name. All three parts are load-bearing:
+
+      * without "line 0" every `class function` body is masked;
+      * without the lead token a stale span that starts before the header turns
+        the whole routine into a nested one and deletes its <returns>;
+      * without the NAME CHECK the lead token latches onto whatever routine the
+        span happens to head -- 81 of 96 eligible spans on the shipping YADF
+        index -- and publishes that routine's return values under this one's
+        name. Run `anchor` mode for the split.
+
+    An empty sym_name declines the lead-token anchor rather than re-enabling
+    the unchecked form. Accepting the first routine keyword ANYWHERE is
+    deliberately NOT done -- a span starting mid-routine has no honest reading.
     """
     toks, code = scan_body(lines)
     out = [list(l) for l in lines]
@@ -264,7 +317,9 @@ def mask_nested(lines, mask_ch='\x01'):
                     pending = None
             continue
         if tk in ROUTINE_KW:
-            if not header_seen and (li == 0 or ti == 0) and not stack:
+            own = li == 0 or (is_lead_keyword(toks, ti) and sym_name
+                              and header_name_at(toks, ti, lines) == sym_name.lower())
+            if not header_seen and own and not stack:
                 header_seen = True
                 continue
             if stack:
@@ -381,8 +436,8 @@ def mutation_forms(code_only):
     return tags
 
 
-def mine_new(body):
-    masked, code = mask_nested(body)
+def mine_new(body, sym_name=''):
+    masked, code = mask_nested(body, sym_name)
     tags = mutation_forms(code)
     if tags:
         return [], tags
@@ -400,15 +455,22 @@ def mine_new(body):
 # --------------------------------------------------------------------------
 
 def routines(db, prefix=None):
-    """(qname, path, impl_start, impl_end, body_lines) for every routine with a
-    return type and an implementation span."""
+    """(qname, name, path, impl_start, impl_end, body_lines) for every routine
+    with a return type and an implementation span.
+
+    `name` is the SIMPLE name -- exactly what TSymbol.Name gives the engine, and
+    what the lead-token anchor is checked against. One row PER SYMBOL ROW, not
+    per qualified name: an index can hold several rows for one qname (duplicate
+    `files` entries, copies under Test\\), each with its own span, and it is the
+    ROW that is stale or not.
+    """
     con = sqlite3.connect(db)
     rows = con.execute(
-        'SELECT s.qualified_name, s.signature, s.impl_start_line, s.impl_end_line, f.path '
+        'SELECT s.qualified_name, s.name, s.signature, s.impl_start_line, s.impl_end_line, f.path '
         'FROM symbols s JOIN files f ON f.id = s.file_id '
         'WHERE s.impl_start_line > 0 AND s.impl_end_line >= s.impl_start_line').fetchall()
     cache = {}
-    for qn, sig, a, b, path in rows:
+    for qn, nm, sig, a, b, path in rows:
         if prefix and not path.lower().startswith(prefix.lower()):
             continue
         if parse_return_type(sig) == '':
@@ -422,19 +484,153 @@ def routines(db, prefix=None):
         src = cache[path]
         if not src:
             continue
-        yield qn, path, a, b, src[a - 1: min(b, len(src))]
+        yield qn, nm, path, a, b, src[a - 1: min(b, len(src))]
+
+
+def lead_anchor_of(body, sym_name):
+    """(eligible, header_name, matches) for the lead-token anchor on this span.
+
+    eligible is True only when body line 0 is NOT the header -- i.e. when the
+    lead-token clause is the sole thing that could accept a header at all.
+    """
+    toks, _ = scan_body(body)
+    for ti, (li, col, tk, kind, end) in enumerate(toks):
+        if kind != 'word':
+            continue
+        if tk in ROUTINE_KW:
+            if li == 0 or not is_lead_keyword(toks, ti):
+                return False, '', False
+            hn = header_name_at(toks, ti, body)
+            return True, hn, bool(hn) and hn == (sym_name or '').lower()
+        break
+    return False, '', False
+
+
+def mine_unchecked(body):
+    """The lead-token anchor AS IT SHIPPED at 55bcdaf: accepted on body line 0
+    OR at token 0, with no name check and no `class` allowance. Kept only so
+    the regression it caused stays measurable from this file; it is NOT the
+    engine's behaviour any more."""
+    masked, code = _mask_nested_no_namecheck(body)
+    if mutation_forms(code):
+        return []
+    seen, out = set(), []
+    for ln in masked:
+        r = result_rhs_new(ln) or exit_rhs(ln)
+        if r and r not in seen:
+            seen.add(r)
+            out.append(r)
+    return out[:CAP]
+
+
+def _mask_nested_no_namecheck(lines, mask_ch='\x01'):
+    toks, code = scan_body(lines)
+    out = [list(l) for l in lines]
+    cod = [list(l) for l in code]
+    depth = paren = 0
+    header_seen = False
+    pending = None
+    stack = []
+    for ti, (li, col, tk, kind, end) in enumerate(toks):
+        if kind == 'sym':
+            if tk == '(':
+                paren += 1
+            elif tk == ')':
+                paren -= 1
+                if pending and not pending[3] and paren < pending[2]:
+                    pending = None
+            elif tk == ';':
+                if pending and not pending[3] and paren == pending[2]:
+                    pending = None
+            continue
+        if tk in ROUTINE_KW:
+            if not header_seen and (li == 0 or ti == 0) and not stack:
+                header_seen = True
+                continue
+            if stack:
+                continue
+            nxt = toks[ti + 1] if ti + 1 < len(toks) else None
+            named = bool(nxt and nxt[3] == 'word' and nxt[2] != 'of')
+            pending = (li, col, paren, named)
+            continue
+        if tk in OPENERS:
+            if pending:
+                stack.append((pending[0], pending[1], depth))
+                pending = None
+            depth += 1
+            continue
+        if tk == 'end':
+            depth -= 1
+            if stack and depth <= stack[-1][2]:
+                sli, scol, _ = stack.pop()
+                for x in range(sli, li + 1):
+                    a = scol if x == sli else 0
+                    b = (end + 1) if x == li else len(out[x])
+                    for k in range(a, min(b, len(out[x]))):
+                        out[x][k] = mask_ch
+                        cod[x][k] = mask_ch
+    return [''.join(l) for l in out], [''.join(l) for l in cod]
+
+
+def cmd_anchor(db, prefix=None):
+    elig = match = 0
+    foreign = []
+    gained, regressed, lost = [], [], []
+    for qn, nm, path, a, b, body in routines(db, prefix):
+        ok, hn, hit = lead_anchor_of(body, nm)
+        if ok:
+            elig += 1
+            if hit:
+                match += 1
+            else:
+                foreign.append((qn, nm, hn, a, b))
+        now = mine_new(body, nm)[0][:CAP]
+        # (i) what the NAME-CHECKED anchor buys over having no lead-token anchor
+        # at all: mine_new with an empty name IS that variant, by construction.
+        none_ = mine_new(body, '')[0][:CAP]
+        if none_ != now:
+            (gained if ok and hit else lost).append((qn, a, b, none_, now))
+        # (ii) what the name check WITHDRAWS from the anchor as it shipped at
+        # 55bcdaf. A row the unchecked anchor made emit is only a gain if the
+        # header it anchored is this symbol's; otherwise the shipped text names
+        # ANOTHER routine's return values and withdrawing it is the point.
+        was = mine_unchecked(body)
+        if was != now:
+            regressed.append((qn, a, b, was, now, ok and not hit))
+    print('spans eligible for the LEAD-TOKEN anchor        : %d' % elig)
+    print('  header IS this symbol -- a real recovery      : %d' % match)
+    print('  header is ANOTHER routine -- a MIS-ANCHOR     : %d  (%.0f%%)'
+          % (len(foreign), 100.0 * len(foreign) / max(1, elig)))
+    print('vs NO lead-token anchor at all (option B):')
+    print('  rows GAINED, anchored by their own header     : %d' % len(gained))
+    print('  rows changed on a FOREIGN/unnamed header      : %d  <- must be 0' % len(lost))
+    print('vs the UNCHECKED anchor as it shipped at 55bcdaf:')
+    print('  rows changed                                  : %d' % len(regressed))
+    print('     of which the header was FOREIGN (a fix)    : %d'
+          % sum(1 for r in regressed if r[5]))
+    print('     of which the header was this symbol (a LOSS): %d'
+          % sum(1 for r in regressed if not r[5]))
+    for label, rows in (('gained-vs-B', gained), ('CHANGED-ON-FOREIGN-vs-B', lost)):
+        for qn, a, b, was, now in rows[:12]:
+            print('   [%s] %s  span=%d..%d\n        was=%s\n        now=%s'
+                  % (label, qn, a, b, was, now))
+    for qn, a, b, was, now, isforeign in regressed[:12]:
+        print('   [%s] %s  span=%d..%d\n        was=%s\n        now=%s'
+              % ('withdrawn' if isforeign else 'LOST', qn, a, b, was, now))
+    for qn, nm, hn, a, b in foreign[:12]:
+        print('   [mis-anchor] %s  span=%d..%d  header=%s' % (qn, a, b, hn or '<none>'))
 
 
 def cmd_blast(db, prefix=None):
     n_old = n_kept = n_changed = 0
     per_form = collections.Counter()
     examples = []
-    for qn, path, a, b, body in routines(db, prefix):
+    for qn, nm, path, a, b, body in routines(db, prefix):
         old = mine_old(body)[:CAP]
         if not old:
             continue
         n_old += 1
-        new, tags = mine_new(body)
+        new, tags = mine_new(body, nm)
         new = new[:CAP]
         if new:
             n_kept += 1
@@ -469,7 +665,7 @@ def cmd_blast(db, prefix=None):
 
 def cmd_argpass(db, prefix=None):
     cnt = collections.Counter()
-    for qn, path, a, b, body in routines(db, prefix):
+    for qn, nm, path, a, b, body in routines(db, prefix):
         for ln in body:
             t = strip_line_comment(ln)
             if result_rhs_old(ln):
@@ -536,7 +732,7 @@ def blank_block_comments(lines):
 
 def cmd_braces(db, prefix=None):
     hits = []
-    for qn, path, a, b, body in routines(db, prefix):
+    for qn, nm, path, a, b, body in routines(db, prefix):
         o = mine_old(body)[:CAP]
         n = mine_old(blank_block_comments(body))[:CAP]
         if o != n:
@@ -550,7 +746,8 @@ if __name__ == '__main__':
     if len(sys.argv) < 3:
         print(__doc__)
         raise SystemExit(2)
-    MODE = {'blast': cmd_blast, 'argpass': cmd_argpass, 'braces': cmd_braces}
+    MODE = {'blast': cmd_blast, 'anchor': cmd_anchor,
+            'argpass': cmd_argpass, 'braces': cmd_braces}
     fn = MODE.get(sys.argv[1])
     if fn is None:
         print(__doc__)

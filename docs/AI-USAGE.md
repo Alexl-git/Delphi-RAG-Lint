@@ -214,11 +214,20 @@ in 2b.
 > than none); or every candidate is a `Result.<Field> := ` / `Result[i] := `
 > member assignment (those build the result, they are not return values, and
 > one real case populates 42 fields). A **nested** routine's or anonymous
-> method's `Result` belongs to that routine, never to the enclosing one -- and
-> the routine's own header is recognised on body line 0 OR as the body's first
-> token, so an index that lags the tree by a line does not turn the whole
-> routine into a nested one. `hover` shares the miner, so it says exactly the
-> same thing.
+> method's `Result` belongs to that routine, never to the enclosing one.
+>
+> A **stale span** is the last reason for silence, and the rule is narrow on
+> purpose. `impl_start_line` is normally the header line; when it is not, the
+> header is still accepted as the body's *lead* token -- the first token, or
+> the routine keyword of a `class function`, whose `class` token comes first --
+> **but only when the name that header declares is this routine's name**.
+> Anything else is silence. That check is not a formality: a lead token can sit
+> arbitrarily many lines down (comments and blank lines emit none), so without
+> it the anchor latches onto whichever routine the stale span happens to head
+> and publishes *that* routine's return values under this one's name. Measured
+> on one shipping index, 81 of the 96 spans the anchor was eligible for headed
+> some other routine (`python tools/measure/returns_blast.py anchor <db>`).
+> `hover` shares the miner, so it says exactly the same thing.
 >
 > **New managed-block fact lines.** The generated `<!-- drag-lint:auto -->`
 > block can also carry (each omitted when empty): `Overrides: TAncestor.M`,

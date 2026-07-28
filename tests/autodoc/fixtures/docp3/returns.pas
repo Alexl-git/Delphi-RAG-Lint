@@ -14,11 +14,27 @@ interface
 // state the returned value correctly it states nothing -- it never guesses,
 // and it never leaks a fragment of raw syntax into prose.
 //
-// FIVE GROUPS, plus the controls that keep each of them falsifiable. A SIXTH
-// scenario lives in the runner rather than here, because it is a property of
-// the INDEX and not of the source: PlainSum, AnonHost and LocalHost are hovered
-// again against a copy of the index whose impl_start_line was moved back by one
-// line, which is what a stale index holds.
+// FIVE GROUPS, plus the controls that keep each of them falsifiable. TWO MORE
+// scenarios live in the runner rather than here, because they are properties of
+// the INDEX and not of the source -- a STALE span, which is what an index built
+// before the last edit holds:
+//
+//   * a span that begins EARLY but still inside the routine's own header --
+//     PlainSum, AnonHost, LocalHost and TBox.ClassLag, hovered again against a
+//     copy of the index whose impl_start_line was moved back by one line. The
+//     routine's own header must still be recognised, ClassLag included: for a
+//     `class function` the FIRST token of the body is `class`, not the routine
+//     keyword.
+//
+//   * a span that begins inside a DIFFERENT ROUTINE -- ForeignB, hovered
+//     against a copy of the index whose impl_start_line was moved onto the
+//     blank line above ForeignA's header. Measured on the shipping
+//     C:\Projects\YADF\YADF.sqlite, that is what the majority of stale spans
+//     look like: 81 of the 96 spans eligible for the first-token rule head
+//     some OTHER routine, several of them tens of lines away. The required
+//     answer is ABSENCE. Emitting ForeignA's return value under ForeignB's
+//     name is the exact defect this whole task exists to remove, and a
+//     "recovery" that does it is a regression.
 //
 //   MUTATION   PrevIdx / Accum -- Result is changed by something other than a
 //              whole-Result assignment (Dec(Result); Result := Result + x), so
@@ -47,10 +63,10 @@ interface
 //
 // CONTROLS: PlainSum, DoubleIt, ConcatPath, NestedCallRhs, OneLiner, AnonHost,
 // LocalHost, InlineProcVar, ParamlessProcVar, LocalProcTypeDecl,
-// BraceCommentInc, BraceCommentSelfRef, ParenStarSetLength and
-// StrLiteralResult must ALL still render an Observed: line. A rule that simply
-// stopped emitting <returns> would satisfy every absence check in this file
-// and fail these fourteen.
+// BraceCommentInc, BraceCommentSelfRef, ParenStarSetLength, StrLiteralResult,
+// TBox.ClassLag, ForeignA and ForeignB must ALL still render an Observed: line.
+// A rule that simply stopped emitting <returns> would satisfy every absence
+// check in this file and fail these seventeen.
 //
 // InlineProcVar / ParamlessProcVar / LocalProcTypeDecl are the guard on the
 // nested-routine detector itself: a local PROCEDURAL-TYPE spells the `function`
@@ -75,6 +91,14 @@ type
   end;
 
   TIntGetter = reference to function(const ARec: TCfg): Integer;
+
+  // The `class function` carrier. A class method's implementation header
+  // begins with the `class` token, NOT with the routine keyword, so a span
+  // that starts one line early leaves the routine keyword as the body's
+  // SECOND token. Hovered against a lagged span in the runner.
+  TBox = class
+    class function ClassLag(A: Integer): Integer;
+  end;
 
 // Plain, complete, unmutated, no nesting. The load-bearing control.
 function PlainSum(A, B: Integer): Integer;
@@ -141,6 +165,18 @@ function ParenStarSetLength(A: Integer): string;
 // 'Result := Result + 1' as PROSE inside a format string. Nothing is mutated
 // and the whole expression, semicolon and all, is one physical line.
 function StrLiteralResult(A: Integer): string;
+
+// ForeignA and ForeignB are ADJACENT, in this order, with a blank line above
+// ForeignA's header. The runner moves ForeignB's indexed impl_start_line onto
+// that blank line, so ForeignB's span then begins one line above ANOTHER
+// routine's header and covers ForeignA's whole body. ForeignA's return value
+// is deliberately unique in this file, so "ForeignB adopted it" is a check
+// that can only pass one way.
+function ForeignA(A: Integer): Integer;
+
+// The victim of the doctored span. With its TRUE span it returns A - 7; with
+// the doctored one it must return NOTHING.
+function ForeignB(A: Integer): Integer;
 
 // Driver exists so that every declaration above is actually DOCUMENTED.
 // `document --unit` writes no comment at all for a decl whose facts block
@@ -279,6 +315,21 @@ begin
   Result := Format('Result := Result + 1; %d', [A]);
 end;
 
+class function TBox.ClassLag(A: Integer): Integer;
+begin
+  Result := A + 41;
+end;
+
+function ForeignA(A: Integer): Integer;
+begin
+  Result := A * 7;
+end;
+
+function ForeignB(A: Integer): Integer;
+begin
+  Result := A - 7;
+end;
+
 procedure Driver;
 var
   C: TCfg;
@@ -290,7 +341,8 @@ begin
   C.Gamma := Length(NestedCallRhs('a', 'b')) + Length(ConcatPath('a', 'b'));
   C.Delta := ParamlessProcVar(5) + LocalProcTypeDecl(6) + BraceCommentInc(7) + BraceCommentSelfRef(8);
   C.Omega := Length(ParenStarSetLength(9)) + Length(StrLiteralResult(10));
-  C.Sigma := C.Alpha + C.Beta + C.Gamma + C.Delta + C.Omega;
+  C.Sigma := C.Alpha + C.Beta + C.Gamma + C.Delta + C.Omega
+           + TBox.ClassLag(11) + ForeignA(12) + ForeignB(13);
 end;
 
 end.

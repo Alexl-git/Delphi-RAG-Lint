@@ -10,6 +10,11 @@ interface
 /// `Exit(&lt;rhs>)` in ABodyLines, in first-seen source order.</summary>
 /// <param name="ABodyLines">The routine's implementation body lines
 ///   (impl_start_line..impl_end_line), one string per source line.</param>
+/// <param name="ARoutineName">The documented routine's SIMPLE name (TSymbol.Name
+///   -- 'ClassLag', not 'returns.TBox.ClassLag'). Used only to confirm that a
+///   span whose first line is not the header nevertheless begins at THIS
+///   routine's header; pass '' when there is no name to give, which costs the
+///   recovery of such a span and never mis-attributes one.</param>
 /// <returns>Distinct RHS strings, trimmed, dedup'd. EMPTY when none was found
 ///   AND empty when the routine mutates Result in a way this enumeration
 ///   cannot express -- see the remarks.</returns>
@@ -32,10 +37,18 @@ interface
 ///   caller passes the ENCLOSING routine's whole impl span, so local routines
 ///   and anonymous methods live inside those lines; their scopes are masked out
 ///   before mining. (This unit used to claim the caller's span excluded them.
-///   It never did.) The routine's OWN header is recognised on body line 0 or as
-///   the body's first token, so a span that begins one line early -- an index
-///   lagging the tree -- does not turn the whole routine into a nested one.</para></remarks>
-function MineReturnExpressions(const ABodyLines: TArray<string>): TArray<string>;
+///   It never did.)</para>
+///   <para>* NOTHING when the span is STALE -- unless it can be proved to be
+///   this routine's span. impl_start_line is normally the header line; an index
+///   built before the last edit can start it earlier. The header is therefore
+///   also accepted as the body's LEAD token (token 0, or the routine keyword of
+///   a `class function`, whose `class` token comes first) -- but ONLY when the
+///   name it declares is ARoutineName. Without that check the anchor latches
+///   onto whatever routine the span happens to head, and the output then names
+///   a DIFFERENT routine's return values: measured on one live index, 81 of the
+///   96 spans the anchor was eligible for headed some other routine.</para></remarks>
+function MineReturnExpressions(const ABodyLines: TArray<string>;
+  const ARoutineName: string): TArray<string>;
 
 type
   /// <summary>A mined return expression plus the 0-based index (within
@@ -50,13 +63,16 @@ type
 /// distinct RHS was first seen (0-based offset into ABodyLines), so the hover
 /// popup can make each return value clickable and jump to its source line.</summary>
 /// <param name="ABodyLines">The routine's implementation body lines.</param>
+/// <param name="ARoutineName">The documented routine's SIMPLE name -- see
+///   MineReturnExpressions.</param>
 /// <returns>Distinct mined returns with their first-seen line offset. Expr is
 ///   always the LITERAL source RHS: the IDE plugin matches on that string to
 ///   find the line to navigate to, so nothing may be prefixed onto it.</returns>
 /// <remarks>Same suppression rules as MineReturnExpressions -- see there.
 ///   Masking never changes the line COUNT, so LineOffset still indexes
 ///   ABodyLines.</remarks>
-function MineReturnExpressionsEx(const ABodyLines: TArray<string>): TArray<TReturnMined>;
+function MineReturnExpressionsEx(const ABodyLines: TArray<string>;
+  const ARoutineName: string): TArray<TReturnMined>;
 
 implementation
 
@@ -263,6 +279,61 @@ begin
         or (AWord = 'asm') or (AWord = 'record');
 end;
 
+// True when the routine keyword at token index AKw is the body's LEAD header --
+// the very first token, or the keyword of a `class function` / `class procedure`
+// / `class constructor` / `class operator`, whose `class` token comes first. An
+// implementation header has nothing else in front of it, so one leading `class`
+// is the whole allowance.
+function IsLeadKeyword(AToks: TList<TMaskTok>; AKw: Integer): Boolean;
+begin
+  Result:= (AKw = 0)
+        or ((AKw = 1) and AToks[0].IsWord and (AToks[0].Text = 'class'));
+end;
+
+// The routine NAME the header at token AKw declares: the LAST dotted component
+// of what follows the keyword, lowercased, or '' when no identifier follows.
+//
+//   function PlainSum(A: Integer)        -> 'plainsum'
+//   class function TBox.ClassLag(A: ...) -> 'classlag'
+//   constructor TFoo.Create              -> 'create'
+//
+// Components must be joined by a literal '.' on the SAME line, so the walk stops
+// at the first token that is not part of the qualified name. A GENERIC header
+// (`function TList<T>.Add`) therefore yields the TYPE name rather than the
+// method's -- '<' is not '.' -- and the caller's name check then declines the
+// anchor. That is the safe direction (absence over wrong), and it costs nothing
+// measurable: over YADF, drag-lint's own src\ and ORM3 the anchor is eligible on
+// 111 spans and none of them has a generic header
+// (tools/measure/returns_blast.py anchor).
+function HeaderNameAt(AToks: TList<TMaskTok>; AKw: Integer;
+  const ALines: TArray<string>): string;
+var
+  J, PrevLine, PrevEnd: Integer ;
+  T                   : TMaskTok;
+  Ln                  : string  ;
+begin
+  Result  := '';
+  PrevLine:= -1;
+  PrevEnd := 0;
+  J:= AKw + 1;
+  while J < AToks.Count do
+  begin
+    T:= AToks[J];
+    if not T.IsWord then Break;
+    if Result <> '' then
+    begin
+      if (T.Line <> PrevLine) or (T.Col <> PrevEnd + 2) then Break;
+      if (T.Line < 0) or (T.Line > High(ALines)) then Break;
+      Ln:= ALines[T.Line];
+      if (PrevEnd + 1 > Length(Ln)) or (Ln[PrevEnd + 1] <> '.') then Break;
+    end;
+    Result  := T.Text;
+    PrevLine:= T.Line;
+    PrevEnd := T.EndCol;
+    Inc(J);
+  end;
+end;
+
 // Replace every character of every NESTED routine scope with NESTED_MASK,
 // leaving the line COUNT and every other column untouched (LineOffset still
 // indexes the caller's array). ACodeOnly comes back masked over the same
@@ -271,19 +342,30 @@ end;
 // A routine keyword ARMS a candidate; the next block opener CONFIRMS it and the
 // matching 'end' closes it. Two things must not be swallowed:
 //
-//   * the routine's OWN header. impl_start_line is USUALLY the header line, but
-//     an index that lags the tree can start the span a line early -- measured on
-//     the shipping YADF index, 5 routines whose span begins on the blank line
-//     above the header, every one of them losing its whole <returns>. So the
-//     header is accepted EITHER on body line 0 OR as the FIRST token of the
-//     body. Both halves are load-bearing: dropping "line 0" masks the body of
-//     every `class function` (the `class` token comes first -- measured 111
-//     routines in drag-lint's own src\ and 58 in ORM3 that would lose their
-//     <returns>), and dropping "first token" is the lagging-span bug. What is
-//     deliberately NOT done is accepting the first routine keyword ANYWHERE:
-//     over the same corpora that also re-reads 21 spans that start deep inside
-//     the PREVIOUS routine -- garbage in, unpredictable out -- and one of them
-//     stops emitting altogether.
+//   * the routine's OWN header, AND ONLY THAT. impl_start_line is USUALLY the
+//     header line, so body line 0 is the primary anchor. But an index built
+//     before the last edit starts the span somewhere else, and then the header
+//     reads as a nested routine and the whole body is blanked. So the header is
+//     also accepted as the body's LEAD token -- token 0, or the routine keyword
+//     of a `class function`, whose `class` token comes first (IsLeadKeyword).
+//
+//     The lead-token anchor is NAME-CHECKED, and that is the load-bearing half.
+//     Comments and blank lines emit no tokens, so "the body's first token" can
+//     sit arbitrarily many lines down and head a COMPLETELY DIFFERENT routine.
+//     Measured on the shipping YADF index (returns_blast.py anchor): the clause
+//     is eligible on 96 spans and 81 of them -- 84% -- head some other routine,
+//     because that index holds duplicate `files` rows for one path differing
+//     only in drive-letter case, so spans land 26 to 63 lines out. Accepting
+//     those did not recover a lost <returns>; it published another routine's
+//     return values under this routine's name, which is the exact defect this
+//     unit exists to prevent. With the name check the same index recovers one
+//     row (YADF.Groups.ParseGroups) and mis-attributes none.
+//
+//     What is deliberately NOT done is accepting the first routine keyword
+//     ANYWHERE: over the same corpora that re-reads spans starting deep inside
+//     the PREVIOUS routine -- garbage in, unpredictable out -- and one row stops
+//     emitting altogether. The name check would reject most of those too, but a
+//     span that starts mid-routine has no honest reading at all.
 //
 //   * a PROCEDURAL TYPE -- `var F: function(X: Integer): Integer;` spells the
 //     keyword and opens no scope. It is told apart by having no identifier
@@ -296,7 +378,7 @@ end;
 //     blanking the entire body. Hence ':' is a token: after the keyword it says
 //     "return type follows", i.e. no name.
 function MaskNestedRoutines(const ABodyLines: TArray<string>;
-  out ACodeOnly: TArray<string>): TArray<string>;
+  const ARoutineName: string; out ACodeOnly: TArray<string>): TArray<string>;
 var
   Toks     : TList<TMaskTok> ;
   Stk      : TStack<TNestFrame>;
@@ -340,9 +422,17 @@ begin
       end;
       if IsRoutineKeyword(T.Text) then
       begin
-        if (not HeaderSeen) and (Stk.Count = 0) and ((T.Line = 0) or (Ti = 0)) then
+        // The documented routine's own header -- see above. Body line 0 is the
+        // unconditional anchor; the LEAD-TOKEN anchor must additionally prove
+        // the header it found is THIS routine's, or it anchors a foreign one.
+        // An empty ARoutineName proves nothing, so it declines rather than
+        // silently re-enabling the unchecked form.
+        if (not HeaderSeen) and (Stk.Count = 0)
+           and ((T.Line = 0)
+                or (IsLeadKeyword(Toks, Ti) and (ARoutineName <> '')
+                    and SameText(HeaderNameAt(Toks, Ti, ABodyLines), ARoutineName))) then
         begin
-          HeaderSeen:= True;   // the documented routine's own header -- see above
+          HeaderSeen:= True;
           Continue;
         end;
         if Stk.Count > 0 then Continue;   // already inside a masked scope
@@ -662,7 +752,8 @@ begin
   Result:= False;
 end;
 
-function MineReturnExpressionsEx(const ABodyLines: TArray<string>): TArray<TReturnMined>;
+function MineReturnExpressionsEx(const ABodyLines: TArray<string>;
+  const ARoutineName: string): TArray<TReturnMined>;
 var
   Masked : TArray<string>               ;
   Code   : TArray<string>               ;
@@ -673,7 +764,7 @@ var
   i      : Integer                      ;
 begin
   Result:= nil;
-  Masked:= MaskNestedRoutines(ABodyLines, Code);
+  Masked:= MaskNestedRoutines(ABodyLines, ARoutineName, Code);
   // Absence over wrong: a mutated Result makes every whole-Result assignment
   // below a seed, and naming a seed claims a value the routine may never return.
   // Asked of the CODE-ONLY view -- suppression is destructive, so a mutation
@@ -701,14 +792,15 @@ begin
   end;
 end;
 
-function MineReturnExpressions(const ABodyLines: TArray<string>): TArray<string>;
+function MineReturnExpressions(const ABodyLines: TArray<string>;
+  const ARoutineName: string): TArray<string>;
 var
   Mined: TArray<TReturnMined>;
   i    : Integer             ;
 begin
   { Thin wrapper over the line-aware miner -- callers that only need the RHS text
     (e.g. the auto-document facts builder) stay on this signature. }
-  Mined:= MineReturnExpressionsEx(ABodyLines);
+  Mined:= MineReturnExpressionsEx(ABodyLines, ARoutineName);
   SetLength(Result, Length(Mined));
   for i:= 0 to High(Mined) do Result[i]:= Mined[i].Expr;
 end;

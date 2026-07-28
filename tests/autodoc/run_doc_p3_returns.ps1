@@ -47,16 +47,35 @@
       mutation test now runs on a CODE-ONLY view of the body, and ':' is a
       token so "return type follows" is distinguishable from "name follows".
 
-  (6) A SPAN THAT LAGS THE TREE BY ONE LINE IS STILL THAT ROUTINE'S SPAN.
-      The routine's own header used to be recognised only on body line 0. An
-      index that lags the tree can start the span on the blank line above the
-      header -- measured on the shipping C:\Projects\YADF\YADF.sqlite: 5
-      routines, every one losing its whole <returns> -- and the header then
-      read as a NESTED routine, blanking the body. It is now accepted on body
-      line 0 OR as the body's first token. Both halves are load-bearing:
-      dropping "line 0" masks the body of every `class function`, whose
-      `class` token comes first (measured 111 routines in drag-lint's own src\
-      and 58 in ORM3 that would lose their <returns>).
+  (6) A SPAN THAT BEGINS EARLY INSIDE THE ROUTINE'S OWN HEADER IS STILL THAT
+      ROUTINE'S SPAN.  The routine's own header used to be recognised only on
+      body line 0, so an index that starts the span on the blank line above
+      the header read that header as a NESTED routine and blanked the body.
+      It is now accepted on body line 0 OR as the body's LEAD token -- the
+      first token, or the routine keyword of a `class function`, whose `class`
+      token comes first.
+
+      A ONE-LINE LAG IS THE FIXTURE, NOT THE BOUND. A stale span is stale by
+      whatever the file moved: the real rows on the shipping
+      C:\Projects\YADF\YADF.sqlite are duplicate `files` entries for one path
+      differing only in drive-letter case, off by 26 to 63 lines and by whole
+      routines. Shifting only impl_start_line is a faithful simulation of the
+      SHAPE (a span whose first line is not the header) and is the only way to
+      produce it deterministically -- prepending a source line moves
+      impl_end_line too, and the truncated span then has no closing 'end' to
+      pop the frame, so the bug hides and the scenario tests nothing.
+
+  (7) ... BUT ONLY IF IT IS THIS ROUTINE'S HEADER.  Rule (6)'s lead-token
+      anchor originally accepted whatever routine the span happened to start
+      at. Measured on the same YADF index, that clause is eligible on 96 spans
+      and 81 of them (84%) head some OTHER routine -- so it did not recover a
+      lost <returns>, it published a foreign routine's return values under
+      this routine's name, which is the exact defect this task exists to
+      remove. The lead token is now accepted only when the identifier
+      following the keyword (last dotted component) IS the documented
+      routine's name; otherwise the body is masked and the answer is absence.
+      Callers with no name to give get the body-line-0 rule alone.
+      Command: tools\measure\returns_blast.py anchor <db> [<prefix>].
 
   WHAT DOES *NOT* CHANGE, AND IS ASSERTED AS SUCH
   -----------------------------------------------
@@ -106,6 +125,11 @@
   and the two procedural-type guards emitted no <returns> at all, and the
   lagging-span scenario returned "returns":[] where the true span returns
   ["A + B"]. Transcript in the fix-round report.
+  Group (7) likewise: the engine at 55bcdaf IS its reverted fix. Against it,
+  ForeignB over a span starting one line above ForeignA's header hovered
+  ["A * 7"] -- ForeignA's return value, under ForeignB's name -- and
+  TBox.ClassLag over a span one line early hovered [] where its true span
+  hovers ["A + 41"]. Transcript in the fix-round-2 report.
 
   Runs from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -335,7 +359,7 @@ $lines = [IO.File]::ReadAllLines($tgt)
 $names  = @('PlainSum','DoubleIt','ConcatPath','PrevIdx','Accum','DefaultCfg',
             'NestedCallRhs','MultiLineRhs','OneLiner','AnonHost','LocalHost','InlineProcVar',
             'ParamlessProcVar','LocalProcTypeDecl','BraceCommentInc','BraceCommentSelfRef',
-            'ParenStarSetLength','StrLiteralResult')
+            'ParenStarSetLength','StrLiteralResult','ClassLag','ForeignA','ForeignB')
 $blocks = @{}
 foreach ($nm in $names) {
   $ln = Get-DeclLine $db $nm
@@ -355,11 +379,11 @@ foreach ($nm in $names) {
 # A filter that matches the thing it is describing is the exact shape of a
 # vacuous test.
 $obsLines = @($lines | Where-Object { $_ -match '^\s*///' -and $_ -match 'Observed:' })
-Check 'CONTROL: exactly FOURTEEN ///-prefixed "Observed:" lines in the applied file' `
-  ($obsLines.Count -eq 14) ("count=" + $obsLines.Count)
+Check 'CONTROL: exactly SEVENTEEN ///-prefixed "Observed:" lines in the applied file' `
+  ($obsLines.Count -eq 17) ("count=" + $obsLines.Count)
 foreach ($nm in @('PlainSum','DoubleIt','ConcatPath','NestedCallRhs','OneLiner','AnonHost','LocalHost','InlineProcVar',
                   'ParamlessProcVar','LocalProcTypeDecl','BraceCommentInc','BraceCommentSelfRef',
-                  'ParenStarSetLength','StrLiteralResult')) {
+                  'ParenStarSetLength','StrLiteralResult','ClassLag','ForeignA','ForeignB')) {
   Check "CONTROL: $nm still renders an Observed: line" ((Get-Observed $blocks[$nm]) -ne '') `
     ($blocks[$nm] -replace "`n",' | ')
 }
@@ -429,6 +453,19 @@ Check 'GUARD: ParamlessProcVar''s PARAMETERLESS procedural-type var did not swal
 Check 'GUARD: LocalProcTypeDecl''s local procedural TYPE did not swallow its body -- it still renders "G() + A"' `
   ((Get-Observed $blocks['LocalProcTypeDecl']) -eq 'G() + A') ($blocks['LocalProcTypeDecl'] -replace "`n",' | ')
 
+# --- (6/7 baseline) The three stale-span carriers, with their TRUE spans. ---
+# Scenarios 2 and 3 doctor these rows; a doctored result is only evidence if
+# the undoctored one is right, and these are the exact texts those scenarios
+# then demand back (ClassLag) or demand the ABSENCE of (ForeignA's, under
+# ForeignB's name).
+foreach ($p in @(
+    @{ N = 'ClassLag'; Want = 'A + 41'; Why = 'a class method -- its body''s FIRST token is `class`' },
+    @{ N = 'ForeignA'; Want = 'A * 7' ; Why = 'the routine a doctored ForeignB span lands in' },
+    @{ N = 'ForeignB'; Want = 'A - 7' ; Why = 'the victim of that doctored span' })) {
+  Check ("SPAN-BASELINE: {0} ({1}) renders exactly ""{2}"" with its TRUE span" -f $p.N, $p.Why, $p.Want) `
+    ((Get-Observed $blocks[$p.N]) -eq $p.Want) ($blocks[$p.N] -replace "`n",' | ')
+}
+
 # --- (5) The suppressing mutation must be IN CODE. --------------------------
 # Rule (1) DELETES documentation, so this group is its bound. Each check states
 # the EXACT sentence: it cannot pass over an absent <returns> (Get-Observed
@@ -497,21 +534,32 @@ foreach ($l in $lines) { if ($l -match '^\s*///') { foreach ($ch in $l.ToCharArr
 Check 'every emitted /// line is 7-bit ASCII' ($bad.Count -eq 0) ($bad -join ' | ')
 
 # ===========================================================================
-# (6) SCENARIO 2 -- an index that LAGS THE TREE BY ONE LINE.
+# (6) SCENARIO 2 -- a STALE span that still begins inside the routine's own
+# header region.
 #
 # impl_start_line is normally the header line, but an index built before the
 # last edit can start the span on the blank line ABOVE it. The header was then
 # not on body line 0, was classified as a NESTED routine, and the entire body
-# was blanked. Measured on the shipping C:\Projects\YADF\YADF.sqlite: 5
-# routines lose their whole <returns> this way, e.g. YADF.Groups.ParseGroups
-# (span 123..182, header on 124) -- and the failure is indistinguishable from
-# a legitimate suppression, on indexes this project queries every day.
+# was blanked.
 #
-# Reproduced deterministically by shifting impl_start_line back by one in a
-# COPY of the index, which is exactly what a lagging index holds. A source edit
-# cannot produce it: prepending a line moves impl_end_line too, and the
-# truncated span then has no closing 'end' to pop the frame -- so the bug hides
-# and the scenario would silently test nothing.
+# Engine-verified on the shipping C:\Projects\YADF\YADF.sqlite: exactly ONE
+# row is recovered this way, YADF.Groups.ParseGroups (span 123..182, header on
+# 124, hovers "Root"). The earlier claim of "5 routines, every one of them
+# losing its whole <returns>" was a python-port number the engine does not
+# reproduce and it counted mis-anchors as gains -- see rule (7) and
+# tools\measure\returns_blast.py anchor.
+#
+# ONE LINE IS THE FIXTURE, NOT THE BOUND -- see rule (6) in the header. Shifting
+# only impl_start_line reproduces the SHAPE deterministically; a source edit
+# cannot, because prepending a line moves impl_end_line too and the truncated
+# span then has no closing 'end' to pop the frame, so the bug hides and the
+# scenario would silently test nothing.
+#
+# ClassLag carries the `class function` form, whose implementation header
+# begins with the `class` token: with the span one line early the routine
+# keyword is the body's SECOND token, and a lead-token rule that only ever
+# looked at token 0 deleted its whole <returns>. Engine-verified RED at
+# 55bcdaf: "returns":[] against a true-span ["A + 41"].
 # ===========================================================================
 Write-Host ''
 Write-Host '=== returns.pas, index span shifted one line early ===' -ForegroundColor Cyan
@@ -545,17 +593,22 @@ print(cur.rowcount)
 # that redden would leave "the fix does not break the other nesting form"
 # unstated.
 foreach ($p in @(
-    @{ N = 'PlainSum' ; Want = 'A + B'        ; Why = 'a plain routine -- RED before the fix' },
-    @{ N = 'AnonHost' ; Want = 'F(ACfg) + 1'  ; Why = 'a host whose ANONYMOUS method opens after its own begin -- RED before the fix' },
-    @{ N = 'LocalHost'; Want = 'Twice(A) + 1' ; Why = 'a host with a NAMED nested routine -- green before the fix, kept as its control' })) {
+    @{ N = 'PlainSum' ; Q = 'returns.PlainSum'      ; Hdr = '^function\s+PlainSum\('
+       Want = 'A + B'        ; Why = 'a plain routine -- RED before the fix' },
+    @{ N = 'AnonHost' ; Q = 'returns.AnonHost'      ; Hdr = '^function\s+AnonHost\('
+       Want = 'F(ACfg) + 1'  ; Why = 'a host whose ANONYMOUS method opens after its own begin -- RED before the fix' },
+    @{ N = 'LocalHost'; Q = 'returns.LocalHost'     ; Hdr = '^function\s+LocalHost\('
+       Want = 'Twice(A) + 1' ; Why = 'a host with a NAMED nested routine -- green before the fix, kept as its control' },
+    @{ N = 'ClassLag' ; Q = 'returns.TBox.ClassLag' ; Hdr = '^class\s+function\s+TBox\.ClassLag\('
+       Want = 'A + 41'       ; Why = 'a CLASS method, whose body''s first token is `class` -- RED at 55bcdaf, "returns":[]' })) {
   $span0 = Get-ImplSpan $db2 $p.N
   $ok    = ($span0[0] -ge 2) -and ($src2[$span0[0] - 2].Trim() -eq '') -and `
-           ($src2[$span0[0] - 1] -match ('^function\s+' + $p.N + '\('))
+           ($src2[$span0[0] - 1] -match $p.Hdr)
   Check ("PRECONDITION (lag): {0}'s TRUE span starts on its header line {1}, and the line above it is BLANK" -f $p.N, $span0[0]) `
     $ok ("above=[" + $src2[$span0[0] - 2] + "] header=[" + $src2[$span0[0] - 1] + "]")
 
   # Control: the shifted result is only evidence if the UNSHIFTED one is right.
-  $before = @(Get-HoverReturns $db2 ('returns.' + $p.N))
+  $before = @(Get-HoverReturns $db2 $p.Q)
   Check ("CONTROL (lag): with its TRUE span, {0} hovers exactly '{1}'" -f $p.N, $p.Want) `
     (($before.Count -eq 1) -and ($before[0] -eq $p.Want)) ("returns=" + ($before -join ','))
 
@@ -567,7 +620,19 @@ foreach ($p in @(
          $p.N, $span1[0], $span1[1]) `
     (($span1[0] -eq $span0[0] - 1) -and ($span1[1] -eq $span0[1])) ("was=" + ($span0 -join '..') + " now=" + ($span1 -join '..'))
 
-  $after = @(Get-HoverReturns $db2 ('returns.' + $p.N))
+  # ... and the lead token really is what the rule has to cope with: for
+  # ClassLag it is `class`, for the other three it is the routine keyword. Read
+  # off the lagged span itself, so "the class form is covered" is an assertion
+  # rather than a sentence in a comment.
+  $lead = ''
+  foreach ($ln in $src2[($span1[0] - 1) .. ($span1[1] - 1)]) {
+    if ($ln.Trim() -ne '') { if ($ln -match '([A-Za-z_][A-Za-z0-9_]*)') { $lead = $Matches[1] }; break }
+  }
+  $wantLead = if ($p.N -eq 'ClassLag') { 'class' } else { 'function' }
+  Check ("PRECONDITION (lag): the FIRST token of {0}'s lagged body is '{1}'" -f $p.N, $wantLead) `
+    ($lead -eq $wantLead) ("lead=" + $lead)
+
+  $after = @(Get-HoverReturns $db2 $p.Q)
   Check ("LAG: {0} ({1}) still hovers exactly '{2}' with a span that starts one line early" -f $p.N, $p.Why, $p.Want) `
     (($after.Count -eq 1) -and ($after[0] -eq $p.Want)) ("returns=" + ($after -join ','))
 }
@@ -581,6 +646,103 @@ foreach ($p in @(
   Check ("LAG: {0}'s lagged span still masks its nested routine -- '{1}' is not among its returns" -f $p.N, $p.Leak) `
     (($lagRet.Count -gt 0) -and ($lagRet -notcontains $p.Leak)) ("returns=" + ($lagRet -join ','))
 }
+
+# ===========================================================================
+# (7) SCENARIO 3 -- a STALE span that begins inside a DIFFERENT ROUTINE.
+#
+# This is the shape rule (6)'s lead-token anchor could not tell apart from its
+# own header, and it is the MAJORITY shape: on C:\Projects\YADF\YADF.sqlite,
+# 81 of the 96 spans eligible for that anchor head some other routine
+# (tools\measure\returns_blast.py anchor). A "recovery" there is not a
+# recovery -- it publishes one routine's return values under another's name,
+# which is precisely the defect this task exists to remove.
+#
+# ForeignB's impl_start_line is moved onto the blank line above ForeignA's
+# header, so its span begins one line above ANOTHER routine's header and
+# covers that routine's whole body. THE REQUIRED ANSWER IS ABSENCE. Asserting
+# that here rather than "ForeignB returns A - 7" is deliberate: with the span
+# stale the miner has no way to know which lines are ForeignB's, so silence is
+# the only honest answer, and rule (4) of this file -- absence over wrong --
+# says that is the right trade.
+#
+# Engine-verified RED at 55bcdaf: "returns":["A * 7"] -- ForeignA's value,
+# under ForeignB's name.
+# ===========================================================================
+Write-Host ''
+Write-Host '=== returns.pas, index span shifted INTO ANOTHER ROUTINE ===' -ForegroundColor Cyan
+
+$sc3 = Join-Path C:\TEMP 'draglint_docp3_returns_foreign'
+if (Test-Path $sc3) { Remove-Item $sc3 -Recurse -Force }
+New-Item -ItemType Directory -Path $sc3 | Out-Null
+$tgt3 = Join-Path $sc3 'returns.pas'
+$db3  = Join-Path $sc3 'r.sqlite'
+Copy-Item $fx $tgt3 -Force
+& $exePath index $sc3 --db $db3 2>$null | Out-Null
+$src3 = [IO.File]::ReadAllLines($tgt3)
+
+$fgnPy = Join-Path $sc3 'foreignspan.py'
+@'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+cur = con.execute(
+    "UPDATE symbols SET impl_start_line = ? "
+    "WHERE name = ? AND impl_start_line > 0", (int(sys.argv[3]), sys.argv[2]))
+con.commit()
+print(cur.rowcount)
+'@ | Set-Content $fgnPy -Encoding ascii
+
+$spanA = Get-ImplSpan $db3 'ForeignA'
+$spanB = Get-ImplSpan $db3 'ForeignB'
+
+# The two routines really are adjacent and in this order, and the line above
+# ForeignA's header really is blank -- otherwise "one line above ANOTHER
+# routine's header" is not what the doctored span describes.
+Check ("PRECONDITION (foreign): ForeignA {0}..{1} precedes ForeignB {2}..{3}, and the line above ForeignA's header is BLANK" -f `
+       $spanA[0], $spanA[1], $spanB[0], $spanB[1]) `
+  (($spanA[0] -gt 1) -and ($spanB[0] -gt $spanA[1]) -and ($src3[$spanA[0] - 2].Trim() -eq '') `
+   -and ($src3[$spanA[0] - 1] -match '^function\s+ForeignA\(')) `
+  ("above=[" + $src3[$spanA[0] - 2] + "] header=[" + $src3[$spanA[0] - 1] + "]")
+
+# Controls, before anything is doctored: each routine states its OWN value.
+# Without these, "ForeignB returns nothing" would also be satisfied by a miner
+# that returns nothing for either of them.
+foreach ($p in @(@{ N = 'ForeignA'; Want = 'A * 7' }, @{ N = 'ForeignB'; Want = 'A - 7' })) {
+  $r = @(Get-HoverReturns $db3 ('returns.' + $p.N))
+  Check ("CONTROL (foreign): with its TRUE span, {0} hovers exactly '{1}'" -f $p.N, $p.Want) `
+    (($r.Count -eq 1) -and ($r[0] -eq $p.Want)) ("returns=" + ($r -join ','))
+}
+
+$rc3 = (& python $fgnPy $db3 'ForeignB' ($spanA[0] - 1)) -join ''
+Check 'PRECONDITION (foreign): the UPDATE moved exactly ONE ForeignB row' ($rc3.Trim() -eq '1') ("rowcount=" + $rc3)
+
+$spanB2 = Get-ImplSpan $db3 'ForeignB'
+Check ("PRECONDITION (foreign): ForeignB's span now READS {0}..{1} -- it begins one line ABOVE ForeignA's header and COVERS ForeignA's body" -f `
+       $spanB2[0], $spanB2[1]) `
+  (($spanB2[0] -eq $spanA[0] - 1) -and ($spanB2[1] -eq $spanB[1]) -and ($spanB2[1] -ge $spanA[1])) `
+  ("was=" + ($spanB -join '..') + " now=" + ($spanB2 -join '..'))
+
+# ... and ForeignA's own Result line is genuinely reachable inside that span.
+# This is what makes the absence check below falsifiable: the foreign value is
+# there to be picked up, and the engine used to pick it up.
+$fgnLn = @(Find-Lines $src3 'Result := A \* 7')
+Check ("PRECONDITION (foreign): ForeignA's own 'Result := A * 7' (line {0}) lies INSIDE ForeignB's doctored span" -f ($fgnLn -join ',')) `
+  (($fgnLn.Count -eq 1) -and ($fgnLn[0] -ge $spanB2[0]) -and ($fgnLn[0] -le $spanB2[1])) `
+  ("lines=" + ($fgnLn -join ','))
+
+$fgnRet = @(Get-HoverReturns $db3 'returns.ForeignB')
+Check 'FOREIGN: ForeignB does NOT adopt ForeignA''s return value "A * 7"' `
+  ($fgnRet -notcontains 'A * 7') ("returns=" + ($fgnRet -join ','))
+Check 'FOREIGN: ForeignB hovers NOTHING AT ALL over a span that heads another routine -- absence over wrong' `
+  ($fgnRet.Count -eq 0) ("returns=" + ($fgnRet -join ','))
+
+# The autodoc surface must agree with hover here too -- they share the miner,
+# and a fix that silenced one surface only would be a defect. Asserted on the
+# rendered <returns>, which is the text a human actually reads.
+& $exePath document --unit $tgt3 --db $db3 --apply 2>$null | Out-Null
+$lines3 = [IO.File]::ReadAllLines($tgt3)
+$bad3   = @($lines3 | Where-Object { $_ -match '^\s*///' -and $_ -match 'Observed:' -and $_ -match 'A \* 7' })
+Check 'FOREIGN: exactly ONE ///-prefixed "Observed:" line in the file names "A * 7" -- ForeignA''s own, and no other' `
+  ($bad3.Count -eq 1) ($bad3 -join ' | ')
 
 }
 finally { Pop-Location }
