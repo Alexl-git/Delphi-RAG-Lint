@@ -1,7 +1,7 @@
 # drag-lint smoke autotest
 #
 # Drives drag-lint.exe and drag-lint.exe lsp the same way the IDE plugin
-# does — outside the IDE — so regressions in the CLI, indexer, LSP server,
+# does -- outside the IDE -- so regressions in the CLI, indexer, LSP server,
 # and pipe-framing layer can be caught without launching RAD Studio.
 #
 # Exit code: 0 on full pass, non-zero on first failure.
@@ -201,7 +201,7 @@ Run-Stage 'CLI smoke' {
 }
 
 # --------------------------------------------------------------------------
-# Stage 2: LSP server — spawn + initialize + hover + shutdown
+# Stage 2: LSP server -- spawn + initialize + hover + shutdown
 #
 # This is the regression-catcher for the v0.40.1 freeze and the v0.40.2 Stop
 # hang. If LSP can be spawned, initialized, hover-queried, and shut down

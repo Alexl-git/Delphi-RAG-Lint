@@ -24,7 +24,7 @@ unit DRagLint.Parser.Sql;
      - Symbol-level only. Body of triggers/procedures is NOT parsed for
        INSERT/UPDATE/SELECT refs in v0.40.5 (deferred to v0.40.6 if needed).
      - INSERT/UPDATE INTO FIB$* metadata tables are NOT parsed in v0.40.5
-       (deferred — user-deferred decision).
+       (deferred -- user-deferred decision).
      - Column data-types stored verbatim in symbols.signature.
 
    Robustness:
@@ -32,7 +32,7 @@ unit DRagLint.Parser.Sql;
        blocks.
      - Skips strings, comments, and parenthesised expressions when looking
        for the next top-level statement separator.
-     - Doesn't validate semantics — a malformed CREATE TABLE simply emits
+     - Doesn't validate semantics -- a malformed CREATE TABLE simply emits
        whatever it can extract before bailing. *)
 
 interface
@@ -215,7 +215,7 @@ end; // function
 
 function FindMatchingParen(const AText: string; AOpenIdx: Integer): Integer;
 { Scans from the '(' at AOpenIdx for the matching ')'. Returns 0 on no match.
-  String/comment-stripped text only — callers must pass the cleaned text. }
+  String/comment-stripped text only -- callers must pass the cleaned text. }
 var
   Depth: Integer;
   I    : Integer;
@@ -392,7 +392,7 @@ begin
       Name:= M.Groups[1].Value;
       ComputeLineCol(Raw, M.Index, Line, Col);
       { Find paren of the column list (the regex anchors at the '(' that ends
-        the match — we need its position in the cleaned text). }
+        the match -- we need its position in the cleaned text). }
       OpenP:= M.Index + M.Length - 1;
       CloseP:= FindMatchingParen(Cleaned, OpenP);
       if CloseP > OpenP then ComputeLineCol(Raw, CloseP, EndLine, EndCol)

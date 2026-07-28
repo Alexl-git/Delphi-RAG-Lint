@@ -262,7 +262,7 @@ begin
       'run_ast_checks', 'Run compiler-less AST diagnostics on a Delphi source file. ' + 'Checks: unbalanced begin/end, undeclared identifiers (vs symbol index). '
         + 'Works in Zed / VS Code / any editor without dcc.exe installed.',
       '{"type":"object","properties":{' + '"target":{"type":"string","description":"Absolute path to a .pas file"},'
-        + '"db":{"type":"string","description":"Path to .sqlite database (optional — enables undeclared-identifier check)"}'
+        + '"db":{"type":"string","description":"Path to .sqlite database (optional -- enables undeclared-identifier check)"}'
         + '},"required":["target"],"additionalProperties":false}'));
 
   // v0.26: run dcc64/msbuild and return compiler findings as JSON.
@@ -271,7 +271,7 @@ begin
         + 'When db is supplied the findings are also stored in compiler_findings ' + 'for later LSP publishDiagnostics merging.',
       '{"type":"object","properties":{' + '"target":{"type":"string","description":"Absolute path to a .pas file or .dproj project"},'
         + '"msbuild_path":{"type":"string","description":"Absolute path to msbuild.exe (optional)"},'
-        + '"db":{"type":"string","description":"Path to .sqlite database (optional — stores findings)"}' + '},"required":["target"],"additionalProperties":false}'));
+        + '"db":{"type":"string","description":"Path to .sqlite database (optional -- stores findings)"}' + '},"required":["target"],"additionalProperties":false}'));
 
   Res.AddPair('tools', Tools);
   SendResult(AId, Res);

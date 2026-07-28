@@ -84,7 +84,7 @@ begin
 end;
 
 procedure ClearPriorSnapshot(ASqlite: TFDConnection);
-{ Drag-lint v0.40.5: simple rolling snapshot — keep only the latest
+{ Drag-lint v0.40.5: simple rolling snapshot -- keep only the latest
   snapshot in each fb_* table. Reduce DB bloat. If you want history,
   duplicate the table or back up the sqlite before re-snapshotting. }
 begin
@@ -267,7 +267,7 @@ begin
         QSrc:= TFDQuery.Create(nil); QIns:= TFDQuery.Create(nil);
         try
           QSrc.Connection:= FbConn;
-          { Project-specific schema — the actual FIB$FIELDS_INFO in Micronite
+          { Project-specific schema -- the actual FIB$FIELDS_INFO in Micronite
             v6 doesn't carry READ_ONLY. Stick to fields confirmed present in
             the MS*.SQL DDL. Other variants of FIB$* across projects will
             have their own columns; if needed, extend this list later. }

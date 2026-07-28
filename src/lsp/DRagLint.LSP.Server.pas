@@ -61,7 +61,7 @@ type
       procedure HandleDidOpenOrSave(const AParams: TJSONObject);
       function LocationFromSymbol(const ASym: TSymbol   ): TJSONObject; overload;
       function LocationFromRef   (const ARef: TReference): TJSONObject; overload;
-      { v0.40.3: explicit-store overloads — preferred for multi-DB queries
+      { v0.40.3: explicit-store overloads -- preferred for multi-DB queries
       so each Location URI resolves against the store that owns the row. }
       function LocationFromSymbol(const ASym: TSymbol   ; const AStore: ISymbolStore): TJSONObject; overload;
       function LocationFromRef   (const ARef: TReference; const AStore: ISymbolStore): TJSONObject; overload;
@@ -221,7 +221,7 @@ begin
 end;
 
 // SendRawNotification sends a notification (no id) with Content-Length framing.
-// Identical to SendMessage but semantically distinct — used for server-pushed
+// Identical to SendMessage but semantically distinct -- used for server-pushed
 // notifications such as textDocument/publishDiagnostics.
 procedure TLSPServer.SendRawNotification(const AObj: TJSONObject);
 begin
@@ -547,7 +547,7 @@ begin
 
     { v0.40.3: iterate every store, merge results. For each store, prefer
       exact-name matches; fall back to fuzzy when exact returns nothing.
-      Per-store fallback is intentional — if project DB has an exact hit
+      Per-store fallback is intentional -- if project DB has an exact hit
       we don't want library DB's fuzzy noise diluting the result. }
     for StIdx:= 0 to High(FStores) do
     begin

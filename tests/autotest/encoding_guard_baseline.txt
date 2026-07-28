@@ -1,0 +1,103 @@
+# encoding_guard_baseline.txt -- pre-existing lone-LF .pas/.dfm files, recorded by T3k.
+#
+# WHY A BASELINE AND NOT A FIX. c:\Projects\CLAUDE.md requires .pas/.dfm to be
+# strict CRLF / 7-bit ASCII / no BOM. 80 files under src\ and tests\ predate that
+# rule being enforced by anything. Rewriting all 80 would be a large, untestable
+# change to linter and preprocessor FIXTURES whose byte content some runners pin,
+# for no behavioural gain -- dcc reads both. So they are recorded here and exempted
+# from the lone-LF check ONLY. The ASCII and BOM checks still apply to them.
+#
+# WHAT THE GUARD ACTUALLY PROTECTS (register HAZARD H1): a file that is CRLF today
+# must not silently become LF. T3j's implementer converted two .pas files to LF with
+# a scripted edit and the content diff, the build, and a 185/187 green battery ALL
+# missed it -- git normalizes on commit, so the committed blob was correct while the
+# on-disk file dcc64 reads was wrong. Anything NOT listed here must have zero lone LFs.
+#
+# TO REMOVE AN ENTRY: convert the file to CRLF, delete its line, re-run the guard.
+# TO ADD ONE: don't. A new entry means a file just got damaged -- fix the file.
+#
+# Columns: path <TAB> class <TAB> loneLF-at-baseline <TAB> CRLF-at-baseline
+# class MIXED = part CRLF, part LF. Those three are the H1 shape already realised,
+# pre-existing in the IDE plugin tree; recorded rather than silently lumped in with
+# the uniformly-LF files.
+#
+src/config/Config.EngineRunner.pas	LF-ONLY	268	0
+src/config/Config.IndexesFrame.dfm	LF-ONLY	446	0
+src/config/Config.IndexesFrame.pas	LF-ONLY	1054	0
+src/config/Config.MainForm.dfm	LF-ONLY	73	0
+src/config/Config.MainForm.pas	LF-ONLY	243	0
+src/config/Config.SettingsFrame.dfm	LF-ONLY	107	0
+src/config/Config.SettingsFrame.pas	LF-ONLY	198	0
+src/delphi-plugin/DragLint.Plugin.AutoComplete.pas	MIXED	9	178
+src/delphi-plugin/DragLint.Plugin.DockForm.dfm	LF-ONLY	6	0
+src/delphi-plugin/DragLint.Plugin.GraphWindow.dfm	LF-ONLY	6	0
+src/delphi-plugin/DragLint.Plugin.OptionsFrames.dfm	LF-ONLY	6	0
+src/delphi-plugin/DragLint.Plugin.Providers.pas	MIXED	17	224
+src/delphi-plugin/DragLint.Plugin.Telemetry.pas	MIXED	7	67
+tests/autotest/fixtures/SampleUnit.pas	LF-ONLY	81	0
+tests/fixtures/Calls.pas	LF-ONLY	29	0
+tests/fixtures/coverage/tree/inA/a.pas	LF-ONLY	4	0
+tests/fixtures/coverage/tree/inB/b.pas	LF-ONLY	4	0
+tests/fixtures/coverage/tree/oldstuff - Copy/c.pas	LF-ONLY	4	0
+tests/fixtures/coverage/tree/unassigned/d.pas	LF-ONLY	4	0
+tests/fixtures/Kinds.pas	LF-ONLY	45	0
+tests/fixtures/LoopFBN.pas	LF-ONLY	40	0
+tests/fixtures/manifest/app/uAlpha.pas	LF-ONLY	6	0
+tests/fixtures/manifest/app/uBeta.pas	LF-ONLY	5	0
+tests/fixtures/manifest/app/uGamma.pas	LF-ONLY	4	0
+tests/fixtures/manifest/app/uOrphan.pas	LF-ONLY	4	0
+tests/fixtures/manifest/app/uStale.pas	LF-ONLY	4	0
+tests/fixtures/manifest/proj/build/x.pas	LF-ONLY	1	0
+tests/fixtures/manifest/proj/keep.pas	LF-ONLY	1	0
+tests/fixtures/manifest/proj/sub/b.pas	LF-ONLY	1	0
+tests/fixtures/manifest/proj/Unit_OLD.pas	LF-ONLY	1	0
+tests/fixtures/manifest/sql/scratch.pas	LF-ONLY	1	0
+tests/fixtures/Smoke.pas	LF-ONLY	24	0
+tests/fixtures/SmokeForm.dfm	LF-ONLY	25	0
+tests/fixtures/UsageDemo.pas	LF-ONLY	16	0
+tests/lint-project/CycTest.pas	LF-ONLY	25	0
+tests/lint-project/layers/App.Business.Svc.pas	LF-ONLY	5	0
+tests/lint-project/layers/App.Data.DAO.pas	LF-ONLY	5	0
+tests/lint-project/layers/App.UI.Main.pas	LF-ONLY	5	0
+tests/lint/code-after-exit.pas	LF-ONLY	31	0
+tests/lint/criticalsection-not-released.pas	LF-ONLY	27	0
+tests/lint/cyclomatic-complexity.pas	LF-ONLY	27	0
+tests/lint/dataset-open-without-close.pas	LF-ONLY	27	0
+tests/lint/deep-nesting.pas	LF-ONLY	18	0
+tests/lint/empty-on-handler.pas	LF-ONLY	28	0
+tests/lint/firedac-open-execsql-mismatch.pas	LF-ONLY	17	0
+tests/lint/float-equality-comparison.pas	LF-ONLY	15	0
+tests/lint/float-equality-datetime.pas	LF-ONLY	13	0
+tests/lint/float-equality-string-fp.pas	LF-ONLY	37	0
+tests/lint/format-argument-count.pas	LF-ONLY	29	0
+tests/lint/format-specifier-type-mismatch.pas	LF-ONLY	27	0
+tests/lint/freeandnil-on-interface.pas	LF-ONLY	15	0
+tests/lint/gettickcount-wraparound.pas	LF-ONLY	15	0
+tests/lint/global-form-variable.dfm	LF-ONLY	2	0
+tests/lint/global-form-variable.pas	LF-ONLY	14	0
+tests/lint/hardcoded-absolute-path.pas	LF-ONLY	15	0
+tests/lint/hardcoded-connection-string.pas	LF-ONLY	15	0
+tests/lint/hardcoded-ip-address.pas	LF-ONLY	15	0
+tests/lint/length-zero-compare.pas	LF-ONLY	15	0
+tests/lint/locale-sensitive-conversion.pas	LF-ONLY	15	0
+tests/lint/loop-executes-at-most-once.pas	LF-ONLY	43	0
+tests/lint/nil-comparison-pointer.pas	LF-ONLY	19	0
+tests/lint/not-comparison-precedence.pas	LF-ONLY	15	0
+tests/lint/outputdebugstring.pas	LF-ONLY	12	0
+tests/lint/path-traversal.pas	LF-ONLY	24	0
+tests/lint/public-field.pas	LF-ONLY	15	0
+tests/lint/redundant-not-not.pas	LF-ONLY	15	0
+tests/lint/string-equality-nonalpha.pas	LF-ONLY	24	0
+tests/lint/string-equality-numeric.pas	LF-ONLY	21	0
+tests/lint/suppression.pas	LF-ONLY	17	0
+tests/lint/syntax-error-ifend.pas	LF-ONLY	20	0
+tests/lint/too-many-exit-points.pas	LF-ONLY	23	0
+tests/lint/too-many-parameters.pas	LF-ONLY	17	0
+tests/lint/try-except-swallowed.pas	LF-ONLY	37	0
+tests/lint/ui-access-in-thread.pas	LF-ONLY	23	0
+tests/lint/unprotected-object-free.pas	LF-ONLY	63	0
+tests/lint/unsafe-shellexecute.pas	LF-ONLY	21	0
+tests/lint/uppercase-compare.pas	LF-ONLY	15	0
+tests/lint/use-after-free.pas	LF-ONLY	27	0
+tests/lint/virtual-method-in-constructor.pas	LF-ONLY	66	0
+tests/lint/win64-pointer-cast.pas	LF-ONLY	15	0
