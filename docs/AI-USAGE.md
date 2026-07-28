@@ -204,16 +204,21 @@ in 2b.
 > **When the mined `<returns>` says nothing.** The enumeration is a display
 > aid, not an authority, and it prefers silence to naming a value the routine
 > does not return. No `Observed:` suffix is emitted **at all** when: the
-> routine changes `Result` by `Inc`/`Dec`/`SetLength` or by a self-referential
-> `Result := ... Result ...` (the whole-`Result` assignments are then only a
-> seed -- "Observed: AFrom" for a loop that walks away from `AFrom` was the
-> reported defect); the right-hand side does not END on its own line (the
-> capture is single-line, and half an expression is worse than none); or every
-> candidate is a `Result.<Field> := ` / `Result[i] := ` member assignment
-> (those build the result, they are not return values, and one real case
-> populates 42 fields). A **nested** routine's or anonymous method's `Result`
-> belongs to that routine, never to the enclosing one. `hover` shares the
-> miner, so it says exactly the same thing.
+> routine changes `Result` **in code** by `Inc`/`Dec`/`SetLength` or by a
+> self-referential `Result := ... Result ...` (the whole-`Result` assignments
+> are then only a seed -- "Observed: AFrom" for a loop that walks away from
+> `AFrom` was the reported defect; "in code" is literal -- comments and string
+> literals are blanked before that test, so an `Inc(Result)` parked in a
+> `{...}` comment does not silence anything); the right-hand side does not END
+> on its own line (the capture is single-line, and half an expression is worse
+> than none); or every candidate is a `Result.<Field> := ` / `Result[i] := `
+> member assignment (those build the result, they are not return values, and
+> one real case populates 42 fields). A **nested** routine's or anonymous
+> method's `Result` belongs to that routine, never to the enclosing one -- and
+> the routine's own header is recognised on body line 0 OR as the body's first
+> token, so an index that lags the tree by a line does not turn the whole
+> routine into a nested one. `hover` shares the miner, so it says exactly the
+> same thing.
 >
 > **New managed-block fact lines.** The generated `<!-- drag-lint:auto -->`
 > block can also carry (each omitted when empty): `Overrides: TAncestor.M`,

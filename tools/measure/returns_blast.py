@@ -24,16 +24,29 @@ USAGE (python 3.8+, stdlib only):
     python returns_blast.py argpass <db.sqlite> [<path-prefix-filter>]
     python returns_blast.py braces  <db.sqlite> [<path-prefix-filter>]
 
-  blast   -- routines emitting >=1 mined case today, how many the mutation rule
-             suppresses (per form), and how many keep emitting but with
+  blast   -- routines emitting >=1 mined case today, how many stop emitting and
+             WHICH RULE silenced each one, and how many keep emitting but with
              different text. This is the headline measurement.
+
+             The per-rule split is not cosmetic. Three rules can empty the set
+             -- the mutation rule, the incomplete-RHS rule, and nested-scope
+             masking -- and this script once counted all three under one
+             heading labelled "SUPPRESSED by the mutation rule", which the
+             reply doc then repeated. On YADF the MAJORITY of the suppression
+             was the multi-line-RHS rule, so the label was wrong about most of
+             what it described.
   argpass -- the callees that receive a bare `Result` as an argument, ranked.
              This is the evidence for DECLINING INBOX form 1b: the naive text
              test for "Result passed to a var/out parameter" cannot tell a
              write from a read, and the corpus is dominated by Length/SizeOf.
   braces  -- routines whose mined set changes if `{...}` / `(*...*)` block
              comments are blanked. Evidence for the deferred brace-comment
-             defect; StripLineComment only handles `//`.
+             defect (register K23), which is about MINING out of a comment.
+             NOTE WHAT THIS MODE CANNOT SEE: it compares mine_old against
+             mine_old(blanked), so it measures the mining direction only. The
+             SUPPRESSION direction -- a comment's Inc(Result) deleting a true
+             <returns> -- is invisible to it, and was a separate defect fixed
+             in T4b's fix round 1.
 
 Example corpora used by the reply doc:
 
@@ -144,20 +157,33 @@ WORD_RESULT = re.compile(r'(?<![A-Za-z0-9_])result(?![A-Za-z0-9_])', re.I)
 INCDEC = re.compile(r'(?<![A-Za-z0-9_])(inc|dec|setlength)\s*\(\s*result\s*[,)]', re.I)
 
 
-def tokens_of(lines):
-    """(line_idx, col, text_lower, kind, end_col) skipping strings and comments."""
+def scan_body(lines):
+    """Port of TokenizeBody: (tokens, code_only_lines).
+
+    tokens are (line_idx, col, text_lower, kind, end_col) with strings and all
+    three comment forms skipped; code_only_lines is the same text with every
+    comment and every string literal replaced by spaces (same line count, same
+    columns). ':' is a token so `function: Integer` (a parameterless procedural
+    type -- the word after the keyword is its RETURN TYPE) is distinguishable
+    from `function Twice(...)` (a named nested routine).
+    """
+    toks = []
+    code = [list(l) for l in lines]
     in_brace = in_paren_star = False
     for li, ln in enumerate(lines):
         i, n = 0, len(ln)
         while i < n:
             c = ln[i]
             if in_brace:
+                code[li][i] = ' '
                 if c == '}':
                     in_brace = False
                 i += 1
                 continue
             if in_paren_star:
+                code[li][i] = ' '
                 if c == '*' and i + 1 < n and ln[i + 1] == ')':
+                    code[li][i + 1] = ' '
                     in_paren_star = False
                     i += 2
                     continue
@@ -165,15 +191,20 @@ def tokens_of(lines):
                 continue
             if c == '{':
                 in_brace = True
+                code[li][i] = ' '
                 i += 1
                 continue
             if c == '(' and i + 1 < n and ln[i + 1] == '*':
                 in_paren_star = True
+                code[li][i] = code[li][i + 1] = ' '
                 i += 2
                 continue
             if c == '/' and i + 1 < n and ln[i + 1] == '/':
+                for k in range(i, n):
+                    code[li][k] = ' '
                 break
             if c == "'":
+                q = i
                 i += 1
                 while i < n:
                     if ln[i] == "'":
@@ -183,22 +214,39 @@ def tokens_of(lines):
                         i += 1
                         break
                     i += 1
+                for k in range(q, min(i, n)):
+                    code[li][k] = ' '
                 continue
             if c.isalpha() or c == '_':
                 j = i
                 while j < n and is_id_ch(ln[j]):
                     j += 1
-                yield (li, i, ln[i:j].lower(), 'word', j - 1)
+                toks.append((li, i, ln[i:j].lower(), 'word', j - 1))
                 i = j
                 continue
-            if c in '();':
-                yield (li, i, c, 'sym', i)
+            if c in '();:':
+                toks.append((li, i, c, 'sym', i))
             i += 1
+    return toks, [''.join(l) for l in code]
+
+
+def tokens_of(lines):
+    return scan_body(lines)[0]
 
 
 def mask_nested(lines, mask_ch='\x01'):
+    """(masked_source, masked_code_only) -- nested scopes blanked in both.
+
+    The routine's OWN header is accepted on body line 0 OR as the body's first
+    token. Both halves are load-bearing: without "line 0" every `class
+    function` body is masked (the `class` token comes first); without "first
+    token" a span that lags the tree by one line turns the whole routine into a
+    nested one. Accepting the first routine keyword ANYWHERE is deliberately
+    NOT done -- it also re-reads spans that start inside the previous routine.
+    """
+    toks, code = scan_body(lines)
     out = [list(l) for l in lines]
-    toks = list(tokens_of(lines))
+    cod = [list(l) for l in code]
     depth = paren = 0
     header_seen = False
     pending = None          # (line, col, paren, named)
@@ -216,7 +264,7 @@ def mask_nested(lines, mask_ch='\x01'):
                     pending = None
             continue
         if tk in ROUTINE_KW:
-            if not header_seen and li == 0 and not stack:
+            if not header_seen and (li == 0 or ti == 0) and not stack:
                 header_seen = True
                 continue
             if stack:
@@ -240,7 +288,8 @@ def mask_nested(lines, mask_ch='\x01'):
                     b = (end + 1) if x == li else len(out[x])
                     for k in range(a, min(b, len(out[x]))):
                         out[x][k] = mask_ch
-    return [''.join(l) for l in out]
+                        cod[x][k] = mask_ch
+    return [''.join(l) for l in out], [''.join(l) for l in cod]
 
 
 def looks_complete(s):
@@ -317,11 +366,13 @@ def result_rhs_new(line, mask_ch='\x01'):
         scan = p + 6
 
 
-def mutation_forms(masked):
+def mutation_forms(code_only):
+    """Asked of the CODE-ONLY view. Suppression deletes documentation, so a
+    mutation that exists only inside a comment or a string literal must not
+    fire -- `{ old: Inc(Result); }` mutates nothing."""
     tags = set()
-    for ln in masked:
-        t = strip_line_comment(ln)
-        m = INCDEC.search(t)
+    for ln in code_only:
+        m = INCDEC.search(ln)
         if m:
             tags.add('setlength' if m.group(1).lower() == 'setlength' else 'incdec')
         r = result_rhs_new(ln)
@@ -331,8 +382,8 @@ def mutation_forms(masked):
 
 
 def mine_new(body):
-    masked = mask_nested(body)
-    tags = mutation_forms(masked)
+    masked, code = mask_nested(body)
+    tags = mutation_forms(code)
     if tags:
         return [], tags
     seen, out = set(), []
@@ -393,14 +444,22 @@ def cmd_blast(db, prefix=None):
                     examples.append((qn, old, new))
         else:
             per_form['ANY'] += 1
+            # WHICH rule silenced it. mine_new returns the mutation tags it
+            # found; an empty tag set means the set was emptied by the
+            # incomplete-RHS rule or by nested-scope masking instead. Counting
+            # both under one "mutation rule" heading mis-attributed the
+            # MAJORITY of YADF's suppression.
+            per_form['by-mutation' if tags else 'by-rhs-or-mask'] += 1
             for t in tags:
                 per_form[t] += 1
     print('routines emitting >=1 mined case TODAY   : %d' % n_old)
-    print('  SUPPRESSED by the mutation rule        : %d  (%.1f%%)'
+    print('  no longer emitting, ANY rule           : %d  (%.1f%%)'
           % (per_form['ANY'], 100.0 * per_form['ANY'] / max(1, n_old)))
-    for t, c in sorted(per_form.items()):
-        if t != 'ANY':
-            print('        by form %-10s : %d' % (t, c))
+    print('     of which by the MUTATION rule       : %d' % per_form['by-mutation'])
+    for t in ('selfref', 'setlength', 'incdec'):
+        if per_form[t]:
+            print('           by form %-10s     : %d' % (t, per_form[t]))
+    print('     of which by INCOMPLETE-RHS / MASK   : %d' % per_form['by-rhs-or-mask'])
     print('  still emitting, DIFFERENT text         : %d  (%.1f%%)'
           % (n_changed, 100.0 * n_changed / max(1, n_old)))
     print('  still emitting, text unchanged         : %d' % (n_kept - n_changed))

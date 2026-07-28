@@ -35,6 +35,29 @@
       were credited to the host. YADF's OptionTable listed six anonymous
       getters' Results; FormatSource listed four from local helpers.
 
+  (5) THE SUPPRESSING MUTATION MUST BE IN CODE.  Rules (1) and (4) DELETE
+      documentation, so their false positives are the expensive ones: they
+      silently remove a true <returns> from a routine that never had the
+      defect. Three shapes did exactly that -- Inc(Result) parked in a {...}
+      comment, `Result := Result + 1` left in a (*..*) or a comment, and
+      'Result := Result + 1' as PROSE inside a format string -- and a
+      PARAMETERLESS procedural type (`var F: function: Integer;`) made the
+      nested-routine detector eat the entire routine, because the word after
+      the keyword is the RETURN TYPE and was read as a routine NAME. The
+      mutation test now runs on a CODE-ONLY view of the body, and ':' is a
+      token so "return type follows" is distinguishable from "name follows".
+
+  (6) A SPAN THAT LAGS THE TREE BY ONE LINE IS STILL THAT ROUTINE'S SPAN.
+      The routine's own header used to be recognised only on body line 0. An
+      index that lags the tree can start the span on the blank line above the
+      header -- measured on the shipping C:\Projects\YADF\YADF.sqlite: 5
+      routines, every one losing its whole <returns> -- and the header then
+      read as a NESTED routine, blanking the body. It is now accepted on body
+      line 0 OR as the body's first token. Both halves are load-bearing:
+      dropping "line 0" masks the body of every `class function`, whose
+      `class` token comes first (measured 111 routines in drag-lint's own src\
+      and 58 in ORM3 that would lose their <returns>).
+
   WHAT DOES *NOT* CHANGE, AND IS ASSERTED AS SUCH
   -----------------------------------------------
   Result.<Field> := is still not mined (DefaultCfg). This already worked -- the
@@ -68,8 +91,9 @@
   absence check in this file; the eight-strong control list and the exact
   expected texts are what tell those two apart.
 
-  LOAD-BEARING PROOFS (transcripts in the task 4b report). Each mutation leaves
-  the mechanism reachable and changes only its answer:
+  LOAD-BEARING PROOFS (transcripts in the task 4b report and its fix-round-1
+  report). Each mutation leaves the mechanism reachable and changes only its
+  answer:
     M1  MaskNestedRoutines returns its input unchanged -> the NESTED group
         reddens (AnonHost, LocalHost, and the file-wide leak checks); the
         MUTATION, CAPTURE and CONTROL groups stay green.
@@ -77,6 +101,11 @@
         Accum, and the Observed:-line count); everything else stays green.
     M3  The incomplete-RHS guard removed -> MultiLineRhs reddens alone.
     M4  The block-keyword terminator removed -> OneLiner reddens alone.
+  Groups (5) and (6) need no synthetic mutation: the engine at 2fbb20d IS the
+  reverted fix, and every one of their checks was RED against it -- NOT-CODE
+  and the two procedural-type guards emitted no <returns> at all, and the
+  lagging-span scenario returned "returns":[] where the true span returns
+  ["A + B"]. Transcript in the fix-round report.
 
   Runs from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -143,6 +172,16 @@ function Find-Lines([string[]]$src, [string]$rx) {
   $out = New-Object System.Collections.Generic.List[int]
   for ($i = 0; $i -lt $src.Count; $i++) { if ($src[$i] -match $rx) { $out.Add($i + 1) } }
   return $out
+}
+
+# The hover surface's own mined return list for $qname, as an array (empty when
+# hover emitted none, or when the JSON could not be parsed at all).
+function Get-HoverReturns([string]$db, [string]$qname) {
+  $raw = (& $exePath hover --qname $qname --db $db --format json 2>$null) -join ''
+  $o = $null
+  try { $o = ($raw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json } catch { return @() }
+  if ($null -eq $o) { return @() }
+  return @($o.returns)
 }
 
 # The 'Observed: ...' payload of the <returns> tag inside a doc block, or ''.
@@ -247,9 +286,40 @@ Check 'PRECONDITION: DefaultCfg assigns all SIX Result.<Field> members inside it
 # spells the 'function' keyword inside its own span without opening a scope.
 $ipSpan = Get-ImplSpan $db 'InlineProcVar'
 $ipLn   = @(Find-Lines $pre 'F: function\(X: Integer\): Integer;')
-Check 'PRECONDITION: InlineProcVar declares a PROCEDURAL-TYPE local (the ''function'' keyword, no body) inside its indexed span' `
+Check 'PRECONDITION: InlineProcVar declares a PARAMETERISED PROCEDURAL-TYPE local (the ''function'' keyword, no body) inside its indexed span' `
   (($ipSpan[0] -gt 0) -and ($ipLn.Count -eq 1) -and ($ipLn[0] -ge $ipSpan[0]) -and ($ipLn[0] -le $ipSpan[1])) `
   ("span=" + ($ipSpan -join '..') + " line=" + ($ipLn -join ','))
+
+# (5, detector) InlineProcVar above is disarmed by its PARENTHESES, so it was
+# never a guard on the parameterless forms -- which is why the detector ate
+# both of these. Assert the absence of parentheses explicitly: without it,
+# "a procedural type is guarded" is a claim about one spelling of three.
+foreach ($p in @(
+    @{ N = 'ParamlessProcVar' ; Rx = 'F: function: Integer;'        ; What = 'a PARAMETERLESS procedural-type VAR' },
+    @{ N = 'LocalProcTypeDecl'; Rx = 'TGetter = function: Integer;' ; What = 'a PARAMETERLESS procedural-type local TYPE' })) {
+  $span = Get-ImplSpan $db $p.N
+  $ln   = @(Find-Lines $pre $p.Rx)
+  $in   = @($ln | Where-Object { $_ -ge $span[0] -and $_ -le $span[1] })
+  $noParen = ($in.Count -eq 1) -and ($pre[$in[0]-1] -notmatch '\(')
+  Check ("PRECONDITION: {0} declares {1} inside its indexed span, with NO parentheses to disarm the detector" -f $p.N, $p.What) `
+    (($span[0] -gt 0) -and ($in.Count -eq 1) -and $noParen) `
+    ("span=" + ($span -join '..') + " lines=" + ($ln -join ','))
+}
+
+# (5, not-code) The NOT-CODE group only tests anything if the mutation SHAPE is
+# really inside each routine's indexed span and really is inside a comment or a
+# string literal. Derived from the pre-apply source, never from the output.
+foreach ($p in @(
+    @{ N = 'BraceCommentInc'    ; Rx = '\{ old implementation: Inc\(Result\); \}' ; What = 'Inc(Result) inside a {...} comment' },
+    @{ N = 'BraceCommentSelfRef'; Rx = '\{ was: Result := Result \+ 1; \}'        ; What = 'a self-referential Result := inside a {...} comment' },
+    @{ N = 'ParenStarSetLength' ; Rx = '\(\* dead: SetLength\(Result, A\); \*\)'  ; What = 'SetLength(Result, ..) inside a (*..*) comment' },
+    @{ N = 'StrLiteralResult'   ; Rx = "Format\('Result := Result \+ 1; %d'"      ; What = "'Result := Result + 1' inside a STRING LITERAL" })) {
+  $span = Get-ImplSpan $db $p.N
+  $ln   = @(Find-Lines $pre $p.Rx)
+  $in   = @($ln | Where-Object { $_ -ge $span[0] -and $_ -le $span[1] })
+  Check ("PRECONDITION: {0}'s indexed impl span {1}..{2} CONTAINS {3}" -f $p.N, $span[0], $span[1], $p.What) `
+    (($span[0] -gt 0) -and ($in.Count -eq 1)) ("lines=" + ($ln -join ','))
+}
 
 # ===========================================================================
 # APPLY
@@ -263,7 +333,9 @@ $text  = [IO.File]::ReadAllText($tgt)
 $lines = [IO.File]::ReadAllLines($tgt)
 
 $names  = @('PlainSum','DoubleIt','ConcatPath','PrevIdx','Accum','DefaultCfg',
-            'NestedCallRhs','MultiLineRhs','OneLiner','AnonHost','LocalHost','InlineProcVar')
+            'NestedCallRhs','MultiLineRhs','OneLiner','AnonHost','LocalHost','InlineProcVar',
+            'ParamlessProcVar','LocalProcTypeDecl','BraceCommentInc','BraceCommentSelfRef',
+            'ParenStarSetLength','StrLiteralResult')
 $blocks = @{}
 foreach ($nm in $names) {
   $ln = Get-DeclLine $db $nm
@@ -283,9 +355,11 @@ foreach ($nm in $names) {
 # A filter that matches the thing it is describing is the exact shape of a
 # vacuous test.
 $obsLines = @($lines | Where-Object { $_ -match '^\s*///' -and $_ -match 'Observed:' })
-Check 'CONTROL: exactly EIGHT ///-prefixed "Observed:" lines in the applied file' `
-  ($obsLines.Count -eq 8) ("count=" + $obsLines.Count)
-foreach ($nm in @('PlainSum','DoubleIt','ConcatPath','NestedCallRhs','OneLiner','AnonHost','LocalHost','InlineProcVar')) {
+Check 'CONTROL: exactly FOURTEEN ///-prefixed "Observed:" lines in the applied file' `
+  ($obsLines.Count -eq 14) ("count=" + $obsLines.Count)
+foreach ($nm in @('PlainSum','DoubleIt','ConcatPath','NestedCallRhs','OneLiner','AnonHost','LocalHost','InlineProcVar',
+                  'ParamlessProcVar','LocalProcTypeDecl','BraceCommentInc','BraceCommentSelfRef',
+                  'ParenStarSetLength','StrLiteralResult')) {
   Check "CONTROL: $nm still renders an Observed: line" ((Get-Observed $blocks[$nm]) -ne '') `
     ($blocks[$nm] -replace "`n",' | ')
 }
@@ -345,6 +419,37 @@ foreach ($leak in @('AInner.Beta','X * 5')) {
 # --- (guard) The nested-routine detector must not swallow a routine. --------
 Check 'GUARD: InlineProcVar''s procedural-type local did not swallow its body -- it still renders "F(A) + 9"' `
   ((Get-Observed $blocks['InlineProcVar']) -eq 'F(A) + 9') ($blocks['InlineProcVar'] -replace "`n",' | ')
+# The PARAMETERLESS forms. InlineProcVar above is disarmed by its parentheses
+# and so was never a guard on these: `function: Integer` has none, and the word
+# after the keyword is the RETURN TYPE. Read as a routine NAME it stopped the
+# ';' from disarming the candidate, the routine's own `begin` confirmed the
+# frame, and the whole body was blanked -- both emitted no <returns> at all.
+Check 'GUARD: ParamlessProcVar''s PARAMETERLESS procedural-type var did not swallow its body -- it still renders "F() + A"' `
+  ((Get-Observed $blocks['ParamlessProcVar']) -eq 'F() + A') ($blocks['ParamlessProcVar'] -replace "`n",' | ')
+Check 'GUARD: LocalProcTypeDecl''s local procedural TYPE did not swallow its body -- it still renders "G() + A"' `
+  ((Get-Observed $blocks['LocalProcTypeDecl']) -eq 'G() + A') ($blocks['LocalProcTypeDecl'] -replace "`n",' | ')
+
+# --- (5) The suppressing mutation must be IN CODE. --------------------------
+# Rule (1) DELETES documentation, so this group is its bound. Each check states
+# the EXACT sentence: it cannot pass over an absent <returns> (Get-Observed
+# returns '' for one), and it cannot pass on an engine that suppresses more.
+Check 'NOT-CODE: BraceCommentInc renders "A + 100" -- an Inc(Result) parked in a {...} comment mutates nothing' `
+  ((Get-Observed $blocks['BraceCommentInc']) -eq 'A + 100') ($blocks['BraceCommentInc'] -replace "`n",' | ')
+Check 'NOT-CODE: ParenStarSetLength renders "''p'' + IntToStr(A)" -- a SetLength(Result, ..) in a (*..*) comment mutates nothing' `
+  ((Get-Observed $blocks['ParenStarSetLength']) -eq "'p' + IntToStr(A)") ($blocks['ParenStarSetLength'] -replace "`n",' | ')
+Check 'NOT-CODE: StrLiteralResult renders the WHOLE Format call -- "Result := Result + 1" inside a literal is prose, not a mutation' `
+  ((Get-Observed $blocks['StrLiteralResult']) -eq "Format('Result := Result + 1; %d', [A])") `
+  ($blocks['StrLiteralResult'] -replace "`n",' | ')
+# BraceCommentSelfRef documents an OPEN defect as well as a closed one. The
+# false SUPPRESSION is gone -- its real return A + 200 is named again -- but the
+# MINING side still reads `Result := Result + 1` out of the comment and lists it
+# first. That is register K23, deliberately still open, because mined text is
+# RENDERED and blanking comments there has to decide what to leave behind. The
+# expectation is pinned verbatim INCLUDING the leak, so when K23 is fixed this
+# line reddens and names itself rather than the leak vanishing unnoticed.
+Check 'NOT-CODE: BraceCommentSelfRef names its real return A + 200 (still preceded by the comment''s own "Result + 1" -- K23, open)' `
+  ((Get-Observed $blocks['BraceCommentSelfRef']) -eq 'Result + 1; A + 200') `
+  ($blocks['BraceCommentSelfRef'] -replace "`n",' | ')
 
 # --- (2c) The nested call is captured whole, not truncated at a paren. ------
 Check 'CAPTURE: NestedCallRhs renders the WHOLE nested call, never a "ConcatPath(" fragment' `
@@ -390,6 +495,92 @@ Check 'IDEMPOTENT: a second --apply after a reindex is byte-identical' ($md5Cycl
 $bad = @()
 foreach ($l in $lines) { if ($l -match '^\s*///') { foreach ($ch in $l.ToCharArray()) { if ([int]$ch -gt 126) { $bad += $l; break } } } }
 Check 'every emitted /// line is 7-bit ASCII' ($bad.Count -eq 0) ($bad -join ' | ')
+
+# ===========================================================================
+# (6) SCENARIO 2 -- an index that LAGS THE TREE BY ONE LINE.
+#
+# impl_start_line is normally the header line, but an index built before the
+# last edit can start the span on the blank line ABOVE it. The header was then
+# not on body line 0, was classified as a NESTED routine, and the entire body
+# was blanked. Measured on the shipping C:\Projects\YADF\YADF.sqlite: 5
+# routines lose their whole <returns> this way, e.g. YADF.Groups.ParseGroups
+# (span 123..182, header on 124) -- and the failure is indistinguishable from
+# a legitimate suppression, on indexes this project queries every day.
+#
+# Reproduced deterministically by shifting impl_start_line back by one in a
+# COPY of the index, which is exactly what a lagging index holds. A source edit
+# cannot produce it: prepending a line moves impl_end_line too, and the
+# truncated span then has no closing 'end' to pop the frame -- so the bug hides
+# and the scenario would silently test nothing.
+# ===========================================================================
+Write-Host ''
+Write-Host '=== returns.pas, index span shifted one line early ===' -ForegroundColor Cyan
+
+$sc2 = Join-Path C:\TEMP 'draglint_docp3_returns_lag'
+if (Test-Path $sc2) { Remove-Item $sc2 -Recurse -Force }
+New-Item -ItemType Directory -Path $sc2 | Out-Null
+$tgt2 = Join-Path $sc2 'returns.pas'
+$db2  = Join-Path $sc2 'r.sqlite'
+Copy-Item $fx $tgt2 -Force
+& $exePath index $sc2 --db $db2 2>$null | Out-Null
+$src2 = [IO.File]::ReadAllLines($tgt2)
+
+$lagPy = Join-Path $sc2 'lagspan.py'
+@'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+cur = con.execute(
+    "UPDATE symbols SET impl_start_line = impl_start_line - 1 "
+    "WHERE name = ? AND impl_start_line > 0", (sys.argv[2],))
+con.commit()
+print(cur.rowcount)
+'@ | Set-Content $lagPy -Encoding ascii
+
+# PlainSum and AnonHost were both RED here before the fix; LocalHost was NOT,
+# and it is kept anyway as the control that says so. The lag only swallows a
+# host when the header's own candidate frame survives to the host's `begin`:
+# LocalHost's NAMED nested routine spells `function` again first and OVERWRITES
+# that candidate, so the bug never reaches it, while AnonHost's anonymous
+# method opens after the host's `begin` and does not. Asserting only the two
+# that redden would leave "the fix does not break the other nesting form"
+# unstated.
+foreach ($p in @(
+    @{ N = 'PlainSum' ; Want = 'A + B'        ; Why = 'a plain routine -- RED before the fix' },
+    @{ N = 'AnonHost' ; Want = 'F(ACfg) + 1'  ; Why = 'a host whose ANONYMOUS method opens after its own begin -- RED before the fix' },
+    @{ N = 'LocalHost'; Want = 'Twice(A) + 1' ; Why = 'a host with a NAMED nested routine -- green before the fix, kept as its control' })) {
+  $span0 = Get-ImplSpan $db2 $p.N
+  $ok    = ($span0[0] -ge 2) -and ($src2[$span0[0] - 2].Trim() -eq '') -and `
+           ($src2[$span0[0] - 1] -match ('^function\s+' + $p.N + '\('))
+  Check ("PRECONDITION (lag): {0}'s TRUE span starts on its header line {1}, and the line above it is BLANK" -f $p.N, $span0[0]) `
+    $ok ("above=[" + $src2[$span0[0] - 2] + "] header=[" + $src2[$span0[0] - 1] + "]")
+
+  # Control: the shifted result is only evidence if the UNSHIFTED one is right.
+  $before = @(Get-HoverReturns $db2 ('returns.' + $p.N))
+  Check ("CONTROL (lag): with its TRUE span, {0} hovers exactly '{1}'" -f $p.N, $p.Want) `
+    (($before.Count -eq 1) -and ($before[0] -eq $p.Want)) ("returns=" + ($before -join ','))
+
+  $rc = (& python $lagPy $db2 $p.N) -join ''
+  Check ("PRECONDITION (lag): the UPDATE moved exactly ONE {0} row back by a line" -f $p.N) `
+    ($rc.Trim() -eq '1') ("rowcount=" + $rc)
+  $span1 = Get-ImplSpan $db2 $p.N
+  Check ("PRECONDITION (lag): {0}'s span now READS {1}..{2} -- one line before the header, ending where it did" -f `
+         $p.N, $span1[0], $span1[1]) `
+    (($span1[0] -eq $span0[0] - 1) -and ($span1[1] -eq $span0[1])) ("was=" + ($span0 -join '..') + " now=" + ($span1 -join '..'))
+
+  $after = @(Get-HoverReturns $db2 ('returns.' + $p.N))
+  Check ("LAG: {0} ({1}) still hovers exactly '{2}' with a span that starts one line early" -f $p.N, $p.Why, $p.Want) `
+    (($after.Count -eq 1) -and ($after[0] -eq $p.Want)) ("returns=" + ($after -join ','))
+}
+# ... and neither lagged host adopts its nested routine's Result. Recognising
+# the header must not cost the masking: the whole point of accepting the FIRST
+# TOKEN as a header is that everything after it is still judged normally.
+foreach ($p in @(
+    @{ N = 'AnonHost' ; Leak = 'AInner.Beta' },
+    @{ N = 'LocalHost'; Leak = 'X * 5'       })) {
+  $lagRet = @(Get-HoverReturns $db2 ('returns.' + $p.N))
+  Check ("LAG: {0}'s lagged span still masks its nested routine -- '{1}' is not among its returns" -f $p.N, $p.Leak) `
+    (($lagRet.Count -gt 0) -and ($lagRet -notcontains $p.Leak)) ("returns=" + ($lagRet -join ','))
+}
 
 }
 finally { Pop-Location }

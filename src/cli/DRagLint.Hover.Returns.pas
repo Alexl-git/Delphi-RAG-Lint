@@ -22,7 +22,9 @@ interface
 ///   <para>* NOTHING AT ALL when Result is mutated by Inc/Dec/SetLength or by a
 ///   self-referential `Result := ... Result ...`. The whole-Result assignments
 ///   are then only a seed, and naming the seed alone claims a value the routine
-///   provably does not return.</para>
+///   provably does not return. That test reads CODE ONLY -- comments and string
+///   literals are blanked first, because suppression DELETES documentation and
+///   a `{ old: Inc(Result); }` mutates nothing.</para>
 ///   <para>* NOTHING for an RHS that does not END on its own line (unbalanced
 ///   parentheses, a trailing binary operator). The capture is single-line; the
 ///   alternative to silence is shipping half an expression.</para>
@@ -30,7 +32,9 @@ interface
 ///   caller passes the ENCLOSING routine's whole impl span, so local routines
 ///   and anonymous methods live inside those lines; their scopes are masked out
 ///   before mining. (This unit used to claim the caller's span excluded them.
-///   It never did.)</para></remarks>
+///   It never did.) The routine's OWN header is recognised on body line 0 or as
+///   the body's first token, so a span that begins one line early -- an index
+///   lagging the tree -- does not turn the whole routine into a nested one.</para></remarks>
 function MineReturnExpressions(const ABodyLines: TArray<string>): TArray<string>;
 
 type
@@ -110,28 +114,55 @@ type
     Depth: Integer;    // block depth OUTSIDE the nested routine
   end;
 
-// Identifiers plus the three symbols the nested-routine detector needs, with
+// Identifiers plus the four symbols the nested-routine detector needs, with
 // Pascal strings and all three comment forms skipped. Comment state carries
 // across lines, which is why this is one pass over the whole body rather than
 // a per-line scan.
-procedure TokenizeBody(const ALines: TArray<string>; AToks: TList<TMaskTok>);
+//
+// ACodeOnly is the SAME lines with every comment and every string literal
+// (delimiters included) replaced by spaces -- same line count, same column
+// positions, so a range blanked in one can be blanked in the other. It exists
+// because this file has exactly one scanner that knows where code is, and the
+// MUTATION test needs that knowledge: `{ old: Inc(Result); }` is parked dead
+// code and `Format('Result := Result + 1')` is prose, and a mutation "found"
+// in either DELETES a true <returns> from a routine that has none.
+//
+// The MINING scan deliberately does NOT use this view: mined text is rendered,
+// and blanking a `{AReadOnly=}` in the middle of an expression would leave a
+// hole in the sentence a reader sees (register K23 -- mining out of a comment
+// is a separate, still-open defect).
+procedure TokenizeBody(const ALines: TArray<string>; AToks: TList<TMaskTok>;
+  out ACodeOnly: TArray<string>);
 var
-  InBrace, InParenStar: Boolean;
-  Li, I, N, J          : Integer;
-  Ln                   : string ;
-  T                    : TMaskTok;
+  InBrace, InParenStar: Boolean ;
+  Li, I, N, J, Q      : Integer ;
+  Ln, Code            : string  ;
+  T                   : TMaskTok;
+
+  procedure Blank(AFrom, ATo: Integer);
+  var
+    K: Integer;
+  begin
+    if AFrom < 1 then AFrom:= 1;
+    if ATo > N then ATo:= N;
+    for K:= AFrom to ATo do Code[K]:= ' ';
+  end;
+
 begin
+  SetLength(ACodeOnly, Length(ALines));
   InBrace:= False;
   InParenStar:= False;
   for Li:= 0 to High(ALines) do
   begin
     Ln:= ALines[Li];
+    Code:= Ln;
     N:= Length(Ln);
     I:= 1;
     while I <= N do
     begin
       if InBrace then
       begin
+        Blank(I, I);
         if Ln[I] = '}' then InBrace:= False;
         Inc(I);
         Continue;
@@ -140,23 +171,31 @@ begin
       begin
         if (Ln[I] = '*') and (I < N) and (Ln[I + 1] = ')') then
         begin
+          Blank(I, I + 1);
           InParenStar:= False;
           Inc(I, 2);
           Continue;
         end;
+        Blank(I, I);
         Inc(I);
         Continue;
       end;
-      if Ln[I] = '{' then begin InBrace:= True; Inc(I); Continue; end;
+      if Ln[I] = '{' then begin InBrace:= True; Blank(I, I); Inc(I); Continue; end;
       if (Ln[I] = '(') and (I < N) and (Ln[I + 1] = '*') then
       begin
         InParenStar:= True;
+        Blank(I, I + 1);
         Inc(I, 2);
         Continue;
       end;
-      if (Ln[I] = '/') and (I < N) and (Ln[I + 1] = '/') then Break;
+      if (Ln[I] = '/') and (I < N) and (Ln[I + 1] = '/') then
+      begin
+        Blank(I, N);
+        Break;
+      end;
       if Ln[I] = '''' then
       begin
+        Q:= I;                       // the opening quote
         Inc(I);
         while I <= N do
         begin
@@ -168,6 +207,7 @@ begin
           end;
           Inc(I);
         end;
+        Blank(Q, I - 1);             // the whole literal, delimiters included
         Continue;
       end;
       if IsIdentStart(Ln[I]) then
@@ -181,7 +221,11 @@ begin
         I:= J;
         Continue;
       end;
-      if CharInSet(Ln[I], ['(', ')', ';']) then
+      // ':' is tokenized purely so the nested-routine detector can tell
+      // `function: Integer;` (a PARAMETERLESS procedural type -- the token
+      // after the keyword is the RETURN TYPE) from `function Twice(...)` (a
+      // named nested routine). Nothing else consumes it.
+      if CharInSet(Ln[I], ['(', ')', ';', ':']) then
       begin
         T.Line:= Li; T.Col:= I; T.EndCol:= I;
         T.Text:= Ln[I];
@@ -190,6 +234,7 @@ begin
       end;
       Inc(I);
     end;
+    ACodeOnly[Li]:= Code;
   end;
 end;
 
@@ -220,18 +265,38 @@ end;
 
 // Replace every character of every NESTED routine scope with NESTED_MASK,
 // leaving the line COUNT and every other column untouched (LineOffset still
-// indexes the caller's array).
+// indexes the caller's array). ACodeOnly comes back masked over the same
+// ranges, so the mutation test sees the same scopes.
 //
 // A routine keyword ARMS a candidate; the next block opener CONFIRMS it and the
 // matching 'end' closes it. Two things must not be swallowed:
-//   * the routine's OWN header, which is body line 0 by construction
-//     (impl_start_line is the header line);
+//
+//   * the routine's OWN header. impl_start_line is USUALLY the header line, but
+//     an index that lags the tree can start the span a line early -- measured on
+//     the shipping YADF index, 5 routines whose span begins on the blank line
+//     above the header, every one of them losing its whole <returns>. So the
+//     header is accepted EITHER on body line 0 OR as the FIRST token of the
+//     body. Both halves are load-bearing: dropping "line 0" masks the body of
+//     every `class function` (the `class` token comes first -- measured 111
+//     routines in drag-lint's own src\ and 58 in ORM3 that would lose their
+//     <returns>), and dropping "first token" is the lagging-span bug. What is
+//     deliberately NOT done is accepting the first routine keyword ANYWHERE:
+//     over the same corpora that also re-reads 21 spans that start deep inside
+//     the PREVIOUS routine -- garbage in, unpredictable out -- and one of them
+//     stops emitting altogether.
+//
 //   * a PROCEDURAL TYPE -- `var F: function(X: Integer): Integer;` spells the
 //     keyword and opens no scope. It is told apart by having no identifier
 //     after the keyword AND by reaching a ';' (or leaving its parentheses)
 //     before any block opener; a NAMED nested routine has the identifier, so
-//     the ';' ending its own header must not disarm it.
-function MaskNestedRoutines(const ABodyLines: TArray<string>): TArray<string>;
+//     the ';' ending its own header must not disarm it. The PARAMETERLESS form
+//     `var F: function: Integer;` has no parentheses either, and the token
+//     after the keyword is its RETURN TYPE -- a word, which read as a name made
+//     the ';' stop disarming and the routine's own begin confirm the frame,
+//     blanking the entire body. Hence ':' is a token: after the keyword it says
+//     "return type follows", i.e. no name.
+function MaskNestedRoutines(const ABodyLines: TArray<string>;
+  out ACodeOnly: TArray<string>): TArray<string>;
 var
   Toks     : TList<TMaskTok> ;
   Stk      : TStack<TNestFrame>;
@@ -246,12 +311,13 @@ var
 begin
   SetLength(Result, Length(ABodyLines));
   for Ti:= 0 to High(ABodyLines) do Result[Ti]:= ABodyLines[Ti];
+  ACodeOnly:= nil;
   if Length(ABodyLines) = 0 then Exit;
 
   Toks:= TList<TMaskTok>.Create;
   Stk := TStack<TNestFrame>.Create;
   try
-    TokenizeBody(ABodyLines, Toks);
+    TokenizeBody(ABodyLines, Toks, ACodeOnly);
     Depth:= 0; Paren:= 0;
     HeaderSeen:= False; HavePend:= False; PendNamed:= False;
     PendLine:= 0; PendCol:= 0; PendParen:= 0;
@@ -274,9 +340,9 @@ begin
       end;
       if IsRoutineKeyword(T.Text) then
       begin
-        if (not HeaderSeen) and (Stk.Count = 0) and (T.Line = 0) then
+        if (not HeaderSeen) and (Stk.Count = 0) and ((T.Line = 0) or (Ti = 0)) then
         begin
-          HeaderSeen:= True;   // the documented routine's own header
+          HeaderSeen:= True;   // the documented routine's own header -- see above
           Continue;
         end;
         if Stk.Count > 0 then Continue;   // already inside a masked scope
@@ -312,6 +378,7 @@ begin
             if X = Fr.Line then A:= Fr.Col else A:= 1;
             if X = T.Line then B:= T.EndCol else B:= MaxInt;
             BlankRange(Result, X, A, B);
+            BlankRange(ACodeOnly, X, A, B);
           end;
         end;
       end;
@@ -565,20 +632,26 @@ end;
 // assignment, which makes the enumeration of those assignments a seed rather
 // than an account of the return value.
 //
+// ACodeOnly MUST be TokenizeBody's code-only view, not the raw body. This
+// function only ever DELETES a <returns>, so every false positive silently
+// destroys true documentation -- and a `{ old: Inc(Result); }` or a
+// `Format('Result := Result + 1')` are not mutations of anything. Passing raw
+// lines here suppressed three such routines.
+//
 // DELIBERATELY NOT DETECTED: Result handed to a USER routine's var/out
 // parameter. That needs the callee's signature, which a pure text miner does
 // not have, and the naive text test ("Result appears as a whole argument") is
 // dominated by pure READS -- measured over drag-lint's own src, 135 of 251 such
 // sites are Length/SizeOf/Exists. Suppressing on those would delete correct
 // <returns> sections to catch a form neither corpus contains.
-function HasResultMutation(const ALines: TArray<string>): Boolean;
+function HasResultMutation(const ACodeOnly: TArray<string>): Boolean;
 var
   Ln, Low, Rhs: string ;
   I           : Integer;
 begin
-  for I:= 0 to High(ALines) do
+  for I:= 0 to High(ACodeOnly) do
   begin
-    Ln:= StripLineComment(ALines[I]);
+    Ln:= ACodeOnly[I];
     Low:= LowerCase(Ln);
     if CallsIntrinsicOnResult(Low, 'inc')       then Exit(True);
     if CallsIntrinsicOnResult(Low, 'dec')       then Exit(True);
@@ -592,6 +665,7 @@ end;
 function MineReturnExpressionsEx(const ABodyLines: TArray<string>): TArray<TReturnMined>;
 var
   Masked : TArray<string>               ;
+  Code   : TArray<string>               ;
   Seen   : TDictionary<string, Boolean> ;
   Ordered: TList<TReturnMined>          ;
   Rhs    : string                       ;
@@ -599,10 +673,12 @@ var
   i      : Integer                      ;
 begin
   Result:= nil;
-  Masked:= MaskNestedRoutines(ABodyLines);
+  Masked:= MaskNestedRoutines(ABodyLines, Code);
   // Absence over wrong: a mutated Result makes every whole-Result assignment
   // below a seed, and naming a seed claims a value the routine may never return.
-  if HasResultMutation(Masked) then Exit;
+  // Asked of the CODE-ONLY view -- suppression is destructive, so a mutation
+  // that only exists in a comment or inside a string literal must not fire.
+  if HasResultMutation(Code) then Exit;
   Seen:= TDictionary<string, Boolean>.Create;
   Ordered:= TList<TReturnMined>.Create;
   try
