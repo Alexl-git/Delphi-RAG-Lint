@@ -62,6 +62,16 @@ function MergeUsage(const AParts: TArray<TArray<string>>): TArray<string>;
 /// dotted segment, is in AUsed (case-insensitive).</summary>
 function IsRowUsed(const AFromPath: string; const AUsed: TArray<string>): Boolean;
 
+/// <summary>PURE: examine a set of already-read file texts and report what the From class
+/// actually uses.</summary>
+/// <param name="ADfmTexts">Contents of the selected .dfm files.</param>
+/// <param name="APasTexts">Contents of the selected .pas files.</param>
+/// <param name="AFromClass">Bare From class name, e.g. 'TabcToggleBtn'.</param>
+/// <param name="AFromPaths">Every leaf path of the From property tree, used both to derive
+/// PAS candidates and to decide which used names have no row.</param>
+function ComputeUsage(const ADfmTexts, APasTexts: TArray<string>;
+  const AFromClass: string; const AFromPaths: TArray<string>): TUsageSet;
+
 implementation
 
 { A valid (possibly dotted) DFM property name: identifier chars and dots only, starting
@@ -276,6 +286,50 @@ end;
 function IsRowUsed(const AFromPath: string; const AUsed: TArray<string>): Boolean;
 begin
   Result := HasName(AUsed, AFromPath) or HasName(AUsed, LastSegment(AFromPath));
+end;
+
+function ComputeUsage(const ADfmTexts, APasTexts: TArray<string>;
+  const AFromClass: string; const AFromPaths: TArray<string>): TUsageSet;
+var
+  Parts: TList<TArray<string>>;
+  Cand : TArray<string>;
+  T, N : string;
+  Miss : TList<string>;
+begin
+  Result := Default(TUsageSet);
+  Cand   := CandidatesFor(AFromPaths);
+  Parts  := TList<TArray<string>>.Create;
+  Miss   := TList<string>.Create;
+  try
+    for T in ADfmTexts do
+    begin
+      Parts.Add(ScanDfmText(T, AFromClass));
+      Inc(Result.DfmCount);
+    end;
+    for T in APasTexts do
+    begin
+      Parts.Add(ScanPasText(T, Cand));
+      Inc(Result.PasCount);
+    end;
+    Result.Names := MergeUsage(Parts.ToArray);
+
+    // A used name is Missing when no From-tree leaf matches it by either rule.
+    for N in Result.Names do
+    begin
+      var Found: Boolean := False;
+      for var P in AFromPaths do
+        if SameText(P, N) or SameText(LastSegment(P), N) then
+        begin
+          Found := True;
+          Break;
+        end;
+      if not Found then Miss.Add(N);
+    end;
+    Result.Missing := Miss.ToArray;
+  finally
+    Miss.Free;
+    Parts.Free;
+  end;
 end;
 
 end.

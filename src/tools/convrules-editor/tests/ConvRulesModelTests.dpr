@@ -1933,6 +1933,61 @@ begin
   Check('usage.merge.count', Length(M) = 3, IntToStr(Length(M)));
 end;
 
+{ Criterion 11 plus the orchestration: ComputeUsage merges both sources, counts files, and
+  reports used names with no From-tree leaf. Also pins criterion 1 against the REAL block
+  shape from ORM3\CLIENT\VARINSP.dfm (an ABC5 TabcToggleBtn with a Picture.Data blob),
+  copied here as a fixture so the suite never depends on a path outside the repo. }
+procedure TestComputeUsage;
+const
+  REAL_DFM =
+    '            object btnEWAcAQL: TabcToggleBtn'#13#10 +
+    '              Left = 4'#13#10 +
+    '              Top = 175'#13#10 +
+    '              Width = 44'#13#10 +
+    '              Height = 39'#13#10 +
+    '              GroupIndex = 58114708'#13#10 +
+    '              Caption = ''Ac'''#13#10 +
+    '              Images = imlGlyphList'#13#10 +
+    '              Layout = ablGlyphCenter'#13#10 +
+    '              Picture.Data = {'#13#10 +
+    '                07544269746D617076080000424D760800000000000076000000280000008000'#13#10 +
+    '                0000200000000100040000000000000800000000000000000000100000000000}'#13#10 +
+    '            end'#13#10;
+  PAS = '  btnEWAcAQL.Enabled := True;'#13#10;
+
+  function Has(const A: TArray<string>; const S: string): Boolean;
+  var X: string;
+  begin
+    for X in A do
+      if SameText(X, S) then Exit(True);
+    Result := False;
+  end;
+
+var
+  U: TUsageSet;
+begin
+  U := ComputeUsage([REAL_DFM], [PAS], 'TabcToggleBtn',
+    ['Left', 'Top', 'Width', 'Height', 'GroupIndex', 'Caption', 'Images', 'Layout',
+     'Picture', 'Picture.Data', 'Enabled', 'Hint']);
+
+  Check('usage.compute.dfmcount', U.DfmCount = 1, IntToStr(U.DfmCount));
+  Check('usage.compute.pascount', U.PasCount = 1, IntToStr(U.PasCount));
+  Check('usage.compute.dfm',      Has(U.Names, 'GroupIndex'), 'from the DFM');
+  Check('usage.compute.pas',      Has(U.Names, 'Enabled'), 'from the PAS');
+  Check('usage.compute.blob',     not Has(U.Names, '07544269746D617076080000424D760800000000000076000000280000008000'),
+    'hex blob lines are not names');
+  Check('usage.compute.unused',   not Has(U.Names, 'Hint'), 'Hint is used nowhere');
+  Check('usage.compute.nomissing', Length(U.Missing) = 0,
+    'every used name has a From-tree leaf here');
+
+  // criterion 11: a used name with no From-tree leaf is reported
+  U := ComputeUsage([REAL_DFM], [], 'TabcToggleBtn', ['Caption']);
+  Check('usage.compute.missing', Has(U.Missing, 'GroupIndex'),
+    'GroupIndex is assigned in the DFM but absent from the From tree');
+  Check('usage.compute.missing.notused', not Has(U.Missing, 'Caption'),
+    'a name WITH a leaf is not Missing');
+end;
+
 begin
   try
     TestBlockSplitRulesRoundTrip;
@@ -1958,6 +2013,7 @@ begin
     TestDuplicateHeaders;
     TestScanDfm;
     TestScanPasAndMatch;
+    TestComputeUsage;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;
