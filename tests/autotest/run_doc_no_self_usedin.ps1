@@ -23,9 +23,11 @@
     ever references TSelfOnly. Its own qualified impl header
     'procedure TSelfOnly.Add;' is the ONLY ref to the name 'TSelfOnly' anywhere.
     After `document --qname ...TSelfOnly --apply --no-backup`, TSelfOnly must get
-    NO managed block at all (no "Used in units:", no "Called from:") -- proving
-    the self-ref is excluded from BOTH facts (Called-from was already fixed by
-    Bug C; this test's target is Used-in-units).
+    NO managed block at all: no "Used in units:" line, and no reference line
+    under EITHER label -- "Called from:" or, since v(ADP3 T4) relabelled a
+    non-callable's references, "Used by:" -- proving the self-ref is excluded
+    from BOTH facts (Called-from was already fixed by Bug C; this test's
+    target is Used-in-units).
 
   Scenario 2 -- positive case, proves no over-exclusion (two units):
     uSharedType.pas declares TShared (one implemented method, Ping -- its own
@@ -116,7 +118,17 @@ $block1 = Get-DocBlockAbove $lines1 'TSelfOnly\s*=\s*class'
 Check 'TSelfOnly: NO managed block at all (self-only, no genuine facts)' `
   (-not ($block1 -match [regex]::Escape('<!-- drag-lint:auto BEGIN -->'))) $block1
 Check 'TSelfOnly: no "Used in units:" line' (-not ($block1 -match 'Used in units:')) $block1
-Check 'TSelfOnly: no "Called from:" line'   (-not ($block1 -match 'Called from:'))   $block1
+# v(ADP3 T4 review round 1): anchored on EITHER label. TSelfOnly is a CLASS, so
+# post-T4 CanBeCallTarget is False for it and the engine can NEVER emit
+# "Called from:" here -- the check as written could not fail, and it stayed
+# green BECAUSE it had gone vacuous. Widened to the same pattern
+# tests/callresolve/run_callsite_kind_universe.ps1 applied to its
+# CalledFromLine helper for the identical reason, and renamed to say what it
+# now asserts: no reference line at all, under any label. (No coverage was lost
+# while it was vacuous -- the sibling above, no managed block whatsoever, is
+# strictly stronger -- but the guarantee its NAME advertised was.)
+Check 'TSelfOnly: no reference line under EITHER label ("Called from:" / "Used by:")' `
+  (-not ($block1 -match '(Called from:|Used by:)')) $block1
 
 Write-Host ''
 Write-Host 'Scenario 2: class used from ANOTHER unit + a unit-scope var (positive case)' -ForegroundColor Cyan

@@ -53,6 +53,20 @@
      inside the same unit, which resolves, so their lists are uniformly
      CERTAIN and must stay plain and must stay "Called from:".
 
+     "Uniformly CERTAIN" is NOT observable in the rendered line: rule (2)
+     strips the marker from a uniform list of EITHER kind, so a one-entry
+     certain list and a one-entry uncertain list render the identical shape.
+     A therefore derives the certainty FROM THE INDEX before it asserts
+     anything about the line -- dump-call-edges must hold exactly one
+     'certain' edge into each of MakePoint and SumPoint, and ambiguous-calls
+     must report A's index with no unresolved call site at all. Review round
+     1 measured what their absence cost: with OriginSum moved into a second
+     unit (its calls become cross-unit, no call_edges row, both control lists
+     uniformly UNCERTAIN) the applied file is shape-identical and ALL 27 of
+     A's checks still passed -- including the one named "uniformly-CERTAIN
+     list still renders plain", which was reading a uniformly-uncertain list.
+     The preconditions are what make the control a control.
+
   B  fixtures\docp3\callerline_mixed.pas + callerline_mixedcross.pas, indexed
      TOGETHER. Ping's caller list holds one 'certain' entry (NearCaller, same
      unit, real call_edges row) and one 'unverified' entry (FarCaller, cross
@@ -61,10 +75,12 @@
      marker is correctly suppressed or never emitted at all. Only a mixed list
      tells those two apart.
 
-     B's preconditions are re-derived FROM THE INDEX (dump-call-edges and
-     ambiguous-calls), never from the rendered line the scenario is about to
-     assert on. If the resolver ever learns to resolve the cross-unit site the
-     precondition fails and names the fixture, instead of leaving B vacuous.
+     BOTH scenarios' preconditions are re-derived FROM THE INDEX
+     (dump-call-edges and ambiguous-calls), never from the rendered line the
+     scenario is about to assert on. If the resolver ever learns to resolve
+     B's cross-unit site, or stops resolving A's same-unit ones, the
+     precondition fails and names the fixture, instead of leaving the
+     scenario vacuous.
 
   LOAD-BEARING PROOFS (see task-4-report.md for the transcripts). Each mutation
   leaves the mechanism reachable and changes only its answer, and each reddens a
@@ -72,6 +88,13 @@
     M1  RefVerb forced to 'Called from: '  -> A LABEL reddens, A MARKER + B green
     M2  Mixed forced True  (pre-fix rule)  -> A MARKER reddens, A LABEL + B green
     M3  Mixed forced False (over-suppress) -> B reddens, all of A green
+    M4  (fixture mutation, review round 1) OriginSum moved into a second unit,
+        so A's control arm becomes uniformly UNCERTAIN -> 5 FAIL: the three
+        A PRECONDITION checks and the two 'single entry is the
+        callerline.OriginSum edge' checks. Every OTHER A check -- all 27 that
+        existed before round 1, including 'uniformly-CERTAIN list still
+        renders plain' -- stays GREEN on a uniformly-uncertain list. That is
+        precisely the blindness these five exist to close.
 
   Runs from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -160,6 +183,29 @@ $dbA  = Join-Path $sa 'a.sqlite'
 Copy-Item $fxA $tgtA -Force
 
 & $exePath index $sa --db $dbA 2>$null | Out-Null
+
+# --- Preconditions, re-derived from the INDEX, not from the rendered line. ---
+# A exists to hold BOTH arms of the marker rule in one file: TPoint2's
+# uniformly-UNCERTAIN list and MakePoint/SumPoint's uniformly-CERTAIN ones. But
+# the two arms RENDER IDENTICALLY -- rule (2) strips the marker from a uniform
+# list of either kind -- so no check on the applied file can tell them apart.
+# Review round 1 proved the cost: move OriginSum into a second unit, its calls
+# become cross-unit with no call_edges row, both control lists turn uniformly
+# UNCERTAIN, and all 27 of A's checks still passed, including the one named
+# "uniformly-CERTAIN list still renders plain". The control had silently become
+# a second copy of the uncertain case. So assert the certain arm IS certain,
+# from the index, BEFORE asserting how it renders.
+$edgesA = (& $exePath dump-call-edges --db $dbA 2>$null) -join "`n"
+foreach ($nm in @('MakePoint','SumPoint')) {
+  $eA = @([regex]::Matches($edgesA, "(?m)^\s*\d+\|callerline\.$nm\|certain\s*$"))
+  Check "A PRECONDITION: the index holds exactly ONE certain call edge into $nm" ($eA.Count -eq 1) `
+    ("edges=" + ($edgesA -replace "`n",' / '))
+}
+$ambA = (& $exePath ambiguous-calls --db $dbA 2>$null) -join "`n"
+Check 'A PRECONDITION: A''s index holds NO unresolved call site (the control lists are uniformly CERTAIN, not merely unmarked)' `
+  (($ambA -match '(?m)^0 ambiguous call\(s\)') -and (-not ($ambA -match '\[unverified\]'))) `
+  ($ambA -replace "`n",' / ')
+
 & $exePath document --unit $tgtA --db $dbA --apply 2>$null | Out-Null
 $md5Cycle1 = Get-FileMd5 $tgtA
 # Reindex so the start lines below describe the file the apply just wrote.
@@ -219,10 +265,19 @@ if ($usedByLines.Count -eq 1) {
   Check 'A MARKER: TPoint2 uniformly-UNCERTAIN list has 1 entry and no marker' $false `
     'no single "Used by:" line to inspect -- see the CONTROL above'
 }
-foreach ($l in $calledFromLines) {
+# Located THROUGH each symbol's own block and NAMED for it. Iterating the two
+# lines anonymously gave both checks the same name, so a failure could not say
+# whether MakePoint or SumPoint had regressed. The second check ties the
+# rendered entry back to the call edge the PRECONDITION above asserted certain,
+# so 'plain' is read off a list that is known-certain rather than merely
+# known-unmarked.
+foreach ($nm in @('MakePoint','SumPoint')) {
+  $l = @(($blocks[$nm] -split "`n") | Where-Object { $_ -match 'Called from:' })[0]
   $e = Split-RefEntries $l
-  Check 'A MARKER: uniformly-CERTAIN list still renders plain (unchanged)' `
-    (($e.Count -eq 1) -and (-not $e[0].Marked)) ($l.Trim())
+  Check "A MARKER: $nm's uniformly-CERTAIN list still renders plain (unchanged)" `
+    (($e.Count -eq 1) -and (-not $e[0].Marked)) (("" + $l).Trim())
+  Check "A MARKER: $nm's single entry is the callerline.OriginSum edge the PRECONDITION asserted certain" `
+    (($e.Count -eq 1) -and ($e[0].Name -eq 'callerline.OriginSum')) (("" + $l).Trim())
 }
 
 # --- Idempotency: reindex + a second --apply is byte-identical. --------------
