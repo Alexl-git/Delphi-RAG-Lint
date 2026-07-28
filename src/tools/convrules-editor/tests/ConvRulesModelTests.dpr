@@ -1394,6 +1394,52 @@ begin
   end;
 end;
 
+{ Criterion 10: the composed output is a valid .rules file -- compose two books,
+  hand the text to convert-validate and require OK. Skips (does not fail) when the
+  drag-lint exe is absent, matching the suite's environment policy. }
+procedure TestComposedFileValidates;
+var
+  Exe   : string;
+  WS    : TWorkingSet;
+  Rep   : TComposeReport;
+  Text  : string;
+  Eng   : TEngineAdapter;
+  Res   : TValidateResult;
+begin
+  Exe := ResolveExe;
+  if Exe = '' then
+  begin
+    Skip('compose.validates', 'drag-lint.exe not found');
+    Exit;
+  end;
+  WS := TWorkingSet.Create;
+  try
+    WS.AddText('first.rules',
+      '#convert Vcl.Graphics.TFont -> Vcl.Graphics.TFont'#13#10 +
+      '#link Color <- Color'#13#10 +
+      '#link Height <- Height'#13#10);
+    WS.AddText('second.rules',
+      '#convert Vcl.Graphics.TFont -> Vcl.Graphics.TFont'#13#10 +
+      '#link Color <- Name'#13#10 +          // collides -> earlier wins
+      '#link Size <- Size'#13#10 +           // merged
+      '#convert Vcl.StdCtrls.TEdit -> Vcl.StdCtrls.TMemo'#13#10 +
+      '#link Text <- Text'#13#10);           // appended whole
+    Text := WS.ComposeAll(Rep);
+    Check('compose.validates.resolved', Rep.ResolvedCount = 1, IntToStr(Rep.ResolvedCount));
+
+    Eng := TEngineAdapter.Create(Exe, []);
+    try
+      Res := Eng.ValidateText(Text, '', '');
+      Check('compose.validates', Res.OK, 'convert-validate rejected the composed file: '
+        + Res.FirstError + ' | text=' + StringReplace(Text, #13#10, '\n', [rfReplaceAll]));
+    finally
+      Eng.Free;
+    end;
+  finally
+    WS.Free;
+  end;
+end;
+
 { Criterion 5 (the maMergeOther half, previously untested): within a matched block,
   a non-#link incoming line new to the target is merged verbatim (maMergeOther); one
   already present -- an EXACT match after trimming -- is not re-added; the header
@@ -1470,6 +1516,7 @@ begin
     TestComposePrecedence;
     TestBackupRotation;
     TestBackupFailureAborts;
+    TestComposedFileValidates;
     TestMergeOtherLines;
     TestPlatform;
     TestUnitDirectives;
