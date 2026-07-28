@@ -186,8 +186,9 @@ in 2b.
 > **Docs config (manifest `docs` section, all keys optional).**
 > `docs.max_return_cases` (production ships `6`) caps the mined
 > `Result := ...` cases appended to `<returns>` as an "Observed: ..." suffix
-> -- `0` disables mining, leaving a bare `TODO: describe.`; absent defaults to
-> `20`. `docs.max_callers` (production ships `5`) caps the generated
+> -- `0` disables mining, and a `<returns>` with nothing left to say is then
+> not written at all (there is no `TODO:` placeholder any more); absent
+> defaults to `20`. `docs.max_callers` (production ships `5`) caps the generated
 > "Called from:" list, appending `(+N more)` beyond the cap; absent defaults
 > to `5`. `docs.accessor_trivial_max_lines` (default `2`, code-level -- stays
 > ON even with no `docs` section at all) is the trivial-accessor threshold
@@ -199,6 +200,20 @@ in 2b.
 > must be `>= 0`. Only **Max return cases** has a GUI field (Linter options
 > page, see `docs/INSTALL.md`); `max_callers`, `accessor_trivial_max_lines`,
 > and `complexity_min` are manifest-only for now.
+>
+> **When the mined `<returns>` says nothing.** The enumeration is a display
+> aid, not an authority, and it prefers silence to naming a value the routine
+> does not return. No `Observed:` suffix is emitted **at all** when: the
+> routine changes `Result` by `Inc`/`Dec`/`SetLength` or by a self-referential
+> `Result := ... Result ...` (the whole-`Result` assignments are then only a
+> seed -- "Observed: AFrom" for a loop that walks away from `AFrom` was the
+> reported defect); the right-hand side does not END on its own line (the
+> capture is single-line, and half an expression is worse than none); or every
+> candidate is a `Result.<Field> := ` / `Result[i] := ` member assignment
+> (those build the result, they are not return values, and one real case
+> populates 42 fields). A **nested** routine's or anonymous method's `Result`
+> belongs to that routine, never to the enclosing one. `hover` shares the
+> miner, so it says exactly the same thing.
 >
 > **New managed-block fact lines.** The generated `<!-- drag-lint:auto -->`
 > block can also carry (each omitted when empty): `Overrides: TAncestor.M`,
