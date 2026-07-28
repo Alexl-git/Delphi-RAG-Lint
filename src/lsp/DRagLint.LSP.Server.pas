@@ -1012,7 +1012,7 @@ begin
           var HBody: TArray<string>;
           SetLength(HBody, HHi - HLo + 1);
           for var hk:= HLo to HHi do HBody[hk - HLo]:= HovAll[hk];
-          HovRhs:= MineReturnExpressions(HBody, Sel.Name);
+          HovRhs:= MineReturnExpressions(HBody, Sel.QualifiedName);
         end;
       end;
     end;

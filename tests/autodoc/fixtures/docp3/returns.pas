@@ -36,6 +36,19 @@ interface
 //     name is the exact defect this whole task exists to remove, and a
 //     "recovery" that does it is a regression.
 //
+//   * the same, where the two routines SHARE A SIMPLE NAME -- TAlpha.Same and
+//     TBeta.Same. An anchor that compares only the LAST dotted component of
+//     the header it found cannot tell them apart, so TBeta.Same adopts
+//     TAlpha.Same's value while the check that is supposed to prevent exactly
+//     that reports a match. It is not an exotic shape: overloads and
+//     same-named methods on sibling classes are usually ADJACENT in the
+//     implementation section, which is precisely where a stale span lands.
+//     Census over the three live indexes -- (file, simple-name) groups holding
+//     more than one distinct impl_start_line -- YADF 73 groups / 158 symbol
+//     rows, drag-lint's own index 83 / 198, ORM3 98 / 414. The anchor is
+//     therefore checked against the symbol's QUALIFIED-NAME TAIL, not its
+//     simple name.
+//
 //   MUTATION   PrevIdx / Accum -- Result is changed by something other than a
 //              whole-Result assignment (Dec(Result); Result := Result + x), so
 //              the enumeration of whole-Result assignments is not an account
@@ -64,9 +77,9 @@ interface
 // CONTROLS: PlainSum, DoubleIt, ConcatPath, NestedCallRhs, OneLiner, AnonHost,
 // LocalHost, InlineProcVar, ParamlessProcVar, LocalProcTypeDecl,
 // BraceCommentInc, BraceCommentSelfRef, ParenStarSetLength, StrLiteralResult,
-// TBox.ClassLag, ForeignA and ForeignB must ALL still render an Observed: line.
-// A rule that simply stopped emitting <returns> would satisfy every absence
-// check in this file and fail these seventeen.
+// TBox.ClassLag, ForeignA, ForeignB, TAlpha.Same and TBeta.Same must ALL still
+// render an Observed: line. A rule that simply stopped emitting <returns> would
+// satisfy every absence check in this file and fail these nineteen.
 //
 // InlineProcVar / ParamlessProcVar / LocalProcTypeDecl are the guard on the
 // nested-routine detector itself: a local PROCEDURAL-TYPE spells the `function`
@@ -98,6 +111,20 @@ type
   // SECOND token. Hovered against a lagged span in the runner.
   TBox = class
     class function ClassLag(A: Integer): Integer;
+  end;
+
+  // The same-simple-name pair. Both classes declare a method called `Same`, and
+  // their implementations are ADJACENT in that order with a blank line above
+  // TAlpha's -- the arrangement a compiler encourages and a stale span lands
+  // in. Their return values are deliberately distinct and unique in this file,
+  // so "TBeta.Same adopted TAlpha.Same's value" is a check that can only pass
+  // one way. Hovered against a doctored span in the runner.
+  TAlpha = class
+    class function Same(A: Integer): Integer;
+  end;
+
+  TBeta = class
+    class function Same(A: Integer): Integer;
   end;
 
 // Plain, complete, unmutated, no nesting. The load-bearing control.
@@ -330,6 +357,16 @@ begin
   Result := A - 7;
 end;
 
+class function TAlpha.Same(A: Integer): Integer;
+begin
+  Result := A * 11;
+end;
+
+class function TBeta.Same(A: Integer): Integer;
+begin
+  Result := A * 22;
+end;
+
 procedure Driver;
 var
   C: TCfg;
@@ -342,7 +379,8 @@ begin
   C.Delta := ParamlessProcVar(5) + LocalProcTypeDecl(6) + BraceCommentInc(7) + BraceCommentSelfRef(8);
   C.Omega := Length(ParenStarSetLength(9)) + Length(StrLiteralResult(10));
   C.Sigma := C.Alpha + C.Beta + C.Gamma + C.Delta + C.Omega
-           + TBox.ClassLag(11) + ForeignA(12) + ForeignB(13);
+           + TBox.ClassLag(11) + ForeignA(12) + ForeignB(13)
+           + TAlpha.Same(14) + TBeta.Same(15);
 end;
 
 end.

@@ -45,8 +45,28 @@ USAGE (python 3.8+, stdlib only):
              lead-token anchor structurally could not see its own failure: a
              span that lands inside a DIFFERENT routine and starts emitting
              that routine's return values registers as a GAIN. It is not a
-             gain. A row whose anchored header name is not the symbol's name
-             is a REGRESSION and is counted as one here.
+             gain. A row whose anchored header is not this symbol's is a
+             REGRESSION and is counted as one here.
+
+             AND IT MUST NOT CLASSIFY WITH THE MECHANISM'S OWN PREDICATE. Its
+             first version did, twice over, and both were caught by review:
+             (a) `lead_anchor_of` stopped at the first non-routine word, so
+             every `class`-led span -- the very form the engine had just been
+             extended to handle -- reported ineligible and vanished from every
+             count (YADF: 96 reported, 100 real); and (b) its "rows lost" test
+             read `none_ != now and not (ok and hit)`, in which the second
+             conjunct is IMPLIED FALSE by the first for every non-class span,
+             so the line could not fail. A tautology is not a check. The loss
+             test now runs TWO criteria, neither of which touches the
+             mechanism's code: (i) the index's own impl_start_line map -- does
+             any indexed row start its implementation on the line the anchor
+             landed on, and is it this symbol? -- which is authoritative but
+             silent when that row and its duplicates are all stale, i.e. on
+             every one of YADF's eligible spans; and (ii) a regex read of the
+             raw source line plus a component comparison, which always speaks.
+             It also prints the residual is_qualified_tail cannot see: an
+             ACCEPTED unqualified header on a symbol the index calls a
+             `method`.
   argpass -- the callees that receive a bare `Result` as an argument, ranked.
              This is the evidence for DECLINING INBOX form 1b: the naive text
              test for "Result passed to a var/out parameter" cannot tell a
@@ -252,15 +272,15 @@ def is_lead_keyword(toks, ti):
     return ti == 0 or (ti == 1 and toks[0][3] == 'word' and toks[0][2] == 'class')
 
 
-def header_name_at(toks, ti, lines):
-    """The routine name the header at token ti declares -- the last dotted
-    component of what follows the keyword, lowercased, '' if none.
+def header_chain_at(toks, ti, lines):
+    """The WHOLE dotted chain the header at token ti declares, lowercased, ''
+    if none -- 'tbox.classlag', not 'classlag'.
 
     Components must be joined by a literal '.' on the same line, so a generic
-    header (`function TList<T>.Add`) yields the TYPE name and the caller's name
-    check then declines the anchor. Port of Delphi HeaderNameAt.
+    header (`function TList<T>.Add`) yields the TYPE name alone and
+    is_qualified_tail then declines the anchor. Port of Delphi HeaderChainAt.
     """
-    name = ''
+    chain = ''
     prev_line = -1
     prev_end = 0
     j = ti + 1
@@ -268,34 +288,55 @@ def header_name_at(toks, ti, lines):
         li, col, tk, kind, end = toks[j]
         if kind != 'word':
             break
-        if name:
+        if prev_line >= 0:
             if li != prev_line or col != prev_end + 2:
                 break
             if prev_end + 1 >= len(lines[li]) or lines[li][prev_end + 1] != '.':
                 break
-        name, prev_line, prev_end = tk, li, end
+            chain += '.' + tk
+        else:
+            chain = tk
+        prev_line, prev_end = li, end
         j += 1
-    return name
+    return chain
 
 
-def mask_nested(lines, sym_name='', mask_ch='\x01'):
+def is_qualified_tail(chain, qname):
+    """chain is a COMPONENT-WISE tail of qname, case-insensitively.
+
+    'talpha.same' vs 'returns.TBeta.Same' -> False, which is the whole point:
+    the last component alone matches and the routines are different. A tail
+    rather than a fixed component count, because the unit prefix is itself
+    dotted and of unknown length. Port of Delphi IsQualifiedTail.
+    """
+    if not chain or not qname:
+        return False
+    c, q = chain.lower(), qname.lower()
+    return c == q or q.endswith('.' + c)
+
+
+def mask_nested(lines, accept, lead_test=is_lead_keyword, mask_ch='\x01'):
     """(masked_source, masked_code_only) -- nested scopes blanked in both.
 
     The routine's OWN header is accepted on body line 0, OR as the body's LEAD
-    token (token 0, or the routine keyword of a `class function`) WHEN THE NAME
-    IT DECLARES IS sym_name. All three parts are load-bearing:
+    token (lead_test: token 0, or the routine keyword of a `class function`)
+    WHEN accept(<the dotted chain that header declares>) says so. All three
+    parts are load-bearing:
 
       * without "line 0" every `class function` body is masked;
       * without the lead token a stale span that starts before the header turns
         the whole routine into a nested one and deletes its <returns>;
       * without the NAME CHECK the lead token latches onto whatever routine the
-        span happens to head -- 81 of 96 eligible spans on the shipping YADF
+        span happens to head -- 85 of 100 eligible spans on the shipping YADF
         index -- and publishes that routine's return values under this one's
         name. Run `anchor` mode for the split.
 
-    An empty sym_name declines the lead-token anchor rather than re-enabling
-    the unchecked form. Accepting the first routine keyword ANYWHERE is
-    deliberately NOT done -- a span starting mid-routine has no honest reading.
+    ONE masker, parameterised, rather than a copy per historical variant: the
+    three copies this file used to carry were a standing invitation to drift,
+    and the variants differ only in `accept` and `lead_test`. See mine_new,
+    mine_lastcomp and mine_unchecked. Accepting the first routine keyword
+    ANYWHERE is deliberately NOT offered -- a span starting mid-routine has no
+    honest reading at all.
     """
     toks, code = scan_body(lines)
     out = [list(l) for l in lines]
@@ -317,8 +358,8 @@ def mask_nested(lines, sym_name='', mask_ch='\x01'):
                     pending = None
             continue
         if tk in ROUTINE_KW:
-            own = li == 0 or (is_lead_keyword(toks, ti) and sym_name
-                              and header_name_at(toks, ti, lines) == sym_name.lower())
+            own = li == 0 or (lead_test(toks, ti)
+                              and accept(header_chain_at(toks, ti, lines)))
             if not header_seen and own and not stack:
                 header_seen = True
                 continue
@@ -436,8 +477,7 @@ def mutation_forms(code_only):
     return tags
 
 
-def mine_new(body, sym_name=''):
-    masked, code = mask_nested(body, sym_name)
+def _mine(masked, code):
     tags = mutation_forms(code)
     if tags:
         return [], tags
@@ -450,27 +490,51 @@ def mine_new(body, sym_name=''):
     return out, tags
 
 
+def mine_new(body, qname=''):
+    """THE SHIPPING ENGINE. The lead-token anchor fires only when the dotted
+    chain the header declares is a component-wise TAIL of the symbol's
+    QUALIFIED name. An empty qname declines the anchor (is_qualified_tail is
+    False for it) rather than re-enabling the unchecked form -- which is also
+    how option B, 'no lead-token anchor at all', is expressed here."""
+    return _mine(*mask_nested(body, lambda ch: is_qualified_tail(ch, qname)))
+
+
+def mine_lastcomp(body, sym_name=''):
+    """The anchor AS IT SHIPPED at 75a4be6: name-checked, but on the LAST
+    DOTTED COMPONENT only, so `class function TBeta.Same` accepts
+    `class function TAlpha.Same`'s header. Kept so the withdrawal that closed
+    that hole stays measurable from this file."""
+    low = (sym_name or '').lower()
+    return _mine(*mask_nested(
+        body, lambda ch: bool(ch) and bool(low) and ch.rsplit('.', 1)[-1] == low))
+
+
 # --------------------------------------------------------------------------
 # Corpus walk.
 # --------------------------------------------------------------------------
 
 def routines(db, prefix=None):
-    """(qname, name, path, impl_start, impl_end, body_lines) for every routine
-    with a return type and an implementation span.
+    """(qname, name, kind, path, impl_start, impl_end, body_lines) for every
+    routine with a return type and an implementation span.
 
-    `name` is the SIMPLE name -- exactly what TSymbol.Name gives the engine, and
-    what the lead-token anchor is checked against. One row PER SYMBOL ROW, not
-    per qualified name: an index can hold several rows for one qname (duplicate
-    `files` entries, copies under Test\\), each with its own span, and it is the
-    ROW that is stale or not.
+    `name` is the SIMPLE name -- exactly what TSymbol.Name used to be checked
+    against -- and `qname` is TSymbol.QualifiedName, which is what the anchor
+    is checked against now. `kind` is the indexer's own classification
+    ('method', 'function', ...), carried so a caller can ask a question the
+    miner cannot: an UNQUALIFIED header cannot declare a method.
+
+    One row PER SYMBOL ROW, not per qualified name: an index can hold several
+    rows for one qname (duplicate `files` entries, copies under Test\\), each
+    with its own span, and it is the ROW that is stale or not.
     """
     con = sqlite3.connect(db)
     rows = con.execute(
-        'SELECT s.qualified_name, s.name, s.signature, s.impl_start_line, s.impl_end_line, f.path '
+        'SELECT s.qualified_name, s.name, s.kind, s.signature, '
+        '       s.impl_start_line, s.impl_end_line, f.path '
         'FROM symbols s JOIN files f ON f.id = s.file_id '
         'WHERE s.impl_start_line > 0 AND s.impl_end_line >= s.impl_start_line').fetchall()
     cache = {}
-    for qn, nm, sig, a, b, path in rows:
+    for qn, nm, kind, sig, a, b, path in rows:
         if prefix and not path.lower().startswith(prefix.lower()):
             continue
         if parse_return_type(sig) == '':
@@ -484,26 +548,82 @@ def routines(db, prefix=None):
         src = cache[path]
         if not src:
             continue
-        yield qn, nm, path, a, b, src[a - 1: min(b, len(src))]
+        yield qn, nm, kind, path, a, b, src[a - 1: min(b, len(src))]
 
 
-def lead_anchor_of(body, sym_name):
-    """(eligible, header_name, matches) for the lead-token anchor on this span.
+RAW_HDR = re.compile(
+    r'^\s*(?:class\s+)?(?:function|procedure|constructor|destructor|operator)\s+'
+    r'([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)', re.I)
+
+
+def raw_header_names(src_line, qname):
+    """(spoke, names_this_symbol) -- read straight off the RAW SOURCE LINE.
+
+    The measurement's second INDEPENDENT criterion, and the one that always
+    speaks. It shares no code with header_chain_at, is_lead_keyword or
+    is_qualified_tail: a regex over the source text, then a component-by-
+    component comparison against the qualified name. A blind spot in the
+    mechanism therefore cannot hide inside the test of the mechanism.
+
+    The LOCATION still comes from the anchor -- it has to, since the question
+    is "the header IT landed on" -- but the verdict does not.
+    """
+    m = RAW_HDR.match(src_line)
+    if not m:
+        return False, False
+    parts = [p.lower() for p in m.group(1).split('.')]
+    q = [p.lower() for p in (qname or '').split('.')]
+    return True, 0 < len(parts) <= len(q) and q[len(q) - len(parts):] == parts
+
+
+def header_owners(db):
+    """(path_lower, absolute_1_based_line) -> set of qualified names the INDEX
+    says start their implementation there.
+
+    This is the measurement's INDEPENDENT criterion. Every other test of "is
+    the anchored header this routine's?" in this file runs the same predicate
+    the engine runs, so it can only ever agree with itself; this one asks the
+    indexer, which decided where each routine's implementation begins without
+    any knowledge of the anchor rule.
+    """
+    con = sqlite3.connect(db)
+    out = collections.defaultdict(set)
+    for qn, a, path in con.execute(
+            'SELECT s.qualified_name, s.impl_start_line, f.path '
+            'FROM symbols s JOIN files f ON f.id = s.file_id '
+            'WHERE s.impl_start_line > 0'):
+        out[(path.lower(), a)].add(qn.lower())
+    return out
+
+
+def lead_anchor_of(body, qname):
+    """(eligible, header_chain, matches, header_line) for the lead-token anchor.
 
     eligible is True only when body line 0 is NOT the header -- i.e. when the
     lead-token clause is the sole thing that could accept a header at all.
+    header_line is the 0-based body line the anchored header sits on, so a
+    caller can ask a question about it that does NOT go through this function's
+    own predicate.
+
+    A LEADING `class` IS SKIPPED, NOT A STOP. This loop used to break at the
+    first word token that was not a routine keyword, so every `class`-led span
+    -- the exact form the engine's IsLeadKeyword was extended to handle --
+    reported eligible=False and was invisible to every count below. Executed on
+    the shipping YADF index that hid 4 eligible spans (96 reported, 100 real).
     """
     toks, _ = scan_body(body)
     for ti, (li, col, tk, kind, end) in enumerate(toks):
         if kind != 'word':
             continue
+        if tk == 'class':
+            continue
         if tk in ROUTINE_KW:
             if li == 0 or not is_lead_keyword(toks, ti):
-                return False, '', False
-            hn = header_name_at(toks, ti, body)
-            return True, hn, bool(hn) and hn == (sym_name or '').lower()
+                return False, '', False, -1
+            ch = header_chain_at(toks, ti, body)
+            return True, ch, is_qualified_tail(ch, qname), li
         break
-    return False, '', False
+    return False, '', False, -1
 
 
 def mine_unchecked(body):
@@ -511,126 +631,123 @@ def mine_unchecked(body):
     OR at token 0, with no name check and no `class` allowance. Kept only so
     the regression it caused stays measurable from this file; it is NOT the
     engine's behaviour any more."""
-    masked, code = _mask_nested_no_namecheck(body)
-    if mutation_forms(code):
-        return []
-    seen, out = set(), []
-    for ln in masked:
-        r = result_rhs_new(ln) or exit_rhs(ln)
-        if r and r not in seen:
-            seen.add(r)
-            out.append(r)
-    return out[:CAP]
-
-
-def _mask_nested_no_namecheck(lines, mask_ch='\x01'):
-    toks, code = scan_body(lines)
-    out = [list(l) for l in lines]
-    cod = [list(l) for l in code]
-    depth = paren = 0
-    header_seen = False
-    pending = None
-    stack = []
-    for ti, (li, col, tk, kind, end) in enumerate(toks):
-        if kind == 'sym':
-            if tk == '(':
-                paren += 1
-            elif tk == ')':
-                paren -= 1
-                if pending and not pending[3] and paren < pending[2]:
-                    pending = None
-            elif tk == ';':
-                if pending and not pending[3] and paren == pending[2]:
-                    pending = None
-            continue
-        if tk in ROUTINE_KW:
-            if not header_seen and (li == 0 or ti == 0) and not stack:
-                header_seen = True
-                continue
-            if stack:
-                continue
-            nxt = toks[ti + 1] if ti + 1 < len(toks) else None
-            named = bool(nxt and nxt[3] == 'word' and nxt[2] != 'of')
-            pending = (li, col, paren, named)
-            continue
-        if tk in OPENERS:
-            if pending:
-                stack.append((pending[0], pending[1], depth))
-                pending = None
-            depth += 1
-            continue
-        if tk == 'end':
-            depth -= 1
-            if stack and depth <= stack[-1][2]:
-                sli, scol, _ = stack.pop()
-                for x in range(sli, li + 1):
-                    a = scol if x == sli else 0
-                    b = (end + 1) if x == li else len(out[x])
-                    for k in range(a, min(b, len(out[x]))):
-                        out[x][k] = mask_ch
-                        cod[x][k] = mask_ch
-    return [''.join(l) for l in out], [''.join(l) for l in cod]
+    return _mine(*mask_nested(body, lambda ch: True,
+                              lead_test=lambda toks, ti: ti == 0))[0][:CAP]
 
 
 def cmd_anchor(db, prefix=None):
+    owners = header_owners(db)
     elig = match = 0
     foreign = []
-    gained, regressed, lost = [], [], []
-    for qn, nm, path, a, b, body in routines(db, prefix):
-        ok, hn, hit = lead_anchor_of(body, nm)
+    gained, regressed = [], []
+    lost, wrong_subject, unclaimed, mute, residual = [], [], 0, 0, []
+    for qn, nm, kind, path, a, b, body in routines(db, prefix):
+        ok, ch, hit, hli = lead_anchor_of(body, qn)
         if ok:
             elig += 1
             if hit:
                 match += 1
             else:
-                foreign.append((qn, nm, hn, a, b))
-        now = mine_new(body, nm)[0][:CAP]
-        # (i) what the NAME-CHECKED anchor buys over having no lead-token anchor
-        # at all: mine_new with an empty name IS that variant, by construction.
+                foreign.append((qn, nm, ch, a, b))
+            # ---- THE INDEPENDENT TESTS ------------------------------------
+            # (i) Who does the INDEX say starts an implementation on the line
+            # the anchor landed on? Authoritative when it speaks, but SILENT
+            # on a span whose own row is stale and whose duplicate rows are
+            # stale too -- which on YADF is every eligible span, so this
+            # criterion alone would establish nothing there.
+            claim = owners.get((path.lower(), a + hli), set())
+            if not claim:
+                unclaimed += 1
+            elif hit and qn.lower() not in claim:
+                wrong_subject.append((qn, a, b, 'index', sorted(claim)))
+            elif (not hit) and qn.lower() in claim:
+                lost.append((qn, a, b, 'index', ch))
+            # (ii) A separate reading of the same header off the RAW SOURCE.
+            # Always speaks, and shares no code with the mechanism.
+            spoke, names_it = raw_header_names(body[hli], qn)
+            if spoke:
+                if hit and not names_it:
+                    wrong_subject.append((qn, a, b, 'source', [body[hli].strip()]))
+                elif (not hit) and names_it:
+                    lost.append((qn, a, b, 'source', ch))
+            else:
+                mute += 1
+            # ---- THE RESIDUAL is_qualified_tail CANNOT SEE ----------------
+            # An unqualified chain is a tail of every qualified name ending in
+            # it, so a plain routine `Same` still anchors a method `T.Same`.
+            # The index knows which symbols are methods; the miner does not.
+            if hit and '.' not in ch and (kind or '').lower() == 'method':
+                residual.append((qn, a, b, ch))
+        now = mine_new(body, qn)[0][:CAP]
+        # (i) what the anchor buys over having no lead-token anchor at all:
+        # mine_new with an empty qname IS that variant, by construction.
         none_ = mine_new(body, '')[0][:CAP]
         if none_ != now:
-            (gained if ok and hit else lost).append((qn, a, b, none_, now))
-        # (ii) what the name check WITHDRAWS from the anchor as it shipped at
-        # 55bcdaf. A row the unchecked anchor made emit is only a gain if the
-        # header it anchored is this symbol's; otherwise the shipped text names
-        # ANOTHER routine's return values and withdrawing it is the point.
-        was = mine_unchecked(body)
+            gained.append((qn, a, b, none_, now))
+        # (ii) what the QUALIFIED-NAME check withdraws from the anchor as it
+        # shipped at 75a4be6, which name-checked the last dotted component
+        # only. Classified by the INDEPENDENT test above, not by `hit`.
+        was = mine_lastcomp(body, nm)[0][:CAP]
         if was != now:
-            regressed.append((qn, a, b, was, now, ok and not hit))
-    print('spans eligible for the LEAD-TOKEN anchor        : %d' % elig)
-    print('  header IS this symbol -- a real recovery      : %d' % match)
-    print('  header is ANOTHER routine -- a MIS-ANCHOR     : %d  (%.0f%%)'
+            claim = owners.get((path.lower(), a + hli), set()) if hli >= 0 else set()
+            regressed.append((qn, a, b, was, now, bool(claim) and qn.lower() not in claim))
+    print('spans eligible for the LEAD-TOKEN anchor          : %d' % elig)
+    print('  header IS this symbol (qualified-name tail)     : %d' % match)
+    print('  header is ANOTHER routine -- a MIS-ANCHOR       : %d  (%.0f%%)'
           % (len(foreign), 100.0 * len(foreign) / max(1, elig)))
+    print('INDEPENDENT of the anchor\'s own predicate. Two criteria, neither of which')
+    print('consults header_chain_at / is_lead_keyword / is_qualified_tail:')
+    print('  (i) the index\'s own impl_start_line map, (ii) a regex over the raw source.')
+    print('  DECLINED spans a criterion says ARE this symbol : %d  <- a real LOSS, must be 0'
+          % len(lost))
+    print('  ACCEPTED spans a criterion says are ANOTHER     : %d  <- wrong subject, must be 0'
+          % len(wrong_subject))
+    print('  header line claimed by NO indexed row           : %d  (criterion (i) silent)'
+          % unclaimed)
+    print('  header line the raw-source regex could not read : %d  (criterion (ii) silent)'
+          % mute)
+    print('  ACCEPTED on an UNQUALIFIED header for a `method`: %d  <- residual, register K30'
+          % len(residual))
     print('vs NO lead-token anchor at all (option B):')
-    print('  rows GAINED, anchored by their own header     : %d' % len(gained))
-    print('  rows changed on a FOREIGN/unnamed header      : %d  <- must be 0' % len(lost))
-    print('vs the UNCHECKED anchor as it shipped at 55bcdaf:')
-    print('  rows changed                                  : %d' % len(regressed))
-    print('     of which the header was FOREIGN (a fix)    : %d'
+    print('  rows GAINED                                     : %d' % len(gained))
+    print('vs the anchor as it shipped at 75a4be6 (LAST COMPONENT only):')
+    print('  rows changed                                    : %d' % len(regressed))
+    print('     of which WITHDRAWN (index: another symbol)   : %d'
           % sum(1 for r in regressed if r[5]))
-    print('     of which the header was this symbol (a LOSS): %d'
+    print('     of which not so classified                   : %d'
           % sum(1 for r in regressed if not r[5]))
-    for label, rows in (('gained-vs-B', gained), ('CHANGED-ON-FOREIGN-vs-B', lost)):
-        for qn, a, b, was, now in rows[:12]:
-            print('   [%s] %s  span=%d..%d\n        was=%s\n        now=%s'
-                  % (label, qn, a, b, was, now))
+    print('vs the UNCHECKED anchor as it shipped at 55bcdaf:')
+    n_unch = 0
+    for qn, nm, kind, path, a, b, body in routines(db, prefix):
+        if mine_unchecked(body) != mine_new(body, qn)[0][:CAP]:
+            n_unch += 1
+    print('  rows changed                                    : %d' % n_unch)
+    for qn, a, b, was, now in gained[:12]:
+        print('   [gained-vs-B] %s  span=%d..%d\n        was=%s\n        now=%s'
+              % (qn, a, b, was, now))
+    for qn, a, b, crit, ch in lost[:12]:
+        print('   [LOST by %s] %s  span=%d..%d  header=%s' % (crit, qn, a, b, ch or '<none>'))
+    for qn, a, b, crit, claim in wrong_subject[:12]:
+        print('   [WRONG-SUBJECT by %s] %s  span=%d..%d  says=%s' % (crit, qn, a, b, claim))
+    for qn, a, b, ch in residual[:12]:
+        print('   [residual K30] %s  span=%d..%d  header=%s' % (qn, a, b, ch))
     for qn, a, b, was, now, isforeign in regressed[:12]:
         print('   [%s] %s  span=%d..%d\n        was=%s\n        now=%s'
-              % ('withdrawn' if isforeign else 'LOST', qn, a, b, was, now))
-    for qn, nm, hn, a, b in foreign[:12]:
-        print('   [mis-anchor] %s  span=%d..%d  header=%s' % (qn, a, b, hn or '<none>'))
+              % ('withdrawn' if isforeign else 'CHANGED', qn, a, b, was, now))
+    for qn, nm, ch, a, b in foreign[:12]:
+        print('   [mis-anchor] %s  span=%d..%d  header=%s' % (qn, a, b, ch or '<none>'))
 
 
 def cmd_blast(db, prefix=None):
     n_old = n_kept = n_changed = 0
     per_form = collections.Counter()
     examples = []
-    for qn, nm, path, a, b, body in routines(db, prefix):
+    for qn, nm, kind, path, a, b, body in routines(db, prefix):
         old = mine_old(body)[:CAP]
         if not old:
             continue
         n_old += 1
-        new, tags = mine_new(body, nm)
+        new, tags = mine_new(body, qn)
         new = new[:CAP]
         if new:
             n_kept += 1
@@ -665,7 +782,7 @@ def cmd_blast(db, prefix=None):
 
 def cmd_argpass(db, prefix=None):
     cnt = collections.Counter()
-    for qn, nm, path, a, b, body in routines(db, prefix):
+    for qn, nm, kind, path, a, b, body in routines(db, prefix):
         for ln in body:
             t = strip_line_comment(ln)
             if result_rhs_old(ln):
@@ -732,7 +849,7 @@ def blank_block_comments(lines):
 
 def cmd_braces(db, prefix=None):
     hits = []
-    for qn, nm, path, a, b, body in routines(db, prefix):
+    for qn, nm, kind, path, a, b, body in routines(db, prefix):
         o = mine_old(body)[:CAP]
         n = mine_old(blank_block_comments(body))[:CAP]
         if o != n:

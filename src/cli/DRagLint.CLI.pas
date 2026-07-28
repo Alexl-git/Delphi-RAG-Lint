@@ -3883,7 +3883,7 @@ begin
         return's source line. Body[0] is source line ImplStartLine, so the
         absolute 1-based line is ImplStartLine + offset. Rhs (strings) is still
         used by the markdown path below. }
-      var Mined: TArray<TReturnMined>:= MineReturnExpressionsEx(Body, Syms[0].Name);
+      var Mined: TArray<TReturnMined>:= MineReturnExpressionsEx(Body, Syms[0].QualifiedName);
       SetLength(Rhs, Length(Mined));
       SetLength(RhsLines, Length(Mined));
       for var mi:= 0 to High(Mined) do

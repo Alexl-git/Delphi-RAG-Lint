@@ -71,11 +71,23 @@
       and 81 of them (84%) head some OTHER routine -- so it did not recover a
       lost <returns>, it published a foreign routine's return values under
       this routine's name, which is the exact defect this task exists to
-      remove. The lead token is now accepted only when the identifier
-      following the keyword (last dotted component) IS the documented
-      routine's name; otherwise the body is masked and the answer is absence.
-      Callers with no name to give get the body-line-0 rule alone.
+      remove. The lead token is now accepted only when the header it heads is
+      the documented routine's own; otherwise the body is masked and the answer
+      is absence. Callers with no name to give get the body-line-0 rule alone.
       Command: tools\measure\returns_blast.py anchor <db> [<prefix>].
+
+      "IS THIS ROUTINE'S HEADER" IS A QUALIFIED-NAME TEST, NOT A SIMPLE-NAME
+      ONE. Comparing only the LAST dotted component leaves the hole open for
+      the commonest adjacency there is: two classes with a method of the same
+      name, or two overloads, sitting next to each other in the implementation
+      section. `class function TBeta.Same` over a span that starts above
+      `class function TAlpha.Same` then answers with TAlpha's value while the
+      check reports a match. Census over the three live indexes -- (file,
+      simple-name) groups holding more than one distinct impl_start_line --
+      YADF 73 groups / 158 symbol rows, drag-lint's own index 83 / 198, ORM3
+      98 / 414. The whole dotted chain the header declares must therefore be a
+      COMPONENT-WISE TAIL of the symbol's qualified name
+      (talpha.same vs returns.TBeta.Same -> declined).
 
   WHAT DOES *NOT* CHANGE, AND IS ASSERTED AS SUCH
   -----------------------------------------------
@@ -130,6 +142,10 @@
   ["A * 7"] -- ForeignA's return value, under ForeignB's name -- and
   TBox.ClassLag over a span one line early hovered [] where its true span
   hovers ["A + 41"]. Transcript in the fix-round-2 report.
+  The SAME-SIMPLE-NAME half of group (7) has its own reverted fix, the engine
+  at 75a4be6, which name-checked the last dotted component only. Against it
+  TBeta.Same over a span starting one line above TAlpha.Same's header hovered
+  ["A * 11"] -- TAlpha's value, under TBeta's name. Fix-round-3 report.
 
   Runs from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -187,6 +203,35 @@ function Get-ImplSpan([string]$db, [string]$name) {
   if ($null -eq $o) { return @(0,0) }
   foreach ($r in @($o)) {
     if ([int]$r.impl_start_line -gt 0) { return @([int]$r.impl_start_line, [int]$r.impl_end_line) }
+  }
+  return @(0,0)
+}
+
+# The same two lookups keyed by QUALIFIED name. The same-simple-name pair needs
+# them and nothing else does: `query --name Same` returns TWO rows, and "the
+# first one" is not an answer when the whole point of the pair is that the
+# simple name does not identify the routine. Returns 0 / @(0,0) when the
+# qualified name matches no row, which the callers assert on.
+function Get-DeclLineQ([string]$db, [string]$qname) {
+  $simple = $qname.Substring($qname.LastIndexOf('.') + 1)
+  $j = (& $exePath query --name $simple --db $db --json 2>$null) -join "`n"
+  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return 0 }
+  if ($null -eq $o) { return 0 }
+  foreach ($r in @($o)) {
+    if (($r.qualified_name -eq $qname) -and ($r.section -eq 'interface')) { return [int]$r.start_line }
+  }
+  return 0
+}
+
+function Get-ImplSpanQ([string]$db, [string]$qname) {
+  $simple = $qname.Substring($qname.LastIndexOf('.') + 1)
+  $j = (& $exePath query --name $simple --db $db --json 2>$null) -join "`n"
+  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return @(0,0) }
+  if ($null -eq $o) { return @(0,0) }
+  foreach ($r in @($o)) {
+    if (($r.qualified_name -eq $qname) -and ([int]$r.impl_start_line -gt 0)) {
+      return @([int]$r.impl_start_line, [int]$r.impl_end_line)
+    }
   }
   return @(0,0)
 }
@@ -330,6 +375,23 @@ foreach ($p in @(
     ("span=" + ($span -join '..') + " lines=" + ($ln -join ','))
 }
 
+# (7, same-simple-name) Scenario 4 is only a test of the qualified-name check if
+# the two routines really do SHARE a simple name in the index and really are
+# adjacent with a blank line above the first. Both properties are the fixture's,
+# not the output's, and neither is visible in a rendered <returns>.
+$snRows = @((& $exePath query --name Same --db $db --json 2>$null) -join "`n" | ConvertFrom-Json)
+$snQ    = @($snRows | ForEach-Object { $_.qualified_name } | Sort-Object -Unique)
+Check 'PRECONDITION (same-name): the index holds TWO DISTINCT qualified names whose SIMPLE name is both `Same`' `
+  (($snQ.Count -eq 2) -and ($snQ -contains 'returns.TAlpha.Same') -and ($snQ -contains 'returns.TBeta.Same')) `
+  ("qnames=" + ($snQ -join ','))
+$snA = Get-ImplSpanQ $db 'returns.TAlpha.Same'
+$snB = Get-ImplSpanQ $db 'returns.TBeta.Same'
+Check ("PRECONDITION (same-name): TAlpha.Same {0}..{1} immediately precedes TBeta.Same {2}..{3}, and the line above TAlpha.Same's header is BLANK" -f `
+       $snA[0], $snA[1], $snB[0], $snB[1]) `
+  (($snA[0] -gt 1) -and ($snB[0] -gt $snA[1]) -and ($pre[$snA[0] - 2].Trim() -eq '') `
+   -and ($pre[$snA[0] - 1] -match '^class\s+function\s+TAlpha\.Same\(')) `
+  ("above=[" + $pre[$snA[0] - 2] + "] header=[" + $pre[$snA[0] - 1] + "]")
+
 # (5, not-code) The NOT-CODE group only tests anything if the mutation SHAPE is
 # really inside each routine's indexed span and really is inside a comment or a
 # string literal. Derived from the pre-apply source, never from the output.
@@ -366,6 +428,16 @@ foreach ($nm in $names) {
   Check "$nm resolved to an interface declaration line" ($ln -gt 0) "line=$ln"
   $blocks[$nm] = Get-DocBlockAtLine $lines $ln
 }
+# The same-simple-name pair, resolved by QUALIFIED name. Get-DeclLine would
+# return whichever of the two rows the index listed first, so every check keyed
+# on it would be a check on an unknown one of them.
+foreach ($p in @(
+    @{ Key = 'TAlpha.Same'; Q = 'returns.TAlpha.Same' },
+    @{ Key = 'TBeta.Same' ; Q = 'returns.TBeta.Same'  })) {
+  $ln = Get-DeclLineQ $db $p.Q
+  Check ("{0} resolved to an interface declaration line" -f $p.Q) ($ln -gt 0) "line=$ln"
+  $blocks[$p.Key] = Get-DocBlockAtLine $lines $ln
+}
 
 # --- NON-VACUITY CONTROL, asserted BEFORE any absence check. ----------------
 # 'no Observed: here' is trivially true over a file with no <returns> at all,
@@ -379,11 +451,12 @@ foreach ($nm in $names) {
 # A filter that matches the thing it is describing is the exact shape of a
 # vacuous test.
 $obsLines = @($lines | Where-Object { $_ -match '^\s*///' -and $_ -match 'Observed:' })
-Check 'CONTROL: exactly SEVENTEEN ///-prefixed "Observed:" lines in the applied file' `
-  ($obsLines.Count -eq 17) ("count=" + $obsLines.Count)
+Check 'CONTROL: exactly NINETEEN ///-prefixed "Observed:" lines in the applied file' `
+  ($obsLines.Count -eq 19) ("count=" + $obsLines.Count)
 foreach ($nm in @('PlainSum','DoubleIt','ConcatPath','NestedCallRhs','OneLiner','AnonHost','LocalHost','InlineProcVar',
                   'ParamlessProcVar','LocalProcTypeDecl','BraceCommentInc','BraceCommentSelfRef',
-                  'ParenStarSetLength','StrLiteralResult','ClassLag','ForeignA','ForeignB')) {
+                  'ParenStarSetLength','StrLiteralResult','ClassLag','ForeignA','ForeignB',
+                  'TAlpha.Same','TBeta.Same')) {
   Check "CONTROL: $nm still renders an Observed: line" ((Get-Observed $blocks[$nm]) -ne '') `
     ($blocks[$nm] -replace "`n",' | ')
 }
@@ -459,9 +532,11 @@ Check 'GUARD: LocalProcTypeDecl''s local procedural TYPE did not swallow its bod
 # then demand back (ClassLag) or demand the ABSENCE of (ForeignA's, under
 # ForeignB's name).
 foreach ($p in @(
-    @{ N = 'ClassLag'; Want = 'A + 41'; Why = 'a class method -- its body''s FIRST token is `class`' },
-    @{ N = 'ForeignA'; Want = 'A * 7' ; Why = 'the routine a doctored ForeignB span lands in' },
-    @{ N = 'ForeignB'; Want = 'A - 7' ; Why = 'the victim of that doctored span' })) {
+    @{ N = 'ClassLag'   ; Want = 'A + 41'; Why = 'a class method -- its body''s FIRST token is `class`' },
+    @{ N = 'ForeignA'   ; Want = 'A * 7' ; Why = 'the routine a doctored ForeignB span lands in' },
+    @{ N = 'ForeignB'   ; Want = 'A - 7' ; Why = 'the victim of that doctored span' },
+    @{ N = 'TAlpha.Same'; Want = 'A * 11'; Why = 'the routine a doctored TBeta.Same span lands in -- SAME simple name' },
+    @{ N = 'TBeta.Same' ; Want = 'A * 22'; Why = 'the victim of that doctored span' })) {
   Check ("SPAN-BASELINE: {0} ({1}) renders exactly ""{2}"" with its TRUE span" -f $p.N, $p.Why, $p.Want) `
     ((Get-Observed $blocks[$p.N]) -eq $p.Want) ($blocks[$p.N] -replace "`n",' | ')
 }
@@ -743,6 +818,114 @@ $lines3 = [IO.File]::ReadAllLines($tgt3)
 $bad3   = @($lines3 | Where-Object { $_ -match '^\s*///' -and $_ -match 'Observed:' -and $_ -match 'A \* 7' })
 Check 'FOREIGN: exactly ONE ///-prefixed "Observed:" line in the file names "A * 7" -- ForeignA''s own, and no other' `
   ($bad3.Count -eq 1) ($bad3 -join ' | ')
+
+# ===========================================================================
+# (7b) SCENARIO 4 -- a STALE span that begins inside a DIFFERENT ROUTINE OF
+# THE SAME SIMPLE NAME.
+#
+# Scenario 3 is satisfied by comparing the LAST dotted component of the
+# anchored header with the symbol's simple name, and that comparison leaves
+# this shape wide open: `class function TBeta.Same` over a span that starts
+# above `class function TAlpha.Same` finds TAlpha's header, reads `same` off
+# it, matches `Same`, accepts the anchor, and publishes TAlpha's value under
+# TBeta's name -- while the check that exists to prevent exactly that reports
+# a match.
+#
+# ADJACENCY IS WHAT MAKES IT LIKELY RATHER THAN EXOTIC: overloads and
+# same-named methods on sibling classes sit next to each other in the
+# implementation section, which is where a stale span lands. Census over the
+# three live indexes -- (file, simple-name) groups holding more than one
+# distinct impl_start_line -- YADF 73 groups / 158 symbol rows, drag-lint's
+# own index 83 / 198, ORM3 98 / 414.
+#
+# Engine-verified RED at 75a4be6: "returns":["A * 11"], TAlpha's value.
+#
+# THE REQUIRED ANSWER IS ITS OWN VALUE OR NOTHING, never the neighbour's.
+# Both halves are asserted: "it does not say A * 11" alone is satisfied by an
+# engine that says nothing about anything, which is why the file-wide
+# population control above and the SPAN-BASELINE pair are its bound.
+# ===========================================================================
+Write-Host ''
+Write-Host '=== returns.pas, index span shifted INTO A SAME-NAMED SIBLING ===' -ForegroundColor Cyan
+
+$sc4 = Join-Path C:\TEMP 'draglint_docp3_returns_samename'
+if (Test-Path $sc4) { Remove-Item $sc4 -Recurse -Force }
+New-Item -ItemType Directory -Path $sc4 | Out-Null
+$tgt4 = Join-Path $sc4 'returns.pas'
+$db4  = Join-Path $sc4 'r.sqlite'
+Copy-Item $fx $tgt4 -Force
+& $exePath index $sc4 --db $db4 2>$null | Out-Null
+$src4 = [IO.File]::ReadAllLines($tgt4)
+
+# Keyed on QUALIFIED name, not on `name`: both rows are called `Same`, so the
+# scenario-3 script would move BOTH and the doctored span would no longer be
+# distinguishable from a global shift.
+$snPy = Join-Path $sc4 'samenamespan.py'
+@'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+cur = con.execute(
+    "UPDATE symbols SET impl_start_line = ? "
+    "WHERE qualified_name = ? AND impl_start_line > 0", (int(sys.argv[3]), sys.argv[2]))
+con.commit()
+print(cur.rowcount)
+'@ | Set-Content $snPy -Encoding ascii
+
+$spanSA = Get-ImplSpanQ $db4 'returns.TAlpha.Same'
+$spanSB = Get-ImplSpanQ $db4 'returns.TBeta.Same'
+
+Check ("PRECONDITION (same-name): TAlpha.Same {0}..{1} precedes TBeta.Same {2}..{3}, and the line above TAlpha.Same's header is BLANK" -f `
+       $spanSA[0], $spanSA[1], $spanSB[0], $spanSB[1]) `
+  (($spanSA[0] -gt 1) -and ($spanSB[0] -gt $spanSA[1]) -and ($src4[$spanSA[0] - 2].Trim() -eq '') `
+   -and ($src4[$spanSA[0] - 1] -match '^class\s+function\s+TAlpha\.Same\(')) `
+  ("above=[" + $src4[$spanSA[0] - 2] + "] header=[" + $src4[$spanSA[0] - 1] + "]")
+
+# THE HOLE ITSELF, asserted rather than described: the header the anchor will
+# find declares a DIFFERENT routine whose LAST DOTTED COMPONENT is identical to
+# the documented one's simple name. Read off the source, not off the engine.
+$snHdr  = $src4[$spanSA[0] - 1]
+$snLast = if ($snHdr -match 'function\s+([A-Za-z_][A-Za-z0-9_.]*)') { ($Matches[1] -split '\.')[-1] } else { '' }
+Check 'PRECONDITION (same-name): the header the anchor lands on declares TAlpha.Same, whose LAST dotted component is TBeta.Same''s simple name' `
+  (($snLast -eq 'Same') -and ($snHdr -match 'TAlpha\.Same') -and ($snHdr -notmatch 'TBeta')) `
+  ("header=[" + $snHdr.Trim() + "] last=" + $snLast)
+
+# Controls, before anything is doctored.
+foreach ($p in @(@{ Q = 'returns.TAlpha.Same'; Want = 'A * 11' }, @{ Q = 'returns.TBeta.Same'; Want = 'A * 22' })) {
+  $r = @(Get-HoverReturns $db4 $p.Q)
+  Check ("CONTROL (same-name): with its TRUE span, {0} hovers exactly '{1}'" -f $p.Q, $p.Want) `
+    (($r.Count -eq 1) -and ($r[0] -eq $p.Want)) ("returns=" + ($r -join ','))
+}
+
+$rc4 = (& python $snPy $db4 'returns.TBeta.Same' ($spanSA[0] - 1)) -join ''
+Check 'PRECONDITION (same-name): the UPDATE moved exactly ONE row, TBeta.Same''s' ($rc4.Trim() -eq '1') ("rowcount=" + $rc4)
+
+$spanSB2 = Get-ImplSpanQ $db4 'returns.TBeta.Same'
+$spanSA2 = Get-ImplSpanQ $db4 'returns.TAlpha.Same'
+Check ("PRECONDITION (same-name): TBeta.Same's span now READS {0}..{1} -- one line ABOVE TAlpha.Same's header, COVERING TAlpha.Same's body -- and TAlpha.Same's own span is UNTOUCHED" -f `
+       $spanSB2[0], $spanSB2[1]) `
+  (($spanSB2[0] -eq $spanSA[0] - 1) -and ($spanSB2[1] -eq $spanSB[1]) -and ($spanSB2[1] -ge $spanSA[1]) `
+   -and ($spanSA2[0] -eq $spanSA[0]) -and ($spanSA2[1] -eq $spanSA[1])) `
+  ("beta was=" + ($spanSB -join '..') + " now=" + ($spanSB2 -join '..') + " alpha=" + ($spanSA2 -join '..'))
+
+# ... and TAlpha.Same's own Result line really is reachable inside that span,
+# which is what makes the absence below falsifiable.
+$snLn = @(Find-Lines $src4 'Result := A \* 11')
+Check ("PRECONDITION (same-name): TAlpha.Same's own 'Result := A * 11' (line {0}) lies INSIDE TBeta.Same's doctored span" -f ($snLn -join ',')) `
+  (($snLn.Count -eq 1) -and ($snLn[0] -ge $spanSB2[0]) -and ($snLn[0] -le $spanSB2[1])) `
+  ("lines=" + ($snLn -join ','))
+
+$snRet = @(Get-HoverReturns $db4 'returns.TBeta.Same')
+Check 'SAME-NAME: TBeta.Same does NOT adopt TAlpha.Same''s return value "A * 11" -- a matching SIMPLE name is not a matching routine' `
+  ($snRet -notcontains 'A * 11') ("returns=" + ($snRet -join ','))
+Check 'SAME-NAME: TBeta.Same hovers its OWN value "A * 22" or NOTHING AT ALL -- never the same-named neighbour''s' `
+  (($snRet.Count -eq 0) -or (($snRet.Count -eq 1) -and ($snRet[0] -eq 'A * 22'))) ("returns=" + ($snRet -join ','))
+
+# The autodoc surface must agree, on the text a human reads.
+& $exePath document --unit $tgt4 --db $db4 --apply 2>$null | Out-Null
+$lines4 = [IO.File]::ReadAllLines($tgt4)
+$bad4   = @($lines4 | Where-Object { $_ -match '^\s*///' -and $_ -match 'Observed:' -and $_ -match 'A \* 11' })
+Check 'SAME-NAME: exactly ONE ///-prefixed "Observed:" line in the file names "A * 11" -- TAlpha.Same''s own, and no other' `
+  ($bad4.Count -eq 1) ($bad4 -join ' | ')
 
 }
 finally { Pop-Location }

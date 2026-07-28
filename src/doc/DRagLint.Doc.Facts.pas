@@ -799,10 +799,13 @@ begin
       var BodyLines: TArray<string>; SetLength(BodyLines, 0);
       for var Ln:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(RSrc)) do
         BodyLines:= BodyLines + [RSrc[Ln - 1]];
-      // ASym.Name is passed so the miner can tell "this span starts a line early
-      // at MY header" from "this span starts inside SOMEBODY ELSE'S routine" --
-      // a stale index produces both, and only the first is recoverable.
-      var Mined: TArray<string>:= MineReturnExpressions(BodyLines, ASym.Name);
+      // ASym.QualifiedName is passed so the miner can tell "this span starts a
+      // line early at MY header" from "this span starts inside SOMEBODY ELSE'S
+      // routine" -- a stale index produces both, and only the first is
+      // recoverable. The QUALIFIED name, because the simple one cannot separate
+      // TAlpha.Same from TBeta.Same and such pairs are adjacent in the
+      // implementation section, which is where a stale span lands.
+      var Mined: TArray<string>:= MineReturnExpressions(BodyLines, ASym.QualifiedName);
       if Length(Mined) > AMaxReturnCases then SetLength(Mined, AMaxReturnCases);
       Result.ReturnCases:= Mined;
     end;
