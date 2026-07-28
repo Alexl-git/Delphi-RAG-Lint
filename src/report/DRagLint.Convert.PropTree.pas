@@ -98,7 +98,13 @@ type
   /// the root class's own + inherited properties, no recursion). ToPersistent,
   /// when True (the CLI default), stops the ancestor climb at a class named
   /// 'TPersistent' or 'TObject' so the enumerator does not surface TObject's
-  /// non-published noise -- pragmatic, name-based, no RTTI.</remarks>
+  /// non-published noise -- pragmatic, name-based, no RTTI.
+  /// No field is a managed type, so a local variable of this record is raw,
+  /// UNINITIALISED stack memory in Delphi -- nothing zeroes it. Every caller
+  /// MUST start with `Opts:= Default(TPropTreeOptions);` before assigning any
+  /// field, so a field the caller does not explicitly set (today or after a
+  /// future field is added) is deterministically False/0/'' rather than
+  /// whatever garbage happened to be on the stack.</remarks>
   TPropTreeOptions = record
     Depth       : Integer;
     ToPersistent: Boolean;

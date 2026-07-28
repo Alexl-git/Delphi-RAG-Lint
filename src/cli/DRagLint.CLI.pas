@@ -10837,6 +10837,7 @@ begin
   Depth:= AArgs.Depth;
   if Depth <= 0 then Depth:= 6;
 
+  Opts:= Default(TPropTreeOptions);
   Opts.Depth            := Depth;
   Opts.ToPersistent     := AArgs.ToPersistent;
   Opts.TreatRefsAsLeaves:= AArgs.RefsAsLeaves;
@@ -11046,6 +11047,7 @@ begin
   // is parse-only: only parse errors surface (empty trees skip path checks).
   Depth:= AArgs.Depth;
   if Depth <= 0 then Depth:= 6;
+  Opts:= Default(TPropTreeOptions);
   Opts.Depth       := Depth;
   Opts.ToPersistent:= AArgs.ToPersistent;
 
@@ -11145,6 +11147,7 @@ begin
   // DoConvertValidate's store-open + multi-db loop verbatim).
   Depth:= AArgs.Depth;
   if Depth <= 0 then Depth:= 6;
+  Opts:= Default(TPropTreeOptions);
   Opts.Depth       := Depth;
   Opts.ToPersistent:= AArgs.ToPersistent;
 
@@ -11415,6 +11418,7 @@ begin
 
   Depth:= AArgs.Depth;
   if Depth <= 0 then Depth:= 6;
+  Opts:= Default(TPropTreeOptions);
   Opts.Depth       := Depth;
   Opts.ToPersistent:= AArgs.ToPersistent;
 
@@ -11621,6 +11625,7 @@ begin
 
   Depth:= AArgs.Depth;
   if Depth <= 0 then Depth:= 6;
+  Opts:= Default(TPropTreeOptions);
   Opts.Depth       := Depth;
   Opts.ToPersistent:= AArgs.ToPersistent;
 
