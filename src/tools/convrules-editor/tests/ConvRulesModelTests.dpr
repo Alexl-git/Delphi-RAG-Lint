@@ -1988,6 +1988,96 @@ begin
     'a name WITH a leaf is not Missing');
 end;
 
+{ Review fix (Important 1 + 2): a terminator character sitting inside a QUOTED literal
+  inside a <...> or (...) container must not be mistaken for the container's real
+  terminator. For <...> this used to pop the block stack early on a mid-list item's own
+  bare 'end', silently dropping every property recorded after the list (criterion the
+  reviewer traced: 'Y > Z' inside an item clears SkipTo, 'end' then pops the From-class
+  block, 'GroupIndex' after the list is never seen). For (...) -- previously untested at
+  all -- the same early clear instead lets a line INSIDE the still-open value be read as
+  a real property. Both are fixed by StripQuoted: the terminator search runs over a copy
+  of the line with quoted content removed. }
+procedure TestScanDfmSkipRobustness;
+const
+  ANGLE_SRC =
+    'object btnA: TabcToggleBtn'#13#10 +
+    '  Columns = <'#13#10 +
+    '    item'#13#10 +
+    '      Caption = ''Y > Z'''#13#10 +   // '>' inside quotes must not close the list
+    '    end'#13#10 +
+    '    item'#13#10 +
+    '      Caption = ''B'''#13#10 +
+    '    end>'#13#10 +
+    '  GroupIndex = 5'#13#10 +            // must still be recorded
+    'end'#13#10;
+
+  PAREN_SRC =
+    'object btnA: TabcToggleBtn'#13#10 +
+    '  Extra = ('#13#10 +
+    '    ''A) B'''#13#10 +                // ')' inside quotes must not close the value
+    '    BogusInner = 1'#13#10 +          // looks like an assignment; must NOT be recorded
+    '    ''C'')'#13#10 +
+    '  Hint = ''after'''#13#10 +          // must still be recorded
+    'end'#13#10;
+
+  { Confirms the same-line case is unaffected by the fix: a value that opens AND
+    closes its container on one line must not itself trip skip mode. }
+  SAMELINE_SRC =
+    'object btnA: TabcToggleBtn'#13#10 +
+    '  Columns = <>'#13#10 +
+    '  Blob = {}'#13#10 +
+    '  Hint = ''x'''#13#10 +
+    'end'#13#10;
+
+  function Has(const A: TArray<string>; const S: string): Boolean;
+  var X: string;
+  begin
+    for X in A do
+      if SameText(X, S) then Exit(True);
+    Result := False;
+  end;
+
+var
+  U: TArray<string>;
+begin
+  U := ScanDfmText(ANGLE_SRC, 'TabcToggleBtn');
+  Check('usage.dfm.skip.angle.quote-defeat',
+    Has(U, 'GroupIndex'), 'a > inside a quoted item value must not close the <...> list early');
+  Check('usage.dfm.skip.angle.inner-not-recorded',
+    not Has(U, 'Caption'), 'assignments inside <...> items are never recorded');
+
+  U := ScanDfmText(PAREN_SRC, 'TabcToggleBtn');
+  Check('usage.dfm.skip.paren.quote-defeat',
+    not Has(U, 'BogusInner'), 'a ) inside a quoted list value must not close the (...) value early');
+  Check('usage.dfm.skip.paren.after-recorded',
+    Has(U, 'Hint'), 'the immediate-level property after the list still gets recorded');
+
+  U := ScanDfmText(SAMELINE_SRC, 'TabcToggleBtn');
+  Check('usage.dfm.skip.sameline.angle-empty',
+    Has(U, 'Blob'), 'Columns = <> must not itself enter skip mode');
+  Check('usage.dfm.skip.sameline.brace-empty',
+    Has(U, 'Hint'), 'Blob = {} must not itself enter skip mode');
+end;
+
+{ Review fix (Important 3): ScanPasText was reworked from an O(candidates x textlength)
+  per-candidate scan into a single O(textlength) harvest of every '.Identifier' token
+  followed by an O(candidates) membership filter. This pins the boundary case that
+  inversion is most likely to get wrong: a '.' as the very last character of the text
+  (nothing follows it to harvest) must not raise or hang, and an empty candidate list
+  or empty text must still return an empty result. }
+procedure TestScanPasEndOfTextSafety;
+begin
+  Check('usage.pas.eot.trailingdot',
+    Length(ScanPasText('x.', ['x'])) = 0, 'a trailing dot with nothing after it harvests nothing');
+  Check('usage.pas.eot.emptytext',
+    Length(ScanPasText('', ['Caption'])) = 0, 'empty text yields an empty result');
+  Check('usage.pas.eot.emptycandidates',
+    Length(ScanPasText('a.Caption := 1;', [])) = 0, 'no candidates yields an empty result');
+  Check('usage.pas.eot.dotatend.stillfindsearlier',
+    Contains(ScanPasText('a.Caption := 1; b.', ['Caption']), 'Caption'),
+    'a trailing dot must not stop an earlier real match from being found');
+end;
+
 begin
   try
     TestBlockSplitRulesRoundTrip;
@@ -2012,7 +2102,9 @@ begin
     TestCastLibMergeRefused;
     TestDuplicateHeaders;
     TestScanDfm;
+    TestScanDfmSkipRobustness;
     TestScanPasAndMatch;
+    TestScanPasEndOfTextSafety;
     TestComputeUsage;
     TestPlatform;
     TestUnitDirectives;

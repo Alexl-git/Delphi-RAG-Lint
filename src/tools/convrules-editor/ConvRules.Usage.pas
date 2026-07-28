@@ -111,6 +111,44 @@ begin
   Result := AClass <> '';
 end;
 
+{ Removes the CONTENT of every single-quoted DFM string literal from ALine (the quotes
+  too), collapsing the Pascal doubled-apostrophe escaped-quote convention correctly, so
+  a literal's own '>', ')' or blob-closing brace can never be mistaken for a block
+  terminator by a caller that then searches the result for one. A literal left open at
+  end of line strips to the end of the line -- DFM values are never split mid-literal
+  without a fresh opening quote on the continuation, so this is a safe simplification,
+  not a real string-continuation parser. }
+function StripQuoted(const ALine: string): string;
+var
+  i: Integer;
+  InQuote: Boolean;
+begin
+  Result := '';
+  InQuote := False;
+  i := 1;
+  while i <= Length(ALine) do
+  begin
+    if not InQuote then
+    begin
+      if ALine[i] = '''' then
+        InQuote := True
+      else
+        Result := Result + ALine[i];
+    end
+    else
+    begin
+      if ALine[i] = '''' then
+      begin
+        if (i < Length(ALine)) and (ALine[i + 1] = '''') then
+          Inc(i)                // '' inside a literal: an escaped quote, stay inside
+        else
+          InQuote := False;     // this quote closes the literal
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
 function ScanDfmText(const AText, AFromClass: string): TArray<string>;
 var
   Lines : TArray<TRawLine>;
@@ -152,7 +190,9 @@ begin
 
       if SkipTo <> '' then
       begin
-        if Pos(SkipTo, Cur) > 0 then SkipTo := '';
+        // A terminator char sitting inside a quoted item value (e.g. Caption = 'Y > Z')
+        // must not be mistaken for the container's own terminator -- search stripped.
+        if Pos(SkipTo, StripQuoted(Cur)) > 0 then SkipTo := '';
         Continue;
       end;
 
@@ -176,7 +216,10 @@ begin
       if not IsPropName(Nm) then Continue;
       AddName(Nm);
 
-      Val := Trim(Copy(Cur, ep + 1, MaxInt));
+      // Stripped so a same-line value that merely CONTAINS a quoted opener character
+      // (unlikely, but the same robustness rule applies here as to the terminator
+      // search above) is judged on what is actually outside any quoted literal.
+      Val := StripQuoted(Trim(Copy(Cur, ep + 1, MaxInt)));
       if      Val = '{' then SkipTo := '}'
       else if Val = '<' then SkipTo := '>'
       else if Val = '(' then SkipTo := ')';
@@ -209,77 +252,146 @@ begin
   Result := False;
 end;
 
-function CandidatesFor(const AFromPaths: TArray<string>): TArray<string>;
-var
-  List: TList<string>;
-  P   : string;
-
-  procedure Add(const S: string);
-  begin
-    if (S <> '') and not HasName(List.ToArray, S) then List.Add(S);
+type
+  { Case-insensitive, insertion-ordered set of names. Review fix (Important 3): the
+    original CandidatesFor/MergeUsage/ScanPasText each deduplicated via
+    HasName(List.ToArray, ...) -- a full array copy plus a linear scan per insertion,
+    O(n^2) with n in the thousands at this feature's real scale (Abcbtn.TabcToggleBtn
+    alone has 3905 proptree leaves). FSeen gives O(1) membership so repeated inserts
+    stay linear overall; FOrder alongside preserves first-seen order for ToArray, which
+    callers (and their tests) rely on. Implementation-only: nothing outside this unit
+    needs a named set type. }
+  TNameSet = class
+  private
+    FSeen : TDictionary<string, Byte>;
+    FOrder: TList<string>;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Add(const AName: string);
+    function Contains(const AName: string): Boolean;
+    function ToArray: TArray<string>;
   end;
 
+constructor TNameSet.Create;
 begin
-  List := TList<string>.Create;
+  inherited Create;
+  FSeen  := TDictionary<string, Byte>.Create;
+  FOrder := TList<string>.Create;
+end;
+
+destructor TNameSet.Destroy;
+begin
+  FOrder.Free;
+  FSeen.Free;
+  inherited;
+end;
+
+procedure TNameSet.Add(const AName: string);
+var
+  Key: string;
+begin
+  Key := LowerCase(AName);
+  if not FSeen.ContainsKey(Key) then
+  begin
+    FSeen.Add(Key, 0);
+    FOrder.Add(AName);
+  end;
+end;
+
+function TNameSet.Contains(const AName: string): Boolean;
+begin
+  Result := FSeen.ContainsKey(LowerCase(AName));
+end;
+
+function TNameSet.ToArray: TArray<string>;
+begin
+  Result := FOrder.ToArray;
+end;
+
+function CandidatesFor(const AFromPaths: TArray<string>): TArray<string>;
+var
+  NameSet: TNameSet;
+  P      : string;
+  Seg    : string;
+begin
+  NameSet := TNameSet.Create;
   try
     for P in AFromPaths do
     begin
-      Add(P);
-      Add(LastSegment(P));
+      if P <> '' then NameSet.Add(P);
+      Seg := LastSegment(P);
+      if Seg <> '' then NameSet.Add(Seg);
     end;
-    Result := List.ToArray;
+    Result := NameSet.ToArray;
   finally
-    List.Free;
+    NameSet.Free;
+  end;
+end;
+
+{ Review fix (Important 3): every distinct '.Identifier' token in AText, harvested in a
+  SINGLE left-to-right pass -- each '.' is followed by the run of identifier characters
+  after it, which becomes one token (an empty run, e.g. a '.' as the last character of
+  the text, safely yields nothing). This replaces ScanPasText's old approach of one Pos
+  scan of the WHOLE text per candidate (O(candidates x textlength), ~7810 candidates x a
+  several-hundred-KB unit, per file) with one O(textlength) harvest plus an O(candidates)
+  membership filter. It is exactly equivalent for the loose-match rule: a candidate is
+  used iff it appears as a '.Identifier' token followed by a non-identifier character,
+  which is precisely what this yields. Comments and string literals are still NOT
+  excluded -- same loose semantics ScanPasText has always documented. }
+function HarvestDotTokens(const AText: string): TNameSet;
+var
+  i, j: Integer;
+begin
+  Result := TNameSet.Create;
+  i := 1;
+  while i <= Length(AText) do
+  begin
+    if AText[i] = '.' then
+    begin
+      j := i + 1;
+      while (j <= Length(AText)) and CharInSet(AText[j], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do
+        Inc(j);
+      if j > i + 1 then Result.Add(Copy(AText, i + 1, j - i - 1));
+      i := j;
+    end
+    else
+      Inc(i);
   end;
 end;
 
 function ScanPasText(const AText: string; const ACandidates: TArray<string>): TArray<string>;
 var
-  Low  : string;
-  List : TList<string>;
-  C, Nd: string;
-  p, aft: Integer;
-  Found: Boolean;
+  Tokens: TNameSet;
+  Hits  : TNameSet;
+  C     : string;
 begin
-  Low  := LowerCase(AText);
-  List := TList<string>.Create;
+  Tokens := HarvestDotTokens(AText);
+  Hits   := TNameSet.Create;
   try
     for C in ACandidates do
-    begin
-      Nd := '.' + LowerCase(C);
-      p  := Pos(Nd, Low);
-      Found := False;
-      while (p > 0) and not Found do
-      begin
-        aft := p + Length(Nd);
-        if (aft > Length(Low))
-           or not CharInSet(Low[aft], ['a'..'z', '0'..'9', '_']) then
-          Found := True
-        else
-          p := Pos(Nd, Low, p + 1);
-      end;
-      if Found and not HasName(List.ToArray, C) then List.Add(C);
-    end;
-    Result := List.ToArray;
+      if Tokens.Contains(C) then Hits.Add(C);
+    Result := Hits.ToArray;
   finally
-    List.Free;
+    Hits.Free;
+    Tokens.Free;
   end;
 end;
 
 function MergeUsage(const AParts: TArray<TArray<string>>): TArray<string>;
 var
-  List: TList<string>;
-  Part: TArray<string>;
-  S   : string;
+  NameSet: TNameSet;
+  Part   : TArray<string>;
+  S      : string;
 begin
-  List := TList<string>.Create;
+  NameSet := TNameSet.Create;
   try
     for Part in AParts do
       for S in Part do
-        if not HasName(List.ToArray, S) then List.Add(S);
-    Result := List.ToArray;
+        NameSet.Add(S);
+    Result := NameSet.ToArray;
   finally
-    List.Free;
+    NameSet.Free;
   end;
 end;
 
