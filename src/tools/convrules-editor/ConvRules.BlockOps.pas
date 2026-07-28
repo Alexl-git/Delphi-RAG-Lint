@@ -1,8 +1,9 @@
 unit ConvRules.BlockOps;
 
 { Pure curation operations over block lists: select, delete, split out, copy out,
-  and link-level merge PLANNING (PlanMerge). Applying a plan and composing files
-  from it (ApplyMerge / Compose) is the next task.
+  link-level merge PLANNING (PlanMerge), applying a plan (ApplyMerge), and folding
+  a whole working set into one file by precedence (Compose). The working set
+  itself, file I/O, backups and the VCL form are built on top of this unit, not in it.
 
   Every operation moves the blocks' RAW TEXT, so a block that was merely moved is
   byte-identical to what it was in its old file -- comments, blank lines and
@@ -95,6 +96,55 @@ function BlockLinks(const ABlock: TRuleBlock): TArray<TBlockLink>;
 /// case). An incoming block with no counterpart is appended whole.</summary>
 /// <returns>A plan; ATarget and AIncoming are copied into it unmodified.</returns>
 function PlanMerge(const ATarget, AIncoming: TRuleBlocks): TMergePlan;
+
+type
+  /// <summary>How one conflict is settled.</summary>
+  TMergeResolution = (mrKeepExisting, mrTakeIncoming);
+
+  /// <summary>One file of a working set, in composition order.</summary>
+  TComposeInput = record
+    Path  : string;
+    Blocks: TRuleBlocks;
+  end;
+
+  /// <summary>What a composition did: a human-readable line per decision that was
+  /// not a plain no-op, plus the two counts the status bar shows.</summary>
+  TComposeReport = record
+    Lines        : TArray<string>;
+    ResolvedCount: Integer;   // collisions auto-resolved by precedence
+    AppendedCount: Integer;   // whole blocks appended
+  end;
+
+/// <summary>PURE: apply a plan and return the merged block list. AResolutions is
+/// indexed by CONFLICT ORDINAL (the i-th maConflict item in plan order); a missing
+/// entry means mrKeepExisting. mrTakeIncoming replaces the existing #link line in
+/// place, verbatim; every other write appends the incoming line verbatim to the end
+/// of the matched block. The target blocks are never re-emitted.</summary>
+function ApplyMerge(const APlan: TMergePlan;
+  const AResolutions: TArray<TMergeResolution>): TRuleBlocks;
+
+/// <summary>PURE: one report line per non-trivial decision, naming AIncomingName
+/// (the file the blocks came from) so a composed report is readable.</summary>
+function MergeReportLines(const APlan: TMergePlan;
+  const AResolutions: TArray<TMergeResolution>;
+  const AIncomingName: string): TArray<string>;
+
+/// <summary>PURE: fold the working set into one file, top to bottom, with the merge
+/// semantics above. Earlier files win: every collision is auto-resolved in favour of
+/// the earlier file and listed in AReport (composing three large books must not mean
+/// answering hundreds of prompts). Returns the composed file text.</summary>
+function Compose(const AInputs: TArray<TComposeInput>;
+  out AReport: TComposeReport): string;
+
+/// <summary>PURE: the block, guaranteed to end with a line terminator. A file whose
+/// last line had no EOL would otherwise glue itself onto whatever is appended after
+/// it, producing '#link R <- S#convert X.T -> Y.T'.</summary>
+function EnsureTrailingEol(const ABlock: TRuleBlock): TRuleBlock;
+
+/// <summary>PURE: AFirst followed by ASecond, with AFirst's last block terminated so
+/// the two never run together. Used when appending split-out blocks to an existing
+/// file (a move, not a merge).</summary>
+function ConcatBlocks(const AFirst, ASecond: TRuleBlocks): TRuleBlocks;
 
 implementation
 
@@ -341,6 +391,198 @@ begin
     Result.Items := Items.ToArray;
   finally
     Items.Free;
+  end;
+end;
+
+{ Append whole lines to the end of a block, using the block's own terminator and
+  first making sure the block ends with one. }
+function AppendLinesToBlock(const ABlock: TRuleBlock;
+  const ALines: TArray<string>): TRuleBlock;
+var
+  Eol: string;
+  S  : string;
+begin
+  Result := ABlock;
+  if Length(ALines) = 0 then Exit;
+  Eol := BlockEol(ABlock);
+  if (Result.RawText <> '')
+     and not (Result.RawText.EndsWith(#10) or Result.RawText.EndsWith(#13)) then
+    Result.RawText := Result.RawText + Eol;
+  for S in ALines do
+  begin
+    Result.RawText := Result.RawText + S + Eol;
+    Inc(Result.EndLine);
+  end;
+end;
+
+{ Replace the FIRST line equal to AOld with ANew, keeping every terminator. }
+function ReplaceLineInBlock(const ABlock: TRuleBlock;
+  const AOld, ANew: string): TRuleBlock;
+var
+  Lines: TArray<TRawLine>;
+  i    : Integer;
+  Done : Boolean;
+begin
+  Result := ABlock;
+  Lines  := SplitRawLines(ABlock.RawText);
+  Done   := False;
+  Result.RawText := '';
+  for i := 0 to High(Lines) do
+  begin
+    if (not Done) and (Lines[i].Text = AOld) then
+    begin
+      Result.RawText := Result.RawText + ANew + Lines[i].Eol;
+      Done := True;
+    end
+    else
+      Result.RawText := Result.RawText + Lines[i].Text + Lines[i].Eol;
+  end;
+end;
+
+function EnsureTrailingEol(const ABlock: TRuleBlock): TRuleBlock;
+begin
+  Result := ABlock;
+  if (Result.RawText <> '')
+     and not (Result.RawText.EndsWith(#10) or Result.RawText.EndsWith(#13)) then
+    Result.RawText := Result.RawText + BlockEol(Result);
+end;
+
+function ConcatBlocks(const AFirst, ASecond: TRuleBlocks): TRuleBlocks;
+var
+  i: Integer;
+begin
+  Result := AFirst;
+  if Length(Result) > 0 then
+    Result[High(Result)] := EnsureTrailingEol(Result[High(Result)]);
+  for i := 0 to High(ASecond) do
+  begin
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := ASecond[i];
+  end;
+end;
+
+{ The resolution for the AConflictOrdinal-th conflict (default: keep existing). }
+function ResolutionAt(const AResolutions: TArray<TMergeResolution>;
+  AConflictOrdinal: Integer): TMergeResolution;
+begin
+  if (AConflictOrdinal >= 0) and (AConflictOrdinal <= High(AResolutions)) then
+    Result := AResolutions[AConflictOrdinal]
+  else
+    Result := mrKeepExisting;
+end;
+
+function ApplyMerge(const APlan: TMergePlan;
+  const AResolutions: TArray<TMergeResolution>): TRuleBlocks;
+var
+  Blocks : TList<TRuleBlock>;
+  i, cOrd: Integer;
+  It     : TMergeItem;
+begin
+  Blocks := TList<TRuleBlock>.Create;
+  try
+    for i := 0 to High(APlan.Target) do Blocks.Add(APlan.Target[i]);
+    cOrd := 0;
+    for i := 0 to High(APlan.Items) do
+    begin
+      It := APlan.Items[i];
+      case It.Action of
+        maAppendBlock:
+          begin
+            // terminate whatever is currently last, or the two blocks run together
+            if Blocks.Count > 0 then
+              Blocks[Blocks.Count - 1] := EnsureTrailingEol(Blocks[Blocks.Count - 1]);
+            Blocks.Add(APlan.Incoming[It.IncomingBlockIdx]);
+          end;
+        maMergeLink, maMergeOther:
+          Blocks[It.TargetBlockIdx] :=
+            AppendLinesToBlock(Blocks[It.TargetBlockIdx], [It.Line]);
+        maConflict:
+          begin
+            if ResolutionAt(AResolutions, cOrd) = mrTakeIncoming then
+              Blocks[It.TargetBlockIdx] :=
+                ReplaceLineInBlock(Blocks[It.TargetBlockIdx], It.ExistingLine, It.Line);
+            Inc(cOrd);
+          end;
+        maSkipDuplicate: ; // nothing to do
+      end;
+    end;
+    Result := Blocks.ToArray;
+  finally
+    Blocks.Free;
+  end;
+end;
+
+function MergeReportLines(const APlan: TMergePlan;
+  const AResolutions: TArray<TMergeResolution>;
+  const AIncomingName: string): TArray<string>;
+var
+  List   : TList<string>;
+  i, cOrd: Integer;
+  It     : TMergeItem;
+begin
+  List := TList<string>.Create;
+  try
+    cOrd := 0;
+    for i := 0 to High(APlan.Items) do
+    begin
+      It := APlan.Items[i];
+      case It.Action of
+        maAppendBlock:
+          List.Add(Format('%s: appended block %s',
+            [AIncomingName, Trim(APlan.Incoming[It.IncomingBlockIdx].Header)]));
+        maMergeLink:
+          List.Add(Format('%s: merged %s', [AIncomingName, Trim(It.Line)]));
+        maMergeOther:
+          List.Add(Format('%s: merged line %s', [AIncomingName, Trim(It.Line)]));
+        maConflict:
+          begin
+            if ResolutionAt(AResolutions, cOrd) = mrTakeIncoming then
+              List.Add(Format('%s: conflict on %s -- took incoming (%s <- %s), dropped (%s <- %s)',
+                [AIncomingName, It.ToPath, It.ToPath, It.IncomingFrom, It.ToPath, It.ExistingFrom]))
+            else
+              List.Add(Format('%s: conflict on %s -- kept earlier (%s <- %s), dropped (%s <- %s)',
+                [AIncomingName, It.ToPath, It.ToPath, It.ExistingFrom, It.ToPath, It.IncomingFrom]));
+            Inc(cOrd);
+          end;
+        maSkipDuplicate: ; // a duplicate is a no-op, not worth a report line
+      end;
+    end;
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+function Compose(const AInputs: TArray<TComposeInput>;
+  out AReport: TComposeReport): string;
+var
+  Acc  : TRuleBlocks;
+  Plan : TMergePlan;
+  Lines: TList<string>;
+  i, k : Integer;
+  Name : string;
+begin
+  AReport := Default(TComposeReport);
+  if Length(AInputs) = 0 then Exit('');
+  Acc   := AInputs[0].Blocks;
+  Lines := TList<string>.Create;
+  try
+    for i := 1 to High(AInputs) do
+    begin
+      Name := ExtractFileName(AInputs[i].Path);
+      Plan := PlanMerge(Acc, AInputs[i].Blocks);
+      for k := 0 to High(Plan.Items) do
+        case Plan.Items[k].Action of
+          maConflict:    Inc(AReport.ResolvedCount);
+          maAppendBlock: Inc(AReport.AppendedCount);
+        end;
+      Lines.AddRange(MergeReportLines(Plan, nil, Name));   // nil = keep earlier
+      Acc := ApplyMerge(Plan, nil);
+    end;
+    AReport.Lines := Lines.ToArray;
+    Result := JoinBlocks(Acc);
+  finally
+    Lines.Free;
   end;
 end;
 

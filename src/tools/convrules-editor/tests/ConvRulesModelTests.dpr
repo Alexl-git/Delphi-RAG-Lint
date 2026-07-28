@@ -1269,6 +1269,66 @@ begin
     'a differing units list is a different rule, so it is appended not merged');
 end;
 
+{ Criterion 9: composing a working set resolves link collisions in favour of the
+  EARLIER file and lists every resolved collision in its report. Compose and merge
+  share one code path, so this also proves ApplyMerge. }
+procedure TestComposePrecedence;
+var
+  Inputs: TArray<TComposeInput>;
+  Report: TComposeReport;
+  Text  : string;
+  i     : Integer;
+  Found : Boolean;
+begin
+  SetLength(Inputs, 2);
+  Inputs[0].Path   := 'first.rules';
+  Inputs[0].Blocks := SplitRulesBlocks(
+    '#convert A.T -> B.T'#13#10 +
+    '#link P <- Q'#13#10);
+  Inputs[1].Path   := 'second.rules';
+  Inputs[1].Blocks := SplitRulesBlocks(
+    '#convert A.T -> B.T'#13#10 +
+    '#link P <- Z'#13#10 +          // collides with first.rules -> earlier wins
+    '#link R <- S'#13#10 +          // missing -> merged
+    '#convert X.T -> Y.T'#13#10 +   // no counterpart -> appended whole
+    '#link M <- N'#13#10);
+
+  Text := Compose(Inputs, Report);
+
+  Check('compose.keeps.earlier', Pos('#link P <- Q', Text) > 0, 'earlier link must survive');
+  Check('compose.drops.later', Pos('#link P <- Z', Text) = 0, 'later colliding link must not be written');
+  Check('compose.merges.missing', Pos('#link R <- S', Text) > 0, 'missing link must be merged');
+  Check('compose.appends.block', Pos('#convert X.T -> Y.T', Text) > 0, 'unmatched block must be appended');
+  Check('compose.resolved.count', Report.ResolvedCount = 1, IntToStr(Report.ResolvedCount));
+  Check('compose.appended.count', Report.AppendedCount = 1, IntToStr(Report.AppendedCount));
+
+  Found := False;
+  for i := 0 to High(Report.Lines) do
+    if (Pos('second.rules', Report.Lines[i]) > 0) and (Pos('P', Report.Lines[i]) > 0)
+       and (Pos('Z', Report.Lines[i]) > 0) then Found := True;
+  Check('compose.report.names.collision', Found,
+    'the report must name the file, the target and the losing source');
+
+  // taking the incoming side REPLACES the existing line in place, verbatim
+  var Plan: TMergePlan := PlanMerge(Inputs[0].Blocks, Inputs[1].Blocks);
+  var Merged: string := JoinBlocks(ApplyMerge(Plan, [mrTakeIncoming]));
+  Check('merge.apply.takeincoming', (Pos('#link P <- Z', Merged) > 0)
+    and (Pos('#link P <- Q', Merged) = 0), 'mrTakeIncoming must replace the existing link');
+
+  // Edge cases: composing nothing yields nothing; composing ONE file is a no-op that
+  // returns it byte-for-byte (there is no second file to merge, so nothing is touched).
+  var Empty: TComposeReport;
+  Check('compose.empty', Compose(nil, Empty) = '', 'an empty working set composes to ''''');
+  var One: TArray<TComposeInput>;
+  SetLength(One, 1);
+  One[0].Path   := 'solo.rules';
+  One[0].Blocks := SplitRulesBlocks('#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10);
+  Check('compose.single.identity',
+    Compose(One, Empty) = '#convert A.T -> B.T'#13#10 + '#link P <- Q'#13#10,
+    'composing one file must return it unchanged');
+  Check('compose.single.noreport', Length(Empty.Lines) = 0, 'a single file reports nothing');
+end;
+
 { Criterion 5 (the maMergeOther half, previously untested): within a matched block,
   a non-#link incoming line new to the target is merged verbatim (maMergeOther); one
   already present -- an EXACT match after trimming -- is not re-added; the header
@@ -1342,6 +1402,7 @@ begin
     TestMergeReportsConflict;
     TestMergeAllowsFanOut;
     TestMergeAppendsUnmatchedBlock;
+    TestComposePrecedence;
     TestMergeOtherLines;
     TestPlatform;
     TestUnitDirectives;
