@@ -28,7 +28,9 @@ type
   private
     FFiles: TList<TWorkingFile>;
   public
+    /// <summary>Creates an empty working set (no files loaded).</summary>
     constructor Create;
+    /// <summary>Frees the working set and its loaded blocks.</summary>
     destructor Destroy; override;
 
     /// <summary>Add already-read text under APath (the grammar follows APath's
@@ -36,13 +38,17 @@ type
     procedure AddText(const APath, AText: string);
     /// <summary>Read APath from disk and add it. Raises if the file is unreadable.</summary>
     procedure AddFile(const APath: string);
+    /// <summary>Drop the entry at AIndex from the set. Out-of-range is a no-op;
+    /// this never touches disk.</summary>
     procedure Remove(AIndex: Integer);
     /// <summary>Swap with the previous entry (raise this file's precedence). No-op at 0.</summary>
     procedure MoveUp(AIndex: Integer);
     /// <summary>Swap with the next entry. No-op at the end.</summary>
     procedure MoveDown(AIndex: Integer);
 
+    /// <summary>Number of files currently loaded.</summary>
     function  Count: Integer;
+    /// <summary>The file at AIndex, in composition-precedence order.</summary>
     function  Item(AIndex: Integer): TWorkingFile;
     /// <summary>Replace one file's blocks after a curation operation.</summary>
     procedure SetBlocks(AIndex: Integer; const ABlocks: TRuleBlocks);
