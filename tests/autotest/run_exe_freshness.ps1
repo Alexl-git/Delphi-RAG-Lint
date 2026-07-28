@@ -21,7 +21,7 @@
   ANNOUNCE ITSELF EITHER: the only reason those two were ever found is that one of
   them produced a visible contradiction.
 
-  Check 1 -- every exe any runner resolves must be current
+  Check 1 -- every exe any runner resolves must exist and be current
     NOT a blacklist. The first version of this runner checked two forbidden path
     fragments (Win32\Debug, dll-win32) and validated freshness on two hardcoded
     Win64 paths -- so a runner defaulting to src\cli\Win32\Release\ or
@@ -174,29 +174,79 @@ $testsRoot = Join-Path $Repo 'tests'
 $runners = @(Get-ChildItem -LiteralPath $testsRoot -Recurse -Filter 'run_*.ps1' -File)
 Check 'runners enumerated' ($runners.Count -gt 0) "($($runners.Count) run_*.ps1 under tests\, recursive)"
 
-$targets   = @{}   # resolved full path -> list of "runner:line"
-$unresolved = 0
+$targets    = @{}   # resolved full path -> list of "runner:line"
+$unresolved = New-Object System.Collections.Generic.List[string]
+$siteCount  = 0
+$runnersWithResolvedSite = 0
 foreach ($f in $runners) {
   $dir = Split-Path $f.FullName -Parent
+  $rel = $f.FullName.Substring($Repo.Length + 1).Replace('\', '/')
+  $anyResolved = $false
   foreach ($hit in (Get-ExeLiterals $f.FullName)) {
+    $siteCount++
     $full = Resolve-ExeLiteral $hit.Literal $dir
-    if ($null -eq $full) { $unresolved++; continue }
+    if ($null -eq $full) { $unresolved.Add(("{0}:{1}  {2}" -f $rel, $hit.Line, $hit.Literal)); continue }
+    $anyResolved = $true
     $key = $full.ToLowerInvariant()
     if (-not $targets.ContainsKey($key)) { $targets[$key] = @{ Path = $full; Sites = New-Object System.Collections.Generic.List[string] } }
-    $targets[$key].Sites.Add(("{0}:{1}" -f $f.FullName.Substring($Repo.Length + 1).Replace('\', '/'), $hit.Line))
+    $targets[$key].Sites.Add(("{0}:{1}" -f $rel, $hit.Line))
   }
+  if ($anyResolved) { $runnersWithResolvedSite++ }
 }
-Check 'runners resolve at least one exe target' ($targets.Count -gt 0) "($($targets.Count) distinct target(s), $unresolved variable-only reference(s) skipped)"
+Check 'runners resolve at least one exe target' ($targets.Count -gt 0) `
+  "($($targets.Count) distinct target(s) from $siteCount site(s); $runnersWithResolvedSite runner(s) with a RESOLVED site)"
 
-# --- Check 1: every resolved target that EXISTS must be current ------------
-# An ABSENT target is not silently ignored, but it is not this runner's failure
-# either: every runner already guards with its own Test-Path and exits 2, so
-# absence is loud where staleness is silent. Reported so it stays visible.
+# --- the enumeration needs a FLOOR, and it must floor the RIGHT quantity ----
+# Target count is the wrong thing to floor: a regression that dropped the
+# "$PSScriptRoot\..." form -- 145 of 168 sites -- would still leave 23 sites and
+# BOTH real targets, so a `> 0` check passes with 86% of coverage silently gone.
+# That is the shrinking-battery lesson in miniature.
+#
+# THE FIRST VERSION OF THIS FLOOR WAS ITSELF VACUOUS, and it is worth saying why
+# rather than quietly fixing it. It counted EXTRACTED sites, so killing
+# Resolve-ExeLiteral's $PSScriptRoot branch left the count untouched at 167/191
+# and the check PASSED while 145 sites went unverified. Extraction and
+# resolution are two stages and a floor on the first says nothing about the
+# second. Both are now asserted: the floor counts runners with a RESOLVED site,
+# and an unresolvable literal is a failure in its own right below.
+#
+# Floored as a FRACTION of runners rather than a literal count, so it scales with
+# the battery instead of going stale the way a hardcoded "31 tests" did. Measured
+# when written: 167 of 191 runners contribute a resolved site (87%). The 24 that
+# do not are DUnitX harnesses which build and run their own exe.
+$floorFrac = 0.70
+$floor = [int][Math]::Floor($runners.Count * $floorFrac)
+Check "at least $([int]($floorFrac * 100))% of runners contribute a RESOLVED exe site (coverage floor)" `
+  ($runnersWithResolvedSite -ge $floor) "($runnersWithResolvedSite of $($runners.Count); floor $floor)"
+if ($runnersWithResolvedSite -lt $floor) {
+  Write-Host '        ^ far fewer runners resolve to a checkable exe than they used to.' -ForegroundColor Yellow
+  Write-Host '          Most likely a literal FORM stopped being recognised or stopped' -ForegroundColor Yellow
+  Write-Host '          resolving (there are 6), which shrinks coverage without changing' -ForegroundColor Yellow
+  Write-Host '          the target list at all.' -ForegroundColor Yellow
+}
+
+# An unresolvable literal is a hole, not a curiosity: that runner names an exe
+# this guard cannot check. Zero today; reported per site so a new one is
+# actionable rather than a number.
+Check 'every extracted exe literal resolves to a concrete path' ($unresolved.Count -eq 0) `
+  "($($unresolved.Count) unresolved of $siteCount)"
+foreach ($x in $unresolved) { Write-Host "        $x" -ForegroundColor Red }
+
+# --- Check 1: every resolved target must exist AND be current --------------
+# An absent target is a FAILURE, not an INFO. An earlier version made it INFO and
+# justified that with "every runner already guards with its own Test-Path and
+# exits 2" -- an unmeasured universal, and false: of the 167 runners contributing
+# a site, 110 have no Test-Path on the exe at all, and 47 of those also lack
+# $ErrorActionPreference = 'Stop' (measured by re-running this file's own
+# extractor over the same population, then grepping each contributing runner).
+# Rather than swap one claimed mechanism for another, the check no longer needs
+# one: if a runner names an exe this guard cannot find, the guard cannot verify
+# that runner's target, and saying so is the honest outcome.
 foreach ($k in ($targets.Keys | Sort-Object)) {
   $t = $targets[$k]
   $rel = if ($t.Path.StartsWith($Repo)) { $t.Path.Substring($Repo.Length + 1) } else { $t.Path }
   if (-not (Test-Path -LiteralPath $t.Path)) {
-    Write-Host ("  [INFO] referenced but absent: {0}   <- {1}" -f $rel, ($t.Sites -join ', ')) -ForegroundColor DarkGray
+    Check "$rel exists (referenced by a runner)" $false ("resolved by: " + ($t.Sites -join ', '))
     continue
   }
   $exe = Get-Item -LiteralPath $t.Path

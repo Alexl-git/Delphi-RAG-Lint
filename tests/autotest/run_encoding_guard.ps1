@@ -59,16 +59,41 @@
       LF becomes CRLF; the autofix runners copy fixtures to scratch before
       editing. The full battery was then re-run with all 80 converted.
 
-  So the rule below is universal and a new violation anywhere is a failure. If
-  you are tempted to add an exemption list: measure first. That is what turned
-  this file from an 80-entry allowlist into no allowlist at all.
+  So within the scope below there is no allowlist, and a new violation is a
+  failure. If you are tempted to add an exemption list: measure first. That is
+  what turned this file from an 80-entry allowlist into no allowlist at all.
+
+  SCOPE IS BOUNDED, AND THE BOUND IS SELF-REPORTING
+  -------------------------------------------------
+  An earlier version of this header claimed "the rule below is universal and a
+  new violation ANYWHERE is a failure". It was not: the scan covered .ps1/.pas/
+  .dfm while .gitattributes also declares *.dpr, *.dpk and *.inc, and FIVE such
+  files were lone-LF drifted at the time -- src\config\drag-lint-config.dpr (34),
+  build\phase0_smoke.dpr, tests\fixtures\T59_workspace_config.dpr,
+  tests\fixtures\manifest\app\App.dpr and .../uAlpha.inc. H1 realised, in real
+  compiled source, uncaught by the guard built to catch it. A universal claim
+  over a partial scan is the same defect class as the deleted baseline: text
+  that is broader than what ships.
+
+  Fixed two ways. The three Delphi extensions are now scanned and those five
+  files renormalized (same three-way content-invariance proof), AND the gap is
+  now structural rather than a promise: DECLARED_EXTS below is checked against
+  .gitattributes, and every extension declared `text eol=crlf` that this runner
+  does NOT scan is PRINTED with its reason. A new extension added to
+  .gitattributes shows up immediately as unscanned instead of silently widening
+  a claim nobody re-reads.
 
   Checks
   ------
-    .ps1  under src\ tests\ build\ stats\ : zero lone LF, no BOM, zero bytes >127
-    .pas
-    .dfm  under src\ tests\               : zero lone LF, no BOM, zero bytes >127
-    .gitattributes still declares the rule this runner asserts, for all three
+    .ps1                      under src\ tests\ build\ stats\
+    .pas .dpr .dpk .dfm .inc  under src\ tests\ build\
+        -> zero lone LF, no BOM, zero bytes >127
+    every extension .gitattributes declares `text eol=crlf` is either scanned or
+    listed below with a reason (and every unscanned DIRECTORY likewise)
+    .gitattributes still declares the rule this runner asserts
+
+  The bound is EXTENSION and ROOT, both stated where they are enforced. Nothing
+  here claims coverage of the whole repo.
 
   SCOPE DECISION, flagged rather than left implicit: CLAUDE.md writes the
   7-bit-ASCII / no-BOM rule for .pas and .dfm. This runner applies it to .ps1
@@ -116,10 +141,34 @@ foreach ($k in $DeliberateFixtures.Keys) {
 # --- scan ------------------------------------------------------------------
 # One pass over the bytes per file: this has to stay fast enough that nobody is
 # tempted to skip it. Measured well under 10 s for the whole tree.
-$roots = @{
+$roots = [ordered]@{
   '.ps1' = @('src', 'tests', 'build', 'stats')
-  '.pas' = @('src', 'tests')
-  '.dfm' = @('src', 'tests')
+  '.pas' = @('src', 'tests', 'build')
+  '.dpr' = @('src', 'tests', 'build')
+  '.dpk' = @('src', 'tests', 'build')
+  '.dfm' = @('src', 'tests', 'build')
+  '.inc' = @('src', 'tests', 'build')
+}
+
+# Extensions .gitattributes declares `text eol=crlf` that this runner does NOT
+# scan, each with the reason. Checked against .gitattributes below, so this list
+# cannot quietly fall out of date and the header cannot claim more than the scan
+# delivers. To scan one, delete its entry and add it to $roots.
+$DeclaredNotScanned = [ordered]@{
+  '.bat' = 'MEASURED, deliberately deferred (register K8): 15 .bat are drifted, 3 of them MIXED, spread across build\, the repo root, third_party\ and tools\. cmd.exe is not merely tolerant of line endings the way dcc is -- label and goto handling can differ -- so "does anything depend on these bytes" needs its own measurement before a bulk rewrite. That measurement is exactly what the deleted baseline skipped; not repeating the mistake in the other direction.'
+  '.cmd' = 'Same family as .bat and the same open measurement.'
+}
+
+# Directories holding scannable extensions that are deliberately OUT of $roots.
+# Same reasoning as $DeclaredNotScanned and printed the same way: the scan's
+# bound is stated where it is enforced, so the header cannot over-claim on ROOTS
+# either. (The extension bound was over-claimed once already -- see the header.)
+$UnscannedRoots = [ordered]@{
+  'docs' = 'docs\examples\ holds third-party reproduction material, some of it UNTRACKED (the DevExpress printer-crash repro), whose bytes are part of the reproduction and are not this repo''s to normalize. The two TRACKED example units under docs\examples\circular-uses-demo\ were renormalized by T3k anyway, since they are ordinary repo content; nothing checks them, which is why this exclusion is stated rather than assumed.'
+}
+foreach ($k in $UnscannedRoots.Keys) {
+  Write-Host ("  [NOTE] directory NOT scanned: {0}\" -f $k) -ForegroundColor DarkGray
+  Write-Host ("         {0}" -f $UnscannedRoots[$k]) -ForegroundColor DarkGray
 }
 $badLf  = New-Object System.Collections.Generic.List[string]
 $badBom = New-Object System.Collections.Generic.List[string]
@@ -183,9 +232,31 @@ if ($badHi.Count -gt 0) {
 # would quietly be enforcing a convention the repo no longer claims.
 $ga = Join-Path $Repo '.gitattributes'
 $gaText = if (Test-Path $ga) { Get-Content $ga -Raw } else { '' }
-foreach ($ext in @('ps1', 'pas', 'dfm')) {
-  Check ".gitattributes still declares *.$ext text eol=crlf" `
-    ($gaText -match ("(?m)^\*\.{0}\s+text\s+eol=crlf" -f $ext))
+Check '.gitattributes present' (Test-Path $ga)
+
+foreach ($ext in $roots.Keys) {
+  Check ".gitattributes still declares *$ext text eol=crlf" `
+    ($gaText -match ("(?m)^\*{0}\s+text\s+eol=crlf" -f [regex]::Escape($ext)))
+}
+
+# --- the scan's BOUND must match what the repo declares --------------------
+# Without this the header could once again claim more than the scan delivers --
+# which is exactly how five drifted .dpr/.inc files sat uncaught. Every
+# extension .gitattributes declares must be either scanned or listed as a
+# deliberate exclusion WITH a reason; a new one is neither, so it fails here.
+$declared = @([regex]::Matches($gaText, '(?m)^\*(\.\w+)\s+text\s+eol=crlf') | ForEach-Object { $_.Groups[1].Value.ToLowerInvariant() })
+Check 'declared eol=crlf extensions parsed from .gitattributes' ($declared.Count -gt 0) "($($declared -join ' '))"
+$unaccounted = @($declared | Where-Object { -not $roots.Contains($_) -and -not $DeclaredNotScanned.Contains($_) })
+Check 'every declared eol=crlf extension is scanned or excluded with a reason' ($unaccounted.Count -eq 0) `
+  $(if ($unaccounted.Count -gt 0) { "unaccounted: $($unaccounted -join ' ')" } else { '' })
+if ($unaccounted.Count -gt 0) {
+  Write-Host '        ^ .gitattributes declares an extension this runner neither scans nor' -ForegroundColor Yellow
+  Write-Host '          deliberately excludes. Add it to $roots, or to $DeclaredNotScanned' -ForegroundColor Yellow
+  Write-Host '          with the reason. Do NOT leave the header claiming coverage it lacks.' -ForegroundColor Yellow
+}
+foreach ($k in $DeclaredNotScanned.Keys) {
+  Write-Host ("  [NOTE] declared but NOT scanned: *{0}" -f $k) -ForegroundColor DarkGray
+  Write-Host ("         {0}" -f $DeclaredNotScanned[$k]) -ForegroundColor DarkGray
 }
 
 Write-Host ''
