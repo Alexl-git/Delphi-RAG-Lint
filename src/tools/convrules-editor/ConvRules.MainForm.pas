@@ -1261,18 +1261,6 @@ begin
     Dlg.Free;
   end;
 
-  var LGuard: IInterface := HourGlass;
-  Dfms := nil; Pass := nil; Bad := nil;
-  for F in FUsedFiles do
-    try
-      if SameText(ExtractFileExt(F), '.dfm') then
-        Dfms := Dfms + [TFile.ReadAllText(F)]
-      else
-        Pass := Pass + [TFile.ReadAllText(F)];
-    except
-      on E: Exception do Bad := Bad + [ExtractFileName(F)];
-    end;
-
   Paths := nil;
   for L in FFromTree.Leaves do
     Paths := Paths + [L.Path];
@@ -1284,7 +1272,25 @@ begin
   DotPos := LastDelimiter('.', FromBare);
   if DotPos > 0 then FromBare := Copy(FromBare, DotPos + 1, MaxInt);
 
-  U := ComputeUsage(Dfms, Pass, FromBare, Paths);
+  // LGuard is scoped to this nested block only, so the wait cursor comes back down
+  // before ShowUsageReport's modal report below -- that dialog waits on the user,
+  // which is not what an hourglass should be shown over.
+  begin
+    var LGuard: IInterface := HourGlass;
+    Dfms := nil; Pass := nil; Bad := nil;
+    for F in FUsedFiles do
+      try
+        if SameText(ExtractFileExt(F), '.dfm') then
+          Dfms := Dfms + [TFile.ReadAllText(F)]
+        else
+          Pass := Pass + [TFile.ReadAllText(F)];
+      except
+        on E: Exception do Bad := Bad + [ExtractFileName(F)];
+      end;
+
+    U := ComputeUsage(Dfms, Pass, FromBare, Paths);
+  end;
+
   FUsedProps := U.Names;
   FExamineInfo := Format('Examined %d file(s): %d of %d From properties used.',
     [U.DfmCount + U.PasCount, Length(U.Names), Length(Paths)]);
@@ -1302,6 +1308,7 @@ end;
 procedure TConvRulesForm.DoClearExamine(Sender: TObject);
 begin
   FUsedProps := nil;
+  FUsedFiles := nil;
   FExamineInfo := '';
   FGrid.Invalidate;
   SetStatus('Examination cleared.');
