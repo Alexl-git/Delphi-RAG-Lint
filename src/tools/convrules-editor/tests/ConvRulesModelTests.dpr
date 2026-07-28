@@ -1031,8 +1031,10 @@ begin
   Blocks := SplitRulesBlocks(Text);
   Check('blockfile.rules.roundtrip.file', JoinBlocks(Blocks) = Text,
     Format('got %d bytes, want %d', [Length(JoinBlocks(Blocks)), Length(Text)]));
-  Check('blockfile.rules.roundtrip.file.blocks', Length(Blocks) >= 3,
-    'sample.rules has 3 #convert blocks + preamble');
+  { Sanity check: the assertion holds for the fixture AS COMMITTED (2 #convert blocks).
+    A working-tree-only fixture state hides test failures from clean checkouts. }
+  Check('blockfile.rules.roundtrip.file.blocks', Length(Blocks) >= 2,
+    'sample.rules has at least 2 #convert blocks');
 end;
 
 { Criterion 1b: the same byte-faithful round-trip for .castlib, whose blocks are
