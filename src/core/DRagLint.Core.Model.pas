@@ -572,6 +572,8 @@ function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
     * TSQLiteSymbolStore.ResolveCallTargets           (writes call_edges)
     * TSQLiteSymbolStore.FindUnresolvedNameCallers    (reads the complement)
     * TSQLiteSymbolStore.GetAmbiguousCalls            (reads the complement)
+    * DRagLint.Lint.ClassMetrics (x2)                 (RFC / feature-envy)
+    * DRagLint.FormsMap.FindFormViaHook               (proc-var hook call sites)
 
   WHY IT HAS TO BE ONE DECLARATION -- register item E1, the defect this fixes.
   ResolveCallTargets resolves ONLY kind='call' refs, so a ref of any other kind
@@ -590,8 +592,21 @@ function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
 
   The complement is only meaningful against the writer's own universe, so the
   universe is declared once here and every side reads it. This is the T3j/S1
-  lesson applied: a single declaration both sides read makes the drift
-  structurally impossible.
+  lesson applied: a single declaration both sides read removes the drift channel.
+
+  EXACTLY WHAT IS PROVEN, and it is deliberately not phrased as "impossible"
+  (T3i review round 2). Renaming REF_KIND_CALL and rebuilding leaves GREEN:
+  run_ambiguous_calls, run_calledfrom_resolved, run_callsite_kind_universe,
+  run_resolve_targets, run_doc_no_self_caller and run_store_tests -- i.e. the
+  parser, the writer, both complement readers and BOTH ClassMetrics filters are
+  demonstrated to move in lockstep (run_store_tests was independently shown to
+  cover those filters: pointing them at a different literal reddens feature-envy
+  and high-response). FormsMap.FindFormViaHook is wired to the same declaration
+  but is NOT covered by that proof -- disabling its query entirely leaves the
+  whole battery green, including run_formsmap's own check whose NAME mentions
+  the hook. So its lockstep is structural, not demonstrated. Round 1 claimed
+  "structurally impossible" on the strength of four green runners while three
+  literals were still out there; the claim now states its evidence.
 
   DISCLOSED CONSEQUENCE (a writer-side gap, deliberately NOT fixed here). A
   paren-less dotted invocation in EXPRESSION position -- `N:= Obj.Func;`,
@@ -620,8 +635,11 @@ const
 /// <summary>The SQL predicate selecting call-site refs, for the queries that
 /// build their WHERE clause as text.</summary>
 /// <param name="ARefAlias">Table alias (or table name) the predicate should
-/// qualify, e.g. 'r' for 'FROM refs r'. Must not be empty.</param>
+/// qualify, e.g. 'r' for 'FROM refs r'.</param>
 /// <returns>A fragment of the form '&lt;alias&gt;.kind = ''call'''.</returns>
+/// <exception cref="EArgumentException">Raised when ARefAlias is blank. An
+/// empty alias would silently yield '.kind = ''call''', which is not valid SQL
+/// and would surface as an opaque prepare failure far from the mistake.</exception>
 /// <remarks>Emits the value of REF_KIND_CALL, so the SQL sites and the Pascal
 /// sites share one declaration. Returns a bare predicate with no AND/WHERE, so
 /// the caller controls where it is spliced.</remarks>
@@ -799,8 +817,14 @@ end;
 
 function CallSiteRefKindSql(const ARefAlias: string): string;
 { QuotedStr doubles any embedded apostrophe, so the emitted fragment stays
-  well-formed no matter what REF_KIND_CALL is set to. }
+  well-formed no matter what REF_KIND_CALL is set to.
+  v(ADP3 T3i review round 2): the blank-alias guard is real, not decorative --
+  without it an empty alias yields '.kind = ''call''', which is invalid SQL that
+  fails at prepare time with a message pointing at the whole query rather than
+  at the caller that forgot its alias. }
 begin
+  if Trim(ARefAlias) = '' then
+    raise EArgumentException.Create('CallSiteRefKindSql: ARefAlias must name a table or alias');
   Result:= ARefAlias + '.kind = ' + QuotedStr(REF_KIND_CALL);
 end;
 

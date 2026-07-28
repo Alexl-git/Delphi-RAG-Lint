@@ -712,7 +712,11 @@ begin
       Q.SQL.Text:=
         'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
         'FROM refs r JOIN files f ON f.id = r.file_id ' +
-        'WHERE r.name_text = :h AND r.kind = ''call'' AND f.language LIKE ''delphi%''';
+        // v(ADP3 T3i review round 2): CallSiteRefKindSql, not a literal. This asks
+        // the same "what kind is a call" question REF_KIND_CALL exists to own, and
+        // it was correct only because the value happened to be unchanged.
+        'WHERE r.name_text = :h AND ' + CallSiteRefKindSql('r') +
+        ' AND f.language LIKE ''delphi%''';
       Q.ParamByName('h').AsString:= AHookField;
       Q.Open;
       while not Q.Eof do

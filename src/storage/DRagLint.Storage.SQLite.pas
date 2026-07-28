@@ -112,8 +112,14 @@ type
       procedure UpsertCallEdge(const AToken: TFileTxToken; const AEdge: TCallEdge);
       procedure ClearCallEdges;
       function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
+      { v(ADP3 T3i review round 2): the '= True' default is declared ONCE, on
+        ISymbolStore. Delphi binds a default from the STATIC type of the
+        expression, so repeating it here would be two declarations of one
+        decision -- and if they ever diverged, an interface-typed caller and a
+        class-typed caller would silently get different behaviour. Every caller
+        goes through ISymbolStore, so omitting it here costs nothing. }
       function FindUnresolvedNameCallers(const AName: string;
-        ACallSitesOnly: Boolean = True): TArray<TResolvedCaller>;
+        ACallSitesOnly: Boolean): TArray<TResolvedCaller>;
       function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
       function CountCallEdges: Int64;
       function PurgeLocals: Int64;
@@ -1151,10 +1157,12 @@ end; // function
 /// collected a "Called from:" entry per type_use mention. See the block comment
 /// above REF_KIND_CALL in DRagLint.Core.Model for the full account, including
 /// the one shape this deliberately no longer reaches.</para>
-/// <para>ACallSitesOnly=False reinstates the kind-blind scan for the single
-/// caller whose question is NOT about calls -- a type's reference list. It is
-/// documented on the interface declaration; do not add callers.</para></summary>
-/// (ADP1 Bug C fix): EXCLUDES a class's own method-header self-reference. A
+/// <para>ACallSitesOnly=False reinstates the kind-blind scan for the one caller
+/// whose question is NOT about calls: DRagLint.Doc.Facts passes it for a symbol
+/// that can never BE a call target (every non-routine kind), where this bucket
+/// is a reference list rather than a caller list. Documented in full on the
+/// interface declaration; do not add callers.</para>
+/// <para>(ADP1 Bug C fix): EXCLUDES a class's own method-header self-reference. A
 /// qualified impl header ('function TThing.Add(...)') emits a type_use ref of
 /// name_text='TThing' whose enclosing_symbol_id is the METHOD ITSELF
 /// (TThing.Add) -- s.parent_id is then TThing's own id. When AName matches
@@ -1176,7 +1184,7 @@ end; // function
 /// named type is still excluded (self-reference, both branches false). A
 /// ref enclosed by a routine belonging to a DIFFERENT type (or no type at
 /// all, e.g. a plain top-level routine) is kept: s.parent_id is either a
-/// non-matching id or NULL, either of which satisfies the OR.</summary>
+/// non-matching id or NULL, either of which satisfies the OR.</para></summary>
 function TSQLiteSymbolStore.FindUnresolvedNameCallers(const AName: string;
   ACallSitesOnly: Boolean): TArray<TResolvedCaller>;
 var

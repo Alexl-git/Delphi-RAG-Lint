@@ -28,9 +28,18 @@ unit callsitekind;
 // purpose: that name collision is what turns a property read into a phantom
 // unresolved call site once the kind restriction is missing.
 
+// T3i REVIEW ROUND 2 additions: TProbeKind (enum) and TProbeAlias (type alias)
+// are documentable kinds (Doc.Batch.IsDocumentableKind) that round 1's gate
+// omitted, so their reference list silently vanished. Each is referenced from a
+// unit-scope var in the implementation section -- the NULL-enclosing shape that
+// run_doc_no_self_caller.ps1 pins for a class -- so the four kinds carry the
+// SAME reference shape and any difference between them is the gate, not the data.
+
 interface
 
 type
+  TProbeKind = (pkFirst, pkSecond);
+
   TProbe = class
   private
     FCount: Integer;
@@ -39,6 +48,8 @@ type
     procedure Fire;
     function Make: Integer;
   end;
+
+  TProbeAlias = TProbe;
 
   TDriver = class
   private
@@ -53,6 +64,11 @@ type
 function Count: Integer;
 
 implementation
+
+// Unit-scope references: NULL-enclosing type_use refs, one per non-routine kind.
+var
+  GKind : TProbeKind ;
+  GAlias: TProbeAlias;
 
 function Count: Integer;
 begin

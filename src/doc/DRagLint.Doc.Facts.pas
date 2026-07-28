@@ -309,20 +309,29 @@ begin
   Result:= SameText(Parent.Name, ATypeName) and (Parent.Kind in [skClass, skInterface, skRecord]);
 end;
 
-// v(ADP3 T3i): the kinds whose "Called from:" fact is NOT a call list at all --
-// for these it holds plain references to the TYPE NAME, awaiting the planned
-// "Used by:" relabel.
+// v(ADP3 T3i review round 2): can a symbol of this kind ever BE a call target?
+// Only a routine can: TCallResolver resolves a call ref to a routine symbol, so
+// call_edges.target_symbol_id is always a routine and FindResolvedCallers can
+// never return a row for anything else.
 //
-// ONE declaration, read by the CalledFrom gather's call-sites-only gate and by
-// the "Used in units:" gather below. Those are two DIFFERENT decisions -- "is
-// this kind exempt from the call-site restriction" and "does this kind get a
-// units fact" -- that coincide on the same SET, and for one reason: these are
-// exactly the kinds a reference names without calling. Sharing the set means a
-// kind added for one decision cannot be forgotten in the other; it does NOT
-// claim the two decisions are the same.
-function IsTypeLikeKind(AKind: TSymbolKind): Boolean;
+// This -- not a list of "type-like" kinds -- is the correct gate for the
+// CalledFrom gather's call-sites-only restriction. For a NON-routine symbol the
+// unresolved bucket has never held call sites at all: it holds plain references
+// to the symbol's NAME, which the renderer then labels "Called from:". The label
+// is the defect; relabelling it (the planned "Used by:" for types) is owned by
+// the render workstream. Restricting a non-routine to call sites therefore does
+// not correct a caller list, it DELETES a reference list -- so we restrict
+// exactly when the symbol could genuinely have callers, and the non-routine path
+// stays byte-identical to pre-T3i for EVERY kind.
+//
+// ROUND 1 GOT THIS WRONG, and the way it was wrong is the lesson: the gate was a
+// literal [skClass, skInterface, skRecord], which is the set
+// run_doc_no_self_caller.ps1 happens to pin -- the boundary was drawn by what a
+// test covered rather than by the semantics. skEnum and skTypeAlias are equally
+// documentable (see Doc.Batch.IsDocumentableKind) and silently lost their line.
+function CanBeCallTarget(AKind: TSymbolKind): Boolean;
 begin
-  Result:= AKind in [skClass, skInterface, skRecord];
+  Result:= AKind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor];
 end;
 
 // Parses the return type from a signature: the text after the LAST ':' that is
@@ -663,19 +672,21 @@ begin
     // so a caller that resolved CERTAIN to a DIFFERENT same-named method still
     // appeared here with a ' ?'.
     //
-    // TYPE-LIKE KINDS ARE DELIBERATELY EXEMPT, and this is a scope boundary, not
-    // an oversight. For a class/interface/record this bucket has never held call
-    // sites at all -- it holds plain type_use REFERENCES to the type name, which
-    // the renderer then labels "Called from:". That label is the defect, not the
-    // content, and relabelling it (the planned "Used by:" for types) is owned by
-    // the render workstream; `tests/autotest/run_doc_no_self_caller.ps1` pins the
-    // present content, including the NULL-enclosing unit-scope reference that a
-    // Bug C regression once dropped. Passing CallSitesOnly for a type would have
-    // emptied a shipped fact as a side effect of fixing the CALL question and
-    // deleted the very input the relabel is meant to display -- so the kind gate
-    // keeps that path byte-identical and leaves the decision with its owner.
+    // NON-ROUTINE KINDS ARE DELIBERATELY EXEMPT, and this is a scope boundary,
+    // not an oversight. A class, interface, record, enum or type alias can never
+    // be a call target (see CanBeCallTarget), so for those this bucket has never
+    // held call sites at all -- it holds plain type_use REFERENCES to the name,
+    // which the renderer then labels "Called from:". That label is the defect,
+    // not the content, and relabelling it (the planned "Used by:" for types) is
+    // owned by the render workstream; `tests/autotest/run_doc_no_self_caller.ps1`
+    // pins the present content, including the NULL-enclosing unit-scope reference
+    // that a Bug C regression once dropped. Restricting a non-routine to call
+    // sites would have emptied a shipped fact as a side effect of fixing the CALL
+    // question and deleted the very input the relabel is meant to display -- so
+    // the gate keeps that path byte-identical and leaves the decision to its
+    // owner. run_callsite_kind_universe.ps1 pins a class AND an enum here.
     ResCallers:= AStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
-                                                 not IsTypeLikeKind(ASym.Kind));
+                                                 CanBeCallTarget(ASym.Kind));
     for RC in ResCallers do
     begin
       FR:= ToFactRef(RC);
@@ -697,7 +708,7 @@ begin
       // Same kind gate as the primary store above -- the two must agree, or a
       // type's fact would depend on which DB a reference happened to live in.
       ResCallers:= ExStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
-                                                    not IsTypeLikeKind(ASym.Kind));
+                                                    CanBeCallTarget(ASym.Kind));
       for RC in ResCallers do
       begin
         FR:= ToFactRef(RC);
@@ -873,7 +884,17 @@ begin
   // facts-only gate. A ref with no enclosing symbol (a unit-scope 'var G: T;')
   // is NOT a self-reference and is always kept -- see RefIsOwnMemberSelfRef's
   // header comment for the NULL-enclosing lesson carried from Bug C.
-  if IsTypeLikeKind(ASym.Kind) then // v(ADP3 T3i): shared with the CalledFrom gate
+  // v(ADP3 T3i review round 2): DELIBERATELY ITS OWN SET, NOT CanBeCallTarget's
+  // complement, and round 1's attempt to share one declaration between this gate
+  // and the CalledFrom gate was the error that hid the skEnum/skTypeAlias bug.
+  // The two decisions look alike but their correct sets DIFFER: "which kinds are
+  // exempt from the call-site restriction" is every non-routine kind, whereas
+  // "which kinds get a Used in units: fact" is these three and always has been.
+  // Widening this one to match would ADD a brand-new fact line to every enum and
+  // alias -- a behaviour change nobody asked for, in the opposite direction to
+  // the one being fixed. Sharing is only safe when two sites answer the SAME
+  // question; here they do not, so they get one declaration each.
+  if ASym.Kind in [skClass, skInterface, skRecord] then
   begin
     var URefs: TArray<TReference>:= AStore.FindCallersByName(LastSeg(ASym.QualifiedName));
     var UnitSet: TStringList:= TStringList.Create;

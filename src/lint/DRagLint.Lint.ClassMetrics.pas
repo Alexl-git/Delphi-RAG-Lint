@@ -308,7 +308,9 @@ var
     try
       Refs:= GetRefs(AInfo.FileId);
       for R in Refs do
-        if SameText(R.Kind, 'call') and (R.NameText <> '') and EnclosedByOwnMethod(AInfo, R.EnclosingSymbolId) then
+        // v(ADP3 T3i review round 2): REF_KIND_CALL, not a literal -- same
+        // "what kind is a call" question the shared declaration owns.
+        if SameText(R.Kind, REF_KIND_CALL) and (R.NameText <> '') and EnclosedByOwnMethod(AInfo, R.EnclosingSymbolId) then
           Called.AddOrSetValue(LowerCase(R.NameText), True);
       Result:= Length(AInfo.Methods) + Called.Count;
     finally
@@ -831,7 +833,7 @@ var
       Refs:= GetRefs(AInfo.FileId);
       for R in Refs do
       begin
-        if not SameText(R.Kind, 'call') then Continue;
+        if not SameText(R.Kind, REF_KIND_CALL) then Continue; // v(ADP3 T3i r2): shared declaration
         if R.NameText = '' then Continue;
         if not EnclosedByOwnMethod(AInfo, R.EnclosingSymbolId) then Continue;
         Low:= LowerCase(R.NameText);
