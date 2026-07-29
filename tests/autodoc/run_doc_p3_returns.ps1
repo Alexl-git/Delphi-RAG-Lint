@@ -92,6 +92,15 @@
       COMPONENT-WISE TAIL of the symbol's qualified name
       (talpha.same vs returns.TBeta.Same -> declined).
 
+  (8) A ROUTINE KEYWORD IS NOT A CALLEE. Register K24, added in Task 4f fix
+      round 1 -- a Calls: item, not a <returns> one, but over THESE routines:
+      the Calls: body-scan captures `Identifier(`, and AnonHost's anonymous
+      method and InlineProcVar's procedural-type local both write exactly that,
+      so both used to render `/// Calls: F, function`. The fix (four routine
+      keywords into Doc.Facts.IsCallSkipWord) shipped in Task 4f with no
+      fixture at all; this group is that fixture. Engine-verified RED against a
+      build with the four keywords removed again -- see the fix-round-1 report.
+
   WHAT DOES *NOT* CHANGE, AND IS ASSERTED AS SUCH
   -----------------------------------------------
   Result.<Field> := is still not mined (DefaultCfg). This already worked -- the
@@ -261,6 +270,14 @@ function Get-HoverReturns([string]$db, [string]$qname) {
 # The 'Observed: ...' payload of the <returns> tag inside a doc block, or ''.
 function Get-Observed([string]$block) {
   $m = [regex]::Match($block, '<returns>(?:<!--[^>]*-->)?\s*Observed:\s*(.*?)\.?</returns>')
+  if ($m.Success) { return $m.Groups[1].Value } else { return '' }
+}
+
+# The payload of the managed remarks block's 'Calls:' line, or '' when the block
+# carries none. Whole-line anchored: the word also occurs in this file's own
+# prose, and a substring match would read that instead.
+function Get-Calls([string]$block) {
+  $m = [regex]::Match($block, '(?m)^\s*///\s*Calls:\s*(.*?)\s*$')
   if ($m.Success) { return $m.Groups[1].Value } else { return '' }
 }
 
@@ -531,6 +548,40 @@ Check 'GUARD: ParamlessProcVar''s PARAMETERLESS procedural-type var did not swal
   ((Get-Observed $blocks['ParamlessProcVar']) -eq 'F() + A') ($blocks['ParamlessProcVar'] -replace "`n",' | ')
 Check 'GUARD: LocalProcTypeDecl''s local procedural TYPE did not swallow its body -- it still renders "G() + A"' `
   ((Get-Observed $blocks['LocalProcTypeDecl']) -eq 'G() + A') ($blocks['LocalProcTypeDecl'] -replace "`n",' | ')
+
+# --- (8) A ROUTINE KEYWORD IS NOT A CALLEE. ---------------------------------
+# Register K24, asserted in Task 4f fix round 1. The Calls: body-scan captures
+# `Identifier(`, and both an anonymous method (`F := function(const AInner:
+# TCfg): Integer begin ... end`) and a parameterised procedural type (`F:
+# function(X: Integer): Integer;`) write exactly that -- so every routine
+# holding one listed a callee literally named `function`. Doc.Facts.IsCallSkipWord
+# drops the four routine keywords now; nothing asserted it, and "verified live"
+# is an observation, not an assertion.
+#
+# The fixture ALREADY carried both shapes -- they are InlineProcVar and AnonHost,
+# which exist for the nested-routine detector -- so this group adds coverage
+# without adding a fixture whose only reader is itself.
+#
+# THE EXACT PAYLOAD, not "does not contain function": a Calls: line that stopped
+# being emitted, or a block that was never written, satisfies an absence test.
+Check 'CALLS: AnonHost''s anonymous method is not a callee -- its Calls: line is exactly "F"' `
+  ((Get-Calls $blocks['AnonHost']) -eq 'F') ($blocks['AnonHost'] -replace "`n",' | ')
+Check 'CALLS: InlineProcVar''s procedural-type declaration is not a callee -- its Calls: line is exactly "F"' `
+  ((Get-Calls $blocks['InlineProcVar']) -eq 'F') ($blocks['InlineProcVar'] -replace "`n",' | ')
+# ... and file-wide, so the same leak on some OTHER symbol's block is caught.
+# Split on the comma the renderer joins with, and compare WHOLE callee names:
+# a substring test would fire on a real callee that merely contains the word.
+$callsLines = @($lines | Where-Object { $_ -match '^\s*///\s*Calls:' })
+Check 'CALLS: the applied file renders Calls: lines at all (the bound for the absence below)' `
+  ($callsLines.Count -ge 8) ("count=" + $callsLines.Count)
+$kwCallees = @()
+foreach ($cl in $callsLines) {
+  foreach ($callee in (($cl -replace '^\s*///\s*Calls:\s*','') -split ',')) {
+    if ($callee.Trim() -match '^(?i)(function|procedure|constructor|destructor)$') { $kwCallees += $cl }
+  }
+}
+Check 'CALLS: no Calls: line in the file names a ROUTINE KEYWORD as a callee (K24)' `
+  ($kwCallees.Count -eq 0) ($kwCallees -join ' | ')
 
 # --- (6/7 baseline) The three stale-span carriers, with their TRUE spans. ---
 # Scenarios 2 and 3 doctor these rows; a doctored result is only evidence if

@@ -120,7 +120,14 @@
     .ps1                      under src\ tests\ build\ stats\ tools\
     .pas .dpr .dpk .dfm .inc  under src\ tests\ build\ tools\
     .bat .cmd                 under src\ tests\ build\ tools\
-        -> zero lone LF, no BOM, zero bytes >127
+        -> zero lone LF, no BOM, zero bytes >127, and zero stray C0 control
+           bytes (anything under 32 that is not TAB / CR / LF). The last of
+           those was added in Task 4f fix round 1: this phase injected a lone CR
+           and then a FORMFEED, both invisible to the diff, the build and a
+           green battery, and this guard saw neither -- and the returns miner's
+           in-band sentinels NESTED_MASK = #1 / COMMENT_MASK = #2 rest on
+           exactly the premise it now checks. 0 offenders in 918 files when it
+           was added; proved RED by writing a 0x0C into a scratch .pas.
     every extension .gitattributes declares `text eol=crlf` is either scanned or
     listed in $DeclaredNotScanned with a reason
     every top-level directory holding a scannable file -- AND the repo root
@@ -235,6 +242,22 @@ $UnscannedRoots = [ordered]@{
 $badLf  = New-Object System.Collections.Generic.List[string]
 $badBom = New-Object System.Collections.Generic.List[string]
 $badHi  = New-Object System.Collections.Generic.List[string]
+# v(ADP3 T4f fix round 1): C0 control bytes other than TAB / CR / LF.
+# TWO reasons, and the second is the one that makes it an assertion rather than
+# tidiness:
+#   1. HAZARD H1's own history. This phase injected a lone CR (a scripted edit),
+#      then a FORMFEED, both invisible to the diff, the build and a green
+#      battery -- and this guard, which exists for exactly that, saw neither: it
+#      counted lone LF, BOMs and bytes >127 and nothing between 0 and 8 or 11
+#      and 31. Every implementer since has run a private byte check by hand.
+#   2. The ENGINE's two masking sentinels rest on this being true. Hover.Returns
+#      uses NESTED_MASK = #1 and COMMENT_MASK = #2 as in-band markers over a
+#      copy of the source line, justified by 'cannot occur in a .pas: 7-bit
+#      ASCII'. That premise was prose. It is now the thing this clause checks.
+# Population when the clause was added: 0 offenders in 918 files (a python
+# emulation of $roots below; command, unit and classifier in the fix-round-1
+# report). Proved RED by writing a 0x0C into a scratch .pas under tests\.
+$badCtl = New-Object System.Collections.Generic.List[string]
 $scanned = 0
 
 foreach ($ext in $roots.Keys) {
@@ -246,15 +269,19 @@ foreach ($ext in $roots.Keys) {
       $scanned++
       if ($DeliberateFixtures.Contains($rel)) { return }
       $b = [System.IO.File]::ReadAllBytes($_.FullName)
-      $lone = 0; $hi = 0
+      $lone = 0; $hi = 0; $ctl = 0
       for ($i = 0; $i -lt $b.Length; $i++) {
         $c = $b[$i]
         if ($c -eq 10) { if ($i -eq 0 -or $b[$i - 1] -ne 13) { $lone++ } }
         elseif ($c -gt 127) { $hi++ }
+        # v(ADP3 T4f fix round 1): a C0 control byte that is not TAB / CR / LF.
+        # See '$badCtl' below for why this is an assertion and not a nicety.
+        elseif ($c -lt 32 -and $c -ne 9 -and $c -ne 13) { $ctl++ }
       }
       $bom = ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) -or
              ($b.Length -ge 2 -and (($b[0] -eq 0xFF -and $b[1] -eq 0xFE) -or ($b[0] -eq 0xFE -and $b[1] -eq 0xFF)))
       if ($lone -gt 0) { $badLf.Add(("{0}  ({1} lone LF)" -f $rel, $lone)) }
+      if ($ctl -gt 0) { $badCtl.Add(("{0}  ({1} stray control byte(s))" -f $rel, $ctl)) }
       if ($bom) { $badBom.Add($rel) }
       # The BOM itself is three high bytes; do not double-report it.
       if ($hi -gt 0 -and -not ($bom -and $hi -le 3)) { $badHi.Add(("{0}  ({1} bytes >127)" -f $rel, $hi)) }
@@ -275,6 +302,18 @@ if ($badLf.Count -gt 0) {
   Write-Host '          Convert it back to CRLF. Do NOT add an exemption list:' -ForegroundColor Yellow
   Write-Host '          .gitattributes already makes CRLF what a fresh clone produces, so' -ForegroundColor Yellow
   Write-Host '          an exemption would assert something untrue about the repo.' -ForegroundColor Yellow
+}
+
+Check 'no stray C0 control byte (anything under 32 that is not TAB/CR/LF)' ($badCtl.Count -eq 0) `
+  "($($badCtl.Count) offender(s))"
+foreach ($x in $badCtl) { Write-Host "        $x" -ForegroundColor Red }
+if ($badCtl.Count -gt 0) {
+  Write-Host '        ^ a formfeed, a NUL or a #1/#2 in a source file. A scripted edit puts' -ForegroundColor Yellow
+  Write-Host '          these in and nothing else notices: the diff renders them as nothing,' -ForegroundColor Yellow
+  Write-Host '          dcc compiles straight through, and the battery stays green. It has' -ForegroundColor Yellow
+  Write-Host '          happened twice in this phase. It also breaks the engine: the returns' -ForegroundColor Yellow
+  Write-Host '          miner masks with the in-band sentinels #1 and #2 on the stated' -ForegroundColor Yellow
+  Write-Host '          grounds that a .pas cannot contain them.' -ForegroundColor Yellow
 }
 
 Check 'no BOM in any source file' ($badBom.Count -eq 0) "($($badBom.Count) offender(s))"

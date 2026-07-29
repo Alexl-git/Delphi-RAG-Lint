@@ -783,16 +783,54 @@ begin
   // with no line of code changing, and a user could be shown a STALE row while a
   // fresh one sat in the same DB.
   //
+  // v(ADP3 T4f fix round 1, IMPORTANT 1): the first ordering term used to be
+  // the impl_start_line CASE below, and the comment above it claimed that put
+  // "a row with an implementation body before a forward-declaration stub".
+  // FALSE for the whole type population, and measurably weak everywhere else.
+  // Command: sqlite over the shipped C:\Projects\.drag-lint\library-Win64.sqlite.
+  // Unit: DISTINCT qualified_name owning more than one `symbols` row.
+  // Classifier: the term takes BOTH values inside the group, i.e. it actually
+  // discriminates rather than being constant across the candidates.
+  //   71258 duplicate qnames  -> the impl term discriminates for   398 (0.56%)
+  //   23664 of them of kind class/interface/record -> discriminates for 0
+  // A class / interface / record row never carries an impl span, so for every
+  // type the CASE was constant and file order alone decided. Live consequence
+  // on that index: `hover --qname System.TObject` answered def_line 599, the
+  // `TObject = class;` forward stub, while the real body starts at 680.
+  //
   // Ordered now, most-useful first and then fully deterministic:
-  //   1. a row with an implementation body before a forward-declaration stub --
-  //      the body is what a reader hovering a name wants, and a stub carries no
-  //      Calls / Returns / Complexity facts at all;
-  //   2. then file_id, start_line, id -- three columns that cannot tie, so the
+  //   1. a real declaration before a FORWARD-DECLARATION STUB. The predicate is
+  //      the engine's own, transcribed: IsStub (below, inside
+  //      ResolveTypeNameToClassEx) and Convert.PropTree's IsForwardDeclClass
+  //      both say
+  //      "kind is class/interface, heritage empty, end_line <= start_line", and
+  //      both hand-roll the same preference AFTER the query returns. On the
+  //      same index and classifier this term discriminates for 23511 of the
+  //      23664 duplicate class/interface/record qnames -- a forward declaration
+  //      is ordinary in RTL/VCL source and gives its class a second row IN THE
+  //      SAME FILE, which is why the population is nothing like the rare
+  //      duplicate-file case. TRIM(NULL) is NULL, hence the COALESCE: the
+  //      indexer stores NULL, not '', for absent heritage.
+  //   2. then a row with an implementation body. This is the term above, kept
+  //      and demoted, with its claim narrowed to what it can do: it decides
+  //      only where impl_start_line is populated at all, i.e. among ROUTINE
+  //      rows -- an abstract or unimplemented overload against an implemented
+  //      one, or one duplicate-file copy that got a body and one that did not.
+  //      That is the 398, and they are worth having; they are simply not the
+  //      stub case.
+  //   3. then file_id, start_line, id -- three columns that cannot tie, so the
   //      answer is reproducible across rebuilds rather than merely stable today.
+  // Asserted by tests\autotest\run_hover_qname_row_order.ps1, on two natural
+  // Delphi shapes (a forward-declared class; an overload pair whose abstract
+  // member is declared first), each with the tie-breakers-alone order read out
+  // of the DB as the de-vacuator.
   // This does NOT make duplicate rows correct; indexer-side path normalisation
   // is still the other half of K29 and is not done here.
   FQFindByQName         := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname ' +
-    'ORDER BY (CASE WHEN impl_start_line IS NOT NULL AND impl_start_line > 0 THEN 0 ELSE 1 END), ' +
+    'ORDER BY (CASE WHEN kind IN (''class'', ''interface'') ' +
+    '            AND COALESCE(TRIM(heritage), '''') = '''' ' +
+    '            AND end_line <= start_line THEN 1 ELSE 0 END), ' +
+    '(CASE WHEN impl_start_line IS NOT NULL AND impl_start_line > 0 THEN 0 ELSE 1 END), ' +
     'file_id, start_line, id');
   FQCountSymbols        := NewQuery('SELECT COUNT(*) AS n FROM symbols'                                );
   FQCountFiles          := NewQuery('SELECT COUNT(*) AS n FROM files'                                  );

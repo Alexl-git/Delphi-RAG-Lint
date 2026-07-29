@@ -6,5 +6,13 @@ inherited-bare 45
 # a blanket !inherited-bare, because the rule DOES fire in this file: a blanket
 # form would be satisfied only by the rule never firing at all, and asserting
 # that would contradict the line above.
-!inherited-bare 39
+#
+# v(ADP3 T4f fix round 1): the first pin named line 39, which is `begin`. NOTHING
+# has ever fired there -- the pre-K32 query `((inherited) @warn)` fires at 40, 45
+# and 50, the current one at 45 -- so the pin was satisfied before and after the
+# fix and could not fail. The qualified paren-less call is on line 40.
+# Executed both ways with `lint --rules-dir` over a scratch copy of rules\:
+#   old `((inherited) @warn)`  -> inherited-bare at 40, 45, 50
+#   current query              -> inherited-bare at 45
+!inherited-bare 40
 !inherited-bare 50
