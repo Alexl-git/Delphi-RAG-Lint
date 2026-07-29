@@ -98,11 +98,29 @@ type
     procedure DeleteUnitUsesForFile(AFileId: Int64);
     function GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>          ;
     function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
+    /// <summary>Whole-DB post-index pass: fills unit_uses.target_file_id for
+    /// every `uses` entry that names an indexed file. Idempotent, and only
+    /// ever fills rows that are still NULL.</summary>
+    /// <remarks>Two rules, in order: the used unit's name equals a file's
+    /// lowercased basename stem ('Vcl.Controls' -&gt; Vcl.Controls.pas); or,
+    /// for a BARE name only, exactly one indexed stem carries that name as
+    /// its last dotted segment ('Buttons' -&gt; Vcl.Buttons.pas -- Delphi's
+    /// unit scope names). Anything else is left NULL.
+    /// GUARANTEES ONLY that some indexed file is named after the used unit --
+    /// NOT that it is the file the compiler would have picked. Two indexed
+    /// copies of one unit collide on a stem and an arbitrary one wins.
+    /// ANCESTOR RESOLUTION DOES NOT READ THIS COLUMN (ResolveAncestry scopes
+    /// textually), so an index predating this pass is not thereby wrong about
+    /// ancestry. ResolveHelpers, the call resolver and the deps report do read
+    /// it.</remarks>
     procedure ResolveUnitUseTargets;
     // v11 (M1): type & hierarchy resolution. ResolveAncestry is a whole-DB
     // post-index pass (run after ResolveUnitUseTargets) that splits each
     // class/interface's `heritage` text, resolves each ancestor to a defining
-    // symbol via the file's in-scope uses graph, and writes type_ancestors edges.
+    // symbol in the scope of the declaring unit -- textually, by the shared
+    // rule PickAncestorCandidateByScope, so it needs no resolved uses graph --
+    // and writes type_ancestors edges. An ancestor it cannot disambiguate is
+    // written unresolved (ancestor_kind '?'), never guessed.
     procedure ResolveAncestry;
     /// <summary>v15: whole-DB helper-resolution pass (run after ResolveAncestry).
     /// Links each record/class helper's target type name to its defining symbol,

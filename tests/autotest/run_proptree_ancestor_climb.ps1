@@ -22,20 +22,29 @@
     Zed.Root9.pas   TRoot9  = class(TMid9)     -- namespace prefix 'Zed'
                     TRootF9 = class(TMidF9)    -- namespace prefix 'Zed'
                     (deliberately NO uses clause)
-    Vcl.Mid9.pas    TMid9   = class(TAmb9)     -- globally UNIQUE name, so the
+    Vcl.Mid9.pas    TAmbAlias9 = TAmb9;        -- a TYPE ALIAS: the break.
+                    TMid9   = class(TAmbAlias9) -- globally UNIQUE name, so the
                                                   TRoot9 -> TMid9 edge RESOLVES
                                                   at index time and the climb
                                                   genuinely reaches a second hop
                                                   in a DIFFERENT unit.
                                                   (deliberately NO uses clause)
-    FMX.Mid9.pas    TMidF9  = class(TAmb9)     -- the mirror. Also no uses.
+    FMX.Mid9.pas    TAmbAliasF9 = TAmb9;       -- the mirror alias.
+                    TMidF9  = class(TAmbAliasF9) -- the mirror. Also no uses.
     Vcl.Cand9.pas   TAmb9   [property Marker: TMarkVcl9]
     FMX.Cand9.pas   TAmb9   [property Marker: TMarkFmx9]  <- same simple name,
-                                                  so 'TAmb9' is AMBIGUOUS and
-                                                  ResolveAncestry declines
-                                                  (ancestor_kind='?'), the same
-                                                  shape as the measured
-                                                  real-library root cause.
+                                                  so 'TAmb9' is AMBIGUOUS.
+
+    WHY THE BREAK IS AN ALIAS. ResolveAncestry's candidate set is
+    class/interface only, so a type-alias ancestor is a name it structurally
+    CANNOT resolve: it writes ancestor_kind='?' regardless of how capable its
+    scope rule is. Before Task 4 the break was 'TMid9 = class(TAmb9)' and the
+    index declined for a different reason -- it had no scope data. Task 4 gave
+    the index-time resolver the same shared scope rule the query side uses, it
+    resolved the 'Vcl' prefix itself, and this fixture silently stopped
+    exercising the query-time climb. The sanity assertion below caught that;
+    the alias restores the property the assertion is there to guarantee,
+    against any future index-side improvement short of alias-aware ancestry.
 
     The root unit's prefix is 'Zed', which matches NEITHER candidate. So:
       * resolve 'TAmb9' in the ROOT's scope (the defect)   -> rule 3 finds no
@@ -164,9 +173,20 @@ interface
 // prefix (rule 3) can. TMid9's own name is globally unique, so the
 // TRoot9 -> TMid9 edge RESOLVES at index time; the break is one hop ABOVE the
 // queried root, in THIS unit.
+//
+// THE BREAK IS A TYPE ALIAS, and that is load-bearing. ResolveAncestry's
+// candidate set is class/interface only, so an alias ancestor is a name it
+// STRUCTURALLY cannot resolve -- it writes ancestor_kind='?' no matter how
+// good its scope rule gets. Inheriting from 'TAmb9' directly would no longer
+// do: since Task 4 the index-time resolver applies the same shared scope rule
+// as the query side, so it would resolve the 'Vcl' prefix itself and this
+// fixture would stop exercising the QUERY-TIME climb at all (it did exactly
+// that, and the sanity assertion below caught it).
 
 type
-  TMid9 = class(TAmb9)
+  TAmbAlias9 = TAmb9;
+
+  TMid9 = class(TAmbAlias9)
   end;
 
 implementation
@@ -179,11 +199,15 @@ unit FMX.Mid9;
 
 interface
 
-// The mirror of Vcl.Mid9 -- also no uses clause; only the 'FMX' prefix can
-// decide. Criterion 5's "nor the reverse".
+// The mirror of Vcl.Mid9 -- also no uses clause, same type-alias break; only
+// the 'FMX' prefix can decide. Criterion 5's "nor the reverse". The alias
+// carries its own name so that resolving IT is never the ambiguous step --
+// the ambiguity is deliberately one hop further up, at 'TAmb9'.
 
 type
-  TMidF9 = class(TAmb9)
+  TAmbAliasF9 = TAmb9;
+
+  TMidF9 = class(TAmbAliasF9)
   end;
 
 implementation
@@ -414,9 +438,9 @@ con.close()
 '@
 Write-Host ''
 Write-Host 'fixture sanity: the break really is an UNRESOLVED edge' -ForegroundColor Cyan
-$edgeMid  = (python $script:PyEdge $db 'TMid9'  'TAmb9').Trim()
+$edgeMid  = (python $script:PyEdge $db 'TMid9'  'TAmbAlias9').Trim()
 $edgeRoot = (python $script:PyEdge $db 'TRoot9' 'TMid9').Trim()
-Check "Vcl.Mid9.TMid9's 'TAmb9' edge is UNRESOLVED (the fallback is what must fix it)" ($edgeMid -eq '?|NULL') "edge=$edgeMid"
+Check "Vcl.Mid9.TMid9's 'TAmbAlias9' edge is UNRESOLVED (the fallback is what must fix it)" ($edgeMid -eq '?|NULL') "edge=$edgeMid"
 Check "Zed.Root9.TRoot9's 'TMid9' edge IS resolved (so the climb reaches a 2nd unit)" ($edgeRoot -like 'class|SET') "edge=$edgeRoot"
 
 # --- CASE A: criterion 7 -- the break is resolved in Vcl.Mid9's scope, not Zed's. --

@@ -65,7 +65,6 @@ type
       FQDeleteFileUnitUses   : TFDQuery;
       FQGetFileUnitUses      : TFDQuery;
       FQFindUsersOfUnit      : TFDQuery;
-      FQResolveUnitUseTargets: TFDQuery;
       // Task 3c: ancestry-derived GUI-framework anchor (see
       // FrameworkAnchorForFile). Pure derivations of what is already in the
       // index -- no writes, so --no-write-back is unaffected.
@@ -406,7 +405,6 @@ begin
   FQDeleteFileUnitUses.Free;
   FQGetFileUnitUses.Free;
   FQFindUsersOfUnit.Free;
-  FQResolveUnitUseTargets.Free;
   FAnchorCache.Free;
   if Assigned(FConn) then
   begin
@@ -915,16 +913,10 @@ begin
   FQFindUsersOfUnit.Params.ParamByName('un').DataType:= ftString;
   FQFindUsersOfUnit.Prepare;
 
-  // Resolves target_file_id for every unit_uses row whose unit_name_norm
-  // matches the lower-cased basename (stem) of some files.path entry.
-  // Run once after a full index pass; safe to re-run (UPDATE is idempotent).
-  // Uses LOWER + substr math because sqlite's basename trick (replace ext)
-  // would over-match. Path separators normalised to '/'.
-  FQResolveUnitUseTargets:= NewQuery(
-    'UPDATE unit_uses SET target_file_id = (' + '  SELECT f.id FROM files f ' + '  WHERE LOWER(' + '    REPLACE(' + '      SUBSTR(' +
-    '        SUBSTR(f.path, 1 + LENGTH(f.path) - INSTR(' + '          REPLACE(REPLACE(f.path, ''\'', ''/''), ''/'', '''') || ''/'',' + '          ''/'')), 1)' +
-    '      , ''.pas'', '''')' + '  ) = unit_uses.unit_name_norm ' + '  LIMIT 1) ' + 'WHERE target_file_id IS NULL');
-  FQResolveUnitUseTargets.Prepare;
+  // (An all-SQL FQResolveUnitUseTargets used to be prepared here. It was never
+  // executed -- ResolveUnitUseTargets builds its own queries -- and it encoded
+  // the unit_name_norm-vs-full-stem comparison that was the criterion-12 bug,
+  // so it was removed rather than left as a second, wrong copy of the rule.)
   FStatementsPrepared:= True;
 end; // begin
 
@@ -1353,8 +1345,11 @@ end; // function
 
 function TSQLiteSymbolStore.GetUnitScopeEdges: TArray<TFileScopeEdge>;
 { v14 (D5): resolved uses-scope edges (file_id -> target_file_id), the exact set
-  ResolveAncestry loads inline for its FileScope map. Unresolved rows (NULL
-  target_file_id) are excluded, so both ids are always > 0. }
+  ResolveHelpers loads inline for its FileScope map. Unresolved rows (NULL
+  target_file_id) are excluded, so both ids are always > 0.
+  Task 4: ResolveAncestry no longer uses this shape at all -- it scopes
+  candidates from the TEXTUAL uses names instead, so it does not depend on
+  target_file_id ever having been resolved. }
 var
   Q   : TFDQuery            ;
   List: TList<TFileScopeEdge>;
@@ -2586,7 +2581,27 @@ end;
 ///  This is the ONE decision procedure shared by the query-time resolver
 ///  (ResolveTypeNameToClass / PickCandidate, below) and the index-time
 ///  resolver (ResolveAncestry) -- change the precedence HERE, not by
-///  re-implementing it in either caller.
+///  re-implementing it in either caller. Both callers reach it the same way:
+///  a name with a SINGLE candidate short-circuits before this function is
+///  entered, and everything ambiguous comes here. Both gather AScopeUnitName
+///  and AScopeUsesNames from the same two sources (the scope file's own `unit`
+///  symbols, then its unit_uses.unit_name entries, lowercased) -- query time
+///  per file on demand, index time in one bulk pass.
+///  WHAT IS SHARED IS THE RULE, NOT THE CANDIDATE SET. The query-time caller
+///  offers class, interface, record AND type-alias symbols and chases an alias
+///  to its target; ResolveAncestry offers class and interface only. So the two
+///  can be handed DIFFERENT fields for the same name, and a name that is
+///  ambiguous on one side may be a single candidate (or none) on the other.
+///  That difference predates this function and is not something it arbitrates.
+///  ONE INPUT DIFFERS, deliberately: ResolveAncestry always passes
+///  AScopeFrameworkAnchor = '', because it is REBUILDING type_ancestors and
+///  FrameworkAnchorForFile derives the anchor by climbing that same table. The
+///  consequence is bounded and stated in full: rules 1, 2a and 3-for-a-dotted-
+///  unit are identical on both sides; a LEGACY UNDOTTED scope unit gets no
+///  rule 3 and an unconfirmed (therefore dropped) rule 2b GUI hit at index
+///  time, so it DECLINES there and is resolved later by the query-time climb,
+///  which does supply an anchor. Index time is never the more permissive of
+///  the two.
 /// </remarks>
 function PickAncestorCandidateByScope(const ACandidates: TArray<TSymbol>;
   AScopeFileId: Int64; const AScopeUnitName: string;
@@ -3779,21 +3794,85 @@ begin
   end; // try
 end; // function
 
+// Sentinel stored in the last-segment map for a segment that 2+ DISTINCT file
+// stems share ('controls' <- both 'vcl.controls' and 'fmx.controls'). Not a
+// legal file stem (a stem is a lowercased basename), so it can never collide
+// with a real one. Its presence makes rule B below decline that segment.
+const
+  CStemAmbiguous = '?';
+
 procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
 { Drives target_file_id resolution in Pascal rather than SQL because the
   basename-extract is fiddly across sqlite dialects (Win32 FireDAC's
   bundled sqlite lacks some 3.24+ functions). We pull every (file_id, path),
-  compute the lowercase stem, build a dictionary, then UPDATE per group. }
+  compute the lowercase stem, build the two maps below, then UPDATE per
+  distinct used-unit name.
+
+  THE BUG THIS REPLACES (design doc criterion 12, measured on
+  library-Win64.sqlite): the previous pass matched unit_uses.UNIT_NAME_NORM --
+  which UnitNameNorm() defines as the LAST dotted segment, so 'Vcl.Controls'
+  is stored as 'controls' -- against the FULL basename stem 'vcl.controls'.
+  Those two can never be equal for a dotted unit name, so EVERY dotted `uses`
+  row stayed NULL: 122 of 38512 resolved. Worse, the 122 that did resolve were
+  WRONG -- they were dotted names landing on an unrelated file that happened to
+  be named after their last segment ('uses Fmx.Editor.MaskEdit' -> FMX.MaskEdit.pas).
+
+  Resolution rules, in order (first hit wins; no hit leaves the row NULL):
+   A. EXACT: the lowercased used-unit name equals a file's lowercased basename
+      stem. 'Vcl.Controls' -> Vcl.Controls.pas; 'Abcbtn' -> Abcbtn.pas. This is
+      a NAME EQUALITY, not an inference, and it is what criterion 12 asks for.
+   B. UNIT SCOPE NAMES, bare names only: a used name with NO dot may match a
+      DOTTED stem by its last segment -- 'uses Buttons' -> Vcl.Buttons.pas --
+      but ONLY when exactly one distinct stem carries that segment. This is
+      Delphi's own unit-scope-names resolution, in the only direction Delphi
+      performs it. The uniqueness requirement is what keeps it honest: the
+      collision-prone names are exactly the ones both GUI frameworks declare
+      ('controls', 'graphics', 'forms', 'menus', 'stdctrls', ...), and each of
+      those has 2+ stems and therefore DECLINES.
+      A DOTTED name never falls back here -- 'uses Zeta.Alpha' with no
+      Zeta.Alpha.pas indexed stays NULL rather than seizing Ns.Alpha.pas.
+      That direction is what produced both measured wrong-namespace matches.
+
+  Measured effect on library-Win64.sqlite (85157 rows): 41.8% -> 91.8%
+  resolved, with rule B contributing 4539 rows across 145 bare names, NONE of
+  which lands in a GUI namespace the referencing unit does not already share.
+
+  NOT GUARANTEED: that a resolved target is the unit the Delphi compiler would
+  have picked. Two indexed copies of the same unit (two source trees) collide
+  on one stem and the LAST one read wins arbitrarily -- unchanged from before,
+  and harmless because both copies declare the same unit. Nothing downstream
+  may treat target_file_id as proof of anything beyond "some indexed file is
+  named after this used unit".
+
+  ANCESTOR RESOLUTION DOES NOT DEPEND ON THIS. ResolveAncestry scopes
+  candidates from the TEXTUAL uses names (PickAncestorCandidateByScope), so a
+  database whose target_file_id is entirely NULL -- every index built before
+  this fix -- still resolves ancestors correctly without a re-index. The
+  consumers that do read the column are ResolveHelpers, TCallResolver and the
+  deps report. }
 var
-  QFiles      : TFDQuery                  ;
-  QUpdate     : TFDQuery                  ;
-  StemToFileId: TDictionary<string, Int64>;
-  Path        : string                    ;
-  Stem        : string                    ;
-  Slash       : Integer                   ;
+  QFiles      : TFDQuery                   ;
+  QNames      : TFDQuery                   ;
+  QUpdate     : TFDQuery                   ;
+  StemToFileId: TDictionary<string, Int64> ;
+  SegToStem   : TDictionary<string, string>; // last segment -> its ONLY stem, or CStemAmbiguous
+  UsedNorms   : TList<string>              ; // parallel arrays: one entry per
+  UsedFulls   : TList<string>              ; //   distinct (norm, lowercased name)
+  Path        : string                     ;
+  Stem        : string                     ;
+  Seg         : string                     ;
+  Seen        : string                     ;
+  Slash       : Integer                    ;
+  Dot         : Integer                    ;
+  i           : Integer                    ;
+  Fid         : Int64                      ;
 begin
-  StemToFileId:= TDictionary<string, Int64>.Create;
+  StemToFileId:= TDictionary<string, Int64> .Create;
+  SegToStem   := TDictionary<string, string>.Create;
+  UsedNorms   := TList<string>.Create;
+  UsedFulls   := TList<string>.Create;
   QFiles := TFDQuery.Create(nil);
+  QNames := TFDQuery.Create(nil);
   QUpdate:= TFDQuery.Create(nil);
   try
     QFiles.Connection:= FConn;
@@ -3806,25 +3885,73 @@ begin
       if Slash >= 0 then Stem:= Copy(Path, Slash + 2, MaxInt)
       else Stem:= Path;
       Stem:= LowerCase(ChangeFileExt(Stem, ''));
-      if Stem <> '' then StemToFileId.AddOrSetValue(Stem, QFiles.FieldByName('id').AsLargeInt);
+      if Stem <> '' then
+      begin
+        StemToFileId.AddOrSetValue(Stem, QFiles.FieldByName('id').AsLargeInt);
+        Seg:= Stem;
+        Dot:= LastDelimiter('.', Seg);
+        if Dot > 0 then Seg:= Copy(Seg, Dot + 1, MaxInt);
+        // Distinct STEMS, not distinct files: two indexed copies of
+        // Vcl.Controls.pas are one candidate unit, not an ambiguity.
+        if not SegToStem.TryGetValue(Seg, Seen) then SegToStem.Add(Seg, Stem)
+        else if (Seen <> CStemAmbiguous) and (Seen <> Stem) then SegToStem[Seg]:= CStemAmbiguous;
+      end;
       QFiles.Next;
     end;
     QFiles.Close;
 
-    QUpdate.Connection:= FConn;
-    QUpdate.SQL.Text:= 'UPDATE unit_uses SET target_file_id = :tid ' + 'WHERE unit_name_norm = :un AND target_file_id IS NULL';
-    QUpdate.Params.ParamByName('tid').DataType:= ftLargeint;
-    QUpdate.Params.ParamByName('un' ).DataType:= ftString;
-    QUpdate.Prepare;
-    for var Kvp in StemToFileId do
+    { Pull the distinct used-unit names first and close the cursor: the UPDATE
+      below writes the very table this reads. Mirrors ResolveAncestry's
+      pull-everything-then-write idiom. }
+    QNames.Connection:= FConn;
+    QNames.SQL.Text:= 'SELECT DISTINCT unit_name_norm, LOWER(unit_name) AS un_lc ' +
+                      'FROM unit_uses WHERE target_file_id IS NULL';
+    QNames.Open;
+    while not QNames.Eof do
     begin
-      QUpdate.ParamByName('tid').AsLargeInt:= Kvp.Value;
-      QUpdate.ParamByName('un' ).AsString  := Kvp.Key;
+      UsedNorms.Add(QNames.Fields[0].AsString);
+      UsedFulls.Add(QNames.Fields[1].AsString);
+      QNames.Next;
+    end;
+    QNames.Close;
+
+    { Both keys are used: unit_name_norm hits idx_unit_uses_unit_norm so the
+      UPDATE is an index seek rather than a scan of the whole table, and the
+      LOWER(unit_name) equality is what actually selects the rows -- two units
+      sharing a last segment ('Vcl.Controls' and 'FMX.Controls') share a norm
+      and must NOT be updated together. }
+    QUpdate.Connection:= FConn;
+    QUpdate.SQL.Text:= 'UPDATE unit_uses SET target_file_id = :tid ' +
+                       'WHERE unit_name_norm = :un AND LOWER(unit_name) = :full ' +
+                       '  AND target_file_id IS NULL';
+    QUpdate.Params.ParamByName('tid' ).DataType:= ftLargeint;
+    QUpdate.Params.ParamByName('un'  ).DataType:= ftString;
+    QUpdate.Params.ParamByName('full').DataType:= ftString;
+    QUpdate.Prepare;
+    for i:= 0 to UsedFulls.Count - 1 do
+    begin
+      Stem:= UsedFulls[i];
+      if Stem = '' then Continue;
+      if not StemToFileId.ContainsKey(Stem) then           // rule A missed
+      begin
+        if Pos('.', Stem) > 0 then Continue;               // rule B is bare-only
+        if not SegToStem.TryGetValue(Stem, Seen) then Continue;
+        if Seen = CStemAmbiguous then Continue;            // 2+ stems -- decline
+        Stem:= Seen;                                       // rule B hit
+      end;
+      if not StemToFileId.TryGetValue(Stem, Fid) then Continue;
+      QUpdate.ParamByName('tid' ).AsLargeInt:= Fid;
+      QUpdate.ParamByName('un'  ).AsString  := UsedNorms[i];
+      QUpdate.ParamByName('full').AsString  := UsedFulls[i];
       QUpdate.ExecSQL;
     end;
   finally
-    QUpdate.Free;
-    QFiles.Free;
+    QUpdate    .Free;
+    QNames     .Free;
+    QFiles     .Free;
+    UsedFulls  .Free;
+    UsedNorms  .Free;
+    SegToStem  .Free;
     StemToFileId.Free;
   end; // try
 end; // procedure
@@ -3899,23 +4026,60 @@ end;
 
 procedure TSQLiteSymbolStore.ResolveAncestry;
 { Whole-DB pass: for each class/interface with heritage text, split it, resolve
-  each ancestor to a defining class/interface symbol (preferring one in scope of
-  the declaring file via the unit_uses graph), and rebuild type_ancestors.
-  Mirrors ResolveUnitUseTargets: pull everything, resolve in memory, batch write. }
+  each ancestor to a defining class/interface symbol in the scope of the
+  declaring unit, and rebuild type_ancestors.
+  Mirrors ResolveUnitUseTargets: pull everything, resolve in memory, batch write.
+
+  Task 4: the disambiguation is PickAncestorCandidateByScope -- the same
+  function the query-time resolver (ResolveTypeNameToClass.PickCandidate)
+  calls, gathering the same scope facts the same way. It used to be a private
+  nested CandInScope over unit_uses.target_file_id, which had two consequences
+  worth remembering:
+    * it tested the RESOLVED uses graph, and that column was NULL for every
+      dotted `uses` row (the criterion-12 bug, see ResolveUnitUseTargets), so
+      whole namespaces had NO scope at all and every ambiguous ancestor in
+      them was declined -- Vcl.StdCtrls.TCustomEdit's 'TWinControl' edge was
+      written as ancestor_kind='?' for exactly this reason;
+    * the two sides could drift apart, because the precedence lived twice.
+  Now the precedence lives once, and the scope test is TEXTUAL, so it needs no
+  re-index to be correct on databases already on disk.
+
+  THE ANCHOR IS DELIBERATELY NOT SUPPLIED HERE (the '' passed as
+  AScopeFrameworkAnchor below). FrameworkAnchorForFile derives its answer by
+  climbing type_ancestors -- the very table this pass DELETEs and rebuilds --
+  so mid-rebuild it would read a half-written table and its answer would
+  depend on row order. '' is within that parameter's contract ("not derived")
+  and costs only rule 3 for a LEGACY UNDOTTED scope unit, which the query-time
+  climb still rescues with a real anchor once this pass has committed. A
+  DOTTED scope unit derives rule 3's segment from its own name and is
+  unaffected. This is also why FAnchorCache.Clear below stays sufficient:
+  nothing inside this pass can populate that cache. }
 var
   Q          : TFDQuery                            ;
   QIns       : TFDQuery                            ;
   NameToCands: TObjectDictionary<string, TList<TSymbol>>;
-  FileScope  : TObjectDictionary<Int64,  TList<Int64>>  ;
+  { Scope facts per file, gathered exactly as ResolveTypeNameToClass's
+    LoadScopeNames gathers them for one file: the file's own unit name, and
+    the lowercased union of its own unit names with the textual
+    unit_uses.unit_name entries. }
+  FileUnit   : TDictionary<Int64, string>          ;
+  FileUses   : TObjectDictionary<Int64, TDictionary<string, Boolean>>;
   Lc         : string                             ;
   Sym        : TSymbol                            ;
+  Chosen     : TSymbol                            ; // the scope rule's pick, Id = 0 on a decline
+  ScopeUnit  : string                             ; // inheriting file's own unit name ('' if none)
+  ScopeUses  : TDictionary<string, Boolean>       ; // its scope-name set (nil if none)
 
-  function CandInScope(ADeclFile, ACandFile: Int64): Boolean;
-  var L: TList<Int64>;
+  procedure NoteScopeName(AFileId: Int64; const AName: string);
+  var D: TDictionary<string, Boolean>;
   begin
-    Result:= (ADeclFile = ACandFile);
-    if Result then Exit;
-    if FileScope.TryGetValue(ADeclFile, L) then Result:= L.IndexOf(ACandFile) >= 0;
+    if (AFileId <= 0) or (AName = '') then Exit;
+    if not FileUses.TryGetValue(AFileId, D) then
+    begin
+      D:= TDictionary<string, Boolean>.Create;
+      FileUses.Add(AFileId, D);
+    end;
+    D.AddOrSetValue(LowerCase(AName), True);
   end;
 
 begin
@@ -3923,28 +4087,36 @@ begin
     which this pass is about to DELETE and rebuild -- drop them before the
     rebuild rather than serve a pre-rebuild anchor afterwards. Matters only when
     one process both indexes and queries through the same store instance; on a
-    query-only open the cache is simply empty here. }
+    query-only open the cache is simply empty here. Nothing in this pass calls
+    FrameworkAnchorForFile (see the header note on the '' anchor), so the cache
+    cannot be re-poisoned between here and the commit. }
   FAnchorCache.Clear;
   NameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
-  FileScope  := TObjectDictionary<Int64,  TList<Int64>>.Create([doOwnsValues]);
+  FileUnit   := TDictionary<Int64, string>.Create;
+  FileUses   := TObjectDictionary<Int64, TDictionary<string, Boolean>>.Create([doOwnsValues]);
   Q   := TFDQuery.Create(nil);
   QIns:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    { 1. candidate class/interface symbols, indexed by lowercased simple name. }
-    Q.SQL.Text:= 'SELECT id, file_id, kind, name, heritage, start_line, end_line ' +
+    { 1. candidate class/interface symbols, indexed by lowercased simple name.
+      qualified_name is load-bearing: PickAncestorCandidateByScope derives each
+      candidate's DECLARING UNIT from it (DeclaringUnitOfQName) for rules 2
+      and 3. Without it every candidate looks unit-less and both rules go
+      silent. }
+    Q.SQL.Text:= 'SELECT id, file_id, kind, name, qualified_name, heritage, start_line, end_line ' +
                  'FROM symbols WHERE kind IN (''class'',''interface'')';
     Q.Open;
     while not Q.Eof do
     begin
       Sym:= Default(TSymbol);
-      Sym.Id       := Q.FieldByName('id'        ).AsLargeInt;
-      Sym.FileId   := Q.FieldByName('file_id'   ).AsLargeInt;
-      Sym.Kind     := TSymbolKind.FromText(Q.FieldByName('kind').AsString);
-      Sym.Name     := Q.FieldByName('name'      ).AsString;
-      Sym.Heritage := Q.FieldByName('heritage'  ).AsString;
-      Sym.StartLine:= Q.FieldByName('start_line').AsInteger;
-      Sym.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
+      Sym.Id           := Q.FieldByName('id'            ).AsLargeInt;
+      Sym.FileId       := Q.FieldByName('file_id'       ).AsLargeInt;
+      Sym.Kind         := TSymbolKind.FromText(Q.FieldByName('kind').AsString);
+      Sym.Name         := Q.FieldByName('name'          ).AsString;
+      Sym.QualifiedName:= Q.FieldByName('qualified_name').AsString;
+      Sym.Heritage     := Q.FieldByName('heritage'      ).AsString;
+      Sym.StartLine    := Q.FieldByName('start_line'    ).AsInteger;
+      Sym.EndLine      := Q.FieldByName('end_line'      ).AsInteger;
       Lc:= LowerCase(Sym.Name);
       if not NameToCands.ContainsKey(Lc) then NameToCands.Add(Lc, TList<TSymbol>.Create);
       NameToCands[Lc].Add(Sym);
@@ -3973,15 +4145,31 @@ begin
             if (Cl[CI].Heritage.Trim = '') and (Cl[CI].EndLine <= Cl[CI].StartLine) then
               Cl.Delete(CI);
       end;
-    { 2. per-file in-scope set: the resolved target_file_id of each used unit. }
-    Q.SQL.Text:= 'SELECT file_id, target_file_id FROM unit_uses WHERE target_file_id IS NOT NULL';
+    { 2. per-file SCOPE FACTS. Deliberately TEXTUAL, and deliberately the same
+      two queries LoadScopeNames runs per file at query time -- the file's own
+      unit name(s), then every unit_uses.unit_name as written. Nothing here
+      reads target_file_id, so an index whose uses graph was never resolved
+      (every index built before the criterion-12 fix) resolves ancestors just
+      as well as a freshly built one; a re-index is an improvement to the
+      OTHER consumers of that column, not a precondition for correct ancestry.
+      ORDER BY id makes "the file's own unit name" the lowest-id unit symbol in
+      the file, matching LoadScopeNames' first row for that file. }
+    Q.SQL.Text:= 'SELECT file_id, name FROM symbols WHERE kind = ''unit'' ORDER BY id';
     Q.Open;
     while not Q.Eof do
     begin
-      var Fid:= Q.FieldByName('file_id'       ).AsLargeInt;
-      var Tid:= Q.FieldByName('target_file_id').AsLargeInt;
-      if not FileScope.ContainsKey(Fid) then FileScope.Add(Fid, TList<Int64>.Create);
-      FileScope[Fid].Add(Tid);
+      var Fid  := Q.Fields[0].AsLargeInt;
+      var UName:= Q.Fields[1].AsString  ;
+      if (Fid > 0) and (UName <> '') and not FileUnit.ContainsKey(Fid) then FileUnit.Add(Fid, UName);
+      NoteScopeName(Fid, UName);
+      Q.Next;
+    end;
+    Q.Close;
+    Q.SQL.Text:= 'SELECT file_id, unit_name FROM unit_uses';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      NoteScopeName(Q.Fields[0].AsLargeInt, Q.Fields[1].AsString);
       Q.Next;
     end;
     Q.Close;
@@ -4013,28 +4201,28 @@ begin
           var Cands  : TList<TSymbol>;
           if NameToCands.TryGetValue(LowerCase(AncName), Cands) then
           begin
-            var InScopeIdx  := -1;
-            var InScopeCount:= 0;
-            for var ci:= 0 to Cands.Count - 1 do
-              if CandInScope(SymFile, Cands[ci].FileId) then
-              begin
-                Inc(InScopeCount);
-                if InScopeIdx < 0 then InScopeIdx:= ci;
-              end;
-            { Resolve when unambiguous: exactly one in-scope candidate, or (none
-              in scope) a single global definition. Otherwise leave unresolved
-              (FP policy: when unsure, don't claim). }
-            if InScopeCount = 1 then
+            { A single global definition needs no disambiguation -- the same
+              short-circuit PickCandidate makes at query time, and the reason
+              the stub filter in step 1b matters so much. Otherwise hand the
+              field to the ONE shared scope rule. It declines (Id = 0) when no
+              rule narrows the field to one, and a decline is written out as
+              ancestor_kind='?' exactly as before: when unsure, don't claim. }
+            if Cands.Count = 1 then Chosen:= Cands[0]
+            else
             begin
-              RSymId := Cands[InScopeIdx].Id;
-              RFileId:= Cands[InScopeIdx].FileId;
-              RKind  := Cands[InScopeIdx].Kind.ToText;
-            end
-            else if (InScopeCount = 0) and (Cands.Count = 1) then
+              ScopeUnit:= '' ;
+              ScopeUses:= nil;
+              FileUnit.TryGetValue(SymFile, ScopeUnit);
+              FileUses.TryGetValue(SymFile, ScopeUses);
+              { '' anchor: see this procedure's header -- type_ancestors is
+                mid-rebuild here, so no anchor can honestly be derived. }
+              Chosen:= PickAncestorCandidateByScope(Cands.ToArray, SymFile, ScopeUnit, ScopeUses, '');
+            end;
+            if Chosen.Id > 0 then
             begin
-              RSymId := Cands[0].Id;
-              RFileId:= Cands[0].FileId;
-              RKind  := Cands[0].Kind.ToText;
+              RSymId := Chosen.Id;
+              RFileId:= Chosen.FileId;
+              RKind  := Chosen.Kind.ToText;
             end;
           end;
           QIns.ParamByName('sid').AsLargeInt:= SymId;
@@ -4065,7 +4253,8 @@ begin
     QIns.Free;
     Q.Free;
     NameToCands.Free;
-    FileScope.Free;
+    FileUses.Free;
+    FileUnit.Free;
   end; // try
 end; // procedure
 
