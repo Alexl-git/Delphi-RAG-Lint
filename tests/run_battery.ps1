@@ -47,6 +47,26 @@
   PowerShell array binding, which `pwsh -File` does not do). Both switches print
   a "this is NOT the full battery" banner, in the header AND in the summary.
 
+  A BATTERY NUMBER IS A PROPERTY OF A TREE, NOT OF A COMMIT (register K41)
+  -----------------------------------------------------------------------
+  A clean checkout of c4b78d0 enumerates 192 executed / 193 found; the working
+  tree this phase was done in enumerates 194 / 195, because two runners
+  (run_hover_callsite.ps1, run_typeat_generic_member.ps1) are UNTRACKED files
+  that exist only there. Every report in the phase quoted the larger pair as if
+  it described the commit. So this script now prints WHICH TREE it counted in --
+  the path, the commit, whether the tree is dirty, and how many of the runners it
+  found are untracked -- and any report quoting the denominator must quote that
+  line with it.
+
+  The same divergence has a second half that is not about counting: reproducing a
+  green battery in a fresh checkout also needs a `rules` directory beside the exe,
+  and without it a batch of runners fails for a reason none of them states. The
+  tracked source is rules\ at the repo root (112 files); the copies beside the
+  exe are gitignored (.gitignore:14 `Win64/`, :63 `third_party/*/rules/`) and
+  nothing stages them, so a clone has none. That is now a LOUD, NAMED
+  precondition printed before the first runner starts, instead of N obscure
+  failures a hundred lines later.
+
   Exit codes
   ----------
     0  every runner in the enumerated set passed
@@ -140,10 +160,37 @@ if ($Include.Count -gt 0) {
   $kept = @($kept | Where-Object { MatchesAny (RelPath $_.FullName) $Include })
 }
 
+# --- WHICH TREE is this? (register K41) ------------------------------------
+# The denominator below is a property of THIS tree. Print the tree beside it so a
+# report cannot quote one without the other, and count the enumerated runners
+# that are UNTRACKED -- those are exactly the files that make this tree's number
+# differ from a clean checkout's.
+$gitHead = ''; $gitDirty = ''; $untrackedRunners = @()
+try {
+  Push-Location $repoRoot
+  $gitHead = (git rev-parse --short HEAD 2>$null | Out-String).Trim()
+  $porcelain = @(git status --porcelain 2>$null)
+  $gitDirty = if ($porcelain.Count -gt 0) { "DIRTY ($($porcelain.Count) entr(ies))" } else { 'clean' }
+  $trackedSet = @{}
+  foreach ($t in @(git ls-files -- 'tests' 2>$null)) { $trackedSet[$t.ToLowerInvariant()] = $true }
+  if ($trackedSet.Count -gt 0) {
+    $untrackedRunners = @($allRunners | Where-Object { -not $trackedSet.ContainsKey((RelPath $_.FullName).ToLowerInvariant()) })
+  }
+} catch { } finally { Pop-Location }
+
 # --- Print the denominator BEFORE running anything -------------------------
 Write-Host ''
 Write-Host '=== drag-lint battery ===' -ForegroundColor Cyan
+Write-Host ("  tree                                             : {0}" -f $repoRoot) -ForegroundColor Cyan
+Write-Host ("  commit / worktree state                          : {0} / {1}" -f `
+            $(if ($gitHead) { $gitHead } else { '(git unavailable)' }), `
+            $(if ($gitDirty) { $gitDirty } else { 'unknown' })) -ForegroundColor Cyan
 Write-Host ("  runners found under tests\ (run_*.ps1, recursive) : {0}" -f $totalFound)
+Write-Host ("  ... of which UNTRACKED in this tree              : {0}" -f $untrackedRunners.Count) `
+           -ForegroundColor $(if ($untrackedRunners.Count -gt 0) { 'Yellow' } else { 'Gray' })
+foreach ($u in $untrackedRunners) {
+  Write-Host ("      {0}  -- exists only in THIS tree; a clean checkout does not enumerate it" -f (RelPath $u.FullName)) -ForegroundColor Yellow
+}
 Write-Host ("  excluded by policy                               : {0}" -f $excluded.Count)
 foreach ($k in $DefaultExclusions.Keys) {
   Write-Host ("      {0}  -- {1}" -f $k, $DefaultExclusions[$k]) -ForegroundColor DarkGray
@@ -194,6 +241,36 @@ $bySuite = $kept | Group-Object {
 Write-Host '  by suite:'
 foreach ($g in $bySuite) { Write-Host ("      {0,-16} {1}" -f $g.Name, $g.Count) }
 Write-Host ''
+
+# --- PRECONDITION: the rule catalogue beside the exe (register K41) ---------
+# Several autofix/autotest runners invoke the exe with no --rules-dir, so it
+# resolves <exe-dir>\rules. That directory is GITIGNORED and nothing stages it,
+# so a fresh checkout has none and those runners fail without ever saying why --
+# the same trap that made T4d fix round 1's first blast-radius measurement fake.
+# Say it here, once, loudly, naming the tracked source and the fix.
+$rulesSrc = Join-Path $repoRoot 'rules'
+$rulesDsts = @('src\cli\Win64\Debug\rules', 'third_party\dll-win64\rules')
+$missingRules = @($rulesDsts | Where-Object {
+  $p = Join-Path $repoRoot $_
+  (-not (Test-Path -LiteralPath $p)) -or
+  (@(Get-ChildItem -LiteralPath $p -File -Filter '*.scm' -ErrorAction SilentlyContinue).Count -eq 0)
+})
+if ($missingRules.Count -gt 0) {
+  Write-Host '  *** PRECONDITION MISSING: no rule catalogue beside the exe ***' -ForegroundColor Red
+  foreach ($m in $missingRules) { Write-Host ("      absent or empty: {0}" -f $m) -ForegroundColor Red }
+  Write-Host  '      Runners that invoke the exe without --rules-dir resolve <exe-dir>\rules and' -ForegroundColor Red
+  Write-Host  '      will fail WITHOUT naming this as the cause. The tracked source is rules\ at' -ForegroundColor Red
+  Write-Host  '      the repo root; the copies beside the exe are gitignored and nothing stages' -ForegroundColor Red
+  Write-Host  '      them, so a fresh clone never has them. Fix:' -ForegroundColor Red
+  foreach ($m in $missingRules) {
+    Write-Host ("        Copy-Item ""{0}\*.scm"",""{0}\*.json"" ""{1}\{2}\"" -Force" -f $rulesSrc, $repoRoot, $m) -ForegroundColor Red
+  }
+  Write-Host  '      Continuing anyway -- a battery that refuses to start hides more than it saves.' -ForegroundColor Red
+  Write-Host ''
+} else {
+  Write-Host ("  rule catalogue beside the exe                     : present ({0})" -f ($rulesDsts -join ', ')) -ForegroundColor Gray
+  Write-Host ''
+}
 
 if ($List) {
   foreach ($r in $kept) { Write-Host (RelPath $r.FullName) }
@@ -273,6 +350,13 @@ Write-Host ''
 Write-Host '=== battery summary ===' -ForegroundColor Cyan
 Write-Host ("  {0} pass / {1} fail / {2} timeout out of {3} executed  (of {4} found)" -f `
             $pass, $fail.Count, $timeout.Count, $results.Count, $totalFound)
+# K41: the denominator above is a property of THIS tree. Repeated here because a
+# report quotes the tail, not the header -- the same reason the narrowing banner
+# is repeated below.
+Write-Host ("  counted in: {0}  @ {1} ({2}){3}" -f `
+            $repoRoot, $(if ($gitHead) { $gitHead } else { '(git unavailable)' }), $gitDirty, `
+            $(if ($untrackedRunners.Count -gt 0) { "  -- INCLUDING $($untrackedRunners.Count) UNTRACKED runner(s)" } else { '' })) `
+           -ForegroundColor $(if ($untrackedRunners.Count -gt 0) { 'Yellow' } else { 'Cyan' })
 Write-Host ("  wall clock: {0:N1} min" -f $sw.Elapsed.TotalMinutes)
 # Repeat the narrowing banner in the SUMMARY. A report usually quotes the tail,
 # not the header, so a banner that only appears at the top is a banner a narrowed

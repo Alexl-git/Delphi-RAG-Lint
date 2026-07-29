@@ -92,15 +92,43 @@
   Every top-level directory holding a scannable file is now enumerated and must
   be scanned or excluded with a printed reason.
 
+  .bat AND .cmd ARE NOW SCANNED (register K8, Task 4f)
+  ----------------------------------------------------
+  They were declared `text eol=crlf` and left unscanned, on the stated grounds
+  that "cmd.exe is not merely tolerant of line endings the way dcc is -- label
+  and goto handling can differ -- so does anything depend on these bytes needs
+  its own measurement before a bulk rewrite". The measurement was then taken and
+  it points the other way:
+
+    * all 88 tracked .bat/.cmd carry `attr/text eol=crlf` AND an index blob that
+      is pure LF, so A FRESH CLONE ALREADY PRODUCES ALL 88 AS CRLF. The 19
+      drifted files were working-tree writes, identical in shape to K1 (.ps1) and
+      K3 (.pas/.dfm) -- and the exemption's own hazard argues FOR converting,
+      since CRLF is what cmd.exe natively expects and LF is the anomaly;
+    * NOTHING reads a .bat by bytes. Every .bat a runner touches is either
+      rsvars.bat outside this repo or a build_harness.bat the runner GENERATES
+      into scratch (`grep -n "\.bat" tests --include=*.ps1`);
+    * converting the 19 changed no committed content, proved the same three ways
+      T3k used: LF-normalized md5 unchanged, `git diff` empty, and
+      `git hash-object --path` equal to the index sha, for all 19.
+
+  One real content change came with it: build\_buildruntime32.bat carried an
+  em dash (E2 80 94) in a REM line, the K2 byte sequence, now ASCII.
+
   Checks
   ------
     .ps1                      under src\ tests\ build\ stats\ tools\
     .pas .dpr .dpk .dfm .inc  under src\ tests\ build\ tools\
+    .bat .cmd                 under src\ tests\ build\ tools\
         -> zero lone LF, no BOM, zero bytes >127
     every extension .gitattributes declares `text eol=crlf` is either scanned or
     listed in $DeclaredNotScanned with a reason
-    every top-level directory holding a scannable file is either scanned or
-    listed in $UnscannedRoots with a reason
+    every top-level directory holding a scannable file -- AND the repo root
+    itself, which holds scannable files and is not a directory in that
+    enumeration -- is either scanned or listed in $UnscannedRoots with a reason
+    every entry in $DeliberateFixtures still EXISTS (K12: the exemption banner
+    printed unconditionally, so it could advertise an exemption for a file that
+    had been deleted or renamed)
     .gitattributes still declares the rule this runner asserts
 
   Both bounds -- EXTENSION and DIRECTORY -- are ASSERTED, not described. Nothing
@@ -145,9 +173,28 @@ $DeliberateFixtures = [ordered]@{
   'tests/preprocess/fixtures/bom_main.pas' =
     'tests\preprocess\run_bom.ps1 asserts this file STARTS with EF BB BF and that the preprocessor blanks those 3 bytes without moving any offset. Removing the BOM deletes the test.'
 }
+#
+# K12: this banner used to print UNCONDITIONALLY, so an entry could keep
+# advertising an exemption after the file it exempts had been deleted or
+# renamed -- a note outliving the thing it excuses, which is the same species as
+# a coverage claim nothing enforces. The existence of each exempted path is now
+# ASSERTED, and the note prints only for a file that is actually there.
+$missingFixtures = New-Object System.Collections.Generic.List[string]
 foreach ($k in $DeliberateFixtures.Keys) {
-  Write-Host ("  [NOTE] deliberate violation, exempt: {0}" -f $k) -ForegroundColor DarkGray
-  Write-Host ("         {0}" -f $DeliberateFixtures[$k]) -ForegroundColor DarkGray
+  $fx = Join-Path $Repo ($k -replace '/', '\')
+  if (Test-Path -LiteralPath $fx) {
+    Write-Host ("  [NOTE] deliberate violation, exempt: {0}" -f $k) -ForegroundColor DarkGray
+    Write-Host ("         {0}" -f $DeliberateFixtures[$k]) -ForegroundColor DarkGray
+  } else {
+    $missingFixtures.Add($k)
+  }
+}
+Check 'every deliberate-violation exemption names a file that exists' ($missingFixtures.Count -eq 0) `
+  $(if ($missingFixtures.Count -gt 0) { "missing: $($missingFixtures -join ', ')" } else { "($($DeliberateFixtures.Count) exemption(s))" })
+if ($missingFixtures.Count -gt 0) {
+  Write-Host '        ^ an exemption outlived the fixture it exempts. Delete the entry, or' -ForegroundColor Yellow
+  Write-Host '          restore the file. Leaving it prints a NOTE claiming this guard is' -ForegroundColor Yellow
+  Write-Host '          deliberately skipping something that is not there to skip.' -ForegroundColor Yellow
 }
 
 # --- scan ------------------------------------------------------------------
@@ -160,16 +207,19 @@ $roots = [ordered]@{
   '.dpk' = @('src', 'tests', 'build', 'tools')
   '.dfm' = @('src', 'tests', 'build', 'tools')
   '.inc' = @('src', 'tests', 'build', 'tools')
+  '.bat' = @('src', 'tests', 'build', 'tools')   # K8, see the header
+  '.cmd' = @('src', 'tests', 'build', 'tools')   # zero exist today; scanned anyway
 }
 
 # Extensions .gitattributes declares `text eol=crlf` that this runner does NOT
 # scan, each with the reason. Checked against .gitattributes below, so this list
 # cannot quietly fall out of date and the header cannot claim more than the scan
 # delivers. To scan one, delete its entry and add it to $roots.
-$DeclaredNotScanned = [ordered]@{
-  '.bat' = 'MEASURED, deliberately deferred (register K8). Tracked: 19 drifted of 88 (16 pure LF + 3 MIXED) -- build\ 9, tests\ 8, src\ 1, repo root 1. Whole working tree incl. untracked: 26 drifted of 95, 5 MIXED (build\ 9, tests\ 8, repo root 5, scratchpad\ 3, src\ 1). Commands: `git ls-files --eol -- "*.bat" "*.cmd"` and a byte scan of every .bat/.cmd in the tree. cmd.exe is not merely tolerant of line endings the way dcc is -- label and goto handling can differ -- so "does anything depend on these bytes" needs its own measurement before a bulk rewrite. That measurement is exactly what the deleted baseline skipped; not repeating the mistake in the other direction.'
-  '.cmd' = 'Same family as .bat and the same open measurement. Note there are ZERO tracked .cmd files in the repo, so this entry is forward-looking rather than covering anything that exists today.'
-}
+# EMPTY on purpose since Task 4f closed K8: every extension .gitattributes
+# declares `text eol=crlf` is now scanned. Kept, not deleted, because the
+# assertion below reads it -- a future extension added to .gitattributes must
+# land in $roots or here, and being in neither is a FAILURE.
+$DeclaredNotScanned = [ordered]@{}
 
 # Directories holding scannable extensions that are deliberately OUT of $roots.
 # ASSERTED below, not merely printed: the extension bound was over-claimed once
@@ -180,6 +230,7 @@ $UnscannedRoots = [ordered]@{
   'docs'        = 'docs\examples\ holds third-party reproduction material, some of it UNTRACKED (the DevExpress printer-crash repro, whose PrinterCrashRepro.dpr is lone-LF), whose bytes are part of the reproduction and are not this repo''s to normalize. The two TRACKED units under docs\examples\circular-uses-demo\ were renormalized by T3k anyway, since they are ordinary repo content.'
   'third_party' = 'VENDORED UPSTREAM CODE (delphi-tree-sitter, 16 tracked files). Normalizing it would diverge this copy from upstream and make every future sync a conflict. Named rather than silently omitted, because 6 of its 11 scannable files DO violate the rule: ConsoleReadPasFile.dpr, VCLDemo\DelphiTreeSitterVCLDemo.dpr, VCLDemo\frmDTSLanguage.pas, VCLDemo\frmDTSMain.pas and VCLDemo\frmDTSQuery.pas each carry a UTF-8 BOM, and TreeSitterLib.pas carries one high byte. That is upstream''s encoding choice, not drift in this repo.'
   'scratchpad'  = 'GITIGNORED working scratch (.gitignore:71). Nothing in it is tracked, so there is no repo state to protect; dumptree.dpr and test-ast.pas are both lone-LF and that is harmless.'
+  '(repo root)' = 'The repo ROOT is not a directory in the enumeration below, and it holds scannable files -- 6 .bat as of Task 4f, of which only _bpl_build.bat and deploy-staged.bat are TRACKED; the other four (build.bat, build2.bat, build-task1.bat, build_plugin_win32.bat) are GITIGNORED developer scratch, all lone-LF, and are not this guard''s or this repo''s to rewrite. Unlike src\ tests\ build\ tools\, the root mixes tracked deliverables with personal scratch, and this guard has no way to tell them apart without shelling out to git. Named here rather than left invisible: the two TRACKED root .bat were renormalized by Task 4f (K8) but are NOT policed, so drift in them would go unnoticed. Registered as the residual of K8.'
 }
 $badLf  = New-Object System.Collections.Generic.List[string]
 $badBom = New-Object System.Collections.Generic.List[string]
@@ -277,8 +328,17 @@ foreach ($k in $DeclaredNotScanned.Keys) {
 # the list was incomplete -- third_party\ (11 scannable files, 6 of them
 # violating), tools\ and scratchpad\ were all missing while the header implied
 # full coverage. A bound that cannot fail is not a bound.
+#
+# Task 4f: the enumeration walked DIRECTORIES only, so the repo ROOT -- which is
+# not one of them -- could hold scannable files that neither the scan nor the
+# bound ever mentioned. It does: 6 .bat sit there. A bound that skips the one
+# location it cannot express is the K14 shape again, one level up, so the root
+# is now enumerated as '(repo root)' and must be accounted for like any other.
 $scannedDirs = @($roots.Values | ForEach-Object { $_ } | Sort-Object -Unique)
 $dirsWithScannable = New-Object System.Collections.Generic.List[string]
+$rootHit = Get-ChildItem -Path (Join-Path $Repo '*') -File -Include $($roots.Keys | ForEach-Object { "*$_" }) `
+             -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($null -ne $rootHit) { $dirsWithScannable.Add('(repo root)') }
 foreach ($d in (Get-ChildItem -LiteralPath $Repo -Directory -ErrorAction SilentlyContinue)) {
   if ($d.Name.StartsWith('.')) { continue }   # .git, .superpowers -- no build inputs
   $hit = Get-ChildItem -LiteralPath $d.FullName -Recurse -File -Include $($roots.Keys | ForEach-Object { "*$_" }) `
