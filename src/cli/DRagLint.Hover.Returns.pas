@@ -36,6 +36,14 @@ interface
 ///   <para>* NOTHING for an RHS that does not END on its own line (unbalanced
 ///   parentheses, a trailing binary operator). The capture is single-line; the
 ///   alternative to silence is shipping half an expression.</para>
+///   <para>* NOTHING MINED OUT OF A COMMENT. v(ADP3 T4f, register K23): mining
+///   reads a view with all three comment forms blanked and string literals
+///   KEPT, so a `{ Result := Result + 1; }` is no longer published as a return
+///   value while a function that really returns a literal still is. Removing a
+///   comment mid-expression leaves a gap, since columns must survive for the
+///   nested-scope mask; the gap is marked with COMMENT_MASK and closed in the
+///   captured RHS afterwards, so the rendered sentence has no hole in it AND an
+///   expression the author simply spaced out is reproduced verbatim.</para>
 ///   <para>* A nested routine's Result belongs to that nested routine. The
 ///   caller passes the ENCLOSING routine's whole impl span, so local routines
 ///   and anonymous methods live inside those lines; their scopes are masked out
@@ -94,6 +102,21 @@ const
     recognise "this expression spans a nested routine" and say nothing instead. }
   NESTED_MASK = #1;
 
+  { Stands in for every character of a COMMENT in the mining view (register K23).
+    A SEPARATE sentinel from NESTED_MASK because the two mean opposite things:
+    NESTED_MASK says "this expression reaches into a nested routine, say
+    NOTHING", while this one says "a comment was removed here, close the gap and
+    carry on". And not a space, for the reason the first attempt at this proved:
+    blanking a comment to spaces made a removed inline brace comment
+    indistinguishable from the author's own `AValue  +  1`, so collapsing the
+    gap ALSO normalised
+    source formatting that the miner had always reproduced verbatim -- caught by
+    run_doc_p3_idempotent_edgecases.ps1, whose Scenario A pins exactly that
+    two-space case. With a sentinel, only a gap a comment actually left is
+    closed. Cannot occur in a .pas: this repo's sources are 7-bit ASCII text and
+    #2 is a control byte, the same argument NESTED_MASK rests on. }
+  COMMENT_MASK = #2;
+
 function IsIdentStart(C: Char): Boolean;
 begin
   Result:= (C = '_') or ((C >= 'A') and (C <= 'Z')) or ((C >= 'a') and (C <= 'z'));
@@ -110,6 +133,66 @@ var
 begin
   P:= Pos('//', S);
   if P > 0 then Result:= Copy(S, 1, P - 1) else Result:= S;
+end;
+
+/// <summary>v(ADP3 T4f, register K23): close the gap a REMOVED COMMENT left in a
+/// captured expression, and touch nothing else.</summary>
+/// <param name="S">A captured right-hand side taken from the mining view, in
+/// which every comment has been replaced by COMMENT_MASK, column for column.
+/// </param>
+/// <returns>The same text with each maximal run of COMMENT_MASK -- together
+/// with the spaces immediately around it -- replaced by ONE space, then
+/// trimmed. A string containing no COMMENT_MASK is returned unchanged.</returns>
+/// <remarks>This is the answer to the whitespace question K23 was parked on, and
+/// the SECOND answer: the first collapsed every run of two or more spaces, which
+/// also rewrote author formatting the miner had always reproduced verbatim.
+/// run_doc_p3_idempotent_edgecases.ps1's Scenario A pins `Result := AValue  +
+/// 1;` and went RED on it -- correctly, since nothing about closing a comment
+/// gap licenses editing an expression that has no comment in it.
+///
+/// Columns must survive in the source lines (the nested-scope mask blanks by
+/// column across all three views), so the gap can only be closed HERE, on the
+/// captured string. Quote handling is unnecessary by construction: the mining
+/// view keeps string literals intact and blanks only comments, and a comment
+/// cannot begin inside a literal, so no COMMENT_MASK can ever land between
+/// quotes.</remarks>
+function CollapseCommentGaps(const S: string): string;
+var
+  I, N: Integer;
+  Sb  : TStringBuilder;
+begin
+  N:= Length(S);
+  if (N = 0) or (Pos(COMMENT_MASK, S) = 0) then Exit(Trim(S));
+  Sb:= TStringBuilder.Create;
+  try
+    I:= 1;
+    while I <= N do
+    begin
+      if (S[I] = COMMENT_MASK) or (S[I] = ' ') then
+      begin
+        // One run of masks and the whitespace touching it. Emitted as a single
+        // space ONLY when the run actually contained a mask; a run of plain
+        // spaces is copied through untouched, which is what keeps
+        // `AValue  +  1` intact.
+        var J: Integer:= I;
+        var SawMask: Boolean:= False;
+        while (J <= N) and ((S[J] = COMMENT_MASK) or (S[J] = ' ')) do
+        begin
+          if S[J] = COMMENT_MASK then SawMask:= True;
+          Inc(J);
+        end;
+        if SawMask then Sb.Append(' ')
+        else Sb.Append(Copy(S, I, J - I));
+        I:= J;
+        Continue;
+      end;
+      Sb.Append(S[I]);
+      Inc(I);
+    end;
+    Result:= Trim(Sb.ToString);
+  finally
+    Sb.Free;
+  end;
 end;
 
 { ---------------------------------------------------------------------------
@@ -150,19 +233,52 @@ type
 // code and `Format('Result := Result + 1')` is prose, and a mutation "found"
 // in either DELETES a true <returns> from a routine that has none.
 //
-// The MINING scan deliberately does NOT use this view: mined text is rendered,
-// and blanking a `{AReadOnly=}` in the middle of an expression would leave a
-// hole in the sentence a reader sees (register K23 -- mining out of a comment
-// is a separate, still-open defect).
+// ANoComments is a THIRD view over the same lines: comments blanked, STRING
+// LITERALS LEFT INTACT (register K23, closed in v(ADP3 T4f)). The MINING scan
+// reads this one.
+//
+// It needs to be its own view rather than either of the other two. Mining off
+// the RAW lines is what K23 was: `StripLineComment` handled only `//`, so
+// `{ Result := Result + 1; }` reached the RHS capture and drag-lint's own
+// HoverForm.ReturnLineForBodyLine shipped `Observed: <expr>" (inline for a
+// single` -- prose about this very feature, published as a return value.
+// Mining off ACodeOnly is not the fix either: it blanks literals too, and a
+// function whose return values ARE string literals (IntrinsicSignature, in this
+// repo) would then have nothing left to say. So: comments out, literals in.
+//
+// The whitespace question K23 was left open on is answered in the miner, not
+// here. Removing an inline comment from the middle of an expression leaves a
+// gap, and columns must be preserved (the nested-scope mask blanks by column
+// across all three views), so the gap is written as COMMENT_MASK and closed by
+// CollapseCommentGaps on the captured RHS. Using a SENTINEL rather than spaces
+// is load-bearing: with spaces the miner could not tell a removed comment from
+// author formatting, and closing the gap silently normalised expressions that
+// contained no comment at all.
 procedure TokenizeBody(const ALines: TArray<string>; AToks: TList<TMaskTok>;
-  out ACodeOnly: TArray<string>);
+  out ACodeOnly: TArray<string>; out ANoComments: TArray<string>);
 var
   InBrace, InParenStar: Boolean ;
   Li, I, N, J, Q      : Integer ;
-  Ln, Code            : string  ;
+  Ln, Code, NoCom     : string  ;
   T                   : TMaskTok;
 
+  // A COMMENT range: gone from both derived views. A SPACE in the code-only
+  // view (its only reader is the mutation test, which just needs the text not to
+  // be there) and COMMENT_MASK in the mining view, whose output is RENDERED and
+  // therefore has to tell "a comment used to be here" apart from "the author put
+  // two spaces here" -- see CollapseCommentGaps.
   procedure Blank(AFrom, ATo: Integer);
+  var
+    K: Integer;
+  begin
+    if AFrom < 1 then AFrom:= 1;
+    if ATo > N then ATo:= N;
+    for K:= AFrom to ATo do begin Code[K]:= ' '; NoCom[K]:= COMMENT_MASK; end;
+  end;
+
+  // A STRING LITERAL: gone from the code-only view (a mutation "found" inside
+  // one is prose), kept verbatim in the mining view (it can be the answer).
+  procedure BlankCodeOnly(AFrom, ATo: Integer);
   var
     K: Integer;
   begin
@@ -173,12 +289,14 @@ var
 
 begin
   SetLength(ACodeOnly, Length(ALines));
+  SetLength(ANoComments, Length(ALines));
   InBrace:= False;
   InParenStar:= False;
   for Li:= 0 to High(ALines) do
   begin
     Ln:= ALines[Li];
     Code:= Ln;
+    NoCom:= Ln;
     N:= Length(Ln);
     I:= 1;
     while I <= N do
@@ -230,7 +348,7 @@ begin
           end;
           Inc(I);
         end;
-        Blank(Q, I - 1);             // the whole literal, delimiters included
+        BlankCodeOnly(Q, I - 1);     // the whole literal, delimiters included
         Continue;
       end;
       if IsIdentStart(Ln[I]) then
@@ -258,6 +376,7 @@ begin
       Inc(I);
     end;
     ACodeOnly[Li]:= Code;
+    ANoComments[Li]:= NoCom;
   end;
 end;
 
@@ -445,7 +564,8 @@ end;
 //     blanking the entire body. Hence ':' is a token: after the keyword it says
 //     "return type follows", i.e. no name.
 function MaskNestedRoutines(const ABodyLines: TArray<string>;
-  const AQualifiedName: string; out ACodeOnly: TArray<string>): TArray<string>;
+  const AQualifiedName: string; out ACodeOnly: TArray<string>;
+  out ANoComments: TArray<string>): TArray<string>;
 var
   Toks     : TList<TMaskTok> ;
   Stk      : TStack<TNestFrame>;
@@ -461,12 +581,13 @@ begin
   SetLength(Result, Length(ABodyLines));
   for Ti:= 0 to High(ABodyLines) do Result[Ti]:= ABodyLines[Ti];
   ACodeOnly:= nil;
+  ANoComments:= nil;
   if Length(ABodyLines) = 0 then Exit;
 
   Toks:= TList<TMaskTok>.Create;
   Stk := TStack<TNestFrame>.Create;
   try
-    TokenizeBody(ABodyLines, Toks, ACodeOnly);
+    TokenizeBody(ABodyLines, Toks, ACodeOnly, ANoComments);
     Depth:= 0; Paren:= 0;
     HeaderSeen:= False; HavePend:= False; PendNamed:= False;
     PendLine:= 0; PendCol:= 0; PendParen:= 0;
@@ -538,6 +659,7 @@ begin
             if X = T.Line then B:= T.EndCol else B:= MaxInt;
             BlankRange(Result, X, A, B);
             BlankRange(ACodeOnly, X, A, B);
+            BlankRange(ANoComments, X, A, B);
           end;
         end;
       end;
@@ -826,6 +948,7 @@ function MineReturnExpressionsEx(const ABodyLines: TArray<string>;
 var
   Masked : TArray<string>               ;
   Code   : TArray<string>               ;
+  NoCom  : TArray<string>               ;
   Seen   : TDictionary<string, Boolean> ;
   Ordered: TList<TReturnMined>          ;
   Rhs    : string                       ;
@@ -833,7 +956,7 @@ var
   i      : Integer                      ;
 begin
   Result:= nil;
-  Masked:= MaskNestedRoutines(ABodyLines, AQualifiedName, Code);
+  Masked:= MaskNestedRoutines(ABodyLines, AQualifiedName, Code, NoCom);
   // Absence over wrong: a mutated Result makes every whole-Result assignment
   // below a seed, and naming a seed claims a value the routine may never return.
   // Asked of the CODE-ONLY view -- suppression is destructive, so a mutation
@@ -842,10 +965,16 @@ begin
   Seen:= TDictionary<string, Boolean>.Create;
   Ordered:= TList<TReturnMined>.Create;
   try
-    for i:= 0 to High(Masked) do
+    // v(ADP3 T4f, register K23): mined from the NO-COMMENT view, not from
+    // Masked. Masked is the raw body with nested scopes blanked, so a
+    // `{ Result := Result + 1; }` still reached the capture and was published as
+    // a return value. NoCom is the same lines with comments blanked and STRING
+    // LITERALS KEPT -- Code would have taken the literals too, and this repo has
+    // a function (IntrinsicSignature) whose return values are literals.
+    for i:= 0 to High(NoCom) do
     begin
-      Rhs:= ResultRhs(Masked[i]);
-      if Rhs = '' then Rhs:= ExitRhs(Masked[i]);
+      Rhs:= CollapseCommentGaps(ResultRhs(NoCom[i]));
+      if Rhs = '' then Rhs:= CollapseCommentGaps(ExitRhs(NoCom[i]));
       if (Rhs <> '') and not Seen.ContainsKey(Rhs) then
       begin
         Seen.Add(Rhs, True);

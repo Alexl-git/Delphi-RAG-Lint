@@ -558,15 +558,25 @@ Check 'NOT-CODE: ParenStarSetLength renders "''p'' + IntToStr(A)" -- a SetLength
 Check 'NOT-CODE: StrLiteralResult renders the WHOLE Format call -- "Result := Result + 1" inside a literal is prose, not a mutation' `
   ((Get-Observed $blocks['StrLiteralResult']) -eq "Format('Result := Result + 1; %d', [A])") `
   ($blocks['StrLiteralResult'] -replace "`n",' | ')
-# BraceCommentSelfRef documents an OPEN defect as well as a closed one. The
-# false SUPPRESSION is gone -- its real return A + 200 is named again -- but the
-# MINING side still reads `Result := Result + 1` out of the comment and lists it
-# first. That is register K23, deliberately still open, because mined text is
-# RENDERED and blanking comments there has to decide what to leave behind. The
-# expectation is pinned verbatim INCLUDING the leak, so when K23 is fixed this
-# line reddens and names itself rather than the leak vanishing unnoticed.
-Check 'NOT-CODE: BraceCommentSelfRef names its real return A + 200 (still preceded by the comment''s own "Result + 1" -- K23, open)' `
-  ((Get-Observed $blocks['BraceCommentSelfRef']) -eq 'Result + 1; A + 200') `
+# BraceCommentSelfRef used to document an OPEN defect beside a closed one: the
+# false SUPPRESSION was gone, but the MINING side still read
+# `Result := Result + 1` out of the {...} comment and listed it FIRST, so the
+# expectation was pinned verbatim INCLUDING the leak ('Result + 1; A + 200') so
+# that closing it would redden a line naming itself.
+#
+# v(ADP3 T4f): K23 IS CLOSED and this is that line, updated. Mining now reads a
+# view with comments blanked and STRING LITERALS KEPT -- a third view, because
+# the code-only view used by the mutation test would also have taken the
+# literals, and StrLiteralResult two checks above proves a literal can BE the
+# answer. The expectation is now the routine's real return alone.
+Check 'NOT-CODE: BraceCommentSelfRef names its real return A + 200 and NOTHING from the comment (K23, closed)' `
+  ((Get-Observed $blocks['BraceCommentSelfRef']) -eq 'A + 200') `
+  ($blocks['BraceCommentSelfRef'] -replace "`n",' | ')
+# The de-vacuator for the line above, and it is not the same assertion: an
+# ABSENT <returns> also satisfies "does not contain Result + 1". This says the
+# comment's text is gone AND the block still says something.
+Check 'NOT-CODE: BraceCommentSelfRef''s block exists and carries NO "Result + 1" from inside the comment' `
+  (($blocks['BraceCommentSelfRef'] -match 'Observed:') -and -not ($blocks['BraceCommentSelfRef'] -match 'Result \+ 1')) `
   ($blocks['BraceCommentSelfRef'] -replace "`n",' | ')
 
 # --- (2c) The nested call is captured whole, not truncated at a paren. ------

@@ -1,0 +1,10 @@
+# Register K32. The query was `((inherited) @warn)` -- it matched EVERY inherited
+# node, so a qualified call raised a finding whose own message says BARE.
+# Line 45 is the only bare `inherited;` in the fixture.
+inherited-bare 45
+# The two QUALIFIED forms must not fire. Both are (rule, line) pairs rather than
+# a blanket !inherited-bare, because the rule DOES fire in this file: a blanket
+# form would be satisfied only by the rule never firing at all, and asserting
+# that would contradict the line above.
+!inherited-bare 39
+!inherited-bare 50

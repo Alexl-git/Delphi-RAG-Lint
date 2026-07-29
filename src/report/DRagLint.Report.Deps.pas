@@ -354,8 +354,16 @@ begin
               if FileIdToGlobal.TryGetValue((Int64(StoreIdx) shl 40) or TargetFid, TargetGlobal) then
                 Edge.TargetFileId:= TargetGlobal;
             end;
+            { v(ADP3 T4f, register K39): full stem first, dotted tail second --
+              the same two-pass order ResolveUnitUseTargets uses, and the same
+              fix as DoUsesReport's copy of this fallback. AStemToGlobal is keyed
+              on the FULL lowercased basename stem, so looking it up with
+              UnitNameNorm (the dotted TAIL) could never hit for a dotted unit:
+              the tail-vs-stem mismatch T4d fixed in the live path, surviving in
+              the cross-DB fallback that runs exactly when target_file_id is NULL. }
             if Edge.TargetFileId = -1 then
-              if AStemToGlobal.TryGetValue(Edge.UnitNameNorm, TargetGlobal) then Edge.TargetFileId:= TargetGlobal;
+              if AStemToGlobal.TryGetValue(LowerCase(Edge.UnitName), TargetGlobal) then Edge.TargetFileId:= TargetGlobal
+              else if AStemToGlobal.TryGetValue(Edge.UnitNameNorm, TargetGlobal) then Edge.TargetFileId:= TargetGlobal;
 
             if not PerStore.ContainsKey(GlobalIdx) then PerStore.Add(GlobalIdx, TList<TDepsUsesEdge>.Create);
             PerStore[GlobalIdx].Add(Edge);

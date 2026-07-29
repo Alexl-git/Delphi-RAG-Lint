@@ -387,11 +387,22 @@ end;
 
 // True for identifiers that appear as 'Word(' but are Pascal reserved words /
 // control-flow / typecasts, not real call targets. Kept out of the Calls list.
+//
+// v(ADP3 T4f, register K24): the four ROUTINE keywords are here now. The Calls
+// body-scan matches `Identifier(`, and an anonymous method or a procedural type
+// writes exactly that -- `F := function(A: Integer): Integer` -- so every
+// routine holding one rendered a callee literally named 'function'. Visible in
+// T4b's own fixture output: AnonHost and InlineProcVar both emitted
+// `/// Calls: F, function`. A word that is a reserved word cannot be a call
+// target, which is the same reason the other fourteen are here; these four were
+// simply never added because nothing in the corpora that built this list had an
+// anonymous method in it.
 function IsCallSkipWord(const AWord: string): Boolean;
 const
-  SKIP: array[0..13] of string = (
+  SKIP: array[0..17] of string = (
     'if', 'while', 'for', 'case', 'with', 'and', 'or', 'not', 'in',
-    'array', 'set', 'string', 'to', 'downto');
+    'array', 'set', 'string', 'to', 'downto',
+    'function', 'procedure', 'constructor', 'destructor');
 var W: string;
 begin
   W:= LowerCase(AWord);

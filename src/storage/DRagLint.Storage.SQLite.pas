@@ -65,7 +65,15 @@ type
       FQDeleteFileUnitUses   : TFDQuery;
       FQGetFileUnitUses      : TFDQuery;
       FQFindUsersOfUnit      : TFDQuery;
-      FQResolveUnitUseTargets: TFDQuery;
+      { v(ADP3 T4f, register K34): FQResolveUnitUseTargets is GONE. It was built
+        and Prepare'd here and freed in the destructor, and nothing ever called
+        ExecSQL on it -- the work is done in Pascal by ResolveUnitUseTargets,
+        whose header says why. Deleting it changed no behaviour; leaving it was
+        the hazard. Its SQL compared a file's basename STEM against
+        unit_uses.unit_name_norm, which is the dotted TAIL, i.e. exactly the
+        mismatch T4d fixed in the live path -- so the next reader to "fix" the
+        Pascal by making it agree with the SQL would have reintroduced the
+        defect from a statement that had never run. }
       { Task 4d: memo for the ancestor climb's late name resolution, keyed
         '<scopeFileId>|<lowercased type name>'. Without it the climb re-runs a
         full scope load + a name lookup for the SAME (file, name) pair on every
@@ -401,7 +409,6 @@ begin
   FQDeleteFileUnitUses.Free;
   FQGetFileUnitUses.Free;
   FQFindUsersOfUnit.Free;
-  FQResolveUnitUseTargets.Free;
   if Assigned(FConn) then
   begin
     if FConn.Connected then FConn.Close;
@@ -766,7 +773,27 @@ begin
     'VALUES (:fid, :sid, :src, :kind, :owner, :txt, :sl, :sc, :el, :ec)');
   FQDeleteFileStringLiterals:= NewQuery('DELETE FROM string_literals WHERE file_id = :fid');
   FQFindByName          := NewQuery( 'SELECT * FROM symbols WHERE name = :name ORDER BY qualified_name');
-  FQFindByQName         := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname'             );
+  // v(ADP3 T4f, register K29): this had NO ORDER BY, while its neighbour above
+  // does. An index legitimately holds several rows for one qualified name --
+  // YADF has duplicate `files` rows for one path that differ only in
+  // drive-letter case, and YADF.Layout.TightenAnchorSpacingInLine has THREE
+  // symbol rows -- so `hover --qname`, which takes Syms[0], was showing whatever
+  // the query planner happened to emit first. Not "the first duplicate" in any
+  // defined sense: an index rebuild, a VACUUM or a schema change could move it
+  // with no line of code changing, and a user could be shown a STALE row while a
+  // fresh one sat in the same DB.
+  //
+  // Ordered now, most-useful first and then fully deterministic:
+  //   1. a row with an implementation body before a forward-declaration stub --
+  //      the body is what a reader hovering a name wants, and a stub carries no
+  //      Calls / Returns / Complexity facts at all;
+  //   2. then file_id, start_line, id -- three columns that cannot tie, so the
+  //      answer is reproducible across rebuilds rather than merely stable today.
+  // This does NOT make duplicate rows correct; indexer-side path normalisation
+  // is still the other half of K29 and is not done here.
+  FQFindByQName         := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname ' +
+    'ORDER BY (CASE WHEN impl_start_line IS NOT NULL AND impl_start_line > 0 THEN 0 ELSE 1 END), ' +
+    'file_id, start_line, id');
   FQCountSymbols        := NewQuery('SELECT COUNT(*) AS n FROM symbols'                                );
   FQCountFiles          := NewQuery('SELECT COUNT(*) AS n FROM files'                                  );
 
@@ -924,16 +951,14 @@ begin
   FQFindUsersOfUnit.Params.ParamByName('un').DataType:= ftString;
   FQFindUsersOfUnit.Prepare;
 
-  // Resolves target_file_id for every unit_uses row whose unit_name_norm
-  // matches the lower-cased basename (stem) of some files.path entry.
-  // Run once after a full index pass; safe to re-run (UPDATE is idempotent).
-  // Uses LOWER + substr math because sqlite's basename trick (replace ext)
-  // would over-match. Path separators normalised to '/'.
-  FQResolveUnitUseTargets:= NewQuery(
-    'UPDATE unit_uses SET target_file_id = (' + '  SELECT f.id FROM files f ' + '  WHERE LOWER(' + '    REPLACE(' + '      SUBSTR(' +
-    '        SUBSTR(f.path, 1 + LENGTH(f.path) - INSTR(' + '          REPLACE(REPLACE(f.path, ''\'', ''/''), ''/'', '''') || ''/'',' + '          ''/'')), 1)' +
-    '      , ''.pas'', '''')' + '  ) = unit_uses.unit_name_norm ' + '  LIMIT 1) ' + 'WHERE target_file_id IS NULL');
-  FQResolveUnitUseTargets.Prepare;
+  // v(ADP3 T4f, register K34): an UPDATE statement resolving target_file_id from
+  // SQL used to be built and Prepare'd here. It was DEAD -- nothing ever called
+  // ExecSQL on it -- and its predicate compared a file's basename STEM against
+  // unit_uses.unit_name_norm, which is the dotted TAIL. That is precisely the
+  // mismatch T4d fixed in ResolveUnitUseTargets (see its header), so the
+  // statement was a live trap: it looked like the authority the Pascal was
+  // duplicating, and anyone reconciling the two toward it would have restored
+  // the defect. The Pascal is the only implementation and always was.
   FStatementsPrepared:= True;
 end; // begin
 

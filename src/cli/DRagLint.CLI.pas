@@ -5892,8 +5892,21 @@ var
               TargetFid:= QUses.FieldByName('target_file_id').AsLargeInt;
               if FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or TargetFid, TargetGlobal) then Edge.TargetFileId:= TargetGlobal;
             end;
+            { v(ADP3 T4f, register K39): TWO passes, most specific first, the same
+              order ResolveUnitUseTargets uses. StemToGlobal is keyed on the FULL
+              lowercased basename stem ('vcl.controls'), and this used to look it
+              up with Edge.UnitNameNorm, which is the dotted TAIL ('controls') --
+              the exact tail-vs-stem mismatch T4d fixed in the live path, sitting
+              in the fallback that only runs when target_file_id is NULL, i.e.
+              precisely when it is needed. For a DOTTED unit it could never hit.
+              Pass 1 is LOWER(unit_name) against the full stem, matching pass 1 of
+              the resolver character for character (no TRIM -- see register K43;
+              normalising here would hide a parser defect rather than fix it).
+              Pass 2 keeps the tail lookup for the legacy shapes pass 1 cannot
+              reach (`uses SysUtils` -> System.SysUtils.pas). }
             if Edge.TargetFileId = -1 then
-              if StemToGlobal.TryGetValue(Edge.UnitNameNorm, TargetGlobal) then Edge.TargetFileId:= TargetGlobal;
+              if StemToGlobal.TryGetValue(LowerCase(Edge.UnitName), TargetGlobal) then Edge.TargetFileId:= TargetGlobal
+              else if StemToGlobal.TryGetValue(Edge.UnitNameNorm, TargetGlobal) then Edge.TargetFileId:= TargetGlobal;
 
             if not PerStore.ContainsKey(GlobalIdx) then PerStore.Add(GlobalIdx, TList<TUsesEdge>.Create);
             PerStore[GlobalIdx].Add(Edge);
@@ -6550,13 +6563,63 @@ begin
   end; // try
 end; // function
 
+/// <summary>v(ADP3 T4f, register K20): the ON-DISK identity of a tree-sitter
+/// grammar DLL the process has ALREADY LOADED -- its real path, mtime and byte
+/// size. Read via GetModuleHandle/GetModuleFileName so it names the module the
+/// loader actually bound, not a path this code guesses next to the exe.</summary>
+/// <param name="AModule">Module name as the import declares it, e.g.
+/// 'tree-sitter-delphi13.dll'.</param>
+/// <returns>'&lt;path&gt;  yyyy-mm-dd hh:nn:ss  N bytes', or 'not loaded' when the
+/// module is not in this process, or 'unknown' when it is loaded but cannot be
+/// stat'ed.</returns>
+/// <remarks>WHY THIS EXISTS AT ALL. `info` printed 'tree-sitter: delphi13 14'
+/// and that 14 is the tree-sitter ABI number, identical for every grammar at
+/// that ABI (dfm prints 14 too) and unchanged as a DLL ages. The grammar team
+/// traced a SIX-WEEK drift and an entire false bug report -- filed against a
+/// parser that was not the one running -- to exactly this, and T4c had to build
+/// a parse-fixture harness because no version string could answer "is this DLL
+/// current". mtime + size cannot answer it either, but unlike the ABI number
+/// they CHANGE when the DLL does, which is the whole ask. A real
+/// tree_sitter_delphi13_grammar_version() export is upstream's standing offer
+/// and remains the better fix.</remarks>
+function TreeSitterModuleStamp(const AModule: string): string;
+var
+  H  : HMODULE                    ;
+  Buf: array[0..MAX_PATH] of Char ;
+  P  : string                     ;
+  Age: TDateTime                  ;
+  SR : TSearchRec                 ;
+  Sz : Int64                      ;
+begin
+  Result:= 'not loaded';
+  H:= GetModuleHandle(PChar(AModule));
+  if H = 0 then Exit;
+  Result:= 'unknown';
+  if GetModuleFileName(H, Buf, Length(Buf)) = 0 then Exit;
+  P:= Buf;
+  if not FileAge(P, Age) then Exit;
+  Sz:= -1;
+  if FindFirst(P, faAnyFile, SR) = 0 then
+  try
+    Sz:= SR.Size;
+  finally
+    System.SysUtils.FindClose(SR);
+  end;
+  Result:= P + '  ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age);
+  if Sz >= 0 then Result:= Result + '  ' + IntToStr(Sz) + ' bytes';
+end;
+
 /// <summary>drag-lint info [--json] -- prints engine self-info: version, build
 /// date (from the exe's own file timestamp), MIT license, description,
-/// tree-sitter grammar versions, capabilities (FTS5, CLI verb count), the exe
-/// path, and the build platform. Read-only; no DB, no side effects. --json emits
-/// the stable schema "info/1"; without it, a human-readable block. Consumed by
-/// the IDE About box.</summary>
+/// tree-sitter ABI numbers AND the on-disk stamp of each loaded grammar DLL,
+/// capabilities (FTS5, CLI verb count), the exe path, and the build platform.
+/// Read-only; no DB, no side effects. --json emits the stable schema "info/1";
+/// without it, a human-readable block. Consumed by the IDE About box.</summary>
 /// <returns>0 always.</returns>
+/// <remarks>v(ADP3 T4f, register K20): the numbers under `tree_sitter` are ABI
+/// versions, not grammar versions, and the text form now says so. `dll_delphi13`
+/// / `dll_dfm` are ADDITIVE to schema info/1 -- `delphi13` and `dfm` keep their
+/// meaning, so an existing consumer (the IDE About box) is unaffected.</remarks>
 function DoInfo(const AArgs: TArgs): Integer;
 var
   UseJson  : Boolean;
@@ -6567,6 +6630,8 @@ var
   Fts5     : Boolean;
   TsDelphi : string;
   TsDfm    : string;
+  TsDelphiDll: string;
+  TsDfmDll   : string;
   JRoot, JTs, JCap: TJSONObject;
 begin
   Result:= 0;
@@ -6578,6 +6643,8 @@ begin
   Fts5:= ProbeFts5Available;                                    { small helper: try/except the FTS5 create, mirrors DoSelfTestFts5 }
   TsDelphi:= TreeSitterGrammarVersion(tree_sitter_delphi13);     { returns 'N' or 'unknown' }
   TsDfm:= TreeSitterGrammarVersion(tree_sitter_dfm);
+  TsDelphiDll:= TreeSitterModuleStamp('tree-sitter-delphi13.dll');
+  TsDfmDll   := TreeSitterModuleStamp('tree-sitter-dfm.dll'      );
 
   if UseJson then
   begin
@@ -6592,6 +6659,11 @@ begin
       JTs:= TJSONObject.Create;
       JTs.AddPair('delphi13', TsDelphi);
       JTs.AddPair('dfm', TsDfm);
+      // K20: 'delphi13'/'dfm' above are ABI numbers. These two are the only
+      // fields in this block that move when the DLL does.
+      JTs.AddPair('abi_note', 'delphi13/dfm are tree-sitter ABI versions, not grammar versions');
+      JTs.AddPair('dll_delphi13', TsDelphiDll);
+      JTs.AddPair('dll_dfm', TsDfmDll);
       JRoot.AddPair('tree_sitter', JTs);
       JCap:= TJSONObject.Create;
       JCap.AddPair('fts5', TJSONBool.Create(Fts5));
@@ -6609,7 +6681,13 @@ begin
     Writeln('drag-lint ', VERSION, '  (built ', BuildDate, ')');
     Writeln('License: MIT');
     Writeln('symbol-aware index + RAG + lint for Delphi/Pascal');
-    Writeln('tree-sitter: delphi13 ', TsDelphi, ' / dfm ', TsDfm);
+    // K20: labelled 'ABI' on purpose. This number is the tree-sitter ABI, it is
+    // the same for every grammar at that ABI, and it does not move when the
+    // grammar is rebuilt -- reading it as a grammar version cost six weeks and a
+    // false bug report. The two lines under it are what actually changes.
+    Writeln('tree-sitter ABI: delphi13 ', TsDelphi, ' / dfm ', TsDfm, '   (ABI, NOT a grammar version)');
+    Writeln('  delphi13 dll: ', TsDelphiDll);
+    Writeln('  dfm      dll: ', TsDfmDll);
     Writeln('capabilities: FTS5=', BoolToStr(Fts5, True), ', CLI verbs=', CLI_VERB_COUNT);
     Writeln('exe: ', ExePath, '   platform: ', Plat);
   end;
