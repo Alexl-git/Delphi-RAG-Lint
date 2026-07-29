@@ -141,9 +141,20 @@ type
 /// <returns>The flattened tree. RootType='' with empty Nodes when AClassQName
 /// resolves to no class-kind symbol.</returns>
 /// <remarks>Own properties come from FindAllChildSymbols(classId) filtered to
-/// property-kind; inherited properties are gathered by walking the resolved
-/// ancestor closure (GetTransitiveAncestors) and enumerating each ancestor
-/// class's property children. Leaf names are deduped -- a redeclared property
+/// property-kind; inherited properties are gathered by walking the ancestor
+/// closure (GetTransitiveAncestors) and enumerating each ancestor class's
+/// property children. An ancestor edge the INDEXER left UNRESOLVED (it declines
+/// rather than guess a same-named ancestor) no longer ends the climb: the
+/// ancestor NAME is bridged at QUERY time via ISymbolStore.ResolveTypeNameToClass
+/// -- same shared scope rule (same unit -&gt; unique uses hit -&gt; unique leading
+/// dotted-namespace segment -&gt; decline), but matched textually, so it repairs
+/// indexes already on disk without a re-index. The name is resolved in the unit
+/// of the class that actually inherits it, never blanket in the queried root's
+/// unit; only a class-kind result is accepted; a decline still stops the climb
+/// (never a guess); and a Vcl.* class can never resolve into an FMX.* ancestor
+/// or the reverse. The bridged climb is bounded by a visited-class-id set and a
+/// depth cap, and performs NO writes, so a read-only (--no-write-back) store is
+/// unaffected. Leaf names are deduped -- a redeclared property
 /// shadows the ancestor's, and the most-derived declaration wins for DeclaredIn.
 /// The type is parsed from the property Signature (a leading ':' + whitespace is
 /// trimmed, then the first type token is taken up to whitespace / ';' / 'read' /
@@ -217,11 +228,115 @@ begin
   Result:= (Low = 'tpersistent') or (Low = 'tobject');
 end;
 
+// True when a class symbol's declaration is INDISTINGUISHABLE, in the index as
+// it exists on disk, from a class-REFERENCE declaration
+// ('TWinControlClass = class of TWinControl;'). The parser emits such a
+// declaration as kind='class' with heritage='TWinControl' spanning a single
+// line -- byte-for-byte the same shape it emits for a genuine one-line subclass
+// ('EFIBInterBaseError = class(EFIBError) end;'): same kind, empty signature,
+// empty modifiers, single line, non-empty heritage. VERIFIED against
+// library-Win64.sqlite: all five TWinControlClass rows and the fib/FIBDataSet
+// one-line subclasses are identical on every stored column.
+//
+// This matters because a class REFERENCE does not inherit an instance property
+// surface -- `class of TWinControl` has no Align, no Font, no Left. Bridging
+// such an edge would hand the conversion editor thousands of leaves that cannot
+// be assigned (measured: Vcl.Controls.TControl's FloatingDockSiteClass alone
+// expanded from 1 leaf to 2957). Telling the two constructs apart needs a
+// parser/schema change and therefore a RE-INDEX, which the query-time fallback
+// exists precisely to avoid, so the fallback applies the same policy as the
+// rest of this engine: when unsure, don't claim -- it declines to bridge from
+// one, leaving those chains exactly where they stop today.
+//
+// Only the query-time FALLBACK consults this. Edges the indexer already
+// resolved keep their current behaviour untouched (this changes nothing about
+// them), and the bare-property-type walk (ResolveViaBridgedAncestry) never
+// needs it: a class reference declares no properties, so that walk cannot
+// reach one as a property-declaring class.
+function IsIndistinguishableFromClassRef(const ASym: TSymbol): Boolean;
+begin
+  Result:= (ASym.Kind = skClass) and (ASym.Heritage.Trim <> '') and
+           (ASym.EndLine <= ASym.StartLine);
+end;
+
+// Normalize ONE raw heritage token to the form stored in
+// type_ancestors.ancestor_name: trim, drop a generic argument list
+// (TList<TFoo> -> TList), then take the dotted tail
+// (System.Classes.TComponent -> TComponent). Deliberately mirrors
+// DRagLint.Storage.SQLite's NormalizeAncestorName (kept local -- that one is
+// unit-private) so a heritage token and the ancestor_name row the indexer
+// derived FROM it compare equal by construction.
+function NormalizeHeritageToken(const ARaw: string): string;
+var
+  S: string ;
+  P: Integer;
+begin
+  S:= Trim(ARaw);
+  P:= Pos('<', S);
+  if P > 0 then S:= Trim(Copy(S, 1, P - 1));
+  P:= LastDelimiter('.', S);
+  if P > 0 then S:= Copy(S, P + 1, MaxInt);
+  Result:= Trim(S);
+end;
+
+// True when AName is one of AHeritage's OWN entries -- i.e. the class carrying
+// AHeritage is the one that DIRECTLY inherits/implements AName. Splits on
+// TOP-LEVEL commas only (mirrors DRagLint.Storage.SQLite's SplitHeritageList,
+// so a generic ancestor's own comma -- TDictionary<string, Integer> -- does not
+// split the list) and compares each token through NormalizeHeritageToken.
+// Used by the query-time ancestor fallback to find WHICH class in a transitive
+// closure actually declares an unresolved ancestor name, so that name is
+// resolved in THAT class's unit scope (design criterion 7) rather than in the
+// scope of whatever class the walk happened to start from.
+function HeritageDeclares(const AHeritage, AName: string): Boolean;
+var
+  Depth: Integer;
+  Start: Integer;
+  i    : Integer;
+  Ch   : Char   ;
+begin
+  Result:= False;
+  if (Trim(AHeritage) = '') or (Trim(AName) = '') then Exit;
+  Depth:= 0;
+  Start:= 1;
+  for i:= 1 to Length(AHeritage) do
+  begin
+    Ch:= AHeritage[i];
+    if Ch = '<' then Inc(Depth)
+    else if Ch = '>' then Dec(Depth)
+    else if (Ch = ',') and (Depth <= 0) then
+    begin
+      if SameText(NormalizeHeritageToken(Copy(AHeritage, Start, i - Start)), AName) then Exit(True);
+      Start:= i + 1;
+    end;
+  end;
+  if Start <= Length(AHeritage) then
+    Result:= SameText(NormalizeHeritageToken(Copy(AHeritage, Start, MaxInt)), AName);
+end;
+
+const
+  // Hard cap on how many BRIDGED hops ClassChain's query-time fallback may
+  // take from one starting class. Belt-and-braces next to the visited-class-id
+  // set (which alone already terminates the climb, since every recursion must
+  // first add a class id never seen on this chain): a malformed or
+  // self-referential index must not be able to spin, and no real Object Pascal
+  // hierarchy is anywhere near this deep. Matches GetTransitiveAncestors' own
+  // 64-hop BFS bound (DRagLint.Storage.SQLite.pas).
+  CMaxBridgedChainDepth = 64;
+
 function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
   const AOpts: TPropTreeOptions): TPropTree;
 var
   Nodes    : TList<TPropNode>;
   Truncated: Boolean         ;
+  // Per-QUERY memoization for the ancestor climb (the fallback below hits the
+  // DB per unresolved hop, and ClassChain is called at least twice per walked
+  // class -- CollectProps + CollectFields -- plus once more for every path a
+  // class-typed property is re-expanded on). Both caches are pure query-scoped
+  // derivations of the ancestry tables; nothing here writes to the store, so
+  // --no-write-back (a read-only store handle) is unaffected.
+  ChainCache : TDictionary<Int64 , TArray<TSymbol>>; // class id -> its resolved chain
+  BridgeCache: TDictionary<string, TSymbol        >; // 'lowername|scopefileid' -> bridged class
 
   // True when a class symbol is a mere forward declaration ('TFoo = class;')
   // rather than the real body. A forward decl spans a single line and carries no
@@ -273,32 +388,139 @@ var
     end;
   end;
 
-  // Ordered list of the class + its resolved ancestor classes (most-derived
-  // first). Stops climbing at TPersistent/TObject when AOpts.ToPersistent.
+  // Ordered list of the class + its ancestor classes (most-derived first).
+  // Stops climbing at TPersistent/TObject when AOpts.ToPersistent.
+  //
+  // TWO sources feed the chain:
+  //  (a) the ancestor edges the INDEXER already resolved -- read in one shot
+  //      via GetTransitiveAncestors, exactly as before this change;
+  //  (b) QUERY-TIME FALLBACK (design 2026-07-29-proptree-ancestor-scope,
+  //      section 3.1, criteria 6-7). ResolveAncestry writes an UNRESOLVED row
+  //      (ancestor_kind='?', ancestor_symbol_id=NULL) whenever it cannot
+  //      disambiguate a same-named ancestor -- "when unsure, don't claim". This
+  //      function used to SKIP those rows, so the climb stopped dead at the
+  //      first one and EVERY inherited property above it vanished (the measured
+  //      symptom: Vcl.StdCtrls.TEdit and cxButtons.TcxButton expose no Name /
+  //      Tag / Left / Top). Each such row is now BRIDGED to its defining class
+  //      by AStore.ResolveTypeNameToClass, which applies the SAME shared scope
+  //      rule (PickAncestorCandidateByScope: same unit -> unique uses hit ->
+  //      unique first-dotted-namespace-segment -> decline) but matches unit
+  //      names TEXTUALLY, so -- unlike the index-time resolver -- it does NOT
+  //      need unit_uses.target_file_id and therefore repairs indexes that are
+  //      ALREADY ON DISK, with no re-index. A decline (Id=0) stays a decline:
+  //      the chain simply stops there, exactly as it does today. Nothing here
+  //      writes, so a --no-write-back (read-only) store is unaffected.
+  //
+  // SCOPE, per criterion 7: an unresolved row surfaced by
+  // GetTransitiveAncestors' BFS may have been declared by ANY class in the
+  // closure, not by the class the walk started from. The name is therefore
+  // resolved in the unit of the class whose OWN heritage actually lists it
+  // (HeritageDeclares over the most-derived-first Known list) -- never blanket
+  // in the root class's file.
+  //
+  // GUARDS: a visited-class-id set (a class is placed, and climbed FROM, at
+  // most once -- so a self-referential or cyclic index terminates instead of
+  // spinning) plus a CMaxBridgedChainDepth cap on bridged recursion. Only
+  // skClass results are accepted, so an unresolved INTERFACE entry in a class's
+  // heritage can never be bridged into the class chain. And an edge declared by
+  // something the index cannot distinguish from a 'class of X' class REFERENCE
+  // is refused outright -- see IsIndistinguishableFromClassRef.
   function ClassChain(const ARoot: TSymbol): TArray<TSymbol>;
   var
-    List: TList<TSymbol>       ;
-    Anc : TArray<TTypeAncestor>;
-    A   : TTypeAncestor        ;
-    Sym : TSymbol              ;
+    List   : TList<TSymbol>             ;
+    SeenIds: TDictionary<Int64, Boolean>;
+
+    // Place ASym in the chain unless it is not a class or is already there.
+    // Doubles as the cycle guard: False also means "do not climb from it".
+    function TryAdd(const ASym: TSymbol): Boolean;
+    begin
+      Result:= (ASym.Id > 0) and (ASym.Kind = skClass) and not SeenIds.ContainsKey(ASym.Id);
+      if not Result then Exit;
+      SeenIds.Add(ASym.Id, True);
+      List.Add(ASym);
+    end;
+
+    // Bridge one unresolved ancestor NAME to its defining class in
+    // AScopeFileId's unit scope. Memoized per (name, scope) -- the same broken
+    // edge is re-visited by every descendant walked in one query.
+    function Bridge(const AName: string; AScopeFileId: Int64): TSymbol;
+    var
+      Key: string;
+    begin
+      Key:= LowerCase(AName) + '|' + IntToStr(AScopeFileId);
+      if BridgeCache.TryGetValue(Key, Result) then Exit;
+      Result:= BodyOf(AStore.ResolveTypeNameToClass(AName, AScopeFileId));
+      BridgeCache.AddOrSetValue(Key, Result);
+    end;
+
+    procedure ClimbFrom(const AFrom: TSymbol; ADepthLeft: Integer);
+    var
+      Anc  : TArray<TTypeAncestor>;
+      A    : TTypeAncestor        ;
+      Known: TList<TSymbol>       ; // AFrom + the resolved classes of its closure
+      K    : TSymbol              ;
+      Sym  : TSymbol              ;
+      Brid : TSymbol              ;
+      Decl : TSymbol              ; // the class whose OWN heritage lists A.Name
+    begin
+      if (AFrom.Id <= 0) or (ADepthLeft <= 0) then Exit;
+      Known:= TList<TSymbol>.Create;
+      try
+        Known.Add(AFrom);
+        Anc:= AStore.GetTransitiveAncestors(AFrom.Id);
+        for A in Anc do
+        begin
+          // When ToPersistent is on, do not enumerate the props of TPersistent /
+          // TObject themselves (and everything above is unreachable anyway).
+          if AOpts.ToPersistent and IsStopClass(A.Name) then Break;
+          if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
+          begin
+            Sym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
+            if (Sym.Id > 0) and (Sym.Kind = skClass) then
+            begin
+              Known.Add(Sym); // a later unresolved row may be ITS heritage entry
+              TryAdd(Sym);
+            end;
+          end
+          else if not A.Resolved then
+          begin
+            // Resolve in the scope of the class that actually inherits this
+            // name (criterion 7); AFrom itself only as a last resort (e.g. the
+            // declaring class is an interface, which never enters Known).
+            Decl:= AFrom;
+            for K in Known do
+              if HeritageDeclares(K.Heritage, A.Name) then
+              begin
+                Decl:= K;
+                Break;
+              end;
+            // Never bridge FROM something the index cannot tell apart from a
+            // 'class of X' class reference -- it has no instance surface to
+            // inherit. See IsIndistinguishableFromClassRef.
+            if IsIndistinguishableFromClassRef(Decl) then Continue;
+            Brid:= Bridge(A.Name, Decl.FileId);
+            if (Brid.Id > 0) and (Brid.Kind = skClass) and
+               not (AOpts.ToPersistent and IsStopClass(Brid.Name)) and TryAdd(Brid) then
+              ClimbFrom(Brid, ADepthLeft - 1); // the bridged class's own chain
+          end;
+        end;
+      finally
+        Known.Free;
+      end;
+    end;
+
   begin
-    List:= TList<TSymbol>.Create;
+    if (ARoot.Id > 0) and ChainCache.TryGetValue(ARoot.Id, Result) then Exit;
+    List   := TList<TSymbol>.Create;
+    SeenIds:= TDictionary<Int64, Boolean>.Create;
     try
       List.Add(ARoot);
-      Anc:= AStore.GetTransitiveAncestors(ARoot.Id);
-      for A in Anc do
-      begin
-        // When ToPersistent is on, do not enumerate the props of TPersistent /
-        // TObject themselves (and everything above is unreachable anyway).
-        if AOpts.ToPersistent and IsStopClass(A.Name) then Break;
-        if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
-        begin
-          Sym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
-          if (Sym.Id > 0) and (Sym.Kind = skClass) then List.Add(Sym);
-        end;
-      end;
+      if ARoot.Id > 0 then SeenIds.Add(ARoot.Id, True);
+      ClimbFrom(ARoot, CMaxBridgedChainDepth);
       Result:= List.ToArray;
+      if ARoot.Id > 0 then ChainCache.AddOrSetValue(ARoot.Id, Result);
     finally
+      SeenIds.Free;
       List.Free;
     end;
   end;
@@ -471,9 +693,10 @@ var
   // the whole VCL-inherited property surface (Align, Caption, Anchors, ...) loses
   // its type. This walks UP the chain BRIDGING each unresolved ancestor NAME to its
   // defining class via the scope-aware, alias-following AStore.ResolveTypeNameToClass
-  // (scope = the root class's own file, whose uses-clause disambiguates e.g. Vcl
-  // from FMX), and returns the first KNOWN type declared for APropName above the
-  // break. '' when the walk still finds nothing (never fabricates a type).
+  // (scope = the unit of the class that actually INHERITS that name at that hop,
+  // whose uses-clause / namespace prefix disambiguates e.g. Vcl from FMX -- see
+  // Climb's rule below), and returns the first KNOWN type declared for APropName
+  // above the break. '' when the walk still finds nothing (never fabricates a type).
   function ResolveViaBridgedAncestry(const AClass: TSymbol; const APropName: string): string;
   var
     Visited: TDictionary<string, Boolean>;
@@ -491,38 +714,64 @@ var
 
     function Climb(const ASym: TSymbol): string;
     var
-      Anc: TArray<TTypeAncestor>;
-      A  : TTypeAncestor        ;
-      Nxt: TSymbol              ;
-      Tok: string               ;
-      Key: string               ;
+      Anc  : TArray<TTypeAncestor>;
+      A    : TTypeAncestor        ;
+      Nxt  : TSymbol              ;
+      Tok  : string               ;
+      Key  : string               ;
+      Known: TList<TSymbol>       ; // ASym + the resolved classes of its closure
+      K    : TSymbol              ;
+      Sym  : TSymbol              ;
+      Scope: Int64                ;
     begin
       Result:= '';
       Anc:= AStore.GetTransitiveAncestors(ASym.Id);
-      // (a) any already-RESOLVED CLASS ancestor that declares the property with
-      // a type. CLASS-ONLY (R3, Task 3, mirrors ResolveInheritedType's guard
-      // above): an implemented interface can appear in this same closure and
-      // independently redeclare a same-named property with an unrelated type --
-      // excluded so the bridge never resolves to a wrong-class type either.
-      for A in Anc do
-        if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
+      Known:= TList<TSymbol>.Create;
+      try
+        Known.Add(ASym);
+        // (a) any already-RESOLVED CLASS ancestor that declares the property with
+        // a type. CLASS-ONLY (R3, Task 3, mirrors ResolveInheritedType's guard
+        // above): an implemented interface can appear in this same closure and
+        // independently redeclare a same-named property with an unrelated type --
+        // excluded so the bridge never resolves to a wrong-class type either.
+        for A in Anc do
+          if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
+          begin
+            Sym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
+            Known.Add(Sym); // a later unresolved row may be ITS heritage entry
+            Tok:= PropTypeOn(Sym);
+            if Tok <> '' then Exit(Tok);
+          end;
+        // (b) bridge each UNRESOLVED ancestor name, then keep climbing from it.
+        // SCOPE (design criterion 7): resolve the name in the unit of the class
+        // that actually INHERITS it -- found by matching the name against each
+        // known class's own heritage, most-derived first -- falling back to the
+        // class this hop is climbing FROM. It used to pass AClass.FileId, the
+        // file of the ROOT class the whole query started from, at every hop;
+        // that contradicts ResolveTypeNameToClass's AScopeFileId contract and
+        // silently mis-scopes any break that occurs above a unit boundary.
+        for A in Anc do
         begin
-          Tok:= PropTypeOn(BodyOf(AStore.GetSymbolById(A.SymbolId)));
+          if A.Resolved then Continue;
+          Key:= LowerCase(A.Name);
+          if (Key = '') or Visited.ContainsKey(Key) then Continue;
+          Visited.Add(Key, True);
+          Scope:= ASym.FileId;
+          for K in Known do
+            if HeritageDeclares(K.Heritage, A.Name) then
+            begin
+              Scope:= K.FileId;
+              Break;
+            end;
+          Nxt:= BodyOf(AStore.ResolveTypeNameToClass(A.Name, Scope));
+          if Nxt.Id <= 0 then Continue;
+          Tok:= PropTypeOn(Nxt);   // declared directly on the bridged class?
+          if Tok <> '' then Exit(Tok);
+          Tok:= Climb(Nxt);        // else climb the bridged class's own chain
           if Tok <> '' then Exit(Tok);
         end;
-      // (b) bridge each UNRESOLVED ancestor name, then keep climbing from it.
-      for A in Anc do
-      begin
-        if A.Resolved then Continue;
-        Key:= LowerCase(A.Name);
-        if (Key = '') or Visited.ContainsKey(Key) then Continue;
-        Visited.Add(Key, True);
-        Nxt:= BodyOf(AStore.ResolveTypeNameToClass(A.Name, AClass.FileId));
-        if Nxt.Id <= 0 then Continue;
-        Tok:= PropTypeOn(Nxt);   // declared directly on the bridged class?
-        if Tok <> '' then Exit(Tok);
-        Tok:= Climb(Nxt);        // else climb the bridged class's own chain
-        if Tok <> '' then Exit(Tok);
+      finally
+        Known.Free;
       end;
     end;
 
@@ -928,9 +1177,11 @@ begin
   Root:= ResolveClassByQName(AClassQName);
   if Root.Id = 0 then Exit; // unresolved class -> empty tree, RootType=''
 
-  Nodes    := TList<TPropNode>.Create;
-  Visited  := TDictionary<string, Boolean>.Create;
-  Truncated:= False;
+  Nodes      := TList<TPropNode>.Create;
+  Visited    := TDictionary<string, Boolean>.Create;
+  ChainCache := TDictionary<Int64 , TArray<TSymbol>>.Create;
+  BridgeCache:= TDictionary<string, TSymbol        >.Create;
+  Truncated  := False;
   try
     Result.RootType:= Root.Name;
     Visited.Add(LowerCase(Root.Name), True); // guard against direct self-reference
@@ -938,8 +1189,10 @@ begin
     Result.Nodes    := Nodes.ToArray;
     Result.Truncated:= Truncated;
   finally
-    Nodes.Free;
-    Visited.Free;
+    BridgeCache.Free;
+    ChainCache .Free;
+    Nodes      .Free;
+    Visited    .Free;
   end;
 end;
 
