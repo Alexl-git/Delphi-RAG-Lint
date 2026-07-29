@@ -253,10 +253,14 @@ type
       ///  no evidence and conflicting evidence are deliberately indistinguishable
       ///  to the caller, because both must lead to the same decline.</returns>
       /// <remarks>
-      ///  GUARANTEE, stated narrowly: the segment returned is one an ALREADY-
-      ///  RESOLVED (index-time) ancestor edge chain reaches from at least one
-      ///  class declared in AFileId, and no chain from that file reaches the
-      ///  other GUI framework. It is NOT a claim about the file's project, its
+      ///  GUARANTEE, stated narrowly: the segment returned is the NEAREST GUI
+      ///  hop of an ALREADY-RESOLVED (index-time) ancestor edge chain from at
+      ///  least one class declared in AFileId, and no chain from that file has
+      ///  a DIFFERENT nearest GUI hop. Each climb stops at its nearest GUI hop
+      ///  and never looks above it, so this says nothing about what lies
+      ///  further up -- "no chain reaches the other framework" would be a
+      ///  stronger claim than the code makes. It is NOT a claim about the
+      ///  file's project, its
       ///  .dproj &lt;FrameworkType&gt;, or its .dfm/.fmx sibling -- none of which
       ///  the library index records (see docs/TODO-URGENT-framework-type-record.md).
       ///  It is FILE-level, not class-level: a file mixing a Vcl-rooted and an
@@ -2539,12 +2543,15 @@ end;
 /// <param name="AScopeFrameworkAnchor">The GUI framework segment ('Vcl' or
 ///  'FMX') the scope unit's own class ancestry demonstrably belongs to, for
 ///  a LEGACY PRE-NAMESPACE scope unit whose name yields no segment of its
-///  own; '' when unknown, contradictory, or simply not derived. Read by
-///  rule 3 and ONLY when UnitFrameworkPrefix(AScopeUnitName) = '' -- so a
-///  DOTTED scope unit ignores this parameter entirely and behaves exactly
-///  as it did before the parameter existed. Never consulted by rules 1, 2a
-///  or 2b: an anchor is weaker evidence than the scope unit's own text, and
-///  must never override it. See
+///  own; '' when unknown, contradictory, or simply not derived. Read ONLY
+///  where UnitFrameworkPrefix(AScopeUnitName) = '', and in both places for
+///  the same purpose -- to stand in for the segment the unit does not have:
+///  rule 3 SELECTS by it, and rule 2b's guard requires a GUI-namespace hit
+///  to agree with it. A DOTTED scope unit therefore ignores this parameter
+///  entirely and behaves exactly as it did before the parameter existed.
+///  Never consulted by rules 1 or 2a, which rest on what the unit
+///  explicitly states; and in rule 2b it can only ever VETO a hit, never
+///  produce one, so it cannot override anything. See
 ///  TSQLiteSymbolStore.FrameworkAnchorForFile.</param>
 /// <returns>The chosen candidate, or a default(TSymbol) (Id = 0) when no
 ///  rule narrows the field to one.</returns>
@@ -2560,24 +2567,22 @@ end;
 ///  vs 'FMX.*' vs 'Winapi.*' are the motivating cases, not the whole rule.
 ///  The anchor, by contrast, is only ever 'Vcl' or 'FMX' -- it is evidence
 ///  about the two conflicting GUI frameworks specifically.
-///  CROSS-FRAMEWORK GUARANTEE, stated exactly -- it is keyed to the SCOPE
-///  UNIT'S OWN NAME, not to the anchor. Rules 2b and 3 can never return an
-///  FMX.* candidate for a scope unit whose own name is Vcl.*, or the
-///  reverse: rule 3 matches that unit's own segment, and rule 2b explicitly
-///  drops a hit that would cross it.
-///  NOT guaranteed, deliberately: an UNDOTTED scope unit has no such
-///  segment, so 2b's drop is inert for it, and 2b outranks rule 3 -- an
-///  undotted unit whose bare `uses` name last-segment-matches exactly ONE
-///  candidate takes that candidate even where its own ancestry anchors on
-///  the other framework. That is a bare `uses` read the way Delphi reads
-///  it, on a unit that lives in neither framework's namespace, so design
-///  criterion 5 (which speaks of a Vcl.* class and an FMX.* class) does not
-///  reach it; the proptree refuse side does not reach it either, its
-///  guarantee being per-hop over DOTTED declarers.
-///  Rule 2a deliberately CAN cross: a Vcl.* unit that explicitly `uses`
-///  exactly one FMX.* unit declaring the name has stated which one it
-///  means, and an explicit uses outranks every heuristic here. Rule 1
-///  likewise. Nothing in this function ever settles a tie by array order.
+///  CROSS-FRAMEWORK GUARANTEE, stated exactly. Define the scope's EFFECTIVE
+///  FRAMEWORK as its own leading segment, or -- when it has none -- the
+///  ancestry anchor. Neither rule 2b nor rule 3 can then return a candidate
+///  from a GUI framework namespace that disagrees with it: rule 3 selects BY
+///  that segment, and rule 2b drops any GUI-namespace hit that segment does
+///  not confirm. An UNKNOWN effective framework (an undotted unit with no
+///  anchor) is not confirmation -- rule 3 is skipped and rule 2b drops the
+///  GUI hit, so such a unit DECLINES rather than taking a plausible-looking
+///  candidate. Non-GUI candidates ('System.*', 'Winapi.*', undotted,
+///  project namespaces) are never dropped by either rule; they are not
+///  competing frameworks.
+///  Rules 1 and 2a deliberately CAN cross, and rank above both: a unit that
+///  is in the same file as a candidate, or that explicitly `uses` exactly
+///  one FMX.* unit declaring the name, has STATED which one it means. An
+///  explicit declaration outranks every inference here. Nothing in this
+///  function ever settles a tie by array order.
 ///  This is the ONE decision procedure shared by the query-time resolver
 ///  (ResolveTypeNameToClass / PickCandidate, below) and the index-time
 ///  resolver (ResolveAncestry) -- change the precedence HERE, not by
@@ -2611,23 +2616,46 @@ var
     if P > 0 then Result:= Copy(AUnitName, P + 1, MaxInt);
   end;
 
-  // Criterion 5 for pass 2 ONLY. Pass 2 is a heuristic re-reading of the
-  // uses clause, not something the unit wrote, so it must not be able to
-  // hand a Vcl.* unit an FMX.* candidate (or the reverse) -- the one way a
-  // weaker match could be MORE dangerous than the exact one it replaces.
-  // Both segments come from the shared UnitFrameworkPrefix /
-  // IsGuiFrameworkPrefix pair, the same notion the proptree refuse side
-  // uses; '' (undotted, System.*, Winapi.*, a project namespace) is not a
-  // GUI framework and is never dropped.
-  function WeakHitCrossesGuiFramework(const ACandUnit: string): Boolean;
+  // Criterion 5 for pass 2b ONLY, stated POSITIVELY: a weak hit that lands in
+  // a GUI framework namespace must be CONFIRMED by the scope's own effective
+  // framework. Unknown is not confirmation -- an unconfirmed GUI hit is
+  // dropped, and pass 2b then finds nothing rather than something plausible.
+  //
+  // The first cut of this asked the opposite question ("do the two segments
+  // CROSS?") and was inert exactly where it was needed: an undotted legacy
+  // unit's own segment is '', which is not a GUI framework, so nothing was
+  // ever refused for the very population pass 2b targets. MEASURED on
+  // library-Win64.sqlite: 'AdFax.TApdAbstractFaxStatus.Position' and
+  // 'AdProtcl.TApdAbstractStatus.Position' -- undotted Async Professional
+  // units, `uses ... Types ...` bare, no anchor -- took FMX.Types.TPosition on
+  // a unique last-segment hit and grew 11 FireMonkey leaves each. Both had
+  // DECLINED before pass 2b existed, and the proptree refuse side could not
+  // catch it (CrossesGuiFramework needs BOTH prefixes to be GUI, and the
+  // inheritor's is ''). It also exceeded pass 2b's own justification: a bare
+  // `uses Types` denotes 'Vcl.*' or 'System.*' under a VCL project's unit
+  // scope names -- 'FMX' is never among them.
+  //
+  // The scope's effective framework is its own leading segment, or -- by the
+  // SAME substitution rule 3 makes, for the same reason -- the ancestry anchor
+  // when it has no segment of its own. Applying the anchor here is a VETO that
+  // can only shrink the hit set, never a selector: it cannot make pass 2b
+  // return something it would not otherwise have returned.
+  //
+  // Non-GUI candidates ('System.*', 'Winapi.*', undotted, project namespaces)
+  // are never dropped, so pass 2b keeps its purpose. The named trade-off: a
+  // DOTTED but NON-GUI scope unit ('Data.*', a project namespace) writing a
+  // bare `uses` now declines instead of taking a GUI candidate -- strictly
+  // more conservative, and pinned by case I of
+  // tests/autotest/run_proptree_framework_anchor.ps1.
+  function WeakHitFrameworkUnconfirmed(const ACandUnit: string): Boolean;
   var
     ScopeSeg: string;
     CandSeg : string;
   begin
     ScopeSeg:= UnitFrameworkPrefix(AScopeUnitName);
-    CandSeg := UnitFrameworkPrefix(ACandUnit    );
-    Result  := IsGuiFrameworkPrefix(ScopeSeg) and IsGuiFrameworkPrefix(CandSeg) and
-               not SameText(ScopeSeg, CandSeg);
+    if ScopeSeg = '' then ScopeSeg:= AScopeFrameworkAnchor;
+    CandSeg := UnitFrameworkPrefix(ACandUnit);
+    Result  := IsGuiFrameworkPrefix(CandSeg) and not SameText(ScopeSeg, CandSeg);
   end;
 
 begin
@@ -2667,6 +2695,12 @@ begin
     // ('vcl.graphics') can never equal a bare last segment ('graphics'), so
     // a unit that writes fully-qualified uses names -- every RTL unit --
     // cannot gain a hit here that it did not already have.
+    // A hit landing in a GUI framework namespace must additionally be
+    // CONFIRMED by the scope's effective framework -- see
+    // WeakHitFrameworkUnconfirmed, and read its comment before touching this:
+    // the first cut asked "do they cross?" instead, which was inert for the
+    // undotted units this pass exists for and put FireMonkey types on legacy
+    // VCL classes.
     if UsesHits = 0 then
     begin
       UsesHit:= Default(TSymbol);
@@ -2675,7 +2709,7 @@ begin
         CandUnit:= DeclaringUnitOfQName(S.QualifiedName);
         if CandUnit = '' then Continue;
         if not AScopeUsesNames.ContainsKey(LowerCase(LastUnitSegment(CandUnit))) then Continue;
-        if WeakHitCrossesGuiFramework(CandUnit) then Continue;
+        if WeakHitFrameworkUnconfirmed(CandUnit) then Continue;
         Inc(UsesHits);
         if UsesHits = 1 then UsesHit:= S;
       end;
@@ -2770,15 +2804,25 @@ begin
       end;
       QCls.Close;
       // One hop UP: the nearest ancestor the INDEXER already resolved to a
-      // real class symbol. ancestor_symbol_id IS NOT NULL is what keeps this
-      // a pure table read -- an unresolved edge is simply the end of this
-      // climb, never a name handed to the resolver. kind='class' skips
-      // implemented interfaces in the same heritage list; ORDER BY ordinal
-      // then makes the base class the row taken.
+      // real class symbol. 'ancestor_symbol_id IS NOT NULL' is what keeps
+      // this a pure table read -- an unresolved edge is simply the end of
+      // this climb, never a name handed to the resolver. It is written out
+      // even though today's INNER JOIN already implies it, so that a later
+      // change to a LEFT JOIN cannot silently break that invariant.
+      // kind='class' skips implemented interfaces in the same heritage list;
+      // ORDER BY ordinal then makes the base class the row taken.
+      // KNOWN IMPRECISION: because the JOIN drops an UNRESOLVED row rather
+      // than stopping at it, a class whose base class did not resolve but
+      // whose implemented interface did -- and whose interface happens to be
+      // indexed as kind='class' -- yields that lower-priority heritage slot
+      // as "the nearest ancestor". Marginal, and it can only ever add
+      // evidence that is then subject to the same nearest-hop and
+      // both-frameworks-decline rules; it is recorded rather than fixed.
       QAnc.Connection:= FConn;
       QAnc.SQL.Text  := 'SELECT s.id, s.qualified_name FROM type_ancestors ta ' +
                         'JOIN symbols s ON s.id = ta.ancestor_symbol_id ' +
-                        'WHERE ta.symbol_id = :sid AND s.kind = ''class'' ' +
+                        'WHERE ta.symbol_id = :sid AND ta.ancestor_symbol_id IS NOT NULL ' +
+                        'AND s.kind = ''class'' ' +
                         'ORDER BY ta.ordinal LIMIT 1';
       for i:= 0 to StartIds.Count - 1 do
       begin

@@ -35,8 +35,10 @@
                    exactly where an unresolvable type has always left it.
 
   CASES
-    A  undotted unit, chain reaches Vcl.* ......... anchor 'Vcl' breaks the 2b tie
-    B  undotted unit, NO anchor at all ............ 2b decides alone (its own RED case)
+    A  undotted unit, chain reaches Vcl.* ......... anchor 'Vcl' confirms the Vcl
+       candidate and drops the FMX twin, leaving 2b exactly one hit
+    B  undotted unit, TWO 'Vcl.*' candidates ...... 2b decides where rule 3 cannot
+       (same first segment), its own RED case
     C  undotted unit, chain reaches FMX.* ......... mirror of A (criterion 5 "nor the reverse")
     D  undotted unit, chain reaches Data.* only ... NO GUI hop -> must still DECLINE
     E  undotted unit, one Vcl-rooted AND one FMX-rooted class -> MIXED -> DECLINE
@@ -44,22 +46,33 @@
        (the anchor is a last resort, never an override)
     G  DOTTED scope unit whose ancestry says FMX -> rule 3 still follows the unit's
        OWN 'Vcl' segment. Pins "a dotted scope unit never reads the anchor".
+    H  UNANCHORED undotted unit, unique FMX weak hit -> must DECLINE. The measured
+       AdFax / AdProtcl regression; see the case for the full history.
+    I  DOTTED but NON-GUI scope unit ('Data.*'), unique FMX weak hit -> must DECLINE.
+       Pins the named trade-off of confirming positively.
 
   RED PROOF -- each mechanism was disabled in turn, rebuilt, and re-run (full
   output in the Task 3c report):
-    anchor never derived ................... A and C fail (4 checks); B D E F G pass
-    rule 2b removed ........................ B fails (2 checks); the rest pass
-    "both frameworks" detection removed .... E fails (2 checks): it picks the
+    anchor never derived ................... A, B and C fail; D E F G H I pass
+    rule 2b removed ........................ B fails; the rest pass
+    "both frameworks" detection removed .... E fails: it picks the
                                              first-enumerated class's Vcl side
+    rule 2b's guard reverted to its first "refuse only when BOTH segments are
+    GUI and differ" form ................... H and I fail (4 checks)
     anchor allowed to override a dotted unit's own segment, AND made to skip the
     starting class's own unit .............. G fails (2 checks)
-  Note on G: with only the override mutation the anchor STILL came out 'Vcl',
-  because the climb inspects the starting class's own unit first and
-  'Vcl.ScopeG' is already a GUI unit -- a dotted GUI unit cannot be given a
-  contradicting anchor. Both mutations together do flip the selection to FMX,
-  at which point the proptree refuse side (CrossesGuiFramework, criterion 5)
-  rejects it and the property declines instead: defence in depth, and the case
-  goes red either way.
+
+  Note on G, recorded because it is easy to over-claim: the two gates that keep
+  the anchor away from a dotted scope unit -- deriving it only for an undotted
+  unit, and substituting it only into an EMPTY segment -- are individually
+  unobservable, so no test can go red on either one alone. The climb inspects
+  the starting class's OWN unit first, so a GUI-dotted unit's anchor is
+  necessarily its own segment (removing the substitution gate is then a no-op),
+  and a non-GUI dotted unit never gets an anchor derived at all (removing the
+  derivation gate is then a no-op). Only both mutations together flip G, and
+  when they do the proptree refuse side (CrossesGuiFramework, criterion 5)
+  rejects the cross-framework type and the property declines: defence in depth,
+  red either way. G is a regression pin on that conjunction, not on one gate.
 #>
 [CmdletBinding()]
 param(
@@ -159,7 +172,9 @@ implementation
 end.
 '@
 
-# --- Case B: no anchor anywhere -- the WEAK last-segment pass decides alone --
+# --- Case B: the WEAK last-segment pass decides BETWEEN TWO SAME-FRAMEWORK ---
+#     candidates, which rule 3 cannot separate however good its anchor is.
+Write-Anchor    'Vcl.AnchorB'  'TVclAnchorB'
 Write-Candidate 'Vcl.MenusB'   'TThingB' 'MenusOnlyB'
 Write-Candidate 'Vcl.WidgetsB' 'TThingB' 'WidgetsOnlyB'
 
@@ -170,14 +185,20 @@ interface
 
 uses
   MenusB;      // BARE name matching the LAST SEGMENT of exactly ONE candidate
-               // unit ('Vcl.MenusB'), never of 'Vcl.WidgetsB'. Both candidates
-               // carry the SAME 'Vcl' first segment, so rule 3 could not
-               // separate them even with an anchor -- and there is none here:
-               // TPersistent is not declared in this fixture, so this class's
-               // ancestor edge never resolves and the climb finds nothing.
+               // unit ('Vcl.MenusB'), never of 'Vcl.WidgetsB'. BOTH candidates
+               // carry the SAME 'Vcl' first segment, so rule 3 cannot separate
+               // them however good its anchor is -- only the last-segment pass
+               // can, which is what makes this case rule 2b's own.
+               //
+               // The 'Vcl' anchor (via TVclAnchorB) is REQUIRED here, not
+               // scenery: rule 2b CONFIRMS a GUI-namespace hit against the
+               // scope's EFFECTIVE framework, and an unanchored legacy unit
+               // has none, so both candidates would be dropped and this would
+               // decline. That confirmation is what stops a legacy VCL unit
+               // taking an FMX.* candidate -- see case H.
 
 type
-  TLegacyMenusRoot = class(TPersistent)
+  TLegacyMenusRoot = class(TVclAnchorB)
   private
     FMarkerB: TThingB;
   published
@@ -344,6 +365,93 @@ implementation
 end.
 '@
 
+# --- Case H: THE REGRESSION. An UNANCHORED legacy unit whose bare `uses` name --
+#     last-segment-matches exactly ONE candidate, and that candidate is FMX.
+#
+#     MEASURED on library-Win64.sqlite, and shipped broken in the first cut of
+#     rule 2b: 'AdFax.TApdAbstractFaxStatus.Position: TPosition' and
+#     'AdProtcl.TApdAbstractStatus.Position: TPosition'. Both units are Async
+#     Professional -- undotted, `uses ... Controls, Forms, Graphics, ..., Types,
+#     Windows`, all bare -- and neither anchors (their chains reach no dotted GUI
+#     hop). After stub-drop and PickCandidate's kind filter the candidates are
+#     StrUtil.TPosition (record), RpDefine.TPosition (class) and
+#     FMX.Types.TPosition (class); 'Vcl.Forms.TPosition' is kind='enum' and is
+#     excluded, so the VCL answer is not even in the running. 2a scored 0 and
+#     2b's last-segment test matched 'types' exactly once -> FMX.Types.TPosition,
+#     putting 11 FireMonkey leaves onto a legacy VCL class. Both DECLINED before
+#     rule 2b existed, and the proptree refuse side cannot catch it either
+#     (CrossesGuiFramework needs BOTH prefixes to be GUI; the inheritor's is '').
+#
+#     It also exceeds 2b's own justification: `uses Types` denotes 'Vcl.*' or
+#     'System.*' under a VCL project's unit scope names -- 'FMX' is never among
+#     them. So a GUI-namespace weak hit must be CONFIRMED by the scope's
+#     effective framework, and an unknown framework must drop it.
+Write-Candidate 'FMX.TypesH'   'TThingH' 'FmxOnlyH'
+Write-Candidate 'Other.WidgetH' 'TThingH' 'OtherOnlyH'
+
+Write-Ascii (Join-Path $work 'LegacyNoAnchorKit.pas') @'
+unit LegacyNoAnchorKit;
+
+interface
+
+uses
+  TypesH;      // BARE name. Its last segment matches 'FMX.TypesH' and nothing
+               // else -- a UNIQUE weak hit, so rule 2b would decide here. This
+               // unit has NO anchor (TPersistent is not declared in this
+               // fixture, so the ancestor edge never resolves and the climb
+               // finds no GUI hop), which means nothing confirms that FMX is
+               // what this unit meant. It must DECLINE.
+
+type
+  TLegacyNoAnchorRoot = class(TPersistent)
+  private
+    FMarkerH: TThingH;
+  published
+    property MarkerH: TThingH read FMarkerH write FMarkerH;
+  end;
+
+implementation
+
+end.
+'@
+
+# --- Case I: the named TRADE-OFF of confirming positively. A DOTTED but ------
+#     NON-GUI scope unit ('Data.*', a project namespace) writing a bare `uses`
+#     no longer takes a GUI candidate on a unique weak hit: its own segment is
+#     'Data', which is not the candidate's 'FMX', so the hit is dropped and the
+#     type declines. Strictly more conservative than picking, and this case is
+#     what makes that deliberate rather than accidental -- it goes RED on the
+#     single mutation of reverting rule 2b's guard to its first "refuse only
+#     when BOTH segments are GUI and differ" form.
+Write-Candidate 'FMX.GraphicsI'  'TThingI' 'FmxOnlyI'
+Write-Candidate 'Other.WidgetI'  'TThingI' 'OtherOnlyI'
+
+Write-Ascii (Join-Path $work 'Data.ScopeI.pas') @'
+unit Data.ScopeI;
+
+interface
+
+uses
+  GraphicsI;   // BARE name whose last segment matches 'FMX.GraphicsI' and
+               // nothing else. This unit's own first segment is 'Data' -- a
+               // real namespace, but not one of the two GUI frameworks. Under
+               // the OLD guard ("cross" only when both segments are GUI) 'Data'
+               // was not GUI, so the FMX hit sailed through. It must not: a
+               // 'Data.*' unit has not said it means FireMonkey.
+
+type
+  TDataScopeRootI = class(TPersistent)
+  private
+    FMarkerI: TThingI;
+  published
+    property MarkerI: TThingI read FMarkerI write FMarkerI;
+  end;
+
+implementation
+
+end.
+'@
+
 $db = Join-Path $WorkDir 'anchor.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
 $indexOut = & $Exe index $work --db $db 2>$null
@@ -404,6 +512,10 @@ Test-Picks 'LegacyOverrideKit.TLegacyOverrideRoot' 'MarkerF' 'FmxOnlyF' 'VclOnly
   "Case F: an explicit 'uses FMX.GraphicsF' outranks the 'Vcl' anchor (never an override)"
 Test-Picks 'Vcl.ScopeG.TDottedScopeRootG'          'MarkerG' 'VclOnlyG' 'FmxOnlyG' `
   "Case G: a DOTTED scope unit follows its OWN segment and never reads the anchor"
+Test-Declines 'LegacyNoAnchorKit.TLegacyNoAnchorRoot' 'MarkerH' 'FmxOnlyH' 'OtherOnlyH' `
+  'Case H: UNANCHORED legacy unit, unique FMX weak hit -- the AdFax/AdProtcl defect'
+Test-Declines 'Data.ScopeI.TDataScopeRootI'          'MarkerI' 'FmxOnlyI' 'OtherOnlyI' `
+  'Case I: DOTTED NON-GUI scope unit does not take a GUI candidate on a weak hit'
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
