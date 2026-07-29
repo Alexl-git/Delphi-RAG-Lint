@@ -71,11 +71,19 @@ type
         full scope load + a name lookup for the SAME (file, name) pair on every
         GetTransitiveAncestors call, and proptree makes one per class it visits --
         measured 39s for cxButtons.TcxButton against the 1.87 GB library index.
-        Safe to hold for the store's lifetime: nothing a query does (the only
-        write on a read path is MemoizePropertyType, which touches property
-        signatures) can change which class a type name resolves to. An indexing
-        run rebuilds ancestry through ResolveAncestry on a store that has not
-        served climbs, so no stale entry can survive into one. }
+        Safe to hold ACROSS QUERIES: nothing a query does (the only write on a
+        read path is MemoizePropertyType, which touches property signatures) can
+        change which class a type name resolves to.
+
+        NOT safe to hold across an INDEXING pass on the same instance, which is
+        why ResolveUnitUseTargets clears it. `index --watch` builds one store
+        outside its tick loop (DRagLint.CLI.pas DoIndex) and `reconcile` does the
+        same, and each tick's ResolveCallTargets reaches GetTransitiveAncestors
+        through TCallResolver.LookupMethodOnType -- so a tick can populate this
+        memo, the next tick can delete and reissue the symbol ids it holds, and a
+        cached TSymbol would then carry a dangling id straight into a stored
+        call edge. The clear is DEFENSIVE: the sequence is reachable in code and
+        was not reproduced as an observed wrong answer. }
       FLateAncCache: TDictionary<string, TSymbol>;
       procedure Connect(const ADbPath: string; AReadOnly: Boolean);
       procedure PrepareStatements;
@@ -2596,9 +2604,10 @@ var
              (S.Heritage.Trim = '') and (S.EndLine <= S.StartLine);
   end;
 
-  // Best type candidate for a bare name: unique in-scope (by uses-unit-name),
-  // else first in-scope, else the single global definition. Id=0 when none / an
-  // out-of-scope ambiguity that cannot be disambiguated.
+  // Best type candidate for a bare name: unique in-scope (by uses-unit-name);
+  // else first in-scope (non-strict only -- strict refuses); else the single
+  // global definition, scope or no scope. Id=0 when none / a several-in-scope
+  // ambiguity under strict / an out-of-scope ambiguity.
   function PickCandidate(const AName: string): TSymbol;
   var
     Raw    : TArray<TSymbol>;
@@ -2642,6 +2651,14 @@ var
       if not AStrict then Exit(InScope[0]);
       Exit;
     end;
+    { NONE in scope. The single global definition is taken REGARDLESS of scope --
+      including by AStrict, so "strict" is strict only about the several-in-scope
+      case above, not about scope as such. A file with no `uses` clause at all
+      still resolves a lone global candidate here. That is deliberate and mirrors
+      ResolveAncestry's own `(InScopeCount = 0) and (Cands.Count = 1)` arm: for a
+      class/interface name it cannot widen the answer (there is nothing else it
+      could be), and refusing would lose every ancestor in a unit whose uses rows
+      the index failed to record. Registered as K37. }
     if Length(Types) = 1 then Exit(Types[0]);        // single global definition
     // ambiguous, none in scope -> refuse to guess (leaves the caller at 'unknown').
   end;
@@ -3462,20 +3479,42 @@ procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
   unit_uses.unit_name_norm, which UnitNameNorm defines as the dotted TAIL of the
   used unit's name ('Vcl.Controls' -> 'controls'), against the FULL basename stem
   of files.path ('Vcl.Controls.pas' -> 'vcl.controls'). Those two can never be
-  equal for a dotted unit, so target_file_id stayed NULL for every dotted `uses`
-  in the index -- 49527 of 85157 rows (58%) in library-Win64.sqlite. The tail-only
-  key dates from when a unit's file really was named after its last segment
-  (SysUtils.pas); the RTL has shipped fully-dotted filenames since Delphi 2009.
-  Everything keyed off that scope silently degraded -- most visibly
-  ResolveAncestry, whose uses-scope disambiguation collapsed to same-file-only and
-  so abandoned every cross-unit ancestor hop onto an ambiguous name.
+  equal for a dotted unit, so target_file_id stayed NULL for essentially every
+  dotted `uses` in the index: in library-Win64.sqlite, 38390 of the 38512 dotted
+  rows (99.7%) were NULL, and 38022 of those name a unit whose file IS indexed --
+  i.e. purely this defect. (The other 11137 NULL rows are PLAIN unit names, and
+  every one of them names a unit that is not in the index at all, so they are
+  missing data rather than a mismatch. Counted with
+  `SELECT CASE WHEN INSTR(unit_name,'.')>0 ... GROUP BY` over unit_uses, and
+  classified against the set of indexed basename stems.) The tail-only key dates
+  from when a unit's file really was named after its last segment (SysUtils.pas);
+  the RTL has shipped fully-dotted filenames since Delphi 2009. Everything keyed
+  off that scope silently degraded -- most visibly ResolveAncestry, whose
+  uses-scope disambiguation collapsed to same-file-only and so abandoned every
+  cross-unit ancestor hop onto an ambiguous name.
+
+  ONLY SOURCE FILES ARE CANDIDATES. A `uses` clause names a UNIT, and a unit is
+  declared by a .pas/.dpr/.dpk -- never by the .dfm the indexer stores beside a
+  form unit, which shares its stem exactly. Taking `files` unfiltered lets that
+  .dfm compete for the stem, and it is walked first, so it wins: measured on
+  tests\fixtures\formsmap as 15 of 30 uses rows bound to a .dfm, and 62 (ORM3) /
+  612 (library-Win64) distinct used-unit names whose first `files` row is a .dfm.
+  A .dfm declares no classes, so a scope entry pointing at one is an EMPTY scope
+  and ResolveAncestry loses every edge that scope alone could have resolved.
+  Filtering here (rather than at the accumulator) also keeps pass 2's ambiguity
+  test honest: a .pas/.dfm pair stems identically, so `PrevStem <> Stem` could
+  never have fired on it. Guarded by run_proptree_ancestor_climb.ps1 group
+  E5-E8, which reads the stored tables -- the query-time late resolver is textual
+  and masks this in every proptree-level assertion.
 
   Two passes, most-specific first:
     1. the used unit's FULL name against the full file stem. Exact, and the only
        pass that can match a dotted unit to its dotted file. First-wins on a
-       duplicate stem: a repeated full stem is the SAME unit indexed twice (two
-       search paths / a stale copy), never two different units, so either row is
-       an equally correct answer to "which file declares this unit".
+       duplicate stem: after the source filter, two files with the same stem both
+       declare a unit of that name, only one of which the compiler's search path
+       would have picked -- and nothing in the index records which. Either row is
+       therefore as good an answer as the other to "which file declares this
+       unit"; what must not happen is a non-source file being one of them.
     2. the tail (unit_name_norm) against the tail of the file stem, for the
        legacy shapes pass 1 cannot reach -- `uses SysUtils` resolving to
        System.SysUtils.pas, or `uses Vcl.Controls` to a pre-namespace
@@ -3493,9 +3532,16 @@ var
   Path       : string                    ;
   Stem       : string                    ;
   Tail       : string                    ;
+  Ext        : string                    ;
   Slash      : Integer                   ;
   Dot        : Integer                   ;
 begin
+  { Task 4d fix round 1: the ancestor climb's late-resolution memo caches
+    (file, name) -> TSymbol, and a reindex tick deletes and reissues symbol ids
+    under it. This procedure is the head of every post-index resolve pass
+    (index/--watch DoIndex, and reconcile), so dropping the memo here is the one
+    place that covers both. See the FLateAncCache declaration. }
+  FLateAncCache.Clear;
   FullToFile:= TDictionary<string, Int64>  .Create;
   TailToFile:= TDictionary<string, Int64>  .Create;
   TailAmbig := TDictionary<string, Boolean>.Create;
@@ -3509,6 +3555,16 @@ begin
     while not QFiles.Eof do
     begin
       Path:= QFiles.FieldByName('path').AsString;
+      // A unit is declared by SOURCE. Everything else the indexer stores -- a
+      // form's .dfm above all, which shares the .pas's stem exactly -- must not
+      // be able to claim a stem in either map. Done here, before the stem is
+      // computed, so pass 1 and pass 2 see the same filtered set.
+      Ext:= LowerCase(ExtractFileExt(Path));
+      if (Ext <> '.pas') and (Ext <> '.dpr') and (Ext <> '.dpk') then
+      begin
+        QFiles.Next;
+        Continue;
+      end;
       Slash:= Path.LastDelimiter('\/');
       if Slash >= 0 then Stem:= Copy(Path, Slash + 2, MaxInt)
       else Stem:= Path;

@@ -10,8 +10,13 @@
   edge as a name-only LEAF and stops climbing. Two independent causes make that
   fire constantly on real code:
 
-    1. unit_uses.target_file_id is NULL for every DOTTED unit (58% of all rows in
-       library-Win64: 49527 / 85157), because UnitNameNorm stores the dotted TAIL
+    1. unit_uses.target_file_id is NULL for essentially every DOTTED unit -- in
+       library-Win64, 38390 of the 38512 dotted rows (99.7%), of which 38022 name
+       a unit whose file IS indexed, so they are purely this mismatch. (The other
+       11137 NULL rows of the 49527 total are PLAIN unit names, every one naming a
+       unit absent from the index: missing data, not a mismatch. An earlier draft
+       of this header charged all 49527 to the defect and called it "58%".)
+       The cause: UnitNameNorm stores the dotted TAIL
        ('Vcl.Controls' -> 'controls') while ResolveUnitUseTargets keys on the FULL
        file stem ('vcl.controls'). They can never match. ResolveAncestry's
        uses-scope disambiguation therefore degenerates to same-file-only, so every
@@ -57,6 +62,25 @@
                   header with interfaces == the cxButtons.TcxCustomButton case.
     Ambig.Kit.pas uses Vcl.Kit AND Fmx.Kit, then descends from 'TWinControl'.
                   BOTH candidates are in scope: the resolver must resolve NOTHING.
+    Dfm.Kit.pas   + Dfm.Kit.dfm -- a form unit and the .dfm the indexer stores
+                  beside it, sharing a stem. TDfmCtl [DfmMarker] is AMBIGUOUS
+                  (Dup.Kit declares one too), so scope is the ONLY thing that can
+                  resolve an edge onto it.
+    Dup.Kit.pas   the TDfmCtl decoy [DupPoison]. Nothing that must reach Dfm.Kit
+                  uses it.
+    PlainKit.pas  + PlainKit.dfm -- the same pair with a PLAIN name, because the
+                  mis-binding is a stem collision, not a dotted-name defect.
+    Cli.Kit.pas   uses Dfm.Kit and PlainKit; TCliCtl descends from TDfmCtl.
+
+  THE FIX-ROUND-1 CRITICAL, which groups A-D could not see: ResolveUnitUseTargets
+  pulled `files` unfiltered, so a form's .dfm competed with its .pas for the stem
+  and (being walked first) won. A .dfm declares no classes, so the resulting
+  scope entry is an EMPTY scope and ResolveAncestry abandons the edge -- measured
+  on tests\fixtures\formsmap as 15 of 30 uses rows bound to a .dfm, and 62 (ORM3)
+  / 612 (library-Win64) distinct used-unit names that would bind to one. Groups
+  B, C and D all stayed green through it, because the query-time late resolver is
+  TEXTUAL and never reads target_file_id. Group E is the only guard; E5-E8 pin
+  this case and read the stored tables, never the engine's answer.
 
   Load-bearing assertions (proptree --no-write-back --format json):
     A CONTROL      Vcl.Kit.TWinControl already climbs to TComponentBase (Tag).
@@ -73,9 +97,12 @@
     D REFUSAL      Ambig.Kit.TAmbiguous emits its OWN AmbMarker (de-vacuating: the
                    tree really was built) but NEITHER ancestor surface. Absence
                    over wrong.
-    E ROOT CAUSE   the index-time guard: a DOTTED uses row resolves target_file_id,
-                   and the ambiguous cross-unit edge is stored RESOLVED and points
-                   at the Vcl.Kit class, not the Fmx.Kit one.
+    E ROOT CAUSE   the index-time guard, read off the STORED tables: a DOTTED uses
+                   row resolves target_file_id (E1-E2); the ambiguous cross-unit
+                   edge is stored RESOLVED and points at the Vcl.Kit class, not the
+                   Fmx.Kit one (E3); the genuinely ambiguous one stays unresolved
+                   (E4); and a uses row binds to the unit's .pas and never to the
+                   .dfm beside it (E5-E7, de-vacuated by E8).
 #>
 [CmdletBinding()]
 param(
@@ -256,6 +283,120 @@ implementation
 end.
 '@
 
+# --- The .pas/.dfm pair (fix round 1). ResolveUnitUseTargets pulls `files` for
+# every indexed file, INCLUDING the .dfm the indexer stores beside a form unit.
+# Both share the stem, so whichever accumulator policy wins decides whether
+# `uses Dfm.Kit` points at Dfm.Kit.pas or Dfm.Kit.dfm -- and .dfm is walked
+# first. A .dfm declares no classes, so a scope entry pointing at one is an
+# empty scope: ResolveAncestry then cannot see Dfm.Kit.TDfmCtl and abandons the
+# edge. TDfmCtl is deliberately AMBIGUOUS (Dup.Kit declares one too) so that the
+# single-global fallback cannot rescue it -- scope is the only thing that can.
+Write-Ascii (Join-Path $work 'Dfm.Kit.pas') @'
+unit Dfm.Kit;
+
+interface
+
+uses
+  Vcl.Kit;
+
+type
+  // AMBIGUOUS simple name: Dup.Kit declares a TDfmCtl too. This unit has a .dfm.
+  TDfmCtl = class(TComponentBase)
+  private
+    FDfmMarker: Integer;
+  published
+    property DfmMarker: Integer read FDfmMarker write FDfmMarker;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Dfm.Kit.dfm') @'
+object DfmCtl: TDfmCtl
+  Left = 0
+  Top = 0
+  Caption = 'Kit'
+end
+'@
+
+Write-Ascii (Join-Path $work 'Dup.Kit.pas') @'
+unit Dup.Kit;
+
+interface
+
+type
+  // The DECOY that makes 'TDfmCtl' ambiguous. Nothing that must reach Dfm.Kit
+  // ever uses this unit.
+  TDfmCtl = class(TPersistent)
+  private
+    FDupPoison: Integer;
+  published
+    property DupPoison: Integer read FDupPoison write FDupPoison;
+  end;
+
+implementation
+
+end.
+'@
+
+# A PLAIN-named pair too: the mis-binding is not a dotted-name defect, it is a
+# stem-collision defect, and the reviewer's evidence (tests\fixtures\formsmap)
+# is entirely plain names.
+Write-Ascii (Join-Path $work 'PlainKit.pas') @'
+unit PlainKit;
+
+interface
+
+type
+  TPlainCtl = class(TPersistent)
+  private
+    FPlainMarker: Integer;
+  published
+    property PlainMarker: Integer read FPlainMarker write FPlainMarker;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'PlainKit.dfm') @'
+object PlainCtl: TPlainCtl
+  Left = 0
+  Top = 0
+  Caption = 'Plain'
+end
+'@
+
+Write-Ascii (Join-Path $work 'Cli.Kit.pas') @'
+unit Cli.Kit;
+
+interface
+
+uses
+  Dfm.Kit, PlainKit;
+
+type
+  // Descends from the AMBIGUOUS TDfmCtl. Only `uses Dfm.Kit` says which one --
+  // and only if that uses row points at Dfm.Kit.pas rather than Dfm.Kit.dfm.
+  TCliCtl = class(TDfmCtl)
+  private
+    FCliMarker: Integer;
+  published
+    property CliMarker: Integer read FCliMarker write FCliMarker;
+  end;
+
+implementation
+
+end.
+'@
+
 $db = Join-Path $WorkDir 'climb.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
 $indexOut = & $Exe index $work --db $db 2>&1
@@ -334,7 +475,7 @@ con.close()
 function Sql([string]$Q) { return ((python $pySql $db $Q) -join "`n").Trim() }
 
 $e1 = Sql "SELECT COUNT(*) FROM unit_uses WHERE unit_name='Vcl.Kit' AND target_file_id IS NOT NULL"
-Check 'E1 dotted "uses Vcl.Kit" resolves target_file_id' ($e1 -eq '2') "rows with a target=$e1 (expected 2: Std.Kit + Ambig.Kit)"
+Check 'E1 dotted "uses Vcl.Kit" resolves target_file_id' ($e1 -eq '3') "rows with a target=$e1 (expected 3: Std.Kit + Ambig.Kit + Dfm.Kit)"
 
 $e2 = Sql "SELECT COUNT(*) FROM unit_uses WHERE target_file_id IS NULL"
 Check 'E2 no dotted uses row is left unresolved' ($e2 -eq '0') "unresolved rows=$e2"
@@ -352,6 +493,42 @@ Check 'E3 stored edge TCustomEdit->TWinControl resolves to the Vcl.Kit file' ($e
 # ...and the genuinely ambiguous one must still be stored UNRESOLVED.
 $e4 = Sql "SELECT COUNT(*) FROM symbols s JOIN type_ancestors ta ON ta.symbol_id=s.id WHERE s.qualified_name='Ambig.Kit.TAmbiguous' AND ta.ancestor_name='TWinControl' AND ta.ancestor_symbol_id IS NULL"
 Check 'E4 genuinely ambiguous edge stays UNRESOLVED at index time' ($e4 -eq '1') "unresolved-count=$e4"
+
+# --- E5..E8: a `uses` names a UNIT, and a unit is declared by source, never by a
+# .dfm. These are the regression guard for the fix-round-1 Critical: whichever
+# accumulator ResolveUnitUseTargets uses, it must never let a form's .dfm win the
+# stem over its .pas. E6 is the one that shows the CONSEQUENCE (an empty scope
+# un-resolves an ancestry edge that scope alone could resolve); the query-time
+# late resolver is textual and would mask it in any proptree-level assertion, so
+# every one of these reads the stored tables.
+Write-Host ''
+Write-Host 'E5-E8. A uses row must bind to the .pas, never to the .dfm beside it' -ForegroundColor Cyan
+
+$e5d = Sql "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='Dfm.Kit'"
+Check 'E5 dotted "uses Dfm.Kit" binds to Dfm.Kit.pas' ($e5d -match '(?i)Dfm\.Kit\.pas$') "target=$e5d"
+
+$e5p = Sql "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='PlainKit'"
+Check 'E5b plain "uses PlainKit" binds to PlainKit.pas' ($e5p -match '(?i)PlainKit\.pas$') "target=$e5p"
+
+# The consequence: scope is the ONLY thing that can resolve this edge (TDfmCtl is
+# ambiguous, so the single-global fallback cannot), and an empty scope loses it.
+$e6 = Sql @"
+SELECT COALESCE(f.path,'<UNRESOLVED>') FROM symbols s
+  JOIN type_ancestors ta ON ta.symbol_id = s.id
+  LEFT JOIN symbols a ON a.id = ta.ancestor_symbol_id
+  LEFT JOIN files   f ON f.id = a.file_id
+ WHERE s.qualified_name = 'Cli.Kit.TCliCtl' AND ta.ancestor_name = 'TDfmCtl'
+"@
+Check 'E6 stored edge TCliCtl->TDfmCtl resolves to Dfm.Kit.pas (not Dup.Kit, not unresolved)' ($e6 -match '(?i)Dfm\.Kit\.pas$') "target=$e6"
+
+# Whole-fixture guard: nothing may bind to a non-source file at all.
+$e7 = Sql "SELECT COUNT(*) FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE LOWER(f.path) NOT LIKE '%.pas' AND LOWER(f.path) NOT LIKE '%.dpr' AND LOWER(f.path) NOT LIKE '%.dpk'"
+Check 'E7 no uses row targets a non-source file' ($e7 -eq '0') "rows targeting a non-.pas/.dpr/.dpk=$e7"
+
+# De-vacuating E7: it only means something if the .dfm files are in `files` at
+# all. If the indexer stopped storing them, E7 would pass for the wrong reason.
+$e8 = Sql "SELECT COUNT(*) FROM files WHERE LOWER(path) LIKE '%.dfm'"
+Check 'E8 de-vacuates E7: the .dfm files ARE indexed' ($e8 -eq '2') "dfm files in the index=$e8 (expected 2)"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
