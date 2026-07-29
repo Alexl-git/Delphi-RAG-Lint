@@ -81,7 +81,14 @@
     - SAFETY: TcxTypedButton's explicit 'Align: TMyAlign' is NEVER overwritten.
     - idempotency: a SECOND plain query leaves signatures unchanged (no further
       mutation).
-    - read-only: resolution still returns TAlign even against a read-only handle.
+    - '--no-write-back': resolution still returns TAlign AND the database file is
+      byte-identical afterwards (SHA-256 before vs after), measured on a copy of
+      the PRISTINE index rather than the already-memoized one -- with a POSITIVE
+      CONTROL running the identical query without the flag and requiring the file
+      to change, so a blind probe cannot pass as a guarantee. This replaces an
+      earlier block that claimed to cover a "read-only handle" and in fact opened
+      an ordinary writable copy, passed no flag, and asserted only the type; see
+      the comment at that block for the full history.
 
   Load-bearing assertions (Vcl.ExtCtrls.TPanel / FMX.Layouts.TLayout --
   ambiguous Vcl-vs-FMX ancestor via dotted framework prefixes, design doc
@@ -308,11 +315,31 @@ Write-Host 'Indexing fixture' -ForegroundColor Cyan
 $indexOut = & $Exe index $work --db $db 2>&1
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
+# A PRISTINE snapshot of the freshly-indexed DB, taken BEFORE any query runs.
+# Section 1 below queries $db with write-back at its DEFAULT (on), so from that
+# point on $db is already memoized and any copy of it is useless as a write-back
+# probe -- a second write-back run against it is idempotent. The --no-write-back
+# block near the end of this section needs a DB that a write WOULD change, so it
+# copies THIS, not $db.
+$dbPristine = Join-Path $WorkDir 'bridge_pristine.sqlite'
+Copy-Item $db $dbPristine -Force
+
 function Get-Tree([string]$Database, [string]$QName) {
   Push-Location $WorkDir
   try {
     $raw = (& $Exe proptree --qname $QName --format json --db $Database) -join "`n"
   } finally { Pop-Location }
+  return ($raw | ConvertFrom-Json)
+}
+
+# Same, but with explicit extra CLI arguments -- used by the write-back probes,
+# where the presence or absence of '--no-write-back' IS the thing under test.
+function Get-TreeArgs([string]$Database, [string]$QName, [string[]]$Extra) {
+  Push-Location $WorkDir
+  try {
+    $raw = (& $Exe proptree --qname $QName --format json --db $Database @Extra) -join "`n"
+  } finally { Pop-Location }
+  if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
   return ($raw | ConvertFrom-Json)
 }
 
@@ -360,12 +387,44 @@ $sigBefore = Get-Sig $dbw 'TcxSpeedButton'
 $null = Get-Tree $dbw 'CxKit.TcxButton'
 Check "idempotent: TcxSpeedButton.Align unchanged on re-query" ((Get-Sig $dbw 'TcxSpeedButton') -eq $sigBefore)
 
-# Read-only DB: resolution still returns TAlign, no write attempted/succeeds.
-$dbro = Join-Path $WorkDir 'bridge_ro.sqlite'
-Copy-Item $db $dbro -Force
-$treeRo = Get-Tree $dbro 'CxKit.TcxButton' # (no --write-back flag; default is auto, but RO handle no-ops)
-$alignRo = @($treeRo.properties) | Where-Object { $_.path -eq 'Align' } | Select-Object -First 1
-Check "read-only still resolves Align=TAlign" ($null -ne $alignRo -and $alignRo.type -eq 'TAlign') "type=$($alignRo.type)"
+# --- 2b. '--no-write-back' MUST NOT MUTATE THE DB (design doc section 7). --------
+#
+# WHAT THIS BLOCK USED TO BE, recorded so the gap is not re-opened: it was
+# labelled "Read-only DB: resolution still returns TAlign, no write attempted",
+# commented "(no --write-back flag; default is auto, but RO handle no-ops)", and
+# it did a plain Copy-Item to an ordinary WRITABLE file, passed no flag at all,
+# and only re-checked the resolved type. There was no read-only handle anywhere
+# in it and nothing that could observe a write, so it merely re-ran section 1's
+# query under a second name. --no-write-back had no red-able guard at all.
+#
+# Two things make this an actual guard. First, the assertion is on the FILE, not
+# on the query result: SHA-256 before and after. Second -- and this is the part
+# that is easy to get wrong -- both copies are taken from $dbPristine, NOT from
+# $db. $db was memoized by section 1's default-write-back query, so a write-back
+# run against a copy of it is idempotent and the hash would compare equal with
+# or WITHOUT the flag. The positive control below is what proves the probe can
+# actually see a write; without it, "hash unchanged" means nothing.
+$dbNwb = Join-Path $WorkDir 'bridge_nowriteback.sqlite'
+Copy-Item $dbPristine $dbNwb -Force
+$hNwbBefore = (Get-FileHash $dbNwb -Algorithm SHA256).Hash
+$treeRo     = Get-TreeArgs $dbNwb 'CxKit.TcxButton' @('--no-write-back')
+$hNwbAfter  = (Get-FileHash $dbNwb -Algorithm SHA256).Hash
+$alignRo    = @($treeRo.properties) | Where-Object { $_.path -eq 'Align' } | Select-Object -First 1
+Check "--no-write-back still resolves Align=TAlign" ($null -ne $alignRo -and $alignRo.type -eq 'TAlign') "type=$($alignRo.type)"
+Check "--no-write-back leaves the DB byte-identical (SHA-256 unchanged)" ($hNwbBefore -eq $hNwbAfter) `
+  "before=$($hNwbBefore.Substring(0,16)) after=$($hNwbAfter.Substring(0,16))"
+
+# POSITIVE CONTROL for the check above. Same pristine DB, same query, WITHOUT
+# the flag -- the file MUST change. If this ever goes red the hash probe has
+# gone blind and the '--no-write-back' assertion above is worthless, whatever
+# colour it reports.
+$dbWbCtl = Join-Path $WorkDir 'bridge_writeback_control.sqlite'
+Copy-Item $dbPristine $dbWbCtl -Force
+$hCtlBefore = (Get-FileHash $dbWbCtl -Algorithm SHA256).Hash
+$null       = Get-TreeArgs $dbWbCtl 'CxKit.TcxButton' @()
+$hCtlAfter  = (Get-FileHash $dbWbCtl -Algorithm SHA256).Hash
+Check "POSITIVE CONTROL: the same query WITHOUT the flag DOES change the DB (probe is not blind)" `
+  ($hCtlBefore -ne $hCtlAfter) "before=$($hCtlBefore.Substring(0,16)) after=$($hCtlAfter.Substring(0,16))"
 
 # --- 3. AMBIGUOUS ANCESTOR ACROSS FRAMEWORKS, via genuine DOTTED framework ------
 #        prefixes (design doc criteria 1-5). 'TCustomControl' must resolve

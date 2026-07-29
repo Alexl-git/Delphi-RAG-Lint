@@ -132,6 +132,46 @@ inherit from an `FMX.*` one.
     `run_proptree_ancestry_bridge.ps1`, `run_proptree_polymorphic.ps1`, `run_proptree_fields.ps1`,
     `run_proptree_visibility.ps1`, and `run_convert_rules.ps1` (26/0).
 
+### 5a. Amendment to criterion 5 -- "never by INFERENCE" (recorded 2026-07-29)
+
+Criterion 5 above is written as an absolute ("SHALL NEVER ... nor the reverse") with no
+exception. The shipped code does not implement it as an absolute, deliberately, and the
+divergence is recorded here rather than silently tolerated. **The code is correct; the
+criterion as written was too strong.** No code change is owed for this.
+
+Rules 1 and 2a **can** cross `Vcl` <-> `FMX`, by design:
+
+- **Rule 1** (same unit) -- a candidate declared in the very unit doing the inheriting.
+- **Rule 2a** (strong `uses`) -- the inheriting unit's `uses` clause names the candidate's
+  declaring unit by its FULL name, and exactly one candidate matches.
+
+Both rest on something the unit itself **stated**, not on something the resolver guessed. A unit
+that writes `uses FMX.Controls` and then inherits an ambiguous name declared there has said which
+one it means, and an explicit declaration must outrank every inference -- otherwise the resolver
+would be overriding the source it is indexing. The code documents this at
+`src/storage/DRagLint.Storage.SQLite.pas:2576-2579`.
+
+What IS absolute is the inference side, and that is the guarantee worth having:
+
+> Criterion 5 holds as: **the resolver shall never select a cross-framework ancestor BY
+> INFERENCE.** Rule 2b drops any GUI-namespaced weak hit the scope's effective framework does not
+> confirm, and rule 3 selects strictly by that same segment, so neither can ever return a
+> `Vcl.*` candidate for an `FMX`-scoped class or the reverse. Only an explicit statement in the
+> source -- same unit, or a fully-qualified `uses` -- can cross.
+
+Measured residual on the on-disk `library-Win64.sqlite` at the time of writing:
+
+- **0** cross-framework resolved ancestor edges in the whole index -- so the theoretical
+  crossing that rules 1 and 2a permit does not actually occur anywhere in the indexed corpus.
+- **9** `FMX.* uses Vcl.*` rows exist in `unit_uses`, confined to exactly **four** FMX
+  design-time units -- `FMX.Design.Bitmap.pas`, `FMX.Editor.Items.pas` (5 of the 9),
+  `FMX.Editor.ListView.pas`, `FMX.Editor.MultiView.pas`. Design-time FMX code legitimately
+  pulls in VCL for the IDE surface; none of these produced a crossed ancestor edge.
+
+Criteria 1-4 are unaffected. The precedence order (1 > 2a > 2b > 3 > decline) is what makes the
+amended statement true: the inference rules sit strictly BELOW the explicit ones and can never
+promote themselves past them.
+
 ## 6. Testing
 
 `tests/autotest/run_proptree_ancestry_bridge.ps1` is the template: it builds a synthetic 3-unit

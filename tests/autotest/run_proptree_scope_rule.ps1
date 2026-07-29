@@ -4,22 +4,27 @@
   the shared same-unit -> uses -> framework-prefix -> decline scope rule
   used to disambiguate a same-named ancestor/type candidate.
 
-  WHY THIS EXISTS: run_proptree_ancestry_bridge.ps1 (Task 1) exercises the
-  rule only through a scenario where the DECISIVE PrefixHits=1 line (rule 3)
-  cannot yet be observed end-to-end -- that scenario needs the query-time
-  climb fallback (Task 3) and/or the index-time repair (Task 4), neither of
-  which Task 2 implements. Without a test of its own, the one line that
-  separates this rule from a guessing resolver -- and the Finding-1 fix that
-  makes rule 2 equally strict -- would ship with zero committed coverage.
+  WHY THIS EXISTS (restated after Task 4 -- the original reason is now stale).
+  When this suite was written, rule 3's DECISIVE PrefixHits=1 line had no
+  end-to-end coverage anywhere: run_proptree_ancestry_bridge.ps1 (Task 1)
+  reached the rule only through scenarios rule 1 and rule 2 already settled.
+  Task 4 changed that -- run_proptree_ancestry_bridge.ps1:402 and :412 now pin
+  rule 3's ACCEPT side end-to-end in both framework directions. What this suite
+  still contributes, and why it is not redundant, is the DECLINE side and the
+  rule's PRECEDENCE, one case per branch, on a hermetic fixture where each
+  branch is reached in isolation: rule 1 beating rule 2, two uses-named
+  candidates declining rather than settling by array order (the Finding-1 fix),
+  two same-prefix candidates declining, and an undotted scope with no derivable
+  anchor declining. Those are the branches a bridge-level test cannot separate.
 
   TECHNIQUE: every case below routes an ambiguous name through a TYPE ALIAS
   ancestor ('TAliasSrcN = TThingN;') exactly like the CxKit/TcxBaseButton
   case in run_proptree_ancestry_bridge.ps1. ResolveAncestry's candidate set
-  is class/interface only (src/storage/DRagLint.Storage.SQLite.pas ~3506),
+  is class/interface only (src/storage/DRagLint.Storage.SQLite.pas ~4170),
   so it NEVER links a type-alias ancestor regardless of whether the alias's
   target name is unique or ambiguous -- the edge is unconditionally left
   unresolved. That forces proptree's bare-property-type resolution (' Marker'
-  is redeclared with no type) through the LIVE path: PropTree.pas:520
+  is redeclared with no type) through the LIVE path: PropTree.pas:841/856
   (ResolveViaBridgedAncestry.Climb) -> AStore.ResolveTypeNameToClass ->
   PickCandidate -> PickAncestorCandidateByScope. This is the ONLY production
   call site (confirmed: ResolveAncestry never calls ResolveTypeNameToClass),
@@ -28,7 +33,7 @@
   Each case declares a DECOY with a DIFFERENTLY-TYPED same-named 'Marker'
   property so a wrong pick is DETECTABLE (shows up as the decoy's type, not
   merely absent), and a decline is DETECTABLE too (shows up as literal
-  'unknown' -- see DRagLint.Convert.PropTree.pas:789-796 -- never one of the
+  'unknown' -- see DRagLint.Convert.PropTree.pas:1190-1197 -- never one of the
   candidate types, which would mean the rule guessed by array order).
 
   CASES (design doc 2026-07-29-proptree-ancestor-scope-design.md section 3.3
@@ -37,11 +42,16 @@
     2. a uses-named candidate wins WHEN UNIQUE .................. rule 2
     3. two uses-named candidates -> decline (Finding 1's fix) .... rule 2 -> 4
     4. two same-framework-prefix candidates -> decline ........... rule 3 -> 4
-    5/6. undotted scope vs dotted candidates: no prefix match AND
-         no wildcard fallback -- declines, never a substring-match guess
-         (mirrors run_proptree_ancestry_bridge.ps1's 'VclKit must not count
-         as sharing a prefix with Vcl.Controls' concern, one level up: here
-         the SCOPE itself is undotted, not just a decoy candidate) . rule 3
+    5/6. undotted scope AND no derivable anchor -> rule 3 has no segment to
+         match, so it cannot narrow anything and the rule declines. Note
+         BOTH halves are load-bearing since Task 3c: an undotted scope alone
+         no longer skips rule 3 -- FrameworkAnchorForFile substitutes a GUI
+         segment derived from the scope file's own resolved ancestry
+         (Storage.SQLite.pas:2757). VclKit5 gets none because TRoot5's chain
+         (TAliasSrc5 = TThing5 = class(TObject)) reaches no Vcl.*/FMX.* hop,
+         so ScopePrefix stays '' and rule 3 is skipped after all. Anchor-
+         DRIVEN selection for an undotted scope is pinned separately, by
+         run_proptree_framework_anchor.ps1 cases A/C ............... rule 3
     7. exactly ONE same-framework-prefix candidate wins -- the ACCEPT side
        of "PrefixHits = 1", uncovered by cases 4/5/6 (which only exercise
        its decline side) and the reason rule 3 exists at all .... rule 3
@@ -377,9 +387,20 @@ unit VclKit5;
 
 interface
 
-// UNDOTTED scope unit name (no '.' at all) -- rule 3 must be skipped
-// outright for this scope, not treated as carrying an empty-string
-// "wildcard" prefix that matches anything.
+// UNDOTTED scope unit name (no '.' at all) AND no derivable framework
+// anchor -- so rule 3 has no segment to match with, and must not treat the
+// empty string as a "wildcard" prefix matching anything.
+//
+// BOTH halves matter, and the second is easy to miss. Since Task 3c an
+// undotted scope does NOT skip rule 3 by itself: FrameworkAnchorForFile
+// substitutes a 'Vcl'/'FMX' segment derived from the scope file's own
+// resolved ancestry (Storage.SQLite.pas:2757), and rule 3 then runs on it.
+// This fixture gets no anchor only because TRoot5's chain
+// (TAliasSrc5 = TThing5 = class(TObject)) reaches no GUI hop at all. Give
+// any class in this unit a Vcl.*/FMX.* ancestor and the anchor appears,
+// rule 3 runs, and the decline below turns into a pick -- so do not add
+// one here. The anchor-DRIVEN path is pinned by
+// run_proptree_framework_anchor.ps1 (cases A and C), not here.
 
 type
   TAliasSrc5 = TThing5;
@@ -507,10 +528,15 @@ Check "TRoot4.Marker is NOT 'TMarkB4'" ($t4 -ne 'TMarkB4') "type=$t4"
 Check "TRoot4.Marker stays 'unknown' (genuine decline)" ($t4 -eq 'unknown') "type=$t4"
 
 Write-Host ''
-Write-Host 'Case 5/6: undotted scope vs dotted candidates -- no prefix match, no wildcard' -ForegroundColor Cyan
+# A third check used to sit here asserting the pick was not 'TMarkVclDotted5',
+# captioned "undotted scope must not substring-match 'Vcl.Controls5'". It was
+# blind: it pinned a substring-matching implementation that never existed
+# (UnitFrameworkPrefix reads the text BEFORE the first '.', so an undotted name
+# yields '' and cannot substring-match anything), and it is strictly implied by
+# the 'unknown' check below. Removed rather than left as false reassurance.
+Write-Host 'Case 5/6: undotted scope, no derivable anchor -- rule 3 has no segment to match' -ForegroundColor Cyan
 $t5 = Get-MarkerType $db 'VclKit5.TRoot5'
-Check "TRoot5.Marker is NOT 'TMarkVclDotted5' (undotted scope must not substring-match 'Vcl.Controls5')" ($t5 -ne 'TMarkVclDotted5') "type=$t5"
-Check "TRoot5.Marker is NOT 'TMarkOther5' either (no wildcard fallback)" ($t5 -ne 'TMarkOther5') "type=$t5"
+Check "TRoot5.Marker is NOT 'TMarkOther5' (no wildcard fallback)" ($t5 -ne 'TMarkOther5') "type=$t5"
 Check "TRoot5.Marker stays 'unknown' (genuine decline)" ($t5 -eq 'unknown') "type=$t5"
 
 Write-Host ''

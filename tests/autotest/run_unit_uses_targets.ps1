@@ -29,16 +29,36 @@
   refills, in one transaction -- so it can REPAIR a wrong value rather than
   preserve it (the 'repair:' checks at the end).
 
-  EACH CASE IS INDEPENDENTLY RED-ABLE against a specific line of the fix:
+  EACH CASE IS RED-ABLE against a specific line of the fix -- but read the
+  note on D and E before trusting "delete the line and watch it fail":
     A  dotted exact      -- RED if the norm-vs-stem comparison comes back
     B  bare exact        -- RED if rule A is dropped (also the pre-fix regression guard)
     C  bare -> dotted    -- RED if rule B is dropped
-    D  ambiguous segment -- RED if rule B stops requiring a UNIQUE stem
-    E  dotted -> other   -- RED if rule B stops being bare-only
+    D  ambiguous segment -- RED if rule B stops requiring a UNIQUE stem   (see below)
+    E  dotted -> other   -- RED if rule B stops being bare-only           (see below)
     F  no such unit      -- RED if anything resolves a name with no candidate
     G  bare -> GUI stem  -- RED if the IsGuiFrameworkPrefix refusal is dropped
     H  dotted -> GUI stem-- RED if that refusal is applied to rule A as well
     repair (x2)          -- RED if the pass goes back to filling only NULL rows
+
+  D AND E ARE NOT RED UNDER PLAIN DELETION, and saying otherwise overstates
+  them. Their guard lines are EFFECT-DEAD if you simply remove them:
+    * E guards Storage.SQLite.pas:3989 ('if Pos(''.'', Stem) > 0 then Continue',
+      rule B is bare-only). Delete it and the very next line looks the dotted
+      name up in SegToStem, whose keys are LAST SEGMENTS and therefore never
+      contain a dot -- so a dotted key misses regardless and the row still
+      stays NULL. The check passes either way.
+    * D guards Storage.SQLite.pas:3991 ('if Seen = CStemAmbiguous then
+      Continue'). Delete it and CStemAmbiguous ('?') is carried into Stem and
+      then looked up in StemToFileId, where '?' is never a key -- so the
+      TryGetValue on the next line misses and the row still stays NULL. The
+      check passes either way.
+  Both ARE red under the mutation that actually matters, which is the SHAPE OF
+  THE ORIGINAL BUG rather than an absent line: make rule B accept a dotted name
+  by matching on its last segment (E), or make it resolve an ambiguous segment
+  to the first stem seen instead of declining (D). That is the better test --
+  a deleted guard here is inert, a wrong guard is what ships damage -- so mutate
+  toward the bug, not toward nothing, when re-proving these two.
 
   CASE E's RED-ABILITY IS FRAGILE, and was silently lost once: it needs its
   segment ('alpha') to stay UNIQUE across the fixture. A second file whose stem

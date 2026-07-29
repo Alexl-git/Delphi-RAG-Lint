@@ -50,7 +50,7 @@
     NOT AN ALIAS, and this is the trap to remember. An earlier revision used
     'TAmbAlias9 = TAmb9' as the break. It declined at index time correctly, but
     ResolveTypeNameToClass RE-SCOPES to the alias's own file before resolving
-    the alias target (LoadScopeNames(Cand.FileId), Storage.SQLite.pas ~:3019),
+    the alias target (LoadScopeNames(Cand.FileId), Storage.SQLite.pas ~:3032),
     so hop 1 resolved the globally-unique alias name under ANY scope and hop 2
     ran in the alias's own (correct) unit -- Cases A and B passed with the
     criterion-7 defect injected. The name resolved in the CALLER's scope has to
@@ -99,14 +99,14 @@
   A Vcl-scoped class whose ancestor name is a type ALIAS to the ONE class of
   that name, and that class lives in an FMX unit, would therefore be bridged
   with NO scope check whatsoever and spliced straight into the class chain. The
-  climb's own CrossesNamespace guard is what refuses it. Neither
+  climb's own CrossesGuiFramework guard is what refuses it. Neither
   run_proptree_scope_rule.ps1 nor run_proptree_ancestry_bridge.ps1 can reach
   this: every ambiguous name in those fixtures has TWO candidates and so takes
   the scope-rule path instead.
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-proptree-ancestor-climb"
 )
 $ErrorActionPreference = 'Stop'
@@ -241,7 +241,7 @@ interface
 //
 // An earlier revision made the break a TYPE ALIAS instead. That looked
 // equivalent and was not: ResolveTypeNameToClass RE-SCOPES to the alias's own
-// file (LoadScopeNames(Cand.FileId), Storage.SQLite.pas ~:3019) before
+// file (LoadScopeNames(Cand.FileId), Storage.SQLite.pas ~:3032) before
 // resolving the alias target, so the caller's scope was discarded and the
 // correct scope handed back for free -- Cases A and B then passed under the
 // criterion-7 defect just as well as without it. The name resolved in the

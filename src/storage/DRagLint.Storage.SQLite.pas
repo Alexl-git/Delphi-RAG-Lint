@@ -2545,8 +2545,17 @@ end;
 ///  to agree with it. A DOTTED scope unit therefore ignores this parameter
 ///  entirely and behaves exactly as it did before the parameter existed.
 ///  Never consulted by rules 1 or 2a, which rest on what the unit
-///  explicitly states; and in rule 2b it can only ever VETO a hit, never
-///  produce one, so it cannot override anything. See
+///  explicitly states. In rule 2b the anchor acts through
+///  WeakHitFrameworkUnconfirmed, which only ever REMOVES entries from that
+///  pass's hit set and adds none. Two consequences, both real, and neither
+///  is "the anchor cannot change the outcome":
+///    * 2b returns only when EXACTLY ONE hit survives, so a removal can turn
+///      a tie into a decision -- the guard CAN convert a decline into a pick.
+///    * the anchor is what CONFIRMS a GUI-namespace hit, so supplying one is
+///      precisely what lets 2b return a GUI candidate at all; an UNANCHORED
+///      undotted unit has every GUI hit dropped instead.
+///  What no anchor can do is make 2b return a GUI candidate it does NOT
+///  confirm, or override rules 1 or 2a. See
 ///  TSQLiteSymbolStore.FrameworkAnchorForFile.</param>
 /// <returns>The chosen candidate, or a default(TSymbol) (Id = 0) when no
 ///  rule narrows the field to one.</returns>
@@ -2568,9 +2577,12 @@ end;
 ///  from a GUI framework namespace that disagrees with it: rule 3 selects BY
 ///  that segment, and rule 2b drops any GUI-namespace hit that segment does
 ///  not confirm. An UNKNOWN effective framework (an undotted unit with no
-///  anchor) is not confirmation -- rule 3 is skipped and rule 2b drops the
-///  GUI hit, so such a unit DECLINES rather than taking a plausible-looking
-///  candidate. Non-GUI candidates ('System.*', 'Winapi.*', undotted,
+///  anchor) is not confirmation -- rule 3 is skipped and rule 2b drops EVERY
+///  GUI-namespace hit, so such a unit can never take a GUI candidate. It does
+///  NOT follow that it always declines: dropping a GUI hit can leave exactly
+///  one surviving NON-GUI hit where there had been a tie, and pass 2b then
+///  returns that one. The guarantee is about WHICH NAMESPACES can come back,
+///  not about declining. Non-GUI candidates ('System.*', 'Winapi.*', undotted,
 ///  project namespaces) are never dropped by either rule; they are not
 ///  competing frameworks.
 ///  Rules 1 and 2a deliberately CAN cross, and rank above both: a unit that
@@ -2665,9 +2677,30 @@ var
   //
   // The scope's effective framework is its own leading segment, or -- by the
   // SAME substitution rule 3 makes, for the same reason -- the ancestry anchor
-  // when it has no segment of its own. Applying the anchor here is a VETO that
-  // can only shrink the hit set, never a selector: it cannot make pass 2b
-  // return something it would not otherwise have returned.
+  // when it has no segment of its own.
+  //
+  // WHAT THIS GUARD CAN AND CANNOT DO, stated exactly, because the obvious
+  // summary is wrong. Mechanically it only ever REMOVES entries from pass 2b's
+  // hit set: it adds nothing and selects nothing. It does NOT follow that "it
+  // cannot change what 2b returns" -- that reading is FALSE, and it stood in
+  // this comment for several revisions. Pass 2b returns only when EXACTLY ONE
+  // hit survives, so removing a candidate can turn a tie into a decision.
+  //   Worked counter-example. Candidates 'Vcl.X.TFoo' and 'System.Y.TFoo', an
+  //   undotted scope unit with NO anchor, `uses` carrying the bare names 'x'
+  //   and 'y'. WITH the guard the Vcl hit is unconfirmed and dropped, exactly
+  //   one hit survives, and 2b returns 'System.Y.TFoo'. WITHOUT it both hit,
+  //   UsesHits = 2, and the rule falls through to rule 3 -- which has no
+  //   segment to match and DECLINES. The guard turned a decline into a pick.
+  // Symmetrically, the ANCHOR is what confirms a GUI hit, so supplying one is
+  // exactly what lets 2b return a GUI candidate at all (case A of
+  // tests/autotest/run_proptree_framework_anchor.ps1): unanchored, every GUI
+  // hit is dropped and the unit declines.
+  //
+  // The two properties that ARE absolute, and the only ones worth asserting:
+  //   * 2b can never return a GUI-namespaced candidate that the scope's
+  //     effective framework does not CONFIRM -- that is precisely what is
+  //     removed here;
+  //   * this guard never runs before, or overrides, rules 1 or 2a.
   //
   // Non-GUI candidates ('System.*', 'Winapi.*', undotted, project namespaces)
   // are never dropped, so pass 2b keeps its purpose. The named trade-off: a

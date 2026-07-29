@@ -462,6 +462,12 @@ function Get-Tree([string]$Database, [string]$QName) {
   try {
     $raw = (& $Exe proptree --qname $QName --format json --db $Database --no-write-back 2>$null) -join "`n"
   } finally { Pop-Location }
+  # Empty output must degrade to $null, not throw. ConvertFrom-Json on '' raises
+  # under $ErrorActionPreference='Stop' and would abort the whole suite mid-run,
+  # turning one failing case into no result at all. The callers below already
+  # treat a missing tree as a failed check. Mirrors the same guard in
+  # run_proptree_prop_type_scope.ps1.
+  if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
   return ($raw | ConvertFrom-Json)
 }
 
@@ -501,7 +507,7 @@ function Test-Declines([string]$QName, [string]$Marker, [string]$ChildA, [string
 Test-Picks 'LegacyVclKit.TLegacyVclRoot'           'MarkerA' 'VclOnlyA' 'FmxOnlyA' `
   "Case A: undotted legacy unit, ancestry reaches Vcl.* -> anchor 'Vcl' breaks the bare-uses tie"
 Test-Picks 'LegacyMenusKit.TLegacyMenusRoot'       'MarkerB' 'MenusOnlyB' 'WidgetsOnlyB' `
-  'Case B: no anchor at all -- the weak last-segment uses pass decides alone'
+  'Case B: rule 3 cannot separate two same-segment Vcl.* candidates -- the weak last-segment uses pass decides (its Vcl anchor still REQUIRED to confirm the hit)'
 Test-Picks 'LegacyFmxKit.TLegacyFmxRoot'           'MarkerC' 'FmxOnlyC' 'VclOnlyC' `
   "Case C: mirror -- ancestry reaches FMX.* -> anchor 'FMX' (criterion 5, reverse direction)"
 Test-Declines 'LegacyDataKit.TLegacyDataRoot'      'MarkerD' 'VclOnlyD' 'FmxOnlyD' `
