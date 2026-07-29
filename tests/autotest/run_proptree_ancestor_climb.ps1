@@ -126,6 +126,17 @@
     D REFUSAL      Ambig.Kit.TAmbiguous emits its OWN AmbMarker (de-vacuating: the
                    tree really was built) but NEITHER ancestor surface. Absence
                    over wrong.
+                   HOW STRONG D ACTUALLY IS, measured rather than counted
+                   (register K38): under the mutation that removes the mechanism
+                   -- AStrict:=False at the climb's call site -- only D4 and D5
+                   go red. Non-strict returns InScope[0], so exactly ONE
+                   candidate is grafted; D2/D3 fire only if candidate ORDER
+                   flips, which a fixture-file rename could do silently. So four
+                   named-leaf checks carried two checks' worth of discrimination.
+                   D6 is the order-independent form and is strictly stronger than
+                   all four: the refusal means the top-level surface is declared
+                   by TAmbiguous ALONE, which forbids a graft from any class at
+                   all. D7 de-vacuates D6 against B's grafting tree.
     E ROOT CAUSE   the index-time guard, read off the STORED tables: a DOTTED uses
                    row resolves target_file_id (E1-E2); the ambiguous cross-unit
                    edge is stored RESOLVED and points at the Vcl.Kit class, not the
@@ -612,6 +623,28 @@ Check 'D2 does NOT graft Vcl.Kit.TWinControl (Left)'         (-not (HasLeaf $dTo
 Check 'D3 does NOT graft Vcl.Kit.TComponentBase (Tag)'       (-not (HasLeaf $dTop 'Tag'))       ("declared_in=" + (LeafUnit $dTop 'Tag'))
 Check 'D4 does NOT graft Fmx.Kit.TWinControl (FmxLeft)'      (-not (HasLeaf $dTop 'FmxLeft'))   ("declared_in=" + (LeafUnit $dTop 'FmxLeft'))
 Check 'D5 does NOT graft Fmx.Kit.TFmxBase (FmxPoison)'       (-not (HasLeaf $dTop 'FmxPoison')) ("declared_in=" + (LeafUnit $dTop 'FmxPoison'))
+# K38 -- D2..D5 name FOUR leaves, but under the mutation that removes the very
+# mechanism this group pins (AStrict:=False at the climb's call site) only TWO of
+# them go red. Non-strict returns InScope[0], so exactly ONE candidate is grafted
+# and the other pair stays green; WHICH pair is decided by candidate ORDER, which
+# a fixture-file rename could silently flip. Measured by the T4d fix-round-1
+# reviewer, not restated from the brief: D4/D5 red, D2/D3 green.
+#
+# D6 is the order-independent form of the same requirement, and it is STRICTLY
+# STRONGER than D2..D5 together: a refusal means the top-level surface is
+# declared by TAmbiguous and by NOTHING ELSE, so it forbids a graft from any
+# class -- including one no D-check names. Whichever candidate a non-strict
+# resolver picks, D6 reddens.
+$dClimb = ClimbOf $dTop
+Check 'D6 REFUSAL is order-independent: the whole top-level surface is declared by TAmbiguous ALONE' `
+  ($dClimb -eq 'Ambig.Kit.TAmbiguous') ("climb=" + $dClimb)
+# D7 de-vacuates D6 without needing a rebuilt exe: the SAME predicate applied to
+# B's tree, which DOES graft, must be FALSE. Without it, "the climb names exactly
+# one class" would also hold for a tree that grafted nothing because it was never
+# built -- the shape D1 guards against for absence and nothing guarded for here.
+$bClimbForD7 = ClimbOf $bTop
+Check 'D7 D6 is not vacuous: the SAME predicate is FALSE for Std.Kit.TEdit, which does graft' `
+  ($bClimbForD7 -ne 'Std.Kit.TEdit') ("B climb=" + $bClimbForD7)
 
 # --- E. ROOT CAUSE, at rest: the INDEX-TIME half of the fix. ----------------------
 # Query the stored tables directly rather than the engine's own answer, so this

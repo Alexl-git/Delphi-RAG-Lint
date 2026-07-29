@@ -41,7 +41,23 @@
   "Current" means: not older than the newest file in the CLI's own source set,
   which is READ FROM src\cli\drag-lint.dproj's DCC_UnitSearchPath rather than
   hardcoded here -- a hardcoded directory list is exactly the kind of copy that
-  goes stale. One declaration, read by the compiler and by this check.
+  goes stale. One declaration, read by the compiler and by this check. Every
+  <DCC_UnitSearchPath> block is read, not the first (register K5): a .dproj
+  carries one per build configuration.
+
+  Three things this file asserts that nothing in tests\ can currently exercise,
+  and why they are self-tests rather than surveys (Task 4f)
+    K5  the real .dproj has exactly ONE configuration block, so it cannot tell a
+        first-match parse from a union parse. A synthetic two-block document can,
+        and does.
+    K11 no line in tests\ puts a `#` inside a string literal ahead of an exe
+        literal -- and that is precisely the state in which a regression would
+        remove coverage with nothing to see. Three synthetic lines pin the rule
+        in both directions.
+    K10 a BARE relative literal is CWD-relative, so resolving it against the repo
+        root is only right while the driver runs runners from there. That is now
+        asserted against run_battery.ps1's own -WorkingDirectory rather than
+        assumed.
 
   On Win32, and on register item E3
     Whether the Win32 CLI stays a supported artifact is E3, an open USER
@@ -93,26 +109,53 @@ Write-Host '== exe freshness (E8) ==' -ForegroundColor Cyan
 $dproj = Join-Path $Repo 'src\cli\drag-lint.dproj'
 Check 'CLI .dproj present' (Test-Path $dproj) $dproj
 
+# K5 -- a .dproj carries ONE <DCC_UnitSearchPath> PER BUILD CONFIGURATION, and
+# this used to read only the FIRST match. A path present only in a later
+# configuration block was invisible, so the "newest source file" could be
+# computed over a silently smaller set and understate itself. Now the UNION of
+# every block, de-duplicated in first-seen order.
+#
+# src\cli\drag-lint.dproj carries exactly ONE block today (23 entries), so the
+# real .dproj cannot discriminate the two versions -- which is why the fix ships
+# with the SELF-TEST below over a synthetic two-configuration document rather
+# than with a claim. Revert this to [regex]::Match and that check goes red.
+function Get-DprojSearchPathEntries([string]$Text) {
+  $out = New-Object System.Collections.Generic.List[string]
+  foreach ($m in [regex]::Matches($Text, '<DCC_UnitSearchPath>(.*?)</DCC_UnitSearchPath>', 'Singleline')) {
+    foreach ($p in ($m.Groups[1].Value -split ';')) {
+      $t = $p.Trim()
+      if ($t -ne '' -and -not $out.Contains($t)) { $out.Add($t) }
+    }
+  }
+  return $out
+}
+
+$k5Probe = '<Project>' +
+  '<PropertyGroup Condition="Debug"><DCC_UnitSearchPath>..\alpha;..\shared</DCC_UnitSearchPath></PropertyGroup>' +
+  '<PropertyGroup Condition="Release"><DCC_UnitSearchPath>..\shared;..\only_in_release</DCC_UnitSearchPath></PropertyGroup>' +
+  '</Project>'
+$k5 = @(Get-DprojSearchPathEntries $k5Probe)
+Check 'search-path parse reads EVERY build configuration, not just the first (K5)' `
+  (($k5 -contains '..\only_in_release') -and ($k5.Count -eq 3)) "(got: $($k5 -join ' '))"
+
 $srcDirs = New-Object System.Collections.Generic.List[string]
+$dprojBlocks = 0
 if (Test-Path $dproj) {
   $cliDir = Split-Path $dproj -Parent
   $srcDirs.Add($cliDir)
-  # NOTE (deferred to the second sweep, recorded in the register): a .dproj
-  # carries one DCC_UnitSearchPath per build configuration. This takes the first
-  # match, so a config-specific path present only in a later block is not seen
-  # and the source set can silently shrink. The count assertion below is the
-  # floor that makes a large shrink visible; a per-config union is the real fix.
-  $m = [regex]::Match((Get-Content $dproj -Raw), '<DCC_UnitSearchPath>(.*?)</DCC_UnitSearchPath>', 'Singleline')
-  if ($m.Success) {
-    foreach ($p in ($m.Groups[1].Value -split ';')) {
-      $t = $p.Trim()
-      if ($t -eq '' -or $t.StartsWith('$(')) { continue }
-      $full = Join-Path $cliDir $t
-      if (Test-Path $full) { $srcDirs.Add((Resolve-Path $full).Path) }
+  $dprojText = Get-Content $dproj -Raw
+  $dprojBlocks = [regex]::Matches($dprojText, '<DCC_UnitSearchPath>', 'Singleline').Count
+  foreach ($t in (Get-DprojSearchPathEntries $dprojText)) {
+    if ($t.StartsWith('$(')) { continue }
+    $full = Join-Path $cliDir $t
+    if (Test-Path $full) {
+      $r = (Resolve-Path $full).Path
+      if (-not $srcDirs.Contains($r)) { $srcDirs.Add($r) }
     }
   }
 }
-Check 'source dirs read from the .dproj search path' ($srcDirs.Count -gt 1) "($($srcDirs.Count) dirs)"
+Check 'source dirs read from the .dproj search path' ($srcDirs.Count -gt 1) `
+  "($($srcDirs.Count) dirs, from $dprojBlocks DCC_UnitSearchPath block(s))"
 
 $newest = $null
 foreach ($d in $srcDirs) {
@@ -131,11 +174,35 @@ if ($null -ne $newest) {
 # ending in <sep>drag-lint.exe. The separator requirement drops a bare
 # 'drag-lint.exe' filename (run_smoke builds one for a copy destination), which
 # names no location and cannot be a stale target.
-function Get-ExeLiterals([string]$Path) {
+#
+# K11 -- `#` only starts a comment OUTSIDE a string literal. This used to cut the
+# line at the first `#` unconditionally, so `$Tag = "rc#1"; $Exe = "...\drag-lint.exe"`
+# would have dropped the exe literal and that site would have gone unchecked with
+# no sign. There is no such line in tests\ today, which is exactly why the
+# requirement is asserted by the self-test below instead of by a survey: a
+# regression here removes coverage silently, and "no instance today" is the
+# condition under which nobody would notice.
+#
+# LIMIT, stated rather than implied: this is a scanner, not a PowerShell parser.
+# It tracks single and double quotes only; a `#` inside a here-string, or a
+# doubled '' escape, can still confuse it. It is strictly better than cutting at
+# the first `#`, and it is not a lexer.
+function Remove-PsLineComment([string]$Code) {
+  $inS = $false; $inD = $false
+  for ($i = 0; $i -lt $Code.Length; $i++) {
+    $c = $Code[$i]
+    if ($c -eq "'" -and -not $inD) { $inS = -not $inS; continue }
+    if ($c -eq '"' -and -not $inS) { $inD = -not $inD; continue }
+    if ($c -eq '#' -and -not $inS -and -not $inD) { return $Code.Substring(0, $i) }
+  }
+  return $Code
+}
+
+function Get-ExeLiteralsFromLines([string[]]$Lines) {
   $out = New-Object System.Collections.Generic.List[object]
   $inBlock = $false
   $n = 0
-  foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
+  foreach ($line in $Lines) {
     $n++
     $code = $line
     if ($inBlock) {
@@ -150,8 +217,7 @@ function Get-ExeLiterals([string]$Path) {
       if ($end -lt 0) { $code = $code.Substring(0, $start); $inBlock = $true }
       else { $code = $code.Substring(0, $start) + $rest.Substring($end + 2) }
     }
-    $hash = $code.IndexOf('#')
-    if ($hash -ge 0) { $code = $code.Substring(0, $hash) }
+    $code = Remove-PsLineComment $code
     if ($code.Trim() -eq '') { continue }
     foreach ($mm in [regex]::Matches($code, '["'']([^"'']*[\\/]drag-lint\.exe)["'']', 'IgnoreCase')) {
       $out.Add([pscustomobject]@{ Line = $n; Literal = $mm.Groups[1].Value })
@@ -160,12 +226,50 @@ function Get-ExeLiterals([string]$Path) {
   return $out
 }
 
+function Get-ExeLiterals([string]$Path) {
+  return Get-ExeLiteralsFromLines ([System.IO.File]::ReadAllLines($Path))
+}
+
+# K11 self-test. Three probe lines, one requirement each: a `#` inside a string
+# must not hide a following literal; a real trailing comment must still be
+# stripped; and code before a trailing comment must still count.
+#
+# THE PROBE STRINGS ARE ASSEMBLED, NOT WRITTEN. This file is itself inside the
+# scanned population, so a quoted `...\drag-lint.exe` on a CODE line here would
+# be extracted as a genuine target and the guard would fail on its own fixtures
+# -- which is exactly what the first version of this self-test did. Splitting the
+# filename keeps the source free of the shape the extractor looks for while the
+# probe still carries it at run time. (The header's block-comment self-test is
+# deliberately the opposite: there the literal IS written out, because a comment
+# is precisely where it must not count.)
+$EXE_ = 'drag' + '-lint.exe'
+$k11Keep = @(Get-ExeLiteralsFromLines @(('$Tag = "rc#1"; $Exe = "..\..\third_party\dll-win64\{0}"' -f $EXE_)))
+$k11Drop = @(Get-ExeLiteralsFromLines @(('$X = 1   # see ..\..\src\cli\Win32\Debug\{0}' -f $EXE_)))
+$k11Half = @(Get-ExeLiteralsFromLines @(('$Exe = "..\..\a\{0}"  # not "..\..\b\{0}"' -f $EXE_)))
+Check 'a # inside a STRING LITERAL does not hide a following exe literal (K11)' `
+  (($k11Keep.Count -eq 1) -and ($k11Keep[0].Literal -eq ('..\..\third_party\dll-win64\' + $EXE_))) `
+  "(got $($k11Keep.Count): $(($k11Keep | ForEach-Object { $_.Literal }) -join ', '))"
+Check 'a # that really does start a comment still hides the rest of the line (K11)' `
+  ($k11Drop.Count -eq 0) "(got $($k11Drop.Count))"
+Check 'code before a trailing comment counts, the comment after it does not (K11)' `
+  (($k11Half.Count -eq 1) -and ($k11Half[0].Literal -eq ('..\..\a\' + $EXE_))) `
+  "(got $($k11Half.Count): $(($k11Half | ForEach-Object { $_.Literal }) -join ', '))"
+
+# K10 -- a BARE RELATIVE literal ('src\cli\Win64\Debug\drag-lint.exe', no
+# $PSScriptRoot and no leading '..') is CWD-relative at run time, not
+# runner-relative and not repo-relative. Resolving it against $Repo is therefore
+# correct only while the process CWD IS the repo root. That is not an accident
+# to be relied on quietly: it is a REQUIREMENT of the battery, and it is
+# asserted below against tests\run_battery.ps1's own -WorkingDirectory, so the
+# day the driver stops supplying it this guard reddens instead of resolving
+# 17 sites against a base nothing guarantees.
+$script:BareRelativeSites = 0
 function Resolve-ExeLiteral([string]$Literal, [string]$RunnerDir) {
   $s = $Literal
   if ($s.StartsWith('$PSScriptRoot')) { $s = $s.Substring('$PSScriptRoot'.Length).TrimStart('\', '/'); $base = $RunnerDir }
   elseif ($s.StartsWith('..'))        { $base = $RunnerDir }
   elseif ([IO.Path]::IsPathRooted($s)) { return [IO.Path]::GetFullPath($s) }
-  else                                 { $base = $Repo }
+  else                                 { $base = $Repo; $script:BareRelativeSites++ }
   if ($s -match '\$') { return $null }   # any other variable: cannot resolve statically
   return [IO.Path]::GetFullPath((Join-Path $base $s))
 }
@@ -195,6 +299,24 @@ foreach ($f in $runners) {
 }
 Check 'runners resolve at least one exe target' ($targets.Count -gt 0) `
   "($($targets.Count) distinct target(s) from $siteCount site(s); $runnersWithResolvedSite runner(s) with a RESOLVED site)"
+
+# K10 -- the base a bare relative literal is resolved against is the battery's
+# CWD, and this is where that stops being an assumption. run_battery.ps1 starts
+# every runner with -WorkingDirectory $repoRoot (deliberately, so the engine's
+# config walk-up finds C:\Projects\.drag-lint.json -- see its own comment), and
+# that is the ONLY reason resolving against $Repo here matches what those
+# runners will actually open. Assert the requirement, at its source.
+$batteryPath = Join-Path $Repo 'tests\run_battery.ps1'
+$batteryText = if (Test-Path $batteryPath) { Get-Content $batteryPath -Raw } else { '' }
+Check 'the battery starts every runner with the REPO ROOT as CWD (what makes a bare relative exe literal resolve here) (K10)' `
+  ($batteryText -match '(?s)Start-Process.*?-WorkingDirectory\s+\$repoRoot') `
+  "($script:BareRelativeSites bare-relative site(s) resolved against the repo root)"
+if (-not ($batteryText -match '(?s)Start-Process.*?-WorkingDirectory\s+\$repoRoot')) {
+  Write-Host '        ^ the driver no longer pins the runners CWD to the repo root, so a bare' -ForegroundColor Yellow
+  Write-Host '          relative exe literal now resolves somewhere this guard cannot predict.' -ForegroundColor Yellow
+  Write-Host '          Either restore -WorkingDirectory $repoRoot, or rewrite those literals' -ForegroundColor Yellow
+  Write-Host '          in the $PSScriptRoot form, which is CWD-independent.' -ForegroundColor Yellow
+}
 
 # --- the enumeration needs a FLOOR, and it must floor the RIGHT quantity ----
 # Target count is the wrong thing to floor: a regression that dropped the

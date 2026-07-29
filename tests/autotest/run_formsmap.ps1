@@ -34,7 +34,14 @@ $db  = "$WorkDir\fixture.sqlite"
 $out = "$WorkDir\forms.csv"
 & $Exe index $FixtureDir --db $db 2>&1 | Out-Null
 Check 'index fixture exits 0' ($LASTEXITCODE -eq 0)
+# K6: this call is timed so the 'no hang' check below can be an ASSERTION. It
+# used to be `Check 'no hang (script completed)' ($true)` -- a tautology that
+# could never fail, inflating this runner's check total by one while measuring
+# nothing. Reaching the line already proved the script had not hung; the literal
+# $true proved nothing at all.
+$swCsv = [System.Diagnostics.Stopwatch]::StartNew()
 & $Exe forms-csv --project "$FixtureDir\Demo.dproj" --db $db --out $out 2>&1 | Out-Null
+$swCsv.Stop()
 Check 'forms-csv exits 0' ($LASTEXITCODE -eq 0)
 Check 'csv exists' (Test-Path $out)
 $csv = Get-Content $out -Raw
@@ -63,7 +70,13 @@ Check 'unreachable form'               ($csv -match 'uDemoUnreached,frmLonely,\d
 # v2 (9a81345): standalone-function call sites (Demo.RunAdminBootstrap) are also
 # listed as callers, so frmList need not be first in the Called From field.
 Check 'called-from for frmEdit'        ($csv -match "uDemoEdit,frmEdit,\d+,[^,]*,[^,]*frmList")
-Check 'no hang (script completed)'     ($true)
+# K6: a real bound on the wall clock of the forms-csv call, replacing a literal
+# $true. The fixture is 7 forms; the call is sub-second on this machine, so 60 s
+# is two orders of magnitude of headroom and still fails on a genuine hang --
+# earlier and with a better name than the battery's 180 s per-runner kill, which
+# reports TIMEOUT for the whole runner and names no stage.
+Check 'no hang: forms-csv completed within 60 s' ($swCsv.Elapsed.TotalSeconds -lt 60) `
+  ("{0:N2}s" -f $swCsv.Elapsed.TotalSeconds)
 # Task 7b: root regression (bootstrap procedure must not steal root)
 Check 'root regression: frmMain root (blank nav)' ($csv -match "uDemoMain,frmMain,\d+,,")
 Check 'root regression: frmEdit still reachable'  ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> frmList -> 'Edit Item' -> frmEdit,")

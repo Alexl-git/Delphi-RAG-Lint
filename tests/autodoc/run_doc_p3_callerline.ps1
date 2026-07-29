@@ -166,6 +166,46 @@ function Split-RefEntries([string]$line) {
 # line would be caught too.
 function Count-Markers([string]$text) { return ([regex]::Matches($text, '\)\s\?')).Count }
 
+# --- dump-call-edges: LAYOUT and CONTENT are separate questions (register K19) -
+# The preconditions below used to match a whole line,
+# `^\s*\d+\|<qname>\|certain$`, against the raw dump. That conflates two
+# unrelated failures: THE EDGE IS MISSING (what the check is named for) and THE
+# DUMP GAINED A COLUMN (a change in a diagnostic verb's output, nothing to do
+# with resolution). A fourth field would redden every one of them under a name
+# that blames the resolver.
+#
+# So the layout is asserted ONCE, by its own name, and the edge preconditions
+# read FIELDS. The verb's contract is `ref_id|target_qname|confidence`
+# (DRagLint.CLI.pas DoDumpCallEdges), one row per resolved edge, no header.
+function Parse-CallEdges([string]$raw) {
+  $out = New-Object System.Collections.Generic.List[object]
+  foreach ($l in ($raw -split "`n")) {
+    $t = $l.Trim()
+    if ($t -eq '' -or $t -notlike '*|*') { continue }
+    $f = $t -split '\|'
+    $out.Add([pscustomobject]@{
+      Fields     = $f
+      RefId      = $f[0]
+      QName      = $(if ($f.Count -gt 1) { $f[1] } else { '' })
+      Confidence = $(if ($f.Count -gt 2) { $f[2] } else { '' })
+    })
+  }
+  return $out
+}
+
+function Check-EdgeDumpLayout([string]$tag, $parsed, [string]$raw) {
+  $widths = @(@($parsed | ForEach-Object { $_.Fields.Count }) | Sort-Object -Unique)
+  Check "$tag FORMAT: dump-call-edges still emits exactly ref_id|target_qname|confidence (3 fields)" `
+    ((@($parsed).Count -gt 0) -and ($widths.Count -eq 1) -and ($widths[0] -eq 3)) `
+    ("field widths " + ($widths -join ',') + " over " + @($parsed).Count + " row(s); raw=" + ($raw -replace "`n",' / '))
+}
+
+# Edges into $qname at $confidence, read by FIELD so a layout change cannot be
+# mistaken for a missing edge.
+function Edges-Into($parsed, [string]$qname, [string]$confidence) {
+  return @($parsed | Where-Object { $_.QName -eq $qname -and $_.Confidence -eq $confidence })
+}
+
 Push-Location C:\TEMP
 try {
 
@@ -198,8 +238,10 @@ Copy-Item $fxA $tgtA -Force
 # uncertain arm IS uncertain. Neither arm's kind is observable in the output
 # these checks read, so neither may be inherited from fixture prose.
 $edgesA = (& $exePath dump-call-edges --db $dbA 2>$null) -join "`n"
+$parsedA = Parse-CallEdges $edgesA
+Check-EdgeDumpLayout 'A' $parsedA $edgesA
 foreach ($nm in @('MakePoint','SumPoint')) {
-  $eA = @([regex]::Matches($edgesA, "(?m)^\s*\d+\|callerline\.$nm\|certain\s*$"))
+  $eA = Edges-Into $parsedA "callerline.$nm" 'certain'
   Check "A PRECONDITION: the index holds exactly ONE certain call edge into $nm" ($eA.Count -eq 1) `
     ("edges=" + ($edgesA -replace "`n",' / '))
 }
@@ -214,7 +256,7 @@ Check 'A PRECONDITION: A''s index holds NO unresolved call site (the control lis
 # is never a call target (CanBeCallTarget False, so Doc.Facts hardcodes
 # 'unverified'), which is why this holds by construction today and is cheap to
 # assert -- and why it is worth asserting against the day that stops being true.
-$tpEdgesA = @([regex]::Matches($edgesA, "(?m)^\s*\d+\|callerline\.TPoint2\|"))
+$tpEdgesA = @($parsedA | Where-Object { $_.QName -eq 'callerline.TPoint2' })
 Check 'A PRECONDITION: the index holds NO call edge into TPoint2 (its list is uniformly UNCERTAIN, not merely unmarked)' `
   ($tpEdgesA.Count -eq 0) ("edges=" + ($edgesA -replace "`n",' / '))
 
@@ -319,7 +361,9 @@ $dbB = Join-Path $sb 'b.sqlite'
 
 # --- Preconditions, re-derived from the INDEX, not from the rendered line. ---
 $edges = (& $exePath dump-call-edges --db $dbB 2>$null) -join "`n"
-$pingEdges = @([regex]::Matches($edges, '(?m)^\s*\d+\|callerline_mixed\.Ping\|certain\s*$'))
+$parsedB = Parse-CallEdges $edges
+Check-EdgeDumpLayout 'B' $parsedB $edges
+$pingEdges = Edges-Into $parsedB 'callerline_mixed.Ping' 'certain'
 Check 'B PRECONDITION: the index holds exactly ONE certain call edge into Ping' ($pingEdges.Count -eq 1) `
   ("edges=" + ($edges -replace "`n",' / '))
 
