@@ -410,11 +410,57 @@ function SeeAlsoToJson(const ASeeAlso: TArray<string>): string             ;
 
 function DefaultDocConfig: TDocConfig;
 
+/// <summary>Unit-qualified prefix of a qualified symbol name
+/// ('Vcl.Controls.TWinControl' -&gt; 'Vcl.Controls'); '' when the name carries no
+/// dotted prefix at all.</summary>
+/// <remarks>Known limitation: splits on the LAST dot, so a NESTED type
+/// ('Vcl.Controls.TOuter.TInner') yields 'Vcl.Controls.TOuter' rather than the
+/// declaring unit. Harmless for the leading-namespace question
+/// (UnitFrameworkPrefix still returns 'Vcl'); it does mean a nested type's
+/// declaring "unit" never matches a plain unit name in a uses set.
+/// Lives HERE, in the shared base unit, so the query-time resolver
+/// (DRagLint.Storage.SQLite) and the proptree ancestor climb
+/// (DRagLint.Convert.PropTree) share ONE definition of "which unit declares
+/// this" instead of each hand-rolling its own.</remarks>
+function DeclaringUnitOfQName(const AQName: string): string;
+
+/// <summary>The leading NAMESPACE SEGMENT of a dotted unit name -- the
+/// substring before the FIRST '.' ('Vcl.Controls' -&gt; 'Vcl'; 'Vcl.StdCtrls'
+/// -&gt; 'Vcl'; 'FMX.Controls.Win' -&gt; 'FMX'; 'Winapi.Windows' -&gt;
+/// 'Winapi').</summary>
+/// <returns>The segment, or '' when AUnitName carries no dot at all.</returns>
+/// <remarks>An UNDOTTED unit name -- a hermetic-test unit ('VclKit') or real
+/// third-party code ('cxButtons', 'Abcbtn') -- has NO namespace segment, and
+/// must never be treated as sharing one with a dotted name like 'Vcl.Controls'.
+/// Returning '' is what makes BOTH sides skip it rather than substring-match:
+/// the SELECT side (PickAncestorCandidateByScope rule 3, which needs a unique
+/// same-segment candidate) and the REFUSE side (the proptree climb's
+/// cross-namespace guard, which only refuses when BOTH segments are non-empty
+/// and differ). This is the single definition of that notion; do not
+/// re-derive it.</remarks>
+function UnitFrameworkPrefix(const AUnitName: string): string;
+
 implementation
 
 uses
   System.SysUtils
   ;
+
+function DeclaringUnitOfQName(const AQName: string): string;
+var P: Integer;
+begin
+  Result:= '';
+  P:= LastDelimiter('.', AQName);
+  if P > 1 then Result:= Copy(AQName, 1, P - 1);
+end;
+
+function UnitFrameworkPrefix(const AUnitName: string): string;
+var P: Integer;
+begin
+  Result:= '';
+  P:= Pos('.', AUnitName);
+  if P > 0 then Result:= Copy(AUnitName, 1, P - 1);
+end;
 
 const
   KindText: array[TSymbolKind] of string = (

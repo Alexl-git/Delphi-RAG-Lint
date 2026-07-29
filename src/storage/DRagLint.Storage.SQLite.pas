@@ -2450,31 +2450,11 @@ begin
   end;
 end;
 
-// Unit-qualified prefix of a qualified symbol name ('Vcl.StdCtrls.TCustomButton'
-// -> 'Vcl.StdCtrls'); '' when the name carries no dotted prefix at all. Used by
-// PickAncestorCandidateByScope to read "which unit declares this candidate".
-function DeclaringUnitOfQName(const AQName: string): string;
-var P: Integer;
-begin
-  Result:= '';
-  P:= LastDelimiter('.', AQName);
-  if P > 1 then Result:= Copy(AQName, 1, P - 1);
-end;
-
-// The FRAMEWORK-PREFIX segment of a dotted unit name -- the substring before
-// the FIRST '.' ('Vcl.Controls' -> 'Vcl'; 'Vcl.StdCtrls' -> 'Vcl';
-// 'FMX.Controls.Win' -> 'FMX'; 'Winapi.Windows' -> 'Winapi'). '' when the name
-// carries no dot at all: an undotted unit name (e.g. a hermetic-test fixture
-// unit called 'VclKit') has NO framework prefix and must never be treated as
-// sharing one with a dotted name like 'Vcl.Controls' -- see
-// PickAncestorCandidateByScope rule 3.
-function UnitFrameworkPrefix(const AUnitName: string): string;
-var P: Integer;
-begin
-  Result:= '';
-  P:= Pos('.', AUnitName);
-  if P > 0 then Result:= Copy(AUnitName, 1, P - 1);
-end;
+// DeclaringUnitOfQName ("which unit declares this candidate") and
+// UnitFrameworkPrefix (the leading dotted namespace segment) moved to
+// DRagLint.Core.Model, so this SELECT-side rule and the proptree ancestor
+// climb's REFUSE-side cross-namespace guard share ONE definition of the notion
+// rather than each carrying its own copy. Semantics are unchanged.
 
 /// <summary>
 ///  Shared ancestor/type-candidate disambiguation rule: given several

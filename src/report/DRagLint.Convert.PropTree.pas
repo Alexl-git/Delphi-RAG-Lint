@@ -149,12 +149,20 @@ type
 /// -- same shared scope rule (same unit -&gt; unique uses hit -&gt; unique leading
 /// dotted-namespace segment -&gt; decline), but matched textually, so it repairs
 /// indexes already on disk without a re-index. The name is resolved in the unit
-/// of the class that actually inherits it, never blanket in the queried root's
-/// unit; only a class-kind result is accepted; a decline still stops the climb
-/// (never a guess); and a Vcl.* class can never resolve into an FMX.* ancestor
-/// or the reverse. The bridged climb is bounded by a visited-class-id set and a
-/// depth cap, and performs NO writes, so a read-only (--no-write-back) store is
-/// unaffected. Leaf names are deduped -- a redeclared property
+/// of the class whose own heritage declares it; only when NO class in the
+/// closure declares it (the declaring symbol is an interface, say) does it fall
+/// back to the unit of the class that hop is climbing from -- which, at the
+/// outermost hop, is the queried root. Only a class-kind result is accepted, so
+/// an ancestor that resolves to an interface symbol is never placed in the
+/// chain (this does NOT claim to detect a same-named CLASS standing in for what
+/// was written as an interface entry). A decline still stops the climb (never a
+/// guess). A bridge is refused outright when the candidate's leading dotted
+/// namespace segment differs from the inheriting class's and both are non-empty,
+/// so a Vcl.* class can never be given an FMX.* ancestor or the reverse -- this
+/// is enforced in the climb itself, because the shared scope rule is bypassed
+/// when a name has only one candidate. The bridged climb is bounded by a
+/// visited-class-id set and a depth cap, and performs NO writes, so a read-only
+/// (--no-write-back) store is unaffected. Leaf names are deduped -- a redeclared property
 /// shadows the ancestor's, and the most-derived declaration wins for DeclaredIn.
 /// The type is parsed from the property Signature (a leading ':' + whitespace is
 /// trimmed, then the first type token is taken up to whitespace / ';' / 'read' /
@@ -314,6 +322,71 @@ begin
     Result:= SameText(NormalizeHeritageToken(Copy(AHeritage, Start, MaxInt)), AName);
 end;
 
+// The class whose OWN heritage lists AName -- i.e. the class actually doing the
+// inheriting at this hop, which is the scope an unresolved ancestor name must be
+// resolved in (design criterion 7). AKnown is the current hop's class followed
+// by the resolved classes of its ancestor closure, most-derived first, so the
+// first match is the nearest declarer.
+//
+// LAST RESORT, stated plainly: when NO class in AKnown declares AName -- e.g.
+// the declaring class is an INTERFACE, which never enters AKnown -- this returns
+// AFallback, the class the current hop is climbing FROM. At the outermost call
+// that IS the queried root, so in exactly that residual case the name is
+// resolved in the root's unit. That is the criterion-7 defect at reduced radius,
+// not its absence: it is confined to closures whose declarer is not a class, and
+// it is one reason the caller ALSO applies CrossesNamespace below rather than
+// trusting the derived scope on its own.
+function ScopeSymbolFor(const AKnown: TList<TSymbol>; const AFallback: TSymbol;
+  const AName: string): TSymbol;
+var
+  K: TSymbol;
+begin
+  Result:= AFallback;
+  if not Assigned(AKnown) then Exit;
+  for K in AKnown do
+    if HeritageDeclares(K.Heritage, AName) then Exit(K);
+end;
+
+// True when bridging AInheritor's ancestor to ACandidate would cross between two
+// DIFFERENT top-level namespaces -- the guard behind design criterion 5, "SHALL
+// NEVER select an FMX.* ancestor for a Vcl.* class, nor the reverse".
+//
+// WHY THIS IS NEEDED ON TOP OF THE SHARED SCOPE RULE. ResolveTypeNameToClass ->
+// PickCandidate short-circuits on a SINGLE candidate (DRagLint.Storage.SQLite:
+// 'if Length(Types) = 1 then Exit(Types[0])'), so PickAncestorCandidateByScope
+// -- and with it rule 3's namespace check -- is consulted ONLY when two or more
+// same-named candidates exist. A Vcl-scoped class whose unresolved ancestor name
+// resolves (typically via a type-ALIAS chase, since a lone same-named CLASS
+// would already have been linked at index time) to the ONE class of that name,
+// living in an FMX unit, would otherwise be bridged with no scope check at all
+// and placed straight into the class chain. Criterion 5 is an absolute SHALL,
+// and this climb is the first caller that puts the result into the CHAIN rather
+// than into a single property's type.
+//
+// Both segments come from DRagLint.Core.Model.UnitFrameworkPrefix -- the same
+// leading-dotted-segment notion the select-side rule uses, one definition.
+// Refuses ONLY when BOTH are non-empty and differ: an UNDOTTED unit has no
+// namespace to conflict with, which is what keeps the real third-party roots
+// working ('cxButtons.TcxCustomButton' -> 'Vcl.StdCtrls.TCustomButton',
+// 'Abcbtn.*' -> 'Vcl.Controls.*').
+//
+// KNOWN COST, accepted deliberately: two genuinely different namespaces that
+// legitimately inherit across one another (a 'Vcl.*' class reaching a 'System.*'
+// ancestor through an alias) are refused too, so such a chain stops where it
+// stops today instead of being repaired. That is the conservative direction and
+// matches the engine's standing policy -- when unsure, don't claim -- whereas
+// the alternative risks splicing a parallel framework's whole surface into a
+// chain, which is a WRONG answer rather than a missing one.
+function CrossesNamespace(const AInheritor, ACandidate: TSymbol): Boolean;
+var
+  InhPrefix : string;
+  CandPrefix: string;
+begin
+  InhPrefix := UnitFrameworkPrefix(DeclaringUnitOfQName(AInheritor.QualifiedName));
+  CandPrefix:= UnitFrameworkPrefix(DeclaringUnitOfQName(ACandidate.QualifiedName));
+  Result    := (InhPrefix <> '') and (CandPrefix <> '') and not SameText(InhPrefix, CandPrefix);
+end;
+
 const
   // Hard cap on how many BRIDGED hops ClassChain's query-time fallback may
   // take from one starting class. Belt-and-braces next to the visited-class-id
@@ -414,17 +487,23 @@ var
   // SCOPE, per criterion 7: an unresolved row surfaced by
   // GetTransitiveAncestors' BFS may have been declared by ANY class in the
   // closure, not by the class the walk started from. The name is therefore
-  // resolved in the unit of the class whose OWN heritage actually lists it
-  // (HeritageDeclares over the most-derived-first Known list) -- never blanket
-  // in the root class's file.
+  // resolved in the unit of the class whose OWN heritage actually lists it --
+  // ScopeSymbolFor over the most-derived-first Known list, which also documents
+  // precisely what its last resort falls back to.
   //
-  // GUARDS: a visited-class-id set (a class is placed, and climbed FROM, at
-  // most once -- so a self-referential or cyclic index terminates instead of
-  // spinning) plus a CMaxBridgedChainDepth cap on bridged recursion. Only
-  // skClass results are accepted, so an unresolved INTERFACE entry in a class's
-  // heritage can never be bridged into the class chain. And an edge declared by
-  // something the index cannot distinguish from a 'class of X' class REFERENCE
-  // is refused outright -- see IsIndistinguishableFromClassRef.
+  // GUARDS, in the order they apply to an unresolved row:
+  //  * IsIndistinguishableFromClassRef -- refuse to bridge FROM a declaration
+  //    the index cannot tell apart from a 'class of X' class reference;
+  //  * Kind = skClass -- an ancestor that resolves to an INTERFACE symbol is
+  //    never placed in the class chain. (This rejects interface SYMBOLS; it
+  //    does not detect a same-named CLASS standing in for what was written as
+  //    an interface heritage entry.)
+  //  * CrossesNamespace -- criterion 5, enforced here rather than delegated,
+  //    because the shared scope rule is skipped entirely for a single-candidate
+  //    name;
+  //  * a visited-class-id set (each class is placed, and climbed FROM, at most
+  //    once, so a self-referential or cyclic index terminates instead of
+  //    spinning) plus a CMaxBridgedChainDepth cap on bridged recursion.
   function ClassChain(const ARoot: TSymbol): TArray<TSymbol>;
   var
     List   : TList<TSymbol>             ;
@@ -458,7 +537,6 @@ var
       Anc  : TArray<TTypeAncestor>;
       A    : TTypeAncestor        ;
       Known: TList<TSymbol>       ; // AFrom + the resolved classes of its closure
-      K    : TSymbol              ;
       Sym  : TSymbol              ;
       Brid : TSymbol              ;
       Decl : TSymbol              ; // the class whose OWN heritage lists A.Name
@@ -485,22 +563,20 @@ var
           else if not A.Resolved then
           begin
             // Resolve in the scope of the class that actually inherits this
-            // name (criterion 7); AFrom itself only as a last resort (e.g. the
-            // declaring class is an interface, which never enters Known).
-            Decl:= AFrom;
-            for K in Known do
-              if HeritageDeclares(K.Heritage, A.Name) then
-              begin
-                Decl:= K;
-                Break;
-              end;
+            // name (criterion 7); AFrom itself only as a last resort -- see
+            // ScopeSymbolFor for exactly what that last resort does.
+            Decl:= ScopeSymbolFor(Known, AFrom, A.Name);
             // Never bridge FROM something the index cannot tell apart from a
             // 'class of X' class reference -- it has no instance surface to
             // inherit. See IsIndistinguishableFromClassRef.
             if IsIndistinguishableFromClassRef(Decl) then Continue;
             Brid:= Bridge(A.Name, Decl.FileId);
-            if (Brid.Id > 0) and (Brid.Kind = skClass) and
-               not (AOpts.ToPersistent and IsStopClass(Brid.Name)) and TryAdd(Brid) then
+            if (Brid.Id <= 0) or (Brid.Kind <> skClass) then Continue;
+            // Criterion 5, enforced HERE and not left to the scope rule: that
+            // rule is skipped entirely when the name has a single candidate.
+            // See CrossesNamespace.
+            if CrossesNamespace(Decl, Brid) then Continue;
+            if not (AOpts.ToPersistent and IsStopClass(Brid.Name)) and TryAdd(Brid) then
               ClimbFrom(Brid, ADepthLeft - 1); // the bridged class's own chain
           end;
         end;
@@ -720,9 +796,7 @@ var
       Tok  : string               ;
       Key  : string               ;
       Known: TList<TSymbol>       ; // ASym + the resolved classes of its closure
-      K    : TSymbol              ;
       Sym  : TSymbol              ;
-      Scope: Int64                ;
     begin
       Result:= '';
       Anc:= AStore.GetTransitiveAncestors(ASym.Id);
@@ -738,7 +812,11 @@ var
           if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
           begin
             Sym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
-            Known.Add(Sym); // a later unresolved row may be ITS heritage entry
+            // Same admission test ClimbFrom applies, so both Known lists hold
+            // real classes only and a zero-Id BodyOf result can never become a
+            // scope candidate.
+            if (Sym.Id > 0) and (Sym.Kind = skClass) then
+              Known.Add(Sym); // a later unresolved row may be ITS heritage entry
             Tok:= PropTypeOn(Sym);
             if Tok <> '' then Exit(Tok);
           end;
@@ -756,14 +834,8 @@ var
           Key:= LowerCase(A.Name);
           if (Key = '') or Visited.ContainsKey(Key) then Continue;
           Visited.Add(Key, True);
-          Scope:= ASym.FileId;
-          for K in Known do
-            if HeritageDeclares(K.Heritage, A.Name) then
-            begin
-              Scope:= K.FileId;
-              Break;
-            end;
-          Nxt:= BodyOf(AStore.ResolveTypeNameToClass(A.Name, Scope));
+          Nxt:= BodyOf(AStore.ResolveTypeNameToClass(A.Name,
+                  ScopeSymbolFor(Known, ASym, A.Name).FileId));
           if Nxt.Id <= 0 then Continue;
           Tok:= PropTypeOn(Nxt);   // declared directly on the bridged class?
           if Tok <> '' then Exit(Tok);

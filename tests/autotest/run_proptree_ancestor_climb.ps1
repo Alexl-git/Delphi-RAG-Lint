@@ -49,17 +49,40 @@
     one blanket scope that happens to suit both -- is impossible, because the two
     roots live in the SAME unit yet must reach OPPOSITE frameworks.
 
-  CASE C -- CYCLE GUARD. 'TSelfAlias9 = TSelfCyc9;' with
-  'TSelfCyc9 = class(TSelfAlias9)' is a self-referential ancestry: the alias
-  ancestor bridges straight back to the class that declares it. ClassChain must
-  place/climb each class at most once (visited-class-id set) and cap bridged
-  recursion, so this terminates with a one-class chain instead of spinning.
-  HONEST SCOPE OF THIS CASE: what it observes is that the query TERMINATES,
-  exits 0, and emits the class's own property exactly once -- it does not, and
-  cannot from the CLI, distinguish which of the two guards (visited set or depth
-  cap) stopped it. It is a live-fire regression guard against a hang/stack
-  overflow on a malformed or self-referential index, not a unit test of the
-  visited set in isolation.
+  CASE C -- CYCLE GUARD, made independently RED-able. A LINEAR cycle is not
+  enough: the depth cap alone bounds it, and leaf-name dedup in CollectProps /
+  CollectFields hides the repeated chain, so deleting the visited set changes no
+  output at all. This case therefore uses a BRANCHING cycle --
+  'TCycHub = class(TCycAliasL, TCycAliasR)' where BOTH aliases lead back to
+  TCycHub. With the visited-class-id set each class is climbed at most once and
+  the query is instant. WITHOUT it, every climb of the hub bridges both names
+  again, so the recursion branches two ways per level and the depth cap bounds
+  it at 2^64 -- it never returns. The assertion is a hard wall-clock bound on a
+  fixture that is exponential without the guard, which is exactly the "a
+  malformed or self-referential index must not spin" property the guard exists
+  for. (A two-entry heritage whose second entry is a class is not something the
+  Delphi compiler would accept. That is the point: the guard's job is to survive
+  a MALFORMED index, and type_ancestors records a row per heritage token
+  regardless of what the compiler would say.)
+
+  CASE D -- DEPTH CAP, independently RED-able. A straight, ACYCLIC alias chain
+  longer than CMaxBridgedChainDepth (64). The visited set can never fire here --
+  every class in the chain is distinct -- so only the depth cap can stop the
+  climb. A marker declared comfortably INSIDE the cap must be reachable; one
+  declared BEYOND it must not be. Both directions are pinned, so removing the
+  cap turns the second check red and shrinking it turns the first red.
+
+  CASE E -- CRITERION 5 WHEN THE NAME HAS A SINGLE CANDIDATE: the gap the shared
+  scope rule cannot close. ResolveTypeNameToClass -> PickCandidate
+  short-circuits on a lone candidate ('if Length(Types) = 1 then Exit(Types[0])'),
+  so PickAncestorCandidateByScope -- and with it rule 3 -- is never consulted.
+  A Vcl-scoped class whose ancestor name is a type ALIAS to the ONE class of
+  that name, and that class lives in an FMX unit, would therefore be bridged
+  with NO scope check whatsoever and spliced straight into the class chain. The
+  climb's own CrossesNamespace guard is what refuses it. Neither
+  run_proptree_scope_rule.ps1 nor run_proptree_ancestry_bridge.ps1 can reach
+  this: every ambiguous name in those fixtures has TWO candidates and so takes
+  the scope-rule path instead.
 #>
 [CmdletBinding()]
 param(
@@ -197,18 +220,164 @@ unit Cyc9;
 
 interface
 
-// CYCLE: the alias ancestor resolves straight back to the class that declares
-// it, so bridging it hands the climb a class it has already placed. The climb
-// must terminate (visited-class-id set + bridged-depth cap), not spin.
+// BRANCHING CYCLE -- deliberately malformed, see the header. Both heritage
+// entries of TCycHub are aliases that lead back to TCycHub, so each climb of
+// the hub can bridge TWO names that each return to it. With the
+// visited-class-id set every class is climbed at most once and this is
+// instant; without it the recursion branches two ways per level and the depth
+// cap bounds it at 2^64, i.e. it never returns.
 
 type
-  TSelfAlias9 = TSelfCyc9;
+  TCycAliasL = TCycLeft;
+  TCycAliasR = TCycRight;
+  TCycBack   = TCycHub;
 
-  TSelfCyc9 = class(TSelfAlias9)
+  TCycHub = class(TCycAliasL, TCycAliasR)
   private
     FSelfMark: Integer;
   published
     property SelfMark: Integer read FSelfMark write FSelfMark;
+  end;
+
+  TCycLeft = class(TCycBack)
+  end;
+
+  TCycRight = class(TCycBack)
+  end;
+
+implementation
+
+end.
+'@
+
+# --- CASE D fixture: a straight ACYCLIC alias chain LONGER than the depth cap. -----
+#     Every hop is a distinct class reached through a type alias, so every edge is
+#     unresolved and must be bridged; the visited set can never fire. TDeep9_000 is
+#     the queried root and each TDeep9_NNN inherits TDeep9_(NNN+1) via an alias.
+#     MarkNear is declared at hop 40 (inside the 64 cap) and MarkFar at hop 80
+#     (beyond it).
+$deepNear = 40
+$deepFar  = 80
+$sb = New-Object System.Text.StringBuilder
+[void]$sb.AppendLine('unit Deep9;')
+[void]$sb.AppendLine('')
+[void]$sb.AppendLine('interface')
+[void]$sb.AppendLine('')
+[void]$sb.AppendLine('type')
+[void]$sb.AppendLine('  TMarkNear9 = (mn9None, mn9Full);')
+[void]$sb.AppendLine('  TMarkFar9  = (mf9None, mf9Full);')
+[void]$sb.AppendLine('')
+for ($i = 0; $i -le $deepFar; $i++) {
+  [void]$sb.AppendLine(('  TDeepAlias9_{0:000} = TDeep9_{0:000};' -f $i))
+}
+[void]$sb.AppendLine('')
+for ($i = 0; $i -lt $deepFar; $i++) {
+  [void]$sb.AppendLine(('  TDeep9_{0:000} = class(TDeepAlias9_{1:000})' -f $i, ($i + 1)))
+  if ($i -eq $deepNear) {
+    [void]$sb.AppendLine('  private')
+    [void]$sb.AppendLine('    FMarkNear: TMarkNear9;')
+    [void]$sb.AppendLine('  published')
+    [void]$sb.AppendLine('    property MarkNear: TMarkNear9 read FMarkNear write FMarkNear;')
+  }
+  [void]$sb.AppendLine('  end;')
+}
+[void]$sb.AppendLine(('  TDeep9_{0:000} = class(TPersistent)' -f $deepFar))
+[void]$sb.AppendLine('  private')
+[void]$sb.AppendLine('    FMarkFar: TMarkFar9;')
+[void]$sb.AppendLine('  published')
+[void]$sb.AppendLine('    property MarkFar: TMarkFar9 read FMarkFar write FMarkFar;')
+[void]$sb.AppendLine('  end;')
+[void]$sb.AppendLine('')
+[void]$sb.AppendLine('implementation')
+[void]$sb.AppendLine('')
+[void]$sb.AppendLine('end.')
+Write-Ascii (Join-Path $work 'Deep9.pas') $sb.ToString()
+
+# --- CASE E fixture: the ancestor name has exactly ONE candidate, in an FMX unit. --
+Write-Ascii (Join-Path $work 'FMX.Sole9.pas') @'
+unit FMX.Sole9;
+
+interface
+
+type
+  TSoleFmxMark9 = (sf9None, sf9Full);
+
+  // The ONLY class of this name anywhere in the fixture. Because it is unique,
+  // ResolveTypeNameToClass's PickCandidate short-circuits on it and the shared
+  // scope rule is never consulted -- so nothing but the climb's own
+  // cross-namespace guard stands between it and a Vcl class's ancestor chain.
+  TSoleOnlyInFmx9 = class(TPersistent)
+  private
+    FSoleMark: TSoleFmxMark9;
+  published
+    property SoleMark: TSoleFmxMark9 read FSoleMark write FSoleMark;
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Vcl.Sole9.pas') @'
+unit Vcl.Sole9;
+
+interface
+
+// A 'Vcl.*' class whose ancestor is an ALIAS to a class that exists ONLY in an
+// 'FMX.*' unit. The alias makes ResolveAncestry leave the edge unresolved (its
+// candidate set is class/interface only), and the alias target is globally
+// unique, so PickCandidate short-circuits without ever running the scope rule.
+// Criterion 5 must still hold: 'SoleMark' must NOT appear on TVclSole9.
+
+type
+  TSoleAlias9 = TSoleOnlyInFmx9;
+
+  TVclSole9 = class(TSoleAlias9)
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Vcl.SoleOkTarget9.pas') @'
+unit Vcl.SoleOkTarget9;
+
+interface
+
+type
+  TSoleOkMark9 = (so9None, so9Full);
+
+  // The CONTROL target: also globally unique, also reached through an alias
+  // from another unit -- but that unit shares this one's 'Vcl' namespace, so
+  // the cross-namespace guard must NOT refuse it.
+  TSoleOnlyInVcl9 = class(TPersistent)
+  private
+    FOkMark: TSoleOkMark9;
+  published
+    property OkMark: TSoleOkMark9 read FOkMark write FOkMark;
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Vcl.SoleOk9.pas') @'
+unit Vcl.SoleOk9;
+
+interface
+
+// CONTROL for case E: structurally IDENTICAL to Vcl.Sole9 -- alias ancestor,
+// unresolved edge, globally unique target, PickCandidate short-circuit -- but
+// the target lives in a 'Vcl.*' unit. This must still bridge, which is what
+// makes case E's refusal attributable to the namespace conflict rather than to
+// the climb simply being unable to bridge a lone candidate.
+
+type
+  TSoleOkAlias9 = TSoleOnlyInVcl9;
+
+  TVclSoleOk9 = class(TSoleOkAlias9)
   end;
 
 implementation
@@ -275,20 +444,59 @@ Check "TRootF9.Marker resolves to the FMX candidate 'TMarkFmx9'" ($mB.type -eq '
 Check "TRootF9.Marker is NOT the Vcl decoy 'TMarkVcl9' (criterion 5, reverse)" ($mB.type -ne 'TMarkVcl9') "type=$($mB.type)"
 Check "TRootF9 climb reached FMX.Cand9.TAmb9, not Vcl.Cand9.TAmb9" ($mB.declared_in -eq 'FMX.Cand9.TAmb9') "declared_in=$($mB.declared_in)"
 
-# --- CASE C: cyclic ancestry must terminate, not spin. -----------------------------
+# --- CASE C: BRANCHING cycle -- exponential without the visited-class-id set. ------
+#     Run out-of-process with a hard timeout: without the guard this never returns,
+#     so a wall-clock bound is the assertion. 60 s is ~500x the guarded runtime.
 Write-Host ''
-Write-Host 'Case C: self-referential ancestry terminates (cycle + depth guards)' -ForegroundColor Cyan
+Write-Host 'Case C: branching cyclic ancestry terminates (visited-class-id set)' -ForegroundColor Cyan
+$outC = Join-Path $WorkDir 'cyc.json'
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
-$rawC = $null
-Push-Location $WorkDir
-try { $rawC = (& $Exe proptree --qname Cyc9.TSelfCyc9 --format json --db $db --no-write-back 2>$null) -join "`n" } finally { Pop-Location }
-$ecC = $LASTEXITCODE
+$pC = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir `
+      -ArgumentList @('proptree','--qname','Cyc9.TCycHub','--format','json','--db',$db,'--no-write-back') `
+      -RedirectStandardOutput $outC -RedirectStandardError "$outC.err" -NoNewWindow -PassThru
+$finC = $pC.WaitForExit(60000)
 $sw.Stop()
-Check "cyclic ancestry: proptree exits 0 (no hang, no stack overflow)" ($ecC -eq 0) "exit=$ecC elapsed=$([math]::Round($sw.Elapsed.TotalSeconds,2))s"
-$tC = if ([string]::IsNullOrWhiteSpace($rawC)) { $null } else { $rawC | ConvertFrom-Json }
-Check "cyclic ancestry: root_type='TSelfCyc9'" ($null -ne $tC -and $tC.root_type -eq 'TSelfCyc9') "root_type=$($tC.root_type)"
+if (-not $finC) { try { $pC.Kill() } catch {} }
+Check "branching cycle: terminates within 60 s (RED without the visited set: 2^64 branching)" `
+  $finC "elapsed=$([math]::Round($sw.Elapsed.TotalSeconds,2))s"
+Check "branching cycle: exits 0 (no stack overflow)" ($finC -and $pC.ExitCode -eq 0) "exit=$(if($finC){$pC.ExitCode}else{'TIMEOUT'})"
+$tC = $null
+if ($finC -and (Test-Path $outC)) {
+  $rawC = Get-Content $outC -Raw
+  if (-not [string]::IsNullOrWhiteSpace($rawC)) { $tC = $rawC | ConvertFrom-Json }
+}
+Check "branching cycle: root_type='TCycHub'" ($null -ne $tC -and $tC.root_type -eq 'TCycHub') "root_type=$($tC.root_type)"
 $selfMarks = @(@($tC.properties) | Where-Object { $_.path -eq 'SelfMark' })
-Check "cyclic ancestry: 'SelfMark' emitted exactly once (chain not walked twice)" ($selfMarks.Count -eq 1) "count=$($selfMarks.Count)"
+Check "branching cycle: 'SelfMark' emitted exactly once" ($selfMarks.Count -eq 1) "count=$($selfMarks.Count)"
+
+# --- CASE D: depth cap, on an ACYCLIC chain where the visited set cannot fire. -----
+Write-Host ''
+Write-Host "Case D: bridged-climb depth cap (chain of $deepFar alias hops, cap = 64)" -ForegroundColor Cyan
+$tD = Get-Tree 'Deep9.TDeep9_000'
+Check "fixture sanity: TDeep9_000 resolves as a class" ($null -ne $tD -and $tD.root_type -eq 'TDeep9_000') "root_type=$($tD.root_type)"
+$near = @($tD.properties) | Where-Object { $_.path -eq 'MarkNear' } | Select-Object -First 1
+$far  = @($tD.properties) | Where-Object { $_.path -eq 'MarkFar'  } | Select-Object -First 1
+Check "depth cap: marker at hop $deepNear (INSIDE the cap) IS reached" ($null -ne $near) `
+  "RED if the cap were shrunk below $deepNear -- pins the cap from going too low"
+Check "depth cap: marker at hop $deepFar (BEYOND the cap) is NOT reached" ($null -eq $far) `
+  "RED if the depth cap were removed -- this is the cap's only observable effect"
+
+# --- CASE E: criterion 5 where the ancestor name has a SINGLE candidate. -----------
+Write-Host ''
+Write-Host 'Case E: single-candidate ancestor in another namespace is REFUSED (criterion 5)' -ForegroundColor Cyan
+$edgeSole = (python $script:PyEdge $db 'TVclSole9' 'TSoleAlias9').Trim()
+Check "fixture sanity: TVclSole9's alias edge is UNRESOLVED (so the fallback runs)" ($edgeSole -eq '?|NULL') "edge=$edgeSole"
+$tE = Get-Tree 'Vcl.Sole9.TVclSole9'
+Check "fixture sanity: TVclSole9 resolves as a class" ($null -ne $tE -and $tE.root_type -eq 'TVclSole9') "root_type=$($tE.root_type)"
+$soleE = @($tE.properties) | Where-Object { $_.path -eq 'SoleMark' } | Select-Object -First 1
+Check "Vcl.Sole9.TVclSole9 does NOT inherit the FMX-only ancestor's 'SoleMark' (criterion 5)" ($null -eq $soleE) `
+  ("type=$($soleE.type) declared_in=$($soleE.declared_in) -- PRESENT means a Vcl class was given an FMX ancestor with no scope check at all, because PickCandidate short-circuits on the lone candidate")
+# And prove the refusal is namespace-driven, not a blanket inability to bridge an
+# alias to a unique target: same shape, same-namespace target, must SUCCEED.
+$tE2 = Get-Tree 'Vcl.SoleOk9.TVclSoleOk9'
+$okE = @($tE2.properties) | Where-Object { $_.path -eq 'OkMark' } | Select-Object -First 1
+Check "control: the SAME shape with a same-namespace target still bridges (guard is not a blanket refusal)" `
+  ($null -ne $okE -and $okE.type -eq 'TSoleOkMark9') "type=$($okE.type) declared_in=$($okE.declared_in)"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
