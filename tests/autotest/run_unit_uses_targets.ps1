@@ -11,19 +11,23 @@
   Measured on library-Win64.sqlite before the fix: 122 of 38512 dotted rows
   resolved -- and those 122 were WRONG, dotted names that had landed on an
   unrelated file named after their last segment ('uses Fmx.Editor.MaskEdit'
-  matching FMX.MaskEdit.pas). Overall 41.8% of rows resolved; after, 91.8%.
+  matching FMX.MaskEdit.pas). Overall 41.8% of rows resolved; after, 91.0%.
 
   THE RULES NOW, in order (first hit wins; no hit leaves the row NULL):
     A. EXACT -- the lowercased used-unit name equals a file's lowercased
        basename stem. A name equality, not an inference. Applies to dotted and
-       bare names alike.
-    B. UNIT SCOPE NAMES, BARE NAMES ONLY -- a used name with no dot may match a
-       DOTTED stem by that stem's last segment ('uses Beta' -> Ns.Beta.pas),
-       but only when exactly ONE distinct stem carries that segment. This is
-       Delphi's own unit-scope-names resolution, in the only direction Delphi
-       performs it, and the uniqueness requirement is what keeps it honest.
-    A DOTTED name NEVER falls back to rule B. That direction produced both
-    measured wrong-namespace matches, and case E below is its RED-proof.
+       bare names alike, and is NOT restricted by the GUI rule below.
+    B. UNIT SCOPE NAMES -- a used name may match a DOTTED stem by that stem's
+       last segment ('uses Beta' -> Ns.Beta.pas). An INFERENCE, so it carries
+       three restrictions, each independently pinned below:
+         * BARE NAMES ONLY   (case E)
+         * exactly ONE distinct stem carries the segment   (case D)
+         * the target stem is NOT in a GUI framework namespace   (case G)
+       This is Delphi's own unit-scope-names resolution, in the only direction
+       Delphi performs it.
+  The pass RECOMPUTES rather than tops up -- it clears target_file_id and
+  refills, in one transaction -- so it can REPAIR a wrong value rather than
+  preserve it (the 'repair:' checks at the end).
 
   EACH CASE IS INDEPENDENTLY RED-ABLE against a specific line of the fix:
     A  dotted exact      -- RED if the norm-vs-stem comparison comes back
@@ -32,6 +36,17 @@
     D  ambiguous segment -- RED if rule B stops requiring a UNIQUE stem
     E  dotted -> other   -- RED if rule B stops being bare-only
     F  no such unit      -- RED if anything resolves a name with no candidate
+    G  bare -> GUI stem  -- RED if the IsGuiFrameworkPrefix refusal is dropped
+    H  dotted -> GUI stem-- RED if that refusal is applied to rule A as well
+    repair (x2)          -- RED if the pass goes back to filling only NULL rows
+
+  CASE E's RED-ABILITY IS FRAGILE, and was silently lost once: it needs its
+  segment ('alpha') to stay UNIQUE across the fixture. A second file whose stem
+  ends in '.alpha' makes rule B decline on AMBIGUITY instead, so case E then
+  passes with or without the bare-only restriction and stops testing anything.
+  That is exactly what adding a 'Vcl.Alpha.pas' for case H did. Case H uses the
+  unshared segment 'delta' precisely so it cannot recur -- do not give any new
+  fixture file a stem ending in '.alpha'.
 
   NOT covered here, deliberately: ancestor resolution. ResolveAncestry does not
   read this column at all (it scopes candidates textually), which is why an
@@ -68,9 +83,15 @@ function Write-Ascii([string]$Path, [string]$Body) {
 Write-Ascii (Join-Path $work 'Ns.Alpha.pas') @'
 unit Ns.Alpha;
 
-// Stem 'ns.alpha', last segment 'alpha' -- and NO other indexed stem ends in
-// '.alpha', so 'alpha' is a UNIQUE segment. Target of case A (by its full
-// name) and the thing case E must NOT be allowed to seize.
+// Stem 'ns.alpha', last segment 'alpha' -- and NO other indexed stem in this
+// fixture ends in '.alpha', so 'alpha' is a UNIQUE segment. Target of case A
+// (by its full name) and the thing case E must NOT be allowed to seize.
+//
+// THAT UNIQUENESS IS LOAD-BEARING FOR CASE E, and it is not obvious. Case E
+// proves rule B refuses a DOTTED name. If some other file's stem also ended in
+// '.alpha', rule B would decline on AMBIGUITY first and case E would pass even
+// with the bare-only restriction removed -- green, and testing nothing. Do not
+// add a second '.alpha' stem here; see the suite header.
 
 interface
 
@@ -149,14 +170,20 @@ implementation
 end.
 '@
 
-Write-Ascii (Join-Path $work 'Vcl.Alpha.pas') @'
-unit Vcl.Alpha;
+Write-Ascii (Join-Path $work 'Vcl.Delta.pas') @'
+unit Vcl.Delta;
 
 // Exists so that the GUI-namespace refusal is shown to apply to rule B ONLY:
-// 'uses Vcl.Alpha' NAMES this file outright and must resolve, GUI or not.
+// 'uses Vcl.Delta' NAMES this file outright and must resolve, GUI or not.
 // Rule A is a name equality the unit itself stated; only the rule B INFERENCE
 // is refused a GUI target. Case H -- without it, case G would also pass under
 // a blanket "never resolve into Vcl.*" that broke criterion 12 for VCL units.
+//
+// THE SEGMENT 'delta' IS DELIBERATELY UNSHARED. The first cut of this case used
+// 'Vcl.Alpha.pas', which collided with Ns.Alpha.pas on the segment 'alpha' and
+// silently destroyed case E's RED-ability -- rule B then declined on ambiguity
+// rather than on the bare-only restriction case E exists to pin. Any file added
+// here must carry a segment no other fixture file carries.
 
 interface
 
@@ -178,7 +205,7 @@ uses
   Zed.Alpha,     // E: dotted, no such stem          -> must stay NULL
   NoSuchUnit9,   // F: nothing of the sort indexed   -> must stay NULL
   Widgets9,      // G: bare, unique -- but GUI stem  -> must stay NULL
-  Vcl.Alpha;     // H: dotted exact, GUI stem        -> Vcl.Alpha.pas (rule A)
+  Vcl.Delta;     // H: dotted exact, GUI stem        -> Vcl.Delta.pas (rule A)
 
 implementation
 
@@ -212,7 +239,7 @@ function Get-Use([string]$Name) { return (python $script:PyUse $db $Name).Trim()
 Write-Host ''
 Write-Host 'unit_uses.target_file_id after a fresh index' -ForegroundColor Cyan
 
-$script:AllNames = @('Ns.Alpha','Plain','Beta','Gamma','Zed.Alpha','NoSuchUnit9','Widgets9','Vcl.Alpha')
+$script:AllNames = @('Ns.Alpha','Plain','Beta','Gamma','Zed.Alpha','NoSuchUnit9','Widgets9','Vcl.Delta')
 
 # Fixture sanity: every uses entry produced a row at all.
 foreach ($n in $script:AllNames) {
@@ -264,9 +291,9 @@ Check "G: bare 'uses Widgets9' stays NULL -- rule B never infers a GUI-namespace
 # --- H. ...and that refusal applies to rule B ONLY. Rule A is a name equality -----
 #        the unit stated outright, so a DOTTED uses naming a Vcl.* file must
 #        still resolve -- otherwise criterion 12 would be broken for all of VCL.
-$h = Get-Use 'Vcl.Alpha'
-Check "H: dotted 'uses Vcl.Alpha' RESOLVES -- the GUI refusal binds rule B, never rule A" `
-  ($h -like '*|SET|Vcl.Alpha.pas') `
+$h = Get-Use 'Vcl.Delta'
+Check "H: dotted 'uses Vcl.Delta' RESOLVES -- the GUI refusal binds rule B, never rule A" `
+  ($h -like '*|SET|Vcl.Delta.pas') `
   "row=$h -- if this is NULL the guard was applied too broadly and criterion 12 is broken for every Vcl.*/FMX.* unit"
 
 # --- Idempotency: re-running the resolve pass must not change any answer. ---------

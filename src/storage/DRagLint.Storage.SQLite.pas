@@ -2587,12 +2587,19 @@ end;
 ///  and AScopeUsesNames from the same two sources (the scope file's own `unit`
 ///  symbols, then its unit_uses.unit_name entries, lowercased) -- query time
 ///  per file on demand, index time in one bulk pass. Two differences in that
-///  gathering are known and immaterial, recorded so nobody has to re-derive
-///  them: index time skips empty names and file ids &lt;= 0 where query time
-///  inserts LowerCase('') unguarded (an empty key matches no candidate's
-///  declaring unit either way), and index time orders the scope file's `unit`
-///  symbols by id where query time takes the first row the engine returns
-///  (a file with two `unit` symbols is malformed).
+///  gathering are known and recorded so nobody has to re-derive them.
+///  (a) Index time skips empty names and file ids &lt;= 0; query time inserts
+///  LowerCase('') unguarded. An empty key can only ever match a candidate
+///  whose QualifiedName carries NO DOT, since that is the only input for which
+///  DeclaringUnitOfQName returns ''. Pass 2a performs that lookup UNGUARDED,
+///  so at query time an empty unit_name row together with such a candidate CAN
+///  produce a spurious single 2a hit; pass 2b already guards exactly this
+///  ('if CandUnit = '' then Continue'), 2a does not. Narrow, and unreachable
+///  on the index side -- but NOT vacuous. Do not restate it as "an empty key
+///  matches nothing".
+///  (b) Index time orders the scope file's `unit` symbols by id; query time
+///  takes the first row the engine returns. Observable only for a file that
+///  declares two `unit` symbols, which is malformed.
 ///  WHAT IS SHARED IS THE RULE, NOT THE CANDIDATE SET. The query-time caller
 ///  offers class, interface, record AND type-alias symbols and chases an alias
 ///  to its target; ResolveAncestry offers class and interface only. So the two
