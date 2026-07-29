@@ -1,4 +1,4 @@
-# Delphi source files MUST be ANSI / CRLF — per CLAUDE.md project rule.
+# Delphi source files MUST be ANSI / CRLF -- per CLAUDE.md project rule.
 *.pas    text eol=crlf
 *.dpr    text eol=crlf
 *.dpk    text eol=crlf
@@ -10,13 +10,28 @@
 *.cmd    text eol=crlf
 *.ps1    text eol=crlf
 
-# Generic text files — normalize on commit, native checkout
+# Generic text files -- normalize on commit, native checkout
 *.md     text
 *.txt    text
 *.sql    text
 *.json   text
 
-# Binaries — never touch
+# BYTE-EXACT SNAPSHOTS -- never normalize. Register K42.
+# tests\preprocess\run_tolerance.ps1 byte-compares the preprocessor's output
+# against these snapshots. The dcc-tolerance pass REPLACES one adjacent
+# whitespace byte with ';' (byte 59), and for tol_a_cr / tol_a_externalsym /
+# tol_b_cr the byte it replaces is the CR of a CRLF -- so the CORRECT output
+# carries a deliberate LONE LF. These files matched no pattern above, so they
+# inherited core.autocrlf's text handling: the lone LF was stored as LF in the
+# index and came back out of a FRESH CLONE as CRLF, one byte longer. Measured
+# at c4b78d0: 99 / 141 / 93 bytes in the authoring checkout against
+# 100 / 142 / 94 in a clone of it, and the three 'byte-identical to frozen
+# snapshot' checks were RED on every clone while green in the tree they were
+# written in. Nothing else caught it because nothing this repo runs runs from a
+# clone. The .pas INPUTS are ordinary CRLF and were never the problem.
+tests/preprocess/fixtures/tolerance/*.expected -text
+
+# Binaries -- never touch
 *.dll    binary
 *.exe    binary
 *.lib    binary
