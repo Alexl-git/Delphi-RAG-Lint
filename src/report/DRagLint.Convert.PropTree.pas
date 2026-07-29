@@ -370,16 +370,12 @@ begin
     if HeritageDeclares(K.Heritage, AName) then Exit(K);
 end;
 
-// The two MUTUALLY EXCLUSIVE GUI framework namespaces. A Delphi class surface is
-// either VCL or FireMonkey; the two are parallel, never interchangeable, and a
-// type from one is never a valid stand-in for a same-named type from the other.
-// Everything else a GUI unit legitimately reaches -- 'System.*', 'Winapi.*',
-// 'Data.*', 'Soap.*', a project's own namespace, an undotted legacy unit -- is
-// SHARED ground, not a competing framework.
-function IsGuiFrameworkPrefix(const APrefix: string): Boolean;
-begin
-  Result:= SameText(APrefix, 'Vcl') or SameText(APrefix, 'FMX');
-end;
+// The "which two namespaces are mutually exclusive" question -- {Vcl, FMX} --
+// is answered ONCE, by DRagLint.Core.Model.IsGuiFrameworkPrefix, which this
+// unit's CrossesGuiFramework (the REFUSE side) and DRagLint.Storage.SQLite's
+// ancestry-derived framework anchor (the SELECT side) both call. It used to be
+// defined here; it moved to the shared base unit when the select side needed it
+// too, so the pair is never spelled out twice. Semantics unchanged.
 
 // True when binding AInheritor to ACandidate would cross between the two
 // CONFLICTING GUI FRAMEWORKS -- the guard behind design criterion 5, "SHALL
@@ -415,10 +411,9 @@ end;
 // UNDOTTED unit yields '', which is not a GUI framework prefix, so it is never
 // refused: that is what keeps the real third-party roots working
 // ('cxButtons.TcxCustomButton' -> 'Vcl.StdCtrls.TCustomButton', 'Abcbtn.*' ->
-// 'Vcl.Controls.*'). The Vcl/FMX pair is named explicitly here rather than
-// derived, because "which namespaces are mutually exclusive" is a fact about
-// Delphi's two GUI frameworks, not something the shape of a unit name can tell
-// you.
+// 'Vcl.Controls.*'). The Vcl/FMX pair itself is named explicitly rather than
+// derived -- see DRagLint.Core.Model.IsGuiFrameworkPrefix for why, and for the
+// one place it is written down.
 function CrossesGuiFramework(const AInheritor, ACandidate: TSymbol): Boolean;
 var
   InhPrefix : string;

@@ -435,10 +435,33 @@ function DeclaringUnitOfQName(const AQName: string): string;
 /// Returning '' is what makes BOTH sides skip it rather than substring-match:
 /// the SELECT side (PickAncestorCandidateByScope rule 3, which needs a unique
 /// same-segment candidate) and the REFUSE side (the proptree climb's
-/// cross-namespace guard, which only refuses when BOTH segments are non-empty
-/// and differ). This is the single definition of that notion; do not
-/// re-derive it.</remarks>
+/// cross-GUI-framework guard, CrossesGuiFramework, which refuses only when BOTH
+/// segments are GUI frameworks -- see IsGuiFrameworkPrefix -- and differ). This
+/// is the single definition of that notion; do not re-derive it.</remarks>
 function UnitFrameworkPrefix(const AUnitName: string): string;
+
+/// <summary>True when ANamespaceSegment is one of Delphi's two MUTUALLY
+/// EXCLUSIVE GUI framework namespaces -- 'Vcl' or 'FMX' (case-insensitive
+/// compare; '' is never one).</summary>
+/// <param name="ANamespaceSegment">A LEADING namespace segment as returned by
+///  UnitFrameworkPrefix -- not a whole unit name. 'Vcl.Graphics' is NOT a GUI
+///  framework prefix; 'Vcl' is.</param>
+/// <remarks>A Delphi class surface is either VCL or FireMonkey; the two are
+///  parallel, never interchangeable, and a type from one is never a valid
+///  stand-in for a same-named type from the other. Everything else a GUI unit
+///  legitimately reaches -- 'System.*', 'Winapi.*', 'Data.*', 'Soap.*', a
+///  project's own namespace, an undotted legacy unit -- is SHARED ground, not a
+///  competing framework, and is deliberately NOT listed here.
+///  The pair is named explicitly rather than derived, because "which namespaces
+///  are mutually exclusive" is a fact about Delphi's two GUI frameworks, not
+///  something the shape of a unit name can tell you. This is the ONLY place in
+///  src/ that names them: the REFUSE side (DRagLint.Convert.PropTree's
+///  CrossesGuiFramework, design criterion 5) and the SELECT side
+///  (DRagLint.Storage.SQLite's ancestry-derived framework anchor and its
+///  last-segment `uses` guard) both call in here rather than each carrying a
+///  literal. NOT a general "same namespace?" test -- it answers only "is this
+///  segment one of the two conflicting GUI frameworks?".</remarks>
+function IsGuiFrameworkPrefix(const ANamespaceSegment: string): Boolean;
 
 implementation
 
@@ -460,6 +483,11 @@ begin
   Result:= '';
   P:= Pos('.', AUnitName);
   if P > 0 then Result:= Copy(AUnitName, 1, P - 1);
+end;
+
+function IsGuiFrameworkPrefix(const ANamespaceSegment: string): Boolean;
+begin
+  Result:= SameText(ANamespaceSegment, 'Vcl') or SameText(ANamespaceSegment, 'FMX');
 end;
 
 const

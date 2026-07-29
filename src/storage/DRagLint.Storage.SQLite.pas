@@ -66,6 +66,11 @@ type
       FQGetFileUnitUses      : TFDQuery;
       FQFindUsersOfUnit      : TFDQuery;
       FQResolveUnitUseTargets: TFDQuery;
+      // Task 3c: ancestry-derived GUI-framework anchor (see
+      // FrameworkAnchorForFile). Pure derivations of what is already in the
+      // index -- no writes, so --no-write-back is unaffected.
+      FAnchorCache           : TDictionary<Int64, string>; // file id -> '' | 'Vcl' | 'FMX'
+      FDerivingAnchor        : Boolean;                    // re-entrancy guard
       procedure Connect(const ADbPath: string; AReadOnly: Boolean);
       procedure PrepareStatements;
       procedure EnsureTrigramTablePopulated;
@@ -237,6 +242,37 @@ type
       function GetSymbolSlice(const AQName: string): TArray<TSliceChunk>                                          ;
       function FindCallersByNameWithContext(const ACalleeName: string; AContextLines: Integer): TArray<TReference>;
     private
+      /// <summary>Task 3c: the GUI framework (exactly 'Vcl' or 'FMX') that the
+      ///  classes declared in AFileId demonstrably inherit FROM, or '' when the
+      ///  index shows no such evidence or shows BOTH. Used as rule 3's scope
+      ///  segment in PickAncestorCandidateByScope when -- and only when -- the
+      ///  scope unit's OWN name carries no dotted namespace segment, i.e. for a
+      ///  legacy pre-namespace unit ('Abcbtn', 'cxButtons').</summary>
+      /// <param name="AFileId">The scope file. &lt;= 0 yields ''.</param>
+      /// <returns>'Vcl', 'FMX', or '' -- and '' is the common, CORRECT answer:
+      ///  no evidence and conflicting evidence are deliberately indistinguishable
+      ///  to the caller, because both must lead to the same decline.</returns>
+      /// <remarks>
+      ///  GUARANTEE, stated narrowly: the segment returned is one an ALREADY-
+      ///  RESOLVED (index-time) ancestor edge chain reaches from at least one
+      ///  class declared in AFileId, and no chain from that file reaches the
+      ///  other GUI framework. It is NOT a claim about the file's project, its
+      ///  .dproj &lt;FrameworkType&gt;, or its .dfm/.fmx sibling -- none of which
+      ///  the library index records (see docs/TODO-URGENT-framework-type-record.md).
+      ///  It is FILE-level, not class-level: a file mixing a Vcl-rooted and an
+      ///  FMX-rooted class yields '' for BOTH.
+      ///  NO RECURSION INTO NAME RESOLUTION -- the load-bearing property. The
+      ///  climb follows ONLY type_ancestors rows whose ancestor_symbol_id the
+      ///  indexer already resolved, read straight out of the DB by id; it never
+      ///  calls ResolveTypeNameToClass / PickAncestorCandidateByScope, which is
+      ///  what stops "resolve a name -> derive an anchor -> resolve a name" from
+      ///  closing a loop, since the resolver is the only caller. FDerivingAnchor
+      ///  additionally makes any FUTURE re-entrant edit degrade to '' (decline)
+      ///  instead of recursing. Cached per file id (FAnchorCache) and cleared by
+      ///  ResolveAncestry, whose rebuild is the only thing that can invalidate it.
+      ///  Pure read; a --no-write-back / read-only handle is unaffected.
+      /// </remarks>
+      function FrameworkAnchorForFile(AFileId: Int64): string;
       // v0.42: path-tolerant file-id resolution for FindSymbolsByFile (outline)
       function ResolveFileIdTolerant(const APath: string): Int64;
       // v11 (M1): resolve a type name to its defining class/interface/record
@@ -277,7 +313,9 @@ uses
 constructor TSQLiteSymbolStore.Create(const ADbPath: string; AReadOnly: Boolean = False);
 begin
   inherited Create;
-  FReadOnly := AReadOnly;
+  FReadOnly      := AReadOnly;
+  FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
+  FDerivingAnchor:= False;
   Connect(ADbPath, AReadOnly);
   { v0.86 Task 4: a read-only open still needs its SELECT queries built. In the
     write path PrepareStatements is Migrate's last step; read verbs never call
@@ -365,6 +403,7 @@ begin
   FQGetFileUnitUses.Free;
   FQFindUsersOfUnit.Free;
   FQResolveUnitUseTargets.Free;
+  FAnchorCache.Free;
   if Assigned(FConn) then
   begin
     if FConn.Connected then FConn.Close;
@@ -2461,20 +2500,24 @@ end;
 ///  same-named class/interface/record/type-alias candidates, picks the one
 ///  a referencing unit actually means, in strict precedence order --
 ///  (1) a candidate declared in the SAME unit (file) as the referencing
-///  class; (2) a candidate whose declaring unit is textually named in the
+///  class; (2a) a candidate whose declaring unit is textually named in the
 ///  referencing unit's `uses` clause (either the interface or the
 ///  implementation section -- plain membership, so it works even when
 ///  `unit_uses.target_file_id` was never resolved), but ONLY when that
-///  narrows the field to EXACTLY ONE candidate; (3) a candidate whose
+///  narrows the field to EXACTLY ONE candidate; (2b) failing that, and only
+///  when 2a matched NOTHING at all, the same test against the candidate
+///  unit's LAST dotted segment ('Vcl.Graphics' counts as `uses Graphics`),
+///  again only when EXACTLY ONE candidate qualifies; (3) a candidate whose
 ///  declaring unit shares the referencing unit's first DOTTED NAMESPACE
 ///  SEGMENT (the substring before the first '.' -- see
-///  UnitFrameworkPrefix), again ONLY when that narrows the field to
-///  EXACTLY ONE candidate; (4) decline. Each rule short-circuits: the first
-///  rule that narrows the field to exactly one candidate decides the
-///  result without consulting the next rule. A rule that finds 2+
-///  qualifying candidates does NOT pick one by array/insertion order --
-///  that would be exactly as arbitrary as guessing -- it falls through to
-///  the next rule instead.
+///  UnitFrameworkPrefix), or, when the referencing unit's own name has no
+///  such segment, shares AScopeFrameworkAnchor instead; again ONLY when
+///  that narrows the field to EXACTLY ONE candidate; (4) decline. Each rule
+///  short-circuits: the first rule that narrows the field to exactly one
+///  candidate decides the result without consulting the next rule. A rule
+///  that finds 2+ qualifying candidates does NOT pick one by array/insertion
+///  order -- that would be exactly as arbitrary as guessing -- it falls
+///  through to the next rule instead.
 /// </summary>
 /// <param name="ACandidates">Same-named candidates, already reduced to real
 ///  bodies by the caller (forward-declaration stubs dropped -- see
@@ -2493,6 +2536,16 @@ end;
 ///  the scope unit's `uses` clause (either section). Membership test only;
 ///  does not require `unit_uses.target_file_id` to be populated. May be nil
 ///  (rule 2 is then skipped).</param>
+/// <param name="AScopeFrameworkAnchor">The GUI framework segment ('Vcl' or
+///  'FMX') the scope unit's own class ancestry demonstrably belongs to, for
+///  a LEGACY PRE-NAMESPACE scope unit whose name yields no segment of its
+///  own; '' when unknown, contradictory, or simply not derived. Read by
+///  rule 3 and ONLY when UnitFrameworkPrefix(AScopeUnitName) = '' -- so a
+///  DOTTED scope unit ignores this parameter entirely and behaves exactly
+///  as it did before the parameter existed. Never consulted by rules 1, 2a
+///  or 2b: an anchor is weaker evidence than the scope unit's own text, and
+///  must never override it. See
+///  TSQLiteSymbolStore.FrameworkAnchorForFile.</param>
 /// <returns>The chosen candidate, or a default(TSymbol) (Id = 0) when no
 ///  rule narrows the field to one.</returns>
 /// <remarks>
@@ -2500,24 +2553,40 @@ end;
 ///  don't claim" -- callers must never guess further on a decline. Rule 3's
 ///  segment compare is exact ('VclKit' has no dot, so UnitFrameworkPrefix
 ///  returns '' for it and it can never match 'Vcl.Controls' -- an undotted
-///  unit name never participates). Rule 3 is written generically (matches
-///  ANY shared first dotted segment, not a hardcoded allowlist) so it also
+///  unit name never participates; for such a unit rule 3 runs only if an
+///  ANCHOR was supplied). Rule 3 is written generically (matches ANY shared
+///  first dotted segment, not a hardcoded allowlist) so it also
 ///  disambiguates project/third-party namespaces, not just the RTL; 'Vcl.*'
 ///  vs 'FMX.*' vs 'Winapi.*' are the motivating cases, not the whole rule.
-///  Because both rule 2 and rule 3 require a UNIQUE hit before deciding,
-///  this function never resolves a Vcl.* scope to an FMX.* candidate, or
-///  the reverse: an ambiguous case (e.g. a scope unit that uses both a
-///  Vcl.* and an FMX.* unit each declaring the same type name) falls
-///  through rule 2 to rule 3, and, if rule 3 also can't narrow to one,
-///  falls through to decline -- never an array-order pick. This is the ONE
-///  decision procedure shared by the query-time resolver
+///  The anchor, by contrast, is only ever 'Vcl' or 'FMX' -- it is evidence
+///  about the two conflicting GUI frameworks specifically.
+///  CROSS-FRAMEWORK GUARANTEE, stated exactly -- it is keyed to the SCOPE
+///  UNIT'S OWN NAME, not to the anchor. Rules 2b and 3 can never return an
+///  FMX.* candidate for a scope unit whose own name is Vcl.*, or the
+///  reverse: rule 3 matches that unit's own segment, and rule 2b explicitly
+///  drops a hit that would cross it.
+///  NOT guaranteed, deliberately: an UNDOTTED scope unit has no such
+///  segment, so 2b's drop is inert for it, and 2b outranks rule 3 -- an
+///  undotted unit whose bare `uses` name last-segment-matches exactly ONE
+///  candidate takes that candidate even where its own ancestry anchors on
+///  the other framework. That is a bare `uses` read the way Delphi reads
+///  it, on a unit that lives in neither framework's namespace, so design
+///  criterion 5 (which speaks of a Vcl.* class and an FMX.* class) does not
+///  reach it; the proptree refuse side does not reach it either, its
+///  guarantee being per-hop over DOTTED declarers.
+///  Rule 2a deliberately CAN cross: a Vcl.* unit that explicitly `uses`
+///  exactly one FMX.* unit declaring the name has stated which one it
+///  means, and an explicit uses outranks every heuristic here. Rule 1
+///  likewise. Nothing in this function ever settles a tie by array order.
+///  This is the ONE decision procedure shared by the query-time resolver
 ///  (ResolveTypeNameToClass / PickCandidate, below) and the index-time
 ///  resolver (ResolveAncestry) -- change the precedence HERE, not by
 ///  re-implementing it in either caller.
 /// </remarks>
 function PickAncestorCandidateByScope(const ACandidates: TArray<TSymbol>;
   AScopeFileId: Int64; const AScopeUnitName: string;
-  AScopeUsesNames: TDictionary<string, Boolean>): TSymbol;
+  AScopeUsesNames: TDictionary<string, Boolean>;
+  const AScopeFrameworkAnchor: string): TSymbol;
 var
   S          : TSymbol;
   ScopePrefix: string ;
@@ -2525,6 +2594,42 @@ var
   UsesHits   : Integer;
   PrefixHit  : TSymbol;
   PrefixHits : Integer;
+  CandUnit   : string ;
+
+  // The LAST dotted segment of a unit name ('Vcl.Graphics' -> 'Graphics'),
+  // or the whole name when it carries no dot. Delphi's own unit-scope-names
+  // resolution in reverse: with 'Vcl' among the project's unit scope names,
+  // a bare `uses Graphics` denotes the unit whose full name is
+  // 'Vcl.Graphics'. Note the undotted case returns the name unchanged, so a
+  // candidate in an undotted unit matches identically in both passes and
+  // pass 2 can never reach one that pass 1 missed.
+  function LastUnitSegment(const AUnitName: string): string;
+  var P: Integer;
+  begin
+    Result:= AUnitName;
+    P:= LastDelimiter('.', AUnitName);
+    if P > 0 then Result:= Copy(AUnitName, P + 1, MaxInt);
+  end;
+
+  // Criterion 5 for pass 2 ONLY. Pass 2 is a heuristic re-reading of the
+  // uses clause, not something the unit wrote, so it must not be able to
+  // hand a Vcl.* unit an FMX.* candidate (or the reverse) -- the one way a
+  // weaker match could be MORE dangerous than the exact one it replaces.
+  // Both segments come from the shared UnitFrameworkPrefix /
+  // IsGuiFrameworkPrefix pair, the same notion the proptree refuse side
+  // uses; '' (undotted, System.*, Winapi.*, a project namespace) is not a
+  // GUI framework and is never dropped.
+  function WeakHitCrossesGuiFramework(const ACandUnit: string): Boolean;
+  var
+    ScopeSeg: string;
+    CandSeg : string;
+  begin
+    ScopeSeg:= UnitFrameworkPrefix(AScopeUnitName);
+    CandSeg := UnitFrameworkPrefix(ACandUnit    );
+    Result  := IsGuiFrameworkPrefix(ScopeSeg) and IsGuiFrameworkPrefix(CandSeg) and
+               not SameText(ScopeSeg, CandSeg);
+  end;
+
 begin
   Result:= Default(TSymbol);
   // Rule 1: same unit as the referencing class.
@@ -2540,6 +2645,8 @@ begin
   // must fall through to rule 3 -- never settle by order.
   if Assigned(AScopeUsesNames) then
   begin
+    // Pass 2a (STRONG): the uses clause names the candidate's declaring
+    // unit by its FULL name.
     UsesHits:= 0;
     UsesHit := Default(TSymbol);
     for S in ACandidates do
@@ -2549,11 +2656,44 @@ begin
         if UsesHits = 1 then UsesHit:= S;
       end;
     if UsesHits = 1 then Exit(UsesHit);
+    // Pass 2b (WEAK, Task 3c): a PRE-NAMESPACE uses clause writes bare unit
+    // names -- 'Abcbtn' has `uses Graphics, Menus, ImgList` while the units
+    // are indexed as 'Vcl.Graphics', 'Vcl.Menus', 'Vcl.ImgList' -- so pass
+    // 2a scores zero and every such reference used to decline. Retry
+    // against the candidate unit's LAST segment.
+    // ONLY when pass 2a matched NOTHING: 2+ exact hits is a genuine
+    // ambiguity that a weaker test has no standing to resolve, and it must
+    // keep falling through to rule 3 exactly as before. A dotted uses entry
+    // ('vcl.graphics') can never equal a bare last segment ('graphics'), so
+    // a unit that writes fully-qualified uses names -- every RTL unit --
+    // cannot gain a hit here that it did not already have.
+    if UsesHits = 0 then
+    begin
+      UsesHit:= Default(TSymbol);
+      for S in ACandidates do
+      begin
+        CandUnit:= DeclaringUnitOfQName(S.QualifiedName);
+        if CandUnit = '' then Continue;
+        if not AScopeUsesNames.ContainsKey(LowerCase(LastUnitSegment(CandUnit))) then Continue;
+        if WeakHitCrossesGuiFramework(CandUnit) then Continue;
+        Inc(UsesHits);
+        if UsesHits = 1 then UsesHit:= S;
+      end;
+      if UsesHits = 1 then Exit(UsesHit);
+    end;
   end;
   // Rule 3: candidate's declaring unit shares the referencing unit's first
   // dotted namespace segment -- only when it narrows the field to exactly
   // one.
   ScopePrefix:= UnitFrameworkPrefix(AScopeUnitName);
+  // Task 3c: a LEGACY PRE-NAMESPACE scope unit has no segment of its own,
+  // so rule 3 could never run for it and the whole rule collapsed to a
+  // decline. Substitute the ancestry-derived GUI framework anchor -- what
+  // the unit's own classes demonstrably inherit from. Strictly a
+  // substitution for the MISSING segment: when the scope unit IS dotted the
+  // anchor is not even read, and '' (no evidence, or evidence of both)
+  // leaves rule 3 skipped exactly as it was.
+  if ScopePrefix = '' then ScopePrefix:= AScopeFrameworkAnchor;
   if ScopePrefix <> '' then
   begin
     PrefixHits:= 0;
@@ -2567,6 +2707,127 @@ begin
     if PrefixHits = 1 then Exit(PrefixHit);
   end;
   // Rule 4: ambiguous -- decline rather than guess.
+end;
+
+const
+  // Hop cap for ONE class's anchor climb. Belt-and-braces next to the
+  // per-climb visited-id set (which alone already terminates it, since every
+  // hop must be an id not yet seen on this climb): a self-referential or
+  // cyclic index must not be able to spin. Matches CMaxBridgedChainDepth
+  // (DRagLint.Convert.PropTree) and GetTransitiveAncestors' own 64-hop bound;
+  // no real Object Pascal hierarchy is anywhere near this deep.
+  CMaxAnchorClimbHops = 64;
+
+function TSQLiteSymbolStore.FrameworkAnchorForFile(AFileId: Int64): string;
+var
+  QCls     : TFDQuery           ;
+  QAnc     : TFDQuery           ;
+  StartIds : TList<Int64 >      ;
+  StartQNs : TList<string>      ;
+  Seen     : TDictionary<Int64, Boolean>; // visited class ids on the CURRENT climb
+  Found    : string             ;         // the single GUI segment seen so far
+  Mixed    : Boolean            ;         // both frameworks reached -> no anchor
+  Seg      : string             ;
+  CurId    : Int64              ;
+  CurQName : string             ;
+  Hops     : Integer            ;
+  i        : Integer            ;
+begin
+  Result:= '';
+  if AFileId <= 0 then Exit;
+  if FAnchorCache.TryGetValue(AFileId, Result) then Exit;
+  // Re-entrancy guard. Today it can never fire -- the climb below reads
+  // type_ancestors/symbols directly and calls no resolver -- and that is
+  // precisely the invariant it exists to protect: should anyone ever make the
+  // derivation resolve a NAME, the resolver would call back in here and the
+  // pair would recurse. Degrade to '' (decline), never recurse, and never
+  // cache that guarded '' as if it were evidence.
+  if FDerivingAnchor then Exit;
+  FDerivingAnchor:= True;
+  try
+    Found   := '';
+    Mixed   := False;
+    QCls    := TFDQuery.Create(nil);
+    QAnc    := TFDQuery.Create(nil);
+    StartIds:= TList<Int64 >.Create;
+    StartQNs:= TList<string>.Create;
+    Seen    := TDictionary<Int64, Boolean>.Create;
+    try
+      // Every class declared in the scope file is a starting point: the file
+      // is the unit of resolution, and a legacy unit's classes are its own
+      // best evidence of which framework it was written against. Read the
+      // whole list up front so the per-hop query can reuse the connection.
+      QCls.Connection:= FConn;
+      QCls.SQL.Text  := 'SELECT id, qualified_name FROM symbols ' +
+                        'WHERE file_id = :fid AND kind = ''class'' ORDER BY id';
+      QCls.ParamByName('fid').AsLargeInt:= AFileId;
+      QCls.Open;
+      while not QCls.Eof do
+      begin
+        StartIds.Add(QCls.Fields[0].AsLargeInt);
+        StartQNs.Add(QCls.Fields[1].AsString  );
+        QCls.Next;
+      end;
+      QCls.Close;
+      // One hop UP: the nearest ancestor the INDEXER already resolved to a
+      // real class symbol. ancestor_symbol_id IS NOT NULL is what keeps this
+      // a pure table read -- an unresolved edge is simply the end of this
+      // climb, never a name handed to the resolver. kind='class' skips
+      // implemented interfaces in the same heritage list; ORDER BY ordinal
+      // then makes the base class the row taken.
+      QAnc.Connection:= FConn;
+      QAnc.SQL.Text  := 'SELECT s.id, s.qualified_name FROM type_ancestors ta ' +
+                        'JOIN symbols s ON s.id = ta.ancestor_symbol_id ' +
+                        'WHERE ta.symbol_id = :sid AND s.kind = ''class'' ' +
+                        'ORDER BY ta.ordinal LIMIT 1';
+      for i:= 0 to StartIds.Count - 1 do
+      begin
+        if Mixed then Break;
+        CurId   := StartIds[i];
+        CurQName:= StartQNs[i];
+        Hops    := 0;
+        Seen.Clear;
+        while (CurId > 0) and (Hops < CMaxAnchorClimbHops) do
+        begin
+          Inc(Hops);
+          if Seen.ContainsKey(CurId) then Break;
+          Seen.Add(CurId, True);
+          Seg:= UnitFrameworkPrefix(DeclaringUnitOfQName(CurQName));
+          if IsGuiFrameworkPrefix(Seg) then
+          begin
+            // NEAREST hop wins for this class, and we stop: anything above a
+            // Vcl./FMX. class is that framework's own business.
+            if Found = '' then Found:= Seg
+            else if not SameText(Found, Seg) then Mixed:= True;
+            Break;
+          end;
+          if QAnc.Active then QAnc.Close;
+          QAnc.ParamByName('sid').AsLargeInt:= CurId;
+          QAnc.Open;
+          if QAnc.Eof then CurId:= 0
+          else
+          begin
+            CurId   := QAnc.Fields[0].AsLargeInt;
+            CurQName:= QAnc.Fields[1].AsString  ;
+          end;
+          QAnc.Close;
+        end;
+      end;
+      // Evidence of BOTH frameworks is evidence of neither: a file that
+      // declares a Vcl-rooted and an FMX-rooted class cannot anchor, and
+      // must decline exactly as a file with no evidence at all does.
+      if Mixed then Result:= '' else Result:= Found;
+      FAnchorCache.AddOrSetValue(AFileId, Result);
+    finally
+      Seen    .Free;
+      StartQNs.Free;
+      StartIds.Free;
+      QAnc    .Free;
+      QCls    .Free;
+    end;
+  finally
+    FDerivingAnchor:= False;
+  end;
 end;
 
 function TSQLiteSymbolStore.ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64): TSymbol;
@@ -2631,6 +2892,7 @@ var
     Types  : TArray<TSymbol>;
     HasBody: Boolean         ;
     S      : TSymbol         ;
+    Anchor : string          ;
   begin
     Result:= Default(TSymbol);
     Raw:= FindSymbolsByExactName(AName);
@@ -2655,7 +2917,16 @@ var
     if Length(Types) = 0 then Exit;
     if Length(Types) = 1 then Exit(Types[0]);        // single global definition
     // ambiguous (2+ same-named candidates) -- apply the shared scope rule.
-    Result:= PickAncestorCandidateByScope(Types, CurScopeFileId, CurScopeUnitName, UsesNames);
+    // The ancestry anchor is derived HERE, lazily, and only for a scope unit
+    // whose own name carries no namespace segment: it costs an ancestor climb
+    // (cached per file), and rule 3 would not look at it for a dotted unit
+    // anyway. Deriving it before the Length(Types) = 1 short-circuit above
+    // would pay that cost on every unambiguous name for nothing.
+    Anchor:= '';
+    if UnitFrameworkPrefix(CurScopeUnitName) = '' then
+      Anchor:= FrameworkAnchorForFile(CurScopeFileId);
+    Result:= PickAncestorCandidateByScope(Types, CurScopeFileId, CurScopeUnitName,
+                                          UsesNames, Anchor);
   end;
 
 var
@@ -3604,6 +3875,12 @@ var
   end;
 
 begin
+  { Task 3c: FrameworkAnchorForFile's answers are derived from type_ancestors,
+    which this pass is about to DELETE and rebuild -- drop them before the
+    rebuild rather than serve a pre-rebuild anchor afterwards. Matters only when
+    one process both indexes and queries through the same store instance; on a
+    query-only open the cache is simply empty here. }
+  FAnchorCache.Clear;
   NameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
   FileScope  := TObjectDictionary<Int64,  TList<Int64>>.Create([doOwnsValues]);
   Q   := TFDQuery.Create(nil);
