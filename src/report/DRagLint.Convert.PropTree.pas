@@ -156,16 +156,19 @@ type
 /// an ancestor that resolves to an interface symbol is never placed in the
 /// chain (this does NOT claim to detect a same-named CLASS standing in for what
 /// was written as an interface entry). A decline still stops the climb (never a
-/// guess). A bridge is refused outright when the candidate's leading dotted
-/// namespace segment differs from the inheriting class's and both are non-empty
-/// -- enforced in the climb itself, because the shared scope rule is bypassed
-/// when a name has only one candidate. Stated precisely, that refusal is PER
-/// HOP: a hop whose inheriting class lives in a DOTTED unit can never reach a
-/// differently-prefixed one, so a Vcl.* class is never given an FMX.* ancestor
-/// directly, or the reverse; it is NOT a transitive guarantee, because an
-/// UNDOTTED unit (cxButtons, Abcbtn) has no namespace segment to conflict with
-/// and both directions remain open through it -- deliberately, since that is
-/// exactly what lets real third-party roots bridge into Vcl.* at all.
+/// guess). A bridge is refused outright when the inheriting class and the
+/// candidate sit in the two CONFLICTING GUI FRAMEWORK namespaces -- one 'Vcl.*',
+/// the other 'FMX.*' -- enforced in the climb itself, because the shared scope
+/// rule is bypassed when a name has only one candidate. That refusal is narrow
+/// and deliberately so: it is Vcl-vs-FMX ONLY, never a general
+/// different-namespace veto, so a 'Vcl.*' class still reaches 'System.*',
+/// 'Winapi.*', 'Data.*', a project namespace or an undotted unit normally
+/// (refusing those would veto the whole RTL surface a GUI unit legitimately
+/// references). Stated precisely, the guarantee is also PER HOP, not transitive:
+/// each individual hop is checked, but an intermediate class in an UNDOTTED unit
+/// (cxButtons, Abcbtn) belongs to NEITHER framework, so a chain may still pass
+/// through one and reach the other side -- deliberately, since that is exactly
+/// what lets real third-party roots bridge into Vcl.* at all.
 /// The bridged climb is bounded by a visited-class-id set and a depth cap, and
 /// performs NO writes, so a read-only
 /// (--no-write-back) store is unaffected. Leaf names are deduped -- a redeclared property
@@ -185,13 +188,16 @@ type
 /// scope rule, scoped PER PROPERTY to the unit of the class that DECLARES that
 /// property (not the queried root's unit), and alias-following; a class-kind
 /// result is recursed into (Kind='class', IsClassTyped=True, child paths
-/// prefixed with '&lt;prop&gt;.'), and the same per-hop cross-namespace refusal
-/// described above is applied between the declaring class and the candidate.
-/// Anything else -- a non-class, a refused candidate, or a decline by the scope
-/// rule -- yields Kind='scalar' with TypeName still the token as written, and no
-/// recursion; a decline is never retried with a scope-unaware lookup, so the
-/// tree may be SMALLER than a careless resolver's but never carries another
-/// framework's property surface. Recursion is bounded by BOTH AOpts.Depth AND a
+/// prefixed with '&lt;prop&gt;.'), and the same per-hop Vcl-vs-FMX refusal
+/// described above is applied between the declaring class and the candidate --
+/// so a VCL class's 'System.*'-typed property (TBasicAction, TList, TComponent,
+/// ...) expands normally, and only a genuine cross-GUI-framework candidate is
+/// refused. Anything else -- a non-class, a refused candidate, or a decline by
+/// the scope rule -- yields Kind='scalar' with TypeName still the token as
+/// written, and no recursion; a decline is never retried with a scope-unaware
+/// lookup, so the tree may be SMALLER than a careless resolver's but never
+/// carries the other GUI framework's property surface. Recursion is bounded by
+/// BOTH AOpts.Depth AND a
 /// visited-TYPE-name set (keyed by the type NAME as written, so two differently
 /// scoped properties naming the same type expand only once per path), so a
 /// back-reference (e.g. 'Parent: TWinControl') always terminates. When
@@ -351,7 +357,7 @@ end;
 // that IS the queried root, so in exactly that residual case the name is
 // resolved in the root's unit. That is the criterion-7 defect at reduced radius,
 // not its absence: it is confined to closures whose declarer is not a class, and
-// it is one reason the caller ALSO applies CrossesNamespace below rather than
+// it is one reason the caller ALSO applies CrossesGuiFramework below rather than
 // trusting the derived scope on its own.
 function ScopeSymbolFor(const AKnown: TList<TSymbol>; const AFallback: TSymbol;
   const AName: string): TSymbol;
@@ -364,44 +370,64 @@ begin
     if HeritageDeclares(K.Heritage, AName) then Exit(K);
 end;
 
-// True when bridging AInheritor's ancestor to ACandidate would cross between two
-// DIFFERENT top-level namespaces -- the guard behind design criterion 5, "SHALL
+// The two MUTUALLY EXCLUSIVE GUI framework namespaces. A Delphi class surface is
+// either VCL or FireMonkey; the two are parallel, never interchangeable, and a
+// type from one is never a valid stand-in for a same-named type from the other.
+// Everything else a GUI unit legitimately reaches -- 'System.*', 'Winapi.*',
+// 'Data.*', 'Soap.*', a project's own namespace, an undotted legacy unit -- is
+// SHARED ground, not a competing framework.
+function IsGuiFrameworkPrefix(const APrefix: string): Boolean;
+begin
+  Result:= SameText(APrefix, 'Vcl') or SameText(APrefix, 'FMX');
+end;
+
+// True when binding AInheritor to ACandidate would cross between the two
+// CONFLICTING GUI FRAMEWORKS -- the guard behind design criterion 5, "SHALL
 // NEVER select an FMX.* ancestor for a Vcl.* class, nor the reverse".
 //
 // WHY THIS IS NEEDED ON TOP OF THE SHARED SCOPE RULE. ResolveTypeNameToClass ->
 // PickCandidate short-circuits on a SINGLE candidate (DRagLint.Storage.SQLite:
 // 'if Length(Types) = 1 then Exit(Types[0])'), so PickAncestorCandidateByScope
 // -- and with it rule 3's namespace check -- is consulted ONLY when two or more
-// same-named candidates exist. A Vcl-scoped class whose unresolved ancestor name
-// resolves (typically via a type-ALIAS chase, since a lone same-named CLASS
-// would already have been linked at index time) to the ONE class of that name,
-// living in an FMX unit, would otherwise be bridged with no scope check at all
-// and placed straight into the class chain. Criterion 5 is an absolute SHALL,
-// and this climb is the first caller that puts the result into the CHAIN rather
-// than into a single property's type.
+// same-named candidates exist. A Vcl-scoped class whose ancestor name or
+// property type resolves to the ONE class of that name, living in an FMX unit,
+// would otherwise be accepted with no scope check at all.
+//
+// SCOPE OF THE REFUSAL -- read this before widening it. It refuses ONLY
+// Vcl-vs-FMX. It is NOT a general "different namespace" veto, and an earlier
+// revision of this function that WAS one had to be narrowed: refusing on any
+// differing prefix vetoed the whole RTL surface referenced from VCL. Measured on
+// library-Win64.sqlite, that silently degraded correct, unambiguous resolutions
+// to 'scalar' -- 'Vcl.Controls.TControl.Action: TBasicAction' (declared in
+// System.Classes, 137 descendants, on 5 of the 6 baseline qnames),
+// 'TWinControl.AlignControlList: TList', 'Vcl.Menus.*.PopupComponent:
+// TComponent', and every 'PResource'-typed property. Those are not ambiguous and
+// not cross-framework; they are ordinary VCL-uses-RTL references.
+//
+// Criterion 5 says "never select an FMX.* ancestor for a Vcl.* class, nor the
+// reverse". It does not say "never cross a namespace". Selecting BY namespace
+// affinity is a sound heuristic and the select side (PickAncestorCandidateByScope
+// rule 3) stays generic for exactly that reason; refusing BY namespace difference
+// is not sound, because most namespace differences are legitimate.
 //
 // Both segments come from DRagLint.Core.Model.UnitFrameworkPrefix -- the same
-// leading-dotted-segment notion the select-side rule uses, one definition.
-// Refuses ONLY when BOTH are non-empty and differ: an UNDOTTED unit has no
-// namespace to conflict with, which is what keeps the real third-party roots
-// working ('cxButtons.TcxCustomButton' -> 'Vcl.StdCtrls.TCustomButton',
-// 'Abcbtn.*' -> 'Vcl.Controls.*').
-//
-// KNOWN COST, accepted deliberately: two genuinely different namespaces that
-// legitimately inherit across one another (a 'Vcl.*' class reaching a 'System.*'
-// ancestor through an alias) are refused too, so such a chain stops where it
-// stops today instead of being repaired. That is the conservative direction and
-// matches the engine's standing policy -- when unsure, don't claim -- whereas
-// the alternative risks splicing a parallel framework's whole surface into a
-// chain, which is a WRONG answer rather than a missing one.
-function CrossesNamespace(const AInheritor, ACandidate: TSymbol): Boolean;
+// leading-dotted-segment notion the select-side rule uses, one definition. An
+// UNDOTTED unit yields '', which is not a GUI framework prefix, so it is never
+// refused: that is what keeps the real third-party roots working
+// ('cxButtons.TcxCustomButton' -> 'Vcl.StdCtrls.TCustomButton', 'Abcbtn.*' ->
+// 'Vcl.Controls.*'). The Vcl/FMX pair is named explicitly here rather than
+// derived, because "which namespaces are mutually exclusive" is a fact about
+// Delphi's two GUI frameworks, not something the shape of a unit name can tell
+// you.
+function CrossesGuiFramework(const AInheritor, ACandidate: TSymbol): Boolean;
 var
   InhPrefix : string;
   CandPrefix: string;
 begin
   InhPrefix := UnitFrameworkPrefix(DeclaringUnitOfQName(AInheritor.QualifiedName));
   CandPrefix:= UnitFrameworkPrefix(DeclaringUnitOfQName(ACandidate.QualifiedName));
-  Result    := (InhPrefix <> '') and (CandPrefix <> '') and not SameText(InhPrefix, CandPrefix);
+  Result    := IsGuiFrameworkPrefix(InhPrefix) and IsGuiFrameworkPrefix(CandPrefix) and
+               not SameText(InhPrefix, CandPrefix);
 end;
 
 const
@@ -549,9 +575,10 @@ var
   //    never placed in the class chain. (This rejects interface SYMBOLS; it
   //    does not detect a same-named CLASS standing in for what was written as
   //    an interface heritage entry.)
-  //  * CrossesNamespace -- criterion 5, enforced here rather than delegated,
+  //  * CrossesGuiFramework -- criterion 5, enforced here rather than delegated,
   //    because the shared scope rule is skipped entirely for a single-candidate
-  //    name;
+  //    name (Vcl-vs-FMX only: a Vcl.* class reaching a System.* ancestor is
+  //    legitimate and still bridges);
   //  * a visited-class-id set (each class is placed, and climbed FROM, at most
   //    once, so a self-referential or cyclic index terminates instead of
   //    spinning) plus a CMaxBridgedChainDepth cap on bridged recursion.
@@ -615,8 +642,10 @@ var
             if (Brid.Id <= 0) or (Brid.Kind <> skClass) then Continue;
             // Criterion 5, enforced HERE and not left to the scope rule: that
             // rule is skipped entirely when the name has a single candidate.
-            // See CrossesNamespace.
-            if CrossesNamespace(Decl, Brid) then Continue;
+            // Vcl-vs-FMX ONLY -- a Vcl.* class reaching a System.* ancestor
+            // through an alias is legitimate and must still bridge. See
+            // CrossesGuiFramework.
+            if CrossesGuiFramework(Decl, Brid) then Continue;
             if not (AOpts.ToPersistent and IsStopClass(Brid.Name)) and TryAdd(Brid) then
               ClimbFrom(Brid, ADepthLeft - 1); // the bridged class's own chain
           end;
@@ -883,8 +912,9 @@ var
           // walk reaches the very same single-candidate PickCandidate
           // short-circuit, so without the guard a bare-redeclared property on a
           // Vcl.* class could take its TYPE from a lone FMX-declared homonym
-          // with no scope check having run at all. See CrossesNamespace.
-          if CrossesNamespace(Decl, Nxt) then Continue;
+          // with no scope check having run at all. Vcl-vs-FMX ONLY; see
+          // CrossesGuiFramework.
+          if CrossesGuiFramework(Decl, Nxt) then Continue;
           Tok:= PropTypeOn(Nxt);   // declared directly on the bridged class?
           if Tok <> '' then Exit(Tok);
           Tok:= Climb(Nxt);        // else climb the bridged class's own chain
@@ -1199,10 +1229,12 @@ var
       // Criterion 5, enforced HERE for the same reason the ancestor climb
       // enforces it rather than delegating: PickCandidate short-circuits on a
       // lone candidate, so the scope rule never runs for a type name with
-      // exactly one -- possibly wrong-framework -- definition. See
-      // CrossesNamespace (and note its guarantee is PER HOP: an undotted
-      // declaring unit has no namespace to conflict with).
-      if (TypeSym.Id > 0) and CrossesNamespace(DeclaredBy[idx], TypeSym) then
+      // exactly one -- possibly wrong-framework -- definition. Vcl-vs-FMX ONLY:
+      // a VCL class's 'System.*'-typed property (TBasicAction, TList,
+      // TComponent, ...) is an ordinary RTL reference and must still expand.
+      // See CrossesGuiFramework (and note its guarantee is PER HOP: an undotted
+      // declaring unit is not a GUI framework and is never refused).
+      if (TypeSym.Id > 0) and CrossesGuiFramework(DeclaredBy[idx], TypeSym) then
         TypeSym:= Default(TSymbol);
       // A DECLINE (Id = 0) leaves the leaf exactly where an unresolvable type
       // leaves it today -- Kind='scalar', not recursed into, TypeName still the

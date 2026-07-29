@@ -20,7 +20,7 @@
 
   Walk now resolves the token through ISymbolStore.ResolveTypeNameToClass, in
   the unit scope of the class that DECLARES that property, with the same
-  CrossesNamespace refusal the climb uses.
+  CrossesGuiFramework (Vcl-vs-FMX) refusal the climb uses.
 
   CASES
 
@@ -56,6 +56,19 @@
          across an unresolved type-ALIAS ancestor edge that leads to a lone
          FMX-declared class: the type must stay 'unknown', not be taken from the
          FMX class. Also paired with a same-namespace control.
+
+    5/6 -- THE OTHER DIRECTION, and the reason cases 1-4 are not sufficient on
+         their own: a namespace crossing that is LEGITIMATE must still succeed.
+         The guard is Vcl-vs-FMX only, never a general different-namespace veto.
+         Cases 1-4 all pair a refusal with a SAME-namespace control, so a guard
+         that refused far too much would still pass every one of them -- and an
+         earlier revision of this task did exactly that, vetoing the entire RTL
+         surface referenced from VCL ('Vcl.Controls.TControl.Action:
+         TBasicAction' and its 137 descendants, 'TWinControl.AlignControlList:
+         TList', 'PopupComponent: TComponent', every 'PResource'). Case 5 pins
+         the property-type path (Vcl.* host, System.* property type) and case 6
+         pins the CHAIN path (Vcl.* class inheriting a System.* ancestor across
+         an alias edge) -- the latter a latent defect in the Task 3 climb.
 
   Cases 3 and 4 differ from run_proptree_ancestor_climb.ps1's Case E: that one
   asserts an FMX-only ancestor's property is ABSENT (the CHAIN refused). Here
@@ -389,6 +402,89 @@ implementation
 end.
 '@
 
+# --- Case 5/6: a LEGITIMATE namespace crossing must NOT be refused. -----------
+# The cross-framework guard is Vcl-vs-FMX ONLY. 'System.*' is shared ground that
+# every VCL unit references (TBasicAction, TList, TComponent, PResource, ...).
+# An earlier revision of this task refused on ANY differing prefix and silently
+# degraded all of those to 'scalar' on the real library. These two cases pin that
+# shut, one per code path: the property type, and the ancestor chain.
+Write-Ascii (Join-Path $work 'System.Cand3b.pas') @'
+unit System.Cand3b;
+
+interface
+
+type
+  // Globally unique name, so PickCandidate short-circuits and the shared scope
+  // rule never runs -- the ONLY thing that can reject this is the guard.
+  TSysOnly3b = class(TObject)
+  private
+    FSysMark3b: Integer;
+  published
+    property SysMark3b: Integer read FSysMark3b write FSysMark3b;
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Vcl.SysHost3b.pas') @'
+unit Vcl.SysHost3b;
+
+interface
+
+type
+  // 'Vcl' referencing 'System' -- an ordinary RTL reference, not a framework
+  // conflict. Must expand.
+  TVclSysHost3b = class(TObject)
+  private
+    FThing: TSysOnly3b;
+  published
+    property Thing: TSysOnly3b read FThing write FThing;
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'System.Base3b.pas') @'
+unit System.Base3b;
+
+interface
+
+type
+  TSysBase3b = class(TObject)
+  private
+    FSysBaseMark3b: Integer;
+  published
+    property SysBaseMark3b: Integer read FSysBaseMark3b write FSysBaseMark3b;
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Vcl.SysDeriv3b.pas') @'
+unit Vcl.SysDeriv3b;
+
+interface
+
+type
+  // The CHAIN side of the same question: a Vcl.* class whose ancestor is only
+  // reachable across an unresolved type-alias edge into System.*. Refusing this
+  // was a latent defect in the Task 3 climb, for the same wrong reason.
+  TSysAlias3b = TSysBase3b;
+
+  TVclSysDeriv3b = class(TSysAlias3b)
+  end;
+
+implementation
+
+end.
+'@
+
 $db = Join-Path $WorkDir 'proptypescope.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
 $indexOut = & $Exe index $work --db $db 2>$null
@@ -487,6 +583,29 @@ $t4ok = Get-Tree 'Vcl.BareOk3b.TVclBareOk3b'
 $bare4ok = Get-Leaf $t4ok 'BareOkMark3b'
 Check "control: the SAME shape with a same-namespace target STILL bridges the bare type" `
   ($null -ne $bare4ok -and $bare4ok.type -eq 'TVclBareOkMarkType3b') "type=$($bare4ok.type)"
+
+# --- CASE 5 ------------------------------------------------------------------
+Write-Host ''
+Write-Host 'Case 5: a Vcl.* class STILL expands a System.*-typed property (guard is Vcl-vs-FMX only)' -ForegroundColor Cyan
+$t5 = Get-Tree 'Vcl.SysHost3b.TVclSysHost3b'
+Check "fixture sanity: TVclSysHost3b resolves as a class" ($null -ne $t5 -and $t5.root_type -eq 'TVclSysHost3b') "root_type=$($t5.root_type)"
+$thing5 = Get-Leaf $t5 'Thing'
+Check "TVclSysHost3b.Thing is class-typed" ($null -ne $thing5 -and $thing5.is_class_typed -eq $true) `
+  "type=$($thing5.type) kind=$($thing5.kind) class_typed=$($thing5.is_class_typed)"
+Check "TVclSysHost3b.Thing expands the System.* class ('Thing.SysMark3b' present)" `
+  ($null -ne (Get-Leaf $t5 'Thing.SysMark3b')) `
+  ("paths=" + (Get-Paths $t5) + " -- ABSENT means the cross-framework guard was widened into a blanket different-namespace veto, which on the real library degrades every RTL-typed VCL property (TBasicAction, TList, TComponent, PResource) to 'scalar'")
+
+# --- CASE 6 ------------------------------------------------------------------
+Write-Host ''
+Write-Host 'Case 6: the ancestor CHAIN also still bridges Vcl.* -> System.*' -ForegroundColor Cyan
+$t6 = Get-Tree 'Vcl.SysDeriv3b.TVclSysDeriv3b'
+Check "fixture sanity: TVclSysDeriv3b resolves as a class" ($null -ne $t6 -and $t6.root_type -eq 'TVclSysDeriv3b') "root_type=$($t6.root_type)"
+$sys6 = Get-Leaf $t6 'SysBaseMark3b'
+Check "Vcl.* class inherits its System.* ancestor's property across the alias edge" ($null -ne $sys6) `
+  ("paths=" + (Get-Paths $t6) + " -- ABSENT means ClassChain.ClimbFrom refused a legitimate Vcl->System bridge")
+Check "and that inherited property is attributed to the System.* declarer" `
+  ($null -ne $sys6 -and $sys6.declared_in -eq 'System.Base3b.TSysBase3b') "declared_in=$($sys6.declared_in)"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
