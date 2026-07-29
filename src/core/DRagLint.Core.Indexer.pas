@@ -540,6 +540,37 @@ begin
       // path above: Clear only frees cached trees, it does not touch FStore.
       TAstParseCache.Clear;
       IdxToId.Free;
+      // v(ADP3 T4e): flush the progress stream once per file, so an abnormal
+      // termination cannot swallow the tail of this log.
+      //
+      // Delphi buffers `Output` through TTextRec.BufPtr, and TTextBuf is
+      // `array[0..127]` -- 128 bytes. A buffered stream reaches the disk only
+      // when that buffer FILLS, or when the RTL closes Output during a normal
+      // _Halt0. A process that dies WITHOUT _Halt0 (TerminateProcess,
+      // ExitProcess, a fault) therefore loses whatever is still in the buffer,
+      // and the log ends wherever the last 128-byte boundary fell -- mid-line,
+      // usually mid-token.
+      //
+      // That is not hypothetical: it destroyed the evidence in
+      // docs\INBOX-index-all-win32-library-rebuild-aborts.md. All three
+      // surviving logs of that report's five aborted runs stop mid-token, and
+      // the drag-lint-written byte count of each is an EXACT multiple of 128
+      // (120448 = 941*128, 413312 = 3229*128, 23936 = 187*128). The report
+      // read its last visible line as the crash site; it was only the last
+      // full buffer. Up to 127 bytes -- one to two whole files' worth of
+      // progress -- were silently discarded on every run.
+      //
+      // Flushing HERE rather than inside ReportProgress is deliberate: this
+      // finally is the single per-file exit point, so it covers the success
+      // path (progress line + its DIAG lines) and the `ERROR indexing` path
+      // alike, exactly once per file, and it cannot be bypassed by the except
+      // branch above. Cost is one <=128-byte WriteFile per file, which is
+      // nothing beside parsing it. Unguarded, matching the existing Flush
+      // sites (DRagLint.CLI.pas, DRagLint.MCP.Server.pas): a stdout that
+      // cannot be written is not a condition this loop can meaningfully
+      // continue through.
+      // Guarded by tests\autotest\run_index_progress_flush.ps1.
+      Flush(Output);
     end; // try
   finally
     DocRegions.Free;
