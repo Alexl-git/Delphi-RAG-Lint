@@ -5,6 +5,40 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+- **Fixed: a used unit's name was stored with the source's alignment padding,
+  and the `uses` edge was silently lost.** `unit_uses.unit_name` came from
+  `Trim(NodeText(moduleName))`, but a `moduleName` node spans the WHOLE dotted
+  name, so a house-style-aligned clause (`Alpha  .Config,`) was stored verbatim.
+  `ResolveUnitUseTargets`' pass 1 keys on `LOWER(unit_name) = :un`, which a
+  padded value can never satisfy; pass 2 keys on the dotted tail and quietly
+  rescued the row whenever that tail was unique, so the defect was invisible
+  until two units shared a tail -- then the edge was simply dropped. Now
+  stripped at the store, at BOTH sites that read the node (the `uses` clause and
+  a unit's own `unit Foo.Bar;` declaration, which is the qualified-name prefix
+  of every symbol the unit declares). **This is an INDEX-TIME fix: existing
+  indexes keep their bad rows until they are reindexed.** Measured before the
+  fix: 147 of 1836 `unit_uses` rows in this repo's own index (137 unresolved)
+  and 286 of 14223 in ORM3 (285 unresolved); 0 in `library-Win64` and 0 in
+  M2022, because the alignment is our house style and not third-party code. If
+  you rely on `find-callers`, `query descendants`, the unit graph or `--json`
+  uses output over an index built before this, **reindex** -- until then those
+  rows still read as unresolved. Not handled: a comment written inside the
+  dotted name (`Alpha.{x}Config`).
+- **Fixed: `index` lost up to 127 bytes of its own progress log whenever the
+  process was killed.** `Output` is buffered through Delphi's 128-byte
+  `TTextBuf` and reaches disk only when that buffer fills or when the RTL closes
+  it during a normal `_Halt0`, so an `index` run terminated externally
+  (`Stop-Process`, `taskkill`, a fault) ended its log mid-token at the last
+  128-byte boundary -- which cost five runs of a library rebuild investigation,
+  because the last visible token looked like the crash site and was not.
+  `TIndexer.IndexFile`'s per-file `finally` now flushes, covering the progress
+  line, its `DIAG:` lines and the `ERROR indexing` path alike, at one <=128-byte
+  write per file. Scope, stated plainly: this guarantees no COMPLETED line is
+  left in the buffer; a single emitted line longer than 128 bytes (a `DIAG:`
+  line on a deep path) still reaches disk in pieces and can still be read
+  cut mid-line. Other long-running verbs (`lint --project`,
+  `document --project`, `convert`, `workspace index`) are unchanged and still
+  truncate. See `docs/INBOX-REPLY-index-win32-abort-2026-07-29.md`.
 - **Auto-Document Phase 2: six analysis facts in `document` and `hover`.**
   Beyond Phase 1's cheap index lookups, the managed `<!-- drag-lint:auto -->`
   block -- and the `hover --format md` popup, rendered from the same shared

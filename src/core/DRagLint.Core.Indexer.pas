@@ -541,7 +541,20 @@ begin
       TAstParseCache.Clear;
       IdxToId.Free;
       // v(ADP3 T4e): flush the progress stream once per file, so an abnormal
-      // termination cannot swallow the tail of this log.
+      // termination cannot swallow COMPLETED lines from the tail of this log.
+      //
+      // PRECONDITION, and it is not decorative (register K54): what this buys
+      // is "no completed line is lost", NOT "the file always ends on a line
+      // terminator". The RTL still empties the 128-byte buffer the instant it
+      // fills, so a SINGLE emitted line longer than 128 bytes reaches disk in
+      // 128-byte pieces and an outside reader can see it cut mid-line no matter
+      // how often this flushes -- and the `DIAG:` lines of the very corpus this
+      // was diagnosed on DO exceed 128 (`    DIAG: ` + a DevExpress or Raize
+      // source path + a parser message). The same holds for one file emitting a
+      // progress line plus enough DIAG lines to total over 128 bytes between
+      // two flushes. What the flush guarantees unconditionally is that a
+      // completed burst is not still SITTING in the buffer when the process
+      // dies -- which is what destroyed the evidence below.
       //
       // Delphi buffers `Output` through TTextRec.BufPtr, and TTextBuf is
       // `array[0..127]` -- 128 bytes. A buffered stream reaches the disk only

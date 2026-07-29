@@ -4,13 +4,19 @@
 **From:** autodoc Phase 3, Task 4e (`feat/autodoc-phase3`, `C:\Projects\Delphi-RAG-lint`).
 
 **TL;DR:** **drag-lint is not crashing.** Something on this box is killing `drag-lint.exe`
-**by image name** with `Stop-Process -Force`, which is exactly `TerminateProcess(handle, -1)`.
-That reproduces every one of your five observables on demand. The culprit is this repo's own
-documented build-unblock step -- a build cannot stage `third_party\dll-win64\drag-lint.exe`
-while a rebuild holds it, and six of our plan files tell the next agent to clear the lock with
-`Get-Process drag-lint | Stop-Process -Force`. Your two supporting findings both need
-correcting: the `DIAG:` line was **not** the crash site, and the manifest/CWD gotcha **is not
-real**. One genuine second defect confirmed and FIXED.
+**by image name**, via .NET `Process.Kill()` -- exactly `TerminateProcess(handle, -1)`. That
+reproduces every one of your five observables on demand, and it is **proven in that class**.
+
+**Attribution is strong opportunity, not proof** (Windows records no caller for
+`TerminateProcess`), so read section 1 before acting on it: the prime suspect is this repo's own
+build-unblock step. A build cannot stage `third_party\dll-win64\drag-lint.exe` while another
+`drag-lint.exe` holds it, and **35 of our `.md` files** prescribe or record clearing that lock by
+image name -- **24** of them with `Stop-Process -Name drag-lint -Force`. What makes it more than
+a story: for **both** Scheduled-Task runs, a build whose launcher opens with that kill in a
+poll-until-writable loop started within **one second** of your run dying.
+
+Your two supporting findings both need correcting: the `DIAG:` line was **not** the crash site,
+and the manifest/CWD gotcha **is not real**. One genuine second defect confirmed and FIXED.
 
 ---
 
@@ -21,8 +27,8 @@ here, six trials (three on a 900-unit fixture, three more below):
 
 | kill method | exit code | stderr | stdout tail |
 |---|---|---|---|
-| `Stop-Process -Force` | **-1** | **0 bytes** | cut **mid-token**, length **≡ 0 mod 128** |
-| `taskkill /F` | 1 | 0 bytes | cut mid-token, length ≡ 0 mod 128 |
+| `Stop-Process -Force` | **-1** | **0 bytes** | cut **mid-token**, length **mod 128 = 0** |
+| `taskkill /F` | 1 | 0 bytes | cut mid-token, length mod 128 = 0 |
 
 Three consecutive `Stop-Process` trials on the fixture: `exit=-1 stderrBytes=0
 logbytes=4480/4992/5120 mod128=0`, tails `...P\claude\c--Projects-Delphi-RAG-li`,
@@ -47,21 +53,78 @@ Application log for 2026-07-27 18:00-01:00 and the only entries are unrelated di
 `LiveKernelEvent`s); the truncated write; and the parent `cmd.exe` surviving to record
 `EXITCODE=-1`, which rules out anything that kills the whole tree.
 
+**What the `-1` narrows to, exactly.** -1 is the exit code .NET's `Process.Kill()` passes to
+`TerminateProcess`, so it implicates the **`Process.Kill` family** -- `Stop-Process`,
+`$proc.Kill()`, and any .NET or PowerShell caller that goes through it -- not the
+`Stop-Process` cmdlet uniquely. What it does rule out is `taskkill /F`, which passes 1: the two
+`taskkill /F /IM drag-lint.exe` recipes in our plan files are **not** what produced your -1.
+
 **It is also why switching to Task Scheduler did not help.** You read runs 4 and 5 surviving
 outside an agent process tree as proof that nothing was reaping the process. A by-**name** kill
 does not care about process trees, so Task Scheduler gave it no protection at all. That
 inference was the one that sent the investigation toward an internal fault.
 
-**Opportunity, from the git log.** Run 4 started 18:56:06; commit `5ba4532` landed at
-**18:56:12**, `88d63cf` at 18:59:48. Run 5 ran 23:59:00-23:59:46, between `110a314` (23:11:50)
-and `a9dac5f` (00:05:26, `fix(index)`). Another agent was editing and building `drag-lint.exe`
-across both windows, and every build must stage over the exe your rebuild had open.
+**How widespread the recipe is, counted.** Unit = a distinct `.md` file under
+`C:\Projects\Delphi-RAG-lint` (this repo, `HEAD` = `a687aca` plus working tree). Classifier = a
+line naming `drag-lint` in a kill: `Stop-Process [-Name] drag-lint`, `Get-Process ...drag-lint...
+| Stop-Process`, or `taskkill ... /IM ...drag-lint`. Command:
+
+```
+rg -uu -g "*.md" -l "(Stop-Process\s+(-Name\s+)?drag[-_]lint|Get-Process[^\r\n]*drag[-_]lint[^\r\n]*\|[^\r\n]*Stop-Process|taskkill[^\r\n]*/IM[^\r\n]*drag[-_]lint)" .
+```
+
+**35 files, 50 occurrences** (excluding this reply and the register entry that analyses it),
+split by form -- and the split matters, because the two forms give **different exit codes**:
+
+| form | files | occurrences | exit code it produces |
+|---|---|---|---|
+| `Stop-Process [-Name] drag-lint ...` | 28 (24 of them with the exact `-Name` form) | 41 | **-1** |
+| `Get-Process drag-lint... \| Stop-Process -Force` | **4** (`d1a`:780, `d2a`:770, `d2b`:620 and :858, `d3`:458 and :704) | 6 | **-1** |
+| `taskkill /F /IM drag-lint.exe` | 3 (`2026-07-06-autodocument-finish-plan.md`:16, `2026-07-06-preprocessor-port-plan.md`:16, `.superpowers/sdd/d5-task-1-report.md`:85) | 3 | **1** |
+
+An earlier draft of this reply said "six of our plan files" carry the `Get-Process | Stop-Process`
+form. That was wrong twice over: that form is in **four** files (six occurrences), and two of the
+six plan files it was counting carry `taskkill` instead -- the form this same section uses as the
+*discriminator*. Corrected here and in K52.
+
+**Opportunity: a build starts within one second of each death.** Commit times are the wrong
+clock for this -- your run 4 died at 20:03:41 and the git log has **no commit at all between
+18:59:48 (`88d63cf`) and 22:43:21 (`66d9dfc`)**, a 3 h 43 m gap straddling the death. Build
+artefacts are the right clock, and they are still on disk. `Start-Process
+-RedirectStandardError` truncates its target when the child starts, so a build's 0-byte `.err`
+file is stamped with the build's **start**:
+
+| your run | died | build `.err` truncated (start) | build `.log` last written (end) | launcher |
+|---|---|---|---|---|
+| 4 | 2026-07-27 20:03:41 | `build_r1.log.err` **20:03:41** | `build_r1.log` 20:03:53, `OK: staged Win64 drag-lint.exe` | `rebuild_and_run.ps1 -Tag r1` |
+| 5 | 2026-07-27 23:59:46.69 | `build_M3b.log.err` **23:59:47** | `build_M3b.log` 23:59:58 | `mutate.ps1 -Tag M3b` |
+
+Both live in another session's scratchpad
+(`C:\TEMP\claude\c--Projects-Delphi-RAG-lint\f206dd0e-...\scratchpad`), and **both launchers
+open with the by-name kill**, in a loop that exists precisely because the staged exe was locked:
+
+```powershell
+for ($k = 0; $k -lt 40; $k++) {
+  Get-Process drag-lint -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  try { $fs = [IO.File]::Open($exe, 'Open', 'ReadWrite', 'None'); $fs.Close(); break }
+  catch { Start-Sleep -Milliseconds 500 }
+}
+```
+
+That loop only breaks once nothing holds `third_party\dll-win64\drag-lint.exe` -- which is the
+exe your Scheduled Task was running. The kill is the first statement; the redirect that stamps
+20:03:41 / 23:59:47 is the next one.
+
+Corroborating, same evening, same box: `C:\TEMP\draglint_t3j_agree\a.sqlite` written 20:04:46
+and two `strip_wrongsymbol.pas` fixtures at 20:05:04 (65 and 83 seconds after run 4 died), and a
+whole battery run in `C:\TEMP\draglint_battery_20260727-201217`.
 
 **Honesty about the limit of this:** Windows does not log who called `TerminateProcess`, so I
-cannot prove *which* process killed yours. What is proven is that the signature is
-reproducible on demand and matches on every observable, that the opportunity existed in both
-windows, and that the by-name kill is written down in our own docs as the thing to do. Recorded
-as **K52**.
+**cannot prove which process killed yours** -- the table above is opportunity, not a causal
+record, and this section's conclusion is consistent-but-not-conclusive. What *is* proven, and
+proven independently of it: drag-lint was not crashing; it was terminated externally by a caller
+passing exit code -1; and the `DIAG:` line was a 128-byte buffer boundary rather than a crash
+site. Recorded as **K52**.
 
 ## 2. Your `DIAG:` clue was a buffer artifact, not the crash site
 
@@ -97,15 +160,31 @@ it is what made this cost five runs. `TIndexer.IndexFile`'s per-file `finally` n
 lines and the `ERROR indexing` path alike, exactly once per file. Cost is one <=128-byte write
 per file.
 
+**Exactly what it buys, and its precondition.** The guarantee is *no completed output is left
+sitting in the buffer when the process dies*. It is **not** "the log always ends on a line
+terminator", and it only reduces to that while every burst between two flushes fits the 128-byte
+`TTextBuf`. A single line longer than 128 bytes still reaches disk in 128-byte pieces -- the RTL
+empties the buffer the moment it fills -- so an outside reader can still catch such a line cut in
+half, flush or no flush. **That matters for your corpus specifically:** `    DIAG: ` plus a deep
+DevExpress or Raize path plus a parser message goes past 128 bytes easily. For a normal progress
+line (`  <path> -> N symbols, N refs, N errors`) it holds up to a ~93-character path.
+
 Guarded by a new runner, `tests/autotest/run_index_progress_flush.ps1`: it kills an in-flight
-`index` with `Stop-Process` and requires the log an outside reader sees to be complete. The
-mutation is the pre-fix binary, and the assertion is deterministic in the failing direction --
-while `Output` is unflushed, **every** sample length is necessarily a multiple of 128:
+`index` with `Stop-Process` (by **PID**) and requires the log an outside reader sees to be
+complete. The mutation is the pre-fix binary, and the failing direction is deterministic, not
+probabilistic -- while `Output` is unflushed, **every** sample length is necessarily a multiple
+of 128:
 
 | | samples ending mid-line | samples off the 128-byte boundary |
 |---|---|---|
-| pre-fix exe | 8 of 8 | **0 of 8** (`4736,7040,9344,11648,13568,16000,18048,19968`) |
-| post-fix exe | 0 of 8 | **8 of 8** (`4890,7297,9372,11862,14103,16012,18170,20162`) |
+| pre-fix exe | 8 of 8 | **0 of 8** (`4608,7040,8832,10752,12544,14080,16128,17664`) |
+| post-fix exe | 0 of 8 | **8 of 8** (`4733,6593,8019,9631,10995,12731,14157,15831`) |
+
+The runner asserts that 128-byte precondition rather than assuming it -- it rejects a `-WorkDir`
+whose paths would push a progress line past 128 bytes, and it measures the longest line the run
+actually emitted. It has to: an earlier version of it was green only because `$env:TEMP` is
+`C:\TEMP` on this box, and failed under a longer work path against a build whose flush was
+demonstrably working.
 
 Note this changes only how much you can SEE. It does not stop the kill. **Residual, registered
 as K51:** only the indexer flushes; `lint --project`, `document --project`, `convert` and
@@ -123,7 +202,7 @@ your exact command into a scratch DB, undisturbed, while nobody else built. It r
 - flat resources throughout: working set 175 -> 328 MB over the whole run, handle count pinned
   at 150, 1-4 threads. No leak, nothing approaching a limit on a 36 GB box.
 
-I then killed it deliberately, to produce the §1 reproduction. It did not stop on its own and
+I then killed it deliberately, to produce the section 1 reproduction. It did not stop on its own and
 showed no sign of being about to.
 
 That eliminates the internal explanations: not input-specific (three different stop points, and
@@ -180,12 +259,33 @@ is observable rather than inferable. I did not change the order.
 
 ## 7. What we would like from you
 
-- [ ] **Decide the fragment's fate** (§5). Nothing was moved.
+- [ ] **Decide the fragment's fate** (section 5). Nothing was moved.
 - [ ] **Stop killing by name.** Until K52 is fixed in the docs, before any build check
       `Get-Process drag-lint | Select Id,Path` and kill only the PID whose `Path` is the
       staging copy -- never the whole image name, and never while a rebuild is running.
 - [ ] Coordinate the next full rebuild so no build stages during it. That is the whole fix.
 
 Register entries: **K51** (flush residual), **K52** (by-name kill -- root cause),
-**K53** (manifest order, propose-only).
-Battery at this change: `196 pass / 0 fail / 0 timeout out of 196 executed  (of 197 found)`.
+**K53** (manifest order, propose-only), **K54** (the flush's 128-byte precondition),
+**K55** (`unit-name-matches-file` compares raw `moduleName` text), **K56**, **K57**.
+
+Battery at this change, with the tree it is a property of (a battery number is not a property of
+a commit -- register K41):
+
+```
+  tree                                             : C:\Projects\Delphi-RAG-lint
+  commit / worktree state                          : a687aca / DIRTY (44 entr(ies))
+  runners found under tests\ (run_*.ps1, recursive) : 198
+  ... of which UNTRACKED in this tree              : 2
+      tests/autotest/run_hover_callsite.ps1
+      tests/autotest/run_typeat_generic_member.ps1
+  excluded by policy                               : 1   (tests/run_battery.ps1, the driver itself)
+
+  197 pass / 0 fail / 0 timeout out of 197 executed  (of 198 found)
+  counted in: C:\Projects\Delphi-RAG-lint  @ a687aca (DIRTY (44 entr(ies)))  -- INCLUDING 2 UNTRACKED runner(s)
+  wall clock: 10.9 min
+```
+
+Measured at the fix-round head (`a687aca` + this round's working tree, which is what the runner
+reports; the fix commit itself is not in that hash because the battery ran before it). Two of the
+198 runners exist only in this tree, so a clean checkout enumerates 196.

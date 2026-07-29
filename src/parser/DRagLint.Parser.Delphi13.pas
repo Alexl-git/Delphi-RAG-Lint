@@ -275,6 +275,16 @@ end;
 // NOT handled: a comment written inside the dotted name (`Alpha.{x}Config`),
 // which is still stored verbatim. Rarer than this was, and no worse than
 // before. Guarded by tests\autotest\run_uses_padded_name.ps1.
+//
+// "EVERY whitespace byte" is meant literally, so the test is `C <= ' '` and not
+// a four-way match on #32/#9/#13/#10 (register K57). Pascal's whitespace class
+// also contains #11 (VT) and #12 (FF), and those two would have survived a
+// four-way match and produced exactly the unresolved edge this function exists
+// to prevent -- invisibly, since neither renders. Not hypothetical: MEASURED at
+// the T4e fix round, `unit Delta<VT>.Config;` indexes with 0 errors through this
+// grammar and emits a moduleName node. Nothing legal in a `moduleName` sorts
+// below #32: the node's grammar is `ident ('.' ident)*`, so every retained byte
+// is an identifier character or a dot.
 function StripModuleNameWhitespace(const AName: string): string;
 var
   I: Integer;
@@ -286,7 +296,7 @@ begin
   for I:= 1 to Length(AName) do
   begin
     C:= AName[I];
-    if (C = ' ') or (C = #9) or (C = #13) or (C = #10) then Continue;
+    if C <= ' ' then Continue;
     Inc(N);
     Result[N]:= C;
   end;
@@ -353,7 +363,20 @@ begin
   // Take the full text of moduleName so multi-segment unit names like
   // DRagLint.Core.Interfaces are preserved verbatim. Earlier impl grabbed
   // only the first identifier and lost everything after the dot.
-  UnitName:= Trim(NodeText(ModNode, AState.Source));
+  //
+  // v(ADP3 T4e fix round 1, register K43): the SAME strip as WalkUsesClause
+  // above, for the same reason -- a `moduleName` node spans the whole dotted
+  // name, so `unit Alpha  .Config;` hands back the padding too and `Trim` only
+  // removes the ends. This site is the more expensive one to get wrong: this
+  // value becomes the skUnit symbol's own name AND the qualified-name prefix of
+  // every symbol the unit declares (see AState.Emit below and the `UnitName +
+  // '.initialization'` forms), so one padded declaration would mis-key a whole
+  // unit's worth of rows, not one edge. Latent when fixed -- 0 of 7098 `unit`
+  // symbols across Delphi-RAG-lint / ORM3 / library-Win64 / M2022 carried
+  // embedded whitespace -- because we align `uses` clauses, not the `unit` line.
+  // Applied anyway: the strip is the same one-call cost, and a site reading the
+  // same node with the same hazard should not be left reading it differently.
+  UnitName:= StripModuleNameWhitespace(NodeText(ModNode, AState.Source));
   if UnitName = '' then Exit;
   AState.CurrentSection:= ''; { the unit symbol itself is section-less }
   UnitIdx:= AState.Emit(skUnit, UnitName, UnitName, -1, ANode);
