@@ -7,6 +7,27 @@ has the user's live TabcToggleBtn->TcxButton test data (229 lines) -- do NOT rev
 Design: `docs/converter/2026-07-20-converter-editor-unit-replacement-design.md`
 Plan:   `docs/converter/2026-07-20-converter-editor-unit-replacement-plan.md`
 
+## NEXT ACTION (2026-07-29)
+
+**Implement `docs/superpowers/plans/2026-07-29-proptree-ancestor-scope.md` on branch `main`, in a
+FRESH worktree** (`main` = `674706a`). Spec:
+`docs/superpowers/specs/2026-07-29-proptree-ancestor-scope-design.md`.
+
+This is the fix that makes `Name`, `Tag`, `Left`, `Top` assignable -- see "Why `Name`/`Tag` cannot
+be assigned" below for the measured root cause. Do the work on `main`, NOT on
+`feat/converter-editor`, and NEVER in `C:\Projects\Delphi-RAG-lint` (another team's checkout, on
+`feat/autodoc-phase3`, ~44 dirty files).
+
+Order of business next session:
+
+1. Create a worktree of `main` and run the plan's Task 1 -- capture the baseline leaf counts
+   BEFORE changing anything, because criteria 10-11 are regression guards on chains that work today.
+2. Tasks 2-5 as written. The query-time fallback (Task 3) is the one that pays off immediately:
+   it repairs indexes already on disk, with no re-index, which matters because a full library
+   rebuild currently aborts.
+3. Then rebuild the editor on `feat/converter-editor` and confirm in the GUI that the To pool
+   finally offers `Name`/`Tag`/`Left`/`Top` for `cxButtons.TcxButton`.
+
 ## LATEST -- resume here (2026-07-28b): Examine + grid search shipped; two engine INBOX notes filed
 
 Three things landed after the curation merge, all on `feat/converter-editor`, all UNPUSHED.
