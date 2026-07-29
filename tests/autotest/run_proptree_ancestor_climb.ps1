@@ -22,36 +22,47 @@
     Zed.Root9.pas   TRoot9  = class(TMid9)     -- namespace prefix 'Zed'
                     TRootF9 = class(TMidF9)    -- namespace prefix 'Zed'
                     (deliberately NO uses clause)
-    Vcl.Mid9.pas    TAmbAlias9 = TAmb9;        -- a TYPE ALIAS: the break.
-                    TMid9   = class(TAmbAlias9) -- globally UNIQUE name, so the
+    Mid9A.pas       TAnchor9A = class(TVclBase9) -- anchor evidence only
+                    TMid9   = class(TAmb9)     -- globally UNIQUE name, so the
                                                   TRoot9 -> TMid9 edge RESOLVES
                                                   at index time and the climb
                                                   genuinely reaches a second hop
                                                   in a DIFFERENT unit.
-                                                  (deliberately NO uses clause)
-    FMX.Mid9.pas    TAmbAliasF9 = TAmb9;       -- the mirror alias.
-                    TMidF9  = class(TAmbAliasF9) -- the mirror. Also no uses.
+                                                  UNDOTTED unit name, and NO
+                                                  uses clause.
+    Mid9B.pas       TAnchorF9B = class(TFmxBase9)
+                    TMidF9  = class(TAmb9)     -- the mirror. Also undotted.
+    Vcl.Base9.pas   TVclBase9 -- globally unique; the anchor hop for Mid9A
+    FMX.Base9.pas   TFmxBase9 -- the anchor hop for Mid9B
     Vcl.Cand9.pas   TAmb9   [property Marker: TMarkVcl9]
     FMX.Cand9.pas   TAmb9   [property Marker: TMarkFmx9]  <- same simple name,
                                                   so 'TAmb9' is AMBIGUOUS.
 
-    WHY THE BREAK IS AN ALIAS. ResolveAncestry's candidate set is
-    class/interface only, so a type-alias ancestor is a name it structurally
-    CANNOT resolve: it writes ancestor_kind='?' regardless of how capable its
-    scope rule is. Before Task 4 the break was 'TMid9 = class(TAmb9)' and the
-    index declined for a different reason -- it had no scope data. Task 4 gave
-    the index-time resolver the same shared scope rule the query side uses, it
-    resolved the 'Vcl' prefix itself, and this fixture silently stopped
-    exercising the query-time climb. The sanity assertion below caught that;
-    the alias restores the property the assertion is there to guarantee,
-    against any future index-side improvement short of alias-aware ancestry.
+    WHY THE MID UNITS ARE UNDOTTED. The break must be a name the INDEX-time
+    resolver declines and the QUERY-time climb resolves, or Cases A/B stop
+    testing the climb. Since Task 4 both sides run the SAME scope rule, so the
+    only thing that separates them is the framework ANCHOR: ResolveAncestry
+    passes '' (it is rebuilding type_ancestors, the table an anchor is derived
+    from) while PickCandidate derives a real one for an undotted scope unit.
+    An undotted mid unit therefore declines at index time and resolves at query
+    time -- see Mid9A.pas for the full argument in both directions.
 
-    The root unit's prefix is 'Zed', which matches NEITHER candidate. So:
-      * resolve 'TAmb9' in the ROOT's scope (the defect)   -> rule 3 finds no
-        prefix match, the rule correctly DECLINES, the climb stops, and 'Marker'
-        is ABSENT from both trees;
-      * resolve it in the INHERITING class's scope (correct) -> Vcl.Mid9's 'Vcl'
-        prefix picks Vcl.Cand9 and FMX.Mid9's 'FMX' prefix picks FMX.Cand9, so
+    NOT AN ALIAS, and this is the trap to remember. An earlier revision used
+    'TAmbAlias9 = TAmb9' as the break. It declined at index time correctly, but
+    ResolveTypeNameToClass RE-SCOPES to the alias's own file before resolving
+    the alias target (LoadScopeNames(Cand.FileId), Storage.SQLite.pas ~:3019),
+    so hop 1 resolved the globally-unique alias name under ANY scope and hop 2
+    ran in the alias's own (correct) unit -- Cases A and B passed with the
+    criterion-7 defect injected. The name resolved in the CALLER's scope has to
+    be the AMBIGUOUS one.
+
+    The root unit's prefix is 'Zed', which matches NEITHER candidate, and
+    'Zed.Root9' is DOTTED so no anchor is derived for it either. So:
+      * resolve 'TAmb9' in the ROOT's scope (the defect)   -> rule 3 matches
+        'Zed' against 'Vcl'/'FMX', the rule correctly DECLINES, the climb stops,
+        and 'Marker' is ABSENT from both trees;
+      * resolve it in the INHERITING class's scope (correct) -> Mid9A's anchor
+        'Vcl' picks Vcl.Cand9 and Mid9B's anchor 'FMX' picks FMX.Cand9, so
         'Marker' is present and DIFFERENTLY TYPED in each direction.
     A wrong pick is therefore detectable (shows up as the other framework's enum),
     a decline is detectable (Marker absent), and passing for the wrong reason --
@@ -163,30 +174,19 @@ implementation
 end.
 '@
 
-Write-Ascii (Join-Path $work 'Vcl.Mid9.pas') @'
-unit Vcl.Mid9;
+Write-Ascii (Join-Path $work 'Vcl.Base9.pas') @'
+unit Vcl.Base9;
 
 interface
 
-// Deliberately NO uses clause, so neither same-unit (rule 1) nor uses-based
-// (rule 2) scoping can decide 'TAmb9' -- only this unit's 'Vcl' namespace
-// prefix (rule 3) can. TMid9's own name is globally unique, so the
-// TRoot9 -> TMid9 edge RESOLVES at index time; the break is one hop ABOVE the
-// queried root, in THIS unit.
-//
-// THE BREAK IS A TYPE ALIAS, and that is load-bearing. ResolveAncestry's
-// candidate set is class/interface only, so an alias ancestor is a name it
-// STRUCTURALLY cannot resolve -- it writes ancestor_kind='?' no matter how
-// good its scope rule gets. Inheriting from 'TAmb9' directly would no longer
-// do: since Task 4 the index-time resolver applies the same shared scope rule
-// as the query side, so it would resolve the 'Vcl' prefix itself and this
-// fixture would stop exercising the QUERY-TIME climb at all (it did exactly
-// that, and the sanity assertion below caught it).
+// Sole purpose: give Mid9A.pas's ancestry a resolvable hop into a 'Vcl.*'
+// unit, so FrameworkAnchorForFile can derive the anchor 'Vcl' for that
+// undotted unit at QUERY time. TVclBase9's name is globally unique, so the
+// TAnchor9A -> TVclBase9 edge resolves at INDEX time and the anchor climb --
+// which follows only ALREADY-RESOLVED type_ancestors rows -- can use it.
 
 type
-  TAmbAlias9 = TAmb9;
-
-  TMid9 = class(TAmbAlias9)
+  TVclBase9 = class(TPersistent)
   end;
 
 implementation
@@ -194,20 +194,89 @@ implementation
 end.
 '@
 
-Write-Ascii (Join-Path $work 'FMX.Mid9.pas') @'
-unit FMX.Mid9;
+Write-Ascii (Join-Path $work 'FMX.Base9.pas') @'
+unit FMX.Base9;
 
 interface
 
-// The mirror of Vcl.Mid9 -- also no uses clause, same type-alias break; only
-// the 'FMX' prefix can decide. Criterion 5's "nor the reverse". The alias
-// carries its own name so that resolving IT is never the ambiguous step --
-// the ambiguity is deliberately one hop further up, at 'TAmb9'.
+// The mirror: gives Mid9B.pas the anchor 'FMX'. See Vcl.Base9.pas.
 
 type
-  TAmbAliasF9 = TAmb9;
+  TFmxBase9 = class(TPersistent)
+  end;
 
-  TMidF9 = class(TAmbAliasF9)
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Mid9A.pas') @'
+unit Mid9A;
+
+interface
+
+// Deliberately NO uses clause, so neither same-unit (rule 1) nor uses-based
+// (rule 2) scoping can decide 'TAmb9'. TMid9's own name is globally unique, so
+// the TRoot9 -> TMid9 edge RESOLVES at index time; the break is one hop ABOVE
+// the queried root, in THIS unit.
+//
+// THIS UNIT'S NAME IS UNDOTTED, and that is load-bearing in BOTH directions:
+//
+//   INDEX TIME must DECLINE 'TAmb9'. UnitFrameworkPrefix('Mid9A') is '', so
+//   rule 3 has no segment of its own to match with, and ResolveAncestry
+//   supplies no anchor (it is mid-way through rebuilding type_ancestors, the
+//   very table an anchor is derived from). Rule 3 is therefore skipped and the
+//   edge is written ancestor_kind='?' -- which is what the sanity assertion
+//   below pins, and what makes Cases A and B exercise the QUERY-TIME climb.
+//
+//   QUERY TIME must RESOLVE it, and only in THIS unit's scope. PickCandidate
+//   derives an anchor for an undotted scope unit: FrameworkAnchorForFile climbs
+//   TAnchor9A -> Vcl.Base9.TVclBase9 and answers 'Vcl', which rule 3
+//   substitutes for the missing segment and uses to pick Vcl.Cand9.TAmb9.
+//   Resolving in the ROOT unit's scope instead (Zed.Root9 -- the criterion-7
+//   defect) derives NO anchor at all, because 'Zed.Root9' IS dotted and
+//   PickCandidate therefore never calls FrameworkAnchorForFile; rule 3 then
+//   matches 'Zed' against 'Vcl'/'FMX', finds nothing, and DECLINES. That
+//   asymmetry is what makes Cases A and B decisive for criterion 7.
+//
+// An earlier revision made the break a TYPE ALIAS instead. That looked
+// equivalent and was not: ResolveTypeNameToClass RE-SCOPES to the alias's own
+// file (LoadScopeNames(Cand.FileId), Storage.SQLite.pas ~:3019) before
+// resolving the alias target, so the caller's scope was discarded and the
+// correct scope handed back for free -- Cases A and B then passed under the
+// criterion-7 defect just as well as without it. The name resolved in the
+// CALLER's scope must be the AMBIGUOUS one, or these cases test nothing.
+
+type
+  // Anchor evidence only -- never queried. See Vcl.Base9.pas.
+  TAnchor9A = class(TVclBase9)
+  end;
+
+  TMid9 = class(TAmb9)
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Mid9B.pas') @'
+unit Mid9B;
+
+interface
+
+// The mirror of Mid9A -- also undotted, also no uses clause, same ambiguous
+// 'TAmb9' break. Its anchor evidence points at FMX.Base9, so the query-time
+// climb must reach FMX.Cand9.TAmb9 here where Mid9A reaches Vcl.Cand9.TAmb9.
+// Criterion 5's "nor the reverse", and the reason no single blanket scope can
+// satisfy both roots: they live in the SAME root unit.
+
+type
+  // Anchor evidence only -- never queried. See FMX.Base9.pas.
+  TAnchorF9B = class(TFmxBase9)
+  end;
+
+  TMidF9 = class(TAmb9)
   end;
 
 implementation
@@ -438,12 +507,12 @@ con.close()
 '@
 Write-Host ''
 Write-Host 'fixture sanity: the break really is an UNRESOLVED edge' -ForegroundColor Cyan
-$edgeMid  = (python $script:PyEdge $db 'TMid9'  'TAmbAlias9').Trim()
+$edgeMid  = (python $script:PyEdge $db 'TMid9'  'TAmb9').Trim()
 $edgeRoot = (python $script:PyEdge $db 'TRoot9' 'TMid9').Trim()
-Check "Vcl.Mid9.TMid9's 'TAmbAlias9' edge is UNRESOLVED (the fallback is what must fix it)" ($edgeMid -eq '?|NULL') "edge=$edgeMid"
+Check "Mid9A.TMid9's 'TAmb9' edge is UNRESOLVED (the fallback is what must fix it)" ($edgeMid -eq '?|NULL') "edge=$edgeMid"
 Check "Zed.Root9.TRoot9's 'TMid9' edge IS resolved (so the climb reaches a 2nd unit)" ($edgeRoot -like 'class|SET') "edge=$edgeRoot"
 
-# --- CASE A: criterion 7 -- the break is resolved in Vcl.Mid9's scope, not Zed's. --
+# --- CASE A: criterion 7 -- the break is resolved in Mid9A's scope, not Zed's. -----
 Write-Host ''
 Write-Host 'Case A: multi-unit climb resolves the break in the INHERITING unit (criterion 7)' -ForegroundColor Cyan
 $tA = Get-Tree 'Zed.Root9.TRoot9'

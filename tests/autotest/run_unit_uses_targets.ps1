@@ -133,6 +133,38 @@ implementation
 end.
 '@
 
+Write-Ascii (Join-Path $work 'Vcl.Widgets9.pas') @'
+unit Vcl.Widgets9;
+
+// The ONLY stem carrying the last segment 'widgets9', and it sits in a GUI
+// framework namespace. Rule B's uniqueness test alone would therefore hand it
+// to a bare `uses Widgets9` -- which is exactly the criterion-5 hazard that
+// uniqueness CANNOT cover, because uniqueness is a property of what happens to
+// be INDEXED, not a property of the rule. Case G pins the structural refusal.
+
+interface
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Vcl.Alpha.pas') @'
+unit Vcl.Alpha;
+
+// Exists so that the GUI-namespace refusal is shown to apply to rule B ONLY:
+// 'uses Vcl.Alpha' NAMES this file outright and must resolve, GUI or not.
+// Rule A is a name equality the unit itself stated; only the rule B INFERENCE
+// is refused a GUI target. Case H -- without it, case G would also pass under
+// a blanket "never resolve into Vcl.*" that broke criterion 12 for VCL units.
+
+interface
+
+implementation
+
+end.
+'@
+
 Write-Ascii (Join-Path $work 'Consumer.pas') @'
 unit Consumer;
 
@@ -144,7 +176,9 @@ uses
   Beta,          // C: bare, unique last segment     -> Ns.Beta.pas
   Gamma,         // D: bare, TWO stems carry it      -> must stay NULL
   Zed.Alpha,     // E: dotted, no such stem          -> must stay NULL
-  NoSuchUnit9;   // F: nothing of the sort indexed   -> must stay NULL
+  NoSuchUnit9,   // F: nothing of the sort indexed   -> must stay NULL
+  Widgets9,      // G: bare, unique -- but GUI stem  -> must stay NULL
+  Vcl.Alpha;     // H: dotted exact, GUI stem        -> Vcl.Alpha.pas (rule A)
 
 implementation
 
@@ -178,8 +212,10 @@ function Get-Use([string]$Name) { return (python $script:PyUse $db $Name).Trim()
 Write-Host ''
 Write-Host 'unit_uses.target_file_id after a fresh index' -ForegroundColor Cyan
 
+$script:AllNames = @('Ns.Alpha','Plain','Beta','Gamma','Zed.Alpha','NoSuchUnit9','Widgets9','Vcl.Alpha')
+
 # Fixture sanity: every uses entry produced a row at all.
-foreach ($n in 'Ns.Alpha','Plain','Beta','Gamma','Zed.Alpha','NoSuchUnit9') {
+foreach ($n in $script:AllNames) {
   Check "fixture sanity: Consumer's 'uses $n' produced a unit_uses row" ((Get-Use $n) -ne 'NOROW') "row=$(Get-Use $n)"
 }
 
@@ -215,14 +251,60 @@ Check "E: dotted 'uses Zed.Alpha' stays NULL -- it must NOT seize Ns.Alpha.pas" 
 $f = Get-Use 'NoSuchUnit9'
 Check "F: 'uses NoSuchUnit9' stays NULL (no candidate file exists)" ($f -like '*|NULL|NULL') "row=$f"
 
+# --- G. CRITERION 5, STRUCTURALLY: rule B must never infer a GUI-namespaced -------
+#        target, even when it is the UNIQUE holder of the segment. Uniqueness is
+#        a property of what happens to be indexed; this must be a property of the
+#        rule. Here Vcl.Widgets9.pas is the only 'widgets9' stem in the tree, so
+#        uniqueness alone WOULD hand it over.
+$g = Get-Use 'Widgets9'
+Check "G: bare 'uses Widgets9' stays NULL -- rule B never infers a GUI-namespace target (criterion 5)" `
+  ($g -like '*|NULL|NULL') `
+  "row=$g -- Vcl.Widgets9.pas is the UNIQUE 'widgets9' stem, so the uniqueness test passes and only the IsGuiFrameworkPrefix refusal stops it; without it, an index carrying FMX.Types.pas but not System.Types.pas would give a legacy VCL unit FireMonkey types"
+
+# --- H. ...and that refusal applies to rule B ONLY. Rule A is a name equality -----
+#        the unit stated outright, so a DOTTED uses naming a Vcl.* file must
+#        still resolve -- otherwise criterion 12 would be broken for all of VCL.
+$h = Get-Use 'Vcl.Alpha'
+Check "H: dotted 'uses Vcl.Alpha' RESOLVES -- the GUI refusal binds rule B, never rule A" `
+  ($h -like '*|SET|Vcl.Alpha.pas') `
+  "row=$h -- if this is NULL the guard was applied too broadly and criterion 12 is broken for every Vcl.*/FMX.* unit"
+
 # --- Idempotency: re-running the resolve pass must not change any answer. ---------
 Write-Host ''
 Write-Host 'idempotency: a second index pass over the same tree' -ForegroundColor Cyan
-$before = @('Ns.Alpha','Plain','Beta','Gamma','Zed.Alpha','NoSuchUnit9' | ForEach-Object { Get-Use $_ })
+$before = @($script:AllNames | ForEach-Object { Get-Use $_ })
 $null = & $Exe index $work --db $db 2>&1
-$after  = @('Ns.Alpha','Plain','Beta','Gamma','Zed.Alpha','NoSuchUnit9' | ForEach-Object { Get-Use $_ })
+$after  = @($script:AllNames | ForEach-Object { Get-Use $_ })
 Check "re-indexing leaves every target_file_id unchanged" (($before -join ';') -eq ($after -join ';')) `
   "before=$($before -join ' ; ') after=$($after -join ' ; ')"
+
+# --- Finding 4: the pass RECOMPUTES, so it can REPAIR a wrong value. A row -------
+#     poisoned behind the indexer's back (simulating the 122 measured wrong
+#     dotted targets left by the old rule in a file that is never re-parsed)
+#     must be corrected by the next pass, not preserved because it is non-NULL.
+Write-Host ''
+Write-Host 'repair: a pre-existing WRONG target_file_id is corrected, not kept' -ForegroundColor Cyan
+$script:PyPoison = Join-Path $WorkDir 'poison.py'
+Write-Ascii $script:PyPoison @'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1]); c = con.cursor()
+# point 'uses Ns.Alpha' at the WRONG file, and invent a target for a name that
+# must have none -- exactly the two shapes the old fill-only pass could not fix.
+wrong = c.execute("SELECT id FROM files WHERE path LIKE '%Plain.pas'").fetchone()[0]
+c.execute("UPDATE unit_uses SET target_file_id=? WHERE LOWER(unit_name)='ns.alpha'", (wrong,))
+c.execute("UPDATE unit_uses SET target_file_id=? WHERE LOWER(unit_name)='gamma'", (wrong,))
+con.commit(); con.close()
+print('poisoned')
+'@
+$null = python $script:PyPoison $db
+Check "fixture sanity: the poison took (Ns.Alpha now points at Plain.pas)" ((Get-Use 'Ns.Alpha') -like '*|SET|Plain.pas') "row=$(Get-Use 'Ns.Alpha')"
+Check "fixture sanity: the poison took (Gamma now has a target at all)"    ((Get-Use 'Gamma')    -like '*|SET|Plain.pas') "row=$(Get-Use 'Gamma')"
+$null = & $Exe index $work --db $db 2>&1
+$r1 = Get-Use 'Ns.Alpha'
+$r2 = Get-Use 'Gamma'
+Check "repair: a WRONG target is corrected by the next pass" ($r1 -like '*|SET|Ns.Alpha.pas') `
+  "row=$r1 -- RED if the pass only fills NULL rows; the 122 measured wrong dotted targets would then survive this fix forever"
+Check "repair: a target that should not exist is cleared back to NULL" ($r2 -like '*|NULL|NULL') "row=$r2"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

@@ -98,14 +98,24 @@ type
     procedure DeleteUnitUsesForFile(AFileId: Int64);
     function GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>          ;
     function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
-    /// <summary>Whole-DB post-index pass: fills unit_uses.target_file_id for
-    /// every `uses` entry that names an indexed file. Idempotent, and only
-    /// ever fills rows that are still NULL.</summary>
-    /// <remarks>Two rules, in order: the used unit's name equals a file's
-    /// lowercased basename stem ('Vcl.Controls' -&gt; Vcl.Controls.pas); or,
-    /// for a BARE name only, exactly one indexed stem carries that name as
-    /// its last dotted segment ('Buttons' -&gt; Vcl.Buttons.pas -- Delphi's
-    /// unit scope names). Anything else is left NULL.
+    /// <summary>Whole-DB post-index pass: RECOMPUTES unit_uses.target_file_id
+    /// for every row, from the used unit's name and the set of indexed file
+    /// names. Idempotent.</summary>
+    /// <remarks>Two rules, in order: (A) the used unit's name equals a file's
+    /// lowercased basename stem ('Vcl.Controls' -&gt; Vcl.Controls.pas); or
+    /// (B) for a BARE name only, exactly one indexed stem carries that name as
+    /// its last dotted segment AND that stem is not in a GUI framework
+    /// namespace ('Grids' -&gt; Data.Grids.pas -- Delphi's unit scope names).
+    /// Anything else is left NULL.
+    /// CLEARS THE COLUMN FIRST, so it REPAIRS a stale or wrong value instead of
+    /// only filling gaps -- an incremental re-index that does not re-parse a
+    /// file would otherwise preserve that file's old targets forever. Runs in
+    /// one transaction, so a failure rolls back to the previous values. Any
+    /// caller holding a target_file_id across this call must re-read it.
+    /// GUARANTEES that rule B never resolves a row to a Vcl.* or FMX.* file
+    /// (criterion 5, structural -- not a property of what happens to be
+    /// indexed). Rule A is a name equality the unit itself stated and is
+    /// deliberately not restricted that way.
     /// GUARANTEES ONLY that some indexed file is named after the used unit --
     /// NOT that it is the file the compiler would have picked. Two indexed
     /// copies of one unit collide on a stem and an arbitrary one wins.

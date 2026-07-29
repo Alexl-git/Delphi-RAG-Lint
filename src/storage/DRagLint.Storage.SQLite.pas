@@ -2586,7 +2586,13 @@ end;
 ///  entered, and everything ambiguous comes here. Both gather AScopeUnitName
 ///  and AScopeUsesNames from the same two sources (the scope file's own `unit`
 ///  symbols, then its unit_uses.unit_name entries, lowercased) -- query time
-///  per file on demand, index time in one bulk pass.
+///  per file on demand, index time in one bulk pass. Two differences in that
+///  gathering are known and immaterial, recorded so nobody has to re-derive
+///  them: index time skips empty names and file ids &lt;= 0 where query time
+///  inserts LowerCase('') unguarded (an empty key matches no candidate's
+///  declaring unit either way), and index time orders the scope file's `unit`
+///  symbols by id where query time takes the first row the engine returns
+///  (a file with two `unit` symbols is malformed).
 ///  WHAT IS SHARED IS THE RULE, NOT THE CANDIDATE SET. The query-time caller
 ///  offers class, interface, record AND type-alias symbols and chases an alias
 ///  to its target; ResolveAncestry offers class and interface only. So the two
@@ -3821,21 +3827,26 @@ procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
    A. EXACT: the lowercased used-unit name equals a file's lowercased basename
       stem. 'Vcl.Controls' -> Vcl.Controls.pas; 'Abcbtn' -> Abcbtn.pas. This is
       a NAME EQUALITY, not an inference, and it is what criterion 12 asks for.
-   B. UNIT SCOPE NAMES, bare names only: a used name with NO dot may match a
-      DOTTED stem by its last segment -- 'uses Buttons' -> Vcl.Buttons.pas --
-      but ONLY when exactly one distinct stem carries that segment. This is
-      Delphi's own unit-scope-names resolution, in the only direction Delphi
-      performs it. The uniqueness requirement is what keeps it honest: the
-      collision-prone names are exactly the ones both GUI frameworks declare
-      ('controls', 'graphics', 'forms', 'menus', 'stdctrls', ...), and each of
-      those has 2+ stems and therefore DECLINES.
-      A DOTTED name never falls back here -- 'uses Zeta.Alpha' with no
-      Zeta.Alpha.pas indexed stays NULL rather than seizing Ns.Alpha.pas.
-      That direction is what produced both measured wrong-namespace matches.
+   B. UNIT SCOPE NAMES, bare names only, never into a GUI namespace: a used
+      name with NO dot may match a DOTTED stem by its last segment --
+      'uses Grids' -> Data.Grids.pas -- but only when exactly one distinct stem
+      carries that segment AND that stem's leading segment is not one of the
+      two GUI frameworks (see IsGuiFrameworkPrefix). This is Delphi's own
+      unit-scope-names resolution, in the only direction Delphi performs it.
+      Three restrictions, each load-bearing and each independently pinned by
+      tests/autotest/run_unit_uses_targets.ps1:
+        * BARE ONLY. 'uses Zeta.Alpha' with no Zeta.Alpha.pas indexed stays
+          NULL rather than seizing Ns.Alpha.pas. That direction is what
+          produced both measured wrong-namespace matches.
+        * UNIQUE STEM. 2+ stems carrying the segment means decline.
+        * NEVER GUI. See the long comment at the call site: uniqueness is a
+          property of what happens to be INDEXED, so it cannot by itself keep
+          criterion 5. Refusing GUI-namespaced targets outright makes that a
+          property of the rule.
 
-  Measured effect on library-Win64.sqlite (85157 rows): 41.8% -> 91.8%
-  resolved, with rule B contributing 4539 rows across 145 bare names, NONE of
-  which lands in a GUI namespace the referencing unit does not already share.
+  Measured effect on library-Win64.sqlite (85157 rows): 41.8% -> 91.0%
+  resolved -- rule A 73652 rows, rule B 3871 rows across 106 bare names, none
+  of them in a GUI namespace.
 
   NOT GUARANTEED: that a resolved target is the unit the Delphi compiler would
   have picked. Two indexed copies of the same unit (two source trees) collide
@@ -3881,6 +3892,12 @@ begin
     while not QFiles.Eof do
     begin
       Path:= QFiles.FieldByName('path').AsString;
+      // TWO DIFFERENT LastDelimiters live in this procedure, eight lines apart.
+      // This one is TStringHelper.LastDelimiter -- a METHOD on Path, ZERO-based,
+      // returning -1 for "absent", hence '>= 0' and the +2 to land one char past
+      // the separator. The one just below is the GLOBAL System.SysUtils
+      // LastDelimiter -- ONE-based, returning 0 for "absent", hence '> 0' and
+      // +1. Both are correct; neither may be copied onto the other.
       Slash:= Path.LastDelimiter('\/');
       if Slash >= 0 then Stem:= Copy(Path, Slash + 2, MaxInt)
       else Stem:= Path;
@@ -3889,7 +3906,7 @@ begin
       begin
         StemToFileId.AddOrSetValue(Stem, QFiles.FieldByName('id').AsLargeInt);
         Seg:= Stem;
-        Dot:= LastDelimiter('.', Seg);
+        Dot:= LastDelimiter('.', Seg);          // GLOBAL, 1-based -- see above
         if Dot > 0 then Seg:= Copy(Seg, Dot + 1, MaxInt);
         // Distinct STEMS, not distinct files: two indexed copies of
         // Vcl.Controls.pas are one candidate unit, not an ambiguity.
@@ -3905,7 +3922,7 @@ begin
       pull-everything-then-write idiom. }
     QNames.Connection:= FConn;
     QNames.SQL.Text:= 'SELECT DISTINCT unit_name_norm, LOWER(unit_name) AS un_lc ' +
-                      'FROM unit_uses WHERE target_file_id IS NULL';
+                      'FROM unit_uses';
     QNames.Open;
     while not QNames.Eof do
     begin
@@ -3922,28 +3939,67 @@ begin
       and must NOT be updated together. }
     QUpdate.Connection:= FConn;
     QUpdate.SQL.Text:= 'UPDATE unit_uses SET target_file_id = :tid ' +
-                       'WHERE unit_name_norm = :un AND LOWER(unit_name) = :full ' +
-                       '  AND target_file_id IS NULL';
+                       'WHERE unit_name_norm = :un AND LOWER(unit_name) = :full';
     QUpdate.Params.ParamByName('tid' ).DataType:= ftLargeint;
     QUpdate.Params.ParamByName('un'  ).DataType:= ftString;
     QUpdate.Params.ParamByName('full').DataType:= ftString;
     QUpdate.Prepare;
-    for i:= 0 to UsedFulls.Count - 1 do
-    begin
-      Stem:= UsedFulls[i];
-      if Stem = '' then Continue;
-      if not StemToFileId.ContainsKey(Stem) then           // rule A missed
+    FConn.StartTransaction;
+    try
+      { RECOMPUTE, don't top up. Filling only NULL rows made the pass unable to
+        REPAIR a wrong value: on an incremental re-index a file that is not
+        re-parsed keeps its unit_uses rows, so the 122 measured wrong dotted
+        targets would have survived this fix forever. Clearing first makes the
+        repair total, and the pass stays idempotent because the rules below are
+        a pure function of (files, unit_uses.unit_name). Nothing else in the
+        codebase ever writes this column -- UpsertUnitUse always inserts NULL --
+        so no other producer's work is being discarded. The transaction is what
+        makes the clear safe: a failure rolls back to the previous values rather
+        than leaving the column empty. }
+      FConn.ExecSQL('UPDATE unit_uses SET target_file_id = NULL');
+      for i:= 0 to UsedFulls.Count - 1 do
       begin
-        if Pos('.', Stem) > 0 then Continue;               // rule B is bare-only
-        if not SegToStem.TryGetValue(Stem, Seen) then Continue;
-        if Seen = CStemAmbiguous then Continue;            // 2+ stems -- decline
-        Stem:= Seen;                                       // rule B hit
+        Stem:= UsedFulls[i];
+        if Stem = '' then Continue;
+        if not StemToFileId.ContainsKey(Stem) then           // rule A missed
+        begin
+          if Pos('.', Stem) > 0 then Continue;               // rule B is bare-only
+          if not SegToStem.TryGetValue(Stem, Seen) then Continue;
+          if Seen = CStemAmbiguous then Continue;            // 2+ stems -- decline
+          { CRITERION 5, STRUCTURALLY. Rule B is an INFERENCE -- the used name
+            does not name this file, Delphi's unit scope names do -- and an
+            inference must never be able to hand a unit one GUI framework's
+            code when it meant the other's. Uniqueness alone does not prevent
+            that: it is a property of what happens to be INDEXED, so an index
+            carrying FMX.Types.pas but not System.Types.pas would make a bare
+            `uses Types` uniquely FireMonkey. Refusing every GUI-namespaced
+            target makes the guarantee a property of the RULE instead.
+            The obvious alternative -- accept a GUI target when the REFERENCING
+            unit's own leading segment confirms it, the shape rule 2b uses --
+            was measured on library-Win64.sqlite and is exactly equivalent
+            here: of the 678 rows rule B would resolve into a GUI namespace,
+            ZERO are written by a unit whose own segment is 'Vcl' or 'FMX'
+            (they are undotted legacy units, plus a handful of 'dunitx' and
+            'spring' ones). Fully-qualified `uses` is universal inside both
+            frameworks, so a confirming case barely exists. This keeps 3871 of
+            rule B's 4549 rows and costs the corpus-dependent 678.
+            Rule A is deliberately NOT guarded: `uses Vcl.Controls` naming
+            Vcl.Controls.pas is a name equality the unit itself stated, not an
+            inference, and rules 1/2a of the ancestor scope rule cross for the
+            same reason. }
+          if IsGuiFrameworkPrefix(UnitFrameworkPrefix(Seen)) then Continue;
+          Stem:= Seen;                                       // rule B hit
+        end;
+        if not StemToFileId.TryGetValue(Stem, Fid) then Continue;
+        QUpdate.ParamByName('tid' ).AsLargeInt:= Fid;
+        QUpdate.ParamByName('un'  ).AsString  := UsedNorms[i];
+        QUpdate.ParamByName('full').AsString  := UsedFulls[i];
+        QUpdate.ExecSQL;
       end;
-      if not StemToFileId.TryGetValue(Stem, Fid) then Continue;
-      QUpdate.ParamByName('tid' ).AsLargeInt:= Fid;
-      QUpdate.ParamByName('un'  ).AsString  := UsedNorms[i];
-      QUpdate.ParamByName('full').AsString  := UsedFulls[i];
-      QUpdate.ExecSQL;
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
     end;
   finally
     QUpdate    .Free;
