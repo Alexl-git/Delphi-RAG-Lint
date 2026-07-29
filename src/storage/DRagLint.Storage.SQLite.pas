@@ -3481,40 +3481,67 @@ procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
   of files.path ('Vcl.Controls.pas' -> 'vcl.controls'). Those two can never be
   equal for a dotted unit, so target_file_id stayed NULL for essentially every
   dotted `uses` in the index: in library-Win64.sqlite, 38390 of the 38512 dotted
-  rows (99.7%) were NULL, and 38022 of those name a unit whose file IS indexed --
-  i.e. purely this defect. (The other 11137 NULL rows are PLAIN unit names, and
-  every one of them names a unit that is not in the index at all, so they are
-  missing data rather than a mismatch. Counted with
-  `SELECT CASE WHEN INSTR(unit_name,'.')>0 ... GROUP BY` over unit_uses, and
-  classified against the set of indexed basename stems.) The tail-only key dates
-  from when a unit's file really was named after its last segment (SysUtils.pas);
-  the RTL has shipped fully-dotted filenames since Delphi 2009. Everything keyed
-  off that scope silently degraded -- most visibly ResolveAncestry, whose
-  uses-scope disambiguation collapsed to same-file-only and so abandoned every
-  cross-unit ancestor hop onto an ambiguous name.
+  rows (99.7%) were NULL, inside 49527 NULL rows out of 85157.
 
-  ONLY SOURCE FILES ARE CANDIDATES. A `uses` clause names a UNIT, and a unit is
-  declared by a .pas/.dpr/.dpk -- never by the .dfm the indexer stores beside a
-  form unit, which shares its stem exactly. Taking `files` unfiltered lets that
-  .dfm compete for the stem, and it is walked first, so it wins: measured on
-  tests\fixtures\formsmap as 15 of 30 uses rows bound to a .dfm, and 62 (ORM3) /
-  612 (library-Win64) distinct used-unit names whose first `files` row is a .dfm.
-  A .dfm declares no classes, so a scope entry pointing at one is an EMPTY scope
-  and ResolveAncestry loses every edge that scope alone could have resolved.
+  HOW THOSE 49527 ARE CLASSIFIED, stated because two earlier versions of this
+  paragraph got it wrong and both times it was the CLASSIFIER and not the
+  arithmetic. Replay BOTH passes below over the NULL rows, against the same
+  candidate set the code now builds (files whose lowercased extension is '.pas';
+  stem = lowercased basename; tail = text after the stem's last dot; a tail
+  claimed by two different stems is ambiguous):
+
+      pass 1 resolves  38022  (all dotted)
+      pass 2 resolves   4592  (4549 plain + 43 dotted)
+      refused, tail ambiguous 6381  (6241 plain + 140 dotted)
+      names nothing indexed    532  ( 347 plain + 185 dotted)
+
+  So 48995 of the 49527 name a unit that IS indexed. Version 1 charged all 49527
+  to this defect and called it "58%". Version 2 classified the 11137 plain-name
+  NULLs by FULL-STEM equality -- pass 1's criterion, applied to rows that by
+  construction cannot match it, since full-stem equality is exactly what made
+  them NULL -- and so called all 11137 missing data; 10790 of them in fact match
+  an indexed file TAIL, which is the case pass 2 exists for. The tail-only key
+  dates from when a unit's file really was named after its last segment
+  (SysUtils.pas); the RTL has shipped fully-dotted filenames since Delphi 2009.
+  Everything keyed off that scope silently degraded -- most visibly
+  ResolveAncestry, whose uses-scope disambiguation collapsed to same-file-only and
+  so abandoned every cross-unit ancestor hop onto an ambiguous name.
+
+  ONLY A .pas IS A CANDIDATE. A `uses` clause names a UNIT. A .dfm is a form
+  resource, a .dpr names a PROGRAM and a .dpk names a PACKAGE; none of them
+  declares a unit, and .dpk files carry 0 symbols in all four indexes measured
+  (305 files in library-Win64, 64 in M2022, 2 in ORM3, 1 here). Any of them
+  sharing a stem with a real unit will WIN it, because the scan is path-ordered
+  and '.dfm' < '.dpk' < '.dpr' < '.pas'. The resulting scope entry points at a
+  file that declares no classes -- an EMPTY scope -- and ResolveAncestry then
+  loses every edge that scope alone could have resolved. Measured on
+  tests\fixtures\formsmap, taking `files` unfiltered bound 15 of 30 uses rows to a
+  .dfm; on the real indexes, replaying the whole unfiltered procedure and counting
+  DISTINCT LOWER(TRIM(unit_name)) whose winning file is not a .pas gives 62 in
+  ORM3, 613 in library-Win64, 205 in M2022 and 25 here. Narrowing the filter from
+  .pas/.dpr/.dpk to .pas costs nothing measurable: on all four indexes the number
+  of uses rows that resolve is IDENTICAL under both (78244 / 5339 / 2791 / 762),
+  because no row's only candidate was a .dpr or a .dpk. It is a latent hole rather
+  than a live one -- 2 stems in this repo's own index ('app', 'main') are held by
+  both a .dpr and a .pas, and nothing uses them -- but it un-resolved a fixture
+  edge that PRE-T4d resolved correctly, which is the same defect as the .dfm one.
   Filtering here (rather than at the accumulator) also keeps pass 2's ambiguity
-  test honest: a .pas/.dfm pair stems identically, so `PrevStem <> Stem` could
-  never have fired on it. Guarded by run_proptree_ancestor_climb.ps1 group
-  E5-E8, which reads the stored tables -- the query-time late resolver is textual
-  and masks this in every proptree-level assertion.
+  test able to fire at all: two files that differ only in extension stem
+  identically, so `PrevStem <> Stem` could never have separated them. Guarded by
+  run_proptree_ancestor_climb.ps1 group E5-E14, which reads the stored tables --
+  the query-time late resolver is textual and masks this in every proptree-level
+  assertion -- and which names the file it expects rather than the extension set
+  this code allows.
 
   Two passes, most-specific first:
     1. the used unit's FULL name against the full file stem. Exact, and the only
        pass that can match a dotted unit to its dotted file. First-wins on a
-       duplicate stem: after the source filter, two files with the same stem both
-       declare a unit of that name, only one of which the compiler's search path
-       would have picked -- and nothing in the index records which. Either row is
-       therefore as good an answer as the other to "which file declares this
-       unit"; what must not happen is a non-source file being one of them.
+       duplicate stem: after the .pas filter a repeated stem is two files that
+       each declare a unit of that name, only one of which the compiler's search
+       path would have picked -- and nothing in the index records which. Either
+       row is therefore as good an answer as the other to "which file declares
+       this unit". (Before the filter it was not a choice between two answers at
+       all: the competitor was a .dfm or a .dpr, which is never an answer.)
     2. the tail (unit_name_norm) against the tail of the file stem, for the
        legacy shapes pass 1 cannot reach -- `uses SysUtils` resolving to
        System.SysUtils.pas, or `uses Vcl.Controls` to a pre-namespace
@@ -3555,12 +3582,17 @@ begin
     while not QFiles.Eof do
     begin
       Path:= QFiles.FieldByName('path').AsString;
-      // A unit is declared by SOURCE. Everything else the indexer stores -- a
-      // form's .dfm above all, which shares the .pas's stem exactly -- must not
-      // be able to claim a stem in either map. Done here, before the stem is
-      // computed, so pass 1 and pass 2 see the same filtered set.
+      // A unit is declared by a .pas and by nothing else. Everything else the
+      // indexer stores -- the .dfm beside a form unit, the .dpr of a program,
+      // the .dpk of a package, an .inc -- must not be able to claim a stem in
+      // either map. Done here, before the stem is computed, so pass 1 and pass 2
+      // see the same filtered set. LowerCase is load-bearing and not a nicety:
+      // ORM3 stores 554 paths ending '.PAS' against 203 ending '.pas' -- the
+      // MAJORITY of that project -- plus 25 in M2022 and 14 in library-Win64.
+      // Dropping it takes every one of those units out of every uses-scope
+      // (mutation-proved: group E12-E14 goes red, the rest stays green).
       Ext:= LowerCase(ExtractFileExt(Path));
-      if (Ext <> '.pas') and (Ext <> '.dpr') and (Ext <> '.dpk') then
+      if Ext <> '.pas' then
       begin
         QFiles.Next;
         Continue;

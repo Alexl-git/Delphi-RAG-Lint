@@ -11,11 +11,18 @@
   fire constantly on real code:
 
     1. unit_uses.target_file_id is NULL for essentially every DOTTED unit -- in
-       library-Win64, 38390 of the 38512 dotted rows (99.7%), of which 38022 name
-       a unit whose file IS indexed, so they are purely this mismatch. (The other
-       11137 NULL rows of the 49527 total are PLAIN unit names, every one naming a
-       unit absent from the index: missing data, not a mismatch. An earlier draft
-       of this header charged all 49527 to the defect and called it "58%".)
+       library-Win64, 38390 of the 38512 dotted rows (99.7%), inside 49527 NULL
+       rows out of 85157. CLASSIFIER, because two earlier drafts of this header got
+       the split wrong and both times it was a classifier error: replay the FIXED
+       procedure's BOTH passes over the NULL rows (files filtered to .pas, stem =
+       lowercased basename, tail = text after the stem's last dot, a tail claimed
+       by two different stems is ambiguous). Pass 1 resolves 38022, pass 2 a
+       further 4592, 6381 are correctly refused on an ambiguous tail, and 532 name
+       nothing indexed. So 48995 of the 49527 name an indexed unit. Draft 1 charged
+       all 49527 to the defect and called it "58%"; draft 2 classified by full-stem
+       equality -- pass 1's criterion alone -- and so called all 11137 plain-name
+       NULLs missing data, when 10790 of them match an indexed file TAIL, which is
+       exactly what pass 2 exists for (`uses SysUtils` -> System.SysUtils.pas).
        The cause: UnitNameNorm stores the dotted TAIL
        ('Vcl.Controls' -> 'controls') while ResolveUnitUseTargets keys on the FULL
        file stem ('vcl.controls'). They can never match. ResolveAncestry's
@@ -71,16 +78,38 @@
     PlainKit.pas  + PlainKit.dfm -- the same pair with a PLAIN name, because the
                   mis-binding is a stem collision, not a dotted-name defect.
     Cli.Kit.pas   uses Dfm.Kit and PlainKit; TCliCtl descends from TDfmCtl.
+    Prog.dpr      + Prog.pas -- a PROGRAM whose stem collides with a unit's.
+                  `uses Prog` names the UNIT; the .dpr is not a candidate at all.
+                  TProgCtl is AMBIGUOUS (Dup.Kit declares one), so scope decides.
+    UseProg.pas   uses Prog; TUseProg descends from TProgCtl.
+    Upper.Kit.PAS an UPPERCASE extension, as 554 of ORM3's 757 .pas paths really
+                  are. TUpCtl is AMBIGUOUS (Dup.Kit declares one too).
+    UseUp.Kit.pas uses Upper.Kit; TUseUp descends from TUpCtl.
 
   THE FIX-ROUND-1 CRITICAL, which groups A-D could not see: ResolveUnitUseTargets
   pulled `files` unfiltered, so a form's .dfm competed with its .pas for the stem
   and (being walked first) won. A .dfm declares no classes, so the resulting
   scope entry is an EMPTY scope and ResolveAncestry abandons the edge -- measured
-  on tests\fixtures\formsmap as 15 of 30 uses rows bound to a .dfm, and 62 (ORM3)
-  / 612 (library-Win64) distinct used-unit names that would bind to one. Groups
-  B, C and D all stayed green through it, because the query-time late resolver is
-  TEXTUAL and never reads target_file_id. Group E is the only guard; E5-E8 pin
-  this case and read the stored tables, never the engine's answer.
+  on tests\fixtures\formsmap as 15 of 30 uses rows bound to a .dfm, and on the
+  real indexes (replaying the whole unfiltered procedure and counting DISTINCT
+  LOWER(TRIM(unit_name)) whose winning file is not a .pas) 62 in ORM3, 613 in
+  library-Win64, 205 in M2022, 25 in this repo's own index. Groups B, C and D all
+  stayed green through it, because the query-time late resolver is TEXTUAL and
+  never reads target_file_id. Group E is the only guard; E5-E14 pin this case and
+  read the stored tables, never the engine's answer.
+
+  AND THE FIX-ROUND-1 GUARD WAS WRITTEN TO THE IMPLEMENTATION. Round 1 whitelisted
+  .pas/.dpr/.dpk, and E7 asserted "no row targets a non-.pas/.dpr/.dpk" -- the
+  CODE's own set, so it could not fire on the code admitting the wrong extensions.
+  A `uses` clause names a UNIT: a .dpr names a program and a .dpk names a package,
+  and neither declares a unit (.dpk files carry 0 symbols in all four measured
+  indexes). Because the `files` scan is path-ordered, '.dpk' < '.dpr' < '.pas', so
+  a colliding non-unit file ALWAYS won. Executed: `uses Prog` bound to Prog.dpr on
+  both b811097 and round 1, un-resolving an ancestor edge that pre-T4d 0e84cc6 got
+  RIGHT. E9-E11 assert the REQUIREMENT -- the target is Prog.pas, named -- not
+  membership of any allowed set. E12-E14 pin the one line that keeps ORM3's 554
+  uppercase .PAS paths in scope at all, LowerCase(ExtractFileExt(..)), which
+  nothing asserted.
 
   Load-bearing assertions (proptree --no-write-back --format json):
     A CONTROL      Vcl.Kit.TWinControl already climbs to TComponentBase (Tag).
@@ -101,8 +130,12 @@
                    row resolves target_file_id (E1-E2); the ambiguous cross-unit
                    edge is stored RESOLVED and points at the Vcl.Kit class, not the
                    Fmx.Kit one (E3); the genuinely ambiguous one stays unresolved
-                   (E4); and a uses row binds to the unit's .pas and never to the
-                   .dfm beside it (E5-E7, de-vacuated by E8).
+                   (E4); a uses row binds to the unit's .pas and never to the .dfm
+                   beside it (E5-E7, de-vacuated by E8); never to the .dpr either
+                   (E9-E10, de-vacuated by E11); and an UPPERCASE .PAS is still a
+                   candidate (E12-E13, de-vacuated by E14). Every one of E5-E13
+                   names the file it expects, so none of them can pass by agreeing
+                   with whatever set the implementation currently allows.
 #>
 [CmdletBinding()]
 param(
@@ -338,6 +371,24 @@ type
     property DupPoison: Integer read FDupPoison write FDupPoison;
   end;
 
+  // Same job for the .dpr pair: without this, Prog.TProgCtl is the single global
+  // definition and PickCandidate takes it with no scope at all, so E10 would pass
+  // even with `uses Prog` pointing at Prog.dpr.
+  TProgCtl = class(TPersistent)
+  private
+    FDupProgPoison: Integer;
+  published
+    property DupProgPoison: Integer read FDupProgPoison write FDupProgPoison;
+  end;
+
+  // ...and for the uppercase-extension pair.
+  TUpCtl = class(TPersistent)
+  private
+    FDupUpPoison: Integer;
+  published
+    property DupUpPoison: Integer read FDupUpPoison write FDupUpPoison;
+  end;
+
 implementation
 
 end.
@@ -390,6 +441,109 @@ type
     FCliMarker: Integer;
   published
     property CliMarker: Integer read FCliMarker write FCliMarker;
+  end;
+
+implementation
+
+end.
+'@
+
+# --- The .pas/.dpr pair (fix round 2). Round 1 whitelisted .pas/.dpr/.dpk, and
+# because the `files` scan is path-ordered the .dpr sorts BEFORE the .pas and wins
+# the stem. A program declares no unit, so `uses Prog` then names a file that
+# declares nothing -- the same empty scope as the .dfm case, on a stem that
+# pre-T4d 0e84cc6 bound correctly. Executed across the three exes:
+#   0e84cc6 -> Prog.pas (edge resolved) | b811097 -> Prog.dpr (<UNRESOLVED>)
+#   7192542 -> Prog.dpr (<UNRESOLVED>)  | round 2 -> Prog.pas (edge resolved)
+Write-Ascii (Join-Path $work 'Prog.dpr') @'
+program Prog;
+
+uses
+  UseProg in 'UseProg.pas';
+
+begin
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Prog.pas') @'
+unit Prog;
+
+interface
+
+type
+  // AMBIGUOUS simple name: Dup.Kit declares a TProgCtl too, so the single-global
+  // fallback cannot rescue this edge -- only `uses Prog` can, and only if it
+  // points at Prog.pas rather than at the program beside it.
+  TProgCtl = class(TPersistent)
+  private
+    FProgMarker: Integer;
+  published
+    property ProgMarker: Integer read FProgMarker write FProgMarker;
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'UseProg.pas') @'
+unit UseProg;
+
+interface
+
+uses
+  Prog;
+
+type
+  TUseProg = class(TProgCtl)
+  private
+    FUseMarker: Integer;
+  published
+    property UseMarker: Integer read FUseMarker write FUseMarker;
+  end;
+
+implementation
+
+end.
+'@
+
+# --- The UPPERCASE-extension pair. ORM3 stores 554 paths ending '.PAS' against
+# 203 ending '.pas' -- the majority of that project -- plus 25 in M2022 and 14 in
+# library-Win64. The only thing keeping them eligible as `uses` targets is the
+# LowerCase() around ExtractFileExt in ResolveUnitUseTargets, and nothing asserted
+# it. TUpCtl is ambiguous for the same reason TProgCtl is.
+Write-Ascii (Join-Path $work 'Upper.Kit.PAS') @'
+unit Upper.Kit;
+
+interface
+
+type
+  TUpCtl = class(TPersistent)
+  private
+    FUpMarker: Integer;
+  published
+    property UpMarker: Integer read FUpMarker write FUpMarker;
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'UseUp.Kit.pas') @'
+unit UseUp.Kit;
+
+interface
+
+uses
+  Upper.Kit;
+
+type
+  TUseUp = class(TUpCtl)
+  private
+    FUseUpMarker: Integer;
+  published
+    property UseUpMarker: Integer read FUseUpMarker write FUseUpMarker;
   end;
 
 implementation
@@ -473,6 +627,21 @@ print("\n".join("|".join("" if v is None else str(v) for v in r)
 con.close()
 '@
 function Sql([string]$Q) { return ((python $pySql $db $Q) -join "`n").Trim() }
+# Rows, not a joined blob: `-match` over a newline-joined string anchors at the END
+# of the whole string, so a two-row result whose LAST row happens to be the .pas
+# would satisfy '\.pas$' with a .dfm row sitting right there. Every "binds to X"
+# assertion below therefore checks the ROW COUNT as well as the path.
+function SqlRows([string]$Q) {
+  $out = @(python $pySql $db $Q)
+  return @($out | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+}
+# $Expect is a regex for the FULL expected path tail, e.g. '[\\/]Dfm\.Kit\.pas$'.
+# $CaseSensitive matters for the uppercase-extension case only.
+function CheckSoleTarget([string]$Name, [string[]]$Rows, [string]$Expect, [switch]$CaseSensitive) {
+  $one = ($Rows.Count -eq 1)
+  $hit = if ($CaseSensitive) { $one -and ($Rows[0] -cmatch $Expect) } else { $one -and ($Rows[0] -match $Expect) }
+  Check $Name $hit ("rows=" + $Rows.Count + " targets=[" + ($Rows -join '; ') + "] expected=" + $Expect)
+}
 
 $e1 = Sql "SELECT COUNT(*) FROM unit_uses WHERE unit_name='Vcl.Kit' AND target_file_id IS NOT NULL"
 Check 'E1 dotted "uses Vcl.Kit" resolves target_file_id' ($e1 -eq '3') "rows with a target=$e1 (expected 3: Std.Kit + Ambig.Kit + Dfm.Kit)"
@@ -494,21 +663,24 @@ Check 'E3 stored edge TCustomEdit->TWinControl resolves to the Vcl.Kit file' ($e
 $e4 = Sql "SELECT COUNT(*) FROM symbols s JOIN type_ancestors ta ON ta.symbol_id=s.id WHERE s.qualified_name='Ambig.Kit.TAmbiguous' AND ta.ancestor_name='TWinControl' AND ta.ancestor_symbol_id IS NULL"
 Check 'E4 genuinely ambiguous edge stays UNRESOLVED at index time' ($e4 -eq '1') "unresolved-count=$e4"
 
-# --- E5..E8: a `uses` names a UNIT, and a unit is declared by source, never by a
-# .dfm. These are the regression guard for the fix-round-1 Critical: whichever
-# accumulator ResolveUnitUseTargets uses, it must never let a form's .dfm win the
-# stem over its .pas. E6 is the one that shows the CONSEQUENCE (an empty scope
-# un-resolves an ancestry edge that scope alone could resolve); the query-time
-# late resolver is textual and would mask it in any proptree-level assertion, so
-# every one of these reads the stored tables.
+# --- E5..E14: a `uses` names a UNIT, and only a .pas declares one. These are the
+# regression guard for the fix-round-1 Critical and for the round-1 guard's own
+# defect: whichever accumulator ResolveUnitUseTargets uses, it must never let a
+# form's .dfm -- or a program's .dpr -- win the stem over its .pas. E6/E10 are the
+# ones that show the CONSEQUENCE (an empty scope un-resolves an ancestry edge that
+# scope alone could resolve); the query-time late resolver is textual and would
+# mask it in any proptree-level assertion, so every one of these reads the stored
+# tables. Each names the file it expects, so none can pass by agreeing with the
+# implementation's current allowed set -- which is exactly how round 1's E7 missed
+# the .dpr.
 Write-Host ''
 Write-Host 'E5-E8. A uses row must bind to the .pas, never to the .dfm beside it' -ForegroundColor Cyan
 
-$e5d = Sql "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='Dfm.Kit'"
-Check 'E5 dotted "uses Dfm.Kit" binds to Dfm.Kit.pas' ($e5d -match '(?i)Dfm\.Kit\.pas$') "target=$e5d"
+$e5d = SqlRows "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='Dfm.Kit'"
+CheckSoleTarget 'E5 dotted "uses Dfm.Kit" binds to Dfm.Kit.pas and nothing else' $e5d '(?i)[\\/]Dfm\.Kit\.pas$'
 
-$e5p = Sql "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='PlainKit'"
-Check 'E5b plain "uses PlainKit" binds to PlainKit.pas' ($e5p -match '(?i)PlainKit\.pas$') "target=$e5p"
+$e5p = SqlRows "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='PlainKit'"
+CheckSoleTarget 'E5b plain "uses PlainKit" binds to PlainKit.pas and nothing else' $e5p '(?i)[\\/]PlainKit\.pas$'
 
 # The consequence: scope is the ONLY thing that can resolve this edge (TDfmCtl is
 # ambiguous, so the single-global fallback cannot), and an empty scope loses it.
@@ -521,14 +693,66 @@ SELECT COALESCE(f.path,'<UNRESOLVED>') FROM symbols s
 "@
 Check 'E6 stored edge TCliCtl->TDfmCtl resolves to Dfm.Kit.pas (not Dup.Kit, not unresolved)' ($e6 -match '(?i)Dfm\.Kit\.pas$') "target=$e6"
 
-# Whole-fixture guard: nothing may bind to a non-source file at all.
-$e7 = Sql "SELECT COUNT(*) FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE LOWER(f.path) NOT LIKE '%.pas' AND LOWER(f.path) NOT LIKE '%.dpr' AND LOWER(f.path) NOT LIKE '%.dpk'"
-Check 'E7 no uses row targets a non-source file' ($e7 -eq '0') "rows targeting a non-.pas/.dpr/.dpk=$e7"
+# Whole-fixture sweep. NOTE what this is and is not: it restates the rule the code
+# now applies, so it is a CONSISTENCY check across every row, not the requirement.
+# Round 1's version of this line whitelisted exactly what the code whitelisted and
+# was therefore unable to fail on the code allowing the wrong thing. The
+# requirement is carried by E5/E5b/E9/E12, which name the file they expect.
+$e7 = Sql "SELECT COUNT(*) FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE LOWER(f.path) NOT LIKE '%.pas'"
+Check 'E7 sweep: no uses row anywhere targets a non-.pas' ($e7 -eq '0') "rows targeting a non-.pas=$e7"
 
-# De-vacuating E7: it only means something if the .dfm files are in `files` at
+# De-vacuating E7: it only means something if non-.pas files are in `files` at
 # all. If the indexer stopped storing them, E7 would pass for the wrong reason.
 $e8 = Sql "SELECT COUNT(*) FROM files WHERE LOWER(path) LIKE '%.dfm'"
 Check 'E8 de-vacuates E7: the .dfm files ARE indexed' ($e8 -eq '2') "dfm files in the index=$e8 (expected 2)"
+
+# --- E9..E11: the same thing for a PROGRAM. A .dpr sorts before the .pas it shares
+# a stem with, so round 1's whitelist handed `uses Prog` to the program.
+Write-Host ''
+Write-Host 'E9-E11. A uses row must bind to the .pas, never to the .dpr beside it' -ForegroundColor Cyan
+
+$e9 = SqlRows "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='Prog'"
+CheckSoleTarget 'E9 "uses Prog" binds to Prog.pas -- named, not "some allowed extension"' $e9 '(?i)[\\/]Prog\.pas$'
+
+# The consequence, and the one that pre-T4d 0e84cc6 got RIGHT: TProgCtl is
+# ambiguous (Dup.Kit), so only the uses-scope can resolve this edge, and a scope
+# pointing at a program is empty.
+$e10 = Sql @"
+SELECT COALESCE(f.path,'<UNRESOLVED>') FROM symbols s
+  JOIN type_ancestors ta ON ta.symbol_id = s.id
+  LEFT JOIN symbols a ON a.id = ta.ancestor_symbol_id
+  LEFT JOIN files   f ON f.id = a.file_id
+ WHERE s.qualified_name = 'UseProg.TUseProg' AND ta.ancestor_name = 'TProgCtl'
+"@
+Check 'E10 stored edge TUseProg->TProgCtl resolves to Prog.pas (not Dup.Kit, not unresolved)' ($e10 -match '(?i)[\\/]Prog\.pas$') "target=$e10"
+
+$e11 = Sql "SELECT COUNT(*) FROM files WHERE LOWER(path) LIKE '%.dpr'"
+Check 'E11 de-vacuates E9/E10: the .dpr IS indexed and did compete' ($e11 -eq '1') "dpr files in the index=$e11 (expected 1)"
+
+# --- E12..E14: an UPPERCASE .PAS is still a unit. LowerCase(ExtractFileExt(..)) is
+# the whole of what keeps ORM3's 554 such paths eligible, and until now nothing
+# asserted it. Mutation-proved rather than assumed: with that LowerCase removed and
+# the exe rebuilt, E12, E13 and E2 go red and every other assertion in this file
+# stays green.
+Write-Host ''
+Write-Host 'E12-E14. An UPPERCASE .PAS extension is still a unit' -ForegroundColor Cyan
+
+$e12 = SqlRows "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='Upper.Kit'"
+CheckSoleTarget 'E12 "uses Upper.Kit" binds to Upper.Kit.PAS' $e12 '[\\/]Upper\.Kit\.PAS$' -CaseSensitive
+
+$e13 = Sql @"
+SELECT COALESCE(f.path,'<UNRESOLVED>') FROM symbols s
+  JOIN type_ancestors ta ON ta.symbol_id = s.id
+  LEFT JOIN symbols a ON a.id = ta.ancestor_symbol_id
+  LEFT JOIN files   f ON f.id = a.file_id
+ WHERE s.qualified_name = 'UseUp.Kit.TUseUp' AND ta.ancestor_name = 'TUpCtl'
+"@
+Check 'E13 stored edge TUseUp->TUpCtl resolves to Upper.Kit.PAS (not Dup.Kit, not unresolved)' ($e13 -cmatch '[\\/]Upper\.Kit\.PAS$') "target=$e13"
+
+# GLOB, not LIKE: SQLite's LIKE is case-insensitive over ASCII, so LIKE '%.PAS'
+# would match every .pas file and this de-vacuator would assert nothing.
+$e14 = Sql "SELECT COUNT(*) FROM files WHERE path GLOB '*.PAS'"
+Check 'E14 de-vacuates E12/E13: the path really is stored with an uppercase extension' ($e14 -eq '1') "files matching GLOB '*.PAS'=$e14 (expected 1)"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
