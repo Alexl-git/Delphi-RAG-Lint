@@ -2484,12 +2484,17 @@ end;
 ///  class; (2) a candidate whose declaring unit is textually named in the
 ///  referencing unit's `uses` clause (either the interface or the
 ///  implementation section -- plain membership, so it works even when
-///  `unit_uses.target_file_id` was never resolved); (3) a candidate whose
-///  declaring unit shares the referencing unit's FRAMEWORK PREFIX (the
-///  dotted segment before the first '.' -- see UnitFrameworkPrefix), but
-///  ONLY when that narrows the field to EXACTLY ONE candidate; (4) decline.
-///  Each rule short-circuits: the first rule that finds a qualifying
-///  candidate decides the result without consulting the next rule.
+///  `unit_uses.target_file_id` was never resolved), but ONLY when that
+///  narrows the field to EXACTLY ONE candidate; (3) a candidate whose
+///  declaring unit shares the referencing unit's first DOTTED NAMESPACE
+///  SEGMENT (the substring before the first '.' -- see
+///  UnitFrameworkPrefix), again ONLY when that narrows the field to
+///  EXACTLY ONE candidate; (4) decline. Each rule short-circuits: the first
+///  rule that narrows the field to exactly one candidate decides the
+///  result without consulting the next rule. A rule that finds 2+
+///  qualifying candidates does NOT pick one by array/insertion order --
+///  that would be exactly as arbitrary as guessing -- it falls through to
+///  the next rule instead.
 /// </summary>
 /// <param name="ACandidates">Same-named candidates, already reduced to real
 ///  bodies by the caller (forward-declaration stubs dropped -- see
@@ -2497,11 +2502,13 @@ end;
 /// <param name="AScopeFileId">FileId of the class/unit doing the
 ///  referencing. Callers walking a multi-hop ancestry chain must pass the
 ///  FileId of the class actually inheriting at THAT hop, not the FileId of
-///  the root class the walk started from.</param>
+///  the root class the walk started from. AScopeFileId <= 0 means
+///  "unknown" and skips rule 1 outright (never a wildcard match against a
+///  candidate's own possibly-unset FileId).</param>
 /// <param name="AScopeUnitName">The scope unit's own name (e.g.
-///  'Vcl.StdCtrls'), used only to derive its framework prefix for rule 3.
-///  Pass '' when unknown -- rule 3 is then skipped outright, never treated
-///  as a wildcard match.</param>
+///  'Vcl.StdCtrls'), used only to derive its leading dotted-namespace
+///  segment for rule 3. Pass '' when unknown -- rule 3 is then skipped
+///  outright, never treated as a wildcard match.</param>
 /// <param name="AScopeUsesNames">Lowercased unit names textually present in
 ///  the scope unit's `uses` clause (either section). Membership test only;
 ///  does not require `unit_uses.target_file_id` to be populated. May be nil
@@ -2511,13 +2518,22 @@ end;
 /// <remarks>
 ///  Declining (Id = 0) is a CORRECT outcome, not a failure -- "when unsure,
 ///  don't claim" -- callers must never guess further on a decline. Rule 3's
-///  prefix compare is an exact leading-segment match, never a substring, so
-///  an undotted name like 'VclKit' can never match 'Vcl.Controls': this
-///  function must NEVER resolve a Vcl.* scope to an FMX.* candidate, or the
-///  reverse. This is the ONE decision procedure shared by the query-time
-///  resolver (ResolveTypeNameToClass / PickCandidate, below) and the
-///  index-time resolver (ResolveAncestry) -- change the precedence HERE,
-///  not by re-implementing it in either caller.
+///  segment compare is exact ('VclKit' has no dot, so UnitFrameworkPrefix
+///  returns '' for it and it can never match 'Vcl.Controls' -- an undotted
+///  unit name never participates). Rule 3 is written generically (matches
+///  ANY shared first dotted segment, not a hardcoded allowlist) so it also
+///  disambiguates project/third-party namespaces, not just the RTL; 'Vcl.*'
+///  vs 'FMX.*' vs 'Winapi.*' are the motivating cases, not the whole rule.
+///  Because both rule 2 and rule 3 require a UNIQUE hit before deciding,
+///  this function never resolves a Vcl.* scope to an FMX.* candidate, or
+///  the reverse: an ambiguous case (e.g. a scope unit that uses both a
+///  Vcl.* and an FMX.* unit each declaring the same type name) falls
+///  through rule 2 to rule 3, and, if rule 3 also can't narrow to one,
+///  falls through to decline -- never an array-order pick. This is the ONE
+///  decision procedure shared by the query-time resolver
+///  (ResolveTypeNameToClass / PickCandidate, below) and the index-time
+///  resolver (ResolveAncestry) -- change the precedence HERE, not by
+///  re-implementing it in either caller.
 /// </remarks>
 function PickAncestorCandidateByScope(const ACandidates: TArray<TSymbol>;
   AScopeFileId: Int64; const AScopeUnitName: string;
@@ -2525,20 +2541,38 @@ function PickAncestorCandidateByScope(const ACandidates: TArray<TSymbol>;
 var
   S          : TSymbol;
   ScopePrefix: string ;
+  UsesHit    : TSymbol;
+  UsesHits   : Integer;
   PrefixHit  : TSymbol;
   PrefixHits : Integer;
 begin
   Result:= Default(TSymbol);
   // Rule 1: same unit as the referencing class.
-  for S in ACandidates do
-    if S.FileId = AScopeFileId then Exit(S);
-  // Rule 2: candidate's declaring unit is named in the referencing unit's uses.
+  if AScopeFileId > 0 then
+    for S in ACandidates do
+      if S.FileId = AScopeFileId then Exit(S);
+  // Rule 2: candidate's declaring unit is named in the referencing unit's
+  // uses -- only when it narrows the field to exactly one. Two-or-more
+  // uses-named candidates are exactly as indistinguishable as two
+  // same-prefix candidates in rule 3 below; picking the first by array
+  // order here could hand back an FMX.* candidate for a Vcl.*-rooted class
+  // (or vice versa) whenever the scope unit uses both frameworks, so this
+  // must fall through to rule 3 -- never settle by order.
   if Assigned(AScopeUsesNames) then
+  begin
+    UsesHits:= 0;
+    UsesHit := Default(TSymbol);
     for S in ACandidates do
       if AScopeUsesNames.ContainsKey(LowerCase(DeclaringUnitOfQName(S.QualifiedName))) then
-        Exit(S);
-  // Rule 3: candidate's declaring unit shares the referencing unit's
-  // framework prefix -- only when it narrows the field to exactly one.
+      begin
+        Inc(UsesHits);
+        if UsesHits = 1 then UsesHit:= S;
+      end;
+    if UsesHits = 1 then Exit(UsesHit);
+  end;
+  // Rule 3: candidate's declaring unit shares the referencing unit's first
+  // dotted namespace segment -- only when it narrows the field to exactly
+  // one.
   ScopePrefix:= UnitFrameworkPrefix(AScopeUnitName);
   if ScopePrefix <> '' then
   begin
