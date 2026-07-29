@@ -3511,14 +3511,33 @@ procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
   resource, a .dpr names a PROGRAM and a .dpk names a PACKAGE; none of them
   declares a unit, and .dpk files carry 0 symbols in all four indexes measured
   (305 files in library-Win64, 64 in M2022, 2 in ORM3, 1 here). Any of them
-  sharing a stem with a real unit will WIN it, because the scan is path-ordered
-  and '.dfm' < '.dpk' < '.dpr' < '.pas'. The resulting scope entry points at a
+  sharing a stem with a real unit CAN win it, and wins outright when the two paths
+  are byte-identical up to the extension -- but it does NOT always win, and the
+  wording here before 2026-07-29 ("will WIN it, because the scan is path-ordered
+  and '.dfm' < '.dpk' < '.dpr' < '.pas'") was false as stated. The scan is
+  `SELECT id, path FROM files`, which SQLite serves from the UNIQUE index on path
+  (EXPLAIN QUERY PLAN: SCAN files USING COVERING INDEX sqlite_autoindex_files_1),
+  so it is ordered by RAW PATH BYTES under BINARY collation and the first file to
+  reach a stem keeps it. The extension therefore decides only once everything
+  before it matches byte for byte: CASE and DIRECTORY position are compared first,
+  and these corpora are full of both. ORM3's DFCTLIST.PAS beats DFCTLIST.dfm
+  INSIDE the extension ('P' 0x50 < 'd' 0x64); ABC5's ABCDFTIP.PAS beats
+  Abcdftip.dfm at the second character of the basename ('B' 0x42 < 'b' 0x62);
+  Source\Base\Spring.pas beats Source\Spring.inc on the directory. Distinct used
+  names whose non-.pas competitor LOSES: 5 in library-Win64, 5 in ORM3, 8 in
+  M2022, 0 here.
+    Where the non-unit file does win, the resulting scope entry points at a
   file that declares no classes -- an EMPTY scope -- and ResolveAncestry then
   loses every edge that scope alone could have resolved. Measured on
   tests\fixtures\formsmap, taking `files` unfiltered bound 15 of 30 uses rows to a
   .dfm; on the real indexes, replaying the whole unfiltered procedure and counting
-  DISTINCT LOWER(TRIM(unit_name)) whose winning file is not a .pas gives 62 in
-  ORM3, 613 in library-Win64, 205 in M2022 and 25 here. Narrowing the filter from
+  DISTINCT LOWER(TRIM(unit_name)) whose WINNING file is not a .pas gives 57 in
+  ORM3, 608 in library-Win64, 197 in M2022 and 25 here. THE CRITERION IS THE
+  WINNER'S EXTENSION. The 62 / 613 / 205 / 25 published here before 2026-07-29 do
+  not follow from it: they are its union with "some non-.pas file claims the
+  stem, won or not", which is a wider set. Command, committed rather than
+  described (register K18, T4b's precedent): tools\measure\uses_target_replay.py,
+  measured at c4b78d0. Narrowing the filter from
   .pas/.dpr/.dpk to .pas costs nothing measurable: on all four indexes the number
   of uses rows that resolve is IDENTICAL under both (78244 / 5339 / 2791 / 762),
   because no row's only candidate was a .dpr or a .dpk. It is a latent hole rather

@@ -88,28 +88,46 @@
 
   THE FIX-ROUND-1 CRITICAL, which groups A-D could not see: ResolveUnitUseTargets
   pulled `files` unfiltered, so a form's .dfm competed with its .pas for the stem
-  and (being walked first) won. A .dfm declares no classes, so the resulting
+  and, where it sorted first, won. A .dfm declares no classes, so the resulting
   scope entry is an EMPTY scope and ResolveAncestry abandons the edge -- measured
   on tests\fixtures\formsmap as 15 of 30 uses rows bound to a .dfm, and on the
   real indexes (replaying the whole unfiltered procedure and counting DISTINCT
-  LOWER(TRIM(unit_name)) whose winning file is not a .pas) 62 in ORM3, 613 in
-  library-Win64, 205 in M2022, 25 in this repo's own index. Groups B, C and D all
+  LOWER(TRIM(unit_name)) whose WINNING file is not a .pas) 57 in ORM3, 608 in
+  library-Win64, 197 in M2022, 25 in this repo's own index. Groups B, C and D all
   stayed green through it, because the query-time late resolver is TEXTUAL and
   never reads target_file_id. Group E is the only guard; E5-E14 pin this case and
   read the stored tables, never the engine's answer.
+
+  Those four figures were published here as 62 / 613 / 205 / 25 before 2026-07-29
+  and did NOT follow from the criterion stated in the same sentence. That set is
+  the union of "the WINNING file is not a .pas" with "some non-.pas file claims
+  the stem, won or not". The command is committed rather than described --
+  tools\measure\uses_target_replay.py, measured at c4b78d0 -- so both numbers can
+  be re-derived instead of trusted.
 
   AND THE FIX-ROUND-1 GUARD WAS WRITTEN TO THE IMPLEMENTATION. Round 1 whitelisted
   .pas/.dpr/.dpk, and E7 asserted "no row targets a non-.pas/.dpr/.dpk" -- the
   CODE's own set, so it could not fire on the code admitting the wrong extensions.
   A `uses` clause names a UNIT: a .dpr names a program and a .dpk names a package,
   and neither declares a unit (.dpk files carry 0 symbols in all four measured
-  indexes). Because the `files` scan is path-ordered, '.dpk' < '.dpr' < '.pas', so
-  a colliding non-unit file ALWAYS won. Executed: `uses Prog` bound to Prog.dpr on
-  both b811097 and round 1, un-resolving an ancestor edge that pre-T4d 0e84cc6 got
-  RIGHT. E9-E11 assert the REQUIREMENT -- the target is Prog.pas, named -- not
-  membership of any allowed set. E12-E14 pin the one line that keeps ORM3's 554
-  uppercase .PAS paths in scope at all, LowerCase(ExtractFileExt(..)), which
-  nothing asserted.
+  indexes). Executed: `uses Prog` bound to Prog.dpr on both b811097 and round 1,
+  un-resolving an ancestor edge that pre-T4d 0e84cc6 got RIGHT. E9-E11 assert the
+  REQUIREMENT -- the target is Prog.pas, named -- not membership of any allowed
+  set. E12-E14 pin the one line that keeps ORM3's 554 uppercase .PAS paths in
+  scope at all, LowerCase(ExtractFileExt(..)), which nothing asserted.
+
+  WHY 'Prog.dpr WON' HERE AND WHY THAT IS NOT A GENERAL RULE. The earlier text
+  said a colliding non-unit file "ALWAYS won" because the scan is path-ordered and
+  '.dpk' < '.dpr' < '.pas'. False as stated. The scan is served from the UNIQUE
+  index on files.path, so the order is by RAW PATH BYTES: the extension decides
+  only when everything before it is byte-identical, which is exactly the shape
+  THIS FIXTURE has (Prog.dpr beside Prog.pas, same directory, same case). Real
+  corpora are not that tidy -- ORM3's DFCTLIST.PAS beats DFCTLIST.dfm inside the
+  extension ('P' 0x50 < 'd' 0x64), ABC5's ABCDFTIP.PAS beats Abcdftip.dfm on
+  basename case, and a directory name can decide before either. Distinct used
+  names whose non-.pas competitor LOSES: 5 in library-Win64, 5 in ORM3, 8 in
+  M2022, 0 in this repo. The fixture pins the byte-identical-path case, and that
+  is the case it should be read as pinning.
 
   Load-bearing assertions (proptree --no-write-back --format json):
     A CONTROL      Vcl.Kit.TWinControl already climbs to TComponentBase (Tag).

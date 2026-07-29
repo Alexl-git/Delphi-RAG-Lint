@@ -189,8 +189,11 @@ in 2b.
 > -- `0` disables mining, and a `<returns>` with nothing left to say is then
 > not written at all (there is no `TODO:` placeholder any more); absent
 > defaults to `20`. `docs.max_callers` (production ships `5`) caps the generated
-> "Called from:" list, appending `(+N more)` beyond the cap; absent defaults
-> to `5`. `docs.accessor_trivial_max_lines` (default `2`, code-level -- stays
+> reference list, appending `(+N more)` beyond the cap; absent defaults
+> to `5`. It caps **both** labels: a callable symbol renders `Called from:`,
+> and a class / interface / record / enum / type alias renders `Used by:` over
+> the same list, so one cap governs both. `docs.accessor_trivial_max_lines`
+> (default `2`, code-level -- stays
 > ON even with no `docs` section at all) is the trivial-accessor threshold
 > above. `docs.complexity_min` (default `10`) is the cyclomatic-complexity
 > threshold at/above which the Phase 2 `Complexity:` fact line renders (see

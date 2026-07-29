@@ -1370,27 +1370,38 @@ var
   end;
   // v(ADP3 T4): the ' ?' uncertainty marker is emitted ONLY when the list is
   // MIXED. A marker on EVERY entry distinguishes nothing, and that is the state
-  // most lists are actually in: measured on the pre-T4 tree at 6bcc0a3 (whose
-  // last engine-affecting commit is f5fc66e -- the three after it are test-only,
-  // so the binary measured IS f5fc66e's), 65 of
-  // YADF's 99 reference lines and 832 of drag-lint's own 1126 are uniformly
-  // uncertain (70.7% and 85.4% of all ENTRIES carry the marker). So a uniformly
-  // uncertain list now renders plain, exactly as a uniformly certain one always
-  // has, and what survives is the COMPARATIVE information: within one list,
-  // which entries are the weaker ones. Mixed lists are not rare enough for that
-  // to be an empty promise -- the same measurement found 6 and 83 of them.
+  // most lists were measured to be in on the pre-T4 tree, on both a real
+  // consumer corpus and this repo's own source. So a uniformly uncertain list
+  // now renders plain, exactly as a uniformly certain one always has, and what
+  // survives is the COMPARATIVE information: within one list, which entries are
+  // the weaker ones. Mixed lists were not rare enough in that measurement for
+  // this to be an empty promise.
+  //
+  // THE FIGURES THAT USED TO BE HERE ARE GONE, DELIBERATELY (register K18).
+  // Four percentages and two counts sat in this comment, produced by
+  // scratchpad\measure_markers.ps1, which was never committed and no longer
+  // exists. They were dated and attributed -- the mitigation the stale "49 of
+  // 49" lacked -- but that is not enough, and here it cannot be repaired the way
+  // T4b repaired its own numbers by committing tools\measure\returns_blast.py:
+  // the quantity is a property of the PRE-T4 RENDERING, produced by a binary
+  // (f5fc66e's) that no longer exists, of output this engine no longer emits.
+  // No commit of this repo after T4 can re-derive it. A number nobody can check
+  // reads as a current property of the code and slowly stops being one -- so it
+  // belongs in a DATED record, and it has one: the phase ledger's T17 section
+  // ("FOUR ONE-TIME REWRITES TO EXPECT", cause 2) and the T4 report carry the
+  // measurement with its date and corpora. What belongs HERE is the rule.
+  //
+  // The rule's ORIGINAL justification in the plan ("it fired 49 times out of
+  // 49") was itself stale and was re-measured rather than inherited: it predates
+  // T3i, which stopped counting 'member-access' refs as unresolved call sites
+  // and so removed one cause of the saturation. The rule survived that
+  // correction. That is the part worth keeping, and it needs no percentage.
   //
   // This is a RENDERING change and nothing more. The root cause -- weak
   // call_edges resolution in project DBs, which is why so many lists are
   // uniformly uncertain in the first place -- is the D5 follow-up; Confidence
   // itself, the Facts builder's certain-before-uncertain ORDERING, the display
   // cap and the '(+N more)' suffix are all untouched.
-  //
-  // NOTE the plan's own justification for this rule ("it fired 49 times out of
-  // 49") is STALE and was re-measured rather than inherited: it predates T3i,
-  // which stopped counting 'member-access' refs as unresolved call sites and so
-  // removed one of the causes of the saturation. The rule survives the
-  // correction; the numbers above are the current ones.
   function JoinRefs(const A: TArray<TDocFactRef>): string;
   var i: Integer; AnyCertain, AnyUncertain, Mixed: Boolean;
   begin

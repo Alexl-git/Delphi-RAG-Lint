@@ -50,9 +50,13 @@
   PRE-EXISTING ENGINE QUIRK #2 (also out of scope, do not "fix" via this
   test): every
   class with an implemented method also picks up a spurious self-referential
-  'Called from:' fact on the CLASS symbol itself (each qualified impl header,
+  reference fact on the CLASS symbol itself (each qualified impl header,
   e.g. 'procedure TDerived.DoPaint;', emits a type_use ref to 'TDerived' that
-  FindUnresolvedNameCallers name-matches). This affects the CLASS blocks, not
+  FindUnresolvedNameCallers name-matches). Register K17: this said
+  "'Called from:' fact" until 2026-07-29, which is pre-T4 text -- a class is not
+  a call target (Core.Model.CanBeCallTarget), so T4 renders the same list under
+  'Used by:'. The reference itself, and the fact that it is spurious, are
+  unchanged; only the label is. This affects the CLASS blocks, not
   the per-method blocks asserted here, but it does mean batch mode documents
   MORE than just the 6 method-like symbols below (TBase/TDerived/TDerived2/
   TGreeter/TLogger class blocks appear too) -- assertions below are therefore

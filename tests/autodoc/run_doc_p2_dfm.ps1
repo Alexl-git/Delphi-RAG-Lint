@@ -33,8 +33,12 @@
   FindUnresolvedNameCallers (the query behind the PRE-EXISTING 'Called from:'
   fact, v14/D5) matches ANY refs row by name_text with no kind filter, so
   that same .dfm reference is ALSO picked up as an (unverified) "caller" of
-  Button1Click -- a spurious 'Called from: Button1Click caller (uForm.dfm) ?'
-  line that has nothing to do with Task 6. That line's presence/absence
+  Button1Click -- a spurious 'Called from: Button1Click caller (uForm.dfm)'
+  line that has nothing to do with Task 6. (Register K17: that example carried
+  a trailing ' ?' until 2026-07-29. It is pre-T4 text. T4 suppresses the marker
+  on a UNIFORM list, and this list has one entry, so it is uniform by
+  construction and renders plain. The quirk itself is unchanged; only the
+  rendering of it is.) That line's presence/absence
   across repeat runs is NOT stable once a prior doc-comment already exists
   (a separate, unresolved determinism gap in that pre-existing fact), so a
   whole-file byte-identity idempotency check would intermittently fail for a

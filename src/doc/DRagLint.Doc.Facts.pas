@@ -665,9 +665,19 @@ begin
 
   // v(ADP3 T4): carry the symbol's OWN kind to the renderer, which selects the
   // reference line's verb from it (see TDocFacts.SymbolKind). Set FIRST, before
-  // any early-exit path can be added below it -- Default(TDocFacts) leaves this
-  // at Ord 0, and a wrong kind renders a wrong CLAIM ('Called from:' about a
-  // record) rather than an absent one, so it must never be reached by accident.
+  // any early-exit path can be added below it: Default(TDocFacts) leaves this at
+  // Ord 0, and a wrong kind renders a wrong CLAIM rather than an absent one.
+  //
+  // v(ADP3 T4f, register K16): the failure mode stated here until 2026-07-29 was
+  // backwards, and the identical wrong premise reached T4's brief AND its review
+  // prompt because all three inherited it instead of reading the enum. Ord 0 is
+  // skUnit (DRagLint.Core.Model.TSymbolKind), which is NOT a call target, so
+  // CanBeCallTarget is False for it: an unset field renders 'Used by:' ON A
+  // ROUTINE -- not "'Called from:' about a record". The mitigation is unchanged
+  // and the field is provably always assigned; only the stated consequence was
+  // wrong. Ord 0 being the harmless-looking skUnit is exactly why: the wrong
+  // verb appears on the callable half, where it reads most like a bug in the
+  // resolver rather than an unset field.
   Result.SymbolKind:= ASym.Kind;
 
   // Called from: RESOLVED caller refs -> display 'EnclosingQName (file)'.
