@@ -20,19 +20,35 @@
   occurrence across the queried class's ancestor+descendant closure (never
   overwriting an explicit type).
 
-  FIXTURE (three units, indexed as one tree):
+  FIXTURE (four units, indexed as one tree):
     VclKit.pas  -- TAlign enum; a resolved VCL-style chain
                    TControl(TPersistent) [property Align: TAlign]
                      <- TWinControl <- TButtonControl <- TCustomButton
     FmxKit.pas  -- TAlignLayout enum; a DECOY 'TCustomButton' with
                    'property Align: TAlignLayout'. Same simple name as VclKit's
                    TCustomButton => the ancestor name 'TCustomButton' is AMBIGUOUS.
+                   ALSO a DECOY 'TWinControl' (class(TPersistent), own
+                   'property Align: TAlignLayout') -- same simple name as
+                   VclKit's TWinControl, for the VclForms scenario below.
     CxKit.pas   -- uses VclKit (NOT FmxKit).
                    'type TcxBaseButton = TCustomButton;'   (the alias => broken edge)
                    TcxCustomButton(TcxBaseButton) published 'property Align;' (bare, intermediate)
                    TcxButton(TcxCustomButton) published 'property Align;' (bare, the queried leaf)
                    TcxSpeedButton(TcxButton) published 'property Align;' (bare, DESCENDANT)
                    TcxTypedButton(TcxButton) published 'property Align: TMyAlign;' (SAFETY: explicit)
+    VclForms.pas -- design doc 2026-07-29-proptree-ancestor-scope-design.md, criteria
+                   3+5: 'TPanel = class(TWinControl) end;' with DELIBERATELY NO
+                   'uses' clause, so neither same-unit nor uses-based scoping
+                   applies to the globally-ambiguous 'TWinControl' name (VclKit's
+                   real one + FmxKit's decoy above). This is the SAME shape as
+                   the measured real-library root cause (Vcl.StdCtrls.TCustomEdit's
+                   'TWinControl' edge is left unresolved for the same reason:
+                   CandInScope finds zero in-scope candidates). ResolveAncestry
+                   therefore declines today (ancestor_kind='?'), and the climb
+                   in ClassChain stops at TPanel -- TControl.Align never surfaces.
+                   Once the framework-prefix scope rule ships (rule 3: 'VclForms'
+                   and 'VclKit' share the 'Vcl' prefix), this must resolve into
+                   VclKit's TWinControl and NEVER into FmxKit's decoy (rule 5).
 
   Load-bearing assertions (proptree --qname CxKit.TcxButton --format json):
     - Align resolves to 'TAlign'  (was 'unknown' before the fix)     <-- THE FIX
@@ -46,6 +62,16 @@
     - idempotency: a SECOND plain query leaves signatures unchanged (no further
       mutation).
     - read-only: resolution still returns TAlign even against a read-only handle.
+
+  Load-bearing assertions (VclForms.TPanel -- ambiguous Vcl-vs-FMX ancestor,
+  design doc criteria 1-5): see section 3 below. TODAY (RED, before the
+  framework-prefix scope rule): the type_ancestors row for TPanel's
+  'TWinControl' edge is LEFT UNRESOLVED (ancestor_kind='?',
+  ancestor_symbol_id=NULL) and Align is ABSENT from the proptree output --
+  the climb never reaches VclKit.TControl. This must never flip to a WRONG
+  resolution (Align='TAlignLayout' / edge pointing at FmxKit.pas); it must
+  flip to the CORRECT one (Align='TAlign' / edge pointing at VclKit.pas) once
+  tasks 2-3 implement the framework-prefix rule.
 #>
 [CmdletBinding()]
 param(
@@ -120,6 +146,18 @@ type
     property Align: TAlignLayout read FAlign write FAlign;
   end;
 
+  // DECOY: same simple name 'TWinControl' as VclKit's, so 'TWinControl'
+  // becomes a globally AMBIGUOUS ancestor name (2 candidates) -- the same
+  // shape as the real bug (Vcl.Controls.TWinControl vs
+  // FMX.Controls.Win.TWinControl). Align is a DIFFERENT type here too, so a
+  // wrong (FMX) pick is detectable instead of merely absent.
+  TWinControl = class(TPersistent)
+  private
+    FAlign: TAlignLayout;
+  published
+    property Align: TAlignLayout read FAlign write FAlign;
+  end;
+
 implementation
 
 end.
@@ -157,6 +195,31 @@ type
   TcxTypedButton = class(TcxButton) // SAFETY CASE: explicit own type
   published
     property Align: TMyAlign;      // must NOT be overwritten
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'VclForms.pas') @'
+unit VclForms;
+
+interface
+
+// Deliberately NO 'uses' clause: neither VclKit nor FmxKit is in scope, so
+// today's same-unit/uses-based disambiguation (ResolveAncestry.CandInScope)
+// finds ZERO in-scope candidates for the globally-ambiguous 'TWinControl'
+// name (VclKit's real one + FmxKit's decoy) and declines -- ancestor_kind='?',
+// ancestor_symbol_id=NULL. This mirrors the MEASURED real-library root cause
+// verbatim (design doc section 2: Vcl.StdCtrls.TCustomEdit's 'TWinControl'
+// edge is left unresolved the same way). Once the framework-prefix scope
+// rule ships (design section 3.3, rule 3), this must resolve into VclKit's
+// TWinControl -- both units share the 'Vcl' prefix -- and must NEVER resolve
+// into FmxKit's decoy (design criteria 3 and 5).
+
+type
+  TPanel = class(TWinControl)
   end;
 
 implementation
@@ -227,6 +290,53 @@ Copy-Item $db $dbro -Force
 $treeRo = Get-Tree $dbro 'CxKit.TcxButton' # (no --write-back flag; default is auto, but RO handle no-ops)
 $alignRo = @($treeRo.properties) | Where-Object { $_.path -eq 'Align' } | Select-Object -First 1
 Check "read-only still resolves Align=TAlign" ($null -ne $alignRo -and $alignRo.type -eq 'TAlign') "type=$($alignRo.type)"
+
+# --- 3. AMBIGUOUS ANCESTOR ACROSS FRAMEWORKS: 'TWinControl' must resolve into --
+#        VCL, never into the FMX decoy (design doc criteria 3 + 5). TPanel's
+#        own unit (VclForms) has NO 'uses' clause, so today neither same-unit
+#        nor uses-based scoping applies and ResolveAncestry declines -- the
+#        SAME shape as the measured real-library bug (Vcl.StdCtrls.TCustomEdit's
+#        TWinControl edge: ancestor_kind='?', ancestor_symbol_id=NULL).
+Write-Host ''
+Write-Host 'type_ancestors: VclForms.TPanel -> TWinControl (ambiguous Vcl-vs-FMX)' -ForegroundColor Cyan
+
+$script:PyAncestor = Join-Path $WorkDir 'read_ancestor.py'
+Write-Ascii $script:PyAncestor @'
+import sqlite3, sys
+con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True); c = con.cursor()
+r = c.execute(
+    "SELECT ta.ancestor_kind, ta.ancestor_symbol_id, f.path "
+    "FROM type_ancestors ta "
+    "JOIN symbols s ON s.id = ta.symbol_id AND s.kind='class' AND s.name=? "
+    "LEFT JOIN files f ON f.id = ta.ancestor_file_id "
+    "WHERE ta.ancestor_name=? ORDER BY ta.ordinal LIMIT 1",
+    (sys.argv[2], sys.argv[3])
+).fetchone()
+print('NOROW' if r is None else "%s|%s|%s" % (r[0] or '', 'NULL' if r[1] is None else r[1], r[2] or 'NULL'))
+con.close()
+'@
+function Get-AncestorEdge([string]$Database,[string]$Cls,[string]$Anc){ return (python $script:PyAncestor $Database $Cls $Anc).Trim() }
+
+$edge = Get-AncestorEdge $db 'TPanel' 'TWinControl'
+Check "fixture sanity: TPanel's ancestor row exists in type_ancestors" ($edge -ne 'NOROW') "edge=$edge"
+Check "TPanel's ambiguous 'TWinControl' resolves into VclKit, not FmxKit (criteria 3+5)" `
+  ($edge -like '*VclKit.pas') `
+  "edge=$edge -- TODAY this is '?|NULL|NULL' (LEFT UNRESOLVED, matching the design doc's measured real-library root cause: ResolveAncestry.CandInScope finds zero in-scope candidates and declines); it must become 'class|<id>|...VclKit.pas' once the framework-prefix scope rule ships"
+Check "TPanel's ambiguous 'TWinControl' NEVER resolves into the FMX decoy (criterion 5)" `
+  ($edge -notlike '*FmxKit.pas') "edge=$edge"
+
+Write-Host ''
+Write-Host 'proptree VclForms.TPanel (ambiguous ancestor -- observable symptom)' -ForegroundColor Cyan
+$treePanel  = Get-Tree $db 'VclForms.TPanel'
+Check "fixture sanity: VclForms.TPanel resolves as a class (root_type='TPanel')" ($treePanel.root_type -eq 'TPanel') "root_type=$($treePanel.root_type)"
+$alignPanel = @($treePanel.properties) | Where-Object { $_.path -eq 'Align' } | Select-Object -First 1
+if ($null -ne $alignPanel) {
+  Check "Align is NOT the FMX decoy 'TAlignLayout' (criterion 5)" ($alignPanel.type -ne 'TAlignLayout') "type=$($alignPanel.type)"
+  Check "Align resolves to VCL's 'TAlign' (criterion 3: framework-prefix scope rule)" ($alignPanel.type -eq 'TAlign') "type=$($alignPanel.type)"
+} else {
+  Check "Align resolves to VCL's 'TAlign' (criterion 3: framework-prefix scope rule)" $false `
+    "Align is ABSENT from the tree -- the climb stopped at the unresolved TWinControl edge and never reached VclKit.TControl (expected RED today; see the type_ancestors check above for the root cause)"
+}
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
