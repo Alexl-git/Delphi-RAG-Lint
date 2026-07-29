@@ -237,16 +237,17 @@ var
 
   procedure AddName(const AName: string);
   var
-    X: string;
+    X   : string;
     Root: string;
+    dp  : Integer;   // MUST be local: reusing the enclosing `ep` corrupts the '=' position
   begin
     for X in Names do
       if SameText(X, AName) then Exit;
     Names.Add(AName);
-    ep := Pos('.', AName);
-    if ep > 1 then
+    dp := Pos('.', AName);
+    if dp > 1 then
     begin
-      Root := Copy(AName, 1, ep - 1);
+      Root := Copy(AName, 1, dp - 1);
       for X in Names do
         if SameText(X, Root) then Exit;
       Names.Add(Root);
