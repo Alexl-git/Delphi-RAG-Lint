@@ -119,14 +119,22 @@ below `TcxCustomButton` is lost. Here the ancestor name IS globally unique
 (`cxButtons.TcxBaseButton`, `cxButtons.pas:527`) and IS in the same unit, so defect 1 does not
 explain it.
 
-Two things to look at:
+**Both of the obvious explanations are DISPROVED (2026-07-29). Please do not spend time on them:**
 
-1. **`TcxCustomButton` has TWO class rows** -- a forward declaration `TcxCustomButton = class;`
-   at `cxButtons.pas:53` (cols 3-27), and the real declaration at `cxButtons.pas:531`. If the
-   resolver takes the forward declaration, it finds no ancestor and the walk ends.
-2. **The real declaration is a multi-line header with interfaces:**
-   `TcxCustomButton = class(TcxBaseButton,` / `IdxSkinSupport,` / `IcxLookAndFeelContainer,` ...
-   A parser that expects `class(Ancestor)` on one line would yield no ancestor edge.
+1. *Forward declaration shadowing the real class.* `TcxCustomButton` does have two class rows --
+   `TcxCustomButton = class;` at `cxButtons.pas:53` and the real declaration at `:531` -- but
+   `IsForwardDeclClass` (`PropTree.pas:231-234`) already distinguishes them by empty heritage and
+   `EndLine <= StartLine`, and `ResolveAncestry` step 1b already drops stubs.
+2. *Multi-line class header losing the ancestor.* The real header does span lines with interfaces
+   (`class(TcxBaseButton,` / `IdxSkinSupport,` / `IcxLookAndFeelContainer,` ...), but
+   `HeritageTextOf` (`src/parser/DRagLint.Parser.Delphi13.pas:397-436`) walks AST `typeref`
+   children rather than text lines, and the heritage is captured INTACT as
+   `'TcxBaseButton, IdxSkinSupport, IcxLookAndFeelContainer, ...'`.
+
+Our current belief is that this is the same NULL `target_file_id` problem as defect 1 -- the
+resolver declines rather than failing to see the ancestor -- but we did not confirm it for this
+specific pair, so it is still listed separately. `cxButtons.TcxBaseButton` IS indexed
+(`cxButtons.pas:527`), so the target exists.
 
 Reproduce:
 
