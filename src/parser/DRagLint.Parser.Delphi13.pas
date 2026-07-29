@@ -248,6 +248,51 @@ begin
   if (Length(Result) >= 2) and (Result[1] = '''') and (Result[Length(Result)] = '''') then Result:= Copy(Result, 2, Length(Result) - 2);
 end;
 
+// v(ADP3 T4e, register K43): remove EVERY whitespace byte from a dotted module
+// name, not just the ones on the ends.
+//
+// A `moduleName` node spans the WHOLE dotted name, so its source text carries
+// whatever the author wrote between the tokens -- and this repo aligns its own
+// `uses` clauses (`Alpha  .Config`). `Trim` only removes the ENDS, so that
+// interior padding was being stored verbatim in `unit_uses.unit_name`, where
+// `ResolveUnitUseTargets`' pass 1 -- `LOWER(unit_name) = :un`, see
+// DRagLint.Storage.SQLite.pas:3716 -- can never match it, leaving the edge
+// unresolved. Pass 2 keys on `unit_name_norm` (the dotted TAIL, which the
+// padding does not reach) and so MASKED this whenever the tail happened to be
+// unique; where two units share a tail it is refused as ambiguous and the edge
+// was simply lost. Measured before the fix: 147 of 1836 such rows in this
+// repo's own index (137 unresolved), 286 of 14223 in ORM3 (285 unresolved), and
+// 0 in library-Win64 / M2022 -- zero in third-party code, because the alignment
+// is our house style.
+//
+// Stripping ALL whitespace is exactly equivalent to re-joining the tokens: a
+// moduleName is `ident ('.' ident)*`, so whitespace can only ever be
+// inter-token padding here and cannot be part of a legal name. Fixed at the
+// STORE, not at the lookup -- normalizing inside the resolver's WHERE clause
+// would hide the bad value rather than stop it being written, and every other
+// consumer of `unit_name` would still see the padded string.
+//
+// NOT handled: a comment written inside the dotted name (`Alpha.{x}Config`),
+// which is still stored verbatim. Rarer than this was, and no worse than
+// before. Guarded by tests\autotest\run_uses_padded_name.ps1.
+function StripModuleNameWhitespace(const AName: string): string;
+var
+  I: Integer;
+  N: Integer;
+  C: Char  ;
+begin
+  SetLength(Result, Length(AName));
+  N:= 0;
+  for I:= 1 to Length(AName) do
+  begin
+    C:= AName[I];
+    if (C = ' ') or (C = #9) or (C = #13) or (C = #10) then Continue;
+    Inc(N);
+    Result[N]:= C;
+  end;
+  SetLength(Result, N);
+end;
+
 // v0.40.4: walk a declUses node, emitting one TUnitUse per declUsesUnit child.
 procedure WalkUsesClause(const ANode: TTSNode; const AState: TWalkState; ASection: TUnitUseSection);
 var
@@ -273,7 +318,7 @@ begin
       else if Sub.NodeType = 'literalString' then LitNode:= Sub;
     end;
     if ModNode.IsNull then Continue;
-    UnitName:= Trim(NodeText(ModNode, AState.Source));
+    UnitName:= StripModuleNameWhitespace(NodeText(ModNode, AState.Source));
     if UnitName = '' then Continue;
     InPath:= '';
     if not LitNode.IsNull then InPath:= ExtractInPath(LitNode, AState.Source);
