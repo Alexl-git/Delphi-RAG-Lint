@@ -2450,16 +2450,125 @@ begin
   end;
 end;
 
+// Unit-qualified prefix of a qualified symbol name ('Vcl.StdCtrls.TCustomButton'
+// -> 'Vcl.StdCtrls'); '' when the name carries no dotted prefix at all. Used by
+// PickAncestorCandidateByScope to read "which unit declares this candidate".
+function DeclaringUnitOfQName(const AQName: string): string;
+var P: Integer;
+begin
+  Result:= '';
+  P:= LastDelimiter('.', AQName);
+  if P > 1 then Result:= Copy(AQName, 1, P - 1);
+end;
+
+// The FRAMEWORK-PREFIX segment of a dotted unit name -- the substring before
+// the FIRST '.' ('Vcl.Controls' -> 'Vcl'; 'Vcl.StdCtrls' -> 'Vcl';
+// 'FMX.Controls.Win' -> 'FMX'; 'Winapi.Windows' -> 'Winapi'). '' when the name
+// carries no dot at all: an undotted unit name (e.g. a hermetic-test fixture
+// unit called 'VclKit') has NO framework prefix and must never be treated as
+// sharing one with a dotted name like 'Vcl.Controls' -- see
+// PickAncestorCandidateByScope rule 3.
+function UnitFrameworkPrefix(const AUnitName: string): string;
+var P: Integer;
+begin
+  Result:= '';
+  P:= Pos('.', AUnitName);
+  if P > 0 then Result:= Copy(AUnitName, 1, P - 1);
+end;
+
+/// <summary>
+///  Shared ancestor/type-candidate disambiguation rule: given several
+///  same-named class/interface/record/type-alias candidates, picks the one
+///  a referencing unit actually means, in strict precedence order --
+///  (1) a candidate declared in the SAME unit (file) as the referencing
+///  class; (2) a candidate whose declaring unit is textually named in the
+///  referencing unit's `uses` clause (either the interface or the
+///  implementation section -- plain membership, so it works even when
+///  `unit_uses.target_file_id` was never resolved); (3) a candidate whose
+///  declaring unit shares the referencing unit's FRAMEWORK PREFIX (the
+///  dotted segment before the first '.' -- see UnitFrameworkPrefix), but
+///  ONLY when that narrows the field to EXACTLY ONE candidate; (4) decline.
+///  Each rule short-circuits: the first rule that finds a qualifying
+///  candidate decides the result without consulting the next rule.
+/// </summary>
+/// <param name="ACandidates">Same-named candidates, already reduced to real
+///  bodies by the caller (forward-declaration stubs dropped -- see
+///  IsStub).</param>
+/// <param name="AScopeFileId">FileId of the class/unit doing the
+///  referencing. Callers walking a multi-hop ancestry chain must pass the
+///  FileId of the class actually inheriting at THAT hop, not the FileId of
+///  the root class the walk started from.</param>
+/// <param name="AScopeUnitName">The scope unit's own name (e.g.
+///  'Vcl.StdCtrls'), used only to derive its framework prefix for rule 3.
+///  Pass '' when unknown -- rule 3 is then skipped outright, never treated
+///  as a wildcard match.</param>
+/// <param name="AScopeUsesNames">Lowercased unit names textually present in
+///  the scope unit's `uses` clause (either section). Membership test only;
+///  does not require `unit_uses.target_file_id` to be populated. May be nil
+///  (rule 2 is then skipped).</param>
+/// <returns>The chosen candidate, or a default(TSymbol) (Id = 0) when no
+///  rule narrows the field to one.</returns>
+/// <remarks>
+///  Declining (Id = 0) is a CORRECT outcome, not a failure -- "when unsure,
+///  don't claim" -- callers must never guess further on a decline. Rule 3's
+///  prefix compare is an exact leading-segment match, never a substring, so
+///  an undotted name like 'VclKit' can never match 'Vcl.Controls': this
+///  function must NEVER resolve a Vcl.* scope to an FMX.* candidate, or the
+///  reverse. This is the ONE decision procedure shared by the query-time
+///  resolver (ResolveTypeNameToClass / PickCandidate, below) and the
+///  index-time resolver (ResolveAncestry) -- change the precedence HERE,
+///  not by re-implementing it in either caller.
+/// </remarks>
+function PickAncestorCandidateByScope(const ACandidates: TArray<TSymbol>;
+  AScopeFileId: Int64; const AScopeUnitName: string;
+  AScopeUsesNames: TDictionary<string, Boolean>): TSymbol;
+var
+  S          : TSymbol;
+  ScopePrefix: string ;
+  PrefixHit  : TSymbol;
+  PrefixHits : Integer;
+begin
+  Result:= Default(TSymbol);
+  // Rule 1: same unit as the referencing class.
+  for S in ACandidates do
+    if S.FileId = AScopeFileId then Exit(S);
+  // Rule 2: candidate's declaring unit is named in the referencing unit's uses.
+  if Assigned(AScopeUsesNames) then
+    for S in ACandidates do
+      if AScopeUsesNames.ContainsKey(LowerCase(DeclaringUnitOfQName(S.QualifiedName))) then
+        Exit(S);
+  // Rule 3: candidate's declaring unit shares the referencing unit's
+  // framework prefix -- only when it narrows the field to exactly one.
+  ScopePrefix:= UnitFrameworkPrefix(AScopeUnitName);
+  if ScopePrefix <> '' then
+  begin
+    PrefixHits:= 0;
+    PrefixHit := Default(TSymbol);
+    for S in ACandidates do
+      if SameText(UnitFrameworkPrefix(DeclaringUnitOfQName(S.QualifiedName)), ScopePrefix) then
+      begin
+        Inc(PrefixHits);
+        if PrefixHits = 1 then PrefixHit:= S;
+      end;
+    if PrefixHits = 1 then Exit(PrefixHit);
+  end;
+  // Rule 4: ambiguous -- decline rather than guess.
+end;
+
 function TSQLiteSymbolStore.ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64): TSymbol;
 var
-  UsesNames: TDictionary<string, Boolean>; // lowercased unit names in scope (own + used)
-  SeenAlias: TDictionary<string, Boolean>; // alias-chain cycle guard (lowercased names)
+  UsesNames       : TDictionary<string, Boolean>; // lowercased unit names in scope (own + used)
+  SeenAlias       : TDictionary<string, Boolean>; // alias-chain cycle guard (lowercased names)
+  CurScopeFileId  : Int64 ; // FileId LoadScopeNames was last called with
+  CurScopeUnitName: string; // that file's own unit name (for the framework-prefix rule)
 
   procedure LoadScopeNames(AFileId: Int64);
   var
     Q: TFDQuery;
   begin
     UsesNames.Clear;
+    CurScopeFileId  := AFileId;
+    CurScopeUnitName:= '';
     if AFileId <= 0 then Exit;
     Q:= TFDQuery.Create(nil);
     try
@@ -2470,6 +2579,7 @@ var
       Q.Open;
       while not Q.Eof do
       begin
+        if CurScopeUnitName = '' then CurScopeUnitName:= Q.Fields[0].AsString;
         UsesNames.AddOrSetValue(LowerCase(Q.Fields[0].AsString), True);
         Q.Next;
       end;
@@ -2489,16 +2599,6 @@ var
     end;
   end;
 
-  // Unit-qualified prefix of a qualified name ('Vcl.StdCtrls.TCustomButton' ->
-  // 'Vcl.StdCtrls'); '' when the name carries no dotted prefix.
-  function UnitPrefix(const AQName: string): string;
-  var P: Integer;
-  begin
-    Result:= '';
-    P:= LastDelimiter('.', AQName);
-    if P > 1 then Result:= Copy(AQName, 1, P - 1);
-  end;
-
   // True when a class/interface candidate is a forward-declaration stub
   // ('TFoo = class;' -- empty heritage, single line). Type aliases are never
   // stubs (their target lives in Signature, heritage is legitimately empty).
@@ -2508,14 +2608,13 @@ var
              (S.Heritage.Trim = '') and (S.EndLine <= S.StartLine);
   end;
 
-  // Best type candidate for a bare name: unique in-scope (by uses-unit-name),
-  // else first in-scope, else the single global definition. Id=0 when none / an
-  // out-of-scope ambiguity that cannot be disambiguated.
+  // Best type candidate for a bare name: the single global definition when
+  // unambiguous, else the shared scope rule (PickAncestorCandidateByScope --
+  // same unit -> uses -> framework prefix -> decline). Id=0 when it declines.
   function PickCandidate(const AName: string): TSymbol;
   var
     Raw    : TArray<TSymbol>;
     Types  : TArray<TSymbol>;
-    InScope: TArray<TSymbol>;
     HasBody: Boolean         ;
     S      : TSymbol         ;
   begin
@@ -2540,14 +2639,9 @@ var
       Types:= Kept;
     end;
     if Length(Types) = 0 then Exit;
-    // prefer candidates whose declaring unit is in the reference file's scope.
-    SetLength(InScope, 0);
-    for S in Types do
-      if UsesNames.ContainsKey(LowerCase(UnitPrefix(S.QualifiedName))) then
-        InScope:= InScope + [S];
-    if Length(InScope) >= 1 then Exit(InScope[0]);   // in-scope wins (first if several)
     if Length(Types) = 1 then Exit(Types[0]);        // single global definition
-    // ambiguous, none in scope -> refuse to guess (leaves the caller at 'unknown').
+    // ambiguous (2+ same-named candidates) -- apply the shared scope rule.
+    Result:= PickAncestorCandidateByScope(Types, CurScopeFileId, CurScopeUnitName, UsesNames);
   end;
 
 var
