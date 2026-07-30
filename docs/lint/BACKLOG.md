@@ -1,5 +1,540 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-07-29 (LATEST-71) -- **INTERRUPT HANDLED: the shared binaries were built from the WRONG BRANCH, and the default `-Exe` could not start. Both fixed + staged. Plan NOT advanced: T5 is still NEXT.**
+>
+> This session did **no plan work**. The user redirected to incoming messages first. Read this block,
+> then jump straight to LATEST-69/70 below and start **T5** (`task-5-brief.md`).
+>
+> ### What came in
+>
+> The converter/proptree group reported: their final review told the fix wave to align eleven suites'
+> `-Exe` default to `src\cli\Win64\Debug\drag-lint.exe`, but that exe dies **0xC000007B**
+> (27 PASS / 111 FAIL). They deliberately did not fix it -- main was merged and green and it would
+> have been an unreviewed commit on main.
+>
+> ### Two defects found, both fixed
+>
+> **1. The `-Exe` default cannot start -- and the cause is one link deeper than reported.**
+> Absent companions alone would be `0xC0000135` (DLL not found). `0xC000007B` is
+> `STATUS_INVALID_IMAGE_FORMAT` = a **bitness** error. Measured: `third_party\dll` **is on `PATH`** and
+> its three `tree-sitter*.dll` are **x86** (PE machine `0x014C`; `dll-win64` copies are `0x8664`). Chain:
+> companions absent beside the exe -> loader falls through to `PATH` -> loads the x86 copies -> mismatch.
+> On a machine without that `PATH` entry the same defect appears as `0xC0000135`, so **never assert
+> "not 0xC000007B" -- assert "the default `-Exe` starts."**
+>
+> **Fix (in `build/build_draglint_win64.bat`, UNCOMMITTED):** stage the three companions next to the
+> **linked** exe as well as outward. One `copy`. Fixes all **45** files under `tests\autotest\` that
+> default to the linked exe (not eleven), needs zero test edits, and preserves
+> `run_exe_freshness.ps1`'s teeth. **We rejected the prescribed fix** (repoint the suites at
+> `third_party\dll-win64\drag-lint.exe`): that is a *staged copy* written by any branch at any time, so
+> defaulting the battery at it institutionalises exactly what the freshness guard exists to catch.
+>
+> **2. The shared binaries other groups consume were built from THIS feature branch.**
+> `third_party\dll-win64\drag-lint.exe` (Jul 29 09:54) came from `feat/autodoc-phase3`, which is
+> **54 commits behind main** -- it contained none of main's merged proptree ancestor-scope work.
+> Anyone testing the converter against the shared exe was testing without that fix.
+>
+> **Rebuilt from `main` (`34a96e2`) in a throwaway worktree and staged:**
+>
+> | artifact | path | size |
+> |---|---|---|
+> | `drag-lint.exe` Win64 (x64) | `third_party\dll-win64\drag-lint.exe` | 30,623,340 |
+> | `dclDragLintWizard.bpl` **Win32** (x86 -- the IDE is 32-bit) | `third_party\dll-win32\dclDragLintWizard.bpl` | 7,061,115 |
+> | `dclDragLintWizard.dcp` | `third_party\dll-win32\dclDragLintWizard.dcp` | 2,356,620 |
+>
+> Previous exe preserved as `third_party\dll-win64\drag-lint.exe.prev-autodoc-phase3`.
+>
+> ### Verification (classifiers named)
+>
+> | check | result |
+> |---|---|
+> | fresh `main` Win64 + Win32-BPL build | `CLI64_EXITCODE=0`, `BPL32_EXITCODE=0`, hints only (H2077/H2164) |
+> | linked exe, 0 companions (RED) | `exit 0xC000007B` |
+> | same exe, same dir, 3 companions (GREEN) | `drag-lint 1.2.1-alpha`, `exit 0` |
+> | patched script, companions deleted first | script `exit 0`, `3 file(s) copied`, exe starts |
+> | `run_proptree_ancestor_climb.ps1` on **default `-Exe`** | `exit 0`, final verdict `PASS` |
+> | `run_proptree_prop_type_scope.ps1` on **default `-Exe`** | `exit 0`, final verdict `PASS` |
+>
+> Classifier for the suite rows is the **runner's exit code + its final verdict line**. A grep for
+> line-start `PASS` under-counts (the suites indent `[PASS]`) -- it reported `PASS=1` for
+> multi-assertion suites. Fifth instance of "green while measuring nothing": **name the command, the
+> unit, AND the classifier.**
+>
+> ### Why our own battery never caught this
+>
+> `src\cli\Win64\Debug\tree-sitter*.dll` existed in this working tree, **hand-copied, untracked, and
+> `.gitignore`d** (`.gitignore:14 Win64/`). Every "green on the default `-Exe`" we have ever claimed
+> held because of three files present on one machine and in no commit. Same defect class as `b365197`.
+> The fix removes the machine dependency instead of re-hiding it.
+>
+> ### Flagged, NOT touched -- decisions owed
+>
+> 1. **`build/build_draglint.bat` reproduces the defect by construction:** it builds **Win64** and
+>    stages into `third_party\dll`, whose tree-sitter DLLs are **x86** and which is on `PATH`. A live
+>    landmine for whoever runs that older script next.
+> 2. **`third_party\dll\drag-lint.exe` is a stale x86 build (Jul 5)** and is on `PATH`, so a bare
+>    `drag-lint` resolves to it -- the Win32 exe that `CLAUDE.md` warns OOMs on the 1.4 GB index.
+> 3. **The build-script fix must land on main under the converter group's review**, not via this
+>    branch's 103-commit merge. Their reason for stopping was correct; we did not commit either.
+>
+> ### Notification sent
+>
+> `docs/INBOX-REPLY-exe-default-0xC000007B-2026-07-29.md`, delivered to **both** checkouts
+> (`Delphi-RAG-lint` and `Delphi-RAG-lint-converter`).
+>
+> ### Git / tree state
+>
+> `feat/autodoc-phase3` @ `b365197`, **103 ahead of / 54 behind `main`**; `main` is **72 ahead of
+> `origin/main`**; **nothing pushed**; branch has no upstream. **USER HOLDS COMMIT+PUSH.**
+> Tracked files dirty from THIS session: `build/build_draglint_win64.bat` (the fix),
+> `third_party/dll-win32/dclDragLintWizard.bpl` + `.dcp` (**tracked binaries**, replaced by the
+> main-built ones -- deliberate and flagged). Pre-existing dirty: `docs/lint/BACKLOG.md`,
+> `docs/superpowers/specs/2026-06-29-grep-elimination-indexer-wishlist.md`,
+> `third_party/dll-win64/drag-lint.json`. The temp `main` worktree was **removed** -- leaving it would
+> have blocked the converter group from checking out `main` themselves.
+>
+> ### >>> NEXT ACTION
+>
+> **T5** -- ownership-yield investigation, TIMEBOXED. Brief:
+> `.superpowers/sdd/2026-07-24-autodocument-phase3-harvest-and-facts/task-5-brief.md`.
+> Then T6-T9 (harvester) and T10-T14 (four facts), both NOT STARTED.
+>
+> **Careful:** the battery's default `-Exe` is `src\cli\Win64\Debug\drag-lint.exe`, which in this
+> working tree is still a **`feat/autodoc-phase3`** build (companions present, verified starting).
+> The *staged* `third_party\dll-win64\drag-lint.exe` is now **main's** build and does NOT contain this
+> branch's autodoc work -- do not use it to validate T5+.
+
+> ## RESUME 2026-07-29 (LATEST-72) -- **T5 COMPLETE: ownership-yield investigation concluded. FINDING: correct conservative behaviour, no bug. No-bug path (finding document only). COMMIT DONE: `0c78b06`.**
+>
+> **T5 result:** No bug found. The dispose-gate (`AnalyzeReturnsOwner` line 1882) is working correctly by design. When a function disposes of Result anywhere (including in except blocks), `returns_owner` is conservatively omitted (empty). This prevents false `new` claims for functions with conditional ownership (freed on exception path, transferred on normal path).
+>
+> - **Fixture verification:** `owner_alias.MakeAliased` (aliased generic, no dispose) correctly yields `returns_owner = 'new'`
+> - **Real YADF case:** `YADF.Tokens.LoadTokensFromString` has `Result.Free` in except block -> correctly yields `returns_owner = ''` (empty)
+> - **Evidence:** Test `run_doc_p2_owner.ps1` PASS; disposition gate assertion `DisposedResult has NO Owns returned: line (Result.Free seen -- does not cleanly escape)` confirms correct behaviour
+> - **Finding document:** `docs/lint/2026-07-29-ownership-yield-finding.md` records the gate, the rationale, and why the fix (conditional-ownership tracking) is out-of-scope for Phase 3
+> - **Commit:** `docs/lint/2026-07-29-ownership-yield-finding.md` added; no code changes; no regression test needed
+>
+> **>>> NEXT ACTION: T6** -- harvester, boundary scan and acceptance guards. Brief: `.superpowers/sdd/2026-07-24-autodocument-phase3-harvest-and-facts/task-6-brief.md`.
+
+> ## RESUME 2026-07-28 (LATEST-69) -- **AUTO-DOCUMENT PHASE 3: T4, T4b, T4c CLOSED. Two NEW INBOX tasks inserted. Branch `feat/autodoc-phase3`, ~90 commits, NEVER PUSHED. USER HOLDS COMMIT+PUSH.**
+>
+> **Read `.superpowers/sdd/2026-07-24-autodocument-phase3-harvest-and-facts/progress.md` (ledger) and
+> `deferred-defects-register.md` (live defects + standing policies) FIRST.** Every task has a
+> `task-<N>-brief.md` in that directory; the inserted ones are hand-written.
+>
+> ### Closed this session
+>
+> | task | commits | rounds |
+> |---|---|---|
+> | **T4** caller-line render fixes | `447e812`, `4b35452`, `fb37b37` | 2 review rounds, clean |
+> | **T4b** INBOX `<returns>` correctness | `2fbb20d`, `55bcdaf`, `75a4be6`, `b14fbd7`, `2cd6edc` | **4** review rounds, clean |
+> | **T4c** INBOX tree-sitter DLL | `0e84cc6` | verdict: **already fixed, no rebuild** |
+> | **T4d** INBOX `proptree` ancestor climb | `b811097`, `7192542`, `c4b78d0` | 2 rounds, clean. **Unblocked the converter editor** |
+> | **T4f** SECOND MINOR SWEEP (user-inserted) | `8fbdaf8`..`dc4cc70`, `59fff21` | 1 round, clean. 29 items, every one with a named verdict |
+> | **T4e** INBOX Win32 index abort | `c9dea59`, `a687aca`, `b365197` | 1 round. **drag-lint was never crashing** |
+>
+> ### T4e's answer, because it invalidates a shared assumption
+>
+> `index --all` was **terminated externally** by a caller passing exit `-1` (`Process.Kill` family =
+> `TerminateProcess(h,-1)`), which is why stderr was empty and no Windows event was logged. The
+> `DIAG:` line the report called the crash site was a **128-byte `TTextBuf` boundary**: all three
+> surviving logs are exact multiples of 128 (941/3229/187 x 128) where a normal exit lands off-boundary.
+> Attribution nailed to the second: run 4 died **20:03:41** and `build_r1.log.err` truncates at
+> **20:03:41**; run 5 died **23:59:46.69**, `build_M3b.log.err` at **23:59:47** -- both from scripts
+> whose FIRST statement is `Get-Process drag-lint | Stop-Process -Force`, inside a poll-until-writable
+> loop that only iterates because something holds the exe. **Verdict: proven in its class,
+> consistent-but-not-conclusive in attribution.**
+>
+> ### >>> TWO USER DECISIONS ARE BLOCKING NOTHING BUT ARE OWED
+>
+> 1. **K52 -- our own docs tell agents to kill drag-lint BY IMAGE NAME.** `Stop-Process [-Name]
+>    drag-lint` appears in **28 `.md` files (41 occurrences)**, `Get-Process ... | Stop-Process -Force`
+>    in **4 more (6)**, `taskkill /F /IM` in **3**. This destroyed a 1.9 GB index rebuild at least twice
+>    and misdirected a multi-day investigation. Recommended: kill by **PID**, or scope to the holder of
+>    the staging path. NOT DONE -- it is the user's documented procedure.
+> 2. **The 9.5 MB `library-Win32.sqlite` fragment (HAZARD H2).** Recommended: rename to
+>    `.broken-20260728` so consumers fail loudly instead of answering thinly. NOT DONE -- user's data.
+>
+> ### Ordered remaining work
+>
+> 1. **T5** ownership-yield investigation, TIMEBOXED (`task-5-brief.md`, written). **NEXT.**
+> 2. **T6-T9 harvester (NOT STARTED)**, **T10-T14 four facts (NOT STARTED)**, T15, T16, THIRD minor
+>    sweep, T17, T3m, final whole-branch review.
+>
+> **T10 gained an incoming ask -- K59, a `framework_type` record** (`docs/TODO-URGENT-framework-type-record.md`,
+> filed at the user's explicit instruction by the proptree session, whose branch is barred from adding a
+> schema column). T10 is the v19 bump, so a fifth additive column is cheap **if the design is right --
+> and their own TODO shows the obvious column does not solve their case**: `.dproj` `<FrameworkType>` is
+> project-scoped, the library index has no project concept, and `Abcbtn.pas` (the unit actually
+> degrading -- `PopupMenu` 757 leaves, `Images` 214, `Font` 14) is shared library source with no
+> `.dproj`. The `.dfm`/`.fmx` signal is one-sided: **743 `.dfm`, 0 `.fmx`**. **Two questions asked back
+> before it lands:** is attribution per-FILE or per-PROJECT (declining may be correct, not a gap), and
+> does their un-built uses-graph anchor subsume it as a query-time fix needing no reindex? See register
+> K59 and `docs/INBOX-REPLY-proptree-branch-collision-2026-07-29.md` §6.
+>
+> ### MINORS -- the standing policy and the live state
+>
+> **User instruction (2026-07-29): collect minors, then clear them in a DEDICATED STEP.** They inserted
+> **T4f** before T5 for exactly that and said to do it again -- so the **THIRD sweep** is a real
+> scheduled task, not a footnote. T3k was the first, T4f the second.
+>
+> - **Register K-series high-water = `K58`. Allocate from K59, and CHECK THE REGISTER FIRST.** Two
+>   agents once numbered from K21 independently and it had to be untangled by hand; separately, a
+>   controller inventory built from headings **missed K26 and K27** because they were recorded in prose.
+>   Enumerate with `bash grep -n` over the whole file, not by reading section titles.
+> - **Open for the third sweep:** K15 (needs a Win32 BPL rebuild + a live IDE check -- outside this
+>   build path and outside the battery), K20, K26, K27, K28 (needs the span validated against source --
+>   indexer work), K30-K33, K36, K44-K58, plus the **fourth `--db` defect** (ancestor resolution does
+>   not span every supplied `--db`; needs a multi-store id space through
+>   `BuildPropTree`/`ClassChain`/`BodyOf`).
+> - **A sweep's discipline, which worked twice:** every item leaves with a **named verdict** -- fixed /
+>   confirmed already done / owned elsewhere untouched / declined with the reason -- including the
+>   out-of-scope ones. T3k proved items vanish silently without it. **Batch the builds:** a `.pas`
+>   comment edit re-times the source ahead of the staged exe and turns `run_exe_freshness.ps1` red.
+> - **A sweep is where scope creep lives.** If an item needs design, a schema change, a library reindex
+>   or a plugin rebuild, that is a *verdict*, not a licence to expand.
+>
+> ### HAZARD H3 -- BRANCH COLLISION, unresolved and owned by the user
+>
+> A parallel session fixed the **same** proptree defect on `feat/proptree-ancestor-scope` (11 commits,
+> from `main@674706a`), announced in `docs/INBOX-REPLY-proptree-ancestor-scope-2026-07-29.md`.
+> **Both branches created `tests/autotest/run_proptree_ancestor_climb.ps1` with different content, and
+> both rewrote the same storage procedures -- whichever merges second will not merge cleanly.**
+> Their branch is the better base for proptree (it also fixes scope-aware property TYPES:
+> `Vcl.Controls.TControl.Parent` was resolving to `FMX.Controls.Win.TWinControl`), **but their
+> `ResolveUnitUseTargets` has no extension filter and uses last-wins -- the Critical T4d fixed -- and on
+> their branch it is NOT latent, because they populate that column for the first time.** Measurements
+> and the four other findings they will want are in
+> `docs/INBOX-REPLY-proptree-branch-collision-2026-07-29.md`. **Nothing on their branch was touched.**
+> 4. **T6-T9 harvester (NOT STARTED)**, **T10-T14 four facts (NOT STARTED)**, T15 docs, T16 converter +
+>    Obsidian, **THIRD minor sweep** (T3k was the first, T4f the second), **T17 rollout**, T3m, final
+>    whole-branch review.
+>
+> ### T17 now has FIVE one-time-rewrite causes, not two
+>
+> Consolidated in the register under "T17 -- FIVE ONE-TIME REWRITES TO EXPECT". (1) T3g's re-indent,
+> (2) T4's relabel + marker suppression, (3) **K21's pre-marker `<returns>` -- the ONLY one that does
+> NOT self-converge**, (4) T4d's deeper ancestor chains changing doc facts on an UNCHANGED index,
+> (5) **K44** -- `document --unit` omits a comment `document --qname` writes, because `HasManagedBlock`
+> uses the `AUTO_BEGIN` fence as a proxy for "has facts" and T4b broke that proxy. Only (3) needs a
+> decision; the rest converge on a second apply.
+>
+> ### Standing constraints that bite
+>
+> - **Only ONE agent may build+stage `drag-lint.exe` at a time** -- concurrent builds clobber each
+>   other's staged binary. T4d/T4e/T5 all build. Serialize them.
+> - **HAZARD H2: `library-Win32.sqlite` is a 9.5 MB fragment that answers queries WRONGLY.** It is
+>   authoritative for NOTHING; a miss is not evidence of absence. Use `library-Win64.sqlite`. T4e is the
+>   fix. Do not delete/rename the fragment -- user's data.
+> - **Libraries stay un-reindexed until the schema is final** (user). This is a DESIGN constraint, not
+>   just process: an index-time-only fix does not reach a consumer until a rebuild.
+> - **Minors: collect, act later** (user, reaffirmed 2026-07-28). Register K-series high-water mark:
+>   **K32**. Allocate from K33 and CHECK FIRST -- two agents independently numbered from K21 and it had
+>   to be untangled.
+> - **More INBOX messages are expected** (user). Two arrived mid-session. Each becomes a task WITH a
+>   `docs/INBOX-REPLY-*.md`. Note `docs/INBOX-*.md` and `.superpowers/` are **untracked by convention**,
+>   so those deliverables live only in the working tree.
+> - Battery at `0e84cc6`: **`193 pass / 0 fail / 0 timeout out of 193 executed (of 194 found)`**, 10.8 min.
+>
+> ### The three ways this phase has been green while measuring nothing
+>
+> 1. **A mutation must leave the mechanism reachable and change only its answer.**
+> 2. **A coverage claim must be an assertion or it must not be written.**
+> 3. **NEW: a measurement must classify by a criterion INDEPENDENT of the mechanism it measures.** T4b
+>    shipped a Critical behind a green table because the table used the engine's own predicate.
+>
+> Corollaries earned this session: **every count must name its command AND its unit** (a two-round
+> dispute where both numbers were right at different resolutions); **a figure is only as findable as the
+> digits you think to look for**, and spelled-out numbers are invisible to a digit sweep.
+>
+> ### Controller errors (mine), for whoever dispatches next
+>
+> Five now, all the same shape: **reasoning about code from a summary instead of from the code, then
+> stating the conclusion as an instruction.** The worst would have destroyed 111 `<returns>` sections in
+> our own source. Every one was caught by an implementer who measured. **Keep "push back with evidence"
+> in every brief** -- it is the only reason these were recoverable.
+>
+> ---
+
+> ## RESUME 2026-07-28 (LATEST-68) -- **AUTO-DOCUMENT PHASE 3: 15 of 27 TASKS DONE. Branch `feat/autodoc-phase3` @ `6bcc0a3`, 81 commits, NEVER PUSHED (no upstream). `main` is 56 ahead of `origin/main`. USER HOLDS COMMIT+PUSH.**
+>
+> ### 0. READ THIS FIRST -- T4's STATE
+>
+> **[UPDATED at handoff time -- see the T4 STATUS line at the end of this block for what actually
+> happened.]** T4 was dispatched and got a long way before the reset: measured at 08:43, the runner
+> `tests/autodoc/run_doc_p3_callerline.ps1` (16 KB, all five assertions) and the fixture
+> `tests/autodoc/fixtures/docp3/callerline.pas` both existed, `src/doc/DRagLint.Doc.Facts.pas` and
+> `DRagLint.Doc.Regions.pas` carried **+98/-10**, and the exe had **already been rebuilt after the last
+> source edit** -- i.e. it was in the verification phase, not the beginning.
+>
+> **So do NOT reflexively discard those edits.** If T4 committed before the reset, `git log` shows it
+> and there is nothing to decide. If the working tree still holds uncommitted `src/doc/*.pas` changes
+> with no T4 commit, you have a nearly-complete implementation whose agent is gone: **run
+> `pwsh -File tests\autodoc\run_doc_p3_callerline.ps1` and the full battery first** -- if they pass,
+> review and commit it as T4; if they fail in a way you cannot quickly attribute, then revert
+> (`git checkout -- src/doc/DRagLint.Doc.Facts.pas src/doc/DRagLint.Doc.Regions.pas`, delete the two
+> new test files) and re-dispatch from
+> `.superpowers/sdd/2026-07-24-autodocument-phase3-harvest-and-facts/task-4-brief.md`, which is complete.
+> **T4 has NOT been reviewed either way -- the task review still owes.**
+>
+> Also dirty and SAFE TO KEEP (controller's, not T4's): `docs/lint/BACKLOG.md`,
+> `docs/superpowers/specs/2026-06-29-grep-elimination-indexer-wishlist.md`.
+> `third_party/dll-win64/drag-lint.json` -- provenance unclear, inspect before keeping.
+>
+> **T4 STATUS AT HANDOFF -- RESOLVED, no decision needed.** T4 completed and **committed `447e812`**
+> before the reset, so there are no orphaned edits and nothing to revert. Battery
+> **`191 pass / 0 fail / 0 timeout out of 191 executed (of 192 found)`** at `447e812`; sweep zero
+> differing lines. **T4 has NOT been reviewed -- reviewing it is the next session's FIRST ACTION.**
+> Base for the review package is `6bcc0a3`.
+>
+> Three things T4 established that later tasks need:
+> 1. **The plan's "49 of 49 saturation" is STALE** (it predates T3i). Measured on the pre-T4 tree:
+>    YADF **186/263 entries = 70.7%** (28 lines all-certain / 65 all-uncertain / **6 mixed**);
+>    drag-lint `src` **2594/3039 = 85.4%** (211 / 832 / **83 mixed**). The mixed-only rule still holds
+>    -- two thirds of lines are uniformly uncertain, so suppression concentrates the signal rather than
+>    erasing it -- but **mixed lines demonstrably exist**, which is what makes the rule meaningful.
+> 2. **`CanBeCallTarget` was reused; the five-kind set appears nowhere in the diff.** The plan would
+>    have had T4 write a third copy -- carrying that cross-task interface into the dispatch is what
+>    prevented it, and future dispatches must keep doing so.
+> 3. **The brief's `--json` fallback for the mixed assertion was ILLUSORY** -- `document --json`
+>    exposes no facts, so it could never have worked. T4 achieved the STRONG form instead (same-unit
+>    caller resolves, cross-unit does not), with preconditions re-derived from the index via
+>    `dump-call-edges` / `ambiguous-calls`, both proven to discriminate.
+>
+> **T4's open concerns, for the reviewer and for T17:**
+> - Two runners pinned the old `Called from:` label; one had been pinned **by T3i specifically for T4
+>   to flip**. Both were updated as expectations, never the engine, and both gained checks.
+>   `CalledFromLine` needed widening because two callers assert *absence* and would have read a
+>   relabelled line as no line.
+> - **NEW, filed for the second minor sweep:** the IDE plugin's hover column caption still reads
+>   "Called from" for every kind (`src/delphi-plugin/.../HoverForm.pas:1211`), so hover and the written
+>   doc now disagree for types. Out of T4's scope and build path.
+> - **T17 must expect a one-time non-empty first-apply diff** on already-documented code (the relabel
+>   plus marker suppression). Verify with `git diff -w`, as T3g's re-indent already required.
+>
+> ### 1. Where to read, in order
+>
+> 1. `.superpowers/sdd/2026-07-24-autodocument-phase3-harvest-and-facts/progress.md` -- the LEDGER.
+> 2. `.../deferred-defects-register.md` -- the LIVE defect list, with standing policies at the top.
+> 3. `.../task-<N>-brief.md` -- every task has one; inserted tasks' briefs are hand-written.
+>
+> ### 2. Status
+>
+> **DONE (15):** T1, T2, T3, T3b, T3c, T3f (before this session) + **T3e, T3g, T3d, T3d2, T3h, T3j,
+> T3i, T3k** (this session). All review-clean.
+> **ORDERED REMAINING WORK (updated 2026-07-28 per the user):**
+> 1. **REVIEW T4** -- complete and committed (`447e812`) but ungated. Base `6bcc0a3`. **First action.**
+> 2. **T4b -- INBOX: autodoc `<returns>` is incomplete and can be actively misleading.**
+>    `docs/INBOX-autodoc-returns-section-incomplete.md` (2026-07-27). A correctness defect **in this
+>    phase's own feature** -- it names a value the function provably does not return, and that text is
+>    read daily through Help Insight and LSP hover. Fix **and write a REPLY doc reporting what was
+>    done.** Register has the full brief.
+> 3. **T4c -- INBOX: rebuild the production tree-sitter DLL + reindex.**
+>    `docs/INBOX-tree-sitter-jedi-jvcl-grammar-fixes.md` (2026-07-17). Three grammar gaps fixed
+>    upstream (`e531000`); drag-lint cannot see them until the DLL is rebuilt. **CAUTION:** the message
+>    asks for a reindex, but the standing user decision is *libraries stay un-reindexed until the
+>    schema is final* -- so self-index only, and say so in the reply. Also write a REPLY doc.
+> 4. Then **T5**, **T6-T9 harvester (NOT STARTED)**, **T10-T14 four facts (NOT STARTED)**, T15 docs,
+>    T16 converter+Obsidian, **second minor sweep** (K5-K15), **T17 rollout**, **T3m**, final
+>    whole-branch review.
+>
+> **Both INBOX tasks must end with a written reply** (`docs/INBOX-REPLY-*.md`), following
+> `INBOX-REPLY-converter-v18-ack.md` as the format precedent: what shipped, what was measured, and
+> anything deliberately not done with the reason.
+>
+> **The battery is `190 pass / 0 fail / 0 timeout out of 190 executed (of 191 found)` at `6bcc0a3` --
+> zero exemptions, no caveats. The phase's first fully honest green.** Run it with
+> `pwsh -File tests\run_battery.ps1` and quote the denominator IT prints.
+>
+> ### 3. Two rules this phase paid for -- put them in every future brief
+>
+> 1. **A mutation must leave the mechanism reachable and change only its answer.** Six proofs went
+>    green while measuring nothing (one counted *extracted* items while the regression was in
+>    *resolution*; one renamed a target so the site left the enumeration instead of becoming the
+>    failure case; two were suppressed by an earlier gate; one used case-insensitive `-match` and
+>    measured a neighbouring `//` line; one examined ZERO blocks because Python's universal-newline
+>    translation defeated a `\r\n` split -- **and the re-reviewer hit that identical failure on its own
+>    first attempt**). Practical form: disable the fix, confirm RED, **and confirm the RED names the
+>    assertion you intended.** If a proof passes first try, be suspicious.
+> 2. **A coverage claim must be an assertion or it must not be written.** "Prose broader than what
+>    ships" recurred in **six consecutive rounds**, twice inside the guard files built to prevent it.
+>
+> ### 4. IMPROVEMENT SUGGESTIONS -- do not lose these
+>
+> **Indexer (all filed in `docs/superpowers/specs/2026-06-29-grep-elimination-indexer-wishlist.md`):**
+> - **E4, highest value: nested routines are NOT INDEXED AT ALL** -- no symbol, no refs. Verified:
+>   `local_var` = 13,993 rows (so the walker DOES enter routine bodies) but routine-in-routine symbols
+>   = **0**. Consequence: `find-callers` can report "no callers" **wrongly**, and the failure mode is a
+>   confident EMPTY RESULT, not an error. It already caused a real miss (a 4-consumer enumeration
+>   returned 3; Grep found the 4th). **Rule until fixed: the index is authoritative for a POSITIVE
+>   answer, not a NEGATIVE one.**
+> - **E5:** a paren-less dotted call in expression position (`T := TThing.Create;` -- the dominant
+>   Delphi constructor idiom, 1215 orphan `Create` member-accesses in the self-index) emits **no `call`
+>   ref**, so it is invisible to `Calls:`, `call-path`, `call-tree`, `Covered by:`. Fixing it changes
+>   what is INDEXED and needs every index rebuilt.
+> - **Text index does not cover `.ps1` / `.bat` / `.md`** (`--source` accepts `pas|dfm|sql` only). The
+>   `.ps1` gap is the costly one: `tests/` holds ~190 runners and "which runner asserts X?" is a
+>   constant question. Proposed minimal shape: extend the existing FTS5 table with a `source` value per
+>   family so `--source ps1` works like `--source pas`. Exclude generated output.
+>
+> **Tooling / harness:**
+> - **The `Grep` TOOL silently skips hidden directories on recursive sweeps.** A repo-wide search
+>   returned 2 files while `bash grep -rl` returned those plus 5 under `.superpowers/`. Since the
+>   ledger, register, briefs and reports ALL live in that dot-directory, **any completeness-critical
+>   sweep must use `bash grep -rn` or an explicit path.**
+> - Consider a CI/battery check that the two guards themselves stay green on a FRESH CLONE, since both
+>   were built around fresh-clone-vs-working-tree divergence.
+>
+> **Process (from controller errors this session -- all mine):**
+> - **Run the task review BEFORE sending a fix round.** I once analysed an implementer's concerns and
+>   dispatched fixes myself, skipping the independent review; two of my rulings in that dispatch were
+>   wrong and only the implementer's pushback caught them.
+> - **Do not inherit framing from the register without checking the code it describes.** Three of my
+>   rulings were wrong for exactly this reason (a "require blank" rule that would have broken
+>   apply/strip symmetry; a line-source that would have made a guard vacuous; a kind-set widening that
+>   would have fabricated a new fact line). **Implementers caught all three with measurements.**
+> - **Plan premises go stale mid-execution.** T4's justification cites a "49-of-49 saturation" that T3i
+>   partly fixed eight tasks later. Briefs for remaining tasks must say **measure the current state,
+>   do not assume the plan's numbers.**
+> - **Every count must state the command that produced it.** Three separate count disputes this phase.
+> - **Carry accumulated constraints into every dispatch** -- the plan text cannot know about predicates
+>   and guards added by inserted tasks. T4 would have written a THIRD copy of `CanBeCallTarget`.
+>
+> ### 5. Open USER decisions
+>
+> - **E3: is the Win32 CLI still a supported artifact?** `third_party\dll-win32\drag-lint.exe` is from
+>   2026-07-05 (`0.86.0-alpha` vs the CLI's `1.2.1-alpha`). Nothing in the battery targets Win32 any
+>   more; `run_exe_freshness.ps1` deliberately does not decide it and now fails a Win32 exe for the
+>   TRUE reason (staleness), so answering "supported" just needs a build step added.
+> - **Commit + push:** 81 branch commits, no upstream; `main` 56 ahead of `origin/main`.
+>
+> ### 6. Gotchas for a cold start
+>
+> 1. **HAZARD H1:** a scripted edit can silently convert CRLF->LF and **the diff, the build AND a green
+>    battery all miss it** -- git commits a correct blob while the on-disk file `dcc64` reads stays
+>    wrong. `run_encoding_guard.ps1` now catches it repo-wide; still check bytes on files you touch.
+> 2. `Doc.Document.pas`'s `RegionFullyEngineOwned`, `IsFenceOnlyRemarksSpan`, `CommentLinesContain` and
+>    the delete-branch gating are **OFF-LIMITS** as executable code -- that file regressed in three
+>    consecutive rounds.
+> 3. A **background task started inside a subagent's turn does not survive that turn ending** -- one
+>    implementer lost a battery run at 114/185 this way. Keep long verifications in the foreground.
+> 4. The self-index lags the working tree; reindex `src/` (~30s incremental) before querying, or a
+>    stale query sends you back to Grep.
+> 5. `.pas`/`.dfm`/`.dpr`/`.dpk`/`.inc` are strict CRLF + 7-bit ASCII + no BOM, enforced by
+>    `.gitattributes` AND now by the encoding guard.
+>
+> ---
+
+> ## RESUME 2026-07-27 (LATEST-67) -- **AUTO-DOCUMENT PHASE 3 IS IN EXECUTION. 6 of 25 tasks done, all review-clean. Branch `feat/autodoc-phase3` @ `97d9f53`, 27 commits, NEVER PUSHED (no upstream). `main` @ `18bbbc8` is 18 ahead of `origin/main`. Working tree CLEAN. USER HOLDS COMMIT+PUSH.**
+>
+> **>>> NEXT ACTION:** continue with `superpowers:subagent-driven-development`. Read this entry, then
+> the SDD ledger `.superpowers/sdd/2026-07-24-autodocument-phase3-harvest-and-facts/progress.md`
+> and the live defect list `deferred-defects-register.md` in the same directory. Task briefs and
+> per-task reports for every completed task are there too.
+>
+> ### 1. Status -- what shipped
+>
+> | Task | State |
+> | --- | --- |
+> | T1 uniform `<!-- drag-lint:auto -->` provenance marker; `Observed:` sniff deleted | DONE, review clean (1 fix round) |
+> | T2 `document --strip` | DONE, review clean (1 fix round) |
+> | T3 omit empty summary/param/returns tags | DONE, review clean (**3** fix rounds) |
+> | T3b preserve hand-written `<exception>`/`<example>`/`<since>`/`<deprecated>`/`<seealso>` | DONE, review clean (**4** fix rounds; escalated to a fresh implementer at round 4) |
+> | T3c index doc-tag coverage (`HasContent` widened) | DONE, review clean (1 fix round) |
+> | T3f repair path preserves what it cannot model | DONE, review clean (1 fix round) |
+>
+> **The plan grew from 17 to 25 tasks.** Seven were inserted mid-execution -- T3b, T3c, T3d, T3e,
+> T3f, T3g, T3h -- each after a review found a real defect, most of them **pre-existing and older
+> than Phase 3**. Nine such bugs have surfaced so far, including `MergeComment` silently dropping
+> five hand-written tag types since `24efbb9` and class-member doc de-indentation since `26b986c`.
+>
+> ### 2. Resume point -- the ordered remaining work
+>
+> 1. **T3e -- battery health.** Scope expanded 2026-07-27. `tests/` holds 185 `.ps1`, but every
+>    "full battery" run in this phase covered only `autodoc` + `autotest`. A controller sweep of the
+>    other **68 runners** gave **60 pass, 8 RED**:
+>    - `tests/autofix/run_missing_doc_fix.ps1` -- **almost certainly OUR churn.** T3 stopped emitting
+>      description-less `<param>` and empty `<summary>`, so the missing-doc autofix no longer inserts
+>      what this suite asserts. T3's churn pass covered only autodoc/autotest, because that was the
+>      only definition of "the battery" anyone had.
+>    - `tests/refactor/run_textedit_tests.ps1` -- **not ours**:
+>      `BUILD FAILED: F2613 Unit 'DRagLint.Preprocess.Types' not found` at `Core.Interfaces.pas(8)`.
+>    - Undiagnosed: `callresolve/run_ambiguous_calls`, `callresolve/run_calledfrom_resolved`
+>      (caller-resolution -- T1/T3/T4 all touch it, **must** be diagnosed), `refactor/run_buildlocal_tests`,
+>      `refactor/run_extractmethod_unit_tests`, `ergonomics/run_pipeline_tests`,
+>      `lintconfig/run_lintconfig_tests`.
+>    - Also: `run_smoke.ps1` (stale **Win32** exe -- needs a Win32 build) and the two FLAKY runners.
+>    - **Durable deliverable: fix the coverage DEFINITION** so no future task can report green against
+>      61% of the suite. Classify every failure as (a) our churn -- fix the expectation, never the
+>      engine; (b) a regression we caused -- fix the engine; (c) pre-existing/harness -- fix or record
+>      why it cannot pass. No silent skips.
+> 2. **T3g -- the ONLY hard blocker for T17.** `document --apply` de-indents every class member's doc
+>    comment to column 0. Root cause: `src/doc/DRagLint.Doc.Document.pas` hardcodes `Prefix:= '/// '`,
+>    introduced in `26b986c`. Fix `Prefix` to inherit the declaration's leading whitespace and add a
+>    fixture with an indented class member asserting the indent survives.
+> 3. **T3d** -- 16 deferred code defects (D1-D12 plus N4-N9 and T3f's four minors), listed in the register.
+> 4. **T3h** -- unkeyed singular-match picks the wrong occurrence from cycle 2; its residue is
+>    **unmarked, so `--strip` cannot remove it**. Needs parser position-tracking.
+> 5. **T4-T17, the untouched original plan** -- caller-line fixes, the TIMEBOXED ownership investigation,
+>    **the harvester (T6-T9) and the four new facts (T10-T14) have NOT started**, then docs, the
+>    converter INBOX + Obsidian schema page, and the rollout.
+>
+> ### 3. Commands
+>
+> - Build: `build/build_draglint_win64.bat` via PowerShell `Start-Process -Wait` with a log; confirm
+>   `BUILD_EXITCODE=0`, no `[dcc] Error`, and that the deployed
+>   `third_party\dll-win64\drag-lint.exe` timestamp actually moved. Kill orphan `drag-lint.exe` /
+>   `bds.exe` first -- a lock makes the deploy copy fail SILENTLY and you then test a stale exe.
+> - Battery: **a runner is `run_*.ps1`.** On-disk **112** = 45 `tests/autodoc/` + 67 `tests/autotest/`.
+>   `tests/autotest/_manifest_common.ps1` is a dot-sourced HELPER, not a runner -- miscounting it caused
+>   three separate disagreements. Plus the 68 runners in the other `tests/` subdirectories.
+> - Safety net: `pwsh -File tests\autodoc\run_doc_p3_idempotency_sweep.ps1` -- enumerates symbols from
+>   the index and asserts an md5 fixed point over 3 apply+reindex cycles plus the cycle-1 branch action.
+>   **Run it before and after any change to the doc engine and diff the results.**
+> - DBs: no `sqlite3` on PATH -- use `C:\Python314\python` (`?mode=ro`).
+>
+> ### 4. User decisions that OVERRIDE the plan as written
+>
+> 1. **Do NOT reindex the libraries** until the schema structure is final. Further inserted tasks may
+>    push the schema to v20/v21 and that is accepted. Keep only the drag-lint self-index
+>    (`C:\Projects\.drag-lint\Delphi-RAG-lint.sqlite`) fresh, so index queries can replace Grep.
+>    **This supersedes T17 steps 3 and 4** ("reindex all 9 manifest DBs" / "both YADF DBs").
+> 2. **"Fix all the problems and then continue."** Nothing is parked for the final review; the
+>    register is the live list and items leave it only when actually fixed.
+> 3. **Standing policy for a newly found problem:** if it interferes with the task in hand, fix it
+>    INLINE in that task's fix round; otherwise finish the task and insert it as the NEXT step while
+>    the context is fresh. Never append it silently to the end.
+> 4. **More review passes are pre-authorized.** Do not trade review depth for speed.
+> 5. **Index-first over Grep**, including for this repo's own `.pas` files; log each replaced Grep to
+>    `stats/draglint-usage.log`. (That log's `est_tokens_saved` column is a hand-entered ESTIMATE; the
+>    genuinely measured figure is `bench-context` on ORM3, 556 vs 33,762 tokens.)
+>
+> ### 5. Gotchas for a cold start
+>
+> 1. **`MergeComment` has absorbed 12 fix rounds across 5 tasks.** Its invariants: the presence/content
+>    split (each gate reads its own `BuildStandaloneFor` view for PRESENCE; content ALWAYS from
+>    `AExisting`); `PRESERVED_VERBATIM_CONTAINERS` + `PRESERVED_CONTAINER_PATTERNS` must stay
+>    load-bearing and must match the parser's patterns character-for-character; a marked tag is
+>    engine-owned regardless of content **except `<param>`** (nothing will ever refill one), and
+>    `--strip` mirrors that exception.
+> 2. **`RegionFullyEngineOwned`, `IsFenceOnlyRemarksSpan`, `CommentLinesContain` and the delete-branch
+>    gating in `Doc.Document.pas` are OFF-LIMITS** unless a fix provably requires them. That file
+>    regressed in three consecutive fix rounds.
+> 3. A test that passes with the fix disabled is the most common defect the reviews caught here --
+>    **verify every new assertion by reverting the fix and confirming RED.** Swap the deployed binary;
+>    `-Exe <path>` is not a usable revert mechanism (the binary needs its siblings, so every check
+>    degrades to a false RED).
+> 4. `.pas`/`.dfm` = strict 7-bit ASCII + CRLF, no BOM; DocInsight on new public declarations; a
+>    `{ }` comment must not contain `{`, `}` or `...`.
+> 5. The tree-sitter self-lint PostToolUse hook reports FALSE errors on generic-heavy `.pas` -- trust
+>    `dcc64`, not the hook.
+> 6. `YADF.sqlite` (v18) and `YADFOT.sqlite` (**v17**) are not in the manifest, so `resolve-dbs` never
+>    selects them; pass `--db` explicitly.
+> 7. Two untracked runners (`tests/autotest/run_hover_callsite.ps1`, `run_typeat_generic_member.ps1`)
+>    are real prior-session regression tests, both passing, deliberately left uncommitted.
+>
+> ---
+
 > ## RESUME 2026-07-26 (LATEST-66) -- **AUTO-DOCUMENT PHASE 3 PLAN WRITTEN (17 tasks; the plan FILE is named `2026-07-24-...`, pairing with the spec). No code changed this session -- plan-writing only. NEXT = `superpowers:subagent-driven-development` on the plan. Git UNCHANGED from LATEST-65: `main`=`7c551f1`, origin=`f434769`, 17 UNPUSHED + 17 dirty tracked files (LATEST-63 hover work) + the untracked spec + the new untracked plan. USER HOLDS COMMIT+PUSH.**
 >
 > **>>> NEXT ACTION:** run `superpowers:subagent-driven-development` against
