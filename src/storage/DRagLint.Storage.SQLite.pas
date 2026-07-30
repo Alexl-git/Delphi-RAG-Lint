@@ -3888,12 +3888,59 @@ procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
   resolved -- rule A 73652 rows, rule B 3871 rows across 106 bare names, none
   of them in a GUI namespace.
 
+  ONLY A .pas IS A CANDIDATE (ported from feat/autodoc-phase3, whose measurements
+  are re-derived below on this machine by tools/measure/phase1_verify.py). A
+  `uses` clause names a UNIT, and in this corpus a unit is declared by a .pas and
+  by nothing else: kind='unit' symbols live exclusively in .pas files -- 5542 in
+  library-Win64, 757 in ORM3, 278 in M2022, 521 in this repo's own index, and
+  ZERO in any other extension -- while the .dpk files carry no symbols at all
+  (305 / 2 / 64 / 1 files, 0 symbols each). Everything else the indexer stores
+  competes for the same stem: the .dfm beside a form unit, the .dpr of a program,
+  the .dpk of a package, an .inc. The shipped indexes already hold 129
+  (library-Win64) / 38 (ORM3) / 45 (M2022) / 15 (here) unit_uses rows bound to a
+  non-.pas.
+
+  WHICH SHAPES PRODUCE THOSE ROWS, stated because it is not every collision and
+  claiming otherwise would overstate the defect. `SELECT id, path FROM files` is a
+  covering-index scan in raw path-byte order (EXPLAIN QUERY PLAN: SCAN files USING
+  COVERING INDEX sqlite_autoindex_files_1) and the accumulator below is
+  AddOrSetValue, i.e. LAST WINS. '.pas' sorts after '.dfm', '.dpk', '.dpr' and
+  '.inc', so an IDENTICALLY-CASED pair ('Foo.dfm' vs 'Foo.pas') is won by the .pas
+  even unfiltered -- that shape is latent, not live. The two live shapes are:
+    (1) SOLE HOLDER -- a non-.pas is the only file carrying the stem, so nothing
+        competes and the row binds to a file that declares no unit. 125 of
+        library-Win64's 129 (Spring.inc 112, Events.dpr 8, TestRunner.dpr 4,
+        ex.inc 1), 22 of ORM3's 38 (Interfaces.dpk), all 15 here (config.inc).
+    (2) MIXED-CASE COLLISION -- the legacy all-caps unit filename with a lowercase
+        sibling, where 'P' 0x50 < 'd' 0x64 puts the .dfm LAST and last-wins hands
+        it the stem. ORM3's DFCTLIST.PAS/DFCTLIST.dfm and four more like it = 16
+        rows; 45 rows over 8 stems in M2022; 4 in library-Win64. Counting stems
+        rather than rows: 5 non-.pas winners in library-Win64, 5 in ORM3, 8 in
+        M2022, 0 here.
+  The filter is applied BEFORE the stem is computed, so pass A and pass B see one
+  filtered set, and so rule B's ambiguity test can fire at all: two files
+  differing only in extension stem identically, so 'this segment is carried by 2+
+  distinct stems' could never separate them.
+  .pas ONLY, not .pas/.dpr/.dpk: a .dpr names a PROGRAM and a .dpk a PACKAGE, and
+  neither declares a unit -- shape (1) above is exactly that case, live, 34 rows
+  across two indexes. feat/autodoc-phase3 also measured that narrowing the filter
+  from .pas/.dpr/.dpk to .pas leaves the number of rows that resolve identical
+  (78244 / 5339 / 2791 / 762); that figure is THEIRS and was not re-derived here.
+  LowerCase on the extension is load-bearing, not tidiness: ORM3 stores 554 paths
+  ending '.PAS' against 203 ending '.pas' -- the majority of that project -- plus
+  25 in M2022 and 14 in library-Win64. A case-sensitive test drops every one of
+  those units out of every uses-scope. Pinned by run_unit_uses_targets.ps1 cases
+  I-N, which name the file they expect rather than the extension set this code
+  happens to allow.
+
   NOT GUARANTEED: that a resolved target is the unit the Delphi compiler would
-  have picked. Two indexed copies of the same unit (two source trees) collide
-  on one stem and the LAST one read wins arbitrarily -- unchanged from before,
-  and harmless because both copies declare the same unit. Nothing downstream
-  may treat target_file_id as proof of anything beyond "some indexed file is
-  named after this used unit".
+  have picked. Two indexed .pas copies of the same unit (two source trees)
+  collide on one stem and the LAST one read wins arbitrarily -- unchanged from
+  before, and harmless because both copies declare the same unit. What the filter
+  above adds is that the competitor is always another unit-declaring file: before
+  it, the winner could be a .dfm or a .dpr, which is not an answer to "which file
+  declares this unit" at all. Nothing downstream may treat target_file_id as
+  proof of anything beyond "some indexed .pas is named after this used unit".
 
   ANCESTOR RESOLUTION DOES NOT DEPEND ON THIS. ResolveAncestry scopes
   candidates from the TEXTUAL uses names (PickAncestorCandidateByScope), so a
@@ -3910,6 +3957,7 @@ var
   UsedNorms   : TList<string>              ; // parallel arrays: one entry per
   UsedFulls   : TList<string>              ; //   distinct (norm, lowercased name)
   Path        : string                     ;
+  Ext         : string                     ; // lowercased extension of Path
   Stem        : string                     ;
   Seg         : string                     ;
   Seen        : string                     ;
@@ -3932,6 +3980,18 @@ begin
     while not QFiles.Eof do
     begin
       Path:= QFiles.FieldByName('path').AsString;
+      // A unit is declared by a .pas and by nothing else. Everything else the
+      // indexer stores -- the .dfm beside a form unit, the .dpr of a program, the
+      // .dpk of a package, an .inc -- must not be able to claim a stem in either
+      // map. Done HERE, before the stem is computed, so both passes see the same
+      // filtered set (see the header note). LowerCase is load-bearing and not a
+      // nicety: ORM3 stores 554 paths ending '.PAS' against 203 ending '.pas'.
+      Ext:= LowerCase(ExtractFileExt(Path));
+      if Ext <> '.pas' then
+      begin
+        QFiles.Next;
+        Continue;
+      end;
       // TWO DIFFERENT LastDelimiters live in this procedure, eight lines apart.
       // This one is TStringHelper.LastDelimiter -- a METHOD on Path, ZERO-based,
       // returning -1 for "absent", hence '>= 0' and the +2 to land one char past
