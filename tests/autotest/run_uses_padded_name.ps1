@@ -128,6 +128,23 @@ implementation
 end.
 "@
 
+# --- Site 3, the lint rule. DRagLint.Diagnostics.NamingChecks' unit-name-matches-file
+#     reads the SAME moduleName node and compared it with Trim, so a padded
+#     declaration in a correctly-named file was a false positive. This file is
+#     named Mismatch.pas and declares a padded name that is genuinely different,
+#     so it de-vacuates C1 (the rule is on and CAN fire) and pins the deliberate
+#     split in one shot: the COMPARISON uses the stripped name, the MESSAGE quotes
+#     the author's raw text.
+Write-Ascii (Join-Path $work 'Mismatch.pas') @"
+unit Other$pad.Thing;
+
+interface
+
+implementation
+
+end.
+"@
+
 Write-Ascii (Join-Path $work 'PadUser.pas') @'
 unit PadUser;
 
@@ -207,6 +224,32 @@ Check "B2: a symbol the unit declares is keyed 'Gamma.Config.TGammaCtl'" ($b2 -e
 
 $b3 = Sql "SELECT COUNT(*) FROM symbols WHERE kind='unit' AND name $wsGlob"
 Check 'B3 sweep: no kind=unit symbol name carries whitespace, #11 and #12 included' ($b3 -eq '0') "rows with whitespace=$b3"
+
+# --- C. Site 3: the lint rule that reads the same node. ---------------------------
+#     unit-name-matches-file is off unless selected, so it is driven with
+#     `lint --rule`. C2 must come with C1: on its own, C1 ("no finding") would pass
+#     just as well if the rule never ran at all.
+Write-Host ''
+Write-Host 'site 3 -- the unit-name-matches-file lint rule (NamingChecks)' -ForegroundColor Cyan
+function LintUnitName([string]$File) {
+  return @(& $Exe lint (Join-Path $work $File) --rule unit-name-matches-file 2>&1) | ForEach-Object { "$_" }
+}
+$c1 = LintUnitName 'Gamma.Config.pas'
+$c1Hits = @($c1 | Where-Object { $_ -match 'unit-name-matches-file' })
+Check "C1: no unit-name-matches-file finding on the padded 'unit Gamma<pad>.Config' in Gamma.Config.pas" `
+  ($c1Hits.Count -eq 0) `
+  "findings=[$($c1Hits -join ' | ')] -- the rule compared the RAW node text, so the padding made a correctly-named file look mismatched"
+
+$c2 = LintUnitName 'Mismatch.pas'
+$c2Hits = @($c2 | Where-Object { $_ -match 'unit-name-matches-file' })
+Check "C2 de-vacuates C1: the rule IS on and DOES fire on a genuine mismatch (Other<pad>.Thing in Mismatch.pas)" `
+  ($c2Hits.Count -eq 1) "findings=[$($c2Hits -join ' | ')]"
+
+# The deliberate split: stripped for the comparison, RAW for the message. A reader
+# of the diagnostic should see what they actually typed, padding included.
+Check "C3: the finding's message quotes the AUTHOR'S RAW text, padding intact" `
+  (($c2Hits -join ' ') -match ([regex]::Escape('Other' + $pad + '.Thing'))) `
+  "message=[$($c2Hits -join ' | ')] -- if this shows 'Other.Thing' the message was built from the stripped value instead of the raw one"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

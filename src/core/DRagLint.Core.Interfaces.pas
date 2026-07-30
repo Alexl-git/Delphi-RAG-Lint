@@ -132,12 +132,14 @@ type
     /// (criterion 5, structural -- not a property of what happens to be
     /// indexed). Rule A is a name equality the unit itself stated and is
     /// deliberately not restricted that way.
-    /// GUARANTEES that a resolved target is a <c>.pas</c> file: any other
-    /// extension is excluded (.dfm, .dpr, .dpk and .inc among them) before a stem
-    /// is computed, so no row can point at a file that declares no unit. The
-    /// extension test is case-insensitive, so an uppercase <c>.PAS</c> path is
-    /// still a candidate. It is an extension test only -- it does not verify that
-    /// the .pas actually declares a unit of that name.
+    /// GUARANTEES that a resolved target is a <c>.pas</c> file, and NOTHING
+    /// beyond that: any other extension is excluded (.dfm, .dpr, .dpk and .inc
+    /// among them) before a stem is computed. The test is case-insensitive, so an
+    /// uppercase <c>.PAS</c> path is still a candidate.
+    /// It is an EXTENSION test and no more. It does NOT guarantee that the target
+    /// declares a unit at all, let alone a unit of that name: a .pas holding only
+    /// a <c>program</c> or <c>library</c> header, an include-style fragment
+    /// named .pas, or one the parser failed on all satisfy it.
     /// GUARANTEES ONLY that some indexed .pas is named after the used unit --
     /// NOT that it is the file the compiler would have picked. Two indexed
     /// copies of one unit collide on a stem and an arbitrary one wins.

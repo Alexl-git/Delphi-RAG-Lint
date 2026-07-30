@@ -1,21 +1,40 @@
 """Phase 1 measurement replay -- READ ONLY.
 
-Reproduces (or refutes) the four measurements the autodoc Phase 3 group reported
-in docs/INBOX-REPLY-proptree-branch-collision-2026-07-29.md, on the corpora on
-this machine. Every connection is opened mode=ro; nothing here writes.
+Reproduces (or refutes) the INDEX-SIDE measurements the autodoc Phase 3 group
+reported in docs/INBOX-REPLY-proptree-branch-collision-2026-07-29.md, on the
+corpora on this machine. Every connection is opened mode=ro; nothing here writes.
 
-Usage: python phase1_verify.py <item>   where item in 1|3|4|all
+SCOPE, stated because an earlier version of this docstring said "the four
+measurements" and this script never covered all four: it replays items 1, 3 and 4.
+Item 2 (the build script staging the tree-sitter companions) is not measurable
+from an index -- it is verified by running the linked exe and reading its exit
+code, which no SQL can do.
+
+Usage:
+    python phase1_verify.py [1|3|4|all] [db-name]      -- the built-in corpora
+    python phase1_verify.py 4 --db name=C:\\path\\to.sqlite [--db ...]
+The --db form overrides the machine-local defaults below entirely, so this can be
+run on a checkout that does not share this machine's paths.
 """
 import os
 import sqlite3
 import sys
 
-DBS = [
+DEFAULT_DBS = [
     ("library-Win64", r"C:\Projects\.drag-lint\library-Win64.sqlite"),
     ("ORM3", r"C:\Projects\DB\ORM3\drag-lint.sqlite"),
     ("M2022", r"C:\Projects\.drag-lint\M2022.sqlite"),
     ("self", r"C:\Projects\.drag-lint\Delphi-RAG-lint.sqlite"),
 ]
+
+# Every byte Pascal treats as whitespace, which is the class
+# DRagLint.Parser.Delphi13.StripModuleNameWhitespace removes (`C <= ' '`).
+# #11 (VT) and #12 (FF) are in it and are exactly the two an earlier version of
+# this GLOB omitted -- so its "0 rows" answers covered a NARROWER class than the
+# fix, and than run_uses_padded_name.ps1's own sweep. Kept in sync with that
+# suite's $wsGlob.
+WS_GLOB = ("GLOB '*[' || char(32) || char(9) || char(10) || char(11) || char(12) "
+           "|| char(13) || ']*'")
 
 
 def conn(path):
@@ -157,30 +176,43 @@ def item4(name, path):
     print("== item 4 :: %s" % name)
     tot = c.execute("SELECT COUNT(*) FROM unit_uses").fetchone()[0]
     pad = c.execute(
-        "SELECT COUNT(*) FROM unit_uses WHERE unit_name GLOB '*[ '||char(9)||char(10)||char(13)||']*'"
-    ).fetchone()[0]
+        "SELECT COUNT(*) FROM unit_uses WHERE unit_name %s" % WS_GLOB).fetchone()[0]
     padun = c.execute(
         "SELECT COUNT(*) FROM unit_uses WHERE target_file_id IS NULL AND "
-        "unit_name GLOB '*[ '||char(9)||char(10)||char(13)||']*'").fetchone()[0]
+        "unit_name %s" % WS_GLOB).fetchone()[0]
     print("   unit_uses rows=%d  with embedded whitespace=%d  of those unresolved=%d"
           % (tot, pad, padun))
     ex = c.execute(
-        "SELECT unit_name FROM unit_uses WHERE unit_name GLOB '*[ '||char(9)||char(10)||char(13)||']*' "
-        "LIMIT 5").fetchall()
+        "SELECT unit_name FROM unit_uses WHERE unit_name %s LIMIT 5" % WS_GLOB).fetchall()
     for (u,) in ex:
         print("      %r" % u)
     us = c.execute(
-        "SELECT COUNT(*) FROM symbols WHERE kind='unit' AND "
-        "name GLOB '*[ '||char(9)||char(10)||char(13)||']*'").fetchone()[0]
+        "SELECT COUNT(*) FROM symbols WHERE kind='unit' AND name %s" % WS_GLOB).fetchone()[0]
     ust = c.execute("SELECT COUNT(*) FROM symbols WHERE kind='unit'").fetchone()[0]
     print("   kind='unit' symbols with embedded whitespace: %d of %d" % (us, ust))
     c.close()
 
 
 def main():
-    which = sys.argv[1] if len(sys.argv) > 1 else "all"
-    only = sys.argv[2] if len(sys.argv) > 2 else None
-    for name, path in DBS:
+    argv = sys.argv[1:]
+    # --db name=path (repeatable) REPLACES the machine-local defaults.
+    dbs = []
+    rest = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--db" and i + 1 < len(argv):
+            spec = argv[i + 1]
+            nm, _, pth = spec.partition("=")
+            dbs.append((nm, pth) if pth else (os.path.basename(nm), nm))
+            i += 2
+            continue
+        rest.append(argv[i])
+        i += 1
+    if not dbs:
+        dbs = DEFAULT_DBS
+    which = rest[0] if rest else "all"
+    only = rest[1] if len(rest) > 1 else None
+    for name, path in dbs:
         if only and name != only:
             continue
         if not os.path.exists(path):

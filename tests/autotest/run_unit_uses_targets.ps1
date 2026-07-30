@@ -549,6 +549,24 @@ Write-Host 'only a .pas can be a uses target (cases I-N)' -ForegroundColor Cyan
 
 # SHAPE 2 -- the mixed-case collision. 'DFKIT.PAS' < 'DFKIT.dfm' in path bytes, so
 # the .dfm is walked LAST and last-wins hands it the stem unless it is filtered out.
+#
+# I AND N ARE DECISIVE ONLY WHILE THAT ORDER HOLDS, and it is a property of the
+# QUERY PLAN, not of the requirement. ResolveUnitUseTargets runs `SELECT id, path
+# FROM files` with no ORDER BY; today SQLite serves it as SCAN files USING COVERING
+# INDEX sqlite_autoindex_files_1 (path is UNIQUE), i.e. binary path order, which
+# puts DFKIT.dfm ('d' 0x64) after DFKIT.PAS ('P' 0x50). Note the rowids run the
+# OTHER way -- the .dfm is inserted first -- so a planner change to a rowid scan
+# would make the .PAS the last writer and last-wins would pick it EVEN UNFILTERED:
+# I and N would then pass without the fix, silently. This check asserts the premise
+# so that becomes a loud failure instead. J/K/K2 carry the requirement regardless
+# of scan order, which is why they are the ones that must never be removed.
+$scanOrder = SqlRows "SELECT path FROM files"
+$iPas = [Array]::FindIndex([string[]]$scanOrder, [Predicate[string]]{ param($p) $p -cmatch '[\\/]DFKIT\.PAS$' })
+$iDfm = [Array]::FindIndex([string[]]$scanOrder, [Predicate[string]]{ param($p) $p -cmatch '[\\/]DFKIT\.dfm$' })
+Check "I/N premise: in the resolver's own `files` scan order, DFKIT.dfm comes AFTER DFKIT.PAS" `
+  (($iPas -ge 0) -and ($iDfm -gt $iPas)) `
+  "PAS at index $iPas, dfm at index $iDfm -- if the dfm ever sorts FIRST, last-wins picks the .PAS unfiltered and cases I and N stop testing the fix (J/K/K2 still do)"
+
 CheckSoleTarget "I: 'uses DfKit' binds to DFKIT.PAS, never the DFKIT.dfm that sorts after it" `
   (TargetsOf 'DfKit') '[\\/]DFKIT\.PAS$' `
   "-- the ORM3 DFCTLIST shape ('P' 0x50 < 'd' 0x64); 16 rows in ORM3, 45 in M2022, 4 in library-Win64 are bound this way today" -CaseSensitive
