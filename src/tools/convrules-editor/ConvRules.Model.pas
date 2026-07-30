@@ -134,7 +134,27 @@ const
   ARROW_MIGRATE = ' -> ';
   ARROW_LINK    = ' <- ';
 
+/// <summary>Renders one property as a grid/pool cell: 'Path : Type', or the bare
+/// Path when the type is blank.</summary>
+/// <param name="APath">The flattened dotted property path; returned as-is.</param>
+/// <param name="ATypeName">The leaf's type; blank/whitespace suppresses the
+///   ' : Type' suffix rather than emitting a dangling separator.</param>
+/// <returns>The display text for the cell.</returns>
+/// <remarks>Single-sourced so the grid's From column, the grid's To column and the
+/// To pool cannot drift apart -- the To column showed a bare path until 2026-07-30
+/// while the other two showed a type, which is what made a To leaf's type
+/// invisible at the point of assignment. PathOfGridCell/TypeOfCell are the
+/// inverse and split on the same ' : ' separator, so any change here must keep
+/// that round-trip. Pure: no UI, no I/O.</remarks>
+function PropCellText(const APath, ATypeName: string): string;
+
 implementation
+
+function PropCellText(const APath, ATypeName: string): string;
+begin
+  if Trim(ATypeName) = '' then Result := APath
+  else Result := APath + ' : ' + Trim(ATypeName);
+end;
 
 { ---- small helpers ---- }
 

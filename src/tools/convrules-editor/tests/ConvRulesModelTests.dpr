@@ -986,6 +986,44 @@ begin
   end;
 end;
 
+{ PropCellText single-sources the 'Path : Type' cell rendering used by the grid's
+  From column, the grid's To column and the To pool. The To column showed a BARE
+  path until 2026-07-30, so a To leaf's type was invisible exactly where the
+  assignment decision is made. These pin the contract the three call sites share,
+  including the separator that PathOfGridCell/TypeOfCell split back on. }
+procedure TestPropCellText;
+var
+  s: string;
+  p: Integer;
+begin
+  Check('propcell.path.and.type', PropCellText('Left', 'Integer') = 'Left : Integer',
+    PropCellText('Left', 'Integer'));
+  Check('propcell.dotted.path.kept',
+    PropCellText('Colors.Button.Text', 'TColor') = 'Colors.Button.Text : TColor',
+    PropCellText('Colors.Button.Text', 'TColor'));
+
+  // A blank type must NOT leave a dangling ' : ' -- an unresolved ancestor yields
+  // an empty type, and 'Left : ' would read as a type named nothing.
+  Check('propcell.blank.type.no.separator', PropCellText('Left', '') = 'Left',
+    PropCellText('Left', ''));
+  Check('propcell.whitespace.type.no.separator', PropCellText('Left', '   ') = 'Left',
+    '[' + PropCellText('Left', '   ') + ']');
+
+  // The separator must survive the split the readers perform (PathOfGridCell /
+  // TypeOfCell live in the form unit and split on this exact ' : ').
+  s := PropCellText('Tag', 'NativeInt');
+  p := Pos(' : ', s);
+  Check('propcell.separator.roundtrips.path', (p > 0) and (Copy(s, 1, p - 1) = 'Tag'),
+    s);
+  Check('propcell.separator.roundtrips.type',
+    (p > 0) and (Copy(s, p + 3, Length(s)) = 'NativeInt'), s);
+
+  // A path that already contains a colon must not be re-split by the readers at
+  // the wrong place: the FIRST ' : ' is the separator.
+  Check('propcell.first.separator.wins',
+    Pos(' : ', PropCellText('A', 'B')) = 2, PropCellText('A', 'B'));
+end;
+
 procedure TestUnitDirectives;
 const
   SRC =
@@ -2343,6 +2381,7 @@ begin
     TestFillFromUnit;
     TestProptreeBareClass;
     TestProptree2Live;
+    TestPropCellText;
     TestPlatformDefaults;
     TestEngineTimeoutHeadroom;
     TestProptreeRefsAsLeavesLive;

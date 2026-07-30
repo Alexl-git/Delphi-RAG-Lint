@@ -1087,9 +1087,10 @@ begin
   for i := 0 to High(FFromTree.Leaves) do
   begin
     Leaf := FFromTree.Leaves[i];
-    fromCell := Format('%s : %s', [Leaf.Path, Leaf.TypeName]);
+    fromCell := PropCellText(Leaf.Path, Leaf.TypeName);
     Link := FindLinkForFrom(Leaf.Path);
-    if Link <> nil then toCell := Link.LinkTo else toCell := '';
+    if Link <> nil then toCell := PropCellText(Link.LinkTo, LeafType(FToTree, Link.LinkTo))
+                   else toCell := '';
     if GridRowMatchesFilter(fromCell, toCell, fromFilter, toFilter) then
       Inc(matched);
   end;
@@ -1106,14 +1107,15 @@ begin
   for i := 0 to High(FFromTree.Leaves) do
   begin
     Leaf := FFromTree.Leaves[i];
-    fromCell := Format('%s : %s', [Leaf.Path, Leaf.TypeName]);
+    fromCell := PropCellText(Leaf.Path, Leaf.TypeName);
     Link := FindLinkForFrom(Leaf.Path);
-    if Link <> nil then toCell := Link.LinkTo else toCell := '';
+    if Link <> nil then toCell := PropCellText(Link.LinkTo, LeafType(FToTree, Link.LinkTo))
+                   else toCell := '';
     if not GridRowMatchesFilter(fromCell, toCell, fromFilter, toFilter) then Continue;
     FGrid.Cells[0, r] := fromCell;
     if Link <> nil then
     begin
-      FGrid.Cells[1, r] := Link.LinkTo;
+      FGrid.Cells[1, r] := toCell;          // 'Path : Type', same shape as the From cell
       FGrid.Cells[2, r] := Link.Cast;
     end
     else
@@ -1176,7 +1178,7 @@ begin
           if (Filter = '') or (Pos(Filter, LowerCase(Leaf.Path)) > 0) then
             if (FPoolTypeFilter = '') or SameText(Leaf.TypeName, FPoolTypeFilter) then
             begin
-              var disp: string := Format('%s : %s', [Leaf.Path, Leaf.TypeName]);
+              var disp: string := PropCellText(Leaf.Path, Leaf.TypeName);
               // public members are code-only -- tag so a DFM rule sees they won't
               // stream to a .dfm (published targets carry no tag).
               if SameText(Leaf.Visibility, 'public') then disp := disp + '   (PAS-only)';
@@ -1535,7 +1537,9 @@ begin
   end;
 
   AssignLink(FromPath, ToPath, fromType, toType);
-  FGrid.Cells[1, row] := ToPath;
+  { toType is the RESOLVED type (ResolveUnknownTypes may have inferred it from the
+    From side), so this cell can show a type where a bare FToTree lookup would not. }
+  FGrid.Cells[1, row] := PropCellText(ToPath, toType);
   FGrid.Cells[2, row] := FindLinkForFrom(FromPath).Cast;
   RefreshPool;
   SyncRawFromModel;
