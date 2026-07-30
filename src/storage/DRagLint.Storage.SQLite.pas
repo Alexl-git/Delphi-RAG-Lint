@@ -770,7 +770,53 @@ begin
     'VALUES (:fid, :sid, :src, :kind, :owner, :txt, :sl, :sc, :el, :ec)');
   FQDeleteFileStringLiterals:= NewQuery('DELETE FROM string_literals WHERE file_id = :fid');
   FQFindByName          := NewQuery( 'SELECT * FROM symbols WHERE name = :name ORDER BY qualified_name');
-  FQFindByQName         := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname'             );
+  // ORDERED, because it was not (ported from feat/autodoc-phase3; numbers
+  // re-derived on this machine by tools/measure/phase1_verify.py against the
+  // shipped C:\Projects\.drag-lint\library-Win64.sqlite, read-only).
+  //
+  // A qualified name is NOT unique in `symbols`: 71258 of them own more than one
+  // row in library-Win64, 23664 of those of kind class/interface/record. With no
+  // ORDER BY, `FindSymbolsByQualifiedName`'s FIRST row -- which is what
+  // ResolveTypeNameToClassEx, PropTree and `hover --qname` all reach for -- was
+  // whatever SQLite handed back, i.e. scan order. Measured live consequence:
+  // `hover --qname System.TObject` answered the `TObject = class;` FORWARD
+  // DECLARATION at def_line 599 while the real body starts at 680.
+  //
+  // Ordered now, most-useful first and then fully deterministic:
+  //   1. a real declaration BEFORE a forward-declaration stub. The predicate is
+  //      the engine's own, transcribed rather than invented: IsStub (inside
+  //      ResolveTypeNameToClassEx) and Convert.PropTree's IsForwardDeclClass both
+  //      say "class/interface, heritage empty, end_line <= start_line", and both
+  //      hand-roll this same preference AFTER the query returns. Putting it in the
+  //      ORDER BY gives every OTHER consumer the answer those two compute for
+  //      themselves. On the classifier "the term takes both values inside the
+  //      group" it discriminates for 23511 of the 23664 duplicate
+  //      class/interface/record qnames -- a forward declaration is ordinary in
+  //      RTL/VCL source and gives its class a second row in the SAME file, so this
+  //      population is nothing like the rare duplicate-file case. TRIM(NULL) is
+  //      NULL, hence the COALESCE: the indexer stores NULL, not '', for absent
+  //      heritage.
+  //   2. then a row with an implementation body. Narrow, and stated as such: it
+  //      decides only where impl_start_line is populated at all, i.e. among
+  //      ROUTINE rows -- an abstract or unimplemented overload against an
+  //      implemented one. It discriminates for 398 of the 71258 duplicates
+  //      (0.56%) and for ZERO of the 23664 type ones, because a
+  //      class/interface/record row never carries an impl span.
+  //   3. then file_id, start_line, id. `id` is unique, so no two rows can tie and
+  //      the order is TOTAL -- one database always answers the same first row.
+  //      What that does NOT buy, said plainly: file_id and id are reassigned by a
+  //      rebuild, so two rows separated only by those can swap between rebuilds.
+  //
+  // This does NOT make duplicate rows correct, and it does not pick the RIGHT
+  // duplicate when two files each hold a full definition: it only orders them
+  // deterministically. Indexer-side path normalisation is the other half and is
+  // not done here. Asserted by tests/autotest/run_qname_row_order.ps1.
+  FQFindByQName         := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname ' +
+    'ORDER BY (CASE WHEN kind IN (''class'', ''interface'') ' +
+    '            AND COALESCE(TRIM(heritage), '''') = '''' ' +
+    '            AND end_line <= start_line THEN 1 ELSE 0 END), ' +
+    '(CASE WHEN impl_start_line IS NOT NULL AND impl_start_line > 0 THEN 0 ELSE 1 END), ' +
+    'file_id, start_line, id');
   FQCountSymbols        := NewQuery('SELECT COUNT(*) AS n FROM symbols'                                );
   FQCountFiles          := NewQuery('SELECT COUNT(*) AS n FROM files'                                  );
 

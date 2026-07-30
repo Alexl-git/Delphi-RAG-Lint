@@ -70,6 +70,22 @@ type
     procedure RollbackFileTx(const AToken: TFileTxToken);
 
     function FindSymbolsByExactName    (const AName : string): TArray<TSymbol>;
+    /// <summary>Every symbol whose qualified_name equals <paramref name="AQName"/>
+    /// exactly. A qualified name is NOT unique, so this routinely returns several
+    /// rows.</summary>
+    /// <returns>Rows ordered: a real declaration before a forward-declaration
+    /// stub (class/interface, empty heritage, end_line &lt;= start_line -- the same
+    /// predicate ResolveTypeNameToClassEx's IsStub and PropTree's
+    /// IsForwardDeclClass apply after the fact), then a row carrying an
+    /// implementation body, then file_id/start_line/id. Empty array when the name
+    /// is not indexed.</returns>
+    /// <remarks>The order is TOTAL -- id is unique, so no two rows can tie and one
+    /// database always answers the same Result[0]. NOT guaranteed stable across a
+    /// REBUILD: file_id and id are reassigned when the index is rebuilt, so two
+    /// rows separated only by those can swap. It also does NOT decide which of two
+    /// duplicate full definitions in two different files is the RIGHT one -- only
+    /// which one comes first. Callers needing the right one must disambiguate by
+    /// scope themselves.</remarks>
     function FindSymbolsByQualifiedName(const AQName: string): TArray<TSymbol>;
     // v0.42: file outline - every symbol declared in one file, ordered by
     // position. Backs the Structure form (was mis-using class-scoped surface).
