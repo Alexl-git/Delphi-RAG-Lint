@@ -19,7 +19,8 @@ uses
   ConvRules.BlockOps in '..\ConvRules.BlockOps.pas',
   ConvRules.WorkingSet in '..\ConvRules.WorkingSet.pas',
   ConvRules.Engine in '..\ConvRules.Engine.pas',
-  ConvRules.Platform in '..\ConvRules.Platform.pas';
+  ConvRules.Platform in '..\ConvRules.Platform.pas',
+  ConvRules.Usage in '..\ConvRules.Usage.pas';
 
 var
   GPass: Integer = 0;
@@ -2032,6 +2033,262 @@ begin
     'a preamble has no header, so it can never be a duplicate');
 end;
 
+{ Criteria 1-6: the DFM scanner records the assignments of blocks whose class is the
+  From class, at that block's immediate level only, skipping binary blobs and nested
+  components -- but descending into nested blocks to find further instances. }
+procedure TestScanDfm;
+const
+  SRC =
+    'object Form1: TForm1'#13#10 +
+    '  Caption = ''ignored -- wrong class'''#13#10 +
+    '  object btnA: TabcToggleBtn'#13#10 +
+    '    Left = 4'#13#10 +
+    '    Top = 175'#13#10 +
+    '    Caption = ''Ac'''#13#10 +
+    '    Layout = ablGlyphCenter'#13#10 +
+    '    Picture.Data = {'#13#10 +
+    '      07544269746D617076080000424D7606'#13#10 +
+    '      Width = 999'#13#10 +          // inside the blob: must NOT be recorded
+    '      0000200000000100040000000000}'#13#10 +
+    '    Columns = <'#13#10 +
+    '      item'#13#10 +
+    '        Height = 888'#13#10 +       // inside the item list: must NOT be recorded
+    '      end>'#13#10 +
+    '    object lblChild: TLabel'#13#10 +
+    '      Alignment = taLeftJustify'#13#10 +   // child component: NOT the From class
+    '    end'#13#10 +
+    '  end'#13#10 +
+    '  object btnB: TabcToggleBtn'#13#10 +
+    '    Hint = ''second instance'''#13#10 +
+    '  end'#13#10 +
+    'end'#13#10;
+
+  function Has(const A: TArray<string>; const S: string): Boolean;
+  var
+    X: string;
+  begin
+    for X in A do
+      if SameText(X, S) then Exit(True);
+    Result := False;
+  end;
+
+var
+  U: TArray<string>;
+begin
+  U := ScanDfmText(SRC, 'TabcToggleBtn');
+  Check('usage.dfm.left',      Has(U, 'Left'), 'plain assignment');
+  Check('usage.dfm.caption',   Has(U, 'Caption'), 'plain assignment');
+  Check('usage.dfm.layout',    Has(U, 'Layout'), 'plain assignment');
+  Check('usage.dfm.dotted',    Has(U, 'Picture.Data'), 'dotted path recorded whole');
+  Check('usage.dfm.dotroot',   Has(U, 'Picture'), 'dotted path also records its root');
+  Check('usage.dfm.blob',      not Has(U, 'Width'), 'a line inside a { } blob is not an assignment');
+  Check('usage.dfm.itemlist',  not Has(U, 'Height'), 'a line inside a < > item list is not an assignment');
+  Check('usage.dfm.child',     not Has(U, 'Alignment'), 'a nested component is not the From class');
+  Check('usage.dfm.sibling',   Has(U, 'Hint'), 'a second instance of the From class is scanned');
+  Check('usage.dfm.wrongclass', not Has(U, 'ignored'), 'the outer TForm1 block is not scanned');
+  Check('usage.dfm.none', Length(ScanDfmText(SRC, 'TNotPresent')) = 0,
+    'no block of the From class yields an empty set');
+end;
+
+{ Criteria 7-10: loose '.PropName' matching in a .pas, candidate derivation from the
+  From tree, the row test, and case-insensitive de-duplication across files. }
+procedure TestScanPasAndMatch;
+const
+  PAS =
+    'procedure TForm1.Go;'#13#10 +
+    'begin'#13#10 +
+    '  btnA.Caption := ''x'';'#13#10 +
+    '  with btnA do Layout := ablGlyphLeft;'#13#10 +   // no dot: NOT matched, by design
+    '  Self.CaptionExtra := 1;'#13#10 +                // must not mark Caption used
+    '  lbl.Font.Size := 9;'#13#10 +
+    'end;'#13#10;
+
+  function Has(const A: TArray<string>; const S: string): Boolean;
+  var X: string;
+  begin
+    for X in A do
+      if SameText(X, S) then Exit(True);
+    Result := False;
+  end;
+
+var
+  Cand, U, M: TArray<string>;
+begin
+  Cand := CandidatesFor(['Caption', 'Layout', 'Font.Size', 'Hint']);
+  Check('usage.cand.leaf',   Has(Cand, 'Size'), 'last segment of a dotted path is a candidate');
+  Check('usage.cand.full',   Has(Cand, 'Font.Size'), 'the full dotted path is a candidate');
+  Check('usage.cand.plain',  Has(Cand, 'Caption'), 'plain names are candidates');
+
+  U := ScanPasText(PAS, Cand);
+  Check('usage.pas.hit',      Has(U, 'Caption'), '.Caption is used');
+  Check('usage.pas.boundary', not Has(U, 'Hint'), 'Hint never appears');
+  Check('usage.pas.suffix',   Has(U, 'Caption'), 'CaptionExtra must not be the only reason');
+  Check('usage.pas.nested',   Has(U, 'Size'), '.Size matches through lbl.Font.Size');
+  Check('usage.pas.nodot',    not Has(U, 'Layout'),
+    'a with-block assignment has no dot, so the loose match cannot see it');
+
+  // criterion 8 in isolation: a longer identifier must not mark the shorter one used
+  Check('usage.pas.notprefix',
+    not Has(ScanPasText('  x.CaptionExtra := 1;'#13#10, ['Caption']), 'Caption'),
+    '.CaptionExtra must not mark Caption used');
+
+  // criterion 9: the row test
+  Check('usage.row.exact',  IsRowUsed('Caption', ['caption']), 'case-insensitive exact path');
+  Check('usage.row.leaf',   IsRowUsed('Font.Size', ['Size']), 'last segment matches');
+  Check('usage.row.full',   IsRowUsed('Font.Size', ['Font.Size']), 'full path matches');
+  Check('usage.row.miss',   not IsRowUsed('Font.Size', ['Color']), 'unrelated name does not match');
+
+  // criterion 10: merge de-duplicates case-insensitively
+  M := MergeUsage([TArray<string>.Create('Caption', 'Left'),
+                   TArray<string>.Create('caption', 'Top')]);
+  Check('usage.merge.count', Length(M) = 3, IntToStr(Length(M)));
+end;
+
+{ Criterion 11 plus the orchestration: ComputeUsage merges both sources, counts files, and
+  reports used names with no From-tree leaf. Also pins criterion 1 against the REAL block
+  shape from ORM3\CLIENT\VARINSP.dfm (an ABC5 TabcToggleBtn with a Picture.Data blob),
+  copied here as a fixture so the suite never depends on a path outside the repo. }
+procedure TestComputeUsage;
+const
+  REAL_DFM =
+    '            object btnEWAcAQL: TabcToggleBtn'#13#10 +
+    '              Left = 4'#13#10 +
+    '              Top = 175'#13#10 +
+    '              Width = 44'#13#10 +
+    '              Height = 39'#13#10 +
+    '              GroupIndex = 58114708'#13#10 +
+    '              Caption = ''Ac'''#13#10 +
+    '              Images = imlGlyphList'#13#10 +
+    '              Layout = ablGlyphCenter'#13#10 +
+    '              Picture.Data = {'#13#10 +
+    '                07544269746D617076080000424D760800000000000076000000280000008000'#13#10 +
+    '                0000200000000100040000000000000800000000000000000000100000000000}'#13#10 +
+    '            end'#13#10;
+  PAS = '  btnEWAcAQL.Enabled := True;'#13#10;
+
+  function Has(const A: TArray<string>; const S: string): Boolean;
+  var X: string;
+  begin
+    for X in A do
+      if SameText(X, S) then Exit(True);
+    Result := False;
+  end;
+
+var
+  U: TUsageSet;
+begin
+  U := ComputeUsage([REAL_DFM], [PAS], 'TabcToggleBtn',
+    ['Left', 'Top', 'Width', 'Height', 'GroupIndex', 'Caption', 'Images', 'Layout',
+     'Picture', 'Picture.Data', 'Enabled', 'Hint']);
+
+  Check('usage.compute.dfmcount', U.DfmCount = 1, IntToStr(U.DfmCount));
+  Check('usage.compute.pascount', U.PasCount = 1, IntToStr(U.PasCount));
+  Check('usage.compute.dfm',      Has(U.Names, 'GroupIndex'), 'from the DFM');
+  Check('usage.compute.pas',      Has(U.Names, 'Enabled'), 'from the PAS');
+  Check('usage.compute.blob',     not Has(U.Names, '07544269746D617076080000424D760800000000000076000000280000008000'),
+    'hex blob lines are not names');
+  Check('usage.compute.unused',   not Has(U.Names, 'Hint'), 'Hint is used nowhere');
+  Check('usage.compute.nomissing', Length(U.Missing) = 0,
+    'every used name has a From-tree leaf here');
+
+  // criterion 11: a used name with no From-tree leaf is reported
+  U := ComputeUsage([REAL_DFM], [], 'TabcToggleBtn', ['Caption']);
+  Check('usage.compute.missing', Has(U.Missing, 'GroupIndex'),
+    'GroupIndex is assigned in the DFM but absent from the From tree');
+  Check('usage.compute.missing.notused', not Has(U.Missing, 'Caption'),
+    'a name WITH a leaf is not Missing');
+end;
+
+{ Review fix (Important 1 + 2): a terminator character sitting inside a QUOTED literal
+  inside a <...> or (...) container must not be mistaken for the container's real
+  terminator. For <...> this used to pop the block stack early on a mid-list item's own
+  bare 'end', silently dropping every property recorded after the list (criterion the
+  reviewer traced: 'Y > Z' inside an item clears SkipTo, 'end' then pops the From-class
+  block, 'GroupIndex' after the list is never seen). For (...) -- previously untested at
+  all -- the same early clear instead lets a line INSIDE the still-open value be read as
+  a real property. Both are fixed by StripQuoted: the terminator search runs over a copy
+  of the line with quoted content removed. }
+procedure TestScanDfmSkipRobustness;
+const
+  ANGLE_SRC =
+    'object btnA: TabcToggleBtn'#13#10 +
+    '  Columns = <'#13#10 +
+    '    item'#13#10 +
+    '      Caption = ''Y > Z'''#13#10 +   // '>' inside quotes must not close the list
+    '    end'#13#10 +
+    '    item'#13#10 +
+    '      Caption = ''B'''#13#10 +
+    '    end>'#13#10 +
+    '  GroupIndex = 5'#13#10 +            // must still be recorded
+    'end'#13#10;
+
+  PAREN_SRC =
+    'object btnA: TabcToggleBtn'#13#10 +
+    '  Extra = ('#13#10 +
+    '    ''A) B'''#13#10 +                // ')' inside quotes must not close the value
+    '    BogusInner = 1'#13#10 +          // looks like an assignment; must NOT be recorded
+    '    ''C'')'#13#10 +
+    '  Hint = ''after'''#13#10 +          // must still be recorded
+    'end'#13#10;
+
+  { Confirms the same-line case is unaffected by the fix: a value that opens AND
+    closes its container on one line must not itself trip skip mode. }
+  SAMELINE_SRC =
+    'object btnA: TabcToggleBtn'#13#10 +
+    '  Columns = <>'#13#10 +
+    '  Blob = {}'#13#10 +
+    '  Hint = ''x'''#13#10 +
+    'end'#13#10;
+
+  function Has(const A: TArray<string>; const S: string): Boolean;
+  var X: string;
+  begin
+    for X in A do
+      if SameText(X, S) then Exit(True);
+    Result := False;
+  end;
+
+var
+  U: TArray<string>;
+begin
+  U := ScanDfmText(ANGLE_SRC, 'TabcToggleBtn');
+  Check('usage.dfm.skip.angle.quote-defeat',
+    Has(U, 'GroupIndex'), 'a > inside a quoted item value must not close the <...> list early');
+  Check('usage.dfm.skip.angle.inner-not-recorded',
+    not Has(U, 'Caption'), 'assignments inside <...> items are never recorded');
+
+  U := ScanDfmText(PAREN_SRC, 'TabcToggleBtn');
+  Check('usage.dfm.skip.paren.quote-defeat',
+    not Has(U, 'BogusInner'), 'a ) inside a quoted list value must not close the (...) value early');
+  Check('usage.dfm.skip.paren.after-recorded',
+    Has(U, 'Hint'), 'the immediate-level property after the list still gets recorded');
+
+  U := ScanDfmText(SAMELINE_SRC, 'TabcToggleBtn');
+  Check('usage.dfm.skip.sameline.angle-empty',
+    Has(U, 'Blob'), 'Columns = <> must not itself enter skip mode');
+  Check('usage.dfm.skip.sameline.brace-empty',
+    Has(U, 'Hint'), 'Blob = {} must not itself enter skip mode');
+end;
+
+{ Review fix (Important 3): ScanPasText was reworked from an O(candidates x textlength)
+  per-candidate scan into a single O(textlength) harvest of every '.Identifier' token
+  followed by an O(candidates) membership filter. This pins the boundary case that
+  inversion is most likely to get wrong: a '.' as the very last character of the text
+  (nothing follows it to harvest) must not raise or hang, and an empty candidate list
+  or empty text must still return an empty result. }
+procedure TestScanPasEndOfTextSafety;
+begin
+  Check('usage.pas.eot.trailingdot',
+    Length(ScanPasText('x.', ['x'])) = 0, 'a trailing dot with nothing after it harvests nothing');
+  Check('usage.pas.eot.emptytext',
+    Length(ScanPasText('', ['Caption'])) = 0, 'empty text yields an empty result');
+  Check('usage.pas.eot.emptycandidates',
+    Length(ScanPasText('a.Caption := 1;', [])) = 0, 'no candidates yields an empty result');
+  Check('usage.pas.eot.dotatend.stillfindsearlier',
+    Contains(ScanPasText('a.Caption := 1; b.', ['Caption']), 'Caption'),
+    'a trailing dot must not stop an earlier real match from being found');
+end;
+
 begin
   try
     TestBlockSplitRulesRoundTrip;
@@ -2055,6 +2312,11 @@ begin
     TestGrammarGuard;
     TestCastLibMergeRefused;
     TestDuplicateHeaders;
+    TestScanDfm;
+    TestScanDfmSkipRobustness;
+    TestScanPasAndMatch;
+    TestScanPasEndOfTextSafety;
+    TestComputeUsage;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;
