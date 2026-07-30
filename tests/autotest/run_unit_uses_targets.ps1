@@ -271,7 +271,7 @@ end.
 #   (2) MIXED-CASE COLLISION -- the legacy all-caps unit filename with a lowercase
 #       sibling, where 'P' 0x50 < 'd' 0x64 puts the .dfm LAST and last-wins hands
 #       it the stem. ORM3's DFCTLIST.PAS / DFCTLIST.dfm and four more like it =
-#       16 rows; 26 rows over 8 stems in M2022; 4 in library-Win64. Case I, and
+#       16 rows; 45 rows over 8 stems in M2022; 4 in library-Win64. Case I, and
 #       the fixture uses that exact shape.
 #
 # Each case NAMES THE FILE IT EXPECTS (or that no file is expected) rather than
@@ -551,7 +551,7 @@ Write-Host 'only a .pas can be a uses target (cases I-N)' -ForegroundColor Cyan
 # the .dfm is walked LAST and last-wins hands it the stem unless it is filtered out.
 CheckSoleTarget "I: 'uses DfKit' binds to DFKIT.PAS, never the DFKIT.dfm that sorts after it" `
   (TargetsOf 'DfKit') '[\\/]DFKIT\.PAS$' `
-  "-- the ORM3 DFCTLIST shape ('P' 0x50 < 'd' 0x64); 16 rows in ORM3, 26 in M2022, 4 in library-Win64 are bound this way today" -CaseSensitive
+  "-- the ORM3 DFCTLIST shape ('P' 0x50 < 'd' 0x64); 16 rows in ORM3, 45 in M2022, 4 in library-Win64 are bound this way today" -CaseSensitive
 
 # SHAPE 1 -- a non-.pas as SOLE holder of the stem. Declining is the correct answer:
 # nothing indexed declares a unit of that name.
