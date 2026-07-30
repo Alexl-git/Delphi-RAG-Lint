@@ -57,12 +57,30 @@ through the real adapter. 16 checks.
 
 ## RESUME POINT — the exact next action
 
-**Spec the multi-`--db` ancestor resolution** (was item 3 below; it is now the top blocker).
-The editor-fix review that used to sit here is DONE and merged — see the 2026-07-30 note above.
+**Execute the Phase G plan, starting at Task 1.**
 
-Everything needed to converge on `TcxButton` now works in the shipped binaries. The next real
-wall is that this only holds for types that live in the **library** index; a real ORM3 project
-form still cannot resolve its ancestors. Details in item 3 of the list below.
+- Plan: `docs/superpowers/plans/2026-07-30-converter-editor-phase-g.md` — 10 TDD tasks.
+- Spec: `docs/superpowers/specs/2026-07-30-converter-editor-phase-g-design.md`.
+- Worktree: `C:\TEMP\claude\c--Projects-Delphi-RAG-lint\wt-merge-converter`,
+  branch `merge/converter-into-main`, clean, HEAD = `main` = `86735cb`.
+- Use `superpowers:executing-plans` (or `subagent-driven-development`) — 10 tasks with
+  ordering constraints is past the point where conversational execution holds up.
+- **Baseline to beat: 376 pass / 0 fail / 0 skip.** A rising `skip` count is a failure, not
+  a neutral result — this suite has silently gone vacuous three times that way.
+
+Phase G delivers: theme (follow the IDE), a toolbar, go-to-definition, the reusable
+`#mapping`/`#apply` conditional enum→property DSL **in the editor only**, Examine harvesting
+`uses` clauses, and the ReFind BDE→FireDAC corpus as a fixture.
+
+**Do not push.** `main` is 99 ahead of `origin/main` on purpose: nothing is published until
+the converter engine and the editor match and are both tested on several real project forms.
+
+### Still the top ENGINE blocker (unchanged, not part of Phase G)
+
+Multi-`--db` ancestor resolution: `DoPropTree` hands `BuildPropTree` only the first store the
+root resolved in, so a real ORM3 form's ancestors — which live in the library index — are
+unreachable even with `--db project --db library`. `TcxButton` converges only because it IS in
+the library index. Details in item 3 below.
 
 ## Then, in order
 
