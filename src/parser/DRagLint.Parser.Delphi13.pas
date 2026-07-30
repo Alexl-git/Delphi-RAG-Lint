@@ -244,6 +244,56 @@ begin
   if (Length(Result) >= 2) and (Result[1] = '''') and (Result[Length(Result)] = '''') then Result:= Copy(Result, 2, Length(Result) - 2);
 end;
 
+// Remove EVERY whitespace byte from a dotted module name, not just the ones on
+// the ends (ported from feat/autodoc-phase3; counts below re-derived on this
+// machine by tools/measure/phase1_verify.py, read-only).
+//
+// A `moduleName` node spans the WHOLE dotted name, so its source text carries
+// whatever the author wrote BETWEEN the tokens -- and this repo aligns its own
+// `uses` clauses (`DRagLint.Core   .Model`). `Trim` removes only the ends, so
+// that interior padding was stored verbatim in `unit_uses.unit_name`, where
+// ResolveUnitUseTargets' rule A -- an equality against `LOWER(unit_name)` -- can
+// never match it. Rule B keys on `unit_name_norm`, the dotted TAIL, which the
+// padding does not reach, and so MASKED this whenever the tail happened to be
+// unique; where two units share a tail it declines as ambiguous and the row was
+// simply lost. Measured before the fix: 147 of 1836 rows in this repo's own index
+// carry embedded whitespace (137 of them unresolved) and 286 of 14223 in ORM3
+// (285 unresolved); 0 in library-Win64 and 0 in M2022, because the alignment is
+// our house style and not third-party code's.
+//
+// Stripping ALL whitespace is exactly equivalent to re-joining the tokens: a
+// `moduleName` is `ident ('.' ident)*`, so whitespace here can only ever be
+// inter-token padding and can never be part of a legal name. `C <= ' '` rather
+// than a four-way match on #32/#9/#13/#10 because #11 (VT) and #12 (FF) are also
+// Pascal whitespace and would otherwise survive INVISIBLY; nothing legal in a
+// moduleName sorts below #32, since every retained byte is an identifier
+// character or a dot.
+//
+// Fixed at the STORE, not at the lookup: normalizing inside the resolver's WHERE
+// clause would hide the bad value rather than stop it being written, and every
+// other consumer of `unit_name` would still read the padded string.
+//
+// NOT HANDLED: a comment written inside the dotted name (`Alpha.{x}Config`) is
+// still stored verbatim -- rarer than this was, and no worse than before.
+// Guarded by tests/autotest/run_uses_padded_name.ps1.
+function StripModuleNameWhitespace(const AName: string): string;
+var
+  I: Integer;
+  N: Integer;
+  C: Char   ;
+begin
+  SetLength(Result, Length(AName));
+  N:= 0;
+  for I:= 1 to Length(AName) do
+  begin
+    C:= AName[I];
+    if C <= ' ' then Continue;
+    Inc(N);
+    Result[N]:= C;
+  end;
+  SetLength(Result, N);
+end;
+
 // v0.40.4: walk a declUses node, emitting one TUnitUse per declUsesUnit child.
 procedure WalkUsesClause(const ANode: TTSNode; const AState: TWalkState; ASection: TUnitUseSection);
 var
@@ -269,7 +319,7 @@ begin
       else if Sub.NodeType = 'literalString' then LitNode:= Sub;
     end;
     if ModNode.IsNull then Continue;
-    UnitName:= Trim(NodeText(ModNode, AState.Source));
+    UnitName:= StripModuleNameWhitespace(NodeText(ModNode, AState.Source));
     if UnitName = '' then Continue;
     InPath:= '';
     if not LitNode.IsNull then InPath:= ExtractInPath(LitNode, AState.Source);
@@ -304,7 +354,19 @@ begin
   // Take the full text of moduleName so multi-segment unit names like
   // DRagLint.Core.Interfaces are preserved verbatim. Earlier impl grabbed
   // only the first identifier and lost everything after the dot.
-  UnitName:= Trim(NodeText(ModNode, AState.Source));
+  //
+  // The SAME strip as WalkUsesClause above, for the same reason -- a `moduleName`
+  // node spans the whole dotted name, so `unit Alpha  .Config;` hands back the
+  // padding too and `Trim` removes only the ends. This site is the more expensive
+  // one to get wrong: the value becomes the skUnit symbol's own name AND the
+  // qualified-name prefix of every symbol the unit declares (AState.Emit below,
+  // and the `UnitName + '.initialization'` forms), so one padded `unit` line
+  // would mis-key a whole unit's rows rather than one edge. LATENT when fixed --
+  // 0 of the 7098 kind='unit' symbols across Delphi-RAG-lint / ORM3 /
+  // library-Win64 / M2022 carry embedded whitespace, because we align `uses`
+  // clauses and not the `unit` line -- which is exactly why it is pinned by a
+  // fixture and not by a live query.
+  UnitName:= StripModuleNameWhitespace(NodeText(ModNode, AState.Source));
   if UnitName = '' then Exit;
   AState.CurrentSection:= ''; { the unit symbol itself is section-less }
   UnitIdx:= AState.Emit(skUnit, UnitName, UnitName, -1, ANode);
