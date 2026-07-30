@@ -26,17 +26,28 @@ uses
 const
   /// <summary>Watchdog for ONE drag-lint invocation, in milliseconds. On expiry
   /// RunCapture terminates the child and returns 3.</summary>
-  /// <remarks>This is a guard against a pathological (effectively unbounded)
-  /// property walk hanging the editor's main thread -- NOT a latency budget, so
-  /// it is set well above any legitimate call rather than close to it. It was
-  /// 30000, which was BELOW legitimate work: the slowest call the editor can
-  /// issue (GetProptree with no --min-visibility) measured a 20.11 s mean here on
-  /// 2026-07-29 with a warm index, and 74-79 s was recorded on a colder one --
-  /// i.e. the editor reported a timeout for a query that would have succeeded.
-  /// Every proptree call now also passes --refs-as-leaves, which brings that
-  /// slowest call to a 7.82 s mean (8.38 s worst of 3); 180 s leaves headroom for
-  /// a cold index several times slower than that and still exceeds the 79 s worst
-  /// case ever recorded WITHOUT the flag.</remarks>
+  /// <remarks>A guard against a pathological (effectively unbounded) walk hanging
+  /// the editor's main thread -- NOT a latency budget, so it is set well above
+  /// every legitimate call rather than close to one. It was 30000, which was below
+  /// legitimate work on TWO different paths. Measured 2026-07-29 against
+  /// library-Win64 + ORM3, per verb:
+  ///   ValidateText  (convert-validate)                      29.83 s  &lt;-- slowest
+  ///   GetProptree   (no --min-visibility, --refs-as-leaves)   7.82 s
+  ///   GetProptree   (--min-visibility published, refs)        6.96 s
+  ///   ListDescendantsOf / ListProjectUnits                &lt;= 0.50 s
+  /// So a 30 s bound sat essentially ON TOP of ValidateText, and the pre-fix
+  /// proptree call (20.11 s warm here, 74-79 s recorded on a colder index) could
+  /// exceed it outright -- the editor reported a timeout for work that would have
+  /// succeeded. 180 s is ~6x the slowest call above.</remarks>
+  /// <remarks>CONDITION, since this bound does not cover everything: Scaffold
+  /// (convert-scaffold) measured 346 s for one Vcl.StdCtrls.TButton -&gt;
+  /// cxButtons.TcxButton scaffold, emitting 6.7 MB, and WOULD time out here. That
+  /// is currently harmless only because Scaffold has no caller in the editor. Give
+  /// it one and this bound must be revisited -- or better, find out why it is 44x
+  /// the equivalent proptree call (convert-scaffold takes no --refs-as-leaves, so
+  /// it is likely expanding component references the way proptree used to).
+  /// Note also that RunCapture drains on the calling thread, so this bound is also
+  /// the longest the UI can be frozen.</remarks>
   ENGINE_TIMEOUT_MS = 180000;
 
 type

@@ -829,15 +829,18 @@ begin
 end;
 
 { The engine watchdog must sit ABOVE the slowest call the editor can issue, not
-  inside it. It was 30000 ms while GetProptree with no --min-visibility measured a
-  20.11 s mean on a warm index here and 74-79 s on a colder one -- so the editor
-  reported "TIMED OUT" for queries that would have succeeded. Pure: asserts the
-  constant, since the failure mode is a value chosen too small. }
+  inside it. At 30000 ms it was below legitimate work on two paths: ValidateText
+  (convert-validate) measured 29.83 s -- essentially ON the bound -- and the
+  pre-fix proptree call measured 20.11 s warm here and 74-79 s on a colder index.
+  Pure: asserts the constant, because the failure mode is a value chosen too small.
+  The floor is 3x the slowest measured live call, not the value itself, so tuning
+  180000 up or down stays free while a return to 30000 does not. }
 procedure TestEngineTimeoutHeadroom;
 begin
   Check('engine.timeout.above.slowest.recorded.call', ENGINE_TIMEOUT_MS >= 90000,
-    Format('ENGINE_TIMEOUT_MS=%d ms; the slowest proptree call recorded on this '
-      + 'corpus was 79 s, so a watchdog at or below that fires on legitimate work',
+    Format('ENGINE_TIMEOUT_MS=%d ms; the slowest call the editor issues measured '
+      + '29.83 s (convert-validate) and a pre-fix proptree call took 74-79 s on a '
+      + 'cold index, so a watchdog at or below that fires on legitimate work',
       [ENGINE_TIMEOUT_MS]));
 end;
 
