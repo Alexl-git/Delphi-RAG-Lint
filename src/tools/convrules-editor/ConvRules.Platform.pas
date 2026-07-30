@@ -12,10 +12,30 @@ uses
 
 type
   /// <summary>Which platform library a picker side resolves component types
-  /// against. cpBoth = the union of both platform libraries -- the FROM safety
-  /// net, since some legacy components (e.g. Orpheus TOvcTable) are indexed under
-  /// only one platform's library.</summary>
+  /// against. cpBoth lists both libraries, Win32 first (see LibDbsFor).</summary>
+  /// <remarks>cpBoth is offered but is NOT the default for either side. It was
+  /// intended as a FROM safety net for components indexed under only one
+  /// platform; measured 2026-07-29 against the libraries on disk that net was
+  /// empty (Win64 alone gave the same 6180 TComponent descendants as the union,
+  /// Orpheus TOvcTable included), while library-Win32.sqlite was a 9.5 MB
+  /// fragment of the ~1.9 GB corpus. Because a consumer such as `proptree`
+  /// resolves a qname from the FIRST --db that answers, listing a fragment ahead
+  /// of a healthy index can shadow it. Use cpBoth deliberately, not by
+  /// default.</remarks>
   TConvPlatform = (cpWin32, cpWin64, cpBoth);
+
+const
+  /// <summary>The platform each picker side uses when the user passes no
+  /// --from-platform / --to-platform. Single-sourced here because the editor's
+  /// .dpr and the form's globals must not be able to disagree.</summary>
+  /// <remarks>FROM was cpBoth until 2026-07-29. It is cpWin64 because the union
+  /// added nothing measurable (same 6180 TComponent descendants either way) while
+  /// listing a 9.5 MB fragment of the corpus ahead of the healthy index, which a
+  /// first-DB-wins consumer such as `proptree` could resolve from. Ord() of these
+  /// is also the platform combo boxes' initial ItemIndex, so any value here must
+  /// stay inside TConvPlatform's ordinal range.</remarks>
+  DEFAULT_FROM_PLATFORM = cpWin64;
+  DEFAULT_TO_PLATFORM   = cpWin64;
 
 /// <summary>Parse a platform token (case-insensitive: 'win32' | 'win64' |
 /// 'both'). Returns ADefault for '' or any unrecognized token.</summary>

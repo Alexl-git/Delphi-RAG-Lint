@@ -776,6 +776,212 @@ begin
   end;
 end;
 
+{ The picker-side platform DEFAULTS (single-sourced in ConvRules.Platform, consumed
+  by both ConvRulesEditor.dpr and ConvRules.MainForm's globals).
+
+  FROM defaulted to cpBoth, which put library-Win32.sqlite -- a 9.5 MB fragment of
+  the ~1.9 GB corpus, authoritative for nothing -- FIRST in the DB list that
+  `proptree` resolves a qname from (first DB that answers wins). Measured
+  2026-07-29 the fragment did not in fact shadow anything (identical leaf counts,
+  identical 6180-name descendant lists), so this pins the default rather than a
+  truncation claim. cpBoth must remain SELECTABLE -- only the default moved. }
+procedure TestPlatformDefaults;
+const
+  LibDir = 'C:\Lib\';
+var
+  d: TArray<string>;
+  s: string;
+  sawWin32, sawWin64: Boolean;
+begin
+  Check('platform.default.from.win64', DEFAULT_FROM_PLATFORM = cpWin64,
+    'FROM default is ' + PlatformToStr(DEFAULT_FROM_PLATFORM)
+    + ' -- must not union the library-Win32 fragment');
+  Check('platform.default.to.win64', DEFAULT_TO_PLATFORM = cpWin64,
+    'TO default is ' + PlatformToStr(DEFAULT_TO_PLATFORM));
+
+  // The DEFAULT FROM db set must not name the fragment at all.
+  d := LibDbsFor(DEFAULT_FROM_PLATFORM, LibDir);
+  sawWin32 := False; sawWin64 := False;
+  for s in d do
+  begin
+    if Pos('library-Win32', s) > 0 then sawWin32 := True;
+    if Pos('library-Win64', s) > 0 then sawWin64 := True;
+  end;
+  Check('platform.default.from.excludes.win32.fragment', not sawWin32,
+    'the default FROM db set still lists library-Win32.sqlite');
+  Check('platform.default.from.includes.win64', sawWin64,
+    'the default FROM db set does not list library-Win64.sqlite');
+
+  // cpBoth is still reachable: the ABILITY to union deliberately was not removed.
+  Check('platform.both.still.parses', ParsePlatform('both', cpWin64) = cpBoth);
+  Check('platform.both.still.unions', Length(LibDbsFor(cpBoth, LibDir)) = 2);
+
+  // The platform combos set ItemIndex := Ord(<platform>) over items (Win32,Win64,
+  // Both) and read it back as TConvPlatform(ItemIndex). Changing a default only
+  // stays consistent while that round-trip holds for the value chosen.
+  Check('platform.default.from.itemindex.inrange',
+    (Ord(DEFAULT_FROM_PLATFORM) >= Ord(cpWin32)) and (Ord(DEFAULT_FROM_PLATFORM) <= Ord(cpBoth)),
+    Format('Ord=%d', [Ord(DEFAULT_FROM_PLATFORM)]));
+  Check('platform.default.from.itemindex.roundtrips',
+    TConvPlatform(Ord(DEFAULT_FROM_PLATFORM)) = DEFAULT_FROM_PLATFORM);
+  Check('platform.default.to.itemindex.roundtrips',
+    TConvPlatform(Ord(DEFAULT_TO_PLATFORM)) = DEFAULT_TO_PLATFORM);
+end;
+
+{ The engine watchdog must sit ABOVE the slowest call the editor can issue, not
+  inside it. It was 30000 ms while GetProptree with no --min-visibility measured a
+  20.11 s mean on a warm index here and 74-79 s on a colder one -- so the editor
+  reported "TIMED OUT" for queries that would have succeeded. Pure: asserts the
+  constant, since the failure mode is a value chosen too small. }
+procedure TestEngineTimeoutHeadroom;
+begin
+  Check('engine.timeout.above.slowest.recorded.call', ENGINE_TIMEOUT_MS >= 90000,
+    Format('ENGINE_TIMEOUT_MS=%d ms; the slowest proptree call recorded on this '
+      + 'corpus was 79 s, so a watchdog at or below that fires on legitimate work',
+      [ENGINE_TIMEOUT_MS]));
+end;
+
+{ GetProptree must pass --refs-as-leaves. A TComponent-typed property is a
+  REFERENCE to a separate component, not an owned sub-object; recursing into it
+  invents targets that cannot be assigned (Action.ActionComponent.Name,
+  Action.Components.Tag) and is what made the walk unbounded.
+
+  Checked through the real GetProptree path, by consequence rather than by
+  inspecting the command line: with the flag TcxButton has a bare 'Action' leaf and
+  NOTHING beneath it (measured 0 'Action.*' paths, vs 8 without the flag), while
+  owned TPersistent sub-objects are still expanded -- the latter guards against
+  "fixing" the cost with --depth 1, which drops 523 of 696 leaves, all nested.
+  Skipped when the exe / library-Win64 db is absent. }
+procedure TestProptreeRefsAsLeavesLive;
+var
+  Exe    : string;
+  Adapter: TEngineAdapter;
+  Tree   : TProptree;
+  Err    : string;
+  L      : TPropLeaf;
+  nUnder, nNested: Integer;
+  sawAction: Boolean;
+begin
+  Exe := ResolveExe;
+  if (Exe = '') or (not TFile.Exists(LibWin64)) then
+  begin
+    Skip('proptree.refsasleaves', 'exe / library-Win64 db absent');
+    Exit;
+  end;
+  Adapter := TEngineAdapter.Create(Exe, LibDbsFor(DEFAULT_FROM_PLATFORM,
+    'C:\Projects\.drag-lint\') + [ProjectDb]);
+  try
+    if not Adapter.GetProptree('cxButtons.TcxButton', Tree, Err, 'published')
+       or (Length(Tree.Leaves) = 0) then
+    begin
+      Skip('proptree.refsasleaves', 'TcxButton did not resolve: ' + Err);
+      Exit;
+    end;
+    nUnder := 0; nNested := 0; sawAction := False;
+    for L in Tree.Leaves do
+    begin
+      if SameText(L.Path, 'Action') then sawAction := True;
+      if L.Path.StartsWith('Action.', True) then Inc(nUnder);
+      if Pos('.', L.Path) > 0 then Inc(nNested);
+    end;
+    Check('proptree.refsasleaves.reference.is.a.leaf', sawAction,
+      'no bare "Action" leaf -- expected the reference itself to be emitted');
+    Check('proptree.refsasleaves.not.recursed', nUnder = 0,
+      Format('%d "Action.*" paths -- --refs-as-leaves is not being passed', [nUnder]));
+    Check('proptree.refsasleaves.owned.still.expanded', nNested > 0,
+      'no dotted paths at all -- owned sub-objects were flattened away too '
+      + '(--depth 1 would do this, and it is not an acceptable substitute)');
+  finally
+    Adapter.Free;
+  end;
+end;
+
+{ ACCEPTANCE (the goal the whole proptree effort was for): for a TcxButton TARGET,
+  Name, Tag, Left and Top must APPEAR in the To pool and be ASSIGNABLE.
+
+  Driven through the editor's own layers, not a hand-rolled query:
+    * appear  = ConvRules.Engine.GetProptree(...,'published') emits the leaf AND
+                Leaf.IsWritable -- exactly the two conditions RefreshPool filters
+                the To pool on (the rest of RefreshPool is the already-assigned set
+                and the user's text/type filters).
+    * assignable = ConvRules.Casts.IsCastable(fromType, toType), the predicate
+                behind MainForm.CanCast, plus LeafWritable -- the two gates
+                AssignFromPool applies before it will create a #link.
+  The FROM counterpart is Vcl.StdCtrls.TButton (a plain VCL button -> TcxButton is
+  the archetypal conversion); its four properties carry the same declared types.
+  Also asserts the types are not 'unknown', which is what a broken cx ancestry used
+  to yield for every VCL-inherited property. Skipped when the exe/db are absent. }
+procedure TestAcceptanceTcxButtonToPool;
+const
+  Wanted: array[0..3] of string = ('Name', 'Tag', 'Left', 'Top');
+var
+  Exe      : string;
+  Adapter  : TEngineAdapter;
+  ToTree   : TProptree;
+  FromTree : TProptree;
+  Err      : string;
+  i        : Integer;
+  L        : TPropLeaf;
+  inPool   : Boolean;
+  toType   : string;
+  fromType : string;
+begin
+  Exe := ResolveExe;
+  if (Exe = '') or (not TFile.Exists(LibWin64)) then
+  begin
+    Skip('acceptance.tcxbutton', 'exe / library-Win64 db absent');
+    Exit;
+  end;
+  Adapter := TEngineAdapter.Create(Exe, LibDbsFor(DEFAULT_FROM_PLATFORM,
+    'C:\Projects\.drag-lint\') + [ProjectDb]);
+  try
+    if not Adapter.GetProptree('cxButtons.TcxButton', ToTree, Err, 'published')
+       or (Length(ToTree.Leaves) = 0) then
+    begin
+      Skip('acceptance.tcxbutton', 'TcxButton did not resolve: ' + Err);
+      Exit;
+    end;
+    if not Adapter.GetProptree('Vcl.StdCtrls.TButton', FromTree, Err, 'published')
+       or (Length(FromTree.Leaves) = 0) then
+    begin
+      Skip('acceptance.tcxbutton', 'TButton (FROM counterpart) did not resolve: ' + Err);
+      Exit;
+    end;
+    for i := Low(Wanted) to High(Wanted) do
+    begin
+      // (1) present in the To tree AND writable => RefreshPool puts it in the pool.
+      inPool := False; toType := '';
+      for L in ToTree.Leaves do
+        if SameText(L.Path, Wanted[i]) then
+        begin
+          toType := L.TypeName;
+          inPool := L.IsWritable;
+          Break;
+        end;
+      Check('acceptance.tcxbutton.pool.' + Wanted[i], inPool,
+        Format('%s is absent from the TcxButton published surface, or is read-only, '
+          + 'so the To pool cannot offer it', [Wanted[i]]));
+      Check('acceptance.tcxbutton.type.known.' + Wanted[i],
+        not IsUnknownType(toType),
+        Format('%s has type "%s" -- an unresolved ancestry loses the type and blocks '
+          + 'every cast decision', [Wanted[i], toType]));
+
+      // (2) assignable from the plausible FROM counterpart, via the editor's gate.
+      fromType := '';
+      for L in FromTree.Leaves do
+        if SameText(L.Path, Wanted[i]) then begin fromType := L.TypeName; Break; end;
+      Check('acceptance.tcxbutton.from.has.' + Wanted[i], fromType <> '',
+        Format('TButton.%s not found -- cannot judge assignability', [Wanted[i]]));
+      Check('acceptance.tcxbutton.assignable.' + Wanted[i],
+        (fromType <> '') and IsCastable(fromType, toType),
+        Format('TButton.%s (%s) -> TcxButton.%s (%s) rejected by IsCastable',
+          [Wanted[i], fromType, Wanted[i], toType]));
+    end;
+  finally
+    Adapter.Free;
+  end;
+end;
+
 procedure TestUnitDirectives;
 const
   SRC =
@@ -1872,6 +2078,10 @@ begin
     TestFillFromUnit;
     TestProptreeBareClass;
     TestProptree2Live;
+    TestPlatformDefaults;
+    TestEngineTimeoutHeadroom;
+    TestProptreeRefsAsLeavesLive;
+    TestAcceptanceTcxButtonToPool;
 
     Writeln('');
     Writeln(Format('model-tests: %d pass / %d fail / %d skip / %d total',

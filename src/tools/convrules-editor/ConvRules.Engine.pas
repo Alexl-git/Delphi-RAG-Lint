@@ -23,6 +23,22 @@ uses
   , System.Generics.Collections
   ;
 
+const
+  /// <summary>Watchdog for ONE drag-lint invocation, in milliseconds. On expiry
+  /// RunCapture terminates the child and returns 3.</summary>
+  /// <remarks>This is a guard against a pathological (effectively unbounded)
+  /// property walk hanging the editor's main thread -- NOT a latency budget, so
+  /// it is set well above any legitimate call rather than close to it. It was
+  /// 30000, which was BELOW legitimate work: the slowest call the editor can
+  /// issue (GetProptree with no --min-visibility) measured a 20.11 s mean here on
+  /// 2026-07-29 with a warm index, and 74-79 s was recorded on a colder one --
+  /// i.e. the editor reported a timeout for a query that would have succeeded.
+  /// Every proptree call now also passes --refs-as-leaves, which brings that
+  /// slowest call to a 7.82 s mean (8.38 s worst of 3); 180 s leaves headroom for
+  /// a cold index several times slower than that and still exceeds the 79 s worst
+  /// case ever recorded WITHOUT the flag.</remarks>
+  ENGINE_TIMEOUT_MS = 180000;
+
 type
   /// <summary>One flattened property leaf from `proptree --format json`
   /// (schema proptree/1).</summary>
@@ -86,10 +102,21 @@ type
     /// <summary>The adapter's current default DB list (read-only view).</summary>
     function DbList: TArray<string>;
 
-    /// <summary>proptree --qname X [--min-visibility V] --format json. AMinVisibility
-    /// ('published'|'public'|'') selects the target surface (engine schema v17); ''
-    /// emits every leaf. Returns False + empty tree if the type does not resolve
-    /// (exit 1) or the exe/db is unusable (exit 2).</summary>
+    /// <summary>proptree --qname X [--min-visibility V] --refs-as-leaves --format
+    /// json. AMinVisibility ('published'|'public'|'') selects the target surface
+    /// (engine schema v17); '' emits every leaf. Returns False + empty tree if the
+    /// type does not resolve (exit 1), the exe/db is unusable (exit 2), or the call
+    /// exceeded ENGINE_TIMEOUT_MS (exit 3).</summary>
+    /// <param name="AQname">Bare ('TcxButton') or unit-qualified
+    /// ('cxButtons.TcxButton'); a bare name is qualified first via
+    /// ResolveClassQName.</param>
+    /// <remarks>--refs-as-leaves is ALWAYS passed, so a TComponent-typed property
+    /// appears as a single leaf and is NOT recursed into. Callers therefore do not
+    /// see paths through a component reference (no 'Action.Owner.Name'); those are
+    /// references, not owned sub-objects, and are not assignable targets. Leaves
+    /// through owned TPersistent sub-objects ('Colors.Button.FormattedText.*') are
+    /// still returned in full. ATree.Truncated reports the engine's own cap and is
+    /// True even for a bounded call on a large DevExpress control.</remarks>
     function GetProptree(const AQname: string; out ATree: TProptree;
       out AError: string; const AMinVisibility: string = ''): Boolean;
 
@@ -108,9 +135,9 @@ type
       out AError: string): Boolean; overload;
 
     /// <summary>As ListDescendantsOf, but queries an EXPLICIT db set (ADbs) instead
-    /// of the adapter's default. Lets a caller union libraries per-query -- e.g. the
-    /// FROM picker unions Win32+Win64 so Win64-only Orpheus TOvc* classes appear
-    /// alongside Win32 controls. Names from all listed DBs are merged + deduped.</summary>
+    /// of the adapter's default, so each picker side can scope to its own platform
+    /// library. Names from all listed DBs are merged + deduped, so listing several
+    /// DBs can only add names, never remove them.</summary>
     function ListDescendantsOf(const AAncestor: string; const ADbs: TArray<string>;
       out ANames: TArray<string>; out AError: string): Boolean; overload;
 
@@ -322,15 +349,13 @@ begin
     CloseHandle(WritePipe);
     WritePipe := 0;
 
-    // Bounded, non-blocking drain: poll the pipe so a pathological engine call (an
-    // unbounded proptree expansion on some DevExpress controls -- see the v17
-    // --refs-as-leaves follow-up) times out gracefully instead of freezing the
-    // editor's main thread on an INFINITE wait.
-    const TIMEOUT_MS = 30000;
+    // Bounded, non-blocking drain: poll the pipe so a pathological engine call
+    // times out gracefully instead of freezing the editor's main thread on an
+    // INFINITE wait. See ENGINE_TIMEOUT_MS for why the bound is where it is.
     var TimedOut: Boolean := False;
     SB := TStringBuilder.Create;
     try
-      var Deadline: UInt64 := GetTickCount64 + TIMEOUT_MS;
+      var Deadline: UInt64 := GetTickCount64 + ENGINE_TIMEOUT_MS;
       var Avail: DWORD := 0;
       repeat
         if PeekNamedPipe(ReadPipe, nil, 0, nil, @Avail, nil) and (Avail > 0) then
@@ -367,7 +392,7 @@ begin
     if TimedOut then
     begin
       AOutput := AOutput + sLineBreak +
-        Format('[timeout: engine call exceeded %d s]', [TIMEOUT_MS div 1000]);
+        Format('[timeout: engine call exceeded %d s]', [ENGINE_TIMEOUT_MS div 1000]);
       Result := 3;                                 // distinct code: timed out (not 0/1/2)
     end
     else if GetExitCodeProcess(PI.hProcess, ExitCode) then
@@ -404,19 +429,30 @@ begin
   QN := ResolveClassQName(AQname);
   // Target surface (engine schema v17): --min-visibility published (DFM-streamable
   // props only) or public (adds public props + public fields); '' emits all leaves.
-  // NOTE: the old --refs-as-leaves flag is NOT in the shipped v17 engine (it lives
-  // only on the converter branch's proptree) -- passing it makes v17 FATAL, so it is
-  // dropped here. Follow-up: ask the engine team to add it to main so referenced
-  // components (Action.Owner.Name, DropDownMenu.Tag) stop expanding into the surface.
+  // --refs-as-leaves IS on main (parsed in DRagLint.CLI.pas) and is passed on every
+  // call: a TComponent-typed property is a REFERENCE to another component, not an
+  // owned sub-object, so expanding it (Action.Owner.Name, DropDownMenu.Tag) invents
+  // targets that cannot be assigned. Leaving such properties unexpanded is both the
+  // correct target surface and what bounds the walk. Measured on cxButtons.TcxButton
+  // against library-Win64 + ORM3, 3 runs each, 2026-07-29:
+  //   --min-visibility published              2936 leaves, mean 18.22 s
+  //   ... plus --refs-as-leaves                696 leaves, mean  6.96 s
+  //   no --min-visibility                    36795 leaves, mean 20.11 s
+  //   ... plus --refs-as-leaves              11692 leaves, mean  7.82 s
+  // Name, Tag, Left and Top are present in all four. --min-visibility filters at
+  // OUTPUT time and does not shorten the walk (hence ~2 s), whereas
+  // --refs-as-leaves prunes the walk itself (~11 s).
   VisArg := '';
   if AMinVisibility <> '' then VisArg := ' --min-visibility ' + AMinVisibility;
-  Code := RunCapture(Format('proptree --qname "%s"%s --format json%s', [QN, VisArg, DbArgs]), Output);
+  Code := RunCapture(Format('proptree --qname "%s"%s --refs-as-leaves --format json%s',
+    [QN, VisArg, DbArgs]), Output);
   if Code = 3 then
   begin
-    AError := Format('proptree TIMED OUT for %s -- the property tree is too large to '
-      + 'enumerate. The shipped v17 engine dropped --refs-as-leaves, so referenced '
-      + 'components expand without bound on some controls. Awaiting the engine fix; '
-      + 'try a different class meanwhile.', [AQname]);
+    AError := Format('proptree TIMED OUT for %s after %d s -- the property tree is '
+      + 'too large to enumerate. The call already passes --refs-as-leaves, which '
+      + 'bounds reference expansion, so a timeout here means the walk is genuinely '
+      + 'pathological (or the index is being written by another process). Try a '
+      + 'different class, and report the qname.', [AQname, ENGINE_TIMEOUT_MS div 1000]);
     Exit(False);
   end;
   if Code <> 0 then

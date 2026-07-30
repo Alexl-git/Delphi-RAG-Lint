@@ -50,16 +50,19 @@ begin
 end;
 
 { The library index directory and the project index. The FROM/TO platform (each
-  selectable via --from-platform / --to-platform, default FROM=Both, TO=Win64)
+  selectable via --from-platform / --to-platform, default FROM=Win64, TO=Win64)
   picks which library-Win32/Win64.sqlite each side draws types from; the project
-  DB (ORM3) is always-on and additive (project units + project-declared types). }
+  DB (ORM3) is always-on and additive (project units + project-declared types).
+  FROM defaulted to Both until 2026-07-29; library-Win32.sqlite is a 9.5 MB
+  fragment that adds no names Win64 lacks, so the union only risked shadowing the
+  healthy index (proptree resolves from the first --db that answers). }
 const
   LibDir    = 'C:\Projects\.drag-lint\';
   ProjectDb = 'C:\Projects\DB\ORM3\drag-lint.sqlite';
 
 { Parse --from-platform / --to-platform (case-insensitive win32|win64|both).
-  Absent -> ADefault, which the caller sets so the defaults reproduce today's
-  behavior (FROM=Both, TO=Win64). Scans flag/value pairs positionally. }
+  Absent -> ADefault, which the caller passes as DEFAULT_FROM_PLATFORM /
+  DEFAULT_TO_PLATFORM. Scans flag/value pairs positionally. }
 function ArgPlatform(const AFlag: string; ADefault: TConvPlatform): TConvPlatform;
 var
   i: Integer;
@@ -78,8 +81,8 @@ begin
   GEditorLibDir       := LibDir;
   GEditorProjectDb    := ProjectDb;
   GEditorCastLib      := ResolveCastLib;
-  GEditorFromPlatform := ArgPlatform('--from-platform', cpBoth);
-  GEditorToPlatform   := ArgPlatform('--to-platform', cpWin64);
+  GEditorFromPlatform := ArgPlatform('--from-platform', DEFAULT_FROM_PLATFORM);
+  GEditorToPlatform   := ArgPlatform('--to-platform', DEFAULT_TO_PLATFORM);
   Application.Initialize;
   Application.Title := 'ConvRulesEditor';
   Application.MainFormOnTaskbar := True;

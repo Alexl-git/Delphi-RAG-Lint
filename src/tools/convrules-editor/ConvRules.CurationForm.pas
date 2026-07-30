@@ -610,6 +610,15 @@ begin
   Target := AskTargetFile(ChangeFileExt(FSet.Item(fi).Path, '') + '-copy'
     + ExtractFileExt(FSet.Item(fi).Path));
   if Target = '' then Exit;
+  // Same guard as DoSplit, on CANONICAL paths, and needed for a different reason.
+  // WriteBlocksTo APPENDS when the target exists, so copying onto the source would
+  // append the selected blocks back into the source -- duplicating them -- and then
+  // report "source unchanged", which would be false. Refuse instead.
+  if SameText(NormalizedPath(Target), NormalizedPath(FSet.Item(fi).Path)) then
+  begin
+    FStatus.SimpleText := 'Copy target must be a different file.';
+    Exit;
+  end;
   Cpy := CopyOut(FSet.Item(fi).Blocks, Sel);
   if not WriteBlocksTo(Target, Cpy, Bak, Note) then Exit;
   // criterion 4: the source file is NOT written

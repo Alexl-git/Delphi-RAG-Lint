@@ -147,8 +147,12 @@ var
   { Path to the shipped class-cast library (.castlib); '' = class casts unavailable
     (scalar-only, today's behavior). Resolved + set by the .dpr before CreateForm. }
   GEditorCastLib: string = '';
-  GEditorFromPlatform: TConvPlatform = cpBoth;   // default: FROM union (today's behavior)
-  GEditorToPlatform: TConvPlatform = cpWin64;    // default: TO target Win64 (today's behavior)
+  { Defaults come from ConvRules.Platform so the .dpr and this unit cannot drift
+    apart; the .dpr overwrites both from --from-platform / --to-platform, which
+    still accept win32|win64|both. FROM was cpBoth until 2026-07-29 -- see
+    DEFAULT_FROM_PLATFORM for the measurements behind the change. }
+  GEditorFromPlatform: TConvPlatform = DEFAULT_FROM_PLATFORM;
+  GEditorToPlatform: TConvPlatform = DEFAULT_TO_PLATFORM;
 
 implementation
 
@@ -543,12 +547,17 @@ end;
 
 { Load the FROM and TO class pickers, once. They are deliberately DIFFERENT sets:
 
-    FROM = all TComponent descendants across BOTH platform libraries (Win32+Win64
-           union) -- the source app has visual controls AND non-visual components
-           (BDE TTable, datasets) plus legacy Orpheus TOvc* controls indexed under
-           Win64 only. A TControl-only, Win32-only filter (the v1 behaviour) hid
-           all three. TComponent is the right superset: every convertible source
-           component descends from it.
+    FROM = all TComponent descendants of the FROM platform's library (default
+           Win64) -- the source app has visual controls AND non-visual components
+           (BDE TTable, datasets) plus legacy Orpheus TOvc* controls. A
+           TControl-only filter (the v1 behaviour) hid all three; TComponent is
+           the right superset, since every convertible source component descends
+           from it. The default was Win32+Win64 as a "safety net" for components
+           indexed under only one platform. Measured 2026-07-29, that net is
+           empty: Win64 alone yields the same 6180 names as the union (Win32
+           alone yields 3, all of them already in Win64), and TOvcTable is in
+           Win64. Pick 'Both' in the FROM combo if a future library split
+           reintroduces platform-only components.
 
     TO   = TControl descendants of the TARGET platform's library only (Win64) --
            conversions target visual controls on the platform being migrated to.
