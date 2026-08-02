@@ -17,8 +17,17 @@ interface
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.Generics.Collections,
   Winapi.Windows, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls,
-  Vcl.ExtCtrls, Vcl.Grids, Vcl.Dialogs, Vcl.Menus, Vcl.Graphics,
-  ConvRules.Model, ConvRules.Casts, ConvRules.Engine, ConvRules.Platform, ConvRules.CastLib;
+  Vcl.ExtCtrls, Vcl.Grids, Vcl.Dialogs, Vcl.Menus, Vcl.Graphics, Vcl.Themes,
+  ConvRules.Model, ConvRules.Casts, ConvRules.Engine, ConvRules.Platform,
+  ConvRules.CastLib, ConvRules.Theme;
+
+const
+  /// <summary>HKCU key holding this editor's per-user settings.</summary>
+  EDITOR_REG_KEY = 'Software\DragLint\ConvRulesEditor';
+  /// <summary>Value under EDITOR_REG_KEY holding the theme preference token
+  /// (see ConvRules.Theme.ThemePrefToStr). The .dpr reads it at start-up; the
+  /// View &gt; Theme menu writes it back.</summary>
+  EDITOR_REG_THEME = 'Theme';
 
 type
   TConvRulesForm = class(TForm)
@@ -36,6 +45,10 @@ type
 
     FFromPlatform: TConvPlatform;     // FROM picker library platform
     FToPlatform  : TConvPlatform;     // TO picker library platform
+
+    FThemeMode: TThemeMode;                       // mode currently applied (drives GridDrawCell)
+    FMnuTheme : array[TThemePref] of TMenuItem;   // View > Theme radio items
+    FStatusIsError: Boolean;                      // last status was SetError (red bold)
 
     // toolbar
     FPanelTop : TPanel;
@@ -114,11 +127,17 @@ type
     /// <summary>Shows a small read-only report window listing used property names
     /// that matched no From-tree leaf (ConvRules.Usage TUsageSet.Missing).</summary>
     procedure ShowUsageReport(const AMissing: TArray<string>);
-    /// <summary>FGrid.OnDrawCell: paints a row pale green when its From path is used
-    /// per the active examination (FUsedProps), else the normal fixed/selected/
-    /// window colours. Requires FGrid.DefaultDrawing = False to own painting.</summary>
+    /// <summary>FGrid.OnDrawCell: paints a row green when its From path is used per
+    /// the active examination (FUsedProps), else the normal fixed/selected/window
+    /// colours. Every colour is resolved through StyleServices, so the grid follows
+    /// the active VCL style. Requires FGrid.DefaultDrawing = False to own painting.</summary>
     procedure GridDrawCell(Sender: TObject; ACol, ARow: Integer; Rect: TRect;
       State: TGridDrawState);
+    { Builds the main menu (View > Theme). Called first from BuildUI so the menu bar
+      is in place before the panels claim the client area. }
+    procedure BuildMenu;
+    { View > Theme item handler; the item's Tag is Ord(TThemePref). }
+    procedure ThemeMenuClick(Sender: TObject);
     procedure RefreshPool;
     procedure DoAssign(Sender: TObject);
     procedure DoUnassign(Sender: TObject);
@@ -137,6 +156,8 @@ type
     procedure RulesFilterChange(Sender: TObject);
     procedure SetStatus(const S: string);
     procedure SetError(const S: string);
+    { Re-applies FLblStatus's font for the kind of message currently shown. }
+    procedure RefreshStatusColor;
     procedure LoadAllClasses;
     function  FromDbSet: TArray<string>;
     function  ToDbSet: TArray<string>;
@@ -163,6 +184,24 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure LoadFile(const APath: string);
+
+    /// <summary>Switches the application to the light or dark VCL style and
+    /// repaints the owner-drawn grid in that mode.</summary>
+    /// <param name="AMode">The mode to apply.</param>
+    /// <remarks>Falls back to the built-in system style when the requested style is
+    /// not linked into the executable (TStyleManager.TrySetStyle returns False) --
+    /// the window then stays usable rather than half-themed. Records AMode either
+    /// way, so GridDrawCell keeps tinting the Examine marking for the mode the user
+    /// asked for. Does not persist anything; see SetThemePref.</remarks>
+    procedure ApplyTheme(AMode: TThemeMode);
+
+    /// <summary>Records the user's theme preference, persists it under
+    /// EDITOR_REG_KEY, and applies the mode it resolves to.</summary>
+    /// <param name="APref">The new preference; tpFollowIde re-reads GEditorIdeTheme.</param>
+    /// <remarks>A failed registry write is swallowed: the preference still takes
+    /// effect for this session, it simply will not survive a restart. Also syncs the
+    /// View &gt; Theme radio items, so it is safe to call from outside the menu.</remarks>
+    procedure SetThemePref(APref: TThemePref);
   end;
 
 var
@@ -181,12 +220,25 @@ var
     DEFAULT_FROM_PLATFORM for the measurements behind the change. }
   GEditorFromPlatform: TConvPlatform = DEFAULT_FROM_PLATFORM;
   GEditorToPlatform: TConvPlatform = DEFAULT_TO_PLATFORM;
+  { Theme. Both are read from the registry and set by the .dpr before CreateForm;
+    the constructor applies ResolveThemeMode(GEditorThemePref, GEditorIdeTheme).
+    GEditorIdeTheme is the IDE's raw theme name -- kept (not pre-resolved) because
+    switching back to "Follow IDE" at runtime has to re-resolve against it. }
+  GEditorThemePref: TThemePref = tpFollowIde;
+  GEditorIdeTheme: string = '';
 
 implementation
 
 uses
-  System.StrUtils, System.Math, ConvRules.Units, ConvRules.WorkingSet,
-  ConvRules.CurationForm, ConvRules.Usage;
+  System.StrUtils, System.Math, System.Win.Registry, ConvRules.Units,
+  ConvRules.WorkingSet, ConvRules.CurationForm, ConvRules.Usage;
+
+const
+  { VCL style names as they are recorded INSIDE the .vsf files linked by
+    ConvRulesEditorStyles.rc -- not the file names. Verified with
+    TStyleManager.IsValidStyle; if the .rc ever swaps a style, these must follow. }
+  STYLE_LIGHT = 'Windows11 Modern Light';
+  STYLE_DARK  = 'Windows11 Modern Dark';
 
 { ---- helpers ---- }
 
@@ -239,6 +291,8 @@ begin
   FSurfaceMinVis := 'published';   // default target surface = DFM-streamable
   FCastDefs := LoadCastLib(GEditorCastLib);   // [] when no .castlib is found
   BuildUI;
+  // After BuildUI: ApplyTheme repaints FGrid, which BuildUI creates.
+  ApplyTheme(ResolveThemeMode(GEditorThemePref, GEditorIdeTheme));
   OnClose := FormCloseHandler;
   Visible := True;  // ensure the CreateNew form is shown by Run
   SetStatus('Ready. Open a .rules file, or pick From/To classes and press '
@@ -258,6 +312,86 @@ begin
   inherited;
 end;
 
+procedure TConvRulesForm.BuildMenu;
+const
+  { Indexed by TThemePref -- keep in step with ConvRules.Theme's declaration order. }
+  CAPTIONS: array[TThemePref] of string = ('Follow &IDE', '&Light', '&Dark');
+var
+  LMenu : TMainMenu;
+  LView : TMenuItem;
+  LTheme: TMenuItem;
+  P     : TThemePref;
+begin
+  LMenu := TMainMenu.Create(Self);
+
+  LView := TMenuItem.Create(Self);
+  LView.Caption := '&View';
+  LMenu.Items.Add(LView);
+
+  LTheme := TMenuItem.Create(Self);
+  LTheme.Caption := '&Theme';
+  LView.Add(LTheme);
+
+  for P := Low(TThemePref) to High(TThemePref) do
+  begin
+    FMnuTheme[P] := TMenuItem.Create(Self);
+    FMnuTheme[P].Caption   := CAPTIONS[P];
+    FMnuTheme[P].RadioItem := True;
+    FMnuTheme[P].Tag       := Ord(P);
+    FMnuTheme[P].Checked   := (P = GEditorThemePref);
+    FMnuTheme[P].OnClick   := ThemeMenuClick;
+    LTheme.Add(FMnuTheme[P]);
+  end;
+
+  Menu := LMenu;
+end;
+
+procedure TConvRulesForm.ThemeMenuClick(Sender: TObject);
+begin
+  SetThemePref(TThemePref((Sender as TMenuItem).Tag));
+end;
+
+procedure TConvRulesForm.SetThemePref(APref: TThemePref);
+var
+  Reg: TRegistry;
+  P  : TThemePref;
+begin
+  GEditorThemePref := APref;
+  for P := Low(TThemePref) to High(TThemePref) do
+    if FMnuTheme[P] <> nil then FMnuTheme[P].Checked := (P = APref);
+
+  // Persist. A locked/denied HKCU is not worth an error dialog mid-session: the
+  // preference still applies now, it just will not survive a restart.
+  Reg := TRegistry.Create(KEY_READ or KEY_WRITE);
+  try
+    try
+      Reg.RootKey := HKEY_CURRENT_USER;
+      if Reg.OpenKey(EDITOR_REG_KEY, True) then
+        Reg.WriteString(EDITOR_REG_THEME, ThemePrefToStr(APref));
+    except
+      on E: ERegistryException do
+        SetStatus('Theme applied for this session, but could not be saved: ' + E.Message);
+    end;
+  finally
+    Reg.Free;
+  end;
+
+  ApplyTheme(ResolveThemeMode(APref, GEditorIdeTheme));
+end;
+
+procedure TConvRulesForm.ApplyTheme(AMode: TThemeMode);
+var
+  LStyle: string;
+begin
+  FThemeMode := AMode;
+  if AMode = tmDark then LStyle := STYLE_DARK else LStyle := STYLE_LIGHT;
+  // ShowErrorDialog=False: a missing style resource must not pop a modal at start-up.
+  if not TStyleManager.TrySetStyle(LStyle, False) then
+    TStyleManager.TrySetStyle(TStyleManager.SystemStyleName, False);
+  RefreshStatusColor;   // seFont is off there, so the style will not do it for us
+  if FGrid <> nil then FGrid.Invalidate;
+end;
+
 procedure TConvRulesForm.BuildUI;
 var
   Split1: TSplitter;
@@ -269,6 +403,10 @@ begin
   Caption := 'ConvRulesEditor -- conversion rule-book editor';
   Width := 1600; Height := 720;
   Position := poScreenCenter;
+
+  // Menu bar first: it takes its strip off the top of the client area before the
+  // aligned panels below are laid out.
+  BuildMenu;
 
   // --- bottom status bar (created first so it reserves the bottom edge; the top
   //     status label stays too, but this makes the current message visible even
@@ -305,6 +443,9 @@ begin
 
   FLblStatus := TLabel.Create(Self);
   FLblStatus.Parent := FPanelTop; FLblStatus.SetBounds(392, 11, 688, 15);
+  // seFont off: with it on, the active style overrides Font.Color and SetError's
+  // red would never show. SetStatus resolves its own colour via StyleServices.
+  FLblStatus.StyleElements := FLblStatus.StyleElements - [seFont];
 
   // --- row 1: From Unit [v]  [Fill From-classes] -- pick a unit first, then its
   //     component classes drop into the rules library as From-only conversions ---
@@ -585,12 +726,40 @@ begin
   // marking all go through it) -- required for OnDrawCell to own the cell colour.
   FGrid.DefaultDrawing := False;
   FGrid.OnDrawCell := GridDrawCell;
+
+  // TLabel is a TGraphicControl, so no style hook reaches it: with Transparent
+  // False it fills its own rectangle with Color, which ParentColor resolves to the
+  // panel's *property* (clBtnFace, light) no matter how darkly the style PAINTS
+  // that panel -- while the caption itself is styled light. Result under the dark
+  // style: white text on a white box. Transparent drops the fill, leaving styled
+  // text over the styled parent. Applied in one sweep so later labels inherit it.
+  for var i := 0 to ComponentCount - 1 do
+    if Components[i] is TLabel then TLabel(Components[i]).Transparent := True;
+end;
+
+{ Re-assert FLblStatus's font for the current message kind. FLblStatus opts out of
+  seFont (so SetError's red survives a style), which also means the style will never
+  refresh it -- hence this is called on every message AND from ApplyTheme, or a
+  status set under dark would keep its pale text after a switch to light. }
+procedure TConvRulesForm.RefreshStatusColor;
+begin
+  if FLblStatus = nil then Exit;
+  if FStatusIsError then
+  begin
+    FLblStatus.Font.Color := clRed;
+    FLblStatus.Font.Style := [fsBold];
+  end
+  else
+  begin
+    FLblStatus.Font.Color := StyleServices.GetSystemColor(clWindowText);
+    FLblStatus.Font.Style := [];
+  end;
 end;
 
 procedure TConvRulesForm.SetStatus(const S: string);
 begin
-  FLblStatus.Font.Color := clWindowText;
-  FLblStatus.Font.Style := [];
+  FStatusIsError := False;
+  RefreshStatusColor;
   FLblStatus.Caption := S;
   if FStatusBar <> nil then FStatusBar.SimpleText := S;
 end;
@@ -598,8 +767,8 @@ end;
 { Show a message in RED bold -- for blocked assignments and errors. }
 procedure TConvRulesForm.SetError(const S: string);
 begin
-  FLblStatus.Font.Color := clRed;
-  FLblStatus.Font.Style := [fsBold];
+  FStatusIsError := True;
+  RefreshStatusColor;
   FLblStatus.Caption := S;
   // The status bar has no per-message colour in SimplePanel mode; prefix so an
   // error still reads as one at the bottom of the form.
@@ -1368,30 +1537,40 @@ begin
 end;
 
 { FGrid.OnDrawCell -- owns ALL cell painting once FGrid.DefaultDrawing is False.
-  A data row (ARow > 0) whose From path is in FUsedProps paints pale green, EXCEPT
-  when it is the selected cell/row: selection must stay visible on a green row, so
-  gdSelected always wins and paints the normal highlight colour instead. }
+  A data row (ARow > 0) whose From path is in FUsedProps paints green, EXCEPT when
+  it is the selected cell/row: selection must stay visible on a marked row, so
+  gdSelected always wins and paints the normal highlight colour instead.
+
+  Every colour goes through StyleServices.GetSystemColor rather than the raw cl*
+  constant. DefaultDrawing = False keeps the style engine out of this canvas, so
+  without that indirection the grid would keep painting the system light palette
+  under a dark style. The marking itself is derived from the ACTIVE window colour
+  (ConvRules.Theme.ExamineRowColor) so it stays a visible tint on either ground
+  instead of a fixed pale green that vanishes on dark. }
 procedure TConvRulesForm.GridDrawCell(Sender: TObject; ACol, ARow: Integer;
   Rect: TRect; State: TGridDrawState);
 var
-  Cv: TCanvas;
+  Cv : TCanvas;
+  Win: TColor;
 begin
-  Cv := FGrid.Canvas;
-  // Default painting for the header and for any row we are not marking, and always for
-  // the selected cell so the selection stays visible on a green row.
+  Cv  := FGrid.Canvas;
+  Win := StyleServices.GetSystemColor(clWindow);
   if (ARow > 0) and (gdSelected not in State)
      and (Length(FUsedProps) > 0)
      and IsRowUsed(PathOfGridCell(FGrid.Cells[0, ARow]), FUsedProps) then
-    Cv.Brush.Color := $00D8F5D8   // pale green, readable behind black text
+    // ColorToRGB: under the system style GetSystemColor hands back the clWindow
+    // CONSTANT ($FF0000xx), whose bytes are an index, not channels -- tinting that
+    // would produce nonsense. Real styles already return RGB, where it is a no-op.
+    Cv.Brush.Color := TColor(ExamineRowColor(Integer(ColorToRGB(Win)), FThemeMode))
   else if gdSelected in State then
-    Cv.Brush.Color := clHighlight
+    Cv.Brush.Color := StyleServices.GetSystemColor(clHighlight)
   else if gdFixed in State then
-    Cv.Brush.Color := clBtnFace
+    Cv.Brush.Color := StyleServices.GetSystemColor(clBtnFace)
   else
-    Cv.Brush.Color := clWindow;
+    Cv.Brush.Color := Win;
 
-  if gdSelected in State then Cv.Font.Color := clHighlightText
-  else Cv.Font.Color := clWindowText;
+  if gdSelected in State then Cv.Font.Color := StyleServices.GetSystemColor(clHighlightText)
+  else Cv.Font.Color := StyleServices.GetSystemColor(clWindowText);
 
   Cv.FillRect(Rect);
   Cv.TextRect(Rect, Rect.Left + 2, Rect.Top + 2, FGrid.Cells[ACol, ARow]);

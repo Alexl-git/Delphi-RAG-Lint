@@ -6,8 +6,14 @@ program ConvRulesEditor;
 
 uses
   System.SysUtils,
+  System.Classes,
   System.IOUtils,
+  System.Win.Registry,
+  Winapi.Windows,
   Vcl.Forms,
+  Vcl.Themes,
+  Vcl.Styles,
+  ConvRules.Theme in 'ConvRules.Theme.pas',
   ConvRules.Model in 'ConvRules.Model.pas',
   ConvRules.Units in 'ConvRules.Units.pas',
   ConvRules.Casts in 'ConvRules.Casts.pas',
@@ -20,6 +26,13 @@ uses
   ConvRules.CurationForm in 'ConvRules.CurationForm.pas',
   ConvRules.Usage in 'ConvRules.Usage.pas',
   ConvRules.MainForm in 'ConvRules.MainForm.pas';
+
+{ VCL styles (Windows11 Modern Light / Dark) linked as VCLSTYLE resources; without
+  them TStyleManager.TrySetStyle returns False and the theme menu does nothing.
+  Built from ConvRulesEditorStyles.rc by the build scripts (dcc64 cannot compile a
+  .rc itself -- it tries to link it as a .res and fails with E2161). Vcl.Styles,
+  above, registers the resource type that makes them auto-discoverable. }
+{$R ConvRulesEditorStyles.res}
 
 { Resolve the drag-lint exe: next to this editor (both deploy to dll-win64), else
   a couple of well-known spots. }
@@ -74,6 +87,75 @@ begin
       Exit(ParsePlatform(ParamStr(i + 1), ADefault));
 end;
 
+{ Highest installed BDS version key, e.g. '37.0'. '' when none is present. }
+function HighestBdsVersion: string;
+var
+  Reg : TRegistry;
+  Keys: TStringList;
+  i   : Integer;
+  Best: Double;
+  v   : Double;
+begin
+  Result := '';
+  Best := -1;
+  Reg := TRegistry.Create(KEY_READ);
+  Keys := TStringList.Create;
+  try
+    Reg.RootKey := HKEY_CURRENT_USER;
+    if Reg.OpenKeyReadOnly('Software\Embarcadero\BDS') then
+    begin
+      Reg.GetKeyNames(Keys);
+      for i := 0 to Keys.Count - 1 do
+        if TryStrToFloat(Keys[i], v, TFormatSettings.Invariant) and (v > Best) then
+        begin
+          Best := v;
+          Result := Keys[i];
+        end;
+    end;
+  finally
+    Keys.Free;
+    Reg.Free;
+  end;
+end;
+
+{ The IDE's own theme name, '' when unreadable. '' resolves to light -- see
+  ConvRules.Theme.IdeThemeToMode for why that is the safe default. }
+function ReadIdeTheme: string;
+var
+  Reg: TRegistry;
+  Ver: string;
+begin
+  Result := '';
+  Ver := HighestBdsVersion;
+  if Ver = '' then Exit;
+  Reg := TRegistry.Create(KEY_READ);
+  try
+    Reg.RootKey := HKEY_CURRENT_USER;
+    if Reg.OpenKeyReadOnly('Software\Embarcadero\BDS\' + Ver + '\Theme') then
+      if Reg.ValueExists('Theme') then Result := Reg.ReadString('Theme');
+  finally
+    Reg.Free;
+  end;
+end;
+
+{ The user's stored theme preference; tpFollowIde when absent or unrecognised.
+  Written back by the form's View > Theme menu (TConvRulesForm.SetThemePref). }
+function ReadThemePref: TThemePref;
+var
+  Reg: TRegistry;
+begin
+  Result := tpFollowIde;
+  Reg := TRegistry.Create(KEY_READ);
+  try
+    Reg.RootKey := HKEY_CURRENT_USER;
+    if Reg.OpenKeyReadOnly(EDITOR_REG_KEY) then
+      if Reg.ValueExists(EDITOR_REG_THEME) then
+        Result := StrToThemePref(Reg.ReadString(EDITOR_REG_THEME), tpFollowIde);
+  finally
+    Reg.Free;
+  end;
+end;
+
 var
   Form: TConvRulesForm;
 begin
@@ -84,6 +166,10 @@ begin
   GEditorCastLib      := ResolveCastLib;
   GEditorFromPlatform := ArgPlatform('--from-platform', DEFAULT_FROM_PLATFORM);
   GEditorToPlatform   := ArgPlatform('--to-platform', DEFAULT_TO_PLATFORM);
+  // Theme: read the IDE's setting and the stored preference here, so the form's
+  // constructor can apply the resolved mode before anything is painted.
+  GEditorIdeTheme     := ReadIdeTheme;
+  GEditorThemePref    := ReadThemePref;
   Application.Initialize;
   Application.Title := 'ConvRulesEditor';
   Application.MainFormOnTaskbar := True;

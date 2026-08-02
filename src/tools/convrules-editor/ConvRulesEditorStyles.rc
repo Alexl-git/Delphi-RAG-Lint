@@ -1,0 +1,17 @@
+// VCL styles linked into ConvRulesEditor.exe.
+//
+// Resource type VCLSTYLE is what Vcl.Styles registers with TStyleManager, so the
+// two styles below are auto-discovered at start-up and TStyleManager.TrySetStyle
+// can name them. Without this resource TrySetStyle returns False and the app is
+// stuck on the system style.
+//
+// Style names INSIDE the .vsf files (verified with TStyleManager.IsValidStyle):
+//   Windows11_Modern_Light.vsf -> 'Windows11 Modern Light'
+//   Windows11_Modern_Dark.vsf  -> 'Windows11 Modern Dark'
+// Those strings are what ConvRules.MainForm's STYLE_LIGHT/STYLE_DARK must hold.
+//
+// The build scripts compile this with brcc32 before dcc64; dcc64 cannot compile a
+// .rc itself (it tries to link it as a .res and fails with E2161).
+
+LIGHTSTYLE VCLSTYLE "styles\Windows11_Modern_Light.vsf"
+DARKSTYLE  VCLSTYLE "styles\Windows11_Modern_Dark.vsf"
