@@ -167,11 +167,16 @@ type
     /// <summary>Append a node; returns it.</summary>
     function Add(ANode: TRuleNode): TRuleNode;
 
-    /// <summary>Serialize like SaveToString, but DROP every #convert block that has
-    /// no #link (an incomplete rule -- a From/To pair with nothing mapped yet is
-    /// scratch, not a rule, so it is not persisted). Content OUTSIDE any #convert
-    /// block (leading comments/blanks) is preserved. Complete blocks round-trip
-    /// unchanged. Reports how many blocks were dropped via ADroppedCount.</summary>
+    /// <summary>Serialize like SaveToString, but DROP every #convert block that maps
+    /// nothing -- a From/To pair with no #link AND no #apply is scratch, not a rule,
+    /// so it is not persisted. Content OUTSIDE any #convert block (leading
+    /// comments/blanks) is preserved. Blocks that map something round-trip unchanged.
+    /// Reports how many blocks were dropped via ADroppedCount.</summary>
+    /// <param name="ADroppedCount">Set to the number of blocks omitted; 0 when none.</param>
+    /// <remarks>Annotation-only body nodes do NOT rescue a block: a block whose only
+    /// child is a #note (or a comment/blank) still counts as mapping nothing and is
+    /// dropped. #default / #ignore / #remove likewise do not currently rescue a
+    /// block -- pre-existing behaviour, deliberately left alone here.</remarks>
     function SaveCompleteToString(out ADroppedCount: Integer): string;
   end;
 
@@ -461,9 +466,15 @@ begin
       if LowerCase(Rest).StartsWith('#when') then
       begin
         Rest := Trim(Copy(Rest, Length('#when') + 1, MaxInt));
-        var Cond: string := Rest;
-        var SetsTxt: string := '';
-        SplitBareArrow(Rest, Cond, SetsTxt);
+        var Cond, SetsTxt: string;
+        // Branch on the result: SplitBareArrow's out-mode string arguments are
+        // finalized to '' BEFORE it runs, so on False they are empty, NOT whatever
+        // the caller put there. A #when with no '->' must keep its condition.
+        if not SplitBareArrow(Rest, Cond, SetsTxt) then
+        begin
+          Cond    := Rest;
+          SetsTxt := '';
+        end;
         var EqP: Integer := Pos('=', Cond);
         if EqP > 0 then
         begin
@@ -692,7 +703,7 @@ var
   SB : TStringBuilder;
   i  : Integer       ;
   j  : Integer       ;
-  hasLink: Boolean   ;
+  hasContent: Boolean;
 begin
   ADroppedCount := 0;
   SB := TStringBuilder.Create;
@@ -704,13 +715,16 @@ begin
       begin
         // find the block extent [i .. j) up to the next header or EOF
         j := i + 1;
-        hasLink := False;
+        hasContent := False;
         while (j < FNodes.Count) and (FNodes[j].Kind <> rnkConvert) do
         begin
-          if FNodes[j].Kind = rnkLink then hasLink := True;
+          // A block MAPS something if it links a property or applies a #mapping.
+          // #apply counts: its whole body may be one #apply and that is a real,
+          // authored rule -- dropping it would be silent data loss on save.
+          if FNodes[j].Kind in [rnkLink, rnkApply] then hasContent := True;
           Inc(j);
         end;
-        if hasLink then
+        if hasContent then
         begin
           // emit the whole block verbatim (header + its nodes)
           for var k := i to j - 1 do
@@ -720,7 +734,7 @@ begin
           end;
         end
         else
-          Inc(ADroppedCount); // incomplete rule (no #link) -> not persisted
+          Inc(ADroppedCount); // maps nothing -> scratch, not persisted
         i := j;
       end
       else

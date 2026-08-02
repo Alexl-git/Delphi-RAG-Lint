@@ -2874,6 +2874,167 @@ begin
   end;
 end;
 
+{ A '#when' with no '-> sets' must still keep its condition. This is not a
+  hypothetical: SplitBareArrow takes out-mode strings, and Delphi finalizes an
+  out-mode managed argument to '' BEFORE the callee runs -- so seeding the argument
+  with "the original text" and relying on the callee to leave it alone silently
+  yields an EMPTY condition. Only a test that omits the arrow can catch that. }
+procedure TestMappingWhenWithoutSets;
+var
+  B: TRuleBook;
+  N: TRuleNode;
+begin
+  B := TRuleBook.Create;
+  try
+    N := B.ParseLine('#mapping XYZStyle #when Style = stOK');
+    Check('when.noarrow.kind', N.Kind = rnkMapping);
+    Check('when.noarrow.name', N.MapName = 'XYZStyle', N.MapName);
+    Check('when.noarrow.from', N.WhenFrom = 'Style', '[' + N.WhenFrom + ']');
+    Check('when.noarrow.value', N.WhenValue = 'stOK', '[' + N.WhenValue + ']');
+    Check('when.noarrow.nosets', Length(N.Sets) = 0, IntToStr(Length(N.Sets)));
+    { A condition with no '=' either: the path must survive rather than vanish. }
+    N := B.ParseLine('#mapping XYZStyle #when Style');
+    Check('when.noeq.from', N.WhenFrom = 'Style', '[' + N.WhenFrom + ']');
+  finally
+    B.Free;
+  end;
+end;
+
+{ Emit's #mapping/#apply branches only run for an EDITED (Dirty) node -- an untouched
+  line returns Raw -- so the round-trip test alone would pass even against a parser
+  that never recognised #mapping. This drives Emit directly and pins the canonical
+  text of all three #mapping forms plus #apply in the suite, permanently. }
+procedure TestMappingEmit;
+var
+  N   : TRuleNode      ;
+  B   : TRuleBook      ;
+  Sets: TArray<TSetPair>;
+
+  { Parse a line, mark it edited, and re-emit: the canonical serialization must be a
+    FIXPOINT of the canonical source text, or editing one field of an untouched line
+    silently reformats it. }
+  function ReEmit(const ALine: string): string;
+  var Nd: TRuleNode;
+  begin
+    Nd := B.ParseLine(ALine);
+    try
+      Nd.Dirty := True;
+      Result := Nd.Emit;
+    finally
+      Nd.Free;
+    end;
+  end;
+
+begin
+  N := TRuleNode.Create;
+  try
+    N.Kind        := rnkMapping;
+    N.Dirty       := True;
+    N.MapName     := 'XYZStyle';
+    N.MapFromType := 'XYZ.TXYZButtonStyle';
+    N.MapToTypes  := TArray<string>.Create('cxButtons.TcxButton', 'cxButtons.TcxBigButton');
+    Check('emit.decl', N.Emit =
+      '#mapping XYZStyle from XYZ.TXYZButtonStyle to cxButtons.TcxButton, cxButtons.TcxBigButton',
+      N.Emit);
+  finally
+    N.Free;
+  end;
+
+  SetLength(Sets, 2);
+  Sets[0].ToPath := 'Default'    ; Sets[0].Value := 'True' ;
+  Sets[1].ToPath := 'ModalResult'; Sets[1].Value := 'mrOk' ;
+
+  N := TRuleNode.Create;
+  try
+    N.Kind      := rnkMapping;
+    N.Dirty     := True;
+    N.MapName   := 'XYZStyle';
+    N.WhenFrom  := 'Style';
+    N.WhenValue := 'stOK';
+    N.Sets      := Sets;
+    Check('emit.when', N.Emit =
+      '#mapping XYZStyle #when Style = stOK -> Default = True, ModalResult = mrOk', N.Emit);
+  finally
+    N.Free;
+  end;
+
+  N := TRuleNode.Create;
+  try
+    N.Kind    := rnkMapping;
+    N.Dirty   := True;
+    N.MapName := 'XYZStyle';
+    N.IsElse  := True;
+    N.Sets    := Copy(Sets, 1, 1); // ModalResult = mrOk
+    Check('emit.else', N.Emit = '#mapping XYZStyle #else -> ModalResult = mrOk', N.Emit);
+  finally
+    N.Free;
+  end;
+
+  N := TRuleNode.Create;
+  try
+    N.Kind      := rnkApply;
+    N.Dirty     := True;
+    N.ApplyName := 'XYZStyle';
+    Check('emit.apply', N.Emit = '#apply XYZStyle', N.Emit);
+  finally
+    N.Free;
+  end;
+
+  { parse -> edit -> emit must be a fixpoint for every form. }
+  B := TRuleBook.Create;
+  try
+    Check('emit.fixpoint.decl',
+      ReEmit('#mapping XYZStyle from XYZ.TXYZButtonStyle to cxButtons.TcxButton')
+      = '#mapping XYZStyle from XYZ.TXYZButtonStyle to cxButtons.TcxButton',
+      ReEmit('#mapping XYZStyle from XYZ.TXYZButtonStyle to cxButtons.TcxButton'));
+    Check('emit.fixpoint.when',
+      ReEmit('#mapping XYZStyle #when Style = stOK -> Default = True, ModalResult = mrOk')
+      = '#mapping XYZStyle #when Style = stOK -> Default = True, ModalResult = mrOk',
+      ReEmit('#mapping XYZStyle #when Style = stOK -> Default = True, ModalResult = mrOk'));
+    Check('emit.fixpoint.else',
+      ReEmit('#mapping XYZStyle #else -> ModalResult = mrNone')
+      = '#mapping XYZStyle #else -> ModalResult = mrNone',
+      ReEmit('#mapping XYZStyle #else -> ModalResult = mrNone'));
+    Check('emit.fixpoint.apply',
+      ReEmit('#apply XYZStyle') = '#apply XYZStyle', ReEmit('#apply XYZStyle'));
+  finally
+    B.Free;
+  end;
+end;
+
+{ A #convert block whose entire body is '#apply' MAPS something -- it pulls in a whole
+  #mapping. SaveCompleteToString used to drop any block with no #link, so such a block
+  was written to disk as zero bytes and reported as an "empty rule": silent data loss
+  in exactly the shape #apply exists to create. A #note-only block is still scratch. }
+procedure TestSaveCompleteKeepsApplyOnly;
+var
+  Book   : TRuleBook;
+  dropped: Integer  ;
+  outp   : string   ;
+begin
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(
+      '#mapping XYZStyle from XYZ.TXYZButtonStyle to cxButtons.TcxButton'#13#10 +
+      '#convert XYZ.TXYZToggleButton -> cxButtons.TcxButton'#13#10 +  // #apply only: KEEP
+      '  #apply XYZStyle'#13#10 +
+      '#convert C.TFoo -> D.TBar'#13#10 +                             // #note only: DROP
+      '#note nothing mapped yet'#13#10);
+    outp := Book.SaveCompleteToString(dropped);
+    Check('savecomplete.apply.dropcount', dropped = 1, IntToStr(dropped));
+    Check('savecomplete.apply.keeps.header',
+      Pos('#convert XYZ.TXYZToggleButton -> cxButtons.TcxButton', outp) > 0,
+      'an #apply-only block was dropped as if empty');
+    Check('savecomplete.apply.keeps.body', Pos('#apply XYZStyle', outp) > 0, outp);
+    Check('savecomplete.apply.keeps.mapping',
+      Pos('#mapping XYZStyle from', outp) > 0, 'the #mapping declaration was lost');
+    Check('savecomplete.apply.still.drops.note', Pos('C.TFoo', outp) = 0,
+      'a #note-only block is still scratch');
+  finally
+    Book.Free;
+  end;
+end;
+
 
 begin
   try
@@ -2940,6 +3101,9 @@ begin
     TestGoToDefinitionLive;
     TestMappingRules;
     TestMappingRoundTrip;
+    TestMappingWhenWithoutSets;
+    TestMappingEmit;
+    TestSaveCompleteKeepsApplyOnly;
 
     Writeln('');
     Writeln(Format('model-tests: %d pass / %d fail / %d skip / %d total',
