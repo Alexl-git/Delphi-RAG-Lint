@@ -62,6 +62,12 @@ type
     // v0.4: returns True if this file is already indexed at exactly this
     // mtime AND sha256 - so the indexer can skip re-parsing it.
     function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary
+    // schema_meta key. Used to carry the INDEXER FINGERPRINT -- see
+    // TIndexer.ForceReparse -- so an engine upgrade can invalidate an otherwise
+    // byte-identical file. '' when the key (or the table) is absent.
+    function GetMetaValue(const AKey: string): string                                                                     ;
+    procedure SetMetaValue(const AKey, AValue: string)                                                                    ;
     function OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
     function UpsertSymbol(const AToken: TFileTxToken; const ASymbol: TSymbol): Int64                                      ;
     procedure UpsertReference(const AToken: TFileTxToken; const ARef  : TReference);
@@ -422,6 +428,13 @@ type
     // cross-dictionary dedup -- e.g. exclude folders already covered by the
     // library or active-project indexes). Repeatable.
     procedure AddExcludeRoot(const APath: string);
+    /// <summary>INBOX 2.3: bypass the incremental up-to-date skip for this whole
+    /// run, re-parsing every walked file even when path+mtime+sha are unchanged.
+    /// Set when the caller detects an indexer-fingerprint change (a different
+    /// engine build, schema, platform or preprocess profile would extract
+    /// different symbols from identical bytes) or when the user passes
+    /// --force-reparse.</summary>
+    procedure SetForceReparse(AValue: Boolean);
     /// <summary>Apply glob-based file/dir filtering to subsequent IndexFolder
     /// calls. Must be called before the first IndexFolder; has no effect on
     /// IndexFile. SqlOnlyMS defaults to True if never called.</summary>

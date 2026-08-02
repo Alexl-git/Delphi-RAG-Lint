@@ -33,6 +33,7 @@ type
       FPreprocessEnabled: Boolean                          ; { PP-Task-9: run Preprocess before parsing }
       FProfile        : TDefineProfile                     ; { PP-Task-9: active define profile when preprocessing }
       FPreprocessFellBack: Boolean                         ; { PP-Task-9: one-shot fallback-log latch }
+      FForceReparse   : Boolean                            ; { INBOX 2.3: bypass the incremental skip for this whole run }
       /// <summary>PP-Task-9: log a per-file preprocess fallback the FIRST time it
       /// happens in this run, then stay silent so a bad batch does not flood the
       /// output with one line per file. The file is still indexed from its RAW
@@ -76,6 +77,7 @@ type
       procedure IndexFile(const AFilePath: string);
       function SkippedUpToDate: Integer;
       procedure AddExcludeRoot(const APath: string);
+      procedure SetForceReparse(AValue: Boolean);
       procedure SetWalkFilter(const AFilter: TWalkFilter);
       procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
   end;
@@ -134,6 +136,11 @@ begin
   if APath = '' then Exit;
   Norm:= LowerCase(IncludeTrailingPathDelimiter( ExcludeTrailingPathDelimiter(APath)));
   if not FExcludeRoots.Contains(Norm) then FExcludeRoots.Add(Norm);
+end;
+
+procedure TIndexer.SetForceReparse(AValue: Boolean);
+begin
+  FForceReparse:= AValue;
 end;
 
 function TIndexer.IsUnderExcludeRoot(const APath: string): Boolean;
@@ -363,7 +370,17 @@ begin
   // v0.4: incremental skip. If the file's already in the DB with the same
   // mtime and sha256, nothing to do - the parser would emit the same
   // symbols. Saves a parse + the per-file transaction.
-  if FStore.FileIsUpToDate(AFilePath, Mtime, Sha) then
+  //
+  // INBOX 2.3: "the parser would emit the same symbols" is only true while the
+  // PARSER is the same. The test above keys on FILE identity (path+mtime+sha)
+  // and knows nothing about what this build would produce, so after an engine
+  // upgrade an unchanged file was skipped FOREVER and kept its older, poorer
+  // parse -- a stale 0-match that is indistinguishable from "this symbol does
+  // not exist". Reported against a procedure the index had never seen because
+  // the DB predated the parser that could extract it; `touch` was the only
+  // known workaround. FForceReparse is set for the whole run when the caller
+  // detects an indexer-fingerprint change (or passes --force-reparse).
+  if (not FForceReparse) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha) then
   begin
     Inc(FSkippedUpToDate);
     Exit;
