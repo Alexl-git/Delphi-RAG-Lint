@@ -1313,7 +1313,7 @@ begin
 
   // ...and against the real file (spec section 11: not only synthetic input).
   P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
-    '..\..\..\..\docs\examples\convrules\sample.rules'));
+    '..\..\..\..\convrules\sample.rules'));
   if not TFile.Exists(P) then
   begin
     Skip('blockfile.rules.roundtrip.file', 'sample.rules not found: ' + P);
@@ -3580,9 +3580,88 @@ begin
     'an unapplied mapping must not take leaves out of the pool');
 end;
 
+{ Absolute path of a rule book in the repo's top-level convrules\ directory.
+  The test exe lives in src\tools\convrules-editor\tests, so four levels up is the
+  repo root. }
+function ConvRulesCorpusPath(const AFileName: string): string;
+begin
+  Result := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\convrules\' + AFileName));
+end;
+
+{ Conformance harness for one imported reFind rule book.
+
+  These files are Embarcadero's OWN reFind migration instructions, committed under
+  convrules\ verbatim (see docs\converter\refind-corpus.md). They are a product
+  deliverable a user can open in the editor, NOT an optional fixture -- so an absent
+  file is a FAILURE, never a Skip.
+
+  Three assertions, and none of them may be relaxed to get green:
+    * a non-trivial count of RECOGNISED (non-blank, non-comment) lines, which stops a
+      parser from "passing" by classifying the whole file as blank;
+    * ZERO rnkUnknown lines -- the claim under test is that our DSL is a reFind
+      superset, and every unknown line is a hole in that claim;
+    * byte-exact round-trip: SaveToString must reproduce the file's exact text. }
+procedure CheckReFindCorpus(const AId, AFileName: string; AMinRecognised: Integer);
+var
+  P, Txt, Round, FirstUnknown: string;
+  Book               : TRuleBook;
+  N                  : TRuleNode;
+  Unknown, Recognised: Integer  ;
+begin
+  P := ConvRulesCorpusPath(AFileName);
+  if not TFile.Exists(P) then
+  begin
+    Check(AId + '.present', False, 'committed corpus file is missing: ' + P);
+    Exit;
+  end;
+  Check(AId + '.present', True);
+
+  Txt  := TFile.ReadAllText(P, TEncoding.ASCII);
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(Txt);
+
+    Unknown      := 0;
+    Recognised   := 0;
+    FirstUnknown := '';
+    for N in Book.Nodes do
+      if N.Kind = rnkUnknown then
+      begin
+        Inc(Unknown);
+        if FirstUnknown = '' then FirstUnknown := N.Raw;
+      end
+      else if not (N.Kind in [rnkBlank, rnkComment]) then
+        Inc(Recognised);
+
+    Check(AId + '.recognised.nontrivial', Recognised >= AMinRecognised,
+      Format('%d recognised lines, want >= %d', [Recognised, AMinRecognised]));
+    Check(AId + '.no.unknown', Unknown = 0,
+      Format('%d unknown line(s); first: "%s"', [Unknown, FirstUnknown]));
+
+    Round := Book.SaveToString;
+    Check(AId + '.roundtrip', Round = Txt,
+      Format('round-trip altered the corpus (got %d chars, want %d)',
+             [Length(Round), Length(Txt)]));
+  finally
+    Book.Free;
+  end;
+end;
+
+{ Task 9: our DSL claims to be a reFind SUPERSET. This measures that claim against
+  Embarcadero's two shipped reFind instruction files rather than invented input. }
+procedure TestReFindCorpusLoads;
+begin
+  // 71 directives (#unuse / #remove / #remove DFM: / #migrate) across 77 lines.
+  CheckReFindCorpus('refind.bde',   'FireDAC_Migrate_BDE.rules',  20);
+  // 200-odd bare 'old -> new' unit renames -- reFind's plain find/replace form.
+  CheckReFindCorpus('refind.units', 'FireDAC_Rename_Units.rules', 20);
+end;
+
 
 begin
   try
+    TestReFindCorpusLoads;
     TestBlockSplitRulesRoundTrip;
     TestBlockSplitCastLibRoundTrip;
     TestBlockLabel;
