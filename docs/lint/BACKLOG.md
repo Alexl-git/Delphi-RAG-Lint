@@ -1,5 +1,88 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-08-02 (LATEST-76) -- **SUPERSEDES LATEST-75's next-action.** Converter 2.1 FIXED + verified on real RTL/VCL. The INBOX file GREW two new findings (2.9 HIGH, 2.10) after it was first read. Three decisions taken with the user: do NOT merge the branch into main, DO merge main into the branch, and make the indexer CASE-INSENSITIVE by default.
+>
+> ### >>> NEXT ACTIONS, in order
+>
+> 1. **Cherry-pick `41973bd` (2.1) onto `main`, rebuild, restage the shared exe.** Same pattern as
+>    `0c24f1a` -> `13e7fb0`. The conversion team cannot use 2.1 until this happens.
+> 2. **Merge `main` INTO `feat/autodoc-phase3`** (NOT the other way -- see the ruling below).
+> 3. **Case-insensitive lookups by default** (design below).
+> 4. **2.9** `--refs-as-leaves` phantom leaves (HIGH). Only reproducible from `main` until step 2.
+> 5. Then the deferred LATEST-75 work: INVESTIGATE-ONLY the 22 T7 failures, then plan T8.
+>
+> ### Fixed since LATEST-75
+>
+> **`41973bd` -- converter INBOX 2.1: method-pointer / procedural types were never indexed.**
+> `TNotifyEvent = procedure(Sender: TObject) of object;` produced ZERO rows. Confirmed with
+> tree-sitter's own CLI that the grammar parses it perfectly --
+> `(declType name: (identifier) (kEq) type: (type (declProcRef ...)))` -- so it is an EMITTER gap:
+> `WalkDeclType`'s dispatch had handlers only for interface / helper / class-or-record / enum /
+> alias, nothing claimed `declProcRef`, and `TryWalkAlias` accepts only a direct `typeref`. New
+> `TryWalkProcType`, ordered **before** `TryWalkAlias` (a declProcRef's ARGUMENTS contain typerefs
+> the alias handler would otherwise grab as the target). Emitted as `skTypeAlias` (kind `type`)
+> with the whole signature as target text, interior whitespace collapsed.
+> **Verified on real sources, not fixtures:** `System.Classes.pas` -> TNotifyEvent / TThreadMethod /
+> TGetStrProc; `Vcl.Controls.pas` -> TMouseEvent (declared across TWO lines, returns one collapsed
+> signature) / TKeyPressEvent. Autodoc battery unchanged, 56 suites / 1702 pass / the same 22 fail.
+>
+> ### The INBOX file GREW while it was being worked
+>
+> `docs/INBOX-converter-editor-phase-g-engine-findings.md` was modified at 13:53 -- AFTER it was
+> first read -- gaining **2.9** and **2.10**. Its own title still says "8 findings"; there are 10.
+> **Re-check that file's mtime before trusting a previous reading of it.**
+>
+> * **2.9 `--refs-as-leaves` does not prune component-reference roots -- HIGH, NOT STARTED.**
+>   `proptree --min-visibility published --refs-as-leaves` on
+>   `FireDAC.Comp.Client.TFDUpdateSQL` returns 364 leaves of which **354 are phantom**; 7 reference
+>   roots are not pruned. Inflates the editor's Auto-Match target surface ~36x. Code is
+>   `src/report/DRagLint.Convert.PropTree.pas`, which **exists only on `main`** -- it cannot be
+>   reproduced from this branch until main is merged in (next action 2).
+> * **2.10 `query --name` is case-sensitive, silently -- ROOT-CAUSED, NOT FIXED.** The two lookup
+>   paths disagree: `FindSymbolsByExactName` uses `WHERE name = :name` (SQLite `=` is
+>   case-SENSITIVE) while `FindSymbolsByPrefix` uses `LIKE 'x%'` (case-INSENSITIVE for ASCII). That
+>   is why the reporter saw the matching SEMANTICS shift with case (`TEdit` 2 rows, `tEdit` 2
+>   DIFFERENT rows, `tedit` 10 rows). **LOOSE END: neither path explains `ANotifyEvent` matching
+>   `TNotifyEvent`, which is a SUBSTRING -- a third lookup path exists and has NOT been located.
+>   Find it before changing `--name`; it is on every consumer's hot path.**
+>
+> ### USER RULING -- case-insensitive by DEFAULT
+>
+> **Delphi identifiers are case-insensitive, so a case-sensitive index is WRONG FOR THE LANGUAGE,**
+> not merely inconvenient. This reframes 2.10 from MEDIUM to a correctness bug and subsumes part of
+> 2.4. Agreed design, NOT yet implemented:
+>
+> * `WHERE name = :name COLLATE NOCASE` on the exact-name and qualified-name lookups.
+> * **`CREATE INDEX IF NOT EXISTS idx_symbols_name_nocase ON symbols(name COLLATE NOCASE)` is
+>   REQUIRED, not optional** -- the existing `name` index is BINARY and a NOCASE comparison cannot
+>   use it, so without this every lookup becomes a full scan of ~1.5M rows.
+> * Opt back in with a new `--case-sensitive` flag.
+> * `NOCASE` folds only ASCII A-Z, which is exactly right: this codebase is strict 7-bit ASCII.
+>
+> ### USER RULING -- branch merge direction
+>
+> Almost everything is already merged: of 20 branches only **`feat/autodoc-phase3` (117 ahead /
+> 108 behind)** and **`merge/converter-into-main` (2 ahead, the converter team's own)** carry
+> unmerged work.
+>
+> **DO NOT merge `feat/autodoc-phase3` into `main`.** Phase 3 is ~7 of 17 tasks done (T8/T9 and
+> T10-T14 not started) and carries 22 known-red suites whose fix is blocked on a deferred product
+> decision. That would put a half-built feature plus 22 failing tests on the branch everyone builds
+> from.
+>
+> **DO merge `main` INTO the branch.** It is 108 behind and the gap is still growing (82 yesterday).
+> That gap is exactly what caused today's near-miss -- the branch lacks `--refs-as-leaves`, so any
+> exe built from it is FATAL to the converter editor. Merging main in kills that hazard for good,
+> and makes 2.9 reproducible here. **Expect a conflict:** `feat/proptree-ancestor-scope` fixed the
+> same proptree defect we did and is already in main, so it will surface during this merge.
+>
+> ### Git
+>
+> `feat/autodoc-phase3` = `41973bd`, 117 ahead / 108 behind `main`. `main` = `13e7fb0`, 126 ahead of
+> `origin/main`. **NOTHING PUSHED -- user holds push.** Tree clean; the two INBOX markdown files are
+> untracked by convention. The staged `third_party\dll-win64\drag-lint.exe` is main+2.2+2.3 and does
+> **NOT** yet carry 2.1.
+
 > ## RESUME 2026-08-02 (LATEST-75) -- **T7's red suites CLOSED, but the real story is that T7 was 9 suites red, not 2. One genuine engine defect found + fixed. Converter INBOX 2.2 + 2.3 fixed, cherry-picked to `main`, and the SHARED exe is refreshed. Tree CLEAN, nothing pushed.**
 >
 > ### >>> NEXT ACTION
