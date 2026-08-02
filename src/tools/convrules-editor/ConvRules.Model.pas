@@ -35,8 +35,21 @@ type
     rnkMigrate,    // #migrate [Class:][obj.]old -> new [, unit ...]
     rnkNote,       // #note text
     rnkPcre,       // raw <pcre> -> <pcre> escape-hatch line
+    rnkMapping,    // #mapping Name from Type to Classes  |  #mapping Name #when/#else -> sets
+    rnkApply,      // #apply Name  (pull a #mapping into this #convert block)
     rnkUnknown     // anything else (kept verbatim, never dropped)
   );
+
+  /// <summary>One 'ToPath = Value' assignment from a #mapping clause's set list.</summary>
+  /// <remarks>ToPath keeps its dots intact ('Style.ModalResult.Default' stays one path,
+  /// it is never split into segments). Value is the verbatim right-hand text with the
+  /// surrounding whitespace trimmed; the model does not interpret or type-check it.</remarks>
+  TSetPair = record
+    /// <summary>Target property path on the converted component (dots preserved).</summary>
+    ToPath: string;
+    /// <summary>Right-hand value text, trimmed but otherwise verbatim.</summary>
+    Value : string;
+  end;
 
   /// <summary>One parsed DSL line. Raw is the verbatim source (minus EOL); the
   /// typed fields carry the parsed parts for the kinds that have them. Emit()
@@ -83,6 +96,30 @@ type
     // (Migrate/PCRE are rarely grid-edited; the directive tabs edit Raw text).
     NoteText: string;      // rnkNote payload (after '#note ')
 
+    // rnkMapping -- ONE node per physical line; a #mapping with three clauses is
+    // three sibling nodes, never a tree. MapFromType <> '' marks the declaration
+    // line; otherwise the node is a clause (IsElse tells #when from #else apart).
+    /// <summary>The mapping's name, present on the declaration line AND on every
+    /// clause line, since the clauses are siblings that only refer back by name.</summary>
+    MapName    : string;
+    /// <summary>Declaration line only: the source enum type ('' on clause lines).</summary>
+    MapFromType: string;
+    /// <summary>Declaration line only: the target classes the mapping is narrowed to,
+    /// in source order; empty on clause lines.</summary>
+    MapToTypes : TArray<string>;
+    /// <summary>#when clause only: the left-hand source property path.</summary>
+    WhenFrom   : string;
+    /// <summary>#when clause only: the enum value the clause fires on.</summary>
+    WhenValue  : string;
+    /// <summary>True on an '#else' clause, which carries Sets but no WhenFrom/WhenValue.</summary>
+    IsElse     : Boolean;
+    /// <summary>Clause lines only: the assignments to the right of '->', in source order.</summary>
+    Sets       : TArray<TSetPair>;
+
+    // rnkApply
+    /// <summary>The name of the #mapping this #apply line pulls into its block.</summary>
+    ApplyName  : string;
+
     function Emit: string;
   end;
 
@@ -92,10 +129,18 @@ type
   TRuleBook = class
   private
     FNodes: TObjectList<TRuleNode>;
-    function ParseLine(const ALine: string): TRuleNode;
   public
     constructor Create;
     destructor Destroy; override;
+
+    /// <summary>Parse ONE physical line into a fresh, unowned node.</summary>
+    /// <param name="ALine">The line without its trailing CR/LF. Any text is legal:
+    ///   a line the grammar does not recognise becomes rnkUnknown, never an error.</param>
+    /// <returns>A new TRuleNode with Raw set to ALine and Dirty False. The CALLER owns
+    ///   it unless it is handed to Add/LoadFromString, which transfer it to the book.</returns>
+    /// <remarks>Never raises. Public so the model can be spec'd line-by-line without
+    ///   round-tripping a whole file.</remarks>
+    function ParseLine(const ALine: string): TRuleNode;
 
     procedure Clear;
     procedure LoadFromString(const AText: string);
@@ -163,6 +208,101 @@ begin
   Result := S.StartsWith('//') or S.StartsWith(';');
 end;
 
+{ Split S on TOP-LEVEL commas. A comma nested in (), [] or <>, or inside a quoted
+  string, is part of one item and does not separate items -- so a generic target
+  class ('Unit.TList<A, B>') stays one entry. Blank items are dropped.
+  Tradeoff: '<' is treated as an opener, so an unbalanced '<' would swallow the
+  commas after it; generics are far likelier here than a bare '<' in a class name
+  or an enum value. }
+function SplitTopLevelCommas(const S: string): TArray<string>;
+var
+  L    : TList<string>;
+  i    : Integer      ;
+  Depth: Integer      ;
+  InStr: Boolean      ;
+  Start: Integer      ;
+  Item : string       ;
+begin
+  L := TList<string>.Create;
+  try
+    Depth := 0;
+    InStr := False;
+    Start := 1;
+    for i := 1 to Length(S) do
+    begin
+      case S[i] of
+        '''': InStr := not InStr;
+        '(', '[', '<': if not InStr then Inc(Depth);
+        ')', ']', '>': if (not InStr) and (Depth > 0) then Dec(Depth);
+        ',':
+          if (not InStr) and (Depth = 0) then
+          begin
+            Item := Trim(Copy(S, Start, i - Start));
+            if Item <> '' then L.Add(Item);
+            Start := i + 1;
+          end;
+      end;
+    end;
+    Item := Trim(Copy(S, Start, MaxInt));
+    if Item <> '' then L.Add(Item);
+    Result := L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+{ Parse a #mapping clause's set list -- '<ToPath> = <Value>[, ...]' -- into pairs.
+  Each item splits on its FIRST '=' so a value containing '=' survives whole, and
+  ToPath keeps its dots ('Style.ModalResult.Default' is one path, never segments).
+  An item with no '=' yields a bare ToPath with an empty Value. }
+function ParseSetList(const S: string): TArray<TSetPair>;
+var
+  L   : TList<TSetPair>;
+  Item: string         ;
+  P   : Integer        ;
+  Pair: TSetPair       ;
+begin
+  L := TList<TSetPair>.Create;
+  try
+    for Item in SplitTopLevelCommas(S) do
+    begin
+      P := Pos('=', Item);
+      if P > 0 then
+      begin
+        Pair.ToPath := Trim(Copy(Item, 1, P - 1));
+        Pair.Value  := Trim(Copy(Item, P + 1, MaxInt));
+      end
+      else
+      begin
+        Pair.ToPath := Item;
+        Pair.Value  := '';
+      end;
+      L.Add(Pair);
+    end;
+    Result := L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+{ Render a set list in the canonical spacing Emit uses: 'A = 1, B = 2'. Only ever
+  reached for a Dirty node -- an untouched line still round-trips from Raw. }
+function EmitSetList(const A: TArray<TSetPair>): string;
+var
+  L : TList<string>;
+  Pr: TSetPair     ;
+begin
+  L := TList<string>.Create;
+  try
+    for Pr in A do
+      if Pr.Value <> '' then L.Add(Pr.ToPath + ' = ' + Pr.Value)
+      else                   L.Add(Pr.ToPath);
+    Result := string.Join(', ', L.ToArray);
+  finally
+    L.Free;
+  end;
+end;
+
 { TRuleNode }
 
 function TRuleNode.Emit: string;
@@ -197,6 +337,18 @@ begin
       Result := Format('#useswap %s -> %s', [SwapOld, string.Join(', ', SwapNew)]);
     rnkNote:
       Result := Format('#note %s', [NoteText]);
+    rnkMapping:
+      // MapFromType marks the declaration line; the clause lines differ only by IsElse.
+      if MapFromType <> '' then
+        Result := Format('#mapping %s from %s to %s',
+                         [MapName, MapFromType, string.Join(', ', MapToTypes)])
+      else if IsElse then
+        Result := Format('#mapping %s #else -> %s', [MapName, EmitSetList(Sets)])
+      else
+        Result := Format('#mapping %s #when %s = %s -> %s',
+                         [MapName, WhenFrom, WhenValue, EmitSetList(Sets)]);
+    rnkApply:
+      Result := Format('#apply %s', [ApplyName]);
   else
     // rnkMigrate, rnkPcre, rnkComment, rnkBlank, rnkUnknown: edited via Raw.
     Result := Raw;
@@ -251,6 +403,20 @@ var
     end;
   end;
 
+  { Split on the FIRST bare '->', with or without the surrounding spaces -- a
+    #mapping clause writes '#else -> x', where the arrow has no space to its left. }
+  function SplitBareArrow(const S: string; out L, R: string): Boolean;
+  var Q: Integer;
+  begin
+    Q := Pos('->', S);
+    Result := Q > 0;
+    if Result then
+    begin
+      L := Trim(Copy(S, 1, Q - 1));
+      R := Trim(Copy(S, Q + 2, MaxInt));
+    end;
+  end;
+
 begin
   N := TRuleNode.Create;
   N.Raw := ALine;
@@ -275,6 +441,72 @@ begin
     if P = 0 then P := Length(T) + 1;
     var Dir: string := LowerCase(Copy(T, 1, P - 1));
     Body := Trim(Copy(T, P + 1, MaxInt));
+
+    if Dir = '#mapping' then
+    begin
+      // Three flat sibling line forms, all tied together only by <Name>:
+      //   #mapping <Name> from <EnumType> to <Class>[, <Class> ...]   (declaration)
+      //   #mapping <Name> #when <Path> = <Value> -> <ToPath> = <V>[, ...]
+      //   #mapping <Name> #else -> <ToPath> = <V>[, ...]
+      N.Kind := rnkMapping;
+      P := Pos(' ', Body);
+      if P = 0 then
+      begin
+        N.MapName := Body; // name only; the tail round-trips from Raw
+        Exit(N);
+      end;
+      N.MapName := Trim(Copy(Body, 1, P - 1));
+      Rest := Trim(Copy(Body, P + 1, MaxInt));
+
+      if LowerCase(Rest).StartsWith('#when') then
+      begin
+        Rest := Trim(Copy(Rest, Length('#when') + 1, MaxInt));
+        var Cond: string := Rest;
+        var SetsTxt: string := '';
+        SplitBareArrow(Rest, Cond, SetsTxt);
+        var EqP: Integer := Pos('=', Cond);
+        if EqP > 0 then
+        begin
+          N.WhenFrom  := Trim(Copy(Cond, 1, EqP - 1));
+          N.WhenValue := Trim(Copy(Cond, EqP + 1, MaxInt));
+        end
+        else
+          N.WhenFrom := Cond;
+        N.Sets := ParseSetList(SetsTxt);
+        Exit(N);
+      end;
+
+      if LowerCase(Rest).StartsWith('#else') then
+      begin
+        N.IsElse := True;
+        Rest := Trim(Copy(Rest, Length('#else') + 1, MaxInt));
+        var Lhs, SetsTxt: string;
+        if SplitBareArrow(Rest, Lhs, SetsTxt) then
+          N.Sets := ParseSetList(SetsTxt);
+        Exit(N);
+      end;
+
+      if LowerCase(Rest).StartsWith('from ') then
+      begin
+        Rest := Trim(Copy(Rest, Length('from ') + 1, MaxInt));
+        var ToP: Integer := Pos(' to ', LowerCase(Rest));
+        if ToP > 0 then
+        begin
+          N.MapFromType := Trim(Copy(Rest, 1, ToP - 1));
+          N.MapToTypes  := SplitTopLevelCommas(Copy(Rest, ToP + Length(' to '), MaxInt));
+        end
+        else
+          N.MapFromType := Rest;
+      end;
+      Exit(N);
+    end;
+
+    if Dir = '#apply' then
+    begin
+      N.Kind := rnkApply;
+      N.ApplyName := Body;
+      Exit(N);
+    end;
 
     if Dir = '#convert' then
     begin

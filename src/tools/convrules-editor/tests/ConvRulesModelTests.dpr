@@ -2803,6 +2803,77 @@ begin
   end;
 end;
 
+{ #mapping declares a reusable enum -> property-value mapping ONCE, narrowed to a source
+  enum and one or more target classes; #apply pulls it into a #convert block. One node per
+  line -- the model is flat and must stay flat. #apply is NOT #use: #use already means
+  "add a unit to the uses clause". }
+procedure TestMappingRules;
+var
+  B: TRuleBook;
+  N: TRuleNode;
+begin
+  B := TRuleBook.Create;
+  try
+    N := B.ParseLine('#mapping XYZStyle from XYZ.TXYZButtonStyle to cxButtons.TcxButton, cxButtons.TcxBigButton');
+    Check('mapping.kind', N.Kind = rnkMapping);
+    Check('mapping.name', N.MapName = 'XYZStyle', N.MapName);
+    Check('mapping.fromtype', N.MapFromType = 'XYZ.TXYZButtonStyle', N.MapFromType);
+    Check('mapping.totypes.count', Length(N.MapToTypes) = 2, IntToStr(Length(N.MapToTypes)));
+    Check('mapping.totypes.second', N.MapToTypes[1] = 'cxButtons.TcxBigButton', N.MapToTypes[1]);
+
+    N := B.ParseLine('#mapping XYZStyle #when Style = stOK -> Default = True, ModalResult = mrOk');
+    Check('when.kind', N.Kind = rnkMapping);
+    Check('when.name', N.MapName = 'XYZStyle', N.MapName);
+    Check('when.from', N.WhenFrom = 'Style', N.WhenFrom);
+    Check('when.value', N.WhenValue = 'stOK', N.WhenValue);
+    Check('when.not.else', not N.IsElse);
+    Check('when.sets.count', Length(N.Sets) = 2, IntToStr(Length(N.Sets)));
+    Check('when.sets.0.path', N.Sets[0].ToPath = 'Default', N.Sets[0].ToPath);
+    Check('when.sets.0.value', N.Sets[0].Value = 'True', N.Sets[0].Value);
+    Check('when.sets.1.path', N.Sets[1].ToPath = 'ModalResult', N.Sets[1].ToPath);
+
+    // Multi-level target paths must survive -- the whole point of the path model.
+    N := B.ParseLine('#mapping XYZStyle #when Style = stOK -> Style.ModalResult.Default = True');
+    Check('when.nested.path', N.Sets[0].ToPath = 'Style.ModalResult.Default', N.Sets[0].ToPath);
+
+    N := B.ParseLine('#mapping XYZStyle #else -> ModalResult = mrNone');
+    Check('else.is.else', N.IsElse);
+    Check('else.sets', (Length(N.Sets) = 1) and (N.Sets[0].Value = 'mrNone'));
+
+    N := B.ParseLine('#apply XYZStyle');
+    Check('apply.kind', N.Kind = rnkApply);
+    Check('apply.name', N.ApplyName = 'XYZStyle', N.ApplyName);
+
+    // #use must NOT be mistaken for #apply.
+    N := B.ParseLine('#use FireDAC.Comp.Client');
+    Check('use.still.means.unit', N.Kind = rnkUse, 'use must stay a uses-clause directive');
+  finally
+    B.Free;
+  end;
+end;
+
+{ An unedited line must come back byte-for-byte; a rule book that rewrites lines it did not
+  change makes every diff unreadable. }
+procedure TestMappingRoundTrip;
+const
+  SRC =
+    '#mapping XYZStyle from XYZ.TXYZButtonStyle to cxButtons.TcxButton'#13#10 +
+    '#mapping XYZStyle #when Style = stOK -> Default = True, ModalResult = mrOk'#13#10 +
+    '#mapping XYZStyle #else -> ModalResult = mrNone'#13#10 +
+    '#convert XYZ.TXYZToggleButton -> cxButtons.TcxButton'#13#10 +
+    '  #apply XYZStyle'#13#10;
+var
+  B: TRuleBook;
+begin
+  B := TRuleBook.Create;
+  try
+    B.LoadFromString(SRC);
+    Check('mapping.roundtrip.exact', B.SaveToString = SRC, 'round-trip altered the text');
+  finally
+    B.Free;
+  end;
+end;
+
 
 begin
   try
@@ -2867,6 +2938,8 @@ begin
     TestQueryLocationParse;
     TestEnumMembersParse;
     TestGoToDefinitionLive;
+    TestMappingRules;
+    TestMappingRoundTrip;
 
     Writeln('');
     Writeln(Format('model-tests: %d pass / %d fail / %d skip / %d total',
