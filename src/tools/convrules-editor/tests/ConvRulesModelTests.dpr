@@ -3245,6 +3245,146 @@ begin
     'expected exactly 1 warning kind, got ' + IntToStr(Warnings));
 end;
 
+{ BuildMappingNodes hands OWNERSHIP to the caller (unlike ParseAll, whose nodes belong to
+  GParseBook), so a test that builds must free. }
+procedure FreeNodes(const ANodes: TArray<TRuleNode>);
+var
+  N: TRuleNode;
+begin
+  for N in ANodes do N.Free;
+end;
+
+{ The fold/unfold pair is what keeps the mapping EDITOR a thin window: one case per enum
+  member to show, one node per physical line to store. Anything the fold drops -- a #when
+  on a literal the enum has not got, a member with no assignments -- is either a rule the
+  author would never see again or a line that should never have been written. }
+procedure TestMappingFold;
+var
+  Nodes  : TArray<TRuleNode>;
+  Cases  : TArray<TMappingCase>;
+  Built  : TArray<TRuleNode>;
+  Emitted: string;
+  N      : TRuleNode;
+
+  function CaseFor(const AMember: string): Integer;
+  var
+    i: Integer;
+  begin
+    Result := -1;
+    for i := 0 to High(Cases) do
+      if (not Cases[i].IsElse) and SameText(Cases[i].Member, AMember) then Exit(i);
+  end;
+
+begin
+  Nodes := ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton, cxButtons.TcxBigButton',
+    '#mapping M #when Style = stOK -> Default = True, ModalResult = mrOk',
+    '#mapping M #when Style = stGhost -> Cancel = True',
+    '#mapping M #else -> ModalResult = mrNone'
+  ]);
+
+  Check('fold.names', (Length(MappingNames(Nodes)) = 1) and (MappingNames(Nodes)[0] = 'M'),
+    'one mapping is declared here');
+  Check('fold.decl.found', MappingDeclaration(Nodes, 'm') <> nil,
+    'the name match is case-insensitive, like the rest of the DSL');
+  Check('fold.whenfrom', MappingWhenFrom(Nodes, 'M') = 'Style', MappingWhenFrom(Nodes, 'M'));
+  Check('fold.whenvalues',
+    string.Join(',', MappingWhenValues(Nodes, 'M')) = 'stOK,stGhost',
+    string.Join(',', MappingWhenValues(Nodes, 'M')));
+
+  Cases := MappingCasesOf(Nodes, 'M', ['stOK', 'stCancel']);
+  Check('fold.case.count', Length(Cases) = 4,
+    '2 enum members + the off-list stGhost + the #else, got ' + IntToStr(Length(Cases)));
+  Check('fold.member.order', (Cases[0].Member = 'stOK') and (Cases[1].Member = 'stCancel'),
+    'cases follow the ENUM declaration order, not the file order');
+  Check('fold.sets', Length(Cases[0].Sets) = 2, IntToStr(Length(Cases[0].Sets)));
+  Check('fold.unmapped.member.empty', Length(Cases[1].Sets) = 0,
+    'stCancel has no #when, so its case must come back empty');
+  Check('fold.offlist.kept', CaseFor('stGhost') = 2,
+    'a #when on a value the enum has not got was dropped instead of shown');
+  Check('fold.else.last', Cases[High(Cases)].IsElse,
+    'the #else pseudo-member must sit at the END of the member list');
+  Check('fold.else.sets',
+    (Length(Cases[3].Sets) = 1) and (Cases[3].Sets[0].ToPath = 'ModalResult'),
+    'the #else carries its own assignments');
+
+  Built := BuildMappingNodes('M', 'X.TStyle',
+    ['cxButtons.TcxButton', 'cxButtons.TcxBigButton'], 'Style', Cases);
+  try
+    Emitted := '';
+    for N in Built do Emitted := Emitted + N.Emit + #13#10;
+    Check('unfold.count', Length(Built) = 4, IntToStr(Length(Built)) + ': ' + Emitted);
+    Check('unfold.decl.first',
+      Built[0].Emit = '#mapping M from X.TStyle to cxButtons.TcxButton, cxButtons.TcxBigButton',
+      Built[0].Emit);
+    Check('unfold.when',
+      Pos('#mapping M #when Style = stOK -> Default = True, ModalResult = mrOk', Emitted) > 0,
+      Emitted);
+    Check('unfold.skips.unmapped', Pos('stCancel', Emitted) = 0,
+      'a member with no assignments must emit no clause at all');
+    Check('unfold.else.last', Built[3].Emit = '#mapping M #else -> ModalResult = mrNone',
+      Built[3].Emit);
+  finally
+    FreeNodes(Built);
+  end;
+
+  // No source type -> no declaration line. The clauses are still legal lines; it is
+  // ValidateMappings that then calls every #apply naming M undefined.
+  Built := BuildMappingNodes('M', '', nil, 'Style', Cases);
+  try
+    Check('unfold.no.decl.without.fromtype',
+      (Length(Built) = 3) and (Built[0].WhenValue = 'stOK'), IntToStr(Length(Built)));
+  finally
+    FreeNodes(Built);
+  end;
+end;
+
+{ What the mapping grid, the To pool and Auto-Match have to agree on: a From leaf an
+  applied #mapping decides is NOT unassigned, and the targets that mapping sets are NOT
+  free. Three call sites, one answer, so they cannot drift apart. }
+procedure TestMappingGridHooks;
+var
+  Book   : TArray<TRuleNode>;
+  Blk    : TArray<TRuleNode>;
+  Names  : TArray<string>;
+  Conds  : TArray<TConditionalFrom>;
+  Targets: TArray<string>;
+begin
+  Book := ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton',
+    '#mapping M #when Style = stOK -> Default = True, ModalResult = mrOk',
+    '#mapping M #when Style = stCancel -> Cancel = True',
+    '#mapping M #else -> ModalResult = mrNone',
+    '#convert X.TBtn -> cxButtons.TcxButton',
+    '#apply M'
+  ]);
+  Blk := ParseAll(['#apply M']);
+
+  Names := AppliedMappingNames(Blk);
+  Check('applied.names', (Length(Names) = 1) and (Names[0] = 'M'), 'the block applies M');
+
+  Conds := ConditionalFromPaths(Book, Names);
+  Check('cond.one.path', Length(Conds) = 1,
+    'every clause reads the same From property, so there is ONE conditional leaf, got '
+    + IntToStr(Length(Conds)));
+  Check('cond.case.count', ConditionalCasesOf(Conds, 'Style') = 3,
+    'two #when plus the #else are three branches of the same decision, got '
+    + IntToStr(ConditionalCasesOf(Conds, 'Style')));
+  Check('cond.case.count.casing', ConditionalCasesOf(Conds, 'STYLE') = 3,
+    'path matching is case-insensitive');
+  Check('cond.unrelated.leaf', ConditionalCasesOf(Conds, 'Caption') = 0,
+    'a leaf no mapping decides must stay freely assignable');
+  Check('cond.needs.apply', Length(ConditionalFromPaths(Book, nil)) = 0,
+    'a mapping the block does not #apply must not claim that block''s From leaves');
+
+  Targets := MappedTargetPaths(Book, Names);
+  Check('targets.count', Length(Targets) = 3, string.Join(',', Targets));
+  Check('targets.deduped', CountOf(Targets, 'ModalResult') = 1,
+    'ModalResult is set by two clauses, and must be withheld from the pool once');
+  Check('targets.needs.apply', Length(MappedTargetPaths(Book, nil)) = 0,
+    'an unapplied mapping must not take leaves out of the pool');
+end;
+
 
 begin
   try
@@ -3317,6 +3457,8 @@ begin
     TestMappingValidation;
     TestMappingBadLiteral;
     TestMappingIssueSeverity;
+    TestMappingFold;
+    TestMappingGridHooks;
 
     FreeAndNil(GParseBook);
 

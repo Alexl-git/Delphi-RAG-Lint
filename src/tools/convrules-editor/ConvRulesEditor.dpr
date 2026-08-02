@@ -25,6 +25,8 @@ uses
   ConvRules.WorkingSet in 'ConvRules.WorkingSet.pas',
   ConvRules.CurationForm in 'ConvRules.CurationForm.pas',
   ConvRules.Usage in 'ConvRules.Usage.pas',
+  ConvRules.Mappings in 'ConvRules.Mappings.pas',
+  ConvRules.MappingForm in 'ConvRules.MappingForm.pas',
   ConvRules.MainForm in 'ConvRules.MainForm.pas';
 
 { VCL styles (Windows11 Modern Light / Dark) linked as VCLSTYLE resources; without

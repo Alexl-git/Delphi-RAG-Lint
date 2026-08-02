@@ -19,7 +19,8 @@ uses
   Winapi.Windows, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls,
   Vcl.ExtCtrls, Vcl.Grids, Vcl.Dialogs, Vcl.Menus, Vcl.Graphics, Vcl.Themes,
   ConvRules.Model, ConvRules.Casts, ConvRules.Engine, ConvRules.Platform,
-  ConvRules.CastLib, ConvRules.Theme, ConvRules.OpenSourceClient;
+  ConvRules.CastLib, ConvRules.Theme, ConvRules.OpenSourceClient,
+  ConvRules.Mappings, ConvRules.MappingForm;
 
 const
   /// <summary>HKCU key holding this editor's per-user settings.</summary>
@@ -59,6 +60,7 @@ type
     FTbUnassign  : TToolButton;       // mapping: drop the selected row's assignment
     FTbFindInFrom: TToolButton;       // mapping: select the same-named From row
     FTbOnlyType  : TToolButton;       // mapping: pool type-narrowing toggle (caption flips)
+    FTbMappings  : TToolButton;       // mapping: open the conditional #mapping editor
     FTbExamine      : TToolButton;    // examine: pick .dfm/.pas, mark used From props
     FTbClearExamine : TToolButton;    // examine: drop the current examination
     FPanelTop : TPanel;
@@ -183,6 +185,17 @@ type
     procedure PoolFilter(Sender: TObject);
     procedure DoFindInFrom(Sender: TObject);
     procedure DoOnlyType(Sender: TObject);
+    /// <summary>Opens the conditional #mapping editor for one named mapping, splices the
+    /// result back into the book and makes sure the active block #applies it.</summary>
+    /// <remarks>Needs an active block: the live validation is done against that block's
+    /// To tree and To class, and a mapping only reaches a block through an #apply.</remarks>
+    procedure DoMappings(Sender: TObject);
+    { The mapping names the ACTIVE block #applies; [] when no block is selected. }
+    function  ActiveAppliedNames: TArray<string>;
+    { The From paths those applied mappings decide conditionally, with a case count each.
+      Recomputed per caller rather than cached: a mapping edit, a block switch and a raw
+      tab edit would each have to invalidate a cache, and the node list is short. }
+    function  ActiveConditionals: TArray<TConditionalFrom>;
     procedure SyncRawFromModel;
     procedure RefreshUnitList;
     procedure InsertUnitNode(ANode: TRuleNode);
@@ -536,6 +549,9 @@ begin
   FTbOnlyType := AddBtn('Only this type',
     'Show only pool leaves whose TYPE matches the highlighted leaf (toggle)',
     DoOnlyType);
+  FTbMappings := AddBtn('Mappings...',
+    'Author a conditional #mapping -- one enum VALUE sets several target properties -- '
+    + 'and #apply it to this conversion', DoMappings);
   AddSep;
 
   // --- examine ---
@@ -569,6 +585,7 @@ begin
   FTbFindInFrom.Enabled := (FActiveHdr >= 0) and (FPool.ItemIndex >= 0);
   FTbExamine.Enabled    := (FActiveHdr >= 0);
   FTbClearExamine.Enabled := Length(FUsedProps) > 0;
+  FTbMappings.Enabled   := (FActiveHdr >= 0);
 end;
 
 { FGrid.OnSelectCell -- the grid row is half of the Assign/Unassign gate, so the
@@ -1369,7 +1386,13 @@ end;
   DoUnassign / DoFindInFrom all read the SELECTED ROW'S CELL TEXT rather than
   indexing into FFromTree.Leaves by row number, so a filtered grid does not break
   them. Called once from LoadGridForBlock after the trees are (re)loaded, and
-  again on every keystroke in either filter box via GridFilterChange. }
+  again on every keystroke in either filter box via GridFilterChange.
+
+  A From leaf with no #link may still be spoken for: an applied #mapping can decide it
+  conditionally, and such a row shows '<conditional: N cases>' in the To column rather
+  than reading as unassigned. The conditional list is built ONCE per refresh (the two
+  passes below both consult it), because the alternative is rescanning every node for
+  every leaf. }
 procedure TConvRulesForm.RefreshGrid;
 var
   i, r, matched: Integer;
@@ -1377,9 +1400,24 @@ var
   Link: TRuleNode;
   fromCell, toCell: string;
   fromFilter, toFilter: string;
+  conds: TArray<TConditionalFrom>;
+
+  { The To cell for a From leaf: its #link target, else the conditional marker, else ''. }
+  function ToCellFor(const APath: string; ALink: TRuleNode): string;
+  var
+    n: Integer;
+  begin
+    if ALink <> nil then
+      Exit(PropCellText(ALink.LinkTo, LeafType(FToTree, ALink.LinkTo)));
+    n := ConditionalCasesOf(conds, APath);
+    if n > 0 then Result := Format('<conditional: %d cases>', [n])
+    else          Result := '';
+  end;
+
 begin
   fromFilter := Trim(FGridFindFrom.Text);
   toFilter   := Trim(FGridFindTo.Text);
+  conds      := ActiveConditionals;
 
   matched := 0;
   for i := 0 to High(FFromTree.Leaves) do
@@ -1387,8 +1425,7 @@ begin
     Leaf := FFromTree.Leaves[i];
     fromCell := PropCellText(Leaf.Path, Leaf.TypeName);
     Link := FindLinkForFrom(Leaf.Path);
-    if Link <> nil then toCell := PropCellText(Link.LinkTo, LeafType(FToTree, Link.LinkTo))
-                   else toCell := '';
+    toCell := ToCellFor(Leaf.Path, Link);
     if GridRowMatchesFilter(fromCell, toCell, fromFilter, toFilter) then
       Inc(matched);
   end;
@@ -1407,20 +1444,15 @@ begin
     Leaf := FFromTree.Leaves[i];
     fromCell := PropCellText(Leaf.Path, Leaf.TypeName);
     Link := FindLinkForFrom(Leaf.Path);
-    if Link <> nil then toCell := PropCellText(Link.LinkTo, LeafType(FToTree, Link.LinkTo))
-                   else toCell := '';
+    toCell := ToCellFor(Leaf.Path, Link);
     if not GridRowMatchesFilter(fromCell, toCell, fromFilter, toFilter) then Continue;
     FGrid.Cells[0, r] := fromCell;
-    if Link <> nil then
-    begin
-      FGrid.Cells[1, r] := toCell;          // 'Path : Type', same shape as the From cell
-      FGrid.Cells[2, r] := Link.Cast;
-    end
-    else
-    begin
-      FGrid.Cells[1, r] := '';
-      FGrid.Cells[2, r] := '';
-    end;
+    // 'Path : Type' for a #link, '<conditional: N cases>' for a mapped leaf, '' for
+    // an unassigned one. A conditional row has no cast: the mapping sets values, it
+    // does not convert one.
+    FGrid.Cells[1, r] := toCell;
+    if Link <> nil then FGrid.Cells[2, r] := Link.Cast
+    else                FGrid.Cells[2, r] := '';
     Inc(r);
   end;
 
@@ -1459,12 +1491,17 @@ var
   Link: TRuleNode;
   Leaf: TPropLeaf;
   Filter: string;
+  Target: string;
 begin
   // pool = T leaves not currently assigned to any From (via #link ToPath)
   Assigned := TDictionary<string, Boolean>.Create;
   try
     for Link in ActiveLinks do
       if Link.LinkTo <> '' then Assigned.AddOrSetValue(LowerCase(Link.LinkTo), True);
+    // A target an applied #mapping sets IS assigned -- by the mapping rather than by a
+    // #link -- so a pool that still offered it would be lying about the block.
+    for Target in MappedTargetPaths(FBook.Nodes.ToArray, ActiveAppliedNames) do
+      Assigned.AddOrSetValue(LowerCase(Target), True);
 
     Filter := LowerCase(Trim(FPoolFind.Text));
     FPool.Items.BeginUpdate;
@@ -1870,6 +1907,127 @@ begin
   SetStatus(Format('Pool narrowed to type "%s".', [t]));
 end;
 
+{ ---- conditional #mapping rules ---------------------------------------------
+
+  A #mapping is FILE-scope and reaches a block only through an #apply, so both
+  helpers below read the WHOLE book for the clauses but only the ACTIVE BLOCK for
+  which mappings are in force. The folding itself lives in ConvRules.Mappings; this
+  window just asks. }
+
+function TConvRulesForm.ActiveAppliedNames: TArray<string>;
+begin
+  if FActiveHdr < 0 then Exit(nil);
+  Result := AppliedMappingNames(FBook.NodesInBlock(FActiveHdr));
+end;
+
+function TConvRulesForm.ActiveConditionals: TArray<TConditionalFrom>;
+begin
+  if FActiveHdr < 0 then Exit(nil);
+  Result := ConditionalFromPaths(FBook.Nodes.ToArray, ActiveAppliedNames);
+end;
+
+{ "Mappings..." -- open the conditional-mapping editor for ONE named #mapping and
+  splice the result back into the book.
+
+  The name is asked for with InputQuery rather than a second picker window: the
+  file's existing names are listed in the prompt, so an unrecognised name reads as
+  "create this one" instead of silently editing the wrong mapping.
+
+  Three things happen on the way back in, and each of them is why this is not just
+  a ShowModal call:
+   * the mapping's OLD lines are removed and the new ones inserted in their place,
+     because the editor rewrites the whole mapping as one unit. A brand-new mapping
+     goes ABOVE the first #convert instead -- file scope, so every block can apply
+     it; written inside a block it would read as that block's.
+   * FActiveHdr is re-derived from the header NODE, since inserting above it moves
+     its index.
+   * the #apply is added when it is missing. Without it the mapping is authored,
+     validated and completely inert, and the grid would show nothing at all. }
+procedure TConvRulesForm.DoMappings(Sender: TObject);
+var
+  Names  : TArray<string>;
+  Name   : string;
+  Prompt : string;
+  Own    : TArray<TRuleNode>;
+  Idx    : TArray<Integer>;
+  Hdr    : TRuleNode;
+  InsAt  : Integer;
+  i      : Integer;
+  N      : TRuleNode;
+  Applied: Boolean;
+begin
+  if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
+
+  Names := MappingNames(FBook.Nodes.ToArray);
+
+  // Default to the mapping this block already applies, else the first one in the file.
+  Name := '';
+  for N in FBook.NodesInBlock(FActiveHdr) do
+    if (N.Kind = rnkApply) and (N.ApplyName <> '') then begin Name := N.ApplyName; Break; end;
+  if (Name = '') and (Length(Names) > 0) then Name := Names[0];
+
+  Prompt := 'Mapping name -- an existing one, or a new name to create:';
+  if Length(Names) > 0 then
+    Prompt := Prompt + sLineBreak + 'In this file: ' + string.Join(', ', Names);
+  if not InputQuery('Mappings', Prompt, Name) then Exit;
+  Name := Trim(Name);
+  if Name = '' then begin SetStatus('No mapping name given.'); Exit; end;
+
+  // Where this mapping's lines live today. Indexes, not just the nodes: they are what
+  // the splice below deletes and inserts at.
+  Idx := nil;
+  Own := nil;
+  for i := 0 to FBook.Nodes.Count - 1 do
+    if (FBook.Nodes[i].Kind = rnkMapping) and SameText(FBook.Nodes[i].MapName, Name) then
+    begin
+      Idx := Idx + [i];
+      Own := Own + [FBook.Nodes[i]];
+    end;
+
+  Hdr := FBook.Nodes[FActiveHdr];
+  if not TMappingForm.EditMapping(Self, Name, Own, FEngine, FToTree, Hdr.ToType) then
+  begin
+    SetStatus(Format('Mapping "%s" unchanged.', [Name]));
+    Exit;
+  end;
+  // Own now holds FRESH nodes owned by this method until the book takes them below.
+
+  if Length(Idx) > 0 then
+    InsAt := Idx[0]                    // still valid after the deletes: it is the first
+  else                                 // freed slot, and nothing before it moved
+  begin
+    InsAt := 0;
+    for i := 0 to FBook.Nodes.Count - 1 do
+      if FBook.Nodes[i].Kind = rnkConvert then begin InsAt := i; Break; end;
+  end;
+
+  for i := High(Idx) downto 0 do
+    FBook.Nodes.Delete(Idx[i]);        // the book owns them, so Delete frees them
+  for i := 0 to High(Own) do
+    FBook.Nodes.Insert(InsAt + i, Own[i]);
+
+  FActiveHdr := FBook.Nodes.IndexOf(Hdr);
+
+  Applied := False;
+  for N in FBook.NodesInBlock(FActiveHdr) do
+    if (N.Kind = rnkApply) and SameText(N.ApplyName, Name) then
+    begin Applied := True; Break; end;
+  if not Applied then
+  begin
+    N := TRuleNode.Create;
+    N.Kind      := rnkApply;
+    N.ApplyName := Name;
+    N.Dirty     := True;
+    FBook.Nodes.Insert(FActiveHdr + 1, N);
+  end;
+
+  LoadGridForBlock(FActiveHdr);
+  SyncRawFromModel;
+  RefreshRulesList;
+  SetStatus(Format('Mapping "%s": %d line(s) written%s.',
+    [Name, Length(Own), IfThen(Applied, '', ' and #apply added to this conversion')]));
+end;
+
 { Target surface changed (DFM published <-> PAS public+fields): remember the new
   --min-visibility and re-fetch the active rule's From/To trees at that surface. }
 procedure TConvRulesForm.SurfaceChanged(Sender: TObject);
@@ -1991,6 +2149,7 @@ var
   cnt: Integer;
   L: TRuleNode;
   matchType: string;
+  conds: TArray<TConditionalFrom>;
 
   function LeafName(const APath: string): string;
   begin
@@ -2003,6 +2162,7 @@ begin
   var LGuard: IInterface := HourGlass;
   if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
   nMatched := 0;
+  conds := ActiveConditionals;
   assignedTo := TDictionary<string, Boolean>.Create;
   toNameCount := TDictionary<string, Integer>.Create;
   try
@@ -2024,6 +2184,10 @@ begin
     begin
       // skip From leaves already mapped
       if FindLinkForFrom(fromLeaf.Path) <> nil then Continue;
+      // A leaf an applied #mapping decides conditionally is mapped too, just not by a
+      // #link. Auto-matching one on top would add a second, UNCONDITIONAL answer for
+      // the same source property -- the two rules would then both claim it.
+      if ConditionalCasesOf(conds, fromLeaf.Path) > 0 then Continue;
       fromName := LowerCase(LeafName(fromLeaf.Path));
 
       // PASS 1 -- an EXACT full-path match (From.path == To.path) is unambiguous
