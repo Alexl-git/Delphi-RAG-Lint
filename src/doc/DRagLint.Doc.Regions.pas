@@ -2386,14 +2386,31 @@ begin
     // it as its own.
     if NormProse <> '' then
     begin
+      // The harvested block is a RUN, not a set of individually marked lines.
+      // EmitHarvestedRemarks marks only its FIRST line (so the emitted prose is
+      // not littered with one HTML comment per line), which means a per-line
+      // marker test kept paragraphs 2..N -- they arrived here looking
+      // hand-written, were re-emitted as prose AND regenerated below, and the
+      // block grew by its own length on EVERY apply cycle. Measured on
+      // fixtures/docp3/tagoccurrence.pas: a constant +1501 bytes per cycle,
+      // never converging. The original T7 fix was verified only against
+      // harvest_text.pas, whose harvest is a single line, so it could not
+      // surface this.
+      //
+      // Truncating at the first marked line is what TDocStripper's rule 1b
+      // already does (delete from the marked line to the next tag/fence), and
+      // the two verbs MUST agree or apply and strip diverge again. It is safe
+      // for the same reason rule 1b states: MergeComment emits preserved
+      // hand-written prose ABOVE this block and never below it, so everything
+      // from the marker onward is engine-written continuation.
       var Kept: TStringBuilder:= TStringBuilder.Create;
       try
         for var PL in NormProse.Split([#10]) do
-          if Pos(AUTO_MARK, PL) = 0 then
-          begin
-            if Kept.Length > 0 then Kept.Append(#10);
-            Kept.Append(PL);
-          end;
+        begin
+          if Pos(AUTO_MARK, PL) > 0 then Break;
+          if Kept.Length > 0 then Kept.Append(#10);
+          Kept.Append(PL);
+        end;
         NormProse:= Trim(Kept.ToString);
       finally
         Kept.Free;
