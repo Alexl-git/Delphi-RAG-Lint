@@ -87,8 +87,21 @@ param(
   # the more dangerous of the two, so it gets the louder warning, not the quieter.
   [string[]]$Exclude = @(),
 
-  # Per-runner wall-clock budget. 180 s is the value the 2026-07-27 sweep used.
-  [int]$TimeoutSec = 180,
+  # Per-runner wall-clock budget.
+  #
+  # 300, not the 180 the 2026-07-27 sweep used. tests\lint\run_lint_tests.ps1
+  # takes 194.1 s standalone on this machine and passes 156/156, so at 180 it was
+  # killed and reported TIMEOUT -- but only when the machine was busy, so the same
+  # commit reported 0 timeouts on one run and 1 on the next. An intermittent red
+  # that is really "the cap is below the runner's honest cost" is worse than a
+  # slow suite: it teaches a reader to discount timeouts, which is exactly when a
+  # real hang gets waved through.
+  #
+  # This does NOT weaken the guard. A genuinely hung runner is still killed, and
+  # killed with its whole process tree, because an orphaned drag-lint.exe holds a
+  # .sqlite lock that fails the NEXT runner too. Raise this again only with a
+  # measured standalone time for the runner that needed it.
+  [int]$TimeoutSec = 300,
 
   # Enumerate and print the set, run nothing.
   [switch]$List,

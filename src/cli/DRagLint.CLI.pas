@@ -400,6 +400,11 @@ begin
   Writeln('                               you want suggestions; a fuzzy row does NOT carry the name you asked for.');
   Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
   Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--limit N] [--db ...] [--json]');
+  Writeln('                               searches STRING LITERALS ONLY -- string constants, resourcestrings,');
+  Writeln('                               DFM captions, SQL exception messages. NOT source text: identifiers,');
+  Writeln('                               property assignments, comments and type names are not in this corpus,');
+  Writeln('                               so 0 matches for those is correct, not a missing index. Use grep for');
+  Writeln('                               source text. (INBOX 2.7 -- 0 matches read as "not indexed".)');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--resolved] [--db ...] [--json]');
   Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous)');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');

@@ -4,11 +4,30 @@
 >
 > ### Git
 >
-> `feat/autodoc-phase3` = **`4438c06`** (+ uncommitted docs), was 110 behind `main` and is now
-> current. `main` = `3b4a877`, unchanged -- **nothing was merged INTO main.** NOTHING PUSHED.
-> Shared exe `third_party\dll-win64\drag-lint.exe` rebuilt + staged **17:06**, verified in the
+> `feat/autodoc-phase3` = **`c963dd9`**, was 110 behind `main` and is now current.
+> `main` = `3b4a877`, unchanged -- **nothing was merged INTO main.** NOTHING PUSHED.
+> Shared exe `third_party\dll-win64\drag-lint.exe` rebuilt + staged **17:31**, verified in the
 > STAGED binary. Completion report for the converter team:
 > `docs/INBOX-REPLY-2026-08-02-engine-completion-report.md`.
+>
+> ### Battery
+>
+> **200 pass / 6 fail / 0 timeout of 206** on the clean run at `4438c06`
+> (baseline before this session's work: 185 / 13 / 1 of 199). The 6 are the 5 autodoc suites
+> holding the 22 checks below plus `run_missing_doc_fix`, red since Task 3 -- **no unexplained
+> failure remains.** Fixed along the way: 5 `run_convert_*`, `run_bare_rhs_refs`, `run_butterfly`,
+> and `run_lint_tests`' timeout. A further confirming run was made after the 2.4/2.6/2.8 work.
+>
+> ### The converter INBOX is CLOSED except 2.5
+>
+> 2.1 / 2.2 / 2.3 / 2.11 were already done. This session closed **2.4** (`--exact`, and `--name`
+> now accepts a qualified name), **2.6** (enum members reachable -- `surface` accepts an enum and
+> returns members with ordinals in declaration order; they were always indexed and returned by no
+> query, so the team was parsing source to recover them), **2.8** (`--quiet` suppresses the stderr
+> config banner, for their stream-merging `RunCapture`), **2.9** and **2.10**.
+> **2.5 (bare `TEdit` resolving to FMX) is deliberately NOT fixed** -- it is a product decision and
+> the reporters were right not to invent a VCL-over-FMX preference. Suggested shape offered in the
+> reply: a `--prefer-namespace Vcl` hint on the query rather than a baked-in default.
 >
 > ### >>> NEXT ACTION: get the ruling in `docs/lint/TRIAGE-the-22-harvest-repair.md`
 >
