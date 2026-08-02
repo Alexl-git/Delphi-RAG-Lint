@@ -3649,19 +3649,124 @@ begin
 end;
 
 { Task 9: our DSL claims to be a reFind SUPERSET. This measures that claim against
-  Embarcadero's two shipped reFind instruction files rather than invented input. }
+  Embarcadero's two shipped reFind instruction files rather than invented input.
+
+  READ THE LIMITS before trusting the green:
+  * '.roundtrip' proves line-split / line-ending fidelity ONLY. TRuleNode.Emit returns
+    Raw verbatim whenever Dirty is False, and LoadFromString never sets Dirty, so the
+    round-trip cannot exercise ANY field reconstruction -- for #migrate exactly as much
+    as for rnkPcre. TestReFindCorpusReconstructs is the test that does.
+  * '.recognised.nontrivial' is met by line SHAPE, not by comprehension: for the rename
+    corpus every non-blank line contains ' -> ', so the threshold is satisfied by the
+    file format alone.
+  * '.no.unknown' is the only assertion with real grammar content, and its strength
+    differs per file -- keyword dispatch for the BDE corpus, an unanchored catch-all
+    for the rename corpus. See docs\converter\refind-corpus.md. }
 procedure TestReFindCorpusLoads;
 begin
-  // 71 directives (#unuse / #remove / #remove DFM: / #migrate) across 77 lines.
+  // 69 directives (#unuse / #remove / #remove DFM: / #migrate) across 77 lines.
   CheckReFindCorpus('refind.bde',   'FireDAC_Migrate_BDE.rules',  20);
-  // 200-odd bare 'old -> new' unit renames -- reFind's plain find/replace form.
+  // 197 bare 'old -> new' unit renames -- reFind's plain find/replace form.
   CheckReFindCorpus('refind.units', 'FireDAC_Rename_Units.rules', 20);
+end;
+
+{ The kinds TRuleNode.Emit rebuilds FROM ITS TYPED FIELDS when Dirty. Everything else
+  (rnkMigrate, rnkPcre, rnkComment, rnkBlank, rnkUnknown) falls to Emit's else branch
+  and returns Raw whatever Dirty says. }
+const
+  RECONSTRUCTING_KINDS = [rnkConvert, rnkLink, rnkDefault, rnkIgnore, rnkRemove,
+                          rnkUnuse, rnkUse, rnkUseSwap, rnkNote, rnkMapping, rnkApply];
+
+{ Task 9 follow-up: make the BDE corpus prove something the plain round-trip cannot.
+
+  Marking a node Dirty forces Emit to REBUILD the line out of the fields the parser
+  decomposed it into, instead of echoing Raw. Doing that to the real corpus and getting
+  the original bytes back is genuine evidence that parse and emit are inverses for those
+  directive forms -- which is what "superset of reFind" has to mean in practice.
+
+  Deliberately scoped to the kinds that HAVE a reconstruction path: dirtying a
+  raw-only kind would prove nothing while making the check look broader than it is.
+  The third assertion pins the known gap so it cannot close silently. }
+procedure TestReFindCorpusReconstructs;
+var
+  P, Txt, Rebuilt             : string   ;
+  Book                        : TRuleBook;
+  N, FirstUnuse               : TRuleNode;
+  Rebuildable, Migrates, Bare : Integer  ;
+begin
+  P := ConvRulesCorpusPath('FireDAC_Migrate_BDE.rules');
+  if not TFile.Exists(P) then
+  begin
+    Check('refind.bde.reconstruct.present', False, 'committed corpus file is missing: ' + P);
+    Exit;
+  end;
+
+  Txt  := TFile.ReadAllText(P, TEncoding.ASCII);
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(Txt);
+
+    Rebuildable := 0;
+    Migrates    := 0;
+    Bare        := 0;
+    FirstUnuse  := nil;
+    for N in Book.Nodes do
+    begin
+      if N.Kind in RECONSTRUCTING_KINDS then
+      begin
+        Inc(Rebuildable);
+        N.Dirty := True;   // force Emit down the field-reconstruction path
+        if (N.Kind = rnkUnuse) and (FirstUnuse = nil) then FirstUnuse := N;
+      end;
+      if N.Kind = rnkMigrate then
+      begin
+        Inc(Migrates);
+        // A decomposed #migrate would have filled these; none of them does.
+        if (N.FromType = '') and (N.ToType = '') and (N.Units = '') then Inc(Bare);
+      end;
+    end;
+
+    { 6 x #unuse + 2 x #remove + 1 x #remove DFM: = 9 lines with a real parse->emit
+      inverse to check. Small, but it is the honest number. }
+    Check('refind.bde.reconstruct.count', Rebuildable >= 9,
+      Format('%d reconstructable nodes, want >= 9', [Rebuildable]));
+
+    Rebuilt := Book.SaveToString;
+    Check('refind.bde.reconstruct.exact', Rebuilt = Txt,
+      Format('re-emitting %d nodes from their parsed fields did not reproduce the corpus '
+           + '(got %d chars, want %d)', [Rebuildable, Length(Rebuilt), Length(Txt)]));
+
+    { GAP, pinned: #migrate is recognised but NOT decomposed -- ParseLine sets only Kind
+      and Raw, so Emit passes it straight through and all 60 of the corpus's #migrate
+      lines round-trip vacuously. If someone teaches the parser to split #migrate, this
+      check fails on purpose: update it AND docs\converter\refind-corpus.md together. }
+    Check('refind.bde.migrate.notdecomposed', (Migrates >= 60) and (Bare = Migrates),
+      Format('%d of %d #migrate nodes carry no parsed fields', [Bare, Migrates]));
+
+    { Sensitivity guard: '.reconstruct.exact' would also pass if Dirty were ignored and
+      every node echoed Raw. Perturb one parsed FIELD -- not Raw -- and the output must
+      change. If it does not, the reconstruction path is dead and the check above is
+      vacuous. }
+    if FirstUnuse = nil then
+      Check('refind.bde.reconstruct.live', False, 'no rnkUnuse node to perturb')
+    else
+    begin
+      FirstUnuse.UnuseUnit := 'ZZZ.Sentinel';
+      Rebuilt := Book.SaveToString;
+      Check('refind.bde.reconstruct.live',
+        (Rebuilt <> Txt) and (Pos('#unuse ZZZ.Sentinel', Rebuilt) > 0),
+        'editing a parsed field did not change the emitted text -- Emit ignored Dirty');
+    end;
+  finally
+    Book.Free;
+  end;
 end;
 
 
 begin
   try
     TestReFindCorpusLoads;
+    TestReFindCorpusReconstructs;
     TestBlockSplitRulesRoundTrip;
     TestBlockSplitCastLibRoundTrip;
     TestBlockLabel;
