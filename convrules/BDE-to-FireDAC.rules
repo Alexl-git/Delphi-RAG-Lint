@@ -481,9 +481,11 @@
 //          TDBDataSet (64) / TBDEDataSet (57) -> FireDAC.Comp.Client.TFDRdbmsDataSet:
 //            the TARGET publishes only Name and Tag of its own (every other
 //            member is public and re-published by the concrete TFDQuery/TFDTable
-//            descendants instead). Auto-Match against it produced 27 identity
-//            links into shared Data.DB metadata sub-objects (FieldDefs.*,
-//            Constraints.*) plus ONE demonstrably wrong pairing,
+//            descendants instead). Auto-Match against it produced 57 links, of
+//            which 52 were identity links into shared Data.DB metadata
+//            sub-objects (FieldDefs.*, Constraints.*, FieldDefList.*) -- true
+//            but worthless, since those are the SAME Data.DB classes on both
+//            sides -- 4 were Name/Tag, and ONE was demonstrably wrong,
 //            'Indexes.Items.Filter <- Filter'. A #convert block was written and
 //            then withdrawn on that evidence. Convert the CONCRETE class
 //            (TQuery/TTable/TStoredProc) instead; this line stays a type rename.
