@@ -4428,12 +4428,80 @@ begin
 end;
 
 
+{ The silent-damage guard for the conversion library.
+
+  '#remove <P>' is FILE-SCOPED and takes a BARE property name -- unlike #migrate it has
+  no '<Class>:' qualifier -- so it strips P from EVERY component in the converted file.
+  Emitting one for a property that some OTHER #convert block legitimately reads would
+  destroy that block's mapping, and nothing in the DSL would complain. This asserts the
+  invariant the library is built to: no plain #remove names a property that any #link
+  anywhere takes as its SOURCE (directly, or as the root of a dotted source path, since
+  removing Params also removes Params.Items.Name).
+
+  '#remove DFM: <P>' is deliberately EXCLUDED from the check, because it is a different
+  statement: it drops only the value persisted in the .dfm and KEEPS the property in
+  code. The corpus's '#remove DFM: Origin' coexists with '#link Origin <- Origin' on
+  purpose -- Origin is the one inherited Data.DB.TField.Origin, carried by both
+  Data.DB.TAutoIncField and FireDAC.Comp.DataSet.TFDAutoIncField (verified against
+  library-Win64), so the link is real while the DFM remove only discards a stale
+  BDE-format value. Promoting that line to a plain '#remove Origin' WOULD break the
+  link -- and this test fails if anyone does, which is the point. }
+procedure TestConversionLibraryRemovesAreSafe;
+var
+  P, Txt, Bad : string;
+  Book        : TRuleBook;
+  N, L2       : TRuleNode;
+  Src, Prop   : string;
+  Dot, NBad   : Integer;
+begin
+  P := ConvRulesCorpusPath('BDE-to-FireDAC.rules');
+  if not TFile.Exists(P) then
+  begin
+    Check('convlib.bde2fd.removes.present', False, 'library file is missing: ' + P);
+    Exit;
+  end;
+
+  Txt  := TFile.ReadAllText(P, TEncoding.ASCII);
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(Txt);
+    NBad := 0;
+    Bad  := '';
+    for N in Book.Nodes do
+    begin
+      if (N.Kind <> rnkRemove) or N.RemoveDfmOnly then Continue;
+      Prop := Trim(N.RemoveProp);
+      if Prop = '' then Continue;
+      for L2 in Book.Nodes do
+      begin
+        if L2.Kind <> rnkLink then Continue;
+        Src := Trim(L2.LinkFrom);
+        Dot := Pos('.', Src);
+        if Dot > 0 then Src := Copy(Src, 1, Dot - 1);
+        if SameText(Src, Prop) then
+        begin
+          Inc(NBad);
+          if Bad = '' then
+            Bad := Format('#remove %s vs #link %s <- %s',
+                          [Prop, L2.LinkTo, L2.LinkFrom]);
+        end;
+      end;
+    end;
+    Check('convlib.bde2fd.removes.dont.strip.links', NBad = 0,
+      Format('%d file-scope #remove/#link collision(s); first: %s', [NBad, Bad]));
+  finally
+    Book.Free;
+  end;
+end;
+
+
 begin
   try
     TestReFindCorpusLoads;
     TestReFindCorpusReconstructs;
     TestConversionLibraryLoads;
     TestConversionLibraryReconstructs;
+    TestConversionLibraryRemovesAreSafe;
     TestBlockSplitRulesRoundTrip;
     TestBlockSplitCastLibRoundTrip;
     TestBlockLabel;
