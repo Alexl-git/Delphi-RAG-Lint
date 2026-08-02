@@ -1,5 +1,21 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-08-02 (LATEST-75) -- **T7 fixture rework IN PROGRESS. `run_doc_p3_preserve_tags.ps1` comment adjacency issue identified and partially addressed; `run_doc_p3_returns.ps1` expects 20 (TWENTY) not 19. See docs/lint/FIXTURE-UPDATE-T7-HARVEST-2026-08-02.md.**
+> 
+> ### Status Update
+> 
+> T7 legitimately harvests `//` comments directly above declarations. Test fixtures with such comments now see those harvested into `<summary>` tags. Two paths forward:
+> 
+> 1. **preserve_tags.pas**: Added 2+ blank lines before `///` tags to break adjacency (prevents comment-above-declaration harvesting since `HarvestInterfaceComment` uses `FindDocRegionAbove` with `AllowGap=1`). Fixture comments explain what each test isolates; separation preserves both the test intent AND the fixture's self-documenting nature without weakening the guards.
+> 
+> 2. **returns.ps1**: Updated count expectation from NINETEEN to TWENTY (line ~477). With T7 harvesting, one routine that previously had no summary (T3's omit-when-empty suppressed its blocks) now emits one, making its `<returns>` visible. The 20th line is legitimate and should be re-derived, not just counted.
+> 
+> ### NEXT IMMEDIATE ACTIONS
+> 
+> 1. **Verify preserve_tags fixture fix** -- run `run_doc_p3_preserve_tags.ps1` to confirm the blank-line separation breaks harvesting (assertions should now pass).
+> 2. **Identify and list the 20th routine** in `run_doc_p3_returns.ps1` control list (which routine now renders Observed: when it didn't before).
+> 3. **Debug returns.pas indexing issue** -- test currently shows all spans as 0..0 (empty index), despite the test creating and populating a database. May be fixture-format or runner-initialization issue.
+
 > ## RESUME 2026-08-01 (LATEST-74) -- **T7 CODE COMPLETE and green on its own suite + 6 regressions + a byte-identical apply/strip round-trip. NOT FINISHED: two suites are RED on expectation churn the plan predicted. Committed anyway, deliberately, with the churn named.**
 >
 > ### What T7 shipped

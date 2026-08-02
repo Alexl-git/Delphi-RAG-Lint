@@ -37,6 +37,7 @@ procedure CallsAllTags;
 // is forced non-empty by the facts alone and the UNGUARDED delete+insert
 // repair branch runs directly (not the Merged='' branch RegionFullyEngineOwned
 // guards) -- this is "Task 3's delete branch made destructive", reproduced.
+
 /// <exception cref="EBar">Raised on bad input.</exception>
 procedure ExceptionOnlyHasCaller;
 
@@ -46,6 +47,7 @@ procedure CallsExceptionOnly;
 // hand-written summary alone already routes this through the repair path
 // (ExistingHasAnyTag is True from HasSummaryTag), so this proves the repair
 // path does not fabricate any of the five even when it genuinely runs.
+
 /// <summary>Plain summary; no exotic tags here.</summary>
 procedure NoExoticTags;
 
@@ -61,6 +63,7 @@ procedure NoExoticTags;
 // same failure as the tag simply being dropped. WITH a caller so the
 // repair path has something else to say too (proving this is a genuine
 // merge, matching ExceptionOnlyHasCaller's own reasoning above).
+
 /// <deprecated/>
 procedure BareDeprecatedOnly;
 
@@ -78,6 +81,7 @@ procedure CallsBareDeprecatedOnly;
 // every other symbol above, this is the ONE case where growth, not
 // disappearance, was the failure mode, so idempotency itself is the
 // regression test here). WITH a caller so the repair path genuinely runs.
+
 /// <summary>Uses <see cref="Other.RelatedThing"/> for related lookups and
 /// can raise <exception cref="ENested">a nested, inline description</exception>
 /// in edge cases.</summary>
@@ -100,6 +104,7 @@ procedure CallsNestedTagsInSummary;
 // underlying mechanism -- BuildStandaloneFor's canonical container list --
 // is the same one already exercised by the three rows below; see the task
 // report for that verification).
+
 /// <deprecated>Use <see cref="Other.RelatedThing"/> instead of this old thing.</deprecated>
 procedure NestedInDeprecated;
 
@@ -121,6 +126,7 @@ procedure CallsNestedExceptionInExample;
 // between the comment and the declaration) -- every OTHER symbol in this
 // fixture abuts its declaration, and the brief's own table names both
 // shapes.
+
 /// <deprecated>Use Rev instead; this will be removed in 2.0.</deprecated>
 
 procedure GappedDeprecatedMessage;
@@ -134,6 +140,7 @@ procedure CallsGappedDeprecatedMessage;
 // SeeAlso array; re-emitting every entry as <seealso> would destroy the
 // author's <see> and fabricate a <seealso> they never wrote (a destruction
 // AND a fabrication, since the two tags render differently).
+
 /// <see cref="Other.RelatedThing"/>
 procedure BareSeeOnly;
 
@@ -146,6 +153,7 @@ procedure CallsBareSeeOnly;
 // sniff correctly leaves these as plain prose; a caller would only add an
 // unrelated facts block and dilute what the assertion is checking (whether
 // the FULL original text survives, untruncated).
+
 /// Plain prose that mentions <seealso> without any cref, plus trailing words.
 procedure ProseMentionsSeeAlso;
 /// Grows the <seed> lookup table by one bucket.
@@ -159,6 +167,7 @@ procedure ProseMentionsDeprecatedSoon;
 // '') could not distinguish "the tag is absent" from "present but empty";
 // HasExampleTag (mirroring HasSummaryTag) makes that distinction. WITH a
 // caller so the repair path genuinely runs.
+
 /// <summary>Has a deliberately blank example slot.</summary>
 /// <example></example>
 procedure EmptyExampleSurvives;
@@ -180,6 +189,7 @@ procedure CallsEmptyExampleSurvives;
 // repair-delete-insert branch -- worse than Task 3's OWN known growth-only
 // trap, since here cycle 1 looks completely safe). Each row below is WITH a
 // caller, matching every other load-bearing case in this fixture.
+
 /// <deprecated >Space before the closing angle bracket.</deprecated>
 procedure SpaceBeforeCloseDeprecated;
 
@@ -194,6 +204,7 @@ procedure CallsUnclosedDeprecated;
 // the OLD hand-maintained sniff mismatched on this axis too. Correctly
 // recognized, this round-trips as a genuine <deprecated/> (canonical
 // lowercase spelling, NOT wrapped in a fabricated <summary>).
+
 /// <DEPRECATED>Recognized case-insensitively.</DEPRECATED>
 procedure AllCapsDeprecatedTag;
 
@@ -203,6 +214,7 @@ procedure CallsAllCapsDeprecatedTag;
 // dating this task) does not, so this was ALREADY a sniff/parse mismatch
 // before round 2 -- the general "no recognized tag at all" fallback closes
 // it as a side effect, without needing an exception-specific sniff change.
+
 /// <exception>Missing the required cref attribute.</exception>
 procedure ExceptionNoCrefAttr;
 
@@ -216,6 +228,7 @@ procedure CallsExceptionNoCrefAttr;
 // v(ADP3 T3f): closed. The emitter accounts for nothing on that line, so the
 // residual carry-through hands the whole line back verbatim, exactly as it
 // does for <value>.
+
 /// <summary>Has a real, well-formed summary.</summary>
 /// <seealso>Missing the required cref, sitting alongside a real tag.</seealso>
 procedure SeeAlsoNoCrefWithSummary;
@@ -235,6 +248,7 @@ procedure CallsUnclosedExampleTag;
 // fresh/additive path and leaves this line untouched; cycle 2 is where
 // MergeAdjacentSameKind folds the facts block in and the repair path
 // actually normalizes the tab to a canonical single space.
+
 /// <seealso	cref="Other.RelatedThing"/>
 procedure TabSeparatedSeeAlso;
 
@@ -259,6 +273,7 @@ procedure CallsTabSeparatedSeeAlso;
 // text), and cycles 2/3 confirm the SAME content survives once
 // MergeAdjacentSameKind folds the two into one region and the repair path
 // genuinely runs on it.
+
 /// <since>1.0 <exception cref="EInSince">x</exception></since>
 procedure SinceWithNestedException;
 
@@ -282,6 +297,7 @@ procedure CallsSinceWithNestedDeprecated;
 // inside one of the rich-body four still fabricated a standalone sibling
 // tag the author never wrote. Each row below is stable, byte-identical, from
 // the FIRST apply cycle.
+
 /// <exception cref="E1">exc text <summary>nested summary</summary> tail</exception>
 procedure ExceptionWithNestedSummary;
 
@@ -317,6 +333,7 @@ procedure CallsExampleWithNestedParam;
 // nested inside a genuinely standalone one still survives verbatim. See
 // TDocRegions.StandaloneBodyOf. This row now asserts 3-cycle stability AND the
 // strip round-trip, like every other nesting row.
+
 /// <deprecated>dep <returns>nested returns text</returns> tail</deprecated>
 function DeprecatedWithNestedReturns: Integer;
 
@@ -333,6 +350,7 @@ procedure CallsDeprecatedWithNestedReturns;
 // so "nested remarks" got duplicated above the fence -- unmarked, so a strip left
 // a <remarks> element the author never wrote. See DeprecatedWithNestedReturns'
 // own comment for how T3h closed it.
+
 /// <example>ex <remarks>nested remarks</remarks> tail</example>
 procedure ExampleWithNestedRemarks;
 

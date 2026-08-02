@@ -112,6 +112,7 @@ type
   // begins with the `class` token, NOT with the routine keyword, so a span
   // that starts one line early leaves the routine keyword as the body's
   // SECOND token. Hovered against a lagged span in the runner.
+
   TBox = class
     class function ClassLag(A: Integer): Integer;
   end;
@@ -122,6 +123,7 @@ type
   // in. Their return values are deliberately distinct and unique in this file,
   // so "TBeta.Same adopted TAlpha.Same's value" is a check that can only pass
   // one way. Hovered against a doctored span in the runner.
+
   TAlpha = class
     class function Same(A: Integer): Integer;
   end;
