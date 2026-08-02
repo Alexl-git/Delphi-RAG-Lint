@@ -12,6 +12,7 @@ uses
   System.Classes,
   Winapi.Windows,
   ConvRules.Model in '..\ConvRules.Model.pas',
+  ConvRules.Mappings in '..\ConvRules.Mappings.pas',
   ConvRules.Units in '..\ConvRules.Units.pas',
   ConvRules.Casts in '..\ConvRules.Casts.pas',
   ConvRules.CastLib in '..\ConvRules.CastLib.pas',
@@ -27,6 +28,10 @@ var
   GPass: Integer = 0;
   GFail: Integer = 0;
   GSkip: Integer = 0;
+  { Owns every node handed out by ParseAll, so the fixture can return a plain
+    TArray<TRuleNode> the caller never has to free. Created on first use, freed once
+    at the end of the run. }
+  GParseBook: TRuleBook = nil;
 
 procedure Check(const AName: string; ACond: Boolean; const ADetail: string = '');
 begin
@@ -3035,6 +3040,119 @@ begin
   end;
 end;
 
+{ One flattened property-tree leaf. Mapping validation only reads Path and IsWritable,
+  so those are what the fixture pins; the rest is filled in plausibly so the record is
+  never half-initialised. }
+function MakeLeaf(const APath, ATypeName: string; AWritable: Boolean): TPropLeaf;
+begin
+  Result := Default(TPropLeaf);
+  Result.Path       := APath;
+  Result.TypeName   := ATypeName;
+  Result.Kind       := 'scalar';
+  Result.IsWritable := AWritable;
+  Result.Visibility := 'published';
+  Result.MemberKind := 'property';
+end;
+
+{ A TProptree standing in for a real `drag-lint proptree` result, so mapping validation
+  is testable with no index, no exe and no process spawn. }
+function MakeTreeFixture(const ALeaves: TArray<TPropLeaf>): TProptree;
+begin
+  Result := Default(TProptree);
+  Result.Qname    := 'cxButtons.TcxButton';
+  Result.RootType := 'cxButtons.TcxButton';
+  Result.Leaves   := ALeaves;
+end;
+
+{ Parse a rule-book fragment into the flat node array a validator consumes. The nodes
+  belong to GParseBook (program lifetime), never to the caller. }
+function ParseAll(const ALines: TArray<string>): TArray<TRuleNode>;
+var
+  I: Integer;
+begin
+  if GParseBook = nil then
+    GParseBook := TRuleBook.Create;
+  SetLength(Result, Length(ALines));
+  for I := 0 to High(ALines) do
+    Result[I] := GParseBook.Add(GParseBook.ParseLine(ALines[I]));
+end;
+
+{ Validation is what makes the mapping trustworthy: an unwritable or absent target is a rule
+  that will silently do nothing at apply time. Non-exhaustive is a WARNING, not an error --
+  leaving a member unmapped is a legitimate choice. }
+procedure TestMappingValidation;
+var
+  Tree: TProptree;
+  Nodes: TArray<TRuleNode>;
+  Issues: TArray<TMappingIssue>;
+
+  function HasKind(const A: TArray<TMappingIssue>; K: TMappingIssueKind): Boolean;
+  var it: TMappingIssue;
+  begin
+    for it in A do if it.Kind = K then Exit(True);
+    Result := False;
+  end;
+begin
+  Tree := MakeTreeFixture([
+    MakeLeaf('Default',     'Boolean',      True),
+    MakeLeaf('ModalResult', 'TModalResult', True),
+    MakeLeaf('Handle',      'HWND',         False)   // read-only
+  ]);
+
+  Nodes := ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton',
+    '#mapping M #when Style = stOK -> Default = True'
+  ]);
+  Issues := ValidateMappings(Nodes, Tree, ['stOK'], 'cxButtons.TcxButton');
+  Check('validate.clean', Length(Issues) = 0, 'a valid mapping reported issues');
+
+  Nodes := ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton',
+    '#mapping M #when Style = stOK -> Nope = True'
+  ]);
+  Check('validate.missing.target',
+    HasKind(ValidateMappings(Nodes, Tree, ['stOK'], 'cxButtons.TcxButton'), mikTargetMissing));
+
+  Nodes := ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton',
+    '#mapping M #when Style = stOK -> Handle = 1'
+  ]);
+  Check('validate.readonly.target',
+    HasKind(ValidateMappings(Nodes, Tree, ['stOK'], 'cxButtons.TcxButton'), mikTargetReadOnly));
+
+  // Applying to a class the mapping never declared.
+  Nodes := ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton',
+    '#mapping M #when Style = stOK -> Default = True'
+  ]);
+  Check('validate.totype.not.declared',
+    HasKind(ValidateMappings(Nodes, Tree, ['stOK'], 'Vcl.StdCtrls.TButton'), mikToTypeNotDeclared));
+
+  // Two members, one #when, no #else -> WARN, and it must NOT be reported as an error kind.
+  Nodes := ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton',
+    '#mapping M #when Style = stOK -> Default = True'
+  ]);
+  Issues := ValidateMappings(Nodes, Tree, ['stOK', 'stCancel'], 'cxButtons.TcxButton');
+  Check('validate.nonexhaustive.warns', HasKind(Issues, mikNonExhaustive));
+  Check('validate.nonexhaustive.not.fatal',
+    not HasKind(Issues, mikTargetMissing), 'a gap must not masquerade as a missing target');
+
+  // An #else closes the gap.
+  Nodes := ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton',
+    '#mapping M #when Style = stOK -> Default = True',
+    '#mapping M #else -> ModalResult = mrNone'
+  ]);
+  Check('validate.else.closes.gap',
+    not HasKind(ValidateMappings(Nodes, Tree, ['stOK','stCancel'], 'cxButtons.TcxButton'),
+                mikNonExhaustive));
+
+  Check('validate.apply.undefined',
+    HasKind(ValidateMappings(ParseAll(['#apply Ghost']), Tree, [], 'cxButtons.TcxButton'),
+            mikUndefined));
+end;
+
 
 begin
   try
@@ -3104,6 +3222,9 @@ begin
     TestMappingWhenWithoutSets;
     TestMappingEmit;
     TestSaveCompleteKeepsApplyOnly;
+    TestMappingValidation;
+
+    FreeAndNil(GParseBook);
 
     Writeln('');
     Writeln(Format('model-tests: %d pass / %d fail / %d skip / %d total',
