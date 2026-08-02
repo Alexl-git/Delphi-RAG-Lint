@@ -20,6 +20,7 @@ uses
   ConvRules.WorkingSet in '..\ConvRules.WorkingSet.pas',
   ConvRules.Engine in '..\ConvRules.Engine.pas',
   ConvRules.Platform in '..\ConvRules.Platform.pas',
+  ConvRules.Theme in '..\ConvRules.Theme.pas',
   ConvRules.Usage in '..\ConvRules.Usage.pas';
 
 var
@@ -1022,6 +1023,44 @@ begin
   // the wrong place: the FIRST ' : ' is the separator.
   Check('propcell.first.separator.wins',
     Pos(' : ', PropCellText('A', 'B')) = 2, PropCellText('A', 'B'));
+end;
+
+{ Pure theme model. The IDE stores its theme at HKCU\Software\Embarcadero\BDS\<ver>\
+  Theme, value 'Theme' (observed: 'Dark'). Only 'Dark' means dark; every other value,
+  including absent/garbage, means light -- a wrong guess here makes the editor unreadable,
+  so the default is the safe one. ExamineRowColor derives the used-row marking from the
+  ACTIVE window colour, because the old hard-coded $00D8F5D8 is invisible on a dark style. }
+procedure TestThemeModel;
+begin
+  Check('theme.ide.dark',    IdeThemeToMode('Dark')    = tmDark,  'Dark');
+  Check('theme.ide.dark.ci', IdeThemeToMode('dArK')    = tmDark,  'case-insensitive');
+  Check('theme.ide.light',   IdeThemeToMode('Light')   = tmLight, 'Light');
+  Check('theme.ide.gray',    IdeThemeToMode('Gray')    = tmLight, 'Gray is not dark');
+  Check('theme.ide.empty',   IdeThemeToMode('')        = tmLight, 'absent -> light');
+  Check('theme.ide.garbage', IdeThemeToMode('Zzz')     = tmLight, 'unknown -> light');
+
+  // An explicit preference must WIN over whatever the IDE says.
+  Check('theme.pref.light.wins', ResolveThemeMode(tpLight, 'Dark')  = tmLight);
+  Check('theme.pref.dark.wins',  ResolveThemeMode(tpDark,  'Light') = tmDark);
+  Check('theme.pref.follow',     ResolveThemeMode(tpFollowIde, 'Dark') = tmDark);
+  Check('theme.pref.follow.light', ResolveThemeMode(tpFollowIde, 'Light') = tmLight);
+
+  // The marking must DIFFER from the background it sits on, in both modes -- that is
+  // the whole contract. Equality here means an invisible highlight.
+  Check('theme.examine.light.differs', ExamineRowColor($00FFFFFF, tmLight) <> $00FFFFFF);
+  Check('theme.examine.dark.differs',  ExamineRowColor($00202020, tmDark)  <> $00202020);
+  Check('theme.examine.modes.differ',
+    ExamineRowColor($00FFFFFF, tmLight) <> ExamineRowColor($00FFFFFF, tmDark),
+    'light and dark must not produce the same marking');
+  Check('theme.examine.light.exact',
+    ExamineRowColor($00FFFFFF, tmLight) = $00D8FFD8,
+    IntToHex(ExamineRowColor($00FFFFFF, tmLight), 6));
+
+  Check('theme.pref.roundtrip.follow',
+    StrToThemePref(ThemePrefToStr(tpFollowIde), tpLight) = tpFollowIde);
+  Check('theme.pref.roundtrip.dark',
+    StrToThemePref(ThemePrefToStr(tpDark), tpLight) = tpDark);
+  Check('theme.pref.unknown.default', StrToThemePref('nonsense', tpFollowIde) = tpFollowIde);
 end;
 
 procedure TestUnitDirectives;
@@ -2381,6 +2420,7 @@ begin
     TestFillFromUnit;
     TestProptreeBareClass;
     TestProptree2Live;
+    TestThemeModel;
     TestPropCellText;
     TestPlatformDefaults;
     TestEngineTimeoutHeadroom;
