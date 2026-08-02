@@ -249,7 +249,8 @@ begin
 end;
 
 // v(ADP3 T4e, register K43): remove EVERY whitespace byte from a dotted module
-// name, not just the ones on the ends.
+// name, not just the ones on the ends. (The counts below were independently
+// re-derived on main by tools/measure/phase1_verify.py, read-only, and agreed.)
 //
 // A `moduleName` node spans the WHOLE dotted name, so its source text carries
 // whatever the author wrote between the tokens -- and this repo aligns its own
@@ -376,6 +377,8 @@ begin
   // embedded whitespace -- because we align `uses` clauses, not the `unit` line.
   // Applied anyway: the strip is the same one-call cost, and a site reading the
   // same node with the same hazard should not be left reading it differently.
+  // Being latent is also exactly why it is pinned by a FIXTURE rather than by a
+  // live query -- there is no real-world row for a live query to find.
   UnitName:= StripModuleNameWhitespace(NodeText(ModNode, AState.Source));
   if UnitName = '' then Exit;
   AState.CurrentSection:= ''; { the unit symbol itself is section-less }

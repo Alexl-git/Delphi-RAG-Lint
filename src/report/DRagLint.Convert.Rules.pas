@@ -43,8 +43,11 @@ type
   /// no source maps); rkNote=#note (a human comment carried in the rule set);
   /// rkPcre=a raw non-'#' line containing ' -&gt; ' (the PCRE find/replace escape
   /// hatch); rkIgnore=#ignore (acknowledge an F property/event is intentionally
-  /// NOT mapped -- suppresses the unmapped-non-default WARN for that FromPath).</remarks>
-  TRuleKind = (rkUnuse, rkRemove, rkMigrate, rkConvert, rkLink, rkDefault, rkNote, rkPcre, rkIgnore);
+  /// NOT mapped -- suppresses the unmapped-non-default WARN for that FromPath).
+  /// rkUse=#use (ADD a unit to the uses clause -- companion to #unuse).
+  /// rkUseSwap=#useswap (replace Old with one-or-more New units; UnitName=Old,
+  /// UnitsAdd=the New list; canonically #unuse Old + #use New...).</remarks>
+  TRuleKind = (rkUnuse, rkRemove, rkMigrate, rkConvert, rkLink, rkDefault, rkNote, rkPcre, rkIgnore, rkUse, rkUseSwap);
 
   /// <summary>One parsed conversion rule. A flat record; only the fields relevant
   /// to <see cref="Kind"/> are populated (the rest stay '').</summary>
@@ -108,6 +111,7 @@ type
 /// its 1-based LineNo) and whose ParseErrors carry any unknown-directive lines.
 /// An empty/whitespace-only input yields empty Rules and empty ParseErrors.</returns>
 /// <remarks>Directive grammar (all case-INSENSITIVE on the leading '#word'):
+/// '#use &lt;unit&gt;' (add a unit); '#useswap &lt;Old&gt; -&gt; &lt;New1&gt; [, &lt;New2&gt; ...]' (replace a unit with one-or-more units);
 /// '#unuse &lt;unit&gt;'; '#remove &lt;prop&gt;' / '#remove DFM: &lt;prop&gt;'
 /// (DFM-only); '#migrate [&lt;Class&gt; :] [&lt;obj&gt; .] &lt;old&gt; -&gt;
 /// &lt;new&gt; [, &lt;unit&gt; ...]'; '#convert &lt;FromType&gt; -&gt;
@@ -294,6 +298,29 @@ begin
       if Directive('#unuse', Arg) then
       begin
         R.Kind    := rkUnuse;
+        R.UnitName:= Arg;
+        AddRule(R);
+      end
+      else if Directive('#useswap', Arg) then
+      begin
+        // #useswap <Old> -> <New1>[, <New2> ...]  -- UnitName=Old, UnitsAdd=News.
+        R.Kind:= rkUseSwap;
+        ArrPos:= Pos(ARROW_MIGRATE, Arg);
+        if ArrPos > 0 then
+        begin
+          R.UnitName:= Trim(Copy(Arg, 1, ArrPos - 1));
+          Rhs       := Trim(Copy(Arg, ArrPos + Length(ARROW_MIGRATE), MaxInt));
+        end
+        else begin R.UnitName:= Trim(Arg); Rhs:= ''; end;
+        // Rhs is a pure comma list of New units; fold Head + rest into UnitsAdd.
+        SplitHeadAndUnits(Rhs, Head, Units);
+        if Head <> '' then Insert(Head, Units, 0);
+        R.UnitsAdd:= Units;
+        AddRule(R);
+      end
+      else if Directive('#use', Arg) then
+      begin
+        R.Kind    := rkUse;
         R.UnitName:= Arg;
         AddRule(R);
       end

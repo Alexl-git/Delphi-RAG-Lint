@@ -27,7 +27,10 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-convert-rules"
 )
-$ErrorActionPreference = 'Stop'
+# 'Continue' not 'Stop': the native drag-lint exe prints a '(loaded defaults)' note
+# to stderr, which under 'Stop' PowerShell turns into a terminating error mid-run.
+# Pass/fail here is driven by explicit Check() calls + the final exit code, not exceptions.
+$ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }
@@ -85,6 +88,30 @@ Check 'default present'        ($parsedRaw -match 'default.*Name')             "
 Check 'note present'           ($parsedRaw -match 'note')                      "raw=$parsedRaw"
 Check 'ignore present'         ($parsedRaw -match 'ignore.*TabOrder')          "raw=$parsedRaw"
 Check 'pcre escape-hatch present' ($parsedRaw -match 'pcre.*FindThis.*ReplaceThat') "raw=$parsedRaw"
+
+# ---------------------------------------------------------------------------
+# PART (a2): #use / #useswap unit-replacement directives (parse-only)
+# These must be RECOGNISED (not unknown-directive parse errors), so parse-only
+# exits 0 and the count includes them -- what keeps the editor's Save-validate
+# green once it emits unit rules.
+# ---------------------------------------------------------------------------
+$RulesUnits = @'
+#use imcFOLDERS
+#useswap FOLDERDEF -> imcFOLDERS
+#useswap ovcTable -> cxGrid, cxGridDBTableView
+'@
+$rulesUnitsFile = Join-Path $WorkDir 'rules-units.txt'
+Write-Ascii $rulesUnitsFile $RulesUnits
+
+Write-Host ''
+Write-Host 'convert-validate --rules rules-units.txt --print-parsed' -ForegroundColor Cyan
+$unitsRaw = (& $Exe convert-validate --rules $rulesUnitsFile --print-parsed) -join "`n"
+$unitsExit = $LASTEXITCODE
+Check 'unit-rules parse-only exits 0' ($unitsExit -eq 0)          "exit=$unitsExit; raw=$unitsRaw"
+Check 'unit-rules parsed 3 rules'     ($unitsRaw -match 'parsed 3 rule') "raw=$unitsRaw"
+Check 'use rule present'    ($unitsRaw -match 'use imcFOLDERS')   "raw=$unitsRaw"
+Check 'useswap rule present' ($unitsRaw -match 'useswap FOLDERDEF') "raw=$unitsRaw"
+Check 'useswap multi units' ($unitsRaw -match 'cxGridDBTableView') "raw=$unitsRaw"
 
 # ---------------------------------------------------------------------------
 # Build + index the PropFix fixture (from Task 1) for path validation

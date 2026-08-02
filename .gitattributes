@@ -5,6 +5,9 @@
 *.dfm    text eol=crlf
 *.inc    text eol=crlf
 
+# Conversion rule books — data, but their exact bytes are asserted by a round-trip test
+*.rules  text eol=crlf
+
 # Build scripts on Windows
 *.bat    text eol=crlf
 *.cmd    text eol=crlf

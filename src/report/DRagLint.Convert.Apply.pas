@@ -991,6 +991,7 @@ begin
   if Length(DfmFileSyms) = 0 then
     DfmFileSyms:= DfmStore.FindSymbolsByFile(TPath.GetFullPath(ADfmPath));
 
+  Opts:= Default(TPropTreeOptions);
   Opts.Depth       := 6;
   Opts.ToPersistent:= True;
 

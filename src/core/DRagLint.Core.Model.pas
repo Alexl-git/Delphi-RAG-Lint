@@ -702,11 +702,85 @@ function CallSiteRefKindSql(const ARefAlias: string): string;
 /// that gate.</remarks>
 function CanBeCallTarget(AKind: TSymbolKind): Boolean;
 
+/// <summary>Unit-qualified prefix of a qualified symbol name
+/// ('Vcl.Controls.TWinControl' -&gt; 'Vcl.Controls'); '' when the name carries no
+/// dotted prefix at all.</summary>
+/// <remarks>Known limitation: splits on the LAST dot, so a NESTED type
+/// ('Vcl.Controls.TOuter.TInner') yields 'Vcl.Controls.TOuter' rather than the
+/// declaring unit. Harmless for the leading-namespace question
+/// (UnitFrameworkPrefix still returns 'Vcl'); it does mean a nested type's
+/// declaring "unit" never matches a plain unit name in a uses set.
+/// Lives HERE, in the shared base unit, so the query-time resolver
+/// (DRagLint.Storage.SQLite) and the proptree ancestor climb
+/// (DRagLint.Convert.PropTree) share ONE definition of "which unit declares
+/// this" instead of each hand-rolling its own.</remarks>
+function DeclaringUnitOfQName(const AQName: string): string;
+
+/// <summary>The leading NAMESPACE SEGMENT of a dotted unit name -- the
+/// substring before the FIRST '.' ('Vcl.Controls' -&gt; 'Vcl'; 'Vcl.StdCtrls'
+/// -&gt; 'Vcl'; 'FMX.Controls.Win' -&gt; 'FMX'; 'Winapi.Windows' -&gt;
+/// 'Winapi').</summary>
+/// <returns>The segment, or '' when AUnitName carries no dot at all.</returns>
+/// <remarks>An UNDOTTED unit name -- a hermetic-test unit ('VclKit') or real
+/// third-party code ('cxButtons', 'Abcbtn') -- has NO namespace segment, and
+/// must never be treated as sharing one with a dotted name like 'Vcl.Controls'.
+/// Returning '' is what makes BOTH sides skip it rather than substring-match:
+/// the SELECT side (PickAncestorCandidateByScope rule 3, which needs a unique
+/// same-segment candidate) and the REFUSE side (the proptree climb's
+/// cross-GUI-framework guard, CrossesGuiFramework, which refuses only when BOTH
+/// segments are GUI frameworks -- see IsGuiFrameworkPrefix -- and differ). This
+/// is the single definition of that notion; do not re-derive it.</remarks>
+function UnitFrameworkPrefix(const AUnitName: string): string;
+
+/// <summary>True when ANamespaceSegment is one of Delphi's two MUTUALLY
+/// EXCLUSIVE GUI framework namespaces -- 'Vcl' or 'FMX' (case-insensitive
+/// compare; '' is never one).</summary>
+/// <param name="ANamespaceSegment">A LEADING namespace segment as returned by
+///  UnitFrameworkPrefix -- not a whole unit name. 'Vcl.Graphics' is NOT a GUI
+///  framework prefix; 'Vcl' is.</param>
+/// <remarks>A Delphi class surface is either VCL or FireMonkey; the two are
+///  parallel, never interchangeable, and a type from one is never a valid
+///  stand-in for a same-named type from the other. Everything else a GUI unit
+///  legitimately reaches -- 'System.*', 'Winapi.*', 'Data.*', 'Soap.*', a
+///  project's own namespace, an undotted legacy unit -- is SHARED ground, not a
+///  competing framework, and is deliberately NOT listed here.
+///  The pair is named explicitly rather than derived, because "which namespaces
+///  are mutually exclusive" is a fact about Delphi's two GUI frameworks, not
+///  something the shape of a unit name can tell you. This is the ONLY place in
+///  src/ that names them: the REFUSE side (DRagLint.Convert.PropTree's
+///  CrossesGuiFramework, design criterion 5) and the SELECT side
+///  (DRagLint.Storage.SQLite's ancestry-derived framework anchor and its
+///  last-segment `uses` guard) both call in here rather than each carrying a
+///  literal. NOT a general "same namespace?" test -- it answers only "is this
+///  segment one of the two conflicting GUI frameworks?".</remarks>
+function IsGuiFrameworkPrefix(const ANamespaceSegment: string): Boolean;
+
 implementation
 
 uses
   System.SysUtils
   ;
+
+function DeclaringUnitOfQName(const AQName: string): string;
+var P: Integer;
+begin
+  Result:= '';
+  P:= LastDelimiter('.', AQName);
+  if P > 1 then Result:= Copy(AQName, 1, P - 1);
+end;
+
+function UnitFrameworkPrefix(const AUnitName: string): string;
+var P: Integer;
+begin
+  Result:= '';
+  P:= Pos('.', AUnitName);
+  if P > 0 then Result:= Copy(AUnitName, 1, P - 1);
+end;
+
+function IsGuiFrameworkPrefix(const ANamespaceSegment: string): Boolean;
+begin
+  Result:= SameText(ANamespaceSegment, 'Vcl') or SameText(ANamespaceSegment, 'FMX');
+end;
 
 const
   KindText: array[TSymbolKind] of string = (

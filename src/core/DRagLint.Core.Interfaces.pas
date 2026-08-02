@@ -76,6 +76,22 @@ type
     procedure RollbackFileTx(const AToken: TFileTxToken);
 
     function FindSymbolsByExactName    (const AName : string): TArray<TSymbol>;
+    /// <summary>Every symbol whose qualified_name equals <paramref name="AQName"/>
+    /// exactly. A qualified name is NOT unique, so this routinely returns several
+    /// rows.</summary>
+    /// <returns>Rows ordered: a real declaration before a forward-declaration
+    /// stub (class/interface, empty heritage, end_line &lt;= start_line -- the same
+    /// predicate ResolveTypeNameToClass's IsStub and PropTree's
+    /// IsForwardDeclClass apply after the fact), then a row carrying an
+    /// implementation body, then file_id/start_line/id. Empty array when the name
+    /// is not indexed.</returns>
+    /// <remarks>The order is TOTAL -- id is unique, so no two rows can tie and one
+    /// database always answers the same Result[0]. NOT guaranteed stable across a
+    /// REBUILD: file_id and id are reassigned when the index is rebuilt, so two
+    /// rows separated only by those can swap. It also does NOT decide which of two
+    /// duplicate full definitions in two different files is the RIGHT one -- only
+    /// which one comes first. Callers needing the right one must disambiguate by
+    /// scope themselves.</remarks>
     function FindSymbolsByQualifiedName(const AQName: string): TArray<TSymbol>;
     // v0.42: file outline - every symbol declared in one file, ordered by
     // position. Backs the Structure form (was mis-using class-scoped surface).
@@ -104,11 +120,47 @@ type
     procedure DeleteUnitUsesForFile(AFileId: Int64);
     function GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>          ;
     function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
+    /// <summary>Whole-DB post-index pass: RECOMPUTES unit_uses.target_file_id
+    /// for every row, from the used unit's name and the set of indexed file
+    /// names. Idempotent.</summary>
+    /// <remarks>Two rules, in order: (A) the used unit's name equals a file's
+    /// lowercased basename stem ('Vcl.Controls' -&gt; Vcl.Controls.pas); or
+    /// (B) for a BARE name only, exactly one indexed stem carries that name as
+    /// its last dotted segment AND that stem is not in a GUI framework
+    /// namespace ('Grids' -&gt; Data.Grids.pas -- Delphi's unit scope names).
+    /// Anything else is left NULL.
+    /// CLEARS THE COLUMN FIRST, so it REPAIRS a stale or wrong value instead of
+    /// only filling gaps -- an incremental re-index that does not re-parse a
+    /// file would otherwise preserve that file's old targets forever. Runs in
+    /// one transaction, so a failure rolls back to the previous values. Any
+    /// caller holding a target_file_id across this call must re-read it.
+    /// GUARANTEES that rule B never resolves a row to a Vcl.* or FMX.* file
+    /// (criterion 5, structural -- not a property of what happens to be
+    /// indexed). Rule A is a name equality the unit itself stated and is
+    /// deliberately not restricted that way.
+    /// GUARANTEES that a resolved target is a <c>.pas</c> file, and NOTHING
+    /// beyond that: any other extension is excluded (.dfm, .dpr, .dpk and .inc
+    /// among them) before a stem is computed. The test is case-insensitive, so an
+    /// uppercase <c>.PAS</c> path is still a candidate.
+    /// It is an EXTENSION test and no more. It does NOT guarantee that the target
+    /// declares a unit at all, let alone a unit of that name: a .pas holding only
+    /// a <c>program</c> or <c>library</c> header, an include-style fragment
+    /// named .pas, or one the parser failed on all satisfy it.
+    /// GUARANTEES ONLY that some indexed .pas is named after the used unit --
+    /// NOT that it is the file the compiler would have picked. Two indexed
+    /// copies of one unit collide on a stem and an arbitrary one wins.
+    /// ANCESTOR RESOLUTION DOES NOT READ THIS COLUMN (ResolveAncestry scopes
+    /// textually), so an index predating this pass is not thereby wrong about
+    /// ancestry. ResolveHelpers, the call resolver and the deps report do read
+    /// it.</remarks>
     procedure ResolveUnitUseTargets;
     // v11 (M1): type & hierarchy resolution. ResolveAncestry is a whole-DB
     // post-index pass (run after ResolveUnitUseTargets) that splits each
     // class/interface's `heritage` text, resolves each ancestor to a defining
-    // symbol via the file's in-scope uses graph, and writes type_ancestors edges.
+    // symbol in the scope of the declaring unit -- textually, by the shared
+    // rule PickAncestorCandidateByScope, so it needs no resolved uses graph --
+    // and writes type_ancestors edges. An ancestor it cannot disambiguate is
+    // written unresolved (ancestor_kind '?'), never guessed.
     procedure ResolveAncestry;
     /// <summary>v15: whole-DB helper-resolution pass (run after ResolveAncestry).
     /// Links each record/class helper's target type name to its defining symbol,

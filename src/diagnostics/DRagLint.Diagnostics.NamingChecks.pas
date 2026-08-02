@@ -473,7 +473,31 @@ var
       var ModNode: TTSNode:= FindChildOfType(N, 'moduleName');
       if not ModNode.IsNull then
       begin
-        var UnitName: string:= Trim(NodeStr(ModNode));
+        { A moduleName node spans the WHOLE dotted name, so its source text
+          carries whatever the author wrote BETWEEN the tokens, and Trim removes
+          only the ENDS -- `unit Alpha  .Config;` used to reach SameText below as
+          'Alpha  .Config' and fire this rule against a file correctly named
+          Alpha.Config.pas. Strip every whitespace byte, which for this node is
+          exactly re-joining the tokens (the grammar is `ident ('.' ident)*`, so
+          nothing legal in it sorts below #32). `<= ' '` and not a four-way match
+          on #32/#9/#13/#10: #11 and #12 are Pascal whitespace too and neither
+          renders. Canonical definition is
+          DRagLint.Parser.Delphi13.StripModuleNameWhitespace, which is what writes
+          unit_uses.unit_name and the skUnit symbol name; replicated here rather
+          than exported because that unit's helpers are implementation-only and
+          this file already replicates VisibilityOfSection for the same reason
+          (see the note above). Latent today -- 0 of 7098 kind='unit' symbols
+          across Delphi-RAG-lint / ORM3 / library-Win64 / M2022 carry embedded
+          whitespace, because we align `uses` clauses and not `unit` lines.
+          TWO VALUES ON PURPOSE: UnitNameRaw is what the author wrote and is what
+          the MESSAGE quotes -- a diagnostic echoing the real source text is
+          defensible, and on a genuine mismatch the padding is worth seeing.
+          UnitName is the stripped form and is the only one COMPARED (and the only
+          one emptiness-tested, so an all-whitespace name cannot fire). }
+        var UnitNameRaw: string:= NodeStr(ModNode);
+        var UnitName   : string:= UnitNameRaw;
+        for var Wi: Integer:= Length(UnitName) downto 1 do
+          if UnitName[Wi] <= ' ' then Delete(UnitName, Wi, 1);
         var FileBase: string:= ChangeFileExt(ExtractFileName(StringReplace(AFile, '/', PathDelim, [rfReplaceAll])), '');
         { Skip the synthetic live-diagnostics buffer: the IDE plugin snapshots an
           unsaved editor buffer to %TEMP%\drag-lint-live-<tickcount>.pas and lints
@@ -485,7 +509,7 @@ var
            (not StartsText('drag-lint-live-', FileBase)) then
           EmitAt(ModNode, 'unit-name-matches-file',
             Format('Unit name "%s" does not match file name "%s"',
-              [UnitName, FileBase]));
+              [UnitNameRaw, FileBase]));
       end;
       { Still recurse so inner declarations are checked by other rules. }
       for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));

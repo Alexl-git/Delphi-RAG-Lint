@@ -1,71 +1,56 @@
 <#
-  run_uses_padded_name.ps1 -- register K43.
+  run_uses_padded_name.ps1 -- a used unit's name is not the source text between
+  its dots.
 
-  WHAT THIS GUARDS
+  THE BUG (ported from feat/autodoc-phase3; counts re-derived on this machine by
+  tools/measure/phase1_verify.py, read-only). Both sites that read a `moduleName`
+  node used `Trim`. A moduleName spans the WHOLE dotted name, so its text carries
+  whatever the author wrote BETWEEN the tokens, and `Trim` removes only the ends.
+  This repo aligns its own `uses` clauses, so `DRagLint.Core   .Model` was stored
+  in unit_uses.unit_name verbatim -- interior padding and all.
 
-  `WalkUsesClause` (src/parser/DRagLint.Parser.Delphi13.pas) stored a used
-  unit's name as `Trim(NodeText(ModNode, ...))`. A `moduleName` node spans the
-  whole dotted name, and `Trim` only removes LEADING and TRAILING whitespace --
-  so this repo's own alignment house style,
+  That is not cosmetic. ResolveUnitUseTargets' rule A is an equality against
+  `LOWER(unit_name)`, which a padded value can never satisfy, so the row is left
+  unresolved -- and rule B cannot rescue it, because rule B is BARE-ONLY and a
+  padded dotted name still contains its dots (Storage.SQLite.pas, 'rule B is
+  bare-only'). Measured before the fix: 147 of 1836 unit_uses rows in this repo's
+  own index carry embedded whitespace, 137 of them unresolved; 286 of 14223 in
+  ORM3, 285 unresolved; 0 in library-Win64 and 0 in M2022 -- zero in third-party
+  code, because the alignment is our house style.
 
-      uses
-        Alpha  .Config,
-        Beta.Config;
+  TWO SITES, and the second is the expensive one. WalkUsesClause feeds
+  unit_uses.unit_name (one edge per padded row). WalkUnit feeds the skUnit
+  symbol's own name AND the qualified-name prefix of every symbol the unit
+  declares, so one padded `unit` line would mis-key a whole unit's rows. The
+  second site is LATENT -- 0 of 7098 kind='unit' symbols across
+  Delphi-RAG-lint / ORM3 / library-Win64 / M2022 carry embedded whitespace,
+  because we align `uses` clauses and not `unit` lines -- which is precisely why
+  it needs a fixture rather than a live query.
 
-  stored the literal string `'Alpha  .Config'`, interior padding and all.
+  WHAT EACH CHECK IS FOR:
+    P1/P2  de-vacuators, read from the fixture BYTES on disk: the padding really
+           is there, and it really includes #11/#12. Without these the whole
+           suite could pass on a fixture that lost its padding to an editor.
+    A1     the stored unit_name has no whitespace   -- the requirement
+    A2     ...and the row RESOLVES                  -- the consequence
+    A3     CONTROL: an unpadded row in the same clause resolves too, so a red A2
+           is this defect and not a broken resolver
+    A4     sweep: no unit_uses row anywhere carries embedded whitespace
+    B1     site 2: the skUnit symbol's own name is clean
+    B2     site 2: the qualified-name PREFIX of a symbol the unit declares is
+           clean -- the consequence that makes site 2 worth fixing
+    B3     site 2 covers #11/#12 specifically, i.e. `C <= ' '` and not a
+           four-way match on #32/#9/#13/#10
 
-  That is not cosmetic. `ResolveUnitUseTargets`'s pass 1
-  (src/storage/DRagLint.Storage.SQLite.pas:3716) keys on
-  `LOWER(unit_name) = :un`, which a padded value can NEVER satisfy, so the edge
-  is left unresolved (`target_file_id IS NULL`). Pass 2 keys on
-  `unit_name_norm`, which is the dotted TAIL and is unaffected by the padding --
-  which is why the defect stayed mostly invisible: whenever the tail is unique,
-  pass 2 quietly rescues the row and the answer looks right.
+  NOT COVERED, and said so in the code too: a comment written inside the dotted
+  name (`Alpha.{x}Config`) is still stored verbatim.
 
-  Measured at the time of the fix, `unit_uses` rows whose `unit_name` contains
-  whitespace: 147 of 1836 in the self index (137 still unresolved), 286 of 14223
-  in ORM3 (285 unresolved), 0 in library-Win64 and 0 in M2022 -- zero in the
-  third-party indexes, because the padding is OUR house style.
-
-  THE FIXTURE IS BUILT SO PASS 2 CANNOT MASK THE DEFECT
-
-  Two units, `Alpha.Config` and `Beta.Config`, deliberately SHARE the tail
-  `config`. That makes the tail ambiguous, so `ResolveUnitUseTargets` refuses it
-  in pass 2 (`if TailAmbig.ContainsKey(...) then Continue`) and pass 1 is the
-  only route to a resolved edge. `Consumer` then uses one of them PADDED and the
-  other PLAIN, so a single index run yields the contrast directly:
-
-    pre-fix   unit_name='Alpha  .Config'  target_file_id=NULL   <- padded, lost
-              unit_name='Beta.Config'     target_file_id=2      <- plain, fine
-
-  The plain row is the control: it proves the resolver, the fixture and the
-  ambiguous tail all work, so a failure of the padded row can only be the stored
-  name. Without it, a broken resolver would look identical to this defect.
-
-  THE SECOND SITE THAT READS THE SAME NODE (`Gamma`, fix round 1)
-
-  `WalkUnit` reads the very same `moduleName` node for a unit's OWN declaration
-  and had the very same `Trim`. That value is worse to get wrong than a uses
-  edge: it becomes the `unit` symbol's `name` AND the `qualified_name` prefix of
-  every symbol the unit declares, so ONE padded `unit` line mis-keys a whole
-  unit's rows. `Gamma.Config.pas` declares itself `unit Gamma  .Config;` and is
-  asserted on both stored columns. It is deliberately NOT used by `Consumer`, so
-  it cannot disturb the two `unit_uses` rows above; measured latent when fixed
-  (0 of 7098 `unit` symbols across the self / ORM3 / library-Win64 / M2022
-  indexes carried embedded whitespace), which is exactly why it needs a fixture
-  rather than a live query to stay fixed.
-
-  CWD: this runner does NOT Push-Location, unlike the `tests\autodoc\*` runners
-  whose headers say "run from a NEUTRAL CWD" and then actually do it. It does
-  not need to -- every path it hands the exe (`$work`, `--db`) is absolute, and
-  the battery supplies the repo root as CWD deliberately (see
-  tests\run_battery.ps1). `$env:TEMP\drag-lint-uses-padded` is where the FIXTURE
-  lives, not a working directory.
+  Usage: pwsh -File tests/autotest/run_uses_padded_name.ps1 [-Exe <path>]
 #>
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\drag-lint-uses-padded"
+  [string]$WorkDir = "$env:TEMP\drag-lint-uses-padded-name"
 )
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -75,144 +60,196 @@ function Check($n, $ok, $d = '') {
   Write-Host ("  [{0}] {1} {2}" -f $s, $n, $d) -ForegroundColor $c
   if (-not $ok) { $script:Failed = $true }
 }
-function Write-Ascii([string]$Path, [string]$Body) {
-  $norm = $Body -replace "`r`n", "`n" -replace "`n", "`r`n"
-  [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
-}
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
-$work = Join-Path $WorkDir 'src'
+$work = Join-Path $WorkDir 'fixture'
 New-Item -ItemType Directory $work | Out-Null
+
+function Write-Ascii([string]$Path, [string]$Body) {
+  $norm = $Body -replace "`r`n", "`n" -replace "`n", "`r`n"
+  [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
+}
 
 Write-Ascii (Join-Path $work 'Alpha.Config.pas') @'
 unit Alpha.Config;
+
+// The unit the PADDED `uses Alpha  .Config` names. It shares its dotted TAIL
+// ('config') with Beta.Config, which costs nothing here but keeps the fixture
+// honest if rule B ever stopped being bare-only: two units carrying one tail is
+// ambiguous, so no tail-based pass could rescue the padded row either.
+
 interface
-function AlphaCfg: Integer;
+
 implementation
-function AlphaCfg: Integer;
-begin
-  Result := 1;
-end;
+
 end.
 '@
+
 Write-Ascii (Join-Path $work 'Beta.Config.pas') @'
 unit Beta.Config;
+
+// The CONTROL target: `uses Beta.Config` is written without padding in the same
+// clause, so if A2 is red and A3 is green the defect is the padding and not the
+// resolver.
+
 interface
-function BetaCfg: Integer;
+
 implementation
-function BetaCfg: Integer;
-begin
-  Result := 2;
-end;
+
 end.
 '@
-# Gamma pads its OWN declaration, which is the WalkUnit site. Nothing uses it.
-# The padding is SPACE + #11 (VT) + #12 (FF) on purpose (register K57): the
-# strip's contract is "every whitespace byte", and Pascal's whitespace class is
-# wider than the four bytes an earlier version of it matched. Both are written
-# as [char] escapes so this .ps1 stays 7-bit ASCII with no stray control bytes.
-# This grammar accepts them between the tokens of a dotted name -- MEASURED, and
-# the premise check below re-measures it on every run: the fixture must index
-# with 0 errors and emit a unit symbol, or these assertions prove nothing.
-$pad = ' ' + [char]11 + [char]12 + ' '
-Write-Ascii (Join-Path $work 'Gamma.Config.pas') (@'
-unit Gamma@PAD@.Config;
+
+# --- Site 2. The `unit` line pads its OWN dotted name, with SPACE + #11 (VT) +
+#     #12 (FF). VT and FF are Pascal whitespace and would survive a four-way
+#     match on #32/#9/#13/#10, invisibly -- neither renders. Built with [char]
+#     escapes so this .ps1 stays 7-bit ASCII with no stray control bytes.
+$pad = ' ' + [char]11 + [char]12
+Write-Ascii (Join-Path $work 'Gamma.Config.pas') @"
+unit Gamma$pad.Config;
+
+// The padding above is SPACE + #11 + #12. This value becomes the skUnit symbol's
+// name AND the qualified-name prefix of TGammaCtl below.
+
 interface
-function GammaCfg: Integer;
+
+type
+  TGammaCtl = class
+  private
+    FMarker: Integer;
+  published
+    property Marker: Integer read FMarker write FMarker;
+  end;
+
 implementation
-function GammaCfg: Integer;
-begin
-  Result := 3;
-end;
+
 end.
-'@ -replace '@PAD@', $pad)
-# Alpha is PADDED the way this repo aligns; Beta is plain (the control).
-Write-Ascii (Join-Path $work 'Consumer.pas') @'
-unit Consumer;
+"@
+
+# --- Site 3, the lint rule. DRagLint.Diagnostics.NamingChecks' unit-name-matches-file
+#     reads the SAME moduleName node and compared it with Trim, so a padded
+#     declaration in a correctly-named file was a false positive. This file is
+#     named Mismatch.pas and declares a padded name that is genuinely different,
+#     so it de-vacuates C1 (the rule is on and CAN fire) and pins the deliberate
+#     split in one shot: the COMPARISON uses the stripped name, the MESSAGE quotes
+#     the author's raw text.
+Write-Ascii (Join-Path $work 'Mismatch.pas') @"
+unit Other$pad.Thing;
+
 interface
-uses
-  Alpha  .Config,
-  Beta.Config;
-function Both: Integer;
+
 implementation
-function Both: Integer;
-begin
-  Result := AlphaCfg + BetaCfg;
-end;
+
+end.
+"@
+
+Write-Ascii (Join-Path $work 'PadUser.pas') @'
+unit PadUser;
+
+interface
+
+uses
+  Alpha  .Config,   // PADDED, the house-style alignment that produced 147 rows here
+  Beta.Config;      // the unpadded control
+
+implementation
+
 end.
 '@
 
 $db = Join-Path $WorkDir 'padded.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
 $indexOut = & $Exe index $work --db $db 2>&1
-Check 'index exits 0' ($LASTEXITCODE -eq 0) "$($indexOut -join ' | ')"
+Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
+Check 'index reports 0 parse errors (a padded dotted name is legal Delphi and must parse)' `
+  (-not (($indexOut -join ' ') -match '[1-9]\d* errors')) "$($indexOut -join ' | ')"
 
-$py = Join-Path $WorkDir 'q.py'
-@'
-import sqlite3, sys, json
-c = sqlite3.connect(sys.argv[1])
-rows = [{"unit_name": r[0], "norm": r[1], "target": r[2]}
-        for r in c.execute("SELECT unit_name, unit_name_norm, target_file_id FROM unit_uses")]
-print(json.dumps(rows))
-'@ | Set-Content $py -Encoding ASCII
-$rows = @(python $py $db | ConvertFrom-Json)
+# --- Probes. ----------------------------------------------------------------------
+$script:PySql = Join-Path $WorkDir 'sql.py'
+Write-Ascii $script:PySql @'
+import sqlite3, sys
+con = sqlite3.connect("file:%s?mode=ro" % sys.argv[1].replace("\\", "/"), uri=True)
+print("\n".join("|".join("" if v is None else str(v) for v in r)
+                for r in con.execute(sys.argv[2]).fetchall()))
+con.close()
+'@
+function Sql([string]$Q) { return ((python $script:PySql $db $Q) -join "`n").Trim() }
+# Any byte <= 0x20 anywhere in the value. GLOB, not LIKE: LIKE would need one
+# pattern per byte and is case-folding; a character class is exact.
+$wsGlob = "GLOB '*[' || char(32) || char(9) || char(10) || char(11) || char(12) || char(13) || ']*'"
 
-$pySym = Join-Path $WorkDir 'qsym.py'
-@'
-import sqlite3, sys, json
-c = sqlite3.connect(sys.argv[1])
-rows = [{"kind": r[0], "name": r[1], "qname": r[2]}
-        for r in c.execute("SELECT kind, name, qualified_name FROM symbols ORDER BY id")]
-print(json.dumps(rows))
-'@ | Set-Content $pySym -Encoding ASCII
-$syms = @(python $pySym $db | ConvertFrom-Json)
+# --- P1/P2. The fixture really carries the padding. --------------------------------
+Write-Host ''
+Write-Host 'de-vacuators: the fixture bytes on disk' -ForegroundColor Cyan
+$userBytes  = [System.IO.File]::ReadAllBytes((Join-Path $work 'PadUser.pas'))
+$userText   = [System.Text.Encoding]::ASCII.GetString($userBytes)
+Check 'P1: PadUser.pas really contains "Alpha  .Config" (interior spaces)' ($userText -match 'Alpha {2}\.Config') `
+  "-- if an editor collapsed the alignment the rest of this suite would pass for the wrong reason"
+$gammaBytes = [System.IO.File]::ReadAllBytes((Join-Path $work 'Gamma.Config.pas'))
+$hasVt = $gammaBytes -contains 11
+$hasFf = $gammaBytes -contains 12
+Check 'P2: Gamma.Config.pas really contains a #11 and a #12 byte' ($hasVt -and $hasFf) `
+  "VT=$hasVt FF=$hasFf -- these two are what separate `C <= ' '` from a four-way whitespace match"
 
-Check 'both uses rows are present' ($rows.Count -eq 2) "count=$($rows.Count): $($rows | ForEach-Object { $_.unit_name })"
+# --- A. Site 1: unit_uses.unit_name. ----------------------------------------------
+Write-Host ''
+Write-Host 'site 1 -- unit_uses.unit_name (WalkUsesClause)' -ForegroundColor Cyan
+$a1 = Sql "SELECT COUNT(*) FROM unit_uses WHERE unit_name = 'Alpha.Config'"
+Check "A1: the padded clause stored unit_name EXACTLY 'Alpha.Config'" ($a1 -eq '1') `
+  "rows=$a1 -- stored values now: [$((Sql "SELECT GROUP_CONCAT(unit_name, ' ; ') FROM unit_uses"))]"
 
-# Premise of the fixture, asserted rather than assumed: the shared tail really
-# is ambiguous, so pass 2 is genuinely out of the picture for BOTH rows.
-$norms = @($rows | ForEach-Object { $_.norm } | Sort-Object -Unique)
-Check 'fixture premise: both rows share ONE tail, so pass 2 cannot resolve either' `
-  ($norms.Count -eq 1 -and $norms[0] -eq 'config') "norms=$($norms -join ',')"
+$a2 = Sql "SELECT COALESCE(f.path,'<UNRESOLVED>') FROM unit_uses u LEFT JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='Alpha.Config'"
+Check "A2: ...and the row RESOLVES to Alpha.Config.pas" ($a2 -match '(?i)[\\/]Alpha\.Config\.pas$') `
+  "target=$a2 -- rule A is an equality on LOWER(unit_name), which a padded value can never satisfy, and rule B is bare-only so it cannot rescue a dotted one"
 
-$alpha = $rows | Where-Object { $_.unit_name -replace '\s', '' -eq 'Alpha.Config' }
-$beta  = $rows | Where-Object { $_.unit_name -replace '\s', '' -eq 'Beta.Config'  }
+$a3 = Sql "SELECT COALESCE(f.path,'<UNRESOLVED>') FROM unit_uses u LEFT JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='Beta.Config'"
+Check "A3 control: the UNPADDED 'Beta.Config' in the same clause resolves too" ($a3 -match '(?i)[\\/]Beta\.Config\.pas$') `
+  "target=$a3 -- if this is red the resolver is broken and A2 says nothing about padding"
 
-Check 'control: the PLAIN use resolves via pass 1' `
-  ($null -ne $beta -and $null -ne $beta.target) "beta=$($beta | ConvertTo-Json -Compress)"
+$a4 = Sql "SELECT COUNT(*) FROM unit_uses WHERE unit_name $wsGlob"
+Check 'A4 sweep: no unit_uses row anywhere carries embedded whitespace' ($a4 -eq '0') "rows with whitespace=$a4"
 
-# The defect itself, stated on the stored value.
-Check 'the PADDED use is stored with NO interior whitespace' `
-  ($null -ne $alpha -and $alpha.unit_name -eq 'Alpha.Config') `
-  "stored=$(if ($alpha) { "'" + $alpha.unit_name + "'" } else { '<missing>' })"
+# --- B. Site 2: the skUnit symbol name and every qualified-name prefix. -----------
+Write-Host ''
+Write-Host 'site 2 -- the unit symbol and the qualified-name prefix (WalkUnit)' -ForegroundColor Cyan
+$b1 = Sql "SELECT COUNT(*) FROM symbols WHERE kind='unit' AND name='Gamma.Config'"
+Check "B1: the skUnit symbol's own name is EXACTLY 'Gamma.Config'" ($b1 -eq '1') `
+  "rows=$b1 -- unit names stored: [$((Sql "SELECT GROUP_CONCAT(name, ' ; ') FROM symbols WHERE kind='unit'"))]"
 
-# The consequence, stated separately -- a future change could strip whitespace
-# at lookup time and satisfy the check above while leaving this one red.
-Check 'the PADDED use RESOLVES to a target file (pass 1 can match it)' `
-  ($null -ne $alpha -and $null -ne $alpha.target) `
-  "alpha=$($alpha | ConvertTo-Json -Compress)"
+$b2 = Sql "SELECT COUNT(*) FROM symbols WHERE qualified_name='Gamma.Config.TGammaCtl'"
+Check "B2: a symbol the unit declares is keyed 'Gamma.Config.TGammaCtl'" ($b2 -eq '1') `
+  "rows=$b2 -- qnames seen: [$((Sql "SELECT GROUP_CONCAT(qualified_name, ' ; ') FROM symbols WHERE name='TGammaCtl'"))]"
 
-# --- WalkUnit: the same node read for the unit's OWN declaration -------------
-# Premise first: Gamma must actually have been parsed, or the two checks under
-# it would pass by finding nothing.
-$gammaUnit = @($syms | Where-Object { $_.kind -eq 'unit' -and ($_.name -replace '\s', '') -eq 'Gamma.Config' })
-Check 'fixture premise: the padded DECLARATION parsed and emitted a unit symbol' `
-  ($gammaUnit.Count -eq 1) `
-  ("unit symbols=[{0}]" -f (($syms | Where-Object { $_.kind -eq 'unit' } | ForEach-Object { "'" + $_.name + "'" }) -join ' '))
+$b3 = Sql "SELECT COUNT(*) FROM symbols WHERE kind='unit' AND name $wsGlob"
+Check 'B3 sweep: no kind=unit symbol name carries whitespace, #11 and #12 included' ($b3 -eq '0') "rows with whitespace=$b3"
 
-Check 'the padded DECLARATION is stored with NO interior whitespace' `
-  ($gammaUnit.Count -eq 1 -and $gammaUnit[0].name -eq 'Gamma.Config') `
-  ("stored={0}" -f $(if ($gammaUnit.Count) { "'" + $gammaUnit[0].name + "'" } else { '<missing>' }))
+# --- C. Site 3: the lint rule that reads the same node. ---------------------------
+#     unit-name-matches-file is off unless selected, so it is driven with
+#     `lint --rule`. C2 must come with C1: on its own, C1 ("no finding") would pass
+#     just as well if the rule never ran at all.
+Write-Host ''
+Write-Host 'site 3 -- the unit-name-matches-file lint rule (NamingChecks)' -ForegroundColor Cyan
+function LintUnitName([string]$File) {
+  return @(& $Exe lint (Join-Path $work $File) --rule unit-name-matches-file 2>&1) | ForEach-Object { "$_" }
+}
+$c1 = LintUnitName 'Gamma.Config.pas'
+$c1Hits = @($c1 | Where-Object { $_ -match 'unit-name-matches-file' })
+Check "C1: no unit-name-matches-file finding on the padded 'unit Gamma<pad>.Config' in Gamma.Config.pas" `
+  ($c1Hits.Count -eq 0) `
+  "findings=[$($c1Hits -join ' | ')] -- the rule compared the RAW node text, so the padding made a correctly-named file look mismatched"
 
-# The consequence, stated separately: the declaration's text is the prefix of
-# every symbol the unit declares, so a padded name mis-keys them all.
-$gammaFn = @($syms | Where-Object { $_.name -eq 'GammaCfg' })
-Check 'every symbol in that unit is qualified with the UNPADDED name' `
-  ($gammaFn.Count -eq 1 -and $gammaFn[0].qname -eq 'Gamma.Config.GammaCfg') `
-  ("qualified_name={0}" -f $(if ($gammaFn.Count) { "'" + $gammaFn[0].qname + "'" } else { '<missing>' }))
+$c2 = LintUnitName 'Mismatch.pas'
+$c2Hits = @($c2 | Where-Object { $_ -match 'unit-name-matches-file' })
+Check "C2 de-vacuates C1: the rule IS on and DOES fire on a genuine mismatch (Other<pad>.Thing in Mismatch.pas)" `
+  ($c2Hits.Count -eq 1) "findings=[$($c2Hits -join ' | ')]"
+
+# The deliberate split: stripped for the comparison, RAW for the message. A reader
+# of the diagnostic should see what they actually typed, padding included.
+Check "C3: the finding's message quotes the AUTHOR'S RAW text, padding intact" `
+  (($c2Hits -join ' ') -match ([regex]::Escape('Other' + $pad + '.Thing'))) `
+  "message=[$($c2Hits -join ' | ')] -- if this shows 'Other.Thing' the message was built from the stripped value instead of the raw one"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

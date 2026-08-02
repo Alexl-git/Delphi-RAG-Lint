@@ -315,6 +315,8 @@ Real reFind sample lines (from the BDE2FD sample):
 | `#default <ToPath> = <value>` | set a target property to a default when no source maps to it |
 | `#ignore <FromPath>` | acknowledge an F property/event is intentionally NOT mapped -- suppresses its unmapped-non-default warning (other unmapped props still warn). Added in Batch 2a-i for the re-emit engine. |
 | `#note <text>` | a human comment carried in the rule (the scaffolder emits `candidates:` and `DROPPED` notes) |
+| `#use <unit>` | add a unit to the PAS `uses` clause (the companion to reFind's `#unuse`) |
+| `#useswap <Old> -> <New1> [, <New2> ...]` | replace unit `<Old>` with one-or-more `<New>` units. Sugar for `#unuse Old` + `#use New1` + `#use New2` ... |
 
 Example superset block:
 
@@ -329,6 +331,26 @@ Example superset block:
 `#link`/`#default` **ToPath** must exist in the `--to` tree; `#link` **FromPath**
 must exist in the `--from` tree (unless it is the `???` stub). That is exactly what
 `convert-validate` checks.
+
+### Unit replacement: `#use` / `#useswap`
+
+`#use`/`#useswap` manage the target `.pas` `uses` clause. They are **file-level**
+(they may live outside any `#convert` block), so a standalone swap such as
+`#useswap FOLDERDEF -> imcFOLDERS` stands on its own. `#useswap Old -> New1, New2`
+is exactly `#unuse Old` + `#use New1` + `#use New2`.
+
+The **converter editor** ("Unit Rules" tab) authors these and can **auto-derive**
+them from the `#convert` blocks: each To-type's declaring unit becomes a `#use`,
+each From-type's a `#unuse`. Normalization (the "no doubles" rule, shared with the
+apply path) is:
+
+- **ADD** = every `#use` + every `#useswap` New + every `#convert` trailing unit;
+- **REMOVE** = every `#unuse` + every `#useswap` Old;
+- add each ADD unit only if not already present; a unit in both sets -> **ADD wins**
+  (it is needed), reported as a conflict.
+
+_Status:_ **recognized by the parser now (parse-only -- they validate clean and
+round-trip);** executed by `convert-apply` in a later phase.
 
 ## End-to-end workflow
 

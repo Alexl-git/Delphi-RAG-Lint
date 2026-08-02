@@ -1,175 +1,113 @@
 <#
-  run_proptree_ancestor_climb.ps1 -- the ancestor CLIMB must not stop at an edge
-  the INDEX left unresolved.
+  run_proptree_ancestor_climb.ps1 -- the QUERY-TIME ancestor-climb fallback in
+  DRagLint.Convert.PropTree.ClassChain (design doc
+  2026-07-29-proptree-ancestor-scope-design.md section 3.1, criteria 6-7).
 
-  THE BUG (INBOX-proptree-ancestor-climb-stops-early.md, 2026-07-28, reproduced on
-  1.2.1-alpha against library-Win64.sqlite): ResolveAncestry resolves an ancestor
-  NAME to a symbol id only when it is unambiguous -- exactly one candidate in the
-  declaring file's uses-scope, or a single global definition. Everything else is
-  stored with ancestor_symbol_id = NULL, and GetTransitiveAncestors treats a NULL
-  edge as a name-only LEAF and stops climbing. Two independent causes make that
-  fire constantly on real code:
+  WHAT THIS COVERS THAT NOTHING ELSE DOES
 
-    1. unit_uses.target_file_id is NULL for essentially every DOTTED unit -- in
-       library-Win64, 38390 of the 38512 dotted rows (99.7%), inside 49527 NULL
-       rows out of 85157. CLASSIFIER, because two earlier drafts of this header got
-       the split wrong and both times it was a classifier error: replay the FIXED
-       procedure's BOTH passes over the NULL rows (files filtered to .pas, stem =
-       lowercased basename, tail = text after the stem's last dot, a tail claimed
-       by two different stems is ambiguous). Pass 1 resolves 38022, pass 2 a
-       further 4592, 6381 are correctly refused on an ambiguous tail, and 532 name
-       nothing indexed. So 48995 of the 49527 name an indexed unit. Draft 1 charged
-       all 49527 to the defect and called it "58%"; draft 2 classified by full-stem
-       equality -- pass 1's criterion alone -- and so called all 11137 plain-name
-       NULLs missing data, when 10790 of them match an indexed file TAIL, which is
-       exactly what pass 2 exists for (`uses SysUtils` -> System.SysUtils.pas).
-       The cause: UnitNameNorm stores the dotted TAIL
-       ('Vcl.Controls' -> 'controls') while ResolveUnitUseTargets keys on the FULL
-       file stem ('vcl.controls'). They can never match. ResolveAncestry's
-       uses-scope disambiguation therefore degenerates to same-file-only, so every
-       CROSS-UNIT hop onto an ambiguous name (TWinControl exists in both
-       Vcl.Controls and FMX.Controls.Win) is abandoned -- losing the whole
-       TWinControl/TControl/TComponent surface for nearly all of VCL.
-    2. A TYPE ALIAS ancestor ('TcxBaseButton = TCustomButton;') is never resolved
-       at all: ResolveAncestry's candidate query is kind IN ('class','interface'),
-       and an alias is kind='type'.
+  run_proptree_scope_rule.ps1 proves the shared scope rule itself
+  (PickAncestorCandidateByScope), and run_proptree_ancestry_bridge.ps1 proves an
+  unresolved edge is bridged at all -- but BOTH resolve the broken edge on the
+  class the query was rooted at, i.e. SINGLE-HOP. A single-hop fixture cannot
+  distinguish "resolved in the inheriting class's unit" from "resolved in the
+  ROOT class's unit", because those are the same unit. That is exactly why the
+  root-scope defect (PropTree.pas passing the ROOT's FileId at every hop, against
+  ResolveTypeNameToClass's documented AScopeFileId contract) survived unnoticed.
 
-  WHY EVERY UNIT NAME IN THIS FIXTURE IS DOTTED, AND WHY THAT IS THE POINT: an
-  earlier draft of this fixture used plain names (VclKit, StdKit) and group B
-  PASSED on the broken exe. For a plain unit the tail IS the full stem, so
-  target_file_id resolves, the uses-scope is intact, and the ambiguous hop is
-  disambiguated correctly. Dotted-ness is the entire difference between the
-  reporter's working rows and his failing ones, so the fixture must be dotted or
-  it asserts nothing. Group E pins that mechanism directly.
+  Design criterion 7: "THE fallback SHALL use the FileId of the class doing the
+  inheriting, not the FileId of the root class the query started from."
 
-  THE FIX, in two places:
-    QUERY-TIME (works on indexes that already exist -- no reindex, which matters
-      because the library DBs may not be rebuilt yet): GetTransitiveAncestors
-      LATE-RESOLVES an unresolved edge through the scope-aware, alias-following
-      resolver in STRICT mode -- resolve only when exactly ONE candidate survives,
-      REFUSE when more than one does. That resolver scopes by TEXTUAL unit name
-      from unit_uses.unit_name, so it is immune to cause 1 above, and it follows
-      type aliases, so it also covers cause 2.
-    INDEX-TIME (correct at rest, but only after a rebuild): ResolveUnitUseTargets
-      now matches a dotted unit name against the full dotted file stem, and falls
-      back to tail-matching only when that tail is unambiguous.
+  CASE A/B -- MULTI-UNIT, decisive for criterion 7 AND criterion 5.
 
-  FIXTURE (five units, indexed as one tree, ALL DOTTED):
-    Vcl.Kit.pas   TComponentBase(TPersistent) [Tag]  <- TWinControl [Left]
-                  'TWinControl' is deliberately AMBIGUOUS (Fmx.Kit declares one
-                  too); 'TComponentBase' is deliberately UNIQUE (the control hop).
-    Fmx.Kit.pas   TFmxBase(TPersistent) [FmxPoison] <- TWinControl [FmxLeft]
-                  the DECOY. No unit that must climb into Vcl.Kit ever uses it.
-    Std.Kit.pas   uses Vcl.Kit (NOT Fmx.Kit).
-                  TCustomEdit(TWinControl) [Text] <- TEdit [EditMarker]
-                  == the Vcl.StdCtrls.TEdit case: a CROSS-UNIT hop on an ambiguous
-                     name, disambiguated only by the uses clause.
-    Cx.Kit.pas    uses Std.Kit. 'TcxBaseButton = TCustomEdit;' (alias, same unit)
-                  TcxCustomButton(TcxBaseButton, ICxSkin, ICxHint) -- a MULTI-LINE
-                  header with interfaces == the cxButtons.TcxCustomButton case.
-    Ambig.Kit.pas uses Vcl.Kit AND Fmx.Kit, then descends from 'TWinControl'.
-                  BOTH candidates are in scope: the resolver must resolve NOTHING.
-    Dfm.Kit.pas   + Dfm.Kit.dfm -- a form unit and the .dfm the indexer stores
-                  beside it, sharing a stem. TDfmCtl [DfmMarker] is AMBIGUOUS
-                  (Dup.Kit declares one too), so scope is the ONLY thing that can
-                  resolve an edge onto it.
-    Dup.Kit.pas   the TDfmCtl decoy [DupPoison]. Nothing that must reach Dfm.Kit
-                  uses it.
-    PlainKit.pas  + PlainKit.dfm -- the same pair with a PLAIN name, because the
-                  mis-binding is a stem collision, not a dotted-name defect.
-    Cli.Kit.pas   uses Dfm.Kit and PlainKit; TCliCtl descends from TDfmCtl.
-    Prog.dpr      + Prog.pas -- a PROGRAM whose stem collides with a unit's.
-                  `uses Prog` names the UNIT; the .dpr is not a candidate at all.
-                  TProgCtl is AMBIGUOUS (Dup.Kit declares one), so scope decides.
-    UseProg.pas   uses Prog; TUseProg descends from TProgCtl.
-    Upper.Kit.PAS an UPPERCASE extension, as 554 of ORM3's 757 .pas paths really
-                  are. TUpCtl is AMBIGUOUS (Dup.Kit declares one too).
-    UseUp.Kit.pas uses Upper.Kit; TUseUp descends from TUpCtl.
+    Zed.Root9.pas   TRoot9  = class(TMid9)     -- namespace prefix 'Zed'
+                    TRootF9 = class(TMidF9)    -- namespace prefix 'Zed'
+                    (deliberately NO uses clause)
+    Mid9A.pas       TAnchor9A = class(TVclBase9) -- anchor evidence only
+                    TMid9   = class(TAmb9)     -- globally UNIQUE name, so the
+                                                  TRoot9 -> TMid9 edge RESOLVES
+                                                  at index time and the climb
+                                                  genuinely reaches a second hop
+                                                  in a DIFFERENT unit.
+                                                  UNDOTTED unit name, and NO
+                                                  uses clause.
+    Mid9B.pas       TAnchorF9B = class(TFmxBase9)
+                    TMidF9  = class(TAmb9)     -- the mirror. Also undotted.
+    Vcl.Base9.pas   TVclBase9 -- globally unique; the anchor hop for Mid9A
+    FMX.Base9.pas   TFmxBase9 -- the anchor hop for Mid9B
+    Vcl.Cand9.pas   TAmb9   [property Marker: TMarkVcl9]
+    FMX.Cand9.pas   TAmb9   [property Marker: TMarkFmx9]  <- same simple name,
+                                                  so 'TAmb9' is AMBIGUOUS.
 
-  THE FIX-ROUND-1 CRITICAL, which groups A-D could not see: ResolveUnitUseTargets
-  pulled `files` unfiltered, so a form's .dfm competed with its .pas for the stem
-  and, where it sorted first, won. A .dfm declares no classes, so the resulting
-  scope entry is an EMPTY scope and ResolveAncestry abandons the edge -- measured
-  on tests\fixtures\formsmap as 15 of 30 uses rows bound to a .dfm, and on the
-  real indexes (replaying the whole unfiltered procedure and counting DISTINCT
-  LOWER(TRIM(unit_name)) whose WINNING file is not a .pas) 57 in ORM3, 608 in
-  library-Win64, 197 in M2022, 25 in this repo's own index. Groups B, C and D all
-  stayed green through it, because the query-time late resolver is TEXTUAL and
-  never reads target_file_id. Group E is the only guard; E5-E14 pin this case and
-  read the stored tables, never the engine's answer.
+    WHY THE MID UNITS ARE UNDOTTED. The break must be a name the INDEX-time
+    resolver declines and the QUERY-time climb resolves, or Cases A/B stop
+    testing the climb. Since Task 4 both sides run the SAME scope rule, so the
+    only thing that separates them is the framework ANCHOR: ResolveAncestry
+    passes '' (it is rebuilding type_ancestors, the table an anchor is derived
+    from) while PickCandidate derives a real one for an undotted scope unit.
+    An undotted mid unit therefore declines at index time and resolves at query
+    time -- see Mid9A.pas for the full argument in both directions.
 
-  Those four figures were published here as 62 / 613 / 205 / 25 before 2026-07-29
-  and did NOT follow from the criterion stated in the same sentence. That set is
-  the union of "the WINNING file is not a .pas" with "some non-.pas file claims
-  the stem, won or not". The command is committed rather than described --
-  tools\measure\uses_target_replay.py, measured at c4b78d0 -- so both numbers can
-  be re-derived instead of trusted.
+    NOT AN ALIAS, and this is the trap to remember. An earlier revision used
+    'TAmbAlias9 = TAmb9' as the break. It declined at index time correctly, but
+    ResolveTypeNameToClass RE-SCOPES to the alias's own file before resolving
+    the alias target (LoadScopeNames(Cand.FileId), Storage.SQLite.pas ~:3032),
+    so hop 1 resolved the globally-unique alias name under ANY scope and hop 2
+    ran in the alias's own (correct) unit -- Cases A and B passed with the
+    criterion-7 defect injected. The name resolved in the CALLER's scope has to
+    be the AMBIGUOUS one.
 
-  AND THE FIX-ROUND-1 GUARD WAS WRITTEN TO THE IMPLEMENTATION. Round 1 whitelisted
-  .pas/.dpr/.dpk, and E7 asserted "no row targets a non-.pas/.dpr/.dpk" -- the
-  CODE's own set, so it could not fire on the code admitting the wrong extensions.
-  A `uses` clause names a UNIT: a .dpr names a program and a .dpk names a package,
-  and neither declares a unit (.dpk files carry 0 symbols in all four measured
-  indexes). Executed: `uses Prog` bound to Prog.dpr on both b811097 and round 1,
-  un-resolving an ancestor edge that pre-T4d 0e84cc6 got RIGHT. E9-E11 assert the
-  REQUIREMENT -- the target is Prog.pas, named -- not membership of any allowed
-  set. E12-E14 pin the one line that keeps ORM3's 554 uppercase .PAS paths in
-  scope at all, LowerCase(ExtractFileExt(..)), which nothing asserted.
+    The root unit's prefix is 'Zed', which matches NEITHER candidate, and
+    'Zed.Root9' is DOTTED so no anchor is derived for it either. So:
+      * resolve 'TAmb9' in the ROOT's scope (the defect)   -> rule 3 matches
+        'Zed' against 'Vcl'/'FMX', the rule correctly DECLINES, the climb stops,
+        and 'Marker' is ABSENT from both trees;
+      * resolve it in the INHERITING class's scope (correct) -> Mid9A's anchor
+        'Vcl' picks Vcl.Cand9 and Mid9B's anchor 'FMX' picks FMX.Cand9, so
+        'Marker' is present and DIFFERENTLY TYPED in each direction.
+    A wrong pick is therefore detectable (shows up as the other framework's enum),
+    a decline is detectable (Marker absent), and passing for the wrong reason --
+    one blanket scope that happens to suit both -- is impossible, because the two
+    roots live in the SAME unit yet must reach OPPOSITE frameworks.
 
-  WHY 'Prog.dpr WON' HERE AND WHY THAT IS NOT A GENERAL RULE. The earlier text
-  said a colliding non-unit file "ALWAYS won" because the scan is path-ordered and
-  '.dpk' < '.dpr' < '.pas'. False as stated. The scan is served from the UNIQUE
-  index on files.path, so the order is by RAW PATH BYTES: the extension decides
-  only when everything before it is byte-identical, which is exactly the shape
-  THIS FIXTURE has (Prog.dpr beside Prog.pas, same directory, same case). Real
-  corpora are not that tidy -- ORM3's DFCTLIST.PAS beats DFCTLIST.dfm inside the
-  extension ('P' 0x50 < 'd' 0x64), ABC5's ABCDFTIP.PAS beats Abcdftip.dfm on
-  basename case, and a directory name can decide before either. Distinct used
-  names whose non-.pas competitor LOSES: 5 in library-Win64, 5 in ORM3, 8 in
-  M2022, 0 in this repo. The fixture pins the byte-identical-path case, and that
-  is the case it should be read as pinning.
+  CASE C -- CYCLE GUARD, made independently RED-able. A LINEAR cycle is not
+  enough: the depth cap alone bounds it, and leaf-name dedup in CollectProps /
+  CollectFields hides the repeated chain, so deleting the visited set changes no
+  output at all. This case therefore uses a BRANCHING cycle --
+  'TCycHub = class(TCycAliasL, TCycAliasR)' where BOTH aliases lead back to
+  TCycHub. With the visited-class-id set each class is climbed at most once and
+  the query is instant. WITHOUT it, every climb of the hub bridges both names
+  again, so the recursion branches two ways per level and the depth cap bounds
+  it at 2^64 -- it never returns. The assertion is a hard wall-clock bound on a
+  fixture that is exponential without the guard, which is exactly the "a
+  malformed or self-referential index must not spin" property the guard exists
+  for. (A two-entry heritage whose second entry is a class is not something the
+  Delphi compiler would accept. That is the point: the guard's job is to survive
+  a MALFORMED index, and type_ancestors records a row per heritage token
+  regardless of what the compiler would say.)
 
-  Load-bearing assertions (proptree --no-write-back --format json):
-    A CONTROL      Vcl.Kit.TWinControl already climbs to TComponentBase (Tag).
-                   This hop is UNIQUE-named, passes before AND after the fix, and
-                   is what proves the fixture and the walk are capable at all --
-                   without it, B failing would not distinguish "climb broken" from
-                   "fixture never had the property".
-    B DEFECT 1     Std.Kit.TEdit reaches Left (Vcl.Kit.TWinControl) and Tag
-                   (Vcl.Kit.TComponentBase), and NEVER the Fmx.Kit decoy's FmxLeft
-                   / FmxPoison. declared_in is asserted, not just the leaf name --
-                   the whole bug is the right name arriving from the wrong unit.
-    C DEFECT 2     Cx.Kit.TcxCustomButton climbs THROUGH the type alias and the
-                   multi-line interface header to Text, Left and Tag.
-    D REFUSAL      Ambig.Kit.TAmbiguous emits its OWN AmbMarker (de-vacuating: the
-                   tree really was built) but NEITHER ancestor surface. Absence
-                   over wrong.
-                   HOW STRONG D ACTUALLY IS, measured rather than counted
-                   (register K38): under the mutation that removes the mechanism
-                   -- AStrict:=False at the climb's call site -- only D4 and D5
-                   go red. Non-strict returns InScope[0], so exactly ONE
-                   candidate is grafted; D2/D3 fire only if candidate ORDER
-                   flips, which a fixture-file rename could do silently. So four
-                   named-leaf checks carried two checks' worth of discrimination.
-                   D6 is the order-independent form and is strictly stronger than
-                   all four: the refusal means the top-level surface is declared
-                   by TAmbiguous ALONE, which forbids a graft from any class at
-                   all. D7 de-vacuates D6 against B's grafting tree.
-    E ROOT CAUSE   the index-time guard, read off the STORED tables: a DOTTED uses
-                   row resolves target_file_id (E1-E2); the ambiguous cross-unit
-                   edge is stored RESOLVED and points at the Vcl.Kit class, not the
-                   Fmx.Kit one (E3); the genuinely ambiguous one stays unresolved
-                   (E4); a uses row binds to the unit's .pas and never to the .dfm
-                   beside it (E5-E7, de-vacuated by E8); never to the .dpr either
-                   (E9-E10, de-vacuated by E11); and an UPPERCASE .PAS is still a
-                   candidate (E12-E13, de-vacuated by E14). Every one of E5-E13
-                   names the file it expects, so none of them can pass by agreeing
-                   with whatever set the implementation currently allows.
+  CASE D -- DEPTH CAP, independently RED-able. A straight, ACYCLIC alias chain
+  longer than CMaxBridgedChainDepth (64). The visited set can never fire here --
+  every class in the chain is distinct -- so only the depth cap can stop the
+  climb. A marker declared comfortably INSIDE the cap must be reachable; one
+  declared BEYOND it must not be. Both directions are pinned, so removing the
+  cap turns the second check red and shrinking it turns the first red.
+
+  CASE E -- CRITERION 5 WHEN THE NAME HAS A SINGLE CANDIDATE: the gap the shared
+  scope rule cannot close. ResolveTypeNameToClass -> PickCandidate
+  short-circuits on a lone candidate ('if Length(Types) = 1 then Exit(Types[0])'),
+  so PickAncestorCandidateByScope -- and with it rule 3 -- is never consulted.
+  A Vcl-scoped class whose ancestor name is a type ALIAS to the ONE class of
+  that name, and that class lives in an FMX unit, would therefore be bridged
+  with NO scope check whatsoever and spliced straight into the class chain. The
+  climb's own CrossesGuiFramework guard is what refuses it. Neither
+  run_proptree_scope_rule.ps1 nor run_proptree_ancestry_bridge.ps1 can reach
+  this: every ambiguous name in those fixtures has TWO candidates and so takes
+  the scope-rule path instead.
 #>
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\drag-lint-proptree-climb"
+  [string]$WorkDir = "$env:TEMP\drag-lint-proptree-ancestor-climb"
 )
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -192,26 +130,21 @@ function Write-Ascii([string]$Path, [string]$Body) {
   [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
 }
 
-Write-Ascii (Join-Path $work 'Vcl.Kit.pas') @'
-unit Vcl.Kit;
+Write-Ascii (Join-Path $work 'Vcl.Cand9.pas') @'
+unit Vcl.Cand9;
 
 interface
 
 type
-  // UNIQUE simple name -> this hop resolves even before the fix (control A).
-  TComponentBase = class(TPersistent)
-  private
-    FTag: Integer;
-  published
-    property Tag: Integer read FTag write FTag;
-  end;
+  TMarkVcl9 = (mv9None, mv9Full);
 
-  // AMBIGUOUS simple name: Fmx.Kit declares a TWinControl too.
-  TWinControl = class(TComponentBase)
+  // One of the two same-named candidates for the ambiguous ancestor 'TAmb9'.
+  // Marker is typed DIFFERENTLY from the FMX twin so a wrong pick is visible.
+  TAmb9 = class(TPersistent)
   private
-    FLeft: Integer;
+    FMarker: TMarkVcl9;
   published
-    property Left: Integer read FLeft write FLeft;
+    property Marker: TMarkVcl9 read FMarker write FMarker;
   end;
 
 implementation
@@ -219,26 +152,21 @@ implementation
 end.
 '@
 
-Write-Ascii (Join-Path $work 'Fmx.Kit.pas') @'
-unit Fmx.Kit;
+Write-Ascii (Join-Path $work 'FMX.Cand9.pas') @'
+unit FMX.Cand9;
 
 interface
 
 type
-  TFmxBase = class(TPersistent)
-  private
-    FFmxPoison: Integer;
-  published
-    property FmxPoison: Integer read FFmxPoison write FFmxPoison;
-  end;
+  TMarkFmx9 = (mf9None, mf9Full);
 
-  // The DECOY. Same simple name as Vcl.Kit's, completely different surface.
-  // If the climb ever grafts THIS onto a Vcl.Kit descendant the test fails.
-  TWinControl = class(TFmxBase)
+  // The mirror candidate. Same simple name 'TAmb9' as Vcl.Cand9's, which is
+  // what makes the ancestor name globally AMBIGUOUS.
+  TAmb9 = class(TPersistent)
   private
-    FFmxLeft: Integer;
+    FMarker: TMarkFmx9;
   published
-    property FmxLeft: Integer read FFmxLeft write FFmxLeft;
+    property Marker: TMarkFmx9 read FMarker write FMarker;
   end;
 
 implementation
@@ -246,29 +174,19 @@ implementation
 end.
 '@
 
-Write-Ascii (Join-Path $work 'Std.Kit.pas') @'
-unit Std.Kit;
+Write-Ascii (Join-Path $work 'Vcl.Base9.pas') @'
+unit Vcl.Base9;
 
 interface
 
-uses
-  Vcl.Kit;
+// Sole purpose: give Mid9A.pas's ancestry a resolvable hop into a 'Vcl.*'
+// unit, so FrameworkAnchorForFile can derive the anchor 'Vcl' for that
+// undotted unit at QUERY time. TVclBase9's name is globally unique, so the
+// TAnchor9A -> TVclBase9 edge resolves at INDEX time and the anchor climb --
+// which follows only ALREADY-RESOLVED type_ancestors rows -- can use it.
 
 type
-  // The Vcl.StdCtrls.TCustomEdit case: cross-unit hop onto the AMBIGUOUS name
-  // 'TWinControl'. Only the uses clause says which one is meant.
-  TCustomEdit = class(TWinControl)
-  private
-    FText: string;
-  published
-    property Text: string read FText write FText;
-  end;
-
-  TEdit = class(TCustomEdit)
-  private
-    FEditMarker: Integer;
-  published
-    property EditMarker: Integer read FEditMarker write FEditMarker;
+  TVclBase9 = class(TPersistent)
   end;
 
 implementation
@@ -276,68 +194,15 @@ implementation
 end.
 '@
 
-Write-Ascii (Join-Path $work 'Cx.Kit.pas') @'
-unit Cx.Kit;
+Write-Ascii (Join-Path $work 'FMX.Base9.pas') @'
+unit FMX.Base9;
 
 interface
 
-uses
-  Std.Kit;
+// The mirror: gives Mid9B.pas the anchor 'FMX'. See Vcl.Base9.pas.
 
 type
-  ICxSkin = interface
-    ['{1B7F0C2A-0001-4A00-9000-000000000001}']
-    procedure Skin;
-  end;
-
-  ICxHint = interface
-    ['{1B7F0C2A-0002-4A00-9000-000000000002}']
-    procedure Hint;
-  end;
-
-  // The cxButtons.TcxBaseButton case: a TYPE ALIAS, unique name, same unit.
-  // ResolveAncestry never resolves it (kind='type', not 'class').
-  TcxBaseButton = TCustomEdit;
-
-  // Multi-line header carrying interfaces, exactly like cxButtons.TcxCustomButton.
-  TcxCustomButton = class(TcxBaseButton,
-    ICxSkin,
-    ICxHint)
-  private
-    FCxMarker: Integer;
-  published
-    property CxMarker: Integer read FCxMarker write FCxMarker;
-  end;
-
-implementation
-
-procedure TcxCustomButton.Skin;
-begin
-end;
-
-procedure TcxCustomButton.Hint;
-begin
-end;
-
-end.
-'@
-
-Write-Ascii (Join-Path $work 'Ambig.Kit.pas') @'
-unit Ambig.Kit;
-
-interface
-
-uses
-  Vcl.Kit, Fmx.Kit;
-
-type
-  // BOTH Vcl.Kit.TWinControl and Fmx.Kit.TWinControl are in scope here. Nothing
-  // in the index can say which is meant, so the resolver must resolve NEITHER.
-  TAmbiguous = class(TWinControl)
-  private
-    FAmbMarker: Integer;
-  published
-    property AmbMarker: Integer read FAmbMarker write FAmbMarker;
+  TFmxBase9 = class(TPersistent)
   end;
 
 implementation
@@ -345,77 +210,49 @@ implementation
 end.
 '@
 
-# --- The .pas/.dfm pair (fix round 1). ResolveUnitUseTargets pulls `files` for
-# every indexed file, INCLUDING the .dfm the indexer stores beside a form unit.
-# Both share the stem, so whichever accumulator policy wins decides whether
-# `uses Dfm.Kit` points at Dfm.Kit.pas or Dfm.Kit.dfm -- and .dfm is walked
-# first. A .dfm declares no classes, so a scope entry pointing at one is an
-# empty scope: ResolveAncestry then cannot see Dfm.Kit.TDfmCtl and abandons the
-# edge. TDfmCtl is deliberately AMBIGUOUS (Dup.Kit declares one too) so that the
-# single-global fallback cannot rescue it -- scope is the only thing that can.
-Write-Ascii (Join-Path $work 'Dfm.Kit.pas') @'
-unit Dfm.Kit;
+Write-Ascii (Join-Path $work 'Mid9A.pas') @'
+unit Mid9A;
 
 interface
 
-uses
-  Vcl.Kit;
+// Deliberately NO uses clause, so neither same-unit (rule 1) nor uses-based
+// (rule 2) scoping can decide 'TAmb9'. TMid9's own name is globally unique, so
+// the TRoot9 -> TMid9 edge RESOLVES at index time; the break is one hop ABOVE
+// the queried root, in THIS unit.
+//
+// THIS UNIT'S NAME IS UNDOTTED, and that is load-bearing in BOTH directions:
+//
+//   INDEX TIME must DECLINE 'TAmb9'. UnitFrameworkPrefix('Mid9A') is '', so
+//   rule 3 has no segment of its own to match with, and ResolveAncestry
+//   supplies no anchor (it is mid-way through rebuilding type_ancestors, the
+//   very table an anchor is derived from). Rule 3 is therefore skipped and the
+//   edge is written ancestor_kind='?' -- which is what the sanity assertion
+//   below pins, and what makes Cases A and B exercise the QUERY-TIME climb.
+//
+//   QUERY TIME must RESOLVE it, and only in THIS unit's scope. PickCandidate
+//   derives an anchor for an undotted scope unit: FrameworkAnchorForFile climbs
+//   TAnchor9A -> Vcl.Base9.TVclBase9 and answers 'Vcl', which rule 3
+//   substitutes for the missing segment and uses to pick Vcl.Cand9.TAmb9.
+//   Resolving in the ROOT unit's scope instead (Zed.Root9 -- the criterion-7
+//   defect) derives NO anchor at all, because 'Zed.Root9' IS dotted and
+//   PickCandidate therefore never calls FrameworkAnchorForFile; rule 3 then
+//   matches 'Zed' against 'Vcl'/'FMX', finds nothing, and DECLINES. That
+//   asymmetry is what makes Cases A and B decisive for criterion 7.
+//
+// An earlier revision made the break a TYPE ALIAS instead. That looked
+// equivalent and was not: ResolveTypeNameToClass RE-SCOPES to the alias's own
+// file (LoadScopeNames(Cand.FileId), Storage.SQLite.pas ~:3032) before
+// resolving the alias target, so the caller's scope was discarded and the
+// correct scope handed back for free -- Cases A and B then passed under the
+// criterion-7 defect just as well as without it. The name resolved in the
+// CALLER's scope must be the AMBIGUOUS one, or these cases test nothing.
 
 type
-  // AMBIGUOUS simple name: Dup.Kit declares a TDfmCtl too. This unit has a .dfm.
-  TDfmCtl = class(TComponentBase)
-  private
-    FDfmMarker: Integer;
-  published
-    property DfmMarker: Integer read FDfmMarker write FDfmMarker;
+  // Anchor evidence only -- never queried. See Vcl.Base9.pas.
+  TAnchor9A = class(TVclBase9)
   end;
 
-implementation
-
-{$R *.dfm}
-
-end.
-'@
-
-Write-Ascii (Join-Path $work 'Dfm.Kit.dfm') @'
-object DfmCtl: TDfmCtl
-  Left = 0
-  Top = 0
-  Caption = 'Kit'
-end
-'@
-
-Write-Ascii (Join-Path $work 'Dup.Kit.pas') @'
-unit Dup.Kit;
-
-interface
-
-type
-  // The DECOY that makes 'TDfmCtl' ambiguous. Nothing that must reach Dfm.Kit
-  // ever uses this unit.
-  TDfmCtl = class(TPersistent)
-  private
-    FDupPoison: Integer;
-  published
-    property DupPoison: Integer read FDupPoison write FDupPoison;
-  end;
-
-  // Same job for the .dpr pair: without this, Prog.TProgCtl is the single global
-  // definition and PickCandidate takes it with no scope at all, so E10 would pass
-  // even with `uses Prog` pointing at Prog.dpr.
-  TProgCtl = class(TPersistent)
-  private
-    FDupProgPoison: Integer;
-  published
-    property DupProgPoison: Integer read FDupProgPoison write FDupProgPoison;
-  end;
-
-  // ...and for the uppercase-extension pair.
-  TUpCtl = class(TPersistent)
-  private
-    FDupUpPoison: Integer;
-  published
-    property DupUpPoison: Integer read FDupUpPoison write FDupUpPoison;
+  TMid9 = class(TAmb9)
   end;
 
 implementation
@@ -423,53 +260,23 @@ implementation
 end.
 '@
 
-# A PLAIN-named pair too: the mis-binding is not a dotted-name defect, it is a
-# stem-collision defect, and the reviewer's evidence (tests\fixtures\formsmap)
-# is entirely plain names.
-Write-Ascii (Join-Path $work 'PlainKit.pas') @'
-unit PlainKit;
+Write-Ascii (Join-Path $work 'Mid9B.pas') @'
+unit Mid9B;
 
 interface
 
+// The mirror of Mid9A -- also undotted, also no uses clause, same ambiguous
+// 'TAmb9' break. Its anchor evidence points at FMX.Base9, so the query-time
+// climb must reach FMX.Cand9.TAmb9 here where Mid9A reaches Vcl.Cand9.TAmb9.
+// Criterion 5's "nor the reverse", and the reason no single blanket scope can
+// satisfy both roots: they live in the SAME root unit.
+
 type
-  TPlainCtl = class(TPersistent)
-  private
-    FPlainMarker: Integer;
-  published
-    property PlainMarker: Integer read FPlainMarker write FPlainMarker;
+  // Anchor evidence only -- never queried. See FMX.Base9.pas.
+  TAnchorF9B = class(TFmxBase9)
   end;
 
-implementation
-
-{$R *.dfm}
-
-end.
-'@
-
-Write-Ascii (Join-Path $work 'PlainKit.dfm') @'
-object PlainCtl: TPlainCtl
-  Left = 0
-  Top = 0
-  Caption = 'Plain'
-end
-'@
-
-Write-Ascii (Join-Path $work 'Cli.Kit.pas') @'
-unit Cli.Kit;
-
-interface
-
-uses
-  Dfm.Kit, PlainKit;
-
-type
-  // Descends from the AMBIGUOUS TDfmCtl. Only `uses Dfm.Kit` says which one --
-  // and only if that uses row points at Dfm.Kit.pas rather than Dfm.Kit.dfm.
-  TCliCtl = class(TDfmCtl)
-  private
-    FCliMarker: Integer;
-  published
-    property CliMarker: Integer read FCliMarker write FCliMarker;
+  TMidF9 = class(TAmb9)
   end;
 
 implementation
@@ -477,37 +284,23 @@ implementation
 end.
 '@
 
-# --- The .pas/.dpr pair (fix round 2). Round 1 whitelisted .pas/.dpr/.dpk, and
-# because the `files` scan is path-ordered the .dpr sorts BEFORE the .pas and wins
-# the stem. A program declares no unit, so `uses Prog` then names a file that
-# declares nothing -- the same empty scope as the .dfm case, on a stem that
-# pre-T4d 0e84cc6 bound correctly. Executed across the three exes:
-#   0e84cc6 -> Prog.pas (edge resolved) | b811097 -> Prog.dpr (<UNRESOLVED>)
-#   7192542 -> Prog.dpr (<UNRESOLVED>)  | round 2 -> Prog.pas (edge resolved)
-Write-Ascii (Join-Path $work 'Prog.dpr') @'
-program Prog;
-
-uses
-  UseProg in 'UseProg.pas';
-
-begin
-end.
-'@
-
-Write-Ascii (Join-Path $work 'Prog.pas') @'
-unit Prog;
+Write-Ascii (Join-Path $work 'Zed.Root9.pas') @'
+unit Zed.Root9;
 
 interface
 
+// The queried roots. This unit's namespace prefix is 'Zed', which matches
+// NEITHER candidate unit for 'TAmb9' -- so if the climb resolved the broken
+// edge in the ROOT's scope, rule 3 would find no prefix match, decline, and
+// 'Marker' would be absent from BOTH trees below. Both roots live in THIS one
+// unit yet must reach OPPOSITE frameworks, which no single blanket scope can
+// achieve. Deliberately NO uses clause.
+
 type
-  // AMBIGUOUS simple name: Dup.Kit declares a TProgCtl too, so the single-global
-  // fallback cannot rescue this edge -- only `uses Prog` can, and only if it
-  // points at Prog.pas rather than at the program beside it.
-  TProgCtl = class(TPersistent)
-  private
-    FProgMarker: Integer;
-  published
-    property ProgMarker: Integer read FProgMarker write FProgMarker;
+  TRoot9 = class(TMid9)
+  end;
+
+  TRootF9 = class(TMidF9)
   end;
 
 implementation
@@ -515,20 +308,34 @@ implementation
 end.
 '@
 
-Write-Ascii (Join-Path $work 'UseProg.pas') @'
-unit UseProg;
+Write-Ascii (Join-Path $work 'Cyc9.pas') @'
+unit Cyc9;
 
 interface
 
-uses
-  Prog;
+// BRANCHING CYCLE -- deliberately malformed, see the header. Both heritage
+// entries of TCycHub are aliases that lead back to TCycHub, so each climb of
+// the hub can bridge TWO names that each return to it. With the
+// visited-class-id set every class is climbed at most once and this is
+// instant; without it the recursion branches two ways per level and the depth
+// cap bounds it at 2^64, i.e. it never returns.
 
 type
-  TUseProg = class(TProgCtl)
+  TCycAliasL = TCycLeft;
+  TCycAliasR = TCycRight;
+  TCycBack   = TCycHub;
+
+  TCycHub = class(TCycAliasL, TCycAliasR)
   private
-    FUseMarker: Integer;
+    FSelfMark: Integer;
   published
-    property UseMarker: Integer read FUseMarker write FUseMarker;
+    property SelfMark: Integer read FSelfMark write FSelfMark;
+  end;
+
+  TCycLeft = class(TCycBack)
+  end;
+
+  TCycRight = class(TCycBack)
   end;
 
 implementation
@@ -536,22 +343,67 @@ implementation
 end.
 '@
 
-# --- The UPPERCASE-extension pair. ORM3 stores 554 paths ending '.PAS' against
-# 203 ending '.pas' -- the majority of that project -- plus 25 in M2022 and 14 in
-# library-Win64. The only thing keeping them eligible as `uses` targets is the
-# LowerCase() around ExtractFileExt in ResolveUnitUseTargets, and nothing asserted
-# it. TUpCtl is ambiguous for the same reason TProgCtl is.
-Write-Ascii (Join-Path $work 'Upper.Kit.PAS') @'
-unit Upper.Kit;
+# --- CASE D fixture: a straight ACYCLIC alias chain LONGER than the depth cap. -----
+#     Every hop is a distinct class reached through a type alias, so every edge is
+#     unresolved and must be bridged; the visited set can never fire. TDeep9_000 is
+#     the queried root and each TDeep9_NNN inherits TDeep9_(NNN+1) via an alias.
+#     MarkNear is declared at hop 40 (inside the 64 cap) and MarkFar at hop 80
+#     (beyond it).
+$deepNear = 40
+$deepFar  = 80
+$sb = New-Object System.Text.StringBuilder
+[void]$sb.AppendLine('unit Deep9;')
+[void]$sb.AppendLine('')
+[void]$sb.AppendLine('interface')
+[void]$sb.AppendLine('')
+[void]$sb.AppendLine('type')
+[void]$sb.AppendLine('  TMarkNear9 = (mn9None, mn9Full);')
+[void]$sb.AppendLine('  TMarkFar9  = (mf9None, mf9Full);')
+[void]$sb.AppendLine('')
+for ($i = 0; $i -le $deepFar; $i++) {
+  [void]$sb.AppendLine(('  TDeepAlias9_{0:000} = TDeep9_{0:000};' -f $i))
+}
+[void]$sb.AppendLine('')
+for ($i = 0; $i -lt $deepFar; $i++) {
+  [void]$sb.AppendLine(('  TDeep9_{0:000} = class(TDeepAlias9_{1:000})' -f $i, ($i + 1)))
+  if ($i -eq $deepNear) {
+    [void]$sb.AppendLine('  private')
+    [void]$sb.AppendLine('    FMarkNear: TMarkNear9;')
+    [void]$sb.AppendLine('  published')
+    [void]$sb.AppendLine('    property MarkNear: TMarkNear9 read FMarkNear write FMarkNear;')
+  }
+  [void]$sb.AppendLine('  end;')
+}
+[void]$sb.AppendLine(('  TDeep9_{0:000} = class(TPersistent)' -f $deepFar))
+[void]$sb.AppendLine('  private')
+[void]$sb.AppendLine('    FMarkFar: TMarkFar9;')
+[void]$sb.AppendLine('  published')
+[void]$sb.AppendLine('    property MarkFar: TMarkFar9 read FMarkFar write FMarkFar;')
+[void]$sb.AppendLine('  end;')
+[void]$sb.AppendLine('')
+[void]$sb.AppendLine('implementation')
+[void]$sb.AppendLine('')
+[void]$sb.AppendLine('end.')
+Write-Ascii (Join-Path $work 'Deep9.pas') $sb.ToString()
+
+# --- CASE E fixture: the ancestor name has exactly ONE candidate, in an FMX unit. --
+Write-Ascii (Join-Path $work 'FMX.Sole9.pas') @'
+unit FMX.Sole9;
 
 interface
 
 type
-  TUpCtl = class(TPersistent)
+  TSoleFmxMark9 = (sf9None, sf9Full);
+
+  // The ONLY class of this name anywhere in the fixture. Because it is unique,
+  // ResolveTypeNameToClass's PickCandidate short-circuits on it and the shared
+  // scope rule is never consulted -- so nothing but the climb's own
+  // cross-namespace guard stands between it and a Vcl class's ancestor chain.
+  TSoleOnlyInFmx9 = class(TPersistent)
   private
-    FUpMarker: Integer;
+    FSoleMark: TSoleFmxMark9;
   published
-    property UpMarker: Integer read FUpMarker write FUpMarker;
+    property SoleMark: TSoleFmxMark9 read FSoleMark write FSoleMark;
   end;
 
 implementation
@@ -559,20 +411,66 @@ implementation
 end.
 '@
 
-Write-Ascii (Join-Path $work 'UseUp.Kit.pas') @'
-unit UseUp.Kit;
+Write-Ascii (Join-Path $work 'Vcl.Sole9.pas') @'
+unit Vcl.Sole9;
 
 interface
 
-uses
-  Upper.Kit;
+// A 'Vcl.*' class whose ancestor is an ALIAS to a class that exists ONLY in an
+// 'FMX.*' unit. The alias makes ResolveAncestry leave the edge unresolved (its
+// candidate set is class/interface only), and the alias target is globally
+// unique, so PickCandidate short-circuits without ever running the scope rule.
+// Criterion 5 must still hold: 'SoleMark' must NOT appear on TVclSole9.
 
 type
-  TUseUp = class(TUpCtl)
+  TSoleAlias9 = TSoleOnlyInFmx9;
+
+  TVclSole9 = class(TSoleAlias9)
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Vcl.SoleOkTarget9.pas') @'
+unit Vcl.SoleOkTarget9;
+
+interface
+
+type
+  TSoleOkMark9 = (so9None, so9Full);
+
+  // The CONTROL target: also globally unique, also reached through an alias
+  // from another unit -- but that unit shares this one's 'Vcl' namespace, so
+  // the cross-namespace guard must NOT refuse it.
+  TSoleOnlyInVcl9 = class(TPersistent)
   private
-    FUseUpMarker: Integer;
+    FOkMark: TSoleOkMark9;
   published
-    property UseUpMarker: Integer read FUseUpMarker write FUseUpMarker;
+    property OkMark: TSoleOkMark9 read FOkMark write FOkMark;
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $work 'Vcl.SoleOk9.pas') @'
+unit Vcl.SoleOk9;
+
+interface
+
+// CONTROL for case E: structurally IDENTICAL to Vcl.Sole9 -- alias ancestor,
+// unresolved edge, globally unique target, PickCandidate short-circuit -- but
+// the target lives in a 'Vcl.*' unit. This must still bridge, which is what
+// makes case E's refusal attributable to the namespace conflict rather than to
+// the climb simply being unable to bridge a lone candidate.
+
+type
+  TSoleOkAlias9 = TSoleOnlyInVcl9;
+
+  TVclSoleOk9 = class(TSoleOkAlias9)
   end;
 
 implementation
@@ -582,228 +480,116 @@ end.
 
 $db = Join-Path $WorkDir 'climb.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & $Exe index $work --db $db 2>$null
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
-# Read-only (--no-write-back) so no query can mutate the index between assertions.
 function Get-Tree([string]$QName) {
-  $raw = (& $Exe proptree --qname $QName --no-write-back --format json --db $db) -join "`n"
+  Push-Location $WorkDir
+  try {
+    $raw = (& $Exe proptree --qname $QName --format json --db $db --no-write-back 2>$null) -join "`n"
+  } finally { Pop-Location }
+  if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
   return ($raw | ConvertFrom-Json)
 }
-# Top-level leaves only (dotted paths are recursions into class-typed properties,
-# not the root's own inherited surface -- the report measures the same way).
-function Top([object]$Tree) { return @(@($Tree.properties) | Where-Object { $_.path -notmatch '\.' }) }
-function HasLeaf([object[]]$Top, [string]$Name) { return (@($Top | Where-Object { $_.path -eq $Name }).Count -gt 0) }
-function LeafUnit([object[]]$Top, [string]$Name) {
-  $n = @($Top | Where-Object { $_.path -eq $Name }) | Select-Object -First 1
-  if ($null -eq $n) { return '<absent>' } else { return $n.declared_in }
-}
-function ClimbOf([object[]]$Top) { return (($Top | Select-Object -ExpandProperty declared_in -Unique) -join ' -> ') }
 
-# --- A. CONTROL: a UNIQUE-named ancestor hop already climbs (before AND after). ---
-Write-Host ''
-Write-Host 'A. CONTROL -- Vcl.Kit.TWinControl -> TComponentBase (unique name)' -ForegroundColor Cyan
-$aTop = Top (Get-Tree 'Vcl.Kit.TWinControl')
-Check 'A1 control: TWinControl emits its own Left'           (HasLeaf $aTop 'Left') ("climb=" + (ClimbOf $aTop))
-Check 'A2 control: climb reaches TComponentBase (Tag)'       (HasLeaf $aTop 'Tag')  ("climb=" + (ClimbOf $aTop))
-Check 'A3 control: Tag is declared_in Vcl.Kit.TComponentBase' ((LeafUnit $aTop 'Tag') -eq 'Vcl.Kit.TComponentBase') ("declared_in=" + (LeafUnit $aTop 'Tag'))
-
-# --- B. DEFECT 1: cross-unit hop onto an AMBIGUOUS name, uses-disambiguated. ------
-Write-Host ''
-Write-Host 'B. DEFECT 1 -- Std.Kit.TEdit must climb through the ambiguous TWinControl' -ForegroundColor Cyan
-$bTop = Top (Get-Tree 'Std.Kit.TEdit')
-Check 'B1 own EditMarker present (de-vacuating: tree really built)' (HasLeaf $bTop 'EditMarker') ("climb=" + (ClimbOf $bTop))
-Check 'B2 reaches Std.Kit.TCustomEdit (Text)'                (HasLeaf $bTop 'Text') ("climb=" + (ClimbOf $bTop))
-Check 'B3 reaches Vcl.Kit.TWinControl (Left)'                (HasLeaf $bTop 'Left') ("climb=" + (ClimbOf $bTop))
-Check 'B4 Left comes from Vcl.Kit.TWinControl, not Fmx.Kit'  ((LeafUnit $bTop 'Left') -eq 'Vcl.Kit.TWinControl') ("declared_in=" + (LeafUnit $bTop 'Left'))
-Check 'B5 reaches Vcl.Kit.TComponentBase (Tag)'              (HasLeaf $bTop 'Tag')  ("climb=" + (ClimbOf $bTop))
-Check 'B6 Tag comes from Vcl.Kit.TComponentBase'             ((LeafUnit $bTop 'Tag') -eq 'Vcl.Kit.TComponentBase') ("declared_in=" + (LeafUnit $bTop 'Tag'))
-Check 'B7 NEVER the FMX decoy FmxLeft'                       (-not (HasLeaf $bTop 'FmxLeft'))   ("declared_in=" + (LeafUnit $bTop 'FmxLeft'))
-Check 'B8 NEVER the FMX decoy FmxPoison'                     (-not (HasLeaf $bTop 'FmxPoison')) ("declared_in=" + (LeafUnit $bTop 'FmxPoison'))
-
-# --- C. DEFECT 2: type-alias ancestor + multi-line interface header. --------------
-Write-Host ''
-Write-Host 'C. DEFECT 2 -- Cx.Kit.TcxCustomButton must climb through the type alias' -ForegroundColor Cyan
-$cTop = Top (Get-Tree 'Cx.Kit.TcxCustomButton')
-Check 'C1 own CxMarker present (de-vacuating)'               (HasLeaf $cTop 'CxMarker') ("climb=" + (ClimbOf $cTop))
-Check 'C2 climbs the alias into Std.Kit.TCustomEdit (Text)'  (HasLeaf $cTop 'Text') ("climb=" + (ClimbOf $cTop))
-Check 'C3 Text is declared_in Std.Kit.TCustomEdit'           ((LeafUnit $cTop 'Text') -eq 'Std.Kit.TCustomEdit') ("declared_in=" + (LeafUnit $cTop 'Text'))
-Check 'C4 continues to Vcl.Kit.TWinControl (Left)'           (HasLeaf $cTop 'Left') ("climb=" + (ClimbOf $cTop))
-Check 'C5 continues to Vcl.Kit.TComponentBase (Tag)'         (HasLeaf $cTop 'Tag')  ("climb=" + (ClimbOf $cTop))
-Check 'C6 NEVER the FMX decoy FmxLeft'                       (-not (HasLeaf $cTop 'FmxLeft')) ("declared_in=" + (LeafUnit $cTop 'FmxLeft'))
-
-# --- D. REFUSAL: two in-scope candidates -> resolve NOTHING (absence over wrong). --
-Write-Host ''
-Write-Host 'D. REFUSAL -- Ambig.Kit.TAmbiguous has BOTH TWinControls in scope' -ForegroundColor Cyan
-$dTop = Top (Get-Tree 'Ambig.Kit.TAmbiguous')
-Check 'D1 own AmbMarker present (de-vacuating: absence is a REFUSAL, not an empty tree)' (HasLeaf $dTop 'AmbMarker') ("climb=" + (ClimbOf $dTop))
-Check 'D2 does NOT graft Vcl.Kit.TWinControl (Left)'         (-not (HasLeaf $dTop 'Left'))      ("declared_in=" + (LeafUnit $dTop 'Left'))
-Check 'D3 does NOT graft Vcl.Kit.TComponentBase (Tag)'       (-not (HasLeaf $dTop 'Tag'))       ("declared_in=" + (LeafUnit $dTop 'Tag'))
-Check 'D4 does NOT graft Fmx.Kit.TWinControl (FmxLeft)'      (-not (HasLeaf $dTop 'FmxLeft'))   ("declared_in=" + (LeafUnit $dTop 'FmxLeft'))
-Check 'D5 does NOT graft Fmx.Kit.TFmxBase (FmxPoison)'       (-not (HasLeaf $dTop 'FmxPoison')) ("declared_in=" + (LeafUnit $dTop 'FmxPoison'))
-# K38 -- D2..D5 name FOUR leaves, but under the mutation that removes the very
-# mechanism this group pins (AStrict:=False at the climb's call site) only TWO of
-# them go red. Non-strict returns InScope[0], so exactly ONE candidate is grafted
-# and the other pair stays green; WHICH pair is decided by candidate ORDER, which
-# a fixture-file rename could silently flip. Measured by the T4d fix-round-1
-# reviewer, not restated from the brief: D4/D5 red, D2/D3 green.
-#
-# D6 is the order-independent form of the same requirement, and it is STRICTLY
-# STRONGER than D2..D5 together: a refusal means the top-level surface is
-# declared by TAmbiguous and by NOTHING ELSE, so it forbids a graft from any
-# class -- including one no D-check names. Whichever candidate a non-strict
-# resolver picks, D6 reddens.
-$dClimb = ClimbOf $dTop
-Check 'D6 REFUSAL is order-independent: the whole top-level surface is declared by TAmbiguous ALONE' `
-  ($dClimb -eq 'Ambig.Kit.TAmbiguous') ("climb=" + $dClimb)
-# D7 de-vacuates D6 without needing a rebuilt exe: the SAME predicate applied to
-# B's tree, which DOES graft, must be FALSE. Without it, "the climb names exactly
-# one class" would also hold for a tree that grafted nothing because it was never
-# built -- the shape D1 guards against for absence and nothing guarded for here.
-$bClimbForD7 = ClimbOf $bTop
-Check 'D7 D6 is not vacuous: the SAME predicate is FALSE for Std.Kit.TEdit, which does graft' `
-  ($bClimbForD7 -ne 'Std.Kit.TEdit') ("B climb=" + $bClimbForD7)
-
-# --- E. ROOT CAUSE, at rest: the INDEX-TIME half of the fix. ----------------------
-# Query the stored tables directly rather than the engine's own answer, so this
-# group cannot pass merely because the query-time late resolution papered over it.
-Write-Host ''
-Write-Host 'E. ROOT CAUSE -- dotted uses rows must resolve target_file_id at index time' -ForegroundColor Cyan
-$pySql = Join-Path $WorkDir 'sql.py'
-Write-Ascii $pySql @'
+# --- Sanity: the fixture really does present an UNRESOLVED 'TAmb9' edge, i.e. -----
+#     this test is exercising the fallback and not a happy index-time resolution.
+$script:PyEdge = Join-Path $WorkDir 'read_edge.py'
+Write-Ascii $script:PyEdge @'
 import sqlite3, sys
-con = sqlite3.connect("file:%s?mode=ro" % sys.argv[1].replace("\\", "/"), uri=True)
-print("\n".join("|".join("" if v is None else str(v) for v in r)
-                for r in con.execute(sys.argv[2]).fetchall()))
+con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True); c = con.cursor()
+r = c.execute(
+    "SELECT ta.ancestor_kind, ta.ancestor_symbol_id FROM type_ancestors ta "
+    "JOIN symbols s ON s.id = ta.symbol_id AND s.kind='class' AND s.name=? "
+    "WHERE ta.ancestor_name=? LIMIT 1", (sys.argv[2], sys.argv[3])).fetchone()
+print('NOROW' if r is None else "%s|%s" % (r[0] or '', 'NULL' if r[1] is None else 'SET'))
 con.close()
 '@
-function Sql([string]$Q) { return ((python $pySql $db $Q) -join "`n").Trim() }
-# Rows, not a joined blob: `-match` over a newline-joined string anchors at the END
-# of the whole string, so a two-row result whose LAST row happens to be the .pas
-# would satisfy '\.pas$' with a .dfm row sitting right there. Every "binds to X"
-# assertion below therefore checks the ROW COUNT as well as the path.
-function SqlRows([string]$Q) {
-  $out = @(python $pySql $db $Q)
-  return @($out | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+Write-Host ''
+Write-Host 'fixture sanity: the break really is an UNRESOLVED edge' -ForegroundColor Cyan
+$edgeMid  = (python $script:PyEdge $db 'TMid9'  'TAmb9').Trim()
+$edgeRoot = (python $script:PyEdge $db 'TRoot9' 'TMid9').Trim()
+Check "Mid9A.TMid9's 'TAmb9' edge is UNRESOLVED (the fallback is what must fix it)" ($edgeMid -eq '?|NULL') "edge=$edgeMid"
+Check "Zed.Root9.TRoot9's 'TMid9' edge IS resolved (so the climb reaches a 2nd unit)" ($edgeRoot -like 'class|SET') "edge=$edgeRoot"
+
+# --- CASE A: criterion 7 -- the break is resolved in Mid9A's scope, not Zed's. -----
+Write-Host ''
+Write-Host 'Case A: multi-unit climb resolves the break in the INHERITING unit (criterion 7)' -ForegroundColor Cyan
+$tA = Get-Tree 'Zed.Root9.TRoot9'
+Check "fixture sanity: TRoot9 resolves as a class" ($null -ne $tA -and $tA.root_type -eq 'TRoot9') "root_type=$($tA.root_type)"
+$mA = @($tA.properties) | Where-Object { $_.path -eq 'Marker' } | Select-Object -First 1
+Check "TRoot9 reaches 'Marker' at all (the climb crossed the unresolved TAmb9 edge)" ($null -ne $mA) `
+  ("paths=" + (@(@($tA.properties) | ForEach-Object { $_.path }) -join ', ') + " -- ABSENT means the break was resolved in the ROOT unit 'Zed.Root9', whose 'Zed' prefix matches no candidate, so rule 3 declined: that IS the criterion-7 defect")
+Check "TRoot9.Marker resolves to the Vcl candidate 'TMarkVcl9'" ($mA.type -eq 'TMarkVcl9') "type=$($mA.type)"
+Check "TRoot9.Marker is NOT the FMX decoy 'TMarkFmx9' (criterion 5)"  ($mA.type -ne 'TMarkFmx9') "type=$($mA.type)"
+Check "TRoot9 climb reached Vcl.Cand9.TAmb9, not FMX.Cand9.TAmb9" ($mA.declared_in -eq 'Vcl.Cand9.TAmb9') "declared_in=$($mA.declared_in)"
+
+# --- CASE B: the mirror, from the SAME root unit -- so no single blanket scope -----
+#             can satisfy both, only a genuinely per-hop one.
+Write-Host ''
+Write-Host 'Case B: the mirror direction, from the SAME root unit (criterion 5 + 7)' -ForegroundColor Cyan
+$tB = Get-Tree 'Zed.Root9.TRootF9'
+Check "fixture sanity: TRootF9 resolves as a class" ($null -ne $tB -and $tB.root_type -eq 'TRootF9') "root_type=$($tB.root_type)"
+$mB = @($tB.properties) | Where-Object { $_.path -eq 'Marker' } | Select-Object -First 1
+Check "TRootF9 reaches 'Marker' at all" ($null -ne $mB) `
+  ("paths=" + (@(@($tB.properties) | ForEach-Object { $_.path }) -join ', '))
+Check "TRootF9.Marker resolves to the FMX candidate 'TMarkFmx9'" ($mB.type -eq 'TMarkFmx9') "type=$($mB.type)"
+Check "TRootF9.Marker is NOT the Vcl decoy 'TMarkVcl9' (criterion 5, reverse)" ($mB.type -ne 'TMarkVcl9') "type=$($mB.type)"
+Check "TRootF9 climb reached FMX.Cand9.TAmb9, not Vcl.Cand9.TAmb9" ($mB.declared_in -eq 'FMX.Cand9.TAmb9') "declared_in=$($mB.declared_in)"
+
+# --- CASE C: BRANCHING cycle -- exponential without the visited-class-id set. ------
+#     Run out-of-process with a hard timeout: without the guard this never returns,
+#     so a wall-clock bound is the assertion. 60 s is ~500x the guarded runtime.
+Write-Host ''
+Write-Host 'Case C: branching cyclic ancestry terminates (visited-class-id set)' -ForegroundColor Cyan
+$outC = Join-Path $WorkDir 'cyc.json'
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+$pC = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir `
+      -ArgumentList @('proptree','--qname','Cyc9.TCycHub','--format','json','--db',$db,'--no-write-back') `
+      -RedirectStandardOutput $outC -RedirectStandardError "$outC.err" -NoNewWindow -PassThru
+$finC = $pC.WaitForExit(60000)
+$sw.Stop()
+if (-not $finC) { try { $pC.Kill() } catch {} }
+Check "branching cycle: terminates within 60 s (RED without the visited set: 2^64 branching)" `
+  $finC "elapsed=$([math]::Round($sw.Elapsed.TotalSeconds,2))s"
+Check "branching cycle: exits 0 (no stack overflow)" ($finC -and $pC.ExitCode -eq 0) "exit=$(if($finC){$pC.ExitCode}else{'TIMEOUT'})"
+$tC = $null
+if ($finC -and (Test-Path $outC)) {
+  $rawC = Get-Content $outC -Raw
+  if (-not [string]::IsNullOrWhiteSpace($rawC)) { $tC = $rawC | ConvertFrom-Json }
 }
-# $Expect is a regex for the FULL expected path tail, e.g. '[\\/]Dfm\.Kit\.pas$'.
-# $CaseSensitive matters for the uppercase-extension case only.
-function CheckSoleTarget([string]$Name, [string[]]$Rows, [string]$Expect, [switch]$CaseSensitive) {
-  $one = ($Rows.Count -eq 1)
-  $hit = if ($CaseSensitive) { $one -and ($Rows[0] -cmatch $Expect) } else { $one -and ($Rows[0] -match $Expect) }
-  Check $Name $hit ("rows=" + $Rows.Count + " targets=[" + ($Rows -join '; ') + "] expected=" + $Expect)
-}
+Check "branching cycle: root_type='TCycHub'" ($null -ne $tC -and $tC.root_type -eq 'TCycHub') "root_type=$($tC.root_type)"
+$selfMarks = @(@($tC.properties) | Where-Object { $_.path -eq 'SelfMark' })
+Check "branching cycle: 'SelfMark' emitted exactly once" ($selfMarks.Count -eq 1) "count=$($selfMarks.Count)"
 
-$e1 = Sql "SELECT COUNT(*) FROM unit_uses WHERE unit_name='Vcl.Kit' AND target_file_id IS NOT NULL"
-Check 'E1 dotted "uses Vcl.Kit" resolves target_file_id' ($e1 -eq '3') "rows with a target=$e1 (expected 3: Std.Kit + Ambig.Kit + Dfm.Kit)"
-
-$e2 = Sql "SELECT COUNT(*) FROM unit_uses WHERE target_file_id IS NULL"
-Check 'E2 no dotted uses row is left unresolved' ($e2 -eq '0') "unresolved rows=$e2"
-
-# The ambiguous cross-unit edge must be stored RESOLVED, and pointed at Vcl.Kit.
-$e3 = Sql @"
-SELECT f.path FROM symbols s
-  JOIN type_ancestors ta ON ta.symbol_id = s.id
-  JOIN symbols a ON a.id = ta.ancestor_symbol_id
-  JOIN files   f ON f.id = a.file_id
- WHERE s.qualified_name = 'Std.Kit.TCustomEdit' AND ta.ancestor_name = 'TWinControl'
-"@
-Check 'E3 stored edge TCustomEdit->TWinControl resolves to the Vcl.Kit file' ($e3 -match 'Vcl\.Kit\.pas$') "target=$e3"
-
-# ...and the genuinely ambiguous one must still be stored UNRESOLVED.
-$e4 = Sql "SELECT COUNT(*) FROM symbols s JOIN type_ancestors ta ON ta.symbol_id=s.id WHERE s.qualified_name='Ambig.Kit.TAmbiguous' AND ta.ancestor_name='TWinControl' AND ta.ancestor_symbol_id IS NULL"
-Check 'E4 genuinely ambiguous edge stays UNRESOLVED at index time' ($e4 -eq '1') "unresolved-count=$e4"
-
-# --- E5..E14: a `uses` names a UNIT, and only a .pas declares one. These are the
-# regression guard for the fix-round-1 Critical and for the round-1 guard's own
-# defect: whichever accumulator ResolveUnitUseTargets uses, it must never let a
-# form's .dfm -- or a program's .dpr -- win the stem over its .pas. E6/E10 are the
-# ones that show the CONSEQUENCE (an empty scope un-resolves an ancestry edge that
-# scope alone could resolve); the query-time late resolver is textual and would
-# mask it in any proptree-level assertion, so every one of these reads the stored
-# tables. Each names the file it expects, so none can pass by agreeing with the
-# implementation's current allowed set -- which is exactly how round 1's E7 missed
-# the .dpr.
+# --- CASE D: depth cap, on an ACYCLIC chain where the visited set cannot fire. -----
 Write-Host ''
-Write-Host 'E5-E8. A uses row must bind to the .pas, never to the .dfm beside it' -ForegroundColor Cyan
+Write-Host "Case D: bridged-climb depth cap (chain of $deepFar alias hops, cap = 64)" -ForegroundColor Cyan
+$tD = Get-Tree 'Deep9.TDeep9_000'
+Check "fixture sanity: TDeep9_000 resolves as a class" ($null -ne $tD -and $tD.root_type -eq 'TDeep9_000') "root_type=$($tD.root_type)"
+$near = @($tD.properties) | Where-Object { $_.path -eq 'MarkNear' } | Select-Object -First 1
+$far  = @($tD.properties) | Where-Object { $_.path -eq 'MarkFar'  } | Select-Object -First 1
+Check "depth cap: marker at hop $deepNear (INSIDE the cap) IS reached" ($null -ne $near) `
+  "RED if the cap were shrunk below $deepNear -- pins the cap from going too low"
+Check "depth cap: marker at hop $deepFar (BEYOND the cap) is NOT reached" ($null -eq $far) `
+  "RED if the depth cap were removed -- this is the cap's only observable effect"
 
-$e5d = SqlRows "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='Dfm.Kit'"
-CheckSoleTarget 'E5 dotted "uses Dfm.Kit" binds to Dfm.Kit.pas and nothing else' $e5d '(?i)[\\/]Dfm\.Kit\.pas$'
-
-$e5p = SqlRows "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='PlainKit'"
-CheckSoleTarget 'E5b plain "uses PlainKit" binds to PlainKit.pas and nothing else' $e5p '(?i)[\\/]PlainKit\.pas$'
-
-# The consequence: scope is the ONLY thing that can resolve this edge (TDfmCtl is
-# ambiguous, so the single-global fallback cannot), and an empty scope loses it.
-$e6 = Sql @"
-SELECT COALESCE(f.path,'<UNRESOLVED>') FROM symbols s
-  JOIN type_ancestors ta ON ta.symbol_id = s.id
-  LEFT JOIN symbols a ON a.id = ta.ancestor_symbol_id
-  LEFT JOIN files   f ON f.id = a.file_id
- WHERE s.qualified_name = 'Cli.Kit.TCliCtl' AND ta.ancestor_name = 'TDfmCtl'
-"@
-Check 'E6 stored edge TCliCtl->TDfmCtl resolves to Dfm.Kit.pas (not Dup.Kit, not unresolved)' ($e6 -match '(?i)Dfm\.Kit\.pas$') "target=$e6"
-
-# Whole-fixture sweep. NOTE what this is and is not: it restates the rule the code
-# now applies, so it is a CONSISTENCY check across every row, not the requirement.
-# Round 1's version of this line whitelisted exactly what the code whitelisted and
-# was therefore unable to fail on the code allowing the wrong thing. The
-# requirement is carried by E5/E5b/E9/E12, which name the file they expect.
-$e7 = Sql "SELECT COUNT(*) FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE LOWER(f.path) NOT LIKE '%.pas'"
-Check 'E7 sweep: no uses row anywhere targets a non-.pas' ($e7 -eq '0') "rows targeting a non-.pas=$e7"
-
-# De-vacuating E7: it only means something if non-.pas files are in `files` at
-# all. If the indexer stopped storing them, E7 would pass for the wrong reason.
-$e8 = Sql "SELECT COUNT(*) FROM files WHERE LOWER(path) LIKE '%.dfm'"
-Check 'E8 de-vacuates E7: the .dfm files ARE indexed' ($e8 -eq '2') "dfm files in the index=$e8 (expected 2)"
-
-# --- E9..E11: the same thing for a PROGRAM. A .dpr sorts before the .pas it shares
-# a stem with, so round 1's whitelist handed `uses Prog` to the program.
+# --- CASE E: criterion 5 where the ancestor name has a SINGLE candidate. -----------
 Write-Host ''
-Write-Host 'E9-E11. A uses row must bind to the .pas, never to the .dpr beside it' -ForegroundColor Cyan
-
-$e9 = SqlRows "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='Prog'"
-CheckSoleTarget 'E9 "uses Prog" binds to Prog.pas -- named, not "some allowed extension"' $e9 '(?i)[\\/]Prog\.pas$'
-
-# The consequence, and the one that pre-T4d 0e84cc6 got RIGHT: TProgCtl is
-# ambiguous (Dup.Kit), so only the uses-scope can resolve this edge, and a scope
-# pointing at a program is empty.
-$e10 = Sql @"
-SELECT COALESCE(f.path,'<UNRESOLVED>') FROM symbols s
-  JOIN type_ancestors ta ON ta.symbol_id = s.id
-  LEFT JOIN symbols a ON a.id = ta.ancestor_symbol_id
-  LEFT JOIN files   f ON f.id = a.file_id
- WHERE s.qualified_name = 'UseProg.TUseProg' AND ta.ancestor_name = 'TProgCtl'
-"@
-Check 'E10 stored edge TUseProg->TProgCtl resolves to Prog.pas (not Dup.Kit, not unresolved)' ($e10 -match '(?i)[\\/]Prog\.pas$') "target=$e10"
-
-$e11 = Sql "SELECT COUNT(*) FROM files WHERE LOWER(path) LIKE '%.dpr'"
-Check 'E11 de-vacuates E9/E10: the .dpr IS indexed and did compete' ($e11 -eq '1') "dpr files in the index=$e11 (expected 1)"
-
-# --- E12..E14: an UPPERCASE .PAS is still a unit. LowerCase(ExtractFileExt(..)) is
-# the whole of what keeps ORM3's 554 such paths eligible, and until now nothing
-# asserted it. Mutation-proved rather than assumed: with that LowerCase removed and
-# the exe rebuilt, E12, E13 and E2 go red and every other assertion in this file
-# stays green.
-Write-Host ''
-Write-Host 'E12-E14. An UPPERCASE .PAS extension is still a unit' -ForegroundColor Cyan
-
-$e12 = SqlRows "SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id WHERE u.unit_name='Upper.Kit'"
-CheckSoleTarget 'E12 "uses Upper.Kit" binds to Upper.Kit.PAS' $e12 '[\\/]Upper\.Kit\.PAS$' -CaseSensitive
-
-$e13 = Sql @"
-SELECT COALESCE(f.path,'<UNRESOLVED>') FROM symbols s
-  JOIN type_ancestors ta ON ta.symbol_id = s.id
-  LEFT JOIN symbols a ON a.id = ta.ancestor_symbol_id
-  LEFT JOIN files   f ON f.id = a.file_id
- WHERE s.qualified_name = 'UseUp.Kit.TUseUp' AND ta.ancestor_name = 'TUpCtl'
-"@
-Check 'E13 stored edge TUseUp->TUpCtl resolves to Upper.Kit.PAS (not Dup.Kit, not unresolved)' ($e13 -cmatch '[\\/]Upper\.Kit\.PAS$') "target=$e13"
-
-# GLOB, not LIKE: SQLite's LIKE is case-insensitive over ASCII, so LIKE '%.PAS'
-# would match every .pas file and this de-vacuator would assert nothing.
-$e14 = Sql "SELECT COUNT(*) FROM files WHERE path GLOB '*.PAS'"
-Check 'E14 de-vacuates E12/E13: the path really is stored with an uppercase extension' ($e14 -eq '1') "files matching GLOB '*.PAS'=$e14 (expected 1)"
+Write-Host 'Case E: single-candidate ancestor in another namespace is REFUSED (criterion 5)' -ForegroundColor Cyan
+$edgeSole = (python $script:PyEdge $db 'TVclSole9' 'TSoleAlias9').Trim()
+Check "fixture sanity: TVclSole9's alias edge is UNRESOLVED (so the fallback runs)" ($edgeSole -eq '?|NULL') "edge=$edgeSole"
+$tE = Get-Tree 'Vcl.Sole9.TVclSole9'
+Check "fixture sanity: TVclSole9 resolves as a class" ($null -ne $tE -and $tE.root_type -eq 'TVclSole9') "root_type=$($tE.root_type)"
+$soleE = @($tE.properties) | Where-Object { $_.path -eq 'SoleMark' } | Select-Object -First 1
+Check "Vcl.Sole9.TVclSole9 does NOT inherit the FMX-only ancestor's 'SoleMark' (criterion 5)" ($null -eq $soleE) `
+  ("type=$($soleE.type) declared_in=$($soleE.declared_in) -- PRESENT means a Vcl class was given an FMX ancestor with no scope check at all, because PickCandidate short-circuits on the lone candidate")
+# And prove the refusal is namespace-driven, not a blanket inability to bridge an
+# alias to a unique target: same shape, same-namespace target, must SUCCEED.
+$tE2 = Get-Tree 'Vcl.SoleOk9.TVclSoleOk9'
+$okE = @($tE2.properties) | Where-Object { $_.path -eq 'OkMark' } | Select-Object -First 1
+Check "control: the SAME shape with a same-namespace target still bridges (guard is not a blanket refusal)" `
+  ($null -ne $okE -and $okE.type -eq 'TSoleOkMark9') "type=$($okE.type) declared_in=$($okE.declared_in)"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
