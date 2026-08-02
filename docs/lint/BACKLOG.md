@@ -1,5 +1,110 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-08-02 (LATEST-75) -- **T7's red suites CLOSED, but the real story is that T7 was 9 suites red, not 2. One genuine engine defect found + fixed. Converter INBOX 2.2 + 2.3 fixed, cherry-picked to `main`, and the SHARED exe is refreshed. Tree CLEAN, nothing pushed.**
+>
+> ### >>> NEXT ACTION
+>
+> **Investigate the 22 remaining Phase 3 failures (5 suites) -- INVESTIGATE ONLY, the user has
+> explicitly NOT approved an engine change.** They all share one mechanism, described under
+> "The 22" below. Then plan **T8** (harvester implementation-side fallback + precedence).
+>
+> ### What this session found that the ledger did not know
+>
+> **T7 shipped with NINE red suites, not the two its own commit recorded.** Baselining the T6
+> commit (`03dafb7`) with a purpose-built worktree + Delphi build proved `decayrouting`,
+> `guards`, `idempotency_sweep`, `indent`, `residual_lines`, `tagoccurrence` and `unhandledtags`
+> were ALL green at T6 and red at T7. They were never run. Do not trust "N suites red" in a
+> commit message again without running the family.
+>
+> ### Fixed this session
+>
+> | commit | what |
+> |---|---|
+> | `6425a58` | **T7 unbounded growth.** `EmitHarvestedRemarks` marks only the FIRST line of harvested prose, but MergeComment's preserved-prose filter tested the marker PER LINE -- so paragraphs 2..N looked hand-written, were preserved AND regenerated, and the block grew by its own length every cycle. Measured **+1501 bytes/cycle, constant, never converging** on `tagoccurrence`. `TDocStripper` rule 1b already had the right model (delete from the marked line through the run); MergeComment now matches it. Emitted output is unchanged. |
+> | `0c24f1a` | **Converter INBOX 2.2 + 2.3** (see below). |
+> | `c0cc93a` | **Restored the 351 deleted fixture case-note lines**, harvest-proof. |
+>
+> Phase 3 family went **41 -> 22 failures, 7 -> 5 red suites**; `indent` and `residual_lines`
+> fully green. Whole autodoc battery: **56 suites, 1702 pass, 22 fail.**
+>
+> ### The 22 -- ONE mechanism, and it needs a PRODUCT DECISION, not a bug fix
+>
+> Harvest writes a `<summary>` on cycle 1. Cycle 2 therefore sees a summary in the region, which
+> flips the symbol from the fresh-insert branch to the **repair** branch -- and the repair path
+> "re-emits only what it models", so it DELETES hand-written tags it does not model. Watched it
+> delete the author's own `<remarks></remarks>` at `fixtures/docp3/decayrouting.pas:31`. Output
+> does stabilise, but one cycle late, so idempotency fails.
+>
+> The obvious fix is to widen the repair-vs-fresh term so harvested content routes to repair on
+> cycle 1. **DO NOT just do it:** `src/doc/DRagLint.Doc.Document.pas:764-770` records that this
+> exact widening was already considered and **deliberately REVERTED**, because it destroys
+> hand-written tags in real user source. The user was asked and chose *"investigate, don't change
+> yet"* -- so produce a per-case triage (genuine defect vs known-gap fixture that should be
+> re-pinned) with a recommendation, and get a ruling before touching the engine.
+>
+> ### Converter-editor INBOX -- 2.2 and 2.3 FIXED, reply written
+>
+> Incoming: `docs/INBOX-converter-editor-phase-g-engine-findings.md` (8 findings).
+> Reply: `docs/INBOX-REPLY-converter-editor-phase-g-engine-findings.md` (untracked, per convention).
+>
+> * **2.2 `context --task` omitted the target's own body.** Their "renderer bug, not extractor gap"
+>   read was exactly right. `GetSymbolSlice` assumed its argument resolves to a CLASS (emit
+>   `class-decl`, then bodies for `FindChildSymbols`). v0.41 switched the bundler to pass the
+>   TARGET's own qname; nothing here was updated. A method has no child symbols -> body loop
+>   emitted NOTHING. A routine now emits its own recorded `impl_start_line..impl_end_line` from
+>   the index (not `FindImplLine`'s heuristic, which cannot separate overloads). Class path
+>   untouched. 931 -> 1968 tokens on a real symbol.
+> * **2.3 stale incremental skip. THEIR HYPOTHESIS WAS WRONG** -- not mtime granularity;
+>   `FileIsUpToDate` compares path AND mtime AND sha256 and the write path really upserts. The gap
+>   is that the test keys on FILE identity and knows nothing about **what the current build would
+>   extract** (no engine version / schema / preprocess profile / platform). So after any engine
+>   upgrade an unchanged file was skipped FOREVER on its older parse. Fixed with a per-DB
+>   **indexer fingerprint** in `schema_meta` (no table migration), checked on BOTH index paths,
+>   plus a new **`--force-reparse`** (alias `--no-skip`) so consumers stop needing `touch`.
+> * **GRANDFATHERED, by the user's explicit choice:** a DB with no stored fingerprint adopts the
+>   current one silently. Treating "unknown" as stale would force a one-time full reparse of every
+>   index incl. the ~1.8 GB `library-Win64`. **Consequence: existing DBs are NOT retroactively
+>   repaired -- run one `--force-reparse` per DB that matters.**
+> * Queued, not started: 2.1 procedural types (highest-value extractor gap), 2.4 `--exact`,
+>   2.5 tie order / bare names resolving to FMX, 2.6 enum members, 2.7 FTS5 on ad-hoc DBs,
+>   2.8 `--quiet`. `#mapping`/`#apply` is deliberately NOT filed as a bug.
+>
+> ### HAZARD -- how the shared exe must be built (nearly shipped a broken engine)
+>
+> `third_party\dll-win64\drag-lint.exe` is **gitignored**, hand-staged, and shared with the
+> converter group. **This branch is 115 commits ahead of `main` but does NOT have
+> `--refs-as-leaves`**, which their editor passes and an older engine treats as FATAL. Verified:
+>
+> ```
+> branch build : FATAL: Exception: Unknown argument: --refs-as-leaves
+> main + fixes : accepted
+> ```
+>
+> So **never stage a build from `feat/autodoc-phase3`.** The two engine fixes were cherry-picked
+> onto `main` (now `13e7fb0`) and the staged exe was built from there (2026-08-02 13:50) and
+> smoke-tested. This is the LATEST-71 incident's exact shape -- it recurs because the shared exe
+> is untracked, so git never warns.
+>
+> ### Also worth knowing
+>
+> * **Two Claude sessions ran in this repo at once earlier today.** The other one owned these
+>   fixtures, corrupted `returns.pas` with literal unexpanded `` `r`n `` , and its runs collided with
+>   mine on the shared scratch dir `C:\TEMP\draglint_docp3preservetags` (`EInOutError`, plus a
+>   bogus 22-failure run). If suite results look wildly wrong, check for a second session before
+>   believing them.
+> * **Blank lines do NOT stop the harvester.** `HarvestScan` accumulates blank AND comment lines
+>   and stops only at CODE or `///`. The other session's 8 double-blank insertions could not work.
+>   The restored case notes sit between `unit X;` and `interface` -- harvest-proof BY CONSTRUCTION,
+>   because `interface` is a code line.
+> * The `.pas` LF endings seen mid-session were a **working-tree artifact only** -- `.gitattributes`
+>   normalizes `*.pas` and a fresh checkout gives CRLF. Nothing was committed wrong.
+>
+> ### Git
+>
+> `feat/autodoc-phase3` = `c0cc93a`, **115 ahead of `main`**. `main` = `13e7fb0`, **126 ahead of
+> `origin/main`**. **NOTHING PUSHED -- user holds push.** Tree clean; only the two INBOX markdown
+> files are untracked, which is the convention.
+
 > ## RESUME 2026-08-02 (LATEST-75) -- **T7 fixture rework IN PROGRESS. `run_doc_p3_preserve_tags.ps1` comment adjacency issue identified and partially addressed; `run_doc_p3_returns.ps1` expects 20 (TWENTY) not 19. See docs/lint/FIXTURE-UPDATE-T7-HARVEST-2026-08-02.md.**
 > 
 > ### Status Update
