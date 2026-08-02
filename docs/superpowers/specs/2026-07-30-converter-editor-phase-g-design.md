@@ -72,7 +72,12 @@ handler keeps working.
 
 **Acceptance criteria**
 
-- THE toolbar SHALL expose every action currently reachable from a main-form button.
+- THE toolbar SHALL expose every **global** action currently reachable from a main-form
+  button. **AS BUILT (amended 2026-08-02):** 19 of the 22 `TButton`s were consolidated.
+  Three deliberately stay where they are, because they act on the control beside them
+  rather than on the form: the two per-field grid-filter `Clear` buttons (one per search
+  box) and `ShowUsageReport`'s modal `Close`. The original "every action" wording was
+  never achievable without making those three worse.
 - WHEN an action requires a selection THE toolbar SHALL disable it until one exists.
 - THE relocation SHALL NOT change any action's behaviour.
 - THE toolbar SHALL remain usable at the minimum supported window width.
@@ -88,6 +93,20 @@ IS. Today that means leaving the editor.
 only when `TypeOfCell` yields a type. The engine resolves it
 (`drag-lint query --name <T> --json` -> file + line) and the editor asks the running IDE
 to open it over the existing named pipe `\\.\pipe\drag-lint-open-source`.
+
+**AS BUILT (amended 2026-08-02) -- the real engine contract.** The shape assumed when
+this spec was written did not survive contact with `drag-lint query --json`:
+
+- The response is a **bare JSON array**, not an object with a results member.
+- The line field is **`start_line`**, not `line`. (`impl_start_line`/`impl_end_line` are
+  also present and are what a body lookup would use.)
+- **`--name` is a SUBSTRING match, not an exact one.** A caller must therefore be ready
+  for several hits and disambiguate; passing a wrong qualified name (e.g.
+  `Vcl.StdCtrls.TEditCharCase` for what is really `System.UITypes.TEditCharCase`) yields
+  **zero** matches rather than an error, which reads as "no such type".
+- **An enum carries NO `members` field.** Enum members are obtained by parsing the
+  declaration's own source range (`file` + `start_line`..`end_line`) -- the index stores
+  the location, not the member list.
 
 The client is **vendored** from the graph repo (`DragLint.Graph.OpenSourceClient.pas`)
 into the editor under its own name, with a header comment naming the origin and the
@@ -153,6 +172,20 @@ target's members when the target type resolves. Otherwise the value is accepted 
 
 In the mapping grid a conditional row renders as `<conditional: N cases>`; Auto-Match
 skips such rows.
+
+**AS BUILT (amended 2026-08-02).**
+
+- **Creating a mapping auto-adds `#apply <Name>` to the currently selected `#convert`
+  block.** The spec did not ask for this and the plan did not either; it was **ratified
+  by the human partner** and stays. Rationale: a `#mapping` nobody applies is inert, and
+  the block you were looking at when you pressed `Mappings...` is the one you meant.
+- **The warning/error split has ONE owner: `MappingIssueIsWarning` in
+  `ConvRules.Mappings`.** Every consumer asks it rather than re-deciding severity.
+  `mikBadLiteral` is a **WARNING, not an error** (human ruling) -- it is shown but does
+  not block OK. The mapping editor's footer states the split explicitly:
+  `0 error(s), N warning(s). Warnings do not block OK.`
+- Exhaustiveness reports one warning **per uncovered member**, naming the mapping and the
+  member (`AlignMap: ecUpperCase has neither a #when nor an #else`).
 
 **Acceptance criteria**
 
@@ -248,19 +281,59 @@ complete before/after demo projects; we should not invent test material we alrea
 `#unuse`, `#remove`, `#remove DFM:` and `#migrate X -> Y, <unit>` -- every one is an
 existing node kind in BOTH parsers. Plain `<pcre> -> <pcre>` lines map to `rnkPcre`.
 
-**Acceptance criteria**
+**AS BUILT (amended 2026-08-02) -- REFRAMED BY THE HUMAN PARTNER.** The framing below
+("borrow as a test fixture") was replaced before implementation. What shipped:
 
-- THE editor SHALL load `FireDAC_Migrate_BDE.txt` without producing `rnkUnknown` for any
-  line that uses a directive the DSL claims to support.
-- THE round-trip SHALL preserve the borrowed files byte-for-byte when nothing is edited.
-- THE test suite SHALL include at least one borrowed rule file as a fixture.
-- THE test suite SHALL use at least one `Demo` form as a real-world scan fixture.
+- The ReFind files are **product deliverables, not test fixtures**. They were imported
+  ONCE and saved as OUR definition files so the user can navigate to and open them:
+  `convrules\FireDAC_Migrate_BDE.rules` and `convrules\FireDAC_Rename_Units.rules`.
+- A **new top-level `convrules\` directory** was created for them, and
+  `docs\examples\convrules\sample.rules` **moved there** (`convrules\sample.rules`) --
+  promoting rule books out of `docs\` into a first-class directory. Deliberately broader
+  than this section's original scope.
+- **There is no `tests\fixtures` copy and no Skip-when-absent path.** The conformance
+  test is hard: a missing file is a FAILURE.
+
+**Acceptance criteria (as amended)**
+
+- THE editor SHALL load `convrules\FireDAC_Migrate_BDE.rules` without producing
+  `rnkUnknown` for any line that uses a directive the DSL claims to support.
+- THE round-trip SHALL preserve the imported files byte-for-byte when nothing is edited.
+- THE imported rule books SHALL live in the top-level `convrules\` directory as product
+  files, openable by the user.
+- THE conformance test SHALL FAIL, not skip, when an imported file is missing.
 - WHERE a borrowed line uses a construct the DSL does not support THE editor SHALL keep
   it verbatim rather than dropping it.
+- ~~THE test suite SHALL use at least one `Demo` form as a real-world scan fixture.~~
+  **DROPPED** with the fixture framing; not implemented.
+
+**WHAT THE CONFORMANCE TEST IS ACTUALLY WORTH -- do not overrate it.** Recorded here
+because the number ("0 rnkUnknown, byte-exact round-trip") reads far stronger than it is:
+
+- `rnkPcre` is an **unanchored substring test** (`ConvRules.Model.pas:655-660`,
+  `ARROW_MIGRATE = ' -> '`). Any non-`#` line containing that substring anywhere becomes
+  `rnkPcre` and never `rnkUnknown`. 197 of the 211 rename-corpus lines contain it --
+  exactly the "recognised" count. That file's clean result is explained by its line
+  SHAPE, not by grammar comprehension.
+- The byte-exact round-trip is **near-vacuous for both files**: `Emit` returns `Raw` for
+  any kind when `Dirty=False`, and `LoadFromString` always yields non-dirty nodes. It
+  validates `TStringList` line split/rejoin and line endings -- nothing else.
+- Real superset evidence is **9 lines out of 69**: `#unuse` (6), `#remove` (2),
+  `#remove DFM:` (1) genuinely reconstruct from parsed fields. All **60** `#migrate`
+  nodes carry NO parsed fields, so every interesting form (wildcard receiver,
+  `Class:member`, eleven-unit tails) round-trips vacuously.
+
+This is stated in `docs\converter\refind-corpus.md` and mirrored in the test
+spec-comment. Two tests exist specifically to stop the claim drifting:
+`refind.bde.reconstruct.live` perturbs a parsed field and requires the output to change;
+`refind.bde.migrate.notdecomposed` asserts 60/60 `#migrate` nodes are NOT decomposed and
+fails on purpose if anyone later decomposes them.
 
 **Licensing:** these are Embarcadero sample files shipped with the product. Because
-nothing here is published (see standing constraints), vendoring them into the test
-corpus is an internal-use decision only. Revisit before any public release.
+nothing here is published (see standing constraints), importing them is an internal-use
+decision only. **Revisit before any public release** -- note this is now a stronger
+obligation than the original "test corpus" framing implied, because they ship as product
+files in `convrules\`, not as test data.
 
 ---
 
@@ -273,3 +346,52 @@ Two audiences, written once the editor exists so they describe what IS:
    including the per-instance evaluation G6.1 needs.
 2. **A human manual** -- definitions and worked examples: what a conversion is, what a
    cast is, what a mapping is, and how the working set composes.
+
+---
+
+## Phase G -- final verification pass (2026-08-02)
+
+G1-G5 and G7 are **delivered**. G6 is deferred-by-design and G8 is not started. Recorded
+here so the next reader does not re-verify what has been verified.
+
+**Build.** Clean build of both artifacts from scratch (all `.dcu`, both `.exe` and the
+generated `.res` deleted first): `BUILD_EXITCODE=0` for each, no `[dcc64 Error]`. The
+test runner produced **zero** diagnostics; the editor produced exactly **two**
+pre-existing `H2443 MessageDlg / System.UITypes` hints
+(`ConvRules.CurationForm.pas:638`, `ConvRules.MainForm.pas:2425`) and nothing else.
+
+**Suite.** 543 pass / 0 fail / 0 skip.
+
+**Exercised against a real ORM3 form** (`C:\Projects\DB\ORM3\CLIENT\SelectData.dfm`,
+which contains exactly one `TEdit`, `edt_MatchingValue`), using
+`convrules\sample.rules`'s `Vcl.StdCtrls.TEdit -> Vcl.StdCtrls.TMemo` rule:
+
+- Examine reported **14 of 117 From properties used**, which reconciles exactly: the DFM
+  block assigns **13** properties, and `ConvRules.Usage.AddName` (`:190-197`)
+  deliberately also adds the ROOT of a dotted name, so `Font.*` contributes `Font`.
+- Marked rows include `Margins.Left` as well as `Left`. That is the documented matcher at
+  `ConvRules.Usage.pas:603` -- a leaf matches when its FULL PATH **or its LAST SEGMENT**
+  equals a used name -- not a defect.
+- **A `TFont` conversion marks nothing on any real form, and that is correct.** Examine
+  scans for DFM blocks whose CLASS is the From class; `TFont` is never a DFM component,
+  only an inline sub-object. Do not file this as a bug.
+- All three search boxes filter (Find in From, Find in To, To-pool search); the To column
+  shows types; a `#mapping` round-tripped through save and reload.
+
+**Both open items are now CLOSED.**
+
+1. **A live RAD Studio "go to definition" jump is VERIFIED end-to-end** -- previously only
+   the bytes-on-the-pipe half had ever been tested, against a mock. With RAD Studio
+   running, `\\.\pipe\drag-lint-open-source` appears (served by the installed
+   `dll-win32\dclDragLintWizard.bpl`, which does contain the pipe name). Right-clicking
+   `CharCase : TEditCharCase` offered "Go to definition of TEditCharCase"; clicking it
+   changed the IDE title to `... - System.UITypes`, opened that unit, and set the IDE's
+   symbol combo to `TEditCharCase`, whose declaration the index places at
+   `System.UITypes.pas:70`. **The plugin's OTAPI half works.**
+2. **The four never-opened screens are clean in BOTH themes** -- `Curate rule-books`, the
+   `Raw DSL` tab, the `Unit Rules` tab and the Examine usage report were each opened in
+   Light and in Dark. **No white-on-white and nothing unreadable.** Note the residual
+   risk is real but does not currently bite: `ConvRules.CurationForm.pas:257-260` creates
+   its one `TLabel` **without** setting `Transparent`, so it is not covered by the
+   `ComponentCount` sweep `TConvRulesForm.BuildUI` applies to the main form's labels. It
+   renders correctly under both shipped styles anyway; a future style could break it.

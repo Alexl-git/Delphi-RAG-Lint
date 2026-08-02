@@ -1,7 +1,38 @@
 # ConvRules editor -- feature backlog (raised 2026-07-30)
 
+> **STATUS 2026-08-02 -- Phase G is DELIVERED.** Everything specced below as "SPEC BELOW"
+> has since been designed, built, reviewed and verified. Read this header before reading
+> the rest of the file: the item table immediately after it is the ORIGINAL 2026-07-30
+> snapshot and is kept only for the history in item 1.
+>
+> | Phase G | Deliverable | State |
+> |---|---|---|
+> | G1 | Theme: follow the IDE, else Light/Dark (`ConvRules.Theme.pas`, VCL styles) | **DONE** |
+> | G2 | Toolbar: 19 of 22 loose buttons consolidated | **DONE** |
+> | G3 | Go to definition in the IDE + enum-member listing | **DONE** -- live IDE jump verified end-to-end 2026-08-02 |
+> | G4 | `#mapping` / `#apply` conditional enum -> property rules (**editor only**) | **DONE** |
+> | G5 | Examine harvests `uses` clauses into the Unit Rules FROM list | **DONE** |
+> | G6 | Deferred items -- recorded so nobody files them as bugs | **DEFERRED BY DESIGN** |
+> | G7 | ReFind BDE->FireDAC corpus | **DONE** -- imported as PRODUCT files in the new top-level `convrules\`, not as test fixtures |
+> | G8 | Documentation deliverable (DSL design message + human manual) | **NOT STARTED** |
+>
+> Spec, including every as-built deviation: `docs\superpowers\specs\2026-07-30-converter-editor-phase-g-design.md`.
+> Plan: `docs\superpowers\plans\2026-07-30-converter-editor-phase-g.md`.
+> Suite at completion: **543 pass / 0 fail / 0 skip**.
+>
+> **The rule books moved.** `docs\examples\convrules\sample.rules` is now
+> `convrules\sample.rules`, alongside `convrules\FireDAC_Migrate_BDE.rules` and
+> `convrules\FireDAC_Rename_Units.rules`.
+>
+> Still open from this file after Phase G: the two "Also found this session" items below
+> -- **event-coverage assertions in the Usage scanner fixtures** and **tests for the grid
+> search boxes** -- neither of which Phase G addressed.
+
 Six items were raised in one pass. Three are **done** and recorded here so nobody
 re-implements them; three need design before code and are specced below.
+
+**(The table below is the 2026-07-30 original. Items 3, 5 and 6 became G1, G3 and G4 and
+are now DONE -- see the status header above.)**
 
 | # | Item | State |
 |---|------|-------|

@@ -1,6 +1,7 @@
 # RESUME — proptree ancestor scope + converter/editor fixes
 
-Cold-start pointer. Last updated **2026-07-29**. Read this first, then the SDD ledger named below.
+Cold-start pointer. Last updated **2026-08-02** (Phase G complete). Read this first, then
+the SDD ledger named below.
 
 ## Status
 
@@ -57,23 +58,46 @@ through the real adapter. 16 checks.
 
 ## RESUME POINT — the exact next action
 
-**Execute the Phase G plan, starting at Task 1.**
+### Phase G is COMPLETE (2026-08-02). Two things are waiting on a human.
 
-- Plan: `docs/superpowers/plans/2026-07-30-converter-editor-phase-g.md` — 10 TDD tasks.
-- Spec: `docs/superpowers/specs/2026-07-30-converter-editor-phase-g-design.md`.
-- Worktree: `C:\TEMP\claude\c--Projects-Delphi-RAG-lint\wt-merge-converter`,
-  branch `merge/converter-into-main`, clean, HEAD = `main` = `86735cb`.
-- Use `superpowers:executing-plans` (or `subagent-driven-development`) — 10 tasks with
-  ordering constraints is past the point where conversational execution holds up.
-- **Baseline to beat: 376 pass / 0 fail / 0 skip.** A rising `skip` count is a failure, not
-  a neutral result — this suite has silently gone vacuous three times that way.
+All 10 tasks of `docs/superpowers/plans/2026-07-30-converter-editor-phase-g.md` are done
+and reviewed, on branch `merge/converter-into-main` in
+`C:\TEMP\claude\c--Projects-Delphi-RAG-lint\wt-merge-converter`.
+**Suite: 543 pass / 0 fail / 0 skip** (baseline entering Phase G was 376).
 
-Phase G delivers: theme (follow the IDE), a toolbar, go-to-definition, the reusable
-`#mapping`/`#apply` conditional enum→property DSL **in the editor only**, Examine harvesting
-`uses` clauses, and the ReFind BDE→FireDAC corpus as a fixture.
+Delivered: G1 theme (follow the IDE), G2 toolbar, G3 go-to-definition **verified against a
+live RAD Studio**, G4 the reusable `#mapping`/`#apply` conditional enum->property DSL
+**in the editor only**, G5 Examine harvesting `uses` clauses, G7 the ReFind BDE->FireDAC
+corpus **imported as product files** in the new top-level `convrules\` directory.
+G6 is deferred by design. **G8 (the DSL design message + human manual) is NOT started and
+is the natural next piece of work.**
+
+**HELD FOR A HUMAN -- (1) the deploy.** Task 10 Step 3 (copy `ConvRulesEditor.exe` AND
+`drag-lint.exe` + `drag-lint.json` + the three `tree-sitter*.dll` into
+`C:\Projects\Delphi-RAG-lint-converter\third_party\dll-win64\`) was deliberately NOT done:
+it writes into another checkout and overwrites binaries a human uses. It needs explicit
+confirmation. **When it happens, they must go as a PAIR** -- see the gotcha below.
+
+**HELD FOR A HUMAN -- (2) the merge.** `merge/converter-into-main` has not been merged
+into `main`.
 
 **Do not push.** `main` is 99 ahead of `origin/main` on purpose: nothing is published until
 the converter engine and the editor match and are both tested on several real project forms.
+Note this now also covers the imported Embarcadero ReFind files, which ship as product
+files in `convrules\` rather than as test data -- revisit licensing before any public release.
+
+### Verified behaviours worth not re-discovering
+
+- **A `TFont` conversion marks nothing when you Examine a real form, and that is CORRECT.**
+  Examine scans for DFM blocks whose CLASS is the From class, and `TFont` is never a DFM
+  component -- only an inline sub-object of one. Use a From class that really is a
+  component (e.g. `Vcl.StdCtrls.TEdit`, or `Abcbtn.TabcToggleBtn` in `VARINSP.dfm`).
+- **`drag-lint query --name` is a SUBSTRING match.** A wrong qualified name returns
+  **zero** hits rather than an error. `TEditCharCase` is `System.UITypes.TEditCharCase`,
+  not `Vcl.StdCtrls.TEditCharCase`.
+- **The context bundle does not return implementation bodies** even though
+  `impl_start_line`/`impl_end_line` ARE indexed -- logged twice now in
+  `C:\Projects\Delphi-RAG-lint\stats\draglint-gaps.log`.
 
 ### Still the top ENGINE blocker (unchanged, not part of Phase G)
 
