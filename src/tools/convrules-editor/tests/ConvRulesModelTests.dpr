@@ -2366,6 +2366,387 @@ begin
     'a trailing dot must not stop an earlier real match from being found');
 end;
 
+{ Go to definition: the PURE parse behind `query --name <T> --json`.
+
+  Every fixture below is VERBATIM stdout of the shipped exe against
+  C:\Projects\.drag-lint\library-Win64.sqlite, captured 2026-07-30. Three facts
+  about that contract are load-bearing, and each has its own case, because each
+  fails SILENTLY -- a wrong reading yields "not found", or worse a confident jump
+  to the wrong file:
+    * the payload is a BARE top-level array. There is no "results" envelope object
+      wrapped around it.
+    * the line field is "start_line". There is no "line".
+    * --name is a SUBSTRING match. `--name TNotifyEvent` returns local variables
+      called ANotifyEvent and nothing named TNotifyEvent at all; `--name TThread`
+      returns an unrelated FIELD called TThread before System.Classes.TThread.
+      Taking "the first hit" therefore navigates to the wrong symbol, which is why
+      the parser filters on an exact name and ranks type-like kinds first. }
+procedure TestQueryLocationParse;
+const
+  { `query --name TAlignment` -- three exact-name rows, two of them enums. The
+    wanted answer is the first TYPE-LIKE row: System.Classes.pas:176. }
+  QJ_ALIGNMENT =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 1308682,'#13#10 +
+    '    "kind": "enum",'#13#10 +
+    '    "name": "TAlignment",'#13#10 +
+    '    "qualified_name": "System.Classes.TAlignment",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4644,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\source\\rtl\\common\\System.Classes.pas",'#13#10 +
+    '    "start_line": 176,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 176,'#13#10 +
+    '    "end_col": 58,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 661597,'#13#10 +
+    '    "kind": "record",'#13#10 +
+    '    "name": "TAlignment",'#13#10 +
+    '    "qualified_name": "dxRichEdit.Dialogs.TableStyle.TdxRichEditTableStyleDialogForm.TAlignment",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 2715,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\DevExpress\\VCL\\ExpressRichEdit Control\\Sources\\dxRichEdit.Dialogs.TableStyle.pas",'#13#10 +
+    '    "start_line": 245,'#13#10 +
+    '    "start_col": 7,'#13#10 +
+    '    "end_line": 249,'#13#10 +
+    '    "end_col": 11,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 795949,'#13#10 +
+    '    "kind": "enum",'#13#10 +
+    '    "name": "TAlignment",'#13#10 +
+    '    "qualified_name": "dxSplashForms.TdxSplashFormBase.TAlignment",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 3238,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\DevExpress\\VCL\\ExpressSplashForms\\Sources\\dxSplashForms.pas",'#13#10 +
+    '    "start_line": 131,'#13#10 +
+    '    "start_col": 5,'#13#10 +
+    '    "end_line": 131,'#13#10 +
+    '    "end_col": 38,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
+
+  { `query --name TThread` -- the exe returns an unrelated FIELD named TThread
+    BEFORE System.Classes.TThread. "First hit" would open EAppMultiThreaded.pas:67. }
+  QJ_THREAD =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 2119103,'#13#10 +
+    '    "kind": "field",'#13#10 +
+    '    "name": "TThread",'#13#10 +
+    '    "qualified_name": "EAppMultiThreaded.THookedThread.TThread",'#13#10 +
+    '    "signature": "TClass",'#13#10 +
+    '    "modifiers": "public",'#13#10 +
+    '    "section": "implementation",'#13#10 +
+    '    "usable_from_other_units": false,'#13#10 +
+    '    "file_id": 6707,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Neos Eureka S.r.l\\EurekaLog 7\\Source\\EAppMultiThreaded.pas",'#13#10 +
+    '    "start_line": 67,'#13#10 +
+    '    "start_col": 5,'#13#10 +
+    '    "end_line": 67,'#13#10 +
+    '    "end_col": 21,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 1310582,'#13#10 +
+    '    "kind": "class",'#13#10 +
+    '    "name": "TThread",'#13#10 +
+    '    "qualified_name": "System.Classes.TThread",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4644,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\source\\rtl\\common\\System.Classes.pas",'#13#10 +
+    '    "start_line": 1822,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 2021,'#13#10 +
+    '    "end_col": 7,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
+
+  { `query --name TNotifyEvent` -- first two of ten rows. NOT ONE of them is named
+    TNotifyEvent: the type is a method pointer and the index does not carry it, so
+    every hit is the substring ANotifyEvent. This must resolve to nothing. }
+  QJ_NOTIFYEVENT_SUBSTRINGONLY =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 965744,'#13#10 +
+    '    "kind": "local_var",'#13#10 +
+    '    "name": "ANotifyEvent",'#13#10 +
+    '    "qualified_name": "Abcapp.TabcApplicationEvents.AppOnActivate.ANotifyEvent",'#13#10 +
+    '    "signature": "TNotifyEvent",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "implementation",'#13#10 +
+    '    "usable_from_other_units": false,'#13#10 +
+    '    "file_id": 4051,'#13#10 +
+    '    "file": "C:\\Projects\\ABC5\\ABC5\\Source\\Abcapp.pas",'#13#10 +
+    '    "start_line": 322,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 322,'#13#10 +
+    '    "end_col": 15,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 965746,'#13#10 +
+    '    "kind": "local_var",'#13#10 +
+    '    "name": "ANotifyEvent",'#13#10 +
+    '    "qualified_name": "Abcapp.TabcApplicationEvents.AppOnDeactivate.ANotifyEvent",'#13#10 +
+    '    "signature": "TNotifyEvent",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "implementation",'#13#10 +
+    '    "usable_from_other_units": false,'#13#10 +
+    '    "file_id": 4051,'#13#10 +
+    '    "file": "C:\\Projects\\ABC5\\ABC5\\Source\\Abcapp.pas",'#13#10 +
+    '    "start_line": 335,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 335,'#13#10 +
+    '    "end_col": 15,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
+
+  { `query --name TabcButtonStyle` -- one enum row, the ABC5 type the editor's
+    grid actually shows as `Style : TabcButtonStyle`. }
+  QJ_ABCBUTTONSTYLE =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 967081,'#13#10 +
+    '    "kind": "enum",'#13#10 +
+    '    "name": "TabcButtonStyle",'#13#10 +
+    '    "qualified_name": "Abcbtn.TabcButtonStyle",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4055,'#13#10 +
+    '    "file": "C:\\Projects\\ABC5\\ABC5\\Source\\Abcbtn.pas",'#13#10 +
+    '    "start_line": 33,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 39,'#13#10 +
+    '    "end_col": 71,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
+
+  { The two REAL rows `query --name TFontPitch` returns -- the enum in
+    System.UITypes and the Vcl.Graphics ALIAS pointing at it -- written here with the
+    alias FIRST. The engine happens to emit the enum first today, but that order is
+    an artefact of indexing order, not a contract, and only the enum row can yield
+    members. So the ranking, not the order, must decide. }
+  QJ_FONTPITCH_ALIAS_FIRST =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 1269016,'#13#10 +
+    '    "kind": "type",'#13#10 +
+    '    "name": "TFontPitch",'#13#10 +
+    '    "qualified_name": "Vcl.Graphics.TFontPitch",'#13#10 +
+    '    "signature": "System.UITypes.TFontPitch",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4558,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\SOURCE\\VCL\\Vcl.Graphics.pas",'#13#10 +
+    '    "start_line": 390,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 390,'#13#10 +
+    '    "end_col": 42,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 1348320,'#13#10 +
+    '    "kind": "enum",'#13#10 +
+    '    "name": "TFontPitch",'#13#10 +
+    '    "qualified_name": "System.UITypes.TFontPitch",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4705,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\source\\rtl\\common\\System.UITypes.pas",'#13#10 +
+    '    "start_line": 74,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 74,'#13#10 +
+    '    "end_col": 49,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
+
+  { Real zero-hit stdout. The process ALSO exits 1 -- "no hits", not a failure. }
+  QJ_NOHITS = '['#13#10 +
+              ']'#13#10;
+  { RunCapture merges the child's stderr into stdout, and the exe writes this
+    note to stderr on every call. The parser must survive it. }
+  PREAMBLE = '(loaded defaults from C:\Projects\.drag-lint.json)'#13#10;
+var
+  F : string ;
+  Ln: Integer;
+begin
+  Check('queryloc.parses.bare.toplevel.array',
+    ParseQueryLocation(QJ_ALIGNMENT, 'TAlignment', F, Ln)
+    and SameText(ExtractFileName(F), 'System.Classes.pas'), F);
+  Check('queryloc.reads.start_line.not.line',
+    ParseQueryLocation(QJ_ALIGNMENT, 'TAlignment', F, Ln) and (Ln = 176),
+    'expected 176, got ' + IntToStr(Ln));
+  Check('queryloc.prefers.type.over.field',
+    ParseQueryLocation(QJ_THREAD, 'TThread', F, Ln)
+    and SameText(ExtractFileName(F), 'System.Classes.pas') and (Ln = 1822),
+    'first hit is an unrelated field; got ' + F + ':' + IntToStr(Ln));
+  Check('queryloc.prefers.concrete.over.alias',
+    ParseQueryLocation(QJ_FONTPITCH_ALIAS_FIRST, 'TFontPitch', F, Ln)
+    and SameText(ExtractFileName(F), 'System.UITypes.pas') and (Ln = 74),
+    'the enum, not the Vcl.Graphics alias to it; got ' + F + ':' + IntToStr(Ln));
+  Check('queryloc.substring.only.hits.fail',
+    not ParseQueryLocation(QJ_NOTIFYEVENT_SUBSTRINGONLY, 'TNotifyEvent', F, Ln),
+    'ANotifyEvent is a substring hit, not TNotifyEvent');
+  Check('queryloc.accepts.qualified.name',
+    ParseQueryLocation(QJ_ABCBUTTONSTYLE, 'Abcbtn.TabcButtonStyle', F, Ln)
+    and (Ln = 33), IntToStr(Ln));
+  Check('queryloc.tolerates.stderr.preamble',
+    ParseQueryLocation(PREAMBLE + QJ_ABCBUTTONSTYLE, 'TabcButtonStyle', F, Ln)
+    and (Ln = 33), 'the loaded-defaults note must not break the parse');
+  Check('queryloc.empty.array.fails',
+    not ParseQueryLocation(QJ_NOHITS, 'TAlignment', F, Ln),
+    'zero hits must not report success');
+  Check('queryloc.garbage.fails',
+    not ParseQueryLocation('not json', 'TAlignment', F, Ln),
+    'garbage must not report success');
+end;
+
+{ Enum members: the PURE parse of an enum's DECLARATION SOURCE.
+
+  There is no members list in the index and no children query -- an enum row
+  carries only kind='enum' plus file + start_line..end_line, and `surface --qname`
+  refuses a non-class. So the members come from the declaration text itself, and
+  this is the function that reads it. Fixtures are the real source lines the index
+  points at. }
+procedure TestEnumMembersParse;
+const
+  { System.Classes.pas:176 -- the ordinary one-line case. }
+  ED_SIMPLE =
+    '  TAlignment = (taLeftJustify, taRightJustify, taCenter);'#13#10;
+  { Abcbtn.pas:33-39 -- 19 members over seven lines. }
+  ED_MULTILINE =
+    '  TabcButtonStyle = (absAutoDetect, absNew, absWin31, absThin, absThinBlack,'#13#10 +
+    '                     absThinGray,'#13#10 +
+    '                     absThinHighlight, absMidHighlight, absThickHighlight,'#13#10 +
+    '                     absFramed, absFramedBlack, absFramedRaised,'#13#10 +
+    '                     absFramedHighlight, absFramedBlackHighlight,'#13#10 +
+    '                     absRecessed, absRecessedBlack, absRecessedRaised,'#13#10 +
+    '                     absRecessedHighlight, absRecessedBlackHighlight);'#13#10;
+  { CSIdWinsock2.pas:2639-2648 -- the hard real case, all in one declaration:
+    explicit "= N" values, compiler directives, a // comment, and the SAME member
+    appearing in both arms of the $IFDEF. }
+  ED_CONDITIONAL =
+    '  _RIO_NOTIFICATION_COMPLETION_TYPE = ('#13#10 +
+    '    {$IFDEF HAS_ENUM_ELEMENT_VALUES}'#13#10 +
+    '    RIO_EVENT_COMPLETION      = 1,'#13#10 +
+    '    RIO_IOCP_COMPLETION       = 2'#13#10 +
+    '    {$ELSE}'#13#10 +
+    '    rnctUnused,   // do not use'#13#10 +
+    '    RIO_EVENT_COMPLETION,'#13#10 +
+    '    RIO_IOCP_COMPLETION'#13#10 +
+    '    {$ENDIF}'#13#10 +
+    '  );'#13#10;
+  { Abcbtn.pas:68 -- a class. It has '=' and '(' too, so a naive scan would
+    happily report TButton as a "member". }
+  ED_CLASS =
+    '  TabcPicBtn = class(TButton)'#13#10;
+var
+  M: TArray<string>;
+begin
+  Check('enum.members.simple.count',
+    ParseEnumMembers(ED_SIMPLE, M) and (Length(M) = 3), IntToStr(Length(M)));
+  Check('enum.members.simple.order',
+    (Length(M) = 3) and (M[0] = 'taLeftJustify') and (M[2] = 'taCenter'),
+    'declaration order must be preserved');
+  Check('enum.members.multiline.count',
+    ParseEnumMembers(ED_MULTILINE, M) and (Length(M) = 19), IntToStr(Length(M)));
+  Check('enum.members.multiline.ends',
+    (Length(M) = 19) and (M[0] = 'absAutoDetect')
+    and (M[18] = 'absRecessedBlackHighlight'), 'first/last member');
+  Check('enum.members.strips.explicit.values',
+    ParseEnumMembers(ED_CONDITIONAL, M) and Contains(M, 'RIO_EVENT_COMPLETION')
+    and not Contains(M, '1'), 'a "= 1" is a value, not a member');
+  Check('enum.members.skips.directives.and.comments',
+    not Contains(M, 'IFDEF') and not Contains(M, 'ELSE') and not Contains(M, 'do'),
+    'compiler directives and // comments are not members');
+  Check('enum.members.dedupes.ifdef.arms',
+    CountOf(M, 'RIO_EVENT_COMPLETION') = 1,
+    'a member named in both $IFDEF arms is listed once');
+  Check('enum.nonenum.yields.none',
+    not ParseEnumMembers(ED_CLASS, M), 'a class has no enum members');
+  Check('enum.empty.text.yields.none',
+    not ParseEnumMembers('', M), 'empty text has no members');
+end;
+
+{ End-to-end against the REAL exe and the REAL library index: the two adapter
+  verbs the context menu calls. The parse cases above pin the shapes; this pins
+  that the arguments, exit codes and source-range read are right too. }
+procedure TestGoToDefinitionLive;
+var
+  Exe, F, Err: string;
+  Ln     : Integer;
+  Adapter: TEngineAdapter;
+  M      : TArray<string>;
+begin
+  Exe := ResolveExe;
+  if (Exe = '') or not TFile.Exists(LibWin64) then
+  begin
+    Skip('gotodef.live', 'drag-lint.exe or library-Win64 index not found');
+    Exit;
+  end;
+  Adapter := TEngineAdapter.Create(Exe, [LibWin64]);
+  try
+    Check('gotodef.live.resolves.enum',
+      Adapter.ResolveTypeLocation('TAlignment', F, Ln, Err)
+      and SameText(ExtractFileName(F), 'System.Classes.pas') and (Ln = 176),
+      F + ':' + IntToStr(Ln) + ' ' + Err);
+    { Exit code 1 means "no hits", not "the engine broke" -- either way the caller
+      must be told, never left with a stale or blank location. }
+    Check('gotodef.live.unindexed.reports.reason',
+      not Adapter.ResolveTypeLocation('TZzzNotARealTypeXyz', F, Ln, Err)
+      and (Err <> ''), 'an unindexed type must fail WITH a reason');
+    if Adapter.ResolveTypeLocation('TAlignment', F, Ln, Err) and TFile.Exists(F) then
+      Check('gotodef.live.enum.members',
+        Adapter.EnumMembersOf('TAlignment', M, Err) and (Length(M) = 3)
+        and SameText(M[0], 'taLeftJustify'),
+        Err + ' n=' + IntToStr(Length(M)))
+    else
+      Skip('gotodef.live.enum.members', 'RTL source not on disk');
+    Check('gotodef.live.class.has.no.members',
+      not Adapter.EnumMembersOf('TThread', M, Err), 'a class is not an enum');
+  finally
+    Adapter.Free;
+  end;
+end;
+
+
 begin
   try
     TestBlockSplitRulesRoundTrip;
@@ -2426,6 +2807,9 @@ begin
     TestEngineTimeoutHeadroom;
     TestProptreeRefsAsLeavesLive;
     TestAcceptanceTcxButtonToPool;
+    TestQueryLocationParse;
+    TestEnumMembersParse;
+    TestGoToDefinitionLive;
 
     Writeln('');
     Writeln(Format('model-tests: %d pass / %d fail / %d skip / %d total',

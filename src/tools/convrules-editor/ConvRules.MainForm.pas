@@ -19,7 +19,7 @@ uses
   Winapi.Windows, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls,
   Vcl.ExtCtrls, Vcl.Grids, Vcl.Dialogs, Vcl.Menus, Vcl.Graphics, Vcl.Themes,
   ConvRules.Model, ConvRules.Casts, ConvRules.Engine, ConvRules.Platform,
-  ConvRules.CastLib, ConvRules.Theme;
+  ConvRules.CastLib, ConvRules.Theme, ConvRules.OpenSourceClient;
 
 const
   /// <summary>HKCU key holding this editor's per-user settings.</summary>
@@ -86,6 +86,12 @@ type
     FExamineInfo: string;             // status summary, re-shown when blocks change
     FPool     : TListBox;             // unassigned T pool
     FPoolFind : TEdit;
+    // "Go to definition of <T>": ONE popup shared by the grid and the pool, because
+    // both show cells in the same 'Path : Type' shape and TypeOfCell reads either.
+    // PopupComponent tells the handler which control was clicked.
+    FTypePopup : TPopupMenu;
+    FMnuGotoDef: TMenuItem;
+    FCtxType   : string;              // the type under the cursor when the menu opened
     FPoolTypeFilter: string;          // active pool type-narrowing ('' = off)
     // directives / raw
     FTabs     : TPageControl;
@@ -155,6 +161,22 @@ type
     procedure BuildMenu;
     { View > Theme item handler; the item's Tag is Ord(TThemePref). }
     procedure ThemeMenuClick(Sender: TObject);
+    { Builds FTypePopup and hangs it on both the grid and the pool. Called from
+      BuildUI after both controls exist. }
+    procedure BuildTypePopup;
+    { The type token of the grid or pool cell at client position APos, via
+      TypeOfCell. '' when that position shows no type -- the header row, the cast
+      column, blank space past the last row. ASender selects which control. }
+    function  TypeAtPos(ASender: TObject; const APos: TPoint): string;
+    { FGrid/FPool.OnContextPopup -- caches the type under the cursor and re-titles
+      the item. Sets Handled (suppressing the menu ENTIRELY, rather than popping an
+      empty frame with one hidden item) when the cell shows no type. }
+    procedure GridPoolContextPopup(Sender: TObject; MousePos: TPoint;
+      var Handled: Boolean);
+    { FMnuGotoDef.OnClick -- resolves FCtxType and asks the running IDE to open it.
+      Degrades to file:line in the status bar + on the clipboard when no IDE is
+      listening; appends the member list when the type is an enum. }
+    procedure DoGoToDefinition(Sender: TObject);
     procedure RefreshPool;
     procedure DoAssign(Sender: TObject);
     procedure DoUnassign(Sender: TObject);
@@ -250,7 +272,7 @@ var
 implementation
 
 uses
-  System.StrUtils, System.Math, System.Win.Registry, ConvRules.Units,
+  System.StrUtils, System.Math, System.Win.Registry, Vcl.Clipbrd, ConvRules.Units,
   ConvRules.WorkingSet, ConvRules.CurationForm, ConvRules.Usage;
 
 const
@@ -817,6 +839,9 @@ begin
   FGrid.DefaultDrawing := False;
   FGrid.OnDrawCell := GridDrawCell;
   FGrid.OnSelectCell := GridSelectCell;   // re-gates the toolbar as the row moves
+
+  // Needs both FGrid and FPool, so it goes after the grid, not next to the pool.
+  BuildTypePopup;
 
   // TLabel is a TGraphicControl, so no style hook reaches it: with Transparent
   // False it fills its own rectangle with Color, which ParentColor resolves to the
@@ -1509,6 +1534,111 @@ function GridRowMatchesFilter(const AFromCell, AToCell, AFromFilter, AToFilter: 
 begin
   Result := ((AFromFilter = '') or (Pos(LowerCase(AFromFilter), LowerCase(AFromCell)) > 0))
         and ((AToFilter = '') or (Pos(LowerCase(AToFilter), LowerCase(AToCell)) > 0));
+end;
+
+{ ---- Go to definition -------------------------------------------------------
+
+  A cell in the grid or the pool reads 'Path : Type'. That Type is the one piece of
+  the editor a user regularly needs to look AT rather than assign: what are the
+  legal values of TabcButtonStyle, what is TdxAlignment really. Right-click resolves
+  it through the engine and asks the RUNNING IDE to open the declaration, so the
+  answer arrives in the editor already open rather than in a second bds.exe. }
+
+procedure TConvRulesForm.BuildTypePopup;
+begin
+  FTypePopup := TPopupMenu.Create(Self);
+
+  FMnuGotoDef := TMenuItem.Create(Self);
+  // A placeholder: GridPoolContextPopup rewrites this with the actual type before
+  // the menu is ever shown, and suppresses the menu when there is no type.
+  FMnuGotoDef.Caption := 'Go to definition';
+  FMnuGotoDef.OnClick := DoGoToDefinition;
+  FTypePopup.Items.Add(FMnuGotoDef);
+
+  // ONE popup on both controls: the cells share the 'Path : Type' shape, and
+  // OnContextPopup's Sender tells the handler which one was clicked.
+  FGrid.PopupMenu := FTypePopup;
+  FPool.PopupMenu := FTypePopup;
+  FGrid.OnContextPopup := GridPoolContextPopup;
+  FPool.OnContextPopup := GridPoolContextPopup;
+end;
+
+function TConvRulesForm.TypeAtPos(ASender: TObject; const APos: TPoint): string;
+var
+  C, R: Integer;
+  Idx : Integer;
+begin
+  Result := '';
+  if ASender = FPool then
+  begin
+    // Existing=True: past the last item this returns -1 rather than the nearest row.
+    Idx := FPool.ItemAtPos(APos, True);
+    if (Idx >= 0) and (Idx < FPool.Items.Count) then
+      Result := TypeOfCell(FPool.Items[Idx]);
+  end
+  else if ASender = FGrid then
+  begin
+    FGrid.MouseToCell(APos.X, APos.Y, C, R);
+    // R = 0 is the header and R < 0 is off-grid; the cast column holds no ' : Type'
+    // so TypeOfCell returns '' for it without a column test.
+    if (C >= 0) and (R >= 1) then Result := TypeOfCell(FGrid.Cells[C, R]);
+  end;
+end;
+
+procedure TConvRulesForm.GridPoolContextPopup(Sender: TObject; MousePos: TPoint;
+  var Handled: Boolean);
+begin
+  FCtxType := TypeAtPos(Sender, MousePos);
+  if FCtxType = '' then
+  begin
+    Handled := True;      // nothing to offer here -> show no menu at all
+    Exit;
+  end;
+  FMnuGotoDef.Caption := 'Go to definition of ' + FCtxType;
+end;
+
+procedure TConvRulesForm.DoGoToDefinition(Sender: TObject);
+var
+  LFile   : string;
+  LErr    : string;
+  LWhere  : string;
+  LMsg    : string;
+  LLine   : Integer;
+  LMembers: TArray<string>;
+begin
+  if FCtxType = '' then Exit;
+  // Both engine calls run on this thread (RunCapture drains here), so the window
+  // is unresponsive for their duration -- say so with the cursor.
+  var LGuard: IInterface := HourGlass;
+
+  if not FEngine.ResolveTypeLocation(FCtxType, LFile, LLine, LErr) then
+  begin
+    SetError(LErr);
+    Exit;
+  end;
+  LWhere := Format('%s:%d', [LFile, LLine]);
+  LMsg   := FCtxType + ' -- ' + LWhere;
+
+  // For an enum the member list is usually the actual question ("what can Style
+  // be?"), so it rides along. A failure here is NOT reported: the location is
+  // still good, and most types are simply not enums.
+  if FEngine.EnumMembersOf(FCtxType, LMembers, LErr) and (Length(LMembers) > 0) then
+    LMsg := LMsg + '  (' + string.Join(', ', LMembers) + ')';
+
+  if SendOpenSource(LFile, LLine) then
+    SetStatus('Opened in the IDE: ' + LMsg)
+  else
+    // No plugin answered the pipe (no IDE running, or its BPL is not loaded).
+    // Failing silently is the one unacceptable outcome, so hand over something
+    // pasteable and say why.
+    try
+      Clipboard.AsText := LWhere;
+      SetStatus('No IDE is listening -- copied to the clipboard: ' + LMsg);
+    except
+      on E: Exception do
+        SetStatus('No IDE is listening, and the clipboard refused ('
+          + E.Message + '): ' + LMsg);
+    end;
 end;
 
 { Examine: pick .dfm/.pas files and ask ConvRules.Usage.ComputeUsage which of the active

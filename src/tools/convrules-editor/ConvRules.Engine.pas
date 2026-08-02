@@ -84,12 +84,91 @@ type
 function ParseProptreeJson(const AJson: string): TProptree;
 
 type
+  /// <summary>One row of `drag-lint query --name X --json` -- the fields this
+  /// editor needs out of the engine's symbol record.</summary>
+  /// <remarks>Measured against the shipped exe on 2026-07-30: the payload is a
+  /// BARE top-level JSON array of these records (there is no enclosing "results"
+  /// object), and the declaration line is spelled "start_line", NOT "line".</remarks>
+  TQuerySymbol = record
+    Kind         : string;   // 'class'|'record'|'interface'|'enum'|'type'|'field'|'local_var'|...
+    Name         : string;   // bare identifier
+    QualifiedName: string;   // e.g. 'System.Classes.TAlignment'
+    FilePath     : string;   // absolute path of the declaring file
+    StartLine    : Integer;  // 1-based first line of the declaration ("start_line")
+    EndLine      : Integer;  // 1-based last  line of the declaration ("end_line")
+  end;
+
+/// <summary>PURE: parse the JSON array `query --json` prints into symbol rows.</summary>
+/// <param name="AJson">Raw captured output. A "(loaded defaults ...)" note before or
+/// after the array is tolerated: RunCapture merges the child's stderr into stdout,
+/// and the exe writes that note to stderr on every call.</param>
+/// <returns>One entry per array element. [] when the text contains no JSON array --
+/// garbage in, empty out. Never raises.</returns>
+function ParseQuerySymbols(const AJson: string): TArray<TQuerySymbol>;
+
+/// <summary>PURE: pick the row that actually IS AWantedName.</summary>
+/// <param name="ASyms">Rows as returned by ParseQuerySymbols.</param>
+/// <param name="AWantedName">Bare ('TAlignment') or unit-qualified
+/// ('Abcbtn.TabcButtonStyle'). The part after the last dot is compared to each
+/// row's Name; a qualified request must additionally match QualifiedName.</param>
+/// <param name="ASym">The chosen row. Untouched (Default) when the result is False.</param>
+/// <returns>False when no row carries that exact name.</returns>
+/// <remarks>`--name` is a SUBSTRING match, so the reply routinely contains unrelated
+/// symbols: `--name TNotifyEvent` returns local variables called ANotifyEvent and
+/// nothing named TNotifyEvent at all, and `--name TThread` returns an unrelated FIELD
+/// named TThread BEFORE System.Classes.TThread. Taking the first row is therefore
+/// wrong.</remarks>
+/// <remarks>Ranking, best first: a CONCRETE declaration (class/record/interface/enum),
+/// then kind='type' (an alias, set or subrange), then anything else. So the enum
+/// System.UITypes.TFontPitch beats the alias Vcl.Graphics.TFontPitch that merely points
+/// at it, whichever order the engine happened to list them in -- and it is the enum row
+/// that EnumMembersOf can actually read members out of. Inside one tier the engine's own
+/// row order decides, so a name declared in two unrelated units (Spring.Logging.TColor
+/// and Vcl.Graphics.TColor) is still resolved arbitrarily; pass a qualified name when
+/// that matters.</remarks>
+function SelectQuerySymbol(const ASyms: TArray<TQuerySymbol>;
+  const AWantedName: string; out ASym: TQuerySymbol): Boolean;
+
+/// <summary>PURE: the declaration site of AWantedName in `query --json` output.</summary>
+/// <param name="AJson">Raw captured output (stderr preamble tolerated).</param>
+/// <param name="AWantedName">The type the caller asked about; see SelectQuerySymbol
+/// for how a row is matched and ranked.</param>
+/// <param name="AFile">Absolute path of the declaring file; '' when False.</param>
+/// <param name="ALine">1-based declaration line, read from "start_line"; 0 when False.</param>
+/// <returns>False for garbage, for an empty array (the real zero-hit reply), and --
+/// importantly -- when every row is only a SUBSTRING match on the requested name.</returns>
+function ParseQueryLocation(const AJson, AWantedName: string; out AFile: string;
+  out ALine: Integer): Boolean;
+
+/// <summary>PURE: the member identifiers of an enum, read from its DECLARATION
+/// SOURCE TEXT.</summary>
+/// <param name="ADeclText">The source lines start_line..end_line of an enum row --
+/// e.g. 'TAlignment = (taLeftJustify, taRightJustify, taCenter);'.</param>
+/// <param name="AMembers">Members in declaration order; [] when False.</param>
+/// <returns>False when ADeclText is not an enum declaration (no '=' immediately
+/// followed by a '(' -- which is what rejects 'TFoo = class(TBar)') or when the
+/// list is empty.</returns>
+/// <remarks>The source text is the ONLY place these live: an enum row in the index
+/// carries no members field, `query --qname` returns just the enum itself, and
+/// `surface --qname` refuses anything that is not a class/record/interface. Members
+/// ARE indexed individually as kind='enum_value' rows, but there is no
+/// children-of-a-parent query to reach them.</remarks>
+/// <remarks>Brace comments and compiler directives are stripped, so a declaration
+/// guarded by $IFDEF yields the members of BOTH arms; duplicates are removed
+/// case-insensitively, keeping first appearance. An explicit ordinal ('a = 1')
+/// contributes the identifier only.</remarks>
+function ParseEnumMembers(const ADeclText: string; out AMembers: TArray<string>): Boolean;
+
+type
   /// <summary>Adapter over a drag-lint executable + a set of index DBs.</summary>
   TEngineAdapter = class
   private
     FExePath: string;
     FDbList : TArray<string>;
     function RunCapture(const AArgs: string; out AOutput: string): Integer;
+    /// <summary>`query --name AName --json` -> raw output, or '' + a reason.
+    /// AName must be BARE: a dotted name matches nothing.</summary>
+    function QueryJsonFor(const AName: string; out AJson, AError: string): Boolean;
     function DbArgsFor(const ADbs: TArray<string>): string; overload;
     function DbArgs: string; overload;
     /// <summary>The .pas file that declares unit AUnit, via `query --name AUnit
@@ -166,6 +245,36 @@ type
     /// an error) when the unit has no .dfm or is not indexed.</summary>
     function ListControlTypesInUnit(const AUnit: string;
       const AControlSet: TArray<string>; out ATypes: TArray<string>;
+      out AError: string): Boolean;
+
+    /// <summary>Where AType is declared: `query --name AType --json`, narrowed to an
+    /// exact-name, type-like row (see SelectQuerySymbol -- `--name` is a substring
+    /// match, so the first row is regularly the wrong symbol).</summary>
+    /// <param name="AType">Bare ('TabcButtonStyle') or unit-qualified type name, as it
+    /// appears in a grid/pool cell.</param>
+    /// <param name="AFile">Absolute path of the declaring file; '' when False.</param>
+    /// <param name="ALine">1-based declaration line; 0 when False.</param>
+    /// <param name="AError">Why it failed; '' on success.</param>
+    /// <returns>False when the type is not in the configured indexes, when the exe or
+    /// a DB is unusable, or when the call exceeded ENGINE_TIMEOUT_MS.</returns>
+    /// <remarks>Exit 1 from the engine means "no hits", NOT a broken call -- it is
+    /// reported as a not-indexed message, not an engine failure. Method-pointer types
+    /// (TNotifyEvent and friends) are among the things the index does not carry, so a
+    /// perfectly ordinary event property resolves to nothing here.</remarks>
+    function ResolveTypeLocation(const AType: string; out AFile: string;
+      out ALine: Integer; out AError: string): Boolean;
+
+    /// <summary>The member identifiers of AType when it is an enum.</summary>
+    /// <param name="AType">Bare or unit-qualified type name.</param>
+    /// <param name="AMembers">Members in declaration order; [] when False.</param>
+    /// <param name="AError">Why it failed; '' on success.</param>
+    /// <returns>False when AType is not indexed, is not an enum, or its declaring
+    /// file is not readable from this machine.</returns>
+    /// <remarks>Two steps, because the index has no members field and no
+    /// children-of query: resolve the enum row to file + start_line..end_line, then
+    /// READ those source lines and hand them to ParseEnumMembers. That makes this the
+    /// one adapter verb that needs the library SOURCE on disk, not just the DB.</remarks>
+    function EnumMembersOf(const AType: string; out AMembers: TArray<string>;
       out AError: string): Boolean;
 
     /// <summary>convert-scaffold --from F --to T. Returns the raw .rules text the
@@ -727,6 +836,440 @@ begin
   finally
     SL.Free;
     Seen.Free;
+  end;
+end;
+
+// Slice the first balanced bracket-ARRAY out of AText. The sibling of
+// SliceJsonObject above, for the verbs that print a bare top-level array
+// (`query --json`) rather than an object. Same string-literal-aware scan, so a
+// '[' inside a JSON string value cannot open a phantom array, and the same
+// reason for existing: RunCapture merges the child's stderr into stdout and the
+// exe writes "(loaded defaults from ...)" to stderr on every call.
+function SliceJsonArray(const AText: string): string;
+var
+  i, depth, startIdx: Integer;
+  inStr: Boolean;
+  esc  : Boolean;
+begin
+  Result := '';
+  startIdx := 0; depth := 0; inStr := False; esc := False;
+  for i := 1 to Length(AText) do
+  begin
+    if inStr then
+    begin
+      if esc then esc := False
+      else if AText[i] = '\' then esc := True
+      else if AText[i] = '"' then inStr := False;
+      Continue;
+    end;
+    case AText[i] of
+      '"': inStr := True;
+      '[':
+        begin
+          if depth = 0 then startIdx := i;
+          Inc(depth);
+        end;
+      ']':
+        // depth > 0 guard: a stray ']' in the preamble must not be read as a close.
+        if depth > 0 then
+        begin
+          Dec(depth);
+          if depth = 0 then
+            Exit(Copy(AText, startIdx, i - startIdx + 1));
+        end;
+    end;
+  end;
+end;
+
+function ParseQuerySymbols(const AJson: string): TArray<TQuerySymbol>;
+var
+  Sliced: string;
+  Root  : TJSONValue;
+  V     : TJSONValue;
+  Obj   : TJSONObject;
+  List  : TList<TQuerySymbol>;
+  Sym   : TQuerySymbol;
+  N     : Integer;
+begin
+  Result := nil;
+  Sliced := SliceJsonArray(AJson);
+  if Sliced = '' then Exit;               // no array in the text -> no rows
+  try
+    Root := TJSONObject.ParseJSONValue(Sliced);
+  except
+    Root := nil;                          // malformed -> [] , never an exception
+  end;
+  if not (Root is TJSONArray) then
+  begin
+    Root.Free;                            // nil-safe
+    Exit;
+  end;
+  List := TList<TQuerySymbol>.Create;
+  try
+    for V in (Root as TJSONArray) do
+      if V is TJSONObject then
+      begin
+        Obj := V as TJSONObject;
+        Sym := Default(TQuerySymbol);
+        Obj.TryGetValue<string>('kind', Sym.Kind);
+        Obj.TryGetValue<string>('name', Sym.Name);
+        Obj.TryGetValue<string>('qualified_name', Sym.QualifiedName);
+        Obj.TryGetValue<string>('file', Sym.FilePath);
+        // "start_line" / "end_line" -- there is no "line" field.
+        if Obj.TryGetValue<Integer>('start_line', N) then Sym.StartLine := N;
+        if Obj.TryGetValue<Integer>('end_line', N) then Sym.EndLine := N;
+        List.Add(Sym);
+      end;
+    Result := List.ToArray;
+  finally
+    List.Free;
+    Root.Free;
+  end;
+end;
+
+// How good an answer a row's kind is to "go to the definition of this TYPE".
+// Lower is better.
+//   0  a CONCRETE declaration -- the thing itself.
+//   1  kind='type', which covers an ALIAS ('Vcl.Graphics.TFontPitch =
+//      System.UITypes.TFontPitch') as well as sets and subranges. A real
+//      declaration outranks an alias to it: it is what the user wanted to read,
+//      and it is the only one EnumMembersOf can read members out of. Both rows
+//      genuinely occur for the same name -- TFontPitch and TFontQuality each
+//      have an enum in System.UITypes and an alias in Vcl.Graphics -- and the
+//      engine's row order between them is not contractual, so ranking rather
+//      than order has to decide.
+//   2  anything else (property/field/param/local_var). A symbol that merely
+//      shares the name is a poor answer, but still better than none.
+function TypeKindTier(const AKind: string): Integer;
+begin
+  if SameText(AKind, 'class') or SameText(AKind, 'record')
+     or SameText(AKind, 'interface') or SameText(AKind, 'enum') then Exit(0);
+  if SameText(AKind, 'type') then Exit(1);
+  Result := 2;
+end;
+
+function SelectQuerySymbol(const ASyms: TArray<TQuerySymbol>;
+  const AWantedName: string; out ASym: TQuerySymbol): Boolean;
+var
+  Bare     : string ;
+  Qualified: Boolean;
+  S        : TQuerySymbol;
+  Best     : Integer;
+  Tier     : Integer;
+  DotPos   : Integer;
+begin
+  ASym := Default(TQuerySymbol);
+  Result := False;
+  if AWantedName = '' then Exit;
+
+  Bare := AWantedName;
+  DotPos := LastDelimiter('.', Bare);
+  Qualified := DotPos > 0;
+  if Qualified then Bare := Copy(Bare, DotPos + 1, MaxInt);
+
+  Best := MaxInt;
+  for S in ASyms do
+  begin
+    // Exact name only: `--name` matched a SUBSTRING, so most rows are other symbols.
+    if not SameText(S.Name, Bare) then Continue;
+    // A qualified request additionally pins the unit/owner, so 'Abcbtn.TabcButtonStyle'
+    // cannot be answered by a same-named type from some other unit.
+    if Qualified and not SameText(S.QualifiedName, AWantedName) then Continue;
+    Tier := TypeKindTier(S.Kind);
+    if Tier < Best then
+    begin
+      Best := Tier;
+      ASym := S;
+      Result := True;
+      // Nothing outranks a concrete declaration, and inside a tier the engine's
+      // row order decides -- so the first tier-0 row found is final.
+      if Best = 0 then Exit;
+    end;
+  end;
+end;
+
+function ParseQueryLocation(const AJson, AWantedName: string; out AFile: string;
+  out ALine: Integer): Boolean;
+var
+  Sym: TQuerySymbol;
+begin
+  AFile := ''; ALine := 0;
+  if not SelectQuerySymbol(ParseQuerySymbols(AJson), AWantedName, Sym) then Exit(False);
+  if Sym.FilePath = '' then Exit(False);   // a row with no file is not a location
+  AFile := Sym.FilePath;
+  // The wire contract says a missing/garbled line is 1, so never emit 0.
+  if Sym.StartLine >= 1 then ALine := Sym.StartLine else ALine := 1;
+  Result := True;
+end;
+
+// Replaces every brace comment / compiler directive, (* *) comment and // line
+// comment with a COMMA -- not a space. A comma, because in an enum body the
+// removed span is frequently an $IFDEF/$ELSE arm boundary sitting between two
+// members that have no comma of their own:
+//   RIO_IOCP_COMPLETION = 2 {$ELSE} rnctUnused,
+// Blanking that to a space would fuse the two into one element and silently drop
+// rnctUnused; a comma separates them, and empty elements are skipped anyway.
+function StripEnumNoise(const AText: string): string;
+var
+  SB  : TStringBuilder;
+  i, n: Integer;
+begin
+  SB := TStringBuilder.Create;
+  try
+    i := 1; n := Length(AText);
+    while i <= n do
+    begin
+      if AText[i] = '{' then
+      begin
+        while (i <= n) and (AText[i] <> '}') do Inc(i);
+        Inc(i);                                       // past the '}' (or past the end)
+        SB.Append(',');
+      end
+      else if (i < n) and (AText[i] = '(') and (AText[i + 1] = '*') then
+      begin
+        Inc(i, 2);
+        while (i < n) and not ((AText[i] = '*') and (AText[i + 1] = ')')) do Inc(i);
+        Inc(i, 2);
+        SB.Append(',');
+      end
+      else if (i < n) and (AText[i] = '/') and (AText[i + 1] = '/') then
+      begin
+        while (i <= n) and not CharInSet(AText[i], [#13, #10]) do Inc(i);
+        SB.Append(',');
+      end
+      else
+      begin
+        SB.Append(AText[i]);
+        Inc(i);
+      end;
+    end;
+    Result := SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+// The identifier an enum element starts with: 'RIO_EVENT_COMPLETION = 1' ->
+// 'RIO_EVENT_COMPLETION'. '' when the element does not start with one (a bare
+// ordinal, or an element left empty by StripEnumNoise).
+function LeadingIdentifier(const AText: string): string;
+var
+  i, n, s: Integer;
+begin
+  Result := '';
+  n := Length(AText);
+  i := 1;
+  while (i <= n) and CharInSet(AText[i], [#9, #10, #13, ' ']) do Inc(i);
+  if (i > n) or not CharInSet(AText[i], ['A'..'Z', 'a'..'z', '_']) then Exit;
+  s := i;
+  while (i <= n) and CharInSet(AText[i], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(i);
+  Result := Copy(AText, s, i - s);
+end;
+
+function ParseEnumMembers(const ADeclText: string; out AMembers: TArray<string>): Boolean;
+var
+  T     : string ;
+  i, n  : Integer;
+  eq    : Integer;
+  depth : Integer;
+  Inner : string ;
+  Elem  : string ;
+  Ident : string ;
+  List  : TStringList;
+  Seen  : TStringList;
+  Start : Integer;
+begin
+  AMembers := nil;
+  Result := False;
+  T := StripEnumNoise(ADeclText);
+
+  // An enum body is the '(' that follows the '=' with only whitespace between the
+  // two. That single rule is what rejects 'TabcPicBtn = class(TButton)' (the word
+  // 'class' sits in between) without needing to know every other type form.
+  eq := Pos('=', T);
+  if eq <= 0 then Exit;
+  n := Length(T);
+  i := eq + 1;
+  while (i <= n) and CharInSet(T[i], [#9, #10, #13, ' ']) do Inc(i);
+  if (i > n) or (T[i] <> '(') then Exit;
+
+  Inc(i);                                     // past the '('
+  Start := i;
+  depth := 1;
+  while i <= n do
+  begin
+    if T[i] = '(' then Inc(depth)
+    else if T[i] = ')' then
+    begin
+      Dec(depth);
+      if depth = 0 then Break;
+    end;
+    Inc(i);
+  end;
+  if depth <> 0 then Exit;                    // unbalanced -> not a declaration we understand
+  Inner := Copy(T, Start, i - Start);
+
+  List := TStringList.Create;
+  Seen := TStringList.Create;
+  try
+    Seen.Sorted := True; Seen.Duplicates := dupIgnore; Seen.CaseSensitive := False;
+    // Split on TOP-LEVEL commas; a nested '(...)' (an ordinal expression) is opaque.
+    Elem := '';
+    depth := 0;
+    for i := 1 to Length(Inner) do
+    begin
+      if (Inner[i] = ',') and (depth = 0) then
+      begin
+        Ident := LeadingIdentifier(Elem);
+        if (Ident <> '') and (Seen.IndexOf(Ident) < 0) then
+        begin
+          Seen.Add(Ident);
+          List.Add(Ident);
+        end;
+        Elem := '';
+        Continue;
+      end;
+      if Inner[i] = '(' then Inc(depth)
+      else if (Inner[i] = ')') and (depth > 0) then Dec(depth);
+      Elem := Elem + Inner[i];
+    end;
+    Ident := LeadingIdentifier(Elem);         // the last element has no trailing comma
+    if (Ident <> '') and (Seen.IndexOf(Ident) < 0) then
+    begin
+      Seen.Add(Ident);
+      List.Add(Ident);
+    end;
+
+    AMembers := List.ToStringArray;
+    Result := List.Count > 0;
+  finally
+    Seen.Free;
+    List.Free;
+  end;
+end;
+
+{ Shared front half of ResolveTypeLocation / EnumMembersOf: run `query --name`
+  and turn the engine's exit code into either usable JSON or a sentence the
+  status bar can show. ANAME must be BARE -- `--name Abcbtn.TabcButtonStyle`
+  matches nothing (measured), so the dotted form is stripped by the callers. }
+function TEngineAdapter.QueryJsonFor(const AName: string;
+  out AJson, AError: string): Boolean;
+var
+  Code: Integer;
+begin
+  AError := '';
+  Code := RunCapture(Format('query --name "%s" --json%s', [AName, DbArgs]), AJson);
+  case Code of
+    0: Exit(True);
+    // Exit 1 is "zero hits", NOT a broken call -- say so plainly rather than
+    // reporting an engine failure for a type that is simply not indexed.
+    1: AError := Format('"%s" is not in the current index set. Method-pointer types '
+         + '(TNotifyEvent and friends) are among the declarations the index does not '
+         + 'carry, and a type from an unindexed library will not be here either.',
+         [AName]);
+    3: AError := Format('query for "%s" timed out after %d s -- the index may be '
+         + 'being written by another process.', [AName, ENGINE_TIMEOUT_MS div 1000]);
+  else
+    AError := Format('query failed (exit %d) for "%s": %s',
+      [Code, AName, Trim(AJson)]);
+  end;
+  AJson := '';
+  Result := False;
+end;
+
+{ The bare identifier of a possibly unit-qualified type name. }
+function BareTypeName(const AType: string): string;
+var
+  DotPos: Integer;
+begin
+  Result := AType;
+  DotPos := LastDelimiter('.', Result);
+  if DotPos > 0 then Result := Copy(Result, DotPos + 1, MaxInt);
+end;
+
+function TEngineAdapter.ResolveTypeLocation(const AType: string; out AFile: string;
+  out ALine: Integer; out AError: string): Boolean;
+var
+  Json: string;
+begin
+  AFile := ''; ALine := 0;
+  if Trim(AType) = '' then
+  begin
+    AError := 'No type to resolve.';
+    Exit(False);
+  end;
+  if not QueryJsonFor(BareTypeName(AType), Json, AError) then Exit(False);
+  Result := ParseQueryLocation(Json, AType, AFile, ALine);
+  if not Result then
+    AError := Format('No declaration named "%s" came back. `query --name` matches a '
+      + 'SUBSTRING, so the index answered with other symbols whose names merely '
+      + 'contain it.', [AType]);
+end;
+
+function TEngineAdapter.EnumMembersOf(const AType: string;
+  out AMembers: TArray<string>; out AError: string): Boolean;
+var
+  Json: string;
+  Sym : TQuerySymbol;
+  SL  : TStringList;
+  Decl: string;
+  i   : Integer;
+begin
+  AMembers := nil;
+  if Trim(AType) = '' then
+  begin
+    AError := 'No type to inspect.';
+    Exit(False);
+  end;
+  if not QueryJsonFor(BareTypeName(AType), Json, AError) then Exit(False);
+  if not SelectQuerySymbol(ParseQuerySymbols(Json), AType, Sym) then
+  begin
+    AError := Format('No declaration named "%s" came back.', [AType]);
+    Exit(False);
+  end;
+  if not SameText(Sym.Kind, 'enum') then
+  begin
+    AError := Format('%s is a %s, not an enum.', [AType, Sym.Kind]);
+    Exit(False);
+  end;
+  // The index holds no member list and offers no children-of query, so the members
+  // have to be read from the declaration the row points at.
+  if (Sym.FilePath = '') or not TFile.Exists(Sym.FilePath) then
+  begin
+    AError := Format('%s is declared in %s, which is not readable from this machine.',
+      [AType, Sym.FilePath]);
+    Exit(False);
+  end;
+  SL := TStringList.Create;
+  try
+    try
+      SL.LoadFromFile(Sym.FilePath);
+    except
+      on E: Exception do
+      begin
+        AError := Format('could not read %s: %s', [Sym.FilePath, E.Message]);
+        Exit(False);
+      end;
+    end;
+    if (Sym.StartLine < 1) or (Sym.StartLine > SL.Count) then
+    begin
+      AError := Format('%s: the index points at %s line %d, which that file does not '
+        + 'have -- the index is stale relative to the source.',
+        [AType, Sym.FilePath, Sym.StartLine]);
+      Exit(False);
+    end;
+    Decl := '';
+    for i := Sym.StartLine to Sym.EndLine do
+    begin
+      if i > SL.Count then Break;
+      Decl := Decl + SL[i - 1] + sLineBreak;   // SL is 0-based; the index is 1-based
+    end;
+    Result := ParseEnumMembers(Decl, AMembers);
+    if not Result then
+      AError := Format('%s is indexed as an enum, but no members could be read from '
+        + '%s lines %d-%d.', [AType, Sym.FilePath, Sym.StartLine, Sym.EndLine]);
+  finally
+    SL.Free;
   end;
 end;
 
