@@ -30,6 +30,7 @@
       { "name": "OCRPDF", "db": "OCRPDF.sqlite",
         "include": ["C:\\Projects\\OCRPDF"] },
       { "name": "Library", "source": "registry-libraries", "platforms": ["Win32", "Win64"],
+        "exclude": ["SourceD3", "Delphi5", "Delphi7", "BuildD3", "BuildD4", "BuildD5", "BuildD7", "BuildCB3", "BuildCB4", "BuildCB5"],
         "db": "library-{platform}.sqlite" }
     ]
   }

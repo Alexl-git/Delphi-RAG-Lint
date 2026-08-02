@@ -12,10 +12,24 @@ cd /D "%ROOT%\src\cli"
 msbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal drag-lint.dproj
 if errorlevel 1 exit /b 1
 
+REM Stage the tree-sitter companions NEXT TO THE LINKED EXE, not only next to the
+REM staged copy. The .pas declarations import them implicitly, so the loader needs
+REM them in the exe's own directory. Without this the freshly linked
+REM src\cli\Win64\Debug\drag-lint.exe -- which is the default -Exe for ~45 autotest
+REM suites -- cannot start: the loader falls through to PATH, finds the x86 copies
+REM in third_party\dll, and dies 0xC000007B STATUS_INVALID_IMAGE_FORMAT. That is a
+REM bitness mismatch, NOT a missing-DLL error, which is why it never looked like a
+REM staging problem.
+copy /Y "%ROOT%\third_party\dll-win64\tree-sitter*.dll" "%ROOT%\src\cli\Win64\Debug\"
+if errorlevel 1 (
+  echo ERROR: failed to stage tree-sitter companions into %ROOT%\src\cli\Win64\Debug
+  exit /b 1
+)
+
 copy /Y "%ROOT%\src\cli\Win64\Debug\drag-lint.exe" "%ROOT%\third_party\dll-win64\drag-lint.exe"
 if errorlevel 1 (
   echo ERROR: failed to stage %ROOT%\third_party\dll-win64\drag-lint.exe
   exit /b 1
 )
-echo OK: staged Win64 drag-lint.exe
+echo OK: staged Win64 drag-lint.exe + tree-sitter companions
 endlocal

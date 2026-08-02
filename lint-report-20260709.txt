@@ -1,0 +1,7 @@
+﻿C:\TEMP\se-fp2\src\SeFp2.pas:5:12  [info] large-magic-number: Integer literal -- consider naming the constant
+C:\TEMP\se-fp2\src\SeFp2.pas:12:24  [info] large-magic-number: Integer literal -- consider naming the constant
+C:\TEMP\se-fp2\src\SeFp2.pas:12:5  [info] field-name-prefix: Field "GagePort" should start with the "F" prefix
+C:\TEMP\se-fp2\src\SeFp2.pas:13:5  [info] field-name-prefix: Field "DChan" should start with the "F" prefix
+C:\TEMP\se-fp2\src\SeFp2.pas:18:3  [info] const-casing: Constant "BoxType_MidwestFlex" should be PascalCase or UPPER_CASE
+:0:0  [warning] unit-not-in-project: Unit 'Classes' is used but not in the platform library and not fully registered in the project (.dpr + .dproj).
+lint-all: 6 finding(s) -- 0 error(s), 6 warning(s) -- 1 file(s) scanned

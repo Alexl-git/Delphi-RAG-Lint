@@ -1,0 +1,108 @@
+Parsing Delphi/Object Pascal code thoroughly is notoriously challenging. Its long evolution, complex dialect variations (Delphi vs. Free Pascal), extensive conditional compilation directives ({$IFDEF}), generics, and inline features make writing a bulletproof syntax scanner quite difficult.
+1. Tree-Sitter & Open-Source Parsers
+While Tree-Sitter is standard for modern text editors (like VS Code and Neovim), there are only a couple of prominent implementations for Delphi/Pascal:
+	• tree-sitter-pascal (by Isopod): This is the definitive Tree-Sitter grammar for Pascal and its dialects (Delphi and Free Pascal). It is surprisingly thorough and actively maintained. It handles modern constructs like generics, extended RTTI attributes, anonymous methods/functions, class helpers, and variant records. 
+	• DelphiAST: While not a Tree-Sitter project, if you are looking for a highly capable native Delphi parser written in Delphi, this open-source project by Oleksandr Skliar is widely recognized. It parses Pascal source code and builds a full Abstract Syntax Tree (AST), making it a popular base for custom static analysis tools. 
+2. Scanners Used by Professional Linters and Formatters
+Commercial and enterprise Delphi ecosystem tools rarely use off-the-shelf generalized parser toolkits like Tree-Sitter or ANTLR. Instead, they rely on custom-built, highly specialized proprietary lexers and parsers to accurately map Delphi’s unique syntax:
+Proprietary Custom Parsers
+	• TMS FixInsight: One of the most popular static analysis and linter tools integrated into RAD Studio. It relies on a bespoke, proprietary parser engineered directly by Roman Yankovsky (and now maintained under TMS). Because it needs to catch logic flaws, it maps out syntax tree tokens natively to parse modern features like multi-line strings and advanced types. 
+	• Peganza (Pascal Analyzer / Pascal Expert): Peganza's tools are legendary in the Delphi community for structural analysis and code metrics. They utilize their own highly mature, proprietary parsing engine built and refined over decades. It is explicitly tuned to understand both legacy Turbo Pascal constructs and ultra-modern Delphi language specifications. 
+	• The Delphi Parser: This automated migration and refactoring engine utilizes a custom rules-based syntax reader designed specifically to ingest millions of lines of VCL/C++ Builder architecture, map dependencies, and safely rewrite code.
+Open-Source Formatters & IDE Tools
+	• GExperts (GExperts Formatter): The most famous open-source productivity suite for Delphi. Its source code formatter uses a native hand-written scanner/lexer loop (originally heavily influenced by early open-source Pascal tokenizers like DelphiFormatter / JFormatter). It reads tokens sequentially to adjust whitespace and indentation without necessarily needing a full AST.
+	• CnPack (CnWizards): Similar to GExperts, this massive open-source wizard package uses its own internal tokenizers written directly in Object Pascal to analyze structure in real-time within the IDE.
+Enterprise Multi-Language Platforms
+	• SonarQube (Delphi Plugin): For enterprise-grade static application security testing (SAST), SonarQube's commercial Delphi plugin parses code using a custom syntax analyzer. Historically, multi-language enterprise tools often adapted ANTLR grammars or built dedicated Java-based lexical analyzers specifically to map Delphi structures into SonarQube's universal code-quality model.
+
+
+Comparing these specific tools to the broader Delphi ecosystem highlights how different parsing philosophies tackle distinct parts of the development workflow. Here is how they stack up against the tools mentioned earlier:
+Generalized Parsing vs. Version-Specific Grammar
+	• tree-sitter-pascal vs. tree-sitter delphi13: The open-source tree-sitter-pascal is a generalized grammar that attempts to cover the vast landscape of Free Pascal, legacy Delphi, and standard Pascal dialects. A targeted "tree-sitter delphi13" grammar narrows that scope significantly. By focusing strictly on the syntax rules, inline features, and generic constraints specific to a modern Delphi 13.1 environment, it eliminates the ambiguities of supporting legacy code. It provides the same exceptional real-time error recovery and IDE telemetry as the broader Tree-Sitter project, but with much higher fidelity for modern syntax.
+Semantic Analysis vs. Enterprise Scanners
+	• TMS FixInsight & Peganza vs. drag-lint: Commercial linters like FixInsight use mature, proprietary parsers to deeply evaluate code structure. Drag-lint architectures operate on this exact same principle — functioning as mini-compiler front-ends. Rather than just reading syntax like Tree-Sitter, they track deep semantic context to catch logic bugs, mismatched types, and structural smells. While enterprise platforms like SonarQube often rely on heavy, multi-language adapters to map Delphi into a universal model, dedicated linters provide a much more rigorous, Delphi-native analysis, though they sacrifice raw parsing speed to achieve it.
+AST Generation vs. High-Velocity Token Scanning
+	• DelphiAST vs. YADF (Yet Another Delphi Formatter): DelphiAST reads source code to build a complete, memory-heavy Abstract Syntax Tree (AST), mapping out the complex relationships between every code block. YADF sits on the opposite end of the spectrum, sharing its architectural DNA with the fast, open-source formatters found in GExperts and CnPack. Instead of building a heavy AST, YADF utilizes a flat-pass, single-pass token scanner. By focusing purely on token boundaries without needing to resolve deep semantic meaning, it bypasses heavy abstractions. This allows it to achieve lightning-fast, deterministic code formatting for large codebases — prioritizing layout precision and execution speed over structural analysis.
+
+
+
+Comparing an AST (Abstract Syntax Tree) to Tree-sitter is comparing a data structure to the engine that creates it.
+An AST is a conceptual way to represent code, whereas Tree-sitter is a specific, modern tool designed to read code and generate those structural trees in real-time.
+Here is the breakdown of how they differ fundamentally.
+What is an AST? (The Concept)
+An Abstract Syntax Tree is a hierarchical representation of the logical structure of source code.
+When a standard compiler (like the Delphi compiler or GCC) reads your code, it strips away the "noise" — whitespace, comments, commas, and parentheses — because the machine doesn't need them to understand the logic. What remains is a pure, abstract tree of operations (e.g., a WhileLoop node containing a Condition node and a Body node).
+Because it drops the formatting details, you generally cannot use a pure AST to perfectly reconstruct the original source code text.
+What is Tree-sitter? (The Engine)
+Tree-sitter is an incremental parsing library. It is a piece of software that takes source code text and generates a syntax tree from it.
+However, Tree-sitter does something slightly different than a traditional compiler: it generates a Concrete Syntax Tree (CST) rather than a pure AST.
+A CST retains absolutely everything. Every space, every comment, and every bracket is preserved as a node in the tree. This is because Tree-sitter is built for text editors (like VS Code or Neovim). An editor needs to know exactly where the comments and spaces are so it can apply syntax highlighting, fold code blocks, or format the text without deleting the developer's formatting.
+Core Differences
+Feature	Abstract Syntax Tree (AST)	Tree-sitter
+Category	A computer science data structure.	A software tool/parsing engine.
+Detail Level	Abstract: Drops whitespace, comments, and syntax symbols.	Concrete: Retains every single keystroke, including invisible characters.
+Speed & State	Usually built from scratch (batch processing) during compilation.	Incremental: Updates the existing tree in milliseconds as you type.
+Primary Use Case	Compiling code into machine instructions or deep static analysis.	Real-time syntax highlighting, code folding, and editor tooling.
+Error Handling	Often halts or throws errors on invalid syntax.	Error-tolerant: Isolates broken code and continues parsing the rest.
+In short, if you are building a compiler or a deep structural linter, you want to generate an AST. If you are building a modern code formatter, editor extension, or syntax highlighter, you use Tree-sitter to generate a CST.
+
+To build an absolute, bulletproof indexer database of a Delphi project and all its deep 3rd-party/system dependencies—with the explicit goal of completely eliminating AI grepping—you need semantic depth, cross-unit type resolution, and conditional compilation handling.
+For this specific architectural goal, an AST-based parser engine is fundamentally superior to Tree-sitter, though they can complement each other in a hybrid tooling environment.
+1. Why an AST Engine Must Be Your Backbone
+Tree-sitter is a local, context-free syntactic parser. It only understands the single file currently in its buffer. To eliminate AI grepping, your database needs to resolve deep language semantics. An AST-driven engine (such as DelphiAST or the Free Pascal Compiler front-end fcl-passrc) is required for several critical reasons:
+	• Type Resolution Across the Search Path: If a method references a type TMyCustomRegistry, Tree-sitter can tell you "this text is a type identifier." It cannot tell you what unit that type comes from. An AST parser, hooked into your project's search paths and uses clauses, tracks down the exact declaration unit, resolving its fields, methods, and properties.
+	• Evaluating Conditional Compilation ({$IFDEF}): Delphi codebases (especially 3rd-party libraries like Jedi, TMS, or Spring4D) are heavily reliant on compiler directives to manage cross-platform compliance or compiler versions. Tree-sitter struggles with complex conditional blocks because it parses syntax patterns globally; it doesn't execute a pre-processor pass. An AST pipeline resolves these directives according to your current project configuration, ensuring you index the exact code that actually compiles.
+	• Scope and Inheritance Tracking: To completely replace text-grepping, your database must understand that TSubClass inherits from TBaseClass. If you search for where a virtual method is overridden or called, a purely syntactic parser will fail to connect the dots. An AST allows you to map inheritance trees and scope blocks directly into relational database tables.
+2. How Tree-Sitter Can Complement the AST
+While Tree-sitter cannot serve as the core engine for a global symbol database, it can act as a powerful utility sidecar within your development pipeline:
+	• The Live Editor Bridge: While your background AST engine maintains the deep, relational SQL database of the entire project, Tree-sitter can run locally inside your text editor. As you type, Tree-sitter handles instant syntax highlighting, error isolation, and local structural folding before the file is even saved or re-indexed by the main AST engine.
+	• The Fault-Tolerant Ingestion Guard: AST parsers are notoriously fragile when encountering syntax errors; if a file has an unclosed block, the compiler-style parser often bails. Tree-sitter is highly error-tolerant. You can use Tree-sitter as a first-pass triage to verify file structural sanity or to extract raw strings/comments quickly without triggering a heavy semantic compilation pass.
+3. The Ideal Indexer Architecture
+To completely bypass AI text-searching, your pipeline should ingest code using an AST front-end and map it directly into a highly structured relational schema (like SQLite or Firebird).
+Here is how the parsing techniques map out across a code snippet into an integrated indexer pipeline:
+Recommended Tooling Choice
+	1. Core Ingestion: Use DelphiAST (if building your indexer natively in Delphi) or Free Pascal's fcl-passrc engine. They are built specifically to handle the structural nuances of the Pascal language.
+	2. Database Strategy: Flatten the resulting AST nodes into structured tables:
+		○ Units (ID, Name, FilePath)
+		○ Types (ID, UnitID, Name, Kind [Class, Record, Interface], ParentTypeID)
+		○ Symbols (ID, TypeID, Name, Kind [Method, Field, Property], Visibility, Signature)
+		○ References (ID, SourceSymbolID, TargetSymbolID, LineNumber)
+By treating your code as a strict, relational dataset through an AST pipeline, your local search queries can instantaneously pinpoint dependencies, call hierarchies, and implementations with absolute architectural certainty.
+
+=============
+
+Building a tool to index a project's architecture and accurately map dependencies requires moving beyond simple text scanning. The Delphi ecosystem contains several indexers, cross-referencers, and static analyzers that range from enterprise compliance suites to open-source AST libraries.
+Here is a thorough comparison of the established parsing and indexing tools available for Delphi:
+1. Enterprise Multi-Language Analyzers
+Understand by SciTools
+	• License: Commercial (Enterprise-grade pricing)
+	• Architecture: Proprietary, multi-language semantic cross-referencer.
+	• Capabilities: Understand is designed specifically to map out massive, complex legacy systems. It builds a highly optimized internal database of your code, generating control flow graphs, call trees, and architectural butterfly charts. Because it deeply parses Object Pascal, it completely eliminates the need for text searches when finding where a specific variable, type, or virtual method is utilized across millions of lines of code. 
+2. Dedicated Delphi Static Analyzers 
+Peganza Pascal Analyzer (PAL)
+	• License: Commercial (with a free "PAL Lite" version) 
+	• Architecture: Proprietary Delphi native parser.
+	• Capabilities: A legendary tool in the Delphi community recently updated for Delphi 13.1. Rather than just indexing for navigation, PAL builds large internal tables of identifiers and subprogram calls to evaluate code health. It generates dozens of comprehensive reports, such as third-party dependency lists, reverse call trees, and cross-references. Peganza also offers Pascal Expert, which brings this parsing technology directly into the IDE. 
+Delphi Parser (PACIFITY Technologies)
+	• License: Commercial
+	• Architecture: Rule-based code scanner and modifier mapped to a database backend.
+	• Capabilities: This tool is specifically engineered for massive automated modernization projects, such as migrating legacy database architectures to modern FireDAC and Firebird SQL backends. It scans millions of lines of code, maps the structure and dependencies, and identifies exactly what needs to be changed. It operates on an agile refactoring loop, capable of inserting, changing, or safely commenting out code based on a customizable rules engine without manual intervention. 
+3. IDE Refactoring Indexers
+MMX Code Explorer (formerly ModelMaker)
+	• License: Free
+	• Architecture: IDE-integrated class browser and source indexer. 
+	• Capabilities: Now available as a free tool integrated directly into RAD Studio, MMX acts as an advanced, real-time structural map. It indexes classes, inheritance trees, and members, providing two-way navigation and deep refactoring capabilities (like extracting classes and re-arranging code regions). It is incredibly fast but is designed for active development within the editor rather than exporting relational data to an external database.
+4. Open-Source Parser Libraries
+DelphiAST
+	• License: Free / Open Source
+	• Architecture: Native Delphi TPasSyntaxTreeBuilder.
+	• Capabilities: This is not a standalone application, but rather the underlying parsing engine you would use to build your own indexer. DelphiAST takes standard Delphi source code, evaluates compiler directives, and generates a structured XML or object-based Abstract Syntax Tree. 
+If the goal is to develop an internal suite to completely bypass AI grepping, feeding the output of DelphiAST into a custom Firebird database schema is the most powerful architectural approach. By mapping units, classes, generic parameters, and method signatures into distinct relational tables, you can execute instantaneous SQL queries against your entire codebase's structural hierarchy, ensuring absolute accuracy when tracing 3rd-party dependencies.
+This Essential MMX Code Explorer Setup demonstrates how an integrated class browser and source indexer can visually manage code relationships and advanced refactoring directly inside the Delphi environment.
+
+
+I'm not sure but I think MMX is using DelphiAST. This is why we see Uwe Raabe reports errors there.
+Can we benefit from it? Is it hard to duplicate?
+
+
+

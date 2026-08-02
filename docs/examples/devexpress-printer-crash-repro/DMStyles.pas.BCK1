@@ -1,0 +1,28 @@
+unit DMStyles;
+
+{ Minimal repro datamodule, mirroring the real Micronite "uStyles" (TdmStyles).
+  It hosts a TdxComponentPrinter whose report link (TdxGridReportLink) targets a
+  cxGrid that lives on ANOTHER form (Form2). This cross-form/cross-module link is
+  the crash trigger: when a form that USES this datamodule is opened in the
+  designer, the printer tries to resolve the link's Component reference across
+  modules and calls through a nil/dangling pointer. }
+
+interface
+
+uses
+  System.SysUtils, System.Classes,
+  dxPSCore, dxPSGlbl, dxPSEngn, dxPScxGridLnk;
+
+type
+  TdmStyles = class(TDataModule)
+    dxPrinter: TdxComponentPrinter;
+  end;
+
+var
+  dmReproStyles: TdmStyles;
+
+implementation
+
+{$R *.dfm}
+
+end.

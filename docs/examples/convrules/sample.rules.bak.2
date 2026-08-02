@@ -1,0 +1,94 @@
+#convert Vcl.Graphics.TFont -> Vcl.Graphics.TFont
+#note sample rule-book for ConvRulesEditor -- edit in the visual editor
+#link Color <- Color
+#link Height <- Height
+#link Name <- Name
+#link Size <- Size : Round
+#default Charset = 1
+#ignore Handle
+#note Handle is an OS resource -- intentionally not mapped
+// a hand comment survives round-trip
+; so does a semicolon comment
+
+#convert Vcl.StdCtrls.TEdit -> Vcl.StdCtrls.TMemo
+#note second rule -- alternative target for the same family of controls
+#link Text <- Text
+#link ReadOnly <- ReadOnly
+#unuse SomeLegacyUnit
+#remove DFM: DesignInfo
+
+#convert TabcToggleBtn -> tcxbutton
+
+#link OptionsImage.Images.Source.Items <- Images.Source.Items
+#link OptionsImage.Images.Destination.Items <- Images.Destination.Items
+#link OptionsImage.Images.Links.IgnoreIndex <- Images.Links.IgnoreIndex
+#link OptionsImage.Images.Links.IgnoreImages <- Images.Links.IgnoreImages
+#link HintHelper.HintWindow.ParentColor <- ParentColor
+#link HintHelper.HintWindow.PopupMenu <- PopupMenu
+#link HintHelper.HintWindow.PopupMenu.PopupPoint <- PopupMenu.PopupPoint
+#link HintHelper.HintWindow.PopupMenu.ItemsCount <- PopupMenu.ItemsCount
+#link HintHelper.HintWindow.PopupMenu.Items <- PopupMenu.Items
+#link HintHelper.HintWindow.PopupMenu.UseParentScale <- PopupMenu.UseParentScale
+#link LookAndFeel.ChangeListenerList.List.Objects <- SoundList.Items.Objects
+#link HintHelper.HintWindow.Brush.OnGradientChanged <- Canvas.Stroke.OnGradientChanged
+#link HintHelper.HintWindow.Brush.DefaultColor <- Canvas.Stroke.DefaultColor
+#link HintHelper.HintWindow.Brush.DefaultKind <- Canvas.Stroke.DefaultKind
+#link HintHelper.HintWindow.Brush.Color <- Canvas.Stroke.Color
+#link HintHelper.HintWindow.Brush.Bitmap <- Canvas.Stroke.Bitmap
+#link HintHelper.HintWindow.Brush.Kind <- Canvas.Stroke.Kind
+#link HintHelper.HintWindow.Brush.Gradient <- Canvas.Stroke.Gradient
+#link HintHelper.HintWindow.Brush.Resource <- Canvas.Stroke.Resource
+#link HintHelper.HintWindow.Brush <- Canvas.Stroke.Resource.Brush
+#link HintHelper.HintWindow.ActionLink <- ActionLink
+#link HintHelper.HintWindow.ActionLink.Client <- ActionLink.Client
+#link HintHelper.HintWindow.DesktopFont <- DesktopFont
+#link HintHelper.HintWindow.IsControl <- IsControl
+#link HintHelper.HintWindow.MouseCapture <- MouseCapture
+#link HintHelper.HintWindow.ScalingFlags <- ScalingFlags
+#link HintHelper.HintWindow.Text <- Text
+#link HintHelper.HintWindow.WheelAccumulator <- WheelAccumulator
+#link HintHelper.HintWindow.IScaling <- IScaling
+#link HintHelper.HintWindow.WindowText <- WindowText
+#link HintHelper.HintWindow.OnCanResize <- OnCanResize
+#link HintHelper.HintWindow.OnConstrainedResize <- OnConstrainedResize
+#link HintHelper.HintWindow.OnMouseWheelDown <- OnMouseWheelDown
+#link HintHelper.HintWindow.OnMouseWheelUp <- OnMouseWheelUp
+#link HintHelper.HintWindow.BoundsRect <- BoundsRect
+#link HintHelper.HintWindow.ClientHeight <- ClientHeight
+#link HintHelper.HintWindow.ClientOrigin <- ClientOrigin
+#link HintHelper.HintWindow.ClientWidth <- ClientWidth
+#link HintHelper.HintWindow.Constraints.MinSize <- Constraints.MinSize
+#link HintHelper.HintWindow.Constraints.MaxSize <- Constraints.MaxSize
+#link HintHelper.HintWindow.Constraints.MaxHeight <- Constraints.MaxHeight
+#link HintHelper.HintWindow.Constraints.MaxWidth <- Constraints.MaxWidth
+#link HintHelper.HintWindow.Constraints.MinHeight <- Constraints.MinHeight
+#link HintHelper.HintWindow.Constraints.MinWidth <- Constraints.MinWidth
+#link HintHelper.HintWindow.ControlState <- ControlState
+#link HintHelper.HintWindow.ControlStyle <- ControlStyle
+#link HintHelper.HintWindow.DockOrientation <- DockOrientation
+#link HintHelper.HintWindow.Floating <- Floating
+#link HintHelper.HintWindow.FloatingDockSiteClass <- FloatingDockSiteClass
+#link HintHelper.HintWindow.HostDockSite <- HostDockSite
+#link HintHelper.HintWindow.LRDockWidth <- LRDockWidth
+#link HintHelper.HintWindow.ScaleFactor <- ScaleFactor
+#link HintHelper.HintWindow.TBDockHeight <- TBDockHeight
+#link HintHelper.HintWindow.UndockHeight <- UndockHeight
+#link HintHelper.HintWindow.UndockWidth <- UndockWidth
+#link HintHelper.HintWindow.Parent <- Parent
+#link HintHelper.HintWindow.StyleElements <- StyleElements
+#link HintHelper.HintWindow.RaiseOnNonMainThreadUsage <- RaiseOnNonMainThreadUsage
+#link HintHelper.HintWindow.AlignWithMargins <- AlignWithMargins
+#link HintHelper.HintWindow.HelpType <- HelpType
+#link HintHelper.HintWindow.HelpKeyword <- HelpKeyword
+#link HintHelper.HintWindow.HelpContext <- HelpContext
+#link HintHelper.HintWindow.Margins <- Margins
+#link HintHelper.HintWindow.CustomHint <- CustomHint
+#link HintHelper.HintWindow.CustomHint.WorkComplete <- CustomHint.WorkComplete
+#link HintHelper.HintWindow.CustomHint.ShowingHint <- CustomHint.ShowingHint
+#link HintHelper.HintWindow.CustomHint.Title <- CustomHint.Title
+#link HintHelper.HintWindow.CustomHint.Style <- CustomHint.Style
+#link HintHelper.HintWindow.CustomHint.Delay <- CustomHint.Delay
+#link HintHelper.HintWindow.CustomHint.HideAfter <- CustomHint.HideAfter
+#link HintHelper.HintWindow.CustomHint.Position <- CustomHint.Position
+#link HintHelper.HintWindow.ParentCustomHint <- ParentCustomHint
+#link AllowAllUp <- AllowAllUp

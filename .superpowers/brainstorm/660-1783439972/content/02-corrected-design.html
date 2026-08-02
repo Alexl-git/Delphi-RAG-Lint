@@ -1,0 +1,131 @@
+<style>
+  .lead { font-size:13px;color:#555;margin:0 0 18px;line-height:1.5; }
+  .lead code { background:rgba(0,0,0,.06); padding:1px 5px; border-radius:4px; }
+
+  .row { display:flex; gap:30px; flex-wrap:wrap; align-items:flex-start; }
+  .col { flex:1 1 420px; min-width:400px; }
+  .col h3 { margin:0 0 10px; font-size:14px; }
+
+  .tt { border:1px solid #b9b9b9; border-radius:5px; overflow:hidden;
+        box-shadow:0 8px 26px rgba(0,0,0,.28); background:#fdfdfd;
+        font-family:"Segoe UI",sans-serif; }
+  .tt.dark { background:#1e1e1e; border-color:#3a3a3a; color:#dcdcdc; }
+
+  /* ONE-LINE clickable header = the full signature + location on the right */
+  .hdr { display:flex; justify-content:space-between; align-items:baseline; gap:16px;
+         padding:8px 12px; border-bottom:1px solid #e2e2e2; }
+  .dark .hdr { border-color:#3a3a3a; }
+  .sig { font-family:Consolas,monospace; font-size:13px; white-space:nowrap; }
+  .sig a { text-decoration:none; }
+  .sig a:hover .nm { text-decoration:underline; }
+  .loc { font-family:"Segoe UI",sans-serif; font-size:11.5px; color:#8a8a8a; white-space:nowrap; }
+  .loc a { color:#8a8a8a; text-decoration:none; } .loc a:hover { text-decoration:underline; }
+
+  /* syntax colors (light / dark) */
+  .kw  { color:#0b57d0; }  .dark .kw  { color:#569cd6; }
+  .typ { color:#2e7d32; }  .dark .typ { color:#4ec9b0; }
+  .nm  { color:#1a56db; font-weight:600; }  .dark .nm { color:#4ea1ff; }
+  .pn  { color:#6f42c1; }  .dark .pn  { color:#c586c0; }   /* param name */
+  .lit { color:#a31515; }  .dark .lit { color:#ce9178; }
+  .op  { color:#555; }     .dark .op  { color:#b0b0b0; }
+  .mut { color:#8a8a8a; }
+
+  .sect { padding:8px 12px; border-top:1px solid #ececec; }
+  .dark .sect { border-color:#333; }
+  .lbl { font-family:"Segoe UI",sans-serif; font-size:10.5px; text-transform:uppercase;
+         letter-spacing:.06em; color:#8a8a8a; margin-bottom:5px; }
+  .prm { font-family:Consolas,monospace; font-size:12.5px; margin:2px 0; }
+
+  .cl { width:100%; border-collapse:collapse; font-family:Consolas,monospace; font-size:12px; }
+  .cl td { padding:2px 6px; white-space:nowrap; }
+  .cl tr:hover { background:#eef4ff; cursor:pointer; } .dark .cl tr:hover { background:#243447; }
+  .cl .fn { color:#1a56db; } .dark .cl .fn { color:#4ea1ff; }
+  .cl .ln { color:#8a8a8a; text-align:right; }
+  .more { color:#8a8a8a; font-style:italic; padding:4px 6px; font-size:11.5px; }
+
+  .cap { font-size:11.5px; color:#8a8a8a; margin-top:6px; font-family:"Segoe UI",sans-serif; }
+</style>
+
+<p class="lead">
+  All four corrections applied. Left: a boolean function with a single computed return.
+  Right: a function returning several error codes (list up to 10). Header is now
+  <b>one line</b> = full signature + <code>unit.pas Line N</code> on the right, the whole
+  thing clickable&nbsp;&rarr;&nbsp;definition.
+</p>
+
+<div class="row">
+
+  <!-- ============ boolean / single computed return ============ -->
+  <div class="col">
+    <h3>Boolean &mdash; single computed return</h3>
+    <div class="tt">
+      <div class="hdr">
+        <span class="sig"><a href="#" onclick="return false;"><span class="kw">function</span>
+          BASICF.<span class="nm">SomeFunction</span>(<span class="kw">const</span> <span class="pn">A1</span>:&nbsp;<span class="typ">integer</span>;
+          <span class="pn">A2</span>:&nbsp;<span class="typ">string</span>; <span class="kw">var</span> <span class="pn">A3</span>:&nbsp;<span class="typ">double</span>):&nbsp;<span class="typ">boolean</span>;</a></span>
+        <span class="loc"><a href="#" onclick="return false;">BASICF.pas&nbsp; Line&nbsp;123</a></span>
+      </div>
+      <div class="sect">
+        <div class="lbl">Parameters</div>
+        <div class="prm"><span class="kw">const</span> <span class="pn">A1</span> : <span class="typ">integer</span></div>
+        <div class="prm"><span class="pn">A2</span> : <span class="typ">string</span></div>
+        <div class="prm"><span class="kw">var</span> <span class="pn">A3</span> : <span class="typ">double</span></div>
+      </div>
+      <div class="sect">
+        <div class="lbl">Returns</div>
+        <div class="prm"><span class="typ">boolean</span> <span class="mut">:</span> <span class="nm">Result</span> <span class="op">:=</span> S2.Length <span class="op">&gt;</span> <span class="lit">0</span></div>
+      </div>
+      <div class="sect">
+        <div class="lbl">Called from&nbsp; <span class="mut" style="text-transform:none;letter-spacing:0">(3)</span></div>
+        <table class="cl">
+          <tr><td class="fn">JobUtils.pas</td><td class="ln">2192</td><td>if SomeFunction(a,b,c) then</td></tr>
+          <tr><td class="fn">Folders.pas</td><td class="ln">88</td><td>ok := SomeFunction(...);</td></tr>
+          <tr><td class="fn">Plan.pas</td><td class="ln">341</td><td>while not SomeFunction(...)</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="cap">Returns line shows the actual <code style="font-family:Consolas">Result :=</code> expression mined from the body (no LLM).</div>
+  </div>
+
+  <!-- ============ error-code enumeration return ============ -->
+  <div class="col">
+    <h3>Integer &mdash; multiple return codes (up to 10)</h3>
+    <div class="tt dark">
+      <div class="hdr">
+        <span class="sig"><a href="#" onclick="return false;"><span class="kw">function</span>
+          USERS.<span class="nm">Authenticate</span>(<span class="kw">const</span> <span class="pn">AUser</span>,&nbsp;<span class="pn">APwd</span>:&nbsp;<span class="typ">string</span>):&nbsp;<span class="typ">Integer</span>;</a></span>
+        <span class="loc"><a href="#" onclick="return false;">USERS.pas&nbsp; Line&nbsp;56</a></span>
+      </div>
+      <div class="sect">
+        <div class="lbl">Parameters</div>
+        <div class="prm"><span class="kw">const</span> <span class="pn">AUser</span> : <span class="typ">string</span></div>
+        <div class="prm"><span class="kw">const</span> <span class="pn">APwd</span> : <span class="typ">string</span></div>
+      </div>
+      <div class="sect">
+        <div class="lbl">Returns&nbsp; <span class="mut" style="text-transform:none;letter-spacing:0">(integer &mdash; 4 code paths)</span></div>
+        <div class="prm"><span class="nm">Result</span> <span class="op">:=</span> <span class="typ">ERROR_OK</span></div>
+        <div class="prm"><span class="nm">Result</span> <span class="op">:=</span> <span class="typ">ERROR_NO_USER</span></div>
+        <div class="prm"><span class="nm">Result</span> <span class="op">:=</span> <span class="typ">ERROR_BAD_PWD</span></div>
+        <div class="prm"><span class="nm">Result</span> <span class="op">:=</span> <span class="typ">ERROR_LOCKED</span></div>
+      </div>
+      <div class="sect">
+        <div class="lbl">Called from&nbsp; <span class="mut" style="text-transform:none;letter-spacing:0">(12)</span></div>
+        <table class="cl">
+          <tr><td class="fn">Login.pas</td><td class="ln">210</td><td>rc := Authenticate(u, p);</td></tr>
+          <tr><td class="fn">Session.pas</td><td class="ln">77</td><td>if Authenticate(...) = ERROR_OK</td></tr>
+          <tr><td class="fn">Api.pas</td><td class="ln">455</td><td>case Authenticate(...) of</td></tr>
+        </table>
+        <div class="more">&hellip; and 9 more</div>
+      </div>
+    </div>
+    <div class="cap">Same tooltip, dark theme. Distinct RHS values listed (dedup&rsquo;d), capped at 10.</div>
+  </div>
+
+</div>
+
+<p style="font-size:12px;color:#888;margin-top:22px;line-height:1.5;">
+  <b>Open question on the Returns mining</b> (I&rsquo;ll ask in the terminal): a body can assign
+  <code style="font-family:Consolas">Result</code> many times (loops, temp values). Do we list
+  <i>every distinct</i> RHS, or only &ldquo;terminal-ish&rdquo; ones? And do we skip it entirely when the RHS
+  is complex/multi-line to avoid noise?
+</p>

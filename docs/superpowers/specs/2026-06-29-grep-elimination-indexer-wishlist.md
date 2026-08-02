@@ -136,3 +136,79 @@ hand-read source to learn things the index *could* have answered:
   more than computing it inline.
 - **Next dedicated "indexer awareness" milestone:** brainstorm S1.3 + S2 + S3 as a set (one schema
   bump, one reindex). This is the "more index functions" brainstorm the user asked to schedule.
+
+## Addendum 2026-07-27 -- audited from the Phase 3 controller session (measured, not recalled)
+
+The controller ran nine Greps in one session. **Four were avoidable and one assumption was wrong**;
+the rest hit two real coverage gaps. Each row was verified against the live self-index
+(`C:\Projects\.drag-lint\Delphi-RAG-lint.sqlite`), not reasoned about.
+
+### Avoidable -- the index already answers these today
+
+| What I grepped | What I should have run | Verified |
+| --- | --- | --- |
+| `Prefix` in one `.pas` (to find where a local is assigned) | `query --name Prefix` | **Locals ARE indexed.** Returns `kind=local_var`, `DRagLint.Doc.Document.TDocumenter.BuildForSymbol.Prefix : string`. **I had assumed locals were out of scope -- they are not.** The qualified name names the declaring routine, which is exactly what the Grep was for. |
+| `function NormalizeCommentLines` | `query --name NormalizeCommentLines` | Returns the full signature + `[impl-only]`. |
+| a regex for the `...Stub` function declaration | `query --name Generate` | Returns `TDocStubGenerator.Generate` with its full signature. |
+| `'/// '` and `'///'` string literals across `src/` | `query --text "TODO: describe" --source pas` | Returns `[pas/literal]` hits with `file:line:col` **and** the owning unit. This is the single highest-value under-used verb: **string-literal search is an index job.** |
+
+**Correction to record:** the belief that "the index holds declarations, not locals" is FALSE and was
+the reason for the first Grep. `local_var` is a first-class `kind`.
+
+### Genuine gaps -- Grep was correct, and here is what would retire it
+
+| Gap | Evidence from this session | Value |
+| --- | --- | --- |
+| **`.ps1` is not indexed** | `tests/` holds **180 `run_*.ps1` runners**. "Which runner asserts X?" came up repeatedly across nine tasks and is only answerable by Grep. `query --text "OK: staged"` returns **0 matches** because `--source` covers `pas\|dfm\|sql` only. | **Highest.** The test battery is a primary artifact of this repo; agents search it constantly. Assertion text is exactly the FTS5 use case already built. |
+| **`.bat` / `.cmd` not indexed** | Finding an unguarded `copy` across `build/*.bat` (a real defect: the script printed `OK: staged` over a failed copy) required Grep. | Low volume, but trivially cheap once `.ps1` lands -- same file-scanner, same FTS5 table. |
+| **`.md` not indexed** | This project keeps its working state in markdown: `docs/lint/BACKLOG.md` is the resume document, plus specs, plans and defect registers. Four of the nine Greps were markdown lookups. | Medium-high. Distinct from code search, but it is where "what did we decide and why" lives. |
+
+**Proposed shape, deliberately minimal:** extend the existing FTS5 text index with a `source` value
+per non-Delphi family (`ps1`, `bat`, `md`) rather than inventing a second mechanism, so
+`query --text "<phrase>" --source ps1` works the way `--source pas` already does. No symbol
+extraction, no AST -- text + `file:line:col` is enough to retire every Grep in the table above.
+
+**Guardrail worth keeping in mind:** `.md` and `.ps1` under `tests/` include generated output
+(`tests/autotest/results/*.json`, `logs/`) that should be excluded, or the text index inherits the
+noise the `.gitignore` was just added to suppress.
+
+## Addendum 2026-07-28 -- **E4: A CORRECTNESS HOLE, not a coverage gap. Read this before trusting a negative.**
+
+Everything above this line is about *files the index does not cover*. This entry is different and more
+serious: it is about **Delphi code the index does cover, answering incompletely and silently.**
+
+**Nested routines (a `procedure`/`function` declared inside another routine's body) are not indexed at
+all -- no symbol, no refs.** Confirmed by direct query of the self-index, not inferred:
+
+| Query | Result |
+| --- | --- |
+| `select kind, count(*) from symbols group by kind` | `local_var` **13,993**, `param` 7,211, `method` 2,761, `function` 1,769, `procedure` 1,048 ... |
+| symbols whose `qualified_name` implies routine-in-routine nesting | **0** |
+| control: `local_var` inside a routine body | present, e.g. `DRagLint.Doc.Document.TDocumenter.BuildForSymbol.Path` |
+
+So the indexer **does** walk routine bodies -- it emits ~14k locals from inside them -- but it does not
+emit the nested routines themselves. That asymmetry suggests an omission in the symbol emitter rather
+than a design decision, though this addendum does not attempt to prove that.
+
+**Why it matters more than a missing file type:**
+
+- `query --name <NestedRoutine>` returns **nothing**, which is indistinguishable from "no such symbol".
+- `query find-callers --name X` **misses call sites located inside nested routines**, so "0 callers"
+  can be simply wrong.
+- Any index-based *enumeration* of call sites under-counts, silently.
+- **The failure mode is a confident empty result, not an error.** Every other gap in this document
+  announces itself (the file is not there, so nothing matches and you know why).
+
+**How it was found, which is the part worth generalising:** during T3i, `query find-callers` **missed a
+real fourth consumer** of a predicate the task was fixing. Grep found it. Had the enumeration been
+trusted, the task would have shipped a fix to three of four sites believing it had covered all of them.
+
+**Practical rule until this is closed:** the index is authoritative for a **positive** answer
+(it found something, and it is AST-exact). For a **negative** answer -- "no callers", "no such symbol",
+"that is the complete set" -- corroborate with a text search before relying on it, *especially* when the
+answer is load-bearing for a decision. Note `query --text` is not a substitute: it covers string
+literals and comments, not identifiers.
+
+**Related, disclosed alongside it (register E5):** a paren-less dotted call in expression position
+(`T := TThing.Create;`) emits no `call` ref, so it is invisible to call-graph queries too. Same class:
+an incomplete answer that looks complete.

@@ -1,0 +1,11 @@
+MISSING (3) - used but not listed (will be added with --apply):
+  JEDI -> C:\Projects\DB\ORM3\JEDI.inc   (used by MStreams)
+(loaded defaults from C:\Projects\.drag-lint.json)
+  FTS5 probe: AVAILABLE
+  INC -> C:\Projects\DB\ORM3\INC.inc   (used by MStreams)
+  CMMGetDataMultiplyer -> CMMGetDataMultiplyer.pas   (used by Blueprint4)
+EXTRA (1) - listed but never reached via uses (review):
+  ArrayHelper -> c:\projects\arrayhelper\arrayhelper.pas
+STALE (0) - used but looks stale (investigate):
+Run a full project build to verify after --apply.
+coherence: members=566 incoherent=566 scanned=627 recompiled=true

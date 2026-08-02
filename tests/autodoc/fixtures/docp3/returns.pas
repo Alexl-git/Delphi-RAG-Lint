@@ -131,70 +131,60 @@ type
   end;
 
 // Plain, complete, unmutated, no nesting. The load-bearing control.
-function PlainSum(A, B: Integer): Integer;
+`r`nfunction PlainSum(A, B: Integer): Integer;
 
 // Second control, and the callee InlineProcVar assigns to its local.
-function DoubleIt(X: Integer): Integer;
+`r`nfunction DoubleIt(X: Integer): Integer;
 
 // Third control, and the callee NestedCallRhs nests twice over.
-function ConcatPath(const A, B: string): string;
+`r`nfunction ConcatPath(const A, B: string): string;
 
-// YADF.Groups.pas:100 PrevSignificantIdx -- the reported case. The seed AFrom
-// is precisely the value this routine returns ONLY when the loop never runs.
 function PrevIdx(const AItems: TArray<Integer>; AFrom: Integer): Integer;
 
-// YADF.Layout.pas:99 form 1c -- an accumulator leaks its intermediate step.
 function Accum(const AItems: TArray<Integer>): Integer;
 
-// YADF.Options.pas:128 DefaultOptions -- member-level assignment only. Takes
-// a parameter it does not need, purely so Driver's call to it is a call the
-// body scan can see: `C := DefaultCfg;` is an assignment, not an
-// 'Identifier(' call site, and a decl with no facts at all gets no doc
-// comment, which would make every check below it an assertion over nothing.
 function DefaultCfg(ASeed: Integer): TCfg;
 
 // YADF.Options.pas:796 SharedAppDataIniPath -- a nested call with a space
 // after the open paren, on ONE physical line, ending in ';'.
-function NestedCallRhs(const ADir, AName: string): string;
+`r`nfunction NestedCallRhs(const ADir, AName: string): string;
 
-// The documented "single-line RHS" limitation, met head-on: this RHS is
-// genuinely continued on the next line.
 function MultiLineRhs(A, B: Integer): Boolean;
 
 // YADF.Options.pas OptionTable's second defect -- a Result assignment with no
 // ';' anywhere on its line.
-function OneLiner(A: Integer): Integer;
+`r`nfunction OneLiner(A: Integer): Integer;
 
 // YADF.Options.pas OptionTable -- an anonymous method's Result inside the
 // enclosing routine's span.
-function AnonHost(const ACfg: TCfg): Integer;
+`r`nfunction AnonHost(const ACfg: TCfg): Integer;
 
 // The same, for a NAMED local routine.
-function LocalHost(A: Integer): Integer;
+`r`nfunction LocalHost(A: Integer): Integer;
 
 // The nested-routine detector's own guard -- see the header note.
-function InlineProcVar(A: Integer): Integer;
+`r`nfunction InlineProcVar(A: Integer): Integer;
 
 // The PARAMETERLESS procedural-type variable. No parentheses to disarm the
 // detector, and the word after `function` is the RETURN TYPE.
-function ParamlessProcVar(A: Integer): Integer;
+`r`nfunction ParamlessProcVar(A: Integer): Integer;
 
 // The same shape declared as a local TYPE rather than a var.
-function LocalProcTypeDecl(A: Integer): Integer;
+`r`nfunction LocalProcTypeDecl(A: Integer): Integer;
 
 // A mutation of Result parked in a {...} comment is not a mutation: this
 // routine's CODE contains no Inc(Result), and it returns exactly A + 100.
-function BraceCommentInc(A: Integer): Integer;
+`r`nfunction BraceCommentInc(A: Integer): Integer;
 
 // The same for a self-referential assignment left behind in a comment.
-function BraceCommentSelfRef(A: Integer): Integer;
+`r`nfunction BraceCommentSelfRef(A: Integer): Integer;
 
 // ... and for the (*..*) comment form, with the third detected intrinsic.
-function ParenStarSetLength(A: Integer): string;
+`r`nfunction ParenStarSetLength(A: Integer): string;
 
 // 'Result := Result + 1' as PROSE inside a format string. Nothing is mutated
 // and the whole expression, semicolon and all, is one physical line.
-function StrLiteralResult(A: Integer): string;
+`r`nfunction StrLiteralResult(A: Integer): string;
 
 // ForeignA and ForeignB are ADJACENT, in this order, with a blank line above
 // ForeignA's header. The runner moves ForeignB's indexed impl_start_line onto
@@ -202,18 +192,18 @@ function StrLiteralResult(A: Integer): string;
 // routine's header and covers ForeignA's whole body. ForeignA's return value
 // is deliberately unique in this file, so "ForeignB adopted it" is a check
 // that can only pass one way.
-function ForeignA(A: Integer): Integer;
+`r`nfunction ForeignA(A: Integer): Integer;
 
 // The victim of the doctored span. With its TRUE span it returns A - 7; with
 // the doctored one it must return NOTHING.
-function ForeignB(A: Integer): Integer;
+`r`nfunction ForeignB(A: Integer): Integer;
 
 // Driver exists so that every declaration above is actually DOCUMENTED.
 // `document --unit` writes no comment at all for a decl whose facts block
 // would come out empty, so an absence assertion ("this routine's block has no
 // Observed:") over an uncalled routine would be an assertion over a block that
 // was never written. Driver gives each of them one caller, which is enough.
-procedure Driver;
+`r`nprocedure Driver;
 
 implementation
 
