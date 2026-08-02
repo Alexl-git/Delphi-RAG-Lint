@@ -104,6 +104,8 @@ type
       function IsSchemaCurrent(out AFound, AExpected: Integer): Boolean;
 
       function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+      function GetMetaValue(const AKey: string): string                                                                     ;
+      procedure SetMetaValue(const AKey, AValue: string)                                                                    ;
       function OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
       function UpsertSymbol(const AToken: TFileTxToken; const ASymbol: TSymbol): Int64                                      ;
       procedure UpsertReference(const AToken: TFileTxToken; const ARef    : TReference   );
@@ -1007,6 +1009,43 @@ begin
     Q.Free;
   end;
 end; // function
+
+// INBOX 2.3: generic schema_meta reader. Tolerates a missing table (a DB from
+// before schema_meta existed) and a missing key, both as '' -- callers treat
+// that as "unknown", never as an error, exactly as IsSchemaCurrent does.
+function TSQLiteSymbolStore.GetMetaValue(const AKey: string): string;
+var
+  Q: TFDQuery;
+begin
+  Result:= '';
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT value FROM schema_meta WHERE key = :k LIMIT 1';
+    Q.ParamByName('k').AsString:= AKey;
+    try
+      Q.Open;
+      if not Q.IsEmpty then Result:= Q.Fields[0].AsString;
+    except
+      { table absent (pre-schema_meta DB) -> leave Result = '' }
+    end;
+  finally
+    Q.Free;
+  end;
+end; // function
+
+// INBOX 2.3: generic schema_meta writer. schema_meta is created by the schema
+// DDL, so an absent table here means a read-only or non-index DB -- swallowed
+// for the same reason the reader swallows it, since a fingerprint that cannot
+// be recorded must not fail the run that produced it.
+procedure TSQLiteSymbolStore.SetMetaValue(const AKey, AValue: string);
+begin
+  try
+    FConn.ExecSQL('INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ?)', [AKey, AValue]);
+  except
+    { non-writable / pre-schema_meta DB -- recording the fingerprint is best-effort }
+  end;
+end; // procedure
 
 // v0.43: canonical stored-path form. The walker can produce mixed separators
 // ('C:/root\sub\file.pas') when the index root is given with '/', which made
@@ -3671,26 +3710,69 @@ begin
     Chunk.Text:= JoinLines(ClassSym.StartLine - 1, ClassSym.EndLine - 1);
     Chunks.Add(Chunk);
 
-    // 3. Implementation bodies for each method child of the class.
-    Children:= FindChildSymbols(ClassSym.Id);
-    for Child in Children do
+    // 3. Implementation body / bodies.
+    //
+    // TWO SHAPES REACH HERE, and only one of them was ever handled.
+    //
+    // When AQName resolves to a CLASS, the bodies worth showing are its
+    // methods' -- the original v0.17 behaviour, and what `drag-lint slice`
+    // still asks for.
+    //
+    // When it resolves to a ROUTINE, the child walk below finds NOTHING: a
+    // method has no child symbols. That became the NORMAL case at v0.41, when
+    // the context bundler deliberately switched to passing the target symbol's
+    // own qname ("ONLY the target symbol's own body, never the whole parent
+    // class" -- DRagLint.Context.Bundler.pas). Nothing here was updated to
+    // match, so `context --task "modify <Unit.TClass.Method>"` shipped a slice
+    // holding the unit header, the method's DECLARATION and `end.` -- and no
+    // body at all, silently, while still reporting a token count.
+    //
+    // Reported by the converter-editor team (INBOX 2.2) against two unrelated
+    // symbols, each with impl_start_line / impl_end_line correctly populated in
+    // the DB -- which is why they could narrow it to a renderer gap rather than
+    // an extractor one. A routine now emits its OWN recorded impl span, taken
+    // from the index rather than re-derived by FindImplLine's name heuristic:
+    // the span is authoritative and already paid for, and the heuristic cannot
+    // tell two same-named overloads apart.
+    if (ClassSym.Kind in [skMethod, skProcedure, skFunction, skConstructor, skDestructor])
+       and (ClassSym.ImplStartLine > 0) then
     begin
-      if not (Child.Kind in [skMethod, skProcedure, skFunction, skConstructor, skDestructor]) then Continue;
-      // Build pattern "ClassName.MethodName" for the impl finder.
-      ImplPattern:= ClassSym.Name + '.' + Child.Name;
-      ImplLine:= FindImplLine(AllLines, ImplPattern);
-      if ImplLine < 0 then Continue;
-      ImplEndLine:= FindImplEnd(AllLines, ImplLine);
-      // Clamp to valid range
-      if ImplEndLine < ImplLine then ImplEndLine:= ImplLine;
-      if ImplEndLine >= LineCount then ImplEndLine:= LineCount - 1;
-      Chunk:= Default(TSliceChunk);
-      Chunk.Kind:= 'impl-method';
-      Chunk.StartLine:= ImplLine    + 1;
-      Chunk.EndLine  := ImplEndLine + 1;
-      Chunk.Text:= JoinLines(ImplLine, ImplEndLine);
-      Chunks.Add(Chunk);
-    end; // for
+      ImplLine   := ClassSym.ImplStartLine - 1; // 1-based (DB) -> 0-based
+      ImplEndLine:= ClassSym.ImplEndLine   - 1;
+      if ImplEndLine < ImplLine       then ImplEndLine:= ImplLine;
+      if ImplEndLine >= LineCount     then ImplEndLine:= LineCount - 1;
+      if (ImplLine >= 0) and (ImplLine < LineCount) then
+      begin
+        Chunk:= Default(TSliceChunk);
+        Chunk.Kind     := 'impl-method';
+        Chunk.StartLine:= ImplLine    + 1;
+        Chunk.EndLine  := ImplEndLine + 1;
+        Chunk.Text     := JoinLines(ImplLine, ImplEndLine);
+        Chunks.Add(Chunk);
+      end;
+    end
+    else
+    begin
+      Children:= FindChildSymbols(ClassSym.Id);
+      for Child in Children do
+      begin
+        if not (Child.Kind in [skMethod, skProcedure, skFunction, skConstructor, skDestructor]) then Continue;
+        // Build pattern "ClassName.MethodName" for the impl finder.
+        ImplPattern:= ClassSym.Name + '.' + Child.Name;
+        ImplLine:= FindImplLine(AllLines, ImplPattern);
+        if ImplLine < 0 then Continue;
+        ImplEndLine:= FindImplEnd(AllLines, ImplLine);
+        // Clamp to valid range
+        if ImplEndLine < ImplLine then ImplEndLine:= ImplLine;
+        if ImplEndLine >= LineCount then ImplEndLine:= LineCount - 1;
+        Chunk:= Default(TSliceChunk);
+        Chunk.Kind:= 'impl-method';
+        Chunk.StartLine:= ImplLine    + 1;
+        Chunk.EndLine  := ImplEndLine + 1;
+        Chunk.Text:= JoinLines(ImplLine, ImplEndLine);
+        Chunks.Add(Chunk);
+      end; // for
+    end;
 
     // 4. Unit trailer: find the "end." line (0-based search from the end).
     TrailerLine:= LineCount - 1;

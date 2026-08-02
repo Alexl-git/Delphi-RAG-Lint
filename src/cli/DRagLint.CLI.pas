@@ -258,6 +258,7 @@ type
     Jobs: Integer; // --jobs <n>  parallel worker processes (0 = manifest/auto)
     // v0.45: index manifest (Task 9) -- DB selection + size guard
     Force32       : Boolean; // --force32  treat this run as 32-bit for size-guard testing
+    ForceReparse  : Boolean; // INBOX 2.3: --force-reparse  ignore the incremental up-to-date skip
     SizeGuardMB   : Integer; // --size-guard-mb <n>  override manifest sizeGuardMB (0=warn always)
     SizeGuardMBSet: Boolean; // True when --size-guard-mb was explicitly given
     // v0.46: file-size guard (tree-sitter native stack overflow prevention)
@@ -625,6 +626,9 @@ begin
     else if (A = '--layers') and (i < ParamCount) then begin Inc(i); Result.LayersPath:= ParamStr(i); end
     else if A = '--json'    then Result.AsJson:= True
     else if A = '--full'    then Result.Full  := True // refresh-findings: force a full build
+    // INBOX 2.3: re-parse every walked file even when path+mtime+sha are
+    // unchanged. --no-skip is the name consumers reached for first; both work.
+    else if (A = '--force-reparse') or (A = '--no-skip') then Result.ForceReparse:= True
     else if A = '--dry-run' then Result.DryRun:= True
     else if A = '--quiet'   then Result.Quiet := True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
@@ -1233,7 +1237,14 @@ end;
 // -- unioned with a .dproj's config defines when the section is a single-project
 // closure. --no-preprocess (from index --all) passes False for a raw all-branch
 // build.
-function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True): Boolean;
+{ INBOX 2.3: defined with DoIndex (the single-root path) but needed here too;
+  forward-declared rather than moved so the fingerprint policy stays next to the
+  comment that explains it. }
+function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
+  AForceArg, APreprocess: Boolean; const APlatform: string): Boolean; forward;
+
+function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
+  AForceReparse: Boolean = False): Boolean;
 var
   Store          : ISymbolStore                              ;
   Indexer        : IIndexer                                  ;
@@ -1280,6 +1291,10 @@ begin
     // honour the SAME active define profile.
     var SectionProfile: TDefineProfile:= ResolveIndexProfile(SectionDproj, AItem.Platform, '');
     Indexer.SetPreprocess(APreprocess, SectionProfile);
+    { INBOX 2.3: same fingerprint gate as the single-root path -- the manifest
+      path is the one that builds the big shared indexes, so it is the one where
+      a silently stale parse survives longest. }
+    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, APreprocess, AItem.Platform);
 
     // Apply walk filter from the resolved plan item.
     Indexer.SetWalkFilter(AItem.Filter);
@@ -1468,7 +1483,7 @@ begin
   if EffJobs <= 1 then
   begin
     AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess) then AnyFailed:= True; end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse) then AnyFailed:= True; end;
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -1480,7 +1495,7 @@ begin
   begin
     Writeln(ErrOutput, 'NOTE: --jobs >1 requires --config <path>; running sequentially.');
     AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess) then AnyFailed:= True; end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse) then AnyFailed:= True; end;
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -1652,6 +1667,52 @@ begin
   else Result:= AArgs.DbPath; // default: drag-lint.sqlite in CWD
 end; // function ResolveIndexDb
 
+// INBOX 2.3 (converter-editor team, 2026-08-02): the identity of everything that
+// decides WHAT this build extracts from a given byte sequence. The incremental
+// skip compares path+mtime+sha -- FILE identity -- and so cannot tell that a
+// newer engine would find symbols the stored parse missed. An unchanged file was
+// therefore skipped forever after an upgrade, answering 0-match confidently and
+// wrongly; `touch` was the only known workaround.
+//
+// Deliberately NOT part of the sha basis: changing that would invalidate every
+// stored sha at once (see TIndexer's own note). This is a separate, per-DB key.
+const INDEXER_FP_KEY = 'indexer_fingerprint';
+
+function IndexerFingerprint(const AStore: ISymbolStore; APreprocess: Boolean; const APlatform: string): string;
+var
+  Found, Expected: Integer;
+begin
+  { IsSchemaCurrent yields the engine's expected schema without importing the
+    schema unit here; the DB's own stored value is irrelevant to OUR identity. }
+  AStore.IsSchemaCurrent(Found, Expected);
+  Result:= Format('v=%s;schema=%d;pp=%d;plat=%s',
+                  [VERSION, Expected, Ord(APreprocess), LowerCase(APlatform)]);
+end;
+
+// Decides whether this run re-parses everything, and records the current
+// fingerprint. Returns True when the incremental skip is bypassed.
+//
+// GRANDFATHERED: a DB with no stored fingerprint adopts the current one
+// SILENTLY rather than forcing a reparse. Treating "unknown" as "stale" would
+// force a one-time full re-parse of every existing index -- including the
+// ~1.8 GB library-Win64 -- on the first run of this build, which is exactly the
+// mass reindex the project is holding off until the schema settles. Files gain
+// protection as they are next reindexed; --force-reparse covers the rest.
+function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
+  AForceArg, APreprocess: Boolean; const APlatform: string): Boolean;
+var
+  Cur, Prev: string;
+begin
+  Cur := IndexerFingerprint(AStore, APreprocess, APlatform);
+  Prev:= AStore.GetMetaValue(INDEXER_FP_KEY);
+  Result:= AForceArg or ((Prev <> '') and (Prev <> Cur));
+  if Result then
+    if AForceArg then Writeln('Force reparse: ON (--force-reparse; ignoring the up-to-date skip)')
+    else Writeln(Format('Indexer changed since this DB was built (%s -> %s): re-parsing every file in scope.', [Prev, Cur]));
+  AIndexer.SetForceReparse(Result);
+  AStore.SetMetaValue(INDEXER_FP_KEY, Cur);
+end;
+
 function DoIndex(const AArgs: TArgs): Integer;
 var
   Store    : ISymbolStore                              ;
@@ -1708,6 +1769,9 @@ begin
     ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   if not AArgs.NoPreprocess then Writeln('Preprocess: ON  (per-config directive resolution; platform=', PpPlatform, ')')
   else Writeln('Preprocess: OFF  (--no-preprocess: raw all-branch parsing)');
+  { INBOX 2.3: an engine/platform/preprocess change invalidates the stored parse
+    even when every byte on disk is identical. }
+  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, not AArgs.NoPreprocess, PpPlatform);
 
   { v0.42: cross-dictionary dedup -- exclude any subtree the caller says is
     already covered by another index (library / active-project DB). }
@@ -2010,7 +2074,7 @@ begin
     TDirectory.CreateDirectory(OutDir);
     AnyFailed:= False;
     for var PS in Plan.Items do
-      if not BuildPlanItem(PS, AArgs.Docs, not AArgs.NoPreprocess) then AnyFailed:= True;
+      if not BuildPlanItem(PS, AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse) then AnyFailed:= True;
 
     if AnyFailed then Result:= 1 else Result:= 0;
   finally
