@@ -1,5 +1,169 @@
 unit returns;
 
+// ===========================================================================
+// CASE NOTES -- why each shape below exists.
+//
+// These notes used to sit directly above their own declarations. They cannot
+// live there any more: v(ADP3 T7) harvests an interface-side // comment that is
+// adjacent-above a declaration into that symbol's <summary>, so test COMMENTARY
+// became test DATA -- it was published as documentation, and it broke every
+// assertion phrased as "no <summary> was fabricated here". They were deleted
+// outright to get the suites green; that discarded the rationale for ~30 subtle
+// cases, so they are restored here instead.
+//
+// This position is harvest-proof BY CONSTRUCTION, not by luck: HarvestScan walks
+// UP from a declaration and stops at the first line of code, and the `interface`
+// keyword below is code. Blank lines do NOT stop it (they are accumulated and
+// then trimmed), which is why merely spacing the comments out did not work.
+// ===========================================================================
+// Auto-Document Phase 3, Task 4b -- the <returns> MINING fixture.
+//
+// Source: docs/INBOX-autodoc-returns-section-incomplete.md. The generated
+// <returns> line "names a value the function provably does not return", and
+// that same text is read every day through Help Insight and LSP hover. Every
+// routine below is a small stand-in for a VERIFIED real case in
+// C:\Projects\YADF, named in the comment above it.
+//
+// THE RULE THE FIXTURE ENCODES: absence over wrong. Where the miner cannot
+// state the returned value correctly it states nothing -- it never guesses,
+// and it never leaks a fragment of raw syntax into prose.
+//
+// FIVE GROUPS, plus the controls that keep each of them falsifiable. TWO MORE
+// scenarios live in the runner rather than here, because they are properties of
+// the INDEX and not of the source -- a STALE span, which is what an index built
+// before the last edit holds:
+//
+//   * a span that begins EARLY but still inside the routine's own header --
+//     PlainSum, AnonHost, LocalHost and TBox.ClassLag, hovered again against a
+//     copy of the index whose impl_start_line was moved back by one line. The
+//     routine's own header must still be recognised, ClassLag included: for a
+//     `class function` the FIRST token of the body is `class`, not the routine
+//     keyword.
+//
+//   * a span that begins inside a DIFFERENT ROUTINE -- ForeignB, hovered
+//     against a copy of the index whose impl_start_line was moved onto the
+//     blank line above ForeignA's header. Measured on the shipping
+//     C:\Projects\YADF\YADF.sqlite, that is what the majority of stale spans
+//     look like: 85 of the 100 spans eligible for the first-token rule -- one
+//     per SYMBOL ROW, tools\measure\returns_blast.py anchor <db> -- head
+//     some OTHER routine, several of them tens of lines away. The required
+//     answer is ABSENCE. Emitting ForeignA's return value under ForeignB's
+//     name is the exact defect this whole task exists to remove, and a
+//     "recovery" that does it is a regression.
+//
+//   * the same, where the two routines SHARE A SIMPLE NAME -- TAlpha.Same and
+//     TBeta.Same. An anchor that compares only the LAST dotted component of
+//     the header it found cannot tell them apart, so TBeta.Same adopts
+//     TAlpha.Same's value while the check that is supposed to prevent exactly
+//     that reports a match. It is not an exotic shape: overloads and
+//     same-named methods on sibling classes are usually ADJACENT in the
+//     implementation section, which is precisely where a stale span lands.
+//     Census over the three live indexes -- (file, simple-name) groups holding
+//     more than one distinct impl_start_line -- YADF 73 groups / 158 symbol
+//     rows, drag-lint's own index 84 / 200, ORM3 98 / 414. One of the
+//     self-index groups is THIS FILE's own TAlpha.Same / TBeta.Same pair, so a
+//     self-index built before this fixture reads 83 / 198. The anchor is
+//     therefore checked against the symbol's QUALIFIED-NAME TAIL, not its
+//     simple name.
+//
+//   MUTATION   PrevIdx / Accum -- Result is changed by something other than a
+//              whole-Result assignment (Dec(Result); Result := Result + x), so
+//              the enumeration of whole-Result assignments is not an account
+//              of what comes back. Suppressed entirely.
+//   NESTED     AnonHost / LocalHost -- an anonymous method and a named local
+//              routine live INSIDE the enclosing routine's indexed impl span,
+//              so their own Result assignments used to be credited to the
+//              enclosing routine. Both hosts still return a real value of
+//              their own, deliberately: an absent <returns> would make
+//              "the nested Result is not here" vacuous.
+//   CAPTURE    OneLiner / MultiLineRhs / NestedCallRhs -- where the RHS ends.
+//              A `begin Result := X end` line has no ';' at all and used to
+//              swallow `end else begin Result := 0 end`; an RHS continued on
+//              the next line used to emit the unbalanced first half.
+//   MEMBERS    DefaultCfg -- Result.<Field> := is NOT a return value and must
+//              never be enumerated (YADF's DefaultOptions populates 42 fields
+//              in a row). This already works; it is here as a regression.
+//   NOT-CODE   BraceCommentInc / BraceCommentSelfRef / ParenStarSetLength /
+//              StrLiteralResult -- the mutation that suppresses must be a
+//              mutation IN CODE. A `{ old: Inc(Result); }` is parked dead code
+//              and 'Result := Result + 1' inside a format string is prose;
+//              suppressing on either DELETES a true <returns> from a routine
+//              that mutates nothing. Suppression is the destructive direction,
+//              so these four are the controls that bound it.
+//
+// CONTROLS: PlainSum, DoubleIt, ConcatPath, NestedCallRhs, OneLiner, AnonHost,
+// LocalHost, InlineProcVar, ParamlessProcVar, LocalProcTypeDecl,
+// BraceCommentInc, BraceCommentSelfRef, ParenStarSetLength, StrLiteralResult,
+// TBox.ClassLag, ForeignA, ForeignB, TAlpha.Same and TBeta.Same must ALL still
+// render an Observed: line. A rule that simply stopped emitting <returns> would
+// satisfy every absence check in this file and fail these nineteen.
+//
+// InlineProcVar / ParamlessProcVar / LocalProcTypeDecl are the guard on the
+// nested-routine detector itself: a local PROCEDURAL-TYPE spells the `function`
+// keyword inside the routine's declaration part but opens no scope. A detector
+// that armed on the keyword and confirmed on the next `begin` would swallow the
+// whole routine body and the routine's own return would vanish. THREE of them,
+// because the forms are told apart by different tokens and a guard over one
+// form is not a guard over the others: InlineProcVar's `function(X: Integer)`
+// is disarmed by its parentheses, while ParamlessProcVar's `function: Integer`
+// and LocalProcTypeDecl's `type TGetter = function: Integer` have none -- the
+// token after the keyword is their RETURN TYPE, and reading it as a routine
+// NAME is exactly what made the detector eat both of them.
+
+  // The `class function` carrier. A class method's implementation header
+  // begins with the `class` token, NOT with the routine keyword, so a span
+  // that starts one line early leaves the routine keyword as the body's
+  // SECOND token. Hovered against a lagged span in the runner.
+  // The same-simple-name pair. Both classes declare a method called `Same`, and
+  // their implementations are ADJACENT in that order with a blank line above
+  // TAlpha's -- the arrangement a compiler encourages and a stale span lands
+  // in. Their return values are deliberately distinct and unique in this file,
+  // so "TBeta.Same adopted TAlpha.Same's value" is a check that can only pass
+  // one way. Hovered against a doctored span in the runner.
+// Plain, complete, unmutated, no nesting. The load-bearing control.
+// Second control, and the callee InlineProcVar assigns to its local.
+// Third control, and the callee NestedCallRhs nests twice over.
+// YADF.Groups.pas:100 PrevSignificantIdx -- the reported case. The seed AFrom
+// is precisely the value this routine returns ONLY when the loop never runs.
+// YADF.Layout.pas:99 form 1c -- an accumulator leaks its intermediate step.
+// YADF.Options.pas:128 DefaultOptions -- member-level assignment only. Takes
+// a parameter it does not need, purely so Driver's call to it is a call the
+// body scan can see: `C := DefaultCfg;` is an assignment, not an
+// 'Identifier(' call site, and a decl with no facts at all gets no doc
+// comment, which would make every check below it an assertion over nothing.
+// YADF.Options.pas:796 SharedAppDataIniPath -- a nested call with a space
+// after the open paren, on ONE physical line, ending in ';'.
+// The documented "single-line RHS" limitation, met head-on: this RHS is
+// genuinely continued on the next line.
+// YADF.Options.pas OptionTable's second defect -- a Result assignment with no
+// ';' anywhere on its line.
+// YADF.Options.pas OptionTable -- an anonymous method's Result inside the
+// enclosing routine's span.
+// The same, for a NAMED local routine.
+// The nested-routine detector's own guard -- see the header note.
+// The PARAMETERLESS procedural-type variable. No parentheses to disarm the
+// detector, and the word after `function` is the RETURN TYPE.
+// The same shape declared as a local TYPE rather than a var.
+// A mutation of Result parked in a {...} comment is not a mutation: this
+// routine's CODE contains no Inc(Result), and it returns exactly A + 100.
+// The same for a self-referential assignment left behind in a comment.
+// ... and for the (*..*) comment form, with the third detected intrinsic.
+// 'Result := Result + 1' as PROSE inside a format string. Nothing is mutated
+// and the whole expression, semicolon and all, is one physical line.
+// ForeignA and ForeignB are ADJACENT, in this order, with a blank line above
+// ForeignA's header. The runner moves ForeignB's indexed impl_start_line onto
+// that blank line, so ForeignB's span then begins one line above ANOTHER
+// routine's header and covers ForeignA's whole body. ForeignA's return value
+// is deliberately unique in this file, so "ForeignB adopted it" is a check
+// that can only pass one way.
+// The victim of the doctored span. With its TRUE span it returns A - 7; with
+// the doctored one it must return NOTHING.
+// Driver exists so that every declaration above is actually DOCUMENTED.
+// `document --unit` writes no comment at all for a decl whose facts block
+// would come out empty, so an absence assertion ("this routine's block has no
+// Observed:") over an uncalled routine would be an assertion over a block that
+// was never written. Driver gives each of them one caller, which is enough.
+
 interface
 
 type
