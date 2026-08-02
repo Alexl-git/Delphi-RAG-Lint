@@ -351,6 +351,7 @@ type
     // TPersistent/TObject); --no-to-persistent turns it OFF.
     ToPersistent  : Boolean; // proptree: stop ancestor climb at TPersistent/TObject (default True)
     RefsAsLeaves  : Boolean; // proptree: TComponent-typed props are reference leaves, not expanded (default False)
+    ExactOnly     : Boolean; // query: --exact, suppress the fuzzy fallback (INBOX 2.4)
     // proptree write-back is AUTOMATIC by default: the resolving index is opened
     // WRITABLE so a type recovered by the lazy ancestry-bridge is memoized back
     // onto the property row (next query is a plain hit; self-limiting -- once
@@ -389,10 +390,15 @@ begin
   Writeln('                               any index form also takes [--force-reparse] (alias --no-skip): re-parse every');
   Writeln('                               walked file even when path+mtime+sha are unchanged. Needed once per DB after an');
   Writeln('                               engine upgrade that extracts something new -- see INBOX 2.3.');
-  Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive]');
+  Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
   Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
   Writeln('                               --case-sensitive restores byte-exact matching.');
+  Writeln('                               --name also accepts a QUALIFIED name (falls back to --qname on a dotted value).');
+  Writeln('                               --exact suppresses the fuzzy fallback, so 0 rows means "no such symbol".');
+  Writeln('                               JSON rows carry "match_kind": "exact" | "fuzzy" -- reject "fuzzy" unless');
+  Writeln('                               you want suggestions; a fuzzy row does NOT carry the name you asked for.');
+  Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
   Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--limit N] [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--resolved] [--db ...] [--json]');
   Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous)');
@@ -503,6 +509,20 @@ begin
   Writeln('  --db = .\drag-lint.sqlite next to the cwd');
 end; // procedure
 
+/// <summary>True when ASwitch appears verbatim on the command line.</summary>
+/// <remarks>For the handful of decisions that must be made BEFORE ParseArgs has
+/// run -- today just --quiet, which LoadConfigDefaults needs while it is loading
+/// the very config that ParseArgs will later override. Exact equality, not a
+/// prefix test: every switch it will ever be asked about is valueless, so a
+/// prefix match could only ever create false positives.</remarks>
+function HasSwitch(const ASwitch: string): Boolean;
+var i: Integer;
+begin
+  Result:= False;
+  for i:= 1 to ParamCount do
+    if SameText(ParamStr(i), ASwitch) then Exit(True);
+end;
+
 // v0.45 Task 9: forward declarations so DoQuery (declared early) can call
 // these helpers that are defined later in the file.
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
@@ -569,7 +589,17 @@ begin
   finally
     J.Free;
   end; // try
-  Writeln(ErrOutput, '(loaded defaults from ', Candidate, ')');
+  { INBOX 2.8: --quiet suppresses this. The banner is already on stderr and
+    stdout alone is clean JSON, but the conversion team's RunCapture MERGES the
+    two streams (SI.hStdError := WritePipe), which corrupts the JSON -- they work
+    around it with a balanced-bracket scan. A flag is kinder than documenting it.
+
+    Read from ParamStr rather than TArgs because this runs during config load,
+    BEFORE ParseArgs -- there is no TArgs yet. Scanning argv directly is the only
+    thing available here, and it is exact: --quiet takes no value, so a bare
+    match cannot collide with another switch's argument. }
+  if not HasSwitch('--quiet') then
+    Writeln(ErrOutput, '(loaded defaults from ', Candidate, ')');
 end; // procedure
 
 function ParseArgs: TArgs;
@@ -651,6 +681,8 @@ begin
     // process-wide switch (see CaseSensitiveLookups) rather than carried in
     // TArgs: every store-opening site would otherwise have to pass it through.
     else if A = '--case-sensitive' then DRagLint.Storage.SQLite.CaseSensitiveLookups:= True
+    // INBOX 2.4: no fuzzy suggestions -- zero rows means "no such symbol".
+    else if A = '--exact' then Result.ExactOnly:= True
     else if A = '--dry-run' then Result.DryRun:= True
     else if A = '--quiet'   then Result.Quiet := True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
@@ -2756,7 +2788,19 @@ begin
     Store:= OpenReadOnlyStore(DbPath, RoOk);
     if not RoOk then Continue; { stale DB reported; skip, scan the rest }
     if AArgs.QName <> '' then Symbols:= Store.FindSymbolsByQualifiedName(AArgs.QName)
-    else Symbols:= Store.FindSymbolsByExactName(AArgs.Name);
+    else
+    begin
+      Symbols:= Store.FindSymbolsByExactName(AArgs.Name);
+      { INBOX 2.4, second half: `--name` used to REJECT a qualified name --
+        `--name Abcbtn.TabcButtonStyle` returned [] and exit 1, so every caller
+        had to know which flag a given string wanted. A bare identifier can
+        never contain a dot, so a dotted --name is unambiguously a qualified
+        name and there is nothing to guess. Tried only AFTER the bare lookup
+        misses, so a symbol legitimately named with a dot (none today) would
+        still win. }
+      if (Length(Symbols) = 0) and (Pos('.', AArgs.Name) > 0) then
+        Symbols:= Store.FindSymbolsByQualifiedName(AArgs.Name);
+    end;
     for S in Symbols do
     begin
       SetLength(AllSymbols, Length(AllSymbols) + 1);
@@ -2767,7 +2811,12 @@ begin
     LastStore:= Store;
   end; // for
 
-  if (Length(AllSymbols) = 0) and (AArgs.Name <> '') then
+  { INBOX 2.4: --exact suppresses the fuzzy fallback entirely, so "no rows" means
+    "no such symbol" and nothing else. The team asked for this after
+    `--name TNotifyEvent` returned a local variable named `ANotifyEvent` and they
+    had to filter client-side; match_kind now LABELS such a row, but a consumer
+    that never wants suggestions should not have to receive and reject them. }
+  if (Length(AllSymbols) = 0) and (AArgs.Name <> '') and not AArgs.ExactOnly then
   begin
     // Fuzzy fallback: hit each DB, accumulate, top-K overall.
     for DbPath in PathsToScan do
@@ -4229,9 +4278,60 @@ begin
   // Validate that the symbol exists and is a class/record/interface.
   Syms:= Store.FindSymbolsByQualifiedName(AArgs.QName);
   if Length(Syms) = 0 then begin Writeln(System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName])); Exit(1); end;
+  { INBOX 2.6: an ENUM's members were indexed but reachable by NO query. They
+    exist as separate symbols (kind='enum_value', qualified_name
+    '<EnumQName>.<member>'), but `query --qname <Enum>` returned only the enum,
+    `hover` did not list them, and `surface` refused outright -- so the team
+    had to read the declaration's source range and parse the parenthesised
+    identifier list to get data the index already held.
+
+    surface answers "what members does this type have?", which is exactly the
+    question, so it now answers it for enums too rather than sending the caller
+    back to the source text. Ordinal order is the declaration order, which is
+    what an enum's members mean; FindAllChildSymbols returns them by id, and id
+    is assigned in parse order. }
+  if Syms[0].Kind = skEnum then
+  begin
+    var Members: TArray<TSymbol>:= Store.FindAllChildSymbols(Syms[0].Id);
+    if Length(Members) = 0 then
+    begin
+      Writeln(System.SysUtils.Format('(enum %s has no indexed members)', [Syms[0].QualifiedName]));
+      Exit(1);
+    end;
+    if LowerCase(AArgs.Format) = 'json' then
+    begin
+      var JEnum:= TJSONObject.Create;
+      try
+        JEnum.AddPair('qualified_name', Syms[0].QualifiedName);
+        JEnum.AddPair('kind', Syms[0].Kind.ToText);
+        var JMembers:= TJSONArray.Create;
+        for var Mi:= 0 to High(Members) do
+        begin
+          var JM:= TJSONObject.Create;
+          JM.AddPair('name'          , Members[Mi].Name         );
+          JM.AddPair('qualified_name', Members[Mi].QualifiedName);
+          JM.AddPair('ordinal'       , TJSONNumber.Create(Mi)   );
+          JM.AddPair('start_line'    , TJSONNumber.Create(Members[Mi].StartLine));
+          JMembers.AddElement(JM);
+        end;
+        JEnum.AddPair('members', JMembers);
+        Writeln(JEnum.Format(2));
+      finally
+        JEnum.Free;
+      end;
+    end
+    else
+    begin
+      Writeln(System.SysUtils.Format('enum %s', [Syms[0].QualifiedName]));
+      for var Mi:= 0 to High(Members) do
+        Writeln(System.SysUtils.Format('  %d  %s', [Mi, Members[Mi].Name]));
+    end;
+    Exit(0);
+  end;
+
   if not (Syms[0].Kind in [skClass, skRecord, skInterface]) then
   begin
-    Writeln(System.SysUtils.Format( 'Symbol %s has kind "%s"; surface requires a class, record, or interface.', [Syms[0].QualifiedName, Syms[0].Kind.ToText]));
+    Writeln(System.SysUtils.Format( 'Symbol %s has kind "%s"; surface requires a class, record, or interface (or an enum, for its members).', [Syms[0].QualifiedName, Syms[0].Kind.ToText]));
     Exit(2);
   end;
 
