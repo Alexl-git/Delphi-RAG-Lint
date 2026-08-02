@@ -60,24 +60,26 @@ const
     'CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)', 'CREATE INDEX IF NOT EXISTS idx_symbols_qname ON symbols(qualified_name)',
     'CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id)', 'CREATE INDEX IF NOT EXISTS idx_symbols_parent ON symbols(parent_id)',
 
-    // NOCASE companions to the two name indexes above. REQUIRED, not an
-    // optimisation: name lookups compare `COLLATE NOCASE` (Delphi identifiers
-    // are case-insensitive, so a case-SENSITIVE index is wrong for the
-    // language), and SQLite cannot serve a NOCASE comparison from a BINARY
-    // index. Without these every `query --name` degrades to a full scan of the
-    // symbols table -- ~1.5M rows on the shipped library index.
+    // NOCASE companions to the two name indexes above. They serve the
+    // case-insensitive RETRY that FindSymbolsByExactName /
+    // FindSymbolsByQualifiedName fire when a byte-exact lookup found nothing
+    // (Delphi identifiers are case-insensitive, so a wrong-case name must not
+    // read as "no such symbol" -- see CaseSensitiveLookups).
     //
-    // Both collations are kept. The binary ones still serve ORDER BY, the
-    // range/prefix scans, and the opt-in `--case-sensitive` path's own
-    // ordering; dropping them to "save space" would move the cost rather than
-    // remove it.
+    // Both collations are kept, and the BINARY ones remain the hot path: SQLite
+    // cannot serve a NOCASE comparison from a binary index, and it cannot serve
+    // an exact one from a NOCASE index either. Measured cost of getting that
+    // backwards, on library-Win64.sqlite (2.17M symbols, no NOCASE index): a
+    // single `query --name` 0.63 s -> 2.77 s, and a proptree ancestor climb 2 s
+    // -> 300 s+. That is why the retry, not the primary lookup, is the NOCASE
+    // one.
     //
-    // DISCLOSED: an EXISTING index gains these only when it is next opened
-    // WRITABLE, because Migrate is what runs this list and read verbs never
-    // call it. A read-only query against a not-yet-migrated DB is CORRECT but
-    // SLOW -- it full-scans. `drag-lint index <dir> --db <db>` (any writable
-    // open) fixes it permanently; it does not need --force-reparse, since this
-    // is a pure DDL addition and touches no extracted data.
+    // An EXISTING index gains these only when next opened WRITABLE, because
+    // Migrate runs this list and read verbs never call it. That is now a
+    // PERFORMANCE detail of the retry alone rather than of every lookup: until
+    // then a retry costs one scan, and only in the case that previously returned
+    // a wrong answer. Any `drag-lint index` adds them; --force-reparse is NOT
+    // needed, since this is pure DDL and touches no extracted data.
     'CREATE INDEX IF NOT EXISTS idx_symbols_name_nocase  ON symbols(name COLLATE NOCASE)',
     'CREATE INDEX IF NOT EXISTS idx_symbols_qname_nocase ON symbols(qualified_name COLLATE NOCASE)',
 

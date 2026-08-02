@@ -414,16 +414,14 @@ end;
 // 'Vcl.Controls.*'). The Vcl/FMX pair itself is named explicitly rather than
 // derived -- see DRagLint.Core.Model.IsGuiFrameworkPrefix for why, and for the
 // one place it is written down.
-function CrossesGuiFramework(const AInheritor, ACandidate: TSymbol): Boolean;
-var
-  InhPrefix : string;
-  CandPrefix: string;
-begin
-  InhPrefix := UnitFrameworkPrefix(DeclaringUnitOfQName(AInheritor.QualifiedName));
-  CandPrefix:= UnitFrameworkPrefix(DeclaringUnitOfQName(ACandidate.QualifiedName));
-  Result    := IsGuiFrameworkPrefix(InhPrefix) and IsGuiFrameworkPrefix(CandPrefix) and
-               not SameText(InhPrefix, CandPrefix);
-end;
+{ CrossesGuiFramework MOVED to DRagLint.Core.Model (v: merge main ->
+  autodoc-phase3). It was local here; the storage layer's late-ancestor
+  resolution needs the SAME refusal, and this unit cannot be a dependency of
+  that one. Two copies of a criterion-5 predicate is how criterion 5 ends up
+  enforced on one path and not the other -- which is exactly what happened, and
+  what run_proptree_ancestor_climb / run_proptree_prop_type_scope caught. The
+  call sites below are unchanged; the declaration now lives beside
+  UnitFrameworkPrefix and IsGuiFrameworkPrefix, which it is built from. }
 
 const
   // Hard cap on how many BRIDGED hops ClassChain's query-time fallback may

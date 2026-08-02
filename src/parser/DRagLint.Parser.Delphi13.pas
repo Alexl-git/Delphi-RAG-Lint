@@ -930,6 +930,78 @@ begin
   Result:= True;
 end; // function
 
+// v(post-merge, INBOX type-alias-shapes): LAST-CHANCE walker for a named type
+// declaration that no earlier TryWalk* claimed. Emits skTypeAlias with the
+// target's text, exactly as TryWalkAlias and TryWalkStrongAlias do.
+//
+// WHAT WAS MISSING. TryWalkAlias accepts ONLY a direct `typeref` target, and its
+// own comment said the rest were "handled by the earlier TryWalk* dispatch (or
+// left unemitted)". The parenthesis was carrying the whole truth: measured on a
+// ten-declaration fixture, FOUR shapes produced NO declaration row at all --
+//
+//   TAliasStr = string;             a plain alias whose target is a KEYWORD
+//   TRange    = 1..10;              subrange
+//   TArr      = array[0..3] of Byte;
+//   TSetOf    = set of Byte;
+//
+// -- while TAliasIdent = Integer, both `type X` strong forms and the enum all
+// indexed fine. So `query --name TRange` answered "does not exist" about a type
+// declared in the file it had just indexed. That is the SAME false-negative
+// class as INBOX 2.10's case-sensitivity bug: a confident, indistinguishable
+// "no such symbol".
+//
+// The plain/strong asymmetry is the tell, and it corrects a claim in
+// TryWalkStrongAlias's header: `TStrongStr = type string` IS indexed while
+// `TAliasStr = string` is NOT -- same target, differing only by the keyword.
+// INBOX 2.11 closed the strong form of this hole because that was the shape the
+// converter reported; nobody measured the plain one.
+//
+// SAFE BY CONSTRUCTION, the same argument TryWalkStrongAlias made: this runs
+// LAST in the dispatch, so every shape another walker recognises has already
+// Exit'ed. It can only ADD rows for declarations that currently produce none --
+// it cannot alter or displace an existing one.
+//
+// Alias CHASING is unaffected in kind: ResolveTypeNameToClass's PickCandidate
+// already accepts skTypeAlias and calls ParseFirstTypeToken on the signature.
+// For `1..10` or `array[0..3] of Byte` that yields a token naming no symbol, the
+// lookup misses and the chase Breaks -- the same dead end as today, reached one
+// step later. For `TAliasStr = string` it is a strict improvement:
+// ResolveTypeCategory can now chase it to its intrinsic, which it previously
+// could not do at all.
+function TryWalkOtherTypeDecl(const ADeclTypeNode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
+var
+  i           : Integer;
+  Child       : TTSNode;
+  TypeWrapNode: TTSNode;
+  NameNode    : TTSNode;
+  TypeName    : string ;
+  QName       : string ;
+  Target      : string ;
+begin
+  Result:= False;
+  { Take the LAST `type:` wrapper, matching TryWalkStrongAlias. ChildByField
+    returns the FIRST, which is what made the strong form blind (see its
+    header); a last-chance walker must not reintroduce that bug. }
+  TypeWrapNode:= Default(TTSNode);
+  for i:= 0 to ADeclTypeNode.NamedChildCount - 1 do
+  begin
+    Child:= ADeclTypeNode.NamedChild(i);
+    if Child.NodeType = 'type' then TypeWrapNode:= Child;
+  end;
+  if TypeWrapNode.IsNull then TypeWrapNode:= ADeclTypeNode.ChildByField('type');
+  if TypeWrapNode.IsNull then Exit;
+  NameNode:= ADeclTypeNode.ChildByField('name');
+  if NameNode.IsNull then Exit;
+  TypeName:= NodeText(NameNode, AState.Source);
+  if TypeName = '' then Exit;
+  Target:= CollapseWhitespace(NodeText(TypeWrapNode, AState.Source));
+  if Target = '' then Exit;
+  if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
+  else QName:= TypeName;
+  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target);
+  Result:= True;
+end; // function
+
 // Text of a node's `type:` field (field/property/const type, or a proc's
 // return type), whitespace-collapsed. Empty when there is no type child.
 function TypeTextOf(const ANode: TTSNode; const ASource: TBytes): string;
@@ -1429,7 +1501,12 @@ begin
     if TryWalkStrongAlias  (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { INBOX 2.11: gated on the `type` KEYWORD, so it claims only the strong form -- shapes nothing else emits }
     if TryWalkProcType     (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { INBOX 2.1: before TryWalkAlias -- a declProcRef's ARGUMENTS contain typerefs that TryWalkAlias would otherwise grab as the alias target }
     if TryWalkAlias        (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { v11 (M1) }
-    // Unknown shape (set, subrange, proc-type, etc.) - fall through to default recurse.
+    { LAST. Everything above has declined, so this claims only shapes that
+      produced NO row at all -- measured: a plain alias to a KEYWORD target
+      (`= string`), a subrange, an array type and a set type. See its header. }
+    if TryWalkOtherTypeDecl(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
+    // Nothing claimed it and it has no `type:` wrapper at all -- fall through
+    // to the default recurse.
   end;
 
   // declProc: emit a method (when inside class/record/interface) or a free

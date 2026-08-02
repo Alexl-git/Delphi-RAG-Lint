@@ -755,6 +755,37 @@ function UnitFrameworkPrefix(const AUnitName: string): string;
 ///  segment one of the two conflicting GUI frameworks?".</remarks>
 function IsGuiFrameworkPrefix(const ANamespaceSegment: string): Boolean;
 
+/// <summary>True when AInheritor and ACandidate are declared in units belonging
+/// to DIFFERENT Delphi GUI frameworks -- one Vcl.*, the other FMX.* -- i.e. the
+/// candidate is never a legitimate ancestor/type for the inheritor.</summary>
+/// <param name="AInheritor">The class the answer would be grafted ONTO.</param>
+/// <param name="ACandidate">The class being considered for it.</param>
+/// <returns>True only when BOTH declaring units carry a GUI framework segment
+/// AND those segments differ. False whenever either side is undotted, is a
+/// shared namespace (System.*, Winapi.*, Data.*), or is the same framework --
+/// so an ordinary RTL reference is never refused.</returns>
+/// <remarks>v(merge main -&gt; autodoc-phase3): PROMOTED here from a local
+/// function inside DRagLint.Convert.PropTree, because a SECOND site turned out
+/// to need it and a copy is how these two drift. That second site is the
+/// storage-layer late-ancestor resolution in
+/// TSQLiteSymbolStore.GetTransitiveAncestors, which exists only on this branch:
+/// PropTree guarded its OWN walk, so when the branch's late resolution began
+/// answering names PropTree's walk never asked about, criterion 5 was enforced
+/// on one path and not the other. Measured, not theorised -- it reddened
+/// run_proptree_ancestor_climb and run_proptree_prop_type_scope, both of which
+/// pass on main, the moment the two branches met.
+///
+/// <para>Why the refusal is needed at all even though a scope rule exists:
+/// PickCandidate short-circuits on a LONE candidate before any scope rule runs,
+/// so a type name with exactly one -- possibly wrong-framework -- definition is
+/// returned with no scope check. This is the backstop for precisely that.</para>
+///
+/// <para>A Delphi class surface is either VCL or FireMonkey; the two are
+/// parallel, and a type from one is never a stand-in for a same-named type from
+/// the other. The pair itself is named in IsGuiFrameworkPrefix, which is the one
+/// place it is written down.</para></remarks>
+function CrossesGuiFramework(const AInheritor, ACandidate: TSymbol): Boolean;
+
 implementation
 
 uses
@@ -780,6 +811,17 @@ end;
 function IsGuiFrameworkPrefix(const ANamespaceSegment: string): Boolean;
 begin
   Result:= SameText(ANamespaceSegment, 'Vcl') or SameText(ANamespaceSegment, 'FMX');
+end;
+
+function CrossesGuiFramework(const AInheritor, ACandidate: TSymbol): Boolean;
+var
+  InhPrefix : string;
+  CandPrefix: string;
+begin
+  InhPrefix := UnitFrameworkPrefix(DeclaringUnitOfQName(AInheritor.QualifiedName));
+  CandPrefix:= UnitFrameworkPrefix(DeclaringUnitOfQName(ACandidate.QualifiedName));
+  Result    := IsGuiFrameworkPrefix(InhPrefix) and IsGuiFrameworkPrefix(CandPrefix) and
+               not SameText(InhPrefix, CandPrefix);
 end;
 
 const

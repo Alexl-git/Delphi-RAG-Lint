@@ -94,6 +94,8 @@ print("\n".join("|".join("" if v is None else str(v) for v in r)
 con.close()
 '@
 function Sql([string]$Q) { return ((python $script:PySql $db $Q) -join "`n").Trim() }
+# Same probe against a DIFFERENT database (the case-variant-siblings fixture).
+function Sql2([string]$Db, [string]$Q) { return ((python $script:PySql $Db $Q) -join "`n").Trim() }
 
 # Rows for one --name spelling, as objects. Returns @() on no match.
 function QName([string]$Name, [switch]$CaseSensitive) {
@@ -167,6 +169,45 @@ $wrongIsExact = ($csWrong.Count -gt 0) -and ($csWrong[0].match_kind -eq 'exact')
 Check '--case-sensitive: a wrong-case spelling is NOT an exact match' (-not $wrongIsExact) `
   "rows=$($csWrong.Count) match_kind=$(if ($csWrong.Count) { $csWrong[0].match_kind } else { '<none>' })"
 
+# --- 3b. EXACT WINS over a case-variant sibling -------------------------------
+# The lookup is exact-FIRST and only retries NOCASE on zero rows, so when a DB
+# holds two rows differing only in case, asking for one spelling returns THAT
+# one and the retry never fires. Deliberate: it keeps every exact-case caller's
+# row set byte-identical to what it was before this change, so the fix cannot
+# perturb an existing consumer. Pinned because it is a design choice, not an
+# accident -- a future "just make it all NOCASE" would change it silently.
+Write-Host ''
+Write-Host '3b -- an exact-case hit is never widened to its case-variant siblings' -ForegroundColor Cyan
+$sibWork = Join-Path $WorkDir 'siblings'
+New-Item -ItemType Directory $sibWork | Out-Null
+Write-Ascii (Join-Path $sibWork 'SibKit.pas') @'
+unit SibKit;
+
+interface
+
+type
+  TSibling = class(TObject)
+  end;
+
+  Tsibling = class(TObject)
+  end;
+
+implementation
+
+end.
+'@
+$sibDb = Join-Path $WorkDir 'sib.sqlite'
+& $Exe index $sibWork --db $sibDb 2>&1 | Out-Null
+$stored = Sql2 $sibDb "SELECT COUNT(DISTINCT name) FROM symbols WHERE name LIKE 'TSibling'"
+Check 'precondition: the DB holds BOTH spellings as distinct rows' ($stored -eq '2') "distinct spellings=$stored"
+$sibRaw = @(& $Exe query --name 'TSibling' --db $sibDb --json 2>&1) | ForEach-Object { "$_" } |
+            Where-Object { $_ -notmatch 'loaded defaults' }
+$sibTxt = ($sibRaw -join "`n").Trim()
+$sib = if ($sibTxt.StartsWith('[')) { @($sibTxt | ConvertFrom-Json) } else { @() }
+Check 'asking for TSibling returns ONLY TSibling, not its lowercase sibling' `
+  (($sib.Count -eq 1) -and ($sib[0].name -ceq 'TSibling')) `
+  "rows=$($sib.Count) names=$(($sib | ForEach-Object { $_.name }) -join ',')"
+
 # --- 4. match_kind marks the fuzzy fallback (INBOX 2.10, second half) ---------
 Write-Host ''
 Write-Host '4 -- the fuzzy fallback is LABELLED in JSON, not just in text' -ForegroundColor Cyan
@@ -196,12 +237,23 @@ Check 'idx_symbols_name_nocase exists'  ($idx -match 'idx_symbols_name_nocase') 
 Check 'idx_symbols_qname_nocase exists' ($idx -match 'idx_symbols_qname_nocase')
 
 $planName = Sql "EXPLAIN QUERY PLAN SELECT * FROM symbols WHERE name = 'x' COLLATE NOCASE"
-Check '--name lookup uses the NOCASE index (no SCAN)' `
+Check 'the NOCASE retry uses the NOCASE index (no SCAN)' `
   (($planName -match 'idx_symbols_name_nocase') -and ($planName -notmatch 'SCAN symbols')) "$planName"
 
 $planQName = Sql "EXPLAIN QUERY PLAN SELECT * FROM symbols WHERE qualified_name = 'x' COLLATE NOCASE"
-Check '--qname lookup uses the NOCASE index (no SCAN)' `
+Check 'the NOCASE qname retry uses the NOCASE index (no SCAN)' `
   (($planQName -match 'idx_symbols_qname_nocase') -and ($planQName -notmatch 'SCAN symbols')) "$planQName"
+
+# The PRIMARY lookup must stay on the BINARY index. This is the check that would
+# have caught the first cut of this fix, which made the lookup COLLATE NOCASE
+# outright: correct, and 0.63s -> 2.77s per query on the shipped 2.17M-symbol
+# library index, because no existing DB carries the NOCASE index (read verbs
+# never migrate). A NOCASE index cannot serve an exact comparison either, so
+# this is not redundant with the two checks above -- they test different
+# statements.
+$planExact = Sql "EXPLAIN QUERY PLAN SELECT * FROM symbols WHERE name = 'x'"
+Check 'the EXACT lookup stays on the BINARY index (no SCAN)' `
+  (($planExact -match 'idx_symbols_name') -and ($planExact -notmatch 'nocase') -and ($planExact -notmatch 'SCAN symbols')) "$planExact"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'CASE-INSENSITIVE QUERY: FAIL' -ForegroundColor Red; exit 1 }

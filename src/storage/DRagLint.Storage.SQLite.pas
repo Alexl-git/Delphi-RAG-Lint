@@ -44,11 +44,29 @@ var
   /// value none of them varies. It is written once, before any store is opened,
   /// and only read thereafter.</para>
   ///
-  /// <para>The comparison is in SQL, not a Pascal post-filter, so the NOCASE
-  /// index does the work; see idx_symbols_name_nocase in
-  /// DRagLint.Storage.Schema. The case-SENSITIVE path is the one that
-  /// post-filters, because it is the rare opt-in and narrowing an
-  /// already-index-served row set is cheap.</para></remarks>
+  /// <para>EXACT FIRST, NOCASE ONLY AS A RETRY -- and this order is load-bearing,
+  /// not a preference. The first cut of this fix made the lookup
+  /// <c>COLLATE NOCASE</c> outright. SQLite cannot serve a NOCASE comparison
+  /// from a BINARY index, and idx_symbols_name_nocase exists only on a database
+  /// that has been opened WRITABLE since this change (Migrate runs the DDL; read
+  /// verbs never call it) -- which is NO existing consumer index. Measured on the
+  /// shipped library-Win64.sqlite (2.17M symbols, no NOCASE index): one
+  /// <c>query --name</c> went 0.63 s -&gt; 2.77 s, and a proptree ancestor climb,
+  /// which issues thousands of these, went from 2 s to over 300 s. So the hot
+  /// path stays byte-exact on the binary index, and the NOCASE statement runs
+  /// ONLY when the exact lookup returned zero rows -- i.e. only where the answer
+  /// would otherwise have been the false "does not exist" this fixes. On a
+  /// migrated DB that retry is index-served; on an un-migrated one it costs one
+  /// scan, in a case that used to cost a wrong answer.</para>
+  ///
+  /// <para>A consequence worth stating: when an index somehow holds BOTH
+  /// <c>TEdit</c> and <c>tedit</c> as distinct rows, asking for <c>TEdit</c>
+  /// returns only <c>TEdit</c> -- the retry never fires. That is deliberate. It
+  /// keeps every exact-case caller's row set byte-identical to what it was
+  /// before this change, so the fix cannot perturb an existing consumer.</para>
+  ///
+  /// <para><c>--case-sensitive</c> simply suppresses the retry, so the opt-in
+  /// path is exactly the old behaviour, statement for statement.</para></remarks>
   CaseSensitiveLookups: Boolean = False;
 
 type
@@ -69,6 +87,11 @@ type
       FQDeleteFileStringLiterals : TFDQuery     ;
       FQFindByName           : TFDQuery     ;
       FQFindByQName          : TFDQuery     ;
+      { NOCASE retries, fired only when the exact lookup above found nothing.
+        See CaseSensitiveLookups. }
+      FQFindByNameCI         : TFDQuery     ;
+      FQFindByQNameCI        : TFDQuery     ;
+      FNocaseWarned          : Boolean      ; // one note per store, not per query
       FQCountSymbols         : TFDQuery     ;
       FQCountFiles           : TFDQuery     ;
       FQUpsertSymbolDoc      : TFDQuery     ;
@@ -133,6 +156,9 @@ type
       FDerivingAnchor        : Boolean;                    // re-entrancy guard
       procedure Connect(const ADbPath: string; AReadOnly: Boolean);
       procedure PrepareStatements;
+      { One-time stderr note when this DB lacks idx_symbols_name_nocase, so a
+        consumer paying for the scan is told why. See its implementation. }
+      procedure WarnIfNocaseIndexMissing;
       procedure EnsureTrigramTablePopulated;
       // v0.86 Task 4: read-only FTS5 detection -- does the string_fts virtual
       // table exist? (a SELECT on sqlite_master; issues no DDL). Used only on a
@@ -441,6 +467,45 @@ begin
       Result := not Q.IsEmpty;
     except
       Result := False;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+procedure TSQLiteSymbolStore.WarnIfNocaseIndexMissing;
+{ The case-insensitive RETRY is correct on any database, but it is only FAST on
+  one that carries idx_symbols_name_nocase -- and no index built before that DDL
+  landed does, because Migrate creates it and read verbs never call Migrate.
+  Measured on the shipped library-Win64.sqlite (2.17M symbols): a proptree
+  ancestor climb takes 55.2s without the index and 1.2s with it, because a climb
+  MISSES constantly (every ancestor naming an unindexed unit) and each miss is
+  what triggers the retry.
+
+  So: never silently. A consumer that hits 55s must be told why and what to do,
+  once per store, on stderr so it cannot corrupt --json on stdout. Saying nothing
+  is the exact failure mode this whole change exists to remove. }
+var
+  Q: TFDQuery;
+begin
+  if FNocaseWarned then Exit;
+  FNocaseWarned:= True;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT 1 FROM sqlite_master WHERE type = ''index'' ' +
+                   'AND name = ''idx_symbols_name_nocase'' LIMIT 1';
+    try
+      Q.Open;
+      if Q.IsEmpty then
+        { ErrOutput, not Writeln: stdout carries --json, and a note spliced into
+          it would break every machine consumer -- which is the class of bug this
+          change is fixing, so it must not introduce one. }
+        Writeln(ErrOutput, 'note: this index predates the case-insensitive name lookup, so a ' +
+                           'wrong-case or absent name costs a full scan. Run "drag-lint index ' +
+                           '<dir> --db <db>" once to add it (no --force-reparse needed).');
+    except
+      { a probe that cannot run must never take the query with it }
     end;
   finally
     Q.Free;
@@ -852,11 +917,11 @@ begin
     '  start_line, start_col, end_line, end_col) ' +
     'VALUES (:fid, :sid, :src, :kind, :owner, :txt, :sl, :sc, :el, :ec)');
   FQDeleteFileStringLiterals:= NewQuery('DELETE FROM string_literals WHERE file_id = :fid');
-  // COLLATE NOCASE: Delphi identifiers are case-insensitive, so `TEdit`,
-  // `tEdit` and `tedit` name the SAME symbol and must return the same rows.
-  // See CaseSensitiveLookups (interface section) for the whole rationale, the
-  // opt-out, and why the comparison is done in SQL rather than in Pascal.
-  FQFindByName          := NewQuery( 'SELECT * FROM symbols WHERE name = :name COLLATE NOCASE ORDER BY qualified_name');
+  // EXACT first (binary, served by idx_symbols_name), NOCASE only as a RETRY on
+  // zero rows -- see CaseSensitiveLookups for why it is this way round and not
+  // NOCASE-by-default.
+  FQFindByName          := NewQuery( 'SELECT * FROM symbols WHERE name = :name ORDER BY qualified_name');
+  FQFindByNameCI        := NewQuery( 'SELECT * FROM symbols WHERE name = :name COLLATE NOCASE ORDER BY qualified_name');
   // ORDERED, because it was not (ported from feat/autodoc-phase3; numbers
   // re-derived on this machine by tools/measure/phase1_verify.py against the
   // shipped C:\Projects\.drag-lint\library-Win64.sqlite, read-only).
@@ -898,7 +963,13 @@ begin
   // duplicate when two files each hold a full definition: it only orders them
   // deterministically. Indexer-side path normalisation is the other half and is
   // not done here. Asserted by tests/autotest/run_qname_row_order.ps1.
-  FQFindByQName         := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname COLLATE NOCASE ' +
+  FQFindByQNameCI       := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname COLLATE NOCASE ' +
+    'ORDER BY (CASE WHEN kind IN (''class'', ''interface'') ' +
+    '            AND COALESCE(TRIM(heritage), '''') = '''' ' +
+    '            AND end_line <= start_line THEN 1 ELSE 0 END), ' +
+    '(CASE WHEN impl_start_line IS NOT NULL AND impl_start_line > 0 THEN 0 ELSE 1 END), ' +
+    'file_id, start_line, id');
+  FQFindByQName         := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname ' +
     'ORDER BY (CASE WHEN kind IN (''class'', ''interface'') ' +
     '            AND COALESCE(TRIM(heritage), '''') = '''' ' +
     '            AND end_line <= start_line THEN 1 ELSE 0 END), ' +
@@ -2015,21 +2086,32 @@ begin
     FQFindByName.Open;
     while not FQFindByName.Eof do
     begin
-      // The SQL matched COLLATE NOCASE. Under the --case-sensitive opt-in,
-      // narrow to byte-exact here rather than in a second prepared statement:
-      // the row set is already index-served and small, and one statement means
-      // one place where the lookup's SQL can be got wrong.
-      if CaseSensitiveLookups and (FQFindByName.FieldByName('name').AsString <> AName) then
-      begin
-        FQFindByName.Next;
-        Continue;
-      end;
       List.Add(ReadSymbolFromQuery(FQFindByName));
       FQFindByName.Next;
     end;
     FQFindByName.Close;
+    { Nothing matched byte-exactly. Retry case-insensitively before reporting
+      absence -- see CaseSensitiveLookups. }
+    if (List.Count = 0) and not CaseSensitiveLookups then
+    begin
+      WarnIfNocaseIndexMissing;
+      if FQFindByNameCI.Active then FQFindByNameCI.Close;
+      FQFindByNameCI.ParamByName('name').AsString:= AName;
+      FQFindByNameCI.Open;
+      while not FQFindByNameCI.Eof do
+      begin
+        List.Add(ReadSymbolFromQuery(FQFindByNameCI));
+        FQFindByNameCI.Next;
+      end;
+    end;
     Result:= List.ToArray;
   finally
+    { Close in the FINALLY, not after the loop: ReadSymbolFromQuery can raise,
+      and a still-open dataset holds its cursor for the life of the store (these
+      are long-lived PREPARED queries, not locals). The pre-existing
+      close-after-the-loop left that open on any exception path. }
+    if FQFindByName  .Active then FQFindByName  .Close;
+    if FQFindByNameCI.Active then FQFindByNameCI.Close;
     List.Free;
   end;
 end; // function
@@ -2045,19 +2127,27 @@ begin
     FQFindByQName.Open;
     while not FQFindByQName.Eof do
     begin
-      // See FindSymbolsByExactName: SQL matches NOCASE, the rare
-      // --case-sensitive opt-in narrows to byte-exact here.
-      if CaseSensitiveLookups and (FQFindByQName.FieldByName('qualified_name').AsString <> AQName) then
-      begin
-        FQFindByQName.Next;
-        Continue;
-      end;
       List.Add(ReadSymbolFromQuery(FQFindByQName));
       FQFindByQName.Next;
     end;
     FQFindByQName.Close;
+    { Same exact-then-NOCASE-retry shape as FindSymbolsByExactName. }
+    if (List.Count = 0) and not CaseSensitiveLookups then
+    begin
+      WarnIfNocaseIndexMissing;
+      if FQFindByQNameCI.Active then FQFindByQNameCI.Close;
+      FQFindByQNameCI.ParamByName('qname').AsString:= AQName;
+      FQFindByQNameCI.Open;
+      while not FQFindByQNameCI.Eof do
+      begin
+        List.Add(ReadSymbolFromQuery(FQFindByQNameCI));
+        FQFindByQNameCI.Next;
+      end;
+    end;
     Result:= List.ToArray;
   finally
+    if FQFindByQName  .Active then FQFindByQName  .Close;
+    if FQFindByQNameCI.Active then FQFindByQNameCI.Close;
     List.Free;
   end;
 end; // function
@@ -5021,6 +5111,18 @@ begin
             if not FLateAncCache.TryGetValue(CacheKey, Late) then
             begin
               Late:= ResolveTypeNameToClass(A.Name, ScopeFile);
+              { CRITERION 5, and this path needs its OWN check. PickCandidate
+                short-circuits on a LONE candidate before any scope rule runs, so
+                a name with exactly one -- possibly wrong-framework -- definition
+                comes back unchecked. PropTree guards its own walk with the same
+                predicate, but this late resolution answers names that walk never
+                asks about, so relying on the caller left criterion 5 enforced on
+                one path and not the other. Measured when the branches met: a Vcl
+                class inherited an FMX-only ancestor's members.
+                Refuse rather than substitute -- absence over wrong -- and cache
+                the refusal like any other. }
+              if (Late.Id > 0) and CrossesGuiFramework(GetSymbolById(Cur), Late) then
+                Late:= Default(TSymbol);
               FLateAncCache.AddOrSetValue(CacheKey, Late); // a REFUSAL (Id=0) is cached too
             end;
             if (Late.Id > 0) and (Late.Kind in [skClass, skInterface]) then
