@@ -1,5 +1,50 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-08-02 (LATEST-77) -- **THE SHARED EXE NOW CARRIES ALL FOUR CONVERTER FIXES. 2.11 found + fixed. Read this before LATEST-76.**
+>
+> ### The exe other teams rely on is CURRENT
+>
+> `third_party\dll-win64\drag-lint.exe` rebuilt **2026-08-02 15:16** from `main` + **2.1, 2.2,
+> 2.3, 2.11**. `main` = `3b4a877`. Verified IN THE STAGED BINARY, not just the build output:
+> `--refs-as-leaves` accepted, `--force-reparse` works, `context` emits `impl-method`,
+> `TNotifyEvent` and `TFileName` both index. The exe is gitignored, so git will never tell you
+> this -- check its timestamp.
+>
+> **Strategy used, and why:** the four engine fixes are branch-INDEPENDENT, so they were
+> cherry-picked onto `main` and the exe built there. Phase 3 was NOT merged into main (still
+> ~7/17 tasks, 22 red suites). That gives other teams every fix without shipping half a feature.
+>
+> ### 2.11 -- strong type aliases, FIXED (`ec579a0`, on main as `3b4a877`)
+>
+> `TFileName = type string;` produced NO declaration row. The strong form carries **TWO `type:`
+> fields** and `ChildByField` returns the FIRST -- which is the `kType` KEYWORD, not a typeref --
+> so `TryWalkAlias` exited. That is exactly why plain aliases, subranges and enums were all fine
+> and only this shape was blind. `type string`'s target is `(declString (kString))`, not a typeref
+> at all. New `TryWalkStrongAlias` takes the LAST `type:` wrapper, **gated on the `type` keyword so
+> it can only ADD rows, never alter one**. Verified: `System.SysUtils.TFileName` -> `kind=type`,
+> target `string`. (`TDate`/`TTime` live in `System.pas`, not SysUtils -- their absence there is
+> expected, not a miss.) Unblocks the converter's TableName Auto-Match.
+>
+> ### >>> NEXT ACTIONS
+>
+> 1. **Merge `main` INTO `feat/autodoc-phase3`.** Now doubly worth it: it also brings back the four
+>    fixes so the branch and the shipped exe stop diverging. Expect a proptree conflict from
+>    `feat/proptree-ancestor-scope`.
+> 2. **Case-insensitive lookups by default** -- see LATEST-76 for the agreed design. **Find the
+>    THIRD substring lookup path first** (it matched `ANotifyEvent` for `TNotifyEvent`); the two
+>    known paths do not explain it, and `--name` is on every consumer's hot path.
+> 3. **2.9** `--refs-as-leaves` phantom leaves (HIGH) -- reproducible once main is merged in.
+> 4. Then the deferred: INVESTIGATE-ONLY the 22 T7 failures, then T8.
+>
+> ### The INBOX file keeps GROWING while it is being worked
+>
+> `docs/INBOX-converter-editor-phase-g-engine-findings.md` grew TWICE today -- 2.9/2.10 at 13:53,
+> then 2.11 at 15:05 -- and its title still says "8 findings" when there are 11. **Always re-check
+> its mtime before trusting an earlier reading.** The reply now carries an UPDATE section covering
+> 2.1/2.9/2.10/2.11 and asks them to ping on append.
+
+
+
 > ## RESUME 2026-08-02 (LATEST-76) -- **SUPERSEDES LATEST-75's next-action.** Converter 2.1 FIXED + verified on real RTL/VCL. The INBOX file GREW two new findings (2.9 HIGH, 2.10) after it was first read. Three decisions taken with the user: do NOT merge the branch into main, DO merge main into the branch, and make the indexer CASE-INSENSITIVE by default.
 >
 > ### >>> NEXT ACTIONS, in order
