@@ -33,3 +33,29 @@ These fixtures explain what each test case isolates or guards. The explanatory c
 - The precision of the guards (no false negatives)
 
 Blank-line separation or comment relocation achieves this without compromising the test.
+
+## 2026-08-02 Session: Analysis and Approach
+
+**Analysis Done:**
+1. Confirmed T7 HarvestInterfaceComment now harvests `//` comments adjacent-above declarations
+2. Identified that `//` explanatory comments in fixtures are being converted to `<summary>` tags
+3. Determined that DEFAULT_CFG is likely the 20th function now rendering (had no doc comment, now gets summary from harvested comment)
+4. Found that file encoding had issues when attempting edits (literal `r`n sequences appearing)
+
+**Clear Next Steps for returns.pas:**
+1. Update test runner:
+   - Line ~477: Change count check from 19 to 20
+   - Update header comments (NINETEEN -> TWENTY)
+2. Update fixture control list:
+   - Add DefaultCfg to the CONTROL list
+   - Explain that with T7 harvesting, DefaultCfg now has a summary so renders instead of being omitted
+
+**Clear Next Steps for preserve_tags.pas:**
+1. Identify all procedures with descriptive `//` comments adjacent-above declarations
+2. Add blank line(s) before the `///` doc comments to break adjacency
+3. Rationale: Keep explanatory comments but prevent them from being harvested as summaries
+
+**Known Issues:**
+- File encoding problems when using Edit tool (appeared as literal `r`n in output)
+- Suggest using direct git edits or PowerShell to avoid encoding issues
+- Index spans show 0..0 after fixture modifications (needs reindex)
