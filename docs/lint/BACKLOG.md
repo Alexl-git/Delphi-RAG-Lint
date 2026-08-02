@@ -1,5 +1,141 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-08-01 (LATEST-74) -- **T7 CODE COMPLETE and green on its own suite + 6 regressions + a byte-identical apply/strip round-trip. NOT FINISHED: two suites are RED on expectation churn the plan predicted. Committed anyway, deliberately, with the churn named.**
+>
+> ### What T7 shipped
+>
+> `HarvestText` in `DRagLint.Doc.Harvest.pas`; `EscXml` PROMOTED to
+> `DRagLint.Doc.Regions`' interface (one escaper, one behaviour); `TDocFacts.HarvestedRemarks`;
+> `HarvestInterfaceComment` called from `TDocFactsBuilder.Build`; `EmitHarvestedRemarks` shared by
+> **both** of `MergeComment`'s paths (fresh and repair). Suite
+> `tests/autodoc/run_doc_p3_harvest_text.ps1` + fixture `fixtures/docp3/harvest_text.pas`.
+>
+> **Three defects found and fixed while wiring it, each measured, not reasoned:**
+>
+> 1. **The scan must skip the existing doc region.** `MergeComment` writes its `///` block BETWEEN
+>    the harvested `//` comment and the declaration, so a second run scanning up from the
+>    declaration met `///` first, got `hrNone`, and DROPPED the summary the first run wrote.
+>    `HarvestInterfaceComment` walks up over the region (blank-line tolerance = `FindDocRegionAbove`'s
+>    `AllowGap=1`) so the candidate is the comment above it.
+> 2. **The harvested paragraph DOUBLED on every apply cycle.** `StripManagedBlock` removes only the
+>    `AUTO_BEGIN..AUTO_END` fence, so harvested prose (which sits above the fence) arrived in the
+>    repair path's preserved-prose slot looking hand-written -- re-emitted as prose AND regenerated.
+>    Fixed by dropping `AUTO_MARK`-carrying lines from that slot: marker-keyed ownership, the same
+>    rule the rest of the unit uses. Same defect SHAPE as the nested-`<remarks>` duplication T3h fixed.
+> 3. **`--strip` could not undo what `--apply` wrote.** Harvested remarks match neither strip rule 1
+>    (no recognized opening tag before the marker) nor rule 2 (no fence), so apply-then-strip left the
+>    marked line AND an orphaned `<remarks>` pair, with a `drag-lint:auto` marker surviving a verb
+>    whose entire contract is that none do. Added **rule 1b** to `TDocStripper`. Verified:
+>    apply -> strip is now **byte-identical to the pre-apply fixture** (MD5 `DDC392A8...` both sides).
+>
+> ### >>> NEXT ACTION -- the two RED suites. This is a FIXTURE decision, not a code fix.
+>
+> | suite | FAIL | cause |
+> |---|---|---|
+> | `run_doc_p3_preserve_tags.ps1` | 6 | its fixtures carry descriptive `//` comments above the declarations; those are now legitimately harvested into `<summary>`, and assertions written as "NOT wrapped in a fabricated `<summary>`" cannot tell a real harvest from the fabrication they were written to catch |
+> | `run_doc_p3_returns.ps1` | 1 | `CONTROL: exactly NINETEEN Observed: lines` now counts **20** -- a routine that had nothing to say emitted no block at all under T3's omit-when-empty, and now emits one because the harvest gave it a summary, so its `<returns>` renders too |
+>
+> **VERIFIED legitimate, not a regression:** the new summaries are verbatim the fixtures' own `//`
+> comments (transcript: `ClassLag`, `TAlpha/TBeta.Same`, `PlainSum`, `PrevIdx` ... all carry their
+> own fixture prose). Nothing is fabricated.
+>
+> **Recommended fix -- do NOT weaken the assertions.** `preserve_tags`' checks are load-bearing
+> against a real prior defect. Prefer moving those fixtures' descriptive comments so they are not
+> adjacent-above a declaration (e.g. below the declaration, or separated by a line of code), which
+> keeps every assertion's original intent intact. Only `returns`' NINETEEN -> TWENTY is a genuine
+> count update, and it should be re-derived from the control list, not just incremented.
+>
+> ### Git
+>
+> `feat/autodoc-phase3`: `03dafb7` (T6) then T7. **T7 is committed with these two suites RED and
+> said so in its commit message** -- the alternative was leaving three measured fixes uncommitted.
+> Push still held by the user.
+>
+> ### Index gap filed this session
+>
+> `docs/INBOX-parser-var-named-dynamic.md` -- a var entry named `Dynamic` (or `Virtual`) fails to
+> parse unless it is FIRST in its `var` block. Class **unsupported**; hits our own
+> `src/doc/DRagLint.Doc.SymbolFacts.pas:1407` on every self-index run. Bisected to a 6-line repro;
+> logged in `stats/draglint-gaps.log`.
+
+> ## RESUME 2026-08-01 (LATEST-73) -- **T6 COMPLETE + committed (`03dafb7`). NEXT = T7. One measured hazard: the STAGED exe is main's build, so the whole autodoc battery is RED on its own default `-Exe` and only green with `-Exe` pointed at the linked build.**
+>
+> **Incoming messages: NONE.** Every `docs/INBOX-*.md` has a matching REPLY; nothing has
+> arrived since `INBOX-REPLY-exe-default-0xC000007B-2026-07-29.md` (Jul 29 19:26). The
+> `wt-merge-converter` worktree's INBOX files are Jul 30 08:39 **checkout** timestamps, not new mail.
+>
+> ### T6 -- harvester boundary scan + acceptance guards. DONE.
+>
+> New unit `src/doc/DRagLint.Doc.Harvest.pas` (`HarvestScan`, `THarvestReason`, `THarvestResult`,
+> `HarvestReasonToString`), reached from the CLI as `selftest harvest --file <p> --line <n>`.
+> Fixture `tests/autodoc/fixtures/docp3/harvest_scan.pas`, runner
+> `tests/autodoc/run_doc_p3_harvest_scan.ps1` -- **33 checks, all PASS**, all eight verdicts observed.
+>
+> **Three decisions the plan left open, fixed and documented in the unit's header:**
+> guard precedence is stated explicitly (hrEmpty before hrBanner -- an empty string satisfies the
+> banner pattern too; hrTrailer on LAYOUT before any content is read); a **compiler directive is
+> CODE, not a comment** (`{$IFDEF X}` read as a comment is harvestable -- `$R *.res` passes every
+> content guard -- so the scan stops at one); and **blank lines are trimmed from BOTH ends** of the
+> accumulated block, not only the top, so T7 is not handed a trailing empty paragraph.
+>
+> **Engine-verified, not asserted:** mutation M1 (reject on ANY `end;` stop) reddens **CaseAfterEnd
+> alone**, CaseTrailer still green -- so the tie-breaker's *accepting* direction is load-bearing.
+> Restored and re-verified green.
+>
+> A note for whoever writes the next brace comment: the unit's own header had to be rewritten as
+> `//` lines because it spells the brace delimiters, and a brace comment ends at the first close
+> brace inside it. The first draft did not compile -- it demonstrated the exact defect
+> `hrNestedBrace` exists to catch.
+>
+> ### HAZARD (measured, pre-existing, NOT introduced by T6)
+>
+> `third_party\dll-win64\drag-lint.exe` is **main's** build (staged Jul 29 19:22 by LATEST-71 for the
+> converter/proptree group). It has no `document --strip` -- a Phase 3 **T2** feature -- and no
+> `selftest harvest`. All ~41 `tests/autodoc/` runners default `-Exe` at that staged copy, so **the
+> autodoc battery is RED on its own default today**. Measured, not inferred:
+>
+> | suite | default `-Exe` (staged/main) | `-Exe` linked branch build |
+> |---|---|---|
+> | `run_doc_p3_strip.ps1` | 11 FAIL lines, verdict FAIL | 0 FAIL, **PASS** |
+> | `run_doc_p3_provenance.ps1` | 6 FAIL lines, verdict FAIL | 0 FAIL, **PASS** |
+> | `run_doc_p3_harvest_scan.ps1` (new) | would FAIL (no subverb) | 0 FAIL, **PASS** |
+>
+> **T6's runner deliberately keeps the suite convention** (default = the staged copy) rather than
+> forking it: this is ONE cause with ONE fix -- restage when the branch merges -- and forty-one
+> suites disagreeing about their default would hide it. **Until then, run the autodoc battery with
+> `-Exe c:\Projects\Delphi-RAG-lint\src\cli\Win64\Debug\drag-lint.exe`.** Any "battery green" claim
+> that does not name the exe is meaningless right now.
+>
+> This session built with a scratchpad wrapper that **does NOT stage** into `third_party\dll-win64`,
+> deliberately: overwriting main's staged build with a `feat/autodoc-phase3` one would reintroduce
+> exactly the defect LATEST-71 fixed for the other group.
+>
+> ### Git
+>
+> `feat/autodoc-phase3` @ **`03dafb7`** (T6). Push still held by the user. Tracked files dirty from
+> earlier sessions are unchanged (`build/build_draglint_win64.bat`, the two Win32 BPL/DCP binaries,
+> `third_party/dll-win64/drag-lint.json`, two docs).
+>
+> ### >>> NEXT ACTION
+>
+> **T7** -- harvester text transformation and interface-side wiring. Plan section "Task 7", line ~861
+> of `docs/superpowers/plans/2026-07-24-autodocument-phase3-harvest-and-facts.md`.
+> Then T8, T9, then the four facts T10-T14, then T15-T17.
+
+> ## QUEUED FEATURE 2026-08-01 -- **`Assigned` section in the hover popup + auto-document. Implement SOON, after Phase 3 reaches a committable point. NOT one of Phase 3's 17 tasks.**
+>
+> User request: for objects (and maybe any variable), show the source lines that **create or
+> assign** them -- exactly as `<returns>` already shows the `Result := ...` sites. Section name is
+> literally **`Assigned`**. Cap at **5**, configurable.
+>
+> The cap has a precedent to copy rather than reinvent: `docs.max_callers` (default 5,
+> `LoadDocMaxCallers` at `src/cli/DRagLint.CLI.pas:1071`, manifest read/validate/write at
+> `src/index/DRagLint.Index.Manifest.pas:437/649/737`, capped at render in
+> `src/doc/DRagLint.Doc.Facts.pas:783-790`). The new key is **`docs.max_assigned`, default 5**.
+>
+> Full request of record, with anchors and the four open design questions:
+> **`docs/lint/FEATURE-assigned-section-autodoc-hover.md`**. Not started -- no branch, no spec.
+
 > ## RESUME 2026-07-29 (LATEST-71) -- **INTERRUPT HANDLED: the shared binaries were built from the WRONG BRANCH, and the default `-Exe` could not start. Both fixed + staged. Plan NOT advanced: T5 is still NEXT.**
 >
 > This session did **no plan work**. The user redirected to incoming messages first. Read this block,
