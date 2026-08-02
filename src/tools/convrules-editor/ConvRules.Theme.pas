@@ -37,7 +37,13 @@ function ResolveThemeMode(APref: TThemePref; const AIdeTheme: string): TThemeMod
 /// <param name="AWindowColor">The style's resolved window colour, as a TColorRef-style
 ///   BGR integer.</param>
 /// <param name="AMode">The mode in force.</param>
-/// <returns>A colour guaranteed to differ from AWindowColor.</returns>
+/// <returns>AWindowColor tinted towards green, and so different from AWindowColor for
+///   every ground a real style produces. The tint is a fixed per-channel step that
+///   saturates at 0 and 255, so a ground already sitting at those clamps comes back
+///   unchanged: pure white ($00FFFFFF) in dark mode, and a ground with red = 0 AND
+///   blue = 0 (fully saturated green) in light mode. Neither occurs in practice --
+///   dark mode is only ever applied to a dark window colour -- but do not rely on the
+///   difference for an arbitrary caller-supplied colour.</returns>
 /// <remarks>Light mode tints green DOWN from the window colour; dark mode tints UP, so
 /// the marking reads as "highlighted" against either ground.</remarks>
 function ExamineRowColor(AWindowColor: Integer; AMode: TThemeMode): Integer;
