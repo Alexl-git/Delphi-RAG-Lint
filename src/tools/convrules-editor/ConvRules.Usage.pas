@@ -55,6 +55,26 @@ function CandidatesFor(const AFromPaths: TArray<string>): TArray<string>;
 /// dot and is therefore NOT seen.</remarks>
 function ScanPasText(const AText: string; const ACandidates: TArray<string>): TArray<string>;
 
+/// <summary>PURE: every unit named in a .pas text's uses clauses -- BOTH the interface
+/// and the implementation one, because a unit used only in the implementation still has
+/// to be converted.</summary>
+/// <param name="APasText">The whole .pas (or .dpr) as text.</param>
+/// <returns>Unit names exactly as written, de-duplicated case-insensitively, in
+/// first-seen order. A dotted name stays ONE name: 'Winapi.Windows' is a single unit,
+/// never 'Winapi' plus 'Windows'.</returns>
+/// <remarks>A clause runs to its terminating ';', not to end of line, so a multi-line
+/// clause is harvested whole; the .dpr "Foo in 'Foo.pas'" form contributes 'Foo'.
+/// A 'uses' inside a '//', a brace or a '(* *)' comment, or inside a string literal, is
+/// not a clause -- and neither is an identifier that merely contains it ('MyUses',
+/// 'UsesFoo') nor a qualified member ('X.Uses').
+/// KNOWN LIMITATIONS, both deliberate and both pinned by the test suite: (1) brace
+/// comments are NOT treated as nesting -- the first closing brace ends the comment,
+/// which is Delphi's own rule, so a 'uses' following an inner closing brace IS
+/// harvested; (2) no conditional compilation is evaluated -- a $IFDEF arm the compiler
+/// would discard still contributes its units. For a candidate work list, over-reporting
+/// is the safe direction: nothing here creates a rule, and the user deletes rows.</remarks>
+function ScanUsesClauses(const APasText: string): TArray<string>;
+
 /// <summary>PURE: union of several scans, de-duplicated case-insensitively.</summary>
 function MergeUsage(const AParts: TArray<TArray<string>>): TArray<string>;
 
@@ -307,6 +327,156 @@ end;
 function TNameSet.ToArray: TArray<string>;
 begin
   Result := FOrder.ToArray;
+end;
+
+function IsIdentStartCh(C: Char): Boolean;
+begin
+  Result := CharInSet(C, ['A'..'Z', 'a'..'z', '_']);
+end;
+
+function IsIdentCh(C: Char): Boolean;
+begin
+  Result := CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']);
+end;
+
+{ If a non-code run starts at AIdx -- a '//' line comment, a brace comment, a '(* *)'
+  comment, or a single-quoted string literal -- advances AIdx past it and returns True;
+  otherwise leaves AIdx alone and returns False. Brace comments do not nest (Delphi's
+  own rule): the first closing brace ends the comment. An unterminated run consumes to
+  end of text, which is the only sane thing to do with a truncated file. }
+function SkipNonCode(const AText: string; var AIdx: Integer): Boolean;
+var
+  N: Integer;
+begin
+  Result := True;
+  N := Length(AText);
+  if (AIdx < N) and (AText[AIdx] = '/') and (AText[AIdx + 1] = '/') then
+  begin
+    while (AIdx <= N) and (AText[AIdx] <> #13) and (AText[AIdx] <> #10) do Inc(AIdx);
+    Exit;
+  end;
+  if AText[AIdx] = '{' then
+  begin
+    Inc(AIdx);
+    while (AIdx <= N) and (AText[AIdx] <> '}') do Inc(AIdx);
+    if AIdx <= N then Inc(AIdx);
+    Exit;
+  end;
+  if (AIdx < N) and (AText[AIdx] = '(') and (AText[AIdx + 1] = '*') then
+  begin
+    Inc(AIdx, 2);
+    while (AIdx < N) and not ((AText[AIdx] = '*') and (AText[AIdx + 1] = ')')) do Inc(AIdx);
+    if AIdx < N then Inc(AIdx, 2) else AIdx := N + 1;
+    Exit;
+  end;
+  if AText[AIdx] = '''' then
+  begin
+    Inc(AIdx);
+    while AIdx <= N do
+    begin
+      if AText[AIdx] = '''' then
+      begin
+        if (AIdx < N) and (AText[AIdx + 1] = '''') then
+          Inc(AIdx)                       // '' inside a literal: an escaped quote
+        else
+        begin
+          Inc(AIdx);                      // this quote closes the literal
+          Exit;
+        end;
+      end;
+      Inc(AIdx);
+    end;
+    Exit;
+  end;
+  Result := False;
+end;
+
+function ScanUsesClauses(const APasText: string): TArray<string>;
+var
+  NameSet: TNameSet;
+  i, j, N: Integer;
+  Tok    : string;
+  PrevSig: Char;      // last significant code character; guards 'X.Uses'
+
+  { Reads the comma-separated clause starting at AIdx up to the terminating ';' (or end
+    of text) and adds each entry's leading dotted identifier. Comment and string runs
+    INSIDE the clause are skipped, which is what reduces "Foo in 'Foo.pas'" to 'Foo'. }
+  procedure HarvestClause(var AIdx: Integer);
+  var
+    Entry: string;
+
+    procedure FlushEntry;
+    var
+      k : Integer;
+      Nm: string;
+    begin
+      Entry := Trim(Entry);
+      Nm    := '';
+      if (Entry <> '') and IsIdentStartCh(Entry[1]) then
+      begin
+        k := 1;
+        while (k <= Length(Entry)) and (IsIdentCh(Entry[k]) or (Entry[k] = '.')) do Inc(k);
+        Nm := Copy(Entry, 1, k - 1);
+        while (Nm <> '') and (Nm[Length(Nm)] = '.') do SetLength(Nm, Length(Nm) - 1);
+      end;
+      if Nm <> '' then NameSet.Add(Nm);
+      Entry := '';
+    end;
+
+  begin
+    Entry := '';
+    while AIdx <= N do
+    begin
+      if SkipNonCode(APasText, AIdx) then
+      begin
+        Entry := Entry + ' ';   // a skipped run still separates tokens
+        Continue;
+      end;
+      if APasText[AIdx] = ';' then
+      begin
+        Inc(AIdx);
+        Break;
+      end;
+      if APasText[AIdx] = ',' then
+      begin
+        FlushEntry;
+        Inc(AIdx);
+        Continue;
+      end;
+      Entry := Entry + APasText[AIdx];
+      Inc(AIdx);
+    end;
+    FlushEntry;               // the entry before ';' (or before end of text)
+  end;
+
+begin
+  NameSet := TNameSet.Create;
+  try
+    N := Length(APasText);
+    PrevSig := #0;
+    i := 1;
+    while i <= N do
+    begin
+      if SkipNonCode(APasText, i) then Continue;   // PrevSig deliberately unchanged
+      if IsIdentStartCh(APasText[i]) then
+      begin
+        j := i;
+        while (j <= N) and IsIdentCh(APasText[j]) do Inc(j);
+        Tok := Copy(APasText, i, j - i);
+        i   := j;
+        // Whole-token match, so 'MyUses'/'UsesFoo' never qualify; PrevSig rules out a
+        // qualified member access like 'X.Uses'.
+        if SameText(Tok, 'uses') and (PrevSig <> '.') then HarvestClause(i);
+        PrevSig := 'x';       // an identifier: significant, and definitely not a '.'
+        Continue;
+      end;
+      if APasText[i] > ' ' then PrevSig := APasText[i];
+      Inc(i);
+    end;
+    Result := NameSet.ToArray;
+  finally
+    NameSet.Free;
+  end;
 end;
 
 function CandidatesFor(const AFromPaths: TArray<string>): TArray<string>;

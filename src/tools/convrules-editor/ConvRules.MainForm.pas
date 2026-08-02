@@ -86,6 +86,12 @@ type
     FUsedProps  : TArray<string>;     // Examine result; empty = no examination active
     FUsedFiles  : TArray<string>;     // the examined file set, retained for the session
     FExamineInfo: string;             // status summary, re-shown when blocks change
+    // Units harvested from the examined .pas files (ConvRules.Usage.ScanUsesClauses).
+    // CANDIDATES ONLY -- never rules: RefreshUnitList shows them as extra rows under
+    // the real #use/#unuse/#useswap ones and nothing here touches FBook, so an Examine
+    // can never dirty the rule book. Filtered against the current rules at DISPLAY
+    // time, so authoring a rule for one makes its candidate row go away by itself.
+    FUnitCandidates: TArray<string>;
     FPool     : TListBox;             // unassigned T pool
     FPoolFind : TEdit;
     // "Go to definition of <T>": ONE popup shared by the grid and the pool, because
@@ -569,7 +575,8 @@ begin
   AddBtn('+ Remove unit',
     'Add #unuse <unit> -- a unit to REMOVE from the uses clause', DoAddUnuse);
   AddBtn('Delete unit rule',
-    'Delete the unit rule selected on the Unit Rules tab', DoDeleteUnit);
+    'Delete the unit rule selected on the Unit Rules tab '
+    + '(or dismiss the Examine candidate selected there)', DoDeleteUnit);
   AddBtn('Derive units',
     'Add #use/#unuse from every #convert To/From type (deduped)', DoDeriveUnits);
   AddBtn('Check units', 'Report #use/#unuse conflicts (ADD wins)', DoCheckUnits);
@@ -584,7 +591,7 @@ begin
   FTbUnassign.Enabled   := (FActiveHdr >= 0) and (FGrid.Row > 0);
   FTbFindInFrom.Enabled := (FActiveHdr >= 0) and (FPool.ItemIndex >= 0);
   FTbExamine.Enabled    := (FActiveHdr >= 0);
-  FTbClearExamine.Enabled := Length(FUsedProps) > 0;
+  FTbClearExamine.Enabled := (Length(FUsedProps) > 0) or (Length(FUnitCandidates) > 0);
   FTbMappings.Enabled   := (FActiveHdr >= 0);
 end;
 
@@ -1693,7 +1700,11 @@ end;
   down from thousands of leaves to the handful a real form touches. Read-only -- only
   TFile.ReadAllText is called on the chosen files, nothing is ever written. Requires a
   selected #convert rule (FActiveHdr >= 0); the From class comes from FBook, not the
-  picker text, so it is always in sync with the grid currently on screen. }
+  picker text, so it is always in sync with the grid currently on screen.
+
+  The same .pas texts are also run through ScanUsesClauses, and the units they name
+  become CANDIDATE rows on the Unit Rules tab -- a work list, not an edit. The rule
+  book is not touched by any of this. }
 procedure TConvRulesForm.DoExamine(Sender: TObject);
 var
   Dlg  : TOpenDialog;
@@ -1703,6 +1714,8 @@ var
   U    : TUsageSet;
   L    : TPropLeaf;
   F    : string;
+  T    : string;
+  UnitParts: TArray<TArray<string>>;
   FromBare: string;
   DotPos  : Integer;
 begin
@@ -1753,26 +1766,41 @@ begin
   end;
 
   FUsedProps := U.Names;
-  FExamineInfo := Format('Examined %d file(s): %d of %d From properties used.',
-    [U.DfmCount + U.PasCount, Length(U.Names), Length(Paths)]);
+
+  // The same .pas texts also answer "which units does this form pull in" -- harvest
+  // them into the Unit Rules tab as CANDIDATES. Deliberately additive: it never
+  // creates, edits or deletes a rule, so Examine stays the read-only action it says
+  // it is. RefreshUnitList does the "already has a rule" filtering.
+  UnitParts := nil;
+  for T in Pass do
+    UnitParts := UnitParts + [ScanUsesClauses(T)];
+  FUnitCandidates := MergeUsage(UnitParts);
+
+  FExamineInfo := Format('Examined %d file(s): %d of %d From properties used; ' +
+    '%d unit(s) offered on the Unit Rules tab.',
+    [U.DfmCount + U.PasCount, Length(U.Names), Length(Paths),
+     Length(FUnitCandidates)]);
   if Length(Bad) > 0 then
     FExamineInfo := FExamineInfo + ' Unreadable: ' + string.Join(', ', Bad);
   SetStatus(FExamineInfo);
   FGrid.Invalidate;
+  RefreshUnitList;        // draws the harvested units as candidate rows
   UpdateToolbarEnabled;   // "Clear marks" is gated on there BEING an examination
 
   if Length(U.Missing) > 0 then
     ShowUsageReport(U.Missing);
 end;
 
-{ Drop the current examination -- the session-state fields only; the rule model
-  itself is untouched. }
+{ Drop the current examination -- the session-state fields only (green marks AND the
+  harvested unit candidates); the rule model itself is untouched. }
 procedure TConvRulesForm.DoClearExamine(Sender: TObject);
 begin
   FUsedProps := nil;
   FUsedFiles := nil;
+  FUnitCandidates := nil;
   FExamineInfo := '';
   FGrid.Invalidate;
+  RefreshUnitList;        // takes the candidate rows back off the Unit Rules tab
   UpdateToolbarEnabled;   // nothing left to clear -> "Clear marks" goes back down
   SetStatus('Examination cleared.');
 end;
@@ -2501,11 +2529,17 @@ begin
   else FBook.Nodes.Insert(Heads[0], ANode);
 end;
 
+{ The list shows the rule book's unit directives first, then -- underneath them -- the
+  units Examine harvested that STILL have no rule of their own (Item.Data = nil marks a
+  candidate). Candidates are re-filtered on every refresh rather than pruned once, so
+  authoring a #use/#unuse/#useswap for one silently retires its candidate row, and one
+  source unit can fan out to several replacements through the existing #useswap. }
 procedure TConvRulesForm.RefreshUnitList;
 var
   N   : TRuleNode;
   Item: TListItem;
   S   : TUnitSets;
+  Cand: string;
 
   function InConflict(const AUnit: string): Boolean;
   var c: string;
@@ -2514,6 +2548,21 @@ var
     if AUnit = '' then Exit;
     for c in S.Conflicts do
       if SameText(c, AUnit) then Exit(True);
+  end;
+
+  { Does a unit directive already speak about AUnit? SwapOld, not SwapNew: a #useswap's
+    new units are replacements the legacy form would not itself have used. }
+  function HasRuleFor(const AUnit: string): Boolean;
+  var n: TRuleNode;
+  begin
+    Result := True;
+    for n in FBook.UnitNodes do
+      case n.Kind of
+        rnkUse    : if SameText(n.UseUnit,   AUnit) then Exit;
+        rnkUnuse  : if SameText(n.UnuseUnit, AUnit) then Exit;
+        rnkUseSwap: if SameText(n.SwapOld,   AUnit) then Exit;
+      end;
+    Result := False;
   end;
 
 begin
@@ -2550,6 +2599,17 @@ begin
       end;
       Item.Data := Pointer(N);
     end;
+
+    for Cand in FUnitCandidates do
+      if not HasRuleFor(Cand) then
+      begin
+        Item := FUnitList.Items.Add;
+        Item.Caption := '(candidate)';
+        Item.SubItems.Add(Cand);
+        Item.SubItems.Add('');
+        Item.SubItems.Add('from Examine');
+        Item.Data := nil;   // NOT a rule -- see DoDeleteUnit
+      end;
   finally
     FUnitList.Items.EndUpdate;
   end;
@@ -2622,7 +2682,10 @@ end;
 
 procedure TConvRulesForm.DoDeleteUnit(Sender: TObject);
 var
-  N: TRuleNode;
+  N   : TRuleNode;
+  Cand: string;
+  Kept: TArray<string>;
+  U   : string;
 begin
   if FUnitList.Selected = nil then
   begin
@@ -2630,7 +2693,22 @@ begin
     Exit;
   end;
   N := TRuleNode(FUnitList.Selected.Data);
-  if N = nil then Exit;
+
+  // Data = nil is an Examine CANDIDATE, not a rule: dismissing it drops it from the
+  // harvested set only. The rule book is untouched, so no SyncRawFromModel either.
+  if N = nil then
+  begin
+    Cand := FUnitList.Selected.SubItems[0];
+    Kept := nil;
+    for U in FUnitCandidates do
+      if not SameText(U, Cand) then Kept := Kept + [U];
+    FUnitCandidates := Kept;
+    RefreshUnitList;
+    UpdateToolbarEnabled;
+    SetStatus('Dismissed candidate unit ' + Cand + '.');
+    Exit;
+  end;
+
   FBook.Nodes.Remove(N); // TObjectList owns its items -> frees N
   RefreshUnitList;
   SyncRawFromModel;

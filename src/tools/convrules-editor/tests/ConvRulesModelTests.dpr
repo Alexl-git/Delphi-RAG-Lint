@@ -2281,6 +2281,94 @@ begin
     'a name WITH a leaf is not Missing');
 end;
 
+{ Harvesting the units a form actually uses is what turns the Unit Rules tab from a blank
+  page into a work list. Both clauses count; a unit used only in the implementation still
+  has to be converted. }
+procedure TestScanUsesClauses;
+const
+  SRC =
+    'unit Foo;'#13#10 +
+    'interface'#13#10 +
+    'uses'#13#10 +
+    '  Winapi.Windows, FLDRDEF,'#13#10 +
+    '  DBTables;'#13#10 +
+    'implementation'#13#10 +
+    'uses BDEConst, Vcl.Forms;'#13#10 +
+    'end.'#13#10;
+var
+  u: TArray<string>;
+  function Has(const N: string): Boolean;
+  var s: string;
+  begin
+    for s in u do if SameText(s, N) then Exit(True);
+    Result := False;
+  end;
+begin
+  u := ScanUsesClauses(SRC);
+  Check('uses.interface.harvested', Has('FLDRDEF'), 'FLDRDEF');
+  Check('uses.multiline.harvested', Has('DBTables'), 'DBTables (second line of the clause)');
+  Check('uses.implementation.harvested', Has('BDEConst'), 'BDEConst');
+  Check('uses.dotted.kept.whole', Has('Winapi.Windows'), 'a dotted unit is ONE name');
+  Check('uses.count', Length(u) = 5, IntToStr(Length(u)));
+
+  // 'uses' inside a comment or a string must not create phantom units.
+  Check('uses.in.comment.ignored',
+    Length(ScanUsesClauses('// uses Ghost;'#13#10'implementation'#13#10)) = 0, 'comment');
+end;
+
+{ Pins the exact edges ScanUsesClauses's DocInsight claims -- both the things it DOES
+  handle (the three Delphi comment forms, string literals, identifiers that merely
+  CONTAIN 'uses', a qualified '.Uses' member, the .dpr 'unit in file' form,
+  case-insensitive de-duplication) and the two things it deliberately does NOT: brace
+  comments do not nest (which is Delphi's own rule, not a bug), and no IFDEF arm is
+  ever evaluated, so a disabled arm's units are harvested too. Making a known-imperfect
+  behaviour visible in the suite is the point: it cannot then change unnoticed. }
+procedure TestScanUsesClausesLimits;
+
+  function Names(const ASrc: string): string;
+  begin
+    Result := string.Join(',', ScanUsesClauses(ASrc));
+  end;
+
+begin
+  Check('uses.brace.comment.ignored', Names('{ uses Ghost; }'#13#10) = '', Names('{ uses Ghost; }'));
+  Check('uses.starcomment.ignored', Names('(* uses Ghost; *)'#13#10) = '',
+    Names('(* uses Ghost; *)'));
+  Check('uses.string.ignored', Names('S := ''uses Ghost;'';'#13#10) = '',
+    Names('S := ''uses Ghost;'';'));
+  // Also written to DISCRIMINATE: a scanner matching 'uses' as a prefix/substring of a
+  // token harvests 'Ghost' from the argument list behind the bogus keyword. The obvious
+  // 'MyUses := 1;' form would have passed either way (':= 1' harvests nothing).
+  Check('uses.prefixed.identifier.ignored',
+    Names('procedure UsesFoo(A, Ghost: Integer);'#13#10) = '',
+    Names('procedure UsesFoo(A, Ghost: Integer);'));
+  Check('uses.suffixed.identifier.ignored', Names('MyUses(A, Ghost);'#13#10) = '',
+    Names('MyUses(A, Ghost);'));
+  // Written so it DISCRIMINATES: drop the '.'-guard and this harvests a phantom 'Ghost'
+  // (the clause after the bogus keyword runs to the ';'). 'X.Uses := 1;' would have
+  // passed either way, because ':= 1' has no leading identifier to harvest.
+  Check('uses.qualified.member.ignored', Names('Call(A.Uses, Ghost);'#13#10) = '',
+    Names('Call(A.Uses, Ghost);'));
+  Check('uses.dpr.in.file.form',
+    Names('uses Foo in ''Foo.pas'', Bar;'#13#10) = 'Foo,Bar',
+    Names('uses Foo in ''Foo.pas'', Bar;'));
+  Check('uses.dedup.case.insensitive',
+    Names('uses Foo;'#13#10'implementation'#13#10'uses FOO, Bar;'#13#10) = 'Foo,Bar',
+    Names('uses Foo;'#13#10'implementation'#13#10'uses FOO, Bar;'));
+
+  // LIMITATION (and Delphi's own rule): '{' comments do not nest, so the FIRST '}'
+  // closes the comment and what follows it is real code.
+  Check('uses.brace.comments.do.not.nest',
+    Names('{ outer { inner } uses Ghost; }'#13#10) = 'Ghost',
+    Names('{ outer { inner } uses Ghost; }'));
+
+  // LIMITATION: no conditional compilation is evaluated -- a disabled arm still
+  // contributes its units. For a candidate work list that over-reports on purpose.
+  Check('uses.ifdef.arm.still.harvested',
+    Names('{$IFDEF NEVER}'#13#10'uses Ghost;'#13#10'{$ENDIF}'#13#10) = 'Ghost',
+    Names('{$IFDEF NEVER}'#13#10'uses Ghost;'#13#10'{$ENDIF}'));
+end;
+
 { Review fix (Important 1 + 2): a terminator character sitting inside a QUOTED literal
   inside a <...> or (...) container must not be mistaken for the container's real
   terminator. For <...> this used to pop the block stack early on a mid-list item's own
@@ -3521,6 +3609,8 @@ begin
     TestScanPasAndMatch;
     TestScanPasEndOfTextSafety;
     TestComputeUsage;
+    TestScanUsesClauses;
+    TestScanUsesClausesLimits;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;
