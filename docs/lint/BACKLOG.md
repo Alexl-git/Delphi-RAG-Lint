@@ -42,6 +42,27 @@
 > check 3 passes); repair does not use it. Two questions for the user are at the end of the triage.
 > **No engine change was made.** T8 remains unstarted.
 >
+> ### WHAT IS LEFT OF PHASE 3 -- verified from `git log`, not from these resume blocks
+>
+> **The plan is T1-T17, SEVENTEEN tasks.** 15 more were INSERTED mid-execution (T3b-T3k, T4b-T4f),
+> so there are **32 work items, 22 done, 10 left**.
+>
+> **DONE: T1-T7 + all 15 inserted.** T5 `0c78b06`/`284d7a0`, T6 `03dafb7`, T7 `9b10a65`+`6425a58`.
+> **NOT STARTED: T8, T9, T10, T11, T12, T13, T14, T15, T16, T17.** No commit on the branch touches
+> any of them, so nothing is half-built. A full status board now sits at the TOP of
+> `.superpowers/sdd/2026-07-24-autodocument-phase3-harvest-and-facts/progress.md` -- **that ledger's
+> narrative stops at T4f on 2026-07-29 and never recorded T5/T6/T7**, so a session resuming from it
+> alone would redo three finished tasks. The board fixes that.
+>
+> **THE 22 RED CHECKS ARE T9's WORK.** T9 is "Harvester -- drift protection, IDEMPOTENCY, strip
+> round-trip", and all 22 are idempotency failures caused by harvesting; they surfaced early only
+> because T7 shipped harvest without T8/T9 behind it. So the ruling requested in
+> `TRIAGE-the-22-harvest-repair.md` is **T9's central design decision**, not a side bug report --
+> answering it unblocks the task. Note T9's own refresh table already says a NON-marked summary is
+> "hand-written -- never touch", which supports the triage's recommendation; but that table governs
+> the SUMMARY only and is silent on the sibling tags the repair branch currently deletes, which is
+> precisely the gap needing the ruling.
+>
 > ### Fixed this session
 >
 > * **2.9 `--refs-as-leaves` phantom leaves (converter HIGH) -- FIXED BY THE MERGE ITSELF.**
