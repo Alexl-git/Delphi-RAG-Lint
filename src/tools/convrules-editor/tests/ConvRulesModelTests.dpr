@@ -3293,20 +3293,31 @@ begin
     string.Join(',', MappingWhenValues(Nodes, 'M')));
 
   Cases := MappingCasesOf(Nodes, 'M', ['stOK', 'stCancel']);
+  // Every index below is guarded IN THE SAME EXPRESSION, because Check reports and
+  // returns -- it does not abort. An unguarded Cases[3] after a length check that merely
+  // FAILED would take the whole runner down with exit 2 and no summary line, turning one
+  // regression into no results at all.
   Check('fold.case.count', Length(Cases) = 4,
     '2 enum members + the off-list stGhost + the #else, got ' + IntToStr(Length(Cases)));
-  Check('fold.member.order', (Cases[0].Member = 'stOK') and (Cases[1].Member = 'stCancel'),
+  Check('fold.member.order', (Length(Cases) > 1)
+    and (Cases[0].Member = 'stOK') and (Cases[1].Member = 'stCancel'),
     'cases follow the ENUM declaration order, not the file order');
-  Check('fold.sets', Length(Cases[0].Sets) = 2, IntToStr(Length(Cases[0].Sets)));
-  Check('fold.unmapped.member.empty', Length(Cases[1].Sets) = 0,
+  Check('fold.sets', (Length(Cases) > 0) and (Length(Cases[0].Sets) = 2),
+    'stOK maps two targets');
+  Check('fold.unmapped.member.empty', (Length(Cases) > 1) and (Length(Cases[1].Sets) = 0),
     'stCancel has no #when, so its case must come back empty');
   Check('fold.offlist.kept', CaseFor('stGhost') = 2,
     'a #when on a value the enum has not got was dropped instead of shown');
-  Check('fold.else.last', Cases[High(Cases)].IsElse,
+  Check('fold.else.last', (Length(Cases) > 0) and Cases[High(Cases)].IsElse,
     'the #else pseudo-member must sit at the END of the member list');
   Check('fold.else.sets',
-    (Length(Cases[3].Sets) = 1) and (Cases[3].Sets[0].ToPath = 'ModalResult'),
+    (Length(Cases) > 3) and (Length(Cases[3].Sets) = 1)
+    and (Cases[3].Sets[0].ToPath = 'ModalResult'),
     'the #else carries its own assignments');
+  Check('fold.whenfrom.blank.when.primary',
+    (Length(Cases) > 0) and (Cases[0].WhenFrom = ''),
+    'a case reading the mapping''s own source property must not pin it, or renaming that '
+    + 'property in one field stops working');
 
   Built := BuildMappingNodes('M', 'X.TStyle',
     ['cxButtons.TcxButton', 'cxButtons.TcxBigButton'], 'Style', Cases);
@@ -3314,26 +3325,111 @@ begin
     Emitted := '';
     for N in Built do Emitted := Emitted + N.Emit + #13#10;
     Check('unfold.count', Length(Built) = 4, IntToStr(Length(Built)) + ': ' + Emitted);
-    Check('unfold.decl.first',
-      Built[0].Emit = '#mapping M from X.TStyle to cxButtons.TcxButton, cxButtons.TcxBigButton',
-      Built[0].Emit);
+    Check('unfold.decl.first', (Length(Built) > 0) and
+      (Built[0].Emit = '#mapping M from X.TStyle to cxButtons.TcxButton, cxButtons.TcxBigButton'),
+      Emitted);
     Check('unfold.when',
       Pos('#mapping M #when Style = stOK -> Default = True, ModalResult = mrOk', Emitted) > 0,
       Emitted);
     Check('unfold.skips.unmapped', Pos('stCancel', Emitted) = 0,
       'a member with no assignments must emit no clause at all');
-    Check('unfold.else.last', Built[3].Emit = '#mapping M #else -> ModalResult = mrNone',
-      Built[3].Emit);
+    Check('unfold.else.last', (Length(Built) > 3)
+      and (Built[3].Emit = '#mapping M #else -> ModalResult = mrNone'), Emitted);
   finally
     FreeNodes(Built);
   end;
 
-  // No source type -> no declaration line. The clauses are still legal lines; it is
-  // ValidateMappings that then calls every #apply naming M undefined.
+  // No source type -> NO declaration line, and the target classes go with it. MapFromType
+  // is the only thing that marks a node as a declaration (IsDeclaration tests exactly
+  // that, and Emit branches on it), so a node holding target classes but no source type
+  // would be re-read as a CLAUSE and emitted as '#mapping M #when  =  -> ' -- a line the
+  // grammar has not got. The guard belongs here, not in whatever UI happens to call this.
   Built := BuildMappingNodes('M', '', nil, 'Style', Cases);
   try
     Check('unfold.no.decl.without.fromtype',
       (Length(Built) = 3) and (Built[0].WhenValue = 'stOK'), IntToStr(Length(Built)));
+  finally
+    FreeNodes(Built);
+  end;
+
+  // ... and target classes ALONE must not conjure one either: that was the shape that
+  // emitted the malformed line.
+  Built := BuildMappingNodes('M', '', ['cxButtons.TcxButton'], 'Style', Cases);
+  try
+    Emitted := '';
+    for N in Built do Emitted := Emitted + N.Emit + #13#10;
+    Check('unfold.totypes.alone.emit.no.decl', Length(Built) = 3,
+      IntToStr(Length(Built)) + ': ' + Emitted);
+    Check('unfold.no.malformed.when', Pos('#when  =', Emitted) = 0,
+      'a target-classes-only node was emitted through the #when branch: ' + Emitted);
+  finally
+    FreeNodes(Built);
+  end;
+end;
+
+{ A mapping may test more than one source property -- the model allows a WhenFrom per
+  clause, and ConditionalFromPaths already reports a path per clause. Folding on the VALUE
+  alone made '#when Style = stOK' and '#when Kind = stOK' collide: one round-tripped line
+  reading Style, the second condition destroyed and its assignments silently re-homed onto
+  the first. Nothing warned; the file just came back wrong. }
+procedure TestMappingDivergentWhenFrom;
+var
+  Nodes  : TArray<TRuleNode>;
+  Cases  : TArray<TMappingCase>;
+  Built  : TArray<TRuleNode>;
+  Emitted: string;
+  N      : TRuleNode;
+begin
+  Nodes := ParseAll([
+    '#mapping D from X.TStyle to C.TBtn',
+    '#mapping D #when Style = stOK -> Default = True',
+    '#mapping D #when Kind = stOK -> Cancel = True'
+  ]);
+
+  Check('divergent.primary', MappingWhenFrom(Nodes, 'D') = 'Style',
+    'the FIRST clause names the primary property, got ' + MappingWhenFrom(Nodes, 'D'));
+
+  Cases := MappingCasesOf(Nodes, 'D', ['stOK']);
+  // one member case (Style/stOK) + the divergent Kind/stOK + the #else
+  Check('divergent.case.count', Length(Cases) = 3,
+    'the two clauses collapsed into one case, got ' + IntToStr(Length(Cases)));
+  Check('divergent.primary.case.unpinned',
+    (Length(Cases) > 0) and (Cases[0].WhenFrom = '') and (Length(Cases[0].Sets) = 1)
+    and (Cases[0].Sets[0].ToPath = 'Default'),
+    'the primary case must hold ONLY its own clause''s assignments');
+  Check('divergent.case.pins.its.property',
+    (Length(Cases) > 1) and (Cases[1].Member = 'stOK') and (Cases[1].WhenFrom = 'Kind')
+    and (Length(Cases[1].Sets) = 1) and (Cases[1].Sets[0].ToPath = 'Cancel'),
+    'the clause on a different source property must keep it, and keep its own sets');
+
+  Built := BuildMappingNodes('D', 'X.TStyle', ['C.TBtn'], 'Style', Cases);
+  try
+    Emitted := '';
+    for N in Built do Emitted := Emitted + N.Emit + #13#10;
+    Check('divergent.roundtrip.style',
+      Pos('#mapping D #when Style = stOK -> Default = True', Emitted) > 0, Emitted);
+    Check('divergent.roundtrip.kind',
+      Pos('#mapping D #when Kind = stOK -> Cancel = True', Emitted) > 0,
+      'the second condition was lost: ' + Emitted);
+    Check('divergent.no.merge', Pos('Default = True, Cancel = True', Emitted) = 0,
+      'the two clauses'' assignments were merged onto one line: ' + Emitted);
+  finally
+    FreeNodes(Built);
+  end;
+
+  // The uniform case still follows the caller's AWhenFrom, or renaming the source
+  // property in one field would stop reaching the clauses.
+  Nodes := ParseAll([
+    '#mapping U from X.TStyle to C.TBtn',
+    '#mapping U #when Style = stOK -> Default = True'
+  ]);
+  Cases := MappingCasesOf(Nodes, 'U', ['stOK']);
+  Built := BuildMappingNodes('U', 'X.TStyle', ['C.TBtn'], 'Kind', Cases);
+  try
+    Emitted := '';
+    for N in Built do Emitted := Emitted + N.Emit + #13#10;
+    Check('uniform.follows.rename',
+      Pos('#mapping U #when Kind = stOK -> Default = True', Emitted) > 0, Emitted);
   finally
     FreeNodes(Built);
   end;
@@ -3458,6 +3554,7 @@ begin
     TestMappingBadLiteral;
     TestMappingIssueSeverity;
     TestMappingFold;
+    TestMappingDivergentWhenFrom;
     TestMappingGridHooks;
 
     FreeAndNil(GParseBook);

@@ -158,7 +158,9 @@ begin
   L.Caption := 'From property:';
   FEdWhenFrom := TEdit.Create(Self);
   FEdWhenFrom.Parent := Top; FEdWhenFrom.SetBounds(652, 8, 260, 23);
-  FEdWhenFrom.Hint := 'The source property every #when reads, e.g. Style';
+  FEdWhenFrom.Hint := 'The source property the #when clauses read, e.g. Style. A clause '
+    + 'that tests a DIFFERENT property keeps its own and is tagged [property] in the '
+    + 'member list.';
   FEdWhenFrom.ShowHint := True;
   FEdWhenFrom.OnChange := DeclChanged;
 
@@ -338,6 +340,11 @@ begin
     for Item in FCases do
     begin
       if Item.IsElse then Text := ELSE_ROW else Text := Item.Member;
+      // A case that reads a DIFFERENT source property than the box above shows up twice
+      // under the same member name otherwise, with no way to tell which is which -- so
+      // name the property it actually tests. Rare; see TMappingCase.WhenFrom.
+      if (not Item.IsElse) and (Item.WhenFrom <> '') then
+        Text := Text + ' [' + Item.WhenFrom + ']';
       // The count is the only cue that a member is already mapped; without it the user
       // has to click every row to find out.
       if Length(Item.Sets) > 0 then

@@ -59,6 +59,15 @@ type
     Member: string;
     /// <summary>True on the single #else case, which carries Sets but no member.</summary>
     IsElse: Boolean;
+    /// <summary>The source property this case reads, ONLY when it differs from the
+    ///   mapping's primary one; '' means "whatever the mapping reads".</summary>
+    /// <remarks>Almost always ''. A mapping normally tests ONE source property, and a
+    ///   case that agrees leaves this blank so the caller's AWhenFrom applies -- which is
+    ///   what lets an editor rename the source property in one box. It is filled in only
+    ///   for the rare clause that tests a DIFFERENT property, and then it is load-bearing:
+    ///   folding '#when Style = stOK' and '#when Kind = stOK' into one case would destroy
+    ///   the second condition and silently re-home its assignments onto the first.</remarks>
+    WhenFrom: string;
     /// <summary>The assignments this case makes, in author order.</summary>
     Sets  : TArray<TSetPair>;
   end;
@@ -130,10 +139,11 @@ function MappingDeclaration(const ANodes: TArray<TRuleNode>; const AName: string
 /// <param name="AName">The mapping name, matched case-insensitively.</param>
 /// <returns>The first non-empty WhenFrom found, or '' when the mapping has no #when
 ///   clause yet.</returns>
-/// <remarks>The model allows a different WhenFrom per clause; in practice one mapping
-///   reads ONE source property, which is the assumption an editor is built on. The first
-///   clause wins, so a hand-written file that disagrees with itself is normalised rather
-///   than rejected.</remarks>
+/// <remarks>This is the mapping's PRIMARY source property, not its only one: the model
+///   allows a different WhenFrom per clause, and MappingCasesOf keeps any clause that
+///   reads something else as a case of its own rather than normalising it away. Use this
+///   to seed an editor's "source property" field; use MappingCasesOf to find out whether
+///   the mapping is actually uniform.</remarks>
 function MappingWhenFrom(const ANodes: TArray<TRuleNode>; const AName: string): string;
 
 /// <summary>The enum values AName's #when clauses fire on, in first-seen order.</summary>
@@ -150,19 +160,30 @@ function MappingWhenValues(const ANodes: TArray<TRuleNode>; const AName: string)
 /// <param name="AName">The mapping name, matched case-insensitively.</param>
 /// <param name="AMembers">The source enum's members, in declaration order. May be [].</param>
 /// <returns>One case per member of AMembers in that order, then a case for every #when
-///   value NOT in AMembers (so a literal the enum does not contain is shown rather than
-///   silently dropped), then ALWAYS the #else case last -- present even when empty, so an
-///   editor has a row to fill in.</returns>
-/// <remarks>Two #when lines on the same value are merged into one case, their Sets
-///   concatenated in file order. Never raises.</remarks>
+///   clause NOT already covered (a literal the enum does not contain, or one that tests a
+///   different source property), then ALWAYS the #else case last -- present even when
+///   empty, so an editor has a row to fill in.</returns>
+/// <remarks>Clauses are keyed on the PAIR (WhenFrom, WhenValue), not on the value alone.
+///   Two lines that agree on both are merged into one case with their Sets concatenated
+///   in file order; two lines that name the same value but read DIFFERENT source
+///   properties stay two cases, or the second one's condition would be destroyed and its
+///   assignments silently re-homed onto the first.
+///   <para>The mapping's PRIMARY source property is the first #when's WhenFrom. Cases
+///   that read it leave TMappingCase.WhenFrom blank, so an editor renaming that property
+///   in one place still works; only a divergent case pins its own.</para>
+///   <para>Never raises.</para></remarks>
 function MappingCasesOf(const ANodes: TArray<TRuleNode>; const AName: string;
   const AMembers: TArray<string>): TArray<TMappingCase>;
 
 /// <summary>Unfold a mapping back into flat nodes -- one per physical line.</summary>
 /// <param name="AName">The mapping's name, written on the declaration AND every clause.</param>
-/// <param name="AFromType">The source enum type; '' suppresses the declaration line.</param>
-/// <param name="AToTypes">The target classes the mapping is narrowed to.</param>
-/// <param name="AWhenFrom">The source property path every #when clause reads.</param>
+/// <param name="AFromType">The source enum type. '' suppresses the declaration line
+///   ENTIRELY -- MapFromType is what makes a node a declaration, so a node carrying only
+///   target classes would be re-read as a clause and emitted as a malformed #when.</param>
+/// <param name="AToTypes">The target classes the mapping is narrowed to. Dropped along
+///   with the declaration when AFromType is '', for the reason above.</param>
+/// <param name="AWhenFrom">The source property path used by every case that does not pin
+///   its own (see TMappingCase.WhenFrom).</param>
 /// <param name="ACases">The cases to emit; a case with no Sets emits nothing.</param>
 /// <returns>Freshly created nodes, Dirty and in emit order: the declaration first (when
 ///   there is one), then the clauses in ACases order. The CALLER OWNS every node and must
@@ -401,54 +422,74 @@ end;
 function MappingCasesOf(const ANodes: TArray<TRuleNode>; const AName: string;
   const AMembers: TArray<string>): TArray<TMappingCase>;
 var
-  L     : TList<TMappingCase>;
-  Item  : TMappingCase       ;
-  Node  : TRuleNode          ;
-  Member: string             ;
-  Placed: TArray<string>     ;
+  L      : TList<TMappingCase>;
+  Item   : TMappingCase       ;
+  Node   : TRuleNode          ;
+  Member : string             ;
+  Primary: string             ;   // the source property the mapping mainly reads
+  Placed : TArray<string>     ;   // keys already turned into a case (see CaseKey)
 
-  { Every #when clause on AValue, concatenated in file order -- two clauses on the same
-    member are one case, not two rows the editor could only show one of. }
-  function SetsFor(const AValue: string): TArray<TSetPair>;
+  { The identity of a clause: the PAIR it fires on. Keyed on both halves because the same
+    value tested on two different source properties is two rules, not one. The separator
+    cannot occur in either half -- a property path is dotted identifiers, a value is a
+    single identifier. }
+  function CaseKey(const AFrom, AValue: string): string;
+  begin
+    Result := AFrom + '|' + AValue;
+  end;
+
+  { Every #when clause on exactly this (property, value) pair, concatenated in file order.
+    Two lines that agree on both are one case; the editor could only show one row anyway,
+    and merging them loses nothing. }
+  function SetsFor(const AFrom, AValue: string): TArray<TSetPair>;
   var
     N: TRuleNode;
   begin
     Result := nil;
     for N in ANodes do
       if IsClause(N) and SameText(N.MapName, AName) and (not N.IsElse)
-         and SameText(N.WhenValue, AValue) then
+         and SameText(N.WhenFrom, AFrom) and SameText(N.WhenValue, AValue) then
         Result := Result + N.Sets;
   end;
 
 begin
+  Primary := MappingWhenFrom(ANodes, AName);
   L := TList<TMappingCase>.Create;
   try
     for Member in AMembers do
     begin
-      Item.Member := Member;
-      Item.IsElse := False;
-      Item.Sets   := SetsFor(Member);
+      Item.Member   := Member;
+      Item.IsElse   := False;
+      Item.WhenFrom := '';                       // reads the primary property
+      Item.Sets     := SetsFor(Primary, Member);
       L.Add(Item);
-      Placed := Placed + [Member];
+      Placed := Placed + [CaseKey(Primary, Member)];
     end;
 
-    // A #when on a value the member list does not contain -- an unresolved enum, or a
-    // typo the author has to SEE -- must not vanish just because it is off-list.
+    // Two kinds of clause are not covered by the member sweep above and must not vanish:
+    // one on a value the enum does not contain (an unresolved type, or a typo the author
+    // has to SEE), and one that tests a DIFFERENT source property. Both get their own row.
     for Node in ANodes do
       if IsClause(Node) and SameText(Node.MapName, AName) and (not Node.IsElse)
-         and (Node.WhenValue <> '') and not HasText(Placed, Node.WhenValue) then
+         and (Node.WhenValue <> '')
+         and not HasText(Placed, CaseKey(Node.WhenFrom, Node.WhenValue)) then
       begin
         Item.Member := Node.WhenValue;
         Item.IsElse := False;
-        Item.Sets   := SetsFor(Node.WhenValue);
+        // Blank when it agrees with the mapping's primary property, so it still follows a
+        // rename; pinned only when it genuinely reads something else.
+        if SameText(Node.WhenFrom, Primary) then Item.WhenFrom := ''
+        else                                     Item.WhenFrom := Node.WhenFrom;
+        Item.Sets   := SetsFor(Node.WhenFrom, Node.WhenValue);
         L.Add(Item);
-        Placed := Placed + [Node.WhenValue];
+        Placed := Placed + [CaseKey(Node.WhenFrom, Node.WhenValue)];
       end;
 
     // The #else pseudo-member is always last and always present, empty or not.
-    Item.Member := '';
-    Item.IsElse := True;
-    Item.Sets   := nil;
+    Item.Member   := '';
+    Item.IsElse   := True;
+    Item.WhenFrom := '';
+    Item.Sets     := nil;
     for Node in ANodes do
       if IsClause(Node) and SameText(Node.MapName, AName) and Node.IsElse then
         Item.Sets := Item.Sets + Node.Sets;
@@ -469,10 +510,15 @@ var
 begin
   L := TList<TRuleNode>.Create;
   try
-    // No source type and no target classes = nothing to declare; the clauses alone are
-    // still valid lines, and ValidateMappings will call the #apply undefined, which is
-    // the honest report rather than an emitted half-line.
-    if (AFromType <> '') or (Length(AToTypes) > 0) then
+    // The source type is what MAKES a node a declaration -- IsDeclaration tests exactly
+    // MapFromType <> '', and Emit branches on the same field. A node with target classes
+    // but no source type is therefore classified as a CLAUSE and emitted through the
+    // #when branch as '#mapping M #when  =  -> ', which is not a line the grammar has.
+    // So: no source type, no declaration, and the target classes are dropped with it.
+    // ValidateMappings then reports every #apply naming this mapping as undefined, which
+    // is the honest signal. This guard is the invariant's home; a caller's own
+    // required-field check is a convenience on top of it, never the thing holding it up.
+    if AFromType <> '' then
     begin
       N := TRuleNode.Create;
       N.Kind        := rnkMapping;
@@ -495,7 +541,10 @@ begin
         N.IsElse := True
       else
       begin
-        N.WhenFrom  := AWhenFrom;
+        // A case that pinned its own source property keeps it; every other one follows
+        // the mapping's, which is what makes renaming that property a one-field edit.
+        if Item.WhenFrom <> '' then N.WhenFrom := Item.WhenFrom
+        else                        N.WhenFrom := AWhenFrom;
         N.WhenValue := Item.Member;
       end;
       L.Add(N);
