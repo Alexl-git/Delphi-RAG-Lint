@@ -47,6 +47,17 @@ type
     Detail : string           ;
   end;
 
+/// <summary>Severity of an issue kind: True = warning, False = error.</summary>
+/// <param name="AKind">The kind to classify.</param>
+/// <returns>True only for mikNonExhaustive; False for every other kind.</returns>
+/// <remarks>The one place this rule is written down, so a consumer never re-derives it.
+///   Non-exhaustiveness is deliberately NOT an error: a rule book may map only the enum
+///   members that matter and leave the rest to the target's own defaults, which is
+///   authoring intent rather than a defect. Every other kind describes a rule that will
+///   silently fail to do what it says at apply time, so those must block.
+///   <para>Callers gating an OK button should let warnings through and stop on errors.</para></remarks>
+function MappingIssueIsWarning(AKind: TMappingIssueKind): Boolean;
+
 /// <summary>Validate every #mapping and #apply node in one #convert block's context.</summary>
 /// <param name="ANodes">The flat node list to check, in file order. Non-mapping kinds are
 ///   ignored. Nodes are read only; ownership stays with the caller.</param>
@@ -69,6 +80,11 @@ function ValidateMappings(const ANodes: TArray<TRuleNode>; const AToTree: TPropt
   const AEnumMembers: TArray<string>; const ABlockToType: string): TArray<TMappingIssue>;
 
 implementation
+
+function MappingIssueIsWarning(AKind: TMappingIssueKind): Boolean;
+begin
+  Result := AKind = mikNonExhaustive;
+end;
 
 { Case-insensitive membership, the comparison the DSL uses everywhere. }
 function HasText(const AArr: TArray<string>; const AValue: string): Boolean;

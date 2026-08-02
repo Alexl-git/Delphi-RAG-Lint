@@ -3153,6 +3153,98 @@ begin
             mikUndefined));
 end;
 
+{ File-level twin of the nested HasKind inside TestMappingValidation. That procedure is
+  plan-mandated text and is kept verbatim, so its private helper is not hoisted out of it;
+  the tests below get their own. }
+function HasIssueKind(const A: TArray<TMappingIssue>; K: TMappingIssueKind): Boolean;
+var
+  it: TMappingIssue;
+begin
+  for it in A do
+    if it.Kind = K then Exit(True);
+  Result := False;
+end;
+
+{ mikBadLiteral is the one kind TestMappingValidation never asserts, so without this the
+  whole "is this #when value actually a member of the source enum" check could be inverted
+  or deleted and the suite would stay green. A #when on a value the enum does not have is a
+  clause that can never fire -- dead rule, silently. }
+procedure TestMappingBadLiteral;
+var
+  Tree  : TProptree            ;
+  Issues: TArray<TMappingIssue>;
+begin
+  Tree := MakeTreeFixture([MakeLeaf('Default', 'Boolean', True)]);
+
+  Issues := ValidateMappings(ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton',
+    '#mapping M #when Style = stBogus -> Default = True'
+  ]), Tree, ['stOK'], 'cxButtons.TcxButton');
+  Check('validate.bad.literal', HasIssueKind(Issues, mikBadLiteral),
+    'a #when on a non-member fired no mikBadLiteral');
+
+  // A value that IS a member must not be flagged -- the check must discriminate.
+  Issues := ValidateMappings(ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton',
+    '#mapping M #when Style = stOK -> Default = True'
+  ]), Tree, ['stOK'], 'cxButtons.TcxButton');
+  Check('validate.good.literal.not.flagged', not HasIssueKind(Issues, mikBadLiteral),
+    'a legitimate enum member was reported as a bad literal');
+
+  // Members unknown (empty list) -> the question is unanswerable, so stay silent rather
+  // than flag every literal. This is the guard the doc-comment promises.
+  Issues := ValidateMappings(ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton',
+    '#mapping M #when Style = stBogus -> Default = True'
+  ]), Tree, [], 'cxButtons.TcxButton');
+  Check('validate.literal.unknown.members.silent', not HasIssueKind(Issues, mikBadLiteral),
+    'an unknown member list must not manufacture bad-literal issues');
+
+  // An '#else' has no literal at all and must never be judged against the member list.
+  Issues := ValidateMappings(ParseAll([
+    '#mapping M from X.TStyle to cxButtons.TcxButton',
+    '#mapping M #else -> Default = True'
+  ]), Tree, ['stOK'], 'cxButtons.TcxButton');
+  Check('validate.else.has.no.literal', not HasIssueKind(Issues, mikBadLiteral),
+    'an #else was judged as if it carried an enum literal');
+end;
+
+{ The warning/error split must live in ONE place, or Task 7's OK-button gate re-derives it
+  and the two copies eventually disagree. The expected table is indexed BY THE ENUM, so
+  adding a kind without classifying it fails to COMPILE (E2072) rather than silently
+  defaulting to "error". }
+procedure TestMappingIssueSeverity;
+const
+  EXPECTED: array[TMappingIssueKind] of Boolean = (
+    False,   // mikUndefined         -- #apply names a mapping that does not exist
+    False,   // mikTargetMissing     -- assignment to a property the class has not got
+    False,   // mikTargetReadOnly    -- assignment that cannot happen
+    False,   // mikBadLiteral        -- clause that can never fire
+    False,   // mikToTypeNotDeclared -- applied outside the mapping's declared contract
+    True     // mikNonExhaustive     -- the ONLY warning: an unmapped member is a choice
+  );
+  NAMES: array[TMappingIssueKind] of string = (
+    'mikUndefined', 'mikTargetMissing', 'mikTargetReadOnly', 'mikBadLiteral',
+    'mikToTypeNotDeclared', 'mikNonExhaustive'
+  );
+var
+  K       : TMappingIssueKind;
+  Warnings: Integer          ;
+begin
+  Warnings := 0;
+  for K := Low(TMappingIssueKind) to High(TMappingIssueKind) do
+  begin
+    Check('severity.' + NAMES[K], MappingIssueIsWarning(K) = EXPECTED[K],
+      NAMES[K] + ' is classified as ' +
+      (if MappingIssueIsWarning(K) then 'a warning' else 'an error') + ', expected the opposite');
+    if MappingIssueIsWarning(K) then Inc(Warnings);
+  end;
+  // Counted from the ACTUAL classifier, not the table: a classifier that answers False
+  // (or True) for everything fails here as well as above.
+  Check('severity.exactly.one.warning', Warnings = 1,
+    'expected exactly 1 warning kind, got ' + IntToStr(Warnings));
+end;
+
 
 begin
   try
@@ -3223,6 +3315,8 @@ begin
     TestMappingEmit;
     TestSaveCompleteKeepsApplyOnly;
     TestMappingValidation;
+    TestMappingBadLiteral;
+    TestMappingIssueSeverity;
 
     FreeAndNil(GParseBook);
 
