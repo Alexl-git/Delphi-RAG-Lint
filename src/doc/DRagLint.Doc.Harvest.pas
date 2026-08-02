@@ -102,6 +102,27 @@ type
 /// <returns>The verdict and the accumulated block. Never raises.</returns>
 function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarvestResult;
 
+/// <summary>Transforms an ACCEPTED THarvestResult into DocInsight-ready text:
+/// the first paragraph as the summary, the remainder as remarks prose.</summary>
+/// <param name="AResult">A scan result. Any Reason other than hrAccepted yields
+/// two empty strings -- the guards are the whole point, so a rejected block must
+/// never reach a caller as text it could emit by mistake.</param>
+/// <param name="ASummary">The first paragraph: comment markers stripped, wrapped
+/// lines joined with single spaces, XML-escaped.</param>
+/// <param name="ARemarks">The remaining paragraphs, one per line, separated by a
+/// blank line (#10#10). '' when the block is a single paragraph.</param>
+/// <remarks>Returns PLAIN TEXT with #10 separators and does NOT re-prefix
+/// anything with '///'. That is deliberate: TDocRegions.MergeComment's
+/// EmitTagged already splits on newlines and re-prefixes every continuation line
+/// (the 5ebde68 corruption fix), and a second prefixer would either double the
+/// marker or fight it.
+///
+/// Escaping uses DRagLint.Doc.Regions.EscXml -- the same escaper every mined
+/// fact goes through -- rather than a local copy, so the ampersand-first pass
+/// order cannot drift between the two. Harvested prose needs it MORE than mined
+/// identifiers do: it is arbitrary human text.</remarks>
+procedure HarvestText(const AResult: THarvestResult; out ASummary, ARemarks: string);
+
 /// <summary>The stable uppercase spelling of a reason, as printed by
 /// `selftest harvest` and asserted by tests/autodoc/run_doc_p3_harvest_scan.ps1.
 /// Lives here rather than at the print site so the enum and its wire form
@@ -109,6 +130,14 @@ function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarv
 function HarvestReasonToString(const AReason: THarvestReason): string;
 
 implementation
+
+uses
+  // v(ADP3 T7): EscXml only. Taken here rather than in the interface so the
+  // cycle DRagLint.Doc.Regions -> DRagLint.Doc.Facts -> DRagLint.Doc.Harvest ->
+  // DRagLint.Doc.Regions never closes through three interface sections, which
+  // Delphi rejects. This unit's INTERFACE stays dependency-free apart from the
+  // RTL, which is also what "deliberately pure" in the header is worth.
+  DRagLint.Doc.Regions;
 
 type
   // Lexer state carried ACROSS lines. A string literal never spans a line in
@@ -317,6 +346,139 @@ begin
   if Total = 0 then Exit(0);
   Result:= Sepdown / Total;
 end;
+
+// Removes the comment delimiters from one raw source line and returns what was
+// inside, with the content's OWN leading whitespace preserved so the caller can
+// compute the block's common indentation.
+//
+// The leading whitespace BEFORE the marker is not content and is dropped;
+// `//   foo` yields `   foo`, not `  //   foo`. Both delimiter styles are
+// handled at both ends because a block comment's opener and closer sit on
+// different lines of a multi-line block.
+function StripMarkers(const ALine: string): string;
+var
+  T: string;
+begin
+  T:= TrimLeft(ALine);
+  if T.StartsWith('///') then T:= Copy(T, 4, MaxInt)
+  else if T.StartsWith('//') then T:= Copy(T, 3, MaxInt)
+  else
+  begin
+    if T.StartsWith('(*') then T:= Copy(T, 3, MaxInt)
+    else if T.StartsWith('{') then T:= Copy(T, 2, MaxInt);
+    T:= TrimRight(T);
+    if T.EndsWith('*)') then T:= Copy(T, 1, Length(T) - 2)
+    else if T.EndsWith('}') then T:= Copy(T, 1, Length(T) - 1);
+  end;
+  Result:= TrimRight(T);
+end;
+
+// Collapses every run of whitespace in AText to a single space and trims. The
+// lines of a paragraph are a WRAPPED SENTENCE, not separate statements, so they
+// are rejoined with one space rather than preserved as written.
+function CollapseSpaces(const AText: string): string;
+var
+  i   : Integer;
+  Prev: Boolean;
+  Sb  : TStringBuilder;
+begin
+  Sb  := TStringBuilder.Create;
+  try
+    Prev:= False;
+    for i:= 1 to Length(AText) do
+    begin
+      if CharInSet(AText[i], [' ', #9]) then
+      begin
+        if not Prev then Sb.Append(' ');
+        Prev:= True;
+      end
+      else
+      begin
+        Sb.Append(AText[i]);
+        Prev:= False;
+      end;
+    end;
+    Result:= Trim(Sb.ToString);
+  finally
+    Sb.Free;
+  end;
+end;
+
+procedure HarvestText(const AResult: THarvestResult; out ASummary, ARemarks: string);
+var
+  Content : TArray<string>;
+  Paras   : TArray<string>;
+  i, Ind  : Integer       ;
+  MinInd  : Integer       ;
+  Cur     : string        ;
+  Sb      : TStringBuilder;
+begin
+  ASummary:= '';
+  ARemarks:= '';
+  if (AResult.Reason <> hrAccepted) or (Length(AResult.RawLines) = 0) then Exit;
+
+  // (1a) Strip the comment delimiters.
+  SetLength(Content, Length(AResult.RawLines));
+  for i:= Low(AResult.RawLines) to High(AResult.RawLines) do
+    Content[i]:= StripMarkers(AResult.RawLines[i]);
+
+  // (1b) Normalise indentation: remove the COMMON leading-whitespace prefix,
+  // measured over the non-blank lines only (a blank line has no indentation to
+  // contribute and would drive the minimum to zero).
+  MinInd:= MaxInt;
+  for i:= Low(Content) to High(Content) do
+  begin
+    if Trim(Content[i]) = '' then Continue;
+    Ind:= 0;
+    while (Ind < Length(Content[i])) and CharInSet(Content[i][Ind + 1], [' ', #9]) do Inc(Ind);
+    if Ind < MinInd then MinInd:= Ind;
+  end;
+  if (MinInd > 0) and (MinInd < MaxInt) then
+    for i:= Low(Content) to High(Content) do
+      if Length(Content[i]) >= MinInd then Content[i]:= Copy(Content[i], MinInd + 1, MaxInt);
+
+  // (2) Split into paragraphs on blank comment lines, and (5) join each
+  // paragraph's wrapped lines with a single space.
+  Paras:= nil;
+  Cur  := '';
+  for i:= Low(Content) to High(Content) do
+  begin
+    if Trim(Content[i]) = '' then
+    begin
+      if Trim(Cur) <> '' then
+      begin
+        SetLength(Paras, Length(Paras) + 1);
+        Paras[High(Paras)]:= CollapseSpaces(Cur);
+      end;
+      Cur:= '';
+    end
+    else Cur:= Cur + ' ' + Content[i];
+  end;
+  if Trim(Cur) <> '' then
+  begin
+    SetLength(Paras, Length(Paras) + 1);
+    Paras[High(Paras)]:= CollapseSpaces(Cur);
+  end;
+  if Length(Paras) = 0 then Exit;
+
+  // (3) + (4) First paragraph is the summary, the rest are remarks prose,
+  // separated by a blank line. Escaped with the ONE escaper (see the header).
+  ASummary:= EscXml(Paras[0]);
+  if Length(Paras) > 1 then
+  begin
+    Sb:= TStringBuilder.Create;
+    try
+      for i:= 1 to High(Paras) do
+      begin
+        if i > 1 then Sb.Append(#10#10);
+        Sb.Append(EscXml(Paras[i]));
+      end;
+      ARemarks:= Sb.ToString;
+    finally
+      Sb.Free;
+    end;
+  end;
+end; // procedure
 
 function HarvestReasonToString(const AReason: THarvestReason): string;
 begin

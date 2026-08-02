@@ -321,6 +321,42 @@ begin
       end;
     end;
 
+    // Rule 1b (v(ADP3 T7)): HARVESTED REMARKS PROSE -- a marked line that is
+    // NOT a tag. TDocRegions.EmitHarvestedRemarks writes the harvested comment's
+    // second-and-later paragraphs inside <remarks> and ABOVE the AUTO_BEGIN
+    // fence, with AUTO_MARK on the FIRST line only. That shape matches neither
+    // rule 1 (no recognized opening tag precedes the marker, so ManagedTagCloser
+    // returns '') nor rule 2 (no fence), so before this rule the write path
+    // produced something --strip could not undo: MEASURED on
+    // fixtures/docp3/harvest_text.pas -- apply then strip left the marked prose
+    // line and an orphaned <remarks>/</remarks> pair behind, with one
+    // drag-lint:auto marker surviving a verb whose whole contract is that none
+    // do.
+    //
+    // The run ends at the first following line that opens or closes a TAG, or
+    // that carries the fence -- i.e. at </remarks> or AUTO_BEGIN. Nothing
+    // hand-written can be caught by that: MergeComment emits preserved hand
+    // prose ABOVE this block, never below it, so everything between the marked
+    // line and the next tag is engine-written continuation (including the bare
+    // /// paragraph separators, whose content is empty).
+    //
+    // Counted as a BLOCK, not a tag: it is a contiguous engine-owned region
+    // like the fence, and no <tag> was removed.
+    if (MarkPos > 0) and (Pos(AUTO_MARK, DocLineContent(Line)) = 1) then
+    begin
+      J:= I + 1;
+      while (J <= AHi) do
+      begin
+        var C: string:= DocLineContent(ALines[J]);
+        if C.StartsWith('<') or (Pos(AUTO_BEGIN, ALines[J]) > 0) or (Pos(AUTO_END, ALines[J]) > 0) then Break;
+        Inc(J);
+      end;
+      for K:= I to J - 1 do ADeleted[K]:= True;
+      Inc(ABlocksRemoved);
+      I:= J;
+      Continue;
+    end;
+
     Inc(I); // ordinary /// content (hand-written, or a marker outside a recognized tag) -- kept
   end;
 

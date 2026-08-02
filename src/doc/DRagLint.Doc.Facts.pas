@@ -219,6 +219,16 @@ type
     // <summary> is emitted ONLY when this is non-empty; '' means "nothing to
     // say", so the tag is omitted entirely rather than emitted blank.
     HarvestedSummary : string           ;
+    // v(ADP3 T7): the harvested comment's SECOND and later paragraphs, joined
+    // by a blank line, already XML-escaped by HarvestText. '' when the source
+    // comment was a single paragraph, which is the common case.
+    //
+    // Rendered inside <remarks> and ABOVE the AUTO_BEGIN facts fence, with
+    // AUTO_MARK on its first line so --strip and the drift check can identify
+    // exactly these lines. Above the fence, not inside it: the fence is
+    // regenerated wholesale every run, and prose sitting inside it would be
+    // destroyed by the next regeneration.
+    HarvestedRemarks : string           ;
     // v(ADP3 T4): the documented symbol's OWN kind, copied verbatim from
     // ASym.Kind by Build. Exactly ONE consumer: RenderFactsBlock selects the
     // reference line's VERB from it, via DRagLint.Core.Model.CanBeCallTarget --
@@ -279,7 +289,12 @@ type
 implementation
 
 uses
-  DRagLint.Doc.SymbolFacts; // v(ADP2 T5): ComputeCoveredBy -- see TDocFacts.CoveredBy's comment
+  DRagLint.Doc.SymbolFacts, // v(ADP2 T5): ComputeCoveredBy -- see TDocFacts.CoveredBy's comment
+  // v(ADP3 T7): HarvestScan / HarvestText, called from Build via
+  // HarvestInterfaceComment. IMPLEMENTATION-side because Doc.Harvest reaches
+  // Doc.Regions, which uses THIS unit in its interface -- the cycle is legal
+  // only while at least one hop goes through an implementation section.
+  DRagLint.Doc.Harvest;
 
 function DocDisplayCount(ATotal: Integer): Integer;
 begin
@@ -560,6 +575,46 @@ begin
   if ALine <= Length(Lines) then Result:= Trim(Lines[ALine - 1]);
 end;
 
+// v(ADP3 T7): fills AFacts.HarvestedSummary / .HarvestedRemarks from the
+// hand-written comment above ASym's INTERFACE declaration, or leaves both '' when
+// there is nothing acceptable there. Never raises: an unreadable file, a stale
+// line number, or a rejected block all mean "no harvested text", which is the
+// same absent-not-wrong stance the rest of this unit takes.
+//
+// See the call site in Build for WHY the scan starts above the existing doc
+// region rather than at the declaration line.
+procedure HarvestInterfaceComment(const AStore: ISymbolStore; const ASym: TSymbol;
+  var AFacts: TDocFacts);
+var
+  Lines  : TArray<string>;
+  EffLine: Integer       ;
+  i      : Integer       ;
+  Res    : THarvestResult;
+begin
+  if ASym.StartLine <= 0 then Exit;
+  try
+    Lines:= System.IOUtils.TFile.ReadAllLines(AStore.GetFilePath(ASym.FileId), TEncoding.ANSI);
+  except
+    Exit; // unreadable -> no harvested text, exactly as if there were no comment
+  end;
+  if ASym.StartLine > Length(Lines) then Exit;
+
+  // Walk up over the doc region this declaration already has, so the harvest
+  // candidate is the comment ABOVE it and a second run sees what the first saw.
+  EffLine:= ASym.StartLine;
+  i      := EffLine - 2;                                    // 0-based, the line above the declaration
+  if (i >= 0) and (Trim(Lines[i]) = '') then Dec(i);        // FindDocRegionAbove's AllowGap = 1
+  while (i >= 0) and Trim(Lines[i]).StartsWith('///') do
+  begin
+    EffLine:= i + 1;
+    Dec(i);
+  end;
+
+  Res:= HarvestScan(Lines, EffLine);
+  if Res.Reason <> hrAccepted then Exit;
+  HarvestText(Res, AFacts.HarvestedSummary, AFacts.HarvestedRemarks);
+end;
+
 // Detects a Pascal 'deprecated' DIRECTIVE on ASym's declaration and, when
 // present, extracts its optional trailing message string literal. This is
 // GROUND-TRUTH ONLY: called just once per Build and the caller sets
@@ -690,6 +745,28 @@ begin
   // verb appears on the callable half, where it reads most like a bug in the
   // resolver rather than an unset field.
   Result.SymbolKind:= ASym.Kind;
+
+  // v(ADP3 T7): HARVEST the hand-written comment above this symbol's INTERFACE
+  // declaration into HarvestedSummary / HarvestedRemarks. Copy, never move --
+  // nothing here edits the source; MergeComment writes a separate /// region and
+  // the original // comment stays exactly where its author put it.
+  //
+  // THE SCAN DOES NOT START AT THE DECLARATION LINE, and that is load-bearing.
+  // MergeComment writes its /// region immediately ABOVE the declaration, i.e.
+  // BETWEEN the harvested comment and the declaration. A second run scanning up
+  // from ASym.StartLine would therefore meet /// first, get hrNone (Task 6's
+  // already-DocInsight rule), find HarvestedSummary empty, and DROP the summary
+  // the first run had just written -- `document --apply` would rewrite the file
+  // on every run. So the existing doc region is skipped and the candidate is
+  // whatever sits above IT. Anchored on run_doc_p3_harvest_text.ps1's
+  // idempotency pair; the blank-line tolerance matches FindDocRegionAbove's own
+  // AllowGap=1, so both agree on where a region begins.
+  //
+  // A HAND-WRITTEN /// block is skipped by the same walk, so a // comment above
+  // one is harvested while the hand-written tags are preserved by MergeComment's
+  // existing precedence. Which of the two wins when they disagree is Task 8's
+  // question, not this call site's.
+  HarvestInterfaceComment(AStore, ASym, Result);
 
   // Called from: RESOLVED caller refs -> display 'EnclosingQName (file)'.
   // v14 (D5) -- THE BUG FIX. Previously this was name-based

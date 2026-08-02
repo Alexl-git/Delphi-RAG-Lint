@@ -380,6 +380,30 @@ type
     class function StripForDisplay(const S: string): string;
   end;
 
+/// <summary>XML-escapes S for use as ELEMENT TEXT content: ampersand, less-than
+/// and greater-than become their XML entity references. The ampersand pass runs
+/// first so the ampersand it introduces for a later entity is not re-escaped.</summary>
+/// <remarks>Applied to EVERY mined value emitted into the managed facts block
+/// (caller/callee names, unit names, raised/overridden/implemented types,
+/// deprecated messages, return cases). Mined content is NOT guaranteed to be a
+/// bare identifier -- a generic type, an operator method, or an arbitrary
+/// deprecated message can carry angle brackets or an ampersand. Without this the
+/// generated DocInsight XML is ill-formed ("Bad XML documentation comment"), and
+/// a literal remarks close tag inside a fact additionally breaks the regex-based
+/// re-parse (the non-greedy match stops at the injected close tag) on which the
+/// idempotent strip-and-regenerate depends.
+///
+/// v(ADP3 T7): PROMOTED from this unit's implementation section to its
+/// interface. The harvester (DRagLint.Doc.Harvest.HarvestText) escapes the prose
+/// it promotes out of a hand-written comment, and that prose is arbitrary human
+/// text -- far likelier to carry an ampersand or an angle bracket than a mined
+/// identifier ever was. One escaper, one behaviour: Doc.Harvest calls THIS
+/// rather than carrying a second copy that could drift in its pass order.
+/// Doc.Harvest reaches it through its IMPLEMENTATION uses clause, so the
+/// dependency cycle this unit's interface would otherwise close
+/// (Regions -&gt; Facts -&gt; Harvest -&gt; Regions) never forms.</remarks>
+function EscXml(const S: string): string;
+
 implementation
 
 uses
@@ -393,18 +417,42 @@ uses
   // v(ADP3 T3b review, Critical 1 fix): StripElement's TRegEx.
   System.RegularExpressions;
 
-/// <summary>XML-escapes S for use as ELEMENT TEXT content: ampersand, less-than
-/// and greater-than become their XML entity references. The ampersand pass runs
-/// first so the ampersand it introduces for a later entity is not re-escaped.</summary>
-/// <remarks>Applied to EVERY mined value emitted into the managed facts block
-/// (caller/callee names, unit names, raised/overridden/implemented types,
-/// deprecated messages, return cases). Mined content is NOT guaranteed to be a
-/// bare identifier -- a generic type, an operator method, or an arbitrary
-/// deprecated message can carry angle brackets or an ampersand. Without this the
-/// generated DocInsight XML is ill-formed ("Bad XML documentation comment"), and
-/// a literal remarks close tag inside a fact additionally breaks the regex-based
-/// re-parse (the non-greedy match stops at the injected close tag) on which the
-/// idempotent strip-and-regenerate depends.</remarks>
+// v(ADP3 T7): emits AHarvested (harvested prose beyond the first paragraph)
+// into an already-open <remarks> element, one APrefix-prefixed line per line,
+// with AUTO_MARK on the FIRST line so `document --strip` and the drift check
+// can identify exactly these lines as engine-owned. No-op when AHarvested is ''.
+//
+// ONE emitter for BOTH of MergeComment's paths (fresh and repair). They had
+// drifted apart before -- see the residual/prose handling either side of this
+// call -- and harvested prose that appeared on only one of them would look like
+// a harvester bug rather than a wiring one.
+//
+// Emitted ABOVE the AUTO_BEGIN fence by both callers, never inside it: the
+// fence's contents are regenerated wholesale on every run, so prose placed
+// inside would be destroyed by the next regeneration.
+//
+// Every line carries APrefix, never a bare embedded newline -- the 5ebde68
+// corruption was exactly an unprefixed interior line turning the rest of a doc
+// block into code.
+procedure EmitHarvestedRemarks(ASb: TStringBuilder; const APrefix, AHarvested: string);
+var
+  Norm : string        ;
+  Parts: TArray<string>;
+  i    : Integer       ;
+begin
+  if AHarvested = '' then Exit;
+  Norm := StringReplace(AHarvested, #13#10, #10, [rfReplaceAll]);
+  Norm := StringReplace(Norm, #13, #10, [rfReplaceAll]);
+  Parts:= Norm.Split([#10]);
+  for i:= 0 to High(Parts) do
+    if i = 0 then ASb.AppendLine(APrefix + AUTO_MARK + Trim(Parts[i]))
+    else ASb.AppendLine((APrefix + Trim(Parts[i])).TrimRight);
+end;
+
+// v(ADP3 T7): the DocInsight contract for this function now lives on its
+// INTERFACE declaration, which is the surface Doc.Harvest compiles against.
+// Restated here it would be a second copy free to drift from the one callers
+// read.
 function EscXml(const S: string): string;
 begin
   Result:= StringReplace(S, '&', '&amp;', [rfReplaceAll]);
@@ -1941,12 +1989,19 @@ begin
         if Obs <> '' then
           Sb.AppendLine(APrefix + '<returns>' + AUTO_MARK + Obs + '</returns>');
       end;
-      if Facts <> '' then
+      // v(ADP3 T7): the <remarks> element is now also warranted by harvested
+      // prose alone -- a symbol can have a second paragraph worth promoting and
+      // no facts at all -- so the condition is widened past `Facts <> ''`.
+      if (Facts <> '') or (AFacts.HarvestedRemarks <> '') then
       begin
         Sb.AppendLine(APrefix + '<remarks>');
-        Sb.AppendLine(APrefix + AUTO_BEGIN);
-        Sb.AppendLine(Facts);
-        Sb.AppendLine(APrefix + AUTO_END);
+        EmitHarvestedRemarks(Sb, APrefix, AFacts.HarvestedRemarks);
+        if Facts <> '' then
+        begin
+          Sb.AppendLine(APrefix + AUTO_BEGIN);
+          Sb.AppendLine(Facts);
+          Sb.AppendLine(APrefix + AUTO_END);
+        end;
         Sb.AppendLine(APrefix + '</remarks>');
       end;
       Result:= Sb.ToString.TrimRight([#13, #10]);
@@ -2313,6 +2368,38 @@ begin
       Prose:= StripManagedBlock(BodyRemarks);
     var NormProse: string:= StringReplace(Trim(Prose), #13#10, #10, [rfReplaceAll]);
     NormProse:= StringReplace(NormProse, #13, #10, [rfReplaceAll]);
+    // v(ADP3 T7): DROP AUTO_MARK-carrying lines from the preserved-prose slot.
+    // Harvested remarks live inside <remarks> ABOVE the fence, so
+    // StripManagedBlock -- which removes the AUTO_BEGIN..AUTO_END fence and
+    // nothing else -- leaves them behind and they arrive here looking exactly
+    // like hand-written prose. Re-emitted as prose AND regenerated by
+    // EmitHarvestedRemarks below, the harvested paragraph DOUBLED on every
+    // apply cycle: measured, cycle 2 of run_doc_p3_harvest_text.ps1 carried the
+    // paragraph twice.
+    //
+    // This is the same defect shape the comment above describes for nested
+    // <remarks>, and it takes the same marker-keyed answer the rest of this
+    // unit uses: marked means engine-owned, so it is regenerated, never
+    // preserved. Ownership changes hands by REMOVING the marker (v(ADP3 T3)) --
+    // a human who deletes it keeps the line as their own prose, and the
+    // harvester will not put it back because MergeComment no longer recognises
+    // it as its own.
+    if NormProse <> '' then
+    begin
+      var Kept: TStringBuilder:= TStringBuilder.Create;
+      try
+        for var PL in NormProse.Split([#10]) do
+          if Pos(AUTO_MARK, PL) = 0 then
+          begin
+            if Kept.Length > 0 then Kept.Append(#10);
+            Kept.Append(PL);
+          end;
+        NormProse:= Trim(Kept.ToString);
+      finally
+        Kept.Free;
+      end;
+      Prose:= NormProse; // keep the two views in step -- both branches below read them
+    end;
     // v(ADP3 T2 adjacent fix): a SINGLE-LINE hand-written remarks with NO
     // facts to add is re-emitted on ONE line -- '<remarks>prose</remarks>' --
     // exactly like EmitTagged already does for a single-line summary/param/
@@ -2327,9 +2414,12 @@ begin
     // own marker-only ownership rule). Multi-line prose, or any Facts to
     // fence, still take the multi-line path below unchanged -- a fence
     // always needs its own lines.
-    if (Trim(Prose) <> '') and (Facts = '') and (not NormProse.Contains(#10)) then
+    // v(ADP3 T7): ... and no harvested prose to place above a fence. The
+    // one-line form has nowhere to put a second, marked paragraph, so harvested
+    // remarks take the multi-line path below exactly as Facts already do.
+    if (Trim(Prose) <> '') and (Facts = '') and (AFacts.HarvestedRemarks = '') and (not NormProse.Contains(#10)) then
       Sb.AppendLine(APrefix + '<remarks>' + Trim(Prose) + '</remarks>')
-    else if (Trim(Prose) <> '') or (Facts <> '') then
+    else if (Trim(Prose) <> '') or (Facts <> '') or (AFacts.HarvestedRemarks <> '') then
     begin
       Sb.AppendLine(APrefix + '<remarks>');
       if Trim(Prose) <> '' then
@@ -2342,6 +2432,8 @@ begin
           if Trim(ProseLine) <> '' then
             Sb.AppendLine(APrefix + Trim(ProseLine));
       end;
+      // v(ADP3 T7): after the preserved hand prose, before the fence.
+      EmitHarvestedRemarks(Sb, APrefix, AFacts.HarvestedRemarks);
       if Facts <> '' then
       begin
         Sb.AppendLine(APrefix + AUTO_BEGIN);
