@@ -4324,11 +4324,116 @@ begin
   end;
 end;
 
+{ convrules\BDE-to-FireDAC.rules is the assembled conversion LIBRARY: the BDE corpus
+  re-expressed as #convert blocks with their property links filled in, machine-written
+  by replaying the editor's own Auto-Match rule against drag-lint property trees.
+
+  It is a product deliverable a user opens and edits, so -- exactly like the two
+  imported reFind books -- an absent file is a FAILURE, never a Skip. What is pinned
+  here are the invariants that must survive ANY edit the user makes, NOT the current
+  block/link counts (those are expected to move as they work through it):
+
+    * it loads with ZERO rnkUnknown lines;
+    * SaveToString reproduces it byte for byte;
+    * every #convert block "maps something", i.e. carries at least one
+      #link / #apply / #ignore. This is the one that earns its keep: a block that
+      maps nothing is SILENTLY DROPPED on save (TRuleBook.BlockMapsSomething, and
+      docs\converter\convrules-dsl.md "Known limits" #3), so a library whose blocks
+      were all #note would look fine and evaporate the first time it was saved. }
+procedure TestConversionLibraryLoads;
+var
+  P, Txt: string;
+  Book  : TRuleBook;
+  Hdrs  : TArray<Integer>;
+  H, Bad: Integer;
+begin
+  { The recognised-line floor is deliberately far below what the file carries today
+    (~300 directives): this is a working document meant to be cut down, and a tight
+    threshold would fail on legitimate editing rather than on a parser regression. }
+  CheckReFindCorpus('convlib.bde2fd', 'BDE-to-FireDAC.rules', 50);
+
+  P := ConvRulesCorpusPath('BDE-to-FireDAC.rules');
+  if not TFile.Exists(P) then Exit;   // already reported by CheckReFindCorpus
+  Txt  := TFile.ReadAllText(P, TEncoding.ASCII);
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(Txt);
+    Hdrs := Book.ConvertHeaders;
+    Check('convlib.bde2fd.blocks', Length(Hdrs) > 0, 'no #convert block parsed');
+    Bad := 0;
+    for H in Hdrs do
+      if not TRuleBook.BlockMapsSomething(Book.NodesInBlock(H)) then Inc(Bad);
+    Check('convlib.bde2fd.blocks.survive.save', Bad = 0,
+      Format('%d of %d #convert block(s) map nothing and would be dropped on save',
+             [Bad, Length(Hdrs)]));
+  finally
+    Book.Free;
+  end;
+end;
+
+{ The library is almost entirely made of kinds that DO reconstruct (#convert, #link,
+  #note, #mapping, #apply, #unuse, #remove), which makes it a far stronger parse/emit
+  inverse witness than the reFind corpus -- there the honest number was 9 lines, here
+  it is the whole file. Same shape as TestReFindCorpusReconstructs, including its
+  sensitivity guard, because '.exact' alone would also pass if Dirty were ignored. }
+procedure TestConversionLibraryReconstructs;
+var
+  P, Txt, Rebuilt: string;
+  Book           : TRuleBook;
+  N, FirstLink   : TRuleNode;
+  Rebuildable    : Integer;
+begin
+  P := ConvRulesCorpusPath('BDE-to-FireDAC.rules');
+  if not TFile.Exists(P) then
+  begin
+    Check('convlib.bde2fd.reconstruct.present', False, 'library file is missing: ' + P);
+    Exit;
+  end;
+
+  Txt  := TFile.ReadAllText(P, TEncoding.ASCII);
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(Txt);
+    Rebuildable := 0;
+    FirstLink   := nil;
+    for N in Book.Nodes do
+      if N.Kind in RECONSTRUCTING_KINDS then
+      begin
+        Inc(Rebuildable);
+        N.Dirty := True;
+        if (N.Kind = rnkLink) and (FirstLink = nil) then FirstLink := N;
+      end;
+
+    Check('convlib.bde2fd.reconstruct.count', Rebuildable >= 50,
+      Format('%d reconstructable nodes, want >= 50', [Rebuildable]));
+    Rebuilt := Book.SaveToString;
+    Check('convlib.bde2fd.reconstruct.exact', Rebuilt = Txt,
+      Format('re-emitting %d nodes from their parsed fields did not reproduce the '
+           + 'library (got %d chars, want %d) -- the file is no longer canonical DSL',
+             [Rebuildable, Length(Rebuilt), Length(Txt)]));
+
+    if FirstLink = nil then
+      Check('convlib.bde2fd.reconstruct.live', False, 'no rnkLink node to perturb')
+    else
+    begin
+      FirstLink.LinkTo := 'ZZZ.Sentinel';
+      Rebuilt := Book.SaveToString;
+      Check('convlib.bde2fd.reconstruct.live',
+        (Rebuilt <> Txt) and (Pos('#link ZZZ.Sentinel <- ', Rebuilt) > 0),
+        'editing a parsed field did not change the emitted text -- Emit ignored Dirty');
+    end;
+  finally
+    Book.Free;
+  end;
+end;
+
 
 begin
   try
     TestReFindCorpusLoads;
     TestReFindCorpusReconstructs;
+    TestConversionLibraryLoads;
+    TestConversionLibraryReconstructs;
     TestBlockSplitRulesRoundTrip;
     TestBlockSplitCastLibRoundTrip;
     TestBlockLabel;

@@ -1,0 +1,493 @@
+// BDE -> FireDAC conversion library -- a STARTING POINT, not a finished rule book.
+//
+// Assembled 2026-08-02 from convrules\FireDAC_Migrate_BDE.rules (Embarcadero's
+// reFind corpus, imported verbatim and NOT modified). That corpus is 60 flat
+// #migrate lines; this file re-expresses the part of it the ConvRules editor can
+// work with -- one #convert block per component pair, with the property links
+// filled in -- and carries the rest through unchanged at the bottom.
+//
+// WHAT IS CORPUS-SUPPLIED (trust it): every #unuse and #remove line, the units on
+//   each #convert header, both #mapping blocks, and the #link lines under a
+//   '#note corpus' marker. These come from Embarcadero's own migration rules.
+//
+// WHAT IS MACHINE-GENERATED (review it): the #link lines under a
+//   '#note auto-matched' marker. They were produced by the editor's own Auto-Match
+//   rule, replayed headlessly against `drag-lint proptree --min-visibility
+//   published --refs-as-leaves` for both sides (library-Win64 index): a source
+//   leaf is paired only when exactly ONE writable, still-unassigned target leaf
+//   has the same FULL PATH and a legal cast; failing that, only when the source
+//   leaf's NAME is unique among ALL target last-segments and exactly one such
+//   target is castable. Nothing ambiguous was guessed.
+//
+// WHAT STILL NEEDS A HUMAN:
+//   * Every block's '#note outstanding:' line counts the source properties that
+//     got NO target. They were deliberately left out rather than invented.
+//   * The #migrate lines at the bottom could not become property links -- they
+//     rename METHODS (Session.*, FindDatabase, AddAlias, TDatabase:Execute), or
+//     enum types with no property that carries them (TUpdateKind, TUpdateAction,
+//     TDBScreenCursors), or classes with no published surface at all
+//     (TBlobStream, EDBEngineError). They are carried VERBATIM, not dropped.
+//   * convert-apply does not evaluate #mapping/#apply yet (DSL doc, Known limits
+//     #1), so a post-save `convert-validate` reports those two directives as
+//     unknown. The file is correct; the engine has not caught up.
+//
+// Unit/file renames (uAD.inc -> FireDAC.inc and 210 more) are a DIFFERENT domain
+// and are deliberately NOT merged here -- see convrules\FireDAC_Rename_Units.rules.
+//
+// Plain 7-bit ASCII, CRLF.
+
+// ---------------------------------------------------------------------------
+// 1. BDE units to drop (corpus, verbatim)
+// ---------------------------------------------------------------------------
+#unuse BDE.DBTables
+#unuse BDE.BDEConst
+#unuse DBTables
+#unuse BDEConst
+#unuse BDEMTS
+#unuse BDE
+
+// Corpus, verbatim: properties with no FireDAC counterpart at all.
+#remove SessionName
+#remove PrivateDir
+#remove DFM: Origin
+
+// ---------------------------------------------------------------------------
+// 2. Enum-valued property conversions (corpus). Only the two groups that a
+//    #convert block below actually consumes are expressed as #mapping; the
+//    other three enum groups have no property carrying them and stay #migrate.
+// ---------------------------------------------------------------------------
+#mapping BdeTransIsolation from Bde.DBTables.TTransIsolation to FireDAC.Comp.Client.TFDConnection
+#mapping BdeTransIsolation #when TransIsolation = tiDirtyRead -> TxOptions.Isolation = xiDirtyRead
+#mapping BdeTransIsolation #when TransIsolation = tiReadCommitted -> TxOptions.Isolation = xiReadCommitted
+#mapping BdeTransIsolation #when TransIsolation = tiRepeatableRead -> TxOptions.Isolation = xiRepeatableRead
+
+#mapping BdeBatchMode from Bde.DBTables.TBatchMode to FireDAC.Comp.BatchMove.TFDBatchMove
+#mapping BdeBatchMode #when Mode = batAppend -> Mode = dmAppend
+#mapping BdeBatchMode #when Mode = batUpdate -> Mode = dmUpdate
+#mapping BdeBatchMode #when Mode = batAppendUpdate -> Mode = dmAppendUpdate
+#mapping BdeBatchMode #when Mode = batDelete -> Mode = dmDelete
+#mapping BdeBatchMode #when Mode = batCopy -> Mode = dmAlwaysInsert
+
+// ---------------------------------------------------------------------------
+// 3. Component conversions
+// ---------------------------------------------------------------------------
+
+#convert Bde.DBTables.TSession -> FireDAC.Comp.Client.TFDManager, FireDAC.Comp.Client
+#note 11 source properties; 0 corpus-supplied, 3 auto-matched, 8 left for you.
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link Active <- Active
+#link Name <- Name
+#link Tag <- Tag
+#note outstanding: 8 source properties with no target -- left out rather than guessed.
+
+#convert Bde.DBTables.TDatabase -> FireDAC.Comp.Client.TFDConnection, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Error, FireDAC.UI.Intf, FireDAC.Phys.Intf, FireDAC.Stan.Def, FireDAC.Stan.Pool, FireDAC.Stan.Async, FireDAC.Phys, FireDAC.Comp.Client
+#note 19 source properties; 2 corpus-supplied, 10 auto-matched, 6 left for you.
+#note corpus -- from FireDAC_Migrate_BDE.rules; do not let Auto-Match overwrite these.
+#link ConnectionName <- DatabaseName
+#link ConnectionDefName <- AliasName
+#note corpus -- enum-valued property, handled by the #mapping above.
+#apply BdeTransIsolation
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link Connected <- Connected
+#link DriverName <- DriverName
+#link ResourceOptions.KeepConnection <- KeepConnection
+#link LoginPrompt <- LoginPrompt
+#link AfterConnect <- AfterConnect
+#link AfterDisconnect <- AfterDisconnect
+#link BeforeConnect <- BeforeConnect
+#link BeforeDisconnect <- BeforeDisconnect
+#link Name <- Name
+#link Tag <- Tag
+#note outstanding: 6 source properties with no target -- left out rather than guessed.
+
+#convert Bde.DBTables.TTable -> FireDAC.Comp.Client.TFDTable, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param, FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf, FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client
+#note 89 source properties; 3 corpus-supplied, 73 auto-matched, 13 left for you.
+#note corpus -- from FireDAC_Migrate_BDE.rules; do not let Auto-Match overwrite these.
+#link ConnectionName <- DatabaseName
+#link UpdateOptions.UpdateMode <- UpdateMode
+#link UpdateOptions.ReadOnly <- ReadOnly
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link Constraints <- Constraints
+#link Constraints.Items.CustomConstraint <- Constraints.Items.CustomConstraint
+#link Constraints.Items.ErrorMessage <- Constraints.Items.ErrorMessage
+#link Constraints.Items.FromDictionary <- Constraints.Items.FromDictionary
+#link Constraints.Items.ImportedConstraint <- Constraints.Items.ImportedConstraint
+#link Exclusive <- Exclusive
+#link FieldDefs.Items.Attributes <- FieldDefs.Items.Attributes
+#link FieldDefs.Items.ChildDefs <- FieldDefs.Items.ChildDefs
+#link FieldDefs.Items.DataType <- FieldDefs.Items.DataType
+#link FieldDefs.Items.Precision <- FieldDefs.Items.Precision
+#link FieldDefs.Items.Size <- FieldDefs.Items.Size
+#link FieldDefs.Items.Name <- FieldDefs.Items.Name
+#link FieldDefs.ParentDef.Attributes <- FieldDefs.ParentDef.Attributes
+#link FieldDefs.ParentDef.ChildDefs <- FieldDefs.ParentDef.ChildDefs
+#link FieldDefs.ParentDef.DataType <- FieldDefs.ParentDef.DataType
+#link FieldDefs.ParentDef.Precision <- FieldDefs.ParentDef.Precision
+#link FieldDefs.ParentDef.Size <- FieldDefs.ParentDef.Size
+#link FieldDefs.ParentDef.Name <- FieldDefs.ParentDef.Name
+#link IndexDefs.Items.CaseInsFields <- IndexDefs.Items.CaseInsFields
+#link IndexDefs.Items.DescFields <- IndexDefs.Items.DescFields
+#link IndexDefs.Items.Expression <- IndexDefs.Items.Expression
+#link IndexDefs.Items.Fields <- IndexDefs.Items.Fields
+#link IndexDefs.Items.Options <- IndexDefs.Items.Options
+#link IndexDefs.Items.Source <- IndexDefs.Items.Source
+#link IndexDefs.Items.GroupingLevel <- IndexDefs.Items.GroupingLevel
+#link IndexDefs.Items.Name <- IndexDefs.Items.Name
+#link IndexFieldNames <- IndexFieldNames
+#link IndexName <- IndexName
+#link MasterFields <- MasterFields
+#link MasterSource <- MasterSource
+#link Filter <- Filter
+#link Filtered <- Filtered
+#link FilterOptions <- FilterOptions
+#link OnFilterRecord <- OnFilterRecord
+#link Active <- Active
+#link AutoCalcFields <- AutoCalcFields
+#link CachedUpdates <- CachedUpdates
+#link ObjectView <- ObjectView
+#link BeforeOpen <- BeforeOpen
+#link AfterOpen <- AfterOpen
+#link BeforeClose <- BeforeClose
+#link AfterClose <- AfterClose
+#link BeforeInsert <- BeforeInsert
+#link AfterInsert <- AfterInsert
+#link BeforeEdit <- BeforeEdit
+#link AfterEdit <- AfterEdit
+#link BeforePost <- BeforePost
+#link AfterPost <- AfterPost
+#link BeforeCancel <- BeforeCancel
+#link AfterCancel <- AfterCancel
+#link BeforeDelete <- BeforeDelete
+#link AfterDelete <- AfterDelete
+#link BeforeScroll <- BeforeScroll
+#link AfterScroll <- AfterScroll
+#link BeforeRefresh <- BeforeRefresh
+#link AfterRefresh <- AfterRefresh
+#link OnCalcFields <- OnCalcFields
+#link OnDeleteError <- OnDeleteError
+#link OnEditError <- OnEditError
+#link OnNewRecord <- OnNewRecord
+#link OnPostError <- OnPostError
+#link FieldOptions.AutoCreateMode <- FieldOptions.AutoCreateMode
+#link FieldOptions.PositionMode <- FieldOptions.PositionMode
+#link FieldOptions.UpdatePersistent <- FieldOptions.UpdatePersistent
+#link FieldOptions.BlobDisplayValue <- FieldOptions.BlobDisplayValue
+#link FieldDefList.FieldDefs.Attributes <- FieldDefList.FieldDefs.Attributes
+#link FieldDefList.FieldDefs.ChildDefs <- FieldDefList.FieldDefs.ChildDefs
+#link FieldDefList.FieldDefs.DataType <- FieldDefList.FieldDefs.DataType
+#link FieldDefList.FieldDefs.Precision <- FieldDefList.FieldDefs.Precision
+#link FieldDefList.FieldDefs.Size <- FieldDefList.FieldDefs.Size
+#link FieldDefList.FieldDefs.Name <- FieldDefList.FieldDefs.Name
+#link Name <- Name
+#link Tag <- Tag
+#note outstanding: 13 source properties with no target -- left out rather than guessed.
+
+#convert Bde.DBTables.TQuery -> FireDAC.Comp.Client.TFDQuery, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param, FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf, FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client
+#note 81 source properties; 5 corpus-supplied, 68 auto-matched, 8 left for you.
+#note corpus -- from FireDAC_Migrate_BDE.rules; do not let Auto-Match overwrite these.
+#link ConnectionName <- DatabaseName
+#link FetchOptions.Unidirectional <- Unidirectional
+#link UpdateOptions.RequestLive <- RequestLive
+#link UpdateOptions.UpdateMode <- UpdateMode
+#link MasterSource <- DataSource
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link Constraints <- Constraints
+#link Constraints.Items.CustomConstraint <- Constraints.Items.CustomConstraint
+#link Constraints.Items.ErrorMessage <- Constraints.Items.ErrorMessage
+#link Constraints.Items.FromDictionary <- Constraints.Items.FromDictionary
+#link Constraints.Items.ImportedConstraint <- Constraints.Items.ImportedConstraint
+#link SQL <- SQL
+#link Params.Items.DataType <- Params.Items.DataType
+#link Params.Items.Precision <- Params.Items.Precision
+#link Params.Items.NumericScale <- Params.Items.NumericScale
+#link Params.Items.Name <- Params.Items.Name
+#link Params.Items.ParamType <- Params.Items.ParamType
+#link Params.Items.Size <- Params.Items.Size
+#link Params.Items.Value <- Params.Items.Value
+#link Filter <- Filter
+#link Filtered <- Filtered
+#link FilterOptions <- FilterOptions
+#link OnFilterRecord <- OnFilterRecord
+#link Active <- Active
+#link AutoCalcFields <- AutoCalcFields
+#link CachedUpdates <- CachedUpdates
+#link ObjectView <- ObjectView
+#link BeforeOpen <- BeforeOpen
+#link AfterOpen <- AfterOpen
+#link BeforeClose <- BeforeClose
+#link AfterClose <- AfterClose
+#link BeforeInsert <- BeforeInsert
+#link AfterInsert <- AfterInsert
+#link BeforeEdit <- BeforeEdit
+#link AfterEdit <- AfterEdit
+#link BeforePost <- BeforePost
+#link AfterPost <- AfterPost
+#link BeforeCancel <- BeforeCancel
+#link AfterCancel <- AfterCancel
+#link BeforeDelete <- BeforeDelete
+#link AfterDelete <- AfterDelete
+#link BeforeScroll <- BeforeScroll
+#link AfterScroll <- AfterScroll
+#link BeforeRefresh <- BeforeRefresh
+#link AfterRefresh <- AfterRefresh
+#link OnCalcFields <- OnCalcFields
+#link OnDeleteError <- OnDeleteError
+#link OnEditError <- OnEditError
+#link OnNewRecord <- OnNewRecord
+#link OnPostError <- OnPostError
+#link FieldOptions.AutoCreateMode <- FieldOptions.AutoCreateMode
+#link FieldOptions.PositionMode <- FieldOptions.PositionMode
+#link FieldOptions.UpdatePersistent <- FieldOptions.UpdatePersistent
+#link FieldOptions.BlobDisplayValue <- FieldOptions.BlobDisplayValue
+#link FieldDefs.Items.Attributes <- FieldDefs.Items.Attributes
+#link FieldDefs.Items.ChildDefs <- FieldDefs.Items.ChildDefs
+#link FieldDefs.Items.DataType <- FieldDefs.Items.DataType
+#link FieldDefs.Items.Precision <- FieldDefs.Items.Precision
+#link FieldDefs.Items.Size <- FieldDefs.Items.Size
+#link FieldDefs.Items.Name <- FieldDefs.Items.Name
+#link FieldDefs.ParentDef.Attributes <- FieldDefs.ParentDef.Attributes
+#link FieldDefs.ParentDef.ChildDefs <- FieldDefs.ParentDef.ChildDefs
+#link FieldDefs.ParentDef.DataType <- FieldDefs.ParentDef.DataType
+#link FieldDefs.ParentDef.Precision <- FieldDefs.ParentDef.Precision
+#link FieldDefs.ParentDef.Size <- FieldDefs.ParentDef.Size
+#link FieldDefs.ParentDef.Name <- FieldDefs.ParentDef.Name
+#link FieldDefList.FieldDefs.Attributes <- FieldDefList.FieldDefs.Attributes
+#link FieldDefList.FieldDefs.ChildDefs <- FieldDefList.FieldDefs.ChildDefs
+#link FieldDefList.FieldDefs.DataType <- FieldDefList.FieldDefs.DataType
+#link FieldDefList.FieldDefs.Precision <- FieldDefList.FieldDefs.Precision
+#link FieldDefList.FieldDefs.Size <- FieldDefList.FieldDefs.Size
+#link FieldDefList.FieldDefs.Name <- FieldDefList.FieldDefs.Name
+#link Name <- Name
+#link Tag <- Tag
+#note outstanding: 8 source properties with no target -- left out rather than guessed.
+
+#convert Bde.DBTables.TUpdateSQL -> FireDAC.Comp.Client.TFDUpdateSQL, FireDAC.Comp.Client
+#note 5 source properties; 0 corpus-supplied, 5 auto-matched, 0 left for you.
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link ModifySQL <- ModifySQL
+#link InsertSQL <- InsertSQL
+#link DeleteSQL <- DeleteSQL
+#link Name <- Name
+#link Tag <- Tag
+#note outstanding: 0 source properties with no target -- left out rather than guessed.
+
+#convert Bde.DBTables.TStoredProc -> FireDAC.Comp.Client.TFDStoredProc, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param, FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf, FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client
+#note 76 source properties; 1 corpus-supplied, 68 auto-matched, 7 left for you.
+#note corpus -- from FireDAC_Migrate_BDE.rules; do not let Auto-Match overwrite these.
+#link ConnectionName <- DatabaseName
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link StoredProcName <- StoredProcName
+#link Overload <- Overload
+#link Params.Items.DataType <- Params.Items.DataType
+#link Params.Items.Precision <- Params.Items.Precision
+#link Params.Items.NumericScale <- Params.Items.NumericScale
+#link Params.Items.Name <- Params.Items.Name
+#link Params.Items.ParamType <- Params.Items.ParamType
+#link Params.Items.Size <- Params.Items.Size
+#link Params.Items.Value <- Params.Items.Value
+#link Filter <- Filter
+#link Filtered <- Filtered
+#link FilterOptions <- FilterOptions
+#link OnFilterRecord <- OnFilterRecord
+#link Active <- Active
+#link AutoCalcFields <- AutoCalcFields
+#link CachedUpdates <- CachedUpdates
+#link ObjectView <- ObjectView
+#link BeforeOpen <- BeforeOpen
+#link AfterOpen <- AfterOpen
+#link BeforeClose <- BeforeClose
+#link AfterClose <- AfterClose
+#link BeforeInsert <- BeforeInsert
+#link AfterInsert <- AfterInsert
+#link BeforeEdit <- BeforeEdit
+#link AfterEdit <- AfterEdit
+#link BeforePost <- BeforePost
+#link AfterPost <- AfterPost
+#link BeforeCancel <- BeforeCancel
+#link AfterCancel <- AfterCancel
+#link BeforeDelete <- BeforeDelete
+#link AfterDelete <- AfterDelete
+#link BeforeScroll <- BeforeScroll
+#link AfterScroll <- AfterScroll
+#link BeforeRefresh <- BeforeRefresh
+#link AfterRefresh <- AfterRefresh
+#link OnCalcFields <- OnCalcFields
+#link OnDeleteError <- OnDeleteError
+#link OnEditError <- OnEditError
+#link OnNewRecord <- OnNewRecord
+#link OnPostError <- OnPostError
+#link Constraints.Items.CustomConstraint <- Constraints.Items.CustomConstraint
+#link Constraints.Items.ErrorMessage <- Constraints.Items.ErrorMessage
+#link Constraints.Items.FromDictionary <- Constraints.Items.FromDictionary
+#link Constraints.Items.ImportedConstraint <- Constraints.Items.ImportedConstraint
+#link FieldOptions.AutoCreateMode <- FieldOptions.AutoCreateMode
+#link FieldOptions.PositionMode <- FieldOptions.PositionMode
+#link FieldOptions.UpdatePersistent <- FieldOptions.UpdatePersistent
+#link FieldOptions.BlobDisplayValue <- FieldOptions.BlobDisplayValue
+#link FieldDefs.Items.Attributes <- FieldDefs.Items.Attributes
+#link FieldDefs.Items.ChildDefs <- FieldDefs.Items.ChildDefs
+#link FieldDefs.Items.DataType <- FieldDefs.Items.DataType
+#link FieldDefs.Items.Precision <- FieldDefs.Items.Precision
+#link FieldDefs.Items.Size <- FieldDefs.Items.Size
+#link FieldDefs.Items.Name <- FieldDefs.Items.Name
+#link FieldDefs.ParentDef.Attributes <- FieldDefs.ParentDef.Attributes
+#link FieldDefs.ParentDef.ChildDefs <- FieldDefs.ParentDef.ChildDefs
+#link FieldDefs.ParentDef.DataType <- FieldDefs.ParentDef.DataType
+#link FieldDefs.ParentDef.Precision <- FieldDefs.ParentDef.Precision
+#link FieldDefs.ParentDef.Size <- FieldDefs.ParentDef.Size
+#link FieldDefs.ParentDef.Name <- FieldDefs.ParentDef.Name
+#link FieldDefList.FieldDefs.Attributes <- FieldDefList.FieldDefs.Attributes
+#link FieldDefList.FieldDefs.ChildDefs <- FieldDefList.FieldDefs.ChildDefs
+#link FieldDefList.FieldDefs.DataType <- FieldDefList.FieldDefs.DataType
+#link FieldDefList.FieldDefs.Precision <- FieldDefList.FieldDefs.Precision
+#link FieldDefList.FieldDefs.Size <- FieldDefList.FieldDefs.Size
+#link FieldDefList.FieldDefs.Name <- FieldDefList.FieldDefs.Name
+#link Name <- Name
+#link Tag <- Tag
+#note outstanding: 7 source properties with no target -- left out rather than guessed.
+
+#convert Data.DB.TParam -> FireDAC.Stan.Param.TFDParam, FireDAC.Stan.Param
+#note 7 source properties; 0 corpus-supplied, 7 auto-matched, 0 left for you.
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link DataType <- DataType
+#link Precision <- Precision
+#link NumericScale <- NumericScale
+#link Name <- Name
+#link ParamType <- ParamType
+#link Size <- Size
+#link Value <- Value
+#note outstanding: 0 source properties with no target -- left out rather than guessed.
+
+#convert Data.DB.TParams -> FireDAC.Stan.Param.TFDParams, FireDAC.Stan.Param
+#note 7 source properties; 0 corpus-supplied, 7 auto-matched, 0 left for you.
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link Items.DataType <- Items.DataType
+#link Items.Precision <- Items.Precision
+#link Items.NumericScale <- Items.NumericScale
+#link Items.Name <- Items.Name
+#link Items.ParamType <- Items.ParamType
+#link Items.Size <- Items.Size
+#link Items.Value <- Items.Value
+#note outstanding: 0 source properties with no target -- left out rather than guessed.
+
+#convert Data.DB.TAutoIncField -> FireDAC.Comp.DataSet.TFDAutoIncField, FireDAC.Comp.DataSet
+#note 32 source properties; 0 corpus-supplied, 31 auto-matched, 1 left for you.
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link MaxValue <- MaxValue
+#link MinValue <- MinValue
+#link Alignment <- Alignment
+#link DisplayFormat <- DisplayFormat
+#link EditFormat <- EditFormat
+#link AutoGenerateValue <- AutoGenerateValue
+#link CustomConstraint <- CustomConstraint
+#link ConstraintErrorMessage <- ConstraintErrorMessage
+#link DefaultExpression <- DefaultExpression
+#link DisplayLabel <- DisplayLabel
+#link DisplayWidth <- DisplayWidth
+#link FieldKind <- FieldKind
+#link FieldName <- FieldName
+#link Index <- Index
+#link ImportedConstraint <- ImportedConstraint
+#link LookupDataSet <- LookupDataSet
+#link LookupKeyFields <- LookupKeyFields
+#link LookupResultField <- LookupResultField
+#link KeyFields <- KeyFields
+#link LookupCache <- LookupCache
+#link Origin <- Origin
+#link ProviderFlags <- ProviderFlags
+#link ReadOnly <- ReadOnly
+#link Required <- Required
+#link Visible <- Visible
+#link OnChange <- OnChange
+#link OnGetText <- OnGetText
+#link OnSetText <- OnSetText
+#link OnValidate <- OnValidate
+#link Name <- Name
+#link Tag <- Tag
+#note CONFLICT: the file-scope '#remove DFM: Origin' above deletes Origin,
+#note but Auto-Match paired it here. Decide which one you want.
+#note outstanding: 1 source property with no target -- left out rather than guessed.
+
+#convert Bde.DBTables.TBatchMove -> FireDAC.Comp.BatchMove.TFDBatchMove, FireDAC.Comp.BatchMove
+#note 14 source properties; 0 corpus-supplied, 3 auto-matched, 10 left for you.
+#note corpus -- enum-valued property, handled by the #mapping above.
+#apply BdeBatchMode
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link CommitCount <- CommitCount
+#link Name <- Name
+#link Tag <- Tag
+#note outstanding: 10 source properties with no target -- left out rather than guessed.
+
+// ---------------------------------------------------------------------------
+// 4. Corpus lines that could NOT become property links -- carried verbatim.
+//    (a) enum types + members with no property in any block above to carry them
+// ---------------------------------------------------------------------------
+#migrate TUpdateKind -> TFDUpdateRequest, FireDAC.Phys.Intf
+#migrate ukModify -> arUpdate, FireDAC.Phys.Intf
+#migrate ukInsert -> arInsert, FireDAC.Phys.Intf
+#migrate ukDelete -> arDelete, FireDAC.Phys.Intf
+
+#migrate TUpdateAction -> TFDErrorAction, FireDAC.Stan.Intf
+#migrate uaFail -> eaFail, FireDAC.Stan.Intf
+#migrate uaAbort -> eaExitFailure, FireDAC.Stan.Intf
+#migrate uaSkip -> eaSkip, FireDAC.Stan.Intf
+#migrate uaRetry -> eaRetry, FireDAC.Stan.Intf
+#migrate uaApplied -> eaApplied, FireDAC.Stan.Intf
+
+#migrate TDBScreenCursors -> TFDGUIxScreenCursor, FireDAC.UI.Intf
+#migrate dcrDefault -> gcrDefault
+#migrate dcrHourGlass -> gcrHourGlass
+#migrate dcrSQLWait -> gcrSQLWait
+#migrate dcrOther -> gcrNone
+
+//    (b) METHOD renames -- #link maps properties only
+#migrate Session.* -> FDManager.*, FireDAC.Comp.Client
+#migrate IsAlias -> IsConnectionDef
+#migrate AddAlias -> AddConnectionDef
+#migrate DeleteAlias -> DeleteConnectionDef
+#migrate ModifyAlias -> ModifyConnectionDef
+#migrate GetAliasParams -> GetConnectionDefParams
+#migrate GetAliasNames -> GetConnectionDefNames
+#migrate FindDatabase -> FindConnection
+#migrate OpenDatabase -> OpenConnection
+#migrate CloseDatabase -> CloseConnection
+#migrate GetDatabaseNames -> GetConnectionNames
+#migrate TDatabase:Execute -> ExecSQL
+
+//    (c) the two enum-group members the #mapping blocks above already express,
+//        kept so a text search of this file still finds every corpus rename
+#migrate TTransIsolation -> TFDTxIsolation, FireDAC.Stan.Option
+#migrate tiDirtyRead -> xiDirtyRead, FireDAC.Stan.Option
+#migrate tiReadCommitted -> xiReadCommitted, FireDAC.Stan.Option
+#migrate tiRepeatableRead -> xiRepeatableRead, FireDAC.Stan.Option
+#migrate TransIsolation -> TxOptions.Isolation
+#migrate TBatchMode -> TFDBatchMoveMode, FireDAC.Comp.BatchMove
+#migrate batAppend -> dmAppend, FireDAC.Comp.BatchMove
+#migrate batUpdate -> dmUpdate, FireDAC.Comp.BatchMove
+#migrate batAppendUpdate -> dmAppendUpdate, FireDAC.Comp.BatchMove
+#migrate batDelete -> dmDelete, FireDAC.Comp.BatchMove
+#migrate batCopy -> dmAlwaysInsert, FireDAC.Comp.BatchMove
+
+//    (d) property renames whose source property is NOT on the published (DFM)
+//        surface of any block above, so no #link could carry them
+#migrate UpdateRecordTypes -> FilterChanges
+
+//    (e) class pairs that are TYPE renames, not component conversions: an
+//        abstract base class or a non-component, with no usable published
+//        property surface on one or both sides. Measured 2026-08-02 against
+//        the Win64 library index, at --min-visibility published:
+//          TBlobStream / TFDBlobStream           0 leaves both sides
+//          EDBEngineError / EFDDBEngineException 0 leaves both sides
+//          TDBDataSet (64) / TBDEDataSet (57) -> FireDAC.Comp.Client.TFDRdbmsDataSet:
+//            the TARGET publishes only Name and Tag of its own (every other
+//            member is public and re-published by the concrete TFDQuery/TFDTable
+//            descendants instead). Auto-Match against it produced 27 identity
+//            links into shared Data.DB metadata sub-objects (FieldDefs.*,
+//            Constraints.*) plus ONE demonstrably wrong pairing,
+//            'Indexes.Items.Filter <- Filter'. A #convert block was written and
+//            then withdrawn on that evidence. Convert the CONCRETE class
+//            (TQuery/TTable/TStoredProc) instead; this line stays a type rename.
+#migrate TBlobStream -> TFDBlobStream, FireDAC.Comp.DataSet
+#migrate EDBEngineError -> EFDDBEngineException, FireDAC.Stan.Error
+#migrate TDBDataSet -> TFDRDBMSDataSet, FireDAC.Comp.Client
+#migrate TBDEDataSet -> TFDRDBMSDataSet, FireDAC.Comp.Client
