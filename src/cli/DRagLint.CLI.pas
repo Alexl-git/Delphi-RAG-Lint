@@ -75,6 +75,7 @@ uses
   , DRagLint.Doc        .Drift
   , DRagLint.Doc        .Batch
   , DRagLint.Doc        .Strip
+  , DRagLint.Doc        .Harvest
   , DRagLint.Doc        .SymbolFacts
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
@@ -13710,6 +13711,60 @@ begin
   Result:= 0;
 end;
 
+// selftest harvest --file <path.pas> --line <n>: run DRagLint.Doc.Harvest.
+// HarvestScan over ONE declaration line and print its verdict, machine-readably.
+//
+// AutoDocument Phase 3 Task 6. The probe exists so the boundary scan can be
+// asserted BEFORE Task 7 gives it a consumer: without it, the first thing to
+// exercise these guards would be the text transformation built on top of them,
+// and a guard's failure would surface as wrong prose three tasks later.
+//
+// Reads the file with the SAME ANSI reader the doc path uses (TFile.
+// ReadAllLines(..., TEncoding.ANSI)), so a Latin-1 byte reaches HarvestScan as
+// the char the write path would have to emit -- which is what the hrNonAscii
+// guard is about.
+//
+// Prints exactly one status line
+//   REASON=<...> LINES=<n> START=<n> END=<n>
+// followed by 'RAW: ' + each accumulated source line.
+// Exit 0 on success, 2 on a missing/unreadable file or a missing --line.
+function DoSelfTestHarvest(const AArgs: TArgs): Integer;
+var
+  Lines: TArray<string> ;
+  Res  : THarvestResult ;
+  S    : string         ;
+begin
+  if AArgs.InFile = '' then
+  begin
+    Writeln(ErrOutput, 'selftest harvest requires --file <path.pas>');
+    Exit(2);
+  end;
+  if AArgs.RefLine <= 0 then
+  begin
+    Writeln(ErrOutput, 'selftest harvest requires --line <n> (1-based declaration line)');
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.InFile) then
+  begin
+    Writeln(ErrOutput, 'selftest harvest: file not found: ', AArgs.InFile);
+    Exit(2);
+  end;
+  try
+    Lines:= TFile.ReadAllLines(AArgs.InFile, TEncoding.ANSI);
+  except
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, 'selftest harvest: cannot read ', AArgs.InFile, ': ', E.Message);
+      Exit(2);
+    end;
+  end;
+  Res:= HarvestScan(Lines, AArgs.RefLine);
+  Writeln(Format('REASON=%s LINES=%d START=%d END=%d',
+    [HarvestReasonToString(Res.Reason), Length(Res.RawLines), Res.StartLine, Res.EndLine]));
+  for S in Res.RawLines do Writeln('RAW: ', S);
+  Result:= 0;
+end; // function
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -13722,10 +13777,11 @@ begin
   else if AArgs.SubCommand = 'coverage' then Result:= DoSelfTestCoverage   (AArgs)
   else if AArgs.SubCommand = 'recreate'      then Result:= DoSelfTestRecreate
   else if AArgs.SubCommand = 'unused-locals' then Result:= DoSelfTestUnusedLocals
+  else if AArgs.SubCommand = 'harvest'       then Result:= DoSelfTestHarvest    (AArgs)
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest');
     Result:= 2;
   end;
 end; // function

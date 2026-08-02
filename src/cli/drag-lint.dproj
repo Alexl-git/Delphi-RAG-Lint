@@ -148,6 +148,7 @@
         <DCCReference Include="..\doc\DRagLint.Doc.Drift.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.Batch.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.Strip.pas"/>
+        <DCCReference Include="..\doc\DRagLint.Doc.Harvest.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.SymbolFacts.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.DeadCode.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.TestStub.pas"/>
