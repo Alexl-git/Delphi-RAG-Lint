@@ -743,6 +743,81 @@ begin
   Result:= True;
 end; // function
 
+// INBOX 2.1 (converter-editor team, 2026-08-02): a method-pointer / procedural
+// type -- `X = procedure(...) [of object];` / `X = function(...): T [of object];`
+// -- was PARSED and then silently dropped. The grammar produces it cleanly:
+//
+//   (declType name: (identifier) (kEq)
+//     type: (type (declProcRef (kProcedure) args: (declArgs ...) (kOf) (kObject))))
+//
+// but no TryWalk* handler claimed `declProcRef`, and TryWalkAlias only accepts a
+// direct `typeref` target, so every one of these fell through the dispatch and
+// was never emitted. `TNotifyEvent`, `TMouseEvent`, `TKeyPressEvent`,
+// `TThreadMethod` and `TGetStrProc` all returned ZERO rows while plain aliases in
+// the SAME already-indexed file resolved -- so this is an emitter gap, not a
+// grammar gap and not a coverage gap.
+//
+// It matters well beyond the RTL: EVERY VCL event property is typed with one of
+// these, which is what made "go to definition" on `OnClick` impossible in
+// ConvRulesEditor. Worse, because `query --name` is a SUBSTRING match, the
+// absence did not read as empty -- the query returned unrelated locals called
+// `ANotifyEvent`, so a consumer taking the first hit navigated somewhere wrong.
+//
+// Emitted as skTypeAlias (kind `type`), which is what a plain alias reports and
+// what the reporter expected, carrying the WHOLE procedural signature as the
+// target text so hover/context show `procedure(Sender: TObject) of object` rather
+// than a bare name. A distinct symbol kind was considered and rejected: it would
+// need a new kind string plus an update to every consumer's type-category logic,
+// for nothing the signature text does not already convey.
+function TryWalkProcType(const ADeclTypeNode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
+var
+  TypeWrapNode: TTSNode;
+  RefNode     : TTSNode;
+  NameNode    : TTSNode;
+  TypeName    : string ;
+  QName       : string ;
+  Target      : string ;
+  Raw         : string ;
+  i           : Integer;
+  C           : Char   ;
+  PrevSpace   : Boolean;
+begin
+  Result:= False;
+  TypeWrapNode:= ADeclTypeNode.ChildByField('type');
+  if TypeWrapNode.IsNull then Exit;
+  if TypeWrapNode.NodeType = 'declProcRef' then RefNode:= TypeWrapNode
+  else RefNode:= FindNamedChildOfType(TypeWrapNode, 'declProcRef');
+  if RefNode.IsNull then Exit;
+  NameNode:= ADeclTypeNode.ChildByField('name');
+  if NameNode.IsNull then Exit;
+  TypeName:= NodeText(NameNode, AState.Source);
+  if TypeName = '' then Exit;
+  { A parameter list can wrap across lines; collapse runs of whitespace so the
+    stored signature is one readable line, as TypeTextOf already does for fields. }
+  Raw      := NodeText(RefNode, AState.Source);
+  PrevSpace:= False;
+  Target   := '';
+  for i:= 1 to Length(Raw) do
+  begin
+    C:= Raw[i];
+    if (C = #9) or (C = #10) or (C = #13) or (C = ' ') then
+    begin
+      if not PrevSpace then Target:= Target + ' ';
+      PrevSpace:= True;
+    end
+    else
+    begin
+      Target   := Target + C;
+      PrevSpace:= False;
+    end;
+  end;
+  Target:= Trim(Target);
+  if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
+  else QName:= TypeName;
+  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target);
+  Result:= True;
+end; // function
+
 // v11 (M1): simple type-reference alias `type X = SomeType;` -> emit skTypeAlias
 // with the target type text in Signature, so ResolveTypeCategory can chase
 // `type TMyFloat = Double;` to its intrinsic. ONLY a direct `typeref` target
@@ -1270,6 +1345,7 @@ begin
     if TryWalkHelper       (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { v15: declHelper is distinct from declClass -- must be tried first or its target typeref gets grabbed by TryWalkAlias }
     if TryWalkClassOrRecord(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
     if TryWalkEnum         (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
+    if TryWalkProcType     (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { INBOX 2.1: before TryWalkAlias -- a declProcRef's ARGUMENTS contain typerefs that TryWalkAlias would otherwise grab as the alias target }
     if TryWalkAlias        (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { v11 (M1) }
     // Unknown shape (set, subrange, proc-type, etc.) - fall through to default recurse.
   end;
