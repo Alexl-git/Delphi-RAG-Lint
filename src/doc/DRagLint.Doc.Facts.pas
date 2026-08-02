@@ -583,13 +583,33 @@ end;
 //
 // See the call site in Build for WHY the scan starts above the existing doc
 // region rather than at the declaration line.
+// The line a harvest scan should actually start from, given a 1-based
+// declaration/definition line: walk UP over any doc region already sitting
+// there, so the candidate is the comment ABOVE it.
+//
+// Load-bearing for idempotency, and it is the T7 fix: MergeComment writes its
+// `///` block immediately above the declaration, i.e. BETWEEN the harvested
+// comment and the declaration. A second run scanning from the declaration would
+// meet `///` first, get hrNone (Task 6's already-DocInsight rule), find
+// HarvestedSummary empty, and DROP the summary the first run wrote.
+function HarvestStartLine(const ALines: TArray<string>; ADeclLine: Integer): Integer;
+var i: Integer;
+begin
+  Result:= ADeclLine;
+  i     := Result - 2;                                     // 0-based, the line above
+  if (i >= 0) and (Trim(ALines[i]) = '') then Dec(i);      // FindDocRegionAbove's AllowGap = 1
+  while (i >= 0) and Trim(ALines[i]).StartsWith('///') do
+  begin
+    Result:= i + 1;
+    Dec(i);
+  end;
+end;
+
 procedure HarvestInterfaceComment(const AStore: ISymbolStore; const ASym: TSymbol;
   var AFacts: TDocFacts);
 var
-  Lines  : TArray<string>;
-  EffLine: Integer       ;
-  i      : Integer       ;
-  Res    : THarvestResult;
+  Lines: TArray<string>;
+  Res  : THarvestResult;
 begin
   if ASym.StartLine <= 0 then Exit;
   try
@@ -599,18 +619,24 @@ begin
   end;
   if ASym.StartLine > Length(Lines) then Exit;
 
-  // Walk up over the doc region this declaration already has, so the harvest
-  // candidate is the comment ABOVE it and a second run sees what the first saw.
-  EffLine:= ASym.StartLine;
-  i      := EffLine - 2;                                    // 0-based, the line above the declaration
-  if (i >= 0) and (Trim(Lines[i]) = '') then Dec(i);        // FindDocRegionAbove's AllowGap = 1
-  while (i >= 0) and Trim(Lines[i]).StartsWith('///') do
-  begin
-    EffLine:= i + 1;
-    Dec(i);
-  end;
+  // v(ADP3 T8): search order -- INTERFACE declaration first, then the
+  // IMPLEMENTATION definition; the first ACCEPTED hit wins and the search stops.
+  //
+  // Interface-side is preferred because a comment there is unambiguously about
+  // the declaration. Implementation-side is where the VOLUME is: on the YADF
+  // corpus 120 of 121 harvestable comments sit above the BODY, because authors
+  // comment the code they are writing while DocInsight renders the declaration.
+  // Promoting onto the declaration is the whole point -- the original comment
+  // stays exactly where it is (COPY, never move).
+  Res:= HarvestScan(Lines, HarvestStartLine(Lines, ASym.StartLine));
 
-  Res:= HarvestScan(Lines, EffLine);
+  // Only when the interface side declined, and only when there is a DISTINCT
+  // body to look at: for an implementation-only routine the two lines coincide
+  // and re-scanning is wasted work rather than wrong.
+  if (Res.Reason <> hrAccepted) and (ASym.ImplStartLine > 0) and
+     (ASym.ImplStartLine <> ASym.StartLine) and (ASym.ImplStartLine <= Length(Lines)) then
+    Res:= HarvestScan(Lines, HarvestStartLine(Lines, ASym.ImplStartLine));
+
   if Res.Reason <> hrAccepted then Exit;
   HarvestText(Res, AFacts.HarvestedSummary, AFacts.HarvestedRemarks);
 end;
