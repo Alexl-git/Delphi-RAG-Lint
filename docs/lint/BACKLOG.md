@@ -1,5 +1,74 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-08-02 (LATEST-78) -- **`main` IS MERGED IN. 2.9 + 2.10 FIXED. A merge-induced regression was found and fixed. ONE USER RULING IS BLOCKING. Read this before LATEST-77.**
+>
+> ### Git
+>
+> `feat/autodoc-phase3` = **`4438c06`** (+ uncommitted docs), was 110 behind `main` and is now
+> current. `main` = `3b4a877`, unchanged -- **nothing was merged INTO main.** NOTHING PUSHED.
+> Shared exe `third_party\dll-win64\drag-lint.exe` rebuilt + staged **17:06**, verified in the
+> STAGED binary. Completion report for the converter team:
+> `docs/INBOX-REPLY-2026-08-02-engine-completion-report.md`.
+>
+> ### >>> NEXT ACTION: get the ruling in `docs/lint/TRIAGE-the-22-harvest-repair.md`
+>
+> The 22 red autodoc checks were triaged as LATEST-75 asked. **The obvious fix is worse than
+> leaving them red, and the triage now proves why with numbers.** `EmptyRemarksOnly` goes
+> `7502 -> 9481 -> 9456 -> 9456` bytes: **cycle 2 SHRINKS the file**, because the repair branch
+> deletes the author's empty `<remarks>`. Widening the repair-vs-fresh term (the reverted
+> one-liner at `Doc.Document.pas:764-770`) does NOT prevent that deletion -- it moves it to cycle 1.
+> The suites would go green and the author's tag would still be gone, sooner, on the user's first
+> run. **Recommendation: make the REPAIR branch non-destructive instead** -- the engine already
+> has a guard that preserves an unmodeled `<value>` tag on the fresh path (`run_doc_p3_unhandledtags`
+> check 3 passes); repair does not use it. Two questions for the user are at the end of the triage.
+> **No engine change was made.** T8 remains unstarted.
+>
+> ### Fixed this session
+>
+> * **2.9 `--refs-as-leaves` phantom leaves (converter HIGH) -- FIXED BY THE MERGE ITSELF.**
+>   `TFDUpdateSQL` published surface: **364 leaves / 354 phantom on `main` -> 10 / 0 now**
+>   (5630 -> 500 without `--min-visibility`). `IsComponentType` asks the ancestor climb whether the
+>   type descends from `TComponent`; for `TFDAdaptedDataSet` that climb could not reach it on `main`,
+>   so the flag descended. The branch's late-ancestor resolution supplies the missing half -- so the
+>   fix needed BOTH sides and neither branch alone could show it.
+> * **2.10 case sensitivity -- FIXED, and the DESIGN IN LATEST-76 WAS WRONG.** Plain `COLLATE NOCASE`
+>   on the lookups is correct and catastrophically slow: SQLite cannot serve NOCASE from a BINARY
+>   index and **no existing consumer DB has a NOCASE one** (Migrate creates it; read verbs never call
+>   Migrate). Measured: proptree climb 2s -> **300s+**. Now **EXACT first, NOCASE only as a retry on
+>   zero rows**. Climb 55.2s un-migrated / **1.2s migrated**; wrong-case query 2.37s -> 0.23s.
+>   Consumers need ONE writable `drag-lint index` per DB (35.6s, +80MB on 1.87GB); the engine prints
+>   a one-time **stderr** note if they have not. Exact-case callers get byte-identical row sets.
+> * **THE THIRD LOOKUP PATH IS FOUND** -- there isn't one. `ANotifyEvent` matching `TNotifyEvent` is
+>   `FindSymbolsFuzzy` (trigram + Levenshtein, distance 3 allowed at 13 chars), which fires on ANY
+>   zero-row exact lookup. The `(no exact match...)` banner prints **only without `--json`**, so JSON
+>   consumers got guesses shaped like hits. Every `query` JSON row now carries
+>   **`"match_kind": "exact"|"fuzzy"`**.
+> * **REGRESSION THIS MERGE CAUSED, found and fixed.** `run_proptree_ancestor_climb` and
+>   `run_proptree_prop_type_scope` pass on `main` and went RED on the merge: PropTree guarded its own
+>   walk with a local `CrossesGuiFramework`, but the branch's late-ancestor resolution answers names
+>   that walk never asks about, so criterion 5 was enforced on one path and not the other -- a Vcl
+>   class inherited an FMX-only ancestor. `CrossesGuiFramework` **promoted to `Core.Model`**; both
+>   sites read the one declaration.
+> * **Four type-declaration shapes were never indexed** (NEW, nobody filed it): a plain alias to a
+>   KEYWORD target (`= string`), a subrange, an array type, a set type. `query --name TRange` denied
+>   a type in the file it had just indexed. The tell: `= type string` indexed while `= string` did
+>   not -- 2.11 closed the strong form only. **This corrects LATEST-77**, which said "plain aliases,
+>   subranges and enums were all fine": enums are, subranges are not.
+> * Encoding guard: `*.rules` (arrived with main's converter work) was declared `eol=crlf` but never
+>   scanned, so the guard's accounting assertion went red the moment the branches met -- which is what
+>   it is for. Plus 3 files left lone-LF on disk, one by this session's own `sed -i`.
+>
+> ### Traps confirmed the hard way
+>
+> 1. **Git Bash `grep -c $'\r$'` LIES about line endings** -- it reported CRLF on files that were
+>    pure LF. Use a byte-level check; the encoding guard caught what my grep missed.
+> 2. **Do not rebuild the exe while a battery runs.** 51 of 79 `autotest` runners resolve
+>    `src\cli\Win64\Debug\drag-lint.exe`; rebuilding mid-run contaminated a whole battery (4 phantom
+>    timeouts). The first battery of the session was also worthless for a different reason: the
+>    autodoc suites default to the STAGED exe, which was built from `main` and has no Phase 3.
+> 3. **PowerShell `-ne` / `-eq` are CASE-INSENSITIVE.** A check in the case-sensitivity suite
+>    asserted the exact opposite of its name until it used `-cne`.
+>
 > ## RESUME 2026-08-02 (LATEST-77) -- **THE SHARED EXE NOW CARRIES ALL FOUR CONVERTER FIXES. 2.11 found + fixed. Read this before LATEST-76.**
 >
 > ### The exe other teams rely on is CURRENT
