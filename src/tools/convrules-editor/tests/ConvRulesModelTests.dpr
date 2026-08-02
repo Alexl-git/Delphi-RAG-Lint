@@ -2603,38 +2603,82 @@ const
   { RunCapture merges the child's stderr into stdout, and the exe writes this
     note to stderr on every call. The parser must survive it. }
   PREAMBLE = '(loaded defaults from C:\Projects\.drag-lint.json)'#13#10;
+
+  { The real System.Classes.TAlignment row with its "start_line" field DELETED.
+    The exe has never been observed to emit a row without one, so this is not a
+    captured shape -- it exists to pin the DEFENSIVE branch the DocInsight on
+    ParseQueryLocation promises: a chosen row with no usable line still resolves,
+    to line 1 of the right file, never to line 0. }
+  QJ_ALIGNMENT_NO_START_LINE =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 1308682,'#13#10 +
+    '    "kind": "enum",'#13#10 +
+    '    "name": "TAlignment",'#13#10 +
+    '    "qualified_name": "System.Classes.TAlignment",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4644,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\source\\rtl\\common\\System.Classes.pas",'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 176,'#13#10 +
+    '    "end_col": 58,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
 var
-  F : string ;
-  Ln: Integer;
+  F  : string ;
+  Ln : Integer;
+  Amb: Integer;
 begin
   Check('queryloc.parses.bare.toplevel.array',
-    ParseQueryLocation(QJ_ALIGNMENT, 'TAlignment', F, Ln)
+    ParseQueryLocation(QJ_ALIGNMENT, 'TAlignment', F, Ln, Amb)
     and SameText(ExtractFileName(F), 'System.Classes.pas'), F);
   Check('queryloc.reads.start_line.not.line',
-    ParseQueryLocation(QJ_ALIGNMENT, 'TAlignment', F, Ln) and (Ln = 176),
+    ParseQueryLocation(QJ_ALIGNMENT, 'TAlignment', F, Ln, Amb) and (Ln = 176),
     'expected 176, got ' + IntToStr(Ln));
   Check('queryloc.prefers.type.over.field',
-    ParseQueryLocation(QJ_THREAD, 'TThread', F, Ln)
+    ParseQueryLocation(QJ_THREAD, 'TThread', F, Ln, Amb)
     and SameText(ExtractFileName(F), 'System.Classes.pas') and (Ln = 1822),
     'first hit is an unrelated field; got ' + F + ':' + IntToStr(Ln));
   Check('queryloc.prefers.concrete.over.alias',
-    ParseQueryLocation(QJ_FONTPITCH_ALIAS_FIRST, 'TFontPitch', F, Ln)
+    ParseQueryLocation(QJ_FONTPITCH_ALIAS_FIRST, 'TFontPitch', F, Ln, Amb)
     and SameText(ExtractFileName(F), 'System.UITypes.pas') and (Ln = 74),
     'the enum, not the Vcl.Graphics alias to it; got ' + F + ':' + IntToStr(Ln));
+
+  { Ranking settles KIND, never a tie WITHIN a kind tier -- and ties are ordinary.
+    All three TAlignment rows are tier 0 (two enums and a record), all are
+    section=interface with usable_from_other_units=true, so nothing on the rows can
+    separate them; System.Classes wins only because it was indexed first. The count
+    is what lets the caller say so instead of presenting a coin-flip as the answer. }
+  Check('queryloc.reports.tied.candidates',
+    ParseQueryLocation(QJ_ALIGNMENT, 'TAlignment', F, Ln, Amb) and (Amb = 3),
+    'three tier-0 rows named TAlignment; got ' + IntToStr(Amb));
+  Check('queryloc.unambiguous.reports.one',
+    ParseQueryLocation(QJ_THREAD, 'TThread', F, Ln, Amb) and (Amb = 1),
+    'only the class is tier 0, so the answer was forced; got ' + IntToStr(Amb));
+  Check('queryloc.missing.start_line.clamps.to.one',
+    ParseQueryLocation(QJ_ALIGNMENT_NO_START_LINE, 'TAlignment', F, Ln, Amb)
+    and SameText(ExtractFileName(F), 'System.Classes.pas') and (Ln = 1),
+    'the wire contract treats a missing line as 1, never 0; got ' + IntToStr(Ln));
+
   Check('queryloc.substring.only.hits.fail',
-    not ParseQueryLocation(QJ_NOTIFYEVENT_SUBSTRINGONLY, 'TNotifyEvent', F, Ln),
-    'ANotifyEvent is a substring hit, not TNotifyEvent');
+    not ParseQueryLocation(QJ_NOTIFYEVENT_SUBSTRINGONLY, 'TNotifyEvent', F, Ln, Amb)
+    and (Amb = 0), 'ANotifyEvent is a substring hit, not TNotifyEvent');
   Check('queryloc.accepts.qualified.name',
-    ParseQueryLocation(QJ_ABCBUTTONSTYLE, 'Abcbtn.TabcButtonStyle', F, Ln)
+    ParseQueryLocation(QJ_ABCBUTTONSTYLE, 'Abcbtn.TabcButtonStyle', F, Ln, Amb)
     and (Ln = 33), IntToStr(Ln));
   Check('queryloc.tolerates.stderr.preamble',
-    ParseQueryLocation(PREAMBLE + QJ_ABCBUTTONSTYLE, 'TabcButtonStyle', F, Ln)
+    ParseQueryLocation(PREAMBLE + QJ_ABCBUTTONSTYLE, 'TabcButtonStyle', F, Ln, Amb)
     and (Ln = 33), 'the loaded-defaults note must not break the parse');
   Check('queryloc.empty.array.fails',
-    not ParseQueryLocation(QJ_NOHITS, 'TAlignment', F, Ln),
+    not ParseQueryLocation(QJ_NOHITS, 'TAlignment', F, Ln, Amb),
     'zero hits must not report success');
   Check('queryloc.garbage.fails',
-    not ParseQueryLocation('not json', 'TAlignment', F, Ln),
+    not ParseQueryLocation('not json', 'TAlignment', F, Ln, Amb),
     'garbage must not report success');
 end;
 
@@ -2680,29 +2724,39 @@ const
 var
   M: TArray<string>;
 begin
+  { Every case re-parses. Asserting against whatever M was left holding by the
+    PREVIOUS Check couples the cases together and, worse, makes the negative ones
+    ("no directive is a member") pass for free whenever M happens to be empty. }
   Check('enum.members.simple.count',
     ParseEnumMembers(ED_SIMPLE, M) and (Length(M) = 3), IntToStr(Length(M)));
   Check('enum.members.simple.order',
-    (Length(M) = 3) and (M[0] = 'taLeftJustify') and (M[2] = 'taCenter'),
+    ParseEnumMembers(ED_SIMPLE, M) and (Length(M) = 3)
+    and (M[0] = 'taLeftJustify') and (M[2] = 'taCenter'),
     'declaration order must be preserved');
   Check('enum.members.multiline.count',
     ParseEnumMembers(ED_MULTILINE, M) and (Length(M) = 19), IntToStr(Length(M)));
   Check('enum.members.multiline.ends',
-    (Length(M) = 19) and (M[0] = 'absAutoDetect')
+    ParseEnumMembers(ED_MULTILINE, M) and (Length(M) = 19)
+    and (M[0] = 'absAutoDetect')
     and (M[18] = 'absRecessedBlackHighlight'), 'first/last member');
   Check('enum.members.strips.explicit.values',
     ParseEnumMembers(ED_CONDITIONAL, M) and Contains(M, 'RIO_EVENT_COMPLETION')
     and not Contains(M, '1'), 'a "= 1" is a value, not a member');
+  { The non-empty guard is the point: without it this passes for free on an empty M. }
   Check('enum.members.skips.directives.and.comments',
-    not Contains(M, 'IFDEF') and not Contains(M, 'ELSE') and not Contains(M, 'do'),
+    ParseEnumMembers(ED_CONDITIONAL, M) and (Length(M) > 0)
+    and not Contains(M, 'IFDEF') and not Contains(M, 'ELSE') and not Contains(M, 'do'),
     'compiler directives and // comments are not members');
   Check('enum.members.dedupes.ifdef.arms',
-    CountOf(M, 'RIO_EVENT_COMPLETION') = 1,
-    'a member named in both $IFDEF arms is listed once');
+    ParseEnumMembers(ED_CONDITIONAL, M)
+    and (CountOf(M, 'RIO_EVENT_COMPLETION') = 1)
+    and Contains(M, 'rnctUnused'),
+    'both arms contribute, but a member named in both is listed once');
   Check('enum.nonenum.yields.none',
-    not ParseEnumMembers(ED_CLASS, M), 'a class has no enum members');
+    not ParseEnumMembers(ED_CLASS, M) and (Length(M) = 0),
+    'a class has no enum members');
   Check('enum.empty.text.yields.none',
-    not ParseEnumMembers('', M), 'empty text has no members');
+    not ParseEnumMembers('', M) and (Length(M) = 0), 'empty text has no members');
 end;
 
 { End-to-end against the REAL exe and the REAL library index: the two adapter
@@ -2739,8 +2793,11 @@ begin
         Err + ' n=' + IntToStr(Length(M)))
     else
       Skip('gotodef.live.enum.members', 'RTL source not on disk');
+    { Err too, not just the False: a silent failure would otherwise pass here, and
+      the status bar has nothing to show the user when Err is empty. }
     Check('gotodef.live.class.has.no.members',
-      not Adapter.EnumMembersOf('TThread', M, Err), 'a class is not an enum');
+      not Adapter.EnumMembersOf('TThread', M, Err) and (Err <> '')
+      and (Length(M) = 0), 'a class is not an enum, and must say so: Err=' + Err);
   finally
     Adapter.Free;
   end;

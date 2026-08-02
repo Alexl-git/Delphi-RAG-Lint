@@ -1604,6 +1604,7 @@ var
   LWhere  : string;
   LMsg    : string;
   LLine   : Integer;
+  LAmbig  : Integer;
   LMembers: TArray<string>;
 begin
   if FCtxType = '' then Exit;
@@ -1611,13 +1612,22 @@ begin
   // is unresponsive for their duration -- say so with the cursor.
   var LGuard: IInterface := HourGlass;
 
-  if not FEngine.ResolveTypeLocation(FCtxType, LFile, LLine, LErr) then
+  if not FEngine.ResolveTypeLocation(FCtxType, LFile, LLine, LErr, LAmbig) then
   begin
     SetError(LErr);
     Exit;
   end;
   LWhere := Format('%s:%d', [LFile, LLine]);
   LMsg   := FCtxType + ' -- ' + LWhere;
+
+  // Several equally-ranked declarations carried this name and the engine's row order
+  // picked one. That happens on types the grid shows constantly -- TAlignment has
+  // three, TColor two -- so it is said out loud rather than presented as the answer.
+  // The unit is the file's base name, which is what makes "opened System.Classes"
+  // readable at a glance next to the full path.
+  if LAmbig > 1 then
+    LMsg := Format('%d declarations named %s; opened %s.  ',
+      [LAmbig, FCtxType, ChangeFileExt(ExtractFileName(LFile), '')]) + LMsg;
 
   // For an enum the member list is usually the actual question ("what can Style
   // be?"), so it rides along. A failure here is NOT reported: the location is

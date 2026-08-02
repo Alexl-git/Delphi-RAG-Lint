@@ -112,6 +112,10 @@ function ParseQuerySymbols(const AJson: string): TArray<TQuerySymbol>;
 /// ('Abcbtn.TabcButtonStyle'). The part after the last dot is compared to each
 /// row's Name; a qualified request must additionally match QualifiedName.</param>
 /// <param name="ASym">The chosen row. Untouched (Default) when the result is False.</param>
+/// <param name="AAmbiguity">How many exact-name rows shared the WINNING tier. 1 means
+/// the answer was forced; &gt; 1 means ASym is one of several equally-ranked candidates
+/// and was picked only by the engine's row order. 0 when the result is False. The
+/// caller MUST surface a value &gt; 1 -- see the remarks.</param>
 /// <returns>False when no row carries that exact name.</returns>
 /// <remarks>`--name` is a SUBSTRING match, so the reply routinely contains unrelated
 /// symbols: `--name TNotifyEvent` returns local variables called ANotifyEvent and
@@ -122,23 +126,36 @@ function ParseQuerySymbols(const AJson: string): TArray<TQuerySymbol>;
 /// then kind='type' (an alias, set or subrange), then anything else. So the enum
 /// System.UITypes.TFontPitch beats the alias Vcl.Graphics.TFontPitch that merely points
 /// at it, whichever order the engine happened to list them in -- and it is the enum row
-/// that EnumMembersOf can actually read members out of. Inside one tier the engine's own
-/// row order decides, so a name declared in two unrelated units (Spring.Logging.TColor
-/// and Vcl.Graphics.TColor) is still resolved arbitrarily; pass a qualified name when
-/// that matters.</remarks>
+/// that EnumMembersOf can actually read members out of.</remarks>
+/// <remarks>Ranking CANNOT settle a tie inside a tier, and ties are common rather than
+/// exotic: `--name TAlignment` returns THREE tier-0 rows -- System.Classes.TAlignment
+/// (enum), a record nested in a DevExpress RichEdit dialog form, and an enum nested in
+/// dxSplashForms -- all `section=interface` with `usable_from_other_units=true`, so no
+/// row attribute separates them either. The right one wins only because System.Classes
+/// was indexed first, which is exactly the ordering assumption the tiering exists to
+/// remove. Rather than guess harder, this reports HOW MANY tied via AAmbiguity so the
+/// caller can turn a silent wrong jump into a visible choice. Pass a qualified name to
+/// force the issue.</remarks>
 function SelectQuerySymbol(const ASyms: TArray<TQuerySymbol>;
-  const AWantedName: string; out ASym: TQuerySymbol): Boolean;
+  const AWantedName: string; out ASym: TQuerySymbol;
+  out AAmbiguity: Integer): Boolean;
 
 /// <summary>PURE: the declaration site of AWantedName in `query --json` output.</summary>
 /// <param name="AJson">Raw captured output (stderr preamble tolerated).</param>
 /// <param name="AWantedName">The type the caller asked about; see SelectQuerySymbol
 /// for how a row is matched and ranked.</param>
 /// <param name="AFile">Absolute path of the declaring file; '' when False.</param>
-/// <param name="ALine">1-based declaration line, read from "start_line"; 0 when False.</param>
-/// <returns>False for garbage, for an empty array (the real zero-hit reply), and --
-/// importantly -- when every row is only a SUBSTRING match on the requested name.</returns>
+/// <param name="ALine">1-based declaration line, read from "start_line". 0 when False.
+/// CLAMPED to a minimum of 1 on success: the wire contract says a missing or garbled
+/// line is to be treated as 1, so a chosen row whose "start_line" is absent or &lt; 1
+/// still resolves -- to line 1 of the right file, never to line 0.</param>
+/// <param name="AAmbiguity">How many rows tied at the winning tier; see
+/// SelectQuerySymbol. 1 = forced, &gt; 1 = the caller must say so, 0 when False.</param>
+/// <returns>False for garbage, for an empty array (the real zero-hit reply), for a
+/// chosen row with no "file", and -- importantly -- when every row is only a SUBSTRING
+/// match on the requested name.</returns>
 function ParseQueryLocation(const AJson, AWantedName: string; out AFile: string;
-  out ALine: Integer): Boolean;
+  out ALine: Integer; out AAmbiguity: Integer): Boolean;
 
 /// <summary>PURE: the member identifiers of an enum, read from its DECLARATION
 /// SOURCE TEXT.</summary>
@@ -253,7 +270,8 @@ type
     /// <param name="AType">Bare ('TabcButtonStyle') or unit-qualified type name, as it
     /// appears in a grid/pool cell.</param>
     /// <param name="AFile">Absolute path of the declaring file; '' when False.</param>
-    /// <param name="ALine">1-based declaration line; 0 when False.</param>
+    /// <param name="ALine">1-based declaration line; 0 when False. Clamped to a
+    /// minimum of 1 on success -- see ParseQueryLocation.</param>
     /// <param name="AError">Why it failed; '' on success.</param>
     /// <returns>False when the type is not in the configured indexes, when the exe or
     /// a DB is unusable, or when the call exceeded ENGINE_TIMEOUT_MS.</returns>
@@ -261,8 +279,29 @@ type
     /// reported as a not-indexed message, not an engine failure. Method-pointer types
     /// (TNotifyEvent and friends) are among the things the index does not carry, so a
     /// perfectly ordinary event property resolves to nothing here.</remarks>
+    /// <remarks>This overload DISCARDS the ambiguity count, so it cannot tell the user
+    /// that several equally-ranked declarations shared the name. Any caller with a
+    /// status bar should use the overload below.</remarks>
     function ResolveTypeLocation(const AType: string; out AFile: string;
-      out ALine: Integer; out AError: string): Boolean;
+      out ALine: Integer; out AError: string): Boolean; overload;
+
+    /// <summary>As above, but also reports how many equally-ranked declarations carried
+    /// the name.</summary>
+    /// <param name="AType">Bare or unit-qualified type name.</param>
+    /// <param name="AFile">Absolute path of the declaring file; '' when False.</param>
+    /// <param name="ALine">1-based declaration line; 0 when False.</param>
+    /// <param name="AError">Why it failed; '' on success.</param>
+    /// <param name="AAmbiguity">1 when the answer was forced. &gt; 1 when AFile is one
+    /// of several tied candidates, chosen only by the engine's row order -- the caller
+    /// must SAY SO rather than present it as the answer. 0 when False.</param>
+    /// <returns>As the overload above.</returns>
+    /// <remarks>Ties are ordinary, not exotic: `TAlignment` has three (an RTL enum and
+    /// two types nested in DevExpress form classes) and `TColor` has two
+    /// (Vcl.Graphics and Spring.Logging). See SelectQuerySymbol for why no row
+    /// attribute can separate them.</remarks>
+    function ResolveTypeLocation(const AType: string; out AFile: string;
+      out ALine: Integer; out AError: string;
+      out AAmbiguity: Integer): Boolean; overload;
 
     /// <summary>The member identifiers of AType when it is an enum.</summary>
     /// <param name="AType">Bare or unit-qualified type name.</param>
@@ -949,7 +988,8 @@ begin
 end;
 
 function SelectQuerySymbol(const ASyms: TArray<TQuerySymbol>;
-  const AWantedName: string; out ASym: TQuerySymbol): Boolean;
+  const AWantedName: string; out ASym: TQuerySymbol;
+  out AAmbiguity: Integer): Boolean;
 var
   Bare     : string ;
   Qualified: Boolean;
@@ -959,6 +999,7 @@ var
   DotPos   : Integer;
 begin
   ASym := Default(TQuerySymbol);
+  AAmbiguity := 0;
   Result := False;
   if AWantedName = '' then Exit;
 
@@ -967,6 +1008,10 @@ begin
   Qualified := DotPos > 0;
   if Qualified then Bare := Copy(Bare, DotPos + 1, MaxInt);
 
+  // Two passes over the same filter. The first finds the best tier present and its
+  // first row; the second counts how many rows tied there. Counting cannot be folded
+  // into the first pass without knowing the winning tier up front -- and the count is
+  // the whole point: it is what stops a tie being reported as a certainty.
   Best := MaxInt;
   for S in ASyms do
   begin
@@ -979,25 +1024,36 @@ begin
     if Tier < Best then
     begin
       Best := Tier;
-      ASym := S;
+      ASym := S;          // first row of the best tier seen so far
       Result := True;
-      // Nothing outranks a concrete declaration, and inside a tier the engine's
-      // row order decides -- so the first tier-0 row found is final.
-      if Best = 0 then Exit;
     end;
+  end;
+  if not Result then Exit;
+
+  for S in ASyms do
+  begin
+    if not SameText(S.Name, Bare) then Continue;
+    if Qualified and not SameText(S.QualifiedName, AWantedName) then Continue;
+    if TypeKindTier(S.Kind) = Best then Inc(AAmbiguity);
   end;
 end;
 
 function ParseQueryLocation(const AJson, AWantedName: string; out AFile: string;
-  out ALine: Integer): Boolean;
+  out ALine: Integer; out AAmbiguity: Integer): Boolean;
 var
   Sym: TQuerySymbol;
 begin
   AFile := ''; ALine := 0;
-  if not SelectQuerySymbol(ParseQuerySymbols(AJson), AWantedName, Sym) then Exit(False);
-  if Sym.FilePath = '' then Exit(False);   // a row with no file is not a location
+  if not SelectQuerySymbol(ParseQuerySymbols(AJson), AWantedName, Sym, AAmbiguity) then
+    Exit(False);
+  if Sym.FilePath = '' then
+  begin
+    AAmbiguity := 0;
+    Exit(False);                           // a row with no file is not a location
+  end;
   AFile := Sym.FilePath;
-  // The wire contract says a missing/garbled line is 1, so never emit 0.
+  // The wire contract says a missing/garbled line is 1, so never emit 0: the file is
+  // still the right answer and opening it at the top beats reporting nothing.
   if Sym.StartLine >= 1 then ALine := Sym.StartLine else ALine := 1;
   Result := True;
 end;
@@ -1190,16 +1246,24 @@ end;
 function TEngineAdapter.ResolveTypeLocation(const AType: string; out AFile: string;
   out ALine: Integer; out AError: string): Boolean;
 var
+  Ambiguity: Integer;
+begin
+  Result := ResolveTypeLocation(AType, AFile, ALine, AError, Ambiguity);
+end;
+
+function TEngineAdapter.ResolveTypeLocation(const AType: string; out AFile: string;
+  out ALine: Integer; out AError: string; out AAmbiguity: Integer): Boolean;
+var
   Json: string;
 begin
-  AFile := ''; ALine := 0;
+  AFile := ''; ALine := 0; AAmbiguity := 0;
   if Trim(AType) = '' then
   begin
     AError := 'No type to resolve.';
     Exit(False);
   end;
   if not QueryJsonFor(BareTypeName(AType), Json, AError) then Exit(False);
-  Result := ParseQueryLocation(Json, AType, AFile, ALine);
+  Result := ParseQueryLocation(Json, AType, AFile, ALine, AAmbiguity);
   if not Result then
     AError := Format('No declaration named "%s" came back. `query --name` matches a '
       + 'SUBSTRING, so the index answered with other symbols whose names merely '
@@ -1209,11 +1273,12 @@ end;
 function TEngineAdapter.EnumMembersOf(const AType: string;
   out AMembers: TArray<string>; out AError: string): Boolean;
 var
-  Json: string;
-  Sym : TQuerySymbol;
-  SL  : TStringList;
-  Decl: string;
-  i   : Integer;
+  Json : string;
+  Sym  : TQuerySymbol;
+  SL   : TStringList;
+  Decl : string;
+  i    : Integer;
+  Ambig: Integer;
 begin
   AMembers := nil;
   if Trim(AType) = '' then
@@ -1222,7 +1287,7 @@ begin
     Exit(False);
   end;
   if not QueryJsonFor(BareTypeName(AType), Json, AError) then Exit(False);
-  if not SelectQuerySymbol(ParseQuerySymbols(Json), AType, Sym) then
+  if not SelectQuerySymbol(ParseQuerySymbols(Json), AType, Sym, Ambig) then
   begin
     AError := Format('No declaration named "%s" came back.', [AType]);
     Exit(False);
