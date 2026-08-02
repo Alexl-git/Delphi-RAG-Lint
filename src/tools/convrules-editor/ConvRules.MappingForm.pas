@@ -32,6 +32,13 @@ type
     FBlockToType: string;                // the applying block's To class, for validation
     FSeed       : TArray<TRuleNode>;     // borrowed entry nodes; read once, never retained
     FMembers    : TArray<string>;        // source enum members as last resolved
+    { Why the member list cannot be trusted, or '' when it can. Set by LoadMembers (the
+      resolve failed, or the name was ambiguous, or the list is only the values already
+      written here) and by DeclChanged (the source enum type was retyped, so whatever
+      was resolved belongs to the PREVIOUS type). Revalidate appends it to the status
+      line instead of overwriting it: mikBadLiteral and the whole exhaustiveness pass
+      are only as good as this list, so an unresolved list must not look like success. }
+    FMemberNote : string;
     FCases      : TArray<TMappingCase>;  // one per FMemberList row, #else last
     FSeedSig    : string;                // canonical text at entry (see Signature)
     FLoading    : Boolean;               // suppress edit handlers while filling controls
@@ -292,13 +299,30 @@ procedure TMappingForm.LoadMembers(AFromCurrent: Boolean);
 var
   Members: TArray<string>;
   Err    : string;
+  Ambig  : Integer;
+  FromTyp: string;
   Source : TArray<TRuleNode>;
   Own    : TObjectList<TRuleNode>;
 begin
   Members := nil;
-  if (FEngine <> nil) and (Trim(FEdFromType.Text) <> '') then
-    if not FEngine.EnumMembersOf(Trim(FEdFromType.Text), Members, Err) then
+  Err     := '';
+  Ambig   := 0;
+  FMemberNote := '';
+  FromTyp := Trim(FEdFromType.Text);
+  // Neither the failure reason nor the ambiguity count may be dropped here. Everything
+  // downstream -- every mikBadLiteral verdict and the entire exhaustiveness pass -- is
+  // computed against this list, so a list that could not be resolved, or that came from
+  // one of several same-named declarations, has to be visible rather than look exactly
+  // like a clean load.
+  if (FEngine <> nil) and (FromTyp <> '') then
+    if not FEngine.EnumMembersOf(FromTyp, Members, Err, Ambig) then
+    begin
       Members := nil;
+      FMemberNote := 'Enum members NOT resolved: ' + Err;
+    end
+    else if Ambig > 1 then
+      FMemberNote := Format('%d declarations are named %s; the member list came from '
+        + 'one of them.', [Ambig, FromTyp]);
 
   Own := TObjectList<TRuleNode>.Create(True);
   try
@@ -316,7 +340,12 @@ begin
     // ambiguously. For those the values the author already wrote are the only members
     // known -- without this the list would be EMPTY for mappings that already work.
     if Length(Members) = 0 then
+    begin
       Members := MappingWhenValues(Source, FName);
+      if (FMemberNote = '') and (FromTyp <> '') then
+        FMemberNote := 'The member list is the values already written here, not '
+          + FromTyp + '''s.';
+    end;
 
     FMembers := Members;
     FCases   := MappingCasesOf(Source, FName, Members);
@@ -454,10 +483,24 @@ end;
 
 { OnChange for the three declaration boxes. The source enum type is NOT re-resolved
   here: EnumMembersOf spawns the drag-lint exe, and doing that per keystroke would
-  stall the window. "Load members" is the explicit trigger. }
+  stall the window. "Load members" is the explicit trigger.
+
+  But it is not re-VALIDATED against the old members either. FMembers still holds the
+  PREVIOUS enum's members, and checking the #when values against those produces
+  confidently wrong verdicts -- every value of the newly-typed enum reads as a bad
+  literal, and every member of the old one reads as uncovered. Dropping the list is
+  the honest answer: ValidateMappings gates both mikBadLiteral and the exhaustiveness
+  pass on Length(AEnumMembers) > 0, so an empty list turns those two checks OFF until
+  "Load members" resolves the new type. No check is better than a wrong one. }
 procedure TMappingForm.DeclChanged(Sender: TObject);
 begin
   if FLoading then Exit;
+  if Sender = FEdFromType then
+  begin
+    FMembers := nil;
+    FMemberNote := 'Source enum type edited -- press "Load members" to check values '
+      + 'against it.';
+  end;
   Revalidate;
 end;
 
@@ -520,6 +563,12 @@ begin
     if (Errors = 0) and (Length(Issues) > 0) then
       FStatus.SimpleText := FStatus.SimpleText + ' Warnings do not block OK.';
   end;
+  // The issue counts above are only meaningful if the member list they were computed
+  // against is meaningful. When it is not, that caveat is APPENDED rather than allowed
+  // to be overwritten -- "No issues." on an unresolvable enum is the exact reading this
+  // has to prevent.
+  if FMemberNote <> '' then
+    FStatus.SimpleText := FStatus.SimpleText + '   ' + FMemberNote;
 end;
 
 class function TMappingForm.EditMapping(AOwner: TComponent; const AName: string;

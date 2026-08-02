@@ -626,6 +626,7 @@ var
   Adapter: TEngineAdapter;
   Tree   : TProptree;
   Err    : string;
+  Note   : string;
   OK     : Boolean;
 begin
   Exe := ResolveExe;
@@ -637,13 +638,13 @@ begin
   Adapter := TEngineAdapter.Create(Exe, [LibWin32, LibWin64, ProjectDb]);
   try
     // TabcToggleBtn is Abcbtn.TabcToggleBtn -- the exact class the user picked.
-    OK := Adapter.GetProptree('TabcToggleBtn', Tree, Err);
+    OK := Adapter.GetProptree('TabcToggleBtn', Tree, Err, Note);
     Check('proptree.bareclass.ok', OK, Err);
     Check('proptree.bareclass.nonempty', Length(Tree.Leaves) > 0,
       Format('TabcToggleBtn resolved to %d leaves (bug: bare name not qualified)',
         [Length(Tree.Leaves)]));
     // An already-qualified name must still work (no double-qualify regression).
-    OK := Adapter.GetProptree('Abcbtn.TabcToggleBtn', Tree, Err);
+    OK := Adapter.GetProptree('Abcbtn.TabcToggleBtn', Tree, Err, Note);
     Check('proptree.qualified.still.ok', OK and (Length(Tree.Leaves) > 0), Err);
   finally
     Adapter.Free;
@@ -660,6 +661,7 @@ var
   Adapter: TEngineAdapter;
   Tree   : TProptree;
   Err    : string;
+  Note   : string;
   OK, sawField, allKinded: Boolean;
   L      : TPropLeaf;
 begin
@@ -671,7 +673,7 @@ begin
   end;
   Adapter := TEngineAdapter.Create(Exe, [LibWin32, LibWin64, ProjectDb]);
   try
-    OK := Adapter.GetProptree('TcxButton', Tree, Err, 'published');
+    OK := Adapter.GetProptree('TcxButton', Tree, Err, Note, 'published');
     if not OK or (Length(Tree.Leaves) = 0) then
     begin
       Skip('proptree2.live', 'TcxButton not resolved at published surface (pre-v17 exe?): ' + Err);
@@ -868,6 +870,7 @@ var
   Adapter: TEngineAdapter;
   Tree   : TProptree;
   Err    : string;
+  Note   : string;
   L      : TPropLeaf;
   nUnder, nNested: Integer;
   sawAction: Boolean;
@@ -881,7 +884,7 @@ begin
   Adapter := TEngineAdapter.Create(Exe, LibDbsFor(DEFAULT_FROM_PLATFORM,
     'C:\Projects\.drag-lint\') + [ProjectDb]);
   try
-    if not Adapter.GetProptree('cxButtons.TcxButton', Tree, Err, 'published')
+    if not Adapter.GetProptree('cxButtons.TcxButton', Tree, Err, Note, 'published')
        or (Length(Tree.Leaves) = 0) then
     begin
       Skip('proptree.refsasleaves', 'TcxButton did not resolve: ' + Err);
@@ -927,6 +930,7 @@ const
 var
   Exe      : string;
   Adapter  : TEngineAdapter;
+  Note     : string;
   ToTree   : TProptree;
   FromTree : TProptree;
   Err      : string;
@@ -945,13 +949,13 @@ begin
   Adapter := TEngineAdapter.Create(Exe, LibDbsFor(DEFAULT_FROM_PLATFORM,
     'C:\Projects\.drag-lint\') + [ProjectDb]);
   try
-    if not Adapter.GetProptree('cxButtons.TcxButton', ToTree, Err, 'published')
+    if not Adapter.GetProptree('cxButtons.TcxButton', ToTree, Err, Note, 'published')
        or (Length(ToTree.Leaves) = 0) then
     begin
       Skip('acceptance.tcxbutton', 'TcxButton did not resolve: ' + Err);
       Exit;
     end;
-    if not Adapter.GetProptree('Vcl.StdCtrls.TButton', FromTree, Err, 'published')
+    if not Adapter.GetProptree('Vcl.StdCtrls.TButton', FromTree, Err, Note, 'published')
        or (Length(FromTree.Leaves) = 0) then
     begin
       Skip('acceptance.tcxbutton', 'TButton (FROM counterpart) did not resolve: ' + Err);
@@ -3128,6 +3132,192 @@ begin
   end;
 end;
 
+{ "Does this block map anything" had TWO answers on this branch: SaveCompleteToString
+  rescued [rnkLink, rnkApply] while the rules list's completeness percentage counted
+  [rnkLink, rnkIgnore]. An #apply-only block therefore read as 0 % while being a finished
+  rule, and an #ignore-only block read as 100 % and was then dropped on save as "empty".
+  TRuleBook.BlockMapsSomething is now the single answer, and this pins its membership:
+  #link, #apply and #ignore each DECIDE the fate of a source property; #note (and a bare
+  block) decide nothing. A #mapping is deliberately NOT a member -- it is a declaration
+  and maps nothing until an #apply names it. }
+procedure TestBlockMapsSomething;
+var
+  Book: TRuleBook;
+  Hdrs: TArray<Integer>;
+begin
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(
+      '#convert A.T1 -> B.T1'#13#10 +
+      '#link X <- Y'#13#10 +
+      '#convert A.T2 -> B.T2'#13#10 +
+      '#apply M'#13#10 +
+      '#convert A.T3 -> B.T3'#13#10 +
+      '#ignore Foo'#13#10 +
+      '#convert A.T4 -> B.T4'#13#10 +
+      '#note nothing mapped yet'#13#10 +
+      '#convert A.T5 -> B.T5'#13#10 +
+      '#mapping M from E to B.T5'#13#10);
+    Hdrs := Book.ConvertHeaders;
+    Check('blockmaps.headers', Length(Hdrs) = 5, IntToStr(Length(Hdrs)));
+    // Every index below is guarded by the SAME length test in the same expression: an
+    // unguarded index would abort the runner with exit 2 and no summary line.
+    Check('blockmaps.link',
+      (Length(Hdrs) = 5) and TRuleBook.BlockMapsSomething(Book.NodesInBlock(Hdrs[0])));
+    Check('blockmaps.apply',
+      (Length(Hdrs) = 5) and TRuleBook.BlockMapsSomething(Book.NodesInBlock(Hdrs[1])),
+      'an #apply-only block maps something');
+    Check('blockmaps.ignore',
+      (Length(Hdrs) = 5) and TRuleBook.BlockMapsSomething(Book.NodesInBlock(Hdrs[2])),
+      'an #ignore is an authored decision about a source property');
+    Check('blockmaps.note',
+      (Length(Hdrs) = 5) and not TRuleBook.BlockMapsSomething(Book.NodesInBlock(Hdrs[3])),
+      'a #note-only block is annotation, not a rule');
+    Check('blockmaps.mappingonly',
+      (Length(Hdrs) = 5) and not TRuleBook.BlockMapsSomething(Book.NodesInBlock(Hdrs[4])),
+      'a #mapping DECLARATION maps nothing until an #apply names it');
+    Check('blockmaps.emptyarray', not TRuleBook.BlockMapsSomething(nil));
+  finally
+    Book.Free;
+  end;
+end;
+
+{ The other half of the same disagreement: an #ignore-only block used to show 100 %
+  complete in the rules list and then be silently dropped on save as an empty rule.
+  Now that both sides read BlockMapsSomething it is KEPT. The #note-only block in the
+  same fixture is still scratch, so this does not simply rescue everything. }
+procedure TestSaveCompleteKeepsIgnoreOnly;
+var
+  Book   : TRuleBook;
+  dropped: Integer  ;
+  outp   : string   ;
+begin
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(
+      '#convert A.TFrom -> B.TTo'#13#10 +   // #ignore only: KEEP
+      '#ignore Caption'#13#10 +
+      '#convert C.TFoo -> D.TBar'#13#10 +   // #note only: DROP
+      '#note nothing mapped yet'#13#10);
+    outp := Book.SaveCompleteToString(dropped);
+    Check('savecomplete.ignore.dropcount', dropped = 1, IntToStr(dropped));
+    Check('savecomplete.ignore.keeps.header',
+      Pos('#convert A.TFrom -> B.TTo', outp) > 0,
+      'an #ignore-only block was dropped as if empty');
+    Check('savecomplete.ignore.keeps.body', Pos('#ignore Caption', outp) > 0, outp);
+    Check('savecomplete.ignore.still.drops.note', Pos('C.TFoo', outp) = 0,
+      'a #note-only block is still scratch');
+  finally
+    Book.Free;
+  end;
+end;
+
+{ The mapping splice used to be index arithmetic in the VCL layer -- collect indices,
+  delete descending, insert at Idx[0] -- which the console suite cannot link, and BOTH
+  data-loss bugs this feature shipped with were in that seam. It now lives in
+  TRuleBook.ReplaceMapping, so it can be pinned:
+    * a mapping that already exists is replaced IN PLACE, so one written inside a
+      #convert block stays inside that block;
+    * a name not yet present goes ABOVE the first #convert -- file scope;
+    * a book with no #convert at all takes it at the top;
+    * [] deletes the mapping outright.
+  Ownership: ParseLine hands out unowned nodes and ReplaceMapping takes them, so nothing
+  here is freed twice and nothing leaks. }
+procedure TestReplaceMapping;
+var
+  Book : TRuleBook;
+  Nodes: TArray<TRuleNode>;
+  Body : TArray<TRuleNode>;
+  outp : string;
+begin
+  { --- existing mapping, inside a block: replaced in place --- }
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(
+      '#convert A.TFrom -> B.TTo'#13#10 +
+      '#link X <- Y'#13#10 +
+      '#mapping M from E.TOld to B.TTo'#13#10 +
+      '#mapping M #when a -> P = 1'#13#10 +
+      '#apply M'#13#10);
+    Nodes := Book.MappingNodesNamed('M');
+    Check('replacemapping.found.before', Length(Nodes) = 2, IntToStr(Length(Nodes)));
+    Check('replacemapping.found.other', Length(Book.MappingNodesNamed('Nope')) = 0);
+    Check('replacemapping.found.blank', Length(Book.MappingNodesNamed('')) = 0);
+
+    // TWO replacement lines, because a real mapping is always a declaration plus its
+    // clauses -- and their ORDER is load-bearing: a clause emitted before its
+    // declaration is not the same mapping.
+    Book.ReplaceMapping('M', [Book.ParseLine('#mapping M from E.TNew to B.TTo'),
+                              Book.ParseLine('#mapping M #when b -> P = 2')]);
+    outp := Book.SaveToString;
+    Check('replacemapping.new.written', Pos('#mapping M from E.TNew to B.TTo', outp) > 0,
+      outp);
+    Check('replacemapping.old.gone', Pos('E.TOld', outp) = 0, 'the old line survived');
+    Check('replacemapping.clause.gone', Pos('#when a', outp) = 0,
+      'the mapping is rewritten as ONE unit -- stale clauses must not survive');
+    Check('replacemapping.count.after', Length(Book.MappingNodesNamed('M')) = 2,
+      IntToStr(Length(Book.MappingNodesNamed('M'))));
+    Check('replacemapping.order.preserved',
+      (Pos('E.TNew', outp) > 0) and (Pos('#when b', outp) > 0)
+      and (Pos('E.TNew', outp) < Pos('#when b', outp)),
+      'the replacement lines were inserted out of order');
+
+    // In place: it went back where the old lines were, which is INSIDE the block, and
+    // the block's other nodes kept their order (#link before it, #apply after).
+    Body := Book.NodesInBlock(0);
+    Check('replacemapping.inblock.len', Length(Body) = 4, IntToStr(Length(Body)));
+    Check('replacemapping.inblock.order',
+      (Length(Body) = 4) and (Body[0].Kind = rnkLink) and (Body[1].Kind = rnkMapping)
+      and (Body[2].Kind = rnkMapping) and (Body[3].Kind = rnkApply),
+      'the splice reordered the block');
+
+    // [] deletes the mapping outright, leaving the rest of the block untouched.
+    Book.ReplaceMapping('M', []);
+    Check('replacemapping.delete', Length(Book.MappingNodesNamed('M')) = 0);
+    Check('replacemapping.delete.keeps.link', Pos('#link X <- Y', Book.SaveToString) > 0);
+    Check('replacemapping.delete.keeps.apply', Pos('#apply M', Book.SaveToString) > 0,
+      'deleting the declaration must not delete the #apply that names it');
+  finally
+    Book.Free;
+  end;
+
+  { --- name not present: lands above the FIRST #convert, i.e. at file scope --- }
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(
+      '// lead comment'#13#10 +
+      '#convert A.TFrom -> B.TTo'#13#10 +
+      '#link X <- Y'#13#10);
+    Book.ReplaceMapping('N', [Book.ParseLine('#mapping N from E.T to B.TTo')]);
+    Check('replacemapping.new.name.count', Length(Book.MappingNodesNamed('N')) = 1);
+    Check('replacemapping.new.name.pos',
+      (Book.Nodes.Count > 2) and (Book.Nodes[1].Kind = rnkMapping)
+      and (Book.Nodes[2].Kind = rnkConvert),
+      'a brand-new mapping must sit ABOVE the first #convert, not inside a block');
+    // Header sits at index 2 now (comment, mapping, convert, link).
+    Body := Book.NodesInBlock(2);
+    Check('replacemapping.new.name.notinblock',
+      (Length(Body) = 1) and (Body[0].Kind = rnkLink),
+      'the block body must still be just its #link');
+  finally
+    Book.Free;
+  end;
+
+  { --- no #convert anywhere: the top of the file is the only file scope --- }
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString('// only a comment'#13#10);
+    Book.ReplaceMapping('N', [Book.ParseLine('#mapping N from E.T to B.T')]);
+    Check('replacemapping.noconvert.pos',
+      (Book.Nodes.Count > 0) and (Book.Nodes[0].Kind = rnkMapping),
+      'with no #convert header the mapping goes to the top');
+    Check('replacemapping.noconvert.comment.kept',
+      Pos('// only a comment', Book.SaveToString) > 0);
+  finally
+    Book.Free;
+  end;
+end;
+
 { One flattened property-tree leaf. Mapping validation only reads Path and IsWritable,
   so those are what the fixture pins; the rest is filled in plausibly so the record is
   never half-initialised. }
@@ -3835,6 +4025,9 @@ begin
     TestMappingWhenWithoutSets;
     TestMappingEmit;
     TestSaveCompleteKeepsApplyOnly;
+    TestBlockMapsSomething;
+    TestSaveCompleteKeepsIgnoreOnly;
+    TestReplaceMapping;
     TestMappingValidation;
     TestMappingBadLiteral;
     TestMappingIssueSeverity;

@@ -305,6 +305,15 @@ begin
   FBlocks.Columns.Add.Caption := 'Kind';    FBlocks.Columns[1].Width := 70;
   FBlocks.Columns.Add.Caption := 'Block';   FBlocks.Columns[2].Width := 620;
   FBlocks.Columns.Add.Caption := 'Lines';   FBlocks.Columns[3].Width := 80;
+
+  // TLabel is a TGraphicControl, so no style hook reaches it: without Transparent it
+  // fills its rectangle with the light clBtnFace its parent's PROPERTY resolves to
+  // while the caption is painted styled, which is white-on-white under a dark style.
+  // This window rendered acceptably under the two styles that happen to ship, but by
+  // luck rather than design -- it was the only one of the three without the sweep.
+  // Same sweep, and same reason, as the main window's and the mapping editor's.
+  for var i := 0 to ComponentCount - 1 do
+    if Components[i] is TLabel then TLabel(Components[i]).Transparent := True;
 end;
 
 procedure TCurationForm.RefreshFiles;

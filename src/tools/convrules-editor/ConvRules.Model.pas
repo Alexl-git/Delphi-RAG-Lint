@@ -167,16 +167,67 @@ type
     /// <summary>Append a node; returns it.</summary>
     function Add(ANode: TRuleNode): TRuleNode;
 
+    /// <summary>The rnkMapping nodes named AName, in file order.</summary>
+    /// <param name="AName">Mapping name, compared case-insensitively. '' matches
+    /// nothing.</param>
+    /// <returns>Borrowed references -- the book still owns them. [] when no mapping
+    /// carries the name.</returns>
+    function MappingNodesNamed(const AName: string): TArray<TRuleNode>;
+
+    /// <summary>Replace EVERY line of the #mapping named AName with ANew, in one
+    /// splice.</summary>
+    /// <param name="AName">The mapping being rewritten, compared case-insensitively.
+    /// '' does nothing.</param>
+    /// <param name="ANew">The mapping's complete replacement lines, in file order.
+    /// OWNERSHIP TRANSFERS TO THE BOOK -- the caller must not free them, and must not
+    /// pass nodes that are ALREADY in this book (the old ones are freed by the delete
+    /// below, so an aliased node would be freed and then re-inserted dangling). []
+    /// deletes the mapping outright.</param>
+    /// <remarks>WHERE the lines land: on top of the old ones when the mapping already
+    /// exists -- so a mapping written inside a #convert block stays in that block --
+    /// and otherwise immediately ABOVE the first #convert header, which is file scope,
+    /// so every block can apply it. A book with no #convert header at all takes them at
+    /// the top. The mapping is rewritten as ONE unit because that is how the mapping
+    /// editor hands it back; there is no per-line diff.</remarks>
+    /// <remarks>Node ORDER outside the mapping is preserved: the deletes run
+    /// descending, so no surviving index shifts under a later delete, and the insert
+    /// point is the first freed slot, which nothing before it moved past. Callers
+    /// holding an INDEX into Nodes (a selected #convert header, say) must re-derive it
+    /// afterwards -- Nodes.IndexOf on the node itself is the safe way.</remarks>
+    procedure ReplaceMapping(const AName: string; const ANew: TArray<TRuleNode>);
+
+    /// <summary>PURE: does this block body decide the fate of at least one source
+    /// property?</summary>
+    /// <param name="ANodes">A #convert block's body nodes, as NodesInBlock returns
+    /// them. A nil element is skipped. Passing the header itself does no harm --
+    /// rnkConvert is not one of the deciding kinds.</param>
+    /// <returns>True when the body contains at least one rnkLink, rnkApply or
+    /// rnkIgnore node.</returns>
+    /// <remarks>THE single answer to "does this block map anything". Two call sites
+    /// used to answer it separately and disagree: SaveCompleteToString rescued
+    /// [rnkLink, rnkApply] while the editor's completeness percentage counted
+    /// [rnkLink, rnkIgnore]. An #apply-only block -- the very shape #apply exists to
+    /// create -- therefore read as 0 % complete while being a finished rule, and an
+    /// #ignore-only block read as 100 % complete and was then dropped on save as
+    /// "empty".</remarks>
+    /// <remarks>Membership is "decides a source property", not "has any content":
+    /// #link maps one, #apply hands one or more to a named #mapping, and #ignore
+    /// records that one is deliberately NOT mapped -- all three are authored
+    /// decisions that are lost if the block is dropped. A #mapping is a DECLARATION
+    /// and maps nothing until an #apply names it, so it does not rescue a block;
+    /// #note, comments and blanks are annotation. #default and #remove are likewise
+    /// left out -- pre-existing behaviour, not revisited here.</remarks>
+    class function BlockMapsSomething(const ANodes: TArray<TRuleNode>): Boolean; static;
+
     /// <summary>Serialize like SaveToString, but DROP every #convert block that maps
-    /// nothing -- a From/To pair with no #link AND no #apply is scratch, not a rule,
-    /// so it is not persisted. Content OUTSIDE any #convert block (leading
+    /// nothing (see BlockMapsSomething). Content OUTSIDE any #convert block (leading
     /// comments/blanks) is preserved. Blocks that map something round-trip unchanged.
     /// Reports how many blocks were dropped via ADroppedCount.</summary>
     /// <param name="ADroppedCount">Set to the number of blocks omitted; 0 when none.</param>
     /// <remarks>Annotation-only body nodes do NOT rescue a block: a block whose only
     /// child is a #note (or a comment/blank) still counts as mapping nothing and is
-    /// dropped. #default / #ignore / #remove likewise do not currently rescue a
-    /// block -- pre-existing behaviour, deliberately left alone here.</remarks>
+    /// dropped. A #mapping-only, #default-only or #remove-only block is likewise still
+    /// dropped -- pre-existing behaviour, deliberately left alone here.</remarks>
     function SaveCompleteToString(out ADroppedCount: Integer): string;
   end;
 
@@ -698,15 +749,74 @@ begin
   end;
 end;
 
+function TRuleBook.MappingNodesNamed(const AName: string): TArray<TRuleNode>;
+var
+  L: TList<TRuleNode>;
+  i: Integer         ;
+begin
+  L := TList<TRuleNode>.Create;
+  try
+    if AName <> '' then
+      for i := 0 to FNodes.Count - 1 do
+        if (FNodes[i].Kind = rnkMapping) and SameText(FNodes[i].MapName, AName) then
+          L.Add(FNodes[i]);
+    Result := L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+procedure TRuleBook.ReplaceMapping(const AName: string; const ANew: TArray<TRuleNode>);
+var
+  Idx  : TArray<Integer>;
+  InsAt: Integer        ;
+  i    : Integer        ;
+begin
+  if AName = '' then Exit;
+
+  Idx := nil;
+  for i := 0 to FNodes.Count - 1 do
+    if (FNodes[i].Kind = rnkMapping) and SameText(FNodes[i].MapName, AName) then
+      Idx := Idx + [i];
+
+  if Length(Idx) > 0 then
+    InsAt := Idx[0]           // still valid after the deletes: it is the FIRST freed
+  else                        // slot, and nothing before it moved
+  begin
+    // A mapping that does not exist yet goes above the first #convert -- file scope,
+    // so every block can apply it. Written inside a block it would read as that
+    // block's. With no #convert at all, the top of the file is the only file scope.
+    InsAt := 0;
+    for i := 0 to FNodes.Count - 1 do
+      if FNodes[i].Kind = rnkConvert then begin InsAt := i; Break; end;
+  end;
+
+  // Descending, so each remaining index in Idx still addresses its own node.
+  for i := High(Idx) downto 0 do
+    FNodes.Delete(Idx[i]);    // the book owns them, so Delete frees them
+  for i := 0 to High(ANew) do
+    FNodes.Insert(InsAt + i, ANew[i]);
+end;
+
+class function TRuleBook.BlockMapsSomething(const ANodes: TArray<TRuleNode>): Boolean;
+var
+  N: TRuleNode;
+begin
+  for N in ANodes do
+    if (N <> nil) and (N.Kind in [rnkLink, rnkApply, rnkIgnore]) then Exit(True);
+  Result := False;
+end;
+
 function TRuleBook.SaveCompleteToString(out ADroppedCount: Integer): string;
 var
-  SB : TStringBuilder;
-  i  : Integer       ;
-  j  : Integer       ;
-  hasContent: Boolean;
+  SB  : TStringBuilder;
+  i   : Integer       ;
+  j   : Integer       ;
+  Body: TList<TRuleNode>;
 begin
   ADroppedCount := 0;
   SB := TStringBuilder.Create;
+  Body := TList<TRuleNode>.Create;   // borrowed references; FNodes still owns them
   try
     i := 0;
     while i < FNodes.Count do
@@ -715,16 +825,15 @@ begin
       begin
         // find the block extent [i .. j) up to the next header or EOF
         j := i + 1;
-        hasContent := False;
+        Body.Clear;
         while (j < FNodes.Count) and (FNodes[j].Kind <> rnkConvert) do
         begin
-          // A block MAPS something if it links a property or applies a #mapping.
-          // #apply counts: its whole body may be one #apply and that is a real,
-          // authored rule -- dropping it would be silent data loss on save.
-          if FNodes[j].Kind in [rnkLink, rnkApply] then hasContent := True;
+          Body.Add(FNodes[j]);
           Inc(j);
         end;
-        if hasContent then
+        // "Maps something" is NOT decided here -- BlockMapsSomething is the one place
+        // that rule is written down, shared with the editor's completeness percentage.
+        if BlockMapsSomething(Body.ToArray) then
         begin
           // emit the whole block verbatim (header + its nodes)
           for var k := i to j - 1 do
@@ -747,6 +856,7 @@ begin
     end;
     Result := SB.ToString;
   finally
+    Body.Free;
     SB.Free;
   end;
 end;

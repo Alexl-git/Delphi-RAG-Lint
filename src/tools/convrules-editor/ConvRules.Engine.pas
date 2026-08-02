@@ -193,11 +193,29 @@ type
     function ResolveUnitFile(const AUnit: string): string;
     /// <summary>Qualify a bare class name to its unit-qualified form (TcxButton ->
     /// cxButtons.TcxButton) via `query --name`, which is what `proptree --qname`
-    /// requires. If AName already contains a '.', or no class row is found, AName
-    /// is returned unchanged. When several units declare the name, the first class
-    /// row wins (best-effort; the caller may still pass a qualified name to be
-    /// exact).</summary>
-    function ResolveClassQName(const AName: string): string;
+    /// requires. Discards the tie count; see the overload below.</summary>
+    function ResolveClassQName(const AName: string): string; overload;
+
+    /// <summary>As above, reporting how many CLASS rows carried EXACTLY this
+    /// name.</summary>
+    /// <param name="AName">Bare class name. Returned unchanged (with AAmbiguity 0)
+    /// when it already contains a '.', when it is empty, or when no class row
+    /// carries it.</param>
+    /// <param name="AAmbiguity">1 when exactly one class is named AName. &gt; 1 when
+    /// several are and the result is one of them, picked only by the engine's row
+    /// order -- the caller must SAY SO. 0 when nothing resolved.</param>
+    /// <returns>The chosen row's qualified_name, or AName unchanged.</returns>
+    /// <remarks>Selection goes through the same ParseQuerySymbols/SelectQuerySymbol
+    /// pair the go-to-definition path uses, narrowed to kind='class' first (proptree
+    /// wants the class, and a same-named enum or record would otherwise win the tier-0
+    /// tie). The rows are pre-filtered rather than ranked because `--name` is a
+    /// SUBSTRING match: measured against library-Win64 on 2026-08-02, `--name TLabel`
+    /// returns 34 rows of which most are kind='component' DFM instances. Ties between
+    /// frameworks are the normal case, not the exotic one -- TEdit has two classes
+    /// (FMX.Edit and Vcl.StdCtrls) and TButton four -- so the count is what turns a
+    /// silent FMX property tree into a visible one.</remarks>
+    function ResolveClassQName(const AName: string;
+      out AAmbiguity: Integer): string; overload;
   public
     constructor Create(const AExePath: string; const ADbList: TArray<string>);
 
@@ -217,6 +235,11 @@ type
     /// <param name="AQname">Bare ('TcxButton') or unit-qualified
     /// ('cxButtons.TcxButton'); a bare name is qualified first via
     /// ResolveClassQName.</param>
+    /// <param name="ANote">'' unless a BARE name matched several classes, in which
+    /// case it says how many and which one was used -- e.g. 'TEdit: 2 classes carry
+    /// that name; used FMX.Edit.TEdit.'. The tree that comes back is then only one of
+    /// the candidates, so the caller MUST show this even though the call succeeded.
+    /// Never a reason to treat the result as a failure.</param>
     /// <remarks>--refs-as-leaves is ALWAYS passed, so a TComponent-typed property
     /// appears as a single leaf and is NOT recursed into. Callers therefore do not
     /// see paths through a component reference (no 'Action.Owner.Name'); those are
@@ -225,7 +248,8 @@ type
     /// still returned in full. ATree.Truncated reports the engine's own cap and is
     /// True even for a bounded call on a large DevExpress control.</remarks>
     function GetProptree(const AQname: string; out ATree: TProptree;
-      out AError: string; const AMinVisibility: string = ''): Boolean;
+      out AError: string; out ANote: string;
+      const AMinVisibility: string = ''): Boolean;
 
     /// <summary>The unit that declares ATypeName, derived by resolving it to its
     /// unit-qualified form (ResolveClassQName) and taking the part before the LAST
@@ -313,8 +337,28 @@ type
     /// children-of query: resolve the enum row to file + start_line..end_line, then
     /// READ those source lines and hand them to ParseEnumMembers. That makes this the
     /// one adapter verb that needs the library SOURCE on disk, not just the DB.</remarks>
+    /// <remarks>This overload DISCARDS the ambiguity count, so it cannot tell the user
+    /// that the members came from one of several equally-ranked declarations sharing
+    /// the name. Any caller that keeps the list around -- and validates literals or
+    /// exhaustiveness against it -- should use the overload below.</remarks>
     function EnumMembersOf(const AType: string; out AMembers: TArray<string>;
-      out AError: string): Boolean;
+      out AError: string): Boolean; overload;
+
+    /// <summary>As above, but also reports how many equally-ranked declarations carried
+    /// the name.</summary>
+    /// <param name="AType">Bare or unit-qualified type name.</param>
+    /// <param name="AMembers">Members in declaration order; [] when False.</param>
+    /// <param name="AError">Why it failed; '' on success.</param>
+    /// <param name="AAmbiguity">1 when the answer was forced. &gt; 1 when AMembers came
+    /// from one of several tied declarations, chosen only by the engine's row order --
+    /// the caller must SAY SO rather than present the list as authoritative. 0 when
+    /// False.</param>
+    /// <returns>As the overload above.</returns>
+    /// <remarks>Ties are ordinary, not exotic -- see ResolveTypeLocation. A tied enum
+    /// matters more than a tied jump: the wrong member list turns every literal check
+    /// and the exhaustiveness pass into confident nonsense.</remarks>
+    function EnumMembersOf(const AType: string; out AMembers: TArray<string>;
+      out AError: string; out AAmbiguity: Integer): Boolean; overload;
 
     /// <summary>convert-scaffold --from F --to T. Returns the raw .rules text the
     /// scaffolder emits (to be loaded into a TRuleBook), or '' + AError on failure.</summary>
@@ -573,19 +617,26 @@ end;
 {$ENDIF}
 
 function TEngineAdapter.GetProptree(const AQname: string; out ATree: TProptree;
-  out AError: string; const AMinVisibility: string): Boolean;
+  out AError: string; out ANote: string; const AMinVisibility: string): Boolean;
 var
   Output: string;
   Code  : Integer;
   QN    : string;
   VisArg: string;
+  Ambig : Integer;
 begin
   AError := '';
+  ANote := '';
   ATree := Default(TProptree);
   // The pickers hand us a BARE class name (TcxButton); proptree --qname needs the
   // unit-qualified form (cxButtons.TcxButton). Qualify it first (no-op if already
   // qualified or not resolvable).
-  QN := ResolveClassQName(AQname);
+  QN := ResolveClassQName(AQname, Ambig);
+  // Several classes carry that bare name -- TEdit, TButton and TLabel all have both an
+  // FMX and a VCL declaration -- and only the engine's row order chose between them.
+  // Silently returning an FMX property tree for a VCL form is the failure this reports.
+  if Ambig > 1 then
+    ANote := Format('%s: %d classes carry that name; used %s.', [AQname, Ambig, QN]);
   // Target surface (engine schema v17): --min-visibility published (DFM-streamable
   // props only) or public (adds public props + public fields); '' emits all leaves.
   // --refs-as-leaves IS on main (parsed in DRagLint.CLI.pas) and is passed on every
@@ -764,41 +815,48 @@ end;
 
 function TEngineAdapter.ResolveClassQName(const AName: string): string;
 var
-  Output: string;
-  Code  : Integer;
-  Root  : TJSONValue;
-  Arr   : TJSONArray;
-  V     : TJSONValue;
-  Obj   : TJSONObject;
-  Kind, QN: string;
+  Ambiguity: Integer;
+begin
+  Result := ResolveClassQName(AName, Ambiguity);
+end;
+
+function TEngineAdapter.ResolveClassQName(const AName: string;
+  out AAmbiguity: Integer): string;
+var
+  Json   : string;
+  Err    : string;
+  Syms   : TArray<TQuerySymbol>;
+  Classes: TArray<TQuerySymbol>;
+  S      : TQuerySymbol;
+  Sym    : TQuerySymbol;
+  n      : Integer;
 begin
   Result := AName;
+  AAmbiguity := 0;
   // Already qualified (has a '.') or empty -> nothing to do.
   if (AName = '') or (Pos('.', AName) > 0) then Exit;
-  Code := RunCapture(Format('query --name "%s" --json%s', [AName, DbArgs]), Output);
-  if Code = 2 then Exit;
-  var lb: Integer := Pos('[', Output);
-  var rb: Integer := 0;
-  for var i := Length(Output) downto 1 do
-    if Output[i] = ']' then begin rb := i; Break; end;
-  if (lb <= 0) or (rb <= lb) then Exit;
-  Root := TJSONObject.ParseJSONValue(Copy(Output, lb, rb - lb + 1));
-  if not (Root is TJSONArray) then begin Root.Free; Exit; end;
-  try
-    Arr := Root as TJSONArray;
-    // Prefer the first class row; that qualified_name is what proptree needs.
-    for V in Arr do
-      if V is TJSONObject then
-      begin
-        Obj := V as TJSONObject;
-        Obj.TryGetValue<string>('kind', Kind);
-        if SameText(Kind, 'class') and Obj.TryGetValue<string>('qualified_name', QN)
-           and (QN <> '') then
-          Exit(QN);
-      end;
-  finally
-    Root.Free;
+  if not QueryJsonFor(AName, Json, Err) then Exit;   // exit 1 = no hits, not a failure
+  Syms := ParseQuerySymbols(Json);
+  // Keep only class rows, then let the SHARED selector do the exact-name match and
+  // the tie count. Taking "the first kind=class row" without comparing the name is
+  // what this replaces: `--name` is a substring match, so that row is regularly a
+  // different class whose name merely contains the request.
+  SetLength(Classes, Length(Syms));
+  n := 0;
+  for S in Syms do
+    if SameText(S.Kind, 'class') then
+    begin
+      Classes[n] := S;
+      Inc(n);
+    end;
+  SetLength(Classes, n);
+  if not SelectQuerySymbol(Classes, AName, Sym, AAmbiguity) then
+  begin
+    AAmbiguity := 0;
+    Exit;
   end;
+  if Sym.QualifiedName <> '' then Result := Sym.QualifiedName
+  else AAmbiguity := 0;             // a row with no qualified_name qualifies nothing
 end;
 
 function TEngineAdapter.DeclaringUnitOf(const ATypeName: string): string;
@@ -1273,21 +1331,30 @@ end;
 function TEngineAdapter.EnumMembersOf(const AType: string;
   out AMembers: TArray<string>; out AError: string): Boolean;
 var
+  Ambiguity: Integer;
+begin
+  Result := EnumMembersOf(AType, AMembers, AError, Ambiguity);
+end;
+
+function TEngineAdapter.EnumMembersOf(const AType: string;
+  out AMembers: TArray<string>; out AError: string;
+  out AAmbiguity: Integer): Boolean;
+var
   Json : string;
   Sym  : TQuerySymbol;
   SL   : TStringList;
   Decl : string;
   i    : Integer;
-  Ambig: Integer;
 begin
   AMembers := nil;
+  AAmbiguity := 0;
   if Trim(AType) = '' then
   begin
     AError := 'No type to inspect.';
     Exit(False);
   end;
   if not QueryJsonFor(BareTypeName(AType), Json, AError) then Exit(False);
-  if not SelectQuerySymbol(ParseQuerySymbols(Json), AType, Sym, Ambig) then
+  if not SelectQuerySymbol(ParseQuerySymbols(Json), AType, Sym, AAmbiguity) then
   begin
     AError := Format('No declaration named "%s" came back.', [AType]);
     Exit(False);
@@ -1295,6 +1362,7 @@ begin
   if not SameText(Sym.Kind, 'enum') then
   begin
     AError := Format('%s is a %s, not an enum.', [AType, Sym.Kind]);
+    AAmbiguity := 0;
     Exit(False);
   end;
   // The index holds no member list and offers no children-of query, so the members
@@ -1303,6 +1371,7 @@ begin
   begin
     AError := Format('%s is declared in %s, which is not readable from this machine.',
       [AType, Sym.FilePath]);
+    AAmbiguity := 0;
     Exit(False);
   end;
   SL := TStringList.Create;
@@ -1313,6 +1382,7 @@ begin
       on E: Exception do
       begin
         AError := Format('could not read %s: %s', [Sym.FilePath, E.Message]);
+        AAmbiguity := 0;
         Exit(False);
       end;
     end;
@@ -1321,6 +1391,7 @@ begin
       AError := Format('%s: the index points at %s line %d, which that file does not '
         + 'have -- the index is stale relative to the source.',
         [AType, Sym.FilePath, Sym.StartLine]);
+      AAmbiguity := 0;
       Exit(False);
     end;
     Decl := '';
@@ -1331,8 +1402,11 @@ begin
     end;
     Result := ParseEnumMembers(Decl, AMembers);
     if not Result then
+    begin
       AError := Format('%s is indexed as an enum, but no members could be read from '
         + '%s lines %d-%d.', [AType, Sym.FilePath, Sym.StartLine, Sym.EndLine]);
+      AAmbiguity := 0;
+    end;
   finally
     SL.Free;
   end;

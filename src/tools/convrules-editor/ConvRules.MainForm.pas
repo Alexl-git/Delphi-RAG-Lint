@@ -1301,7 +1301,15 @@ begin
       Inc(total); Inc(done);
     end;
   end;
-  if total = 0 then Exit(0);
+  if total = 0 then
+  begin
+    // Nothing countable. That is 0 % only if the block genuinely maps nothing --
+    // an #apply-only block has no countable ROWS but is a finished rule, and
+    // showing it as 0 % contradicted the save path, which keeps it. Both sides now
+    // ask TRuleBook.BlockMapsSomething, so the list and the file cannot disagree.
+    if TRuleBook.BlockMapsSomething(Nodes) then Exit(100);
+    Exit(0);
+  end;
   Result := Round(done * 100 / total);
 end;
 
@@ -1329,8 +1337,11 @@ end;
 
 procedure TConvRulesForm.LoadGridForBlock(AHdrIdx: Integer);
 var
-  Node: TRuleNode;
-  Err : string;
+  Node    : TRuleNode;
+  Err     : string;
+  FromNote: string;
+  ToNote  : string;
+  Notes   : string;
 begin
   var LGuard: IInterface := HourGlass;
   FActiveHdr := AHdrIdx;
@@ -1348,18 +1359,26 @@ begin
   // fetch F + T trees from the engine. The From tree always loads (a From-only
   // rule still shows its flattened property list); the To tree loads only once a
   // To class has been assigned.
-  if not FEngine.GetProptree(Node.FromType, FFromTree, Err, FSurfaceMinVis) then
+  FromNote := ''; ToNote := '';
+  if not FEngine.GetProptree(Node.FromType, FFromTree, Err, FromNote, FSurfaceMinVis) then
   begin
     SetStatus('From tree: ' + Err);
     FFromTree := Default(TProptree);
   end;
   if Trim(Node.ToType) = '' then
     FToTree := Default(TProptree)   // From-only rule: no To tree yet
-  else if not FEngine.GetProptree(Node.ToType, FToTree, Err, FSurfaceMinVis) then
+  else if not FEngine.GetProptree(Node.ToType, FToTree, Err, ToNote, FSurfaceMinVis) then
   begin
     SetStatus('To tree: ' + Err);
     FToTree := Default(TProptree);
   end;
+  // A bare class name that several units declare resolved by row order alone, so the
+  // tree on screen may belong to the wrong framework. Say which one was used -- this
+  // rides on the SUCCESS path, so it has to be carried down to the final SetStatus
+  // rather than announced here, where the leaf-count message would erase it.
+  Notes := '';
+  if FromNote <> '' then Notes := Notes + '  ' + FromNote;
+  if ToNote   <> '' then Notes := Notes + '  ' + ToNote;
 
   // Loading a different rule: a filter left over from the last selection would
   // silently narrow (or empty) the new grid and look like missing data, so clear
@@ -1375,10 +1394,11 @@ begin
   // Only the status line needs an explicit hand here, since the plain leaf-count
   // message below would otherwise silently replace the examination summary.
   if FExamineInfo <> '' then
-    SetStatus(FExamineInfo)
+    SetStatus(FExamineInfo + Notes)
   else
     SetStatus(Format('%s -> %s : %d From leaves, %d To leaves.',
-      [Node.FromType, Node.ToType, Length(FFromTree.Leaves), Length(FToTree.Leaves)]));
+      [Node.FromType, Node.ToType, Length(FFromTree.Leaves), Length(FToTree.Leaves)])
+      + Notes);
   // A rule is now active: the actions that needed one become reachable. Every
   // "a rule was selected" path (RulesSelectItem, LoadFile's auto-select,
   // DoNewConversion, SurfaceChanged) lands here, so this is the single hook.
@@ -1963,10 +1983,10 @@ end;
 
   Three things happen on the way back in, and each of them is why this is not just
   a ShowModal call:
-   * the mapping's OLD lines are removed and the new ones inserted in their place,
-     because the editor rewrites the whole mapping as one unit. A brand-new mapping
-     goes ABOVE the first #convert instead -- file scope, so every block can apply
-     it; written inside a block it would read as that block's.
+   * the mapping's OLD lines are replaced by the new ones, because the editor
+     rewrites the whole mapping as one unit. The splice itself lives in
+     TRuleBook.ReplaceMapping, which is where its rules (where a brand-new mapping
+     lands, why the deletes run descending) are written down and tested.
    * FActiveHdr is re-derived from the header NODE, since inserting above it moves
      its index.
    * the #apply is added when it is missing. Without it the mapping is authored,
@@ -1977,10 +1997,7 @@ var
   Name   : string;
   Prompt : string;
   Own    : TArray<TRuleNode>;
-  Idx    : TArray<Integer>;
   Hdr    : TRuleNode;
-  InsAt  : Integer;
-  i      : Integer;
   N      : TRuleNode;
   Applied: Boolean;
 begin
@@ -2001,16 +2018,9 @@ begin
   Name := Trim(Name);
   if Name = '' then begin SetStatus('No mapping name given.'); Exit; end;
 
-  // Where this mapping's lines live today. Indexes, not just the nodes: they are what
-  // the splice below deletes and inserts at.
-  Idx := nil;
-  Own := nil;
-  for i := 0 to FBook.Nodes.Count - 1 do
-    if (FBook.Nodes[i].Kind = rnkMapping) and SameText(FBook.Nodes[i].MapName, Name) then
-    begin
-      Idx := Idx + [i];
-      Own := Own + [FBook.Nodes[i]];
-    end;
+  // The mapping's lines as they stand -- borrowed, the book still owns them; they are
+  // the editor's seed.
+  Own := FBook.MappingNodesNamed(Name);
 
   Hdr := FBook.Nodes[FActiveHdr];
   if not TMappingForm.EditMapping(Self, Name, Own, FEngine, FToTree, Hdr.ToType) then
@@ -2018,22 +2028,15 @@ begin
     SetStatus(Format('Mapping "%s" unchanged.', [Name]));
     Exit;
   end;
-  // Own now holds FRESH nodes owned by this method until the book takes them below.
+  // Own now holds FRESH nodes owned by this method until ReplaceMapping takes them.
 
-  if Length(Idx) > 0 then
-    InsAt := Idx[0]                    // still valid after the deletes: it is the first
-  else                                 // freed slot, and nothing before it moved
-  begin
-    InsAt := 0;
-    for i := 0 to FBook.Nodes.Count - 1 do
-      if FBook.Nodes[i].Kind = rnkConvert then begin InsAt := i; Break; end;
-  end;
+  // The splice itself is the BOOK's job, not the window's: the index arithmetic (delete
+  // descending, insert at the first freed slot, file scope for a brand-new mapping) is
+  // model surgery, and the two data-loss bugs this feature shipped with were both in
+  // exactly that seam.
+  FBook.ReplaceMapping(Name, Own);
 
-  for i := High(Idx) downto 0 do
-    FBook.Nodes.Delete(Idx[i]);        // the book owns them, so Delete frees them
-  for i := 0 to High(Own) do
-    FBook.Nodes.Insert(InsAt + i, Own[i]);
-
+  // Inserting above the header moved it, so the index must be re-derived from the NODE.
   FActiveHdr := FBook.Nodes.IndexOf(Hdr);
 
   Applied := False;
@@ -2117,6 +2120,7 @@ procedure TConvRulesForm.DoAssign(Sender: TObject);
 var
   FromPath, ToPath: string;
   row     : Integer;
+  LCases  : Integer;
   fromType, toType: string;
 begin
   if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
@@ -2127,6 +2131,21 @@ begin
   FromPath := PathOfGridCell(FGrid.Cells[0, row]);
   ToPath   := PathOfGridCell(FPool.Items[FPool.ItemIndex]);
   if (FromPath = '') or (ToPath = '') then Exit;
+
+  // Exactly the rule DoAutoMatch applies to the same rows: a From leaf an applied
+  // #mapping already decides conditionally is spoken for, even though it has no #link.
+  // Writing an unconditional #link beside it leaves TWO rules claiming one source
+  // property, and nothing downstream catches that -- RefreshPool withholds its targets
+  // and RefreshGrid labels it '<conditional: N cases>', but ValidateMappings is never
+  // run over the whole book, so the clash would ship silently.
+  LCases := ConditionalCasesOf(ActiveConditionals, FromPath);
+  if LCases > 0 then
+  begin
+    SetError(Format('Blocked: %s is already decided by an applied #mapping (%d case(s)). '
+      + 'Edit that mapping instead -- a #link here would claim the same source property '
+      + 'a second time, unconditionally.', [FromPath, LCases]));
+    Exit;
+  end;
 
   fromType := LeafType(FFromTree, FromPath);
   toType   := LeafType(FToTree, ToPath);
@@ -2290,6 +2309,7 @@ var
   fromT, toT: string;
   tree: TProptree;
   err : string;
+  fromNote, toNote, notes: string;
   hdr : TRuleNode;
   newHdrIdx: Integer;
 begin
@@ -2305,12 +2325,12 @@ begin
   SetStatus(Format('Resolving %s and %s ...', [fromT, toT]));
   Application.ProcessMessages;
   tree := Default(TProptree);
-  if not FEngine.GetProptree(fromT, tree, err) or (Length(tree.Leaves) = 0) then
+  if not FEngine.GetProptree(fromT, tree, err, fromNote) or (Length(tree.Leaves) = 0) then
   begin
     SetError(Format('From class "%s" is not indexed (no properties found). %s', [fromT, err]));
     Exit;
   end;
-  if not FEngine.GetProptree(toT, tree, err) or (Length(tree.Leaves) = 0) then
+  if not FEngine.GetProptree(toT, tree, err, toNote) or (Length(tree.Leaves) = 0) then
   begin
     SetError(Format('To class "%s" is not indexed (no properties found). %s', [toT, err]));
     Exit;
@@ -2361,8 +2381,14 @@ begin
   // pre-fill the obvious matches
   DoAutoMatch(nil);
   SyncRawFromModel;
+  // This is where a bare class name typed into a picker is first resolved, so it is
+  // also where an FMX-vs-VCL tie has to be said out loud -- the tree behind every
+  // auto-match just made may belong to the other framework.
+  notes := '';
+  if fromNote <> '' then notes := notes + '  ' + fromNote;
+  if toNote   <> '' then notes := notes + '  ' + toNote;
   SetStatus(Format('Conversion %s -> %s set and auto-matched. Review, then Save.',
-    [fromT, toT]));
+    [fromT, toT]) + notes);
 end;
 
 procedure TConvRulesForm.DoUnassign(Sender: TObject);
