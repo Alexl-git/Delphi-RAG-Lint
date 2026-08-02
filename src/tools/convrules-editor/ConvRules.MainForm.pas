@@ -50,7 +50,17 @@ type
     FMnuTheme : array[TThemePref] of TMenuItem;   // View > Theme radio items
     FStatusIsError: Boolean;                      // last status was SetError (red bold)
 
-    // toolbar
+    // action toolbar -- ONE grouped TToolBar owns every action that used to be a
+    // loose TButton scattered over the top panel, the pool panel, the grid filter
+    // bar and the Unit Rules tab. Only the buttons UpdateToolbarEnabled gates, or
+    // whose caption flips at runtime, need a field; the rest are wired and dropped.
+    FToolbar     : TToolBar;
+    FTbAssign    : TToolButton;       // mapping: assign the pool leaf to the grid row
+    FTbUnassign  : TToolButton;       // mapping: drop the selected row's assignment
+    FTbFindInFrom: TToolButton;       // mapping: select the same-named From row
+    FTbOnlyType  : TToolButton;       // mapping: pool type-narrowing toggle (caption flips)
+    FTbExamine      : TToolButton;    // examine: pick .dfm/.pas, mark used From props
+    FTbClearExamine : TToolButton;    // examine: drop the current examination
     FPanelTop : TPanel;
     FLblFile  : TLabel;
     FLblStatus: TLabel;
@@ -71,18 +81,11 @@ type
     FGridFindFrom: TEdit;             // grid filter: From column substring
     FGridFindTo  : TEdit;             // grid filter: To column substring
     FLblGridMatch: TLabel;            // "N of M" count shown while a grid filter is active
-    FBtnExamine: TButton;             // pick .dfm/.pas files and mark used From properties
-    FBtnClearExamine: TButton;        // drop the current examination
     FUsedProps  : TArray<string>;     // Examine result; empty = no examination active
     FUsedFiles  : TArray<string>;     // the examined file set, retained for the session
     FExamineInfo: string;             // status summary, re-shown when blocks change
     FPool     : TListBox;             // unassigned T pool
     FPoolFind : TEdit;
-    FBtnAssign: TButton;
-    FBtnUnasgn: TButton;
-    FBtnAuto  : TButton;
-    FBtnFindFrom: TButton;            // pool: select the From-grid row of the same name
-    FBtnOnlyType: TButton;            // pool: toggle filter to the highlighted leaf's type
     FPoolTypeFilter: string;          // active pool type-narrowing ('' = off)
     // directives / raw
     FTabs     : TPageControl;
@@ -92,6 +95,20 @@ type
     FRulesFilter: TEdit;
 
     procedure BuildUI;
+    { Builds the single top-aligned action toolbar. Called from BuildUI right after
+      the menu, so its strip is claimed before the panels below take the client
+      area. Every TToolButton.OnClick points at the SAME handler the loose TButton
+      it replaced used -- no handler body was copied. }
+    procedure BuildToolbar;
+    { Enables only what the current selection supports; see the implementation for
+      why the always-enabled-then-complain behaviour was worth replacing. }
+    procedure UpdateToolbarEnabled;
+    { FGrid.OnSelectCell -- re-gates the toolbar when the grid row changes. Never
+      vetoes (CanSelect is left alone). }
+    procedure GridSelectCell(Sender: TObject; ACol, ARow: Integer;
+      var CanSelect: Boolean);
+    { FPool.OnClick -- re-gates the toolbar when the pool highlight changes. }
+    procedure PoolSelectionChanged(Sender: TObject);
     procedure FormCloseHandler(Sender: TObject; var Action: TCloseAction);
     procedure DoLoad(Sender: TObject);
     /// <summary>Back the file up, write the canonical DSL, validate it and report.</summary>
@@ -403,13 +420,157 @@ begin
       + 'fell back to the system style.');
 end;
 
+{ ONE grouped toolbar for every action in this window, in the order a session
+  actually runs: file/working-set | mapping | examine | unit rules, each group
+  closed by a tbsSeparator. It replaces 19 loose TButtons that were spread over
+  four different parents (top panel, pool panel, grid filter bar, Unit Rules tab),
+  where the same action's discoverability depended on which tab happened to be up.
+
+  Every OnClick points at the handler the button it replaced already used -- no
+  handler body was copied, so there is exactly one implementation of each action.
+
+  Two buttons deliberately did NOT move: the grid filter bar's two "Clear"
+  buttons. They are affordances of the TEdit they sit beside, not free-standing
+  actions -- they belong to none of the four groups, and two toolbar buttons both
+  captioned "Clear" would be unreadable.
+
+  Layout notes that are easy to get wrong on a code-built TToolBar:
+   * there is no Add method -- insertion order is decided by the button's Left/Top
+     AT THE MOMENT Parent is assigned (TToolBar.ButtonIndex picks the row nearest
+     Top, then the slot at Left). Both are therefore parked out past the strip so
+     each new button appends to the end of the last row; the real bounds are
+     overwritten by the toolbar immediately afterwards.
+   * per-button AutoSize is REQUIRED: without it a text-only button keeps the
+     toolbar's 23px ButtonWidth and the caption is clipped.
+   * Wrapable + the toolbar's own AutoSize let a narrow window wrap to a second
+     row and grow, rather than hiding the tail of the strip. }
+procedure TConvRulesForm.BuildToolbar;
+const
+  PARK = 30000;   // past the right/bottom edge of any real strip -- see above
+
+  function AddBtn(const ACaption, AHint: string;
+    AHandler: TNotifyEvent): TToolButton;
+  begin
+    Result := TToolButton.Create(Self);
+    Result.Caption := ACaption;
+    Result.OnClick := AHandler;
+    if AHint <> '' then
+    begin
+      Result.Hint := AHint;
+      Result.ShowHint := True;
+    end;
+    Result.Left := PARK; Result.Top := PARK;
+    Result.Parent := FToolbar;
+    Result.AutoSize := True;
+  end;
+
+  procedure AddSep;
+  var
+    LSep: TToolButton;
+  begin
+    LSep := TToolButton.Create(Self);
+    LSep.Style := tbsSeparator;
+    LSep.Width := 10;
+    LSep.Left := PARK; LSep.Top := PARK;
+    LSep.Parent := FToolbar;
+  end;
+
+begin
+  FToolbar := TToolBar.Create(Self);
+  FToolbar.Parent := Self;
+  FToolbar.Top := 0;                 // sorts above FPanelTop in the alTop band
+  FToolbar.Align := alTop;
+  FToolbar.ShowCaptions := True;
+  FToolbar.Wrapable := True;
+  FToolbar.AutoSize := True;
+  FToolbar.Flat := True;
+  FToolbar.ShowHint := True;
+
+  // --- file / working set ---
+  AddBtn('Open...', 'Open a conversion .rules file', DoLoad);
+  AddBtn('Save', 'Write the canonical DSL back (.bak backup, then validate)',
+    DoSaveClick);
+  AddBtn('Validate', 'Run convert-validate over the current model', DoValidate);
+  AddBtn('Curate...', 'Split / copy / delete / merge blocks across several rule-books, '
+    + 'or compose them into one file for the engine', DoCurate);
+  AddSep;
+
+  // --- mapping: acts on the top pickers, the selected grid row and the pool ---
+  AddBtn('+ New Conversion',
+    'Create a #convert block from the From/To pickers above', DoNewConversion);
+  AddBtn('Fill From-classes',
+    'Add a From-only conversion per component class on the picked unit''s form '
+    + '(optional -- pick the unit in the "From Unit" box above first)', DoLoadUnit);
+  AddBtn('Auto-Match', 'Assign every unambiguous, castable property pair',
+    DoAutoMatch);
+  FTbAssign := AddBtn('<- Assign',
+    'Assign the highlighted To leaf (pool, right) to the selected From row',
+    DoAssign);
+  FTbUnassign := AddBtn('Unassign ->',
+    'Drop the selected From row''s assignment', DoUnassign);
+  FTbFindInFrom := AddBtn('Find in From',
+    'Select the From-grid row whose property has the SAME name as the highlighted '
+    + 'To leaf', DoFindInFrom);
+  FTbOnlyType := AddBtn('Only this type',
+    'Show only pool leaves whose TYPE matches the highlighted leaf (toggle)',
+    DoOnlyType);
+  AddSep;
+
+  // --- examine ---
+  FTbExamine := AddBtn('Examine...',
+    'Pick .dfm/.pas files and mark the From properties they actually use (green)',
+    DoExamine);
+  FTbClearExamine := AddBtn('Clear marks',
+    'Drop the current examination and unmark all rows', DoClearExamine);
+  AddSep;
+
+  // --- unit rules: the Unit Rules TAB keeps its list; only its buttons moved ---
+  AddBtn('+ Swap', 'Add #useswap Old -> New1[, New2 ...]', DoAddSwap);
+  AddBtn('+ Add unit', 'Add #use <unit> -- a unit to ADD to the uses clause',
+    DoAddUse);
+  AddBtn('+ Remove unit',
+    'Add #unuse <unit> -- a unit to REMOVE from the uses clause', DoAddUnuse);
+  AddBtn('Delete unit rule',
+    'Delete the unit rule selected on the Unit Rules tab', DoDeleteUnit);
+  AddBtn('Derive units',
+    'Add #use/#unuse from every #convert To/From type (deduped)', DoDeriveUnits);
+  AddBtn('Check units', 'Report #use/#unuse conflicts (ADD wins)', DoCheckUnits);
+end;
+
+{ Enables only what the current selection supports. Several actions were previously always
+  enabled and reported an error only when pressed; that is a worse experience than a
+  disabled button, and it hid which state each action actually requires. }
+procedure TConvRulesForm.UpdateToolbarEnabled;
+begin
+  FTbAssign.Enabled     := (FActiveHdr >= 0) and (FGrid.Row > 0) and (FPool.ItemIndex >= 0);
+  FTbUnassign.Enabled   := (FActiveHdr >= 0) and (FGrid.Row > 0);
+  FTbFindInFrom.Enabled := (FActiveHdr >= 0) and (FPool.ItemIndex >= 0);
+  FTbExamine.Enabled    := (FActiveHdr >= 0);
+  FTbClearExamine.Enabled := Length(FUsedProps) > 0;
+end;
+
+{ FGrid.OnSelectCell -- the grid row is half of the Assign/Unassign gate, so the
+  toolbar has to be re-evaluated whenever it moves. CanSelect is left untouched:
+  this hook only observes. }
+procedure TConvRulesForm.GridSelectCell(Sender: TObject; ACol, ARow: Integer;
+  var CanSelect: Boolean);
+begin
+  UpdateToolbarEnabled;
+end;
+
+{ FPool.OnClick -- the pool highlight is the other half of the Assign gate (and
+  all of the Find-in-From gate). }
+procedure TConvRulesForm.PoolSelectionChanged(Sender: TObject);
+begin
+  UpdateToolbarEnabled;
+end;
+
 procedure TConvRulesForm.BuildUI;
 var
   Split1: TSplitter;
   Split2: TSplitter;
   LeftPanel, GridPanel, PoolPanel: TPanel;
   TabRules, TabRaw, TabUnits: TTabSheet;
-  BtnLoad, BtnSave, BtnValidate: TButton;
 begin
   Caption := 'ConvRulesEditor -- conversion rule-book editor';
   Width := 1600; Height := 720;
@@ -427,33 +588,20 @@ begin
   FStatusBar.SimplePanel := True;
   FStatusBar.SimpleText := 'Ready.';
 
-  // --- top toolbar: file actions / class builder / project-unit helper / path ---
+  // --- the one action toolbar (all four groups); claims its strip before the
+  //     picker panel below it ---
+  BuildToolbar;
+
+  // --- top panel: status line / class builder / project-unit helper / path.
+  //     Its four file-action buttons moved to the toolbar, so row 0 is now the
+  //     status line alone and gets the full width. ---
   FPanelTop := TPanel.Create(Self);
+  FPanelTop.Top := 200;   // sorts BELOW FToolbar in the alTop band
   FPanelTop.Parent := Self; FPanelTop.Align := alTop; FPanelTop.Height := 122;
   FPanelTop.BevelOuter := bvNone;
 
-  BtnLoad := TButton.Create(Self);
-  BtnLoad.Parent := FPanelTop; BtnLoad.SetBounds(8, 6, 90, 25);
-  BtnLoad.Caption := 'Open...'; BtnLoad.OnClick := DoLoad;
-
-  BtnSave := TButton.Create(Self);
-  BtnSave.Parent := FPanelTop; BtnSave.SetBounds(104, 6, 90, 25);
-  BtnSave.Caption := 'Save'; BtnSave.OnClick := DoSaveClick;
-
-  BtnValidate := TButton.Create(Self);
-  BtnValidate.Parent := FPanelTop; BtnValidate.SetBounds(200, 6, 90, 25);
-  BtnValidate.Caption := 'Validate'; BtnValidate.OnClick := DoValidate;
-
-  var BtnCurate: TButton := TButton.Create(Self);
-  BtnCurate.Parent := FPanelTop; BtnCurate.SetBounds(296, 6, 90, 25);
-  BtnCurate.Caption := 'Curate...';
-  BtnCurate.Hint := 'Split / copy / delete / merge blocks across several rule-books, '
-    + 'or compose them into one file for the engine';
-  BtnCurate.ShowHint := True;
-  BtnCurate.OnClick := DoCurate;
-
   FLblStatus := TLabel.Create(Self);
-  FLblStatus.Parent := FPanelTop; FLblStatus.SetBounds(392, 11, 688, 15);
+  FLblStatus.Parent := FPanelTop; FLblStatus.SetBounds(8, 11, 1072, 15);
   // seFont off: with it on, the active style overrides Font.Color and SetError's
   // red would never show. SetStatus resolves its own colour via StyleServices.
   FLblStatus.StyleElements := FLblStatus.StyleElements - [seFont];
@@ -467,10 +615,7 @@ begin
   FCbUnit.AutoComplete := True; FCbUnit.DropDownCount := 24;
   FCbUnit.Hint := 'Pick a project unit to add a From-only conversion per component class on its form (optional)';
   FCbUnit.ShowHint := True; FCbUnit.OnDropDown := CbLoadUnits;
-
-  var BtnFillUnit: TButton := TButton.Create(Self);
-  BtnFillUnit.Parent := FPanelTop; BtnFillUnit.SetBounds(350, 38, 150, 25);
-  BtnFillUnit.Caption := 'Fill From-classes'; BtnFillUnit.OnClick := DoLoadUnit;
+  // Its "Fill From-classes" trigger is the toolbar button of that name.
 
   // Target surface: DFM = published props only; PAS = public props + public fields.
   // Selects proptree --min-visibility for the From/To trees (engine schema v17).
@@ -507,10 +652,7 @@ begin
   FCbTo.AutoComplete := True; FCbTo.DropDownCount := 24;
   FCbTo.Hint := 'Target controls (Win64) -- type to filter (TcxTextEdit, TcxGrid, ...)';
   FCbTo.ShowHint := True; FCbTo.OnDropDown := CbLoadClasses;
-
-  var BtnNew: TButton := TButton.Create(Self);
-  BtnNew.Parent := FPanelTop; BtnNew.SetBounds(706, 70, 130, 25);
-  BtnNew.Caption := '+ New Conversion'; BtnNew.OnClick := DoNewConversion;
+  // The pair's trigger is the toolbar's "+ New Conversion" button.
 
   // --- platform selectors: FROM platform / TO platform (re-scope the pickers) ---
   // Combo item order (Win32,Win64,Both) matches TConvPlatform (cpWin32,cpWin64,
@@ -572,30 +714,8 @@ begin
   // --- Unit Rules tab: #use / #unuse / #useswap authoring + derive/check ---
   TabUnits := TTabSheet.Create(FTabs); TabUnits.PageControl := FTabs;
   TabUnits.Caption := 'Unit Rules';
-  var UPanel: TPanel := TPanel.Create(Self);
-  UPanel.Parent := TabUnits; UPanel.Align := alTop; UPanel.Height := 64;
-  UPanel.BevelOuter := bvNone;
-  var BSwap: TButton := TButton.Create(Self);
-  BSwap.Parent := UPanel; BSwap.SetBounds(6, 6, 104, 25);
-  BSwap.Caption := '+ Swap'; BSwap.OnClick := DoAddSwap;
-  BSwap.Hint := 'Add #useswap Old -> New1[, New2 ...]'; BSwap.ShowHint := True;
-  var BUse: TButton := TButton.Create(Self);
-  BUse.Parent := UPanel; BUse.SetBounds(114, 6, 104, 25);
-  BUse.Caption := '+ Add unit'; BUse.OnClick := DoAddUse;
-  var BUnuse: TButton := TButton.Create(Self);
-  BUnuse.Parent := UPanel; BUnuse.SetBounds(222, 6, 110, 25);
-  BUnuse.Caption := '+ Remove unit'; BUnuse.OnClick := DoAddUnuse;
-  var BDel: TButton := TButton.Create(Self);
-  BDel.Parent := UPanel; BDel.SetBounds(6, 34, 104, 25);
-  BDel.Caption := 'Delete'; BDel.OnClick := DoDeleteUnit;
-  var BDerive: TButton := TButton.Create(Self);
-  BDerive.Parent := UPanel; BDerive.SetBounds(114, 34, 104, 25);
-  BDerive.Caption := 'Derive units'; BDerive.OnClick := DoDeriveUnits;
-  BDerive.Hint := 'Add #use/#unuse from every #convert To/From type (deduped)';
-  BDerive.ShowHint := True;
-  var BCheck: TButton := TButton.Create(Self);
-  BCheck.Parent := UPanel; BCheck.SetBounds(222, 34, 110, 25);
-  BCheck.Caption := 'Check units'; BCheck.OnClick := DoCheckUnits;
+  // The six authoring buttons that used to sit on a 64px panel here are now the
+  // toolbar's "unit rules" group; the tab keeps the list they act on.
   FUnitList := TListView.Create(Self);
   FUnitList.Parent := TabUnits; FUnitList.Align := alClient;
   FUnitList.ViewStyle := vsReport; FUnitList.ReadOnly := True;
@@ -614,49 +734,22 @@ begin
   PoolPanel.Parent := Self; PoolPanel.Align := alRight; PoolPanel.Width := 400;
   PoolPanel.BevelOuter := bvNone;
 
-  FBtnAuto := TButton.Create(Self);
-  FBtnAuto.Parent := PoolPanel; FBtnAuto.SetBounds(6, 6, 388, 27);
-  FBtnAuto.Caption := 'Auto-Match unambiguous properties';
-  FBtnAuto.Anchors := [akLeft, akTop, akRight];
-  FBtnAuto.OnClick := DoAutoMatch;
-
+  // Auto-Match / Find in From / Only this type / Assign / Unassign all moved to
+  // the toolbar's "mapping" group; the pool keeps only its search box and list,
+  // which is what the freed 140px of height goes to.
   var LblPool: TLabel := TLabel.Create(Self);
-  LblPool.Parent := PoolPanel; LblPool.SetBounds(6, 40, 388, 15);
+  LblPool.Parent := PoolPanel; LblPool.SetBounds(6, 8, 388, 15);
   LblPool.Caption := 'To (unassigned pool) -- search:';
 
   FPoolFind := TEdit.Create(Self);
-  FPoolFind.Parent := PoolPanel; FPoolFind.SetBounds(6, 58, 388, 23);
+  FPoolFind.Parent := PoolPanel; FPoolFind.SetBounds(6, 26, 388, 23);
   FPoolFind.Anchors := [akLeft, akTop, akRight];
   FPoolFind.OnChange := PoolFilter;
 
-  // Pool helpers, acting on the HIGHLIGHTED pool leaf: align it to its same-named
-  // From-grid row, or narrow the pool to a single type (a toggle).
-  FBtnFindFrom := TButton.Create(Self);
-  FBtnFindFrom.Parent := PoolPanel; FBtnFindFrom.SetBounds(6, 86, 190, 25);
-  FBtnFindFrom.Caption := 'Find in From by name';
-  FBtnFindFrom.Hint := 'Select the From-grid row whose property has the SAME name as the highlighted To leaf';
-  FBtnFindFrom.ShowHint := True; FBtnFindFrom.Anchors := [akLeft, akTop];
-  FBtnFindFrom.OnClick := DoFindInFrom;
-
-  FBtnOnlyType := TButton.Create(Self);
-  FBtnOnlyType.Parent := PoolPanel; FBtnOnlyType.SetBounds(202, 86, 192, 25);
-  FBtnOnlyType.Caption := 'Only this type';
-  FBtnOnlyType.Hint := 'Show only pool leaves whose TYPE matches the highlighted leaf (toggle)';
-  FBtnOnlyType.ShowHint := True; FBtnOnlyType.Anchors := [akLeft, akTop, akRight];
-  FBtnOnlyType.OnClick := DoOnlyType;
-
-  FBtnAssign := TButton.Create(Self);
-  FBtnAssign.Parent := PoolPanel; FBtnAssign.SetBounds(6, 116, 190, 25);
-  FBtnAssign.Caption := '<- Assign to From'; FBtnAssign.OnClick := DoAssign;
-
-  FBtnUnasgn := TButton.Create(Self);
-  FBtnUnasgn.Parent := PoolPanel; FBtnUnasgn.SetBounds(202, 116, 192, 25);
-  FBtnUnasgn.Caption := 'Unassign ->'; FBtnUnasgn.OnClick := DoUnassign;
-  FBtnUnasgn.Anchors := [akLeft, akTop, akRight];
-
   FPool := TListBox.Create(Self);
-  FPool.Parent := PoolPanel; FPool.SetBounds(6, 146, 388, 496);
+  FPool.Parent := PoolPanel; FPool.SetBounds(6, 56, 388, 586);
   FPool.Anchors := [akLeft, akTop, akRight, akBottom];
+  FPool.OnClick := PoolSelectionChanged;
 
   Split2 := TSplitter.Create(Self);
   Split2.Parent := Self; Split2.Align := alRight; Split2.Width := 4;
@@ -669,7 +762,7 @@ begin
   //     alClient beneath it. See RefreshGrid / GridRowMatchesFilter. ---
   var GridFilterPanel: TPanel := TPanel.Create(Self);
   GridFilterPanel.Parent := GridPanel; GridFilterPanel.Align := alTop;
-  GridFilterPanel.Height := 64; GridFilterPanel.BevelOuter := bvNone;
+  GridFilterPanel.Height := 36; GridFilterPanel.BevelOuter := bvNone;
 
   var LblGridFrom: TLabel := TLabel.Create(Self);
   LblGridFrom.Parent := GridFilterPanel; LblGridFrom.SetBounds(6, 9, 66, 15);
@@ -705,22 +798,8 @@ begin
   FLblGridMatch.Parent := GridFilterPanel; FLblGridMatch.SetBounds(626, 9, 160, 15);
   FLblGridMatch.Caption := '';
 
-  // Examine: pick .dfm/.pas files and mark which From properties they actually use
-  // (ConvRules.Usage.ComputeUsage), so the grid's ~thousands of leaves can be
-  // triaged down to the handful a real form touches. See DoExamine/GridDrawCell.
-  FBtnExamine := TButton.Create(Self);
-  FBtnExamine.Parent := GridFilterPanel; FBtnExamine.SetBounds(6, 34, 110, 25);
-  FBtnExamine.Caption := 'Examine...';
-  FBtnExamine.Hint := 'Pick .dfm/.pas files and mark the From properties they actually use (green)';
-  FBtnExamine.ShowHint := True;
-  FBtnExamine.OnClick := DoExamine;
-
-  FBtnClearExamine := TButton.Create(Self);
-  FBtnClearExamine.Parent := GridFilterPanel; FBtnClearExamine.SetBounds(122, 34, 110, 25);
-  FBtnClearExamine.Caption := 'Clear marks';
-  FBtnClearExamine.Hint := 'Drop the current examination and unmark all rows';
-  FBtnClearExamine.ShowHint := True;
-  FBtnClearExamine.OnClick := DoClearExamine;
+  // Examine / Clear marks moved to the toolbar's "examine" group; the second row
+  // of this filter bar went with them.
 
   FGrid := TStringGrid.Create(Self);
   FGrid.Parent := GridPanel; FGrid.Align := alClient;
@@ -737,6 +816,7 @@ begin
   // marking all go through it) -- required for OnDrawCell to own the cell colour.
   FGrid.DefaultDrawing := False;
   FGrid.OnDrawCell := GridDrawCell;
+  FGrid.OnSelectCell := GridSelectCell;   // re-gates the toolbar as the row moves
 
   // TLabel is a TGraphicControl, so no style hook reaches it: with Transparent
   // False it fills its own rectangle with Color, which ParentColor resolves to the
@@ -746,6 +826,10 @@ begin
   // text over the styled parent. Applied in one sweep so later labels inherit it.
   for var i := 0 to ComponentCount - 1 do
     if Components[i] is TLabel then TLabel(Components[i]).Transparent := True;
+
+  // Nothing is selected yet: start the selection-dependent actions disabled
+  // rather than enabled-and-complaining.
+  UpdateToolbarEnabled;
 end;
 
 { Re-assert FLblStatus's font for the current message kind. FLblStatus opts out of
@@ -1198,7 +1282,7 @@ begin
   FActiveHdr := AHdrIdx;
   // A fresh block: drop any pool type-narrowing carried over from the last selection.
   FPoolTypeFilter := '';
-  if FBtnOnlyType <> nil then FBtnOnlyType.Caption := 'Only this type';
+  if FTbOnlyType <> nil then FTbOnlyType.Caption := 'Only this type';
   Node := FBook.Nodes[AHdrIdx];
   // Mirror the rule's From/To into the top pickers, so a From-only rule can have a
   // To assigned there (there is otherwise no way to set the To for a picked rule).
@@ -1241,6 +1325,10 @@ begin
   else
     SetStatus(Format('%s -> %s : %d From leaves, %d To leaves.',
       [Node.FromType, Node.ToType, Length(FFromTree.Leaves), Length(FToTree.Leaves)]));
+  // A rule is now active: the actions that needed one become reachable. Every
+  // "a rule was selected" path (RulesSelectItem, LoadFile's auto-select,
+  // DoNewConversion, SurfaceChanged) lands here, so this is the single hook.
+  UpdateToolbarEnabled;
 end;
 
 { Refill the grid from FFromTree.Leaves, keeping only rows that pass the active
@@ -1489,6 +1577,7 @@ begin
     FExamineInfo := FExamineInfo + ' Unreadable: ' + string.Join(', ', Bad);
   SetStatus(FExamineInfo);
   FGrid.Invalidate;
+  UpdateToolbarEnabled;   // "Clear marks" is gated on there BEING an examination
 
   if Length(U.Missing) > 0 then
     ShowUsageReport(U.Missing);
@@ -1502,6 +1591,7 @@ begin
   FUsedFiles := nil;
   FExamineInfo := '';
   FGrid.Invalidate;
+  UpdateToolbarEnabled;   // nothing left to clear -> "Clear marks" goes back down
   SetStatus('Examination cleared.');
 end;
 
@@ -1620,7 +1710,7 @@ begin
   if FPoolTypeFilter <> '' then
   begin
     FPoolTypeFilter := '';
-    FBtnOnlyType.Caption := 'Only this type';
+    FTbOnlyType.Caption := 'Only this type';
     RefreshPool;
     SetStatus('Pool type filter cleared.');
     Exit;
@@ -1630,7 +1720,7 @@ begin
   t := TypeOfCell(FPool.Items[FPool.ItemIndex]);
   if t = '' then begin SetStatus('That leaf has no resolved type to filter by.'); Exit; end;
   FPoolTypeFilter := t;
-  FBtnOnlyType.Caption := 'Show all types';
+  FTbOnlyType.Caption := 'Show all types';
   RefreshPool;
   SetStatus(Format('Pool narrowed to type "%s".', [t]));
 end;
