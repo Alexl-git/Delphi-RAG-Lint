@@ -3182,6 +3182,13 @@ begin
   ]), Tree, ['stOK'], 'cxButtons.TcxButton');
   Check('validate.bad.literal', HasIssueKind(Issues, mikBadLiteral),
     'a #when on a non-member fired no mikBadLiteral');
+  // Detected AND advisory -- both halves pinned together so neither can be dropped on its
+  // own. The member list this was judged against comes from an index that often cannot
+  // see the enum, so the CHECK may be the thing that is wrong; an editor must show this
+  // and still allow the save. Reported always, blocking never.
+  Check('validate.bad.literal.is.advisory',
+    HasIssueKind(Issues, mikBadLiteral) and MappingIssueIsWarning(mikBadLiteral),
+    'a bad literal must be REPORTED and left NON-BLOCKING');
 
   // A value that IS a member must not be flagged -- the check must discriminate.
   Issues := ValidateMappings(ParseAll([
@@ -3219,9 +3226,13 @@ const
     False,   // mikUndefined         -- #apply names a mapping that does not exist
     False,   // mikTargetMissing     -- assignment to a property the class has not got
     False,   // mikTargetReadOnly    -- assignment that cannot happen
-    False,   // mikBadLiteral        -- clause that can never fire
+    True,    // mikBadLiteral        -- WARNING: the member list this was judged against
+             //                         comes from an index that often cannot see the enum
+             //                         (method-pointer types are not indexed at all,
+             //                         TColor resolves ambiguously), so a correct literal
+             //                         can be flagged. Report it; never block a save on it.
     False,   // mikToTypeNotDeclared -- applied outside the mapping's declared contract
-    True     // mikNonExhaustive     -- the ONLY warning: an unmapped member is a choice
+    True     // mikNonExhaustive     -- WARNING: an unmapped member is an authoring choice
   );
   NAMES: array[TMappingIssueKind] of string = (
     'mikUndefined', 'mikTargetMissing', 'mikTargetReadOnly', 'mikBadLiteral',
@@ -3241,8 +3252,8 @@ begin
   end;
   // Counted from the ACTUAL classifier, not the table: a classifier that answers False
   // (or True) for everything fails here as well as above.
-  Check('severity.exactly.one.warning', Warnings = 1,
-    'expected exactly 1 warning kind, got ' + IntToStr(Warnings));
+  Check('severity.exactly.two.warnings', Warnings = 2,
+    'expected exactly 2 warning kinds, got ' + IntToStr(Warnings));
 end;
 
 { BuildMappingNodes hands OWNERSHIP to the caller (unlike ParseAll, whose nodes belong to

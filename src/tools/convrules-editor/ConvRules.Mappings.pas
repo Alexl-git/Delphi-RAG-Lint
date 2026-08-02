@@ -22,15 +22,18 @@ uses
 
 type
   /// <summary>What is wrong with a #mapping or #apply.</summary>
-  /// <remarks>All kinds are ERRORS -- a rule that will not do what it says -- with the
-  ///   single exception of mikNonExhaustive, which is a WARNING: leaving an enum member
-  ///   unmapped is a legitimate authoring choice, not a defect. A consumer that renders
-  ///   these must not treat a coverage gap with the same weight as a broken target.
+  /// <remarks>Kinds are ERRORS -- a rule that will not do what it says -- except for the
+  ///   two WARNINGS below. Ask MappingIssueIsWarning rather than reading this list: it is
+  ///   the classifier, this is only the commentary. A consumer that renders these must not
+  ///   treat a coverage gap, or a literal an imperfect index cannot vouch for, with the
+  ///   same weight as a broken target.
   ///   <para>mikUndefined: an #apply names a #mapping that was never declared.</para>
   ///   <para>mikTargetMissing: a set target path is absent from the To class's tree.</para>
   ///   <para>mikTargetReadOnly: the target exists but cannot be assigned to.</para>
-  ///   <para>mikBadLiteral: a #when fires on a value that is not a member of the source
-  ///   enum.</para>
+  ///   <para>mikBadLiteral (WARNING): a #when fires on a value that is not in the member
+  ///   list supplied. Advisory because that list can be wrong -- see
+  ///   MappingIssueIsWarning for why an unindexed or ambiguously-resolved enum makes this
+  ///   a report rather than a veto.</para>
   ///   <para>mikToTypeNotDeclared: the block converts to a class the mapping never
   ///   narrowed itself to, so applying it there is out of contract.</para>
   ///   <para>mikNonExhaustive (WARNING): an enum member has neither a #when nor an
@@ -86,12 +89,22 @@ type
 
 /// <summary>Severity of an issue kind: True = warning, False = error.</summary>
 /// <param name="AKind">The kind to classify.</param>
-/// <returns>True only for mikNonExhaustive; False for every other kind.</returns>
+/// <returns>True for mikNonExhaustive and mikBadLiteral; False for every other kind.</returns>
 /// <remarks>The one place this rule is written down, so a consumer never re-derives it.
-///   Non-exhaustiveness is deliberately NOT an error: a rule book may map only the enum
-///   members that matter and leave the rest to the target's own defaults, which is
-///   authoring intent rather than a defect. Every other kind describes a rule that will
-///   silently fail to do what it says at apply time, so those must block.
+///   <para>mikNonExhaustive is deliberately NOT an error: a rule book may map only the
+///   enum members that matter and leave the rest to the target's own defaults, which is
+///   authoring intent rather than a defect.</para>
+///   <para>mikBadLiteral is advisory for a different reason -- the CHECK ITSELF may be
+///   wrong. It fires when a #when value is not in the member list this unit was handed,
+///   and that list comes from an index that routinely cannot see the enum: method-pointer
+///   types are not indexed at all, and a name like TColor resolves ambiguously (Spring.
+///   Logging vs Vcl.Graphics), so the members can belong to the wrong type. A literal can
+///   therefore be flagged when it is in fact correct, and blocking a save on it would make
+///   the editor unusable against an imperfect index -- which is the normal case here, not
+///   the exceptional one. It is still REPORTED every time: shown, never silent, never
+///   blocking.</para>
+///   <para>Every other kind describes a rule that will silently fail to do what it says at
+///   apply time, and those the editor can be sure about, so they must block.</para>
 ///   <para>Callers gating an OK button should let warnings through and stop on errors.</para></remarks>
 function MappingIssueIsWarning(AKind: TMappingIssueKind): Boolean;
 
@@ -236,7 +249,7 @@ implementation
 
 function MappingIssueIsWarning(AKind: TMappingIssueKind): Boolean;
 begin
-  Result := AKind = mikNonExhaustive;
+  Result := AKind in [mikNonExhaustive, mikBadLiteral];
 end;
 
 { Case-insensitive membership, the comparison the DSL uses everywhere. }
