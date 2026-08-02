@@ -39,6 +39,22 @@ Suite **594 pass / 0 fail / 0 skip**.
 **Genuinely open for a human: 13, not 53** -- 8 NEAR-MISS lines (one hand-made `#link` each)
 plus 5 cross-block conflicts. The other 40 are `#ignore`d or `#remove`d with a stated reason.
 
+**The 8 near-misses split into two causes -- verified 2026-08-02. Triage them separately:**
+
+- **Cause A: a missing DECLARATION in the index, not a cast rule.** `TTable.TableName : TFileName`
+  vs `TFDTable.TableName : String` -- same name, top-level both sides, and legal Delphi. It failed
+  only because **`TFileName` has no declaration row**: strong type aliases (`T = type X`) are never
+  indexed (`TCaption`, `TDate`, `TTime` likewise; subranges and enums are fine). Filed as INBOX
+  **2.11**. **When the engine fixes that, re-run the matcher and these should resolve themselves --
+  do not hand-write them yet.**
+- **Cause B: the target path is NESTED, and this will never auto-match.** `TFDTable`, `TFDQuery`
+  and `TFDConnection` have **zero top-level `ReadOnly`** -- only `UpdateOptions.ReadOnly` /
+  `TxOptions.ReadOnly` (plus `CheckReadOnly`). BDE's is top-level. Auto-Match declined *correctly*:
+  pass 1 wants the same full path, pass 2 wants a globally unique last segment and `ReadOnly` is
+  not unique. This is exactly why Embarcadero hand-wrote `#link UpdateOptions.ReadOnly <- ReadOnly`
+  for `TTable`; the `TDatabase` equivalent is almost certainly
+  `#link TxOptions.ReadOnly <- ReadOnly`. **These are the ones to do by hand.**
+
 ### Gotchas that will bite a cold start
 
 1. **`#remove <prop>` is FILE-SCOPED.** There is no `[<Class>:]` qualifier (unlike `#migrate`),
