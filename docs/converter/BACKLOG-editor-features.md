@@ -14,7 +14,11 @@
 > | G5 | Examine harvests `uses` clauses into the Unit Rules FROM list | **DONE** |
 > | G6 | Deferred items -- recorded so nobody files them as bugs | **DEFERRED BY DESIGN** |
 > | G7 | ReFind BDE->FireDAC corpus | **DONE** -- imported as PRODUCT files in the new top-level `convrules\`, not as test fixtures |
-> | G8 | Documentation deliverable (DSL design message + human manual) | **NOT STARTED** |
+> | G8 | Documentation deliverable (DSL design message + human manual) | **DONE** -- [`convrules-dsl.md`](convrules-dsl.md) + [`convrules-editor-manual.md`](convrules-editor-manual.md) |
+>
+> Documentation (G8): the DSL design write-up and reference is
+> [`convrules-dsl.md`](convrules-dsl.md); the human manual is
+> [`convrules-editor-manual.md`](convrules-editor-manual.md).
 >
 > Spec, including every as-built deviation: `docs\superpowers\specs\2026-07-30-converter-editor-phase-g-design.md`.
 > Plan: `docs\superpowers\plans\2026-07-30-converter-editor-phase-g.md`.

@@ -347,11 +347,32 @@ Two audiences, written once the editor exists so they describe what IS:
 2. **A human manual** -- definitions and worked examples: what a conversion is, what a
    cast is, what a mapping is, and how the working set composes.
 
+**AS BUILT (2026-08-02) -- DELIVERED.** Two documents, both in `docs\converter\`:
+
+- `docs\converter\convrules-dsl.md` -- the DSL design write-up and reference: the flat
+  one-node-per-line model and why, the `Dirty`-gated byte-exact round-trip and what it does
+  NOT prove, the measured extent of the reFind superset claim (9 lines of 69), the full
+  directive reference taken from `TRuleBook.ParseLine`'s dispatch, `#mapping`/`#apply` in
+  depth, the six `TMappingIssueKind` values with `MappingIssueIsWarning` as their single
+  owner, and the known limits.
+- `docs\converter\convrules-editor-manual.md` -- the human manual: opening a rule book,
+  the main window, assigning/Auto-Match, Examine (including the `uses`-clause candidates),
+  authoring a conditional mapping end to end, go-to-definition with its caveats, themes,
+  saving (`.bak`, dropped-block and validate warnings) and troubleshooting.
+
+One deviation from the framing above: item 1 was written as a DSL **reference document**
+rather than as a message addressed to the engine team, because the per-instance evaluation
+G6.1 needs is already recorded in G6.1 itself. A measured fact worth carrying forward: the
+engine's parser recognises 12 directives and NOT `#mapping`/`#apply`, so `convert-validate`
+exits 1 with `line N: unknown directive: #mapping` on any book containing one -- which the
+editor surfaces on its status bar after every save. Documented, not fixed.
+
 ---
 
 ## Phase G -- final verification pass (2026-08-02)
 
-G1-G5 and G7 are **delivered**. G6 is deferred-by-design and G8 is not started. Recorded
+G1-G5 and G7 are **delivered**; G8 followed on 2026-08-02 (see its section). G6 is
+deferred-by-design. Recorded
 here so the next reader does not re-verify what has been verified.
 
 **Build.** Clean build of both artifacts from scratch (all `.dcu`, both `.exe` and the
