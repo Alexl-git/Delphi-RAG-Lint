@@ -18,6 +18,39 @@ uses
   , DRagLint.Core.Interfaces
   ;
 
+var
+  /// <summary>Process-wide switch: when False (the DEFAULT) the two exact name
+  /// lookups -- FindSymbolsByExactName and FindSymbolsByQualifiedName -- compare
+  /// case-INSENSITIVELY. Set True by the CLI's <c>--case-sensitive</c> flag to
+  /// restore byte-exact matching.</summary>
+  /// <remarks>WHY INSENSITIVE IS THE DEFAULT, and why this is a correctness fix
+  /// rather than an ergonomic one: <b>Delphi identifiers are case-insensitive</b>.
+  /// <c>TEdit</c>, <c>tEdit</c> and <c>tedit</c> are the SAME identifier to the
+  /// compiler, so an index that answers differently for each is not being strict
+  /// -- it is answering a question the language does not ask. Reported by the
+  /// conversion team (INBOX 2.10) after
+  /// <c>query --name TFDRDBMSDataSet</c> returned <c>[]</c> with exit 1 against an
+  /// index that provably held it as <c>TFDRdbmsDataSet</c>. Exit 1 also means "no
+  /// such symbol", so a caller who mistypes the case gets a confident, and
+  /// indistinguishable, "does not exist".
+  ///
+  /// <para>NOCASE folds only ASCII A-Z, which is exactly right here: this
+  /// codebase is strict 7-bit ASCII by standing rule, and Delphi's own identifier
+  /// case-folding is ASCII-only too.</para>
+  ///
+  /// <para>A GLOBAL, deliberately. This is one process-wide CLI switch read from
+  /// argv once, and the alternative -- threading it through ISymbolStore -- would
+  /// touch every one of the many store-construction sites in the CLI to express a
+  /// value none of them varies. It is written once, before any store is opened,
+  /// and only read thereafter.</para>
+  ///
+  /// <para>The comparison is in SQL, not a Pascal post-filter, so the NOCASE
+  /// index does the work; see idx_symbols_name_nocase in
+  /// DRagLint.Storage.Schema. The case-SENSITIVE path is the one that
+  /// post-filters, because it is the rare opt-in and narrowing an
+  /// already-index-served row set is cheap.</para></remarks>
+  CaseSensitiveLookups: Boolean = False;
+
 type
   TSQLiteSymbolStore = class(TInterfacedObject, ISymbolStore)
     strict private
@@ -819,7 +852,11 @@ begin
     '  start_line, start_col, end_line, end_col) ' +
     'VALUES (:fid, :sid, :src, :kind, :owner, :txt, :sl, :sc, :el, :ec)');
   FQDeleteFileStringLiterals:= NewQuery('DELETE FROM string_literals WHERE file_id = :fid');
-  FQFindByName          := NewQuery( 'SELECT * FROM symbols WHERE name = :name ORDER BY qualified_name');
+  // COLLATE NOCASE: Delphi identifiers are case-insensitive, so `TEdit`,
+  // `tEdit` and `tedit` name the SAME symbol and must return the same rows.
+  // See CaseSensitiveLookups (interface section) for the whole rationale, the
+  // opt-out, and why the comparison is done in SQL rather than in Pascal.
+  FQFindByName          := NewQuery( 'SELECT * FROM symbols WHERE name = :name COLLATE NOCASE ORDER BY qualified_name');
   // ORDERED, because it was not (ported from feat/autodoc-phase3; numbers
   // re-derived on this machine by tools/measure/phase1_verify.py against the
   // shipped C:\Projects\.drag-lint\library-Win64.sqlite, read-only).
@@ -861,7 +898,7 @@ begin
   // duplicate when two files each hold a full definition: it only orders them
   // deterministically. Indexer-side path normalisation is the other half and is
   // not done here. Asserted by tests/autotest/run_qname_row_order.ps1.
-  FQFindByQName         := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname ' +
+  FQFindByQName         := NewQuery( 'SELECT * FROM symbols WHERE qualified_name = :qname COLLATE NOCASE ' +
     'ORDER BY (CASE WHEN kind IN (''class'', ''interface'') ' +
     '            AND COALESCE(TRIM(heritage), '''') = '''' ' +
     '            AND end_line <= start_line THEN 1 ELSE 0 END), ' +
@@ -1978,6 +2015,15 @@ begin
     FQFindByName.Open;
     while not FQFindByName.Eof do
     begin
+      // The SQL matched COLLATE NOCASE. Under the --case-sensitive opt-in,
+      // narrow to byte-exact here rather than in a second prepared statement:
+      // the row set is already index-served and small, and one statement means
+      // one place where the lookup's SQL can be got wrong.
+      if CaseSensitiveLookups and (FQFindByName.FieldByName('name').AsString <> AName) then
+      begin
+        FQFindByName.Next;
+        Continue;
+      end;
       List.Add(ReadSymbolFromQuery(FQFindByName));
       FQFindByName.Next;
     end;
@@ -1999,6 +2045,13 @@ begin
     FQFindByQName.Open;
     while not FQFindByQName.Eof do
     begin
+      // See FindSymbolsByExactName: SQL matches NOCASE, the rare
+      // --case-sensitive opt-in narrows to byte-exact here.
+      if CaseSensitiveLookups and (FQFindByQName.FieldByName('qualified_name').AsString <> AQName) then
+      begin
+        FQFindByQName.Next;
+        Continue;
+      end;
       List.Add(ReadSymbolFromQuery(FQFindByQName));
       FQFindByQName.Next;
     end;

@@ -386,8 +386,13 @@ begin
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
   Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--dry-run [--json]] [--jobs <n>]');
-  Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json]');
-  Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json]');
+  Writeln('                               any index form also takes [--force-reparse] (alias --no-skip): re-parse every');
+  Writeln('                               walked file even when path+mtime+sha are unchanged. Needed once per DB after an');
+  Writeln('                               engine upgrade that extracts something new -- see INBOX 2.3.');
+  Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive]');
+  Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
+  Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
+  Writeln('                               --case-sensitive restores byte-exact matching.');
   Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--limit N] [--db ...] [--json]');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--resolved] [--db ...] [--json]');
   Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous)');
@@ -640,6 +645,12 @@ begin
     // INBOX 2.3: re-parse every walked file even when path+mtime+sha are
     // unchanged. --no-skip is the name consumers reached for first; both work.
     else if (A = '--force-reparse') or (A = '--no-skip') then Result.ForceReparse:= True
+    // INBOX 2.10: exact name lookups are case-INSENSITIVE by default, because
+    // Delphi identifiers are. This restores byte-exact matching for a caller who
+    // genuinely wants to distinguish TEdit from tEdit. Set on the storage unit's
+    // process-wide switch (see CaseSensitiveLookups) rather than carried in
+    // TArgs: every store-opening site would otherwise have to pass it through.
+    else if A = '--case-sensitive' then DRagLint.Storage.SQLite.CaseSensitiveLookups:= True
     else if A = '--dry-run' then Result.DryRun:= True
     else if A = '--quiet'   then Result.Quiet := True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
@@ -2096,7 +2107,23 @@ begin
   end; // try
 end; // function
 
-procedure PrintSymbols(const ASymbols: TArray<TSymbol>; AsJson: Boolean; const AFilePaths: TArray<string> = nil);
+/// <param name="AFuzzy">True when these rows came from the FUZZY FALLBACK (the
+///  trigram + Levenshtein path taken only after an exact lookup returned zero
+///  rows), not from an exact match. Emits <c>"match_kind"</c> in the JSON.</param>
+/// <remarks>WHY match_kind EXISTS (INBOX 2.10, second half). The TEXT output has
+///  always prefixed a fuzzy result set with '(no exact match for "X" - closest
+///  matches:)', but that banner is printed ONLY when --json is absent -- so a
+///  JSON consumer received a near-miss in exactly the same shape as a hit, with
+///  nothing marking it a guess. That is the shape the conversion team's editor
+///  reads, and it is how 'ANotifyEvent' came back looking like a successful
+///  lookup of a symbol that does not exist: TNotifyEvent is 13 chars, so
+///  FuzzyMaxDistanceFor allows 3, and the two differ by 1.
+///  <para>Emitted on EVERY row, including exact ones, rather than only on fuzzy
+///  rows: a field that appears only in the bad case is one a consumer can forget
+///  to check, and its absence would be ambiguous between "exact" and "written by
+///  an older engine". Additive -- existing consumers ignore it.</para></remarks>
+procedure PrintSymbols(const ASymbols: TArray<TSymbol>; AsJson: Boolean; const AFilePaths: TArray<string> = nil;
+  AFuzzy: Boolean = False);
 var
   JArr: TJSONArray ;
   JObj: TJSONObject;
@@ -2113,6 +2140,10 @@ begin
         Sym:= ASymbols[i];
         JObj:= TJSONObject.Create;
         JObj.AddPair('id', TJSONNumber.Create(Sym.Id));
+        { 'exact' | 'fuzzy' -- see the AFuzzy param. A consumer that wants only
+          real hits must reject 'fuzzy'; the row is a SUGGESTION, and the name
+          it carries is NOT the name that was asked for. }
+        JObj.AddPair('match_kind', (if AFuzzy then 'fuzzy' else 'exact'));
         JObj.AddPair('kind', Sym.Kind.ToText);
         JObj.AddPair('name'          , Sym.Name         );
         JObj.AddPair('qualified_name', Sym.QualifiedName);
@@ -2756,7 +2787,7 @@ begin
     if Length(AllSymbols) > 0 then
     begin
       if not AArgs.AsJson then Writeln(Format('(no exact match for "%s" - closest matches:)', [AArgs.Name]));
-      PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths);
+      PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths, {AFuzzy=}True);
       Exit(0);
     end;
   end; // if

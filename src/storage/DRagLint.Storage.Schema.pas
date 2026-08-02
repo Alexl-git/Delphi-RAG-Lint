@@ -28,7 +28,7 @@ const
   // table's shape untouched -- so e.g. an index on such a column aborts the
   // whole migration with "no such column" on every pre-vN database. Indexes
   // on retrofitted columns belong in Migrate(), after their ALTER.
-  SCHEMA_DDL: array[0..58] of string = (
+  SCHEMA_DDL: array[0..60] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' + '  key   TEXT PRIMARY KEY,' + '  value TEXT NOT NULL' + ')',
 
     'CREATE TABLE IF NOT EXISTS files (' + '  id          INTEGER PRIMARY KEY,' + '  path        TEXT NOT NULL UNIQUE,' + '  mtime_unix  INTEGER NOT NULL,' +
@@ -59,6 +59,27 @@ const
 
     'CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)', 'CREATE INDEX IF NOT EXISTS idx_symbols_qname ON symbols(qualified_name)',
     'CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id)', 'CREATE INDEX IF NOT EXISTS idx_symbols_parent ON symbols(parent_id)',
+
+    // NOCASE companions to the two name indexes above. REQUIRED, not an
+    // optimisation: name lookups compare `COLLATE NOCASE` (Delphi identifiers
+    // are case-insensitive, so a case-SENSITIVE index is wrong for the
+    // language), and SQLite cannot serve a NOCASE comparison from a BINARY
+    // index. Without these every `query --name` degrades to a full scan of the
+    // symbols table -- ~1.5M rows on the shipped library index.
+    //
+    // Both collations are kept. The binary ones still serve ORDER BY, the
+    // range/prefix scans, and the opt-in `--case-sensitive` path's own
+    // ordering; dropping them to "save space" would move the cost rather than
+    // remove it.
+    //
+    // DISCLOSED: an EXISTING index gains these only when it is next opened
+    // WRITABLE, because Migrate is what runs this list and read verbs never
+    // call it. A read-only query against a not-yet-migrated DB is CORRECT but
+    // SLOW -- it full-scans. `drag-lint index <dir> --db <db>` (any writable
+    // open) fixes it permanently; it does not need --force-reparse, since this
+    // is a pure DDL addition and touches no extracted data.
+    'CREATE INDEX IF NOT EXISTS idx_symbols_name_nocase  ON symbols(name COLLATE NOCASE)',
+    'CREATE INDEX IF NOT EXISTS idx_symbols_qname_nocase ON symbols(qualified_name COLLATE NOCASE)',
 
     'CREATE TABLE IF NOT EXISTS refs (' + '  id          INTEGER PRIMARY KEY,' + '  symbol_id   INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
     '  file_id     INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' + '  kind        TEXT NOT NULL,' + '  name_text   TEXT NOT NULL,' + '  start_line  INTEGER NOT NULL,' +

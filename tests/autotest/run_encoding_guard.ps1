@@ -216,6 +216,16 @@ $roots = [ordered]@{
   '.inc' = @('src', 'tests', 'build', 'tools')
   '.bat' = @('src', 'tests', 'build', 'tools')   # K8, see the header
   '.cmd' = @('src', 'tests', 'build', 'tools')   # zero exist today; scanned anyway
+  # v(merge main -> autodoc-phase3): *.rules arrived with main's converter work,
+  # which declared it `text eol=crlf` in .gitattributes without adding it here --
+  # so the accounting assertion below went RED the moment the branches met, which
+  # is exactly what it is for. All four tracked rule books live in convrules\ (a
+  # top-level directory that did not exist on this branch before the merge) and
+  # were already clean when scanned, so this costs nothing and closes the bound.
+  # They are ordinary repo content, not vendored material: the converter EDITOR
+  # writes them, so a scripted edit there can drift them the same way one drifted
+  # DRagLint.Core.Interfaces.pas during this very merge.
+  '.rules' = @('convrules', 'src', 'tests', 'tools')
 }
 
 # Extensions .gitattributes declares `text eol=crlf` that this runner does NOT
