@@ -188,12 +188,15 @@ type
     /// <summary>Switches the application to the light or dark VCL style and
     /// repaints the owner-drawn grid in that mode.</summary>
     /// <param name="AMode">The mode to apply.</param>
+    /// <param name="AInteractive">True when the user asked for this from the menu.
+    ///   Only then is a fallback reported; start-up stays silent, because a modal or
+    ///   an error banner before the window is even up helps nobody.</param>
     /// <remarks>Falls back to the built-in system style when the requested style is
     /// not linked into the executable (TStyleManager.TrySetStyle returns False) --
     /// the window then stays usable rather than half-themed. Records AMode either
     /// way, so GridDrawCell keeps tinting the Examine marking for the mode the user
     /// asked for. Does not persist anything; see SetThemePref.</remarks>
-    procedure ApplyTheme(AMode: TThemeMode);
+    procedure ApplyTheme(AMode: TThemeMode; AInteractive: Boolean = False);
 
     /// <summary>Records the user's theme preference, persists it under
     /// EDITOR_REG_KEY, and applies the mode it resolves to.</summary>
@@ -376,20 +379,28 @@ begin
     Reg.Free;
   end;
 
-  ApplyTheme(ResolveThemeMode(APref, GEditorIdeTheme));
+  ApplyTheme(ResolveThemeMode(APref, GEditorIdeTheme), True);   // user-driven: report a fallback
 end;
 
-procedure TConvRulesForm.ApplyTheme(AMode: TThemeMode);
+procedure TConvRulesForm.ApplyTheme(AMode: TThemeMode; AInteractive: Boolean = False);
 var
-  LStyle: string;
+  LStyle : string;
+  LFailed: Boolean;
 begin
   FThemeMode := AMode;
   if AMode = tmDark then LStyle := STYLE_DARK else LStyle := STYLE_LIGHT;
   // ShowErrorDialog=False: a missing style resource must not pop a modal at start-up.
-  if not TStyleManager.TrySetStyle(LStyle, False) then
+  LFailed := not TStyleManager.TrySetStyle(LStyle, False);
+  if LFailed then
     TStyleManager.TrySetStyle(TStyleManager.SystemStyleName, False);
   RefreshStatusColor;   // seFont is off there, so the style will not do it for us
   if FGrid <> nil then FGrid.Invalidate;
+  // The user picked a mode and the window barely changed: say why, or the only clue
+  // that STYLE_LIGHT/STYLE_DARK have drifted from ConvRulesEditorStyles.rc is that
+  // nothing happens. Start-up keeps its silence.
+  if LFailed and AInteractive then
+    SetError('Theme style "' + LStyle + '" is not linked into this build -- '
+      + 'fell back to the system style.');
 end;
 
 procedure TConvRulesForm.BuildUI;
